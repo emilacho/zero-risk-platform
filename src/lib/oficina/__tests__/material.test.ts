@@ -271,6 +271,26 @@ describe('④ sin gasto doble; «negado por tope» es sin dato, no un error', ()
     expect(g[0].cost_usd).toBe(0.4) // el portero dijo 5: la oficina carga como máximo su tope
     expect(g[0].ref_id).toBe(idDelPedido(id, (([...M.turnos.get(id)!.values()].find((t) => t.tipo === 'material'))!).n, 'foto'))
   })
+  it('el costo que trae el AVISO también se topa en `material_tope_usd` (el portero dice 5, la oficina carga 0,40)', async () => {
+    const { M, id, traer } = await escena({ fotos: [] })
+    const { ultima } = await correr(M, id, guion())
+    traer([FOTO_BUENA])
+    await recibirMaterial(M.P, aviso(id, (ultima.cuerpo.turno as { n: number }).n, conFotos(5)))
+    expect(M.gastos.filter((x) => x.ref_tabla === 'cerebro_pedidos').map((x) => x.cost_usd)).toEqual([0.4])
+  })
+  it('si el aviso llega mientras el pedido vuelve con su respuesta, el material se cierra UNA sola vez (un artefacto, un cobro)', async () => {
+    const { M, id } = await escena({
+      fotos: [],
+      responder: () => ({ ok: true, body: conFotos(0.12) }),
+      antes: async (p, m, _i, traer) => { traer([FOTO_BUENA]); await recibirMaterial(m.P, { pedido_id: p.pedido_id, ref_de_quien_pide: p.ref_de_quien_pide, ...conFotos(0.12) }) },
+    })
+    await correr(M, id, guion())
+    expect(M.artefactos.filter((a) => a.encargo_id === id && a.tipo === 'material')).toHaveLength(1)
+    expect(M.gastos.filter((g) => g.ref_tabla === 'cerebro_pedidos')).toHaveLength(1)
+    expect(M.encargos.get(id)!.estado_del_motor.pasos_ejecutados).toBeGreaterThan(0)
+    const fin = await correr(M, id, guion())
+    expect(fin.ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
+  })
   it('el pedido_id es determinista por (encargo, turno, clase) y distinto entre clases', () => {
     const e = '00000000-0000-4000-8000-000000000001'
     expect(idDelPedido(e, 3, 'foto')).toBe(idDelPedido(e, 3, 'foto'))
@@ -368,6 +388,12 @@ describe('b) el campo `necesito` de los agentes ya no es una promesa rota', () =
   })
   it('si vuelve a pedir lo mismo no se le vuelve a preguntar al portero (sin bucle)', async () => {
     const E = await escena({ fotos: [FOTO_BUENA], responder: () => ({ ok: true, body: hechosDelPortero() }) })
+    const { ultima } = await correr(E.M, E.id, guion({ texto: () => conNecesito(1) }))
+    expect(E.llamadas.pedir).toHaveLength(1)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
+  })
+  it('aunque el cupo de pedidos sea alto, el MISMO paso no vuelve a preguntar lo mismo (una vez por paso)', async () => {
+    const E = await escena({ fotos: [FOTO_BUENA], limites: { material_max_pedidos_por_encargo: 5 }, responder: () => ({ ok: true, body: hechosDelPortero() }) })
     const { ultima } = await correr(E.M, E.id, guion({ texto: () => conNecesito(1) }))
     expect(E.llamadas.pedir).toHaveLength(1)
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
