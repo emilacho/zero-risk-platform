@@ -9,7 +9,7 @@
  */
 import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
 import { pulirResumen, AGENTE_DEL_PULIDO } from './resumen-pulido'
-import { archivarFichasDeBrazos } from './brazos/archivo'
+import { archivarFichasDeBrazos, huellaDeFicha } from './brazos/archivo'
 import { TOPE_DEL_PORTERO_USD, TOPE_DEL_PULIDO_APARTE_USD, UMBRALES_DE_GASTO_POR_OMISION, type Interruptores, type UmbralesDeGasto } from './datos'
 import { gastoDeHoy, validar, type Respuesta } from './rutas'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
@@ -112,8 +112,8 @@ export async function rutaPulir(deps: DepsDePulir, cuerpo: unknown): Promise<Res
   if (pr.usado) {
     // otra `ref` (la del resumen por código del día ya existe): así se archiva como versión nueva que REEMPLAZA a la del día y no como «igual»
     sal.cliente.ref = `${sal.cliente.ref}:pulido`
+    sal.cliente.datos = { ...(sal.cliente.datos ?? {}), pulido_por: pr.agente, base_huella: huellaDeFicha(sal.cliente.contenido) }
     sal.cliente.contenido = pr.texto
-    sal.cliente.datos = { ...(sal.cliente.datos ?? {}), pulido_por: pr.agente }
     const ar = await archivarFichasDeBrazos({ db: deps.db, fichas: [sal.cliente], ahora, dry_run: false, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id, nuevoId: deps.nuevoId })
     escritas = ar.escritas
     errores.push(...ar.errores.map((m) => `resumen pulido: ${m}`))

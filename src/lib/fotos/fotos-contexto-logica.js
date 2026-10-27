@@ -496,9 +496,89 @@ function rolDeLaCuenta(o) {
   return 'competidor'
 }
 
+// ───────────────────────────── fotos de OTRAS FUENTES (27-oct · competencia y referencias) ─────────────────────────────
+/**
+ * Además del Instagram, el Servicio copia fotos de lo que ya raspa de los competidores y del mercado, cada una con su ORIGEN:
+ *   · google_maps_scraper          → la portada de cada ficha de Mapas (un competidor concreto)        → 'competidor'
+ *   · competitor_website_scraper   → la imagen de portada (og:image) de cada sitio de competidor        → 'competidor'
+ *   · facebook_ads_library_scraper → la imagen de cada anuncio hallado por búsqueda (NO es un competidor nombrado) → 'referencia'
+ * Pura: sin red ni `URL`. Una fuente sin imagen no inventa nada (devuelve menos). El mismo archivo se deduplica después, por huella, en «Fotos · revisar».
+ */
+var FUENTES_AJENAS = ['google_maps_scraper', 'competitor_website_scraper', 'facebook_ads_library_scraper']
+function esFuenteAjena(fn) { return FUENTES_AJENAS.indexOf(String(fn)) !== -1 }
+function slugDeFuente(s, max) {
+  return sinTildes(s).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max || 40)
+}
+function urlDeImagen(u) { return typeof u === 'string' && /^https?:\/\/[^\s]+$/i.test(u) && u.length < 1500 ? u : null }
+function hostDe(u) { return String(u || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/[\/?#].*$/, '').toLowerCase() }
+/** una dirección relativa se resuelve a mano contra la página (el nodo Code no tiene `URL`) */
+function absolutaContra(base, ruta) {
+  var r = String(ruta || '').trim()
+  if (/^https?:\/\//i.test(r)) return r
+  var m = /^(https?:\/\/[^\/?#]+)/i.exec(String(base || ''))
+  if (!m) return null
+  if (r.indexOf('//') === 0) return (/^https/i.test(base) ? 'https:' : 'http:') + r
+  if (r.charAt(0) === '/') return m[1] + r
+  return null
+}
+function ogImagenDe(item) {
+  var og = item && item.metadata && item.metadata.openGraph
+  if (!Array.isArray(og)) return null
+  for (var i = 0; i < og.length; i++) {
+    var p = og[i] && og[i].property
+    if ((p === 'og:image' || p === 'og:image:url' || p === 'og:image:secure_url') && og[i].content) return absolutaContra(item.url, og[i].content)
+  }
+  return null
+}
+function imagenDeAnuncio(sn) {
+  if (!sn || typeof sn !== 'object') return null
+  var listas = [sn.images, sn.cards, sn.videos]
+  for (var i = 0; i < listas.length; i++) {
+    var l = Array.isArray(listas[i]) ? listas[i] : []
+    for (var j = 0; j < l.length; j++) {
+      var u = urlDeImagen(l[j] && (l[j].original_image_url || l[j].resized_image_url || l[j].video_preview_image_url))
+      if (u) return u
+    }
+  }
+  return null
+}
+function huellaCorta(t) { var h = 5381; for (var i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) >>> 0; return h.toString(36) }
+function fotosDeOtrasFuentes(funcion, items, opciones) {
+  var tope = (opciones && opciones.max) || 12
+  var lista = Array.isArray(items) ? items : []
+  var out = []
+  var vistos = {}
+  var agrega = function (f) { if (out.length < tope && f.src && !vistos[f.owner_role + '|' + f.handle + '|' + f.post_id]) { vistos[f.owner_role + '|' + f.handle + '|' + f.post_id] = 1; out.push(f) } }
+  for (var i = 0; i < lista.length; i++) {
+    var it = lista[i]
+    if (!it || typeof it !== 'object') continue
+    if (funcion === 'google_maps_scraper') {
+      var u = urlDeImagen(it.imageUrl)
+      var id = String(it.placeId || it.cid || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 60)
+      var nombre = limpiar(it.title, 80)
+      if (!u || !(id || nombre)) continue
+      agrega({ owner_role: 'competidor', handle: slugDeFuente(nombre, 40) || 'mapas', post_id: 'maps-' + (id || slugDeFuente(nombre, 40)), tipo: 'maps_portada', src: u, caption: limpiar(nombre + (it.categoryName ? ' · ' + it.categoryName : '') + (it.address ? ' · ' + it.address : ''), 300) || null, post_url: urlDeImagen(it.url), medio: 'foto', posicion: 'unica' })
+    } else if (funcion === 'competitor_website_scraper') {
+      var host = hostDe(it.url), og = ogImagenDe(it)
+      if (!host || !og || vistos['web|' + host]) continue
+      vistos['web|' + host] = 1
+      agrega({ owner_role: 'competidor', handle: host, post_id: 'web-' + slugDeFuente(host, 30) + '-' + huellaCorta(og), tipo: 'web_portada', src: og, caption: limpiar(it.metadata && it.metadata.title, 300) || null, post_url: urlDeImagen(it.url), medio: 'foto', posicion: 'unica' })
+    } else if (funcion === 'facebook_ads_library_scraper') {
+      var sn = it.snapshot || {}
+      var img = imagenDeAnuncio(sn)
+      var aid = String(it.ad_archive_id || it.adArchiveID || '').replace(/[^0-9a-z]/gi, '')
+      if (!img || !aid) continue
+      var pagina = slugDeFuente(sn.page_name || it.page_name || '', 40) || 'anuncio'
+      var cuerpo = sn.body && (sn.body.text || sn.body)
+      agrega({ owner_role: 'referencia', handle: pagina, post_id: 'ad-' + aid, tipo: 'anuncio', src: img, caption: limpiar(typeof cuerpo === 'string' ? cuerpo : sn.title, 300) || null, post_url: urlDeImagen(sn.link_url), medio: 'foto', posicion: 'unica' })
+    }
+  }
+  return out
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    manejoDeInstagram: manejoDeInstagram, objetivosDeLaLlamada: objetivosDeLaLlamada, rolDeLaCuenta: rolDeLaCuenta,
+    manejoDeInstagram: manejoDeInstagram, objetivosDeLaLlamada: objetivosDeLaLlamada, rolDeLaCuenta: rolDeLaCuenta, fotosDeOtrasFuentes: fotosDeOtrasFuentes, esFuenteAjena: esFuenteAjena,
     sinTildes: sinTildes, raicesDe: raicesDe, excluirDe: excluirDe, sinNegaciones: sinNegaciones,
     entradaDeProtagonista: entradaDeProtagonista, catalogoDeProtagonistas: catalogoDeProtagonistas, productoDelBrief: productoDelBrief, alternativasDelBrief: alternativasDelBrief, catalogoDelBrief: catalogoDelBrief, productoDeTexto: productoDeTexto,
     contextoDePost: contextoDePost, aMedio: aMedio, sha256Hex: sha256Hex,

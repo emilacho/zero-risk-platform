@@ -67,7 +67,7 @@ function fallo(fuentes: NombreDeFuente[], error: string): Salida {
 const exito = (fuentes: Partial<Record<NombreDeFuente, EstadoDeFuente>>, lineas: Ficha[]): Salida => ({ fuentes, lineas, lecturas: 1, fallidas: 0 })
 
 const porRol = (rol: unknown): { origen: Origen; estado: Estado; propio: boolean } =>
-  rol === 'competidor' ? { origen: 'tercero', estado: 'de_tercero', propio: false } : { origen: 'su_fuente', estado: 'visto_en_su_fuente', propio: true }
+  rol === 'competidor' || rol === 'referencia' ? { origen: 'tercero', estado: 'de_tercero', propio: false } : { origen: 'su_fuente', estado: 'visto_en_su_fuente', propio: true }
 
 /** Estado de un documento producido que pasa por aprobación */
 const estadoDeTrabajo = (status: unknown): Estado => (status === 'approved' || status === 'published' ? 'aprobado' : status === 'rejected' ? 'rechazado' : 'borrador sin aprobar')
@@ -296,7 +296,7 @@ export async function leerFotos(ctx: Contexto): Promise<Salida> {
     const queMuestra = texto(f.que_muestra)
     const publicado = iso(f.posted_at)
     const leyenda = texto(f.caption)
-    const nombre = esLogo ? 'Logotipo' : esVideo ? 'Portada de video' : 'Foto'
+    const nombre = esLogo ? 'Logotipo' : esVideo ? 'Portada de video' : f.owner_role === 'referencia' ? 'Foto de referencia' : 'Foto'
     // la línea que lee el portero DISTINGUE cada foto: clase · fecha · producto (o, sin producto, el comienzo de su texto)
     const distintivo = producto && producto.length ? producto.join(' / ') : leyenda ? recorte(leyenda, 40) : 'sin producto ni texto'
     claves.push(String(f.post_id ?? f.id).slice(0, 12))

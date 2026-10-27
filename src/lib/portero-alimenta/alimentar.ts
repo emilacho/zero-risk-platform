@@ -16,7 +16,7 @@ import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlam
 import { planDeArchivo, planDeReconfirmaciones, type FichaReconfirmable, type PlanDeArchivo } from './archivar'
 import { unidadesDeRaspados, type FilaCruda, type Unidad } from './unidades'
 import { correrBrazos, hayBrazoActivo, type BrazosActivos, type ResultadoDeBrazos } from './brazos'
-import { archivarFichasDeBrazos } from './brazos/archivo'
+import { archivarFichasDeBrazos, huellaDeFicha } from './brazos/archivo'
 import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
 import { pulirResumen, topeDelPulido } from './resumen-pulido'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
@@ -232,7 +232,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
           // el agente ve los CANDIDATOS de «Quién es»; si no sirve, queda el armado por código (el respaldo)
           const pr = await pulirResumen(sal.texto_para_el_agente, { llamarAgente: e.pulirResumen, topeUsd: tope.tope_usd }, sal.cliente.contenido)
           pulido = { usado: pr.usado, motivo: pr.motivo, agente: pr.agente, costo_usd: pr.costo_usd, lineas_originales: pr.lineas_originales, lineas_conservadas: pr.lineas_conservadas, descartadas: pr.descartadas.length, citas_originales: pr.citas_originales, citas_conservadas: pr.citas_conservadas, tope_usd: tope.tope_usd, tope_subido: tope.subido, paso_del_tope_base: pr.paso_del_tope_base === true }
-          if (pr.usado) { sal.cliente.contenido = pr.texto; sal.cliente.datos = { ...(sal.cliente.datos ?? {}), pulido_por: pr.agente } }
+          if (pr.usado) { sal.cliente.datos = { ...(sal.cliente.datos ?? {}), pulido_por: pr.agente, base_huella: huellaDeFicha(sal.cliente.contenido) }; sal.cliente.contenido = pr.texto }
           if (pr.costo_usd) r.gasto = { ...r.gasto, modelo_usd: Math.round((r.gasto.modelo_usd + pr.costo_usd) * 1e6) / 1e6 }
         }
         const ar = await archivarFichasDeBrazos({ db: e.db, fichas: [sal.cliente, ...sal.sedes], ahora, dry_run: e.dry_run, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id, nuevoId: e.nuevoId })

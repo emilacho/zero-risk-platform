@@ -177,6 +177,20 @@ describe('el informe de costos anota los pedidos por la oficina que pidió', () 
   })
 })
 
+describe('el informe de costos dice TODOS los topes vigentes (ninguno escondido)', () => {
+  it('lista los firmados (aviso 3, apaga 10, diario 1,00 por cliente) con lo que mide cada uno, y el 1,00 del diario no es el gasto total del portero', async () => {
+    const { rutaCostos } = await import('../costos')
+    const r = await rutaCostos({ db: crearBaseFalsa(mundo(DIEZ_CLIENTES[0], []) as never).db as never, ahora: AHORA, env: {} })
+    const topes = r.body.topes_vigentes as Array<{ tope: string; usd: number; mide: string; firma: string }>
+    const por = (n: string) => topes.find((x) => x.tope === n)!
+    expect(por('portero · aviso')).toMatchObject({ usd: 3, firma: expect.stringContaining('firmado') })
+    expect(por('portero · apagado')).toMatchObject({ usd: 10, firma: expect.stringContaining('firmado') })
+    expect(por('diario · por cliente y día')).toMatchObject({ usd: 1, firma: 'firmado (D-4)' })
+    expect(por('diario · por cliente y día').mide).toContain('NO con el gasto total')
+    expect(topes.every((x) => x.mide.length > 10 && x.firma.length > 0)).toBe(true)
+  })
+})
+
 describe('consultar no devuelve el resumen vivo (es un derivado de las demás fichas) salvo que se pida su clase', () => {
   it('una pregunta por palabras trae la ficha concreta, no el resumen', async () => {
     const c = DIEZ_CLIENTES[0]

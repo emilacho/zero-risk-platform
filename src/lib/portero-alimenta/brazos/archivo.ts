@@ -35,7 +35,7 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
   for (const f of o.fichas) porCliente.set(f.client_id, [...(porCliente.get(f.client_id) ?? []), f])
 
   for (const [cid, fichas] of porCliente) {
-    const leidas = await leerTodas(() => o.db.from('cerebro_fichas').select('id, ref, atributo, huella, retirada_en, vigente_hasta').eq('client_id', cid).is('retirada_en', null).order('id', { ascending: true }))
+    const leidas = await leerTodas(() => o.db.from('cerebro_fichas').select('id, ref, atributo, huella, retirada_en, vigente_hasta, provenance_tag').eq('client_id', cid).is('retirada_en', null).order('id', { ascending: true }))
     if (leidas.error) { r.errores.push(`lectura de las fichas vigentes de ${cid}: ${leidas.error.message}`); continue }
     const vigentes = (Array.isArray(leidas.data) ? (leidas.data as Fila[]) : []).filter((x) => typeof x.ref === 'string' && (x.ref as string).startsWith('brazo:'))
     const porRef = new Map(vigentes.map((x) => [String(x.ref), x]))
@@ -46,7 +46,9 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
       const huella = huellaDeFicha(f.contenido)
       const mismaRef = porRef.get(f.ref)
       const vigente = porAtributo.get(f.atributo)
-      const igual = mismaRef ?? (vigente && vigente.huella === huella ? vigente : null)
+      // un resumen PULIDO guarda la huella del armado por código que pulió (`base_huella`): si el armado de hoy es el mismo, el pulido sigue siendo la ficha vigente (otra corrida del mismo día ya no lo pisa con el armado sin pulir)
+      const pulidoDeLoMismo = vigente && typeof (vigente.provenance_tag as Fila | null)?.datos === 'object' && ((vigente.provenance_tag as { datos?: Fila }).datos?.base_huella === huella)
+      const igual = mismaRef ?? (vigente && (vigente.huella === huella || pulidoDeLoMismo) ? vigente : null)
       if (igual) {
         r.iguales++; r.plan.push({ ref: f.ref, accion: 'igual', alcance: f.alcance })
         // una cifra que sigue igual y sigue viva: se corre su vigencia (solo hacia adelante); el contenido no se toca
