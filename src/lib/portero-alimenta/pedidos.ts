@@ -15,6 +15,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto'
 import { extraerJson } from '../cerebro/portero/decision'
+import type { OrigenDeFoto, RespuestaDeFotos } from '../cerebro/portero/fotos-pendientes'
 import { normalizar } from '../manual/texto'
 import { coincidePorPalabra } from '../texto/coincidencia'
 import { archivarFichasDeBrazos } from './brazos/archivo'
@@ -81,6 +82,10 @@ export interface ResultadoDeHueco {
   intentado: string[]
   /** funciones del catálogo que se pidieron a la cadena (estado en_cadena) */
   funciones?: string[]
+  /** pedido de FOTOS (27-oct): los `foto_id` etiquetados que responden, con su origen; `fotos_resumen` dice cuántas hay por origen y cuántas faltan por etiquetar */
+  foto_ids?: string[]
+  fotos?: Array<{ foto_id: string; origen: OrigenDeFoto; que_muestra: string | null; producto_visto: string[]; url: string | null }>
+  fotos_resumen?: { por_origen: Record<string, { total: number; etiquetadas: number }>; sin_etiquetar: number; etiquetadas_ahora: number }
   costo_usd: number
 }
 
@@ -215,6 +220,26 @@ export interface DepsDePedido extends DepsDeRutas {
   esperar?: (ms: number) => Promise<void>
   /** anfitriones a los que se puede avisar; por omisión `ANFITRIONES_DE_AVISO_POR_OMISION` */
   anfitrionesDeAviso?: string[]
+  /** FOTOS (27-oct): `listar` lee las fotos del cliente con origen y etiqueta (US$ 0); `etiquetar` etiqueta las pendientes (modelo con imagen; ausente en seco) */
+  fotos?: {
+    listar: (clientId: string) => Promise<RespuestaDeFotos>
+    etiquetar?: (clientId: string) => Promise<{ etiquetadas: number; costo_usd: number }>
+  }
+}
+
+/** fotos que bastan para dar un pedido de fotos por resuelto; menos ⇒ se responde con lo que hay y se pide más a la cadena */
+export const FOTOS_PARA_DAR_POR_RESUELTO = 8
+const PALABRAS_DE_FOTOS = /\b(fotos?|fotografias?|imagenes|imagen)\b/
+/** ¿este hueco pide FOTOS del cliente? (`tipo: 'fotos'` o el texto del hueco las nombra) */
+export const esPedidoDeFotos = (h: Hueco): boolean => normalizar(h.tipo ?? '') === 'fotos' || PALABRAS_DE_FOTOS.test(normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' ')))
+/** de qué origen se piden: lo que el texto nombra; sin nombrar ninguno, todos (propias + competencia + referencias) */
+export function origenesPedidos(h: Hueco): OrigenDeFoto[] {
+  const t = normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' '))
+  const o: OrigenDeFoto[] = []
+  if (/\b(propias?|del cliente|de la marca)\b/.test(t)) o.push('propia')
+  if (/\b(competenc\w*|competidor\w*)\b/.test(t)) o.push('competencia')
+  if (/\breferencias?\b/.test(t)) o.push('referencia')
+  return o
 }
 
 /** ¿se puede avisar a esta URL? https y un anfitrión permitido (el aviso lleva la llave interna) */
@@ -370,6 +395,34 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
     const completo = `${pedido}${p.para && pedido !== p.para ? ` (para: ${p.para})` : ''}`
     const r: ResultadoDeHueco = { hueco: h, estado: 'no_resuelto', detalle: '', fichas: [], hallazgos: [], intentado: [], costo_usd: 0 }
     const gastar = (usd: number) => { gastado += usd; r.costo_usd = r6(r.costo_usd + usd) }
+
+    // 0 · FOTOS (27-oct): se responde con los `foto_id` etiquetados (propias + competencia/referencias, con su origen); lo que falta por etiquetar se etiqueta ahora; si hay pocas, se pide más a la cadena
+    if (deps.fotos && esPedidoDeFotos(h)) {
+      const pedidos = origenesPedidos(h)
+      let l = await deps.fotos.listar(p.client_id)
+      if (!l.ok) { r.intentado.push(`fotos: ${l.detalle}`); r.detalle = 'esta información me falta: no pude leer las fotos del cliente'; huecos.push(r); continue }
+      let ahoraEtiquetadas = 0
+      if (!p.dry_run && deps.fotos.etiquetar && l.sin_etiquetar > 0 && gastado < tope - 1e-9) {
+        try {
+          const e = await deps.fotos.etiquetar(p.client_id)
+          ahoraEtiquetadas = e.etiquetadas; gastar(e.costo_usd)
+          if (e.etiquetadas > 0) { const l2 = await deps.fotos.listar(p.client_id); if (l2.ok) l = l2 }
+        } catch (e) { r.intentado.push(`etiquetar: ${e instanceof Error ? e.message : String(e)}`) }
+      }
+      const elegidas = l.fotos.filter((f) => f.etiquetada && (!pedidos.length || pedidos.includes(f.origen)))
+      r.foto_ids = elegidas.map((f) => f.foto_id)
+      r.fotos = elegidas.map((f) => ({ foto_id: f.foto_id, origen: f.origen, que_muestra: f.que_muestra, producto_visto: f.producto_visto, url: f.url }))
+      r.fotos_resumen = { por_origen: l.por_origen, sin_etiquetar: l.sin_etiquetar - ahoraEtiquetadas, etiquetadas_ahora: ahoraEtiquetadas }
+      const resumenOrigen = `propias ${l.por_origen.propia.total} · competencia ${l.por_origen.competencia.total} · referencias ${l.por_origen.referencia.total}`
+      if (elegidas.length >= FOTOS_PARA_DAR_POR_RESUELTO) { r.estado = 'ya_esta'; r.detalle = `${elegidas.length} foto(s) etiquetada(s) con su origen (${resumenOrigen}); sin traer nada nuevo` }
+      else if (p.dry_run) { r.estado = 'seco'; r.detalle = `en seco: hay ${elegidas.length} foto(s) etiquetada(s) de lo pedido (${resumenOrigen}); faltan para llegar a ${FOTOS_PARA_DAR_POR_RESUELTO}: se pediría más a la cadena` }
+      else {
+        funcionesDeCadena.add('instagram_scraper')
+        r.estado = 'en_cadena'; r.funciones = ['instagram_scraper']
+        r.detalle = `hay ${elegidas.length} foto(s) etiquetada(s) de lo pedido (${resumenOrigen}); se pide más a la cadena: las fotos nuevas se copian al raspar y se etiquetan solas; pide de nuevo al terminar`
+      }
+      huecos.push(r); continue
+    }
 
     // 1 · por código: lo pedido por atributo/clase que ya está fresco
     const exactas = fichasPorAtributo(h, c.fichas)

@@ -11,7 +11,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { avisarAAlertas, estadoDelFlujoDelPortero } from '@/lib/portero-alimenta/avisos'
-import { FLUJO_DEL_PORTERO_POR_OMISION, rutaNoCorrio } from '@/lib/portero-alimenta/no-corrio'
+import { FLUJO_DEL_PORTERO_POR_OMISION, n8nContesta, raspadoRealDelCliente, rutaNoCorrio } from '@/lib/portero-alimenta/no-corrio'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -31,7 +31,7 @@ async function correr(request: Request, dry_run: boolean) {
   if (!autorizado(request)) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001' }, { status: 401 })
   try {
     const db = getSupabaseAdmin() as unknown as Db
-    const r = await rutaNoCorrio({ db, interruptores: interruptoresDelEntorno(), workflowId: process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO_POR_OMISION, estadoDelFlujo: estadoDelFlujoDelPortero(), avisar: avisarAAlertas({ db }) }, { dry_run })
+    const r = await rutaNoCorrio({ db, raspadoDelCliente: raspadoRealDelCliente(db), n8nResponde: n8nContesta(), interruptores: interruptoresDelEntorno(), workflowId: process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO_POR_OMISION, estadoDelFlujo: estadoDelFlujoDelPortero(), avisar: avisarAAlertas({ db }) }, { dry_run })
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'no_corrio_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

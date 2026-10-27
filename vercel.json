@@ -8,7 +8,15 @@
     },
     {
       "path": "/api/brain/alimentar/no-corrio",
-      "schedule": "0 14 * * *"
+      "schedule": "15 14 * * *"
+    },
+    {
+      "path": "/api/brain/alimentar/no-corrio?repaso=1",
+      "schedule": "45 14 * * *"
+    },
+    {
+      "path": "/api/brain/portero/etiquetar-pendientes",
+      "schedule": "30 14 * * *"
     }
   ]
 }
