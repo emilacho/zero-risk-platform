@@ -6,6 +6,7 @@ import type { BriefLeido } from './brief'
 import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
 import type { Estado, Ficha } from './tipos'
 import type { FuentesCompletas } from './puertos'
+import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
 import type { ReglasDeImagen } from './reglas-de-imagen'
 
 export const AVISO_DEL_CEREBRO = 'Este cliente tiene un cerebro (almacén de conocimiento) que se actualiza a diario; lo esencial va abajo. Si necesitas algo que no está, dilo en el campo `necesito` de tu respuesta (máximo 3) y la sala se lo pide; lo que no se consiga se declara, no se inventa.'
@@ -32,6 +33,8 @@ export interface ContextoDePedido {
   /** las imágenes que el curador debe mirar ahora (índice estable + dirección) */
   imagenesAMirar: Array<{ indice: number; url: string }>
   /** datos de un artefacto (o undefined) */
+  /** la plantilla genera la imagen cuando no hay foto apta (`generar_cuando_no_hay_foto`): el pedido de los prompts lo sabe */
+  sinFoto?: boolean
   art: (nombre: string) => Record<string, unknown> | undefined
 }
 
@@ -62,7 +65,7 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
     case 'prompts': {
       esquema = 'prompts.v1'
       const vd = c.art('visual_direction') ?? {}
-      task = `${base}\n## Dirección visual del curador\n${String(vd.resumen ?? '')}\nEstilo: ${String(vd.estilo ?? '')}\n\n## Reglas de imagen (el código comprobará cada prompt ANTES de generar)\n${describirReglas(c.reglas)}\n\n## Tu trabajo\nPropones 2 o 3 prompts de imagen distintos, en lenguaje natural (sujeto, entorno, luz, cámara, estilo). Cada prompt debe cubrir TODO lo obligatorio y no nombrar nada de lo prohibido sin negarlo. No escribas tamaño, proporción ni parámetros: los fija la sala. No nombres marcas, fotógrafos ni personas reales.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
+      task = `${base}\n## Dirección visual del curador\n${String(vd.resumen ?? '')}\nEstilo: ${String(vd.estilo ?? '')}\n\n## Reglas de imagen (el código comprobará cada prompt ANTES de generar)\n${describirReglas(c.reglas)}\n\n## Tu trabajo\nPropones 2 o 3 prompts de imagen distintos, en lenguaje natural (sujeto, entorno, luz, cámara, estilo). Cada prompt debe cubrir TODO lo obligatorio y no nombrar nada de lo prohibido sin negarlo. No escribas tamaño, proporción ni parámetros: los fija la sala. No nombres marcas, fotógrafos ni personas reales.${c.sinFoto ? seccionDeImagenSinFoto(F) : ''}\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
       return finalizar(task)
     }
     case 'mirar': {

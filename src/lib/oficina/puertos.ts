@@ -20,6 +20,8 @@ export interface FuentesCompletas {
   fuentes: FuentesDelCliente
   propios: PropiosDelCliente
   fotos: FotoEtiquetada[]
+  /** fotos de la COMPETENCIA y de referencia (con su origen): NUNCA candidatas; solo estilo, en texto */
+  referencias?: FotoEtiquetada[]
   /** fotos ya usadas: id → ISO */
   usos: Record<string, string>
   /** vocabulario de productos del cliente (lo que muestran sus fotos), para saber qué protagoniza un brief */
@@ -58,7 +60,7 @@ export interface Encargo {
   salida_output_id: string | null
   hitl_queue_id: string | null
 }
-export interface NuevoEncargo { client_id: string; parte_id: string; brief_id: string; tipo_de_grupo: string; familia: string; tope_usd: number; dry_run: boolean; prueba: boolean; sala_ref: Record<string, unknown> | null; estado_del_motor: Estado }
+export interface NuevoEncargo { /** la causa de un fallo ya corregida: permite reabrir un encargo `fallido` aunque ya haya gastado (tope de versiones intacto) */ reabrir_causa?: string; client_id: string; parte_id: string; brief_id: string; tipo_de_grupo: string; familia: string; tope_usd: number; dry_run: boolean; prueba: boolean; sala_ref: Record<string, unknown> | null; estado_del_motor: Estado }
 
 export interface TurnoRegistrado {
   n: number; paso: string; tipo: string; agente: string | null
@@ -118,8 +120,18 @@ export type AperturaDeJefatura =
   | { estado: 'no_abre'; motivo: string }
   | { estado: 'error'; motivo: string }
 
+/** el portero del cerebro: el PEDIDO (`POST /api/brain/alimentar/pedido`) y la lectura de su resultado (`GET …/pedido?id=`) */
+export interface PuertoDelCerebro {
+  /** la ruta de vuelta a la que el portero avisa (`avisar_a`): nuestra propia casa */
+  avisarA: string
+  pedir(p: import('./material').PedidoAlPortero): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; error: string; http?: number }>
+  leerPedido(id: string): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; error: string; http?: number }>
+}
+
 export interface Puertos {
   almacen: Almacen
+  /** MATERIAL · el portero. Opcional: sin él (o con `material_activo` apagado) la oficina funciona exactamente como antes */
+  cerebro?: PuertoDelCerebro
   ahora(): Date
   fuentes(clientId: string): Promise<FuentesCompletas | { error: string }>
   parte(parteId: string, clientId: string): Promise<{ texto: string } | null>

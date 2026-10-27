@@ -6,6 +6,7 @@
  * Más: `citasExisten` (una regla extraída de un brief de texto debe traer una cita que EXISTA en el brief) y `datosAjenos` (teléfono, @ o enlace que no son del cliente).
  */
 import { aparicionesDe, contienePalabra, datosDeContacto, esTelefonoDeLaLista, normalizar } from './texto'
+import { motivosDeInvencion, type ReglasDeInvencion } from './prompts-sin-invencion'
 
 export interface ReglaDeImagen { id: string; texto: string; claves?: string[]; cita?: string }
 export interface ReglasDeImagen { obligatorio: ReglaDeImagen[]; prohibido: ReglaDeImagen[] }
@@ -23,7 +24,8 @@ const RE_NOMBRA_AUTOR = /\b(?:al estilo de|en el estilo de|estilo de|inspirad[oa
 export interface FalloDePrompt { indice: number; motivos: string[] }
 export interface ResultadoDeChequearPrompts { pasan: number[]; fallan: FalloDePrompt[]; ninguno: boolean }
 
-export function chequearPrompts(prompts: string[], reglas: ReglasDeImagen, propios: Pick<PropiosDelCliente, 'marcas_ajenas'>): ResultadoDeChequearPrompts {
+/** `invencion` (opcional, apagada por omisión): lo que una imagen generada sin foto no puede pedir ni copiar → prompts-sin-invencion.ts */
+export function chequearPrompts(prompts: string[], reglas: ReglasDeImagen, propios: Pick<PropiosDelCliente, 'marcas_ajenas'>, invencion?: ReglasDeInvencion | null): ResultadoDeChequearPrompts {
   const pasan: number[] = []
   const fallan: FalloDePrompt[] = []
   prompts.forEach((p, i) => {
@@ -39,6 +41,7 @@ export function chequearPrompts(prompts: string[], reglas: ReglasDeImagen, propi
     if (RE_PARAMETRO.test(p)) motivos.push('trae parámetros del generador (--xx): el tamaño y los parámetros los fija la sala')
     if (RE_ASPECTO.test(p)) motivos.push('escribe una relación de aspecto: el tamaño lo fija la sala')
     if (RE_NOMBRA_AUTOR.test(p)) motivos.push('nombra un estilo «de» una persona real (fotógrafo, artista)')
+    if (invencion) motivos.push(...motivosDeInvencion(p, invencion))
     if (motivos.length) fallan.push({ indice: i, motivos }); else pasan.push(i)
   })
   return { pasan, fallan, ninguno: pasan.length === 0 }
