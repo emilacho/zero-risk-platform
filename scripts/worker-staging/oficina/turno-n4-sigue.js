@@ -8,6 +8,8 @@ if (e.error && typeof e.error === 'object') throw new Error('OFICINA_RESULTADO_N
 const status = Number(e.statusCode)
 const b = e.body && typeof e.body === 'object' ? e.body : {}
 if (status === 200 && b.accion === 'esperar' && b.turno) return [{ json: { llave: c.llave, ruta: 'esperar', turno_body: { encargo_id: c.encargo_id, turno: b.turno } } }]
+// 200 `esperar_jefatura` / `esperar_material` → el encargo espera a la jefatura o al portero: la ejecución termina SIN error y sin ítems (nada se despierta; ellos reanudan por su ruta de vuelta)
+if (status === 200 && (b.accion === 'esperar_jefatura' || b.accion === 'esperar_material')) return []
 if (status === 200 && b.accion === 'cerrado') {
   const ref = b.sala_ref && typeof b.sala_ref === 'object' ? b.sala_ref : {}
   return [{ json: { llave: c.llave, ruta: 'cable', payload_cable: {

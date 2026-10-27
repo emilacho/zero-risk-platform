@@ -79,13 +79,15 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
     crearEncargo: async (n) => {
       const previos = [...m.encargos.values()].filter((x) => x.parte_id === n.parte_id && x.brief_id === n.brief_id && x.tipo_de_grupo === n.tipo_de_grupo).sort((a, b) => b.version_encargo - a.version_encargo)
       let version = 1
+      let salaRef = n.sala_ref
       if (previos[0]) {
-        const d = decidirReapertura({ estado: previos[0].estado, gasto_usd: previos[0].gasto_usd, version_encargo: previos[0].version_encargo, pasos_ejecutados: previos[0].estado_del_motor.pasos_ejecutados })
+        const d = decidirReapertura({ estado: previos[0].estado, gasto_usd: previos[0].gasto_usd, version_encargo: previos[0].version_encargo, pasos_ejecutados: previos[0].estado_del_motor.pasos_ejecutados }, n.reabrir_causa)
         if (d.accion === 'devolver') return { ok: true, encargo: previos[0], nuevo: false }
         version = d.version
+        if (d.por_causa) salaRef = { ...(n.sala_ref ?? {}), reapertura: { causa_corregida: d.por_causa, desde_version: previos[0].version_encargo } }
       }
       const id = `00000000-0000-4000-8000-${String(m.encargos.size + 1).padStart(12, '0')}`
-      const e: Encargo = { id, client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, estado: 'abierto', estado_del_motor: n.estado_del_motor, con_desacuerdo: false, imagen_generada: false, tope_usd: o.tope ?? n.tope_usd, gasto_usd: 0, dry_run: n.dry_run, prueba: n.prueba, sala_ref: n.sala_ref, salida_output_id: null, hitl_queue_id: null }
+      const e: Encargo = { id, client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, estado: 'abierto', estado_del_motor: n.estado_del_motor, con_desacuerdo: false, imagen_generada: false, tope_usd: o.tope ?? n.tope_usd, gasto_usd: 0, dry_run: n.dry_run, prueba: n.prueba, sala_ref: salaRef, salida_output_id: null, hitl_queue_id: null }
       m.encargos.set(id, e)
       return { ok: true, encargo: e, nuevo: true }
     },

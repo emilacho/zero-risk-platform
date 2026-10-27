@@ -4,6 +4,8 @@
  * FUNCIONES de código y el tratamiento de la salida de cada agente de esas plantillas. Diseño: docs/DISENO-2026-10-09-oficina-salas-2-3-4.md §2, §3, §4.
  * No publica en ninguna red: la entrega (sala 4) deja los archivos y la hoja de pasos para publicar A MANO.
  */
+import { candidatasDelEncargo, medirFotos } from './material-fotos'
+import { limitesDeMaterial } from './material'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { elementosDelKit, esCarrusel, planDeOrigen, esKitDeHistorias, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, leerMedidas, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega, type FilaDeFormato } from './entrega'
@@ -16,6 +18,7 @@ import type { ResultadoDePaso } from './motor'
 import { construirTareaLaminas, contextoDelRevisorLaminas, type ContextoLaminas } from './pedidos-laminas'
 import type { Cambios, Encargo, FuentesCompletas, Puertos } from './puertos'
 import { chequearPrompts, citasExisten, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
+import { reglasDeInvencion } from './prompts-sin-invencion'
 import { ROLES_DE_LAMINA } from './salida'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 
@@ -62,7 +65,7 @@ export function contextoL(pl: Plantilla, e: Estado): ContextoLaminas {
   const b = baseL(e)
   return {
     fuentes: b.F, brief: b.brief, proporcion: b.proporcion, estado: e, reglas: reglasVisuales(e, b.brief), imagenesAMirar: imagenesAMirarL(e), art: (n) => datos(e, n),
-    familia: b.familia, limites: pl.limites, elementos: b.elementos, plataforma: b.plataforma, refsValidos: refsValidosDe(b), refsGeneradas: refsGeneradas(e), png: arr<string>(datos(e, 'render')?.urls),
+    sinFoto: pl.limites.generar_cuando_no_hay_foto === true, familia: b.familia, limites: pl.limites, elementos: b.elementos, plataforma: b.plataforma, refsValidos: refsValidosDe(b), refsGeneradas: refsGeneradas(e), png: arr<string>(datos(e, 'render')?.urls),
   }
 }
 
@@ -106,7 +109,7 @@ export async function ejecutarCodigoL(P: Puertos, enc: Encargo, pl: Plantilla, p
   switch (paso.funcion) {
     case 'abrir_laminas': return abrir(P, enc, pl)
     case 'asignar_fotos': return asignarFotos(P, pl, e)
-    case 'chequear_prompts_ref': return chequearPromptsRef(e, paso.clave.startsWith('reimagen_'))
+    case 'chequear_prompts_ref': return chequearPromptsRef(e, pl, paso.clave.startsWith('reimagen_'))
     case 'imagen_ref': return imagenRef(P, enc, pl, paso.clave.startsWith('reimagen_'))
     case 'elegir_version_ref': return elegirVersionRef(e)
     case 'armar_laminas': return armar(e)
@@ -146,22 +149,14 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
 }
 
 function asignarFotos(P: Puertos, pl: Plantilla, e: Estado): SalidaCodigoL {
-  const b = baseL(e)
-  const vocab = b.F.vocabulario_de_productos
-  const protas = b.familia === 'kit' ? protagonistasDelBrief({ protagonista: b.elementos.map((x) => `${x.tema}. ${x.datos.join(' ')}`).join('. ') }, vocab) : protagonistasDelBrief(b.brief, vocab)
-  const prohibe = prohibePersonas(b.brief)
-  const pedido = { protagonista: protas, prohibe_personas: prohibe, proporcion: b.proporcion, usos: b.F.usos, reuso_dias: Number(pl.limites.reuso_dias ?? 14), ahora: P.ahora() }
-  let cf = candidatasFoto(b.F.fotos, { ...pedido, excluir_reusadas: true }, b.F.propios)
-  let reusoPermitido = false
-  if (cf.candidatas.length === 0) {
-    // «una foto sola que sirve no se bloquea»: si no hay otra, se permite repetir (con aviso)
-    const laxa = candidatasFoto(b.F.fotos, { ...pedido, excluir_reusadas: false }, b.F.propios)
-    if (laxa.candidatas.length) { cf = laxa; reusoPermitido = true }
-  }
-  return { res: { costo_usd: 0, artefacto: { ...cf, protagonistas: protas, prohibe_personas: prohibe, reuso_permitido: reusoPermitido, reusadas: cf.candidatas.filter((c) => c.reusada).map((c) => c.id) } } }
+  // MATERIAL (apagado por omisión): con el interruptor encendido y menos fotos estrictas que el mínimo, entran las CERCANAS (propias, etiquetadas, aptas; rotuladas)
+  const lim = limitesDeMaterial(pl.limites)
+  let { cf, protas, prohibe, reusoPermitido } = candidatasDelEncargo(e, pl, P.ahora())
+  if (lim.activo && cf.candidatas.length < medirFotos(e, pl, P.ahora()).minimo) ({ cf, protas, prohibe, reusoPermitido } = candidatasDelEncargo(e, pl, P.ahora(), { permitirCercanas: true }))
+  return { res: { costo_usd: 0, artefacto: { ...cf, protagonistas: protas, prohibe_personas: prohibe, reuso_permitido: reusoPermitido, reusadas: cf.candidatas.filter((c) => c.reusada).map((c) => c.id), cercanas: cf.candidatas.filter((c) => c.cercana).map((c) => c.id) } } }
 }
 
-function chequearPromptsRef(e: Estado, esRe = false): SalidaCodigoL {
+function chequearPromptsRef(e: Estado, pl: Plantilla, esRe = false): SalidaCodigoL {
   const b = baseL(e)
   const gen = esRe ? refsDeLaReImagen(e) : refsGeneradas(e)
   const pr = arr<{ ref: string; prompts: Array<{ prompt: string; idea_en_una_linea: string }> }>(datos(e, 'prompts')?.imagenes)
@@ -170,7 +165,7 @@ function chequearPromptsRef(e: Estado, esRe = false): SalidaCodigoL {
   const fichas: Ficha[] = []
   for (const ref of gen) {
     const lista = pr.find((x) => x.ref === ref)?.prompts ?? []
-    const ch = chequearPrompts(lista.map((p) => p.prompt), reglas, b.F.propios)
+    const ch = chequearPrompts(lista.map((p) => p.prompt), reglas, b.F.propios, reglasDeInvencion(pl.limites, b.F.referencias))
     porRef[ref] = { indices: ch.pasan, prompts: ch.pasan.map((i) => lista[i]) }
     if (!ch.pasan.length) fichas.push(fichaNueva(`prompts-ninguno-${ref}`, 'chequeo', 'imagen', 'sugerencia', `ningún prompt de «${ref}» cumple las reglas del brief: esa lámina sale sin imagen generada`, 'reglas de imagen del brief', 'declarar la lámina sin imagen generada'))
   }
@@ -491,10 +486,14 @@ function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Pl
   const politica = String(pl.limites.politica_imagen_generada ?? 'permitida')
   const maxGen = Number(pl.limites.imagenes_generadas_max ?? 2)
   let generadas = 0
+  const generarSiFalta = pl.limites.generar_cuando_no_hay_foto === true
+  const sinImagen = new Set<string>(Array.isArray(pl.limites.roles_sin_imagen) ? (pl.limites.roles_sin_imagen as unknown[]).map(String) : ['cta', 'cierre'])
   const efectivas: ImagenDecidida[] = imgs.map((i) => {
     let modo = i.modo, foto = i.foto_id
     // el CÓDIGO decide lo que no se confía al modelo: una foto real tiene que ser una de las candidatas
     if (modo === 'real' && !cand.some((c) => c.id === foto)) { fichas.push(fichaNueva(`vd-foto-invalida-${i.ref}`, 'chequeo', 'imagen', 'sugerencia', `el curador eligió la foto «${foto ?? '(sin id)'}» para «${i.ref}», que no es una candidata: se genera una imagen`, 'candidatas de la sala')); modo = 'generada'; foto = undefined }
+    // NUNCA UNA LÁMINA VACÍA (criterio de Emilio 27-oct): sin foto apta la imagen se GENERA con el contexto del cliente, rotulada; solo las láminas tipográficas de marca (cta/cierre, dato de plantilla) salen sin imagen. Apagado por omisión (`generar_cuando_no_hay_foto`).
+    if (modo === 'ninguna' && generarSiFalta && politica !== 'prohibida' && !sinImagen.has(i.ref)) { fichas.push(fichaNueva(`vd-generada-por-falta-${i.ref}`, 'chequeo', 'imagen', 'sugerencia', `no hay foto del cliente apta para «${i.ref}»: la imagen se genera con el contexto del cliente (rotulada «generada»)`, 'criterio de la oficina: nunca una lámina vacía', 'revisar la imagen generada')); modo = 'generada' }
     if (modo === 'generada' && politica === 'prohibida') { fichas.push(fichaNueva(`vd-prohibida-${i.ref}`, 'chequeo', 'imagen', 'sugerencia', `la política del cliente prohíbe imágenes generadas y no hay foto real apta para «${i.ref}»: esa lámina sale sin imagen`, 'política de imagen generada')); modo = 'ninguna' }
     if (modo === 'generada') { generadas++; if (generadas > maxGen) { fichas.push(fichaNueva(`vd-tope-${i.ref}`, 'chequeo', 'imagen', 'sugerencia', `se pidieron más de ${maxGen} imágenes generadas: «${i.ref}» sale sin imagen`, 'tope de imágenes generadas')); modo = 'ninguna' } }
     return { ...i, modo, foto_id: foto }

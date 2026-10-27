@@ -13,6 +13,7 @@ import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt } from '../revisor-gpt'
 import { llamarRevisorGptConLibro } from '../revisor-gpt-libro'
 import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
 import { identidadVisualDelCliente } from './identidad-visual'
+import { separarFotos } from './material'
 import type { Registro } from './chequeos'
 import { avisoDeProvisionales } from '../manual/lectura'
 import { codificarPng } from './encaje'
@@ -93,9 +94,10 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         if (mb.error) return { error: `manual: ${mb.error.message}` }
         const manual = mb.data?.[0]
         if (!manual) return { error: 'el cliente no tiene manual de marca' }
-        const fo = (await db.from('client_social_images').select('id,url,estado,que_muestra,producto_visto,texto_visible,con_personas,tipo_de_toma,formato,etiqueta_confianza').eq('client_id', clientId).eq('estado', 'ok')) as { data: Fila[] | null; error: { message: string } | null }
+        const fo = (await db.from('client_social_images').select('id,owner_role,url,estado,que_muestra,producto_visto,texto_visible,con_personas,tipo_de_toma,formato,etiqueta_confianza').eq('client_id', clientId).eq('estado', 'ok')) as { data: Fila[] | null; error: { message: string } | null }
         if (fo.error) return { error: `fotos: ${fo.error.message}` }
-        const fotos = lista<Fila>(fo.data).map((x) => ({ ...x, id: String(x.id) }) as unknown as FotoEtiquetada)
+        // propio / competencia / referencia: UNA sola implementación (la del portero). Solo las PROPIAS son fotos del cliente; el resto es referencia de estilo, jamás candidata
+        const { propias: fotos, referencias } = separarFotos(lista<Fila>(fo.data))
         const desde = new Date(ahora().getTime() - DIAS_DE_USO * 86_400_000).toISOString()
         const us = (await db.from('oficina_uso_de_fotos').select('foto_id,usada_en').eq('client_id', clientId).gte('usada_en', desde)) as { data: Fila[] | null; error: { message: string } | null }
         const usos: Record<string, string> = {}
@@ -119,13 +121,31 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
             telefonos_verificables: telefonos.length > 0, handles_verificables: handles.length > 0,
           },
           propios: { telefonos, handles, urls: cliente.website_url ? [String(cliente.website_url)] : [], marcas_ajenas: competidores.map((c) => c.toLowerCase()) },
-          fotos, usos, vocabulario_de_productos: [...new Set(fotos.flatMap((x) => x.producto_visto ?? []))],
+          fotos, referencias, usos, vocabulario_de_productos: [...new Set(fotos.flatMap((x) => x.producto_visto ?? []))],
           zona: config.zona_horaria ?? config.timezone ?? null,
           slug: typeof cliente.slug === 'string' && cliente.slug ? cliente.slug : null,
           marca: marcaDelCliente(manual, cliente, handles),
         }
         return out
       } catch (e) { return { error: e instanceof Error ? e.message : String(e) } }
+    },
+    // MATERIAL · el portero del cerebro (el pedido y la lectura de su resultado); la llave interna viaja SOLO a nuestra propia casa
+    cerebro: {
+      avisarA: `${env.baseUrl}/api/oficina/material-vuelta`,
+      async pedir(p) {
+        try {
+          const r = await f(`${env.baseUrl}/api/brain/alimentar/pedido`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(p), signal: AbortSignal.timeout(60000) })
+          const j = (await r.json().catch(() => ({}))) as Record<string, unknown>
+          return r.ok ? { ok: true as const, body: j } : { ok: false as const, error: String(j.detalle ?? j.error ?? `HTTP ${r.status}`), http: r.status }
+        } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) } }
+      },
+      async leerPedido(id) {
+        try {
+          const r = await f(`${env.baseUrl}/api/brain/alimentar/pedido?id=${encodeURIComponent(id)}`, { headers: { 'x-api-key': env.internalKey }, signal: AbortSignal.timeout(30000) })
+          const j = (await r.json().catch(() => ({}))) as Record<string, unknown>
+          return r.ok ? { ok: true as const, body: j } : { ok: false as const, error: String(j.detalle ?? j.error ?? `HTTP ${r.status}`), http: r.status }
+        } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) } }
+      },
     },
     async plan(planId, clientId) {
       const r = (await db.from('client_historical_outputs').select('content').eq('id', planId).eq('client_id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }

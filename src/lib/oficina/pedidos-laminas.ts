@@ -6,6 +6,7 @@ import type { ElementoDelKit } from './brief'
 import { AVISO_DEL_CEREBRO, describirReglas, FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO, resumenDelEncargo, type ContextoDePedido } from './pedidos'
 import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
 import { ROLES_DE_LAMINA, LIMITES_DE_LAMINA } from './salida'
+import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
 import type { Ficha, Limites } from './tipos'
 
 export interface ContextoLaminas extends ContextoDePedido {
@@ -98,7 +99,7 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
     case 'prompts': {
       esquema = 'prompts_por_ref.v1'
       const vd = c.art('visual_direction') ?? {}
-      return fin(`${base}\n## Dirección visual del curador\n${s(vd.resumen)}\nEstilo: ${s(vd.estilo)}\n\n## Imágenes que hay que GENERAR (ref → para qué)\n${lista(arr(vd.imagenes).filter((i) => c.refsGeneradas.includes(s((i as Record<string, unknown>).ref))).map((i) => `${s((i as Record<string, unknown>).ref)}: ${s((i as Record<string, unknown>).motivo)}`))}\n\n## Reglas de imagen (el código comprobará cada prompt ANTES de generar)\n${describirReglas(c.reglas)}\n\n## Tu trabajo\nPara CADA imagen a generar propones 2 o 3 prompts distintos, en lenguaje natural (sujeto, entorno, luz, cámara, estilo). Cada prompt debe cubrir TODO lo obligatorio y no nombrar nada de lo prohibido sin negarlo. No escribas tamaño, proporción ni parámetros: los fija la sala. No nombres marcas, fotógrafos ni personas reales.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
+      return fin(`${base}\n## Dirección visual del curador\n${s(vd.resumen)}\nEstilo: ${s(vd.estilo)}\n\n## Imágenes que hay que GENERAR (ref → para qué)\n${lista(arr(vd.imagenes).filter((i) => c.refsGeneradas.includes(s((i as Record<string, unknown>).ref))).map((i) => `${s((i as Record<string, unknown>).ref)}: ${s((i as Record<string, unknown>).motivo)}`))}\n\n## Reglas de imagen (el código comprobará cada prompt ANTES de generar)\n${describirReglas(c.reglas)}\n\n## Tu trabajo\nPara CADA imagen a generar propones 2 o 3 prompts distintos, en lenguaje natural (sujeto, entorno, luz, cámara, estilo). Cada prompt debe cubrir TODO lo obligatorio y no nombrar nada de lo prohibido sin negarlo. No escribas tamaño, proporción ni parámetros: los fija la sala. No nombres marcas, fotógrafos ni personas reales.${c.sinFoto ? seccionDeImagenSinFoto(c.fuentes) : ''}\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
     }
     case 'mirar': {
       esquema = 'observacion_imagenes.v1'
