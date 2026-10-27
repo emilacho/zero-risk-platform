@@ -73,8 +73,8 @@ describe('las salidas reales que mataron las piezas', () => {
     const segundo = procesarSalida(BRF_0004, 'copy_kit.v1', 1, 1, conLimpieza)
     expect(segundo).toMatchObject({ ok: false, accion: 'falla_visible' })
   })
-  it('BRF-0004 · con el interruptor ENCENDIDO (hoy apagado) el eyebrow que no cabe se descarta, se anota, y lo demás del autor queda tal cual', () => {
-    expect(DESCARTAR_EYEBROW_LARGO).toBe(false)
+  it('BRF-0004 · con el interruptor ENCENDIDO (así quedó el 27-oct) el eyebrow que no cabe se descarta, se anota, y lo demás del autor queda tal cual', () => {
+    expect(DESCARTAR_EYEBROW_LARGO).toBe(true)
     const r = procesarSalida(BRF_0004, 'copy_kit.v1', 1, 1, { limpiarForma: { descartarEyebrowLargo: true } })
     expect(r.ok).toBe(true)
     if (r.ok) {

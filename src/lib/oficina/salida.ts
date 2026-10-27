@@ -228,10 +228,10 @@ export function descartarIgnorados(esq: Esq, v: unknown, ruta = '$', quitados: s
  * LIMPIAR LA FORMA (21-oct · cierre de la tercera prueba real: las 3 piezas murieron por la FORMA de una salida buena, no por su contenido). Arreglos DETERMINISTAS que no cambian el sentido ni inventan nada, y se anotan:
  *  a) un campo OPCIONAL de texto que llega vacío (`"foto_id": ""` cuando la imagen no es una foto) se omite: vacío = ausente;
  *  b) `paleta[i]` demasiado larga que lleva un `#hex` («#FF4500 (naranja de marca — fondo dominante)») se queda con el hex;
- *  c) (APAGADO por defecto, sale con GO) un `eyebrow` OPCIONAL más largo que su tope se descarta en vez de matar la pieza entera; el texto del autor NUNCA se recorta ni se reescribe.
+ *  c) (ENCENDIDO el 27-oct con GO de Emilio; poner false lo apaga) un `eyebrow` OPCIONAL más largo que su tope se descarta en vez de matar la pieza entera; el texto del autor NUNCA se recorta ni se reescribe.
  * Lo que no se puede arreglar así sigue fallando (falla visible). Puro.
  */
-export const DESCARTAR_EYEBROW_LARGO = false
+export const DESCARTAR_EYEBROW_LARGO = true
 export function limpiarForma(esq: Esq, v: unknown, ruta = '$', anotados: string[] = [], o: { descartarEyebrowLargo?: boolean } = {}): unknown {
   if (esq.t === 'arr' && Array.isArray(v)) return v.map((x, i) => limpiarForma(esq.de, x, `${ruta}[${i}]`, anotados, o))
   if (esq.t === 'obj' && v && typeof v === 'object' && !Array.isArray(v)) {
