@@ -29,6 +29,28 @@ export function origenDeLaFoto(ownerRole: unknown): OrigenDeFoto {
   return 'competencia'
 }
 
+/**
+ * Dos filas con el MISMO archivo (`hash_archivo`) son UNA foto: medido el 27-oct en df7e47cc, 11 de 22 filas eran las propias rotuladas «competidor» al raspar (antes del arreglo del 21-oct).
+ * De cada grupo gana el origen más confiable (propia, luego referencia, luego competencia) y, a igual origen, la primera por id. Sin huella no se agrupa.
+ */
+const RANGO_DE_ORIGEN: Record<OrigenDeFoto, number> = { propia: 0, referencia: 1, competencia: 2 }
+export function idsDeFotosRepetidas(filas: Fila[]): Set<string> {
+  const mejor = new Map<string, Fila>()
+  const peor = (a: Fila, b: Fila) => { // ¿a es mejor que b?
+    const d = RANGO_DE_ORIGEN[origenDeLaFoto(a.owner_role)] - RANGO_DE_ORIGEN[origenDeLaFoto(b.owner_role)]
+    return d !== 0 ? d < 0 : String(a.id) < String(b.id)
+  }
+  for (const f of filas) {
+    const h = txt(f.hash_archivo)
+    if (!h) continue
+    const m = mejor.get(h)
+    if (!m || peor(f, m)) mejor.set(h, f)
+  }
+  const repetidas = new Set<string>()
+  for (const f of filas) { const h = txt(f.hash_archivo); if (h && mejor.get(h) !== f) repetidas.add(String(f.id)) }
+  return repetidas
+}
+
 export interface FotoVista {
   foto_id: string
   origen: OrigenDeFoto
@@ -48,7 +70,7 @@ export interface FotoVista {
   formato: string | null
 }
 
-const COLUMNAS_DE_LECTURA = ['id', 'owner_role', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'duplicado_de']
+const COLUMNAS_DE_LECTURA = ['id', 'owner_role', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'duplicado_de', 'hash_archivo']
 
 export interface PedidoDeFotos { cliente: string; origen?: OrigenDeFoto | null; soloEtiquetadas?: boolean; limite?: number }
 export type RespuestaDeFotos =
@@ -63,8 +85,9 @@ export async function listarFotos(consulta: Consulta, p: PedidoDeFotos): Promise
   const limite = Math.min(Math.max(Math.trunc(p.limite ?? LIMITE_POR_DEFECTO_DE_FOTOS) || LIMITE_POR_DEFECTO_DE_FOTOS, 1), LIMITE_MAXIMO_DE_FOTOS)
   const r = await consulta({ tabla: 'client_social_images', columnas: COLUMNAS_DE_LECTURA, donde: { client_id: cliente, estado: 'ok' }, orden: { columna: 'created_at', descendente: true }, limite: 1000 })
   if (r.error) return { ok: false, error: 'error_de_lectura', detalle: r.error.slice(0, 200) }
+  const repetidas = idsDeFotosRepetidas(r.filas)
   const vistas: FotoVista[] = r.filas
-    .filter((f) => !txt(f.duplicado_de))
+    .filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)))
     .map((f) => ({
       foto_id: String(f.id), origen: origenDeLaFoto(f.owner_role), cuenta: txt(f.handle), tipo: txt(f.tipo), medio: txt(f.medio), url: txt(f.url),
       publicada_en: txt(f.posted_at), copiada_en: txt(f.created_at), etiquetada: !!txt(f.etiquetada_en), que_muestra: txt(f.que_muestra), producto_visto: lista(f.producto_visto),
@@ -96,6 +119,8 @@ export interface InformeDeEtiquetas {
   fallidas: Array<{ foto_id: string; motivo: string }>
   omitidas_por_tope: number
   omitidas_por_plazo: number
+  /** pendientes que son el MISMO archivo que otra foto de mejor origen: no se pagan dos veces */
+  repetidas_omitidas: number
   costo_usd: number
   error?: string
 }
@@ -109,11 +134,13 @@ export async function etiquetarPendientes(deps: DepsDeEtiquetarPendientes, p: Pe
   const dry = p.dry_run !== false
   const informes: InformeDeEtiquetas[] = []
   for (const cliente of p.clientes) {
-    const inf: InformeDeEtiquetas = { cliente, pendientes: 0, etiquetadas_hoy_antes: 0, intentadas: 0, etiquetadas: 0, fallidas: [], omitidas_por_tope: 0, omitidas_por_plazo: 0, costo_usd: 0 }
+    const inf: InformeDeEtiquetas = { cliente, pendientes: 0, etiquetadas_hoy_antes: 0, intentadas: 0, etiquetadas: 0, fallidas: [], omitidas_por_tope: 0, omitidas_por_plazo: 0, repetidas_omitidas: 0, costo_usd: 0 }
     informes.push(inf)
-    const r = await deps.consulta({ tabla: 'client_social_images', columnas: ['id', 'owner_role', 'estado', 'etiquetada_en', 'duplicado_de', 'created_at'], donde: { client_id: cliente, estado: 'ok' }, orden: { columna: 'created_at', descendente: false }, limite: 1000 })
+    const r = await deps.consulta({ tabla: 'client_social_images', columnas: ['id', 'owner_role', 'estado', 'etiquetada_en', 'duplicado_de', 'hash_archivo', 'created_at'], donde: { client_id: cliente, estado: 'ok' }, orden: { columna: 'created_at', descendente: false }, limite: 1000 })
     if (r.error) { inf.error = r.error.slice(0, 200); continue }
-    const filas: Fila[] = r.filas.filter((f) => !txt(f.duplicado_de))
+    const repetidas = idsDeFotosRepetidas(r.filas)
+    const filas: Fila[] = r.filas.filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)))
+    inf.repetidas_omitidas = r.filas.filter((f) => !txt(f.duplicado_de) && repetidas.has(String(f.id)) && !txt(f.etiquetada_en)).length
     inf.etiquetadas_hoy_antes = filas.filter((f) => (txt(f.etiquetada_en) ?? '').slice(0, 10) === hoy).length
     const pendientes = filas.filter((f) => !txt(f.etiquetada_en)).sort((a, b) => Number(origenDeLaFoto(a.owner_role) !== 'propia') - Number(origenDeLaFoto(b.owner_role) !== 'propia'))
     inf.pendientes = pendientes.length

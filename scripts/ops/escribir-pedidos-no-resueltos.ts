@@ -6,8 +6,10 @@
 import fs from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 
-const t = fs.readFileSync('C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform/.env.local', 'utf8')
-const g = (k: string) => (t.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim().replace(/^["']|["']$/g, '')
+// 27-oct: las llaves ya no viven en el .env.local (limpieza de restos): primero el entorno (`doppler run -p zero-risk -c prd -- npx tsx …`), y el archivo solo como respaldo
+const ARCHIVO = 'C:/Users/emili/Documents/Claude/Projects/Agentic Business Agency/zero-risk-platform/.env.local'
+const t = fs.existsSync(ARCHIVO) ? fs.readFileSync(ARCHIVO, 'utf8') : ''
+const g = (k: string) => process.env[k] || (t.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim().replace(/^["']|["']$/g, '')
 const SALIDA = process.argv.find((a) => a.startsWith('--salida='))?.slice(9) ?? 'C:/Users/emili/OneDrive/Documents/zr-vault/raw/tasks/PEDIDOS-NO-RESUELTOS-CEREBRO.md'
 type Hueco = { hueco?: Record<string, unknown>; estado?: string; detalle?: string; intentado?: string[] }
 

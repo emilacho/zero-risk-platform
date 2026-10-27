@@ -73,3 +73,7 @@ outputs/
 # pnpm regenera este archivo en instalaciones locales y CI falla con
 # "packages field missing or empty" (ya pasó dos veces · b1c2fa3 y PR #320).
 pnpm-workspace.yaml
+
+# 21-oct · cierre de la fuga: las exportaciones de flujos de n8n traen credenciales dentro; nunca se suben
+.tmp-*
+evidence/mapa-despacho-*/

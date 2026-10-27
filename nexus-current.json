@@ -71,7 +71,7 @@
                                                                                          "value":  "application/json"
                                                                                      },
                                                                                      {
-                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "value":  "<REDACTADO>",
                                                                                          "name":  "x-api-key"
                                                                                      }
                                                                                  ]
@@ -108,7 +108,7 @@
                                                                                          "value":  "={{ $env.INTERNAL_API_KEY }}"
                                                                                      },
                                                                                      {
-                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "value":  "<REDACTADO>",
                                                                                          "name":  "x-api-key"
                                                                                      },
                                                                                      {
@@ -145,7 +145,7 @@
                                                                                          "value":  "application/json"
                                                                                      },
                                                                                      {
-                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "value":  "<REDACTADO>",
                                                                                          "name":  "x-api-key"
                                                                                      }
                                                                                  ]
@@ -345,7 +345,7 @@
                                                                                          "value":  "application/json"
                                                                                      },
                                                                                      {
-                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "value":  "<REDACTADO>",
                                                                                          "name":  "x-api-key"
                                                                                      }
                                                                                  ]
@@ -378,7 +378,7 @@
                                                                                          "value":  "application/json"
                                                                                      },
                                                                                      {
-                                                                                         "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                         "value":  "<REDACTADO>",
                                                                                          "name":  "x-api-key"
                                                                                      }
                                                                                  ]
@@ -847,7 +847,7 @@
                                                                                                                "value":  "application/json"
                                                                                                            },
                                                                                                            {
-                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "value":  "<REDACTADO>",
                                                                                                                "name":  "x-api-key"
                                                                                                            }
                                                                                                        ]
@@ -884,7 +884,7 @@
                                                                                                                "value":  "={{ $env.INTERNAL_API_KEY }}"
                                                                                                            },
                                                                                                            {
-                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "value":  "<REDACTADO>",
                                                                                                                "name":  "x-api-key"
                                                                                                            },
                                                                                                            {
@@ -921,7 +921,7 @@
                                                                                                                "value":  "application/json"
                                                                                                            },
                                                                                                            {
-                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "value":  "<REDACTADO>",
                                                                                                                "name":  "x-api-key"
                                                                                                            }
                                                                                                        ]
@@ -1121,7 +1121,7 @@
                                                                                                                "value":  "application/json"
                                                                                                            },
                                                                                                            {
-                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "value":  "<REDACTADO>",
                                                                                                                "name":  "x-api-key"
                                                                                                            }
                                                                                                        ]
@@ -1154,7 +1154,7 @@
                                                                                                                "value":  "application/json"
                                                                                                            },
                                                                                                            {
-                                                                                                               "value":  "557fd3526c7808040924290f170aa25099d2896282acf31cf38dd9cf2ea2bfed",
+                                                                                                               "value":  "<REDACTADO>",
                                                                                                                "name":  "x-api-key"
                                                                                                            }
                                                                                                        ]
