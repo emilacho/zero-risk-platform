@@ -73,6 +73,17 @@ describe('el pulido aparte · guardas', () => {
     expect(r.body).toMatchObject({ apagado: true })
     expect(a.llamadas).toHaveLength(0); expect(t.cerebro_fichas).toHaveLength(n)
   })
+  it('otra corrida del MISMO día con los mismos datos no pisa el resumen pulido con el armado sin pulir (Náufrago 27-oct)', async () => {
+    const t = await conResumen(c)
+    const r = await rutaPulir({ db: crearBaseFalsa(t as never).db, interruptores: ENC, pulirResumen: agente().f, ahora: AHORA }, { client_id: c.id, dry_run: false, ...WF })
+    expect(r.body).toMatchObject({ pulido: { usado: true } })
+    const pulido = vivos(t, c).find((f) => f.atributo === 'resumen:cliente')!
+    const otra = await alimentarCliente({ db: crearBaseFalsa(t as never).db, client_id: c.id, dry_run: false, forzar: true, interruptores: ENC, ahora: AHORA, ...WF })
+    expect(otra.errores).toEqual([])
+    const despues = vivos(t, c).filter((f) => f.atributo === 'resumen:cliente')
+    expect(despues).toHaveLength(1)
+    expect(despues[0].id).toBe(pulido.id)
+  })
   it('en seco no llama al agente ni escribe', async () => {
     const t = await conResumen(c); const n = t.cerebro_fichas.length
     const a = agente()

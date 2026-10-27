@@ -10,6 +10,13 @@ const buenas = []
 const fallas = []
 const duplicadas = []
 const vistas = {}
+// 27-oct · el MISMO archivo es una sola foto en todo el cliente (no solo dentro de un post): lo de competencia o referencia que ya está guardado con otro rol/cuenta no se vuelve a subir
+// (medido en df7e47cc: 11 «competidor» eran las propias). La propia siempre entra. Si la lectura falla, se sigue sin esta guarda (la lectura y el etiquetado también deduplican por huella).
+const previosPorHuella = {}
+if (metas[0] && metas[0].client_id) {
+  const previos = await this.helpers.httpRequest({ url: SB + '/rest/v1/client_social_images?client_id=eq.' + metas[0].client_id + '&hash_archivo=not.is.null&select=hash_archivo,owner_role,handle,post_id&limit=1000', method: 'GET', json: true, timeout: 15000, headers: auth }).catch(() => [])
+  for (const p of Array.isArray(previos) ? previos : []) if (p.hash_archivo && !previosPorHuella[p.hash_archivo]) previosPorHuella[p.hash_archivo] = p
+}
 // el contexto que acompaña a cada fila (lo trae `Fotos · lista`)
 const contexto = (m) => ({ caption: m.caption || null, posted_at: m.posted_at || null, post_url: m.post_url || null, posicion: m.posicion || null, medio: m.medio || null })
 for (let i = 0; i < metas.length; i++) {
@@ -37,7 +44,10 @@ for (let i = 0; i < metas.length; i++) {
   const hash = sha256Hex(buf)
   const claveDup = String(m.post_id).replace(/-c\d+$/, '') + '|' + hash
   if (vistas[claveDup] !== undefined) { duplicadas.push({ post_id: m.post_id, igual_a: vistas[claveDup], hash }); continue }
+  const previo = previosPorHuella[hash]
+  if (previo && m.owner_role !== 'propio' && !(previo.owner_role === m.owner_role && previo.handle === m.handle && previo.post_id === m.post_id)) { duplicadas.push({ post_id: m.post_id, igual_a: previo.owner_role + ':' + previo.handle + '/' + previo.post_id, hash }); continue }
   vistas[claveDup] = m.post_id
+  if (!previosPorHuella[hash]) previosPorHuella[hash] = { owner_role: m.owner_role, handle: m.handle, post_id: m.post_id }
   const ext = ct === 'image/png' ? 'png' : ct === 'image/webp' ? 'webp' : 'jpg'
   buenas.push({
     json: { ...m, ct, hash_archivo: hash, bytes: buf.length, magic: buf.slice(0, 4).toString('hex'), path: m.client_id + '/' + m.owner_role + '/' + m.handle + '/' + m.post_id + '.' + ext },

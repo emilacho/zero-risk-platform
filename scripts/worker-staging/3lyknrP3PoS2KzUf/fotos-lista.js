@@ -1,8 +1,14 @@
 // COPIA DE FOTOS · 1/5 · LISTA · CC#1 · 2026-09-29 · 03-oct: CADA FOTO CON SU CONTEXTO (texto, fecha, enlace del post, posición en el carrusel, medio real) vía `contextoDePost` (fotos-contexto-logica.js, pegada arriba por el constructor).
 // Una salida por foto a copiar (perfil HD + últimas portadas + hijas de carrusel).
-// Solo instagram_scraper real (no ensayo) con client_id. Sin fotos ⇒ [] y la rama termina sin ruido.
+// Instagram real (no ensayo) con client_id, más (27-oct) las fuentes ajenas de competencia/referencias. Sin fotos ⇒ [] y la rama termina sin ruido.
 const ctx = $('Validar el cuerpo contra el esquema').first().json
-if (ctx.apify_function !== 'instagram_scraper' || ctx.dry_run === true || !ctx.client_id) return []
+if (ctx.dry_run === true || !ctx.client_id) return []
+// 27-oct · competencia y referencias: Mapas, sitios de competidores y biblioteca de anuncios también dejan sus fotos, cada una con su origen (competidor / referencia)
+if (esFuenteAjena(ctx.apify_function)) {
+  const crudos = $('Merge · apify data ready').all().map((i) => i.json)
+  return fotosDeOtrasFuentes(ctx.apify_function, crudos, { max: 12 }).map((f) => ({ json: { client_id: ctx.client_id, ...f } }))
+}
+if (ctx.apify_function !== 'instagram_scraper') return []
 const SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'
 const auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }
 const MAX_POSTS = 12
