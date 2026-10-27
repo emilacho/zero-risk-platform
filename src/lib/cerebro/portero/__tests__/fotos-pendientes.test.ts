@@ -1,7 +1,7 @@
 /** Fotos del cerebro (27-oct): lectura con origen y etiquetado automático con tope por cliente/día. US$ 0 · sin red (la base y el etiquetador son moldes). */
 import { describe, expect, it } from 'vitest'
 import type { Consulta, Fila } from '../../consulta'
-import { etiquetarPendientes, listarFotos, origenDeLaFoto, TOPE_DE_ETIQUETAS_POR_CLIENTE_Y_DIA } from '../fotos-pendientes'
+import { etiquetarPendientes, idsDeFotosRepetidas, listarFotos, origenDeLaFoto, TOPE_DE_ETIQUETAS_POR_CLIENTE_Y_DIA } from '../fotos-pendientes'
 
 const C = 'cliente-a'
 const HOY = new Date('2026-10-27T14:30:00Z')
@@ -49,6 +49,29 @@ describe('listarFotos', () => {
     expect((await listarFotos(consultaCon([], 'caída'), { cliente: C })).ok).toBe(false)
     expect((await listarFotos(consultaCon([]), { cliente: '' })).ok).toBe(false)
     expect((await listarFotos(consultaCon([]), { cliente: C, origen: 'x' as never })).ok).toBe(false)
+  })
+})
+
+describe('el mismo archivo es UNA foto (df7e47cc, 27-oct: 11 «competidor» eran las propias)', () => {
+  const dup = [foto('a', 'competidor', { hash_archivo: 'H1' }), foto('b', 'propio', { hash_archivo: 'H1' }), foto('c', 'competidor', { hash_archivo: 'H2' }), foto('d', 'propio'), foto('e', 'propio')]
+  it('gana el origen más confiable del grupo; a igual origen, la primera por id; sin huella no se agrupa', () => {
+    expect([...idsDeFotosRepetidas(dup)]).toEqual(['a'])
+    const mismos = [foto('z', 'propio', { hash_archivo: 'H' }), foto('y', 'propio', { hash_archivo: 'H' })]
+    expect([...idsDeFotosRepetidas(mismos)]).toEqual(['z'])
+    expect(idsDeFotosRepetidas([foto('p', 'propio'), foto('q', 'propio')]).size).toBe(0)
+  })
+  it('la lectura no cuenta la repetida: 5 filas, 4 fotos, la «competencia» que era propia desaparece', async () => {
+    const r = await listarFotos(consultaCon(dup), { cliente: C })
+    expect(r.ok && r.total).toBe(4)
+    expect(r.ok && r.por_origen.propia.total).toBe(3)
+    expect(r.ok && r.fotos.map((f) => f.foto_id)).not.toContain('a')
+  })
+  it('el etiquetado no paga la repetida y lo dice', async () => {
+    const vistas: string[] = []
+    const r = await etiquetarPendientes({ consulta: consultaCon(dup), ahora: () => HOY, etiquetarFoto: async (a) => { vistas.push(a.foto_id); return { llamo_al_modelo: true, escribio: true, costo_usd: 0.008 } } }, { clientes: [C], dry_run: false })
+    expect(vistas).not.toContain('a')
+    expect(vistas).toHaveLength(4)
+    expect(r.informes[0].repetidas_omitidas).toBe(1)
   })
 })
 
