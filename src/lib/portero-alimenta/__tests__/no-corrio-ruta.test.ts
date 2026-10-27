@@ -29,8 +29,10 @@ beforeEach(() => {
   vi.stubEnv('CRON_SECRET', SECRETO)
   vi.stubEnv('INTERNAL_API_KEY', LLAVE)
   vi.stubEnv('PORTERO_ALIMENTAR', 'on')
+  vi.stubEnv('N8N_BASE_URL', 'http://n8n.prueba')
+  vi.stubGlobal('fetch', async () => new Response('ok', { status: 200 })) // n8n contesta: esta prueba no mide ese chequeo
 })
-afterEach(() => { vi.unstubAllEnvs() })
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
 describe('puertas', () => {
   it('el secreto del cron correcto entra; uno equivocado del mismo largo no; sin nada, no', async () => {

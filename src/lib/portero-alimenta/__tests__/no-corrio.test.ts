@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { crearBaseFalsa } from './base-falsa'
 import { avisarAAlertas, estadoDelFlujoDelPortero } from '../avisos'
-import { DIAS_EN_QUE_SE_AVISA, rutaNoCorrio, type DepsDeNoCorrio, type EstadoDelFlujo } from '../no-corrio'
+import { DIAS_EN_QUE_SE_AVISA, n8nContesta, raspadoRealDelCliente, rutaNoCorrio, type DepsDeNoCorrio, type EstadoDelFlujo } from '../no-corrio'
 import { GET, POST } from '../../../app/api/brain/alimentar/no-corrio/route'
 
 const C = '99999999-9999-4999-8999-999999999999'
@@ -174,9 +174,71 @@ describe('entrada y salidas', () => {
     expect((await av('hola')).ok).toBe(true)
     expect(cuerpo).toContain('C0B7XUUEBHA')
   })
-  it('vercel.json programa la alarma a las 14:00 UTC, después de la corrida de las 12:30', async () => {
+  it('vercel.json programa la alarma a las 14:15 UTC (después de la corrida de las 12:30) y un repaso a las 14:45', async () => {
     const { readFileSync } = await import('node:fs')
     const cfg = JSON.parse(readFileSync(new URL('../../../../vercel.json', import.meta.url), 'utf8')) as { crons: Array<{ path: string; schedule: string }> }
-    expect(cfg.crons).toContainEqual({ path: '/api/brain/alimentar/no-corrio', schedule: '0 14 * * *' })
+    expect(cfg.crons).toContainEqual({ path: '/api/brain/alimentar/no-corrio', schedule: '15 14 * * *' })
+    expect(cfg.crons).toContainEqual({ path: '/api/brain/alimentar/no-corrio?repaso=1', schedule: '45 14 * * *' })
+    expect(cfg.crons).toContainEqual({ path: '/api/brain/portero/etiquetar-pendientes', schedule: '30 14 * * *' })
+  })
+})
+
+describe('corrió ciega y n8n caído (27-oct)', () => {
+  const HECHA = [fila('2026-10-15', 'hecha')]
+  it('«hecha» pero SIN raspado real hoy y con raspado los 7 días anteriores ⇒ avisa que corrió ciega', async () => {
+    const m = montar(HECHA)
+    m.deps.raspadoDelCliente = async () => ({ ok: true, hoy: 0, previos: 22 })
+    const r = await rutaNoCorrio(m.deps, REAL)
+    expect(m.avisos).toHaveLength(1)
+    expect(m.avisos[0]).toContain('corrió ciega')
+    expect((r.body.clientes as Array<{ veredicto: string }>)[0].veredicto).toBe('hecha_sin_raspado')
+  })
+  it('«hecha» con raspado real hoy ⇒ silencio', async () => {
+    const m = montar(HECHA)
+    m.deps.raspadoDelCliente = async () => ({ ok: true, hoy: 18, previos: 22 })
+    await rutaNoCorrio(m.deps, REAL)
+    expect(m.avisos).toHaveLength(0)
+  })
+  it('un cliente que nunca raspó (sin filas previas) no dispara «corrió ciega»', async () => {
+    const m = montar(HECHA)
+    m.deps.raspadoDelCliente = async () => ({ ok: true, hoy: 0, previos: 0 })
+    await rutaNoCorrio(m.deps, REAL)
+    expect(m.avisos).toHaveLength(0)
+  })
+  it('si no se puede leer el raspado, no se inventa una alarma (solo el chequeo de la corrida cuenta)', async () => {
+    const m = montar(HECHA)
+    m.deps.raspadoDelCliente = async () => ({ ok: false, detalle: 'la base no contestó' })
+    await rutaNoCorrio(m.deps, REAL)
+    expect(m.avisos).toHaveLength(0)
+  })
+  it('n8n no responde ⇒ UN aviso aunque todos los clientes tengan su corrida de hoy', async () => {
+    const m = montar(HECHA)
+    m.deps.n8nResponde = async () => ({ ok: false, detalle: 'n8n respondió 502' })
+    const r = await rutaNoCorrio(m.deps, REAL)
+    expect(m.avisos).toHaveLength(1)
+    expect(m.avisos[0]).toContain('n8n no responde')
+    expect((r.body.clientes as Array<{ veredicto: string }>).map((v) => v.veredicto)).toContain('n8n_no_responde')
+  })
+  it('n8n responde ⇒ silencio', async () => {
+    const m = montar(HECHA)
+    m.deps.n8nResponde = async () => ({ ok: true, detalle: 'responde' })
+    await rutaNoCorrio(m.deps, REAL)
+    expect(m.avisos).toHaveLength(0)
+  })
+  it('n8nContesta: 200 responde, 502 no, sin base no, red caída no (nunca lanza)', async () => {
+    const ok = (s: number) => async () => new Response('', { status: s })
+    expect((await n8nContesta({ base: 'http://n', fetchImpl: ok(200) })()).ok).toBe(true)
+    expect((await n8nContesta({ base: 'http://n', fetchImpl: ok(502) })()).ok).toBe(false)
+    expect((await n8nContesta({ base: '', fetchImpl: ok(200) })()).ok).toBe(false)
+    expect((await n8nContesta({ base: 'http://n', fetchImpl: async () => { throw new Error('ECONNRESET') } })()).detalle).toContain('ECONNRESET')
+  })
+  it('raspadoRealDelCliente cuenta hoy y los 7 días anteriores, solo ensayo=false', async () => {
+    const base = crearBaseFalsa({ apify_raw: [
+      { id: 1, client_id: C, ensayo: false, created_at: '2026-10-15T12:40:00Z' },
+      { id: 2, client_id: C, ensayo: false, created_at: '2026-10-12T12:40:00Z' },
+      { id: 3, client_id: C, ensayo: true, created_at: '2026-10-15T12:41:00Z' },
+      { id: 4, client_id: C, ensayo: false, created_at: '2026-10-01T12:40:00Z' },
+    ] } as never)
+    expect(await raspadoRealDelCliente(base.db)(C, '2026-10-15')).toEqual({ ok: true, hoy: 1, previos: 1 })
   })
 })

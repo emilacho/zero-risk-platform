@@ -6,6 +6,9 @@
  *  · existe y NO está `hecha`                    → si el vigilante ya apagó y avisó (`resumen.vigilante.ok === false`) → silencio (ya se avisó); si no, UNA línea;
  *  · no existe                                   → si el flujo sigue inactivo porque el vigilante lo apagó (el último rastro trae `vigilante.ok === false`) → silencio
  *                                                  (UN aviso por apagado: el del vigilante); si no, UNA línea con el estado del flujo.
+ * Dos comprobaciones más (27-oct · la corrida del 22 salió «hecha» CIEGA: Apify devolvió 500 con la llave vieja y no quedó ni una fila de raspado real; del 23 al 26 el flujo murió en su primera llamada y nadie avisó):
+ *  · «hecha» sin raspado real: la corrida de hoy está `hecha` pero el cliente no tiene NINGUNA fila de raspado real de hoy (`apify_raw`, ensayo=false) y sí las tuvo en los 7 días anteriores ⇒ UNA línea (un cliente que nunca raspa no dispara esto);
+ *  · n8n no responde: si el propio n8n no contesta (`/healthz`) ⇒ UNA línea, aunque todos los clientes tengan su corrida de hoy (si cae n8n, nadie más avisa).
  * Sin repetir cada día: la racha se mide por la distancia entre hoy y el último rastro (sin escribir nada: una fila marcadora bloquearía la corrida del día con `ya_corrio_hoy`).
  * Se avisa el PRIMER día sin corrida (distancia 1) y UN recordatorio al 4.º día (distancia 4); entre medias, silencio. US$ 0 · no llama a Apify ni a modelo · solo lee.
  */
@@ -31,9 +34,37 @@ export interface DepsDeNoCorrio extends DepsDeRutas {
   estadoDelFlujo?: (workflowId: string) => Promise<EstadoDelFlujo>
   /** manda UNA línea a #alertas; ok solo si el canal confirmó */
   avisar?: (texto: string, clave?: string) => Promise<{ ok: boolean; detalle: string }>
+  /** cuántas filas de raspado REAL tuvo el cliente hoy y en los 7 días anteriores; sin esto no se revisa el raspado */
+  raspadoDelCliente?: (clientId: string, dia: string) => Promise<{ ok: true; hoy: number; previos: number } | { ok: false; detalle: string }>
+  /** ¿contesta el propio n8n? sin esto no se revisa */
+  n8nResponde?: () => Promise<{ ok: boolean; detalle: string }>
 }
 
-export interface VeredictoDeNoCorrio { client_id: string; nombre: string | null; veredicto: 'corrio' | 'ya_avisado' | 'no_corrio' | 'sin_corrida_en_racha' | 'no_pude_comprobar'; linea?: string; dias_sin_corrida?: number }
+/** el raspado real de un cliente: filas de `apify_raw` (ensayo=false) de hoy y de los 7 días anteriores, leídas de la base */
+export function raspadoRealDelCliente(db: DepsDeRutas['db']) {
+  return async (clientId: string, dia: string): Promise<{ ok: true; hoy: number; previos: number } | { ok: false; detalle: string }> => {
+    const desde = new Date(Date.parse(`${dia}T00:00:00Z`) - 7 * 86_400_000).toISOString()
+    const q = await db.from('apify_raw').select('created_at').eq('client_id', clientId).eq('ensayo', false).gte('created_at', desde).limit(2000)
+    if (q.error) return { ok: false, detalle: String(q.error.message).slice(0, 100) }
+    const filas = lista(q.data)
+    const hoy = filas.filter((f) => String(f.created_at).slice(0, 10) === dia).length
+    return { ok: true, hoy, previos: filas.length - hoy }
+  }
+}
+
+/** ¿contesta n8n? GET /healthz con tope de 10 s; lo que no sea 200 es «no responde» */
+export function n8nContesta(o: { base?: string; fetchImpl?: (u: string, i?: RequestInit) => Promise<Response> } = {}) {
+  return async (): Promise<{ ok: boolean; detalle: string }> => {
+    const base = (o.base ?? process.env.N8N_BASE_URL ?? '').replace(/\/$/, '')
+    if (!base) return { ok: false, detalle: 'sin N8N_BASE_URL' }
+    try {
+      const r = await (o.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i)))(`${base}/healthz`, { signal: AbortSignal.timeout(10_000) })
+      return r.ok ? { ok: true, detalle: 'responde' } : { ok: false, detalle: `n8n respondió ${r.status}` }
+    } catch (e) { return { ok: false, detalle: e instanceof Error ? e.message : String(e) } }
+  }
+}
+
+export interface VeredictoDeNoCorrio { client_id: string; nombre: string | null; veredicto: 'corrio' | 'hecha_sin_raspado' | 'n8n_no_responde' | 'ya_avisado' | 'no_corrio' | 'sin_corrida_en_racha' | 'no_pude_comprobar'; linea?: string; dias_sin_corrida?: number }
 
 const yaLoAvisoElVigilante = (f: Fila | undefined) => !!f && esObjeto(f.resumen) && esObjeto(f.resumen.vigilante) && (f.resumen.vigilante as Fila).ok === false
 
@@ -51,6 +82,13 @@ export async function rutaNoCorrio(deps: DepsDeNoCorrio, cuerpo: { dry_run?: boo
   const act = await clientesActivos(deps.db)
   const veredictos: VeredictoDeNoCorrio[] = []
   const lineas: string[] = []
+  if (deps.n8nResponde) {
+    const n = await deps.n8nResponde()
+    if (!n.ok) {
+      const l = `🟠 Portero del cerebro · n8n no responde (${n.detalle.slice(0, 100)}) · si n8n está caído nadie más avisa: revisar el servicio de n8n en Railway`
+      veredictos.push({ client_id: 'n8n', nombre: null, veredicto: 'n8n_no_responde', linea: l }); lineas.push(l)
+    }
+  }
   if (!act.ok) {
     const l = `🟠 Portero del cerebro · no pude comprobar si corrió hoy (${act.detalle.slice(0, 120)}) · revisar el flujo ${wf} en n8n`
     veredictos.push({ client_id: 'general', nombre: null, veredicto: 'no_pude_comprobar', linea: l })
@@ -67,7 +105,14 @@ export async function rutaNoCorrio(deps: DepsDeNoCorrio, cuerpo: { dry_run?: boo
       const filas = lista(q.data)
       const hoy = filas.find((f) => String(f.dia).slice(0, 10) === dia)
       if (hoy) {
-        if (hoy.estado === 'hecha') { veredictos.push({ client_id: c.client_id, nombre: c.nombre, veredicto: 'corrio' }); continue }
+        if (hoy.estado === 'hecha') {
+          const rs = deps.raspadoDelCliente ? await deps.raspadoDelCliente(c.client_id, dia).catch((e: unknown) => ({ ok: false as const, detalle: e instanceof Error ? e.message : String(e) })) : null
+          if (rs && rs.ok && rs.hoy === 0 && rs.previos > 0) {
+            const l = lineaDeNoCorrio(c.nombre, `la corrida de hoy salió «hecha» pero sin ninguna fila de raspado real (los 7 días anteriores sí tuvieron ${rs.previos}): corrió ciega`, wf)
+            veredictos.push({ client_id: c.client_id, nombre: c.nombre, veredicto: 'hecha_sin_raspado', linea: l }); lineas.push(l); continue
+          }
+          veredictos.push({ client_id: c.client_id, nombre: c.nombre, veredicto: 'corrio' }); continue
+        }
         if (yaLoAvisoElVigilante(hoy)) { veredictos.push({ client_id: c.client_id, nombre: c.nombre, veredicto: 'ya_avisado' }); continue }
         const l = lineaDeNoCorrio(c.nombre, `la corrida de hoy quedó «${String(hoy.estado)}» y nadie avisó`, wf)
         veredictos.push({ client_id: c.client_id, nombre: c.nombre, veredicto: 'no_corrio', linea: l }); lineas.push(l); continue

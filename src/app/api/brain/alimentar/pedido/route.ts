@@ -12,6 +12,9 @@ import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { modeloRegistrado, puenteAlIndice } from '@/lib/portero-alimenta/entorno'
 import { ANFITRIONES_DE_AVISO_POR_OMISION, rutaLeerPedido, rutaPedido } from '@/lib/portero-alimenta/pedidos'
+import { listarFotos } from '@/lib/cerebro/portero/fotos-pendientes'
+import { consultaDelEntorno } from '@/lib/cerebro/portero/entorno'
+import { etiquetarPendientesDelEntorno } from '@/lib/cerebro/portero/etiquetar-entorno'
 import { avisoReal, buscarReal, dispararCadenaReal, leerPaginaReal } from '@/lib/portero-alimenta/pedidos-entorno'
 
 export const dynamic = 'force-dynamic'
@@ -41,6 +44,13 @@ export async function POST(request: Request) {
       segundoPlano: real ? (t) => waitUntil(t) : undefined,
       topePorPedidoUsd: num('PORTERO_PEDIDO_TOPE_USD'), topePorOficinaYDiaUsd: num('PORTERO_PEDIDO_TOPE_OFICINA_DIA_USD'),
       enviarAviso: real ? avisoReal(llave) : undefined,
+      fotos: {
+        listar: (clientId) => listarFotos(consultaDelEntorno(), { cliente: clientId, limite: 200 }),
+        etiquetar: real ? async (clientId) => {
+          const x = await etiquetarPendientesDelEntorno({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string }, { clientes: [clientId], dry_run: false })
+          return { etiquetadas: x.etiquetadas, costo_usd: x.costo_usd }
+        } : undefined,
+      },
       anfitrionesDeAviso: [...ANFITRIONES_DE_AVISO_POR_OMISION, ...String(process.env.PORTERO_AVISAR_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)],
     }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })
