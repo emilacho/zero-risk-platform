@@ -14,7 +14,7 @@ function sembrar(): DbFalsa {
   const db = new DbFalsa()
   db.semilla('clients', [{ id: CLIENTE, name: 'Cliente de práctica', country: 'Ecuador', website_url: 'https://www.naufrago.ec', config: { apify: { own_handles: { instagram: 'naufrago.ec' }, competitor_list: [{ name: 'Pez Azul' }] }, zona_horaria: 'America/Guayaquil' } }])
   db.semilla('client_brand_books', [{ client_id: CLIENTE, version: 1, voice_description: 'Voz directa y económica. Tutea siempre (tú/sabes/pides — nunca vos).', forbidden_words: ['premium', 'calidad garantizada', 'el mejor', 'gourmet'], typography: ['Inter'], primary_colors: ['#112233'] }])
-  db.semilla('client_social_images', FOTOS.map((f) => ({ ...f, client_id: CLIENTE })))
+  db.semilla('client_social_images', [...FOTOS.map((f) => ({ ...f, owner_role: 'propio', client_id: CLIENTE })), { id: 'ajena-1', owner_role: 'competidor', estado: 'ok', url: 'https://fotos.test/ajena-1.jpg', que_muestra: 'ceviche de la competencia', client_id: CLIENTE }])
   db.semilla('client_sede_datos', [{ client_id: CLIENTE, campo: 'canal_pedido', valor_texto: 'WhatsApp +593 997 744 288' }, { client_id: CLIENTE, campo: 'horario', valor_texto: 'jueves a lunes' }])
   db.semilla('client_web_pages', [{ client_id: CLIENTE, competitor_id: null, content_text: 'Carta {"@type":"MenuItem","name":"Ceviche","offers":{"price":"7.00","priceCurrency":"USD"}} {"@type":"MenuItem","name":"Encebollado","offers":{"price":"5.50","priceCurrency":"USD"}}' }, { client_id: CLIENTE, competitor_id: 'otro', content_text: '{"@type":"MenuItem","name":"Ajeno","offers":{"price":"99.00"}}' }])
   db.semilla('client_historical_outputs', [{ id: PARTE, client_id: CLIENTE, output_type: 'campaign_brief_pack', content: PARTE_REAL }])
@@ -142,7 +142,8 @@ describe('fuentes del cliente leídas de la base', () => {
     expect(fu.fuentes).toMatchObject({ palabras_prohibidas: ['premium', 'calidad garantizada', 'el mejor', 'gourmet'], registro: 'tuteo', telefonos: ['997744288'], handles: ['@naufrago.ec'], competidores: ['Pez Azul'], telefonos_verificables: true, handles_verificables: true })
     expect(fu.fuentes.precios.sort()).toEqual(['5.50', '7.00']) // el precio 99.00 de la página de un competidor NO entra
     expect(fu.zona).toBe('America/Guayaquil')
-    expect(fu.fotos).toHaveLength(16)
+    expect(fu.fotos).toHaveLength(16) // la foto de la competencia NO es del cliente
+    expect(fu.referencias?.map((x) => x.id)).toEqual(['ajena-1'])
     expect(fu.vocabulario_de_productos).toEqual(expect.arrayContaining(['Ceviches', 'Encebollados']))
     expect(fu.propios.marcas_ajenas).toContain('pez azul')
     expect(fu.manual_texto.length).toBeGreaterThan(50)

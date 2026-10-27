@@ -10,7 +10,8 @@
 import type { Db } from './almacen-supabase'
 import { filasQueVencen, NOTA_DE_VENCIMIENTO } from './entrega'
 import type { Puertos } from './puertos'
-import { fallar, jefaturaSinRespuesta } from './orquestador'
+import { fallar, jefaturaSinRespuesta, plantillaDe } from './orquestador'
+import { resolverMaterialVencido } from './material-orquestador'
 
 type Fila = Record<string, unknown>
 export const MINUTOS_PARA_DAR_POR_MUERTO = 12
@@ -46,6 +47,12 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
       if (String(t.inicio) >= limiteJefatura) continue
       await jefaturaSinRespuesta(P, enc.id, `la revisión de la jefatura no entregó en ${MINUTOS_PARA_ESPERAR_A_LA_JEFATURA} min`)
       reanudar.push(enc.id)
+      continue
+    }
+    if (t.tipo === 'material') {
+      // el portero tiene su propio plazo (20 min; techo 30): pasado el plazo se lee su pedido, pasado el techo se sigue SIN dato. Nunca es un «paso muerto» ni cierra el encargo como fallido
+      const pl = await plantillaDe(P, enc)
+      if (await resolverMaterialVencido(P, enc, pl, String(t.inicio), ahora) === 'cerrado') reanudar.push(enc.id)
       continue
     }
     const clave = `muerto:${String(t.paso)}`

@@ -6,6 +6,7 @@ import type { BriefLeido } from './brief'
 import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
 import type { Estado, Ficha } from './tipos'
 import type { FuentesCompletas } from './puertos'
+import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
 import type { ReglasDeImagen } from './reglas-de-imagen'
 
 export const AVISO_DEL_CEREBRO = 'Este cliente tiene un cerebro (almacén de conocimiento) que se actualiza a diario; lo esencial va abajo. Si necesitas algo que no está, dilo en el campo `necesito` de tu respuesta (máximo 3) y la sala se lo pide; lo que no se consiga se declara, no se inventa.'
@@ -14,7 +15,7 @@ const recorta = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}\n[�
 const lista = (xs: string[]) => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : '- (ninguno)')
 
 export const CONTRATOS_EN_TEXTO: Record<string, string> = {
-  'visual_direction.v1': '{"resumen": "…", "paleta": ["…"], "estilo": "…", "decision": {"modo": "real|generada|ninguna", "foto_id": "(solo si modo=real)", "motivo": "…"}, "reglas_de_imagen": {"obligatorio": [{"id": "o1", "texto": "…", "claves": ["palabras que debe cubrir un prompt"], "cita": "copia LITERAL del brief"}], "prohibido": [{"id": "p1", "texto": "…", "claves": ["palabras que no debe nombrar"], "cita": "copia LITERAL del brief"}]}, "necesito": []}',
+  'visual_direction.v1': '{"resumen": "…", "paleta": ["#RRGGBB"], "estilo": "…", "decision": {"modo": "real|generada|ninguna", "foto_id": "(SOLO si modo=real; en generada o ninguna OMITE la clave: no pongas texto vacío)", "motivo": "…"}, "reglas_de_imagen": {"obligatorio": [{"id": "o1", "texto": "…", "claves": ["palabras que debe cubrir un prompt"], "cita": "copia LITERAL del brief"}], "prohibido": [{"id": "p1", "texto": "…", "claves": ["palabras que no debe nombrar"], "cita": "copia LITERAL del brief"}]}, "necesito": []}',
   'prompts.v1': '{"prompts": [{"prompt": "…", "idea_en_una_linea": "…"}, {"prompt": "…", "idea_en_una_linea": "…"}]}  (2 o 3 prompts; no escribas tamaño ni parámetros: los fija la sala)',
   'observacion_imagen.v1': '{"imagenes": [{"indice": 0, "reglas": [{"id": "o1", "presente": true, "evidencia": "…"}], "texto_en_imagen": ["…"], "marcas": ["…"], "personas": 0, "producto": "…", "elementos_visibles": ["…"]}], "preferencia": [0]}  (presente = true | false | "no_se_ve"; describes, no apruebas)',
   'pieza_post.v1': '{"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…", "necesito": []}',
@@ -32,6 +33,8 @@ export interface ContextoDePedido {
   /** las imágenes que el curador debe mirar ahora (índice estable + dirección) */
   imagenesAMirar: Array<{ indice: number; url: string }>
   /** datos de un artefacto (o undefined) */
+  /** la plantilla genera la imagen cuando no hay foto apta (`generar_cuando_no_hay_foto`): el pedido de los prompts lo sabe */
+  sinFoto?: boolean
   art: (nombre: string) => Record<string, unknown> | undefined
 }
 
@@ -62,7 +65,7 @@ export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fic
     case 'prompts': {
       esquema = 'prompts.v1'
       const vd = c.art('visual_direction') ?? {}
-      task = `${base}\n## Dirección visual del curador\n${String(vd.resumen ?? '')}\nEstilo: ${String(vd.estilo ?? '')}\n\n## Reglas de imagen (el código comprobará cada prompt ANTES de generar)\n${describirReglas(c.reglas)}\n\n## Tu trabajo\nPropones 2 o 3 prompts de imagen distintos, en lenguaje natural (sujeto, entorno, luz, cámara, estilo). Cada prompt debe cubrir TODO lo obligatorio y no nombrar nada de lo prohibido sin negarlo. No escribas tamaño, proporción ni parámetros: los fija la sala. No nombres marcas, fotógrafos ni personas reales.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
+      task = `${base}\n## Dirección visual del curador\n${String(vd.resumen ?? '')}\nEstilo: ${String(vd.estilo ?? '')}\n\n## Reglas de imagen (el código comprobará cada prompt ANTES de generar)\n${describirReglas(c.reglas)}\n\n## Tu trabajo\nPropones 2 o 3 prompts de imagen distintos, en lenguaje natural (sujeto, entorno, luz, cámara, estilo). Cada prompt debe cubrir TODO lo obligatorio y no nombrar nada de lo prohibido sin negarlo. No escribas tamaño, proporción ni parámetros: los fija la sala. No nombres marcas, fotógrafos ni personas reales.${c.sinFoto ? seccionDeImagenSinFoto(F) : ''}\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_EN_TEXTO[esquema]}`
       return finalizar(task)
     }
     case 'mirar': {

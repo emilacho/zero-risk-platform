@@ -18,6 +18,8 @@ export interface FotoEtiquetada {
   tipo_de_toma?: string | null
   formato?: string | null
   etiqueta_confianza?: 'alta' | 'media' | 'baja' | null
+  /** de quién es la foto: propia | competencia | referencia (sale de `owner_role`; solo las PROPIAS pueden ser candidatas) */
+  origen?: 'propia' | 'competencia' | 'referencia'
 }
 export interface PedidoDeFoto {
   /** lo que protagoniza el brief (p. ej. el producto); si está vacío no se filtra por producto */
@@ -31,8 +33,10 @@ export interface PedidoDeFoto {
   ahora?: Date
   /** si es true, una foto usada dentro de la ventana se descarta; si es false solo se marca */
   excluir_reusadas?: boolean
+  /** material CERCANO: una foto propia, etiquetada y apta en todo lo demás pero que NO muestra el protagonista del brief, entra rotulada `cercana` (el curador decide; la bandeja lo dice) */
+  permitir_cercanas?: boolean
 }
-export interface Candidata { id: string; motivo_de_aceptacion: string; requiere_mirar: boolean; reusada: boolean }
+export interface Candidata { id: string; motivo_de_aceptacion: string; requiere_mirar: boolean; reusada: boolean; cercana?: boolean }
 export interface Descartada { id: string; motivos: string[] }
 
 /** qué `formato` de foto NO se puede recortar a cada proporción sin perder el protagonista (dato; hoy el vocabulario real solo trae cuadrado y vertical) */
@@ -49,10 +53,14 @@ export function candidatasFoto(fotos: FotoEtiquetada[], pedido: PedidoDeFoto, pr
   const protas = (Array.isArray(pedido.protagonista) ? pedido.protagonista : [pedido.protagonista]).map((x) => x.trim()).filter(Boolean)
   for (const f of fotos) {
     const m: string[] = []
+    let cercana = false
+    // la competencia y las referencias NUNCA son candidatas, aunque estén etiquetadas y se vean perfectas
+    if (f.origen && f.origen !== 'propia') { descartadas.push({ id: f.id, motivos: [`es una foto de ${f.origen === 'competencia' ? 'la competencia' : 'referencia'}: solo sirve como referencia de estilo, no se publica`] }); continue }
     if (f.estado && f.estado !== 'ok') m.push(`estado «${f.estado}»`)
     if (!f.tipo_de_toma || !f.etiqueta_confianza) m.push('sin etiquetar')
     if (protas.length && !(f.producto_visto ?? []).some((p) => protas.some((x) => contienePalabra(p, x) || contienePalabra(x, p)))) {
-      m.push(`el protagonista del brief («${protas.join(' / ')}») no está en lo que muestra la foto`)
+      if (pedido.permitir_cercanas) cercana = true
+      else m.push(`el protagonista del brief («${protas.join(' / ')}») no está en lo que muestra la foto`)
     }
     if (f.texto_visible && f.texto_visible.trim()) {
       const aj = datosAjenos([f.texto_visible], propios)
@@ -72,7 +80,7 @@ export function candidatasFoto(fotos: FotoEtiquetada[], pedido: PedidoDeFoto, pr
       }
     }
     if (m.length) descartadas.push({ id: f.id, motivos: m })
-    else candidatas.push({ id: f.id, motivo_de_aceptacion: `muestra «${(f.producto_visto ?? []).join(', ') || 'sin producto'}» · toma ${f.tipo_de_toma} · ${f.formato ?? 'formato sin dato'}`, requiere_mirar: f.etiqueta_confianza !== 'alta', reusada })
+    else candidatas.push({ id: f.id, motivo_de_aceptacion: `muestra «${(f.producto_visto ?? []).join(', ') || 'sin producto'}» · toma ${f.tipo_de_toma} · ${f.formato ?? 'formato sin dato'}${cercana ? ' · CERCANA: no muestra el protagonista del brief' : ''}`, requiere_mirar: f.etiqueta_confianza !== 'alta', reusada, ...(cercana ? { cercana: true } : {}) })
   }
   return { candidatas, descartadas }
 }

@@ -53,12 +53,14 @@ export function almacenDeSupabase(db: Db): Almacen {
       if (previos.error) return { ok: false as const, error: previos.error.message }
       const ultimo = (previos.data as Fila[] | null)?.[0]
       let version = 1
+      let salaRef = n.sala_ref
       if (ultimo) {
-        const d = decidirReapertura({ estado: String(ultimo.estado), gasto_usd: Number(ultimo.gasto_usd ?? 0), version_encargo: Number(ultimo.version_encargo ?? 1), pasos_ejecutados: Number((ultimo.estado_del_motor as { pasos_ejecutados?: number } | null)?.pasos_ejecutados ?? 0) })
+        const d = decidirReapertura({ estado: String(ultimo.estado), gasto_usd: Number(ultimo.gasto_usd ?? 0), version_encargo: Number(ultimo.version_encargo ?? 1), pasos_ejecutados: Number((ultimo.estado_del_motor as { pasos_ejecutados?: number } | null)?.pasos_ejecutados ?? 0) }, n.reabrir_causa)
         if (d.accion === 'devolver') return { ok: true as const, encargo: aEncargo(ultimo), nuevo: false }
         version = d.version
+        if (d.por_causa) salaRef = { ...(n.sala_ref ?? {}), reapertura: { causa_corregida: d.por_causa, desde_version: Number(ultimo.version_encargo ?? 1), estado_anterior: String(ultimo.estado), gasto_anterior_usd: Number(ultimo.gasto_usd ?? 0) } }
       }
-      const fila = { client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, ...(ultimo?.slack_ts ? { slack_canal: ultimo.slack_canal ?? null, slack_ts: ultimo.slack_ts } : {}), estado: 'abierto', estado_del_motor: n.estado_del_motor, tope_usd: n.tope_usd, dry_run: n.dry_run, prueba: n.prueba, sala_ref: n.sala_ref }
+      const fila = { client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, ...(ultimo?.slack_ts ? { slack_canal: ultimo.slack_canal ?? null, slack_ts: ultimo.slack_ts } : {}), estado: 'abierto', estado_del_motor: n.estado_del_motor, tope_usd: n.tope_usd, dry_run: n.dry_run, prueba: n.prueba, sala_ref: salaRef }
       const r = await db.from('oficina_encargos').insert(fila).select('*').single()
       if (!r.error) return { ok: true as const, encargo: aEncargo(r.data as Fila), nuevo: true }
       if (r.error.code === DUPLICADO) {

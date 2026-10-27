@@ -17,13 +17,18 @@ import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
-import { candidatasFoto, confianzaDeLaFoto } from './fotos'
+import { confianzaDeLaFoto } from './fotos'
+import { candidatasDelEncargo, medirFotos } from './material-fotos'
+import { limitesDeMaterial } from './material'
+import { reglasDeInvencion } from './prompts-sin-invencion'
+import { marcaDeOrigenActiva, origenesDeImagenes } from './marcas-de-origen'
+import { antesDeLasFotos, despuesDeUnAgente, pedirLoQueElAgenteNecesita, seccionDeMaterialParaElAgente } from './material-orquestador'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
 import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, type ContextoDePedido } from './pedidos'
 import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../notas-del-dueno/autorevision'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
-import { procesarSalida, proyectarAlEsquema } from './salida'
+import { DESCARTAR_EYEBROW_LARGO, procesarSalida, proyectarAlEsquema } from './salida'
 import { agotaLasVersiones, MAX_VERSIONES_POR_BRIEF } from './reapertura'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
@@ -83,7 +88,7 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   }
   const s: Sobre = v.sobre
   const tope = Math.min(s.tope_usd ?? pl.plantilla.limites.tope_encargo_usd, pl.plantilla.limites.tope_encargo_usd)
-  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: salaRefConFila(entrada.sala_ref, s), estado_del_motor: estadoInicial() })
+  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: salaRefConFila(entrada.sala_ref, s), estado_del_motor: estadoInicial(), ...(s.reabrir_causa_corregida ? { reabrir_causa: s.reabrir_causa_corregida } : {}) })
   if (!c.ok) return r(500, { error: 'almacen_error', detalle: c.error })
   if (!c.nuevo) return r(200, { accion: 'ya_existia', encargo_id: c.encargo.id, estado: c.encargo.estado })
   const sal = await avanzar(P, c.encargo.id)
@@ -91,7 +96,7 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
 }
 
 // ───────────────────────── avanzar
-async function plantillaDe(P: Puertos, enc: Encargo): Promise<Plantilla> {
+export async function plantillaDe(P: Puertos, enc: Encargo): Promise<Plantilla> {
   const p = await P.almacen.leerPlantilla(enc.familia)
   if (!p) throw new Error(`plantilla «${enc.familia}» no existe`)
   // el tope de ESTE encargo (el del sobre, nunca más que el de la plantilla) manda sobre el de la plantilla
@@ -122,6 +127,8 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
     const abierto = await P.almacen.turnoAbierto(enc.id)
     if (abierto) {
       // un «siguiente» repetido no abre otro paso: ENTREGA DE NUEVO el mismo pedido (mismo número, misma dispatch_key)
+      // el turno abierto es el de MATERIAL (el portero está trayendo lo pedido): se contesta con la MISMA acción que al abrirlo; nunca se re-entrega el pedido del agente
+      if (abierto.tipo === 'material') return r(200, { accion: 'esperar_material', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'material', dispatch_key: abierto.dispatch_key } })
       const sg = siguientePaso(enc.estado_del_motor, pl)
       if (sg.accion === 'ejecutar' && (sg.paso.tipo === 'agente' || sg.paso.tipo === 'portero')) {
         const a = armarPedido(enc, pl, sg.paso, enc.estado_del_motor)
@@ -138,6 +145,11 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
     const e = enc.estado_del_motor
     try {
       if (paso.tipo === 'codigo') {
+        // MATERIAL · antes de asignar/elegir fotos: si faltan fotos propias aptas, se le PIDE al portero (apagado por omisión: devuelve null y todo sigue igual)
+        if (paso.funcion === 'asignar_fotos' || paso.funcion === 'elegir_foto') {
+          const m = await antesDeLasFotos(P, enc, pl, paso.clave)
+          if (m) return m
+        }
         const out = await ejecutarCodigo(P, enc, pl, paso)
         if (out.fallido) return fallar(P, enc, out.fallido)
         enc = await aplicar(P, enc, pl, sig.indice, out.res, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'codigo', agente: null, dispatch_key: null, cost_usd: out.res.costo_usd }, gastos: out.gastos, usos: out.usos, imagen_generada: out.imagen_generada })
@@ -226,12 +238,14 @@ function armarPedido(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDe
   if (familiaDeLaminas(pl)) {
     // salas 2 y 3: el agente de cada paso es el que dice la plantilla (los hallazgos tienen un paso por dueño)
     const t = paso.tipo === 'agente' ? armarPedidoL(pl, paso, e, errorDeFormato ? { errorDeFormato } : undefined) : null
-    return { agente: paso.quien, pedido: pedidoDe(enc, pl, paso, paso.quien, t, e) }
+    const tm = t && seccionDeMaterialParaElAgente(e, paso.clave) ? { ...t, task: t.task + seccionDeMaterialParaElAgente(e, paso.clave) } : t
+    return { agente: paso.quien, pedido: pedidoDe(enc, pl, paso, paso.quien, tm, e) }
   }
   const agente = paso.quien === 'dueno_del_donde' ? AGENTE_DEL_TEXTO : paso.quien
   const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' || paso.clave === 'decide_imagen' ? fichasQueTocan(e, paso) : []
-  const t = paso.tipo === 'agente' ? construirTarea(paso.clave, contexto2(e)!, { fichas: fichasPropias, ...(errorDeFormato ? { errorDeFormato } : {}) }) : null
-  return { agente, pedido: pedidoDe(enc, pl, paso, agente, t, e) }
+  const t = paso.tipo === 'agente' ? construirTarea(paso.clave, { ...contexto2(e)!, sinFoto: pl.limites.generar_cuando_no_hay_foto === true }, { fichas: fichasPropias, ...(errorDeFormato ? { errorDeFormato } : {}) }) : null
+  const tm = t && seccionDeMaterialParaElAgente(e, paso.clave) ? { ...t, task: t.task + seccionDeMaterialParaElAgente(e, paso.clave) } : t
+  return { agente, pedido: pedidoDe(enc, pl, paso, agente, tm, e) }
 }
 
 /**
@@ -318,16 +332,15 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       return { res: { costo_usd: 0, artefacto: { brief, proporcion, F: fu } } }
     }
     case 'elegir_foto': {
-      const b = base(e)
-      const protas = protagonistasDelBrief(b.brief, b.F.vocabulario_de_productos)
-      const prohibe = prohibePersonas(b.brief)
-      const cf = candidatasFoto(b.F.fotos, { protagonista: protas, prohibe_personas: prohibe, proporcion: b.proporcion, usos: b.F.usos, reuso_dias: Number(pl.limites.reuso_dias ?? 14), ahora: P.ahora() }, b.F.propios)
-      return { res: { costo_usd: 0, artefacto: { ...cf, protagonistas: protas, prohibe_personas: prohibe } } }
+      const lim = limitesDeMaterial(pl.limites)
+      let { cf, protas, prohibe } = candidatasDelEncargo(e, pl, P.ahora())
+      if (lim.activo && cf.candidatas.length < medirFotos(e, pl, P.ahora()).minimo) ({ cf, protas, prohibe } = candidatasDelEncargo(e, pl, P.ahora(), { permitirCercanas: true }))
+      return { res: { costo_usd: 0, artefacto: { ...cf, protagonistas: protas, prohibe_personas: prohibe, cercanas: cf.candidatas.filter((c) => c.cercana).map((c) => c.id) } } }
     }
     case 'chequear_prompts': {
       const b = base(e)
       const prompts = ((datos(e, 'prompts')?.prompts ?? []) as Array<{ prompt: string; idea_en_una_linea: string }>)
-      const ch = chequearPrompts(prompts.map((p) => p.prompt), reglasParaPrompts(e, b.brief, b.F), b.F.propios)
+      const ch = chequearPrompts(prompts.map((p) => p.prompt), reglasParaPrompts(e, b.brief, b.F), b.F.propios, reglasDeInvencion(pl.limites, b.F.referencias))
       const esRe = paso.clave.startsWith('reimagen_')
       const repeticion = (e.vueltas['chequear_prompts'] ?? 0) >= 1
       if (esRe && ch.ninguno) return { res: { costo_usd: 0, artefacto: { indices: [], ninguno: true, fallan: ch.fallan, prompts: [] }, fichas: [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se queda la imagen anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
@@ -559,7 +572,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
 
   // agente: contrato de formato
   const intentos = e.vueltas[`fmt:${paso.clave}`] ?? 0
-  const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato)
+  const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato, { limpiarForma: { descartarEyebrowLargo: DESCARTAR_EYEBROW_LARGO } })
   /** un reintento: la misma pregunta con el error literal (de formato, o de lo que la sala comprueba por código) */
   const pedirReintento = async (mensaje: string, motivo: string): Promise<Respuesta> => {
     const nuevo: Estado = { ...e, vueltas: { ...e.vueltas, [`fmt:${paso.clave}`]: intentos + 1 }, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }
@@ -574,6 +587,15 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   if (!p.ok) {
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), fichas: [...e.fichas, fichaNueva(`formato-${paso.clave}`, 'chequeo', 'formato', 'bloquea', p.ficha.que ?? 'formato inválido')], turno: { ...turnoBase, n, estado: 'fallo', error: p.errores.join(' · ') }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
     return fallar(P, { ...enc, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, p.ficha.que ?? 'formato inválido')
+  }
+  // MATERIAL · el campo `necesito` de la salida (lo que BLOQUEA su trabajo) se cumple UNA vez por paso: se descarta esta salida, se le pide al portero y el MISMO agente vuelve a trabajar con la respuesta
+  const nec = await despuesDeUnAgente(P, enc, pl, paso.clave, p.valor)
+  if (nec.necesidades.length) {
+    const { [`fmt:${paso.clave}`]: _f, ...vs } = e.vueltas
+    void _f
+    const nuevo: Estado = { ...e, vueltas: vs, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, turno: { ...turnoBase, n, estado: 'hecho', error: 'necesito: espera al portero' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
+    return pedirLoQueElAgenteNecesita(P, { ...enc, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd }, pl, paso.clave, nec.necesidades)
   }
   const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(paso, p.valor, enc, e, pl, intentos) : procesarValor(paso, p.valor, enc, e, pl)
   if (proc.reintentar !== undefined) return pedirReintento(proc.reintentar, 'validación de la sala: reintento')
@@ -626,7 +648,7 @@ async function recibirAutorevision(P: Puertos, enc: Encargo, pl: Plantilla, sig:
   }
 
   if (res.error || typeof res.texto !== 'string') { await registrar(false, [{ sin_respuesta: res.error ?? 'respuesta vacía' }]); return seguir({ costo_usd: c.costo }, `auto-revisión sin respuesta: ${res.error ?? 'respuesta vacía'}`) }
-  const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato)
+  const p = procesarSalida(res.texto, paso.salida!.esquema, intentos, paso.salida!.reintento_formato, { limpiarForma: { descartarEyebrowLargo: DESCARTAR_EYEBROW_LARGO } })
   if (!p.ok) return p.accion === 'reintentar' ? reintentarOSeguir(p.mensaje_de_error) : (await registrar(false, [{ sin_cambios: 'formato' }]), seguir({ costo_usd: c.costo }, `auto-revisión sin efecto: ${p.errores.slice(0, 2).join(' · ')}`))
   const v = validarAutorevision(p.valor, notas.map((x) => x.id), original)
   if (!v.ok) return reintentarOSeguir(v.error)
@@ -772,11 +794,13 @@ async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean,
     const opinion = opinionExterna(e)
     const sinSegunda = datos(e, 'fichas_externas')?.sin_revision === true
     const contenido = { ...(lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }), ...(opinion ? { opinion_externa: opinion } : {}) }
-    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}), ...metadataDeLaJefatura(e) }
+    // de dónde viene cada imagen (foto propia · cercana · generada · tipográfica): solo con la plantilla que lo pide
+    const origenes = marcaDeOrigenActiva(pl.limites) ? origenesDeImagenes(e, pl.limites) : null
+    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}), ...metadataDeLaJefatura(e), ...(origenes ? { origen_de_imagenes: origenes.por_imagen, origen_de_imagenes_resumen: origenes.resumen } : {}) }
     const s = await P.salida({ client_id: enc.client_id, titulo: lam ? lam.titulo : `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
     if (s.ok) {
       output_id = s.output_id
-      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: prefijoDeLaBandeja(e) + (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (imagenPorRehacer(e) ? '🖼️ IMAGEN POR REHACER (decide una persona) · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
+      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: prefijoDeLaBandeja(e) + (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (imagenPorRehacer(e) ? '🖼️ IMAGEN POR REHACER (decide una persona) · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: (origenes?.resumen ? `🖼️ ${origenes.resumen} — ` : '') + (lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280)), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
       if (q.ok) hitl_id = q.id
     }
   }
