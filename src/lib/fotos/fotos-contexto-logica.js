@@ -557,12 +557,12 @@ function fotosDeOtrasFuentes(funcion, items, opciones) {
       var id = String(it.placeId || it.cid || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 60)
       var nombre = limpiar(it.title, 80)
       if (!u || !(id || nombre)) continue
-      agrega({ owner_role: 'competidor', handle: slugDeFuente(nombre, 40) || 'mapas', post_id: 'maps-' + (id || slugDeFuente(nombre, 40)), tipo: 'maps_portada', src: u, caption: limpiar(nombre + (it.categoryName ? ' · ' + it.categoryName : '') + (it.address ? ' · ' + it.address : ''), 300) || null, post_url: urlDeImagen(it.url), medio: 'foto', posicion: 'unica' })
+      agrega({ owner_role: 'competidor', handle: slugDeFuente(nombre, 40) || 'mapas', post_id: 'maps-' + (id || slugDeFuente(nombre, 40)), tipo: 'maps_portada', src: u, caption: limpiar(nombre + (it.categoryName ? ' · ' + it.categoryName : '') + (it.address ? ' · ' + it.address : ''), 300) || null, post_url: urlDeImagen(it.url), medio: 'imagen', posicion: 'unica' })
     } else if (funcion === 'competitor_website_scraper') {
       var host = hostDe(it.url), og = ogImagenDe(it)
       if (!host || !og || vistos['web|' + host]) continue
       vistos['web|' + host] = 1
-      agrega({ owner_role: 'competidor', handle: host, post_id: 'web-' + slugDeFuente(host, 30) + '-' + huellaCorta(og), tipo: 'web_portada', src: og, caption: limpiar(it.metadata && it.metadata.title, 300) || null, post_url: urlDeImagen(it.url), medio: 'foto', posicion: 'unica' })
+      agrega({ owner_role: 'competidor', handle: host, post_id: 'web-' + slugDeFuente(host, 30) + '-' + huellaCorta(og), tipo: 'web_portada', src: og, caption: limpiar(it.metadata && it.metadata.title, 300) || null, post_url: urlDeImagen(it.url), medio: 'imagen', posicion: 'unica' })
     } else if (funcion === 'facebook_ads_library_scraper') {
       var sn = it.snapshot || {}
       var img = imagenDeAnuncio(sn)
@@ -570,7 +570,7 @@ function fotosDeOtrasFuentes(funcion, items, opciones) {
       if (!img || !aid) continue
       var pagina = slugDeFuente(sn.page_name || it.page_name || '', 40) || 'anuncio'
       var cuerpo = sn.body && (sn.body.text || sn.body)
-      agrega({ owner_role: 'referencia', handle: pagina, post_id: 'ad-' + aid, tipo: 'anuncio', src: img, caption: limpiar(typeof cuerpo === 'string' ? cuerpo : sn.title, 300) || null, post_url: urlDeImagen(sn.link_url), medio: 'foto', posicion: 'unica' })
+      agrega({ owner_role: 'referencia', handle: pagina, post_id: 'ad-' + aid, tipo: 'anuncio', src: img, caption: limpiar(typeof cuerpo === 'string' ? cuerpo : sn.title, 300) || null, post_url: urlDeImagen(sn.link_url), medio: 'imagen', posicion: 'unica' })
     }
   }
   return out
