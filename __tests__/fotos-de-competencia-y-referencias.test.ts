@@ -32,7 +32,7 @@ describe('fotosDeOtrasFuentes (lógica pura)', () => {
   it('Mapas: la portada de cada ficha es de un COMPETIDOR, con nombre, categoría y enlace', () => {
     const r = F.fotosDeOtrasFuentes('google_maps_scraper', [lugar(1), lugar(2)])
     expect(r).toHaveLength(2)
-    expect(r[0]).toMatchObject({ owner_role: 'competidor', handle: 'cevicheria-1', post_id: 'maps-chijabc1_x', tipo: 'maps_portada', src: 'https://lh3.googleusercontent.com/p/1', medio: 'foto' })
+    expect(r[0]).toMatchObject({ owner_role: 'competidor', handle: 'cevicheria-1', post_id: 'maps-chijabc1_x', tipo: 'maps_portada', src: 'https://lh3.googleusercontent.com/p/1', medio: 'imagen' })
     expect(r[0].caption).toContain('Restaurante')
   })
   it('Mapas: sin imagen, sin nombre ni id, o con una imagen que no es una dirección → no inventa nada', () => {
@@ -70,6 +70,14 @@ async function lista(fn: string, crudos: unknown[], o: { dry_run?: boolean; codi
     .call({ helpers: { httpRequest: async () => [{ config: {} }] } }, { first: () => items[0], all: () => items }, $, { SUPABASE_SERVICE_ROLE_KEY: 'k' }, {}, { id: 'WF' }, { id: '1' })
   return (out as Array<{ json: Record<string, unknown> }>).map((x) => x.json)
 }
+
+describe('lo que sale de «lista» cumple las reglas de la tabla (medio y posición); el 23514 del primer intento real lo habría atrapado', () => {
+  it('medio ∈ imagen/video/reel/logo y posición ∈ unica/portada/hijo-N en cada fuente', () => {
+    const todo = [...F.fotosDeOtrasFuentes('google_maps_scraper', [lugar(1)]), ...F.fotosDeOtrasFuentes('competitor_website_scraper', [sitio('https://a.com/', '/o.jpg')]), ...F.fotosDeOtrasFuentes('facebook_ads_library_scraper', [anuncio('1', 'p', 'https://scontent.fbcdn.net/a.jpg')])]
+    expect(todo).toHaveLength(3)
+    for (const f of todo) { expect(['imagen', 'video', 'reel', 'logo']).toContain(f.medio); expect(f.posicion === 'unica' || f.posicion === 'portada' || /^hijo-[0-9]+$/.test(f.posicion)).toBe(true) }
+  })
+})
 
 describe('«Fotos · lista» con el código real', () => {
   it('Mapas → competidor; anuncios → referencia; sitios → competidor; todas con client_id', async () => {
