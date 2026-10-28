@@ -11,9 +11,8 @@ import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
-import { LISTA_DE_FOTOS, armarTarea, pedidoDeAgente, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
+import { armarTarea, pedidoDeAgente, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
 import { direccionDe, porteroDe } from './directorio'
-import { huellaDePedido } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, type Traduccion } from './traductor'
 import { COTAS, FAMILIAS_MESA, type Aporte, type EstadoMesa, type Tarjeta, type TipoDeAporte } from './tipos'
@@ -245,4 +244,3 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
   return avanzar(P, enc.id)
 }
 
-export { LISTA_DE_FOTOS, huellaDePedido }

@@ -5,7 +5,7 @@
  * subtle body line · brand footer with subtle scroll cue. Designed to
  * be readable on a phone preview at small sizes.
  */
-import { resolveBrand, fitHeadlineSize, conFotoDeFondo, resolverPie } from './shared'
+import { resolveBrand, fitHeadlineSize, fitBodySize, conFotoDeFondo, resolverPie } from './shared'
 import type { TemplateProps } from '../types'
 
 export function InstagramReel({ brand, content, slide_index, total_slides }: TemplateProps) {
@@ -19,6 +19,7 @@ export function InstagramReel({ brand, content, slide_index, total_slides }: Tem
     maxSize: 128,
     targetLines: 4,
   })
+  const bodySize = fitBodySize(content.body ?? '', { canvasWidth: W - 160, availableHeight: 640, maxSize: 36, minSize: 26 })
 
   const root = (
     <div
@@ -111,7 +112,7 @@ export function InstagramReel({ brand, content, slide_index, total_slides }: Tem
         <div
           style={{
             display: 'flex',
-            fontSize: 36,
+            fontSize: bodySize,
             marginTop: 36,
             opacity: 0.88,
             lineHeight: 1.4,

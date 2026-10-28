@@ -5,7 +5,7 @@
  * bottom caption bar). Headline left-aligned · chunky · accent
  * underline. Brand handle as a TikTok-style @handle pill.
  */
-import { resolveBrand, fitHeadlineSize, conFotoDeFondo } from './shared'
+import { resolveBrand, fitHeadlineSize, fitBodySize, conFotoDeFondo } from './shared'
 import type { TemplateProps } from '../types'
 
 export function TikTok({ brand, content, slide_index, total_slides }: TemplateProps) {
@@ -22,6 +22,7 @@ export function TikTok({ brand, content, slide_index, total_slides }: TemplatePr
     maxSize: 120,
     targetLines: 5,
   })
+  const bodySize = fitBodySize(content.body ?? '', { canvasWidth: W - 160, availableHeight: 600, maxSize: 36, minSize: 26 })
 
   const root = (
     <div
@@ -135,7 +136,7 @@ export function TikTok({ brand, content, slide_index, total_slides }: TemplatePr
         <div
           style={{
             display: 'flex',
-            fontSize: 36,
+            fontSize: bodySize,
             lineHeight: 1.4,
             opacity: 0.9,
             marginTop: 40,

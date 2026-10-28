@@ -49,6 +49,8 @@ export const PUEDEN_NOMBRARLAS = [
   /^scripts\/audit\/cerebro-tablas-no-las-usa-nadie\.mjs$/,
   /^scripts\/audit\/cerebro-paso-2-verifica-base\.mjs$/,
   /^src\/lib\/cerebro\//,
+  // 28-oct · LA MESA: el tablero del equipo MUESTRA al compañero la lista de fotos propias del cliente (solo LECTURA de las columnas de etiqueta ya cargadas); no escribe nada
+  /^src\/lib\/oficina\/mesa\/pedidos\.ts$/,
   /^src\/app\/api\/brain\/portero\//,
   // 14-oct · EL PORTERO QUE ALIMENTA (firma de Emilio 14-oct): el MISMO portero del cerebro, en su propia carpeta (fuera de `src/lib/cerebro/` porque la vigilancia de la condición 1 prohíbe
   // partir textos del PEDIDO en esa carpeta; aquí se filtra material raspado, no el pedido). Escribe `cerebro_fichas`/`cerebro_ingresos` y las 2 tablas nuevas de su migración (SIN APLICAR).

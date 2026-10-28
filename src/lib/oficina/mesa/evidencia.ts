@@ -13,7 +13,7 @@ export const PEDIDO_DEL_OBSERVADOR = (descripcion: string): string => [
   `La imagen se pidió así: ${descripcion.slice(0, 600)}`,
 ].join('\n')
 
-export interface LecturaDelObservador { texto_visible: string[]; marcas: string[]; personas: number; leido: boolean }
+export interface LecturaDelObservador { texto_leido: string[]; marcas: string[]; personas: number; leido: boolean }
 
 const lista = (s: string): string[] => s.split('|').map((x) => x.trim().replace(/^["“”«»']+|["“”«»']+$/g, '').trim()).filter((x) => x && !/^(ninguno|ninguna|n\/a|-)$/i.test(x))
 
@@ -21,8 +21,8 @@ export function leerObservador(texto: string): LecturaDelObservador {
   const t = String(texto ?? '')
   const campo = (k: string) => new RegExp(`${k}\\s*:\\s*(.*)`, 'i').exec(t)?.[1] ?? null
   const tv = campo('TEXTO_VISIBLE'), mc = campo('MARCAS'), ps = campo('PERSONAS')
-  if (tv === null) return { texto_visible: [], marcas: [], personas: 0, leido: false }
-  return { texto_visible: lista(tv), marcas: mc ? lista(mc) : [], personas: ps ? Math.max(0, parseInt(ps, 10) || 0) : 0, leido: true }
+  if (tv === null) return { texto_leido: [], marcas: [], personas: 0, leido: false }
+  return { texto_leido: lista(tv), marcas: mc ? lista(mc) : [], personas: ps ? Math.max(0, parseInt(ps, 10) || 0) : 0, leido: true }
 }
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9ñ]+/g, ' ').trim()
@@ -54,8 +54,8 @@ export function observacionDeLaMesa(o: { items: Array<{ indice: number; ref: str
     const l = o.lecturas[it.indice]
     if (!l?.leido) { sin_lectura.push(it.indice); continue } // sin lectura no se decide: el observador no contestó → se acepta con aviso (no se bloquea por falta de ojos)
     const ajenas = l.marcas.filter((m) => !propias.has(norm(m)))
-    const { sobrante } = cotejoDeTexto(l.texto_visible, o.permitido)
-    observaciones.push({ indice: it.indice, reglas: [], texto_en_imagen: l.texto_visible, marcas: l.marcas, personas: l.personas })
+    const { sobrante } = cotejoDeTexto(l.texto_leido, o.permitido)
+    observaciones.push({ indice: it.indice, reglas: [], texto_en_imagen: l.texto_leido, marcas: l.marcas, personas: l.personas })
     if (sobrante.length || ajenas.length) {
       rechazadas.push({ indice: it.indice, ref: it.ref, motivo: [sobrante.length ? `texto que la pieza no pidió: ${sobrante.slice(0, 3).join(' | ')}` : '', ajenas.length ? `marca ajena: ${ajenas.slice(0, 3).join(' | ')}` : ''].filter(Boolean).join(' · ') })
     } else (aceptadas[it.ref] ??= []).push(it.indice)
