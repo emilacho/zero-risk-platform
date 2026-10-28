@@ -26,7 +26,7 @@ import { enviarPiezaASlack, leerNotasParaElProductor, piezaParaSlackDeLaBandeja,
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { /** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string }
+export interface Entorno { /** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string; }
 
 /** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
 export { ESPERAS_DEL_REVISOR_MS }
@@ -262,6 +262,21 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       }
       return { ok: true, id }
     },
+    // solo si el entorno trae la llave del portero (aunque sea vacía: vacía = falta y bloquea a propósito); sin ella (pruebas) no se comprueba
+    ...(env.porteroWebhookKey === undefined ? {} : { async chequearPortero() {
+      if (!env.porteroWebhookKey) return { ok: false as const, detalle: 'falta PORTERO_WEBHOOK_KEY en el entorno de la plataforma (viene de Doppler)' }
+      const base = ((env.n8nWebhookBase ?? '').trim() || N8N_POR_OMISION).replace(/\/+$/, '')
+      try {
+        const res = await f(`${base}/zero-risk/portero`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-portero-key': env.porteroWebhookKey, 'x-api-key': env.internalKey }, body: '{}', signal: AbortSignal.timeout(15_000) })
+        const txt = await res.text()
+        let j: Record<string, unknown> = {}
+        try { j = JSON.parse(txt) } catch { /* no es JSON: no es el portero */ }
+        const codigo = typeof j.error === 'string' ? j.error : ''
+        // el portero VIVO y con las dos llaves buenas contesta 400 con un código PORTERO_* de validación (el cuerpo vacío no trae cliente)
+        if (res.status === 400 && codigo.startsWith('PORTERO_') && codigo !== 'PORTERO_LLAVE_INCORRECTA') return { ok: true as const }
+        return { ok: false as const, detalle: `la puerta del portero contestó HTTP ${res.status}: ${txt.slice(0, 160)}` }
+      } catch (e) { return { ok: false as const, detalle: `la puerta del portero no contestó: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) } }
+    } }),
     async avisar(p) {
       if (p.dry_run || !env.slackToken) return
       try {

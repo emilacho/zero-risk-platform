@@ -21,13 +21,17 @@ const JSON_H = { name: 'Content-Type', value: 'application/json' }
 const LLAVE = { name: 'x-sala-dispatch-key', value: '={{ $json.llave }}' }
 
 const code = (nombre, archivo, pos) => ({ parameters: { jsCode: leer(archivo) }, name: nombre, type: 'n8n-nodes-base.code', typeVersion: 2, position: pos })
-const http = (nombre, url, pos, { headers = [], body = null, timeout = 30000, completa = true } = {}) => ({
+/** la llave de los webhooks del portero NO se escribe en el flujo: se usa la CREDENCIAL de n8n que el propio webhook del portero valida (se carga desde Doppler al rotar) */
+export const CREDENCIAL_PORTERO = { id: 'fwf6hHajandyfnyz', name: 'Portero · llave de los webhooks (x-portero-key) [2026-10]' }
+const http = (nombre, url, pos, { headers = [], body = null, timeout = 30000, completa = true, credencial = null } = {}) => ({
   parameters: {
+    ...(credencial ? { authentication: 'genericCredentialType', genericAuthType: 'httpHeaderAuth' } : {}),
     method: 'POST', url, sendHeaders: true, headerParameters: { parameters: [JSON_H, ...headers] },
     ...(body ? { sendBody: true, specifyBody: 'json', jsonBody: body } : {}),
     options: { timeout, response: { response: { neverError: true, ...(completa ? { fullResponse: true } : {}) } } },
   },
   name: nombre, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, position: pos, onError: 'continueRegularOutput',
+  ...(credencial ? { credentials: { httpHeaderAuth: credencial } } : {}),
 })
 const cond = (nombre, izq, operador, pos, derecha = '') => ({
   parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' }, combinator: 'and', conditions: [{ leftValue: izq, rightValue: derecha, operator: operador }] }, options: {} },
@@ -100,7 +104,7 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
     // ── portero (una pregunta al cerebro: no escribe en ninguna tabla)
     cond(N.pSeco, '={{ $json.dry_run }}', esVerdadero, x(3, -300)),
     // 🔴 el portero puede costar (razonar llama al modelo): SIN reintento
-    http(N.portero, `${N8N_HOOKS}/zero-risk/portero`, x(4, -450), { headers: [{ name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' }], body: '={{ JSON.stringify($json.turno.pedido.cuerpo) }}', timeout: 120000, completa: false }),
+    http(N.portero, `${N8N_HOOKS}/zero-risk/portero`, x(4, -450), { headers: [{ name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' }], body: '={{ JSON.stringify($json.turno.pedido.cuerpo) }}', timeout: 120000, completa: false, credencial: CREDENCIAL_PORTERO }),
     code(N.pRes, 'turno-n3p-portero.js', x(5, -300)),
     // ── agente
     code(N.armar, 'turno-n1-armar.js', x(3, 200)),
