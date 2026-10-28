@@ -66,7 +66,44 @@ describe('el vigía y los pasos muertos', () => {
     return { db, P, hora, id: String(a.cuerpo.encargo_id) }
   }
   const vivo = (db: DbFalsa) => db.tablas['oficina_turnos'].find((t) => t.estado === 'corriendo' || t.estado === 'muerto')!
-  const envejecer = (db: DbFalsa, ahora: Date, min: number) => { vivo(db).inicio = new Date(ahora.getTime() - min * 60_000).toISOString() }
+  const envejecer = (db: DbFalsa, ahora: Date, min: number) => { vivo(db).workflow_execution_id = 'ex-acuse'; vivo(db).inicio = new Date(ahora.getTime() - min * 60_000).toISOString() }
+  const envejecerSinAcuse = (db: DbFalsa, ahora: Date, min: number) => { vivo(db).workflow_execution_id = null; vivo(db).inicio = new Date(ahora.getTime() - min * 60_000).toISOString() }
+  // 28-oct · TRASPASO PERDIDO: un turno lanzado que ningún flujo acusó se vuelve a entregar a los 3 min (no a los 12)
+  it('lanzado y SIN acuse a los 4 min: se vuelve a entregar el MISMO turno (no se da por muerto)', async () => {
+    const { db, P, hora, id } = await conPasoColgado()
+    const n = Number(vivo(db).n)
+    envejecerSinAcuse(db, hora.v, 4)
+    expect(await revisarPasosMuertos(P, db, hora.v)).toEqual({ reanudar: [id], fallidos: [], cierres: [] })
+    expect(vivo(db).estado).toBe('corriendo')
+    expect((await avanzar(P, id)).cuerpo).toMatchObject({ accion: 'esperar', reentrega: true, turno: { n } })
+  })
+  it('lanzado y sin acuse a los 2 min: todavía no', async () => {
+    const { db, P, hora } = await conPasoColgado()
+    envejecerSinAcuse(db, hora.v, 2)
+    expect(await revisarPasosMuertos(P, db, hora.v)).toEqual({ reanudar: [], fallidos: [], cierres: [] })
+  })
+  it('con acuse (el flujo lo tomó y está trabajando) NO se vuelve a entregar a los 4 min', async () => {
+    const { db, P, hora } = await conPasoColgado()
+    envejecer(db, hora.v, 4)
+    expect(await revisarPasosMuertos(P, db, hora.v)).toEqual({ reanudar: [], fallidos: [], cierres: [] })
+  })
+  it('la reentrega sin acuse tiene tope (3): después manda la regla de los 12 min', async () => {
+    const { db, P, hora, id } = await conPasoColgado()
+    for (let i = 0; i < 3; i++) { envejecerSinAcuse(db, hora.v, 4); expect((await revisarPasosMuertos(P, db, hora.v)).reanudar).toEqual([id]) }
+    envejecerSinAcuse(db, hora.v, 5)
+    expect((await revisarPasosMuertos(P, db, hora.v)).reanudar).toEqual([])
+    envejecerSinAcuse(db, hora.v, MINUTOS_PARA_DAR_POR_MUERTO + 1)
+    expect(await revisarPasosMuertos(P, db, hora.v)).toEqual({ reanudar: [id], fallidos: [], cierres: [] })
+    expect(vivo(db).estado).toBe('muerto')
+  })
+  it('EL ACUSE es atómico: dos flujos para el mismo turno → solo uno lo toma (el otro se detiene y no paga)', async () => {
+    const { P, id, db } = await conPasoColgado()
+    const n = Number(vivo(db).n)
+    expect(await P.almacen.acusarTurno(id, n, 'ex-A')).toBe('tomado')
+    expect(await P.almacen.acusarTurno(id, n, 'ex-B')).toBe('ya_tomado')
+    expect(vivo(db).workflow_execution_id).toBe('ex-A')
+    expect(await P.almacen.acusarTurno(id, n + 7, 'ex-C')).toBe('no_abierto')
+  })
   it('un paso «corriendo» de menos de 12 min no se toca', async () => {
     const { db, P, hora } = await conPasoColgado()
     envejecer(db, hora.v, 5)
@@ -75,7 +112,7 @@ describe('el vigía y los pasos muertos', () => {
   })
   it('a los 12 min se da por muerto y se reintenta UNA vez (mismo número de paso)', async () => {
     const { db, P, hora, id } = await conPasoColgado()
-    const n = vivo(db).n
+    const n = Number(vivo(db).n)
     envejecer(db, hora.v, MINUTOS_PARA_DAR_POR_MUERTO + 1)
     const r = await revisarPasosMuertos(P, db, hora.v)
     expect(r).toEqual({ reanudar: [id], fallidos: [], cierres: [] })
@@ -179,4 +216,18 @@ describe('rutas /api/oficina/*: cerradas por la llave de despacho y por la confi
 
 describe('el almacén no importa el estado inicial desde fuera', () => {
   it('estadoInicial es un objeto nuevo cada vez', () => { expect(estadoInicial()).not.toBe(estadoInicial()); void almacenDeSupabase })
+})
+
+// 28-oct · el flujo `oficina · turno` ACUSA el turno al recibirlo (traspaso perdido)
+describe('el flujo acusa cada turno', () => {
+  it('el constructor pone «Acuse» y «¿Lo tomo?» entre la entrada y la bifurcación portero/agente, y el reloj del vigía a 2 min', async () => {
+    const { construirTurno, construirVigia } = await import('../../../../scripts/worker-staging/oficina/construir-oficina.mjs')
+    const t = construirTurno() as unknown as { connections: Record<string, { main?: Array<Array<{ node: string }>> }> }
+    const sal = (de: string) => t.connections[de]?.main?.flat().map((x) => x.node)
+    expect(sal('⓪ Entrada · llave')).toEqual(['⓪ Acuse del turno'])
+    expect(sal('⓪ Acuse del turno')).toEqual(['⓪ ¿Lo tomo?'])
+    expect(sal('⓪ ¿Lo tomo?')).toEqual(['① ¿Portero?'])
+    const reloj = construirVigia().nodes.find((n: { type: string }) => n.type.endsWith('scheduleTrigger'))
+    expect(reloj.parameters.rule.interval[0].minutesInterval).toBe(2)
+  })
 })

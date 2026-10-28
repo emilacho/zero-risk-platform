@@ -79,9 +79,9 @@ describe('la FORMA de los 3 flujos: inactivos, sin reintentos que paguen, sin ll
     expect(f.connections['② ¿Modo seco?'].main[0][0].node).toBe('③ Registrar el resultado')
     expect(f.connections['① ¿Modo seco? (portero)'].main[0][0].node).toBe('① Portero · resultado')
   })
-  it('el VIGÍA: reloj de 10 min', () => {
+  it('el VIGÍA: reloj de 2 min (traspaso perdido: lo lanzado sin acuse se reanuda a los 3)', () => {
     const t = flujos.vigia.nodes.find((n) => n.type.endsWith('scheduleTrigger'))!
-    expect(t.parameters.rule.interval[0]).toEqual({ field: 'minutes', minutesInterval: 10 })
+    expect(t.parameters.rule.interval[0]).toEqual({ field: 'minutes', minutesInterval: 2 })
   })
   it('las ÚNICAS direcciones a las que llaman son las de la oficina, la pieza simple, el portero, run-sdk y la vuelta a la sala (nada de Meta, Slack ni publicar)', () => {
     const permitidas = [/\/api\/oficina\/(encargos|turnos|vigia)$/, /\/zero-risk\/(pieza|oficina-turno|portero)$/, /\/api\/agents\/run-sdk$/, /api\/sala\/callback/]
@@ -209,6 +209,14 @@ describe('turno · entrada, pedido, aceptación y vuelta', () => {
     expect(f({ rechazo: { status: 401 } }).error).toMatch(/PORTERO_NO_RESPONDE/)
     expect(f({}).error).toMatch(/PORTERO_NO_RESPONDE/)
     expect(f({ cliente: 'c', modo: 'conversado', estado: 'ok', lista: [1, 2], costo_usd: 0.02 })).toMatchObject({ texto: '{"cliente":"c","modo":"conversado","estado":"ok","lista":[1,2],"costo_usd":0.02}', costo_usd: 0.02 })
+  })
+  it('⓪ tomar el turno: «tomado» sigue con el mismo ítem; «ya_tomado» o «no_abierto» DETIENEN este flujo (no llama a nadie, no paga); si el acuse falla, sigue',  () => {
+    const e = { llave, encargo_id: ENC, turno: { n: 2, tipo: 'agente' }, dry_run: false }
+    const f = (input: unknown) => json(ejecutar('turno-n0b-tomar.js', { input: [input], nodos: { '⓪ Entrada · llave': [e] } }))
+    expect(f({ statusCode: 200, body: { acuse: 'tomado' } })).toEqual([e])
+    expect(f({ statusCode: 200, body: { acuse: 'ya_tomado' } })).toEqual([])
+    expect(f({ statusCode: 200, body: { acuse: 'no_abierto' } })).toEqual([])
+    expect(f({ error: { message: 'caída' } })).toEqual([e]) // el acuse nunca frena una pieza por sí solo
   })
   it('③ ¿y ahora? esperar ⇒ despierta el siguiente paso; cerrado ⇒ cable con el resultado REAL; otra cosa ⇒ se detiene', () => {
     const c = { llave, encargo_id: ENC }

@@ -1,11 +1,12 @@
 /**
  * POST /api/oficina/turnos · el motor de la oficina, un paso por llamada. SALA 1 · PR 4 · NADIE la llama todavía.
+ *  { accion: 'acuse', encargo_id, n, workflow_execution_id } → el flujo TOMA el turno (una sola vez; `ya_tomado` = otro flujo ya lo tiene: este se detiene)
  *  { accion: 'siguiente', encargo_id }  → ejecuta los pasos de código/revisor en línea y devuelve el PEDIDO del siguiente empleado (o el cierre);
  *  { accion: 'resultado', encargo_id, n, texto | error, costo_usd?, workflow_execution_id?, tokens_in?, tokens_out? } → aplica el contrato de formato y los validadores, registra y sigue.
  * Llave: `x-sala-dispatch-key` (sin `SALA_DISPATCH_KEY`, 503). El `dry_run` lo trae el encargo desde que se abrió (no se puede cambiar aquí).
  */
 import { NextResponse } from 'next/server'
-import { avanzar, recibirResultado } from '@/lib/oficina/orquestador'
+import { acusarTurno, avanzar, recibirResultado } from '@/lib/oficina/orquestador'
 import { checkLlaveDeLaSala, esObjeto, puertosReales } from '@/lib/oficina/ruta'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +24,11 @@ export async function POST(request: Request) {
   if (!esObjeto(cuerpo)) return NextResponse.json({ error: 'entrada_invalida', errores: ['el cuerpo debe ser un objeto'] }, { status: 400 })
   const errores: string[] = []
   if (typeof cuerpo.encargo_id !== 'string' || !UUID.test(cuerpo.encargo_id)) errores.push('`encargo_id` debe ser un uuid')
-  if (cuerpo.accion !== 'siguiente' && cuerpo.accion !== 'resultado') errores.push('`accion` debe ser siguiente o resultado')
+  if (cuerpo.accion !== 'siguiente' && cuerpo.accion !== 'resultado' && cuerpo.accion !== 'acuse') errores.push('`accion` debe ser siguiente, resultado o acuse')
+  if (cuerpo.accion === 'acuse') {
+    if (!Number.isInteger(cuerpo.n) || (cuerpo.n as number) < 1) errores.push('`n` debe ser el número del paso (entero ≥ 1)')
+    if (typeof cuerpo.workflow_execution_id !== 'string' || !cuerpo.workflow_execution_id) errores.push('`workflow_execution_id` es obligatorio en el acuse')
+  }
   if (cuerpo.accion === 'resultado') {
     if (!Number.isInteger(cuerpo.n) || (cuerpo.n as number) < 1) errores.push('`n` debe ser el número del paso (entero ≥ 1)')
     if (cuerpo.texto !== undefined && typeof cuerpo.texto !== 'string') errores.push('`texto` debe ser texto')
@@ -34,7 +39,9 @@ export async function POST(request: Request) {
   try {
     const { P } = puertosReales(request)
     const id = cuerpo.encargo_id as string
-    const r = cuerpo.accion === 'siguiente'
+    const r = cuerpo.accion === 'acuse'
+      ? await acusarTurno(P, id, cuerpo.n as number, cuerpo.workflow_execution_id as string)
+      : cuerpo.accion === 'siguiente'
       ? await avanzar(P, id)
       : await recibirResultado(P, id, cuerpo.n as number, {
           ...(typeof cuerpo.texto === 'string' ? { texto: cuerpo.texto } : {}), ...(typeof cuerpo.error === 'string' ? { error: cuerpo.error } : {}),
