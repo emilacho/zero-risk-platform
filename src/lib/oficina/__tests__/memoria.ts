@@ -93,6 +93,13 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
     },
     leerEncargo: async (id) => { const e = m.encargos.get(id); return e ? JSON.parse(JSON.stringify(e)) : null },
     turnoAbierto: async (id) => [...(m.turnos.get(id)?.values() ?? [])].find((t) => t.estado === 'corriendo') ?? null,
+    acusarTurno: async (id, n, ejecucion) => {
+      const t = m.turnos.get(id)?.get(n)
+      if (!t || t.estado !== 'corriendo') return 'no_abierto'
+      if (t.workflow_execution_id) return 'ya_tomado'
+      t.workflow_execution_id = ejecucion
+      return 'tomado'
+    },
     guardar: async (c) => {
       const e = m.encargos.get(c.encargo_id)!
       e.estado_del_motor = JSON.parse(JSON.stringify(c.estado_del_motor)); e.gasto_usd = c.gasto_usd

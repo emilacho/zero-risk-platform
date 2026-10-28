@@ -94,6 +94,8 @@ export interface Almacen {
   leerEncargo(id: string): Promise<Encargo | null>
   /** el turno que está esperando respuesta (estado corriendo), si hay uno */
   turnoAbierto(encargoId: string): Promise<TurnoRegistrado | null>
+  /** EL ACUSE del flujo (28-oct · traspaso perdido): el flujo que recibe un turno lo TOMA una sola vez (atómico: solo si sigue `corriendo` y sin dueño). Dos despertares del mismo turno no pagan dos veces */
+  acusarTurno(encargoId: string, n: number, ejecucion: string): Promise<'tomado' | 'ya_tomado' | 'no_abierto'>
   guardar(c: Cambios): Promise<void>
 }
 
@@ -135,6 +137,8 @@ export interface Puertos {
   cerebro?: PuertoDelCerebro
   /** LA MESA · el directorio vivo y el libro de aportes. Opcional: sin él las familias `*_mesa` no abren (fallan visibles) y las v1 funcionan igual */
   mesa?: PuertoMesa
+  /** CHEQUEO GRATIS de la puerta del portero (n8n `zero-risk/portero`): manda un cuerpo vacío con las dos llaves y espera el rechazo de VALIDACIÓN del portero (no llama al modelo, no cuesta). Opcional: sin él no se comprueba */
+  chequearPortero?(): Promise<{ ok: true } | { ok: false; detalle: string }>
   ahora(): Date
   fuentes(clientId: string): Promise<FuentesCompletas | { error: string }>
   parte(parteId: string, clientId: string): Promise<{ texto: string } | null>

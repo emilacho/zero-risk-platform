@@ -3,9 +3,11 @@
  * («el sobre sigue por la pieza simple»). Llave: `x-sala-dispatch-key` (sin `SALA_DISPATCH_KEY`, 503).
  * Cuerpo `abrir`: el sobre de `brief/parte-listo · producir` { parte_id, brief_id, dry_run (OBLIGATORIO y booleano), tope_usd?, familia? } + lo que PONE LA SALA en la raíz:
  * `client_id`, `target_step_id`, `_journey_id`, `_sala_correlation_id`. Un `client_id` dentro de otro objeto no se lee.
+ * `despertar: true` (opcional): para quien abre o reabre sin la puerta de n8n, la ruta despierta al flujo `oficina · turno` con el primer turno (sin esto el turno 2 quedaba sin lanzar hasta que el vigía lo hallaba).
  * Cuerpo `leer`: { accion: 'leer', encargo_id }.
  */
 import { NextResponse } from 'next/server'
+import { despertarAlFlujoDeLaOficina } from '@/lib/oficina/despertar'
 import { abrirEncargo } from '@/lib/oficina/orquestador'
 import { checkLlaveDeLaSala, esObjeto, puertosReales } from '@/lib/oficina/ruta'
 
@@ -34,6 +36,11 @@ export async function POST(request: Request) {
     if (!clientId || !target) return NextResponse.json({ error: 'entrada_invalida', errores: ['faltan `client_id` y `target_step_id` (los pone la sala en la raíz)'] }, { status: 400 })
     const sala_ref = { _journey_id: cuerpo._journey_id ?? null, _sala_correlation_id: cuerpo._sala_correlation_id ?? null }
     const r = await abrirEncargo(P, { cuerpo, client_id: clientId, target_step_id: target, sala_ref })
+    // 28-oct · TRASPASO: quien abre o REABRE a mano (sin la puerta de n8n) pide `despertar: true` y la ruta misma despierta al flujo `oficina · turno`; el acuse del turno impide que un segundo despertar pague otra vez
+    if (cuerpo.despertar === true && r.status === 200 && r.cuerpo.accion === 'esperar' && esObjeto(r.cuerpo.turno)) {
+      const d = await despertarAlFlujoDeLaOficina(fetch, { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, String(r.cuerpo.encargo_id), r.cuerpo.turno)
+      return NextResponse.json({ ...r.cuerpo, despertado: d.despertado, ...(d.despertado ? {} : { motivo_sin_despertar: d.motivo }) }, { status: r.status })
+    }
     return NextResponse.json(r.cuerpo, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'oficina_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

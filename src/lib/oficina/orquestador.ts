@@ -80,6 +80,14 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   const pl = await P.almacen.leerPlantilla(dec.familia)
   if (!pl) return r(404, { error: 'plantilla_desconocida', familia: dec.familia })
   if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia })
+  // 28-oct · CHEQUEO GRATIS de la puerta del portero: si el portero no contesta (llave rota tras una rotación, flujo apagado), el encargo NO se crea ni gasta; una sola alarma por incidente
+  if (P.chequearPortero && pl.plantilla.pasos.some((x) => x.tipo === 'portero')) {
+    const ch = await P.chequearPortero()
+    if (!ch.ok) {
+      await P.avisar({ canal: 'alertas', encargo_id: v.sobre.brief_id, texto: `🚪 La oficina no puede hablar con el portero (${ch.detalle}). Las piezas esperan; no se gasta nada hasta que se arregle la llave de la puerta.`, dry_run: v.sobre.dry_run })
+      return r(409, { error: 'portero_no_responde', detalle: ch.detalle, pendiente: 'puerta_del_portero' })
+    }
+  }
   // 21-oct · PRE-VUELO de las láminas: sin identidad visual legible o sin carpeta (slug) el encargo NO se crea (antes nacía y cerraba `fallido` a los 3 s); queda pendiente del re-proceso visual. Una lectura que falla no bloquea (el paso `abrir` la vuelve a leer y lo dice)
   if (familiaDeLaminas(pl.plantilla)) {
     const fu = await P.fuentes(entrada.client_id)
@@ -540,6 +548,14 @@ async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, _paso: P
 // ───────────────────────── recibir el resultado de un agente / del portero
 export interface ResultadoDeTurno { texto?: string; error?: string; costo_usd?: number; workflow_execution_id?: string | null; tokens_in?: number | null; tokens_out?: number | null }
 
+/** EL ACUSE (28-oct): el flujo `oficina · turno` avisa que TOMÓ el turno. Una sola vez por turno: un segundo despertar (el vigía, un reintento) recibe `ya_tomado` y el flujo se detiene SIN llamar al agente ni al portero (nada se paga dos veces) */
+export async function acusarTurno(P: Puertos, encargoId: string, n: number, ejecucion: string): Promise<Respuesta> {
+  const x = await P.almacen.acusarTurno(encargoId, n, ejecucion)
+  return r(200, { acuse: x, encargo_id: encargoId, n })
+}
+
+/** lo que el flujo manda cuando la puerta del portero contestó otra cosa que un portero */
+export const PORTERO_NO_RESPONDE = 'PORTERO_NO_RESPONDE'
 export async function recibirResultado(P: Puertos, encargoId: string, n: number, res: ResultadoDeTurno): Promise<Respuesta> {
   const enc = await P.almacen.leerEncargo(encargoId)
   if (!enc) return r(404, { error: 'encargo_inexistente' })
@@ -561,6 +577,16 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   // el segundo cerebro: la auto-revisión NUNCA frena ni rompe la entrega (si algo sale mal, la pieza sigue tal cual la hizo el agente)
   if (paso.revisa) return recibirAutorevision(P, enc, pl, sig, abierto.agente, res, { costo, gastoModelo, turnoBase, n })
 
+  // 28-oct · lo que contestó la puerta NO era el portero (rechazo de llave, HTML, vacío): jamás cuenta como éxito. Se reintenta UNA vez; si sigue, UNA alarma y la pieza queda en espera SIN gastar (se reanuda con `siguiente` cuando se arregle la llave)
+  if (paso.tipo === 'portero' && typeof res.error === 'string' && res.error.startsWith(PORTERO_NO_RESPONDE)) {
+    const k = `portero_roto:${paso.clave}`
+    const veces = (e.vueltas[k] ?? 0) + 1
+    const nuevo: Estado = { ...e, pasos_ejecutados: e.pasos_ejecutados + 1, vueltas: { ...e.vueltas, [k]: veces } }
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', turno: { ...turnoBase, n, estado: 'fallo', error: res.error.slice(0, 300), cost_usd: 0 } })
+    if (veces < 2) return avanzar(P, enc.id)
+    if (veces === 2) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🚪 El portero no respondió dos veces seguidas (${res.error.slice(0, 160)}). La pieza ${enc.brief_id} queda en espera, sin gasto; se reanuda cuando se arregle la llave de la puerta.`, dry_run: enc.dry_run })
+    return r(200, { accion: 'esperando_al_portero', encargo_id: enc.id, veces })
+  }
   if (res.error || typeof res.texto !== 'string') {
     // el turno murió o devolvió error: se registra como fallo y el encargo cierra visible (el vigía reintenta UNA vez antes de llegar aquí)
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: e.gasto_usd + costo, turno: { ...turnoBase, n, estado: 'fallo', error: res.error ?? 'respuesta vacía' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })

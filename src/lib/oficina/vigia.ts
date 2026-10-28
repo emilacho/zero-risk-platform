@@ -15,6 +15,10 @@ import { resolverMaterialVencido } from './material-orquestador'
 
 type Fila = Record<string, unknown>
 export const MINUTOS_PARA_DAR_POR_MUERTO = 12
+/** 28-oct · un turno LANZADO que ningún flujo acusó en este tiempo se perdió en el traspaso: se vuelve a entregar (no se da por muerto) */
+export const MINUTOS_PARA_REANUDAR_LO_LANZADO = 3
+/** cuántas veces se vuelve a entregar un turno sin acuse antes de dejarlo a la regla de los 12 min */
+export const MAX_REENTREGAS_SIN_ACUSE = 3
 /** J8a · el paso `jefatura` espera a una revisión que corre en n8n (≈ 5–15 min por salto, hasta ≈ 50 min en el peor caso): no es un paso muerto a los 12 min. Pasado este tiempo la pieza sigue «sin revisar» */
 export const MINUTOS_PARA_ESPERAR_A_LA_JEFATURA = 90
 
@@ -35,13 +39,29 @@ export async function vencerBandeja(db: Db, ahora: Date): Promise<{ vencidas: st
 export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> }> {
   const limite = new Date(ahora.getTime() - MINUTOS_PARA_DAR_POR_MUERTO * 60_000).toISOString()
   const limiteJefatura = new Date(ahora.getTime() - MINUTOS_PARA_ESPERAR_A_LA_JEFATURA * 60_000).toISOString()
+  // ① LO LANZADO SIN ACUSE (traspaso perdido): a los 3 min se vuelve a entregar el mismo turno (el acuse atómico impide que dos flujos lo paguen)
+  const limiteLanzado = new Date(ahora.getTime() - MINUTOS_PARA_REANUDAR_LO_LANZADO * 60_000).toISOString()
+  const reentregar: string[] = []
+  const sa = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,inicio').eq('estado', 'corriendo').is('workflow_execution_id', null).lt('inicio', limiteLanzado)) as { data: Fila[] | null; error: { message: string } | null }
+  if (sa.error) throw new Error(`vigía · leer los turnos sin acuse: ${sa.error.message}`)
+  for (const t of sa.data ?? []) {
+    if (t.tipo !== 'agente' && t.tipo !== 'portero') continue // material y jefatura tienen su propio plazo
+    const enc = await P.almacen.leerEncargo(String(t.encargo_id))
+    if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido'].includes(enc.estado)) continue
+    const k = `lanzado:${String(t.paso)}:${String(t.n)}`
+    const veces = enc.estado_del_motor.vueltas[k] ?? 0
+    if (veces >= MAX_REENTREGAS_SIN_ACUSE) continue // se deja a la regla de los 12 min (muerto → un reintento → fallido)
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: { ...enc.estado_del_motor, vueltas: { ...enc.estado_del_motor.vueltas, [k]: veces + 1 } }, gasto_usd: enc.gasto_usd })
+    reentregar.push(enc.id)
+  }
   const r = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,inicio').eq('estado', 'corriendo').lt('inicio', limite)) as { data: Fila[] | null; error: { message: string } | null }
   if (r.error) throw new Error(`vigía · leer los pasos vivos: ${r.error.message}`)
-  const reanudar: string[] = [], fallidos: string[] = []
+  const reanudar: string[] = [...reentregar], fallidos: string[] = []
   const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = []
   for (const t of r.data ?? []) {
     const enc = await P.almacen.leerEncargo(String(t.encargo_id))
     if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido'].includes(enc.estado)) continue
+    if (reentregar.includes(enc.id)) continue // se acaba de volver a entregar: no se da por muerto
     if (t.tipo === 'jefatura') {
       // J8a · la revisión de la jefatura tiene su propio plazo y su propio vigía: aquí solo se da por perdida pasado el plazo largo, y la pieza sigue marcada (nunca se pierde)
       if (String(t.inicio) >= limiteJefatura) continue
