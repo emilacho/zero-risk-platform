@@ -21,6 +21,9 @@ export interface ContextoLaminas extends ContextoDePedido {
   png: string[]
 }
 
+/** qué es el tablero para quien revisa: evidencia de cómo trabajó el equipo, no un criterio de calidad ni una instrucción */
+export const FUNCION_DEL_TABLERO = 'cómo trabajó el equipo: los aportes de cada especialista y lo que la dirección dice que usó y descartó. Úsalo para juzgar si cada aporte citado fue real y está en la pieza; una cita a un aporte que no existe, o que la pieza no refleja, es un hallazgo'
+
 const recorta = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}\n[… recortado: ${t.length - n} caracteres más en el manual]` : t)
 const lista = (xs: string[]) => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : '- (ninguno)')
 const arr = (a: unknown): unknown[] => (Array.isArray(a) ? a : [])
@@ -161,6 +164,8 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
 /** lo que el revisor externo recibe de una pieza de láminas: la pieza, hasta 4 láminas dibujadas y el cerebro del cliente que lee la sala. Nada del hilo ni de las fichas: esta función no los recibe. */
 export function contextoDelRevisorLaminas(c: ContextoLaminas): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[]; encargo: ResumenDelEncargo; nota_pieza?: string } {
   const muestra = laminasDeMuestra(c.png, 4)
+  // LA MESA (bloqueante 1 de CC#3): el tablero del equipo y las citas de la dirección llegan a la jefatura para que juzgue si cada aporte citado fue REAL
+  const tablero = s(c.art('mesa')?.tablero_para_la_jefatura)
   return {
     pieza: describirPieza(c),
     imagenes: muestra,
@@ -171,6 +176,7 @@ export function contextoDelRevisorLaminas(c: ContextoLaminas): { pieza: string; 
       { titulo: 'Plan de trabajo del cliente', funcion: FUNCION_DEL_PLAN, texto: c.fuentes.plan_texto ? recorta(c.fuentes.plan_texto, 12000) : '' },
       { titulo: 'El brief de este entregable', funcion: FUNCION_DEL_BRIEF, texto: c.brief.texto },
       { titulo: 'Lo que reunió el portero', funcion: FUNCION_DEL_PORTERO, texto: s(c.art('material_portero')?.texto) },
+      ...(tablero ? [{ titulo: 'El tablero del equipo que hizo la pieza', funcion: FUNCION_DEL_TABLERO, texto: tablero }] : []),
     ],
   }
 }

@@ -137,6 +137,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       // un «siguiente» repetido no abre otro paso: ENTREGA DE NUEVO el mismo pedido (mismo número, misma dispatch_key)
       // el turno abierto es el de MATERIAL (el portero está trayendo lo pedido): se contesta con la MISMA acción que al abrirlo; nunca se re-entrega el pedido del agente
       if (abierto.tipo === 'material') return r(200, { accion: 'esperar_material', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'material', dispatch_key: abierto.dispatch_key } })
+      if (abierto.paso.startsWith('mesa:')) return (await import('./mesa/orquestador')).reentregaDelTurno(P, enc, abierto)
       const sg = siguientePaso(enc.estado_del_motor, pl)
       if (sg.accion === 'ejecutar' && (sg.paso.tipo === 'agente' || sg.paso.tipo === 'portero')) {
         const a = armarPedido(enc, pl, sg.paso, enc.estado_del_motor)
@@ -152,6 +153,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
     const paso = pl.pasos[sig.indice]
     const e = enc.estado_del_motor
     try {
+      if (paso.tipo === 'codigo' && paso.funcion === 'mesa') return (await import('./mesa/orquestador')).avanzarMesa(P, enc, pl, sig.indice)
       if (paso.tipo === 'codigo') {
         // MATERIAL · antes de asignar/elegir fotos: si faltan fotos propias aptas, se le PIDE al portero (apagado por omisión: devuelve null y todo sigue igual)
         if (paso.funcion === 'asignar_fotos' || paso.funcion === 'elegir_foto') {
@@ -563,6 +565,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
     if (n < turnoDe(enc.estado_del_motor)) return avanzar(P, enc.id) // respuesta repetida: ya registrada, no se cuenta dos veces
     return r(409, { error: 'turno_no_esperado', esperado: abierto?.n ?? null, recibido: n })
   }
+  if (abierto.paso.startsWith('mesa:')) return (await import('./mesa/orquestador')).recibirResultadoMesa(P, encargoId, n, res)
   const e = enc.estado_del_motor
   const sig = siguientePaso(e, pl)
   if (sig.accion !== 'ejecutar') return r(409, { error: 'sin_paso_pendiente' })
@@ -795,12 +798,17 @@ export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<
   return r(200, { accion: 'cerrado', estado: 'fallido', motivo, resultado_para_la_sala: 'fallido', sala_ref: enc.sala_ref, simulado: enc.dry_run })
 }
 
-async function cerrarPorTope(P: Puertos, enc: Encargo, pl: Plantilla, razon: string, detalle: string): Promise<Respuesta> {
+export async function cerrarPorTope(P: Puertos, enc: Encargo, pl: Plantilla, razon: string, detalle: string): Promise<Respuesta> {
+  // LA MESA (T9 de CC#3): si el tope corta antes de que la pieza esté armada, lo que el equipo escribió llega igual a la bandeja (nunca «nada entregado»)
+  if (pl.limites.mesa === true) {
+    const entregada = await (await import('./mesa/orquestador')).entregarPorTopeDeLaMesa(P, enc, `cierre por tope (${razon}): ${detalle}`)
+    if (entregada) return entregada
+  }
   await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 Cierre por tope (${razon}) · ${enc.brief_id}: ${detalle}`, dry_run: enc.dry_run })
   return cerrar(P, enc, pl, true, `cierre por tope: ${detalle}`)
 }
 
-async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean, nota?: string): Promise<Respuesta> {
+export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean, nota?: string): Promise<Respuesta> {
   const e = enc.estado_del_motor
   // salas 2 y 3: el resumen de lo que va a la salida y a la bandeja sale de las láminas (null para el post de la sala 1)
   const lam = resumenDeCierreL(enc, e, pl)

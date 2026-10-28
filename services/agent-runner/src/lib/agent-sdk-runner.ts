@@ -522,6 +522,8 @@ const MCP_ALLOWED_TOOLS_BY_SERVER: Record<string, readonly string[]> = {
   // una corrida real: contestó *"el usuario denegó el permiso... no se realizó
   // ninguna llamada"*. Montarla sin este renglón es montarla muda.
   'mirar-afuera': ['mcp__mirar-afuera__mirar_afuera'],
+  // LA MESA (28-oct) · las tres herramientas del tablero compartido. Una herramienta montada y no listada aquí queda MUDA sin error (el agente la ve y se niega): la prueba de cierre es ver en el rastro real que se llamó.
+  mesa: ['mcp__mesa__mesa_pedir', 'mcp__mesa__mesa_devolver', 'mcp__mesa__pedir_material'],
 }
 
 /** Brand Book · nombres del tool_use de emit_brand_section (namespace + bare). */
@@ -608,6 +610,8 @@ function buildSdkOptions(
     agentSlug: input.agentName,
     clientId: input.clientId ?? undefined,
     ...(input.mirarAfueraLimites ? { mirarAfueraLimites: input.mirarAfueraLimites } : {}),
+    // turno de la mesa: el encargo sale de lo que fijó la plataforma en `extra` (nunca del modelo)
+    ...(input.extra?.mesa === true && typeof input.extra.encargo_id === 'string' && input.extra.encargo_id ? { mesa: { encargoId: input.extra.encargo_id } } : {}),
   })
   return {
     systemPrompt: systemPromptOption as unknown as Options['systemPrompt'],

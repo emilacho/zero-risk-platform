@@ -12,6 +12,7 @@ import { filasQueVencen, NOTA_DE_VENCIMIENTO } from './entrega'
 import type { Puertos } from './puertos'
 import { fallar, jefaturaSinRespuesta, plantillaDe } from './orquestador'
 import { resolverMaterialVencido } from './material-orquestador'
+import { esTurnoDeLaMesa, recibirResultadoMesa } from './mesa/orquestador'
 
 type Fila = Record<string, unknown>
 export const MINUTOS_PARA_DAR_POR_MUERTO = 12
@@ -73,6 +74,12 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
       // el portero tiene su propio plazo (20 min; techo 30): pasado el plazo se lee su pedido, pasado el techo se sigue SIN dato. Nunca es un «paso muerto» ni cierra el encargo como fallido
       const pl = await plantillaDe(P, enc)
       if (await resolverMaterialVencido(P, enc, pl, String(t.inicio), ahora) === 'cerrado') reanudar.push(enc.id)
+      continue
+    }
+    if (esTurnoDeLaMesa(String(t.paso))) {
+      // LA MESA (bloqueante 6 de CC#3): un turno de especialista que no volvió NO mata la pieza ni se reintenta en círculo: queda anotado en el libro como turno fallido (la mesa lo reintenta hasta 3 veces por agente y luego sigue sin él)
+      await recibirResultadoMesa(P, enc.id, Number(t.n), { error: `sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min`, costo_usd: 0 })
+      reanudar.push(enc.id)
       continue
     }
     const clave = `muerto:${String(t.paso)}`

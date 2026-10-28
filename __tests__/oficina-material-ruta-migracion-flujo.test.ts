@@ -94,14 +94,14 @@ describe('POST /api/oficina/material-vuelta', () => {
     expect(otra.status).toBe(200); expect(otra.j.accion).toBe('sin_efecto')
     expect((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1)
   })
-  it('es la ÚNICA ruta de la oficina que acepta la llave interna: el código lo declara y las demás siguen con la de despacho', () => {
+  it('son las ÚNICAS rutas de la oficina que aceptan la llave interna (material-vuelta y las herramientas de la mesa): el código lo declara y las demás siguen con la de despacho', () => {
     const fuente = fs.readFileSync(path.join(process.cwd(), 'src/app/api/oficina/material-vuelta/route.ts'), 'utf8')
     expect(fuente).toMatch(/checkInternalKey/)
     expect(fuente).not.toMatch(/checkLlaveDeLaSala/)
     const dir = path.join(process.cwd(), 'src/app/api/oficina')
     const rutas = fs.readdirSync(dir, { recursive: true }).map(String).filter((f) => f.endsWith('route.ts'))
     const conInterna = rutas.filter((f) => /checkInternalKey|requireInternalKey|INTERNAL_API_KEY/.test(fs.readFileSync(path.join(dir, f), 'utf8')))
-    expect(conInterna.map((f) => f.replace(/\\/g, '/'))).toEqual(['material-vuelta/route.ts'])
+    expect(conInterna.map((f) => f.replace(/\\/g, '/'))).toEqual(['material-vuelta/route.ts', 'mesa/herramienta/route.ts'])
   })
   it('la pieza termina en la bandeja después del aviso (end to end)', async () => {
     await llamarCon(aviso())

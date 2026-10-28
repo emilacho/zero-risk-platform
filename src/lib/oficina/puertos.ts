@@ -11,6 +11,7 @@ import type { FilaDeFormato } from './entrega'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import type { SobreDeRevisionDePieza } from './paso-jefatura'
 import type { NotaVista } from '../notas-del-dueno/autorevision'
+import type { PuertoMesa } from './mesa/tipos'
 
 /** lo que el cliente tiene (manual, fotos, datos propios), leído UNA vez al abrir y guardado en el encargo */
 export interface FuentesCompletas {
@@ -134,6 +135,8 @@ export interface Puertos {
   almacen: Almacen
   /** MATERIAL · el portero. Opcional: sin él (o con `material_activo` apagado) la oficina funciona exactamente como antes */
   cerebro?: PuertoDelCerebro
+  /** LA MESA · el directorio vivo y el libro de aportes. Opcional: sin él las familias `*_mesa` no abren (fallan visibles) y las v1 funcionan igual */
+  mesa?: PuertoMesa
   /** CHEQUEO GRATIS de la puerta del portero (n8n `zero-risk/portero`): manda un cuerpo vacío con las dos llaves y espera el rechazo de VALIDACIÓN del portero (no llama al modelo, no cuesta). Opcional: sin él no se comprueba */
   chequearPortero?(): Promise<{ ok: true } | { ok: false; detalle: string }>
   ahora(): Date

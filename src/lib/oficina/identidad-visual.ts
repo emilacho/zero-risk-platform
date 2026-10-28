@@ -122,7 +122,7 @@ export function identidadVisualDelCliente(manual: Fila, cliente: Fila, handles: 
 }
 
 /** las familias que dibujan láminas (las que necesitan identidad visual y carpeta): la misma lista que `familiaDeLaminas` del orquestador de láminas (una prueba las mantiene iguales) */
-export const esFamiliaDeLaminas = (familia: string): boolean => familia === 'carrusel_ig_v1' || familia === 'kit_historias'
+export const esFamiliaDeLaminas = (familia: string): boolean => familia === 'carrusel_ig_v1' || familia === 'kit_historias' || familia === 'carrusel_mesa' || familia === 'kit_mesa'
 
 export type MotivoDePrevuelo = 'sin_identidad_visual' | 'sin_slug'
 /** ⑦ ¿se puede abrir un encargo de láminas con estas fuentes? `null` = sí. Solo bloquea con un dato que FALTA de verdad (una lectura que falló no se confunde con «falta»). */

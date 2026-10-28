@@ -24,10 +24,11 @@ import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 
 export type FamiliaDeLaminas = 'carrusel' | 'kit'
 /** la plantilla es de varias láminas si es una de estas dos (el resto de las familias las atiende el orquestador de la sala 1) */
-export const familiaDeLaminas = (pl: Pick<Plantilla, 'familia'>): FamiliaDeLaminas | null => (pl.familia === 'carrusel_ig_v1' ? 'carrusel' : pl.familia === 'kit_historias' ? 'kit' : null)
+export const familiaDeLaminas = (pl: Pick<Plantilla, 'familia'>): FamiliaDeLaminas | null => (pl.familia === 'carrusel_ig_v1' || pl.familia === 'carrusel_mesa' ? 'carrusel' : pl.familia === 'kit_historias' || pl.familia === 'kit_mesa' ? 'kit' : null)
 
 export interface BaseL { brief: BriefLeido; proporcion: string; F: FuentesCompletas; familia: FamiliaDeLaminas; plataforma: string; elementos: ElementoDelKit[] }
 const baseL = (e: Estado): BaseL => datos(e, 'encargo') as unknown as BaseL
+export const baseDeLaminas = baseL
 const arr = <T = Record<string, unknown>>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
 const txt = (x: unknown): string => (typeof x === 'string' ? x : x == null ? '' : String(x))
 const refsValidosDe = (b: BaseL): string[] => (b.familia === 'kit' ? b.elementos.map((x) => x.ref) : [...ROLES_DE_LAMINA])
@@ -109,6 +110,7 @@ export async function ejecutarCodigoL(P: Puertos, enc: Encargo, pl: Plantilla, p
   switch (paso.funcion) {
     case 'abrir_laminas': return abrir(P, enc, pl)
     case 'asignar_fotos': return asignarFotos(P, pl, e)
+    case 'mesa_observar': return (await import('./mesa/observar')).observarImagenes(P, enc, pl)
     case 'chequear_prompts_ref': return chequearPromptsRef(e, pl, paso.clave.startsWith('reimagen_'))
     case 'imagen_ref': return imagenRef(P, enc, pl, paso.clave.startsWith('reimagen_'))
     case 'elegir_version_ref': return elegirVersionRef(e)
@@ -308,6 +310,9 @@ function chequeos(pl: Plantilla, e: Estado): SalidaCodigoL {
     const max = Number(pl.limites.acompanamiento_max ?? 700)
     for (const x of copiaK) if ((x.acompanamiento ?? '').length > max) todasFichas.push({ id: `lam-acomp-${x.ref}`, origen: 'chequeo', donde: 'texto', gravedad: 'sugerencia', estado: 'abierta', que: `el acompañamiento de «${x.ref}» tiene ${(x.acompanamiento ?? '').length} caracteres y se usa un tope de ${max} (sin verificar)`, contra_que: 'límite del acompañamiento (sin verificar)', propuesta: 'acortar' })
   }
+  // LA MESA: el largo nunca rechaza una pieza (el dibujo se ajusta al texto con un piso legible): lo largo queda como aviso, no como bloqueo
+  // (T7 de CC#3) …pero la ficha queda VISIBLE y abierta: viaja a la jefatura como marca heredada con el rótulo «texto muy largo para la lámina»
+  if (pl.limites.mesa === true) for (const f of todasFichas) if (/\d+ caracteres/.test(f.que ?? '') && f.gravedad === 'bloquea') { f.gravedad = 'sugerencia'; f.que = `texto muy largo para la lámina (el dibujo baja la letra hasta el piso legible): ${f.que ?? ''}` }
   const prefijo = `chk${e.pasos_ejecutados}`
   return { res: { costo_usd: 0, artefacto: { fichas: todasFichas.length }, fichas: todasFichas.map((f, i) => ({ ...f, id: `${prefijo}-${i}` })), reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'laminas', 'estructura'] } } }
 }

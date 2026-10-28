@@ -5,7 +5,7 @@
  * format so headlines breathe. Slide indicator bottom-right when part
  * of a carousel.
  */
-import { resolveBrand, fitHeadlineSize, conFotoDeFondo } from './shared'
+import { resolveBrand, fitHeadlineSize, fitBodySize, conFotoDeFondo } from './shared'
 import type { TemplateProps } from '../types'
 
 export function FacebookFeed({ brand, content, slide_index, total_slides }: TemplateProps) {
@@ -20,6 +20,7 @@ export function FacebookFeed({ brand, content, slide_index, total_slides }: Temp
     maxSize: 72,
     targetLines: 3,
   })
+  const bodySize = fitBodySize(content.body ?? '', { canvasWidth: 720, availableHeight: 190, maxSize: 22, minSize: 15, lineHeight: 1.45 })
 
   const root = (
     <div
@@ -106,7 +107,7 @@ export function FacebookFeed({ brand, content, slide_index, total_slides }: Temp
           <div
             style={{
               display: 'flex',
-              fontSize: 22,
+              fontSize: bodySize,
               lineHeight: 1.45,
               opacity: 0.78,
               marginTop: 24,

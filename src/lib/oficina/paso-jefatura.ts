@@ -19,7 +19,7 @@ export const CLAVE_DEL_PASO_JEFATURA = 'jefatura'
 export const ARTEFACTO_DE_LA_JEFATURA = 'respuesta_imagen'
 export type FamiliaDePieza = 'post_img' | 'carrusel' | 'kit'
 
-export const familiaDePieza = (pl: Pick<Plantilla, 'familia'>): FamiliaDePieza => (pl.familia === 'carrusel_ig_v1' ? 'carrusel' : pl.familia === 'kit_historias' ? 'kit' : 'post_img')
+export const familiaDePieza = (pl: Pick<Plantilla, 'familia'>): FamiliaDePieza => (pl.familia === 'carrusel_ig_v1' || pl.familia === 'carrusel_mesa' ? 'carrusel' : pl.familia === 'kit_historias' || pl.familia === 'kit_mesa' ? 'kit' : 'post_img')
 
 /**
  * Quién corrige cada parte de la pieza (reparo 2 de CC#3: la fila `pieza` de la política solo declara texto e imagen; el carrusel y el kit llevan además a quien dibuja o estructura).

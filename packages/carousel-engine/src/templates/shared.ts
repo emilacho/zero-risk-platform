@@ -55,6 +55,39 @@ export function fitHeadlineSize(
   return Math.max(minSize, Math.round(maxSize * ratio))
 }
 
+/**
+ * Body text size that FITS its box · the text is NEVER rejected for being long: the size steps down (2px at a time) from `maxSize` to a legible floor (`minSize`).
+ * Same char-count estimate as `fitHeadlineSize` (satori cannot measure text). At the floor the text keeps that size even if it overflows (`bodyOverflows` tells the caller so it can warn).
+ */
+export function fitBodySize(
+  body: string,
+  options: { canvasWidth: number; availableHeight: number; maxSize: number; minSize: number; lineHeight?: number },
+): number {
+  const { canvasWidth, availableHeight, maxSize, minSize, lineHeight = 1.4 } = options
+  const text = (body ?? '').trim()
+  if (!text) return maxSize
+  for (let size = maxSize; size >= minSize; size -= 2) {
+    if (estimatedLines(text, canvasWidth, size) * size * lineHeight <= availableHeight) return size
+  }
+  return minSize
+}
+
+/** true when even the legible floor does not fit the box (the slide still renders; the caller decides whether to warn) */
+export function bodyOverflows(
+  body: string,
+  options: { canvasWidth: number; availableHeight: number; minSize: number; lineHeight?: number },
+): boolean {
+  const { canvasWidth, availableHeight, minSize, lineHeight = 1.4 } = options
+  const text = (body ?? '').trim()
+  return !!text && estimatedLines(text, canvasWidth, minSize) * minSize * lineHeight > availableHeight
+}
+
+/** estimated line count: explicit line breaks count, and each paragraph wraps by chars-per-line at that size */
+function estimatedLines(text: string, canvasWidth: number, size: number): number {
+  const charsPerLine = Math.max(1, Math.floor(canvasWidth / (size * 0.55)))
+  return text.split(/\r?\n/).reduce((n, par) => n + Math.max(1, Math.ceil(par.length / charsPerLine)), 0)
+}
+
 export type { SlideContent, TemplateProps }
 
 /**

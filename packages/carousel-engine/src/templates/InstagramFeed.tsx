@@ -5,7 +5,7 @@
  * Brand handle + slide indicator top bar · eyebrow over a big headline ·
  * body paragraph · CTA pill bottom-right.
  */
-import { resolveBrand, fitHeadlineSize, conFotoDeFondo, resolverPie } from './shared'
+import { resolveBrand, fitHeadlineSize, fitBodySize, conFotoDeFondo, resolverPie } from './shared'
 import type { TemplateProps } from '../types'
 
 export function InstagramFeed({ brand, content, slide_index, total_slides }: TemplateProps) {
@@ -19,6 +19,7 @@ export function InstagramFeed({ brand, content, slide_index, total_slides }: Tem
     maxSize: 96,
     targetLines: 4,
   })
+  const bodySize = fitBodySize(content.body ?? '', { canvasWidth: W - 200, availableHeight: 420, maxSize: 32, minSize: 22 })
 
   const root = (
     <div
@@ -114,7 +115,7 @@ export function InstagramFeed({ brand, content, slide_index, total_slides }: Tem
         <div
           style={{
             display: 'flex',
-            fontSize: 32,
+            fontSize: bodySize,
             lineHeight: 1.4,
             opacity: 0.92,
             maxWidth: W - 200,
