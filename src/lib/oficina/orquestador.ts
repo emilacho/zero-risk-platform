@@ -546,6 +546,12 @@ async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, _paso: P
 // ───────────────────────── recibir el resultado de un agente / del portero
 export interface ResultadoDeTurno { texto?: string; error?: string; costo_usd?: number; workflow_execution_id?: string | null; tokens_in?: number | null; tokens_out?: number | null }
 
+/** EL ACUSE (28-oct): el flujo `oficina · turno` avisa que TOMÓ el turno. Una sola vez por turno: un segundo despertar (el vigía, un reintento) recibe `ya_tomado` y el flujo se detiene SIN llamar al agente ni al portero (nada se paga dos veces) */
+export async function acusarTurno(P: Puertos, encargoId: string, n: number, ejecucion: string): Promise<Respuesta> {
+  const x = await P.almacen.acusarTurno(encargoId, n, ejecucion)
+  return r(200, { acuse: x, encargo_id: encargoId, n })
+}
+
 /** lo que el flujo manda cuando la puerta del portero contestó otra cosa que un portero */
 export const PORTERO_NO_RESPONDE = 'PORTERO_NO_RESPONDE'
 export async function recibirResultado(P: Puertos, encargoId: string, n: number, res: ResultadoDeTurno): Promise<Respuesta> {

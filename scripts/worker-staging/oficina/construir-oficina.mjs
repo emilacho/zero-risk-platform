@@ -6,7 +6,7 @@
 //
 //  · `oficina · puerta`  (webhook zero-risk/oficina)       la sala despierta esta puerta; sin `familia` (o con la oficina apagada) el sobre sigue INTACTO por la pieza simple (pasarela)
 //  · `oficina · turno`   (webhook zero-risk/oficina-turno) UN paso por ejecución: portero o agente (run-sdk + espera), registra el resultado y despierta el paso siguiente
-//  · `oficina · vigía`   (cada 10 min)                     vence la bandeja de la oficina y reanuda los pasos muertos
+//  · `oficina · vigía`   (cada 2 min)                      vence la bandeja de la oficina y reanuda los pasos muertos
 // 🔴 Por construcción: NINGÚN nodo que pague tiene `retryOnFail` · toda llamada HTTP entrega siempre salida (neverError) y una GUARDA decide · nada se traga un error ·
 //    el modo seco no llama a ningún proveedor · NO se toca el mapa de viajes, ni la pieza simple, ni el alta · la llave de despacho es la de siempre (SALA_DISPATCH_KEY), jamás en el JSON.
 import fs from 'node:fs'
@@ -92,7 +92,7 @@ export function construirPuerta({ path = 'zero-risk/oficina', nombre = 'Zero Ris
 export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zero Risk — Oficina · un turno (portero o agente → resultado → siguiente) · CC#2', webhookId = 'oficina-turno-0001' } = {}) {
   const x = (i, y = 0) => [i * 260, y]
   const N = {
-    web: 'Webhook · oficina turno', entrada: '⓪ Entrada · llave', esPortero: '① ¿Portero?',
+    web: 'Webhook · oficina turno', entrada: '⓪ Entrada · llave', acuse: '⓪ Acuse del turno', tomo: '⓪ ¿Lo tomo?', esPortero: '① ¿Portero?',
     pSeco: '① ¿Modo seco? (portero)', portero: '① Portero', pRes: '① Portero · resultado',
     armar: '② Armar el pedido', aSeco: '② ¿Modo seco?', agente: '② Agente (run-sdk)', acepto: '② ¿Aceptó el pedido?', ifAcepto: '② ¿Aceptó?', espera: '② Esperar al agente', vuelta: '② Vuelta',
     registrar: '③ Registrar el resultado', sigue: '③ ¿Y ahora?', ifEsperar: '③ ¿Siguiente paso?', siguiente: '③ Siguiente paso', cable: '③ Cable de vuelta · sala',
@@ -100,6 +100,9 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
   const nodes = [
     { parameters: { httpMethod: 'POST', path, responseMode: 'onReceived', options: {} }, name: N.web, type: 'n8n-nodes-base.webhook', typeVersion: 2, position: x(0), webhookId },
     code(N.entrada, 'turno-n0-entrada.js', x(1)),
+    // 28-oct · TRASPASO: el flujo acusa el turno (atómico en la sala); un segundo despertar del mismo turno se detiene aquí y no paga
+    http(N.acuse, `${VERCEL}/api/oficina/turnos`, x(1, -150), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "acuse", encargo_id: $json.encargo_id, n: $json.turno.n, workflow_execution_id: String($execution.id) }) }}', timeout: 300000 }),
+    code(N.tomo, 'turno-n0b-tomar.js', x(1, 150)),
     cond(N.esPortero, "={{ $json.turno.tipo }}", esIgual, x(2), 'portero'),
     // ── portero (una pregunta al cerebro: no escribe en ninguna tabla)
     cond(N.pSeco, '={{ $json.dry_run }}', esVerdadero, x(3, -300)),
@@ -124,7 +127,7 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
     CABLE(N.cable, x(13, 100)),
   ]
   const links = [
-    [N.web, N.entrada], [N.entrada, N.esPortero],
+    [N.web, N.entrada], [N.entrada, N.acuse], [N.acuse, N.tomo], [N.tomo, N.esPortero],
     [N.esPortero, N.pSeco, 0], [N.esPortero, N.armar, 1],
     [N.pSeco, N.pRes, 0], [N.pSeco, N.portero, 1], [N.portero, N.pRes], [N.pRes, N.registrar],
     [N.armar, N.aSeco], [N.aSeco, N.registrar, 0], [N.aSeco, N.agente, 1],
@@ -138,10 +141,10 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
 // ───────────────────────── 3 · EL VIGÍA
 export function construirVigia({ nombre = 'Zero Risk — Oficina · el vigía (vence la bandeja y reanuda los pasos muertos) · CC#2' } = {}) {
   const x = (i, y = 0) => [i * 260, y]
-  const N = { reloj: 'Reloj · cada 10 min', vigia: '① Vigilar', pend: '① Qué hacer con cada pendiente', esRean: '② ¿Reanudar?', rearmar: '② Re-armar el paso', paso: '② Re-armar · resultado', turno: 'Turno · arrancar', cable: 'Cable de vuelta · sala' }
+  const N = { reloj: 'Reloj · cada 2 min', vigia: '① Vigilar', pend: '① Qué hacer con cada pendiente', esRean: '② ¿Reanudar?', rearmar: '② Re-armar el paso', paso: '② Re-armar · resultado', turno: 'Turno · arrancar', cable: 'Cable de vuelta · sala' }
   const llaveEnv = { name: 'x-sala-dispatch-key', value: '={{ $env.SALA_DISPATCH_KEY }}' }
   const nodes = [
-    { parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 10 }] } }, name: N.reloj, type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position: x(0) },
+    { parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 2 }] } }, name: N.reloj, type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position: x(0) },
     http(N.vigia, `${VERCEL}/api/oficina/vigia`, x(1), { headers: [llaveEnv], body: '={{ JSON.stringify({}) }}', timeout: 300000 }),
     code(N.pend, 'vigia-n1-reanudar.js', x(2)),
     cond(N.esRean, '={{ $json.tipo }}', esIgual, x(3), 'reanudar'),

@@ -79,6 +79,14 @@ export function almacenDeSupabase(db: Db): Almacen {
       const f = d?.[0]
       return f ? { n: Number(f.n), paso: String(f.paso), tipo: String(f.tipo), agente: (f.agente as string | null) ?? null, estado: 'corriendo', dispatch_key: (f.dispatch_key as string | null) ?? null, cost_usd: Number(f.cost_usd ?? 0) } : null
     },
+    async acusarTurno(encargoId, n, ejecucion) {
+      // condicional en la base: solo gana quien lo toma mientras el turno sigue corriendo y sin dueño
+      const u = await db.from('oficina_turnos').update({ workflow_execution_id: ejecucion }).eq('encargo_id', encargoId).eq('n', n).eq('estado', 'corriendo').is('workflow_execution_id', null).select('id')
+      if (u.error) throw new Error(`acusar el paso: ${u.error.message}`)
+      if (((u.data as Fila[] | null) ?? []).length > 0) return 'tomado' as const
+      const t = ok(await db.from('oficina_turnos').select('estado').eq('encargo_id', encargoId).eq('n', n).limit(1), 'leer el paso acusado') as Fila[] | null
+      return t?.[0]?.estado === 'corriendo' ? ('ya_tomado' as const) : ('no_abierto' as const)
+    },
     async guardar(c: Cambios) {
       const patch: Fila = { estado_del_motor: c.estado_del_motor, gasto_usd: c.gasto_usd }
       if (c.estado) { patch.estado = c.estado; if (c.estado === 'cerrado' || c.estado === 'cerrado_por_tope' || c.estado === 'fallido') patch.cerrado_en = new Date().toISOString() }

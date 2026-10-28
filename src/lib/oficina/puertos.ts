@@ -93,6 +93,8 @@ export interface Almacen {
   leerEncargo(id: string): Promise<Encargo | null>
   /** el turno que está esperando respuesta (estado corriendo), si hay uno */
   turnoAbierto(encargoId: string): Promise<TurnoRegistrado | null>
+  /** EL ACUSE del flujo (28-oct · traspaso perdido): el flujo que recibe un turno lo TOMA una sola vez (atómico: solo si sigue `corriendo` y sin dueño). Dos despertares del mismo turno no pagan dos veces */
+  acusarTurno(encargoId: string, n: number, ejecucion: string): Promise<'tomado' | 'ya_tomado' | 'no_abierto'>
   guardar(c: Cambios): Promise<void>
 }
 
