@@ -12,7 +12,8 @@ import { registrarPaso } from '../motor'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
 import { armarTarea, pedidoDeAgente, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
-import { direccionDe, porteroDe } from './directorio'
+import { direccionDe, especialistasPertinentes, porteroDe } from './directorio'
+import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, type Traduccion } from './traductor'
 import { COTAS, FAMILIAS_MESA, type Aporte, type EstadoMesa, type Tarjeta, type TipoDeAporte } from './tipos'
@@ -152,7 +153,11 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
 /** la pieza del equipo → los artefactos de la cola mecánica. Devuelve 'repetir' si se hizo una pregunta (la dirección contesta y la mesa sigue) */
 async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, est: EstadoMesa, libro: Aporte[], forzado: string | null): Promise<Respuesta | 'repetir'> {
   const ult = [...libro].reverse().find((a) => a.tipo === 'integra')
-  if (!ult) return fallar(P, enc, `la mesa no produjo ninguna pieza${forzado ? ` (${forzado})` : ''}`)
+  if (!ult) {
+    // sin integración (la dirección no alcanzó a integrar: tope o turnos muertos): lo que el equipo SÍ escribió llega a la bandeja como texto; solo un tablero vacío es un fallo
+    const entregada = forzado ? await entregarPorTopeDeLaMesa(P, enc, `la mesa no alcanzó a integrar la pieza (${forzado})`) : null
+    return entregada ?? fallar(P, enc, `la mesa no produjo ninguna pieza${forzado ? ` (${forzado})` : ''}`)
+  }
   const b = baseDeLaminas(enc.estado_del_motor)
   const tr: Traduccion = traducirPieza(ult.texto, est.tipo, {
     refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])),
@@ -178,7 +183,9 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const otros: Record<string, Record<string, unknown>> = { visual_direction: visual, prompts_validos: prompts }
   if (est.tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
   else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
-  const nuevaMesa: EstadoMesa = { ...est, fase: 'traducida', pieza_texto: ult.texto, turno_abierto: null }
+  // bloqueante 1 de CC#3: el libro y las citas llegan a la jefatura (contexto de la revisión) para que juzgue si cada aporte fue real
+  const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, generadas.length > 0)
+  const nuevaMesa: EstadoMesa = { ...est, fase: 'traducida', pieza_texto: ult.texto, turno_abierto: null, tablero_para_la_jefatura: tableroParaLaJefatura(libro, ult.texto, pertinentes) }
   const res = { costo_usd: 0, artefacto: nuevaMesa as unknown as Record<string, unknown>, otros_artefactos: otros }
   const e0 = conMesa(enc.estado_del_motor, nuevaMesa)
   const nuevo = registrarPaso(e0, pl, indice, res)
@@ -193,19 +200,36 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
 }
 
 /** la pieza no se pudo traducir: la jefatura la recibe como texto y el encargo cierra marcado «con desacuerdo» (nunca se pierde, nunca se rellena) */
-async function aTextoParaLaJefatura(P: Puertos, enc: Encargo, est: EstadoMesa, texto: string, motivo: string): Promise<Respuesta> {
+async function aTextoParaLaJefatura(P: Puertos, enc: Encargo, est: EstadoMesa, texto: string, motivo: string, estadoFinal: 'cerrado' | 'cerrado_por_tope' = 'cerrado'): Promise<Respuesta> {
   const e = enc.estado_del_motor
+  const porTope = estadoFinal === 'cerrado_por_tope'
   let salida: Record<string, unknown> = { pieza_texto: texto, motivo }
   if (!enc.dry_run) {
-    const s = await P.salida({ client_id: enc.client_id, titulo: `Pieza ${enc.brief_id} (texto de la mesa, sin dibujar)`, contenido: { pieza_texto: texto, motivo }, metadata: { origen: 'oficina', familia: enc.familia, oficina_encargo_id: enc.id, brief_id: enc.brief_id, con_desacuerdo: true, desacuerdos: [`mesa: ${motivo}`], sin_dibujar: true } })
+    const s = await P.salida({ client_id: enc.client_id, titulo: `Pieza ${enc.brief_id} (texto de la mesa, sin dibujar)`, contenido: { pieza_texto: texto, motivo }, metadata: { origen: 'oficina', familia: enc.familia, oficina_encargo_id: enc.id, brief_id: enc.brief_id, con_desacuerdo: true, desacuerdos: [`mesa: ${motivo}`], sin_dibujar: true, ...(porTope ? { cerrado_por_tope: true } : {}) } })
     if (s.ok) {
       const q = await P.bandeja({ client_id: enc.client_id, output_id: s.output_id, titulo: `⚠️ SIN DIBUJAR (decide una persona) · Pieza ${enc.brief_id}`, vista_previa: texto.slice(0, 280), metadata: { oficina_encargo_id: enc.id, costo_usd: e.gasto_usd, sin_dibujar: true, motivo }, expires_at: null })
       salida = { ...salida, output_id: s.output_id, hitl_queue_id: q.ok ? q.id : null }
     }
   }
-  await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(e, { ...est, fase: 'cerrada', pieza_texto: texto }), gasto_usd: e.gasto_usd, estado: 'cerrado', con_desacuerdo: true, salida_output_id: (salida.output_id as string | undefined) ?? null, hitl_queue_id: (salida.hitl_queue_id as string | undefined) ?? null })
-  await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ La mesa no pudo traducir la pieza ${enc.brief_id} a láminas (${motivo}); el texto quedó en la bandeja para una persona`, dry_run: enc.dry_run })
-  return r(200, { accion: 'cerrado', estado: 'cerrado', con_desacuerdo: true, sin_dibujar: true, motivo, simulado: enc.dry_run, gasto_usd: e.gasto_usd, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos: [`mesa: ${motivo}`] })
+  await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(e, { ...est, fase: 'cerrada', pieza_texto: texto }), gasto_usd: e.gasto_usd, estado: estadoFinal, con_desacuerdo: true, salida_output_id: (salida.output_id as string | undefined) ?? null, hitl_queue_id: (salida.hitl_queue_id as string | undefined) ?? null })
+  await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: porTope ? `🛑 Cierre por tope · ${enc.brief_id}: ${motivo}; el texto de la mesa quedó en la bandeja para una persona (no se perdió la pieza)` : `⚠️ La mesa no pudo traducir la pieza ${enc.brief_id} a láminas (${motivo}); el texto quedó en la bandeja para una persona`, dry_run: enc.dry_run })
+  return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, sin_dibujar: true, motivo, simulado: enc.dry_run, gasto_usd: e.gasto_usd, resultado_para_la_sala: porTope ? 'cerrado_por_tope' : 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos: [`mesa: ${motivo}`], output_id: (salida.output_id as string | undefined) ?? null, hitl_queue_id: (salida.hitl_queue_id as string | undefined) ?? null })
+}
+
+/**
+ * Bloqueante 2 de CC#3 (T9): si el tope corta ANTES de que la pieza esté armada, la mesa NO termina en «nada entregado»: lo que el equipo ya escribió va a la bandeja como texto, marcado «cerrado por tope».
+ * Devuelve null si no hay nada que entregar (libro vacío) o si ya hay una entrega (entonces vale el cierre por tope de siempre).
+ */
+export async function entregarPorTopeDeLaMesa(P: Puertos, enc: Encargo, motivo: string): Promise<Respuesta | null> {
+  if (!P.mesa || datos(enc.estado_del_motor, 'entrega')) return null
+  const est = estadoDeLaMesa(enc.estado_del_motor)
+  if (!est) return null
+  const libro = await P.mesa.libro(enc.id)
+  const ult = [...libro].reverse().find((a) => a.tipo === 'integra')
+  const crudo = libro.filter((a) => ['dirige', 'aporta', 'responde'].includes(a.tipo) && a.texto.trim()).map((a) => `[${a.de}] ${a.texto.trim()}`).join('\n\n')
+  const texto = ult?.texto?.trim() || est.pieza_texto?.trim() || crudo
+  if (!texto) return null
+  return aTextoParaLaJefatura(P, enc, est, texto, motivo, 'cerrado_por_tope')
 }
 
 /** la respuesta de un turno de la mesa (agente) */

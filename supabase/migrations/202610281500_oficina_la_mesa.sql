@@ -65,7 +65,7 @@ END $$;
 -- el directorio inicial. La pertinencia es DATO: `carrusel`/`kit` = su aporte es obligatorio en ese tipo de pieza; `carrusel:si_imagen_generada` = solo si alguna imagen se genera.
 -- Los jueces de la jefatura (brand_strategist, editor_en_jefe, jefe_client_success) y jefe-marketing NO están: calificar y crear son cosas distintas (no-circularidad).
 INSERT INTO public.oficina_directorio (agente, rol, especialidad, sabe_hacer, necesita, entrega, pertinente_en) VALUES
-  ('creative-director', 'direccion', 'dirección creativa: abre la pieza con una idea rectora, convoca al equipo, integra y entrega la pieza completa',
+  ('creative-director-mesa', 'direccion', 'dirección creativa: abre la pieza con una idea rectora, convoca al equipo, integra y entrega la pieza completa',
     ARRAY['idea rectora y tono', 'estructura de la pieza', 'decidir qué se usa y qué se descarta', 'citar cada aporte usado o descartado'],
     ARRAY['manual de marca', 'brief y plan', 'aportes del equipo'], ARRAY['la pieza completa (láminas, pie, etiquetas) con sus citas'], ARRAY[]::text[]),
   ('content-creator', 'miembro', 'texto: titulares, cuerpo, llamado, pie de foto y etiquetas en la voz de la marca',

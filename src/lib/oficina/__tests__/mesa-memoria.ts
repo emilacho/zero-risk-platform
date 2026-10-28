@@ -2,7 +2,7 @@
 import type { Aporte, NuevoAporte, PuertoMesa, Tarjeta } from '../mesa/tipos'
 
 export const DIRECTORIO: Tarjeta[] = [
-  { agente: 'creative-director', rol: 'direccion', especialidad: 'dirección creativa', sabe_hacer: ['idea rectora', 'integrar'], necesita: ['manual', 'brief'], entrega: ['pieza completa'], pertinente_en: [], activo: true, version: 1 },
+  { agente: 'creative-director-mesa', rol: 'direccion', especialidad: 'dirección creativa', sabe_hacer: ['idea rectora', 'integrar'], necesita: ['manual', 'brief'], entrega: ['pieza completa'], pertinente_en: [], activo: true, version: 1 },
   { agente: 'content-creator', rol: 'miembro', especialidad: 'texto', sabe_hacer: ['titulares', 'pie'], necesita: ['manual'], entrega: ['texto'], pertinente_en: ['carrusel', 'kit'], activo: true, version: 1 },
   { agente: 'carousel-designer', rol: 'miembro', especialidad: 'ritmo de láminas', sabe_hacer: ['láminas'], necesita: ['texto'], entrega: ['láminas'], pertinente_en: ['carrusel'], activo: true, version: 1 },
   { agente: 'design-visual-storyteller', rol: 'miembro', especialidad: 'narrativa del kit', sabe_hacer: ['estructura'], necesita: ['brief'], entrega: ['estructura'], pertinente_en: ['kit'], activo: true, version: 1 },

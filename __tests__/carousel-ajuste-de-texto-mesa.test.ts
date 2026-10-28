@@ -42,6 +42,17 @@ describe('fitBodySize · puro', () => {
     expect(fitBodySize(TEXTO(20000), o)).toBe(22)
     expect(bodyOverflows(TEXTO(20000), o)).toBe(true)
   })
+  it('D03 · una línea que se pasa por UN carácter cuenta como línea nueva (se redondea hacia arriba): el tamaño baja justo lo necesario', () => {
+    // a tamaño 32 caben floor(900 / (32 × 0,55)) = 51 caracteres por línea; a 30, 54. Alto disponible 60: una línea de 32 (44,8) cabe, dos (89,6) no.
+    const o2 = { canvasWidth: 900, availableHeight: 60, maxSize: 32, minSize: 22 }
+    expect(fitBodySize('a'.repeat(51), o2)).toBe(32) // justo una línea
+    expect(fitBodySize('a'.repeat(52), o2)).toBe(30) // se pasa por uno: son dos líneas a 32, así que baja a 30 (una línea de 54)
+    // un salto de línea con texto corto en cada lado = dos líneas aunque el texto sea corto
+    expect(fitBodySize('a\na', { canvasWidth: 900, availableHeight: 60, maxSize: 32, minSize: 22 })).toBeLessThan(32)
+    // y el desborde usa la misma cuenta: 2 líneas × 22 × 1,4 = 61,6 > 60
+    expect(bodyOverflows('a'.repeat(52 * 4), { canvasWidth: 900, availableHeight: 60, minSize: 22 })).toBe(true)
+    expect(bodyOverflows('a'.repeat(40), { canvasWidth: 900, availableHeight: 60, minSize: 22 })).toBe(false)
+  })
   it('los saltos de línea cuentan: muchas líneas cortas bajan el tamaño igual que un párrafo largo', () => {
     const lineas = Array.from({ length: 30 }, () => 'ok').join('\n')
     expect(fitBodySize(lineas, o)).toBeLessThan(32)

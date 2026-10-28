@@ -311,7 +311,8 @@ function chequeos(pl: Plantilla, e: Estado): SalidaCodigoL {
     for (const x of copiaK) if ((x.acompanamiento ?? '').length > max) todasFichas.push({ id: `lam-acomp-${x.ref}`, origen: 'chequeo', donde: 'texto', gravedad: 'sugerencia', estado: 'abierta', que: `el acompañamiento de «${x.ref}» tiene ${(x.acompanamiento ?? '').length} caracteres y se usa un tope de ${max} (sin verificar)`, contra_que: 'límite del acompañamiento (sin verificar)', propuesta: 'acortar' })
   }
   // LA MESA: el largo nunca rechaza una pieza (el dibujo se ajusta al texto con un piso legible): lo largo queda como aviso, no como bloqueo
-  if (pl.limites.mesa === true) for (const f of todasFichas) if (f.gravedad === 'bloquea' && /\d+ caracteres/.test(f.que ?? '')) f.gravedad = 'sugerencia'
+  // (T7 de CC#3) …pero la ficha queda VISIBLE y abierta: viaja a la jefatura como marca heredada con el rótulo «texto muy largo para la lámina»
+  if (pl.limites.mesa === true) for (const f of todasFichas) if (/\d+ caracteres/.test(f.que ?? '') && f.gravedad === 'bloquea') { f.gravedad = 'sugerencia'; f.que = `texto muy largo para la lámina (el dibujo baja la letra hasta el piso legible): ${f.que ?? ''}` }
   const prefijo = `chk${e.pasos_ejecutados}`
   return { res: { costo_usd: 0, artefacto: { fichas: todasFichas.length }, fichas: todasFichas.map((f, i) => ({ ...f, id: `${prefijo}-${i}` })), reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'laminas', 'estructura'] } } }
 }

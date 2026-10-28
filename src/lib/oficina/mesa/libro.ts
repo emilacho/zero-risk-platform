@@ -28,6 +28,9 @@ export function leerCitas(texto: string): Cita[] {
   return citas
 }
 
+/** el motivo de una cita (usé o descarté) debe decir algo: menos de esto es trámite barato (T4 de CC#3) */
+export const MOTIVO_MINIMO = 8
+
 export interface VerificacionDeCitas {
   ok: boolean
   /** referencias a aportes que no existen en el libro */
@@ -36,6 +39,8 @@ export interface VerificacionDeCitas {
   sin_cita: string[]
   /** descartes sin motivo (menos de 8 caracteres) */
   descartes_sin_motivo: number[]
+  /** «usé» sin motivo (menos de 8 caracteres): no cuenta como cita */
+  usos_sin_motivo: number[]
 }
 
 /** ¿cada especialidad pertinente está citada? (un aporte citado vale para su autor; un descarte pide motivo) */
@@ -43,16 +48,44 @@ export function verificarCitas(texto: string, libro: Aporte[], pertinentes: stri
   const citas = leerCitas(texto)
   const porN = new Map(libro.map((a) => [a.n, a] as const))
   const inexistentes = [...new Set(citas.filter((c) => !porN.has(c.n)).map((c) => c.n))]
-  const descartes_sin_motivo = [...new Set(citas.filter((c) => c.accion === 'descarte' && c.motivo.length < 8).map((c) => c.n))]
+  const descartes_sin_motivo = [...new Set(citas.filter((c) => c.accion === 'descarte' && c.motivo.length < MOTIVO_MINIMO).map((c) => c.n))]
+  const usos_sin_motivo = [...new Set(citas.filter((c) => c.accion === 'uso' && c.motivo.length < MOTIVO_MINIMO).map((c) => c.n))]
   const citados = new Set<string>()
   for (const c of citas) {
     const a = porN.get(c.n)
     if (!a) continue
-    if (c.accion === 'descarte' && c.motivo.length < 8) continue
+    if (c.motivo.length < MOTIVO_MINIMO) continue
     citados.add(a.de)
   }
   const sin_cita = pertinentes.filter((p) => !citados.has(p))
-  return { ok: !inexistentes.length && !sin_cita.length && !descartes_sin_motivo.length, inexistentes, sin_cita, descartes_sin_motivo }
+  return { ok: !inexistentes.length && !sin_cita.length && !descartes_sin_motivo.length && !usos_sin_motivo.length, inexistentes, sin_cita, descartes_sin_motivo, usos_sin_motivo }
+}
+
+const recorte = (t: string, n: number): string => { const x = t.replace(/\s+/g, ' ').trim(); return x.length > n ? `${x.slice(0, n)}…` : x }
+
+/**
+ * Lo que la JEFATURA ve del tablero (bloqueante 1 de CC#3): cada aporte con su referencia, la cita de la dirección (usados / descartados, con el motivo) y lo que el código comprobó,
+ * para que juzgue si cada aporte citado fue REAL (el código verifica existencia y cobertura; la calidad es de la jefatura). Puro. Tope de tamaño: el contexto de una revisión no es ilimitado.
+ */
+export function tableroParaLaJefatura(libro: Aporte[], integracion: string, pertinentes: string[], maxChars = 7000): string {
+  const v = verificarCitas(integracion, libro, pertinentes)
+  const citas = leerCitas(integracion)
+  const porN = new Map(libro.map((a) => [a.n, a] as const))
+  const lineaCita = (c: Cita): string => `- ${refDe({ n: c.n })}${porN.get(c.n) ? ` (${porN.get(c.n)!.de})` : ' (NO EXISTE en el tablero)'}: ${c.motivo || '(sin motivo)'}`
+  const lista = (xs: string[]): string[] => (xs.length ? xs : ['(ninguno)'])
+  const aportes = libro.filter((a) => ['dirige', 'aporta', 'responde', 'material', 'integra'].includes(a.tipo)).map((a) => `${refDe(a)} · ${a.de} · ${a.tipo}: ${recorte(a.texto, 600)}`)
+  const sinMotivo = [...new Set([...v.usos_sin_motivo, ...v.descartes_sin_motivo])]
+  const partes = [
+    '## Aportes del equipo (tablero)', ...(aportes.length ? aportes : ['(el tablero no tiene aportes)']),
+    '', '## Aportes que la dirección dice que USÓ', ...lista(citas.filter((c) => c.accion === 'uso').map(lineaCita)),
+    '', '## Aportes que la dirección dice que DESCARTÓ', ...lista(citas.filter((c) => c.accion === 'descarte').map(lineaCita)),
+    '', '## Lo que el código comprobó',
+    `- citas a aportes que no existen: ${v.inexistentes.length ? v.inexistentes.map((n) => `A${n}`).join(', ') : 'ninguna'}`,
+    `- especialidades pertinentes sin cita válida: ${v.sin_cita.length ? v.sin_cita.join(', ') : 'ninguna'}`,
+    `- citas sin motivo suficiente: ${sinMotivo.length ? sinMotivo.map((n) => `A${n}`).join(', ') : 'ninguna'}`,
+  ]
+  const t = partes.join('\n')
+  return t.length > maxChars ? `${t.slice(0, maxChars)}\n[… recortado: ${t.length - maxChars} caracteres más del tablero]` : t
 }
 
 /** cuántos aportes REALES (aporta/responde, con texto) hizo cada agente */

@@ -24,6 +24,9 @@ export const COTAS = {
   TECHO_SOBRE_TOPE: 1.2,
   /** lo que se reserva por turno de agente (US$) */
   RESERVA_POR_TURNO_USD: 0.6,
+  /** lo que viene DESPUÉS de la mesa (imagen + observador + jefatura ≈ 0,7–0,9; sin imagen generada solo la jefatura y el armado): la mesa lo reserva antes de seguir conversando (bloqueante 2 de CC#3) */
+  RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD: 0.9,
+  RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD: 0.5,
   /** el traductor de la pieza pregunta al autor como máximo UNA vez (condición 7) */
   MAX_PREGUNTAS_DEL_TRADUCTOR: 1,
   /** cuántas veces se le devuelve la integración al director por citas que faltan */
@@ -101,6 +104,8 @@ export interface EstadoMesa {
   cierre_forzado: string | null
   /** la pieza completa que entregó la dirección (texto libre) */
   pieza_texto: string | null
+  /** el tablero (aportes, citas y lo que el código comprobó) que viaja a la jefatura para que juzgue si cada aporte fue real; lo escribe `cerrarLaMesa` */
+  tablero_para_la_jefatura?: string
   /** el turno que está esperando respuesta */
   turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'traducir'; responde_a: string | null } | null
 }

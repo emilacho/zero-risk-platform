@@ -799,6 +799,11 @@ export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<
 }
 
 export async function cerrarPorTope(P: Puertos, enc: Encargo, pl: Plantilla, razon: string, detalle: string): Promise<Respuesta> {
+  // LA MESA (T9 de CC#3): si el tope corta antes de que la pieza esté armada, lo que el equipo escribió llega igual a la bandeja (nunca «nada entregado»)
+  if (pl.limites.mesa === true) {
+    const entregada = await (await import('./mesa/orquestador')).entregarPorTopeDeLaMesa(P, enc, `cierre por tope (${razon}): ${detalle}`)
+    if (entregada) return entregada
+  }
   await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 Cierre por tope (${razon}) · ${enc.brief_id}: ${detalle}`, dry_run: enc.dry_run })
   return cerrar(P, enc, pl, true, `cierre por tope: ${detalle}`)
 }

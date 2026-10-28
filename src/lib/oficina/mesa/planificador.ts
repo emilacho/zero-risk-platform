@@ -22,10 +22,14 @@ export const techoDe = (tope: number): number => +(tope * COTAS.TECHO_SOBRE_TOPE
 const fallosDe = (libro: Aporte[], agente: string): number => libro.filter((a) => a.tipo === 'nota' && a.de === agente && a.texto.startsWith('turno_fallido')).length
 const ultimaIntegracion = (libro: Aporte[]): Aporte | null => [...libro].reverse().find((a) => a.tipo === 'integra') ?? null
 
+/** lo que la pieza todavía gastará después de la mesa (imagen + observador + jefatura): la mesa no puede gastárselo conversando */
+export const reservaDeLoQueSigue = (hayImagenGenerada: boolean): number => (hayImagenGenerada ? COTAS.RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD : COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD)
+
 /** ¿se agotó alguna cota que obliga a «cerrar con lo que hay»? devuelve la razón o null */
 export function cotaAgotada(est: EstadoMesa, ctx: ContextoDeLaMesa): string | null {
   if (est.turnos >= COTAS.MAX_TURNOS) return `se usaron los ${COTAS.MAX_TURNOS} turnos de la mesa`
-  if (ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD > ctx.tope_usd) return `el gasto (${ctx.gasto_usd.toFixed(2)}) más la reserva de un turno pasa el tope de la pieza (${ctx.tope_usd})`
+  const siguiente = reservaDeLoQueSigue(ctx.hayImagenGenerada)
+  if (ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + siguiente > ctx.tope_usd) return `el gasto (${ctx.gasto_usd.toFixed(2)}) más la reserva de un turno (${COTAS.RESERVA_POR_TURNO_USD}) y de lo que sigue (${siguiente}) pasa el tope de la pieza (${ctx.tope_usd})`
   return null
 }
 
@@ -57,7 +61,8 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   if (agotada) {
     const ult = ultimaIntegracion(libro)
     const hayAportesNuevos = libro.some((a) => ['aporta', 'responde', 'material'].includes(a.tipo) && (!ult || a.n > ult.n))
-    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD <= techoDe(ctx.tope_usd)
+    // la integración final puede pasar del tope (hasta el techo ×1,2), pero NUNCA se come lo que viene después: imagen, observador y jefatura también caben bajo el techo
+    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada) <= techoDe(ctx.tope_usd)
     if ((!ult || hayAportesNuevos) && puedeGastar && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO && est.marcas.integracion_forzada !== true) {
       return { accion: 'turno', agente: dir.agente, tipo: 'integrar', responde_a: null, motivo: `cierra con lo que hay: ${agotada}` }
     }

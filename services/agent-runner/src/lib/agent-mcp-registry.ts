@@ -82,7 +82,7 @@ const MIRAR_AFUERA_ALLOW: ReadonlySet<string> = new Set([
  * Los jueces de la jefatura NO están: calificar y crear son cosas distintas (no-circularidad).
  */
 export const MESA_ALLOW: ReadonlySet<string> = new Set([
-  'creative-director',
+  'creative-director-mesa',
   'content-creator',
   'carousel-designer',
   'design-visual-storyteller',
