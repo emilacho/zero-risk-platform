@@ -47,9 +47,11 @@ export function decidirPlanApify(uso: UsoDelPlan, pctMax: number, proximoMaxUsd 
   return { permitido: true, pct_usado: pct, pct_max: pctMax, tope_usd: tope, restante_usd: restante, motivo: null }
 }
 
-/** la línea de #alertas: UNA por ciclo de facturación (la clave la fija el inicio del ciclo) */
-export const lineaDePlanApify = (d: DecisionDelPlan, uso: UsoDelPlan): string =>
-  `🟠 Portero del cerebro · plan de Apify al ${d.pct_usado} % del crédito del mes (US$ ${uso.usado_usd.toFixed(2)} de ${uso.credito_usd.toFixed(2)}; tope ${d.pct_max} %): el raspado se detuvo hasta el próximo ciclo${uso.ciclo_hasta ? ` (corta el ${uso.ciclo_hasta.slice(0, 10)})` : ''} · lo que ya está guardado sigue sirviendo`
+/** la línea de #alertas: UNA por ciclo de facturación (la clave la fija el inicio del ciclo). `sigue` = construcción: se avisa pero el raspado NO se detiene */
+export const lineaDePlanApify = (d: DecisionDelPlan, uso: UsoDelPlan, sigue = false): string =>
+  sigue
+    ? `🟠 Portero del cerebro · plan de Apify al ${d.pct_usado} % del crédito del mes (US$ ${uso.usado_usd.toFixed(2)} de ${uso.credito_usd.toFixed(2)}; pasó del ${d.pct_max} %): en construcción el raspado SIGUE; decide si subes el plan${uso.ciclo_hasta ? ` (el ciclo corta el ${uso.ciclo_hasta.slice(0, 10)})` : ''}${uso.usado_usd >= uso.credito_usd ? ' · el crédito ya se acabó: si Apify bloquea, sube el plan en la facturación de la cuenta de Apify y el raspado vuelve solo' : ''}`
+    : `🟠 Portero del cerebro · plan de Apify al ${d.pct_usado} % del crédito del mes (US$ ${uso.usado_usd.toFixed(2)} de ${uso.credito_usd.toFixed(2)}; tope ${d.pct_max} %): el raspado se detuvo hasta el próximo ciclo${uso.ciclo_hasta ? ` (corta el ${uso.ciclo_hasta.slice(0, 10)})` : ''} · lo que ya está guardado sigue sirviendo`
 export const claveDeAvisoDelPlan = (uso: UsoDelPlan): string => `plan-apify:${(uso.ciclo_desde ?? 'sin-ciclo').slice(0, 10)}`
 
 type Fila = Record<string, unknown>
@@ -81,6 +83,8 @@ export interface DepsDelPlan {
   /** UNA línea a #alertas con su clave (una por ciclo); ok solo si el canal confirmó */
   avisar?: (texto: string, clave?: string) => Promise<{ ok: boolean; detalle: string }>
   dry_run?: boolean
+  /** false = construcción (Emilio 28-oct): se avisa una vez pero el raspado NO se frena; por omisión true (campaña) */
+  frena?: boolean
 }
 
 /**
@@ -92,6 +96,6 @@ export async function revisarPlanApify(d: DepsDelPlan = {}): Promise<{ leido: tr
   if (!r.ok) return { leido: false, detalle: r.detalle }
   const decision = decidirPlanApify(r.uso, pctMaximoDelPlan(d.env ?? process.env))
   if (decision.permitido || d.dry_run === true || !d.avisar) return { leido: true, uso: r.uso, decision }
-  const aviso = await d.avisar(lineaDePlanApify(decision, r.uso), claveDeAvisoDelPlan(r.uso)).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) }))
+  const aviso = await d.avisar(lineaDePlanApify(decision, r.uso, d.frena === false), claveDeAvisoDelPlan(r.uso)).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) }))
   return { leido: true, uso: r.uso, decision, aviso }
 }

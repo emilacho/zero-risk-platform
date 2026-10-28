@@ -7,7 +7,7 @@
 import type { Db } from './alimentar'
 import { clientesActivos } from './clientes'
 import { TOPE_DEL_PORTERO_USD, TOPE_DEL_PULIDO_APARTE_USD, umbralesDeGastoDelEntorno } from './datos'
-import { modoDelEntorno, topeDiarioPorClienteUsd, type ModoDelPortero } from './modo'
+import { eldineroFrena, modoDelEntorno, topeDiarioPorClienteUsd, type ModoDelPortero } from './modo'
 import { decidirPlanApify, pctMaximoDelPlan, type UsoDelPlan } from './plan-apify'
 import { TOPE_DIARIO_DE_BRAZOS_USD } from './brazos'
 import { TOPE_POR_OFICINA_Y_DIA_USD, TOPE_POR_PEDIDO_USD } from './pedidos'
@@ -28,8 +28,8 @@ export function topesVigentes(u: { aviso_usd: number; apagar_usd: number }, ctx:
     { tope: 'portero · una corrida', usd: TOPE_DEL_PORTERO_USD, mide: 'antes de llamar a un modelo: el gasto de hoy + lo que va a costar no puede pasar de esto; si pasa, el paso se omite y se dice', firma: 'de la pieza', frena: true },
     { tope: 'pulido del resumen', usd: TOPE_DEL_PULIDO_APARTE_USD, mide: 'una llamada de pulido (una por día y cliente)', firma: 'de la pieza (calidad sobre precio, 16-oct)', frena: true },
     { tope: 'brazos por código', usd: TOPE_DIARIO_DE_BRAZOS_USD, mide: 'el modelo que usan los brazos de competencia por sede', firma: 'de la pieza', frena: true },
-    { tope: 'raspado diario · por cliente y día', usd: topeDiarioPorClienteUsd(ctx.modo ?? 'construccion'), mide: `lo que el plan del día puede pedir a Apify por cliente, contando lo ya gastado hoy (se mide con el máximo declarado por función); depende del modo: ${ctx.modo ?? 'construccion'} (construccion 3,00 · campana 1,00)`, firma: 'firmado 28-oct (D-4 era el 1,00)', frena: true },
-    ...(ctx.plan ? [{ tope: 'plan de Apify · mes', usd: decidirPlanApify(ctx.plan.uso, ctx.plan.pct_max).tope_usd, mide: `${ctx.plan.pct_max} % del crédito del mes (US$ ${ctx.plan.uso.credito_usd}, plan ${ctx.plan.uso.plan}); lleva US$ ${ctx.plan.uso.usado_usd.toFixed(2)}; al pasarse se detiene el raspado y se avisa una vez`, firma: 'firmado 28-oct', frena: true }] : []),
+    { tope: 'raspado diario · por cliente y día', usd: topeDiarioPorClienteUsd(ctx.modo ?? 'construccion'), mide: `${eldineroFrena(ctx.modo ?? 'construccion') ? '' : '(construcción: NO corta, solo se registra) '}lo que el plan del día puede pedir a Apify por cliente, contando lo ya gastado hoy (se mide con el máximo declarado por función); depende del modo: ${ctx.modo ?? 'construccion'} (construccion 3,00 · campana 1,00)`, firma: 'firmado 28-oct (D-4 era el 1,00)', frena: eldineroFrena(ctx.modo ?? 'construccion') },
+    ...(ctx.plan ? [{ tope: 'plan de Apify · mes', usd: decidirPlanApify(ctx.plan.uso, ctx.plan.pct_max).tope_usd, mide: `${eldineroFrena(ctx.modo ?? 'construccion') ? '' : '(construcción: NO corta, solo se registra) '}${ctx.plan.pct_max} % del crédito del mes (US$ ${ctx.plan.uso.credito_usd}, plan ${ctx.plan.uso.plan}); lleva US$ ${ctx.plan.uso.usado_usd.toFixed(2)}; al pasarse se detiene el raspado y se avisa una vez`, firma: 'firmado 28-oct', frena: eldineroFrena(ctx.modo ?? 'construccion') }] : []),
     { tope: 'pedido libre de una oficina', usd: TOPE_POR_PEDIDO_USD, mide: 'un pedido (etiquetar fotos, pulido, cadena)', firma: 'firmado (encargo de pedidos)', frena: true },
     { tope: 'oficina por día', usd: TOPE_POR_OFICINA_Y_DIA_USD, mide: 'todos los pedidos de una oficina en el día', firma: 'de la pieza', frena: true },
     { tope: 'etiquetado de una foto', usd: TOPE_DE_GASTO_POR_FOTO_USD, mide: 'una llamada de etiquetado (cuesta ~0,008)', firma: 'de la pieza', frena: true },
@@ -49,6 +49,11 @@ export async function rutaCostos(deps: { db: Db; ahora?: Date; env?: Record<stri
   const act = await clientesActivos(deps.db)
   if (!act.ok) return { status: 502, body: { error: 'lectura_fallida', detalle: act.detalle } }
   const u = umbralesDeGastoDelEntorno(env)
+  // gasto de Apify de hoy POR FUNCIÓN (Emilio 28-oct: visible para cuando se definan los parámetros económicos; no se investiga ahora)
+  const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
+  const cf = await deps.db.from('costs').select('service, amount_usd').like('service', 'apify:%').gte('created_at', dia0.toISOString()).limit(1000)
+  const porFuncion: Record<string, { corridas: number; usd: number }> = {}
+  if (!cf.error) for (const f of ((cf.data ?? []) as Array<{ service?: unknown; amount_usd?: unknown }>)) { const k = String(f.service ?? '').replace(/^apify:/, ''); const x = (porFuncion[k] ??= { corridas: 0, usd: 0 }); x.corridas += 1; x.usd = r2(x.usd + (Number(f.amount_usd) || 0)) }
   const clientes: Array<Record<string, unknown>> = []
   const fallas: string[] = []
   let total = 0
@@ -65,10 +70,9 @@ export async function rutaCostos(deps: { db: Db; ahora?: Date; env?: Record<stri
   const planApify = lectura === null ? null : lectura.ok ? { uso: lectura.uso, ...decidirPlanApify(lectura.uso, pctMaximoDelPlan(env)) } : { leido: false as const, detalle: lectura.detalle }
   clientes.sort((a, b) => (Number(b.gasto_usd) || 0) - (Number(a.gasto_usd) || 0))
   // los pedidos libres de hoy, anotados por la OFICINA que pidió (el gasto ya cuenta en cada cliente; esto dice quién lo pidió). Una falla de lectura se dice; no cambia nada de lo demás.
-  const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)
   const pe = await deps.db.from('cerebro_pedidos').select('pedido_por_oficina, costo_usd, estado').gte('creado_en', dia0.toISOString()).limit(1000)
   const porOficina = new Map<string, { pedidos: number; costo_usd: number }>()
   if (!pe.error) for (const p of (Array.isArray(pe.data) ? pe.data : []) as Array<Record<string, unknown>>) { const k = String(p.pedido_por_oficina ?? 'sin oficina'); const a = porOficina.get(k) ?? { pedidos: 0, costo_usd: 0 }; a.pedidos++; a.costo_usd += Number(p.costo_usd) || 0; porOficina.set(k, a) }
   const pedidosPorOficina = [...porOficina].map(([oficina, v]) => ({ oficina, pedidos: v.pedidos, costo_usd: Math.round(v.costo_usd * 1e6) / 1e6 })).sort((a, b) => b.costo_usd - a.costo_usd)
-  return { status: fallas.length ? 502 : 200, body: { ok: fallas.length === 0, dia: ahora.toISOString().slice(0, 10), clientes_activos: act.datos.clientes.length, umbral_global: g, umbrales_por_cliente: u, modo: modoDelEntorno(env), plan_apify: planApify, topes_vigentes: topesVigentes(u, { modo: modoDelEntorno(env).modo, plan: planApify && 'uso' in planApify ? planApify : null }), total_del_portero_usd: r2(total), promedio_por_cliente_usd: act.datos.clientes.length ? r2(total / act.datos.clientes.length) : 0, sobre_el_umbral_global: total > g.umbral_usd, clientes, pedidos_por_oficina: pe.error ? null : pedidosPorOficina, ...(pe.error ? { pedidos_por_oficina_error: String(pe.error.message).slice(0, 120) } : {}), ...(fallas.length ? { fallas } : {}), modelos_llamados: 0 } }
+  return { status: fallas.length ? 502 : 200, body: { ok: fallas.length === 0, dia: ahora.toISOString().slice(0, 10), clientes_activos: act.datos.clientes.length, apify_hoy_por_funcion: porFuncion, umbral_global: g, umbrales_por_cliente: u, modo: modoDelEntorno(env), plan_apify: planApify, topes_vigentes: topesVigentes(u, { modo: modoDelEntorno(env).modo, plan: planApify && 'uso' in planApify ? planApify : null }), total_del_portero_usd: r2(total), promedio_por_cliente_usd: act.datos.clientes.length ? r2(total / act.datos.clientes.length) : 0, sobre_el_umbral_global: total > g.umbral_usd, clientes, pedidos_por_oficina: pe.error ? null : pedidosPorOficina, ...(pe.error ? { pedidos_por_oficina_error: String(pe.error.message).slice(0, 120) } : {}), ...(fallas.length ? { fallas } : {}), modelos_llamados: 0 } }
 }

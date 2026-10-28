@@ -20,7 +20,7 @@ import { clientesActivos } from './clientes'
 import { COBERTURA_DEL_ALTA_HORAS, sinLoYaRaspado, type FilaDeRaspadoParaCubrir } from './cobertura'
 import { MAX_TROZOS_A_ESCRIBIR_POR_PASADA, MAX_TROZOS_A_SACAR_POR_PASADA, reconciliarPuente, type FichaParaPuente } from './puente'
 import { leerTodas } from './paginar'
-import { topeDiarioPorClienteUsd, type ModoDelPortero } from './modo'
+import { topeDiarioPorClienteUsd, topeQueCortaUsd, type ModoDelPortero } from './modo'
 
 export interface Respuesta { status: number; body: Record<string, unknown> }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -142,7 +142,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
     if (brazosCtx.errores.length) { brazosCtxError = brazosCtx.errores.join(' · '); brazosCtx = undefined }
   }
   const forzarPosicion = v.cuerpo.forzar_posicion === true
-  const base = { forzar_posicion: forzarPosicion, cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx, ...(deps.modo ? { tope_usd: topeDiarioPorClienteUsd(deps.modo) } : {}) }
+  const base = { forzar_posicion: forzarPosicion, cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx, ...(deps.modo ? { tope_usd: topeDiarioPorClienteUsd(deps.modo), tope_corta_usd: topeQueCortaUsd(deps.modo, TOPE_DEL_PORTERO_USD) } : {}) }
 
   // las búsquedas propias: el modelo PROPONE, el código decide
   let propuestas: ResultadoDePropuestas = { aceptadas: [], rechazadas: [] }
@@ -232,7 +232,7 @@ export async function rutaArticulos(deps: DepsDeRutas, cuerpo: unknown): Promise
   const omitidas: Array<{ url: string; por_que: string }> = []
   for (const url of urls) {
     const usd = 0.0536
-    if (acumulado + usd > TOPE_DEL_PORTERO_USD) { omitidas.push({ url, por_que: `no cabe en el tope del día (US$ ${acumulado.toFixed(4)} + ${usd} > ${TOPE_DEL_PORTERO_USD.toFixed(2)})` }); continue }
+    if (acumulado + usd > topeQueCortaUsd(deps.modo, TOPE_DEL_PORTERO_USD)) { omitidas.push({ url, por_que: `no cabe en el tope del día (US$ ${acumulado.toFixed(4)} + ${usd} > ${TOPE_DEL_PORTERO_USD.toFixed(2)})` }); continue }
     acumulado += usd
     acciones.push({ fuente: 'prensa', funcion: 'website_content_scraper', params: { startUrls: [{ url }], maxCrawlPages: 1, maxCrawlDepth: 0 }, metadata: { target_kind: 'third_party', llamado_por: 'portero-articulo' }, usd_max: usd, medido: true, objetivo: url })
   }
@@ -266,7 +266,7 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
   const acciones: AccionDelPortero[] = []
   const omitidas: Array<{ fuente: string; por_que: string }> = []
   const poner = (a: AccionDelPortero) => {
-    if (acumulado + a.usd_max > TOPE_DEL_PORTERO_USD) { omitidas.push({ fuente: a.fuente, por_que: `no cabe en el tope del día (US$ ${acumulado.toFixed(4)} + ${a.usd_max} > ${TOPE_DEL_PORTERO_USD.toFixed(2)})` }); return }
+    if (acumulado + a.usd_max > topeQueCortaUsd(deps.modo, TOPE_DEL_PORTERO_USD)) { omitidas.push({ fuente: a.fuente, por_que: `no cabe en el tope del día (US$ ${acumulado.toFixed(4)} + ${a.usd_max} > ${TOPE_DEL_PORTERO_USD.toFixed(2)})` }); return }
     acumulado += a.usd_max; acciones.push(a)
   }
 

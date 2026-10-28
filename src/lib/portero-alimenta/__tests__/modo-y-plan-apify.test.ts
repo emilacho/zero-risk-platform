@@ -1,11 +1,12 @@
 /** El modo del portero (construcción / campaña), el plan de Apify y el vigía por corrida (28-oct). US$ 0 · sin red. */
 import { describe, expect, it } from 'vitest'
 import { crearBaseFalsa } from './base-falsa'
-import { CORRIDAS_POR_MODO, corridaForzada, corridaProgramadaAhora, corridaQueSeRevisa, corridasDelDia, modoDelEntorno, topeDiarioPorClienteUsd } from '../modo'
+import { CORRIDAS_POR_MODO, eldineroFrena, topeQueCortaUsd, corridaForzada, corridaProgramadaAhora, corridaQueSeRevisa, corridasDelDia, modoDelEntorno, topeDiarioPorClienteUsd } from '../modo'
 import { claveDeAvisoDelPlan, decidirPlanApify, frenarCuerpoPorPlan, leerUsoDelPlan, lineaDePlanApify, pctMaximoDelPlan, revisarPlanApify, type UsoDelPlan } from '../plan-apify'
 import { corridaDeLaHora } from '../modo-ruta'
 import { rutaNoCorrio, type DepsDeNoCorrio } from '../no-corrio'
 import { topesVigentes } from '../costos'
+import { descubrir } from '../plan'
 import { RETENCION_DE_FOTOS_AJENAS_DIAS, diasDeRetencionDeUnaFoto } from '../../cerebro/retencion-de-fotos'
 
 const U = (usado: number, extra: Partial<UsoDelPlan> = {}): UsoDelPlan => ({ plan: 'STARTER', credito_usd: 29, usado_usd: usado, ciclo_desde: '2026-10-25T00:00:00.000Z', ciclo_hasta: '2026-11-24T23:59:59.999Z', ...extra })
@@ -161,7 +162,10 @@ describe('los topes visibles dependen del modo y traen el plan de Apify', () => 
     const c = topesVigentes(u, { modo: 'construccion', plan }); const k = topesVigentes(u, { modo: 'campana', plan })
     expect(c.find((x) => x.tope === 'raspado diario · por cliente y día')?.usd).toBe(3)
     expect(k.find((x) => x.tope === 'raspado diario · por cliente y día')?.usd).toBe(1)
-    expect(c.find((x) => x.tope === 'plan de Apify · mes')).toMatchObject({ usd: 26.1, frena: true })
+    expect(c.find((x) => x.tope === 'plan de Apify · mes')).toMatchObject({ usd: 26.1, frena: false })
+    expect(k.find((x) => x.tope === 'plan de Apify · mes')).toMatchObject({ usd: 26.1, frena: true })
+    expect(c.find((x) => x.tope === 'raspado diario · por cliente y día')?.frena).toBe(false)
+    expect(k.find((x) => x.tope === 'raspado diario · por cliente y día')?.frena).toBe(true)
     // los firmados del gasto total no cambian con el modo
     expect(k.find((x) => x.tope === 'portero · aviso')?.usd).toBe(3); expect(k.find((x) => x.tope === 'portero · apagado')?.usd).toBe(10)
     expect(topesVigentes(u).some((x) => x.tope === 'plan de Apify · mes')).toBe(false)
@@ -173,5 +177,31 @@ describe('retención de las fotos ajenas', () => {
     expect(RETENCION_DE_FOTOS_AJENAS_DIAS).toBe(90)
     expect(diasDeRetencionDeUnaFoto('competidor')).toBe(90); expect(diasDeRetencionDeUnaFoto('referencia')).toBe(90)
     expect(diasDeRetencionDeUnaFoto('propio')).toBeNull()
+  })
+})
+
+describe('en construcción el dinero no frena (Emilio 28-oct)', () => {
+  const base = { cliente: { id: 'C', name: 'Náufrago', website_url: 'https://naufrago.example', config: { apify: { own_handles: { instagram: 'naufrago.ec' } } } }, ciudad: 'Olón', publicaciones_propias: [] as string[], interruptores: { alimentar: true, proponer_busquedas: false, menciones: true, puente_al_indice: false } }
+  it('solo la campaña deja que el dinero frene; el tope que corta en construcción es enorme', () => {
+    expect(eldineroFrena('construccion')).toBe(false); expect(eldineroFrena('campana')).toBe(true)
+    expect(topeQueCortaUsd('campana', 3)).toBe(1); expect(topeQueCortaUsd(undefined, 3)).toBe(3); expect(topeQueCortaUsd('construccion', 3)).toBeGreaterThan(1000)
+  })
+  it('con US$ 2,95 gastados el plan CORTA en campaña y NO corta en construcción (solo registra que pasó del tope)', () => {
+    const campana = descubrir({ ...base, gastado_hoy_usd: 2.95, tope_usd: 1, tope_corta_usd: topeQueCortaUsd('campana', 3) })
+    const constr = descubrir({ ...base, gastado_hoy_usd: 2.95, tope_usd: 3, tope_corta_usd: topeQueCortaUsd('construccion', 3) })
+    expect(campana.hacer.length).toBe(0); expect(campana.el_tope_corta).toBe(true)
+    expect(constr.hacer.length).toBeGreaterThan(0); expect(constr.omitidas.filter((o) => /tope del día/.test(o.por_que))).toEqual([])
+    expect(constr.el_tope_corta).toBe(false); expect(constr.pasa_del_tope_de_referencia).toBe(true); expect(constr.tope_usd).toBe(3)
+  })
+  it('al pasar el 90 % del plan: UN aviso que dice que el raspado sigue; el cuerpo no se toca', async () => {
+    const avisos: string[] = []
+    const r = await revisarPlanApify({ leer: async () => ({ ok: true, uso: U(27) }), env: {}, frena: false, avisar: async (t) => { avisos.push(t); return { ok: true, detalle: 'ok' } } })
+    expect(r.leido && r.decision.permitido).toBe(false)
+    expect(avisos).toHaveLength(1); expect(avisos[0]).toMatch(/SIGUE/)
+    const cuerpo = { plan: { hacer: [{ fuente: 'sitio' }], omitidas: [] } }
+    expect(frenarCuerpoPorPlan(cuerpo, decidirPlanApify(U(27), 90)).plan).not.toEqual(cuerpo.plan)
+  })
+  it('crédito agotado: el aviso dice qué hacer', () => {
+    expect(lineaDePlanApify(decidirPlanApify(U(29), 90), U(29), true)).toMatch(/sube el plan/)
   })
 })
