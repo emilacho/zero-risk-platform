@@ -11,6 +11,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { avisarAAlertas, estadoDelFlujoDelPortero } from '@/lib/portero-alimenta/avisos'
+import { corridaQueSeRevisa, modoDelEntorno } from '@/lib/portero-alimenta/modo'
 import { FLUJO_DEL_PORTERO_POR_OMISION, n8nContesta, raspadoRealDelCliente, rutaNoCorrio } from '@/lib/portero-alimenta/no-corrio'
 
 export const dynamic = 'force-dynamic'
@@ -27,20 +28,23 @@ function autorizado(request: Request): boolean {
   return checkInternalKey(request).ok
 }
 
-async function correr(request: Request, dry_run: boolean) {
+async function correr(request: Request, dry_run: boolean, corrida?: Date | null) {
   if (!autorizado(request)) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001' }, { status: 401 })
   try {
     const db = getSupabaseAdmin() as unknown as Db
-    const r = await rutaNoCorrio({ db, raspadoDelCliente: raspadoRealDelCliente(db), n8nResponde: n8nContesta(), interruptores: interruptoresDelEntorno(), workflowId: process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO_POR_OMISION, estadoDelFlujo: estadoDelFlujoDelPortero(), avisar: avisarAAlertas({ db }) }, { dry_run })
+    // el vigía revisa CADA corrida del modo vigente (28-oct): el cron pasa `corrida` calculada con el modo; fuera de la ventana de una corrida no hay nada que revisar y calla
+    if (corrida === null) return NextResponse.json({ ok: true, nada_que_revisar: true, modo: modoDelEntorno().modo, detalle: 'a esta hora no toca revisar ninguna corrida del modo vigente', modelos_llamados: 0 }, { status: 200 })
+    const r = await rutaNoCorrio({ db, raspadoDelCliente: raspadoRealDelCliente(db), n8nResponde: n8nContesta(), ...(corrida ? { corridaEsperada: corrida } : {}), interruptores: interruptoresDelEntorno(), workflowId: process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO_POR_OMISION, estadoDelFlujo: estadoDelFlujoDelPortero(), avisar: avisarAAlertas({ db }) }, { dry_run })
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'no_corrio_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 }
 
-export async function GET(request: Request) { return correr(request, false) }
+export async function GET(request: Request) { return correr(request, false, corridaQueSeRevisa(modoDelEntorno().modo, new Date())) }
 export async function POST(request: Request) {
-  let cuerpo: { dry_run?: unknown } = {}
+  let cuerpo: { dry_run?: unknown; corrida?: unknown } = {}
   try { cuerpo = await request.json() } catch { /* sin cuerpo = ensayo */ }
-  return correr(request, cuerpo.dry_run === false ? false : true)
+  const c = typeof (cuerpo as { corrida?: unknown }).corrida === 'string' ? new Date((cuerpo as { corrida: string }).corrida) : undefined
+  return correr(request, cuerpo.dry_run === false ? false : true, c && !Number.isNaN(c.getTime()) ? c : undefined)
 }

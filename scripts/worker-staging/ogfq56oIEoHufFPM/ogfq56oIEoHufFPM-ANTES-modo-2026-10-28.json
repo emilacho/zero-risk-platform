@@ -1,0 +1,1617 @@
+{
+ "id": "ogfq56oIEoHufFPM",
+ "name": "Zero Risk — Cerebro · mantenimiento diario del portero (que ALIMENTA) · CC-CEREBRO",
+ "description": null,
+ "active": true,
+ "activeVersionId": "5fbcf758-2c25-479f-ad8c-db7aa47fd742",
+ "createdAt": "2026-10-10T11:16:15.564Z",
+ "updatedAt": "2026-10-16T16:31:35.168Z",
+ "isArchived": false,
+ "versionId": "5fbcf758-2c25-479f-ad8c-db7aa47fd742",
+ "versionCounter": 13,
+ "sourceWorkflowId": null,
+ "triggerCount": 4,
+ "nodes": [
+  {
+   "id": "a19cfbf4-fa9e-4c1d-93b0-1229c4cfca9e",
+   "name": "Webhook · a mano (con llave)",
+   "webhookId": "cerebro-diario-mantenimiento-0001",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    -120
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/cerebro-diario-mantenimiento-ensayo",
+    "responseMode": "lastNode",
+    "options": {}
+   }
+  },
+  {
+   "id": "60b4b66b-2a3d-4713-ac31-d3b626ae47bf",
+   "name": "Horario diario 08:30 (hora de n8n)",
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.2,
+   "position": [
+    0,
+    120
+   ],
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "cronExpression",
+       "expression": "30 8 * * *"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "b09f66ba-e498-45cd-acd5-839378a4b0b0",
+   "name": "⓪ Entrada",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    260,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ⓪ ENTRADA · mantenimiento diario del portero · CC#2 · 2026-10-10 · + «completar despertar» (CC-CEREBRO · 15-oct).\n//  · por HORARIO: corre de verdad (dry_run=false), para todos los clientes activos.\n//  · a mano (webhook con llave de despacho): `dry_run` BOOLEANO OBLIGATORIO; `client_id` (uuid) opcional limita el alcance.\n//  · completar despertar (webhook con llave interna): lo llama el ALTA para UN cliente tras el despertar; exige `client_id` uuid y `pedir_ahora === true`. Misma cadena que la diaria.\n// 🔴 Sin llave, o sin `dry_run` booleano en la entrada a mano, el flujo SE DETIENE aquí: no se lee ni se escribe nada.\nconst UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i\nlet d = null\ntry { d = $('Webhook · completar despertar (llave interna)').first() } catch (e) { d = null }\nlet w = null\ntry { w = $('Webhook · a mano (con llave)').first() } catch (e) { w = null }\nlet u = null\ntry { u = $('Webhook · un cliente (llave interna)').first() } catch (e) { u = null }\nconst base = { workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) }\nif (u) {\n  const h = u.json || {}\n  const esperada = String($env.INTERNAL_API_KEY || '')\n  const recibida = String((h.headers || {})['x-api-key'] || '')\n  if (!esperada || recibida !== esperada) throw new Error('UN_CLIENTE_SIN_LLAVE · falta o no coincide x-api-key · se DETIENE')\n  const b = h.body || {}\n  if (typeof b.client_id !== 'string' || !UUID.test(b.client_id)) throw new Error('UN_CLIENTE_INVALIDO · `client_id` es obligatorio y debe ser un uuid · se DETIENE')\n  return [{ json: { ...base, via: 'cliente', dry_run: false, client_id: b.client_id, reintento: b.reintento === true, posicion_ahora: b.posicion_ahora === true } }]\n}\nif (d) {\n  const h = d.json || {}\n  const esperada = String($env.INTERNAL_API_KEY || '')\n  const recibida = String((h.headers || {})['x-api-key'] || '')\n  if (!esperada || recibida !== esperada) throw new Error('DESPERTAR_SIN_LLAVE · falta o no coincide x-api-key (o INTERNAL_API_KEY no está configurada) · se DETIENE')\n  const b = h.body || {}\n  if (typeof b.client_id !== 'string' || !UUID.test(b.client_id)) throw new Error('DESPERTAR_CLIENTE_INVALIDO · `client_id` es obligatorio y debe ser un uuid · se DETIENE')\n  if (b.pedir_ahora !== true) return []\n  return [{ json: { ...base, via: 'despertar', dry_run: false, client_id: b.client_id } }]\n}\nif (!w) return [{ json: { ...base, via: 'horario', dry_run: false, client_id: null } }]\nconst h = w.json || {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '')\nconst recibida = String((h.headers || {})['x-sala-dispatch-key'] || '')\nif (!esperada || recibida !== esperada) throw new Error('DIARIO_SIN_LLAVE · falta o no coincide x-sala-dispatch-key (o SALA_DISPATCH_KEY no está configurada) · se DETIENE')\nconst b = h.body || {}\nif (typeof b.dry_run !== 'boolean') throw new Error('DIARIO_DRY_RUN_OBLIGATORIO · `dry_run` es obligatorio y debe ser true o false · se DETIENE')\nif (b.client_id !== undefined && (typeof b.client_id !== 'string' || !UUID.test(b.client_id))) throw new Error('DIARIO_CLIENTE_INVALIDO · `client_id` debe ser un uuid · se DETIENE')\nreturn [{ json: { ...base, via: 'a mano', dry_run: b.dry_run, client_id: b.client_id || null } }]"
+   }
+  },
+  {
+   "id": "f3cdc525-f907-4b6a-9f72-0c3d0fef7ffc",
+   "name": "① Clientes activos",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    520,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/descubrir",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, fase: 'clientes', ...($json.client_id ? { client_id: $json.client_id } : {}), workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id }) }}",
+    "options": {
+     "timeout": 120000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "92ffeeb2-c310-4adf-a072-74249b75a063",
+   "name": "① Un elemento por cliente",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ① SEPARAR EL PLAN EN UN ELEMENTO POR CLIENTE. Si el plan falló, se DICE (un fallo nunca se lee como «no hay clientes»).\r\nconst e = $('⓪ Entrada').first().json\r\nconst r = $input.first().json || {}\r\nconst p = r.body ? r.body : r\r\nif (!p || p.error || !Array.isArray(p.clientes)) return [{ json: { ...e, cliente: null, falla: 'El plan falló: ' + String((p && (p.error || p.detalle)) || 'sin respuesta') + ' ' + String((p && p.detalle) || '') } }]\r\nif (!p.clientes.length) return [{ json: { ...e, cliente: null, falla: null, sin_clientes: true, excluidos: p.excluidos || [] } }]\r\nreturn p.clientes.map((c) => ({ json: { ...e, cliente: c.client_id, nombre: c.nombre, acciones: (c.plan && c.plan.hacer) || [], omitidas: (c.plan && c.plan.omitidas) || [], no_cubiertas: (c.plan && c.plan.no_cubiertas) || [], gastado_hoy_usd: c.gastado_hoy_usd, falla: null } }))\r\n"
+   }
+  },
+  {
+   "id": "00303605-a2e8-467a-ba0f-47d87a4a7b83",
+   "name": "② Ampliar (Servicio de Apify)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1560,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ② LA AMPLIACIÓN (paso 1, lo que el flujo de la mañana NO cubre) · ejecuta SOLO lo que la ruta `plan` dejó en `acciones` de CADA cliente (ya recortado al tope de US$ 1,00 por cliente y día).\r\n// 🔴 Con `dry_run` NO llama a nadie. 🔴 Una llamada al Servicio por acción, SIN reintento (cada una paga). 🔴 Dos fallas seguidas por cliente ⇒ para a ese cliente. Este nodo NO lee ninguna tabla: lo decide la ruta.\r\n// El Servicio guarda lo crudo en `apify_raw` (destino `respuesta`); lo que cuesta se mide con la API de Apify y se informa a `correr`, que lo compara con el tope.\r\n// Procesa TODOS los elementos (uno por cliente), en orden, y devuelve uno por cliente.\r\nconst N8N = 'https://n8n-production-72be.up.railway.app'\r\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\r\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\r\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\r\nconst ES_ULTIMA = true\r\nconst salidas = []\r\nfor (const item of $input.all()) {\r\n  const e = item.json\r\n  const salida = { ...e, ampliacion: e.ampliacion ? { ...e.ampliacion } : { hecho: false, llamadas: [], gasto_usd: 0, parado: null } }\r\n  delete salida.acciones_pendientes\r\n  if (e.falla || !e.cliente) { salidas.push({ json: salida }); continue }\r\n  if (e.dry_run === true) { salida.ampliacion.nota = 'dry_run: no se llamó a ningún proveedor'; salidas.push({ json: salida }); continue }\r\n  let seguidasConFalla = e.ampliacion && e.ampliacion.seguidas_con_falla ? e.ampliacion.seguidas_con_falla : 0\r\n  const pendientes = []\r\n  const lista = Array.isArray(e.acciones_pendientes) ? e.acciones_pendientes : e.acciones || []\r\n  for (const a of lista) {\r\n    if (salida.ampliacion.parado) continue // dos fallas seguidas: se declara en parado, no se sigue\r\n    if (Date.now() - T0 > 60000) { pendientes.push(a); continue } // no cupo en este nodo: pasa al siguiente\r\n    const t0 = Date.now()\r\n    const r = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\r\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id } } })\r\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\r\n    const ll = { fuente: a.fuente, funcion: a.funcion, hecho: r.statusCode === 200 && b.ok === true, http: r.statusCode, ms: Date.now() - t0, apify_run_id: b.apify_run_id || null, usd_max: a.usd_max, medido: a.medido }\r\n    if (!ll.hecho) ll.error = String(b.error || b.message || b.validation_errors || '').slice(0, 160)\r\n    let costo = typeof a.usd_max === 'number' ? a.usd_max : 0 // sin dato real, se cuenta el MÁXIMO (nunca 0 para decir «no sé»)\r\n    if (ll.apify_run_id && $env.APIFY_API_TOKEN) {\r\n      const u = await http({ timeout: Math.min(15000, RESTA_MS()), url: 'https://api.apify.com/v2/actor-runs/' + ll.apify_run_id, method: 'GET', headers: { Authorization: 'Bearer ' + $env.APIFY_API_TOKEN } })\r\n      const d = u.body && u.body.data\r\n      if (d && d.usageTotalUsd !== undefined) { ll.costo_real_usd = Number(d.usageTotalUsd); costo = ll.costo_real_usd }\r\n    }\r\n    ll.costo_contado_usd = costo\r\n    salida.ampliacion.gasto_usd = Number((salida.ampliacion.gasto_usd + costo).toFixed(6))\r\n    salida.ampliacion.llamadas.push(ll)\r\n    seguidasConFalla = ll.hecho ? 0 : seguidasConFalla + 1\r\n    if (seguidasConFalla >= 2) { salida.ampliacion.parado = 'dos_fallas_seguidas'; break }\r\n  }\r\n  salida.ampliacion.seguidas_con_falla = seguidasConFalla\r\n  if (ES_ULTIMA) {\r\n    salida.ampliacion.omitidas_por_tiempo = pendientes.map((a) => a.fuente + ': ' + a.funcion) // se DICE lo que no cupo\r\n    delete salida.ampliacion.seguidas_con_falla\r\n  } else salida.acciones_pendientes = pendientes\r\n  salida.ampliacion.hecho = salida.ampliacion.llamadas.length > 0 && salida.ampliacion.llamadas.every((l) => l.hecho) && pendientes.length === 0\r\n  salidas.push({ json: salida })\r\n}\r\nreturn salidas\r\n"
+   }
+  },
+  {
+   "id": "c4957add-e8ec-4d1c-932d-3d5b30d0fd6b",
+   "name": "⑤ Cierre",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3120,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ⑤ CIERRE · una línea por cliente: qué pidió el portero, qué leyó, qué archivó (suma / reemplaza / nada / duda), qué quedó en la biblioteca y qué costó. Un error se DICE.\nconst clientes = $input.all().map((i) => i.json).map((p) => {\n  const a = p.alimentada || {}\n  const res = (a.plan && a.plan.resumen) || {}\n  const q = p.puente_final || {}\n  return {\n    cliente: p.cliente || null,\n    plan_fallo: p.falla || null,\n    portero: p.portero || null,\n    ampliacion: p.ampliacion ? { hecho: p.ampliacion.hecho, gasto_usd: p.ampliacion.gasto_usd, parado: p.ampliacion.parado, llamadas: (p.ampliacion.llamadas || []).length } : null,\n    articulos: p.articulos ? { hecho: p.articulos.hecho, llamadas: (p.articulos.llamadas || []).length, gasto_usd: p.articulos.gasto_usd } : null,\n    tanda2: p.tanda2 ? { hecho: p.tanda2.hecho, llamadas: (p.tanda2.llamadas || []).map((l) => l.funcion), gasto_usd: p.tanda2.gasto_usd, revision: p.tanda2.revision, omitidas: (p.tanda2.omitidas || []).map((o) => o.fuente + ': ' + o.por_que) } : null,\n    omitidas_por_tiempo: [].concat((p.ampliacion && p.ampliacion.omitidas_por_tiempo) || [], (p.articulos && p.articulos.omitidas_por_tiempo) || [], (p.tanda2 && p.tanda2.omitidas_por_tiempo) || []),\n    alimentar: a.apagado ? 'apagado' : a.estado || (p.falla ? 'saltado' : 'sin_respuesta'),\n    suma: res.suma || 0, reemplaza: res.reemplaza || 0, nada: res.nada || 0, duda: res.duda || 0, sin_confirmar: res.sin_confirmar || 0,\n    modelo_usd: (a.gasto && a.gasto.modelo_usd) || 0,\n    puente: { quedan: typeof q.quedan === 'number' ? q.quedan : null, vueltas: (q.vueltas || []).length, falla: q.falla || q.lectura_fallida || null },\n    errores: [].concat(Array.isArray(a.errores) ? a.errores : []),\n    detalle: a.detalle || a.error || null,\n  }\n})\nconst e = $('⓪ Entrada').first().json\nconst malo = clientes.some((c) => c.plan_fallo || c.errores.length > 0 || c.puente.falla || (typeof c.puente.quedan === 'number' && c.puente.quedan > 0) || ['con_errores', 'lectura_fallida', 'sin_respuesta'].includes(c.alimentar))\nreturn [{ json: { fin: malo ? 'con_errores' : 'hecho', via: e.via, dry_run: e.dry_run, clientes } }]"
+   }
+  },
+  {
+   "id": "6f0a1c10-0001-4a00-8000-00000000d001",
+   "name": "① Descubrir (el portero que alimenta)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    1040,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/descubrir",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, client_id: $json.cliente || '00000000-0000-4000-8000-000000000000', workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, forzar_posicion: $('⓪ Entrada').first().json.posicion_ahora === true }) }}",
+    "options": {
+     "timeout": 120000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "6f0a1c10-0002-4a00-8000-00000000d002",
+   "name": "① Plan unificado",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1300,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ① PLAN UNIFICADO · junta, por cliente, lo que el plan de hoy dijo (quién es cliente activo) con lo que dice el portero que alimenta (qué pedirle hoy a Apify: TODO diario, tope US$ 1,50).\n// 🔴 Si el portero está APAGADO (PORTERO_ALIMENTAR) la ruta contesta {apagado:true}: aquí no hay acciones y el flujo no pide nada nuevo. Un fallo se DICE; nunca se lee como «no hay nada».\nconst base = $('① Un elemento por cliente').all().map((i) => i.json)\nconst resp = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nreturn base.map((e, k) => {\n  const r = resp[k] || {}\n  if (e.falla || !e.cliente) return { json: { ...e, portero: { omitido: true } } }\n  if (r.apagado) return { json: { ...e, acciones: [], omitidas: [], no_cubiertas: [], portero: { apagado: true } } }\n  if (r.error || !r.plan) return { json: { ...e, acciones: [], falla: 'El portero no pudo armar el plan: ' + String(r.error || r.detalle || 'sin respuesta'), portero: { error: true } } }\n  return { json: { ...e, acciones: r.plan.hacer || [], omitidas: r.plan.omitidas || [], no_cubiertas: r.plan.no_cubiertas || [], gastado_hoy_usd: (r.gasto_de_hoy && r.gasto_de_hoy.total_usd) || 0,\n    portero: { tope_usd: r.tope_por_cliente_usd, costo_maximo_del_plan_usd: r.plan.costo_maximo_del_plan_usd, propuestas: (r.propuestas && r.propuestas.aceptadas) || [] } } }\n})"
+   }
+  },
+  {
+   "id": "6f0a1c10-0003-4a00-8000-00000000d003",
+   "name": "② bis Artículos (qué leer)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    1560,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/descubrir",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, client_id: $json.cliente || '00000000-0000-4000-8000-000000000000', workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, fase: 'articulos' }) }}",
+    "options": {
+     "timeout": 120000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "6f0a1c10-0004-4a00-8000-00000000d004",
+   "name": "② bis Leer artículos (Servicio de Apify)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1820,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ② bis · LEE las páginas que el portero eligió de la búsqueda de hoy (≤ 3, nunca el sitio propio ni redes). Misma regla que ②: con dry_run NO llama a nadie; una llamada por página, SIN reintento.\n// El Servicio guarda SOLO calling_workflow_id como llamado_por: la tanda lleva el sufijo «#articulo» para que el portero sepa que es una página de un tercero.\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\nconst previos = $('② Ampliar (Servicio de Apify)').all().map((i) => i.json)\nconst resp = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst salidas = []\nfor (let k = 0; k < previos.length; k++) {\n  const e = previos[k]\n  const r = resp[k] || {}\n  const salida = { ...e, articulos: { hecho: false, llamadas: [], gasto_usd: 0, omitidas: r.omitidas || [] } }\n  if (e.falla || !e.cliente || e.dry_run === true || r.apagado || !Array.isArray(r.acciones)) { salida.articulos.nota = e.dry_run === true ? 'dry_run: no se llamó a ningún proveedor' : 'sin páginas que leer'; salidas.push({ json: salida }); continue }\n  for (const a of r.acciones) {\n    if (Date.now() - T0 > 80000) { (salida.articulos.omitidas_por_tiempo = salida.articulos.omitidas_por_tiempo || []).push(a.funcion + (a.objetivo ? ' · ' + a.objetivo : '')); continue }\n    const t0 = Date.now()\n    const x = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero_articulo', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id + '#articulo' } } })\n    const b = x.body && typeof x.body === 'object' ? x.body : {}\n    const ok = x.statusCode === 200 && b.ok === true\n    salida.articulos.llamadas.push({ funcion: a.funcion, objetivo: a.objetivo, hecho: ok, http: x.statusCode, ms: Date.now() - t0, usd_max: a.usd_max })\n    salida.articulos.gasto_usd = Number((salida.articulos.gasto_usd + (typeof a.usd_max === 'number' ? a.usd_max : 0)).toFixed(6))\n  }\n  salida.articulos.hecho = salida.articulos.llamadas.length > 0 && salida.articulos.llamadas.every((l) => l.hecho)\n  // el gasto de las páginas se suma al de la ampliación para que `correr` lo compare con el tope\n  salida.ampliacion = { ...(e.ampliacion || {}), gasto_usd: Number((((e.ampliacion && e.ampliacion.gasto_usd) || 0) + salida.articulos.gasto_usd).toFixed(6)) }\n  salidas.push({ json: salida })\n}\nreturn salidas"
+   }
+  },
+  {
+   "id": "6f0a1c10-0006-4a00-8000-00000000d006",
+   "name": "② ter Reseñas y videos (qué pedir)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    2080,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/descubrir",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, client_id: $json.cliente || '00000000-0000-4000-8000-000000000000', workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, fase: 'tanda2' }) }}",
+    "options": {
+     "timeout": 120000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "6f0a1c10-0007-4a00-8000-00000000d007",
+   "name": "② ter Leer reseñas y videos (Servicio de Apify)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2340,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ② ter · pide al Servicio lo que la tanda 1 hizo posible: las reseñas de la ficha CONFIRMADA de Mapas y los videos de Instagram solo si hubo publicaciones nuevas.\n// Misma regla que ②: con dry_run NO llama a nadie; una llamada por acción, SIN reintento. Sufijo «#tanda2» en calling_workflow_id.\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\nconst previos = $('② bis Leer artículos (Servicio de Apify)').all().map((i) => i.json)\nconst resp = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst salidas = []\nfor (let k = 0; k < previos.length; k++) {\n  const e = previos[k]\n  const r = resp[k] || {}\n  const salida = { ...e, tanda2: { hecho: false, llamadas: [], gasto_usd: 0, omitidas: r.omitidas || [], revision: r.revision_de_publicaciones || null } }\n  if (e.falla || !e.cliente || e.dry_run === true || r.apagado || !Array.isArray(r.acciones)) { salida.tanda2.nota = e.dry_run === true ? 'dry_run: no se llamó a ningún proveedor' : 'sin nada que pedir'; salidas.push({ json: salida }); continue }\n  for (const a of r.acciones) {\n    if (Date.now() - T0 > 80000) { (salida.tanda2.omitidas_por_tiempo = salida.tanda2.omitidas_por_tiempo || []).push(a.funcion + (a.objetivo ? ' · ' + a.objetivo : '')); continue }\n    const t0 = Date.now()\n    const x = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero_tanda2', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id + '#tanda2' } } })\n    const b = x.body && typeof x.body === 'object' ? x.body : {}\n    salida.tanda2.llamadas.push({ funcion: a.funcion, objetivo: a.objetivo, hecho: x.statusCode === 200 && b.ok === true, http: x.statusCode, ms: Date.now() - t0, usd_max: a.usd_max })\n    salida.tanda2.gasto_usd = Number((salida.tanda2.gasto_usd + (typeof a.usd_max === 'number' ? a.usd_max : 0)).toFixed(6))\n  }\n  salida.tanda2.hecho = salida.tanda2.llamadas.length > 0 && salida.tanda2.llamadas.every((l) => l.hecho)\n  salida.ampliacion = { ...(e.ampliacion || {}), gasto_usd: Number((((e.ampliacion && e.ampliacion.gasto_usd) || 0) + salida.tanda2.gasto_usd).toFixed(6)) }\n  salidas.push({ json: salida })\n}\nreturn salidas"
+   }
+  },
+  {
+   "id": "6f0a1c10-0005-4a00-8000-00000000d005",
+   "name": "④ Alimentar (filtrar · razonar · archivar)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    2600,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/procesar",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, client_id: $json.cliente || '00000000-0000-4000-8000-000000000000', workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, ...($('⓪ Entrada').first().json.reintento === true ? { forzar: true } : {}) }) }}",
+    "options": {
+     "timeout": 280000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "6f0a1c10-0008-4a00-8000-00000000d008",
+   "name": "④ bis Puente (repetir hasta terminar)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2860,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ④ bis · RECONCILIA el puente a la biblioteca por pasadas de ≤ 40 trozos hasta que no quede nada (idempotente). Con dry_run solo cuenta (una llamada).\n// Una falla se DICE; nunca se lee como «no queda nada». No llama a Apify ni a ningún modelo.\nconst ORIGEN = 'https://zero-risk-platform.vercel.app'\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 130000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\nconst previos = $('② ter Leer reseñas y videos (Servicio de Apify)').all().map((i) => i.json)\nconst alimentadas = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst salidas = []\nfor (let k = 0; k < previos.length; k++) {\n  const e = previos[k]\n  const a = alimentadas[k] || {}\n  const salida = { ...e, alimentada: a, puente_final: null }\n  if (e.falla || !e.cliente || a.apagado) { salidas.push({ json: salida }); continue }\n  let p = a.puente || null\n  const vueltas = []\n  for (let v = 0; v < 12 && Date.now() - T0 < 80000 && p && typeof p.quedan === 'number' && p.quedan > 0 && e.dry_run !== true; v++) {\n    const r = await http({ timeout: RESTA_MS(), url: ORIGEN + '/api/brain/alimentar/puente', method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': $env.INTERNAL_API_KEY },\n      body: { client_id: e.cliente, dry_run: false, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id } })\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\n    vueltas.push({ http: r.statusCode, quedan: b.puente && b.puente.quedan, errores: b.errores || [] })\n    if (r.statusCode !== 200 || !b.puente) { p = { ...(p || {}), falla: 'el puente respondió ' + r.statusCode }; break }\n    p = b.puente\n  }\n  salida.puente_final = p ? { ...p, vueltas } : null\n  salidas.push({ json: salida })\n}\nreturn salidas"
+   }
+  },
+  {
+   "id": "vigilante-6",
+   "name": "⑥ Vigilar (apaga y avisa si algo falla)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    3380,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/vigilar",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ dry_run: $('⓪ Entrada').first().json.dry_run !== false, workflow_id: $('⓪ Entrada').first().json.workflow_id, workflow_execution_id: $('⓪ Entrada').first().json.workflow_execution_id, cierre: $json, ...($('⓪ Entrada').first().json.client_id ? { client_id: $('⓪ Entrada').first().json.client_id } : {}) }) }}",
+    "options": {
+     "timeout": 300000
+    }
+   }
+  },
+  {
+   "id": "c0de0000-d35e-4a00-8000-000000000001",
+   "name": "Webhook · completar despertar (llave interna)",
+   "webhookId": "cerebro-completar-despertar-0001",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    120
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/cerebro-completar-despertar",
+    "responseMode": "onReceived",
+    "options": {}
+   }
+  },
+  {
+   "id": "00303605-a2e8-467a-ba0f-47d87a4a7001",
+   "name": "② Ampliar (tanda 1)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1120,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ② LA AMPLIACIÓN (paso 1, lo que el flujo de la mañana NO cubre) · ejecuta SOLO lo que la ruta `plan` dejó en `acciones` de CADA cliente (ya recortado al tope de US$ 1,00 por cliente y día).\r\n// 🔴 Con `dry_run` NO llama a nadie. 🔴 Una llamada al Servicio por acción, SIN reintento (cada una paga). 🔴 Dos fallas seguidas por cliente ⇒ para a ese cliente. Este nodo NO lee ninguna tabla: lo decide la ruta.\r\n// El Servicio guarda lo crudo en `apify_raw` (destino `respuesta`); lo que cuesta se mide con la API de Apify y se informa a `correr`, que lo compara con el tope.\r\n// Procesa TODOS los elementos (uno por cliente), en orden, y devuelve uno por cliente.\r\nconst N8N = 'https://n8n-production-72be.up.railway.app'\r\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\r\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\r\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\r\nconst ES_ULTIMA = false\r\nconst salidas = []\r\nfor (const item of $input.all()) {\r\n  const e = item.json\r\n  const salida = { ...e, ampliacion: e.ampliacion ? { ...e.ampliacion } : { hecho: false, llamadas: [], gasto_usd: 0, parado: null } }\r\n  delete salida.acciones_pendientes\r\n  if (e.falla || !e.cliente) { salidas.push({ json: salida }); continue }\r\n  if (e.dry_run === true) { salida.ampliacion.nota = 'dry_run: no se llamó a ningún proveedor'; salidas.push({ json: salida }); continue }\r\n  let seguidasConFalla = e.ampliacion && e.ampliacion.seguidas_con_falla ? e.ampliacion.seguidas_con_falla : 0\r\n  const pendientes = []\r\n  const lista = Array.isArray(e.acciones_pendientes) ? e.acciones_pendientes : e.acciones || []\r\n  for (const a of lista) {\r\n    if (salida.ampliacion.parado) continue // dos fallas seguidas: se declara en parado, no se sigue\r\n    if (Date.now() - T0 > 60000) { pendientes.push(a); continue } // no cupo en este nodo: pasa al siguiente\r\n    const t0 = Date.now()\r\n    const r = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\r\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id } } })\r\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\r\n    const ll = { fuente: a.fuente, funcion: a.funcion, hecho: r.statusCode === 200 && b.ok === true, http: r.statusCode, ms: Date.now() - t0, apify_run_id: b.apify_run_id || null, usd_max: a.usd_max, medido: a.medido }\r\n    if (!ll.hecho) ll.error = String(b.error || b.message || b.validation_errors || '').slice(0, 160)\r\n    let costo = typeof a.usd_max === 'number' ? a.usd_max : 0 // sin dato real, se cuenta el MÁXIMO (nunca 0 para decir «no sé»)\r\n    if (ll.apify_run_id && $env.APIFY_API_TOKEN) {\r\n      const u = await http({ timeout: Math.min(15000, RESTA_MS()), url: 'https://api.apify.com/v2/actor-runs/' + ll.apify_run_id, method: 'GET', headers: { Authorization: 'Bearer ' + $env.APIFY_API_TOKEN } })\r\n      const d = u.body && u.body.data\r\n      if (d && d.usageTotalUsd !== undefined) { ll.costo_real_usd = Number(d.usageTotalUsd); costo = ll.costo_real_usd }\r\n    }\r\n    ll.costo_contado_usd = costo\r\n    salida.ampliacion.gasto_usd = Number((salida.ampliacion.gasto_usd + costo).toFixed(6))\r\n    salida.ampliacion.llamadas.push(ll)\r\n    seguidasConFalla = ll.hecho ? 0 : seguidasConFalla + 1\r\n    if (seguidasConFalla >= 2) { salida.ampliacion.parado = 'dos_fallas_seguidas'; break }\r\n  }\r\n  salida.ampliacion.seguidas_con_falla = seguidasConFalla\r\n  if (ES_ULTIMA) {\r\n    salida.ampliacion.omitidas_por_tiempo = pendientes.map((a) => a.fuente + ': ' + a.funcion) // se DICE lo que no cupo\r\n    delete salida.ampliacion.seguidas_con_falla\r\n  } else salida.acciones_pendientes = pendientes\r\n  salida.ampliacion.hecho = salida.ampliacion.llamadas.length > 0 && salida.ampliacion.llamadas.every((l) => l.hecho) && pendientes.length === 0\r\n  salidas.push({ json: salida })\r\n}\r\nreturn salidas\r\n"
+   }
+  },
+  {
+   "id": "00303605-a2e8-467a-ba0f-47d87a4a7002",
+   "name": "② Ampliar (tanda 2)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1340,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ② LA AMPLIACIÓN (paso 1, lo que el flujo de la mañana NO cubre) · ejecuta SOLO lo que la ruta `plan` dejó en `acciones` de CADA cliente (ya recortado al tope de US$ 1,00 por cliente y día).\r\n// 🔴 Con `dry_run` NO llama a nadie. 🔴 Una llamada al Servicio por acción, SIN reintento (cada una paga). 🔴 Dos fallas seguidas por cliente ⇒ para a ese cliente. Este nodo NO lee ninguna tabla: lo decide la ruta.\r\n// El Servicio guarda lo crudo en `apify_raw` (destino `respuesta`); lo que cuesta se mide con la API de Apify y se informa a `correr`, que lo compara con el tope.\r\n// Procesa TODOS los elementos (uno por cliente), en orden, y devuelve uno por cliente.\r\nconst N8N = 'https://n8n-production-72be.up.railway.app'\r\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\r\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\r\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\r\nconst ES_ULTIMA = false\r\nconst salidas = []\r\nfor (const item of $input.all()) {\r\n  const e = item.json\r\n  const salida = { ...e, ampliacion: e.ampliacion ? { ...e.ampliacion } : { hecho: false, llamadas: [], gasto_usd: 0, parado: null } }\r\n  delete salida.acciones_pendientes\r\n  if (e.falla || !e.cliente) { salidas.push({ json: salida }); continue }\r\n  if (e.dry_run === true) { salida.ampliacion.nota = 'dry_run: no se llamó a ningún proveedor'; salidas.push({ json: salida }); continue }\r\n  let seguidasConFalla = e.ampliacion && e.ampliacion.seguidas_con_falla ? e.ampliacion.seguidas_con_falla : 0\r\n  const pendientes = []\r\n  const lista = Array.isArray(e.acciones_pendientes) ? e.acciones_pendientes : e.acciones || []\r\n  for (const a of lista) {\r\n    if (salida.ampliacion.parado) continue // dos fallas seguidas: se declara en parado, no se sigue\r\n    if (Date.now() - T0 > 60000) { pendientes.push(a); continue } // no cupo en este nodo: pasa al siguiente\r\n    const t0 = Date.now()\r\n    const r = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\r\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id } } })\r\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\r\n    const ll = { fuente: a.fuente, funcion: a.funcion, hecho: r.statusCode === 200 && b.ok === true, http: r.statusCode, ms: Date.now() - t0, apify_run_id: b.apify_run_id || null, usd_max: a.usd_max, medido: a.medido }\r\n    if (!ll.hecho) ll.error = String(b.error || b.message || b.validation_errors || '').slice(0, 160)\r\n    let costo = typeof a.usd_max === 'number' ? a.usd_max : 0 // sin dato real, se cuenta el MÁXIMO (nunca 0 para decir «no sé»)\r\n    if (ll.apify_run_id && $env.APIFY_API_TOKEN) {\r\n      const u = await http({ timeout: Math.min(15000, RESTA_MS()), url: 'https://api.apify.com/v2/actor-runs/' + ll.apify_run_id, method: 'GET', headers: { Authorization: 'Bearer ' + $env.APIFY_API_TOKEN } })\r\n      const d = u.body && u.body.data\r\n      if (d && d.usageTotalUsd !== undefined) { ll.costo_real_usd = Number(d.usageTotalUsd); costo = ll.costo_real_usd }\r\n    }\r\n    ll.costo_contado_usd = costo\r\n    salida.ampliacion.gasto_usd = Number((salida.ampliacion.gasto_usd + costo).toFixed(6))\r\n    salida.ampliacion.llamadas.push(ll)\r\n    seguidasConFalla = ll.hecho ? 0 : seguidasConFalla + 1\r\n    if (seguidasConFalla >= 2) { salida.ampliacion.parado = 'dos_fallas_seguidas'; break }\r\n  }\r\n  salida.ampliacion.seguidas_con_falla = seguidasConFalla\r\n  if (ES_ULTIMA) {\r\n    salida.ampliacion.omitidas_por_tiempo = pendientes.map((a) => a.fuente + ': ' + a.funcion) // se DICE lo que no cupo\r\n    delete salida.ampliacion.seguidas_con_falla\r\n  } else salida.acciones_pendientes = pendientes\r\n  salida.ampliacion.hecho = salida.ampliacion.llamadas.length > 0 && salida.ampliacion.llamadas.every((l) => l.hecho) && pendientes.length === 0\r\n  salidas.push({ json: salida })\r\n}\r\nreturn salidas\r\n"
+   }
+  },
+  {
+   "id": "9c1f0b52-6d7e-4b6a-9a5e-3f0c2a7d1e44",
+   "name": "Webhook · un cliente (llave interna)",
+   "webhookId": "5d2a8e71-0c43-4f9b-8b1d-6e7a9c3b2f10",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    300
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/cerebro-diario-un-cliente",
+    "responseMode": "onReceived",
+    "options": {}
+   }
+  },
+  {
+   "id": "7a3e5b90-2c81-4d6f-a0e2-1b9d4c8f6a35",
+   "name": "① Repartir (una ejecución por cliente)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1000,
+    180
+   ],
+   "parameters": {
+    "jsCode": "// ① REPARTIR · en la ejecución del HORARIO cada cliente se corre en SU PROPIA ejecución (webhook «un cliente», llave interna). El límite de 120 s por nodo es por ejecución:\n// así ninguna fuente de un cliente se recorta por el tiempo de otro. En cualquier otra entrada (a mano, despertar, un cliente) los elementos pasan SIN cambio.\n// Si el plan falló o no hay clientes, pasa sin cambio (el cierre y el vigilante de ESTA ejecución lo dicen). Un reparto que falla NO pierde al cliente: se corre aquí mismo.\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst T0 = Date.now()\nconst entrada = $('⓪ Entrada').first().json\nconst items = $input.all()\nif (!entrada || entrada.via !== 'horario' || entrada.dry_run === true) return items\nconst clientes = items.filter((i) => i.json && i.json.cliente && !i.json.falla)\nif (!clientes.length || clientes.length !== items.length) return items\nconst fallidos = []\nconst repartidos = []\nfor (let k = 0; k < clientes.length; k++) {\n  const it = clientes[k]\n  if (k > 0 && Date.now() - T0 < 90000) await new Promise((r) => setTimeout(r, 1000))\n  try {\n    const r = await this.helpers.httpRequest({ url: N8N + '/webhook/zero-risk/cerebro-diario-un-cliente', method: 'POST', json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 20000, headers: { 'Content-Type': 'application/json', 'x-api-key': $env.INTERNAL_API_KEY }, body: { client_id: it.json.cliente, origen_del_reparto: String(entrada.workflow_execution_id) } })\n    if (r.statusCode === 200) repartidos.push(it.json.cliente)\n    else fallidos.push(it)\n  } catch (err) { fallidos.push(it) }\n}\nreturn fallidos"
+   }
+  },
+  {
+   "id": "2e8c4a17-9b30-4f5d-8c6a-0d1f7b3e9a52",
+   "name": "⑦ Reintento (misma mañana)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3600,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ⑦ REINTENTO (la misma mañana) · si en la corrida de este cliente algo quedó omitido por tiempo, se pide UNA vez más (reintento:true ⇒ `forzar`): nunca más de una, nunca si el vigilante habló,\n// nunca en una entrada a mano o en seco. Lo omitido hoy debe quedar en 0 en el caso normal; esto es la red.\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst e = $('⓪ Entrada').first().json\nconst v = $input.first().json || {}\nconst vb = v.body ? v.body : v\nconst cierre = $('⑤ Cierre').first().json\nconst con = ((cierre && cierre.clientes) || []).filter((c) => c.cliente && Array.isArray(c.omitidas_por_tiempo) && c.omitidas_por_tiempo.length > 0)\nconst motivo = e.reintento === true ? 'ya es un reintento' : e.dry_run !== false ? 'en seco' : vb.ok === false ? 'el vigilante habló' : !['horario', 'cliente'].includes(e.via) ? 'entrada a mano o despertar' : !con.length ? 'nada omitido' : null\nif (motivo) return [{ json: { reintento: false, motivo } }]\nawait new Promise((r) => setTimeout(r, 20000))\nconst lanzados = []\nfor (const c of con) {\n  try {\n    const r = await this.helpers.httpRequest({ url: N8N + '/webhook/zero-risk/cerebro-diario-un-cliente', method: 'POST', json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 20000, headers: { 'Content-Type': 'application/json', 'x-api-key': $env.INTERNAL_API_KEY }, body: { client_id: c.cliente, reintento: true } })\n    lanzados.push({ cliente: c.cliente, http: r.statusCode, omitidas: c.omitidas_por_tiempo })\n  } catch (err) { lanzados.push({ cliente: c.cliente, http: 0, error: String((err && err.message) || err).slice(0, 120) }) }\n}\nreturn [{ json: { reintento: true, lanzados } }]"
+   }
+  },
+  {
+   "id": "012af67d-350c-4032-aa4f-e4bd8ada70af",
+   "name": "⑧ Quién se pule (después del cierre)",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    3860,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ⑧ QUIÉN SE PULE · el pulido del resumen vivo va en su propio paso, DESPUÉS del cierre y del vigilante (nunca dentro de ④). Solo clientes cuyo guardado quedó «hecha» y que el vigilante no pausó; nunca en seco.\nconst e = $('⓪ Entrada').first().json\nif (e.dry_run !== false) return []\nconst cierre = $('⑤ Cierre').first().json\nlet v = {}\ntry { v = $('⑥ Vigilar (apaga y avisa si algo falla)').first().json || {} } catch (err) { v = {} }\nconst vb = v.body ? v.body : v\nconst pausados = new Set(((vb && vb.pausados) || []).map((p) => p.client_id))\nreturn ((cierre && cierre.clientes) || []).filter((c) => c.cliente && c.alimentar === 'hecha' && !c.plan_fallo && !pausados.has(c.cliente)).map((c) => ({ json: { cliente: c.cliente, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id } }))"
+   }
+  },
+  {
+   "id": "afbfcbc7-c502-4569-84b4-639931dc3abe",
+   "name": "⑧ bis Pulir el resumen vivo (aparte)",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
+   "position": [
+    4120,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/pulir",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ dry_run: false, client_id: $json.cliente, workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id }) }}",
+    "options": {
+     "timeout": 290000,
+     "response": {
+      "response": {
+       "neverError": true
+      }
+     }
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Webhook · a mano (con llave)": {
+   "main": [
+    [
+     {
+      "node": "⓪ Entrada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Horario diario 08:30 (hora de n8n)": {
+   "main": [
+    [
+     {
+      "node": "⓪ Entrada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Entrada": {
+   "main": [
+    [
+     {
+      "node": "① Clientes activos",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① Un elemento por cliente": {
+   "main": [
+    [
+     {
+      "node": "① Repartir (una ejecución por cliente)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Ampliar (Servicio de Apify)": {
+   "main": [
+    [
+     {
+      "node": "② bis Artículos (qué leer)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① Descubrir (el portero que alimenta)": {
+   "main": [
+    [
+     {
+      "node": "① Plan unificado",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① Plan unificado": {
+   "main": [
+    [
+     {
+      "node": "② Ampliar (tanda 1)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② bis Artículos (qué leer)": {
+   "main": [
+    [
+     {
+      "node": "② bis Leer artículos (Servicio de Apify)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② bis Leer artículos (Servicio de Apify)": {
+   "main": [
+    [
+     {
+      "node": "② ter Reseñas y videos (qué pedir)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② ter Reseñas y videos (qué pedir)": {
+   "main": [
+    [
+     {
+      "node": "② ter Leer reseñas y videos (Servicio de Apify)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② ter Leer reseñas y videos (Servicio de Apify)": {
+   "main": [
+    [
+     {
+      "node": "④ Alimentar (filtrar · razonar · archivar)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ Alimentar (filtrar · razonar · archivar)": {
+   "main": [
+    [
+     {
+      "node": "④ bis Puente (repetir hasta terminar)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ bis Puente (repetir hasta terminar)": {
+   "main": [
+    [
+     {
+      "node": "⑤ Cierre",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① Clientes activos": {
+   "main": [
+    [
+     {
+      "node": "① Un elemento por cliente",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑤ Cierre": {
+   "main": [
+    [
+     {
+      "node": "⑥ Vigilar (apaga y avisa si algo falla)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Webhook · completar despertar (llave interna)": {
+   "main": [
+    [
+     {
+      "node": "⓪ Entrada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Ampliar (tanda 1)": {
+   "main": [
+    [
+     {
+      "node": "② Ampliar (tanda 2)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Ampliar (tanda 2)": {
+   "main": [
+    [
+     {
+      "node": "② Ampliar (Servicio de Apify)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Webhook · un cliente (llave interna)": {
+   "main": [
+    [
+     {
+      "node": "⓪ Entrada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "① Repartir (una ejecución por cliente)": {
+   "main": [
+    [
+     {
+      "node": "① Descubrir (el portero que alimenta)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑥ Vigilar (apaga y avisa si algo falla)": {
+   "main": [
+    [
+     {
+      "node": "⑦ Reintento (misma mañana)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑦ Reintento (misma mañana)": {
+   "main": [
+    [
+     {
+      "node": "⑧ Quién se pule (después del cierre)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⑧ Quién se pule (después del cierre)": {
+   "main": [
+    [
+     {
+      "node": "⑧ bis Pulir el resumen vivo (aparte)",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "nodeGroups": [],
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "staticData": {
+  "node:Horario diario 08:30 (hora de n8n)": {
+   "recurrenceRules": [
+    null
+   ],
+   "recurrenceRuleSignatures": [
+    null
+   ]
+  }
+ },
+ "pinData": null,
+ "meta": null,
+ "tags": [],
+ "shared": [
+  {
+   "role": "workflow:owner",
+   "workflowId": "ogfq56oIEoHufFPM",
+   "projectId": "xKBOyp07nrGbu4ob",
+   "project": {
+    "id": "xKBOyp07nrGbu4ob",
+    "name": "Emilio  Perez  <emilacho@hotmail.com>",
+    "type": "personal",
+    "icon": null,
+    "description": null,
+    "customTelemetryTags": [],
+    "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-04-18T13:41:21.856Z",
+    "updatedAt": "2026-04-18T13:51:26.012Z"
+   },
+   "createdAt": "2026-10-10T11:16:15.564Z",
+   "updatedAt": "2026-10-10T11:16:15.564Z"
+  }
+ ],
+ "activeVersion": {
+  "versionId": "5fbcf758-2c25-479f-ad8c-db7aa47fd742",
+  "workflowId": "ogfq56oIEoHufFPM",
+  "nodes": [
+   {
+    "id": "a19cfbf4-fa9e-4c1d-93b0-1229c4cfca9e",
+    "name": "Webhook · a mano (con llave)",
+    "webhookId": "cerebro-diario-mantenimiento-0001",
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 2,
+    "position": [
+     0,
+     -120
+    ],
+    "parameters": {
+     "httpMethod": "POST",
+     "path": "zero-risk/cerebro-diario-mantenimiento-ensayo",
+     "responseMode": "lastNode",
+     "options": {}
+    }
+   },
+   {
+    "id": "60b4b66b-2a3d-4713-ac31-d3b626ae47bf",
+    "name": "Horario diario 08:30 (hora de n8n)",
+    "type": "n8n-nodes-base.scheduleTrigger",
+    "typeVersion": 1.2,
+    "position": [
+     0,
+     120
+    ],
+    "parameters": {
+     "rule": {
+      "interval": [
+       {
+        "field": "cronExpression",
+        "expression": "30 8 * * *"
+       }
+      ]
+     }
+    }
+   },
+   {
+    "id": "b09f66ba-e498-45cd-acd5-839378a4b0b0",
+    "name": "⓪ Entrada",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     260,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ⓪ ENTRADA · mantenimiento diario del portero · CC#2 · 2026-10-10 · + «completar despertar» (CC-CEREBRO · 15-oct).\n//  · por HORARIO: corre de verdad (dry_run=false), para todos los clientes activos.\n//  · a mano (webhook con llave de despacho): `dry_run` BOOLEANO OBLIGATORIO; `client_id` (uuid) opcional limita el alcance.\n//  · completar despertar (webhook con llave interna): lo llama el ALTA para UN cliente tras el despertar; exige `client_id` uuid y `pedir_ahora === true`. Misma cadena que la diaria.\n// 🔴 Sin llave, o sin `dry_run` booleano en la entrada a mano, el flujo SE DETIENE aquí: no se lee ni se escribe nada.\nconst UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i\nlet d = null\ntry { d = $('Webhook · completar despertar (llave interna)').first() } catch (e) { d = null }\nlet w = null\ntry { w = $('Webhook · a mano (con llave)').first() } catch (e) { w = null }\nlet u = null\ntry { u = $('Webhook · un cliente (llave interna)').first() } catch (e) { u = null }\nconst base = { workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) }\nif (u) {\n  const h = u.json || {}\n  const esperada = String($env.INTERNAL_API_KEY || '')\n  const recibida = String((h.headers || {})['x-api-key'] || '')\n  if (!esperada || recibida !== esperada) throw new Error('UN_CLIENTE_SIN_LLAVE · falta o no coincide x-api-key · se DETIENE')\n  const b = h.body || {}\n  if (typeof b.client_id !== 'string' || !UUID.test(b.client_id)) throw new Error('UN_CLIENTE_INVALIDO · `client_id` es obligatorio y debe ser un uuid · se DETIENE')\n  return [{ json: { ...base, via: 'cliente', dry_run: false, client_id: b.client_id, reintento: b.reintento === true, posicion_ahora: b.posicion_ahora === true } }]\n}\nif (d) {\n  const h = d.json || {}\n  const esperada = String($env.INTERNAL_API_KEY || '')\n  const recibida = String((h.headers || {})['x-api-key'] || '')\n  if (!esperada || recibida !== esperada) throw new Error('DESPERTAR_SIN_LLAVE · falta o no coincide x-api-key (o INTERNAL_API_KEY no está configurada) · se DETIENE')\n  const b = h.body || {}\n  if (typeof b.client_id !== 'string' || !UUID.test(b.client_id)) throw new Error('DESPERTAR_CLIENTE_INVALIDO · `client_id` es obligatorio y debe ser un uuid · se DETIENE')\n  if (b.pedir_ahora !== true) return []\n  return [{ json: { ...base, via: 'despertar', dry_run: false, client_id: b.client_id } }]\n}\nif (!w) return [{ json: { ...base, via: 'horario', dry_run: false, client_id: null } }]\nconst h = w.json || {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '')\nconst recibida = String((h.headers || {})['x-sala-dispatch-key'] || '')\nif (!esperada || recibida !== esperada) throw new Error('DIARIO_SIN_LLAVE · falta o no coincide x-sala-dispatch-key (o SALA_DISPATCH_KEY no está configurada) · se DETIENE')\nconst b = h.body || {}\nif (typeof b.dry_run !== 'boolean') throw new Error('DIARIO_DRY_RUN_OBLIGATORIO · `dry_run` es obligatorio y debe ser true o false · se DETIENE')\nif (b.client_id !== undefined && (typeof b.client_id !== 'string' || !UUID.test(b.client_id))) throw new Error('DIARIO_CLIENTE_INVALIDO · `client_id` debe ser un uuid · se DETIENE')\nreturn [{ json: { ...base, via: 'a mano', dry_run: b.dry_run, client_id: b.client_id || null } }]"
+    }
+   },
+   {
+    "id": "f3cdc525-f907-4b6a-9f72-0c3d0fef7ffc",
+    "name": "① Clientes activos",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     520,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/descubrir",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, fase: 'clientes', ...($json.client_id ? { client_id: $json.client_id } : {}), workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id }) }}",
+     "options": {
+      "timeout": 120000,
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "92ffeeb2-c310-4adf-a072-74249b75a063",
+    "name": "① Un elemento por cliente",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     780,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ① SEPARAR EL PLAN EN UN ELEMENTO POR CLIENTE. Si el plan falló, se DICE (un fallo nunca se lee como «no hay clientes»).\r\nconst e = $('⓪ Entrada').first().json\r\nconst r = $input.first().json || {}\r\nconst p = r.body ? r.body : r\r\nif (!p || p.error || !Array.isArray(p.clientes)) return [{ json: { ...e, cliente: null, falla: 'El plan falló: ' + String((p && (p.error || p.detalle)) || 'sin respuesta') + ' ' + String((p && p.detalle) || '') } }]\r\nif (!p.clientes.length) return [{ json: { ...e, cliente: null, falla: null, sin_clientes: true, excluidos: p.excluidos || [] } }]\r\nreturn p.clientes.map((c) => ({ json: { ...e, cliente: c.client_id, nombre: c.nombre, acciones: (c.plan && c.plan.hacer) || [], omitidas: (c.plan && c.plan.omitidas) || [], no_cubiertas: (c.plan && c.plan.no_cubiertas) || [], gastado_hoy_usd: c.gastado_hoy_usd, falla: null } }))\r\n"
+    }
+   },
+   {
+    "id": "00303605-a2e8-467a-ba0f-47d87a4a7b83",
+    "name": "② Ampliar (Servicio de Apify)",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1560,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ② LA AMPLIACIÓN (paso 1, lo que el flujo de la mañana NO cubre) · ejecuta SOLO lo que la ruta `plan` dejó en `acciones` de CADA cliente (ya recortado al tope de US$ 1,00 por cliente y día).\r\n// 🔴 Con `dry_run` NO llama a nadie. 🔴 Una llamada al Servicio por acción, SIN reintento (cada una paga). 🔴 Dos fallas seguidas por cliente ⇒ para a ese cliente. Este nodo NO lee ninguna tabla: lo decide la ruta.\r\n// El Servicio guarda lo crudo en `apify_raw` (destino `respuesta`); lo que cuesta se mide con la API de Apify y se informa a `correr`, que lo compara con el tope.\r\n// Procesa TODOS los elementos (uno por cliente), en orden, y devuelve uno por cliente.\r\nconst N8N = 'https://n8n-production-72be.up.railway.app'\r\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\r\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\r\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\r\nconst ES_ULTIMA = true\r\nconst salidas = []\r\nfor (const item of $input.all()) {\r\n  const e = item.json\r\n  const salida = { ...e, ampliacion: e.ampliacion ? { ...e.ampliacion } : { hecho: false, llamadas: [], gasto_usd: 0, parado: null } }\r\n  delete salida.acciones_pendientes\r\n  if (e.falla || !e.cliente) { salidas.push({ json: salida }); continue }\r\n  if (e.dry_run === true) { salida.ampliacion.nota = 'dry_run: no se llamó a ningún proveedor'; salidas.push({ json: salida }); continue }\r\n  let seguidasConFalla = e.ampliacion && e.ampliacion.seguidas_con_falla ? e.ampliacion.seguidas_con_falla : 0\r\n  const pendientes = []\r\n  const lista = Array.isArray(e.acciones_pendientes) ? e.acciones_pendientes : e.acciones || []\r\n  for (const a of lista) {\r\n    if (salida.ampliacion.parado) continue // dos fallas seguidas: se declara en parado, no se sigue\r\n    if (Date.now() - T0 > 60000) { pendientes.push(a); continue } // no cupo en este nodo: pasa al siguiente\r\n    const t0 = Date.now()\r\n    const r = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\r\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id } } })\r\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\r\n    const ll = { fuente: a.fuente, funcion: a.funcion, hecho: r.statusCode === 200 && b.ok === true, http: r.statusCode, ms: Date.now() - t0, apify_run_id: b.apify_run_id || null, usd_max: a.usd_max, medido: a.medido }\r\n    if (!ll.hecho) ll.error = String(b.error || b.message || b.validation_errors || '').slice(0, 160)\r\n    let costo = typeof a.usd_max === 'number' ? a.usd_max : 0 // sin dato real, se cuenta el MÁXIMO (nunca 0 para decir «no sé»)\r\n    if (ll.apify_run_id && $env.APIFY_API_TOKEN) {\r\n      const u = await http({ timeout: Math.min(15000, RESTA_MS()), url: 'https://api.apify.com/v2/actor-runs/' + ll.apify_run_id, method: 'GET', headers: { Authorization: 'Bearer ' + $env.APIFY_API_TOKEN } })\r\n      const d = u.body && u.body.data\r\n      if (d && d.usageTotalUsd !== undefined) { ll.costo_real_usd = Number(d.usageTotalUsd); costo = ll.costo_real_usd }\r\n    }\r\n    ll.costo_contado_usd = costo\r\n    salida.ampliacion.gasto_usd = Number((salida.ampliacion.gasto_usd + costo).toFixed(6))\r\n    salida.ampliacion.llamadas.push(ll)\r\n    seguidasConFalla = ll.hecho ? 0 : seguidasConFalla + 1\r\n    if (seguidasConFalla >= 2) { salida.ampliacion.parado = 'dos_fallas_seguidas'; break }\r\n  }\r\n  salida.ampliacion.seguidas_con_falla = seguidasConFalla\r\n  if (ES_ULTIMA) {\r\n    salida.ampliacion.omitidas_por_tiempo = pendientes.map((a) => a.fuente + ': ' + a.funcion) // se DICE lo que no cupo\r\n    delete salida.ampliacion.seguidas_con_falla\r\n  } else salida.acciones_pendientes = pendientes\r\n  salida.ampliacion.hecho = salida.ampliacion.llamadas.length > 0 && salida.ampliacion.llamadas.every((l) => l.hecho) && pendientes.length === 0\r\n  salidas.push({ json: salida })\r\n}\r\nreturn salidas\r\n"
+    }
+   },
+   {
+    "id": "c4957add-e8ec-4d1c-932d-3d5b30d0fd6b",
+    "name": "⑤ Cierre",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     3120,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ⑤ CIERRE · una línea por cliente: qué pidió el portero, qué leyó, qué archivó (suma / reemplaza / nada / duda), qué quedó en la biblioteca y qué costó. Un error se DICE.\nconst clientes = $input.all().map((i) => i.json).map((p) => {\n  const a = p.alimentada || {}\n  const res = (a.plan && a.plan.resumen) || {}\n  const q = p.puente_final || {}\n  return {\n    cliente: p.cliente || null,\n    plan_fallo: p.falla || null,\n    portero: p.portero || null,\n    ampliacion: p.ampliacion ? { hecho: p.ampliacion.hecho, gasto_usd: p.ampliacion.gasto_usd, parado: p.ampliacion.parado, llamadas: (p.ampliacion.llamadas || []).length } : null,\n    articulos: p.articulos ? { hecho: p.articulos.hecho, llamadas: (p.articulos.llamadas || []).length, gasto_usd: p.articulos.gasto_usd } : null,\n    tanda2: p.tanda2 ? { hecho: p.tanda2.hecho, llamadas: (p.tanda2.llamadas || []).map((l) => l.funcion), gasto_usd: p.tanda2.gasto_usd, revision: p.tanda2.revision, omitidas: (p.tanda2.omitidas || []).map((o) => o.fuente + ': ' + o.por_que) } : null,\n    omitidas_por_tiempo: [].concat((p.ampliacion && p.ampliacion.omitidas_por_tiempo) || [], (p.articulos && p.articulos.omitidas_por_tiempo) || [], (p.tanda2 && p.tanda2.omitidas_por_tiempo) || []),\n    alimentar: a.apagado ? 'apagado' : a.estado || (p.falla ? 'saltado' : 'sin_respuesta'),\n    suma: res.suma || 0, reemplaza: res.reemplaza || 0, nada: res.nada || 0, duda: res.duda || 0, sin_confirmar: res.sin_confirmar || 0,\n    modelo_usd: (a.gasto && a.gasto.modelo_usd) || 0,\n    puente: { quedan: typeof q.quedan === 'number' ? q.quedan : null, vueltas: (q.vueltas || []).length, falla: q.falla || q.lectura_fallida || null },\n    errores: [].concat(Array.isArray(a.errores) ? a.errores : []),\n    detalle: a.detalle || a.error || null,\n  }\n})\nconst e = $('⓪ Entrada').first().json\nconst malo = clientes.some((c) => c.plan_fallo || c.errores.length > 0 || c.puente.falla || (typeof c.puente.quedan === 'number' && c.puente.quedan > 0) || ['con_errores', 'lectura_fallida', 'sin_respuesta'].includes(c.alimentar))\nreturn [{ json: { fin: malo ? 'con_errores' : 'hecho', via: e.via, dry_run: e.dry_run, clientes } }]"
+    }
+   },
+   {
+    "id": "6f0a1c10-0001-4a00-8000-00000000d001",
+    "name": "① Descubrir (el portero que alimenta)",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     1040,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/descubrir",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, client_id: $json.cliente || '00000000-0000-4000-8000-000000000000', workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, forzar_posicion: $('⓪ Entrada').first().json.posicion_ahora === true }) }}",
+     "options": {
+      "timeout": 120000,
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "6f0a1c10-0002-4a00-8000-00000000d002",
+    "name": "① Plan unificado",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1300,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ① PLAN UNIFICADO · junta, por cliente, lo que el plan de hoy dijo (quién es cliente activo) con lo que dice el portero que alimenta (qué pedirle hoy a Apify: TODO diario, tope US$ 1,50).\n// 🔴 Si el portero está APAGADO (PORTERO_ALIMENTAR) la ruta contesta {apagado:true}: aquí no hay acciones y el flujo no pide nada nuevo. Un fallo se DICE; nunca se lee como «no hay nada».\nconst base = $('① Un elemento por cliente').all().map((i) => i.json)\nconst resp = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nreturn base.map((e, k) => {\n  const r = resp[k] || {}\n  if (e.falla || !e.cliente) return { json: { ...e, portero: { omitido: true } } }\n  if (r.apagado) return { json: { ...e, acciones: [], omitidas: [], no_cubiertas: [], portero: { apagado: true } } }\n  if (r.error || !r.plan) return { json: { ...e, acciones: [], falla: 'El portero no pudo armar el plan: ' + String(r.error || r.detalle || 'sin respuesta'), portero: { error: true } } }\n  return { json: { ...e, acciones: r.plan.hacer || [], omitidas: r.plan.omitidas || [], no_cubiertas: r.plan.no_cubiertas || [], gastado_hoy_usd: (r.gasto_de_hoy && r.gasto_de_hoy.total_usd) || 0,\n    portero: { tope_usd: r.tope_por_cliente_usd, costo_maximo_del_plan_usd: r.plan.costo_maximo_del_plan_usd, propuestas: (r.propuestas && r.propuestas.aceptadas) || [] } } }\n})"
+    }
+   },
+   {
+    "id": "6f0a1c10-0003-4a00-8000-00000000d003",
+    "name": "② bis Artículos (qué leer)",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     1560,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/descubrir",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, client_id: $json.cliente || '00000000-0000-4000-8000-000000000000', workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, fase: 'articulos' }) }}",
+     "options": {
+      "timeout": 120000,
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "6f0a1c10-0004-4a00-8000-00000000d004",
+    "name": "② bis Leer artículos (Servicio de Apify)",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1820,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ② bis · LEE las páginas que el portero eligió de la búsqueda de hoy (≤ 3, nunca el sitio propio ni redes). Misma regla que ②: con dry_run NO llama a nadie; una llamada por página, SIN reintento.\n// El Servicio guarda SOLO calling_workflow_id como llamado_por: la tanda lleva el sufijo «#articulo» para que el portero sepa que es una página de un tercero.\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\nconst previos = $('② Ampliar (Servicio de Apify)').all().map((i) => i.json)\nconst resp = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst salidas = []\nfor (let k = 0; k < previos.length; k++) {\n  const e = previos[k]\n  const r = resp[k] || {}\n  const salida = { ...e, articulos: { hecho: false, llamadas: [], gasto_usd: 0, omitidas: r.omitidas || [] } }\n  if (e.falla || !e.cliente || e.dry_run === true || r.apagado || !Array.isArray(r.acciones)) { salida.articulos.nota = e.dry_run === true ? 'dry_run: no se llamó a ningún proveedor' : 'sin páginas que leer'; salidas.push({ json: salida }); continue }\n  for (const a of r.acciones) {\n    if (Date.now() - T0 > 80000) { (salida.articulos.omitidas_por_tiempo = salida.articulos.omitidas_por_tiempo || []).push(a.funcion + (a.objetivo ? ' · ' + a.objetivo : '')); continue }\n    const t0 = Date.now()\n    const x = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero_articulo', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id + '#articulo' } } })\n    const b = x.body && typeof x.body === 'object' ? x.body : {}\n    const ok = x.statusCode === 200 && b.ok === true\n    salida.articulos.llamadas.push({ funcion: a.funcion, objetivo: a.objetivo, hecho: ok, http: x.statusCode, ms: Date.now() - t0, usd_max: a.usd_max })\n    salida.articulos.gasto_usd = Number((salida.articulos.gasto_usd + (typeof a.usd_max === 'number' ? a.usd_max : 0)).toFixed(6))\n  }\n  salida.articulos.hecho = salida.articulos.llamadas.length > 0 && salida.articulos.llamadas.every((l) => l.hecho)\n  // el gasto de las páginas se suma al de la ampliación para que `correr` lo compare con el tope\n  salida.ampliacion = { ...(e.ampliacion || {}), gasto_usd: Number((((e.ampliacion && e.ampliacion.gasto_usd) || 0) + salida.articulos.gasto_usd).toFixed(6)) }\n  salidas.push({ json: salida })\n}\nreturn salidas"
+    }
+   },
+   {
+    "id": "6f0a1c10-0006-4a00-8000-00000000d006",
+    "name": "② ter Reseñas y videos (qué pedir)",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     2080,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/descubrir",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, client_id: $json.cliente || '00000000-0000-4000-8000-000000000000', workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, fase: 'tanda2' }) }}",
+     "options": {
+      "timeout": 120000,
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "6f0a1c10-0007-4a00-8000-00000000d007",
+    "name": "② ter Leer reseñas y videos (Servicio de Apify)",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     2340,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ② ter · pide al Servicio lo que la tanda 1 hizo posible: las reseñas de la ficha CONFIRMADA de Mapas y los videos de Instagram solo si hubo publicaciones nuevas.\n// Misma regla que ②: con dry_run NO llama a nadie; una llamada por acción, SIN reintento. Sufijo «#tanda2» en calling_workflow_id.\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\nconst previos = $('② bis Leer artículos (Servicio de Apify)').all().map((i) => i.json)\nconst resp = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst salidas = []\nfor (let k = 0; k < previos.length; k++) {\n  const e = previos[k]\n  const r = resp[k] || {}\n  const salida = { ...e, tanda2: { hecho: false, llamadas: [], gasto_usd: 0, omitidas: r.omitidas || [], revision: r.revision_de_publicaciones || null } }\n  if (e.falla || !e.cliente || e.dry_run === true || r.apagado || !Array.isArray(r.acciones)) { salida.tanda2.nota = e.dry_run === true ? 'dry_run: no se llamó a ningún proveedor' : 'sin nada que pedir'; salidas.push({ json: salida }); continue }\n  for (const a of r.acciones) {\n    if (Date.now() - T0 > 80000) { (salida.tanda2.omitidas_por_tiempo = salida.tanda2.omitidas_por_tiempo || []).push(a.funcion + (a.objetivo ? ' · ' + a.objetivo : '')); continue }\n    const t0 = Date.now()\n    const x = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero_tanda2', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id + '#tanda2' } } })\n    const b = x.body && typeof x.body === 'object' ? x.body : {}\n    salida.tanda2.llamadas.push({ funcion: a.funcion, objetivo: a.objetivo, hecho: x.statusCode === 200 && b.ok === true, http: x.statusCode, ms: Date.now() - t0, usd_max: a.usd_max })\n    salida.tanda2.gasto_usd = Number((salida.tanda2.gasto_usd + (typeof a.usd_max === 'number' ? a.usd_max : 0)).toFixed(6))\n  }\n  salida.tanda2.hecho = salida.tanda2.llamadas.length > 0 && salida.tanda2.llamadas.every((l) => l.hecho)\n  salida.ampliacion = { ...(e.ampliacion || {}), gasto_usd: Number((((e.ampliacion && e.ampliacion.gasto_usd) || 0) + salida.tanda2.gasto_usd).toFixed(6)) }\n  salidas.push({ json: salida })\n}\nreturn salidas"
+    }
+   },
+   {
+    "id": "6f0a1c10-0005-4a00-8000-00000000d005",
+    "name": "④ Alimentar (filtrar · razonar · archivar)",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     2600,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/procesar",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ dry_run: $json.dry_run, client_id: $json.cliente || '00000000-0000-4000-8000-000000000000', workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, ...($('⓪ Entrada').first().json.reintento === true ? { forzar: true } : {}) }) }}",
+     "options": {
+      "timeout": 280000,
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "6f0a1c10-0008-4a00-8000-00000000d008",
+    "name": "④ bis Puente (repetir hasta terminar)",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     2860,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ④ bis · RECONCILIA el puente a la biblioteca por pasadas de ≤ 40 trozos hasta que no quede nada (idempotente). Con dry_run solo cuenta (una llamada).\n// Una falla se DICE; nunca se lee como «no queda nada». No llama a Apify ni a ningún modelo.\nconst ORIGEN = 'https://zero-risk-platform.vercel.app'\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 130000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\nconst previos = $('② ter Leer reseñas y videos (Servicio de Apify)').all().map((i) => i.json)\nconst alimentadas = $input.all().map((i) => { const r = i.json || {}; return r.body ? r.body : r })\nconst salidas = []\nfor (let k = 0; k < previos.length; k++) {\n  const e = previos[k]\n  const a = alimentadas[k] || {}\n  const salida = { ...e, alimentada: a, puente_final: null }\n  if (e.falla || !e.cliente || a.apagado) { salidas.push({ json: salida }); continue }\n  let p = a.puente || null\n  const vueltas = []\n  for (let v = 0; v < 12 && Date.now() - T0 < 80000 && p && typeof p.quedan === 'number' && p.quedan > 0 && e.dry_run !== true; v++) {\n    const r = await http({ timeout: RESTA_MS(), url: ORIGEN + '/api/brain/alimentar/puente', method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': $env.INTERNAL_API_KEY },\n      body: { client_id: e.cliente, dry_run: false, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id } })\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\n    vueltas.push({ http: r.statusCode, quedan: b.puente && b.puente.quedan, errores: b.errores || [] })\n    if (r.statusCode !== 200 || !b.puente) { p = { ...(p || {}), falla: 'el puente respondió ' + r.statusCode }; break }\n    p = b.puente\n  }\n  salida.puente_final = p ? { ...p, vueltas } : null\n  salidas.push({ json: salida })\n}\nreturn salidas"
+    }
+   },
+   {
+    "id": "vigilante-6",
+    "name": "⑥ Vigilar (apaga y avisa si algo falla)",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+     3380,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/vigilar",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ dry_run: $('⓪ Entrada').first().json.dry_run !== false, workflow_id: $('⓪ Entrada').first().json.workflow_id, workflow_execution_id: $('⓪ Entrada').first().json.workflow_execution_id, cierre: $json, ...($('⓪ Entrada').first().json.client_id ? { client_id: $('⓪ Entrada').first().json.client_id } : {}) }) }}",
+     "options": {
+      "timeout": 300000
+     }
+    }
+   },
+   {
+    "id": "c0de0000-d35e-4a00-8000-000000000001",
+    "name": "Webhook · completar despertar (llave interna)",
+    "webhookId": "cerebro-completar-despertar-0001",
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 2,
+    "position": [
+     0,
+     120
+    ],
+    "parameters": {
+     "httpMethod": "POST",
+     "path": "zero-risk/cerebro-completar-despertar",
+     "responseMode": "onReceived",
+     "options": {}
+    }
+   },
+   {
+    "id": "00303605-a2e8-467a-ba0f-47d87a4a7001",
+    "name": "② Ampliar (tanda 1)",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1120,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ② LA AMPLIACIÓN (paso 1, lo que el flujo de la mañana NO cubre) · ejecuta SOLO lo que la ruta `plan` dejó en `acciones` de CADA cliente (ya recortado al tope de US$ 1,00 por cliente y día).\r\n// 🔴 Con `dry_run` NO llama a nadie. 🔴 Una llamada al Servicio por acción, SIN reintento (cada una paga). 🔴 Dos fallas seguidas por cliente ⇒ para a ese cliente. Este nodo NO lee ninguna tabla: lo decide la ruta.\r\n// El Servicio guarda lo crudo en `apify_raw` (destino `respuesta`); lo que cuesta se mide con la API de Apify y se informa a `correr`, que lo compara con el tope.\r\n// Procesa TODOS los elementos (uno por cliente), en orden, y devuelve uno por cliente.\r\nconst N8N = 'https://n8n-production-72be.up.railway.app'\r\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\r\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\r\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\r\nconst ES_ULTIMA = false\r\nconst salidas = []\r\nfor (const item of $input.all()) {\r\n  const e = item.json\r\n  const salida = { ...e, ampliacion: e.ampliacion ? { ...e.ampliacion } : { hecho: false, llamadas: [], gasto_usd: 0, parado: null } }\r\n  delete salida.acciones_pendientes\r\n  if (e.falla || !e.cliente) { salidas.push({ json: salida }); continue }\r\n  if (e.dry_run === true) { salida.ampliacion.nota = 'dry_run: no se llamó a ningún proveedor'; salidas.push({ json: salida }); continue }\r\n  let seguidasConFalla = e.ampliacion && e.ampliacion.seguidas_con_falla ? e.ampliacion.seguidas_con_falla : 0\r\n  const pendientes = []\r\n  const lista = Array.isArray(e.acciones_pendientes) ? e.acciones_pendientes : e.acciones || []\r\n  for (const a of lista) {\r\n    if (salida.ampliacion.parado) continue // dos fallas seguidas: se declara en parado, no se sigue\r\n    if (Date.now() - T0 > 60000) { pendientes.push(a); continue } // no cupo en este nodo: pasa al siguiente\r\n    const t0 = Date.now()\r\n    const r = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\r\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id } } })\r\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\r\n    const ll = { fuente: a.fuente, funcion: a.funcion, hecho: r.statusCode === 200 && b.ok === true, http: r.statusCode, ms: Date.now() - t0, apify_run_id: b.apify_run_id || null, usd_max: a.usd_max, medido: a.medido }\r\n    if (!ll.hecho) ll.error = String(b.error || b.message || b.validation_errors || '').slice(0, 160)\r\n    let costo = typeof a.usd_max === 'number' ? a.usd_max : 0 // sin dato real, se cuenta el MÁXIMO (nunca 0 para decir «no sé»)\r\n    if (ll.apify_run_id && $env.APIFY_API_TOKEN) {\r\n      const u = await http({ timeout: Math.min(15000, RESTA_MS()), url: 'https://api.apify.com/v2/actor-runs/' + ll.apify_run_id, method: 'GET', headers: { Authorization: 'Bearer ' + $env.APIFY_API_TOKEN } })\r\n      const d = u.body && u.body.data\r\n      if (d && d.usageTotalUsd !== undefined) { ll.costo_real_usd = Number(d.usageTotalUsd); costo = ll.costo_real_usd }\r\n    }\r\n    ll.costo_contado_usd = costo\r\n    salida.ampliacion.gasto_usd = Number((salida.ampliacion.gasto_usd + costo).toFixed(6))\r\n    salida.ampliacion.llamadas.push(ll)\r\n    seguidasConFalla = ll.hecho ? 0 : seguidasConFalla + 1\r\n    if (seguidasConFalla >= 2) { salida.ampliacion.parado = 'dos_fallas_seguidas'; break }\r\n  }\r\n  salida.ampliacion.seguidas_con_falla = seguidasConFalla\r\n  if (ES_ULTIMA) {\r\n    salida.ampliacion.omitidas_por_tiempo = pendientes.map((a) => a.fuente + ': ' + a.funcion) // se DICE lo que no cupo\r\n    delete salida.ampliacion.seguidas_con_falla\r\n  } else salida.acciones_pendientes = pendientes\r\n  salida.ampliacion.hecho = salida.ampliacion.llamadas.length > 0 && salida.ampliacion.llamadas.every((l) => l.hecho) && pendientes.length === 0\r\n  salidas.push({ json: salida })\r\n}\r\nreturn salidas\r\n"
+    }
+   },
+   {
+    "id": "00303605-a2e8-467a-ba0f-47d87a4a7002",
+    "name": "② Ampliar (tanda 2)",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1340,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ② LA AMPLIACIÓN (paso 1, lo que el flujo de la mañana NO cubre) · ejecuta SOLO lo que la ruta `plan` dejó en `acciones` de CADA cliente (ya recortado al tope de US$ 1,00 por cliente y día).\r\n// 🔴 Con `dry_run` NO llama a nadie. 🔴 Una llamada al Servicio por acción, SIN reintento (cada una paga). 🔴 Dos fallas seguidas por cliente ⇒ para a ese cliente. Este nodo NO lee ninguna tabla: lo decide la ruta.\r\n// El Servicio guarda lo crudo en `apify_raw` (destino `respuesta`); lo que cuesta se mide con la API de Apify y se informa a `correr`, que lo compara con el tope.\r\n// Procesa TODOS los elementos (uno por cliente), en orden, y devuelve uno por cliente.\r\nconst N8N = 'https://n8n-production-72be.up.railway.app'\r\nconst http = async (o) => this.helpers.httpRequest({ json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 140000, ...o }).catch((err) => ({ statusCode: 0, body: { error: 'sin respuesta: ' + String((err && err.message) || err).slice(0, 140) } }))\r\nconst T0 = Date.now() // presupuesto de tiempo: n8n corta la tarea de código a los 120 s\r\nconst RESTA_MS = () => Math.max(5000, 112000 - (Date.now() - T0))\r\nconst ES_ULTIMA = false\r\nconst salidas = []\r\nfor (const item of $input.all()) {\r\n  const e = item.json\r\n  const salida = { ...e, ampliacion: e.ampliacion ? { ...e.ampliacion } : { hecho: false, llamadas: [], gasto_usd: 0, parado: null } }\r\n  delete salida.acciones_pendientes\r\n  if (e.falla || !e.cliente) { salidas.push({ json: salida }); continue }\r\n  if (e.dry_run === true) { salida.ampliacion.nota = 'dry_run: no se llamó a ningún proveedor'; salidas.push({ json: salida }); continue }\r\n  let seguidasConFalla = e.ampliacion && e.ampliacion.seguidas_con_falla ? e.ampliacion.seguidas_con_falla : 0\r\n  const pendientes = []\r\n  const lista = Array.isArray(e.acciones_pendientes) ? e.acciones_pendientes : e.acciones || []\r\n  for (const a of lista) {\r\n    if (salida.ampliacion.parado) continue // dos fallas seguidas: se declara en parado, no se sigue\r\n    if (Date.now() - T0 > 60000) { pendientes.push(a); continue } // no cupo en este nodo: pasa al siguiente\r\n    const t0 = Date.now()\r\n    const r = await http({ timeout: RESTA_MS(), url: N8N + '/webhook/apify-service-workflow', method: 'POST', headers: { 'Content-Type': 'application/json' },\r\n      body: { client_id: e.cliente, apify_function: a.funcion, params: a.params, destination: 'respuesta', dry_run: false, origen: 'portero', metadata: { ...(a.metadata || {}), calling_workflow_id: e.workflow_id } } })\r\n    const b = r.body && typeof r.body === 'object' ? r.body : {}\r\n    const ll = { fuente: a.fuente, funcion: a.funcion, hecho: r.statusCode === 200 && b.ok === true, http: r.statusCode, ms: Date.now() - t0, apify_run_id: b.apify_run_id || null, usd_max: a.usd_max, medido: a.medido }\r\n    if (!ll.hecho) ll.error = String(b.error || b.message || b.validation_errors || '').slice(0, 160)\r\n    let costo = typeof a.usd_max === 'number' ? a.usd_max : 0 // sin dato real, se cuenta el MÁXIMO (nunca 0 para decir «no sé»)\r\n    if (ll.apify_run_id && $env.APIFY_API_TOKEN) {\r\n      const u = await http({ timeout: Math.min(15000, RESTA_MS()), url: 'https://api.apify.com/v2/actor-runs/' + ll.apify_run_id, method: 'GET', headers: { Authorization: 'Bearer ' + $env.APIFY_API_TOKEN } })\r\n      const d = u.body && u.body.data\r\n      if (d && d.usageTotalUsd !== undefined) { ll.costo_real_usd = Number(d.usageTotalUsd); costo = ll.costo_real_usd }\r\n    }\r\n    ll.costo_contado_usd = costo\r\n    salida.ampliacion.gasto_usd = Number((salida.ampliacion.gasto_usd + costo).toFixed(6))\r\n    salida.ampliacion.llamadas.push(ll)\r\n    seguidasConFalla = ll.hecho ? 0 : seguidasConFalla + 1\r\n    if (seguidasConFalla >= 2) { salida.ampliacion.parado = 'dos_fallas_seguidas'; break }\r\n  }\r\n  salida.ampliacion.seguidas_con_falla = seguidasConFalla\r\n  if (ES_ULTIMA) {\r\n    salida.ampliacion.omitidas_por_tiempo = pendientes.map((a) => a.fuente + ': ' + a.funcion) // se DICE lo que no cupo\r\n    delete salida.ampliacion.seguidas_con_falla\r\n  } else salida.acciones_pendientes = pendientes\r\n  salida.ampliacion.hecho = salida.ampliacion.llamadas.length > 0 && salida.ampliacion.llamadas.every((l) => l.hecho) && pendientes.length === 0\r\n  salidas.push({ json: salida })\r\n}\r\nreturn salidas\r\n"
+    }
+   },
+   {
+    "id": "9c1f0b52-6d7e-4b6a-9a5e-3f0c2a7d1e44",
+    "name": "Webhook · un cliente (llave interna)",
+    "webhookId": "5d2a8e71-0c43-4f9b-8b1d-6e7a9c3b2f10",
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 2,
+    "position": [
+     0,
+     300
+    ],
+    "parameters": {
+     "httpMethod": "POST",
+     "path": "zero-risk/cerebro-diario-un-cliente",
+     "responseMode": "onReceived",
+     "options": {}
+    }
+   },
+   {
+    "id": "7a3e5b90-2c81-4d6f-a0e2-1b9d4c8f6a35",
+    "name": "① Repartir (una ejecución por cliente)",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     1000,
+     180
+    ],
+    "parameters": {
+     "jsCode": "// ① REPARTIR · en la ejecución del HORARIO cada cliente se corre en SU PROPIA ejecución (webhook «un cliente», llave interna). El límite de 120 s por nodo es por ejecución:\n// así ninguna fuente de un cliente se recorta por el tiempo de otro. En cualquier otra entrada (a mano, despertar, un cliente) los elementos pasan SIN cambio.\n// Si el plan falló o no hay clientes, pasa sin cambio (el cierre y el vigilante de ESTA ejecución lo dicen). Un reparto que falla NO pierde al cliente: se corre aquí mismo.\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst T0 = Date.now()\nconst entrada = $('⓪ Entrada').first().json\nconst items = $input.all()\nif (!entrada || entrada.via !== 'horario' || entrada.dry_run === true) return items\nconst clientes = items.filter((i) => i.json && i.json.cliente && !i.json.falla)\nif (!clientes.length || clientes.length !== items.length) return items\nconst fallidos = []\nconst repartidos = []\nfor (let k = 0; k < clientes.length; k++) {\n  const it = clientes[k]\n  if (k > 0 && Date.now() - T0 < 90000) await new Promise((r) => setTimeout(r, 1000))\n  try {\n    const r = await this.helpers.httpRequest({ url: N8N + '/webhook/zero-risk/cerebro-diario-un-cliente', method: 'POST', json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 20000, headers: { 'Content-Type': 'application/json', 'x-api-key': $env.INTERNAL_API_KEY }, body: { client_id: it.json.cliente, origen_del_reparto: String(entrada.workflow_execution_id) } })\n    if (r.statusCode === 200) repartidos.push(it.json.cliente)\n    else fallidos.push(it)\n  } catch (err) { fallidos.push(it) }\n}\nreturn fallidos"
+    }
+   },
+   {
+    "id": "2e8c4a17-9b30-4f5d-8c6a-0d1f7b3e9a52",
+    "name": "⑦ Reintento (misma mañana)",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     3600,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ⑦ REINTENTO (la misma mañana) · si en la corrida de este cliente algo quedó omitido por tiempo, se pide UNA vez más (reintento:true ⇒ `forzar`): nunca más de una, nunca si el vigilante habló,\n// nunca en una entrada a mano o en seco. Lo omitido hoy debe quedar en 0 en el caso normal; esto es la red.\nconst N8N = 'https://n8n-production-72be.up.railway.app'\nconst e = $('⓪ Entrada').first().json\nconst v = $input.first().json || {}\nconst vb = v.body ? v.body : v\nconst cierre = $('⑤ Cierre').first().json\nconst con = ((cierre && cierre.clientes) || []).filter((c) => c.cliente && Array.isArray(c.omitidas_por_tiempo) && c.omitidas_por_tiempo.length > 0)\nconst motivo = e.reintento === true ? 'ya es un reintento' : e.dry_run !== false ? 'en seco' : vb.ok === false ? 'el vigilante habló' : !['horario', 'cliente'].includes(e.via) ? 'entrada a mano o despertar' : !con.length ? 'nada omitido' : null\nif (motivo) return [{ json: { reintento: false, motivo } }]\nawait new Promise((r) => setTimeout(r, 20000))\nconst lanzados = []\nfor (const c of con) {\n  try {\n    const r = await this.helpers.httpRequest({ url: N8N + '/webhook/zero-risk/cerebro-diario-un-cliente', method: 'POST', json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 20000, headers: { 'Content-Type': 'application/json', 'x-api-key': $env.INTERNAL_API_KEY }, body: { client_id: c.cliente, reintento: true } })\n    lanzados.push({ cliente: c.cliente, http: r.statusCode, omitidas: c.omitidas_por_tiempo })\n  } catch (err) { lanzados.push({ cliente: c.cliente, http: 0, error: String((err && err.message) || err).slice(0, 120) }) }\n}\nreturn [{ json: { reintento: true, lanzados } }]"
+    }
+   },
+   {
+    "id": "012af67d-350c-4032-aa4f-e4bd8ada70af",
+    "name": "⑧ Quién se pule (después del cierre)",
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     3860,
+     0
+    ],
+    "parameters": {
+     "jsCode": "// ⑧ QUIÉN SE PULE · el pulido del resumen vivo va en su propio paso, DESPUÉS del cierre y del vigilante (nunca dentro de ④). Solo clientes cuyo guardado quedó «hecha» y que el vigilante no pausó; nunca en seco.\nconst e = $('⓪ Entrada').first().json\nif (e.dry_run !== false) return []\nconst cierre = $('⑤ Cierre').first().json\nlet v = {}\ntry { v = $('⑥ Vigilar (apaga y avisa si algo falla)').first().json || {} } catch (err) { v = {} }\nconst vb = v.body ? v.body : v\nconst pausados = new Set(((vb && vb.pausados) || []).map((p) => p.client_id))\nreturn ((cierre && cierre.clientes) || []).filter((c) => c.cliente && c.alimentar === 'hecha' && !c.plan_fallo && !pausados.has(c.cliente)).map((c) => ({ json: { cliente: c.cliente, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id } }))"
+    }
+   },
+   {
+    "id": "afbfcbc7-c502-4569-84b4-639931dc3abe",
+    "name": "⑧ bis Pulir el resumen vivo (aparte)",
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "onError": "continueRegularOutput",
+    "position": [
+     4120,
+     0
+    ],
+    "parameters": {
+     "method": "POST",
+     "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/pulir",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "name": "x-api-key",
+        "value": "={{ $env.INTERNAL_API_KEY }}"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ dry_run: false, client_id: $json.cliente, workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id }) }}",
+     "options": {
+      "timeout": 290000,
+      "response": {
+       "response": {
+        "neverError": true
+       }
+      }
+     }
+    }
+   }
+  ],
+  "connections": {
+   "Webhook · a mano (con llave)": {
+    "main": [
+     [
+      {
+       "node": "⓪ Entrada",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Horario diario 08:30 (hora de n8n)": {
+    "main": [
+     [
+      {
+       "node": "⓪ Entrada",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⓪ Entrada": {
+    "main": [
+     [
+      {
+       "node": "① Clientes activos",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "① Un elemento por cliente": {
+    "main": [
+     [
+      {
+       "node": "① Repartir (una ejecución por cliente)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② Ampliar (Servicio de Apify)": {
+    "main": [
+     [
+      {
+       "node": "② bis Artículos (qué leer)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "① Descubrir (el portero que alimenta)": {
+    "main": [
+     [
+      {
+       "node": "① Plan unificado",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "① Plan unificado": {
+    "main": [
+     [
+      {
+       "node": "② Ampliar (tanda 1)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② bis Artículos (qué leer)": {
+    "main": [
+     [
+      {
+       "node": "② bis Leer artículos (Servicio de Apify)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② bis Leer artículos (Servicio de Apify)": {
+    "main": [
+     [
+      {
+       "node": "② ter Reseñas y videos (qué pedir)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② ter Reseñas y videos (qué pedir)": {
+    "main": [
+     [
+      {
+       "node": "② ter Leer reseñas y videos (Servicio de Apify)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② ter Leer reseñas y videos (Servicio de Apify)": {
+    "main": [
+     [
+      {
+       "node": "④ Alimentar (filtrar · razonar · archivar)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "④ Alimentar (filtrar · razonar · archivar)": {
+    "main": [
+     [
+      {
+       "node": "④ bis Puente (repetir hasta terminar)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "④ bis Puente (repetir hasta terminar)": {
+    "main": [
+     [
+      {
+       "node": "⑤ Cierre",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "① Clientes activos": {
+    "main": [
+     [
+      {
+       "node": "① Un elemento por cliente",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⑤ Cierre": {
+    "main": [
+     [
+      {
+       "node": "⑥ Vigilar (apaga y avisa si algo falla)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Webhook · completar despertar (llave interna)": {
+    "main": [
+     [
+      {
+       "node": "⓪ Entrada",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② Ampliar (tanda 1)": {
+    "main": [
+     [
+      {
+       "node": "② Ampliar (tanda 2)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "② Ampliar (tanda 2)": {
+    "main": [
+     [
+      {
+       "node": "② Ampliar (Servicio de Apify)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Webhook · un cliente (llave interna)": {
+    "main": [
+     [
+      {
+       "node": "⓪ Entrada",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "① Repartir (una ejecución por cliente)": {
+    "main": [
+     [
+      {
+       "node": "① Descubrir (el portero que alimenta)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⑥ Vigilar (apaga y avisa si algo falla)": {
+    "main": [
+     [
+      {
+       "node": "⑦ Reintento (misma mañana)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⑦ Reintento (misma mañana)": {
+    "main": [
+     [
+      {
+       "node": "⑧ Quién se pule (después del cierre)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "⑧ Quién se pule (después del cierre)": {
+    "main": [
+     [
+      {
+       "node": "⑧ bis Pulir el resumen vivo (aparte)",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   }
+  },
+  "nodeGroups": [],
+  "authors": "Emilio  Perez ",
+  "name": null,
+  "description": null,
+  "autosaved": false,
+  "createdAt": "2026-10-16T16:31:35.171Z",
+  "updatedAt": "2026-10-16T16:31:35.171Z",
+  "workflowPublishHistory": [
+   {
+    "id": 2724,
+    "workflowId": "ogfq56oIEoHufFPM",
+    "versionId": "5fbcf758-2c25-479f-ad8c-db7aa47fd742",
+    "event": "activated",
+    "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-10-16T16:31:35.320Z"
+   },
+   {
+    "id": 2725,
+    "workflowId": "ogfq56oIEoHufFPM",
+    "versionId": "5fbcf758-2c25-479f-ad8c-db7aa47fd742",
+    "event": "deactivated",
+    "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-10-16T16:31:35.449Z"
+   },
+   {
+    "id": 2726,
+    "workflowId": "ogfq56oIEoHufFPM",
+    "versionId": "5fbcf758-2c25-479f-ad8c-db7aa47fd742",
+    "event": "activated",
+    "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+    "createdAt": "2026-10-16T16:31:35.658Z"
+   }
+  ]
+ },
+ "parentFolder": null
+}
