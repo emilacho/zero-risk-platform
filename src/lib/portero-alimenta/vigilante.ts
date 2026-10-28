@@ -19,6 +19,8 @@ import { clientesActivos } from './clientes'
 import { leerTodas } from './paginar'
 import { auditarCliente, auditarCitasDelResumen, type ResultadoDeAuditoria } from './auditoria'
 import { UMBRALES_DE_GASTO_POR_OMISION, type UmbralesDeGasto } from './datos'
+import { anomaliaDelCliente, ANOMALIA_POR_OMISION, type UmbralesDeAnomalia } from './anomalia'
+import { eldineroFrena, type ModoDelPortero } from './modo'
 import { gastoDeHoy, reconciliarYEnviar, type DepsDeRutas, type Respuesta } from './rutas'
 
 /** el umbral de APAGADO por omisión (el real es dato: `deps.umbrales`) */
@@ -44,6 +46,10 @@ export interface DepsDelVigilante extends DepsDeRutas {
   esperar?: (ms: number) => Promise<void>
   /** umbrales de gasto (aviso / apagado); por omisión `UMBRALES_DE_GASTO_POR_OMISION` */
   umbrales?: UmbralesDeGasto
+  /** el modo (28-oct): en construcción el umbral de apagado es SOLO aviso y el freno es ante anomalía; ausente o campaña = como siempre (apaga > umbral) */
+  modo?: ModoDelPortero
+  /** umbrales del freno ante anomalía (solo construcción) */
+  anomalia?: UmbralesDeAnomalia
 }
 
 /** cuánto se espera antes de repetir la comprobación fallida (dentro de la misma ejecución) */
@@ -105,8 +111,17 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
   else {
     r.gasto_usd = redondeo(g.gasto.total_usd)
     const u = deps.umbrales ?? UMBRALES_DE_GASTO_POR_OMISION
-    if (g.gasto.total_usd > u.apagar_usd) r.problemas.push(`gasto del día US$ ${r.gasto_usd.toFixed(2)} > ${u.apagar_usd.toFixed(2)}`)
+    const enConstruccion = deps.modo !== undefined && !eldineroFrena(deps.modo)
+    if (g.gasto.total_usd > u.apagar_usd && !enConstruccion) r.problemas.push(`gasto del día US$ ${r.gasto_usd.toFixed(2)} > ${u.apagar_usd.toFixed(2)}`)
+    else if (g.gasto.total_usd > u.apagar_usd) r.avisos = [...(r.avisos ?? []), `el gasto del día va en US$ ${r.gasto_usd.toFixed(2)}, por encima de ${u.apagar_usd.toFixed(2)}: en construcción solo se avisa, el portero sigue (solo se pausa ante una anomalía)`]
     else if (g.gasto.total_usd > u.aviso_usd) r.avisos = [...(r.avisos ?? []), `el gasto del día va en US$ ${r.gasto_usd.toFixed(2)} (aviso desde ${u.aviso_usd.toFixed(2)}; el portero se apaga solo pasando de ${u.apagar_usd.toFixed(2)})`]
+  }
+
+  // el freno ANTE ANOMALÍA (solo construcción): un error, no el ahorro. Pausa solo a este cliente (P2) y el aviso dice qué lo disparó y cómo reanudar
+  if (g !== null && deps.modo !== undefined && !eldineroFrena(deps.modo)) {
+    const an = await anomaliaDelCliente(deps.db, c.client_id, ahora, deps.anomalia ?? ANOMALIA_POR_OMISION)
+    if (!an.ok) falla('la anomalía de la última hora', an.detalle)
+    else if (an.anomalia) r.problemas.push(`anomalía: ${an.anomalia.motivo}`)
   }
 
   const dia0 = new Date(ahora); dia0.setUTCHours(0, 0, 0, 0)

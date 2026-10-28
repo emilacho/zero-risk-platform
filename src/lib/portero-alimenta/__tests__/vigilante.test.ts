@@ -320,3 +320,35 @@ describe('el flujo trae el vigilante al final y nada más cambia', () => {
     expect(() => conVigilante(despues)).toThrow(/ya está/)
   })
 })
+
+describe('en construcción el gasto normal no apaga; solo una anomalía pausa al cliente (28-oct · Emilio)', () => {
+  const gasto = (usd: number) => ({ service: 'apify:instagram', amount_usd: usd, created_at: '2026-10-14T10:00:00Z', description: JSON.stringify({ es: 'detalle_de_llamada', client_id: C }) })
+  const repetida = (i: number) => ({ id: `ar${i}`, client_id: C, ensayo: false, apify_function: 'instagram_scraper', params: { directUrls: ['https://www.instagram.com/x/'], resultsLimit: 12 }, created_at: '2026-10-14T12:30:00Z' })
+  it('gasto por encima del umbral de apagado: en construcción SOLO aviso (no se pausa ni se apaga); en campaña apaga como siempre', async () => {
+    const a = montar(sana({ costs: [gasto(3.4)] }))
+    const ra = await rutaVigilar({ ...a.deps(), modo: 'construccion' }, { ...REAL, cierre: CIERRE_BUENO })
+    expect(ra.body.ok).toBe(true); expect(a.apagados).toEqual([]); expect(a.avisos).toHaveLength(1)
+    expect(a.avisos[0]).toMatch(/en construcción solo se avisa/)
+    const b = montar(sana({ costs: [gasto(3.4)] }))
+    const rb = await rutaVigilar({ ...b.deps(), modo: 'campana' }, { ...REAL, cierre: CIERRE_BUENO })
+    expect(rb.body.ok).toBe(false); expect(rb.body.pausados ?? rb.body.apagado).toBeTruthy()
+  })
+  it('la misma llamada repetida 8 veces en una hora: PAUSA solo a ese cliente y avisa UNA vez con cómo reanudar (construcción)', async () => {
+    const m = montar(sana({ apify_raw: Array.from({ length: 8 }, (_, i) => repetida(i)) }))
+    const r = await rutaVigilar({ ...m.deps(), modo: 'construccion' }, { ...REAL, cierre: CIERRE_BUENO })
+    expect(r.body.ok).toBe(false); expect(m.apagados).toEqual([])
+    expect(m.avisos).toHaveLength(1); expect(m.avisos[0]).toMatch(/anomalía: la misma llamada a Apify \(instagram_scraper/); expect(m.avisos[0]).toMatch(/reanudar/)
+    expect(r.body.pausados).toEqual([expect.objectContaining({ client_id: C, ya_estaba: false })])
+  })
+  it('7 llamadas iguales NO son anomalía; en campaña ni se mira', async () => {
+    const siete = montar(sana({ apify_raw: Array.from({ length: 7 }, (_, i) => repetida(i)) }))
+    expect((await rutaVigilar({ ...siete.deps(), modo: 'construccion' }, { ...REAL, cierre: CIERRE_BUENO })).body.ok).toBe(true)
+    const ocho = montar(sana({ apify_raw: Array.from({ length: 8 }, (_, i) => repetida(i)) }))
+    expect((await rutaVigilar({ ...ocho.deps(), modo: 'campana' }, { ...REAL, cierre: CIERRE_BUENO })).body.ok).toBe(true)
+  })
+  it('más de US$ 10 en la última hora (modelo) es anomalía de gasto', async () => {
+    const m = montar(sana({ agent_invocations: [{ client_id: C, agent_name: 'x', workflow_id: 'otro', cost_usd: 11, created_at: '2026-10-14T12:40:00Z' }] }))
+    const r = await rutaVigilar({ ...m.deps(), modo: 'construccion' }, { ...REAL, cierre: CIERRE_BUENO })
+    expect(r.body.ok).toBe(false); expect(m.avisos[0]).toMatch(/anomalía: US\$ 11\.00 en la última hora/)
+  })
+})
