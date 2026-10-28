@@ -17,6 +17,30 @@
     {
       "path": "/api/brain/portero/etiquetar-pendientes",
       "schedule": "30 14 * * *"
+    },
+    {
+      "path": "/api/brain/alimentar/no-corrio",
+      "schedule": "15 20 * * *"
+    },
+    {
+      "path": "/api/brain/alimentar/no-corrio?repaso=1",
+      "schedule": "45 20 * * *"
+    },
+    {
+      "path": "/api/brain/alimentar/no-corrio",
+      "schedule": "15 2 * * *"
+    },
+    {
+      "path": "/api/brain/alimentar/no-corrio?repaso=1",
+      "schedule": "45 2 * * *"
+    },
+    {
+      "path": "/api/brain/portero/etiquetar-pendientes",
+      "schedule": "30 20 * * *"
+    },
+    {
+      "path": "/api/brain/portero/etiquetar-pendientes",
+      "schedule": "30 2 * * *"
     }
   ]
 }

@@ -26,13 +26,31 @@ beforeEach(() => {
     client_historical_outputs: [{ id: 'pl', client_id: C, output_type: 'campaign_plan_90d', provenance_tag: {} }],
     cerebro_portero_corridas: [], // nunca corrió ⇒ habría aviso
   } as never)
+  // el cron actúa en la ventana de una corrida del modo (28-oct): 14:15 UTC = 1 h 45 min después de la de las 12:30
+  vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-28T14:15:00Z'))
   vi.stubEnv('CRON_SECRET', SECRETO)
   vi.stubEnv('INTERNAL_API_KEY', LLAVE)
   vi.stubEnv('PORTERO_ALIMENTAR', 'on')
   vi.stubEnv('N8N_BASE_URL', 'http://n8n.prueba')
   vi.stubGlobal('fetch', async () => new Response('ok', { status: 200 })) // n8n contesta: esta prueba no mide ese chequeo
 })
-afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.useRealTimers() })
+
+describe('el cron revisa solo la ventana de una corrida del modo (28-oct)', () => {
+  it('a las 16:00 UTC no toca revisar nada: calla (200, nada_que_revisar) y no avisa', async () => {
+    vi.setSystemTime(new Date('2026-10-28T16:00:00Z'))
+    const r = await GET(new Request(URL_, { headers: { authorization: `Bearer ${SECRETO}` } }))
+    expect(r.status).toBe(200); expect(await r.json()).toMatchObject({ nada_que_revisar: true, modo: 'construccion' }); expect(mensajes).toEqual([])
+  })
+  it('en campaña a las 20:15 UTC (la corrida de las 18:30 no existe) calla; en construcción sí revisa', async () => {
+    vi.setSystemTime(new Date('2026-10-28T20:15:00Z'))
+    vi.stubEnv('PORTERO_MODO', 'campana')
+    expect(await (await GET(new Request(URL_, { headers: { authorization: `Bearer ${SECRETO}` } }))).json()).toMatchObject({ nada_que_revisar: true, modo: 'campana' })
+    vi.stubEnv('PORTERO_MODO', 'construccion')
+    const r = await (await GET(new Request(URL_, { headers: { authorization: `Bearer ${SECRETO}` } }))).json()
+    expect(r.nada_que_revisar).toBeUndefined(); expect(r.ok).toBe(false)
+  })
+})
 
 describe('puertas', () => {
   it('el secreto del cron correcto entra; uno equivocado del mismo largo no; sin nada, no', async () => {
