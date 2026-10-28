@@ -205,10 +205,10 @@ describe('turno · entrada, pedido, aceptación y vuelta', () => {
     const e = { llave, encargo_id: ENC, turno: { n: 2 }, dry_run: false }
     const f = (input: unknown, ent = e) => json(ejecutar('turno-n3p-portero.js', { input: [input], nodos: { '⓪ Entrada · llave': [ent] } }))[0].resultado_body
     expect(f({}, { ...e, dry_run: true })).toMatchObject({ n: 2, texto: expect.stringMatching(/simulado/), costo_usd: 0 })
-    expect(f({ error: { message: 'timeout' } }).error).toMatch(/no respondió/)
-    expect(f({ rechazo: { status: 401 } }).error).toMatch(/rechazó/)
-    expect(f({}).error).toMatch(/vacío/)
-    expect(f({ lista: [1, 2], costo_usd: 0.02 })).toMatchObject({ texto: '{"lista":[1,2],"costo_usd":0.02}', costo_usd: 0.02 })
+    expect(f({ error: { message: 'timeout' } }).error).toMatch(/PORTERO_NO_RESPONDE/)
+    expect(f({ rechazo: { status: 401 } }).error).toMatch(/PORTERO_NO_RESPONDE/)
+    expect(f({}).error).toMatch(/PORTERO_NO_RESPONDE/)
+    expect(f({ cliente: 'c', modo: 'conversado', estado: 'ok', lista: [1, 2], costo_usd: 0.02 })).toMatchObject({ texto: '{"cliente":"c","modo":"conversado","estado":"ok","lista":[1,2],"costo_usd":0.02}', costo_usd: 0.02 })
   })
   it('③ ¿y ahora? esperar ⇒ despierta el siguiente paso; cerrado ⇒ cable con el resultado REAL; otra cosa ⇒ se detiene', () => {
     const c = { llave, encargo_id: ENC }
