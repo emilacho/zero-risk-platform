@@ -28,6 +28,11 @@ export function modoDelEntorno(env: Record<string, string | undefined> = process
 
 export const topeDiarioPorClienteUsd = (modo: ModoDelPortero): number => TOPE_DIARIO_POR_MODO_USD[modo]
 
+/** ¿el dinero frena el raspado en este modo? (Emilio 28-oct: en construcción el dinero no es un obstáculo; los parámetros económicos se definen con el sistema ya construido) */
+export const eldineroFrena = (modo: ModoDelPortero): boolean => modo === 'campana'
+/** el tope que CORTA acciones del raspado: el del modo en campaña; en construcción ninguno (el de referencia solo se registra) */
+export const topeQueCortaUsd = (modo: ModoDelPortero | undefined, porOmision: number): number => (modo === undefined ? porOmision : eldineroFrena(modo) ? topeDiarioPorClienteUsd(modo) : 1_000_000)
+
 const minutosUtc = (d: Date) => d.getUTCHours() * 60 + d.getUTCMinutes()
 const inicioDelDia = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 
