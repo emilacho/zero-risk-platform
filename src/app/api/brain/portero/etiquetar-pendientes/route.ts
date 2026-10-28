@@ -13,6 +13,7 @@ import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { clientesActivos } from '@/lib/portero-alimenta/clientes'
 import { FLUJO_DEL_PORTERO } from '@/lib/portero-alimenta/gasto'
 import { etiquetarPendientesDelEntorno } from '@/lib/cerebro/portero/etiquetar-entorno'
+import { corridaQueSeRevisa, modoDelEntorno } from '@/lib/portero-alimenta/modo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -40,7 +41,7 @@ async function correr(request: Request, o: { dry_run: boolean; client_id?: strin
     }
     const dia = new Date().toISOString().slice(0, 10)
     const r = await etiquetarPendientesDelEntorno(
-      { origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '', workflowId: process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO, ejecucionId: `vercel-cron:etiquetar-pendientes:${dia}` },
+      { origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '', workflowId: process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO, ejecucionId: `vercel-cron:etiquetar-pendientes:${dia}T${new Date().toISOString().slice(11, 16)}` },
       { clientes, dry_run: o.dry_run, tope_por_cliente: o.tope_por_cliente },
     )
     return NextResponse.json({ ok: true, ...r })
@@ -49,7 +50,15 @@ async function correr(request: Request, o: { dry_run: boolean; client_id?: strin
   }
 }
 
-export async function GET(request: Request) { return correr(request, { dry_run: false }) }
+/** el etiquetado se adapta a las corridas del modo (28-oct): corre 2 h después de cada una (14:30, 20:30 y 02:30 UTC en construcción; solo 14:30 en campaña); a otra hora el cron calla */
+export async function GET(request: Request) {
+  const modo = modoDelEntorno().modo
+  if (!corridaQueSeRevisa(modo, new Date(), 90, 300)) {
+    if (!autorizado(request)) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001' }, { status: 401 })
+    return NextResponse.json({ ok: true, nada_que_hacer: true, modo, detalle: 'a esta hora no sigue a ninguna corrida del modo vigente' })
+  }
+  return correr(request, { dry_run: false })
+}
 export async function POST(request: Request) {
   let c: { dry_run?: unknown; client_id?: unknown; tope_por_cliente?: unknown } = {}
   try { c = await request.json() } catch { /* sin cuerpo = ensayo de todos */ }

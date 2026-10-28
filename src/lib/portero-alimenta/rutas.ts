@@ -20,6 +20,7 @@ import { clientesActivos } from './clientes'
 import { COBERTURA_DEL_ALTA_HORAS, sinLoYaRaspado, type FilaDeRaspadoParaCubrir } from './cobertura'
 import { MAX_TROZOS_A_ESCRIBIR_POR_PASADA, MAX_TROZOS_A_SACAR_POR_PASADA, reconciliarPuente, type FichaParaPuente } from './puente'
 import { leerTodas } from './paginar'
+import { topeDiarioPorClienteUsd, type ModoDelPortero } from './modo'
 
 export interface Respuesta { status: number; body: Record<string, unknown> }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -103,6 +104,8 @@ export interface DepsDeRutas {
   ahora?: Date
   /** los nuevos brazos (15-oct): todos APAGADOS si falta; las rutas los leen del entorno */
   brazos?: BrazosActivos
+  /** el modo (28-oct): fija el tope del raspado diario por cliente (3,00 en construcción · 1,00 en campaña); ausente = el de siempre (TOPE_DEL_PORTERO_USD) */
+  modo?: ModoDelPortero
 }
 
 // ───────────────────────── /descubrir · qué pide hoy el portero (solo lectura; el modelo solo para proponer búsquedas)
@@ -139,7 +142,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
     if (brazosCtx.errores.length) { brazosCtxError = brazosCtx.errores.join(' · '); brazosCtx = undefined }
   }
   const forzarPosicion = v.cuerpo.forzar_posicion === true
-  const base = { forzar_posicion: forzarPosicion, cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx }
+  const base = { forzar_posicion: forzarPosicion, cliente: { id: v.client_id, name: cliente.name as string | null, website_url: cliente.website_url as string | null, config: cfg }, rubro, pais: ((cliente.country ?? cliente.pais) as string | null) ?? null, ciudad, ciudades, redes: redesPropias(cfg), publicaciones_propias: publicaciones, gastado_hoy_usd: g.gasto.total_usd, interruptores: deps.interruptores, brazos: deps.brazos, ahora, brazosCtx, ...(deps.modo ? { tope_usd: topeDiarioPorClienteUsd(deps.modo) } : {}) }
 
   // las búsquedas propias: el modelo PROPONE, el código decide
   let propuestas: ResultadoDePropuestas = { aceptadas: [], rechazadas: [] }
@@ -165,7 +168,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
     cubierto_por_el_alta = sinLoYaRaspado(plan, lista(raw.data) as unknown as FilaDeRaspadoParaCubrir[], ahora)
     plan = { ...plan, hacer: cubierto_por_el_alta.hacer, costo_maximo_del_plan_usd: Math.round(cubierto_por_el_alta.hacer.reduce((x, a) => x + a.usd_max, 0) * 1e6) / 1e6 }
   }
-  return { status: 200, body: { dry_run: v.dry_run, tope_por_cliente_usd: TOPE_DEL_PORTERO_USD, plan, cubierto_por_el_alta, gasto_de_hoy: g.gasto, propuestas, modelos_llamados: costoPropuestas > 0 || propuestas.aceptadas.length ? 1 : 0, costo_modelo_usd: costoPropuestas, ...(brazosCtxError ? { brazos_lectura_fallida: brazosCtxError } : {}) } }
+  return { status: 200, body: { dry_run: v.dry_run, tope_por_cliente_usd: plan.tope_usd, plan, cubierto_por_el_alta, gasto_de_hoy: g.gasto, propuestas, modelos_llamados: costoPropuestas > 0 || propuestas.aceptadas.length ? 1 : 0, costo_modelo_usd: costoPropuestas, ...(brazosCtxError ? { brazos_lectura_fallida: brazosCtxError } : {}) } }
 }
 
 /**

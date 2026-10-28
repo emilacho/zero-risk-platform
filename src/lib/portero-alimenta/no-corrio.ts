@@ -38,6 +38,8 @@ export interface DepsDeNoCorrio extends DepsDeRutas {
   raspadoDelCliente?: (clientId: string, dia: string) => Promise<{ ok: true; hoy: number; previos: number } | { ok: false; detalle: string }>
   /** ¿contesta el propio n8n? sin esto no se revisa */
   n8nResponde?: () => Promise<{ ok: boolean; detalle: string }>
+  /** la corrida del modo que se revisa ahora (hora programada, UTC). Con ella, «hecha hoy» exige que la corrida haya dejado rastro DESPUÉS de esa hora (`resumen.ultima_corrida_en`). Sin ella: la revisión de siempre (una por día) */
+  corridaEsperada?: Date | null
 }
 
 /** el raspado real de un cliente: filas de `apify_raw` (ensayo=false) de hoy y de los 7 días anteriores, leídas de la base */
@@ -64,7 +66,7 @@ export function n8nContesta(o: { base?: string; fetchImpl?: (u: string, i?: Requ
   }
 }
 
-export interface VeredictoDeNoCorrio { client_id: string; nombre: string | null; veredicto: 'corrio' | 'hecha_sin_raspado' | 'n8n_no_responde' | 'ya_avisado' | 'no_corrio' | 'sin_corrida_en_racha' | 'no_pude_comprobar'; linea?: string; dias_sin_corrida?: number }
+export interface VeredictoDeNoCorrio { client_id: string; nombre: string | null; veredicto: 'corrio' | 'corrida_sin_rastro' | 'hecha_sin_raspado' | 'n8n_no_responde' | 'ya_avisado' | 'no_corrio' | 'sin_corrida_en_racha' | 'no_pude_comprobar'; linea?: string; dias_sin_corrida?: number }
 
 const yaLoAvisoElVigilante = (f: Fila | undefined) => !!f && esObjeto(f.resumen) && esObjeto(f.resumen.vigilante) && (f.resumen.vigilante as Fila).ok === false
 
@@ -97,7 +99,7 @@ export async function rutaNoCorrio(deps: DepsDeNoCorrio, cuerpo: { dry_run?: boo
     let flujo: EstadoDelFlujo | null = null // se lee una sola vez y solo si hace falta
     const estadoFlujo = async () => (flujo ??= deps.estadoDelFlujo ? await deps.estadoDelFlujo(wf).catch((e: unknown) => ({ ok: false as const, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false as const, detalle: 'sin forma de leer el flujo' })
     for (const c of act.datos.clientes) {
-      const q = await deps.db.from('cerebro_portero_corridas').select('id, dia, estado, resumen').eq('client_id', c.client_id).order('dia', { ascending: false }).limit(10)
+      const q = await deps.db.from('cerebro_portero_corridas').select('id, dia, estado, resumen, creado_en').eq('client_id', c.client_id).order('dia', { ascending: false }).limit(10)
       if (q.error) {
         const l = lineaDeNoCorrio(c.nombre, `no pude comprobar el rastro (${String(q.error.message).slice(0, 100)})`, wf)
         veredictos.push({ client_id: c.client_id, nombre: c.nombre, veredicto: 'no_pude_comprobar', linea: l }); lineas.push(l); continue
@@ -105,6 +107,13 @@ export async function rutaNoCorrio(deps: DepsDeNoCorrio, cuerpo: { dry_run?: boo
       const filas = lista(q.data)
       const hoy = filas.find((f) => String(f.dia).slice(0, 10) === dia)
       if (hoy) {
+        // construcción (28-oct): hay una fila POR DÍA, pero tres corridas; la fila de hoy puede ser la de las 12:30 y la de las 18:30 no haber dejado rastro
+        const ultima = esObjeto(hoy.resumen) && hoy.resumen.tipo === 'despertar' ? NaN : esObjeto(hoy.resumen) && typeof hoy.resumen.ultima_corrida_en === 'string' ? Date.parse(hoy.resumen.ultima_corrida_en) : (typeof hoy.creado_en === 'string' ? Date.parse(hoy.creado_en) : NaN)
+        if (deps.corridaEsperada && !(ultima >= deps.corridaEsperada.getTime() - 60_000) && !yaLoAvisoElVigilante(hoy)) {
+          const hh = deps.corridaEsperada.toISOString().slice(11, 16)
+          const l = lineaDeNoCorrio(c.nombre, `la corrida de las ${hh} UTC no dejó rastro (el último es de ${Number.isFinite(ultima) ? new Date(ultima).toISOString().slice(11, 16) + ' UTC' : 'hora desconocida'})`, wf)
+          veredictos.push({ client_id: c.client_id, nombre: c.nombre, veredicto: 'corrida_sin_rastro', linea: l }); lineas.push(l); continue
+        }
         if (hoy.estado === 'hecha') {
           const rs = deps.raspadoDelCliente ? await deps.raspadoDelCliente(c.client_id, dia).catch((e: unknown) => ({ ok: false as const, detalle: e instanceof Error ? e.message : String(e) })) : null
           if (rs && rs.ok && rs.hoy === 0 && rs.previos > 0) {
@@ -139,7 +148,7 @@ export async function rutaNoCorrio(deps: DepsDeNoCorrio, cuerpo: { dry_run?: boo
   if (dry) return { status: 200, body: { ...body, nota: 'dry_run: no se avisó' } }
   // UNA línea por revisión (si hay varios clientes, se juntan en un solo mensaje)
   const texto = lineas.length === 1 ? lineas[0] : `${lineas[0]} (+${lineas.length - 1} más)`
-  const av = deps.avisar ? await deps.avisar(texto, `no-corrio:${dia}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+  const av = deps.avisar ? await deps.avisar(texto, `no-corrio:${dia}${deps.corridaEsperada ? ':' + deps.corridaEsperada.toISOString().slice(11, 16) : ''}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
   body.aviso = { ...av, texto }
   return { status: av.ok ? 200 : 502, body }
 }
