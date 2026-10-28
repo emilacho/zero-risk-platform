@@ -227,7 +227,7 @@ describe('el flujo acusa cada turno', () => {
     expect(sal('⓪ Entrada · llave')).toEqual(['⓪ Acuse del turno'])
     expect(sal('⓪ Acuse del turno')).toEqual(['⓪ ¿Lo tomo?'])
     expect(sal('⓪ ¿Lo tomo?')).toEqual(['① ¿Portero?'])
-    const reloj = construirVigia().nodes.find((n: { type: string }) => n.type.endsWith('scheduleTrigger'))
+    const reloj = (construirVigia() as unknown as { nodes: Array<{ type: string; parameters: { rule: { interval: Array<{ minutesInterval: number }> } } }> }).nodes.find((n) => n.type.endsWith('scheduleTrigger'))!
     expect(reloj.parameters.rule.interval[0].minutesInterval).toBe(2)
   })
 })
