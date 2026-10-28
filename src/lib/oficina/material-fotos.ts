@@ -33,7 +33,7 @@ export function candidatasDelEncargo(e: Estado, pl: Plantilla, ahora: Date, o: {
 export function medirFotos(e: Estado, pl: Plantilla, ahora: Date): { aptas: number; minimo: number; protas: string[]; cercanas: number } {
   const b = datos(e, 'encargo') as unknown as BaseDelEncargo
   const lim = limitesDeMaterial(pl.limites)
-  const familia = pl.familia === 'carrusel_ig_v1' ? 'carrusel' : pl.familia === 'kit_historias' ? 'kit' : 'post_img'
+  const familia = pl.familia === 'carrusel_ig_v1' || pl.familia === 'carrusel_mesa' ? 'carrusel' : pl.familia === 'kit_historias' || pl.familia === 'kit_mesa' ? 'kit' : 'post_img'
   const estricta = candidatasDelEncargo(e, pl, ahora)
   const conCercanas = candidatasDelEncargo(e, pl, ahora, { permitirCercanas: true })
   return { aptas: estricta.cf.candidatas.length, minimo: fotosMinimas(familia, (b.elementos ?? []).length, lim), protas: estricta.protas, cercanas: conCercanas.cf.candidatas.length - estricta.cf.candidatas.length }

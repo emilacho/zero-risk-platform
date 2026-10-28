@@ -2,6 +2,7 @@
  * LOS ADAPTADORES REALES de los puertos de la oficina. NADA de esto corre mientras la oficina esté apagada (la puerta devuelve 409 antes) y NADA llama a un proveedor en `dry_run`.
  * Todo recibe sus dependencias por parámetro (base, `fetch`, claves) para probarse sin red. Un fallo de Slack nunca se lanza; un proveedor sin configurar responde «no configurado», no revienta.
  */
+import { puertoDeLaMesa } from './mesa/adaptador'
 import { monedaDelCliente } from '@/lib/moneda/por-pais'
 import zlib from 'node:zlib'
 import { renderManualLimpio } from '../brand-book-render-limpio'
@@ -81,6 +82,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
   const almacen = almacenDeSupabase(db)
   return {
     almacen,
+    mesa: puertoDeLaMesa(db),
     ahora,
     // el segundo cerebro del productor (apagado por omisión): las notas que el agente puede ver y el rastro de cada auto-revisión
     ...(env.notasDelDueno ? { notas: { leer: (clientId: string) => leerNotasParaElProductor(db, { baseUrl: env.baseUrl, internalKey: env.internalKey }, f, clientId), registrar: (r: Parameters<typeof registrarAutorevision>[1]) => registrarAutorevision(db, r) } } : {}),

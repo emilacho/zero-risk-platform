@@ -73,6 +73,10 @@ export async function pedirLoQueElAgenteNecesita(P: Puertos, enc: Encargo, pl: P
   return abrir(P, { ...enc, estado_del_motor: nuevo }, pl, { clase: 'hecho', paso: pasoClave, necesidades, armar: (n, avisarA) => pedidoDeHechos({ client_id: enc.client_id, encargo_id: enc.id, n, paso: pasoClave, necesidades, avisar_a: avisarA, dry_run: enc.dry_run }) })
 }
 
+/** la mesa pide material con la voz de un miembro del equipo: mismo pedido al portero, mismo turno `material`, mismo aviso de vuelta */
+export const abrirMaterialDeLaMesa = (P: Puertos, enc: Encargo, pl: Plantilla, necesidades: NecesidadDeAgente[]): Promise<Respuesta> =>
+  abrir(P, enc, pl, { clase: 'hecho', paso: 'mesa', necesidades, armar: (n, avisarA) => pedidoDeHechos({ client_id: enc.client_id, encargo_id: enc.id, n, paso: 'mesa', necesidades, avisar_a: avisarA, dry_run: enc.dry_run }) })
+
 async function abrir(P: Puertos, enc: Encargo, pl: Plantilla, a: Apertura): Promise<Respuesta> {
   const lim = limitesDeMaterial(pl.limites)
   const e0 = enc.estado_del_motor

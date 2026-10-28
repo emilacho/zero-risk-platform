@@ -11,6 +11,7 @@ import type { FilaDeFormato } from './entrega'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import type { SobreDeRevisionDePieza } from './paso-jefatura'
 import type { NotaVista } from '../notas-del-dueno/autorevision'
+import type { PuertoMesa } from './mesa/tipos'
 
 /** lo que el cliente tiene (manual, fotos, datos propios), leído UNA vez al abrir y guardado en el encargo */
 export interface FuentesCompletas {
@@ -132,6 +133,8 @@ export interface Puertos {
   almacen: Almacen
   /** MATERIAL · el portero. Opcional: sin él (o con `material_activo` apagado) la oficina funciona exactamente como antes */
   cerebro?: PuertoDelCerebro
+  /** LA MESA · el directorio vivo y el libro de aportes. Opcional: sin él las familias `*_mesa` no abren (fallan visibles) y las v1 funcionan igual */
+  mesa?: PuertoMesa
   ahora(): Date
   fuentes(clientId: string): Promise<FuentesCompletas | { error: string }>
   parte(parteId: string, clientId: string): Promise<{ texto: string } | null>

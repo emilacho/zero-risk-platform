@@ -76,6 +76,19 @@ const MIRAR_AFUERA_ALLOW: ReadonlySet<string> = new Set([
   'market-research',
   'campaign-brief-agent',
 ])
+/**
+ * LA MESA (28-oct) · quién puede usar las herramientas del tablero compartido (mesa_pedir · mesa_devolver · pedir_material).
+ * Default-deny como el resto, y además exige que el turno venga DE LA MESA (`ctx.mesa`): fuera de una pieza de la mesa el conector no se monta.
+ * Los jueces de la jefatura NO están: calificar y crear son cosas distintas (no-circularidad).
+ */
+export const MESA_ALLOW: ReadonlySet<string> = new Set([
+  'creative-director',
+  'content-creator',
+  'carousel-designer',
+  'design-visual-storyteller',
+  'marketing_instagram_curator',
+  'design-image-prompt-engineer',
+])
 const DATAFORSEO_ALLOW: ReadonlySet<string> = new Set([
   'market-research',
   'seo-specialist',
@@ -158,6 +171,8 @@ export interface AgentMcpContext {
   clientId?: string
   /** LÍMITES de «mirar afuera» por corrida (opt-in · CC#1 · 01-oct) · ausente ⇒ el montaje de siempre · ver mcp/mirar-afuera-limites.js */
   mirarAfueraLimites?: { maxPedidos?: number | null; permitidos?: string[] | null } | null
+  /** el turno es de la mesa: el encargo al que escriben sus herramientas (sale de `extra.encargo_id` del pedido, nunca del modelo) */
+  mesa?: { encargoId: string } | null
 }
 
 export interface McpServerConfig {
@@ -236,6 +251,23 @@ export function buildMcpServers(
         // límites por corrida (opt-in) · sin ellos NO se agrega ninguna clave (el entorno de siempre)
         ...(typeof ctx.mirarAfueraLimites?.maxPedidos === 'number' ? { MIRAR_AFUERA_MAX_PEDIDOS: String(ctx.mirarAfueraLimites.maxPedidos) } : {}),
         ...(Array.isArray(ctx.mirarAfueraLimites?.permitidos) && ctx.mirarAfueraLimites.permitidos.length ? { MIRAR_AFUERA_PERMITIDOS: ctx.mirarAfueraLimites.permitidos.join(',') } : {}),
+      },
+    }
+  }
+
+  // LA MESA · herramientas del tablero compartido. Se monta SOLO en un turno de la mesa (ctx.mesa), para los agentes de MESA_ALLOW y con la plataforma alcanzable
+  // (URL + llave): sin eso el conector no existe y el agente no ve herramientas que no podría usar.
+  if (ctx.mesa?.encargoId && slug && MESA_ALLOW.has(slug) && process.env.ZR_PLATFORM_URL && process.env.INTERNAL_API_KEY) {
+    servers.mesa = {
+      type: 'stdio',
+      command: 'node',
+      args: [pathResolve(process.cwd(), 'src/lib/mcp/mesa-server.js')],
+      env: {
+        ZR_ENCARGO_ID: ctx.mesa.encargoId,
+        ZR_AGENTE: slug,
+        ZR_PLATFORM_URL: process.env.ZR_PLATFORM_URL,
+        INTERNAL_API_KEY: process.env.INTERNAL_API_KEY,
+        PATH: process.env.PATH ?? '',
       },
     }
   }
