@@ -7,7 +7,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error · módulo .mjs de scripts
 import { cambiarPedido, construirFlujo } from '../scripts/worker-staging/bTbWL9lUvQCfStAz/construir-mesa-molde.mjs'
 import { registrarHerramienta } from '../src/lib/oficina/mesa/herramienta'
 import { recibirResultado } from '../src/lib/oficina/orquestador'
