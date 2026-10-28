@@ -48,9 +48,12 @@ describe('P4 · costo por cliente y umbral global en proporción a los clientes 
   it('el informe dice cuánto costó cada cliente y quién pasó sus umbrales; el que más gasta va primero', async () => {
     const t = juntos()
     t.costs.push({ service: 'apify:x', amount_usd: 4, created_at: AHORA.toISOString(), description: JSON.stringify({ es: 'detalle_de_llamada', client_id: DIEZ_CLIENTES[4].id }) }, { service: 'apify:x', amount_usd: 2, created_at: AHORA.toISOString(), description: JSON.stringify({ es: 'detalle_de_llamada', client_id: DIEZ_CLIENTES[1].id }) })
-    const r = await rutaCostos({ db: crearBaseFalsa(t as never).db as never, ahora: AHORA, env: { PORTERO_GASTO_AVISO_USD: '1.5', PORTERO_GASTO_APAGAR_USD: '3' } })
+    const r = await rutaCostos({ db: crearBaseFalsa(t as never).db as never, ahora: AHORA, env: { PORTERO_MODO: 'campana', PORTERO_GASTO_AVISO_USD: '1.5', PORTERO_GASTO_APAGAR_USD: '3' } })
     const cl = r.body.clientes as Array<{ client_id: string; gasto_usd: number; estado: string }>
     expect(cl[0]).toMatchObject({ client_id: DIEZ_CLIENTES[4].id, estado: 'pasa_el_umbral_de_apagado' })
+    // en construcción (28-oct) el mismo gasto es solo un aviso alto: no apaga
+    const rc = await rutaCostos({ db: crearBaseFalsa(t as never).db as never, ahora: AHORA, env: { PORTERO_MODO: 'construccion', PORTERO_GASTO_AVISO_USD: '1.5', PORTERO_GASTO_APAGAR_USD: '3' } })
+    expect((rc.body.clientes as Array<{ estado: string }>)[0].estado).toBe('pasa_el_umbral_de_aviso_alto')
     expect(cl[1]).toMatchObject({ client_id: DIEZ_CLIENTES[1].id, estado: 'pasa_el_umbral_de_aviso' })
     expect(cl[2].estado).toBe('normal')
     expect(r.body.umbrales_por_cliente).toMatchObject({ aviso_usd: 1.5, apagar_usd: 3 }) // los firmados por cliente no cambian aquí

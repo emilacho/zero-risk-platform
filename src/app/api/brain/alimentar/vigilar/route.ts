@@ -11,6 +11,8 @@ import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno, umbralesDeGastoDelEntorno } from '@/lib/portero-alimenta/datos'
 import { avisarAAlertas, apagarFlujoDelPortero } from '@/lib/portero-alimenta/avisos'
 import { rutaVigilar } from '@/lib/portero-alimenta/vigilante'
+import { modoDelEntorno } from '@/lib/portero-alimenta/modo'
+import { umbralesDeAnomaliaDelEntorno } from '@/lib/portero-alimenta/anomalia'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,7 +25,7 @@ export async function POST(request: Request) {
   try { cuerpo = await request.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
   try {
     const db = getSupabaseAdmin() as unknown as Db
-    const r = await rutaVigilar({ db, interruptores: interruptoresDelEntorno(), apagar: apagarFlujoDelPortero(), avisar: avisarAAlertas({ db }), umbrales: umbralesDeGastoDelEntorno() }, cuerpo)
+    const r = await rutaVigilar({ db, interruptores: interruptoresDelEntorno(), apagar: apagarFlujoDelPortero(), avisar: avisarAAlertas({ db }), umbrales: umbralesDeGastoDelEntorno(), modo: modoDelEntorno().modo, anomalia: umbralesDeAnomaliaDelEntorno() }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'vigilante_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

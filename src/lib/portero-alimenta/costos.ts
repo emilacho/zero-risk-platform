@@ -7,6 +7,7 @@
 import type { Db } from './alimentar'
 import { clientesActivos } from './clientes'
 import { TOPE_DEL_PORTERO_USD, TOPE_DEL_PULIDO_APARTE_USD, umbralesDeGastoDelEntorno } from './datos'
+import { ANOMALIA_POR_OMISION, umbralesDeAnomaliaDelEntorno, type UmbralesDeAnomalia } from './anomalia'
 import { eldineroFrena, modoDelEntorno, topeDiarioPorClienteUsd, type ModoDelPortero } from './modo'
 import { decidirPlanApify, pctMaximoDelPlan, type UsoDelPlan } from './plan-apify'
 import { TOPE_DIARIO_DE_BRAZOS_USD } from './brazos'
@@ -21,10 +22,14 @@ const dato = (env: Record<string, string | undefined>, k: string, defecto: numbe
 export const r2 = (n: number): number => Math.round(n * 100) / 100
 
 /** TODOS los topes de gasto vigentes, con lo que mide cada uno: ninguno escondido. Los firmados por Emilio son el aviso y el apagado del portero (por cliente y día); el resto son topes de una pieza o de otro módulo y NO se suman a esos */
-export function topesVigentes(u: { aviso_usd: number; apagar_usd: number }, ctx: { modo?: ModoDelPortero; plan?: { uso: UsoDelPlan; pct_max: number } | null } = {}): Array<{ tope: string; usd: number; mide: string; firma: string; frena: boolean }> {
+export function topesVigentes(u: { aviso_usd: number; apagar_usd: number }, ctx: { modo?: ModoDelPortero; anomalia?: UmbralesDeAnomalia; plan?: { uso: UsoDelPlan; pct_max: number } | null } = {}): Array<{ tope: string; usd: number; mide: string; firma: string; frena: boolean }> {
   return [
     { tope: 'portero · aviso', usd: u.aviso_usd, mide: 'gasto total del día del cliente en lo del portero (Apify + modelo)', firma: 'firmado (aviso > 3)', frena: false },
-    { tope: 'portero · apagado', usd: u.apagar_usd, mide: 'el mismo gasto del día; pasarlo apaga el portero de ese cliente', firma: 'firmado (apaga > 10)', frena: true },
+    { tope: 'portero · apagado', usd: u.apagar_usd, mide: `${eldineroFrena(ctx.modo ?? 'construccion') ? 'el mismo gasto del día; pasarlo apaga el portero de ese cliente' : '(construcción: SOLO aviso, no apaga) el mismo gasto del día; en campaña pasarlo apaga al cliente'}`, firma: 'firmado (apaga > 10); 28-oct: en construcción solo avisa', frena: eldineroFrena(ctx.modo ?? 'construccion') },
+    ...(eldineroFrena(ctx.modo ?? 'construccion') ? [] : [
+      { tope: 'anomalía · gasto por hora', usd: ctx.anomalia?.usd_por_hora ?? ANOMALIA_POR_OMISION.usd_por_hora, mide: 'solo construcción: más que esto en la última hora para un cliente es un error, no ahorro; pausa SOLO a ese cliente y avisa una vez con cómo reanudar', firma: 'firmado 28-oct (dato)', frena: true },
+      { tope: 'anomalía · misma llamada repetida', usd: 0, mide: `solo construcción: ${ctx.anomalia?.repetidas_por_hora ?? ANOMALIA_POR_OMISION.repetidas_por_hora} o más llamadas idénticas (mismo actor y misma entrada) en la última hora = bucle; pausa SOLO a ese cliente (usd = 0: se mide en veces, no en dinero)`, firma: 'firmado 28-oct (dato)', frena: true },
+    ]),
     { tope: 'portero · una corrida', usd: TOPE_DEL_PORTERO_USD, mide: 'antes de llamar a un modelo: el gasto de hoy + lo que va a costar no puede pasar de esto; si pasa, el paso se omite y se dice', firma: 'de la pieza', frena: true },
     { tope: 'pulido del resumen', usd: TOPE_DEL_PULIDO_APARTE_USD, mide: 'una llamada de pulido (una por día y cliente)', firma: 'de la pieza (calidad sobre precio, 16-oct)', frena: true },
     { tope: 'brazos por código', usd: TOPE_DIARIO_DE_BRAZOS_USD, mide: 'el modelo que usan los brazos de competencia por sede', firma: 'de la pieza', frena: true },
@@ -62,7 +67,7 @@ export async function rutaCostos(deps: { db: Db; ahora?: Date; env?: Record<stri
     if (!g.ok) { fallas.push(`${c.nombre ?? c.client_id.slice(0, 8)}: ${g.detalle}`); clientes.push({ client_id: c.client_id, nombre: c.nombre, gasto_usd: null, estado: 'no_pude_leer' }); continue }
     const t = g.gasto.total_usd
     total += t
-    clientes.push({ client_id: c.client_id, nombre: c.nombre, gasto_usd: r2(t), apify_usd: r2(g.gasto.apify_usd), modelo_usd: r2(g.gasto.modelo_usd), estado: t > u.apagar_usd ? 'pasa_el_umbral_de_apagado' : t > u.aviso_usd ? 'pasa_el_umbral_de_aviso' : 'normal' })
+    clientes.push({ client_id: c.client_id, nombre: c.nombre, gasto_usd: r2(t), apify_usd: r2(g.gasto.apify_usd), modelo_usd: r2(g.gasto.modelo_usd), estado: t > u.apagar_usd ? (eldineroFrena(modoDelEntorno(env).modo) ? 'pasa_el_umbral_de_apagado' : 'pasa_el_umbral_de_aviso_alto') : t > u.aviso_usd ? 'pasa_el_umbral_de_aviso' : 'normal' })
   }
   const g = umbralGlobalUsd(act.datos.clientes.length, env)
   // el plan de Apify (solo lectura): si no se puede leer se DICE, no se inventa
@@ -74,5 +79,5 @@ export async function rutaCostos(deps: { db: Db; ahora?: Date; env?: Record<stri
   const porOficina = new Map<string, { pedidos: number; costo_usd: number }>()
   if (!pe.error) for (const p of (Array.isArray(pe.data) ? pe.data : []) as Array<Record<string, unknown>>) { const k = String(p.pedido_por_oficina ?? 'sin oficina'); const a = porOficina.get(k) ?? { pedidos: 0, costo_usd: 0 }; a.pedidos++; a.costo_usd += Number(p.costo_usd) || 0; porOficina.set(k, a) }
   const pedidosPorOficina = [...porOficina].map(([oficina, v]) => ({ oficina, pedidos: v.pedidos, costo_usd: Math.round(v.costo_usd * 1e6) / 1e6 })).sort((a, b) => b.costo_usd - a.costo_usd)
-  return { status: fallas.length ? 502 : 200, body: { ok: fallas.length === 0, dia: ahora.toISOString().slice(0, 10), clientes_activos: act.datos.clientes.length, apify_hoy_por_funcion: porFuncion, umbral_global: g, umbrales_por_cliente: u, modo: modoDelEntorno(env), plan_apify: planApify, topes_vigentes: topesVigentes(u, { modo: modoDelEntorno(env).modo, plan: planApify && 'uso' in planApify ? planApify : null }), total_del_portero_usd: r2(total), promedio_por_cliente_usd: act.datos.clientes.length ? r2(total / act.datos.clientes.length) : 0, sobre_el_umbral_global: total > g.umbral_usd, clientes, pedidos_por_oficina: pe.error ? null : pedidosPorOficina, ...(pe.error ? { pedidos_por_oficina_error: String(pe.error.message).slice(0, 120) } : {}), ...(fallas.length ? { fallas } : {}), modelos_llamados: 0 } }
+  return { status: fallas.length ? 502 : 200, body: { ok: fallas.length === 0, dia: ahora.toISOString().slice(0, 10), clientes_activos: act.datos.clientes.length, apify_hoy_por_funcion: porFuncion, umbral_global: g, umbrales_por_cliente: u, modo: modoDelEntorno(env), plan_apify: planApify, topes_vigentes: topesVigentes(u, { anomalia: umbralesDeAnomaliaDelEntorno(env), modo: modoDelEntorno(env).modo, plan: planApify && 'uso' in planApify ? planApify : null }), total_del_portero_usd: r2(total), promedio_por_cliente_usd: act.datos.clientes.length ? r2(total / act.datos.clientes.length) : 0, sobre_el_umbral_global: total > g.umbral_usd, clientes, pedidos_por_oficina: pe.error ? null : pedidosPorOficina, ...(pe.error ? { pedidos_por_oficina_error: String(pe.error.message).slice(0, 120) } : {}), ...(fallas.length ? { fallas } : {}), modelos_llamados: 0 } }
 }
