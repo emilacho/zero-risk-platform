@@ -101,7 +101,7 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
     { parameters: { httpMethod: 'POST', path, responseMode: 'onReceived', options: {} }, name: N.web, type: 'n8n-nodes-base.webhook', typeVersion: 2, position: x(0), webhookId },
     code(N.entrada, 'turno-n0-entrada.js', x(1)),
     // 28-oct · TRASPASO: el flujo acusa el turno (atómico en la sala); un segundo despertar del mismo turno se detiene aquí y no paga
-    http(N.acuse, `${VERCEL}/api/oficina/turnos`, x(1, -150), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "acuse", encargo_id: $json.encargo_id, n: $json.turno.n, workflow_execution_id: String($execution.id) }) }}', timeout: 30000 }),
+    http(N.acuse, `${VERCEL}/api/oficina/turnos`, x(1, -150), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "acuse", encargo_id: $json.encargo_id, n: $json.turno.n, workflow_execution_id: String($execution.id) }) }}', timeout: 300000 }),
     code(N.tomo, 'turno-n0b-tomar.js', x(1, 150)),
     cond(N.esPortero, "={{ $json.turno.tipo }}", esIgual, x(2), 'portero'),
     // ── portero (una pregunta al cerebro: no escribe en ninguna tabla)
