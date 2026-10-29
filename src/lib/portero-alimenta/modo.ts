@@ -33,6 +33,10 @@ export const eldineroFrena = (modo: ModoDelPortero): boolean => modo === 'campan
 /** el tope que CORTA acciones del raspado: el del modo en campaña; en construcción ninguno (el de referencia solo se registra) */
 export const topeQueCortaUsd = (modo: ModoDelPortero | undefined, porOmision: number): number => (modo === undefined ? porOmision : eldineroFrena(modo) ? topeDiarioPorClienteUsd(modo) : 1_000_000)
 
+/** etiquetas de fotos por cliente y día (29-oct · firma de Emilio): en construcción SIN tope (se etiquetan todas las pendientes en cada pasada; el freno ante anomalía sigue); en campaña vuelve a 10 */
+export const TOPE_DE_ETIQUETAS_POR_MODO: Record<ModoDelPortero, number> = { construccion: 1_000_000, campana: 10 }
+export const topeDeEtiquetasPorClienteYDia = (modo: ModoDelPortero): number => TOPE_DE_ETIQUETAS_POR_MODO[modo]
+
 const minutosUtc = (d: Date) => d.getUTCHours() * 60 + d.getUTCMinutes()
 const inicioDelDia = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 

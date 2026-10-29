@@ -1,7 +1,7 @@
 /**
  * GET/POST /api/brain/portero/etiquetar-pendientes · el ETIQUETADO AUTOMÁTICO de fotos (27-oct · encargo recuperacion-y-vigia-independiente, punto 5).
  * Toda foto `ok` sin etiqueta (propias primero) se etiqueta sola, de CUALQUIER cliente activo, sin corrida a mano: lo llama un cron de Vercel después de la corrida del portero
- * (el copiado de fotos ocurre dentro de ella) y también se puede pedir para un cliente. Tope por cliente y día (`TOPE_DE_ETIQUETAS_POR_CLIENTE_Y_DIA`, ≈ US$ 0,008 por foto) y plazo total;
+ * (el copiado de fotos ocurre dentro de ella) y también se puede pedir para un cliente. Tope por cliente y día según el modo (29-oct: construcción SIN tope, campaña 10; ≈ US$ 0,008 por foto) y plazo total;
  * una foto que falla no frena a las demás. Cada llamada la registra el etiquetador del paso 4 (`log-invocation`), con el flujo del portero como `workflow_id`.
  * Auth: `Authorization: Bearer <CRON_SECRET>` (Vercel Cron) o la llave interna. GET (cron) actúa de verdad; POST acepta `client_id`, `tope_por_cliente` y `dry_run` (por omisión true: solo cuenta).
  */
@@ -13,7 +13,7 @@ import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { clientesActivos } from '@/lib/portero-alimenta/clientes'
 import { FLUJO_DEL_PORTERO } from '@/lib/portero-alimenta/gasto'
 import { etiquetarPendientesDelEntorno } from '@/lib/cerebro/portero/etiquetar-entorno'
-import { corridaQueSeRevisa, modoDelEntorno } from '@/lib/portero-alimenta/modo'
+import { corridaQueSeRevisa, modoDelEntorno, topeDeEtiquetasPorClienteYDia } from '@/lib/portero-alimenta/modo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -42,7 +42,7 @@ async function correr(request: Request, o: { dry_run: boolean; client_id?: strin
     const dia = new Date().toISOString().slice(0, 10)
     const r = await etiquetarPendientesDelEntorno(
       { origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '', workflowId: process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO, ejecucionId: `vercel-cron:etiquetar-pendientes:${dia}T${new Date().toISOString().slice(11, 16)}` },
-      { clientes, dry_run: o.dry_run, tope_por_cliente: o.tope_por_cliente },
+      { clientes, dry_run: o.dry_run, tope_por_cliente: o.tope_por_cliente ?? topeDeEtiquetasPorClienteYDia(modoDelEntorno().modo) },
     )
     return NextResponse.json({ ok: true, ...r })
   } catch (e) {
