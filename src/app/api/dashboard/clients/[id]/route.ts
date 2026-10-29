@@ -19,6 +19,7 @@
  * they never see a slug.
  */
 import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -92,6 +93,8 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   try {
     const { id: idOrSlug } = await context.params
     if (!idOrSlug) {

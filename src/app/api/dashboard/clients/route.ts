@@ -9,6 +9,7 @@
  *        soft-delete from Sprint 6 cleanup 2026-05-17)
  */
 import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -46,6 +47,8 @@ interface ClientStats {
 }
 
 export async function GET(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   try {
     const url = new URL(request.url)
     const rawLimit = parseInt(url.searchParams.get('limit') || '100', 10)
