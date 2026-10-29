@@ -118,6 +118,11 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
     return NextResponse.json({ item: data, nota_de_rechazo: nota })
   }
 
+  // 29-oct · aprobar una pieza de la oficina deja su encargo «aprobada» (antes la aprobación solo se veía en la bandeja). Solo si estaba cerrado; best-effort: la decisión del aprobador manda
+  if (data?.type === TIPO_PIEZA_DE_OFICINA && body.status === 'approved') {
+    await supabase.from('oficina_encargos').update({ estado: 'aprobada' }).eq('hitl_queue_id', String(data.id)).in('estado', ['cerrado', 'cerrado_por_tope'])
+  }
+
   // Lote de publicación o pieza de la oficina aprobados (arreglo 5 de la cadena): al APROBAR se arma la publicación EN ENSAYO (no se llama a Meta ni se publica nada).
   // Un fallo del ensayo se dice en la respuesta, pero no deshace la decisión del aprobador.
   if ((data?.type === TIPO_LOTE_SOCIAL || data?.type === TIPO_PIEZA_DE_OFICINA) && body.status === 'approved') {

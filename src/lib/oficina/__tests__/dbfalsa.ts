@@ -59,6 +59,7 @@ class Consulta {
   update(p: Fila) { this.op = 'update'; this.payload = p; return this }
   upsert(p: Fila | Fila[], o?: { onConflict?: string }) { this.op = 'upsert'; this.payload = p; this.conflicto = o?.onConflict ? o.onConflict.split(',') : null; return this }
   eq(c: string, v: unknown) { this.filtros.push((f) => leer(f, c) === v); return this }
+  in(c: string, vs: unknown[]) { this.filtros.push((f) => vs.includes(leer(f, c))); return this }
   or(expr: string) { const alts = expr.split(',').map((p) => { const [c, op, ...v] = p.split('.'); return { c, op, v: v.join('.') } }); this.filtros.push((f) => alts.some((a) => a.op === 'eq' && String(leer(f, a.c)) === a.v)); return this }
   lt(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) < String(v)); return this }
   gt(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) > String(v)); return this }

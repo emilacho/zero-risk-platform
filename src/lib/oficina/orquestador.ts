@@ -22,6 +22,7 @@ import { candidatasDelEncargo, medirFotos } from './material-fotos'
 import { limitesDeMaterial } from './material'
 import { reglasDeInvencion } from './prompts-sin-invencion'
 import { marcaDeOrigenActiva, origenesDeImagenes } from './marcas-de-origen'
+import { seccionDeCambiosDelDueno } from './cambios-del-dueno'
 import { antesDeLasFotos, despuesDeUnAgente, pedirLoQueElAgenteNecesita, seccionDeMaterialParaElAgente } from './material-orquestador'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
 import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, type ContextoDePedido } from './pedidos'
@@ -96,7 +97,7 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   }
   const s: Sobre = v.sobre
   const tope = Math.min(s.tope_usd ?? pl.plantilla.limites.tope_encargo_usd, pl.plantilla.limites.tope_encargo_usd)
-  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: salaRefConFila(entrada.sala_ref, s), estado_del_motor: estadoInicial(), ...(s.reabrir_causa_corregida ? { reabrir_causa: s.reabrir_causa_corregida } : {}) })
+  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: salaRefConFila(entrada.sala_ref, s), estado_del_motor: estadoInicial(), ...(s.reabrir_causa_corregida ? { reabrir_causa: s.reabrir_causa_corregida } : {}), ...(s.cambios_del_dueno ? { cambios_del_dueno: s.cambios_del_dueno } : {}) })
   if (!c.ok) return r(500, { error: 'almacen_error', detalle: c.error })
   if (!c.nuevo) return r(200, { accion: 'ya_existia', encargo_id: c.encargo.id, estado: c.encargo.estado })
   const sal = await avanzar(P, c.encargo.id)
@@ -131,7 +132,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
   if (!enc) return r(404, { error: 'encargo_inexistente' })
   const pl = await plantillaDe(P, enc)
   for (let vuelta = 0; vuelta < 80; vuelta++) {
-    if (['cerrado', 'cerrado_por_tope', 'fallido'].includes(enc.estado)) return r(200, { accion: 'cerrado', estado: enc.estado, con_desacuerdo: enc.con_desacuerdo })
+    if (['cerrado', 'cerrado_por_tope', 'fallido', 'aprobada'].includes(enc.estado)) return r(200, { accion: 'cerrado', estado: enc.estado, con_desacuerdo: enc.con_desacuerdo })
     const abierto = await P.almacen.turnoAbierto(enc.id)
     if (abierto) {
       // un «siguiente» repetido no abre otro paso: ENTREGA DE NUEVO el mismo pedido (mismo número, misma dispatch_key)
@@ -248,13 +249,15 @@ function armarPedido(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDe
   if (familiaDeLaminas(pl)) {
     // salas 2 y 3: el agente de cada paso es el que dice la plantilla (los hallazgos tienen un paso por dueño)
     const t = paso.tipo === 'agente' ? armarPedidoL(pl, paso, e, errorDeFormato ? { errorDeFormato } : undefined) : null
-    const tm = t && seccionDeMaterialParaElAgente(e, paso.clave) ? { ...t, task: t.task + seccionDeMaterialParaElAgente(e, paso.clave) } : t
+    const tm0 = t && seccionDeMaterialParaElAgente(e, paso.clave) ? { ...t, task: t.task + seccionDeMaterialParaElAgente(e, paso.clave) } : t
+    const tm = tm0 ? { ...tm0, task: tm0.task + seccionDeCambiosDelDueno(enc.sala_ref) } : tm0
     return { agente: paso.quien, pedido: pedidoDe(enc, pl, paso, paso.quien, tm, e) }
   }
   const agente = paso.quien === 'dueno_del_donde' ? AGENTE_DEL_TEXTO : paso.quien
   const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' || paso.clave === 'decide_imagen' ? fichasQueTocan(e, paso) : []
   const t = paso.tipo === 'agente' ? construirTarea(paso.clave, { ...contexto2(e)!, sinFoto: pl.limites.generar_cuando_no_hay_foto === true }, { fichas: fichasPropias, ...(errorDeFormato ? { errorDeFormato } : {}) }) : null
-  const tm = t && seccionDeMaterialParaElAgente(e, paso.clave) ? { ...t, task: t.task + seccionDeMaterialParaElAgente(e, paso.clave) } : t
+  const tm0 = t && seccionDeMaterialParaElAgente(e, paso.clave) ? { ...t, task: t.task + seccionDeMaterialParaElAgente(e, paso.clave) } : t
+  const tm = tm0 ? { ...tm0, task: tm0.task + seccionDeCambiosDelDueno(enc.sala_ref) } : tm0
   return { agente, pedido: pedidoDe(enc, pl, paso, agente, tm, e) }
 }
 

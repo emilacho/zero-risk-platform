@@ -7,6 +7,7 @@ import crypto from 'node:crypto'
 import { datos } from '../ayudas'
 import { avanzar, cerrarPorTope, fallar, plantillaDe, type Respuesta, type ResultadoDeTurno } from '../orquestador'
 import { baseDeLaminas } from '../orquestador-laminas'
+import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
 import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
 import type { Cambios, Encargo, Puertos } from '../puertos'
@@ -64,7 +65,7 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const tipo = t.tipo as TipoDeTurno
   let faltanCitas: string | undefined
   if (tipo === 'devolver_citas') faltanCitas = 'algunas especialidades del equipo (revisa cada aporte del tablero)'
-  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas })
+  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas }) + seccionDeCambiosDelDueno(enc.sala_ref)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(enc.tope_usd) - enc.estado_del_motor.gasto_usd))
   return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4) }) }
