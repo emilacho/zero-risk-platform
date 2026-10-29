@@ -7,6 +7,8 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { rutaConsultar } from '@/lib/portero-alimenta/consultar'
+import { consultarAprendizajeDelEntorno } from '@/lib/portero-alimenta/aprendizaje/entorno'
+import { CLASE_DEL_APRENDIZAJE } from '@/lib/portero-alimenta/aprendizaje/datos'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -17,6 +19,11 @@ export async function GET(request: Request) {
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
   try {
     const u = new URL(request.url).searchParams
+    // el aprendizaje del dueño tiene su propia consulta (huellas, tres espacios, filtro por especialista); el resto de la lectura no lo entrega nunca
+    if (u.get('clase') === CLASE_DEL_APRENDIZAJE) {
+      const a = await consultarAprendizajeDelEntorno({ client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), destinatario: u.get('destinatario'), formato: u.get('formato'), tarea: u.get('tarea'), limite: u.get('limite') })
+      return NextResponse.json(a.body, { status: a.status })
+    }
     const r = await rutaConsultar({ db: getSupabaseAdmin() as unknown as Db }, { client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), que: u.get('que'), atributo: u.get('atributo'), clase: u.get('clase'), sede_clave: u.get('sede_clave'), limite: u.get('limite') })
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {

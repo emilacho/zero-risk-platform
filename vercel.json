@@ -41,6 +41,18 @@
     {
       "path": "/api/brain/portero/etiquetar-pendientes",
       "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/brain/alimentar/aprendizaje",
+      "schedule": "45 14 * * *"
+    },
+    {
+      "path": "/api/brain/alimentar/aprendizaje",
+      "schedule": "45 20 * * *"
+    },
+    {
+      "path": "/api/brain/alimentar/aprendizaje",
+      "schedule": "45 2 * * *"
     }
   ]
 }

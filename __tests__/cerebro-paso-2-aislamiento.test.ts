@@ -72,6 +72,9 @@ export const PUEDEN_NOMBRARLAS = [
   // 16-oct · la puerta del dueño: su migración (la tabla de preguntas pendientes referencia `cerebro_fichas`) y su reversa
   /^supabase\/migrations\/202610161500_cerebro_dueno_preguntas\.sql$/,
   /^supabase\/reversas\/202610161500_cerebro_dueno_preguntas_REVERSA\.sql$/,
+  // 29-oct · el aprendizaje del dueño: su migración (ensancha el alcance de la ficha y crea el índice, el catálogo y las medidas) y su reversa
+  /^supabase\/migrations\/202610291600_cerebro_aprendizaje_del_dueno\.sql$/,
+  /^supabase\/reversas\/202610291600_cerebro_aprendizaje_del_dueno_REVERSA\.sql$/,
   /^scripts\/worker-staging\/ogfq56oIEoHufFPM\//,
   // el puente: `ingest-source` acepta `cerebro_fichas` como origen de trozos (única puerta de escritura de evidencia al índice)
   /^src\/app\/api\/brain\/ingest-source\/route\.ts$/,

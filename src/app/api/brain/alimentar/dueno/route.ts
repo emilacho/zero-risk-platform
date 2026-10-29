@@ -6,12 +6,15 @@
  * Llave interna (`INTERNAL_API_KEY`), nunca `SALA_DISPATCH_KEY`. `dry_run` obligatorio; con false exige workflow_id + workflow_execution_id. Detrás de `PORTERO_DUENO` (apagado por omisión). US$ 0, sin modelo.
  */
 import { NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { puenteAlIndice } from '@/lib/portero-alimenta/entorno'
 import { rutaLeerDueno, rutaDueno } from '@/lib/portero-alimenta/dueno'
+import { FLUJO_DEL_PORTERO } from '@/lib/portero-alimenta/gasto'
+import { procesarAprendizajeDelEntorno } from '@/lib/portero-alimenta/aprendizaje/entorno'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -31,6 +34,12 @@ export async function POST(request: Request) {
       db, interruptores: interruptoresDelEntorno(), activo: activo(),
       puente: real ? puenteAlIndice({ origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '', db }) : undefined,
     }, cuerpo)
+    // 29-oct: una nota cruda nueva (acumula) se desmenuza al entrar, en segundo plano; si falla, la pasada del cron la recoge
+    const b = (cuerpo && typeof cuerpo === 'object' ? cuerpo : {}) as Record<string, unknown>
+    if (real && r.status === 200 && r.body.guardada === true && b.acumula === true && typeof b.client_id === 'string') {
+      const origen = new URL(request.url).origin
+      waitUntil(procesarAprendizajeDelEntorno({ origen, llaveInterna: process.env.INTERNAL_API_KEY ?? '', workflowId: process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO, ejecucionId: `dueno:aprendizaje:${Date.now()}` }, { dry_run: false, client_id: b.client_id, solo: 'desmenuzar' }).catch(() => undefined))
+    }
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'dueno_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
