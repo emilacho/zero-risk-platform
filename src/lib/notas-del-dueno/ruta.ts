@@ -4,7 +4,7 @@
  */
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { verificarFirmaDeSlack } from './firma-slack'
-import { puertosDeNotas, reintentarPendientes } from './adaptadores'
+import { enviarNotaAlCerebro, puertosDeNotas, reintentarPendientes } from './adaptadores'
 import type { ConfiguracionDeNotas, PuertosDeNotas } from './tipos'
 
 export const encendido = (): boolean => process.env.NOTAS_DEL_DUENO === '1'
@@ -20,6 +20,10 @@ export function firmaDeLaPeticion(request: Request, cuerpo: string) {
 export function configuracionReal(): ConfiguracionDeNotas { return { autorizados: autorizadosDelEntorno() } }
 
 export const entornoDeNotas = (request: Request) => ({ baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN, alCerebro: process.env.NOTAS_AL_CEREBRO === '1' })
+
+/** el empuje al cerebro de lo que Emilio dice en el dashboard (misma cola y mismos reintentos que Slack); sin `NOTAS_AL_CEREBRO=1` queda encolado */
+export const empujeDelDashboard = (request: Request) => (nota: Parameters<NonNullable<PuertosDeNotas['enviarAlCerebro']>>[0], ctx: { ts: string; canal_slack: string; respondido_en: string }) =>
+  enviarNotaAlCerebro(getSupabaseAdmin(), entornoDeNotas(request), fetch, nota, ctx)
 
 /** la siguiente vuelta: sube al cerebro las notas que quedaron pendientes. Nunca lanza. */
 export async function reintentarLosPendientes(request: Request) {

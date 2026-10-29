@@ -18,6 +18,8 @@ import { marcarAprobada } from '@/lib/oficina/cambios'
 import { publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA } from '@/lib/publicacion/en-ensayo'
 import { puertosDePublicacion } from '@/lib/publicacion/almacen-supabase'
 import { canalDelRevisor, espejoEncendido, registrarEventoDeEmilio, type AccionDeEmilio } from '@/lib/oficina/eventos-de-emilio/registrar'
+import { empujeDelDashboard } from '@/lib/notas-del-dueno/ruta'
+import { waitUntil } from '@vercel/functions'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -94,10 +96,11 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
   if (esDecision && data?.type === TIPO_PIEZA_DE_OFICINA) {
     try {
       const accion: AccionDeEmilio = body.status === 'approved' ? 'aprobar' : body.status === 'rejected' ? 'rechazar' : 'editar'
-      await registrarEventoDeEmilio(supabase as never, {
+      const ev = await registrarEventoDeEmilio(supabase as never, {
         canal: canalDelRevisor(body.reviewer), accion, autor: String(body.reviewer ?? 'emilio'), hitl_id: String(data.id), comentario: frase,
         resultado: { http: 200, estado: body.status }, crudo: { status: body.status, reviewer: body.reviewer ?? null, decision: body.decision ?? null, frase_del_aprobador: frase, hora_de_la_frase: horaDeLaFrase },
-      }, { espejo: espejoEncendido() })
+      }, { espejo: espejoEncendido(), alCerebro: empujeDelDashboard(request) })
+      if (ev.ok && ev.empuje) { try { waitUntil(ev.empuje) } catch { await ev.empuje } } // el cerebro puede tardar: la respuesta a Emilio no espera
     } catch { /* el evento es un rastro: la decisión del aprobador manda */ }
   }
 

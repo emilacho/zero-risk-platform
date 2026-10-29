@@ -98,13 +98,21 @@ export async function fotoDelContexto(db: DbDeEventos, hitl_id: string): Promise
   return { fila, contexto, faltas }
 }
 
-export type ResultadoDelEvento = { ok: true; id: string | null; repetido: boolean } | { ok: false; error: string }
+/** la nota tal como quedó en `notas_del_dueno` (lo que el empuje al cerebro necesita) */
+export interface NotaEspejada {
+  id: string; client_id: string; alcance: 'cliente'; tipo: 'aprobada' | 'rechazada' | 'editada' | 'comentario'; comentario: string | null; hitl_id: string; output_id: string | null
+  pieza_titulo: string | null; pieza_version: string | null; pieza_familia: string | null; origen: 'tablero'; autor: string; clave_unica: string
+}
+/** sube la nota a la puerta del dueño del cerebro (con su cola de reintentos); nunca lanza */
+export type EmpujeAlCerebro = (nota: NotaEspejada, ctx: { ts: string; canal_slack: string; respondido_en: string }) => Promise<unknown>
+
+export type ResultadoDelEvento = { ok: true; id: string | null; repetido: boolean; /** el empuje al cerebro en curso (si hubo): quien llama lo deja correr con `waitUntil` */ empuje?: Promise<void> } | { ok: false; error: string }
 
 /**
  * Guarda UN evento. Idempotente por `clave_unica` (el mismo clic o el mismo mensaje repetido no duplica). Solo piezas de la bandeja (`content_piece_review`).
  * Además, si `espejo` está encendido y el canal es el dashboard, deja la misma decisión en `notas_del_dueno` (origen «tablero»).
  */
-export async function registrarEventoDeEmilio(db: DbDeEventos, e: EventoDeEmilio, opciones: { espejo?: boolean } = {}): Promise<ResultadoDelEvento> {
+export async function registrarEventoDeEmilio(db: DbDeEventos, e: EventoDeEmilio, opciones: { espejo?: boolean; alCerebro?: EmpujeAlCerebro } = {}): Promise<ResultadoDelEvento> {
   try {
     const foto = await fotoDelContexto(db, e.hitl_id)
     if (!foto.fila) return { ok: false, error: 'pieza_sin_fila' }
@@ -125,27 +133,37 @@ export async function registrarEventoDeEmilio(db: DbDeEventos, e: EventoDeEmilio
     if (!ins.error) id = String((ins.data as Fila).id)
     else if (ins.error.code === '23505') repetido = true
     else return { ok: false, error: ins.error.message }
-    if (opciones.espejo && e.canal === 'dashboard' && !repetido) await espejoEnNotas(db, e, fila)
-    return { ok: true, id, repetido }
+    let empuje: Promise<void> | undefined
+    if (opciones.espejo && e.canal === 'dashboard' && !repetido) {
+      const nota = await espejoEnNotas(db, e, fila)
+      // Sube al cerebro todo lo que traiga TEXTO de Emilio (comentario, motivo de rechazo, cambios pedidos, una aprobación con palabras). Aprobar sin texto no es un hecho del cliente.
+      if (nota && opciones.alCerebro && nota.comentario) {
+        empuje = Promise.resolve(opciones.alCerebro(nota, { ts: id ?? String(fila.clave_unica), canal_slack: 'dashboard', respondido_en: String(fila.ocurrio_en) })).then(() => undefined, () => undefined)
+      }
+    }
+    return { ok: true, id, repetido, ...(empuje ? { empuje } : {}) }
   } catch (err) { return { ok: false, error: err instanceof Error ? err.message : String(err) } }
 }
 
 const TIPO_DE_NOTA: Partial<Record<AccionDeEmilio, string>> = { aprobar: 'aprobada', rechazar: 'rechazada', pedir_cambios: 'editada', editar: 'editada', comentar: 'comentario' }
 
 /** la misma decisión en `notas_del_dueno` (el registro que ya existía). Un fallo aquí no afecta al evento crudo. */
-async function espejoEnNotas(db: DbDeEventos, e: EventoDeEmilio, fila: Fila): Promise<void> {
-  const tipo = TIPO_DE_NOTA[e.accion]
-  if (!tipo || !fila.client_id) return
+async function espejoEnNotas(db: DbDeEventos, e: EventoDeEmilio, fila: Fila): Promise<NotaEspejada | null> {
+  const tipo = TIPO_DE_NOTA[e.accion] as NotaEspejada['tipo'] | undefined
+  if (!tipo || !fila.client_id) return null
   const coment = typeof e.comentario === 'string' ? e.comentario.trim().slice(0, 2000) : ''
   const laminas = (fila.laminas as number[]).length ? ` [láminas: ${(fila.laminas as number[]).join(', ')}]` : ''
   const comentario = coment ? `${coment}${laminas}`.slice(0, 2000) : null
-  if (tipo === 'comentario' && !comentario) return
+  if (tipo === 'comentario' && !comentario) return null
+  const nueva = {
+    client_id: fila.client_id as string, alcance: 'cliente' as const, tipo, comentario, hitl_id: e.hitl_id, output_id: (fila.output_id as string | null) ?? null, pieza_titulo: (fila.pieza_titulo as string | null) ?? null,
+    pieza_version: null, pieza_familia: (fila.familia as string | null) ?? null, origen: 'tablero' as const, autor: e.autor, clave_unica: `evento:${fila.clave_unica as string}`,
+  }
   try {
-    await db.from('notas_del_dueno').insert({
-      client_id: fila.client_id, alcance: 'cliente', tipo, comentario, hitl_id: e.hitl_id, output_id: fila.output_id ?? null, pieza_titulo: fila.pieza_titulo ?? null,
-      pieza_version: null, pieza_familia: fila.familia ?? null, origen: 'tablero', autor: e.autor, clave_unica: `evento:${fila.clave_unica as string}`,
-    })
-  } catch { /* el evento crudo ya quedó; el espejo se puede rehacer desde él */ }
+    const ins = await db.from('notas_del_dueno').insert(nueva).select('id').single()
+    if (ins.error || !ins.data) return null
+    return { id: String((ins.data as Fila).id), ...nueva }
+  } catch { return null /* el evento crudo ya quedó; el espejo se puede rehacer desde él */ }
 }
 
 /** `NOTAS_DEL_DUENO=1` enciende también el espejo en `notas_del_dueno` */
