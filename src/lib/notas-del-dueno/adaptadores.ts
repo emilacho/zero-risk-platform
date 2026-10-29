@@ -2,6 +2,7 @@
  * LOS ADAPTADORES REALES de los puertos de las notas del dueño: la base (Supabase) y Slack. Todo recibe sus dependencias por parámetro (base, `fetch`, llaves) para probarse sin red.
  * Un fallo de Slack nunca se lanza. Un error de lectura de la base NUNCA se lee como «vacío».
  */
+import { registrarEventoDeEmilio } from '@/lib/oficina/eventos-de-emilio/registrar'
 import { BLOQUE_DEL_MOTIVO, CALLBACK_DEL_RECHAZO, CAMPO_DEL_MOTIVO } from './interpretar'
 import { mensajeDeLaPieza, type PiezaParaSlack } from './mensaje-pieza'
 import { seleccionarNotas, unirVistas, vistasDelCerebro, type NotaVista } from './autorevision'
@@ -100,6 +101,9 @@ export function puertosDeNotas(db: Db, env: EntornoDeNotas, f: Fetch = fetch): P
         if (!r.ok) return { ok: false, error: `PATCH /api/hitl respondió ${r.status}` }
         return { ok: true }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+    },
+    async registrarEvento(e) {
+      await registrarEventoDeEmilio(db as never, { canal: 'slack', ...e })
     },
     async guardarNota(n: NotaNueva): Promise<ResultadoDeNota> {
       const ins = await db.from('notas_del_dueno').insert(n).select('id').single()

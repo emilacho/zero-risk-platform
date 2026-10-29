@@ -17,6 +17,7 @@ import { guardarNotaDeRechazo, promoverManualRevisado } from '@/lib/manual/promo
 import { marcarAprobada } from '@/lib/oficina/cambios'
 import { publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA } from '@/lib/publicacion/en-ensayo'
 import { puertosDePublicacion } from '@/lib/publicacion/almacen-supabase'
+import { canalDelRevisor, espejoEncendido, registrarEventoDeEmilio, type AccionDeEmilio } from '@/lib/oficina/eventos-de-emilio/registrar'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -87,6 +88,17 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
       return NextResponse.json({ error: 'estado_no_admitido_por_la_bandeja', detail: `la bandeja no admite el estado «${body.status}»; para cerrar una pieza vencida use rejected con decision.vencida = true` }, { status: 409 })
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // 29-oct · APRENDER DE EMILIO, etapa 1: la decisión sobre una pieza queda como evento crudo e inmutable (dashboard y Slack). Nunca frena ni cambia la decisión.
+  if (esDecision && data?.type === TIPO_PIEZA_DE_OFICINA) {
+    try {
+      const accion: AccionDeEmilio = body.status === 'approved' ? 'aprobar' : body.status === 'rejected' ? 'rechazar' : 'editar'
+      await registrarEventoDeEmilio(supabase as never, {
+        canal: canalDelRevisor(body.reviewer), accion, autor: String(body.reviewer ?? 'emilio'), hitl_id: String(data.id), comentario: frase,
+        resultado: { http: 200, estado: body.status }, crudo: { status: body.status, reviewer: body.reviewer ?? null, decision: body.decision ?? null, frase_del_aprobador: frase, hora_de_la_frase: horaDeLaFrase },
+      }, { espejo: espejoEncendido() })
+    } catch { /* el evento es un rastro: la decisión del aprobador manda */ }
   }
 
   // Side-effect: propagate decision to the source entity, if metadata says so.

@@ -9,6 +9,8 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { pedirCambios } from '@/lib/oficina/cambios'
 import { despertarAlFlujoDeLaOficina } from '@/lib/oficina/despertar'
 import { esObjeto, puertosReales } from '@/lib/oficina/ruta'
+import { espejoEncendido, registrarEventoDeEmilio } from '@/lib/oficina/eventos-de-emilio/registrar'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -31,15 +33,27 @@ export async function POST(request: Request) {
   const reviewer = cuerpo.reviewer === undefined ? 'emilio' : cuerpo.reviewer
   if (typeof reviewer !== 'string' || !reviewer.trim() || reviewer.length > 80) errores.push('`reviewer` debe ser un texto corto')
   if (errores.length) return NextResponse.json({ error: 'entrada_invalida', errores }, { status: 400 })
+  // 29-oct · APRENDER DE EMILIO, etapa 1: lo que Emilio pidió (comentario literal + láminas marcadas) queda como evento crudo, salga bien o mal el pedido. Nunca frena la ruta.
+  const rastro = async (resultado: Record<string, unknown>) => {
+    try {
+      await registrarEventoDeEmilio(getSupabaseAdmin() as never, {
+        canal: 'dashboard', accion: 'pedir_cambios', autor: (reviewer as string).trim(), hitl_id: cuerpo.hitl_id as string, comentario, laminas: laminas as number[],
+        especialidades: Array.isArray(cuerpo.especialidades) ? (cuerpo.especialidades as unknown[]).map(String) : [], resultado,
+        crudo: { hitl_id: cuerpo.hitl_id, comentario, laminas, reviewer, especialidades: cuerpo.especialidades ?? null, despertar: cuerpo.despertar ?? null },
+      }, { espejo: espejoEncendido() })
+    } catch { /* un rastro que falla no cambia la respuesta */ }
+  }
   try {
     const { P, db } = puertosReales(request)
     const r = await pedirCambios(db, P, { hitl_id: cuerpo.hitl_id as string, comentario, laminas: [...new Set(laminas as number[])].sort((a, b) => a - b), reviewer: (reviewer as string).trim() })
+    await rastro({ http: r.status, accion: r.cuerpo.accion ?? null, error: r.cuerpo.error ?? null, ronda: r.cuerpo.ronda ?? null })
     if (cuerpo.despertar !== false && r.status === 200 && r.cuerpo.accion === 'esperar' && esObjeto(r.cuerpo.turno)) {
       const d = await despertarAlFlujoDeLaOficina(fetch, { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, String(r.cuerpo.encargo_id), r.cuerpo.turno)
       return NextResponse.json({ ...r.cuerpo, despertado: d.despertado, ...(d.despertado ? {} : { motivo_sin_despertar: d.motivo }) }, { status: r.status })
     }
     return NextResponse.json(r.cuerpo, { status: r.status })
   } catch (e) {
+    await rastro({ http: 500, error: 'oficina_error' })
     return NextResponse.json({ error: 'oficina_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 }
