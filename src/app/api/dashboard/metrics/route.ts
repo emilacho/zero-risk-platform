@@ -8,6 +8,7 @@
  * agent/cliente-centric · ambos coexisten sin colisión.
  */
 import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -40,7 +41,9 @@ async function fetchWorkflowCount(): Promise<number | null> {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   try {
     const supabase = getSupabaseAdmin()
     const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()

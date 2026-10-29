@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 import { countRows } from '@/lib/supabase-admin'
 
 // GET /api/dashboard — returns KPI summary
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   try {
     const [campaigns, activeCampaigns, leads, newLeads, content] = await Promise.all([
       countRows('campaigns'),

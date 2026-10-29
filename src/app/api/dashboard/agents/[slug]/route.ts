@@ -11,6 +11,7 @@
  * (see agent-alias-map.ts:17).
  */
 import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -50,6 +51,8 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   try {
     const { slug } = await context.params
     if (!slug) {

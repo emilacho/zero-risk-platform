@@ -19,6 +19,7 @@
  * Read-only · no auth required (only exposes already-public values).
  */
 import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -58,7 +59,9 @@ const CHANNELS: Record<string, ChannelConfig> = {
   },
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || null
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || null
 

@@ -8,6 +8,7 @@
  * endpoint to power push-updates on top of the initial fetch.
  */
 import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -28,6 +29,8 @@ interface ActivityRow {
 }
 
 export async function GET(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
   try {
     const url = new URL(request.url)
     const rawLimit = parseInt(url.searchParams.get('limit') || '50', 10)
