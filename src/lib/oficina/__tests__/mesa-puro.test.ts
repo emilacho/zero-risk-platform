@@ -153,10 +153,10 @@ describe('planificador · el código reparte turnos y exige participación, no d
     const l = [A({ de: 'creative-director-mesa', tipo: 'dirige' }), A({ de: 'content-creator', tipo: 'aporta' })]
     expect(techoDe(5)).toBe(6)
     expect(siguienteDeLaMesa(est(), l, ctx(6.01, 5))).toEqual({ accion: 'cierre_por_tope', razon: 'techo_de_gasto' })
-    expect(cotaAgotada(est(), ctx(4.5, 5))).toMatch(/tope de la pieza/)
-    expect(siguienteDeLaMesa(est(), l, ctx(4.5, 5))).toMatchObject({ tipo: 'integrar', motivo: expect.stringContaining('cierra con lo que hay') })
+    expect(cotaAgotada(est(), ctx(3.4, 5))).toMatch(/tope de la pieza/)
+    expect(siguienteDeLaMesa(est(), l, ctx(3.4, 5))).toMatchObject({ tipo: 'integrar', motivo: expect.stringContaining('cierra con lo que hay') })
     const l2 = [...l, A({ de: 'creative-director-mesa', tipo: 'integra', texto: 'x' })]
-    expect(siguienteDeLaMesa(est(), l2, ctx(4.5, 5)).accion).toBe('seguir_a_dibujar')
+    expect(siguienteDeLaMesa(est(), l2, ctx(3.4, 5)).accion).toBe('seguir_a_dibujar')
     // sin plata para otro turno ni siquiera integra
     expect(siguienteDeLaMesa(est(), l, ctx(5.8, 5)).accion).toBe('seguir_a_dibujar')
     // los 24 turnos

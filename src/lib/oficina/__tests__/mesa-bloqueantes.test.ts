@@ -36,26 +36,26 @@ function libroIntegrado(): Aporte[] {
 }
 
 describe('BLOQUEANTE 2 · la cota de la mesa RESERVA lo que viene después (imagen + observador + jefatura)', () => {
-  it('con imagen generada se reservan 0,9 y sin ella 0,5; el turno reserva 0,6: la cota salta cuando gasto + 0,6 + lo que sigue pasa el tope', () => {
-    expect(reservaDeLoQueSigue(true)).toBe(0.9)
-    expect(reservaDeLoQueSigue(false)).toBe(0.5)
+  it('con imagen generada se reservan 2,0 y sin ella 1,7 (incluye la revisión de la jefatura, US$ 1,50); el turno reserva 0,6: la cota salta cuando gasto + 0,6 + lo que sigue pasa el tope', () => {
+    expect(reservaDeLoQueSigue(true)).toBe(2)
+    expect(reservaDeLoQueSigue(false)).toBe(1.7)
     const e = est()
-    expect(cotaAgotada(e, ctx(3.5, 5, true))).toBeNull() // 3,5 + 0,6 + 0,9 = 5,0 · no pasa
-    expect(cotaAgotada(e, ctx(3.51, 5, true))).toMatch(/lo que sigue/)
-    expect(cotaAgotada(e, ctx(3.9, 5, false))).toBeNull() // 3,9 + 0,6 + 0,5 = 5,0
-    expect(cotaAgotada(e, ctx(3.91, 5, false))).toMatch(/lo que sigue/)
+    expect(cotaAgotada(e, ctx(2.4, 5, true))).toBeNull() // 2,4 + 0,6 + 2,0 = 5,0 · no pasa
+    expect(cotaAgotada(e, ctx(2.41, 5, true))).toMatch(/lo que sigue/)
+    expect(cotaAgotada(e, ctx(2.7, 5, false))).toBeNull() // 2,7 + 0,6 + 1,7 = 5,0
+    expect(cotaAgotada(e, ctx(2.71, 5, false))).toMatch(/lo que sigue/)
   })
   it('la integración «con lo que hay» puede pasar del tope pero no se come lo que viene después: bajo el techo ×1,2 tiene que caber también lo que sigue', () => {
     contador = 0
     const l = [A({ de: DIRECCION, tipo: 'dirige' }), A({ de: 'content-creator', tipo: 'aporta' })]
     const techo = techoDe(5)
     expect(techo).toBe(6)
-    // 4,5 + 0,6 + 0,9 = 6,0 → cabe: integra; 4,51 → no cabe: a dibujar sin otra integración
-    expect(siguienteDeLaMesa(est(), l, ctx(4.5, 5, true))).toMatchObject({ accion: 'turno', tipo: 'integrar' })
-    expect(siguienteDeLaMesa(est(), l, ctx(4.51, 5, true))).toMatchObject({ accion: 'seguir_a_dibujar' })
-    // sin imagen la reserva es menor: 4,9 + 0,6 + 0,5 = 6,0
-    expect(siguienteDeLaMesa(est(), l, ctx(4.9, 5, false))).toMatchObject({ accion: 'turno', tipo: 'integrar' })
-    expect(siguienteDeLaMesa(est(), l, ctx(4.91, 5, false))).toMatchObject({ accion: 'seguir_a_dibujar' })
+    // 3,4 + 0,6 + 2,0 = 6,0 → cabe: integra; 3,41 → no cabe: a dibujar sin otra integración (la reserva incluye la revisión de la jefatura, US$ 1,50)
+    expect(siguienteDeLaMesa(est(), l, ctx(3.4, 5, true))).toMatchObject({ accion: 'turno', tipo: 'integrar' })
+    expect(siguienteDeLaMesa(est(), l, ctx(3.41, 5, true))).toMatchObject({ accion: 'seguir_a_dibujar' })
+    // sin imagen la reserva es menor: 3,7 + 0,6 + 1,7 = 6,0
+    expect(siguienteDeLaMesa(est(), l, ctx(3.7, 5, false))).toMatchObject({ accion: 'turno', tipo: 'integrar' })
+    expect(siguienteDeLaMesa(est(), l, ctx(3.71, 5, false))).toMatchObject({ accion: 'seguir_a_dibujar' })
   })
 })
 

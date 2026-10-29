@@ -41,6 +41,23 @@ export function cotejoDeTexto(visibles: string[], permitido: string[]): { sobran
   return { sobrante }
 }
 
+/**
+ * ¿esta marca que el observador vio es del PROPIO cliente? (P3 · 29-oct: el observador rechazó la foto de Zero Risk como «marca ajena: Zero Risk» siendo Zero Risk el cliente).
+ * Es propia si coincide con el nombre del cliente o su usuario, o si el nombre del cliente la contiene entera («Zero Risk» ⊂ «Zero Risk Seguridad Industrial») o ella lo contiene a él.
+ * Mínimo 3 letras en la marca y 2 palabras en común cuando son varias: una marca de OTRO negocio con una palabra suelta igual NO pasa por propia.
+ */
+export function esMarcaPropia(marca: string, propias: string[]): boolean {
+  const m = norm(marca)
+  if (m.length < 3) return false
+  const pm = m.split(' ').filter(Boolean)
+  return propias.map(norm).filter((p) => p.length >= 3).some((p) => {
+    if (p === m) return true
+    const pp = p.split(' ').filter(Boolean)
+    const contiene = (grande: string[], chico: string[]) => chico.length > 0 && chico.every((w) => grande.includes(w)) && (chico.length >= 2 || grande.length === 1)
+    return contiene(pp, pm) || contiene(pm, pp)
+  })
+}
+
 /** la observación con la forma que ya consume la elección de versiones (`aceptadas` por ref) */
 export function observacionDeLaMesa(o: { items: Array<{ indice: number; ref: string }>; lecturas: Record<number, LecturaDelObservador>; permitido: string[]; marcasPropias?: string[] }): {
   observaciones: ObservacionDeImagen[]; aceptadas: Record<string, number[]>; rechazadas: Array<{ indice: number; ref: string; motivo: string }>; sin_lectura: number[]
@@ -49,11 +66,10 @@ export function observacionDeLaMesa(o: { items: Array<{ indice: number; ref: str
   const rechazadas: Array<{ indice: number; ref: string; motivo: string }> = []
   const sin_lectura: number[] = []
   const observaciones: ObservacionDeImagen[] = []
-  const propias = new Set((o.marcasPropias ?? []).map(norm))
   for (const it of o.items) {
     const l = o.lecturas[it.indice]
     if (!l?.leido) { sin_lectura.push(it.indice); continue } // sin lectura no se decide: el observador no contestó → se acepta con aviso (no se bloquea por falta de ojos)
-    const ajenas = l.marcas.filter((m) => !propias.has(norm(m)))
+    const ajenas = l.marcas.filter((m) => !esMarcaPropia(m, o.marcasPropias ?? []))
     const { sobrante } = cotejoDeTexto(l.texto_leido, o.permitido)
     observaciones.push({ indice: it.indice, reglas: [], texto_en_imagen: l.texto_leido, marcas: l.marcas, personas: l.personas })
     if (sobrante.length || ajenas.length) {
