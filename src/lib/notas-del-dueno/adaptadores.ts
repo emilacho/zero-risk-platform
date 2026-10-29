@@ -169,6 +169,8 @@ export async function enviarNotaAlCerebro(db: Db, env: EntornoDeNotas, f: Fetch,
  */
 export const MAX_INTENTOS = 4
 export const ESPERAS_MIN = [5, 20, 60]
+/** cuánto dura la reserva de una nota mientras se envía (si el proceso muere a medias, vuelve a estar disponible pasado este tiempo) */
+export const ARRIENDO_MIN = 3
 
 async function avisarDescarte(env: EntornoDeNotas, f: Fetch, n: NotaNueva & { id: string }, intentos: number, motivo: string): Promise<void> {
   if (!env.slackToken) return
@@ -179,6 +181,16 @@ async function avisarDescarte(env: EntornoDeNotas, f: Fetch, n: NotaNueva & { id
 
 async function intentarEnvio(db: Db, env: EntornoDeNotas, f: Fetch, n: NotaNueva & { id: string }, ctx: { ts: string; canal_slack: string; respondido_en: string }): Promise<EstadoDeEnvio> {
   if (!n.comentario || !n.hitl_id) return 'rechazada'
+  // UN solo envío a la vez por nota: se RESERVA la fila (arriendo de 3 min) antes de llamar a la puerta. Sin esto, cada petición de Slack que termina vuelve a recoger las pendientes y dos envían la misma nota (prueba viva del 29-oct: 1 comentario → 3 fichas en el cerebro).
+  const reloj0 = env.ahora?.() ?? new Date()
+  const antes = await db.from('notas_del_dueno_envios').select('estado,proximo_intento').eq('nota_id', n.id).maybeSingle()
+  if (antes.error || !antes.data) return 'pendiente'
+  const e0 = antes.data as Fila
+  if (e0.estado === 'enviada' || e0.estado === 'rechazada') return e0.estado
+  if (e0.proximo_intento && Date.parse(String(e0.proximo_intento)) > reloj0.getTime()) return 'pendiente'
+  const reserva = db.from('notas_del_dueno_envios').update({ proximo_intento: new Date(reloj0.getTime() + ARRIENDO_MIN * 60_000).toISOString(), actualizada_en: reloj0.toISOString() }).eq('nota_id', n.id).eq('estado', 'pendiente')
+  const tomada = await (e0.proximo_intento ? reserva.eq('proximo_intento', e0.proximo_intento) : reserva.is('proximo_intento', null)).select('nota_id')
+  if (tomada.error || !((tomada.data ?? []) as Fila[]).length) return 'pendiente' // otro la está enviando (o un fallo de la base: se reintenta en la siguiente vuelta)
   const r = await enviarALaPuerta({ baseUrl: env.baseUrl, internalKey: env.internalKey }, f, cuerpoParaLaPuerta({ client_id: n.client_id, hitl_id: n.hitl_id, pieza_titulo: n.pieza_titulo, pieza_familia: n.pieza_familia, comentario: n.comentario, ts: ctx.ts, canal_slack: ctx.canal_slack, respondido_en: ctx.respondido_en }))
   const previo = await db.from('notas_del_dueno_envios').select('intentos').eq('nota_id', n.id).maybeSingle()
   const intentos = Number((previo.data as Fila | null)?.intentos ?? 0) + 1
