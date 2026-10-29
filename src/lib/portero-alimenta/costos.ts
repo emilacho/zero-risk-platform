@@ -8,7 +8,7 @@ import type { Db } from './alimentar'
 import { clientesActivos } from './clientes'
 import { TOPE_DEL_PORTERO_USD, TOPE_DEL_PULIDO_APARTE_USD, umbralesDeGastoDelEntorno } from './datos'
 import { ANOMALIA_POR_OMISION, umbralesDeAnomaliaDelEntorno, type UmbralesDeAnomalia } from './anomalia'
-import { eldineroFrena, modoDelEntorno, topeDiarioPorClienteUsd, type ModoDelPortero } from './modo'
+import { eldineroFrena, modoDelEntorno, topeDeEtiquetasPorClienteYDia, topeDiarioPorClienteUsd, type ModoDelPortero } from './modo'
 import { decidirPlanApify, pctMaximoDelPlan, type UsoDelPlan } from './plan-apify'
 import { TOPE_DIARIO_DE_BRAZOS_USD } from './brazos'
 import { TOPE_POR_OFICINA_Y_DIA_USD, TOPE_POR_PEDIDO_USD } from './pedidos'
@@ -37,6 +37,7 @@ export function topesVigentes(u: { aviso_usd: number; apagar_usd: number }, ctx:
     ...(ctx.plan ? [{ tope: 'plan de Apify · mes', usd: decidirPlanApify(ctx.plan.uso, ctx.plan.pct_max).tope_usd, mide: `${eldineroFrena(ctx.modo ?? 'construccion') ? '' : '(construcción: NO corta, solo se registra) '}${ctx.plan.pct_max} % del crédito del mes (US$ ${ctx.plan.uso.credito_usd}, plan ${ctx.plan.uso.plan}); lleva US$ ${ctx.plan.uso.usado_usd.toFixed(2)}; al pasarse se detiene el raspado y se avisa una vez`, firma: 'firmado 28-oct', frena: eldineroFrena(ctx.modo ?? 'construccion') }] : []),
     { tope: 'pedido libre de una oficina', usd: TOPE_POR_PEDIDO_USD, mide: 'un pedido (etiquetar fotos, pulido, cadena)', firma: 'firmado (encargo de pedidos)', frena: true },
     { tope: 'oficina por día', usd: TOPE_POR_OFICINA_Y_DIA_USD, mide: 'todos los pedidos de una oficina en el día', firma: 'de la pieza', frena: true },
+    { tope: 'etiquetas de fotos · por cliente y día', usd: 0, mide: `(se mide en fotos, no en dinero; ≈ US$ 0,008 cada una) ${eldineroFrena(ctx.modo ?? 'construccion') ? 'campaña: 10 etiquetas por cliente y día' : 'construcción: SIN tope, se etiquetan todas las pendientes en cada pasada (el freno ante anomalía sigue)'}; hoy ${topeDeEtiquetasPorClienteYDia(ctx.modo ?? 'construccion') >= 1_000_000 ? 'sin tope' : topeDeEtiquetasPorClienteYDia(ctx.modo ?? 'construccion') + ' por cliente y día'}`, firma: 'firmado 29-oct', frena: eldineroFrena(ctx.modo ?? 'construccion') },
     { tope: 'etiquetado de una foto', usd: TOPE_DE_GASTO_POR_FOTO_USD, mide: 'una llamada de etiquetado (cuesta ~0,008)', firma: 'de la pieza', frena: true },
   ]
 }
