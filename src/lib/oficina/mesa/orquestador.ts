@@ -14,10 +14,11 @@ import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
 import { armarTarea, pedidoDeAgente, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
 import { direccionDe, especialistasPertinentes, porteroDe } from './directorio'
+import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, type Traduccion } from './traductor'
-import { COTAS, FAMILIAS_MESA, type Aporte, type EstadoMesa, type Tarjeta, type TipoDeAporte } from './tipos'
+import { COTAS, FAMILIAS_MESA, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const sha = (x: unknown) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex')
@@ -65,10 +66,26 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const tipo = t.tipo as TipoDeTurno
   let faltanCitas: string | undefined
   if (tipo === 'devolver_citas') faltanCitas = 'algunas especialidades del equipo (revisa cada aporte del tablero)'
-  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas }) + seccionDeCambiosDelDueno(enc.sala_ref)
+  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(enc.tope_usd) - enc.estado_del_motor.gasto_usd))
   return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4) }) }
+}
+
+/**
+ * lo que el dueño ha dicho y le toca a este agente (el cerebro filtra por especialista y por parecido con la tarea). Se pregunta UNA vez, al abrir el turno. Sin puerto, o si el cerebro falla,
+ * el turno sigue sin notas (el motivo queda en el estado): leer lo aprendido nunca frena una pieza.
+ */
+async function leerNotasDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, agente: string): Promise<LecturaDeNotas | undefined> {
+  if (!P.aprendizaje) return undefined
+  const destinatario = destinatarioDe(agente)
+  const c = contextoDe(enc, est)
+  const tarjeta = est.directorio_congelado.find((x) => x.agente === agente)
+  try {
+    const l = await P.aprendizaje.consultar({ client_id: enc.client_id, agente, destinatario, formato: FORMATO_DE_PIEZA[est.tipo], tarea: tareaParaConsultar({ cliente_nombre: c.cliente_nombre, tipo: est.tipo, especialidad: tarjeta?.especialidad ?? '', brief_texto: c.brief_texto }), dry_run: enc.dry_run })
+    if (!l.ok) return { notas: [], destinatario, aviso: `no se pudo leer: ${l.error}`.slice(0, 300) }
+    return { notas: l.notas.slice(0, 10), destinatario, ...(l.aviso ? { aviso: l.aviso.slice(0, 300) } : {}) }
+  } catch (e) { return { notas: [], destinatario, aviso: `no se pudo leer: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300) } }
 }
 
 /** reentrega del turno abierto (un «siguiente» repetido no abre otro turno) */
@@ -134,7 +151,8 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     }
 
     if (acc.accion === 'turno') {
-      const t = { n: turnoDe(enc.estado_del_motor), agente: acc.agente, tipo: acc.tipo, responde_a: acc.responde_a }
+      const lectura = await leerNotasDelTurno(P, enc, est, acc.agente)
+      const t = { n: turnoDe(enc.estado_del_motor), agente: acc.agente, tipo: acc.tipo, responde_a: acc.responde_a, ...(lectura ? { notas_del_dueno: lectura } : {}) }
       const est2: EstadoMesa = { ...est, turno_abierto: t, cierre_forzado: acc.tipo === 'integrar' && acc.motivo.startsWith('cierra con lo que hay') ? acc.motivo : est.cierre_forzado }
       enc = await guardarMesa(P, enc, est2)
       const p = await pedidoDelTurno(P, enc, est2, t)
@@ -259,12 +277,22 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(e2, est2), gasto_usd: nuevoGasto, estado: 'en_paso', turno: { ...turnoBase, n, estado: 'fallo', error: res.error ?? 'respuesta vacía' }, ...(gasto.length ? { gastos: gasto } : {}) })
     return avanzar(P, enc.id)
   }
+  // lo que el agente dijo de las notas del dueño: se anota el rastro y esas líneas NO entran al tablero ni a la pieza (la jefatura no las ve)
+  let textoFinal = texto
+  const lectura = t.notas_del_dueno
+  // con notas: qué leyó y qué cambió · sin notas porque el cerebro falló: queda dicho que no se pudo leer (sin notas y sin fallo no se escribe nada)
+  if (lectura && (lectura.notas.length || lectura.aviso)) {
+    const leido = lectura.notas.length ? leerRespuestaSobreNotas(texto, lectura.notas) : { texto, respuestas: [] }
+    if (leido.texto.trim()) textoFinal = leido.texto
+    const rastro = lectura.notas.length ? rastroDeLasNotas(lectura, leido.respuestas) : { notas_vistas: [], choco: false, cambios: [{ sin_lectura: lectura.aviso }] }
+    try { await P.aprendizaje?.registrar({ client_id: enc.client_id, encargo_id: enc.id, agente: t.agente, paso: abierto.paso, ...rastro, costo_usd: 0, clave_unica: `${enc.id}:${abierto.paso}:${n}` }) } catch { /* el rastro nunca frena una entrega */ }
+  }
   const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra' }
   const pedido = t.responde_a ? (await P.mesa.libro(enc.id)).find((a) => a.id === t.responde_a) : undefined
-  await P.mesa.aportar(aporteNuevo(enc, t.agente, t.tipo === 'responder' ? pedido?.de ?? null : null, tipoAporte[t.tipo] ?? 'aporta', texto, { responde_a: t.tipo === 'responder' || t.tipo === 'devolver_citas' ? t.responde_a : null, profundidad: pedido ? pedido.profundidad : 0, costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
+  await P.mesa.aportar(aporteNuevo(enc, t.agente, t.tipo === 'responder' ? pedido?.de ?? null : null, tipoAporte[t.tipo] ?? 'aporta', textoFinal, { responde_a: t.tipo === 'responder' || t.tipo === 'devolver_citas' ? t.responde_a : null, profundidad: pedido ? pedido.profundidad : 0, costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
   const integra = t.tipo === 'integrar' || t.tipo === 'devolver_citas'
   const e2: Estado = { ...e, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: nuevoGasto }
-  const est2: EstadoMesa = { ...est, turnos: est.turnos + 1, turno_abierto: null, ...(integra ? { integraciones: est.integraciones + 1, devoluciones_por_citas: est.devoluciones_por_citas + (t.tipo === 'devolver_citas' ? 1 : 0), pieza_texto: texto } : {}), ...(t.tipo === 'integrar' && est.cierre_forzado ? { marcas: { ...est.marcas, integracion_forzada: true } } : {}) }
+  const est2: EstadoMesa = { ...est, turnos: est.turnos + 1, turno_abierto: null, ...(integra ? { integraciones: est.integraciones + 1, devoluciones_por_citas: est.devoluciones_por_citas + (t.tipo === 'devolver_citas' ? 1 : 0), pieza_texto: textoFinal } : {}), ...(t.tipo === 'integrar' && est.cierre_forzado ? { marcas: { ...est.marcas, integracion_forzada: true } } : {}) }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(e2, est2), gasto_usd: nuevoGasto, estado: 'en_paso', turno: { ...turnoBase, n, estado: 'hecho' }, ...(gasto.length ? { gastos: gasto } : {}) })
   return avanzar(P, enc.id)
 }
