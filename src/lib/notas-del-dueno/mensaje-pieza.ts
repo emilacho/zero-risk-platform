@@ -5,7 +5,7 @@
 export const ACCION_APROBAR = 'nota_aprobar'
 export const ACCION_RECHAZAR = 'nota_rechazar'
 export const MAX_SECCION = 2800
-export const MAX_IMAGENES = 4
+export const MAX_IMAGENES = 10 // un carrusel trae hasta 10 láminas; Slack admite 50 bloques
 
 export interface PiezaParaSlack {
   hitl_id: string

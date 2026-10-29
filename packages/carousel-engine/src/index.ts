@@ -9,6 +9,8 @@
 export { renderSlide, renderCarousel, familiasDeMarca, TEMPLATES } from './render'
 export type { RenderOptions } from './render'
 
+export { sinEmojis, sinEmojisEn } from './sin-emojis'
+
 // ── Templates (also importable individually for previews) ──────────────
 export { InstagramFeed } from './templates/InstagramFeed'
 export { InstagramReel } from './templates/InstagramReel'

@@ -78,7 +78,22 @@ export function registroDelManual(voz: string | null | undefined): Registro {
   return 'sin_dato'
 }
 
+/** una alarma de «Slack no entregó» por causa y por hora (UNA por incidente: la repetición no vuelve a sonar). Por proceso: basta para no inundar #alertas con cada aviso del mismo encargo */
+const ALARMAS_DE_SLACK = new Map<string, number>()
+const UNA_POR_HORA_MS = 3_600_000
+export const olvidarAlarmasDeSlack = (): void => ALARMAS_DE_SLACK.clear()
+
 export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () => Date = () => new Date()): Puertos {
+  /** 29-oct · lo que Slack contesta SIEMPRE se mira (`ok`): si no entregó, UNA alarma en #alertas con el error literal (antes moría en silencio: 28-oct, ninguna pieza llegó y nadie lo supo). Nunca lanza; si el que falla es #alertas, no hay a dónde avisar */
+  const alarmaDeSlack = async (que: string, canalFallido: string, error: string): Promise<void> => {
+    const alertas = env.slackCanalAlertas ?? 'C0B7XUUEBHA'
+    if (!env.slackToken || canalFallido === alertas) return
+    const clave = `${canalFallido}:${error}`
+    const t = ahora().getTime()
+    if (t - (ALARMAS_DE_SLACK.get(clave) ?? -Infinity) < UNA_POR_HORA_MS) return
+    ALARMAS_DE_SLACK.set(clave, t)
+    try { await f('https://slack.com/api/chat.postMessage', { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8', authorization: `Bearer ${env.slackToken}` }, body: JSON.stringify({ channel: alertas, text: `🔌 Slack no entregó ${que} en ${canalFallido}: ${error.slice(0, 300)}. Si dice channel_not_found o not_in_channel, hay que reinvitar al bot a ese canal.` }) }) } catch { /* sin a dónde avisar */ }
+  }
   const almacen = almacenDeSupabase(db)
   return {
     almacen,
@@ -260,7 +275,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       const id = String((r.data as Fila).id)
       // la pieza también llega al Slack de Emilio con sus botones, POR EL CANAL DE ESTA OFICINA (el mismo de sus avisos; regla firmada: cada oficina habla con Emilio por su propio canal, nada de mensajes directos). Un fallo aquí NUNCA frena la bandeja, que sigue siendo la vía de siempre
       if (env.notasDelDueno && env.slackToken) {
-        try { await enviarPiezaASlack(db, { baseUrl: env.baseUrl, internalKey: env.internalKey, slackToken: env.slackToken, destino: env.slackCanalHilo ?? CANAL_DE_LA_OFICINA }, await piezaParaSlackDeLaBandeja(db, { hitl_id: id, client_id: p.client_id, output_id: p.output_id, titulo: p.titulo, vista_previa: p.vista_previa, metadata: p.metadata }), f) } catch { /* nunca frena la bandeja */ }
+        try { const s = await enviarPiezaASlack(db, { baseUrl: env.baseUrl, internalKey: env.internalKey, slackToken: env.slackToken, destino: env.slackCanalHilo ?? CANAL_DE_LA_OFICINA }, await piezaParaSlackDeLaBandeja(db, { hitl_id: id, client_id: p.client_id, output_id: p.output_id, titulo: p.titulo, vista_previa: p.vista_previa, metadata: p.metadata }), f); if (!s.ok) await alarmaDeSlack(`la pieza ${p.titulo.slice(0, 80)}`, env.slackCanalHilo ?? CANAL_DE_LA_OFICINA, s.error) } catch (e) { await alarmaDeSlack('la pieza', env.slackCanalHilo ?? CANAL_DE_LA_OFICINA, e instanceof Error ? e.message : String(e)) } // nunca frena la bandeja
       }
       return { ok: true, id }
     },
@@ -290,14 +305,16 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         }
         const post = async (text: string, thread_ts?: string) => {
           const r = await f('https://slack.com/api/chat.postMessage', { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8', authorization: `Bearer ${env.slackToken}` }, body: JSON.stringify({ channel: canal, text, ...(thread_ts ? { thread_ts } : {}) }) })
-          return (await r.json().catch(() => ({}))) as { ok?: boolean; ts?: string }
+          return (await r.json().catch(() => ({ error: `sin respuesta legible (HTTP ${r.status})` }))) as { ok?: boolean; ts?: string; error?: string }
         }
         if (p.canal === 'hilo' && !thread) {
           const raiz = await post(`🧵 Encargo ${p.encargo_id}`)
-          if (raiz.ok && raiz.ts) { thread = raiz.ts; await db.from('oficina_encargos').update({ slack_canal: canal, slack_ts: raiz.ts }).eq('id', p.encargo_id) }
+          if (!raiz.ok) { await alarmaDeSlack(`el aviso del encargo ${p.encargo_id}`, canal, raiz.error ?? 'sin error'); return }
+          if (raiz.ts) { thread = raiz.ts; await db.from('oficina_encargos').update({ slack_canal: canal, slack_ts: raiz.ts }).eq('id', p.encargo_id) }
         }
-        await post(p.texto, thread)
-      } catch { /* un fallo de Slack nunca frena un encargo */ }
+        const aviso = await post(p.texto, thread)
+        if (!aviso.ok) await alarmaDeSlack(`el aviso del encargo ${p.encargo_id}`, canal, aviso.error ?? 'sin error')
+      } catch (e) { await alarmaDeSlack(`el aviso del encargo ${p.encargo_id}`, p.canal === 'alertas' ? env.slackCanalAlertas ?? 'C0B7XUUEBHA' : env.slackCanalHilo ?? CANAL_DE_LA_OFICINA, e instanceof Error ? e.message : String(e)) } // un fallo de Slack nunca frena un encargo
     },
   }
 }

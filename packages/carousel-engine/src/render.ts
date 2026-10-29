@@ -13,6 +13,7 @@ import { InstagramReel } from './templates/InstagramReel'
 import { TikTok } from './templates/TikTok'
 import { FacebookFeed } from './templates/FacebookFeed'
 import { TwitterCard } from './templates/TwitterCard'
+import { sinEmojisEn } from './sin-emojis'
 import { cargarFuentesDeMarca, informeDeFuentes, type FontEntry, type ResolverOpciones } from './fonts'
 import {
   PLATFORM_SPECS,
@@ -62,7 +63,9 @@ export async function renderSlide(args: {
   total_slides: number
   options?: RenderOptions
 }): Promise<RenderedSlide> {
-  const { platform, brand, content, slide_index, total_slides, options = {} } = args
+  const { platform, brand, slide_index, total_slides, options = {} } = args
+  // los emojis no existen en las fuentes de marca: se quitan del texto que se PINTA (satori dibujaría «NO GLYPH»)
+  const content = sinEmojisEn(args.content)
   const spec = PLATFORM_SPECS[platform]
   if (!spec) throw new Error(`Unknown platform: ${platform}`)
   const Template = TEMPLATES[platform]

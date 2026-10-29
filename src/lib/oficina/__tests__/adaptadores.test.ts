@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { crearPuertos, registroDelManual, PREFIJO_DRY, type Entorno } from '../adaptadores'
+import { crearPuertos, olvidarAlarmasDeSlack, registroDelManual, PREFIJO_DRY, type Entorno } from '../adaptadores'
 import { almacenDeSupabase } from '../almacen-supabase'
 import { abrirEncargo } from '../orquestador'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
@@ -213,6 +213,46 @@ describe('cada adaptador por separado', () => {
     const db = sembrar(); db.semilla('oficina_encargos', [{ id: 'e2', client_id: CLIENTE }])
     const rota = (async () => { throw new Error('sin red') }) as unknown as typeof fetch
     await expect(crearPuertos(db, ENV, rota).avisar({ canal: 'alertas', encargo_id: 'e2', texto: 'x', dry_run: false })).resolves.toBeUndefined()
+  })
+  describe('29-oct · Slack que no entrega se DECLARA (antes moría mudo: ninguna pieza llegó y nadie lo supo)', () => {
+    const cuerpos = (ll: Llamada[]) => ll.map((l) => JSON.parse(String(l.init!.body ?? '{}')) as { channel?: string; text?: string })
+    it('si Slack rechaza el aviso del hilo: UNA alarma en #alertas con el error literal; el encargo sigue', async () => {
+      olvidarAlarmasDeSlack()
+      const { f, llamadas } = fetchFalso({ slackOk: false }); const db = sembrar(); db.semilla('oficina_encargos', [{ id: 'e7', client_id: CLIENTE }])
+      const P = crearPuertos(db, ENV, f)
+      await P.avisar({ canal: 'hilo', encargo_id: 'e7', texto: 'x', dry_run: false })
+      await P.avisar({ canal: 'hilo', encargo_id: 'e7', texto: 'y', dry_run: false }) // la repetición NO vuelve a sonar
+      const alarmas = cuerpos(llamadas).filter((c) => c.channel === 'C0B7XUUEBHA')
+      expect(alarmas).toHaveLength(1)
+      expect(alarmas[0].text).toContain('not_in_channel')
+      expect(alarmas[0].text).toContain('C0C7XUKNCLS')
+    })
+    it('si el hilo ya existe y es el MENSAJE el que Slack rechaza, también hay alarma con el error literal', async () => {
+      olvidarAlarmasDeSlack()
+      const { f, llamadas } = fetchFalso({ slackOk: false }); const db = sembrar(); db.semilla('oficina_encargos', [{ id: 'e6', client_id: CLIENTE, slack_ts: '171.1' }])
+      await crearPuertos(db, ENV, f).avisar({ canal: 'hilo', encargo_id: 'e6', texto: 'x', dry_run: false })
+      expect(cuerpos(llamadas).filter((c) => c.channel === 'C0B7XUUEBHA' && /not_in_channel/.test(c.text ?? ''))).toHaveLength(1)
+    })
+    it('si falla el propio aviso a #alertas no hay a dónde avisar: ni bucle ni error', async () => {
+      olvidarAlarmasDeSlack()
+      const { f, llamadas } = fetchFalso({ slackOk: false }); const db = sembrar(); db.semilla('oficina_encargos', [{ id: 'e8', client_id: CLIENTE }])
+      await expect(crearPuertos(db, ENV, f).avisar({ canal: 'alertas', encargo_id: 'e8', texto: 'x', dry_run: false })).resolves.toBeUndefined()
+      expect(llamadas).toHaveLength(1)
+    })
+    it('si Slack responde bien, no hay alarma', async () => {
+      olvidarAlarmasDeSlack()
+      const { f, llamadas } = fetchFalso(); const db = sembrar(); db.semilla('oficina_encargos', [{ id: 'e9', client_id: CLIENTE }])
+      await crearPuertos(db, ENV, f).avisar({ canal: 'hilo', encargo_id: 'e9', texto: 'x', dry_run: false })
+      expect(cuerpos(llamadas).filter((c) => c.channel === 'C0B7XUUEBHA')).toHaveLength(0)
+    })
+    it('la pieza que no llega a Slack también alarma (la bandeja sigue siendo la vía de siempre)', async () => {
+      olvidarAlarmasDeSlack()
+      const { f, llamadas } = fetchFalso({ slackOk: false }); const db = sembrar()
+      const salida = db.tablas['client_historical_outputs']?.[0]
+      const r = await crearPuertos(db, { ...ENV, notasDelDueno: true }, f).bandeja({ client_id: CLIENTE, output_id: String(salida?.id ?? PARTE), titulo: 'Carrusel BRF-9', vista_previa: 'v', metadata: {}, expires_at: null })
+      expect(r.ok).toBe(true)
+      expect(cuerpos(llamadas).filter((c) => c.channel === 'C0B7XUUEBHA' && /not_in_channel/.test(c.text ?? ''))).toHaveLength(1)
+    })
   })
   it('un fallo al guardar un archivo de la entrega se declara (no se pierde en silencio)', async () => {
     const db = sembrar(); db.storageFalla = 'cuota llena'
