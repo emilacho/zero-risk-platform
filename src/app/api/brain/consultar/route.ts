@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const u = new URL(request.url).searchParams
     // el aprendizaje del dueño tiene su propia consulta (huellas, tres espacios, filtro por especialista); el resto de la lectura no lo entrega nunca
     if (u.get('clase') === CLASE_DEL_APRENDIZAJE) {
-      const a = await consultarAprendizajeDelEntorno({ client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), destinatario: u.get('destinatario'), formato: u.get('formato'), tarea: u.get('tarea'), limite: u.get('limite') })
+      const a = await consultarAprendizajeDelEntorno({ client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), destinatario: u.get('destinatario'), formato: u.get('formato'), tarea: u.get('tarea'), limite: u.get('limite'), marcar_uso: u.get('marcar_uso') !== '0' })
       return NextResponse.json(a.body, { status: a.status })
     }
     const r = await rutaConsultar({ db: getSupabaseAdmin() as unknown as Db }, { client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), que: u.get('que'), atributo: u.get('atributo'), clase: u.get('clase'), sede_clave: u.get('sede_clave'), limite: u.get('limite') })

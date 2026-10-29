@@ -12,7 +12,7 @@ import type { FilaDeFormato } from './entrega'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import type { SobreDeRevisionDePieza } from './paso-jefatura'
 import type { NotaVista } from '../notas-del-dueno/autorevision'
-import type { PuertoMesa } from './mesa/tipos'
+import type { NotaLeida, PuertoMesa } from './mesa/tipos'
 
 /** lo que el cliente tiene (manual, fotos, datos propios), leído UNA vez al abrir y guardado en el encargo */
 export interface FuentesCompletas {
@@ -140,6 +140,14 @@ export interface Puertos {
   mesa?: PuertoMesa
   /** CHEQUEO GRATIS de la puerta del portero (n8n `zero-risk/portero`): manda un cuerpo vacío con las dos llaves y espera el rechazo de VALIDACIÓN del portero (no llama al modelo, no cuesta). Opcional: sin él no se comprueba */
   chequearPortero?(): Promise<{ ok: true } | { ok: false; detalle: string }>
+  /**
+   * LA MESA LEE LO QUE EL DUEÑO HA DICHO (opcional): `consultar` pide al cerebro las notas que le tocan a un agente (`GET /api/brain/consultar?clase=aprendizaje_del_dueno`); `registrar` anota en `autorevisiones_del_productor`
+   * qué notas leyó y qué cambió. Sin este puerto la mesa trabaja como siempre; ninguno de los dos frena nunca un turno. La jefatura y la segunda mirada GPT no usan este puerto.
+   */
+  aprendizaje?: {
+    consultar(p: { client_id: string; agente: string; destinatario: string | null; formato: string; tarea: string; dry_run: boolean }): Promise<{ ok: true; notas: NotaLeida[]; aviso?: string } | { ok: false; error: string }>
+    registrar(r: { client_id: string; encargo_id: string; agente: string; paso: string; notas_vistas: string[]; choco: boolean; cambios: unknown[]; costo_usd: number; clave_unica: string }): Promise<void>
+  }
   ahora(): Date
   fuentes(clientId: string): Promise<FuentesCompletas | { error: string }>
   parte(parteId: string, clientId: string): Promise<{ texto: string } | null>

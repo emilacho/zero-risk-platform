@@ -84,6 +84,11 @@ export interface PuertoMesa {
   aportar(a: NuevoAporte): Promise<{ ok: true; aporte: Aporte } | { ok: false; error: string }>
 }
 
+/** una nota del aprendizaje del dueño tal como la entrega el cerebro (`GET /api/brain/consultar?clase=aprendizaje_del_dueno`), reducida a lo que el especialista lee */
+export interface NotaLeida { id: string; nota: string; direccion: string; alcance: string }
+/** lo que se leyó del cerebro para un turno: las notas (puede no haber), a quién iban dirigidas y, si algo falló o el cerebro avisó, el motivo (la lectura nunca frena el turno) */
+export interface LecturaDeNotas { notas: NotaLeida[]; destinatario: string | null; aviso?: string }
+
 /** lo que la mesa guarda en el artefacto `mesa` del encargo */
 export interface EstadoMesa {
   tipo: TipoDePieza
@@ -110,7 +115,7 @@ export interface EstadoMesa {
   /** el tablero (aportes, citas y lo que el código comprobó) que viaja a la jefatura para que juzgue si cada aporte fue real; lo escribe `cerrarLaMesa` */
   tablero_para_la_jefatura?: string
   /** el turno que está esperando respuesta */
-  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'traducir'; responde_a: string | null } | null
+  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
 }
 
 /** lo que decide el planificador */

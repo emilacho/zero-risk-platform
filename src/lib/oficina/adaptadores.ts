@@ -27,7 +27,7 @@ import { enviarPiezaASlack, leerNotasParaElProductor, piezaParaSlackDeLaBandeja,
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { /** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string; }
+export interface Entorno { /** la mesa lee las notas del dueño (encendida por omisión; `APRENDIZAJE_DEL_DUENO=0` la apaga): cada agente consulta al cerebro al abrirse su turno */ aprendizajeDelDueno?: boolean;/** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string; }
 
 /** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
 export { ESPERAS_DEL_REVISOR_MS }
@@ -83,6 +83,31 @@ const ALARMAS_DE_SLACK = new Map<string, number>()
 const UNA_POR_HORA_MS = 3_600_000
 export const olvidarAlarmasDeSlack = (): void => ALARMAS_DE_SLACK.clear()
 
+/**
+ * LA MESA LEE LO QUE EL DUEÑO HA DICHO · `consultar` llama a la lectura instantánea del cerebro (sin modelo; la llave interna viaja SOLO a nuestra propia casa) y `registrar` deja el rastro en `autorevisiones_del_productor`.
+ * En ensayo (`dry_run`) la consulta no marca las notas como usadas (`marcar_uso=0`): un ensayo no cambia cuánto pesa una nota. Nunca lanza desde `consultar`: un fallo se devuelve como `{ ok: false }`.
+ */
+export function puertoDeAprendizaje(db: Db, env: Pick<Entorno, 'baseUrl' | 'internalKey'>, f: Fetch = fetch): NonNullable<Puertos['aprendizaje']> {
+  return {
+    async consultar(p) {
+      try {
+        const q = new URLSearchParams({ client_id: p.client_id, clase: 'aprendizaje_del_dueno', oficina: 'oficina-creativa', agente: p.agente, formato: p.formato, tarea: p.tarea, limite: '10' })
+        if (p.destinatario) q.set('destinatario', p.destinatario)
+        if (p.dry_run) q.set('marcar_uso', '0')
+        const r = await f(`${env.baseUrl}/api/brain/consultar?${q.toString()}`, { headers: { 'x-api-key': env.internalKey }, signal: AbortSignal.timeout(15000) })
+        const j = (await r.json().catch(() => ({}))) as Fila
+        if (!r.ok) return { ok: false as const, error: String(j.detalle ?? j.error ?? `HTTP ${r.status}`) }
+        const notas = (Array.isArray(j.notas) ? (j.notas as Fila[]) : [])
+          .map((n) => ({ id: String(n.ficha_id ?? ''), nota: String(n.nota ?? '').trim(), direccion: n.direccion === 'evitar' ? 'evitar' : 'hacer', alcance: String(n.alcance ?? 'cliente') }))
+          .filter((n) => n.id && n.nota)
+        const aviso = typeof j.aviso_de_busqueda === 'string' && j.aviso_de_busqueda ? j.aviso_de_busqueda : undefined
+        return { ok: true as const, notas, ...(aviso ? { aviso } : {}) }
+      } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) } }
+    },
+    registrar: (r) => registrarAutorevision(db, r),
+  }
+}
+
 export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () => Date = () => new Date()): Puertos {
   /** 29-oct · lo que Slack contesta SIEMPRE se mira (`ok`): si no entregó, UNA alarma en #alertas con el error literal (antes moría en silencio: 28-oct, ninguna pieza llegó y nadie lo supo). Nunca lanza; si el que falla es #alertas, no hay a dónde avisar */
   const alarmaDeSlack = async (que: string, canalFallido: string, error: string): Promise<void> => {
@@ -99,6 +124,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     almacen,
     mesa: puertoDeLaMesa(db),
     ahora,
+    ...(env.aprendizajeDelDueno ? { aprendizaje: puertoDeAprendizaje(db, env, f) } : {}),
     // el segundo cerebro del productor (apagado por omisión): las notas que el agente puede ver y el rastro de cada auto-revisión
     ...(env.notasDelDueno ? { notas: { leer: (clientId: string) => leerNotasParaElProductor(db, { baseUrl: env.baseUrl, internalKey: env.internalKey }, f, clientId), registrar: (r: Parameters<typeof registrarAutorevision>[1]) => registrarAutorevision(db, r) } } : {}),
     async fuentes(clientId) {
