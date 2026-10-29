@@ -10,6 +10,8 @@ import { pedirCambios } from '@/lib/oficina/cambios'
 import { despertarAlFlujoDeLaOficina } from '@/lib/oficina/despertar'
 import { esObjeto, puertosReales } from '@/lib/oficina/ruta'
 import { espejoEncendido, registrarEventoDeEmilio } from '@/lib/oficina/eventos-de-emilio/registrar'
+import { empujeDelDashboard } from '@/lib/notas-del-dueno/ruta'
+import { waitUntil } from '@vercel/functions'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -36,11 +38,12 @@ export async function POST(request: Request) {
   // 29-oct · APRENDER DE EMILIO, etapa 1: lo que Emilio pidió (comentario literal + láminas marcadas) queda como evento crudo, salga bien o mal el pedido. Nunca frena la ruta.
   const rastro = async (resultado: Record<string, unknown>) => {
     try {
-      await registrarEventoDeEmilio(getSupabaseAdmin() as never, {
+      const ev = await registrarEventoDeEmilio(getSupabaseAdmin() as never, {
         canal: 'dashboard', accion: 'pedir_cambios', autor: (reviewer as string).trim(), hitl_id: cuerpo.hitl_id as string, comentario, laminas: laminas as number[],
         especialidades: Array.isArray(cuerpo.especialidades) ? (cuerpo.especialidades as unknown[]).map(String) : [], resultado,
         crudo: { hitl_id: cuerpo.hitl_id, comentario, laminas, reviewer, especialidades: cuerpo.especialidades ?? null, despertar: cuerpo.despertar ?? null },
-      }, { espejo: espejoEncendido() })
+      }, { espejo: espejoEncendido(), alCerebro: empujeDelDashboard(request) })
+      if (ev.ok && ev.empuje) { try { waitUntil(ev.empuje) } catch { await ev.empuje } }
     } catch { /* un rastro que falla no cambia la respuesta */ }
   }
   try {

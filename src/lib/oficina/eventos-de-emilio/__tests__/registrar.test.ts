@@ -148,3 +148,36 @@ describe('Slack: lo que Emilio escribe en el hilo y el clic en «Rechazar» deja
     expect(r.cuerpo).toMatchObject({ ok: true, nota_id: 'n1' })
   })
 })
+
+describe('el empuje al cerebro de lo que Emilio dice en el dashboard', () => {
+  const base2 = { canal: 'dashboard' as const, autor: 'emilio', hitl_id: HITL }
+  it('un comentario con texto (pedir cambios) y un rechazo con motivo suben, con la forma que espera la puerta; aprobar sin texto no', async () => {
+    const { db } = baseFalsa()
+    const subidas: any[] = []
+    const alCerebro = async (n: any, ctx: any) => { subidas.push({ n, ctx }) }
+    const a = await registrarEventoDeEmilio(db, { ...base2, accion: 'pedir_cambios', comentario: 'titular más cercano', laminas: [2] }, { espejo: true, alCerebro })
+    await registrarEventoDeEmilio(db, { ...base2, accion: 'rechazar', comentario: 'no es nuestro tono' }, { espejo: true, alCerebro })
+    await registrarEventoDeEmilio(db, { ...base2, accion: 'aprobar' }, { espejo: true, alCerebro })
+    const c = await registrarEventoDeEmilio(db, { ...base2, accion: 'aprobar', comentario: 'aprobada, pero la 3 más corta' }, { espejo: true, alCerebro })
+    if (a.ok) await a.empuje
+    if (c.ok) await c.empuje
+    expect(subidas).toHaveLength(3)
+    expect(subidas[2].n).toMatchObject({ tipo: 'aprobada', comentario: 'aprobada, pero la 3 más corta' })
+    expect(subidas[0].n).toMatchObject({ tipo: 'editada', comentario: 'titular más cercano [láminas: 2]', hitl_id: HITL, client_id: CLIENTE, alcance: 'cliente' })
+    expect(subidas[0].ctx).toMatchObject({ canal_slack: 'dashboard' })
+    expect(subidas[0].ctx.ts).toMatch(/^id-/) // el id del evento crudo es la referencia del mensaje
+    expect(subidas[1].n).toMatchObject({ tipo: 'rechazada', comentario: 'no es nuestro tono' })
+  })
+  it('sin espejo (o desde Slack, que ya sube por su cuenta) no hay empuje; y si el cerebro falla, el evento igual queda', async () => {
+    const { db, tablas } = baseFalsa()
+    let llamadas = 0
+    const alCerebro = async () => { llamadas++; throw new Error('cerebro caído') }
+    await registrarEventoDeEmilio(db, { ...base2, accion: 'rechazar', comentario: 'x' }, { alCerebro })
+    await registrarEventoDeEmilio(db, { ...base2, canal: 'slack', accion: 'comentar', comentario: 'y', slack: { canal: 'C1', ts: '1.1' } }, { espejo: true, alCerebro })
+    expect(llamadas).toBe(0)
+    const r = await registrarEventoDeEmilio(db, { ...base2, accion: 'rechazar', comentario: 'z' }, { espejo: true, alCerebro })
+    if (r.ok) await expect(r.empuje).resolves.toBeUndefined()
+    expect(llamadas).toBe(1)
+    expect(tablas.eventos_de_emilio.length).toBe(3)
+  })
+})

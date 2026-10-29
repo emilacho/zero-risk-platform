@@ -54,7 +54,7 @@ export function cuerpoParaLaPuerta(n: NotaParaLaPuerta): Record<string, unknown>
     respuesta: recortar(n.comentario.trim(), MAX_RESPUESTA),
     canal: CANAL_QUE_SE_ANOTA, mensaje_ref: `${n.canal_slack}:${n.ts}`, respondido_en: n.respondido_en,
     preguntado_por: { oficina: OFICINA_QUE_PREGUNTA, agente: AGENTE_QUE_PREGUNTA },
-    dry_run: false, workflow_id: FLUJO_DE_LAS_NOTAS, workflow_execution_id: `slack:${n.canal_slack}:${n.ts}`,
+    dry_run: false, workflow_id: FLUJO_DE_LAS_NOTAS, workflow_execution_id: `${n.canal_slack === 'dashboard' ? 'dashboard' : 'slack'}:${n.canal_slack}:${n.ts}`,
   }
 }
 

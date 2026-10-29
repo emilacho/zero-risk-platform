@@ -114,3 +114,41 @@ describe('el adaptador real de Slack escribe el evento', () => {
     expect(db.tablas['eventos_de_emilio'][0]).toMatchObject({ canal: 'slack', accion: 'comentar', autor: 'U1', comentario: 'la 3 no me gusta', client_id: CLIENTE })
   })
 })
+
+describe('de punta a punta (dashboard → evento → nota → puerta del dueño del cerebro)', () => {
+  it('rechazar con motivo + NOTAS_AL_CEREBRO=1 llama a /api/brain/alimentar/dueno con la forma exacta y deja el envío «enviada»', async () => {
+    process.env.NOTAS_DEL_DUENO = '1'; process.env.NOTAS_AL_CEREBRO = '1'
+    const llamadas: Array<{ url: string; cuerpo: any }> = []
+    const real = globalThis.fetch
+    globalThis.fetch = (async (url: string, init?: RequestInit) => { llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) }); return new Response(JSON.stringify({ ok: true }), { status: 200 }) }) as never
+    try {
+      mocks.db = mundo()
+      const { PATCH } = await import('@/app/api/hitl/[id]/route')
+      const r = await PATCH(peticion(`https://t.test/api/hitl/${HITL}`, { status: 'rejected', reviewer: 'emilio', frase_del_aprobador: 'Muy formal para la gente de planta' }, 'PATCH'), { params: { id: HITL } })
+      expect(r.status).toBe(200)
+      await new Promise((res) => setTimeout(res, 20))
+      expect(llamadas).toHaveLength(1)
+      expect(llamadas[0].url).toBe('https://t.test/api/brain/alimentar/dueno')
+      const c = llamadas[0].cuerpo
+      expect(c).toMatchObject({ evento: 'respuesta', acumula: true, client_id: CLIENTE, canal: '#oficina-creativa', respuesta: 'Muy formal para la gente de planta', dry_run: false, preguntado_por: { oficina: 'oficina-creativa', agente: 'content-creator' } })
+      expect(c.tema).toBe('oficina creativa · pieza 22222222'); expect(c.tema.length).toBeLessThanOrEqual(80)
+      expect(c.mensaje_ref).toMatch(/^dashboard:/); expect(c.respondido_en).toMatch(/^\d{4}-\d\d-\d\dT/)
+      expect(c.workflow_execution_id).toMatch(/^dashboard:dashboard:/)
+      const envios = (mocks.db as DbFalsa).tablas['notas_del_dueno_envios']
+      expect(envios[0]).toMatchObject({ estado: 'enviada' })
+    } finally { globalThis.fetch = real; delete process.env.NOTAS_AL_CEREBRO }
+  })
+  it('con NOTAS_AL_CEREBRO apagado la nota queda ENCOLADA (pendiente) y no se llama a nadie', async () => {
+    process.env.NOTAS_DEL_DUENO = '1'; delete process.env.NOTAS_AL_CEREBRO
+    const real = globalThis.fetch; let n = 0
+    globalThis.fetch = (async () => { n++; return new Response('{}') }) as never
+    try {
+      mocks.db = mundo()
+      const { PATCH } = await import('@/app/api/hitl/[id]/route')
+      await PATCH(peticion(`https://t.test/api/hitl/${HITL}`, { status: 'rejected', reviewer: 'emilio', frase_del_aprobador: 'motivo' }, 'PATCH'), { params: { id: HITL } })
+      await new Promise((res) => setTimeout(res, 20))
+      expect(n).toBe(0)
+      expect((mocks.db as DbFalsa).tablas['notas_del_dueno_envios'][0]).toMatchObject({ estado: 'pendiente' })
+    } finally { globalThis.fetch = real }
+  })
+})
