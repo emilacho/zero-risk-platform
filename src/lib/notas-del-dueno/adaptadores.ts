@@ -96,7 +96,8 @@ export function puertosDeNotas(db: Db, env: EntornoDeNotas, f: Fetch = fetch): P
       try {
         const r = await f(`${env.baseUrl}/api/hitl/${hitl_id}`, {
           method: 'PATCH', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey },
-          body: JSON.stringify({ status: d.status, reviewer: d.reviewer, decision: { origen: 'slack' }, ...(d.frase ? { frase_del_aprobador: d.frase } : {}) }),
+          // SIN `decision`: el contrato `hitl-action` la define como texto de una lista (approved|rejected|…) y rechazaba el objeto con 400 (los botones de Slack nunca decidían nada); el origen ya va en `reviewer` («slack:<usuario>»)
+          body: JSON.stringify({ status: d.status, reviewer: d.reviewer, ...(d.frase ? { frase_del_aprobador: d.frase } : {}) }),
         })
         if (!r.ok) return { ok: false, error: `PATCH /api/hitl respondió ${r.status}` }
         return { ok: true }
