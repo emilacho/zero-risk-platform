@@ -5,11 +5,12 @@
  *  · `client_id`/`tenant_id` DENTRO del payload se ignoran siempre: el cliente lo pone la sala;
  *  · `familia` ausente, o no listada en las activas, o la oficina apagada ⇒ PASARELA a la pieza simple, cuerpo intacto (el comportamiento de hoy).
  */
+import { erroresDeCambios, type CambiosDelDueno } from './cambios-del-dueno'
 import { esFechaReal, esHoraReal } from './texto'
 export const TARGET_STEP_PRODUCIR = 'router.dispatch.brief/parte-listo.producir'
 
 /** r79 · D5 · `fila_id`, `fecha` y `hora` son del calendario (la fila que originó el brief): la entrega los usa para nombrar, fechar y vencer la pieza */
-export interface Sobre { /** la causa de un fallo que ya se corrigió: permite reabrir un encargo que ya gastó (tope de versiones intacto) */ reabrir_causa_corregida?: string; parte_id: string; brief_id: string; dry_run: boolean; tope_usd?: number; familia?: string; fila_id?: string; fecha?: string; hora?: string }
+export interface Sobre { /** 29-oct · el dueño devolvió una pieza cerrada con cambios: abre la versión siguiente SIN gastar el tope de 3 versiones (límite propio de 5 rondas) */ cambios_del_dueno?: CambiosDelDueno; /** la causa de un fallo que ya se corrigió: permite reabrir un encargo que ya gastó (tope de versiones intacto) */ reabrir_causa_corregida?: string; parte_id: string; brief_id: string; dry_run: boolean; tope_usd?: number; familia?: string; fila_id?: string; fecha?: string; hora?: string }
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RE_BRIEF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/
 const RE_FAMILIA = /^[a-z][a-z0-9_]{0,39}$/
@@ -26,6 +27,7 @@ export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorad
   if (b.tope_usd !== undefined && !(typeof b.tope_usd === 'number' && b.tope_usd > 0 && b.tope_usd <= 10)) errores.push('`tope_usd` debe ser un número mayor que 0 y no más de 10')
   if (b.familia !== undefined && !(typeof b.familia === 'string' && RE_FAMILIA.test(b.familia))) errores.push('`familia` inválida')
   if (b.reabrir_causa_corregida !== undefined && !(typeof b.reabrir_causa_corregida === 'string' && b.reabrir_causa_corregida.trim().length >= 10 && b.reabrir_causa_corregida.trim().length <= 300)) errores.push('`reabrir_causa_corregida` debe ser una frase de 10 a 300 caracteres')
+  if (b.cambios_del_dueno !== undefined) errores.push(...erroresDeCambios(b.cambios_del_dueno))
   if (b.fila_id !== undefined && !(typeof b.fila_id === 'string' && RE_BRIEF.test(b.fila_id))) errores.push('`fila_id` inválido')
   if (b.fecha !== undefined && !(typeof b.fecha === 'string' && RE_FECHA.test(b.fecha) && esFechaReal(b.fecha))) errores.push('`fecha` debe ser una fecha real aaaa-mm-dd')
   if (b.hora !== undefined && !(typeof b.hora === 'string' && RE_HORA.test(b.hora) && esHoraReal(b.hora.slice(0, 5)))) errores.push('`hora` debe ser una hora real hh:mm')
@@ -33,7 +35,7 @@ export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorad
   const ignorados = ['client_id', 'tenant_id'].filter((k) => k in b)
   return {
     ok: true, ignorados,
-    sobre: { parte_id: b.parte_id as string, brief_id: b.brief_id as string, dry_run: b.dry_run, ...(b.tope_usd !== undefined ? { tope_usd: b.tope_usd as number } : {}), ...(b.familia !== undefined ? { familia: b.familia as string } : {}), ...(b.reabrir_causa_corregida !== undefined ? { reabrir_causa_corregida: (b.reabrir_causa_corregida as string).trim() } : {}), ...(b.fila_id !== undefined ? { fila_id: b.fila_id as string } : {}), ...(b.fecha !== undefined ? { fecha: b.fecha as string } : {}), ...(b.hora !== undefined ? { hora: (b.hora as string).slice(0, 5) } : {}) },
+    sobre: { parte_id: b.parte_id as string, brief_id: b.brief_id as string, dry_run: b.dry_run, ...(b.tope_usd !== undefined ? { tope_usd: b.tope_usd as number } : {}), ...(b.familia !== undefined ? { familia: b.familia as string } : {}), ...(b.reabrir_causa_corregida !== undefined ? { reabrir_causa_corregida: (b.reabrir_causa_corregida as string).trim() } : {}), ...(b.cambios_del_dueno !== undefined ? { cambios_del_dueno: b.cambios_del_dueno as CambiosDelDueno } : {}), ...(b.fila_id !== undefined ? { fila_id: b.fila_id as string } : {}), ...(b.fecha !== undefined ? { fecha: b.fecha as string } : {}), ...(b.hora !== undefined ? { hora: (b.hora as string).slice(0, 5) } : {}) },
   }
 }
 

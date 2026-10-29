@@ -14,6 +14,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 import { TIPO_DE_BANDEJA } from '@/lib/manual/borrador'
 import { guardarNotaDeRechazo, promoverManualRevisado } from '@/lib/manual/promover'
+import { marcarAprobada } from '@/lib/oficina/cambios'
 import { publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA } from '@/lib/publicacion/en-ensayo'
 import { puertosDePublicacion } from '@/lib/publicacion/almacen-supabase'
 
@@ -116,6 +117,11 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
     }
     const nota = await guardarNotaDeRechazo(supabase, { output_id: String(data.output_id), client_id: String(data.client_id), nota: frase ?? '', rechazado_por: String(body.reviewer ?? 'emilio') })
     return NextResponse.json({ item: data, nota_de_rechazo: nota })
+  }
+
+  // 29-oct · aprobar una pieza de la oficina deja su encargo «aprobada» (antes la aprobación solo se veía en la bandeja). Solo si estaba cerrado; best-effort: la decisión del aprobador manda
+  if (data?.type === TIPO_PIEZA_DE_OFICINA && body.status === 'approved') {
+    try { await marcarAprobada(supabase as never, String(data.id)) } catch { /* la decisión del aprobador manda */ }
   }
 
   // Lote de publicación o pieza de la oficina aprobados (arreglo 5 de la cadena): al APROBAR se arma la publicación EN ENSAYO (no se llama a Meta ni se publica nada).

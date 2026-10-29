@@ -48,7 +48,7 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
   for (const t of sa.data ?? []) {
     if (t.tipo !== 'agente' && t.tipo !== 'portero') continue // material y jefatura tienen su propio plazo
     const enc = await P.almacen.leerEncargo(String(t.encargo_id))
-    if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido'].includes(enc.estado)) continue
+    if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido', 'aprobada'].includes(enc.estado)) continue
     const k = `lanzado:${String(t.paso)}:${String(t.n)}`
     const veces = enc.estado_del_motor.vueltas[k] ?? 0
     if (veces >= MAX_REENTREGAS_SIN_ACUSE) continue // se deja a la regla de los 12 min (muerto → un reintento → fallido)
@@ -61,7 +61,7 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
   const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = []
   for (const t of r.data ?? []) {
     const enc = await P.almacen.leerEncargo(String(t.encargo_id))
-    if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido'].includes(enc.estado)) continue
+    if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido', 'aprobada'].includes(enc.estado)) continue
     if (reentregar.includes(enc.id)) continue // se acaba de volver a entregar: no se da por muerto
     if (t.tipo === 'jefatura') {
       // J8a · la revisión de la jefatura tiene su propio plazo y su propio vigía: aquí solo se da por perdida pasado el plazo largo, y la pieza sigue marcada (nunca se pierde)

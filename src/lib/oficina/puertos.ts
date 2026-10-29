@@ -5,6 +5,7 @@
 import type { FuentesDelCliente } from './chequeos'
 import type { FotoEtiquetada } from './fotos'
 import type { PropiosDelCliente } from './reglas-de-imagen'
+import type { CambiosDelDueno } from './cambios-del-dueno'
 import type { ConfigDeOficina } from './sobre'
 import type { Estado, Ficha, Plantilla } from './tipos'
 import type { FilaDeFormato } from './entrega'
@@ -49,7 +50,7 @@ export interface Encargo {
   tipo_de_grupo: string
   familia: string
   version_encargo: number
-  estado: 'abierto' | 'en_paso' | 'cerrado' | 'cerrado_por_tope' | 'fallido'
+  estado: 'abierto' | 'en_paso' | 'cerrado' | 'cerrado_por_tope' | 'fallido' | 'aprobada'
   estado_del_motor: Estado
   con_desacuerdo: boolean
   imagen_generada: boolean
@@ -61,7 +62,7 @@ export interface Encargo {
   salida_output_id: string | null
   hitl_queue_id: string | null
 }
-export interface NuevoEncargo { /** la causa de un fallo ya corregida: permite reabrir un encargo `fallido` aunque ya haya gastado (tope de versiones intacto) */ reabrir_causa?: string; client_id: string; parte_id: string; brief_id: string; tipo_de_grupo: string; familia: string; tope_usd: number; dry_run: boolean; prueba: boolean; sala_ref: Record<string, unknown> | null; estado_del_motor: Estado }
+export interface NuevoEncargo { /** 29-oct · el dueño pidió cambios sobre una pieza cerrada: versión siguiente, fuera del tope de 3 versiones */ cambios_del_dueno?: CambiosDelDueno; /** la causa de un fallo ya corregida: permite reabrir un encargo `fallido` aunque ya haya gastado (tope de versiones intacto) */ reabrir_causa?: string; client_id: string; parte_id: string; brief_id: string; tipo_de_grupo: string; familia: string; tope_usd: number; dry_run: boolean; prueba: boolean; sala_ref: Record<string, unknown> | null; estado_del_motor: Estado }
 
 export interface TurnoRegistrado {
   n: number; paso: string; tipo: string; agente: string | null

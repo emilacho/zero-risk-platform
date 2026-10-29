@@ -57,7 +57,12 @@ export function almacenDeSupabase(db: Db): Almacen {
       const ultimo = n.dry_run ? mayor : todos.find((x) => x.dry_run !== true)
       let version = !n.dry_run && mayor ? Number(mayor.version_encargo ?? 1) + 1 : 1
       let salaRef = n.sala_ref
-      if (ultimo) {
+      if (n.cambios_del_dueno) {
+        // 29-oct · el dueño devolvió una pieza CERRADA: versión siguiente, fuera del tope de 3 versiones (su límite propio son 5 rondas, lo vigila quien llama); jamás sobre un encargo vivo, fallido o de ensayo
+        if (!ultimo || (ultimo.estado !== 'cerrado' && ultimo.estado !== 'cerrado_por_tope')) return { ok: false as const, error: 'cambios_del_dueno: no hay una pieza real cerrada que devolver' }
+        version = Number(mayor?.version_encargo ?? 1) + 1
+        salaRef = { ...(n.sala_ref ?? {}), cambios_del_dueno: n.cambios_del_dueno }
+      } else if (ultimo) {
         const d = decidirReapertura({ estado: String(ultimo.estado), gasto_usd: Number(ultimo.gasto_usd ?? 0), version_encargo: Number(ultimo.version_encargo ?? 1), pasos_ejecutados: Number((ultimo.estado_del_motor as { pasos_ejecutados?: number } | null)?.pasos_ejecutados ?? 0) }, n.reabrir_causa)
         if (d.accion === 'devolver') return { ok: true as const, encargo: aEncargo(ultimo), nuevo: false }
         version = n.dry_run ? d.version : Math.max(d.version, Number(mayor?.version_encargo ?? 1) + 1)
