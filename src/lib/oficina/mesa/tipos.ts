@@ -24,9 +24,12 @@ export const COTAS = {
   TECHO_SOBRE_TOPE: 1.2,
   /** lo que se reserva por turno de agente (US$) */
   RESERVA_POR_TURNO_USD: 0.6,
-  /** lo que viene DESPUÉS de la mesa (imagen + observador + jefatura ≈ 0,7–0,9; sin imagen generada solo la jefatura y el armado): la mesa lo reserva antes de seguir conversando (bloqueante 2 de CC#3) */
-  RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD: 0.9,
-  RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD: 0.5,
+  /**
+   * lo que viene DESPUÉS de la mesa: imagen + observador (≈ 0,2) y la REVISIÓN de la jefatura, que tiene su propio tope (US$ 1,50 por revisión desde el 29-oct, P5 del encargo de correcciones) más un margen.
+   * La mesa lo reserva antes de seguir conversando (bloqueante 2 de CC#3): así la jefatura nunca se queda sin dinero dentro del tope de la pieza y no termina «incompleta por tope».
+   */
+  RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD: 2.0,
+  RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD: 1.7,
   /** el traductor de la pieza pregunta al autor como máximo UNA vez (condición 7) */
   MAX_PREGUNTAS_DEL_TRADUCTOR: 1,
   /** cuántas veces se le devuelve la integración al director por citas que faltan */

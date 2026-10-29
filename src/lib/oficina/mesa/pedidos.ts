@@ -65,6 +65,8 @@ const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'carrusel
       'A3 usé: <qué tomaste de ese aporte>',
       'A5 descarté: <por qué no lo usaste>',
       '```',
+      'Lo que escribes en Título, Texto y Llamado es EXACTAMENTE lo que se dibuja: una sola versión final por campo, sin "Variante A/B", sin etiquetas de formato ("Titular nativo", "Texto en imagen"), sin límites entre paréntesis ni markdown. Si quieres dejar alternativas, ponlas bajo "## Alternativas" (no se dibujan). Las instrucciones para quien dibuja o publica van en "Imagen:" o en tus aportes, no dentro del texto de la lámina.',
+      'El pie ("## Pie") es el texto de publicación final, sin hashtags (esos van solo en "## Etiquetas", una vez cada uno) y con la voz del manual.',
     ].join('\n')
   : [
       'Escribe la PIEZA COMPLETA con esta convención ligera: una sección por elemento del brief, con su identificador:',

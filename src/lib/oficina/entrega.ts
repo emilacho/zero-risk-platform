@@ -31,10 +31,16 @@ export function cuandoSePublica(salaRef: Record<string, unknown> | null | undefi
   return frase ? { fecha: frase.fecha, hora: frase.hora, de: 'ficha' } : null
 }
 
-/** el texto EXACTO para pegar: pie de foto, línea en blanco y los hashtags (con # una sola vez) */
+/** el texto EXACTO para pegar: pie de foto, línea en blanco y los hashtags (con # una sola vez: sin repetidos y sin los que el pie ya trae al final) */
 export function textoParaCopiar(p: { pie_de_foto: string; hashtags: string[] }): string {
-  const tags = p.hashtags.map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')
-  return tags ? `${p.pie_de_foto.trim()}\n\n${tags}` : p.pie_de_foto.trim()
+  const vistos = new Set<string>()
+  const lista = p.hashtags.map((h) => h.trim()).filter(Boolean).map((h) => (h.startsWith('#') ? h : `#${h}`)).filter((h) => { const k = h.toLowerCase(); if (vistos.has(k)) return false; vistos.add(k); return true })
+  // 29-oct · el pie de la mesa llegó con los hashtags ya pegados al final y se imprimían dos veces: las líneas finales que son solo hashtags de la lista se quitan del pie
+  const lineas = p.pie_de_foto.trim().split('\n')
+  while (lineas.length && lineas[lineas.length - 1].trim() && lineas[lineas.length - 1].trim().split(/\s+/).every((x) => vistos.has(x.toLowerCase()))) lineas.pop()
+  const pie = lineas.join('\n').trim()
+  const tags = lista.join(' ')
+  return tags ? `${pie}\n\n${tags}` : pie
 }
 
 export interface Medidas { ancho: number; alto: number; tipo: 'png' | 'jpeg' }

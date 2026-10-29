@@ -35,7 +35,7 @@ export async function observarImagenes(P: Puertos, enc: Encargo, _pl: Plantilla)
       if (rr.costo_usd > 0) { costo += rr.costo_usd; gastos.push({ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: rr.costo_usd, base: 'usage' }) }
     } else if ((rr.costo_usd ?? 0) > 0) { costo += rr.costo_usd ?? 0; gastos.push({ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: rr.costo_usd ?? 0, base: 'usage' }) }
   }
-  const o = observacionDeLaMesa({ items, lecturas, permitido, marcasPropias: [b.F.marca?.brand_handle ?? ''] })
+  const o = observacionDeLaMesa({ items, lecturas, permitido, marcasPropias: [b.F.marca?.brand_handle ?? '', b.F.cliente_nombre ?? ''] })
   const refsConAceptada = new Set(Object.keys(o.aceptadas))
   const fichas = [...new Set(o.rechazadas.map((x) => x.ref))].filter((ref) => !refsConAceptada.has(ref)).map((ref) => {
     const motivos = o.rechazadas.filter((x) => x.ref === ref).map((x) => x.motivo)
