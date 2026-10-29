@@ -57,6 +57,8 @@ export interface PuertosDeNotas {
    * sube una nota a la puerta del dueño del cerebro (idempotente por nota; guarda su estado para reintentar); NUNCA lanza. Sin este puerto no se sube nada.
    * `enviada`: el cerebro la tiene · `pendiente`: no respondió y se reintenta en la siguiente vuelta · `rechazada`: la puerta la rechazó (queda anotado el motivo)
    */
+  /** etapa 1 de aprender de Emilio: deja el evento crudo e inmutable (comentarios en el hilo y clic en «Rechazar»); NUNCA lanza */
+  registrarEvento?(e: { accion: 'comentar' | 'abrir_rechazo'; autor: string; hitl_id: string; comentario?: string | null; slack: { canal: string; ts: string } | null; crudo?: Record<string, unknown> }): Promise<void>
   enviarAlCerebro?(nota: NotaNueva & { id: string }, ctx: { ts: string; canal_slack: string; respondido_en: string }): Promise<EstadoDeEnvio>
 }
 export type EstadoDeEnvio = 'enviada' | 'pendiente' | 'rechazada'

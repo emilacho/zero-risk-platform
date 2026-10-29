@@ -46,6 +46,7 @@ export async function procesar(P: PuertosDeNotas, cfg: ConfiguracionDeNotas, i: 
     const p = await P.pieza(hitl_id)
     if (!p || p.type !== TIPO_PIEZA) return r(200, { ok: true, ignorado: 'el hilo no es de una pieza' })
     const c = alcanceYComentario(i.texto)
+    try { await P.registrarEvento?.({ accion: 'comentar', autor: i.autor, hitl_id: p.hitl_id, comentario: i.texto, slack: { canal: i.canal, ts: i.ts }, crudo: { canal: i.canal, ts: i.ts, hilo_ts: i.hilo_ts, texto: i.texto } }) } catch { /* un rastro que falla no frena nada */ }
     const n = await P.guardarNota({
       client_id: p.client_id, alcance: c.alcance, tipo: 'comentario', comentario: c.comentario, hitl_id: p.hitl_id, output_id: p.output_id,
       pieza_titulo: p.titulo, pieza_version: p.version, pieza_familia: p.familia, origen: 'slack', autor: i.autor, clave_unica: `comentario:${i.canal}:${i.ts}`,
@@ -60,6 +61,7 @@ export async function procesar(P: PuertosDeNotas, cfg: ConfiguracionDeNotas, i: 
     const p = await P.pieza(i.hitl_id)
     if (!p || p.type !== TIPO_PIEZA) return r(200, { ok: false, error: 'pieza_inexistente' })
     if (p.status !== 'pending') return r(200, { ok: false, error: 'ya_decidida', estado: p.status }, `Esta pieza ya estaba decidida (${p.status}).`)
+    try { await P.registrarEvento?.({ accion: 'abrir_rechazo', autor: i.autor, hitl_id: p.hitl_id, comentario: null, slack: i.canal && i.ts ? { canal: i.canal, ts: i.ts } : null, crudo: { canal: i.canal, ts: i.ts } }) } catch { /* un rastro que falla no frena nada */ }
     const abierto = await P.abrirModalDeRechazo(i.trigger_id, { hitl_id: p.hitl_id, canal: i.canal, ts: i.ts, titulo: p.titulo })
     return abierto
       ? r(200, { ok: true, formulario: 'abierto' })
