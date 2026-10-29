@@ -65,9 +65,12 @@ export function describirPieza(c: Pick<ContextoDePedido, 'art'> & { familia: 'ca
 }
 
 /** hasta 3 láminas de muestra: la primera, una intermedia y la última */
-export function laminasDeMuestra(png: string[], n = 3): string[] {
-  if (png.length <= n) return png
-  return [png[0], png[Math.floor(png.length / 2)], png[png.length - 1]].slice(0, n)
+/**
+ * Las láminas que ve quien REVISA (jefe, curador al decidir, revisor externo de la jefatura): TODAS, en orden.
+ * Antes se mandaban solo portada, mitad y última (con 6 láminas, la 1, la 4 y la 6) y el revisor juzgaba lo que no veía (30-oct, pieza 8adbfb3d).
+ */
+export function laminasParaRevisar(png: string[]): string[] {
+  return [...png]
 }
 
 const describirElementos = (els: ElementoDelKit[]) => els.map((e) => `- ${e.ref}: ${e.destino}${e.fecha ? ` · ${e.fecha}${e.hora ? ' ' + e.hora : ''}` : ' · sin fecha'} · tema «${e.tema}» · pilar «${e.pilar}»${e.datos.length ? ` · datos: ${e.datos.join('; ')}` : ''}`).join('\n')
@@ -123,7 +126,7 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
     }
     case 'revision_jefe': {
       esquema = 'fichas.v1'
-      images = laminasDeMuestra(c.png)
+      images = laminasParaRevisar(c.png)
       const donde = kit ? 'texto|hashtags|estructura|imagen' : 'texto|hashtags|laminas|imagen'
       return fin(`${base}\n${datosVerificados}\n\n## La pieza\n${pieza}\n\n## Chequeos duros ya hechos por el código (abiertos)\n${seccionDeFichas(c.estado.fichas.filter((f) => f.origen === 'chequeo' && f.estado === 'abierta'))}\n\n## Tu trabajo\nRevisas UNA vez los errores de fondo contra el manual, el plan y el brief, mirando también las láminas dibujadas. Para cada hallazgo, \`donde\` debe ser uno de: ${donde}. No reescribes: señalas y propones.\n\n## Formato de tu respuesta\nSolo este JSON:\n${'{"fichas": [{"que": "…", "donde": "' + donde + '", "contra_que": "…", "gravedad": "bloquea|sugerencia", "propuesta": "…"}]}'}`)
     }
@@ -148,7 +151,7 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
     }
     case 'decide_imagen': {
       esquema = 'resolucion_solo.v1'
-      images = laminasDeMuestra(c.png, 4)
+      images = laminasParaRevisar(c.png)
       return fin(`${base}\n## Tu dirección visual\n${s(c.art('visual_direction')?.resumen)}\n\n## La pieza completa (texto de todas las piezas; las imágenes que ves son las dibujadas)\n${pieza}\n\n## Opinión libre del revisor externo sobre ESTA pieza (no es una lista de errores ni una orden: es una mirada distinta a la tuya)\n${fichas}\n\n## Tu trabajo\nResponde sobre TU parte (las imágenes y la dirección visual): «tomada» si aceptas que alguna imagen debería cambiar (y en «rehacer» cuáles, por su ref), o «no_tomada» con una línea de razón. Tú decides. Si aceptas y a este encargo todavía le queda su re-imagen, esas imágenes se vuelven a generar UNA vez (con los mismos controles de siempre); si ya no le queda, las decide una persona. No hay otra vuelta.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
     }
     case 'corrige_estructura':
@@ -161,16 +164,15 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
   }
 }
 
-/** lo que el revisor externo recibe de una pieza de láminas: la pieza, hasta 4 láminas dibujadas y el cerebro del cliente que lee la sala. Nada del hilo ni de las fichas: esta función no los recibe. */
+/** lo que el revisor externo recibe de una pieza de láminas: la pieza, TODAS las láminas dibujadas y el cerebro del cliente que lee la sala. Nada del hilo ni de las fichas: esta función no los recibe. */
 export function contextoDelRevisorLaminas(c: ContextoLaminas): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[]; encargo: ResumenDelEncargo; nota_pieza?: string } {
-  const muestra = laminasDeMuestra(c.png, 4)
+  const muestra = laminasParaRevisar(c.png)
   // LA MESA (bloqueante 1 de CC#3): el tablero del equipo y las citas de la dirección llegan a la jefatura para que juzgue si cada aporte citado fue REAL
   const tablero = s(c.art('mesa')?.tablero_para_la_jefatura)
   return {
     pieza: describirPieza(c),
     imagenes: muestra,
     encargo: resumenDelEncargo(c.brief),
-    ...(c.png.length > muestra.length ? { nota_pieza: `solo se adjuntan ${muestra.length} de las ${c.png.length} láminas (portada, intermedias y última); el texto de todas está arriba` } : {}),
     contexto: [
       { titulo: 'Manual de marca del cliente', funcion: FUNCION_DEL_MANUAL, texto: recorta(c.fuentes.manual_texto, 12000) },
       { titulo: 'Plan de trabajo del cliente', funcion: FUNCION_DEL_PLAN, texto: c.fuentes.plan_texto ? recorta(c.fuentes.plan_texto, 12000) : '' },

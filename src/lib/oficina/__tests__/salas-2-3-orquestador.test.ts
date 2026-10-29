@@ -202,7 +202,7 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(pasos).toContain('corrige_laminas'); expect(pasos).not.toContain('corrige_texto')
     expect(M.llamadas.render).toBe(2)
   })
-  it('🔴 el revisor externo recibe la pieza (texto + hasta 4 láminas dibujadas) y el cerebro del cliente, con UNA pregunta abierta; sin reglas y sin nada del jefe ni del diseñador', async () => {
+  it('🔴 el revisor externo recibe la pieza (texto + TODAS las láminas dibujadas) y el cerebro del cliente, con UNA pregunta abierta; sin reglas y sin nada del jefe ni del diseñador', async () => {
     const { M, id } = await abiertoC()
     await correr(M, id, guionCarrusel({ revision_jefe: () => ({ texto: j({ fichas: [{ que: 'SECRETO-DEL-JEFE', donde: 'texto', contra_que: 'brief', gravedad: 'sugerencia', propuesta: 'x' }] }) }) }))
     expect(M.llamadas.revisor).toBe(1)
@@ -214,7 +214,7 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     for (const s of ['### Manual de marca del cliente — ', '### Plan de trabajo del cliente — ', '### El brief de este entregable — ', '### Lo que reunió el portero — ']) expect(t).toContain(s)
     expect(t).toContain('Texto base:'); expect(t).toContain('Láminas:')
     expect(t).not.toMatch(/SECRETO-DEL-JEFE|visual_direction|reglas_de_imagen|gravedad|rúbrica|JSON/i)
-    expect(M.llamadas.revisorImagenes[0].length).toBeGreaterThanOrEqual(3); expect(M.llamadas.revisorImagenes[0].length).toBeLessThanOrEqual(4)
+    expect(M.llamadas.revisorImagenes[0]).toHaveLength(5)
     expect(M.llamadas.revisorImagenes[0].every((u) => /\.test\//.test(u))).toBe(true)
   })
   it('si el brazo no responde (también al reintentar), el encargo cierra FALLIDO y visible; nunca una pieza sin láminas', async () => {
@@ -379,12 +379,12 @@ describe('SALA 2 · más reglas del orquestador de láminas', () => {
     expect(tareas['texto'][0]).toMatch(/Plan de trabajo del cliente[\s\S]*PLAN DE TRABAJO DE PRUEBA/)
     expect(tareas['laminas'][0]).toMatch(/PLAN DE TRABAJO DE PRUEBA/)
   })
-  it('el jefe ve las láminas dibujadas: portada, una intermedia y la última', async () => {
+  it('el jefe ve TODAS las láminas dibujadas, en orden', async () => {
     const { M, id } = await abiertoC()
     const { pedidos } = await correr(M, id, guionCarrusel())
     const imgs = (pedidos['revision_jefe'][0].images as Array<{ url: string }>).map((x) => x.url)
-    expect(imgs).toHaveLength(3)
-    expect(imgs[0]).toMatch(/\/1-1080x1350\.png$/); expect(imgs[2]).toMatch(/\/5-1080x1350\.png$/)
+    expect(imgs).toHaveLength(5)
+    imgs.forEach((u, i) => expect(u).toContain(`/${i + 1}-1080x1350.png`))
   })
   it('cada pedido lleva la indicación de ESE agente en ESTA sala, el tope del paso y el dry_run', async () => {
     const { M, id } = await abiertoC()
