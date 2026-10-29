@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
+import { DbFalsa } from '../../__tests__/dbfalsa'
 
 const mocks = vi.hoisted(() => ({ db: null as unknown }))
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => mocks.db }))
@@ -89,7 +89,7 @@ describe('POST /api/oficina/cambios · pedir cambios con láminas marcadas', () 
 })
 
 describe('inmutabilidad y permisos (la migración)', () => {
-  const SQL = readFileSync(join(__dirname, '..', '..', '..', '..', 'supabase', 'migrations', '202610291900_eventos_de_emilio.sql'), 'utf8')
+  const SQL = readFileSync(join(__dirname, '..', '..', '..', '..', '..', 'supabase', 'migrations', '202610291900_eventos_de_emilio.sql'), 'utf8')
   it('un disparador impide UPDATE, DELETE y TRUNCATE; el servidor solo puede insertar y leer; hay RLS', () => {
     expect(SQL).toMatch(/BEFORE UPDATE OR DELETE ON public\.eventos_de_emilio/)
     expect(SQL).toMatch(/BEFORE TRUNCATE ON public\.eventos_de_emilio/)
@@ -100,7 +100,7 @@ describe('inmutabilidad y permisos (la migración)', () => {
   })
   it('la jefatura y el revisor GPT no importan este módulo', () => {
     for (const f of ['src/lib/jefatura/revision/orquestador.ts', 'src/lib/jefatura/revision/pedidos.ts', 'src/lib/revisor-gpt.ts']) {
-      expect(readFileSync(join(__dirname, '..', '..', '..', '..', f), 'utf8')).not.toMatch(/eventos-de-emilio|eventos_de_emilio/)
+      expect(readFileSync(join(__dirname, '..', '..', '..', '..', '..', f), 'utf8')).not.toMatch(/eventos-de-emilio|eventos_de_emilio/)
     }
   })
 })

@@ -2,7 +2,7 @@
  * LOS ADAPTADORES REALES de los puertos de las notas del dueño: la base (Supabase) y Slack. Todo recibe sus dependencias por parámetro (base, `fetch`, llaves) para probarse sin red.
  * Un fallo de Slack nunca se lanza. Un error de lectura de la base NUNCA se lee como «vacío».
  */
-import { registrarEventoDeEmilio } from '@/lib/eventos-de-emilio/registrar'
+import { registrarEventoDeEmilio } from '@/lib/oficina/eventos-de-emilio/registrar'
 import { BLOQUE_DEL_MOTIVO, CALLBACK_DEL_RECHAZO, CAMPO_DEL_MOTIVO } from './interpretar'
 import { mensajeDeLaPieza, type PiezaParaSlack } from './mensaje-pieza'
 import { seleccionarNotas, unirVistas, vistasDelCerebro, type NotaVista } from './autorevision'

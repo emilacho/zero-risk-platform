@@ -3,8 +3,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { canalDelRevisor, claveDelEvento, especialidadesValidas, registrarEventoDeEmilio } from '../registrar'
-import { procesar } from '../../notas-del-dueno/recibir'
-import type { PuertosDeNotas } from '../../notas-del-dueno/tipos'
+import { procesar } from '../../../notas-del-dueno/recibir'
+import type { PuertosDeNotas } from '../../../notas-del-dueno/tipos'
 
 const HITL = '11111111-1111-4111-8111-111111111111'
 const CLIENTE = 'df7e47cc-bec4-4fa2-bc24-ff97ba5213a5'

@@ -9,7 +9,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { pedirCambios } from '@/lib/oficina/cambios'
 import { despertarAlFlujoDeLaOficina } from '@/lib/oficina/despertar'
 import { esObjeto, puertosReales } from '@/lib/oficina/ruta'
-import { espejoEncendido, registrarEventoDeEmilio } from '@/lib/eventos-de-emilio/registrar'
+import { espejoEncendido, registrarEventoDeEmilio } from '@/lib/oficina/eventos-de-emilio/registrar'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'

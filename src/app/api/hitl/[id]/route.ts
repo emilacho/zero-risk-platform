@@ -17,7 +17,7 @@ import { guardarNotaDeRechazo, promoverManualRevisado } from '@/lib/manual/promo
 import { marcarAprobada } from '@/lib/oficina/cambios'
 import { publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA } from '@/lib/publicacion/en-ensayo'
 import { puertosDePublicacion } from '@/lib/publicacion/almacen-supabase'
-import { canalDelRevisor, espejoEncendido, registrarEventoDeEmilio, type AccionDeEmilio } from '@/lib/eventos-de-emilio/registrar'
+import { canalDelRevisor, espejoEncendido, registrarEventoDeEmilio, type AccionDeEmilio } from '@/lib/oficina/eventos-de-emilio/registrar'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
