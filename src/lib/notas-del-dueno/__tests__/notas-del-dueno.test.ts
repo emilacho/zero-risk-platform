@@ -60,8 +60,12 @@ describe('mensaje de la pieza', () => {
     expect(seccion.text!.text.length).toBeLessThanOrEqual(MAX_SECCION)
     expect(seccion.text!.text.endsWith('…')).toBe(true)
   })
+  it('29-oct · un carrusel de 7 láminas llega con las 7 (antes se cortaba en 4)', () => {
+    const m = mensajeDeLaPieza({ ...base, imagenes: Array.from({ length: 7 }, (_, i) => `https://a.test/l${i + 1}.png`) })
+    expect((m.blocks as Array<{ type: string }>).filter((b) => b.type === 'image')).toHaveLength(7)
+  })
   it('solo manda imágenes públicas https y como mucho MAX_IMAGENES', () => {
-    const imgs = ['https://a.test/1.png', 'http://a.test/2.png', 'data:image/png;base64,AAA', ...Array.from({ length: 8 }, (_, i) => `https://a.test/x${i}.png`)]
+    const imgs = ['https://a.test/1.png', 'http://a.test/2.png', 'data:image/png;base64,AAA', ...Array.from({ length: 14 }, (_, i) => `https://a.test/x${i}.png`)]
     const m = mensajeDeLaPieza({ ...base, imagenes: imgs })
     const im = (m.blocks as Array<{ type: string; image_url?: string }>).filter((b) => b.type === 'image')
     expect(im.length).toBe(MAX_IMAGENES)
