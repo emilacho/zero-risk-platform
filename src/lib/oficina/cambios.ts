@@ -9,6 +9,11 @@ import { TARGET_STEP_PRODUCIR } from './sobre'
 
 const esObjeto = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
 type Fila = Record<string, unknown>
+
+/** 29-oct · el dueño aprobó la pieza: su encargo pasa a «aprobada» (solo si estaba cerrado; un encargo vivo, fallido o ya aprobado no se toca) */
+export async function marcarAprobada(db: Db, hitl_id: string): Promise<void> {
+  await db.from('oficina_encargos').update({ estado: 'aprobada' }).eq('hitl_queue_id', hitl_id).in('estado', ['cerrado', 'cerrado_por_tope'])
+}
 export type ResultadoDeCambios = { status: number; cuerpo: Record<string, unknown> }
 
 export interface PedidoDeCambios { hitl_id: string; comentario: string; laminas: number[]; reviewer: string }
