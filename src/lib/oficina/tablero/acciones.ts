@@ -2,6 +2,7 @@
  * Las acciones del tablero, TRAMO 1 (30-oct): rehacer una pieza que falló, el cliente (editar · nuevo · baja) y la oficina (encender/apagar · tope de gasto).
  * Pendientes de los tramos siguientes (responden 404 = «todavía no disponible»): pieza-nueva, plan-*, firmar-tablero, revision-resolver, manual-*.
  */
+import { almacenDeSupabase } from '../../cadena/almacen-supabase'
 import { abrirEncargo } from '../orquestador'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
@@ -126,9 +127,10 @@ export const oficinaEstado: Manejador = async ({ db, ahora }, { cuerpo }) => {
   if (cuerpo.estado !== 'encendida' && cuerpo.estado !== 'apagada') return rechazo(400, 'entrada_invalida', '`estado` debe ser encendida o apagada')
   const estado = cuerpo.estado
   if (oficina === 'planeacion') {
-    const u = await db.from('cadena_config').update({ valor: estado, actualizado_en: ahora().toISOString() }).eq('clave', 'estado_cadena').select('clave')
-    if (u.error) return rechazo(500, 'oficina_error', u.error.message)
-    if (((u.data as Fila[] | null) ?? []).length === 0) return rechazo(409, 'sin_interruptor', 'no hay interruptor de planeación en la base')
+    // la tabla de la cadena la nombra SOLO el almacén de la cadena (guarda de generalidad)
+    const cadena = almacenDeSupabase()
+    if ((await cadena.leerConfig('estado_cadena')) === undefined) return rechazo(409, 'sin_interruptor', 'no hay interruptor de planeación en la base')
+    await cadena.escribirConfig('estado_cadena', estado)
     return { status: 200, cuerpo: { ok: true, oficina, estado } }
   }
   const tabla = TABLA_DE_ESTADO[oficina]

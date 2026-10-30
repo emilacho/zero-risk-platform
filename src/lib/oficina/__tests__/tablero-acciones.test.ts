@@ -101,11 +101,11 @@ describe('cliente-baja', () => {
 })
 
 describe('oficina-estado / oficina-tope', () => {
-  const sembrar = () => new DbFalsa()
+  const sembrar = () => (mocks.db = new DbFalsa()
     .semilla('oficina_config', [{ id: 1, estado: 'encendida' }]).semilla('finanzas_config', [{ id: 1, estado: 'encendida' }]).semilla('jefatura_config', [{ id: 1, estado: 'encendida' }])
     .semilla('cadena_config', [{ clave: 'estado_cadena', valor: 'encendida' }])
     .semilla('jefatura_grading_policies', [{ artifact_type: 'pieza', tope_revision_usd: 1.5 }, { artifact_type: 'plan', tope_revision_usd: 5 }])
-    .semilla('oficina_tipos_de_grupo', [{ tipo: 'carrusel_mesa', limites: { tope_encargo_usd: 4, otro: 1 } }, { tipo: 'kit_mesa', limites: { tope_encargo_usd: 4 } }, { tipo: 'post_img', limites: { tope_encargo_usd: 2 } }])
+    .semilla('oficina_tipos_de_grupo', [{ tipo: 'carrusel_mesa', limites: { tope_encargo_usd: 4, otro: 1 } }, { tipo: 'kit_mesa', limites: { tope_encargo_usd: 4 } }, { tipo: 'post_img', limites: { tope_encargo_usd: 2 } }])) as DbFalsa
   it('apaga y enciende CADA oficina en su tabla, y solo esa', async () => {
     const db = sembrar()
     for (const [oficina, tabla] of [['creativa', 'oficina_config'], ['financiera', 'finanzas_config'], ['jefatura', 'jefatura_config']] as const) {

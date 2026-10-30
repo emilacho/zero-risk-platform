@@ -8,6 +8,7 @@ const UNICOS: Record<string, string[][]> = {
   oficina_gastos: [['ref_tabla', 'ref_id']],
   oficina_uso_de_fotos: [['encargo_id', 'foto_id']],
   cerebro_diario_corridas: [['client_id', 'dia']],
+  cadena_config: [['clave']],
   notas_del_dueno: [['clave_unica']],
   eventos_de_emilio: [['clave_unica']],
   notas_del_dueno_envios: [['nota_id']],
