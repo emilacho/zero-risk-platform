@@ -195,9 +195,18 @@ describe('E4 · la ruta del borrador con la jefatura (base falsa)', () => {
   }
   const cuerpo = { client_id: C, manual: MANUAL, costo_usd: 0, fidelidad: FID, opinion: { ok: true, texto: 'bien' }, ...WF }
 
-  it('todo cumplido ⇒ versión nueva vigente, validada por la jefatura y con fecha; SIN tarjeta para el dueño', async () => {
+  it('ADENDA 7 · sin `validador` la jefatura NO valida: borrador + tarjeta en la bandeja del dueño, nada se promueve', async () => {
     const db = base()
     const r = await rutaBorrador(db, { ...cuerpo, dry_run: false })
+    expect(r.body).toMatchObject({ ok: true, validador: 'bandeja' })
+    expect(r.body.jefatura).toBeUndefined()
+    expect(String(r.body.hitl_id ?? '')).not.toBe('')
+    expect(db.tablas['client_brand_books']).toHaveLength(1)
+  })
+
+  it('todo cumplido ⇒ versión nueva vigente, validada por la jefatura y con fecha; SIN tarjeta para el dueño', async () => {
+    const db = base()
+    const r = await rutaBorrador(db, { ...cuerpo, validador: 'jefatura', dry_run: false })
     expect(r.status).toBe(200)
     expect(r.body).toMatchObject({ ok: true, validador: 'jefatura', hitl_id: null })
     expect((r.body.jefatura as { valida: boolean }).valida).toBe(true)
@@ -212,7 +221,7 @@ describe('E4 · la ruta del borrador con la jefatura (base falsa)', () => {
   it('si falta algo (hueco, fidelidad, segunda mirada) NO valida: el borrador queda `draft`, dice por qué y nada va a la bandeja', async () => {
     for (const malo of [{ manual: { ...MANUAL, valores: [] } }, { fidelidad: { ...FID, bajo_umbral: ['positioning'] } }, { opinion: { ok: false, error: 'caído' } }]) {
       const db = base()
-      const r = await rutaBorrador(db, { ...cuerpo, ...malo, dry_run: false })
+      const r = await rutaBorrador(db, { ...cuerpo, ...malo, validador: 'jefatura', dry_run: false })
       expect(r.status).toBe(200)
       expect((r.body.jefatura as { valida: boolean; motivos: string[] }).valida).toBe(false)
       expect((r.body.jefatura as { motivos: string[] }).motivos.length).toBeGreaterThan(0)
@@ -223,7 +232,7 @@ describe('E4 · la ruta del borrador con la jefatura (base falsa)', () => {
   })
   it('dry_run no escribe nada y devuelve lo que decidiría', async () => {
     const db = base()
-    const r = await rutaBorrador(db, { ...cuerpo, dry_run: true })
+    const r = await rutaBorrador(db, { ...cuerpo, validador: 'jefatura', dry_run: true })
     expect(r.body).toMatchObject({ simulado: true })
     expect((r.body.jefatura as { valida: boolean }).valida).toBe(true)
     expect(db.tablas['client_brand_books']).toHaveLength(1); expect(db.tablas['client_historical_outputs'] ?? []).toHaveLength(0)
@@ -231,12 +240,12 @@ describe('E4 · la ruta del borrador con la jefatura (base falsa)', () => {
   it('sin cambios y el vigente YA validado ⇒ no hay nada que firmar; sin cambios pero SIN validar ⇒ la jefatura lo valida como versión nueva (ninguna fila se edita)', async () => {
     const yaValidado = base(true)
     yaValidado.tablas['client_brand_books'][0].content_text = JSON.stringify({ brand_book_draft: MANUAL })
-    const r1 = await rutaBorrador(yaValidado, { ...cuerpo, dry_run: false })
+    const r1 = await rutaBorrador(yaValidado, { ...cuerpo, validador: 'jefatura', dry_run: false })
     expect(r1.body).toMatchObject({ sin_cambios: true, output_id: null }); expect(yaValidado.tablas['client_brand_books']).toHaveLength(1)
 
     const sinValidar = base(false)
     sinValidar.tablas['client_brand_books'][0].content_text = JSON.stringify({ brand_book_draft: MANUAL })
-    const r2 = await rutaBorrador(sinValidar, { ...cuerpo, dry_run: false })
+    const r2 = await rutaBorrador(sinValidar, { ...cuerpo, validador: 'jefatura', dry_run: false })
     expect((r2.body.jefatura as { valida: boolean }).valida).toBe(true)
     expect(sinValidar.tablas['client_brand_books']).toHaveLength(2)
     expect(sinValidar.tablas['client_brand_books'][0]).toMatchObject({ id: 'b1', version: 1, human_validated: false })
@@ -249,7 +258,7 @@ describe('E4 · la ruta del borrador con la jefatura (base falsa)', () => {
   })
   it('H3 · el borrador lleva su procedencia (evidencia no confiable) para que ningún lector lo trate como «desconocido»', async () => {
     const db = base()
-    await rutaBorrador(db, { ...cuerpo, manual: { ...MANUAL, valores: [] }, dry_run: false })
+    await rutaBorrador(db, { ...cuerpo, validador: 'jefatura', manual: { ...MANUAL, valores: [] }, dry_run: false })
     expect(db.tablas['client_historical_outputs'][0].provenance_tag).toMatchObject({ type: 'evidence', trust_level: 'untrusted' })
   })
 })

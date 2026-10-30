@@ -163,11 +163,11 @@ describe('M3 · los nodos de código, ejecutados', () => {
     const sin = correr(corre(N.borPedido), { entrada: { ...E, manual_final: { z: 1 }, manual_final_origen: 'sin_opinion', opinion: { ok: false, error: 'x' }, respuesta_del_autor: [{ punto: 'fantasma' }] } })[0].json.borrador_body
     expect(sin.respuesta_del_autor).toBeNull(); expect(sin.opinion).toEqual({ ok: false, error: 'x' })
   })
-  it('⑦ la JEFATURA valida (no la tarjeta del dueño) y el tipo de negocio viaja a la ruta', () => {
+  it('⑦ la jefatura NO valida (ADENDA 7): el flujo manda la bandeja y el tipo de negocio viaja a la ruta', () => {
     const b = correr(corre(N.borPedido), { entrada: { ...E, manual_final: { z: 1 }, manual_final_origen: 'sin_opinion', tipo_de_negocio: 'restaurante', buscado_en: ['sitio'] } })[0].json.borrador_body
-    expect(b).toMatchObject({ validador: 'jefatura', tipo_de_negocio: 'restaurante', buscado_en: ['sitio'] })
+    expect(b).toMatchObject({ validador: 'bandeja', tipo_de_negocio: 'restaurante', buscado_en: ['sitio'] })
     const sinTipo = correr(corre(N.borPedido), { entrada: { ...E, manual_final: { z: 1 }, manual_final_origen: 'sin_opinion' } })[0].json.borrador_body
-    expect(sinTipo).toMatchObject({ validador: 'jefatura', tipo_de_negocio: null, buscado_en: null })
+    expect(sinTipo).toMatchObject({ validador: 'bandeja', tipo_de_negocio: null, buscado_en: null })
   })
   it('⑧ los cierres dicen qué pasó; el de borrador no pierde un error de la ruta', () => {
     expect(correr(corre(N.cierreSin), { entrada: { ...E, dry_run: true, motivo: 'm' } })[0].json).toMatchObject({ fin: 'sin_modelo', dry_run: true, costo_usd: 0 })

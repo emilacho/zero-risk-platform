@@ -99,6 +99,10 @@ describe('el estado del manual vigente', () => {
   it('toma la versión de mayor número', () => {
     expect(estadoDelManual([v(1, true), v(3, false), v(2, true)])).toMatchObject({ estado: 'propuesta_sin_validar', version: 3, fecha: '2026-10-20' })
     expect(estadoDelManual([v(1, false), v(2, true)])).toMatchObject({ estado: 'validado_por_el_dueno', version: 2 })
+    // ADENDA 7: la etiqueta sale de QUIÉN validó (provenance_tag.validado_por), no de que alguien lo marcara
+    expect(estadoDelManual([{ ...v(2, true), provenance_tag: { validado_por: 'jefatura' } }])).toMatchObject({ estado: 'validado_por_la_jefatura', version: 2 })
+    expect(estadoDelManual([{ ...v(2, true), provenance_tag: { validado_por: 'jefatura' } }])).toMatchObject({ texto: expect.stringContaining('validado por la jefatura') })
+    expect(estadoDelManual([{ ...v(2, true), provenance_tag: { validado_por: 'dueno' } }])).toMatchObject({ estado: 'validado_por_el_dueno' })
     expect(estadoDelManual([])).toMatchObject({ estado: 'sin_manual', version: null })
   })
   it('lee de la base y dice cuando no puede', async () => {
