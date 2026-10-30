@@ -6,6 +6,7 @@ import type { FilaDeFormato } from './entrega'
 import type { Almacen, Cambios, Encargo, NuevoEncargo, TurnoRegistrado } from './puertos'
 import { CONFIG_APAGADA, type ConfigDeOficina } from './sobre'
 import { decidirReapertura } from './reapertura'
+import { esIntentoFallidoDeCambios } from './cambios-del-dueno'
 import { estadoInicial, type Plantilla } from './tipos'
 
 export type Db = { from(tabla: string): any }
@@ -59,7 +60,9 @@ export function almacenDeSupabase(db: Db): Almacen {
       let salaRef = n.sala_ref
       if (n.cambios_del_dueno) {
         // 29-oct · el dueño devolvió una pieza CERRADA: versión siguiente, fuera del tope de 3 versiones (su límite propio son 5 rondas, lo vigila quien llama); jamás sobre un encargo vivo, fallido o de ensayo
-        if (!ultimo || (ultimo.estado !== 'cerrado' && ultimo.estado !== 'cerrado_por_tope')) return { ok: false as const, error: 'cambios_del_dueno: no hay una pieza real cerrada que devolver' }
+        // un intento anterior que murió al abrir (ver `esIntentoFallidoDeCambios`) no ocupa el lugar de la pieza cerrada: se mide contra la última real que no sea uno de ellos
+        const vigente = todos.find((x) => x.dry_run !== true && !esIntentoFallidoDeCambios(x))
+        if (!vigente || (vigente.estado !== 'cerrado' && vigente.estado !== 'cerrado_por_tope')) return { ok: false as const, error: 'cambios_del_dueno: no hay una pieza real cerrada que devolver' }
         version = Number(mayor?.version_encargo ?? 1) + 1
         salaRef = { ...(n.sala_ref ?? {}), cambios_del_dueno: n.cambios_del_dueno }
       } else if (ultimo) {

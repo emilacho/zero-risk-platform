@@ -2,7 +2,7 @@
  * PEDIR CAMBIOS · la ruta de verdad (los datos y la tarea viven en cambios-del-dueno.ts, sin ciclos con el orquestador).
  */
 import type { Db } from './almacen-supabase'
-import { MAX_RONDAS_DE_CAMBIOS, TIPO_PIEZA_DE_OFICINA_BANDEJA, type CambiosDelDueno } from './cambios-del-dueno'
+import { esIntentoFallidoDeCambios, MAX_RONDAS_DE_CAMBIOS, TIPO_PIEZA_DE_OFICINA_BANDEJA, type CambiosDelDueno } from './cambios-del-dueno'
 import { abrirEncargo } from './orquestador'
 import type { Puertos } from './puertos'
 import { TARGET_STEP_PRODUCIR } from './sobre'
@@ -37,9 +37,9 @@ export async function pedirCambios(db: Db, P: Puertos, p: PedidoDeCambios): Prom
   if (enc.dry_run === true) return { status: 409, cuerpo: { error: 'es_un_ensayo' } }
   if (enc.estado !== 'cerrado' && enc.estado !== 'cerrado_por_tope') return { status: 409, cuerpo: { error: 'encargo_no_cerrado', estado: enc.estado } }
 
-  const hermanos = await db.from('oficina_encargos').select('version_encargo, sala_ref').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).eq('tipo_de_grupo', enc.tipo_de_grupo)
+  const hermanos = await db.from('oficina_encargos').select('version_encargo, sala_ref, estado, gasto_usd').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).eq('tipo_de_grupo', enc.tipo_de_grupo)
   if (hermanos.error) return { status: 500, cuerpo: { error: 'oficina_error', detalle: hermanos.error.message } }
-  const rondasHechas = ((hermanos.data as Fila[] | null) ?? []).map((x) => (esObjeto(x.sala_ref) && esObjeto(x.sala_ref.cambios_del_dueno) ? Number(x.sala_ref.cambios_del_dueno.ronda) || 0 : 0))
+  const rondasHechas = ((hermanos.data as Fila[] | null) ?? []).filter((x) => !esIntentoFallidoDeCambios(x)).map((x) => (esObjeto(x.sala_ref) && esObjeto(x.sala_ref.cambios_del_dueno) ? Number(x.sala_ref.cambios_del_dueno.ronda) || 0 : 0))
   const ronda = Math.max(0, ...rondasHechas) + 1
   if (ronda > MAX_RONDAS_DE_CAMBIOS) return { status: 409, cuerpo: { error: 'limite_de_rondas', rondas_hechas: ronda - 1, maximo: MAX_RONDAS_DE_CAMBIOS } }
 
@@ -56,7 +56,8 @@ export async function pedirCambios(db: Db, P: Puertos, p: PedidoDeCambios): Prom
     ...(typeof filaDelCalendario.id === 'string' ? { fila_id: filaDelCalendario.id } : {}), ...(typeof filaDelCalendario.fecha === 'string' ? { fecha: filaDelCalendario.fecha } : {}), ...(typeof filaDelCalendario.hora === 'string' ? { hora: filaDelCalendario.hora } : {}),
   }
   const r = await abrirEncargo(P, { cuerpo, client_id: String(enc.client_id), target_step_id: TARGET_STEP_PRODUCIR, sala_ref: { _journey_id: salaPrevia._journey_id ?? null, _sala_correlation_id: salaPrevia._sala_correlation_id ?? null } })
-  if (r.status !== 200 || r.cuerpo.accion === 'ya_existia') {
+  // la mesa puede cerrar `fallido` AL ABRIR (p. ej. sin dirección creativa activa): la ruta contesta 200 con `accion: 'cerrado'` y nada corre; la pieza no se pierde, vuelve a la bandeja
+  if (r.status !== 200 || r.cuerpo.accion === 'ya_existia' || r.cuerpo.accion === 'cerrado') {
     await db.from('hitl_queue').update({ status: 'pending', reviewer: null, decided_at: null, resolved_at: null, decision: {} }).eq('id', p.hitl_id).eq('status', 'edited') // no se pudo abrir: la pieza vuelve a esperar al dueño
     return { status: r.status === 200 ? 409 : r.status, cuerpo: { error: 'no_se_pudo_abrir_la_version_siguiente', detalle: r.cuerpo } }
   }

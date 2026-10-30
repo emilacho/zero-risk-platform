@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
 import { verificarFirmaDeSlack, VENTANA_S } from '../firma-slack'
-import { mensajeDeLaPieza, ACCION_APROBAR, ACCION_RECHAZAR, MAX_SECCION, MAX_IMAGENES } from '../mensaje-pieza'
+import { mensajeDeLaPieza, enlaceDeLaPieza, ACCION_APROBAR, ACCION_RECHAZAR, MAX_SECCION, MAX_IMAGENES } from '../mensaje-pieza'
 import { alcanceYComentario, interpretarEvento, interpretarInteractividad, payloadDeInteractividad, BLOQUE_DEL_MOTIVO, CALLBACK_DEL_RECHAZO, CAMPO_DEL_MOTIVO } from '../interpretar'
 import { procesar } from '../recibir'
 import { enviarPiezaASlack, leerGenerales, puertosDeNotas } from '../adaptadores'
@@ -46,12 +46,15 @@ describe('firma de Slack', () => {
 // ───────────────────────── el mensaje de la pieza
 describe('mensaje de la pieza', () => {
   const base = { hitl_id: HITL, cliente: 'Cliente', titulo: 'Post del lunes', familia: 'post_img' }
-  const botones = (m: { blocks: unknown[] }) => ((m.blocks.find((b) => (b as { type: string }).type === 'actions') as { elements: Array<{ action_id: string; value: string }> }).elements)
-  it('trae los dos botones con el id de la pieza y el aviso de que nada se publica sin aprobar', () => {
+  const botones = (m: { blocks: unknown[] }) => (m.blocks as Array<{ type: string }>).filter((b) => b.type === 'actions')
+  it('30-oct · es solo un aviso: SIN botones, con el enlace directo a la pieza en el dashboard y el aviso de que nada se publica sin aprobar', () => {
     const m = mensajeDeLaPieza({ ...base, texto: 'Hola' })
-    expect(botones(m).map((b) => [b.action_id, b.value])).toEqual([[ACCION_APROBAR, HITL], [ACCION_RECHAZAR, HITL]])
+    expect(botones(m)).toHaveLength(0)
+    expect(JSON.stringify(m.blocks)).not.toContain(ACCION_APROBAR)
+    expect(JSON.stringify(m.blocks)).not.toContain(ACCION_RECHAZAR)
+    expect(JSON.stringify(m.blocks)).toContain(`<${enlaceDeLaPieza(HITL)}|Ver en el dashboard>`)
+    expect(enlaceDeLaPieza(HITL)).toBe(`https://zero-risk-dashboard.vercel.app/piezas?id=${HITL}`)
     expect(JSON.stringify(m.blocks)).toContain('Nada se publica sin tu aprobación')
-    expect(JSON.stringify(m.blocks)).toContain('también puedes aprobar o rechazar en el tablero')   // mientras los botones no estén activos en Slack, la bandeja sigue siendo la vía
     expect(JSON.stringify(m.blocks)).toContain('general:')
   })
   it('recorta el texto largo a lo que Slack admite y lo marca con «…»', () => {
@@ -75,7 +78,7 @@ describe('mensaje de la pieza', () => {
   it('lleva un texto de respaldo y funciona sin texto ni imágenes', () => {
     const m = mensajeDeLaPieza(base)
     expect(m.text).toContain('Post del lunes')
-    expect(botones(m)).toHaveLength(2)
+    expect(JSON.stringify(m.blocks)).toContain('Ver en el dashboard')
   })
 })
 
