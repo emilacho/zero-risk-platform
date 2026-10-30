@@ -62,7 +62,7 @@ export interface Encargo {
   salida_output_id: string | null
   hitl_queue_id: string | null
 }
-export interface NuevoEncargo { /** 29-oct · el dueño pidió cambios sobre una pieza cerrada: versión siguiente, fuera del tope de 3 versiones */ cambios_del_dueno?: CambiosDelDueno; /** la causa de un fallo ya corregida: permite reabrir un encargo `fallido` aunque ya haya gastado (tope de versiones intacto) */ reabrir_causa?: string; client_id: string; parte_id: string; brief_id: string; tipo_de_grupo: string; familia: string; tope_usd: number; dry_run: boolean; prueba: boolean; sala_ref: Record<string, unknown> | null; estado_del_motor: Estado }
+export interface NuevoEncargo { /** 30-oct · RE-REVISIÓN: encargo nuevo que arranca en los chequeos con los materiales de la última versión cerrada (ver `re-revision.ts`); versión siguiente, sin mesa, sin rondas */ re_revision?: { desde_encargo: string; desde_hitl: string; pedido_por: string }; /** 29-oct · el dueño pidió cambios sobre una pieza cerrada: versión siguiente, fuera del tope de 3 versiones */ cambios_del_dueno?: CambiosDelDueno; /** la causa de un fallo ya corregida: permite reabrir un encargo `fallido` aunque ya haya gastado (tope de versiones intacto) */ reabrir_causa?: string; client_id: string; parte_id: string; brief_id: string; tipo_de_grupo: string; familia: string; tope_usd: number; dry_run: boolean; prueba: boolean; sala_ref: Record<string, unknown> | null; estado_del_motor: Estado }
 
 export interface TurnoRegistrado {
   n: number; paso: string; tipo: string; agente: string | null
