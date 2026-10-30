@@ -10,7 +10,7 @@ import { normalizar } from '../../manual/texto'
 import type { Db } from '../alimentar'
 import { leerTodas } from '../paginar'
 import { costoDeLaLlamada, MODELO, type PeticionAlModelo, type RespuestaDelModelo, type ResultadoDeRegistro } from '../../cerebro/portero/razonar'
-import { consolidar, gana, type Nota, type Operacion } from './consolidar'
+import { consolidar, type Nota, type Operacion } from './consolidar'
 import {
   CATALOGO_DE_ARRANQUE, CLASE_DEL_APRENDIZAJE, ESPACIO_GENERAL, PARAMETROS_POR_OMISION, espacioDeAlcance, espacioDeCliente, rubroNormal,
   type Alcance, type Catalogo, type Direccion, type ParametrosDeAprendizaje,
@@ -196,7 +196,9 @@ export async function procesarAprendizaje(deps: DepsDeProcesar, pedido: PedidoDe
           const vieja = vigentes[n - 1]
           if (!vieja) continue
           const fresca: Nota = { id: String(nueva.fila.id), espacio, alcance: i.alcance, industria: rubro, destinatario: i.destinatario, atributo: i.atributo, sobre: i.sobre, idea: i.idea, direccion: i.direccion, formato: i.formato, peso: 1, creada: c.respondido_en, ultima_vez_usada: null, peso_al: null, choca_con: [vieja.id] }
-          if (vieja.espacio === espacio && gana(fresca, vieja).id === fresca.id) {
+          // el modelo ya dijo que se contradicen: en el mismo espacio gana la más nueva (el «formato» que el modelo pone a una idea no la hace más específica que la que la sigue), salvo que sean de formatos distintos
+          const distintoFormato = !!fresca.formato && !!vieja.formato && fresca.formato !== vieja.formato
+          if (vieja.espacio === espacio && !distintoFormato && Date.parse(fresca.creada) >= Date.parse(vieja.creada)) {
             await retirar(deps, vieja.id, `choca con ${fresca.id} (el dueño pidió lo contrario después): gana la más nueva`, fresca.id, ahora, inf)
             inf.operaciones.retirar_por_choque = (inf.operaciones.retirar_por_choque ?? 0) + 1
           } else {
