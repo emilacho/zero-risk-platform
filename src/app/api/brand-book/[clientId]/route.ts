@@ -11,6 +11,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { sanitizeProseFields } from '@/lib/brand-book-caveat-extractor'
 import { empujarManualAlCerebro } from '@/lib/brain/push-al-terminar'
 import { columnasDelBorrador, evaluarCompletitud, fugasDeLasColumnas } from '@/lib/manual/campos-del-manual'
+import { conservarLoDelDueno } from '@/lib/manual/edicion-del-dueno'
 import { completarVisualesDesdeLaFicha } from '@/lib/manual-visuales-desde-la-ficha'
 
 export const runtime = 'nodejs'
@@ -189,7 +190,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   // un ciclo extra del lazo no produce versiones extra.
   const previa = await supabase
     .from('client_brand_books')
-    .select('id, version')
+    .select('*')
     .eq('client_id', clientId)
     .order('version', { ascending: false })
     .limit(1)
@@ -202,7 +203,9 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
   const version = (Number(previa.data?.version) || 0) + 1
 
-  const rowBase = buildBrandBookRow(clientId, bb, body, version)
+  // 30-oct · lo que el dueño escribió desde el dashboard (`_field_meta.<campo>.fuente = 'dueno'`) no lo pisa una corrida posterior: se vuelve a poner en el borrador nuevo
+  const dueno = conservarLoDelDueno((previa.data ?? null) as Record<string, unknown> | null, bb as Record<string, unknown>)
+  const rowBase = buildBrandBookRow(clientId, dueno.bb as typeof bb, body, version)
 
   // CABLE ② · COLORES Y TIPOGRAFÍA DEL SITIO (CC#1 · 2026-09-25 · §144 Emilio). El Servicio de Apify
   // deja en la ficha (`clients.brand_colors` / `brand_fonts`) lo que el sitio declara. Si el manual
