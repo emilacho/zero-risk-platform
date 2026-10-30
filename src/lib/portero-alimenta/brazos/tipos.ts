@@ -12,18 +12,18 @@
  *   · NADA se borra: lo nuevo reemplaza a lo vigente por CÓDIGO (sin modelo) y lo viejo queda retirado con su fecha;
  *   · nada de datos personales de terceros: ni autores de reseñas ni usuarios de publicaciones ajenas.
  */
-export type NombreDeBrazo = 'contexto' | 'demanda' | 'competencia' | 'propios' | 'resumen' | 'pedido'
+export type NombreDeBrazo = 'contexto' | 'demanda' | 'competencia' | 'propios' | 'resumen' | 'pedido' | 'gustado'
 export type Alcance = 'cliente' | 'competidor' | 'mercado' | 'zona'
 /** el `client_id` de las fichas de zona: texto reservado, nunca un uuid de cliente (la tabla guarda `client_id` como texto) */
 export { PREFIJO_DE_ZONA } from '../../cerebro/zona'
 
-export interface BrazosActivos { contexto: boolean; demanda: boolean; competencia: boolean; propios: boolean }
-export const BRAZOS_APAGADOS: BrazosActivos = { contexto: false, demanda: false, competencia: false, propios: false }
+export interface BrazosActivos { contexto: boolean; demanda: boolean; competencia: boolean; propios: boolean; gustado: boolean }
+export const BRAZOS_APAGADOS: BrazosActivos = { contexto: false, demanda: false, competencia: false, propios: false, gustado: false }
 export function brazosDelEntorno(env: Record<string, string | undefined> = process.env): BrazosActivos {
   const on = (k: string) => String(env[k] ?? '').trim().toLowerCase() === 'on'
-  return { contexto: on('PORTERO_BRAZO_CONTEXTO'), demanda: on('PORTERO_BRAZO_DEMANDA'), competencia: on('PORTERO_BRAZO_COMPETENCIA'), propios: on('PORTERO_BRAZO_PROPIOS') }
+  return { contexto: on('PORTERO_BRAZO_CONTEXTO'), demanda: on('PORTERO_BRAZO_DEMANDA'), competencia: on('PORTERO_BRAZO_COMPETENCIA'), propios: on('PORTERO_BRAZO_PROPIOS'), gustado: on('PORTERO_BRAZO_GUSTADO') }
 }
-export const hayBrazoActivo = (b: BrazosActivos | undefined): boolean => !!b && (b.contexto || b.demanda || b.competencia || b.propios)
+export const hayBrazoActivo = (b: BrazosActivos | undefined): boolean => !!b && (b.contexto || b.demanda || b.competencia || b.propios || b.gustado)
 
 /** una ficha que un brazo quiere archivar (todavía sin escribir) */
 export interface FichaDeBrazo {
@@ -64,7 +64,7 @@ export interface ResultadoDeUnBrazo {
 
 /** una acción de Apify que un brazo pide (misma forma que las del portero; el plan la recorta al tope y a las 16 corridas) */
 export interface AccionDeBrazo {
-  fuente: 'demanda' | 'competencia'
+  fuente: 'demanda' | 'competencia' | 'gustado'
   funcion: string
   params: Record<string, unknown>
   metadata: { target_kind: 'own' | 'third_party'; llamado_por: string }
