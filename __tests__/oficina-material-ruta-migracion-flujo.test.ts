@@ -101,7 +101,7 @@ describe('POST /api/oficina/material-vuelta', () => {
     const dir = path.join(process.cwd(), 'src/app/api/oficina')
     const rutas = fs.readdirSync(dir, { recursive: true }).map(String).filter((f) => f.endsWith('route.ts'))
     const conInterna = rutas.filter((f) => /checkInternalKey|requireInternalKey|INTERNAL_API_KEY/.test(fs.readFileSync(path.join(dir, f), 'utf8')))
-    expect(conInterna.map((f) => f.replace(/\\/g, '/'))).toEqual(['cambios/route.ts', 'material-vuelta/route.ts', 'mesa/herramienta/route.ts']) // cambios: la ventana de piezas del tablero (29-oct) llama con la llave interna, como el PATCH de la bandeja
+    expect(conInterna.map((f) => f.replace(/\\/g, '/'))).toEqual(['cambios/route.ts', 'material-vuelta/route.ts', 're-revisar/route.ts', 'mesa/herramienta/route.ts']) // cambios y re-revisar: la ventana de piezas del tablero (29/30-oct) llama con la llave interna, como el PATCH de la bandeja
   })
   it('la pieza termina en la bandeja después del aviso (end to end)', async () => {
     await llamarCon(aviso())

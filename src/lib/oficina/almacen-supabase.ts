@@ -65,6 +65,12 @@ export function almacenDeSupabase(db: Db): Almacen {
         if (!vigente || (vigente.estado !== 'cerrado' && vigente.estado !== 'cerrado_por_tope')) return { ok: false as const, error: 'cambios_del_dueno: no hay una pieza real cerrada que devolver' }
         version = Number(mayor?.version_encargo ?? 1) + 1
         salaRef = { ...(n.sala_ref ?? {}), cambios_del_dueno: n.cambios_del_dueno }
+      } else if (n.re_revision) {
+        // 30-oct · re-revisar: solo la ÚLTIMA versión real, y cerrada; la versión siguiente queda fuera del tope de 3 (no es un intento de la mesa). Si una re-revisión sigue viva, la última ya no está cerrada y esta no abre.
+        const vigente = todos.find((x) => x.dry_run !== true && !esIntentoFallidoDeCambios(x))
+        if (!vigente || vigente.id !== n.re_revision.desde_encargo || (vigente.estado !== 'cerrado' && vigente.estado !== 'cerrado_por_tope')) return { ok: false as const, error: 're_revision: la pieza no es la última versión real cerrada del brief' }
+        version = Number(mayor?.version_encargo ?? 1) + 1
+        salaRef = { ...(n.sala_ref ?? {}), re_revision: n.re_revision }
       } else if (ultimo) {
         const d = decidirReapertura({ estado: String(ultimo.estado), gasto_usd: Number(ultimo.gasto_usd ?? 0), version_encargo: Number(ultimo.version_encargo ?? 1), pasos_ejecutados: Number((ultimo.estado_del_motor as { pasos_ejecutados?: number } | null)?.pasos_ejecutados ?? 0) }, n.reabrir_causa)
         if (d.accion === 'devolver') return { ok: true as const, encargo: aEncargo(ultimo), nuevo: false }
