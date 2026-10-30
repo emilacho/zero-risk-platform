@@ -16,15 +16,19 @@ function huboDespertar(filas: Fila[]): boolean {
   return filas.some((f) => f.estado === 'hecha' && esObjeto(f.resumen) && (f.resumen.tipo === 'despertar' || esObjeto(f.resumen.despertar)))
 }
 
-export async function clientesActivos(db: Db): Promise<{ ok: true; datos: ResultadoDeClientes } | { ok: false; detalle: string }> {
+/**
+ * `pasanPausasDeAlta`: una llamada que NOMBRA a un cliente (el ⑧ «completar despertar» de su alta, o un «un cliente» a mano) no se frena por una pausa «hasta la alta» (`termina_con = alta_terminada`):
+ * esa pausa existe para frenar la corrida diaria de todos, no a la alta que ella espera. Las pausas del vigilante (sin condición) frenan siempre.
+ */
+export async function clientesActivos(db: Db, opciones: { pasanPausasDeAlta?: boolean } = {}): Promise<{ ok: true; datos: ResultadoDeClientes } | { ok: false; detalle: string }> {
   const q = await db.from('clients').select('id, name, status, archived_at, config').order('created_at', { ascending: true }).limit(500)
   if (q.error) return { ok: false, detalle: `clients: ${q.error.message}` }
   const out: ResultadoDeClientes = { clientes: [], excluidos: [] }
   // los clientes que el vigilante PAUSÓ por un problema propio (P2): el flujo sigue para los demás. Sin la tabla (migración sin aplicar) no hay pausas; cualquier otro error se DICE.
   const pausadas = new Map<string, string>()
-  const ps = await db.from('cerebro_portero_pausas').select('client_id, desde, motivo').is('levantada_en', null).limit(1000)
+  const ps = await db.from('cerebro_portero_pausas').select('client_id, desde, motivo, termina_con').is('levantada_en', null).limit(1000)
   if (ps.error && !/cerebro_portero_pausas/.test(String(ps.error.message))) return { ok: false, detalle: `cerebro_portero_pausas: ${ps.error.message}` }
-  if (!ps.error) for (const p of lista(ps.data)) pausadas.set(String(p.client_id), `desde ${String(p.desde ?? '').slice(0, 16)}Z: ${String(p.motivo ?? '').slice(0, 80)}`)
+  if (!ps.error) for (const p of lista(ps.data)) if (!(opciones.pasanPausasDeAlta && p.termina_con === 'alta_terminada')) pausadas.set(String(p.client_id), `desde ${String(p.desde ?? '').slice(0, 16)}Z: ${String(p.motivo ?? '').slice(0, 80)}`)
   for (const c of lista(q.data)) {
     const id = String(c.id)
     const motivos: string[] = []

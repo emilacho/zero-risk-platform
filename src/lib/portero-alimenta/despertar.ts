@@ -14,6 +14,7 @@
  */
 import { alimentarCliente, type Db } from './alimentar'
 import { FLUJO_DEL_PORTERO_POR_OMISION } from './no-corrio'
+import { cerrarPausasDeAlta } from './pausa-de-alta'
 import { gastoDeHoy, reconciliarYEnviar, rutaDescubrir, validar, type DepsDeRutas, type Respuesta } from './rutas'
 import { ESPERA_DEL_REINTENTO_MS, esSoloNoPudeComprobar, evaluarCliente, lineaDeAlerta, type ResultadoDeCliente } from './vigilante'
 
@@ -52,7 +53,11 @@ export async function rutaDespertar(deps: DepsDeDespertar, cuerpo: unknown): Pro
   })
   if (r.estado === 'cliente_inexistente') return { status: 404, body: { error: 'cliente_inexistente', detalle: r.detalle } }
   if (r.estado === 'lectura_fallida') return { status: 502, body: { error: 'lectura_fallida', detalle: r.detalle } }
-  if (r.estado === 'ya_corrio_hoy') return { status: 200, body: { ok: true, dry_run: v.dry_run, estado: r.estado, detalle: 'ya corrió la corrida diaria de hoy: el despertar no hace falta', cerebro_listo: null, modelos_llamados: 0 } }
+  if (r.estado === 'ya_corrio_hoy') {
+    // el cerebro de este cliente ya corrió hoy: no hay nada que completar, así que el ⑦ real ES la señal de «alta terminada» (el ⑧ no corre sin `pedir_ahora`): cierra la pausa «hasta la alta»
+    const cierre = v.dry_run ? undefined : await cerrarPausasDeAlta(deps.db, v.client_id, ahora, ahora)
+    return { status: 200, body: { ok: true, dry_run: v.dry_run, estado: r.estado, detalle: 'ya corrió la corrida diaria de hoy: el despertar no hace falta', cerebro_listo: null, ...(cierre && (cierre.cerradas || cierre.error) ? { pausa_de_alta: cierre } : {}), modelos_llamados: 0 } }
+  }
 
   // el puente en pasadas hasta quedan = 0 (o sin progreso)
   let puente: Record<string, unknown> | null = null
@@ -125,6 +130,8 @@ export async function rutaDespertar(deps: DepsDeDespertar, cuerpo: unknown): Pro
   body.cerebro_listo = false
   if (archivadoBien) { body.pedir_ahora = true; body.completando = completando; body.motivo_no_listo = 'falta lo que el alta no trajo: la cadena del portero lo pide a continuación' }
   else body.pedir_ahora = false
+  // sin cadena que completar (sin errores): el ⑧ no va a correr, y esta es la última señal de la alta → cierra la pausa «hasta la alta»
+  if (!v.dry_run && !body.pedir_ahora && !conErrores && !hayProblemas) { const cierre = await cerrarPausasDeAlta(deps.db, v.client_id, ahora, ahora); if (cierre.cerradas || cierre.error) body.pausa_de_alta = cierre }
   if (sinRaspado) body.sin_raspado_del_alta = true
   body.vigilante = { ok: !hayProblemas, problemas: res.problemas, intentos }
   if (hayProblemas) {

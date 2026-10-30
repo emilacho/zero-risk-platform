@@ -7,6 +7,9 @@ import { alimentarCliente } from '../alimentar'
 import { clientesActivos } from '../clientes'
 import { rutaDespertar } from '../despertar'
 import { rutaListo } from '../listo'
+import { rutaClientes } from '../rutas'
+import { crearBaseFalsa } from './base-falsa'
+import { DIEZ_CLIENTES } from './diez-clientes.fixtures'
 import { FIN_ALTA_TERMINADA, cerrarPausasDeAlta, rutaPausarHastaLaAlta } from '../pausas'
 import { AHORA, CASOS, ON, REAL, montar, tablas } from './fixtures-despertar'
 
@@ -81,5 +84,38 @@ describe('pausa hasta la alta', () => {
   it('si la base falla al cerrar, lo DICE y no lanza', async () => {
     const roto = { from: () => { throw new Error('base caída') } } as never
     expect(await cerrarPausasDeAlta(roto, c.id, AHORA)).toMatchObject({ cerradas: 0, error: 'base caída' })
+  })
+
+  it('CORTE REAL (alta de Náufrago 30-oct): el cerebro ya corrió hoy → ⑦ responde ya_corrio_hoy, el ⑧ no corre → el ⑦ real cierra la pausa', async () => {
+    const t = nueva(); pausa(t, { termina_con: FIN_ALTA_TERMINADA })
+    t.cerebro_portero_corridas.push({ id: 'diaria', client_id: c.id, dia: AHORA.toISOString().slice(0, 10), estado: 'hecha', resumen: {}, creado_en: min(-600).toISOString() })
+    const seco = await rutaDespertar(montar(t).deps, { client_id: c.id, dry_run: true })
+    expect(seco.body).toMatchObject({ estado: 'ya_corrio_hoy' }); expect(t.cerebro_portero_pausas[0].levantada_en).toBeNull() // un ensayo no cierra nada
+    const r = await rutaDespertar(montar(t).deps, { client_id: c.id, ...REAL })
+    expect(r.body).toMatchObject({ estado: 'ya_corrio_hoy', pausa_de_alta: { cerradas: 1 } })
+    expect(t.cerebro_portero_pausas[0]).toMatchObject({ levantada_por: 'alta terminada' })
+    expect((await activos(t, min(5))).clientes.map((x) => x.client_id)).toContain(c.id)
+  })
+
+  it('el ⑧ (completar) nombra al cliente: una pausa «hasta la alta» NO lo frena; la del vigilante sí; la diaria (sin nombre) sí lo salta', async () => {
+    const t = nueva(); pausa(t, { termina_con: FIN_ALTA_TERMINADA })
+    const d = montar(t).deps
+    const nombrado = await rutaClientes(d, { dry_run: true, client_id: c.id })
+    expect((nombrado.body.clientes as Array<{ client_id: string }>).map((x) => x.client_id)).toContain(c.id)
+    const todos = await rutaClientes(d, { dry_run: true })
+    expect((todos.body.excluidos as Array<{ client_id: string }>).map((x) => x.client_id)).toContain(c.id)
+    const u = nueva(); pausa(u, { termina_con: null })
+    const del_vigilante = await rutaClientes(montar(u).deps, { dry_run: true, client_id: c.id })
+    expect((del_vigilante.body.excluidos as Array<{ client_id: string }>).map((x) => x.client_id)).toContain(c.id)
+  })
+
+  it('los 10 clientes de prueba: la alta termina → cada pausa «hasta la alta» se cierra sola y solo la suya', async () => {
+    const t: T = { cerebro_portero_pausas: DIEZ_CLIENTES.map((x, n) => ({ id: `p-${n}`, client_id: x.id, motivo: 'desde cero', problemas: [], desde: min(-60).toISOString(), levantada_en: null, termina_con: FIN_ALTA_TERMINADA })) }
+    const db = crearBaseFalsa(t as never, { reloj: () => AHORA.toISOString() }).db as never
+    for (const [n, x] of DIEZ_CLIENTES.entries()) {
+      expect(await cerrarPausasDeAlta(db, x.id, AHORA, AHORA)).toEqual({ cerradas: 1 })
+      expect(t.cerebro_portero_pausas.filter((p) => p.levantada_en).length).toBe(n + 1)
+      expect(t.cerebro_portero_pausas[n].levantada_por).toBe('alta terminada')
+    }
   })
 })
