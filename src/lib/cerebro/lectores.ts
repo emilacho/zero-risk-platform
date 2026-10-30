@@ -13,6 +13,7 @@ import { resumirTexto } from './resumen'
 import { type DecisionAtada, type DecisionDelDueno, type Estado, type EstadoDeFuente, type Ficha, type NombreDeFuente, type Origen, pesoDeTexto } from './tipos'
 import { derivarVersiones } from './versiones'
 import { avisoDeProvisionales } from '../manual/lectura'
+import { validacionDelManual, versionVigente } from '../manual/campos-del-manual'
 import { AVISO_DE_HORARIO_CERRADA, AVISO_DE_HORARIO_POR_ABRIR, estadoDeLasSedes, esLineaDeHorarioOAtencion } from '../sedes/por-abrir'
 
 export interface Contexto {
@@ -98,18 +99,19 @@ export async function leerFichaDelCliente(ctx: Contexto): Promise<{ salida: Sali
 
 // ── manual de marca: todas las versiones, vigente = la de mayor número ─────────────────
 export async function leerManual(ctx: Contexto): Promise<Salida> {
-  const r = await leer(ctx, { tabla: 'client_brand_books', columnas: ['id', 'version', 'human_validated', 'created_at', 'content_text'], donde: { client_id: ctx.cliente }, orden: { columna: 'version', descendente: true } })
+  const r = await leer(ctx, { tabla: 'client_brand_books', columnas: ['id', 'version', 'human_validated', 'provenance_tag', 'created_at', 'content_text'], donde: { client_id: ctx.cliente }, orden: { columna: 'version', descendente: true } })
   if (r.error) return fallo(['manual'], r.error)
   const filas = r.filas
-  const maxima = filas.reduce((m, f) => Math.max(m, Number(f.version) || 0), 0)
+  const vigenteId = versionVigente(filas)?.id
   const lineas = filas.map((f) => {
     const version = Number(f.version) || 0
-    const vigente = version === maxima
+    const vigente = f.id === vigenteId
+    const validacion = validacionDelManual(f)
     const cuerpo = texto(f.content_text) ?? ''
     return linea(ctx, {
       ref: `client_brand_books:${f.id}`, estante: 'E1', clase: 'manual', titulo: `Manual de marca · versión ${version}`,
-      que_es: `Manual de marca (voz, valores, posicionamiento, vocabulario y palabras prohibidas)${vigente && avisoDeProvisionales(f.content_text) ? ` · ${avisoDeProvisionales(f.content_text)}` : ''}`,
-      origen: 'producido', estado: f.human_validated === true ? 'aprobado' : 'borrador sin aprobar',
+      que_es: `Manual de marca (voz, valores, posicionamiento, vocabulario y palabras prohibidas) · ${validacion.rotulo}${vigente && avisoDeProvisionales(f.content_text) ? ` · ${avisoDeProvisionales(f.content_text)}` : ''}`,
+      origen: 'producido', estado: validacion.aprobado ? 'aprobado' : 'borrador sin aprobar',
       fecha: iso(f.created_at), plazo: 'sin_plazo', version, vigente, reemplazada: !vigente, versiones_anteriores: vigente ? filas.length - 1 : 0,
       peso: pesoDeTexto(cuerpo), ...(vigente ? { contenido: cuerpo } : {}),
     })
