@@ -148,7 +148,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         for (const u of lista<Fila>(us.error ? [] : us.data)) { const id = String(u.foto_id); const t = String(u.usada_en); if (!usos[id] || usos[id] < t) usos[id] = t }
         const sd = (await db.from('client_sede_datos').select('valor_texto').eq('client_id', clientId).eq('campo', 'canal_pedido')) as { data: Fila[] | null; error: { message: string } | null }
         const telefonos = sd.error ? [] : [...new Set(lista<Fila>(sd.data).flatMap((x) => datosDeContacto(String(x.valor_texto ?? '')).telefonos))]
-        const wp = (await db.from('client_web_pages').select('content_text').eq('client_id', clientId).is('competitor_id', null)) as { data: Fila[] | null; error: { message: string } | null }
+        const wp = (await db.from('client_web_pages').select('content_text').eq('client_id', clientId).is('competitor_id', null).eq('owner_role', 'propio')) as { data: Fila[] | null; error: { message: string } | null }
         const precios = wp.error ? [] : [...new Set(lista<Fila>(wp.data).flatMap((p) => extraerCatalogo(String(p.content_text ?? '')).items.map((i) => i.precio).filter((x): x is number => typeof x === 'number').map((x) => x.toFixed(2))))]
         const config = (cliente.config ?? {}) as { apify?: { own_handles?: Record<string, string>; competitor_list?: Array<{ name?: string }> }; zona_horaria?: string; timezone?: string }
         const handles = Object.values(config.apify?.own_handles ?? {}).filter(Boolean).map((h) => (String(h).startsWith('@') ? String(h) : `@${h}`))
