@@ -188,6 +188,15 @@ export async function POST(req: Request, { params }: RouteContext) {
   // ya toman la mayor versión. Las anteriores se conservan: nada se borra ni se pisa.
   // El Promote del cimiento corre UNA vez por corrida (después del veredicto), así que
   // un ciclo extra del lazo no produce versiones extra.
+  // 30-oct · dos escrituras del manual al mismo tiempo toman la misma versión: el índice único rechaza la segunda y ésta lee de nuevo la vigente (con lo de la otra) y se arma otra vez; hasta 4 intentos
+  let data = null as { id?: string; gate_outcome?: string | null } | null
+  let version = 1
+  let previaId: unknown = null
+  let fichaVisualError: string | null = null
+  let row: Record<string, unknown> = {}
+  let visuales: ReturnType<typeof completarVisualesDesdeLaFicha> | null = null
+  let dueno: ReturnType<typeof conservarLoDelDueno> | null = null
+  for (let intento = 0; ; intento++) {
   const previa = await supabase
     .from('client_brand_books')
     .select('*')
@@ -201,10 +210,11 @@ export async function POST(req: Request, { params }: RouteContext) {
       { status: 500 },
     )
   }
-  const version = (Number(previa.data?.version) || 0) + 1
+  version = (Number(previa.data?.version) || 0) + 1
+  previaId = previa.data?.id ?? null
 
   // 30-oct · lo que el dueño escribió desde el dashboard (`_field_meta.<campo>.fuente = 'dueno'`) no lo pisa una corrida posterior: se vuelve a poner en el borrador nuevo
-  const dueno = conservarLoDelDueno((previa.data ?? null) as Record<string, unknown> | null, bb as Record<string, unknown>)
+  dueno = conservarLoDelDueno((previa.data ?? null) as Record<string, unknown> | null, bb as Record<string, unknown>)
   const rowBase = buildBrandBookRow(clientId, dueno.bb as typeof bb, body, version)
 
   // CABLE ② · COLORES Y TIPOGRAFÍA DEL SITIO (CC#1 · 2026-09-25 · §144 Emilio). El Servicio de Apify
@@ -213,7 +223,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   // completan DESDE LA FICHA. Aditivo: ficha vacía ⇒ fila idéntica a la de hoy. Si la lectura de la
   // ficha falla, el manual sale igual que hoy y se declara en el recibo (`visuales_origen: null`).
   let fichaVisual: { brand_colors?: unknown; brand_fonts?: unknown } | null = null
-  let fichaVisualError: string | null = null
+  fichaVisualError = null
   try {
     const f = await supabase.from('clients').select('brand_colors, brand_fonts').eq('id', clientId).maybeSingle()
     if (f.error) fichaVisualError = f.error.message?.slice(0, 200) ?? 'error'
@@ -221,20 +231,25 @@ export async function POST(req: Request, { params }: RouteContext) {
   } catch (e) {
     fichaVisualError = e instanceof Error ? e.message.slice(0, 200) : 'error'
   }
-  const visuales = completarVisualesDesdeLaFicha(rowBase, bb, fichaVisual)
-  const row = visuales.row
+  visuales = completarVisualesDesdeLaFicha(rowBase, bb, fichaVisual)
+  row = visuales.row
 
-  const { data, error } = await supabase
+  const ins = await supabase
     .from('client_brand_books')
     .insert(row)
     .select('id, gate_outcome')
     .single()
+  const error = ins.error
+  if (error && intento < 3 && (String((error as { code?: string }).code ?? '') === '23505' || /duplicate|unique/i.test(error.message ?? ''))) continue
+  data = ins.data as typeof data
 
   if (error) {
     return NextResponse.json(
       { persisted: false, error: 'insert_failed', detail: error.message?.slice(0, 400) },
       { status: 500 },
     )
+  }
+  break
   }
   // EL RECIBO DICE QUÉ QUEDÓ ESCRITO (2026-09-01 · corrida 118856).
   // El escritor anterior a la pieza (e) aceptaba `gate_outcome` en el cuerpo, lo
@@ -250,14 +265,14 @@ export async function POST(req: Request, { params }: RouteContext) {
   return NextResponse.json({
     persisted: true,
     // CABLE ② · de dónde salieron primary_colors / typography ('manual' · 'ficha' · null = quedaron vacíos)
-    visuales_origen: visuales.origen,
+    visuales_origen: visuales?.origen ?? null,
     ...(fichaVisualError ? { visuales_ficha_error: fichaVisualError } : {}),
     id: data?.id,
     client_id: clientId,
     gate_outcome: data?.gate_outcome ?? null,
     // E111 · el recibo dice QUÉ versión quedó vigente y cuál era la anterior (null = primera).
     version,
-    previous_id: previa.data?.id ?? null,
+    previous_id: previaId,
     // El recibo DICE que se empujo (o por que no) · nunca silencioso.
     brain_push,
   })
