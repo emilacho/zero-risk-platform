@@ -46,12 +46,46 @@ export function esElMismoTema(a: string, b: string): boolean {
   return comunes / Math.min(pa.length, pb.length) >= PARECIDO_MINIMO
 }
 
+/**
+ * ¿esta tira de dígitos es un TELÉFONO? (30-oct) Se decide por su FORMA y su contexto, no por el largo: un precio, un código de producto, una cantidad o una fecha pasan intactos.
+ *  · no es teléfono: fechas, montos con moneda o con miles (1.250.000), y números sueltos sin forma de teléfono;
+ *  · sí lo es: con prefijo +NN, con una palabra de contacto cerca (llama, WhatsApp, cel, teléfono…), el móvil de Ecuador/Uruguay (09 + 8 dígitos), o
+ *    9–10 dígitos con separadores y un primer dígito de móvil/fijo (EC, CO, MX, PE, CL, ES, AR, UY).
+ */
+const PALABRA_DE_CONTACTO = /(llam|whats?app|wasap|wsp|cel\b|celu|tel[eé]f|\btel\b|\bfono|m[oó]vil|contact|n[uú]mero|escr[ií]b|comunic)[^\d]{0,30}$/i
+const MONEDA_ANTES = /(\$|€|£|us\$|s\/\.?|\busd|\beur|\bmxn|\bcop|\bclp|\bars|\bpen|\buyu|precio|costo|valor|cuesta|vale|total)\s*:?\s*$/i
+const MONEDA_DESPUES = /^\s*(usd|d[oó]lares|soles|pesos|mxn|cop|eur|euros|clp|ars|pen|uyu|%|\$|unidades|u\b|und|kg|gr|ml|cm|mm|años|a[ñn]os|seguidores|likes|personas|clientes)/i
+export function esTelefono(candidato: string, antes: string, despues: string): boolean {
+  const digitos = candidato.replace(/\D/g, '')
+  if (digitos.length < 7 || digitos.length > 15) return false
+  const c = candidato.trim()
+  if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(c) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/.test(c)) return false // fecha
+  if (/^\d{1,3}([.,]\d{3})+([.,]\d{1,2})?$/.test(c) || /^\d+[.,]\d{1,2}$/.test(c)) return false // miles / decimales
+  const conPrefijo = c.startsWith('+') || /^\(?00\d/.test(c)
+  const conContexto = PALABRA_DE_CONTACTO.test(antes.slice(-45))
+  if (!conPrefijo && !conContexto && (MONEDA_ANTES.test(antes) || MONEDA_DESPUES.test(despues))) return false // monto o cantidad
+  if (conPrefijo) return digitos.length >= 9
+  if (conContexto) return true
+  if (/^09\d{8}$/.test(digitos) && !/[.,]/.test(c)) return true // móvil de EC/UY sin separadores
+  const separado = /[\s().-]/.test(c)
+  if (!separado || /[.,]\d{3}\b/.test(c) && !/\s/.test(c)) return false
+  if (digitos.length === 10) return '013569'.includes(digitos[0])
+  if (digitos.length === 9) return '0679'.includes(digitos[0])
+  if (digitos.length === 11 || digitos.length === 12) return digitos.startsWith('549') || digitos.startsWith('521') || digitos.startsWith('593') || digitos.startsWith('57') || digitos.startsWith('51') || digitos.startsWith('34')
+  return false
+}
+
 /** quita lo que identifica a terceros: correos, teléfonos y @usuarios (el dueño habla de su negocio, no entrega datos ajenos) */
 export function sinDatosPersonales(t: string): { texto: string; redactado: boolean } {
   let redactado = false
   t = t.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, () => { redactado = true; return '[correo omitido]' })
   t = t.replace(/(?<![\w@])@[\w.]{2,}/g, () => { redactado = true; return '[usuario omitido]' })
-  t = t.replace(/\+?\d[\d\s().-]{6,}\d/g, (m) => { if (m.replace(/\D/g, '').length < 7) return m; redactado = true; return '[teléfono omitido]' })
+  t = t.replace(/(?<![\w$€.,/])(?:\+|\(?00)?\(?\d[\d\s().-]{5,}\d/g, (m, ...resto) => {
+    const pos = resto[resto.length - 2] as number
+    if (!esTelefono(m, t.slice(0, pos), t.slice(pos + m.length))) return m
+    redactado = true
+    return '[teléfono omitido]'
+  })
   return { texto: t.replace(/\s+/g, ' ').trim(), redactado }
 }
 

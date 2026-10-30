@@ -251,7 +251,39 @@ describe('mismas garantías que `razonar`: sin flujo no se llama, una llamada, s
   })
 })
 
-describe('respuestas malas del modelo: respaldo con su motivo, sin escribir nada', () => {
+describe('respuesta ilegible: un reintento más estricto y, si sigue mal, la marca «no se pudo leer» (30-oct)', () => {
+  it('si el segundo intento sale bien, se etiqueta normal, se suman los dos costos y se registra UNA fila', async () => {
+    let n = 0
+    const { deps, espia } = armar(() => (++n === 1 ? { texto: 'esto no es json' } : { texto: bueno() }))
+    const r = await etiquetar(deps, cuerpo())
+    expect(salida(r)).toMatchObject({ modo: 'etiquetado', escribio: true, intentos: 2 })
+    expect(espia.peticiones).toHaveLength(2)
+    expect(espia.peticiones[0].system).not.toMatch(/REINTENTO/)
+    expect(espia.peticiones[1].system).toMatch(/REINTENTO/)
+    expect(espia.escrituras).toHaveLength(1)
+    expect(espia.escrituras[0].valores.etiqueta_modelo).not.toBe('sin-lectura')
+    expect(espia.registros).toHaveLength(1)
+    expect((espia.registros[0].metadata as Record<string, unknown>).intentos).toBe(2)
+  })
+  it('si los dos intentos fallan: marca «no se pudo leer» con el motivo (ocupa la etiqueta: no se reintenta en bucle)', async () => {
+    const { deps, espia } = armar('esto no es json')
+    const r = await etiquetar(deps, cuerpo())
+    expect(salida(r)).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: 'json_roto', intentos: 2, marcada_sin_lectura: true })
+    expect(espia.peticiones).toHaveLength(2)
+    expect(espia.escrituras).toHaveLength(1)
+    expect(espia.escrituras[0].valores).toMatchObject({ etiqueta_modelo: 'sin-lectura', etiqueta_confianza: 'baja', producto_visto: [] })
+    expect(espia.escrituras[0].valores.que_muestra).toMatch(/no se pudo leer.*json_roto/)
+  })
+  it('un fallo de red o de tiempo NO se reintenta ni se marca (no es culpa de la foto)', async () => {
+    const { deps, espia } = armar(() => { throw new Error('socket hang up') })
+    const r = await etiquetar(deps, cuerpo())
+    expect(salida(r)).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: 'error_del_modelo', intentos: 1 })
+    expect(espia.peticiones).toHaveLength(1)
+    expect(espia.escrituras).toHaveLength(0)
+  })
+})
+
+describe('respuestas malas del modelo: respaldo con su motivo (tras el reintento, solo se escribe la marca)', () => {
   it.each([
     ['JSON roto', 'esto no es json', 'json_roto'],
     ['sin «que_muestra»', JSON.stringify({ producto_visto: [] }), 'campos_que_faltan'],
@@ -261,8 +293,8 @@ describe('respuestas malas del modelo: respaldo con su motivo, sin escribir nada
     const { deps, espia } = armar(texto)
     const r = await etiquetar(deps, cuerpo())
     expect(salida(r)).toMatchObject({ modo: 'respaldo', motivo_de_respaldo: motivo, escribio: false, llamo_al_modelo: true })
-    expect(espia.escrituras).toHaveLength(0)
-    expect(espia.registros).toHaveLength(1) // la llamada se pagó: se registra
+    expect(espia.escrituras.filter((e) => e.valores.etiqueta_modelo !== 'sin-lectura')).toHaveLength(0) // nunca una etiqueta inventada: a lo más, la marca
+    expect(espia.registros).toHaveLength(1) // las llamadas se pagaron: se registran (una fila con las dos)
   })
   it('una salida cortada por max_tokens se dice como tal (no «json roto»)', async () => {
     const { deps } = armar(() => ({ texto: '{"que_muestra":"un plato con', stop_reason: 'max_tokens' }))

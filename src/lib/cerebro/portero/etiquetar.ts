@@ -154,6 +154,15 @@ export interface Mirada {
   caida: string | null
 }
 
+/** 30-oct · segundo intento cuando la respuesta no se pudo leer: la misma instrucción, más estricta con el formato */
+export const INSTRUCCION_ESTRICTA = `
+
+REINTENTO: tu respuesta anterior no se pudo leer. Responde AHORA solo con un objeto JSON válido, con comillas dobles, sin texto antes ni después, sin bloques de código y sin comentarios. Forma exacta: {"que_muestra": "...", "producto_visto": [], "texto_visible": "", "confianza": "baja", "con_personas": "no", "tipo_de_toma": "otro"}. Frases cortas, sin saltos de línea dentro de los textos y sin comillas dobles dentro de ellos.`
+/** las caídas que son de la RESPUESTA (reintentables y, si se repiten, marcables); las de red, tiempo o llave no lo son */
+export const CAIDAS_DE_LECTURA = ['json_roto', 'salida_cortada', 'campos_que_faltan']
+/** marca de una foto que el modelo no pudo leer tras el reintento: ocupa la etiqueta para que no se reintente en bucle */
+export const MODELO_SIN_LECTURA = 'sin-lectura'
+
 /** lo que se le manda al modelo junto con la foto: la leyenda y las líneas de producto, como DATO */
 export const armarMensajeDeMirada = (leyenda: string, lineasDeProducto: string[]): string =>
   `<leyenda>\n${comoDato(leyenda || '(sin texto)')}\n</leyenda>\n<productos>\n${comoDato(lineasDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO).join('\n') || '(el cliente no tiene líneas de producto)')}\n</productos>`
@@ -173,10 +182,11 @@ export async function mirarImagen(
   mensaje: string,
   nombresDeProducto: string[],
   nombresDeFamilia: string[] = [],
+  estricta = false,
 ): Promise<Mirada> {
   const catalogo = new Map<string, string>()
   for (const n of nombresDeProducto.slice(0, MAXIMO_DE_LINEAS_DE_PRODUCTO)) if (!catalogo.has(normalizar(n))) catalogo.set(normalizar(n), n)
-  const peticion: PeticionConImagen = { model: MODELO, max_tokens: MAX_TOKENS_DE_ETIQUETA, thinking: RAZONAMIENTO, system: INSTRUCCION_DEL_ETIQUETADOR, texto: mensaje, imagen, timeoutMs: TIEMPO_MAXIMO_DE_ETIQUETA_MS }
+  const peticion: PeticionConImagen = { model: MODELO, max_tokens: MAX_TOKENS_DE_ETIQUETA, thinking: RAZONAMIENTO, system: estricta ? INSTRUCCION_DEL_ETIQUETADOR + INSTRUCCION_ESTRICTA : INSTRUCCION_DEL_ETIQUETADOR, texto: mensaje, imagen, timeoutMs: TIEMPO_MAXIMO_DE_ETIQUETA_MS }
   const inicio = Date.now()
   let respuesta: RespuestaDelModelo | null = null
   let fallo: Mirada['fallo'] = null
@@ -353,7 +363,16 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
   if (!bajada.ok) return sinModelo(bajada.motivo, bajada.detalle ? { detalle_de_la_bajada: bajada.detalle } : {})
 
   // ── 3 y 4 · UNA llamada, sin reintentos, y leer lo que dijo (compartido con `recibir`: `mirarImagen`)
-  const { respuesta, fallo, duracion, usage, costo, etiqueta, descartados, caida } = await mirarImagen(deps.llamarModelo, { tipo: bajada.tipo, base64: bajada.base64 }, mensaje, nombresDeProducto, nombresDeFamilia)
+  // 30-oct: si la respuesta no se pudo leer, UN segundo intento con el formato más estricto (se suman costo y tiempo; se registra una fila con los dos)
+  let mirada = await mirarImagen(deps.llamarModelo, { tipo: bajada.tipo, base64: bajada.base64 }, mensaje, nombresDeProducto, nombresDeFamilia)
+  let intentos = 1
+  if (mirada.caida && CAIDAS_DE_LECTURA.includes(mirada.caida) && !modoPrueba) {
+    const primera = mirada
+    const segunda = await mirarImagen(deps.llamarModelo, { tipo: bajada.tipo, base64: bajada.base64 }, mensaje, nombresDeProducto, nombresDeFamilia, true)
+    intentos = 2
+    mirada = { ...segunda, duracion: primera.duracion + segunda.duracion, costo: primera.costo + segunda.costo, usage: { input_tokens: primera.usage.input_tokens + segunda.usage.input_tokens, output_tokens: primera.usage.output_tokens + segunda.usage.output_tokens } }
+  }
+  const { respuesta, fallo, duracion, usage, costo, etiqueta, descartados, caida } = mirada
 
   // ── 5 · escribir SOLO las columnas de etiqueta (nunca en modo prueba, nunca sin una etiqueta válida): las 9, o con `solo_toma` solo las 3 de la toma
   //        el formato sale de las MEDIDAS de la imagen (sin modelo): si no se pueden leer, queda vacío
@@ -366,6 +385,13 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     escribio = w.ok
     if (!w.ok) detalleDeEscritura = w.detalle ?? 'la escritura falló'
   }
+  // 30-oct: tras el reintento sigue ilegible → se marca «no se pudo leer» con su motivo (ocupa la etiqueta: no se reintenta en bucle; `etiqueta_modelo` lo distingue de una lectura real)
+  let marcadaSinLectura = false
+  if (!etiqueta && !modoPrueba && !soloToma && intentos === 2 && caida && CAIDAS_DE_LECTURA.includes(caida)) {
+    const w = await deps.escribir({ foto_id: fotoId as string, cliente: cli, valores: { que_muestra: `[no se pudo leer] ${caida} tras ${intentos} intentos`, producto_visto: [], etiquetada_en: ahora().toISOString(), etiqueta_modelo: MODELO_SIN_LECTURA, texto_visible: '', etiqueta_confianza: 'baja' } })
+    marcadaSinLectura = w.ok
+    if (!w.ok) detalleDeEscritura = w.detalle ?? 'la marca de «no se pudo leer» no se guardó'
+  }
 
   // ── 6 · se registra SIEMPRE (también lo que falló); si el registro falla, la respuesta GRITA
   let registro: ResultadoDeRegistro
@@ -377,7 +403,7 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
       client_id: modoPrueba ? CLIENTE_DE_PRUEBA : cli, command: modoPrueba ? 'portero.etiquetar.prueba' : 'portero.etiquetar',
       response_text: etiqueta ? JSON.stringify(etiqueta).slice(0, 2000) : '',
       metadata: {
-        foto_id: fotoId, ...(soloToma ? { solo_toma: true } : {}), ...(fotoEnBase64 ? { origen_de_la_foto: 'base64_de_prueba' } : {}), motivo_de_respaldo: caida, stop_reason: respuesta?.stop_reason ?? null, escribio, bytes_de_la_foto: bajada.bytes, producto_visto_descartados: descartados,
+        foto_id: fotoId, ...(soloToma ? { solo_toma: true } : {}), ...(fotoEnBase64 ? { origen_de_la_foto: 'base64_de_prueba' } : {}), motivo_de_respaldo: caida, intentos, marcada_sin_lectura: marcadaSinLectura, stop_reason: respuesta?.stop_reason ?? null, escribio, bytes_de_la_foto: bajada.bytes, producto_visto_descartados: descartados,
         ...(modoPrueba ? { prueba: true, cliente_de_prueba: cli } : {}),
       },
     })
@@ -392,7 +418,7 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
   if (etiqueta && !modoPrueba && !escribio) alertas.push('etiqueta_sin_guardar')
 
   return salida(200, {
-    modo: caida ? 'respaldo' : 'etiquetado', ...(caida ? { motivo_de_respaldo: caida } : {}), llamo_al_modelo: respuesta !== null, escribio,
+    modo: caida ? 'respaldo' : 'etiquetado', ...(caida ? { motivo_de_respaldo: caida } : {}), llamo_al_modelo: respuesta !== null, escribio, intentos, ...(marcadaSinLectura ? { marcada_sin_lectura: true } : {}),
     ...(etiqueta ? { etiqueta: { ...etiqueta, formato: toma.formato } } : {}), producto_visto_descartados: descartados,
     ...(etiqueta && !modoPrueba ? { columnas_escritas: escribio ? (soloToma ? [...COLUMNAS_DE_LA_TOMA] : [...COLUMNAS_QUE_ESCRIBE]) : [] } : {}),
     ...(detalleDeEscritura ? { detalle_de_escritura: detalleDeEscritura } : {}), ...(omitidas ? { lineas_de_producto_omitidas: omitidas } : {}),

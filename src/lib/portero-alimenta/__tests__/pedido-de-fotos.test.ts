@@ -17,7 +17,7 @@ const tablas = () => ({
   client_sedes: [], cerebro_fichas: [], cerebro_ingresos: [], cerebro_pedidos: [], agents: [{ name: 'creative-director' }], costs: [], agent_invocations: [],
   apify_raw: [], client_brain_chunks: [], cerebro_portero_corridas: [],
 })
-const vista = (id: string, origen: OrigenDeFoto, etiquetada: boolean): FotoVista => ({ foto_id: id, origen, cuenta: 'c', tipo: 'post_image', medio: 'imagen', url: `https://x/${id}.jpg`, publicada_en: null, copiada_en: null, etiquetada, que_muestra: etiquetada ? `foto ${id}` : null, producto_visto: [], texto_visible: null, confianza: etiquetada ? 'alta' : null, con_personas: null, tipo_de_toma: null, formato: null })
+const vista = (id: string, origen: OrigenDeFoto, etiquetada: boolean): FotoVista => ({ foto_id: id, origen, cuenta: 'c', tipo: 'post_image', medio: 'imagen', url: `https://x/${id}.jpg`, publicada_en: null, copiada_en: null, etiquetada, que_muestra: etiquetada ? `foto ${id}` : null, producto_visto: [], texto_visible: null, confianza: etiquetada ? 'alta' : null, con_personas: null, tipo_de_toma: null, formato: null, no_se_pudo_leer: false })
 function respuesta(fotos: FotoVista[]): RespuestaDeFotos {
   const por_origen = { propia: { total: 0, etiquetadas: 0 }, competencia: { total: 0, etiquetadas: 0 }, referencia: { total: 0, etiquetadas: 0 } }
   for (const f of fotos) { por_origen[f.origen].total++; if (f.etiquetada) por_origen[f.origen].etiquetadas++ }

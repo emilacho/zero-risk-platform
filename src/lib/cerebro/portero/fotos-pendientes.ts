@@ -68,9 +68,11 @@ export interface FotoVista {
   con_personas: boolean | null
   tipo_de_toma: string | null
   formato: string | null
+  /** el modelo no pudo leerla tras el reintento: su «etiqueta» es solo la marca con el motivo */
+  no_se_pudo_leer: boolean
 }
 
-const COLUMNAS_DE_LECTURA = ['id', 'owner_role', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'duplicado_de', 'hash_archivo']
+const COLUMNAS_DE_LECTURA = ['id', 'owner_role', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'etiqueta_modelo', 'duplicado_de', 'hash_archivo']
 
 export interface PedidoDeFotos { cliente: string; origen?: OrigenDeFoto | null; soloEtiquetadas?: boolean; limite?: number }
 export type RespuestaDeFotos =
@@ -92,7 +94,7 @@ export async function listarFotos(consulta: Consulta, p: PedidoDeFotos): Promise
       foto_id: String(f.id), origen: origenDeLaFoto(f.owner_role), cuenta: txt(f.handle), tipo: txt(f.tipo), medio: txt(f.medio), url: txt(f.url),
       publicada_en: txt(f.posted_at), copiada_en: txt(f.created_at), etiquetada: !!txt(f.etiquetada_en), que_muestra: txt(f.que_muestra), producto_visto: lista(f.producto_visto),
       texto_visible: txt(f.texto_visible), confianza: txt(f.etiqueta_confianza), con_personas: typeof f.con_personas === 'boolean' ? f.con_personas : null,
-      tipo_de_toma: txt(f.tipo_de_toma), formato: txt(f.formato),
+      tipo_de_toma: txt(f.tipo_de_toma), formato: txt(f.formato), no_se_pudo_leer: txt(f.etiqueta_modelo) === 'sin-lectura',
     }))
   const por_origen = Object.fromEntries(ORIGENES_DE_FOTO.map((o) => [o, { total: 0, etiquetadas: 0 }])) as Record<OrigenDeFoto, { total: number; etiquetadas: number }>
   for (const v of vistas) { por_origen[v.origen].total++; if (v.etiquetada) por_origen[v.origen].etiquetadas++ }
