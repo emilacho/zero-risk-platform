@@ -7,9 +7,18 @@
 export const MAX_RONDAS_DE_CAMBIOS = 5
 export const TIPO_PIEZA_DE_OFICINA_BANDEJA = 'content_piece_review'
 
+const esObjeto = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
+
+/**
+ * 30-oct · un intento de abrir la versión de cambios que murió AL ABRIR (cerró `fallido`, sin gastar nada, llevando `cambios_del_dueno`): no es una ronda del dueño ni una pieza que devolver.
+ * No cuenta en las 5 rondas y no impide pedir los cambios otra vez cuando la causa se arregle; la pieza vuelve a la bandeja.
+ */
+export function esIntentoFallidoDeCambios(e: { estado?: unknown; gasto_usd?: unknown; sala_ref?: unknown }): boolean {
+  return e.estado === 'fallido' && Number(e.gasto_usd ?? 0) === 0 && esObjeto(e.sala_ref) && esObjeto(e.sala_ref.cambios_del_dueno)
+}
+
 export interface CambiosDelDueno { ronda: number; comentario: string; laminas: number[]; desde_hitl: string; pedido_por: string }
 
-const esObjeto = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
 
 /** valida lo que viaja en el sobre: devuelve los errores (vacío = bien) */
 export function erroresDeCambios(c: unknown): string[] {

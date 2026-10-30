@@ -46,7 +46,8 @@ describe('la bandeja de la oficina también manda la pieza a Slack (solo con la 
     expect(post.cuerpo.channel).toBe(CANAL_DE_LA_OFICINA)
     expect(CANAL_DE_LA_OFICINA).toBe('C0C7XUKNCLS')
     expect(llamadas.filter((l) => l.url.endsWith('conversations.open'))).toHaveLength(0) // nunca mensajes directos
-    expect(JSON.stringify(post.cuerpo.blocks)).toContain('nota_aprobar')
+    expect(JSON.stringify(post.cuerpo.blocks)).not.toContain('nota_aprobar')
+    expect(JSON.stringify(post.cuerpo.blocks)).toContain('Ver en el dashboard')
     expect(JSON.stringify(post.cuerpo.blocks)).toContain('Ceviche de la casa')
     const fila = db.tablas['hitl_queue'].find((x) => x.type === 'content_piece_review')!
     expect(fila.metadata).toMatchObject({ slack: { canal: CANAL_DE_LA_OFICINA, ts: '9.9' }, familia: 'post_img' })
