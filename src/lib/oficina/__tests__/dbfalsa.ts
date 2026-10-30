@@ -96,6 +96,7 @@ class Consulta {
     else if (this.t.startsWith('cerebro_')) o.id ??= `88888888-8888-4888-8888-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'eventos_de_emilio') { o.id ??= `99999999-9999-4999-8999-${String(++this.db.secuencia).padStart(12, '0')}` }
     else if (this.t === 'notas_del_dueno' || this.t === 'autorevisiones_del_productor') { o.id ??= `66666666-6666-4666-8666-${String(++this.db.secuencia).padStart(12, '0')}`; o.creada_en ??= new Date(Date.UTC(2026, 9, 21, 12, 0, this.db.secuencia)).toISOString() }
+    else if (this.t === 'clients') o.id ??= `55555555-5555-4555-8555-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'client_historical_outputs' || this.t === 'hitl_queue') o.id ??= `77777777-7777-4777-8777-${String(++this.db.secuencia).padStart(12, '0')}`
     return o
   }
