@@ -202,13 +202,22 @@ describe('POST /api/brand-book/[clientId] · el manual entra al cerebro al termi
   })
 
   it('🟢 si el insert FALLA, no se empuja nada', async () => {
-    chain.single.mockResolvedValueOnce({ data: null, error: { message: 'duplicate key' } })
+    chain.single.mockResolvedValueOnce({ data: null, error: { message: 'permission denied' } })
     const { POST } = await loadRoute()
     const res = await POST(req(cuerpo), ctx)
     const j = await res.json()
     expect(res.status).toBe(500)
     expect(j.persisted).toBe(false)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('🟢 ADENDA 1 · si otra escritura tomó la misma versión (23505) se reintenta sobre la vigente y la fila queda escrita', async () => {
+    chain.single.mockResolvedValueOnce({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } })
+    const { POST } = await loadRoute()
+    const res = await POST(req(cuerpo), ctx)
+    const j = await res.json()
+    expect(res.status).toBe(200)
+    expect(j.persisted).toBe(true)
   })
 
   it('🟢 E111 · si el manual YA existía se guarda la versión siguiente y ÉSA se empuja al cerebro (la fila nueva, no la vieja)', async () => {

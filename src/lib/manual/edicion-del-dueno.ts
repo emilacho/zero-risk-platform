@@ -68,17 +68,19 @@ function copiaSinIdentidad(f: Fila): Fila {
   return c
 }
 
+const INTENTOS_POR_CHOQUE = 4
+
 async function insertarVersion(db: Db, client_id: string, armar: (vigente: Fila) => Fila): Promise<{ ok: true; id: string; version: number; vigente: Fila } | { ok: false; error: string; sin_manual?: boolean }> {
-  for (let intento = 0; intento < 2; intento++) {
+  for (let intento = 0; intento < INTENTOS_POR_CHOQUE; intento++) {
     const { fila, error } = await leerVigente(db, client_id)
     if (error) return { ok: false, error: `no pude leer el manual vigente: ${error}` }
     if (!fila) return { ok: false, error: 'el cliente todavía no tiene manual', sin_manual: true }
     const nueva = armar(fila)
     const ins = await db.from('client_brand_books').insert(nueva).select('id, version').single()
     if (!ins.error) return { ok: true, id: String((ins.data as Fila).id), version: Number((ins.data as Fila).version), vigente: fila }
-    // otra edición entró al mismo tiempo (versión repetida): se vuelve a leer la vigente y se arma otra vez, una sola vez
+    // otra escritura entró al mismo tiempo (versión repetida): se vuelve a leer la vigente y se arma otra vez sobre ELLA, así lo de la otra no se pierde
     const choque = String((ins.error as Fila).code ?? '') === '23505' || /duplicate|unique/i.test(String((ins.error as Fila).message ?? ''))
-    if (!choque || intento === 1) return { ok: false, error: `no pude guardar la versión nueva: ${String((ins.error as Fila).message ?? ins.error)}` }
+    if (!choque || intento === INTENTOS_POR_CHOQUE - 1) return { ok: false, error: `no pude guardar la versión nueva: ${String((ins.error as Fila).message ?? ins.error)}` }
   }
   return { ok: false, error: 'no pude guardar la versión nueva' }
 }

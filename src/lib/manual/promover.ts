@@ -64,7 +64,12 @@ export async function promoverManualRevisado(db: Db, e: EntradaDePromocion): Pro
   for (const c of COLUMNAS_QUE_SE_HEREDAN) if (row[c] == null && anterior?.[c] != null) row[c] = anterior[c]
 
   const ins = await db.from('client_brand_books').insert(row).select('id').single()
-  if (ins.error) return { ok: false, error: 'insercion_fallida', detalle: ins.error.message }
+  if (ins.error) {
+    // otra escritura tomó esta versión al mismo tiempo (índice único): la vigente cambió, este borrador ya no se revisó contra ella; no se pisa nada y queda sin promover
+    const choque = String((ins.error as Fila).code ?? '') === '23505' || /duplicate|unique/i.test(ins.error.message ?? '')
+    if (choque) return { ok: false, error: 'version_vigente_cambio', detalle: `otra escritura tomó la versión ${version} al mismo tiempo; el borrador queda sin promover y la otra escritura se conserva` }
+    return { ok: false, error: 'insercion_fallida', detalle: ins.error.message }
+  }
   const id = String((ins.data as Fila).id)
   // marca el borrador como aprobado (si la base lo rechaza, la promoción ya ocurrió: no se deshace; el borrador aprobado dos veces no inserta de nuevo porque la versión base ya no es la vigente)
   const marca = await db.from('client_historical_outputs').update({ status: 'approved', provenance_tag: { ...((b.fila.provenance_tag as Fila | null) ?? {}), aprobado_por: e.aprobador, aprobado_en: ahora, frase_del_aprobador: e.frase_del_aprobador ?? null, version_promovida: version } }).eq('id', e.output_id)
