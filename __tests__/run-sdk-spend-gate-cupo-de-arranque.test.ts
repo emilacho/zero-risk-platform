@@ -1,7 +1,7 @@
 /**
  * EL CUPO DE ARRANQUE (CC#2 · 20-oct · opción A firmada por Emilio 15:15). US$ 0 · sin base ni modelo.
  * Un cliente `onboarding` en sus primeros días tiene techo de 24 h = el MAYOR entre el general (8) y RUN_ONBOARDING_CAP_USD (13); al pasar a `active` vuelve a 8.
- * No cambia: la vara por corrida (5), que la ficha solo BAJA, el kill-switch, y que sin dato de la ficha rige lo normal (falla hacia lo normal, nunca hacia lo alto).
+ * No cambia: la vara por corrida (5), que la ficha MANDA (sube o baja, desde el 30-oct), el kill-switch, y que sin dato de la ficha rige lo normal (falla hacia lo normal, nunca hacia lo alto).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkRunSdkSpendCap, resolveClientCapContext, techoGenericoDeArranque, DEFAULT_ONBOARDING_SPEND_CAP_USD, DEFAULT_ONBOARDING_DAYS } from '../src/lib/run-sdk-spend-gate'

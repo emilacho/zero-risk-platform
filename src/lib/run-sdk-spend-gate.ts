@@ -64,7 +64,7 @@ export const DEFAULT_RUN_SPEND_CAP_USD = 8.0
 /**
  * ── CUPO DE ARRANQUE · opción A firmada por Emilio (20-oct, 15:15) ──
  * Un cliente NUEVO gasta en su primer día alta + planeación (+ finanzas y el primer ciclo): medido, entre ≈ 4 y 10. Con el techo de 24 h en US$ 8 la planeación podía frenarse sola el primer día, y no existía
- * ningún camino para subir el techo de un cliente legítimo (la ficha solo BAJA). Mientras la ficha esté en `onboarding` (y solo durante `RUN_ONBOARDING_DIAS` días desde que se creó, por omisión 7: sin esa cota un
+ * ningún camino para subir el techo de un cliente legítimo (entonces la ficha solo BAJABA; desde el 30-oct manda). Mientras la ficha esté en `onboarding` (y solo durante `RUN_ONBOARDING_DIAS` días desde que se creó, por omisión 7: sin esa cota un
  * cliente olvidado en `onboarding` tendría el techo alto para siempre) el techo de 24 h es el MAYOR entre el general y `RUN_ONBOARDING_CAP_USD` (13 por omisión). Al pasar a `active` vuelve al general.
  * NO cambia: la vara por corrida (US$ 5), el cubo `system`, que (desde el 30-oct) `config.spend_cap_usd` de la ficha MANDA —sube o baja—, ni la política de fallo (sin dato de la ficha ⇒ techo general: falla hacia lo normal, nunca hacia lo alto).
  */

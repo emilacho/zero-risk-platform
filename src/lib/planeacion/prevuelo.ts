@@ -10,7 +10,7 @@
  * 🔴 EL RELOJ vive en la base (`plan_corridas.espera_desde`, insert-once): un reinicio nunca lo reinicia; la lectura del 45:00 exacto SÍ cuenta (se lee la señal ANTES de vencer).
  * 🔴 UN SOLO PLAN: el re-disparo avanza con compare-and-set; dos re-disparos simultáneos ⇒ gana uno, el otro recibe `otro_re_disparo_gano` y no hace nada.
  * 🔴 CUPO (§13.1): `techo (spend_cap_usd de la ficha si lo trae, si no el genérico) − gastado 24 h` debe cubrir la suma de topes del plan; si no, no corre y dice «sube la ficha a X»
- *    (si lo que falta es el techo GENÉRICO, subir la ficha no sirve: la ficha solo BAJA el techo, y lo dice).
+ *    (desde el 30-oct subir la ficha del cliente sí arregla la falta de cupo: su tope manda).
  * PURO: todo lo de afuera entra por puertos (se prueba con reloj simulado, sin red, sin gasto). NADIE lo llama todavía.
  */
 import { abrir, correr, reintentar, CADA_REINTENTO_S, ESPERA_MAXIMA_MIN, type PuertoDeCorridas } from './corridas'

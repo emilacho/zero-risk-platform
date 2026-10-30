@@ -1,6 +1,6 @@
 /**
  * El cupo de arranque en la tercera puerta (agent-runner · Railway) · espejo de `__tests__/run-sdk-spend-gate-cupo-de-arranque.test.ts` (CC#2 · 20-oct · opción A firmada por Emilio).
- * Ficha `onboarding` en sus primeros 7 días ⇒ techo de 24 h = el mayor entre el general (8) y RUN_ONBOARDING_CAP_USD (13). Falla hacia lo normal. La ficha solo BAJA.
+ * Ficha `onboarding` en sus primeros 7 días ⇒ techo de 24 h = el mayor entre el general (8) y RUN_ONBOARDING_CAP_USD (13). Falla hacia lo normal. La ficha MANDA (sube o baja, desde el 30-oct).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkSpendCap, techoDeArranque } from '../spend-gate.js'
