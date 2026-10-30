@@ -2,6 +2,7 @@
  * LOS ADAPTADORES REALES de los puertos de la oficina. NADA de esto corre mientras la oficina esté apagada (la puerta devuelve 409 antes) y NADA llama a un proveedor en `dry_run`.
  * Todo recibe sus dependencias por parámetro (base, `fetch`, claves) para probarse sin red. Un fallo de Slack nunca se lanza; un proveedor sin configurar responde «no configurado», no revienta.
  */
+import { retirarLasSuperadas } from './superadas'
 import { puertoDeLaMesa } from './mesa/adaptador'
 import { monedaDelCliente } from '@/lib/moneda/por-pais'
 import zlib from 'node:zlib'
@@ -299,6 +300,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       const r = await db.from('hitl_queue').insert({ client_id: p.client_id, agent_name: 'oficina', risk_type: 'strategic_decision', output_preview: p.vista_previa || p.titulo, type: 'content_piece_review', title: p.titulo, priority: 'medium', status: 'pending', payload: {}, metadata: p.metadata, output_id: p.output_id, expires_at: p.expires_at }).select('id').single()
       if (r.error) return { ok: false, error: r.error.message }
       const id = String((r.data as Fila).id)
+      await retirarLasSuperadas(db, { hitl_id: id, client_id: p.client_id, metadata: p.metadata }) // regla estructural: la versión anterior de la misma pieza que siga pendiente se retira sola (nunca lanza)
       // la pieza también llega al Slack de Emilio con sus botones, POR EL CANAL DE ESTA OFICINA (el mismo de sus avisos; regla firmada: cada oficina habla con Emilio por su propio canal, nada de mensajes directos). Un fallo aquí NUNCA frena la bandeja, que sigue siendo la vía de siempre
       if (env.notasDelDueno && env.slackToken) {
         try { const s = await enviarPiezaASlack(db, { baseUrl: env.baseUrl, internalKey: env.internalKey, slackToken: env.slackToken, destino: env.slackCanalHilo ?? CANAL_DE_LA_OFICINA }, await piezaParaSlackDeLaBandeja(db, { hitl_id: id, client_id: p.client_id, output_id: p.output_id, titulo: p.titulo, vista_previa: p.vista_previa, metadata: p.metadata }), f); if (!s.ok) await alarmaDeSlack(`la pieza ${p.titulo.slice(0, 80)}`, env.slackCanalHilo ?? CANAL_DE_LA_OFICINA, s.error) } catch (e) { await alarmaDeSlack('la pieza', env.slackCanalHilo ?? CANAL_DE_LA_OFICINA, e instanceof Error ? e.message : String(e)) } // nunca frena la bandeja
