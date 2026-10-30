@@ -10,6 +10,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { sanitizeProseFields } from '@/lib/brand-book-caveat-extractor'
 import { empujarManualAlCerebro } from '@/lib/brain/push-al-terminar'
+import { columnasDelBorrador, evaluarCompletitud, fugasDeLasColumnas } from '@/lib/manual/campos-del-manual'
 import { completarVisualesDesdeLaFicha } from '@/lib/manual-visuales-desde-la-ficha'
 
 export const runtime = 'nodejs'
@@ -91,6 +92,9 @@ export function buildBrandBookRow(
     // REQUIERE la migración 202608201200_client_brand_books_positioning.sql aplicada.
     positioning: clean('positioning', bb.positioning ?? null),
     elevator_pitch: clean('elevator_pitch', bb.elevator_pitch ?? null),
+    // LA DEFINICIÓN ÚNICA (30-oct): propósito, misión, visión, valores, personalidad, eslogan declarado, mensajes y propuestas de valor van a SU columna desde `lib/manual/campos-del-manual.ts`.
+    // El borrador los nombra en español y las columnas en inglés; nadie traducía (6 columnas vacías en los manuales de 2026-08/10). Un solo punto, una sola tabla.
+    ...columnasDelBorrador(bb, prose.cleaned),
     // el draft completo (incl. icp_summary/customer_angle/retention_notes que no tienen
     // columna) se preserva en content_text como JSON · nada se pierde.
     content_text: JSON.stringify({
@@ -104,9 +108,11 @@ export function buildBrandBookRow(
       // Identificadores internos que se colaron igual · se DECLARAN, no se borran
       // (borrar a ciegas mutila la frase). Sirve para enterarse sin leer manual
       // por manual.
-      ...(Object.keys(prose.leaked).length > 0
-        ? { _leaked_internal_terms: prose.leaked }
-        : {}),
+      // Las fugas de las columnas de la definición única entran acá también: el detector solo miraba la prosa y varias de ellas son listas.
+      ...((() => {
+        const leaked = { ...prose.leaked, ...fugasDeLasColumnas(bb, prose.cleaned) }
+        return Object.keys(leaked).length > 0 ? { _leaked_internal_terms: leaked } : {}
+      })()),
       fidelity_passed: body.fidelity_passed === true,
       fidelity_scores: body.fidelity_scores ?? null,
       fidelity_threshold: body.fidelity_threshold ?? null,
@@ -116,6 +122,12 @@ export function buildBrandBookRow(
       // es para poder VERLO sin abrir el JSON fila por fila.
       gate_outcome: body.gate_outcome ?? null,
       gate_nota: body.gate_nota ?? null,
+      // N2 · el cierre: cada obligatorio lleno, propuesto por un agente (y dicho) o hueco declarado con lo que se buscó. NO cambia el veredicto de la vara ni la regla «el manual sale siempre, marcado» (28-ago):
+      // solo deja a la vista si está completo. `tipo_de_negocio` y `buscado_en` son opcionales (un negocio sin local no exige sedes).
+      completitud: evaluarCompletitud(bb, {
+        tipo: typeof body.tipo_de_negocio === 'string' ? body.tipo_de_negocio : null,
+        buscadoEn: Array.isArray(body.buscado_en) ? body.buscado_en.filter((x): x is string => typeof x === 'string') : undefined,
+      }),
     }),
     // Sprint B · pieza (e) · 2026-08-28 (§144 Emilio) · el manual sale SIEMPRE, y el
     // que no alcanzó la vara sale MARCADO. Antes se retenía en silencio para una

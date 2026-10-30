@@ -22,7 +22,7 @@ describe('preparar', () => {
   it('dice qué falta y arma UN pedido para el agente dueño de la misión', async () => {
     const r = await rutaPrepararPropuesta(base(), { client_id: CID, campos: ['mision'] })
     expect(r.status).toBe(200)
-    expect(r.body).toMatchObject({ ok: true, version_base: 4, faltantes: ['mision'] })
+    expect(r.body).toMatchObject({ ok: true, version_base: 4, faltantes: expect.arrayContaining(['mision']) })
     const pedidos = r.body.pedidos as Array<{ agente: string; campos: string[]; task: string }>
     expect(pedidos.length).toBe(1); expect(pedidos[0]).toMatchObject({ agente: 'jefe-client-success', campos: ['mision'] })
     expect(pedidos[0].task).toContain('cocina de casa')

@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server";
 import { checkInternalKey } from "@/lib/internal-auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { procedenciaDelCampo } from "@/lib/brain/persist-chunks";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -161,6 +162,13 @@ export async function POST(request: Request) {
   }
 
   const sections = extractSections(row as SourceRow, sourceTable as SourceTable);
+  // 30-oct (condición 2 de Cerebro): cada trozo del manual lleva la fuente/confianza/estado de su campo
+  if (sourceTable === "client_brand_books") {
+    for (const s of sections as Array<{ section_label: string; text: string; metadata?: Record<string, unknown> }>) {
+      const extra = procedenciaDelCampo(row as SourceRow, s.section_label);
+      if (extra) s.metadata = extra;
+    }
+  }
   if (sections.length === 0) {
     return NextResponse.json(
       { ok: true, chunks_upserted: 0, note: "no_valid_sections_extracted" },
@@ -189,6 +197,22 @@ export async function POST(request: Request) {
   let ingestJson: Record<string, unknown> = {};
   try { ingestJson = JSON.parse(ingestBody); } catch { ingestJson = { raw: ingestBody.slice(0, 300) }; }
 
+  // 30-oct (condición 1 de Cerebro): UNA sola versión viva del manual en el cerebro. Si esta fila es la vigente (la de mayor número) y entró bien,
+  // los trozos de las versiones anteriores se retiran (derivados: se vuelven a generar desde la tabla, que no se toca).
+  let trozosRetirados: number | null = null;
+  if (ingestRes.ok && sourceTable === "client_brand_books") {
+    // el retiro es limpieza: si falla, el reindexado ya hecho NO se tumba (el cerebro lee la versión vigente igual)
+    try {
+      const { data: masAlta } = await supabase.from("client_brand_books").select("id").eq("client_id", clientId).order("version", { ascending: false }).limit(1);
+      if (Array.isArray(masAlta) && masAlta[0] && String((masAlta[0] as { id: string }).id) === sourceId) {
+        const { data: borrados } = await supabase.from("client_brain_chunks").delete().eq("client_id", clientId).eq("source_table", "client_brand_books").neq("source_id", sourceId).select("id");
+        trozosRetirados = (borrados ?? []).length;
+      }
+    } catch (e) {
+      console.error("[reembed-source-row] no pude retirar los trozos de versiones anteriores:", e instanceof Error ? e.message : e);
+    }
+  }
+
   const ageSec = body.updated_at
     ? Math.round((Date.now() - new Date(body.updated_at).getTime()) / 1000)
     : null;
@@ -201,6 +225,7 @@ export async function POST(request: Request) {
       chunks_upserted: ingestJson.chunks_upserted ?? 0,
       cost_usd: ingestJson.cost_usd ?? 0,
       source_row_age_seconds: ageSec,
+      trozos_retirados_de_versiones_anteriores: trozosRetirados,
       source_table: sourceTable,
       source_id: sourceId,
       client_id: clientId,

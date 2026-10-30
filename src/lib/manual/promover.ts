@@ -17,7 +17,7 @@ export const COLUMNAS_QUE_SE_HEREDAN = ['primary_colors', 'typography', 'imagery
 export const PROVENANCE_DEL_MANUAL_REVISADO = { type: 'evidence', source: 'manual_revisado', trust_level: 'tenant_trusted' } as const
 
 export type ResultadoDePromocion =
-  | { ok: true; version: number; id: string; previous_id: string | null; brain_push: EmpujeResultado | null; ya_promovido?: false }
+  | { ok: true; version: number; id: string; previous_id: string | null; brain_push: EmpujeResultado | null; ya_promovido?: false; /** la versión se insertó pero la marca del borrador falló: se declara */ aviso_marca?: string }
   | { ok: true; ya_promovido: true; version: null }
   | { ok: false; error: 'borrador_inexistente' | 'borrador_ilegible' | 'version_vigente_cambio' | 'lectura_fallida' | 'insercion_fallida'; detalle: string }
 
@@ -25,6 +25,8 @@ export interface EntradaDePromocion {
   output_id: string
   client_id: string
   aprobador: string
+  /** quién valida: la jefatura (por defecto desde el 30-oct, dentro del loop) o el dueño (su firma en la bandeja o el botón del tablero) */
+  validado_por?: 'jefatura' | 'dueno'
   frase_del_aprobador?: string | null
   empujar?: (e: EmpujeEntrada) => EmpujeResultado
   ahora?: Date
@@ -55,8 +57,8 @@ export async function promoverManualRevisado(db: Db, e: EntradaDePromocion): Pro
 
   const ahora = (e.ahora ?? new Date()).toISOString()
   const version = vigente + 1
-  const base = buildBrandBookRow(e.client_id, contenido.manual, { approved_by: e.aprobador, approved_at: ahora, source: 'revision_del_manual', gate_outcome: null, gate_nota: 'revisado por código y revisor externo; firmado por una persona', fidelity_passed: false }, version)
-  const row: Fila = { ...base, human_validated: true, auto_generated_from: 'revision_del_manual', provenance_tag: PROVENANCE_DEL_MANUAL_REVISADO }
+  const base = buildBrandBookRow(e.client_id, contenido.manual, { approved_by: e.aprobador, approved_at: ahora, source: 'revision_del_manual', gate_outcome: null, gate_nota: e.validado_por === 'jefatura' ? 'revisado por código y revisor externo; validado por la jefatura' : 'revisado por código y revisor externo; firmado por una persona', fidelity_passed: false }, version)
+  const row: Fila = { ...base, human_validated: true, auto_generated_from: 'revision_del_manual', provenance_tag: { ...PROVENANCE_DEL_MANUAL_REVISADO, validado_por: e.validado_por ?? 'dueno', validado_en: ahora, validado_via: e.aprobador } }
   const eslogan = typeof contenido.manual.tagline === 'string' && contenido.manual.tagline.trim() ? contenido.manual.tagline : (anterior?.tagline ?? null)
   if (eslogan) row.tagline = eslogan
   for (const c of COLUMNAS_QUE_SE_HEREDAN) if (row[c] == null && anterior?.[c] != null) row[c] = anterior[c]
@@ -65,9 +67,11 @@ export async function promoverManualRevisado(db: Db, e: EntradaDePromocion): Pro
   if (ins.error) return { ok: false, error: 'insercion_fallida', detalle: ins.error.message }
   const id = String((ins.data as Fila).id)
   // marca el borrador como aprobado (si la base lo rechaza, la promoción ya ocurrió: no se deshace; el borrador aprobado dos veces no inserta de nuevo porque la versión base ya no es la vigente)
-  await db.from('client_historical_outputs').update({ status: 'approved', provenance_tag: { ...((b.fila.provenance_tag as Fila | null) ?? {}), aprobado_por: e.aprobador, aprobado_en: ahora, frase_del_aprobador: e.frase_del_aprobador ?? null, version_promovida: version } }).eq('id', e.output_id)
+  const marca = await db.from('client_historical_outputs').update({ status: 'approved', provenance_tag: { ...((b.fila.provenance_tag as Fila | null) ?? {}), aprobado_por: e.aprobador, aprobado_en: ahora, frase_del_aprobador: e.frase_del_aprobador ?? null, version_promovida: version } }).eq('id', e.output_id)
   const brain_push = (e.empujar ?? empujarManualAlCerebro)({ client_id: e.client_id, source_id: id })
-  return { ok: true, version, id, previous_id: anterior ? String(anterior.id) : null, brain_push }
+  // H4 (CC#3, 10-oct): si la marca falla se DECLARA (la versión ya está insertada; no se oculta)
+  const aviso_marca = marca?.error ? `la versión ${version} quedó insertada pero no se pudo marcar el borrador como aprobado: ${marca.error.message}` : undefined
+  return { ok: true, version, id, previous_id: anterior ? String(anterior.id) : null, brain_push, ...(aviso_marca ? { aviso_marca } : {}) }
 }
 
 /** rechazar: la nota queda en el borrador (auditoría y guía de la próxima corrida); no se edita ningún manual */

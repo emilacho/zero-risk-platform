@@ -73,6 +73,8 @@ const ES_UUID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{1
 interface IngestSection {
   section_label: string;
   text: string;
+  /** procedencia por trozo (p. ej. la fuente/confianza/estado del campo del manual) */
+  metadata?: Record<string, unknown>;
 }
 
 interface IngestBody {
@@ -173,6 +175,7 @@ export async function POST(request: Request) {
     .map((s) => ({
       section_label: s.section_label.trim().slice(0, 200),
       text: s.text.trim(),
+      ...(s.metadata && typeof s.metadata === "object" && !Array.isArray(s.metadata) ? { metadata: s.metadata } : {}),
     }))
     .filter((s) => s.section_label.length > 0 && s.text.length > 10);
 
@@ -310,6 +313,7 @@ export async function POST(request: Request) {
     provenance_tag: provenanceTag,
     metadata: {
       ...(body.metadata ?? {}),
+      ...(s.metadata && typeof s.metadata === "object" ? s.metadata : {}),
       embedding_model: embed.model,
       embedding_dimensions: EMBEDDING_DIMENSIONS,
       ingested_at: nowIso,

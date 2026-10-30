@@ -18,7 +18,7 @@ async function armar(): Promise<{ hitl_id: string; output_id: string }> {
     filaInstagram('i1', 'clinicaejemplo', 'Sonríe sin miedo,\nsiempre contigo!'),
   ].map((f) => ({ ...f, client_id: C, ensayo: false })))
   holder.db = db
-  const r = await rutaBorrador(db, { client_id: C, manual: MANUAL, costo_usd: 0, dry_run: false, workflow_id: 'w', workflow_execution_id: 'e' })
+  const r = await rutaBorrador(db, { validador: 'bandeja', client_id: C, manual: MANUAL, costo_usd: 0, dry_run: false, workflow_id: 'w', workflow_execution_id: 'e' })
   return { hitl_id: String(r.body.hitl_id), output_id: String(r.body.output_id) }
 }
 const parchar = async (id: string, body: Record<string, unknown>) => {

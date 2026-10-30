@@ -11,6 +11,7 @@ import { checkLlaveDeLaSala } from '../oficina/ruta'
 import { llamarRevisorGpt } from '../revisor-gpt'
 import { llamarRevisorGptConLibro, type ContextoDelLibro } from '../revisor-gpt-libro'
 import { guardarBorrador, type OpinionDeGpt } from './borrador'
+import { guardarYValidarPorJefatura } from './validar-por-jefatura'
 import { armarPedidoDelManual } from './pedido-gpt'
 import { ordenarMateria } from './materia'
 import { cerrarRevision, leerInsumos, prepararRevision, type Db, type Insumos } from './revision'
@@ -123,6 +124,9 @@ export async function rutaBorrador(db: Db, cuerpo: unknown): Promise<Respuesta> 
   const costo = typeof v.cuerpo.costo_usd === 'number' && Number.isFinite(v.cuerpo.costo_usd) ? v.cuerpo.costo_usd : 0
   const respuesta = Array.isArray(v.cuerpo.respuesta_del_autor) ? (v.cuerpo.respuesta_del_autor as never) : null
   const fid = esObjeto(v.cuerpo.fidelidad) ? (v.cuerpo.fidelidad as never) : null
-  const r = await guardarBorrador(db, { insumos: ins, cierre, opinion: op, fidelidad: fid, respuesta_del_autor: respuesta, costo_usd: costo, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id, dry_run: v.dry_run })
-  return { status: r.ok ? 200 : 502, body: { ...r, retirados_en_el_registro_interno: cierre.retirados.length } }
+  // desde el 30-oct valida la jefatura (por omisión); `validador: 'bandeja'` conserva la tarjeta para el dueño como herramienta opcional
+  const validador: 'jefatura' | 'bandeja' = v.cuerpo.validador === 'bandeja' ? 'bandeja' : 'jefatura'
+  const entrada = { insumos: ins, cierre, opinion: op, fidelidad: fid, respuesta_del_autor: respuesta, costo_usd: costo, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id, dry_run: v.dry_run, validador, tipo_de_negocio: typeof v.cuerpo.tipo_de_negocio === 'string' ? v.cuerpo.tipo_de_negocio : null, buscado_en: Array.isArray(v.cuerpo.buscado_en) ? v.cuerpo.buscado_en.filter((x): x is string => typeof x === 'string') : undefined }
+  const r = validador === 'bandeja' ? await guardarBorrador(db, entrada) : await guardarYValidarPorJefatura(db, entrada)
+  return { status: r.ok ? 200 : 502, body: { ...r, validador, retirados_en_el_registro_interno: cierre.retirados.length } }
 }

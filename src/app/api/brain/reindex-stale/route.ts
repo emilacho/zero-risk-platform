@@ -16,6 +16,7 @@
 import { NextResponse } from "next/server";
 import { checkInternalKey } from "@/lib/internal-auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { procedenciaDelCampo } from "@/lib/brain/persist-chunks";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -162,7 +163,19 @@ export async function POST(request: Request) {
         }
       }
 
+      // 30-oct (condición 1 de Cerebro): del manual solo vive en el cerebro la versión vigente (la de mayor número); el barrido no resucita las anteriores
+      let vigentes: Set<string> | null = null;
+      if (sourceTable === "client_brand_books") {
+        const { data: todas } = await supabase.from("client_brand_books").select("id,client_id,version").in("client_id", [...new Set(rows.map((r) => r.client_id))]);
+        const maxima: Record<string, { id: string; v: number }> = {};
+        for (const t of (todas ?? []) as { id: string; client_id: string; version: number | null }[]) {
+          const v = Number(t.version) || 0;
+          if (!maxima[t.client_id] || v > maxima[t.client_id].v) maxima[t.client_id] = { id: t.id, v };
+        }
+        vigentes = new Set(Object.values(maxima).map((m) => m.id));
+      }
       const stale = rows.filter((r) => {
+        if (vigentes && !vigentes.has(r.id)) return false;
         const lastChunk = chunkAgg[r.id];
         return !lastChunk || r.updated_at > lastChunk;
       });
@@ -178,6 +191,12 @@ export async function POST(request: Request) {
       for (const row of toIngest) {
         const sections = extractSections(row, sourceTable);
         if (sections.length === 0) continue;
+        if (sourceTable === "client_brand_books") {
+          for (const sec of sections as Array<{ section_label: string; text: string; metadata?: Record<string, unknown> }>) {
+            const extra = procedenciaDelCampo(row as unknown as Record<string, unknown>, sec.section_label);
+            if (extra) sec.metadata = extra;
+          }
+        }
         try {
           const r = await fetch(`${origin}/api/brain/ingest-source`, {
             method: "POST",

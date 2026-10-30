@@ -157,14 +157,14 @@ describe('M2 · el borrador y la bandeja (S8) · LO QUITADO SIN FUENTE NO VA A E
   const cuerpo = { client_id: C, manual: MANUAL, costo_usd: 0.42, opinion: { ok: true, texto: 'GPT dice algo.' }, respuesta_del_autor: [{ punto: 'p1', decision: 'tomada', razon: 'porque sí' }] }
   it('dry_run: devuelve la tarjeta y NO escribe', async () => {
     const db = base()
-    const r = await rutaBorrador(db, { ...cuerpo, dry_run: true })
+    const r = await rutaBorrador(db, { ...cuerpo, validador: 'bandeja', dry_run: true })
     expect(r.status).toBe(200); expect(r.body).toMatchObject({ simulado: true, output_id: null, hitl_id: null, sin_cambios: false })
     expect(nada(db)).toBe(true)
   })
   it('real: borrador `draft` fuera de `client_brand_books` + tarjeta pendiente atada al borrador; el manual vigente no se toca', async () => {
     const db = base()
     const antes = JSON.stringify(db.tablas['client_brand_books'])
-    const r = await rutaBorrador(db, { ...cuerpo, dry_run: false, ...WF })
+    const r = await rutaBorrador(db, { ...cuerpo, validador: 'bandeja', dry_run: false, ...WF })
     expect(r.status).toBe(200)
     const out = db.tablas['client_historical_outputs'][0]
     expect(out).toMatchObject({ client_id: C, output_type: TIPO_DE_BORRADOR, status: 'draft' })
@@ -176,7 +176,7 @@ describe('M2 · el borrador y la bandeja (S8) · LO QUITADO SIN FUENTE NO VA A E
   })
   it('lo retirado queda SOLO en el registro interno del borrador; la tarjeta (título, vista previa, metadata) no lo trae, ni siquiera como «texto anterior»', async () => {
     const db = base()
-    await rutaBorrador(db, { ...cuerpo, dry_run: false, ...WF })
+    await rutaBorrador(db, { ...cuerpo, validador: 'bandeja', dry_run: false, ...WF })
     const out = db.tablas['client_historical_outputs'][0]
     expect(JSON.stringify((out.provenance_tag as any).registro_interno.retirados)).toMatch(/trazabilidad/)
     const hitl = JSON.stringify(db.tablas['hitl_queue'][0])
@@ -191,18 +191,18 @@ describe('M2 · el borrador y la bandeja (S8) · LO QUITADO SIN FUENTE NO VA A E
   })
   it('si GPT falló, la tarjeta sale «SIN SEGUNDA MIRADA»', async () => {
     const db = base()
-    await rutaBorrador(db, { ...cuerpo, opinion: { ok: false, error: 'caído' }, dry_run: false, ...WF })
+    await rutaBorrador(db, { ...cuerpo, validador: 'bandeja', opinion: { ok: false, error: 'caído' }, dry_run: false, ...WF })
     expect(String(db.tablas['hitl_queue'][0].title)).toMatch(/SIN SEGUNDA MIRADA/)
     expect((db.tablas['hitl_queue'][0].metadata as any).sin_segunda_mirada).toBe(true)
   })
   it('sin cambios frente a lo vigente ⇒ no hay nada que firmar: ni borrador ni tarjeta', async () => {
     const db = new DbFalsa().semilla('clients', [{ id: C, name: 'X', config: {} }]).semilla('client_brand_books', [{ id: 'b', client_id: C, version: 1, content_text: JSON.stringify({ brand_book_draft: { voice_description: 'Voz cálida.', tagline: 'Ya está' } }) }])
-    const r = await rutaBorrador(db, { client_id: C, manual: { voice_description: 'Voz cálida.', tagline: 'Ya está' }, dry_run: false, ...WF })
+    const r = await rutaBorrador(db, { validador: 'bandeja', client_id: C, manual: { voice_description: 'Voz cálida.', tagline: 'Ya está' }, dry_run: false, ...WF })
     expect(r.body).toMatchObject({ sin_cambios: true, output_id: null }); expect(nada(db)).toBe(true)
   })
   it('si la tarjeta falla después del borrador, se DICE y se informa el borrador escrito (no se esconde)', async () => {
     const db = base(); db.fallar['hitl_queue'] = 'sin permiso'
-    const r = await rutaBorrador(db, { ...cuerpo, dry_run: false, ...WF })
+    const r = await rutaBorrador(db, { ...cuerpo, validador: 'bandeja', dry_run: false, ...WF })
     expect(r.status).toBe(502); expect(String(r.body.error)).toMatch(/bandeja: sin permiso/)
   })
 })
@@ -210,7 +210,7 @@ describe('M2 · el borrador y la bandeja (S8) · LO QUITADO SIN FUENTE NO VA A E
 describe('M2 · la promoción (aprobar) y la nota (rechazar)', () => {
   async function conBorrador() {
     const db = base()
-    await rutaBorrador(db, { client_id: C, manual: MANUAL, costo_usd: 0, dry_run: false, ...WF })
+    await rutaBorrador(db, { validador: 'bandeja', client_id: C, manual: MANUAL, costo_usd: 0, dry_run: false, ...WF })
     return { db, output_id: String(db.tablas['client_historical_outputs'][0].id) }
   }
   it('aprobar inserta la versión max+1 VIGENTE y firmada; la anterior queda intacta; hereda visuales; empuja al cerebro', async () => {
