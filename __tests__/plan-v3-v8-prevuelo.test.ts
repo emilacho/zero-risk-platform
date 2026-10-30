@@ -154,10 +154,12 @@ describe('V8 · el cupo (§13.1)', () => {
     expect(r).toMatchObject({ decision: 'no_corre', motivo: 'falta_cupo', sube_la_ficha_a: 4 })
     expect(r.detalle).toMatch(/falta cupo/)
   })
-  it('lo ya gastado en 24 h cuenta: con 5,00 gastados y el techo en 8 no alcanza (3,40) y pide subir la ficha… que no sirve si el techo es el genérico', async () => {
+  it('lo ya gastado en 24 h cuenta: con 5,00 gastados y el techo en 8 no alcanza (3,40) y dice a cuánto subir la ficha (desde el 30-oct la ficha SUBE el techo)', async () => {
     const r = await prevuelo(entrada(), mundo({ cupo: cupo({ gastado_24h_usd: 5 }) }).P)
-    expect(r).toMatchObject({ decision: 'no_corre', motivo: 'techo_generico_insuficiente' })
-    expect(r.detalle).toMatch(/solo baja el techo/)
+    expect(r).toMatchObject({ decision: 'no_corre', motivo: 'falta_cupo', sube_la_ficha_a: 9 })
+  })
+  it('con la ficha en 20 (por encima del general) hay cupo para lo que el general no daba', async () => {
+    expect((await prevuelo(entrada(), mundo({ cupo: cupo({ cap_usd: 20, override_usd: 20, gastado_24h_usd: 5 }) }).P)).decision).toBe('correr')
   })
   it('si el techo es el de la ficha (más bajo que el genérico), SÍ se arregla subiéndola', async () => {
     const r = await prevuelo(entrada(), mundo({ cupo: cupo({ cap_usd: 2, override_usd: 2, gastado_24h_usd: 0.5 }) }).P)

@@ -3,7 +3,7 @@
  * Cada lectura que falla devuelve `{ ok: false }` (nunca un «vacío»): el pre-vuelo lo dice y no corre.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { resolveClientCapContext, resolveClientFamily, resolveRunSpendCapUsd, techoGenericoDeArranque } from '../run-sdk-spend-gate'
+import { resolveClientCapContext, resolveClientFamily, resolveRunSpendCapUsd, techoDelCliente, techoGenericoDeArranque } from '../run-sdk-spend-gate'
 import { notifySpendGateDegradation } from '../spend-gate-alert'
 import { interruptoresDelEntorno } from '../portero-alimenta/datos'
 import { rutaListo } from '../portero-alimenta/listo'
@@ -40,7 +40,7 @@ export function puertosDeSupabase(db: SupabaseClient, ahora: () => Date = () => 
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
     },
 
-    // el MISMO criterio del freno de run-sdk: techo = el menor entre el genérico y `spend_cap_usd` de la ficha; gastado = `agent_invocations` de la FAMILIA en las últimas 24 h
+    // el MISMO criterio del freno de run-sdk (`techoDelCliente`): techo = `spend_cap_usd` de la ficha si lo trae, si no el general/arranque; gastado = `agent_invocations` de la FAMILIA en las últimas 24 h
     async cupo(client_id): Promise<LecturaDeCupo> {
       try {
         const { family } = await resolveClientFamily(db, client_id, notifySpendGateDegradation)
@@ -54,7 +54,7 @@ export function puertosDeSupabase(db: SupabaseClient, ahora: () => Date = () => 
         const ficha = await resolveClientCapContext(db, client_id)
         const base_ = techoGenericoDeArranque({ status: ficha.status, createdAt: ficha.createdAt, nowMs: ahora().getTime(), generico: resolveRunSpendCapUsd() })
         const override = ficha.override
-        return { ok: true, generico_usd: base_.cap, override_usd: override, cap_usd: override !== null ? Math.min(base_.cap, override) : base_.cap, gastado_24h_usd: Math.round(gastado * 1e6) / 1e6 }
+        return { ok: true, generico_usd: base_.cap, override_usd: override, cap_usd: techoDelCliente(base_.cap, override), gastado_24h_usd: Math.round(gastado * 1e6) / 1e6 }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
     },
 

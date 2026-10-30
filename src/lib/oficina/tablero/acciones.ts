@@ -120,6 +120,27 @@ export const clienteBaja: Manejador = async ({ db, ahora }, { cuerpo }) => {
   return { status: 200, cuerpo: { ok: true, client_id: cuerpo.client_id, estado: 'churned' }, toca }
 }
 
+// ───────────────────────── tope de 24 h POR CLIENTE (30-oct · «sube y baja»): `clients.config.spend_cap_usd` ES el techo del cliente (mayor o menor que el general y que el cupo de arranque; ver `techoDelCliente`)
+export const TOPE_MAXIMO_POR_CLIENTE_USD = 1000
+export const clienteTope: Manejador = async ({ db }, { cuerpo }) => {
+  if (typeof cuerpo.client_id !== 'string' || !UUID.test(cuerpo.client_id)) return rechazo(400, 'entrada_invalida', '`client_id` debe ser un uuid')
+  const toca = { client_id: cuerpo.client_id }
+  const v = num(cuerpo.tope_usd)
+  if (v === null || v <= 0 || v > TOPE_MAXIMO_POR_CLIENTE_USD) return rechazo(400, 'entrada_invalida', `\`tope_usd\` debe ser un número mayor que 0 y no más de ${TOPE_MAXIMO_POR_CLIENTE_USD}`, toca)
+  const r = await db.from('clients').select('id, config, status').eq('id', cuerpo.client_id).limit(1)
+  if (r.error) return rechazo(500, 'clientes_error', r.error.message, toca)
+  const cli = ((r.data as Fila[] | null) ?? [])[0]
+  if (!cli) return rechazo(404, 'cliente_inexistente', 'no existe ese cliente', toca)
+  if (cli.status === 'churned') return rechazo(409, 'cliente_dado_de_baja', 'un cliente dado de baja no se edita', toca)
+  const config: Fila = esObjeto(cli.config) ? { ...cli.config } : {}
+  const anterior = num(config.spend_cap_usd)
+  config.spend_cap_usd = v
+  const u = await db.from('clients').update({ config }).eq('id', cuerpo.client_id).select('id')
+  if (u.error) return rechazo(500, 'clientes_error', u.error.message, toca)
+  const general = Number(process.env.RUN_SPEND_CAP_USD) > 0 ? Number(process.env.RUN_SPEND_CAP_USD) : 8
+  return { status: 200, cuerpo: { ok: true, client_id: cuerpo.client_id, tope_usd: v, tope_anterior_usd: anterior !== null && anterior > 0 ? anterior : null, general_usd: general, sobre_el_general: v > general }, toca: { ...toca, comentario: `tope de 24 h: ${anterior !== null && anterior > 0 ? anterior : 'sin tope propio'} → ${v}` } }
+}
+
 // ───────────────────────── oficinas: interruptor y tope
 const OFICINAS = ['creativa', 'financiera', 'jefatura', 'planeacion'] as const
 const TABLA_DE_ESTADO: Record<string, string> = { creativa: 'oficina_config', financiera: 'finanzas_config', jefatura: 'jefatura_config' }
@@ -188,6 +209,7 @@ export const ACCIONES: Record<string, Manejador> = {
   'cliente-nuevo': clienteNuevo,
   'cliente-editar': clienteEditar,
   'cliente-baja': clienteBaja,
+  'cliente-tope': clienteTope,
   'oficina-estado': oficinaEstado,
   'oficina-tope': oficinaTope,
 }

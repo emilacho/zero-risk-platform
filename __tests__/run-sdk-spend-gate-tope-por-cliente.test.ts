@@ -1,6 +1,6 @@
 /**
  * Relevo 59 · la puerta ANTES de cada llamada de modelo para la prueba desde cero: `clients.config.spend_cap_usd` baja el techo de las 24 h de ESE cliente.
- * Prueba en seco: un libro simulado, sin base ni modelo. El tope solo BAJA el techo y falla ABIERTO.
+ * Prueba en seco: un libro simulado, sin base ni modelo. El tope del cliente MANDA (sube o baja, desde el 30-oct) y falla ABIERTO.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkRunSdkSpendCap, resolveClientCapOverrideUsd, DEFAULT_RUN_SPEND_CAP_USD } from '../src/lib/run-sdk-spend-gate'
@@ -45,15 +45,15 @@ describe('tope por cliente · la puerta previa', () => {
     const pasado = await GATE(sb({ config, libro: gasto(3.5) }))
     expect(pasado).toMatchObject({ blocked: true, reason: 'over_cap' })
   })
-  it('SOLO BAJA: un tope mayor que el genérico se ignora (no se puede usar para subir el freno)', async () => {
+  it('SUBE (30-oct): un tope mayor que el genérico MANDA — con 50 y 9 gastados pasa; se corta al llegar a 50', async () => {
     const r = await GATE(sb({ config: { spend_cap_usd: 50 }, libro: gasto(9) }))
-    expect(r).toMatchObject({ blocked: true, reason: 'over_cap', cap_usd: 8 }); expect(r).not.toHaveProperty('cap_override_usd')
-    expect((await GATE(sb({ config: { spend_cap_usd: 50 }, libro: gasto(7) }))).blocked).toBe(false)
+    expect(r).toMatchObject({ blocked: false, cap_usd: 50, cap_override_usd: 50 })
+    expect(await GATE(sb({ config: { spend_cap_usd: 50 }, libro: gasto(50) }))).toMatchObject({ blocked: true, reason: 'over_cap', cap_usd: 50 })
   })
-  it('respeta también el techo del entorno si es más bajo que el tope de la ficha', async () => {
+  it('la ficha manda también sobre el techo del entorno (30-oct): con el entorno en 2 y la ficha en 3,3, gastar 2,5 pasa', async () => {
     process.env.RUN_SPEND_CAP_USD = '2'
     const r = await GATE(sb({ config: { spend_cap_usd: 3.3 }, libro: gasto(2.5) }))
-    expect(r).toMatchObject({ blocked: true, cap_usd: 2 })
+    expect(r).toMatchObject({ blocked: false, cap_usd: 3.3 })
   })
   it('FALLA ABIERTO: tope ilegible, cero, negativo, texto, ficha con error o sin ficha ⇒ techo genérico (nunca bloquea de más)', async () => {
     for (const config of [{ spend_cap_usd: 0 }, { spend_cap_usd: -1 }, { spend_cap_usd: 'mucho' }, { spend_cap_usd: null }, null, [], 'x']) {

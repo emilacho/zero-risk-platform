@@ -55,9 +55,11 @@ describe('agent-runner §150 spend gate', () => {
     expect(r).toMatchObject({ blocked: true, reason: 'over_cap', cap_usd: 6, cap_ficha_usd: 6 })
   })
 
-  it('la ficha NUNCA sube el general: ficha 50, gasto 9 → bloquea con el 8', async () => {
+  it('la ficha MANDA (30-oct): ficha 50, gasto 9 → pasa con el 50; con gasto 50 bloquea', async () => {
     const sb = supabaseWith({ data: [{ cost_usd: 9 }], error: null }, { data: [{ config: { spend_cap_usd: 50 } }], error: null })
-    expect(await checkSpendCap(sb, CLIENTE)).toMatchObject({ blocked: true, cap_usd: 8 })
+    expect(await checkSpendCap(sb, CLIENTE)).toMatchObject({ blocked: false })
+    const sb2 = supabaseWith({ data: [{ cost_usd: 50 }], error: null }, { data: [{ config: { spend_cap_usd: 50 } }], error: null })
+    expect(await checkSpendCap(sb2, CLIENTE)).toMatchObject({ blocked: true, cap_usd: 50 })
   })
 
   it('bajo el techo → pasa', async () => {

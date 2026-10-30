@@ -87,6 +87,35 @@ describe('cliente-editar', () => {
   })
 })
 
+describe('cliente-tope (el tope de 24 h del cliente SUBE y BAJA)', () => {
+  const sembrar = (extra: Record<string, unknown> = {}) => new DbFalsa().semilla('clients', [{ id: CID, status: 'active', config: { moneda: 'USD', spend_cap_usd: 6 }, ...extra }])
+  it('sube por encima del general y baja, sin perder el resto de la config, y dice de dónde a dónde', async () => {
+    const db = sembrar()
+    const sube = await llamar('cliente-tope', db, { client_id: CID, tope_usd: 20 })
+    expect(sube).toMatchObject({ status: 200, cuerpo: { ok: true, tope_usd: 20, tope_anterior_usd: 6, general_usd: 8, sobre_el_general: true }, toca: { client_id: CID, comentario: 'tope de 24 h: 6 → 20' } })
+    expect(db.tablas['clients'][0].config).toEqual({ moneda: 'USD', spend_cap_usd: 20 })
+    const baja = await llamar('cliente-tope', db, { client_id: CID, tope_usd: 3 })
+    expect(baja).toMatchObject({ status: 200, cuerpo: { tope_usd: 3, tope_anterior_usd: 20, sobre_el_general: false } })
+    expect(db.tablas['clients'][0].config).toMatchObject({ spend_cap_usd: 3 })
+  })
+  it('sin tope previo: tope_anterior_usd es null', async () => {
+    const db = new DbFalsa().semilla('clients', [{ id: CID, status: 'active', config: {} }])
+    expect(await llamar('cliente-tope', db, { client_id: CID, tope_usd: 12 })).toMatchObject({ status: 200, cuerpo: { tope_anterior_usd: null } })
+  })
+  it.each<[string, Record<string, unknown>]>([
+    ['cero', { client_id: CID, tope_usd: 0 }], ['negativo', { client_id: CID, tope_usd: -5 }], ['texto', { client_id: CID, tope_usd: '20' }],
+    ['por encima del máximo', { client_id: CID, tope_usd: 1000.01 }], ['sin tope', { client_id: CID }], ['cliente sin uuid', { client_id: 'x', tope_usd: 5 }],
+  ])('%s → 400 y no cambia nada', async (_n, cuerpo) => {
+    const db = sembrar()
+    expect((await llamar('cliente-tope', db, cuerpo)).status).toBe(400)
+    expect(db.tablas['clients'][0].config).toMatchObject({ spend_cap_usd: 6 })
+  })
+  it('cliente inexistente → 404; dado de baja → 409', async () => {
+    expect((await llamar('cliente-tope', new DbFalsa().semilla('clients', []), { client_id: CID, tope_usd: 5 })).status).toBe(404)
+    expect((await llamar('cliente-tope', sembrar({ status: 'churned' }), { client_id: CID, tope_usd: 5 })).status).toBe(409)
+  })
+})
+
 describe('cliente-baja', () => {
   it('pone churned con fecha y motivo; exige motivo; no repite la baja', async () => {
     const db = new DbFalsa().semilla('clients', [{ id: CID, status: 'active' }])

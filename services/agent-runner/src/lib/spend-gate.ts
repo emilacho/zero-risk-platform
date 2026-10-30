@@ -13,7 +13,7 @@
  * `@/lib/run-sdk-spend-gate`, so the rule is REPLICATED here. Keep in sync with it:
  *   - applies to EVERY client (no tenant list)
  *   - enforce · ON por omisión · se apaga SOLO con el interruptor explícito `RUN_SPEND_CAP_ENFORCE=false`
- *   - cap · `RUN_SPEND_CAP_USD` (número > 0) o $8 general; la ficha del cliente (`clients.config.spend_cap_usd`) puede BAJARLO, nunca subirlo
+ *   - cap · `RUN_SPEND_CAP_USD` (número > 0) o $8 general; la ficha del cliente (`clients.config.spend_cap_usd`) MANDA: es el techo de ese cliente, sube o baja (30-oct)
  *   - CUPO DE ARRANQUE (opción A firmada por Emilio 20-oct): ficha `onboarding` dentro de sus primeros `RUN_ONBOARDING_DIAS` días (7) ⇒ el techo de 24 h es el MAYOR entre el general y `RUN_ONBOARDING_CAP_USD` (13); al pasar a `active` vuelve al general. Espejo de `techoGenericoDeArranque` en `src/lib/run-sdk-spend-gate.ts`
  *   - spend · SUM(cost_usd) by client_id over a 24h wall-clock window
  *
@@ -32,7 +32,7 @@ export interface SpendGateResult {
   /** el techo de 24 h fue el CUPO DE ARRANQUE (ficha `onboarding` en sus primeros días) */
   readonly cupo_de_arranque?: boolean
   readonly spent_usd?: number
-  /** el techo de la ficha, si bajó el general */
+  /** el techo de la ficha, si difiere del general/arranque */
   readonly cap_ficha_usd?: number
 }
 
@@ -95,7 +95,7 @@ export interface SupabaseLike {
 
 /**
  * Evaluate the §150 spend cap. Returns `{ blocked: true }` only when enforce is live
- * AND cumulative 24h spend of the client >= its cap (the general one, or its ficha's if lower).
+ * AND cumulative 24h spend of the client >= its cap (its ficha's when it has one, up or down; else the general one).
  */
 export async function checkSpendCap(
   supabase: SupabaseLike,
@@ -129,7 +129,7 @@ export async function checkSpendCap(
         cap = t.cap; arranque = t.arranque
       }
       const delaFicha = f.error ? null : capDeLaFicha(fila?.config)
-      if (delaFicha !== null && delaFicha < cap) { cap = delaFicha; capFicha = delaFicha }
+      if (delaFicha !== null && delaFicha !== cap) { cap = delaFicha; capFicha = delaFicha } // 30-oct · la ficha MANDA (sube o baja), mismo criterio que `techoDelCliente` de la plataforma
     } catch {
       // sin dato de la ficha rige el techo general
     }

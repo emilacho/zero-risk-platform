@@ -9,8 +9,8 @@
  *    lo declara y el relleno sigue en false (nunca Apify en lugar del cerebro). Una señal que no se pudo leer en toda la espera es `señal_ausente`, distinta de `vencido`.
  * 🔴 EL RELOJ vive en la base (`plan_corridas.espera_desde`, insert-once): un reinicio nunca lo reinicia; la lectura del 45:00 exacto SÍ cuenta (se lee la señal ANTES de vencer).
  * 🔴 UN SOLO PLAN: el re-disparo avanza con compare-and-set; dos re-disparos simultáneos ⇒ gana uno, el otro recibe `otro_re_disparo_gano` y no hace nada.
- * 🔴 CUPO (§13.1): `min(techo genérico, spend_cap_usd de la ficha) − gastado 24 h` debe cubrir la suma de topes del plan; si no, no corre y dice «sube la ficha a X»
- *    (si lo que falta es el techo GENÉRICO, subir la ficha no sirve: la ficha solo BAJA el techo, y lo dice).
+ * 🔴 CUPO (§13.1): `techo (spend_cap_usd de la ficha si lo trae, si no el genérico) − gastado 24 h` debe cubrir la suma de topes del plan; si no, no corre y dice «sube la ficha a X»
+ *    (desde el 30-oct subir la ficha del cliente sí arregla la falta de cupo: su tope manda).
  * PURO: todo lo de afuera entra por puertos (se prueba con reloj simulado, sin red, sin gasto). NADIE lo llama todavía.
  */
 import { abrir, correr, reintentar, CADA_REINTENTO_S, ESPERA_MAXIMA_MIN, type PuertoDeCorridas } from './corridas'
@@ -27,7 +27,7 @@ export interface FichaDelCliente {
 }
 export type LecturaDeFicha = ({ ok: true } & FichaDelCliente) | { ok: false; error: string }
 export interface CupoDelCliente {
-  /** el techo EFECTIVO de 24 h: el menor entre el genérico y el `spend_cap_usd` de la ficha */
+  /** el techo EFECTIVO de 24 h: el `spend_cap_usd` de la ficha si lo trae, si no el genérico/arranque */
   cap_usd: number
   generico_usd: number
   /** `spend_cap_usd` de la ficha, o null si no tiene */
@@ -145,8 +145,6 @@ export async function prevuelo(
     const necesita = sumaDeTopes(snap)
     const libre = r2(c.cap_usd - c.gastado_24h_usd)
     if (libre + 1e-9 < necesita) {
-      const generico = c.generico_usd - c.gastado_24h_usd + 1e-9 < necesita
-      if (generico) return noCorre(dry, 'techo_generico_insuficiente', `el techo genérico de 24 h (${c.generico_usd}) menos lo gastado (${c.gastado_24h_usd}) no cubre los topes del plan (${necesita}): subir la ficha NO lo arregla, la ficha solo baja el techo`)
       const sube = Math.ceil((c.gastado_24h_usd + necesita + 0.5) * 2) / 2
       return noCorre(dry, 'falta_cupo', `falta cupo: libre ${libre} < ${necesita} (techo ${c.cap_usd}, gastado 24 h ${c.gastado_24h_usd})`, { sube_la_ficha_a: sube })
     }

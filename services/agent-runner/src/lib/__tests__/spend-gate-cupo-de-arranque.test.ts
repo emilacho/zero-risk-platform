@@ -1,6 +1,6 @@
 /**
  * El cupo de arranque en la tercera puerta (agent-runner · Railway) · espejo de `__tests__/run-sdk-spend-gate-cupo-de-arranque.test.ts` (CC#2 · 20-oct · opción A firmada por Emilio).
- * Ficha `onboarding` en sus primeros 7 días ⇒ techo de 24 h = el mayor entre el general (8) y RUN_ONBOARDING_CAP_USD (13). Falla hacia lo normal. La ficha solo BAJA.
+ * Ficha `onboarding` en sus primeros 7 días ⇒ techo de 24 h = el mayor entre el general (8) y RUN_ONBOARDING_CAP_USD (13). Falla hacia lo normal. La ficha MANDA (sube o baja, desde el 30-oct).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkSpendCap, techoDeArranque } from '../spend-gate.js'
@@ -51,10 +51,12 @@ describe('agent-runner · checkSpendCap con el cupo de arranque', () => {
     expect(await checkSpendCap(supabaseWith([5, 4], fichaDe('active', haceDias(1))), CLIENTE, AHORA)).toMatchObject({ blocked: true, cap_usd: 8 })
     expect(await checkSpendCap(supabaseWith([9], fichaDe('onboarding', haceDias(30))), CLIENTE, AHORA)).toMatchObject({ blocked: true, cap_usd: 8 })
   })
-  it('la ficha solo BAJA: tope 6 rige 6 (y no se marca arranque); tope 50 se ignora', async () => {
+  it('la ficha MANDA: tope 6 rige 6 (y no se marca arranque); tope 50 rige 50 (sube)', async () => {
     const r = await checkSpendCap(supabaseWith([7], fichaDe('onboarding', haceDias(1), { spend_cap_usd: 6 })), CLIENTE, AHORA)
     expect(r).toMatchObject({ blocked: true, cap_usd: 6, cap_ficha_usd: 6 }); expect(r).not.toHaveProperty('cupo_de_arranque')
     expect(await checkSpendCap(supabaseWith([12], fichaDe('onboarding', haceDias(1), { spend_cap_usd: 50 })), CLIENTE, AHORA)).toMatchObject({ blocked: false })
+    expect(await checkSpendCap(supabaseWith([19], fichaDe('active', haceDias(40), { spend_cap_usd: 20 })), CLIENTE, AHORA)).toMatchObject({ blocked: false })
+    expect(await checkSpendCap(supabaseWith([20], fichaDe('active', haceDias(40), { spend_cap_usd: 20 })), CLIENTE, AHORA)).toMatchObject({ blocked: true, cap_usd: 20, cap_ficha_usd: 20 })
   })
   it('FALLA HACIA LO NORMAL: ficha con error, vacía, sin estado o sin fecha ⇒ 8', async () => {
     for (const f of [{ data: null, error: { message: 'x' } }, { data: [], error: null }, fichaDe(undefined, haceDias(1)), fichaDe('onboarding', undefined)])
