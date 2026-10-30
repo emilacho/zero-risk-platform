@@ -14,7 +14,7 @@ import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
 import { armarTarea, pedidoDeAgente, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
 import { direccionDe, especialistasPertinentes, porteroDe } from './directorio'
-import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
+import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, type Traduccion } from './traductor'
@@ -177,8 +177,9 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     const entregada = forzado ? await entregarPorTopeDeLaMesa(P, enc, `la mesa no alcanzó a integrar la pieza (${forzado})`) : null
     return entregada ?? fallar(P, enc, `la mesa no produjo ninguna pieza${forzado ? ` (${forzado})` : ''}`)
   }
+  const textoPieza = quitarLineasDeNotas(ult.texto)
   const b = baseDeLaminas(enc.estado_del_motor)
-  const tr: Traduccion = traducirPieza(ult.texto, est.tipo, {
+  const tr: Traduccion = traducirPieza(textoPieza, est.tipo, {
     refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])),
     preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR,
   })
@@ -189,7 +190,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   }
   if (!tr.ok) {
     // condición 7 · no se pudo traducir ni con una pregunta: la pieza viaja COMO TEXTO a la jefatura (que la ve entera) y se cierra marcada
-    return aTextoParaLaJefatura(P, enc, est, ult.texto, tr.motivo ?? 'no se pudo traducir la pieza')
+    return aTextoParaLaJefatura(P, enc, est, textoPieza, tr.motivo ?? 'no se pudo traducir la pieza')
   }
 
   const imagenes = tr.imagenes
@@ -204,7 +205,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
   // bloqueante 1 de CC#3: el libro y las citas llegan a la jefatura (contexto de la revisión) para que juzgue si cada aporte fue real
   const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, generadas.length > 0)
-  const nuevaMesa: EstadoMesa = { ...est, fase: 'traducida', pieza_texto: ult.texto, turno_abierto: null, tablero_para_la_jefatura: tableroParaLaJefatura(libro, ult.texto, pertinentes) }
+  const nuevaMesa: EstadoMesa = { ...est, fase: 'traducida', pieza_texto: textoPieza, turno_abierto: null, tablero_para_la_jefatura: tableroParaLaJefatura(libro.map((x) => ({ ...x, texto: quitarLineasDeNotas(x.texto) })), textoPieza, pertinentes) }
   const res = { costo_usd: 0, artefacto: nuevaMesa as unknown as Record<string, unknown>, otros_artefactos: otros }
   const e0 = conMesa(enc.estado_del_motor, nuevaMesa)
   const nuevo = registrarPaso(e0, pl, indice, res)
@@ -287,6 +288,9 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
     const rastro = lectura.notas.length ? rastroDeLasNotas(lectura, leido.respuestas) : { notas_vistas: [], choco: false, cambios: [{ sin_lectura: lectura.aviso }] }
     try { await P.aprendizaje?.registrar({ client_id: enc.client_id, encargo_id: enc.id, agente: t.agente, paso: abierto.paso, ...rastro, costo_usd: 0, clave_unica: `${enc.id}:${abierto.paso}:${n}` }) } catch { /* el rastro nunca frena una entrega */ }
   }
+  // aunque ese turno no tuviera notas (cerebro vacío, caído o apagado), una línea «N1 apliqué…» suelta no entra al libro ni a la pieza
+  const sinLineas = quitarLineasDeNotas(textoFinal)
+  if (sinLineas.trim()) textoFinal = sinLineas
   const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra' }
   const pedido = t.responde_a ? (await P.mesa.libro(enc.id)).find((a) => a.id === t.responde_a) : undefined
   await P.mesa.aportar(aporteNuevo(enc, t.agente, t.tipo === 'responder' ? pedido?.de ?? null : null, tipoAporte[t.tipo] ?? 'aporta', textoFinal, { responde_a: t.tipo === 'responder' || t.tipo === 'devolver_citas' ? t.responde_a : null, profundidad: pedido ? pedido.profundidad : 0, costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
