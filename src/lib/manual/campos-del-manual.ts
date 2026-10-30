@@ -41,7 +41,7 @@ export const CAMPOS: readonly CampoDelManual[] = [
   { clave: 'voice_description', etiqueta: 'Voz', tipo: 'texto', columna: 'voice_description', editable: true, obligatorio: true, clave_del_tablero: 'voz' },
   { clave: 'personalidad', etiqueta: 'Personalidad', tipo: 'lista', tipo_de_columna: 'texto', columna: 'brand_personality', editable: true, obligatorio: true },
   { clave: 'positioning', etiqueta: 'Posicionamiento', tipo: 'texto', columna: 'positioning', editable: true, obligatorio: true, clave_del_tablero: 'posicionamiento' },
-  { clave: 'icp_summary', etiqueta: 'Público', tipo: 'texto', ruta: 'icp_summary', editable: false, obligatorio: true, clave_del_tablero: 'publico' },
+  { clave: 'icp_summary', etiqueta: 'Público', tipo: 'texto', ruta: 'icp_summary', editable: true, obligatorio: true, clave_del_tablero: 'publico' },
   { clave: 'mensajes_clave', etiqueta: 'Mensajes clave', tipo: 'lista', columna: 'key_messages', editable: true, obligatorio: true },
   { clave: 'propuestas_de_valor', etiqueta: 'Propuestas de valor', tipo: 'lista', columna: 'value_propositions', editable: true, obligatorio: true },
   { clave: 'productos', etiqueta: 'Productos o servicios', tipo: 'lista', ruta: 'productos', editable: true, obligatorio: true },

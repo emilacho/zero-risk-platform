@@ -1,11 +1,13 @@
 /**
  * Las acciones del tablero, TRAMO 1 (30-oct): rehacer una pieza que falló, el cliente (editar · nuevo · baja) y la oficina (encender/apagar · tope de gasto).
- * Pendientes de los tramos siguientes (responden 404 = «todavía no disponible»): pieza-nueva, plan-*, firmar-tablero, revision-resolver, manual-*.
+ * Pendientes de los tramos siguientes (responden 404 = «todavía no disponible»): plan-*. (manual-campos es la ruta PATCH /api/manual/{client_id}/campos; pieza-nueva se retiró: las piezas salen solo de la campaña.)
  */
 import { almacenDeSupabase } from '../../cadena/almacen-supabase'
 import { abrirEncargo } from '../orquestador'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { firmarTablero, revisionResolver } from './revisiones'
+import { empujarManualAlCerebro } from '../../brain/push-al-terminar'
+import { rutaValidarManual } from '../../manual/edicion-rutas'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -171,7 +173,15 @@ export const oficinaTope: Manejador = async ({ db }, { cuerpo }) => {
   return { status: 200, cuerpo: { ok: true, oficina, tope_usd: t, que_es: 'lo máximo que gasta UNA pieza de la mesa (carrusel y kit)', plantillas: cambiados } }
 }
 
+// ───────────────────────── manual-validar (US$ 0): la vigente pasa a validada por el dueño
+export const manualValidar: Manejador = async ({ db }, { cuerpo, reviewer }) => {
+  if (typeof cuerpo.client_id !== 'string' || !UUID.test(cuerpo.client_id)) return rechazo(400, 'entrada_invalida', '`client_id` debe ser un uuid')
+  const s = await rutaValidarManual({ db, cerebro: { env: { baseUrl: '', internalKey: '' } }, empujarManual: (x) => empujarManualAlCerebro(x) }, cuerpo.client_id, reviewer)
+  return { status: s.status, cuerpo: s.body, toca: s.toca }
+}
+
 export const ACCIONES: Record<string, Manejador> = {
+  'manual-validar': manualValidar,
   'revision-resolver': revisionResolver,
   'firmar-tablero': firmarTablero,
   'rehacer-pieza': rehacerPieza,

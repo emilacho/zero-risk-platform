@@ -59,7 +59,7 @@ describe('la definición única · una fila por campo', () => {
   })
   it('los campos que el tablero edita tienen su clave de tablero y los derivados no se editan', () => {
     expect(CAMPOS.filter((c) => c.clave_del_tablero).map((c) => c.clave_del_tablero).sort()).toEqual(['eslogan', 'nunca', 'posicionamiento', 'proposito', 'publico', 'valores', 'voz'])
-    expect(CAMPO_POR_CLAVE.icp_summary.editable).toBe(false)
+    expect(CAMPO_POR_CLAVE.icp_summary.editable).toBe(true)
     expect(CAMPO_POR_CLAVE.customer_angle.editable).toBe(false)
   })
   it('N1 · valores, productos, sedes, lo que nunca hace y visión son obligatorios, además de los de siempre', () => {
