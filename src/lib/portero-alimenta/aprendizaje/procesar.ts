@@ -9,6 +9,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { normalizar } from '../../manual/texto'
 import type { Db } from '../alimentar'
 import { leerTodas } from '../paginar'
+import { esCanalDelManual } from '../dueno'
 import { costoDeLaLlamada, MODELO, type PeticionAlModelo, type RespuestaDelModelo, type ResultadoDeRegistro } from '../../cerebro/portero/razonar'
 import { consolidar, type Nota, type Operacion } from './consolidar'
 import {
@@ -90,6 +91,7 @@ const PLAZO_DE_RESERVA_MS = 10 * 60_000
 function crudaDeFicha(f: Fila, desde: string, ahora: Date = new Date()): Cruda | null {
   const d = datosDe(f)
   if (d.acumula !== true || d.desmenuzada_en) return null
+  if (esCanalDelManual(txt(d.canal))) return null // lo que el dueño escribe en el manual son hechos de marca, no preferencias de estilo: nunca se desmenuza
   const reservada = txt(d.desmenuzando_desde)
   if (reservada && ahora.getTime() - Date.parse(reservada) < PLAZO_DE_RESERVA_MS) return null
   const cuando = txt(d.respondido_en) || txt(f.observado_en)

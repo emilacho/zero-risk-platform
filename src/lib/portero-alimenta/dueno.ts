@@ -30,6 +30,16 @@ export const MAX_TEMA = 80
 export const HORAS_DE_UNA_PREGUNTA_PENDIENTE = 72
 export const CLASE_DEL_DUENO = 'dato_del_dueno'
 export const PREFIJO_DE_ATRIBUTO = 'dueno:'
+/** canal con el que el dashboard empuja lo que el dueño escribe en el manual (30-oct): dato del manual por campo, nunca una nota para el aprendizaje */
+export const CANAL_DEL_MANUAL = 'dashboard · manual'
+export const PREFIJO_DEL_MANUAL = 'manual'
+export const esCanalDelManual = (canal: string): boolean => normalizar(canal).replace(/\s+/g, ' ') === normalizar(CANAL_DEL_MANUAL).replace(/\s+/g, ' ')
+/** el campo del manual que nombra el tema «manual · <campo>» (null si no lo trae) */
+export function campoDelManual(tema: string): string | null {
+  const m = /^\s*manual\s*[·:\-–—]\s*(.+)$/i.exec(tema)
+  const campo = m ? temaNormal(m[1]) : ''
+  return campo || null
+}
 /** parecido mínimo entre dos temas (palabras significativas compartidas / palabras del menor) para tratarlos como el mismo */
 export const PARECIDO_MINIMO = 0.67
 
@@ -117,13 +127,14 @@ function normalizar_(cuerpo: Record<string, unknown>): Respuesta | EntradaDeDuen
   if (!pregunta || pregunta.length > MAX_PREGUNTA) return err(400, 'entrada_invalida', `\`pregunta\` es obligatoria (hasta ${MAX_PREGUNTA} caracteres)`)
   const canal = txt(cuerpo.canal)
   if (!canal || canal.length > 60) return err(400, 'entrada_invalida', '`canal` es obligatorio (p. ej. «MD de Slack», «chat con Lenovo»)')
+  if (esCanalDelManual(canal) && !campoDelManual(tema)) return err(400, 'entrada_invalida', 'el canal «dashboard · manual» exige `tema` con la forma «manual · <campo>»')
   const respuesta = txt(cuerpo.respuesta)
   if (evento === 'respuesta' && (!respuesta || respuesta.length > MAX_RESPUESTA)) return err(400, 'entrada_invalida', `\`respuesta\` es obligatoria (hasta ${MAX_RESPUESTA} caracteres)`)
   const cuando = txt(cuerpo.respondido_en)
   if (evento === 'respuesta' && (!cuando || Number.isNaN(Date.parse(cuando)))) return err(400, 'entrada_invalida', '`respondido_en` debe ser una fecha ISO')
   return {
     evento, client_id: String(cuerpo.client_id), sede_clave: txt(cuerpo.sede_clave) || null, pregunta, respuesta, tema, canal, mensaje_ref: txt(cuerpo.mensaje_ref) || null,
-    respondido_en: cuando ? new Date(cuando).toISOString() : '', preguntado_por: { oficina, agente }, pregunta_id: txt(cuerpo.pregunta_id) || null, forzar: cuerpo.forzar === true, acumula: cuerpo.acumula === true,
+    respondido_en: cuando ? new Date(cuando).toISOString() : '', preguntado_por: { oficina, agente }, pregunta_id: txt(cuerpo.pregunta_id) || null, forzar: cuerpo.forzar === true, acumula: cuerpo.acumula === true && !esCanalDelManual(canal), // un dato del manual jamás se acumula: reemplaza al anterior del mismo campo
   }
 }
 
@@ -153,6 +164,7 @@ async function respuestasVigentes(db: Db, clientId: string): Promise<{ ok: true;
   if (q.error) return { ok: false, detalle: `cerebro_fichas: ${q.error.message}` }
   return { ok: true, filas: q.data.filter((f) => f.descartada !== true) }
 }
+const canalDe = (f: Fila): string => { const pt = (f.provenance_tag && typeof f.provenance_tag === 'object' ? f.provenance_tag : {}) as Fila; const d = (pt.datos && typeof pt.datos === 'object' ? pt.datos : {}) as Fila; return txt(d.canal) }
 const temaDe = (f: Fila): string => { const pt = (f.provenance_tag && typeof f.provenance_tag === 'object' ? f.provenance_tag : {}) as Fila; const d = (pt.datos && typeof pt.datos === 'object' ? pt.datos : {}) as Fila; return txt(d.tema) }
 /** la sede de una respuesta: la de su columna o su rastro; null = vale para todas */
 const sedeDe = (f: Fila): string => claveDeAlcance(sedesDeFicha(f.provenance_tag) ?? (txt(f.sede) ? txt(f.sede).split(',') : null))
@@ -199,7 +211,9 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
 
   const vig = await respuestasVigentes(deps.db, n.client_id)
   if (!vig.ok) return err(502, 'lectura_fallida', vig.detalle)
-  const delMismoTema = vig.filas.filter((f) => sedeDe(f) === alcance && esElMismoTema(temaDe(f), n.tema))
+  const campoManual = esCanalDelManual(n.canal) ? campoDelManual(n.tema) : null
+  // el manual se reemplaza por CAMPO exacto (no por parecido de palabras: «manual · voz» y «manual · voz de marca» son campos distintos)
+  const delMismoTema = vig.filas.filter((f) => sedeDe(f) === alcance && (campoManual ? campoDelManual(temaDe(f)) === campoManual && esCanalDelManual(canalDe(f)) : esElMismoTema(temaDe(f), n.tema)))
   const hace = new Date(ahora.getTime() - HORAS_DE_UNA_PREGUNTA_PENDIENTE * 3_600_000).toISOString()
   const pe = await deps.db.from('cerebro_dueno_preguntas').select('*').eq('client_id', n.client_id).eq('estado', 'pendiente').gte('creado_en', hace).limit(200)
   if (pe.error) return err(502, 'lectura_fallida', `cerebro_dueno_preguntas: ${pe.error.message}`)
@@ -241,16 +255,16 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
   const wi = await deps.db.from('cerebro_ingresos').insert({ id: ing, client_id: n.client_id, origen: 'dueno', fuente_ref: `dueno:${n.canal}`.slice(0, 120), es_completa: false, huella: `${dia}:dueno:${huella16(ref)}`, material: null, estado: 'fichado', workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id })
   if (wi.error) return err(502, 'registro_fallido', `cerebro_ingresos: ${wi.error.message}`)
   const cuando = n.respondido_en
-  const contenido = `Confirmado por el dueño (${n.canal}, ${cuando.slice(0, 10)}). Pregunta: «${preguntaLimpia}». Respuesta del dueño: «${limpia.texto}»`
+  const contenido = campoManual ? `Dato del manual escrito por el dueño (campo «${campoManual}», ${cuando.slice(0, 10)}). ${preguntaLimpia}: «${limpia.texto}»` : `Confirmado por el dueño (${n.canal}, ${cuando.slice(0, 10)}). Pregunta: «${preguntaLimpia}». Respuesta del dueño: «${limpia.texto}»`
   const fila = {
-    id: fichaId, client_id: n.client_id, ingreso_id: ing, ref, clase: CLASE_DEL_DUENO, titulo: `Dueño · ${n.tema}${sedeClave ? ` · sede ${sedeClave}` : ''}`.slice(0, 160), que_es: limpia.texto.slice(0, 200), contenido, origen: 'dueno',
+    id: fichaId, client_id: n.client_id, ingreso_id: ing, ref, clase: CLASE_DEL_DUENO, titulo: `${campoManual ? 'Manual' : 'Dueño'} · ${n.tema}${sedeClave ? ` · sede ${sedeClave}` : ''}`.slice(0, 160), que_es: limpia.texto.slice(0, 200), contenido, origen: 'dueno',
     fecha_fuente: cuando, reconfirmado_en: cuando, plazo: null, vigente_hasta: null, version_de: vieja && !llegoTarde ? String(vieja.id) : null, huella: huella16(contenido),
-    propiedad: 'propia', porque: `respuesta del dueño por ${n.canal}`, juzgado_por: 'regla', observado_en: cuando, atributo: `${PREFIJO_DE_ATRIBUTO}${temaNormal(n.tema)}`, sede: alcance || null,
-    decision: vieja && !llegoTarde ? 'reemplaza' : 'suma', razon_de_decision: vieja && !llegoTarde ? 'una respuesta nueva del dueño al mismo tema reemplaza a la anterior' : n.acumula ? 'nota que se suma (acumula): no reemplaza a otras del mismo tema' : llegoTarde ? 'llegó más tarde que otra más nueva: queda archivada' : 'primera respuesta del dueño a este tema',
+    propiedad: 'propia', porque: `respuesta del dueño por ${n.canal}`, juzgado_por: 'regla', observado_en: cuando, atributo: campoManual ? `${PREFIJO_DE_ATRIBUTO}${PREFIJO_DEL_MANUAL}:${campoManual}` : `${PREFIJO_DE_ATRIBUTO}${temaNormal(n.tema)}`, sede: alcance || null,
+    decision: vieja && !llegoTarde ? 'reemplaza' : 'suma', razon_de_decision: vieja && !llegoTarde ? campoManual ? `el dato nuevo del manual (campo ${campoManual}) reemplaza al anterior` : 'una respuesta nueva del dueño al mismo tema reemplaza a la anterior' : n.acumula ? 'nota que se suma (acumula): no reemplaza a otras del mismo tema' : llegoTarde ? 'llegó más tarde que otra más nueva: queda archivada' : 'primera respuesta del dueño a este tema',
     alcance: 'cliente', descartada: false, retirada_en: llegoTarde ? ahora.toISOString() : null, motivo_retirada: llegoTarde ? 'una respuesta más nueva del dueño al mismo tema ya estaba guardada' : null,
     provenance_tag: {
       type: 'evidence', source: 'dueno', trust_level: 'untrusted', confirmado_por: 'dueno', canal: n.canal, ingress_route: '/api/brain/alimentar/dueno',
-      datos: { tema: n.tema, tema_norm: temaNormal(n.tema), pregunta: preguntaLimpia, respuesta: limpia.texto, canal: n.canal, mensaje_ref: n.mensaje_ref, respondido_en: cuando, preguntado_por: n.preguntado_por, ...(n.acumula ? { acumula: true } : {}), ...(limpia.redactado ? { datos_personales_omitidos: true } : {}), ...datosDeSede(sedeClave ? [sedeClave] : null) },
+      datos: { ...(campoManual ? { manual: { campo: campoManual } } : {}), tema: n.tema, tema_norm: temaNormal(n.tema), pregunta: preguntaLimpia, respuesta: limpia.texto, canal: n.canal, mensaje_ref: n.mensaje_ref, respondido_en: cuando, preguntado_por: n.preguntado_por, ...(n.acumula ? { acumula: true } : {}), ...(limpia.redactado ? { datos_personales_omitidos: true } : {}), ...datosDeSede(sedeClave ? [sedeClave] : null) },
     },
   }
   const wf = await deps.db.from('cerebro_fichas').insert(fila)
