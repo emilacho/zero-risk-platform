@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
+import { leerEstadoDelManual } from '@/lib/portero-alimenta/estado-del-manual'
 import { rutaConsultar } from '@/lib/portero-alimenta/consultar'
 import { consultarAprendizajeDelEntorno } from '@/lib/portero-alimenta/aprendizaje/entorno'
 import { CLASE_DEL_APRENDIZAJE } from '@/lib/portero-alimenta/aprendizaje/datos'
@@ -25,7 +26,9 @@ export async function GET(request: Request) {
       return NextResponse.json(a.body, { status: a.status })
     }
     const r = await rutaConsultar({ db: getSupabaseAdmin() as unknown as Db }, { client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), que: u.get('que'), atributo: u.get('atributo'), clase: u.get('clase'), sede_clave: u.get('sede_clave'), limite: u.get('limite') })
-    return NextResponse.json(r.body, { status: r.status })
+    // el estado del manual vigente (validado por el dueño / propuesta sin validar, versión, fecha) viaja con toda consulta del cliente
+    const manual = r.status === 200 ? await leerEstadoDelManual(getSupabaseAdmin() as unknown as Db, String(u.get('client_id'))) : null
+    return NextResponse.json(manual ? { ...r.body, manual } : r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'consultar_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

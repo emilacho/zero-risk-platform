@@ -10,6 +10,7 @@ import { PREFIJO_DE_VENTAS } from './brazos/propios'
 import type { FichaDeBrazo } from './brazos/tipos'
 import { claveDeAlcance, sedesDeFicha } from './sedes-fuentes'
 import { leerTodas } from './paginar'
+import { leerEstadoDelManual, type ManualVigente } from './estado-del-manual'
 import { AVISO_DE_HORARIO_CERRADA, AVISO_DE_HORARIO_POR_ABRIR, CAMPO_DEL_ESTADO, ROTULO_CERRADA, ROTULO_POR_ABRIR, esLineaDeHorarioOAtencion, estadoDeLasSedes } from '../sedes/por-abrir'
 
 type Fila = Record<string, unknown>
@@ -117,6 +118,8 @@ export interface EntradaDelResumen {
   sedes_por_abrir?: string[]
   /** claves de las sedes que el dueño o la ficha dicen «cerradas»: igual que las por abrir, su horario y su atención salen rotulados */
   sedes_cerradas?: string[]
+  /** estado del manual de marca vigente (solo lectura de `client_brand_books`); sin él, el resumen no dice nada del manual */
+  manual?: ManualVigente
 }
 export interface SalidaDelResumen { cliente: FichaDeBrazo; sedes: FichaDeBrazo[]; huecos: string[]; secciones: Record<string, number>; /** el mismo resumen con los CANDIDATOS de «Quién es» (lo que recibe el agente del pulido) */ texto_para_el_agente: string }
 
@@ -219,6 +222,9 @@ export function armarResumen(e: EntradaDelResumen, opciones: { candidatos?: bool
   const ctx = e.zona.filter((f) => vigente(f, e.ahora)).slice(0, MAX_POR_SECCION)
   sec('contexto', 'Contexto que le aplica', ctx.map((f) => linea(f, 140)), 'no hay contexto de su país')
 
+  if (e.manual) partes.unshift(`## Manual de marca
+- ${e.manual.texto.replace(/^Manual de marca: /, '')}`)
+
   const cabecera = `RESUMEN VIVO · ${e.nombre ?? e.client_id.slice(0, 8)} · armado el ${e.ahora.toISOString().slice(0, 10)} por código desde las fichas vivas (cada línea cita su ficha; nada sin fuente)`
   const pie = huecos.length ? `\n## Huecos\n${huecos.map((h) => `- ${h}`).join('\n')}` : ''
   return { texto: `${cabecera}\n\n${partes.join('\n\n')}${pie}`, huecos, secciones }
@@ -270,7 +276,8 @@ export async function cargarEntradaDelResumen(db: Db, o: { client_id: string; no
   const estados = estadoDeLasSedes({ config: o.config, fichasDelDueno: fichas as never, datosDeSede })
   const porAbrir = [...estados].filter(([, v]) => v === 'por_abrir').map(([k]) => k)
   const cerradas = [...estados].filter(([, v]) => v === 'cerrada').map(([k]) => k)
-  return { ok: true, entrada: { client_id: o.client_id, nombre: o.nombre, rubro: o.rubro, ahora: o.ahora, fichas, zona, sedes: o.sedes, ...(porAbrir.length ? { sedes_por_abrir: porAbrir } : {}), ...(cerradas.length ? { sedes_cerradas: cerradas } : {}) } }
+  const manual = await leerEstadoDelManual(db, o.client_id)
+  return { ok: true, entrada: { client_id: o.client_id, nombre: o.nombre, rubro: o.rubro, ahora: o.ahora, fichas, zona, sedes: o.sedes, ...('version' in manual ? { manual } : {}), ...(porAbrir.length ? { sedes_por_abrir: porAbrir } : {}), ...(cerradas.length ? { sedes_cerradas: cerradas } : {}) } }
 }
 
 /** LA LECTURA DE LAS OFICINAS: el resumen vigente del cliente en UNA llamada (y los de sus sedes). Una falla de lectura se DICE; sin resumen = `null`, no un texto inventado. */
