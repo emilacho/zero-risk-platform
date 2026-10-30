@@ -355,9 +355,9 @@ export async function rutaClientes(deps: DepsDeRutas, cuerpo: unknown): Promise<
   if (!esObjeto(cuerpo)) return err(400, 'entrada_invalida', 'el cuerpo debe ser un objeto')
   if (typeof cuerpo.dry_run !== 'boolean') return err(400, 'dry_run_obligatorio', '`dry_run` es obligatorio y debe ser true o false')
   if (!deps.interruptores.alimentar) return { status: 200, body: { apagado: true, detalle: 'PORTERO_ALIMENTAR está apagado: no se leyó ni se escribió nada', clientes: [], excluidos: [], modelos_llamados: 0 } }
-  const r = await clientesActivos(deps.db)
-  if (!r.ok) return err(502, 'lectura_fallida', r.detalle)
   const solo = typeof cuerpo.client_id === 'string' && UUID.test(cuerpo.client_id) ? cuerpo.client_id : null
+  const r = await clientesActivos(deps.db, { pasanPausasDeAlta: solo !== null })
+  if (!r.ok) return err(502, 'lectura_fallida', r.detalle)
   const datos = solo ? { clientes: r.datos.clientes.filter((c) => c.client_id === solo), excluidos: r.datos.excluidos.filter((c) => c.client_id === solo) } : r.datos
   return { status: 200, body: { dry_run: cuerpo.dry_run, ...datos, modelos_llamados: 0 } }
 }
