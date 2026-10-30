@@ -7,6 +7,7 @@
  * en `ESPERA_MAXIMA_DEL_DESPERTAR_MIN`, se da por listo CON HUECOS declarados (lo que se debía pedir y no llegó): no bloquea para siempre. Una fuente que falló también sale en `huecos`.
  */
 import { rutaLeerPedido } from './pedidos'
+import { cerrarPausasDeAlta } from './pausa-de-alta'
 import { reconciliarYEnviar, type DepsDeRutas, type Respuesta } from './rutas'
 
 export const FRESCURA_DEL_LISTO_HORAS = 36
@@ -34,6 +35,8 @@ export interface SenalDeListo {
   completando: boolean
   /** lo que se debía pedir y no llegó (fuente que falló o cadena que no terminó): el cerebro queda listo igual, con esto declarado */
   huecos: Array<{ fuente: string; funcion: string; objetivo: string }>
+  /** si la alta terminó y cerró pausas «hasta la alta» de este cliente (o no pudo) */
+  pausa_de_alta?: { cerradas: number; error?: string }
 }
 
 /**
@@ -106,11 +109,13 @@ async function rutaListoBase(deps: DepsDeRutas, cuerpo: unknown): Promise<Respue
   }
   if (venciada && !huecos.length) huecos.push({ fuente: 'cadena', funcion: 'cadena_del_despertar', objetivo: `no terminó en ${ESPERA_MAXIMA_DEL_DESPERTAR_MIN} min` })
   const conHuecos = huecos.length ? ` · con ${huecos.length} hueco(s) declarado(s)` : ''
+  // la alta terminó (despertar/completar listo): cierra SOLAS las pausas «hasta la alta» de este cliente (no frenan a la alta; solo a la corrida diaria)
+  const cierre = dsp || tipo === 'despertar' ? await cerrarPausasDeAlta(deps.db, clientId, new Date(t), ahora) : { cerradas: 0 }
 
   return {
     status: 200,
     body: base({
-      listo: true, desde: new Date(t).toISOString(), origen: dsp ? 'despertar' : tipo, ultima_corrida: corrida, puente_quedan: 0, huecos,
+      listo: true, desde: new Date(t).toISOString(), origen: dsp ? 'despertar' : tipo, ultima_corrida: corrida, puente_quedan: 0, huecos, ...(cierre.cerradas || cierre.error ? { pausa_de_alta: cierre } : {}),
       motivo: (venciada ? `la cadena del despertar no terminó en ${ESPERA_MAXIMA_DEL_DESPERTAR_MIN} min: se da por listo con lo que hay y puente al índice al día` : dsp ? 'despertar del alta completo (lo que faltaba ya se pidió) y puente al índice al día' : tipo === 'despertar' ? 'despertar del alta terminado y puente al índice al día' : `corrida diaria hecha hace ${haceHoras} h y puente al índice al día`) + conHuecos,
     }) as unknown as Record<string, unknown>,
   }

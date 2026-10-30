@@ -21,6 +21,7 @@ import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
 import { pulirResumen, topeDelPulido } from './resumen-pulido'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
 import { leerTodas } from './paginar'
+import { cerrarPausasDeAlta } from './pausa-de-alta'
 import { claveDeAlcance, sedesDeFicha, sedesDeLaFuente, tipoDeFuenteDeUnidad } from './sedes-fuentes'
 
 /** las fichas de zona (`zona:ec`) que le tocan al cliente por su país */
@@ -296,5 +297,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), ultima_corrida_en: ahora.toISOString(), ...arrastreDelDespertar, ...(r.declarado_sedes?.length ? { declarado_sedes: r.declarado_sedes } : {}), unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores, ...(r.resumen_vivo ? { resumen_vivo: r.resumen_vivo } : {}), ...(r.brazos ? { brazos: { activos: r.brazos.activos, por_brazo: r.brazos.por_brazo, archivo: r.brazos.archivo ? { escritas: r.brazos.archivo.escritas, iguales: r.brazos.archivo.iguales, retiradas: r.brazos.archivo.retiradas } : null } } : {}) }, gasto_apify_usd: 0, gasto_modelo_usd: r.gasto.modelo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
   const log = corridaDeHoy ? await e.db.from('cerebro_portero_corridas').update(rastro).eq('id', String(corridaDeHoy.id)) : await e.db.from('cerebro_portero_corridas').insert(rastro)
   if (log.error) r.errores.push(`rastro: ${log.error.message}`); else r.escrituras.corrida = 1
+  // el ⑧ que COMPLETA el despertar = la alta terminó: cierra solas las pausas «hasta la alta» del cliente (si falla, la alta no se cae: el «listo» lo reintenta)
+  if (!log.error && estado === 'hecha' && Object.keys(arrastreDelDespertar).length) await cerrarPausasDeAlta(e.db, e.client_id, ahora, ahora)
   return { ...r, ok: r.errores.length === 0, estado: r.errores.length ? 'con_errores' : 'hecha' }
 }
