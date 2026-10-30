@@ -10,9 +10,9 @@ import { normalizar } from '../../manual/texto'
 import type { Db } from '../alimentar'
 import { leerTodas } from '../paginar'
 import { costoDeLaLlamada, MODELO, type PeticionAlModelo, type RespuestaDelModelo, type ResultadoDeRegistro } from '../../cerebro/portero/razonar'
-import { consolidar, type Nota, type Operacion } from './consolidar'
+import { consolidar, gana, type Nota, type Operacion } from './consolidar'
 import {
-  CATALOGO_DE_ARRANQUE, CLASE_DEL_APRENDIZAJE, ESPACIO_GENERAL, PARAMETROS_POR_OMISION, espacioDeAlcance, rubroNormal,
+  CATALOGO_DE_ARRANQUE, CLASE_DEL_APRENDIZAJE, ESPACIO_GENERAL, PARAMETROS_POR_OMISION, espacioDeAlcance, espacioDeCliente, rubroNormal,
   type Alcance, type Catalogo, type Direccion, type ParametrosDeAprendizaje,
 } from './datos'
 import { leerIdeas, promptDeDesmenuzar, type Idea } from './desmenuzar'
@@ -84,9 +84,14 @@ export function notaDeFicha(f: Fila): Nota | null {
 
 interface Cruda { id: string; client_id: string; respuesta: string; respondido_en: string; canal: string; tema: string; mensaje_ref: string | null; intentos: number }
 
-function crudaDeFicha(f: Fila, desde: string): Cruda | null {
+/** una nota que otra pasada (la puerta del dueño o el cron) está desmenuzando ahora mismo no se toma: se espera ese plazo y, si la otra pasada murió, se retoma */
+const PLAZO_DE_RESERVA_MS = 10 * 60_000
+
+function crudaDeFicha(f: Fila, desde: string, ahora: Date = new Date()): Cruda | null {
   const d = datosDe(f)
   if (d.acumula !== true || d.desmenuzada_en) return null
+  const reservada = txt(d.desmenuzando_desde)
+  if (reservada && ahora.getTime() - Date.parse(reservada) < PLAZO_DE_RESERVA_MS) return null
   const cuando = txt(d.respondido_en) || txt(f.observado_en)
   if (!cuando || cuando.slice(0, 10) < desde) return null
   const respuesta = txt(d.respuesta)
@@ -140,14 +145,18 @@ export async function procesarAprendizaje(deps: DepsDeProcesar, pedido: PedidoDe
     if (pedido.client_id) q = q.eq('client_id', pedido.client_id)
     const r = await leerTodas(() => q.order('id', { ascending: true }))
     if (r.error) inf.errores.push(`crudas: ${r.error.message}`)
-    const pendientes = r.data.map((f) => crudaDeFicha(f, p.desde)).filter((c): c is Cruda => !!c).sort((a, b) => a.respondido_en.localeCompare(b.respondido_en))
+    const pendientes = r.data.map((f) => crudaDeFicha(f, p.desde, ahora)).filter((c): c is Cruda => !!c).sort((a, b) => a.respondido_en.localeCompare(b.respondido_en))
     inf.notas_crudas_pendientes = pendientes.length
     if (!dry) for (const c of pendientes.slice(0, p.notas_por_pasada)) {
       if (!deps.llamarModelo || !deps.registrar) { inf.errores.push('sin modelo: no se desmenuza'); break }
       const cl = await deps.db.from('clients').select('id, industry').eq('id', c.client_id).limit(1)
       const rubroCrudo = txt(lista(cl.data)[0]?.industry) || null
       const rubro = rubroCrudo ? rubroNormal(rubroCrudo) : null
-      const { system, texto } = promptDeDesmenuzar({ comentario: c.respuesta, rubro: rubroCrudo, formato: null, catalogo })
+      // se reserva la nota ANTES de pagar el modelo: dos pasadas a la vez (la puerta y el cron) no la desmenuzan dos veces
+      const reservaErr = await actualizarDatos(deps.db, c.id, { desmenuzando_desde: ahora.toISOString() })
+      if (reservaErr) { inf.errores.push(reservaErr); continue }
+      const vigentes = await ideasVigentesDelCliente(deps.db, c.client_id, p.vigentes_a_comparar)
+      const { system, texto } = promptDeDesmenuzar({ comentario: c.respuesta, rubro: rubroCrudo, formato: null, catalogo, vigentes: vigentes.map(resumenDeNota) })
       const t0 = Date.now()
       let resp: RespuestaDelModelo | null = null, fallo: string | null = null
       try { resp = await deps.llamarModelo({ model: MODELO, max_tokens: 1500, thinking: { type: 'between_tools' }, system, messages: [{ role: 'user', content: texto }], timeoutMs: 40_000 }) } catch (e) { fallo = e instanceof Error ? e.message : String(e) }
@@ -161,8 +170,11 @@ export async function procesarAprendizaje(deps: DepsDeProcesar, pedido: PedidoDe
       }).catch((e: unknown): ResultadoDeRegistro => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) }))
       if (!reg.ok) inf.errores.push(`llamada sin registro (${c.id}): ${reg.detalle ?? ''}`)
       if (fallo || !resp) { inf.errores.push(`modelo (${c.id}): ${fallo}`); await marcarIntento(deps.db, c, inf); continue }
-      const lei = leerIdeas(resp.texto, { comentario: c.respuesta, catalogo, rubro })
+      const lei = leerIdeas(resp.texto, { comentario: c.respuesta, catalogo, rubro, marcas: p.marcas_de_alcance, vigentes: vigentes.length })
       if (lei.ilegible) { inf.ilegibles++; await marcarIntento(deps.db, c, inf); continue }
+      // última comprobación antes de escribir: si otra pasada ya la desmenuzó mientras el modelo pensaba, no se duplican las ideas
+      const otra = await deps.db.from('cerebro_fichas').select('provenance_tag').eq('id', c.id).limit(1)
+      if (txt(datosDe(lista(otra.data)[0] ?? {}).desmenuzada_en)) { inf.errores.push(`nota ${c.id}: otra pasada ya la desmenuzó; se descartó esta lectura`); continue }
       const nuevas: FichaNueva[] = []
       for (const i of lei.ideas) {
         if (i.atributo_propuesto && !inf.atributos_propuestos.includes(i.atributo)) {
@@ -179,9 +191,24 @@ export async function procesarAprendizaje(deps: DepsDeProcesar, pedido: PedidoDe
         const wf = await deps.db.from('cerebro_fichas').insert(nueva.fila)
         if (wf.error) { inf.errores.push(`ficha (${c.id}): ${wf.error.message}`); continue }
         nuevas.push(nueva); inf.fichas_nuevas++
+        // una idea que contradice a otra vigente del cliente: en el mismo espacio gana la más nueva (la vieja se retira con motivo); si no, se anota el choque y la consulta entrega solo la ganadora
+        for (const n of i.contradice) {
+          const vieja = vigentes[n - 1]
+          if (!vieja) continue
+          const fresca: Nota = { id: String(nueva.fila.id), espacio, alcance: i.alcance, industria: rubro, destinatario: i.destinatario, atributo: i.atributo, sobre: i.sobre, idea: i.idea, direccion: i.direccion, formato: i.formato, peso: 1, creada: c.respondido_en, ultima_vez_usada: null, peso_al: null, choca_con: [vieja.id] }
+          if (vieja.espacio === espacio && gana(fresca, vieja).id === fresca.id) {
+            await retirar(deps, vieja.id, `choca con ${fresca.id} (el dueño pidió lo contrario después): gana la más nueva`, fresca.id, ahora, inf)
+            inf.operaciones.retirar_por_choque = (inf.operaciones.retirar_por_choque ?? 0) + 1
+          } else {
+            const e1 = await actualizarDatos(deps.db, vieja.id, { choca_con: [...new Set([...vieja.choca_con, fresca.id])] })
+            const e2 = await actualizarDatos(deps.db, fresca.id, { choca_con: [...new Set([...fresca.choca_con, vieja.id])] })
+            for (const e of [e1, e2]) if (e) inf.errores.push(e)
+            inf.operaciones.anotar_choque = (inf.operaciones.anotar_choque ?? 0) + 1
+          }
+        }
       }
       await escribirHuellas(deps, nuevas, inf)
-      const e = await actualizarDatos(deps.db, c.id, { desmenuzada_en: ahora.toISOString(), ideas: lei.ideas.length, ...(lei.descartadas.length ? { ideas_descartadas: lei.descartadas.length } : {}) })
+      const e = await actualizarDatos(deps.db, c.id, { desmenuzando_desde: null, desmenuzada_en: ahora.toISOString(), ideas: lei.ideas.length, ...(lei.descartadas.length ? { ideas_descartadas: lei.descartadas.length } : {}) })
       if (e) inf.errores.push(e)
       if (lei.ideas.length) inf.desmenuzadas++; else inf.sin_ideas++
     }
@@ -203,10 +230,18 @@ export async function procesarAprendizaje(deps: DepsDeProcesar, pedido: PedidoDe
   return inf
 }
 
+/** las ideas vivas del cliente (las más pesadas primero): contra ellas se compara cada idea nueva */
+async function ideasVigentesDelCliente(db: Db, clientId: string, maximo: number): Promise<Nota[]> {
+  const r = await db.from('cerebro_fichas').select('id, client_id, que_es, observado_en, creado_en, alcance, provenance_tag').eq('client_id', espacioDeCliente(clientId)).eq('clase', CLASE_DEL_APRENDIZAJE).is('retirada_en', null).eq('descartada', false).limit(500)
+  if (r.error) return []
+  return lista(r.data).map(notaDeFicha).filter((n): n is Nota => !!n).sort((a, b) => b.peso - a.peso || b.creada.localeCompare(a.creada)).slice(0, Math.max(0, maximo))
+}
+const resumenDeNota = (n: Nota): string => `${n.direccion === 'hacer' ? 'Hacer' : 'Evitar'} (${n.destinatario} · ${n.atributo}): ${n.idea}`
+
 async function marcarIntento(db: Db, c: Cruda, inf: InformeDeProcesar): Promise<void> {
   const n = c.intentos + 1
   // tras 3 intentos fallidos se da por vista (no se paga sin fin por un comentario que no se deja leer); queda dicho en la nota
-  const e = await actualizarDatos(db, c.id, n >= 3 ? { intentos_desmenuzar: n, desmenuzada_en: new Date().toISOString(), ideas: 0, motivo: 'tres intentos sin respuesta legible' } : { intentos_desmenuzar: n })
+  const e = await actualizarDatos(db, c.id, n >= 3 ? { intentos_desmenuzar: n, desmenuzando_desde: null, desmenuzada_en: new Date().toISOString(), ideas: 0, motivo: 'tres intentos sin respuesta legible' } : { intentos_desmenuzar: n, desmenuzando_desde: null })
   if (e) inf.errores.push(e)
 }
 

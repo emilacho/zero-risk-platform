@@ -6,7 +6,7 @@
  * PURO: sin red ni base.
  */
 import { normalizar } from '../../manual/texto'
-import { ALCANCES, slugNormal, type Alcance, type Catalogo, type Direccion } from './datos'
+import { ALCANCES, PARAMETROS_POR_OMISION, slugNormal, type Alcance, type Catalogo, type Direccion } from './datos'
 
 export interface Idea {
   idea: string
@@ -19,20 +19,25 @@ export interface Idea {
   formato: string | null
   cita: string
   atributo_propuesto: boolean
+  /** números (de la lista de vigentes que se le mostró) de las ideas que esta contradice */
+  contradice: number[]
 }
 export const MAX_IDEAS_POR_NOTA = 8
 export const MAX_COMENTARIO = 2000
 
-export function promptDeDesmenuzar(o: { comentario: string; rubro: string | null; formato: string | null; catalogo: Catalogo }): { system: string; texto: string } {
+export function promptDeDesmenuzar(o: { comentario: string; rubro: string | null; formato: string | null; catalogo: Catalogo; vigentes?: string[] }): { system: string; texto: string } {
   const system = [
     'Eres el desmenuzador de los comentarios del dueño de un negocio sobre piezas de marketing. Separas el comentario en IDEAS SUELTAS que sirvan a quien produzca la próxima pieza.',
-    'Responde SOLO un objeto JSON: {"ideas":[{"idea":"…","sobre":"…","atributo":"…","destinatario":"…","direccion":"hacer|evitar","alcance":"cliente|industria|formato|general","evidencia_de_alcance":"…","formato":"…","cita":"…"}]}.',
+    'Responde SOLO un objeto JSON: {"ideas":[{"idea":"…","sobre":"…","atributo":"…","destinatario":"…","direccion":"hacer|evitar","alcance":"cliente|industria|formato|general","evidencia_de_alcance":"…","formato":"…","cita":"…","contradice":[]}]}.',
     'Reglas: (1) una idea = una indicación accionable; no inventes nada que el dueño no dijo. (2) "cita" = la frase LITERAL del comentario que la respalda. (3) "sobre" = 1 a 3 palabras del tema (p. ej. emojis, fondo blanco, precio). (4) "direccion": hacer si pide algo, evitar si lo rechaza.',
     '(5) "alcance" es "cliente" SALVO que el dueño diga expresamente que vale para todo un rubro (industria), para un tipo de pieza (formato) o para todos sus negocios / siempre (general); en ese caso copia en "evidencia_de_alcance" la frase literal que lo dice. Ante la duda, "cliente".',
     `(6) "destinatario" ∈ ${o.catalogo.destinatarios.join(' | ')} (a quién le sirve: texto = quien escribe, diseno = quien diseña, imagen = quien produce la foto, direccion = criterio general de la mesa).`,
     `(7) "atributo" ∈ ${o.catalogo.atributos.join(' | ')}; si ninguno encaja, escribe uno nuevo corto en minúsculas sin tildes. (8) Si el comentario no contiene ninguna indicación (solo un saludo o un "ok"), devuelve {"ideas":[]}. Máximo ${MAX_IDEAS_POR_NOTA} ideas.`,
+    '(9) "contradice": los números de las IDEAS VIGENTES de la lista (si hay) que esta idea nueva deja sin efecto porque pide lo contrario o algo incompatible (p. ej. «tono cercano» contradice «tono formal y distante»); [] si no contradice a ninguna. Solo números de la lista.',
+    '(10) "formato": el tipo de pieza solo si el dueño lo nombra (carrusel, reel, historia…); si no lo nombra, déjalo vacío: nunca escribas "no se sabe" ni "general".',
   ].join('\n')
-  const texto = `Rubro del negocio: ${o.rubro ?? 'no se sabe'}\nFormato de la pieza comentada: ${o.formato ?? 'no se sabe'}\nComentario del dueño (literal):\n«${o.comentario.slice(0, MAX_COMENTARIO)}»`
+  const vigentes = o.vigentes?.length ? `\nIDEAS VIGENTES de este cliente (para "contradice"):\n${o.vigentes.map((v, n) => `${n + 1}. ${v}`).join('\n')}` : ''
+  const texto = `Rubro del negocio: ${o.rubro ?? 'no se sabe'}\nFormato de la pieza comentada: ${o.formato ?? 'no se sabe'}${vigentes}\nComentario del dueño (literal):\n«${o.comentario.slice(0, MAX_COMENTARIO)}»`
   return { system, texto }
 }
 
@@ -41,7 +46,11 @@ const limpio = (s: unknown, max: number): string => String(s ?? '').replace(/\s+
 const contiene = (todo: string, frase: string): boolean => { const f = normalizar(frase).replace(/\s+/g, ' ').trim(); return f.length >= 4 && normalizar(todo).replace(/\s+/g, ' ').includes(f) }
 
 /** lee la respuesta del modelo (JSON, con o sin cercas) y aplica las guardas; devuelve las ideas válidas y por qué se descartó cada resto */
-export function leerIdeas(textoDelModelo: string, o: { comentario: string; catalogo: Catalogo; rubro?: string | null }): { ideas: Idea[]; descartadas: string[]; ilegible: boolean } {
+/** «no se sabe», «general», «ninguno»…: el modelo a veces rellena el formato con una negación; eso es «sin formato» */
+const SIN_FORMATO = new Set(['no_se_sabe', 'no_se', 'general', 'ninguno', 'ninguna', 'na', 'n_a', 'sin_formato', 'no_aplica', 'todos', 'cualquiera', 'desconocido', 'otro'])
+const conMarca = (evidencia: string, marcas: string[]): boolean => marcas.some((m) => contiene(evidencia, m))
+
+export function leerIdeas(textoDelModelo: string, o: { comentario: string; catalogo: Catalogo; rubro?: string | null; marcas?: { general: string[]; industria: string[] }; vigentes?: number }): { ideas: Idea[]; descartadas: string[]; ilegible: boolean } {
   const m = /\{[\s\S]*\}/.exec(textoDelModelo)
   let j: unknown
   try { j = m ? JSON.parse(m[0]) : null } catch { j = null }
@@ -57,13 +66,19 @@ export function leerIdeas(textoDelModelo: string, o: { comentario: string; catal
     const destinatario = o.catalogo.destinatarios.includes(slug(x.destinatario)) ? slug(x.destinatario) : 'direccion'
     let alcance: Alcance = (ALCANCES as string[]).includes(String(x.alcance)) ? (x.alcance as Alcance) : 'cliente'
     // subir de alcance exige la frase del dueño que lo dice, y que esa frase esté de verdad en su comentario
-    if (alcance !== 'cliente' && !contiene(o.comentario, limpio(x.evidencia_de_alcance, 200))) alcance = 'cliente'
-    const formato = slug(x.formato) || null
+    const evidencia = limpio(x.evidencia_de_alcance, 200)
+    if (alcance !== 'cliente' && !contiene(o.comentario, evidencia)) alcance = 'cliente'
+    // y esa frase tiene que ser de las que de verdad dicen «más allá de este cliente» («siempre» o «en mis publicaciones» no lo dicen)
+    const marcas = o.marcas ?? PARAMETROS_POR_OMISION.marcas_de_alcance
+    if (alcance === 'general' && !conMarca(evidencia, marcas.general)) alcance = 'cliente'
+    if (alcance === 'industria' && !conMarca(evidencia, [...marcas.industria, ...marcas.general])) alcance = 'cliente'
+    const formatoDicho = slug(x.formato)
+    const formato = formatoDicho && !SIN_FORMATO.has(formatoDicho) ? formatoDicho : null
     if (alcance === 'formato' && !formato) alcance = 'cliente'
     if (alcance === 'industria' && !o.rubro) alcance = 'cliente'
     const citaDicha = limpio(x.cita, 300)
     const cita = contiene(o.comentario, citaDicha) ? citaDicha : limpio(o.comentario, 300)
-    ideas.push({ idea: texto, sobre: limpio(x.sobre, 60) || atributo, atributo, destinatario, direccion, alcance, formato: alcance === 'formato' || formato ? formato : null, cita, atributo_propuesto: !o.catalogo.atributos.includes(atributo) })
+    ideas.push({ idea: texto, sobre: limpio(x.sobre, 60) || atributo, atributo, destinatario, direccion, alcance, formato: alcance === 'formato' || formato ? formato : null, cita, atributo_propuesto: !o.catalogo.atributos.includes(atributo), contradice: [...new Set((Array.isArray(x.contradice) ? x.contradice : []).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= (o.vigentes ?? 0)))] })
   }
   return { ideas, descartadas, ilegible: false }
 }
