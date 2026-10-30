@@ -87,20 +87,24 @@ export function chunksFromBrandBook(row: Record<string, unknown>): BrainChunk[] 
  * 30-oct (condición 2 de Cerebro): cada trozo del manual lleva la procedencia de SU campo (`_field_meta` del borrador: fuente, confianza, estado) para que los agentes traten lo inferido
  * como inspiración y solo lo declarado (con cita) como obligatorio. Un manual sin `_field_meta` no cambia nada.
  */
-function conProcedenciaPorCampo(chunks: BrainChunk[], row: Record<string, unknown>): BrainChunk[] {
+export function procedenciaDelCampo(row: Record<string, unknown>, seccion: string): Record<string, unknown> | undefined {
   let meta: Record<string, Record<string, unknown>> = {}
   try {
     const ct = typeof row.content_text === 'string' ? JSON.parse(row.content_text) : null
     const m = ct?.brand_book_draft?._field_meta
     if (m && typeof m === 'object') meta = m as typeof meta
   } catch { /* sin procedencia: los trozos salen como siempre */ }
-  if (!Object.keys(meta).length) return chunks
+  const campo = CAMPOS.find((x) => x.columna === seccion)
+  const m = campo ? meta[campo.clave] : undefined
+  if (!campo || !m) return undefined
+  const { fuente, confianza, estado } = m
+  return { campo: campo.clave, procedencia: { fuente: fuente ?? null, confianza: confianza ?? null, estado: estado ?? null } }
+}
+
+function conProcedenciaPorCampo(chunks: BrainChunk[], row: Record<string, unknown>): BrainChunk[] {
   return chunks.map((c) => {
-    const campo = CAMPOS.find((x) => x.columna === c.section_label)
-    const m = campo ? meta[campo.clave] : undefined
-    if (!m) return c
-    const { fuente, confianza, estado } = m
-    return { ...c, metadata: { ...(c.metadata ?? {}), campo: campo!.clave, procedencia: { fuente: fuente ?? null, confianza: confianza ?? null, estado: estado ?? null } } }
+    const extra = procedenciaDelCampo(row, c.section_label)
+    return extra ? { ...c, metadata: { ...(c.metadata ?? {}), ...extra } } : c
   })
 }
 
