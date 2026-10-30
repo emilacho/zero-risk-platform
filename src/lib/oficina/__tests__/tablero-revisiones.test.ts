@@ -50,7 +50,7 @@ describe('firmar-tablero', () => {
     expect(s.status).toBe(200)
     expect(db.tablas['finanzas_tableros'][0]).toMatchObject({ estado: 'firmado', firmado_por: 'emilio', firmado_en: AHORA.toISOString(), huella: 'abc' })
   })
-  it.each([
+  it.each<[string, Record<string, unknown>]>([
     ['ya firmado', { estado: 'firmado' }], ['borrador', { estado: 'borrador' }], ['ensayo', { dry_run: true }], ['no vigente', { vigente: false }], ['sin huella', { huella: null }],
   ])('%s → 409 y no cambia', async (_n, extra) => {
     const db = new DbFalsa().semilla('finanzas_tableros', [tab(extra)])
