@@ -66,7 +66,7 @@ export const DEFAULT_RUN_SPEND_CAP_USD = 8.0
  * Un cliente NUEVO gasta en su primer día alta + planeación (+ finanzas y el primer ciclo): medido, entre ≈ 4 y 10. Con el techo de 24 h en US$ 8 la planeación podía frenarse sola el primer día, y no existía
  * ningún camino para subir el techo de un cliente legítimo (la ficha solo BAJA). Mientras la ficha esté en `onboarding` (y solo durante `RUN_ONBOARDING_DIAS` días desde que se creó, por omisión 7: sin esa cota un
  * cliente olvidado en `onboarding` tendría el techo alto para siempre) el techo de 24 h es el MAYOR entre el general y `RUN_ONBOARDING_CAP_USD` (13 por omisión). Al pasar a `active` vuelve al general.
- * NO cambia: la vara por corrida (US$ 5), el cubo `system`, que `config.spend_cap_usd` de la ficha solo BAJA, ni la política de fallo (sin dato de la ficha ⇒ techo general: falla hacia lo normal, nunca hacia lo alto).
+ * NO cambia: la vara por corrida (US$ 5), el cubo `system`, que (desde el 30-oct) `config.spend_cap_usd` de la ficha MANDA —sube o baja—, ni la política de fallo (sin dato de la ficha ⇒ techo general: falla hacia lo normal, nunca hacia lo alto).
  */
 export const DEFAULT_ONBOARDING_SPEND_CAP_USD = 13.0
 export const DEFAULT_ONBOARDING_DAYS = 7
@@ -137,7 +137,7 @@ export interface SpendGateResult {
   /** el techo de 24 h fue el CUPO DE ARRANQUE (cliente `onboarding` en sus primeros días); `cap_generico_usd` es el que habría regido */
   readonly cupo_de_arranque?: boolean
   readonly cap_generico_usd?: number
-  /** Si la ficha del cliente trae un tope MÁS BAJO (`config.spend_cap_usd`), el que rigió. Solo puede BAJAR el techo, nunca subirlo. */
+  /** Si la ficha del cliente trae su propio tope (`config.spend_cap_usd`) y difiere del general/arranque, el que rigió (sube o baja). */
   readonly cap_override_usd?: number
   readonly spent_usd?: number
   /** Ficha canónica contra la que se acumuló (B1) · útil para forense. */
@@ -201,6 +201,15 @@ export function techoGenericoDeArranque(o: { status: unknown; createdAt: unknown
   if (edad < 0 || edad > resolveOnboardingDays() * 24 * 60 * 60 * 1000) return { cap: o.generico, arranque: false }
   const cupo = resolveOnboardingSpendCapUsd()
   return cupo > o.generico ? { cap: cupo, arranque: true } : { cap: o.generico, arranque: false }
+}
+
+/**
+ * EL TECHO DE 24 h DE UN CLIENTE (30-oct · «tope por cliente que SUBE y BAJA»): si la ficha trae `config.spend_cap_usd` (> 0) ESE es el techo, mayor o menor que el general y que el cupo de arranque;
+ * sin dato rige `base` (el general, o el cupo de arranque). UNA sola función para todos los lectores del techo (el freno de run-sdk y el pre-vuelo de planeación). Reemplaza al antiguo «el menor de los dos».
+ * El tope POR CORRIDA (US$ 5) y el cubo `system` no pasan por aquí.
+ */
+export function techoDelCliente(base: number, override: number | null | undefined): number {
+  return typeof override === 'number' && Number.isFinite(override) && override > 0 ? override : base
 }
 
 /** Resuelve el techo · env `RUN_SPEND_CAP_USD` (número positivo) > default $8. */
@@ -345,7 +354,7 @@ export async function resolveClientFamily(
 }
 
 /**
- * Tope POR CLIENTE (relevo 59 · la prueba desde cero): `clients.config.spend_cap_usd` (número > 0) BAJA el techo de las 24 h de ESE cliente por debajo del genérico; nunca lo sube.
+ * Tope POR CLIENTE (relevo 59 · la prueba desde cero): `clients.config.spend_cap_usd` (número > 0) ES el techo de las 24 h de ESE cliente (sube o baja respecto del genérico; ver `techoDelCliente`).
  * Es la «puerta ANTES de cada llamada de modelo»: la corrida que llegue con el gasto ya al tope no se lanza. Falla ABIERTO (sin ficha, sin dato o error ⇒ null ⇒ techo genérico):
  * el freno nunca se rompe por esta lectura. Ojo: cuenta lo ya REGISTRADO; las llamadas en vuelo (aún sin fila) no entran: por eso el tope se pone con margen.
  */
@@ -478,12 +487,12 @@ export async function checkRunSdkSpendCap(
     const ficha = await resolveClientCapContext(supabase, String(clientId))
     const override = ficha.override
     const arr = techoGenericoDeArranque({ status: ficha.status, createdAt: ficha.createdAt, nowMs, generico: capGenerico })
-    const cap = override !== null ? Math.min(arr.cap, override) : arr.cap
+    const cap = techoDelCliente(arr.cap, override)
     const runCap = resolveRunScopedCapUsd()
     const runId = opts.runId ?? null
     const base = {
       cap_usd: cap,
-      ...(override !== null && override < arr.cap ? { cap_override_usd: override } : {}),
+      ...(override !== null && override !== arr.cap ? { cap_override_usd: override } : {}),
       ...(arr.arranque ? { cupo_de_arranque: true, cap_generico_usd: capGenerico } : {}),
       spent_usd: spent,
       canonical_client_id: canonical,

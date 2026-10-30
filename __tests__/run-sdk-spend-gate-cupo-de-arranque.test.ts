@@ -70,9 +70,11 @@ describe('el freno de run-sdk con el cupo de arranque', () => {
     const libro = [{ cost_usd: 5, workflow_execution_id: 'corrida-nueva' }]
     expect(await GATE(sb({ status: 'onboarding', created_at: haceDias(1), libro }))).toMatchObject({ blocked: true, reason: 'run_over_cap', run_cap_usd: 5 })
   })
-  it('la ficha solo BAJA: tope 6 en un cliente onboarding rige 6; tope 50 se ignora y rige 13', async () => {
+  it('la ficha MANDA: tope 6 en un cliente onboarding rige 6; tope 50 rige 50 (sube)', async () => {
     expect(await GATE(sb({ status: 'onboarding', created_at: haceDias(1), config: { spend_cap_usd: 6 }, libro: gasto(7) }))).toMatchObject({ blocked: true, cap_usd: 6, cap_override_usd: 6 })
-    expect(await GATE(sb({ status: 'onboarding', created_at: haceDias(1), config: { spend_cap_usd: 50 }, libro: gasto(12) }))).toMatchObject({ blocked: false, cap_usd: 13 })
+    expect(await GATE(sb({ status: 'onboarding', created_at: haceDias(1), config: { spend_cap_usd: 50 }, libro: gasto(12) }))).toMatchObject({ blocked: false, cap_usd: 50, cap_override_usd: 50 })
+    expect(await GATE(sb({ status: 'active', created_at: haceDias(40), config: { spend_cap_usd: 20 }, libro: gasto(19) }))).toMatchObject({ blocked: false, cap_usd: 20 })
+    expect(await GATE(sb({ status: 'active', created_at: haceDias(40), config: { spend_cap_usd: 20 }, libro: gasto(20) }))).toMatchObject({ blocked: true, cap_usd: 20 })
   })
   it('FALLA HACIA LO NORMAL: sin ficha, con error al leerla o sin estado/fecha ⇒ 8, nunca 13', async () => {
     for (const s of [sb({ sinFicha: true, libro: gasto(9) }), sb({ fichaError: true, libro: gasto(9) }), sb({ created_at: haceDias(1), libro: gasto(9) }), sb({ status: 'onboarding', libro: gasto(9) })])
@@ -98,7 +100,7 @@ describe('el pre-vuelo de la planeación lee el MISMO cupo (si no, diría «sin 
       return { select: () => ({ gte: () => ({ eq: async () => ({ data: filas, error: null }), in: async () => ({ data: filas, error: null }) }) }) }
     },
   }) as never
-  it('cliente onboarding de ayer: el cupo del pre-vuelo es 13; active o viejo, 8; la ficha solo baja', async () => {
+  it('cliente onboarding de ayer: el cupo del pre-vuelo es 13; active o viejo, 8; la ficha manda (sube o baja)', async () => {
     const { puertosDeSupabase } = await import('../src/lib/planeacion/prevuelo-supabase')
     const ahora = () => new Date(AHORA)
     const c = async (ficha: Record<string, unknown>) => puertosDeSupabase(dbPrevuelo(ficha, [5, 3]), ahora).cupo('c1')
@@ -106,5 +108,6 @@ describe('el pre-vuelo de la planeación lee el MISMO cupo (si no, diría «sin 
     expect(await c({ config: {}, status: 'active', created_at: haceDias(1) })).toMatchObject({ ok: true, cap_usd: 8 })
     expect(await c({ config: {}, status: 'onboarding', created_at: haceDias(30) })).toMatchObject({ ok: true, cap_usd: 8 })
     expect(await c({ config: { spend_cap_usd: 6 }, status: 'onboarding', created_at: haceDias(1) })).toMatchObject({ ok: true, cap_usd: 6, override_usd: 6 })
+    expect(await c({ config: { spend_cap_usd: 20 }, status: 'onboarding', created_at: haceDias(30) })).toMatchObject({ ok: true, cap_usd: 20, generico_usd: 8, override_usd: 20 })
   })
 })
