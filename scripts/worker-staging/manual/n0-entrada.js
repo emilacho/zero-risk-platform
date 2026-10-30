@@ -7,4 +7,7 @@ if (!esperada || recibida !== esperada) throw new Error('MANUAL_SIN_LLAVE · fal
 const b = h.body || {}
 if (typeof b.client_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(b.client_id)) throw new Error('MANUAL_CLIENTE_INVALIDO · `client_id` debe ser un uuid · se DETIENE')
 if (typeof b.dry_run !== 'boolean') throw new Error('MANUAL_DRY_RUN_OBLIGATORIO · `dry_run` es obligatorio y debe ser true o false · se DETIENE')
-return [{ json: { client_id: b.client_id, dry_run: b.dry_run, llave: recibida, workflow_id: String($workflow.id), workflow_execution_id: String($execution.id), costo_usd: 0 } }]
+// opcionales (agnóstico): el tipo de negocio decide los obligatorios del manual; «buscado_en» dice dónde se buscó lo que falta
+const tipo = typeof b.tipo_de_negocio === 'string' && b.tipo_de_negocio.trim() ? b.tipo_de_negocio.trim().slice(0, 80) : null
+const buscado = Array.isArray(b.buscado_en) ? b.buscado_en.filter((x) => typeof x === 'string').slice(0, 10) : null
+return [{ json: { client_id: b.client_id, dry_run: b.dry_run, tipo_de_negocio: tipo, buscado_en: buscado, llave: recibida, workflow_id: String($workflow.id), workflow_execution_id: String($execution.id), costo_usd: 0 } }]

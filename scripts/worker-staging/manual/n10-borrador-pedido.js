@@ -6,5 +6,7 @@ const body = {
   client_id: est.client_id, dry_run: false, workflow_id: est.workflow_id, workflow_execution_id: est.workflow_execution_id,
   manual: est.manual_final, opinion: est.opinion || null, respuesta_del_autor: con ? est.respuesta_del_autor : null,
   costo_usd: Math.round((Number(est.costo_usd) || 0) * 1e6) / 1e6, fidelidad: est.fidelidad || null,
+  // la JEFATURA valida (no la bandeja del dueño): sin tarjeta; el tipo de negocio y dónde se buscó fijan lo obligatorio
+  validador: 'jefatura', tipo_de_negocio: est.tipo_de_negocio || null, buscado_en: est.buscado_en || null,
 }
 return [{ json: { ...est, borrador_body: body } }]
