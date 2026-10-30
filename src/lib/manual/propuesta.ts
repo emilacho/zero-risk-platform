@@ -24,6 +24,12 @@ export const CAMPOS_PROPONIBLES: Record<string, CampoProponible> = {
   tagline_opciones: { tipo: 'lista', agente: 'editor-en-jefe', que: '2 o 3 lemas posibles · es una elección, no un hecho' },
   mensajes_clave: { tipo: 'lista', agente: 'editor-en-jefe', que: '3 a 5 mensajes desde lo que le importa al cliente' },
   propuestas_de_valor: { tipo: 'lista', agente: 'jefe-client-success', que: '3 a 5 diferenciadores reales respecto de la alternativa' },
+  // 30-oct · «el manual sale solo»: los obligatorios que ningún empleado producía (ver `campos-del-manual.ts`). Se proponen SOLO con lo que la evidencia sostiene; si no alcanza, el campo queda como hueco declarado.
+  vision: { tipo: 'texto', agente: 'jefe-client-success', que: 'a dónde quiere llegar el negocio · 1 frase, solo si la evidencia lo sostiene' },
+  valores: { tipo: 'lista', agente: 'editor-en-jefe', que: '3 a 5 valores que la marca demuestra en lo que hace y dice, no los que suenan bien' },
+  productos: { tipo: 'lista', agente: 'jefe-client-success', que: 'los productos o servicios que el negocio ofrece, tal como los nombra la evidencia (sin precios ni cifras que no estén escritos)' },
+  sedes: { tipo: 'lista', agente: 'jefe-client-success', que: 'los lugares donde atiende, tal como los nombra la evidencia (ciudad o dirección); si no atiende en un local, devuélvelo vacío' },
+  nunca_hace: { tipo: 'lista', agente: 'editor-en-jefe', que: 'lo que la marca nunca dice ni hace, deducido de cómo habla y de lo que rechaza en la evidencia' },
 }
 
 const vacio = (v: unknown): boolean => {

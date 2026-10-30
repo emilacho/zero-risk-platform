@@ -7,6 +7,8 @@
  *    (auditoría); la tarjeta de la bandeja no lo lleva, ni su vista previa, ni los hechos, ni nada que se le muestre.
  */
 import { renderManualLimpio } from '../brand-book-render-limpio'
+import type { VeredictoDeLaJefatura } from './jefatura'
+import type { ResultadoDePromocion } from './promover'
 import { diferenciasPorCampo, type Db, type Insumos, type ResultadoDeCierre } from './revision'
 
 export const TIPO_DE_BORRADOR = 'brand_book_draft_revision'
@@ -27,6 +29,12 @@ export interface EntradaDelBorrador {
   workflow_execution_id: string
   dry_run: boolean
   ahora?: Date
+  /** quién valida al final: la jefatura (por omisión desde el 30-oct) o la bandeja del dueño (la tarjeta de siempre, como herramienta opcional) */
+  validador?: 'jefatura' | 'bandeja'
+  /** tipo de negocio, si se conoce (un negocio sin local no exige sedes) */
+  tipo_de_negocio?: string | null
+  /** las fuentes que se leyeron (para decir «busqué en …» en cada hueco) */
+  buscado_en?: readonly string[]
 }
 export interface ResultadoDelBorrador {
   ok: boolean
@@ -38,6 +46,8 @@ export interface ResultadoDelBorrador {
   sin_cambios: boolean
   /** lo que se escribió (o se escribiría) en la bandeja: se ve exactamente lo que verá Emilio */
   tarjeta: Record<string, unknown>
+  /** solo con validador jefatura: lo que decidió y, si validó, la versión que quedó vigente */
+  jefatura?: VeredictoDeLaJefatura & { promocion?: ResultadoDePromocion | null; completo: boolean }
 }
 
 /** la tarjeta que ve Emilio: manual nuevo en limpio, qué cambió, cada hecho con su cita y fuente, las dudas, la opinión de GPT y la respuesta del autor, y el costo. SIN lo retirado. */

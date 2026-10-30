@@ -15,6 +15,7 @@ import { generateEmbedding } from './embed'
 import { runIngressFilter, type ProvenanceTag } from '../ingress-filter'
 import { buildBrainProvenanceTag, type BrainTrustLevel } from '../client-brain'
 import { brainRoutePolicy, quarantineChunk } from './portero'
+import { CAMPOS } from '../manual/campos-del-manual'
 
 export interface BrainChunk {
   section_label: string
@@ -79,7 +80,28 @@ export function chunksFromBrandBook(row: Record<string, unknown>): BrainChunk[] 
     const text = typeof v === 'string' ? v : JSON.stringify(v)
     if (text.length > 2) out.push({ section_label: f, chunk_text: text })
   }
-  return out
+  return conProcedenciaPorCampo(out, row)
+}
+
+/**
+ * 30-oct (condición 2 de Cerebro): cada trozo del manual lleva la procedencia de SU campo (`_field_meta` del borrador: fuente, confianza, estado) para que los agentes traten lo inferido
+ * como inspiración y solo lo declarado (con cita) como obligatorio. Un manual sin `_field_meta` no cambia nada.
+ */
+function conProcedenciaPorCampo(chunks: BrainChunk[], row: Record<string, unknown>): BrainChunk[] {
+  let meta: Record<string, Record<string, unknown>> = {}
+  try {
+    const ct = typeof row.content_text === 'string' ? JSON.parse(row.content_text) : null
+    const m = ct?.brand_book_draft?._field_meta
+    if (m && typeof m === 'object') meta = m as typeof meta
+  } catch { /* sin procedencia: los trozos salen como siempre */ }
+  if (!Object.keys(meta).length) return chunks
+  return chunks.map((c) => {
+    const campo = CAMPOS.find((x) => x.columna === c.section_label)
+    const m = campo ? meta[campo.clave] : undefined
+    if (!m) return c
+    const { fuente, confianza, estado } = m
+    return { ...c, metadata: { ...(c.metadata ?? {}), campo: campo!.clave, procedencia: { fuente: fuente ?? null, confianza: confianza ?? null, estado: estado ?? null } } }
+  })
 }
 
 /**
