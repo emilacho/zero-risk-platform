@@ -1,4 +1,4 @@
-import { quienValido } from '../manual/campos-del-manual'
+import { validacionDelManual, versionVigente } from '../manual/campos-del-manual'
 
 /**
  * EL ESTADO DEL MANUAL VIGENTE (30-oct) · solo lectura de `client_brand_books`: ¿lo validó el dueño, la jefatura o es una propuesta del sistema sin validar?, ¿qué versión?, ¿de cuándo?
@@ -15,12 +15,12 @@ const dia = (x: unknown): string | null => (typeof x === 'string' && x.length >=
 
 /** puro: del conjunto de versiones del manual, el estado de la vigente */
 export function estadoDelManual(filas: Fila[]): ManualVigente {
-  const conVersion = filas.map((f) => ({ f, v: Number(f.version) || 0 })).sort((a, b) => b.v - a.v)
-  const vig = conVersion[0]
+  const vigente = versionVigente(filas)
+  const vig = vigente ? { f: vigente, v: Number(vigente.version) || 0 } : null
   if (!vig) return { estado: 'sin_manual', version: null, fecha: null, texto: 'Manual de marca: el cliente todavía no tiene manual.' }
   const fecha = dia(vig.f.validated_at) ?? dia(vig.f.created_at)
   // la etiqueta sale de QUIÉN validó de verdad (`provenance_tag.validado_por`), no de que alguien lo haya marcado: antes decía «dueño» ante cualquier human_validated
-  const quien = quienValido(vig.f)
+  const { quien } = validacionDelManual(vig.f)
   if (quien === 'jefatura') return { estado: 'validado_por_la_jefatura', version: vig.v, fecha, texto: `Manual de marca: validado por la jefatura (versión ${vig.v}${fecha ? `, ${fecha}` : ''}).` }
   if (quien === 'dueno') return { estado: 'validado_por_el_dueno', version: vig.v, fecha, texto: `Manual de marca: validado por el dueño (versión ${vig.v}${fecha ? `, ${fecha}` : ''}).` }
   return { estado: 'propuesta_sin_validar', version: vig.v, fecha, texto: `Manual de marca: propuesta del sistema, sin validar por el dueño (versión ${vig.v}${fecha ? `, ${fecha}` : ''}).` }

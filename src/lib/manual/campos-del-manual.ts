@@ -222,3 +222,18 @@ export function quienValido(fila: { human_validated?: unknown; provenance_tag?: 
   const p = (fila.provenance_tag ?? {}) as Record<string, unknown>
   return p.validado_por === 'jefatura' ? 'jefatura' : 'dueno'
 }
+
+/** precedencia: dueño > validado por la jefatura > propuesta (un dato firmado por el dueño pesa más que uno validado por la jefatura, y los dos más que una propuesta) */
+export const RANGO_DE_VALIDACION: Readonly<Record<QuienValido, number>> = { dueno: 2, jefatura: 1, propuesta: 0 }
+export const ROTULO_DE_VALIDACION: Readonly<Record<QuienValido, string>> = { dueno: 'validado por el dueño', jefatura: 'validado por la jefatura', propuesta: 'propuesta del sistema, sin validar' }
+
+/** la versión VIGENTE del manual: la de mayor número (una corrida posterior propone una versión nueva al lado, nunca baja una validada). La única definición de «vigente» para los lectores. */
+export function versionVigente<T extends { version?: unknown }>(filas: T[]): T | null {
+  return filas.reduce<T | null>((m, f) => (!m || (Number(f.version) || 0) > (Number(m.version) || 0) ? f : m), null)
+}
+
+/** lo que un lector necesita saber de una versión: quién la validó, su rótulo y si cuenta como aprobada. Es la ÚNICA puerta para calcularlo: ningún lector mira `human_validated` por su cuenta. */
+export function validacionDelManual(fila: { human_validated?: unknown; provenance_tag?: unknown }): { quien: QuienValido; rango: number; rotulo: string; aprobado: boolean } {
+  const quien = quienValido(fila)
+  return { quien, rango: RANGO_DE_VALIDACION[quien], rotulo: ROTULO_DE_VALIDACION[quien], aprobado: quien !== 'propuesta' }
+}
