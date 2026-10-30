@@ -68,6 +68,14 @@ export function leerRespuestaSobreNotas(texto: string, notas: NotaLeida[]): { te
   return { texto: limpio, respuestas: [...porNota.values()] }
 }
 
+/**
+ * Red de seguridad al cerrar la mesa: ninguna línea «N<k> apliqué…» llega a las láminas, al pie ni a las etiquetas, aunque cite una nota que ese turno no tenía
+ * (un agente sin lectura, un número de más). `leerRespuestaSobreNotas` ya las retira turno a turno; esto vale aunque aquello falle o no se haya ejecutado.
+ */
+export function quitarLineasDeNotas(texto: string): string {
+  return String(texto ?? '').split(/\r?\n/).filter((l) => !LINEA_DE_NOTA.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()
+}
+
 /** el rastro para `autorevisiones_del_productor`: notas leídas, si algo chocó y qué cambió; las notas que el agente no mencionó quedan anotadas (no se da por hecho que las cumplió) */
 export function rastroDeLasNotas(l: LecturaDeNotas, respuestas: RespuestaSobreNota[]): { notas_vistas: string[]; choco: boolean; cambios: unknown[] } {
   const aplicadas = respuestas.filter((r) => r.aplicada)
