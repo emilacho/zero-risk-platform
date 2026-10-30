@@ -124,8 +124,9 @@ export async function rutaBorrador(db: Db, cuerpo: unknown): Promise<Respuesta> 
   const costo = typeof v.cuerpo.costo_usd === 'number' && Number.isFinite(v.cuerpo.costo_usd) ? v.cuerpo.costo_usd : 0
   const respuesta = Array.isArray(v.cuerpo.respuesta_del_autor) ? (v.cuerpo.respuesta_del_autor as never) : null
   const fid = esObjeto(v.cuerpo.fidelidad) ? (v.cuerpo.fidelidad as never) : null
-  // desde el 30-oct valida la jefatura (por omisión); `validador: 'bandeja'` conserva la tarjeta para el dueño como herramienta opcional
-  const validador: 'jefatura' | 'bandeja' = v.cuerpo.validador === 'bandeja' ? 'bandeja' : 'jefatura'
+  // decisión de Emilio (30-oct, ADENDA 7): la jefatura NO valida el manual. Por omisión es lo de siempre: borrador + tarjeta en la bandeja del dueño.
+  // El camino de la jefatura queda en el código, APAGADO: solo se toma si alguien lo pide explícitamente con `validador: 'jefatura'`.
+  const validador: 'jefatura' | 'bandeja' = v.cuerpo.validador === 'jefatura' ? 'jefatura' : 'bandeja'
   const entrada = { insumos: ins, cierre, opinion: op, fidelidad: fid, respuesta_del_autor: respuesta, costo_usd: costo, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id, dry_run: v.dry_run, validador, tipo_de_negocio: typeof v.cuerpo.tipo_de_negocio === 'string' ? v.cuerpo.tipo_de_negocio : null, buscado_en: Array.isArray(v.cuerpo.buscado_en) ? v.cuerpo.buscado_en.filter((x): x is string => typeof x === 'string') : undefined }
   const r = validador === 'bandeja' ? await guardarBorrador(db, entrada) : await guardarYValidarPorJefatura(db, entrada)
   return { status: r.ok ? 200 : 502, body: { ...r, validador, retirados_en_el_registro_interno: cierre.retirados.length } }
