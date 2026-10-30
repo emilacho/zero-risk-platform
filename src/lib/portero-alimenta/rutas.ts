@@ -137,7 +137,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
   // los nuevos brazos de demanda y competencia miran POR SEDE: sus puntos, los competidores ya juzgados y las ubicaciones ya pedidas (una lectura; un error se DICE y se cae a lo de siempre)
   let brazosCtx: Awaited<ReturnType<typeof cargarContextoDeBrazos>> | undefined
   let brazosCtxError: string | null = null
-  if (deps.brazos && (deps.brazos.demanda || deps.brazos.competencia)) {
+  if (deps.brazos && (deps.brazos.demanda || deps.brazos.competencia || deps.brazos.gustado)) {
     brazosCtx = await cargarContextoDeBrazos(deps.db, v.client_id, cliente, ahora)
     if (brazosCtx.errores.length) { brazosCtxError = brazosCtx.errores.join(' · '); brazosCtx = undefined }
   }

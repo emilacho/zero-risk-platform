@@ -21,14 +21,14 @@ import { confirmarCompetidores, guardarCompetidoresConfirmados } from '../brazos
 
 const MIERCOLES = new Date('2026-10-14T12:00:00Z')
 const JUEVES = new Date('2026-10-15T15:00:00Z')
-const TODOS: BrazosActivos = { contexto: true, demanda: true, competencia: true, propios: true }
+const TODOS: BrazosActivos = { contexto: true, demanda: true, competencia: true, propios: true, gustado: false }
 const CL = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
 const FAMILIA: Record<string, string[]> = { '11111111-1111-4111-8111-111111111111': ['salud'], '22222222-2222-4222-8222-222222222222': ['automotriz'], '33333333-3333-4333-8333-333333333333': ['software'] }
 
 describe('interruptores · todo apagado por omisión', () => {
   it('sin variables, ningún brazo está encendido; solo «on» exacto enciende', () => {
     expect(brazosDelEntorno({})).toEqual(BRAZOS_APAGADOS)
-    expect(brazosDelEntorno({ PORTERO_BRAZO_DEMANDA: 'true', PORTERO_BRAZO_CONTEXTO: '1', PORTERO_BRAZO_PROPIOS: 'ON' })).toEqual({ contexto: false, demanda: false, competencia: false, propios: true })
+    expect(brazosDelEntorno({ PORTERO_BRAZO_DEMANDA: 'true', PORTERO_BRAZO_CONTEXTO: '1', PORTERO_BRAZO_PROPIOS: 'ON' })).toEqual({ contexto: false, demanda: false, competencia: false, propios: true, gustado: false })
   })
   it('las dos rutas de producción leen el entorno (nada está encendido «de fábrica»)', () => {
     const raiz = path.resolve(__dirname, '../../../..')

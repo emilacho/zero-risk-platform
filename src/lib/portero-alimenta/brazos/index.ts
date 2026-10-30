@@ -9,6 +9,7 @@ import { paisIsoDe } from '../../cerebro/zona'
 import { archivarFichasDeBrazos, type ResultadoDeArchivo, type RetiroDeBrazo } from './archivo'
 import { accionesDeCompetencia, competidoresConfirmados, competidoresVigilados, fichasDeCompetencia } from './competencia'
 import { fichasDeContexto } from './contexto'
+import { accionesDeGustado, fichasDeGustado } from './gustado'
 import { accionDeDemanda, accionesDeDemandaPorSede, fichasDeDemanda, terminosDeDemanda, type FilaCrudaDeBrazo } from './demanda'
 import { familiasDelRubro } from '../../fuentes-publicas/plan'
 import { idiomaDeBusqueda } from '../datos'
@@ -25,6 +26,19 @@ const obj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object'
 const txt = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
 
 /** país ISO-2 (minúscula) de la ficha: acepta el código o el nombre; sin dato no se adivina */
+/** las ciudades donde se busca lo más gustado: las que declara el dueño (`config.apify.ciudades_de_gusto`) o, si no, la ciudad de la ficha (sin ciudad, el mercado) */
+export function ciudadesDeGusto(config: unknown, ciudad?: string | null, mercado?: string | null): string[] {
+  const declaradas = obj(obj(config).apify).ciudades_de_gusto
+  const lista = (Array.isArray(declaradas) ? declaradas : []).map(txt).filter(Boolean)
+  if (lista.length) return [...new Set(lista)].slice(0, 3)
+  const una = txt(ciudad) || txt(mercado).split(/[,·]/)[0].trim()
+  return una ? [una] : []
+}
+/** las cuentas de Instagram propias del cliente (`config.apify.own_handles.instagram`), sin @ */
+export function handlesPropios(config: unknown): string[] {
+  const h = obj(obj(obj(config).apify).own_handles).instagram
+  return (Array.isArray(h) ? h : [h]).map((x) => txt(x).replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/.*$/, '')).filter(Boolean)
+}
 export const paisDeLaFicha = (cliente: Record<string, unknown>): string | null => paisIsoDe(cliente.country ?? cliente.pais, cliente.market)
 
 /**
@@ -41,7 +55,7 @@ export interface EntradaDeAccionesDeBrazos {
   familias?: string[]
   ahora: Date
   /** sedes con punto, competidores del sistema y ubicaciones ya pedidas (de `cargarContextoDeBrazos`); sin esto, lo de siempre (por ciudad) */
-  ctx?: Pick<ContextoDeBrazos, 'sedes' | 'delSistema' | 'ubicadasRecientemente'>
+  ctx?: Pick<ContextoDeBrazos, 'sedes' | 'delSistema' | 'ubicadasRecientemente'> & Partial<Pick<ContextoDeBrazos, 'filas'>>
   /** tope del pico del día (por omisión `TOPE_DIARIO_DE_BRAZOS_USD`) */
   topeDiarioUsd?: number
   /** pide la posición por sede AHORA aunque no sea su día (miércoles): una vez, a pedido explícito (`forzar_posicion`) */
@@ -75,6 +89,12 @@ export function accionesDeBrazos(e: EntradaDeAccionesDeBrazos): { acciones: Acci
       const radios = sedes.map((s) => radioDeSede(familias, s)).filter((r): r is number => r !== null)
       acciones.push(...accionesDeCompetencia({ idioma, vigilados: c.vigilados, ahora: e.ahora, ciudad: e.ciudad, mercado, pais: paisDeLaFicha(e.cliente as Record<string, unknown>), anunciosCadaSemanas: 2, sedes: porSede, radioKm: radios.length ? Math.max(...radios) : null }))
     }
+  }
+  if (e.brazos.gustado) {
+    const t = terminosDeDemanda({ rubro: e.rubro ?? e.cliente.industry, config: e.cliente.config, familias })
+    const g = accionesDeGustado({ terminos: t, ciudades: ciudadesDeGusto(e.cliente.config, e.ciudad, mercado), config: e.cliente.config, ahora: e.ahora, forzar: e.forzarPosicion === true, filas: (e.ctx?.filas ?? []) as unknown as FilaCrudaDeBrazo[], handlesPropios: handlesPropios(e.cliente.config) })
+    acciones.push(...g.acciones)
+    no_cubiertas.push(...g.no_cubiertas)
   }
   // el tope del día: lo que no cabe se DECLARA (el plan del portero lo vuelve a recortar contra su tope y las 16 corridas)
   let suma = 0
@@ -133,7 +153,7 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
   const nombre = txt(e.cliente.name)
   const familias = familiasDelRubro(txt(e.cliente.industry) || null)
   // una sola carga: sedes con su punto, crudos de Mapas y fichas vigentes de los brazos (solo si hace falta)
-  const ctx = e.brazos.demanda || e.brazos.competencia ? await cargarContextoDeBrazos(e.db, e.client_id, e.cliente, e.ahora) : null
+  const ctx = e.brazos.demanda || e.brazos.competencia || e.brazos.gustado ? await cargarContextoDeBrazos(e.db, e.client_id, e.cliente, e.ahora) : null
   if (ctx?.errores.length) salida.errores.push(...ctx.errores.map((m) => `lectura de los brazos: ${m}`))
   const filas = (ctx && ctx.filas.length ? ctx.filas : e.filas) as unknown as FilaCrudaDeBrazo[]
 
@@ -163,6 +183,10 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
     const propias = c.motivo ? { brazo: 'competencia' as const, estado: 'sin_material' as const, fichas: [] as FichaDeBrazo[], declarado: [] as string[], detalle: c.motivo } : fichasDeCompetencia({ client_id: e.client_id, vigilados: c.vigilados, filas })
     const delJuicio = sis?.fichas ?? []
     poner({ brazo: 'competencia', estado: propias.fichas.length || delJuicio.length ? 'listo' : 'sin_material', fichas: [...delJuicio, ...propias.fichas], declarado: [...propias.declarado, ...(sis?.declarado ?? [])], ...(propias.fichas.length || delJuicio.length ? {} : { detalle: propias.detalle ?? 'sin competidores todavía' }) })
+  }
+  if (e.brazos.gustado) {
+    const t = terminosDeDemanda({ rubro: txt(e.cliente.industry) || null, config: cfg, familias: familiasDelRubro(txt(e.cliente.industry) || null) })
+    poner(fichasDeGustado({ client_id: e.client_id, nombre, terminos: t, ciudades: ciudadesDeGusto(cfg, e.ciudad, txt(e.cliente.market)), config: cfg, ahora: e.ahora, filas, handlesPropios: handlesPropios(cfg) }))
   }
   if (e.brazos.propios) {
     try {
