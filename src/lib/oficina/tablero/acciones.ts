@@ -5,6 +5,7 @@
 import { almacenDeSupabase } from '../../cadena/almacen-supabase'
 import { abrirEncargo } from '../orquestador'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
+import { firmarTablero, revisionResolver } from './revisiones'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -171,6 +172,8 @@ export const oficinaTope: Manejador = async ({ db }, { cuerpo }) => {
 }
 
 export const ACCIONES: Record<string, Manejador> = {
+  'revision-resolver': revisionResolver,
+  'firmar-tablero': firmarTablero,
   'rehacer-pieza': rehacerPieza,
   'cliente-nuevo': clienteNuevo,
   'cliente-editar': clienteEditar,
