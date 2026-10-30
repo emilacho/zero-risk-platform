@@ -86,6 +86,32 @@ describe('2 · «contradice»: el modelo señala qué ideas vigentes deja sin ef
   })
 })
 
+describe('2b · el formato que el modelo pone a la idea vieja no la hace ganar (prueba real: «publicaciones»)', () => {
+  it('la vieja con formato «publicaciones» y la nueva sin formato: gana la nueva; con formatos distintos solo se anota el choque', async () => {
+    for (const [formatoNueva, retira] of [[null, true], ['reel', false]] as const) {
+      const t: Record<string, Fila[]> = {
+        clients: [{ id: CID, industry: 'prueba' }], cerebro_ingresos: [], cerebro_aprendizaje_indice: [], cerebro_aprendizaje_catalogo: [],
+        cerebro_fichas: [
+          { id: 'vieja-1', client_id: espacioDeCliente(CID), clase: 'aprendizaje_del_dueno', que_es: 'Tono formal', observado_en: '2026-10-30T08:00:00.000Z', alcance: 'cliente', retirada_en: null, descartada: false,
+            provenance_tag: { datos: { destinatario: 'texto', atributo: 'tono', sobre: 'tono formal', direccion: 'hacer', formato: 'publicaciones', industria: 'prueba', peso: 1, peso_al: '2026-10-30T08:00:00.000Z', choca_con: [] } } },
+          { id: 'cruda-1', client_id: CID, clase: 'dato_del_dueno', observado_en: '2026-10-30T08:30:00.000Z', retirada_en: null, descartada: false,
+            provenance_tag: { datos: { acumula: true, respuesta: 'Vuelve al tono cercano.', respondido_en: '2026-10-30T08:30:00.000Z', canal: 'c', tema: 't' } } },
+        ],
+      }
+      const { db } = crearBaseMini(t, { rpc: () => ({ data: [], error: null }) })
+      let n = 0
+      const r = await procesarAprendizaje({
+        db: db as never, ahora: () => AHORA, nuevoId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`, workflowId: 'wf', ejecucionId: 'ex',
+        llamarModelo: async () => ({ texto: JSON.stringify({ ideas: [{ idea: 'Tono cercano', sobre: 'tono cercano', atributo: 'tono', destinatario: 'texto', direccion: 'hacer', alcance: 'cliente', formato: formatoNueva ?? '', cita: 'tono cercano', contradice: [1] }] }), usage: { input_tokens: 10, output_tokens: 10 } }),
+        registrar: async () => ({ ok: true }), embeber: async (x: string[]) => ({ ok: true as const, embeddings: x.map(() => [1]), modelo: 'm' }),
+      } as never, { dry_run: false, client_id: CID, solo: 'desmenuzar' })
+      expect(r.errores).toEqual([])
+      expect(Boolean((t.cerebro_fichas.find((f) => f.id === 'vieja-1') as Fila).retirada_en)).toBe(retira)
+      if (!retira) expect((((t.cerebro_fichas.find((f) => f.id === 'vieja-1') as Fila).provenance_tag as Fila).datos as Fila).choca_con).toHaveLength(1)
+    }
+  })
+})
+
 describe('3 · una nota no se desmenuza dos veces a la vez', () => {
   const t0 = (extra: Fila) => ({
     id: 'cruda-1', client_id: CID, clase: 'dato_del_dueno', observado_en: '2026-10-30T08:30:00.000Z', retirada_en: null, descartada: false,
