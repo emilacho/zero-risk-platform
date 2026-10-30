@@ -43,11 +43,20 @@ export interface ParametrosDeAprendizaje {
   similitud_minima: number
   limite_por_omision: number
   limite_maximo: number
+  /** frases con que el dueño sube una idea de alcance (una evidencia sin ninguna de ellas no sube: «siempre» solo no es «todos mis negocios») · dato ampliable */
+  marcas_de_alcance: { general: string[]; industria: string[] }
+  /** cuántas ideas vigentes del cliente se le muestran al desmenuzador para que diga cuáles contradice la idea nueva */
+  vigentes_a_comparar: number
 }
 export const PARAMETROS_POR_OMISION: ParametrosDeAprendizaje = {
   semivida_dias: 60, piso_de_peso: 0.05, parecido_minimo: 0.67, industrias_para_general: 2, notas_por_pasada: 12, desde: '2026-10-29',
   consultantes_excluidos: ['jefatura', 'jefe', 'camino', 'gpt', 'revisor', 'qa-reviewer', 'reality', 'brand_strategist', 'editor_en_jefe', 'jefe_client_success'],
   similitud_minima: 0.12, limite_por_omision: 10, limite_maximo: 10,
+  marcas_de_alcance: {
+    general: ['todos mis negocios', 'todas mis marcas', 'todos mis clientes', 'cualquier cliente', 'cualquier negocio', 'cualquiera de mis negocios', 'mis otros negocios', 'en todos mis', 'en todas mis', 'para todos mis', 'para todas mis', 'sea del rubro que sea', 'en cualquier rubro', 'en cualquier industria'],
+    industria: ['este rubro', 'mi rubro', 'mi industria', 'este sector', 'mi sector', 'este tipo de negocio', 'negocios como este', 'negocios del mismo giro', 'todos los negocios de', 'todas las empresas de'],
+  },
+  vigentes_a_comparar: 40,
 }
 export function parametrosDelEntorno(env: Record<string, string | undefined> = process.env): ParametrosDeAprendizaje {
   const base = { ...PARAMETROS_POR_OMISION }
