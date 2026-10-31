@@ -11,7 +11,7 @@ const textos = (x: unknown): string[] => lista<unknown>(x).map(String)
 
 export const aTarjeta = (f: Fila): Tarjeta => ({
   agente: String(f.agente), rol: f.rol === 'direccion' || f.rol === 'portero' ? f.rol : 'miembro', especialidad: String(f.especialidad ?? ''),
-  sabe_hacer: textos(f.sabe_hacer), necesita: textos(f.necesita), entrega: textos(f.entrega), pertinente_en: textos(f.pertinente_en), activo: f.activo !== false, version: Number(f.version ?? 1),
+  sabe_hacer: textos(f.sabe_hacer), necesita: textos(f.necesita), entrega: textos(f.entrega), pertinente_en: textos(f.pertinente_en), ...(textos(f.indicacion).length ? { indicacion: textos(f.indicacion) } : {}), activo: f.activo !== false, version: Number(f.version ?? 1),
 })
 export const aAporte = (f: Fila): Aporte => ({
   id: String(f.id), encargo_id: String(f.encargo_id), n: Number(f.n), de: String(f.de), para: f.para == null ? null : String(f.para),

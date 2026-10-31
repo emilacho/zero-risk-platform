@@ -239,7 +239,13 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
       CONVENCION_DE_LA_PIEZA(c.tipo),
     ].join('\n'),
   }
-  return cab + tu[tipo]
+  return cab + seccionDeIndicacion(o.tarjeta, agente) + tu[tipo]
+}
+
+/** T6: la indicación propia del agente (dato del directorio) · va ANTES de su turno y nunca toca su identidad · sin indicación no añade nada */
+export function seccionDeIndicacion(t: Tarjeta | undefined, agente: string): string {
+  const ind = (t?.indicacion ?? []).map((x) => x.trim()).filter(Boolean)
+  return ind.length ? ['## Indicación de la oficina para ti (' + agente + ')', ...ind.map((x) => '- ' + x), '', ''].join('\n') : ''
 }
 
 /** el pedido que consume el flujo de turnos de n8n (mismo molde que la v1: `agent_name`, `task`, `images`, `esquema`…) */

@@ -53,6 +53,8 @@ export interface Tarjeta {
   entrega: string[]
   /** tipos de pieza donde su aporte es OBLIGATORIO: `carrusel`, `kit`, o `carrusel:si_imagen_generada` (solo si alguna imagen se genera) */
   pertinente_en: string[]
+  /** T6 (31-oct): la indicación obligatoria de este agente en la mesa (dato de la fila): va con el pedido de cada turno, NUNCA dentro de su identidad. Ausente = sin indicación */
+  indicacion?: string[]
   activo: boolean
   version: number
 }
