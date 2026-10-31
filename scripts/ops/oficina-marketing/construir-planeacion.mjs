@@ -143,9 +143,11 @@ function construirValidador(f) {
     .replace('client_id: $json.client_id,', () => "client_id: $('Validar · ¿qué dijo?').last().json.client_id,")
     .replace(A, () => "content: $('¿Llegó la vuelta?').last().json.texto, content_text: $('¿Llegó la vuelta?').last().json.texto,")
     .replace(`producing_agent: '${AGENTE_DE_HOY}'`, () => `producing_agent: ${ELEGIDO}`)
+    // 🔴 reserva de CC3: NO es un plan. Otro `output_type` (los lectores de la cadena y del cerebro buscan 'campaign_plan_90d' exacto: resolverPlan toma el MÁS RECIENTE) y la marca `prueba_*` que el diario y el cerebro ya excluyen.
+    .replace("output_type: 'campaign_plan_90d'", () => "output_type: 'campaign_plan_90d_borrador'")
     .replace('registro_interno: $json.registro_interno || null, estado_del_plan: $json.estado_del_plan || null, pendientes: $json.pendientes || null', () => "estado_del_plan: 'forma_invalida'")
     .replace('caracteres: $json.caracteres,', () => "caracteres: $('Validar · ¿qué dijo?').last().json.caracteres,")
-    .replace(B, () => "provenance_tag: { forma_invalida: true, necesita_humano: true, hallazgos: $('Validar · ¿qué dijo?').last().json.hallazgos, fuente: 'planeacion',")
+    .replace(B, () => "provenance_tag: { forma_invalida: true, prueba_forma_invalida: true, necesita_humano: true, hallazgos: $('Validar · ¿qué dijo?').last().json.hallazgos, fuente: 'planeacion',")
   agregarNodo(f, borrador, 'Guardar el plan', -220, 720)
   agregarNodo(f, codigo('Validar · armar la alerta', CODIGO_ALERTA_FORMA), 'Guardar el plan', -220, 800)
   const campana = structuredClone(nodo(f, 'Campana · plan sin PDF'))

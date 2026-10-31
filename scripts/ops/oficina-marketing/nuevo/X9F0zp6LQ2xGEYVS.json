@@ -3787,7 +3787,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ client_id: $('Validar · ¿qué dijo?').last().json.client_id, title: 'Plan de 90 dias · ' + new Date().toISOString().slice(0,10), output_type: 'campaign_plan_90d', content: $('¿Llegó la vuelta?').last().json.texto, content_text: $('¿Llegó la vuelta?').last().json.texto, producing_agent: $('Redactor · elegir').last().json.redactor_elegido, status: 'draft', provenance_tag: { forma_invalida: true, necesita_humano: true, hallazgos: $('Validar · ¿qué dijo?').last().json.hallazgos, fuente: 'planeacion', workflow_id: $workflow.id, workflow_execution_id: $execution.id, guardado_antes_de_drive: true, caracteres: $('Validar · ¿qué dijo?').last().json.caracteres, estado_del_plan: 'forma_invalida' } }) }}",
+        "jsonBody": "={{ JSON.stringify({ client_id: $('Validar · ¿qué dijo?').last().json.client_id, title: 'Plan de 90 dias · ' + new Date().toISOString().slice(0,10), output_type: 'campaign_plan_90d_borrador', content: $('¿Llegó la vuelta?').last().json.texto, content_text: $('¿Llegó la vuelta?').last().json.texto, producing_agent: $('Redactor · elegir').last().json.redactor_elegido, status: 'draft', provenance_tag: { forma_invalida: true, prueba_forma_invalida: true, necesita_humano: true, hallazgos: $('Validar · ¿qué dijo?').last().json.hallazgos, fuente: 'planeacion', workflow_id: $workflow.id, workflow_execution_id: $execution.id, guardado_antes_de_drive: true, caracteres: $('Validar · ¿qué dijo?').last().json.caracteres, estado_del_plan: 'forma_invalida' } }) }}",
         "options": {
           "timeout": 30000,
           "response": {
