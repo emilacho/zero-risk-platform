@@ -692,7 +692,7 @@ Antes de descomponer cualquier tarea, SIEMPRE evalúa:
 $ident$, identity_source = 'project-local:src/agents/identities/jefe-marketing.md · adaptado de MatthiasMRC/bmad-marketing-growth (Max Growth) · corregido E4 2026-10-31 (antes decía msitarzewski nexus-strategy)', updated_at = now()
 WHERE name = 'jefe-marketing' AND md5(identity_content) = '40d82c79347d5088f52a483faec12b39';
 
--- ruflo · antes 1939 caracteres (md5 b3e3fcf6c9a4caccba5a660df688a11f) → después 2014 (md5 e9626dcfe60b981e1667b3c0ff2b01f0)
+-- ruflo · antes 1939 caracteres (md5 b3e3fcf6c9a4caccba5a660df688a11f) → después 2002 (md5 ed84b9881ad4fcee41e9a71ad672b279)
 UPDATE public.agents SET identity_content = $ident$# RUFLO — Clasificador de Tareas (Router)
 
 ## Rol
@@ -717,7 +717,6 @@ Eres RUFLO, el clasificador inteligente de Zero Risk. Tu única función es anal
 - tracking-specialist: Analytics setup, UTM tracking, attribution
 
 ## Formato de Respuesta (JSON estricto)
-```json
 {
   "department": "marketing",
   "classification": "content_creation | seo | paid_media | growth | social | cro | sales | creative | tracking | general",
@@ -726,7 +725,6 @@ Eres RUFLO, el clasificador inteligente de Zero Risk. Tu única función es anal
   "needs_jefe": true,
   "brief": "Resumen breve de la tarea y por qué se asigna a estos agentes"
 }
-```
 
 ## Reglas
 - SIEMPRE responde con JSON válido
@@ -1279,7 +1277,7 @@ WHERE name = 'web_designer' AND md5(identity_content) IN ('c6d572dfd1f20e75d6fe7
 DO $$
 DECLARE n integer;
 BEGIN
-  SELECT count(*) INTO n FROM public.agents WHERE name IN ('carousel-designer', 'creative-director-mesa', 'delivery-coordinator', 'jefe-marketing', 'ruflo', 'spell-check-corrector', 'style-consistency-reviewer', 'video-editor', 'web_designer') AND md5(identity_content) IN ('4582c70cfcacb86b7241c05beb53703a', '4dbe3f42042500cfaa302e9a7ff1ce54', 'e027c7a1c0b526d620ce6b9fd1c4a9b9', '79e745fad4a85c5dc8727deaa81d60f4', 'e9626dcfe60b981e1667b3c0ff2b01f0', '60ea4efdd5fc77625c3ddfe288377e9a', 'bbbc26672fe727c5a07c34bd01b85245', '27c1d0251b8244beea09041eeca135bf', 'f658b16fe38982c8c6bbcddaaf6ab241');
+  SELECT count(*) INTO n FROM public.agents WHERE name IN ('carousel-designer', 'creative-director-mesa', 'delivery-coordinator', 'jefe-marketing', 'ruflo', 'spell-check-corrector', 'style-consistency-reviewer', 'video-editor', 'web_designer') AND md5(identity_content) IN ('4582c70cfcacb86b7241c05beb53703a', '4dbe3f42042500cfaa302e9a7ff1ce54', 'e027c7a1c0b526d620ce6b9fd1c4a9b9', '79e745fad4a85c5dc8727deaa81d60f4', 'ed84b9881ad4fcee41e9a71ad672b279', '60ea4efdd5fc77625c3ddfe288377e9a', 'bbbc26672fe727c5a07c34bd01b85245', '27c1d0251b8244beea09041eeca135bf', 'f658b16fe38982c8c6bbcddaaf6ab241');
   IF n <> 9 THEN
     RAISE EXCEPTION 'identidades E4: solo % de 9 filas quedaron con el texto nuevo (alguna cambió desde el respaldo del 2026-10-31): se revierte todo', n;
   END IF;

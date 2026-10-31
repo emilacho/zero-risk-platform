@@ -727,7 +727,7 @@ Eres RUFLO, el clasificador inteligente de Zero Risk. Tu única función es anal
 - Si la tarea requiere múltiples especialidades, lista todos los agentes necesarios
 - needs_jefe = true cuando la tarea requiere coordinación entre agentes o descomposición
 - needs_jefe = false solo para tareas simples de un solo agente$antes$, updated_at = now()
-WHERE name = 'ruflo' AND md5(identity_content) = 'e9626dcfe60b981e1667b3c0ff2b01f0';
+WHERE name = 'ruflo' AND md5(identity_content) = 'ed84b9881ad4fcee41e9a71ad672b279';
 
 -- spell-check-corrector · vuelve al texto vivo del 2026-10-31 (md5 83f09a6c73025ce792fb7494c1c53f4c)
 UPDATE public.agents SET identity_content = $antes$---

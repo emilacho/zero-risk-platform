@@ -7,6 +7,7 @@
  *  · la migración 202610312010 lleva cada `.md` BYTE A BYTE con guarda md5 del texto vivo respaldado y exige las 9 filas; la reversa restaura el texto vivo (respaldo de fila).
  *    (sello 2010: 2008 y 2009 son de CC2 en la misma semana de trabajo).
  */
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -65,6 +66,7 @@ describe('T6b · lo que dicen las identidades corregidas', () => {
     expect(d).toContain("verify design-image-prompt-engineer's prompts are coherent with the")
     expect(d).toContain('"fix_owner": "content-creator | web-designer | design-visual-storyteller | design-image-prompt-engineer | ...",')
     expect(identidad('ruflo.md')).toContain('- creative-director-mesa: Brand guidelines, creative direction, creative review (visual direction: design-visual-storyteller)')
+    expect(identidad('ruflo.md')).not.toContain('```json') // observación de CC3: el ejemplo va sin cerco, como vive hoy (la regla dice «NO uses markdown code blocks»)
   })
   it.each(['spell-check-corrector.md', 'video-editor.md', 'jefe-marketing.md'])('🔴 %s: sin voseo interno (texto interno en tuteo, firma de Emilio 11-oct)', (archivo) => {
     expect(identidad(archivo)).not.toMatch(VOSEO)
@@ -103,9 +105,18 @@ describe('T6b · la migración 202610312008 y su reversa (protocolo identity_con
     expect(bloque![1].replace(/\r\n/g, '\n')).not.toBe(nuevo)
     if (dos) expect(MIGRACION).toContain(`'${md5(bloque![1])}')`) // el md5 del texto LF de la reversa es el segundo de la guarda
   })
-  it('🔴 la reversa (y la migración) se guardan en LF: el repositorio no conserva CRLF, así que ningún respaldo depende de él', () => {
-    expect(fs.readFileSync(path.join(RAIZ, RUTA_REVERSA), 'utf8')).not.toMatch(/\r/)
-    expect(fs.readFileSync(path.join(RAIZ, RUTA_MIGRACION), 'utf8')).not.toMatch(/\r/)
+  it('🔴 la reversa, la migración y las 9 identidades se guardan en LF (lo que git guarda, no la carpeta de Windows) y .gitattributes lo fija con eol=lf', () => {
+    // reserva de CC3: con autocrlf=true la carpeta materializa CRLF; lo que importa es el contenido guardado en git (índice), que es lo que se aplica en T9
+    const enGit = (rel: string) => {
+      try {
+        return execFileSync('git', ['show', `:${rel}`], { cwd: RAIZ, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+      } catch {
+        return fs.readFileSync(path.join(RAIZ, rel), 'utf8') // sin git (CI sin índice): la carpeta, que allí es LF
+      }
+    }
+    for (const rel of [RUTA_REVERSA, RUTA_MIGRACION, ...AGENTES.map((a) => `src/agents/identities/${a.archivo}`)]) expect(enGit(rel), rel).not.toMatch(/\r/)
+    const atributos = leer('.gitattributes')
+    for (const regla of ['src/agents/identities/*.md text eol=lf', 'supabase/migrations/202610312010_*.sql text eol=lf', 'supabase/reversas/202610312010_*.sql text eol=lf']) expect(atributos).toContain(regla)
   })
   it('🔴 el sello 2010 no choca con ninguna otra migración ni reversa del 31-oct (2008 y 2009 son de CC2)', () => {
     const sello = (f: string) => f.slice(0, 12)
