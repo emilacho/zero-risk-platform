@@ -133,7 +133,7 @@ export interface PuertoDelCerebro {
 }
 
 /** 31-oct · las mesas de brief y de concepto entregan su tablero a la cadena (o dicen que no pudieron): la fila de `cadena_brief_creativo` / `cadena_conceptos` la cierra la propia cadena (contrato: raw/tasks/2026-10-31-CONTRATO-CC2-puertos-de-las-mesas-brief-y-concepto-para-CC1). Primera entrega que cierra gana. */
-export type EntregaALaCadena = { ok: true; estado?: string; ya_cerrada?: boolean } | { ok: false; error?: string }
+export type EntregaALaCadena = { ok: true; estado?: string; ya_cerrada?: boolean; /** el sobre con el que la puerta de la cadena vuelve a entrar (si el próximo paso no es de una persona): la oficina lo deja pasar tal cual, no lo lee */ siguiente?: { sobre: object } } | { ok: false; error?: string }
 export interface PuertoDeLaCadena {
   entregarBrief(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
   entregarConcepto(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null; brief_devuelto?: string | null }): Promise<EntregaALaCadena>
