@@ -16,7 +16,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { sanitizeString } from '@/lib/validation'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { VARIABLE_DE_LA_LLAVE, costoEstimadoUsd, enviar, estado, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
-import { TOPE_POR_VIDEO_USD, armarPedido, cuerpoParaHiggsfield, rutaDelModelo } from '@/lib/video/parametros'
+import { TOPE_POR_VIDEO_USD, armarPedido, conDescuento, cuerpoParaHiggsfield, rutaDelModelo } from '@/lib/video/parametros'
 import { cerrarEnElLibro, cierreDeFila, registrarEnvioEnElLibro, sessionIdDeVideo } from '@/lib/video/libro'
 import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 
@@ -63,11 +63,15 @@ export async function POST(request: Request) {
   // 3 · estimación (gratis) y tope
   const est = await estimar(fetch, k, ruta, cuerpo)
   if (est.error && est.usd === undefined) return json(502, { error: 'no_se_pudo_estimar', detail: est.error, upstream_status: est.status, correlation_id: est.correlacion, ...base })
-  const costo = est.usd !== undefined ? est.usd : costoEstimadoUsd(est.tarifas!, { resolucion: pedido.resolucion, relacion: pedido.relacion, segundos: pedido.segundos })
-  if (costo === null) return json(502, { error: 'no_se_pudo_estimar', detail: 'fórmula sin tarifa para esta resolución', ...base })
-  if (costo > tope) return json(409, { error: 'tope_por_video', detail: `el video costaría US$ ${costo.toFixed(4)} y el tope es US$ ${tope}`, costo_estimado_usd: costo, ...base })
+  const costoLista = est.usd !== undefined ? est.usd : costoEstimadoUsd(est.tarifas!, { resolucion: pedido.resolucion, relacion: pedido.relacion, segundos: pedido.segundos })
+  if (costoLista === null) return json(502, { error: 'no_se_pudo_estimar', detail: 'fórmula sin tarifa para esta resolución', ...base })
+  // el descuento vigente del proveedor (medido en la corrida real del 31-oct): lo que se compara con el tope y se reserva es lo que de verdad se cobra
+  const desc = conDescuento(costoLista, pedido.modelo, Date.now())
+  const costo = desc.usd
+  const costos = { costo_estimado_usd: costo, costo_lista_usd: costoLista, descuento_pct: desc.pct }
+  if (costo > tope) return json(409, { error: 'tope_por_video', detail: `el video costaría US$ ${costo.toFixed(4)} (lista US$ ${costoLista.toFixed(4)}) y el tope es US$ ${tope}`, ...costos, ...base })
 
-  if (dryRun) return json(200, { ok: true, dry_run: true, request_id: `dry-${claveIdempotente}`, status: 'simulado', costo_estimado_usd: costo, ...base })
+  if (dryRun) return json(200, { ok: true, dry_run: true, request_id: `dry-${claveIdempotente}`, status: 'simulado', ...costos, ...base })
 
   // 4 · envío idempotente
   const env = await enviar(fetch, k, ruta, cuerpo, claveIdempotente)
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
     requestId: env.pedido.request_id, clientId, agentSlug, modelo: pedido.modelo, ruta, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, conFotos: pedido.fotos.length,
     caller, costoEstimadoUsd: costo, startedAtMs: Date.now(), workflowId, workflowExecutionId, claveIdempotente, correlacion: env.pedido.correlacion,
   })
-  return json(202, { ok: true, request_id: env.pedido.request_id, status: env.pedido.status, status_url: env.pedido.status_url, costo_estimado_usd: costo, libro: libro.ok ? (libro.existia ? 'ya_estaba' : 'anotado') : `no_anotado: ${libro.error}`, ...base })
+  return json(202, { ok: true, request_id: env.pedido.request_id, status: env.pedido.status, status_url: env.pedido.status_url, ...costos, libro: libro.ok ? (libro.existia ? 'ya_estaba' : 'anotado') : `no_anotado: ${libro.error}`, ...base })
 }
 
 export async function GET(request: Request) {
