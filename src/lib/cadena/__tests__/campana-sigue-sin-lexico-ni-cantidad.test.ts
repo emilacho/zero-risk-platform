@@ -58,6 +58,13 @@ describe('bajarFaltantesDeCantidad (pura)', () => {
     expect(x.ficha.gravedad).toBe('aviso')
     expect(x.ficha.que).toContain('por confirmar')
   })
+  it('las tres clases (feed, historias, anuncios) se leen y el faltante de cada una baja a aviso', () => {
+    for (const clase of ['feed', 'historias', 'anuncios']) {
+      expect(leerV08(mensajeV08(3, 'tiktok', clase, 1, 4))).toEqual({ semana: 3, red: 'tiktok', clase, real: 1, meta: 4 })
+      expect(bajarFaltantesDeCantidad([hall('V08', 'bloquea', mensajeV08(3, 'tiktok', clase, 1, 4))])[0].severidad).toBe('aviso')
+      expect(bajarFaltantesDeCantidad([hall('V08', 'bloquea', mensajeV08(3, 'tiktok', clase, 5, 4))])[0].severidad).toBe('bloquea')
+    }
+  })
   it('el EXCESO (real > meta) sigue bloqueando', () => {
     const [x] = bajarFaltantesDeCantidad([hall('V08', 'bloquea', mensajeV08(1, 'instagram', 'feed', 3, 2))])
     expect(x.severidad).toBe('bloquea')
