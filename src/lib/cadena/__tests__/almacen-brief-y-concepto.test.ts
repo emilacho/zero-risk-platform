@@ -45,9 +45,9 @@ describe('almacén en memoria · brief creativo y concepto', () => {
   })
 })
 
-describe('la siembra real de la migración 202610312000', () => {
+describe('la siembra real de la migración 202610312001', () => {
   const RAIZ = join(__dirname, '..', '..', '..', '..')
-  const sql = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610312000_cadena_brief_creativo_y_conceptos.sql'), 'utf8')
+  const sql = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610312001_cadena_brief_creativo_y_conceptos.sql'), 'utf8')
   it('trae el plazo aprobacion_concepto (24 h · 72 h · seguir_esperando) y el reloj sabe calcularlo', () => {
     const p = plazosDeLaMigracion().find((x) => x.tipo === 'aprobacion_concepto')!
     expect(p).toEqual({ tipo: 'aprobacion_concepto', recordatorio_horas: 24, alerta_horas: 72, vence_horas: null, vence_regla: 'seguir_esperando', accion_al_vencer: 'seguir_esperando' })
@@ -64,7 +64,7 @@ describe('la siembra real de la migración 202610312000', () => {
     expect(sql).toMatch(/REVOKE ALL ON SEQUENCE public\.cadena_brief_creativo_id_seq, public\.cadena_conceptos_id_seq FROM PUBLIC, anon, authenticated/)
     expect(sql).toMatch(/CHECK \(objeto IN \('estrategia','calendario','brief','brief_creativo','concepto'\)\)/)
     expect(sql).toMatch(/NOTIFY pgrst/)
-    const reversa = readFileSync(join(RAIZ, 'supabase', 'reversas', '202610312000_cadena_brief_creativo_y_conceptos_REVERSA.sql'), 'utf8')
+    const reversa = readFileSync(join(RAIZ, 'supabase', 'reversas', '202610312001_cadena_brief_creativo_y_conceptos_REVERSA.sql'), 'utf8')
     for (const t of ['cadena_conceptos', 'cadena_brief_creativo']) expect(reversa).toContain(`DROP TABLE IF EXISTS public.${t}`)
     expect(reversa).toMatch(/RAISE EXCEPTION 'cadena_config\.nuevo_orden tiene/)
   })

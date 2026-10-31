@@ -5,8 +5,8 @@
 --   4) `cadena_validaciones.objeto` admite `brief_creativo` y `concepto`.
 --   5) plazo `aprobacion_concepto`: recordatorio 24 h, alerta 72 h, y NO vence solo (`seguir_esperando`: el reloj se rearma cada 72 h; la decisión es de Emilio, nunca del tiempo).
 --   6) `cadena_config`: `planeacion = {redactor}` (el redactor del plan es dato · F2), `max_fases` (tope de fases del plan · F3) y la PALANCA `nuevo_orden = {clientes: []}` (vacía = la cadena de hoy, byte a byte).
--- Nada corre: la palanca nace VACÍA. Reversa: supabase/reversas/202610312000_cadena_brief_creativo_y_conceptos_REVERSA.sql
--- Nota: la migración 202610311600 (CC#2) es independiente; ésta no toca `cadena_mesas_calendario` ni `calendario_mesa`.
+-- Nada corre: la palanca nace VACÍA. Reversa: supabase/reversas/202610312001_cadena_brief_creativo_y_conceptos_REVERSA.sql
+-- Nota: SOLO DDL de la cadena. Las plantillas `brief_mesa`/`concepto_mesa` y el directorio de la oficina los siembra CC#2 en 202610312000_oficina_mesas_de_brief_y_concepto.sql (T2); ésta es independiente de aquélla.
 BEGIN;
 
 -- ───────────────────────── 1 · el brief creativo de la campaña

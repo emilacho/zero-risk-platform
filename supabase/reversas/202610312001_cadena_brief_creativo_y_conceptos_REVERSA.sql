@@ -1,4 +1,4 @@
--- REVERSA de 202610312000_cadena_brief_creativo_y_conceptos.sql · CC#1 · 2026-10-31 · NO APLICADA
+-- REVERSA de 202610312001_cadena_brief_creativo_y_conceptos.sql · CC#1 · 2026-10-31 · NO APLICADA
 -- Se NIEGA si hay evidencia de uso REAL: filas no secas en las tablas nuevas, filas del calendario con fase/idea_ref, validaciones de los objetos nuevos,
 -- esperas de aprobacion_concepto o la palanca `nuevo_orden` con clientes. Lo seco se borra (es ensayo).
 -- 🔴 CUANDO LA GUARDA SALTA, ESTE ARCHIVO DEJA SU TRANSACCIÓN ABIERTA: en una SESIÓN INTERACTIVA hace falta un ROLLBACK a mano.

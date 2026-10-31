@@ -2,7 +2,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export
  function baseFalsa(config: Record<string, unknown>) {
-  const t: Record<string, any[]> = { finanzas_config: [{ id: 1, ...config }], finanzas_encargos: [], finanzas_turnos: [], finanzas_artefactos: [] }
+  // `cadena_config` vacía: el redactor del plan es opcional (31-oct · F2) y sin fila la plantilla usa su omisión
+  const t: Record<string, any[]> = { finanzas_config: [{ id: 1, ...config }], finanzas_encargos: [], finanzas_turnos: [], finanzas_artefactos: [], cadena_config: [] }
   let id = 0
   const from = (tabla: string) => {
     const q: any = { op: 'select', filtros: [] as Array<(f: any) => boolean>, orden: null, lim: Infinity, fila: null, conflicto: null }
