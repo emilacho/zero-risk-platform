@@ -14,7 +14,7 @@ import { lineaBaseSemanal } from '../linea-base'
 import { leerRespuesta } from '../preguntas'
 import type { Bloque } from '../tipos'
 import { entradaDesdeLaConversa } from './entrada'
-import { extraerJson, respuestaDeEquilibrioValida, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
+import { extraerJson, normalizarEquilibrio, respuestaDeEquilibrioValida, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
 import { CANALES_VALIDOS, especialistasQueHablan } from './omision'
 import { AGENTES, PLANTILLA_FINANCIERA, reservaDelCierre2 } from './plantilla'
 import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type PuertosDeConversa, type Semilla, type TopeDePrueba, type TurnoDeConversa } from './puertos'
@@ -68,7 +68,7 @@ const POR_PASO: Record<string, string> = {
   busqueda: 'Eres el especialista en búsqueda. Di si conviene ACTIVAR la búsqueda pagada o diferirla, su mínimo y la señal de activación; recuerda que la búsqueda local gratuita va primero. ' + ESQUEMA_DE_CONSULTA,
   medicion: 'Eres el especialista en medición. Di qué cuenta como resultado según el evento, cómo se enlaza con la venta sin tocar el destino, la hoja mínima y los umbrales. ' + ESQUEMA_DE_CONSULTA,
   ajuste: FORMA_DEL_PLANTEO + ' ' + 'Lee las respuestas de los especialistas, AJUSTA tu planteo (meta, fases, reparto) y contesta lo que te piden. Devuelve el planteo FIJADO con el mismo esquema planteo.v1. ' + LISTA_DE_CANALES + ' No fijes montos de pauta. Si el contexto trae `equilibrio` con `cubre: false`, la meta NO paga el plan: DEBES agregar `equilibrio_respuesta: { decision: "subo_la_meta" | "mantengo_la_meta", motivo }` (si subes la meta, sube `meta_por_semana` y di de dónde sale: es un supuesto; si la mantienes, di por qué). La meta de equilibrio la calculó el código: no la recalcules.',
-  cierre: 'Eres el jefe de finanzas. Resuelve los conflictos y emite la SALIDA: sale, sale_ajustada o sale_con_alerta (nunca «no sale»: lo financiero no bloquea). Lista los hallazgos con severidad (critico, alto, medio, bajo) y a quién aluden (fpa, redes, busqueda, medicion, plan). Cada hallazgo lleva su ESTADO: «abierto» (sigue pendiente) o «resuelto» (tú mismo lo resolviste en este cierre); un crítico resuelto no bloquea la firma, y escribir «RESUELTO» en el texto sin el campo estado NO cuenta (el código lo toma como abierto y lo avisa). Si una cifra que manda está «sin base», solo puedes emitir sale_con_alerta. Esquema acuerdo.v1: {salida, hallazgos[{severidad, que, alude?, estado}], conflictos_resueltos[], dato_que_no_bloquea?, preguntas_a_emilio[{clave, texto, recomendacion, supuesto_si_no_responde}]}.',
+  cierre: 'Eres el jefe de finanzas. Resuelve los conflictos y emite la SALIDA: sale, sale_ajustada o sale_con_alerta (nunca «no sale»: lo financiero no bloquea). Lista los hallazgos con severidad (critico, alto, medio, bajo) y a quién aluden (fpa, redes, busqueda, medicion, plan). Cada hallazgo lleva su ESTADO: «abierto» (sigue pendiente) o «resuelto» (tú mismo lo resolviste en este cierre); un crítico resuelto no bloquea la firma, y escribir «RESUELTO» en el texto sin el campo estado NO cuenta (el código lo toma como abierto y lo avisa). Si una cifra que manda está «sin base», solo puedes emitir sale_con_alerta. Esquema acuerdo.v1: {salida, hallazgos[{severidad, que, alude?, estado}], conflictos_resueltos[], dato_que_no_bloquea?, preguntas_a_emilio[{clave, texto, recomendacion, supuesto_si_no_responde, impacto?}]}. PREGUNTAS AL DUEÑO: pregunta solo lo que cambia el resultado y no se arregla con un supuesto; cada una con su impacto (alto, medio o bajo = cuánto cambia el plan) y escrita en lenguaje llano para el dueño (sin nombres internos ni palabras técnicas como «tablero»). Si el planteo dice «no sé» el presupuesto de pauta y el dueño no lo ha dado, la PRIMERA pregunta es el presupuesto semanal de pauta.',
 }
 export function pedidoDelAgente(paso: Paso, contexto: Record<string, unknown>): string {
   const base = paso.clave.replace(/_2$/, '')
@@ -408,10 +408,19 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Prom
       if (!r.ok) { ultimoError = r.error; error = r.error; break }
       const j = extraerJson(r.salida)
       if (!j.ok) { ultimoError = j.error; continue }
-      const v = validar(paso, j.valor)
+      const jv = normalizarEquilibrio(j.valor)
+      const v = validar(paso, jv)
       if (v.ok && exigeEquilibrio && !respuestaDeEquilibrioValida(v.valor)) { ultimoError = 'la meta no cubre el equilibrio: falta equilibrio_respuesta { decision, motivo }'; sinRespuestaAlEquilibrio = v.valor }
       else if (v.ok) valor = v.valor
-      else ultimoError = v.errores.join('; ')
+      else {
+        ultimoError = v.errores.join('; ')
+        // lo ÚNICO malo es la respuesta al equilibrio: el resto del planteo (meta, canales, reparto) es bueno y no se tira (se reintenta con el error y, si no mejora, se conserva marcado)
+        if (v.errores.every((x) => x.startsWith('equilibrio_respuesta debe ser')) && jv && typeof jv === 'object') {
+          const { equilibrio_respuesta: _mala, ...resto } = jv as Record<string, unknown>
+          const sin = validar(paso, resto)
+          if (sin.ok) sinRespuestaAlEquilibrio = sin.valor
+        }
+      }
     }
     // agotado el reintento SIN responder el equilibrio: se CONSERVA el planteo (válido) y se marca; descartarlo tiraría el trabajo del paso (la meta, los canales, el reparto)
     if (!valor && sinRespuestaAlEquilibrio) { valor = { ...sinRespuestaAlEquilibrio, equilibrio_sin_respuesta: true }; error = null }

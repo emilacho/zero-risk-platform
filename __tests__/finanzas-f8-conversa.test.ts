@@ -462,6 +462,29 @@ describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la m
     expect((m.arts.bloque as any).alertas_de_entrada.join(' ')).toMatch(/equilibrio_sin_respuesta/)
     expect(fin.r.cuerpo.terminado).toBe(true)
   })
+  it('🔴 31-oct · una respuesta al equilibrio MAL FORMADA (decisión inventada) ya no tira el turno entero: el planteo bueno se conserva marcado (antes: fallo, US$ 0,29 perdidos)', async () => {
+    const MAL = { ...BAJO, equilibrio_respuesta: { decision: 'quizas', motivo: 'no sé' } }
+    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, MAL, MAL] } })
+    const r = await abrir(m)
+    const fin = await correrTodo(m, (r.cuerpo as any).encargo_id)
+    expect(fin.r.status).toBe(200)
+    const fijado = m.arts.planteo_fijado as any
+    expect(fijado.sin_supuestos_del_agente).toBeUndefined()
+    expect(fijado.equilibrio_sin_respuesta).toBe(true)
+    expect(fijado.equilibrio_respuesta).toBeUndefined()
+    expect(fijado.meta_por_semana).toBe(1)
+  })
+  it('🔴 31-oct · decisión con mayúsculas/espacios («Mantengo la meta») y motivo de más de 400 caracteres: se normalizan y se aceptan al PRIMER intento', async () => {
+    const LARGA = { ...BAJO, equilibrio_respuesta: { decision: ' Mantengo la meta ', motivo: 'porque '.repeat(80) } }
+    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, LARGA] } })
+    const r = await abrir(m)
+    await correrTodo(m, (r.cuerpo as any).encargo_id)
+    expect(tareasDelAjuste(m).length).toBe(1)
+    const fijado = m.arts.planteo_fijado as any
+    expect(fijado.equilibrio_respuesta.decision).toBe('mantengo_la_meta')
+    expect(fijado.equilibrio_respuesta.motivo.length).toBeLessThanOrEqual(400)
+    expect(fijado.equilibrio_sin_respuesta).toBeUndefined()
+  })
   it('control · si SÍ responde, no queda la marca', async () => {
     const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, CON_RESPUESTA] } })
     const r = await abrir(m)

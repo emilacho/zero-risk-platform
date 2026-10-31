@@ -20,6 +20,7 @@ import { nombreDelClienteDe } from '@/lib/finanzas/conversa/nombre'
 import { listarAbiertos, preguntarAlDueno, recogerRespuestas } from '@/lib/finanzas/conversa/buzon'
 import { slackMdPuerto } from '@/lib/buzon-dueno/slack-md'
 import { cerebroDelDueno } from '@/lib/buzon-dueno/cerebro-dueno'
+import { avisarAAlertas } from '@/lib/buzon-dueno/alertas'
 import { checkInternalKey } from '@/lib/finanzas/ruta'
 
 export const dynamic = 'force-dynamic'
@@ -82,6 +83,8 @@ export async function POST(request: Request) {
         ahora: P.ahora,
         // el nombre de la ficha para el mensaje al dueño (sin esto salía el id del cliente)
         nombreDelCliente: nombreDelClienteDe(db),
+        // una pregunta que no pudo salir avisa a #alertas (antes se callaba)
+        avisar: avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '', canal: process.env.FINANZAS_CANAL_ALERTAS }),
       }
       r = c.accion === 'buzon_abiertos' ? await listarAbiertos(B) : c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id as string) : await recogerRespuestas(B, c.encargo_id as string)
     }

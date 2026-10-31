@@ -177,7 +177,7 @@ describe('PREGUNTAR · un solo MD al dueño', () => {
   })
   it('una pregunta con jerga o voseo no sale (el dueño no lee jerga)', async () => {
     const m = mundo(), s = slackFalso()
-    m.arts.acuerdo = { preguntas_a_emilio: [{ ...PREGUNTAS[0], texto: '¿Cuál es el workflow del dispatch? Decime vos' }] }
+    m.arts.acuerdo = { preguntas_a_emilio: [{ ...PREGUNTAS[0], texto: '¿Cuál es el dry_run del dispatch? Decime vos' }] } // 31-oct: «workflow» ahora se cambia por «proceso» (ver finanzas-buzon-pregunta-por-pregunta); un nombre interno sin equivalente sigue sin salir
     const r = await preguntarAlDueno(puertos(m, s), 'enc-1')
     expect(r.cuerpo).toMatchObject({ enviado: false, motivo: 'pregunta_mal_formada' })
     expect(s.llamadas.filter((l) => l.metodo === 'chat.postMessage')).toHaveLength(0)
@@ -386,7 +386,7 @@ describe('CEREBRO · la puerta del dueño', () => {
   })
   it('una pregunta mal formada no deja preguntas pendientes en el cerebro', async () => {
     const m = mundo(), s = slackFalso(), ce = cerebroFalso()
-    m.arts.acuerdo = { preguntas_a_emilio: [{ ...PREGUNTAS[0], texto: '¿Cuál es el workflow del dispatch?' }] }
+    m.arts.acuerdo = { preguntas_a_emilio: [{ ...PREGUNTAS[0], texto: '¿Cuál es el dry_run del dispatch?' }] }
     await preguntarAlDueno(puertos(m, s, 'envia', ce.c), 'enc-1')
     expect(ce.preguntas).toHaveLength(0)
   })
