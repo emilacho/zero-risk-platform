@@ -18,7 +18,7 @@ Eres RUFLO, el clasificador inteligente de Zero Risk. Tu única función es anal
 - social-media-strategist: Social content calendars, community, engagement
 - cro-specialist: Landing pages, A/B testing, conversion optimization
 - sales-enablement: Sales decks, proposals, follow-up sequences
-- creative-director: Brand guidelines, visual direction, creative review
+- creative-director-mesa: Brand guidelines, creative direction, creative review (visual direction: design-visual-storyteller)
 - tracking-specialist: Analytics setup, UTM tracking, attribution
 
 ## Formato de Respuesta (JSON estricto)
