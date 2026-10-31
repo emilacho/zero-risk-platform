@@ -4,13 +4,13 @@
  * Este archivo: solo tipos y las cotas duras. Sin base, sin red, sin modelo.
  */
 
-/** las familias de la mesa: nombre de la familia → tipo de pieza. Conviven con las v1 (`carrusel_ig_v1`, `kit_historias`); un encargo termina con la que lo abrió. */
-export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit' } as const
+/** las familias de la mesa: nombre de la familia → tipo de pieza. Conviven con las v1 (`carrusel_ig_v1`, `kit_historias`); un encargo termina con la que lo abrió. `video_mesa` (31-oct · parte 2 del brazo de video): la mesa escribe el GUION y el brazo lo filma. */
+export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', video_mesa: 'video' } as const
 export type FamiliaMesa = keyof typeof FAMILIAS_MESA
 export type TipoDePieza = (typeof FAMILIAS_MESA)[FamiliaMesa]
 export const esFamiliaMesa = (f: string): f is FamiliaMesa => Object.prototype.hasOwnProperty.call(FAMILIAS_MESA, f)
-/** la plantilla v1 cuyas funciones de código (abrir, armar, dibujar, empaquetar) reutiliza la mesa */
-export const FAMILIA_V1_DE: Record<TipoDePieza, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias' }
+/** la plantilla v1 cuyas funciones de código (abrir, armar, dibujar, empaquetar) reutiliza la mesa (el video no tiene v1: sus funciones son propias, `orquestador-video.ts`) */
+export const FAMILIA_V1_DE: Record<TipoDePieza, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias', video: 'video_mesa' }
 
 /** las cotas del bucle (guardarraíles de bucle coherente): nada de la mesa es indefinido */
 export const COTAS = {
@@ -30,6 +30,8 @@ export const COTAS = {
    */
   RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD: 2.0,
   RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD: 1.7,
+  /** el VIDEO (parte 2 · 31-oct): lo que viene después de la mesa es el brazo (hasta US$ 5 por video, con descuento ≈ 2,6) más la revisión de la jefatura (1,5): la mesa lo reserva antes de seguir conversando */
+  RESERVA_DE_LO_QUE_SIGUE_VIDEO_USD: 6.5,
   /** el traductor de la pieza pregunta al autor como máximo UNA vez (condición 7) */
   MAX_PREGUNTAS_DEL_TRADUCTOR: 1,
   /** cuántas veces se le devuelve la integración al director por citas que faltan */
@@ -47,7 +49,7 @@ export interface Tarjeta {
   sabe_hacer: string[]
   necesita: string[]
   entrega: string[]
-  /** tipos de pieza donde su aporte es OBLIGATORIO: `carrusel`, `kit`, o `carrusel:si_imagen_generada` (solo si alguna imagen se genera) */
+  /** tipos de pieza donde su aporte es OBLIGATORIO: `carrusel`, `kit`, `video`, o `carrusel:si_imagen_generada` (solo si alguna imagen se genera) */
   pertinente_en: string[]
   activo: boolean
   version: number

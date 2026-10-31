@@ -14,21 +14,21 @@
  */
 import { especialistasPertinentes, direccionDe } from './directorio'
 import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
-import { COTAS, type Accion, type Aporte, type EstadoMesa } from './tipos'
+import { COTAS, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 
-export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean }
+export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza }
 
 export const techoDe = (tope: number): number => +(tope * COTAS.TECHO_SOBRE_TOPE).toFixed(6)
 const fallosDe = (libro: Aporte[], agente: string): number => libro.filter((a) => a.tipo === 'nota' && a.de === agente && a.texto.startsWith('turno_fallido')).length
 const ultimaIntegracion = (libro: Aporte[]): Aporte | null => [...libro].reverse().find((a) => a.tipo === 'integra') ?? null
 
-/** lo que la pieza todavía gastará después de la mesa (imagen + observador + jefatura): la mesa no puede gastárselo conversando */
-export const reservaDeLoQueSigue = (hayImagenGenerada: boolean): number => (hayImagenGenerada ? COTAS.RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD : COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD)
+/** lo que la pieza todavía gastará después de la mesa (imagen + observador + jefatura; en el video, el brazo + la jefatura): la mesa no puede gastárselo conversando */
+export const reservaDeLoQueSigue = (hayImagenGenerada: boolean, tipo?: TipoDePieza): number => (tipo === 'video' ? COTAS.RESERVA_DE_LO_QUE_SIGUE_VIDEO_USD : hayImagenGenerada ? COTAS.RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD : COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD)
 
 /** ¿se agotó alguna cota que obliga a «cerrar con lo que hay»? devuelve la razón o null */
 export function cotaAgotada(est: EstadoMesa, ctx: ContextoDeLaMesa): string | null {
   if (est.turnos >= COTAS.MAX_TURNOS) return `se usaron los ${COTAS.MAX_TURNOS} turnos de la mesa`
-  const siguiente = reservaDeLoQueSigue(ctx.hayImagenGenerada)
+  const siguiente = reservaDeLoQueSigue(ctx.hayImagenGenerada, ctx.tipo ?? est.tipo)
   if (ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + siguiente > ctx.tope_usd) return `el gasto (${ctx.gasto_usd.toFixed(2)}) más la reserva de un turno (${COTAS.RESERVA_POR_TURNO_USD}) y de lo que sigue (${siguiente}) pasa el tope de la pieza (${ctx.tope_usd})`
   return null
 }
@@ -62,7 +62,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
     const ult = ultimaIntegracion(libro)
     const hayAportesNuevos = libro.some((a) => ['aporta', 'responde', 'material'].includes(a.tipo) && (!ult || a.n > ult.n))
     // la integración final puede pasar del tope (hasta el techo ×1,2), pero NUNCA se come lo que viene después: imagen, observador y jefatura también caben bajo el techo
-    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada) <= techoDe(ctx.tope_usd)
+    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada, ctx.tipo ?? est.tipo) <= techoDe(ctx.tope_usd)
     if ((!ult || hayAportesNuevos) && puedeGastar && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO && est.marcas.integracion_forzada !== true) {
       return { accion: 'turno', agente: dir.agente, tipo: 'integrar', responde_a: null, motivo: `cierra con lo que hay: ${agotada}` }
     }

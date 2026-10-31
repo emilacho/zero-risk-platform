@@ -18,6 +18,7 @@ import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineas
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, type Traduccion } from './traductor'
+import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
 import { COTAS, FAMILIAS_MESA, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -155,9 +156,9 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     }
     const libro = await P.mesa.libro(enc.id)
     const b = baseDeLaminas(enc.estado_del_motor)
-    // antes de que exista una pieza se cuenta con imágenes generadas (los especialistas de imagen participan); después manda lo que la pieza realmente pide
-    const hayImagenGenerada = est.pieza_texto == null ? true : hayImagenesAGenerar(est.pieza_texto, est.tipo, b.elementos.map((x) => x.ref))
-    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada })
+    // antes de que exista una pieza se cuenta con imágenes generadas (los especialistas de imagen participan); después manda lo que la pieza realmente pide. El video nunca genera imágenes: el brazo filma.
+    const hayImagenGenerada = est.tipo === 'video' ? false : est.pieza_texto == null ? true : hayImagenesAGenerar(est.pieza_texto, est.tipo, b.elementos.map((x) => x.ref))
+    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo })
 
     if (acc.accion === 'cierre_por_tope') {
       await guardarMesa(P, enc, { ...est, fase: 'cerrada' })
@@ -205,10 +206,11 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   }
   const textoPieza = quitarLineasDeNotas(ult.texto)
   const b = baseDeLaminas(enc.estado_del_motor)
-  const tr: Traduccion = traducirPieza(textoPieza, est.tipo, {
-    refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])),
-    preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR,
-  })
+  const opcionesDelTraductor = { preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR }
+  // el VIDEO (parte 2 · 31-oct): la pieza es un GUION; el traductor de láminas no aplica (sin imágenes que generar: el brazo filma)
+  const tr: Traduccion | TraduccionDeGuion = est.tipo === 'video'
+    ? traducirGuion(textoPieza, opcionesDelTraductor)
+    : traducirPieza(textoPieza, est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), ...opcionesDelTraductor })
   if (!tr.ok && tr.pregunta) {
     await P.mesa!.aportar(aporteNuevo(enc, 'traductor', est.direccion, 'devuelve', tr.pregunta, { responde_a: null, profundidad: 0 }))
     await guardarMesa(P, enc, { ...est, preguntas_del_traductor: est.preguntas_del_traductor + 1, cierre_forzado: est.cierre_forzado })
@@ -219,18 +221,27 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     return aTextoParaLaJefatura(P, enc, est, textoPieza, tr.motivo ?? 'no se pudo traducir la pieza')
   }
 
-  const imagenes = tr.imagenes
-  const generadas = imagenes.filter((i) => i.modo === 'generada') as Array<{ ref: string; modo: 'generada'; descripcion: string }>
-  const visual = {
-    imagenes: imagenes.map((i) => (i.modo === 'real' ? { ref: i.ref, modo: 'real', foto_id: i.foto_id, motivo: 'elegida por el equipo' } : i.modo === 'generada' ? { ref: i.ref, modo: 'generada', motivo: 'pedida por el equipo' } : { ref: i.ref, modo: 'ninguna', motivo: 'sin imagen' })),
-    refs_generadas: generadas.map((g) => g.ref), hay_generadas: generadas.length > 0, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa',
+  const otros: Record<string, Record<string, unknown>> = {}
+  let hayGeneradas = false
+  if ('planos' in tr) {
+    otros.guion = { ...tr, texto: textoPieza } as unknown as Record<string, unknown>
+    otros.copy_video = { pie_de_foto: tr.pie_de_foto, hashtags: tr.hashtags }
+    otros.visual_direction = { imagenes: [], refs_generadas: [], hay_generadas: false, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa' }
+    otros.prompts_validos = { por_ref: {}, ninguno: true }
+  } else {
+    const imagenes = tr.imagenes
+    const generadas = imagenes.filter((i) => i.modo === 'generada') as Array<{ ref: string; modo: 'generada'; descripcion: string }>
+    hayGeneradas = generadas.length > 0
+    otros.visual_direction = {
+      imagenes: imagenes.map((i) => (i.modo === 'real' ? { ref: i.ref, modo: 'real', foto_id: i.foto_id, motivo: 'elegida por el equipo' } : i.modo === 'generada' ? { ref: i.ref, modo: 'generada', motivo: 'pedida por el equipo' } : { ref: i.ref, modo: 'ninguna', motivo: 'sin imagen' })),
+      refs_generadas: generadas.map((g) => g.ref), hay_generadas: hayGeneradas, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa',
+    }
+    otros.prompts_validos = { por_ref: Object.fromEntries(generadas.map((g) => [g.ref, { indices: [0], prompts: [{ prompt: g.descripcion, idea_en_una_linea: g.descripcion.slice(0, 120) }] }])), ninguno: false }
+    if (est.tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
+    else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
   }
-  const prompts = { por_ref: Object.fromEntries(generadas.map((g) => [g.ref, { indices: [0], prompts: [{ prompt: g.descripcion, idea_en_una_linea: g.descripcion.slice(0, 120) }] }])), ninguno: false }
-  const otros: Record<string, Record<string, unknown>> = { visual_direction: visual, prompts_validos: prompts }
-  if (est.tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
-  else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
   // bloqueante 1 de CC#3: el libro y las citas llegan a la jefatura (contexto de la revisión) para que juzgue si cada aporte fue real
-  const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, generadas.length > 0)
+  const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, hayGeneradas)
   const nuevaMesa: EstadoMesa = { ...est, fase: 'traducida', pieza_texto: textoPieza, turno_abierto: null, tablero_para_la_jefatura: tableroParaLaJefatura(libro.map((x) => ({ ...x, texto: quitarLineasDeNotas(x.texto) })), textoPieza, pertinentes) }
   const res = { costo_usd: 0, artefacto: nuevaMesa as unknown as Record<string, unknown>, otros_artefactos: otros }
   const e0 = conMesa(enc.estado_del_motor, nuevaMesa)

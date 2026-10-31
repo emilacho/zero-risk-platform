@@ -13,6 +13,7 @@ import type { Puertos } from './puertos'
 import { fallar, jefaturaSinRespuesta, plantillaDe } from './orquestador'
 import { resolverMaterialVencido } from './material-orquestador'
 import { esTurnoDeLaMesa, recibirResultadoMesa } from './mesa/orquestador'
+import { sondearVideos } from './orquestador-video'
 
 type Fila = Record<string, unknown>
 export const MINUTOS_PARA_DAR_POR_MUERTO = 12
@@ -55,11 +56,16 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: { ...enc.estado_del_motor, vueltas: { ...enc.estado_del_motor.vueltas, [k]: veces + 1 } }, gasto_usd: enc.gasto_usd })
     reentregar.push(enc.id)
   }
+  // ② EL BRAZO DE VIDEO (parte 2 · 31-oct): los turnos `brazo` no son pasos muertos a los 12 min; el vigía SONDEA el estado del video en cada vuelta (≈ 5–8 min por video; plazo 45 min) y registra el paso cuando termina
+  const vb = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,inicio').eq('estado', 'corriendo').eq('tipo', 'brazo')) as { data: Fila[] | null; error: { message: string } | null }
+  if (vb.error) throw new Error(`vigía · leer los turnos del brazo: ${vb.error.message}`)
+  const videos = await sondearVideos(P, (vb.data ?? []).map((t) => ({ encargo_id: String(t.encargo_id), n: Number(t.n), paso: String(t.paso), inicio: String(t.inicio) })), ahora)
   const r = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,inicio').eq('estado', 'corriendo').lt('inicio', limite)) as { data: Fila[] | null; error: { message: string } | null }
   if (r.error) throw new Error(`vigía · leer los pasos vivos: ${r.error.message}`)
-  const reanudar: string[] = [...reentregar], fallidos: string[] = []
-  const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = []
+  const reanudar: string[] = [...reentregar, ...videos.reanudar], fallidos: string[] = [...videos.fallidos]
+  const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = [...videos.cierres]
   for (const t of r.data ?? []) {
+    if (t.tipo === 'brazo') continue // el brazo tiene su propio plazo (arriba)
     const enc = await P.almacen.leerEncargo(String(t.encargo_id))
     if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido', 'aprobada'].includes(enc.estado)) continue
     if (reentregar.includes(enc.id)) continue // se acaba de volver a entregar: no se da por muerto

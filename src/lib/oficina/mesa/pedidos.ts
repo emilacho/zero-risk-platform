@@ -5,6 +5,7 @@
 import { seccionDelDirectorio } from './directorio'
 import { refDe } from './libro'
 import { COTAS, type Aporte, type EstadoMesa, type Tarjeta, type TipoDePieza } from './tipos'
+import { NOMBRE_DE_LA_PIEZA } from './aprendizaje'
 import type { FotoEtiquetada } from '../fotos'
 import { CABECERA_SALTAR_EDITOR } from '../../cadena/constantes'
 
@@ -48,7 +49,31 @@ export const LISTA_DE_FOTOS = (fotos: FotoEtiquetada[]): string => {
   return propias.map((f) => `- ${f.id} · ${f.que_muestra ?? 'sin descripción'}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}`).join('\n')
 }
 
-const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'carrusel'
+const CONVENCION_DEL_GUION = [
+  'Escribe el GUION COMPLETO del video con esta convención ligera (no es un formulario: es para que el brazo de video lo filme tal cual):',
+  '```',
+  '## Plano 1 · 0–3 s',
+  'Se ve: … (qué muestra la cámara: producto, lugar, acción; sin rostros reconocibles de personas reales)',
+  'Movimiento: … (cámara fija, paneo, acercamiento, cámara en mano…)',
+  'Texto en pantalla: … (solo si lo lleva; literal, corto)',
+  'Foto: foto:<id de una foto propia> | ninguna   (la foto real de referencia de ese plano)',
+  '## Plano 2 · 3–8 s   (…una sección por plano; el video dura de 8 a 15 segundos en total)',
+  '## Audio',
+  '<música o sonido ambiente que acompaña; SIN voz ni narración>',
+  '## Pie',
+  '<el pie de foto de la publicación>',
+  '## Etiquetas',
+  '#una #otra',
+  '## Citas',
+  'A3 usé: <qué tomaste de ese aporte>',
+  'A5 descarté: <por qué no lo usaste>',
+  '```',
+  'Lo que escribes en «Se ve», «Movimiento» y «Texto en pantalla» es EXACTAMENTE lo que se le pide al modelo de video: una sola versión final, sin "Variante A/B", sin markdown. Los tiempos de cada plano van en su encabezado y suman la duración del video (8–15 s).',
+  'Las fotos propias del cliente son la referencia visual de cada plano (el modelo las usa para no inventar el producto ni el lugar): nombra la que corresponda en «Foto:». No inventes textos, precios ni sellos en pantalla que no estén en el brief, el manual o el material del portero.',
+  'El pie ("## Pie") es el texto de publicación final, sin hashtags (esos van solo en "## Etiquetas", una vez cada uno) y con la voz del manual.',
+].join('\n')
+
+const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'video' ? CONVENCION_DEL_GUION : tipo === 'carrusel'
   ? [
       'Escribe la PIEZA COMPLETA con esta convención ligera (no es un formulario: es para que el equipo de dibujo la lea):',
       '```',
@@ -88,7 +113,9 @@ const REGLAS_DURAS = (c: ContextoDeTurno): string => [
   '## Las únicas tres reglas duras',
   `1. **Gasto.** La pieza tiene un tope de US$ ${c.tope_usd.toFixed(2)} (ya se gastó US$ ${c.gasto_usd.toFixed(2)}). Cuida cada turno: no repitas lo que ya está en el tablero.`,
   '2. **No inventes datos que comprometan al cliente**: certificaciones, normas, precios, cifras, teléfonos, usuarios, marcas ajenas ni nada que no esté en el manual, el brief, el plan, las fotos o el material del portero. Si te falta un dato, dilo o pídelo; no lo rellenes. Una imagen generada tampoco debe mostrar textos, sellos, normas ni lecturas de instrumentos inventados.',
-  '3. **La pieza debe poder dibujarse**: cada lámina es un título, un texto corto, un llamado (si lo lleva) y una imagen. Lo demás es tu criterio; sin límites de caracteres: si algo es largo, el dibujo se ajusta o el equipo lo parte.',
+  c.tipo === 'video'
+    ? '3. **El guion debe poder filmarse por un modelo de video**: planos con sus segundos (8 a 15 s en total), qué se ve en cada uno, el movimiento de cámara y la foto propia de referencia si la hay. Sin voces ni narración (solo música o ambiente), sin rostros reconocibles de personas reales, sin texto en pantalla que no esté escrito literalmente en el guion. Lo demás es tu criterio.'
+    : '3. **La pieza debe poder dibujarse**: cada lámina es un título, un texto corto, un llamado (si lo lleva) y una imagen. Lo demás es tu criterio; sin límites de caracteres: si algo es largo, el dibujo se ajusta o el equipo lo parte.',
 ].join('\n')
 
 const HERRAMIENTAS = [
@@ -103,7 +130,7 @@ const HERRAMIENTAS = [
 export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string }): string {
   const { tipo, agente, est, libro, c } = o
   const cab = [
-    `# Mesa de trabajo · ${c.cliente_nombre} · ${c.tipo === 'carrusel' ? 'carrusel' : 'kit de historias'} ${c.brief_id}`,
+    `# Mesa de trabajo · ${c.cliente_nombre} · ${NOMBRE_DE_LA_PIEZA[c.tipo]} ${c.brief_id}`,
     `Eres **${agente}**${o.tarjeta ? ` — ${o.tarjeta.especialidad}` : ''}. Estás en la oficina creativa de la agencia.`,
     '',
     REGLAS_DURAS(c),
@@ -132,7 +159,9 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
   const tu: Record<TipoDeTurno, string> = {
     dirigir: [
       '## Tu turno · DIRECCIÓN CREATIVA: abre la pieza',
-      'Lee el manual, luego el brief y el plan. Escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.',
+      c.tipo === 'video'
+        ? 'Lee el manual, luego el brief y el plan. Escribe tu **idea rectora** del video corto: qué vas a contar en 8–15 segundos, con qué ritmo y estructura de planos, qué fotos propias sirven de referencia y qué necesitas de cada compañero (guion, ritmo de video corto, criterio de YouTube/short, texto del pie, curaduría de fotos).'
+        : 'Lee el manual, luego el brief y el plan. Escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.',
       'El equipo completo participa en cada pieza: la oficina se formó con estos especialistas por razones concretas. Cada uno aportará su especialidad; no escribas tú todo. Si ya sabes que te falta material del cliente, pídelo con `pedir_material`.',
     ].join('\n'),
     aportar: [

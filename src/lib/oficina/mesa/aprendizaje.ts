@@ -20,11 +20,13 @@ export const DESTINATARIO_DE_AGENTE: Record<string, string> = {
   'design-image-prompt-engineer': 'imagen',
 }
 export const destinatarioDe = (agente: string): string | null => DESTINATARIO_DE_AGENTE[agente] ?? null
-export const FORMATO_DE_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit' }
+export const FORMATO_DE_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit', video: 'video' }
+/** cómo se nombra cada tipo de pieza en el pedido de un turno */
+export const NOMBRE_DE_LA_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit de historias', video: 'video corto (reel/short)' }
 
 /** el texto con el que el cerebro busca por parecido: qué va a producir este especialista, para qué pieza y de qué trata el encargo */
 export function tareaParaConsultar(o: { cliente_nombre: string; tipo: TipoDePieza; especialidad: string; brief_texto: string }): string {
-  const pieza = o.tipo === 'carrusel' ? 'carrusel' : 'kit de historias'
+  const pieza = NOMBRE_DE_LA_PIEZA[o.tipo]
   return `${o.especialidad || 'aporte a la pieza'} · ${pieza} de ${o.cliente_nombre}. ${o.brief_texto.replace(/\s+/g, ' ').trim()}`.slice(0, 1500)
 }
 

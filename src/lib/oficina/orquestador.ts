@@ -18,6 +18,7 @@ import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
+import { contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, resumenDeCierreV } from './orquestador-video'
 import { confianzaDeLaFoto } from './fotos'
 import { candidatasDelEncargo, medirFotos } from './material-fotos'
 import { limitesDeMaterial } from './material'
@@ -139,6 +140,8 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       // un «siguiente» repetido no abre otro paso: ENTREGA DE NUEVO el mismo pedido (mismo número, misma dispatch_key)
       // el turno abierto es el de MATERIAL (el portero está trayendo lo pedido): se contesta con la MISMA acción que al abrirlo; nunca se re-entrega el pedido del agente
       if (abierto.tipo === 'material') return r(200, { accion: 'esperar_material', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'material', dispatch_key: abierto.dispatch_key } })
+      // el turno abierto es el del BRAZO DE VIDEO (el proveedor está filmando): la misma acción que al abrirlo; el vigía sondea y registra cuando termine
+      if (abierto.tipo === 'brazo') return r(200, { accion: 'esperar_brazo', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'brazo', dispatch_key: abierto.dispatch_key } })
       if (abierto.paso.startsWith('mesa:')) return (await import('./mesa/orquestador')).reentregaDelTurno(P, enc, abierto)
       const sg = siguientePaso(enc.estado_del_motor, pl)
       if (sg.accion === 'ejecutar' && (sg.paso.tipo === 'agente' || sg.paso.tipo === 'portero')) {
@@ -156,6 +159,14 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
     const e = enc.estado_del_motor
     try {
       if (paso.tipo === 'codigo' && paso.funcion === 'mesa') return (await import('./mesa/orquestador')).avanzarMesa(P, enc, pl, sig.indice)
+      if (paso.tipo === 'codigo' && paso.funcion === 'video') {
+        // EL BRAZO DE VIDEO (parte 2 · 31-oct): en dry_run el paso cierra en el acto (simulado); en real abre un turno `brazo` y espera al vigía
+        const out = await enviarVideo(P, enc, pl, paso)
+        if (out.fallido) return fallar(P, enc, out.fallido)
+        if (out.esperar) return r(200, out.esperar)
+        enc = await aplicar(P, enc, pl, sig.indice, out.res!, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'codigo', agente: null, dispatch_key: null, cost_usd: 0 } })
+        continue
+      }
       if (paso.tipo === 'codigo') {
         // MATERIAL · antes de asignar/elegir fotos: si faltan fotos propias aptas, se le PIDE al portero (apagado por omisión: devuelve null y todo sigue igual)
         if (paso.funcion === 'asignar_fotos' || paso.funcion === 'elegir_foto') {
@@ -170,7 +181,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       }
       if (paso.tipo === 'jefatura') {
         // J8a · la pieza ya pasó los chequeos duros: se abre UNA revisión en la jefatura y se espera su cierre
-        const material = familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : contextoDelRevisor(contexto(e))
+        const material = familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : familiaDeVideo(pl) ? contextoDeRevisorV(pl, e) : contextoDelRevisor(contexto(e))
         const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: material.contexto })
         const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
         if (ap.estado === 'esperando') {
@@ -444,7 +455,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       try { if (P.notas) { const l = await P.notas.leer(enc.client_id); notas = l.notas; error = l.error } } catch (err) { error = err instanceof Error ? err.message : String(err) }
       return { res: { costo_usd: 0, artefacto: { hay: notas.length > 0, notas, ...(error ? { error } : {}) } } }
     }
-    default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
+    default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : familiaDeVideo(pl) ? ejecutarCodigoV(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
   }
 }
 
@@ -815,8 +826,8 @@ export async function cerrarPorTope(P: Puertos, enc: Encargo, pl: Plantilla, raz
 
 export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: boolean, nota?: string): Promise<Respuesta> {
   const e = enc.estado_del_motor
-  // salas 2 y 3: el resumen de lo que va a la salida y a la bandeja sale de las láminas (null para el post de la sala 1)
-  const lam = resumenDeCierreL(enc, e, pl)
+  // salas 2 y 3: el resumen de lo que va a la salida y a la bandeja sale de las láminas; el video, del guion y del video (null para el post de la sala 1)
+  const lam = resumenDeCierreL(enc, e, pl) ?? resumenDeCierreV(enc, e, pl)
   const abiertasQueBloquean = e.fichas.filter((f) => f.gravedad === 'bloquea' && (f.estado === 'abierta' || f.estado === 'no_tomada'))
   // J8a · una revisión incompleta (fallida o cortada por tope) o que no pudo abrirse NO se pierde: la pieza va a la bandeja marcada y una persona la mira antes de aprobarla
   const conDesacuerdo = abiertasQueBloquean.length > 0 || parcial || revisionIncompleta(e)
