@@ -245,8 +245,8 @@ describe('los 7 errores del calendario real, inyectados (cliente A): el sistema 
   it('#5 anuncio/pieza a las 06:00 con el local cerrado: V06 bloquea', () => {
     expect(chequeos(malo(conPieza(c, bueno, 1, 'a', { hora: '06:00' })))).toContain('V06')
   })
-  it('#6 dato sin fuente («45 g»): V14 bloquea; con un trozo NO confiable como única fuente, también', () => {
-    expect(chequeos(malo(conPieza(c, bueno, 1, 'a', { tema: 'Nuestro pan de 45 g' })))).toContain('V14')
+  it('#6 dato declarado sin fuente («45 g»): bloquea (V22 si la referencia no existe); con un trozo NO confiable como única fuente, V14 también', () => {
+    expect(chequeos(malo(conPieza(c, bueno, 1, 'a', { datos: [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'no-existe', nivel: 'F1', opcional: false }] })))).toContain('V22')
     const conTrozo = conPieza(c, bueno, 1, 'a', { tema: 'Nuestro pan de 45 g', datos: [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'trozo-dudoso', nivel: 'F3', opcional: false }] })
     const hs = malo(conTrozo)
     expect(hs.some((h) => h.chequeo === 'V14' && /no sostiene un dato por sí sola/.test(h.ficha.que))).toBe(true)
@@ -278,12 +278,13 @@ describe('CC#3 condición 3 · afirmaciones de origen, frescura, porción y traz
     expect(hallarAfirmaciones('el menú de Café Brisa', ['Café Brisa'], { lexico: PACK_ALIMENTOS }).some((h) => h.subtipo === 'origen_lugar')).toBe(false)
     expect(hallarAfirmaciones('mira lo que subimos de Instagram', [], { lexico: PACK_ALIMENTOS }).some((h) => h.subtipo === 'origen_lugar')).toBe(false)
   })
-  it('sin respaldo bloquean igual que una cifra; con un dato F0/F1 que las contenga, pasan; con un trozo no confiable, no', () => {
+  it('sin respaldo avisan «por confirmar» y NO bloquean (el léxico ya no saca filas); con un dato F0/F1 que las contenga, pasan; con un trozo no confiable, no', () => {
     const c = clienteA()
     const bueno = tandaBuena(c)
     const v = (t: TandaAgente, refs = c.referencias) => validarTodo(insumos(c, t, { referencias: refs }))
     const tema = 'El pan llega fresco todos los días'
-    expect(chequeos(v(conPieza(c, bueno, 1, 'a', { tema })))).toContain('V14')
+    expect(chequeos(v(conPieza(c, bueno, 1, 'a', { tema })))).not.toContain('V14')
+    expect(v(conPieza(c, bueno, 1, 'a', { tema }))).toEqual(expect.arrayContaining([expect.objectContaining({ chequeo: 'V14n', severidad: 'aviso' })]))
     const manual: Referencia = { id: 'ficha-pan', client_id: c.clientId, origen: 'ficha', firmada: true, vigente: true, texto: 'El pan llega fresco todos los días a las 06:00.' }
     const dato = { dato: 'frescura', valor: 'fresco', clase: 'alto' as const, ref: 'ficha-pan', nivel: 'F0' as const, opcional: false }
     expect(chequeos(v(conPieza(c, bueno, 1, 'a', { tema, datos: [dato] }), [...c.referencias, manual]))).not.toContain('V14')
@@ -405,7 +406,7 @@ describe('el ciclo de UNA corrección', () => {
     expect(deTanda.modo).toBe('tanda')
   })
   it('tras la corrección, un dato sin fuente hace SALIR la fila (no se le pregunta a nadie) y el slot se anota como omitido', () => {
-    const hs = validarTodo(insumos(c, conPieza(c, bueno, 1, 'a', { tema: 'Nuestro pan de 45 g' })))
+    const hs = validarTodo(insumos(c, conPieza(c, bueno, 1, 'a', { datos: [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'no-existe', nivel: 'F1', opcional: false }] })))
     const r = resolverTrasCorreccion(hs, () => 1)
     expect(r.estado).toBe('filas_salen')
     expect(r.filasQueSalen).toEqual(['s1-d1-a'])

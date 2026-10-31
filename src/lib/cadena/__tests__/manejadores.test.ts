@@ -286,7 +286,7 @@ describe('el calendario: preparar, guardar, una corrección, filas que salen', (
   it('🔴 un dato sin fuente: UNA corrección pidiendo SOLO esa fila; si el modelo no lo arregla la FILA sale (no se pregunta a nadie) y el resto sigue', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)
-    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, tema: 'Nuestro pan de 45 g' } : p)) }
+    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, datos: [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'no-existe', nivel: 'F1', opcional: false }] } : p)) }
     const { g } = await tandaDe(al, id, 1, mala)
     expect(g!.cuerpo.correccion).toBe(true)
     expect(g!.cuerpo.modo).toBe('filas')
@@ -294,7 +294,7 @@ describe('el calendario: preparar, guardar, una corrección, filas que salen', (
     // la corrección vuelve igual de mal
     const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
     expect((p2.cuerpo.run_sdk as { task: string }).task).toContain('Devuelve SOLO las piezas que fallaron')
-    const soloMala = { piezas: [{ ...piezaBuena(A, 1, 'a', 'Nuestro pan de 45 g'), tema: 'Nuestro pan de 45 g' }], ajustes_al_patron: [] }
+    const soloMala = { piezas: [{ ...piezaBuena(A, 1, 'a', 'Nuestro pan de 45 g'), datos: [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'no-existe', nivel: 'F1', opcional: false }] }], ajustes_al_patron: [] }
     const g2 = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok(soloMala) }, AHORA)
     expect(g2.cuerpo).toMatchObject({ ok: true, salieron_sin_fuente: ['s1-d1-a'], validadas: 15 })
     const filas = await al.filas(id)
@@ -305,7 +305,7 @@ describe('el calendario: preparar, guardar, una corrección, filas que salen', (
   it('un dato sin fuente que la corrección SÍ arregla: nadie sale', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)
-    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, tema: 'Nuestro pan de 45 g' } : p)) }
+    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, datos: [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'no-existe', nivel: 'F1', opcional: false }] } : p)) }
     const { g } = await tandaDe(al, id, 1, mala)
     const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
     const arreglada = { piezas: [piezaBuena(A, 1, 'a', 'Nuestro pan de la casa')], ajustes_al_patron: [] }
@@ -597,7 +597,7 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
 })
 
 describe('r74 · F3 · una llamada de corrección vencida no deja la campaña atascada con un éxito falso', () => {
-  const mala = () => ({ ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, tema: 'Nuestro pan de 45 g' } : p)) })
+  const mala = () => ({ ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, datos: [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'no-existe', nivel: 'F1', opcional: false }] } : p)) })
   it('verde: el reenvío sin corrección pide la corrección con los hallazgos que bloquearon y la campaña termina activa', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)

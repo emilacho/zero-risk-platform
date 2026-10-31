@@ -8,6 +8,7 @@ import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { escalonQueToca, invarianteDeReloj, type Violacion } from './esperas'
 import { abrirEsperaDe, resolverEsperas } from './nucleo'
 import { pasarSinRevision } from './revision-jefatura'
+import { retomarPorCantidades } from './pasos'
 import type { Fila } from './tipos'
 
 type Linea = { campana_id: string; texto: string }
@@ -59,6 +60,15 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
     const ultima = corridas[corridas.length - 1]
     if (ultima.estado === 'ok') continue
     lineas.push({ campana_id: c.id, texto: `la campaña quedó en «${c.estado}»: su última llamada (${ultima.paso}, intento ${ultima.intento}) terminó ${ultima.estado} y no hay ninguna en curso. Qué hacer: reenviar el sobre del plan para que la cadena reintente` })
+  }
+
+  // 2c · una campaña en `necesita_humano` SOLO por cantidades se retoma sola (no llama al modelo ni gasta; ante la duda no toca nada)
+  for (const c of await al.campanasEnEspera()) {
+    if (c.estado !== 'necesita_humano') continue
+    try {
+      const r = await retomarPorCantidades(al, c, ahora)
+      if (r.retomada) { aplicado.push(`campaña ${c.id} retomada sola (${r.motivo})`); lineas.push({ campana_id: c.id, texto: `la campaña se retomó sola: solo le faltaban cantidades por semana, que viajan como aviso al brief (${r.motivo})` }) }
+    } catch (e) { lineas.push({ campana_id: c.id, texto: `no se pudo intentar retomar la campaña sola: ${String((e as Error)?.message ?? e).slice(0, 160)}` }) }
   }
 
   // 3 · el brazo de video: cuando opera, las filas que esperaban pasan a `validada`

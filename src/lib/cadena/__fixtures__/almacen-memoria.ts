@@ -126,7 +126,7 @@ export class AlmacenMemoria implements Almacen {
   async hallazgosQueBloquean(campanaId: string, tanda: number) {
     const v = this.validaciones.filter((x) => x.campana_id === campanaId && x.objeto === 'calendario' && x.tanda === tanda)
     const ultimo = v.reduce((m, x) => Math.max(m, x.intento), 0)
-    return v.filter((x) => x.intento === ultimo).flatMap((x) => x.hallazgos).filter((h) => h.severidad === 'bloquea').map((h) => ({ ficha: h.ficha, fila_id: h.fila_id }))
+    return v.filter((x) => x.intento === ultimo).flatMap((x) => x.hallazgos).filter((h) => h.severidad === 'bloquea').map((h) => ({ ficha: h.ficha, fila_id: h.fila_id, chequeo: h.chequeo }))
   }
   async corridaPorClave(campanaId: string, paso: string, clave: string, intento: number) { return this.corridas.find((c) => c.campana_id === campanaId && c.paso === paso && c.clave_idempotencia === clave && c.intento === intento) ?? null }
   async abrirCorrida(c: Omit<Corrida, 'id'>) {

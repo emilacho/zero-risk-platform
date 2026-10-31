@@ -5,6 +5,7 @@
  *
  * Alcance de la corrección (§10.4): `fila` (se parchea sola) o `tanda` (frecuencia y reparto son del conjunto).
  */
+import { mensajeV08 } from './cantidad'
 import { hallarAfirmaciones, hallarFechasEnTema, type LexicoAfirmaciones } from './afirmaciones'
 import { saleAntes } from './resolver-dependencias'
 import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from './registro'
@@ -54,7 +55,7 @@ export interface InsumosCalendario {
 
 const ALCANCE: Record<string, Alcance> = {
   V01: 'tanda', V02: 'fila', V03: 'fila', V04: 'fila', V05: 'fila', V06: 'fila', V07: 'fila', V07b: 'fila', V08: 'tanda', V09: 'tanda', V10: 'tanda',
-  V11: 'tanda', V12: 'tanda', V13: 'fila', V14: 'fila', V15: 'fila', V16: 'fila', V17: 'tanda', V18: 'tanda', V20: 'fila', V22: 'fila',
+  V11: 'tanda', V12: 'tanda', V13: 'fila', V14: 'fila', V14n: 'fila', V15: 'fila', V16: 'fila', V17: 'tanda', V18: 'tanda', V20: 'fila', V22: 'fila',
   C01: 'fila', C02: 'fila', C03: 'fila', C04: 'fila',
 }
 
@@ -297,12 +298,12 @@ function chequeoDeDatos(f: Fila, ins: InsumosCalendario, refPorId: Map<string, R
     if (!cubre) {
       const excusado = f.pendientes.some((p) => compacto(p).includes(compacto(hl.texto)) || normalizar(p).includes(normalizar(hl.subtipo)))
       if (excusado) out.push(h('V14', 'aviso', f, `«${hl.texto}» queda pendiente de fuente`, 'datos con fuente', 'se investiga con fuente; si no hay, la fila sale'))
-      else out.push(h('V14', 'bloquea', f, hl.tipo === 'cifra' ? `la cifra «${hl.texto}» (${hl.subtipo}) no está en datos[] con fuente` : `la afirmación «${hl.texto}» (${hl.subtipo}) no tiene respaldo`, 'cada cifra y cada afirmación de origen, frescura, porción, trazabilidad o garantía necesita respaldo F0/F1/F2', 'respaldarla en datos[], cambiar el tema o quitarla'))
+      else out.push(h('V14n', 'aviso', f, hl.tipo === 'cifra' ? `por confirmar: la cifra «${hl.texto}» (${hl.subtipo}) no está en datos[] con fuente` : `por confirmar: la afirmación «${hl.texto}» (${hl.subtipo}) no tiene respaldo`, 'cada cifra y cada afirmación de origen, frescura, porción, trazabilidad o garantía necesita respaldo F0/F1/F2', 'el brief decide con el manual y el cerebro si se usa, se cambia o se quita'))
     } else {
       // …y la referencia citada debe CONTENER la frase entera: un valor suelto que sí aparece en el plan no respalda «llega el mismo día»
       const ref = refPorId.get(cubre.ref)
       if (hl.tipo === 'afirmacion' && ref && ref.client_id === ins.clientId && !compacto(ref.texto).includes(compacto(hl.texto))) {
-        out.push(h('V14', 'bloquea', f, `la afirmación «${hl.texto}» (${hl.subtipo}) cita una referencia que no la dice (${cubre.ref})`, 'la referencia contiene la afirmación entera', 'citar la fuente que lo dice, cambiar el tema o quitarla'))
+        out.push(h('V14n', 'aviso', f, `por confirmar: la afirmación «${hl.texto}» (${hl.subtipo}) cita una referencia que no la dice (${cubre.ref})`, 'la referencia contiene la afirmación entera', 'el brief decide con el manual y el cerebro si se usa, se cambia o se quita'))
       } else validarDato(cubre, hl.clase)
     }
   }
@@ -333,7 +334,7 @@ function chequeoFrecuencia(ins: InsumosCalendario): Hallazgo[] {
         if (dif <= holgura) continue
         const tolerancia = clase === 'feed' ? 0 : 1
         const sev: Severidad = !completa ? 'aviso' : dif > tolerancia && (clase === 'feed' || dif > 1) ? 'bloquea' : 'aviso'
-        if (dif > 0) out.push(h('V08', sev, null, `semana ${semana}, ${c.red}, ${clase}: ${real} piezas y la estrategia pide ${meta}`, 'frecuencia de la estrategia', 'ajustar la cantidad', `semana ${semana} · ${c.red}`))
+        if (dif > 0) out.push(h('V08', sev, null, mensajeV08(semana, c.red, clase, real, meta), 'frecuencia de la estrategia', 'ajustar la cantidad', `semana ${semana} · ${c.red}`))
       }
     }
   }
