@@ -205,3 +205,38 @@ describe('sin la palanca el camino es el de hoy; y todo lo demás DETIENE', () =
     expect(o.fila_parte.provenance_tag.hoja).toBeUndefined()
   })
 })
+
+describe('chequeos sobre el texto final de la hoja (pedido de CC3)', () => {
+  const correr = async (al: AlmacenMemoria, ctx: Record<string, unknown> = {}) => {
+    const m = mundo(al)
+    const r = await recorrer(leer('nuevo'), '③ Hoja · armar el pedido', { ...CONTEXTO, ...ctx }, { http: m.http, hasta: ['⑤ ¿Modo seco?'] })
+    return r.historial['④ Chequeos'][0]
+  }
+  it('🔴 un formato sin familia DETIENE el flujo (no es un aviso mudo)', async () => {
+    const al = await cadena()
+    al.formatos = async () => ({ instagram: [{ formato: 'carrusel', produccion: 'opera', lead_dias: 3, max_por_dia: 3 }, { formato: 'foto', produccion: 'opera', lead_dias: 3, max_por_dia: 3 }], facebook: [{ formato: 'foto', produccion: 'opera', lead_dias: 3, max_por_dia: 3 }] }) as any
+    await expect(correr(al)).rejects.toThrow(/PARTE_HOJA_SIN_FAMILIA/)
+  })
+  it('una palabra prohibida del manual en lo que la hoja pide se DECLARA; en las listas PROHIBIDO / NEGATIVOS no cuenta', async () => {
+    const o = await correr(await cadena(), { forbidden_words: ['silla', 'precios'] })
+    const h = o.hallazgos.filter((x: any) => x.chequeo === 'palabra_prohibida').map((x: any) => x.detalle)
+    expect(h.some((d: string) => d.includes('«silla»'))).toBe(true)
+    expect(h.some((d: string) => d.includes('«precios»'))).toBe(false) // «precios» solo aparece en la lista de lo que no se dice
+    expect(o.parte_valido).toBe(true) // como en el nodo de hoy, no es fatal
+    expect(o.por_chequeo.palabra_prohibida).toBeGreaterThan(0)
+  })
+  it('una cifra «,77» en la hoja la vuelve NO VÁLIDA (fatal, como en el nodo de hoy)', async () => {
+    const al = await cadena()
+    ;Object.assign(al.filasGuardadas.find((f) => f.id === 'F1-S1-ig-01') as any, { tema: 'promo de 47,77 dólares', idea_ref: null })
+    const o = await correr(al)
+    expect(o.parte_valido).toBe(false)
+    expect(o.motivo_invalido).toMatch(/centinela/)
+    expect(o.payload_cable.resultado).toBe('parte_no_valido')
+    expect(o.fila_parte.content).toMatch(/PARTE NO VÁLIDO/)
+  })
+  it('sin palabras prohibidas ni cifras raras: limpio', async () => {
+    const o = await correr(await cadena(), { forbidden_words: ['barato', 'gratis'] })
+    expect(o.hallazgos).toEqual([])
+    expect(o.parte_valido).toBe(true)
+  })
+})

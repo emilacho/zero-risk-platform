@@ -47,11 +47,34 @@ export const ATAJO_DE_LA_HOJA = `// ═══ T5 · la HOJA POR CÓDIGO (nuevo o
     const h = c0.hoja
     const prov = h.provenance || {}
     const hoy = new Date().toISOString().slice(0, 10)
-    const valido = prov.valido === true
     const avisos = Array.isArray(h.avisos) ? h.avisos.map(String) : []
+    // un formato sin familia saldría SIN sala: no es un aviso mudo, es una detención (cadena_formatos_por_red.familia se completa antes de producir)
+    const sinFamilia = avisos.filter(function (a) { return /sin familia/.test(a) })
+    if (sinFamilia.length) throw new Error('PARTE_HOJA_SIN_FAMILIA · ' + sinFamilia.join(' · ') + ' · se DETIENE y no escribe nada')
     const hallazgos = avisos.map(function (a) { return { chequeo: 'aviso_de_la_hoja', entregable: null, detalle: a } })
-    const por_chequeo = hallazgos.length ? { aviso_de_la_hoja: hallazgos.length } : {}
-    const motivo = valido ? null : 'la hoja por código no es válida (provenance.valido = false)' + (avisos.length ? ' · ' + avisos.join(' · ') : '')
+    // chequeos sobre el texto FINAL de la hoja (mezcla brief + gran idea + calendario): cifras centinela (,77) y palabras prohibidas del manual (fuera de las listas PROHIBIDO / NEGATIVOS, que las nombran a propósito)
+    const sinAcentos = function (t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '') }
+    const pedidoLineas = []
+    let enLista = false
+    String(h.hoja).split('\\n').forEach(function (l) {
+      if (/^- (PROHIBIDO|NEGATIVOS)/.test(l)) { enLista = true; return }
+      if (enLista && /^\\s+/.test(l)) return
+      enLista = false
+      pedidoLineas.push(l.replace(/no se dice:.*$/i, ''))
+    })
+    const centinela = String(h.hoja).match(/\\d+[.,]77(?!\\d)/)
+    if (centinela) hallazgos.push({ chequeo: 'centinela', entregable: null, detalle: 'aparece la cifra «' + centinela[0] + '» (termina en ,77) · copia del ejemplo de la referencia' })
+    const pedidoNorm = ' ' + sinAcentos(pedidoLineas.join('\\n')).replace(/[^a-z0-9]+/g, ' ') + ' '
+    ;(Array.isArray(c0.forbidden_words) ? c0.forbidden_words : []).forEach(function (w) {
+      const wn = sinAcentos(typeof w === 'string' ? w : (w && (w.word || w.palabra)) || '').replace(/[^a-z0-9]+/g, ' ').trim()
+      if (!wn) return
+      if (pedidoNorm.indexOf(' ' + wn + ' ') !== -1) hallazgos.push({ chequeo: 'palabra_prohibida', entregable: null, detalle: 'la hoja usa «' + wn + '», prohibida por el manual, fuera de las listas de lo prohibido' })
+    })
+    const por_chequeo = {}
+    hallazgos.forEach(function (x) { por_chequeo[x.chequeo] = (por_chequeo[x.chequeo] || 0) + 1 })
+    const fatales = hallazgos.filter(function (x) { return x.chequeo === 'centinela' })
+    const valido = prov.valido === true && fatales.length === 0
+    const motivo = valido ? null : (prov.valido === true ? '' : 'la hoja por código no es válida (provenance.valido = false)') + fatales.map(function (x) { return (prov.valido === true ? '' : ' · ') + 'falla el chequeo «' + x.chequeo + '»' }).join(' · ') + (prov.valido === true ? '' : (avisos.length ? ' · ' + avisos.join(' · ') : ''))
     const encabezado = (valido ? '' : '# ⛔ PARTE NO VÁLIDO · NO USAR\\nMotivo: ' + motivo + '\\n\\n')
     const parte_md0 = encabezado + String(h.hoja)
     const briefs = Array.isArray(h.briefs) ? h.briefs : []
