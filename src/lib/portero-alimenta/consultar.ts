@@ -10,6 +10,7 @@
 import type { Db } from './alimentar'
 import { candidatasPorPalabras, fichasPorAtributo, type FichaCandidata } from './pedidos'
 import { leerTodas } from './paginar'
+import { adjuntoDelCliente } from './contexto-del-cliente'
 import type { Respuesta } from './rutas'
 
 type Fila = Record<string, unknown>
@@ -58,8 +59,10 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
   if (!lista(cl.data).length) return err(404, 'cliente_inexistente', 'no existe la ficha del cliente')
   const fi = await leerTodas(() => deps.db.from('cerebro_fichas').select('id, ref, clase, atributo, titulo, que_es, contenido, observado_en, fecha_fuente, reconfirmado_en, vigente_hasta, alcance, sede, origen, propiedad, porque, provenance_tag, descartada, retirada_en').eq('client_id', clientId).is('retirada_en', null).order('id', { ascending: true }))
   if (fi.error) return err(502, 'lectura_fallida', `cerebro_fichas: ${fi.error.message}`)
+  // 31-oct · el resumen vivo y los informes de la mesa NO se mezclan con los resultados: viajan SIEMPRE aparte, en `contexto_del_cliente`
+  const contexto = await adjuntoDelCliente(deps.db, clientId, ahora)
   // el resumen vivo es un derivado de las demás fichas (las junta todas en un texto): contestaría a todo y taparía la ficha concreta; solo se entrega si se pide su clase
-  let filas = fi.data.filter((f) => f.descartada !== true && (clase === 'resumen_vivo' || txt(f.clase) !== 'resumen_vivo') && txt(f.clase) !== 'aprendizaje_del_dueno')
+  let filas = fi.data.filter((f) => f.descartada !== true && (clase === 'resumen_vivo' || txt(f.clase) !== 'resumen_vivo') && (clase === 'informe_de_analisis' || txt(f.clase) !== 'informe_de_analisis') && txt(f.clase) !== 'aprendizaje_del_dueno')
   if (sede) filas = filas.filter((f) => { const s = sedesDe(f); return !s.length || s.includes(sede) })
   const porId = new Map<string, Fila>(filas.map((f) => [String(f.id), f]))
   const cands: FichaCandidata[] = filas.map((f) => ({ id: String(f.id), ref: txt(f.ref), clase: txt(f.clase), atributo: txt(f.atributo), titulo: txt(f.titulo), contenido: txt(f.contenido) || txt(f.que_es), observado_en: f.observado_en ? String(f.observado_en) : null, vigente_hasta: f.vigente_hasta ? String(f.vigente_hasta) : null, alcance: f.alcance ? String(f.alcance) : null }))
@@ -96,7 +99,7 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
     status: 200,
     body: {
       ok: true, client_id: clientId, consultado_por: { oficina, agente }, que: que || null, atributo: atributo || null, clase: clase || null, sede_clave: sede || null,
-      sin_dato: sinDato, total: ordenadas.length, resultados,
+      sin_dato: sinDato, total: ordenadas.length, resultados, contexto_del_cliente: contexto,
       ...(sinDato ? { nota: 'el cerebro no tiene nada vigente sobre eso: no se inventa. Si lo necesitas, pídelo con POST /api/brain/alimentar/pedido (avisar_a te avisa cuando esté) o sigue declarando «sin dato del cerebro»' } : {}),
       registrada, ...(registrada ? {} : { registro_error: w.error?.message ?? 'sin detalle' }), ms, modelos_llamados: 0, costo_usd: 0,
     },

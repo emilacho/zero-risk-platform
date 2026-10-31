@@ -51,6 +51,8 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/lib\/cerebro\//,
   // 31-oct · TENDENCIAS Y REDES: su prueba nombra la URL de la tabla `cerebro_tendencias` (guardado y lectura de tendencias del rubro y de la bodega viral)
   /^__tests__\/tendencias-y-redes\.test\.ts$/,
+  // 31-oct · VOZ DEL PÚBLICO Y RESUMEN SIEMPRE: su prueba arma fichas de prueba con columnas de la tabla (informes y resumen vivo)
+  /^__tests__\/voz-del-publico-y-resumen-siempre\.test\.ts$/,
   // 28-oct · LA MESA: el tablero del equipo MUESTRA al compañero la lista de fotos propias del cliente (solo LECTURA de las columnas de etiqueta ya cargadas); no escribe nada
   /^src\/lib\/oficina\/mesa\/pedidos\.ts$/,
   /^src\/app\/api\/brain\/portero\//,
