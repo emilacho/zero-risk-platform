@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { elementosDelKit, esKitDeHistorias, parsearBrief, planDeOrigen, proporcionDelBrief, fechaLimiteDelBrief } from '@/lib/oficina/brief'
 import { leerBriefCreativo } from '../brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '../conceptos'
-import { escribirHoja, fechaEnLetras, filasDelKit, idDelKit, lineaDeElemento, RE_ID_DE_BRIEF, type FilaDeHoja, type InsumosDeLaHoja } from '../hoja'
+import { escribirHoja, fechaEnLetras, filasDelKit, idDelKit, kitDestino, lineaDeElemento, RE_ID_DE_BRIEF, type FilaDeHoja, type InsumosDeLaHoja } from '../hoja'
 import type { FormatosPorRed } from '../tipos'
 
 const PLAN = '## Fase 1\nObjetivo: que el barrio sepa que la cocina abre temprano.'
@@ -135,5 +135,38 @@ describe('hoja.v1 · ida y vuelta con el lector de la oficina', () => {
     expect(lineaDeElemento(fila({ id: 'x', fecha: '2026-11-12', hora: '9:00', tema: 'a | b', pilar: 'p;q', datos: [{ dato: 'd', valor: 'v;w', clase: 'alto', ref: 'r', nivel: 'F1' } as any] }))).toBe('2026-11-12 9:00 | historia | a / b | p;q | d: v,w')
     expect(idDelKit('2026 W46/x')).toBe('kit-2026-W46-x')
     expect(RE_ID_DE_BRIEF.test(idDelKit('2026-W46'))).toBe(true)
+  })
+})
+
+describe('reserva 2 de CC3 (lote 2) · reglas que los mutantes vivos dejaron sin prueba', () => {
+  it('H04 · WhatsApp siempre es «estado» aunque el formato diga historia; en otra red manda el formato', () => {
+    expect(kitDestino({ red: 'whatsapp', formato: 'historia' })).toBe('estado')
+    expect(kitDestino({ red: 'WhatsApp', formato: 'historia' })).toBe('estado')
+    expect(kitDestino({ red: 'ig', formato: 'estado' })).toBe('estado')
+    expect(kitDestino({ red: 'ig', formato: 'historia' })).toBe('historia')
+    expect(lineaDeElemento(fila({ id: 'w', red: 'whatsapp', formato: 'historia', tema: 't', pilar: 'p' }))).toContain('| estado | t | p')
+  })
+  it('H11 · el id del kit se recorta a 40 caracteres: con un lote_key largo sigue siendo un id válido para la oficina', () => {
+    const largo = idDelKit('2026-W46-' + 'x'.repeat(80))
+    expect(largo).toHaveLength(40)
+    expect(RE_ID_DE_BRIEF.test(largo)).toBe(true)
+    expect(RE_ID_DE_BRIEF.test('kit-2026-W46-' + 'x'.repeat(80))).toBe(false) // sin recorte la oficina lo rechazaría
+    const h = escribirHoja(INS([fila({ id: 'K1', formato: 'historia' })], { lote_key: '2026-W46-' + 'x'.repeat(80) }))
+    expect(h.briefs[0].brief_id).toHaveLength(40)
+    expect(h.provenance.kit?.brief_id).toBe(h.briefs[0].brief_id)
+  })
+  it('H13 · la hora del brief se recorta a HH:MM (una hora con segundos no rompe la fecha límite que lee la oficina)', () => {
+    const h = escribirHoja(INS([fila({ id: 'F1', hora: '09:30:00' })]))
+    expect(h.texto_md).toContain('- APRUEBA Y PARA CUÁNDO: aprobar antes de publicar · publica el 12 de noviembre de 2026 a las 09:30')
+    expect(h.texto_md).not.toContain('a las 09:30:00')
+  })
+  it('H16 · el kit NO lleva «DATOS DEL CALENDARIO» (sus datos viajan en cada elemento); una pieza suelta sí', () => {
+    const dato = { dato: 'precio', valor: '$2,50', clase: 'alto', ref: 'r', nivel: 'F1', opcional: false } as never
+    const h = escribirHoja(INS([fila({ id: 'S1', formato: 'carrusel', datos: [dato] }), fila({ id: 'K1', formato: 'historia', datos: [dato] }), fila({ id: 'K2', formato: 'historia', fecha: '2026-11-13', datos: [dato] })]))
+    const bloques = h.texto_md.split('\n### ')
+    const suelta = bloques.find((b) => b.startsWith('S1 ·'))!, kit = bloques.find((b) => b.startsWith('kit-'))!
+    expect(suelta).toContain('- DATOS DEL CALENDARIO: precio: $2,50 (r)')
+    expect(kit).not.toContain('DATOS DEL CALENDARIO')
+    expect(kit).toContain('precio: $2,50') // en los elementos del kit
   })
 })
