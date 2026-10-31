@@ -13,8 +13,9 @@ const dirigido = (x: unknown): Record<string, unknown> => (x && typeof x === 'ob
 
 /** la ficha del cliente → lo que es SUYO (sitio y usuarios de sus redes). Sin ficha de redes, solo el sitio. */
 export function propiosDeFicha(c: { website_url?: string | null; config?: unknown }): Propios {
-  const own = dirigido(dirigido(dirigido(c.config).apify).own_handles)
-  const handles = Object.values(own).filter((v): v is string => typeof v === 'string' && v.trim() !== '').map((v) => v.trim().replace(/^https?:\/\/[^/]+\//, '').replace(/^@/, '').replace(/\/.*$/, ''))
+  // las MISMAS cuentas que cuenta la regla única de la base (31-oct): las del descubridor (`apify.own_handles`) y las que puso una persona (`own_social_handles`), sin repetir
+  const own = [...Object.values(dirigido(dirigido(c.config).own_social_handles)), ...Object.values(dirigido(dirigido(dirigido(c.config).apify).own_handles))]
+  const handles = [...new Set(own.filter((v): v is string => typeof v === 'string' && v.trim() !== '').map((v) => v.trim().replace(/^https?:\/\/[^/]+\//, '').replace(/^@/, '').replace(/\/.*$/, '')))]
   return { sitio: c.website_url ?? null, handles }
 }
 
