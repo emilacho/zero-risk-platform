@@ -83,8 +83,11 @@ describe('T7 · catálogo: las tres identidades, su atribución y la migración'
   it('🔴 la reversa borra SOLO las tres filas (por nombre Y por procedencia) y se detiene si alguna sigue activa en el directorio', () => {
     expect(REVERSA).toContain(`DELETE FROM public.agents WHERE name IN ('whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist') AND identity_source LIKE 'canonical:${ORIGEN_E1.repositorio}@${ORIGEN_E1.commit.slice(0, 7)}:%';`)
     expect(REVERSA.match(/DELETE FROM/g)).toHaveLength(1)
-    expect(REVERSA).toContain("FROM public.oficina_directorio WHERE agente IN ('whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist') AND activo")
-    expect(REVERSA).toContain('RAISE EXCEPTION')
+    // menor 1 de CC3 (Y11): la guarda es EXACTAMENTE esta condición (sin añadidos que la neutralicen, sin comentar) y lo que sigue es la excepción
+    const guarda = /^\s*IF to_regclass\('public\.oficina_directorio'\) IS NOT NULL AND EXISTS \(SELECT 1 FROM public\.oficina_directorio WHERE agente IN \('whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist'\) AND activo\) THEN\n\s*RAISE EXCEPTION 'alguno de los agentes E1 sigue activo en oficina_directorio: desactívalo antes de revertir';\n\s*END IF;$/m
+    expect(REVERSA).toMatch(guarda)
+    expect(REVERSA.match(/RAISE EXCEPTION/g)).toHaveLength(1)
+    expect(REVERSA.indexOf('RAISE EXCEPTION')).toBeLessThan(REVERSA.indexOf('DELETE FROM'))
     expect(REVERSA).not.toMatch(/design-visual-storyteller|creative-director/)
   })
 })

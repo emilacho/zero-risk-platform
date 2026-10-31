@@ -464,8 +464,14 @@ describe('reserva de CC3 (certificación firma 1+2) · el pegado del método del
     expect(t).toContain(METODO_CALENDARIO_POR_OMISION)
     expect(t).toContain('# GRAN IDEA (concepto aprobado · versión 1)')
   })
-  it('🔴 sin gran idea (palanca apagada = la cadena de hoy) el pedido NO lleva método; con palanca y sin gran idea, la tanda espera (no hay pedido)', async () => {
-    expect(await tareaDe(almacen(false))).not.toContain('# MÉTODO')
+  it('🔴 sin gran idea (palanca apagada = la cadena de hoy) el pedido NO lleva método y el método NI SE LEE de la configuración; con palanca y sin gran idea, la tanda espera (no hay pedido)', async () => {
+    const sinIdea = almacen(false)
+    const lecturas: string[] = []
+    const leerConfig = sinIdea.leerConfig.bind(sinIdea)
+    sinIdea.leerConfig = async (k: string) => { lecturas.push(k); return leerConfig(k) }
+    expect(await tareaDe(sinIdea)).not.toContain('# MÉTODO')
+    // menor de CC3 (X16): pegar «siempre» sería equivalente en la salida (tareaDeCalendario lo descarta sin concepto), pero NO en las lecturas: sin gran idea no se consulta `metodos`
+    expect(lecturas).not.toContain(CLAVE_DE_METODOS)
     const p = await calendarioPreparar(almacen(true), { ...wf(), tanda: 1 }, AHORA)
     expect(p.status).toBe(200)
     expect(p.cuerpo.accion).toBe('esperar_concepto')
