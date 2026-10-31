@@ -16,6 +16,8 @@ export interface PlazoCfg {
 export interface Reloj { recordatorio_en: string | null; alerta_en: string | null; vence_en: string; accion_al_vencer: string }
 
 const H = 3_600_000
+/** cada cuánto se rearma una espera que «sigue esperando» (aprobación del concepto): la decisión es de Emilio, nunca del tiempo */
+export const HORAS_DE_REARME = 72
 const iso = (ms: number) => new Date(ms).toISOString()
 
 export interface ContextoPlazo { fechaPieza?: string; fechaInicio?: string; leadDiasVideo?: number; /** zona IANA de la campaña: «el final del día de la pieza» es el suyo, no el de UTC */ zona?: string | null }
@@ -46,6 +48,8 @@ export function calcularReloj(p: PlazoCfg, ahora: string, ctx: ContextoPlazo = {
   else if (p.vence_regla === 'fecha_menos_lead_dias_video' && ctx.fechaPieza) vence = Date.parse(`${sumarDias(ctx.fechaPieza, -(ctx.leadDiasVideo ?? 5))}T00:00:00Z`)
   else if (p.vence_regla === 'fecha_inicio_menos_1_dia' && ctx.fechaInicio) vence = Date.parse(`${sumarDias(ctx.fechaInicio, -1)}T00:00:00Z`)
   else if (p.vence_regla === 'resumen_semanal') vence = t0 + 7 * 24 * H
+  // 31-oct (nuevo orden): la aprobación del concepto NO vence sola: el reloj se rearma cada 72 h (la acción al vencer es `seguir_esperando`, no una decisión)
+  else if (p.vence_regla === 'seguir_esperando') vence = t0 + HORAS_DE_REARME * H
   else throw new Error(`el plazo ${p.tipo} (${p.vence_regla}) necesita datos que no llegaron: no se crea una espera sin reloj`)
   if (vence < t0) vence = t0 // una pieza que ya perdió su fecha vence ya, no en el pasado
   return {

@@ -2,7 +2,7 @@
  * Almacén EN MEMORIA de la cadena · para las pruebas de los manejadores (sin base, sin red, US$ 0).
  * Imita las garantías de la base que importan: únicos, idempotencia de corridas/esperas, una campaña viva por cliente.
  */
-import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, ParteSecoAGuardar } from '../almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar } from '../almacen'
 import type { PlazoCfg } from '../esperas'
 import type { Fila, FormatosPorRed, Hallazgo } from '../tipos'
 import type { FechaEspecialVerificada } from '../validador-calendario'
@@ -23,6 +23,8 @@ export function plazosDeLaMigracion(): PlazoCfg[] {
   // la siembra base + la de J7 (`revision_jefatura`), cada una con su propio INSERT
   const bloques = [sql.slice(sql.indexOf('INSERT INTO public.cadena_plazos'), sql.indexOf('ON CONFLICT (tipo)'))]
   try { const j7 = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610151700_cadena_plazo_revision_jefatura.sql'), 'utf8'); bloques.push(j7.slice(j7.indexOf('INSERT INTO public.cadena_plazos'), j7.indexOf('ON CONFLICT (tipo)'))) } catch { /* sin la de J7: la base sola */ }
+  // 31-oct (nuevo orden · T1): el plazo de la aprobación del concepto (`aprobacion_concepto` · seguir_esperando)
+  try { const t1 = readFileSync(join(RAIZ, 'supabase', 'migrations', '202610312000_cadena_brief_creativo_y_conceptos.sql'), 'utf8'); const i = t1.indexOf('INSERT INTO public.cadena_plazos'); bloques.push(t1.slice(i, t1.indexOf('ON CONFLICT (tipo)', i))) } catch { /* sin la de T1 */ }
   for (const bloque of bloques) for (const m of bloque.matchAll(/\('([a-z_]+)',\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|\d+),\s*(NULL|'[a-z_0-9]+'),\s*'([a-z_]+)'/g)) {
     const n = (x: string) => (x === 'NULL' ? null : Number(x))
     out.push({ tipo: m[1], recordatorio_horas: n(m[2]), alerta_horas: n(m[3]), vence_horas: n(m[4]), vence_regla: m[5] === 'NULL' ? null : m[5].replace(/'/g, ''), accion_al_vencer: m[6] })
@@ -51,6 +53,8 @@ export class AlmacenMemoria implements Almacen {
   ])
   campanas: Campana[] = []
   estrategias: EstrategiaGuardada[] = []
+  briefsCreativos: BriefCreativoGuardado[] = []
+  conceptos: ConceptoGuardado[] = []
   filasGuardadas: (Fila & { campana_id: string; calendario_version: number })[] = []
   validaciones: { campana_id: string; objeto: string; version: number; tanda: number | null; intento: number; hallazgos: Hallazgo[] }[] = []
   corridas: Corrida[] = []
@@ -107,6 +111,28 @@ export class AlmacenMemoria implements Almacen {
   async campanasActivas() { return structuredClone(this.campanas.filter((c) => c.estado === 'activa')) }
   async ultimaEstrategia(campanaId: string) { return this.estrategias.filter((e) => e.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarEstrategia(e: EstrategiaGuardada) { this.estrategias.push(e) }
+  // 31-oct (nuevo orden · T1) · imita el UNIQUE (campana_id, version) de la base
+  async ultimoBriefCreativo(campanaId: string) { return structuredClone(this.briefsCreativos.filter((b) => b.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null) }
+  async insertarBriefCreativo(b: BriefCreativoGuardado) {
+    if (this.briefsCreativos.some((x) => x.campana_id === b.campana_id && x.version === b.version)) throw Object.assign(new Error('duplicate key value violates unique constraint "cadena_brief_creativo_version"'), { code: '23505' })
+    this.briefsCreativos.push(structuredClone(b))
+  }
+  async actualizarBriefCreativo(campanaId: string, version: number, patch: Partial<BriefCreativoGuardado>) {
+    const b = this.briefsCreativos.find((x) => x.campana_id === campanaId && x.version === version)
+    if (!b) throw new Error('no existe el brief creativo')
+    Object.assign(b, patch)
+  }
+  async ultimoConcepto(campanaId: string) { return structuredClone(this.conceptos.filter((c) => c.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null) }
+  async insertarConcepto(c: ConceptoGuardado) {
+    if (this.conceptos.some((x) => x.campana_id === c.campana_id && x.version === c.version)) throw Object.assign(new Error('duplicate key value violates unique constraint "cadena_conceptos_version"'), { code: '23505' })
+    this.conceptos.push(structuredClone(c))
+  }
+  async actualizarConcepto(campanaId: string, version: number, patch: Partial<ConceptoGuardado>) {
+    const c = this.conceptos.find((x) => x.campana_id === campanaId && x.version === version)
+    if (!c) throw new Error('no existe el concepto')
+    Object.assign(c, patch)
+  }
+  async conceptosVencidos(ahora: string) { return structuredClone(this.conceptos.filter((c) => c.estado === 'abierta' && c.plazo_en && Date.parse(c.plazo_en) <= Date.parse(ahora))) }
   async filas(campanaId: string, version?: number) { return structuredClone(this.filasGuardadas.filter((f) => f.campana_id === campanaId && (version === undefined || f.calendario_version === version))) }
   async guardarFilas(campanaId: string, version: number, _ev: number, filas: Fila[]) {
     for (const f of filas) {
@@ -120,7 +146,7 @@ export class AlmacenMemoria implements Almacen {
     for (const f of this.filasGuardadas) if (f.campana_id === campanaId && f.calendario_version === version && ids.includes(f.id)) f.estado = estado
   }
   async ultimaVersionDeCalendario(campanaId: string) { return this.filasGuardadas.filter((f) => f.campana_id === campanaId).reduce((m, f) => Math.max(m, f.calendario_version), 0) }
-  async guardarValidaciones(campanaId: string, objeto: 'estrategia' | 'calendario' | 'brief', version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[]) {
+  async guardarValidaciones(campanaId: string, objeto: ObjetoDeValidacion, version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[]) {
     this.validaciones.push({ campana_id: campanaId, objeto, version, tanda, intento, hallazgos })
   }
   async hallazgosQueBloquean(campanaId: string, tanda: number) {

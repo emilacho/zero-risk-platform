@@ -12,7 +12,7 @@ import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autop
 import type { SobreDeLote } from './arranque'
 import { almacenDeSupabase as almacenDeJefatura } from '@/lib/jefatura/revision/almacen-supabase'
 import { decidirRetencion } from './revision-jefatura'
-import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
 import { horarioDeNorm } from './horario'
 import { registroDelCliente } from './registro'
 import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
@@ -119,6 +119,15 @@ export function almacenDeSupabase(): Almacen {
     async ultimaEstrategia(campanaId) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
     async insertarEstrategia(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (error) fallo(error) },
 
+    // 31-oct (nuevo orden · T1) · brief creativo y concepto: el UNIQUE (campana_id, version) de la base decide la carrera («la primera entrega que cierra gana»)
+    async ultimoBriefCreativo(campanaId) { return (await lista<BriefCreativoGuardado>(db.from('cadena_brief_creativo').select('campana_id, version, estado, texto_md, leido, devolucion_texto, motivo, costo_usd, encargo_id, seco').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
+    async insertarBriefCreativo(b) { const { error } = await db.from('cadena_brief_creativo').insert(b); if (error) fallo(error) },
+    async actualizarBriefCreativo(campanaId, version, patch) { const { error } = await db.from('cadena_brief_creativo').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version); if (error) fallo(error) },
+    async ultimoConcepto(campanaId) { return (await lista<ConceptoGuardado>(db.from('cadena_conceptos').select('campana_id, version, estado, aprobacion, texto_md, leido, brief_devuelto, motivo, costo_usd, plazo_en, encargo_id, hitl_id, nota_de_emilio, apunta_a, decidido_en, seco').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
+    async insertarConcepto(c) { const { error } = await db.from('cadena_conceptos').insert(c); if (error) fallo(error) },
+    async actualizarConcepto(campanaId, version, patch) { const { error } = await db.from('cadena_conceptos').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version); if (error) fallo(error) },
+    async conceptosVencidos(ahora) { return lista<ConceptoGuardado>(db.from('cadena_conceptos').select('campana_id, version, estado, aprobacion, texto_md, leido, brief_devuelto, motivo, costo_usd, plazo_en, encargo_id, hitl_id, nota_de_emilio, apunta_a, decidido_en, seco').eq('estado', 'abierta').lte('plazo_en', ahora).limit(500)) },
+
     async filas(campanaId, version) {
       let q = db.from('cadena_calendario_filas').select('*').eq('campana_id', campanaId).limit(5000)
       if (version !== undefined) q = q.eq('calendario_version', version)
@@ -130,6 +139,8 @@ export function almacenDeSupabase(): Almacen {
         id: f.id, campana_id: campanaId, estrategia_version: estrategiaVersion, calendario_version: version, tanda: f.tanda, semana: f.semana, dia_semana: f.dia_semana, fecha: f.fecha,
         hora: f.hora, red: f.red, formato: f.formato, pilar: f.pilar, tema: f.tema, sede: f.sede, requiere_abierto: f.requiere_abierto, depende_de: f.depende_de, datos: f.datos,
         pendientes: f.pendientes, pieza_fija: f.pieza_fija, origen: f.origen, estado: f.estado, avisos: f.avisos, seco,
+        // 31-oct (nuevo orden): la fase y la idea del banco viajan con la fila; la cadena de hoy las deja en NULL (ausentes = NULL, nunca «undefined» que el upsert ignoraría)
+        fase: f.fase ?? null, idea_ref: f.idea_ref ?? null,
       })), { onConflict: 'campana_id,calendario_version,id' })
       if (error) fallo(error)
     },
