@@ -7,6 +7,7 @@ import type { Almacen, Campana, ContextoDelCliente, Corrida } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, DIAS_DE_CAMPANA, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, SEMANAS_DE_PANORAMA, SEMANAS_DE_TANDA, topeDelPaso, type Paso } from './constantes'
+import { bajarFaltantesDeCantidad, sinFaltantesSiCorrige } from './cantidad'
 import { planDeCorreccion, resolverTrasCorreccion } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_ESTRATEGIA } from './esquemas'
 import { expandirPatron, fusionarTanda } from './expandir-patron'
@@ -262,7 +263,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   // las dependencias imposibles (misma fecha y hora, antecesora que sale después…) las arregla el código y las anota: nunca llegan a bloquear la campaña
   let filas = resolverDependencias(fusionarTanda(base, objeto, estr, campana, tanda, formatos).filas, previas).filas
   const ajustes = esCorreccion ? [...(objeto.ajustes_al_patron ?? []), ...omitidosImplicitos(estr, semanas, filas)] : objeto.ajustes_al_patron ?? []
-  let hs: Hallazgo[] = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, fechas, ahora, lexico))
+  let hs: Hallazgo[] = sinFaltantesSiCorrige(esCorreccion, validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, fechas, ahora, lexico)))
   await al.guardarValidaciones(campana.id, 'calendario', version, tanda, esCorreccion ? 2 : 1, hs, campana.seco)
   const plan = planDeCorreccion(hs)
 
@@ -281,7 +282,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
     // dato sin fuente: la FILA sale (nunca se le pregunta a nadie del cliente) y se vuelve a validar con el slot anotado como omitido
     salen.push(...res.filasQueSalen)
     filas = filas.map((f) => (salen.includes(f.id) ? { ...f, estado: 'descartada_sin_fuente' as const } : f))
-    hs = validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, [...ajustes, ...res.ajustes], fechas, ahora, lexico))
+    hs = bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, [...ajustes, ...res.ajustes], fechas, ahora, lexico)))
     await al.guardarValidaciones(campana.id, 'calendario', version, tanda, 2, hs, campana.seco)
     if (hs.some((h) => h.severidad === 'bloquea')) {
       await al.guardarFilas(campana.id, version, 1, filas, campana.seco)

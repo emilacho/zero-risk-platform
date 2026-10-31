@@ -314,8 +314,8 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
   it('🔴 un dato sin fuente en la tanda: UNA corrección y, si no se arregla, la FILA sale (nadie del cliente recibe nada) y la cadena abre igual', async () => {
     const m = mundo()
     const t = tandaBuena(m.cliente)
-    const mala = { ...t, piezas: t.piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, tema: 'Nuestro pan de 45 g' } : p)) }
-    const sigueMala = { piezas: [{ ...piezaBuena(m.cliente, 1, 'a', 'x'), tema: 'Nuestro pan de 45 g' }], ajustes_al_patron: [] }
+    const mala = { ...t, piezas: t.piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, datos: [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'no-existe', nivel: 'F1', opcional: false }] } : p)) }
+    const sigueMala = { piezas: [{ ...piezaBuena(m.cliente, 1, 'a', 'x'), datos: [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'no-existe', nivel: 'F1', opcional: false }] }], ajustes_al_patron: [] }
     const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [m.cliente.estrategia], calendario: [mala, sigueMala] } }))
     expect(r[0].json.resultado).toBe('cadena_abierta')
     const filas = await m.al.filas(m.al.campanas[0].id)

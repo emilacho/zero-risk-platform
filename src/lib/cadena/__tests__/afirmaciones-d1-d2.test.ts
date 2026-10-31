@@ -13,6 +13,7 @@ const FORMATOS = formatosDeLaMigracion()
 const PACK = lexicoDeLaIndustria('restaurante de comida')
 const hallarAfirmaciones = (t: string, c: readonly string[] = [], o: OpcionesAfirmaciones = {}) => hallarBase(t, c, { lexico: lexicoDeLaIndustria('restaurante de comida', o.lexico) })
 const bloq = (hs: Hallazgo[]) => hs.filter((h) => h.severidad === 'bloquea').map((h) => `${h.chequeo}:${h.ficha.que}`)
+const avi = (hs: Hallazgo[]) => hs.filter((h) => h.severidad === 'aviso').map((h) => `${h.chequeo}:${h.ficha.que}`)
 function ins(c: ClienteFixture, t: TandaAgente, extra: Partial<InsumosCalendario> = {}): InsumosCalendario {
   return { campana: c.campana, estrategia: c.estrategia, planTexto: c.planTexto, formatos: FORMATOS, sedes: c.sedes, referencias: c.referencias, lexico: PACK, clientId: c.clientId, ahora: c.ahora, filas: filasDe(c, t, FORMATOS), forbiddenWords: c.forbiddenWords, conocidos: c.conocidos, ...extra }
 }
@@ -39,10 +40,11 @@ describe('D1 · «de <sede>» solo es exento si lo ubica una palabra de lugar (a
     expect(sub(hallarAfirmaciones('Visítanos en la sede de Olón', sedes, { lexico }))).toContain('origen_lugar:de Olón')
     expect(sub(hallarAfirmaciones('Visítanos en el barrio de Olón', sedes, { lexico })).filter((x) => x.startsWith('origen_lugar'))).toEqual([])
   })
-  it('validador completo: con Olón como sede y SIN dato, la frase bloquea', () => {
+  it('validador completo: con Olón como sede y SIN dato, la frase NO bloquea: viaja como nota «por confirmar»', () => {
     const c = clienteA(); const b = tandaBuena(c)
     const a = validarTodo(ins(c, conPieza(b, 1, 'a', { tema: 'Camarón y pescado de Olón' }), { conocidos: [...c.conocidos, 'Olón'] }))
-    expect(bloq(a).some((m) => m.startsWith('V14') && m.includes('de Olón'))).toBe(true)
+    expect(bloq(a).filter((m) => m.startsWith('V14'))).toEqual([])
+    expect(avi(a).some((m) => m.startsWith('V14n') && m.includes('de Olón'))).toBe(true)
   })
 })
 
@@ -51,7 +53,7 @@ describe('D2 · un dato flojo NO cubre una afirmación', () => {
   const planRef: Referencia = { id: 'plan-x', client_id: c.clientId, origen: 'plan', texto: 'Sedes: Guayaquil y Olón. Ceviche y mixtos.' }
   const refs = [...c.referencias, planRef]
   const dato = (o: Partial<{ dato: string; valor: string; ref: string }>) => ({ dato: 'x', valor: 'x', clase: 'alto' as const, ref: 'plan-x', nivel: 'F1' as const, opcional: false, ...o })
-  const run = (tema: string, datos: ReturnType<typeof dato>[], extra: Partial<InsumosCalendario> = {}) => bloq(validarTodo(ins(c, conPieza(b, 1, 'a', { tema, datos }), { referencias: refs, ...extra })))
+  const run = (tema: string, datos: ReturnType<typeof dato>[], extra: Partial<InsumosCalendario> = {}) => avi(validarTodo(ins(c, conPieza(b, 1, 'a', { tema, datos }), { referencias: refs, ...extra })))
   it('la frase en `dato` (texto libre) con un `valor` que sí está en el plan NO la respalda', () => {
     const m = run('El marisco llega el mismo día', [dato({ dato: 'el marisco llega el mismo día', valor: 'Ceviche' })])
     expect(m.some((x) => x.startsWith('V14') && x.includes('mismo dia'))).toBe(true)
@@ -62,7 +64,7 @@ describe('D2 · un dato flojo NO cubre una afirmación', () => {
   })
   it('aunque la referencia SÍ diga la frase, un `valor` que no la contiene no la cubre (el texto libre `dato` no cuenta)', () => {
     const ref2: Referencia = { id: 'plan-w', client_id: c.clientId, origen: 'plan', texto: 'El marisco llega el mismo día. Ceviche.' }
-    const m = bloq(validarTodo(ins(c, conPieza(b, 1, 'a', { tema: 'El marisco llega el mismo día', datos: [dato({ dato: 'el marisco llega el mismo día', valor: 'Ceviche', ref: 'plan-w' })] }), { referencias: [...refs, ref2] })))
+    const m = avi(validarTodo(ins(c, conPieza(b, 1, 'a', { tema: 'El marisco llega el mismo día', datos: [dato({ dato: 'el marisco llega el mismo día', valor: 'Ceviche', ref: 'plan-w' })] }), { referencias: [...refs, ref2] })))
     expect(m.some((x) => x.startsWith('V14') && x.includes('mismo dia'))).toBe(true)
   })
   it('valor con la frase + referencia que la contiene entera: respaldado (sin V14 de afirmación)', () => {
