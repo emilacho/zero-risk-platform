@@ -27,6 +27,11 @@ export function puertoDeLaMesa(db: Db): PuertoMesa {
       if (r.error) throw new Error(`directorio de la mesa: ${r.error.message}`)
       return lista<Fila>(r.data).map(aTarjeta)
     },
+    async configDeLaCadena(clave) {
+      const r = await db.from('cadena_config').select('valor').eq('clave', clave).maybeSingle()
+      if (r.error) throw new Error(`config de la cadena (${clave}): ${r.error.message}`)
+      return (r.data as Fila | null)?.valor
+    },
     async libro(encargoId) {
       const r = await db.from('oficina_mesa_aportes').select('*').eq('encargo_id', encargoId).order('n', { ascending: true })
       if (r.error) throw new Error(`libro de la mesa: ${r.error.message}`)

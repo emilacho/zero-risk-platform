@@ -13,7 +13,7 @@ import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
-import { armarTarea, pedidoDeAgente, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
+import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
 import { direccionDe, especialistasPertinentes, porteroDe } from './directorio'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { tableroParaLaJefatura } from './libro'
@@ -86,6 +86,17 @@ const textoDeHechos = (e: Estado): string => {
   return hs.map((h) => `- ${h.texto}${h.fuente ? ` (fuente: ${h.fuente})` : ''}`).join('\n')
 }
 
+/** T6: el método (y las fichas por red) del asiento, leídos de `cadena_config`; cualquier fallo de lectura = sin método, nunca frena el turno */
+async function metodoDelAsiento(P: Puertos, agente: string): Promise<string | undefined> {
+  const cual = ASIENTOS_CON_METODO[agente]
+  const leer = P.mesa?.configDeLaCadena?.bind(P.mesa)
+  if (!cual || !leer) return undefined
+  const intenta = async (k: string): Promise<unknown> => { try { return await leer(k) } catch { return undefined } }
+  const metodos = await intenta('metodos')
+  const fichas = cual === 'fichas_por_red' ? await intenta('fichas_por_red') : undefined
+  return seccionDeMetodo(agente, metodos, fichas, new Date().toISOString()) || undefined
+}
+
 /** el pedido del turno de un agente (puro respecto del libro: sirve igual para la primera entrega y para la reentrega) */
 export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, t: NonNullable<EstadoMesa['turno_abierto']>): Promise<{ agente: string; pedido: Record<string, unknown>; paso: string }> {
   const libro = await P.mesa!.libro(enc.id)
@@ -95,7 +106,8 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const tipo = t.tipo as TipoDeTurno
   let faltanCitas: string | undefined
   if (tipo === 'devolver_citas') faltanCitas = 'algunas especialidades del equipo (revisa cada aporte del tablero)'
-  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
+  const metodo = await metodoDelAsiento(P, t.agente)
+  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(enc.tope_usd) - enc.estado_del_motor.gasto_usd))
   return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4) }) }

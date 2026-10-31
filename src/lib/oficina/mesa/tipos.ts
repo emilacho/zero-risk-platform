@@ -86,6 +86,8 @@ export type NuevoAporte = Omit<Aporte, 'id' | 'n' | 'creado_en'>
 export interface PuertoMesa {
   /** las tarjetas ACTIVAS del directorio (vivo: agregar un agente es insertar una fila) */
   directorio(): Promise<Tarjeta[]>
+  /** T6: lectura de una llave de `cadena_config` (`metodos`, `fichas_por_red`) · opcional: sin puerto o con error, el turno sigue sin método (leer un método nunca frena una pieza) */
+  configDeLaCadena?(clave: string): Promise<unknown>
   libro(encargoId: string): Promise<Aporte[]>
   aportar(a: NuevoAporte): Promise<{ ok: true; aporte: Aporte } | { ok: false; error: string }>
 }

@@ -7,6 +7,7 @@ import { refDe } from './libro'
 import { COTAS, type Aporte, type EstadoMesa, type Tarjeta, type TipoDePieza } from './tipos'
 import type { FotoEtiquetada } from '../fotos'
 import { CABECERA_SALTAR_EDITOR } from '../../cadena/constantes'
+import { fichasEnTexto, leerFichasPorRed, metodoDeAsiento } from '../../cadena/metodos'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas'
 
@@ -167,7 +168,7 @@ const HERRAMIENTAS = [
   `Máximo ${COTAS.MAX_PROFUNDIDAD} niveles de pedidos encadenados y ${COTAS.MAX_IDAS_VUELTAS_POR_PAREJA} idas y vueltas con un mismo compañero: después decide la dirección creativa con lo que haya.`,
 ].join('\n')
 
-export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string }): string {
+export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string }): string {
   const { tipo, agente, est, libro, c } = o
   // la mesa de concepto tiene dos rondas: la 1 elige UNA gran idea entre caminos; la 2 la desarrolla en capítulos, series e ideas (la integración final lleva la convención)
   const ronda = libro.filter((a) => a.tipo === 'integra').length + 1
@@ -239,13 +240,26 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
       CONVENCION_DE_LA_PIEZA(c.tipo),
     ].join('\n'),
   }
-  return cab + seccionDeIndicacion(o.tarjeta, agente) + tu[tipo]
+  return cab + seccionDeIndicacion(o.tarjeta, agente) + (o.metodo ? o.metodo + '\n\n' : '') + tu[tipo]
 }
 
 /** T6: la indicación propia del agente (dato del directorio) · va ANTES de su turno y nunca toca su identidad · sin indicación no añade nada */
 export function seccionDeIndicacion(t: Tarjeta | undefined, agente: string): string {
   const ind = (t?.indicacion ?? []).map((x) => x.trim()).filter(Boolean)
   return ind.length ? ['## Indicación de la oficina para ti (' + agente + ')', ...ind.map((x) => '- ' + x), '', ''].join('\n') : ''
+}
+
+/** agentes de la mesa que llevan un método de CC#1 y cuáles de las dos lecturas de `cadena_config` necesita cada uno (el método no va en la identidad: va en la tarea, después del marco y antes del formato de salida) */
+export const ASIENTOS_CON_METODO: Readonly<Record<string, 'pieza' | 'fichas_por_red'>> = { 'content-creator': 'pieza', marketing_instagram_curator: 'fichas_por_red' }
+
+/** T6: el método del asiento (`cadena_config.metodos`; apagado o sin método = nada) y, para el curador, las fichas por red como dato con su caducidad · puro */
+export function seccionDeMetodo(agente: string, metodos: unknown, fichas: unknown, hoy: string): string {
+  const cual = ASIENTOS_CON_METODO[agente]
+  if (!cual) return ''
+  const m = metodoDeAsiento(agente, metodos)
+  const f = cual === 'fichas_por_red' ? leerFichasPorRed(fichas) : []
+  const partes = [m, f.length ? fichasEnTexto(f, f.map((x) => x.red), hoy) : null].filter((x): x is string => !!x && !!x.trim())
+  return partes.length ? ['## Método de la oficina para ti (guía, no formato)', ...partes].join('\n\n') : ''
 }
 
 /** el pedido que consume el flujo de turnos de n8n (mismo molde que la v1: `agent_name`, `task`, `images`, `esquema`…) */
