@@ -332,6 +332,19 @@ describe('el descuento vigente del proveedor (medido 31-oct: lista 3,70 → carg
     expect(conDescuento(3.6979, 'bytedance/seedance-2.5', despues)).toEqual({ usd: 3.6979, pct: 0 })
     expect(conDescuento(3.6979, 'otro/modelo', antes)).toEqual({ usd: 3.6979, pct: 0 })
   })
+  it('D6 (CC3): el tope se compara con el costo CON descuento, no con la lista: 720p 12 s = lista 5,55 > 5 pero 3,88 con el 30 % → se envía y se reserva 3,88', async () => {
+    fetchMock
+      .mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
+      .mockResolvedValueOnce(respuesta(200, { status: 'queued', request_id: 'r12', status_url: 'https://api.higgsfield.ai/requests/r12/status' }))
+    const r = await post({ ...PEDIDO, segundos: 12 })
+    const j = await r.json()
+    expect(r.status).toBe(202)
+    expect(j.costo_lista_usd).toBeCloseTo(5.5469, 3)
+    expect(j.costo_estimado_usd).toBeCloseTo(3.8828, 3)
+    expect(j.tope_usd).toBe(5)
+    expect(llamadas()).toHaveLength(2) // estimación + envío
+    expect(insert.mock.calls[0][0].cost_usd).toBeCloseTo(3.8828, 3)
+  })
   it('pasada la fecha del descuento, la ruta vuelve a reservar la lista (720p 8 s = US$ 3,70)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
