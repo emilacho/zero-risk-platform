@@ -66,10 +66,12 @@ export function seccionDelDirectorio(directorio: Tarjeta[], yo: string): string 
 const PERSONAS = /\b(personas?|gente|rostros?|caras?|comensales?|familias?|ni[ñn]os?|ni[ñn]as?|mujeres?|hombres?|chef|cocineros?|meseros?|mozos?|amigos?|parejas?|sonri\w+|retratos?|people|persons?|faces?|famil(?:y|ies)|kids?|children|women|men|friends|couples?|waiters?)\b/i
 
 /** una frase que niega o prohíbe («No aparecen personas», «sin gente», «VISUAL PROHIBIDO») no cuenta: un brief que EXCLUYE personas no convoca al especialista de inclusión */
-const NIEGA = /\b(no|sin|ni|nunca|nadie|ning[uú]n[ao]?|without|never)\b|prohib/i
+const NIEGA = /\b(no|sin|ni|nunca|nadie|ning[uú]n[ao]?|evit\w+|excluy\w+|descart\w+|nada de|without|never|avoid\w*)\b|prohib/i
+/** y una negación que viene DESPUÉS de la palabra («humor fuera», «bromas excluidas») */
+const NIEGA_DESPUES = /\b(fuera|excluid\w+|descartad\w+|prohibid\w+|out)\b/i
 
 /** palabras de tono lúdico (humor, juego, sorpresa, encanto) que piden a Whimsy en una pieza · el manual, el brief o el plan "lo ameritan" cuando las afirman (no cuando las niegan) */
-const LUDICO = /\b(l[úu]dic\w*|humor\w*|juegos?|jugue\w*|divert\w*|sorpres\w*|travesur\w*|ingenio\w*|ocurren\w*|encanto|playful|whimsical?|witty|fun|humou?r\w*|delight\w*|surpris\w*)\b/i
+const LUDICO = /\b(l[úu]dic\w*|humor\w*|juegos? de palabras|jugue\w*|divert\w*|sorpres\w*|travesur\w*|ingenio\w*|ocurrente\w*|encanto|playful|whimsical?|witty|fun|humou?r\w*|delight\w*|surpris\w*)\b/i
 
 /** ¿el texto AFIRMA una palabra de la lista? La negación cuenta solo si está PEGADA (las 4 palabras de antes, misma frase); lo que cuelga de un encabezado «… PROHIBIDO:» no cuenta */
 function afirma(texto: string, palabras: RegExp): boolean {
@@ -78,7 +80,8 @@ function afirma(texto: string, palabras: RegExp): boolean {
   const hay = (f: string): boolean => {
     for (const m of f.matchAll(new RegExp(palabras.source, 'gi'))) {
       const antes = f.slice(0, m.index).trim().split(/\s+/).slice(-4).join(' ')
-      if (!NIEGA.test(antes)) return true
+      const despues = f.slice((m.index ?? 0) + m[0].length).trim().split(/\s+/).slice(0, 2).join(' ')
+      if (!NIEGA.test(antes) && !NIEGA_DESPUES.test(despues)) return true
     }
     return false
   }

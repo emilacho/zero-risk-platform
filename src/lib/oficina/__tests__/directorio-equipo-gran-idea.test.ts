@@ -224,11 +224,15 @@ describe('ORDEN PASO A · Whimsy en las piezas con condición, carousel-designer
   it('`si_whimsy` se calcula del brief, del manual o del plan; una negación pegada o una prohibición no la enciende', () => {
     expect(condicionesDeLaPieza('Carrusel del plato del día', 'Tono cercano, divertido y con humor')).toEqual(['si_whimsy'])
     expect(condicionesDeLaPieza('Una sorpresa para el fin de semana')).toEqual(['si_whimsy'])
-    expect(condicionesDeLaPieza('Primer plano del encebollado', null, 'Plan: juegos con la audiencia')).toEqual(['si_whimsy'])
+    expect(condicionesDeLaPieza('Primer plano del encebollado', null, 'Plan: juegos de palabras con la audiencia')).toEqual(['si_whimsy'])
     expect(condicionesDeLaPieza('Playful tone, families smiling')).toEqual(['si_personas', 'si_whimsy'])
     expect(condicionesDeLaPieza('Primer plano del encebollado', 'Tono sobrio y formal', undefined)).toEqual([])
     expect(condicionesDeLaPieza('Plato del día', 'Sin humor ni bromas. Tono serio.')).toEqual([])
     expect(condicionesDeLaPieza('Plato', '- TONO PROHIBIDO:\n  - divertido\n')).toEqual([])
     expect(condicionesDeLaPieza('Plato', 'La marca no es divertida pero sí cálida')).toEqual([])
+    // tabla de la certificación de CC3 (paso A): nada de esto es un tono lúdico pedido
+    for (const t of ['Evita el humor y las bromas.', 'Tono serio; humor fuera.', 'Los pedidos ocurren a la hora del almuerzo.', 'Está en juego la reputación de la marca.', 'Un juego de luces cálidas en la mesa.', 'No usar humor.', 'Sin humor ni bromas', 'Nada de bromas: la marca es seria']) expect(condicionesDeLaPieza('Plato del día', t)).toEqual([])
+    // y lo que SÍ lo pide sigue encendiendo
+    for (const t of ['Tono divertido y cercano', 'Con juegos de palabras en los títulos', 'Marca ocurrente y juguetona', 'Playful, witty tone', 'Queremos sorprender con humor']) expect(condicionesDeLaPieza('Plato del día', t)).toEqual(['si_whimsy'])
   })
 })
