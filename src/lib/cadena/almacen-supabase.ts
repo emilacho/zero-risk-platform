@@ -38,6 +38,9 @@ async function fichaDelCliente(db: ReturnType<typeof getSupabaseAdmin>, clientId
   return (sinIdioma.data as FichaDelCliente | null) ?? null
 }
 
+/** 31-oct (T3): las columnas del brief creativo (con `plazo_en`, migración 202610312003) */
+const COLUMNAS_DEL_BRIEF = 'campana_id, version, estado, texto_md, leido, devolucion_texto, motivo, costo_usd, encargo_id, seco, plazo_en'
+
 export function almacenDeSupabase(): Almacen {
   const db = getSupabaseAdmin()
   const uno = async <T>(q: PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T | null> => { const { data, error } = await q; if (error) fallo(error); return (data as T | null) ?? null }
@@ -134,7 +137,9 @@ export function almacenDeSupabase(): Almacen {
     async insertarEstrategia(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (error) fallo(error) },
 
     // 31-oct (nuevo orden · T1) · brief creativo y concepto: el UNIQUE (campana_id, version) de la base decide la carrera («la primera entrega que cierra gana»)
-    async ultimoBriefCreativo(campanaId) { return (await lista<BriefCreativoGuardado>(db.from('cadena_brief_creativo').select('campana_id, version, estado, texto_md, leido, devolucion_texto, motivo, costo_usd, encargo_id, seco').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
+    async briefsDe(campanaId) { return lista<BriefCreativoGuardado>(db.from('cadena_brief_creativo').select(COLUMNAS_DEL_BRIEF).eq('campana_id', campanaId).order('version', { ascending: true }).limit(50)) },
+    async briefsVencidos(ahora) { return lista<BriefCreativoGuardado>(db.from('cadena_brief_creativo').select(COLUMNAS_DEL_BRIEF).eq('estado', 'borrador').lte('plazo_en', ahora).limit(500)) },
+    async ultimoBriefCreativo(campanaId) { return (await lista<BriefCreativoGuardado>(db.from('cadena_brief_creativo').select(COLUMNAS_DEL_BRIEF).eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
     async insertarBriefCreativo(b) { const { error } = await db.from('cadena_brief_creativo').insert(b); if (error) fallo(error) },
     async actualizarBriefCreativo(campanaId, version, patch) { const { error } = await db.from('cadena_brief_creativo').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version); if (error) fallo(error) },
     async ultimoConcepto(campanaId) { return (await lista<ConceptoGuardado>(db.from('cadena_conceptos').select('campana_id, version, estado, aprobacion, texto_md, leido, brief_devuelto, motivo, costo_usd, plazo_en, encargo_id, hitl_id, nota_de_emilio, apunta_a, decidido_en, seco').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },

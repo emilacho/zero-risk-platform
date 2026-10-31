@@ -59,6 +59,8 @@ export interface BriefCreativoGuardado {
   motivo: string | null
   costo_usd: number | null
   encargo_id: string | null
+  /** red de seguridad (plazo de trabajo + holgura): pasado, el reloj deja el brief `descartada` y la campaña reabre una vez (migración 202610312003 · hueco 1 de CC3) */
+  plazo_en?: string | null
   seco: boolean
 }
 /** 31-oct (nuevo orden · T1): el concepto guardado (`cadena_conceptos` · contrato concepto.v1) */
@@ -194,6 +196,10 @@ export interface Almacen {
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>
   // 31-oct (nuevo orden · T1) · brief creativo y concepto: UNA fila por (campaña, versión); la primera entrega que cierra gana (único en la base)
   ultimoBriefCreativo(campanaId: string): Promise<BriefCreativoGuardado | null>
+  /** 31-oct (T3 · hueco 1 de CC3): todas las versiones del brief de una campaña, de la 1 en adelante */
+  briefsDe(campanaId: string): Promise<BriefCreativoGuardado[]>
+  /** los briefs abiertos (`borrador`) cuyo plazo propio ya pasó (el vigía los deja `descartada`) */
+  briefsVencidos(ahora: string): Promise<BriefCreativoGuardado[]>
   insertarBriefCreativo(b: BriefCreativoGuardado): Promise<void>
   actualizarBriefCreativo(campanaId: string, version: number, patch: Partial<BriefCreativoGuardado>): Promise<void>
   ultimoConcepto(campanaId: string): Promise<ConceptoGuardado | null>

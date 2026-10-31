@@ -113,6 +113,8 @@ export class AlmacenMemoria implements Almacen {
   async insertarEstrategia(e: EstrategiaGuardada) { this.estrategias.push(e) }
   // 31-oct (nuevo orden · T1) · imita el UNIQUE (campana_id, version) de la base
   async ultimoBriefCreativo(campanaId: string) { return structuredClone(this.briefsCreativos.filter((b) => b.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null) }
+  async briefsDe(campanaId: string) { return structuredClone(this.briefsCreativos.filter((b) => b.campana_id === campanaId).sort((a, b) => a.version - b.version)) }
+  async briefsVencidos(ahora: string) { return structuredClone(this.briefsCreativos.filter((b) => b.estado === 'borrador' && b.plazo_en && Date.parse(b.plazo_en) <= Date.parse(ahora))) }
   async insertarBriefCreativo(b: BriefCreativoGuardado) {
     if (this.briefsCreativos.some((x) => x.campana_id === b.campana_id && x.version === b.version)) throw Object.assign(new Error('duplicate key value violates unique constraint "cadena_brief_creativo_version"'), { code: '23505' })
     this.briefsCreativos.push(structuredClone(b))

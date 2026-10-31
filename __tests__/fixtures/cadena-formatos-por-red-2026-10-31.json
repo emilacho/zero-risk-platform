@@ -1,0 +1,147 @@
+{
+  "facebook": [
+    {
+      "formato": "anuncio_carrusel",
+      "produccion": "opera",
+      "lead_dias": 9,
+      "max_por_dia": 2,
+      "familia": null
+    },
+    {
+      "formato": "anuncio_imagen",
+      "produccion": "opera",
+      "lead_dias": 9,
+      "max_por_dia": 3,
+      "familia": null
+    },
+    {
+      "formato": "carrusel",
+      "produccion": "opera",
+      "lead_dias": 6,
+      "max_por_dia": 2,
+      "familia": "carrusel_ig_v1"
+    },
+    {
+      "formato": "foto",
+      "produccion": "opera",
+      "lead_dias": 5,
+      "max_por_dia": 3,
+      "familia": "post_img"
+    },
+    {
+      "formato": "historia",
+      "produccion": "opera",
+      "lead_dias": 4,
+      "max_por_dia": 10,
+      "familia": "kit_historias"
+    },
+    {
+      "formato": "reel",
+      "produccion": "espera_brazo",
+      "lead_dias": 7,
+      "max_por_dia": 2,
+      "familia": null
+    }
+  ],
+  "instagram": [
+    {
+      "formato": "anuncio_carrusel",
+      "produccion": "opera",
+      "lead_dias": 9,
+      "max_por_dia": 2,
+      "familia": null
+    },
+    {
+      "formato": "anuncio_imagen",
+      "produccion": "opera",
+      "lead_dias": 9,
+      "max_por_dia": 3,
+      "familia": null
+    },
+    {
+      "formato": "carrusel",
+      "produccion": "opera",
+      "lead_dias": 6,
+      "max_por_dia": 2,
+      "familia": "carrusel_ig_v1"
+    },
+    {
+      "formato": "foto",
+      "produccion": "opera",
+      "lead_dias": 5,
+      "max_por_dia": 3,
+      "familia": "post_img"
+    },
+    {
+      "formato": "historia",
+      "produccion": "opera",
+      "lead_dias": 4,
+      "max_por_dia": 10,
+      "familia": "kit_historias"
+    },
+    {
+      "formato": "reel",
+      "produccion": "espera_brazo",
+      "lead_dias": 7,
+      "max_por_dia": 2,
+      "familia": null
+    }
+  ],
+  "linkedin": [
+    {
+      "formato": "carrusel",
+      "produccion": "opera",
+      "lead_dias": 6,
+      "max_por_dia": 2,
+      "familia": "carrusel_ig_v1"
+    },
+    {
+      "formato": "foto",
+      "produccion": "opera",
+      "lead_dias": 5,
+      "max_por_dia": 2,
+      "familia": "post_img"
+    },
+    {
+      "formato": "texto",
+      "produccion": "opera",
+      "lead_dias": 4,
+      "max_por_dia": 2,
+      "familia": null
+    }
+  ],
+  "tiktok": [
+    {
+      "formato": "video",
+      "produccion": "espera_brazo",
+      "lead_dias": 7,
+      "max_por_dia": 3,
+      "familia": null
+    }
+  ],
+  "whatsapp": [
+    {
+      "formato": "estado",
+      "produccion": "opera",
+      "lead_dias": 4,
+      "max_por_dia": 5,
+      "familia": "kit_historias"
+    }
+  ],
+  "youtube": [
+    {
+      "formato": "short",
+      "produccion": "espera_brazo",
+      "lead_dias": 7,
+      "max_por_dia": 2,
+      "familia": null
+    },
+    {
+      "formato": "video",
+      "produccion": "espera_brazo",
+      "lead_dias": 9,
+      "max_por_dia": 1,
+      "familia": null
+    }
+  ]
+}

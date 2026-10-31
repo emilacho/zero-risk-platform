@@ -10,7 +10,7 @@ import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLa
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
 import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V2, ESQUEMA_ESTRATEGIA } from './esquemas'
-import { conceptoParaElCalendario, etapaDeReentrada, nuevoOrdenEncendido } from './mesas'
+import { conceptoParaElCalendario, etapaDeReentrada, nuevoOrdenEncendido, tramoDeReemision } from './mesas'
 import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
@@ -387,7 +387,8 @@ export async function calendarioSiguiente(al: Almacen, cuerpo: Record<string, un
   if (!encendida) return { status: 200, cuerpo: { tanda: ultima + 1, faltan_dias: faltan } }
   const etapa = await etapaDeReentrada(al, c)
   if (!etapa) return { status: 200, cuerpo: { tanda: null, motivo: `la tanda ${ultima + 1} espera a una mesa que trabaja o a la decisión de Emilio: nada que reemitir` } }
-  return { status: 200, cuerpo: { tanda: ultima + 1, etapa, ...(faltan === null ? {} : { faltan_dias: faltan }) } }
+  // hueco 2 de CC3: el respaldo lleva un tramo de medio día en la etapa (clave nueva por pasada del vigía mientras haya algo que hacer); ver `tramoDeReemision`
+  return { status: 200, cuerpo: { tanda: ultima + 1, etapa: `${etapa}:${tramoDeReemision(ahora)}`, ...(faltan === null ? {} : { faltan_dias: faltan }) } }
 }
 
 /**

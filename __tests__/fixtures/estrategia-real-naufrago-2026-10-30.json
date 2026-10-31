@@ -1,0 +1,286 @@
+{
+  "fases": [
+    {
+      "clave": "senal",
+      "objetivo": "Juntar señal de medición de visitas al local en Olón",
+      "cita_plan": "acumular señal de medición",
+      "dia_desde": 1,
+      "dia_hasta": 30
+    },
+    {
+      "clave": "recompra",
+      "objetivo": "Hacer crecer la base propia por WhatsApp para que los clientes vuelvan",
+      "cita_plan": "construir base de recompra (LTV)",
+      "dia_desde": 31,
+      "dia_hasta": 60
+    },
+    {
+      "clave": "temporada",
+      "objetivo": "Posicionarse antes de la temporada alta",
+      "cita_plan": "posicionarse antes de la temporada alta",
+      "dia_desde": 61,
+      "dia_hasta": 90
+    }
+  ],
+  "hitos": [],
+  "alertas": [
+    {
+      "ref": "sede:0a605e33-05fc-485a-9774-7e99fa2b030c",
+      "texto": "La sede Guayaquil está por abrir y solo atenderá a domicilio; no se le planean piezas hasta que abra."
+    },
+    {
+      "ref": "sede:0ee0f2b3-8883-4d65-ab04-06ce401d91f2",
+      "texto": "Olón abre de jueves a lunes; martes y miércoles no hay piezas que pidan local abierto."
+    },
+    {
+      "ref": "manual:d777e705-50a5-4648-881d-da0dc71bb134",
+      "texto": "No mostrar marcas ajenas (Tabasco, Rukutú) en las piezas, ni usar palabras prohibidas como «garantizado» o «congelado»."
+    }
+  ],
+  "canales": [
+    {
+      "red": "instagram",
+      "rol": "principal",
+      "motivo": "El plan da a meta_ig el mayor peso; es el canal preferido de los turistas según el manual.",
+      "formatos": [
+        "reel",
+        "foto",
+        "carrusel",
+        "historia",
+        "anuncio_imagen"
+      ],
+      "frecuencia": {
+        "feed_semana": 4,
+        "anuncios_semana": 1,
+        "historias_semana": 5
+      }
+    },
+    {
+      "red": "facebook",
+      "rol": "replica",
+      "motivo": "Va dentro del mismo canal meta_ig del plan; replica lo de Instagram.",
+      "formatos": [
+        "foto",
+        "reel"
+      ],
+      "frecuencia": {
+        "feed_semana": 2,
+        "anuncios_semana": 0,
+        "historias_semana": 0
+      }
+    },
+    {
+      "red": "tiktok",
+      "rol": "replica",
+      "motivo": "Cubre el canal video_corto del plan con los mismos reels.",
+      "formatos": [
+        "video"
+      ],
+      "frecuencia": {
+        "feed_semana": 2,
+        "anuncios_semana": 0,
+        "historias_semana": 0
+      }
+    },
+    {
+      "red": "youtube",
+      "rol": "replica",
+      "motivo": "Cubre el canal video_corto del plan; replica en short.",
+      "formatos": [
+        "short"
+      ],
+      "frecuencia": {
+        "feed_semana": 1,
+        "anuncios_semana": 0,
+        "historias_semana": 0
+      }
+    },
+    {
+      "red": "whatsapp",
+      "rol": "principal",
+      "motivo": "Es el canal base_propia del plan; el manual pone WhatsApp como canal de locales y de pedidos a domicilio.",
+      "formatos": [
+        "estado"
+      ],
+      "frecuencia": {
+        "feed_semana": 0,
+        "anuncios_semana": 0,
+        "historias_semana": 5
+      }
+    },
+    {
+      "red": "linkedin",
+      "rol": "no",
+      "motivo": "Es un restaurante de playa que vende directo al consumidor; el plan no menciona esta red.",
+      "formatos": [],
+      "frecuencia": {
+        "feed_semana": 0,
+        "anuncios_semana": 0,
+        "historias_semana": 0
+      }
+    }
+  ],
+  "pilares": [
+    {
+      "pct": 40,
+      "clave": "producto",
+      "nombre": "Encebollado y ceviche: sabores de la costa"
+    },
+    {
+      "pct": 25,
+      "clave": "lugar",
+      "nombre": "Olón, a pocos metros de la playa"
+    },
+    {
+      "pct": 20,
+      "clave": "desayuno",
+      "nombre": "Desayuno costero para empezar el día"
+    },
+    {
+      "pct": 15,
+      "clave": "pedido",
+      "nombre": "Pide por WhatsApp / domicilio"
+    }
+  ],
+  "excluidos": [],
+  "pendientes": [
+    {
+      "clave": "presupuesto_pauta",
+      "pedir_a": "portero",
+      "que_falta": "presupuesto semanal de pauta disponible",
+      "desbloquea": [
+        "anuncios de instagram"
+      ]
+    },
+    {
+      "clave": "temporada_alta",
+      "pedir_a": "sistema",
+      "que_falta": "si noviembre-diciembre es temporada alta de playa en Olón",
+      "desbloquea": [
+        "fase temporada"
+      ]
+    },
+    {
+      "clave": "base_propia",
+      "pedir_a": "portero",
+      "que_falta": "tamaño real de la base propia (registros activos en Tesoro del Náufrago)",
+      "desbloquea": [
+        "estados de whatsapp"
+      ]
+    },
+    {
+      "clave": "guayaquil",
+      "pedir_a": "portero",
+      "que_falta": "volumen operativo real de la ghost kitchen Guayaquil y fecha de apertura",
+      "desbloquea": [
+        "piezas de domicilio sede guayaquil"
+      ]
+    },
+    {
+      "clave": "horario_olon",
+      "pedir_a": "portero",
+      "que_falta": "Hay dos horarios para Olón: 08:00–16:00 en Instagram y mapas, y 07:00–15:00 en el sitio",
+      "desbloquea": [
+        "textos con horario"
+      ]
+    },
+    {
+      "clave": "influencers",
+      "pedir_a": "sistema",
+      "que_falta": "disponibilidad de micro-influencers de surf/viaje en Olón",
+      "desbloquea": [
+        "canal influencers"
+      ]
+    }
+  ],
+  "dependencias": [
+    {
+      "antes": "confirmar disponibilidad de micro-influencers",
+      "regla": "No se activan influencers sin confirmar antes que están disponibles.",
+      "despues": "activar el canal de influencers",
+      "cita_plan": "solo micro-influencers surf/viaje en Olón; confirmar disponibilidad antes de activar"
+    }
+  ],
+  "piezas_fijas": [],
+  "patron_semanal": [
+    {
+      "red": "instagram",
+      "hora": "08:00",
+      "sede": "olon",
+      "slot": "jue_reel",
+      "pilar": "producto",
+      "formato": "reel",
+      "dia_semana": 4,
+      "requiere_abierto": true
+    },
+    {
+      "red": "whatsapp",
+      "hora": "07:30",
+      "sede": "olon",
+      "slot": "vie_estado",
+      "pilar": "pedido",
+      "formato": "estado",
+      "dia_semana": 5,
+      "requiere_abierto": true
+    },
+    {
+      "red": "instagram",
+      "hora": "09:00",
+      "sede": "olon",
+      "slot": "sab_foto",
+      "pilar": "lugar",
+      "formato": "foto",
+      "dia_semana": 6,
+      "requiere_abierto": true
+    },
+    {
+      "red": "instagram",
+      "hora": "10:00",
+      "sede": "olon",
+      "slot": "sab_historia",
+      "pilar": "desayuno",
+      "formato": "historia",
+      "dia_semana": 6,
+      "requiere_abierto": true
+    },
+    {
+      "red": "instagram",
+      "hora": "08:30",
+      "sede": "olon",
+      "slot": "dom_carrusel",
+      "pilar": "desayuno",
+      "formato": "carrusel",
+      "dia_semana": 7,
+      "requiere_abierto": true
+    },
+    {
+      "red": "tiktok",
+      "hora": "12:00",
+      "sede": "olon",
+      "slot": "dom_tiktok",
+      "pilar": "producto",
+      "formato": "video",
+      "dia_semana": 7,
+      "requiere_abierto": false
+    },
+    {
+      "red": "whatsapp",
+      "hora": "08:00",
+      "sede": "olon",
+      "slot": "lun_estado",
+      "pilar": "pedido",
+      "formato": "estado",
+      "dia_semana": 1,
+      "requiere_abierto": true
+    }
+  ],
+  "fechas_que_importan": [
+    {
+      "tipo": "temporada alta de playa",
+      "ambito": "Olón",
+      "motivo": "La meta se mide contra la llegada de la temporada alta; todavía falta confirmar cuándo empieza.",
+      "origen": "plan",
+      "cita_plan": "posicionarse antes de la temporada alta"
+    }
+  ]
+}
