@@ -9,7 +9,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { canalesNombrados, cifrasCentinela, correccionDeForma, fasesConDias, LARGO_MINIMO, semanasFechadas, validarFormaDelPlan } from '@/lib/planeacion/validador-plan'
+import { canalesNombrados, cifrasCentinela, correccionDeForma, fasesConDias, LARGO_MINIMO, metaPorSemana, semanasFechadas, validarFormaDelPlan } from '@/lib/planeacion/validador-plan'
 
 vi.mock('@/lib/internal-auth', () => ({
   checkInternalKey: (r: Request) => (r.headers.get('x-api-key') === 'ok' ? { ok: true } : { ok: false, reason: 'Invalid x-api-key' }),
@@ -106,6 +106,101 @@ describe('el plan real pasa y los planes rotos no', () => {
   })
 })
 
+/** un plan con la meta escrita de una sola forma (sin el encabezado «Meta prudente…» que ayudaba de más) */
+const conMeta = (meta: string) => PLAN_DE_PRACTICA.replace('**Meta prudente a 90 días:**\n- Pedidos rastreables por semana: 15 (desde 2)', meta)
+
+describe('reserva 1 de CC3 · la meta con cifra por semana vale en cualquier orden (y en tabla)', () => {
+  it.each([
+    'meta: 15 pedidos por semana',
+    'Meta: 15 pedidos por semana.',
+    'Meta: 15 pedidos semanales',
+    'Meta semanal: 15 pedidos',
+    'Objetivo: 15 pedidos a la semana',
+    'Pedidos rastreables por semana: 15 (meta prudente)',
+    '- 15 pedidos cada semana\n\nEsa es la meta del trimestre.',
+    'Meta del trimestre:\n- Pedidos: 15/semana',
+    '| Semana | Meta |\n|---|---|\n| 1 | 2 pedidos |\n| 2 | 4 pedidos |',
+    '| Week | Target |\n|---|---|\n| 1 | 2 orders |',
+  ])('«%s» pasa F2', (meta) => {
+    expect(metaPorSemana(conMeta(meta))).toBe(true)
+    expect(validarFormaDelPlan(conMeta(meta)).hallazgos.map((h) => h.donde)).not.toContain('metas')
+  })
+  it.each([
+    'Meta: muchos pedidos por semana (a definir)',
+    'Meta: 15 pedidos al mes',
+    'Pedidos por semana: los que se pueda',
+    '| Semana | Meta |\n|---|---|\n| 1 | a definir |',
+    'Se publica 3 veces por semana.', // cifra por semana sin ser META (frecuencia de publicación)
+  ])('«%s» NO pasa F2', (meta) => {
+    expect(metaPorSemana(conMeta(meta))).toBe(false)
+    expect(validarFormaDelPlan(conMeta(meta)).hallazgos.map((h) => h.donde)).toContain('metas')
+  })
+})
+
+describe('reserva 2 de CC3 · un plan en INGLÉS correcto pasa (el idioma lo fija el manual del cliente)', () => {
+  const WEEKS = [
+    '| Week | Period | Theme | Format |', '|---|---|---|---|',
+    '| Week 1 | Nov 3-9 | Fix the base | Audit |', '| Week 2 | Nov 10-16 | Complete the base | Setup |', '| Week 3 | Nov 17-23 | Launch | Reel + ad |',
+    '| Week 4 | Nov 24-30 | Review #1 | Post |', '| Week 5 | Dec 1-7 | Second venue | Carousel |', '| Week 6 | Dec 8-14 | Community | Repost |',
+    '| Week 7 | Dec 15-21 | Review #2 | Report |', '| Week 8 | Dec 22-28 | Season | Content |', '| Week 9 | Dec 29 - Jan 4 | Season 2 | Paid |',
+    '| Week 10 | Jan 5-11 | Review #3 | Content |', '| Week 11 | Jan 12-18 | Season close | Party |', '| Week 12 | Jan 19-25 | Close + proposal | Report |',
+  ].join('\n')
+  const filler = Array.from({ length: 8 }, (_, i) => `Paragraph ${i + 1} of the practice plan: the agency produces creative variants, tests and optimizes every week with the data the business shares.`).join('\n')
+  const PLAN_EN = [
+    '# 90-DAY CAMPAIGN PLAN · PRACTICE COFFEE SHOP', '',
+    '## 1 · THE NUMBER', 'Goal: 15 orders per week (from 2).', 'Map reviews: 50.', '',
+    '## 3 · CHANNELS', 'Instagram is the main channel; Facebook mirrors the feed. TikTok is out of scope.', '',
+    '## 7 · BUDGET', '| Line | Prudent | Ambitious |', '|---|---|---|', '| Monthly spend | $300 | $800 |', '| Cost per order | $5.00 | $4.00 |', '',
+    '## 12-WEEK CALENDAR', WEEKS, '', '## ASSUMPTIONS', filler,
+  ].join('\n')
+  it('calendario «| Week 3 | Oct 14-20 |» + «Goal: 15 orders per week» → ok', () => {
+    expect(semanasFechadas(PLAN_EN)).toBe(12)
+    expect(metaPorSemana(PLAN_EN)).toBe(true)
+    expect(canalesNombrados(PLAN_EN)).toEqual(expect.arrayContaining(['instagram', 'facebook']))
+    expect(validarFormaDelPlan(PLAN_EN)).toEqual({ ok: true, hallazgos: [], correccion: null })
+  })
+  it('las variantes inglesas también: «Week 3 · Oct 14-20» en línea · «Phase 2 · days 31-60» · «weekly target: 15» · «15 orders a week … goal»', () => {
+    const enLinea = PLAN_EN.replace(WEEKS, Array.from({ length: 12 }, (_, i) => `Week ${i + 1} · Nov ${i + 1}-${i + 7}: theme of the week.`).join('\n'))
+    expect(semanasFechadas(enLinea)).toBe(12)
+    const fases = PLAN_EN.replace(WEEKS, 'Phase 1 · days 1-30: introduce. Phase 2 · days 31 to 60: convert. Phase 3 (days 61-90): retain.')
+    expect(fasesConDias(fases)).toBe(3)
+    expect(validarFormaDelPlan(fases).ok).toBe(true)
+    expect(metaPorSemana(PLAN_EN.replace('Goal: 15 orders per week (from 2).', 'Weekly target: 15 orders.'))).toBe(true)
+    expect(metaPorSemana(PLAN_EN.replace('Goal: 15 orders per week (from 2).', '15 orders a week is the goal.'))).toBe(true)
+    expect(metaPorSemana(PLAN_EN.replace('Goal: 15 orders per week (from 2).', 'Goal: as many orders as possible per week.'))).toBe(false)
+  })
+  it('un plan en inglés roto se rechaza igual (sin período con mes · sin goal)', () => {
+    const roto = PLAN_EN.replace(WEEKS, '| Week | Theme |\n|---|---|\n' + Array.from({ length: 12 }, (_, i) => `| Week ${i + 1} | theme |`).join('\n')).replace('Goal: 15 orders per week (from 2).', 'Goal: grow.')
+    expect(validarFormaDelPlan(roto).hallazgos.map((h) => h.donde)).toEqual(['calendario', 'metas'])
+  })
+})
+
+describe('reserva 3 de CC3 · los controles que no se probaban', () => {
+  it('F1 · números sueltos NO son semanas fechadas: «| 3 | 10 pedidos | 5 de promo |» ×12 → 0 (solo cuenta un mes conocido, una fecha ISO o «días N–M»)', () => {
+    const tabla = '| Sem. | Pedidos | Promo |\n|---|---|---|\n' + Array.from({ length: 12 }, (_, i) => `| ${i + 1} | ${10 + i} pedidos | 5 de promo |`).join('\n')
+    expect(semanasFechadas(tabla)).toBe(0)
+    expect(validarFormaDelPlan(PLAN_DE_PRACTICA.replace(SEMANAS, tabla)).hallazgos.map((h) => h.donde)).toEqual(['calendario'])
+    // y las formas válidas de período sí cuentan, en los dos idiomas
+    for (const p of ['14-20 oct', '28 oct - 3 nov', 'Oct 14-20', '3 de noviembre', 'del 1 al 7 de dic', '2026-10-14', 'días 1–7', 'days 1-7', 'Sept 1-7']) {
+      expect(semanasFechadas(`| Sem. | Período |\n|---|---|\n| 1 | ${p} |`), p).toBe(1)
+    }
+    for (const p of ['5 de promo', '10 pedidos', '14-20', '3 de la tarde', 'marca 3']) {
+      expect(semanasFechadas(`| Sem. | Período |\n|---|---|\n| 1 | ${p} |`), p).toBe(0)
+    }
+  })
+  it('V14 · la fila de encabezados no cuenta como semana · V13 · un canal incrustado en otra palabra no cuenta · V08 · «,777»/«,775» no son centinela y «1.234,77» sí', () => {
+    expect(semanasFechadas('| Sem. | Período |\n|---|---|\n| 1 | 3-9 nov |')).toBe(1)
+    expect(semanasFechadas('| 1 | 3-9 nov |\n|---|---|\n| 2 | 10-16 nov |')).toBe(1) // la primera fila es la cabecera aunque traiga un período
+    expect(canalesNombrados('una foto instagramable y un tiktoker; nada de facebooks')).toEqual([])
+    expect(canalesNombrados('Instagram, luego Meta Ads y búsqueda en Google Maps')).toEqual(['instagram', 'google maps', 'búsqueda', 'busqueda', 'meta ads', 'ads'])
+    expect(cifrasCentinela('costo $1,777 · tope $12,775 · ratio 0,7')).toEqual([])
+    const dos = cifrasCentinela('## Costos\ncosto $1.234,77 y $3,77\n')
+    expect(dos.map((c) => c.donde)).toEqual(['Costos', 'Costos'])
+    expect(dos[0].cifra).toBe('$1.234,77')
+    expect(dos[1].cifra).toContain('$3,77')
+  })
+})
+
 describe('la puerta POST /api/planeacion/validar-plan (contrato propuesto a CC#2)', () => {
   const pedir = (cuerpo: unknown, llave = 'ok') =>
     validar(new Request('http://x/api/planeacion/validar-plan', {
@@ -134,6 +229,10 @@ describe('la puerta POST /api/planeacion/validar-plan (contrato propuesto a CC#2
     expect(j.ok).toBe(false)
     expect(j.hallazgos).toEqual([{ que: expect.stringMatching(/POR SEMANA/), donde: 'metas' }])
     expect(j.correccion).toContain('1. [metas]')
+  })
+  it('R04 · un texto de más de 400.000 caracteres → 413 (no se valida)', async () => {
+    const r = await pedir({ texto: 'x'.repeat(400_001), ...FIRMA })
+    expect(r.status).toBe(413)
   })
   it('`semanas` del pedido manda sobre las 12 por omisión', async () => {
     const ocho = PLAN_DE_PRACTICA.replace(SEMANAS, SEMANAS.split('\n').slice(0, 10).join('\n'))

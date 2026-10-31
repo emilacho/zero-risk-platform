@@ -12,6 +12,9 @@
  *   `{ ok: true, hallazgos: [] , correccion: null }` o `{ ok: false, hallazgos: [{ que, donde }], correccion: '<texto que se pega al pedido del reintento>' }`.
  *   El reintento (1) → `fallo` → alerta en #alertas + `necesita_humano` los hace el FLUJO con esta respuesta; aquí no se llama a ningún modelo (US$ 0).
  * Agnóstico: ningún nombre, ciudad ni rubro de un cliente; las listas de canales son las redes canónicas + los canales directos genéricos.
+ * Idioma (reserva 2 de CC#3 · 31-oct): el plan sale en el idioma que fija el manual del cliente, así que las reglas entienden español E inglés
+ * (semana/week · meses en los dos idiomas · fase/phase · días/days · meta/objetivo/goal/target · por semana/per week/weekly).
+ * Período (reserva 3 de CC#3): solo cuenta como fecha un MES conocido, una fecha ISO o «días N–M»; «5 de promo» ya no es un período.
  */
 
 export interface HallazgoDeForma { que: string; donde: string }
@@ -24,20 +27,29 @@ export const LARGO_MINIMO = 1500
 
 /** canales que el plan puede nombrar: redes canónicas (Instagram · Facebook · TikTok · LinkedIn · YouTube) + canales directos genéricos */
 export const CANALES = [
-  'instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'whatsapp', 'google ads', 'google maps', 'búsqueda', 'busqueda', 'correo', 'email', 'newsletter', 'sms', 'pinterest', 'telegram', 'twitter', 'meta ads', 'anuncios',
+  'instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'whatsapp', 'google ads', 'google maps', 'búsqueda', 'busqueda', 'search', 'correo', 'email', 'newsletter', 'sms', 'pinterest', 'telegram', 'twitter', 'meta ads', 'anuncios', 'ads',
 ] as const
 
 const RE_ENCABEZADO = /^#{1,4}\s+(.+?)\s*$/
 const RE_SEPARADOR_DE_TABLA = /^\|?[\s:|\-–—]+\|?$/
-/** un período: «14-20 oct» · «28 oct - 3 nov» · «2026-10-14» · «días 1–30» · «del 1 al 7» */
-const RE_PERIODO = /\d{1,2}\s*(?:[-–—]|al?\b|hasta)\s*\d{1,2}|\d{1,2}\s*(?:de\s+)?[a-záéíóú]{3,}\.?\b|\d{4}-\d{2}-\d{2}|d[ií]as?\s*\d/i
-/** una fase con días: «Fase 2 · días 31–60» · «fase de arranque (días 1 a 30)» */
-const RE_FASE_CON_DIAS = /\bfase\b[^\n]{0,80}?d[ií]as?\s*\d{1,3}\s*(?:[-–—]|al?\b|hasta)\s*\d{1,3}|d[ií]as?\s*\d{1,3}\s*(?:[-–—]|al?\b|hasta)\s*\d{1,3}[^\n]{0,80}?\bfase\b/gi
-/** «Semana 3 · 28 oct - 3 nov» fuera de una tabla */
-const RE_SEMANA_FECHADA = /\b(?:semana|sem\.?)\s*(\d{1,2})\b[^\n|]{0,60}?(?:\d{1,2}\s*(?:[-–—]|al?\b|hasta)\s*\d{1,2}\s*(?:de\s+)?[a-záéíóú]{3,}|\d{1,2}\s+(?:de\s+)?[a-záéíóú]{3,}\s*(?:[-–—]|al?\b)|\d{4}-\d{2}-\d{2}|d[ií]as?\s*\d{1,3}\s*(?:[-–—]|al?\b)\s*\d{1,3})/gi
-/** la meta con cifra por semana: «meta … por semana: 15» · «15 pedidos por semana … meta» (misma ventana corta) */
-const RE_META_POR_SEMANA = /\bmetas?\b[\s\S]{0,400}?(?:por semana|semanal(?:es)?|a la semana|cada semana|\/\s*sem(?:ana)?\b)[^\n]{0,60}?\d|(?:por semana|semanal(?:es)?|a la semana|cada semana|\/\s*sem(?:ana)?\b)[^\n]{0,60}?\d[\s\S]{0,200}?\bmetas?\b|\d[^\n]{0,40}?(?:por semana|semanal(?:es)?|a la semana|cada semana)[\s\S]{0,200}?\bmetas?\b/i
-/** las cifras centinela del documento de referencia: todo dinero de los ejemplos termina en ,77 */
+/** un mes conocido, en español o inglés, entero o abreviado («oct» · «octubre» · «Oct.» · «October» · «set»/«sept») */
+const MES = '(?:ene(?:ro)?|jan(?:uary)?|feb(?:rero|ruary)?|mar(?:zo|ch)?|abr(?:il)?|apr(?:il)?|mayo?|jun(?:io|e)?|jul(?:io|y)?|ago(?:sto)?|aug(?:ust)?|sept?(?:iembre|ember)?|set(?:iembre)?|oct(?:ubre|ober)?|nov(?:iembre|ember)?|dic(?:iembre)?|dec(?:ember)?)\\b\\.?'
+const RANGO = '\\d{1,2}\\s*(?:[-–—]|al?\\b|hasta\\b|to\\b)\\s*\\d{1,2}'
+/** un período CON mes conocido o fecha ISO o días: «14-20 oct» · «28 oct - 3 nov» · «Oct 14-20» · «3 de noviembre» · «2026-10-14» · «días 1–30» · «days 1-30» (reserva 3: «5 de promo» NO es un período) */
+const RE_PERIODO = new RegExp(`(?:${RANGO}|\\b\\d{1,2})\\s*(?:de\\s+|of\\s+)?${MES}|\\b${MES}\\s*\\d{1,2}\\b|\\d{4}-\\d{2}-\\d{2}|\\b(?:d[ií]as?|days?)\\s*\\d`, 'i')
+const DIAS_DE_A = '\\b(?:d[ií]as?|days?)\\s*\\d{1,3}\\s*(?:[-–—]|al?\\b|hasta\\b|to\\b|through\\b)\\s*\\d{1,3}'
+/** una fase con días: «Fase 2 · días 31–60» · «fase de arranque (días 1 a 30)» · «Phase 2 · days 31-60» */
+const RE_FASE_CON_DIAS = new RegExp(`\\b(?:fase|phase|etapa|stage)\\b[^\\n]{0,80}?${DIAS_DE_A}|${DIAS_DE_A}[^\\n]{0,80}?\\b(?:fase|phase|etapa|stage)\\b`, 'gi')
+/** «Semana 3 · 28 oct - 3 nov» · «Week 3 · Oct 14-20» fuera de una tabla */
+const RE_SEMANA_FECHADA = new RegExp(`\\b(?:semana|sem\\.?|week|wk\\.?)\\s*(\\d{1,2})\\b[^\\n|]{0,60}?(?:${RE_PERIODO.source})`, 'gi')
+/** la primera celda de una fila del calendario: «3» · «Sem. 3» · «Semana 3» · «Week 3» · «W3» */
+const RE_CELDA_DE_SEMANA = /^(?:sem(?:ana)?\.?|week|wk\.?|w)?\s*(\d{1,2})$/i
+const RE_CABECERA_DE_SEMANA = /^(?:semana|sem\.?|week|wk\.?|w)$/i
+/** la palabra que anuncia una meta (español e inglés) */
+const RE_PALABRA_META = /\b(?:metas?|objetivos?|goals?|targets?|kpis?)\b/i
+/** «por semana» en sus formas (español e inglés) */
+const RE_POR_SEMANA = /\b(?:por semana|semanal(?:es|mente)?|a la semana|cada semana|per week|weekly|a week|each week|every week)\b|\/\s*(?:sem(?:ana)?|w(?:ee)?k)\b/gi
+/** las cifras centinela del documento de referencia: todo dinero de los ejemplos termina en ,77 (con borde: «1.234,77» sí · «,777» y «,775» no) */
 const RE_CENTINELA = /\d,77(?![\d])/g
 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -52,17 +64,25 @@ export function seccionDe(texto: string, i: number): string {
   return 'inicio del plan'
 }
 
+/** las celdas de una fila de tabla markdown (null si la línea no es una fila) */
+function celdasDe(linea: string): string[] | null {
+  const l = linea.trim()
+  if (l.charAt(0) !== '|' || RE_SEPARADOR_DE_TABLA.test(l)) return null
+  const celdas = l.split('|').map((c) => c.trim())
+  if (celdas[0] === '') celdas.shift()
+  if (celdas[celdas.length - 1] === '') celdas.pop()
+  return celdas.length ? celdas : null
+}
+const esFilaDeEncabezados = (lineas: string[], i: number) => i + 1 < lineas.length && RE_SEPARADOR_DE_TABLA.test(lineas[i + 1].trim()) && /-/.test(lineas[i + 1])
+
 /** cuántas semanas distintas trae el calendario con un período al lado (filas de tabla «| N | período |» o líneas «Semana N · período») */
 export function semanasFechadas(texto: string): number {
   const semanas = new Set<number>()
-  const lineas = texto.split('\n').map((l) => l.trim())
+  const lineas = texto.split('\n')
   lineas.forEach((l, i) => {
-    if (l.charAt(0) !== '|' || RE_SEPARADOR_DE_TABLA.test(l)) return
-    if (i + 1 < lineas.length && RE_SEPARADOR_DE_TABLA.test(lineas[i + 1]) && /-/.test(lineas[i + 1])) return // la fila de encabezados
-    const celdas = l.split('|').map((c) => c.trim())
-    if (celdas[0] === '') celdas.shift()
-    if (celdas.length < 2) return
-    const n = /^(?:sem(?:ana)?\.?\s*)?(\d{1,2})$/i.exec(celdas[0])
+    const celdas = celdasDe(l)
+    if (!celdas || celdas.length < 2 || esFilaDeEncabezados(lineas, i)) return
+    const n = RE_CELDA_DE_SEMANA.exec(celdas[0])
     if (!n) return
     const periodo = celdas.slice(1, 3).some((c) => RE_PERIODO.test(c))
     if (periodo) semanas.add(Number(n[1]))
@@ -79,6 +99,37 @@ export function fasesConDias(texto: string): number {
   let n = 0
   while (re.exec(texto) !== null) n++
   return n
+}
+
+/**
+ * ¿hay una meta con cifra POR SEMANA? Vale en cualquier orden (reserva 1 de CC#3): «meta: 15 pedidos por semana» · «Meta semanal: 15» · «15 pedidos por semana … meta» ·
+ * «Goal: 15 orders per week»; la cifra va en la misma línea que «por semana» (≤60 caracteres) y la palabra meta/objetivo/goal/target a ≤400 caracteres antes o ≤200 después
+ * (un encabezado «Meta prudente…» cuenta). También vale una tabla cuya cabecera tenga «Semana»/«Week» y «Meta»/«Goal» con una cifra en la celda de la meta.
+ */
+export function metaPorSemana(texto: string): boolean {
+  const re = new RegExp(RE_POR_SEMANA.source, RE_POR_SEMANA.flags)
+  let m: RegExpExecArray | null
+  while ((m = re.exec(texto)) !== null) {
+    const ini = texto.lastIndexOf('\n', m.index) + 1
+    const finDeLinea = texto.indexOf('\n', m.index)
+    const linea = texto.slice(ini, finDeLinea < 0 ? texto.length : finDeLinea)
+    const pos = m.index - ini
+    if (!/\d/.test(linea.slice(Math.max(0, pos - 60), pos + m[0].length + 60))) continue
+    if (RE_PALABRA_META.test(texto.slice(Math.max(0, m.index - 400), m.index + m[0].length + 200))) return true
+  }
+  const lineas = texto.split('\n')
+  for (let i = 0; i + 2 < lineas.length; i++) {
+    const cabecera = celdasDe(lineas[i])
+    if (!cabecera || !esFilaDeEncabezados(lineas, i)) continue
+    const col = cabecera.findIndex((c) => RE_PALABRA_META.test(c))
+    if (col < 0 || !cabecera.some((c) => RE_CABECERA_DE_SEMANA.test(c))) continue
+    for (let k = i + 2; k < lineas.length; k++) {
+      const fila = celdasDe(lineas[k])
+      if (!fila) break
+      if (/\d/.test(fila[col] ?? '')) return true
+    }
+  }
+  return false
 }
 
 /** los canales que el plan nombra (sin tildes, en minúsculas; cada uno una vez) */
@@ -130,13 +181,13 @@ export function validarFormaDelPlan(texto: unknown, opciones: OpcionesDeForma = 
   const nFases = fasesConDias(t)
   if (nSemanas < semanas && nFases < 2) {
     hallazgos.push({
-      que: `falta el calendario fechado: ${nSemanas} de ${semanas} semanas traen su período (p. ej. «| 3 | 28 oct - 3 nov | …») y no hay fases con días («fase 2 · días 31–60»); escribe las ${semanas} semanas con su fecha, o las fases con sus días de inicio y fin`,
+      que: `falta el calendario fechado: ${nSemanas} de ${semanas} semanas traen su período con mes (p. ej. «| 3 | 28 oct - 3 nov | …» · «| Week 3 | Oct 14-20 | …») y no hay fases con días («fase 2 · días 31–60»); escribe las ${semanas} semanas con su fecha, o las fases con sus días de inicio y fin`,
       donde: 'calendario',
     })
   }
   // F2 · meta con cifra por semana
-  if (!RE_META_POR_SEMANA.test(t)) {
-    hallazgos.push({ que: 'falta la meta con cifra POR SEMANA (p. ej. «meta: 15 pedidos por semana»); sin una cifra semanal nadie puede medir si el plan cumple', donde: 'metas' })
+  if (!metaPorSemana(t)) {
+    hallazgos.push({ que: 'falta la meta con cifra POR SEMANA (p. ej. «meta: 15 pedidos por semana» · «goal: 15 orders per week»); sin una cifra semanal nadie puede medir si el plan cumple', donde: 'metas' })
   }
   // F3 · al menos un canal nombrado
   const canales = canalesNombrados(t)
