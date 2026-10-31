@@ -172,10 +172,10 @@ describe('🔴 el borrador marcado NO es un plan para nadie que lea planes', () 
     FILAS.length = 0
     FILAS.push({ id: 'plan-bueno', client_id: CLIENTE, output_type: 'campaign_plan_90d', created_at: '2026-10-30T10:00:00Z' })
     FILAS.push({ id: 'borrador', ...b, created_at: '2026-10-31T10:00:00Z' })
-    expect(await almacenDeSupabase().resolverPlan(CLIENTE, undefined)).toEqual({ plan_id: 'plan-bueno', fecha: '2026-10-30' })
+    expect(await almacenDeSupabase().resolverPlan(CLIENTE, null)).toEqual({ plan_id: 'plan-bueno', fecha: '2026-10-30' })
     // y si no hay plan bueno, NO inventa uno con el borrador
     FILAS.splice(0, 1)
-    expect(await almacenDeSupabase().resolverPlan(CLIENTE, undefined)).toBeNull()
+    expect(await almacenDeSupabase().resolverPlan(CLIENTE, null)).toBeNull()
     // el plan que SÍ se guarda sigue con su tipo de siempre
     expect(JSON.stringify(nuevo.nodes.find((n: any) => n.name === 'Guardar el plan').parameters)).toContain("output_type: 'campaign_plan_90d'")
   })
