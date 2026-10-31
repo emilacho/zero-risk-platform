@@ -8,7 +8,8 @@ import { COTAS, type Aporte, type EstadoMesa, type Tarjeta, type TipoDePieza } f
 import { NOMBRE_DE_LA_PIEZA } from './aprendizaje'
 import type { FotoEtiquetada } from '../fotos'
 import { CABECERA_SALTAR_EDITOR } from '../../cadena/constantes'
-import { fichasEnTexto, leerFichasPorRed, metodoDeAsiento } from '../../cadena/metodos'
+import { AGENTE_GANCHO_DE_VIDEO, METODO_GANCHO_POR_OMISION, fichasEnTexto, leerFichasPorRed, metodoDeAsiento } from '../../cadena/metodos'
+import { BRIEF_GUIA_NO_REGLA } from '../brief'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas'
 
@@ -119,16 +120,18 @@ const CONVENCION_DEL_CONCEPTO = [
 ].join('\n')
 
 /**
- * T8 · 31-oct · UNA VOZ DE GANCHO POR VIDEO (auditoría 5 del plan v3): el gancho (los primeros segundos) lo propone SOLO quien mide la retención; quien edita el video lo integra
- * en el guion; nadie más propone un gancho aparte (ni el estratega de TikTok/Reels, ni la dirección). Dos ganchos en paralelo es un bug de la mesa, no una riqueza.
- * Los asientos son los de `oficina_directorio` (dato); aquí solo se nombra quién tiene la voz del gancho y quién la integra, para escribir el pedido de cada turno.
+ * T8 · 31-oct · UNA VOZ DE GANCHO POR VIDEO (auditoría 5 del plan v3) · FIRMA 01-nov «hoja sin reja»: el gancho de la hoja es SUGERIDO; el gancho FINAL del video corto lo escribe
+ * la mesa de piezas por UNA voz: `marketing_short_video_editing_coach` con el método `short-video-scripter` pegado a su tarea (la misma voz que fijó la FIRMA del 31-oct
+ * «calendario y gancho» en la cadena · `AGENTE_GANCHO_DE_VIDEO`). Quien edita el video lo integra en el guion; nadie más propone un gancho aparte (ni el estratega de TikTok/Reels,
+ * ni la dirección). La retención (`marketing_video_optimization_specialist`) ya no está en el video corto: aporta en la familia propia del video largo de YouTube (FIRMA 01-nov punto 4).
+ * Dos ganchos en paralelo es un bug de la mesa, no una riqueza. Los asientos son los de `oficina_directorio` (dato); aquí solo se nombra quién tiene la voz y quién la integra.
  */
-export const VOZ_DEL_GANCHO = 'marketing_video_optimization_specialist'
+export const VOZ_DEL_GANCHO: string = AGENTE_GANCHO_DE_VIDEO
 export const QUIEN_INTEGRA_EL_GANCHO = 'video-editor'
 export const REGLA_DEL_GANCHO = `UNA sola voz de gancho por video: el gancho (lo que pasa en los primeros 3 segundos) lo propone únicamente ${VOZ_DEL_GANCHO}; ${QUIEN_INTEGRA_EL_GANCHO} lo integra en el guion. Nadie más propone un gancho aparte, y el guion lleva un solo gancho.`
 /** lo que se le dice a cada asiento de la mesa de video sobre el gancho, según quién es */
 export function reglaDelGanchoPara(agente: string): string {
-  if (agente === VOZ_DEL_GANCHO) return `Eres la ÚNICA voz del gancho de este video: propón UN gancho (los primeros 3 segundos: qué se ve y por qué detiene el scroll) y el ritmo que lo sostiene. Un solo gancho, no alternativas. No escribes el guion ni eliges la dirección visual.`
+  if (agente === VOZ_DEL_GANCHO) return `Eres la ÚNICA voz del gancho de este video: propón UN gancho (los primeros 3 segundos: qué se ve y por qué detiene el scroll) y la puerta de retención que lo sostiene. El GANCHO SUGERIDO del brief es un punto de partida que puedes mejorar, no una obligación. Un solo gancho final, no alternativas (si tu método te pide comparar 2 o 3 familias, compáralas y ENTREGA UNO, diciendo cuál y por qué). No escribes el guion entero ni eliges la dirección visual.\n\n${METODO_GANCHO_POR_OMISION}`
   if (agente === QUIEN_INTEGRA_EL_GANCHO) return `El gancho NO lo propones tú: lo propone ${VOZ_DEL_GANCHO} (míralo en el tablero o pídeselo con \`mesa_pedir\`); tú lo integras en el guion como primer plano. Nunca escribas un gancho alternativo.`
   return `No propongas un gancho: el gancho del video es de ${VOZ_DEL_GANCHO} (una sola voz) y lo integra ${QUIEN_INTEGRA_EL_GANCHO}. Aporta solo lo que tu especialidad suma al resto del video.`
 }
@@ -231,7 +234,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     '## 1 · Manual de marca (léelo PRIMERO)',
     recorta(c.manual_texto || '(sin manual)', DIETA[c.tipo].manual, 'el manual de marca'),
     '',
-    c.tipo === 'brief' ? '## 2 · El marco de la campaña (estrategia, fases, canales, hitos, sedes y fechas)' : c.tipo === 'concepto' ? '## 2 · El brief de la campaña y las fases de la estrategia' : '## 2 · El brief de este entregable',
+    c.tipo === 'brief' ? '## 2 · El marco de la campaña (estrategia, fases, canales, hitos, sedes y fechas)' : c.tipo === 'concepto' ? '## 2 · El brief de la campaña y las fases de la estrategia' : `## 2 · El brief de este entregable (${BRIEF_GUIA_NO_REGLA})`,
     recorta(c.brief_texto, DIETA[c.tipo].marco, 'el marco'),
     '',
     '## 3 · El plan de trabajo',
@@ -253,7 +256,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
         : c.tipo === 'concepto'
         ? ['PRIMERO lee el brief de la campaña con estos 6 criterios: (1) un solo mensaje, (2) insight real, (3) objetivo claro, (4) está planteado como problema y no como solución, (5) es fiel al plan y al manual, (6) se puede crear con lo que trajo el portero. Si alguno falla, **devuelve el brief UNA vez**: escribe una sección `## Devolución del brief` con los puntos que fallan y nada más (la mesa se cierra y la cadena pide un brief nuevo). Si el brief sirve, sigue: del brief y el manual, escribe **EL PROBLEMA en una frase**, y reparte lo que necesitas de cada compañero. Cada uno propondrá 2 o 3 caminos distintos con su porqué, pensados para 90 días.']
         : c.tipo === 'video'
-        ? ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora** del video corto: qué vas a contar en 8–15 segundos, con qué estructura de planos, qué fotos propias sirven de referencia y qué necesitas de cada compañero (guion y pedido al generador, storyboard, gancho y ritmo de retención, texto del pie, coherencia de Instagram o formato nativo de TikTok/Reels si están en la mesa).', REGLA_DEL_GANCHO + ' Tú no propones el gancho: lo pides y lo integras en la pieza.']
+        ? ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora** del video corto: qué vas a contar en 8–15 segundos, con qué estructura de planos, qué fotos propias sirven de referencia y qué necesitas de cada compañero (guion y pedido al generador, storyboard, el gancho final y su puerta de retención (el coach, única voz), texto del pie, coherencia de Instagram o formato nativo de TikTok/Reels, y encanto de marca si la marca lo admite, si están en la mesa).', REGLA_DEL_GANCHO + ' Tú no propones el gancho: lo pides y lo integras en la pieza.']
         : ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.']),
       'El equipo completo participa en cada pieza: la oficina se formó con estos especialistas por razones concretas. Cada uno aportará su especialidad; no escribas tú todo. Si ya sabes que te falta material del cliente, pídelo con `pedir_material`.',
     ].join('\n'),

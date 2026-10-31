@@ -1,7 +1,9 @@
 /**
  * PLANTILLA `video_mesa` · el brazo de video DESDE LA OFICINA (parte 2 · 31-oct · T8 «video sobre la hoja»). Es DATO (se siembra INACTIVA en 202610312012; la enciende la config cuando Emilio dé «dale» a la prueba completa).
- * El equipo de la mesa es DATO del directorio (`oficina_directorio`, 2008 + 2012): dirección `creative-director-mesa` (`video:dirige`) · `video-editor` (guion y pedido al generador) · `design-visual-storyteller` (storyboard)
- * · `marketing_video_optimization_specialist` (retención: la ÚNICA voz del gancho) · `content-creator` (pie y etiquetas) · `marketing_instagram_curator` (`video:si_instagram`) · `tiktok-strategist` (`video:si_tiktok_o_reels`) · portero.
+ * El equipo de la mesa es DATO del directorio (`oficina_directorio`, 2008 + 2012 + 202611011300): dirección `creative-director-mesa` (`video:dirige`) · `video-editor` (guion y pedido al generador; integra el gancho)
+ * · `marketing_short_video_editing_coach` (la ÚNICA voz del gancho, con el método `short-video-scripter` en su tarea · FIRMA 01-nov) · `design-visual-storyteller` (storyboard) · `content-creator` (pie y etiquetas)
+ * · `whimsy-injector` (encanto de marca, solo si la marca lo admite · FIRMA 01-nov) · `marketing_instagram_curator` (`video:si_instagram`) · `tiktok-strategist` (`video:si_tiktok_o_reels`) · portero.
+ * La retención (`marketing_video_optimization_specialist`) NO está aquí: aporta en la familia propia del video largo de YouTube (`video_largo`, sala pendiente · FIRMA 01-nov punto 4).
  * Lo que sigue a la mesa es cola mecánica: guion → pedido al brazo → el video (Seedance, ≤ US$ 5, con descuento vigente) → chequeos → jefatura → entrega (mp4 + guion + pie) → cierre.
  * Tope de la pieza US$ 10 (no 5 como la mesa de láminas): el video solo cuesta ≈ 2,6–4,9 y la jefatura reserva 1,5; a la mesa le quedan ≈ 3.
  */

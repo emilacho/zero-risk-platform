@@ -1,7 +1,8 @@
 /**
  * T8 · LA MESA DE VIDEO SOBRE LA HOJA · lado de la OFICINA (31-oct · plan v3 T8 · CC#1) · US$ 0, sin base ni red ni modelo.
  *  · las condiciones del video (`si_instagram`, `si_tiktok_o_reels`) salen del brief de la hoja;
- *  · el equipo de la mesa es el DATO de 202610312008 + 202610312012 (dirección, guion, pie, storyboard, retención, curador y TikTok condicionales);
+ *  · el equipo de la mesa es el DATO de 202610312008 + 202610312012 (dirección, guion, pie, storyboard, el coach como única voz del gancho [FIRMA 01-nov], curador y TikTok condicionales;
+ *    la retención pasa a `video_largo`, la familia propia del video largo de YouTube);
  *  · UNA voz de gancho por video en el pedido de cada turno; la plantilla sembrada es la que produce el código; el concepto de gasto `video` entra al libro;
  *  · la puerta: un sobre de video sin sala activa NO va a la pasarela;
  *  · ensayo en seco de punta a punta: la hoja REAL escribe el parte, la mesa escribe el guion, el brazo simulado «filma», y la pieza cierra con mp4, guion y pie.
@@ -10,11 +11,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { escribirHoja, type FilaDeHoja, type InsumosDeLaHoja } from '@/lib/cadena/hoja'
+import { BRIEF_GUIA_NO_REGLA } from '../brief'
 import { leerBriefCreativo } from '@/lib/cadena/brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '@/lib/cadena/conceptos'
 import type { FormatosPorRed } from '@/lib/cadena/tipos'
 import { condicionesDelVideo, SI_INSTAGRAM, SI_TIKTOK_O_REELS } from '../mesa/condiciones-de-video'
 import { direccionDe, especialistasPertinentes } from '../mesa/directorio'
+import { AGENTE_GANCHO_DE_VIDEO, METODO_GANCHO_POR_OMISION } from '@/lib/cadena/metodos'
 import { QUIEN_INTEGRA_EL_GANCHO, REGLA_DEL_GANCHO, VOZ_DEL_GANCHO, armarTarea, reglaDelGanchoPara } from '../mesa/pedidos'
 import type { EstadoMesa, Tarjeta } from '../mesa/tipos'
 import { abrirEncargo } from '../orquestador'
@@ -47,12 +50,20 @@ const TRAS_2008: Tarjeta[] = [
   t('marketing_video_optimization_specialist', 'miembro', ['video'], ['Solo gancho y ritmo.']),
   t('portero', 'portero', []),
 ]
-/** lo que hacen los tres UPDATE de 202610312012 */
-const TRAS_2012: Tarjeta[] = TRAS_2008.map((x) =>
-  x.agente === 'creative-director-mesa' ? { ...x, pertinente_en: [...x.pertinente_en, 'video:dirige'] }
-  : x.agente === 'video-editor' || x.agente === 'content-creator' ? { ...x, pertinente_en: [...x.pertinente_en, 'video'] }
-  : x.agente === 'marketing_instagram_curator' ? { ...x, pertinente_en: [...x.pertinente_en, 'video:si_instagram'] }
-  : x)
+/** la indicación del coach en 2012 (FIRMA 01-nov): la única voz del gancho final */
+export const INDICACION_COACH_2012 = 'Eres la ÚNICA voz del gancho de este video: entregas UN gancho final, no alternativas; el gancho sugerido del brief es punto de partida, no obligación. No escribes el guion entero, no eliges la dirección visual y no tocas el pedido al generador: eso es de quien edita el video, que integra tu gancho como primer plano.'
+export const INDICACION_VIDEO_EDITOR_2012 = 'Aportas cómo se contaría esta idea en video corto: estructura, ritmo y qué mostrarías, sin escribir todavía el guion final. Un solo gancho por video: el gancho lo propone el coach de video corto (marketing_short_video_editing_coach); tú lo integras como primer plano, nunca propones uno aparte.'
+/** lo que hacen los UPDATE + el INSERT de 202610312012 (con la FIRMA 01-nov: el coach entra como única voz del gancho; la retención pasa al video largo) */
+export const TRAS_2012: Tarjeta[] = [
+  ...TRAS_2008.map((x) =>
+    x.agente === 'creative-director-mesa' ? { ...x, pertinente_en: [...x.pertinente_en, 'video:dirige'] }
+    : x.agente === 'video-editor' ? { ...x, pertinente_en: [...x.pertinente_en, 'video'], indicacion: [INDICACION_VIDEO_EDITOR_2012] }
+    : x.agente === 'content-creator' ? { ...x, pertinente_en: [...x.pertinente_en, 'video'] }
+    : x.agente === 'marketing_instagram_curator' ? { ...x, pertinente_en: [...x.pertinente_en, 'video:si_instagram'] }
+    : x.agente === 'marketing_video_optimization_specialist' ? { ...x, pertinente_en: x.pertinente_en.map((p) => (p === 'video' ? 'video_largo' : p)) }
+    : x),
+  t('marketing_short_video_editing_coach', 'miembro', ['video'], [INDICACION_COACH_2012]),
+]
 /** el mismo estado con que la sala abre una mesa (copia local: `estadoInicialDeLaMesa` no es pública) */
 const estadoInicialDeLaMesa = (tipo: EstadoMesa['tipo'], directorio: Tarjeta[]): EstadoMesa => ({ tipo, directorio_congelado: directorio.filter((t) => t.activo), direccion: direccionDe(directorio, tipo)?.agente ?? '', turnos: 0, integraciones: 0, devoluciones_por_citas: 0, libro_visto: 0, preguntas_del_traductor: 0, marcas: {}, fase: 'trabajando', cierre_forzado: null, pieza_texto: null, turno_abierto: null })
 
@@ -74,23 +85,32 @@ describe('el equipo de la mesa de video es dato del directorio (2008 + 2012)', (
     expect(direccionDe(TRAS_2012, 'video')?.agente).toBe('creative-director-mesa')
     expect(direccionDe(TRAS_2012, 'brief')?.agente).toBe('campaign-brief-agent')
   })
-  it('fijos: guion (video-editor), pie (content-creator), storyboard (design-visual-storyteller), retención; condicionales: curador solo si_instagram, TikTok solo si_tiktok_o_reels', () => {
-    expect(especialistasPertinentes(TRAS_2012, 'video', false, []).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_video_optimization_specialist', 'video-editor'])
-    expect(especialistasPertinentes(TRAS_2012, 'video', false, [SI_INSTAGRAM]).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_instagram_curator', 'marketing_video_optimization_specialist', 'video-editor'])
-    expect(especialistasPertinentes(TRAS_2012, 'video', false, [SI_INSTAGRAM, SI_TIKTOK_O_REELS]).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_instagram_curator', 'marketing_video_optimization_specialist', 'tiktok-strategist', 'video-editor'])
-    // el coach de video no existe; el analista de mercado tampoco (FIRMA 5); nadie de carrusel se cuela
-    for (const a of especialistasPertinentes(TRAS_2012, 'video', true, [SI_INSTAGRAM, SI_TIKTOK_O_REELS])) expect(['carousel-designer', 'design-image-prompt-engineer', 'inclusive-visuals-specialist', 'whimsy-injector', 'market_research_analyst']).not.toContain(a)
+  it('fijos: guion (video-editor), pie (content-creator), storyboard (design-visual-storyteller), el coach (gancho); condicionales: curador solo si_instagram, TikTok solo si_tiktok_o_reels; la retención NO (video largo)', () => {
+    expect(especialistasPertinentes(TRAS_2012, 'video', false, []).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_short_video_editing_coach', 'video-editor'])
+    expect(especialistasPertinentes(TRAS_2012, 'video', false, [SI_INSTAGRAM]).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_instagram_curator', 'marketing_short_video_editing_coach', 'video-editor'])
+    expect(especialistasPertinentes(TRAS_2012, 'video', false, [SI_INSTAGRAM, SI_TIKTOK_O_REELS]).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_instagram_curator', 'marketing_short_video_editing_coach', 'tiktok-strategist', 'video-editor'])
+    // la retención aporta en el video largo (familia propia, FIRMA 01-nov); el analista de mercado no (FIRMA 5); nadie de carrusel se cuela; whimsy entra recién con 202611011300
+    for (const a of especialistasPertinentes(TRAS_2012, 'video', true, [SI_INSTAGRAM, SI_TIKTOK_O_REELS])) expect(['carousel-designer', 'design-image-prompt-engineer', 'inclusive-visuals-specialist', 'whimsy-injector', 'market_research_analyst', 'marketing_video_optimization_specialist']).not.toContain(a)
+    expect(TRAS_2012.find((x) => x.agente === 'marketing_video_optimization_specialist')!.pertinente_en).toEqual(['video_largo'])
     // antes de 2012 el video no tenía ni guion ni pie: la migración es necesaria
     expect(especialistasPertinentes(TRAS_2008, 'video', false, [SI_INSTAGRAM]).sort()).toEqual(['design-visual-storyteller', 'marketing_video_optimization_specialist'])
   })
-  it('la migración hace exactamente esos tres UPDATE aditivos (array_append con guarda) y nada más al directorio', () => {
+  it('la migración hace esos UPDATE aditivos (array_append con guarda), mueve la retención a video_largo, siembra al coach (ON CONFLICT DO NOTHING) y corrige la indicación de video-editor; nada destructivo', () => {
     expect(SQL).toMatch(/array_append\(pertinente_en, 'video:dirige'\)[\s\S]*WHERE agente = 'creative-director-mesa' AND NOT \('video:dirige' = ANY\(pertinente_en\)\)/)
     expect(SQL).toMatch(/array_append\(pertinente_en, 'video'\)[\s\S]*WHERE agente IN \('video-editor', 'content-creator'\) AND NOT \('video' = ANY\(pertinente_en\)\)/)
     expect(SQL).toMatch(/array_append\(pertinente_en, 'video:si_instagram'\)[\s\S]*WHERE agente = 'marketing_instagram_curator' AND NOT \('video:si_instagram' = ANY\(pertinente_en\)\)/)
-    expect(SQL.match(/UPDATE public\.oficina_directorio/g)).toHaveLength(3)
-    expect(SQL).not.toMatch(/INSERT INTO public\.oficina_directorio|DELETE FROM|DROP TABLE|TRUNCATE/)
-    expect(SQL).toMatch(/IF d <> 1 THEN/); expect(SQL).toMatch(/IF m <> 6 THEN/); expect(SQL).toMatch(/IF p <> 1 THEN/)
+    // FIRMA 01-nov
+    expect(SQL).toMatch(/array_replace\(pertinente_en, 'video', 'video_largo'\)[^\n]*\n\s+WHERE agente = 'marketing_video_optimization_specialist' AND 'video' = ANY\(pertinente_en\)/)
+    expect(SQL).toMatch(/INSERT INTO public\.oficina_directorio \(agente, rol, especialidad, sabe_hacer, necesita, entrega, pertinente_en, indicacion\) VALUES\s+\(\$d\$marketing_short_video_editing_coach\$d\$, \$d\$miembro\$d\$/)
+    expect(SQL).toContain(`ARRAY[$d$${INDICACION_COACH_2012}$d$`)
+    expect(SQL).toContain(`$d$${INDICACION_VIDEO_EDITOR_2012}$d$), actualizado_en = now()\n  WHERE agente = 'video-editor'`)
+    expect(SQL.match(/UPDATE public\.oficina_directorio/g)).toHaveLength(5)
+    expect(SQL.match(/INSERT INTO public\.oficina_directorio/g)).toHaveLength(1)
+    expect(SQL).toMatch(/ON CONFLICT \(agente\) DO NOTHING/)
+    expect(SQL).not.toMatch(/DELETE FROM|DROP TABLE|TRUNCATE/)
+    expect(SQL).toMatch(/IF d <> 1 THEN/); expect(SQL).toMatch(/IF m <> 6 THEN/); expect(SQL).toMatch(/IF p <> 1 THEN/); expect(SQL).toMatch(/IF r <> 1 THEN/); expect(SQL).toMatch(/IF v <> 1 THEN/)
     expect(TRAS_2012.filter((x) => x.rol === 'miembro' && x.pertinente_en.some((p) => p.split(':')[0] === 'video'))).toHaveLength(6)
+    expect((TRAS_2012.find((x) => x.agente === 'video-editor')!.indicacion ?? []).join(' ')).not.toMatch(/quien mide la retención/)
   })
   it('la jefatura del video revisa texto, etiquetas y guion con sus productores (content-creator y video-editor)', () => {
     expect(familiaDePieza(VIDEO_MESA)).toBe('video')
@@ -102,19 +122,25 @@ describe('UNA voz de gancho por video (auditoría 5)', () => {
   const est: EstadoMesa = { ...estadoInicialDeLaMesa('video', TRAS_2012), condiciones: [SI_INSTAGRAM, SI_TIKTOK_O_REELS] }
   const c = { cliente_nombre: 'Cliente', tipo: 'video' as const, brief_id: 'F1-S1-ig-r1', brief_texto: '### F1-S1-ig-r1 · Instagram · reel\n- QUÉ ES: reel', manual_texto: 'manual', plan_texto: null, fotos: [], tope_usd: 10, gasto_usd: 0 }
   const tarea = (tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar', agente: string) => armarTarea({ tipo, agente, tarjeta: TRAS_2012.find((x) => x.agente === agente), est, libro: [], c, pedido: tipo === 'responder' ? { id: 'a-1', encargo_id: 'e', n: 1, de: 'creative-director-mesa', para: agente, tipo: 'pide', texto: '¿gancho?', refs: [], responde_a: null, profundidad: 0, costo_usd: 0, workflow_execution_id: null, creado_en: '' } : undefined })
-  it('la voz del gancho es la retención; quien integra es video-editor', () => {
-    expect(VOZ_DEL_GANCHO).toBe('marketing_video_optimization_specialist')
+  it('la voz del gancho es el coach de video corto (FIRMA 01-nov: la misma voz que la cadena fijó el 31-oct); quien integra es video-editor', () => {
+    expect(VOZ_DEL_GANCHO).toBe('marketing_short_video_editing_coach')
+    expect(VOZ_DEL_GANCHO).toBe(AGENTE_GANCHO_DE_VIDEO)
     expect(QUIEN_INTEGRA_EL_GANCHO).toBe('video-editor')
     expect(REGLA_DEL_GANCHO).toMatch(/UNA sola voz de gancho por video/)
   })
-  it('a la retención se le pide UN gancho (la única voz); a video-editor, integrarlo sin proponer otro; a los demás, no proponer gancho', () => {
+  it('al coach se le pide UN gancho final con su método (la única voz); a video-editor, integrarlo sin proponer otro; a los demás, no proponer gancho', () => {
     expect(tarea('aportar', VOZ_DEL_GANCHO)).toContain('Eres la ÚNICA voz del gancho de este video')
+    expect(tarea('aportar', VOZ_DEL_GANCHO)).toContain(METODO_GANCHO_POR_OMISION)
+    expect(tarea('aportar', VOZ_DEL_GANCHO)).toContain('El GANCHO SUGERIDO del brief es un punto de partida que puedes mejorar, no una obligación')
     expect(tarea('aportar', QUIEN_INTEGRA_EL_GANCHO)).toContain('El gancho NO lo propones tú')
     // A12 (certificación CC3): la otra mitad de «una sola voz»: al guionista se le prohíbe escribir un gancho alternativo y se le dice de quién es
     expect(tarea('aportar', QUIEN_INTEGRA_EL_GANCHO)).toContain('Nunca escribas un gancho alternativo')
     expect(tarea('aportar', QUIEN_INTEGRA_EL_GANCHO)).toContain(`lo propone ${VOZ_DEL_GANCHO}`)
     expect(tarea('responder', QUIEN_INTEGRA_EL_GANCHO)).toContain('Nunca escribas un gancho alternativo')
-    expect(tarea('aportar', VOZ_DEL_GANCHO)).toContain('Un solo gancho, no alternativas')
+    expect(tarea('aportar', VOZ_DEL_GANCHO)).toContain('Un solo gancho final, no alternativas')
+    // nadie más recibe el método del gancho
+    expect(tarea('aportar', QUIEN_INTEGRA_EL_GANCHO)).not.toContain(METODO_GANCHO_POR_OMISION)
+    expect(tarea('aportar', 'tiktok-strategist')).not.toContain(METODO_GANCHO_POR_OMISION)
     expect(tarea('aportar', 'tiktok-strategist')).toContain('No propongas un gancho')
     expect(tarea('aportar', 'content-creator')).toContain('No propongas un gancho')
     expect(tarea('responder', 'tiktok-strategist')).toContain(reglaDelGanchoPara('tiktok-strategist'))
@@ -153,12 +179,15 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
     expect(REVERSA).toMatch(/ADD CONSTRAINT oficina_gastos_concepto_valido CHECK \(concepto IN \('modelo', 'revisor_externo', 'imagen', 'portero'\)\)/)
     expect(REVERSA).toMatch(/WHERE concepto = 'video'\) THEN RAISE EXCEPTION/)
   })
-  it('la reversa quita solo lo de 2012 (no lo de 2008) y se niega con encargos de video', () => {
+  it('la reversa quita solo lo de 2012 (no lo de 2008), devuelve la retención a video, borra al coach, restaura la indicación de video-editor y se niega con encargos de video', () => {
     expect(REVERSA).toMatch(/array_remove\(pertinente_en, 'video:dirige'\)[^\n]*WHERE agente = 'creative-director-mesa'/)
     expect(REVERSA).toMatch(/array_remove\(pertinente_en, 'video'\)[^\n]*WHERE agente IN \('video-editor', 'content-creator'\)/)
     expect(REVERSA).toMatch(/array_remove\(pertinente_en, 'video:si_instagram'\)[^\n]*WHERE agente = 'marketing_instagram_curator'/)
+    expect(REVERSA).toMatch(/array_replace\(pertinente_en, 'video_largo', 'video'\)[^\n]*WHERE agente = 'marketing_video_optimization_specialist'/)
+    expect(REVERSA).toMatch(/DELETE FROM public\.oficina_directorio WHERE agente = 'marketing_short_video_editing_coach'/)
+    expect(REVERSA).toContain(`$d$${INDICACION_VIDEO_EDITOR_2012}$d$,\n  $d$Aportas cómo se contaría esta idea en video corto: estructura, ritmo y qué mostrarías, sin escribir todavía el guion final. Un solo gancho por video: el gancho lo propone quien mide la retención; tú lo integras, nunca propones uno aparte.$d$`)
     const sentencias = REVERSA.split('\n').filter((l) => !l.startsWith('--')).join('\n')
-    expect(sentencias).not.toMatch(/design-visual-storyteller|marketing_video_optimization_specialist|tiktok-strategist/)
+    expect(sentencias).not.toMatch(/design-visual-storyteller|tiktok-strategist|whimsy-injector/)
     expect(REVERSA).toMatch(/DELETE FROM public\.oficina_tipos_de_grupo WHERE tipo = 'video_mesa'/)
     expect(REVERSA).toMatch(/familia = 'video_mesa'\) THEN RAISE EXCEPTION/)
   })
@@ -242,20 +271,23 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
     const id = String(a.cuerpo.encargo_id)
     let aportes = 0
     const { ultima, turnos } = await jugar(M, id, a, (t: Turno) => {
-      if (t.tipo === 'dirigir') return { texto: 'Idea rectora: el pan sale del horno y la mesa larga espera. Pido el gancho a la retención y el guion a video-editor.' }
+      if (t.tipo === 'dirigir') return { texto: 'Idea rectora: el pan sale del horno y la mesa larga espera. Pido el gancho al coach y el guion a video-editor.' }
       if (t.tipo === 'aportar') { aportes++; return { texto: t.agente === VOZ_DEL_GANCHO ? 'Gancho único: el vapor del pan llenando el cuadro en el primer segundo; ritmo de dos planos.' : `Aporte de ${t.agente} para el reel, sin proponer gancho.` } }
       if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: GUION(Array.from({ length: aportes }, (_, i) => `A${i + 2} usé: lo tomé tal cual para el guion`).join('\n')) }
       return undefined
     })
     // el equipo: la dirección abre, los 6 aportan (curador por Instagram, TikTok por el reel), la dirección integra
     expect(turnos[0]).toMatchObject({ agente: 'creative-director-mesa', tipo: 'dirigir' })
-    expect(turnos.filter((x) => x.tipo === 'aportar').map((x) => x.agente).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_instagram_curator', 'marketing_video_optimization_specialist', 'tiktok-strategist', 'video-editor'])
+    expect(turnos.filter((x) => x.tipo === 'aportar').map((x) => x.agente).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_instagram_curator', 'marketing_short_video_editing_coach', 'tiktok-strategist', 'video-editor'])
     expect(turnos.at(-1)).toMatchObject({ agente: 'creative-director-mesa', tipo: 'integrar' })
     // una voz de gancho en el pedido de cada turno
     expect(turnos.find((x) => x.agente === VOZ_DEL_GANCHO)!.task).toContain('Eres la ÚNICA voz del gancho')
     expect(turnos.find((x) => x.agente === QUIEN_INTEGRA_EL_GANCHO)!.task).toContain('El gancho NO lo propones tú')
     expect(turnos.find((x) => x.agente === 'tiktok-strategist')!.task).toContain('No propongas un gancho')
-    expect(turnos.find((x) => x.agente === QUIEN_INTEGRA_EL_GANCHO)!.task).toContain('Un solo gancho por video: el gancho lo propone quien mide la retención')
+    expect(turnos.find((x) => x.agente === QUIEN_INTEGRA_EL_GANCHO)!.task).toContain('Un solo gancho por video: el gancho lo propone el coach de video corto')
+    expect(turnos.find((x) => x.agente === VOZ_DEL_GANCHO)!.task).toContain(METODO_GANCHO_POR_OMISION)
+    expect(turnos.find((x) => x.agente === VOZ_DEL_GANCHO)!.task).toContain(`## 2 · El brief de este entregable (${BRIEF_GUIA_NO_REGLA})`)
+    expect(turnos.find((x) => x.agente === VOZ_DEL_GANCHO)!.task).toContain('GANCHO SUGERIDO: el vapor del pan')
     // la mesa abrió con las condiciones del brief de la hoja
     const enc = M.encargos.get(id)!
     const mesa = enc.estado_del_motor.artefactos['mesa']?.datos as unknown as EstadoMesa

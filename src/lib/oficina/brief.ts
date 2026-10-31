@@ -29,7 +29,10 @@ export interface BriefLeido {
   texto: string
 }
 
-const CAMPOS_LISTA = new Set(['VOCABULARIO OBLIGATORIO', 'PROHIBIDO', 'NEGATIVOS', 'VISUAL OBLIGATORIO', 'VISUAL PROHIBIDO', 'ELEMENTOS'])
+/** FIRMA 01-nov «hoja sin reja»: lo que se le dice a todo el que recibe un brief (pedidos, pedidos-laminas y la mesa). Lo único fijo es el manual, lo prohibido y la gran idea. */
+export const BRIEF_GUIA_NO_REGLA = 'guía, no regla al pie de la letra: lo único fijo es el manual, lo prohibido y la gran idea; todo lo demás puedes mejorarlo'
+// la hoja escribe «VOCABULARIO DE LA MARCA» desde la FIRMA 01-nov; los partes anteriores traen «VOCABULARIO OBLIGATORIO» y siguen siendo legibles
+const CAMPOS_LISTA = new Set(['VOCABULARIO DE LA MARCA', 'VOCABULARIO OBLIGATORIO', 'PROHIBIDO', 'NEGATIVOS', 'VISUAL OBLIGATORIO', 'VISUAL PROHIBIDO', 'ELEMENTOS'])
 
 /** corta la sección de un brief (desde su «### ID ·» hasta el siguiente «### » o «## ») */
 export function seccionDelBrief(parte: string, id: string): string | null {
@@ -66,7 +69,7 @@ export function parsearBrief(parte: string, id: string): BriefLeido | null {
   return {
     id, red: (cab?.[2] ?? '').trim(), formato: (cab?.[3] ?? '').trim(),
     que_es: g('QUÉ ES'), protagonista: g('PROTAGONISTA'), mensaje: g('MENSAJE (uno)'), limites: g('LÍMITES'),
-    vocabulario_obligatorio: listas['VOCABULARIO OBLIGATORIO'] ?? [], prohibido: listas['PROHIBIDO'] ?? [],
+    vocabulario_obligatorio: listas['VOCABULARIO DE LA MARCA'] ?? listas['VOCABULARIO OBLIGATORIO'] ?? [], prohibido: listas['PROHIBIDO'] ?? [],
     sintaxis: g('SINTAXIS'), visual: g('VISUAL'), visual_obligatorio: listas['VISUAL OBLIGATORIO'] ?? [], visual_prohibido: listas['VISUAL PROHIBIDO'] ?? [],
     llamado: g('LLAMADO A LA ACCIÓN'), variantes: g('VARIANTES'), negativos: listas['NEGATIVOS'] ?? [], aprueba: g('APRUEBA Y PARA CUÁNDO'), texto: sec,
     ...(listas['ELEMENTOS'] ? { elementos: listas['ELEMENTOS'] } : {}),
