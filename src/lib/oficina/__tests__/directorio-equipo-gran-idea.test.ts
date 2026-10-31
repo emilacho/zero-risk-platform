@@ -157,3 +157,19 @@ describe('la indicación del agente viaja con el pedido de su turno (no con su i
     expect('indicacion' in aTarjeta({ ...f, indicacion: [] })).toBe(false)
   })
 })
+
+import { condicionesDeLaPieza } from '../mesa/directorio'
+describe('si_personas se calcula al abrir la pieza, del brief', () => {
+  it('con palabras de personas enciende la condición; sin ellas no, y vacío o ausente tampoco', () => {
+    expect(condicionesDeLaPieza('Carrusel con la familia en la mesa y niños sonriendo')).toEqual(['si_personas'])
+    expect(condicionesDeLaPieza('Our customers love the dish')).toEqual(['si_personas'])
+    expect(condicionesDeLaPieza('Primer plano del encebollado, vapor y limón')).toEqual([])
+    expect(condicionesDeLaPieza('')).toEqual([])
+    expect(condicionesDeLaPieza(undefined as unknown as string)).toEqual([])
+  })
+  it('enciende al especialista de inclusión en el carrusel y no en otra cosa', () => {
+    const c = condicionesDeLaPieza('la gente disfrutando')
+    expect(especialistasPertinentes(DESPUES, 'carrusel', true, c)).toContain('inclusive-visuals-specialist')
+    expect(especialistasPertinentes(DESPUES, 'carrusel', true, condicionesDeLaPieza('solo plato'))).not.toContain('inclusive-visuals-specialist')
+  })
+})

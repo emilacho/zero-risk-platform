@@ -61,3 +61,11 @@ export function seccionDelDirectorio(directorio: Tarjeta[], yo: string): string 
   const activos = directorio.filter((t) => t.activo)
   return ['## El equipo (directorio vivo)', ...activos.map(linea)].join('\n\n')
 }
+
+/** palabras que dicen que la pieza muestra personas (rostros, cuerpos, manos): es lo que enciende `si_personas` · deliberadamente literal y corto; una pieza sin estas palabras no llama al especialista de inclusión */
+const PERSONAS = /\b(personas?|gente|rostros?|caras?|clientes?|comensales?|familias?|ni[ñn]os?|ni[ñn]as?|mujeres?|hombres?|equipo|chef|cocineros?|meseros?|mozos?|amigos?|parejas?|grupo|sonri\w+|manos|retratos?|people|persons?|faces?|customers?|family|kids?|children|women|men|friends|couples?|staff|waiters?)\b/i
+
+/** T6 · las condiciones que la mesa calcula SOLA al abrir una pieza de calendario (carrusel o kit) a partir de su brief; las de la cadena las declara la cadena */
+export function condicionesDeLaPieza(briefTexto: string): string[] {
+  return PERSONAS.test(briefTexto ?? '') ? ['si_personas'] : []
+}

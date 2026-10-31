@@ -14,7 +14,7 @@ import { registrarPaso } from '../motor'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
 import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
-import { direccionDe, especialistasPertinentes, porteroDe } from './directorio'
+import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, porteroDe } from './directorio'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
@@ -151,7 +151,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       const tipo = FAMILIAS_MESA[enc.familia as keyof typeof FAMILIAS_MESA]
       if (!tipo) return fallar(P, enc, `la familia «${enc.familia}» no es de la mesa`)
       if (!direccionDe(dir, tipo)) return fallar(P, enc, `el directorio de la mesa no tiene una dirección creativa activa para «${tipo}» (la pieza no abre)`)
-      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : {}) }
+      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : (() => { const c = condicionesDeLaPieza(contextoDe(enc, estadoInicialDeLaMesa(tipo, dir)).brief_texto); return c.length ? { condiciones: c } : {} })()) }
       enc = await guardarMesa(P, enc, est)
     }
     const e = enc.estado_del_motor
