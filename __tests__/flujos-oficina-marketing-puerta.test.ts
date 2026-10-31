@@ -23,58 +23,7 @@ const leer = (carpeta: 'vivo' | 'nuevo', id: string) => JSON.parse(fs.readFileSy
 const PUERTA = 'pBAp5Cx7R39U585i'
 const CALENDARIO = 'cR22ztH1p2ihTIwD'
 
-// ───────────────────────── un emulador mínimo del motor de n8n: nodos Code, If y HTTP; expresiones {{ … }}
-type Item = Record<string, any>
-interface Salida { nodo: string; json: Item }
-const AsyncFunction = Object.getPrototypeOf(async () => 0).constructor as new (...a: string[]) => (...a: any[]) => Promise<any>
-
-function entorno(env: Record<string, string>, historial: Record<string, Item[]>, entrada: Item) {
-  const dolar = (n: string) => ({ last: () => ({ json: (historial[n] ?? [])[(historial[n] ?? []).length - 1] ?? {} }), first: () => ({ json: (historial[n] ?? [])[0] ?? {} }), all: () => (historial[n] ?? []).map((json) => ({ json })) })
-  return { $: dolar, $input: { first: () => ({ json: entrada }), all: () => [{ json: entrada }] }, $env: env, $workflow: { id: 'wf-puerta' }, $execution: { id: 'ex-1' }, $json: entrada }
-}
-const expr = (s: unknown, ctx: ReturnType<typeof entorno>): any => {
-  if (typeof s !== 'string' || !s.startsWith('={{')) return s
-  const cuerpo = s.slice(3, s.lastIndexOf('}}')).trim()
-  return new Function('$json', '$env', '$', `return (${cuerpo})`)(ctx.$json, ctx.$env, ctx.$)
-}
-
-type Http = (url: string, headers: Record<string, string>, cuerpo: any) => Promise<{ statusCode: number; body: any }>
-
-async function recorrer(flujo: any, desde: string, entrada: Item, o: { env?: Record<string, string>; http?: Http; previos?: Record<string, Item[]>; hasta?: string[] } = {}) {
-  const env = { ZERO_RISK_API_URL: 'https://api.test', INTERNAL_API_KEY: 'llave-interna', SALA_DISPATCH_KEY: 'llave-sala', ...(o.env ?? {}) }
-  const historial: Record<string, Item[]> = { ...(o.previos ?? {}) }
-  const pasos: string[] = []
-  let nombre: string | null = desde
-  let item = entrada
-  for (let i = 0; i < 60 && nombre; i++) {
-    const n = flujo.nodes.find((x: any) => x.name === nombre)
-    if (!n) throw new Error(`no existe el nodo «${nombre}»`)
-    if (o.hasta?.includes(nombre)) { pasos.push(nombre); return { pasos, item, ultimo: nombre, historial } }
-    const ctx = entorno(env, historial, item)
-    let salida = 0
-    if (n.type.endsWith('.code')) {
-      const f = new AsyncFunction('$input', '$', '$env', '$workflow', '$execution', n.parameters.jsCode)
-      const r = await f(ctx.$input, ctx.$, ctx.$env, ctx.$workflow, ctx.$execution)
-      item = r[0].json
-    } else if (n.type.endsWith('.if')) {
-      const c = n.parameters.conditions.conditions[0]
-      const izq = expr(c.leftValue, ctx)
-      salida = String(izq) === String(c.rightValue) ? 0 : 1
-    } else if (n.type.endsWith('.httpRequest')) {
-      if (!o.http) throw new Error('el recorrido llegó a un nodo HTTP sin simulador')
-      const url = expr(n.parameters.url, ctx)
-      const headers = Object.fromEntries((n.parameters.headerParameters?.parameters ?? []).map((p: any) => [p.name, expr(p.value, ctx)]))
-      const cuerpo = JSON.parse(expr(n.parameters.jsonBody, ctx))
-      const r = await o.http(url, headers, cuerpo)
-      item = { statusCode: r.statusCode, body: r.body }
-    } else throw new Error(`tipo de nodo sin emulador: ${n.type}`)
-    historial[nombre] = [...(historial[nombre] ?? []), item]
-    pasos.push(nombre)
-    const sig: any[] | undefined = flujo.connections[nombre]?.main?.[salida]
-    nombre = sig?.[0]?.node ?? null
-  }
-  return { pasos, item, ultimo: pasos[pasos.length - 1], historial }
-}
+import { recorrer, type Http, type Item } from './_emulador-n8n'
 
 // ───────────────────────── las dos piezas REALES: la cadena (T3) y la oficina (T2)
 const CLIENTE = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
