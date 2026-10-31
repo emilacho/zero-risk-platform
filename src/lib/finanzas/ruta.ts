@@ -13,7 +13,11 @@ import { montosDeclarados, resumenDelBloque } from './resumen'
 import type { Bloque, Entrada } from './tipos'
 
 export type EstadoDeLaOficina = 'apagada' | 'ensayo' | 'encendida'
-export interface ConfigDeFinanzas { estado: EstadoDeLaOficina; clientes_ensayo: string[]; preguntas_slack: 'apagado' | 'borrador' | 'envia'; conversa: 'apagado' | 'ensayo' | 'enciende' }
+export interface ConfigDeFinanzas {
+  estado: EstadoDeLaOficina; clientes_ensayo: string[]; preguntas_slack: 'apagado' | 'borrador' | 'envia'; conversa: 'apagado' | 'ensayo' | 'enciende'
+  /** oficina de marketing (F2 31-oct): quién redacta el plan y por eso propone y ajusta en la conversación financiera · DATO `cadena_config.planeacion.redactor`; ausente = el redactor por omisión de la plantilla */
+  redactor?: string
+}
 
 export const MAX_BYTES_DE_ENTRADA = 20_000
 export const MAX_LARGO_DE_EJECUCION = 100

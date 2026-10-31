@@ -19,11 +19,15 @@ export function almacenDeFinanzas(db: Db): PuertosDeTablero {
       const r = ok(await db.from('finanzas_config').select('estado,clientes_ensayo,preguntas_slack,conversa').eq('id', 1).maybeSingle(), 'leer la configuración') as Fila | null
       // sin fila o con un valor raro: APAGADA (la dirección segura)
       const estado = r && ['apagada', 'ensayo', 'encendida'].includes(String(r.estado)) ? (String(r.estado) as ConfigDeFinanzas['estado']) : 'apagada'
+      // oficina de marketing (F2 31-oct): el redactor del plan es DATO de la cadena (`cadena_config.planeacion = { redactor }`); sin fila o mal formado, la plantilla usa su omisión
+      const p = ok(await db.from('cadena_config').select('valor').eq('clave', 'planeacion').maybeSingle(), 'leer el redactor del plan') as { valor?: unknown } | null
+      const redactor = p && p.valor && typeof p.valor === 'object' && !Array.isArray(p.valor) && typeof (p.valor as { redactor?: unknown }).redactor === 'string' && (p.valor as { redactor: string }).redactor.trim() ? (p.valor as { redactor: string }).redactor.trim() : undefined
       return {
         estado,
         clientes_ensayo: Array.isArray(r?.clientes_ensayo) ? (r!.clientes_ensayo as string[]) : [],
         preguntas_slack: r && ['apagado', 'borrador', 'envia'].includes(String(r.preguntas_slack)) ? (String(r.preguntas_slack) as ConfigDeFinanzas['preguntas_slack']) : 'apagado',
         conversa: r && ['apagado', 'ensayo', 'enciende'].includes(String(r.conversa)) ? (String(r.conversa) as ConfigDeFinanzas['conversa']) : 'apagado',
+        ...(redactor ? { redactor } : {}),
       }
     },
     async guardarTablero(t) {

@@ -151,7 +151,28 @@ describe('la tabla por tipo, hecha política y plantilla', () => {
     ['tope sobre el máximo', { tope_revision_usd: TOPE_MAXIMO_DE_REVISION_USD + 1 }],
     ['tope 0', { tope_revision_usd: 0 }],
     ['con re-entrega y sin esquema', { esquema_correccion: null }],
+    ['el revisor de fondo es uno de los productores (no-circularidad)', { revisor_fondo: 'content-creator' }],
   ])('una fila mal armada no se usa a medias: %s', (_n, cambios) => { expect(politicaDeFila({ ...FILAS_DE_POLITICA.pieza, ...cambios }).ok).toBe(false) })
+  it('el plan de la oficina de marketing (F1 31-oct): redacta jefe-marketing, revisa editor_en_jefe; el revisor nunca entre los productores', () => {
+    // la fila como la deja 202610311800 (los valores se leen de la migración: si cambia allá y no acá, rojo)
+    const ruta = resolve(__dirname, '..', 'supabase', 'migrations', '202610311800_jefatura_plan_redactor_jefe_marketing.sql')
+    const sql = readFileSync(ruta, 'utf8').replace(/\r\n/g, '\n')
+    const productores = JSON.parse(/SET productores\s*=\s*'(\[[^']*\])'::jsonb/.exec(sql)![1]) as Array<{ donde: string; agente: string }>
+    const revisor = /revisor_fondo\s*=\s*'([a-z_-]+)'/.exec(sql.slice(sql.indexOf('UPDATE')))![1]
+    expect(productores).toEqual([{ donde: '*', agente: 'jefe-marketing' }])
+    expect(revisor).toBe('editor_en_jefe')
+    const nueva = politicaDeFila({ ...FILAS_DE_POLITICA.plan, productores, revisor_fondo: revisor })
+    expect(nueva.ok).toBe(true)
+    expect(nueva.ok && duenosDe(nueva.politica.productores)).toEqual([{ agente: 'jefe-marketing', dondes: [], comodin: true }])
+    // la circular (el jefe se revisa a sí mismo) no pasa, con el mismo revisor de hoy
+    const circular = politicaDeFila({ ...FILAS_DE_POLITICA.plan, productores })
+    expect(circular.ok).toBe(false)
+    expect(circular.ok === false && circular.error).toMatch(/no-circularidad/)
+    // y la reversa deja la fila de antes, que también es válida
+    const rev = readFileSync(resolve(__dirname, '..', 'supabase', 'reversas', '202610311800_jefatura_plan_redactor_jefe_marketing_REVERSA.sql'), 'utf8')
+    expect(JSON.parse(/SET productores\s*=\s*'(\[[^']*\])'::jsonb/.exec(rev)![1])).toEqual(FILAS_DE_POLITICA.plan.productores)
+    expect(/revisor_fondo\s*=\s*'([a-z_-]+)'/.exec(rev.slice(rev.indexOf('UPDATE')))![1]).toBe(FILAS_DE_POLITICA.plan.revisor_fondo)
+  })
   it('el tope máximo es 10 LITERAL: 10 pasa, 10,01 no (no depende de la constante)', () => {
     expect(TOPE_MAXIMO_DE_REVISION_USD).toBe(10)
     expect(politicaDeFila({ ...FILAS_DE_POLITICA.pieza, tope_revision_usd: 10 }).ok).toBe(true)

@@ -9,8 +9,13 @@ import type { Paso, Plantilla } from '../../oficina/tipos'
 const siempre = { tipo: 'siempre' } as const
 const si = (artefacto: string, campo: string): Paso['condicion'] => ({ tipo: 'si_artefacto', artefacto, campo, igual: true })
 
+/**
+ * OFICINA DE MARKETING (F2 firmada por Emilio 31-oct): el que redacta el plan es quien propone y ajusta aquí. Es DATO (`cadena_config.planeacion.redactor`, leído en `ConfigDeFinanzas.redactor`);
+ * esta constante es solo la OMISIÓN cuando el dato no existe. `plantillaConRedactor` reemplaza al proponente en los pasos que le tocan (planteo · ajuste · ajuste_2).
+ */
+export const REDACTOR_POR_OMISION = 'jefe-marketing'
 export const AGENTES = {
-  proponente: 'campaign-brief-agent',
+  proponente: REDACTOR_POR_OMISION,
   fpa: 'finance-fpa-analyst',
   redes: 'paid_media_paid_social_strategist',
   busqueda: 'paid_media_ppc_strategist',
@@ -74,14 +79,26 @@ export const PLANTILLA_FINANCIERA: Plantilla = {
 
 export const MAX_TURNOS_DE_MODELO = 13
 
-/** valida la plantilla contra el vocabulario de F8 (no registra nada en el validador de la oficina creativa: no se toca) */
+/** el proponente de UNA plantilla: quien hace el paso `planteo` (el redactor configurado), o la omisión */
+export const proponenteDe = (p: Plantilla): string => p.pasos.find((x) => x.clave === 'planteo' && x.tipo === 'agente')?.quien ?? AGENTES.proponente
+
+/** la misma plantilla con el redactor configurado en los pasos del proponente (planteo · ajuste · ajuste_2); un redactor vacío o igual = la plantilla tal cual */
+export function plantillaConRedactor(p: Plantilla, redactor: string | undefined): Plantilla {
+  const r = typeof redactor === 'string' ? redactor.trim() : ''
+  const actual = proponenteDe(p)
+  if (!r || r === actual) return p
+  return { ...p, pasos: p.pasos.map((x) => (x.tipo === 'agente' && x.quien === actual ? { ...x, quien: r } : x)) }
+}
+
+/** valida la plantilla contra el vocabulario de F8 (no registra nada en el validador de la oficina creativa: no se toca); el proponente puede ser el redactor configurado */
 export function validarPlantillaFinanciera(p: Plantilla = PLANTILLA_FINANCIERA): string[] {
   const e: string[] = []
   const claves = p.pasos.map((x) => x.clave)
   if (new Set(claves).size !== claves.length) e.push('claves de paso repetidas')
   if (p.limites.max_rondas !== 2) e.push('max_rondas debe ser 2')
   if (p.limites.tope_encargo_usd > 1.5) e.push('el tope del encargo no puede pasar de US$ 1,50')
-  const permitidos = new Set<string>(Object.values(AGENTES))
+  const proponente = proponenteDe(p)
+  const permitidos = new Set<string>([...Object.values(AGENTES), proponente])
   const salidas = new Set<string>()
   for (const x of p.pasos) {
     if (x.tipo === 'agente' && !permitidos.has(x.quien)) e.push(`${x.clave}: agente «${x.quien}» fuera de la oficina`)
@@ -100,8 +117,8 @@ export function validarPlantillaFinanciera(p: Plantilla = PLANTILLA_FINANCIERA):
     const del = agentes.filter((x) => x.ronda === r).map((x) => x.quien)
     const repetidos = del.filter((q, i) => del.indexOf(q) !== i)
     // el proponente habla dos veces en la ronda 1 (planteo y ajuste): es la única excepción del diseño (propone y luego ajusta)
-    for (const q of new Set(repetidos)) if (q !== AGENTES.proponente) e.push(`ronda ${r}: «${q}» habla más de una vez`)
-    if (r === 1 && del.filter((q) => q === AGENTES.proponente).length > 2) e.push('ronda 1: el proponente habla más de dos veces')
+    for (const q of new Set(repetidos)) if (q !== proponente) e.push(`ronda ${r}: «${q}» habla más de una vez`)
+    if (r === 1 && del.filter((q) => q === proponente).length > 2) e.push('ronda 1: el proponente habla más de dos veces')
   }
   return e
 }

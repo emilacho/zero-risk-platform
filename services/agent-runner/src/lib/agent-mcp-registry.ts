@@ -88,6 +88,11 @@ export const MESA_ALLOW: ReadonlySet<string> = new Set([
   'design-visual-storyteller',
   'marketing_instagram_curator',
   'design-image-prompt-engineer',
+  // runtime override · ADENDA 2 31-oct (oficina de marketing · E1 firmada por Emilio): el brief de campaña corre como mesa de un miembro (`brief_mesa`),
+  // y la mesa de concepto / de video convoca a los de video. Sin esto sus turnos no tendrían `mesa_pedir` · `mesa_devolver` · `pedir_material`. Identidades intactas.
+  'campaign-brief-agent',
+  'video-editor',
+  'marketing_video_optimization_specialist',
 ])
 const DATAFORSEO_ALLOW: ReadonlySet<string> = new Set([
   'market-research',
