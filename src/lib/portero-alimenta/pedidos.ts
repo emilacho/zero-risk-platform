@@ -17,6 +17,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { extraerJson } from '../cerebro/portero/decision'
 import type { OrigenDeFoto, RespuestaDeFotos } from '../cerebro/portero/fotos-pendientes'
 import type { RespuestaDeVideos, VideoVisto } from '../cerebro/portero/videos-lectura'
+import type { RespuestaDeTendencias, TendenciaVista } from '../cerebro/portero/tendencias-lectura'
 import { normalizar } from '../manual/texto'
 import { coincidePorPalabra } from '../texto/coincidencia'
 import { archivarFichasDeBrazos } from './brazos/archivo'
@@ -95,6 +96,9 @@ export interface ResultadoDeHueco {
   fotos_resumen?: { por_origen: Record<string, { total: number; etiquetadas: number }>; sin_etiquetar: number; etiquetadas_ahora: number }
   /** pedido de VIDEOS (31-oct): cada video con sus subcategorías, su transcripción y sus capturas etiquetadas; `videos_resumen` dice cuántos hay por tipo y origen */
   videos?: VideoVisto[]
+  /** pedido de TENDENCIAS del rubro (embudo) o de la BODEGA viral del mundo (31-oct); cada una con red, fecha, métricas y nivel */
+  tendencias?: TendenciaVista[]
+  tendencias_resumen?: { alcance: 'cliente' | 'bodega'; dia_vigente: string | null; total: number; por_red: Record<string, number>; por_nivel: Record<string, number> }
   videos_resumen?: { total: number; por_tipo: Record<string, number>; por_origen: Record<string, number> }
   costo_usd: number
 }
@@ -247,6 +251,8 @@ export interface DepsDePedido extends DepsDeRutas {
   }
   /** VIDEOS (31-oct): `listar` lee los videos del cliente con sus capturas y transcripción (US$ 0) */
   videos?: { listar: (clientId: string) => Promise<RespuestaDeVideos> }
+  /** TENDENCIAS (31-oct): `listar` lee las tendencias del cliente o la bodega viral del mundo (US$ 0) */
+  tendencias?: { listar: (clientId: string, opciones: { bodega: boolean }) => Promise<RespuestaDeTendencias> }
 }
 
 /** fotos que bastan para dar un pedido de fotos por resuelto; menos ⇒ se responde con lo que hay y se pide más a la cadena */
@@ -257,6 +263,11 @@ export const esPedidoDeFotos = (h: Hueco): boolean => normalizar(h.tipo ?? '') =
 const PALABRAS_DE_VIDEOS = /\b(videos?|reels?|clips?|filmaciones?)\b/
 /** ¿este hueco pide VIDEOS del cliente? (`tipo: 'videos'` o el texto del hueco los nombra) */
 export const esPedidoDeVideos = (h: Hueco): boolean => normalizar(h.tipo ?? '') === 'videos' || PALABRAS_DE_VIDEOS.test(normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' ')))
+const PALABRAS_DE_BODEGA = /\b(bodega|viral(es)?|virales del mundo)\b/
+const PALABRAS_DE_TENDENCIAS = /\b(tendencias?|trending|trend)\b/
+/** ¿este hueco pide TENDENCIAS del rubro o la BODEGA viral del mundo? */
+export const esPedidoDeTendencias = (h: Hueco): boolean => ['tendencias', 'bodega'].includes(normalizar(h.tipo ?? '')) || PALABRAS_DE_TENDENCIAS.test(normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' '))) || PALABRAS_DE_BODEGA.test(normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' ')))
+export const pideLaBodega = (h: Hueco): boolean => normalizar(h.tipo ?? '') === 'bodega' || PALABRAS_DE_BODEGA.test(normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' ')))
 /** de qué origen se piden: lo que el texto nombra; sin nombrar ninguno, todos (propias + competencia + referencias) */
 export function origenesPedidos(h: Hueco): OrigenDeFoto[] {
   const t = normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' '))
@@ -422,6 +433,18 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
     const completo = `${pedido}${p.para && pedido !== p.para ? ` (para: ${p.para})` : ''}`
     const r: ResultadoDeHueco = { hueco: h, estado: 'no_resuelto', detalle: '', fichas: [], hallazgos: [], intentado: [], costo_usd: 0 }
     const gastar = (usd: number) => { gastado += usd; r.costo_usd = r6(r.costo_usd + usd) }
+
+    // 000 · TENDENCIAS / BODEGA VIRAL (31-oct): se responde con lo guardado, en el orden del embudo y de lo más gustado a lo menos; la bodega NO es de ningún cliente y va por separado
+    if (deps.tendencias && esPedidoDeTendencias(h)) {
+      const bodega = pideLaBodega(h)
+      const lt = await deps.tendencias.listar(p.client_id, { bodega })
+      if (!lt.ok) { r.intentado.push(`tendencias: ${lt.detalle}`); r.detalle = 'esta información me falta: no pude leer las tendencias'; huecos.push(r); continue }
+      r.tendencias = lt.tendencias
+      r.tendencias_resumen = { alcance: lt.alcance, dia_vigente: lt.dia_vigente, total: lt.total, por_red: lt.por_red, por_nivel: lt.por_nivel }
+      if (lt.tendencias.length) { r.estado = 'ya_esta'; r.detalle = `${lt.tendencias.length} pieza(s) de ${bodega ? 'la bodega viral del mundo' : 'tendencias del rubro'} del ${lt.dia_vigente}, ordenadas de lo más gustado a lo menos${bodega ? '' : ' dentro de cada nivel del embudo'}; sin traer nada nuevo` }
+      else { r.estado = 'no_resuelto'; r.nada_usable = true; r.intentado.push(`${bodega ? 'bodega' : 'tendencias'}: nada guardado todavía`); r.detalle = `nada usable por ahora: ${bodega ? 'la bodega viral aún no tiene piezas' : 'aún no hay tendencias guardadas de este cliente'}` }
+      huecos.push(r); continue
+    }
 
     // 00 · VIDEOS (31-oct): se responde con los videos guardados (con sus subcategorías, capturas etiquetadas y transcripción); si el hueco también pide fotos, sigue al camino de las fotos
     if (deps.videos && esPedidoDeVideos(h)) {
