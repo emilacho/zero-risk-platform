@@ -39,7 +39,8 @@ export interface SobreParaLaOficina { tipo_de_mesa: 'brief' | 'concepto'; client
  * el vigía reemite el MISMO sobre de respaldo. La clave lleva la ETAPA (`campana:tanda-N:<etapa>`) para que la sala no lo trague como repetido cuando la pieza que faltaba ya está.
  */
 export interface SobreDeTanda {
-  source: 'cadena/mesas'; intent: 'briefear'
+  /** la ÚNICA fuente de la cadena registrada en la sala (migración 202610110200: fuente + regla BRIEF → la puerta); hueco visto por CC2 el 31-oct · lo que distingue empuje de respaldo es la clave, no la fuente */
+  source: 'cadena/vigia'; intent: 'briefear'
   payload: { modo: 'tanda_siguiente'; campana_id: string; tanda: number; dry_run: boolean; client_id: string }
   idempotency_key: string; logical_period: string; tenant_id: string; client_id: string
 }
@@ -320,7 +321,7 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
 // ───────────────────────────────────────────────────────── con qué sobre vuelve a entrar la puerta (respuesta a CC2 · 31-oct)
 export function sobreDeTanda(c: Pick<Campana, 'id' | 'client_id' | 'seco'>, tanda: number, etapa: string): SobreDeTanda {
   return {
-    source: 'cadena/mesas', intent: 'briefear',
+    source: 'cadena/vigia', intent: 'briefear',
     payload: { modo: 'tanda_siguiente', campana_id: c.id, tanda, dry_run: c.seco, client_id: c.client_id },
     idempotency_key: `${c.id}:tanda-${tanda}:${etapa}`, logical_period: `tanda-${tanda}`, tenant_id: c.client_id, client_id: c.client_id,
   }

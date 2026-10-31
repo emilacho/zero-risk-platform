@@ -217,7 +217,7 @@ describe('con qué sobre vuelve a entrar la puerta (respuesta a CC2 · 31-oct)',
     expect(await sig()).toMatchObject({ tanda: null })
     const b = await recibirBrief(al, entrega(id, 1, BRIEF), AHORA)
     expect(b).toMatchObject({ ok: true, estado: 'validada', siguiente: { sobre: {
-      source: 'cadena/mesas', intent: 'briefear', payload: { modo: 'tanda_siguiente', campana_id: id, tanda: 1, dry_run: true, client_id: A.clientId },
+      source: 'cadena/vigia', intent: 'briefear', payload: { modo: 'tanda_siguiente', campana_id: id, tanda: 1, dry_run: true, client_id: A.clientId },
       idempotency_key: clave(id, 'abrir-concepto-v1'), logical_period: 'tanda-1', tenant_id: A.clientId, client_id: A.clientId,
     } } })
     expect(await sig()).toMatchObject({ tanda: 1, etapa: 'abrir-concepto-v1' })
