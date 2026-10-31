@@ -57,7 +57,7 @@ function baseEnMemoria(tablas: Record<string, Fila[]>, opciones: { fallaEn?: str
 const igReal = (extra: Partial<Fila> = {}): Fila => ({ id: 'ig-1', client_id: CID, apify_function: 'instagram_scraper', params: { usernames: ['naufrago.ec'], resultsLimit: 1 }, respuesta: [IG], ensayo: false, created_at: '2026-10-01T23:45:36.495346+00:00', ...extra })
 const mapasHomonimo = (): Fila => ({ id: 'mp-1', client_id: CID, apify_function: 'google_maps_scraper', params: { searchStringsArray: ['Náufrago'], locationQuery: 'Ecuador' }, respuesta: [MAPAS.item], ensayo: false, created_at: '2026-10-01T23:45:54.143236+00:00' })
 const mundo = (extras: Fila[] = []) => baseEnMemoria({
-  clients: [{ id: CID, name: 'Náufrago', config: { apify: { own_handles: { instagram: 'naufrago.ec' } } } }],
+  clients: [{ id: CID, name: 'Náufrago', website_url: 'https://www.naufrago.ec', config: { apify: { own_handles: { instagram: 'naufrago.ec' } } } }],
   client_web_pages: [{ client_id: CID, owner_role: 'propio', url: SITIO.url, content_text: SITIO.content_text, crawled_at: SITIO.crawled_at }],
   apify_raw: [igReal(), mapasHomonimo(), ...extras],
   client_sedes: [],

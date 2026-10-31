@@ -628,7 +628,7 @@ function bloqueDeVoz(textos, trato) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    clave: clave, leerDias: leerDias, leerRangoDeHoras: leerRangoDeHoras, horarioDeTexto: horarioDeTexto, horarioDeJsonLd: horarioDeJsonLd, horarioDeMaps: horarioDeMaps,
+    clave: clave, anfitrion: anfitrion, leerDias: leerDias, leerRangoDeHoras: leerRangoDeHoras, horarioDeTexto: horarioDeTexto, horarioDeJsonLd: horarioDeJsonLd, horarioDeMaps: horarioDeMaps,
     canonicoHorario: canonicoHorario, describirHorario: describirHorario, telefonoNorm: telefonoNorm, extraerJsonLd: extraerJsonLd,
     observacionesDelSitio: observacionesDelSitio, observacionesDeInstagram: observacionesDeInstagram, observacionesDeMaps: observacionesDeMaps, mismoNegocio: mismoNegocio,
     horarioDeMapsEnTexto: function (lista) { var h = horarioDeMaps(lista); return h ? describirHorario(h) : null }, pruebasDePropiedad: pruebasDePropiedad, probarPropiedad: probarPropiedad, cuentasSocialesDe: cuentasSocialesDe, cuentasDeLaFicha: cuentasDeLaFicha, descubrirSedes: descubrirSedes, ultimasPorFuente: ultimasPorFuente, resolverCampo: resolverCampo, resolverSedes: resolverSedes, ubicacionesParaMapas: ubicacionesParaMapas,
