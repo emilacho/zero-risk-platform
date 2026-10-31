@@ -132,7 +132,7 @@ async function get(qs: string, llave = 'k') {
   return GET(new Request(`http://x/api/video/generate?${qs}`, { headers: { 'x-api-key': llave } }))
 }
 const llamadas = () => fetchMock.mock.calls.map((c) => ({ url: String(c[0]), init: c[1] as RequestInit | undefined }))
-const PEDIDO = { prompt: 'Así servimos un encebollado en Náufrago, de la olla al plato', formato: 'reel', client_id: 'c1', clave: 'enc1:fila1:v1' }
+const PEDIDO = { prompt: 'Así servimos un encebollado en Náufrago, de la olla al plato', formato: 'reel', client_id: 'c1', clave: 'enc1:fila1:v1', workflow_id: 'wf-0', workflow_execution_id: 'ex-0' }
 
 describe('POST /api/video/generate', () => {
   it('sin llave interna → 401 y ninguna llamada al proveedor', async () => {
@@ -238,5 +238,84 @@ describe('GET /api/video/generate', () => {
     const j = await (await get('request_id=r1')).json()
     expect(j).toMatchObject({ status: 'completed', copia: 'solo_proveedor', video_url: 'https://cdn/r1.mp4' })
     expect(j.aviso).toMatch(/OFICINA_BUCKET/)
+  })
+})
+
+// ───────── certificación CC3 (31-oct): 2 condiciones + 2 mutantes vivos ─────────
+describe('condición 1 · la llave solo viaja al proveedor y solo se descarga de destinos públicos', () => {
+  it('destinoPublico: https público sí; http, IP privada, metadatos de nube, bucle local, IPv6 y nombres internos no', async () => {
+    const { destinoPublico } = await import('@/lib/video/destino')
+    expect(destinoPublico('https://cdn.higgsfield.ai/r1.mp4')).toBeNull()
+    expect(destinoPublico('http://cdn.higgsfield.ai/r1.mp4')).toMatch(/https/)
+    expect(destinoPublico('https://169.254.169.254/latest/meta-data')).toMatch(/privada|reservada/)
+    expect(destinoPublico('https://10.0.0.1/x')).toMatch(/privada/)
+    expect(destinoPublico('https://172.20.1.1/x')).toMatch(/privada/)
+    expect(destinoPublico('https://192.168.1.1/x')).toMatch(/privada/)
+    expect(destinoPublico('https://127.0.0.1/x')).toMatch(/privada/)
+    expect(destinoPublico('https://localhost/x')).toMatch(/interno/)
+    expect(destinoPublico('https://db.internal/x')).toMatch(/interno/)
+    expect(destinoPublico('https://[::1]/x')).toMatch(/IPv6/)
+    expect(destinoPublico('https://2130706433/x')).toMatch(/numérico|privada/) // Node ya lo normaliza a 127.0.0.1
+    expect(destinoPublico('no-es-url')).toMatch(/válida/)
+  })
+  it('GET ignora `status_url` del llamador: la llave solo va a api.higgsfield.ai', async () => {
+    fetchMock.mockResolvedValueOnce(respuesta(200, { status: 'in_progress', request_id: 'r1' }))
+    const j = await (await get('request_id=r1&status_url=https%3A%2F%2Fevil.example%2Fcaptura')).json()
+    expect(j).toMatchObject({ status: 'in_progress', terminal: false })
+    expect(llamadas()).toHaveLength(1)
+    expect(llamadas()[0].url).toBe('https://api.higgsfield.ai/requests/r1/status')
+    expect(llamadas().some((c) => c.url.includes('evil'))).toBe(false)
+  })
+  it('GET con request_id que no es un identificador (ruta, barras, espacios) → 400 sin llamar a nadie', async () => {
+    expect((await get('request_id=..%2Fotra%2Fcosa')).status).toBe(400)
+    expect((await get('request_id=r1%20x')).status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('completado con video.url hacia metadatos de nube → NO se descarga, no se sube nada y se declara', async () => {
+    selectRows.value = [{ cost_usd: 1.6445, client_id: 'c1' }]
+    fetchMock.mockResolvedValueOnce(respuesta(200, { status: 'completed', request_id: 'r1', video: { url: 'http://169.254.169.254/latest/meta-data' } }))
+    const j = await (await get('request_id=r1')).json()
+    expect(llamadas()).toHaveLength(1) // solo el estado; ninguna descarga
+    expect(upload).not.toHaveBeenCalled()
+    expect(j).toMatchObject({ status: 'completed', copia: 'solo_proveedor' })
+    expect(j.aviso).toMatch(/no se descarga/)
+  })
+})
+
+describe('condición 2 · sin clave y sin contexto de flujo no se envía nada', () => {
+  it('sin `clave` → 400 y ninguna llamada al proveedor (un reintento sin clave cobraría dos veces)', async () => {
+    const { clave: _c, ...sinClave } = PEDIDO
+    void _c
+    const r = await post(sinClave)
+    expect(r.status).toBe(400)
+    expect((await r.json()).error).toBe('falta_clave')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
+  })
+  it('sin `workflow_id` o sin `workflow_execution_id` → 400 y nada sale', async () => {
+    const { workflow_id: _w, ...sinFlujo } = PEDIDO
+    void _w
+    expect((await post(sinFlujo)).status).toBe(400)
+    const { workflow_execution_id: _e, ...sinEjecucion } = PEDIDO
+    void _e
+    const r = await post(sinEjecucion)
+    expect(r.status).toBe(400)
+    expect((await r.json()).error).toBe('falta_contexto_de_flujo')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('mutantes vivos de CC3 (a, b)', () => {
+  it('(a) `tope_usd` del pedido NO puede subir el tope aprobado: 1080p con tope_usd 50 sigue siendo 409 y el tope aplicado es 5', async () => {
+    fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
+    const r = await post({ ...PEDIDO, resolucion: '1080p', tope_usd: 50 })
+    const j = await r.json()
+    expect(r.status).toBe(409)
+    expect(j.tope_usd).toBe(5)
+    expect(llamadas()).toHaveLength(1)
+  })
+  it('(b) GET sin llave interna → 401 y ninguna llamada al proveedor', async () => {
+    expect((await get('request_id=r1', 'mala')).status).toBe(401)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

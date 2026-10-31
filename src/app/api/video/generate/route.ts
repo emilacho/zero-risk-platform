@@ -11,7 +11,6 @@
  * cierra la fila del libro y devuelve `video_url` (la nuestra) + `url_proveedor` + `expires_at`. En `failed`/`nsfw`/`canceled` cierra con costo 0.
  */
 import { NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { sanitizeString } from '@/lib/validation'
@@ -19,6 +18,7 @@ import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { VARIABLE_DE_LA_LLAVE, costoEstimadoUsd, enviar, estado, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
 import { TOPE_POR_VIDEO_USD, armarPedido, cuerpoParaHiggsfield, rutaDelModelo } from '@/lib/video/parametros'
 import { cerrarEnElLibro, cierreDeFila, registrarEnvioEnElLibro, sessionIdDeVideo } from '@/lib/video/libro'
+import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -45,10 +45,13 @@ export async function POST(request: Request) {
   const clientId = resolveClientIdFromBody(body)
   const agentSlug = sanitizeString(body.agent_slug as string | undefined, 60) || null
   const caller = sanitizeString(body.caller as string | undefined, 40) || 'api'
+  // condición 2 de CC3 (31-oct): lo que gasta no corre sin contexto de flujo, y la clave idempotente la pone SIEMPRE el llamador
+  // (`clave`, p. ej. `<encargo>:<fila>:v<n>`): un reintento con la misma clave devuelve el mismo pedido y no cobra dos veces; sin clave no se envía.
   const workflowId = sanitizeString(body.workflow_id as string | undefined, 120) || null
   const workflowExecutionId = sanitizeString(body.workflow_execution_id as string | undefined, 120) || null
-  // la clave idempotente: la manda el llamador (`clave`, p. ej. `<encargo>:<fila>:v<n>`) o se genera una por pedido
-  const claveIdempotente = sanitizeString(body.clave as string | undefined, 200) || randomUUID()
+  if (!workflowId || !workflowExecutionId) return json(400, { error: 'falta_contexto_de_flujo', detail: 'workflow_id y workflow_execution_id son obligatorios: el brazo solo corre dentro de un flujo' })
+  const claveIdempotente = sanitizeString(body.clave as string | undefined, 200)
+  if (!claveIdempotente) return json(400, { error: 'falta_clave', detail: 'clave (Idempotency-Key) es obligatoria: sin ella un reintento cobraría dos veces' })
   const tope = typeof body.tope_usd === 'number' && body.tope_usd > 0 ? Math.min(body.tope_usd, TOPE_POR_VIDEO_USD) : TOPE_POR_VIDEO_USD
   const ruta = rutaDelModelo(pedido)
   const cuerpo = cuerpoParaHiggsfield(pedido)
@@ -85,9 +88,11 @@ export async function GET(request: Request) {
   const requestId = sanitizeString(url.searchParams.get('request_id') ?? undefined, 120)
   if (!requestId) return json(400, { error: 'falta_request_id' })
   if (requestId.startsWith('dry-')) return json(200, { ok: true, request_id: requestId, status: 'simulado', dry_run: true })
+  if (!REQUEST_ID_VALIDO.test(requestId)) return json(400, { error: 'request_id_invalido' })
   const k = llave()
   if (!k) return json(500, { error: 'llave_no_configurada' })
-  const statusUrl = sanitizeString(url.searchParams.get('status_url') ?? undefined, 300) || `https://api.higgsfield.ai/requests/${encodeURIComponent(requestId)}/status`
+  // condición 1 de CC3 (31-oct): la dirección de estado se arma SIEMPRE aquí; nunca se acepta del llamador (la llave viajaría a donde él diga)
+  const statusUrl = `https://api.higgsfield.ai/requests/${requestId}/status`
 
   const e = await estado(fetch, k, statusUrl)
   if (!e.ok) return json(502, { error: 'estado_fallido', detail: e.error, upstream_status: e.status, request_id: requestId })
@@ -114,6 +119,9 @@ export async function GET(request: Request) {
 }
 
 async function copiarAlBucket(db: ReturnType<typeof getSupabaseAdmin>, b: string, requestId: string, urlProveedor: string): Promise<{ url: string | null; aviso: string | null }> {
+  // condición 1 de CC3: solo se descarga por https hacia anfitriones públicos (nunca IP privadas, metadatos de nube ni nombres internos)
+  const rechazo = destinoPublico(urlProveedor)
+  if (rechazo) return { url: null, aviso: `no se descarga: ${rechazo}` }
   try {
     const r = await fetch(urlProveedor)
     if (!r.ok) return { url: null, aviso: `descarga del proveedor falló (${r.status})` }
