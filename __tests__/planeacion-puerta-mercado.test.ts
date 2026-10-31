@@ -9,8 +9,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { validarRespuesta, BRAZOS, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
-import { ROTULO_INFORME_DE_MERCADO, brazoMercado, contarSenales } from '@/lib/planeacion/brazos'
+import { ROTULO_INFORME_DE_MERCADO, brazoMercado, contarSenales, esSenal, lineasQueNoCuentan } from '@/lib/planeacion/brazos'
 import { traducir } from '@/lib/planeacion/vocabulario'
+import { METODO_MERCADO_POR_OMISION } from '@/lib/cadena/metodos'
 
 const supabaseMock = { from: vi.fn() }
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => supabaseMock }))
@@ -87,11 +88,12 @@ describe('🔴 con señales ⇒ trajo · ROTULADO como propuesta · y el pedido 
     const { json } = await leer(await pedir(PEDIDO))
     expect(json.estado).toBe('trajo')
     expect(String(json.datos.informe).startsWith(ROTULO_INFORME_DE_MERCADO)).toBe(true)
-    expect(json.datos.senales).toBe(4)
+    // reserva 4 de CC3: 3 señales con fuente Y fecha; la cuarta línea («sin dato …») es información, no señal, y se declara en el aviso
+    expect(json.datos.senales).toBe(3)
     expect(json.datos.es_dato_del_cliente).toBe(false)
     expect(json.datos.dimension).toBe('tendencia y oportunidad')
     expect(json.datos.costo_usd).toBe(0.42)
-    expect(json.datos.aviso).toBeUndefined()
+    expect(json.datos.aviso).toBe('1 línea(s) sin fuente o sin fecha (o «sin dato») no cuentan como señal')
     expect(json.fuente).toMatch(/PROPUESTA/)
     expect(json.fuente).toMatch(/rubro «restaurante»/)
     expect(json.proposito).toBe(PEDIDO.proposito)
@@ -132,7 +134,7 @@ describe('🔴 con señales ⇒ trajo · ROTULADO como propuesta · y el pedido 
   it('rubro y plaza del pedido mandan sobre la ficha · y entonces la ficha NO se lee', async () => {
     const espia = corredor({ output: INFORME_OK, cost_usd: 0 })
     await pedir({ ...PEDIDO, params: { rubro: 'gimnasio', plaza: 'Quito', idioma: 'inglés' } })
-    expect(supabaseMock.from).not.toHaveBeenCalled()
+    expect(supabaseMock.from).not.toHaveBeenCalledWith('clients') // (desde la firma 2 sí se lee `cadena_config` por el método; la ficha, no)
     const b = cuerpoAlCorredor(espia)
     expect(b.task).toMatch(/«gimnasio» en Quito/)
     expect(b.task).toMatch(/Idioma: inglés/)
@@ -285,8 +287,28 @@ describe('la lista · una respuesta por pedido, en orden', () => {
 })
 
 describe('el envoltorio solo · sin red', () => {
-  it('contarSenales cuenta líneas de lista de cualquier marcador', () => {
-    expect(contarSenales('- a\n* b\n• c\n1. d\n2) e\ntexto suelto\n-sin espacio')).toBe(5)
+  it('reserva 4 de CC3 · una señal vale solo con fuente Y fecha en su línea, de cualquier marcador de lista; «sin dato», sin fuente o sin fecha no cuentan', () => {
+    const con = (m: string) => `${m} sube la demanda · fuente: boletín del sector (sector.org) · fecha: 2026-03 · oportunidad: x`
+    expect(contarSenales(['- a', '* b', '• c', '1. d', '2) e', 'texto suelto', '-sin espacio'].join('\n'))).toBe(0)
+    expect(contarSenales([con('-'), con('*'), con('•'), con('1.'), con('2)'), 'texto suelto ' + con(''), '-' + con('').trimStart()].join('\n'))).toBe(5)
+    expect(esSenal('- tendencia fuerte en la plaza · fuente: informe anual (x.com) · 2025')).toBe(true)
+    expect(esSenal('- tendencia fuerte en la plaza · fuente: informe anual (x.com)')).toBe(false) // sin fecha
+    expect(esSenal('- tendencia fuerte en la plaza · 2026-01 · confianza: alta')).toBe(false) // sin fuente
+    expect(esSenal('- sin dato sobre turismo interno · fuente: ninguna · 2026')).toBe(false) // «sin dato» es información, no señal
+    expect(lineasQueNoCuentan(INFORME_OK)).toBe(1)
+  })
+  it('reserva 4 de CC3 · un informe cuyas líneas de lista no traen fuente y fecha ⇒ sin_respuesta (son estimaciones, no señales) · y lo dice', async () => {
+    const r = await brazoMercado({ objetivo: 'o', fuente: 'f', rubro: 'restaurante', dry_run: false, pedir: async () => ({ ok: true, salida: '- crece el delivery en la plaza\n- la gente desayuna más temprano', costo_usd: 0.1 }) })
+    expect(r.estado).toBe('sin_respuesta')
+    expect(r.motivo).toMatch(/2 línea\(s\) de lista pero ninguna con fuente Y fecha/)
+  })
+  it('M13 · la ficha del cliente NO existe (sin error de la base) ⇒ sin_respuesta «no existe la ficha» · no se llama al agente', async () => {
+    ficha(null)
+    const espia = corredor({ output: INFORME_OK, cost_usd: 1 })
+    const { json } = await leer(await pedir(PEDIDO))
+    expect(json.estado).toBe('sin_respuesta')
+    expect(json.motivo).toMatch(/no existe la ficha del cliente c/)
+    expect(espia).not.toHaveBeenCalled()
   })
   it('brazoMercado con rubro vacío NO llama a `pedir`', async () => {
     const pedirFn = vi.fn()
@@ -299,5 +321,61 @@ describe('el envoltorio solo · sin red', () => {
     const t = tareaDeMercado({ ficha: { nombre: null, rubro: 'x', plaza: null, pais: null }, idioma: null })
     expect(t).toMatch(/sin dato en la ficha: dilo/)
     expect(t).toMatch(/idioma oficial de su país/)
+  })
+
+  // FIRMA 2 de Emilio (31-oct 20:29Z · punto 2): `market_research_analyst` + `audience-belief-mapper` como capa local, después de las reglas (que mandan) y antes del propósito
+  it('🔴 con método la tarea lo trae DESPUÉS de las reglas y ANTES del propósito; sin método (apagado) es la de hoy byte a byte', () => {
+    const base = { ficha: { nombre: null, rubro: 'x', plaza: 'Quito', pais: 'EC' }, idioma: null, proposito: 'el plan' }
+    const hoy = tareaDeMercado(base)
+    expect(tareaDeMercado({ ...base, metodo: null })).toBe(hoy)
+    const con = tareaDeMercado({ ...base, metodo: METODO_MERCADO_POR_OMISION })
+    expect(con).toContain('# MÉTODO (capa local · audience-belief-mapper')
+    expect(con.indexOf('Respeta el trato')).toBeLessThan(con.indexOf('# MÉTODO'))
+    expect(con.indexOf('# MÉTODO')).toBeLessThan(con.indexOf('Para qué sirve en el plan'))
+    // el método no fija idioma ni trato y no rompe el contrato de la señal (fuente + fecha en la línea de lista)
+    expect(METODO_MERCADO_POR_OMISION).toMatch(/UNA línea de lista con su fuente .* y su fecha/)
+    expect(METODO_MERCADO_POR_OMISION).not.toMatch(/\b(tuteo|voseo|en español|in english)\b/i)
+  })
+  // FIRMA 5 de Emilio (31-oct 21:09Z): la identidad fija otro idioma para los informes internos; el pedido lo corrige SIEMPRE (con o sin método), sin tocar la identidad
+  it('🔴 el pedido dice que la regla de idioma del manual manda sobre la de la identidad, con y sin método, y antes del método', () => {
+    const base = { ficha: { nombre: null, rubro: 'x', plaza: 'Quito', pais: 'EC' }, idioma: 'español' }
+    const FRASE = 'Esta regla manda sobre cualquier regla de tu identidad que fije otro idioma para los informes.'
+    const sin = tareaDeMercado(base)
+    expect(sin).toContain(`- Idioma: español. Respeta el trato (tú, vos, usted u otro) que fije el manual del cliente; no lo cambies. ${FRASE}`)
+    const con = tareaDeMercado({ ...base, metodo: METODO_MERCADO_POR_OMISION })
+    expect(con).toContain(FRASE)
+    expect(con.indexOf(FRASE)).toBeLessThan(con.indexOf('# MÉTODO'))
+    expect(con).toContain('# MÉTODO (capa local · product-trend-researcher (proceso, sin producto)')
+  })
+  it('🔴 la puerta lee `cadena_config.metodos.mercado` por el almacén de la cadena: sin fila va el de omisión; `false` lo apaga; si la lectura falla va el de omisión', async () => {
+    const qFicha = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: { name: 'N', industry: 'restaurante', market: 'Guayaquil', country: 'EC' }, error: null })) }
+    qFicha.select.mockReturnValue(qFicha); qFicha.eq.mockReturnValue(qFicha)
+    const qConfig = (valor: unknown, error: { message: string } | null = null) => {
+      const q = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: valor === undefined ? null : { valor }, error })) }
+      q.select.mockReturnValue(q); q.eq.mockReturnValue(q)
+      return q
+    }
+    const conConfig = (q: unknown) => supabaseMock.from.mockImplementation((t: string) => (t === 'cadena_config' ? q : qFicha))
+
+    conConfig(qConfig(undefined))
+    const e1 = corredor({ output: INFORME_OK, cost_usd: 0 })
+    await pedir(PEDIDO)
+    expect(cuerpoAlCorredor(e1).task).toContain('# MÉTODO (capa local · audience-belief-mapper')
+
+    conConfig(qConfig({ mercado: false }))
+    const e2 = corredor({ output: INFORME_OK, cost_usd: 0 })
+    await pedir(PEDIDO)
+    expect(cuerpoAlCorredor(e2).task).not.toContain('# MÉTODO')
+
+    conConfig(qConfig({ mercado: 'mi método propio' }))
+    const e3 = corredor({ output: INFORME_OK, cost_usd: 0 })
+    await pedir(PEDIDO)
+    expect(cuerpoAlCorredor(e3).task).toContain('\nmi método propio\n')
+
+    conConfig(qConfig(undefined, { message: 'base caída' }))
+    const e4 = corredor({ output: INFORME_OK, cost_usd: 0 })
+    const r4 = await leer(await pedir(PEDIDO))
+    expect(r4.json.estado).toBe('trajo')
+    expect(cuerpoAlCorredor(e4).task).toContain('# MÉTODO (capa local · audience-belief-mapper')
   })
 })

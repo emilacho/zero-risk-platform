@@ -113,6 +113,8 @@ export class AlmacenMemoria implements Almacen {
   async insertarEstrategia(e: EstrategiaGuardada) { this.estrategias.push(e) }
   // 31-oct (nuevo orden · T1) · imita el UNIQUE (campana_id, version) de la base
   async ultimoBriefCreativo(campanaId: string) { return structuredClone(this.briefsCreativos.filter((b) => b.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null) }
+  async briefsDe(campanaId: string) { return structuredClone(this.briefsCreativos.filter((b) => b.campana_id === campanaId).sort((a, b) => a.version - b.version)) }
+  async briefsVencidos(ahora: string) { return structuredClone(this.briefsCreativos.filter((b) => b.estado === 'borrador' && b.plazo_en && Date.parse(b.plazo_en) <= Date.parse(ahora))) }
   async insertarBriefCreativo(b: BriefCreativoGuardado) {
     if (this.briefsCreativos.some((x) => x.campana_id === b.campana_id && x.version === b.version)) throw Object.assign(new Error('duplicate key value violates unique constraint "cadena_brief_creativo_version"'), { code: '23505' })
     this.briefsCreativos.push(structuredClone(b))
@@ -179,6 +181,13 @@ export class AlmacenMemoria implements Almacen {
     this.esperas.push(n)
     return { espera: n, creada: true }
   }
+  // 31-oct (T3) · la bandeja de la gran idea y el libro de decisiones de Emilio, en memoria
+  tarjetas: Array<Parameters<Almacen['abrirTarjetaDeConcepto']>[0] & { id: string; status: string; decision: Record<string, unknown> | null }> = []
+  eventosDeEmilio: Array<Parameters<Almacen['registrarDecisionDeEmilio']>[0]> = []
+  async conceptosDe(campanaId: string) { return structuredClone(this.conceptos.filter((c) => c.campana_id === campanaId).sort((a, b) => a.version - b.version)) }
+  async abrirTarjetaDeConcepto(t: Parameters<Almacen['abrirTarjetaDeConcepto']>[0]) { const id = `hitl-${this.tarjetas.length + 1}`; this.tarjetas.push({ ...structuredClone(t), id, status: 'pending', decision: null }); return id }
+  async cerrarTarjetaDeConcepto(hitlId: string, d: { status: 'approved' | 'rejected'; decision: Record<string, unknown> }) { const t = this.tarjetas.find((x) => x.id === hitlId); if (t) { t.status = d.status; t.decision = structuredClone(d.decision) } }
+  async registrarDecisionDeEmilio(e: Parameters<Almacen['registrarDecisionDeEmilio']>[0]) { this.eventosDeEmilio.push(structuredClone(e)) }
   async esperasVivas() { return structuredClone(this.esperas.filter((e) => e.estado === 'viva')) }
   async actualizarEspera(id: number, patch: Partial<EsperaFila>) {
     const e = this.esperas.find((x) => x.id === id)

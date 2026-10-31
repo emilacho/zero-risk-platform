@@ -120,8 +120,7 @@ blog · 3 occurrences."
 }
 ```
 
-Idioma del JSON · siempre español para clientes Zero Risk Ecuador · inglés
-solo si el cascade entero llega en inglés.
+Idioma del JSON · el del manual del cliente (si el manual no lo fija, el idioma del país del cliente); no mezcles idiomas.
 
 ## Critical Rules
 

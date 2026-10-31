@@ -19,6 +19,7 @@ import { publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA } from '@/lib
 import { puertosDePublicacion } from '@/lib/publicacion/almacen-supabase'
 import { canalDelRevisor, espejoEncendido, registrarEventoDeEmilio, type AccionDeEmilio } from '@/lib/oficina/eventos-de-emilio/registrar'
 import { empujeDelDashboard } from '@/lib/notas-del-dueno/ruta'
+import { TIPO_TARJETA_DE_CONCEPTO } from '@/lib/cadena/almacen'
 import { waitUntil } from '@vercel/functions'
 
 export const dynamic = 'force-dynamic'
@@ -82,7 +83,15 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
     }
   }
 
-  const { data, error } = await supabase.from('hitl_queue').update(updates).eq('id', ctx.params.id).select().single()
+  // 31-oct (T3): la tarjeta «Gran idea» de la cadena NO se decide por aquí (su decisión abre la versión siguiente de la mesa): 409 y a `POST /api/cadena/concepto {accion: 'decidir'}`.
+  // Se excluye en la misma escritura (sin lectura previa en el camino de siempre); si no se actualizó nada, se mira por qué.
+  // reserva 5a de CC3: en SQL `NULL <> 'x'` no es verdadero; una fila con `type` nulo se decide como siempre (solo se excluye la tarjeta de concepto)
+  const { data, error } = await supabase.from('hitl_queue').update(updates).eq('id', ctx.params.id).or(`type.is.null,type.neq.${TIPO_TARJETA_DE_CONCEPTO}`).select().single()
+  if (error && error.code === 'PGRST116') {
+    const { data: fila } = await supabase.from('hitl_queue').select('type').eq('id', ctx.params.id).maybeSingle()
+    if (fila?.type === TIPO_TARJETA_DE_CONCEPTO) return NextResponse.json({ error: 'tarjeta_de_concepto', detail: 'la gran idea de la cadena se decide por POST /api/cadena/concepto {accion: "decidir", decision: "aprobar" | "cambios"}' }, { status: 409 })
+    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
   if (error) {
     // la tabla solo admite pending|approved|rejected|edited: «expired» e «in_review» pasan la puerta de esta ruta (como siempre) pero la base los rechaza (23514).
     // Se dice claro en vez de un 500 genérico: una pieza vencida se cierra con rejected + decision.vencida = true (lo que hace el vigía de la oficina).

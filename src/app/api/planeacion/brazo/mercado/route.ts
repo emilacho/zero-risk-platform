@@ -19,6 +19,8 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { baseDeRunSdk, modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
 import { AGENTE_DE_MERCADO, brazoMercado, ROTULO_INFORME_DE_MERCADO, SENALES_ESPERADAS } from '@/lib/planeacion/brazos'
+import { almacenDeSupabase } from '@/lib/cadena/almacen-supabase'
+import { metodoDe } from '@/lib/cadena/metodos'
 import {
   conLimite,
   CUPO_EN_VUELO,
@@ -66,7 +68,7 @@ const topeDe = (p: PedidoPuerta): number =>
   typeof p.tope_usd === 'number' && p.tope_usd > 0 && p.tope_usd <= TOPE_MAXIMO_USD ? p.tope_usd : TOPE_POR_OMISION_USD
 
 /** el pedido al analista · texto interno (tuteo); el informe sale en el idioma del manual del cliente */
-export function tareaDeMercado(a: { ficha: FichaMinima; idioma: string | null; proposito?: string }): string {
+export function tareaDeMercado(a: { ficha: FichaMinima; idioma: string | null; proposito?: string; metodo?: string | null }): string {
   const plaza = a.ficha.plaza ?? a.ficha.pais ?? 'la plaza del cliente (sin dato en la ficha: dilo)'
   const idioma = a.idioma ?? `el del manual del cliente; si no lo conoces, el idioma oficial de ${a.ficha.pais ?? 'su país'}`
   return [
@@ -78,10 +80,16 @@ export function tareaDeMercado(a: { ficha: FichaMinima; idioma: string | null; p
     '- Si no tienes una fuente para una señal, no la estimes: escribe «sin dato» y qué habría que mirar. Si no hay ninguna señal con fuente, responde solo «sin dato» y qué faltó, sin líneas de lista.',
     '- Nada de predicciones sin intervalo de confianza o método declarado.',
     `- Encabeza el informe con el rótulo exacto: ${ROTULO_INFORME_DE_MERCADO}`,
-    `- Idioma: ${idioma}. Respeta el trato (tú, vos, usted u otro) que fije el manual del cliente; no lo cambies.`,
+    // FIRMA 5 de Emilio (31-oct): la identidad trae una regla que fija otro idioma para los informes internos; aquí manda el manual del cliente (adenda idioma agnóstico), sin tocar la identidad
+    `- Idioma: ${idioma}. Respeta el trato (tú, vos, usted u otro) que fije el manual del cliente; no lo cambies. Esta regla manda sobre cualquier regla de tu identidad que fije otro idioma para los informes.`,
+    // 31-oct (FIRMA 2 de Emilio · capa local): creencias, objeciones y fuerzas del público como guía; las reglas de arriba (fuente Y fecha por señal) mandan
+    ...(a.metodo ? ['', a.metodo] : []),
     ...(a.proposito ? ['', `Para qué sirve en el plan: ${a.proposito}`] : []),
   ].join('\n')
 }
+
+/** el método del analista según `cadena_config.metodos.mercado` · se lee por el almacén de la cadena (único lugar que nombra sus tablas) · cualquier fallo de lectura = el de omisión */
+const metodoDelAnalista = (): Promise<string | null> => metodoDe(almacenDeSupabase(), 'mercado')
 
 async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   const objetivo = p.objetivo as string
@@ -102,7 +110,7 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
 
     const tope = topeDe(p)
     const modelo = modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch: globalThis.fetch, workflow_id: firma.workflow_id })
-    const tarea = tareaDeMercado({ ficha: ficha.ficha, idioma: texto(p.params?.idioma), ...(p.proposito ? { proposito: p.proposito } : {}) })
+    const tarea = tareaDeMercado({ ficha: ficha.ficha, idioma: texto(p.params?.idioma), metodo: await metodoDelAnalista(), ...(p.proposito ? { proposito: p.proposito } : {}) })
     const fuente = `${FUENTE} · rubro «${ficha.ficha.rubro}» · plaza «${ficha.ficha.plaza ?? ficha.ficha.pais ?? 'sin dato'}» · tope US$ ${tope.toFixed(2)}`
 
     return await brazoMercado({

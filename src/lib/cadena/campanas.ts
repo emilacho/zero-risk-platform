@@ -6,6 +6,7 @@ import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } fr
 import { arrancarAlActivar, type ResultadoDelArranque } from './arranque'
 import { DIAS_DE_CAMPANA } from './constantes'
 import { fechaInicioPorRegla, sumarDias } from './fechas'
+import { nuevoOrdenEncendido } from './mesas'
 import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 
 // r75 · 'cadena_apagada': con la cadena apagada la puerta ya NO reenvía al brief viejo (un solo camino de briefs): deja el plan guardado, anota que no se generan briefs y cierra el viaje con este resultado
@@ -178,7 +179,10 @@ export async function campanasActivas(al: Almacen, cuerpo: Record<string, unknow
   if (!(Array.isArray(flujos) && flujos.includes(wf))) return err(403, 'E-WORKFLOW-DESCONOCIDO', 'solo lo llama un flujo de la cadena')
   const estado = await al.leerConfig('estado_cadena')
   const lista = await al.leerConfig('clientes_ensayo')
-  const todas = await al.campanasActivas()
+  // 31-oct (nuevo orden): el vigía también ve las campañas que esperan la gran idea ANTES de la primera tanda (estado `calendario`), SOLO con la palanca encendida para su cliente
+  const enCalendario: Campana[] = []
+  for (const c of (await al.campanasEnArmado()).filter((x) => x.estado === 'calendario')) if (await nuevoOrdenEncendido(al, c.client_id)) enCalendario.push(c)
+  const todas = [...(await al.campanasActivas()), ...enCalendario]
   const visibles = todas.filter((c) => c.seco || estado === 'encendida' || (estado === 'ensayo' && Array.isArray(lista) && lista.includes(c.client_id)))
   return { status: 200, cuerpo: { campanas: visibles.map((c) => ({ id: c.id, client_id: c.client_id, seco: c.seco, sala_ref: c.sala_ref })) } }
 }

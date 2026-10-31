@@ -271,3 +271,18 @@ describe('piezas sueltas del contrato', () => {
     expect(ins).toEqual({ fases: [{ clave: 'F1', semanas: 5 }], redes: [{ red: 'ig', huecos_por_semana: 1 }], prohibidas: ['x'], fotos: ['f1'] })
   })
 })
+
+describe('reserva 2 de CC3 (lote 2) · reglas que los mutantes vivos dejaron sin prueba', () => {
+  it('R06 · una línea que MENCIONA un id sin « · » (prosa) NO se declara «formato no reconocido»; con « · » y sin forma de idea, sí', () => {
+    const md = CONCEPTO + '\n## Caminos descartados y por qué\n- se descartó C1-I09 porque repetía la silla vacía\n- ver C1-I08 · nota suelta del modelo\n'
+    const c = leerConcepto(md, INS)
+    expect(c.ideas_descartadas.map((x) => x.id)).not.toContain('C1-I09')
+    expect(c.ideas_descartadas.find((x) => x.id === 'C1-I08')?.motivo).toMatch(/formato de línea no reconocido/)
+  })
+  it('R07 · las líneas de «Ideas que salen» que SÍ traen « · » no se declaran: salen por referencia y punto', () => {
+    const md = CONCEPTO.replace('## Ideas que salen   - C1-I04: repetía la idea de la silla vacía', '## Ideas que salen   - C1-I04 · repetía la idea de la silla vacía')
+    const c = leerConcepto(md, INS)
+    expect(c.ideas_que_salen).toEqual([{ id: 'C1-I04', motivo: 'repetía la idea de la silla vacía' }])
+    expect(c.ideas_descartadas.map((x) => x.id)).not.toContain('C1-I04')
+  })
+})

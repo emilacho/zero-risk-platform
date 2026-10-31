@@ -63,9 +63,27 @@ export const ESQUEMA_FECHAS_ESPECIALES = objeto({
   no_encontrado: listaDeTexto,
 })
 
+/**
+ * 31-oct (FIRMA de Emilio · gancho de video corto · UNA voz): la salida de `marketing_short_video_editing_coach` con el método `short-video-scripter` (`metodos.ts`).
+ * 2–3 ganchos de familias con nombre + el elegido; la puerta de retención por tramos (0-2s · 2-5s · 5-15s · cierre) con línea hablada, texto en pantalla y plano;
+ * el cierre (bucle o llamada); el aviso de contenido sintético con su decisión explícita; datos con `ref` y pendientes. Spec para grabar: nada se renderiza ni se publica.
+ * T8 lo cablea sobre la hoja; aquí vive el contrato para que la tarea y el esquema nazcan juntos (M1: contrato antes del primer smoke).
+ */
+export const ESQUEMA_GANCHO_DE_VIDEO = objeto({
+  ganchos: lista(objeto({ familia: texto, linea_hablada: texto, texto_en_pantalla: texto })),
+  elegido: entero,
+  por_que: texto,
+  tramos: lista(objeto({ ventana: { enum: ['0-2s', '2-5s', '5-15s', 'cierre'] }, linea_hablada: texto, texto_en_pantalla: texto, plano: texto })),
+  cierre: objeto({ tipo: { enum: ['bucle', 'llamada'] }, llamada: texto }),
+  aviso_sintetico: objeto({ incluir: bool, linea: texto, motivo: texto }),
+  datos: lista(objeto({ dato: texto, valor: texto, ref: texto })),
+  pendientes: listaDeTexto,
+})
+
 export const ESQUEMAS = {
   'estrategia.v1': ESQUEMA_ESTRATEGIA,
   'calendario_tanda.v1': ESQUEMA_CALENDARIO_TANDA,
   'calendario_tanda.v2': ESQUEMA_CALENDARIO_TANDA_V2,
   'fechas_especiales.v1': ESQUEMA_FECHAS_ESPECIALES,
+  'gancho_video.v1': ESQUEMA_GANCHO_DE_VIDEO,
 } as const

@@ -57,7 +57,7 @@ Input you receive:
   (the Client Brain context pre-loaded into your prompt via push-enrichment
   holds the canonical values).
 - **Visual harmony heuristics** · for outputs that ship with image/video
-  slots, verify the creative-director's prompts are coherent with the
+  slots, verify design-image-prompt-engineer's prompts are coherent with the
   brand palette in the Client Brain context (pre-loaded via push-enrichment).
   You don't render
   images, but you sanity-check that prompts won't produce visuals that
@@ -132,7 +132,7 @@ Aggregate verdict:
       "check": "cta_clarity",
       "severity": "medium",
       "issue": "primary CTA 'Conoce más' competes with secondary 'Descubrí más' in same viewport",
-      "fix_owner": "content-creator | web-designer | creative-director | ...",
+      "fix_owner": "content-creator | web-designer | design-visual-storyteller | design-image-prompt-engineer | ...",
       "suggested_fix": "make primary CTA 'Agendá tu diagnóstico' and demote secondary to text-only anchor"
     }
   ],
@@ -144,8 +144,7 @@ Aggregate verdict:
 }
 ```
 
-Idioma del JSON · siempre español para clientes Zero Risk Ecuador · inglés
-si el cascade llega en inglés.
+Idioma del JSON · el del manual del cliente (si el manual no lo fija, el idioma del país del cliente); no mezcles idiomas.
 
 ## Critical Rules
 

@@ -354,6 +354,13 @@ function baseFalsa() {
     const api: any = {
       select: () => api,
       eq: (k: string, v: unknown) => { const fn: any = (f: any) => f[k] === v; fn.d = ['eq', k, v]; q.filtros.push(fn); return api },
+      neq: (k: string, v: unknown) => { const fn: any = (f: any) => f[k] !== v; fn.d = ['neq', k, v]; q.filtros.push(fn); return api },
+      // 31-oct (T3 · reserva 5a de CC3): el PATCH excluye la tarjeta de la gran idea con `or('type.is.null,type.neq.…')` (una fila con type nulo sí se decide)
+      or: (expr: string) => {
+        const alts = expr.split(',').map((p) => { const [k, op, ...v] = p.split('.'); return { k, op, v: v.join('.') } })
+        const fn: any = (f: any) => alts.some((a) => (a.op === 'is' && a.v === 'null' ? f[a.k] == null : a.op === 'neq' ? f[a.k] != null && f[a.k] !== a.v : a.op === 'eq' ? f[a.k] === a.v : false))
+        fn.d = ['or', expr]; q.filtros.push(fn); return api
+      },
       filter: (k: string, op: string, v: unknown) => { const fn: any = (f: any) => (k === 'metadata->>task_id' ? String(f.metadata?.task_id) === v : false); fn.d = [op, k, v]; q.filtros.push(fn); return api },
       limit: (x: number) => { q.lim = x; return api },
       insert: (r: any) => { q.op = 'insert'; q.row = r; return api },

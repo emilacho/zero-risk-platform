@@ -5,3 +5,9 @@ scripts/worker-staging/E39-casilla-negocio/nodos/*.js -text
 scripts/worker-staging/**/*.js text eol=lf
 scripts/worker-staging/**/*.mjs text eol=lf
 scripts/worker-staging/E39-casilla-negocio/nodos/*.js -text
+
+# Identidades y la migración que las lleva byte a byte a la base (T6b · E4): la guarda md5 y el texto que se aplica dependen de LF;
+# en Windows (autocrlf=true) la carpeta de trabajo los volvía CRLF y aplicarlos desde ahí pegaría identidades con CRLF (reserva de CC3).
+src/agents/identities/*.md text eol=lf
+supabase/migrations/202610312010_*.sql text eol=lf
+supabase/reversas/202610312010_*.sql text eol=lf

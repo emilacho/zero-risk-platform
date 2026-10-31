@@ -28,7 +28,8 @@ describe('mesa MCP · montaje', () => {
   })
 
   // oficina de marketing (31-oct · E1): los tres de la ADENDA 2 entran a la mesa; una prueba por agente para que quitar uno se note
-  it.each(['campaign-brief-agent', 'video-editor', 'marketing_video_optimization_specialist'])('%s está en la mesa y recibe el conector en su turno', (slug) => {
+  // + instalaciones E1 (T7): whimsy-injector · tiktok-strategist · inclusive-visuals-specialist
+  it.each(['campaign-brief-agent', 'video-editor', 'marketing_video_optimization_specialist', 'whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist'])('%s está en la mesa y recibe el conector en su turno', (slug) => {
     expect(MESA_ALLOW.has(slug)).toBe(true)
     const s = buildMcpServers({ agentSlug: slug, mesa: { encargoId: 'enc-9' } }).mesa
     expect(s?.env).toMatchObject({ ZR_ENCARGO_ID: 'enc-9', ZR_AGENTE: slug })
