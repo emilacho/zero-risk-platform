@@ -573,7 +573,7 @@ describe('las rutas de Slack también reintentan lo pendiente (la siguiente vuel
   })
   it('la vuelta del reloj de la oficina (el vigía) también los sube, solo con la bandera encendida', async () => {
     vi.doMock('@/lib/oficina/ruta', async (orig) => ({ ...(await orig<typeof import('@/lib/oficina/ruta')>()), checkLlaveDeLaSala: () => ({ ok: true }), puertosReales: () => ({ P: { almacen: { leerConfig: async () => ({ estado: 'encendida', familias_activas: [], clientes_ensayo: [] }) }, ahora: () => new Date() }, dbRutas }) }))
-    vi.doMock('@/lib/oficina/vigia', () => ({ vencerBandeja: async () => ({ vencidas: 0 }), revisarPasosMuertos: async () => ({ reanudar: 0, fallidos: 0, cierres: 0 }) }))
+    vi.doMock('@/lib/oficina/vigia', () => ({ vencerBandeja: async () => ({ vencidas: 0 }), vencerMesasPorPlazo: async () => ({ vencidas: [] }), revisarPasosMuertos: async () => ({ reanudar: 0, fallidos: 0, cierres: 0 }) }))
     vi.resetModules()
     const { POST } = await import('@/app/api/oficina/vigia/route')
     const pedir = () => POST(new Request('https://app.test/api/oficina/vigia', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }))
