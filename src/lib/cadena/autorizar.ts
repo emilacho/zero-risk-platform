@@ -12,9 +12,20 @@ export const err = (status: number, code: string, detalle: string, extra: Record
 
 const texto = (x: unknown): string | null => (typeof x === 'string' && x.trim() !== '' ? x.trim() : null)
 
-export async function autorizarLlamada(al: Almacen, cuerpo: Record<string, unknown>, clientId: string): Promise<Respuesta | null> {
+/**
+ * 31-oct (T4 · tarjeta «Gran idea»): una decisión HUMANA desde el tablero NO es una invocación de agente. Entra con `workflow_id = 'tablero'` y un
+ * `workflow_execution_id` propio (`tablero:<hitl_id>:<hora>`) que deja rastro; SOLO las acciones que lo declaran (`{ humano: true }`: `concepto/decidir`) la aceptan.
+ * Abrir o entregar una mesa con `'tablero'` sigue siendo 403: eso sí invoca agentes y va por flujo.
+ */
+export const WORKFLOW_DEL_TABLERO = 'tablero'
+
+export async function autorizarLlamada(al: Almacen, cuerpo: Record<string, unknown>, clientId: string, opciones: { humano?: boolean } = {}): Promise<Respuesta | null> {
   const wf = texto(cuerpo.workflow_id), ex = texto(cuerpo.workflow_execution_id)
   if (!wf || !ex) return err(400, 'E-WORKFLOW-CTX', 'la llamada necesita workflow_id y workflow_execution_id (los dos, siempre)')
+  if (wf === WORKFLOW_DEL_TABLERO) {
+    if (opciones.humano) return null
+    return err(403, 'E-WORKFLOW-DESCONOCIDO', 'el tablero solo puede DECIDIR (concepto/decidir); abrir o entregar una mesa va por un flujo de la cadena')
+  }
   const flujos = await al.leerConfig('flujos')
   const esFlujo = Array.isArray(flujos) && flujos.includes(wf)
   if (!esFlujo && !(await al.journeyExiste(wf, clientId))) {
