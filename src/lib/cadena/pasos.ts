@@ -14,6 +14,7 @@ import { conceptoParaElCalendario, etapaDeReentrada, nuevoOrdenEncendido, tramoD
 import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
+import { metodoDeCalendario } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
@@ -226,6 +227,8 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
     correccion: correccion ? { fichas: correccion.fichas ?? [], filas: filasMalas, modo: correccion.modo === 'filas' ? 'filas' : 'tanda' } : undefined,
     concepto: mesa.concepto ? { leido: mesa.concepto, version: mesa.version ?? 0 } : undefined,
     fechasEspeciales: mesa.concepto ? await fechasDeclaradas(al, ctx, estr.contenido, campana) : undefined,
+    // 31-oct (FIRMA de Emilio): el método de colocación como capa local, solo con la gran idea; `cadena_config.metodos.calendario` lo apaga o lo reemplaza
+    metodo: mesa.concepto ? await metodoDeCalendario(al) : undefined,
   })
   return {
     status: 200,
