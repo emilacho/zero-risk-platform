@@ -11,6 +11,8 @@ import { firmarVideoDelEntorno } from '@/lib/portero-alimenta/videos-del-cerebro
 import type { OrigenDeFoto } from '@/lib/cerebro/portero/fotos-pendientes'
 
 export const dynamic = 'force-dynamic'
+// medido en real: sin esto Next guardó la primera lectura (tabla vacía) y siguió devolviendo 0 videos con 25 en la base
+export const fetchCache = 'force-no-store'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
