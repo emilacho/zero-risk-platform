@@ -50,14 +50,15 @@ describe('la fórmula del proveedor (leída de /estimate)', () => {
 })
 
 describe('lo aprobado por Emilio (31-oct) · armarPedido', () => {
-  it('por omisión: Seedance 2.5 · 8 s · 1080p · 9:16 para reel · audio sí · sin fotos → text-to-video', () => {
+  it('por omisión (adenda 4): Seedance 2.5 · 8 s · 720p · 9:16 para reel · audio sí · sin fotos → text-to-video; 1080p sigue admitida', () => {
     const r = armarPedido({ prompt: 'Así servimos un encebollado en Náufrago, de la olla al plato', formato: 'reel' })
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    expect(r.pedido).toMatchObject({ modelo: 'bytedance/seedance-2.5', segundos: 8, resolucion: '1080p', relacion: '9:16', audio: true, fotos: [] })
+    expect(r.pedido).toMatchObject({ modelo: 'bytedance/seedance-2.5', segundos: 8, resolucion: '720p', relacion: '9:16', audio: true, fotos: [] })
     expect(rutaDelModelo(r.pedido)).toBe('bytedance/seedance-2.5/text-to-video')
     const c = cuerpoParaHiggsfield(r.pedido)
-    expect(c).toMatchObject({ duration: 8, resolution: '1080p', aspect_ratio: '9:16', generate_audio: true })
+    expect(c).toMatchObject({ duration: 8, resolution: '720p', aspect_ratio: '9:16', generate_audio: true })
+    expect(armarPedido({ prompt: 'Así servimos un encebollado en Náufrago', formato: 'reel', resolucion: '1080p' })).toMatchObject({ ok: true, pedido: { resolucion: '1080p' } })
     expect('image_urls' in c).toBe(false)
     for (const regla of REGLAS_DEL_PEDIDO) expect(String(c.prompt)).toContain(regla)
     expect(String(c.prompt)).toMatch(/Sin voces/)
@@ -150,7 +151,7 @@ describe('POST /api/video/generate', () => {
   })
   it('1080p 8 s cuesta US$ 9,10 > tope 5 → 409 SIN enviar (solo la estimación gratis)', async () => {
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }, { 'x-correlation-id': 'c-1' }))
-    const r = await post(PEDIDO)
+    const r = await post({ ...PEDIDO, resolucion: '1080p' })
     const j = await r.json()
     expect(r.status).toBe(409)
     expect(j.error).toBe('tope_por_video')
@@ -190,6 +191,14 @@ describe('POST /api/video/generate', () => {
     expect(JSON.parse(String(env.init!.body))).toMatchObject({ duration: 8, resolution: '480p', aspect_ratio: '9:16', generate_audio: true, image_urls: ['https://fotos/1.jpg'] })
     expect(insert.mock.calls[0][0]).toMatchObject({ session_id: 'vid-r1', status: 'running', client_id: 'c1', workflow_id: 'wf-1', workflow_execution_id: 'ex-1' })
     expect(insert.mock.calls[0][0].cost_usd).toBeCloseTo(1.6445, 3)
+  })
+  it('la prueba elegida (opción B): 720p · 8 s por omisión → estima US$ 3,70, cabe en el tope y se envía', async () => {
+    fetchMock
+      .mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
+      .mockResolvedValueOnce(respuesta(200, { status: 'queued', request_id: 'r2', status_url: 'https://api.higgsfield.ai/requests/r2/status' }))
+    const j = await (await post(PEDIDO)).json()
+    expect(j).toMatchObject({ ok: true, request_id: 'r2', resolucion: '720p', segundos: 8 })
+    expect(j.costo_estimado_usd).toBeCloseTo(3.698, 3)
   })
   it('el proveedor responde 429 (fila llena, sin cobro) → 429 y nada en el libro', async () => {
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 })).mockResolvedValueOnce(respuesta(429, { error: 'queue full', limit: 40 }, { 'retry-after': '30' }))

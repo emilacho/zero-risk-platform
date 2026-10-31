@@ -1,6 +1,6 @@
 /**
  * PARÁMETROS APROBADOS DEL BRAZO DE VIDEO (Emilio, 31-oct 11:55Z, «aprobado todo» · adenda 1 del encargo):
- * Seedance 2.5 · 8–15 s para reel/tiktok/short · 1080p · audio generado (música/ambiente), SIN voz sintética al inicio · fotos propias del cliente como referencia
+ * Seedance 2.5 · 8–15 s para reel/tiktok/short · 1080p (adenda 4: por omisión 720p hasta medir el descuento real) · audio generado (música/ambiente), SIN voz sintética al inicio · fotos propias del cliente como referencia
  * siempre que existan · SIN caras de personas reales por ahora · tope US$ 5 por video · cantidad = la que pida el calendario.
  * Son DATOS (se cambian aquí o por el pedido, dentro de lo permitido): el código solo impide salirse de lo aprobado y de lo que la API admite.
  */
@@ -9,7 +9,8 @@ export const MODELO_APROBADO = 'bytedance/seedance-2.5'
 export const MODELOS_PERMITIDOS: ReadonlySet<string> = new Set(['bytedance/seedance-2.5', 'bytedance/seedance-2.0'])
 export const DURACION_MIN_S = 8
 export const DURACION_MAX_S = 15
-export const RESOLUCION_APROBADA = '1080p'
+/** adenda 4 (Emilio, 31-oct 12:30Z, opción B): la prueba va a 720p y queda como valor por omisión; 1080p sigue admitida para después, cuando se mida el descuento real */
+export const RESOLUCION_APROBADA = '720p'
 export const RESOLUCIONES_PERMITIDAS: ReadonlySet<string> = new Set(['480p', '720p', '1080p'])
 export const TOPE_POR_VIDEO_USD = 5
 /** relación de cuadro por formato de red (la tabla `cadena_formatos_por_red` nombra el formato; el cuadro lo fija esto) */
