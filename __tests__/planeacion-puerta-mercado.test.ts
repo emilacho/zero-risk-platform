@@ -336,6 +336,17 @@ describe('el envoltorio solo · sin red', () => {
     expect(METODO_MERCADO_POR_OMISION).toMatch(/UNA línea de lista con su fuente .* y su fecha/)
     expect(METODO_MERCADO_POR_OMISION).not.toMatch(/\b(tuteo|voseo|en español|in english)\b/i)
   })
+  // FIRMA 5 de Emilio (31-oct 21:09Z): la identidad fija otro idioma para los informes internos; el pedido lo corrige SIEMPRE (con o sin método), sin tocar la identidad
+  it('🔴 el pedido dice que la regla de idioma del manual manda sobre la de la identidad, con y sin método, y antes del método', () => {
+    const base = { ficha: { nombre: null, rubro: 'x', plaza: 'Quito', pais: 'EC' }, idioma: 'español' }
+    const FRASE = 'Esta regla manda sobre cualquier regla de tu identidad que fije otro idioma para los informes.'
+    const sin = tareaDeMercado(base)
+    expect(sin).toContain(`- Idioma: español. Respeta el trato (tú, vos, usted u otro) que fije el manual del cliente; no lo cambies. ${FRASE}`)
+    const con = tareaDeMercado({ ...base, metodo: METODO_MERCADO_POR_OMISION })
+    expect(con).toContain(FRASE)
+    expect(con.indexOf(FRASE)).toBeLessThan(con.indexOf('# MÉTODO'))
+    expect(con).toContain('# MÉTODO (capa local · product-trend-researcher (proceso, sin producto)')
+  })
   it('🔴 la puerta lee `cadena_config.metodos.mercado` por el almacén de la cadena: sin fila va el de omisión; `false` lo apaga; si la lectura falla va el de omisión', async () => {
     const qFicha = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: { name: 'N', industry: 'restaurante', market: 'Guayaquil', country: 'EC' }, error: null })) }
     qFicha.select.mockReturnValue(qFicha); qFicha.eq.mockReturnValue(qFicha)

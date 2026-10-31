@@ -223,6 +223,17 @@ export const METODO_MERCADO_POR_OMISION: string = [
     'Lo comparativo o lo que afirme un hecho del producto o de un competidor sin fuente queda marcado «[sin fuente]»; registras quién lo dice, nunca si es verdad.',
     'Si para una fuerza u objeción no hay evidencia, escribe «sin dato» y qué habría que mirar; no estimes.',
   ]),
+  // FIRMA 5 de Emilio (31-oct 21:09Z): lo que `market_research_analyst` perdió del Trend Researcher y aplica a marketing digital (INFORME-CC3-trend-researcher-vs-market-research) · capa local, identidad intacta
+  cabecera('product-trend-researcher (proceso, sin producto)', METODOS_ORIGEN),
+  lineas([
+    'Proceso, en este orden: recolectar de muchas fuentes (cuantas puedas verificar; el original pide quince o más) → buscar patrones y anomalías → ponerlos en contexto (plaza, estación, rubro) → estimar impacto → VALIDAR por triangulación → pronosticar con intervalo → decir qué se hace con eso.',
+    'Cada fuente lleva su CREDIBILIDAD (oficial · prensa · gremio · foro · red social) y su SESGO declarado (quién la publica y qué gana); una señal se sostiene cuando la confirman al menos dos fuentes independientes; con una sola fuente es «señal débil» y lo dices.',
+    'Métodos cualitativos que sí aplican: análisis de contenido (qué dicen y cómo lo dicen reseñas, foros, comentarios) y monitoreo de medios con detección de sesgo. Nada de encuestas, patentes ni flujos de inversión: no son de este oficio.',
+    'Comportamiento del público: necesidades no cubiertas y barreras de adopción (qué impide comprar o cambiar), con la frase literal cuando la fuente la trae.',
+    'Escenarios: cuando una señal admite dos lecturas, escribe dos o tres escenarios con su probabilidad (alta/media/baja y por qué) y qué señal confirmaría cada uno; nunca uno solo como certeza.',
+    'Cierra con un MAPA DEL MERCADO de pocas líneas: qué temas y ángulos ya están ocupados en la plaza y qué ESPACIOS EN BLANCO quedan (lo que nadie le está diciendo a este público), sin analizar competidores uno por uno. El informe entero cabe en dos páginas.',
+    'Urgencia: si una señal cambia el plan (regulación, cierre, precio del insumo), márcala «URGENTE» al inicio para que el jefe de marketing la lea primero.',
+  ]),
 ].join('\n')
 
 /** pieza · `content-creator` + `social-creative-builder`: una idea → piezas nativas por red; nunca la misma copia en dos redes */

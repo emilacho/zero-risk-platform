@@ -80,7 +80,8 @@ export function tareaDeMercado(a: { ficha: FichaMinima; idioma: string | null; p
     '- Si no tienes una fuente para una señal, no la estimes: escribe «sin dato» y qué habría que mirar. Si no hay ninguna señal con fuente, responde solo «sin dato» y qué faltó, sin líneas de lista.',
     '- Nada de predicciones sin intervalo de confianza o método declarado.',
     `- Encabeza el informe con el rótulo exacto: ${ROTULO_INFORME_DE_MERCADO}`,
-    `- Idioma: ${idioma}. Respeta el trato (tú, vos, usted u otro) que fije el manual del cliente; no lo cambies.`,
+    // FIRMA 5 de Emilio (31-oct): la identidad trae una regla que fija otro idioma para los informes internos; aquí manda el manual del cliente (adenda idioma agnóstico), sin tocar la identidad
+    `- Idioma: ${idioma}. Respeta el trato (tú, vos, usted u otro) que fije el manual del cliente; no lo cambies. Esta regla manda sobre cualquier regla de tu identidad que fije otro idioma para los informes.`,
     // 31-oct (FIRMA 2 de Emilio · capa local): creencias, objeciones y fuerzas del público como guía; las reglas de arriba (fuente Y fecha por señal) mandan
     ...(a.metodo ? ['', a.metodo] : []),
     ...(a.proposito ? ['', `Para qué sirve en el plan: ${a.proposito}`] : []),

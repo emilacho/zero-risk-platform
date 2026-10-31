@@ -252,6 +252,27 @@ describe('firma 2 · lo que dice cada método (lo que la firma pide)', () => {
     expect(m).toMatch(/escribe «sin dato» y qué habría que mirar; no estimes/)
     expect(m).toMatch(/NO analices|competidor/) // no se mete en competencia: solo marca lo sin fuente
   })
+  // FIRMA 5 de Emilio (31-oct 21:09Z): lo perdido del Trend Researcher que aplica a marketing digital, como capa local (identidad intacta)
+  it('🔴 mercado · FIRMA 5: proceso con triangulación, fuentes con credibilidad y sesgo, métodos cualitativos (sin encuestas ni patentes), necesidades no cubiertas y barreras, escenarios con probabilidad, mapa con espacios en blanco en dos páginas, URGENTE', () => {
+    const m = METODO_MERCADO_POR_OMISION
+    expect(m).toContain('# MÉTODO (capa local · product-trend-researcher (proceso, sin producto)')
+    expect(m).toMatch(/recolectar .*→ .*patrones y anomalías → .*contexto .*→ .*impacto → VALIDAR por triangulación → pronosticar con intervalo → /)
+    expect(m).toMatch(/CREDIBILIDAD .*oficial .*prensa .*gremio .*foro .*red social/)
+    expect(m).toMatch(/SESGO declarado/)
+    expect(m).toMatch(/al menos dos fuentes independientes/)
+    expect(m).toMatch(/análisis de contenido .*monitoreo de medios con detección de sesgo/)
+    expect(m).toMatch(/Nada de encuestas, patentes ni flujos de inversión/)
+    expect(m).toMatch(/necesidades no cubiertas y barreras de adopción/)
+    expect(m).toMatch(/dos o tres escenarios con su probabilidad/)
+    expect(m).toMatch(/MAPA DEL MERCADO .*ESPACIOS EN BLANCO/)
+    expect(m).toMatch(/sin analizar competidores uno por uno/)
+    expect(m).toMatch(/cabe en dos páginas/)
+    expect(m).toMatch(/«URGENTE»/)
+    // sigue siendo una capa local: el de creencias queda intacto delante y la procedencia es la misma (commit fijado)
+    expect(m.indexOf('audience-belief-mapper')).toBeLessThan(m.indexOf('product-trend-researcher'))
+    expect(m).not.toMatch(FIJA_IDIOMA_O_TRATO)
+    expect(m).not.toMatch(DEPENDENCIAS_DEL_REPOSITORIO)
+  })
   it('pieza: nativa por red (nunca copia), gancho de taxonomía cumplido por el cuerpo, enlace según la ficha, carrusel con roles/≈70 %/alt, lista negativa, promesas con referencia', () => {
     const m = METODO_PIEZA_POR_OMISION
     expect(m).toMatch(/nunca pegues el mismo texto en dos redes/)
