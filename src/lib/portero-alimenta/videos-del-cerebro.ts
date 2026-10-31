@@ -8,7 +8,6 @@
  */
 import { createHash, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
-import { createRequire } from 'node:module'
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -138,7 +137,8 @@ export function instantesDeCaptura(duracion: number, n = CAPTURAS_POR_VIDEO): nu
 
 export function rutaDeFfmpeg(): string | null {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH
-  try { return (createRequire(join(process.cwd(), 'package.json'))('@ffmpeg-installer/ffmpeg') as { path?: string }).path ?? null } catch { return null }
+  // referencia ESTÁTICA a propósito: así el empaquetado de Vercel la ve y lleva el ejecutable (con createRequire dinámico no lo llevaba)
+  try { return (require('@ffmpeg-installer/ffmpeg') as { path?: string }).path ?? null } catch { return null }
 }
 
 type Ejecutar = (cmd: string, args: string[], tiempoMs: number) => Promise<{ ok: boolean; salida: string }>
