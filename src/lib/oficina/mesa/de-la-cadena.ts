@@ -105,12 +105,12 @@ export function devolucionDelBrief(texto: string): string | null {
  */
 export async function entregarALaCadena(P: Puertos, enc: Encargo, o: { texto: string | null; motivo: string | null; estado: 'cerrado' | 'cerrado_por_tope' | 'fallido'; brief_devuelto?: string | null }): Promise<Respuesta> {
   const ref = (enc.sala_ref ?? {}) as { tipo_de_mesa?: TipoDeMesaDeLaCadena; campana_id?: string; version?: number }
-  let entrega: { ok: boolean; detalle: string } = { ok: false, detalle: 'la cadena no tiene su puerto en este entorno' }
+  let entrega: { ok: boolean; detalle: string; siguiente?: { sobre: object } } = { ok: false, detalle: 'la cadena no tiene su puerto en este entorno' }
   if (P.cadena && ref.campana_id && ref.version && ref.tipo_de_mesa) {
     try {
       const base = { campana_id: ref.campana_id, version: ref.version, encargo_id: enc.id, texto: o.texto, costo_usd: enc.estado_del_motor.gasto_usd, motivo: o.motivo }
       const x = ref.tipo_de_mesa === 'brief' ? await P.cadena.entregarBrief(base) : await P.cadena.entregarConcepto({ ...base, brief_devuelto: o.brief_devuelto ?? null })
-      entrega = x.ok ? { ok: true, detalle: x.estado ?? 'recibida' } : { ok: false, detalle: x.error ?? 'la cadena no recibió la entrega' }
+      entrega = x.ok ? { ok: true, detalle: x.estado ?? 'recibida', ...(x.siguiente ? { siguiente: x.siguiente } : {}) } : { ok: false, detalle: x.error ?? 'la cadena no recibió la entrega' }
     } catch (e) { entrega = { ok: false, detalle: e instanceof Error ? e.message : String(e) } }
   }
   const cambios: Cambios = { encargo_id: enc.id, estado_del_motor: enc.estado_del_motor, gasto_usd: enc.estado_del_motor.gasto_usd, estado: o.estado, con_desacuerdo: o.estado !== 'cerrado' }

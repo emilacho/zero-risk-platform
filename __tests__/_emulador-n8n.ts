@@ -27,12 +27,13 @@ export async function recorrer(flujo: any, desde: string, entrada: Item, o: { en
   for (let i = 0; i < 60 && nombre; i++) {
     const n = flujo.nodes.find((x: any) => x.name === nombre)
     if (!n) throw new Error(`no existe el nodo «${nombre}»`)
-    if (o.hasta?.includes(nombre)) { pasos.push(nombre); return { pasos, item, ultimo: nombre, historial } }
+    if (o.hasta?.includes(nombre)) { pasos.push(nombre); return { pasos, item, ultimo: nombre, historial, vacio: false } }
     const ctx = entorno(env, historial, item)
     let salida = 0
     if (n.type.endsWith('.code')) {
       const f = new AsyncFunction('$input', '$', '$env', '$workflow', '$execution', n.parameters.jsCode)
       const r = await f(ctx.$input, ctx.$, ctx.$env, ctx.$workflow, ctx.$execution)
+      if (!r.length) { pasos.push(nombre); return { pasos, item: null as any, ultimo: nombre, historial, vacio: true } }
       item = r[0].json
     } else if (n.type.endsWith('.if')) {
       const c = n.parameters.conditions.conditions[0]
@@ -51,5 +52,5 @@ export async function recorrer(flujo: any, desde: string, entrada: Item, o: { en
     const sig: any[] | undefined = flujo.connections[nombre]?.main?.[salida]
     nombre = sig?.[0]?.node ?? null
   }
-  return { pasos, item, ultimo: pasos[pasos.length - 1], historial }
+  return { pasos, item, ultimo: pasos[pasos.length - 1], historial, vacio: false }
 }

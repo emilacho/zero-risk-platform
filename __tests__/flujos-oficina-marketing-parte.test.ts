@@ -70,9 +70,9 @@ async function cadena(o: { palanca?: boolean; conGranIdea?: boolean } = {}) {
   if (o.palanca !== false && o.conGranIdea !== false) {
     const { briefAbrir, recibirBrief, conceptoAbrir, recibirConcepto } = await import('../src/lib/cadena/mesas')
     expect((await briefAbrir(al, wf(), AHORA)).status).toBe(200)
-    expect(await recibirBrief(al, { campana_id: CAMPANA, version: 1, encargo_id: 'enc-1', texto: BRIEF, costo_usd: 0.1, motivo: null }, AHORA)).toEqual({ ok: true, estado: 'validada' })
+    expect(await recibirBrief(al, { campana_id: CAMPANA, version: 1, encargo_id: 'enc-1', texto: BRIEF, costo_usd: 0.1, motivo: null }, AHORA)).toMatchObject({ ok: true, estado: 'validada' })
     expect((await conceptoAbrir(al, wf(), AHORA)).status).toBe(200)
-    expect(await recibirConcepto(al, { campana_id: CAMPANA, version: 1, encargo_id: 'enc-2', texto: CONCEPTO, costo_usd: 0.1, motivo: null }, AHORA)).toEqual({ ok: true, estado: 'lista' })
+    expect(await recibirConcepto(al, { campana_id: CAMPANA, version: 1, encargo_id: 'enc-2', texto: CONCEPTO, costo_usd: 0.1, motivo: null }, AHORA)).toMatchObject({ ok: true, estado: 'lista' })
     const d = await (ACCIONES as any).concepto.decidir(al, wf({ decision: 'aprobar' }), AHORA)
     expect(d.status, JSON.stringify(d.cuerpo)).toBe(200)
     await al.guardarFilas(CAMPANA, 1, 0, [fila('F1-S1-ig-01', 'instagram', 'carrusel', 'C1-I01', 1), fila('F1-S1-ig-02', 'instagram', 'foto', 'C1-I02', 2), fila('F1-S1-fb-03', 'facebook', 'foto', 'C1-I03', 3)] as any)
