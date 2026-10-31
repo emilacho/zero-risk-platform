@@ -53,7 +53,8 @@ export function parsearBrief(parte: string, id: string): BriefLeido | null {
   for (const l of lineas.slice(1)) {
     const item = /^\s{2,}-\s+(.*\S)\s*$/.exec(l)
     if (item && lista) { listas[lista].push(item[1].trim()); continue }
-    const campo = /^-\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9 /()]*?):\s*(.*)$/.exec(l)
+    // 31-oct (CC1 · hoja por código): el nombre admite UNA aclaración en minúsculas entre paréntesis («MENSAJE (uno)»); antes la regex solo aceptaba mayúsculas y el MENSAJE del parte se leía SIEMPRE vacío
+    const campo = /^-\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9 /]*?(?:\s?\([a-záéíóúñ]+\))?):\s*(.*)$/.exec(l)
     if (campo) {
       const nombre = campo[1].trim()
       if (CAMPOS_LISTA.has(nombre) && campo[2].trim() === '') { lista = nombre; listas[nombre] = []; continue }

@@ -52,7 +52,7 @@ describe('F2 · el redactor del plan es dato', () => {
     })
     expect((await almacenDeFinanzas(base({ redactor: 'jefe-marketing' })).leerConfig()).redactor).toBe('jefe-marketing')
     expect((await almacenDeFinanzas(base({ redactor: ' otro ' })).leerConfig()).redactor).toBe('otro')
-    for (const malo of [undefined, null, 'texto', { redactor: '' }, { redactor: 3 }, ['x']]) expect((await almacenDeFinanzas(base(malo)).leerConfig()).redactor, JSON.stringify(malo)).toBeUndefined()
+    for (const malo of [undefined, null, 'texto', { redactor: '' }, { redactor: 3 }, ['x'], { redactor: 'Jefe Marketing!' }, { redactor: 'x' }]) expect((await almacenDeFinanzas(base(malo)).leerConfig()).redactor, JSON.stringify(malo)).toBeUndefined()
   })
 })
 
@@ -164,6 +164,23 @@ describe('punto 1 de CC3 · jefe-marketing fuera de esquema (SIMULADO)', () => {
     expect(m.llamadas.some((l) => l.agente === 'campaign-brief-agent')).toBe(false)
     expect(m.turnos.find((t) => t.paso === 'planteo')?.estado).toBe('hecho')
     expect(final.cuerpo.estado).toBe('cerrado')
+  })
+  it('reserva 5 de CC3 (K9): OTRO redactor configurado es a quien se llama en el planteo, de punta a punta (config → orquestador → modelo); jefe-marketing no aparece', async () => {
+    const m = mundo({ 'content-creator': [RESPUESTA_DE_JEFE_MARKETING, RESPUESTA_DE_JEFE_MARKETING], 'finance-fpa-analyst': [FPA, FPA], paid_media_paid_social_strategist: [{ agente: 'paid_media_paid_social_strategist', resumen: 'r', supuestos: { costo_por_resultado: rango(0.4, 1.2, 0.8) }, preguntas_a_otros: [], alertas: [] }], 'chief-financial-officer': [ACUERDO_OK, ACUERDO_OK] }, { redactor: 'content-creator' })
+    const { final } = await correr(m)
+    expect(m.llamadas.filter((l) => l.paso === 'planteo').map((l) => l.agente)).toEqual(['content-creator'])
+    expect(m.llamadas.some((l) => l.agente === 'jefe-marketing' || l.agente === 'campaign-brief-agent')).toBe(false)
+    expect(m.turnos.find((t) => t.paso === 'planteo')).toMatchObject({ agente: 'content-creator', estado: 'hecho' })
+    expect(final.cuerpo.estado).toBe('cerrado')
+  })
+  it('reserva 5 de CC3: un redactor configurado que NO existe como agente ⇒ el modelo lo rechaza y el turno del planteo queda `fallo` declarado; la conversación termina sola', async () => {
+    const m = mundo({ 'finance-fpa-analyst': [FPA, FPA], 'chief-financial-officer': [ACUERDO_OK, ACUERDO_OK] }, { redactor: 'agente-que-no-existe' })
+    const { final } = await correr(m)
+    const planteo = m.turnos.find((t) => t.paso === 'planteo')!
+    expect(planteo.agente).toBe('agente-que-no-existe')
+    expect(planteo.estado).toBe('fallo')
+    expect(m.llamadas.filter((l) => l.paso === 'planteo').length).toBeLessThanOrEqual(2)
+    expect(final.cuerpo.terminado).toBe(true)
   })
   it('prosa dos veces (reintento 1 agotado) ⇒ el turno del planteo queda `fallo` con «sin supuestos del agente», la conversación sigue con los demás y TERMINA sola; el hilo lo dice', async () => {
     const m = mundo({ 'jefe-marketing': [PROSA, PROSA, PROSA, PROSA], 'finance-fpa-analyst': [FPA, FPA], 'chief-financial-officer': [ACUERDO_OK, ACUERDO_OK] }, { redactor: 'jefe-marketing' })
