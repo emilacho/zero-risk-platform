@@ -5,13 +5,16 @@
  */
 
 /** las familias de la mesa: nombre de la familia → tipo de pieza. Conviven con las v1 (`carrusel_ig_v1`, `kit_historias`); un encargo termina con la que lo abrió. */
-/** 31-oct · `calendario_mesa`: la mesa de ideas del paso calendario de la cadena (sin imágenes, sin traductor, sin jefatura propia; la entrega va a la corrida de la cadena, no a la bandeja) */
-export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', calendario_mesa: 'calendario' } as const
+/** 31-oct · nuevo orden de la cadena: `brief_mesa` (el brief creativo de la campaña) y `concepto_mesa` (la gran idea, capítulos y banco) son mesas de la CADENA: sin imágenes, sin traductor, sin jefatura propia; la entrega va a la cadena, no a la bandeja */
+export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', brief_mesa: 'brief', concepto_mesa: 'concepto' } as const
 export type FamiliaMesa = keyof typeof FAMILIAS_MESA
 export type TipoDePieza = (typeof FAMILIAS_MESA)[FamiliaMesa]
 export const esFamiliaMesa = (f: string): f is FamiliaMesa => Object.prototype.hasOwnProperty.call(FAMILIAS_MESA, f)
 /** la plantilla v1 cuyas funciones de código (abrir, armar, dibujar, empaquetar) reutiliza la mesa */
-export const FAMILIA_V1_DE: Record<Exclude<TipoDePieza, 'calendario'>, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias' }
+export const FAMILIA_V1_DE: Record<Exclude<TipoDePieza, 'brief' | 'concepto'>, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias' }
+/** las mesas que entrega la CADENA (no hay pieza: ni imágenes, ni traductor, ni jefatura propia, ni bandeja) */
+export const TIPOS_DE_LA_CADENA = ['brief', 'concepto'] as const
+export const esDeLaCadena = (tipo: string): tipo is (typeof TIPOS_DE_LA_CADENA)[number] => (TIPOS_DE_LA_CADENA as readonly string[]).includes(tipo)
 
 /** las cotas del bucle (guardarraíles de bucle coherente): nada de la mesa es indefinido */
 export const COTAS = {
@@ -93,6 +96,8 @@ export interface LecturaDeNotas { notas: NotaLeida[]; destinatario: string | nul
 /** lo que la mesa guarda en el artefacto `mesa` del encargo */
 export interface EstadoMesa {
   tipo: TipoDePieza
+  /** condiciones del directorio que la CADENA declara al abrir una mesa suya (p. ej. `si_instagram`, `si_video`): una tarjeta con `<tipo>:<condición>` solo es pertinente si la condición está aquí */
+  condiciones?: string[]
   /** congelada al abrir (REVISION-CC3: un cambio de pertinencia no mueve la meta de una pieza en vuelo) */
   directorio_congelado: Tarjeta[]
   direccion: string

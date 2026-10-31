@@ -56,6 +56,10 @@ export interface Limites {
   margen: number
   tope_encargo_usd: number
   max_rondas: number
+  /** mesa de concepto: integraciones mínimas (rondas) antes de dar por buena la pieza */
+  rondas_minimas?: number
+  /** mesas de la cadena: minutos de plazo de la mesa entera (el vigía de los turnos sigue siendo de 12 min) */
+  plazo_mesa_min?: number
   /** tope TOTAL de una prueba que reparte su gasto entre varios encargos o noches: la holgura que queda = limite − base − lo que ESTE encargo gastó desde que se midió la base; una llamada cuya reserva no cabe no arranca */
   prueba?: { limite_usd: number; base_usd: number; encargo_base_usd: number }
   imagenes_generadas_max?: number

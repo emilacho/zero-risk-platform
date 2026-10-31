@@ -2,28 +2,31 @@
  * EL DIRECTORIO VIVO · quién está en la mesa y qué especialidades son pertinentes para cada tipo de pieza. Es DATO (`oficina_directorio`), no código:
  * agregar un agente = insertar una fila; quitarlo = `activo=false`. Puro: sin base ni red.
  */
-import type { Tarjeta, TipoDePieza } from './tipos'
+import { esDeLaCadena, type Tarjeta, type TipoDePieza } from './tipos'
 
 const CONDICION_IMAGEN = 'si_imagen_generada'
-/** una tarjeta de dirección que en ESTE tipo de pieza es miembro (no dirige): `calendario:miembro` */
+/** una tarjeta de dirección que en ESTE tipo de pieza es miembro (no dirige): `concepto:miembro` */
 const CONDICION_MIEMBRO = 'miembro'
+const CONDICION_DIRIGE = 'dirige'
 
 /** ¿esta tarjeta es de aporte obligatorio en este tipo de pieza? `carrusel` siempre · `carrusel:si_imagen_generada` solo si alguna imagen se genera */
-export function esPertinente(t: Tarjeta, tipo: TipoDePieza, hayImagenGenerada: boolean): boolean {
+export function esPertinente(t: Tarjeta, tipo: TipoDePieza, hayImagenGenerada: boolean, condiciones: readonly string[] = []): boolean {
   if (!t.activo) return false
   return t.pertinente_en.some((p) => {
     const [tp, cond] = p.split(':')
     if (tp !== tipo) return false
     if (!cond) return true
     if (cond === CONDICION_MIEMBRO) return true
-    return cond === CONDICION_IMAGEN ? hayImagenGenerada : false
+    if (cond === CONDICION_DIRIGE) return false
+    if (cond === CONDICION_IMAGEN) return hayImagenGenerada
+    return condiciones.includes(cond)
   })
 }
 
 /** los especialistas cuyo aporte es obligatorio (sin la dirección y sin el portero: ellos no «aportan», dirigen o traen material) */
-export function especialistasPertinentes(directorio: Tarjeta[], tipo: TipoDePieza, hayImagenGenerada: boolean): string[] {
+export function especialistasPertinentes(directorio: Tarjeta[], tipo: TipoDePieza, hayImagenGenerada: boolean, condiciones: readonly string[] = []): string[] {
   // una tarjeta de DIRECCIÓN entra como miembro solo si lo dice con `<tipo>:miembro` (el director creativo es miembro del calendario y dirige carruseles y kits)
-  return directorio.filter((t) => (t.rol === 'miembro' || (t.rol === 'direccion' && marcaMiembro(t, tipo))) && esPertinente(t, tipo, hayImagenGenerada)).map((t) => t.agente)
+  return directorio.filter((t) => (t.rol === 'miembro' || (t.rol === 'direccion' && marcaMiembro(t, tipo))) && esPertinente(t, tipo, hayImagenGenerada, condiciones)).map((t) => t.agente)
 }
 const marcaMiembro = (t: Tarjeta, tipo: TipoDePieza): boolean => t.pertinente_en.includes(`${tipo}:${CONDICION_MIEMBRO}`)
 
@@ -35,10 +38,12 @@ export function direccionDe(directorio: Tarjeta[], tipo?: TipoDePieza): Tarjeta 
   const dirs = directorio.filter((t) => t.rol === 'direccion' && t.activo)
   if (!tipo) return dirs[0] ?? null
   const propios = (t: Tarjeta) => t.pertinente_en.filter((p) => !p.includes(':'))
-  const explicita = dirs.find((t) => propios(t).includes(tipo))
+  const dirige = (t: Tarjeta) => t.pertinente_en.includes(`${tipo}:dirige`)
+  const explicita = dirs.find((t) => propios(t).includes(tipo) || dirige(t))
   if (explicita) return explicita
-  if (tipo === 'calendario') return null
-  return dirs.find((t) => propios(t).length === 0) ?? null
+  // las mesas de la cadena (brief, concepto) solo las dirige quien lo dice; las de piezas conservan el respaldo de siempre
+  if (esDeLaCadena(tipo)) return null
+  return dirs.find((t) => propios(t).length === 0 && !t.pertinente_en.some((p) => p.endsWith(':dirige'))) ?? null
 }
 export const porteroDe = (directorio: Tarjeta[]): Tarjeta | null => directorio.find((t) => t.rol === 'portero' && t.activo) ?? null
 

@@ -23,7 +23,20 @@ export interface ContextoDeTurno {
   gasto_usd: number
 }
 
-const recorta = (t: string, n: number) => (t.length <= n ? t : t.slice(0, n) + '\n[…recortado]')
+/** UNA sola función de recorte: nunca corta callado (ADENDAS 5 y 6 de la ORDEN del 31-oct). Sin nombre del documento conserva el aviso corto de siempre. */
+const recorta = (t: string, n: number, doc?: string) => (t.length <= n ? t : t.slice(0, n) + (doc ? `\n[… recortado: ${n} de ${t.length} caracteres de ${doc}]` : '\n[…recortado]'))
+
+/**
+ * LA DIETA: cuánto de cada documento recibe cada familia de mesa. Es un DATO: los valores de las mesas de piezas son los de HOY (ADENDA 6: no cambian hasta que Emilio firme D3);
+ * las mesas de la cadena reciben el manual COMPLETO (ADENDA 4), con un límite muy alto solo contra desbordes y el aviso de recorte si algo se cortara.
+ * El plan: el brief lo recibe COMPLETO (es su fuente); el concepto NO (el brief ya es su lectura del plan).
+ */
+export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: number }> = {
+  carrusel: { manual: 7000, marco: 5000, plan: 3000 },
+  kit: { manual: 7000, marco: 5000, plan: 3000 },
+  brief: { manual: 120000, marco: 40000, plan: 120000 },
+  concepto: { manual: 120000, marco: 60000, plan: 0 },
+}
 
 /** el tablero: lo más reciente completo, lo antiguo en resumen (el líder mantiene el hilo; los demás no releen todo) */
 export function tableroEnTexto(libro: Aporte[], max = 12000): string {
@@ -48,22 +61,61 @@ export const LISTA_DE_FOTOS = (fotos: FotoEtiquetada[]): string => {
   return propias.map((f) => `- ${f.id} · ${f.que_muestra ?? 'sin descripción'}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}`).join('\n')
 }
 
-/** 31-oct · calendario: lo que entrega la dirección es UNA lista de ideas por hueco de la tanda (no es una pieza dibujable) */
-const CONVENCION_DEL_CALENDARIO = [
-  'Entrega la lista de IDEAS de la tanda con esta convención ligera (no es un formulario: es para que quien ordena el calendario la lea):',
+/** 31-oct · brief creativo de la campaña (`brief_creativo.v1`): UN brief corto, con secciones fijas que el código lee; lo que falta se declara en «Faltantes», nunca se rellena */
+const CONVENCION_DEL_BRIEF = [
+  'Entrega el BRIEF CREATIVO de la campaña con esta convención (secciones fijas, cortas; el código las lee):',
   '```',
-  '## <hueco: semana · día · red · formato> (tal cual aparece en el marco)',
-  'Idea elegida: <tema + gancho + idea visual en 2–3 líneas>',
-  'Viene de: A3 (y A5 si combinaste)',
-  'Alternativa: <otra idea breve, si la hay>',
+  '## De qué parte del plan sale',
+  '<cita LITERAL del plan, entre comillas>',
+  '## Insight',
+  '<una verdad del público, en 1–2 frases>',
+  '## Mensaje',
+  '<UN solo mensaje de campaña>',
+  '## Objetivo',
+  '<objetivo de la campaña, medible> y por red: - <red>: objetivo · llamado',
+  '## Tono',
+  '<voz y trato del manual, en 2 líneas>',
+  '## Obligatorios',
+  '- vocabulario: … · - prohibido: … · - lo que no se dice: …',
+  '## Faltantes',
+  '- <campo>: <qué falta> (nunca se rellena)',
+  '## Contradicciones plan vs manual',
+  '- <qué> · plan dice · manual dice · qué se hizo',
+  '## Citas',
+  'A1 usé: <del portero> …',
+  '```',
+  'Un solo mensaje. Cita el plan literalmente. Nada de cifras ni datos del cliente sin fuente: lo que no esté en el material del portero, el manual o el plan va en «Faltantes». Idioma y trato: los del manual del cliente.',
+].join('\n')
+
+/** 31-oct · concepto de campaña (`concepto.v1`, contrato de la cadena): gran idea paraguas + capítulos por fase + series + banco de ideas (líneas que el código lee) */
+const CONVENCION_DEL_CONCEPTO = [
+  'Entrega el CONCEPTO de la campaña con esta convención (secciones fijas; el código las lee y lo que falte se declara):',
+  '```',
+  '## Gran idea',
+  '<nombre> · <frase paraguas de 90 días>',
+  '## Por qué funciona',
+  '<atado al insight del brief, citándolo>',
+  '## Cómo se ve',
+  '<dirección visual: paleta/estilo del manual, qué aparece, qué no, fotos propias de referencia foto:<id>>',
+  '## Cómo suena',
+  '<voz, trato del manual, ritmo>',
+  '## Capítulo <clave de fase> · <nombre>      (uno por fase de la estrategia)',
+  'Qué cuenta: … · Objetivo de la fase (cita): … · Cómo se ve en este capítulo: …',
+  'Series: - S1 · <nombre> · <qué cuenta> · redes: …',
+  '## Ideas que salen',
+  '- C1-I04: <por qué sale>',
+  '## Caminos descartados y por qué',
+  '- <camino> · <motivo>',
   '## Citas',
   'A3 usé: <qué tomaste de ese aporte>',
   'A5 descarté: <por qué no lo usaste>',
   '```',
-  'Cada hueco del marco tiene UNA idea elegida. No repitas un tema ya usado en las filas previas. Si un hueco es una pieza fija o una fecha especial, respétala y propón solo el ángulo. No inventes datos del cliente (precios, horarios, cifras): una idea puede PEDIR un dato, nunca fabricarlo.',
+  'El BANCO DE IDEAS lo escriben los miembros en sus aportes de la ronda 2, una línea por idea, EXACTAMENTE así:',
+  '- C<fase>-I<nn> · <red> · <formato o cualquiera> · <idea en una línea> · mensaje: <UNA frase propia de esta idea, al servicio del mensaje de campaña> · gancho: <lo que detiene el scroll> · protagonista: <uno> · serie: S1 · foto:<id>|ninguna',
+  'Cada idea con mensaje y gancho PROPIOS (distintos entre ideas); cubre cada red de la estrategia en cada capítulo. Las ideas NO llevan datos con valor (precios, horarios, cifras): el estratega los pone con su referencia. La integración lista cuáles ideas quedan y cuáles salen.',
 ].join('\n')
 
-const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'calendario' ? CONVENCION_DEL_CALENDARIO : tipo === 'carrusel'
+const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'brief' ? CONVENCION_DEL_BRIEF : tipo === 'concepto' ? CONVENCION_DEL_CONCEPTO : tipo === 'carrusel'
   ? [
       'Escribe la PIEZA COMPLETA con esta convención ligera (no es un formulario: es para que el equipo de dibujo la lea):',
       '```',
@@ -117,8 +169,11 @@ const HERRAMIENTAS = [
 
 export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string }): string {
   const { tipo, agente, est, libro, c } = o
+  // la mesa de concepto tiene dos rondas: la 1 elige UNA gran idea entre caminos; la 2 la desarrolla en capítulos, series e ideas (la integración final lleva la convención)
+  const ronda = libro.filter((a) => a.tipo === 'integra').length + 1
+  const soloEleccion = c.tipo === 'concepto' && ronda === 1 && !est.cierre_forzado
   const cab = [
-    `# Mesa de trabajo · ${c.cliente_nombre} · ${c.tipo === 'carrusel' ? 'carrusel' : c.tipo === 'calendario' ? 'ideas del calendario' : 'kit de historias'} ${c.brief_id}`,
+    `# Mesa de trabajo · ${c.cliente_nombre} · ${c.tipo === 'carrusel' ? 'carrusel' : c.tipo === 'brief' ? 'brief creativo de la campaña' : c.tipo === 'concepto' ? 'gran idea de la campaña' : 'kit de historias'} ${c.brief_id}`,
     `Eres **${agente}**${o.tarjeta ? ` — ${o.tarjeta.especialidad}` : ''}. Estás en la oficina creativa de la agencia.`,
     '',
     REGLAS_DURAS(c),
@@ -128,13 +183,13 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     seccionDelDirectorio(est.directorio_congelado, agente),
     '',
     '## 1 · Manual de marca (léelo PRIMERO)',
-    recorta(c.manual_texto || '(sin manual)', 7000),
+    recorta(c.manual_texto || '(sin manual)', DIETA[c.tipo].manual, 'el manual de marca'),
     '',
-    c.tipo === 'calendario' ? '## 2 · El marco de la tanda (huecos, plan, sedes, filas previas, fechas)' : '## 2 · El brief de este entregable',
-    recorta(c.brief_texto, c.tipo === 'calendario' ? 14000 : 5000),
+    c.tipo === 'brief' ? '## 2 · El marco de la campaña (estrategia, fases, canales, hitos, sedes y fechas)' : c.tipo === 'concepto' ? '## 2 · El brief de la campaña y las fases de la estrategia' : '## 2 · El brief de este entregable',
+    recorta(c.brief_texto, DIETA[c.tipo].marco, 'el marco'),
     '',
     '## 3 · El plan de trabajo',
-    c.plan_texto ? recorta(c.plan_texto, 3000) : '(sin plan)',
+    c.tipo === 'concepto' ? '(el brief de la campaña ya es la lectura del plan: no se repite aquí)' : c.plan_texto ? recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan') : '(sin plan)',
     '',
     '## Fotos propias del cliente (ids para `Imagen: foto:<id>`)',
     LISTA_DE_FOTOS(c.fotos),
@@ -147,13 +202,20 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
   const tu: Record<TipoDeTurno, string> = {
     dirigir: [
       '## Tu turno · DIRECCIÓN CREATIVA: abre la pieza',
-      ...(c.tipo === 'calendario'
-        ? ['Lee el manual y el marco de la tanda. Escribe tu **idea rectora de la tanda**: qué vas a contar a lo largo de las semanas, con qué ritmo y series, qué huecos necesitan más imaginación y qué necesitas de cada compañero. Cada compañero aportará ideas concretas POR HUECO (tema · gancho · idea visual · por qué). Tú ordenas y eliges después.']
+      ...(c.tipo === 'brief'
+        ? ['Lee el manual, el plan, la estrategia (el marco) y lo que el portero trajo al tablero. Escribe el **brief creativo de la campaña**: UN insight, UN mensaje, objetivo, tono, obligatorios y faltantes declarados (nunca los rellenes). Si te falta material del cliente, pídelo con `pedir_material`.']
+        : c.tipo === 'concepto'
+        ? ['PRIMERO lee el brief de la campaña con estos 6 criterios: (1) un solo mensaje, (2) insight real, (3) objetivo claro, (4) está planteado como problema y no como solución, (5) es fiel al plan y al manual, (6) se puede crear con lo que trajo el portero. Si alguno falla, **devuelve el brief UNA vez**: escribe una sección `## Devolución del brief` con los puntos que fallan y nada más (la mesa se cierra y la cadena pide un brief nuevo). Si el brief sirve, sigue: del brief y el manual, escribe **EL PROBLEMA en una frase**, y reparte lo que necesitas de cada compañero. Cada uno propondrá 2 o 3 caminos distintos con su porqué, pensados para 90 días.']
         : ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.']),
       'El equipo completo participa en cada pieza: la oficina se formó con estos especialistas por razones concretas. Cada uno aportará su especialidad; no escribas tú todo. Si ya sabes que te falta material del cliente, pídelo con `pedir_material`.',
     ].join('\n'),
     aportar: [
       `## Tu turno · aporta tu especialidad (${agente})`,
+      ...(c.tipo === 'concepto'
+        ? [ronda === 1
+          ? '**RONDA 1 · CAMINOS.** Propón 2 o 3 caminos DISTINTOS para la gran idea de la campaña, cada uno con su porqué (atado al insight del brief), pensados para 90 días. Todavía no escribas ideas sueltas por red.'
+          : '**RONDA 2 · DESARROLLO.** La dirección ya eligió la gran idea (míralo en el tablero). Desarróllala desde tu especialidad: para cada capítulo (fase) de la estrategia, series y IDEAS del banco, una línea por idea con el formato exacto de la convención (`- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: … · protagonista: … · serie: S1 · foto:<id>|ninguna`). Cada idea con su mensaje y su gancho PROPIOS.']
+        : []),
       'La dirección creativa ya abrió la pieza (mírala en el tablero). Tu aporte es obligatorio y debe ser tuyo: lo que SOLO tu especialidad sabe hacer para esta pieza (propuestas concretas, texto, ritmo, descripción de imágenes, etc.), no un “de acuerdo”.',
       'Sé concreto: la dirección creativa citará lo que use de ti y justificará lo que descarte.',
       'Si de verdad tu especialidad no tiene nada que sumar a ESTA pieza, o está bien como va, dilo en una línea que empiece por «Sin aporte:» y di por qué; es una respuesta válida (la dirección creativa la cita como descartada o ya cubierta). No rellenes por cumplir.',
@@ -164,9 +226,11 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
       'Respóndelo con lo que tu especialidad puede dar. Si la respuesta depende de material que no tienes, pídelo con `pedir_material`; no lo inventes.',
     ].join('\n'),
     integrar: [
-      '## Tu turno · DIRECCIÓN CREATIVA: integra y entrega la pieza',
+      soloEleccion ? '## Tu turno · DIRECCIÓN CREATIVA: elige UNA gran idea' : c.tipo === 'concepto' ? '## Tu turno · DIRECCIÓN CREATIVA: integra y entrega el concepto' : '## Tu turno · DIRECCIÓN CREATIVA: integra y entrega la pieza',
       'Integra lo que aportó el equipo. Decide con criterio: puedes usar, ajustar o descartar cada aporte, pero **cita cuáles usaste y cuáles descartaste, con el motivo**, en la sección “Citas” (referencias A<n>). Cada especialidad del equipo debe aparecer citada.',
-      CONVENCION_DE_LA_PIEZA(c.tipo),
+      ...(soloEleccion
+        ? ['Elige UNA gran idea paraguas entre los caminos del equipo (puedes combinar). Escribe `## Gran idea` (<nombre> · <frase paraguas de 90 días>), por qué la elegiste, y **`## Caminos descartados y por qué`**. Cita lo que usaste y descartaste en `## Citas` (A<n>). Todavía no desarrolles capítulos ni banco: eso es la ronda 2.']
+        : [CONVENCION_DE_LA_PIEZA(c.tipo)]),
       ...(o.extra ? ['', o.extra] : []),
     ].join('\n'),
     devolver_citas: [

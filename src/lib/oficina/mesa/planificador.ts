@@ -16,7 +16,7 @@ import { especialistasPertinentes, direccionDe } from './directorio'
 import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, type Accion, type Aporte, type EstadoMesa } from './tipos'
 
-export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number }
+export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number }
 
 export const techoDe = (tope: number): number => +(tope * COTAS.TECHO_SOBRE_TOPE).toFixed(6)
 const fallosDe = (libro: Aporte[], agente: string): number => libro.filter((a) => a.tipo === 'nota' && a.de === agente && a.texto.startsWith('turno_fallido')).length
@@ -77,8 +77,12 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   if (aUnCompanero) return { accion: 'turno', agente: aUnCompanero.para as string, tipo: 'responder', responde_a: aUnCompanero.id, motivo: `pedido de ${aUnCompanero.de}` }
 
   // 5 · especialidades pertinentes sin aporte
-  const hizo = participacion(libro)
-  const faltan = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada).filter((a) => !hizo[a] && fallosDe(libro, a) < COTAS.REINTENTOS_DE_TURNO)
+  // con rondas mínimas > 1, cada ronda pide el aporte de todos DE NUEVO: se cuenta la participación desde la última integración mientras falten rondas
+  const rondasMin = ctx.rondas_minimas ?? 1
+  const integrasHechas = libro.filter((a) => a.tipo === 'integra').length
+  const ultInt = ultimaIntegracion(libro)
+  const hizo = participacion(libro, ultInt && integrasHechas < rondasMin ? ultInt.n : 0)
+  const faltan = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada, est.condiciones ?? []).filter((a) => !hizo[a] && fallosDe(libro, a) < COTAS.REINTENTOS_DE_TURNO)
   if (faltan.length) return { accion: 'turno', agente: faltan[0], tipo: 'aportar', responde_a: null, motivo: 'su especialidad es obligatoria en esta pieza' }
 
   // 6 · aportes nuevos desde la última integración → integra la dirección
@@ -90,7 +94,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   }
 
   // 7 · las citas de la integración (usó/descartó): la existencia y la cobertura las comprueba el código; la calidad, la jefatura
-  const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada)
+  const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada, est.condiciones ?? [])
   const v = verificarCitas(ult.texto, libro, pertinentes)
   if (!v.ok && est.devoluciones_por_citas < COTAS.MAX_DEVOLUCIONES_POR_CITAS && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO) {
     return { accion: 'turno', agente: dir.agente, tipo: 'devolver_citas', responde_a: ult.id, motivo: 'faltan citas de aportes usados o descartados' }
