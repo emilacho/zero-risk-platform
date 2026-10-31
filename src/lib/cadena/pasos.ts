@@ -7,13 +7,13 @@ import type { Almacen, Campana, ContextoDelCliente, Corrida } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, DIAS_DE_CAMPANA, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, SEMANAS_DE_PANORAMA, SEMANAS_DE_TANDA, topeDelPaso, type Paso } from './constantes'
-import { bajarFaltantesDeCantidad, sinFaltantesSiCorrige } from './cantidad'
-import { planDeCorreccion, resolverTrasCorreccion } from './ciclo'
+import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
+import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_ESTRATEGIA } from './esquemas'
 import { expandirPatron, fusionarTanda } from './expandir-patron'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
-import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, semanaDeId } from './nucleo'
+import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
 import type { Ajuste, Estrategia, Fila, FormatosPorRed, Hallazgo, TandaAgente } from './tipos'
@@ -290,6 +290,12 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
       return { status: 200, cuerpo: { necesita_humano: true, fichas: hs.filter((h) => h.severidad === 'bloquea').map((h) => h.ficha), alerta: r.alerta } }
     }
   }
+  return cerrarTanda(al, { campana, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora })
+}
+
+/** Lo que sigue a una tanda ya validada: estado final de cada fila, esperas, panorama, y la campaña pasa a `activa` si era la primera. Lo usan el guardado y el reloj (retomar una campaña frenada solo por cantidades). */
+export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: FormatosPorRed; estr: Estrategia; version: number; tanda: number; semanas: number[]; filas: Fila[]; hs: Hallazgo[]; salen: string[]; ahora: string }): Promise<Respuesta> {
+  const { campana, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora } = p
   // estado final de cada fila: validada | en_investigacion (dato pendiente o sin horario, con su reloj) | espera_video (con su reloj) | descartada_sin_fuente
   const enInvestigacion = new Set(hs.filter((h) => h.severidad === 'aviso' && (h.chequeo === 'V14' || h.chequeo === 'V06') && h.fila_id).map((h) => h.fila_id as string))
   const finales: Fila[] = filas.map((f) => {
@@ -365,4 +371,39 @@ export async function calendarioSiguiente(al: Almacen, cuerpo: Record<string, un
   const faltan = diasEntre(hoy, finDeLaTanda)
   if (faltan > 14) return { status: 200, cuerpo: { tanda: null, motivo: `faltan ${faltan} días para que termine la tanda ${ultima} (se abre a los 14)` } }
   return { status: 200, cuerpo: { tanda: ultima + 1, faltan_dias: faltan } }
+}
+
+/**
+ * 31-oct · el vigía retoma SOLO una campaña que quedó en `necesita_humano` únicamente por cantidades (V08 con real < meta).
+ * No llama al modelo ni gasta: re-valida la tanda guardada con la regla nueva y, si ya no queda ningún bloqueo, la cierra por el mismo camino del guardado
+ * (filas a `validada` / `en_investigacion`, esperas, panorama, y `activa` si era la primera tanda). Ante cualquier duda NO toca nada: sigue esperando a una persona.
+ */
+export async function retomarPorCantidades(al: Almacen, campana: Campana, ahora: string): Promise<{ retomada: boolean; motivo: string }> {
+  const no = (motivo: string) => ({ retomada: false, motivo })
+  if (campana.estado !== 'necesita_humano') return no('no está en necesita_humano')
+  const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
+  const todas = await al.filas(campana.id, version)
+  const pendientes = todas.filter((f) => f.estado === 'propuesta')
+  if (!pendientes.length) return no('no hay una tanda propuesta esperando')
+  const tanda = Math.min(...pendientes.map((f) => f.tanda))
+  const bloqueos = await al.hallazgosQueBloquean(campana.id, tanda)
+  const soloCantidad = bloqueos.length > 0 && bloqueos.every((b) => { const c = b.fila_id === null ? leerV08(b.ficha.que) : null; return !!c && c.real < c.meta })
+  if (!soloCantidad) return no('los bloqueos guardados no son solo de cantidad')
+  const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
+  const estr = (await al.ultimaEstrategia(campana.id))?.contenido
+  if (!ctx || !estr) return no('falta el contexto o la estrategia')
+  const formatos = await al.formatos()
+  const lexico = lexicoDelCliente(ctx.industria, await al.leerConfig('lexico_afirmaciones'))
+  const semanas = semanasDeTanda(tanda)
+  const previas = todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema')
+  const filas = todas.filter((f) => f.tanda === tanda && f.estado !== 'esquema')
+  const salen = filas.filter((f) => f.estado === 'descartada_sin_fuente').map((f) => f.id)
+  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, filas), ...salen.map((id) => ({ semana: semanaDeId(id), slot: slotDe(id), accion: 'omitir' as const, motivo: 'la fila salió: dato sin fuente tras la corrección' }))]
+  const hs = bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, await fechasDeclaradas(al, ctx, estr, campana), ahora, lexico)))
+  if (hs.some((h) => h.severidad === 'bloquea')) return no('al re-validar queda algún bloqueo que no es de cantidad')
+  await al.guardarValidaciones(campana.id, 'calendario', version, tanda, 2, hs, campana.seco)
+  await resolverEsperas(al, campana.id, 'necesita_humano')
+  const n = await al.actualizarCampana(campana.id, { estado: tanda === 1 ? 'calendario' : 'activa', estado_motivo: 'retomada sola: solo faltaban cantidades (viajan como aviso al brief)' })
+  await cerrarTanda(al, { campana: n, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora })
+  return { retomada: true, motivo: `tanda ${tanda} retomada` }
 }

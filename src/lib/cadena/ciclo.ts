@@ -36,7 +36,7 @@ export interface Resolucion {
   fichasPendientes: Ficha[]
 }
 
-function slotDe(id: string): string {
+export function slotDe(id: string): string {
   return id.replace(/^s\d+-d\d+-/, '')
 }
 

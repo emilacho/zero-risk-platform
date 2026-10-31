@@ -5,8 +5,10 @@
  *  · lo que NO cambia: dato declarado sin fuente (la fila sale), exceso de cantidad, dependencias y reparto (→ necesita_humano).
  */
 import { describe, it, expect } from 'vitest'
-import { calendarioGuardar, calendarioPreparar, estrategiaGuardar, estrategiaPreparar, abrirCampana, type Estrategia, type Hallazgo } from '../index'
+import { retomarPorCantidades } from '../pasos'
+import { relojDeLaCadena, calendarioGuardar, calendarioPreparar, estrategiaGuardar, estrategiaPreparar, abrirCampana, type Estrategia, type Hallazgo } from '../index'
 import { bajarFaltantesDeCantidad, leerV08, mensajeV08 } from '../cantidad'
+import { ponerNecesitaHumano } from '../nucleo'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
 
@@ -137,5 +139,89 @@ describe('cantidad por semana: el faltante no detiene; el exceso y lo demás sí
     const { g } = await primera(al, id, mala)
     const g2 = await corregir(al, id, g, mala, 'tanda')
     expect(g2.cuerpo.necesita_humano).toBe(true)
+  })
+})
+
+describe('el reloj retoma SOLO una campaña frenada únicamente por cantidades', () => {
+  const vigia = (al: AlmacenMemoria) => relojDeLaCadena(al, { workflow_id: 'wf-vigia', workflow_execution_id: 'v-1', seco: true }, AHORA)
+  /** deja la campaña como la dejaba la versión vieja: tanda propuesta, bloqueos guardados, en necesita_humano */
+  async function frenada(al: AlmacenMemoria, e: Estrategia, objeto: unknown) {
+    const { id } = await conEstrategia(al, e)
+    const { g } = await primera(al, id, objeto)
+    expect(g.cuerpo.correccion).toBe(true) // la primera pasada sigue pidiendo la única corrección
+    await ponerNecesitaHumano(al, al.campanas.find((c) => c.id === id)!, 'la tanda 1 sigue con bloqueos tras sacar las filas sin fuente', AHORA)
+    return id
+  }
+  it('🔴 solo faltantes de cantidad: el vigía la retoma, las filas quedan validadas, la campaña pasa a activa y no se llama al modelo', async () => {
+    const al = almacen()
+    const id = await frenada(al, conFrecuencia('facebook', 2), tandaBuena(A))
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+    const corridasAntes = (await al.corridasDeCampana(id)).length
+    const r = await vigia(al)
+    expect(r.cuerpo.aplicado).toEqual(expect.arrayContaining([expect.stringContaining(`campaña ${id} retomada sola`)]))
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('activa')
+    const filas = await al.filas(id)
+    expect(filas.filter((f) => f.estado === 'propuesta')).toEqual([])
+    expect(filas.filter((f) => f.estado === 'validada').length).toBeGreaterThan(0)
+    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano' && e.estado === 'viva')).toBe(false)
+    expect((await al.corridasDeCampana(id)).length).toBe(corridasAntes) // ninguna llamada nueva: US$ 0
+    expect(JSON.stringify(al.validaciones.filter((v) => v.objeto === 'calendario'))).toContain('por confirmar')
+  })
+  it('🔴 con un dato sin fuente además del faltante: NO se retoma (sigue esperando a una persona)', async () => {
+    const al = almacen()
+    const t = tandaBuena(A)
+    const id = await frenada(al, conFrecuencia('facebook', 2), { ...t, piezas: t.piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, datos: [DATO_SIN_REF] } : p)) })
+    const r = await vigia(al)
+    expect((r.cuerpo.aplicado as string[]).some((x) => x.includes('retomada sola'))).toBe(false)
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+  })
+  it('🔴 con un EXCESO de cantidad: NO se retoma', async () => {
+    const al = almacen()
+    const id = await frenada(al, conFrecuencia('instagram', 2), tandaBuena(A))
+    const r = await vigia(al)
+    expect((r.cuerpo.aplicado as string[]).some((x) => x.includes('retomada sola'))).toBe(false)
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+  })
+  it('🔴 con un bloqueo de otra clase (una revisión inventada) además del faltante: NO se retoma', async () => {
+    const al = almacen()
+    const t = tandaBuena(A)
+    const id = await frenada(al, conFrecuencia('facebook', 2), { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, tema: 'Ritual de revisión de la semana' } : p)) })
+    await vigia(al)
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+  })
+  it('🔴 sin bloqueos guardados (frenada por otra causa, p. ej. una llamada que no volvió): NO se retoma aunque la tanda propuesta valide limpia', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    await primera(al, id, tandaBuena(A))
+    const v = Math.max(1, await al.ultimaVersionDeCalendario(id))
+    await al.cambiarEstadoDeFilas(id, v, (await al.filas(id, v)).filter((f) => f.estado === 'validada').map((f) => f.id), 'propuesta')
+    await ponerNecesitaHumano(al, al.campanas.find((c) => c.id === id)!, 'la llamada del calendario no entregó el objeto tras 3 intentos', AHORA)
+    await vigia(al)
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+  })
+  it('🔴 si al re-validar aparece un bloqueo que los guardados no tenían, NO se retoma (la re-validación es la que manda)', async () => {
+    const al = almacen()
+    const id = await frenada(al, conFrecuencia('facebook', 2), tandaBuena(A))
+    const v = Math.max(1, await al.ultimaVersionDeCalendario(id))
+    const filas = (await al.filas(id, v)).map((f) => (f.id === 's1-d1-a' ? { ...f, formato: 'foto o reel' } : f))
+    await al.guardarFilas(id, v, 1, filas, true)
+    await vigia(al)
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+  })
+  it('el paso solo actúa sobre campañas en necesita_humano', async () => {
+    const al = almacen()
+    const id = await frenada(al, conFrecuencia('facebook', 2), tandaBuena(A))
+    const c = await al.actualizarCampana(id, { estado: 'pausada' })
+    expect((await retomarPorCantidades(al, c, AHORA)).retomada).toBe(false)
+    expect((await al.filas(id)).some((f) => f.estado === 'propuesta')).toBe(true)
+  })
+  it('una campaña activa o sin tanda propuesta no se toca, y retomar dos veces no duplica nada', async () => {
+    const al = almacen()
+    const id = await frenada(al, conFrecuencia('facebook', 2), tandaBuena(A))
+    await vigia(al)
+    const n1 = (await al.filas(id)).length
+    const r2 = await vigia(al)
+    expect((r2.cuerpo.aplicado as string[]).some((x) => x.includes('retomada sola'))).toBe(false)
+    expect((await al.filas(id)).length).toBe(n1)
   })
 })
