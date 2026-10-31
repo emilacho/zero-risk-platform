@@ -182,6 +182,9 @@ describe('si_personas se calcula al abrir la pieza, del brief', () => {
     // lo que EXCLUYE personas no las convoca
     for (const t of ['VISUAL: El plato aparece completo. No aparecen personas.', 'sin gente en la foto', '- VISUAL PROHIBIDO:\n  - rostros']) expect(condicionesDeLaPieza(t)).toEqual([])
     expect(condicionesDeLaPieza('No aparecen personas. Una familia sonriendo en la mesa')).toEqual(['si_personas'])
+    // una negación LEJOS o sobre otra cosa no apaga a las personas (CC3: el error peligroso es no convocar al especialista)
+    for (const t of ['No olvides mostrar a las familias del barrio', 'Mujeres y hombres reales, no actores', 'Sin filtros: la gente real del barrio', 'No uses stock: queremos a los comensales de verdad']) expect(condicionesDeLaPieza(t)).toEqual(['si_personas'])
+    for (const t of ['No aparecen mujeres, hombres ni niños', 'Nunca muestres rostros', 'Sin personas ni manos', 'without any people in frame']) expect(condicionesDeLaPieza(t)).toEqual([])
     expect(condicionesDeLaPieza(undefined as unknown as string)).toEqual([])
   })
   it('enciende al especialista de inclusión en el carrusel y no en otra cosa', () => {
