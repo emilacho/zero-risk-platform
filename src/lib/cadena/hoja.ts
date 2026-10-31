@@ -15,7 +15,10 @@ export const FAMILIA_DEL_KIT = 'kit_historias'
 /** el id de un brief del parte (mismo criterio que `autoproducir.ts` RE_BRIEF) */
 export const RE_ID_DE_BRIEF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/
 /** proporción por omisión según el formato (se declara en LÍMITES como «por omisión del formato») */
-export const PROPORCION_POR_FORMATO: Readonly<Record<string, string>> = { imagen: '4:5', carrusel: '4:5', historia: '9:16', estado: '9:16', reel: '9:16', video: '9:16', kit: '9:16' }
+export const PROPORCION_POR_FORMATO: Readonly<Record<string, string>> = { imagen: '4:5', carrusel: '4:5', historia: '9:16', estado: '9:16', reel: '9:16', video: '9:16', short: '9:16', tiktok: '9:16', kit: '9:16' }
+/** T8 · los formatos que filma el brazo de video (lo mismo que lee `esVideo` en la oficina: reel · short · video · tiktok); la hoja lo declara en LÍMITES para que la mesa sepa que escribe un guion */
+export const esFormatoDeVideo = (formato: string): boolean => /\b(reel|short|video|tiktok)\b/i.test(formato)
+export const NOTA_DE_VIDEO_EN_LIMITES = 'video corto de 8 a 15 s que filma el brazo de video a partir del guion de la mesa (sin voces ni narración; sin rostros reconocibles de personas reales)'
 const PROPORCION_POR_OMISION = '1:1'
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
@@ -132,7 +135,7 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     campo('PROTAGONISTA', idea?.protagonista || limpio(f.tema) || '(sin protagonista declarado)'),
     campo('MENSAJE (uno)', mensajeDe(idea, f, avisos, cab.id)),
     campo('GANCHO', idea?.gancho ?? ''),
-    campo('LÍMITES', `proporción ${proporcion} (por omisión del formato ${cab.formato}) · ${b.obligatorios.no_se_dice.length ? `no se dice: ${b.obligatorios.no_se_dice.join(', ')}` : 'sin «no se dice» en el brief'}${idea?.foto ? ` · foto citada: ${idea.foto}` : ''}`),
+    campo('LÍMITES', `proporción ${proporcion} (por omisión del formato ${cab.formato})${esFormatoDeVideo(cab.formato) ? ` · ${NOTA_DE_VIDEO_EN_LIMITES}` : ''} · ${b.obligatorios.no_se_dice.length ? `no se dice: ${b.obligatorios.no_se_dice.join(', ')}` : 'sin «no se dice» en el brief'}${idea?.foto ? ` · foto citada: ${idea.foto}` : ''}`),
     ...listaDe('VOCABULARIO OBLIGATORIO', b.obligatorios.vocabulario),
     ...listaDe('PROHIBIDO', b.obligatorios.prohibido),
     campo('SINTAXIS', b.tono),

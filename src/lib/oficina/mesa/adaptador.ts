@@ -11,7 +11,7 @@ const textos = (x: unknown): string[] => lista<unknown>(x).map(String)
 
 export const aTarjeta = (f: Fila): Tarjeta => ({
   agente: String(f.agente), rol: f.rol === 'direccion' || f.rol === 'portero' ? f.rol : 'miembro', especialidad: String(f.especialidad ?? ''),
-  sabe_hacer: textos(f.sabe_hacer), necesita: textos(f.necesita), entrega: textos(f.entrega), pertinente_en: textos(f.pertinente_en), activo: f.activo !== false, version: Number(f.version ?? 1),
+  sabe_hacer: textos(f.sabe_hacer), necesita: textos(f.necesita), entrega: textos(f.entrega), pertinente_en: textos(f.pertinente_en), ...(textos(f.indicacion).length ? { indicacion: textos(f.indicacion) } : {}), activo: f.activo !== false, version: Number(f.version ?? 1),
 })
 export const aAporte = (f: Fila): Aporte => ({
   id: String(f.id), encargo_id: String(f.encargo_id), n: Number(f.n), de: String(f.de), para: f.para == null ? null : String(f.para),
@@ -20,13 +20,15 @@ export const aAporte = (f: Fila): Aporte => ({
   workflow_execution_id: f.workflow_execution_id == null ? null : String(f.workflow_execution_id), creado_en: String(f.creado_en ?? ''),
 })
 
-export function puertoDeLaMesa(db: Db): PuertoMesa {
+/** `leerConfigDeLaCadena`: la lectura de `cadena_config` la hace EL almacén de la cadena (las tablas `cadena_*` solo se nombran allí); aquí solo se pasa */
+export function puertoDeLaMesa(db: Db, leerConfigDeLaCadena?: (clave: string) => Promise<unknown>): PuertoMesa {
   return {
     async directorio() {
       const r = await db.from('oficina_directorio').select('*').eq('activo', true).order('agente', { ascending: true })
       if (r.error) throw new Error(`directorio de la mesa: ${r.error.message}`)
       return lista<Fila>(r.data).map(aTarjeta)
     },
+    ...(leerConfigDeLaCadena ? { configDeLaCadena: leerConfigDeLaCadena } : {}),
     async libro(encargoId) {
       const r = await db.from('oficina_mesa_aportes').select('*').eq('encargo_id', encargoId).order('n', { ascending: true })
       if (r.error) throw new Error(`libro de la mesa: ${r.error.message}`)

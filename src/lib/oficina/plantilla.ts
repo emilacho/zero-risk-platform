@@ -11,9 +11,11 @@ export const FUNCIONES_REGISTRADAS = [
   'abrir_laminas', 'asignar_fotos', 'chequear_prompts_ref', 'imagen_ref', 'elegir_version_ref', 'armar_laminas', 'render_laminas', 'chequeos_laminas', 'empaquetar_entrega_laminas',
   // el segundo cerebro del productor: lee las notas del dueño del cliente (sin modelo, solo lectura)
   'leer_notas',
+  // el brazo de video desde la oficina (parte 2 · 31-oct): la mesa escribe el guion; esto lo pide, lo filma, lo chequea y lo entrega
+  'abrir_video', 'pedido_de_video', 'video', 'chequeos_video', 'empaquetar_entrega_video',
 ] as const
-/** funciones de código que SÍ gastan (un proveedor de imágenes, no un modelo de texto): su tope puede ser mayor que 0 */
-export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref'] as const
+/** funciones de código que SÍ gastan (un proveedor de imágenes o de video, no un modelo de texto): su tope puede ser mayor que 0 */
+export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video'] as const
 /** validadores de código sobre la salida de un agente */
 export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'decide_imagen', 'texto_laminas_en_copy', 'contrato_de_lamina', 'sin_texto_en_estructura', 'refs_validos'] as const
 /** esquemas de salida registrados (ver salida.ts) */
