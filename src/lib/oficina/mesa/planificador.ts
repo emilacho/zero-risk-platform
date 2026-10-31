@@ -16,19 +16,19 @@ import { especialistasPertinentes, direccionDe } from './directorio'
 import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, type Accion, type Aporte, type EstadoMesa } from './tipos'
 
-export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean }
+export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number }
 
 export const techoDe = (tope: number): number => +(tope * COTAS.TECHO_SOBRE_TOPE).toFixed(6)
 const fallosDe = (libro: Aporte[], agente: string): number => libro.filter((a) => a.tipo === 'nota' && a.de === agente && a.texto.startsWith('turno_fallido')).length
 const ultimaIntegracion = (libro: Aporte[]): Aporte | null => [...libro].reverse().find((a) => a.tipo === 'integra') ?? null
 
 /** lo que la pieza todavía gastará después de la mesa (imagen + observador + jefatura): la mesa no puede gastárselo conversando */
-export const reservaDeLoQueSigue = (hayImagenGenerada: boolean): number => (hayImagenGenerada ? COTAS.RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD : COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD)
+export const reservaDeLoQueSigue = (hayImagenGenerada: boolean, posterior?: number): number => (posterior !== undefined ? posterior : hayImagenGenerada ? COTAS.RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD : COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD)
 
 /** ¿se agotó alguna cota que obliga a «cerrar con lo que hay»? devuelve la razón o null */
 export function cotaAgotada(est: EstadoMesa, ctx: ContextoDeLaMesa): string | null {
   if (est.turnos >= COTAS.MAX_TURNOS) return `se usaron los ${COTAS.MAX_TURNOS} turnos de la mesa`
-  const siguiente = reservaDeLoQueSigue(ctx.hayImagenGenerada)
+  const siguiente = reservaDeLoQueSigue(ctx.hayImagenGenerada, ctx.reserva_posterior_usd)
   if (ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + siguiente > ctx.tope_usd) return `el gasto (${ctx.gasto_usd.toFixed(2)}) más la reserva de un turno (${COTAS.RESERVA_POR_TURNO_USD}) y de lo que sigue (${siguiente}) pasa el tope de la pieza (${ctx.tope_usd})`
   return null
 }
@@ -46,7 +46,7 @@ export function pedidosAtendibles(est: EstadoMesa, libro: Aporte[]): Aporte[] {
 
 export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: ContextoDeLaMesa): Accion {
   if (ctx.gasto_usd >= techoDe(ctx.tope_usd)) return { accion: 'cierre_por_tope', razon: 'techo_de_gasto' }
-  const dir = direccionDe(est.directorio_congelado)
+  const dir = direccionDe(est.directorio_congelado, est.tipo)
   if (!dir) throw new Error('la mesa no tiene dirección creativa en el directorio')
   const porteroNombre = est.directorio_congelado.find((t) => t.rol === 'portero' && t.activo)?.agente ?? null
 
@@ -62,7 +62,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
     const ult = ultimaIntegracion(libro)
     const hayAportesNuevos = libro.some((a) => ['aporta', 'responde', 'material'].includes(a.tipo) && (!ult || a.n > ult.n))
     // la integración final puede pasar del tope (hasta el techo ×1,2), pero NUNCA se come lo que viene después: imagen, observador y jefatura también caben bajo el techo
-    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada) <= techoDe(ctx.tope_usd)
+    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada, ctx.reserva_posterior_usd) <= techoDe(ctx.tope_usd)
     if ((!ult || hayAportesNuevos) && puedeGastar && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO && est.marcas.integracion_forzada !== true) {
       return { accion: 'turno', agente: dir.agente, tipo: 'integrar', responde_a: null, motivo: `cierra con lo que hay: ${agotada}` }
     }

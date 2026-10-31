@@ -48,7 +48,22 @@ export const LISTA_DE_FOTOS = (fotos: FotoEtiquetada[]): string => {
   return propias.map((f) => `- ${f.id} · ${f.que_muestra ?? 'sin descripción'}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}`).join('\n')
 }
 
-const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'carrusel'
+/** 31-oct · calendario: lo que entrega la dirección es UNA lista de ideas por hueco de la tanda (no es una pieza dibujable) */
+const CONVENCION_DEL_CALENDARIO = [
+  'Entrega la lista de IDEAS de la tanda con esta convención ligera (no es un formulario: es para que quien ordena el calendario la lea):',
+  '```',
+  '## <hueco: semana · día · red · formato> (tal cual aparece en el marco)',
+  'Idea elegida: <tema + gancho + idea visual en 2–3 líneas>',
+  'Viene de: A3 (y A5 si combinaste)',
+  'Alternativa: <otra idea breve, si la hay>',
+  '## Citas',
+  'A3 usé: <qué tomaste de ese aporte>',
+  'A5 descarté: <por qué no lo usaste>',
+  '```',
+  'Cada hueco del marco tiene UNA idea elegida. No repitas un tema ya usado en las filas previas. Si un hueco es una pieza fija o una fecha especial, respétala y propón solo el ángulo. No inventes datos del cliente (precios, horarios, cifras): una idea puede PEDIR un dato, nunca fabricarlo.',
+].join('\n')
+
+const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'calendario' ? CONVENCION_DEL_CALENDARIO : tipo === 'carrusel'
   ? [
       'Escribe la PIEZA COMPLETA con esta convención ligera (no es un formulario: es para que el equipo de dibujo la lea):',
       '```',
@@ -103,7 +118,7 @@ const HERRAMIENTAS = [
 export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string }): string {
   const { tipo, agente, est, libro, c } = o
   const cab = [
-    `# Mesa de trabajo · ${c.cliente_nombre} · ${c.tipo === 'carrusel' ? 'carrusel' : 'kit de historias'} ${c.brief_id}`,
+    `# Mesa de trabajo · ${c.cliente_nombre} · ${c.tipo === 'carrusel' ? 'carrusel' : c.tipo === 'calendario' ? 'ideas del calendario' : 'kit de historias'} ${c.brief_id}`,
     `Eres **${agente}**${o.tarjeta ? ` — ${o.tarjeta.especialidad}` : ''}. Estás en la oficina creativa de la agencia.`,
     '',
     REGLAS_DURAS(c),
@@ -115,8 +130,8 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     '## 1 · Manual de marca (léelo PRIMERO)',
     recorta(c.manual_texto || '(sin manual)', 7000),
     '',
-    '## 2 · El brief de este entregable',
-    recorta(c.brief_texto, 5000),
+    c.tipo === 'calendario' ? '## 2 · El marco de la tanda (huecos, plan, sedes, filas previas, fechas)' : '## 2 · El brief de este entregable',
+    recorta(c.brief_texto, c.tipo === 'calendario' ? 14000 : 5000),
     '',
     '## 3 · El plan de trabajo',
     c.plan_texto ? recorta(c.plan_texto, 3000) : '(sin plan)',
@@ -132,7 +147,9 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
   const tu: Record<TipoDeTurno, string> = {
     dirigir: [
       '## Tu turno · DIRECCIÓN CREATIVA: abre la pieza',
-      'Lee el manual, luego el brief y el plan. Escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.',
+      ...(c.tipo === 'calendario'
+        ? ['Lee el manual y el marco de la tanda. Escribe tu **idea rectora de la tanda**: qué vas a contar a lo largo de las semanas, con qué ritmo y series, qué huecos necesitan más imaginación y qué necesitas de cada compañero. Cada compañero aportará ideas concretas POR HUECO (tema · gancho · idea visual · por qué). Tú ordenas y eliges después.']
+        : ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.']),
       'El equipo completo participa en cada pieza: la oficina se formó con estos especialistas por razones concretas. Cada uno aportará su especialidad; no escribas tú todo. Si ya sabes que te falta material del cliente, pídelo con `pedir_material`.',
     ].join('\n'),
     aportar: [

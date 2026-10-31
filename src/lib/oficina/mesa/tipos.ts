@@ -5,12 +5,13 @@
  */
 
 /** las familias de la mesa: nombre de la familia → tipo de pieza. Conviven con las v1 (`carrusel_ig_v1`, `kit_historias`); un encargo termina con la que lo abrió. */
-export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit' } as const
+/** 31-oct · `calendario_mesa`: la mesa de ideas del paso calendario de la cadena (sin imágenes, sin traductor, sin jefatura propia; la entrega va a la corrida de la cadena, no a la bandeja) */
+export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', calendario_mesa: 'calendario' } as const
 export type FamiliaMesa = keyof typeof FAMILIAS_MESA
 export type TipoDePieza = (typeof FAMILIAS_MESA)[FamiliaMesa]
 export const esFamiliaMesa = (f: string): f is FamiliaMesa => Object.prototype.hasOwnProperty.call(FAMILIAS_MESA, f)
 /** la plantilla v1 cuyas funciones de código (abrir, armar, dibujar, empaquetar) reutiliza la mesa */
-export const FAMILIA_V1_DE: Record<TipoDePieza, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias' }
+export const FAMILIA_V1_DE: Record<Exclude<TipoDePieza, 'calendario'>, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias' }
 
 /** las cotas del bucle (guardarraíles de bucle coherente): nada de la mesa es indefinido */
 export const COTAS = {

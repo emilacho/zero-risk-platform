@@ -25,10 +25,12 @@ import { resolverCierre } from '../jefatura/revision/cierre'
 import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA, type SalidaDeRevision } from '../jefatura/revision/contrato'
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
 import { enviarPiezaASlack, leerNotasParaElProductor, piezaParaSlackDeLaBandeja, registrarAutorevision } from '../notas-del-dueno/adaptadores'
+import { almacenDeSupabase as almacenDeLaCadena } from '../cadena/almacen-supabase'
+import { entregarIdeasDeLaMesa } from '../cadena/mesa-de-creativos'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { /** la mesa lee las notas del dueño (encendida por omisión; `APRENDIZAJE_DEL_DUENO=0` la apaga): cada agente consulta al cerebro al abrirse su turno */ aprendizajeDelDueno?: boolean;/** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string; }
+export interface Entorno { /** pruebas: el almacén de la cadena (por omisión el real) */ almacenDeLaCadena?: () => import('../cadena/almacen').Almacen; /** la mesa lee las notas del dueño (encendida por omisión; `APRENDIZAJE_DEL_DUENO=0` la apaga): cada agente consulta al cerebro al abrirse su turno */ aprendizajeDelDueno?: boolean;/** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string; }
 
 /** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
 export { ESPERAS_DEL_REVISOR_MS }
@@ -124,6 +126,8 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
   return {
     almacen,
     mesa: puertoDeLaMesa(db),
+    // 31-oct · la mesa de creativos del calendario entrega su tablero a la cadena por SU almacén (las tablas `cadena_*` solo se tocan allí)
+    cadena: { entregarIdeas: (p) => entregarIdeasDeLaMesa((env.almacenDeLaCadena ?? almacenDeLaCadena)(), p) },
     ahora,
     ...(env.aprendizajeDelDueno ? { aprendizaje: puertoDeAprendizaje(db, env, f) } : {}),
     // el segundo cerebro del productor (apagado por omisión): las notas que el agente puede ver y el rastro de cada auto-revisión

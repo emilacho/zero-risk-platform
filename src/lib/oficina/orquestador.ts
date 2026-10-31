@@ -795,6 +795,12 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
 // ───────────────────────── cierres
 export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<Respuesta> {
   const e = enc.estado_del_motor
+  // 31-oct · la mesa del calendario que falla se lo dice a la cadena (que ordena el calendario sin ideas); jamás deja a la campaña esperando
+  if (enc.familia === 'calendario_mesa') {
+    const { entregarALaCadena } = await import('./mesa/calendario')
+    await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 La mesa del calendario falló · ${enc.brief_id}: ${motivo}; el calendario se ordenará sin ideas`, dry_run: enc.dry_run })
+    return entregarALaCadena(P, enc, { texto: null, motivo: `fallo: ${motivo}`.slice(0, 300), estado: 'fallido' })
+  }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: 'fallido', con_desacuerdo: true })
   // una alarma por incidente: la v1 avisa a `alertas`; las versiones reabiertas (v2, v3…) repiten el mismo incidente y van al HILO (la versión nueva hereda el hilo de la anterior)
   await P.avisar({ canal: enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🛑 Encargo fallido · ${enc.brief_id}${enc.version_encargo >= 2 ? ` (intento ${enc.version_encargo})` : ''}: ${motivo}`, dry_run: enc.dry_run })

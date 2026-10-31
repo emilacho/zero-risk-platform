@@ -8,7 +8,8 @@
  */
 import { NextResponse } from 'next/server'
 import { despertarAlFlujoDeLaOficina } from '@/lib/oficina/despertar'
-import { abrirEncargo } from '@/lib/oficina/orquestador'
+import { abrirEncargo, avanzar } from '@/lib/oficina/orquestador'
+import { abrirMesaDelCalendario, validarSobreDelCalendario } from '@/lib/oficina/mesa/calendario'
 import { checkLlaveDeLaSala, esObjeto, puertosReales } from '@/lib/oficina/ruta'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +31,17 @@ export async function POST(request: Request) {
       const e = await P.almacen.leerEncargo(cuerpo.encargo_id)
       if (!e) return NextResponse.json({ error: 'encargo_inexistente' }, { status: 404 })
       return NextResponse.json({ encargo_id: e.id, estado: e.estado, con_desacuerdo: e.con_desacuerdo, gasto_usd: e.gasto_usd, tope_usd: e.tope_usd, dry_run: e.dry_run, fichas: e.estado_del_motor.fichas }, { status: 200 })
+    }
+    // 31-oct · la mesa de creativos del calendario: el sobre lo arma la CADENA (`accion: abrir_mesa` de su paso calendario), no la sala; sin brief ni parte de la sala
+    if (cuerpo.origen === 'calendario') {
+      const v = validarSobreDelCalendario(cuerpo)
+      if (!v.ok) return NextResponse.json({ error: 'entrada_invalida', errores: v.errores }, { status: 400 })
+      const rc = await abrirMesaDelCalendario(P, v.sobre, avanzar)
+      if (cuerpo.despertar === true && rc.status === 200 && rc.cuerpo.accion === 'esperar' && esObjeto(rc.cuerpo.turno)) {
+        const d = await despertarAlFlujoDeLaOficina(fetch, { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, String(rc.cuerpo.encargo_id), rc.cuerpo.turno)
+        return NextResponse.json({ ...rc.cuerpo, despertado: d.despertado, ...(d.despertado ? {} : { motivo_sin_despertar: d.motivo }) }, { status: rc.status })
+      }
+      return NextResponse.json(rc.cuerpo, { status: rc.status })
     }
     const clientId = typeof cuerpo.client_id === 'string' ? cuerpo.client_id : ''
     const target = typeof cuerpo.target_step_id === 'string' ? cuerpo.target_step_id : ''

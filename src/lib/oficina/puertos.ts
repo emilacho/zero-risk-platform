@@ -132,8 +132,15 @@ export interface PuertoDelCerebro {
   leerPedido(id: string): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; error: string; http?: number }>
 }
 
+/** 31-oct · la mesa de creativos del calendario entrega su tablero a la cadena (o dice que no pudo): la fila de `cadena_mesas_calendario` la cierra la propia cadena */
+export interface PuertoDeLaCadena {
+  entregarIdeas(p: { campana_id: string; tanda: number; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<{ ok: true; estado: 'lista' | 'sin_mesa'; ya_cerrada: boolean } | { ok: false; error: string }>
+}
+
 export interface Puertos {
   almacen: Almacen
+  /** LA CADENA (opcional): solo la mesa de creativos del calendario la usa. Sin él esa familia falla visible (y la cadena ordena el calendario sin ideas al vencer el plazo) */
+  cadena?: PuertoDeLaCadena
   /** MATERIAL · el portero. Opcional: sin él (o con `material_activo` apagado) la oficina funciona exactamente como antes */
   cerebro?: PuertoDelCerebro
   /** LA MESA · el directorio vivo y el libro de aportes. Opcional: sin él las familias `*_mesa` no abren (fallan visibles) y las v1 funcionan igual */

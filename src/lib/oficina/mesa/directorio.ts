@@ -5,6 +5,8 @@
 import type { Tarjeta, TipoDePieza } from './tipos'
 
 const CONDICION_IMAGEN = 'si_imagen_generada'
+/** una tarjeta de dirección que en ESTE tipo de pieza es miembro (no dirige): `calendario:miembro` */
+const CONDICION_MIEMBRO = 'miembro'
 
 /** ¿esta tarjeta es de aporte obligatorio en este tipo de pieza? `carrusel` siempre · `carrusel:si_imagen_generada` solo si alguna imagen se genera */
 export function esPertinente(t: Tarjeta, tipo: TipoDePieza, hayImagenGenerada: boolean): boolean {
@@ -13,16 +15,31 @@ export function esPertinente(t: Tarjeta, tipo: TipoDePieza, hayImagenGenerada: b
     const [tp, cond] = p.split(':')
     if (tp !== tipo) return false
     if (!cond) return true
+    if (cond === CONDICION_MIEMBRO) return true
     return cond === CONDICION_IMAGEN ? hayImagenGenerada : false
   })
 }
 
 /** los especialistas cuyo aporte es obligatorio (sin la dirección y sin el portero: ellos no «aportan», dirigen o traen material) */
 export function especialistasPertinentes(directorio: Tarjeta[], tipo: TipoDePieza, hayImagenGenerada: boolean): string[] {
-  return directorio.filter((t) => t.rol === 'miembro' && esPertinente(t, tipo, hayImagenGenerada)).map((t) => t.agente)
+  // una tarjeta de DIRECCIÓN entra como miembro solo si lo dice con `<tipo>:miembro` (el director creativo es miembro del calendario y dirige carruseles y kits)
+  return directorio.filter((t) => (t.rol === 'miembro' || (t.rol === 'direccion' && marcaMiembro(t, tipo))) && esPertinente(t, tipo, hayImagenGenerada)).map((t) => t.agente)
 }
+const marcaMiembro = (t: Tarjeta, tipo: TipoDePieza): boolean => t.pertinente_en.includes(`${tipo}:${CONDICION_MIEMBRO}`)
 
-export const direccionDe = (directorio: Tarjeta[]): Tarjeta | null => directorio.find((t) => t.rol === 'direccion' && t.activo) ?? null
+/**
+ * 31-oct · quién DIRIGE este tipo de pieza (R5 del diseño de la mesa de creativos). En una tarjeta de dirección, `pertinente_en` lista los tipos que dirige (`calendario`); las marcas `<tipo>:miembro` no cuentan.
+ * Una dirección sin ningún tipo propio (la de siempre: el director creativo) dirige lo que nadie reclama, pero NUNCA el calendario: ese solo lo dirige quien lo dice. Sin tipo, se conserva el comportamiento de antes.
+ */
+export function direccionDe(directorio: Tarjeta[], tipo?: TipoDePieza): Tarjeta | null {
+  const dirs = directorio.filter((t) => t.rol === 'direccion' && t.activo)
+  if (!tipo) return dirs[0] ?? null
+  const propios = (t: Tarjeta) => t.pertinente_en.filter((p) => !p.includes(':'))
+  const explicita = dirs.find((t) => propios(t).includes(tipo))
+  if (explicita) return explicita
+  if (tipo === 'calendario') return null
+  return dirs.find((t) => propios(t).length === 0) ?? null
+}
 export const porteroDe = (directorio: Tarjeta[]): Tarjeta | null => directorio.find((t) => t.rol === 'portero' && t.activo) ?? null
 
 /** el directorio que TODOS reciben en cada turno (en español, escrito para compañeros); `yo` se marca para que cada uno sepa quién es */

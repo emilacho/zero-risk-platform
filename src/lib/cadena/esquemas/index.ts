@@ -30,15 +30,28 @@ export const ESQUEMA_ESTRATEGIA = objeto({
   alertas: lista(objeto({ texto, ref: texto })),
 })
 
+/** los campos de una pieza del calendario (sin la idea de la mesa): una sola fuente para el esquema de siempre y el v2 */
+const camposDePieza = {
+  semana: entero, dia_semana: entero, slot: texto, hora: texto, red: texto, formato: texto, pilar: texto, tema: texto, sede: texto,
+  requiere_abierto: bool, depende_de: listaDeTexto, pieza_fija: texto,
+  datos: lista(objeto({ dato: texto, valor: texto, clase: { enum: ['alto', 'medio', 'bajo'] }, ref: texto, nivel: { enum: ['F0', 'F1', 'F2', 'F3'] }, opcional: bool })),
+  pendientes: listaDeTexto,
+}
+const ajustesAlPatron = lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto }))
+
 /** SIN campo de fecha ni de total: el modelo NO puede escribirlos (el formato lo impide, no solo la indicación). */
 export const ESQUEMA_CALENDARIO_TANDA = objeto({
-  piezas: lista(objeto({
-    semana: entero, dia_semana: entero, slot: texto, hora: texto, red: texto, formato: texto, pilar: texto, tema: texto, sede: texto,
-    requiere_abierto: bool, depende_de: listaDeTexto, pieza_fija: texto,
-    datos: lista(objeto({ dato: texto, valor: texto, clase: { enum: ['alto', 'medio', 'bajo'] }, ref: texto, nivel: { enum: ['F0', 'F1', 'F2', 'F3'] }, opcional: bool })),
-    pendientes: listaDeTexto,
-  })),
-  ajustes_al_patron: lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto })),
+  piezas: lista(objeto(camposDePieza)),
+  ajustes_al_patron: ajustesAlPatron,
+})
+
+/**
+ * 31-oct · v2 (mesa de creativos): lo MISMO más `idea_de_mesa` por pieza, FUERA de `datos[]` (ahí `ref` es la referencia de un dato con fuente y V22 saca la fila si no existe).
+ * El helper `objeto()` hace todas las propiedades obligatorias: «opcional» es texto vacío (`''` = la pieza no usó una idea de la mesa). Ningún chequeo bloquea por este campo.
+ */
+export const ESQUEMA_CALENDARIO_TANDA_V2 = objeto({
+  piezas: lista(objeto({ ...camposDePieza, idea_de_mesa: texto })),
+  ajustes_al_patron: ajustesAlPatron,
 })
 
 /** los 16 campos del brief de un entregable (REFERENCIA-el-brief-de-un-entregable.md §2) */
@@ -66,6 +79,7 @@ export const ESQUEMA_FECHAS_ESPECIALES = objeto({
 export const ESQUEMAS = {
   'estrategia.v1': ESQUEMA_ESTRATEGIA,
   'calendario_tanda.v1': ESQUEMA_CALENDARIO_TANDA,
+  'calendario_tanda.v2': ESQUEMA_CALENDARIO_TANDA_V2,
   'brief_fila.v1': ESQUEMA_BRIEF_FILA,
   'fechas_especiales.v1': ESQUEMA_FECHAS_ESPECIALES,
 } as const

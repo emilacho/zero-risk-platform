@@ -48,3 +48,15 @@ function deLaMesa(v1: Plantilla, tipo: 'carrusel_mesa' | 'kit_mesa'): Plantilla 
 
 export const CARRUSEL_MESA: Plantilla = deLaMesa(CARRUSEL_IG_CON_JEFATURA, 'carrusel_mesa')
 export const KIT_MESA: Plantilla = deLaMesa(KIT_HISTORIAS_CON_JEFATURA, 'kit_mesa')
+
+/**
+ * 31-oct · `calendario_mesa` · la mesa de ideas del paso calendario de la cadena. Un solo paso `mesa`: no hay imágenes, observador, traductor ni jefatura de pieza (la jefatura revisa el calendario al final, como siempre);
+ * la entrega la hace el propio orquestador de la mesa a la cadena. Tope US$ 1,50 (el techo ×1,2 lo pone la mesa). Se siembra ACTIVA: la palanca por cliente vive en la cadena (`cadena_config.mesa_de_creativos`).
+ */
+export const TOPE_DE_LA_MESA_DEL_CALENDARIO_USD = 1.5
+export const CALENDARIO_MESA: Plantilla = {
+  tipo: 'calendario_mesa', familia: 'calendario_mesa',
+  pasos: [{ clave: 'mesa', tipo: 'codigo', quien: 'sala', funcion: 'mesa', condicion: { tipo: 'siempre' }, entrada: [], salida_artefacto: 'mesa', tope_usd: 0 }],
+  limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DEL_CALENDARIO_USD, max_rondas: 1, mesa: true },
+  indicaciones: {},
+}
