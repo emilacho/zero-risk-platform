@@ -4,6 +4,7 @@
 //   · «apify-web» → espera hasta 290 s (el límite de la llamada síncrona de Apify es 300 s);
 //   · «Guardar la página» → el texto de todas las páginas cabe hasta 1.000.000 de caracteres (antes 200.000);
 //   · «Guardar lo crudo» → las webs dejan en lo crudo sus enlaces a documentos y videos (`_enlaces`) en vez del HTML, y el límite de lo crudo sube a 5 MB para webs;
+//   · «Fotos · anotar» → una imagen de sitio/Mapas que ya no existe (HTTP 4xx) se declara en la tabla pero no tumba la corrida;
 //   · «Fotos · lista» y «Fotos · revisar» → todas las imágenes de cada página + capturas (lógica `fotosDeSitio` de fotos-contexto-logica.js).
 //   node construir-guardar-todo.mjs <flujo-vivo.json> [salida.json]   → NO toca n8n
 import fs from 'node:fs'
@@ -69,7 +70,7 @@ export function aplicarGuardarTodo(flujo) {
   crudo.parameters.jsonBody = b
 
   // 5 · las fotos
-  for (const [clave, nombre] of [['lista', 'Fotos · lista'], ['revisar', 'Fotos · revisar']]) {
+  for (const [clave, nombre] of [['lista', 'Fotos · lista'], ['revisar', 'Fotos · revisar'], ['anotar', 'Fotos · anotar']]) {
     const x = nodo(nombre)
     const nuevo = codigoDeNodo(clave)
     x.parameters = { ...x.parameters, jsCode: x.parameters.jsCode.includes('\r\n') ? nuevo.replace(/\r?\n/g, '\r\n') : nuevo }
@@ -78,11 +79,30 @@ export function aplicarGuardarTodo(flujo) {
   return w
 }
 
+// PARTE 2 (31-oct) · se aplica SOBRE el flujo que ya tiene «guardar todo»: los fondos CSS y el GIF (lista + revisar), el GIF (revisar) y las fotos de la ficha propia de Mapas (cuerpo de own_google_maps_profile con maxImages).
+export function aplicarGuardarTodo2(flujo) {
+  const w = JSON.parse(JSON.stringify(flujo))
+  const nodo = (n) => { const x = w.nodes.find((y) => y.name === n); if (!x) throw new Error('falta el nodo «' + n + '»'); return x }
+  const armar = nodo('Armar el cuerpo del raspador')
+  const anclaPropia = "locationQuery: $json.params.locationQuery || $json.params.location || '', maxCrawledPlacesPerSearch: $json.params.resultsLimit || 10, language: $json.params.language || 'es' }),"
+  let c = armar.parameters.jsCode
+  if (!c.includes(anclaPropia)) throw new Error('no se halló el cuerpo de own_google_maps_profile (¿ya está aplicada la parte 2?)')
+  armar.parameters.jsCode = c.replace(anclaPropia, anclaPropia.replace("language: $json.params.language || 'es' }),", "language: $json.params.language || 'es', ...(Number($json.params.maxImages) > 0 ? { maxImages: Math.min(Number($json.params.maxImages), 20) } : {}) }),"))
+  for (const [clave, nombre] of [['lista', 'Fotos · lista'], ['revisar', 'Fotos · revisar']]) {
+    const x = nodo(nombre)
+    const nuevo = codigoDeNodo(clave)
+    x.parameters = { ...x.parameters, jsCode: x.parameters.jsCode.includes('\r\n') ? nuevo.replace(/\r?\n/g, '\r\n') : nuevo }
+  }
+  if (!nodo('Fotos · revisar').parameters.jsCode.includes('47494638')) throw new Error('«Fotos · revisar» no reconoce el GIF')
+  return w
+}
+
 if (process.argv[1] && process.argv[1].endsWith('construir-guardar-todo.mjs')) {
-  const [entrada, salida] = process.argv.slice(2)
+  const [entrada, salida] = process.argv.slice(2).filter((a) => !a.startsWith('--'))
   if (!entrada) { console.error('uso: node construir-guardar-todo.mjs <flujo-vivo.json> [salida.json]'); process.exit(2) }
-  const nuevo = aplicarGuardarTodo(JSON.parse(fs.readFileSync(entrada, 'utf8')))
-  const out = salida || join(aqui, 'servicio-apify-ARREGLADO-guardar-todo-2026-10-31.json')
+  const parte2 = process.argv.includes('--parte2')
+  const nuevo = (parte2 ? aplicarGuardarTodo2 : aplicarGuardarTodo)(JSON.parse(fs.readFileSync(entrada, 'utf8')))
+  const out = salida || join(aqui, parte2 ? 'servicio-apify-ARREGLADO-guardar-todo-2-2026-10-31.json' : 'servicio-apify-ARREGLADO-guardar-todo-2026-10-31.json')
   fs.writeFileSync(out, JSON.stringify(nuevo, null, 2))
   console.log('escrito', out)
 }

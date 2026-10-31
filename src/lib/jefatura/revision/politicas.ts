@@ -57,6 +57,8 @@ export function politicaDeFila(f: Record<string, unknown>): { ok: true; politica
   if (tope === null || tope <= 0 || tope > TOPE_MAXIMO_DE_REVISION_USD) return { ok: false, error: `«${tipo}»: tope de revisión ${String(f.tope_revision_usd)} fuera de (0, ${TOPE_MAXIMO_DE_REVISION_USD}]` }
   const productores = Array.isArray(f.productores) ? f.productores.filter((x): x is Productor => esObjeto(x) && typeof x.donde === 'string' && typeof x.agente === 'string') : []
   if (reentrega !== 'ninguna' && productores.length === 0) return { ok: false, error: `«${tipo}»: con re-entrega hace falta al menos un productor` }
+  // no-circularidad (F1 31-oct): quien produce no se revisa a sí mismo; una fila que ponga al revisor de fondo entre los productores no se usa a medias
+  if (productores.some((p) => p.agente === String(f.revisor_fondo))) return { ok: false, error: `«${tipo}»: el revisor de fondo «${String(f.revisor_fondo)}» figura entre los productores (no-circularidad: quien produce no revisa)` }
   if (reentrega !== 'ninguna' && typeof f.esquema_correccion !== 'string') return { ok: false, error: `«${tipo}»: con re-entrega hace falta el esquema de corrección` }
   const docs = esObjeto(f.contra_que) && Array.isArray(f.contra_que.documentos) ? (f.contra_que.documentos as unknown[]).filter((d): d is DocumentoContraElQueSeRevisa => esObjeto(d) && typeof d.clave === 'string' && typeof d.titulo === 'string') : []
   const topes = esObjeto(f.tope_paso_usd) ? f.tope_paso_usd : {}

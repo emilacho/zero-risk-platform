@@ -195,12 +195,18 @@ export const ESCRITORES_CONOCIDOS: Record<string, string> = {
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ARREGLADO-esquemas-vivos-2026-10-19.json':'copia VERSIONADA del Servicio de Apify con el validador de esquemas como dato (aditivo: renombres, «sin dato por cambio del raspador», aviso) · los nodos «Fotos · …» siguen idénticos, solo su copia',
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ANTES-geolocalizacion-2026-10-15.json': 'respaldo del flujo del Servicio de Apify antes de reenviar customGeolocation (competencia por sede) · solo su copia, no escribe nada',
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ARREGLADO-geolocalizacion-2026-10-15.json': 'copia VERSIONADA del Servicio de Apify con customGeolocation reenviado a google_maps_scraper (aditivo) · los nodos «Fotos · …» siguen idénticos, solo su copia, no escribe nada',
+  'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ANTES-guardar-todo-2-2026-10-31.json': 'copia VERSIONADA del flujo del Servicio de Apify antes de «guardar todo» parte 2 (respaldo para la reversa) · solo conserva el nombre de la tabla dentro del flujo, no la escribe',
+  'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ARREGLADO-guardar-todo-2-2026-10-31.json': 'copia VERSIONADA del flujo del Servicio de Apify con fondos CSS, GIF y PDF enlazados (parte 2) · solo conserva el nombre de la tabla dentro del flujo, no la escribe',
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ANTES-menciones-2026-10-14.json': 'copia VERSIONADA del flujo del Servicio de Apify antes de sumar menciones_en_redes (respaldo para la reversa) · solo conserva el nombre de la tabla dentro del flujo, no la escribe',
   'scripts/worker-staging/3lyknrP3PoS2KzUf/servicio-apify-ARREGLADO-menciones-2026-10-14.json': 'copia VERSIONADA del flujo del Servicio de Apify con menciones_en_redes (aditivo) · solo conserva el nombre de la tabla dentro del flujo, no la escribe',
 }
 /** quién, DENTRO de src/ y services/, puede escribir en client_social_images: solo la ruta `etiquetar` del portero (paso 4) y solo UPDATE de las 4 columnas de etiqueta */
 export const ESCRITORES_DE_ETIQUETAS_EN_SRC: Record<string, string> = {
   'src/lib/cerebro/portero/etiqueta-escritura.ts': 'paso 4 · la ruta `etiquetar` del portero: PATCH de las 4 columnas de etiqueta de UNA foto, filtrado por el id de la foto Y el cliente',
+}
+/** quién, DENTRO de src/, puede INSERTAR filas (copia de fotos propias): solo la ficha propia de Mapas, confirmada por el portero (31-oct · parte 2); jamás escribe columnas de etiqueta */
+export const ESCRITORES_DE_COPIA_EN_SRC: Record<string, string> = {
+  'src/lib/portero-alimenta/fotos-de-mapas-propia.ts': 'copia las fotos de la ficha de Mapas que `fichaPropiaDeMapas` confirma como del cliente (nombre exacto o cuenta propia; ambigua u homónimo = ninguna) como propio/maps_foto',
 }
 export function escribeEnLaTabla(texto: string): boolean {
   for (const m of texto.matchAll(/rest\/v1\/client_social_images/g)) {
@@ -217,7 +223,7 @@ describe('C · nadie escribe en client_social_images salvo quienes ya lo hacían
   const candidatos = TODOS.filter((rel) => !/(^|\/)__tests__\//.test(rel) && !/\.test\.ts$/.test(rel) && !/^supabase\/(migrations|reversas)\//.test(rel))
   it('el código del producto (src/ y services/) solo la escribe un escritor DECLARADO, y ese solo actualiza las 4 columnas de etiqueta', () => {
     const escriben = candidatos.filter((rel) => /^(src|services)\//.test(rel)).filter((rel) => escribeEnLaTabla(leer(rel)))
-    expect(escriben.sort(), `escriben en client_social_images sin estar declarados: ${escriben.join(', ')}`).toEqual(Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC).sort())
+    expect(escriben.sort(), `escriben en client_social_images sin estar declarados: ${escriben.join(', ')}`).toEqual([...Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC), ...Object.keys(ESCRITORES_DE_COPIA_EN_SRC)].sort())
     for (const rel of Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC)) {
       const t = leer(rel).split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n')
       expect(/\bmethod:\s*['"`](POST|PUT|DELETE)['"`]/.test(t), `${rel}: solo se permite PATCH (actualizar), nunca insertar ni borrar`).toBe(false)
@@ -228,6 +234,13 @@ describe('C · nadie escribe en client_social_images salvo quienes ya lo hacían
     for (const rel of Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC)) {
       const mod = await import(/* @vite-ignore */ pathToFileURL(path.join(RAIZ, rel)).href.replace(/\.ts$/, ''))
       expect([...mod.COLUMNAS_QUE_ESCRIBE].sort(), rel).toEqual(['con_personas', 'etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'formato', 'producto_visto', 'que_muestra', 'texto_visible', 'tipo_de_toma'])
+    }
+  })
+  it('el escritor de COPIA en src/ no toca jamás las columnas de etiqueta ni borra', () => {
+    for (const rel of Object.keys(ESCRITORES_DE_COPIA_EN_SRC)) {
+      const t = leer(rel).split(/\r?\n/).filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n')
+      expect(/que_muestra|producto_visto|etiqueta_modelo|etiqueta_confianza|texto_visible|tipo_de_toma|con_personas|etiquetada_en/.test(t), `${rel}: no escribe columnas de etiqueta`).toBe(false)
+      expect(/method:\s*['"`](DELETE|PATCH)['"`]/.test(t), `${rel}: no borra ni actualiza`).toBe(false)
     }
   })
   it('en scripts/ solo la escriben los tres conocidos; un escritor nuevo falla hasta que se declare con su razón', () => {

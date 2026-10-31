@@ -612,7 +612,7 @@ function resolverContra(base, ruta) {
 var RUIDO_DE_IMAGEN = /(?:\/favicon|favicon\.|apple-touch-icon|\/sprite|spacer|1x1|pixel|\/tr\?|facebook\.com\/tr|doubleclick|googletagmanager|google-analytics|gravatar|emoji|\/wp-includes\/)/i
 function esFormatoPermitido(u) {
   var limpia = String(u).split('#')[0].split('?')[0].toLowerCase()
-  if (/\.(svg|gif|avif|ico|bmp|tiff?|mp4|webm|pdf)$/.test(limpia)) return false
+  if (/\.(svg|avif|ico|bmp|tiff?|mp4|webm|pdf)$/.test(limpia)) return false
   return true
 }
 function imagenesDeHtml(html, markdown) {
@@ -635,6 +635,13 @@ function imagenesDeHtml(html, markdown) {
       } else out.push({ src: v[1], alt: alt ? alt[1] : '' })
       break
     }
+  }
+  // fondos pintados por CSS: `url(...)` dentro de style="…" y de bloques <style> (solo los que parecen imagen; las fuentes no)
+  var rc = /url\(\s*(?:&quot;|&#39;|["'])?([^"')\s&]+)(?:&quot;|&#39;|["'])?\s*\)/gi
+  var zonas = h.match(/<style\b[\s\S]*?<\/style>|\bstyle="[^"]*"|\bstyle='[^']*'/gi) || []
+  for (var z = 0; z < zonas.length; z++) {
+    rc.lastIndex = 0
+    while ((m = rc.exec(zonas[z])) !== null) { if (/\.(jpe?g|png|webp|gif)(\?|#|$)/i.test(m[1])) out.push({ src: m[1], alt: '' }) }
   }
   var md = String(markdown || '')
   var rm = /!\[([^\]]*)\]\(([^)\s]+)/g

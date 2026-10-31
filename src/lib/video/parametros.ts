@@ -13,6 +13,17 @@ export const DURACION_MAX_S = 15
 export const RESOLUCION_APROBADA = '720p'
 export const RESOLUCIONES_PERMITIDAS: ReadonlySet<string> = new Set(['480p', '720p', '1080p'])
 export const TOPE_POR_VIDEO_USD = 5
+/**
+ * descuento VIGENTE del proveedor (medido en la corrida real del 31-oct: lista US$ 3,70 → cargo US$ 2,59 = 30 %, «Seedance 2.5 · 30% off» en la consola, 7 días).
+ * Lo que se reserva en el libro y se compara con el tope es el costo CON descuento mientras rija; pasada la fecha, vuelve la lista. Es DATO: se cambia aquí cuando cambie la consola.
+ */
+export const DESCUENTO_VIGENTE: Readonly<{ pct: number; hasta: string; modelos: readonly string[] }> = { pct: 0.3, hasta: '2026-11-07T13:19:13Z', modelos: ['bytedance/seedance-2.5', 'bytedance/seedance-2.0'] }
+export function conDescuento(costoListaUsd: number, modelo: string, ahoraMs: number): { usd: number; pct: number } {
+  const d = DESCUENTO_VIGENTE
+  const rige = d.pct > 0 && d.modelos.includes(modelo) && ahoraMs < Date.parse(d.hasta)
+  if (!rige) return { usd: costoListaUsd, pct: 0 }
+  return { usd: +(costoListaUsd * (1 - d.pct)).toFixed(4), pct: d.pct }
+}
 /** relación de cuadro por formato de red (la tabla `cadena_formatos_por_red` nombra el formato; el cuadro lo fija esto) */
 export const RELACION_POR_FORMATO: Readonly<Record<string, string>> = { reel: '9:16', short: '9:16', tiktok: '9:16', video: '16:9', historia: '9:16', estado: '9:16' }
 export const RELACIONES_PERMITIDAS: ReadonlySet<string> = new Set(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'])

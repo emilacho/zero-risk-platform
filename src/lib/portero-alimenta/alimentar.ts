@@ -12,6 +12,8 @@ import { TRANSITORIOS_COMUNES, transitoriosDe, varianteDelCliente, type Interrup
 import { MAX_LLAMADAS_DEL_JUEZ_POR_DIA, TOPE_DE_GASTO_DEL_JUEZ_POR_LLAMADA_USD, TOPE_DEL_PORTERO_USD } from './datos'
 import { filtrar, type ContextoDelCliente } from './filtro'
 import { fichaPropiaDeMapas } from './mapas-propia'
+import { copiarFotosDeMapasPropia, type ResultadoDeFotosDeMapas } from './fotos-de-mapas-propia'
+import { leerDocumentosDeLosSitios } from './documentos-enlazados'
 import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlamada } from './juez'
 import { planDeArchivo, planDeReconfirmaciones, type FichaReconfirmable, type PlanDeArchivo } from './archivar'
 import { unidadesDeRaspados, type FilaCruda, type Unidad } from './unidades'
@@ -71,6 +73,10 @@ export interface ResultadoDeAlimentar {
   gasto: { modelo_usd: number; hoy_antes_usd: number; tope_usd: number; supero_el_tope: boolean }
   escrituras: { fichas: number; retiradas: number; vistas: number; corrida: number; /** fichas cuya vigencia se renovó porque se releyó lo mismo en una fecha más nueva */ reconfirmadas?: number }
   errores: string[]
+  /** fotos de la ficha propia de Mapas (31-oct · parte 2) */
+  fotos_de_mapas?: ResultadoDeFotosDeMapas
+  /** PDF que el sitio enlaza (31-oct · parte 2) */
+  documentos?: { candidatos: number; leidos: number; del_sitio: number; de_competidores: number; fallidos: Array<{ url: string; causa: string }> }
   /** lo que hicieron los nuevos brazos (ausente = ninguno encendido) */
   brazos?: ResultadoDeBrazos
   /** asignaciones de fuente a sede que no corresponden a ninguna sede del cliente (se dicen; la fuente queda en «todas») */
@@ -146,8 +152,31 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   const propios = propiosDeFicha(cliente as never)
   const ctx = contextoDelCliente(cliente, lista(sd.data))
 
-  const unidades = unidadesDeRaspados(lista(rr.data) as unknown as FilaCruda[], { propios, hostsDeReparto: reparto.map(hostDe).filter(Boolean), transitorios: patrones, fichaDeMapas: (items) => fichaPropiaDeMapas(items, ctx).ficha })
+  // 31-oct · los PDF que el sitio enlaza (menús, catálogos): el portero los lee y su texto entra como una página más del sitio propio; los del competidor se guardan como suyos. Nunca tumba la corrida.
+  let filasDeRaspado = lista(rr.data) as unknown as FilaCruda[]
+  try {
+    const entorno = e.env ?? process.env
+    const urlBase = (entorno.NEXT_PUBLIC_SUPABASE_URL ?? entorno.SUPABASE_URL ?? '').replace(/\/$/, ''), llaveBase = entorno.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    const traer = (e.fetch as unknown as ((u: string, i?: RequestInit) => Promise<Response>) | undefined)
+    const d = await leerDocumentosDeLosSitios({
+      filas: filasDeRaspado, ahora, fetchImpl: traer,
+      guardarDePagina: e.dry_run || !urlBase || !llaveBase ? undefined : async (p) => {
+        const w = await (traer ?? fetch)(`${urlBase}/rest/v1/client_web_pages?on_conflict=client_id,url`, { method: 'POST', headers: { apikey: llaveBase, Authorization: `Bearer ${llaveBase}`, 'content-type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ client_id: e.client_id, url: p.url, title: p.titulo, content_text: p.texto, pages_count: p.paginas, crawled_at: ahora.toISOString(), owner_role: 'competidor', competitor_id: p.competitor_id }) })
+        return w.ok
+      },
+    })
+    if (d.candidatos) r.documentos = { candidatos: d.candidatos, leidos: d.leidos, del_sitio: d.del_sitio, de_competidores: d.de_competidores, fallidos: d.fallidos }
+    filasDeRaspado = [...filasDeRaspado, ...d.filas]
+  } catch (err) { r.errores.push(`documentos enlazados: ${err instanceof Error ? err.message : String(err)}`) }
+  const unidades = unidadesDeRaspados(filasDeRaspado, { propios, hostsDeReparto: reparto.map(hostDe).filter(Boolean), transitorios: patrones, fichaDeMapas: (items) => fichaPropiaDeMapas(items, ctx).ficha })
   r.unidades = unidades.length
+  // 31-oct · las fotos de la ficha PROPIA de Mapas (solo la que el portero confirma como del cliente; ambigua u homónimo = ninguna). Nunca tumba la corrida.
+  if (!e.dry_run) {
+    try {
+      const fichasDeMapas = lista(rr.data).filter((f) => f.apify_function === 'own_google_maps_profile').slice(0, 3).flatMap((f) => lista(f.respuesta))
+      if (fichasDeMapas.length) r.fotos_de_mapas = await copiarFotosDeMapasPropia({ clientId: e.client_id, fichasCrudas: fichasDeMapas, ctx, urlDeLaBase: (e.env ?? process.env).NEXT_PUBLIC_SUPABASE_URL ?? (e.env ?? process.env).SUPABASE_URL ?? '', llave: (e.env ?? process.env).SUPABASE_SERVICE_ROLE_KEY ?? '', fetchImpl: e.fetch as never })
+    } catch (err) { r.errores.push(`fotos de Mapas: ${err instanceof Error ? err.message : String(err)}`) }
+  }
   // las cifras (fuente «metrica») NO se descartan por «ya vista»: si el valor vuelve a uno anterior (26 → 50 → 26) tiene que reemplazar al vigente; lo que no cambió lo ve «mismo dato» más abajo
   const vistas = new Set(lista(vv.data).filter((v) => v.fuente !== 'metrica').map((v) => `${v.fuente}|${v.unidad_ref}|${v.huella}`))
   const f = filtrar(unidades, ctx, vistas, patrones)
