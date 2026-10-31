@@ -174,9 +174,14 @@ import { condicionesDeLaPieza } from '../mesa/directorio'
 describe('si_personas se calcula al abrir la pieza, del brief', () => {
   it('con palabras de personas enciende la condición; sin ellas no, y vacío o ausente tampoco', () => {
     expect(condicionesDeLaPieza('Carrusel con la familia en la mesa y niños sonriendo')).toEqual(['si_personas'])
-    expect(condicionesDeLaPieza('Our customers love the dish')).toEqual(['si_personas'])
+    expect(condicionesDeLaPieza('Our friends love the dish')).toEqual(['si_personas'])
+    // palabras ambiguas que NO bastan (CC3: llamarían de más al especialista)
+    for (const t of ['atraer clientes con el plato', 'equipo de cocina nuevo', 'un grupo de ofertas', 'a mano alzada, manos a la obra']) expect(condicionesDeLaPieza(t)).toEqual([])
     expect(condicionesDeLaPieza('Primer plano del encebollado, vapor y limón')).toEqual([])
     expect(condicionesDeLaPieza('')).toEqual([])
+    // lo que EXCLUYE personas no las convoca
+    for (const t of ['VISUAL: El plato aparece completo. No aparecen personas.', 'sin gente en la foto', '- VISUAL PROHIBIDO:\n  - rostros']) expect(condicionesDeLaPieza(t)).toEqual([])
+    expect(condicionesDeLaPieza('No aparecen personas. Una familia sonriendo en la mesa')).toEqual(['si_personas'])
     expect(condicionesDeLaPieza(undefined as unknown as string)).toEqual([])
   })
   it('enciende al especialista de inclusión en el carrusel y no en otra cosa', () => {

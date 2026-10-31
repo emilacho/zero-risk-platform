@@ -63,9 +63,15 @@ export function seccionDelDirectorio(directorio: Tarjeta[], yo: string): string 
 }
 
 /** palabras que dicen que la pieza muestra personas (rostros, cuerpos, manos): es lo que enciende `si_personas` · deliberadamente literal y corto; una pieza sin estas palabras no llama al especialista de inclusión */
-const PERSONAS = /\b(personas?|gente|rostros?|caras?|clientes?|comensales?|familias?|ni[ñn]os?|ni[ñn]as?|mujeres?|hombres?|equipo|chef|cocineros?|meseros?|mozos?|amigos?|parejas?|grupo|sonri\w+|manos|retratos?|people|persons?|faces?|customers?|family|kids?|children|women|men|friends|couples?|staff|waiters?)\b/i
+const PERSONAS = /\b(personas?|gente|rostros?|caras?|comensales?|familias?|ni[ñn]os?|ni[ñn]as?|mujeres?|hombres?|chef|cocineros?|meseros?|mozos?|amigos?|parejas?|sonri\w+|retratos?|people|persons?|faces?|family|kids?|children|women|men|friends|couples?|waiters?)\b/i
+
+/** una frase que niega o prohíbe («No aparecen personas», «sin gente», «VISUAL PROHIBIDO») no cuenta: un brief que EXCLUYE personas no convoca al especialista de inclusión */
+const NIEGA = /\b(no|sin|nunca|nadie|ning[uú]n[ao]?|without|never)\b|prohib/i
 
 /** T6 · las condiciones que la mesa calcula SOLA al abrir una pieza de calendario (carrusel o kit) a partir de su brief; las de la cadena las declara la cadena */
 export function condicionesDeLaPieza(briefTexto: string): string[] {
-  return PERSONAS.test(briefTexto ?? '') ? ['si_personas'] : []
+  // lo que cuelga de un encabezado «… PROHIBIDO:» (la lista que sigue) es lo que NO debe aparecer
+  const sinProhibido = String(briefTexto ?? '').replace(/prohib[^\n]*\n(?:[ \t]+-[^\n]*\n?)*/gi, '')
+  const frases = sinProhibido.split(/[.\n;]+/)
+  return frases.some((f) => PERSONAS.test(f) && !NIEGA.test(f)) ? ['si_personas'] : []
 }
