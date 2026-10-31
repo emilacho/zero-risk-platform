@@ -149,10 +149,12 @@ describe('D1 · el recolector', () => {
     expect(r.descartes).toHaveLength(1)
     expect(JSON.stringify(m.tablas.client_sede_datos)).not.toMatch(/Los Ríos/)
   })
-  it('el sitio del cliente sale de la ficha: un cliente sin sitio registrado prueba por teléfono o dirección', async () => {
+  it('el sitio del cliente sale de la ficha: sin sitio registrado NINGUNA página cuenta como suya (31-oct) · la ficha de Guayaquil no tiene sede declarada y se descarta', async () => {
     const m = mundo([rawMaps('p', propia({ phone: '', street: 'Av. 8 NO' }), '2026-10-02T01:00:00+00:00')])
     ;(m.tablas.clients[0] as Fila).website_url = null
-    expect((await recolectarSedes(m.cliente, CID)).descartes).toEqual([])
+    const r = await recolectarSedes(m.cliente, CID)
+    expect(r.descartes).toHaveLength(1)
+    expect(r.descartes[0].motivo).toMatch(/no es una sede de este cliente/)
   })
 })
 

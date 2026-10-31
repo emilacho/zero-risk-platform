@@ -129,6 +129,29 @@ export function voseoEn(texto: string): string[] {
   return [...hallados]
 }
 
+/**
+ * LIMPIAR LA JERGA EN VEZ DE RECHAZAR TODO (31-oct): el jefe de finanzas escribió «tablero» en una recomendación y el filtro frenó las TRES preguntas en silencio.
+ * Cada palabra con equivalente llano se cambia por él; los nombres internos con guion bajo (dry_run, finanzas_…, client_id, p8…) NO tienen equivalente: ésos siguen rechazándose.
+ */
+const EQUIVALENTE_LLANO: Record<string, string> = {
+  tablero: 'cuadro de cifras', huella: 'identificador', jefatura: 'revisión', json: 'archivo de datos', api: 'conexión técnica', workflow: 'proceso',
+  endpoint: 'conexión', webhook: 'aviso automático', supabase: 'base de datos', n8n: 'proceso automático', mcp: 'conector', rls: 'permisos',
+  sprint: 'ciclo', merge: 'publicación', commit: 'cambio guardado', payload: 'datos enviados',
+}
+export function limpiarJerga(texto: string): { texto: string; cambiado: boolean } {
+  let t = texto
+  for (const [palabra, llano] of Object.entries(EQUIVALENTE_LLANO)) {
+    t = t.replace(new RegExp(`(?<![${LETRA}])(${ESCAPAR(palabra)})(?![${LETRA}])`, 'gi'), (m) => (m[0] === m[0].toUpperCase() && m[0] !== m[0].toLowerCase() ? llano[0].toUpperCase() + llano.slice(1) : llano))
+  }
+  return { texto: t, cambiado: t !== texto }
+}
+/** la pregunta con la jerga cambiada por lo llano en sus tres campos; solo se usa si así queda SIN errores (si no, se conserva la original y se rechaza con su motivo) */
+export function limpiarPregunta(p: Pregunta): { q: Pregunta; cambiada: boolean } {
+  const n: Pregunta = { ...p, texto: limpiarJerga(p.texto ?? '').texto, recomendacion: limpiarJerga(p.recomendacion ?? '').texto, supuesto_si_no_responde: limpiarJerga(p.supuesto_si_no_responde ?? '').texto }
+  const cambiada = n.texto !== p.texto || n.recomendacion !== p.recomendacion || n.supuesto_si_no_responde !== p.supuesto_si_no_responde
+  return cambiada && erroresDePregunta(n).length === 0 ? { q: n, cambiada: true } : { q: p, cambiada: false }
+}
+
 export function erroresDePregunta(p: Pregunta): string[] {
   const e: string[] = []
   if (!p.clave?.trim()) e.push('falta la clave')

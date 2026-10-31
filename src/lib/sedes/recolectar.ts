@@ -37,6 +37,7 @@ interface SedesLogica {
   resolverSedes(sedes: { clave: string; ciudad: string }[], obs: Observacion[]): SedeResuelta[]
   textosPropios(posts: unknown, op?: { max?: number; largo?: number }): { fecha: string | null; texto: string; post: string | null }[]
   clave(s: string): string
+  anfitrion(url: unknown): string | null
 }
 
 export interface AporteMapas {
@@ -92,6 +93,15 @@ function esDeLaCuentaPropia(fila: FilaApify, propio: string | null): boolean {
   return candidatos.some((c) => String(c).trim().replace(/^@/, '').toLowerCase() === propio)
 }
 
+/** ¿esta página es del cliente? Su dominio (o un subdominio) o la página de SU cuenta de Instagram. Sin dominio en la ficha no hay prueba → no cuenta. */
+export function esPaginaDelCliente(url: string, hostPropio: string | null, instagramPropio: string | null): boolean {
+  const h = L.anfitrion(url)
+  if (!h) return false
+  if (hostPropio && (h === hostPropio || h.endsWith('.' + hostPropio))) return true
+  if (instagramPropio && /(^|\.)instagram\.com$/.test(h)) return L.cuentasSocialesDe(url).includes('instagram:' + instagramPropio)
+  return false
+}
+
 const primerItem = (r: unknown): Record<string, unknown> | null => (Array.isArray(r) ? (r[0] as Record<string, unknown>) ?? null : r && typeof r === 'object' ? (r as Record<string, unknown>) : null)
 
 export async function recolectarSedes(supabase: SupabaseClient, clientId: string): Promise<ResultadoRecoleccion> {
@@ -107,7 +117,11 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     const obs: Observacion[] = []
     let nSitio = 0
     const cuentasPropias = new Set<string>()
-    for (const p of paginas) { const o = L.observacionesDelSitio(p.content_text || '', { url: p.url, crawled_at: p.crawled_at }); nSitio += o.length; obs.push(...o); for (const k of L.cuentasSocialesDe(p.content_text || '')) cuentasPropias.add(k) }
+    // `owner_role = 'propio'` NO prueba que la página sea del cliente: el rastreador de búsqueda la pone también a páginas de terceros (decenas de dominios ajenos en un cliente real →
+    // homónimos que se volvían sedes del cliente). Sólo cuenta la página de SU dominio o de SU cuenta.
+    const hostPropio = L.anfitrion(cli[0].website_url)
+    const paginasDelCliente = paginas.filter((p) => esPaginaDelCliente(p.url, hostPropio, propio))
+    for (const p of paginasDelCliente) { const o = L.observacionesDelSitio(p.content_text || '', { url: p.url, crawled_at: p.crawled_at }); nSitio += o.length; obs.push(...o); for (const k of L.cuentasSocialesDe(p.content_text || '')) cuentasPropias.add(k) }
 
     const crudas = RAPIDO(await supabase.from('apify_raw').select('id,apify_function,params,respuesta,ensayo,created_at').eq('client_id', clientId).eq('ensayo', false).in('apify_function', ['instagram_scraper', 'google_maps_scraper', 'own_google_maps_profile']).order('created_at', { ascending: false }).limit(12), 'leer lo raspado') as FilaApify[]
     const igFila = crudas.find((f) => f.apify_function === 'instagram_scraper' && esDeLaCuentaPropia(f, propio) && primerItem(f.respuesta))

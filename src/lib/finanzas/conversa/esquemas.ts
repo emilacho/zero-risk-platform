@@ -57,6 +57,17 @@ export function respuestaDeEquilibrioValida(v: unknown): boolean {
   const r = v.equilibrio_respuesta
   return (DECISIONES_DE_EQUILIBRIO as readonly string[]).includes(String(r.decision)) && texto(r.motivo, 400)
 }
+/**
+ * El ajuste del brief perdió un turno entero (US$ 0,29, 30-oct) por la FORMA de su respuesta al equilibrio. Se arregla lo que es solo forma, sin cambiar lo que el agente decidió:
+ * la decisión con espacios o mayúsculas («Mantengo la meta») pasa a su valor, y un motivo de más de 400 caracteres se recorta.
+ */
+export function normalizarEquilibrio(v: unknown): unknown {
+  if (!objeto(v) || !objeto(v.equilibrio_respuesta)) return v
+  const r = v.equilibrio_respuesta
+  const decision = typeof r.decision === 'string' ? r.decision.trim().toLowerCase().replace(/\s+/g, '_') : r.decision
+  const motivo = typeof r.motivo === 'string' ? (r.motivo.trim().length > 400 ? r.motivo.trim().slice(0, 399) + '…' : r.motivo.trim()) : r.motivo
+  return { ...v, equilibrio_respuesta: { ...r, decision, motivo } }
+}
 export function validarPlanteo(entrada: unknown): Resultado<PlanteoV1> {
   const e: string[] = []
   // arreglo del intento 3 (16-oct): el agente envolvió el planteo en `{ planteo: {...} }`; se desenvuelve (el contenido interno se valida igual de estricto)
@@ -142,7 +153,7 @@ export interface AcuerdoV1 {
   hallazgos: HallazgoDelJefe[]
   conflictos_resueltos: string[]
   dato_que_no_bloquea?: string
-  preguntas_a_emilio: Array<{ clave: string; texto: string; recomendacion: string; supuesto_si_no_responde: string }>
+  preguntas_a_emilio: Array<{ clave: string; texto: string; recomendacion: string; supuesto_si_no_responde: string; impacto?: 'alto' | 'medio' | 'bajo' }>
 }
 export function validarAcuerdo(v: unknown): Resultado<AcuerdoV1> {
   const e: string[] = []
@@ -156,7 +167,7 @@ export function validarAcuerdo(v: unknown): Resultado<AcuerdoV1> {
   })
   if (!Array.isArray(v.conflictos_resueltos) || !v.conflictos_resueltos.every((c) => typeof c === 'string')) e.push('conflictos_resueltos debe ser una lista de textos')
   if (!Array.isArray(v.preguntas_a_emilio)) e.push('preguntas_a_emilio debe ser una lista (puede ir vacía)')
-  else v.preguntas_a_emilio.forEach((p, i) => { if (!objeto(p) || !texto(p.clave, 60) || !texto(p.texto, 600) || !texto(p.recomendacion, 600) || !texto(p.supuesto_si_no_responde, 600)) e.push(`preguntas_a_emilio[${i}] incompleta`) })
+  else v.preguntas_a_emilio.forEach((p, i) => { if (!objeto(p) || !texto(p.clave, 60) || !texto(p.texto, 600) || !texto(p.recomendacion, 600) || !texto(p.supuesto_si_no_responde, 600)) e.push(`preguntas_a_emilio[${i}] incompleta`); else if (p.impacto !== undefined && !['alto', 'medio', 'bajo'].includes(String(p.impacto))) e.push(`preguntas_a_emilio[${i}].impacto debe ser alto, medio o bajo`) })
   if (e.length) return { ok: false, errores: e }
   return { ok: true, valor: v as unknown as AcuerdoV1 }
 }
