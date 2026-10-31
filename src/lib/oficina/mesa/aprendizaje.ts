@@ -20,11 +20,13 @@ export const DESTINATARIO_DE_AGENTE: Record<string, string> = {
   'design-image-prompt-engineer': 'imagen',
 }
 export const destinatarioDe = (agente: string): string | null => DESTINATARIO_DE_AGENTE[agente] ?? null
-export const FORMATO_DE_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit', brief: 'brief', concepto: 'concepto' }
+export const FORMATO_DE_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit', brief: 'brief', concepto: 'concepto', video: 'video' }
+/** cómo se nombra cada tipo de pieza en el pedido de un turno (T8 · 31-oct: la mesa de video se suma a las de la cadena) */
+export const NOMBRE_DE_LA_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit de historias', brief: 'brief creativo de la campaña', concepto: 'gran idea de la campaña', video: 'video corto (reel/short)' }
 
 /** el texto con el que el cerebro busca por parecido: qué va a producir este especialista, para qué pieza y de qué trata el encargo */
 export function tareaParaConsultar(o: { cliente_nombre: string; tipo: TipoDePieza; especialidad: string; brief_texto: string }): string {
-  const pieza = o.tipo === 'carrusel' ? 'carrusel' : o.tipo === 'brief' ? 'brief creativo de la campaña' : o.tipo === 'concepto' ? 'gran idea de la campaña' : 'kit de historias'
+  const pieza = NOMBRE_DE_LA_PIEZA[o.tipo]
   return `${o.especialidad || 'aporte a la pieza'} · ${pieza} de ${o.cliente_nombre}. ${o.brief_texto.replace(/\s+/g, ' ').trim()}`.slice(0, 1500)
 }
 

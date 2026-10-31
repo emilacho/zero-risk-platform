@@ -7,6 +7,7 @@
  */
 import { mensajeV08 } from './cantidad'
 import { hallarAfirmaciones, hallarFechasEnTema, type LexicoAfirmaciones } from './afirmaciones'
+import { esperaAlBrazoSinSala } from './expandir-patron'
 import { saleAntes } from './resolver-dependencias'
 import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from './registro'
 import { diaDeCampana, diaSemanaIso, fechaDeFila, minutos, sumarDias } from './fechas'
@@ -188,7 +189,8 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     // ─── V20 · la marca de video es la de la tabla, no la que quiera el agente
     const fmt = (ins.formatos[f.red] ?? []).find((x) => x.formato === f.formato)
     if (fmt) {
-      const debeEsperar = fmt.produccion === 'espera_brazo'
+      // T8 · con sala (`familia` = video_mesa) el video es una pieza más: no espera
+      const debeEsperar = esperaAlBrazoSinSala(fmt)
       if (debeEsperar && f.estado !== 'espera_video') out.push(h('V20', 'bloquea', f, `el formato ${f.formato} espera al brazo de video pero la fila no está marcada espera_video`, 'cadena_formatos_por_red', 'marcar espera_video: no se esconde un video como otra cosa'))
       if (!debeEsperar && f.estado === 'espera_video') out.push(h('V20', 'bloquea', f, `la fila está marcada espera_video pero ${f.formato} no es de video`, 'cadena_formatos_por_red', 'quitar la marca'))
     }

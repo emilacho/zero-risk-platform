@@ -4,6 +4,7 @@
  */
 import { retirarLasSuperadas } from './superadas'
 import { puertoDeLaMesa } from './mesa/adaptador'
+import { almacenDeSupabase as almacenDeLaCadena } from '../cadena/almacen-supabase'
 import { monedaDelCliente } from '@/lib/moneda/por-pais'
 import zlib from 'node:zlib'
 import { renderManualLimpio } from '../brand-book-render-limpio'
@@ -13,7 +14,8 @@ import { almacenDeSupabase, type Db } from './almacen-supabase'
 import type { FotoEtiquetada } from './fotos'
 import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt } from '../revisor-gpt'
 import { llamarRevisorGptConLibro } from '../revisor-gpt-libro'
-import type { FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
+import type { EnvioDeVideo, EstadoDelBrazo, FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
+import { mp4Simulado } from './orquestador-video'
 import { identidadVisualDelCliente } from './identidad-visual'
 import { separarFotos } from './material'
 import type { Registro } from './chequeos'
@@ -125,7 +127,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
   const almacen = almacenDeSupabase(db)
   return {
     almacen,
-    mesa: puertoDeLaMesa(db),
+    mesa: puertoDeLaMesa(db, (clave) => almacenDeLaCadena().leerConfig(clave)),
     // 31-oct · las mesas de brief y de concepto entregan su tablero a la cadena por SU almacén (las tablas `cadena_*` solo se tocan allí). Mientras la cadena (T3 de CC1) no conecte su recepción, la entrega dice la verdad: no recibida, y la mesa cierra igual avisando a `alertas`
     cadena: env.puertoDeLaCadena ?? { entregarBrief: async () => ({ ok: false, error: SIN_RECEPCION_DE_LA_CADENA }), entregarConcepto: async () => ({ ok: false, error: SIN_RECEPCION_DE_LA_CADENA }) },
     ahora,
@@ -269,8 +271,38 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         return { ok: true, urls: (j.slide_urls as unknown[]).map(String), ancho: Number(j.width ?? medidas.ancho), alto: Number(j.height ?? medidas.alto), fonts_usadas: lista<string>(j.fonts_usadas), fonts_faltantes: lista<string>(j.fonts_faltantes), timings_ms: lista<number>(j.timings_ms) }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
     },
+    /**
+     * EL BRAZO DE VIDEO (parte 2 · 31-oct): `POST /api/video/generate` (estima, compara con el tope, envía idempotente por `clave` y anota el libro) y `GET ?request_id=` (estado; copia al bucket al terminar).
+     * En dry_run NO sale a la red (ni a estimar): devuelve un pedido simulado. El contexto de flujo lo pone la oficina (`workflow_id: oficina:<familia>`).
+     */
+    video: {
+      async enviar(p): Promise<EnvioDeVideo> {
+        if (p.dry_run) return { ok: true, request_id: `dry-${p.pedido.clave}`, status: 'simulado', costo_estimado_usd: 0, simulado: true }
+        try {
+          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: false }
+          const r = await f(`${env.baseUrl}/api/video/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(60000) })
+          const j = (await r.json().catch(() => ({}))) as Fila
+          if (!r.ok || typeof j.request_id !== 'string') return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`), http: r.status }
+          return { ok: true, request_id: j.request_id, status: String(j.status ?? 'queued'), costo_estimado_usd: Number(j.costo_estimado_usd ?? 0), costo_lista_usd: Number(j.costo_lista_usd ?? 0) || undefined, descuento_pct: Number(j.descuento_pct ?? 0) || undefined, simulado: false }
+        } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+      },
+      async estado(requestId): Promise<EstadoDelBrazo> {
+        try {
+          const r = await f(`${env.baseUrl}/api/video/generate?request_id=${encodeURIComponent(requestId)}`, { headers: { 'x-api-key': env.internalKey }, signal: AbortSignal.timeout(60000) })
+          const j = (await r.json().catch(() => ({}))) as Fila
+          if (!r.ok) return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`) }
+          if (j.status === 'simulado') return { ok: true, simulado: true }
+          if (j.terminal !== true) return { ok: true, terminal: false, status: String(j.status ?? '') }
+          if (j.status === 'completed' && typeof j.video_url === 'string') return { ok: true, terminal: true, status: 'completed', video_url: j.video_url, url_proveedor: typeof j.url_proveedor === 'string' ? j.url_proveedor : null, costo_usd: Number(j.costo_usd ?? 0), expires_at: typeof j.expires_at === 'string' ? j.expires_at : null, copia: j.copia === 'bucket' ? 'bucket' : 'solo_proveedor', aviso: typeof j.aviso === 'string' ? j.aviso : null }
+          return { ok: true, terminal: true, status: String(j.status ?? 'failed'), error: typeof j.error === 'string' ? j.error : null }
+        } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+      },
+    },
     async descargar(url) {
-      if (url.startsWith(PREFIJO_DRY)) { const m = /-(\d{2,5})x(\d{2,5})\.png$/.exec(url); return m ? cuerpoPng(Number(m[1]), Number(m[2])) : pngGeneradoSimulado(1024, 1024) }
+      if (url.startsWith(PREFIJO_DRY)) {
+        if (url.endsWith('.mp4')) return mp4Simulado()
+        const m = /-(\d{2,5})x(\d{2,5})\.png$/.exec(url); return m ? cuerpoPng(Number(m[1]), Number(m[2])) : pngGeneradoSimulado(1024, 1024)
+      }
       try {
         const r = await f(url)
         return r.ok ? Buffer.from(await r.arrayBuffer()) : null

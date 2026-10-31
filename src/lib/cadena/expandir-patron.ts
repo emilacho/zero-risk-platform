@@ -5,7 +5,7 @@
  * y arma el panorama de 12 semanas SIN modelo (filas `esquema`, sin tema); las tandas de 4 semanas se materializan después.
  */
 import { diaDeCampana, fechaDeFila } from './fechas'
-import type { Ajuste, Estrategia, Fase, Fila, FormatosPorRed, PiezaAgente, TandaAgente } from './tipos'
+import type { Ajuste, Estrategia, Fase, Fila, FormatoPermitido, FormatosPorRed, PiezaAgente, TandaAgente } from './tipos'
 
 export interface CampanaFechas { fecha_inicio: string; fecha_fin: string }
 
@@ -13,9 +13,14 @@ export function idDeFila(semana: number, dia: number, slot: string): string {
   return `s${semana}-d${dia}-${slot}`
 }
 
+/**
+ * T8 (31-oct · video sobre la hoja) · un formato que «espera al brazo» SIN sala (`familia` nula) sigue siendo una fila `espera_video` (el brazo no existe para él);
+ * con sala (`familia` = `video_mesa`, DATO de `cadena_formatos_por_red`) la fila es una pieza más: entra al lote, a la hoja y a la mesa de video. Es la única puerta: nada de código decide qué formato tiene sala.
+ */
+export const esperaAlBrazoSinSala = (f: FormatoPermitido | undefined): boolean => !!f && f.produccion === 'espera_brazo' && !f.familia
+
 function esVideo(formatos: FormatosPorRed, red: string, formato: string): boolean {
-  const f = (formatos[red] ?? []).find((x) => x.formato === formato)
-  return f ? f.produccion === 'espera_brazo' : false
+  return esperaAlBrazoSinSala((formatos[red] ?? []).find((x) => x.formato === formato))
 }
 
 /** El panorama: una fila `esquema` por cada slot del patrón y cada semana pedida, dentro de las fechas de la campaña. */

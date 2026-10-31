@@ -13,12 +13,14 @@ import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
-import { armarTarea, pedidoDeAgente, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
-import { direccionDe, especialistasPertinentes, porteroDe } from './directorio'
+import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
+import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, porteroDe } from './directorio'
+import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, type Traduccion } from './traductor'
+import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -86,6 +88,17 @@ const textoDeHechos = (e: Estado): string => {
   return hs.map((h) => `- ${h.texto}${h.fuente ? ` (fuente: ${h.fuente})` : ''}`).join('\n')
 }
 
+/** T6: el método (y las fichas por red) del asiento, leídos de `cadena_config`; cualquier fallo de lectura = sin método, nunca frena el turno */
+async function metodoDelAsiento(P: Puertos, agente: string): Promise<string | undefined> {
+  const cual = ASIENTOS_CON_METODO[agente]
+  const leer = P.mesa?.configDeLaCadena?.bind(P.mesa)
+  if (!cual || !leer) return undefined
+  const intenta = async (k: string): Promise<unknown> => { try { return await leer(k) } catch { return undefined } }
+  const metodos = await intenta('metodos')
+  const fichas = cual === 'fichas_por_red' ? await intenta('fichas_por_red') : undefined
+  return seccionDeMetodo(agente, metodos, fichas, new Date().toISOString()) || undefined
+}
+
 /** el pedido del turno de un agente (puro respecto del libro: sirve igual para la primera entrega y para la reentrega) */
 export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, t: NonNullable<EstadoMesa['turno_abierto']>): Promise<{ agente: string; pedido: Record<string, unknown>; paso: string }> {
   const libro = await P.mesa!.libro(enc.id)
@@ -95,7 +108,8 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const tipo = t.tipo as TipoDeTurno
   let faltanCitas: string | undefined
   if (tipo === 'devolver_citas') faltanCitas = 'algunas especialidades del equipo (revisa cada aporte del tablero)'
-  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
+  const metodo = await metodoDelAsiento(P, t.agente)
+  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(enc.tope_usd) - enc.estado_del_motor.gasto_usd))
   return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4) }) }
@@ -139,7 +153,8 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       const tipo = FAMILIAS_MESA[enc.familia as keyof typeof FAMILIAS_MESA]
       if (!tipo) return fallar(P, enc, `la familia «${enc.familia}» no es de la mesa`)
       if (!direccionDe(dir, tipo)) return fallar(P, enc, `el directorio de la mesa no tiene una dirección creativa activa para «${tipo}» (la pieza no abre)`)
-      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : {}) }
+      // T8 · la mesa de video suma las condiciones de la red y el formato del brief de la hoja (`si_instagram`, `si_tiktok_o_reels`) a las del texto (`si_personas`)
+      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : (() => { const c = [...condicionesDeLaPieza(contextoDe(enc, estadoInicialDeLaMesa(tipo, dir)).brief_texto), ...(tipo === 'video' ? condicionesDelVideo(baseDeLaminas(enc.estado_del_motor).brief) : [])]; return c.length ? { condiciones: c } : {} })()) }
       enc = await guardarMesa(P, enc, est)
     }
     const e = enc.estado_del_motor
@@ -187,9 +202,9 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     // las mesas de la cadena no dibujan nada ni pasan por la jefatura de la pieza: sin imágenes y sin reserva para lo que sigue
     const deCalendario = esDeLaCadena(est.tipo)
     const b = deCalendario ? null : baseDeLaminas(enc.estado_del_motor)
-    // antes de que exista una pieza se cuenta con imágenes generadas (los especialistas de imagen participan); después manda lo que la pieza realmente pide
-    const hayImagenGenerada = deCalendario ? false : est.pieza_texto == null ? true : hayImagenesAGenerar(est.pieza_texto, est.tipo, b!.elementos.map((x) => x.ref))
-    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, ...(deCalendario ? { reserva_posterior_usd: 0 } : {}), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}) })
+    // antes de que exista una pieza se cuenta con imágenes generadas (los especialistas de imagen participan); después manda lo que la pieza realmente pide. El video nunca genera imágenes: el brazo filma.
+    const hayImagenGenerada = deCalendario || est.tipo === 'video' ? false : est.pieza_texto == null ? true : hayImagenesAGenerar(est.pieza_texto, est.tipo, b!.elementos.map((x) => x.ref))
+    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...(deCalendario ? { reserva_posterior_usd: 0 } : {}), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}) })
 
     if (acc.accion === 'cierre_por_tope') {
       await guardarMesa(P, enc, { ...est, fase: 'cerrada' })
@@ -245,10 +260,11 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   }
   const textoPieza = quitarLineasDeNotas(ult.texto)
   const b = baseDeLaminas(enc.estado_del_motor)
-  const tr: Traduccion = traducirPieza(textoPieza, est.tipo, {
-    refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])),
-    preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR,
-  })
+  const opcionesDelTraductor = { preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR }
+  // el VIDEO (parte 2 · 31-oct): la pieza es un GUION; el traductor de láminas no aplica (sin imágenes que generar: el brazo filma)
+  const tr: Traduccion | TraduccionDeGuion = est.tipo === 'video'
+    ? traducirGuion(textoPieza, opcionesDelTraductor)
+    : traducirPieza(textoPieza, est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), ...opcionesDelTraductor })
   if (!tr.ok && tr.pregunta) {
     await P.mesa!.aportar(aporteNuevo(enc, 'traductor', est.direccion, 'devuelve', tr.pregunta, { responde_a: null, profundidad: 0 }))
     await guardarMesa(P, enc, { ...est, preguntas_del_traductor: est.preguntas_del_traductor + 1, cierre_forzado: est.cierre_forzado })
@@ -259,18 +275,27 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     return aTextoParaLaJefatura(P, enc, est, textoPieza, tr.motivo ?? 'no se pudo traducir la pieza')
   }
 
-  const imagenes = tr.imagenes
-  const generadas = imagenes.filter((i) => i.modo === 'generada') as Array<{ ref: string; modo: 'generada'; descripcion: string }>
-  const visual = {
-    imagenes: imagenes.map((i) => (i.modo === 'real' ? { ref: i.ref, modo: 'real', foto_id: i.foto_id, motivo: 'elegida por el equipo' } : i.modo === 'generada' ? { ref: i.ref, modo: 'generada', motivo: 'pedida por el equipo' } : { ref: i.ref, modo: 'ninguna', motivo: 'sin imagen' })),
-    refs_generadas: generadas.map((g) => g.ref), hay_generadas: generadas.length > 0, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa',
+  const otros: Record<string, Record<string, unknown>> = {}
+  let hayGeneradas = false
+  if ('planos' in tr) {
+    otros.guion = { ...tr, texto: textoPieza } as unknown as Record<string, unknown>
+    otros.copy_video = { pie_de_foto: tr.pie_de_foto, hashtags: tr.hashtags }
+    otros.visual_direction = { imagenes: [], refs_generadas: [], hay_generadas: false, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa' }
+    otros.prompts_validos = { por_ref: {}, ninguno: true }
+  } else {
+    const imagenes = tr.imagenes
+    const generadas = imagenes.filter((i) => i.modo === 'generada') as Array<{ ref: string; modo: 'generada'; descripcion: string }>
+    hayGeneradas = generadas.length > 0
+    otros.visual_direction = {
+      imagenes: imagenes.map((i) => (i.modo === 'real' ? { ref: i.ref, modo: 'real', foto_id: i.foto_id, motivo: 'elegida por el equipo' } : i.modo === 'generada' ? { ref: i.ref, modo: 'generada', motivo: 'pedida por el equipo' } : { ref: i.ref, modo: 'ninguna', motivo: 'sin imagen' })),
+      refs_generadas: generadas.map((g) => g.ref), hay_generadas: hayGeneradas, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa',
+    }
+    otros.prompts_validos = { por_ref: Object.fromEntries(generadas.map((g) => [g.ref, { indices: [0], prompts: [{ prompt: g.descripcion, idea_en_una_linea: g.descripcion.slice(0, 120) }] }])), ninguno: false }
+    if (est.tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
+    else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
   }
-  const prompts = { por_ref: Object.fromEntries(generadas.map((g) => [g.ref, { indices: [0], prompts: [{ prompt: g.descripcion, idea_en_una_linea: g.descripcion.slice(0, 120) }] }])), ninguno: false }
-  const otros: Record<string, Record<string, unknown>> = { visual_direction: visual, prompts_validos: prompts }
-  if (est.tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
-  else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
   // bloqueante 1 de CC#3: el libro y las citas llegan a la jefatura (contexto de la revisión) para que juzgue si cada aporte fue real
-  const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, generadas.length > 0, est.condiciones ?? [])
+  const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, hayGeneradas, est.condiciones ?? [])
   const nuevaMesa: EstadoMesa = { ...est, fase: 'traducida', pieza_texto: textoPieza, turno_abierto: null, tablero_para_la_jefatura: tableroParaLaJefatura(libro.map((x) => ({ ...x, texto: quitarLineasDeNotas(x.texto) })), textoPieza, pertinentes) }
   const res = { costo_usd: 0, artefacto: nuevaMesa as unknown as Record<string, unknown>, otros_artefactos: otros }
   const e0 = conMesa(enc.estado_del_motor, nuevaMesa)

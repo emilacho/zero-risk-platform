@@ -61,3 +61,25 @@ export function seccionDelDirectorio(directorio: Tarjeta[], yo: string): string 
   const activos = directorio.filter((t) => t.activo)
   return ['## El equipo (directorio vivo)', ...activos.map(linea)].join('\n\n')
 }
+
+/** palabras que dicen que la pieza muestra personas (rostros, cuerpos, manos): es lo que enciende `si_personas` · deliberadamente literal y corto; una pieza sin estas palabras no llama al especialista de inclusión */
+const PERSONAS = /\b(personas?|gente|rostros?|caras?|comensales?|familias?|ni[ñn]os?|ni[ñn]as?|mujeres?|hombres?|chef|cocineros?|meseros?|mozos?|amigos?|parejas?|sonri\w+|retratos?|people|persons?|faces?|family|kids?|children|women|men|friends|couples?|waiters?)\b/i
+
+/** una frase que niega o prohíbe («No aparecen personas», «sin gente», «VISUAL PROHIBIDO») no cuenta: un brief que EXCLUYE personas no convoca al especialista de inclusión */
+const NIEGA = /\b(no|sin|ni|nunca|nadie|ning[uú]n[ao]?|without|never)\b|prohib/i
+
+/** T6 · las condiciones que la mesa calcula SOLA al abrir una pieza de calendario (carrusel o kit) a partir de su brief; las de la cadena las declara la cadena */
+export function condicionesDeLaPieza(briefTexto: string): string[] {
+  // lo que cuelga de un encabezado «… PROHIBIDO:» (la lista que sigue) es lo que NO debe aparecer
+  const sinProhibido = String(briefTexto ?? '').replace(/prohib[^\n]*\n(?:[ \t]+-[^\n]*\n?)*/gi, '')
+  // la negación cuenta solo si está PEGADA a la palabra de persona (las 4 palabras de antes, dentro de la misma frase): «No aparecen personas» niega; «No olvides mostrar a las familias» o «Sin filtros: la gente real» no
+  const frases = sinProhibido.split(/[.\n;:]+/)
+  const hay = (f: string): boolean => {
+    for (const m of f.matchAll(new RegExp(PERSONAS.source, 'gi'))) {
+      const antes = f.slice(0, m.index).trim().split(/\s+/).slice(-4).join(' ')
+      if (!NIEGA.test(antes)) return true
+    }
+    return false
+  }
+  return frases.some(hay) ? ['si_personas'] : []
+}
