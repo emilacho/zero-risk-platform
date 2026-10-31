@@ -232,6 +232,8 @@ describe('ORDEN PASO A · Whimsy en las piezas con condición, carousel-designer
     expect(condicionesDeLaPieza('Plato', 'La marca no es divertida pero sí cálida')).toEqual([])
     // tabla de la certificación de CC3 (paso A): nada de esto es un tono lúdico pedido
     for (const t of ['Evita el humor y las bromas.', 'Tono serio; humor fuera.', 'Los pedidos ocurren a la hora del almuerzo.', 'Está en juego la reputación de la marca.', 'Un juego de luces cálidas en la mesa.', 'No usar humor.', 'Sin humor ni bromas', 'Nada de bromas: la marca es seria']) expect(condicionesDeLaPieza('Plato del día', t)).toEqual([])
+    // una fila por palabra de la negación (CC3 · menores del paso A)
+    for (const t of ['Excluye el humor', 'Descartamos las bromas', 'Avoid humor', 'Nada de humor', 'El humor excluido', 'Descartado el humor', 'Jokes out, humor out']) expect(condicionesDeLaPieza('Plato del día', t)).toEqual([])
     // y lo que SÍ lo pide sigue encendiendo
     for (const t of ['Tono divertido y cercano', 'Con juegos de palabras en los títulos', 'Marca ocurrente y juguetona', 'Playful, witty tone', 'Queremos sorprender con humor']) expect(condicionesDeLaPieza('Plato del día', t)).toEqual(['si_whimsy'])
   })
