@@ -4,7 +4,7 @@
 --      · `marketing_short_video_editing_coach` (tarjeta NUEVA): la ÚNICA voz del gancho final, con el método `short-video-scripter` pegado a su tarea (FIRMA 01-nov «hoja sin reja» punto 1; la misma voz que la FIRMA del 31-oct fijó en la cadena).
 --      Ya estaban (2008): `design-visual-storyteller` (`video`, storyboard) · `tiktok-strategist` (`video:si_tiktok_o_reels`).
 --      `marketing_video_optimization_specialist` (retención) SALE del video corto: su marca `video` pasa a `video_largo`, la familia propia del video largo de YouTube (FIRMA 01-nov punto 4; sala pendiente).
---      Las condiciones `si_instagram` y `si_tiktok_o_reels` las calcula la mesa al abrir, del brief de la hoja (`condiciones-de-video.ts`). El encanto de marca (whimsy) entra por 202611011300.
+--      Las condiciones `si_instagram` y `si_tiktok_o_reels` las calcula la mesa al abrir, del brief de la hoja (`condiciones-de-video.ts`). El encanto de marca (whimsy, FIRMA 01-nov punto 2) es de CC#2: 202610312013 (`si_whimsy`, carrusel y kit); en video queda pendiente.
 --   2) la plantilla `video_mesa`: NACE INACTIVA (derivada por código de `plantillas/video-mesa.ts`; una prueba la mantiene igual a este dato). La enciende la config (`familias_activas`) cuando Emilio dé «dale».
 --   3) `oficina_gastos`: el concepto `video` (lo que cobra el brazo entra al libro de la oficina).
 --   ORDEN: DESPUÉS de 202610312008 (las tarjetas de video-editor y retención deben existir). NO APLICADA: se aplica en la publicación única (T9).

@@ -89,7 +89,7 @@ describe('el equipo de la mesa de video es dato del directorio (2008 + 2012)', (
     expect(especialistasPertinentes(TRAS_2012, 'video', false, []).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_short_video_editing_coach', 'video-editor'])
     expect(especialistasPertinentes(TRAS_2012, 'video', false, [SI_INSTAGRAM]).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_instagram_curator', 'marketing_short_video_editing_coach', 'video-editor'])
     expect(especialistasPertinentes(TRAS_2012, 'video', false, [SI_INSTAGRAM, SI_TIKTOK_O_REELS]).sort()).toEqual(['content-creator', 'design-visual-storyteller', 'marketing_instagram_curator', 'marketing_short_video_editing_coach', 'tiktok-strategist', 'video-editor'])
-    // la retención aporta en el video largo (familia propia, FIRMA 01-nov); el analista de mercado no (FIRMA 5); nadie de carrusel se cuela; whimsy entra recién con 202611011300
+    // la retención aporta en el video largo (familia propia, FIRMA 01-nov); el analista de mercado no (FIRMA 5); nadie de carrusel se cuela; whimsy en video queda pendiente (CC#2 2013 cubre carrusel y kit)
     for (const a of especialistasPertinentes(TRAS_2012, 'video', true, [SI_INSTAGRAM, SI_TIKTOK_O_REELS])) expect(['carousel-designer', 'design-image-prompt-engineer', 'inclusive-visuals-specialist', 'whimsy-injector', 'market_research_analyst', 'marketing_video_optimization_specialist']).not.toContain(a)
     expect(TRAS_2012.find((x) => x.agente === 'marketing_video_optimization_specialist')!.pertinente_en).toEqual(['video_largo'])
     // antes de 2012 el video no tenía ni guion ni pie: la migración es necesaria
