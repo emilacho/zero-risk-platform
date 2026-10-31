@@ -19,6 +19,12 @@ describe('leer un brief de la parte (texto real del cliente piloto, extracto)', 
     expect(b.prohibido).toContain('premium'); expect(b.prohibido).toHaveLength(10)
     expect(b.negativos).toHaveLength(3)
   })
+  it('lee «MENSAJE (uno)» (31-oct: la aclaración en minúsculas entre paréntesis dejaba el mensaje SIEMPRE vacío); otras líneas en minúsculas no son campos', () => {
+    const m = parsearBrief('### X-01 · Instagram · imagen\n- QUÉ ES: a\n- MENSAJE (uno): Pídelo hoy.\n- VISUAL (capa): b\n- nota: no es campo\n- LÍMITES: 4:5\n', 'X-01')!
+    expect(m.mensaje).toBe('Pídelo hoy.')
+    expect(m.que_es).toBe('a'); expect(m.limites).toBe('4:5')
+    expect(b.mensaje).not.toBe('')
+  })
   it('lo que el brief no trae queda vacío (nada se inventa)', () => {
     expect(b.visual_obligatorio).toEqual([]); expect(b.visual_prohibido).toEqual([])
   })

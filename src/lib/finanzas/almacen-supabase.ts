@@ -19,11 +19,19 @@ export function almacenDeFinanzas(db: Db): PuertosDeTablero {
       const r = ok(await db.from('finanzas_config').select('estado,clientes_ensayo,preguntas_slack,conversa').eq('id', 1).maybeSingle(), 'leer la configuración') as Fila | null
       // sin fila o con un valor raro: APAGADA (la dirección segura)
       const estado = r && ['apagada', 'ensayo', 'encendida'].includes(String(r.estado)) ? (String(r.estado) as ConfigDeFinanzas['estado']) : 'apagada'
+      // oficina de marketing (F2 31-oct): el redactor del plan es DATO de la cadena (`cadena_config.planeacion = { redactor }`); sin fila o mal formado, la plantilla usa su omisión
+      // el redactor es OPCIONAL: si la tabla no existe, no se puede leer o la fila falta, la plantilla usa su omisión (jefe-marketing) y la configuración financiera sigue legible (aviso de CC2 31-oct: una base sin `cadena_config` dejaba `config_ilegible`)
+      let p: { valor?: unknown } | null = null
+      try { p = ok(await db.from('cadena_config').select('valor').eq('clave', 'planeacion').maybeSingle(), 'leer el redactor del plan') as { valor?: unknown } | null } catch { p = null }
+      // reserva 5 de CC3 (31-oct): solo un slug de agente (`[a-z0-9_-]`); cualquier otro texto se ignora (omisión). Si el slug no existe como agente, run-sdk lo rechaza y el turno del planteo queda `fallo` declarado (mismo camino que la respuesta fuera de esquema).
+      const crudo = p && p.valor && typeof p.valor === 'object' && !Array.isArray(p.valor) && typeof (p.valor as { redactor?: unknown }).redactor === 'string' ? (p.valor as { redactor: string }).redactor.trim() : ''
+      const redactor = /^[a-z0-9][a-z0-9_-]{1,59}$/.test(crudo) ? crudo : undefined
       return {
         estado,
         clientes_ensayo: Array.isArray(r?.clientes_ensayo) ? (r!.clientes_ensayo as string[]) : [],
         preguntas_slack: r && ['apagado', 'borrador', 'envia'].includes(String(r.preguntas_slack)) ? (String(r.preguntas_slack) as ConfigDeFinanzas['preguntas_slack']) : 'apagado',
         conversa: r && ['apagado', 'ensayo', 'enciende'].includes(String(r.conversa)) ? (String(r.conversa) as ConfigDeFinanzas['conversa']) : 'apagado',
+        ...(redactor ? { redactor } : {}),
       }
     },
     async guardarTablero(t) {
