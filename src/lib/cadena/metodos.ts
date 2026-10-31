@@ -59,12 +59,14 @@ export const METODO_CALENDARIO_POR_OMISION: string = [
   ]),
 ].join('\n')
 
-/** la llave de configuración: `cadena_config.metodos` = `{ calendario: true | false | '<texto que reemplaza al de omisión>', gancho: idem }` */
+/** la llave de configuración: `cadena_config.metodos` = `{ <método>: true | false | '<texto que reemplaza al de omisión>' }` · una llave por método */
 export const CLAVE_DE_METODOS = 'metodos'
-type ConfigDeMetodos = Partial<Record<'calendario' | 'gancho', unknown>>
+/** los métodos firmados (31-oct 20:01Z calendario + gancho · 20:29Z brief, mercado, pieza, fichas_por_red, plan) · `autocontrol` (content-humanizer) espera la verificación de CC#3 */
+export type ClaveDeMetodo = 'calendario' | 'gancho' | 'brief' | 'mercado' | 'pieza' | 'fichas_por_red' | 'plan'
+type ConfigDeMetodos = Partial<Record<ClaveDeMetodo, unknown>>
 
 /** el texto del método a usar: el de omisión (encendido), `null` si está apagado (`false`), o el texto de reemplazo si la configuración trae uno; si la configuración no se puede leer, el de omisión */
-export function metodoSegunConfig(config: unknown, cual: 'calendario' | 'gancho', porOmision: string): string | null {
+export function metodoSegunConfig(config: unknown, cual: ClaveDeMetodo, porOmision: string): string | null {
   const c = config && typeof config === 'object' ? (config as ConfigDeMetodos)[cual] : undefined
   if (c === false) return null
   if (typeof c === 'string' && c.trim()) return c.trim()
@@ -158,4 +160,202 @@ export function tareaDeGanchoDeVideo(p: PedidoDeGanchoDeVideo): string {
     '',
     `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${p.referencias.length ? p.referencias.map((r) => `- ${r.id}: ${r.texto.replace(/\s+/g, ' ').slice(0, 280)}`).join('\n') : '(no hay referencias: no escribas datos concretos)'}`,
   ].join('\n')
+}
+
+// ───────────────────────────────────────────────────────── FIRMA 2 (31-oct 20:29Z · `FIRMA-EMILIO-metodos-para-nuestros-agentes`) · cinco métodos más, GUÍA y no formato
+
+/** procedencia fijada del segundo repositorio (MIT) · `marketing-plan` solo como lista de control del plan */
+export const METODOS_ORIGEN_COREY = {
+  repositorio: 'coreyhaines31/marketingskills',
+  commit: '88c79f6528a9347420e57ceb1fff9a60de651768',
+  fecha: '2026-10-30T23:28:36Z',
+  licencia: 'MIT',
+  rutas: { plan: 'skills/marketing-plan/SKILL.md' },
+} as const
+/** rutas de los cuatro métodos de aaron de la firma 2 (mismo commit que `METODOS_ORIGEN`) */
+export const RUTAS_FIRMA_2 = {
+  brief: 'launch/assemble/message-house-builder/SKILL.md',
+  mercado: 'narrative/trace/audience-belief-mapper/SKILL.md',
+  pieza: 'social/craft/social-creative-builder/SKILL.md',
+  fichas_por_red: 'social/explore/platform-norm-profiler/SKILL.md',
+} as const
+/** `content-humanizer` (alirezarezvani/claude-skills · MIT): firmado como AUTOCONTROL del creador, pero NO se construye hasta que CC#3 verifique (US$ 0, sin su script Python, en cualquier idioma) */
+export const AUTOCONTROL_PENDIENTE = {
+  metodo: 'content-humanizer',
+  repositorio: 'alirezarezvani/claude-skills',
+  ruta: 'marketing-skill/skills/content-humanizer/SKILL.md',
+  estado: 'pendiente de verificación de CC#3 antes de construir (firma 20:29Z, punto 7)',
+} as const
+
+/** la regla común de la firma 2: el agente razona con el método; no rellena casillas; el formato de salida lo fija el pedido, nunca el método */
+export const GUIA_NO_FORMATO = 'Esta capa es GUÍA, no formato obligatorio: razona con ella y úsala donde sume; no rellenes casillas ni cambies el formato de salida que fija el pedido.'
+
+const cabecera = (nombre: string, origen: { repositorio: string; commit: string; licencia: string }) =>
+  `# MÉTODO (capa local · ${nombre} · ${origen.repositorio} @ ${origen.commit.slice(0, 7)} · ${origen.licencia})`
+
+/** brief · `campaign-brief-agent` + `message-house-builder`: la casa del mensaje (techo + tres pilares con prueba) detrás del brief creativo de una campaña */
+export const METODO_BRIEF_POR_OMISION: string = [
+  cabecera('message-house-builder', METODOS_ORIGEN),
+  GUIA_NO_FORMATO,
+  lineas([
+    'La casa del mensaje: un TECHO (el mensaje único del brief, en una frase que el público entienda sin contexto) sostenido por TRES PILARES de valor, cada uno rastreable al plan o al manual (cita de dónde sale). Dos mensajes = ninguno; cuatro pilares = tres y uno que sobra.',
+    'Cada pilar lleva su PRUEBA: un hecho del material del cliente (dato con referencia), un hecho del plan, o «[sin fuente]». Nunca presentes como hecho lo que no tenga referencia; nunca inventes una comparación ni una cifra para llenar un pilar: va a «Faltantes».',
+    'Números antes que adjetivos, pero solo números con referencia; si no hay número, deja el adjetivo fuera y declara el hueco.',
+    'La prueba de la silla vacía: lee el brief como el público que el plan describe; cada frase que a esa persona no le importa, sobra.',
+    'Ángulos por red, no copia: el objetivo por red del brief es un ÁNGULO (qué pilar lidera y qué acción pide) para que la pieza de cada red diga lo mismo con otra forma. Lo que el anuncio, la página y la oferta prometan tiene que ser lo mismo.',
+    'Las palabras prohibidas del manual y las muletillas vacías («único», «el mejor», «revolucionario», «de calidad») no sostienen un pilar: si un pilar solo se sostiene con ellas, no es un pilar.',
+    'No adjudicas promesas: lo comparativo o lo que afirma un resultado sin referencia queda marcado «[sin fuente]» en «Faltantes»; la jefatura y el humano deciden, no tú.',
+  ]),
+].join('\n')
+
+/**
+ * mercado · `market_research_analyst` + `audience-belief-mapper`: del «informe de tendencias» a las creencias, objeciones y fuerzas de cambio del público, CON fuente y fecha.
+ * Ojo con el contrato del brazo: una señal cuenta SOLO si su línea de lista trae fuente Y fecha (`esSenal`); lo inferido no es señal y se declara aparte.
+ */
+export const METODO_MERCADO_POR_OMISION: string = [
+  cabecera('audience-belief-mapper', METODOS_ORIGEN),
+  GUIA_NO_FORMATO,
+  lineas([
+    'Ancla al público que el plan describe (un segmento con dolor, alcance y capacidad de pago), nunca «todos»: una señal sobre «la gente en general» no sirve al plan.',
+    'Qué buscar, además de la tendencia: (1) CREENCIAS y modelos mentales que ese público ya tiene sobre el problema, las alternativas y la categoría; (2) OBJECIONES que se repiten, con cuántas fuentes las mencionan y un reencuadre candidato (un ángulo, no una promesa); (3) las CUATRO FUERZAS del cambio: empuje (qué duele del statu quo), atracción (qué atrae de lo nuevo), ansiedad (qué asusta de cambiar), hábito (qué lo retiene donde está).',
+    'Cada creencia, objeción o fuerza que presentes como señal va en UNA línea de lista con su fuente (nombre y dónde se puede ver) y su fecha, como pide el pedido; sin fuente y fecha no es señal: es inferencia, y la declaras como tal fuera de la lista.',
+    'Conserva las palabras literales del público cuando la fuente las trae (cómo nombran el problema, cómo objetan): esas frases valen más que tu paráfrasis.',
+    'Lo comparativo o lo que afirme un hecho del producto o de un competidor sin fuente queda marcado «[sin fuente]»; registras quién lo dice, nunca si es verdad.',
+    'Si para una fuerza u objeción no hay evidencia, escribe «sin dato» y qué habría que mirar; no estimes.',
+  ]),
+].join('\n')
+
+/** pieza · `content-creator` + `social-creative-builder`: una idea → piezas nativas por red; nunca la misma copia en dos redes */
+export const METODO_PIEZA_POR_OMISION: string = [
+  cabecera('social-creative-builder', METODOS_ORIGEN),
+  GUIA_NO_FORMATO,
+  lineas([
+    'Una idea, N piezas NATIVAS: cada red recibe su forma (hilo o texto corto, tono profesional o conversacional, pie con o sin enlace) según la FICHA DE LA RED si la hay; nunca pegues el mismo texto en dos redes.',
+    'Elige el gancho por red de una taxonomía con nombre (pregunta · a contracorriente · cifra · historia · brecha de curiosidad · prueba · punto de vista) y cumple lo que el gancho promete: una brecha de curiosidad que el cuerpo no cierra es un defecto, no un estilo.',
+    'El enlace va donde la ficha de la red diga (en el texto o en el primer comentario); si no hay ficha o está vencida, dilo y no inventes la norma.',
+    'Carrusel: roles de lámina (gancho · contenido · cierre con la llamada), presupuesto de texto por lámina ≈ 70 % del máximo de la red (supuesto de partida: deja margen al dibujo), zona segura del texto y UNA línea de texto alternativo por lámina.',
+    'Lista negativa: nada de mecánicas de cebo («dale like», «etiqueta a», «comparte para ganar»; una pregunta genuina sí vale), nada de desajuste gancho/cuerpo, nada de etiquetas de relleno (cada hashtag se gana su lugar según la ficha).',
+    'Promesas y datos solo con referencia; lo que no la tenga va a pendientes, no a la pieza. El aviso de contenido pagado o sintético va donde la red lo exige.',
+  ]),
+].join('\n')
+
+/** fichas por red · `marketing_instagram_curator` + `platform-norm-profiler`: la ficha de cada red es DATO fechado que caduca */
+export const METODO_FICHAS_POR_RED_POR_OMISION: string = [
+  cabecera('platform-norm-profiler', METODOS_ORIGEN),
+  GUIA_NO_FORMATO,
+  lineas([
+    'Una FICHA por red, como dato: límites de caracteres, corte visible («ver más»), normas de etiquetas, formatos y proporciones, dónde va el enlace y el primer comentario, etiquetas de divulgación (pagado, sintético) y énfasis conocidos del algoritmo.',
+    'Cada fila lleva su tipo: DOCUMENTADA (fuente oficial de la red, con dónde se lee y fecha de lectura) o FOLCLORE (fuente nombrada, no oficial). El folclore nunca es regla: es supuesto de partida.',
+    'Cada fila y cada ficha llevan fecha de verificación y fecha de revisión (90 días por omisión; menos para lo que cambia rápido). Una ficha pasada su fecha de revisión está VENCIDA: se marca y no se confía hasta re-verificarla.',
+    'No inventes una norma que no puedas citar; si no hay fuente, la fila va como «sin dato» y la pieza se hace con lo conservador.',
+    'Lo que la ficha diga manda sobre el folclore de la red («mejor hora», «largo ideal») y sobre lo que recuerdes de memoria.',
+  ]),
+].join('\n')
+
+/**
+ * plan · `jefe-marketing` + `marketing-plan` (Corey) SOLO como LISTA DE CONTROL: superficies que un plan de 90 días no puede omitir y señales de plan genérico.
+ * Adaptado a una agencia agnóstica de rubro (el original es de software): las etapas se nombran en lenguaje de cualquier negocio.
+ * Es dato (`cadena_config.planeacion.lista_de_control` · migración 202610312006, en copia hasta T9); aquí vive el texto por omisión.
+ */
+export const LISTA_DE_CONTROL_DEL_PLAN: string = [
+  cabecera('marketing-plan (lista de control)', METODOS_ORIGEN_COREY),
+  'Lista de control, no formato: revisa que tu plan cubra cada superficie o diga explícitamente por qué no aplica a este negocio. No agregues secciones por cumplir.',
+  lineas([
+    'Resumen ejecutivo que se sostenga solo: las 3 apuestas grandes, las prioridades de 90 días y el resultado esperado, legible en un minuto.',
+    'Marco estratégico: en qué categoría compite el negocio, quién es exactamente el público (no «todos») y las reglas de voz del manual que ninguna sección puede romper.',
+    'Estado actual: equipo real, presupuesto real, lo que ya se hizo (reconocido, no ignorado), lo que está en marcha y lo que está trabado.',
+    'Cómo nos conocen (adquisición): canales actuales, planeados y descartados con motivo; movimientos de 90 días.',
+    'Primera experiencia (activación): qué pasa la primera vez que alguien llega, compra o entra; qué lo convierte.',
+    'Vuelven (retención): qué hace que el cliente repita; qué evita que se vaya; cómo se recupera al que se fue.',
+    'Recomiendan (referidos): qué mecanismo concreto hace que un cliente traiga a otro.',
+    'Ingresos: precios, paquetes, ventas adicionales; el número que el plan persigue y la meta por semana que lo mide.',
+    'Hoja de ruta de 90 días por semanas con fechas: desbloquear (semanas 1–2) · cimientos (3–4) · velocidad (5–8) · acumular (9–12); cada movimiento con un responsable, no solo una acción.',
+    'Más allá de los 90 días: qué cambia después y qué lo desbloquea (presupuesto, temporada, equipo).',
+    'Herramientas y canales que ejecutan cada movimiento (los que el negocio tiene, no los que no tiene).',
+    'Lo que NO se hace y por qué: las ideas descartadas con su motivo valen tanto como las elegidas.',
+    'Medición y decisiones abiertas: el indicador principal, los indicadores adelantados, quién decide qué, y las decisiones incómodas nombradas (no escondidas).',
+    'Señales de plan genérico (evítalas): tácticas sin secuencia · recomendar lo que el equipo no puede ejecutar · presupuesto que no existe · frases vacías («construir comunidad», «mejorar el SEO») sin movimiento concreto · ignorar la voz del manual · relleno con ideas que el negocio no necesita · no reconocer lo que ya se hizo.',
+    'Denso, no inflado: si una sección no tiene nada que decir, dilo en una línea. Nombra la pregunta abierta antes que adivinar.',
+  ]),
+].join('\n')
+
+/** el texto por omisión de cada método (una llave por método) */
+export const METODOS_POR_OMISION: Record<ClaveDeMetodo, string> = {
+  calendario: METODO_CALENDARIO_POR_OMISION,
+  gancho: METODO_GANCHO_POR_OMISION,
+  brief: METODO_BRIEF_POR_OMISION,
+  mercado: METODO_MERCADO_POR_OMISION,
+  pieza: METODO_PIEZA_POR_OMISION,
+  fichas_por_red: METODO_FICHAS_POR_RED_POR_OMISION,
+  plan: LISTA_DE_CONTROL_DEL_PLAN,
+}
+/** qué método lleva cada empleado (una dimensión por agente · F5): quien redacta piezas no recibe el método de calendario, y viceversa */
+export const METODO_POR_AGENTE: Readonly<Record<string, ClaveDeMetodo>> = {
+  'social-media-strategist': 'calendario',
+  [AGENTE_GANCHO_DE_VIDEO]: 'gancho',
+  'campaign-brief-agent': 'brief',
+  market_research_analyst: 'mercado',
+  'content-creator': 'pieza',
+  marketing_instagram_curator: 'fichas_por_red',
+  'jefe-marketing': 'plan',
+}
+
+/** el método `cual` para esta corrida (lee `cadena_config.metodos`; cualquier fallo de lectura = el de omisión, encendido) */
+export async function metodoDe(al: Pick<Almacen, 'leerConfig'>, cual: ClaveDeMetodo): Promise<string | null> {
+  let config: unknown = null
+  try { config = await al.leerConfig(CLAVE_DE_METODOS) } catch { config = null }
+  return metodoSegunConfig(config, cual, METODOS_POR_OMISION[cual])
+}
+/** el método del empleado `agente` según la configuración ya leída (`null` = ese empleado no tiene método, o está apagado) · para quien arma la tarea de un asiento de la oficina */
+export function metodoDeAsiento(agente: string, config: unknown): string | null {
+  const cual = METODO_POR_AGENTE[agente]
+  return cual ? metodoSegunConfig(config, cual, METODOS_POR_OMISION[cual]) : null
+}
+
+// ───────────────────────────────────────────────────────── fichas por red como DATO (`cadena_config.fichas_por_red`) · caducan
+
+export interface FilaDeFicha { dato: string; valor: string; tipo: 'documentada' | 'folclore' | 'sin_dato'; fuente: string; verificada_en: string }
+export interface FichaDeRed { red: string; verificada_en: string; revisar_antes_de: string; filas: FilaDeFicha[] }
+export const CLAVE_DE_FICHAS_POR_RED = 'fichas_por_red'
+/** el plazo de revisión por omisión del método (supuesto de partida, en días) */
+export const DIAS_DE_REVISION_DE_FICHA = 90
+const TIPOS_DE_FILA = ['documentada', 'folclore', 'sin_dato']
+
+const esFecha = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}/.test(s) && !Number.isNaN(Date.parse(s))
+
+/** lee `cadena_config.fichas_por_red` (`{ <red>: FichaDeRed }`); lo que no tenga la forma se ignora (una ficha mal escrita no es una ficha) */
+export function leerFichasPorRed(config: unknown): FichaDeRed[] {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return []
+  const out: FichaDeRed[] = []
+  for (const [red, v] of Object.entries(config as Record<string, unknown>)) {
+    const f = v as Partial<FichaDeRed> | null
+    if (!f || typeof f !== 'object' || !esFecha(f.verificada_en) || !esFecha(f.revisar_antes_de) || !Array.isArray(f.filas)) continue
+    const filas = f.filas.filter((x): x is FilaDeFicha => {
+      const y = x as Partial<FilaDeFicha> | null
+      return !!y && typeof y === 'object' && typeof y.dato === 'string' && typeof y.valor === 'string' && TIPOS_DE_FILA.includes(String(y.tipo))
+    })
+    out.push({ red: (typeof f.red === 'string' && f.red) || red, verificada_en: f.verificada_en, revisar_antes_de: f.revisar_antes_de, filas })
+  }
+  return out
+}
+/** ¿la ficha está vencida hoy? (llegó o pasó su fecha de revisión) */
+export const fichaVencida = (f: Pick<FichaDeRed, 'revisar_antes_de'>, hoy: string): boolean => Date.parse(hoy) >= Date.parse(f.revisar_antes_de)
+/** la ficha de una red, con su estado · `null` si no hay */
+export function fichaDeRed(fichas: FichaDeRed[], red: string, hoy: string): { ficha: FichaDeRed; vencida: boolean } | null {
+  const f = fichas.find((x) => x.red.toLowerCase() === red.toLowerCase())
+  return f ? { ficha: f, vencida: fichaVencida(f, hoy) } : null
+}
+/** las fichas en texto para una tarea: cada fila con su tipo y fuente; una ficha vencida se MARCA (el método dice: no se confía); una red sin ficha se declara */
+export function fichasEnTexto(fichas: FichaDeRed[], redes: string[], hoy: string): string {
+  const out = ['# FICHAS POR RED (dato verificado; el folclore es supuesto de partida)']
+  for (const red of redes) {
+    const r = fichaDeRed(fichas, red, hoy)
+    if (!r) { out.push(`## ${red} · SIN FICHA (no inventes la norma; usa lo conservador y dilo)`); continue }
+    out.push(`## ${red} · verificada ${r.ficha.verificada_en.slice(0, 10)} · revisar antes de ${r.ficha.revisar_antes_de.slice(0, 10)}${r.vencida ? ' · VENCIDA: no confiar hasta re-verificar' : ''}`)
+    for (const f of r.ficha.filas) {
+      const sello = [f.tipo, f.fuente || '', f.verificada_en ? String(f.verificada_en).slice(0, 10) : ''].filter(Boolean).join(' · ')
+      out.push(`- ${f.dato}: ${f.valor} [${sello}]`)
+    }
+  }
+  return out.join('\n')
 }

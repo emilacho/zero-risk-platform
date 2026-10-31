@@ -21,6 +21,7 @@ import { hallazgosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, ty
 import { escribirHoja } from './hoja'
 import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, type ConceptoLeido } from './conceptos'
 import { TOTAL_DE_TANDAS } from './constantes'
+import { metodoDe } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 import { reglaDeIdioma, reglaDeRegistro } from './registro'
 import type { Estrategia, FormatosPorRed } from './tipos'
@@ -78,12 +79,14 @@ const canalesEnTexto = (e: Estrategia): string => e.canales.map((c) => `- ${c.re
 
 const reglaDeLengua = (ctx: ContextoDelCliente): string => [reglaDeRegistro(ctx.registro), reglaDeIdioma(ctx.idioma)].filter(Boolean).join(' ')
 
-export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null }): string {
+export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null }): string {
   return [
     '# Qué te pido',
     `Escribe el brief creativo de ESTA campaña (versión ${a.version}) a partir del plan, la estrategia y el manual del cliente. ${reglaDeLengua(a.ctx)}`,
     '',
     REFERENCIA_DEL_BRIEF_CREATIVO,
+    // 31-oct (FIRMA 2 de Emilio · capa local): la casa del mensaje como guía para quien dirige el brief (`campaign-brief-agent`); `cadena_config.metodos.brief` la apaga o reemplaza
+    ...(a.metodo ? ['', '# GUÍA PARA LA DIRECCIÓN DEL BRIEF (campaign-brief-agent · no es formato)', a.metodo] : []),
     ...(a.devolucion ? ['', '# DEVOLUCIÓN (la versión anterior se devolvió por esto; corrígelo, no lo discutas)', a.devolucion] : []),
     ...(a.nota ? ['', '# CAMBIOS PEDIDOS POR EL CLIENTE', a.nota] : []),
     '',
@@ -163,6 +166,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
         ctx, estrategia, version: ultimo.version,
         devolucion: previo?.estado === 'devuelta' && previo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? previo.devolucion_texto : null,
         nota: previo?.estado === 'devuelta' && previo.motivo === MOTIVO_CAMBIOS_DE_EMILIO ? texto(previo.devolucion_texto) : null,
+        metodo: await metodoDe(al, 'brief'),
       }),
       condiciones: condicionesDe(estrategia, await al.formatos()),
     }
@@ -180,7 +184,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   await al.insertarBriefCreativo(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado) }),
+    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief') }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }
