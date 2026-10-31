@@ -140,9 +140,9 @@ describe('«Guardar lo crudo» con el código real · enlaces a documentos y vid
 describe('el constructor del flujo', () => {
   const nuevo = gt.aplicarGuardarTodo(ANTES)
   const cuerpo = (w: { nodes: Array<{ name: string; parameters: { jsCode: string } }> }) => w.nodes.find((n) => n.name === 'Armar el cuerpo del raspador')!.parameters.jsCode
-  it('cambia SOLO los 6 nodos previstos; mismas conexiones y mismos nodos', () => {
+  it('cambia SOLO los 7 nodos previstos; mismas conexiones y mismos nodos', () => {
     const cambiados = nuevo.nodes.filter((n: { name: string }, i: number) => JSON.stringify(n) !== JSON.stringify(ANTES.nodes[i])).map((n: { name: string }) => n.name).sort()
-    expect(cambiados).toEqual(['Armar el cuerpo del raspador', 'Fotos · lista', 'Fotos · revisar', 'Guardar la página', 'Guardar lo crudo', 'apify-web'].sort())
+    expect(cambiados).toEqual(['Armar el cuerpo del raspador', 'Fotos · anotar', 'Fotos · lista', 'Fotos · revisar', 'Guardar la página', 'Guardar lo crudo', 'apify-web'].sort())
     expect(nuevo.connections).toEqual(ANTES.connections); expect(nuevo.nodes.length).toBe(ANTES.nodes.length)
   })
   it('sitio propio hasta 200 páginas y competidor hasta 50, cada uno en SU función; con mapa del sitio, HTML y captura', () => {
@@ -162,5 +162,27 @@ describe('el constructor del flujo', () => {
     expect(nuevo.nodes.find((n: { name: string }) => n.name === 'apify-web').parameters.url).toContain('?timeout=290')
     expect(nuevo.nodes.find((n: { name: string }) => n.name === 'Guardar la página').parameters.jsonBody).toContain('.slice(0, 1000000)')
     expect(() => gt.aplicarGuardarTodo(nuevo)).toThrow()
+  })
+})
+
+describe('«Fotos · anotar» con el código real · una imagen caída no tumba la corrida', () => {
+  async function anotar(metas: Array<Record<string, unknown>>, subidas: unknown[]) {
+    const filasEscritas: Array<Record<string, unknown>> = []
+    const $ = (n: string) => { if (n === 'Fotos · revisar') return { all: () => metas.map((json) => ({ json })) }; throw new Error(n) }
+    const f = new AsyncFunction('$input', '$', '$env', '$json', '$workflow', '$execution', servicio.codigoDeNodo('anotar'))
+    return f.call({ helpers: { httpRequest: async (r: { method: string; body?: Array<Record<string, unknown>> }) => { if (r.method === 'POST') { filasEscritas.push(...(r.body ?? [])); return { statusCode: 201, body: '' } } return { statusCode: 200, body: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]) } } } },
+      { all: () => subidas.map((json) => ({ json })) }, $, { SUPABASE_SERVICE_ROLE_KEY: 'k' }, {}, { id: 'WF' }, { id: '1' }).then((out: unknown) => ({ out, filasEscritas }))
+  }
+  const buena = { client_id: CID, owner_role: 'propio', handle: 'x.ec', post_id: 'captura-1', tipo: 'web_captura', path: 'p.jpg', bytes: 6, magic: 'ffd8ffe0' }
+  it('un 404 de una imagen de sitio o de Mapas se declara (fila no_bajo) y la corrida sigue', async () => {
+    const caida = { client_id: CID, owner_role: 'propio', handle: 'x.ec', post_id: 'web-1', tipo: 'web_imagen', estado: 'no_bajo', causa: 'HTTP 404 · x.ec' }
+    const r = await anotar([{ ...buena, _fallas: [caida], _total: 2 }], [{ statusCode: 200 }])
+    expect(r.filasEscritas).toHaveLength(1)
+    expect(JSON.stringify(r.out)).toContain('"copia_fotos":"ok"')
+  })
+  it('🔴 lo demás sigue siendo falla: un 500, un error de red o un 404 de Instagram siguen tumbando la corrida', async () => {
+    for (const c of [{ tipo: 'web_imagen', causa: 'HTTP 500 · x.ec' }, { tipo: 'web_imagen', causa: 'red · timeout' }, { tipo: 'post', causa: 'HTTP 404 · cdn' }]) {
+      await expect(anotar([{ ...buena, _fallas: [{ ...c, handle: 'h', post_id: 'p' }], _total: 2 }], [{ statusCode: 200 }])).rejects.toThrow(/FOTOS_NO_BAJARON/)
+    }
   })
 })

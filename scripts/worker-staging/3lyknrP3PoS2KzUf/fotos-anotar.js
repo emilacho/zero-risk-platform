@@ -33,7 +33,9 @@ const w = await this.helpers.httpRequest({
   headers: { ...auth, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
 })
 if (w.statusCode >= 300) throw new Error('COPIA_FOTOS_SIN_ANOTAR · la tabla respondió HTTP ' + w.statusCode + ' · ' + JSON.stringify(w.body).slice(0, 200))
-const malas = filas.filter((f) => f.estado !== 'ok').concat(fallasPrevias)
+// 31-oct · una imagen de un SITIO o de Mapas que ya no existe (HTTP 4xx: og:image viejo, foto retirada) se DECLARA en la tabla (no_bajo + causa) pero no tumba la corrida entera: no es una falla del sistema
+const caidaDeSitio = (f) => /^(web_|maps_)/.test(String(f.tipo || '')) && /^HTTP 4\d\d/.test(String(f.causa || ''))
+const malas = filas.filter((f) => f.estado !== 'ok').concat(fallasPrevias).filter((f) => !caidaDeSitio(f))
 if (malas.length) {
   throw new Error('FOTOS_NO_BAJARON · ' + malas.length + ' de ' + total + ' · ' + malas.slice(0, 5).map((f) => f.handle + '/' + f.post_id + ' → ' + f.causa).join(' | '))
 }

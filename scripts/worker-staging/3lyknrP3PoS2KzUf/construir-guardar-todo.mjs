@@ -4,6 +4,7 @@
 //   · «apify-web» → espera hasta 290 s (el límite de la llamada síncrona de Apify es 300 s);
 //   · «Guardar la página» → el texto de todas las páginas cabe hasta 1.000.000 de caracteres (antes 200.000);
 //   · «Guardar lo crudo» → las webs dejan en lo crudo sus enlaces a documentos y videos (`_enlaces`) en vez del HTML, y el límite de lo crudo sube a 5 MB para webs;
+//   · «Fotos · anotar» → una imagen de sitio/Mapas que ya no existe (HTTP 4xx) se declara en la tabla pero no tumba la corrida;
 //   · «Fotos · lista» y «Fotos · revisar» → todas las imágenes de cada página + capturas (lógica `fotosDeSitio` de fotos-contexto-logica.js).
 //   node construir-guardar-todo.mjs <flujo-vivo.json> [salida.json]   → NO toca n8n
 import fs from 'node:fs'
@@ -69,7 +70,7 @@ export function aplicarGuardarTodo(flujo) {
   crudo.parameters.jsonBody = b
 
   // 5 · las fotos
-  for (const [clave, nombre] of [['lista', 'Fotos · lista'], ['revisar', 'Fotos · revisar']]) {
+  for (const [clave, nombre] of [['lista', 'Fotos · lista'], ['revisar', 'Fotos · revisar'], ['anotar', 'Fotos · anotar']]) {
     const x = nodo(nombre)
     const nuevo = codigoDeNodo(clave)
     x.parameters = { ...x.parameters, jsCode: x.parameters.jsCode.includes('\r\n') ? nuevo.replace(/\r?\n/g, '\r\n') : nuevo }
