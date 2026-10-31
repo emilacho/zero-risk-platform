@@ -208,15 +208,16 @@ describe('la puerta con el nuevo orden hace el PRÓXIMO paso que falta, contra l
     expect(String(r.item.nota)).toMatch(/la mesa de concepto abrió/)
   })
 
-  it('idempotente: la segunda pasada no abre otra mesa (la cadena contesta ya_abierta y la oficina no se llama)', async () => {
+  it('idempotente: la segunda pasada no abre otra mesa (la cadena contesta ya_abierta CON el sobre y la oficina lo recibe de nuevo, pero reconoce el mismo encargo)', async () => {
     const m = mundo()
     await desdeAbrir(m, 'brief')
     const antes = m.llamadas.length
     const r = await desdeAbrir(m, 'brief')
-    expect(m.llamadas.slice(antes).map((l) => l.ruta)).toEqual(['/api/cadena/brief'])
+    // desde la T3 de CC1 `ya_abierta` devuelve el sobre (rescata un brief borrador huérfano): la oficina se vuelve a llamar y debe reconocer el mismo encargo
+    expect(m.llamadas.slice(antes).map((l) => l.ruta)).toEqual(['/api/cadena/brief', '/api/oficina/encargos'])
     expect(m.M.encargos.size).toBe(1)
     expect(m.al.briefsCreativos).toHaveLength(1)
-    expect(String(r.item.nota)).toMatch(/ya estaba abierta/)
+    expect(String(r.item.nota)).toMatch(/ya tenía encargo: no se repite/)
     expect(r.item.resultado).toBe('cadena_abierta')
   })
 

@@ -9,9 +9,11 @@
  *       Los CUATRO nodos que tenían el nombre pegado («Pedir el plan al redactor», «Guardar el plan», «JEF · plan · armar B», «JEF · plan · armar C») lo leen de ahí: el rótulo `producing_agent` es el redactor REAL.
  *   C · el brazo «INFORME DE MERCADO» (paso 0 del plan · ruta `/api/planeacion/brazo/mercado` de CC1): `elegir brazos` lo pide SOLO si el disparo trae `con_mercado: true` (ausente = el flujo de hoy, sin gasto nuevo; otro valor se rechaza en «⓪ Llave»).
  *       Rama nueva `Brazo · mercado` → `firma de la rama · mercado` → 4.ª entrada de la junta. Su material viaja como PROPUESTA (rótulo + `es_dato_del_cliente:false` los pone la ruta; la junta y el redactor lo leen genérico).
- * NO incluye el validador de forma del plan (`validador-plan.ts`, de CC1 · todavía no entregado).
+ *   D · el VALIDADOR DE FORMA del plan (ruta `/api/planeacion/validar-plan` de CC1): entre «¿Hay plan?» y «Guardar el plan», SOLO si el disparo trae `validar_forma: true` (ausente = el flujo de hoy; otro valor se rechaza en «⓪ Llave»).
+ *       ok → guarda. No ok la 1.ª vez → UN reintento al redactor con `correccion` pegada al final del pedido (con `force_restart`: sin él el corredor devuelve la respuesta vieja). No ok la 2.ª vez → alerta en Slack + `necesita_humano` y NO se guarda ni sigue.
+ *       Una validación que no se pudo leer DETIENE (no se lee un error como «el plan está bien»).
  */
-import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, leerVivo, nodo, redirigir, si } from './lib.mjs'
+import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
 
 const ID = 'X9F0zp6LQ2xGEYVS'
 const AGENTE_DE_HOY = 'campaign-brief-agent'
@@ -78,11 +80,80 @@ function construirMercado(f) {
   f.connections['firma de la rama · mercado'] = { main: [[{ node: 'Junta · esperar los 3 brazos', type: 'main', index: 3 }]] }
 }
 
+export const CODIGO_VALIDAR = `// VALIDAR · ¿QUÉ DIJO? · la puerta de CC1 mira SOLO la forma del plan (calendario fechado · meta por semana · canales · sin cifras ",77"). El fondo sigue en el chequeo de «¿Llegó la vuelta?» y en la jefatura.
+// ok → el plan pasa INTACTO a «Guardar el plan» · no ok la 1.ª vez ($runIndex 0) → UN reintento con la corrección pegada al pedido · no ok la 2.ª → fallo (alerta + necesita_humano).
+// 🔴 una validación que NO se pudo leer (red, 4xx/5xx, forma rara) DETIENE: nunca se lee como «el plan está bien».
+const plan = $('¿Llegó la vuelta?').last().json
+const r = $input.first().json || {}
+if (r.error && typeof r.error === 'object') throw new Error('PLAN_VALIDADOR_NO_LEGIBLE · la llamada falló antes de recibir respuesta (' + String(r.error.message || r.error.name || 'sin detalle').slice(0, 160) + ') · se DETIENE · el plan sigue en esta corrida')
+const status = Number(r.statusCode)
+const b = r.body && typeof r.body === 'object' ? r.body : {}
+if (status !== 200 || typeof b.ok !== 'boolean') throw new Error('PLAN_VALIDADOR_NO_LEGIBLE · el validador contestó ' + status + ' · ' + String(b.error || 'sin detalle').slice(0, 160) + ' · se DETIENE · el plan sigue en esta corrida')
+const intento = $runIndex + 1
+if (b.ok) return [{ json: Object.assign({}, plan, { veredicto: 'ok', validacion_forma: { ok: true, intentos: intento } }) }]
+const hallazgos = Array.isArray(b.hallazgos) ? b.hallazgos : []
+if (intento === 1) {
+  const base = $('Redactor · elegir').last().json
+  const correccion = typeof b.correccion === 'string' && b.correccion.trim() ? b.correccion.trim() : ''
+  if (!correccion) throw new Error('PLAN_VALIDADOR_NO_LEGIBLE · el validador dijo que el plan no tiene forma pero no trajo la corrección · se DETIENE')
+  return [{ json: Object.assign({}, base, { veredicto: 'reintentar', reintento_forma: true, pedido: base.pedido + '\\n\\n' + correccion, hallazgos: hallazgos }) }]
+}
+return [{ json: { veredicto: 'fallo', hallazgos: hallazgos, intentos: intento, client_id: plan.client_id || null, client_name: plan.client_name || null, caracteres: plan.caracteres || 0 } }]
+`
+
+export const CODIGO_ALERTA_FORMA = `// VALIDAR · ARMAR LA ALERTA · el plan volvió sin forma DOS veces (1 reintento gastado) · no se guarda ni sigue · el aviso dice qué hacer
+const v = $input.first().json
+const lista = (v.hallazgos || []).slice(0, 8).map((h) => '  - ' + String(h.que || '?') + (h.donde ? ' (' + String(h.donde).slice(0, 80) + ')' : '')).join('\\n') || '  - (sin detalle)'
+return [{ json: { texto: ':rotating_light: *Plan sin forma* — el redactor devolvió el plan sin la forma pedida DOS veces; la corrida de planeación se detuvo.\\n' +
+  '• cliente: \`' + String(v.client_name || v.client_id || '?') + '\`\\n' +
+  '• plan: ' + v.caracteres + ' caracteres · NO se guardó ni siguió a la jefatura\\n' +
+  '• qué le falta:\\n' + lista + '\\n' +
+  '*Qué hacer:* necesita_humano · el texto está en esta corrida de n8n (nodo «¿Llegó la vuelta?») · cópialo antes de que caduque el historial (~4 h) · NO repagues el raspado: reusa el pedido de «Redactor (B4)».', necesita_humano: true, hallazgos: v.hallazgos || [] } }]
+`
+
+export const CODIGO_RESUMEN_FORMA = `// VALIDAR · RESUMEN · la corrida termina acá: el plan sin forma espera a una persona
+const a = $('Validar · armar la alerta').last().json
+return [{ json: { parado_en: 'validar_forma', necesita_humano: true, hallazgos: a.hallazgos || [] } }]
+`
+
+function construirValidador(f) {
+  const ruta = '={{ $env.ZERO_RISK_API_URL || "https://zero-risk-platform.vercel.app" }}/api/planeacion/validar-plan'
+  agregarNodo(f, si('Validar · ¿se pide?', "={{ (function () { try { return $('Webhook · planeacion').first().json.body.validar_forma === true } catch (e) { return false } })() }}"), 'Guardar el plan', -220, 0)
+  agregarNodo(f, http('Validar · pedir', ruta, [{ name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' }, { name: 'Content-Type', value: 'application/json' }],
+    "={{ JSON.stringify({ texto: $('¿Llegó la vuelta?').last().json.texto, workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}", 30000), 'Guardar el plan', -220, 160)
+  agregarNodo(f, codigo('Validar · ¿qué dijo?', CODIGO_VALIDAR), 'Guardar el plan', -220, 320)
+  agregarNodo(f, si('Validar · ¿pasó?', '={{ $json.veredicto }}', 'ok', 'equals', 'string'), 'Guardar el plan', -220, 480)
+  agregarNodo(f, si('Validar · ¿reintenta?', '={{ $json.veredicto }}', 'reintentar', 'equals', 'string'), 'Guardar el plan', -220, 640)
+  agregarNodo(f, codigo('Validar · armar la alerta', CODIGO_ALERTA_FORMA), 'Guardar el plan', -220, 800)
+  const campana = structuredClone(nodo(f, 'Campana · plan sin PDF'))
+  delete campana.id
+  delete campana.position
+  campana.name = 'Validar · alerta'
+  agregarNodo(f, campana, 'Guardar el plan', -220, 960)
+  agregarNodo(f, codigo('Validar · resumen', CODIGO_RESUMEN_FORMA), 'Guardar el plan', -220, 1120)
+  redirigir(f, '¿Hay plan?', 'Guardar el plan', 'Validar · ¿se pide?')
+  conectar(f, 'Validar · ¿se pide?', 'Validar · pedir', 0)
+  conectar(f, 'Validar · ¿se pide?', 'Guardar el plan', 1)
+  conectar(f, 'Validar · pedir', 'Validar · ¿qué dijo?')
+  conectar(f, 'Validar · ¿qué dijo?', 'Validar · ¿pasó?')
+  conectar(f, 'Validar · ¿pasó?', 'Guardar el plan', 0)
+  conectar(f, 'Validar · ¿pasó?', 'Validar · ¿reintenta?', 1)
+  conectar(f, 'Validar · ¿reintenta?', 'Pedir el plan al redactor', 0)
+  conectar(f, 'Validar · ¿reintenta?', 'Validar · armar la alerta', 1)
+  conectar(f, 'Validar · armar la alerta', 'Validar · alerta')
+  conectar(f, 'Validar · alerta', 'Validar · resumen')
+  // el reintento fuerza el reinicio: sin force_restart el corredor devuelve la respuesta vieja
+  const pedir = nodo(f, 'Pedir el plan al redactor')
+  const fr = 'force_restart: ('
+  if (pedir.parameters.jsonBody.split(fr).length !== 2) throw new Error('«Pedir el plan al redactor» ya no trae force_restart una sola vez')
+  pedir.parameters.jsonBody = pedir.parameters.jsonBody.replace(fr, () => 'force_restart: ($json.reintento_forma === true) || (')
+}
+
 export function construirPlaneacion() {
   const f = leerVivo(ID)
   // A · parar_en
   cambiarCodigo(f, '⓪ Llave · Webhook · planeacion', 'return $input.all()',
-    "// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()")
+    "// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · validar_forma: pasa el plan por el validador de forma (US$ 0) antes de guardarlo · solo true/false/ausente\nconst vf = w.body && typeof w.body === 'object' ? w.body.validar_forma : undefined\nif (vf !== undefined && vf !== null && typeof vf !== 'boolean') throw new Error('PLANEACION_VALIDAR_FORMA_INVALIDO · validar_forma solo admite true o false (llegó ' + JSON.stringify(vf).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()")
   agregarNodo(f, si('Parar · ¿corta aquí?', "={{ (function () { try { return $('Webhook · planeacion').first().json.body.parar_en } catch (e) { return null } })() }}", 'guardar_plan', 'equals', 'string'), 'Guardar el plan', 220, 0)
   agregarNodo(f, codigo('Parar · resumen', CODIGO_PARADO), 'Guardar el plan', 440, -120)
   redirigir(f, 'Guardar el plan', 'JEF · armar', 'Parar · ¿corta aquí?')
@@ -90,6 +161,8 @@ export function construirPlaneacion() {
   conectar(f, 'Parar · ¿corta aquí?', 'JEF · armar', 1)
   // C · el brazo de mercado
   construirMercado(f)
+  // D · el validador de forma
+  construirValidador(f)
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
   agregarNodo(f, codigo('Redactor · elegir', CODIGO_ELEGIR), 'Redactor (B4)', 440, 0)

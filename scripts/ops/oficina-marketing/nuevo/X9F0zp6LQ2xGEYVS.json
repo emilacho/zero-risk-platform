@@ -700,7 +700,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ dry_run: (($('Webhook · planeacion').first().json.body || {}).dry_run === true), agent: $json.redactor_elegido, task: $json.pedido, client_id: $json.cliente_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id, callback_url: $execution.resumeUrl, callback_mode: 'runner', force_restart: (($(\"Webhook · planeacion\").first().json.body || {}).force_restart === true || ($(\"Webhook · planeacion\").first().json.body || {}).forceRestart === true) }) }}",
+        "jsonBody": "={{ JSON.stringify({ dry_run: (($('Webhook · planeacion').first().json.body || {}).dry_run === true), agent: $json.redactor_elegido, task: $json.pedido, client_id: $json.cliente_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id, callback_url: $execution.resumeUrl, callback_mode: 'runner', force_restart: ($json.reintento_forma === true) || (($(\"Webhook · planeacion\").first().json.body || {}).force_restart === true || ($(\"Webhook · planeacion\").first().json.body || {}).forceRestart === true) }) }}",
         "options": {
           "timeout": 60000,
           "response": {
@@ -1071,7 +1071,7 @@
         180
       ],
       "parameters": {
-        "jsCode": "// ⓪ LA LLAVE · CC#2 · relevo 15 (2026-10-08) · mismo patrón que `zero-risk/brief` y `zero-risk/pieza` (lección E67).\n// Este flujo GASTA (modelo, Apify, imagen o video) o PUBLICA hacia afuera (redes, correo). Por eso exige la llave de despacho del motor en la cabecera\n// `x-sala-dispatch-key` (la misma `SALA_DISPATCH_KEY` del entorno de n8n; no se copia a ningún otro sitio) y, si falta, se DETIENE antes de tocar nada.\n// Falla CERRADO: sin la llave en el entorno, el flujo queda cerrado. Los disparos con horario (cron) y las llamadas internas entre flujos no pasan por aquí.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta o publica y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta o publica y solo lo despierta la sala · E67.')\n}\n// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()\n"
+        "jsCode": "// ⓪ LA LLAVE · CC#2 · relevo 15 (2026-10-08) · mismo patrón que `zero-risk/brief` y `zero-risk/pieza` (lección E67).\n// Este flujo GASTA (modelo, Apify, imagen o video) o PUBLICA hacia afuera (redes, correo). Por eso exige la llave de despacho del motor en la cabecera\n// `x-sala-dispatch-key` (la misma `SALA_DISPATCH_KEY` del entorno de n8n; no se copia a ningún otro sitio) y, si falta, se DETIENE antes de tocar nada.\n// Falla CERRADO: sin la llave en el entorno, el flujo queda cerrado. Los disparos con horario (cron) y las llamadas internas entre flujos no pasan por aquí.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta o publica y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta o publica y solo lo despierta la sala · E67.')\n}\n// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · validar_forma: pasa el plan por el validador de forma (US$ 0) antes de guardarlo · solo true/false/ausente\nconst vf = w.body && typeof w.body === 'object' ? w.body.validar_forma : undefined\nif (vf !== undefined && vf !== null && typeof vf !== 'boolean') throw new Error('PLANEACION_VALIDAR_FORMA_INVALIDO · validar_forma solo admite true o false (llegó ' + JSON.stringify(vf).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()\n"
       }
     },
     {
@@ -3606,6 +3606,204 @@
       }
     },
     {
+      "id": "dcc07a92-2e21-4417-1a47-f4fb2e30b770",
+      "position": [
+        1670,
+        160
+      ],
+      "typeVersion": 2,
+      "name": "Validar · ¿se pide?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ (function () { try { return $('Webhook · planeacion').first().json.body.validar_forma === true } catch (e) { return false } })() }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "be959b0c-c509-5e1e-6930-80ce8f8cf84b",
+      "position": [
+        1670,
+        320
+      ],
+      "typeVersion": 4.2,
+      "name": "Validar · pedir",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || \"https://zero-risk-platform.vercel.app\" }}/api/planeacion/validar-plan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ texto: $('¿Llegó la vuelta?').last().json.texto, workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "7130fde8-87d4-25e5-bce5-b4ebc57e365a",
+      "position": [
+        1670,
+        480
+      ],
+      "typeVersion": 2,
+      "name": "Validar · ¿qué dijo?",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// VALIDAR · ¿QUÉ DIJO? · la puerta de CC1 mira SOLO la forma del plan (calendario fechado · meta por semana · canales · sin cifras \",77\"). El fondo sigue en el chequeo de «¿Llegó la vuelta?» y en la jefatura.\n// ok → el plan pasa INTACTO a «Guardar el plan» · no ok la 1.ª vez ($runIndex 0) → UN reintento con la corrección pegada al pedido · no ok la 2.ª → fallo (alerta + necesita_humano).\n// 🔴 una validación que NO se pudo leer (red, 4xx/5xx, forma rara) DETIENE: nunca se lee como «el plan está bien».\nconst plan = $('¿Llegó la vuelta?').last().json\nconst r = $input.first().json || {}\nif (r.error && typeof r.error === 'object') throw new Error('PLAN_VALIDADOR_NO_LEGIBLE · la llamada falló antes de recibir respuesta (' + String(r.error.message || r.error.name || 'sin detalle').slice(0, 160) + ') · se DETIENE · el plan sigue en esta corrida')\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nif (status !== 200 || typeof b.ok !== 'boolean') throw new Error('PLAN_VALIDADOR_NO_LEGIBLE · el validador contestó ' + status + ' · ' + String(b.error || 'sin detalle').slice(0, 160) + ' · se DETIENE · el plan sigue en esta corrida')\nconst intento = $runIndex + 1\nif (b.ok) return [{ json: Object.assign({}, plan, { veredicto: 'ok', validacion_forma: { ok: true, intentos: intento } }) }]\nconst hallazgos = Array.isArray(b.hallazgos) ? b.hallazgos : []\nif (intento === 1) {\n  const base = $('Redactor · elegir').last().json\n  const correccion = typeof b.correccion === 'string' && b.correccion.trim() ? b.correccion.trim() : ''\n  if (!correccion) throw new Error('PLAN_VALIDADOR_NO_LEGIBLE · el validador dijo que el plan no tiene forma pero no trajo la corrección · se DETIENE')\n  return [{ json: Object.assign({}, base, { veredicto: 'reintentar', reintento_forma: true, pedido: base.pedido + '\\n\\n' + correccion, hallazgos: hallazgos }) }]\n}\nreturn [{ json: { veredicto: 'fallo', hallazgos: hallazgos, intentos: intento, client_id: plan.client_id || null, client_name: plan.client_name || null, caracteres: plan.caracteres || 0 } }]\n"
+      }
+    },
+    {
+      "id": "07584285-bd47-8c93-fb0c-9c57d98cb8d7",
+      "position": [
+        1670,
+        640
+      ],
+      "typeVersion": 2,
+      "name": "Validar · ¿pasó?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.veredicto }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "aadd080d-a00a-1498-3e82-219bc8a91368",
+      "position": [
+        1670,
+        800
+      ],
+      "typeVersion": 2,
+      "name": "Validar · ¿reintenta?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.veredicto }}",
+              "rightValue": "reintentar",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fa8bc802-d649-5945-64c5-05d1744d0d99",
+      "position": [
+        1670,
+        960
+      ],
+      "typeVersion": 2,
+      "name": "Validar · armar la alerta",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// VALIDAR · ARMAR LA ALERTA · el plan volvió sin forma DOS veces (1 reintento gastado) · no se guarda ni sigue · el aviso dice qué hacer\nconst v = $input.first().json\nconst lista = (v.hallazgos || []).slice(0, 8).map((h) => '  - ' + String(h.que || '?') + (h.donde ? ' (' + String(h.donde).slice(0, 80) + ')' : '')).join('\\n') || '  - (sin detalle)'\nreturn [{ json: { texto: ':rotating_light: *Plan sin forma* — el redactor devolvió el plan sin la forma pedida DOS veces; la corrida de planeación se detuvo.\\n' +\n  '• cliente: `' + String(v.client_name || v.client_id || '?') + '`\\n' +\n  '• plan: ' + v.caracteres + ' caracteres · NO se guardó ni siguió a la jefatura\\n' +\n  '• qué le falta:\\n' + lista + '\\n' +\n  '*Qué hacer:* necesita_humano · el texto está en esta corrida de n8n (nodo «¿Llegó la vuelta?») · cópialo antes de que caduque el historial (~4 h) · NO repagues el raspado: reusa el pedido de «Redactor (B4)».', necesita_humano: true, hallazgos: v.hallazgos || [] } }]\n"
+      }
+    },
+    {
+      "id": "507a2454-a7cd-228c-6a48-f033391d3b9e",
+      "position": [
+        1670,
+        1120
+      ],
+      "typeVersion": 4.2,
+      "name": "Validar · alerta",
+      "type": "n8n-nodes-base.httpRequest",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.texto }) }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "d3143af3-0b5c-6973-68d4-06be51e4f00f",
+      "position": [
+        1670,
+        1280
+      ],
+      "typeVersion": 2,
+      "name": "Validar · resumen",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// VALIDAR · RESUMEN · la corrida termina acá: el plan sin forma espera a una persona\nconst a = $('Validar · armar la alerta').last().json\nreturn [{ json: { parado_en: 'validar_forma', necesita_humano: true, hallazgos: a.hallazgos || [] } }]\n"
+      }
+    },
+    {
       "id": "1c17bb5d-80ac-f843-1b6b-094939a408b2",
       "position": [
         2080,
@@ -4019,7 +4217,7 @@
       "main": [
         [
           {
-            "node": "Guardar el plan",
+            "node": "Validar · ¿se pide?",
             "type": "main",
             "index": 0
           }
@@ -5319,6 +5517,104 @@
             "node": "Junta · esperar los 3 brazos",
             "type": "main",
             "index": 3
+          }
+        ]
+      ]
+    },
+    "Validar · ¿se pide?": {
+      "main": [
+        [
+          {
+            "node": "Validar · pedir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar el plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar · pedir": {
+      "main": [
+        [
+          {
+            "node": "Validar · ¿qué dijo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar · ¿qué dijo?": {
+      "main": [
+        [
+          {
+            "node": "Validar · ¿pasó?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar · ¿pasó?": {
+      "main": [
+        [
+          {
+            "node": "Guardar el plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar · ¿reintenta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar · ¿reintenta?": {
+      "main": [
+        [
+          {
+            "node": "Pedir el plan al redactor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar · armar la alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar · armar la alerta": {
+      "main": [
+        [
+          {
+            "node": "Validar · alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar · alerta": {
+      "main": [
+        [
+          {
+            "node": "Validar · resumen",
+            "type": "main",
+            "index": 0
           }
         ]
       ]

@@ -36,8 +36,8 @@ export async function recorrer(flujo: any, desde: string, entrada: Item, o: { en
     const ctx = entorno(env, historial, item)
     let salida = 0
     if (n.type.endsWith('.code')) {
-      const f = new AsyncFunction('$input', '$', '$env', '$workflow', '$execution', n.parameters.jsCode)
-      const r = await f(ctx.$input, ctx.$, ctx.$env, ctx.$workflow, ctx.$execution)
+      const f = new AsyncFunction('$input', '$', '$env', '$workflow', '$execution', '$runIndex', n.parameters.jsCode)
+      const r = await f(ctx.$input, ctx.$, ctx.$env, ctx.$workflow, ctx.$execution, (historial[nombre] ?? []).length)
       if (!r.length) { pasos.push(nombre); return { pasos, item: null as any, ultimo: nombre, historial, vacio: true } }
       item = r[0].json
     } else if (n.type.endsWith('.if')) {
