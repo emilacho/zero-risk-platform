@@ -12,7 +12,7 @@ import { esVideo, formatoDeVideo } from '@/lib/oficina/video/pedido'
 import { leerBriefCreativo } from '../brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '../conceptos'
 import { esperaAlBrazoSinSala, expandirPatron, idDeFila } from '../expandir-patron'
-import { NOTA_DE_VIDEO_EN_LIMITES, escribirHoja, esFormatoDeVideo, type FilaDeHoja, type InsumosDeLaHoja } from '../hoja'
+import { NOTA_DE_VIDEO_EN_LIMITES, escribirHoja, esFormatoDeVideo, proporcionDe, type FilaDeHoja, type InsumosDeLaHoja } from '../hoja'
 import type { Estrategia, FormatoPermitido, FormatosPorRed } from '../tipos'
 
 const RAIZ = path.join(__dirname, '..', '..', '..', '..', 'supabase')
@@ -94,6 +94,13 @@ describe('la hoja escribe el brief de video y la oficina lo reconoce como video'
     expect(formatoDeVideo(parsearBrief(h.texto_md, 'F1-S1-yt-s1')!)).toBe('short')
     expect(esVideo(parsearBrief(h.texto_md, 'F1-S1-ig-f1')!)).toBe(false)
     expect(h.texto_md.split('### F1-S1-ig-f1')[1].split('###')[0]).not.toContain(NOTA_DE_VIDEO_EN_LIMITES)
+    // A07 (certificación CC3): short y tiktok son 9:16 en la hoja (por omisión del formato), igual que reel/video; la foto sigue 4:5
+    expect(h.texto_md.split('### F1-S1-tt-v1')[1].split('###')[0]).toContain('proporción 9:16 (por omisión del formato video)')
+    expect(h.texto_md.split('### F1-S1-yt-s1')[1].split('###')[0]).toContain('proporción 9:16 (por omisión del formato short)')
+    expect(h.texto_md.split('### F1-S1-ig-f1')[1].split('###')[0]).not.toContain('proporción 9:16')
+    expect(proporcionDe('short')).toEqual({ proporcion: '9:16', por_omision: true })
+    expect(proporcionDe('tiktok')).toEqual({ proporcion: '9:16', por_omision: true })
+    expect(proporcionDe('TikTok').proporcion).toBe('9:16')
   })
   it('sin la migración (familia nula) la hoja lo declara: «sin familia … el sobre saldrá sin sala»; el brief igual es legible', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-ig-r1' })], SIN_SALA))

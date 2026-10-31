@@ -110,6 +110,11 @@ describe('UNA voz de gancho por video (auditoría 5)', () => {
   it('a la retención se le pide UN gancho (la única voz); a video-editor, integrarlo sin proponer otro; a los demás, no proponer gancho', () => {
     expect(tarea('aportar', VOZ_DEL_GANCHO)).toContain('Eres la ÚNICA voz del gancho de este video')
     expect(tarea('aportar', QUIEN_INTEGRA_EL_GANCHO)).toContain('El gancho NO lo propones tú')
+    // A12 (certificación CC3): la otra mitad de «una sola voz»: al guionista se le prohíbe escribir un gancho alternativo y se le dice de quién es
+    expect(tarea('aportar', QUIEN_INTEGRA_EL_GANCHO)).toContain('Nunca escribas un gancho alternativo')
+    expect(tarea('aportar', QUIEN_INTEGRA_EL_GANCHO)).toContain(`lo propone ${VOZ_DEL_GANCHO}`)
+    expect(tarea('responder', QUIEN_INTEGRA_EL_GANCHO)).toContain('Nunca escribas un gancho alternativo')
+    expect(tarea('aportar', VOZ_DEL_GANCHO)).toContain('Un solo gancho, no alternativas')
     expect(tarea('aportar', 'tiktok-strategist')).toContain('No propongas un gancho')
     expect(tarea('aportar', 'content-creator')).toContain('No propongas un gancho')
     expect(tarea('responder', 'tiktok-strategist')).toContain(reglaDelGanchoPara('tiktok-strategist'))
