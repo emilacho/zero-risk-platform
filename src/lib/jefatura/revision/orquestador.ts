@@ -12,7 +12,7 @@ import { estadoInicial, fichaNueva, registrarPaso, siguientePaso, type Artefacto
 import { desacuerdosDe, hayQueAvisar, resolverCierre, textoDelAviso, type Cierre } from './cierre'
 import { validarEntrada, type EntradaDeRevision, type Marcas, type PayloadDeRevision, type SalidaDeRevision } from './contrato'
 import { procesarSalidaDeRevision } from './formatos'
-import { armarPedidoCiego, armarPedidoDeAgente, auditarPedidoDeAgente, tareaDeCorreccion, tareaDeDecision, tareaDeRevisionDeFondo, type FichaParaElDueno } from './pedidos'
+import { armarPedidoCiego, armarPedidoDeAgente, auditarPedidoDeAgente, tareaDeCorreccion, tareaDeDecision, tareaDeRevisionDeFondo, tareaDeRevisionDeLengua, type FichaParaElDueno } from './pedidos'
 import { elegirVersion as elegirVersionPura, esProductoDeUnaRevision, etiquetaDeVersion, MAXIMO_DE_VERSIONES, planDeGuardado, resultadoTrasElegir, type EvaluacionDeVersion, type Etiqueta, type FilaExistente } from './plan'
 import { atiende, casarId, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpinion, duenosDe, normalizarDonde, plantillaDePolitica, topeDelPaso, type Dueno } from './politicas'
 import { ESTADOS_TERMINALES, type CambiosDeRevision, type PasoRegistrado, type Puertos, type Revision } from './puertos'
@@ -106,7 +106,7 @@ async function aplicar(P: Puertos, rev: Revision, pl: Plantilla, indice: number,
   return { ...rev, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso' }
 }
 
-const ROL_DE: (clave: string) => string = (c) => (c === 'revision_fondo' ? 'fondo' : c === 'segunda_mirada' ? 'ciego' : c.startsWith('correccion:') ? 'productor_corrige' : 'productor_decide')
+const ROL_DE: (clave: string) => string = (c) => (c === 'revision_fondo' ? 'fondo' : c === 'revision_lengua' ? 'lengua' : c === 'segunda_mirada' ? 'ciego' : c.startsWith('correccion:') ? 'productor_corrige' : 'productor_decide')
 /** la traza M1 de un paso: namespace `metadata.jefatura` (diseño §6) */
 function trazaM1(rev: Revision, paso: Paso, extra: Datos = {}): Record<string, unknown> {
   return { jefatura: { role: ROL_DE(paso.clave), review_id: rev.id, artifact_type: rev.artifact_type, artifact_id: rev.artifact_id, cycle: 0, nominal_agent: paso.quien, contra_que_ref: rev.policy.contra_que.map((d) => d.clave), policy_snapshot: { artifact_type: rev.policy.artifact_type, reentrega: rev.policy.reentrega, tope_revision_usd: rev.policy.tope_revision_usd }, ...extra } }
@@ -134,6 +134,9 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
   const duenos = duenosDe(rev.productores)
   if (paso.clave === 'revision_fondo') {
     t = tareaDeRevisionDeFondo({ politica: rev.policy, payload: p, tipo, texto, duenos })
+    donde = p.simulacion?.donde ?? duenos.flatMap((d) => (d.comodin ? [] : d.dondes))[0] ?? 'general'
+  } else if (paso.clave === 'revision_lengua') {
+    t = tareaDeRevisionDeLengua({ payload: p, tipo, texto, duenos })
     donde = p.simulacion?.donde ?? duenos.flatMap((d) => (d.comodin ? [] : d.dondes))[0] ?? 'general'
   } else {
     const d = duenoDe(rev, paso)
@@ -276,7 +279,7 @@ export async function recibirResultado(P: Puertos, revisionId: string, n: number
 interface Procesado { res?: ResultadoDePaso; fallido?: string; reintentar?: string }
 
 function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e: Estado): Procesado {
-  if (paso.clave === 'revision_fondo') {
+  if (paso.clave === 'revision_fondo' || paso.clave === 'revision_lengua') {
     const duenosDeLaRevision = duenosDe(rev.productores)
     const dondeNormalizados: string[] = [], dondeAmbiguos: string[] = []
     const fs = (v.fichas as Array<{ que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string }>).map((f, i) => {

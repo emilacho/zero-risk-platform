@@ -3,6 +3,7 @@
  * Una pasada: latido · escalones de las esperas (una sola vez cada uno) · acción al vencer · llamadas colgadas · liberación de video · invariante V21 · avisos AGREGADOS por campaña.
  * El vigía manda los avisos; esta ruta decide cuáles y los devuelve (en ensayo o en seco se REGISTRAN, no se mandan).
  */
+import crypto from 'node:crypto'
 import type { Almacen, EsperaFila } from './almacen'
 import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { escalonQueToca, invarianteDeReloj, type Violacion } from './esperas'
@@ -11,7 +12,10 @@ import { pasarSinRevision } from './revision-jefatura'
 import { retomarPorCantidades } from './pasos'
 import type { Fila } from './tipos'
 
-type Linea = { campana_id: string; texto: string }
+/** `repetible`: un aviso de ESTADO (no de evento): mientras diga lo mismo, sale una sola vez; si cambia, o desaparece y vuelve, sale de nuevo (31-oct, «vigía sin ruido») */
+type Linea = { campana_id: string; texto: string; repetible?: true }
+const huellaDe = (l: Linea): string => crypto.createHash('sha1').update(`${l.campana_id}
+${l.texto}`).digest('hex').slice(0, 16)
 
 export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   // el vigía no es de un cliente: su `workflow_id` tiene que ser uno de los flujos de la cadena
@@ -25,6 +29,8 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
 
   const lineas: Linea[] = []
   const aplicado: string[] = []
+  // en ensayo o en seco los avisos se REGISTRAN, no se mandan (salvo que `alertas_en_ensayo` diga «enviar»); solo lo que de verdad se manda cuenta como ya avisado
+  const enviar = !seco && (estado === 'encendida' || (estado === 'ensayo' && (await al.leerConfig('alertas_en_ensayo')) === 'enviar'))
   // r79 · D3 · los partes de ensayo vencidos se borran solos (mejor esfuerzo: nunca frena el latido)
   try { const n = await al.limpiarPartesSecos(ahora); if (n > 0) aplicado.push(`${n} parte(s) de ensayo vencido(s) borrado(s)`) } catch { /* se barre en la siguiente vuelta */ }
   const previo = await al.leerConfig('ultimo_latido')
@@ -59,7 +65,7 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
     if (!corridas.length || corridas.some((x) => x.estado === 'en_curso')) continue
     const ultima = corridas[corridas.length - 1]
     if (ultima.estado === 'ok') continue
-    lineas.push({ campana_id: c.id, texto: `la campaña quedó en «${c.estado}»: su última llamada (${ultima.paso}, intento ${ultima.intento}) terminó ${ultima.estado} y no hay ninguna en curso. Qué hacer: reenviar el sobre del plan para que la cadena reintente` })
+    lineas.push({ repetible: true, campana_id: c.id, texto: `la campaña quedó en «${c.estado}»: su última llamada (${ultima.paso}, intento ${ultima.intento}) terminó ${ultima.estado} y no hay ninguna en curso. Qué hacer: reenviar el sobre del plan para que la cadena reintente` })
   }
 
   // 2c · una campaña en `necesita_humano` SOLO por cantidades se retoma sola (no llama al modelo ni gasta; ante la duda no toca nada)
@@ -68,7 +74,7 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
     try {
       const r = await retomarPorCantidades(al, c, ahora)
       if (r.retomada) { aplicado.push(`campaña ${c.id} retomada sola (${r.motivo})`); lineas.push({ campana_id: c.id, texto: `la campaña se retomó sola: solo le faltaban cantidades por semana, que viajan como aviso al brief (${r.motivo})` }) }
-    } catch (e) { lineas.push({ campana_id: c.id, texto: `no se pudo intentar retomar la campaña sola: ${String((e as Error)?.message ?? e).slice(0, 160)}` }) }
+    } catch (e) { lineas.push({ repetible: true, campana_id: c.id, texto: `no se pudo intentar retomar la campaña sola: ${String((e as Error)?.message ?? e).slice(0, 160)}` }) }
   }
 
   // 3 · el brazo de video: cuando opera, las filas que esperaban pasan a `validada`
@@ -87,10 +93,14 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
   // 4 · el invariante V21 (con el latido ANTERIOR: así se ve que el vigía estuvo parado) y el latido nuevo
   const violaciones = await violacionesDeReloj(al, ahora, typeof previo === 'string' ? previo : null, latidoMax)
   await al.escribirConfig('ultimo_latido', ahora)
-  for (const v of violaciones) lineas.push({ campana_id: 'sistema', texto: `V21 · ${v.tipo}: ${v.detalle}` })
+  for (const v of violaciones) lineas.push({ repetible: true, campana_id: 'sistema', texto: `V21 · ${v.tipo}: ${v.detalle}` })
 
   // 5 · resumen semanal (pausadas y video en espera): una línea por campaña, no por fila
-  if (cuerpo.resumen === true) {
+  // el resumen sale UNA vez por día (la primera pasada que lo pide): con el vigía cada 30 min el lunes por la mañana serían 24
+  const hoy = ahora.slice(0, 10)
+  const yaHuboResumenHoy = (await al.leerConfig('ultimo_resumen')) === hoy
+  if (cuerpo.resumen === true && !yaHuboResumenHoy) {
+    if (enviar) await al.escribirConfig('ultimo_resumen', hoy)
     for (const c of [...(await al.campanasActivas()), ...(await al.campanasEnEspera())]) {
       const v = Math.max(1, await al.ultimaVersionDeCalendario(c.id))
       const fs = await al.filas(c.id, v)
@@ -99,12 +109,15 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
     }
   }
 
+  // avisos de ESTADO: solo salen los nuevos o los que cambiaron; lo ya avisado y sin cambio no se repite. Nada se oculta: el que cambia sale.
+  const guardadas = new Set(Array.isArray(await al.leerConfig('avisos_vigia')) ? ((await al.leerConfig('avisos_vigia')) as string[]) : [])
+  const vigentes = lineas.filter((l) => l.repetible).map(huellaDe)
+  const aSalir = lineas.filter((l) => !l.repetible || !guardadas.has(huellaDe(l)))
+  if (enviar) await al.escribirConfig('avisos_vigia', vigentes)
   // agregado por campaña: un solo mensaje por campaña y pasada (la protección contra el ruido)
   const porCampana = new Map<string, string[]>()
-  for (const l of lineas) porCampana.set(l.campana_id, [...(porCampana.get(l.campana_id) ?? []), l.texto])
+  for (const l of aSalir) porCampana.set(l.campana_id, [...(porCampana.get(l.campana_id) ?? []), l.texto])
   const alertas = [...porCampana.entries()].map(([campana_id, ls]) => ({ campana_id, lineas: ls }))
-  // en ensayo o en seco los avisos se REGISTRAN, no se mandan (salvo que `alertas_en_ensayo` diga «enviar»)
-  const enviar = !seco && (estado === 'encendida' || (estado === 'ensayo' && (await al.leerConfig('alertas_en_ensayo')) === 'enviar'))
   return { status: 200, cuerpo: { latido: ahora, aplicado, violaciones, alertas, enviar_alertas: enviar } }
 }
 

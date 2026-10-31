@@ -115,6 +115,15 @@ export function tareaDeRevisionDeFondo(a: { politica: PoliticaDeRevision; payloa
   return { task: partes.filter(Boolean).join('\n\n'), indicacion: linea, esquema: 'fichas.v1' }
 }
 
+/** `spell-check-corrector`: SOLO errores de lengua (ortografía, gramática, tildes, puntuación); no cambia contenido, estilo ni voz; respeta el trato del manual. Toda ficha que marque bloquea. */
+export function tareaDeRevisionDeLengua(a: { payload: PayloadDeRevision; tipo: TipoDeRevision; texto: string; duenos: Dueno[] }): { task: string; indicacion: string; esquema: string } {
+  const linea = `Revisas SOLO la lengua de ${tituloDeLoRevisado(a.tipo)}: ortografía, gramática, tildes y puntuación. No cambies el contenido, el estilo ni la voz de la marca; respeta el trato (tú o usted) que fija el manual.`
+  const dondes = a.duenos.flatMap((d) => (d.comodin ? [] : d.dondes))
+  const donde = dondes.length ? `En «donde» pon SOLO una de estas palabras, tal cual: ${unir(dondes.map((d) => `«${d}»`))}. La palabra o frase con el error va en «que».` : 'En «donde» pon el pasaje al que se refiere.'
+  const partes = [linea, `## Lo que revisas (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, bloqueDeContexto(a.payload.contexto ?? []), `${FORMATO_DE_FICHAS} Toda ficha tuya lleva "gravedad":"bloquea" y en "propuesta" el texto ya corregido. ${donde}`, limitesDelFormato('fichas.v1')]
+  return { task: partes.filter(Boolean).join('\n\n'), indicacion: linea, esquema: 'fichas.v1' }
+}
+
 export interface FichaParaElDueno { id: string; que?: string; donde: string; contra_que?: string; propuesta?: string; gravedad?: string; texto_de_la_opinion?: string }
 
 /** el formato de la oficina: `- [id] (gravedad) en donde: qué` (los flujos de n8n leen los ids con una expresión regular sobre `- [id] (bloquea|sugerencia)`) */

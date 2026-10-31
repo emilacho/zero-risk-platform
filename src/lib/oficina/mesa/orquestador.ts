@@ -49,6 +49,17 @@ function contextoDe(enc: Encargo, est: EstadoMesa): ContextoDeTurno {
   return { cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: enc.tope_usd, gasto_usd: enc.estado_del_motor.gasto_usd }
 }
 
+/** lo que pide ESTA pieza según su brief (puro): fotos propias etiquetadas, hechos del cliente, lo más gustado; el portero decide qué hay */
+export function pedidoDeApertura(id: string, red: string | null | undefined, formato: string | null | undefined, protagonista: string | null | undefined, queEs: string | null | undefined): string {
+  const pieza = [id, red, formato].filter(Boolean).join(' · ')
+  return [
+    `Antes de empezar la pieza ${pieza}: trae lo que el cerebro tenga de ESTA pieza.`,
+    protagonista ? `Protagonista del brief: ${protagonista}.` : '',
+    queEs ? `Qué es: ${queEs}.` : '',
+    'Fotos propias etiquetadas, hechos del cliente que la sustenten (precios, horarios, datos verificados) y lo que más ha gustado a su público. Si no hay nada, dilo: la mesa sigue igual.',
+  ].filter(Boolean).join(' ')
+}
+
 const textoDeHechos = (e: Estado): string => {
   const m = materialDe(e)
   const hs = m?.resultado?.hechos ?? []
@@ -125,6 +136,21 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       const { material_pendiente: _p, ...resto } = est.marcas
       void _p
       est = { ...est, marcas: resto }
+      enc = await guardarMesa(P, enc, est)
+    }
+    // 31-oct (ADENDA 2): ANTES del primer turno la mesa se enriquece del cerebro, siempre que exista un portero; nunca la frena (vacío, cercano o tope se anotan en el tablero y sigue)
+    if (est.marcas.apertura_enriquecida !== true) {
+      const portero = porteroDe(est.directorio_congelado)?.agente
+      est = { ...est, marcas: { ...est.marcas, apertura_enriquecida: true } }
+      if (P.cerebro && portero) {
+        const bf = baseDeLaminas(enc.estado_del_motor)
+        const que = pedidoDeApertura(bf.brief.id, bf.brief.red, bf.brief.formato, bf.brief.protagonista, bf.brief.que_es)
+        const ap = await P.mesa.aportar(aporteNuevo(enc, 'oficina-creativa', portero, 'pide', que))
+        if (ap.ok) {
+          enc = await guardarMesa(P, enc, { ...est, marcas: { ...est.marcas, material_pendiente: ap.aporte.id } })
+          return abrirMaterialDeLaMesa(P, enc, pl, [{ que: que.slice(0, 400), para_que: 'abrir la pieza con lo que el cerebro tiene de ella', bloquea: false }])
+        }
+      }
       enc = await guardarMesa(P, enc, est)
     }
     const libro = await P.mesa.libro(enc.id)

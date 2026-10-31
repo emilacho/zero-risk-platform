@@ -26,14 +26,18 @@ export interface PoliticaDeRevision {
   indicacion_fondo: string | null
   chequeos_previos: string[]
   tope_revision_usd: number
-  tope_paso_usd: { revision_fondo?: number; correccion?: number; segunda_mirada?: number; decision?: number }
+  tope_paso_usd: { revision_fondo?: number; revision_lengua?: number; correccion?: number; segunda_mirada?: number; decision?: number }
   destino_cierre: DestinoDeCierre
   reentrega: Reentrega
   is_active: boolean
 }
 
 export const TOPE_MAXIMO_DE_REVISION_USD = 10
-const TOPES_POR_OMISION = { revision_fondo: 0.2, correccion: 0.2, segunda_mirada: 0.5, decision: 0.2 }
+const TOPES_POR_OMISION = { revision_fondo: 0.2, revision_lengua: 0.05, correccion: 0.2, segunda_mirada: 0.5, decision: 0.2 }
+/** el corrector de lengua (Haiku): corrección DURA de ortografía, gramática, tildes y puntuación; no juzga contenido ni estilo (31-oct, decisión de Emilio) */
+export const REVISOR_DE_LENGUA = 'spell-check-corrector'
+/** el paso existe en un tipo SOLO si su política declara su tope (`tope_paso_usd.revision_lengua`) y el tipo tiene re-entrega: es dato, no código */
+export const tieneRevisionDeLengua = (p: PoliticaDeRevision): boolean => p.tope_paso_usd.revision_lengua !== undefined && p.reentrega !== 'ninguna'
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : null)
@@ -57,7 +61,7 @@ export function politicaDeFila(f: Record<string, unknown>): { ok: true; politica
   const docs = esObjeto(f.contra_que) && Array.isArray(f.contra_que.documentos) ? (f.contra_que.documentos as unknown[]).filter((d): d is DocumentoContraElQueSeRevisa => esObjeto(d) && typeof d.clave === 'string' && typeof d.titulo === 'string') : []
   const topes = esObjeto(f.tope_paso_usd) ? f.tope_paso_usd : {}
   const tp: PoliticaDeRevision['tope_paso_usd'] = {}
-  for (const k of ['revision_fondo', 'correccion', 'segunda_mirada', 'decision'] as const) { const v = num(topes[k]); if (v !== null && v >= 0) tp[k] = v }
+  for (const k of ['revision_fondo', 'revision_lengua', 'correccion', 'segunda_mirada', 'decision'] as const) { const v = num(topes[k]); if (v !== null && v >= 0) tp[k] = v }
   return {
     ok: true,
     politica: {
@@ -80,7 +84,7 @@ export function politicaDeFila(f: Record<string, unknown>): { ok: true; politica
   }
 }
 
-export const topeDelPaso = (p: PoliticaDeRevision, paso: 'revision_fondo' | 'correccion' | 'segunda_mirada' | 'decision'): number => p.tope_paso_usd[paso] ?? TOPES_POR_OMISION[paso]
+export const topeDelPaso = (p: PoliticaDeRevision, paso: 'revision_fondo' | 'revision_lengua' | 'correccion' | 'segunda_mirada' | 'decision'): number => p.tope_paso_usd[paso] ?? TOPES_POR_OMISION[paso]
 
 /** los dueños distintos de la revisión, cada uno con los `donde` que le tocan (`*` = comodín: el único dueño de todo, p. ej. el plan) */
 export interface Dueno { agente: string; dondes: string[]; comodin: boolean }
@@ -156,6 +160,10 @@ export function plantillaDePolitica(p: PoliticaDeRevision, productores: Producto
       tope_usd: topeDelPaso(p, 'revision_fondo'), salida: { esquema: 'fichas.v1', reintento_formato: 1 },
     },
   ]
+  if (tieneRevisionDeLengua(p)) {
+    // sus fichas nacen con origen `jefe` y gravedad `bloquea`: las toma la misma corrección del productor, sin rediseñar
+    pasos.push({ clave: 'revision_lengua', tipo: 'agente', quien: REVISOR_DE_LENGUA, condicion: { tipo: 'siempre' }, ronda: 1, entrada: ['revision'], salida_artefacto: 'fichas_lengua', tope_usd: topeDelPaso(p, 'revision_lengua'), salida: { esquema: 'fichas.v1', reintento_formato: 1 } })
+  }
   if (conRe) {
     for (const d of duenos) {
       const c: Condicion = { tipo: 'si_fichas_abiertas', origen: 'jefe', gravedad: 'bloquea', ...sinWildcard(d) }
