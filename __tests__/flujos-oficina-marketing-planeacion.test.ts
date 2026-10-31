@@ -92,6 +92,18 @@ describe('el redactor del plan es un dato', () => {
     expect(r.item).toMatchObject({ redactor_elegido: 'jefe-marketing', indicacion_elegida: 'Escribe tú el plan completo, no delegues.' })
     expect(r.item.pedido).toBe('Escribe tú el plan completo, no delegues.\n\nPEDIDO ORIGINAL')
   })
+  it('firma 2 · la lista de control va DESPUÉS de la indicación y ANTES del pedido; sola, antes del pedido; vacía o de otro tipo, no se pega', async () => {
+    const LISTA = 'Lista de control: ¿hay meta por semana? ¿hay canales?'
+    const con = await elegir({ statusCode: 200, body: [{ valor: { redactor: 'jefe-marketing', indicacion: 'INDICACION', lista_de_control: '  ' + LISTA + '  ' } }] })
+    expect(con.item.pedido).toBe('INDICACION\n\n' + LISTA + '\n\nPEDIDO ORIGINAL')
+    expect(con.item.lista_de_control_elegida).toBe(LISTA)
+    const sola = await elegir({ statusCode: 200, body: [{ valor: { lista_de_control: LISTA } }] })
+    expect(sola.item).toMatchObject({ redactor_elegido: 'campaign-brief-agent', indicacion_elegida: null, pedido: LISTA + '\n\nPEDIDO ORIGINAL' })
+    for (const nada of ['', '   ', 7, null, {}, ['x']]) {
+      const r = await elegir({ statusCode: 200, body: [{ valor: { lista_de_control: nada } }] })
+      expect(r.item).toMatchObject({ pedido: 'PEDIDO ORIGINAL', lista_de_control_elegida: null })
+    }
+  })
   it('🔴 slug mal formado, lectura que falla o respuesta no 200: DETIENEN antes de gastar (no se cae al agente viejo)', async () => {
     for (const malo of ['Jefe Marketing', '../x', 'a', 7, {}, 'x'.repeat(80)]) await expect(elegir({ statusCode: 200, body: [{ valor: { redactor: malo } }] })).rejects.toThrow(/PLANEACION_REDACTOR_INVALIDO/)
     await expect(elegir({ statusCode: 500, body: {} })).rejects.toThrow(/PLANEACION_REDACTOR_NO_LEGIBLE/)

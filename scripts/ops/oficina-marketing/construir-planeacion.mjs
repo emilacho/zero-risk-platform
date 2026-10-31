@@ -31,7 +31,9 @@ const v = filas.length && filas[0] && typeof filas[0].valor === 'object' && fila
 const redactor = v.redactor === undefined || v.redactor === null || v.redactor === '' ? '${AGENTE_DE_HOY}' : v.redactor
 if (typeof redactor !== 'string' || !/${SLUG}/.test(redactor)) throw new Error('PLANEACION_REDACTOR_INVALIDO · cadena_config.planeacion.redactor debe ser un slug de agente (' + JSON.stringify(redactor).slice(0, 80) + ') · se DETIENE antes de gastar')
 const indicacion = typeof v.indicacion === 'string' && v.indicacion.trim() ? v.indicacion.trim() : ''
-return [{ json: { ...b4, redactor_elegido: redactor, indicacion_elegida: indicacion || null, pedido: indicacion ? indicacion + '\\n\\n' + b4.pedido : b4.pedido } }]
+// firma 2 (31-oct): la lista de control del plan es un dato más (cadena_config.planeacion.lista_de_control) · va DESPUÉS de la indicación y ANTES del pedido · ausente = nada se pega
+const lista = typeof v.lista_de_control === 'string' && v.lista_de_control.trim() ? v.lista_de_control.trim() : ''
+return [{ json: { ...b4, redactor_elegido: redactor, indicacion_elegida: indicacion || null, lista_de_control_elegida: lista || null, pedido: [indicacion, lista, b4.pedido].filter(Boolean).join('\\n\\n') } }]
 `
 
 export const CODIGO_PARADO = `// PARAR · RESUMEN · la corrida pidió detenerse después de «Guardar el plan» (parar_en = guardar_plan): el plan YA quedó guardado; no sigue la jefatura, ni el PDF, ni el brief.
