@@ -48,7 +48,7 @@ export async function rutaDespertar(deps: DepsDeDespertar, cuerpo: unknown): Pro
   const dp = esObjeto(rp) && esObjeto(rp.despertar) ? rp.despertar : null
   const completandoPrevio = dp && esObjeto(dp.completando) && typeof dp.completando.desde === 'string' ? dp.completando.desde : null
   const r = await alimentarCliente({
-    db: deps.db, client_id: v.client_id, dry_run: v.dry_run, interruptores: deps.interruptores, llamarModelo: deps.llamarModelo, pulirResumen: deps.pulirResumen, ahora, despertar: true,
+    db: deps.db, client_id: v.client_id, dry_run: v.dry_run, interruptores: deps.interruptores, llamarModelo: deps.llamarModelo, pulirResumen: deps.pulirResumen, ocr: deps.ocr, ahora, despertar: true,
     gasto_de_hoy_usd: g.gasto.total_usd, workflow_id: v.workflow_id || undefined, workflow_execution_id: v.workflow_execution_id || undefined,
   })
   if (r.estado === 'cliente_inexistente') return { status: 404, body: { error: 'cliente_inexistente', detalle: r.detalle } }

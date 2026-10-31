@@ -8,8 +8,11 @@
 import { leerArchivo } from '../cerebro/archivos/leer'
 import { TOPES } from '../cerebro/archivos/topes'
 import type { FilaCruda } from './unidades'
+import { MAX_OCR_POR_CORRIDA, textoUtilDelOcr, type LectorOcr } from './ocr-de-pdf'
 
 export const MAX_PDF_POR_CORRIDA = 5
+/** un escaneado más largo que esto no se manda a leer (cuesta por página): se DECLARA */
+export const MAX_PAGINAS_DE_OCR = 12
 const MS_DE_DESCARGA = 15_000
 
 type Traer = (url: string, init?: RequestInit) => Promise<Response>
@@ -54,6 +57,8 @@ export interface ResultadoDeDocumentos {
   del_sitio: number
   de_competidores: number
   fallidos: Array<{ url: string; causa: string }>
+  /** PDF escaneados leídos con el modelo (OCR) y lo que costó */
+  ocr: { leidos: number; costo_usd: number }
   /** filas con la forma del lector del sitio, para que el camino normal de unidades las lea como una página más del sitio propio */
   filas: FilaCruda[]
 }
@@ -66,9 +71,11 @@ export async function leerDocumentosDeLosSitios(a: {
   guardarDePagina?: (p: { url: string; titulo: string; texto: string; paginas: number; competitor_id: string }) => Promise<boolean>
   max?: number
   leer?: typeof leerArchivo
+  /** lee un PDF escaneado con el modelo; ausente = el escaneado se declara sin leer (ensayo) */
+  ocr?: LectorOcr
 }): Promise<ResultadoDeDocumentos> {
   const cand = pdfsDeLasFilas(a.filas, a.max ?? MAX_PDF_POR_CORRIDA)
-  const res: ResultadoDeDocumentos = { candidatos: cand.length, leidos: 0, del_sitio: 0, de_competidores: 0, fallidos: [], filas: [] }
+  const res: ResultadoDeDocumentos = { candidatos: cand.length, leidos: 0, del_sitio: 0, de_competidores: 0, fallidos: [], ocr: { leidos: 0, costo_usd: 0 }, filas: [] }
   const traer: Traer = a.fetchImpl ?? ((u, i) => fetch(u, i))
   const leer = a.leer ?? leerArchivo
   for (const c of cand) {
@@ -78,15 +85,25 @@ export async function leerDocumentosDeLosSitios(a: {
       const bytes = Buffer.from(await r.arrayBuffer())
       if (bytes.length > TOPES.pdf_bytes) { res.fallidos.push({ url: c.url, causa: `demasiado grande · ${bytes.length} B` }); continue }
       const l = await leer({ nombre: c.nombre, base64: bytes.toString('base64'), tipo: 'pdf' })
-      if (l.estado !== 'ok' || !l.texto.trim()) { res.fallidos.push({ url: c.url, causa: `${l.estado}${l.motivo ? ' · ' + String(l.motivo).slice(0, 100) : ''}` }); continue }
+      let texto = l.texto
+      let paginas = l.paginas ?? 1
+      if (l.estado === 'escaneado' && a.ocr) {
+        if (res.ocr.leidos >= MAX_OCR_POR_CORRIDA) { res.fallidos.push({ url: c.url, causa: 'escaneado · el tope de lecturas OCR de esta corrida ya se usó' }); continue }
+        if ((l.paginas ?? 0) > MAX_PAGINAS_DE_OCR || (!l.paginas && bytes.length > 3 * 1024 * 1024)) { res.fallidos.push({ url: c.url, causa: `escaneado · demasiado largo para leerlo con el modelo (${l.paginas ?? '?'} páginas)` }); continue }
+        const o = await a.ocr(bytes, c.nombre)
+        res.ocr.leidos++; res.ocr.costo_usd = Math.round((res.ocr.costo_usd + o.costo_usd) * 1e6) / 1e6
+        texto = textoUtilDelOcr(o.texto)
+        if (!texto) { res.fallidos.push({ url: c.url, causa: 'escaneado · el modelo no encontró texto legible' }); continue }
+        if (o.cortado) texto += '\n[la transcripción se cortó por el largo del documento]'
+      } else if (l.estado !== 'ok' || !l.texto.trim()) { res.fallidos.push({ url: c.url, causa: `${l.estado}${l.motivo ? ' · ' + String(l.motivo).slice(0, 100) : ''}` }); continue }
       if (c.rol === 'competidor') {
         if (a.guardarDePagina && c.competitor_id) {
-          const ok = await a.guardarDePagina({ url: c.url, titulo: c.nombre, texto: l.texto.slice(0, 1_000_000), paginas: l.paginas ?? 1, competitor_id: c.competitor_id })
+          const ok = await a.guardarDePagina({ url: c.url, titulo: c.nombre, texto: texto.slice(0, 1_000_000), paginas, competitor_id: c.competitor_id })
           if (!ok) { res.fallidos.push({ url: c.url, causa: 'la tabla rechazó la página del competidor' }); continue }
         }
         res.de_competidores++
       } else {
-        res.filas.push({ id: c.fila_id, apify_function: 'website_content_scraper', params: { startUrls: [{ url: c.url }] }, respuesta: [{ url: c.url, text: l.texto, metadata: { title: c.nombre, documento_de: c.pagina } }], ensayo: false, metadata: { llamado_por: 'portero-alimentar#documento' }, created_at: a.ahora.toISOString() } as unknown as FilaCruda)
+        res.filas.push({ id: c.fila_id, apify_function: 'website_content_scraper', params: { startUrls: [{ url: c.url }] }, respuesta: [{ url: c.url, text: texto, metadata: { title: c.nombre, documento_de: c.pagina } }], ensayo: false, metadata: { llamado_por: 'portero-alimentar#documento' }, created_at: a.ahora.toISOString() } as unknown as FilaCruda)
         res.del_sitio++
       }
       res.leidos++

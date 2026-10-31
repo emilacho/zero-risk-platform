@@ -54,3 +54,21 @@ export async function llamarAlModeloConImagen(p: PeticionConImagen): Promise<Res
     messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: p.imagen.tipo, data: p.imagen.base64 } }, { type: 'text', text: p.texto }] }],
   }, p.timeoutMs)
 }
+
+/** una petición con UN documento PDF (en base64) y un texto: la usa la lectura de PDF escaneados (OCR) del portero */
+export interface PeticionConDocumento {
+  model: string
+  max_tokens: number
+  thinking: { type: 'between_tools' }
+  system: string
+  texto: string
+  documento: { base64: string }
+  timeoutMs: number
+}
+
+export async function llamarAlModeloConDocumento(p: PeticionConDocumento): Promise<RespuestaDelModelo> {
+  return enviar({
+    model: p.model, max_tokens: p.max_tokens, thinking: p.thinking, system: p.system,
+    messages: [{ role: 'user', content: [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.documento.base64 } }, { type: 'text', text: p.texto }] }],
+  }, p.timeoutMs)
+}
