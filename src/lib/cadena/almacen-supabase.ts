@@ -143,9 +143,9 @@ export function almacenDeSupabase(): Almacen {
     },
 
     async hallazgosQueBloquean(campanaId, tanda) {
-      const filas = await lista<{ intento: number; severidad: string; fila_id: string | null; ficha: Ficha }>(db.from('cadena_validaciones').select('intento, severidad, fila_id, ficha').eq('campana_id', campanaId).eq('objeto', 'calendario').eq('tanda', tanda).limit(1000))
+      const filas = await lista<{ intento: number; severidad: string; fila_id: string | null; ficha: Ficha; chequeo: string }>(db.from('cadena_validaciones').select('intento, severidad, fila_id, ficha, chequeo').eq('campana_id', campanaId).eq('objeto', 'calendario').eq('tanda', tanda).limit(1000))
       const ultimo = filas.reduce((m, x) => Math.max(m, x.intento), 0)
-      return filas.filter((x) => x.intento === ultimo && x.severidad === 'bloquea').map((x) => ({ ficha: x.ficha, fila_id: x.fila_id }))
+      return filas.filter((x) => x.intento === ultimo && x.severidad === 'bloquea').map((x) => ({ ficha: x.ficha, fila_id: x.fila_id, chequeo: x.chequeo }))
     },
 
     async corridaPorClave(campanaId, paso, k, intento) { return uno<Corrida>(db.from('cadena_corridas').select('*').eq('campana_id', campanaId).eq('paso', paso).eq('clave_idempotencia', k).eq('intento', intento).maybeSingle()) },

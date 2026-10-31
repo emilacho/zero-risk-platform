@@ -211,9 +211,53 @@ describe('el reloj retoma SOLO una campaña frenada únicamente por cantidades',
     const id = await frenada(al, conFrecuencia('facebook', 2), tandaBuena(A))
     const v = Math.max(1, await al.ultimaVersionDeCalendario(id))
     const filas = (await al.filas(id, v)).map((f) => (f.id === 's1-d1-a' ? { ...f, formato: 'foto o reel' } : f))
-    await al.guardarFilas(id, v, 1, filas, true)
+    await al.guardarFilas(id, v, 1, filas)
     await vigia(al)
     expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+  })
+  /** el estado VIEJO real de Náufrago: la regla de léxico anterior guardó V14 con fila (y sacó esas filas) además de los V08 de cantidad */
+  async function conEstadoViejo(al: AlmacenMemoria, id: string, filasQueSalieron: string[], extra: Hallazgo[] = []) {
+    const v = Math.max(1, await al.ultimaVersionDeCalendario(id))
+    await al.cambiarEstadoDeFilas(id, v, filasQueSalieron, 'descartada_sin_fuente')
+    const viejo = (fila: string): Hallazgo => ({ chequeo: 'V14', severidad: 'bloquea', fila_id: fila, alcance: 'fila', ficha: { que: 'la afirmación «de Olón» (origen_lugar) no tiene respaldo', donde: 'fila ' + fila, contra_que: 'x', gravedad: 'bloquea', propuesta: 'x' } })
+    const v08 = hall('V08', 'bloquea', mensajeV08(2, 'facebook', 'feed', 1, 2))
+    await al.guardarValidaciones(id, 'calendario', v, 1, 2, [...filasQueSalieron.map(viejo), v08, ...extra])
+  }
+  it('🔴 el estado viejo REAL (13 V14 de fila + V08 de cantidad guardados): el vigía la retoma sola', async () => {
+    const al = almacen()
+    const id = await frenada(al, conFrecuencia('facebook', 2), tandaBuena(A))
+    await conEstadoViejo(al, id, ['s1-d1-a', 's2-d1-a', 's3-d1-a'])
+    await vigia(al)
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('activa')
+    const filas = await al.filas(id)
+    expect(filas.filter((f) => f.estado === 'descartada_sin_fuente').map((f) => f.id).sort()).toEqual(['s1-d1-a', 's2-d1-a', 's3-d1-a'])
+    expect(filas.filter((f) => f.estado === 'propuesta')).toEqual([])
+  })
+  it('🔴 un V14 viejo cuya fila SIGUE viva con un dato declarado sin fuente: la re-validación lo bloquea y NO se retoma', async () => {
+    const al = almacen()
+    const t = tandaBuena(A)
+    const id = await frenada(al, conFrecuencia('facebook', 2), { ...t, piezas: t.piezas.map((p) => (p.semana === 1 && p.slot === 'b' ? { ...p, datos: [DATO_SIN_REF] } : p)) })
+    await conEstadoViejo(al, id, ['s1-d1-a'])
+    await vigia(al)
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+  })
+  it('un V14 SIN fila guardado (no es el léxico de una fila) no autoriza a retomar', async () => {
+    const al = almacen()
+    const id = await frenada(al, conFrecuencia('facebook', 2), tandaBuena(A))
+    const v = Math.max(1, await al.ultimaVersionDeCalendario(id))
+    await al.guardarValidaciones(id, 'calendario', v, 1, 2, [{ ...hall('V14', 'bloquea', 'algo de tanda'), fila_id: null }, hall('V08', 'bloquea', mensajeV08(2, 'facebook', 'feed', 1, 2))])
+    await vigia(al)
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+  })
+  it('🔴 guardados que NO son de dato ni de cantidad faltante (V02 de fila, V08 de exceso): no autorizan a retomar aunque la re-validación de hoy salga limpia', async () => {
+    for (const raro of [{ ...hall('V02', 'bloquea', 'formato raro'), fila_id: 's1-d1-a' }, hall('V08', 'bloquea', mensajeV08(2, 'instagram', 'feed', 4, 3))]) {
+      const al = almacen()
+      const id = await frenada(al, conFrecuencia('facebook', 2), tandaBuena(A))
+      const v = Math.max(1, await al.ultimaVersionDeCalendario(id))
+      await al.guardarValidaciones(id, 'calendario', v, 1, 2, [raro, hall('V08', 'bloquea', mensajeV08(2, 'facebook', 'feed', 1, 2))])
+      await vigia(al)
+      expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+    }
   })
   it('el paso solo actúa sobre campañas en necesita_humano', async () => {
     const al = almacen()

@@ -387,7 +387,8 @@ export async function retomarPorCantidades(al: Almacen, campana: Campana, ahora:
   if (!pendientes.length) return no('no hay una tanda propuesta esperando')
   const tanda = Math.min(...pendientes.map((f) => f.tanda))
   const bloqueos = await al.hallazgosQueBloquean(campana.id, tanda)
-  const soloCantidad = bloqueos.length > 0 && bloqueos.every((b) => { const c = b.fila_id === null ? leerV08(b.ficha.que) : null; return !!c && c.real < c.meta })
+  // lo guardado por la regla VIEJA: V08 de cantidad faltante y V14 de fila (el léxico, que hoy ya no bloquea). Quien decide es la re-validación de abajo: si queda cualquier bloqueo, no se retoma.
+  const soloCantidad = bloqueos.length > 0 && bloqueos.every((b) => { if (b.fila_id !== null) return b.chequeo === 'V14'; const c = leerV08(b.ficha.que); return !!c && c.real < c.meta })
   if (!soloCantidad) return no('los bloqueos guardados no son solo de cantidad')
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
   const estr = (await al.ultimaEstrategia(campana.id))?.contenido

@@ -151,7 +151,7 @@ export interface Almacen {
   // validaciones
   guardarValidaciones(campanaId: string, objeto: 'estrategia' | 'calendario' | 'brief', version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[], seco: boolean): Promise<void>
   /** r74 · los hallazgos que BLOQUEAN del último intento guardado de una tanda del calendario (para pedir la corrección si la llamada de corrección murió) */
-  hallazgosQueBloquean(campanaId: string, tanda: number): Promise<Array<{ ficha: Ficha; fila_id: string | null }>>
+  hallazgosQueBloquean(campanaId: string, tanda: number): Promise<Array<{ ficha: Ficha; fila_id: string | null; chequeo?: string }>>
   // corridas (guardarraíles 1–5)
   corridaPorClave(campanaId: string, paso: string, clave: string, intento: number): Promise<Corrida | null>
   /** idempotente: si ya existe devuelve la existente con `creada: false` */
