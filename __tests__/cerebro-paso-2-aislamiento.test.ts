@@ -49,6 +49,8 @@ export const PUEDEN_NOMBRARLAS = [
   /^scripts\/audit\/cerebro-tablas-no-las-usa-nadie\.mjs$/,
   /^scripts\/audit\/cerebro-paso-2-verifica-base\.mjs$/,
   /^src\/lib\/cerebro\//,
+  // 31-oct · TENDENCIAS Y REDES: su prueba nombra la URL de la tabla `cerebro_tendencias` (guardado y lectura de tendencias del rubro y de la bodega viral)
+  /^__tests__\/tendencias-y-redes\.test\.ts$/,
   // 28-oct · LA MESA: el tablero del equipo MUESTRA al compañero la lista de fotos propias del cliente (solo LECTURA de las columnas de etiqueta ya cargadas); no escribe nada
   /^src\/lib\/oficina\/mesa\/pedidos\.ts$/,
   /^src\/app\/api\/brain\/portero\//,

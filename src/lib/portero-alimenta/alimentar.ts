@@ -15,6 +15,7 @@ import { fichaPropiaDeMapas } from './mapas-propia'
 import { copiarFotosDeMapasPropia, type ResultadoDeFotosDeMapas } from './fotos-de-mapas-propia'
 import { leerDocumentosDeLosSitios } from './documentos-enlazados'
 import type { LectorOcr } from './ocr-de-pdf'
+import { bodegaDelMundo, tendenciasDelCliente, type InformeDeTendencias } from './tendencias-del-cliente'
 import { completarCapturas, guardarVideos, videosDeLasFilas, type ResultadoDeVideos } from './videos-del-cerebro'
 import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlamada } from './juez'
 import { planDeArchivo, planDeReconfirmaciones, type FichaReconfirmable, type PlanDeArchivo } from './archivar'
@@ -83,6 +84,8 @@ export interface ResultadoDeAlimentar {
   documentos?: { candidatos: number; leidos: number; del_sitio: number; de_competidores: number; fallidos: Array<{ url: string; causa: string }>; ocr?: { leidos: number; costo_usd: number } }
   /** videos guardados como video (31-oct) */
   videos?: ResultadoDeVideos
+  /** tendencias del rubro (embudo) y bodega viral del mundo (31-oct); ausente = apagado (PORTERO_TENDENCIAS) */
+  tendencias?: { cliente: InformeDeTendencias; bodega: InformeDeTendencias }
   /** videos ya guardados a los que se les sacaron las capturas que les faltaban */
   capturas_completadas?: { revisados: number; completados: number; capturas: number; fallidos: Array<{ post_id: string; causa: string }> }
   /** lo que hicieron los nuevos brazos (ausente = ninguno encendido) */
@@ -195,6 +198,18 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
       if (comp.revisados) r.capturas_completadas = comp
       if (candidatos.length) r.videos = await guardarVideos({ clientId: e.client_id, candidatos, urlDeLaBase: entorno.NEXT_PUBLIC_SUPABASE_URL ?? entorno.SUPABASE_URL ?? '', llave: entorno.SUPABASE_SERVICE_ROLE_KEY ?? '', fetchImpl: e.fetch as never })
     } catch (err) { r.errores.push(`videos: ${err instanceof Error ? err.message : String(err)}`) }
+    // 31-oct · las TENDENCIAS del rubro (embudo global → país → competencia → directa) y la bodega viral del mundo, una vez por día; interruptor PORTERO_TENDENCIAS=on. Nunca tumba la corrida.
+    try {
+      const entorno = e.env ?? process.env
+      if (String(entorno.PORTERO_TENDENCIAS ?? '').trim().toLowerCase() === 'on') {
+        const common = { urlDeLaBase: entorno.NEXT_PUBLIC_SUPABASE_URL ?? entorno.SUPABASE_URL ?? '', llave: entorno.SUPABASE_SERVICE_ROLE_KEY ?? '', token: entorno.APIFY_API_TOKEN ?? entorno.APIFY_API_KEY ?? '', ahora, fetchImpl: e.fetch as never }
+        const tendCliente = await tendenciasDelCliente({ ...common, cliente: cliente as never, clientId: e.client_id, ciudades: lista(sd.data).map((s) => String(s.ciudad ?? '')).filter(Boolean), llamarModelo: e.llamarModelo })
+        const iso = paisIsoDe(cliente.country ?? cliente.pais, cliente.market)
+        const bodega = await bodegaDelMundo({ ...common, paises: iso ? [iso] : [] })
+        r.tendencias = { cliente: tendCliente, bodega }
+        costoDeOcr += (tendCliente.costo_modelo_usd ?? 0)
+      }
+    } catch (err) { r.errores.push(`tendencias: ${err instanceof Error ? err.message : String(err)}`) }
   }
   // las cifras (fuente «metrica») NO se descartan por «ya vista»: si el valor vuelve a uno anterior (26 → 50 → 26) tiene que reemplazar al vigente; lo que no cambió lo ve «mismo dato» más abajo
   const vistas = new Set(lista(vv.data).filter((v) => v.fuente !== 'metrica').map((v) => `${v.fuente}|${v.unidad_ref}|${v.huella}`))
