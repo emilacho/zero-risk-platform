@@ -10,6 +10,7 @@
  *   · Idempotente: la misma observación (misma fuente · mismo valor · mismo raspado) no se guarda dos veces.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { baseDeFicha, esPaginaDelClienteConPrueba } from '../propio/regla-propio'
 const L = require('./sedes-logica.js') as SedesLogica
 
 export interface Observacion {
@@ -93,13 +94,12 @@ function esDeLaCuentaPropia(fila: FilaApify, propio: string | null): boolean {
   return candidatos.some((c) => String(c).trim().replace(/^@/, '').toLowerCase() === propio)
 }
 
-/** ¿esta página es del cliente? Su dominio (o un subdominio) o la página de SU cuenta de Instagram. Sin dominio en la ficha no hay prueba → no cuenta. */
+/**
+ * ¿esta página es del cliente? UNA sola regla (31-oct · `src/lib/propio/regla-propio.ts`, la misma de la base): su dominio (o un subdominio) o la página de SU cuenta en su propia red (cuenta EXACTA).
+ * Sin con qué comparar no hay prueba → no cuenta. Esta firma corta se conserva para quien solo conoce el dominio y su cuenta de Instagram.
+ */
 export function esPaginaDelCliente(url: string, hostPropio: string | null, instagramPropio: string | null): boolean {
-  const h = L.anfitrion(url)
-  if (!h) return false
-  if (hostPropio && (h === hostPropio || h.endsWith('.' + hostPropio))) return true
-  if (instagramPropio && /(^|\.)instagram\.com$/.test(h)) return L.cuentasSocialesDe(url).includes('instagram:' + instagramPropio)
-  return false
+  return esPaginaDelClienteConPrueba({ sitio: hostPropio ? 'https://' + hostPropio : null, cuentas: instagramPropio ? [{ red: 'instagram', usuario: instagramPropio }] : [] }, url)
 }
 
 const primerItem = (r: unknown): Record<string, unknown> | null => (Array.isArray(r) ? (r[0] as Record<string, unknown>) ?? null : r && typeof r === 'object' ? (r as Record<string, unknown>) : null)
@@ -119,8 +119,8 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     const cuentasPropias = new Set<string>()
     // `owner_role = 'propio'` NO prueba que la página sea del cliente: el rastreador de búsqueda la pone también a páginas de terceros (decenas de dominios ajenos en un cliente real →
     // homónimos que se volvían sedes del cliente). Sólo cuenta la página de SU dominio o de SU cuenta.
-    const hostPropio = L.anfitrion(cli[0].website_url)
-    const paginasDelCliente = paginas.filter((p) => esPaginaDelCliente(p.url, hostPropio, propio))
+    const baseDelCliente = baseDeFicha(cli[0])
+    const paginasDelCliente = paginas.filter((p) => esPaginaDelClienteConPrueba(baseDelCliente, p.url))
     for (const p of paginasDelCliente) { const o = L.observacionesDelSitio(p.content_text || '', { url: p.url, crawled_at: p.crawled_at }); nSitio += o.length; obs.push(...o); for (const k of L.cuentasSocialesDe(p.content_text || '')) cuentasPropias.add(k) }
 
     const crudas = RAPIDO(await supabase.from('apify_raw').select('id,apify_function,params,respuesta,ensayo,created_at').eq('client_id', clientId).eq('ensayo', false).in('apify_function', ['instagram_scraper', 'google_maps_scraper', 'own_google_maps_profile']).order('created_at', { ascending: false }).limit(12), 'leer lo raspado') as FilaApify[]
