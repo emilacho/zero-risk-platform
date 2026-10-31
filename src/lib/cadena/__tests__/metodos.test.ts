@@ -17,7 +17,8 @@ import { AGENTE_POR_PASO } from '../constantes'
 import { leerConcepto } from '../conceptos'
 import { ESQUEMA_GANCHO_DE_VIDEO, ESQUEMAS } from '../esquemas'
 import { tareaDeCalendario } from '../indicaciones'
-import { briefAbrir, marcoDelBrief } from '../mesas'
+import { calendarioPreparar } from '../index'
+import { briefAbrir, conceptoAbrir, conceptoDecidir, marcoDelBrief, recibirBrief, recibirConcepto } from '../mesas'
 import {
   AGENTE_GANCHO_DE_VIDEO, AUTOCONTROL_PENDIENTE, CLAVE_DE_METODOS, DIAS_DE_REVISION_DE_FICHA, FAMILIAS_DE_GANCHO, fichaDeRed, fichasEnTexto, GUIA_NO_FORMATO, leerFichasPorRed,
   LISTA_DE_CONTROL_DEL_PLAN, METODO_BRIEF_POR_OMISION, METODO_CALENDARIO_POR_OMISION, METODO_FICHAS_POR_RED_POR_OMISION, METODO_GANCHO_POR_OMISION, METODO_MERCADO_POR_OMISION,
@@ -356,15 +357,21 @@ describe('firma 2 · fichas por red como dato que caduca', () => {
     linkedin: { verificada_en: '2026-06-01', revisar_antes_de: '2026-08-30', filas: [{ dato: 'enlace', valor: 'primer comentario', tipo: 'folclore', fuente: 'folclore de LinkedIn', verificada_en: '2026-06-01' }] },
     tiktok: { verificada_en: 'ayer', revisar_antes_de: '2026-12-30', filas: [] },
     youtube: 'no es una ficha',
+    // menor 2 de CC3 (X12): con fechas pero SIN `filas` no es una ficha (se descarta por forma, no se inventa una vacía)
+    threads: { verificada_en: '2026-10-01', revisar_antes_de: '2026-12-30' },
   }
-  it('🔴 leerFichasPorRed ignora lo que no tiene forma (fecha ilegible, texto suelto) y las filas con tipo desconocido; fichaDeRed marca la VENCIDA', () => {
+  it('🔴 leerFichasPorRed ignora lo que no tiene forma (fecha ilegible, texto suelto, sin filas) y las filas con tipo desconocido; fichaDeRed marca la VENCIDA', () => {
     const f = leerFichasPorRed(fichas)
     expect(f.map((x) => x.red)).toEqual(['instagram', 'linkedin'])
     expect(f[0].filas.map((x) => x.tipo)).toEqual(['documentada', 'folclore'])
     expect(fichaDeRed(f, 'Instagram', '2026-10-31')).toMatchObject({ vencida: false })
     expect(fichaDeRed(f, 'linkedin', '2026-10-31')).toMatchObject({ vencida: true })
     expect(fichaDeRed(f, 'linkedin', '2026-08-29')).toMatchObject({ vencida: false })
+    // menor 3 de CC3 (X08): el borde es el MISMO día de `revisar_antes_de`: ese día ya está vencida («revisar antes de»)
+    expect(fichaDeRed(f, 'linkedin', '2026-08-30')).toMatchObject({ vencida: true })
+    expect(fichaDeRed(f, 'linkedin', '2026-08-29T23:59:59Z')).toMatchObject({ vencida: false })
     expect(fichaDeRed(f, 'tiktok', '2026-10-31')).toBeNull()
+    expect(fichaDeRed(f, 'threads', '2026-10-31')).toBeNull()
     for (const c of [null, 'x', [], 42]) expect(leerFichasPorRed(c)).toEqual([])
   })
   it('fichasEnTexto: cada fila con su tipo y fuente; la vencida lleva la marca; la red sin ficha se declara (no se inventa)', () => {
@@ -374,5 +381,81 @@ describe('firma 2 · fichas por red como dato que caduca', () => {
     expect(t).toContain('## linkedin · verificada 2026-06-01 · revisar antes de 2026-08-30 · VENCIDA: no confiar hasta re-verificar')
     expect(t).toContain('## tiktok · SIN FICHA (no inventes la norma; usa lo conservador y dilo)')
     expect(t).not.toContain('raro')
+  })
+})
+
+describe('reserva de CC3 (certificación firma 1+2) · el pegado del método del calendario en `calendarioPreparar` (pasos.ts)', () => {
+  const A = clienteA()
+  const AHORA = '2026-10-09T12:00:00Z'
+  const CAMP = 'camp-cal'
+  const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', campana_id: CAMP, ...extra })
+  const MARCA = '# MÉTODO (capa local · social-calendar-builder'
+  function almacen(palanca: boolean, config: Record<string, unknown> = {}) {
+    const al = new AlmacenMemoria({
+      contextos: { [A.clientId]: contextoDe(A) },
+      planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] },
+      config: { flujos: ['wf-cadena'], puerta_workflow_id: 'wf-puerta', estado_cadena: 'ensayo', clientes_ensayo: [A.clientId], nuevo_orden: { clientes: palanca ? [A.clientId] : [] }, ...config },
+      journeys: [{ journeyId: 'journey-1', clientId: A.clientId }],
+    })
+    const campana: Campana = {
+      id: CAMP, client_id: A.clientId, plan_id: 'plan-1', fecha_inicio: A.campana.fecha_inicio, fecha_inicio_origen: 'regla', fecha_fin: A.campana.fecha_fin, zona_horaria: 'America/Guayaquil', pais: 'EC', sedes: ['centro'],
+      estado: 'calendario', estado_motivo: null, presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: false, sala_ref: {}, reemplaza_a: null, seco: true,
+    }
+    const estrategia: EstrategiaGuardada = { campana_id: CAMP, version: 1, estado: 'validada', contenido: A.estrategia, agente: 'social-media-strategist', modelo: null, costo_usd: 0, workflow_execution_id: 'ex-0', seco: true }
+    al.campanas.push(campana)
+    al.estrategias.push(estrategia)
+    return al
+  }
+  const BRIEF = [
+    '## De qué parte del plan sale', 'Fase 1: «Se publican 3 posts por semana en Instagram y 1 en Facebook».',
+    '## Insight', 'La gente del barrio desayuna de pie.', '## Mensaje', 'Hay mesa desde las siete.',
+    '## Objetivo', 'Que entren 30 desayunos nuevos por semana.', '- instagram: que miren el pan · «ven a desayunar»', '- facebook: que guarden el horario · «guarda el horario»',
+    '## Tono', 'Cercano.', '## Obligatorios', '- vocabulario: pan de masa madre', '- prohibido: barato; gratis', '- lo que no se dice: precios',
+    '## Faltantes', '- público: el manual no dice edades', '## Contradicciones plan vs manual', '- ninguna',
+  ].join('\n')
+  const GRAN_IDEA = [
+    '## Gran idea  La mesa larga · Noventa días para sentarse juntos', '## Por qué funciona  El insight dice que la gente desayuna de pie.',
+    '## Cómo se ve  Luz cálida.', '## Cómo suena  Voz cercana.',
+    '## Capítulo f1 · Abrir la mesa', 'Qué cuenta: la mesa se abre · Objetivo de la fase (cita): «presentar» · Cómo se ve en este capítulo: planos cerrados',
+    '## Banco de ideas',
+    '- C1-I01 · instagram · foto · la primera silla · mensaje: aquí siempre hay una silla para ti · gancho: ¿quién se sentaba aquí? · protagonista: la silla · serie: ninguna · foto:ninguna',
+    '- C1-I02 · facebook · foto · la silla que nadie usa · mensaje: ninguna silla sobra · gancho: esta silla lleva un mes vacía · protagonista: la silla · serie: ninguna · foto:ninguna',
+  ].join('\n')
+  const entrega = (version: number, texto: string) => ({ campana_id: CAMP, version, encargo_id: `enc-${version}`, texto, costo_usd: 0.1, motivo: null })
+  async function conGranIdeaAprobada(al: AlmacenMemoria) {
+    expect((await briefAbrir(al, wf(), AHORA)).status).toBe(200)
+    expect(await recibirBrief(al, entrega(1, BRIEF), AHORA)).toMatchObject({ ok: true, estado: 'validada' })
+    expect((await conceptoAbrir(al, wf(), AHORA)).status).toBe(200)
+    expect(await recibirConcepto(al, entrega(1, GRAN_IDEA), AHORA)).toMatchObject({ ok: true, estado: 'lista' })
+    expect((await conceptoDecidir(al, wf({ decision: 'aprobar' }), AHORA)).status).toBe(200)
+    return al
+  }
+  const tareaDe = async (al: AlmacenMemoria) => {
+    const p = await calendarioPreparar(al, { ...wf(), tanda: 1 }, AHORA)
+    expect(p.status, JSON.stringify(p.cuerpo)).toBe(200)
+    expect(p.cuerpo.accion).toBeUndefined()
+    return (p.cuerpo.run_sdk as { task: string }).task
+  }
+
+  it('🔴 con la gran idea aprobada, el pedido del calendario lleva el MÉTODO de colocación (el de omisión, con su procedencia)', async () => {
+    const t = await tareaDe(await conGranIdeaAprobada(almacen(true)))
+    expect(t).toContain(MARCA)
+    expect(t).toContain(METODO_CALENDARIO_POR_OMISION)
+    expect(t).toContain('# GRAN IDEA (concepto aprobado · versión 1)')
+  })
+  it('🔴 sin gran idea (palanca apagada = la cadena de hoy) el pedido NO lleva método; con palanca y sin gran idea, la tanda espera (no hay pedido)', async () => {
+    expect(await tareaDe(almacen(false))).not.toContain('# MÉTODO')
+    const p = await calendarioPreparar(almacen(true), { ...wf(), tanda: 1 }, AHORA)
+    expect(p.status).toBe(200)
+    expect(p.cuerpo.accion).toBe('esperar_concepto')
+    expect(p.cuerpo.run_sdk).toBeUndefined()
+  })
+  it('🔴 `cadena_config.metodos.calendario = false` lo apaga aunque haya gran idea; un texto lo reemplaza', async () => {
+    const sin = await tareaDe(await conGranIdeaAprobada(almacen(true, { [CLAVE_DE_METODOS]: { calendario: false } })))
+    expect(sin).not.toContain('# MÉTODO')
+    expect(sin).toContain('# GRAN IDEA (concepto aprobado · versión 1)')
+    const otro = await tareaDe(await conGranIdeaAprobada(almacen(true, { [CLAVE_DE_METODOS]: { calendario: 'coloca lo fuerte el lunes' } })))
+    expect(otro).toContain('coloca lo fuerte el lunes')
+    expect(otro).not.toContain(MARCA)
   })
 })
