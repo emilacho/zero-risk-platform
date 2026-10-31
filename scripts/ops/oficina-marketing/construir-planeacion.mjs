@@ -7,7 +7,9 @@
  *   B · el REDACTOR DEL PLAN es un dato: `cadena_config.planeacion = { redactor, indicacion }`. Dos nodos nuevos después de «Redactor (B4)» lo leen:
  *       sin fila o sin `redactor` ⇒ `campaign-brief-agent` y el pedido sin tocar (lo de hoy); con `indicacion` ⇒ va ANTES del pedido. Un slug mal formado o una lectura que falla DETIENEN (no se cae al agente viejo en silencio).
  *       Los CUATRO nodos que tenían el nombre pegado («Pedir el plan al redactor», «Guardar el plan», «JEF · plan · armar B», «JEF · plan · armar C») lo leen de ahí: el rótulo `producing_agent` es el redactor REAL.
- * NO incluye el brazo «informe de mercado» (espera la ruta `brazo/mercado` de CC1) ni el validador de forma del plan (`validador-plan.ts`, también de CC1).
+ *   C · el brazo «INFORME DE MERCADO» (paso 0 del plan · ruta `/api/planeacion/brazo/mercado` de CC1): `elegir brazos` lo pide SOLO si el disparo trae `con_mercado: true` (ausente = el flujo de hoy, sin gasto nuevo; otro valor se rechaza en «⓪ Llave»).
+ *       Rama nueva `Brazo · mercado` → `firma de la rama · mercado` → 4.ª entrada de la junta. Su material viaja como PROPUESTA (rótulo + `es_dato_del_cliente:false` los pone la ruta; la junta y el redactor lo leen genérico).
+ * NO incluye el validador de forma del plan (`validador-plan.ts`, de CC1 · todavía no entregado).
  */
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, leerVivo, nodo, redirigir, si } from './lib.mjs'
 
@@ -49,16 +51,45 @@ const LEER_CONFIG = {
 
 const ELEGIDO = "$('Redactor · elegir').last().json.redactor_elegido"
 
+export const MERCADO_PEDIR = `// T5 · INFORME DE MERCADO (paso 0 del plan): se pide SOLO si el disparo trae con_mercado === true · ausente = el flujo de hoy (no sale pedido ni gasto). Sin rubro en la ficha el propio brazo contesta sin_respuesta (no se inventa).
+let con_mercado = false;
+try { con_mercado = $('Webhook · planeacion').first().json.body.con_mercado === true; } catch (e) { con_mercado = false; }
+if (con_mercado) pedir('mercado', 'informe_mercado');
+`
+
+function construirMercado(f) {
+  cambiarCodigo(f, 'elegir brazos', "pedir('posthog', 'analitica_propia');", "pedir('posthog', 'analitica_propia');\n\n" + MERCADO_PEDIR)
+  const base = structuredClone(nodo(f, 'Brazo · PostHog'))
+  delete base.id
+  delete base.position
+  base.name = 'Brazo · mercado'
+  base.parameters.url = base.parameters.url.replace('/brazo/posthog', '/brazo/mercado')
+  base.parameters.jsonBody = base.parameters.jsonBody.replaceAll('"posthog"', '"mercado"')
+  if (base.parameters.url.includes('posthog') || base.parameters.jsonBody.includes('posthog')) throw new Error('«Brazo · PostHog» trae más "posthog" de lo previsto: ¿cambió el vivo?')
+  agregarNodo(f, base, 'Brazo · cerebro', 0, 100)
+  const firma = nodo(f, 'firma de la rama · posthog').parameters.jsCode
+  if (!firma.includes("const BRAZO = 'posthog';")) throw new Error('la firma de posthog ya no trae BRAZO fijo')
+  agregarNodo(f, codigo('firma de la rama · mercado', firma.replace("const BRAZO = 'posthog';", "const BRAZO = 'mercado';").replace('// firma de la rama · posthog ·', '// firma de la rama · mercado ·')), 'firma de la rama · posthog', 0, 200)
+  conectar(f, 'elegir brazos', 'Brazo · mercado')
+  conectar(f, 'Brazo · mercado', 'firma de la rama · mercado')
+  const junta = nodo(f, 'Junta · esperar los 3 brazos')
+  if (junta.parameters.numberInputs !== 3) throw new Error('la junta ya no tiene 3 entradas')
+  junta.parameters.numberInputs = 4
+  f.connections['firma de la rama · mercado'] = { main: [[{ node: 'Junta · esperar los 3 brazos', type: 'main', index: 3 }]] }
+}
+
 export function construirPlaneacion() {
   const f = leerVivo(ID)
   // A · parar_en
   cambiarCodigo(f, '⓪ Llave · Webhook · planeacion', 'return $input.all()',
-    "// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()")
+    "// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()")
   agregarNodo(f, si('Parar · ¿corta aquí?', "={{ (function () { try { return $('Webhook · planeacion').first().json.body.parar_en } catch (e) { return null } })() }}", 'guardar_plan', 'equals', 'string'), 'Guardar el plan', 220, 0)
   agregarNodo(f, codigo('Parar · resumen', CODIGO_PARADO), 'Guardar el plan', 440, -120)
   redirigir(f, 'Guardar el plan', 'JEF · armar', 'Parar · ¿corta aquí?')
   conectar(f, 'Parar · ¿corta aquí?', 'Parar · resumen', 0)
   conectar(f, 'Parar · ¿corta aquí?', 'JEF · armar', 1)
+  // C · el brazo de mercado
+  construirMercado(f)
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
   agregarNodo(f, codigo('Redactor · elegir', CODIGO_ELEGIR), 'Redactor (B4)', 440, 0)
