@@ -52,10 +52,12 @@ const DESPUES: Tarjeta[] = [
 ]
 
 describe('la migración 202610312008 trae lo que la firma pide', () => {
-  it('seis tarjetas nuevas, de miembros, y el coach de video NO está', () => {
-    expect(NUEVAS.map((t) => t.agente)).toEqual(['whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist', 'market_research_analyst', 'video-editor', 'marketing_video_optimization_specialist'])
+  it('cinco tarjetas nuevas, de miembros; el coach de video y el analista de mercado NO están (FIRMA 5: el analista vive solo en la mesa de análisis)', () => {
+    expect(NUEVAS.map((t) => t.agente)).toEqual(['whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist', 'video-editor', 'marketing_video_optimization_specialist'])
     for (const t of NUEVAS) expect(t.rol).toBe('miembro')
     expect(SQL).not.toMatch(/video_coach|marketing_short_video_editing_coach/)
+    expect(SQL).not.toMatch(/INSERT[\s\S]*market_research_analyst/)
+    expect(REVERSA).not.toContain('market_research_analyst')
   })
   it('las tres de CC#1 (T7) son IDÉNTICAS a `instalaciones-e1.ts`: tarjeta e indicación', () => {
     for (const i of INSTALACIONES_E1) {
@@ -75,11 +77,21 @@ describe('la migración 202610312008 trae lo que la firma pide', () => {
       for (const r of t.indicacion!) expect(r).not.toMatch(/español de Ecuador|tuteo|voseo|en español\b/i)
     }
   })
-  it('el mercado pide TRES señales con fuente y fecha, sin estimar; video-editor integra un solo gancho; el especialista de retención solo gancho y ritmo', () => {
-    expect(fila('market_research_analyst').indicacion!.join(' ')).toMatch(/TRES señales/)
-    expect(fila('market_research_analyst').indicacion!.join(' ')).toMatch(/sin dato/)
+  it('video-editor integra un solo gancho por video; el especialista de retención solo gancho y ritmo', () => {
     expect(fila('video-editor').indicacion!.join(' ')).toMatch(/Un solo gancho por video/)
     expect(fila('marketing_video_optimization_specialist').indicacion!.join(' ')).toMatch(/Solo gancho y ritmo/)
+  })
+  it('las guardas de la migración cuentan lo que hay: 5 tarjetas y 6 miembros del concepto (3 de antes + whimsy, tiktok, video-editor)', () => {
+    expect(SQL).toMatch(/IF n <> 5 THEN/)
+    expect(SQL).toMatch(/IF c <> 6 THEN/)
+    expect(DESPUES.filter((t) => t.rol === 'miembro' && t.pertinente_en.some((p) => p.split(':')[0] === 'concepto')).length).toBe(6)
+    expect(NUEVAS.length).toBe(5)
+  })
+  it('la inserción no pisa filas que ya existen (DO NOTHING) y el director visual suma carrusel y video con su guarda', () => {
+    expect(SQL).toMatch(/ON CONFLICT \(agente\) DO NOTHING/)
+    expect(SQL).not.toMatch(/DO UPDATE/)
+    expect(SQL).toMatch(/array_append\(pertinente_en, 'video'\)[\s\S]*AND NOT \('video' = ANY\(pertinente_en\)\)/)
+    expect(SQL).toMatch(/array_append\(pertinente_en, 'carrusel'\)[\s\S]*AND NOT \('carrusel' = ANY\(pertinente_en\)\)/)
   })
   it('la migración es aditiva y la reversa la deshace por nombre, se niega con encargos abiertos y quita la columna', () => {
     expect(SQL).not.toMatch(/DELETE FROM|DROP TABLE|TRUNCATE/i)
@@ -93,8 +105,8 @@ describe('la migración 202610312008 trae lo que la firma pide', () => {
 
 describe('el concepto con el equipo completo (código real de la mesa sobre los datos de la migración)', () => {
   const concepto = (condiciones: string[]) => especialistasPertinentes(DESPUES, 'concepto', false, condiciones).sort()
-  const FIJOS = ['content-creator', 'design-visual-storyteller', 'market_research_analyst', 'whimsy-injector']
-  it('sin condiciones: los 4 fijos (el director dirige y el portero trae material, no «aportan»)', () => {
+  const FIJOS = ['content-creator', 'design-visual-storyteller', 'whimsy-injector']
+  it('sin condiciones: los 3 fijos (el director dirige y el portero trae material, no «aportan»)', () => {
     expect(concepto([])).toEqual([...FIJOS].sort())
   })
   it('si_instagram suma al curador; si_video suma a TikTok y al editor de video; ambas, las dos cosas', () => {

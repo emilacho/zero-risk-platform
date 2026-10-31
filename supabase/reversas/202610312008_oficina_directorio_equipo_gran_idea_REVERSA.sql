@@ -5,7 +5,7 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM public.oficina_encargos WHERE estado IN ('abierto', 'en_paso')) THEN RAISE EXCEPTION 'hay encargos de la oficina en curso: no se toca el directorio'; END IF;
 END $$;
-DELETE FROM public.oficina_directorio WHERE agente IN ('whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist', 'market_research_analyst', 'video-editor', 'marketing_video_optimization_specialist');
+DELETE FROM public.oficina_directorio WHERE agente IN ('whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist', 'video-editor', 'marketing_video_optimization_specialist');
 UPDATE public.oficina_directorio SET pertinente_en = array_remove(array_remove(pertinente_en, 'carrusel'), 'video'), actualizado_en = now() WHERE agente = 'design-visual-storyteller';
 ALTER TABLE public.oficina_directorio DROP COLUMN IF EXISTS indicacion;
 COMMIT;

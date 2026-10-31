@@ -20,18 +20,15 @@ export const aAporte = (f: Fila): Aporte => ({
   workflow_execution_id: f.workflow_execution_id == null ? null : String(f.workflow_execution_id), creado_en: String(f.creado_en ?? ''),
 })
 
-export function puertoDeLaMesa(db: Db): PuertoMesa {
+/** `leerConfigDeLaCadena`: la lectura de `cadena_config` la hace EL almacén de la cadena (las tablas `cadena_*` solo se nombran allí); aquí solo se pasa */
+export function puertoDeLaMesa(db: Db, leerConfigDeLaCadena?: (clave: string) => Promise<unknown>): PuertoMesa {
   return {
     async directorio() {
       const r = await db.from('oficina_directorio').select('*').eq('activo', true).order('agente', { ascending: true })
       if (r.error) throw new Error(`directorio de la mesa: ${r.error.message}`)
       return lista<Fila>(r.data).map(aTarjeta)
     },
-    async configDeLaCadena(clave) {
-      const r = await db.from('cadena_config').select('valor').eq('clave', clave).maybeSingle()
-      if (r.error) throw new Error(`config de la cadena (${clave}): ${r.error.message}`)
-      return (r.data as Fila | null)?.valor
-    },
+    ...(leerConfigDeLaCadena ? { configDeLaCadena: leerConfigDeLaCadena } : {}),
     async libro(encargoId) {
       const r = await db.from('oficina_mesa_aportes').select('*').eq('encargo_id', encargoId).order('n', { ascending: true })
       if (r.error) throw new Error(`libro de la mesa: ${r.error.message}`)

@@ -1,8 +1,9 @@
 -- 31-oct · T6 · EL DIRECTORIO DE LA OFICINA PARA LA GRAN IDEA (FIRMA 2 · E2 y E1) · plan de construcción v3 T6 (CC#2).
 --   1) `oficina_directorio.indicacion text[]`: la indicación obligatoria de cada agente es DATO de su fila (va con el pedido de cada turno, NUNCA dentro de la identidad).
---   2) seis tarjetas nuevas: whimsy-injector (siempre en el concepto) · tiktok-strategist (`concepto:si_video`) · inclusive-visuals-specialist (`carrusel:si_personas`, `kit:si_personas`)
---      (las tres son de CC#1 T7: texto idéntico a `src/lib/oficina/instalaciones-e1.ts`, una prueba lo cruza) · market_research_analyst (siempre en el concepto: 3 señales con fuente y fecha)
+--   2) cinco tarjetas nuevas: whimsy-injector (siempre en el concepto) · tiktok-strategist (`concepto:si_video`) · inclusive-visuals-specialist (`carrusel:si_personas`, `kit:si_personas`)
+--      (las tres son de CC#1 T7: texto idéntico a `src/lib/oficina/instalaciones-e1.ts`, una prueba lo cruza)
 --      · video-editor (`concepto:si_video`) · marketing_video_optimization_specialist (fila `video`: solo gancho y ritmo; INERTE hasta que T8 cree la mesa de video).
+--   FIRMA 5 punto 2 (Emilio, 21:09Z): `market_research_analyst` NO está en la mesa de creativos; vive solo en la mesa de análisis (sus informes le llegan por la carpeta del portero). Por eso NO se siembra aquí.
 --   3) design-visual-storyteller: director visual también en `carrusel` y `video` (ya estaba en `kit` y `concepto`).
 --   Fuera del equipo (E2): el coach de video. Pendiente de CC#1: la condición de growth-hacker (no está definida en la firma) y el cálculo de `si_personas` / `si_tiktok_o_reels`.
 --   Datos puros: NO toca tablas de la cadena. Compatible con el código viejo (la columna nueva se lee como lista vacía si falta).
@@ -31,12 +32,6 @@ INSERT INTO public.oficina_directorio (agente, rol, especialidad, sabe_hacer, ne
     ARRAY[$d$correcciones al pedido de imagen$d$],
     ARRAY[$d$carrusel:si_personas$d$, $d$kit:si_personas$d$],
     ARRAY[$d$Revisas el pedido de imagen DESPUÉS de quien lo redacta y ANTES de generar: solo cuando la imagen lleva personas. Aportas lo que falta para que las personas se vean reales y dignas (rasgos distintos, edades, cuerpos, ropa y entorno del país del cliente) y los negativos que bloquean rostros clonados, texto o símbolos inventados y estereotipos.$d$, $d$No redactas el pedido de nuevo ni decides la dirección visual: propones correcciones concretas al pedido existente. Si no conoces el contexto local, lo dices en vez de suponerlo.$d$, $d$Respondes en el idioma y con el trato (tú, vos, usted u otro) que fija el manual del cliente; si el manual no lo dice, en el idioma y el trato del país del cliente. Tu identidad está escrita en otro idioma: eso no cambia el idioma de tu respuesta.$d$]),
-  ($d$market_research_analyst$d$, $d$miembro$d$, $d$señales de mercado: tres señales de la categoría y la plaza del cliente, cada una con su fuente y su fecha$d$,
-    ARRAY[$d$reconocer qué señales de la categoría importan a esta gran idea$d$, $d$citar la fuente y la fecha de cada señal$d$, $d$decir «sin dato» cuando no hay fuente$d$],
-    ARRAY[$d$el brief de la campaña$d$, $d$el rubro y la plaza del cliente$d$, $d$el informe de mercado del plan, si existe$d$],
-    ARRAY[$d$tres señales de mercado, cada una con fuente y fecha$d$],
-    ARRAY[$d$concepto$d$],
-    ARRAY[$d$Aportas TRES señales de mercado (tendencia, oportunidad o cambio de hábito) de la categoría y la plaza del cliente que le sirvan a la gran idea. Cada señal en una línea: qué dice, fuente (nombre y dónde se publica) y fecha.$d$, $d$Si no tienes una fuente para una señal, no la estimes: escribe «sin dato» y qué habría que mirar. No analices competidores y no escribas cifras del cliente.$d$, $d$Respondes en el idioma y con el trato (tú, vos, usted u otro) que fija el manual del cliente; si el manual no lo dice, en el idioma y el trato del país del cliente. Tu identidad está escrita en otro idioma: eso no cambia el idioma de tu respuesta.$d$]),
   ($d$video-editor$d$, $d$miembro$d$, $d$video corto: cómo se cuenta la idea en movimiento (guion, ritmo, planos) y qué pide al generador de video$d$,
     ARRAY[$d$bajar una idea a un guion de video corto$d$, $d$ritmo y estructura de planos$d$, $d$redactar el pedido al generador de video$d$],
     ARRAY[$d$la gran idea en curso$d$, $d$el brief$d$, $d$qué redes con video hay en la estrategia$d$],
@@ -59,10 +54,10 @@ UPDATE public.oficina_directorio SET pertinente_en = array_append(pertinente_en,
 DO $$
 DECLARE n int; c int;
 BEGIN
-  SELECT count(*) INTO n FROM public.oficina_directorio WHERE activo AND agente IN ('whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist', 'market_research_analyst', 'video-editor', 'marketing_video_optimization_specialist');
+  SELECT count(*) INTO n FROM public.oficina_directorio WHERE activo AND agente IN ('whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist', 'video-editor', 'marketing_video_optimization_specialist');
   SELECT count(*) INTO c FROM public.oficina_directorio WHERE activo AND rol = 'miembro' AND EXISTS (SELECT 1 FROM unnest(pertinente_en) p WHERE split_part(p, ':', 1) = 'concepto');
-  IF n <> 6 THEN RAISE EXCEPTION 'se esperaban 6 tarjetas nuevas y hay %', n; END IF;
-  IF c <> 7 THEN RAISE EXCEPTION 'se esperaban 7 miembros del concepto (content-creator, design-visual-storyteller, instagram curator, whimsy, mercado, tiktok, video-editor) y hay %', c; END IF;
+  IF n <> 5 THEN RAISE EXCEPTION 'se esperaban 5 tarjetas nuevas y hay %', n; END IF;
+  IF c <> 6 THEN RAISE EXCEPTION 'se esperaban 6 miembros del concepto (content-creator, design-visual-storyteller, instagram curator, whimsy, tiktok, video-editor) y hay %', c; END IF;
 END $$;
 
 COMMIT;
