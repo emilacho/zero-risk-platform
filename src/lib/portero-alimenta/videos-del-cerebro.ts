@@ -266,18 +266,9 @@ export async function guardarVideos(a: {
       res.por_tipo[c.tipo] = (res.por_tipo[c.tipo] ?? 0) + 1
       res.por_origen[c.rol] = (res.por_origen[c.rol] ?? 0) + 1
       if (!cap.capturas.length) res.sin_capturas.push({ post_id: c.post_id, causa: cap.causa ?? 'sin capturas' })
-      const filasFotos: Array<Record<string, unknown>> = []
-      for (const k of cap.capturas) {
-        const rutaFoto = `${a.clientId}/${c.rol}/${c.handle}/${c.post_id}-f${k.n}.jpg`
-        const f = await traer(`${base}/storage/v1/object/${BUCKET_DE_FOTOS}/${rutaFoto}`, { method: 'POST', headers: { ...auth, 'content-type': 'image/jpeg', 'x-upsert': 'true' }, body: new Uint8Array(k.bytes) })
-        if (!f.ok) continue
-        filasFotos.push({ client_id: a.clientId, owner_role: c.rol, handle: c.handle, post_id: `${c.post_id}-f${k.n}`, tipo: 'video_captura', url: `${base}/storage/v1/object/public/${BUCKET_DE_FOTOS}/${rutaFoto}`, estado: 'ok', causa: null, caption: c.caption, posted_at: c.posted_at, post_url: c.post_url, posicion: `hijo-${k.n}`, medio: 'video', hash_archivo: sha256(k.bytes), video_id: videoId })
-      }
-      if (filasFotos.length) {
-        const fw = await traer(`${base}/rest/v1/client_social_images?on_conflict=client_id,owner_role,handle,post_id`, { method: 'POST', headers: { ...json, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(filasFotos) })
-        if (fw.ok) res.capturas += filasFotos.length
-        else res.sin_capturas.push({ post_id: c.post_id, causa: `la tabla de fotos respondió HTTP ${fw.status}` })
-      }
+      const sub = await subirCapturas({ traer, base, auth, json, clientId: a.clientId, v: { rol: c.rol, handle: c.handle, post_id: c.post_id, caption: c.caption, posted_at: c.posted_at, post_url: c.post_url }, videoId, capturas: cap.capturas })
+      res.capturas += sub.guardadas
+      if (sub.error) res.sin_capturas.push({ post_id: c.post_id, causa: sub.error })
     } catch (e) {
       await declarar((e instanceof Error ? e.message : String(e)).slice(0, 120))
     }
@@ -297,4 +288,54 @@ export function firmarVideoDelEntorno(o?: { urlDeLaBase?: string; llave?: string
     const j = (await r.json().catch(() => null)) as { signedURL?: string } | null
     return j?.signedURL ? `${base}/storage/v1${j.signedURL.startsWith('/') ? '' : '/'}${j.signedURL}` : null
   }
+}
+
+type Auth = Record<string, string>
+/** sube las capturas de un video al almacén de fotos y las inscribe enlazadas por video_id */
+async function subirCapturas(a: { traer: Traer; base: string; auth: Auth; json: Auth; clientId: string; v: { rol: string; handle: string; post_id: string; caption: string | null; posted_at: string | null; post_url: string | null }; videoId: string; capturas: Captura[] }): Promise<{ guardadas: number; error?: string }> {
+  const filasFotos: Array<Record<string, unknown>> = []
+  for (const k of a.capturas) {
+    const rutaFoto = `${a.clientId}/${a.v.rol}/${a.v.handle}/${a.v.post_id}-f${k.n}.jpg`
+    const f = await a.traer(`${a.base}/storage/v1/object/${BUCKET_DE_FOTOS}/${rutaFoto}`, { method: 'POST', headers: { ...a.auth, 'content-type': 'image/jpeg', 'x-upsert': 'true' }, body: new Uint8Array(k.bytes) })
+    if (!f.ok) continue
+    // la base solo admite posición «hijo-N» y medio «video» (restricciones csi_posicion_valida / csi_medio_valido)
+    filasFotos.push({ client_id: a.clientId, owner_role: a.v.rol, handle: a.v.handle, post_id: `${a.v.post_id}-f${k.n}`, tipo: 'video_captura', url: `${a.base}/storage/v1/object/public/${BUCKET_DE_FOTOS}/${rutaFoto}`, estado: 'ok', causa: null, caption: a.v.caption, posted_at: a.v.posted_at, post_url: a.v.post_url, posicion: `hijo-${k.n}`, medio: 'video', hash_archivo: sha256(k.bytes), video_id: a.videoId })
+  }
+  if (!filasFotos.length) return { guardadas: 0, error: a.capturas.length ? 'no subió ninguna captura' : undefined }
+  const fw = await a.traer(`${a.base}/rest/v1/client_social_images?on_conflict=client_id,owner_role,handle,post_id`, { method: 'POST', headers: { ...a.json, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(filasFotos) })
+  return fw.ok ? { guardadas: filasFotos.length } : { guardadas: 0, error: `la tabla de fotos respondió HTTP ${fw.status}` }
+}
+
+/** videos ya guardados que no tienen capturas (el servidor no tenía ffmpeg, o una captura falló): se releen de nuestro almacén y se les sacan */
+export async function completarCapturas(a: { clientId: string; urlDeLaBase: string; llave: string; fetchImpl?: Traer; max?: number; ffmpeg?: string | null; ejecutar?: Ejecutar }): Promise<{ revisados: number; completados: number; capturas: number; fallidos: Array<{ post_id: string; causa: string }> }> {
+  const res = { revisados: 0, completados: 0, capturas: 0, fallidos: [] as Array<{ post_id: string; causa: string }> }
+  if (!a.llave || !a.urlDeLaBase) return res
+  const traer: Traer = a.fetchImpl ?? ((u, i) => fetch(u, i))
+  const base = a.urlDeLaBase.replace(/\/$/, '')
+  const auth = { apikey: a.llave, Authorization: `Bearer ${a.llave}` }
+  const json = { ...auth, 'content-type': 'application/json' }
+  const cid = encodeURIComponent(a.clientId)
+  const [vs, cs] = await Promise.all([
+    traer(`${base}/rest/v1/client_videos?client_id=eq.${cid}&estado=eq.ok&select=id,owner_role,handle,post_id,path,duracion_s,caption,posted_at,post_url&limit=2000`, { headers: auth }),
+    traer(`${base}/rest/v1/client_social_images?client_id=eq.${cid}&tipo=eq.video_captura&select=video_id&limit=5000`, { headers: auth }),
+  ])
+  if (!vs.ok || !cs.ok) return res
+  const conCapturas = new Set(((await cs.json()) as Array<{ video_id: string | null }>).map((x) => x.video_id))
+  const faltan = ((await vs.json()) as Array<{ id: string; owner_role: string; handle: string; post_id: string; path: string | null; duracion_s: number | null; caption: string | null; posted_at: string | null; post_url: string | null }>).filter((v) => v.path && !conCapturas.has(v.id)).slice(0, a.max ?? 3)
+  for (const v of faltan) {
+    res.revisados++
+    try {
+      const r = await traer(`${base}/storage/v1/object/${BUCKET_DE_VIDEOS}/${v.path!.split('/').map(encodeURIComponent).join('/')}`, { headers: auth })
+      if (!r.ok) { res.fallidos.push({ post_id: v.post_id, causa: `HTTP ${r.status} al leer el archivo` }); continue }
+      const bytes = Buffer.from(await r.arrayBuffer())
+      const firma = firmaDeVideo(bytes)
+      if (!firma) { res.fallidos.push({ post_id: v.post_id, causa: 'el archivo guardado no es un video' }); continue }
+      const cap = await capturarMomentos({ bytes, ext: firma.ext, duracion: v.duracion_s, ffmpeg: a.ffmpeg, ejecutar: a.ejecutar })
+      if (!cap.capturas.length) { res.fallidos.push({ post_id: v.post_id, causa: cap.causa ?? 'sin capturas' }); continue }
+      const sub = await subirCapturas({ traer, base, auth, json, clientId: a.clientId, v: { rol: v.owner_role, handle: v.handle, post_id: v.post_id, caption: v.caption, posted_at: v.posted_at, post_url: v.post_url }, videoId: v.id, capturas: cap.capturas })
+      if (sub.error) { res.fallidos.push({ post_id: v.post_id, causa: sub.error }); continue }
+      res.completados++; res.capturas += sub.guardadas
+    } catch (e) { res.fallidos.push({ post_id: v.post_id, causa: (e instanceof Error ? e.message : String(e)).slice(0, 100) }) }
+  }
+  return res
 }
