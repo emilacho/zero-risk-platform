@@ -6,6 +6,7 @@ import { seccionDelDirectorio } from './directorio'
 import { refDe } from './libro'
 import { COTAS, type Aporte, type EstadoMesa, type Tarjeta, type TipoDePieza } from './tipos'
 import type { FotoEtiquetada } from '../fotos'
+import { CABECERA_SALTAR_EDITOR } from '../../cadena/constantes'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas'
 
@@ -165,5 +166,7 @@ export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: st
     agent_name: o.agente, task: o.task, images: [], esquema: 'opinion_libre.v1',
     extra: { indicacion_oficina: 'Mesa de trabajo: aportas como profesional de tu especialidad; texto libre.', paso_de_la_oficina: o.paso, encargo_id: o.encargo_id, mesa: true, mesa_agente: o.agente },
     max_budget_usd: o.reserva_usd, thinking_mode: 'disabled', dry_run: o.dry_run, client_id: o.client_id, workflow_hint: 'oficina · turno',
+    // 31-oct: la mesa NO pasa por el editor de run-sdk (los jueces de la jefatura quedan fuera de la mesa, ADR-020); la cabecera va SIEMPRE
+    headers_requeridos: { [CABECERA_SALTAR_EDITOR]: '1' },
   }
 }

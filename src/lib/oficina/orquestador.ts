@@ -7,6 +7,7 @@
  * reintento cierra el encargo como `fallido` (visible, nunca relleno); un fallo de Slack nunca frena nada; nadie pregunta al cliente.
  */
 import crypto from 'node:crypto'
+import { CABECERA_SALTAR_EDITOR } from '../cadena/constantes'
 import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, esPostDeImagen, type BriefLeido } from './brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
@@ -285,7 +286,7 @@ export function indicacionDe(pl: Plantilla, agente: string): string {
   return ['Indicación de esta sala (capa local; el texto de tu identidad no cambia):', ...reglas.map((x, i) => `${i + 1}. ${x.regla}`)].join('\n')
 }
 
-function pedidoDe(enc: Encargo, pl: Plantilla, paso: Paso, agente: string, t: { task: string; images: string[]; esquema: string } | null, e: Estado): Record<string, unknown> {
+export function pedidoDe(enc: Encargo, pl: Plantilla, paso: Paso, agente: string, t: { task: string; images: string[]; esquema: string } | null, e: Estado): Record<string, unknown> {
   if (paso.tipo === 'portero') {
     const b = base(e)
     return { destino: 'portero', cuerpo: { cliente: enc.client_id, voy_a_producir: { entregable: b.brief.id, red: b.brief.red, formato: b.brief.formato, que_es: b.brief.que_es, protagonista: b.brief.protagonista }, ya_trae: ['manual_vigente', 'fotos_etiquetadas'], ronda: 1 }, dry_run: enc.dry_run }
@@ -294,6 +295,7 @@ function pedidoDe(enc: Encargo, pl: Plantilla, paso: Paso, agente: string, t: { 
     agent_name: agente, task: t!.task, images: t!.images.map((url) => ({ url })), esquema: t!.esquema,
     extra: { indicacion_oficina: indicacionDe(pl, agente), paso_de_la_oficina: paso.clave, encargo_id: enc.id }, max_budget_usd: paso.tope_usd, thinking_mode: 'disabled', dry_run: enc.dry_run, client_id: enc.client_id,
     workflow_hint: 'oficina · turno',
+    headers_requeridos: { [CABECERA_SALTAR_EDITOR]: '1' },
   }
 }
 
