@@ -15,7 +15,7 @@ import { fichaPropiaDeMapas } from './mapas-propia'
 import { copiarFotosDeMapasPropia, type ResultadoDeFotosDeMapas } from './fotos-de-mapas-propia'
 import { leerDocumentosDeLosSitios } from './documentos-enlazados'
 import type { LectorOcr } from './ocr-de-pdf'
-import { guardarVideos, videosDeLasFilas, type ResultadoDeVideos } from './videos-del-cerebro'
+import { completarCapturas, guardarVideos, videosDeLasFilas, type ResultadoDeVideos } from './videos-del-cerebro'
 import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlamada } from './juez'
 import { planDeArchivo, planDeReconfirmaciones, type FichaReconfirmable, type PlanDeArchivo } from './archivar'
 import { unidadesDeRaspados, type FilaCruda, type Unidad } from './unidades'
@@ -83,6 +83,8 @@ export interface ResultadoDeAlimentar {
   documentos?: { candidatos: number; leidos: number; del_sitio: number; de_competidores: number; fallidos: Array<{ url: string; causa: string }>; ocr?: { leidos: number; costo_usd: number } }
   /** videos guardados como video (31-oct) */
   videos?: ResultadoDeVideos
+  /** videos ya guardados a los que se les sacaron las capturas que les faltaban */
+  capturas_completadas?: { revisados: number; completados: number; capturas: number; fallidos: Array<{ post_id: string; causa: string }> }
   /** lo que hicieron los nuevos brazos (ausente = ninguno encendido) */
   brazos?: ResultadoDeBrazos
   /** asignaciones de fuente a sede que no corresponden a ninguna sede del cliente (se dicen; la fuente queda en «todas») */
@@ -188,6 +190,9 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     try {
       const entorno = e.env ?? process.env
       const candidatos = videosDeLasFilas(lista(rr.data), { handlesPropios: ctx.handles })
+      const urlV = entorno.NEXT_PUBLIC_SUPABASE_URL ?? entorno.SUPABASE_URL ?? '', llaveV = entorno.SUPABASE_SERVICE_ROLE_KEY ?? ''
+      const comp = await completarCapturas({ clientId: e.client_id, urlDeLaBase: urlV, llave: llaveV, fetchImpl: e.fetch as never })
+      if (comp.revisados) r.capturas_completadas = comp
       if (candidatos.length) r.videos = await guardarVideos({ clientId: e.client_id, candidatos, urlDeLaBase: entorno.NEXT_PUBLIC_SUPABASE_URL ?? entorno.SUPABASE_URL ?? '', llave: entorno.SUPABASE_SERVICE_ROLE_KEY ?? '', fetchImpl: e.fetch as never })
     } catch (err) { r.errores.push(`videos: ${err instanceof Error ? err.message : String(err)}`) }
   }

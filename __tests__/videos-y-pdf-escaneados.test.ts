@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { capturarMomentos, firmaDeVideo, firmarVideoDelEntorno, guardarVideos, instantesDeCaptura, rutaDeFfmpeg, tipoDeVideoDeInstagram, videosDeLasFilas, BUCKET_DE_VIDEOS, MAX_BYTES_DE_VIDEO } from '../src/lib/portero-alimenta/videos-del-cerebro'
+import { completarCapturas, capturarMomentos, firmaDeVideo, firmarVideoDelEntorno, guardarVideos, instantesDeCaptura, rutaDeFfmpeg, tipoDeVideoDeInstagram, videosDeLasFilas, BUCKET_DE_VIDEOS, MAX_BYTES_DE_VIDEO } from '../src/lib/portero-alimenta/videos-del-cerebro'
 import { deQueTrataElVideo, listarVideos } from '../src/lib/cerebro/portero/videos-lectura'
 import { leerDocumentosDeLosSitios } from '../src/lib/portero-alimenta/documentos-enlazados'
 import { textoUtilDelOcr, MAX_OCR_POR_CORRIDA } from '../src/lib/portero-alimenta/ocr-de-pdf'
@@ -195,6 +195,29 @@ describe('1-3 · guardar el video COMO VIDEO + capturas enlazadas', () => {
     expect(pedidos[0]).toContain('"expiresIn":3600')
     expect(await firmarVideoDelEntorno({ urlDeLaBase: 'https://base.test', llave: 'k', fetchImpl: async () => new Response('x', { status: 400 }) })('a/b.mp4')).toBeNull()
     expect(await firmarVideoDelEntorno({ urlDeLaBase: '', llave: '' })('a/b.mp4')).toBeNull()
+  })
+})
+
+describe('3b · videos ya guardados sin capturas', () => {
+  it('se releen de NUESTRO almacén y se les sacan las capturas; los que ya las tienen no se tocan; si el archivo falla se declara', async () => {
+    const sube: string[] = []
+    const filas: Fila[] = [{ id: 'v1', owner_role: 'propio', handle: 'n', post_id: 'A', path: 'c/propio/n/A.mp4', duracion_s: 20, caption: 'x', posted_at: null, post_url: null }, { id: 'v2', owner_role: 'propio', handle: 'n', post_id: 'B', path: 'c/propio/n/B.mp4', duracion_s: 20, caption: null, posted_at: null, post_url: null }, { id: 'v3', owner_role: 'propio', handle: 'n', post_id: 'C', path: 'c/propio/n/C.mp4', duracion_s: 20, caption: null, posted_at: null, post_url: null }]
+    const fotos: Fila[] = []
+    const fetchImpl = (async (u: string, i?: RequestInit) => {
+      const m = i?.method ?? 'GET'
+      if (u.includes('/rest/v1/client_videos')) return new Response(JSON.stringify(filas), { status: 200 })
+      if (u.includes('/rest/v1/client_social_images') && m === 'GET') return new Response(JSON.stringify([{ video_id: 'v2' }]), { status: 200 })
+      if (u.includes('/rest/v1/client_social_images')) { fotos.push(...(JSON.parse(String(i?.body)) as Fila[])); return new Response('', { status: 201 }) }
+      if (u.includes('/object/client-videos/c/propio/n/C.mp4')) return new Response('x', { status: 404 })
+      if (u.includes('/object/client-videos/')) return new Response(new Uint8Array(MP4), { status: 200 })
+      sube.push(u); return new Response('{}', { status: 200 })
+    }) as never
+    const r = await completarCapturas({ clientId: CID, urlDeLaBase: 'https://base.test', llave: 'k', fetchImpl, ffmpeg: '/ff', ejecutar: ffmpegFalso() })
+    expect(r).toMatchObject({ revisados: 2, completados: 1, capturas: 5 })
+    expect(r.fallidos).toEqual([{ post_id: 'C', causa: 'HTTP 404 al leer el archivo' }])
+    expect(fotos).toHaveLength(5)
+    expect(fotos.every((f) => f.video_id === 'v1' && f.tipo === 'video_captura')).toBe(true)
+    expect(sube.every((u) => u.includes('client-social-images'))).toBe(true)
   })
 })
 
