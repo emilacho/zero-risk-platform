@@ -54,6 +54,8 @@ export interface PiezaAgente {
   semana: number; dia_semana: number; slot: string; hora: string; red: string; formato: string; pilar: string
   tema: string; sede: string; requiere_abierto: boolean; depende_de: string[]; pieza_fija: string
   datos: DatoDeterminado[]; pendientes: string[]
+  /** 31-oct (nuevo orden · `calendario_tanda.v2`): el id de la idea del banco del concepto que la pieza realiza (`C<fase>-I<nn>`) o «»; ausente en la cadena de hoy (v1) */
+  idea_de_mesa?: string
 }
 export interface Ajuste { semana: number; slot: string; accion: 'omitir' | 'mover' | 'agregar'; motivo: string }
 export interface TandaAgente { piezas: PiezaAgente[]; ajustes_al_patron: Ajuste[] }

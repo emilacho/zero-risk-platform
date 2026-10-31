@@ -47,6 +47,7 @@ function baseFalsa() {
     const api: any = {
       select: () => api,
       eq: (k: string, v: unknown) => { q.filtros.push((f: any) => f[k] === v); return api },
+      neq: (k: string, v: unknown) => { q.filtros.push((f: any) => f[k] !== v); return api }, // 31-oct (T3): el PATCH excluye la tarjeta de la gran idea en la misma escritura
       update: (p: any) => { q.op = 'update'; q.patch = p; return api },
       maybeSingle: async () => ({ data: ejecutar().data?.[0] ?? null, error: null }),
       single: async () => { const r = ejecutar(); return { data: r.data?.[0] ?? null, error: r.data?.length ? null : { message: 'sin fila' } } },

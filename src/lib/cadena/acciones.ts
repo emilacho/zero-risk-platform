@@ -8,9 +8,14 @@ import { calendarioGuardar, calendarioPreparar, calendarioSiguiente, estrategiaG
 import { relojDeLaCadena } from './reloj'
 import { calendarioPasar, estrategiaPasar } from './revision-jefatura'
 import { filasAutoproducir } from './autoproducir'
+import { briefAbrir, briefEntregar, conceptoAbrir, conceptoDecidir, conceptoEntregar, hojaEscribir } from './mesas'
 import type { Manejador } from './puerta-http'
 
-export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'validar' | 'filas' | 'fechas' | 'esperas', Record<string, Manejador>> = {
+export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'validar' | 'filas' | 'fechas' | 'esperas' | 'brief' | 'concepto' | 'hojas', Record<string, Manejador>> = {
+  // 31-oct · nuevo orden (T3): las mesas de brief y de concepto y la hoja por código; solo con la palanca `nuevo_orden` encendida para el cliente
+  brief: { abrir: briefAbrir, entregar: briefEntregar },
+  concepto: { abrir: conceptoAbrir, entregar: conceptoEntregar, decidir: conceptoDecidir },
+  hojas: { escribir: hojaEscribir },
   campanas: {
     abrir: abrirCampana,
     avanzar: avanzarCampana,

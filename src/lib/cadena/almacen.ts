@@ -87,6 +87,11 @@ export interface ConceptoGuardado {
 }
 export type ObjetoDeValidacion = 'estrategia' | 'calendario' | 'brief' | 'brief_creativo' | 'concepto'
 
+/** 31-oct (T3): el `type` de la tarjeta «Gran idea» en `hitl_queue` · la bandeja de piezas la muestra aparte y las otras rutas la ignoran o rechazan (`metadata.tipo = 'concepto'`) */
+export const TIPO_TARJETA_DE_CONCEPTO = 'concepto_review'
+export interface TarjetaDeConcepto { client_id: string; campana_id: string; version: number; titulo: string; vista_previa: string; metadata: Record<string, unknown>; seco: boolean }
+export interface DecisionDeEmilio { hitl_id: string; accion: 'aprobar' | 'pedir_cambios'; comentario: string | null; autor: string; ahora: string }
+
 /** lo que la copia por filas HABRÍA escrito en `client_historical_outputs` (la fila del parte), más el lote y cuándo vence el ensayo */
 export interface ParteSecoAGuardar {
   client_id: string
@@ -142,6 +147,8 @@ export interface ContextoDelCliente {
   industria?: string | null
   /** r75 · H2 · el registro del cliente ya resuelto (manual > ficha > país); `sin_dato` = no se bloquea ni se impone nada */
   registro?: 'tu' | 'vos' | 'usted' | 'sin_dato'
+  /** 31-oct (T3 · idioma agnóstico): el idioma de la ficha (`clients.idioma`, p. ej. «español», «english», «português»); ausente = el del manual o el oficial del país (no se inventa) */
+  idioma?: string | null
   /** r74 · de dónde salió la zona: declarada en la ficha · por el país · por defecto de la casa · sin dato (UTC solo como cálculo, y se pregunta) */
   zonaHorariaOrigen?: 'declarada' | 'por_pais' | 'por_defecto_de_la_casa' | 'sin_dato'
   planTexto: string
@@ -194,6 +201,13 @@ export interface Almacen {
   actualizarConcepto(campanaId: string, version: number, patch: Partial<ConceptoGuardado>): Promise<void>
   /** los conceptos abiertos cuyo plazo propio ya pasó (el vigía los cierra `sin_mesa`) */
   conceptosVencidos(ahora: string): Promise<ConceptoGuardado[]>
+  /** 31-oct (T3): todas las versiones del concepto de una campaña, de la 1 en adelante (para contar vueltas de cambios y reaperturas) */
+  conceptosDe(campanaId: string): Promise<ConceptoGuardado[]>
+  /** 31-oct (T3): la tarjeta «Gran idea» en la bandeja (`hitl_queue` · `metadata.origen = 'cadena'` · `metadata.tipo = 'concepto'` · sin vencimiento: `vencerBandeja` no la toca); devuelve su id */
+  abrirTarjetaDeConcepto(t: TarjetaDeConcepto): Promise<string>
+  cerrarTarjetaDeConcepto(hitlId: string, d: { status: 'approved' | 'rejected'; decision: Record<string, unknown> }): Promise<void>
+  /** 31-oct (T3): la decisión de Emilio sobre la gran idea queda en `eventos_de_emilio`; NUNCA lanza (el libro no frena la decisión) */
+  registrarDecisionDeEmilio(e: DecisionDeEmilio): Promise<void>
   // filas
   filas(campanaId: string, calendarioVersion?: number): Promise<Fila[]>
   guardarFilas(campanaId: string, calendarioVersion: number, estrategiaVersion: number, filas: Fila[], seco: boolean): Promise<void>

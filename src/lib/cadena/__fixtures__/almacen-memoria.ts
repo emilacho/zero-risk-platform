@@ -179,6 +179,13 @@ export class AlmacenMemoria implements Almacen {
     this.esperas.push(n)
     return { espera: n, creada: true }
   }
+  // 31-oct (T3) · la bandeja de la gran idea y el libro de decisiones de Emilio, en memoria
+  tarjetas: Array<Parameters<Almacen['abrirTarjetaDeConcepto']>[0] & { id: string; status: string; decision: Record<string, unknown> | null }> = []
+  eventosDeEmilio: Array<Parameters<Almacen['registrarDecisionDeEmilio']>[0]> = []
+  async conceptosDe(campanaId: string) { return structuredClone(this.conceptos.filter((c) => c.campana_id === campanaId).sort((a, b) => a.version - b.version)) }
+  async abrirTarjetaDeConcepto(t: Parameters<Almacen['abrirTarjetaDeConcepto']>[0]) { const id = `hitl-${this.tarjetas.length + 1}`; this.tarjetas.push({ ...structuredClone(t), id, status: 'pending', decision: null }); return id }
+  async cerrarTarjetaDeConcepto(hitlId: string, d: { status: 'approved' | 'rejected'; decision: Record<string, unknown> }) { const t = this.tarjetas.find((x) => x.id === hitlId); if (t) { t.status = d.status; t.decision = structuredClone(d.decision) } }
+  async registrarDecisionDeEmilio(e: Parameters<Almacen['registrarDecisionDeEmilio']>[0]) { this.eventosDeEmilio.push(structuredClone(e)) }
   async esperasVivas() { return structuredClone(this.esperas.filter((e) => e.estado === 'viva')) }
   async actualizarEspera(id: number, patch: Partial<EsperaFila>) {
     const e = this.esperas.find((x) => x.id === id)

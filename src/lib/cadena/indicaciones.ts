@@ -4,8 +4,10 @@
  * El contrato de salida lo impone el esquema (`esquemas/index.ts`); aquí se dicen las reglas que un esquema no puede decir.
  */
 import type { ContextoDelCliente } from './almacen'
+import type { ConceptoLeido } from './conceptos'
 import type { Estrategia, Ficha, Fila, Hallazgo } from './tipos'
-import { reglaDeRegistro, type RegistroDelCliente } from './registro'
+import { reglaDeIdioma, reglaDeRegistro, type RegistroDelCliente } from './registro'
+import type { FechaEspecialVerificada } from './validador-calendario'
 
 const REGLAS_BASE = [
   'Respondes SOLO con el objeto que pide el formato de salida. No escribas nada fuera de él.',
@@ -18,7 +20,12 @@ const REGLAS_BASE = [
 ]
 
 /** r75 · H2 · las reglas comunes llevan el REGISTRO DEL CLIENTE (su manual o su país), no uno fijo del proyecto */
-const reglasComunes = (registro: RegistroDelCliente | undefined): string[] => REGLAS_BASE.map((x) => (x === '@REGISTRO@' ? reglaDeRegistro(registro) : x))
+const reglasComunes = (registro: RegistroDelCliente | undefined, idioma?: string | null): string[] => {
+  const base = REGLAS_BASE.map((x) => (x === '@REGISTRO@' ? reglaDeRegistro(registro) : x))
+  // 31-oct (T3): el idioma de la ficha, si lo hay; sin dato la lista es la de siempre
+  const i = reglaDeIdioma(idioma)
+  return i ? [...base, i] : base
+}
 const lineas = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n')
 
 export interface PedidoDeEstrategia { ctx: ContextoDelCliente; formatosPermitidos: Record<string, string[]>; version: number; correccion?: Ficha[] }
@@ -32,7 +39,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     'Lee el PLAN de marketing y el MANUAL de marca de este negocio y devuelve su ESTRATEGIA de redes como un objeto estructurado (canales, excluidos, pilares, fases, hitos, dependencias, fechas que importan, patrón semanal, piezas fijas, pendientes, alertas).',
     '',
     '# Reglas',
-    lineas(reglasComunes(p.ctx.registro)),
+    lineas(reglasComunes(p.ctx.registro, p.ctx.idioma)),
     lineas([
       'Toda `cita_plan` es una frase LITERAL del plan (copiada tal cual). Si el plan no lo dice, no es una regla del plan: no lo cites; si lo propones tú, ponlo como propuesta con su motivo.',
       'Los pilares suman 100. Las fases caen dentro de 90 días.',
@@ -63,6 +70,40 @@ export interface PedidoDeCalendario {
   filasPrevias: Fila[]
   /** corrección: solo las filas que fallaron + sus fichas */
   correccion?: { fichas: Ficha[]; filas: Fila[]; modo: 'filas' | 'tanda' }
+  /** 31-oct (nuevo orden · T3): la GRAN IDEA aprobada; con ella la tarea trae # GRAN IDEA, un # CAPÍTULO por fase de la tanda con su banco, # FECHAS ESPECIALES, y la salida es `calendario_tanda.v2` (`idea_de_mesa`). Ausente = la tarea de hoy, byte a byte. */
+  concepto?: { leido: ConceptoLeido; version: number }
+  /** solo con `concepto`: las fechas que el cliente declaró y el código verificó (ninguna = se dice) */
+  fechasEspeciales?: FechaEspecialVerificada[]
+}
+
+/** las secciones de la gran idea para la tanda: solo los capítulos (fases) que caen en sus semanas; el banco de cada uno con sus ideas tal cual */
+function seccionesDelConcepto(p: PedidoDeCalendario): string[] {
+  if (!p.concepto) return []
+  const c = p.concepto.leido
+  const diaIni = (Math.min(...p.semanas) - 1) * 7 + 1, diaFin = Math.max(...p.semanas) * 7
+  const fases = p.estrategia.fases.filter((f) => f.dia_desde <= diaFin && f.dia_hasta >= diaIni)
+  const out: string[] = [
+    '',
+    `# GRAN IDEA (concepto aprobado · versión ${p.concepto.version})`,
+    c.gran_idea ? `${c.gran_idea.nombre} · ${c.gran_idea.frase}` : '(sin nombre)',
+    c.por_que_funciona ? `Por qué funciona: ${c.por_que_funciona}` : '',
+    c.como_se_ve ? `Cómo se ve: ${c.como_se_ve}` : '',
+    c.como_suena ? `Cómo suena: ${c.como_suena}` : '',
+    'Cada pieza realiza UNA idea del banco del capítulo de su fase y la cita en `idea_de_mesa` (su id exacto); el MENSAJE de la pieza es el de esa idea, no el mensaje de campaña. Si ninguna idea le sirve, `idea_de_mesa` va vacío y lo dices en `pendientes`.',
+  ].filter((x) => x !== '')
+  for (const f of fases) {
+    const cap = c.capitulos.find((x) => x.fase === f.clave) ?? c.capitulos.find((x) => x.clave.toLowerCase() === f.clave.toLowerCase()) ?? null
+    out.push('', `# CAPÍTULO ${f.clave}${cap ? ` · ${cap.nombre}` : ''} (días ${f.dia_desde}–${f.dia_hasta})`)
+    if (!cap) { out.push('(el concepto no trae capítulo para esta fase: trabaja con la gran idea y dilo en `pendientes`)'); continue }
+    if (cap.que_cuenta) out.push(`Qué cuenta: ${cap.que_cuenta}`)
+    if (cap.como_se_ve) out.push(`Cómo se ve en este capítulo: ${cap.como_se_ve}`)
+    for (const s of cap.series) out.push(`- serie ${s.id} · ${s.nombre} · ${s.que_cuenta} · redes: ${s.redes.join(', ')}`)
+    const ideas = c.banco.filter((i) => i.capitulo === cap.clave || i.capitulo === cap.fase)
+    out.push(`# BANCO DE IDEAS DEL CAPÍTULO ${f.clave}`)
+    out.push(ideas.length ? ideas.map((i) => `- ${i.id} · ${i.red} · ${i.formato} · ${i.idea} · mensaje: ${i.mensaje} · gancho: ${i.gancho}${i.serie ? ` · serie: ${i.serie}` : ''}${i.foto ? ` · foto:${i.foto}` : ''}`).join('\n') : '(banco vacío para este capítulo: dilo en `pendientes`)')
+  }
+  out.push('', '# FECHAS ESPECIALES (verificadas por el código)', p.fechasEspeciales?.length ? p.fechasEspeciales.map((x) => `- ${x.fecha} · ${x.nombre} (${x.tipo})`).join('\n') : '(ninguna declarada para esta campaña)')
+  return out
 }
 
 export function tareaDeCalendario(p: PedidoDeCalendario): string {
@@ -73,9 +114,10 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
   return [
     '# Qué te pido',
     `Materializa la TANDA ${p.tanda} del calendario editorial (semanas ${p.semanas.join(', ')}). Para cada slot del patrón semanal y cada semana, escribe el tema de la pieza; agrega las piezas fijas del plan y los ajustes puntuales.`,
+    ...seccionesDelConcepto(p),
     '',
     '# Reglas',
-    lineas(reglasComunes(p.ctx.registro)),
+    lineas(reglasComunes(p.ctx.registro, p.ctx.idioma)),
     lineas([
       'Respeta el patrón semanal, los pilares, la frecuencia por red y las alertas de la ESTRATEGIA. Una pieza fija de la estrategia usa su `pieza_fija` y su tema.',
       'Si una pieza depende de otra (el plan lo pide), pon el id de la antecesora en `depende_de` (formato `s<semana>-d<día>-<slot>`); nunca dependas de una pieza de video.',

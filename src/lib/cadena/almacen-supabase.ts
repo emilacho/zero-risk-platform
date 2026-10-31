@@ -16,6 +16,8 @@ import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, Context
 import { horarioDeNorm } from './horario'
 import { registroDelCliente } from './registro'
 import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
+import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos-de-emilio/registrar'
+import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
@@ -24,6 +26,17 @@ import type { FechaEspecialVerificada } from './validador-calendario'
 const fallo = (e: { message?: string; code?: string } | null): never => { throw Object.assign(new Error(e?.message ?? 'error de la base'), { code: e?.code }) }
 const clave = (x: string) => normalizar(x).replace(/\s+/g, '_')
 const FUENTE_FUERTE: Record<string, number> = { sitio: 3, instagram: 2, mapas: 1 }
+
+type FichaDelCliente = { name: string; country: string | null; market?: string | null; industry?: string | null; config: Record<string, unknown> | null; idioma?: string | null }
+/** 31-oct (T3): la ficha con su `idioma` (migración 202610312002). Antes de aplicarla la columna no existe (42703): se lee sin ella, el idioma queda ausente y la cadena NO se cae. */
+async function fichaDelCliente(db: ReturnType<typeof getSupabaseAdmin>, clientId: string): Promise<FichaDelCliente | null> {
+  const r = await db.from('clients').select('name, country, market, industry, config, idioma').eq('id', clientId).maybeSingle()
+  if (!r.error) return (r.data as FichaDelCliente | null) ?? null
+  if (r.error.code !== '42703') fallo(r.error)
+  const sinIdioma = await db.from('clients').select('name, country, market, industry, config').eq('id', clientId).maybeSingle()
+  if (sinIdioma.error) fallo(sinIdioma.error)
+  return (sinIdioma.data as FichaDelCliente | null) ?? null
+}
 
 export function almacenDeSupabase(): Almacen {
   const db = getSupabaseAdmin()
@@ -66,7 +79,7 @@ export function almacenDeSupabase(): Almacen {
       if (!plan) return null
       const planTexto = plan.content_text ?? plan.content ?? ''
       if (!planTexto) return null
-      const cli = await uno<{ name: string; country: string | null; market?: string | null; industry?: string | null; config: Record<string, unknown> | null }>(db.from('clients').select('name, country, market, industry, config').eq('id', clientId).maybeSingle())
+      const cli = await fichaDelCliente(db, clientId)
       const manual = (await lista<{ id: string; content_text: string | null; forbidden_words: unknown; voice_description?: string | null; writing_style?: string | null; tone_guidelines?: unknown }>(db.from('client_brand_books').select('id, content_text, forbidden_words, version, voice_description, writing_style, tone_guidelines').eq('client_id', clientId).order('version', { ascending: false }).limit(1)))[0]
       const zonaPorDefecto = await almacen.leerConfig('zona_horaria_por_defecto')
       const refs: Referencia[] = [{ id: planId, client_id: clientId, origen: 'plan', texto: planTexto }]
@@ -103,6 +116,7 @@ export function almacenDeSupabase(): Almacen {
       const zonaOrigen: 'declarada' | 'por_pais' | 'por_defecto_de_la_casa' | 'sin_dato' = z.zona ? z.origen : porDefecto ? 'por_defecto_de_la_casa' : 'sin_dato'
       return {
         clientId, nombreDelNegocio: cli?.name ?? '', pais: cli?.country ?? null, zonaHoraria: zonaCfg ?? porDefecto ?? 'UTC', zonaHorariaOrigen: zonaOrigen, registro: registroDelCliente(manual, cli).registro, industria: cli?.industry ?? null,
+        idioma: typeof cli?.idioma === 'string' && cli.idioma.trim() ? cli.idioma.trim() : null,
         planTexto, manualTexto: manual?.content_text ?? '', forbiddenWords: fw, sedes, referencias: refs, fechaDelPlan: plan.created_at.slice(0, 10),
       }
     },
@@ -127,6 +141,22 @@ export function almacenDeSupabase(): Almacen {
     async insertarConcepto(c) { const { error } = await db.from('cadena_conceptos').insert(c); if (error) fallo(error) },
     async actualizarConcepto(campanaId, version, patch) { const { error } = await db.from('cadena_conceptos').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version); if (error) fallo(error) },
     async conceptosVencidos(ahora) { return lista<ConceptoGuardado>(db.from('cadena_conceptos').select('campana_id, version, estado, aprobacion, texto_md, leido, brief_devuelto, motivo, costo_usd, plazo_en, encargo_id, hitl_id, nota_de_emilio, apunta_a, decidido_en, seco').eq('estado', 'abierta').lte('plazo_en', ahora).limit(500)) },
+    // 31-oct (T3) · la gran idea: todas sus versiones, su tarjeta en la bandeja y la decisión de Emilio
+    async conceptosDe(campanaId) { return lista<ConceptoGuardado>(db.from('cadena_conceptos').select('campana_id, version, estado, aprobacion, texto_md, leido, brief_devuelto, motivo, costo_usd, plazo_en, encargo_id, hitl_id, nota_de_emilio, apunta_a, decidido_en, seco').eq('campana_id', campanaId).order('version', { ascending: true }).limit(50)) },
+    async abrirTarjetaDeConcepto(t) {
+      // misma bandeja que las piezas (`hitl_queue`, columnas heredadas que no pueden ir vacías); SIN `expires_at`: la aprobación de la gran idea no vence, se recuerda (plazo `aprobacion_concepto`)
+      const r = await db.from('hitl_queue').insert({ client_id: t.client_id, agent_name: 'cadena · concepto', risk_type: 'strategic_decision', output_preview: t.vista_previa.slice(0, 2000), type: TIPO_TARJETA_DE_CONCEPTO, title: t.titulo.slice(0, 200), priority: 'high', status: 'pending', payload: {}, metadata: t.metadata, expires_at: null }).select('id').single()
+      if (r.error) fallo(r.error)
+      return String((r.data as { id: unknown }).id)
+    },
+    async cerrarTarjetaDeConcepto(hitlId, d) {
+      const hora = new Date().toISOString()
+      const { error } = await db.from('hitl_queue').update({ status: d.status, reviewer: 'cadena · concepto/decidir', decision: d.decision, decided_at: hora, resolved_at: hora }).eq('id', hitlId)
+      if (error) fallo(error)
+    },
+    async registrarDecisionDeEmilio(e) {
+      try { await registrarEventoDeEmilio(db as unknown as DbDeEventos, { canal: 'dashboard', accion: e.accion, autor: e.autor, hitl_id: e.hitl_id, comentario: e.comentario, ahora: new Date(e.ahora) }) } catch { /* el libro de Emilio nunca frena la decisión; la tarjeta y la espera ya quedaron resueltas */ }
+    },
 
     async filas(campanaId, version) {
       let q = db.from('cadena_calendario_filas').select('*').eq('campana_id', campanaId).limit(5000)
