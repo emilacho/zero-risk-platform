@@ -64,12 +64,12 @@ const entrega = (version: number, texto: string | null, extra: Record<string, un
 
 async function conBriefValidado(al: AlmacenMemoria) {
   expect((await briefAbrir(al, wf(), AHORA)).status).toBe(200)
-  expect(await recibirBrief(al, entrega(1, BRIEF_BUENO), AHORA)).toEqual({ ok: true, estado: 'validada' })
+  expect(await recibirBrief(al, entrega(1, BRIEF_BUENO), AHORA)).toMatchObject({ ok: true, estado: 'validada' })
 }
 async function conConceptoListo(al: AlmacenMemoria, version = 1) {
   const a = await conceptoAbrir(al, wf(version > 1 ? { nota: 'otra vuelta' } : {}), AHORA)
   expect(a.status, JSON.stringify(a.cuerpo)).toBe(200)
-  expect(await recibirConcepto(al, entrega(version, CONCEPTO_BUENO), AHORA)).toEqual({ ok: true, estado: 'lista' })
+  expect(await recibirConcepto(al, entrega(version, CONCEPTO_BUENO), AHORA)).toMatchObject({ ok: true, estado: 'lista' })
 }
 
 describe('la palanca y la autorización', () => {
@@ -133,14 +133,14 @@ describe('la mesa del brief', () => {
   it('la entrega que no pasa el lector se DEVUELVE con los puntos; reabrir lleva la DEVOLUCIÓN al marco (v2); una segunda devolución = necesita_humano; una tercera apertura = brief_agotado', async () => {
     const al = almacen()
     await briefAbrir(al, wf(), AHORA)
-    expect(await recibirBrief(al, entrega(1, BRIEF_MALO), AHORA)).toEqual({ ok: true, estado: 'devuelta' })
+    expect(await recibirBrief(al, entrega(1, BRIEF_MALO), AHORA)).toMatchObject({ ok: true, estado: 'devuelta' })
     expect(al.briefsCreativos[0].devolucion_texto).toMatch(/no se encuentra literal en el plan/)
     expect(al.campanas[0].estado).toBe('calendario')
     const r2 = await briefAbrir(al, wf(), AHORA)
     expect(r2.cuerpo.version).toBe(2)
     expect((r2.cuerpo.sobre as { marco_texto: string }).marco_texto).toContain('# DEVOLUCIÓN')
     expect((r2.cuerpo.sobre as { marco_texto: string }).marco_texto).toContain('no se encuentra literal en el plan')
-    expect(await recibirBrief(al, entrega(2, BRIEF_MALO), AHORA)).toEqual({ ok: true, estado: 'devuelta' })
+    expect(await recibirBrief(al, entrega(2, BRIEF_MALO), AHORA)).toMatchObject({ ok: true, estado: 'devuelta' })
     expect(al.campanas[0].estado).toBe('necesita_humano')
     expect(al.campanas[0].estado_motivo).toMatch(/dos veces/)
     const r3 = await briefAbrir(al, wf(), AHORA)
@@ -151,11 +151,11 @@ describe('la mesa del brief', () => {
   it('sin texto (la mesa falló o venció) la versión queda descartada con el motivo; dos descartes = necesita_humano', async () => {
     const al = almacen()
     await briefAbrir(al, wf(), AHORA)
-    expect(await recibirBrief(al, entrega(1, null, { motivo: 'tope de la mesa' }), AHORA)).toEqual({ ok: true, estado: 'descartada' })
+    expect(await recibirBrief(al, entrega(1, null, { motivo: 'tope de la mesa' }), AHORA)).toMatchObject({ ok: true, estado: 'descartada' })
     expect(al.briefsCreativos[0]).toMatchObject({ estado: 'descartada', motivo: 'tope de la mesa', texto_md: null })
     expect(al.campanas[0].estado).toBe('calendario')
     await briefAbrir(al, wf(), AHORA)
-    expect(await recibirBrief(al, entrega(2, '   '), AHORA)).toEqual({ ok: true, estado: 'descartada' })
+    expect(await recibirBrief(al, entrega(2, '   '), AHORA)).toMatchObject({ ok: true, estado: 'descartada' })
     expect(al.campanas[0].estado).toBe('necesita_humano')
   })
   it('con nota de Emilio (cambios) se abre una versión nueva aunque la última esté validada, y la nota va al marco', async () => {
@@ -217,12 +217,12 @@ describe('la mesa de concepto', () => {
     const al = almacen()
     await conBriefValidado(al)
     await conceptoAbrir(al, wf(), AHORA)
-    expect(await recibirConcepto(al, entrega(1, SIN_GRAN_IDEA), AHORA)).toEqual({ ok: true, estado: 'sin_mesa' })
+    expect(await recibirConcepto(al, entrega(1, SIN_GRAN_IDEA), AHORA)).toMatchObject({ ok: true, estado: 'sin_mesa' })
     expect(al.conceptos[0].motivo).toMatch(/sin_concepto/)
     expect(al.tarjetas).toHaveLength(0)
     expect(al.campanas[0].estado).toBe('calendario')
     expect((await conceptoAbrir(al, wf(), AHORA)).cuerpo.version).toBe(2)
-    expect(await recibirConcepto(al, entrega(2, null, { motivo: 'venció la mesa' }), AHORA)).toEqual({ ok: true, estado: 'sin_mesa' })
+    expect(await recibirConcepto(al, entrega(2, null, { motivo: 'venció la mesa' }), AHORA)).toMatchObject({ ok: true, estado: 'sin_mesa' })
     expect(al.campanas[0].estado).toBe('necesita_humano')
     const r = await conceptoAbrir(al, wf(), AHORA)
     expect(r.status).toBe(409)
@@ -232,7 +232,7 @@ describe('la mesa de concepto', () => {
     const al = almacen()
     await conBriefValidado(al)
     await conceptoAbrir(al, wf(), AHORA)
-    expect(await recibirConcepto(al, entrega(1, '## Devolución del brief\n- el insight no se sostiene', { brief_devuelto: '- el insight no se sostiene' }), AHORA)).toEqual({ ok: true, estado: 'brief_devuelto' })
+    expect(await recibirConcepto(al, entrega(1, '## Devolución del brief\n- el insight no se sostiene', { brief_devuelto: '- el insight no se sostiene' }), AHORA)).toMatchObject({ ok: true, estado: 'brief_devuelto' })
     expect(al.conceptos[0]).toMatchObject({ estado: 'brief_devuelto', brief_devuelto: '- el insight no se sostiene' })
     expect(al.briefsCreativos[0]).toMatchObject({ estado: 'devuelta', devolucion_texto: '- el insight no se sostiene' })
     expect(al.campanas[0].estado).toBe('calendario')
@@ -283,7 +283,7 @@ describe('la decisión de Emilio sobre la gran idea', () => {
     const a2 = await conceptoAbrir(al, wf({ nota: 'más barrio, menos mesa' }), AHORA)
     expect(a2.cuerpo.version).toBe(2)
     expect((a2.cuerpo.sobre as { marco_texto: string }).marco_texto).toContain('# CAMBIOS PEDIDOS POR EL CLIENTE (sobre la versión anterior)\nmás barrio, menos mesa')
-    expect(await recibirConcepto(al, entrega(2, CONCEPTO_BUENO), AHORA)).toEqual({ ok: true, estado: 'lista' })
+    expect(await recibirConcepto(al, entrega(2, CONCEPTO_BUENO), AHORA)).toMatchObject({ ok: true, estado: 'lista' })
     expect(al.tarjetas[1].metadata).toMatchObject({ version: 2, vueltas_restantes: 1 })
     const r2 = await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'concepto', nota: 'otra vez' }), AHORA)
     expect(r2.cuerpo).toMatchObject({ siguiente: { mesa: 'concepto', version: 3 }, vueltas_restantes: 0 })
@@ -329,9 +329,9 @@ describe('el puerto en proceso y las entregas por HTTP', () => {
     const al = almacen()
     await briefAbrir(al, wf(), AHORA)
     const P = puertoDeLaCadena(al, () => AHORA)
-    expect(await P.entregarBrief(entrega(1, BRIEF_BUENO))).toEqual({ ok: true, estado: 'validada' })
+    expect(await P.entregarBrief(entrega(1, BRIEF_BUENO))).toMatchObject({ ok: true, estado: 'validada' })
     await conceptoAbrir(al, wf(), AHORA)
-    expect(await P.entregarConcepto(entrega(1, CONCEPTO_BUENO))).toEqual({ ok: true, estado: 'lista' })
+    expect(await P.entregarConcepto(entrega(1, CONCEPTO_BUENO))).toMatchObject({ ok: true, estado: 'lista' })
     expect(al.tarjetas).toHaveLength(1)
   })
   it('por HTTP (acciones brief/entregar · concepto/entregar) se exige el contexto de flujo y se lee el cuerpo', async () => {

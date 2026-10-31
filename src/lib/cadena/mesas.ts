@@ -20,6 +20,7 @@ import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { hallazgosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
 import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, type ConceptoLeido } from './conceptos'
+import { TOTAL_DE_TANDAS } from './constantes'
 import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 import { reglaDeIdioma, reglaDeRegistro } from './registro'
 import type { Estrategia, FormatosPorRed } from './tipos'
@@ -33,7 +34,18 @@ export const TIPO_DE_ESPERA_DE_CONCEPTO = 'aprobacion_concepto'
 export const objetoDeEsperaDeConcepto = (version: number): string => `concepto:v${version}`
 
 export interface SobreParaLaOficina { tipo_de_mesa: 'brief' | 'concepto'; client_id: string; campana_id: string; version: number; dry_run: boolean; marco_texto: string; condiciones: string[] }
-export type EntregaALaCadena = { ok: true; estado?: string; ya_cerrada?: boolean } | { ok: false; error?: string }
+/**
+ * El SOBRE con el que la puerta vuelve a entrar (31-oct · respuesta a CC2 «quién vuelve a entrar»): quien SABE del evento lo arma aquí y el flujo que ya corre lo lleva a la sala;
+ * el vigía reemite el MISMO sobre de respaldo. La clave lleva la ETAPA (`campana:tanda-N:<etapa>`) para que la sala no lo trague como repetido cuando la pieza que faltaba ya está.
+ */
+export interface SobreDeTanda {
+  source: 'cadena/mesas'; intent: 'briefear'
+  payload: { modo: 'tanda_siguiente'; campana_id: string; tanda: number; dry_run: boolean; client_id: string }
+  idempotency_key: string; logical_period: string; tenant_id: string; client_id: string
+}
+export type EntregaALaCadena = { ok: true; estado?: string; ya_cerrada?: boolean; /** el sobre con el que la puerta vuelve a entrar (si el próximo paso no es de una persona) */ siguiente?: { sobre: SobreDeTanda } } | { ok: false; error?: string }
+/** `motivo` de un brief que Emilio mandó a rehacer desde la tarjeta de la gran idea (no cuenta como reapertura por fallo) */
+export const MOTIVO_CAMBIOS_DE_EMILIO = 'cambios_de_emilio'
 export interface EntregaDeBrief { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }
 export interface EntregaDeConcepto extends EntregaDeBrief { brief_devuelto?: string | null }
 
@@ -135,8 +147,9 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   const c = await cargar(al, cuerpo, true)
   if (!c.ok) return c.r
   const { campana, ctx, estrategia } = c.c
-  const nota = texto(cuerpo.nota)
   const ultimo = await al.ultimoBriefCreativo(campana.id)
+  // la nota de Emilio llega con el sobre o, si la puerta vuelve a entrar sin ella, se recupera del brief que él mandó a rehacer
+  const nota = texto(cuerpo.nota) ?? (ultimo?.estado === 'devuelta' && ultimo.motivo === MOTIVO_CAMBIOS_DE_EMILIO ? texto(ultimo.devolucion_texto) : null)
   if (ultimo?.estado === 'borrador') return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version) } }
   if (ultimo?.estado === 'validada' && !nota) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version) } }
   const version = (ultimo?.version ?? 0) + 1
@@ -149,7 +162,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   await al.insertarBriefCreativo(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado) }),
+    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado) }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: PLAZO_DE_MESA_MIN.brief, sobre } }
@@ -166,7 +179,7 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   if (!texto(p.texto)) {
     await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado: 'descartada', motivo: p.motivo ?? 'la mesa no entregó texto' })
     if (p.version >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `la mesa del brief no entregó dos veces (${p.motivo ?? 'sin motivo'})`, ahora)
-    return { ok: true, estado: 'descartada' }
+    return { ok: true, estado: 'descartada', ...(await siguienteDespuesDe(al, campana.id)) }
   }
   const estr = await al.ultimaEstrategia(campana.id)
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
@@ -175,7 +188,7 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   const estado = bloquea.length ? 'devuelta' : 'validada'
   await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado, texto_md: p.texto, leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
   if (estado === 'devuelta' && p.version >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
-  return { ok: true, estado }
+  return { ok: true, estado, ...(await siguienteDespuesDe(al, campana.id)) }
 }
 
 // ───────────────────────────────────────────────────────── CONCEPTO
@@ -185,13 +198,15 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   const c = await cargar(al, cuerpo, true)
   if (!c.ok) return c.r
   const { campana, ctx, estrategia } = c.c
-  const nota = texto(cuerpo.nota)
   const brief = await al.ultimoBriefCreativo(campana.id)
   if (!brief || brief.estado !== 'validada') return err(409, 'E-SIN-BRIEF', `no hay un brief creativo validado (último: ${brief?.estado ?? 'ninguno'})`)
   const todos = await al.conceptosDe(campana.id)
   const ultimo = todos[todos.length - 1] ?? null
+  // Emilio pidió cambios: la vuelta siguiente se abre aunque la puerta vuelva a entrar sin la nota (se recupera de la decisión; si apuntó al brief, el concepto nuevo va sobre el brief nuevo, sin nota)
+  const conCambios = ultimo?.estado === 'lista' && ultimo.aprobacion === 'cambios'
+  const nota = texto(cuerpo.nota) ?? (conCambios && ultimo.apunta_a === 'concepto' ? texto(ultimo.nota_de_emilio) : null)
   if (ultimo?.estado === 'abierta') return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version) } }
-  if (ultimo?.estado === 'lista' && !nota) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, aprobacion: ultimo.aprobacion, concepto_id: idDeConcepto(campana.id, ultimo.version) } }
+  if (ultimo?.estado === 'lista' && !nota && !conCambios) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, aprobacion: ultimo.aprobacion, concepto_id: idDeConcepto(campana.id, ultimo.version) } }
   if (!nota && cuentaDe(todos, (x) => x.estado === 'sin_mesa') >= MAX_VERSIONES_POR_REAPERTURA) {
     const r = await ponerNecesitaHumano(al, campana, 'la mesa de concepto no entregó concepto dos veces', ahora)
     return { status: 409, cuerpo: { error: 'concepto_agotado', necesita_humano: true, alerta: r.alerta } }
@@ -227,12 +242,12 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
       await al.actualizarBriefCreativo(campana.id, brief.version, { estado: 'devuelta', devolucion_texto: devolucion })
       if (brief.version >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, 'la dirección devolvió el brief y ya era la segunda versión', ahora)
     }
-    return { ok: true, estado: 'brief_devuelto' }
+    return { ok: true, estado: 'brief_devuelto', ...(await siguienteDespuesDe(al, campana.id)) }
   }
   const sinMesa = async (motivo: string): Promise<EntregaALaCadena> => {
     await al.actualizarConcepto(campana.id, p.version, { ...base, estado: 'sin_mesa', motivo, texto_md: p.texto })
     if (cuentaDe(todos, (x) => x.estado === 'sin_mesa') + 1 >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `la mesa de concepto no entregó concepto dos veces (${motivo.slice(0, 160)})`, ahora)
-    return { ok: true, estado: 'sin_mesa' }
+    return { ok: true, estado: 'sin_mesa', ...(await siguienteDespuesDe(al, campana.id)) }
   }
   if (!texto(p.texto)) return sinMesa(p.motivo ?? 'la mesa no entregó texto')
   const estr = await al.ultimaEstrategia(campana.id)
@@ -279,7 +294,7 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
     await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_CONCEPTO, objetoDeEsperaDeConcepto(version))
     if (fila.hitl_id) await al.cerrarTarjetaDeConcepto(fila.hitl_id, { status: 'approved', decision: { accion: 'aprobar', nota, version } })
     if (fila.hitl_id) await al.registrarDecisionDeEmilio({ hitl_id: fila.hitl_id, accion: 'aprobar', comentario: nota, autor, ahora })
-    return { status: 200, cuerpo: { decision: 'aprobar', version, concepto_id: idDeConcepto(campana.id, version) } }
+    return { status: 200, cuerpo: { decision: 'aprobar', version, concepto_id: idDeConcepto(campana.id, version), ...(await siguienteDespuesDe(al, campana.id)) } }
   }
   const apuntaA = cuerpo.apunta_a === 'brief' ? 'brief' : cuerpo.apunta_a === 'concepto' ? 'concepto' : null
   if (!apuntaA) return err(400, 'E-APUNTA-A', 'cambios necesita apunta_a: «concepto» (otra ronda de la mesa) o «brief» (brief nuevo y concepto sobre él)')
@@ -295,8 +310,48 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
   if (fila.hitl_id) await al.cerrarTarjetaDeConcepto(fila.hitl_id, { status: 'rejected', decision: { accion: 'pedir_cambios', apunta_a: apuntaA, nota, version } })
   if (fila.hitl_id) await al.registrarDecisionDeEmilio({ hitl_id: fila.hitl_id, accion: 'pedir_cambios', comentario: nota, autor, ahora })
   const brief = await al.ultimoBriefCreativo(campana.id)
+  // cambios al brief: el brief vigente queda «devuelto por Emilio» (con su nota) para que la puerta, al volver a entrar, abra el brief nuevo y no el concepto
+  if (apuntaA === 'brief' && brief && brief.estado === 'validada') await al.actualizarBriefCreativo(campana.id, brief.version, { estado: 'devuelta', devolucion_texto: nota, motivo: MOTIVO_CAMBIOS_DE_EMILIO })
   const siguiente = apuntaA === 'brief' ? { mesa: 'brief' as const, version: (brief?.version ?? 0) + 1 } : { mesa: 'concepto' as const, version: version + 1 }
-  return { status: 200, cuerpo: { decision: 'cambios', version, apunta_a: apuntaA, siguiente, vueltas_restantes: CAP_DE_VUELTAS_DE_CAMBIOS - vueltas - 1, nota } }
+  const re = await siguienteDespuesDe(al, campana.id)
+  return { status: 200, cuerpo: { decision: 'cambios', version, apunta_a: apuntaA, siguiente: { ...siguiente, ...re.siguiente }, vueltas_restantes: CAP_DE_VUELTAS_DE_CAMBIOS - vueltas - 1, nota } }
+}
+
+// ───────────────────────────────────────────────────────── con qué sobre vuelve a entrar la puerta (respuesta a CC2 · 31-oct)
+export function sobreDeTanda(c: Pick<Campana, 'id' | 'client_id' | 'seco'>, tanda: number, etapa: string): SobreDeTanda {
+  return {
+    source: 'cadena/mesas', intent: 'briefear',
+    payload: { modo: 'tanda_siguiente', campana_id: c.id, tanda, dry_run: c.seco, client_id: c.client_id },
+    idempotency_key: `${c.id}:tanda-${tanda}:${etapa}`, logical_period: `tanda-${tanda}`, tenant_id: c.client_id, client_id: c.client_id,
+  }
+}
+/** la tanda que espera la gran idea: la siguiente a la última hecha (1 si no hay ninguna) */
+export async function tandaQueEspera(al: Almacen, campanaId: string): Promise<number> {
+  const version = Math.max(1, await al.ultimaVersionDeCalendario(campanaId))
+  const hechas = (await al.filas(campanaId, version)).filter((f) => f.estado !== 'esquema')
+  return hechas.reduce((m, f) => Math.max(m, f.tanda), 0) + 1
+}
+/**
+ * La ETAPA por la que la puerta tiene que volver a entrar (va en la clave de idempotencia) · null = nada que reemitir: la palanca está apagada, una mesa está trabajando,
+ * Emilio está decidiendo, o la campaña ya no corre. Es la MISMA para el empuje inmediato (las entregas y la decisión) y para el respaldo del vigía (`calendario/siguiente`).
+ */
+export async function etapaDeReentrada(al: Almacen, campana: Pick<Campana, 'id' | 'client_id'>): Promise<string | null> {
+  const m = await conceptoParaElCalendario(al, campana)
+  if (!m.espera) return m.concepto ? `concepto-v${m.version}` : null
+  if (m.espera.falta === 'entrega' || m.espera.falta === 'aprobacion') return null
+  if (m.espera.falta === 'concepto') return `abrir-concepto-v${(m.espera.version ?? 0) + 1}`
+  const brief = await al.ultimoBriefCreativo(campana.id)
+  if (brief?.estado === 'borrador') return null
+  return `abrir-brief-v${(brief?.version ?? 0) + 1}`
+}
+/** `{ siguiente: { sobre } }` para pegar a una respuesta, o `{}` si no hay con qué volver a entrar */
+export async function siguienteDespuesDe(al: Almacen, campanaId: string): Promise<{ siguiente?: { sobre: SobreDeTanda } }> {
+  const c = await al.campana(campanaId)
+  if (!c || (c.estado !== 'calendario' && c.estado !== 'activa')) return {}
+  const tanda = await tandaQueEspera(al, c.id)
+  if (tanda > TOTAL_DE_TANDAS) return {}
+  const etapa = await etapaDeReentrada(al, c)
+  return etapa ? { siguiente: { sobre: sobreDeTanda(c, tanda, etapa) } } : {}
 }
 
 // ───────────────────────────────────────────────────────── lo que el CALENDARIO y el RELOJ necesitan de las mesas
@@ -314,7 +369,8 @@ export async function conceptoParaElCalendario(al: Almacen, campana: Pick<Campan
   if (aprobado) return { concepto: aprobado.leido as unknown as ConceptoLeido, version: aprobado.version, espera: null }
   const ultimo = todos[todos.length - 1] ?? null
   const brief = await al.ultimoBriefCreativo(campana.id)
-  const falta = !brief || brief.estado !== 'validada' ? 'brief' : !ultimo || ultimo.estado === 'sin_mesa' || ultimo.estado === 'brief_devuelto' ? 'concepto' : ultimo.estado === 'abierta' ? 'entrega' : 'aprobacion'
+  // con cambios pedidos por Emilio al concepto (o al brief, ya rehecho y validado) falta el concepto nuevo, no una decisión
+  const falta = !brief || brief.estado !== 'validada' ? 'brief' : !ultimo || ultimo.estado === 'sin_mesa' || ultimo.estado === 'brief_devuelto' || ultimo.aprobacion === 'cambios' ? 'concepto' : ultimo.estado === 'abierta' ? 'entrega' : 'aprobacion'
   return { concepto: null, version: null, espera: { falta, version: ultimo?.version ?? null, estado: ultimo?.estado ?? null, aprobacion: ultimo?.aprobacion ?? null } }
 }
 

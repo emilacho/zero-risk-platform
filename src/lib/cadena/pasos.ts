@@ -6,11 +6,11 @@
 import type { Almacen, Campana, ContextoDelCliente, Corrida } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
-import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, DIAS_DE_CAMPANA, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, SEMANAS_DE_PANORAMA, SEMANAS_DE_TANDA, topeDelPaso, type Paso } from './constantes'
+import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, SEMANAS_DE_PANORAMA, SEMANAS_DE_TANDA, TOTAL_DE_TANDAS, TOTAL_SEMANAS, topeDelPaso, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
 import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V2, ESQUEMA_ESTRATEGIA } from './esquemas'
-import { conceptoParaElCalendario } from './mesas'
+import { conceptoParaElCalendario, etapaDeReentrada, nuevoOrdenEncendido } from './mesas'
 import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
@@ -24,12 +24,11 @@ import { problemasDeEsquema, validarEstrategia } from './validador-estrategia'
 import { validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
 import { fechasPedidasDe, retencionDe, retenerParaRevision } from './revision-jefatura'
 
-const TOTAL_SEMANAS = Math.ceil(DIAS_DE_CAMPANA / 7)
 export const semanasDeTanda = (tanda: number): number[] => {
   const ini = (tanda - 1) * SEMANAS_DE_TANDA + 1
   return Array.from({ length: SEMANAS_DE_TANDA }, (_, i) => ini + i).filter((s) => s <= TOTAL_SEMANAS)
 }
-export const TOTAL_DE_TANDAS = Math.ceil(TOTAL_SEMANAS / SEMANAS_DE_TANDA)
+export { TOTAL_DE_TANDAS }
 
 const formatosPermitidos = (f: FormatosPorRed): Record<string, string[]> => Object.fromEntries(Object.entries(f).map(([r, fs]) => [r, fs.map((x) => x.formato)]))
 
@@ -369,17 +368,26 @@ export async function calendarioSiguiente(al: Almacen, cuerpo: Record<string, un
   if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
   const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
   if (noAut) return noAut
-  if (c.estado !== 'activa') return { status: 200, cuerpo: { tanda: null, motivo: `la campaña está ${c.estado}` } }
+  // 31-oct (nuevo orden · respuesta a CC2): con la palanca el vigía también reemite ANTES de la primera tanda (la campaña en `calendario` esperando la gran idea) y la respuesta trae `etapa`
+  // para la clave de idempotencia (`campana:tanda-N:<etapa>`); sin nada nuevo que hacer, `tanda: null` y silencio. Palanca apagada: byte a byte lo de hoy.
+  const encendida = await nuevoOrdenEncendido(al, c.client_id)
+  if (c.estado !== 'activa' && !(encendida && c.estado === 'calendario')) return { status: 200, cuerpo: { tanda: null, motivo: `la campaña está ${c.estado}` } }
   const version = Math.max(1, await al.ultimaVersionDeCalendario(id))
   const hechas = (await al.filas(id, version)).filter((f) => f.estado !== 'esquema')
   const ultima = hechas.reduce((m, f) => Math.max(m, f.tanda), 0)
-  if (ultima === 0) return { status: 200, cuerpo: { tanda: null, motivo: 'todavía no hay una primera tanda' } }
+  if (ultima === 0 && !encendida) return { status: 200, cuerpo: { tanda: null, motivo: 'todavía no hay una primera tanda' } }
   if (ultima >= TOTAL_DE_TANDAS) return { status: 200, cuerpo: { tanda: null, motivo: 'ya están todas las tandas' } }
-  const finDeLaTanda = fechaDeFila(c.fecha_inicio, semanasDeTanda(ultima).slice(-1)[0], 7)
-  const hoy = (cadena(cuerpo.hoy) ?? ahora).slice(0, 10)
-  const faltan = diasEntre(hoy, finDeLaTanda)
-  if (faltan > 14) return { status: 200, cuerpo: { tanda: null, motivo: `faltan ${faltan} días para que termine la tanda ${ultima} (se abre a los 14)` } }
-  return { status: 200, cuerpo: { tanda: ultima + 1, faltan_dias: faltan } }
+  let faltan: number | null = null
+  if (ultima > 0) {
+    const finDeLaTanda = fechaDeFila(c.fecha_inicio, semanasDeTanda(ultima).slice(-1)[0], 7)
+    const hoy = (cadena(cuerpo.hoy) ?? ahora).slice(0, 10)
+    faltan = diasEntre(hoy, finDeLaTanda)
+    if (faltan > 14) return { status: 200, cuerpo: { tanda: null, motivo: `faltan ${faltan} días para que termine la tanda ${ultima} (se abre a los 14)` } }
+  }
+  if (!encendida) return { status: 200, cuerpo: { tanda: ultima + 1, faltan_dias: faltan } }
+  const etapa = await etapaDeReentrada(al, c)
+  if (!etapa) return { status: 200, cuerpo: { tanda: null, motivo: `la tanda ${ultima + 1} espera a una mesa que trabaja o a la decisión de Emilio: nada que reemitir` } }
+  return { status: 200, cuerpo: { tanda: ultima + 1, etapa, ...(faltan === null ? {} : { faltan_dias: faltan }) } }
 }
 
 /**
