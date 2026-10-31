@@ -23,8 +23,6 @@ const nextConfig = {
     // Si aun así faltara, el lector FALLA CERRADO (`aislamiento_no_disponible`): el PDF no se lee y queda como archivo con ficha.
     outputFileTracingIncludes: {
       '/api/brain/portero/**': ['./src/lib/cerebro/archivos/trabajador-pdf.cjs', './node_modules/unpdf/**/*'],
-      // el video se guarda como video y se le sacan capturas con ffmpeg (31-oct): el ejecutable se llama en tiempo de ejecución, así que se incluye a mano. Sin él el video se guarda igual y se declara sin capturas.
-      '/api/brain/alimentar/**': ['./node_modules/@ffmpeg-installer/**/*', './node_modules/.pnpm/@ffmpeg-installer+ffmpeg@*/node_modules/@ffmpeg-installer/ffmpeg/**/*', './node_modules/.pnpm/@ffmpeg-installer+linux-x64*/node_modules/@ffmpeg-installer/linux-x64/**/*'],
     },
   },
 };
