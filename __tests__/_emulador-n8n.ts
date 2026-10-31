@@ -12,10 +12,15 @@ function entorno(env: Record<string, string>, historial: Record<string, Item[]>,
   return { $: dolar, $input: { first: () => ({ json: entrada }), all: () => [{ json: entrada }] }, $env: env, $workflow: { id: 'wf-puerta' }, $execution: { id: 'ex-1' }, $json: entrada }
 }
 
+const evaluar = (cuerpo: string, ctx: ReturnType<typeof entorno>): any =>
+  new Function('$json', '$env', '$', '$workflow', '$execution', `return (${cuerpo})`)(ctx.$json, ctx.$env, ctx.$, ctx.$workflow, ctx.$execution)
+
+/** `={{ x }}` devuelve el valor tal cual; `=texto {{ x }} texto` (expresión incrustada) devuelve el texto armado */
 const expr = (s: unknown, ctx: ReturnType<typeof entorno>): any => {
-  if (typeof s !== 'string' || !s.startsWith('={{')) return s
-  const cuerpo = s.slice(3, s.lastIndexOf('}}')).trim()
-  return new Function('$json', '$env', '$', '$workflow', '$execution', `return (${cuerpo})`)(ctx.$json, ctx.$env, ctx.$, ctx.$workflow, ctx.$execution)
+  if (typeof s !== 'string' || !s.startsWith('=')) return s
+  const entero = /^=\{\{([\s\S]*)\}\}$/.exec(s)
+  if (entero && !entero[1].includes('}}')) return evaluar(entero[1].trim(), ctx)
+  return s.slice(1).replace(/\{\{([\s\S]*?)\}\}/g, (_m, e) => String(evaluar(String(e).trim(), ctx)))
 }
 
 export async function recorrer(flujo: any, desde: string, entrada: Item, o: { env?: Record<string, string>; http?: Http; previos?: Record<string, Item[]>; hasta?: string[] } = {}) {
@@ -43,7 +48,7 @@ export async function recorrer(flujo: any, desde: string, entrada: Item, o: { en
       if (!o.http) throw new Error('el recorrido llegó a un nodo HTTP sin simulador')
       const url = expr(n.parameters.url, ctx)
       const headers = Object.fromEntries((n.parameters.headerParameters?.parameters ?? []).map((p: any) => [p.name, expr(p.value, ctx)]))
-      const cuerpo = JSON.parse(expr(n.parameters.jsonBody, ctx))
+      const cuerpo = n.parameters.method === 'GET' ? null : JSON.parse(expr(n.parameters.jsonBody, ctx))
       const r = await o.http(url, headers, cuerpo)
       item = { statusCode: r.statusCode, body: r.body }
     } else throw new Error(`tipo de nodo sin emulador: ${n.type}`)
