@@ -5,6 +5,7 @@
 import { seccionDelDirectorio } from './directorio'
 import { refDe } from './libro'
 import { COTAS, type Aporte, type EstadoMesa, type Tarjeta, type TipoDePieza } from './tipos'
+import { NOMBRE_DE_LA_PIEZA } from './aprendizaje'
 import type { FotoEtiquetada } from '../fotos'
 import { CABECERA_SALTAR_EDITOR } from '../../cadena/constantes'
 import { fichasEnTexto, leerFichasPorRed, metodoDeAsiento } from '../../cadena/metodos'
@@ -37,6 +38,7 @@ export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: n
   kit: { manual: 7000, marco: 5000, plan: 3000 },
   brief: { manual: 120000, marco: 40000, plan: 120000 },
   concepto: { manual: 120000, marco: 60000, plan: 0 },
+  video: { manual: 7000, marco: 5000, plan: 3000 },
 }
 
 /** el tablero: lo más reciente completo, lo antiguo en resumen (el líder mantiene el hilo; los demás no releen todo) */
@@ -116,7 +118,32 @@ const CONVENCION_DEL_CONCEPTO = [
   'Cada idea con mensaje y gancho PROPIOS (distintos entre ideas); cubre cada red de la estrategia en cada capítulo. Las ideas NO llevan datos con valor (precios, horarios, cifras): el estratega los pone con su referencia. La integración lista cuáles ideas quedan y cuáles salen.',
 ].join('\n')
 
-const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'brief' ? CONVENCION_DEL_BRIEF : tipo === 'concepto' ? CONVENCION_DEL_CONCEPTO : tipo === 'carrusel'
+/** T8 · 31-oct · el GUION del video corto (la mesa lo escribe; el brazo lo filma tal cual) */
+const CONVENCION_DEL_GUION = [
+  'Escribe el GUION COMPLETO del video con esta convención ligera (no es un formulario: es para que el brazo de video lo filme tal cual):',
+  '```',
+  '## Plano 1 · 0–3 s',
+  'Se ve: … (qué muestra la cámara: producto, lugar, acción; sin rostros reconocibles de personas reales)',
+  'Movimiento: … (cámara fija, paneo, acercamiento, cámara en mano…)',
+  'Texto en pantalla: … (solo si lo lleva; literal, corto)',
+  'Foto: foto:<id de una foto propia> | ninguna   (la foto real de referencia de ese plano)',
+  '## Plano 2 · 3–8 s   (…una sección por plano; el video dura de 8 a 15 segundos en total)',
+  '## Audio',
+  '<música o sonido ambiente que acompaña; SIN voz ni narración>',
+  '## Pie',
+  '<el pie de foto de la publicación>',
+  '## Etiquetas',
+  '#una #otra',
+  '## Citas',
+  'A3 usé: <qué tomaste de ese aporte>',
+  'A5 descarté: <por qué no lo usaste>',
+  '```',
+  'Lo que escribes en «Se ve», «Movimiento» y «Texto en pantalla» es EXACTAMENTE lo que se le pide al modelo de video: una sola versión final, sin "Variante A/B", sin markdown. Los tiempos de cada plano van en su encabezado y suman la duración del video (8–15 s).',
+  'Las fotos propias del cliente son la referencia visual de cada plano (el modelo las usa para no inventar el producto ni el lugar): nombra la que corresponda en «Foto:». No inventes textos, precios ni sellos en pantalla que no estén en el brief, el manual o el material del portero.',
+  'El pie ("## Pie") es el texto de publicación final, sin hashtags (esos van solo en "## Etiquetas", una vez cada uno) y con la voz del manual.',
+].join('\n')
+
+const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'brief' ? CONVENCION_DEL_BRIEF : tipo === 'concepto' ? CONVENCION_DEL_CONCEPTO : tipo === 'video' ? CONVENCION_DEL_GUION : tipo === 'carrusel'
   ? [
       'Escribe la PIEZA COMPLETA con esta convención ligera (no es un formulario: es para que el equipo de dibujo la lea):',
       '```',
@@ -156,7 +183,9 @@ const REGLAS_DURAS = (c: ContextoDeTurno): string => [
   '## Las únicas tres reglas duras',
   `1. **Gasto.** La pieza tiene un tope de US$ ${c.tope_usd.toFixed(2)} (ya se gastó US$ ${c.gasto_usd.toFixed(2)}). Cuida cada turno: no repitas lo que ya está en el tablero.`,
   '2. **No inventes datos que comprometan al cliente**: certificaciones, normas, precios, cifras, teléfonos, usuarios, marcas ajenas ni nada que no esté en el manual, el brief, el plan, las fotos o el material del portero. Si te falta un dato, dilo o pídelo; no lo rellenes. Una imagen generada tampoco debe mostrar textos, sellos, normas ni lecturas de instrumentos inventados.',
-  '3. **La pieza debe poder dibujarse**: cada lámina es un título, un texto corto, un llamado (si lo lleva) y una imagen. Lo demás es tu criterio; sin límites de caracteres: si algo es largo, el dibujo se ajusta o el equipo lo parte.',
+  c.tipo === 'video'
+    ? '3. **El guion debe poder filmarse por un modelo de video**: planos con sus segundos (8 a 15 s en total), qué se ve en cada uno, el movimiento de cámara y la foto propia de referencia si la hay. Sin voces ni narración (solo música o ambiente), sin rostros reconocibles de personas reales, sin texto en pantalla que no esté escrito literalmente en el guion. Lo demás es tu criterio.'
+    : '3. **La pieza debe poder dibujarse**: cada lámina es un título, un texto corto, un llamado (si lo lleva) y una imagen. Lo demás es tu criterio; sin límites de caracteres: si algo es largo, el dibujo se ajusta o el equipo lo parte.',
 ].join('\n')
 
 const HERRAMIENTAS = [
@@ -174,7 +203,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
   const ronda = libro.filter((a) => a.tipo === 'integra').length + 1
   const soloEleccion = c.tipo === 'concepto' && ronda === 1 && !est.cierre_forzado
   const cab = [
-    `# Mesa de trabajo · ${c.cliente_nombre} · ${c.tipo === 'carrusel' ? 'carrusel' : c.tipo === 'brief' ? 'brief creativo de la campaña' : c.tipo === 'concepto' ? 'gran idea de la campaña' : 'kit de historias'} ${c.brief_id}`,
+    `# Mesa de trabajo · ${c.cliente_nombre} · ${NOMBRE_DE_LA_PIEZA[c.tipo]} ${c.brief_id}`,
     `Eres **${agente}**${o.tarjeta ? ` — ${o.tarjeta.especialidad}` : ''}. Estás en la oficina creativa de la agencia.`,
     '',
     REGLAS_DURAS(c),
@@ -207,6 +236,8 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
         ? ['Lee el manual, el plan, la estrategia (el marco) y lo que el portero trajo al tablero. Escribe el **brief creativo de la campaña**: UN insight, UN mensaje, objetivo, tono, obligatorios y faltantes declarados (nunca los rellenes). Si te falta material del cliente, pídelo con `pedir_material`.']
         : c.tipo === 'concepto'
         ? ['PRIMERO lee el brief de la campaña con estos 6 criterios: (1) un solo mensaje, (2) insight real, (3) objetivo claro, (4) está planteado como problema y no como solución, (5) es fiel al plan y al manual, (6) se puede crear con lo que trajo el portero. Si alguno falla, **devuelve el brief UNA vez**: escribe una sección `## Devolución del brief` con los puntos que fallan y nada más (la mesa se cierra y la cadena pide un brief nuevo). Si el brief sirve, sigue: del brief y el manual, escribe **EL PROBLEMA en una frase**, y reparte lo que necesitas de cada compañero. Cada uno propondrá 2 o 3 caminos distintos con su porqué, pensados para 90 días.']
+        : c.tipo === 'video'
+        ? ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora** del video corto: qué vas a contar en 8–15 segundos, con qué ritmo y estructura de planos, qué fotos propias sirven de referencia y qué necesitas de cada compañero (guion, ritmo de video corto, criterio de YouTube/short, texto del pie, curaduría de fotos).']
         : ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.']),
       'El equipo completo participa en cada pieza: la oficina se formó con estos especialistas por razones concretas. Cada uno aportará su especialidad; no escribas tú todo. Si ya sabes que te falta material del cliente, pídelo con `pedir_material`.',
     ].join('\n'),

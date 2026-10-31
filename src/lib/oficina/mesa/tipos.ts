@@ -6,12 +6,13 @@
 
 /** las familias de la mesa: nombre de la familia → tipo de pieza. Conviven con las v1 (`carrusel_ig_v1`, `kit_historias`); un encargo termina con la que lo abrió. */
 /** 31-oct · nuevo orden de la cadena: `brief_mesa` (el brief creativo de la campaña) y `concepto_mesa` (la gran idea, capítulos y banco) son mesas de la CADENA: sin imágenes, sin traductor, sin jefatura propia; la entrega va a la cadena, no a la bandeja */
-export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', brief_mesa: 'brief', concepto_mesa: 'concepto' } as const
+/** T8 · 31-oct · `video_mesa` (parte 2 del brazo de video, sobre la hoja): la mesa escribe el GUION y el brazo lo filma */
+export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', brief_mesa: 'brief', concepto_mesa: 'concepto', video_mesa: 'video' } as const
 export type FamiliaMesa = keyof typeof FAMILIAS_MESA
 export type TipoDePieza = (typeof FAMILIAS_MESA)[FamiliaMesa]
 export const esFamiliaMesa = (f: string): f is FamiliaMesa => Object.prototype.hasOwnProperty.call(FAMILIAS_MESA, f)
-/** la plantilla v1 cuyas funciones de código (abrir, armar, dibujar, empaquetar) reutiliza la mesa */
-export const FAMILIA_V1_DE: Record<Exclude<TipoDePieza, 'brief' | 'concepto'>, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias' }
+/** la plantilla v1 cuyas funciones de código (abrir, armar, dibujar, empaquetar) reutiliza la mesa (el video no tiene v1: sus funciones son propias, `orquestador-video.ts`) */
+export const FAMILIA_V1_DE: Record<Exclude<TipoDePieza, 'brief' | 'concepto'>, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias', video: 'video_mesa' }
 /** las mesas que entrega la CADENA (no hay pieza: ni imágenes, ni traductor, ni jefatura propia, ni bandeja) */
 export const TIPOS_DE_LA_CADENA = ['brief', 'concepto'] as const
 export const esDeLaCadena = (tipo: string): tipo is (typeof TIPOS_DE_LA_CADENA)[number] => (TIPOS_DE_LA_CADENA as readonly string[]).includes(tipo)
@@ -34,6 +35,8 @@ export const COTAS = {
    */
   RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD: 2.0,
   RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD: 1.7,
+  /** el VIDEO (parte 2 · 31-oct): lo que viene después de la mesa es el brazo (hasta US$ 5 por video, con descuento ≈ 2,6) más la revisión de la jefatura (1,5): la mesa lo reserva antes de seguir conversando */
+  RESERVA_DE_LO_QUE_SIGUE_VIDEO_USD: 6.5,
   /** el traductor de la pieza pregunta al autor como máximo UNA vez (condición 7) */
   MAX_PREGUNTAS_DEL_TRADUCTOR: 1,
   /** cuántas veces se le devuelve la integración al director por citas que faltan */
@@ -51,7 +54,7 @@ export interface Tarjeta {
   sabe_hacer: string[]
   necesita: string[]
   entrega: string[]
-  /** tipos de pieza donde su aporte es OBLIGATORIO: `carrusel`, `kit`, o `carrusel:si_imagen_generada` (solo si alguna imagen se genera) */
+  /** tipos de pieza donde su aporte es OBLIGATORIO: `carrusel`, `kit`, `video`, o `carrusel:si_imagen_generada` (solo si alguna imagen se genera) */
   pertinente_en: string[]
   /** T6 (31-oct): la indicación obligatoria de este agente en la mesa (dato de la fila): va con el pedido de cada turno, NUNCA dentro de su identidad. Ausente = sin indicación */
   indicacion?: string[]

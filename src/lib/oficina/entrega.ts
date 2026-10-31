@@ -64,11 +64,19 @@ export function leerMedidas(b: Buffer): Medidas | null {
 export interface FilaDeFormato { red: string; formato: string; ancho: number; alto: number; tipos_archivo: string[]; peso_max_mb: number; n_min: number; n_max: number; texto_max: number; hashtags_max: number; pasos_publicacion?: string[]; verificado: boolean }
 export interface ArchivoDeEntrega { nombre: string; bytes: Buffer }
 
+/** el tipo del archivo por su ENCABEZADO: png/jpeg (con medidas) o mp4 (caja `ftyp`; las medidas de un video no se leen por código); null si no se reconoce */
+export function tipoDeArchivo(b: Buffer): { tipo: 'png' | 'jpeg' | 'mp4'; ancho: number | null; alto: number | null } | null {
+  const m = leerMedidas(b)
+  if (m) return m
+  if (b.length >= 12 && b.toString('ascii', 4, 8) === 'ftyp') return { tipo: 'mp4', ancho: null, alto: null }
+  return null
+}
+
 export function manifiesto(archivos: ArchivoDeEntrega[], meta: Record<string, unknown>): { archivos: Array<{ nombre: string; bytes: number; sha256: string; ancho: number | null; alto: number | null; tipo: string | null }>; meta: Record<string, unknown> } {
   return {
     meta,
     archivos: archivos.map((a) => {
-      const m = leerMedidas(a.bytes)
+      const m = tipoDeArchivo(a.bytes)
       return { nombre: a.nombre, bytes: a.bytes.length, sha256: crypto.createHash('sha256').update(a.bytes).digest('hex'), ancho: m?.ancho ?? null, alto: m?.alto ?? null, tipo: m?.tipo ?? null }
     }),
   }
@@ -85,7 +93,14 @@ export function chequeosDeEntrega(archivos: ArchivoDeEntrega[], fila: FilaDeForm
   const nombres = archivos.map((a) => a.nombre)
   if (new Set(nombres).size !== nombres.length) nueva('bloquea', 'hay nombres de archivo repetidos', 'orden continuo 01..NN', 'renombrar')
   man.archivos.forEach((a, i) => {
-    if (a.ancho === null || a.alto === null) { nueva('bloquea', `«${a.nombre}» no es una imagen legible`, 'encabezado del archivo', 'regenerar el archivo'); return }
+    if (a.tipo === 'mp4') {
+      // un video: el código no lee sus medidas (solo el encabezado); se chequean el tipo y el peso, y se declara que las medidas no se verificaron
+      if (!fila.tipos_archivo.includes('mp4')) nueva(avisa, `«${a.nombre}» es mp4 y el formato admite ${fila.tipos_archivo.join(', ')}`, 'especificación del formato', 'convertir')
+      if (a.bytes > fila.peso_max_mb * 1024 * 1024) nueva(avisa, `«${a.nombre}» pesa ${(a.bytes / 1048576).toFixed(1)} MB y el límite es ${fila.peso_max_mb}`, 'especificación del formato', 'comprimir')
+      nueva('sugerencia', `«${a.nombre}»: las medidas y la duración del video no se verificaron por código (el formato pide ${fila.ancho}×${fila.alto})`, 'especificación del formato', 'mirar el video antes de aprobar')
+      return
+    }
+    if (a.ancho === null || a.alto === null) { nueva('bloquea', `«${a.nombre}» no es una imagen legible (png/jpeg) ni un video mp4`, 'encabezado del archivo', 'regenerar el archivo'); return }
     if (Math.abs(a.ancho / a.alto - fila.ancho / fila.alto) > 0.01) nueva('bloquea', `«${a.nombre}» mide ${a.ancho}×${a.alto} y el formato pide la proporción ${fila.ancho}×${fila.alto}`, 'especificación del formato', 'recortar a la proporción del formato')
     else if (a.ancho !== fila.ancho || a.alto !== fila.alto) nueva('sugerencia', `«${a.nombre}» mide ${a.ancho}×${a.alto} (proporción correcta) y el formato indica ${fila.ancho}×${fila.alto}`, 'especificación del formato', 'la red lo reescala; subir tal cual o reescalar antes')
     if (a.tipo && !fila.tipos_archivo.includes(a.tipo)) nueva(avisa, `«${a.nombre}» es ${a.tipo} y el formato admite ${fila.tipos_archivo.join(', ')}`, 'especificación del formato', 'convertir')

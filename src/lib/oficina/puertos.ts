@@ -82,7 +82,7 @@ export interface Cambios {
   turno?: TurnoRegistrado
   artefacto?: { tipo: string; version: number; contenido: Record<string, unknown>; sha256: string; autor: string | null }
   fichas?: Ficha[]
-  gastos?: Array<{ concepto: 'modelo' | 'revisor_externo' | 'imagen' | 'portero'; ref_tabla: string | null; ref_id: string | null; cost_usd: number; base: 'usage' | 'estimado' }>
+  gastos?: Array<{ concepto: 'modelo' | 'revisor_externo' | 'imagen' | 'portero' | 'video'; ref_tabla: string | null; ref_id: string | null; cost_usd: number; base: 'usage' | 'estimado' }>
   usos_de_fotos?: Array<{ foto_id: string; rol: string | null }>
 }
 
@@ -139,10 +139,29 @@ export interface PuertoDeLaCadena {
   entregarConcepto(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null; brief_devuelto?: string | null }): Promise<EntregaALaCadena>
 }
 
+/** lo que el brazo de video contesta al enviar: en dry_run el puerto NO sale a la red y devuelve `simulado` */
+export type EnvioDeVideo =
+  | { ok: true; request_id: string; status: string; costo_estimado_usd: number; costo_lista_usd?: number; descuento_pct?: number; simulado: boolean }
+  | { ok: false; error: string; http?: number }
+/** lo que el brazo contesta al preguntar por un pedido (`GET /api/video/generate?request_id=`) */
+export type EstadoDelBrazo =
+  | { ok: true; simulado: true }
+  | { ok: true; simulado?: false; terminal: false; status: string }
+  | { ok: true; simulado?: false; terminal: true; status: 'completed'; video_url: string; url_proveedor: string | null; costo_usd: number; expires_at: string | null; copia: 'bucket' | 'solo_proveedor'; aviso: string | null }
+  | { ok: true; simulado?: false; terminal: true; status: string; error: string | null }
+  | { ok: false; error: string }
+/** EL BRAZO DE VIDEO (parte 2 · 31-oct): enviar un pedido y leer su estado. Opcional: sin él la familia `video_mesa` falla visible al llegar al paso `video` */
+export interface PuertoDeVideo {
+  enviar(p: { pedido: import('./video/pedido').PedidoDeVideoDeLaOficina; client_id: string; encargo_id: string; dry_run: boolean; tope_usd: number; workflow_id: string; workflow_execution_id: string }): Promise<EnvioDeVideo>
+  estado(request_id: string): Promise<EstadoDelBrazo>
+}
+
 export interface Puertos {
   almacen: Almacen
   /** LA CADENA (opcional): solo la mesa de creativos del calendario la usa. Sin él esa familia falla visible (y la cadena ordena el calendario sin ideas al vencer el plazo) */
   cadena?: PuertoDeLaCadena
+  /** EL BRAZO DE VIDEO · opcional (ver `PuertoDeVideo`) */
+  video?: PuertoDeVideo
   /** MATERIAL · el portero. Opcional: sin él (o con `material_activo` apagado) la oficina funciona exactamente como antes */
   cerebro?: PuertoDelCerebro
   /** LA MESA · el directorio vivo y el libro de aportes. Opcional: sin él las familias `*_mesa` no abren (fallan visibles) y las v1 funcionan igual */
