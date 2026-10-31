@@ -93,6 +93,10 @@ export const MESA_ALLOW: ReadonlySet<string> = new Set([
   'campaign-brief-agent',
   'video-editor',
   'marketing_video_optimization_specialist',
+  // instalaciones E1 · PLAN v3 T7 (FIRMA de Emilio 31-oct 16:30Z): encanto de marca, formato corto e imágenes con personas. Sus filas de directorio las siembra CC2 en T6.
+  'whimsy-injector',
+  'tiktok-strategist',
+  'inclusive-visuals-specialist',
 ])
 const DATAFORSEO_ALLOW: ReadonlySet<string> = new Set([
   'market-research',
