@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { validarRespuesta, BRAZOS, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
 import { ROTULO_INFORME_DE_MERCADO, brazoMercado, contarSenales, esSenal, lineasQueNoCuentan } from '@/lib/planeacion/brazos'
 import { traducir } from '@/lib/planeacion/vocabulario'
+import { METODO_MERCADO_POR_OMISION } from '@/lib/cadena/metodos'
 
 const supabaseMock = { from: vi.fn() }
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => supabaseMock }))
@@ -133,7 +134,7 @@ describe('🔴 con señales ⇒ trajo · ROTULADO como propuesta · y el pedido 
   it('rubro y plaza del pedido mandan sobre la ficha · y entonces la ficha NO se lee', async () => {
     const espia = corredor({ output: INFORME_OK, cost_usd: 0 })
     await pedir({ ...PEDIDO, params: { rubro: 'gimnasio', plaza: 'Quito', idioma: 'inglés' } })
-    expect(supabaseMock.from).not.toHaveBeenCalled()
+    expect(supabaseMock.from).not.toHaveBeenCalledWith('clients') // (desde la firma 2 sí se lee `cadena_config` por el método; la ficha, no)
     const b = cuerpoAlCorredor(espia)
     expect(b.task).toMatch(/«gimnasio» en Quito/)
     expect(b.task).toMatch(/Idioma: inglés/)
@@ -320,5 +321,50 @@ describe('el envoltorio solo · sin red', () => {
     const t = tareaDeMercado({ ficha: { nombre: null, rubro: 'x', plaza: null, pais: null }, idioma: null })
     expect(t).toMatch(/sin dato en la ficha: dilo/)
     expect(t).toMatch(/idioma oficial de su país/)
+  })
+
+  // FIRMA 2 de Emilio (31-oct 20:29Z · punto 2): `market_research_analyst` + `audience-belief-mapper` como capa local, después de las reglas (que mandan) y antes del propósito
+  it('🔴 con método la tarea lo trae DESPUÉS de las reglas y ANTES del propósito; sin método (apagado) es la de hoy byte a byte', () => {
+    const base = { ficha: { nombre: null, rubro: 'x', plaza: 'Quito', pais: 'EC' }, idioma: null, proposito: 'el plan' }
+    const hoy = tareaDeMercado(base)
+    expect(tareaDeMercado({ ...base, metodo: null })).toBe(hoy)
+    const con = tareaDeMercado({ ...base, metodo: METODO_MERCADO_POR_OMISION })
+    expect(con).toContain('# MÉTODO (capa local · audience-belief-mapper')
+    expect(con.indexOf('Respeta el trato')).toBeLessThan(con.indexOf('# MÉTODO'))
+    expect(con.indexOf('# MÉTODO')).toBeLessThan(con.indexOf('Para qué sirve en el plan'))
+    // el método no fija idioma ni trato y no rompe el contrato de la señal (fuente + fecha en la línea de lista)
+    expect(METODO_MERCADO_POR_OMISION).toMatch(/UNA línea de lista con su fuente .* y su fecha/)
+    expect(METODO_MERCADO_POR_OMISION).not.toMatch(/\b(tuteo|voseo|en español|in english)\b/i)
+  })
+  it('🔴 la puerta lee `cadena_config.metodos.mercado` por el almacén de la cadena: sin fila va el de omisión; `false` lo apaga; si la lectura falla va el de omisión', async () => {
+    const qFicha = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: { name: 'N', industry: 'restaurante', market: 'Guayaquil', country: 'EC' }, error: null })) }
+    qFicha.select.mockReturnValue(qFicha); qFicha.eq.mockReturnValue(qFicha)
+    const qConfig = (valor: unknown, error: { message: string } | null = null) => {
+      const q = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: valor === undefined ? null : { valor }, error })) }
+      q.select.mockReturnValue(q); q.eq.mockReturnValue(q)
+      return q
+    }
+    const conConfig = (q: unknown) => supabaseMock.from.mockImplementation((t: string) => (t === 'cadena_config' ? q : qFicha))
+
+    conConfig(qConfig(undefined))
+    const e1 = corredor({ output: INFORME_OK, cost_usd: 0 })
+    await pedir(PEDIDO)
+    expect(cuerpoAlCorredor(e1).task).toContain('# MÉTODO (capa local · audience-belief-mapper')
+
+    conConfig(qConfig({ mercado: false }))
+    const e2 = corredor({ output: INFORME_OK, cost_usd: 0 })
+    await pedir(PEDIDO)
+    expect(cuerpoAlCorredor(e2).task).not.toContain('# MÉTODO')
+
+    conConfig(qConfig({ mercado: 'mi método propio' }))
+    const e3 = corredor({ output: INFORME_OK, cost_usd: 0 })
+    await pedir(PEDIDO)
+    expect(cuerpoAlCorredor(e3).task).toContain('\nmi método propio\n')
+
+    conConfig(qConfig(undefined, { message: 'base caída' }))
+    const e4 = corredor({ output: INFORME_OK, cost_usd: 0 })
+    const r4 = await leer(await pedir(PEDIDO))
+    expect(r4.json.estado).toBe('trajo')
+    expect(cuerpoAlCorredor(e4).task).toContain('# MÉTODO (capa local · audience-belief-mapper')
   })
 })

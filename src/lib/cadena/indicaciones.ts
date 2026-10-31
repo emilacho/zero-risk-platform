@@ -74,6 +74,8 @@ export interface PedidoDeCalendario {
   concepto?: { leido: ConceptoLeido; version: number }
   /** solo con `concepto`: las fechas que el cliente declaró y el código verificó (ninguna = se dice) */
   fechasEspeciales?: FechaEspecialVerificada[]
+  /** 31-oct (FIRMA de Emilio · capa local): el MÉTODO de colocación (`metodos.ts`, `social-calendar-builder` sin sus dependencias) · solo se pega con `concepto`; `null`/ausente = sin método (la tarea de hoy) */
+  metodo?: string | null
 }
 
 /** las secciones de la gran idea para la tanda: solo los capítulos (fases) que caen en sus semanas; el banco de cada uno con sus ideas tal cual */
@@ -115,6 +117,7 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     '# Qué te pido',
     `Materializa la TANDA ${p.tanda} del calendario editorial (semanas ${p.semanas.join(', ')}). Para cada slot del patrón semanal y cada semana, escribe el tema de la pieza; agrega las piezas fijas del plan y los ajustes puntuales.`,
     ...seccionesDelConcepto(p),
+    ...(p.concepto && p.metodo ? ['', p.metodo] : []),
     '',
     '# Reglas',
     lineas(reglasComunes(p.ctx.registro, p.ctx.idioma)),
