@@ -12,7 +12,7 @@ import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autop
 import type { SobreDeLote } from './arranque'
 import { almacenDeSupabase as almacenDeJefatura } from '@/lib/jefatura/revision/almacen-supabase'
 import { decidirRetencion } from './revision-jefatura'
-import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, MesaDeCalendario } from './almacen'
+import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
 import { horarioDeNorm } from './horario'
 import { registroDelCliente } from './registro'
 import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
@@ -161,23 +161,6 @@ export function almacenDeSupabase(): Almacen {
     async descartarCorrida(id) { const { error } = await db.from('cadena_corridas').delete().eq('id', id).eq('estado', 'en_curso'); if (error) fallo(error) },
     async corridasDeCampana(campanaId) { return lista<Corrida>(db.from('cadena_corridas').select('*').eq('campana_id', campanaId).limit(1000)) },
     async corridasEnCurso() { return lista<Corrida>(db.from('cadena_corridas').select('*').eq('estado', 'en_curso').limit(1000)) },
-
-    async mesaDeCalendario(campanaId, tanda, version) { return uno<MesaDeCalendario>(db.from('cadena_mesas_calendario').select('*').eq('campana_id', campanaId).eq('tanda', tanda).eq('version', version).maybeSingle()) },
-    async abrirMesaDeCalendario(m) {
-      const { data, error } = await db.from('cadena_mesas_calendario').insert(m).select().single()
-      if (error) {
-        if ((error as { code?: string }).code === '23505') { const ya = await almacen.mesaDeCalendario(m.campana_id, m.tanda, m.version); if (ya) return { mesa: ya, creada: false } }
-        fallo(error)
-      }
-      return { mesa: data as MesaDeCalendario, creada: true }
-    },
-    async cerrarMesaDeCalendario(id, patch) {
-      const { data, error } = await db.from('cadena_mesas_calendario').update({ ...patch, terminada_en: new Date().toISOString() }).eq('id', id).eq('estado', 'abierta').select('id')
-      if (error) fallo(error)
-      return ((data as unknown[] | null) ?? []).length > 0
-    },
-    async anotarIdeasQueSacaronFilas(id, ideas) { const { error } = await db.from('cadena_mesas_calendario').update({ ideas_que_sacaron_filas: ideas }).eq('id', id); if (error) fallo(error) },
-    async mesasAbiertas() { return lista<MesaDeCalendario>(db.from('cadena_mesas_calendario').select('*').eq('estado', 'abierta').limit(1000)) },
 
     async abrirEspera(e) {
       const { data, error } = await db.from('cadena_esperas').insert(e).select().single()

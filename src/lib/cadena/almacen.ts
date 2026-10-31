@@ -73,26 +73,6 @@ export interface Corrida {
   seco: boolean
 }
 
-/**
- * 31-oct · MESA DE CREATIVOS del calendario: una fila por (campaña, tanda, versión del calendario). Lleva su propio plazo (45 min: es el equipo trabajando, no una llamada) y NO es una corrida:
- * el vigía de las corridas no la toca. `abierta` mientras el equipo trabaja · `lista` con el tablero integrado en `texto` · `sin_mesa` si falló, venció o cerró sin nada (el calendario se ordena igual, sin ideas).
- */
-export interface MesaDeCalendario {
-  id: number
-  campana_id: string
-  tanda: number
-  version: number
-  estado: 'abierta' | 'lista' | 'sin_mesa'
-  encargo_id: string | null
-  texto: string | null
-  costo_usd: number | null
-  motivo: string | null
-  plazo_en: string
-  /** ideas de la mesa cuya fila luego salió por dato declarado sin fuente (V14/V22): para medir si la mesa produce ideas con datos sin fuente */
-  ideas_que_sacaron_filas: Array<{ idea: string; chequeo: string; fila_id: string | null }>
-  seco: boolean
-}
-
 export interface EsperaFila {
   id: number
   campana_id: string
@@ -181,14 +161,6 @@ export interface Almacen {
   descartarCorrida(id: number): Promise<void>
   corridasDeCampana(campanaId: string): Promise<Corrida[]>
   corridasEnCurso(): Promise<Corrida[]>
-  // mesa de creativos del calendario
-  mesaDeCalendario(campanaId: string, tanda: number, version: number): Promise<MesaDeCalendario | null>
-  /** idempotente por (campaña, tanda, versión): si ya existe devuelve la existente con `creada: false` */
-  abrirMesaDeCalendario(m: Omit<MesaDeCalendario, 'id'>): Promise<{ mesa: MesaDeCalendario; creada: boolean }>
-  /** solo cierra una mesa `abierta` (la primera que cierra gana; devuelve false si ya estaba cerrada) */
-  cerrarMesaDeCalendario(id: number, patch: Partial<Pick<MesaDeCalendario, 'estado' | 'texto' | 'costo_usd' | 'motivo' | 'encargo_id'>>): Promise<boolean>
-  anotarIdeasQueSacaronFilas(id: number, ideas: MesaDeCalendario['ideas_que_sacaron_filas']): Promise<void>
-  mesasAbiertas(): Promise<MesaDeCalendario[]>
   // esperas
   /** idempotente por `dedup_key` */
   abrirEspera(e: Omit<EsperaFila, 'id'>): Promise<{ espera: EsperaFila; creada: boolean }>

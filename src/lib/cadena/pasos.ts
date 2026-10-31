@@ -9,8 +9,7 @@ import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './auto
 import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, DIAS_DE_CAMPANA, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, SEMANAS_DE_PANORAMA, SEMANAS_DE_TANDA, topeDelPaso, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
 import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
-import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V2, ESQUEMA_ESTRATEGIA } from './esquemas'
-import { CONTRATO_CON_MESA, CONTRATO_SIN_MESA, ideasQueSacaronFilas, marcoDeLaTanda, mesaEncendida, plazoDeLaMesa, proporcionConIdea, siguienteDeLaMesa } from './mesa-de-creativos'
+import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_ESTRATEGIA } from './esquemas'
 import { expandirPatron, fusionarTanda } from './expandir-patron'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
@@ -206,40 +205,7 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   }
   if (!correccion && delaTanda.length > 0 && delaTanda.every((f) => f.estado !== 'propuesta')) return { status: 200, cuerpo: { ya_hecha: true, tanda } }
   const semanas = semanasDeTanda(tanda)
-  // 31-oct · MESA DE CREATIVOS · tramo A: con la palanca apagada (lo normal) nada de esto corre y el calendario es el de siempre, byte a byte
-  let conMesa: { ideas: string | null } | undefined
-  if (await mesaEncendida(al, campana.client_id)) {
-    let m = await al.mesaDeCalendario(campana.id, tanda, version)
-    // la corrección NO reabre la mesa (evita bucles y gasto): sin mesa previa se corrige sin ideas; con mesa lista conserva sus ideas
-    let sig = correccion && !m ? ({ accion: 'ordenar', ideas: null, motivo: 'corrección sin mesa previa' } as const) : siguienteDeLaMesa(m, ahora)
-    if (sig.accion === 'abrir_mesa') {
-      const abierta = await al.abrirMesaDeCalendario({ campana_id: campana.id, tanda, version, estado: 'abierta', encargo_id: null, texto: null, costo_usd: null, motivo: null, plazo_en: plazoDeLaMesa(ahora), ideas_que_sacaron_filas: [], seco: campana.seco })
-      m = abierta.mesa
-      // la fila ya existía (otra llamada ganó la carrera): se espera, no se abre otra mesa
-      sig = abierta.creada ? sig : siguienteDeLaMesa(m, ahora)
-      if (abierta.creada) {
-        const fechas = await fechasDeclaradas(al, ctx, estr.contenido, campana)
-        const esqueleto = expandirPatron(estr.contenido, campana, semanas, tanda, formatos)
-        return {
-          status: 200,
-          cuerpo: {
-            accion: 'abrir_mesa', tanda, calendario_version: version, mesa_id: m.id, plazo_en: m.plazo_en,
-            mesa: { client_id: campana.client_id, campana_id: campana.id, tanda, version, dry_run: campana.seco, marco_texto: marcoDeLaTanda({ ctx, estrategia: estr.contenido, tanda, semanas, esqueleto, filasPrevias: todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema'), fechasEspeciales: fechas.map((f) => ({ fecha: f.fecha, nombre: f.nombre })) }) },
-          },
-        }
-      }
-    }
-    if (sig.accion === 'esperar_mesa') return { status: 200, cuerpo: { accion: 'esperar_mesa', tanda, plazo_en: sig.plazo_en } }
-    if (sig.accion === 'ordenar') {
-      // venció sin entregar: se cierra SIN mesa (la primera que cierra gana: si la mesa entregó en este instante, se respeta su texto)
-      if (m && m.estado === 'abierta') {
-        const cerro = await al.cerrarMesaDeCalendario(m.id, { estado: 'sin_mesa', motivo: sig.motivo })
-        if (!cerro) { m = await al.mesaDeCalendario(campana.id, tanda, version); sig = siguienteDeLaMesa(m, ahora) }
-      }
-      conMesa = { ideas: sig.accion === 'ordenar' ? sig.ideas : null }
-    }
-  }
-  const esquema = validarEsquemaDeSalida(conMesa ? ESQUEMA_CALENDARIO_TANDA_V2 : ESQUEMA_CALENDARIO_TANDA)
+  const esquema = validarEsquemaDeSalida(ESQUEMA_CALENDARIO_TANDA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema del calendario no es válido')
   const modelo = await modeloDeLaCadena(al)
   const prep = await prepararCorrida(al, campana, 'calendario', `t${tanda}:v${version}:c${correccion ? 1 : 0}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash,
@@ -255,15 +221,13 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   const tarea = tareaDeCalendario({
     ctx, estrategia: estr.contenido, tanda, semanas, filasPrevias: todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema'),
     correccion: correccion ? { fichas: correccion.fichas ?? [], filas: filasMalas, modo: correccion.modo === 'filas' ? 'filas' : 'tanda' } : undefined,
-    ...(conMesa ? { mesa: conMesa } : {}),
   })
   return {
     status: 200,
     cuerpo: {
       corrida_id: prep.corrida.id, tanda, semanas, calendario_version: version, intento: prep.corrida.intento, plazo_en: prep.corrida.plazo_en,
       headers: { [CABECERA_SALTAR_EDITOR]: '1' },
-      run_sdk: cuerpoDeRunSdk('calendario', modelo, tarea, esquema.valor, campana.client_id, { contrato: conMesa ? CONTRATO_CON_MESA : CONTRATO_SIN_MESA }),
-      ...(conMesa ? { con_mesa: conMesa.ideas !== null } : {}),
+      run_sdk: cuerpoDeRunSdk('calendario', modelo, tarea, esquema.valor, campana.client_id, { contrato: 'calendario_tanda.v1' }),
     },
   }
 }
@@ -300,7 +264,6 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   let filas = resolverDependencias(fusionarTanda(base, objeto, estr, campana, tanda, formatos).filas, previas).filas
   const ajustes = esCorreccion ? [...(objeto.ajustes_al_patron ?? []), ...omitidosImplicitos(estr, semanas, filas)] : objeto.ajustes_al_patron ?? []
   let hs: Hallazgo[] = sinFaltantesSiCorrige(esCorreccion, validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, fechas, ahora, lexico)))
-  const hsAntesDeSacar = hs
   await al.guardarValidaciones(campana.id, 'calendario', version, tanda, esCorreccion ? 2 : 1, hs, campana.seco)
   const plan = planDeCorreccion(hs)
 
@@ -327,14 +290,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
       return { status: 200, cuerpo: { necesita_humano: true, fichas: hs.filter((h) => h.severidad === 'bloquea').map((h) => h.ficha), alerta: r.alerta } }
     }
   }
-  const cierre = await cerrarTanda(al, { campana, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora })
-  // 31-oct · MESA DE CREATIVOS · R9: las ideas cuya fila salió por dato sin fuente quedan anotadas (medir si la mesa produce ideas con datos sin fuente); la proporción con idea es solo una métrica
-  const mesa = await al.mesaDeCalendario(campana.id, tanda, version)
-  if (!mesa) return cierre
-  const piezas = objeto.piezas as Array<{ semana: number; dia_semana: number; slot: string; idea_de_mesa?: string }>
-  const sacaron = ideasQueSacaronFilas(piezas, salen, (id) => hsAntesDeSacar.find((h) => h.fila_id === id && h.severidad === 'bloquea')?.chequeo ?? null)
-  if (sacaron.length) await al.anotarIdeasQueSacaronFilas(mesa.id, sacaron)
-  return { ...cierre, cuerpo: { ...cierre.cuerpo, mesa: { estado: mesa.estado, ...proporcionConIdea(piezas), ideas_que_sacaron_filas: sacaron.length } } }
+  return cerrarTanda(al, { campana, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora })
 }
 
 /** Lo que sigue a una tanda ya validada: estado final de cada fila, esperas, panorama, y la campaña pasa a `activa` si era la primera. Lo usan el guardado y el reloj (retomar una campaña frenada solo por cantidades). */

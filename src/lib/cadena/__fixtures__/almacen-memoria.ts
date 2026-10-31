@@ -2,7 +2,7 @@
  * Almacén EN MEMORIA de la cadena · para las pruebas de los manejadores (sin base, sin red, US$ 0).
  * Imita las garantías de la base que importan: únicos, idempotencia de corridas/esperas, una campaña viva por cliente.
  */
-import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, MesaDeCalendario, ParteSecoAGuardar } from '../almacen'
+import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, ParteSecoAGuardar } from '../almacen'
 import type { PlazoCfg } from '../esperas'
 import type { Fila, FormatosPorRed, Hallazgo } from '../tipos'
 import type { FechaEspecialVerificada } from '../validador-calendario'
@@ -145,23 +145,6 @@ export class AlmacenMemoria implements Almacen {
   async descartarCorrida(id: number) { this.corridas = this.corridas.filter((c) => !(c.id === id && c.estado === 'en_curso')) }
   async corridasDeCampana(campanaId: string) { return structuredClone(this.corridas.filter((c) => c.campana_id === campanaId)) }
   async corridasEnCurso() { return structuredClone(this.corridas.filter((c) => c.estado === 'en_curso')) }
-  mesas: MesaDeCalendario[] = []
-  async mesaDeCalendario(campanaId: string, tanda: number, version: number) { return structuredClone(this.mesas.find((m) => m.campana_id === campanaId && m.tanda === tanda && m.version === version) ?? null) }
-  async abrirMesaDeCalendario(m: Omit<MesaDeCalendario, 'id'>) {
-    const ya = this.mesas.find((x) => x.campana_id === m.campana_id && x.tanda === m.tanda && x.version === m.version)
-    if (ya) return { mesa: structuredClone(ya), creada: false }
-    const n = { ...m, id: this.mesas.length + 1 } as MesaDeCalendario
-    this.mesas.push(n)
-    return { mesa: structuredClone(n), creada: true }
-  }
-  async cerrarMesaDeCalendario(id: number, patch: Partial<Pick<MesaDeCalendario, 'estado' | 'texto' | 'costo_usd' | 'motivo' | 'encargo_id'>>) {
-    const m = this.mesas.find((x) => x.id === id)
-    if (!m || m.estado !== 'abierta') return false
-    Object.assign(m, patch)
-    return true
-  }
-  async anotarIdeasQueSacaronFilas(id: number, ideas: MesaDeCalendario['ideas_que_sacaron_filas']) { const m = this.mesas.find((x) => x.id === id); if (m) m.ideas_que_sacaron_filas = ideas }
-  async mesasAbiertas() { return structuredClone(this.mesas.filter((m) => m.estado === 'abierta')) }
   async abrirEspera(e: Omit<EsperaFila, 'id'>) {
     const ya = this.esperas.find((x) => x.dedup_key === e.dedup_key)
     if (ya) return { espera: ya, creada: false }
