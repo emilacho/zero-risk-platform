@@ -12,7 +12,9 @@ import { filasQueVencen, NOTA_DE_VENCIMIENTO } from './entrega'
 import type { Puertos } from './puertos'
 import { fallar, jefaturaSinRespuesta, plantillaDe } from './orquestador'
 import { resolverMaterialVencido } from './material-orquestador'
-import { esTurnoDeLaMesa, recibirResultadoMesa } from './mesa/orquestador'
+import { entregarPorTopeDeLaMesa, esTurnoDeLaMesa, recibirResultadoMesa } from './mesa/orquestador'
+import { FAMILIAS_MESA, esDeLaCadena } from './mesa/tipos'
+import { entregarALaCadena } from './mesa/de-la-cadena'
 
 type Fila = Record<string, unknown>
 export const MINUTOS_PARA_DAR_POR_MUERTO = 12
@@ -33,6 +35,30 @@ export async function vencerBandeja(db: Db, ahora: Date): Promise<{ vencidas: st
     const u = (await db.from('hitl_queue').update({ status: 'rejected', resolved_by: 'oficina-vigia', reviewer: 'oficina-vigia', resolution_notes: NOTA_DE_VENCIMIENTO, resolved_at: ahora.toISOString(), decided_at: ahora.toISOString(), decision: { vencida: true, motivo: NOTA_DE_VENCIMIENTO, expires_at: f.expires_at } }).eq('id', f.id).eq('status', 'pending').select('id')) as { data: Fila[] | null; error: { message: string } | null }
     if (u.error) throw new Error(`vigía · vencer ${f.id}: ${u.error.message}`)
     if (u.data?.length) vencidas.push(f.id)
+  }
+  return { vencidas }
+}
+
+/**
+ * El PLAZO de la mesa entera (brief 30 min, concepto 90): pasado el plazo desde que se abrió el encargo, la mesa cierra con lo que hay y se lo entrega a la cadena con motivo «plazo» (cerrado_por_tope).
+ * Es el freno de una mesa que sigue viva sin llegar a integrar (turnos que vuelven, pero sin fin). Solo las mesas de la cadena; nunca la bandeja. Un encargo ya cerrado no se toca.
+ */
+export async function vencerMesasPorPlazo(P: Puertos, db: Db, ahora: Date): Promise<{ vencidas: string[] }> {
+  const familias = Object.entries(FAMILIAS_MESA).filter(([, t]) => esDeLaCadena(t)).map(([f]) => f)
+  const r = (await db.from('oficina_encargos').select('id,creado_en').in('familia', familias).in('estado', ['abierto', 'en_paso'])) as { data: Fila[] | null; error: { message: string } | null }
+  if (r.error) throw new Error(`vigía · leer las mesas de la cadena: ${r.error.message}`)
+  const vencidas: string[] = []
+  for (const f of r.data ?? []) {
+    const enc = await P.almacen.leerEncargo(String(f.id))
+    if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido', 'aprobada'].includes(enc.estado)) continue
+    const pl = await plantillaDe(P, enc)
+    const plazo = Number(pl.limites?.plazo_mesa_min ?? 0)
+    if (!(plazo > 0) || !f.creado_en) continue
+    if (new Date(String(f.creado_en)).getTime() > ahora.getTime() - plazo * 60_000) continue
+    const motivo = `plazo de la mesa agotado (${plazo} min)`
+    const entregado = await entregarPorTopeDeLaMesa(P, enc, motivo)
+    if (!entregado) await entregarALaCadena(P, enc, { texto: null, motivo, estado: 'cerrado_por_tope' })
+    vencidas.push(enc.id)
   }
   return { vencidas }
 }

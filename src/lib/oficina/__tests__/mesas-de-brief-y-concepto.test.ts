@@ -14,6 +14,8 @@ import { cotaAgotada, siguienteDeLaMesa } from '../mesa/planificador'
 import { ROTULO_DE_MATERIAL, pedidoDeAperturaDeLaCadena } from '../mesa/orquestador'
 import { DIETA, armarTarea } from '../mesa/pedidos'
 import { BRIEF_MESA, CONCEPTO_MESA } from '../plantillas/mesa'
+import { vencerMesasPorPlazo } from '../vigia'
+import { DbFalsa } from './dbfalsa'
 import { crearMemoria, CLIENTE } from './memoria'
 import { crearMesaEnMemoria, DIRECTORIO } from './mesa-memoria'
 import type { Aporte, EstadoMesa, Tarjeta } from '../mesa/tipos'
@@ -446,5 +448,62 @@ describe('textos puros', () => {
     expect(t).toContain('[… recortado: 7000 de 9000 caracteres de el manual de marca]')
     expect(t).toContain('[… recortado: 3000 de 4000 caracteres de el plan]')
     expect(t).not.toContain('de el marco]')
+  })
+})
+
+describe('el plazo de la mesa entera (vigía)', () => {
+  const ABIERTA = '2026-10-31T12:00:00Z'
+  const a = (min: number) => new Date(new Date(ABIERTA).getTime() + min * 60_000)
+  async function conMesa(tipo: 'brief' | 'concepto') {
+    const m = await montar(tipo)
+    const db = new DbFalsa().semilla('oficina_encargos', [{ id: m.id, familia: tipo === 'brief' ? 'brief_mesa' : 'concepto_mesa', estado: 'en_paso', creado_en: ABIERTA }])
+    return { m, db }
+  }
+  it('el brief vence a los 30 min y el concepto a los 90: antes del plazo no se toca', async () => {
+    for (const [tipo, plazo] of [['brief', 30], ['concepto', 90]] as const) {
+      const { m, db } = await conMesa(tipo)
+      expect((await vencerMesasPorPlazo(m.M.P, db, a(plazo - 1))).vencidas).toEqual([])
+      expect(m.M.encargos.get(m.id)!.estado).not.toBe('cerrado_por_tope')
+      expect((await vencerMesasPorPlazo(m.M.P, db, a(plazo + 1))).vencidas).toEqual([m.id])
+    }
+  })
+  it('al vencer, lo escrito va a la cadena con motivo de plazo (nunca a la bandeja) y es idempotente', async () => {
+    const { m, db } = await conMesa('concepto')
+    await jugar(m, undefined, 2)
+    const r = await vencerMesasPorPlazo(m.M.P, db, a(120))
+    expect(r.vencidas).toEqual([m.id])
+    expect(m.M.encargos.get(m.id)!.estado).toBe('cerrado_por_tope')
+    expect(m.hecho.conceptos).toHaveLength(1)
+    expect(m.hecho.conceptos[0].motivo).toMatch(/plazo de la mesa agotado \(90 min\)/)
+    expect(m.hecho.conceptos[0].texto).toBeTruthy()
+    expect(m.M.llamadas.bandeja).toHaveLength(0)
+    expect((await vencerMesasPorPlazo(m.M.P, db, a(200))).vencidas).toEqual([])
+    expect(m.hecho.conceptos).toHaveLength(1)
+  })
+  it('un tablero vacío se entrega sin texto y una mesa ya cerrada no se vuelve a tocar', async () => {
+    const { m, db } = await conMesa('brief')
+    await vencerMesasPorPlazo(m.M.P, db, a(40))
+    expect(m.hecho.briefs).toHaveLength(1)
+    expect(m.hecho.briefs[0].texto).toBeNull()
+    m.M.encargos.get(m.id)!.estado = 'cerrado'
+    expect((await vencerMesasPorPlazo(m.M.P, db, a(400))).vencidas).toEqual([])
+  })
+  it('un error de la base se lanza (no se lee como «ninguna vencida»)', async () => {
+    const { m, db } = await conMesa('brief')
+    db.fallar['oficina_encargos'] = 'caída'
+    await expect(vencerMesasPorPlazo(m.M.P, db, a(400))).rejects.toThrow(/caída/)
+  })
+})
+
+describe('el plazo de la mesa: lo que NO vence', () => {
+  it('una plantilla sin plazo o una fila sin fecha de apertura no se cierran por reloj', async () => {
+    const m = await montar('brief')
+    const ok = (creado: unknown) => new DbFalsa().semilla('oficina_encargos', [{ id: m.id, familia: 'brief_mesa', estado: 'en_paso', ...(creado ? { creado_en: creado } : {}) }])
+    expect((await vencerMesasPorPlazo(m.M.P, ok(null), new Date('2027-01-01T00:00:00Z'))).vencidas).toEqual([])
+    const sinPlazo = await montar('brief')
+    sinPlazo.M.plantilla = { plantilla: { ...BRIEF_MESA, limites: { ...BRIEF_MESA.limites, plazo_mesa_min: undefined } }, activo: true }
+    const db = new DbFalsa().semilla('oficina_encargos', [{ id: sinPlazo.id, familia: 'brief_mesa', estado: 'en_paso', creado_en: '2026-01-01T00:00:00Z' }])
+    expect((await vencerMesasPorPlazo(sinPlazo.M.P, db, new Date('2027-01-01T00:00:00Z'))).vencidas).toEqual([])
+    expect(sinPlazo.hecho.briefs).toHaveLength(0)
   })
 })
