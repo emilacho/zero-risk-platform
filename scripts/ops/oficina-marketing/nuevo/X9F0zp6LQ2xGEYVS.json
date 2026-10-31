@@ -3751,6 +3751,54 @@
       }
     },
     {
+      "id": "c7fbb57a-ae09-a48b-f3a4-d42bc8d86a6b",
+      "position": [
+        1670,
+        880
+      ],
+      "typeVersion": 4.2,
+      "name": "Validar · guardar borrador",
+      "type": "n8n-nodes-base.httpRequest",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/client_historical_outputs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: $('Validar · ¿qué dijo?').last().json.client_id, title: 'Plan de 90 dias · ' + new Date().toISOString().slice(0,10), output_type: 'campaign_plan_90d', content: $('¿Llegó la vuelta?').last().json.texto, content_text: $('¿Llegó la vuelta?').last().json.texto, producing_agent: $('Redactor · elegir').last().json.redactor_elegido, status: 'draft', provenance_tag: { forma_invalida: true, necesita_humano: true, hallazgos: $('Validar · ¿qué dijo?').last().json.hallazgos, fuente: 'planeacion', workflow_id: $workflow.id, workflow_execution_id: $execution.id, guardado_antes_de_drive: true, caracteres: $('Validar · ¿qué dijo?').last().json.caracteres, estado_del_plan: 'forma_invalida' } }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
       "id": "fa8bc802-d649-5945-64c5-05d1744d0d99",
       "position": [
         1670,
@@ -3760,7 +3808,7 @@
       "name": "Validar · armar la alerta",
       "type": "n8n-nodes-base.code",
       "parameters": {
-        "jsCode": "// VALIDAR · ARMAR LA ALERTA · el plan volvió sin forma DOS veces (1 reintento gastado) · no se guarda ni sigue · el aviso dice qué hacer\nconst v = $input.first().json\nconst lista = (v.hallazgos || []).slice(0, 8).map((h) => '  - ' + String(h.que || '?') + (h.donde ? ' (' + String(h.donde).slice(0, 80) + ')' : '')).join('\\n') || '  - (sin detalle)'\nreturn [{ json: { texto: ':rotating_light: *Plan sin forma* — el redactor devolvió el plan sin la forma pedida DOS veces; la corrida de planeación se detuvo.\\n' +\n  '• cliente: `' + String(v.client_name || v.client_id || '?') + '`\\n' +\n  '• plan: ' + v.caracteres + ' caracteres · NO se guardó ni siguió a la jefatura\\n' +\n  '• qué le falta:\\n' + lista + '\\n' +\n  '*Qué hacer:* necesita_humano · el texto está en esta corrida de n8n (nodo «¿Llegó la vuelta?») · cópialo antes de que caduque el historial (~4 h) · NO repagues el raspado: reusa el pedido de «Redactor (B4)».', necesita_humano: true, hallazgos: v.hallazgos || [] } }]\n"
+        "jsCode": "// VALIDAR · ARMAR LA ALERTA · el plan volvió sin forma DOS veces (1 reintento gastado) · quedó guardado como BORRADOR MARCADO (necesita_humano) y no sigue a jefatura/PDF/brief\nconst v = $('Validar · ¿qué dijo?').last().json\nconst g = $input.first().json || {}\nconst fila = Array.isArray(g.body) ? g.body[0] : g.body\nconst id = Number(g.statusCode) >= 200 && Number(g.statusCode) < 300 && fila && fila.id ? fila.id : null\nconst lista = (v.hallazgos || []).slice(0, 8).map((h) => '  - ' + String(h.que || '?') + (h.donde ? ' (' + String(h.donde).slice(0, 80) + ')' : '')).join('\\n') || '  - (sin detalle)'\nconst dondeEsta = id\n  ? 'quedó guardado como BORRADOR MARCADO (forma_invalida) con id ' + String(id).slice(0, 8) + '… en client_historical_outputs · NO siguió a la jefatura, al PDF ni al brief'\n  : '🔴 NO se pudo guardar (' + g.statusCode + ') · el texto está SOLO en esta corrida de n8n (nodo «¿Llegó la vuelta?») · cópialo antes de que caduque el historial (~4 h)'\nreturn [{ json: { texto: ':rotating_light: *Plan sin forma* — el redactor devolvió el plan sin la forma pedida DOS veces; la corrida de planeación se detuvo.\\n' +\n  '• cliente: `' + String(v.client_name || v.client_id || '?') + '`\\n' +\n  '• plan: ' + v.caracteres + ' caracteres · ' + dondeEsta + '\\n' +\n  '• qué le falta:\\n' + lista + '\\n' +\n  '*Qué hacer:* necesita_humano · NO repagues el raspado: reusa el pedido de «Redactor (B4)».', necesita_humano: true, plan_guardado_id: id, hallazgos: v.hallazgos || [] } }]\n"
       }
     },
     {
@@ -3800,7 +3848,7 @@
       "name": "Validar · resumen",
       "type": "n8n-nodes-base.code",
       "parameters": {
-        "jsCode": "// VALIDAR · RESUMEN · la corrida termina acá: el plan sin forma espera a una persona\nconst a = $('Validar · armar la alerta').last().json\nreturn [{ json: { parado_en: 'validar_forma', necesita_humano: true, hallazgos: a.hallazgos || [] } }]\n"
+        "jsCode": "// VALIDAR · RESUMEN · la corrida termina acá: el plan sin forma espera a una persona\nconst a = $('Validar · armar la alerta').last().json\nreturn [{ json: { parado_en: 'validar_forma', necesita_humano: true, plan_guardado_id: a.plan_guardado_id || null, hallazgos: a.hallazgos || [] } }]\n"
       }
     },
     {
@@ -5588,6 +5636,17 @@
             "index": 0
           }
         ],
+        [
+          {
+            "node": "Validar · guardar borrador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar · guardar borrador": {
+      "main": [
         [
           {
             "node": "Validar · armar la alerta",

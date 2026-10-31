@@ -10,7 +10,7 @@
  *   C · el brazo «INFORME DE MERCADO» (paso 0 del plan · ruta `/api/planeacion/brazo/mercado` de CC1): `elegir brazos` lo pide SOLO si el disparo trae `con_mercado: true` (ausente = el flujo de hoy, sin gasto nuevo; otro valor se rechaza en «⓪ Llave»).
  *       Rama nueva `Brazo · mercado` → `firma de la rama · mercado` → 4.ª entrada de la junta. Su material viaja como PROPUESTA (rótulo + `es_dato_del_cliente:false` los pone la ruta; la junta y el redactor lo leen genérico).
  *   D · el VALIDADOR DE FORMA del plan (ruta `/api/planeacion/validar-plan` de CC1): entre «¿Hay plan?» y «Guardar el plan», SOLO si el disparo trae `validar_forma: true` (ausente = el flujo de hoy; otro valor se rechaza en «⓪ Llave»).
- *       ok → guarda. No ok la 1.ª vez → UN reintento al redactor con `correccion` pegada al final del pedido (con `force_restart`: sin él el corredor devuelve la respuesta vieja). No ok la 2.ª vez → alerta en Slack + `necesita_humano` y NO se guarda ni sigue.
+ *       ok → guarda. (la 2.ª vez sin forma queda guardada como BORRADOR MARCADO `forma_invalida`, no se pierde) No ok la 1.ª vez → UN reintento al redactor con `correccion` pegada al final del pedido (con `force_restart`: sin él el corredor devuelve la respuesta vieja). No ok la 2.ª vez → alerta en Slack + `necesita_humano` y NO se guarda ni sigue.
  *       Una validación que no se pudo leer DETIENE (no se lee un error como «el plan está bien»).
  */
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
@@ -101,19 +101,25 @@ if (intento === 1) {
 return [{ json: { veredicto: 'fallo', hallazgos: hallazgos, intentos: intento, client_id: plan.client_id || null, client_name: plan.client_name || null, caracteres: plan.caracteres || 0 } }]
 `
 
-export const CODIGO_ALERTA_FORMA = `// VALIDAR · ARMAR LA ALERTA · el plan volvió sin forma DOS veces (1 reintento gastado) · no se guarda ni sigue · el aviso dice qué hacer
-const v = $input.first().json
+export const CODIGO_ALERTA_FORMA = `// VALIDAR · ARMAR LA ALERTA · el plan volvió sin forma DOS veces (1 reintento gastado) · quedó guardado como BORRADOR MARCADO (necesita_humano) y no sigue a jefatura/PDF/brief
+const v = $('Validar · ¿qué dijo?').last().json
+const g = $input.first().json || {}
+const fila = Array.isArray(g.body) ? g.body[0] : g.body
+const id = Number(g.statusCode) >= 200 && Number(g.statusCode) < 300 && fila && fila.id ? fila.id : null
 const lista = (v.hallazgos || []).slice(0, 8).map((h) => '  - ' + String(h.que || '?') + (h.donde ? ' (' + String(h.donde).slice(0, 80) + ')' : '')).join('\\n') || '  - (sin detalle)'
+const dondeEsta = id
+  ? 'quedó guardado como BORRADOR MARCADO (forma_invalida) con id ' + String(id).slice(0, 8) + '… en client_historical_outputs · NO siguió a la jefatura, al PDF ni al brief'
+  : '🔴 NO se pudo guardar (' + g.statusCode + ') · el texto está SOLO en esta corrida de n8n (nodo «¿Llegó la vuelta?») · cópialo antes de que caduque el historial (~4 h)'
 return [{ json: { texto: ':rotating_light: *Plan sin forma* — el redactor devolvió el plan sin la forma pedida DOS veces; la corrida de planeación se detuvo.\\n' +
   '• cliente: \`' + String(v.client_name || v.client_id || '?') + '\`\\n' +
-  '• plan: ' + v.caracteres + ' caracteres · NO se guardó ni siguió a la jefatura\\n' +
+  '• plan: ' + v.caracteres + ' caracteres · ' + dondeEsta + '\\n' +
   '• qué le falta:\\n' + lista + '\\n' +
-  '*Qué hacer:* necesita_humano · el texto está en esta corrida de n8n (nodo «¿Llegó la vuelta?») · cópialo antes de que caduque el historial (~4 h) · NO repagues el raspado: reusa el pedido de «Redactor (B4)».', necesita_humano: true, hallazgos: v.hallazgos || [] } }]
+  '*Qué hacer:* necesita_humano · NO repagues el raspado: reusa el pedido de «Redactor (B4)».', necesita_humano: true, plan_guardado_id: id, hallazgos: v.hallazgos || [] } }]
 `
 
 export const CODIGO_RESUMEN_FORMA = `// VALIDAR · RESUMEN · la corrida termina acá: el plan sin forma espera a una persona
 const a = $('Validar · armar la alerta').last().json
-return [{ json: { parado_en: 'validar_forma', necesita_humano: true, hallazgos: a.hallazgos || [] } }]
+return [{ json: { parado_en: 'validar_forma', necesita_humano: true, plan_guardado_id: a.plan_guardado_id || null, hallazgos: a.hallazgos || [] } }]
 `
 
 function construirValidador(f) {
@@ -124,6 +130,23 @@ function construirValidador(f) {
   agregarNodo(f, codigo('Validar · ¿qué dijo?', CODIGO_VALIDAR), 'Guardar el plan', -220, 320)
   agregarNodo(f, si('Validar · ¿pasó?', '={{ $json.veredicto }}', 'ok', 'equals', 'string'), 'Guardar el plan', -220, 480)
   agregarNodo(f, si('Validar · ¿reintenta?', '={{ $json.veredicto }}', 'reintentar', 'equals', 'string'), 'Guardar el plan', -220, 640)
+  // el plan sin forma 2 veces NO se pierde: queda guardado como borrador marcado (la corrida de n8n conserva solo ~4 h)
+  const borrador = structuredClone(nodo(f, 'Guardar el plan'))
+  delete borrador.id
+  delete borrador.position
+  borrador.name = 'Validar · guardar borrador'
+  const cuerpo = borrador.parameters.jsonBody
+  const A = "content: $json.texto, content_text: $json.texto,"
+  const B = "provenance_tag: { fuente: 'planeacion',"
+  if (cuerpo.split(A).length !== 2 || cuerpo.split(B).length !== 2) throw new Error('«Guardar el plan» ya no tiene la forma esperada')
+  borrador.parameters.jsonBody = cuerpo
+    .replace('client_id: $json.client_id,', () => "client_id: $('Validar · ¿qué dijo?').last().json.client_id,")
+    .replace(A, () => "content: $('¿Llegó la vuelta?').last().json.texto, content_text: $('¿Llegó la vuelta?').last().json.texto,")
+    .replace(`producing_agent: '${AGENTE_DE_HOY}'`, () => `producing_agent: ${ELEGIDO}`)
+    .replace('registro_interno: $json.registro_interno || null, estado_del_plan: $json.estado_del_plan || null, pendientes: $json.pendientes || null', () => "estado_del_plan: 'forma_invalida'")
+    .replace('caracteres: $json.caracteres,', () => "caracteres: $('Validar · ¿qué dijo?').last().json.caracteres,")
+    .replace(B, () => "provenance_tag: { forma_invalida: true, necesita_humano: true, hallazgos: $('Validar · ¿qué dijo?').last().json.hallazgos, fuente: 'planeacion',")
+  agregarNodo(f, borrador, 'Guardar el plan', -220, 720)
   agregarNodo(f, codigo('Validar · armar la alerta', CODIGO_ALERTA_FORMA), 'Guardar el plan', -220, 800)
   const campana = structuredClone(nodo(f, 'Campana · plan sin PDF'))
   delete campana.id
@@ -139,7 +162,8 @@ function construirValidador(f) {
   conectar(f, 'Validar · ¿pasó?', 'Guardar el plan', 0)
   conectar(f, 'Validar · ¿pasó?', 'Validar · ¿reintenta?', 1)
   conectar(f, 'Validar · ¿reintenta?', 'Pedir el plan al redactor', 0)
-  conectar(f, 'Validar · ¿reintenta?', 'Validar · armar la alerta', 1)
+  conectar(f, 'Validar · ¿reintenta?', 'Validar · guardar borrador', 1)
+  conectar(f, 'Validar · guardar borrador', 'Validar · armar la alerta')
   conectar(f, 'Validar · armar la alerta', 'Validar · alerta')
   conectar(f, 'Validar · alerta', 'Validar · resumen')
   // el reintento fuerza el reinicio: sin force_restart el corredor devuelve la respuesta vieja

@@ -21,14 +21,15 @@ const vivo = leer('vivo'), nuevo = leer('nuevo')
 const PLAN_BUENO = fs.readFileSync(path.join(__dirname, 'fixtures', 'ronda78', 'plan-v2-811b9e94.md'), 'utf8')
 const PLAN_ROTO = PLAN_BUENO.replace(/\|\s*\d+\s*\|[^\n]*\n/g, '').slice(0, 1200) // sin calendario fechado y corto
 const CLIENTE = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
-const ENV = { SALA_DISPATCH_KEY: 'k-sala', SLACK_WEBHOOK_URL: 'https://slack.test/hook' }
+const ENV = { SALA_DISPATCH_KEY: 'k-sala', SLACK_WEBHOOK_URL: 'https://slack.test/hook', SUPABASE_URL: 'https://db.test', SUPABASE_SERVICE_ROLE_KEY: 'k-db' }
 const WEBHOOK = (body: Record<string, unknown>) => ({ 'Webhook · planeacion': [{ headers: { 'x-sala-dispatch-key': 'k-sala' }, body }] })
 const web = (body: Record<string, unknown>) => ({ headers: { 'x-sala-dispatch-key': 'k-sala' }, body })
 const BASE = { pedido: 'PEDIDO ORIGINAL', cliente_id: CLIENTE, redactor_elegido: 'campaign-brief-agent' }
 const planItem = (texto: string) => ({ llego_la_vuelta: true, texto, caracteres: texto.length, client_id: CLIENTE, client_name: 'Cafetería Prueba' })
 
-const rutaEnMemoria = (visto: { llamadas: number; cuerpo?: any } = { llamadas: 0 }): Http => async (url, headers, cuerpo) => {
+const rutaEnMemoria = (visto: { llamadas: number; cuerpo?: any; borrador?: any; guardadoFalla?: boolean } = { llamadas: 0 }): Http => async (url, headers, cuerpo) => {
   if (url === 'https://slack.test/hook') { visto.cuerpo = cuerpo; return { statusCode: 200, body: 'ok' } }
+  if (url === 'https://db.test/rest/v1/client_historical_outputs') { visto.borrador = cuerpo; return { statusCode: visto.guardadoFalla ? 500 : 201, body: visto.guardadoFalla ? {} : [{ id: 'abcd1234-0000' }] } }
   expect(url).toBe('https://api.test/api/planeacion/validar-plan')
   visto.llamadas++
   const r = await rutaValidar(new Request(url, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(cuerpo) }))
@@ -49,7 +50,7 @@ describe('el flujo nuevo se parece al vivo en lo demás', () => {
   it('apagado, el único camino por los nodos nuevos termina en «Guardar el plan»; encendido, hay 3 salidas (guarda · reintenta · alerta)', () => {
     expect(nuevo.connections['Validar · ¿se pide?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Validar · pedir'], ['Guardar el plan']])
     expect(nuevo.connections['Validar · ¿pasó?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Guardar el plan'], ['Validar · ¿reintenta?']])
-    expect(nuevo.connections['Validar · ¿reintenta?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Pedir el plan al redactor'], ['Validar · armar la alerta']])
+    expect(nuevo.connections['Validar · ¿reintenta?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Pedir el plan al redactor'], ['Validar · guardar borrador']])
     expect(nuevo.connections['Validar · resumen']).toBeUndefined()
   })
 })
@@ -105,16 +106,28 @@ describe('encendido · contra la ruta real', () => {
     const reintento = await cuerpoDe(nuevo, { ...BASE, pedido: 'P2', reintento_forma: true }, { client_id: CLIENTE, force_restart: false })
     expect(reintento).toMatchObject({ force_restart: true, task: 'P2', agent: 'campaign-brief-agent', client_id: CLIENTE })
   })
-  it('🔴 la 2.ª vez sin forma: NO guarda ni sigue · alerta a Slack con lo que falta · necesita_humano', async () => {
+  it('🔴 la 2.ª vez sin forma: queda guardada como BORRADOR MARCADO (no se pierde) y NO sigue · alerta a Slack con lo que falta · necesita_humano', async () => {
     const visto: any = { llamadas: 0 }
     const r = await desdeValidar(PLAN_ROTO, { client_id: CLIENTE, validar_forma: true }, { http: rutaEnMemoria(visto), previos: { 'Validar · ¿qué dijo?': [{ veredicto: 'reintentar' }] }, hasta: ['Guardar el plan', 'Pedir el plan al redactor', 'JEF · armar'] })
-    expect(r.pasos).toEqual(['Validar · ¿se pide?', 'Validar · pedir', 'Validar · ¿qué dijo?', 'Validar · ¿pasó?', 'Validar · ¿reintenta?', 'Validar · armar la alerta', 'Validar · alerta', 'Validar · resumen'])
-    expect(r.item).toMatchObject({ parado_en: 'validar_forma', necesita_humano: true })
+    expect(r.pasos).toEqual(['Validar · ¿se pide?', 'Validar · pedir', 'Validar · ¿qué dijo?', 'Validar · ¿pasó?', 'Validar · ¿reintenta?', 'Validar · guardar borrador', 'Validar · armar la alerta', 'Validar · alerta', 'Validar · resumen'])
+    expect(r.item).toMatchObject({ parado_en: 'validar_forma', necesita_humano: true, plan_guardado_id: 'abcd1234-0000' })
+    // el borrador lleva el plan ENTERO y la marca; no es un plan normal
+    expect(visto.borrador).toMatchObject({ client_id: CLIENTE, output_type: 'campaign_plan_90d', status: 'draft', content: PLAN_ROTO, content_text: PLAN_ROTO, producing_agent: 'campaign-brief-agent' })
+    expect(visto.borrador.provenance_tag).toMatchObject({ forma_invalida: true, necesita_humano: true, estado_del_plan: 'forma_invalida', caracteres: PLAN_ROTO.length })
+    expect(visto.borrador.provenance_tag.hallazgos.length).toBeGreaterThan(0)
     expect(r.item.hallazgos.length).toBeGreaterThan(0)
     expect(visto.cuerpo.text).toMatch(/Plan sin forma/)
     expect(visto.cuerpo.text).toMatch(/necesita_humano/)
     expect(visto.cuerpo.text).toContain('Cafetería Prueba')
-    expect(visto.cuerpo.text).toMatch(/NO se guardó/)
+    expect(visto.cuerpo.text).toMatch(/BORRADOR MARCADO/)
+    expect(visto.cuerpo.text).toContain('abcd1234')
+  })
+  it('🔴 si el borrador NO se pudo guardar, la alerta lo dice y manda a copiar el texto de la corrida (no finge que se guardó)', async () => {
+    const visto: any = { llamadas: 0, guardadoFalla: true }
+    const r = await desdeValidar(PLAN_ROTO, { client_id: CLIENTE, validar_forma: true }, { http: rutaEnMemoria(visto), previos: { 'Validar · ¿qué dijo?': [{ veredicto: 'reintentar' }] } })
+    expect(r.item).toMatchObject({ necesita_humano: true, plan_guardado_id: null })
+    expect(visto.cuerpo.text).toContain('NO se pudo guardar (500)')
+    expect(visto.cuerpo.text).not.toMatch(/BORRADOR MARCADO/)
   })
   it('🔴 una validación que no se pudo leer DETIENE: 401 (llave mala), 500, cuerpo raro, error de red, o «sin forma» sin corrección', async () => {
     await expect(desdeValidar(PLAN_BUENO, { validar_forma: true }, { http: async () => ({ statusCode: 401, body: { ok: false, error: 'Invalid x-api-key' } }) })).rejects.toThrow(/PLAN_VALIDADOR_NO_LEGIBLE.*401/)
