@@ -1,7 +1,8 @@
 /**
- * PLANTILLA `video_mesa` · el brazo de video DESDE LA OFICINA (parte 2 · 31-oct). Es DATO (se siembra INACTIVA; la enciende la config cuando Emilio dé «dale» a la prueba completa).
- * El equipo de la mesa escribe el GUION (dirección creativa + guionista `video-editor` + coach de video corto + especialista de YouTube + texto + curaduría de fotos propias);
- * lo que sigue es cola mecánica: guion → pedido al brazo → el video (Seedance, ≤ US$ 5, con descuento vigente) → chequeos → jefatura → entrega (mp4 + guion + pie) → cierre.
+ * PLANTILLA `video_mesa` · el brazo de video DESDE LA OFICINA (parte 2 · 31-oct · T8 «video sobre la hoja»). Es DATO (se siembra INACTIVA en 202610312012; la enciende la config cuando Emilio dé «dale» a la prueba completa).
+ * El equipo de la mesa es DATO del directorio (`oficina_directorio`, 2008 + 2012): dirección `creative-director-mesa` (`video:dirige`) · `video-editor` (guion y pedido al generador) · `design-visual-storyteller` (storyboard)
+ * · `marketing_video_optimization_specialist` (retención: la ÚNICA voz del gancho) · `content-creator` (pie y etiquetas) · `marketing_instagram_curator` (`video:si_instagram`) · `tiktok-strategist` (`video:si_tiktok_o_reels`) · portero.
+ * Lo que sigue a la mesa es cola mecánica: guion → pedido al brazo → el video (Seedance, ≤ US$ 5, con descuento vigente) → chequeos → jefatura → entrega (mp4 + guion + pie) → cierre.
  * Tope de la pieza US$ 10 (no 5 como la mesa de láminas): el video solo cuesta ≈ 2,6–4,9 y la jefatura reserva 1,5; a la mesa le quedan ≈ 3.
  */
 import type { Condicion, Plantilla } from '../tipos'

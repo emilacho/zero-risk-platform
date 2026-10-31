@@ -33,7 +33,7 @@ import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } fro
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { DESCARTAR_EYEBROW_LARGO, procesarSalida, proyectarAlEsquema } from './salida'
 import { agotaLasVersiones, MAX_VERSIONES_POR_BRIEF } from './reapertura'
-import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
+import { decidirPuerta, FAMILIAS_SIN_PASARELA, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
@@ -80,9 +80,11 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   const dec = decidirPuerta(v.sobre, entrada.permitir_apagada ? { ...config, estado: 'encendida', familias_activas: [v.sobre.familia ?? ''] } : config, entrada.target_step_id, entrada.client_id)
   if (dec.accion === 'rechazar') return r(400, { error: 'origen_no_aceptado', detalle: `solo se acepta ${TARGET_STEP_PRODUCIR}` })
   if (dec.accion === 'pasarela') return r(409, { error: 'oficina_no_abre', motivo: dec.motivo, detalle: 'la oficina no abre este encargo; el sobre sigue por la pieza simple (pasarela)' })
+  // T8 · el video no tiene pieza simple: el sobre espera a que la mesa de video esté activa (el flujo NO debe mandarlo por la pasarela)
+  if (dec.accion === 'sin_sala') return r(409, { error: 'sin_sala', familia: dec.familia, motivo: dec.motivo, sin_pasarela: true, detalle: `la familia ${dec.familia} no tiene pieza simple: el sobre espera a que la oficina la abra; no sigue por la pasarela` })
   const pl = await P.almacen.leerPlantilla(dec.familia)
   if (!pl) return r(404, { error: 'plantilla_desconocida', familia: dec.familia })
-  if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia })
+  if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia, ...(FAMILIAS_SIN_PASARELA.includes(dec.familia) ? { sin_pasarela: true } : {}) })
   // 28-oct · CHEQUEO GRATIS de la puerta del portero: si el portero no contesta (llave rota tras una rotación, flujo apagado), el encargo NO se crea ni gasta; una sola alarma por incidente
   if (P.chequearPortero && pl.plantilla.pasos.some((x) => x.tipo === 'portero')) {
     const ch = await P.chequearPortero()
