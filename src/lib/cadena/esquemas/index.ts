@@ -41,19 +41,19 @@ export const ESQUEMA_CALENDARIO_TANDA = objeto({
   ajustes_al_patron: lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto })),
 })
 
-/** los 16 campos del brief de un entregable (REFERENCIA-el-brief-de-un-entregable.md §2) */
-export const ESQUEMA_BRIEF_FILA = objeto({
-  fila_id: texto,
-  briefs: lista(objeto({
-    identificador: texto, que_es: texto, de_que_parte_del_plan_sale: texto, objetivo_en_la_plataforma: texto,
-    segmento: objeto({ es: texto, no_es: texto }),
-    protagonista: texto, hipotesis: texto, limites_plataforma: texto, vocabulario_obligatorio: listaDeTexto, prohibido: listaDeTexto,
-    sintaxis: texto, visual: texto, llamado: texto,
-    variantes: objeto({ cantidad: entero, que_varia: texto }),
-    negativos: listaDeTexto, aprueba_y_para_cuando: texto,
-    declarado_pendiente: lista(objeto({ campo: texto, que_falta: texto })),
-    muestra_visual: objeto({ piezas_miradas: entero, fotos: entero, videos: entero, no_se_pudo_observar: texto }),
+/**
+ * 31-oct (nuevo orden · T1): el calendario por tanda con la IDEA DE MESA por pieza (`idea_de_mesa` = el id de la idea del banco del concepto, `C<fase>-I<nn>`, o «» si la fila no realiza ninguna).
+ * Mismas prohibiciones que v1 (sin fecha, sin total). La cadena de hoy sigue con v1; v2 lo usa el paso calendario cuando la palanca `nuevo_orden` está encendida (T3).
+ * El `brief_fila.v1` (brief por publicación) se retiró: nadie lo usa; el brief es UNO por campaña (`brief_creativo.v1`, texto) y la hoja la escribe código.
+ */
+export const ESQUEMA_CALENDARIO_TANDA_V2 = objeto({
+  piezas: lista(objeto({
+    semana: entero, dia_semana: entero, slot: texto, hora: texto, red: texto, formato: texto, pilar: texto, tema: texto, sede: texto,
+    requiere_abierto: bool, depende_de: listaDeTexto, pieza_fija: texto, idea_de_mesa: texto,
+    datos: lista(objeto({ dato: texto, valor: texto, clase: { enum: ['alto', 'medio', 'bajo'] }, ref: texto, nivel: { enum: ['F0', 'F1', 'F2', 'F3'] }, opcional: bool })),
+    pendientes: listaDeTexto,
   })),
+  ajustes_al_patron: lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto })),
 })
 
 /** solo se usa si el cliente declaró tipos de fechas · `tipo`, `ambito` y `alcance` son texto libre: el esquema no fija categorías de ningún rubro */
@@ -66,6 +66,6 @@ export const ESQUEMA_FECHAS_ESPECIALES = objeto({
 export const ESQUEMAS = {
   'estrategia.v1': ESQUEMA_ESTRATEGIA,
   'calendario_tanda.v1': ESQUEMA_CALENDARIO_TANDA,
-  'brief_fila.v1': ESQUEMA_BRIEF_FILA,
+  'calendario_tanda.v2': ESQUEMA_CALENDARIO_TANDA_V2,
   'fechas_especiales.v1': ESQUEMA_FECHAS_ESPECIALES,
 } as const

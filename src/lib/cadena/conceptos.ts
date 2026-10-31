@@ -139,14 +139,18 @@ const textoDe = (s: Seccion | undefined): string => (s ? [titularDe(s).resto, s.
 // ───────────────────────────────────────────────────────── el banco
 /** lee UNA línea de idea `- C1-I01 · <red> · <formato> · <idea> · mensaje: … · gancho: … · protagonista: … · serie: S1 · foto:<id>|ninguna`; `null` si no es una idea */
 export function leerIdea(linea: string): IdeaDelBanco | null {
-  const m = /^\s*-\s+(C[A-Za-z0-9_]+-I\d{2,})\s*·\s*(.*)$/.exec(linea)
+  // reserva 2 de CC3 (31-oct): la viñeta puede ser «-», «*», «•» o «1.», y el id puede ir en negrita; el id sigue siendo exacto (mayúsculas)
+  const m = /^\s*(?:[-*•]|\d+[.)])\s+\**(C[A-Za-z0-9_]+-I\d{2,})\**\s*·\s*(.*)$/.exec(linea)
   if (!m || !RE_ID_DE_IDEA.test(m[1])) return null
   const partes = m[2].split(/\s·\s/).map((x) => x.trim()).filter(Boolean)
   const campos: Record<string, string> = {}
   const libres: string[] = []
+  let ultimo: string | null = null
   for (const p of partes) {
     const c = /^(mensaje|gancho|protagonista|serie|foto)\s*:\s*(.*)$/i.exec(p)
-    if (c) campos[c[1].toLowerCase()] = c[2].trim()
+    if (c) { ultimo = c[1].toLowerCase(); campos[ultimo] = c[2].trim() }
+    // reserva 3 de CC3: un « · » DENTRO de un campo etiquetado no lo corta: el fragmento sin etiqueta se queda en ese campo
+    else if (ultimo) campos[ultimo] = `${campos[ultimo]} · ${p}`
     else libres.push(p)
   }
   const foto = (campos.foto ?? '').trim()
@@ -161,6 +165,19 @@ export function leerIdea(linea: string): IdeaDelBanco | null {
 /** las ideas de TODO el texto (integración + aportes de los miembros): la línea `- C<x>-I<nn> · …` se reconoce en cualquier sección */
 export function ideasDelTexto(md: string): IdeaDelBanco[] {
   return md.replace(/\r/g, '').split('\n').map(leerIdea).filter((x): x is IdeaDelBanco => x !== null)
+}
+/**
+ * reserva 2 de CC3 (31-oct): una línea que TRAE algo con forma de id de idea junto a un « · » pero que `leerIdea` no reconoce (viñeta rara, id en minúscula, sin « · » tras el id…)
+ * NO desaparece: se declara como descartada «formato de línea no reconocido». Las líneas de «Ideas que salen» (`- C1-I04: motivo`) no llevan « · » y no caen aquí.
+ */
+export function lineasDeIdeaNoReconocidas(md: string): Array<{ id: string; linea: string }> {
+  const out: Array<{ id: string; linea: string }> = []
+  for (const l of md.replace(/\r/g, '').split('\n')) {
+    if (/^\s*#/.test(l) || leerIdea(l)) continue
+    const m = /\b(C[A-Za-z0-9_]+-I\d{2,})\b/i.exec(l)
+    if (m && /·/.test(l)) out.push({ id: m[1], linea: l.trim() })
+  }
+  return out
 }
 const capituloDeId = (id: string): string => RE_ID_DE_IDEA.exec(id)?.[1] ?? ''
 
@@ -249,17 +266,18 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
   // el banco: de todo el texto; se descarta lo que no cumple y SE DECLARA
   const banco: IdeaDelBanco[] = []
   const ideas_descartadas: ConceptoLeido['ideas_descartadas'] = []
-  const vistos = new Set<string>()
   const mensajes = new Map<string, string>()
   const ganchos = new Map<string, string>()
+  const mismaLinea = (a: string, b: string) => claveDeTexto(a) === claveDeTexto(b)
   for (const i of ideasDelTexto(md)) {
-    if (vistos.has(i.id)) {
-      // la misma idea repetida tal cual (p. ej. integración + aporte) es una sola; dos líneas distintas con el mismo id es un error
-      const previa = banco.find((b) => b.id === i.id)
-      if (!previa || claveDeTexto(previa.linea) !== claveDeTexto(i.linea)) ideas_descartadas.push({ id: i.id, motivo: 'id duplicado (ya hay otra idea con ese id)', linea: i.linea })
+    // la misma idea repetida tal cual (p. ej. integración + aporte) es una sola; dos líneas distintas con el mismo id YA EN EL BANCO es un error.
+    // reserva 1 de CC3 (31-oct): el duplicado solo cuenta contra una idea que SÍ entró; si la previa fue descartada (p. ej. sin gancho), la corregida se evalúa normal
+    const previa = banco.find((b) => b.id === i.id)
+    if (previa) {
+      if (!mismaLinea(previa.linea, i.linea)) ideas_descartadas.push({ id: i.id, motivo: 'id duplicado (ya hay otra idea con ese id)', linea: i.linea })
       continue
     }
-    vistos.add(i.id)
+    if (ideas_descartadas.some((d) => d.id === i.id && mismaLinea(d.linea, i.linea))) continue
     if (salen.has(i.id)) continue
     const faltas: string[] = []
     if (!i.mensaje.trim()) faltas.push('sin `mensaje:`')
@@ -276,6 +294,7 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
     if (cap === null) avisos.push(`la idea ${i.id} apunta a un capítulo que no existe`)
     banco.push({ ...i, capitulo: cap })
   }
+  for (const l of lineasDeIdeaNoReconocidas(md)) if (!salen.has(l.id)) ideas_descartadas.push({ id: l.id, motivo: 'formato de línea no reconocido (se espera «- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: …»)', linea: l.linea })
   if (!banco.length) bloqueos.push(ideasDelTexto(md).length ? 'sin banco de ideas válido (ninguna idea con mensaje y gancho propios)' : 'sin banco de ideas (ninguna línea `- C<fase>-I<nn> · …`)')
 
   // ≥ 1 idea por red y capítulo, y el mínimo huecos × semanas

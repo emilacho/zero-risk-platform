@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import Ajv from 'ajv'
-import { ESQUEMAS, ESQUEMA_CALENDARIO_TANDA, ESQUEMA_ESTRATEGIA, ESQUEMA_BRIEF_FILA, ESQUEMA_FECHAS_ESPECIALES } from '../esquemas'
+import { ESQUEMAS, ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V2, ESQUEMA_ESTRATEGIA, ESQUEMA_FECHAS_ESPECIALES } from '../esquemas'
 import { validarEsquemaDeSalida, ESQUEMA_MAX_BYTES } from '@/lib/salida-estructurada'
 import { clienteA, clienteB, tandaBuena } from '../__fixtures__/clientes'
 
@@ -50,10 +50,13 @@ describe('lo que el esquema impide por formato (no solo por indicación)', () =>
     expect(p.tipo).toEqual({ type: 'string' })
     expect(p.ambito).toEqual({ type: 'string' })
   })
-  it('el brief lleva los 16 campos del documento de referencia', () => {
-    const b = (ESQUEMA_BRIEF_FILA.properties.briefs as { items: { required: string[] } }).items.required
-    expect(b).toHaveLength(18) // 16 campos + «segmento» y «variantes» cuentan como grupos de dos (ver REFERENCIA §2)
-    for (const k of ['identificador', 'que_es', 'de_que_parte_del_plan_sale', 'hipotesis', 'negativos', 'declarado_pendiente', 'muestra_visual']) expect(b).toContain(k)
+  it('31-oct (nuevo orden): calendario_tanda.v2 = v1 + `idea_de_mesa` por pieza, y nada más; el brief por publicación (brief_fila.v1) se retiró', () => {
+    const v1 = (ESQUEMA_CALENDARIO_TANDA.properties.piezas as { items: { required: string[] } }).items.required
+    const v2 = (ESQUEMA_CALENDARIO_TANDA_V2.properties.piezas as { items: { required: string[] } }).items.required
+    expect([...v2].sort()).toEqual([...v1, 'idea_de_mesa'].sort())
+    for (const k of v2) expect(k).not.toMatch(/fecha|total|pct|porcentaje/i)
+    expect(Object.keys(ESQUEMA_CALENDARIO_TANDA_V2.properties)).toEqual(['piezas', 'ajustes_al_patron'])
+    expect(Object.keys(ESQUEMAS)).toEqual(['estrategia.v1', 'calendario_tanda.v1', 'calendario_tanda.v2', 'fechas_especiales.v1'])
   })
 })
 

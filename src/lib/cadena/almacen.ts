@@ -45,6 +45,48 @@ export interface EstrategiaGuardada {
   seco: boolean
 }
 
+/** 31-oct (nuevo orden · T1): el brief creativo guardado (`cadena_brief_creativo` · contrato brief_creativo.v1) */
+export interface BriefCreativoGuardado {
+  campana_id: string
+  version: number
+  estado: 'borrador' | 'validada' | 'devuelta' | 'descartada'
+  texto_md: string | null
+  /** lo que leyó `leerBriefCreativo` (BriefCreativoLeido) · null mientras es borrador o si la mesa no entregó */
+  leido: Record<string, unknown> | null
+  /** los puntos por los que se devolvió (UNA re-petición; luego necesita_humano) */
+  devolucion_texto: string | null
+  /** por qué no hay texto (la mesa falló, venció o llegó al tope sin nada) */
+  motivo: string | null
+  costo_usd: number | null
+  encargo_id: string | null
+  seco: boolean
+}
+/** 31-oct (nuevo orden · T1): el concepto guardado (`cadena_conceptos` · contrato concepto.v1) */
+export interface ConceptoGuardado {
+  campana_id: string
+  version: number
+  estado: 'abierta' | 'lista' | 'sin_mesa' | 'brief_devuelto'
+  /** la decisión de Emilio sobre la tarjeta de concepto · null mientras no hay tarjeta */
+  aprobacion: 'pendiente' | 'aprobado' | 'cambios' | null
+  texto_md: string | null
+  /** lo que leyó `leerConcepto` (ConceptoLeido) */
+  leido: Record<string, unknown> | null
+  /** texto de «## Devolución del brief» cuando la dirección devolvió el brief (la cadena abre brief v2 con ese marco) */
+  brief_devuelto: string | null
+  motivo: string | null
+  costo_usd: number | null
+  /** el plazo propio de la mesa (90 min): lo guarda la CADENA, la oficina no barre estas mesas */
+  plazo_en: string | null
+  encargo_id: string | null
+  hitl_id: string | null
+  nota_de_emilio: string | null
+  /** a qué apunta un «cambios»: al concepto (otra ronda de mesa) o al brief (brief v2) */
+  apunta_a: 'concepto' | 'brief' | null
+  decidido_en: string | null
+  seco: boolean
+}
+export type ObjetoDeValidacion = 'estrategia' | 'calendario' | 'brief' | 'brief_creativo' | 'concepto'
+
 /** lo que la copia por filas HABRÍA escrito en `client_historical_outputs` (la fila del parte), más el lote y cuándo vence el ensayo */
 export interface ParteSecoAGuardar {
   client_id: string
@@ -143,13 +185,22 @@ export interface Almacen {
   // estrategias
   ultimaEstrategia(campanaId: string): Promise<EstrategiaGuardada | null>
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>
+  // 31-oct (nuevo orden · T1) · brief creativo y concepto: UNA fila por (campaña, versión); la primera entrega que cierra gana (único en la base)
+  ultimoBriefCreativo(campanaId: string): Promise<BriefCreativoGuardado | null>
+  insertarBriefCreativo(b: BriefCreativoGuardado): Promise<void>
+  actualizarBriefCreativo(campanaId: string, version: number, patch: Partial<BriefCreativoGuardado>): Promise<void>
+  ultimoConcepto(campanaId: string): Promise<ConceptoGuardado | null>
+  insertarConcepto(c: ConceptoGuardado): Promise<void>
+  actualizarConcepto(campanaId: string, version: number, patch: Partial<ConceptoGuardado>): Promise<void>
+  /** los conceptos abiertos cuyo plazo propio ya pasó (el vigía los cierra `sin_mesa`) */
+  conceptosVencidos(ahora: string): Promise<ConceptoGuardado[]>
   // filas
   filas(campanaId: string, calendarioVersion?: number): Promise<Fila[]>
   guardarFilas(campanaId: string, calendarioVersion: number, estrategiaVersion: number, filas: Fila[], seco: boolean): Promise<void>
   cambiarEstadoDeFilas(campanaId: string, calendarioVersion: number, ids: string[], estado: Fila['estado']): Promise<void>
   ultimaVersionDeCalendario(campanaId: string): Promise<number>
   // validaciones
-  guardarValidaciones(campanaId: string, objeto: 'estrategia' | 'calendario' | 'brief', version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[], seco: boolean): Promise<void>
+  guardarValidaciones(campanaId: string, objeto: ObjetoDeValidacion, version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[], seco: boolean): Promise<void>
   /** r74 · los hallazgos que BLOQUEAN del último intento guardado de una tanda del calendario (para pedir la corrección si la llamada de corrección murió) */
   hallazgosQueBloquean(campanaId: string, tanda: number): Promise<Array<{ ficha: Ficha; fila_id: string | null; chequeo?: string }>>
   // corridas (guardarraíles 1–5)

@@ -181,7 +181,12 @@ describe('concepto.v1 · lo que bloquea (sin_concepto) y lo que solo se declara'
     ]))
     expect(contienePalabraEntera('es el barato', 'barato')).toBe(true)
     expect(contienePalabraEntera('es baratísimo', 'barato')).toBe(false)
+    // reserva 4 de CC3: casos que SÍ discriminan «entera» de «contiene» (contienen la subcadena y deben dar false)
+    expect(contienePalabraEntera('son baratos', 'barato')).toBe(false)
+    expect(contienePalabraEntera('todo desbaratado', 'barato')).toBe(false)
+    expect(contienePalabraEntera('más barato, imposible', 'barato')).toBe(true)
     expect(contienePalabraEntera('EL MEJOR DEL MUNDO', 'el mejor del mundo')).toBe(true)
+    expect(contienePalabraEntera('el mejor del mundo', 'mejor del mun')).toBe(false)
   })
   it('la devolución del brief (primer turno de la dirección) se lee tal cual', () => {
     const md = CONCEPTO + '\n## Devolución del brief\n- dos mensajes (criterio 1)\n- el objetivo no es medible (criterio 3)\n'
@@ -206,6 +211,33 @@ describe('piezas sueltas del contrato', () => {
     expect(leerIdea('- C1-I1 · ig · reel · x')).toBeNull() // «I1»: el número lleva al menos dos cifras
     expect(leerIdea('- C1-I07 · ig · reel · una idea · mensaje: m · gancho: g')).toMatchObject({ id: 'C1-I07', red: 'ig', formato: 'reel', idea: 'una idea', mensaje: 'm', gancho: 'g', protagonista: '', serie: null, foto: null })
     expect(ideasDelTexto('- C1-I01 · ig · reel · a · mensaje: m · gancho: g\n- C1-I02 · fb · imagen · b · mensaje: n · gancho: h').map((i) => i.id)).toEqual(['C1-I01', 'C1-I02'])
+  })
+  it('reserva 1 de CC3: una idea descartada (sin gancho) y luego CORREGIDA con el mismo id entra al banco; la corregida no es «duplicado»', () => {
+    const md = `## Gran idea  X · y\n## Banco de ideas\n- C1-I01 · ig · reel · a · mensaje: m\n## Integración\n- C1-I01 · ig · reel · a · mensaje: m · gancho: g\n`
+    const c = leerConcepto(md, INS)
+    expect(c.banco.map((i) => [i.id, i.gancho])).toEqual([['C1-I01', 'g']])
+    expect(c.ideas_descartadas).toEqual([expect.objectContaining({ id: 'C1-I01', motivo: 'sin `gancho:`' })])
+    // la misma línea descartada repetida no se declara dos veces; una línea DISTINTA con el id ya en el banco sí es duplicado
+    const c2 = leerConcepto(md.replace('- C1-I01 · ig · reel · a · mensaje: m\n', '- C1-I01 · ig · reel · a · mensaje: m\n- C1-I01 · ig · reel · a · mensaje: m\n') + '- C1-I01 · fb · imagen · otra · mensaje: z · gancho: w\n', INS)
+    expect(c2.ideas_descartadas.map((d) => d.motivo)).toEqual(['sin `gancho:`', 'id duplicado (ya hay otra idea con ese id)'])
+    expect(c2.banco).toHaveLength(1)
+  })
+  it('reserva 2 de CC3: viñetas «*», «1.» e id en negrita se leen; una línea con forma de idea que no se reconoce se DECLARA, no desaparece', () => {
+    expect(leerIdea('* C1-I05 · ig · reel · a · mensaje: m · gancho: g')?.id).toBe('C1-I05')
+    expect(leerIdea('1. C1-I05 · ig · reel · a · mensaje: m · gancho: g')?.id).toBe('C1-I05')
+    expect(leerIdea('- **C1-I05** · ig · reel · a · mensaje: m · gancho: g')?.id).toBe('C1-I05')
+    expect(leerIdea('- c1-i05 · ig · reel · a · mensaje: m · gancho: g')).toBeNull()
+    const md = `## Gran idea  X · y\n## Banco de ideas\n- C1-I01 · ig · reel · a · mensaje: m · gancho: g\n- c1-i05 · ig · reel · b · mensaje: n · gancho: h\nC1-I06 ig · reel · sin viñeta\n## Ideas que salen\n- C1-I04: repetida\n`
+    const c = leerConcepto(md, INS)
+    expect(c.banco.map((i) => i.id)).toEqual(['C1-I01'])
+    expect(c.ideas_descartadas.map((d) => [d.id, d.motivo.split(' (')[0]])).toEqual([['c1-i05', 'formato de línea no reconocido'], ['C1-I06', 'formato de línea no reconocido']])
+  })
+  it('reserva 3 de CC3: un « · » dentro de `mensaje:` o `gancho:` NO corta el campo (la hoja toma el MENSAJE de ahí)', () => {
+    const i = leerIdea('- C1-I07 · ig · reel · una idea · mensaje: aquí · allá · gancho: ¿vienes · o no? · protagonista: la mesa')!
+    expect(i.mensaje).toBe('aquí · allá')
+    expect(i.gancho).toBe('¿vienes · o no?')
+    expect(i.protagonista).toBe('la mesa')
+    expect(i.idea).toBe('una idea')
   })
   it('seccionesDe: solo `## ` abre sección; `###` no; lo que precede a la primera sección se ignora', () => {
     const s = seccionesDe('preámbulo\n## A  x\ncuerpo a\n### no es sección\n## B\n')

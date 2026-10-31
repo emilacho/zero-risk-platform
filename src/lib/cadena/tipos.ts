@@ -83,6 +83,10 @@ export interface Fila {
   origen: 'agente' | 'patron'
   estado: EstadoFila
   avisos: string[]
+  /** 31-oct (nuevo orden): la fase del plan a la que pertenece la fila (clave de `estrategia.fases`); ausente en la cadena de hoy */
+  fase?: string | null
+  /** 31-oct (nuevo orden): la idea del banco del concepto que la fila realiza (`C<fase>-I<nn>`); null/ausente = sin idea (la hoja lo declara) */
+  idea_ref?: string | null
 }
 
 export type Severidad = 'bloquea' | 'aviso'

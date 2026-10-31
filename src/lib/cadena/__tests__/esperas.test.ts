@@ -26,6 +26,15 @@ describe('calcularReloj · una espera sin plazo no existe', () => {
     expect(calcularReloj(plazo({ tipo: 'fecha_inicio_propuesta', vence_regla: 'fecha_inicio_menos_1_dia' }), AHORA, { fechaInicio: '2026-10-19' }).vence_en).toBe('2026-10-18T00:00:00.000Z')
     expect(calcularReloj(plazo({ tipo: 'campana_pausada', vence_regla: 'resumen_semanal' }), AHORA).vence_en).toBe('2026-10-19T12:00:00.000Z')
   })
+  it('31-oct (nuevo orden): la aprobación del concepto NO vence sola: `seguir_esperando` rearma el reloj a 72 h, con recordatorio a 24 h y alerta a 72 h', () => {
+    const r = calcularReloj(plazo({ tipo: 'aprobacion_concepto', recordatorio_horas: 24, alerta_horas: 72, vence_regla: 'seguir_esperando', accion_al_vencer: 'seguir_esperando' }), AHORA)
+    expect(r.recordatorio_en).toBe('2026-10-13T12:00:00.000Z')
+    expect(r.alerta_en).toBe('2026-10-15T12:00:00.000Z')
+    expect(r.vence_en).toBe('2026-10-15T12:00:00.000Z')
+    expect(r.accion_al_vencer).toBe('seguir_esperando')
+    // rearmar desde el vencimiento da otras 72 h: nunca «perdió su fecha»
+    expect(calcularReloj(plazo({ tipo: 'aprobacion_concepto', vence_regla: 'seguir_esperando', accion_al_vencer: 'seguir_esperando' }), r.vence_en).vence_en).toBe('2026-10-18T12:00:00.000Z')
+  })
   it('si faltan los datos para calcular el plazo, NO crea una espera sin reloj: falla fuerte', () => {
     expect(() => calcularReloj(plazo({ tipo: 'aprobacion_bandeja', vence_regla: 'fecha_de_la_pieza' }), AHORA)).toThrow(/sin reloj/)
     expect(() => calcularReloj(plazo({ tipo: 'x' }), AHORA)).toThrow()
