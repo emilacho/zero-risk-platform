@@ -52,11 +52,11 @@ describe('fotosDeSitio (lógica pura)', () => {
     expect(r[0]).toMatchObject({ tipo: 'web_captura', owner_role: 'propio', posicion: 'portada', post_url: 'https://naufrago.ec/p0' })
     expect(new Set(r.map((f: { post_id: string }) => f.post_id)).size).toBe(8)
   })
-  it('descarta lo que «Fotos · revisar» no aceptaría (svg, gif, avif, pdf, data:) y el ruido (favicon, píxeles); lo cuenta', () => {
+  it('descarta lo que «Fotos · revisar» no aceptaría (svg, avif, pdf, data:) y el ruido (favicon, píxeles); lo cuenta', () => {
     const html = '<img src="/a.svg"><img src="/b.gif"><img src="/c.avif"><img src="data:image/png;base64,AAA"><img src="/favicon.ico"><img src="https://www.facebook.com/tr?id=1"><img src="/ok.jpg?v=2">'
     const r = F.fotosDeSitio([pagina('https://naufrago.ec/', html)], { rol: 'propio' })
-    expect(r.map((f: { src: string }) => f.src)).toEqual(['https://naufrago.ec/ok.jpg?v=2'])
-    expect(r.descartadas.formato).toBeGreaterThanOrEqual(3)
+    expect(r.map((f: { src: string }) => f.src)).toEqual(['https://naufrago.ec/b.gif', 'https://naufrago.ec/ok.jpg?v=2'])
+    expect(r.descartadas.formato).toBeGreaterThanOrEqual(2)
   })
   it('tope por llamada y entradas basura no rompen', () => {
     const html = Array.from({ length: 200 }, (_, i) => `<img src="/i${i}.jpg">`).join('')

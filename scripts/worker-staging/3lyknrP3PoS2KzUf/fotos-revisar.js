@@ -32,7 +32,7 @@ for (let i = 0; i < metas.length; i++) {
   else {
     buf = await this.helpers.getBinaryDataBuffer(i, 'data')
     const h = buf.slice(0, 4).toString('hex')
-    ct = h.startsWith('ffd8ff') ? 'image/jpeg' : h === '89504e47' ? 'image/png' : h === '52494646' && buf.slice(8, 12).toString('ascii') === 'WEBP' ? 'image/webp' : null
+    ct = h.startsWith('ffd8ff') ? 'image/jpeg' : h === '89504e47' ? 'image/png' : h === '47494638' ? 'image/gif' : h === '52494646' && buf.slice(8, 12).toString('ascii') === 'WEBP' ? 'image/webp' : null
     if (!ct) causa = 'no es una imagen (empieza con ' + h + ' · ' + String(e.binary.data.mimeType || 'sin tipo') + ')'
     else if (buf.length > 10 * 1024 * 1024) causa = 'demasiado grande · ' + buf.length + ' B'
   }
@@ -48,7 +48,7 @@ for (let i = 0; i < metas.length; i++) {
   if (previo && m.owner_role !== 'propio' && !(previo.owner_role === m.owner_role && previo.handle === m.handle && previo.post_id === m.post_id)) { duplicadas.push({ post_id: m.post_id, igual_a: previo.owner_role + ':' + previo.handle + '/' + previo.post_id, hash }); continue }
   vistas[claveDup] = m.post_id
   if (!previosPorHuella[hash]) previosPorHuella[hash] = { owner_role: m.owner_role, handle: m.handle, post_id: m.post_id }
-  const ext = ct === 'image/png' ? 'png' : ct === 'image/webp' ? 'webp' : 'jpg'
+  const ext = ct === 'image/png' ? 'png' : ct === 'image/gif' ? 'gif' : ct === 'image/webp' ? 'webp' : 'jpg'
   buenas.push({
     json: { ...m, ct, hash_archivo: hash, bytes: buf.length, magic: buf.slice(0, 4).toString('hex'), path: m.client_id + '/' + m.owner_role + '/' + m.handle + '/' + m.post_id + '.' + ext },
     binary: { data: e.binary.data },

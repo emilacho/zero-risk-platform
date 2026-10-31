@@ -79,11 +79,30 @@ export function aplicarGuardarTodo(flujo) {
   return w
 }
 
+// PARTE 2 (31-oct) · se aplica SOBRE el flujo que ya tiene «guardar todo»: los fondos CSS y el GIF (lista + revisar), los PDF enlazados (lista) y las fotos de la ficha propia de Mapas (cuerpo de own_google_maps_profile con maxImages).
+export function aplicarGuardarTodo2(flujo) {
+  const w = JSON.parse(JSON.stringify(flujo))
+  const nodo = (n) => { const x = w.nodes.find((y) => y.name === n); if (!x) throw new Error('falta el nodo «' + n + '»'); return x }
+  const armar = nodo('Armar el cuerpo del raspador')
+  const anclaPropia = "locationQuery: $json.params.locationQuery || $json.params.location || '', maxCrawledPlacesPerSearch: $json.params.resultsLimit || 10, language: $json.params.language || 'es' }),"
+  let c = armar.parameters.jsCode
+  if (!c.includes(anclaPropia)) throw new Error('no se halló el cuerpo de own_google_maps_profile (¿ya está aplicada la parte 2?)')
+  armar.parameters.jsCode = c.replace(anclaPropia, anclaPropia.replace("language: $json.params.language || 'es' }),", "language: $json.params.language || 'es', ...(Number($json.params.maxImages) > 0 ? { maxImages: Math.min(Number($json.params.maxImages), 20) } : {}) }),"))
+  for (const [clave, nombre] of [['lista', 'Fotos · lista'], ['revisar', 'Fotos · revisar']]) {
+    const x = nodo(nombre)
+    const nuevo = codigoDeNodo(clave)
+    x.parameters = { ...x.parameters, jsCode: x.parameters.jsCode.includes('\r\n') ? nuevo.replace(/\r?\n/g, '\r\n') : nuevo }
+  }
+  if (!nodo('Fotos · lista').parameters.jsCode.includes('pdfsEnlazados(')) throw new Error('«Fotos · lista» no usa pdfsEnlazados')
+  return w
+}
+
 if (process.argv[1] && process.argv[1].endsWith('construir-guardar-todo.mjs')) {
-  const [entrada, salida] = process.argv.slice(2)
+  const [entrada, salida] = process.argv.slice(2).filter((a) => !a.startsWith('--'))
   if (!entrada) { console.error('uso: node construir-guardar-todo.mjs <flujo-vivo.json> [salida.json]'); process.exit(2) }
-  const nuevo = aplicarGuardarTodo(JSON.parse(fs.readFileSync(entrada, 'utf8')))
-  const out = salida || join(aqui, 'servicio-apify-ARREGLADO-guardar-todo-2026-10-31.json')
+  const parte2 = process.argv.includes('--parte2')
+  const nuevo = (parte2 ? aplicarGuardarTodo2 : aplicarGuardarTodo)(JSON.parse(fs.readFileSync(entrada, 'utf8')))
+  const out = salida || join(aqui, parte2 ? 'servicio-apify-ARREGLADO-guardar-todo-2-2026-10-31.json' : 'servicio-apify-ARREGLADO-guardar-todo-2026-10-31.json')
   fs.writeFileSync(out, JSON.stringify(nuevo, null, 2))
   console.log('escrito', out)
 }
