@@ -245,6 +245,101 @@ export async function brazoPostHog(args: {
 }
 
 /**
+ * F4 (31-oct · estructura completa §2 · firmada por Emilio) · el brazo MERCADO.
+ *
+ * El informe corto de mercado y tendencias de `market_research_analyst`, ANTES
+ * del redactor del plan. Las tres condiciones de CC3, vinculantes:
+ *   (1) datos con referencia o «sin dato» · nunca estimados · lo de ensayo se descarta;
+ *   (2) UN informe corto rotulado PROPUESTA: no es dato del cliente · el redactor
+ *       lo usa como contexto, no como mandato;
+ *   (3) una dimensión por agente: tendencia y oportunidad; la competencia es de otro.
+ *
+ * Traducción a los tres estados:
+ *   · sin rubro            → `sin_respuesta` (no hay categoría que mirar · NO se preguntó)
+ *   · ensayo (`dry_run`)   → `sin_respuesta` SIN llamar al agente (en seco no genera;
+ *                            lo que devolviera no sería informe) · US$ 0
+ *   · el agente no contestó / devolvió vacío / sin señales legibles → `sin_respuesta`
+ *   · el agente declaró «sin dato» (sin señales)                   → `sin_dato`
+ *   · 1+ señales                                                   → `trajo`, rotulado
+ */
+export const ROTULO_INFORME_DE_MERCADO = '[informe de mercado · PROPUESTA: no es dato del cliente]'
+export const AGENTE_DE_MERCADO = 'market_research_analyst'
+export const DIMENSION_DE_MERCADO = 'tendencia y oportunidad'
+export const SENALES_ESPERADAS = { min: 3, max: 5 } as const
+
+/** una señal = una línea de lista («- », «* », «• », «1. ») · se cuenta, no se interpreta */
+export const RE_SENAL = /^\s*(?:[-*•]|\d+[.)])\s+\S/
+export const contarSenales = (texto: string): number => texto.split(/\r?\n/).filter((l) => RE_SENAL.test(l)).length
+export const declaraSinDato = (texto: string): boolean => /\bsin dato\b/i.test(texto)
+
+export interface RespuestaDelAgenteDeMercado {
+  readonly ok: boolean
+  readonly salida?: unknown
+  readonly error?: string
+  readonly costo_usd: number
+}
+
+export async function brazoMercado(args: {
+  objetivo: string
+  fuente: string
+  limite_ms?: number
+  proposito?: string
+  rubro: string | null | undefined
+  dry_run: boolean
+  /** la llamada al agente (ya firmada con el flujo que llama) · se hace UNA vez y solo si no es ensayo */
+  pedir: () => Promise<RespuestaDelAgenteDeMercado>
+}): Promise<RespuestaBrazo> {
+  return envolverBrazo({
+    brazo: 'mercado',
+    objetivo: args.objetivo,
+    fuente: args.fuente,
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
+    ejecutar: async () => {
+      const rubro = String(args.rubro ?? '').trim()
+      if (!rubro) {
+        return { hay: false as const, noSeMiro: true, motivo: 'falta industry en la ficha · sin rubro no hay categoría que mirar · NO se preguntó' }
+      }
+      if (args.dry_run) {
+        return {
+          hay: false as const,
+          noSeMiro: true,
+          motivo: 'NO SE MIRÓ DE VERDAD · fue un ensayo (dry-run) · el agente no genera en seco y lo que devolviera NO sería informe · no se llamó ni se gastó',
+        }
+      }
+      const r = await args.pedir()
+      if (!r.ok) {
+        return { hay: false as const, noSeMiro: true, motivo: `el agente no contestó · ${r.error ?? 'sin detalle'} · costo US$ ${r.costo_usd.toFixed(2)}` }
+      }
+      const texto = String(r.salida ?? '').trim()
+      if (!texto) return { hay: false as const, noSeMiro: true, motivo: 'el agente devolvió vacío · no hay informe' }
+      const senales = contarSenales(texto)
+      if (senales === 0) {
+        if (declaraSinDato(texto)) {
+          return { hay: false as const, motivo: 'fui, miré y no hay: el analista declaró «sin dato» para esta categoría y plaza, y no estimó · ' + texto.slice(0, 200) }
+        }
+        return { hay: false as const, noSeMiro: true, motivo: 'el informe no trae señales legibles (ninguna línea de lista) · no se usa' }
+      }
+      const informe = texto.startsWith(ROTULO_INFORME_DE_MERCADO) ? texto : `${ROTULO_INFORME_DE_MERCADO}\n${texto}`
+      const fuera = senales < SENALES_ESPERADAS.min || senales > SENALES_ESPERADAS.max
+      return {
+        hay: true as const,
+        datos: {
+          informe,
+          rotulo: ROTULO_INFORME_DE_MERCADO,
+          es_dato_del_cliente: false,
+          dimension: DIMENSION_DE_MERCADO,
+          agente: AGENTE_DE_MERCADO,
+          senales,
+          costo_usd: r.costo_usd,
+          ...(fuera ? { aviso: `trajo ${senales} señal(es); se pidieron ${SENALES_ESPERADAS.min}–${SENALES_ESPERADAS.max}` } : {}),
+        },
+      }
+    },
+  })
+}
+
+/**
  * Canon canonical · el CEREBRO · se LEE, no se escribe.
  *
  * Cero fragmentos tras una búsqueda exitosa es `sin_dato` («este cliente

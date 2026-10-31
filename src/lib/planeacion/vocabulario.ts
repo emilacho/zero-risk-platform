@@ -91,6 +91,8 @@ export const DE_OTRO_BRAZO: Readonly<Record<string, string>> = {
   analitica_propia: 'posthog',
   cerebro_cliente: 'cerebro',
   costo_pauta: 'plataforma',
+  // F4 (31-oct) · el informe de mercado lo escribe un agente, no un raspador
+  informe_mercado: 'mercado',
 }
 
 /**
