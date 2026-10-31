@@ -271,7 +271,7 @@ export async function guardarVideos(a: {
         const rutaFoto = `${a.clientId}/${c.rol}/${c.handle}/${c.post_id}-f${k.n}.jpg`
         const f = await traer(`${base}/storage/v1/object/${BUCKET_DE_FOTOS}/${rutaFoto}`, { method: 'POST', headers: { ...auth, 'content-type': 'image/jpeg', 'x-upsert': 'true' }, body: new Uint8Array(k.bytes) })
         if (!f.ok) continue
-        filasFotos.push({ client_id: a.clientId, owner_role: c.rol, handle: c.handle, post_id: `${c.post_id}-f${k.n}`, tipo: 'video_captura', url: `${base}/storage/v1/object/public/${BUCKET_DE_FOTOS}/${rutaFoto}`, estado: 'ok', causa: null, caption: c.caption, posted_at: c.posted_at, post_url: c.post_url, posicion: `segundo-${k.segundo}`, medio: 'video', hash_archivo: sha256(k.bytes), video_id: videoId })
+        filasFotos.push({ client_id: a.clientId, owner_role: c.rol, handle: c.handle, post_id: `${c.post_id}-f${k.n}`, tipo: 'video_captura', url: `${base}/storage/v1/object/public/${BUCKET_DE_FOTOS}/${rutaFoto}`, estado: 'ok', causa: null, caption: c.caption, posted_at: c.posted_at, post_url: c.post_url, posicion: `hijo-${k.n}`, medio: 'video', hash_archivo: sha256(k.bytes), video_id: videoId })
       }
       if (filasFotos.length) {
         const fw = await traer(`${base}/rest/v1/client_social_images?on_conflict=client_id,owner_role,handle,post_id`, { method: 'POST', headers: { ...json, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(filasFotos) })

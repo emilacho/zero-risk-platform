@@ -15,7 +15,7 @@ export const LIMITE_MAXIMO_DE_VIDEOS = 100
 const txt = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
 const numero = (v: unknown): number | null => { const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN; return Number.isFinite(n) ? n : null }
 
-export interface CapturaVista { foto_id: string; segundo: string | null; url: string | null; etiquetada: boolean; que_muestra: string | null; producto_visto: string[]; texto_visible: string | null }
+export interface CapturaVista { foto_id: string; momento: number | null; url: string | null; etiquetada: boolean; que_muestra: string | null; producto_visto: string[]; texto_visible: string | null }
 export interface VideoVisto {
   video_id: string
   tipo: TipoDeVideoVisto | string
@@ -60,11 +60,11 @@ export async function listarVideos(consulta: Consulta, p: PedidoDeVideos, firmar
   const c = await consulta({ tabla: 'client_social_images', columnas: COLUMNAS_DE_CAPTURA, donde: { client_id: cliente, tipo: 'video_captura' }, orden: { columna: 'posicion', descendente: false }, limite: 2000 })
   if (c.error) return { ok: false, error: 'error_de_lectura', detalle: c.error.slice(0, 200) }
   const capturasDe = new Map<string, CapturaVista[]>()
-  const ordenadas = [...c.filas].filter((f: Fila) => f.estado === 'ok' && txt(f.video_id)).sort((a, b) => (numero(String(a.posicion ?? '').replace('segundo-', '')) ?? 0) - (numero(String(b.posicion ?? '').replace('segundo-', '')) ?? 0))
+  const ordenadas = [...c.filas].filter((f: Fila) => f.estado === 'ok' && txt(f.video_id)).sort((a, b) => (numero(String(a.posicion ?? '').replace('hijo-', '')) ?? 0) - (numero(String(b.posicion ?? '').replace('hijo-', '')) ?? 0))
   for (const f of ordenadas) {
     const k = String(f.video_id)
     const lista = capturasDe.get(k) ?? []
-    lista.push({ foto_id: String(f.id), segundo: txt(f.posicion)?.replace('segundo-', '') ?? null, url: txt(f.url), etiquetada: !!txt(f.etiquetada_en), que_muestra: txt(f.que_muestra), producto_visto: Array.isArray(f.producto_visto) ? (f.producto_visto as unknown[]).filter((x): x is string => typeof x === 'string') : [], texto_visible: txt(f.texto_visible) })
+    lista.push({ foto_id: String(f.id), momento: numero(String(f.posicion ?? '').replace('hijo-', '')), url: txt(f.url), etiquetada: !!txt(f.etiquetada_en), que_muestra: txt(f.que_muestra), producto_visto: Array.isArray(f.producto_visto) ? (f.producto_visto as unknown[]).filter((x): x is string => typeof x === 'string') : [], texto_visible: txt(f.texto_visible) })
     capturasDe.set(k, lista)
   }
   const todos = v.filas.filter((f) => f.estado === 'ok')
