@@ -96,7 +96,7 @@ export function devolucionDelBrief(texto: string): string | null {
   const resto = texto.slice(m.index + m[0].length)
   const sig = /^#{1,3}\s+\S/m.exec(resto)
   const cuerpo = (sig ? resto.slice(0, sig.index) : resto).trim()
-  return cuerpo.length >= 10 ? cuerpo.slice(0, 4000) : null
+  return cuerpo ? cuerpo.slice(0, 4000) : null
 }
 
 /**

@@ -320,7 +320,7 @@ describe('la mesa del CONCEPTO de punta a punta', () => {
 
   it('la devolución se lee de la sección, sin confundirla con otras: texto vacío o sin sección = no devuelve', () => {
     expect(devolucionDelBrief('## Devolución del brief\n- punto uno que falla\n## Citas\nA1 usé')).toBe('- punto uno que falla')
-    expect(devolucionDelBrief('## devolucion del brief\ncorto')).toBeNull()
+    expect(devolucionDelBrief('## devolucion del brief\ncorto')).toBe('corto') // misma regla que el lector de la cadena: cualquier texto no vacío es una devolución
     expect(devolucionDelBrief('el brief está bien, sigo\n## Citas')).toBeNull()
     expect(devolucionDelBrief('## Devolución del brief\n')).toBeNull()
   })
@@ -505,5 +505,21 @@ describe('el plazo de la mesa: lo que NO vence', () => {
     const db = new DbFalsa().semilla('oficina_encargos', [{ id: sinPlazo.id, familia: 'brief_mesa', estado: 'en_paso', creado_en: '2026-01-01T00:00:00Z' }])
     expect((await vencerMesasPorPlazo(sinPlazo.M.P, db, new Date('2027-01-01T00:00:00Z'))).vencidas).toEqual([])
     expect(sinPlazo.hecho.briefs).toHaveLength(0)
+  })
+})
+
+describe('reservas de CC3 (U5 · U12)', () => {
+  it('una mesa que cierra bien NO queda «con desacuerdo»; una cerrada por tope sí (la sala lo ve)', async () => {
+    const bien = await montar('brief')
+    await jugar(bien)
+    expect(bien.M.encargos.get(bien.id)!.con_desacuerdo).toBe(false)
+    const tope = await montar('concepto')
+    await jugar(tope, (t) => ({ texto: t.tipo === 'dirigir' ? 'el problema en una frase' : `aporte de ${t.agente}`, costo_usd: 3.1 }))
+    expect(tope.M.encargos.get(tope.id)!.con_desacuerdo).toBe(true)
+  })
+  it('las condiciones del sobre se recortan a 20 (no entra una lista sin fin)', () => {
+    const OK = { dry_run: true, tipo_de_mesa: 'concepto', client_id: '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312', campana_id: '8168f32b-47d9-466a-9350-3dff31700a58', version: 1, marco_texto: 'x'.repeat(40) }
+    const r = validarSobreDeLaCadena({ ...OK, condiciones: Array.from({ length: 30 }, (_, i) => `si_c${i}`) })
+    expect(r.ok && r.sobre.condiciones).toHaveLength(20)
   })
 })
