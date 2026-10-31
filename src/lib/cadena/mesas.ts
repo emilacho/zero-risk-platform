@@ -151,7 +151,21 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   const ultimo = await al.ultimoBriefCreativo(campana.id)
   // la nota de Emilio llega con el sobre o, si la puerta vuelve a entrar sin ella, se recupera del brief que él mandó a rehacer
   const nota = texto(cuerpo.nota) ?? (ultimo?.estado === 'devuelta' && ultimo.motivo === MOTIVO_CAMBIOS_DE_EMILIO ? texto(ultimo.devolucion_texto) : null)
-  if (ultimo?.estado === 'borrador') return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version) } }
+  if (ultimo?.estado === 'borrador') {
+    // hueco 1 de CC3: una mesa abierta cuyo sobre no llegó a la oficina se rescata devolviendo el MISMO sobre otra vez (la oficina es idempotente: `ya_existia`);
+    // el marco se rearma con lo persistido (la devolución o la nota de la versión anterior); lo que solo viajaba en el sobre original (informe de mercado) no se recupera
+    const previo = (await al.briefsDe(campana.id)).find((b) => b.version === ultimo.version - 1) ?? null
+    const sobre: SobreParaLaOficina = {
+      tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
+      marco_texto: marcoDelBrief({
+        ctx, estrategia, version: ultimo.version,
+        devolucion: previo?.estado === 'devuelta' && previo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? previo.devolucion_texto : null,
+        nota: previo?.estado === 'devuelta' && previo.motivo === MOTIVO_CAMBIOS_DE_EMILIO ? texto(previo.devolucion_texto) : null,
+      }),
+      condiciones: condicionesDe(estrategia, await al.formatos()),
+    }
+    return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version), plazo_mesa_min: PLAZO_DE_MESA_MIN.brief, sobre } }
+  }
   if (ultimo?.estado === 'validada' && !nota) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version) } }
   const version = (ultimo?.version ?? 0) + 1
   // reapertura por devolución o fallo: UNA vez; con nota de Emilio (cambios) no cuenta como reapertura
@@ -159,14 +173,15 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
     const r = await ponerNecesitaHumano(al, campana, `el brief creativo ya se ${ultimo.estado === 'devuelta' ? 'devolvió' : 'descartó'} ${ultimo.version} veces`, ahora)
     return { status: 409, cuerpo: { error: 'brief_agotado', necesita_humano: true, alerta: r.alerta } }
   }
-  const fila: BriefCreativoGuardado = { campana_id: campana.id, version, estado: 'borrador', texto_md: null, leido: null, devolucion_texto: null, motivo: null, costo_usd: null, encargo_id: null, seco: campana.seco }
+  const plazoMin = typeof cuerpo.plazo_mesa_min === 'number' && cuerpo.plazo_mesa_min > 0 ? cuerpo.plazo_mesa_min : PLAZO_DE_MESA_MIN.brief
+  const fila: BriefCreativoGuardado = { campana_id: campana.id, version, estado: 'borrador', texto_md: null, leido: null, devolucion_texto: null, motivo: null, costo_usd: null, encargo_id: null, seco: campana.seco, plazo_en: masMinutos(ahora, plazoMin + HOLGURA_DE_MESA_MIN) }
   await al.insertarBriefCreativo(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
     marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado) }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
   }
-  return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: PLAZO_DE_MESA_MIN.brief, sobre } }
+  return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }
 }
 
 /** la entrega de la mesa del brief (puerto `P.cadena.entregarBrief`) · nunca lanza hacia la oficina: lo que falle se dice en `error` */
@@ -206,7 +221,14 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   // Emilio pidió cambios: la vuelta siguiente se abre aunque la puerta vuelva a entrar sin la nota (se recupera de la decisión; si apuntó al brief, el concepto nuevo va sobre el brief nuevo, sin nota)
   const conCambios = ultimo?.estado === 'lista' && ultimo.aprobacion === 'cambios'
   const nota = texto(cuerpo.nota) ?? (conCambios && ultimo.apunta_a === 'concepto' ? texto(ultimo.nota_de_emilio) : null)
-  if (ultimo?.estado === 'abierta') return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version) } }
+  if (ultimo?.estado === 'abierta') {
+    // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
+    const sobre: SobreParaLaOficina = {
+      tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
+      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio) }), condiciones: condicionesDe(estrategia, await al.formatos()),
+    }
+    return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
+  }
   if (ultimo?.estado === 'lista' && !nota && !conCambios) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, aprobacion: ultimo.aprobacion, concepto_id: idDeConcepto(campana.id, ultimo.version) } }
   if (!nota && cuentaDe(todos, (x) => x.estado === 'sin_mesa') >= MAX_VERSIONES_POR_REAPERTURA) {
     const r = await ponerNecesitaHumano(al, campana, 'la mesa de concepto no entregó concepto dos veces', ahora)
@@ -345,6 +367,12 @@ export async function etapaDeReentrada(al: Almacen, campana: Pick<Campana, 'id' 
   if (brief?.estado === 'borrador') return null
   return `abrir-brief-v${(brief?.version ?? 0) + 1}`
 }
+/**
+ * Hueco 2 de CC3: la sala deduplica por clave y NO reintenta un trabajo aceptado que murió a medias (la puerta de n8n contesta 200 al recibir; lo que muera después no vuelve solo).
+ * Por eso el RESPALDO del vigía lleva en la etapa un tramo de medio día (`:2026-10-31pm`): mientras la campaña siga con algo que hacer, cada pasada del vigía es un sobre NUEVO para la sala
+ * (la puerta es idempotente: `ya_abierta` devuelve el mismo sobre y la oficina contesta `ya_existia`). El empuje inmediato no lleva tramo.
+ */
+export const tramoDeReemision = (ahora: string): string => `${ahora.slice(0, 10)}${new Date(ahora).getUTCHours() < 12 ? 'am' : 'pm'}`
 /** `{ siguiente: { sobre } }` para pegar a una respuesta, o `{}` si no hay con qué volver a entrar */
 export async function siguienteDespuesDe(al: Almacen, campanaId: string): Promise<{ siguiente?: { sobre: SobreDeTanda } }> {
   const c = await al.campana(campanaId)
@@ -375,9 +403,20 @@ export async function conceptoParaElCalendario(al: Almacen, campana: Pick<Campan
   return { concepto: null, version: null, espera: { falta, version: ultimo?.version ?? null, estado: ultimo?.estado ?? null, aprobacion: ultimo?.aprobacion ?? null } }
 }
 
-/** el reloj: una mesa de concepto que pasó su red de seguridad (plazo + holgura) sin entregar queda `sin_mesa` (la campaña sigue; dos veces ⇒ necesita_humano). Devuelve una línea por mesa cerrada. */
+/**
+ * el reloj: una mesa que pasó su red de seguridad (plazo + holgura) sin entregar se cierra (brief ⇒ `descartada` · concepto ⇒ `sin_mesa`) y la campaña sigue: reabre una vez, a la segunda `necesita_humano`.
+ * Devuelve una línea por mesa cerrada. (El brief gana su plazo el 31-oct por el hueco 1 de CC3: un `borrador` cuyo sobre nunca llegó a la oficina paraba la campaña para siempre.)
+ */
 export async function cerrarMesasVencidas(al: Almacen, ahora: string): Promise<Array<{ campana_id: string; texto: string }>> {
   const out: Array<{ campana_id: string; texto: string }> = []
+  for (const b of await al.briefsVencidos(ahora)) {
+    const motivo = `la mesa del brief (versión ${b.version}) no entregó antes de su plazo más la holgura (${b.plazo_en})`
+    await al.actualizarBriefCreativo(b.campana_id, b.version, { estado: 'descartada', motivo })
+    const campana = await al.campana(b.campana_id)
+    const agotado = b.version >= MAX_VERSIONES_POR_REAPERTURA
+    if (campana && agotado) await ponerNecesitaHumano(al, campana, `la mesa del brief no entregó dos veces (la última venció: ${b.plazo_en})`, ahora)
+    out.push({ campana_id: b.campana_id, texto: `${motivo}: queda descartada${agotado ? ' · ya son dos: necesita_humano' : ' · se reabre una vez'}` })
+  }
   for (const c of await al.conceptosVencidos(ahora)) {
     const motivo = `la mesa de concepto (versión ${c.version}) no entregó antes de su plazo más la holgura (${c.plazo_en})`
     await al.actualizarConcepto(c.campana_id, c.version, { estado: 'sin_mesa', motivo })
