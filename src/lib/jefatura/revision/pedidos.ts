@@ -115,7 +115,7 @@ export function tareaDeRevisionDeFondo(a: { politica: PoliticaDeRevision; payloa
   return { task: partes.filter(Boolean).join('\n\n'), indicacion: linea, esquema: 'fichas.v1' }
 }
 
-/** `spell-check-corrector`: SOLO errores de lengua (ortografía, gramática, tildes, puntuación); no cambia contenido, estilo ni voz; respeta el trato del manual. Toda ficha que marque bloquea. */
+/** `spell-check-corrector`: SOLO errores de lengua (ortografía, gramática y puntuación del idioma del texto); no cambia contenido, estilo ni voz; respeta el idioma y el trato del manual. Toda ficha que marque bloquea. */
 export function tareaDeRevisionDeLengua(a: { payload: PayloadDeRevision; tipo: TipoDeRevision; texto: string; duenos: Dueno[] }): { task: string; indicacion: string; esquema: string } {
   const linea = `Revisas SOLO la lengua de ${tituloDeLoRevisado(a.tipo)}: ortografía, gramática y puntuación propias del idioma en que está escrito. No cambies el contenido, el estilo ni la voz de la marca. Respeta el idioma y el trato (tú, vos o usted) que fija el manual del cliente: nunca cambies el trato del texto; si el manual fija tuteo, no lo corrijas hacia el voseo, y si fija voseo, no lo corrijas hacia el tuteo. Marca como error solo el trato que contradice al del manual. Tus propuestas van en el mismo idioma y trato del texto.`
   const dondes = a.duenos.flatMap((d) => (d.comodin ? [] : d.dondes))

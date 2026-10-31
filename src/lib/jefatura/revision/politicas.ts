@@ -34,7 +34,7 @@ export interface PoliticaDeRevision {
 
 export const TOPE_MAXIMO_DE_REVISION_USD = 10
 const TOPES_POR_OMISION = { revision_fondo: 0.2, revision_lengua: 0.05, correccion: 0.2, segunda_mirada: 0.5, decision: 0.2 }
-/** el corrector de lengua (Haiku): corrección DURA de ortografía, gramática, tildes y puntuación; no juzga contenido ni estilo (31-oct, decisión de Emilio) */
+/** el corrector de lengua (Haiku): corrección DURA de ortografía, gramática y puntuación del idioma del texto; no juzga contenido ni estilo (31-oct, decisión de Emilio) */
 export const REVISOR_DE_LENGUA = 'spell-check-corrector'
 /** el paso existe en un tipo SOLO si su política declara su tope (`tope_paso_usd.revision_lengua`) y el tipo tiene re-entrega: es dato, no código */
 export const tieneRevisionDeLengua = (p: PoliticaDeRevision): boolean => p.tope_paso_usd.revision_lengua !== undefined && p.reentrega !== 'ninguna'
