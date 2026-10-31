@@ -8,6 +8,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { copiarFotosDeMapasPropia, urlsDeFotosDeLaFicha, tipoPorFirma } from '../src/lib/portero-alimenta/fotos-de-mapas-propia'
+import { pdfsDeLasFilas, leerDocumentosDeLosSitios } from '../src/lib/portero-alimenta/documentos-enlazados'
 
 const require = createRequire(import.meta.url)
 const W = join(process.cwd(), 'scripts', 'worker-staging', '3lyknrP3PoS2KzUf')
@@ -43,54 +44,64 @@ describe('1 · ilustraciones que dibuja el CSS', () => {
   })
 })
 
-describe('2 · PDF enlazados (puro)', () => {
-  it('solo PDF del MISMO dominio base, sin repetidos, con tope; lee <a href> y enlaces del markdown', () => {
-    const r = F.pdfsEnlazados([
-      pagina('https://www.x.ec/carta', '<a href="/menu.pdf">Menú</a><a href="https://cdn.x.ec/lista.PDF?v=2">Lista</a><a href="https://tercero.com/ajeno.pdf">Ajeno</a><a href="/menu.pdf#p2">repetido</a><a href="/foto.jpg">no</a>', { markdown: '[Catálogo](/cat.pdf) y ![img](/i.pdf)' }),
-    ], { max: 10 })
-    expect(r.map((d: { url: string }) => d.url)).toEqual(['https://www.x.ec/menu.pdf', 'https://cdn.x.ec/lista.PDF?v=2', 'https://www.x.ec/cat.pdf'])
-    expect(r[0]).toMatchObject({ texto: 'Menú', pagina: 'https://www.x.ec/carta' })
-    expect(F.pdfsEnlazados([pagina('https://x.ec/', '<a href="/1.pdf"></a><a href="/2.pdf"></a><a href="/3.pdf"></a>')], { max: 2 })).toHaveLength(2)
-  })
-})
+describe('2 · PDF que el sitio enlaza · lectura del portero', () => {
+  const ahora = new Date('2026-10-31T15:00:00Z')
+  const pag = (url: string, docs: Array<{ url: string; texto?: string }>) => ({ url, text: 'x', _enlaces: { documentos: docs, videos: [] } })
+  const fila = (id: string, fn: string, respuesta: unknown[], extra: Record<string, unknown> = {}) => ({ id, apify_function: fn, respuesta, ensayo: false, created_at: '2026-10-31T10:00:00Z', ...extra }) as never
+  const PDF = Buffer.from('%PDF-1.4 falso')
+  const traerPdf = (log: string[] = [], estado = 200) => async (u: string) => { log.push(u); return new Response(new Uint8Array(PDF), { status: estado }) }
+  const lectorOk = (texto = 'Ceviche mixto US$ 12,50') => async () => ({ estado: 'ok', texto, paginas: 2, motivo: undefined }) as never
 
-describe('2 · PDF enlazados con el código real de «Fotos · lista»', () => {
-  async function lista(fn: string, crudos: unknown[], o: { rol?: string | null; metadata?: Record<string, unknown>; params?: Record<string, unknown> } = {}) {
-    const items = crudos.map((json) => ({ json }))
-    const llamadas: Array<{ url: string; body?: Record<string, unknown> }> = []
-    const refs: Record<string, unknown> = {
-      'Validar el cuerpo contra el esquema': { apify_function: fn, dry_run: false, client_id: CID, metadata: o.metadata ?? {}, cuerpo: {}, params: o.params ?? {} },
-      'Armar el cuerpo del raspador': { cuerpo: { startUrls: [{ url: 'https://x.ec' }] } },
-    }
-    const $ = (n: string) => {
-      if (n === 'Merge · apify data ready') return { all: () => items, first: () => items[0] }
-      return { first: () => ({ json: refs[n] }), all: () => [{ json: refs[n] }] }
-    }
-    await new AsyncFunction('$input', '$', '$env', '$json', '$workflow', '$execution', servicio.codigoDeNodo('lista'))
-      .call({ helpers: { httpRequest: async (r: { url: string; body?: Record<string, unknown> }) => { llamadas.push({ url: r.url, body: r.body }); return r.url.includes('client_web_pages') ? [{ owner_role: o.rol ?? 'propio' }] : {} } } }, { first: () => items[0], all: () => items }, $, { SUPABASE_SERVICE_ROLE_KEY: 'k' }, {}, { id: 'WF' }, { id: '1' })
-    return llamadas.filter((l) => l.url.includes('/webhook/apify-service-workflow'))
-  }
-  const sitio = pagina('https://x.ec/', '<a href="/menu.pdf">Menú</a><a href="/carta.pdf">Carta</a><a href="https://ajeno.com/z.pdf">z</a>')
-
-  it('sitio propio → una llamada al Servicio por PDF (1 página, profundidad 0), marcada #documento; sin client_web_pages = no se llama', async () => {
-    const w = await lista('website_content_scraper', [sitio])
-    expect(w).toHaveLength(2)
-    expect(w[0].body).toMatchObject({ client_id: CID, apify_function: 'website_content_scraper', dry_run: false, params: { startUrls: [{ url: 'https://x.ec/menu.pdf' }], maxCrawlPages: 1, maxCrawlDepth: 0 } })
-    expect(String((w[0].body?.metadata as Record<string, unknown>).llamado_por)).toMatch(/#documento$/)
-    expect((w[0].body?.metadata as Record<string, unknown>).pdf_de).toBe('https://x.ec/')
+  it('elige solo PDF del MISMO dominio base, sin repetidos y con tope; el competidor sin competitor_id no cuenta', () => {
+    const filas = [
+      fila('f1', 'website_content_scraper', [pag('https://www.x.ec/carta', [{ url: 'https://x.ec/menu.pdf', texto: 'Menú' }, { url: 'https://cdn.x.ec/lista.PDF?v=2' }, { url: 'https://tercero.com/ajeno.pdf' }, { url: 'https://x.ec/menu.pdf#p2' }, { url: 'https://x.ec/foto.jpg' }])]),
+      fila('f2', 'competitor_website_scraper', [pag('https://rival.ec/', [{ url: 'https://rival.ec/cat.pdf' }])], { params: { competitor_id: 'c-1' } }),
+      fila('f3', 'competitor_website_scraper', [pag('https://otro.ec/', [{ url: 'https://otro.ec/z.pdf' }])], { params: {} }),
+    ]
+    const r = pdfsDeLasFilas(filas, 10)
+    expect(r.map((d) => [d.url, d.rol, d.competitor_id])).toEqual([['https://x.ec/menu.pdf', 'propio', null], ['https://cdn.x.ec/lista.PDF?v=2', 'propio', null], ['https://rival.ec/cat.pdf', 'competidor', 'c-1']])
+    expect(r[0]).toMatchObject({ nombre: 'Menú', pagina: 'https://www.x.ec/carta', fila_id: 'f1' })
+    expect(pdfsDeLasFilas(filas, 1)).toHaveLength(1)
   })
-  it('🔴 un sitio de página ajena (referencia/tercero) no manda a leer sus PDF', async () => {
-    expect(await lista('website_content_scraper', [sitio], { rol: 'referencia' })).toHaveLength(0)
-    expect(await lista('website_content_scraper', [sitio], { rol: 'competidor' })).toHaveLength(0)
+  it('🔴 un ensayo y la tanda de artículos no aportan PDF', () => {
+    const p = [pag('https://x.ec/', [{ url: 'https://x.ec/a.pdf' }])]
+    expect(pdfsDeLasFilas([fila('e', 'website_content_scraper', p, { ensayo: true })])).toHaveLength(0)
+    expect(pdfsDeLasFilas([fila('a', 'website_content_scraper', p, { metadata: { llamado_por: 'wf#articulo' } })])).toHaveLength(0)
   })
-  it('🔴 sin bucle: una llamada que ya viene de un PDF (#documento) no pide más PDF', async () => {
-    expect(await lista('website_content_scraper', [sitio], { metadata: { llamado_por: 'portero-alimentar#documento' } })).toHaveLength(0)
+  it('sitio propio: el texto del PDF vuelve como una página más del sitio (con el id de la fila que lo enlazó); nada se guarda en tablas', async () => {
+    const log: string[] = []
+    const r = await leerDocumentosDeLosSitios({ filas: [fila('f1', 'website_content_scraper', [pag('https://x.ec/carta', [{ url: 'https://x.ec/menu.pdf', texto: 'Menú' }])])], ahora, fetchImpl: traerPdf(log) as never, leer: lectorOk() })
+    expect(r).toMatchObject({ candidatos: 1, leidos: 1, del_sitio: 1, de_competidores: 0, fallidos: [] })
+    expect(log).toEqual(['https://x.ec/menu.pdf'])
+    expect(r.filas[0]).toMatchObject({ id: 'f1', apify_function: 'website_content_scraper', ensayo: false })
+    expect((r.filas[0].respuesta as Array<Record<string, unknown>>)[0]).toMatchObject({ url: 'https://x.ec/menu.pdf', text: 'Ceviche mixto US$ 12,50' })
   })
-  it('competidor: lleva su competitor_id; sin él no se llama (el Servicio lo exige)', async () => {
-    const w = await lista('competitor_website_scraper', [sitio], { params: { competitor_id: 'c-1' } })
-    expect(w).toHaveLength(2)
-    expect(w[0].body?.params).toMatchObject({ competitor_id: 'c-1', maxCrawlPages: 1 })
-    expect(await lista('competitor_website_scraper', [sitio], { params: {} })).toHaveLength(0)
+  it('🔴 competidor: se guarda COMO COMPETIDOR con su competitor_id y NO vuelve a las fichas del cliente', async () => {
+    const guardadas: Array<Record<string, unknown>> = []
+    const r = await leerDocumentosDeLosSitios({ filas: [fila('f2', 'competitor_website_scraper', [pag('https://rival.ec/', [{ url: 'https://rival.ec/cat.pdf' }])], { params: { competitor_id: 'c-1' } })], ahora, fetchImpl: traerPdf() as never, leer: lectorOk('Catálogo rival'), guardarDePagina: async (p) => { guardadas.push(p); return true } })
+    expect(r).toMatchObject({ leidos: 1, del_sitio: 0, de_competidores: 1 })
+    expect(r.filas).toHaveLength(0)
+    expect(guardadas).toEqual([{ url: 'https://rival.ec/cat.pdf', titulo: 'cat.pdf', texto: 'Catálogo rival', paginas: 2, competitor_id: 'c-1' }])
+  })
+  it('lo que no se puede leer se DECLARA y no tumba nada: HTTP 404, PDF escaneado, tabla que rechaza', async () => {
+    const filas = [fila('f1', 'website_content_scraper', [pag('https://x.ec/', [{ url: 'https://x.ec/a.pdf' }, { url: 'https://x.ec/b.pdf' }])])]
+    const r404 = await leerDocumentosDeLosSitios({ filas, ahora, fetchImpl: traerPdf([], 404) as never, leer: lectorOk() })
+    expect(r404.fallidos.map((f) => f.causa)).toEqual(['HTTP 404', 'HTTP 404'])
+    const esc = await leerDocumentosDeLosSitios({ filas, ahora, fetchImpl: traerPdf() as never, leer: (async () => ({ estado: 'escaneado', texto: '', motivo: 'sin texto' })) as never })
+    expect(esc.leidos).toBe(0)
+    expect(esc.fallidos[0].causa).toMatch(/^escaneado/)
+    const comp = [fila('f2', 'competitor_website_scraper', [pag('https://rival.ec/', [{ url: 'https://rival.ec/cat.pdf' }])], { params: { competitor_id: 'c-1' } })]
+    const rech = await leerDocumentosDeLosSitios({ filas: comp, ahora, fetchImpl: traerPdf() as never, leer: lectorOk(), guardarDePagina: async () => false })
+    expect(rech).toMatchObject({ leidos: 0, de_competidores: 0 })
+    expect(rech.fallidos[0].causa).toMatch(/rechaz/)
+  })
+  it('🔴 el texto de un PDF del sitio propio produce unidades de la fuente «sitio» con el PDF como origen; si el sitio es otro, ninguna', async () => {
+    const { unidadesDeRaspados } = await import('../src/lib/portero-alimenta/unidades')
+    const r = await leerDocumentosDeLosSitios({ filas: [fila('f1', 'website_content_scraper', [pag('https://x.ec/carta', [{ url: 'https://x.ec/menu.pdf' }])])], ahora, fetchImpl: traerPdf() as never, leer: lectorOk('Ceviche mixto US$ 12,50\nHorario: lunes a viernes 10:00 a 18:00') })
+    const us = unidadesDeRaspados(r.filas, { propios: { sitio: 'https://x.ec', handles: [] } })
+    expect(us.length).toBeGreaterThan(0)
+    expect(us.every((u) => u.fuente === 'sitio' && u.url === 'https://x.ec/menu.pdf')).toBe(true)
+    expect(unidadesDeRaspados(r.filas, { propios: { sitio: 'https://otro.com', handles: [] } })).toHaveLength(0)
   })
 })
 
@@ -147,6 +158,13 @@ describe('3 · fotos de la ficha PROPIA de Mapas', () => {
       expect(r.log).toHaveLength(0)
     }
   })
+  it('la misma ficha en varias corridas junta las fotos de todas; la de otra ficha nunca se mezcla', async () => {
+    const vieja = { ...propia, imageUrl: 'https://lh3.example.com/v1', imageUrls: [] }
+    const r = red()
+    await llamar([vieja, homonimo, propia], r)
+    const bajadas = r.log.filter((l) => l.url.startsWith('https://lh3.example.com')).map((l) => l.url)
+    expect(bajadas).toEqual(['https://lh3.example.com/v1', 'https://lh3.example.com/a=w1', 'https://lh3.example.com/b', 'https://lh3.example.com/c'])
+  })
   it('lo que ya se copió no se vuelve a bajar; una foto caída o que no es imagen se declara sin tumbar las demás', async () => {
     const primera = red()
     await llamar([propia], primera)
@@ -175,8 +193,7 @@ describe('el constructor de la parte 2', () => {
     const uno = m.aplicarGuardarTodo(antes)
     const dos = m.aplicarGuardarTodo2(uno)
     const cod = (w: { nodes: Array<{ name: string; parameters: { jsCode: string } }> }, n: string) => w.nodes.find((x) => x.name === n)!.parameters.jsCode
-    expect(cod(dos, 'Fotos · lista')).toContain('pdfsEnlazados(')
-    expect(cod(dos, 'Fotos · lista')).toContain('#documento')
+    expect(cod(dos, 'Fotos · lista')).toContain('fotosDeSitio(')
     expect(cod(dos, 'Fotos · revisar')).toContain("'47494638'")
     expect(cod(dos, 'Armar el cuerpo del raspador')).toMatch(/own_google_maps_profile[^]*maxImages: Math\.min\(Number\(\$json\.params\.maxImages\), 20\)[^]*competitor_website_scraper/)
     expect(dos.nodes).toHaveLength(uno.nodes.length)
