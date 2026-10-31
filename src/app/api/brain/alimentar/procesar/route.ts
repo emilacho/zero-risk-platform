@@ -10,6 +10,7 @@ import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { brazosDelEntorno } from '@/lib/portero-alimenta/brazos'
 import { modeloRegistrado, puenteAlIndice } from '@/lib/portero-alimenta/entorno'
+import { ocrRegistrado } from '@/lib/portero-alimenta/ocr-de-pdf'
 import { rutaAlimentar } from '@/lib/portero-alimenta/rutas'
 
 export const dynamic = 'force-dynamic'
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       llamarModelo: real ? modeloRegistrado({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string, comando: 'portero.juzgar' }) : undefined,
       // el pulido del resumen vivo ya NO va aquí: tiene su propio paso (/pulir, después del cierre) para no trabar el guardado
       puente: real ? puenteAlIndice({ origen, llaveInterna: llave, db }) : undefined,
+      ocr: real ? ocrRegistrado({ origen, llaveInterna: llave, workflowId: b.workflow_id as string, ejecucionId: b.workflow_execution_id as string, clientId: b.client_id as string }) : undefined,
     }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {

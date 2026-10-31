@@ -13,6 +13,8 @@ import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { modeloRegistrado, puenteAlIndice } from '@/lib/portero-alimenta/entorno'
 import { ANFITRIONES_DE_AVISO_POR_OMISION, rutaLeerPedido, rutaPedido } from '@/lib/portero-alimenta/pedidos'
 import { listarFotos } from '@/lib/cerebro/portero/fotos-pendientes'
+import { listarVideos } from '@/lib/cerebro/portero/videos-lectura'
+import { firmarVideoDelEntorno } from '@/lib/portero-alimenta/videos-del-cerebro'
 import { consultaDelEntorno } from '@/lib/cerebro/portero/entorno'
 import { etiquetarPendientesDelEntorno } from '@/lib/cerebro/portero/etiquetar-entorno'
 import { avisoReal, buscarReal, dispararCadenaReal, leerPaginaReal } from '@/lib/portero-alimenta/pedidos-entorno'
@@ -51,6 +53,7 @@ export async function POST(request: Request) {
           return { etiquetadas: x.etiquetadas, costo_usd: x.costo_usd }
         } : undefined,
       },
+      videos: { listar: (clientId) => listarVideos(consultaDelEntorno(), { cliente: clientId, limite: 30 }, firmarVideoDelEntorno()) },
       anfitrionesDeAviso: [...ANFITRIONES_DE_AVISO_POR_OMISION, ...String(process.env.PORTERO_AVISAR_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)],
     }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })

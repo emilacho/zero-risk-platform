@@ -97,6 +97,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/lib\/oficina\/(material|prompts-sin-invencion|marcas-de-origen)\.ts$/,
   /^src\/lib\/oficina\/__tests__\/(material|material-imagen-y-reapertura|adaptadores)\.test\.ts$/,
   /^__tests__\/oficina-material-ruta-migracion-flujo\.test\.ts$/,
+  // videos (31-oct): la prueba y la lectura leen etiquetas de las capturas de los videos
+  /^__tests__\/videos-y-pdf-escaneados\.test\.ts$/,
+  /^src\/lib\/cerebro\/portero\/videos-lectura\.ts$/,
 ]
 export const quienNombra = (archivosYTextos: Array<{ rel: string; texto: string }>): string[] =>
   archivosYTextos.filter(({ rel, texto }) => NOMBRES_NUEVOS.test(texto) && !PUEDEN_NOMBRARLAS.some((r) => r.test(rel))).map((x) => x.rel)
@@ -207,6 +210,7 @@ export const ESCRITORES_DE_ETIQUETAS_EN_SRC: Record<string, string> = {
 /** quién, DENTRO de src/, puede INSERTAR filas (copia de fotos propias): solo la ficha propia de Mapas, confirmada por el portero (31-oct · parte 2); jamás escribe columnas de etiqueta */
 export const ESCRITORES_DE_COPIA_EN_SRC: Record<string, string> = {
   'src/lib/portero-alimenta/fotos-de-mapas-propia.ts': 'copia las fotos de la ficha de Mapas que `fichaPropiaDeMapas` confirma como del cliente (nombre exacto o cuenta propia; ambigua u homónimo = ninguna) como propio/maps_foto',
+  'src/lib/portero-alimenta/videos-del-cerebro.ts': 'guarda las capturas de momentos clave de los videos (tipo video_captura, enlazadas por video_id) que el portero baja; solo inserta, jamás toca columnas de etiqueta',
 }
 export function escribeEnLaTabla(texto: string): boolean {
   for (const m of texto.matchAll(/rest\/v1\/client_social_images/g)) {

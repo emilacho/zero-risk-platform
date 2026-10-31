@@ -16,6 +16,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { extraerJson } from '../cerebro/portero/decision'
 import type { OrigenDeFoto, RespuestaDeFotos } from '../cerebro/portero/fotos-pendientes'
+import type { RespuestaDeVideos, VideoVisto } from '../cerebro/portero/videos-lectura'
 import { normalizar } from '../manual/texto'
 import { coincidePorPalabra } from '../texto/coincidencia'
 import { archivarFichasDeBrazos } from './brazos/archivo'
@@ -92,6 +93,9 @@ export interface ResultadoDeHueco {
   /** el hueco no se intentó (o se cortó) por el tope de gasto del pedido: explícito para que la oficina sepa que no fue «no hay» */
   tope?: boolean
   fotos_resumen?: { por_origen: Record<string, { total: number; etiquetadas: number }>; sin_etiquetar: number; etiquetadas_ahora: number }
+  /** pedido de VIDEOS (31-oct): cada video con sus subcategorías, su transcripción y sus capturas etiquetadas; `videos_resumen` dice cuántos hay por tipo y origen */
+  videos?: VideoVisto[]
+  videos_resumen?: { total: number; por_tipo: Record<string, number>; por_origen: Record<string, number> }
   costo_usd: number
 }
 
@@ -241,6 +245,8 @@ export interface DepsDePedido extends DepsDeRutas {
     listar: (clientId: string) => Promise<RespuestaDeFotos>
     etiquetar?: (clientId: string) => Promise<{ etiquetadas: number; costo_usd: number }>
   }
+  /** VIDEOS (31-oct): `listar` lee los videos del cliente con sus capturas y transcripción (US$ 0) */
+  videos?: { listar: (clientId: string) => Promise<RespuestaDeVideos> }
 }
 
 /** fotos que bastan para dar un pedido de fotos por resuelto; menos ⇒ se responde con lo que hay y se pide más a la cadena */
@@ -248,6 +254,9 @@ export const FOTOS_PARA_DAR_POR_RESUELTO = 8
 const PALABRAS_DE_FOTOS = /\b(fotos?|fotografias?|imagenes|imagen)\b/
 /** ¿este hueco pide FOTOS del cliente? (`tipo: 'fotos'` o el texto del hueco las nombra) */
 export const esPedidoDeFotos = (h: Hueco): boolean => normalizar(h.tipo ?? '') === 'fotos' || PALABRAS_DE_FOTOS.test(normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' ')))
+const PALABRAS_DE_VIDEOS = /\b(videos?|reels?|clips?|filmaciones?)\b/
+/** ¿este hueco pide VIDEOS del cliente? (`tipo: 'videos'` o el texto del hueco los nombra) */
+export const esPedidoDeVideos = (h: Hueco): boolean => normalizar(h.tipo ?? '') === 'videos' || PALABRAS_DE_VIDEOS.test(normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' ')))
 /** de qué origen se piden: lo que el texto nombra; sin nombrar ninguno, todos (propias + competencia + referencias) */
 export function origenesPedidos(h: Hueco): OrigenDeFoto[] {
   const t = normalizar([h.fuente, h.tipo, h.objetivo].filter(Boolean).join(' '))
@@ -413,6 +422,19 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
     const completo = `${pedido}${p.para && pedido !== p.para ? ` (para: ${p.para})` : ''}`
     const r: ResultadoDeHueco = { hueco: h, estado: 'no_resuelto', detalle: '', fichas: [], hallazgos: [], intentado: [], costo_usd: 0 }
     const gastar = (usd: number) => { gastado += usd; r.costo_usd = r6(r.costo_usd + usd) }
+
+    // 00 · VIDEOS (31-oct): se responde con los videos guardados (con sus subcategorías, capturas etiquetadas y transcripción); si el hueco también pide fotos, sigue al camino de las fotos
+    if (deps.videos && esPedidoDeVideos(h)) {
+      const lv = await deps.videos.listar(p.client_id)
+      if (!lv.ok) { r.intentado.push(`videos: ${lv.detalle}`); r.detalle = 'esta información me falta: no pude leer los videos del cliente'; huecos.push(r); continue }
+      const pedidosV = origenesPedidos(h)
+      const elegidosV = lv.videos.filter((v) => !pedidosV.length || pedidosV.includes(v.origen))
+      r.videos = elegidosV
+      r.videos_resumen = { total: lv.total, por_tipo: lv.por_tipo, por_origen: lv.por_origen }
+      if (elegidosV.length) { r.estado = 'ya_esta'; r.detalle = `${elegidosV.length} video(s) guardado(s) como video, con tipo, origen, capturas y transcripción (en el cerebro: ${lv.total}); sin traer nada nuevo` }
+      else { r.estado = 'no_resuelto'; r.nada_usable = true; r.intentado.push(`videos del cliente: ${lv.total} en el cerebro, ninguno de lo pedido`); r.detalle = 'nada usable por ahora: el cerebro no tiene videos guardados de lo pedido' }
+      if (!esPedidoDeFotos(h)) { huecos.push(r); continue }
+    }
 
     // 0 · FOTOS (27-oct): se responde con los `foto_id` etiquetados (propias + competencia/referencias, con su origen); lo que falta por etiquetar se etiqueta ahora; si hay pocas, se pide más a la cadena
     if (deps.fotos && esPedidoDeFotos(h)) {
