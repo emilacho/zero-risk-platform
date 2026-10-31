@@ -155,7 +155,8 @@ describe('POST /api/video/generate', () => {
     const j = await r.json()
     expect(r.status).toBe(409)
     expect(j.error).toBe('tope_por_video')
-    expect(j.costo_estimado_usd).toBeCloseTo(9.0979, 3)
+    expect(j.costo_lista_usd).toBeCloseTo(9.0979, 3)
+    expect(j.costo_estimado_usd).toBeCloseTo(6.3685, 3) // con el 30 % vigente sigue fuera del tope
     expect(llamadas()).toHaveLength(1)
     expect(llamadas()[0].url).toBe('https://api.higgsfield.ai/estimate/bytedance/seedance-2.5/text-to-video')
     expect((llamadas()[0].init!.headers as Record<string, string>).Authorization).toBe('Key id:secreto')
@@ -170,8 +171,9 @@ describe('POST /api/video/generate', () => {
   it('dry_run: estima (gratis), respeta el tope y NO envía ni anota', async () => {
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
     const j = await (await post({ ...PEDIDO, resolucion: '480p', dry_run: true })).json()
-    expect(j).toMatchObject({ ok: true, dry_run: true, status: 'simulado', ruta: 'bytedance/seedance-2.5/text-to-video' })
-    expect(j.costo_estimado_usd).toBeCloseTo(1.6445, 3)
+    expect(j).toMatchObject({ ok: true, dry_run: true, status: 'simulado', ruta: 'bytedance/seedance-2.5/text-to-video', descuento_pct: 0.3 })
+    expect(j.costo_lista_usd).toBeCloseTo(1.6445, 3)
+    expect(j.costo_estimado_usd).toBeCloseTo(1.1512, 3)
     expect(llamadas()).toHaveLength(1)
     expect(insert).not.toHaveBeenCalled()
   })
@@ -190,15 +192,16 @@ describe('POST /api/video/generate', () => {
     expect(JSON.parse(String(est.init!.body))).toEqual(JSON.parse(String(env.init!.body))) // se estima EXACTAMENTE lo que se envía
     expect(JSON.parse(String(env.init!.body))).toMatchObject({ duration: 8, resolution: '480p', aspect_ratio: '9:16', generate_audio: true, image_urls: ['https://fotos/1.jpg'] })
     expect(insert.mock.calls[0][0]).toMatchObject({ session_id: 'vid-r1', status: 'running', client_id: 'c1', workflow_id: 'wf-1', workflow_execution_id: 'ex-1' })
-    expect(insert.mock.calls[0][0].cost_usd).toBeCloseTo(1.6445, 3)
+    expect(insert.mock.calls[0][0].cost_usd).toBeCloseTo(1.1512, 3) // se reserva lo que de verdad se cobra (30 % vigente)
   })
   it('la prueba elegida (opción B): 720p · 8 s por omisión → estima US$ 3,70, cabe en el tope y se envía', async () => {
     fetchMock
       .mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
       .mockResolvedValueOnce(respuesta(200, { status: 'queued', request_id: 'r2', status_url: 'https://api.higgsfield.ai/requests/r2/status' }))
     const j = await (await post(PEDIDO)).json()
-    expect(j).toMatchObject({ ok: true, request_id: 'r2', resolucion: '720p', segundos: 8 })
-    expect(j.costo_estimado_usd).toBeCloseTo(3.698, 3)
+    expect(j).toMatchObject({ ok: true, request_id: 'r2', resolucion: '720p', segundos: 8, descuento_pct: 0.3 })
+    expect(j.costo_lista_usd).toBeCloseTo(3.698, 3)
+    expect(j.costo_estimado_usd).toBeCloseTo(2.5885, 3) // = el cargo real medido el 31-oct (US$ 2,59)
   })
   it('el proveedor responde 429 (fila llena, sin cobro) → 429 y nada en el libro', async () => {
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 })).mockResolvedValueOnce(respuesta(429, { error: 'queue full', limit: 40 }, { 'retry-after': '30' }))
@@ -317,5 +320,40 @@ describe('mutantes vivos de CC3 (a, b)', () => {
   it('(b) GET sin llave interna → 401 y ninguna llamada al proveedor', async () => {
     expect((await get('request_id=r1', 'mala')).status).toBe(401)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('el descuento vigente del proveedor (medido 31-oct: lista 3,70 → cargo 2,59 = 30 %)', () => {
+  it('conDescuento: 30 % mientras rija y para los modelos de la promoción; después de la fecha, o con otro modelo, vuelve la lista', async () => {
+    const { conDescuento, DESCUENTO_VIGENTE } = await import('@/lib/video/parametros')
+    const antes = Date.parse(DESCUENTO_VIGENTE.hasta) - 1000
+    const despues = Date.parse(DESCUENTO_VIGENTE.hasta) + 1000
+    expect(conDescuento(3.6979, 'bytedance/seedance-2.5', antes)).toEqual({ usd: 2.5885, pct: 0.3 })
+    expect(conDescuento(3.6979, 'bytedance/seedance-2.5', despues)).toEqual({ usd: 3.6979, pct: 0 })
+    expect(conDescuento(3.6979, 'otro/modelo', antes)).toEqual({ usd: 3.6979, pct: 0 })
+  })
+  it('D6 (CC3): el tope se compara con el costo CON descuento, no con la lista: 720p 12 s = lista 5,55 > 5 pero 3,88 con el 30 % → se envía y se reserva 3,88', async () => {
+    fetchMock
+      .mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
+      .mockResolvedValueOnce(respuesta(200, { status: 'queued', request_id: 'r12', status_url: 'https://api.higgsfield.ai/requests/r12/status' }))
+    const r = await post({ ...PEDIDO, segundos: 12 })
+    const j = await r.json()
+    expect(r.status).toBe(202)
+    expect(j.costo_lista_usd).toBeCloseTo(5.5469, 3)
+    expect(j.costo_estimado_usd).toBeCloseTo(3.8828, 3)
+    expect(j.tope_usd).toBe(5)
+    expect(llamadas()).toHaveLength(2) // estimación + envío
+    expect(insert.mock.calls[0][0].cost_usd).toBeCloseTo(3.8828, 3)
+  })
+  it('pasada la fecha del descuento, la ruta vuelve a reservar la lista (720p 8 s = US$ 3,70)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-12-01T00:00:00Z'))
+      fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
+      const j = await (await post({ ...PEDIDO, dry_run: true })).json()
+      expect(j.descuento_pct).toBe(0)
+      expect(j.costo_estimado_usd).toBeCloseTo(3.698, 3)
+      expect(j.costo_lista_usd).toBeCloseTo(3.698, 3)
+    } finally { vi.useRealTimers() }
   })
 })
