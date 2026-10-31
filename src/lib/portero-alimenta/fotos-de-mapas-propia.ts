@@ -65,7 +65,11 @@ export async function copiarFotosDeMapasPropia(a: {
   if (!sel.ficha) return vacio('sin_ficha', 'ninguna ficha de Mapas se confirmó como del cliente: no se copian fotos ajenas')
   if (!a.llave || !a.urlDeLaBase) return vacio('sin_base', 'la base no está configurada en el servidor', 1)
   const ficha = sel.ficha
-  const urls = urlsDeFotosDeLaFicha(ficha, a.max ?? MAX_FOTOS_DE_LA_FICHA)
+  // la misma ficha puede venir en varias corridas (la más nueva trae más fotos): se juntan las de TODAS las filas de ESA ficha (misma identidad), nunca las de otra
+  const clave = (f: FichaCruda) => String(f.placeId ?? f.cid ?? f.url ?? '')
+  const identidad = clave(ficha)
+  const mismas = identidad ? a.fichasCrudas.filter((f) => clave(f) === identidad) : [ficha]
+  const urls = [...new Set(mismas.flatMap((f) => urlsDeFotosDeLaFicha(f, 50)))].slice(0, a.max ?? MAX_FOTOS_DE_LA_FICHA)
   if (!urls.length) return vacio('sin_fotos', 'la ficha propia no trae fotos', 1)
 
   const traer: Traer = a.fetchImpl ?? ((u, i) => fetch(u, i))

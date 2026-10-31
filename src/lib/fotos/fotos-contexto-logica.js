@@ -697,42 +697,9 @@ function fotosDeSitio(items, opciones) {
   return out
 }
 
-/**
- * PDF enlazados del sitio (menús, catálogos): direcciones .pdf halladas en los <a href> y en los enlaces del markdown de las páginas del sitio,
- * SOLO del mismo dominio base que la página (un PDF de un tercero no es del sitio). Sin repetidos, hasta `max`. Devuelve [{ url, texto, pagina }].
- */
-function pdfsEnlazados(items, opciones) {
-  var max = (opciones && opciones.max) || 5
-  var lista = Array.isArray(items) ? items : []
-  var out = []
-  var vistos = {}
-  function mete(it, raw, texto) {
-    if (out.length >= max) return
-    var u = resolverContra(it.url, raw)
-    if (!u || !/\.pdf$/i.test(u.split('#')[0].split('?')[0])) return
-    if (baseDeHost(hostDe(u)) !== baseDeHost(hostDe(it.url))) return
-    var k = u.split('#')[0]
-    if (vistos[k]) return
-    vistos[k] = 1
-    out.push({ url: k, texto: limpiar(String(texto || '').replace(/<[^>]+>/g, ' '), 160), pagina: String(it.url) })
-  }
-  for (var i = 0; i < lista.length; i++) {
-    var it = lista[i]
-    if (!it || typeof it !== 'object' || !it.url) continue
-    var m
-    var ra = /<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
-    var h = String(it.html || '')
-    while ((m = ra.exec(h)) !== null) mete(it, m[1], m[2])
-    var rm = /(?<!!)\[([^\]]*)\]\(([^)\s]+)/g
-    var md = String(it.markdown || '')
-    while ((m = rm.exec(md)) !== null) mete(it, m[2], m[1])
-  }
-  return out
-}
-
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    manejoDeInstagram: manejoDeInstagram, objetivosDeLaLlamada: objetivosDeLaLlamada, rolDeLaCuenta: rolDeLaCuenta, fotosDeOtrasFuentes: fotosDeOtrasFuentes, esFuenteAjena: esFuenteAjena, fotosDeSitio: fotosDeSitio, pdfsEnlazados: pdfsEnlazados, baseDeHost: baseDeHost, resolverContra: resolverContra,
+    manejoDeInstagram: manejoDeInstagram, objetivosDeLaLlamada: objetivosDeLaLlamada, rolDeLaCuenta: rolDeLaCuenta, fotosDeOtrasFuentes: fotosDeOtrasFuentes, esFuenteAjena: esFuenteAjena, fotosDeSitio: fotosDeSitio, baseDeHost: baseDeHost, resolverContra: resolverContra,
     sinTildes: sinTildes, raicesDe: raicesDe, excluirDe: excluirDe, sinNegaciones: sinNegaciones,
     entradaDeProtagonista: entradaDeProtagonista, catalogoDeProtagonistas: catalogoDeProtagonistas, productoDelBrief: productoDelBrief, alternativasDelBrief: alternativasDelBrief, catalogoDelBrief: catalogoDelBrief, productoDeTexto: productoDeTexto,
     contextoDePost: contextoDePost, aMedio: aMedio, sha256Hex: sha256Hex,

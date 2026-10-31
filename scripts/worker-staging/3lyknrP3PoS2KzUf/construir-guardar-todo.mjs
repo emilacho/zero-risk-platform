@@ -79,7 +79,7 @@ export function aplicarGuardarTodo(flujo) {
   return w
 }
 
-// PARTE 2 (31-oct) · se aplica SOBRE el flujo que ya tiene «guardar todo»: los fondos CSS y el GIF (lista + revisar), los PDF enlazados (lista) y las fotos de la ficha propia de Mapas (cuerpo de own_google_maps_profile con maxImages).
+// PARTE 2 (31-oct) · se aplica SOBRE el flujo que ya tiene «guardar todo»: los fondos CSS y el GIF (lista + revisar), el GIF (revisar) y las fotos de la ficha propia de Mapas (cuerpo de own_google_maps_profile con maxImages).
 export function aplicarGuardarTodo2(flujo) {
   const w = JSON.parse(JSON.stringify(flujo))
   const nodo = (n) => { const x = w.nodes.find((y) => y.name === n); if (!x) throw new Error('falta el nodo «' + n + '»'); return x }
@@ -93,7 +93,7 @@ export function aplicarGuardarTodo2(flujo) {
     const nuevo = codigoDeNodo(clave)
     x.parameters = { ...x.parameters, jsCode: x.parameters.jsCode.includes('\r\n') ? nuevo.replace(/\r?\n/g, '\r\n') : nuevo }
   }
-  if (!nodo('Fotos · lista').parameters.jsCode.includes('pdfsEnlazados(')) throw new Error('«Fotos · lista» no usa pdfsEnlazados')
+  if (!nodo('Fotos · revisar').parameters.jsCode.includes('47494638')) throw new Error('«Fotos · revisar» no reconoce el GIF')
   return w
 }
 
