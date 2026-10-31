@@ -116,6 +116,8 @@ describe('1-3 · guardar el video COMO VIDEO + capturas enlazadas', () => {
     expect(b.r.videos[0].hash_archivo).toMatch(/^[0-9a-f]{64}$/)
     expect(b.r.fotos).toHaveLength(5)
     expect(b.r.fotos.every((f) => f.tipo === 'video_captura' && f.video_id === b.r.videos[0].id && f.owner_role === 'propio' && f.medio === 'video' && f.estado === 'ok')).toBe(true)
+    // la base solo admite estas posiciones (csi_posicion_valida) y estos medios (csi_medio_valido): medido en real, una captura con otra se rechaza con 23514
+    expect(b.r.fotos.every((f) => /^(unica|portada|hijo-\d+)$/.test(String(f.posicion)) && ['imagen', 'video', 'reel', 'logo'].includes(String(f.medio)))).toBe(true)
     expect(b.r.fotos.map((f) => f.post_id)).toEqual(['A-f1', 'A-f2', 'A-f3', 'A-f4', 'A-f5'])
   })
   it('🔴 el video NO se guarda como foto: ninguna fila de fotos lleva el video ni su dirección', async () => {
@@ -230,7 +232,7 @@ describe('3 · capturas de momentos clave', () => {
 
 describe('4 · la lectura entrega el video con subcategorías, capturas y transcripción', () => {
   const vid = (id: string, extra: Fila = {}): Fila => ({ id, client_id: CID, owner_role: 'propio', handle: 'naufrago.ec', post_id: id, tipo: 'reel', estado: 'ok', path: `${CID}/propio/naufrago.ec/${id}.mp4`, bytes: 1000, duracion_s: 20.5, caption: 'la sopa', posted_at: '2026-10-20T10:00:00Z', post_url: 'https://ig/p/1', transcripcion: 'Hola desde Olón', metricas: { likesCount: 5 }, created_at: '2026-10-31T12:00:00Z', ...extra })
-  const cap = (id: string, v: string, seg: number, extra: Fila = {}): Fila => ({ id, client_id: CID, video_id: v, tipo: 'video_captura', estado: 'ok', posicion: `segundo-${seg}`, url: `https://x/${id}.jpg`, etiquetada_en: '2026-10-31T13:00:00Z', que_muestra: `escena ${id}`, producto_visto: ['sopa'], texto_visible: null, created_at: '2026-10-31T12:00:00Z', ...extra })
+  const cap = (id: string, v: string, seg: number, extra: Fila = {}): Fila => ({ id, client_id: CID, video_id: v, tipo: 'video_captura', estado: 'ok', posicion: `hijo-${seg}`, url: `https://x/${id}.jpg`, etiquetada_en: '2026-10-31T13:00:00Z', que_muestra: `escena ${id}`, producto_visto: ['sopa'], texto_visible: null, created_at: '2026-10-31T12:00:00Z', ...extra })
   const consultaDe = (tablas: Record<string, Fila[]>) => async (p: { tabla: string; donde: Record<string, unknown> }) => ({ filas: (tablas[p.tabla] ?? []).filter((x) => Object.entries(p.donde).every(([k, v]) => x[k] === v)), error: null })
   it('trae tipo, origen, cuenta, fecha, duración, pie, métricas, transcripción, capturas ordenadas con su etiqueta y una dirección firmada', async () => {
     const t = { client_videos: [vid('v1'), vid('v2', { owner_role: 'competidor', tipo: 'anuncio', handle: 'x' }), vid('v3', { estado: 'no_bajo', path: null })], client_social_images: [cap('c2', 'v1', 10), cap('c1', 'v1', 3), cap('c3', 'v1', 20, { etiquetada_en: null, que_muestra: null })] }
@@ -240,7 +242,7 @@ describe('4 · la lectura entrega el video con subcategorías, capturas y transc
     expect(r).toMatchObject({ total: 2, devueltos: 2, sin_descargar: 1, por_tipo: { reel: 1, anuncio: 1 }, por_origen: { propia: 1, competencia: 1, referencia: 0 }, archivo_firmado: true, costo_usd: 0, modelos_llamados: 0 })
     const v1 = r.videos.find((v) => v.video_id === 'v1')!
     expect(v1).toMatchObject({ tipo: 'reel', origen: 'propia', cuenta: 'naufrago.ec', duracion_s: 20.5, pie: 'la sopa', metricas: { likesCount: 5 }, transcripcion: 'Hola desde Olón', publicado_en: '2026-10-20T10:00:00Z', archivo_url: `https://firmada/${CID}/propio/naufrago.ec/v1.mp4` })
-    expect(v1.capturas.map((c) => [c.segundo, c.etiquetada])).toEqual([['3', true], ['10', true], ['20', false]])
+    expect(v1.capturas.map((c) => [c.momento, c.etiquetada])).toEqual([[3, true], [10, true], [20, false]])
     expect(v1.de_que_trata).toBe('escena c1 · escena c2')
   })
   it('filtra por origen y por tipo; sin etiquetas «de qué trata» sale del pie; sin firma lo dice', async () => {
