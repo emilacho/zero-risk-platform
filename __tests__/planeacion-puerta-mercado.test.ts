@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { validarRespuesta, BRAZOS, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
-import { ROTULO_INFORME_DE_MERCADO, brazoMercado, contarSenales } from '@/lib/planeacion/brazos'
+import { ROTULO_INFORME_DE_MERCADO, brazoMercado, contarSenales, esSenal, lineasQueNoCuentan } from '@/lib/planeacion/brazos'
 import { traducir } from '@/lib/planeacion/vocabulario'
 
 const supabaseMock = { from: vi.fn() }
@@ -87,11 +87,12 @@ describe('🔴 con señales ⇒ trajo · ROTULADO como propuesta · y el pedido 
     const { json } = await leer(await pedir(PEDIDO))
     expect(json.estado).toBe('trajo')
     expect(String(json.datos.informe).startsWith(ROTULO_INFORME_DE_MERCADO)).toBe(true)
-    expect(json.datos.senales).toBe(4)
+    // reserva 4 de CC3: 3 señales con fuente Y fecha; la cuarta línea («sin dato …») es información, no señal, y se declara en el aviso
+    expect(json.datos.senales).toBe(3)
     expect(json.datos.es_dato_del_cliente).toBe(false)
     expect(json.datos.dimension).toBe('tendencia y oportunidad')
     expect(json.datos.costo_usd).toBe(0.42)
-    expect(json.datos.aviso).toBeUndefined()
+    expect(json.datos.aviso).toBe('1 línea(s) sin fuente o sin fecha (o «sin dato») no cuentan como señal')
     expect(json.fuente).toMatch(/PROPUESTA/)
     expect(json.fuente).toMatch(/rubro «restaurante»/)
     expect(json.proposito).toBe(PEDIDO.proposito)
@@ -285,8 +286,28 @@ describe('la lista · una respuesta por pedido, en orden', () => {
 })
 
 describe('el envoltorio solo · sin red', () => {
-  it('contarSenales cuenta líneas de lista de cualquier marcador', () => {
-    expect(contarSenales('- a\n* b\n• c\n1. d\n2) e\ntexto suelto\n-sin espacio')).toBe(5)
+  it('reserva 4 de CC3 · una señal vale solo con fuente Y fecha en su línea, de cualquier marcador de lista; «sin dato», sin fuente o sin fecha no cuentan', () => {
+    const con = (m: string) => `${m} sube la demanda · fuente: boletín del sector (sector.org) · fecha: 2026-03 · oportunidad: x`
+    expect(contarSenales(['- a', '* b', '• c', '1. d', '2) e', 'texto suelto', '-sin espacio'].join('\n'))).toBe(0)
+    expect(contarSenales([con('-'), con('*'), con('•'), con('1.'), con('2)'), 'texto suelto ' + con(''), '-' + con('').trimStart()].join('\n'))).toBe(5)
+    expect(esSenal('- tendencia fuerte en la plaza · fuente: informe anual (x.com) · 2025')).toBe(true)
+    expect(esSenal('- tendencia fuerte en la plaza · fuente: informe anual (x.com)')).toBe(false) // sin fecha
+    expect(esSenal('- tendencia fuerte en la plaza · 2026-01 · confianza: alta')).toBe(false) // sin fuente
+    expect(esSenal('- sin dato sobre turismo interno · fuente: ninguna · 2026')).toBe(false) // «sin dato» es información, no señal
+    expect(lineasQueNoCuentan(INFORME_OK)).toBe(1)
+  })
+  it('reserva 4 de CC3 · un informe cuyas líneas de lista no traen fuente y fecha ⇒ sin_respuesta (son estimaciones, no señales) · y lo dice', async () => {
+    const r = await brazoMercado({ objetivo: 'o', fuente: 'f', rubro: 'restaurante', dry_run: false, pedir: async () => ({ ok: true, salida: '- crece el delivery en la plaza\n- la gente desayuna más temprano', costo_usd: 0.1 }) })
+    expect(r.estado).toBe('sin_respuesta')
+    expect(r.motivo).toMatch(/2 línea\(s\) de lista pero ninguna con fuente Y fecha/)
+  })
+  it('M13 · la ficha del cliente NO existe (sin error de la base) ⇒ sin_respuesta «no existe la ficha» · no se llama al agente', async () => {
+    ficha(null)
+    const espia = corredor({ output: INFORME_OK, cost_usd: 1 })
+    const { json } = await leer(await pedir(PEDIDO))
+    expect(json.estado).toBe('sin_respuesta')
+    expect(json.motivo).toMatch(/no existe la ficha del cliente c/)
+    expect(espia).not.toHaveBeenCalled()
   })
   it('brazoMercado con rubro vacío NO llama a `pedir`', async () => {
     const pedirFn = vi.fn()

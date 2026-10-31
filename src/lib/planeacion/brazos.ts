@@ -267,10 +267,22 @@ export const AGENTE_DE_MERCADO = 'market_research_analyst'
 export const DIMENSION_DE_MERCADO = 'tendencia y oportunidad'
 export const SENALES_ESPERADAS = { min: 3, max: 5 } as const
 
-/** una señal = una línea de lista («- », «* », «• », «1. ») · se cuenta, no se interpreta */
+/** una línea de lista («- », «* », «• », «1. ») */
 export const RE_SENAL = /^\s*(?:[-*•]|\d+[.)])\s+\S/
-export const contarSenales = (texto: string): number => texto.split(/\r?\n/).filter((l) => RE_SENAL.test(l)).length
-export const declaraSinDato = (texto: string): boolean => /\bsin dato\b/i.test(texto)
+/** la fuente de una señal: «fuente: …» o «fuente …» en la misma línea */
+export const RE_FUENTE = /\bfuentes?\s*[:：]|\bfuente\b\s*[·\-–]/i
+/** la fecha de una señal: un año (2019–2099), con o sin mes/día, o «fecha: …» */
+export const RE_FECHA = /\b20[2-9]\d(?:-\d{2}(?:-\d{2})?)?\b|\bfecha\s*[:：]/i
+const RE_SIN_DATO = /\bsin dato\b/i
+/**
+ * Reserva 4 de CC3 (31-oct · certificación de T3): una señal vale SOLO si trae fuente Y fecha en su línea; una línea «sin dato» es información (no señal) aunque sea de lista.
+ * Antes el código contaba líneas y la condición 1 («referencia o sin dato») solo la imponía el pedido al agente; ahora la impone el código.
+ */
+export const esSenal = (linea: string): boolean => RE_SENAL.test(linea) && !RE_SIN_DATO.test(linea) && RE_FUENTE.test(linea) && RE_FECHA.test(linea)
+export const contarSenales = (texto: string): number => texto.split(/\r?\n/).filter(esSenal).length
+/** las líneas de lista que NO cuentan como señal (sin fuente, sin fecha, o «sin dato»): se declaran, no se tiran en silencio */
+export const lineasQueNoCuentan = (texto: string): number => texto.split(/\r?\n/).filter((l) => RE_SENAL.test(l) && !esSenal(l)).length
+export const declaraSinDato = (texto: string): boolean => RE_SIN_DATO.test(texto)
 
 export interface RespuestaDelAgenteDeMercado {
   readonly ok: boolean
@@ -314,14 +326,24 @@ export async function brazoMercado(args: {
       const texto = String(r.salida ?? '').trim()
       if (!texto) return { hay: false as const, noSeMiro: true, motivo: 'el agente devolvió vacío · no hay informe' }
       const senales = contarSenales(texto)
+      const noCuentan = lineasQueNoCuentan(texto)
       if (senales === 0) {
         if (declaraSinDato(texto)) {
           return { hay: false as const, motivo: 'fui, miré y no hay: el analista declaró «sin dato» para esta categoría y plaza, y no estimó · ' + texto.slice(0, 200) }
         }
-        return { hay: false as const, noSeMiro: true, motivo: 'el informe no trae señales legibles (ninguna línea de lista) · no se usa' }
+        return {
+          hay: false as const, noSeMiro: true,
+          motivo: noCuentan
+            ? `el informe trae ${noCuentan} línea(s) de lista pero ninguna con fuente Y fecha: no son señales, son estimaciones · no se usa`
+            : 'el informe no trae señales legibles (ninguna línea de lista) · no se usa',
+        }
       }
       const informe = texto.startsWith(ROTULO_INFORME_DE_MERCADO) ? texto : `${ROTULO_INFORME_DE_MERCADO}\n${texto}`
       const fuera = senales < SENALES_ESPERADAS.min || senales > SENALES_ESPERADAS.max
+      const avisos = [
+        ...(fuera ? [`trajo ${senales} señal(es); se pidieron ${SENALES_ESPERADAS.min}–${SENALES_ESPERADAS.max}`] : []),
+        ...(noCuentan ? [`${noCuentan} línea(s) sin fuente o sin fecha (o «sin dato») no cuentan como señal`] : []),
+      ]
       return {
         hay: true as const,
         datos: {
@@ -332,7 +354,7 @@ export async function brazoMercado(args: {
           agente: AGENTE_DE_MERCADO,
           senales,
           costo_usd: r.costo_usd,
-          ...(fuera ? { aviso: `trajo ${senales} señal(es); se pidieron ${SENALES_ESPERADAS.min}–${SENALES_ESPERADAS.max}` } : {}),
+          ...(avisos.length ? { aviso: avisos.join(' · ') } : {}),
         },
       }
     },
