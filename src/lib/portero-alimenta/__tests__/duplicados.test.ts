@@ -168,3 +168,19 @@ describe('lo viejo sin lector está RETIRADO', () => {
     } finally { if (g === undefined) delete process.env.INTERNAL_API_KEY; else process.env.INTERNAL_API_KEY = g }
   })
 })
+
+describe('documentos y videos enlazados por el sitio propio (31-oct · «guardar todo»)', () => {
+  const fila = (extra: Record<string, unknown>) => ({ id: 'w', apify_function: 'website_content_scraper', ensayo: false, created_at: '2026-10-31T08:00:00Z', respuesta: [{ url: 'https://x.example/carta', text: 'Carta del día', ...extra }] })
+  it('cada PDF y cada video enlazado es una unidad del sitio con su texto y su enlace; el mismo enlace en dos páginas es una sola', () => {
+    const enl = { documentos: [{ url: 'https://x.example/menu%20verano.pdf', texto: 'Menú de verano' }, { url: 'https://x.example/otro.pdf', texto: '' }], videos: [{ url: 'https://youtu.be/abc', texto: 'Cómo se prepara' }] }
+    const us = unidadesDeRaspados([{ ...fila({ _enlaces: enl }), respuesta: [{ url: 'https://x.example/carta', text: 'Carta del día', _enlaces: enl }, { url: 'https://x.example/otra', text: 'Otra página del local', _enlaces: enl }] }], { propios: { sitio: 'https://x.example', handles: [] } })
+    const e = us.filter((u) => u.unidad_ref.startsWith('enlace:'))
+    expect(e.map((u) => u.texto).sort()).toEqual(['Documento enlazado: Menú de verano · https://x.example/menu%20verano.pdf', 'Documento enlazado: otro.pdf · https://x.example/otro.pdf', 'Video enlazado: Cómo se prepara · https://youtu.be/abc'].sort())
+    expect(e.every((u) => u.fuente === 'sitio' && u.autoria === 'propia' && u.clase_dato === 'acumula')).toBe(true)
+  })
+  it('🔴 los enlaces de una página que NO es del cliente no entran; sin `_enlaces` o con basura no rompe', () => {
+    const ajeno = unidadesDeRaspados([{ ...fila({ _enlaces: { documentos: [{ url: 'https://x.example/a.pdf', texto: 'a' }] } }), respuesta: [{ url: 'https://tercero.com/x', text: 'Texto de un tercero largo', _enlaces: { documentos: [{ url: 'https://tercero.com/a.pdf', texto: 'a' }] } }] }], { propios: { sitio: 'https://x.example', handles: [] } })
+    expect(ajeno.filter((u) => u.unidad_ref.startsWith('enlace:'))).toHaveLength(0)
+    expect(() => unidadesDeRaspados([fila({ _enlaces: { documentos: [null, 'x', { url: 'javascript:1' }, { url: 5 }], videos: 'no' } }), fila({})], { propios: { sitio: 'https://x.example', handles: [] } })).not.toThrow()
+  })
+})

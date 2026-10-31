@@ -77,6 +77,11 @@ export interface PlanDelPortero {
   familias: string[]
 }
 
+/** techo de páginas del sitio propio (31-oct · «todo es todo»): un sitio normal cabe de sobra; el Servicio corta en 200 */
+export const PAGINAS_DEL_SITIO_PROPIO = 200
+/** máximo en US$ de la corrida del sitio propio: medido 0,004–0,029 por página con la lectura simple; con HTML y capturas se calibra con la primera corrida real */
+export const USD_MAXIMO_DEL_SITIO_PROPIO = 1.5
+
 const obj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Record<string, unknown>) : {})
 const strs = (x: unknown): string[] => (Array.isArray(x) ? x.filter((v): v is string => typeof v === 'string' && /^https?:\/\//i.test(v.trim())).map((v) => v.trim()) : [])
 const costoDe = (f: string) => COSTO_MAXIMO_POR_FUNCION[f] ?? { usd: COSTO_MAXIMO_POR_OMISION_USD, medido: false }
@@ -95,7 +100,8 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
 
   // propias · sitio e Instagram (todos los días)
   const sitio = String(e.cliente.website_url ?? '').trim()
-  if (sitio) candidatas.push(accion('sitio', 'website_content_scraper', { startUrls: [{ url: sitio }], maxCrawlPages: 6, maxCrawlDepth: 1 }, sitio))
+  // 31-oct «guardar todo»: el sitio PROPIO entero (techo de seguridad 200 páginas; si se alcanza, el Servicio lo deja visible en `pages_count`); el máximo en US$ es el tope de la llamada (`maxTotalChargeUsd`)
+  if (sitio) { const a = accion('sitio', 'website_content_scraper', { startUrls: [{ url: sitio }], maxCrawlPages: PAGINAS_DEL_SITIO_PROPIO, maxCrawlDepth: 10 }, sitio); a.usd_max = USD_MAXIMO_DEL_SITIO_PROPIO; candidatas.push(a) }
   else noCubiertas.push({ fuente: 'sitio', por_que: 'la ficha no trae sitio web' })
   const handle = String(obj(cfg.own_handles).instagram ?? '').replace(/^@/, '').trim()
   if (handle) candidatas.push(accion('instagram', 'instagram_scraper', { usernames: [handle], resultsLimit: 12 }, `@${handle}`))

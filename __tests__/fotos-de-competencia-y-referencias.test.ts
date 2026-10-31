@@ -90,7 +90,7 @@ describe('«Fotos · lista» con el código real', () => {
   })
   it('un ensayo (dry_run) y las funciones que no dejan fotos no copian nada', async () => {
     expect(await lista('google_maps_scraper', [lugar(1)], { dry_run: true })).toEqual([])
-    expect(await lista('website_content_scraper', [sitio('https://x.com/', '/og.jpg')])).toEqual([])
+    // (31-oct) el sitio PROPIO ahora deja sus imágenes: lo cubre guardar-todo.test.ts
     expect(await lista('google_serp_scraper', [{ organicResults: [] }])).toEqual([])
   })
   it('el nodo de ANTES (el vivo) no copiaba nada de Mapas: la prueba está roja sin el arreglo', async () => {

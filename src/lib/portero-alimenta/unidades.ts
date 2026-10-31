@@ -106,6 +106,16 @@ export function unidadesDeRaspados(filas: FilaCruda[], o: OpcionesDeUnidades): U
           const atributo = claveDeAtributo(l, clase)
           poner({ ...base(f), fuente, ref: url, unidad_ref: l, texto: l, clase_dato: atributo ? 'atributo' : 'acumula', atributo, clase_de_linea: clase, autoria: 'propia', huella: huellaDeTexto(l), fecha_fuente: null, url })
         }
+        // 31-oct «guardar todo»: los documentos (PDF de menú, catálogos) y los videos que el sitio enlaza se guardan como lo que son: el enlace y su texto (el Servicio los deja en `_enlaces` y suelta el HTML)
+        const enlaces = (p as { _enlaces?: { documentos?: unknown; videos?: unknown } })._enlaces
+        for (const [rotulo, lista] of [['Documento enlazado', enlaces?.documentos], ['Video enlazado', enlaces?.videos]] as const) {
+          for (const d of arr(lista)) {
+            const u = txt(d.url).trim()
+            if (!/^https?:\/\//i.test(u)) continue
+            const nombre = txt(d.texto).replace(/\s+/g, ' ').trim() || ((x) => { try { return decodeURIComponent(x) } catch { return x } })(u.split('#')[0].split('?')[0].split('/').pop() || u)
+            poner({ ...base(f), fuente, ref: url, unidad_ref: `enlace:${huellaDeTexto(u)}`, texto: `${rotulo}: ${nombre} · ${u}`, clase_dato: 'acumula', atributo: null, autoria: 'propia', huella: huellaDeTexto(u), fecha_fuente: null, url: u })
+          }
+        }
       }
     } else if (f.apify_function === 'own_google_maps_profile') {
       const it = o.fichaDeMapas ? o.fichaDeMapas(arr(f.respuesta)) : null
