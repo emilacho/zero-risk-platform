@@ -10,7 +10,7 @@ import { CONTRATO_CON_MESA, CONTRATO_SIN_MESA, PLAZO_DE_LA_MESA_MIN, entregarIde
 import { PLAZO_DE_LLAMADA_POR_DEFECTO_MIN } from '../constantes'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
-import { clienteA, contextoDe, tandaBuena } from '../__fixtures__/clientes'
+import { clienteA, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
 import type { MesaDeCalendario } from '../almacen'
 
 const A = clienteA()
@@ -228,6 +228,31 @@ describe('guardar · idea_de_mesa fuera de datos[] y el contrato v1 viejo', () =
     expect(g.cuerpo.correccion).toBeUndefined()
     expect(al.campanas.find((x) => x.id === id)!.estado).toBe('activa')
     expect(g.cuerpo.mesa).toMatchObject({ con_idea: 0 })
+  })
+
+  it('R9 · una idea cuya fila sale por dato sin fuente queda ANOTADA en la mesa y contada en la respuesta (la métrica no existe si se quita el registro)', async () => {
+    const { al, id, corrida } = await conMesaLista()
+    const dato = [{ dato: 'peso del pan', valor: '45 g', clase: 'alto', ref: 'no-existe', nivel: 'F1', opcional: false }]
+    const mala = { ...conIdeas('A7'), piezas: conIdeas('A7').piezas.map((p) => (p.semana === 1 && p.slot === 'a' ? { ...p, datos: dato } : p)) }
+    const g = await calendarioGuardar(al, { ...wf, campana_id: id, tanda: 1, corrida_id: corrida, resultado: ok(mala) }, minutos(3))
+    expect(g.cuerpo.correccion).toBe(true)
+    const p2 = await calendarioPreparar(al, { ...wf, campana_id: id, tanda: 1, correccion: { fichas: g.cuerpo.fichas, fila_ids: g.cuerpo.fila_ids, modo: 'filas' } }, minutos(4))
+    const soloMala = { piezas: [{ ...piezaBuena(A, 1, 'a', 'Nuestro pan de 45 g'), datos: dato, idea_de_mesa: 'A9' }], ajustes_al_patron: [] }
+    const g2 = await calendarioGuardar(al, { ...wf, campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok(soloMala) }, minutos(5))
+    expect(g2.cuerpo).toMatchObject({ salieron_sin_fuente: ['s1-d1-a'] })
+    expect((g2.cuerpo.mesa as { ideas_que_sacaron_filas: number }).ideas_que_sacaron_filas).toBe(1)
+    expect(al.mesas[0].ideas_que_sacaron_filas).toEqual([expect.objectContaining({ idea: 'A9', fila_id: 's1-d1-a' })])
+  })
+
+  it('una entrega REPETIDA a la mesa ya cerrada es inocua: no cambia texto, costo, estado ni encargo (la guarda está en el almacén)', async () => {
+    const { al, id } = await conMesaLista()
+    const antes = JSON.stringify(al.mesas[0])
+    for (const texto of ['otra', null]) {
+      const r = await entregarIdeasDeLaMesa(al, { campana_id: id, tanda: 1, version: 1, encargo_id: 'otro', texto, costo_usd: 7, motivo: 'fallo: x' })
+      expect(r).toEqual({ ok: true, estado: 'lista', ya_cerrada: true })
+    }
+    expect(JSON.stringify(al.mesas[0])).toBe(antes)
+    expect(await al.cerrarMesaDeCalendario(al.mesas[0].id, { estado: 'sin_mesa', encargo_id: 'z', texto: null, costo_usd: 0, motivo: 'm' })).toBe(false)
   })
 
   it('sin mesa (palanca apagada) la respuesta de guardar es la de siempre: sin bloque «mesa»', async () => {
