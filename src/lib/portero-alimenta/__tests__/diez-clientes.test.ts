@@ -183,7 +183,10 @@ describe('plan del día y brazos: cada cliente pide solo lo que tiene y todo lo 
         expect(buscadas.length).toBe(Math.min(3, ciudades.length))
         if (ciudades.length > 3) expect(plan.no_cubiertas.some((n) => n.fuente === 'mapas')).toBe(true)
       } else expect(mapas).toBeUndefined()
-      expect(plan.costo_maximo_del_plan_usd).toBeLessThan(0.5)
+      // 31-oct «guardar todo»: el sitio propio entero (hasta 200 páginas) tiene un máximo de US$ 1,50; lo demás sigue por debajo de US$ 0,5
+      const sitioPlan = plan.hacer.find((a) => a.fuente === 'sitio')
+      if (sitioPlan) expect(sitioPlan.params).toMatchObject({ maxCrawlPages: 200, maxCrawlDepth: 10 })
+      expect(plan.costo_maximo_del_plan_usd - (sitioPlan ? 1.5 : 0)).toBeLessThan(0.5)
       // los brazos, todos encendidos y en seco, no rompen y no gastan
       const b = await correrBrazos({ db: crearBaseFalsa(tablasDe(c) as never).db, brazos: { ...BRAZOS_APAGADOS, contexto: true, demanda: true, competencia: true, propios: true }, cliente: t.clients[0], client_id: c.id, filas: [], ahora: AHORA, dry_run: true, env: {}, fetch: async () => { throw new Error('sin red') } })
       expect(b.errores).toEqual([])

@@ -558,6 +558,13 @@ function fotosDeOtrasFuentes(funcion, items, opciones) {
       var nombre = limpiar(it.title, 80)
       if (!u || !(id || nombre)) continue
       agrega({ owner_role: 'competidor', handle: slugDeFuente(nombre, 40) || 'mapas', post_id: 'maps-' + (id || slugDeFuente(nombre, 40)), tipo: 'maps_portada', src: u, caption: limpiar(nombre + (it.categoryName ? ' · ' + it.categoryName : '') + (it.address ? ' · ' + it.address : ''), 300) || null, post_url: urlDeImagen(it.url), medio: 'imagen', posicion: 'unica' })
+      // 31-oct · «guardar todo»: TODAS las fotos que trae la ficha (`imageUrls`, si la llamada pidió `maxImages`), no solo la portada
+      var extras = Array.isArray(it.imageUrls) ? it.imageUrls : []
+      for (var k = 0; k < extras.length; k++) {
+        var xu = urlDeImagen(typeof extras[k] === 'string' ? extras[k] : extras[k] && extras[k].imageUrl)
+        if (!xu || xu === u) continue
+        agrega({ owner_role: 'competidor', handle: slugDeFuente(nombre, 40) || 'mapas', post_id: 'maps-' + (id || slugDeFuente(nombre, 40)) + '-f' + (k + 1), tipo: 'maps_foto', src: xu, caption: limpiar(nombre, 300) || null, post_url: urlDeImagen(it.url), medio: 'imagen', posicion: 'hijo-' + (k + 1) })
+      }
     } else if (funcion === 'competitor_website_scraper') {
       var host = hostDe(it.url), og = ogImagenDe(it)
       if (!host || !og || vistos['web|' + host]) continue
@@ -576,9 +583,116 @@ function fotosDeOtrasFuentes(funcion, items, opciones) {
   return out
 }
 
+// ───────────────────────────── fotos y capturas de los SITIOS WEB (31-oct · «guardar todo») ─────────────────────────────
+/**
+ * De cada página de un sitio (propio o de un competidor) salen TODAS sus imágenes (etiquetas <img>/<source>, og:image, imágenes del markdown) y una CAPTURA de pantalla de las páginas principales.
+ * 🔴 «nunca una ajena como propia»: el ROL de las imágenes sale del rol de la PÁGINA (la base lo decide con la regla única «¿es del cliente?»); una página de referencia/tercero NO deja imágenes.
+ *    Dentro de una página propia, una imagen servida desde otro dominio (anuncio, socio, píxel) se rotula 'referencia', nunca 'propio'.
+ * Pura: sin red ni `URL`. Solo JPG/PNG/WebP (el resto no pasa «Fotos · revisar»): se descartan aquí y se cuentan.
+ */
+var SEGUNDOS_NIVELES = ['com', 'co', 'org', 'net', 'edu', 'gob', 'gov', 'ac']
+function baseDeHost(h) {
+  var p = String(h || '').toLowerCase().split('.')
+  if (p.length <= 2) return p.join('.')
+  var penultimo = p[p.length - 2]
+  return SEGUNDOS_NIVELES.indexOf(penultimo) !== -1 && p[p.length - 1].length === 2 ? p.slice(-3).join('.') : p.slice(-2).join('.')
+}
+/** resuelve una dirección (absoluta, //, /ruta o relativa) contra la página; sin `URL` */
+function resolverContra(base, ruta) {
+  var r = String(ruta || '').trim().replace(/&amp;/g, '&')
+  if (!r || r.indexOf('data:') === 0 || r.indexOf('blob:') === 0 || r.indexOf('javascript:') === 0) return null
+  if (/^https?:\/\//i.test(r)) return r
+  var m = /^(https?:\/\/[^\/?#]+)([^?#]*)/i.exec(String(base || ''))
+  if (!m) return null
+  if (r.indexOf('//') === 0) return (/^https/i.test(base) ? 'https:' : 'http:') + r
+  if (r.charAt(0) === '/') return m[1] + r
+  var dir = m[2].replace(/[^\/]*$/, '')
+  return m[1] + (dir || '/') + r
+}
+var RUIDO_DE_IMAGEN = /(?:\/favicon|favicon\.|apple-touch-icon|\/sprite|spacer|1x1|pixel|\/tr\?|facebook\.com\/tr|doubleclick|googletagmanager|google-analytics|gravatar|emoji|\/wp-includes\/)/i
+function esFormatoPermitido(u) {
+  var limpia = String(u).split('#')[0].split('?')[0].toLowerCase()
+  if (/\.(svg|gif|avif|ico|bmp|tiff?|mp4|webm|pdf)$/.test(limpia)) return false
+  return true
+}
+function imagenesDeHtml(html, markdown) {
+  var out = []
+  var h = String(html || '')
+  var re = /<(img|source)\b[^>]*>/gi
+  var m
+  while ((m = re.exec(h)) !== null) {
+    var tag = m[0]
+    var alt = /\balt=["']([^"']*)["']/i.exec(tag)
+    var attrs = ['src', 'data-src', 'data-lazy-src', 'data-original', 'srcset', 'data-srcset']
+    for (var i = 0; i < attrs.length; i++) {
+      var v = new RegExp('\\b' + attrs[i] + '=["\']([^"\']+)["\']', 'i').exec(tag)
+      if (!v) continue
+      if (/srcset$/i.test(attrs[i])) {
+        // la más grande de la lista: «url 480w, url 1200w» → la de mayor ancho
+        var mejor = null, mejorW = -1
+        v[1].split(',').forEach(function (c) { var t = c.trim().split(/\s+/); var w = parseInt(t[1], 10) || 0; if (t[0] && w >= mejorW) { mejor = t[0]; mejorW = w } })
+        if (mejor) out.push({ src: mejor, alt: alt ? alt[1] : '' })
+      } else out.push({ src: v[1], alt: alt ? alt[1] : '' })
+      break
+    }
+  }
+  var md = String(markdown || '')
+  var rm = /!\[([^\]]*)\]\(([^)\s]+)/g
+  while ((m = rm.exec(md)) !== null) out.push({ src: m[2], alt: m[1] })
+  return out
+}
+function metaImagenes(item) {
+  var out = []
+  var og = item && item.metadata && item.metadata.openGraph
+  if (Array.isArray(og)) for (var i = 0; i < og.length; i++) { var p = og[i] && og[i].property; if ((p === 'og:image' || p === 'og:image:url' || p === 'og:image:secure_url' || p === 'twitter:image') && og[i].content) out.push({ src: og[i].content, alt: '' }) }
+  return out
+}
+/**
+ * `opciones`: { rol: 'propio' | 'competidor' (el de la página; otro valor ⇒ []), tope (imágenes por llamada, 80), capturas (páginas con captura, 8) }
+ * Devuelve filas de `client_social_images` (sin client_id): { owner_role, handle, post_id, tipo, src, caption, post_url, medio, posicion }.
+ */
+function fotosDeSitio(items, opciones) {
+  var rol = opciones && opciones.rol
+  if (rol !== 'propio' && rol !== 'competidor') return []
+  var tope = (opciones && opciones.tope) || 80
+  var topeCapturas = (opciones && opciones.capturas) || 8
+  var lista = Array.isArray(items) ? items : []
+  var out = []
+  var vistos = {}
+  var capturas = 0
+  var descartadas = { formato: 0, ruido: 0 }
+  for (var i = 0; i < lista.length; i++) {
+    var it = lista[i]
+    if (!it || typeof it !== 'object' || !it.url) continue
+    var host = hostDe(it.url)
+    if (!host) continue
+    var titulo = limpiar(it.metadata && it.metadata.title, 200)
+    if (it.screenshotUrl && capturas < topeCapturas && urlDeImagen(it.screenshotUrl)) {
+      capturas++
+      out.push({ owner_role: rol, handle: host, post_id: 'captura-' + slugDeFuente(host, 30) + '-' + huellaCorta(String(it.url)), tipo: 'web_captura', src: it.screenshotUrl, caption: limpiar('Captura de pantalla · ' + (titulo || it.url), 300), post_url: urlDeImagen(it.url), medio: 'imagen', posicion: 'portada' })
+    }
+    var candidatas = metaImagenes(it).concat(imagenesDeHtml(it.html, it.markdown))
+    for (var j = 0; j < candidatas.length; j++) {
+      if (out.length >= tope + capturas) break
+      var src = resolverContra(it.url, candidatas[j].src)
+      if (!src || !urlDeImagen(src)) continue
+      if (RUIDO_DE_IMAGEN.test(src)) { descartadas.ruido++; continue }
+      if (!esFormatoPermitido(src)) { descartadas.formato++; continue }
+      var clave = src.split('#')[0]
+      if (vistos[clave]) continue
+      vistos[clave] = 1
+      // el rol de la IMAGEN: en una página propia, solo lo servido desde el dominio del sitio es propio; lo demás es referencia
+      var rolImagen = rol === 'propio' && baseDeHost(hostDe(src)) !== baseDeHost(host) ? 'referencia' : rol
+      out.push({ owner_role: rolImagen, handle: host, post_id: 'web-' + slugDeFuente(host, 30) + '-' + huellaCorta(clave), tipo: 'web_imagen', src: src, caption: limpiar(candidatas[j].alt || titulo, 300) || null, post_url: urlDeImagen(it.url), medio: 'imagen', posicion: 'unica' })
+    }
+  }
+  out.descartadas = descartadas
+  return out
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    manejoDeInstagram: manejoDeInstagram, objetivosDeLaLlamada: objetivosDeLaLlamada, rolDeLaCuenta: rolDeLaCuenta, fotosDeOtrasFuentes: fotosDeOtrasFuentes, esFuenteAjena: esFuenteAjena,
+    manejoDeInstagram: manejoDeInstagram, objetivosDeLaLlamada: objetivosDeLaLlamada, rolDeLaCuenta: rolDeLaCuenta, fotosDeOtrasFuentes: fotosDeOtrasFuentes, esFuenteAjena: esFuenteAjena, fotosDeSitio: fotosDeSitio, baseDeHost: baseDeHost, resolverContra: resolverContra,
     sinTildes: sinTildes, raicesDe: raicesDe, excluirDe: excluirDe, sinNegaciones: sinNegaciones,
     entradaDeProtagonista: entradaDeProtagonista, catalogoDeProtagonistas: catalogoDeProtagonistas, productoDelBrief: productoDelBrief, alternativasDelBrief: alternativasDelBrief, catalogoDelBrief: catalogoDelBrief, productoDeTexto: productoDeTexto,
     contextoDePost: contextoDePost, aMedio: aMedio, sha256Hex: sha256Hex,

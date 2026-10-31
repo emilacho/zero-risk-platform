@@ -211,7 +211,10 @@ describe('BRAZO · competencia vigilada', () => {
     expect(rasimar.every((a) => a.metadata.target_kind === 'third_party')).toBe(true)
     expect(String(rasimar[0].params._brazo)).toBe('competencia:rasimar-restaurante:mapas')
     expect(rasimar[2].params).toMatchObject({ countryCode: 'EC', maxItems: 20 })
-    expect(rasimar.reduce((s, a) => s + a.usd_max, 0)).toBeLessThan(0.3)
+    // 31-oct «guardar todo»: el sitio del competidor puede leer hasta 50 páginas (máx. US$ 0,60); lo demás sigue acotado
+    expect(rasimar.find((a) => a.funcion === 'competitor_website_scraper')?.params).toMatchObject({ maxCrawlPages: 50, maxCrawlDepth: 10 })
+    expect(rasimar.find((a) => a.funcion === 'google_maps_scraper')?.params).toMatchObject({ maxImages: 10 })
+    expect(rasimar.reduce((s, a) => s + a.usd_max, 0)).toBeLessThan(1)
     const jerry = accionesDeCompetencia({ vigilados: v, ahora: new Date('2026-10-12T12:00:00Z'), ciudad: 'Olón', pais: 'ec' }) // lunes · su web es Tripadvisor
     expect(jerry.map((a) => a.funcion)).toEqual(['google_maps_scraper', 'facebook_ads_library_scraper'])
     const pigro = accionesDeCompetencia({ vigilados: v, ahora: new Date('2026-10-14T12:00:00Z'), ciudad: 'Olón', pais: 'ec' }) // miércoles · restaurantguru
