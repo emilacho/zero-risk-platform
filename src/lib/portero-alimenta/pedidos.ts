@@ -17,6 +17,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { extraerJson } from '../cerebro/portero/decision'
 import type { OrigenDeFoto, RespuestaDeFotos } from '../cerebro/portero/fotos-pendientes'
 import type { RespuestaDeVideos, VideoVisto } from '../cerebro/portero/videos-lectura'
+import { adjuntoDelCliente } from './contexto-del-cliente'
 import type { RespuestaDeTendencias, TendenciaVista } from '../cerebro/portero/tendencias-lectura'
 import { normalizar } from '../manual/texto'
 import { coincidePorPalabra } from '../texto/coincidencia'
@@ -324,7 +325,21 @@ async function cargarContexto(deps: DepsDePedido, clientId: string, ahora: Date)
   return { ok: true, c: { cliente, nombre: ctx.nombre, ciudad: ctx.ubicacion[0] ?? '', ctx, fichas } }
 }
 
+/** 31-oct · TODA respuesta del portero a un pedido (recién hecho o leído después) lleva el adjunto único `contexto_del_cliente` (resumen vivo entero + informes vigentes), aparte de los resultados */
+async function conContexto(db: Db, r: Respuesta, clientId: unknown, ahora: Date | undefined): Promise<Respuesta> {
+  if (r.status !== 200 || typeof clientId !== 'string' || !/^[0-9a-f-]{36}$/i.test(clientId)) return r
+  return { ...r, body: { ...r.body, contexto_del_cliente: await adjuntoDelCliente(db, clientId, ahora) } }
+}
+
 export async function rutaPedido(deps: DepsDePedido, cuerpo: unknown): Promise<Respuesta> {
+  // el adjunto se lee ANTES de correr el pedido: después de la respuesta no debe quedar ninguna espera extra (el trabajo en segundo plano ya está en marcha)
+  const id = cuerpo && typeof cuerpo === 'object' ? (cuerpo as Record<string, unknown>).client_id : null
+  const adjunto = deps.activo && typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id) ? await adjuntoDelCliente(deps.db, id, deps.ahora) : null
+  const r = await rutaPedidoBase(deps, cuerpo)
+  return adjunto && r.status === 200 && r.body.apagado !== true ? { ...r, body: { ...r.body, contexto_del_cliente: adjunto } } : r
+}
+
+async function rutaPedidoBase(deps: DepsDePedido, cuerpo: unknown): Promise<Respuesta> {
   const p = normalizarPedido(cuerpo)
   if ('status' in p) return p
   if (!deps.activo) return { status: 200, body: { apagado: true, detalle: 'PORTERO_PEDIDOS está apagado: no se leyó ni se escribió nada', modelos_llamados: 0 } }
@@ -674,6 +689,11 @@ export function descripcion(f: Fila): Record<string, unknown> {
 
 /** GET: el resultado de un pedido; si estaba `en_cadena`, se mira si ya llegó lo que se pidió a la cadena (sin gasto, solo lectura) */
 export async function rutaLeerPedido(deps: { db: Db; ahora?: Date }, id: string): Promise<Respuesta> {
+  const r = await rutaLeerPedidoBase(deps, id)
+  return conContexto(deps.db, r, r.body.client_id, deps.ahora)
+}
+
+async function rutaLeerPedidoBase(deps: { db: Db; ahora?: Date }, id: string): Promise<Respuesta> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return err(400, 'entrada_invalida', '`id` debe ser un uuid')
   const x = await deps.db.from('cerebro_pedidos').select('*').eq('id', id).limit(1)
   if (x.error) return err(502, 'lectura_fallida', `cerebro_pedidos: ${x.error.message}`)
