@@ -307,7 +307,8 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
   if (!id) return err(400, 'E-CAMPOS', 'falta campana_id')
   const campana = await al.campana(id)
   if (!campana) return err(404, 'E-CAMPANA', 'campaña inexistente')
-  const noAut = await autorizarLlamada(al, cuerpo, campana.client_id)
+  // la decisión la toma un humano: desde el tablero entra con workflow_id 'tablero' (T4); desde un flujo, como siempre
+  const noAut = await autorizarLlamada(al, cuerpo, campana.client_id, { humano: true })
   if (noAut) return noAut
   const decision = cuerpo.decision === 'aprobar' || cuerpo.decision === 'cambios' ? cuerpo.decision : null
   if (!decision) return err(400, 'E-DECISION', 'decision debe ser «aprobar» o «cambios»')
