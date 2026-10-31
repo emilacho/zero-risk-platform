@@ -78,6 +78,8 @@ export interface PlanDelPortero {
 }
 
 /** techo de páginas del sitio propio (31-oct · «todo es todo»): un sitio normal cabe de sobra; el Servicio corta en 200 */
+/** fotos de la ficha de Mapas que se piden al raspador (31-oct · parte 2); solo se copian las de la ficha que el portero confirma como del cliente */
+export const FOTOS_DE_LA_FICHA = 10
 export const PAGINAS_DEL_SITIO_PROPIO = 200
 /** máximo en US$ de la corrida del sitio propio: medido 0,004–0,029 por página con la lectura simple; con HTML y capturas se calibra con la primera corrida real */
 export const USD_MAXIMO_DEL_SITIO_PROPIO = 1.5
@@ -108,7 +110,7 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
   else noCubiertas.push({ fuente: 'instagram', por_que: 'el alta no trae la cuenta propia de Instagram' })
 
   // Mapas propio (+ reseñas del propio mapa): por nombre ENTERO y CIUDAD; sin ciudad ni ficha conocida no se paga a ciegas (precedente: el homónimo de Gualaceo)
-  if (e.mapas?.url || e.mapas?.placeId) candidatas.push(accion('mapas', 'own_google_maps_profile', e.mapas.url ? { startUrls: [{ url: e.mapas.url }], language: idioma } : { placeIds: [e.mapas.placeId], language: idioma }, e.mapas.url ?? e.mapas.placeId ?? ''))
+  if (e.mapas?.url || e.mapas?.placeId) candidatas.push(accion('mapas', 'own_google_maps_profile', e.mapas.url ? { startUrls: [{ url: e.mapas.url }], language: idioma, maxImages: FOTOS_DE_LA_FICHA } : { placeIds: [e.mapas.placeId], language: idioma, maxImages: FOTOS_DE_LA_FICHA }, e.mapas.url ?? e.mapas.placeId ?? ''))
   else if (nombre && ciudad) {
     // dedupe por la forma NORMALIZADA (sin mayúsculas ni tildes): «Olón», «olon» y «OLÓN» son la misma sede; se conserva la primera escritura
     const vistas = new Set<string>()
@@ -117,7 +119,7 @@ export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
     if (ciudades.length > 3) noCubiertas.push({ fuente: 'mapas', por_que: `el negocio tiene ${ciudades.length} ciudades y la ficha propia de Mapas solo se busca en las 3 primeras (tope de costo); no se buscan: ${ciudades.slice(3).join(', ')}` })
     ciudades.splice(3)
     // las reseñas NO vienen en la corrida de Mapas (medido 14-oct: aunque se pida `maxReviews`): van en una tanda aparte (`fase: 'tanda2'`) con la dirección de la ficha
-    const m = accion('mapas', 'own_google_maps_profile', { searchStringsArray: ciudades.map((c) => `${nombre} ${c}`), maxCrawledPlacesPerSearch: 1, language: idioma }, ciudades.map((c) => `${nombre} · ${c}`).join(' | '))
+    const m = accion('mapas', 'own_google_maps_profile', { searchStringsArray: ciudades.map((c) => `${nombre} ${c}`), maxCrawledPlacesPerSearch: 1, language: idioma, maxImages: FOTOS_DE_LA_FICHA }, ciudades.map((c) => `${nombre} · ${c}`).join(' | '))
     // el máximo declarado es POR BÚSQUEDA (una por sede): el costo de la corrida es n_sedes × ese máximo
     m.usd_max = Math.round(m.usd_max * ciudades.length * 1e6) / 1e6
     candidatas.push(m)

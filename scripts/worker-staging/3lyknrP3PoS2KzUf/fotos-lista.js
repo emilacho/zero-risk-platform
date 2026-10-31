@@ -16,6 +16,17 @@ if (ctx.apify_function === 'website_content_scraper' || ctx.apify_function === '
     const filas = await this.helpers.httpRequest({ url: 'https://ordaeyxvvvdqsznsecjx.supabase.co/rest/v1/client_web_pages?client_id=eq.' + ctx.client_id + '&url=eq.' + encodeURIComponent(url) + '&select=owner_role', method: 'GET', json: true, timeout: 10000, headers: { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY } })
     rol = Array.isArray(filas) && filas[0] && filas[0].owner_role === 'propio' ? 'propio' : null
   }
+  // 31-oct · parte 2 · los PDF enlazados (menús, catálogos) se leen como una página más: se vuelve a llamar al Servicio con cada PDF (1 página), que guarda su texto como ficha con el rol de la regla única.
+  // No espera la respuesta (el rastreo del PDF corre solo) y no encadena: una llamada que ya viene de un PDF (`#documento`) no pide más.
+  const yaDocumento = String((ctx.metadata && ctx.metadata.llamado_por) || '').endsWith('#documento')
+  if (rol && !yaDocumento) {
+    const pdfs = pdfsEnlazados(crudos, { max: 5 })
+    for (const d of pdfs) {
+      const cuerpoPdf = { client_id: ctx.client_id, destination: 'respuesta', dry_run: false, apify_function: ctx.apify_function, params: { startUrls: [{ url: d.url }], maxCrawlPages: 1, maxCrawlDepth: 0, ...(rol === 'competidor' && ctx.params && ctx.params.competitor_id ? { competitor_id: ctx.params.competitor_id } : {}) }, metadata: { ...(ctx.metadata || {}), llamado_por: String((ctx.metadata && ctx.metadata.llamado_por) || 'servicio') + '#documento', pdf_de: d.pagina } }
+      if (rol === 'competidor' && !(cuerpoPdf.params.competitor_id)) continue
+      try { await this.helpers.httpRequest({ url: 'https://n8n-production-72be.up.railway.app/webhook/apify-service-workflow', method: 'POST', json: true, body: cuerpoPdf, timeout: 4000 }) } catch (e) { /* el envío salió; la respuesta tarda lo que tarde el rastreo */ }
+    }
+  }
   return fotosDeSitio(crudos, { rol, tope: 80, capturas: 8 }).map((f) => ({ json: { client_id: ctx.client_id, ...f } }))
 }
 if (esFuenteAjena(ctx.apify_function)) {
