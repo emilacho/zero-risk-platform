@@ -105,7 +105,7 @@ describe('con el sobre de la cadena (respuesta REAL de la entrega del brief)', (
   it('brief validado: la cadena devuelve el sobre y el flujo se lo manda a la sala TAL CUAL, después del cable', async () => {
     const { respuesta } = await cierreDeLaMesaDeBrief()
     const sobre = respuesta.entrega_a_la_cadena.siguiente?.sobre
-    expect(sobre).toMatchObject({ source: 'cadena/mesas', intent: 'briefear', payload: { modo: 'tanda_siguiente', campana_id: CAMPANA, client_id: CLIENTE } })
+    expect(sobre).toMatchObject({ source: 'cadena/vigia', intent: 'briefear', payload: { modo: 'tanda_siguiente', campana_id: CAMPANA, client_id: CLIENTE } })
     const llamadas: Array<{ ruta: string; cuerpo: any }> = []
     const r = await correr(respuestaDelTurno(respuesta), sala(llamadas))
     expect(r.pasos).toEqual(['③ ¿Y ahora?', '③ ¿Siguiente paso?', '③ Cable de vuelta · sala', '③ Sobre · ¿hay siguiente?', '③ Sobre · a la sala', '③ Sobre · ¿entró?'])
