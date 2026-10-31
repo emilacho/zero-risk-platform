@@ -163,3 +163,18 @@ describe('brief_creativo.v1 · salidas', () => {
     expect(REFERENCIA_DEL_BRIEF_CREATIVO).not.toMatch(/Ecuador|tuteo|voseo|español/i)
   })
 })
+
+describe('reserva 2 de CC3 (lote 2) · reglas que los mutantes vivos dejaron sin prueba', () => {
+  it('B07 · «todos» dentro de una frase CORTA es público «todos»; en una frase larga que lo menciona de paso, no', () => {
+    expect(publicoEsTodos('para todos los vecinos')).toBe(true)
+    expect(publicoEsTodos('mamás y papás que vienen todos los sábados a desayunar con sus hijos pequeños')).toBe(false)
+  })
+  it('B15 · un título de sección con sufijo («## Insight del barrio») se reconoce como la sección Insight', () => {
+    const b = leerBriefCreativo(con({ '## Insight': '## Insight del barrio' }), INS)
+    expect(b.bloqueos).not.toContain('falta la sección «## Insight»')
+    expect(b.insight).toContain('desayuna de pie')
+    // un título parecido pero sin el espacio separador NO es la sección
+    const c = leerBriefCreativo(con({ '## Insight': '## Insightful' }), INS)
+    expect(c.bloqueos).toContain('falta la sección «## Insight»')
+  })
+})
