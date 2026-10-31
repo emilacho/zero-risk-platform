@@ -51,8 +51,10 @@ export interface EntregaDeBrief { campana_id: string; version: number; encargo_i
 export interface EntregaDeConcepto extends EntregaDeBrief { brief_devuelto?: string | null }
 
 // ───────────────────────────────────────────────────────── palanca y condiciones (puros)
+/** APAGADA POR DEFECTO (reserva 5b de CC3): si la lectura de `cadena_config` falla, la cadena de HOY sigue (sin mesas); una palanca que no se puede leer nunca enciende nada */
 export async function nuevoOrdenEncendido(al: Almacen, clientId: string): Promise<boolean> {
-  const p = await al.leerConfig('nuevo_orden')
+  let p: unknown
+  try { p = await al.leerConfig('nuevo_orden') } catch { return false }
   const clientes = p && typeof p === 'object' && Array.isArray((p as { clientes?: unknown }).clientes) ? ((p as { clientes: unknown[] }).clientes as unknown[]) : []
   return clientes.includes(clientId)
 }
@@ -309,6 +311,9 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
   const version = Number.isInteger(cuerpo.version) ? (cuerpo.version as number) : (todos[todos.length - 1]?.version ?? 0)
   const fila = todos.find((x) => x.version === version)
   if (!fila || fila.estado !== 'lista') return err(409, 'E-SIN-TARJETA', `la versión ${version} del concepto no está lista para decidir (${fila?.estado ?? 'no existe'})`)
+  // reserva 3 de CC3: «cambios» cierra la versión (su tarjeta quedó rechazada y la vuelta siguiente ya está en marcha): no se vuelve a aprobar ni a mandar a cambios esa misma versión;
+  // si Emilio se arrepiente, decide sobre la versión siguiente. (Cambios sobre una versión APROBADA sí valen: cambio de rumbo, nota 3 de CC3.)
+  if (fila.aprobacion === 'cambios') return err(409, 'E-YA-DECIDIDO', `la versión ${version} del concepto ya se mandó a cambios (${fila.apunta_a ?? 'concepto'}); la decisión va sobre la versión siguiente`)
   const autor = texto(cuerpo.autor) ?? 'emilio'
   const nota = texto(cuerpo.nota)
   if (decision === 'aprobar') {
@@ -335,7 +340,9 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
   const brief = await al.ultimoBriefCreativo(campana.id)
   // cambios al brief: el brief vigente queda «devuelto por Emilio» (con su nota) para que la puerta, al volver a entrar, abra el brief nuevo y no el concepto
   if (apuntaA === 'brief' && brief && brief.estado === 'validada') await al.actualizarBriefCreativo(campana.id, brief.version, { estado: 'devuelta', devolucion_texto: nota, motivo: MOTIVO_CAMBIOS_DE_EMILIO })
-  const siguiente = apuntaA === 'brief' ? { mesa: 'brief' as const, version: (brief?.version ?? 0) + 1 } : { mesa: 'concepto' as const, version: version + 1 }
+  // la versión siguiente es la ÚLTIMA + 1 (no `version + 1`): cambios sobre una versión que no es la última no pueden chocar con una ya existente (reserva 3 de CC3)
+  const ultimaVersion = todos.reduce((m, x) => Math.max(m, x.version), 0)
+  const siguiente = apuntaA === 'brief' ? { mesa: 'brief' as const, version: (brief?.version ?? 0) + 1 } : { mesa: 'concepto' as const, version: ultimaVersion + 1 }
   const re = await siguienteDespuesDe(al, campana.id)
   return { status: 200, cuerpo: { decision: 'cambios', version, apunta_a: apuntaA, siguiente: { ...siguiente, ...re.siguiente }, vueltas_restantes: CAP_DE_VUELTAS_DE_CAMBIOS - vueltas - 1, nota } }
 }

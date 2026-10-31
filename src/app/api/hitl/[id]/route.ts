@@ -85,7 +85,8 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
 
   // 31-oct (T3): la tarjeta «Gran idea» de la cadena NO se decide por aquí (su decisión abre la versión siguiente de la mesa): 409 y a `POST /api/cadena/concepto {accion: 'decidir'}`.
   // Se excluye en la misma escritura (sin lectura previa en el camino de siempre); si no se actualizó nada, se mira por qué.
-  const { data, error } = await supabase.from('hitl_queue').update(updates).eq('id', ctx.params.id).neq('type', TIPO_TARJETA_DE_CONCEPTO).select().single()
+  // reserva 5a de CC3: en SQL `NULL <> 'x'` no es verdadero; una fila con `type` nulo se decide como siempre (solo se excluye la tarjeta de concepto)
+  const { data, error } = await supabase.from('hitl_queue').update(updates).eq('id', ctx.params.id).or(`type.is.null,type.neq.${TIPO_TARJETA_DE_CONCEPTO}`).select().single()
   if (error && error.code === 'PGRST116') {
     const { data: fila } = await supabase.from('hitl_queue').select('type').eq('id', ctx.params.id).maybeSingle()
     if (fila?.type === TIPO_TARJETA_DE_CONCEPTO) return NextResponse.json({ error: 'tarjeta_de_concepto', detail: 'la gran idea de la cadena se decide por POST /api/cadena/concepto {accion: "decidir", decision: "aprobar" | "cambios"}' }, { status: 409 })

@@ -61,10 +61,14 @@ class Consulta {
   update(p: Fila) { this.op = 'update'; this.payload = p; return this }
   upsert(p: Fila | Fila[], o?: { onConflict?: string }) { this.op = 'upsert'; this.payload = p; this.conflicto = o?.onConflict ? o.onConflict.split(',') : null; return this }
   eq(c: string, v: unknown) { this.filtros.push((f) => leer(f, c) === v); return this }
-  /** 31-oct (T3): el PATCH de la bandeja excluye la tarjeta de la gran idea (`neq('type', …)`) en la misma escritura */
   neq(c: string, v: unknown) { this.filtros.push((f) => leer(f, c) !== v); return this }
   in(c: string, vs: unknown[]) { this.filtros.push((f) => vs.includes(leer(f, c))); return this }
-  or(expr: string) { const alts = expr.split(',').map((p) => { const [c, op, ...v] = p.split('.'); return { c, op, v: v.join('.') } }); this.filtros.push((f) => alts.some((a) => a.op === 'eq' && String(leer(f, a.c)) === a.v)); return this }
+  /** `or('a.eq.x,b.is.null,c.neq.y')` como PostgREST (31-oct · reserva 5a de CC3: el PATCH de la bandeja excluye la tarjeta de la gran idea con `type.is.null,type.neq.…`; `NULL <> x` no es verdadero en SQL) */
+  or(expr: string) {
+    const alts = expr.split(',').map((p) => { const [c, op, ...v] = p.split('.'); return { c, op, v: v.join('.') } })
+    this.filtros.push((f) => alts.some((a) => (a.op === 'eq' ? String(leer(f, a.c)) === a.v : a.op === 'is' && a.v === 'null' ? !hay(leer(f, a.c)) : a.op === 'neq' ? hay(leer(f, a.c)) && String(leer(f, a.c)) !== a.v : false)))
+    return this
+  }
   lt(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) < String(v)); return this }
   gt(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) > String(v)); return this }
   /** `like` de PostgREST con el comodín `%` (solo al final o al principio, como lo usa el código) */
