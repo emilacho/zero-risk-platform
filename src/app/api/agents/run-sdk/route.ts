@@ -336,8 +336,12 @@ const RAILWAY_FETCH_TIMEOUT_MS = 790_000
  *
  * El tope es COMPARTIDO por todos los llamadores (44 nodos en el motor · los nodos
  * del grafo ya recortan su propio prompt en 7.900 y no cambian con esto).
+ *
+ * ── 200.000 (01-nov · corrida 210273) ── el pedido real del plan ya mide 86.000 y la corrección de la jefatura suma el plan y sus fichas: midió 125.108 y este
+ * tope la rechazó, así que la revisión se cerró «fallida» sin corregir nada. Una reescritura suma además el plan anterior (~165.000 en el peor caso). 200.000 sigue
+ * **5× por debajo** del 1 MB medido, y es la misma firma de Emilio: «no se recorta, se recibe». El rechazo por encima sigue siendo el 400 gratis.
  */
-export const TASK_MAX_CHARS = 120_000
+export const TASK_MAX_CHARS = 200_000
 
 const RAILWAY_PROXY_MAX_ATTEMPTS = 3
 const RAILWAY_PROXY_BACKOFF_MS: readonly number[] = [2_000, 4_000]
