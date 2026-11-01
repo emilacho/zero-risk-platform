@@ -7,6 +7,7 @@
  *   1 · la ficha del cliente: `config.apify.sedes_estado = { "<clave de sede>": "por_abrir" | "abierta" }`;
  *   2 · un dato de la sede: `client_sede_datos` con campo `estado` (o `apertura`) y un valor como «por abrir»;
  *   3 · lo que dijo el dueño: la ficha vigente más nueva `dato_del_dueno` con `datos.tema_norm = apertura-sede` para esa sede; su respuesta se lee con `estadoDeApertura`.
+ * (01-nov · ADENDA de Emilio: «esa regla es absurda: el marketing en gran parte se hace para anunciar la bienvenida de un nuevo comercio») El estado de una sede es CONTEXTO: nunca excluye piezas ni planeación. El plan decide; la única guarda es de veracidad: no afirmar «abierto» ni horarios de un local que no atiende.
  * Puro: no lee nada; quien llama le da lo que ya leyó.
  */
 import { normalizar } from '../manual/texto'
@@ -106,5 +107,12 @@ export const sedesCerradas = (e: EntradaDeEstadoDeSedes): Set<string> => new Set
 
 export const ROTULO_POR_ABRIR = 'por abrir'
 export const ROTULO_CERRADA = 'cerrada'
-export const AVISO_DE_HORARIO_CERRADA = 'sede cerrada: no atiende al público'
-export const AVISO_DE_HORARIO_POR_ABRIR = 'sede por abrir: todavía no atiende al público'
+export const AVISO_DE_HORARIO_CERRADA = 'sede cerrada: no atiende al público; no afirmes horario ni atención de local (es contexto: el plan decide qué se comunica)'
+export const AVISO_DE_HORARIO_POR_ABRIR = 'sede por abrir: todavía no atiende al público; no afirmes horario ni atención de local (es contexto: el plan puede proponer piezas de expectativa, preinauguración, delivery y bienvenida)'
+
+/** lo que un agente que planea debe saber del estado de una sede. Contexto, nunca prohibición: sin esto, un modelo que lee «por abrir» dedujo «no se le planean piezas». Sede abierta o sin dato: nada que añadir */
+export function contextoDeEstado(e: EstadoDeSede | null | undefined): string | null {
+  if (e === 'por_abrir') return 'POR ABRIR: es contexto, no una prohibición. No excluyas esta sede por su estado: el plan decide, y puede llevar piezas de expectativa, preinauguración, delivery y bienvenida. Solo no afirmes que está abierta ni des horarios de local; requiere_abierto en false mientras no abra'
+  if (e === 'cerrada') return 'CERRADA: es contexto, no una prohibición. El plan decide qué se comunica. Solo no afirmes que está abierta ni des horarios de local; requiere_abierto en false'
+  return null
+}

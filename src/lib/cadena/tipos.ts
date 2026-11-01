@@ -1,3 +1,4 @@
+import type { EstadoDeSede } from '../sedes/por-abrir'
 /**
  * Tipos de la cadena · contratos de datos (diseño v2 §9.4). Nada de esto sabe de un cliente ni de un rubro.
  */
@@ -103,7 +104,7 @@ export type FormatosPorRed = Record<string, FormatoPermitido[]>
 
 /** Horario de una sede: por día de la semana ISO, tramos [abre, cierra] en HH:MM. Un día sin tramos = cerrado. */
 export type HorarioSede = Partial<Record<number, { abre: string; cierra: string }[]>>
-export interface SedeInfo { clave: string; nombre?: string; telefono?: string | null; horario: HorarioSede | null }
+export interface SedeInfo { clave: string; nombre?: string; telefono?: string | null; horario: HorarioSede | null; /** estado de la sede, si se sabe: es CONTEXTO para quien planea, nunca excluye piezas */ estado?: EstadoDeSede }
 
 export type ConfianzaTrozo = 'system_trusted' | 'tenant_trusted' | 'untrusted' | 'unknown'
 export type FuenteSede = 'sitio' | 'instagram' | 'mapas'
