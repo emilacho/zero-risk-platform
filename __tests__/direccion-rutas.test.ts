@@ -50,6 +50,27 @@ describe('Pedir cambios sin versión nueva (01-nov · adenda 5)', () => {
     expect(ids(r)).not.toContain('cambios-sin-version:c1')
     expect(ids(r)).toContain('cambios-sin-version:c3')
   })
+  it('🔴 un pedido que salió bien no es un riesgo', async () => {
+    const r = await leerRiesgos(ctx(base().semilla('plan_cambios', [pedido('c1', 'aplicado', NOW, 'HTTP 200')])))
+    expect(ids(r).filter((x) => x.startsWith('cambios-sin-version'))).toEqual([])
+  })
+  it('🔴 el detalle pasa por el limpiador de secretos', async () => {
+    const llave = 'sk-ant-api03-' + 'x'.repeat(40)
+    const r = await leerRiesgos(ctx(base().semilla('plan_cambios', [pedido('c1', 'fallido', NOW, `se cayó con la llave ${llave}`)])))
+    const x = r.riesgos.find((y) => y.id === 'cambios-sin-version:c1')
+    expect(x?.detalle).not.toContain(llave)
+    expect(x?.detalle).toContain('[oculto]')
+  })
+  it('🔴 la marca de comparación exige exactamente true', async () => {
+    for (const marca of ['true', 'false', 1, false]) {
+      const r = await leerRiesgos(ctx(base().semilla('client_historical_outputs', [plan('p1', NOW, { comparacion_fallo: marca })])))
+      expect(ids(r), String(marca)).not.toContain('plan-sin-comparar:p1')
+    }
+  })
+  it('🔴 otro tipo de documento con la marca no cuenta', async () => {
+    const r = await leerRiesgos(ctx(base().semilla('client_historical_outputs', [{ ...plan('p1', NOW, { comparacion_fallo: true }), output_type: 'otro_documento' }])))
+    expect(ids(r)).not.toContain('plan-sin-comparar:p1')
+  })
   it('🔴 una falla de hace más de una semana no aparece', async () => {
     const r = await leerRiesgos(ctx(base().semilla('plan_cambios', [pedido('c1', 'fallido', VIEJO, 'x')])))
     expect(ids(r)).not.toContain('cambios-sin-version:c1')
