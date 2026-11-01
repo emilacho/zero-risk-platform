@@ -26,6 +26,25 @@ const nota = (c: ClienteSintetico, pieza: string, ts: string, texto: string, o: 
 const vigentes = (t: T) => t.cerebro_fichas.filter((f) => f.clase === 'dato_del_dueno' && !f.retirada_en)
 const retiradas = (t: T) => t.cerebro_fichas.filter((f) => f.clase === 'dato_del_dueno' && f.retirada_en)
 
+describe('01-nov · firma de Emilio: el dueño puede negar frases', () => {
+  const c = DIEZ_CLIENTES[0]
+  it('quedan en la ficha, para que el control las lea; sin ellas, la ficha queda como siempre', async () => {
+    const m = montar(c)
+    const r = await rutaDueno(m.deps, nota(c, 'x1', '1792175397.213719', 'viene de Manta', { frases_negadas: [' de origen local '] }))
+    expect(r.status).toBe(200)
+    expect((vigentes(m.t)[0].provenance_tag as { datos: { frases_negadas?: string[] } }).datos.frases_negadas).toEqual(['de origen local'])
+    const s = montar(c)
+    await rutaDueno(s.deps, nota(c, 'x1', '1792175397.213719', 'sin frases'))
+    expect((vigentes(s.t)[0].provenance_tag as { datos: Record<string, unknown> }).datos).not.toHaveProperty('frases_negadas')
+  })
+  it.each([['no lista', 'x'], ['muy corta', ['ab']], ['no texto', [3]], ['demasiadas', Array(21).fill('frase larga')], ['demasiado larga', ['x'.repeat(201)]]])('%s: 400 sin guardar', async (_n, v) => {
+    const m = montar(c)
+    const r = await rutaDueno(m.deps, nota(c, 'x1', '1792175397.213719', 'y', { frases_negadas: v }))
+    expect(r.status).toBe(400)
+    expect(vigentes(m.t)).toHaveLength(0)
+  })
+})
+
 describe('con `acumula`, las notas del mismo tema se suman (cualquier id, cualquier cliente)', () => {
   // ids de 1, 2 y 5 palabras, y uno largo
   const IDS = ['a1b2c3d4', 'p-7', 'pieza-de-la-semana-3-final', 'x1', 'a1b2c3d4-0000-4000-8000-00000000abcd']

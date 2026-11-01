@@ -93,6 +93,8 @@ export interface Puertos {
   almacen: Almacen
   /** las páginas propias del cliente, para el revisor del camino que no corre los brazos; nunca lanza */
   paginasDelSitio?(client_id: string): Promise<PaginasDelSitio>
+  /** lo que el dueño declaró, con las frases que niega; nunca lanza */
+  hechosDelDueno?(client_id: string): Promise<Array<{ tema: string; frases_negadas: string[] }>>
   /** la versión real del plan y lo que pidió el dueño en este ciclo, leídos del plan de partida; nunca lanza */
   cicloDelPlan?(artifact_id: string): Promise<CicloDelPlan>
   ahora(): Date

@@ -115,6 +115,8 @@ export interface EntradaDeDueno {
   forzar: boolean
   /** nota que se suma: no reemplaza a otras del mismo tema */
   acumula: boolean
+  /** 01-nov · firma de Emilio: frases que este hecho niega; si un plan las usa, el código lo marca */
+  frases_negadas: string[]
 }
 function normalizar_(cuerpo: Record<string, unknown>): Respuesta | EntradaDeDueno {
   const evento = cuerpo.evento === 'pregunta' ? 'pregunta' : 'respuesta'
@@ -130,10 +132,12 @@ function normalizar_(cuerpo: Record<string, unknown>): Respuesta | EntradaDeDuen
   if (esCanalDelManual(canal) && !campoDelManual(tema)) return err(400, 'entrada_invalida', 'el canal «dashboard · manual» exige `tema` con la forma «manual · <campo>»')
   const respuesta = txt(cuerpo.respuesta)
   if (evento === 'respuesta' && (!respuesta || respuesta.length > MAX_RESPUESTA)) return err(400, 'entrada_invalida', `\`respuesta\` es obligatoria (hasta ${MAX_RESPUESTA} caracteres)`)
+  const negadas = cuerpo.frases_negadas
+  if (negadas !== undefined && !(Array.isArray(negadas) && negadas.length <= 20 && negadas.every((f) => typeof f === 'string' && f.trim().length >= 3 && f.length <= 200))) return err(400, 'entrada_invalida', '`frases_negadas` es una lista de hasta 20 frases de 3 a 200 caracteres')
   const cuando = txt(cuerpo.respondido_en)
   if (evento === 'respuesta' && (!cuando || Number.isNaN(Date.parse(cuando)))) return err(400, 'entrada_invalida', '`respondido_en` debe ser una fecha ISO')
   return {
-    evento, client_id: String(cuerpo.client_id), sede_clave: txt(cuerpo.sede_clave) || null, pregunta, respuesta, tema, canal, mensaje_ref: txt(cuerpo.mensaje_ref) || null,
+    frases_negadas: Array.isArray(negadas) ? (negadas as string[]).map((f) => f.trim()) : [], evento, client_id: String(cuerpo.client_id), sede_clave: txt(cuerpo.sede_clave) || null, pregunta, respuesta, tema, canal, mensaje_ref: txt(cuerpo.mensaje_ref) || null,
     respondido_en: cuando ? new Date(cuando).toISOString() : '', preguntado_por: { oficina, agente }, pregunta_id: txt(cuerpo.pregunta_id) || null, forzar: cuerpo.forzar === true, acumula: cuerpo.acumula === true && !esCanalDelManual(canal), // un dato del manual jamás se acumula: reemplaza al anterior del mismo campo
   }
 }
@@ -264,7 +268,7 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
     alcance: 'cliente', descartada: false, retirada_en: llegoTarde ? ahora.toISOString() : null, motivo_retirada: llegoTarde ? 'una respuesta más nueva del dueño al mismo tema ya estaba guardada' : null,
     provenance_tag: {
       type: 'evidence', source: 'dueno', trust_level: 'untrusted', confirmado_por: 'dueno', canal: n.canal, ingress_route: '/api/brain/alimentar/dueno',
-      datos: { ...(campoManual ? { manual: { campo: campoManual } } : {}), tema: n.tema, tema_norm: temaNormal(n.tema), pregunta: preguntaLimpia, respuesta: limpia.texto, canal: n.canal, mensaje_ref: n.mensaje_ref, respondido_en: cuando, preguntado_por: n.preguntado_por, ...(n.acumula ? { acumula: true } : {}), ...(limpia.redactado ? { datos_personales_omitidos: true } : {}), ...datosDeSede(sedeClave ? [sedeClave] : null) },
+      datos: { ...(n.frases_negadas.length ? { frases_negadas: n.frases_negadas } : {}), ...(campoManual ? { manual: { campo: campoManual } } : {}), tema: n.tema, tema_norm: temaNormal(n.tema), pregunta: preguntaLimpia, respuesta: limpia.texto, canal: n.canal, mensaje_ref: n.mensaje_ref, respondido_en: cuando, preguntado_por: n.preguntado_por, ...(n.acumula ? { acumula: true } : {}), ...(limpia.redactado ? { datos_personales_omitidos: true } : {}), ...datosDeSede(sedeClave ? [sedeClave] : null) },
     },
   }
   const wf = await deps.db.from('cerebro_fichas').insert(fila)

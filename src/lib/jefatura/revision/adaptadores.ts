@@ -7,6 +7,7 @@
  */
 import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGptConLibro } from '../../revision-comun'
 import { almacenDeSupabase, type Db } from './almacen-supabase'
+import { adjuntoDelCliente } from '../../portero-alimenta/contexto-del-cliente'
 import { paginasPropiasDelSitio } from './carpeta-para-revisar'
 import type { CicloDelPlan } from './plan'
 import type { Puertos } from './puertos'
@@ -65,6 +66,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     almacen: almacenDeSupabase(db),
     ahora,
     paginasDelSitio: (clientId) => paginasPropiasDelSitio(db as never, clientId),
+    hechosDelDueno: async (clientId) => { try { return (await adjuntoDelCliente(db as never, clientId)).hechos_del_dueno ?? [] } catch { return [] } },
     cicloDelPlan: (artifactId) => cicloDelPlanDeLaBase(db, artifactId),
     async revisor(p) {
       if (p.dry_run) return { ok: true, texto: '', costo_usd: 0, modelo: 'simulado (dry_run)' }

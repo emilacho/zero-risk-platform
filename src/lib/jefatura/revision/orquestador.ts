@@ -10,6 +10,7 @@
 import { controlarCoherenciaDelPlan } from '../../planeacion/coherencia-del-plan'
 import { armarQueCambio, ponerQueCambio, type FichaDelCambio } from './plan'
 import { conLasPaginasDelSitio } from './carpeta-para-revisar'
+import { controlarFrasesNegadas } from '../../planeacion/coherencia-del-plan'
 import crypto from 'node:crypto'
 import { estadoInicial, fichaNueva, registrarPaso, siguientePaso, type Artefacto, type Estado, type Ficha, type Paso, type Plantilla, type ResultadoDePaso } from '../../revision-comun'
 import { desacuerdosDe, hayQueAvisar, resolverCierre, textoDelAviso, type Cierre } from './cierre'
@@ -52,6 +53,11 @@ const esCorreccion = (paso: Paso): boolean => paso.clave.startsWith('correccion:
 /** los hallazgos del control por código, como fichas del ciclo */
 export function fichasDeCoherencia(texto: string, contexto: string, ahora: Date): Ficha[] {
   return controlarCoherenciaDelPlan({ texto, contexto, referencia: ahora }).map((h, i) => fichaNueva(`codigo-${h.control}-${i}`, 'jefe', h.donde, h.estado === 'no_cuadra' ? 'bloquea' : 'sugerencia', h.que, 'control por código del plan', h.estado === 'no_cuadra' ? 'hacer que cuadre, o declarar el hueco' : 'no se comprobó: revisarlo a mano'))
+}
+
+/** punto 3 · lo que contradice lo declarado por el dueño bloquea; lo mira el código, además del revisor */
+export function fichasDeLoNegado(texto: string, hechos: Array<{ tema: string; frases_negadas: string[] }>): Ficha[] {
+  return controlarFrasesNegadas(texto, hechos).map((h, i) => fichaNueva(`codigo-dueno-${i}`, 'jefe', h.donde, 'bloquea', h.que, 'lo que declaró el dueño', 'quitar esa frase: lo declarado por el dueño manda'))
 }
 
 function estadoDeApertura(entrada: EntradaDeRevision): Estado {
@@ -97,6 +103,7 @@ export async function abrirRevision(P: Puertos, cuerpo: unknown, o: { prueba?: b
   // el flujo declara «sin páginas» cuando el camino no corre los brazos; el revisor recibe las de verdad
   if (p.contexto?.length && P.paginasDelSitio && p.contexto.some((x) => /^SIN P[AÁ]GINAS DEL SITIO/i.test(x.texto.trim()))) p.contexto = conLasPaginasDelSitio(p.contexto, await P.paginasDelSitio(entrada.client_id))
   const apertura = estadoDeApertura(entrada)
+  if (pol.reentrega !== 'ninguna' && P.hechosDelDueno) apertura.fichas.push(...fichasDeLoNegado(p.texto, await P.hechosDelDueno(entrada.client_id)))
   // 01-nov · firma de Emilio: lo que el código halla en fechas y presupuesto entra como ficha al ciclo de siempre. Lo que no pudo leer se dice; no bloquea
   if (entrada.artifact_type === 'plan' && pol.reentrega !== 'ninguna') apertura.fichas.push(...fichasDeCoherencia(p.texto, (p.contexto ?? []).map((x) => x.texto).join('\n'), P.ahora()))
   const c = await P.almacen.crearRevision({
