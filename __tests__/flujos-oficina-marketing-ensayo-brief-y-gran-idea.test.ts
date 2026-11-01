@@ -230,6 +230,29 @@ describe('ENSAYO · tramo 3 · brief → gran idea → tarjeta, y SE DETIENE', (
   })
 })
 
+describe('ENSAYO · un brief que rebasa el tope (cerrado_por_tope) no deja a la campaña en limbo', () => {
+  it('entrega parcial por tope: se devuelve, la puerta reabre UNA vez (v2) y una segunda entrega mala deja la campaña en necesita_humano con aviso', async () => {
+    const m = mundo()
+    await puertaRecibe(m)
+    const parcial = BRIEF.split('\n').slice(0, 6).join('\n') // el brief se cortó a la mitad
+    const r1 = await recibirBrief(m.al, { campana_id: CAMPANA, version: 1, encargo_id: 'enc-1', texto: parcial, costo_usd: 1.6, motivo: 'cerrado_por_tope' }, AHORA)
+    expect(r1).toMatchObject({ ok: true })
+    expect(['devuelta', 'descartada']).toContain((r1 as any).estado)
+    // la puerta vuelve a entrar: la cadena abre la versión 2 (una sola reapertura)
+    const b = await puertaRecibe(m, 'tanda_siguiente')
+    expect(m.al.briefsCreativos.map((x: any) => x.version)).toEqual([1, 2])
+    expect(b.item).toMatchObject({ resultado: 'cadena_abierta' })
+    // la versión 2 también llega cortada: ya no hay otra reapertura
+    const r2 = await recibirBrief(m.al, { campana_id: CAMPANA, version: 2, encargo_id: 'enc-2', texto: parcial, costo_usd: 1.6, motivo: 'cerrado_por_tope' }, AHORA)
+    expect(r2).toMatchObject({ ok: true })
+    const c = await puertaRecibe(m, 'tanda_siguiente').catch((e) => ({ error: String(e) }))
+    const estadoCampana = m.al.campanas[0].estado
+    expect(estadoCampana).toBe('necesita_humano')
+    expect(m.al.briefsCreativos).toHaveLength(2) // nunca una tercera versión
+    expect(m.al.conceptos).toHaveLength(0) // y nunca se abrió la gran idea sobre un brief sin validar
+  })
+})
+
 describe('ENSAYO · cada llamada del tramo lleva su contexto de flujo (cero invocaciones fuera de un flujo)', () => {
   it('las llamadas de la puerta a la cadena llevan workflow_id y workflow_execution_id; las de la oficina, la llave de despacho', async () => {
     const m = mundo()
