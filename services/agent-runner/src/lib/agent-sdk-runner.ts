@@ -43,7 +43,8 @@ import { getSupabaseAdmin } from './supabase.js'
 import { resolveAgentSlug, isCanonicalSlug } from './agent-alias-map.js'
 import { buildMcpServers, DISCOVERY_OUTPUT_ALLOW } from './agent-mcp-registry.js'
 import { insertWithRetry } from './agents-log-retry.js'
-import { insertAgentInvocationWithRetry } from './agent-invocations-log.js'
+import { randomUUID } from 'node:crypto'
+import { guardarTextosDeInvocacion, insertAgentInvocationWithRetry } from './agent-invocations-log.js'
 import { callSdkWithRetry } from './sdk-call-retry.js'
 import {
   shouldSkipStep,
@@ -1066,7 +1067,9 @@ function logExecution(
   // shape so dashboards consuming agent_invocations are caller-agnostic.
   const endedAtMs = startedAtMs + durationMs
   const sessionIdForInsert = drain.sessionId ?? `runner-${startedAtMs}-${Math.random().toString(36).slice(2, 8)}`
+  const invocationId = randomUUID()
   const invocationRow: Record<string, unknown> = {
+    id: invocationId,
     session_id: sessionIdForInsert,
     agent_id: canonicalSlug,
     agent_name: canonicalSlug,
@@ -1172,7 +1175,10 @@ function logExecution(
         : {}),
     },
   }
-  void insertAgentInvocationWithRetry(supabase, invocationRow, canonicalSlug)
+  // los textos van después del libro: su fila apunta a la del libro, y un fallo aquí no toca el costo
+  void insertAgentInvocationWithRetry(supabase, invocationRow, canonicalSlug).then(() =>
+    guardarTextosDeInvocacion(supabase, invocationId, { entrada: input.task, salida: (drain.textoFinal ?? '').trim() !== '' ? (drain.textoFinal as string) : drain.responseText }),
+  )
 }
 
 // ---------- Public entry point ----------

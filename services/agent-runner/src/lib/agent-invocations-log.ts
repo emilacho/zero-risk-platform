@@ -66,3 +66,25 @@ export async function insertAgentInvocationWithRetry(
     await new Promise<void>((resolve) => setTimeout(resolve, AGENT_INVOCATIONS_RETRY_DELAYS_MS[attempt]))
   }
 }
+
+/** 01-nov · observabilidad, punto 1: la misma lista que `src/lib/textos-de-invocacion.ts` (el corredor no importa de la plataforma; una prueba exige que coincidan) */
+export const LLAVES_A_OCULTAR: readonly RegExp[] = [
+  /\b(sk|pk|rk|xox[abps]?|ghp|gho|apify_api)[-_][A-Za-z0-9_-]{8,}/gi,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}(\.[A-Za-z0-9_-]+)?/g,
+  /\b[0-9a-f]{40,}\b/gi,
+]
+const ocultarLlaves = (texto: string): string => LLAVES_A_OCULTAR.reduce((t, re) => t.replace(re, '[oculto]'), texto)
+
+/** el texto completo de la llamada, después de escribir el libro. Sin reintentos y sin lanzar: un fallo aquí no toca la corrida ni el costo */
+export async function guardarTextosDeInvocacion(supabase: SupabaseLike, invocationId: string, t: { entrada?: string | null; salida?: string | null }): Promise<void> {
+  const entrada = typeof t.entrada === 'string' && t.entrada ? ocultarLlaves(t.entrada) : null
+  const salida = typeof t.salida === 'string' && t.salida ? ocultarLlaves(t.salida) : null
+  if (!entrada && !salida) return
+  try {
+    const { error } = await supabase.from('agent_invocation_textos').insert({ invocation_id: invocationId, entrada, salida })
+    if (error) console.error(`[agent-invocations] textos de ${invocationId} sin guardar · ${error.message}`)
+  } catch (e) {
+    console.error(`[agent-invocations] textos de ${invocationId} sin guardar · ${e instanceof Error ? e.message : String(e)}`)
+  }
+}

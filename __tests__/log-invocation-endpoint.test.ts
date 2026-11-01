@@ -133,7 +133,7 @@ describe('POST /api/agents/log-invocation · canon §149 enforcement', () => {
     expect(j.ok).toBe(true)
     expect(j.agent_invocation_id).toBe('inv-canonical-uuid')
     expect(j.canonical_pattern).toBe('log-invocation-local-session')
-    expect(insertMock).toHaveBeenCalledOnce()
+    expect(fromMock.mock.calls.map((c) => (c as unknown as [string])[0])).toEqual(['agent_invocations', 'agent_invocation_textos'])
     const inserted = (insertMock.mock.calls[0] as unknown as [Array<Record<string, unknown>>])[0]
     expect(inserted[0]!.workflow_id).toBe('mc-daemon-health-canonical')
     expect(inserted[0]!.agent_name).toBe('health-check-daemon')
@@ -256,9 +256,21 @@ describe('POST /api/agents/log-invocation · el cuerpo del portero entra (column
     expect(ultimaFila()).toMatchObject({ client_id: 'prueba-portero', cost_usd: 0.03, tokens_input: 10000, tokens_output: 700, num_turns: 1, status: 'completed', command: 'portero.razonar.prueba', agent_name: 'portero-del-cerebro', model: 'claude-sonnet-5-5' })
     expect((ultimaFila().metadata as Record<string, unknown>).prueba).toBe(true)
   })
+  it('🔴 lo que se pidió llega: comienzo en la fila, entero en la tabla de textos; sin pedirlo, la fila queda sin entrada', async () => {
+    const { POST } = await importRoute()
+    const largo = 'p'.repeat(5000) + 'FIN'
+    await POST(makeReq({ ...CUERPO_DEL_PORTERO, input_text: largo, response_text: 'la respuesta' }))
+    const llamadas = insertMock.mock.calls as unknown as Array<[unknown]>
+    const fila = (llamadas[0][0] as Array<Record<string, unknown>>)[0]
+    expect(String(fila.input_summary)).toHaveLength(2001)
+    expect(llamadas[1][0]).toMatchObject({ entrada: largo, salida: 'la respuesta' })
+    insertMock.mockClear(); fromMock.mockClear()
+    await POST(makeReq(CUERPO_DEL_PORTERO))
+    expect(((insertMock.mock.calls as unknown as Array<[Array<Record<string, unknown>>]>)[0][0])[0].input_summary).toBeNull()
+  })
   it('el cambio es SOLO ese campo: las demás columnas de la fila son las de antes', async () => {
     const { POST } = await importRoute()
     await POST(makeReq(CUERPO_DEL_PORTERO))
-    expect(Object.keys(ultimaFila()).sort()).toEqual(['agent_id', 'agent_name', 'client_id', 'command', 'cost_usd', 'ended_at', 'error_message', 'exit_code', 'journey_id', 'metadata', 'model', 'num_turns', 'output_summary', 'session_id', 'started_at', 'status', 'task_id', 'tokens_cache_creation', 'tokens_cache_read', 'tokens_input', 'tokens_output', 'workflow_execution_id', 'workflow_id'])
+    expect(Object.keys(ultimaFila()).sort()).toEqual(['agent_id', 'agent_name', 'client_id', 'command', 'cost_usd', 'ended_at', 'error_message', 'exit_code', 'input_summary', 'journey_id', 'metadata', 'model', 'num_turns', 'output_summary', 'session_id', 'started_at', 'status', 'task_id', 'tokens_cache_creation', 'tokens_cache_read', 'tokens_input', 'tokens_output', 'workflow_execution_id', 'workflow_id'])
   })
 })

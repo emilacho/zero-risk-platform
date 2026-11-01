@@ -10,6 +10,7 @@ import { checkLlaveDeLaSala, esObjeto, puertosReales } from '@/lib/oficina/ruta'
 import { revisarPasosMuertos, vencerBandeja, vencerMesasPorPlazo } from '@/lib/oficina/vigia'
 import { reintentoDeLaCadena } from '@/lib/oficina/reintento-adaptador'
 import { reintentarLosPendientes } from '@/lib/notas-del-dueno/ruta'
+import { purgarTextosViejos } from '@/lib/oficina/purgar-textos'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -36,7 +37,8 @@ export async function POST(request: Request) {
     const notas = process.env.NOTAS_DEL_DUENO === '1' ? await reintentarLosPendientes(request) : undefined
     // ③ el reintento de piezas va DESPUÉS de lo demás y nunca lanza: si falla, el vencimiento de la bandeja y los pasos muertos ya quedaron hechos
     const reintento = await reintentoDeLaCadena(db, env, { ejecutar: true })
-    return NextResponse.json({ accion: 'vigilado', vencidas: v.vencidas, mesas_vencidas_por_plazo: plazo.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres, ...(notas ? { notas_del_dueno: notas } : {}), reintento }, { status: 200 })
+    const purga = await purgarTextosViejos(db, ahora)
+    return NextResponse.json({ accion: 'vigilado', ...(purga.error ? { purga_de_textos_error: purga.error } : {}), vencidas: v.vencidas, mesas_vencidas_por_plazo: plazo.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres, ...(notas ? { notas_del_dueno: notas } : {}), reintento }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'oficina_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
