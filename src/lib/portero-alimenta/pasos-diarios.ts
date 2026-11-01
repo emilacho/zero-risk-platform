@@ -25,11 +25,14 @@ const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
 const esDuplicado = (m: string | undefined) => !!m && /duplicate key|23505|unique/i.test(m)
 
 /** pone el paso «en curso». Atómico: el insert choca con la clave única si otro ya lo tomó; retomar un atascado es un update condicionado a que siga atascado. */
-export async function reclamarPaso(db: Db, a: { clientId: string; dia: string; paso: Paso; ahora: Date; workflowId?: string; ejecucionId?: string }): Promise<Reclamo> {
+/** lo que se sabe de un paso al abandonarse: de ahí sale el aviso a #alertas */
+export interface PasoAbandonado { clientId: string; dia: string; paso: Paso; intentos: number; iniciadoEn: string | null; ultimoError: string | null; ejecucionId: string | null }
+
+export async function reclamarPaso(db: Db, a: { clientId: string; dia: string; paso: Paso; ahora: Date; workflowId?: string; ejecucionId?: string; /** se llama UNA vez, solo por quien de verdad lo pasó a «abandonada» */ alAbandonar?: (p: PasoAbandonado) => Promise<unknown> }): Promise<Reclamo> {
   const ins = await db.from('cerebro_pasos_diarios').insert({ client_id: a.clientId, dia: a.dia, paso: a.paso, estado: 'en_curso', intentos: 1, iniciado_en: a.ahora.toISOString(), workflow_id: a.workflowId ?? null, workflow_execution_id: a.ejecucionId ?? null }).select('id')
   if (!ins.error) return { ok: true, id: String(lista(ins.data)[0]?.id ?? ''), intento: 1 }
   if (!esDuplicado(ins.error.message)) return { ok: false, motivo: 'error', detalle: String(ins.error.message).slice(0, 160) }
-  const ex = await db.from('cerebro_pasos_diarios').select('id, estado, intentos, iniciado_en').eq('client_id', a.clientId).eq('dia', a.dia).eq('paso', a.paso).limit(1)
+  const ex = await db.from('cerebro_pasos_diarios').select('id, estado, intentos, iniciado_en, resumen, workflow_execution_id').eq('client_id', a.clientId).eq('dia', a.dia).eq('paso', a.paso).limit(1)
   if (ex.error) return { ok: false, motivo: 'error', detalle: String(ex.error.message).slice(0, 160) }
   const f = lista(ex.data)[0]
   if (!f) return { ok: false, motivo: 'error', detalle: 'el renglón del paso existe y no se pudo leer' }
@@ -39,7 +42,12 @@ export async function reclamarPaso(db: Db, a: { clientId: string; dia: string; p
   if (Number.isFinite(desde) && a.ahora.getTime() - desde < PLAZO_DE_UN_PASO_MS) return { ok: false, motivo: 'en_curso' }
   const intentos = Number(f.intentos) || 1
   if (intentos >= MAX_INTENTOS_DE_UN_PASO) {
-    await db.from('cerebro_pasos_diarios').update({ estado: 'abandonada', terminado_en: a.ahora.toISOString() }).eq('id', String(f.id)).eq('estado', 'en_curso')
+    const ab = await db.from('cerebro_pasos_diarios').update({ estado: 'abandonada', terminado_en: a.ahora.toISOString() }).eq('id', String(f.id)).eq('estado', 'en_curso').select('id')
+    // el aviso lo da SOLO quien logró el cambio (si dos llegan a la vez, una sola ve la fila): un incidente, un aviso
+    if (!ab.error && lista(ab.data).length && a.alAbandonar) {
+      const errs = f.resumen && typeof f.resumen === 'object' && Array.isArray((f.resumen as Fila).errores) ? ((f.resumen as Fila).errores as unknown[]).map(String) : []
+      await a.alAbandonar({ clientId: a.clientId, dia: a.dia, paso: a.paso, intentos, iniciadoEn: typeof f.iniciado_en === 'string' ? f.iniciado_en : null, ultimoError: errs.length ? errs[errs.length - 1] : null, ejecucionId: typeof f.workflow_execution_id === 'string' ? f.workflow_execution_id : null }).catch(() => undefined)
+    }
     return { ok: false, motivo: 'abandonada' }
   }
   // retomar: solo gana quien encuentra el renglón todavía atascado con el mismo intento
@@ -71,4 +79,17 @@ export async function siguientePaso(db: Db, a: { clientes: string[]; dia: string
     }
   }
   return { ok: true, siguiente: pendientes[0] ?? null, pendientes: pendientes.length }
+}
+
+/** el texto del aviso a #alertas: quién, qué paso, qué día, el último error y cómo reintentar (una línea de contexto + una de acción) */
+export function textoDelAvisoDePasoAbandonado(p: PasoAbandonado): string {
+  const error = p.ultimoError ? p.ultimoError.slice(0, 200) : 'la llamada se cortó antes de cerrar el paso (no dejó error)'
+  return `⚠️ Paso abandonado tras ${p.intentos} intentos · cliente ${p.clientId} · paso ${p.paso} · día ${p.dia}. Último error: ${error}. Para reintentar: POST /api/brain/alimentar/redes {"client_id":"${p.clientId}","paso":"${p.paso}","dry_run":false,"reintentar":true,"workflow_id":"…","workflow_execution_id":"…"}.`
+}
+
+/** reabre un paso ABANDONADO de hoy para que la siguiente llamada lo corra (intentos desde 1); no toca uno hecho ni uno en curso */
+export async function reabrirPaso(db: Db, a: { clientId: string; dia: string; paso: Paso }): Promise<{ ok: boolean; reabierto: boolean; detalle?: string }> {
+  const r = await db.from('cerebro_pasos_diarios').update({ estado: 'en_curso', intentos: 1, iniciado_en: '1970-01-01T00:00:00Z', terminado_en: null }).eq('client_id', a.clientId).eq('dia', a.dia).eq('paso', a.paso).eq('estado', 'abandonada').select('id')
+  if (r.error) return { ok: false, reabierto: false, detalle: String(r.error.message).slice(0, 160) }
+  return { ok: true, reabierto: lista(r.data).length > 0 }
 }

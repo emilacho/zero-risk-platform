@@ -250,8 +250,8 @@ describe('2b · transcripción de los videos guardados', () => {
     expect(b.urls[0]).toContain(`client_id=eq.${CID}`)
     expect(b.urls[0]).toContain('archivo_borrado_en=is.null')
   })
-  it('omite lo que el servicio no admite (más de 24 MB, más de 10 min) sin llamar al servicio', async () => {
-    const a = almacenFalso([v(1, { bytes: 30_000_000 }), v(2, { duracion_s: 700 })], () => 'no debería llamarse')
+  it('omite lo que no se puede transcribir (más de 10 min si es chico; más de 30 min si es grande) sin llamar al servicio', async () => {
+    const a = almacenFalso([v(1, { bytes: 30_000_000, duracion_s: 2000 }), v(2, { duracion_s: 700 })], () => 'no debería llamarse')
     const r = await transcribirVideos({ clientId: null, ...BASE, fetchImpl: a.traer })
     expect(r.omitidos.map((o) => o.post_id)).toEqual(['p1', 'p2'])
     expect(a.whisperLlamadas()).toBe(0)

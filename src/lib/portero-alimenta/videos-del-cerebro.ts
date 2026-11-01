@@ -141,8 +141,8 @@ export function rutaDeFfmpeg(): string | null {
   try { return (require('@ffmpeg-installer/ffmpeg') as { path?: string }).path ?? null } catch { return null }
 }
 
-type Ejecutar = (cmd: string, args: string[], tiempoMs: number) => Promise<{ ok: boolean; salida: string }>
-const ejecutarReal: Ejecutar = (cmd, args, tiempoMs) => new Promise((res) => {
+export type Ejecutar = (cmd: string, args: string[], tiempoMs: number) => Promise<{ ok: boolean; salida: string }>
+export const ejecutarReal: Ejecutar = (cmd, args, tiempoMs) => new Promise((res) => {
   execFile(cmd, args, { timeout: tiempoMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => res({ ok: !err, salida: `${stdout}${stderr}` }))
 })
 

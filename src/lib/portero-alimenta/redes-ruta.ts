@@ -1,23 +1,24 @@
 /**
  * Un paso diario de redes de principio a fin: reclamarlo → correrlo → cerrarlo (hecha solo al terminar). Lo usan la ruta POST (un cliente y un paso) y el cron GET (el siguiente pendiente).
  */
-import { cerrarPaso, reclamarPaso, siguientePaso, type Paso } from './pasos-diarios'
+import { cerrarPaso, reabrirPaso, reclamarPaso, siguientePaso, type Paso, type PasoAbandonado } from './pasos-diarios'
 import { correrPasoDeRedes, tendenciasEncendidas, type EntradaDePasoDeRedes } from './redes-del-cliente'
 import { clientesActivos } from './clientes'
 
 type Db = EntradaDePasoDeRedes['db']
-export interface DepsDePaso { db: Db; ahora: Date; env?: Record<string, string | undefined>; fetch?: EntradaDePasoDeRedes['fetch']; llamarModelo?: (clientId: string, workflowId: string, ejecucionId: string) => EntradaDePasoDeRedes['llamarModelo']; registro?: (workflowId: string, ejecucionId: string) => EntradaDePasoDeRedes['registro'] }
+export interface DepsDePaso { db: Db; ahora: Date; /** el aviso a #alertas cuando un paso queda abandonado (un incidente, un aviso) */ alAbandonar?: (p: PasoAbandonado) => Promise<unknown>; env?: Record<string, string | undefined>; fetch?: EntradaDePasoDeRedes['fetch']; llamarModelo?: (clientId: string, workflowId: string, ejecucionId: string) => EntradaDePasoDeRedes['llamarModelo']; registro?: (workflowId: string, ejecucionId: string) => EntradaDePasoDeRedes['registro'] }
 
 export type RespuestaDePaso =
   | { ok: true; estado: 'apagado' | 'seco' | 'no_hay_pendientes' | 'no_se_reclamo'; paso?: Paso; client_id?: string; motivo?: string; pendientes?: number }
   | { ok: boolean; estado: 'hecha' | 'con_errores'; paso: Paso; client_id: string; intento: number; gasto_usd: number; errores: string[]; resumen: Record<string, unknown>; rastro_cerrado: boolean }
   | { ok: false; estado: 'error'; detalle: string }
 
-export async function correrUnPaso(d: DepsDePaso, a: { clientId: string; paso: Paso; workflowId: string; ejecucionId: string; dry_run: boolean }): Promise<RespuestaDePaso> {
+export async function correrUnPaso(d: DepsDePaso, a: { clientId: string; paso: Paso; workflowId: string; ejecucionId: string; dry_run: boolean; /** reabre antes un paso ABANDONADO de hoy */ reintentar?: boolean }): Promise<RespuestaDePaso> {
   if (!tendenciasEncendidas(d.env)) return { ok: true, estado: 'apagado', paso: a.paso, client_id: a.clientId, motivo: 'PORTERO_TENDENCIAS está apagado: no se hizo nada' }
   const dia = d.ahora.toISOString().slice(0, 10)
   if (a.dry_run) return { ok: true, estado: 'seco', paso: a.paso, client_id: a.clientId, motivo: 'en seco no se reclama ni se escribe nada' }
-  const rec = await reclamarPaso(d.db, { clientId: a.clientId, dia, paso: a.paso, ahora: d.ahora, workflowId: a.workflowId, ejecucionId: a.ejecucionId })
+  if (a.reintentar) { const ab = await reabrirPaso(d.db, { clientId: a.clientId, dia, paso: a.paso }); if (!ab.ok) return { ok: false, estado: 'error', detalle: ab.detalle ?? 'no se pudo reabrir el paso' } }
+  const rec = await reclamarPaso(d.db, { clientId: a.clientId, dia, paso: a.paso, ahora: d.ahora, workflowId: a.workflowId, ejecucionId: a.ejecucionId, alAbandonar: d.alAbandonar })
   if (!rec.ok) return rec.motivo === 'error' ? { ok: false, estado: 'error', detalle: rec.detalle ?? 'no se pudo reclamar el paso' } : { ok: true, estado: 'no_se_reclamo', paso: a.paso, client_id: a.clientId, motivo: rec.motivo }
   const r = await correrPasoDeRedes({ db: d.db, clientId: a.clientId, paso: a.paso, ahora: d.ahora, env: d.env, fetch: d.fetch, llamarModelo: d.llamarModelo?.(a.clientId, a.workflowId, a.ejecucionId), registro: d.registro?.(a.workflowId, a.ejecucionId) })
   const delPaso = r.estado === 'cliente_inexistente' ? ['el cliente no existe'] : r.errores
