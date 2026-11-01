@@ -20,6 +20,7 @@ import { construirControlDeCifras } from './control-de-cifras.mjs'
 import { construirTextoLibreDelDueno } from './texto-libre-del-dueno.mjs'
 import { construirDatosDePruebaDelFlujo } from './datos-de-prueba-del-flujo.mjs'
 import { construirCicloDelPlan } from './ciclo-del-plan.mjs'
+import { construirJefaturaConCarpeta } from './jefatura-contexto.mjs'
 import { construirSegundaMitad, escribirSegundaMitad } from './segunda-mitad.mjs'
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
 
@@ -210,6 +211,8 @@ export function construirPlaneacion() {
   construirDatosDePruebaDelFlujo(f)
   // H · 01-nov · CICLO DEL PLAN (tramo 2): reescritura sobre el plan anterior, versiones, compuerta y la segunda mitad como sub-flujo
   construirCicloDelPlan(f)
+  // I · 01-nov · la jefatura revisa con la MISMA carpeta que el redactor (resumen vivo + informes + páginas del sitio, enteros)
+  construirJefaturaConCarpeta(f)
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
   agregarNodo(f, codigo('Redactor · elegir', CODIGO_ELEGIR), 'Redactor (B4)', 440, 0)
