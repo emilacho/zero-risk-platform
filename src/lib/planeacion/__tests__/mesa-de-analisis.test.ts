@@ -86,6 +86,26 @@ describe('mesa de análisis · el informe se lee sin creerle', () => {
     expect(l.informe.startsWith(rotuloDe('voz_del_publico'))).toBe(true)
     expect(l.declara_sin_dato).toBe(true)
   })
+  it('acepta el id corto (8 hex) como lo escriben los analistas y lo expande al id completo; un corto que no casa no es cita ni «ajena» (corrida 209744)', () => {
+    const c1 = F1.slice(0, 8), c2 = F2.slice(0, 8)
+    const salida = [
+      `- Ocho marisquerías en el malecón [fichas: ${c1}, ${c2} · 2026-10-20] · riesgo`,
+      `- Segmento semanal invisible · [ficha:${c2} · ficha:${c1}]`,
+      `- Feriado largo el 2 y 3 [${c1.toUpperCase()} · 2026-11-02]`,
+      '- Esto cita un corto que no está en el material [ficha:deadbeef] · no sostiene',
+      '- Esto trae una fecha pegada 20261102 y nada más · no sostiene',
+    ].join('\n')
+    const l = leerInforme(salida, ANALISTAS.competencia, material)
+    expect(l.hallazgos).toBe(3); expect(l.lineas_sin_sosten).toBe(2)
+    expect([...l.citas].sort()).toEqual([F1, F2]); expect(l.citas_ajenas).toBe(0)
+    const cuerpo = cuerpoDelInforme({ client_id: C, analista: ANALISTAS.competencia, informe: l, fecha_de_corte: '2026-11-01T00:00:00Z', workflow_id: 'w', workflow_execution_id: 'e' })
+    expect(cuerpo?.citas.sort()).toEqual([F1, F2])
+  })
+  it('un id corto repetido entre dos fichas del material no identifica a ninguna; el UUID completo sigue mandando', () => {
+    const gemela = `${F1.slice(0, 8)}-9999-4999-8999-999999999999`
+    const l = leerInforme(`- hallazgo con corto ambiguo [${F1.slice(0, 8)}]\n- hallazgo con completo [${gemela}]`, ANALISTAS.retencion, [F1, gemela])
+    expect(l.hallazgos).toBe(1); expect(l.citas).toEqual([gemela]); expect(l.citas_ajenas).toBe(0)
+  })
   it('mercado acepta una señal con fuente Y fecha aunque no cite ficha (mira hacia afuera); los demás no', () => {
     const senal = '- Crece la demanda de X · fuente: INEC (inec.gob.ec) · fecha: 2026-09 · confianza media'
     expect(leerInforme(senal, ANALISTAS.mercado, material).hallazgos).toBe(1)

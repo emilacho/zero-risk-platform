@@ -10,8 +10,9 @@
  *   · PALANCA APAGADA POR OMISIÓN: `cadena_config.mesa_de_analisis` = { encendida: true|false, clientes: [client_id…] }. Solo gasta
  *     el cliente listado con la mesa encendida; sin fila, sin lista o con otro valor, la mesa contesta «apagada» y NO llama a nadie.
  *   · TOPES: US$ 1 por analista (nunca más de 2) y US$ 5 por mesa (la suma de los pedidos de un sobre); lo que no cabe NO se pide.
- *   · CITAS: cada hallazgo cita la ficha del cerebro en que se apoya (`[<uuid>]` del material entregado); el portero exige ≥1 cita
- *     para archivar. El tipo `mercado` mira hacia afuera (señales con fuente Y fecha, como F4) y puede no citar: entonces no se archiva
+ *   · CITAS: cada hallazgo cita la ficha del cerebro en que se apoya (`[<uuid>]` del material entregado; también vale el id corto de
+ *     8 hex si es prefijo único de una ficha del material: se expande al id completo · corrida 209744 01-nov, 3 de 5 informes se
+ *     perdían por citar corto); el portero exige ≥1 cita (completa) para archivar. El tipo `mercado` mira hacia afuera (señales con fuente Y fecha, como F4) y puede no citar: entonces no se archiva
  *     y se dice. Una cita a una ficha que no estaba en el material NO cuenta.
  *   · NADA DE PERSONAS: el analista habla del negocio, no de quién dijo qué (P7 del chequeo del plan).
  *   · IDIOMA Y TRATO: los del manual del cliente (el flujo los trae en `params.idioma` / `params.trato`); ninguna indicación de aquí los fija.
@@ -75,6 +76,9 @@ export const HALLAZGOS_ESPERADOS = { min: 3, max: 7 } as const
 export const rotuloDe = (tipo: TipoDeAnalisis): string => `[informe de análisis · ${tipo} · PROPUESTA: no es dato del cliente]`
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+/** id corto: los 8 primeros hex de una ficha, como los escriben los analistas («[ficha:9f51be94 · …]», «[6a9f94b0 · 2026-11-02]») · corrida 209744 01-nov */
+const ID_CORTO = /\b[0-9a-f]{8}\b/gi
+const LARGO_DEL_ID_CORTO = 8
 const txt = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
 
 // ─────────────────────────────────────────────────────────── la palanca
@@ -171,17 +175,38 @@ export interface InformeLeido {
 }
 const RE_LINEA_DE_LISTA = /^\s*(?:[-*•]|\d+[.)])\s+\S/
 
-/** lee la salida del analista sin creerle: cuenta hallazgos sostenidos (cita del material, o fuente+fecha si es mercado) y descarta citas ajenas */
-export function leerInforme(salida: string, analista: Analista, idsDelMaterial: ReadonlyArray<string>): InformeLeido {
-  const disponibles = new Set(idsDelMaterial.map((i) => i.toLowerCase()))
-  const texto = txt(salida)
+/** las fichas del material por id completo y por id corto (prefijo de 8): un prefijo repetido entre dos fichas no identifica a ninguna (null) */
+function indiceDelMaterial(idsDelMaterial: ReadonlyArray<string>): { completos: Set<string>; cortos: Map<string, string | null> } {
+  const completos = new Set<string>()
+  const cortos = new Map<string, string | null>()
+  for (const i of idsDelMaterial) {
+    const id = i.toLowerCase()
+    completos.add(id)
+    const corto = id.slice(0, LARGO_DEL_ID_CORTO)
+    cortos.set(corto, cortos.has(corto) && cortos.get(corto) !== id ? null : id)
+  }
+  return { completos, cortos }
+}
+
+/** las citas de un texto: UUID completos del material y también ids cortos que sean prefijo único de una ficha del material (se devuelven expandidos al id completo).
+ *  Un UUID completo que no está en el material es «ajeno»; un id corto que no casa con nada NO se cuenta (puede ser un número cualquiera, no una cita). */
+function citasDelTexto(texto: string, indice: ReturnType<typeof indiceDelMaterial>): { citas: Set<string>; ajenas: number } {
   const citas = new Set<string>()
   let ajenas = 0
-  for (const m of texto.match(UUID) ?? []) { const id = m.toLowerCase(); if (disponibles.has(id)) citas.add(id); else ajenas++ }
+  for (const m of texto.match(UUID) ?? []) { const id = m.toLowerCase(); if (indice.completos.has(id)) citas.add(id); else ajenas++ }
+  for (const m of texto.match(ID_CORTO) ?? []) { const id = indice.cortos.get(m.toLowerCase()); if (id) citas.add(id) }
+  return { citas, ajenas }
+}
+
+/** lee la salida del analista sin creerle: cuenta hallazgos sostenidos (cita del material, o fuente+fecha si es mercado) y descarta citas ajenas */
+export function leerInforme(salida: string, analista: Analista, idsDelMaterial: ReadonlyArray<string>): InformeLeido {
+  const indice = indiceDelMaterial(idsDelMaterial)
+  const texto = txt(salida)
+  const { citas, ajenas } = citasDelTexto(texto, indice)
   const lineas = texto.split(/\r?\n/).filter((l) => RE_LINEA_DE_LISTA.test(l))
   const sostenida = (l: string): boolean => {
     if (/\bsin dato\b/i.test(l)) return false
-    const conCita = (l.match(UUID) ?? []).some((m) => disponibles.has(m.toLowerCase()))
+    const conCita = citasDelTexto(l, indice).citas.size > 0
     return analista.exige === 'cita' ? conCita : conCita || contarSenales(l) > 0
   }
   const hallazgos = lineas.filter(sostenida).length
