@@ -20,11 +20,13 @@ describe('migración 202611011700 · palanca de la mesa para el cliente de prác
     expect(MIG).not.toMatch(/status = 'active'/)
     expect(MIG).toMatch(/no existe o su status no es onboarding\/active · no se enciende/)
   })
-  it('se niega sin la fila de 1500, con la palanca encendida o con lista ajena; es idempotente para el piloto', () => {
-    expect(MIG).toMatch(/no existe la palanca \(aplica antes 202611011500\)/)
-    expect(MIG).toMatch(/ya está encendida o tiene clientes .* se decide a mano, no se pisa/)
-    expect(MIG).toMatch(/ya estaba encendida solo para el cliente de práctica · nada que hacer/)
+  it('se niega sin la fila de 1500, con la palanca encendida o con lista ajena; es idempotente para el piloto (se exige la CONDICIÓN, no solo el mensaje)', () => {
+    expect(MIG).toMatch(/IF v_actual IS NULL THEN\s+RAISE EXCEPTION 'mesa_de_analisis: no existe la palanca \(aplica antes 202611011500\)/)
+    expect(MIG).toMatch(/IF v_actual ->> 'encendida' = 'true' OR jsonb_array_length\(v_clientes\) > 0 THEN\s+RAISE EXCEPTION 'mesa_de_analisis: la palanca ya está encendida o tiene clientes/)
+    expect(MIG).toMatch(/IF v_actual ->> 'encendida' = 'true' AND v_clientes = to_jsonb\(ARRAY\[v_cliente\]\) THEN\s+RAISE NOTICE 'mesa_de_analisis: ya estaba encendida solo para el cliente de práctica · nada que hacer';\s+RETURN;/)
     expect(MIG).toMatch(/jsonb_build_object\('encendida', true, 'clientes', to_jsonb\(ARRAY\[v_cliente\]\)\)/)
+    // el orden importa: primero «ya está así» (RETURN), después «está de otra forma» (EXCEPTION); al revés, el idempotente se negaría
+    expect(MIG.indexOf("ya estaba encendida solo para el cliente")).toBeLessThan(MIG.indexOf('ya está encendida o tiene clientes'))
   })
   it('migración y reversa nombran al MISMO cliente por id (y solo uno)', () => {
     const idMig = MIG.match(UUID)?.[0]
@@ -35,16 +37,21 @@ describe('migración 202611011700 · palanca de la mesa para el cliente de prác
     expect(REV.match(new RegExp(UUID.source, 'g'))).toHaveLength(1)
   })
   it('la reversa vuelve a {"encendida": false, "clientes": []} SOLO si el valor vivo es exactamente el de la migración', () => {
-    expect(REV).toMatch(/v_actual ->> 'encendida' = 'true' AND v_actual -> 'clientes' = to_jsonb\(ARRAY\[v_cliente\]\)/)
-    expect(REV).toMatch(/no es el que dejó 202611011700 · se decide a mano, no se pisa/)
-    expect(REV).toMatch(/'\{"encendida": false, "clientes": \[\]\}'::jsonb/)
-    expect(REV).toMatch(/ya estaba apagada · nada que hacer/)
+    expect(REV).toMatch(/IF v_actual IS NULL THEN\s+RAISE EXCEPTION 'mesa_de_analisis: no existe la palanca · nada que revertir'/)
+    expect(REV).toMatch(/IF NOT \(v_actual ->> 'encendida' = 'true' AND v_actual -> 'clientes' = to_jsonb\(ARRAY\[v_cliente\]\)\) THEN\s+RAISE EXCEPTION 'mesa_de_analisis: el valor vivo \(%\) no es el que dejó 202611011700 · se decide a mano, no se pisa'/)
+    expect(REV).toMatch(/SET valor = '\{"encendida": false, "clientes": \[\]\}'::jsonb/)
+    expect(REV).toMatch(/IF v_actual ->> 'encendida' = 'false' AND COALESCE\(jsonb_array_length\(v_actual -> 'clientes'\), 0\) = 0 THEN\s+RAISE NOTICE 'mesa_de_analisis: ya estaba apagada · nada que hacer';\s+RETURN;/)
   })
-  it('ninguno de los dos toca otra clave de cadena_config ni otra tabla', () => {
+  it('ninguno de los dos toca otra clave de cadena_config ni otra tabla: cada UPDATE es exactamente «UPDATE public.cadena_config SET valor = … WHERE clave = \'mesa_de_analisis\'»', () => {
     for (const sql of [MIG, REV]) {
-      for (const m of sql.matchAll(/UPDATE public\.(\w+)/g)) expect(m[1]).toBe('cadena_config')
-      expect(sql).not.toMatch(/DELETE|INSERT|DROP|TRUNCATE/)
-      for (const m of sql.matchAll(/WHERE clave = '(\w+)'/g)) expect(m[1]).toBe('mesa_de_analisis')
+      const updates = [...sql.matchAll(/UPDATE[\s\S]*?;/g)].map((m) => m[0].replace(/\s+/g, ' '))
+      expect(updates).toHaveLength(1)
+      expect(updates[0]).toMatch(/^UPDATE public\.cadena_config SET valor = .+ WHERE clave = 'mesa_de_analisis';$/)
+      expect(updates[0]).not.toMatch(/<>|!=|NOT IN|OR /)
+      expect(sql).not.toMatch(/\b(DELETE|INSERT|DROP|TRUNCATE|ALTER|CREATE)\b/)
+      // la única lectura de otra tabla es clients (solo SELECT 1 … WHERE id = …)
+      for (const m of sql.matchAll(/FROM public\.(\w+)/g)) expect(['cadena_config', 'clients']).toContain(m[1])
+      for (const m of sql.matchAll(/SELECT valor INTO v_actual FROM public\.cadena_config WHERE clave = '(\w+)'/g)) expect(m[1]).toBe('mesa_de_analisis')
     }
   })
 })
