@@ -2,6 +2,7 @@
  * PUERTOS DE LA JEFATURA (oficina propia) · todo lo que toca el mundo (base, GPT, Slack) entra por aquí, así el orquestador se prueba con modelo simulado y sin red (diseño v4 §1, molde de la `oficina`).
  * Los adaptadores reales (Supabase, revisor, Slack) viven aparte (J3) y NO se encienden: la jefatura nace apagada.
  */
+import type { CicloDelPlan } from './plan'
 import type { PaginasDelSitio } from './carpeta-para-revisar'
 import type { Estado, Ficha, ResultadoDelRevisor } from '../../revision-comun'
 import type { DevolverA, Marcas, PayloadDeRevision, Productor, Resultado, TipoDeRevision } from './contrato'
@@ -94,6 +95,8 @@ export interface Puertos {
   paginasDelSitio?(client_id: string): Promise<PaginasDelSitio>
   /** lo que el dueño declaró, con las frases que niega; nunca lanza */
   hechosDelDueno?(client_id: string): Promise<Array<{ tema: string; frases_negadas: string[] }>>
+  /** la versión real del plan y lo que pidió el dueño en este ciclo, leídos del plan de partida; nunca lanza */
+  cicloDelPlan?(artifact_id: string): Promise<CicloDelPlan>
   ahora(): Date
   /** el revisor ciego (otro proveedor); en `dry_run` el orquestador NO lo llama (usa la simulación) */
   revisor(p: { texto: string; imagenes_urls: string[]; dry_run: boolean; contexto: { revision_id: string; n: number; client_id: string } }): Promise<ResultadoDelRevisor>

@@ -24,6 +24,13 @@ describe('🔴 fechas', () => {
     expect(que(controlarFechas('Plan de 84 días · 16 de noviembre de 2026 – 7 de febrero de 2027', HOY), /dice 84/)).toHaveLength(0)
     expect(que(controlarFechas('Plan de 85 días · 16 de noviembre de 2026 – 7 de febrero de 2027', HOY), /dice 85/)).toHaveLength(0)
   })
+  it('2 o 3 días de diferencia sí se marcan (F3 de CC3): la tolerancia es de 1 día', () => {
+    expect(que(controlarFechas('Plan de 86 días · 16 de noviembre de 2026 – 7 de febrero de 2027', HOY), /dice 86/)).toHaveLength(1)
+    expect(que(controlarFechas('Plan de 87 días · 16 de noviembre de 2026 – 7 de febrero de 2027', HOY), /dice 87/)).toHaveLength(1)
+  })
+  it('la ficha dice cuál es su fecha de referencia y que puede cambiar', () => {
+    expect(que(controlarFechas('Plan · 2 de noviembre de 2026 – 24 de enero de 2027', HOY), /se abrió esta revisión; si se aprueba después/)).toHaveLength(1)
+  })
   it('arrancar antes de hoy se marca', () => {
     expect(que(controlarFechas('Plan · 2 de noviembre de 2026 – 24 de enero de 2027', HOY), /dice arrancar el 2026-11-02/)).toHaveLength(1)
   })

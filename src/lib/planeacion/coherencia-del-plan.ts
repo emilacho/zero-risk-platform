@@ -53,9 +53,9 @@ export function controlarFechas(texto: string, referencia: Date): HallazgoDeCohe
   const rango = rangoDelPlan(texto)
   const semanas = semanasDelPlan(texto, hoy)
   if (!rango && !semanas.length) return [{ control: 'fechas', estado: 'no_pude_comprobar', que: 'no pude leer ninguna fecha del plan: ni su rango ni sus semanas. Fechas sin comprobar', donde: 'calendario' }]
-  for (const s of semanas) if (s.desde < hoy) f.push({ control: 'fechas', estado: 'no_cuadra', que: `la semana ${s.n} empieza el ${fechaCorta(s.desde)}, antes de la fecha en que el plan puede arrancar (${fechaCorta(hoy)})`, donde: `Semana ${s.n}` })
+  for (const s of semanas) if (s.desde < hoy) f.push({ control: 'fechas', estado: 'no_cuadra', que: `la semana ${s.n} empieza el ${fechaCorta(s.desde)}, antes de la fecha en que el plan puede arrancar (${fechaCorta(hoy)}, el día en que se abrió esta revisión; si se aprueba después, hay que volver a mirarlo)`, donde: `Semana ${s.n}` })
   if (rango) {
-    if (rango.desde < hoy) f.push({ control: 'fechas', estado: 'no_cuadra', que: `el plan dice arrancar el ${fechaCorta(rango.desde)}, antes de la fecha en que puede aprobarse (${fechaCorta(hoy)})`, donde: 'encabezado del plan' })
+    if (rango.desde < hoy) f.push({ control: 'fechas', estado: 'no_cuadra', que: `el plan dice arrancar el ${fechaCorta(rango.desde)}, antes de la fecha en que puede aprobarse (${fechaCorta(hoy)}, el día en que se abrió esta revisión; si se aprueba después, hay que volver a mirarlo)`, donde: 'encabezado del plan' })
     const dias = Math.round((rango.hasta - rango.desde) / DIA_MS) + 1
     const declarada = /\b(\d{2,3})\s*(?:días|dias|days)\b/i.exec(texto)
     if (declarada && Math.abs(Number(declarada[1]) - dias) > 1) f.push({ control: 'fechas', estado: 'no_cuadra', que: `el plan dice ${declarada[1]} días, y su rango (${fechaCorta(rango.desde)} a ${fechaCorta(rango.hasta)}) tiene ${dias}`, donde: 'encabezado del plan' })
