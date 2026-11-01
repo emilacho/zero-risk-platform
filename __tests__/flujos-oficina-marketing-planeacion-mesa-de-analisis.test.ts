@@ -157,7 +157,7 @@ describe('«Redactor (B4)» · la carpeta entera', () => {
     expect(p).toContain('11111111-aaaa')
   })
   it('carpeta ilegible: se DECLARA y lo demás del cerebro se conserva', async () => {
-    const ilegible = { resumen_vivo: { estado: 'no_se_pudo_leer', detalle: 'cerebro_fichas: timeout' }, informes: [], informes_estado: 'no_se_pudo_leer', informes_detalle: 'timeout' }
+    const ilegible = { resumen_vivo: { estado: 'no_se_pudo_leer', detalle: 'lectura del cerebro: timeout' }, informes: [], informes_estado: 'no_se_pudo_leer', informes_detalle: 'timeout' }
     const p = (await b4(nuevo, [conCarpeta(ilegible, { fragmentos: [{ texto: 'FRAGMENTO-CONSERVADO' }] })])).pedido as string
     expect(p).toContain('LA CARPETA NO SE PUDO LEER')
     expect(p).toContain('FRAGMENTO-CONSERVADO')
