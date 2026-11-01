@@ -700,7 +700,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ dry_run: (($('Webhook · planeacion').first().json.body || {}).dry_run === true), agent: $json.redactor_elegido, task: $json.pedido, client_id: $json.cliente_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id, callback_url: $execution.resumeUrl, callback_mode: 'runner', force_restart: ($json.reintento_forma === true) || (($(\"Webhook · planeacion\").first().json.body || {}).force_restart === true || ($(\"Webhook · planeacion\").first().json.body || {}).forceRestart === true) }) }}",
+        "jsonBody": "={{ JSON.stringify({ dry_run: (($('Webhook · planeacion').first().json.body || {}).dry_run === true), agent: $json.redactor_elegido, task: $json.pedido, client_id: $json.cliente_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id, max_budget_usd: 2, callback_url: $execution.resumeUrl, callback_mode: 'runner', force_restart: ($json.reintento_forma === true) || (($(\"Webhook · planeacion\").first().json.body || {}).force_restart === true || ($(\"Webhook · planeacion\").first().json.body || {}).forceRestart === true) }) }}",
         "options": {
           "timeout": 60000,
           "response": {
@@ -1071,7 +1071,7 @@
         180
       ],
       "parameters": {
-        "jsCode": "// ⓪ LA LLAVE · CC#2 · relevo 15 (2026-10-08) · mismo patrón que `zero-risk/brief` y `zero-risk/pieza` (lección E67).\n// Este flujo GASTA (modelo, Apify, imagen o video) o PUBLICA hacia afuera (redes, correo). Por eso exige la llave de despacho del motor en la cabecera\n// `x-sala-dispatch-key` (la misma `SALA_DISPATCH_KEY` del entorno de n8n; no se copia a ningún otro sitio) y, si falta, se DETIENE antes de tocar nada.\n// Falla CERRADO: sin la llave en el entorno, el flujo queda cerrado. Los disparos con horario (cron) y las llamadas internas entre flujos no pasan por aquí.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta o publica y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta o publica y solo lo despierta la sala · E67.')\n}\n// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\n// 01-nov · con_analisis: pide la MESA DE ANÁLISIS (un analista por tipo · gasta hasta el tope de la puerta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst ca = w.body && typeof w.body === 'object' ? w.body.con_analisis : undefined\nif (ca !== undefined && ca !== null && typeof ca !== 'boolean') throw new Error('PLANEACION_CON_ANALISIS_INVALIDO · con_analisis solo admite true o false (llegó ' + JSON.stringify(ca).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · validar_forma: pasa el plan por el validador de forma (US$ 0) antes de guardarlo · solo true/false/ausente\nconst vf = w.body && typeof w.body === 'object' ? w.body.validar_forma : undefined\nif (vf !== undefined && vf !== null && typeof vf !== 'boolean') throw new Error('PLANEACION_VALIDAR_FORMA_INVALIDO · validar_forma solo admite true o false (llegó ' + JSON.stringify(vf).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()\n"
+        "jsCode": "// ⓪ LA LLAVE · CC#2 · relevo 15 (2026-10-08) · mismo patrón que `zero-risk/brief` y `zero-risk/pieza` (lección E67).\n// Este flujo GASTA (modelo, Apify, imagen o video) o PUBLICA hacia afuera (redes, correo). Por eso exige la llave de despacho del motor en la cabecera\n// `x-sala-dispatch-key` (la misma `SALA_DISPATCH_KEY` del entorno de n8n; no se copia a ningún otro sitio) y, si falta, se DETIENE antes de tocar nada.\n// Falla CERRADO: sin la llave en el entorno, el flujo queda cerrado. Los disparos con horario (cron) y las llamadas internas entre flujos no pasan por aquí.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta o publica y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta o publica y solo lo despierta la sala · E67.')\n}\n// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan' && pe !== 'plan_revisado') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" o \"plan_revisado\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\n// 01-nov · con_analisis: pide la MESA DE ANÁLISIS (un analista por tipo · gasta hasta el tope de la puerta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst ca = w.body && typeof w.body === 'object' ? w.body.con_analisis : undefined\nif (ca !== undefined && ca !== null && typeof ca !== 'boolean') throw new Error('PLANEACION_CON_ANALISIS_INVALIDO · con_analisis solo admite true o false (llegó ' + JSON.stringify(ca).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · validar_forma: pasa el plan por el validador de forma (US$ 0) antes de guardarlo · solo true/false/ausente\nconst vf = w.body && typeof w.body === 'object' ? w.body.validar_forma : undefined\nif (vf !== undefined && vf !== null && typeof vf !== 'boolean') throw new Error('PLANEACION_VALIDAR_FORMA_INVALIDO · validar_forma solo admite true o false (llegó ' + JSON.stringify(vf).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()\n"
       }
     },
     {
@@ -3897,6 +3897,50 @@
       }
     },
     {
+      "id": "e1bf7607-8126-1861-7969-c870f510cac4",
+      "position": [
+        6670,
+        1240
+      ],
+      "typeVersion": 2,
+      "name": "Parar · ¿plan revisado?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ (function () { try { return $('Webhook · planeacion').first().json.body.parar_en } catch (e) { return null } })() }}",
+              "rightValue": "plan_revisado",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4ffd1e51-340d-ea0d-2d4f-7943d4cf0a15",
+      "position": [
+        6890,
+        1360
+      ],
+      "typeVersion": 2,
+      "name": "Parar · resumen (plan revisado)",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// PARAR · RESUMEN (plan revisado) · la corrida pidió detenerse DESPUÉS de la jefatura (parar_en = plan_revisado): el plan vigente ya quedó elegido; NO sigue el PDF a Drive, ni el brief, ni nada de lo que cuelga de ahí.\nconst g = $input.first().json || {}\nconst fila = Array.isArray(g) ? g[0] : (Array.isArray(g.body) ? g.body[0] : (g.body || g))\nlet jef = {}\ntry { jef = $('JEF · aplicar').first().json.jef || {} } catch (e) { jef = {} }\nreturn [{ json: { parado_en: 'plan_revisado', plan_vigente_id: fila && fila.id ? fila.id : null, jefatura_fase: jef.fase || null, redactor: (function () { try { return $('Redactor · elegir').last().json.redactor_elegido || null } catch (e) { return null } })() } }]\n"
+      }
+    },
+    {
       "id": "1c17bb5d-80ac-f843-1b6b-094939a408b2",
       "position": [
         2080,
@@ -5124,7 +5168,7 @@
             "index": 0
           },
           {
-            "node": "Plan → Drive (PDF)",
+            "node": "Parar · ¿plan revisado?",
             "type": "main",
             "index": 0
           },
@@ -5746,6 +5790,24 @@
             "node": "Junta · esperar los 3 brazos",
             "type": "main",
             "index": 4
+          }
+        ]
+      ]
+    },
+    "Parar · ¿plan revisado?": {
+      "main": [
+        [
+          {
+            "node": "Parar · resumen (plan revisado)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan → Drive (PDF)",
+            "type": "main",
+            "index": 0
           }
         ]
       ]

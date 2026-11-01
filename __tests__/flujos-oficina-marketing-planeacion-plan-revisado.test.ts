@@ -1,0 +1,73 @@
+/**
+ * 01-nov · `parar_en: 'plan_revisado'` + tope del redactor (encargo de CC1 · PRESUPUESTO-CC1-corrida-corta-del-plan). US$ 0, sin red.
+ * Se ejecuta el CÓDIGO REAL de «⓪ Llave», de «Parar · ¿plan revisado?» y de su resumen del flujo nuevo (`X9F0zp6LQ2xGEYVS`).
+ * Lo que fija: el corte cae DESPUÉS de la jefatura y ANTES del PDF a Drive (que es la puerta al brief); las ramas laterales de la revisión
+ * (marca de «revisión incompleta», aviso de plan con pendientes) siguen colgando de «Plan vigente»; sin el valor, el camino al PDF es el de hoy.
+ */
+import fs from 'node:fs'
+import path from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { recorrer } from './_emulador-n8n'
+
+const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
+const leer = (c: 'vivo' | 'nuevo') => JSON.parse(fs.readFileSync(path.join(RAIZ, c, 'X9F0zp6LQ2xGEYVS.json'), 'utf8'))
+const vivo = leer('vivo'), nuevo = leer('nuevo')
+const CLIENTE = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
+const ENV = { SALA_DISPATCH_KEY: 'k-sala' }
+const web = (body: Record<string, unknown>) => ({ headers: { 'x-sala-dispatch-key': 'k-sala' }, body })
+const WEBHOOK = (body: Record<string, unknown>) => ({ 'Webhook · planeacion': [web(body)] })
+const salidas = (f: any, n: string) => (f.connections[n]?.main ?? []).map((g: any[]) => g.map((c) => c.node))
+
+describe('«⓪ Llave» admite plan_revisado', () => {
+  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?'] })
+  it('«plan_revisado» y «guardar_plan» pasan; cualquier otro valor DETIENE antes de gastar', async () => {
+    for (const ok of ['plan_revisado', 'guardar_plan']) expect((await llave({ client_id: CLIENTE, parar_en: ok })).ultimo).toBe('V9 · ¿pide el pre-vuelo?')
+    for (const raro of ['plan_revisad', 'PLAN_REVISADO', 'jefatura', '', 0, true, ['plan_revisado']]) await expect(llave({ client_id: CLIENTE, parar_en: raro })).rejects.toThrow(/PLANEACION_PARAR_EN_INVALIDO/)
+  })
+})
+
+describe('el cableado del corte', () => {
+  it('«Plan vigente» sigue con sus ramas laterales y el PDF solo se alcanza pasando por el corte', () => {
+    expect(salidas(vivo, 'Plan vigente')[0]).toEqual(['JEF · plan · armar la marca', 'Plan → Drive (PDF)', 'Aviso · plan con pendientes'])
+    expect(salidas(nuevo, 'Plan vigente')[0]).toEqual(['JEF · plan · armar la marca', 'Parar · ¿plan revisado?', 'Aviso · plan con pendientes'])
+    expect(salidas(nuevo, 'Parar · ¿plan revisado?')).toEqual([['Parar · resumen (plan revisado)'], ['Plan → Drive (PDF)']])
+    const haciaElPdf = Object.entries(nuevo.connections).filter(([, c]: any) => JSON.stringify(c).includes('"Plan → Drive (PDF)"')).map(([de]) => de)
+    expect(haciaElPdf).toEqual(['Parar · ¿plan revisado?'])
+  })
+  it('«Parar · resumen (plan revisado)» es un final: no conecta con nada', () => {
+    expect(nuevo.connections['Parar · resumen (plan revisado)']).toBeUndefined()
+  })
+  it('el corte «guardar_plan» de antes no se tocó', () => {
+    expect(salidas(nuevo, 'Parar · ¿corta aquí?')).toEqual(salidas(vivo, 'Parar · ¿corta aquí?').length ? salidas(vivo, 'Parar · ¿corta aquí?') : [['Parar · resumen'], ['JEF · armar']])
+  })
+})
+
+describe('la compuerta después de «Plan vigente»', () => {
+  const vigente = { id: 'plan-7' }
+  it('con «plan_revisado» la corrida termina en el resumen y NO llega al PDF, al cable ni al brief', async () => {
+    const r = await recorrer(nuevo, 'Parar · ¿plan revisado?', vigente, { previos: WEBHOOK({ parar_en: 'plan_revisado' }), hasta: ['Plan → Drive (PDF)'] })
+    expect(r.pasos).toEqual(['Parar · ¿plan revisado?', 'Parar · resumen (plan revisado)'])
+    expect(r.item).toEqual({ parado_en: 'plan_revisado', plan_vigente_id: 'plan-7', jefatura_fase: null, redactor: null })
+  })
+  it('con «guardar_plan», sin parar_en, null o en un disparo que no es webhook, sigue al PDF como hoy', async () => {
+    for (const p of [WEBHOOK({ parar_en: 'guardar_plan' }), WEBHOOK({ client_id: CLIENTE }), WEBHOOK({ parar_en: null }), {}]) {
+      const r = await recorrer(nuevo, 'Parar · ¿plan revisado?', vigente, { previos: p, hasta: ['Plan → Drive (PDF)'] })
+      expect(r.pasos).toEqual(['Parar · ¿plan revisado?', 'Plan → Drive (PDF)'])
+    }
+  })
+})
+
+describe('el tope del redactor', () => {
+  it('«Pedir el plan al redactor» manda max_budget_usd: 2 y el resto del cuerpo no cambia', async () => {
+    const cuerpo = async (flujo: any) => {
+      let visto: any = null
+      await recorrer(flujo, 'Pedir el plan al redactor', { pedido: 'P', cliente_id: CLIENTE, redactor_elegido: 'campaign-brief-agent' }, { env: ENV, http: async (_u: any, _h: any, c: any) => { visto = c; return { statusCode: 200, body: {} } }, previos: WEBHOOK({ dry_run: true }), hasta: ['Esperar al redactor'] })
+      return visto
+    }
+    const n = await cuerpo(nuevo), v = await cuerpo(vivo)
+    expect(v.max_budget_usd).toBeUndefined()
+    expect(n.max_budget_usd).toBe(2)
+    const { max_budget_usd, ...resto } = n
+    expect(resto).toEqual(v)
+  })
+})

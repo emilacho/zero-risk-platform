@@ -116,7 +116,10 @@ describe('encendido · contra la ruta real', () => {
     }
     for (const fr of [false, true, undefined]) {
       const body = { client_id: CLIENTE, ...(fr === undefined ? {} : { force_restart: fr }) }
-      expect(await cuerpoDe(nuevo, BASE, body)).toEqual(await cuerpoDe(vivo, BASE, body))
+      // 01-nov · lo único nuevo en el cuerpo es el tope del redactor (max_budget_usd: 2)
+      const { max_budget_usd, ...resto } = await cuerpoDe(nuevo, BASE, body)
+      expect(max_budget_usd).toBe(2)
+      expect(resto).toEqual(await cuerpoDe(vivo, BASE, body))
     }
     const reintento = await cuerpoDe(nuevo, { ...BASE, pedido: 'P2', reintento_forma: true }, { client_id: CLIENTE, force_restart: false })
     expect(reintento).toMatchObject({ force_restart: true, task: 'P2', agent: 'campaign-brief-agent', client_id: CLIENTE })
