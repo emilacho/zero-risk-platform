@@ -47,8 +47,8 @@ describe('palabras prohibidas · contexto de marca', () => {
     expect(c).not.toMatch(/búsqueda literal · puede ser/)
   })
   it('solo cambian los nodos previstos frente al vivo respaldado', () => {
-    expect(cambiados(leer('vivo', BRIEF), leer('nuevo', BRIEF))).toEqual(['③ Armar el cuerpo del redactor', '④ Chequeos'])
-    expect(cambiados(leer('vivo', PIEZA), leer('nuevo', PIEZA))).toEqual(['⑤ Armar el cuerpo del productor', '⑦ Chequeos'])
+    expect(cambiados(leer('vivo', BRIEF), leer('nuevo', BRIEF))).toEqual(['① Cargar manual vigente', '① GUARDA · sin manual aprobado se DETIENE', '③ Armar el cuerpo del redactor', '④ Chequeos']) // + parte 4 del manual (eslogan real): select, guarda y armado — se prueba aparte
+    expect(cambiados(leer('vivo', PIEZA), leer('nuevo', PIEZA))).toEqual(['② Cargar el manual vigente', '② GUARDA · sin manual aprobado se DETIENE', '⑤ Armar el cuerpo del productor', '⑦ Chequeos']) // + parte 4 del manual (eslogan real)
     const parte = cambiados(leer('vivo', PARTE), leer('nuevo', PARTE))
     expect(parte).toContain('③ Armar el cuerpo del redactor')
     expect(parte).toContain('④ Chequeos')
