@@ -32,10 +32,10 @@ const consolidar = async (flujo: any, ed: Record<string, unknown>, st: Record<st
 }
 
 describe('palabras con intención · alcance', () => {
-  it('solo cambian «[BB] Fan-out prep» y «[BB] Consolidador»; Promote prep queda igual', () => {
+  it('esta parte cambia «[BB] Fan-out prep» y «[BB] Consolidador» (el archivo acumula la parte 2, que toca solo al juez); Promote prep queda igual', () => {
     const v = new Map(vivo.nodes.map((n: any) => [n.name, JSON.stringify(n)]))
     expect(nuevo.nodes.length).toBe(vivo.nodes.length)
-    expect(nuevo.nodes.filter((n: any) => v.get(n.name) !== JSON.stringify(n)).map((n: any) => n.name).sort()).toEqual(['[BB] Consolidador', '[BB] Fan-out prep'])
+    expect(nuevo.nodes.filter((n: any) => v.get(n.name) !== JSON.stringify(n)).map((n: any) => n.name).sort()).toEqual(['[BB] Consolidador', '[BB] Fan-out prep', '[BB] Judge · run-sdk'])
     expect(codigo(nuevo, '[BB] Promote prep')).toBe(codigo(vivo, '[BB] Promote prep'))
     expect(codigo(nuevo, '[BB] Promote prep')).toContain('Object.assign({}, draft')
   })
@@ -69,7 +69,7 @@ describe('palabras con intención · consolidador (código real)', () => {
       { texto: 'cura', intencion: 'legal', porque: 'no es un producto médico', fuente: { cita: 'Art. 5 de la norma', origen: 'web del cliente' } },
     ])
   })
-  it('legal sin cita ⇒ estilo; del_dueno sin cita y fecha ⇒ estilo; del_dueno con ambas se respeta; intención rara ⇒ estilo', async () => {
+  it('legal sin cita ⇒ estilo; CUALQUIER del_dueno de una lente ⇒ estilo (aun con cita y fecha: lo del dueño entra solo por su puerta); intención rara ⇒ estilo', async () => {
     const b = await consolidar(nuevo, {
       palabras_con_intencion: [
         { texto: 'a', intencion: 'legal', porque: 'p' },
@@ -78,8 +78,9 @@ describe('palabras con intención · consolidador (código real)', () => {
         { texto: 'd', intencion: 'bloqueo_total', porque: 'p' },
       ],
     })
-    expect(b.palabras_con_intencion.map((x: any) => [x.texto, x.intencion])).toEqual([['a', 'estilo'], ['b', 'estilo'], ['c', 'del_dueno'], ['d', 'estilo']])
+    expect(b.palabras_con_intencion.map((x: any) => [x.texto, x.intencion])).toEqual([['a', 'estilo'], ['b', 'estilo'], ['c', 'estilo'], ['d', 'estilo']])
     expect(b.palabras_con_intencion[0].fuente).toBeUndefined()
+    expect(b.palabras_con_intencion[2].fuente).toBeUndefined() // el estilo no arrastra una cita ajena
   })
   it('dos lentes nombran la misma palabra: una sola entrada, y gana la legal con cita', async () => {
     const b = await consolidar(
