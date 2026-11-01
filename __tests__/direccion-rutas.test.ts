@@ -234,6 +234,17 @@ describe('corridas', () => {
     expect([...porId.get(a)!.clientes_nombres].sort()).toEqual(['Dos', 'Uno'])
     expect(porId.get(b)).toMatchObject({ clientes: [C1], pasos: 1 })
   })
+  it('🔴 los identificadores largos tienen tope, también con esos prefijos', () => {
+    expect(ID_DE_EJECUCION.test('vercel-cron:a:b:c:d:e')).toBe(true)
+    expect(ID_DE_EJECUCION.test('vercel-cron:a:b:c:d:e:f')).toBe(false)
+  })
+  it('🔴 un cliente repetido sale una sola vez, y client_id sigue siendo el primero para quien ya lo lee', async () => {
+    const fila = (id: string, client_id: string, started_at: string) => ({ id, workflow_id: 'wf', workflow_execution_id: 'vercel-cron:x:1', client_id, agent_name: 'x', status: 'ok', cost_usd: 0, started_at, ended_at: started_at })
+    const r = await leerCorridas(ctx(base().semilla('agent_invocations', [fila('1', C2, '2026-11-01T14:03:00Z'), fila('2', C1, '2026-11-01T14:02:00Z'), fila('3', C2, '2026-11-01T14:01:00Z')])))
+    expect(r.corridas[0].clientes).toEqual([C2, C1])
+    expect(r.corridas[0].client_id).toBe(C2)
+    expect(r.corridas[0].cliente).toBe('Dos')
+  })
   it('🔴 el detalle de una corrida de mantenimiento trae solo la suya', async () => {
     const fila = (id: string, workflow_execution_id: string) => ({ id, workflow_id: 'wf', workflow_execution_id, client_id: C1, agent_name: 'x', status: 'ok', cost_usd: 0, started_at: '2026-11-01T14:00:00Z', ended_at: '2026-11-01T14:01:00Z' })
     const a = 'vercel-cron:etiquetar-pendientes:2026-11-01T14:52', b = 'vercel-cron:etiquetar-pendientes:2026-11-01T14:56'
