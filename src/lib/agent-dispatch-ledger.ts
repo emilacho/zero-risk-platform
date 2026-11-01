@@ -21,7 +21,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const DISPATCHES_TABLE = 'agent_dispatches'
 
-export type DispatchStatus = 'accepted' | 'running' | 'completed' | 'error'
+/** `sin_cierre` lo pone solo el ciclo de vida de los incidentes: nunca registró su final y ya no cuenta como en curso */
+export type DispatchStatus = 'accepted' | 'running' | 'completed' | 'error' | 'sin_cierre'
 
 export interface DispatchIntent {
   /** Key explícito del caller (si lo manda) · si no, se deriva. */

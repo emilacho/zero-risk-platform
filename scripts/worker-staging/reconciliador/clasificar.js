@@ -81,6 +81,8 @@ function clasificarDespacho(despacho, invocacion, intentos, ahora, params) {
   }
 
   if (despacho.status === 'completed') return salir('ok')
+  // 01-nov · ya lo cerró el ciclo de vida de los incidentes, con su motivo: deja de ser un hallazgo
+  if (despacho.status === 'sin_cierre') return salir('ok')
 
   if (despacho.status === 'error') {
     if (ok.length) return salir('error_entregado')
