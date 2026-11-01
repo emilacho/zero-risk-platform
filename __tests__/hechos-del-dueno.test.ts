@@ -9,6 +9,7 @@ import { adjuntoDelCliente } from '../src/lib/portero-alimenta/contexto-del-clie
 import { textoDeLaCarpeta } from '../src/lib/jefatura/revision/carpeta-para-revisar'
 import { abrirRevision, fichasDeLoNegado } from '../src/lib/jefatura/revision/orquestador'
 import { puertosDePrueba, sobre } from './_helpers/jefatura-revision'
+import { crearPuertos } from '../src/lib/jefatura/revision/adaptadores'
 
 const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const MARISCO = { tema: 'origen del marisco', frases_negadas: ['marisco de Olón', 'pescado del día de Olón'] }
@@ -52,6 +53,22 @@ describe('🔴 viaja en la carpeta', () => {
     const t = textoDeLaCarpeta(c)
     expect(t).toMatch(/Hechos que declaró el dueño \(mandan sobre cualquier otra fuente\)/)
     expect(t).toMatch(/origen del marisco: viene de Manta · frases que niega: «marisco de Olón»/)
+  })
+  it('🔴 con los puertos REALES sobre una base falsa, el control sí ve la frase negada (H14 de CC3)', async () => {
+    const db = new DbFalsa().semilla('cerebro_fichas', [ficha({})]).semilla('client_brand_books', [])
+    const reales = crearPuertos(db as never, {} as never)
+    const hechos = await reales.hechosDelDueno!(C)
+    expect(hechos).toEqual([expect.objectContaining({ tema: 'origen del marisco', frases_negadas: ['marisco de Olón'] })])
+    expect(fichasDeLoNegado('Nuestro marisco de Olón', hechos)[0]).toMatchObject({ gravedad: 'bloquea' })
+  })
+  it('una lectura caída no tumba la revisión', async () => {
+    const reales = crearPuertos({ from() { throw new Error('caída') } } as never, {} as never)
+    expect(await reales.hechosDelDueno!(C)).toEqual([])
+  })
+  it('el hecho conserva su sede, y el revisor la lee (H15 de CC3)', async () => {
+    const c = await adjuntoDelCliente(new DbFalsa().semilla('cerebro_fichas', [ficha({ sede: 'loja' })]).semilla('client_brand_books', []) as never, C)
+    expect(c.hechos_del_dueno![0].sede).toBe('loja')
+    expect(textoDeLaCarpeta(c)).toMatch(/sede loja · origen del marisco/)
   })
   it('lo retirado o de otro cliente no viaja; sin hechos, el campo no aparece', async () => {
     const db = new DbFalsa().semilla('cerebro_fichas', [ficha({ id: 'a', retirada_en: '2026-10-20T00:00:00Z' }), ficha({ id: 'b', client_id: 'otro' })]).semilla('client_brand_books', [])
