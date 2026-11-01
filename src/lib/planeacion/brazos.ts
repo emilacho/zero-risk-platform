@@ -528,6 +528,8 @@ export async function brazoCarpeta(args: {
         return {
           hay: false as const,
           motivo: 'fui, miré y no hay: el cliente no tiene carpeta todavía (ni resumen vivo ni informes vigentes de la mesa de análisis) · el portero la arma; el plan no busca por parecido',
+          // la carpeta vacía viaja igual (contrato con CC2: el flujo la lee también en `sin_dato`)
+          datos: { contexto_del_cliente: ctx, material_citado: c.material_citado, carpeta: { resumen_vivo: ctx.resumen_vivo.estado, informes: 0, informes_estado: ctx.informes_estado ?? 'ok' } },
         }
       }
       return {

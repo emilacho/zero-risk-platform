@@ -20,8 +20,11 @@
  *     tablas del cerebro, solo sus funciones públicas);
  *   · `carpeta`: el estado en una línea (para el registro).
  * Sin resumen vivo y sin informes es `sin_dato` (el portero todavía no armó la carpeta: información
- * real para el plan); que la lectura se rompa es `sin_respuesta`. `params.k` / `params.secciones` /
- * `params.query` de la búsqueda vieja se aceptan y se IGNORAN (se declara en `fuente`).
+ * real para el plan) y la carpeta vacía viaja igual en `datos` (contrato con CC2: el flujo la lee
+ * también en `sin_dato`); que la lectura se rompa es `sin_respuesta`. `params.con_carpeta` (el
+ * interruptor del flujo, PROPUESTA-CC2 01-nov) se acepta: la carpeta va SIEMPRE, con o sin él.
+ * `params.k` / `params.secciones` / `params.query` de la búsqueda vieja se aceptan y se IGNORAN
+ * (se declara en `fuente`); los fragmentos por parecido ya no vuelven en ningún caso.
  */
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
