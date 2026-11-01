@@ -29,6 +29,41 @@ const soloLectura = (db: DbFalsa): DbFalsa => {
 }
 const ctx = (db: DbFalsa, extra: Partial<Contexto> = {}): Contexto => ({ db: soloLectura(db), ahora: () => AHORA, env: {}, ...extra })
 
+describe('Pedir cambios sin versión nueva (01-nov · adenda 5)', () => {
+  const NOW = '2026-11-01T14:00:00Z'
+  const VIEJO = '2026-10-01T14:00:00Z'
+  const pedido = (id: string, estado: string, actualizado_en: string, despertar_detalle: string | null = null, client_id = C1) => ({ id, client_id, estado, despertar_detalle, actualizado_en, despertado: true })
+  const plan = (id: string, created_at: string, tag: Record<string, unknown> = {}) => ({ id, client_id: C1, output_type: 'campaign_plan_90d', provenance_tag: tag, created_at })
+  const ids = (r: { riesgos: Array<{ id: string }> }) => r.riesgos.map((x) => x.id)
+  it('🔴 sin cambios reales: lo dice claro, con su motivo', async () => {
+    const r = await leerRiesgos(ctx(base().semilla('plan_cambios', [pedido('c1', 'fallido', NOW, 'sin cambios reales: el redactor devolvió el mismo plan')])))
+    const x = r.riesgos.find((y) => y.id === 'cambios-sin-version:c1')
+    expect(x?.titulo).toMatch(/mismo texto/)
+    expect(x?.detalle).toMatch(/sin cambios reales/)
+  })
+  it('🔴 otra falla no se presenta como «mismo texto»', async () => {
+    const r = await leerRiesgos(ctx(base().semilla('plan_cambios', [pedido('c1', 'fallido', NOW, 'se agotó el tope')])))
+    expect(r.riesgos.find((y) => y.id === 'cambios-sin-version:c1')?.titulo).not.toMatch(/mismo texto/)
+  })
+  it('🔴 si después salió bien, ya no es un riesgo; otro cliente no lo tapa', async () => {
+    const r = await leerRiesgos(ctx(base().semilla('plan_cambios', [pedido('c1', 'fallido', '2026-11-01T10:00:00Z', 'x'), pedido('c2', 'aplicado', NOW), pedido('c3', 'fallido', '2026-11-01T09:00:00Z', 'y', C2)])))
+    expect(ids(r)).not.toContain('cambios-sin-version:c1')
+    expect(ids(r)).toContain('cambios-sin-version:c3')
+  })
+  it('🔴 una falla de hace más de una semana no aparece', async () => {
+    const r = await leerRiesgos(ctx(base().semilla('plan_cambios', [pedido('c1', 'fallido', VIEJO, 'x')])))
+    expect(ids(r)).not.toContain('cambios-sin-version:c1')
+  })
+  it('🔴 un plan que no se pudo comparar se dice, solo si es lo más nuevo del cliente', async () => {
+    const con = await leerRiesgos(ctx(base().semilla('client_historical_outputs', [plan('p1', NOW, { comparacion_fallo: true })])))
+    expect(ids(con)).toContain('plan-sin-comparar:p1')
+    const tapado = await leerRiesgos(ctx(base().semilla('client_historical_outputs', [plan('p1', '2026-11-01T10:00:00Z', { comparacion_fallo: true }), plan('p2', NOW)])))
+    expect(ids(tapado)).not.toContain('plan-sin-comparar:p1')
+    const normal = await leerRiesgos(ctx(base().semilla('client_historical_outputs', [plan('p1', NOW, {})])))
+    expect(ids(normal)).not.toContain('plan-sin-comparar:p1')
+  })
+})
+
 describe('decisiones', () => {
   it('unifica todas las fuentes y ordena: lo que vence primero arriba, después lo más viejo', async () => {
     const db = base()
