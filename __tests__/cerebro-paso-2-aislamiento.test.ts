@@ -35,6 +35,8 @@ const leer = (rel: string): string => fs.readFileSync(path.join(RAIZ, rel), 'utf
 export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo|texto_visible|etiqueta_confianza|con_personas|tipo_de_toma)\b/
 /** quién PUEDE nombrarlas: la migración y su reversa, los guiones de auditoría, el cerebro (su carpeta), la ruta del portero y estas dos pruebas */
 export const PUEDEN_NOMBRARLAS = [
+  // 01-nov · UNA SOLA FUENTE: su prueba siembra fichas en una base falsa y simula una tabla caída; no toca la real
+  /^__tests__\/una-sola-fuente-datos-del-negocio\.test\.ts$/,
   // 01-nov · SEDES COMO DATO: su prueba siembra una tabla vacía en una base falsa para ejercer la carpeta; no toca la real
   /^__tests__\/carpeta-sedes-como-dato\.test\.ts$/,
   // 01-nov · HECHOS DEL DUEÑO: su prueba siembra fichas en una base falsa para ejercer la carpeta; no toca la real

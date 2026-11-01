@@ -6,6 +6,7 @@
  * Cada informe lleva su `fecha_de_corte` y la marca `hay_material_nuevo_desde_el_corte` (¿entró alguna ficha nueva al cerebro después del corte?).
  * Si la lectura falla NO se disfraza de «vacío»: el campo trae `estado: 'no_se_pudo_leer'` y el motivo.
  */
+import { activoDeSoloLectura } from '../planeacion/coherencia-del-plan'
 import { CLASE_DEL_DUENO } from './dueno'
 import { esloganDelCliente, REGLA_DEL_ESLOGAN } from '../manual/campos-del-manual'
 import type { Db } from './alimentar'
@@ -68,20 +69,39 @@ const ms = (v: unknown): number => { const t = Date.parse(txt(v)); return Number
 const masNueva = (a: Fila, b: Fila) => ms(b.observado_en) - ms(a.observado_en)
 
 /** lee el resumen vivo entero y los informes vigentes de UN cliente */
-export async function adjuntoDelCliente(db: Db, clientId: string, ahora: Date = new Date()): Promise<ContextoDelCliente> {
-  const eslogan = await esloganVigente(db, clientId)
-  const sedes = await sedesDelCliente(db, clientId)
+export async function adjuntoDelCliente(db: Db, clientId: string, ahora: Date = new Date(), fallos: string[] = []): Promise<ContextoDelCliente> {
+  const eslogan = await esloganVigente(db, clientId, fallos)
+  const sedes = await sedesDelCliente(db, clientId, fallos)
   const c = await contextoSinEslogan(db, clientId, ahora)
   return { ...(sedes ? { sedes } : {}), ...(eslogan ? { eslogan } : {}), ...c }
 }
 
+/**
+ * 01-nov · ADENDA 3 de Emilio: UNA SOLA FUENTE. Lo que el negocio ES, ya armado, para que manual, plan, brief, partes y piezas lo lean de aquí y ninguno guarde su copia.
+ * Lo que no se pudo leer se dice en `fallos`: una lectura caída nunca parece «no hay datos». Lo que aún no existe se nombra en `sin_dato`.
+ */
+export interface DatosDelNegocio { eslogan: ContextoDelCliente['eslogan'] | null; sedes: SedeDelCliente[]; hechos_del_dueno: HechoDelDueno[]; activos_solo_lectura: string[]; sin_dato: string[]; fallos: string[] }
+export async function datosDelNegocio(db: Db, clientId: string, ahora: Date = new Date()): Promise<DatosDelNegocio> {
+  const fallos: string[] = []
+  const c = await adjuntoDelCliente(db, clientId, ahora, fallos)
+  if (c.resumen_vivo.estado === 'no_se_pudo_leer') fallos.push(`fichas: ${c.resumen_vivo.detalle ?? 'sin detalle'}`)
+  const hechos = c.hechos_del_dueno ?? []
+  return {
+    eslogan: c.eslogan ?? null, sedes: c.sedes ?? [], hechos_del_dueno: hechos,
+    activos_solo_lectura: hechos.map((h) => activoDeSoloLectura(h.tema)).filter((x): x is string => !!x),
+    sin_dato: ['carta y precios por sede'], fallos,
+  }
+}
+
 /** de los datos de cada sede, el más nuevo de cada campo y fuente. Nunca lanza: sin este dato la carpeta viaja igual */
-async function sedesDelCliente(db: Db, clientId: string): Promise<SedeDelCliente[] | null> {
+async function sedesDelCliente(db: Db, clientId: string, fallos: string[]): Promise<SedeDelCliente[] | null> {
   try {
     const s = await db.from('client_sedes').select('id, clave, ciudad').eq('client_id', clientId)
+    if (s.error) fallos.push(`sedes: ${String(s.error.message ?? s.error)}`)
     const sedes = s.error ? [] : lista(s.data)
     if (sedes.length < 2) return null
     const d = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, fuente, observado_en').eq('client_id', clientId)
+    if (d.error) fallos.push(`datos de sede: ${String(d.error.message ?? d.error)}`)
     const ultimos = new Map<string, Fila>()
     for (const f of d.error ? [] : lista(d.data)) {
       if (!txt(f.sede_id) || !txt(f.valor_texto)) continue
@@ -93,22 +113,25 @@ async function sedesDelCliente(db: Db, clientId: string): Promise<SedeDelCliente
       clave: txt(x.clave), ciudad: txt(x.ciudad),
       datos: [...ultimos.values()].filter((f) => txt(f.sede_id) === txt(x.id)).map((f) => ({ campo: txt(f.campo).replace(/_/g, ' '), valor: txt(f.valor_texto), fuente: txt(f.fuente) })).sort((a, b) => a.campo.localeCompare(b.campo)),
     }))
-  } catch {
+  } catch (e) {
+    fallos.push(`sedes: ${e instanceof Error ? e.message : String(e)}`)
     return null
   }
 }
 
 /** del manual vigente; nunca lanza: sin este dato la carpeta viaja igual */
-async function esloganVigente(db: Db, clientId: string): Promise<ContextoDelCliente['eslogan'] | null> {
+async function esloganVigente(db: Db, clientId: string, fallos: string[]): Promise<ContextoDelCliente['eslogan'] | null> {
   try {
     const r = await db.from('client_brand_books').select('tagline, content_text, version').eq('client_id', clientId)
+    if (r.error) fallos.push(`manual: ${String(r.error.message ?? r.error)}`)
     const fila = r.error ? null : lista(r.data).reduce<Fila | null>((m, f) => (!m || Number(f.version) > Number(m.version) ? f : m), null)
     if (!fila) return null
     let borrador: Fila = {}
     try { borrador = (JSON.parse(txt(fila.content_text)) as { brand_book_draft?: Fila }).brand_book_draft ?? {} } catch { /* contenido ilegible: queda la columna */ }
     const e = esloganDelCliente({ ...borrador, ...(txt(fila.tagline) ? { tagline: fila.tagline } : {}) })
     return e ? { ...e, regla: REGLA_DEL_ESLOGAN } : null
-  } catch {
+  } catch (e) {
+    fallos.push(`manual: ${e instanceof Error ? e.message : String(e)}`)
     return null
   }
 }
