@@ -71,6 +71,19 @@ describe('la puerta de la mesa de análisis · candados antes de gastar', () => 
     expect(String(sinFirma[0].motivo)).toMatch(/falta la firma de la corrida/)
     expect(llamadas).toEqual([])
   })
+  it('sin llave interna y con un sobre por lo demás VÁLIDO (palanca encendida, ensayo): la puerta rechaza la llamada antes de leer nada', async () => {
+    configs = { mesa_de_analisis: { encendida: true, clientes: [C] } }
+    const sobreValidoSinLlave = { client_id: C, dry_run: true, ...firma, pedidos: [pedido('competencia')] }
+    const rs = await respuestas(await POST(new Request(URL_, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(sobreValidoSinLlave) })))
+    expect(rs).toHaveLength(1)
+    expect(rs[0]).toMatchObject({ brazo: 'analisis', estado: 'sin_respuesta' })
+    expect(String(rs[0].motivo)).toMatch(/la puerta rechazó la llamada/)
+    expect(base.escrituras).toEqual([])
+    expect(llamadas).toEqual([])
+    // el mismo sobre CON llave sí lee el material (prueba de que lo único que faltaba era la llave)
+    const conLlave = await respuestas(await POST(sobre(sobreValidoSinLlave)))
+    expect(String(conLlave[0].fuente)).toMatch(/material: 2 ficha\(s\)/)
+  })
   it('en ensayo lee el material (el portero registra la consulta) y declara que NO se miró: cero llamadas, US$ 0', async () => {
     const rs = await respuestas(await POST(sobre({ client_id: C, dry_run: true, ...firma, pedidos: [pedido('competencia')] })))
     expect(rs[0]).toMatchObject({ brazo: 'analisis', estado: 'sin_respuesta' })
