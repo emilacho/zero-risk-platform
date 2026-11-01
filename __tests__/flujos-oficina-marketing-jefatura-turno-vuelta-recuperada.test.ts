@@ -26,24 +26,29 @@ const punto = (o: Record<string, unknown> = {}) => ({ statusCode: 200, body: [{ 
 const completar = (entrada: any, pv = previos()) => recorrer(nuevo, '② Vuelta · completar', entrada, { previos: pv, env: ENV, hasta: ['② Vuelta'] })
 
 describe('el cableado', () => {
-  it('«② Esperar al agente» → leer el punto de control → completar → «② Vuelta» (y nada más entra a «② Vuelta»)', () => {
+  it('«② Esperar al agente» → leer el punto de control → completar → ¿sigue corriendo? → «② Vuelta» (y nada más entra a «② Vuelta»)', () => {
     const s = (n: string) => (nuevo.connections[n]?.main ?? []).map((g: any[]) => g.map((c) => c.node))
     expect(s('② Esperar al agente')).toEqual([['② Vuelta · leer el punto de control']])
     expect(s('② Vuelta · leer el punto de control')).toEqual([['② Vuelta · completar']])
-    expect(s('② Vuelta · completar')).toEqual([['② Vuelta']])
+    expect(s('② Vuelta · completar')).toEqual([['② Vuelta · ¿sigue corriendo?']])
+    expect(s('② Vuelta · ¿sigue corriendo?')).toEqual([['② Vuelta · esperar un poco'], ['② Vuelta']])
+    expect(s('② Vuelta · esperar un poco')).toEqual([['② Vuelta · leer el punto de control']])
     const entran = Object.entries(nuevo.connections).filter(([, c]: any) => JSON.stringify(c).includes('"② Vuelta"')).map(([de]) => de)
-    expect(entran).toEqual(['② Vuelta · completar'])
+    expect(entran).toEqual(['② Vuelta · ¿sigue corriendo?'])
   })
   it('🔴 la lectura NO detiene el camino normal si la base se cae', () => {
     const n = nuevo.nodes.find((x: any) => x.name === '② Vuelta · leer el punto de control')
     expect(n.onError).toBe('continueRegularOutput')
     expect(n.alwaysOutputData).toBe(true)
   })
-  it('solo se suman dos nodos y nada más cambia frente al vivo respaldado', () => {
+  it('solo se suman cuatro nodos y lo único que cambia de los de hoy es la espera por el cable: 1800 s → 900 s', () => {
     const v = new Map(vivo.nodes.map((n: any) => [n.name, JSON.stringify(n)]))
-    expect(nuevo.nodes.filter((n: any) => !v.has(n.name)).map((n: any) => n.name).sort()).toEqual(['② Vuelta · completar', '② Vuelta · leer el punto de control'])
-    expect(nuevo.nodes.filter((n: any) => v.has(n.name) && v.get(n.name) !== JSON.stringify(n))).toEqual([])
-    expect(nuevo.nodes.length).toBe(vivo.nodes.length + 2)
+    expect(nuevo.nodes.filter((n: any) => !v.has(n.name)).map((n: any) => n.name).sort()).toEqual(['② Vuelta · completar', '② Vuelta · esperar un poco', '② Vuelta · leer el punto de control', '② Vuelta · ¿sigue corriendo?'])
+    expect(nuevo.nodes.filter((n: any) => v.has(n.name) && v.get(n.name) !== JSON.stringify(n)).map((n: any) => n.name)).toEqual(['② Esperar al agente'])
+    const e = (g: any) => g.nodes.find((n: any) => n.name === '② Esperar al agente').parameters
+    expect(e(vivo).resumeAmount).toBe(1800)
+    expect(e(nuevo)).toEqual({ ...e(vivo), resumeAmount: 900 })
+    expect(nuevo.nodes.length).toBe(vivo.nodes.length + 4)
   })
   it('la lectura pide ESTA ejecución, el agente del pedido y el más reciente, solo el texto', async () => {
     let url = ''
@@ -100,5 +105,34 @@ describe('«② Vuelta» con la vuelta recuperada', () => {
     const r = await recorrer(nuevo, '② Vuelta', { body: { response: TEXTO, recuperada_del_punto_de_control: true } }, { previos: previos(), env: ENV, hasta: ['③ Registrar el resultado'] })
     expect(r.item.resultado_body).toMatchObject({ accion: 'resultado', revision_id: 'rev-1', n: 2, texto: TEXTO, costo_usd: 0 })
     expect(r.item.resultado_body.error).toBeUndefined()
+  })
+})
+
+describe('«¿sigue corriendo?» · si al despertar el agente sigue corriendo, se espera y se relee (tope 8)', () => {
+  const corriendo = { statusCode: 200, body: [{ step_status: 'running', created_at: '2026-11-01T11:12:00.042Z', texto: null, truncado: null }] }
+  const decide = (completo: any, lectura: any, veces = 0) => recorrer(nuevo, '② Vuelta · ¿sigue corriendo?', completo, {
+    previos: previos({ '② Vuelta · completar': [completo], '② Vuelta · leer el punto de control': [lectura], '② Vuelta · ¿sigue corriendo?': Array.from({ length: veces }, () => ({})) }),
+    env: ENV, hasta: ['② Vuelta', '② Vuelta · leer el punto de control'],
+  })
+  it('espera agotada, sin vuelta y el paso sigue «running»: espera un poco y vuelve a leer', async () => {
+    const r = await decide({}, corriendo)
+    expect(r.pasos).toEqual(['② Vuelta · ¿sigue corriendo?', '② Vuelta · esperar un poco', '② Vuelta · leer el punto de control'])
+  })
+  it('con la vuelta por cable, con un fallo declarado o ya rescatada: sigue a «② Vuelta» sin esperar', async () => {
+    for (const c of [{ body: { response: 'POR CABLE' } }, { body: { success: false, error: 'tope' } }, { body: { response: TEXTO, recuperada_del_punto_de_control: true } }]) {
+      const r = await decide(c, corriendo)
+      expect(r.pasos).toEqual(['② Vuelta · ¿sigue corriendo?', '② Vuelta'])
+    }
+  })
+  it.each([['completed', punto()], ['failed', punto({ step_status: 'failed' })], ['sin filas', { statusCode: 200, body: [] }], ['la lectura cayó', { error: { message: 'ECONNRESET' } }], ['error de la base', { statusCode: 500, body: { message: 'x' } }]])('el paso está en %s: no espera más', async (_n, lectura) => {
+    const r = await decide({}, lectura)
+    expect(r.pasos).toEqual(['② Vuelta · ¿sigue corriendo?', '② Vuelta'])
+  })
+  it('el tope: a la octava relectura deja de esperar y sigue a «② Vuelta» (que dirá «llegó vacía»)', async () => {
+    expect((await decide({}, corriendo, 7)).pasos[1]).toBe('② Vuelta · esperar un poco')
+    expect((await decide({}, corriendo, 8)).pasos).toEqual(['② Vuelta · ¿sigue corriendo?', '② Vuelta'])
+  })
+  it('la espera entre lecturas es de 2 minutos', () => {
+    expect(nuevo.nodes.find((n: any) => n.name === '② Vuelta · esperar un poco').parameters).toEqual({ resume: 'timeInterval', amount: 120, unit: 'seconds' })
   })
 })

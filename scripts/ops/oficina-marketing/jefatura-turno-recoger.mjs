@@ -10,7 +10,12 @@
  *   · cualquier otra cosa (lectura que falla, paso aún `running`, truncado, de otro pedido, sin texto) → igual que hoy. Nunca se inventa una respuesta.
  * El modo seco no pasa por la espera, así que no cambia.
  */
-import { agregarNodo, codigo, conectar, redirigir } from './lib.mjs'
+import { agregarNodo, codigo, conectar, nodo, redirigir, si } from './lib.mjs'
+
+/** la espera por el cable vence a los 15 min (el vigía de la plataforma da por muerto un paso a los 12; su constante sube aparte) y, si el agente SIGUE corriendo, se relee cada 2 min hasta 8 veces */
+export const ESPERA_POR_EL_CABLE_S = 900
+export const RELECTURAS_MAX = 8
+export const RELECTURA_CADA_S = 120
 
 export const CODIGO_COMPLETAR_VUELTA_DEL_TURNO = `// ② VUELTA · COMPLETAR · si la vuelta por cable no llegó, la respuesta del agente puede estar en el punto de control (workflow_checkpoints) de ESTA ejecución. Si no, todo igual que hoy.
 const orig = $('② Esperar al agente').last().json || {}
@@ -29,7 +34,10 @@ if (!(desde > 0) || !(creado >= desde - 10000)) return [{ json: orig }]
 return [{ json: { body: { response: String(f.texto), recuperada_del_punto_de_control: true } } }]
 `
 
+export const SIGUE_CORRIENDO = `={{ (function () { try { const c = $('② Vuelta · completar').last().json || {}; const cu = c.body ? c.body : c; if (cu.recuperada_del_punto_de_control === true || cu.success === false) return false; if (String(cu.response || cu.result || cu.output || cu.text || '').trim()) return false; const r = $('② Vuelta · leer el punto de control').last().json || {}; const f = Array.isArray(r.body) ? r.body[0] : null; return !!f && f.step_status === 'running' && $runIndex < ${RELECTURAS_MAX} } catch (e) { return false } })() }}`
+
 export function construirTurnoQueRecoge(f) {
+  nodo(f, '② Esperar al agente').parameters.resumeAmount = ESPERA_POR_EL_CABLE_S
   const leer = agregarNodo(f, {
     name: '② Vuelta · leer el punto de control', type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
     parameters: {
@@ -46,5 +54,11 @@ export function construirTurnoQueRecoge(f) {
   agregarNodo(f, codigo('② Vuelta · completar', CODIGO_COMPLETAR_VUELTA_DEL_TURNO), '② Esperar al agente', 440, 0)
   redirigir(f, '② Esperar al agente', '② Vuelta', '② Vuelta · leer el punto de control')
   conectar(f, '② Vuelta · leer el punto de control', '② Vuelta · completar')
-  conectar(f, '② Vuelta · completar', '② Vuelta')
+  // si al despertar el agente SIGUE corriendo (paso `running`), se espera un poco y se vuelve a leer; con el tope agotado o cualquier otro estado se sigue a «② Vuelta» como antes
+  agregarNodo(f, si('② Vuelta · ¿sigue corriendo?', SIGUE_CORRIENDO), '② Esperar al agente', 660, 0)
+  agregarNodo(f, { name: '② Vuelta · esperar un poco', webhookId: 'jefatura-turno-0002-relectura', type: 'n8n-nodes-base.wait', typeVersion: 1.1, parameters: { resume: 'timeInterval', amount: RELECTURA_CADA_S, unit: 'seconds' } }, '② Esperar al agente', 660, 160)
+  conectar(f, '② Vuelta · completar', '② Vuelta · ¿sigue corriendo?')
+  conectar(f, '② Vuelta · ¿sigue corriendo?', '② Vuelta · esperar un poco', 0)
+  conectar(f, '② Vuelta · ¿sigue corriendo?', '② Vuelta', 1)
+  conectar(f, '② Vuelta · esperar un poco', '② Vuelta · leer el punto de control')
 }

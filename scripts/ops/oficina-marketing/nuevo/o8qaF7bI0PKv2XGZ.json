@@ -188,7 +188,7 @@
         "resume": "webhook",
         "httpMethod": "POST",
         "limitWaitTime": true,
-        "resumeAmount": 1800,
+        "resumeAmount": 900,
         "resumeUnit": "seconds",
         "options": {}
       },
@@ -524,6 +524,53 @@
       "parameters": {
         "jsCode": "// ② VUELTA · COMPLETAR · si la vuelta por cable no llegó, la respuesta del agente puede estar en el punto de control (workflow_checkpoints) de ESTA ejecución. Si no, todo igual que hoy.\nconst orig = $('② Esperar al agente').last().json || {}\nconst cuerpoO = orig.body ? orig.body : orig\nconst textoO = String(cuerpoO.response || cuerpoO.result || cuerpoO.output || cuerpoO.text || '')\nif (textoO.trim().length > 0 || cuerpoO.success === false) return [{ json: orig }]\nconst r = $input.first().json || {}\nconst filas = Array.isArray(r.body) ? r.body : []\nconst f = Number(r.statusCode) === 200 && filas.length && filas[0] && typeof filas[0] === 'object' ? filas[0] : null\nif (!f || f.step_status !== 'completed' || String(f.truncado) === 'true' || !String(f.texto || '').trim()) return [{ json: orig }]\nlet ack = null\ntry { const a = $('② Agente (run-sdk)').last().json; ack = (a.body && a.body.ack_timestamp) || a.ack_timestamp || null } catch (e) { ack = null }\nconst desde = ack ? new Date(ack).getTime() : NaN\nconst creado = new Date(f.created_at).getTime()\nif (!(desde > 0) || !(creado >= desde - 10000)) return [{ json: orig }]\nreturn [{ json: { body: { response: String(f.texto), recuperada_del_punto_de_control: true } } }]\n"
       }
+    },
+    {
+      "id": "def0e9b9-6d80-951f-f2e2-3047d25c32ae",
+      "position": [
+        2480,
+        50
+      ],
+      "typeVersion": 2,
+      "name": "② Vuelta · ¿sigue corriendo?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ (function () { try { const c = $('② Vuelta · completar').last().json || {}; const cu = c.body ? c.body : c; if (cu.recuperada_del_punto_de_control === true || cu.success === false) return false; if (String(cu.response || cu.result || cu.output || cu.text || '').trim()) return false; const r = $('② Vuelta · leer el punto de control').last().json || {}; const f = Array.isArray(r.body) ? r.body[0] : null; return !!f && f.step_status === 'running' && $runIndex < 8 } catch (e) { return false } })() }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dced32d3-07b5-ceea-a816-68ff5714a193",
+      "position": [
+        2480,
+        210
+      ],
+      "typeVersion": 1.1,
+      "name": "② Vuelta · esperar un poco",
+      "webhookId": "jefatura-turno-0002-relectura",
+      "type": "n8n-nodes-base.wait",
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 120,
+        "unit": "seconds"
+      }
     }
   ],
   "connections": {
@@ -724,7 +771,36 @@
       "main": [
         [
           {
+            "node": "② Vuelta · ¿sigue corriendo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Vuelta · ¿sigue corriendo?": {
+      "main": [
+        [
+          {
+            "node": "② Vuelta · esperar un poco",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "② Vuelta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Vuelta · esperar un poco": {
+      "main": [
+        [
+          {
+            "node": "② Vuelta · leer el punto de control",
             "type": "main",
             "index": 0
           }
