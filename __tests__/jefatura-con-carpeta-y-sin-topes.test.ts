@@ -66,6 +66,11 @@ describe('la mesa: un informe bien citado no se descarta', () => {
 })
 
 describe('el revisor tiene la misma carpeta', () => {
+  it('un resumen vivo que no está vigente no se presenta como vigente', () => {
+    const r = textoDeLaCarpeta({ resumen_vivo: { estado: 'vencido', texto: 'RESUMEN VIEJO' }, informes: [] } as never)
+    expect(r).not.toContain('RESUMEN VIEJO')
+    expect(r).toContain('(resumen vivo: vencido)')
+  })
   it('el texto lleva el resumen vivo y los informes enteros, y dice lo que no se pudo leer', () => {
     const t = textoDeLaCarpeta({ resumen_vivo: { estado: 'vigente', texto: 'RESUMEN', sedes: [{ clave: 's', texto: 'DE SEDE' }] }, informes: [{ tipo: 'mercado', texto: 'x'.repeat(50_000) }] } as never)
     expect(t).toContain('RESUMEN'); expect(t).toContain('[sede s] DE SEDE'); expect(t).toContain('x'.repeat(50_000))
@@ -130,7 +135,7 @@ describe('la jefatura de las piezas lleva la carpeta', () => {
   it('el orquestador la suma al contexto del revisor y, si falla, lo dice sin tumbar la revisión', () => {
     const o = readFileSync(join(RAIZ, 'src/lib/oficina/orquestador.ts'), 'utf8')
     expect(o).toMatch(/contexto: \[\.\.\.material\.contexto, \.\.\.carpeta\]/)
-    expect(o).toMatch(/P\.carpetaParaRevisar\(String\(enc\.client_id\)\)\.catch/)
+    expect(o).toMatch(/P\.carpetaParaRevisar\(String\(enc\.client_id\)\)\.catch\([^\n]*no se pudo leer[^\n]*No lo tomes como que no existe/)
     expect(readFileSync(join(RAIZ, 'src/lib/oficina/adaptadores.ts'), 'utf8')).toMatch(/carpetaParaRevisar: \(clientId\) => carpetaParaRevisar\(db, clientId\)/)
   })
 })
