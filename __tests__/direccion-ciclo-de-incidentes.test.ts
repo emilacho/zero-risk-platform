@@ -23,6 +23,7 @@ describe('las reglas', () => {
     expect(cierreDeDespacho({ created_at: hace(23.9) }, AHORA)).toBeNull()
     expect(cierreDeDespacho({ created_at: hace(24) }, AHORA)).toContain('sin cierre registrado')
     expect(cierreDeDespacho({ created_at: hace(167) }, AHORA)).toContain('sin cierre registrado')
+    expect(cierreDeDespacho({ created_at: hace(167) }, AHORA)).not.toContain('vencido')
     expect(cierreDeDespacho({ created_at: hace(168) }, AHORA)).toContain('vencido')
     expect(cierreDeDespacho({ created_at: 'x' }, AHORA)).toBeNull()
   })
@@ -166,6 +167,11 @@ describe('las pantallas lo reflejan', () => {
     expect(r.riesgos.find((x) => x.id === 'despacho:k')).toBeUndefined()
     const c = await leerCorridas(ctx(db))
     expect(c.corridas[0]).toMatchObject({ workflow_execution_id: '77', estado: 'sin_cierre' })
+  })
+  it('un despacho aceptado que aún no empieza cuenta como en curso: la corrida no se da por terminada', async () => {
+    const db = new DbFalsa().semilla('agent_dispatches', [{ id: 'd', dispatch_key: 'k', agent_name: 'a', workflow_execution_id: '77', status: 'accepted', created_at: hace(0.01), client_id: C }])
+    const c = await leerCorridas(ctx(db))
+    expect(c.corridas[0]).toMatchObject({ workflow_execution_id: '77', estado: 'en_curso' })
   })
   it('una corrida con su empleado terminado sigue «completa» aunque su despacho quedó sin cierre', async () => {
     const db = new DbFalsa().semilla('agent_dispatches', [{ id: 'd', dispatch_key: 'k', agent_name: 'a', workflow_execution_id: '77', status: 'sin_cierre', created_at: hace(30) }]).semilla('agent_invocations', [{ id: 'i', agent_name: 'a', workflow_execution_id: '77', status: 'completed', started_at: hace(30) }])
