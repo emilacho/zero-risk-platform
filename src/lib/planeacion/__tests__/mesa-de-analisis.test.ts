@@ -1,7 +1,7 @@
 /**
  * 01-nov · LA MESA DE ANÁLISIS (FIRMA de Emilio 08:42Z puntos 1 y 3) · lógica pura + las migraciones REALES leídas · US$ 0, sin base ni red.
  *   · la palanca está apagada por omisión y solo enciende al cliente listado;
- *   · los topes: US$ 1 por analista (≤ 2) y US$ 4 por mesa; lo que no cabe queda en 0;
+ *   · los topes: US$ 1 por analista (≤ 2) y US$ 5 por mesa; lo que no cabe queda en 0;
  *   · el material lleva el resumen vivo entero y las fichas rotuladas con su id, con el recorte dicho;
  *   · el informe se lee sin creerle: citas ajenas no cuentan, «sin dato» no es hallazgo, mercado acepta fuente+fecha;
  *   · la tarea no fija idioma ni trato, prohíbe nombrar personas y está en tuteo (nunca voseo);
@@ -50,11 +50,12 @@ describe('mesa de análisis · la palanca (apagada por omisión)', () => {
 })
 
 describe('mesa de análisis · los topes', () => {
-  it('US$ 1 por analista por omisión, nunca más de 2; la mesa no pasa de US$ 4: el que no cabe queda en 0; un tipo inválido no gasta', () => {
-    expect(TOPE_POR_ANALISTA_USD).toBe(1); expect(TOPE_DE_LA_MESA_USD).toBe(4)
+  it('US$ 1 por analista por omisión, nunca más de 2; la mesa no pasa de US$ 5 (FIRMA 01-nov: los 5 tipos caben): el que no cabe queda en 0; un tipo inválido no gasta', () => {
+    expect(TOPE_POR_ANALISTA_USD).toBe(1); expect(TOPE_DE_LA_MESA_USD).toBe(5)
     expect(repartirTopes([{ tipo: 'mercado' }, { tipo: 'competencia', tope_usd: 0.5 }, { tipo: 'retencion', tope_usd: 9 }])).toEqual([1, 0.5, 1])
-    expect(repartirTopes(TIPOS_DE_ANALISIS.map((tipo) => ({ tipo })))).toEqual([1, 1, 1, 1, 0])
-    expect(repartirTopes([{ tipo: 'mercado', tope_usd: 2 }, { tipo: 'competencia', tope_usd: 2 }, { tipo: 'voz_del_publico' }])).toEqual([2, 2, 0])
+    expect(repartirTopes(TIPOS_DE_ANALISIS.map((tipo) => ({ tipo })))).toEqual([1, 1, 1, 1, 1])
+    expect(repartirTopes(TIPOS_DE_ANALISIS.map((tipo) => ({ tipo })).concat({ tipo: 'mercado' }))).toEqual([1, 1, 1, 1, 1, 0])
+    expect(repartirTopes([{ tipo: 'mercado', tope_usd: 2 }, { tipo: 'competencia', tope_usd: 2 }, { tipo: 'voz_del_publico' }, { tipo: 'retencion' }])).toEqual([2, 2, 1, 0])
     expect(repartirTopes([{ tipo: null, tope_usd: 1 }, { tipo: 'mercado' }])).toEqual([0, 1])
   })
 })

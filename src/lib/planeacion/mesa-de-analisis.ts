@@ -9,7 +9,7 @@
  * Lo que decide, y por qué:
  *   · PALANCA APAGADA POR OMISIÓN: `cadena_config.mesa_de_analisis` = { encendida: true|false, clientes: [client_id…] }. Solo gasta
  *     el cliente listado con la mesa encendida; sin fila, sin lista o con otro valor, la mesa contesta «apagada» y NO llama a nadie.
- *   · TOPES: US$ 1 por analista (nunca más de 2) y US$ 4 por mesa (la suma de los pedidos de un sobre); lo que no cabe NO se pide.
+ *   · TOPES: US$ 1 por analista (nunca más de 2) y US$ 5 por mesa (la suma de los pedidos de un sobre); lo que no cabe NO se pide.
  *   · CITAS: cada hallazgo cita la ficha del cerebro en que se apoya (`[<uuid>]` del material entregado); el portero exige ≥1 cita
  *     para archivar. El tipo `mercado` mira hacia afuera (señales con fuente Y fecha, como F4) y puede no citar: entonces no se archiva
  *     y se dice. Una cita a una ficha que no estaba en el material NO cuenta.
@@ -65,7 +65,8 @@ export const ANALISTAS: Readonly<Record<TipoDeAnalisis, Analista>> = {
 
 export const TOPE_POR_ANALISTA_USD = 1
 export const TOPE_MAXIMO_POR_ANALISTA_USD = 2
-export const TOPE_DE_LA_MESA_USD = 4
+/** FIRMA de Emilio 01-nov 09:50Z: US$ 5 por sobre (5 analistas × US$ 1); antes US$ 4 dejaba fuera siempre al quinto */
+export const TOPE_DE_LA_MESA_USD = 5
 /** el informe que vuelve al plan (ADENDA 1: 6.000, no 2.500) y el material crudo que recibe cada analista */
 export const TOPE_DEL_INFORME = 6_000
 export const TOPE_DEL_MATERIAL = 6_000
@@ -90,7 +91,7 @@ export function leerPalanca(config: unknown, clientId: string): Palanca {
 
 // ─────────────────────────────────────────────────────────── los topes
 export interface PedidoConTope { readonly tipo: TipoDeAnalisis | null; readonly tope_usd?: number }
-/** el tope de cada pedido del sobre: el suyo (≤ 2) o el de omisión, y la mesa no pasa de US$ 4: lo que no cabe queda en 0 (no se pide) */
+/** el tope de cada pedido del sobre: el suyo (≤ 2) o el de omisión, y la mesa no pasa de US$ 5: lo que no cabe queda en 0 (no se pide) */
 export function repartirTopes(pedidos: ReadonlyArray<PedidoConTope>): number[] {
   let gastado = 0
   return pedidos.map((p) => {

@@ -5,7 +5,7 @@
  *   · en real con la palanca apagada (por omisión): cero llamadas; con palanca pero analista no instalado: cero llamadas;
  *   · en real, encendida para ESTE cliente: UNA llamada al corredor con el tope y la firma, el informe vuelve con sus citas del material
  *     y se archiva por la puerta del portero (su resultado viaja en `datos.archivado`);
- *   · el tope de la mesa (US$ 4) deja fuera al quinto pedido; un tipo desconocido es pedido inválido.
+ *   · el tope de la mesa (US$ 5) deja fuera al sexto pedido (los 5 de la corrida caben); un tipo desconocido es pedido inválido.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { crearBaseFalsa } from '../../portero-alimenta/__tests__/base-falsa'
@@ -147,12 +147,13 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
     expect(r2[0].estado).toBe('sin_dato'); expect(String(r2[0].motivo)).toMatch(/declaró «sin dato»/)
     expect(llamadas.filter((l) => l.url.endsWith('/informe'))).toEqual([])
   })
-  it('el tope de la mesa (US$ 4) deja fuera al quinto pedido sin llamarlo; los demás reciben su tope', async () => {
-    const tipos = ['competencia', 'mercado', 'retencion', 'competencia', 'retencion']
+  it('el tope de la mesa (US$ 5) deja entrar los 5 pedidos de la corrida y deja fuera al sexto sin llamarlo; los demás reciben su tope', async () => {
+    const tipos = ['competencia', 'mercado', 'retencion', 'competencia', 'retencion', 'mercado']
     const rs = await respuestas(await POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: tipos.map((t) => pedido(t)) })))
-    expect(rs).toHaveLength(5)
-    expect(String(rs[4].motivo)).toMatch(/el tope de la mesa \(US\$ 4 por sobre\) no alcanza/)
-    expect(llamadas.filter((l) => l.url.endsWith('/run-sdk'))).toHaveLength(4)
+    expect(rs).toHaveLength(6)
+    expect(String(rs[5].motivo)).toMatch(/el tope de la mesa \(US\$ 5 por sobre\) no alcanza/)
+    expect(rs.slice(0, 5).every((r) => !/tope de la mesa/.test(String(r.motivo ?? '')))).toBe(true)
+    expect(llamadas.filter((l) => l.url.endsWith('/run-sdk'))).toHaveLength(5)
     expect(llamadas.filter((l) => l.url.endsWith('/run-sdk')).every((l) => l.cuerpo.max_budget_usd === 1)).toBe(true)
   })
 })
