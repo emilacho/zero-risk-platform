@@ -55,6 +55,10 @@ export const PUEDEN_NOMBRARLAS = [
   /^__tests__\/cerrar-huecos-tendencias-y-voz\.test\.ts$/,
   /^supabase\/migrations\/202611011000_cerrar_huecos_tendencias_y_voz\.sql$/,
   /^supabase\/reversas\/202611011000_cerrar_huecos_tendencias_y_voz_REVERSA\.sql$/,
+  // 01-nov · FALLAS PENDIENTES Y RETENCIÓN: su prueba nombra `cerebro_fichas`/`cerebro_portero_corridas` (rastro del día) y las etiquetas de las capturas de la bodega; la migración crea la tabla de pasos diarios
+  /^__tests__\/fallas-pendientes-y-retencion\.test\.ts$/,
+  /^supabase\/migrations\/202611011500_pasos_diarios_y_retencion_bodega\.sql$/,
+  /^supabase\/reversas\/202611011500_pasos_diarios_y_retencion_bodega_REVERSA\.sql$/,
   // 31-oct · VOZ DEL PÚBLICO Y RESUMEN SIEMPRE: su prueba arma fichas de prueba con columnas de la tabla (informes y resumen vivo)
   /^__tests__\/voz-del-publico-y-resumen-siempre\.test\.ts$/,
   // 28-oct · LA MESA: el tablero del equipo MUESTRA al compañero la lista de fotos propias del cliente (solo LECTURA de las columnas de etiqueta ya cargadas); no escribe nada

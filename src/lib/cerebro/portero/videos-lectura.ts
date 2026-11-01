@@ -35,6 +35,8 @@ export interface VideoVisto {
   de_que_trata: string | null
   transcripcion: string | null
   archivo_url: string | null
+  /** la retención de la bodega (90 días) borró el ARCHIVO; las capturas, etiquetas, transcripción y datos siguen */
+  archivo_borrado_en: string | null
   capturas: CapturaVista[]
 }
 export interface PedidoDeVideos { cliente: string; /** los videos de la BODEGA del mundo (sin cliente) */ bodega?: boolean; origen?: OrigenDeFoto | null; tipo?: string | null; limite?: number }
@@ -42,7 +44,7 @@ export type RespuestaDeVideos =
   | { ok: true; cliente: string | null; alcance: 'cliente' | 'bodega'; total: number; devueltos: number; por_tipo: Record<string, number>; por_origen: Record<OrigenDeFoto, number>; sin_descargar: number; videos: VideoVisto[]; archivo_firmado: boolean; modelos_llamados: 0; costo_usd: 0 }
   | { ok: false; error: string; detalle: string }
 
-const COLUMNAS_DE_VIDEO = ['id', 'owner_role', 'handle', 'post_id', 'tipo', 'estado', 'path', 'bytes', 'duracion_s', 'caption', 'posted_at', 'post_url', 'transcripcion', 'metricas', 'created_at']
+const COLUMNAS_DE_VIDEO = ['id', 'owner_role', 'handle', 'post_id', 'tipo', 'estado', 'path', 'bytes', 'duracion_s', 'caption', 'posted_at', 'post_url', 'transcripcion', 'metricas', 'created_at', 'archivo_borrado_en']
 const COLUMNAS_DE_CAPTURA = ['id', 'video_id', 'posicion', 'url', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'estado', 'created_at']
 
 /** lo que trata el video: las etiquetas de sus capturas, sin repetir; sin etiquetas, el pie */
@@ -94,7 +96,7 @@ export async function listarVideos(consulta: Consulta, p: PedidoDeVideos, firmar
     const m = f.metricas && typeof f.metricas === 'object' ? (f.metricas as Record<string, unknown>) : {}
     const metricas: Record<string, number> = {}
     for (const [k, x] of Object.entries(m)) { const n = numero(x); if (n !== null) metricas[k] = n }
-    videos.push({ video_id: String(f.id), tipo: String(f.tipo), origen: origenDeLaFoto(f.owner_role), nivel: nivelDe(f), gusto: gustoDelVideo(f), cuenta: txt(f.handle), publicado_en: txt(f.posted_at), copiado_en: txt(f.created_at), duracion_s: numero(f.duracion_s), bytes: numero(f.bytes), pie, metricas, post_url: txt(f.post_url), de_que_trata: deQueTrataElVideo(caps, pie), transcripcion: txt(f.transcripcion), archivo_url, capturas: caps })
+    videos.push({ video_id: String(f.id), tipo: String(f.tipo), origen: origenDeLaFoto(f.owner_role), nivel: nivelDe(f), gusto: gustoDelVideo(f), cuenta: txt(f.handle), publicado_en: txt(f.posted_at), copiado_en: txt(f.created_at), duracion_s: numero(f.duracion_s), bytes: numero(f.bytes), pie, metricas, post_url: txt(f.post_url), de_que_trata: deQueTrataElVideo(caps, pie), transcripcion: txt(f.transcripcion), archivo_url, archivo_borrado_en: txt(f.archivo_borrado_en), capturas: caps })
   }
   return { ok: true, cliente, alcance: bodega ? 'bodega' : 'cliente', total: todos.length, devueltos: videos.length, por_tipo, por_origen, sin_descargar, videos, archivo_firmado: !!firmar, modelos_llamados: 0, costo_usd: 0 }
 }

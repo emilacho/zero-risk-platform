@@ -7,6 +7,7 @@
  * `producto`, `url`, `caption` ni ninguna otra columna: pedirle otra se rechaza SIN hacer la petición. Una prueba permanente del repositorio vigila que nadie
  * más escriba en esa tabla desde `src/` y que este archivo exporte exactamente estas 9 columnas.
  */
+import { CLAVE_DE_LA_BODEGA } from './clave-de-la-bodega'
 import { FORMATOS_VALIDOS } from './formato'
 
 export const COLUMNAS_DE_LA_ETIQUETA = ['que_muestra', 'producto_visto', 'etiquetada_en', 'etiqueta_modelo', 'texto_visible', 'etiqueta_confianza'] as const
@@ -47,7 +48,7 @@ export function crearEscritor(args: { urlDeLaBase: string; llave: string; fetchI
     if (!identificadorSimple(a.foto_id) || !identificadorSimple(a.cliente)) return { ok: false, detalle: 'falta el id de la foto o el cliente, o no es un identificador simple' }
     if (!args.llave || !args.urlDeLaBase) return { ok: false, detalle: 'la base no está configurada en el servidor' }
     try {
-      const r = await traer(`${args.urlDeLaBase.replace(/\/$/, '')}/rest/v1/client_social_images?id=eq.${a.foto_id}&client_id=eq.${a.cliente}`, {
+      const r = await traer(`${args.urlDeLaBase.replace(/\/$/, '')}/rest/v1/client_social_images?id=eq.${a.foto_id}&client_id=${a.cliente === CLAVE_DE_LA_BODEGA ? 'is.null' : `eq.${a.cliente}`}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json', apikey: args.llave, Authorization: `Bearer ${args.llave}`, Prefer: 'return=minimal' },
         body: JSON.stringify(a.valores),

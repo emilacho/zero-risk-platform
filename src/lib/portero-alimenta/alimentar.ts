@@ -15,10 +15,6 @@ import { fichaPropiaDeMapas } from './mapas-propia'
 import { copiarFotosDeMapasPropia, type ResultadoDeFotosDeMapas } from './fotos-de-mapas-propia'
 import { leerDocumentosDeLosSitios } from './documentos-enlazados'
 import type { LectorOcr } from './ocr-de-pdf'
-import { bodegaDelMundo, tendenciasDelCliente, type InformeDeTendencias } from './tendencias-del-cliente'
-import { ejecutarEnApify } from './tendencias'
-import { descubrirCuentas, type InformeDeCuentas } from './cuentas-de-redes'
-import { comentariosDeRedes, comentariosDeVideosDeLaCompetencia, ejecutarComentarios, guardarComentariosDeLaCompetencia, type InformeDeComentarios } from './comentarios-de-redes'
 import { completarCapturas, guardarVideos, videosDeLasFilas, type ResultadoDeVideos } from './videos-del-cerebro'
 import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlamada } from './juez'
 import { planDeArchivo, planDeReconfirmaciones, type FichaReconfirmable, type PlanDeArchivo } from './archivar'
@@ -28,6 +24,9 @@ import { archivarFichasDeBrazos, huellaDeFicha } from './brazos/archivo'
 import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
 import { pulirResumen, topeDelPulido } from './resumen-pulido'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
+import type { InformeDeTendencias } from './tendencias-del-cliente'
+import type { InformeDeCuentas } from './cuentas-de-redes'
+import type { InformeDeComentarios } from './comentarios-de-redes'
 import { leerTodas } from './paginar'
 import { cerrarPausasDeAlta } from './pausa-de-alta'
 import { claveDeAlcance, sedesDeFicha, sedesDeLaFuente, tipoDeFuenteDeUnidad } from './sedes-fuentes'
@@ -205,26 +204,8 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
       if (comp.revisados) r.capturas_completadas = comp
       if (candidatos.length) r.videos = await guardarVideos({ clientId: e.client_id, candidatos, urlDeLaBase: entorno.NEXT_PUBLIC_SUPABASE_URL ?? entorno.SUPABASE_URL ?? '', llave: entorno.SUPABASE_SERVICE_ROLE_KEY ?? '', fetchImpl: e.fetch as never })
     } catch (err) { r.errores.push(`videos: ${err instanceof Error ? err.message : String(err)}`) }
-    // 31-oct · las TENDENCIAS del rubro (embudo global → país → competencia → directa) y la bodega viral del mundo, una vez por día; interruptor PORTERO_TENDENCIAS=on. Nunca tumba la corrida.
-    try {
-      const entorno = e.env ?? process.env
-      if (String(entorno.PORTERO_TENDENCIAS ?? '').trim().toLowerCase() === 'on') {
-        const common = { urlDeLaBase: entorno.NEXT_PUBLIC_SUPABASE_URL ?? entorno.SUPABASE_URL ?? '', llave: entorno.SUPABASE_SERVICE_ROLE_KEY ?? '', token: entorno.APIFY_API_TOKEN ?? entorno.APIFY_API_KEY ?? '', ahora, fetchImpl: e.fetch as never }
-        // las cuentas de TikTok y X se buscan ANTES (regla única: nombre exacto o cuenta, nunca un homónimo); los comentarios y las tendencias directas usan lo que ya está en la ficha
-        const ejecutarApify = ejecutarEnApify({ token: common.token, fetchImpl: e.fetch as never })
-        r.cuentas_de_redes = await descubrirCuentas({ cliente: cliente as never, clientId: e.client_id, ciudades: lista(sd.data).map((s) => String(s.ciudad ?? '')).filter(Boolean), urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora, ejecutar: ejecutarApify, fetchImpl: e.fetch as never })
-        const clienteVivo = (r.cuentas_de_redes.config_nueva ? { ...cliente, config: r.cuentas_de_redes.config_nueva } : cliente) as never
-        const cm = await comentariosDeRedes({ cliente: clienteVivo, clientId: e.client_id, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora, ejecutar: ejecutarComentarios({ token: common.token, fetchImpl: e.fetch as never }), fetchImpl: e.fetch as never })
-        const deVideos = comentariosDeVideosDeLaCompetencia(lista(rr.data) as never, new Set(ctx.handles.map((h) => h.toLowerCase().replace(/^@/, ''))))
-        const gv = deVideos.length ? await guardarComentariosDeLaCompetencia({ clientId: e.client_id, comentarios: deVideos, urlDeLaBase: common.urlDeLaBase, llave: common.llave, ahora, fetchImpl: e.fetch as never }) : { guardados: 0 }
-        r.comentarios_de_redes = { ...cm, de_videos_de_la_competencia: { leidos: deVideos.length, guardados: gv.guardados, ...(gv.error ? { error: gv.error } : {}) } }
-        const tendCliente = await tendenciasDelCliente({ ...common, cliente: clienteVivo, clientId: e.client_id, ciudades: lista(sd.data).map((s) => String(s.ciudad ?? '')).filter(Boolean), llamarModelo: e.llamarModelo })
-        const iso = paisIsoDe(cliente.country ?? cliente.pais, cliente.market)
-        const bodega = await bodegaDelMundo({ ...common, paises: iso ? [iso] : [] })
-        r.tendencias = { cliente: tendCliente, bodega }
-        costoDeOcr += (tendCliente.costo_modelo_usd ?? 0)
-      }
-    } catch (err) { r.errores.push(`tendencias: ${err instanceof Error ? err.message : String(err)}`) }
+    // 01-nov · las TENDENCIAS, las cuentas y los comentarios de redes y la bodega ya NO corren aquí: cada uno es su propio paso (`redes-del-cliente.ts` · `pasos-diarios.ts` · /api/brain/alimentar/redes)
+    // para que ninguna corrida dependa de una sola llamada de 300 s.
   }
   // las cifras (fuente «metrica») NO se descartan por «ya vista»: si el valor vuelve a uno anterior (26 → 50 → 26) tiene que reemplazar al vigente; lo que no cambió lo ve «mismo dato» más abajo
   const vistas = new Set(lista(vv.data).filter((v) => v.fuente !== 'metrica').map((v) => `${v.fuente}|${v.unidad_ref}|${v.huella}`))
@@ -373,7 +354,9 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   const previo = corridaDeHoy && esObjeto(corridaDeHoy.resumen) ? (corridaDeHoy.resumen as Fila).despertar : null
   const arrastreDelDespertar = !e.despertar && esObjeto(previo) ? { despertar: { ...previo, completado_en: ahora.toISOString() } } : {}
   const rastro = { client_id: e.client_id, dia, estado, resumen: { ...(e.despertar ? { tipo: 'despertar' } : {}), ultima_corrida_en: ahora.toISOString(), ...arrastreDelDespertar, ...(r.declarado_sedes?.length ? { declarado_sedes: r.declarado_sedes } : {}), unidades: r.unidades, filtro: r.filtro, juez: r.juez, plan: plan.resumen, escrituras: r.escrituras, errores: r.errores, ...(r.resumen_vivo ? { resumen_vivo: r.resumen_vivo } : {}), ...(r.brazos ? { brazos: { activos: r.brazos.activos, por_brazo: r.brazos.por_brazo, archivo: r.brazos.archivo ? { escritas: r.brazos.archivo.escritas, iguales: r.brazos.archivo.iguales, retiradas: r.brazos.archivo.retiradas } : null } } : {}) }, gasto_apify_usd: 0, gasto_modelo_usd: r.gasto.modelo_usd, workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }
-  const log = corridaDeHoy ? await e.db.from('cerebro_portero_corridas').update(rastro).eq('id', String(corridaDeHoy.id)) : await e.db.from('cerebro_portero_corridas').insert(rastro)
+  let log = corridaDeHoy ? await e.db.from('cerebro_portero_corridas').update(rastro).eq('id', String(corridaDeHoy.id)) : await e.db.from('cerebro_portero_corridas').insert(rastro)
+  // 01-nov · la 2.ª o 3.ª corrida del día (modo construcción) puede llegar mientras otra acaba de escribir el rastro: choca con «una por día» → se actualiza ese renglón
+  if (log.error && !corridaDeHoy && /duplicate key|23505|una_por_dia/i.test(String(log.error.message))) log = await e.db.from('cerebro_portero_corridas').update(rastro).eq('client_id', e.client_id).eq('dia', dia)
   if (log.error) r.errores.push(`rastro: ${log.error.message}`); else r.escrituras.corrida = 1
   // el ⑧ que COMPLETA el despertar = la alta terminó: cierra solas las pausas «hasta la alta» del cliente (si falla, la alta no se cae: el «listo» lo reintenta)
   if (!log.error && estado === 'hecha' && Object.keys(arrastreDelDespertar).length) await cerrarPausasDeAlta(e.db, e.client_id, ahora, ahora)
