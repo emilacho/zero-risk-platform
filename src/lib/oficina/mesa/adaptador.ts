@@ -3,7 +3,7 @@
  * Falla CERRADO: un error de lectura se lanza (nunca se lee como «directorio vacío»: una pieza con el directorio mal leído no abre). Un duplicado del número de aporte (23505) se reintenta con el siguiente.
  */
 import type { Db } from '../almacen-supabase'
-import { TIPOS_DE_APORTE, type Aporte, type NuevoAporte, type PuertoMesa, type Tarjeta, type TipoDeAporte } from './tipos'
+import { esClaveDeEquipo, TIPOS_DE_APORTE, type Aporte, type NuevoAporte, type PuertoMesa, type Tarjeta, type TipoDeAporte } from './tipos'
 
 type Fila = Record<string, unknown>
 const lista = <T>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
@@ -11,7 +11,10 @@ const textos = (x: unknown): string[] => lista<unknown>(x).map(String)
 
 export const aTarjeta = (f: Fila): Tarjeta => ({
   agente: String(f.agente), rol: f.rol === 'direccion' || f.rol === 'portero' ? f.rol : 'miembro', especialidad: String(f.especialidad ?? ''),
-  sabe_hacer: textos(f.sabe_hacer), necesita: textos(f.necesita), entrega: textos(f.entrega), pertinente_en: textos(f.pertinente_en), ...(textos(f.indicacion).length ? { indicacion: textos(f.indicacion) } : {}), activo: f.activo !== false, version: Number(f.version ?? 1),
+  sabe_hacer: textos(f.sabe_hacer), necesita: textos(f.necesita), entrega: textos(f.entrega), pertinente_en: textos(f.pertinente_en), ...(textos(f.indicacion).length ? { indicacion: textos(f.indicacion) } : {}),
+  // el equipo (01-nov) solo si la fila trae la columna: una clave conocida pasa, cualquier otra cosa (o NULL: el portero) es «sin equipo»
+  ...('equipo' in f ? { equipo: esClaveDeEquipo(f.equipo) ? f.equipo : null } : {}),
+  activo: f.activo !== false, version: Number(f.version ?? 1),
 })
 export const aAporte = (f: Fila): Aporte => ({
   id: String(f.id), encargo_id: String(f.encargo_id), n: Number(f.n), de: String(f.de), para: f.para == null ? null : String(f.para),

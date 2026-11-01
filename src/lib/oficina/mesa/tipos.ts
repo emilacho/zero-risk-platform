@@ -45,6 +45,11 @@ export const COTAS = {
   REINTENTOS_DE_TURNO: 3,
 } as const
 
+/** los 6 equipos del departamento de marketing (MAPA 01-nov · firma 01-nov 00:11Z) · claves estables de `oficina_equipos` (las mismas que usa el tablero) */
+export const CLAVES_DE_EQUIPO = ['direccion', 'estrategia', 'creativo', 'web', 'medios', 'relaciones'] as const
+export type ClaveDeEquipo = (typeof CLAVES_DE_EQUIPO)[number]
+export const esClaveDeEquipo = (x: unknown): x is ClaveDeEquipo => typeof x === 'string' && (CLAVES_DE_EQUIPO as readonly string[]).includes(x)
+
 /** una tarjeta del directorio vivo (una fila de `oficina_directorio`) */
 export interface Tarjeta {
   agente: string
@@ -58,6 +63,8 @@ export interface Tarjeta {
   pertinente_en: string[]
   /** T6 (31-oct): la indicación obligatoria de este agente en la mesa (dato de la fila): va con el pedido de cada turno, NUNCA dentro de su identidad. Ausente = sin indicación */
   indicacion?: string[]
+  /** 01-nov · el equipo del departamento al que pertenece (agrupación, no mesa: las mesas son sesiones) · null = proveedor fuera del departamento (el portero) · ausente = fila leída sin la columna */
+  equipo?: ClaveDeEquipo | null
   activo: boolean
   version: number
 }
