@@ -29,6 +29,9 @@ describe('leer el eslogan', () => {
     expect(esloganDelCliente({ tagline_opciones: ['Uno dos', 'Tres cuatro'], _field_meta: META })).toBeNull()
     expect(esloganDelCliente({ tagline_opciones: ['PROPUESTA: uno'], _field_meta: META })).toBeNull()
   })
+  it('un lema citado («el cliente dice…») no pasa por eslogan, aunque sea la única opción sin rótulo (E06 de CC3)', () => {
+    expect(esloganDelCliente({ tagline_opciones: ['el cliente dice: «Hola a todos»', 'PROPUESTA: otra'], _field_meta: META })).toBeNull()
+  })
   it('manda lo declarado con su marca, luego la columna', () => {
     expect(esloganDelCliente({ tagline_opciones: ['Lo mío [frase propia del cliente, verbatim — escrita por el dueño]', 'Otra'], tagline: 'Columna', _field_meta: META })?.texto).toBe('Lo mío')
     expect(esloganDelCliente({ tagline: ' Columna ', tagline_opciones: OPCIONES, _field_meta: META })?.texto).toBe('Columna')
@@ -75,6 +78,17 @@ describe('🔴 la carpeta', () => {
     const c = await adjuntoDelCliente(db as never, C)
     expect(c.eslogan).toMatchObject({ texto: 'Cuando tengas esa sed, aquí estamos!', regla: REGLA_DEL_ESLOGAN })
     expect(textoDeLaCarpeta(c)).toMatch(/Eslogan que el cliente ya usa[\s\S]*Cuando tengas esa sed[\s\S]*si propones otro/i)
+  })
+  it('🔴 si la lectura del manual falla o lanza, la carpeta viaja igual (E15 de CC3)', async () => {
+    const fichas = new DbFalsa().semilla('cerebro_fichas', [])
+    const conManualRoto = (roto: () => unknown) => ({ from: (tabla: string) => (tabla === 'client_brand_books' ? roto() : fichas.from(tabla)) })
+    const lanza = await adjuntoDelCliente(conManualRoto(() => { throw new Error('caída') }) as never, C)
+    expect(lanza).not.toHaveProperty('eslogan'); expect(lanza.resumen_vivo).toBeDefined()
+    const consulta: Record<string, unknown> = {}
+    for (const m of ['select', 'eq']) consulta[m] = () => consulta
+    consulta.then = (ok: (v: unknown) => unknown) => ok({ data: null, error: { message: 'tiempo agotado' } })
+    const conError = await adjuntoDelCliente(conManualRoto(() => consulta) as never, C)
+    expect(conError).not.toHaveProperty('eslogan'); expect(conError.resumen_vivo).toBeDefined()
   })
   it('sin manual, o con un contenido ilegible, la carpeta viaja igual', async () => {
     const sin = await adjuntoDelCliente(new DbFalsa().semilla('cerebro_fichas', []) as never, C)
