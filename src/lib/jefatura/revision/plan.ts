@@ -151,3 +151,41 @@ export function provenanceDeVersionNueva(tagDePartida: unknown, o: { etiqueta: '
 
 /** G3 · «sin otra vuelta»: una versión producida por la jefatura NUNCA abre otra revisión */
 export const esProductoDeUnaRevision = (generado_por_jefatura: string | null | undefined): boolean => typeof generado_por_jefatura === 'string' && generado_por_jefatura.trim() !== ''
+
+// ───────────────────────── «Qué cambió» · lo escribe el código (01-nov · firma de Emilio)
+// El modelo numeraba mal («v3» en la versión 2) y reescribía la lista solo con lo último que le pidieron: se perdía lo que ordenó el dueño. Versión y entradas salen de los datos.
+export interface FichaDelCambio { origen?: string; estado?: string; que?: string; donde?: string; razon?: string }
+export interface CicloDelPlan { version: number | null; pedido_del_dueno: string | null; aviso?: string }
+
+/** la sección completa: la versión real del sistema, lo que pidió el dueño tal cual y lo que se tomó de los revisores */
+export function armarQueCambio(a: { ciclo: CicloDelPlan; fichas: FichaDelCambio[] }): string {
+  const titulo = `## QUÉ CAMBIÓ EN ESTA VERSIÓN${a.ciclo.version ? ` (v${a.ciclo.version})` : ''}`
+  const lineas: string[] = []
+  if (a.ciclo.pedido_del_dueno?.trim()) lineas.push(`- **Lo que pidió el dueño:** ${a.ciclo.pedido_del_dueno.trim().replace(/\s+/g, ' ')}`)
+  if (a.ciclo.aviso) lineas.push(`- ${a.ciclo.aviso}`)
+  for (const f of a.fichas) {
+    if (f.estado !== 'tomada') continue
+    const de = f.origen === 'externa' ? 'revisor externo' : 'jefatura'
+    lineas.push(`- **Corrección de la ${de === 'jefatura' ? 'jefatura' : 'revisión externa'}${f.donde && f.donde !== 'general' ? ` en ${f.donde}` : ''}:** ${(f.razon || f.que || '').trim().replace(/\s+/g, ' ')}`)
+  }
+  return [titulo, '', ...(lineas.length ? lineas : ['- Sin cambios registrados.'])].join('\n')
+}
+
+// con título («## Qué cambió») o solo en negrita («**Qué cambió**»)
+const INICIO_DE_LA_SECCION = /^(?:(#{1,6})\s*\**\s*|\*\*\s*)QU[EÉ] CAMBI[OÓ](?!\p{L})[^\n]*$/imu
+/** pone la sección en el plan: reemplaza la que haya escrito el modelo o, si no hay, va tras el título. El resto del plan queda igual, letra por letra */
+export function ponerQueCambio(texto: string, seccion: string): string {
+  const m = INICIO_DE_LA_SECCION.exec(texto)
+  if (m) {
+    const desde = m.index
+    const resto = texto.slice(desde + m[0].length)
+    // termina en un separador o en un título de igual o mayor rango: los subtítulos son parte de la sección del modelo
+    const fin = new RegExp(`\\n(?:-{3,}\\s*\\n|#{1,${m[1]?.length ?? 6}}\\s)`).exec(resto)
+    let hasta = fin ? desde + m[0].length + fin.index : texto.length
+    while (hasta > desde && texto[hasta - 1] === '\n') hasta-- // los saltos antes del separador son del resto del plan: se conservan
+    return `${texto.slice(0, desde)}${seccion}${texto.slice(hasta)}`
+  }
+  const titulo = /^#\s[^\n]*\n(?:[^\n#-][^\n]*\n)*/.exec(texto)
+  const corte = titulo ? titulo[0].length : 0
+  return `${texto.slice(0, corte)}${corte ? '\n' : ''}${seccion}\n\n${texto.slice(corte)}`
+}
