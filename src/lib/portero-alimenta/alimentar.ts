@@ -6,6 +6,7 @@
  *  · el modelo solo juzga lo que tiene algo vigente con qué reemplazarse; lo demás se SUMA por código (no hay nada que reemplazar ⇒ no hace falta pagar);
  *  · un error de lectura se DICE: nunca se lee como «no hay nada».
  */
+import { retirarSobrantesDeLasRefs } from './repetidas'
 import { enTandas } from './tandas'
 import { propiosDeFicha } from '../manual/cliente'
 import { TRANSITORIOS_COMUNES, transitoriosDe, varianteDelCliente, type Interruptores } from './datos'
@@ -78,7 +79,7 @@ export interface ResultadoDeAlimentar {
   plan: PlanDeArchivo | null
   decisiones: Array<{ fuente: string; unidad: string; decision: string; razon: string; cita: string | null; decidido_por: string; degradada_por?: string }>
   gasto: { modelo_usd: number; hoy_antes_usd: number; tope_usd: number; supero_el_tope: boolean }
-  escrituras: { fichas: number; retiradas: number; vistas: number; corrida: number; /** fichas cuya vigencia se renovó porque se releyó lo mismo en una fecha más nueva */ reconfirmadas?: number }
+  escrituras: { fichas: number; retiradas: number; vistas: number; corrida: number; /** fichas cuya vigencia se renovó porque se releyó lo mismo en una fecha más nueva */ reconfirmadas?: number; /** fichas sobrantes (misma referencia y contenido) retiradas al escribir */ repetidas_retiradas?: number }
   errores: string[]
   /** fotos de la ficha propia de Mapas (31-oct · parte 2) */
   fotos_de_mapas?: ResultadoDeFotosDeMapas
@@ -159,7 +160,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   if (sd.error) return falla('client_sedes', sd.error.message)
   const vv = await leerTodas(() => e.db.from('cerebro_unidades_vistas').select('fuente, unidad_ref, huella, veredicto').eq('client_id', e.client_id).order('id', { ascending: true }))
   if (vv.error) return falla('cerebro_unidades_vistas', vv.error.message)
-  const fv = await leerTodas(() => e.db.from('cerebro_fichas').select('id, atributo, contenido, fecha_fuente, observado_en, creado_en, retirada_en, prueba, provenance_tag, sede').eq('client_id', e.client_id).is('retirada_en', null).order('id', { ascending: true }))
+  const fv = await leerTodas(() => e.db.from('cerebro_fichas').select('id, ref, huella, descartada, propiedad, atributo, contenido, fecha_fuente, observado_en, creado_en, retirada_en, prueba, provenance_tag, sede').eq('client_id', e.client_id).is('retirada_en', null).order('id', { ascending: true }))
   if (fv.error) return falla('cerebro_fichas', fv.error.message)
 
   const cfg = (cliente.config ?? {}) as { registro?: string; idioma?: { registro?: string }; apify?: { url_reparto?: unknown } }
@@ -232,6 +233,10 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   // una ficha de otra sede NUNCA es «lo vigente» de esta; la que no tiene sede (anterior a la asignación) sí la adopta la primera lectura con sede
   const vigenteDe = (u: Unidad) => (u.atributo ? vigentePorAtributo.get(`${claveDeAlcance(u.sedes)}|${u.atributo}`) ?? (u.sedes?.length ? vigentePorAtributo.get(`|${u.atributo}`) : undefined) ?? null : null)
 
+  // las referencias que ya están vivas y se entregan (para no escribir el mismo dato dos veces)
+  const refsVivas = new Map<string, string>()
+  for (const x of lista(fv.data)) if (x.prueba !== true && x.descartada !== true && x.propiedad !== 'incierta' && typeof x.ref === 'string' && x.ref) refsVivas.set(x.ref, String(x.id))
+
   const aJuzgar: Array<{ unidad: Unidad; item: ItemParaJuzgar }> = []
   const porCodigo: Array<{ unidad: Unidad; item: ItemParaJuzgar }> = []
   f.propias.forEach((u, i) => {
@@ -261,7 +266,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     // una cifra con valor nuevo REEMPLAZA a la vigente por código (la vieja queda archivada con su fecha: sirve para la tendencia)
     ...porCodigo.map(({ item }): DecisionDelJuez => item.fuente === 'metrica' && item.vigente ? { n: item.n, decision: 'reemplaza', reemplaza_ficha: item.vigente.ficha_id, razon: 'cifra: el valor nuevo reemplaza al anterior', cita: null, decidido_por: 'sistema' } : { n: item.n, decision: 'suma', reemplaza_ficha: null, razon: item.vigente ? 'sin cambio de atributo' : 'dato nuevo: no hay nada vigente que reemplazar', cita: null, decidido_por: 'sistema' }),
   ]
-  const plan = planDeArchivo({ client_id: e.client_id, items, decisiones, descartadas: f.descartadas, sin_confirmar: f.sin_confirmar, ahora, puente_al_indice: e.interruptores.puente_al_indice, nuevoId: e.nuevoId })
+  const plan = planDeArchivo({ client_id: e.client_id, items, decisiones, descartadas: f.descartadas, sin_confirmar: f.sin_confirmar, ahora, puente_al_indice: e.interruptores.puente_al_indice, nuevoId: e.nuevoId, refsVivas })
   r.plan = plan
   r.decisiones = items.map(({ unidad }, i) => ({ fuente: unidad.fuente, unidad: unidad.unidad_ref.slice(0, 80), decision: decisiones[i].decision, razon: decisiones[i].razon, cita: decisiones[i].cita, decidido_por: decisiones[i].decidido_por, ...(decisiones[i].degradada_por ? { degradada_por: decisiones[i].degradada_por } : {}) }))
   r.gasto = { modelo_usd: Math.round((r.juez.costo_usd + costoDeOcr) * 1e6) / 1e6, hoy_antes_usd: gastoAntes, tope_usd: TOPE_DEL_PORTERO_USD, supero_el_tope: gastoAntes + r.juez.costo_usd + costoDeOcr > TOPE_DEL_PORTERO_USD }
@@ -325,6 +330,12 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     }
     if (await w(e.db.from('cerebro_fichas').insert(fila), `ficha ${x.ref}`)) r.escrituras.fichas++
   })
+  // dos corridas a la vez pudieron escribir lo mismo: se vuelve a mirar y se retira la sobrante (con fecha y motivo; nada se borra)
+  if (plan.fichas.some((x) => x.entregable)) {
+    const sob = await retirarSobrantesDeLasRefs(e.db, e.client_id, plan.fichas.filter((x) => x.entregable).map((x) => x.ref), ahora, 'el portero al escribir')
+    if (sob.retiradas) r.escrituras.repetidas_retiradas = sob.retiradas
+    r.errores.push(...sob.errores)
+  }
   await enTandas(plan.retiros, ESCRITURAS_A_LA_VEZ, async (t) => {
     if (await w(e.db.from('cerebro_fichas').update({ retirada_en: ahora.toISOString(), motivo_retirada: t.motivo_retirada, reemplazada_por: t.reemplazada_por }).eq('id', t.id).eq('client_id', e.client_id), `retiro ${t.id}`)) r.escrituras.retiradas++
   })

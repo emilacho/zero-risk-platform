@@ -26,6 +26,7 @@ export interface FichaParaPuente {
   prueba?: boolean | null
   /** huella del texto: dos fichas vivas de la misma fuente con la misma huella son el MISMO contenido (la misma línea en varias páginas) */
   huella?: string | null
+  atributo?: string | null
 }
 const MAX_TEXTO = 7000
 const iso10 = (s: string | null | undefined): string => String(s ?? '').slice(0, 10)
@@ -49,7 +50,7 @@ export function puenteDeFicha(f: FichaParaPuente): PuenteDeIndice {
 /** pasada del puente: cuántos trozos se escriben y se sacan como máximo en UNA llamada (una llamada larga pasa los 120 s de la ruta); el flujo repite hasta terminar */
 export const MAX_TROZOS_A_ESCRIBIR_POR_PASADA = 40
 export const MAX_TROZOS_A_SACAR_POR_PASADA = 200
-export interface ResultadoDeReconciliar { escribir: PuenteDeIndice[]; sacar: string[]; ya_buscables: number; duplicadas: number }
+export interface ResultadoDeReconciliar { escribir: PuenteDeIndice[]; sacar: string[]; ya_buscables: number; duplicadas: number; /** de las repetidas, las que se retiran sin dudas (misma referencia, huella y atributo) */ resolubles: Array<{ id: string; queda: string }> }
 /** `chunkSourceIds` = los `source_id` de los trozos del cliente cuyo `source_table` es `cerebro_fichas` */
 const fuenteDe = (f: FichaParaPuente): string => /^portero:([^:]+):/.exec(f.ref)?.[1] ?? 'desconocida'
 const cuando = (f: FichaParaPuente): string => String(f.observado_en ?? f.creado_en ?? '')
@@ -71,6 +72,26 @@ export function sinRepetidas(buscables: FichaParaPuente[]): { unicas: FichaParaP
   return { unicas, repetidas }
 }
 
+/**
+ * LAS SOBRANTES QUE SE PUEDEN RETIRAR SIN DUDAS (01-nov): dos fichas vivas con la MISMA referencia (fuente + sede), la MISMA huella del texto y el MISMO atributo son el mismo dato escrito dos veces.
+ * Queda la que ya elige el puente (la más antigua; empate: el id menor) y la otra sobra. Si difiere la referencia (otra sede) o el atributo, NO es resoluble sin dudas: se deja y se pausa.
+ */
+export function sobrantesResolubles(buscables: FichaParaPuente[]): Array<{ id: string; queda: string }> {
+  const grupos = new Map<string, FichaParaPuente[]>()
+  for (const f of buscables) {
+    if (!f.huella) continue
+    const k = `${f.ref}|${f.huella}|${f.atributo ?? ''}`
+    ;(grupos.get(k) ?? grupos.set(k, []).get(k)!).push(f)
+  }
+  const out: Array<{ id: string; queda: string }> = []
+  for (const g of grupos.values()) {
+    if (g.length < 2) continue
+    const orden = [...g].sort((a, b) => (cuando(a) < cuando(b) ? -1 : cuando(a) > cuando(b) ? 1 : a.id < b.id ? -1 : 1))
+    for (const f of orden.slice(1)) out.push({ id: f.id, queda: orden[0].id })
+  }
+  return out
+}
+
 /** `chunkSourceIds` = los `source_id` de los trozos del cliente cuyo `source_table` es `cerebro_fichas`. Devuelve TODO lo pendiente (el tope por pasada lo aplica quien envía). */
 export function reconciliarPuente(fichas: FichaParaPuente[], chunkSourceIds: Iterable<string>): ResultadoDeReconciliar {
   const hay = new Set(chunkSourceIds)
@@ -79,5 +100,5 @@ export function reconciliarPuente(fichas: FichaParaPuente[], chunkSourceIds: Ite
   const escribir = unicas.filter((f) => !hay.has(f.id)).sort((a, b) => (a.id < b.id ? -1 : 1)).map(puenteDeFicha)
   // trozos que ya no deben estar: ficha retirada, descartada, incierta, de prueba, REPETIDA o que ya no existe
   const sacar = [...hay].filter((id) => !idsBuscables.has(id)).sort()
-  return { escribir, sacar, ya_buscables: unicas.length - escribir.length, duplicadas: repetidas.length }
+  return { escribir, sacar, ya_buscables: unicas.length - escribir.length, duplicadas: repetidas.length, resolubles: sobrantesResolubles(fichas.filter(esBuscable)) }
 }

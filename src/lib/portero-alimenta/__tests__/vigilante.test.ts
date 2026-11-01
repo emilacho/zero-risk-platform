@@ -352,3 +352,40 @@ describe('en construcción el gasto normal no apaga; solo una anomalía pausa al
     expect(r.body.ok).toBe(false); expect(m.avisos[0]).toMatch(/anomalía: US\$ 11\.00 en la última hora/)
   })
 })
+
+describe('repetidas que se resuelven sin dudas (01-nov): el vigilante retira la sobrante y el cliente SIGUE', () => {
+  const duplicada = () => {
+    const t = sana()
+    t.cerebro_fichas[0] = { ...t.cerebro_fichas[0], ref: 'portero:sitio:a' }
+    t.cerebro_fichas.push(ficha('c', { ref: 'portero:sitio:a', huella: 'h-a', contenido: 'texto a', creado_en: '2026-10-14T10:00:00Z', observado_en: '2026-10-14T10:00:00Z' }))
+    return t
+  }
+  it('misma referencia, huella y contenido: se retira con fecha y motivo, no se pausa, no se avisa, y queda en el rastro', async () => {
+    const t = duplicada()
+    const m = montar(t)
+    const r = await rutaVigilar(m.deps(), { ...REAL, cierre: CIERRE_BUENO })
+    expect(r.status).toBe(200); expect(r.body.ok).toBe(true)
+    expect(m.avisos).toEqual([]); expect(m.apagados).toEqual([])
+    expect(m.base.escrituras.filter((e) => e.tabla === 'cerebro_portero_pausas')).toEqual([])
+    const c = (t.cerebro_fichas as Array<Record<string, unknown>>).find((f) => f.id === 'c')!
+    expect(c.retirada_en).toBe(MIERCOLES.toISOString()); expect(String(c.motivo_retirada)).toMatch(/repetida de a .*el vigilante retiró la sobrante/)
+    expect(rastroEscrito(m.base)[0].fila).toMatchObject({ resumen: { vigilante: { ok: true, repetidas_retiradas: 1 } } })
+  })
+  it('dry_run: no retira nada (y sigue diciendo el problema)', async () => {
+    const t = duplicada()
+    const m = montar(t)
+    const r = await rutaVigilar(m.deps(), { dry_run: true, cierre: CIERRE_BUENO })
+    expect(r.body.ok).toBe(false)
+    expect((t.cerebro_fichas as Array<Record<string, unknown>>).every((f) => !f.retirada_en)).toBe(true)
+  })
+  it('si la base rechaza la retirada, NO se da por resuelto: pausa y avisa', async () => {
+    const t = duplicada()
+    const base = crearBaseFalsa(t as never)
+    const db = { from: (tabla: string) => { const q = base.db.from(tabla) as unknown as Record<string, unknown>; if (tabla === 'cerebro_fichas') { const up = q.update as (f: unknown) => Record<string, unknown>; q.update = (f: unknown) => { const x = up(f); x.then = (res: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'boom' } }).then(res); return x } } return q } }
+    const avisos: string[] = []
+    const r = await rutaVigilar({ db, interruptores: ON, ahora: MIERCOLES, esperar: async () => {}, umbrales: { aviso_usd: 1.5, apagar_usd: 3 }, avisar: async (x: string) => { avisos.push(x); return { ok: true, detalle: 'ok' } } } as never, { ...REAL, cierre: CIERRE_BUENO })
+    expect(r.body.ok).toBe(false)
+    expect(avisos[0]).toMatch(/PAUSADO solo para/)
+    expect(JSON.stringify((r.body as { clientes: unknown }).clientes)).toMatch(/no pude comprobar retirar las fichas repetidas: retirar c: boom/)
+  })
+})

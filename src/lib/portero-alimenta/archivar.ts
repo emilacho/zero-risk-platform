@@ -86,6 +86,8 @@ export interface EntradaDeArchivo {
   ahora: Date
   puente_al_indice: boolean
   nuevoId?: () => string
+  /** las fichas VIVAS y entregables del cliente: referencia → id. Una ficha nueva con una referencia que ya está viva es la misma cosa escrita dos veces: no se crea (01-nov) */
+  refsVivas?: ReadonlyMap<string, string>
 }
 
 export function planDeArchivo(e: EntradaDeArchivo): PlanDeArchivo {
@@ -94,18 +96,26 @@ export function planDeArchivo(e: EntradaDeArchivo): PlanDeArchivo {
   const plan: PlanDeArchivo = { fichas: [], retiros: [], vistas: [], puente: [], sacar_del_indice: [], resumen: { suma: 0, reemplaza: 0, nada: 0, duda: 0, ajenas: 0, ruido: 0, repetidas: 0, sin_confirmar: 0 } }
   const vista = (u: Unidad, veredicto: string, ficha_id: string | null) => plan.vistas.push({ client_id: e.client_id, fuente: u.fuente, unidad_ref: u.unidad_ref, huella: u.huella, veredicto, ficha_id, ultima_vez: iso })
 
+  // lo vivo ahora (referencia → id) más lo que este mismo plan va creando; lo que el plan retira deja de estar vivo
+  const vivas = new Map<string, string>(e.refsVivas ?? [])
+  const retiradasPorElPlan = new Set(e.decisiones.flatMap((d) => (d && d.decision === 'reemplaza' && d.reemplaza_ficha ? [d.reemplaza_ficha] : [])))
+
   e.items.forEach(({ unidad: u, item }, i) => {
     const d = e.decisiones[i]
     if (!d) return
     if (d.decision === 'nada') { plan.resumen.nada++; vista(u, 'nada', null); return }
     const nueva = id()
     const entregable = d.decision !== 'duda'
+    const refNueva = `portero:${u.fuente}:${u.huella.slice(0, 16)}${sufijoDeRef(u.sedes)}`
+    // la misma referencia ya está viva (de antes o de otra unidad de esta misma corrida): es el mismo dato; se anota como repetida y apunta a la ficha que lo representa
+    const yaViva = entregable ? vivas.get(refNueva) : undefined
+    if (yaViva && !retiradasPorElPlan.has(yaViva)) { plan.resumen.repetidas++; vista(u, 'repetida', yaViva); return }
     const plazo = plazoDe(u)
     const dias = diasDe(plazo)
     const ficha: FichaNueva = {
       id: nueva, client_id: e.client_id,
       // una misma línea en dos sedes son dos fichas (cada sede su precio), no una repetida
-      ref: `portero:${u.fuente}:${u.huella.slice(0, 16)}${sufijoDeRef(u.sedes)}`,
+      ref: refNueva,
       clase: u.atributo ? u.atributo.split(':')[0] : u.fuente, titulo: `${u.fuente} · ${u.atributo ?? u.unidad_ref}${u.sedes?.length ? ` · sede ${u.sedes.join(', ')}` : ''}`.slice(0, 120), que_es: u.texto.slice(0, 200),
       contenido: u.texto, origen: origenDe(u), fecha_fuente: u.fecha_fuente, observado_en: u.observado_en, reconfirmado_en: u.observado_en,
       plazo, vigente_hasta: dias === null ? null : new Date(new Date(u.observado_en).getTime() + dias * DIA).toISOString(),
@@ -118,6 +128,7 @@ export function planDeArchivo(e: EntradaDeArchivo): PlanDeArchivo {
       entregable,
     }
     plan.fichas.push(ficha)
+    if (entregable) vivas.set(refNueva, nueva)
     vista(u, d.decision, nueva)
     plan.resumen[d.decision === 'duda' ? 'duda' : d.decision]++
     if (d.decision === 'reemplaza' && d.reemplaza_ficha) {
