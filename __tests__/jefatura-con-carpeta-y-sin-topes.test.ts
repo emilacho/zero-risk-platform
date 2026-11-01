@@ -13,6 +13,7 @@ import { PEDIDO_MAXIMO } from '../src/lib/planeacion/puertas'
 import { MAX_TAREA_RUN_SDK } from '../src/lib/finanzas/conversa/modelo-run-sdk'
 import { idsCitadosEnElTexto } from '../src/lib/portero-alimenta/contexto-del-cliente'
 import { erroresDeCambios } from '../src/lib/oficina/cambios-del-dueno'
+import { MINUTOS_PARA_DAR_POR_MUERTO, MINUTOS_QUE_ESPERA_EL_TURNO } from '../src/lib/jefatura/revision/orquestador'
 import { REGLA_DE_LAS_PALABRAS_DEL_MANUAL } from '../src/lib/jefatura/revision/pedidos'
 import { brazoAnalisis } from '../src/lib/planeacion/brazos'
 
@@ -153,5 +154,12 @@ describe('una lectura fallida de los datos del dueño', () => {
     const tabla = (t: string) => { const c: Record<string, unknown> = {}; for (const m of ['select', 'eq', 'is', 'in', 'order', 'limit', 'maybeSingle']) c[m] = () => c; c.then = (ok: (v: unknown) => unknown) => ok({ data: t === 'client_sedes' ? null : [], error: t === 'client_sedes' ? { message: 'caída' } : null }); return c }
     const carpeta = await carpetaParaRevisar({ from: tabla }, 'c1')
     expect(carpeta.find((x) => x.titulo === 'Lo que dijo el dueño')?.texto).toMatch(/no se pudo leer.*No lo tomes como que no existe/)
+  })
+})
+
+describe('el vigía no le gana al turno que recoge la respuesta', () => {
+  it('🔴 da por muerto un paso solo después de la espera del turno (hallazgo de CC3)', () => {
+    expect(MINUTOS_QUE_ESPERA_EL_TURNO).toBe(30)
+    expect(MINUTOS_PARA_DAR_POR_MUERTO).toBeGreaterThan(MINUTOS_QUE_ESPERA_EL_TURNO)
   })
 })

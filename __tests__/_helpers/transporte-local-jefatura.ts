@@ -27,7 +27,7 @@ export function transporteLocal(rutas: Rutas, db: () => DbFalsaJefatura) {
   /** pasan 20 min: el paso que sigue «corriendo» de esa revisión queda más viejo que el límite del vigía */
   const envejecer = async (revision_id: string) => {
     for (const p of db().tablas.jefatura_pasos ?? []) {
-      if (p.revision_id === revision_id && p.estado === 'corriendo') for (const k of Object.keys(p)) if (/inicio|started|creado|created/.test(k)) p[k] = new Date(Date.now() - 20 * 60_000).toISOString()
+      if (p.revision_id === revision_id && p.estado === 'corriendo') for (const k of Object.keys(p)) if (/inicio|started|creado|created/.test(k)) p[k] = new Date(Date.now() - 40 * 60_000).toISOString()
     }
   }
   return { llamar, envejecer }

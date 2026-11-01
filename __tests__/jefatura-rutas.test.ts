@@ -353,15 +353,15 @@ describe('el recorrido por HTTP, en seco', () => {
     expect(r.status).toBe(500)
     expect(r.j.detalle).toMatch(/base caída/)
   })
-  it('el vigía en ensayo: un paso colgado de más de 12 min se da por muerto y se reanuda UNA vez', async () => {
+  it('el vigía en ensayo: un paso colgado más allá del plazo se da por muerto y se reanuda UNA vez', async () => {
     const a = await llamar(REVISIONES, 'revisiones', sobre('brief'))
-    ;(db().tablas.jefatura_pasos[0] as Json).inicio = new Date(Date.now() - 20 * 60_000).toISOString()
+    ;(db().tablas.jefatura_pasos[0] as Json).inicio = new Date(Date.now() - 40 * 60_000).toISOString()
     const v1 = await llamar(VIGIA, 'vigia', {})
     expect(v1.j).toMatchObject({ accion: 'vigilado', reanudar: [a.j.revision_id] })
     expect((db().tablas.jefatura_pasos[0] as Json).estado).toBe('muerto')
     const otra = await llamar(TURNOS, 'turnos', { accion: 'siguiente', revision_id: a.j.revision_id })
     expect(otra.j.accion).toBe('esperar')
-    ;(db().tablas.jefatura_pasos[0] as Json).inicio = new Date(Date.now() - 20 * 60_000).toISOString()
+    ;(db().tablas.jefatura_pasos[0] as Json).inicio = new Date(Date.now() - 40 * 60_000).toISOString()
     const v2 = await llamar(VIGIA, 'vigia', {})
     expect(v2.j.fallidos).toEqual([a.j.revision_id])
     expect((db().tablas.jefatura_revisiones[0] as Json)).toMatchObject({ estado: 'fallida', resultado: 'fallida' })

@@ -196,7 +196,7 @@ describe('la jefatura apagada y el vigía', () => {
       turnoBody = nodo(turnoJson, '③ ¿Y ahora?', { entrada: respuesta, nodos: { '⓪ Entrada · llave': entrada } })[0].turno_body
     }
     expect(muerto, 'algún paso debía morir').toBeTruthy()
-    for (const p of db().tablas.jefatura_pasos ?? []) if (p.estado === 'corriendo') for (const k of Object.keys(p)) if (/inicio|started|creado|created/.test(k)) p[k] = new Date(Date.now() - 20 * 60_000).toISOString()
+    for (const p of db().tablas.jefatura_pasos ?? []) if (p.estado === 'corriendo') for (const k of Object.keys(p)) if (/inicio|started|creado|created/.test(k)) p[k] = new Date(Date.now() - 40 * 60_000).toISOString()
     const v = await http(VIGIA, 'vigia', {})
     expect(v.body.accion).toBe('vigilado')
     const items = nodo(vigiaJson, '① Qué hacer con cada pendiente', { entrada: v })
