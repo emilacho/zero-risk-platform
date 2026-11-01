@@ -41,8 +41,11 @@ export type EstadoBrazo = (typeof ESTADOS_BRAZO)[number]
  *  escribe. «web propia» es la función 17 de Apify, no un brazo aparte.
  *  `mercado` (F4 · firmado 31-oct · estructura completa §2): el informe corto de
  *  mercado y tendencias de `market_research_analyst` ANTES del redactor del plan;
- *  es PROPUESTA, nunca dato del cliente, y contesta los mismos tres estados. */
-export const BRAZOS = ['apify', 'posthog', 'cerebro', 'mercado'] as const
+ *  es PROPUESTA, nunca dato del cliente, y contesta los mismos tres estados.
+ *  `analisis` (mesa de análisis · FIRMA 01-nov 08:42Z): generaliza `mercado` a un
+ *  analista por tipo (mercado · competencia · voz_del_publico · escucha_x ·
+ *  retencion); cada informe es PROPUESTA y vuelve al plan con el mismo contrato. */
+export const BRAZOS = ['apify', 'posthog', 'cerebro', 'mercado', 'analisis'] as const
 export type Brazo = (typeof BRAZOS)[number]
 
 /** Canon canonical · la salida idéntica de todo brazo · §4.2. */
@@ -231,7 +234,11 @@ export async function envolverBrazo(args: {
      * bandera un vacío se rotula «fui, miré y no hay», que es afirmar una
      * mirada que no ocurrió (condición de CC#3, 09-sep).
      */
-    | { hay: false; motivo: string; fuente?: string; noSeMiro?: boolean }
+    | {
+        hay: false; motivo: string; fuente?: string; noSeMiro?: boolean
+        /** 01-nov · un `sin_dato` puede llevar DATOS que sí se leyeron (p. ej. la carpeta vacía del cliente: el flujo la lee también en `sin_dato`) */
+        datos?: Record<string, unknown>
+      }
   >
   medido_en?: string
 }): Promise<RespuestaBrazo> {
@@ -274,6 +281,7 @@ export async function envolverBrazo(args: {
       ...base,
       fuente,
       motivo: r.motivo,
+      ...(r.datos && Object.keys(r.datos).length ? { datos: r.datos } : {}),
       ...(args.medido_en ? { medido_en: args.medido_en } : {}),
     })
   } catch (e) {

@@ -397,3 +397,149 @@ export async function brazoCerebro(args: {
     },
   })
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MESA DE ANÁLISIS (FIRMA 01-nov 08:42Z · DISEÑO-CC1 + ADENDA 1) · dos brazos
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface InformeDeAnalisisLeido {
+  readonly informe: string
+  readonly citas: ReadonlyArray<string>
+  readonly citas_ajenas: number
+  readonly hallazgos: number
+  readonly lineas_sin_sosten: number
+  readonly declara_sin_dato: boolean
+  readonly recortado: boolean
+}
+export interface ArchivadoDelInforme { readonly ok: boolean; readonly detalle: string; readonly ficha_id?: string | null }
+
+/**
+ * Canon canonical · UN analista de la mesa de análisis · mismo trato que `mercado`:
+ * en ensayo NO se llama (US$ 0, `sin_respuesta` declarado); el informe se LEE sin
+ * creerle (`leer`: hallazgos sostenidos por cita del material o por fuente+fecha);
+ * sin hallazgos sostenidos no se usa; con «sin dato» declarado es `sin_dato`.
+ * `archivar` (solo corrida real) guarda el informe en el cerebro por la puerta del
+ * portero y su resultado VIAJA en `datos.archivado`: no archivar nunca tumba el informe.
+ */
+export async function brazoAnalisis(args: {
+  objetivo: string
+  fuente: string
+  limite_ms?: number
+  proposito?: string
+  tipo: string
+  agente: string
+  rotulo: string
+  dry_run: boolean
+  esperados: { min: number; max: number }
+  pedir: () => Promise<RespuestaDelAgenteDeMercado>
+  leer: (salida: string) => InformeDeAnalisisLeido
+  archivar?: (informe: InformeDeAnalisisLeido) => Promise<ArchivadoDelInforme>
+}): Promise<RespuestaBrazo> {
+  return envolverBrazo({
+    brazo: 'analisis',
+    objetivo: args.objetivo,
+    fuente: args.fuente,
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
+    ejecutar: async () => {
+      if (args.dry_run) {
+        return {
+          hay: false as const, noSeMiro: true,
+          motivo: `NO SE MIRÓ DE VERDAD · fue un ensayo (dry-run) · el analista «${args.tipo}» (${args.agente}) no genera en seco y lo que devolviera NO sería informe · no se llamó, no se gastó ni se archivó`,
+        }
+      }
+      const r = await args.pedir()
+      if (!r.ok) return { hay: false as const, noSeMiro: true, motivo: `el analista no contestó · ${r.error ?? 'sin detalle'} · costo US$ ${r.costo_usd.toFixed(2)}` }
+      const salida = String(r.salida ?? '').trim()
+      if (!salida) return { hay: false as const, noSeMiro: true, motivo: 'el analista devolvió vacío · no hay informe' }
+      const leido = args.leer(salida)
+      if (leido.hallazgos === 0) {
+        if (leido.declara_sin_dato) return { hay: false as const, motivo: `fui, miré y no hay: el analista «${args.tipo}» declaró «sin dato» y no estimó · ` + salida.slice(0, 200) }
+        return {
+          hay: false as const, noSeMiro: true,
+          motivo: leido.lineas_sin_sosten
+            ? `el informe trae ${leido.lineas_sin_sosten} línea(s) de lista pero ninguna sostenida (sin cita del material ni fuente y fecha): no son hallazgos, son estimaciones · no se usa`
+            : 'el informe no trae hallazgos legibles (ninguna línea de lista) · no se usa',
+        }
+      }
+      const fuera = leido.hallazgos < args.esperados.min || leido.hallazgos > args.esperados.max
+      const avisos = [
+        ...(fuera ? [`trajo ${leido.hallazgos} hallazgo(s); se pidieron ${args.esperados.min}–${args.esperados.max}`] : []),
+        ...(leido.lineas_sin_sosten ? [`${leido.lineas_sin_sosten} línea(s) sin cita del material (o «sin dato») no cuentan como hallazgo`] : []),
+        ...(leido.citas_ajenas ? [`${leido.citas_ajenas} cita(s) a fichas que no estaban en el material se descartaron`] : []),
+        ...(leido.recortado ? ['el informe se recortó al tope'] : []),
+      ]
+      const archivado: ArchivadoDelInforme = args.archivar
+        ? await args.archivar(leido).catch((e) => ({ ok: false, detalle: 'no se pudo archivar · ' + (e instanceof Error ? e.message : String(e)) }))
+        : { ok: false, detalle: 'no se archivó: el informe no cita fichas del cerebro (el portero exige al menos una)' }
+      return {
+        hay: true as const,
+        datos: {
+          tipo: args.tipo,
+          agente: args.agente,
+          informe: leido.informe,
+          rotulo: args.rotulo,
+          es_dato_del_cliente: false,
+          citas: [...leido.citas],
+          hallazgos: leido.hallazgos,
+          costo_usd: r.costo_usd,
+          archivado,
+          ...(avisos.length ? { aviso: avisos.join(' · ') } : {}),
+        },
+      }
+    },
+  })
+}
+
+export interface CarpetaDelCliente {
+  readonly contexto_del_cliente: { resumen_vivo: { estado: string; detalle?: string }; informes: ReadonlyArray<unknown>; informes_estado?: string; informes_detalle?: string }
+  /** los ids de las fichas crudas que los informes citan: el material crudo sigue disponible SOLO por cita (se pide al portero por id) */
+  readonly material_citado: { readonly ids: ReadonlyArray<string>; readonly detalle: string }
+}
+
+/**
+ * Canon canonical · LA CARPETA DEL CLIENTE (FIRMA 01-nov punto 2): el plan ya no
+ * busca por parecido; recibe ENTERA la carpeta que arma el portero (resumen vivo +
+ * informes vigentes de la mesa de análisis) y el material crudo SOLO si un informe lo cita.
+ * Sin resumen vivo y sin informes es `sin_dato` («el portero todavía no armó la carpeta»);
+ * que la lectura se rompa es `sin_respuesta`.
+ */
+export async function brazoCarpeta(args: {
+  objetivo: string
+  fuente: string
+  limite_ms?: number
+  proposito?: string
+  leer: () => Promise<CarpetaDelCliente>
+}): Promise<RespuestaBrazo> {
+  return envolverBrazo({
+    brazo: 'cerebro',
+    objetivo: args.objetivo,
+    fuente: args.fuente,
+    ...(args.limite_ms !== undefined ? { limite_ms: args.limite_ms } : {}),
+    ...(args.proposito ? { proposito: args.proposito } : {}),
+    ejecutar: async () => {
+      const c = await args.leer()
+      const ctx = c.contexto_del_cliente
+      if (ctx.resumen_vivo.estado === 'no_se_pudo_leer') {
+        return { hay: false as const, noSeMiro: true, motivo: 'no se pudo leer la carpeta del cliente · ' + String(ctx.resumen_vivo.detalle ?? ctx.informes_detalle ?? 'sin detalle') }
+      }
+      const hayResumen = ctx.resumen_vivo.estado === 'vigente'
+      if (!hayResumen && ctx.informes.length === 0) {
+        return {
+          hay: false as const,
+          motivo: 'fui, miré y no hay: el cliente no tiene carpeta todavía (ni resumen vivo ni informes vigentes de la mesa de análisis) · el portero la arma; el plan no busca por parecido',
+          // la carpeta vacía viaja igual (contrato con CC2: el flujo la lee también en `sin_dato`)
+          datos: { contexto_del_cliente: ctx, material_citado: c.material_citado, carpeta: { resumen_vivo: ctx.resumen_vivo.estado, informes: 0, informes_estado: ctx.informes_estado ?? 'ok' } },
+        }
+      }
+      return {
+        hay: true as const,
+        datos: {
+          contexto_del_cliente: ctx,
+          material_citado: c.material_citado,
+          carpeta: { resumen_vivo: ctx.resumen_vivo.estado, informes: ctx.informes.length, informes_estado: ctx.informes_estado ?? 'ok' },
+        },
+      }
+    },
+  })
+}
