@@ -2,7 +2,7 @@
  * EL DIRECTORIO VIVO · quién está en la mesa y qué especialidades son pertinentes para cada tipo de pieza. Es DATO (`oficina_directorio`), no código:
  * agregar un agente = insertar una fila; quitarlo = `activo=false`. Puro: sin base ni red.
  */
-import { esDeLaCadena, type Tarjeta, type TipoDePieza } from './tipos'
+import { esDeLaCadena, type ClaveDeEquipo, type Tarjeta, type TipoDePieza } from './tipos'
 
 const CONDICION_IMAGEN = 'si_imagen_generada'
 /** una tarjeta de dirección que en ESTE tipo de pieza es miembro (no dirige): `concepto:miembro` */
@@ -46,6 +46,19 @@ export function direccionDe(directorio: Tarjeta[], tipo?: TipoDePieza): Tarjeta 
   return dirs.find((t) => propios(t).length === 0 && !t.pertinente_en.some((p) => p.endsWith(':dirige'))) ?? null
 }
 export const porteroDe = (directorio: Tarjeta[]): Tarjeta | null => directorio.find((t) => t.rol === 'portero' && t.activo) ?? null
+
+/**
+ * 01-nov · el directorio AGRUPADO por equipo del departamento (MAPA «ESTRUCTURA FINAL: 6 EQUIPOS»). Es una lectura, no cambia quién se sienta en qué mesa.
+ * Las tarjetas sin equipo (el portero: proveedor fuera del departamento) o leídas sin la columna van bajo `null`. Puro: sin base ni red.
+ */
+export function porEquipo(directorio: Tarjeta[]): Map<ClaveDeEquipo | null, Tarjeta[]> {
+  const out = new Map<ClaveDeEquipo | null, Tarjeta[]>()
+  for (const t of directorio) {
+    const k = t.equipo ?? null
+    out.set(k, [...(out.get(k) ?? []), t])
+  }
+  return out
+}
 
 /** el directorio que TODOS reciben en cada turno (en español, escrito para compañeros); `yo` se marca para que cada uno sepa quién es */
 export function seccionDelDirectorio(directorio: Tarjeta[], yo: string): string {
