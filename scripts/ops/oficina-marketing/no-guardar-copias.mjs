@@ -31,13 +31,27 @@ const plan = $input.first().json || {}
 let re = null
 try { re = $('Plan anterior · leer').first().json } catch (e) { re = null }
 if (!re || re.reescritura !== true) return [{ json: Object.assign({}, plan, { copia_del_plan_anterior: 'no' }) }]
-const normal = function (t) { return String(t == null ? '' : t).replace(/\\s+/g, ' ').trim() }
+// la plataforma pega la sección «Qué cambió» a las versiones B y C (tras el título, en el lugar de la del modelo o al final): se quita de AMBOS textos, dondequiera que esté, desde su título hasta el siguiente título del mismo o mayor rango
+const sinQueCambio = function (t) {
+  const fuera = []; let rango = 0
+  String(t == null ? '' : t).split(/\\r?\\n/).forEach(function (linea) {
+    const h = /^\\s*(#{1,6})\\s/.exec(linea)
+    if (rango && h && h[1].length <= rango) rango = 0
+    if (!rango) {
+      const t1 = /^\\s*(#{1,6})\\s*(?:\\*\\*)?\\s*qu[eé]\\s+cambi[oó]/i.exec(linea)
+      const t2 = /^\\s*\\*\\*\\s*qu[eé]\\s+cambi[oó]|^\\s*qu[eé]\\s+cambi[oó]\\s*:/i.exec(linea)
+      if (t1) { rango = t1[1].length; return }
+      if (t2) { rango = 7; return }
+      fuera.push(linea)
+    }
+  })
+  return fuera.join('\\n')
+}
+const normal = function (t) { return sinQueCambio(t).replace(/\\s+/g, ' ').trim() }
 const anterior = re.plan_anterior && typeof re.plan_anterior.texto === 'string' ? normal(re.plan_anterior.texto) : ''
 const nuevo = normal(plan.texto)
 if (!anterior || !nuevo) return [{ json: Object.assign({}, plan, { copia_del_plan_anterior: 'no', comparacion_fallo: true }) }]
-// el plan guardado puede traer al final la sección «Qué cambió» (la pega la plataforma a las versiones B y C): el texto del redactor tal cual es copia si el guardado es ESE texto + solo esa sección
-const resto = anterior.indexOf(nuevo) === 0 ? anterior.slice(nuevo.length).trim() : null
-const esCopia = anterior === nuevo || (resto !== null && /^(?:#{1,6}\\s*)?(?:\\*\\*)?\\s*qu[eé]\\s+cambi[oó]/i.test(resto))
+const esCopia = anterior === nuevo
 if (!esCopia) return [{ json: Object.assign({}, plan, { copia_del_plan_anterior: 'no' }) }]
 if ($runIndex === 0) {
   const base = $('Redactor · elegir').last().json
