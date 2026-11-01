@@ -19,3 +19,11 @@ supabase/migrations/202611011300_*.sql text eol=lf
 supabase/reversas/202610312011_*.sql text eol=lf
 supabase/reversas/202610312012_*.sql text eol=lf
 supabase/reversas/202611011300_*.sql text eol=lf
+
+# Equipos (1400) · mesa de análisis + palanca (1500) · idioma del brief (1510) · 01-nov: la prueba de la mesa lee el SQL de 1510 tal cual y compara md5; en Windows quedaba CRLF (menor 2 de la certificación de CC3).
+supabase/migrations/202611011400_*.sql text eol=lf
+supabase/migrations/202611011500_*.sql text eol=lf
+supabase/migrations/202611011510_*.sql text eol=lf
+supabase/reversas/202611011400_*.sql text eol=lf
+supabase/reversas/202611011500_*.sql text eol=lf
+supabase/reversas/202611011510_*.sql text eol=lf
