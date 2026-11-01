@@ -8,7 +8,7 @@
 import { sobrantesResolubles, type FichaParaPuente } from './puente'
 
 type Fila = Record<string, unknown>
-type Base = { from: (t: string) => any } // eslint-disable-line @typescript-eslint/no-explicit-any
+type Base = { from: (t: string) => any }
 
 /** retira cada sobrante con fecha y motivo; solo toca fichas VIVAS del cliente. Devuelve cuántas retiró y los errores (que se DICEN) */
 export async function retirarSobrantes(db: Base, clientId: string, pares: Array<{ id: string; queda: string }>, ahora: Date, quien: string): Promise<{ retiradas: number; errores: string[] }> {
