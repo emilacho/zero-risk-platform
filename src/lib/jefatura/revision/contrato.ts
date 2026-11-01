@@ -40,6 +40,8 @@ export interface Simulacion {
   donde?: string
   /** largo del plan A simulado (lo usan los flujos para fabricar B y C) */
   largo_a?: number
+  /** la respuesta del verificador de órdenes: `no_cumple_ultima` niega solo la última versión; `no_cumple_todas`, todas */
+  verificador?: 'cumple' | 'no_cumple_ultima' | 'no_cumple_todas' | 'formato_roto' | 'salvaguarda'
 }
 
 export interface PayloadDeRevision {
@@ -61,6 +63,10 @@ export interface PayloadDeRevision {
   simulacion?: Simulacion
   /** plan: el pedido que armó «Redactor (B4)» (datos reunidos, hechos del dueño, registro, referencia del producto), para pedir la versión nueva sin recolectar de nuevo */
   pedido_del_plan?: string
+  /** plan: lo que escribió el dueño, frase por frase. Lo pone la jefatura al abrir, de `plan_cambios`; nadie más */
+  ordenes_del_dueno?: string[]
+  /** plan: había un pedido del dueño y no se pudo leer */
+  orden_ilegible?: boolean
   /** pieza: la familia (post_img, carrusel, kit_historias) */
   familia?: string
   huecos?: HuecosDeLaPregunta
@@ -79,7 +85,7 @@ export interface EntradaDeRevision {
 }
 
 /** `ficha_sin_dueno` solo aparece (en true) cuando una ficha bloqueante del jefe no tiene a quién corregirla; ausente = no pasó (la forma de siempre no cambia) */
-export interface Marcas { con_desacuerdo: boolean; sin_segunda_mirada: boolean; ficha_sin_dueno?: boolean }
+export interface Marcas { con_desacuerdo: boolean; sin_segunda_mirada: boolean; ficha_sin_dueno?: boolean; orden_sin_cumplir?: boolean }
 
 export interface RespuestaDeFicha { ficha_id: string; origen: string; donde: string; estado: string; razon: string | null }
 

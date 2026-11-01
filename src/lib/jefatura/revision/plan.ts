@@ -29,7 +29,7 @@ export interface Adopcion {
   razones: Array<{ etiqueta: Etiqueta; pasa: boolean; contra: Etiqueta; motivo: string }>
 }
 
-export function elegirVersion(evaluaciones: EvaluacionDeVersion[]): Adopcion {
+export function elegirVersion(evaluaciones: EvaluacionDeVersion[], vetadas: ReadonlySet<string> = new Set()): Adopcion {
   const por = new Map<Etiqueta, EvaluacionDeVersion>()
   for (const e of evaluaciones) {
     if (!ETIQUETAS.includes(e.etiqueta)) throw new Error(`etiqueta «${String(e.etiqueta)}» no válida`)
@@ -51,8 +51,9 @@ export function elegirVersion(evaluaciones: EvaluacionDeVersion[]): Adopcion {
     const minimo = a.largo * PORCENTAJE_MINIMO_DEL_LARGO
     const masMarcas = x.marcas > previa.marcas
     const corta = x.largo < minimo
-    const pasa = !masMarcas && !corta
-    razones.push({ etiqueta: et, pasa, contra: previa.etiqueta, motivo: pasa ? `${x.marcas} marca(s) ≤ ${previa.marcas} de ${previa.etiqueta} y largo ${x.largo} ≥ ${Math.ceil(minimo)}` : [masMarcas ? `${x.marcas} marca(s) > ${previa.marcas} de ${previa.etiqueta}` : '', corta ? `largo ${x.largo} < ${Math.ceil(minimo)} (60 % de A)` : ''].filter(Boolean).join(' · ') })
+    const vetada = vetadas.has(et)
+    const pasa = !masMarcas && !corta && !vetada
+    razones.push({ etiqueta: et, pasa, contra: previa.etiqueta, motivo: pasa ? `${x.marcas} marca(s) ≤ ${previa.marcas} de ${previa.etiqueta} y largo ${x.largo} ≥ ${Math.ceil(minimo)}` : [...(vetada ? ['no cumple lo que ordenó el dueño'] : []), masMarcas ? `${x.marcas} marca(s) > ${previa.marcas} de ${previa.etiqueta}` : '', corta ? `largo ${x.largo} < ${Math.ceil(minimo)} (60 % de A)` : ''].filter(Boolean).join(' · ') })
     if (pasa) { previa = x; aceptadas.push(et) }
   }
   return { adoptada: previa.etiqueta, ultima, adoptoLaUltima: previa.etiqueta === ultima, aceptadas, razones }
@@ -158,7 +159,7 @@ export interface FichaDelCambio { origen?: string; estado?: string; que?: string
 export interface CicloDelPlan { version: number | null; pedido_del_dueno: string | null; aviso?: string }
 
 /** la sección completa: la versión real del sistema, lo que pidió el dueño tal cual y lo que se tomó de los revisores */
-export function armarQueCambio(a: { ciclo: CicloDelPlan; fichas: FichaDelCambio[] }): string {
+export function armarQueCambio(a: { ciclo: CicloDelPlan; fichas: FichaDelCambio[]; sin_entrar?: string[] }): string {
   const titulo = `## QUÉ CAMBIÓ EN ESTA VERSIÓN${a.ciclo.version ? ` (v${a.ciclo.version})` : ''}`
   const lineas: string[] = []
   if (a.ciclo.pedido_del_dueno?.trim()) lineas.push(`- **Lo que pidió el dueño:** ${a.ciclo.pedido_del_dueno.trim().replace(/\s+/g, ' ')}`)
@@ -168,6 +169,7 @@ export function armarQueCambio(a: { ciclo: CicloDelPlan; fichas: FichaDelCambio[
     const de = f.origen === 'externa' ? 'revisor externo' : 'jefatura'
     lineas.push(`- **Corrección de la ${de === 'jefatura' ? 'jefatura' : 'revisión externa'}${f.donde && f.donde !== 'general' ? ` en ${f.donde}` : ''}:** ${(f.razon || f.que || '').trim().replace(/\s+/g, ' ')}`)
   }
+  for (const x of a.sin_entrar ?? []) lineas.push(`- **Una versión revisada no entró porque contradecía lo que pediste:** ${x.trim().replace(/\s+/g, ' ')}`)
   return [titulo, '', ...(lineas.length ? lineas : ['- Sin cambios registrados.'])].join('\n')
 }
 

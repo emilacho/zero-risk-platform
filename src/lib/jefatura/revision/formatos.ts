@@ -28,6 +28,7 @@ const respuestas: Esq = { t: 'arr', max: 12, de: { t: 'obj', req: ['id', 'estado
 
 /** esquemas JSON propios de la jefatura (los de la oficina viven en `ESQUEMAS` y no se modifican) */
 export const ESQUEMAS_DE_REVISION: Record<string, Esq> = {
+  'verificacion_de_ordenes.v1': { t: 'obj', req: ['filas'], props: { filas: { t: 'arr', max: 600, de: { t: 'obj', req: ['version', 'orden', 'estado'], props: { version: str(1, 2), orden: { t: 'num', min: 1 }, estado: { t: 'enum', v: ['cumple', 'no_cumple', 'no_aplica'] }, cita: str(0, 4000), motivo: str(0, 4000), salvaguarda: str(0, 40) } } } } },
   'resolucion_objeto.v1': { t: 'obj', req: ['respuestas'], props: { respuestas, objeto: { t: 'obj', props: {}, extra: true } } },
   'resolucion_parcial.v1': { t: 'obj', req: ['respuestas'], props: { respuestas, filas: { t: 'arr', max: 200, de: { t: 'obj', req: ['fila_id'], props: { fila_id: str(1, 80) }, extra: true } } } },
   /** solo el BLOQUE de resolución del plan (el texto va fuera): interno, nunca se le pide a un agente como esquema */

@@ -68,6 +68,13 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     paginasDelSitio: (clientId) => paginasPropiasDelSitio(db as never, clientId),
     hechosDelDueno: async (clientId) => { try { return (await adjuntoDelCliente(db as never, clientId)).hechos_del_dueno ?? [] } catch { return [] } },
     cicloDelPlan: (artifactId) => cicloDelPlanDeLaBase(db, artifactId),
+    async anotarPalabraDelDueno(p) {
+      try {
+        const ya = await db.from('hitl_queue').select('id').eq('output_id', p.plan_id).eq('type', 'palabra_del_dueno').eq('status', 'pending').limit(1)
+        if (ya.error || ((ya.data as unknown[] | null) ?? []).length) return
+        await db.from('hitl_queue').insert({ client_id: p.client_id, output_id: p.plan_id, agent_name: 'jefatura · palabra del dueño', risk_type: 'strategic_decision', output_preview: p.detalle, type: 'palabra_del_dueno', title: p.titulo, priority: 'high', status: 'pending', payload: {}, metadata: p.metadata, expires_at: null })
+      } catch { /* la anotación no frena la elección de versión */ }
+    },
     async revisor(p) {
       if (p.dry_run) return { ok: true, texto: '', costo_usd: 0, modelo: 'simulado (dry_run)' }
       if (!env.openaiKey) return { ok: false, error: 'OPENAI_API_KEY no configurada', costo_usd: 0, intentos: [] }
