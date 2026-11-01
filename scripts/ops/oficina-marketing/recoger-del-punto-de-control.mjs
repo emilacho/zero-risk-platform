@@ -33,7 +33,7 @@ return [{ json: { body: { response: String(f.texto), recuperada_del_punto_de_con
 `
 
 export function construirRecogerDelPuntoDeControl(f) {
-  agregarNodo(f, {
+  const leer = agregarNodo(f, {
     name: 'Vuelta · leer el punto de control', type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
     parameters: {
       method: 'GET',
@@ -43,6 +43,9 @@ export function construirRecogerDelPuntoDeControl(f) {
       options: { timeout: 20000, response: { response: { fullResponse: true, neverError: true } } },
     },
   }, 'Esperar al redactor', 220, 0)
+  // una caída de red o un tiempo agotado de la base NO debe detener el camino normal (la vuelta SÍ llegó por cable y hoy no se hace esta llamada): el error pasa como item y «Vuelta · completar» lo trata como «no hay fila»
+  leer.onError = 'continueRegularOutput'
+  leer.alwaysOutputData = true
   agregarNodo(f, codigo('Vuelta · completar', CODIGO_COMPLETAR_VUELTA), 'Esperar al redactor', 440, 0)
   redirigir(f, 'Esperar al redactor', '¿Llegó la vuelta?', 'Vuelta · leer el punto de control')
   conectar(f, 'Vuelta · leer el punto de control', 'Vuelta · completar')

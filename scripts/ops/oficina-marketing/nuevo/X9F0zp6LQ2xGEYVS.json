@@ -4018,7 +4018,9 @@
             }
           }
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     },
     {
       "id": "d2ef301c-5e1d-0ec4-79c6-bfbfb40c4d7a",

@@ -35,6 +35,11 @@ describe('el cableado', () => {
     const entran = Object.entries(nuevo.connections).filter(([, c]: any) => JSON.stringify(c).includes('"¿Llegó la vuelta?"')).map(([de]) => de)
     expect(entran).toEqual(['Vuelta · completar'])
   })
+  it('🔴 la lectura NO detiene el camino normal si la base se cae: onError continúa y deja pasar el error como item', () => {
+    const n = nuevo.nodes.find((x: any) => x.name === 'Vuelta · leer el punto de control')
+    expect(n.onError).toBe('continueRegularOutput')
+    expect(n.alwaysOutputData).toBe(true)
+  })
   it('la lectura pide ESTA ejecución, el redactor elegido y el más reciente, solo el texto', async () => {
     let url = ''
     await recorrer(nuevo, 'Vuelta · leer el punto de control', {}, { previos: previos(), env: ENV, hasta: ['Vuelta · completar'], http: async (u: string) => { url = u; return punto() } })
@@ -73,6 +78,12 @@ describe('«Vuelta · completar»', () => {
   ] as const
   for (const [caso, entrada] of NO) it(`${caso} → sigue como hoy (sin plan)`, async () => {
     expect((await completar(entrada as any)).item).toEqual({})
+  })
+  it('la lectura que lanzó (item de error de n8n, sin statusCode) → sin plan, y con la vuelta por cable todo sigue igual', async () => {
+    const caida = { error: { message: 'fetch failed', name: 'NodeApiError' } }
+    expect((await completar(caida)).item).toEqual({})
+    const orig = { body: { response: 'POR CABLE' } }
+    expect((await completar(caida, previos({ 'Esperar al redactor': [orig] }))).item).toEqual(orig)
   })
   it('sin ack del pedido no se puede probar que es de este pedido → sin plan', async () => {
     expect((await completar(punto(), previos({ 'Pedir el plan al redactor': [{ accepted: true }] }))).item).toEqual({})
