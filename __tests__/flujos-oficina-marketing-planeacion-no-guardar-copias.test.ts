@@ -55,6 +55,9 @@ describe('el cableado', () => {
     expect(cambio.url).toContain('/rest/v1/plan_cambios?id=eq.')
     expect(cambio.jsonBody).toContain("estado: 'fallido'")
     expect(cambio.jsonBody).toContain(JSON.stringify(DETALLE_SIN_CAMBIOS))
+    // contrato con la plataforma (LISTO-CC1 mitad de la sala): el panel reconoce el caso porque el detalle EMPIEZA con esta frase
+    expect(DETALLE_SIN_CAMBIOS.startsWith('sin cambios reales')).toBe(true)
+    expect(cambio.jsonBody).toContain("despertar_detalle: " + JSON.stringify(DETALLE_SIN_CAMBIOS))
     const cable = nodo(NODO_COPIA_CABLE).parameters.jsonBody
     expect(cable).toContain("resultado: 'no_corrio_sin_cambios_reales'")
     expect(cable).toContain(JSON.stringify(DETALLE_SIN_CAMBIOS))
