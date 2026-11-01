@@ -5,7 +5,7 @@
  *   · `legal`: la prohíbe una norma; exige la cita de la norma. Bloquea.
  *   · `del_dueno`: la prohibió el dueño; exige su cita y su fecha. Bloquea.
  *   · `estilo`: contexto de marca, con su porqué si lo hay. Nunca bloquea. Es lo que es toda palabra que no diga otra cosa.
- * Una palabra dura sin su cita se lee como `estilo`: un agente no puede fabricar un bloqueo.
+ * Una palabra dura sin su cita se lee como `estilo`. Y `del_dueno` solo entra por la decisión del dueño: lo que llega de una corrida baja a `estilo` (`deUnaCorrida`), aunque traiga cita y fecha, porque un modelo puede inventarlas.
  */
 export type Intencion = 'legal' | 'del_dueno' | 'estilo'
 export interface FuenteDeLaPalabra { cita: string; origen?: string; fecha?: string; por?: string }
@@ -67,10 +67,18 @@ export function palabrasDeEstilo(manual: Parameters<typeof leerPalabras>[0]): st
   return leerPalabras(manual).filter((p) => p.intencion === 'estilo').map((p) => p.texto)
 }
 
+/** lo que manda una corrida de agentes: nunca puede declarar por el dueño */
+export function deUnaCorrida(x: unknown): PalabraConIntencion[] {
+  return (Array.isArray(x) ? x : []).map(leerEntrada).filter((p): p is PalabraConIntencion => !!p).map((p) => {
+    if (p.intencion !== 'del_dueno') return p
+    return { texto: p.texto, intencion: 'estilo' as const, ...(p.porque ? { porque: p.porque } : {}) }
+  })
+}
+
 /** lo que una corrida nueva no puede perder: las palabras duras de la versión anterior siguen, aunque el borrador nuevo no las traiga */
 export function conservarPalabrasDuras(previa: Parameters<typeof leerPalabras>[0], nueva: { forbidden_words?: unknown; palabras_con_intencion?: unknown }): { forbidden_words: string[]; palabras_con_intencion: PalabraConIntencion[] } {
   const duras = leerPalabras(previa).filter((p) => p.intencion !== 'estilo')
-  const propias = (Array.isArray(nueva.palabras_con_intencion) ? nueva.palabras_con_intencion as unknown[] : []).map(leerEntrada).filter((x): x is PalabraConIntencion => !!x)
+  const propias = deUnaCorrida(nueva.palabras_con_intencion)
   const anotadas = new Map<string, PalabraConIntencion>()
   for (const p of propias) anotadas.set(clave(p.texto), p)
   for (const p of duras) anotadas.set(clave(p.texto), p) // manda lo declarado antes

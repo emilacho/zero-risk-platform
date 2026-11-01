@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
-import { aplicarDecisionDelDueno, conservarPalabrasDuras, leerPalabras, palabrasDeEstilo, palabrasDuras } from '../src/lib/manual/palabras-con-intencion'
+import { aplicarDecisionDelDueno, conservarPalabrasDuras, deUnaCorrida, leerPalabras, palabrasDeEstilo, palabrasDuras } from '../src/lib/manual/palabras-con-intencion'
 import { conservarLoDelDueno, decidirPalabraDelDueno } from '../src/lib/manual/edicion-del-dueno'
 import { palabrasProhibidasDelManual, limpiarManual } from '../src/lib/manual/limpieza'
 import { chequeosDePost, palabrasQueBloquean, type ContextoDeChequeo } from '../src/lib/oficina/chequeos'
@@ -56,6 +56,25 @@ describe('lo declarado no se pierde', () => {
     const bb = { forbidden_words: ['nuevo'] }
     expect(palabrasDuras(conservarLoDelDueno(previa, bb).bb as never)).toEqual(['barato'])
     expect(conservarLoDelDueno({ forbidden_words: ['x'] }, bb).bb).toBe(bb)
+  })
+})
+
+describe('🔴 una corrida de agentes no declara por el dueño (hallazgo de CC3)', () => {
+  const inventada = { texto: 'barato', intencion: 'del_dueno', porque: 'dicen', fuente: CITA_DUENO }
+  it('del_dueno con cita y fecha, si viene de una corrida, baja a estilo; legal con cita se conserva hasta que Lenovo decida', () => {
+    expect(deUnaCorrida([inventada])).toEqual([{ texto: 'barato', intencion: 'estilo', porque: 'dicen' }])
+    expect(palabrasDuras({ palabras_con_intencion: deUnaCorrida([{ texto: 'gratis', intencion: 'legal', fuente: CITA_LEGAL }]) })).toEqual(['gratis'])
+    expect(deUnaCorrida('no es lista')).toEqual([])
+  })
+  it('por la ruta del manual: con o sin versión anterior, lo inventado no bloquea; lo que el dueño declaró antes sí', () => {
+    const bb = { forbidden_words: ['barato'], palabras_con_intencion: [inventada] }
+    expect(palabrasDuras(conservarLoDelDueno(null, bb).bb as never)).toEqual([])
+    expect(palabrasDuras(conservarLoDelDueno({ forbidden_words: ['x'] }, bb).bb as never)).toEqual([])
+    const previa = { forbidden_words: ['caro'], palabras_con_intencion: [{ texto: 'caro', intencion: 'del_dueno', fuente: CITA_DUENO }] }
+    expect(palabrasDuras(conservarLoDelDueno(previa, bb).bb as never)).toEqual(['caro'])
+  })
+  it('el alta tampoco lo deja pasar', () => {
+    expect(readFileSync(join(process.cwd(), 'src/app/api/clients/upsert/route.ts'), 'utf8')).toMatch(/palabras_con_intencion: deUnaCorrida\(bb\.palabras_con_intencion\)/)
   })
 })
 

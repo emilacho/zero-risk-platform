@@ -14,7 +14,7 @@
 import { CAMPOS, evaluarCompletitud, quienValido, type CampoDelManual } from './campos-del-manual'
 import { enviarALaPuerta, type EntornoDeLaPuerta, type ResultadoDeEnvio } from '../notas-del-dueno/puerta-del-dueno'
 import { CANAL_DEL_MANUAL } from '../portero-alimenta/dueno'
-import { aplicarDecisionDelDueno, conservarPalabrasDuras, leerPalabras, palabrasDuras, type DecisionDelDueno } from './palabras-con-intencion'
+import { aplicarDecisionDelDueno, conservarPalabrasDuras, deUnaCorrida, leerPalabras, palabrasDuras, type DecisionDelDueno } from './palabras-con-intencion'
 
 type Fila = Record<string, unknown>
 export interface Db { from(tabla: string): any }
@@ -260,7 +260,8 @@ export async function empujarCamposAlCerebro(d: DepsDelCerebro, x: { client_id: 
  * (`_field_meta.<campo>.fuente === 'dueno'`) se vuelven a poner —valor y procedencia— en el borrador nuevo. Todo lo demás de la corrida queda igual. Puro.
  */
 export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila): { bb: Fila; conservados: string[] } {
-  if (!previa) return { bb, conservados: [] }
+  // 01-nov · hallazgo de CC3: una corrida no declara por el dueño, ni siquiera en un manual sin versión anterior
+  if (!previa) return Array.isArray(bb.palabras_con_intencion) ? { bb: { ...bb, palabras_con_intencion: deUnaCorrida(bb.palabras_con_intencion) }, conservados: [] } : { bb, conservados: [] }
   const borradorPrevio = objeto(objeto(previa.content_text).brand_book_draft)
   const metaPrevia = objeto(borradorPrevio._field_meta)
   const conservados: string[] = []
@@ -278,8 +279,9 @@ export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila): 
   }
   // 01-nov · firma de Emilio: las palabras declaradas (norma o dueño) tampoco las pierde una corrida
   const hayDuras = palabrasDuras(previa).length > 0
-  if (!conservados.length && !hayDuras) return { bb, conservados }
+  const trae = Array.isArray(bb.palabras_con_intencion) && (bb.palabras_con_intencion as unknown[]).length > 0
+  if (!conservados.length && !hayDuras && !trae) return { bb, conservados }
   if (conservados.length) nuevo._field_meta = meta
-  if (hayDuras) Object.assign(nuevo, conservarPalabrasDuras(previa, nuevo))
+  if (hayDuras || trae) Object.assign(nuevo, conservarPalabrasDuras(previa, nuevo))
   return { bb: nuevo, conservados }
 }

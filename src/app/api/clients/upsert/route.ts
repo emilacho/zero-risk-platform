@@ -25,6 +25,7 @@
  *     internal · gated by x-api-key).
  */
 
+import { deUnaCorrida } from '@/lib/manual/palabras-con-intencion'
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
@@ -301,7 +302,7 @@ export async function POST(request: Request) {
       primary_colors: bb.primary_colors ?? [],
       imagery_style: bb.imagery_style ?? null,
       forbidden_words: bb.forbidden_words ?? [],
-      palabras_con_intencion: bb.palabras_con_intencion ?? [],
+      palabras_con_intencion: deUnaCorrida(bb.palabras_con_intencion),
       required_terminology: bb.required_terminology ?? [],
       competitor_mentions_policy: bb.competitor_mentions_policy ?? 'never_mention',
       content_text: bb.content_text ?? null,
