@@ -49,6 +49,7 @@ export function moldeDelPaso(c: ContextoDeMolde): { texto: string | null; error?
     const vs = c.versiones ?? []
     const ultima = vs[vs.length - 1]?.etiqueta
     const filas = vs.flatMap((v) => (c.ordenes ?? []).map((_, i) => {
+      if (sim.verificador === 'no_aplica_una' && i > 0) return { version: v.etiqueta, orden: i + 1, estado: 'no_aplica', motivo: '(simulado) es contexto' }
       const niega = sim.verificador === 'no_cumple_todas' || (sim.verificador === 'no_cumple_ultima' && v.etiqueta === ultima)
       return niega ? { version: v.etiqueta, orden: i + 1, estado: 'no_cumple', motivo: '(simulado) la versión aplaza la orden' } : { version: v.etiqueta, orden: i + 1, estado: 'cumple', cita: v.texto.trim().slice(0, 80), ...(sim.verificador === 'salvaguarda' ? { salvaguarda: 'ilegal', motivo: '(simulado) sería ilegal' } : {}) }
     }))

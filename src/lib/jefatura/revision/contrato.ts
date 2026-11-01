@@ -41,7 +41,7 @@ export interface Simulacion {
   /** largo del plan A simulado (lo usan los flujos para fabricar B y C) */
   largo_a?: number
   /** la respuesta del verificador de órdenes: `no_cumple_ultima` niega solo la última versión; `no_cumple_todas`, todas */
-  verificador?: 'cumple' | 'no_cumple_ultima' | 'no_cumple_todas' | 'formato_roto' | 'salvaguarda'
+  verificador?: 'cumple' | 'no_cumple_ultima' | 'no_cumple_todas' | 'formato_roto' | 'salvaguarda' | 'no_aplica_una'
 }
 
 export interface PayloadDeRevision {

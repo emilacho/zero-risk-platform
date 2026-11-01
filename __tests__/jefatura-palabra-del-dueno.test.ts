@@ -135,6 +135,24 @@ describe('🔴 de punta a punta, con el motor real', () => {
     expect((r.cuerpo.palabra_del_dueno as { requiere_humano: boolean }).requiere_humano).toBe(true)
     expect(notas[0].detalle).toMatch(/confirmarla contigo, sin cambiarla/)
   })
+  it('🔴 lo que se tomó como «no aplica» queda a la vista del dueño, con su motivo, aunque el resto cumpla', async () => {
+    const { r, notas } = await elegir({ ...CON_TODO, verificador: 'no_aplica_una' }, { version: 2, pedido_del_dueno: `${ORDEN}. El informe de la web son mis pruebas. Publica todos los lunes del mes.` })
+    expect((r.cuerpo.palabra_del_dueno as { requiere_humano: boolean }).requiere_humano).toBe(true) // dos de tres: más de la mitad
+    expect(notas[0].detalle).toMatch(/Se tomó como contexto y no como orden: El informe de la web son mis pruebas.*es contexto/)
+  })
+  it('🔴 con «no aplica» en justo la mitad o menos no va a la persona, pero se anota', async () => {
+    const { r, notas } = await elegir({ ...CON_TODO, verificador: 'no_aplica_una' }, { version: 2, pedido_del_dueno: `${ORDEN}. El informe de la web son mis pruebas.` })
+    expect((r.cuerpo.palabra_del_dueno as { requiere_humano: boolean }).requiere_humano).toBe(false)
+    expect(notas).toHaveLength(1)
+    expect(notas[0]).toMatchObject({ titulo: expect.stringMatching(/cómo se entendió/) })
+    expect(notas[0].detalle).toContain('Se tomó como contexto')
+  })
+  it('🔴 la marca orden_sin_cumplir queda en la revisión cuando va a la persona, y no cuando no', async () => {
+    const a = await elegir({ ...CON_TODO, verificador: 'no_cumple_todas' })
+    expect((await a.P.almacen.leerRevision(a.id))!.marcas.orden_sin_cumplir).toBe(true)
+    const b = await elegir({ ...CON_TODO, verificador: 'cumple' })
+    expect((await b.P.almacen.leerRevision(b.id))!.marcas.orden_sin_cumplir).toBeFalsy()
+  })
   it('🔴 si la respuesta del verificador es ilegible, la revisión cierra igual y ninguna versión cumple', async () => {
     const { r, rev } = await elegir({ ...CON_TODO, verificador: 'formato_roto' })
     expect(rev!.estado).toBe('cerrada')
