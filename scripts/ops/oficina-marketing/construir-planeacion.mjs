@@ -23,6 +23,7 @@ import { construirCicloDelPlan } from './ciclo-del-plan.mjs'
 import { construirJefaturaConCarpeta } from './jefatura-contexto.mjs'
 import { construirEsloganEnPlan } from './eslogan-del-cliente.mjs'
 import { construirHechosDelDuenoEnPlan } from './hechos-del-dueno.mjs'
+import { construirSedesEnPlan } from './sedes-del-cliente.mjs'
 import { construirQueCambioPorCodigo } from './que-cambio-por-codigo.mjs'
 import { construirSegundaMitad, escribirSegundaMitad } from './segunda-mitad.mjs'
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
@@ -219,6 +220,7 @@ export function construirPlaneacion() {
   // J · 01-nov · el eslogan real del cliente llega al redactor del plan como HECHO (ADENDA 1 del manual · reparto con CC1)
   construirEsloganEnPlan(f)
   construirHechosDelDuenoEnPlan(f) // 01-nov · punto 3: lo que declaró el dueño llega al redactor del plan
+  construirSedesEnPlan(f) // 01-nov · punto 1: las sedes como dato llegan al redactor del plan
   construirQueCambioPorCodigo(f) // 01-nov · punto 6 de CC1: «Qué cambió» por código
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
