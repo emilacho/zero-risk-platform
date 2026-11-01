@@ -21,7 +21,10 @@ import { moldeDelPaso, simulacionDelRevisor } from './simulacion'
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const sha = (x: unknown) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex')
-export const MINUTOS_PARA_DAR_POR_MUERTO = 12
+/** el máximo que espera el turno de n8n antes de rendirse: «② Esperar al agente» 900 s + 8 relecturas del punto de control de 120 s */
+export const MINUTOS_QUE_ESPERA_EL_TURNO = 31
+/** 01-nov · hallazgo de CC3: con 12 min el vigía volvía a llamar (y a cobrar) a un agente de más de ~13 min y cerraba la revisión como fallida antes de que el turno recogiera su respuesta. Debe ser MAYOR que la espera del turno; a cambio, un paso de verdad muerto tarda más en detectarse */
+export const MINUTOS_PARA_DAR_POR_MUERTO = 35
 const MAX_VUELTAS_DEL_BUCLE = 40
 
 type Datos = Record<string, unknown>

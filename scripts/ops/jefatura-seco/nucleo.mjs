@@ -125,7 +125,7 @@ export async function correrPorRuta(esc, T, o = {}) {
     for (const e of auditarPedido(t.pedido)) errores_de_pedido.push(`${t.paso}: ${e}`)
     const molde = t.pedido.molde ?? { texto: null, error: 'sin molde' }
     if (molde.texto === null || molde.texto === undefined) {
-      // el productor «murió»: no se responde. Pasan 20 min (se envejece el paso) y el vigía lo da por muerto
+      // el productor «murió»: no se responde. Pasan 40 min (se envejece el paso) y el vigía lo da por muerto
       if (esc.sim?.productor === 'muerto' && T.envejecer) {
         muertes++
         await T.envejecer(revision_id)
