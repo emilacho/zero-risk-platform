@@ -8,6 +8,7 @@ import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { abrirRevision } from '../src/lib/jefatura/revision/orquestador'
 import { conLasPaginasDelSitio, paginasPropiasDelSitio, TOPE_DE_LAS_PAGINAS, type PaginasDelSitio } from '../src/lib/jefatura/revision/carpeta-para-revisar'
 import { crearPuertos } from '../src/lib/jefatura/revision/adaptadores'
+import { TOPE_REAL_DEL_PEDIDO } from '../src/lib/limites-de-tamano'
 
 const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 // el texto EXACTO que recibió el revisor en la corrida 210596
@@ -55,6 +56,17 @@ describe('leer las páginas', () => {
     expect(t).not.toContain('yyy')
     expect(t).toMatch(/no entraron estas páginas del sitio: https:\/\/b\.test\//)
     expect(t.length).toBeLessThanOrEqual(TOPE_DE_LAS_PAGINAS + 200)
+  })
+  it('🔴 un error de la base no se lee como «no hay páginas» (S12 de CC3): se dice, y el revisor no recibe «SIN PÁGINAS»', async () => {
+    const consulta: Record<string, unknown> = {}
+    for (const m of ['select', 'eq', 'is']) consulta[m] = () => consulta
+    consulta.then = (ok: (v: unknown) => unknown) => ok({ data: null, error: { message: 'tiempo agotado' } })
+    const p = await paginasPropiasDelSitio({ from: () => consulta } as never, C)
+    expect(p).toEqual({ estado: 'no_se_pudo', detalle: 'tiempo agotado' })
+    expect(conLasPaginasDelSitio([BLOQUE_DEL_FLUJO], p)[0].texto).not.toMatch(/^SIN P[AÁ]GINAS/)
+  })
+  it('las páginas ocupan a lo sumo la mitad del tope real, para que el resto del pedido siempre quepa (S08 de CC3)', () => {
+    expect(TOPE_DE_LAS_PAGINAS).toBe(TOPE_REAL_DEL_PEDIDO / 2)
   })
   it('una base caída no lanza', async () => {
     expect(await paginasPropiasDelSitio({ from() { throw new Error('caída') } } as never, C)).toEqual({ estado: 'no_se_pudo', detalle: 'caída' })
