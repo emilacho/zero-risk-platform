@@ -143,6 +143,8 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     // r74 · F4 · la regla de «local abierto» aplica SOLO si el negocio tiene sede (un negocio en línea o de servicio a empresas no tiene horario de local que comprobar: sus filas no se frenan)
     if (f.requiere_abierto && ins.sedes.length > 0) {
       const sede = ins.sedes.find((s) => s.clave === f.sede)
+      // 01-nov · veracidad, no bloqueo: el estado de la sede nunca frena una pieza; si esta depende de un local que no atiende, se avisa
+      if (sede?.estado === 'por_abrir' || sede?.estado === 'cerrada') out.push(h('V06', 'aviso', f, `la pieza depende de un local abierto y la sede ${sede.clave} está ${sede.estado === 'cerrada' ? 'cerrada' : 'por abrir'}: revisa que no afirme atención que no existe`, 'estado de la sede', 'plantearla sin depender del local (expectativa, preinauguración, delivery, bienvenida)'))
       const hora = minutos(f.hora)
       if (!sede || !sede.horario) out.push(h('V06', 'aviso', f, 'no hay horario de la sede: no se puede comprobar la hora', 'client_sede_datos', 'PENDIENTE: horario de la sede (se investiga con fuente)'))
       else if (hora == null) out.push(h('V06', 'bloquea', f, 'la fila exige local abierto pero no trae una hora válida', 'hora HH:MM', 'poner la hora'))

@@ -72,7 +72,7 @@ describe('el resumen vivo con una sede por abrir', () => {
     const l = t.split('\n').filter(Boolean)
     expect(l.find((x) => /ceviche mixto/.test(x))).toMatch(/^- \[sede guayaquil \(Guayaquil\) · por abrir\] producto ceviche mixto precio 9 00 usd \[ficha:p1111111/)
     expect(l.find((x) => /ceviche mixto/.test(x))).not.toMatch(/todavía no atiende/)
-    expect(l.find((x) => /abierto hasta 3pm/.test(x))).toMatch(/\[sede guayaquil \(Guayaquil\) · por abrir\] abierto hasta 3pm — sede por abrir: todavía no atiende al público \[ficha:h2222222/)
+    expect(l.find((x) => /abierto hasta 3pm/.test(x))).toMatch(/\[sede guayaquil \(Guayaquil\) · por abrir\] abierto hasta 3pm — sede por abrir: todavía no atiende al público; no afirmes horario ni atención de local[^[]*\[ficha:h2222222/)
     expect(l.find((x) => /abierto hasta 4pm/.test(x))).toMatch(/^- \[sede olon \(Olón\)\] abierto hasta 4pm \[ficha:h4444444/)
     expect(l.find((x) => /encebollado/.test(x))).not.toMatch(/por abrir/)
   })

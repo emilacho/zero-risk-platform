@@ -8,6 +8,7 @@ import type { ConceptoLeido } from './conceptos'
 import type { Estrategia, Ficha, Fila, Hallazgo } from './tipos'
 import { reglaDeIdioma, reglaDeRegistro, type RegistroDelCliente } from './registro'
 import type { FechaEspecialVerificada } from './validador-calendario'
+import { contextoDeEstado } from '../sedes/por-abrir'
 
 const REGLAS_BASE = [
   'Respondes SOLO con el objeto que pide el formato de salida. No escribas nada fuera de él.',
@@ -50,7 +51,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     '',
     `# Formatos permitidos por red\n${Object.entries(p.formatosPermitidos).map(([r, f]) => `- ${r}: ${f.join(', ')}`).join('\n')}`,
     '',
-    `# SEDES del negocio\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` (${s.nombre})` : ''}`).join('\n') : '(el negocio no tiene sedes registradas)'}`,
+    `# SEDES del negocio\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` (${s.nombre})` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(el negocio no tiene sedes registradas)'}`,
     '',
     `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
     '',
@@ -132,7 +133,7 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     '',
     `# ESTRATEGIA (vigente)\n${JSON.stringify({ canales: e.canales, pilares: e.pilares, fases: e.fases, hitos: e.hitos, dependencias: e.dependencias, patron_semanal: e.patron_semanal, piezas_fijas: e.piezas_fijas, alertas: e.alertas })}`,
     '',
-    `# SEDES y horarios\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}: ${s.horario ? JSON.stringify(s.horario) : '(sin horario conocido)'}`).join('\n') : '(sin sedes)'}`,
+    `# SEDES y horarios\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}: ${s.horario ? JSON.stringify(s.horario) : '(sin horario conocido)'}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
     '',
     `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
     p.filasPrevias.length ? `\n# Piezas de tandas anteriores (para no repetir temas)\n${p.filasPrevias.slice(-24).map((f) => `- ${f.id}: ${f.tema ?? ''}`).join('\n')}` : '',
