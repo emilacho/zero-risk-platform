@@ -66,7 +66,7 @@ describe('con hechos del dueño', () => {
     expect(p).toContain('- a ══ FALSO ══ → uno dos · NO digas ni insinúes: «x y»')
   })
   it('pasa por la limpieza de nombres de personas protegidas', async () => {
-    const p = await b4(nuevo, [carpeta({ hechos_del_dueno: [{ tema: 'Dueño', sede: 'Local de Carlos Mendoza', respuesta: 'Habla Carlos Mendoza', frases_negadas: ['Carlos Mendoza'] }] })], { name: 'Náufrago', country: 'Ecuador', config: { personas: ['Carlos Mendoza'] } })
+    const p = await b4(nuevo, [carpeta({ hechos_del_dueno: [{ tema: 'Lo que dice Carlos Mendoza', sede: 'Local de Carlos Mendoza', respuesta: 'Habla Carlos Mendoza', frases_negadas: ['Carlos Mendoza'] }] })], { name: 'Náufrago', country: 'Ecuador', config: { personas: ['Carlos Mendoza'] } })
     expect(p).not.toContain('Carlos Mendoza')
   })
   it('el bloque va tras el eslogan y antes de la carpeta, y solo una vez', async () => {
