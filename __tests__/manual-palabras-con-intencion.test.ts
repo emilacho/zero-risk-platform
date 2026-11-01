@@ -161,6 +161,11 @@ describe('el reparto firmado', () => {
 
 describe('los lectores', () => {
   const lee = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
+  it('la herramienta de las lentes declara el campo y no ofrece declarar por el dueño', () => {
+    const h = lee('services/agent-runner/src/lib/mcp/brand-section-server.js')
+    expect(h).toMatch(/palabras_con_intencion: z\.array/)
+    expect(h).toMatch(/intencion: z\.enum\(\['estilo', 'legal'\]\)/)
+  })
   it('la cadena lee la columna y la pasa; promover no pierde lo declarado (de forma, sobre el código)', () => {
     const a = lee('src/lib/cadena/almacen-supabase.ts')
     expect(a).toMatch(/select\('id, content_text, forbidden_words, palabras_con_intencion,/)

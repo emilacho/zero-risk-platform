@@ -68,7 +68,14 @@ const BRAND_SECTION_INPUT_SCHEMA = {
   icp_summary: z.string().optional().describe('Resumen del ICP · audience_segment + pains + goals'),
   // editor-en-jefe
   voice_description: z.string().optional().describe('Principios de voz/tono concretos y testeables'),
-  forbidden_words: z.array(z.string()).optional().describe('Palabras/frases que NUNCA usar'),
+  forbidden_words: z.array(z.string()).optional().describe('Palabras o frases que la marca evita; es contexto de marca. Sin superlativos ni promesas genéricas'),
+  // 01-nov · firma de Emilio: la intención y la fuente de cada palabra. Una lente nunca declara por el dueño: si lo hace, la plataforma lo baja a estilo
+  palabras_con_intencion: z.array(z.object({
+    texto: z.string(),
+    intencion: z.enum(['estilo', 'legal']).describe('estilo por omisión; legal solo con la cita literal de la norma'),
+    porque: z.string().optional().describe('por qué no va con ESTA marca, con su evidencia'),
+    fuente: z.object({ cita: z.string(), origen: z.string().optional() }).optional().describe('obligatoria para legal'),
+  })).optional().describe('Las palabras de la lista con su intención y su fuente'),
   required_terminology: z.array(z.string()).optional().describe('Términos que usar cuando aplique'),
   // jefe-client-success
   customer_angle: z.string().optional().describe('Ángulo cliente · qué valora / por qué se queda'),
