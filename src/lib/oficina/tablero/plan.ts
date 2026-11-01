@@ -10,7 +10,11 @@
  * Plan EN REVISIÓN = el tag dice `compuerta: true` y su fila de compuerta aún no existe: la jefatura sigue trabajando y nadie decide sobre él todavía.
  * Si el flujo no se pudo despertar (`despertado = false`) nada se gastó y la misma puerta se puede repetir: no queda un pedido ni una aprobación colgados para siempre.
  */
+import { consultasDeDireccion } from '../../cadena/almacen-supabase'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Db, type Fila, type Manejador, type Salida } from './comun'
+
+/** una campaña de ese plan en estos estados no vuelve a armar: la cadena respondería «ya abierta» (hallazgo de CC3, 01-nov) */
+export const CAMPANA_DETENIDA = ['pausada', 'necesita_humano', 'activa']
 
 /** vueltas de reescritura que admite un plan (la versión 1 + 3 reescrituras = versión 4 es la última) */
 export const TOPE_DE_VUELTAS = 3
@@ -74,6 +78,11 @@ async function planDecidible(db: Db, planId: string, toca: Salida['toca']): Prom
   if (!c.ok) return { ok: false, salida: rechazo(500, 'planes_error', c.mensaje, t) }
   if (p.plan.tag.compuerta === true && !c.fila) return { ok: false, salida: rechazo(409, 'plan_en_revision', 'ese plan todavía está en revisión de la jefatura: se decide cuando termine', t) }
   if (c.fila?.estado === 'reemplazado') return { ok: false, salida: rechazo(409, 'no_es_el_vigente', 'ese plan ya fue reemplazado por una versión más nueva', t) }
+  // la campaña de ESTE plan ya no está armando: aprobar no sacaría el brief (la cadena contesta «ya abierta» y se ve como éxito). Se dice ANTES de gastar, y la campaña no se toca: es una decisión del dueño
+  const k = await consultasDeDireccion(db).campanaDelPlan(planId)
+  if (k.error) return { ok: false, salida: rechazo(500, 'planes_error', String(k.error.message ?? 'no se pudo leer la campaña'), t) }
+  const campana = ((k.data as Fila[] | null) ?? [])[0]
+  if (campana && CAMPANA_DETENIDA.includes(String(campana.estado))) return { ok: false, salida: rechazo(409, 'campana_detenida', `la campaña de este plan está «${String(campana.estado)}»${campana.estado_motivo ? ` (${String(campana.estado_motivo).slice(0, 200)})` : ''}: si sigues, el brief no saldría. Primero hay que decidir qué pasa con esa campaña`, t) }
   const a = await cambioAbierto(db, planId)
   if (!a.ok) return { ok: false, salida: rechazo(500, 'planes_error', a.mensaje, t) }
   if (a.fila && !estaColgado(a.fila)) return { ok: false, salida: rechazo(409, 'reescritura_en_curso', `ya hay un pedido de cambios ${a.fila.estado === 'en_reescritura' ? 'en reescritura' : 'pendiente'} sobre este plan: espera la versión nueva`, t) }

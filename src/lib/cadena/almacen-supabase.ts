@@ -45,6 +45,7 @@ const COLUMNAS_DEL_BRIEF = 'campana_id, version, estado, texto_md, leido, devolu
 export const consultasDeDireccion = (db: { from(tabla: string): any }) => ({
   campanasDetenidas: (tope: number) => db.from('cadena_campanas').select('id, client_id, estado, estado_motivo, actualizada_en, seco').in('estado', ['pausada', 'necesita_humano']).limit(tope),
   estadoDeLaCadena: () => db.from('cadena_config').select('valor').eq('clave', 'estado_cadena').limit(1),
+  campanaDelPlan: (planId: string) => db.from('cadena_campanas').select('id, estado, estado_motivo').eq('plan_id', planId).eq('seco', false).limit(1),
 })
 
 export function almacenDeSupabase(): Almacen {
