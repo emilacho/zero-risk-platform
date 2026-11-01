@@ -8,7 +8,7 @@ if (id === undefined || id === null || id === '') return [{ json: { reescritura:
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 if (typeof id !== 'string' || !UUID.test(id)) throw new Error('REESCRITURA_PLAN_BASE_INVALIDO · plan_base_id no es un uuid · se DETIENE antes de gastar')
 const cambios = typeof body.cambios_del_dueno === 'string' ? body.cambios_del_dueno.trim() : ''
-if (cambios.length < 5 || cambios.length > 4000) throw new Error('REESCRITURA_SIN_CAMBIOS · cambios_del_dueno debe tener de 5 a 4000 caracteres · se DETIENE antes de gastar')
+if (cambios.length < 5 || cambios.length > 100000) throw new Error('REESCRITURA_SIN_CAMBIOS · cambios_del_dueno debe tener de 5 a 100000 caracteres · se DETIENE antes de gastar')
 const r = $input.first().json || {}
 if (r.error && typeof r.error === 'object') throw new Error('REESCRITURA_PLAN_BASE_NO_LEGIBLE · la lectura del plan base falló antes de recibir respuesta (' + String(r.error.message || r.error.name || 'sin detalle').slice(0, 160) + ') · se DETIENE antes de gastar')
 if (Number(r.statusCode) !== 200) throw new Error('REESCRITURA_PLAN_BASE_NO_LEGIBLE · la base contestó ' + String(r.statusCode) + ' · se DETIENE antes de gastar')

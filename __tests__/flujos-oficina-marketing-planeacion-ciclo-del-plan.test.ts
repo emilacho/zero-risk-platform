@@ -53,7 +53,7 @@ describe('«⓪ Llave» · entradas del ciclo', () => {
       [{ plan_base_id: PLAN, cambios_del_dueno: '   ' }, /PLANEACION_CAMBIOS_INVALIDOS/],
       [{ plan_base_id: PLAN, cambios_del_dueno: 'abc' }, /PLANEACION_CAMBIOS_INVALIDOS/],
       [{ plan_base_id: PLAN, cambios_del_dueno: 'abcd' }, /PLANEACION_CAMBIOS_INVALIDOS/], // 4 caracteres: el mínimo es 5
-      [{ plan_base_id: PLAN, cambios_del_dueno: 'x'.repeat(4001) }, /PLANEACION_CAMBIOS_INVALIDOS/],
+      [{ plan_base_id: PLAN, cambios_del_dueno: 'x'.repeat(100001) }, /PLANEACION_CAMBIOS_INVALIDOS/],
       [{ cambios_del_dueno: 12345 }, /PLANEACION_CAMBIOS_INVALIDOS/],
       [{ plan_cambio_id: 'zzz' }, /PLANEACION_PLAN_CAMBIO_INVALIDO/],
       [{ sin_compuerta: 'true' }, /PLANEACION_SIN_COMPUERTA_INVALIDO/],
@@ -129,6 +129,19 @@ describe('«Redactor (B4)» · el pedido', () => {
     expect(p).toContain('QUÉ CAMBIÓ EN ESTA VERSIÓN')
     expect(p.indexOf('ESTA ES UNA REESCRITURA')).toBeLessThan(p.indexOf('SECCIONES QUE NO PUEDES OMITIR'))
     expect(o.reescritura).toMatchObject({ plan_base_id: PLAN, version_base: 1, version_nueva: 2 })
+  })
+  it('🔴 sin tope de tamaño propio: un plan anterior de 150.000 caracteres y un pedido de 20.000 van ENTEROS, declarados «entero»', async () => {
+    const grande = 'PLAN-' + 'y'.repeat(150_000) + '-FIN-DEL-PLAN'
+    const cambios = 'CAMBIOS-' + 'z'.repeat(20_000) + '-FIN-DE-LOS-CAMBIOS'
+    const p = (await b4(nuevo, PAQUETE, { 'Plan anterior · leer': [{ ...REESCRITURA, plan_anterior: { id: PLAN, version: 1, texto: grande }, cambios_del_dueno: cambios }] })).pedido as string
+    expect(p).toContain('-FIN-DEL-PLAN')
+    expect(p).toContain('-FIN-DE-LOS-CAMBIOS')
+    expect(p).toContain('EL PLAN ANTERIOR (versión 1, entero)')
+    expect(p).not.toContain('recortado')
+  })
+  it('el pedido del dueño de 20.000 caracteres pasa «⓪ Llave» y «Plan anterior · leer» sin DETENER la corrida', async () => {
+    const r = await recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web({ client_id: CLIENTE, plan_base_id: PLAN, cambios_del_dueno: 'c'.repeat(20_000) }), { env: ENV, hasta: ['Plan anterior · pedir'] })
+    expect(r.ultimo).toBe('Plan anterior · pedir')
   })
   it('sin pedido legible del dueño (o sin texto del plan anterior) el bloque no se emite: pedido idéntico al de hoy', async () => {
     const hoy = (await b4(vivo, PAQUETE)).pedido
