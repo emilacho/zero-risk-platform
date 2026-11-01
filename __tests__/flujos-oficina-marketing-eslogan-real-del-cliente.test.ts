@@ -27,8 +27,9 @@ const b4 = async (flujo: any, material: any[], ficha: any = { name: 'Náufrago',
 const cambiados = (a: any, b: any) => b.nodes.filter((n: any) => { const o = a.nodes.find((x: any) => x.name === n.name); return !o || JSON.stringify(o.parameters) !== JSON.stringify(n.parameters) }).map((n: any) => n.name).sort()
 
 describe('planeación · alcance', () => {
-  it('solo cambia «Redactor (B4)»; no se suman ni se quitan nodos ni conexiones', () => {
-    expect(cambiados(aplicado, nuevoPlan)).toEqual(['Redactor (B4)'])
+  it('solo cambia «Redactor (B4)» (más lo del «Qué cambió»); no se suman ni se quitan nodos ni conexiones', () => {
+    // + el «Qué cambió» por código (punto 6 de CC1): se prueba aparte en flujos-oficina-marketing-que-cambio-por-codigo.test.ts
+    expect(cambiados(aplicado, nuevoPlan).filter((n: string) => !n.startsWith('JEF · plan ·'))).toEqual(['Redactor (B4)'])
     expect(nuevoPlan.nodes.length).toBe(aplicado.nodes.length)
     expect(nuevoPlan.connections).toEqual(aplicado.connections)
   })
