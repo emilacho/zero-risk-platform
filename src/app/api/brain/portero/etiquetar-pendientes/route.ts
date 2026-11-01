@@ -12,6 +12,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { clientesActivos } from '@/lib/portero-alimenta/clientes'
 import { FLUJO_DEL_PORTERO } from '@/lib/portero-alimenta/gasto'
+import { CLAVE_DE_LA_BODEGA } from '@/lib/cerebro/portero/clave-de-la-bodega'
 import { etiquetarPendientesDelEntorno } from '@/lib/cerebro/portero/etiquetar-entorno'
 import { corridaQueSeRevisa, modoDelEntorno, topeDeEtiquetasPorClienteYDia } from '@/lib/portero-alimenta/modo'
 
@@ -37,7 +38,8 @@ async function correr(request: Request, o: { dry_run: boolean; client_id?: strin
     else {
       const act = await clientesActivos(getSupabaseAdmin() as unknown as Db)
       if (!act.ok) return NextResponse.json({ error: 'clientes_no_leidos', detalle: act.detalle.slice(0, 200) }, { status: 502 })
-      clientes = act.datos.clientes.map((c) => c.client_id)
+      // la BODEGA del mundo (capturas de videos sin cliente) se etiqueta igual que un cliente más (01-nov)
+      clientes = [...act.datos.clientes.map((c) => c.client_id), CLAVE_DE_LA_BODEGA]
     }
     const dia = new Date().toISOString().slice(0, 10)
     const r = await etiquetarPendientesDelEntorno(

@@ -14,6 +14,7 @@ import { leerSitio } from '../lectores'
 import type { Ficha } from '../tipos'
 import { PLAZOS_EN_DIAS } from '../plazos'
 import { esUrlDelAlmacen, leerFotoEnBase64, type ResultadoDeBajada } from './almacen'
+import { CLAVE_DE_LA_BODEGA } from './clave-de-la-bodega'
 import { extraerJson } from './decision'
 import { COLUMNAS_DE_LA_TOMA, COLUMNAS_QUE_ESCRIBE, TIPOS_DE_TOMA_VALIDOS, type ResultadoDeEscritura, type ValoresDeEtiqueta } from './etiqueta-escritura'
 import { formatoDeLaFoto } from './formato'
@@ -327,7 +328,7 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     nombresDeFamilia = familiasDePrueba.map((f) => f.nombre)
     lineasDeProducto = [...familiasDePrueba.map(lineaDeFamilia), ...productosDePrueba]
   } else {
-    const r = await deps.consulta({ tabla: 'client_social_images', columnas: soloToma ? ['id', 'url', 'caption', 'estado', 'etiquetada_en', 'tipo_de_toma'] : ['id', 'url', 'caption', 'estado', 'etiquetada_en'], donde: { client_id: cli, id: fotoId as string }, limite: 1 })
+    const r = await deps.consulta({ tabla: 'client_social_images', columnas: soloToma ? ['id', 'url', 'caption', 'estado', 'etiquetada_en', 'tipo_de_toma'] : ['id', 'url', 'caption', 'estado', 'etiquetada_en'], donde: { client_id: cli === CLAVE_DE_LA_BODEGA ? null : cli, id: fotoId as string }, limite: 1 })
     if (r.error) return salida(502, { error: 'error_de_lectura', code: 'E-LECTURA', detail: r.error.slice(0, 200) })
     const fila = r.filas[0]
     if (!fila) return salida(404, { error: 'foto_no_encontrada', code: 'E-FOTO-NO-EXISTE', detail: 'esa foto no existe para este cliente' })
@@ -343,7 +344,8 @@ export async function etiquetar(deps: DepsDeEtiquetar, body: unknown): Promise<{
     }
     url = texto(fila.url) as string
     leyenda = typeof fila.caption === 'string' ? fila.caption : ''
-    const sitio = await leerSitio({ consulta: deps.consulta, cliente: cli, ahora: ahora(), plazos: PLAZOS_EN_DIAS })
+    // la bodega del mundo no tiene sitio ni líneas de producto: la foto se describe tal cual, sin catálogo con qué compararla
+    const sitio = cli === CLAVE_DE_LA_BODEGA ? { lineas: [], fallidas: 0 } : await leerSitio({ consulta: deps.consulta, cliente: cli, ahora: ahora(), plazos: PLAZOS_EN_DIAS })
     if (sitio.fallidas > 0) return sinModelo('error_de_lectura_de_productos')
     const vocabulario = vocabularioDelCatalogo(sitio.lineas)
     nombresDeProducto = vocabulario.nombres

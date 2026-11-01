@@ -10,6 +10,7 @@
  * quedó superada por la decisión de Emilio del 27-oct: se pueden usar para crear (él aprueba cada pieza) y por eso se rotulan, no se esconden.
  */
 import type { Consulta, Fila } from '../consulta'
+import { CLAVE_DE_LA_BODEGA } from './clave-de-la-bodega'
 import { gustoDe, nivelDeOrigen, ordenarPorEmbudo } from '../../portero-alimenta/embudo'
 
 /** cuántas etiquetas por cliente y día (≈ US$ 0,08 con el costo medido de ~US$ 0,008 por foto; dentro del tope diario del cliente) */
@@ -146,7 +147,7 @@ export async function etiquetarPendientes(deps: DepsDeEtiquetarPendientes, p: Pe
   for (const cliente of p.clientes) {
     const inf: InformeDeEtiquetas = { cliente, pendientes: 0, etiquetadas_hoy_antes: 0, intentadas: 0, etiquetadas: 0, fallidas: [], omitidas_por_tope: 0, omitidas_por_plazo: 0, repetidas_omitidas: 0, costo_usd: 0 }
     informes.push(inf)
-    const r = await deps.consulta({ tabla: 'client_social_images', columnas: ['id', 'owner_role', 'estado', 'etiquetada_en', 'duplicado_de', 'hash_archivo', 'created_at'], donde: { client_id: cliente, estado: 'ok' }, orden: { columna: 'created_at', descendente: false }, limite: 1000 })
+    const r = await deps.consulta({ tabla: 'client_social_images', columnas: ['id', 'owner_role', 'estado', 'etiquetada_en', 'duplicado_de', 'hash_archivo', 'created_at'], donde: { client_id: cliente === CLAVE_DE_LA_BODEGA ? null : cliente, estado: 'ok' }, orden: { columna: 'created_at', descendente: false }, limite: 1000 })
     if (r.error) { inf.error = r.error.slice(0, 200); continue }
     const repetidas = idsDeFotosRepetidas(r.filas)
     const filas: Fila[] = r.filas.filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)))
