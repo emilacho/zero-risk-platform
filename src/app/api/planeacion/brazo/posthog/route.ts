@@ -57,6 +57,7 @@ import {
   type PedidoPuerta,
 } from '@/lib/planeacion/puertas'
 import { envolverBrazo, sinRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
+import { condicionesHogQL, leerDatosDePrueba, rotuloDeExclusion } from '@/lib/planeacion/datos-de-prueba'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -106,6 +107,9 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   // `www.` (138). Antes se filtraba sólo `dominio` y `www.dominio`: con `www.naufrago.ec` en la ficha salía `www.www.naufrago.ec` y el plan veía 138
   // visitas en vez de 488. Se pela el `www.` y se piden los dos (medido 30-sep contra los datos reales).
   const base = dominio.toLowerCase().replace(/^www\./, '')
+  // 01-nov · pruebas del dueño / de la agencia (convención `clients.config.datos_de_prueba`): se dejan fuera ANTES de contar. Ausente = nada cambia.
+  const prueba = leerDatosDePrueba(p.params?.datos_de_prueba)
+  const exclusion = condicionesHogQL(prueba)
   const escapado = base.replace(/'/g, "''")
 
   try {
@@ -119,7 +123,7 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
           "select event, count() as n, count(distinct distinct_id) as personas from events " +
           "where timestamp > now() - interval " + dias + " day " +
           // el dominio sale de `$host` o, si el evento no lo trae (los de conducta), del host de `$current_url` (medido 30-sep)
-          "and coalesce(properties.$host, domain(properties.$current_url)) in ('" + escapado + "', 'www." + escapado + "') " +
+          "and coalesce(properties.$host, domain(properties.$current_url)) in ('" + escapado + "', 'www." + escapado + "')" + exclusion + ' ' +
           'group by event order by n desc limit 40',
         )
         const filas = (q.results ?? []).map((f) => ({ evento: String(f[0]), veces: Number(f[1]), personas: Number(f[2]) }))
@@ -138,6 +142,8 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
             atribucion: 'POR DOMINIO, NO POR CLIENTE',
             dominio_leido_de: '$host, o el host de $current_url en los eventos de conducta (que no traen $host)',
             limitacion: LIMITACION,
+            ...(rotuloDeExclusion(prueba) ? { pruebas_excluidas: rotuloDeExclusion(prueba), ...(prueba?.nota ? { pruebas_nota: prueba.nota } : {}) } : {}),
+            ...(prueba?.descartado.length ? { pruebas_descartadas: prueba.descartado } : {}),
             dominio,
             ventana_dias: dias,
             visitas: visitas ? visitas.veces : 0,
