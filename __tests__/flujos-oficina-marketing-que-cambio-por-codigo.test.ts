@@ -72,6 +72,8 @@ describe('alcance', () => {
   it('frente al ya aplicado, este paso toca solo «el plan de guardado», «armar B» y «armar C» (y nada de conexiones)', () => {
     const c = nuevo.nodes.filter((n: any) => { const o = aplicado.nodes.find((x: any) => x.name === n.name); return o && JSON.stringify(o.parameters) !== JSON.stringify(n.parameters) }).map((n: any) => n.name)
     for (const n of [GUARDADO, 'JEF · plan · armar B', 'JEF · plan · armar C']) expect(c).toContain(n)
-    expect(nuevo.connections).toEqual(aplicado.connections)
+    const mios = new Set(['② ¿Es copia del plan anterior?', '② IF · ¿copia · reintentar?', '② IF · ¿copia · detener?', '② IF · ¿hay pedido de cambios?', '② Cambio · sin cambios reales', '② Resumen · sin cambios reales', '② Cable de vuelta · sin cambios reales', '② Cable · ¿volvió? · sin cambios reales'])
+    const sinCopias = Object.fromEntries(Object.entries(nuevo.connections).filter(([k]) => !mios.has(k)).map(([k, v]: [string, any]) => [k, { main: v.main.map((g: any[]) => g.map((c) => (c.node === '② ¿Es copia del plan anterior?' ? { ...c, node: 'Guardar el plan' } : c))) }]))
+    expect(sinCopias).toEqual(aplicado.connections)
   })
 })

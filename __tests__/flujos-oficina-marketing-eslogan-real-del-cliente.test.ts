@@ -29,9 +29,12 @@ const cambiados = (a: any, b: any) => b.nodes.filter((n: any) => { const o = a.n
 describe('planeación · alcance', () => {
   it('solo cambia «Redactor (B4)» (más lo del «Qué cambió»); no se suman ni se quitan nodos ni conexiones', () => {
     // + el «Qué cambió» por código (punto 6 de CC1): se prueba aparte en flujos-oficina-marketing-que-cambio-por-codigo.test.ts
-    expect(cambiados(aplicado, nuevoPlan).filter((n: string) => !n.startsWith('JEF · plan ·'))).toEqual(['Redactor (B4)'])
-    expect(nuevoPlan.nodes.length).toBe(aplicado.nodes.length)
-    expect(nuevoPlan.connections).toEqual(aplicado.connections)
+    // + la adenda 5 (no guardar copias del plan anterior): 8 nodos nuevos «② …», «Pedir el plan al redactor» y «Guardar el plan»; se prueba aparte en flujos-oficina-marketing-planeacion-no-guardar-copias.test.ts
+    const COPIAS = ['② ¿Es copia del plan anterior?', '② IF · ¿copia · reintentar?', '② IF · ¿copia · detener?', '② IF · ¿hay pedido de cambios?', '② Cambio · sin cambios reales', '② Resumen · sin cambios reales', '② Cable de vuelta · sin cambios reales', '② Cable · ¿volvió? · sin cambios reales']
+    expect(cambiados(aplicado, nuevoPlan).filter((n: string) => !n.startsWith('JEF · plan ·') && !COPIAS.includes(n) && !['Pedir el plan al redactor', 'Guardar el plan'].includes(n))).toEqual(['Redactor (B4)'])
+    expect(nuevoPlan.nodes.length).toBe(aplicado.nodes.length + COPIAS.length)
+    const sinCopias = Object.fromEntries(Object.entries(nuevoPlan.connections).filter(([k]) => !COPIAS.includes(k)).map(([k, v]: [string, any]) => [k, { main: v.main.map((g: any[]) => g.map((c) => (c.node === COPIAS[0] ? { ...c, node: 'Guardar el plan' } : c))) }]))
+    expect(sinCopias).toEqual(aplicado.connections)
   })
 })
 
