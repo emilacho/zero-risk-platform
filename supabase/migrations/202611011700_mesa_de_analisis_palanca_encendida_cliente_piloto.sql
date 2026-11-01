@@ -6,7 +6,7 @@
 --   · la fila debe existir (la creó 202611011500);
 --   · si ya está encendida para OTRO cliente (o para más de uno) no la toca: alguien la encendió a mano y eso se decide a mano;
 --   · si ya está encendida exactamente para este cliente, no hace nada (idempotente);
---   · el cliente debe existir en public.clients y estar activo.
+--   · el cliente debe existir en public.clients con status 'onboarding' o 'active' (el piloto está en onboarding · prevuelo CC3 01-nov); paused/churned se niegan.
 -- Reversa: 202611011700_..._REVERSA.sql (vuelve a apagada SOLO si el valor es exactamente el que deja esta migración).
 
 DO $$
@@ -19,8 +19,8 @@ BEGIN
   IF v_actual IS NULL THEN
     RAISE EXCEPTION 'mesa_de_analisis: no existe la palanca (aplica antes 202611011500) · no se enciende';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.clients WHERE id = v_cliente::uuid AND status = 'active') THEN
-    RAISE EXCEPTION 'mesa_de_analisis: el cliente de práctica % no existe o no está activo · no se enciende', v_cliente;
+  IF NOT EXISTS (SELECT 1 FROM public.clients WHERE id = v_cliente::uuid AND status IN ('onboarding', 'active')) THEN
+    RAISE EXCEPTION 'mesa_de_analisis: el cliente de práctica % no existe o su status no es onboarding/active · no se enciende', v_cliente;
   END IF;
   v_clientes := COALESCE(v_actual -> 'clientes', '[]'::jsonb);
   IF v_actual ->> 'encendida' = 'true' AND v_clientes = to_jsonb(ARRAY[v_cliente]) THEN
