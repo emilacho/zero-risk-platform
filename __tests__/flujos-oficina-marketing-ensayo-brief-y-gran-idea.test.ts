@@ -49,9 +49,10 @@ function cadena(o: { palanca?: boolean } = {}) {
 const tarjeta = (agente: string, rol: Tarjeta['rol'], pertinente_en: string[]): Tarjeta => ({ agente, rol, especialidad: `especialidad de ${agente}`, sabe_hacer: ['x'], necesita: ['x'], entrega: ['x'], pertinente_en, activo: true })
 const DIRECTORIO = [tarjeta('campaign-brief-agent', 'direccion', ['brief:dirige']), tarjeta('creative-director-mesa', 'direccion', ['carrusel', 'kit', 'concepto:dirige']), tarjeta('content-creator', 'miembro', ['concepto']), tarjeta('design-visual-storyteller', 'miembro', ['concepto']), tarjeta('marketing_instagram_curator', 'miembro', ['concepto'])]
 
+// 01-nov: las mesas de la cadena NO consultan oficina_config.familias_activas (solo la plantilla activa + nuevo_orden): la lista va vacía a propósito
 function mundo(o: { palanca?: boolean } = {}) {
   const al = cadena(o)
-  const M = crearMemoria({ plantilla: BRIEF_MESA, config: { familias_activas: ['brief_mesa', 'concepto_mesa'] } })
+  const M = crearMemoria({ plantilla: BRIEF_MESA, config: { familias_activas: [] } })
   M.P.mesa = crearMesaEnMemoria(DIRECTORIO)
   const llamadas: Array<{ ruta: string; cuerpo: any }> = []
   const http: Http = async (url, headers, cuerpo) => {
