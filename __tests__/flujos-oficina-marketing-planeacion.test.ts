@@ -19,13 +19,13 @@ const WEBHOOK = (body: Record<string, unknown>) => ({ 'Webhook · planeacion': [
 const AsyncFunction = Object.getPrototypeOf(async () => 0).constructor
 
 describe('el flujo nuevo se parece al vivo en todo menos en lo que debe cambiar', () => {
-  it('cambia 11 nodos (la llave, los 4 con el redactor pegado, elegir brazos, la junta, el armado del pedido del redactor, la vuelta y los 2 que entregan el paquete en la rama FIN) y suma 25; solo se mueven 7 conexiones', () => {
+  it('cambia 13 nodos (la llave, los 4 con el redactor pegado —y los 2 de guardar B/C de la jefatura, que re-imponen el tag del ciclo—, elegir brazos, la junta, el armado del pedido del redactor, la vuelta y los 2 que entregan el paquete en la rama FIN) y suma 50; solo se mueven 8 conexiones', () => {
     const v = new Map(vivo.nodes.map((n: any) => [n.name, n]))
     const cambiados = nuevo.nodes.filter((n: any) => v.has(n.name) && JSON.stringify(v.get(n.name)) !== JSON.stringify(n)).map((n: any) => n.name).sort()
-    expect(cambiados).toEqual(['JEF · plan · armar B', 'JEF · plan · armar C', 'Guardar el plan', 'Pedir el plan al redactor', '⓪ Llave · Webhook · planeacion', 'elegir brazos', 'Junta · esperar los 3 brazos', 'Redactor (B4)', '¿Llegó la vuelta?', 'FIN · devolver el paquete', 'FIN · sobre'].sort())
-    expect(nuevo.nodes.filter((n: any) => !v.has(n.name)).map((n: any) => n.name).sort()).toEqual(['Parar · resumen', 'Parar · ¿corta aquí?', 'Parar · ¿plan revisado?', 'Parar · resumen (plan revisado)', 'Parar · ¿sin plan y con parar_en?', 'Parar · resumen (sin plan)', 'Vuelta · leer el punto de control', 'Vuelta · completar', 'Redactor · elegir', 'Redactor · leer la elección', 'Brazo · mercado', 'firma de la rama · mercado', 'Mesa de análisis', 'firma de la rama · analisis', 'Validar · ¿se pide?', 'Validar · pedir', 'Validar · ¿qué dijo?', 'Validar · ¿pasó?', 'Validar · ¿reintenta?', 'Validar · guardar borrador', 'Validar · armar la alerta', 'Validar · alerta', 'Validar · resumen', 'Lo que dijo el dueño · texto libre', 'Unir el texto libre del dueño al paquete'].sort())
+    expect(cambiados).toEqual(['JEF · plan · armar B', 'JEF · plan · armar C', 'JEF · plan · guardar B', 'JEF · plan · guardar C', 'Guardar el plan', 'Pedir el plan al redactor', '⓪ Llave · Webhook · planeacion', 'elegir brazos', 'Junta · esperar los 3 brazos', 'Redactor (B4)', '¿Llegó la vuelta?', 'FIN · devolver el paquete', 'FIN · sobre'].sort())
+    expect(nuevo.nodes.filter((n: any) => !v.has(n.name)).map((n: any) => n.name).sort()).toEqual(['Anterior · reemplazado', 'Brazo · mercado', 'Cambio · aplicado', 'Cambio · en reescritura', 'Cambio · fallido', 'Campaña · a la vigente', 'Ciclo · armar cierres', 'Ciclo · comprobar', 'Compuerta anterior · reemplazada', 'Compuerta · abrir', 'Compuerta · esperar al dueño', 'Hermanas · expandir', 'Hermanas · no vigentes', 'Lo que dijo el dueño · texto libre', 'Mesa de análisis', 'Parar · resumen', 'Parar · resumen (plan revisado)', 'Parar · resumen (sin plan)', 'Parar · ¿corta aquí?', 'Parar · ¿plan revisado?', 'Parar · ¿sin plan y con parar_en?', 'Plan anterior · leer', 'Plan anterior · pedir', 'Redactor · elegir', 'Redactor · leer la elección', 'Segunda mitad · llamar', 'Segunda mitad · sobre', 'Unir el texto libre del dueño al paquete', 'Validar · alerta', 'Validar · armar la alerta', 'Validar · guardar borrador', 'Validar · pedir', 'Validar · resumen', 'Validar · ¿pasó?', 'Validar · ¿qué dijo?', 'Validar · ¿reintenta?', 'Validar · ¿se pide?', 'Vuelta · completar', 'Vuelta · leer el punto de control', 'firma de la rama · analisis', 'firma de la rama · mercado', '¿Anterior · reemplazado?', '¿Cambio · aplicado?', '¿Campaña · a la vigente?', '¿Compuerta anterior · reemplazada?', '¿Compuerta · abrir?', '¿Compuerta?', '¿Hermanas · no vigentes?', '¿Reescritura · marcar el pedido?', '¿Sin plan · cerrar el pedido?'].sort())
     const movidas = Object.keys(vivo.connections).filter((k) => JSON.stringify(nuevo.connections[k]) !== JSON.stringify(vivo.connections[k])).sort()
-    expect(movidas).toEqual(['Guardar el plan', 'Redactor (B4)', 'elegir brazos', '¿Hay plan?', 'Plan vigente', 'Esperar al redactor', 'Unir el público ideal al paquete'].sort())
+    expect(movidas).toEqual(['Guardar el plan','Redactor (B4)','elegir brazos','¿Hay plan?','Plan vigente','Esperar al redactor','Unir el público ideal al paquete','⓪ Llave · Webhook · planeacion'].sort())
     expect(new Set(nuevo.nodes.map((n: any) => n.id)).size).toBe(nuevo.nodes.length)
     // el nombre del redactor ya no está pegado en ningún nodo del flujo nuevo, salvo como valor por omisión del nodo que lo elige
     const pegados = nuevo.nodes.filter((n: any) => JSON.stringify(n.parameters).includes('campaign-brief-agent')).map((n: any) => n.name)
@@ -39,7 +39,7 @@ describe('el flujo nuevo se parece al vivo en todo menos en lo que debe cambiar'
 })
 
 describe('parar_en · «⓪ Llave»', () => {
-  const llave = (body: Record<string, unknown>, flujo = nuevo) => recorrer(flujo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?'] })
+  const llave = (body: Record<string, unknown>, flujo = nuevo) => recorrer(flujo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?', 'Plan anterior · pedir'] })
   it('ausente o null: pasa y devuelve lo mismo que el vivo', async () => {
     for (const b of [{ client_id: CLIENTE }, { client_id: CLIENTE, parar_en: null }]) {
       const a = await llave(b, vivo), c = await llave(b)
@@ -47,7 +47,7 @@ describe('parar_en · «⓪ Llave»', () => {
     }
   })
   it('«guardar_plan» pasa; cualquier otro valor DETIENE antes de gastar', async () => {
-    expect((await llave({ client_id: CLIENTE, parar_en: 'guardar_plan' })).ultimo).toBe('V9 · ¿pide el pre-vuelo?')
+    expect((await llave({ client_id: CLIENTE, parar_en: 'guardar_plan' })).ultimo).toBe('Plan anterior · pedir')
     for (const raro of ['jefatura', '', 0, true, ['guardar_plan'], 'GUARDAR_PLAN']) await expect(llave({ client_id: CLIENTE, parar_en: raro })).rejects.toThrow(/PLANEACION_PARAR_EN_INVALIDO/)
   })
   it('la llave de despacho sigue mandando: sin ella o equivocada, se DETIENE como hoy', async () => {
@@ -134,7 +134,10 @@ describe('el redactor del plan es un dato', () => {
     }
     const a = await cuerpoDe(vivo, {})
     const b = await cuerpoDe(nuevo, { 'Redactor · elegir': [{ redactor_elegido: 'campaign-brief-agent' }] })
-    expect(b).toEqual(a)
+    // tramo 2 · el tag lleva ahora las claves del ciclo del plan (versión 1, vigente, con compuerta); lo demás es idéntico al vivo
+    const { version, reemplaza_a, vigente, plan_cambio_id, compuerta, ...tagSinCiclo } = b.provenance_tag
+    expect({ version, reemplaza_a, vigente, plan_cambio_id, compuerta }).toEqual({ version: 1, reemplaza_a: null, vigente: true, plan_cambio_id: null, compuerta: true })
+    expect({ ...b, provenance_tag: tagSinCiclo }).toEqual(a)
     const c = await cuerpoDe(nuevo, { 'Redactor · elegir': [{ redactor_elegido: 'jefe-marketing' }] })
     expect(c.producing_agent).toBe('jefe-marketing')
     expect(c.content).toBe('EL PLAN')

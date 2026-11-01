@@ -61,7 +61,7 @@ describe('el flujo nuevo se parece al vivo en lo demás', () => {
     expect(vivo.connections['¿Hay plan?'].main[0].map((c: any) => c.node)).toEqual(['Guardar el plan'])
     expect(nuevo.connections['¿Hay plan?'].main[0].map((c: any) => c.node)).toEqual(['Validar · ¿se pide?'])
     // 01-nov · la rama sin plan ahora pasa por el corte «Parar · ¿sin plan y con parar_en?» (que sin parar_en sigue a «¿Salió el PDF?» como hoy)
-    expect(nuevo.connections['¿Hay plan?'].main[1].map((c: any) => c.node)).toEqual(['Parar · ¿sin plan y con parar_en?'])
+    expect(nuevo.connections['¿Hay plan?'].main[1].map((c: any) => c.node)).toEqual(['¿Sin plan · cerrar el pedido?'])
   })
   it('apagado, el único camino por los nodos nuevos termina en «Guardar el plan»; encendido, hay 3 salidas (guarda · reintenta · alerta)', () => {
     expect(nuevo.connections['Validar · ¿se pide?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Validar · pedir'], ['Guardar el plan']])
@@ -72,9 +72,9 @@ describe('el flujo nuevo se parece al vivo en lo demás', () => {
 })
 
 describe('«⓪ Llave» · validar_forma', () => {
-  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?'] })
+  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?', 'Plan anterior · pedir'] })
   it('true, false, null o ausente pasan; cualquier otro valor DETIENE antes de gastar', async () => {
-    for (const v of [true, false, null, undefined]) expect((await llave({ client_id: CLIENTE, validar_forma: v })).ultimo).toBe('V9 · ¿pide el pre-vuelo?')
+    for (const v of [true, false, null, undefined]) expect((await llave({ client_id: CLIENTE, validar_forma: v })).ultimo).toBe('Plan anterior · pedir')
     for (const raro of ['true', 'si', 1, 0, [], {}]) await expect(llave({ client_id: CLIENTE, validar_forma: raro })).rejects.toThrow(/PLANEACION_VALIDAR_FORMA_INVALIDO/)
   })
 })

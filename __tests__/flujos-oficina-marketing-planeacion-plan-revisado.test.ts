@@ -19,9 +19,9 @@ const WEBHOOK = (body: Record<string, unknown>) => ({ 'Webhook · planeacion': [
 const salidas = (f: any, n: string) => (f.connections[n]?.main ?? []).map((g: any[]) => g.map((c) => c.node))
 
 describe('«⓪ Llave» admite plan_revisado', () => {
-  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?'] })
+  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?', 'Plan anterior · pedir'] })
   it('«plan_revisado» y «guardar_plan» pasan; cualquier otro valor DETIENE antes de gastar', async () => {
-    for (const ok of ['plan_revisado', 'guardar_plan']) expect((await llave({ client_id: CLIENTE, parar_en: ok })).ultimo).toBe('V9 · ¿pide el pre-vuelo?')
+    for (const ok of ['plan_revisado', 'guardar_plan']) expect((await llave({ client_id: CLIENTE, parar_en: ok })).ultimo).toBe('Plan anterior · pedir')
     for (const raro of ['plan_revisad', 'PLAN_REVISADO', 'jefatura', '', 0, true, ['plan_revisado']]) await expect(llave({ client_id: CLIENTE, parar_en: raro })).rejects.toThrow(/PLANEACION_PARAR_EN_INVALIDO/)
   })
 })
@@ -29,10 +29,12 @@ describe('«⓪ Llave» admite plan_revisado', () => {
 describe('el cableado del corte', () => {
   it('«Plan vigente» sigue con sus ramas laterales y el PDF solo se alcanza pasando por el corte', () => {
     expect(salidas(vivo, 'Plan vigente')[0]).toEqual(['JEF · plan · armar la marca', 'Plan → Drive (PDF)', 'Aviso · plan con pendientes'])
-    expect(salidas(nuevo, 'Plan vigente')[0]).toEqual(['JEF · plan · armar la marca', 'Parar · ¿plan revisado?', 'Aviso · plan con pendientes'])
-    expect(salidas(nuevo, 'Parar · ¿plan revisado?')).toEqual([['Parar · resumen (plan revisado)'], ['Plan → Drive (PDF)']])
+    expect(salidas(nuevo, 'Plan vigente')[0]).toEqual(['JEF · plan · armar la marca', 'Ciclo · armar cierres', 'Aviso · plan con pendientes'])
+    expect(salidas(nuevo, 'Ciclo · comprobar')[0]).toEqual(['Parar · ¿plan revisado?'])
+    expect(salidas(nuevo, 'Parar · ¿plan revisado?')).toEqual([['Parar · resumen (plan revisado)'], ['¿Compuerta?']])
     const haciaElPdf = Object.entries(nuevo.connections).filter(([, c]: any) => JSON.stringify(c).includes('"Plan → Drive (PDF)"')).map(([de]) => de)
-    expect(haciaElPdf).toEqual(['Parar · ¿plan revisado?'])
+    // tramo 2 · el PDF ya no cuelga de la planeación en el camino del plan: sale del sub-flujo «Plan · segunda mitad» (compuerta o llamada directa)
+    expect(haciaElPdf).toEqual([])
   })
   it('«Parar · resumen (plan revisado)» es un final: no conecta con nada', () => {
     expect(nuevo.connections['Parar · resumen (plan revisado)']).toBeUndefined()
@@ -51,8 +53,8 @@ describe('la compuerta después de «Plan vigente»', () => {
   })
   it('con «guardar_plan», sin parar_en, null o en un disparo que no es webhook, sigue al PDF como hoy', async () => {
     for (const p of [WEBHOOK({ parar_en: 'guardar_plan' }), WEBHOOK({ client_id: CLIENTE }), WEBHOOK({ parar_en: null }), {}]) {
-      const r = await recorrer(nuevo, 'Parar · ¿plan revisado?', vigente, { previos: p, hasta: ['Plan → Drive (PDF)'] })
-      expect(r.pasos).toEqual(['Parar · ¿plan revisado?', 'Plan → Drive (PDF)'])
+      const r = await recorrer(nuevo, 'Parar · ¿plan revisado?', vigente, { previos: p, hasta: ['¿Compuerta?'] })
+      expect(r.pasos).toEqual(['Parar · ¿plan revisado?', '¿Compuerta?'])
     }
   })
 })
@@ -75,7 +77,8 @@ describe('el camino sin plan', () => {
   })
   it('«¿Hay plan?» falso solo llega a «¿Salió el PDF?» pasando por el corte; el verdadero sigue al validador', () => {
     expect(salidas(vivo, '¿Hay plan?')[1]).toEqual(['¿Salió el PDF?'])
-    expect(salidas(nuevo, '¿Hay plan?')).toEqual([['Validar · ¿se pide?'], ['Parar · ¿sin plan y con parar_en?']])
+    expect(salidas(nuevo, '¿Hay plan?')).toEqual([['Validar · ¿se pide?'], ['¿Sin plan · cerrar el pedido?']])
+    expect(salidas(nuevo, '¿Sin plan · cerrar el pedido?')).toEqual([['Cambio · fallido'], ['Parar · ¿sin plan y con parar_en?']])
     expect(salidas(nuevo, 'Parar · ¿sin plan y con parar_en?')).toEqual([['Parar · resumen (sin plan)'], ['¿Salió el PDF?']])
   })
 })
