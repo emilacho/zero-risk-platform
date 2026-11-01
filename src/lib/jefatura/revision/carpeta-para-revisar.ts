@@ -4,7 +4,7 @@
  * Agnóstico. Nunca lanza: lo que no se pudo leer viaja DICHO, para que el revisor no lo lea como «no existe».
  */
 import { datosDelDueno } from '../../manual/propuesta-rutas'
-import { adjuntoDelCliente, type ContextoDelCliente } from '../../portero-alimenta/contexto-del-cliente'
+import { adjuntoDelCliente, REGLA_DE_LAS_SEDES, type ContextoDelCliente } from '../../portero-alimenta/contexto-del-cliente'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 import type { ContextoDelRevisor } from '../../revision-comun'
 
@@ -15,7 +15,7 @@ export function textoDeLaCarpeta(c: ContextoDelCliente): string {
   const r = c.resumen_vivo
   const resumen = r.estado === 'vigente' ? [r.texto ?? '', ...(r.sedes ?? []).map((s) => `[sede ${s.clave}] ${s.texto}`)].filter(Boolean).join('\n') : `(resumen vivo: ${r.estado})`
   const informes = c.informes_estado === 'no_se_pudo_leer' ? [`(los informes no se pudieron leer: ${c.informes_detalle ?? 'sin detalle'})`] : c.informes.map((i) => `### Informe «${i.tipo}»\n${i.texto}`)
-  return [...(c.hechos_del_dueno?.length ? [`## Hechos que declaró el dueño (mandan sobre cualquier otra fuente)\n${c.hechos_del_dueno.map((h) => `- ${h.sede ? `sede ${h.sede} · ` : ''}${h.tema}: ${h.respuesta}${h.frases_negadas.length ? ` · frases que niega: ${h.frases_negadas.map((x) => `«${x}»`).join(', ')}` : ''}`).join('\n')}`] : []), ...(c.eslogan ? [`## Eslogan que el cliente ya usa\n«${c.eslogan.texto}» (${c.eslogan.fuente}): ${c.eslogan.regla}`] : []), `## Resumen vivo\n${resumen}`, informes.length ? `## Informes de la mesa de análisis\n${informes.join('\n\n')}` : '## Informes de la mesa de análisis\n(no hay vigentes)'].join('\n\n')
+  return [...(c.sedes?.length ? [`## Las sedes del cliente\n${REGLA_DE_LAS_SEDES}.\n${c.sedes.map((s) => `### ${s.ciudad || s.clave}\n${s.datos.length ? s.datos.map((d) => `- ${d.campo}: ${d.valor} (fuente: ${d.fuente})`).join('\n') : '- sin datos guardados'}`).join('\n')}`] : []), ...(c.hechos_del_dueno?.length ? [`## Hechos que declaró el dueño (mandan sobre cualquier otra fuente)\n${c.hechos_del_dueno.map((h) => `- ${h.sede ? `sede ${h.sede} · ` : ''}${h.tema}: ${h.respuesta}${h.frases_negadas.length ? ` · frases que niega: ${h.frases_negadas.map((x) => `«${x}»`).join(', ')}` : ''}`).join('\n')}`] : []), ...(c.eslogan ? [`## Eslogan que el cliente ya usa\n«${c.eslogan.texto}» (${c.eslogan.fuente}): ${c.eslogan.regla}`] : []), `## Resumen vivo\n${resumen}`, informes.length ? `## Informes de la mesa de análisis\n${informes.join('\n\n')}` : '## Informes de la mesa de análisis\n(no hay vigentes)'].join('\n\n')
 }
 
 const problema = (titulo: string, funcion: string, e: unknown): ContextoDelRevisor => ({ titulo, funcion, texto: `(no se pudo leer: ${e instanceof Error ? e.message : String(e)}. No lo tomes como que no existe.)` })

@@ -47,7 +47,13 @@ export interface InformeAdjunto {
 /** 01-nov · firma de Emilio: lo que el dueño declaró. Es un hecho con la máxima precedencia */
 export interface HechoDelDueno { tema: string; respuesta: string; sede: string | null; frases_negadas: string[] }
 
+/** 01-nov · firma de Emilio: cada sede con sus propios datos y de dónde sale cada uno */
+export interface SedeDelCliente { clave: string; ciudad: string; datos: Array<{ campo: string; valor: string; fuente: string }> }
+export const REGLA_DE_LAS_SEDES = 'Cada dato es de su sede. Dos horarios, cartas o canales de dos sedes no son una discrepancia. No uses el dato de una sede para otra'
+
 export interface ContextoDelCliente {
+  /** solo si el cliente tiene dos o más: con una, nadie puede confundirlas */
+  sedes?: SedeDelCliente[]
   hechos_del_dueno?: HechoDelDueno[]
   /** 01-nov · el eslogan que el cliente ya usa, con su fuente y la regla de uso; ausente si no se conoce */
   eslogan?: { texto: string; fuente: string; regla: string }
@@ -64,8 +70,32 @@ const masNueva = (a: Fila, b: Fila) => ms(b.observado_en) - ms(a.observado_en)
 /** lee el resumen vivo entero y los informes vigentes de UN cliente */
 export async function adjuntoDelCliente(db: Db, clientId: string, ahora: Date = new Date()): Promise<ContextoDelCliente> {
   const eslogan = await esloganVigente(db, clientId)
+  const sedes = await sedesDelCliente(db, clientId)
   const c = await contextoSinEslogan(db, clientId, ahora)
-  return eslogan ? { eslogan, ...c } : c
+  return { ...(sedes ? { sedes } : {}), ...(eslogan ? { eslogan } : {}), ...c }
+}
+
+/** de los datos de cada sede, el más nuevo de cada campo y fuente. Nunca lanza: sin este dato la carpeta viaja igual */
+async function sedesDelCliente(db: Db, clientId: string): Promise<SedeDelCliente[] | null> {
+  try {
+    const s = await db.from('client_sedes').select('id, clave, ciudad').eq('client_id', clientId)
+    const sedes = s.error ? [] : lista(s.data)
+    if (sedes.length < 2) return null
+    const d = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, fuente, observado_en').eq('client_id', clientId)
+    const ultimos = new Map<string, Fila>()
+    for (const f of d.error ? [] : lista(d.data)) {
+      if (!txt(f.sede_id) || !txt(f.valor_texto)) continue
+      const k = `${txt(f.sede_id)}|${txt(f.campo)}|${txt(f.fuente)}`
+      const p = ultimos.get(k)
+      if (!p || txt(f.observado_en) > txt(p.observado_en)) ultimos.set(k, f)
+    }
+    return sedes.map((x) => ({
+      clave: txt(x.clave), ciudad: txt(x.ciudad),
+      datos: [...ultimos.values()].filter((f) => txt(f.sede_id) === txt(x.id)).map((f) => ({ campo: txt(f.campo).replace(/_/g, ' '), valor: txt(f.valor_texto), fuente: txt(f.fuente) })).sort((a, b) => a.campo.localeCompare(b.campo)),
+    }))
+  } catch {
+    return null
+  }
 }
 
 /** del manual vigente; nunca lanza: sin este dato la carpeta viaja igual */
