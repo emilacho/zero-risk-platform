@@ -19,13 +19,13 @@ const WEBHOOK = (body: Record<string, unknown>) => ({ 'Webhook · planeacion': [
 const AsyncFunction = Object.getPrototypeOf(async () => 0).constructor
 
 describe('el flujo nuevo se parece al vivo en todo menos en lo que debe cambiar', () => {
-  it('cambia 8 nodos (la llave, los 4 con el redactor pegado, elegir brazos, la junta y el armado del pedido del redactor) y suma 17; solo se mueven 4 conexiones', () => {
+  it('cambia 8 nodos (la llave, los 4 con el redactor pegado, elegir brazos, la junta y el armado del pedido del redactor) y suma 19; solo se mueven 5 conexiones', () => {
     const v = new Map(vivo.nodes.map((n: any) => [n.name, n]))
     const cambiados = nuevo.nodes.filter((n: any) => v.has(n.name) && JSON.stringify(v.get(n.name)) !== JSON.stringify(n)).map((n: any) => n.name).sort()
     expect(cambiados).toEqual(['JEF · plan · armar B', 'JEF · plan · armar C', 'Guardar el plan', 'Pedir el plan al redactor', '⓪ Llave · Webhook · planeacion', 'elegir brazos', 'Junta · esperar los 3 brazos', 'Redactor (B4)'].sort())
-    expect(nuevo.nodes.filter((n: any) => !v.has(n.name)).map((n: any) => n.name).sort()).toEqual(['Parar · resumen', 'Parar · ¿corta aquí?', 'Redactor · elegir', 'Redactor · leer la elección', 'Brazo · mercado', 'firma de la rama · mercado', 'Mesa de análisis', 'firma de la rama · analisis', 'Validar · ¿se pide?', 'Validar · pedir', 'Validar · ¿qué dijo?', 'Validar · ¿pasó?', 'Validar · ¿reintenta?', 'Validar · guardar borrador', 'Validar · armar la alerta', 'Validar · alerta', 'Validar · resumen'].sort())
+    expect(nuevo.nodes.filter((n: any) => !v.has(n.name)).map((n: any) => n.name).sort()).toEqual(['Parar · resumen', 'Parar · ¿corta aquí?', 'Parar · ¿plan revisado?', 'Parar · resumen (plan revisado)', 'Redactor · elegir', 'Redactor · leer la elección', 'Brazo · mercado', 'firma de la rama · mercado', 'Mesa de análisis', 'firma de la rama · analisis', 'Validar · ¿se pide?', 'Validar · pedir', 'Validar · ¿qué dijo?', 'Validar · ¿pasó?', 'Validar · ¿reintenta?', 'Validar · guardar borrador', 'Validar · armar la alerta', 'Validar · alerta', 'Validar · resumen'].sort())
     const movidas = Object.keys(vivo.connections).filter((k) => JSON.stringify(nuevo.connections[k]) !== JSON.stringify(vivo.connections[k])).sort()
-    expect(movidas).toEqual(['Guardar el plan', 'Redactor (B4)', 'elegir brazos', '¿Hay plan?'].sort())
+    expect(movidas).toEqual(['Guardar el plan', 'Redactor (B4)', 'elegir brazos', '¿Hay plan?', 'Plan vigente'].sort())
     expect(new Set(nuevo.nodes.map((n: any) => n.id)).size).toBe(nuevo.nodes.length)
     // el nombre del redactor ya no está pegado en ningún nodo del flujo nuevo, salvo como valor por omisión del nodo que lo elige
     const pegados = nuevo.nodes.filter((n: any) => JSON.stringify(n.parameters).includes('campaign-brief-agent')).map((n: any) => n.name)
@@ -118,7 +118,10 @@ describe('el redactor del plan es un dato', () => {
     }
     const base = { pedido: 'PEDIDO', cliente_id: CLIENTE }
     const hoy = await cuerpoDe(vivo, base)
-    expect(await cuerpoDe(nuevo, { ...base, redactor_elegido: 'campaign-brief-agent' })).toEqual(hoy)
+    // 01-nov · lo único nuevo en el cuerpo es el tope del redactor (max_budget_usd: 2)
+    const { max_budget_usd, ...resto } = await cuerpoDe(nuevo, { ...base, redactor_elegido: 'campaign-brief-agent' })
+    expect(max_budget_usd).toBe(2)
+    expect(resto).toEqual(hoy)
     expect((await cuerpoDe(nuevo, { ...base, redactor_elegido: 'jefe-marketing' })).agent).toBe('jefe-marketing')
     expect(hoy).toMatchObject({ agent: 'campaign-brief-agent', task: 'PEDIDO', client_id: CLIENTE, dry_run: true, force_restart: true, callback_mode: 'runner' })
   })

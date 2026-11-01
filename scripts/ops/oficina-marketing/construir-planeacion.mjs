@@ -14,6 +14,7 @@
  *       Una validación que no se pudo leer DETIENE (no se lee un error como «el plan está bien»).
  */
 import { construirMesaDeAnalisis } from './mesa-de-analisis.mjs'
+import { construirParadaPlanRevisado } from './parar-plan-revisado.mjs'
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
 
 const ID = 'X9F0zp6LQ2xGEYVS'
@@ -182,7 +183,7 @@ export function construirPlaneacion() {
   const f = leerVivo(ID)
   // A · parar_en
   cambiarCodigo(f, '⓪ Llave · Webhook · planeacion', 'return $input.all()',
-    "// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · validar_forma: pasa el plan por el validador de forma (US$ 0) antes de guardarlo · solo true/false/ausente\nconst vf = w.body && typeof w.body === 'object' ? w.body.validar_forma : undefined\nif (vf !== undefined && vf !== null && typeof vf !== 'boolean') throw new Error('PLANEACION_VALIDAR_FORMA_INVALIDO · validar_forma solo admite true o false (llegó ' + JSON.stringify(vf).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()")
+    "// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan' && pe !== 'plan_revisado') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" o \"plan_revisado\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · validar_forma: pasa el plan por el validador de forma (US$ 0) antes de guardarlo · solo true/false/ausente\nconst vf = w.body && typeof w.body === 'object' ? w.body.validar_forma : undefined\nif (vf !== undefined && vf !== null && typeof vf !== 'boolean') throw new Error('PLANEACION_VALIDAR_FORMA_INVALIDO · validar_forma solo admite true o false (llegó ' + JSON.stringify(vf).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()")
   agregarNodo(f, si('Parar · ¿corta aquí?', "={{ (function () { try { return $('Webhook · planeacion').first().json.body.parar_en } catch (e) { return null } })() }}", 'guardar_plan', 'equals', 'string'), 'Guardar el plan', 220, 0)
   agregarNodo(f, codigo('Parar · resumen', CODIGO_PARADO), 'Guardar el plan', 440, -120)
   redirigir(f, 'Guardar el plan', 'JEF · armar', 'Parar · ¿corta aquí?')
@@ -194,6 +195,8 @@ export function construirPlaneacion() {
   construirValidador(f)
   // E · 01-nov · la CARPETA del cliente reemplaza la búsqueda (con_carpeta)
   construirMesaDeAnalisis(f)
+  // F · 01-nov · parar_en 'plan_revisado' + tope del redactor
+  construirParadaPlanRevisado(f)
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
   agregarNodo(f, codigo('Redactor · elegir', CODIGO_ELEGIR), 'Redactor (B4)', 440, 0)
