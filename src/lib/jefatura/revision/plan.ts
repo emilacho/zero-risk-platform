@@ -171,14 +171,16 @@ export function armarQueCambio(a: { ciclo: CicloDelPlan; fichas: FichaDelCambio[
   return [titulo, '', ...(lineas.length ? lineas : ['- Sin cambios registrados.'])].join('\n')
 }
 
-const INICIO_DE_LA_SECCION = /^#{1,6}\s*\**\s*QU[EÉ] CAMBI[OÓ](?!\p{L})[^\n]*$/imu
+// con título («## Qué cambió») o solo en negrita («**Qué cambió**»)
+const INICIO_DE_LA_SECCION = /^(?:(#{1,6})\s*\**\s*|\*\*\s*)QU[EÉ] CAMBI[OÓ](?!\p{L})[^\n]*$/imu
 /** pone la sección en el plan: reemplaza la que haya escrito el modelo o, si no hay, va tras el título. El resto del plan queda igual, letra por letra */
 export function ponerQueCambio(texto: string, seccion: string): string {
   const m = INICIO_DE_LA_SECCION.exec(texto)
   if (m) {
     const desde = m.index
     const resto = texto.slice(desde + m[0].length)
-    const fin = /\n(?:-{3,}\s*\n|#{1,6}\s)/.exec(resto)
+    // termina en un separador o en un título de igual o mayor rango: los subtítulos son parte de la sección del modelo
+    const fin = new RegExp(`\\n(?:-{3,}\\s*\\n|#{1,${m[1]?.length ?? 6}}\\s)`).exec(resto)
     let hasta = fin ? desde + m[0].length + fin.index : texto.length
     while (hasta > desde && texto[hasta - 1] === '\n') hasta-- // los saltos antes del separador son del resto del plan: se conservan
     return `${texto.slice(0, desde)}${seccion}${texto.slice(hasta)}`

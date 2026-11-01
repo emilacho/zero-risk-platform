@@ -46,6 +46,17 @@ describe('🔴 ponerla en el plan', () => {
     expect(ponerQueCambio('# T\n\n## Que cambio\n- a\n## Otra\nb', S)).toBe('# T\n\n' + S + '\n## Otra\nb')
     expect(ponerQueCambio('# T\n\n### QUÉ CAMBIÓ\n- a', S)).toBe('# T\n\n' + S)
   })
+  it('🔴 los subtítulos del modelo se van con su sección (defecto 1 de CC3); un título de igual rango la termina', () => {
+    const t = ponerQueCambio('# T\n\n## QUÉ CAMBIÓ (v3)\n\n### Cambios del dueño\n- a\n\n### Cambios del revisor\n- b\n\n## Resumen\nz', S)
+    expect(t).toBe('# T\n\n' + S + '\n\n## Resumen\nz')
+    expect(t).not.toMatch(/Cambios del|v3/)
+    expect(ponerQueCambio('# T\n## QUÉ CAMBIÓ\n- a\n# Otra\nz', S)).toBe('# T\n' + S + '\n# Otra\nz')
+  })
+  it('un título solo en negrita también se reemplaza (defecto 2 de CC3); una negrita que no empieza la línea, no', () => {
+    expect(ponerQueCambio('# T\n\n**Qué cambió en esta versión**\n- a\n\n## Resumen\nz', S)).toBe('# T\n\n' + S + '\n\n## Resumen\nz')
+    const p = ponerQueCambio('# T\n\nAquí **qué cambió** se discute\n\n## Resumen', S)
+    expect(p).toContain('Aquí **qué cambió** se discute')
+  })
   it('si el modelo no la escribió, va tras el título; sin título, al principio', () => {
     expect(ponerQueCambio('# T\nsub\n\nCuerpo', S)).toBe('# T\nsub\n\n' + S + '\n\n\nCuerpo')
     expect(ponerQueCambio('Cuerpo', S)).toBe(S + '\n\nCuerpo')
@@ -66,6 +77,16 @@ describe('leer el ciclo de la base', () => {
     expect(await cicloDelPlanDeLaBase(uno as never, A)).toEqual({ version: 1, pedido_del_dueno: null })
     const sin = new DbFalsa().semilla('client_historical_outputs', [{ id: A, provenance_tag: { version: 2, plan_cambio_id: K } }]).semilla('plan_cambios', [])
     expect((await cicloDelPlanDeLaBase(sin as never, A)).aviso).toMatch(/No se pudo leer lo que pidió el dueño/)
+  })
+  it('si la primera lectura falla, se dice (Q9 de CC3)', async () => {
+    const consulta: Record<string, unknown> = {}
+    for (const m of ['select', 'eq', 'limit']) consulta[m] = () => consulta
+    consulta.then = (ok: (v: unknown) => unknown) => ok({ data: null, error: { message: 'tiempo agotado' } })
+    expect(await cicloDelPlanDeLaBase({ from: () => consulta } as never, A)).toEqual({ version: null, pedido_del_dueno: null, aviso: expect.stringMatching(/No se pudo leer la versión/) })
+  })
+  it.each([[0], ['x'], [-1], [null]])('una versión %s no es válida: el título sale sin número (Q10 de CC3)', async (v) => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [{ id: A, provenance_tag: { version: v } }])
+    expect((await cicloDelPlanDeLaBase(db as never, A)).version).toBeNull()
   })
   it('una base caída no lanza', async () => {
     expect((await cicloDelPlanDeLaBase({ from() { throw new Error('x') } } as never, A)).aviso).toMatch(/No se pudo leer/)
