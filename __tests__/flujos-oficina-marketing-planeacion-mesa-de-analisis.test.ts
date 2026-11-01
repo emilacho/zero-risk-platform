@@ -46,9 +46,9 @@ describe('el cableado de la rama nueva', () => {
 })
 
 describe('«⓪ Llave» · con_analisis', () => {
-  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?'] })
+  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?', 'Plan anterior · pedir'] })
   it('true, false, null o ausente pasan', async () => {
-    for (const v of [true, false, null, undefined]) expect((await llave({ client_id: CLIENTE, con_analisis: v })).ultimo).toBe('V9 · ¿pide el pre-vuelo?')
+    for (const v of [true, false, null, undefined]) expect((await llave({ client_id: CLIENTE, con_analisis: v })).ultimo).toBe('Plan anterior · pedir')
   })
   it('🔴 cualquier otro valor DETIENE antes de gastar (un «true» entre comillas no enciende un gasto)', async () => {
     for (const raro of ['true', 'si', 1, 0, [], {}]) await expect(llave({ client_id: CLIENTE, con_analisis: raro })).rejects.toThrow(/PLANEACION_CON_ANALISIS_INVALIDO/)

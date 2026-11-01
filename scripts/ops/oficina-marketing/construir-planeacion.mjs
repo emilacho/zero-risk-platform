@@ -19,6 +19,8 @@ import { construirRecogerDelPuntoDeControl } from './recoger-del-punto-de-contro
 import { construirControlDeCifras } from './control-de-cifras.mjs'
 import { construirTextoLibreDelDueno } from './texto-libre-del-dueno.mjs'
 import { construirDatosDePruebaDelFlujo } from './datos-de-prueba-del-flujo.mjs'
+import { construirCicloDelPlan } from './ciclo-del-plan.mjs'
+import { construirSegundaMitad, escribirSegundaMitad } from './segunda-mitad.mjs'
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
 
 const ID = 'X9F0zp6LQ2xGEYVS'
@@ -206,6 +208,8 @@ export function construirPlaneacion() {
   construirControlDeCifras(f)
   construirTextoLibreDelDueno(f)
   construirDatosDePruebaDelFlujo(f)
+  // H · 01-nov · CICLO DEL PLAN (tramo 2): reescritura sobre el plan anterior, versiones, compuerta y la segunda mitad como sub-flujo
+  construirCicloDelPlan(f)
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
   agregarNodo(f, codigo('Redactor · elegir', CODIGO_ELEGIR), 'Redactor (B4)', 440, 0)
@@ -225,4 +229,8 @@ export function construirPlaneacion() {
   return f
 }
 
-if (process.argv[1] && process.argv[1].endsWith('construir-planeacion.mjs')) console.log(escribirNuevo(construirPlaneacion()))
+if (process.argv[1] && process.argv[1].endsWith('construir-planeacion.mjs')) {
+  const planeacion = construirPlaneacion()
+  console.log(escribirNuevo(planeacion))
+  console.log(escribirSegundaMitad(construirSegundaMitad(planeacion)))
+}
