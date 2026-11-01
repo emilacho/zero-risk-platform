@@ -7,6 +7,7 @@
  *   · `vigiar`          → un paso en «corriendo» más de 12 min no volverá: se marca muerto y se reintenta UNA vez; si vuelve a morir, `fallida` + aviso.
  * Sin ciclos: no existe `vuelve_a`; `max_cycles` de julio no se lee. Un bloqueo del código (`necesita_humano`) nunca se salta: con él la jefatura NO abre (regla 8).
  */
+import { armarQueCambio, ponerQueCambio, type FichaDelCambio } from './plan'
 import { conLasPaginasDelSitio } from './carpeta-para-revisar'
 import crypto from 'node:crypto'
 import { estadoInicial, fichaNueva, registrarPaso, siguientePaso, type Artefacto, type Estado, type Ficha, type Paso, type Plantilla, type ResultadoDePaso } from '../../revision-comun'
@@ -435,7 +436,20 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
       await P.avisar({ canal: 'alertas', revision_id: rev.id, texto: `${rev.dry_run ? '🧪 (seco) ' : ''}⚠️ Plan con desacuerdo · ${rev.artifact_id}: la versión ${ad.ultima} no mejoró los chequeos; sigue la ${ad.adoptada}`, dry_run: rev.dry_run })
     }
   }
-  return r(200, { accion: 'versiones_elegidas', adoptada: ad.adoptada, ultima: ad.ultima, adopto_la_ultima: ad.adoptoLaUltima, razones: ad.razones, plan_de_guardado: guardado, resultado: fin.resultado, marcas: fin.marcas, simulado: rev.dry_run })
+  // 01-nov · firma de Emilio: la sección «Qué cambió» la escribe el código en cada versión que se guarda
+  let textos_a_guardar: Partial<Record<'B' | 'C', string>> | undefined
+  if (guardado.guardar.length && P.cicloDelPlan) {
+    const ciclo = await P.cicloDelPlan(rev.artifact_id)
+    const fichas = rev.estado_del_motor.fichas as FichaDelCambio[]
+    textos_a_guardar = {}
+    for (const g of guardado.guardar) {
+      const texto = h.find((x) => x.etiqueta === g.etiqueta)?.texto
+      if (typeof texto !== 'string') continue
+      const hasta = g.etiqueta === 'B' ? fichas.filter((f) => f.origen !== 'externa') : fichas
+      textos_a_guardar[g.etiqueta as 'B' | 'C'] = ponerQueCambio(texto, armarQueCambio({ ciclo, fichas: hasta }))
+    }
+  }
+  return r(200, { accion: 'versiones_elegidas', adoptada: ad.adoptada, ultima: ad.ultima, adopto_la_ultima: ad.adoptoLaUltima, razones: ad.razones, plan_de_guardado: guardado, ...(textos_a_guardar ? { textos_a_guardar } : {}), resultado: fin.resultado, marcas: fin.marcas, simulado: rev.dry_run })
 }
 
 // ───────────────────────── el vigía
