@@ -136,6 +136,8 @@ describe('FIRMA 5 punto 2 · market_research_analyst fuera de la mesa de creativ
     expect(leer('supabase', 'migrations', '202610312008_oficina_directorio_equipo_gran_idea.sql')).not.toMatch(/INSERT[\s\S]*market_research_analyst/)
     expect(SQL_1300).toMatch(/WHERE agente = 'market_research_analyst'\s+AND EXISTS \(SELECT 1 FROM unnest\(pertinente_en\) p WHERE split_part\(p, ':', 1\) IN \('concepto', 'carrusel', 'kit', 'video'\)\)/)
     expect(SQL_1300).toMatch(/IF a <> 0 THEN RAISE EXCEPTION 'market_research_analyst no puede tener marcas de la mesa de creativos/)
+    // R26 (certificación CC3): la sentencia le quita las CUATRO mesas creativas (video incluida), no solo algunas
+    expect(SQL_1300).toMatch(/ARRAY\(SELECT p FROM unnest\(pertinente_en\) p WHERE split_part\(p, ':', 1\) NOT IN \('concepto', 'carrusel', 'kit', 'video'\)\)/)
     expect(sinComentarios(REV_1300)).not.toMatch(/market_research_analyst/)
   })
 })

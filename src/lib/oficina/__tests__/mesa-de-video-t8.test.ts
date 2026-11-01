@@ -103,6 +103,9 @@ describe('el equipo de la mesa de video es dato del directorio (2008 + 2012)', (
     expect(SQL).toMatch(/array_replace\(pertinente_en, 'video', 'video_largo'\)[^\n]*\n\s+WHERE agente = 'marketing_video_optimization_specialist' AND 'video' = ANY\(pertinente_en\)/)
     expect(SQL).toMatch(/INSERT INTO public\.oficina_directorio \(agente, rol, especialidad, sabe_hacer, necesita, entrega, pertinente_en, indicacion\) VALUES\s+\(\$d\$marketing_short_video_editing_coach\$d\$, \$d\$miembro\$d\$/)
     expect(SQL).toContain(`ARRAY[$d$${INDICACION_COACH_2012}$d$`)
+    // R19 (certificación CC3): el coach se sienta en `video` (no en otra pieza); R29: la dirección del video se cuenta por `video:dirige`
+    expect(SQL).toContain(`ARRAY[$d$video$d$],\n    ARRAY[$d$${INDICACION_COACH_2012}$d$`)
+    expect(SQL).toMatch(/SELECT count\(\*\) INTO d FROM public\.oficina_directorio WHERE activo AND rol = 'direccion' AND 'video:dirige' = ANY\(pertinente_en\);/)
     expect(SQL).toContain(`$d$${INDICACION_VIDEO_EDITOR_2012}$d$), actualizado_en = now()\n  WHERE agente = 'video-editor'`)
     expect(SQL.match(/UPDATE public\.oficina_directorio/g)).toHaveLength(5)
     expect(SQL.match(/INSERT INTO public\.oficina_directorio/g)).toHaveLength(1)
