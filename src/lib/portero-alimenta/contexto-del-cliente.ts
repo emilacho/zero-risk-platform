@@ -6,6 +6,7 @@
  * Cada informe lleva su `fecha_de_corte` y la marca `hay_material_nuevo_desde_el_corte` (¿entró alguna ficha nueva al cerebro después del corte?).
  * Si la lectura falla NO se disfraza de «vacío»: el campo trae `estado: 'no_se_pudo_leer'` y el motivo.
  */
+import { esloganDelCliente, REGLA_DEL_ESLOGAN } from '../manual/campos-del-manual'
 import type { Db } from './alimentar'
 
 type Fila = Record<string, unknown>
@@ -43,6 +44,8 @@ export interface InformeAdjunto {
   fichas_nuevas_desde_el_corte: number | string
 }
 export interface ContextoDelCliente {
+  /** 01-nov · el eslogan que el cliente ya usa, con su fuente y la regla de uso; ausente si no se conoce */
+  eslogan?: { texto: string; fuente: string; regla: string }
   resumen_vivo: ResumenVivoAdjunto
   informes: InformeAdjunto[]
   informes_estado?: 'ok' | 'no_se_pudo_leer'
@@ -55,6 +58,27 @@ const masNueva = (a: Fila, b: Fila) => ms(b.observado_en) - ms(a.observado_en)
 
 /** lee el resumen vivo entero y los informes vigentes de UN cliente */
 export async function adjuntoDelCliente(db: Db, clientId: string, ahora: Date = new Date()): Promise<ContextoDelCliente> {
+  const eslogan = await esloganVigente(db, clientId)
+  const c = await contextoSinEslogan(db, clientId, ahora)
+  return eslogan ? { eslogan, ...c } : c
+}
+
+/** del manual vigente; nunca lanza: sin este dato la carpeta viaja igual */
+async function esloganVigente(db: Db, clientId: string): Promise<ContextoDelCliente['eslogan'] | null> {
+  try {
+    const r = await db.from('client_brand_books').select('tagline, content_text').eq('client_id', clientId).order('version', { ascending: false }).limit(1)
+    const fila = r.error ? null : lista(r.data)[0]
+    if (!fila) return null
+    let borrador: Fila = {}
+    try { borrador = (JSON.parse(txt(fila.content_text)) as { brand_book_draft?: Fila }).brand_book_draft ?? {} } catch { /* contenido ilegible: queda la columna */ }
+    const e = esloganDelCliente({ ...borrador, ...(txt(fila.tagline) ? { tagline: fila.tagline } : {}) })
+    return e ? { ...e, regla: REGLA_DEL_ESLOGAN } : null
+  } catch {
+    return null
+  }
+}
+
+async function contextoSinEslogan(db: Db, clientId: string, ahora: Date): Promise<ContextoDelCliente> {
   const q = await db.from('cerebro_fichas').select('id, clase, atributo, titulo, contenido, que_es, observado_en, fecha_fuente, creado_en, vigente_hasta, retirada_en, descartada, sede, provenance_tag').eq('client_id', clientId).in('clase', [CLASE_DEL_RESUMEN_VIVO, CLASE_DEL_INFORME]).is('retirada_en', null).limit(500)
   if (q.error) {
     const detalle = `cerebro_fichas: ${String(q.error.message ?? q.error).slice(0, 160)}`

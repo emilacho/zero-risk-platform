@@ -11,7 +11,7 @@
  *    Quien lo lee lo ve con `quienValido()` (dueño > jefatura > propuesta).
  * No llama a ningún modelo. La puerta del cerebro entra por parámetro (probable sin red).
  */
-import { CAMPOS, evaluarCompletitud, quienValido, type CampoDelManual } from './campos-del-manual'
+import { CAMPOS, esloganDelCliente, evaluarCompletitud, quienValido, type CampoDelManual } from './campos-del-manual'
 import { enviarALaPuerta, type EntornoDeLaPuerta, type ResultadoDeEnvio } from '../notas-del-dueno/puerta-del-dueno'
 import { CANAL_DEL_MANUAL } from '../portero-alimenta/dueno'
 import { aplicarDecisionDelDueno, conservarPalabrasDuras, deUnaCorrida, leerPalabras, palabrasDuras, type DecisionDelDueno } from './palabras-con-intencion'
@@ -280,7 +280,10 @@ export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila): 
   // 01-nov · firma de Emilio: las palabras declaradas (norma o dueño) tampoco las pierde una corrida
   const hayDuras = palabrasDuras(previa).length > 0
   const trae = Array.isArray(bb.palabras_con_intencion) && (bb.palabras_con_intencion as unknown[]).length > 0
-  if (!conservados.length && !hayDuras && !trae) return { bb, conservados }
+  // 01-nov · ADENDA de Emilio: una corrida que no halló el eslogan no borra el que ya se conocía
+  const esloganPrevio = typeof previa.tagline === 'string' && previa.tagline.trim() && !esloganDelCliente(nuevo) ? previa.tagline : null
+  if (esloganPrevio) nuevo.tagline = esloganPrevio
+  if (!conservados.length && !hayDuras && !trae && !esloganPrevio) return { bb, conservados }
   if (conservados.length) nuevo._field_meta = meta
   if (hayDuras || trae) Object.assign(nuevo, conservarPalabrasDuras(previa, nuevo))
   return { bb: nuevo, conservados }

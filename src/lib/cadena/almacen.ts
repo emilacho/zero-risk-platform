@@ -155,6 +155,8 @@ export interface ContextoDelCliente {
   zonaHorariaOrigen?: 'declarada' | 'por_pais' | 'por_defecto_de_la_casa' | 'sin_dato'
   planTexto: string
   manualTexto: string
+  /** 01-nov · el eslogan que el cliente ya usa, con su regla de uso */
+  eslogan?: { texto: string; regla: string } | null
   forbiddenWords: string[]
   /** 01-nov · firma de Emilio: las únicas de la lista que bloquean */
   palabrasDuras?: string[]

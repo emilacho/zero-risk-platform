@@ -26,6 +26,7 @@
  *
  * Función PURA · sin IO · se prueba sin base y sin red.
  */
+import { esloganDelCliente, REGLA_DEL_ESLOGAN } from './manual/campos-del-manual'
 import { palabrasDeEstilo, palabrasDuras } from './manual/palabras-con-intencion'
 import { extractTrailingCaveat, detectInternalTerms } from './brand-book-caveat-extractor'
 
@@ -220,6 +221,9 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
   }
 
   // 01-nov · firma de Emilio: solo lo declarado es una prohibición; el resto de la lista es contexto
+  // 01-nov · ADENDA de Emilio: el eslogan real es un hecho con su fuente; las opciones que quedan sí son propuestas
+  const eslogan = esloganDelCliente(draft)
+  if (eslogan) draft = { ...draft, _eslogan: [`${eslogan.texto} (${eslogan.fuente})`], tagline_opciones: (Array.isArray(draft.tagline_opciones) ? draft.tagline_opciones : []).filter((o) => typeof o !== 'string' || !o.includes(eslogan.texto)) }
   draft = { ...draft, _palabras_duras: palabrasDuras(draft as never), forbidden_words: palabrasDeEstilo(draft as never) }
 
   // las claves S1–S4 de los segmentos salen con el nombre que les da el propio resumen de a quién le hablamos
@@ -257,6 +261,7 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     ['A QUIÉN LE HABLAMOS', 'icp_summary', 'prosa'],
     ['CÓMO SUENA LA MARCA', 'voice_description', 'prosa'],
     ['PERSONALIDAD', 'personalidad', 'lista'],
+    [`ESLOGAN QUE EL CLIENTE YA USA (${REGLA_DEL_ESLOGAN})`, '_eslogan', 'lista'],
     ['LEMAS PROPUESTOS', 'tagline_opciones', 'lista'],
     ['MENSAJES CLAVE', 'mensajes_clave', 'lista'],
     ['PROPUESTAS DE VALOR', 'propuestas_de_valor', 'lista'],
@@ -275,7 +280,7 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
       o += titulo(tit) + ajustar(t) + '\n'
     } else {
       const a = draft[campo]
-      if (!lleno(a)) { if (campo !== '_palabras_duras') omitidas.push(campo); continue } // no tener prohibiciones declaradas es lo normal: no es un hueco
+      if (!lleno(a)) { if (campo !== '_palabras_duras' && campo !== '_eslogan') omitidas.push(campo); continue } // no tener prohibiciones declaradas es lo normal: no es un hueco
       secciones.push(campo)
       o += titulo(tit) + vinetas(a, nombres) + '\n'
     }

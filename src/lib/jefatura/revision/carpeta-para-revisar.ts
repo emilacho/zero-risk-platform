@@ -14,7 +14,7 @@ export function textoDeLaCarpeta(c: ContextoDelCliente): string {
   const r = c.resumen_vivo
   const resumen = r.estado === 'vigente' ? [r.texto ?? '', ...(r.sedes ?? []).map((s) => `[sede ${s.clave}] ${s.texto}`)].filter(Boolean).join('\n') : `(resumen vivo: ${r.estado})`
   const informes = c.informes_estado === 'no_se_pudo_leer' ? [`(los informes no se pudieron leer: ${c.informes_detalle ?? 'sin detalle'})`] : c.informes.map((i) => `### Informe «${i.tipo}»\n${i.texto}`)
-  return [`## Resumen vivo\n${resumen}`, informes.length ? `## Informes de la mesa de análisis\n${informes.join('\n\n')}` : '## Informes de la mesa de análisis\n(no hay vigentes)'].join('\n\n')
+  return [...(c.eslogan ? [`## Eslogan que el cliente ya usa\n«${c.eslogan.texto}» (${c.eslogan.fuente}): ${c.eslogan.regla}`] : []), `## Resumen vivo\n${resumen}`, informes.length ? `## Informes de la mesa de análisis\n${informes.join('\n\n')}` : '## Informes de la mesa de análisis\n(no hay vigentes)'].join('\n\n')
 }
 
 const problema = (titulo: string, funcion: string, e: unknown): ContextoDelRevisor => ({ titulo, funcion, texto: `(no se pudo leer: ${e instanceof Error ? e.message : String(e)}. No lo tomes como que no existe.)` })

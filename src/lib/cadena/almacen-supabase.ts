@@ -24,6 +24,16 @@ import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia,
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
 import { estadoDeLasSedes } from '../sedes/por-abrir'
+import { esloganDelCliente, REGLA_DEL_ESLOGAN } from '../manual/campos-del-manual'
+
+/** lee el eslogan del manual vigente; un contenido ilegible no tumba la lectura */
+function esloganParaLaCadena(m: { tagline?: string | null; content_text?: string | null } | undefined): { texto: string; regla: string } | null {
+  if (!m) return null
+  let borrador: Record<string, unknown> = {}
+  try { borrador = (JSON.parse(m.content_text ?? '') as { brand_book_draft?: Record<string, unknown> }).brand_book_draft ?? {} } catch { /* queda la columna */ }
+  const e = esloganDelCliente({ ...borrador, ...(m.tagline ? { tagline: m.tagline } : {}) })
+  return e ? { texto: e.texto, regla: REGLA_DEL_ESLOGAN } : null
+}
 
 const fallo = (e: { message?: string; code?: string } | null): never => { throw Object.assign(new Error(e?.message ?? 'error de la base'), { code: e?.code }) }
 const clave = (x: string) => normalizar(x).replace(/\s+/g, '_')
@@ -92,7 +102,7 @@ export function almacenDeSupabase(): Almacen {
       const planTexto = plan.content_text ?? plan.content ?? ''
       if (!planTexto) return null
       const cli = await fichaDelCliente(db, clientId)
-      const manual = (await lista<{ id: string; content_text: string | null; forbidden_words: unknown; palabras_con_intencion?: unknown; voice_description?: string | null; writing_style?: string | null; tone_guidelines?: unknown }>(db.from('client_brand_books').select('id, content_text, forbidden_words, palabras_con_intencion, version, voice_description, writing_style, tone_guidelines').eq('client_id', clientId).order('version', { ascending: false }).limit(1)))[0]
+      const manual = (await lista<{ id: string; content_text: string | null; forbidden_words: unknown; palabras_con_intencion?: unknown; tagline?: string | null; voice_description?: string | null; writing_style?: string | null; tone_guidelines?: unknown }>(db.from('client_brand_books').select('id, content_text, forbidden_words, palabras_con_intencion, tagline, version, voice_description, writing_style, tone_guidelines').eq('client_id', clientId).order('version', { ascending: false }).limit(1)))[0]
       const zonaPorDefecto = await almacen.leerConfig('zona_horaria_por_defecto')
       const refs: Referencia[] = [{ id: planId, client_id: clientId, origen: 'plan', texto: planTexto }]
       if (manual?.content_text) refs.push({ id: `manual:${manual.id}`, client_id: clientId, origen: 'manual', texto: manual.content_text })
@@ -131,7 +141,7 @@ export function almacenDeSupabase(): Almacen {
       return {
         clientId, nombreDelNegocio: cli?.name ?? '', pais: cli?.country ?? null, zonaHoraria: zonaCfg ?? porDefecto ?? 'UTC', zonaHorariaOrigen: zonaOrigen, registro: registroDelCliente(manual, cli).registro, industria: cli?.industry ?? null,
         idioma: typeof cli?.idioma === 'string' && cli.idioma.trim() ? cli.idioma.trim() : null,
-        planTexto, manualTexto: manual?.content_text ?? '', forbiddenWords: fw, palabrasDuras: palabrasDuras(manual), sedes, referencias: refs, fechaDelPlan: plan.created_at.slice(0, 10),
+        planTexto, manualTexto: manual?.content_text ?? '', forbiddenWords: fw, palabrasDuras: palabrasDuras(manual), eslogan: esloganParaLaCadena(manual), sedes, referencias: refs, fechaDelPlan: plan.created_at.slice(0, 10),
       }
     },
 
