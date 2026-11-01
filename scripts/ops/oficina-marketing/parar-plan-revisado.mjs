@@ -15,7 +15,7 @@ const g = $input.first().json || {}
 const fila = Array.isArray(g) ? g[0] : (Array.isArray(g.body) ? g.body[0] : (g.body || g))
 let jef = {}
 try { jef = $('JEF · aplicar').first().json.jef || {} } catch (e) { jef = {} }
-return [{ json: { parado_en: 'plan_revisado', plan_vigente_id: fila && fila.id ? fila.id : null, jefatura_fase: jef.fase || null, redactor: (function () { try { return $('Redactor · elegir').last().json.redactor_elegido || null } catch (e) { return null } })() } }]
+return [{ json: { parado_en: 'plan_revisado', plan_vigente_id: fila && (fila.plan_id || fila.id) ? (fila.plan_id || fila.id) : null, jefatura_fase: jef.fase || null, redactor: (function () { try { return $('Redactor · elegir').last().json.redactor_elegido || null } catch (e) { return null } })() } }]
 `
 
 export const CODIGO_PARADO_SIN_PLAN = `// PARAR · RESUMEN (sin plan) · la corrida pidió detenerse (parar_en) y el redactor NO devolvió plan: no se guardó nada, no se pide el PDF ni el brief (sin plan_id no hay de qué briefear).
