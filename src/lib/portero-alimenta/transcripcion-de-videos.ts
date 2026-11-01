@@ -6,13 +6,15 @@
  */
 import { crearRegistrador } from '../cerebro/portero/registro'
 
-export const MAX_TRANSCRIPCIONES_POR_CORRIDA = 6
+export const MAX_TRANSCRIPCIONES_POR_CORRIDA = 15
 export const BYTES_MAXIMOS_PARA_TRANSCRIBIR = 24 * 1024 * 1024
 export const DURACION_MAXIMA_PARA_TRANSCRIBIR_S = 600
 /** Whisper cobra US$ 0,006 por minuto de audio */
 export const USD_POR_MINUTO_DE_WHISPER = 0.006
-export const TOPE_DE_TRANSCRIPCION_POR_CORRIDA_USD = 0.1
+export const TOPE_DE_TRANSCRIPCION_POR_CORRIDA_USD = 0.15
 export const SIN_VOZ = '[sin voz]'
+/** el servicio no pudo leer el audio del archivo (400 «could not be decoded»): se marca para no reintentarlo cada día; no cuenta como costo */
+export const SIN_AUDIO_LEGIBLE = '[sin audio legible]'
 const BUCKET = 'client-videos'
 
 type Traer = (u: string, i?: RequestInit) => Promise<Response>
@@ -69,7 +71,15 @@ export async function transcribirVideos(a: {
       form.append('response_format', 'json')
       const inicio = Date.now()
       const w = await traer('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${a.openaiKey}` }, body: form })
-      if (!w.ok) { inf.fallidos.push({ post_id: v.post_id, causa: `el servicio de voz respondió ${w.status}: ${(await w.text()).slice(0, 80)}` }); continue }
+      if (!w.ok) {
+        const cuerpo = (await w.text()).slice(0, 200)
+        if (w.status === 400 && /could not be decoded|not supported|format/i.test(cuerpo)) {
+          const m = await traer(`${base}/rest/v1/client_videos?id=eq.${v.id}&transcripcion=is.null`, { method: 'PATCH', headers: { ...auth, 'content-type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ transcripcion: SIN_AUDIO_LEGIBLE }) })
+          if (m.ok) inf.omitidos.push({ post_id: v.post_id, causa: 'el servicio no pudo leer el audio del archivo (marcado, no se reintenta)' }); else inf.fallidos.push({ post_id: v.post_id, causa: `no se pudo marcar (${m.status})` })
+          continue
+        }
+        inf.fallidos.push({ post_id: v.post_id, causa: `el servicio de voz respondió ${w.status}: ${cuerpo.slice(0, 80)}` }); continue
+      }
       const texto = textoDeVoz(String(((await w.json()) as { text?: unknown }).text ?? ''))
       inf.costo_usd = Math.round((inf.costo_usd + costo) * 1e6) / 1e6
       // "transcripcion is null" en el filtro: nunca pisa una transcripción que otro paso ya puso
