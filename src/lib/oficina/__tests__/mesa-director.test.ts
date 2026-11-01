@@ -25,7 +25,12 @@ describe('LA MESA · el director creativo', () => {
 
   it('la migración inserta SOLO la fila nueva, inactiva, con el texto EXACTO del archivo y el modelo que ya pasa agents_model_check', () => {
     const texto = /\$ident\$([\s\S]*?)\$ident\$/.exec(MIGRACION)![1]
-    expect(texto).toBe(IDENTIDAD)
+    // 31-oct (T6b · E4): el archivo evolucionó UNA línea («por omisión, español de Ecuador» fuera); lo que insertó esta migración es el texto VIVO de hoy,
+    // respaldado byte a byte en la reversa de 202610312010; el archivo actual = ese texto con solo ese cambio
+    const REVERSA_E4 = leer('supabase/reversas/202610312010_agents_identidades_e4_REVERSA.sql')
+    const vivo = /-- creative-director-mesa · vuelve al texto vivo[^\n]*\nUPDATE public\.agents SET identity_content = \$antes\$([\s\S]*?)\$antes\$/.exec(REVERSA_E4)![1]
+    expect(texto).toBe(vivo)
+    expect(IDENTIDAD).toBe(vivo.replace('en el registro que fije el manual o el país del cliente (por omisión, español de Ecuador con tuteo).', 'en el idioma y el registro que fije el manual o el país del cliente (sin dato, declara que falta y evita la segunda persona marcada).'))
     expect(MIGRACION).toMatch(/'creative-director-mesa', 'Director Creativo'/)
     expect(MIGRACION).toMatch(/'claude-opus-4-7', 'inactive', false/)
     expect(MIGRACION).toMatch(/ON CONFLICT \(name\) DO NOTHING/)

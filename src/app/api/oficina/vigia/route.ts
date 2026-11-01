@@ -7,7 +7,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkLlaveDeLaSala, esObjeto, puertosReales } from '@/lib/oficina/ruta'
-import { revisarPasosMuertos, vencerBandeja } from '@/lib/oficina/vigia'
+import { revisarPasosMuertos, vencerBandeja, vencerMesasPorPlazo } from '@/lib/oficina/vigia'
 import { reintentoDeLaCadena } from '@/lib/oficina/reintento-adaptador'
 import { reintentarLosPendientes } from '@/lib/notas-del-dueno/ruta'
 
@@ -31,11 +31,12 @@ export async function POST(request: Request) {
     const ahora = P.ahora()
     const v = await vencerBandeja(db, ahora)
     const m = await revisarPasosMuertos(P, db, ahora)
+    const plazo = await vencerMesasPorPlazo(P, db, ahora)
     // el segundo cerebro: cada vuelta del reloj también sube al cerebro las notas del dueño que quedaron pendientes (solo con la bandera encendida; nunca frena al vigía)
     const notas = process.env.NOTAS_DEL_DUENO === '1' ? await reintentarLosPendientes(request) : undefined
     // ③ el reintento de piezas va DESPUÉS de lo demás y nunca lanza: si falla, el vencimiento de la bandeja y los pasos muertos ya quedaron hechos
     const reintento = await reintentoDeLaCadena(db, env, { ejecutar: true })
-    return NextResponse.json({ accion: 'vigilado', vencidas: v.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres, ...(notas ? { notas_del_dueno: notas } : {}), reintento }, { status: 200 })
+    return NextResponse.json({ accion: 'vigilado', vencidas: v.vencidas, mesas_vencidas_por_plazo: plazo.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres, ...(notas ? { notas_del_dueno: notas } : {}), reintento }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'oficina_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

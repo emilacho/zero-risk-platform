@@ -38,8 +38,11 @@ export type EstadoBrazo = (typeof ESTADOS_BRAZO)[number]
 
 /** Canon canonical · los brazos del lienzo v11 (firmado por Emilio).
  *  Son DOS brazos —Apify y PostHog— más el cerebro, que se LEE y no se
- *  escribe. «web propia» es la función 17 de Apify, no un brazo aparte. */
-export const BRAZOS = ['apify', 'posthog', 'cerebro'] as const
+ *  escribe. «web propia» es la función 17 de Apify, no un brazo aparte.
+ *  `mercado` (F4 · firmado 31-oct · estructura completa §2): el informe corto de
+ *  mercado y tendencias de `market_research_analyst` ANTES del redactor del plan;
+ *  es PROPUESTA, nunca dato del cliente, y contesta los mismos tres estados. */
+export const BRAZOS = ['apify', 'posthog', 'cerebro', 'mercado'] as const
 export type Brazo = (typeof BRAZOS)[number]
 
 /** Canon canonical · la salida idéntica de todo brazo · §4.2. */

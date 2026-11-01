@@ -17,9 +17,9 @@ import type { Estado, Ficha, Plantilla } from './tipos'
 /** la clave del paso en las plantillas, y el artefacto que deja (el que ya leían `cerrar` y la re-imagen) */
 export const CLAVE_DEL_PASO_JEFATURA = 'jefatura'
 export const ARTEFACTO_DE_LA_JEFATURA = 'respuesta_imagen'
-export type FamiliaDePieza = 'post_img' | 'carrusel' | 'kit'
+export type FamiliaDePieza = 'post_img' | 'carrusel' | 'kit' | 'video'
 
-export const familiaDePieza = (pl: Pick<Plantilla, 'familia'>): FamiliaDePieza => (pl.familia === 'carrusel_ig_v1' || pl.familia === 'carrusel_mesa' ? 'carrusel' : pl.familia === 'kit_historias' || pl.familia === 'kit_mesa' ? 'kit' : 'post_img')
+export const familiaDePieza = (pl: Pick<Plantilla, 'familia'>): FamiliaDePieza => (pl.familia === 'carrusel_ig_v1' || pl.familia === 'carrusel_mesa' ? 'carrusel' : pl.familia === 'kit_historias' || pl.familia === 'kit_mesa' ? 'kit' : pl.familia === 'video_mesa' ? 'video' : 'post_img')
 
 /**
  * Quién corrige cada parte de la pieza (reparo 2 de CC#3: la fila `pieza` de la política solo declara texto e imagen; el carrusel y el kit llevan además a quien dibuja o estructura).
@@ -30,6 +30,8 @@ export function productoresDeLaPieza(familia: FamiliaDePieza): Productor[] {
   const base: Productor[] = [{ donde: 'texto', agente: 'content-creator' }, { donde: 'hashtags', agente: 'content-creator' }, { donde: 'imagen', agente: 'marketing_instagram_curator' }]
   if (familia === 'carrusel') return [...base, { donde: 'laminas', agente: 'carousel-designer' }]
   if (familia === 'kit') return [...base, { donde: 'estructura', agente: 'design-visual-storyteller' }]
+  // el video (parte 2 · 31-oct): no hay imagen que curar (el brazo filma); el guion lo escribe el guionista de la mesa; el video en sí no se corrige (se rehace o no: decide una persona)
+  if (familia === 'video') return [{ donde: 'texto', agente: 'content-creator' }, { donde: 'hashtags', agente: 'content-creator' }, { donde: 'guion', agente: 'video-editor' }]
   return base
 }
 
@@ -51,7 +53,7 @@ export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'famil
   const familia = familiaDePieza(pl)
   const heredadas = marcasHeredadas(e)
   const journey = enc.sala_ref && typeof enc.sala_ref._journey_id === 'string' && enc.sala_ref._journey_id ? enc.sala_ref._journey_id : null
-  const nombreDeLaPieza = familia === 'carrusel' ? 'copy_carrusel' : familia === 'kit' ? 'copy_kit' : 'pieza_post'
+  const nombreDeLaPieza = familia === 'carrusel' ? 'copy_carrusel' : familia === 'kit' ? 'copy_kit' : familia === 'video' ? 'copy_video' : 'pieza_post'
   return {
     artifact_type: 'pieza',
     artifact_id: enc.id,
@@ -136,10 +138,11 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia'>, e: Estad
   const pieza = (salida.artefacto_final as { pieza?: Record<string, unknown> } | undefined)?.pieza
   if (pieza && typeof pieza === 'object' && salida.resultado !== 'fallida') {
     if (familia === 'post_img') otros['pieza_post'] = { ...(datos(e, 'pieza_post') ?? {}), ...pieza }
-    else if (familia === 'carrusel') {
+    else if (familia === 'carrusel' || familia === 'video') {
+      const nombre = familia === 'carrusel' ? 'copy_carrusel' : 'copy_video'
       const solo: Record<string, unknown> = {}
       for (const k of ['pie_de_foto', 'hashtags', 'llamado']) if (pieza[k] !== undefined) solo[k] = pieza[k]
-      if (Object.keys(solo).length) otros['copy_carrusel'] = { ...(datos(e, 'copy_carrusel') ?? {}), ...solo }
+      if (Object.keys(solo).length) otros[nombre] = { ...(datos(e, nombre) ?? {}), ...solo }
     }
   }
   if (salida.marcas?.sin_segunda_mirada) otros['fichas_externas'] = { sin_revision: true, motivo: 'el revisor externo no respondió tras los reintentos' }

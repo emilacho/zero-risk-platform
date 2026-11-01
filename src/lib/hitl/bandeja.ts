@@ -157,7 +157,13 @@ export async function crearAprobacion(db: Db, e: EntradaDeAprobacion, ahora: Dat
   return { id: r.data ? String(r.data.id) : null, expires_at: String(r.data?.expires_at ?? fila.expires_at), error: r.error?.message ?? null }
 }
 
-export interface FiltroDePendientes { estado?: string; limite?: number; clienteId?: string | null; soloOrigen?: string | null }
+export interface FiltroDePendientes {
+  estado?: string; limite?: number; clienteId?: string | null; soloOrigen?: string | null
+  /** 31-oct (T3): las tarjetas «Gran idea» de la cadena (`metadata.tipo = 'concepto'`) NO salen en la bandeja de piezas (se deciden por `/api/cadena/concepto`); solo con `true` se incluyen */
+  incluirConceptos?: boolean
+}
+/** 31-oct (T3): la tarjeta de la gran idea de la cadena (no es una pieza: ni se aprueba por PATCH ni vence) */
+export const esTarjetaDeConcepto = (x: { metadata?: unknown }): boolean => { const m = x.metadata; return !!m && typeof m === 'object' && !Array.isArray(m) && (m as { tipo?: unknown }).tipo === 'concepto' && (m as { origen?: unknown }).origen === 'cadena' }
 /** la lista de la bandeja con el vocabulario viejo de estados: `pending`, `approved`, `rejected`, `expired` (rechazada por vencimiento), `notified` y `all` */
 export async function listarAprobaciones(db: Db, f: FiltroDePendientes = {}): Promise<{ filas: Fila[]; error: string | null }> {
   const estado = f.estado ?? 'pending'
@@ -174,6 +180,7 @@ export async function listarAprobaciones(db: Db, f: FiltroDePendientes = {}): Pr
   if (r.error) return { filas: [], error: r.error.message }
   // «expired» y «notified» no existen en la tabla: se separan aquí. «pending» incluye a las ya avisadas (siguen esperando); «rejected» no incluye a las vencidas.
   const filas = (r.data ?? []).filter((x) => {
+    if (!f.incluirConceptos && esTarjetaDeConcepto(x as { metadata?: unknown })) return false
     const e = estadoLegado(x)
     if (estado === 'all') return true
     if (estado === 'pending') return e === 'pending' || e === 'notified'

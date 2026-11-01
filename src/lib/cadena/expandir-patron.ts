@@ -5,7 +5,7 @@
  * y arma el panorama de 12 semanas SIN modelo (filas `esquema`, sin tema); las tandas de 4 semanas se materializan después.
  */
 import { diaDeCampana, fechaDeFila } from './fechas'
-import type { Ajuste, Estrategia, Fila, FormatosPorRed, PiezaAgente, TandaAgente } from './tipos'
+import type { Ajuste, Estrategia, Fase, Fila, FormatoPermitido, FormatosPorRed, PiezaAgente, TandaAgente } from './tipos'
 
 export interface CampanaFechas { fecha_inicio: string; fecha_fin: string }
 
@@ -13,9 +13,14 @@ export function idDeFila(semana: number, dia: number, slot: string): string {
   return `s${semana}-d${dia}-${slot}`
 }
 
+/**
+ * T8 (31-oct · video sobre la hoja) · un formato que «espera al brazo» SIN sala (`familia` nula) sigue siendo una fila `espera_video` (el brazo no existe para él);
+ * con sala (`familia` = `video_mesa`, DATO de `cadena_formatos_por_red`) la fila es una pieza más: entra al lote, a la hoja y a la mesa de video. Es la única puerta: nada de código decide qué formato tiene sala.
+ */
+export const esperaAlBrazoSinSala = (f: FormatoPermitido | undefined): boolean => !!f && f.produccion === 'espera_brazo' && !f.familia
+
 function esVideo(formatos: FormatosPorRed, red: string, formato: string): boolean {
-  const f = (formatos[red] ?? []).find((x) => x.formato === formato)
-  return f ? f.produccion === 'espera_brazo' : false
+  return esperaAlBrazoSinSala((formatos[red] ?? []).find((x) => x.formato === formato))
 }
 
 /** El panorama: una fila `esquema` por cada slot del patrón y cada semana pedida, dentro de las fechas de la campaña. */
@@ -53,7 +58,29 @@ export interface Fusion { filas: Fila[]; ignoradas: string[] }
  *  · `ajustes_al_patron` con `omitir` quita el slot de esa semana; `mover` no se aplica solo (la pieza trae su día);
  *  · el estado de video lo decide la tabla de formatos, nunca el agente (V20).
  */
-export function fusionarTanda(esquema: Fila[], t: TandaAgente, e: Pick<Estrategia, 'piezas_fijas'>, c: CampanaFechas, tanda: number, formatos: FormatosPorRed): Fusion {
+/** 31-oct (nuevo orden · T3): con la gran idea aprobada, cada fila lleva su `fase` (por el día de campaña) y su `idea_ref` (la `idea_de_mesa` de la pieza si está en el banco; si no, se declara en `avisos`) */
+export interface MesaParaFusionar { banco: ReadonlyArray<{ id: string }>; fases: ReadonlyArray<Pick<Fase, 'clave' | 'dia_desde' | 'dia_hasta'>> }
+export const faseDelDia = (fases: ReadonlyArray<Pick<Fase, 'clave' | 'dia_desde' | 'dia_hasta'>>, dia: number): string | null => fases.find((f) => dia >= f.dia_desde && dia <= f.dia_hasta)?.clave ?? null
+/** la nota que queda en la fila cuando la pieza citó una idea que no está en el banco (sobrevive al cierre de la tanda, como las notas de dependencias) */
+export const PREFIJO_NOTA_DE_IDEA = 'idea de mesa: '
+export const esNotaDeIdea = (a: string): boolean => a.startsWith(PREFIJO_NOTA_DE_IDEA)
+
+export function fusionarTanda(esquema: Fila[], t: TandaAgente, e: Pick<Estrategia, 'piezas_fijas'>, c: CampanaFechas, tanda: number, formatos: FormatosPorRed, mesa?: MesaParaFusionar | null): Fusion {
+  const base = fusionarTandaDeHoy(esquema, t, e, c, tanda, formatos)
+  if (!mesa) return base // la cadena de hoy: byte a byte (sin `fase` ni `idea_ref`)
+  const ideaDe = new Map<string, string>()
+  for (const p of t.piezas ?? []) if (typeof p.idea_de_mesa === 'string' && p.idea_de_mesa.trim()) ideaDe.set(idDeFila(p.semana, p.dia_semana, p.slot), p.idea_de_mesa.trim())
+  const enBanco = new Set(mesa.banco.map((i) => i.id))
+  const filas = base.filas.map((f) => {
+    const pedida = ideaDe.get(f.id) ?? null
+    const idea_ref = pedida && enBanco.has(pedida) ? pedida : null
+    const avisos = pedida && !idea_ref ? [...f.avisos, `${PREFIJO_NOTA_DE_IDEA}la idea «${pedida}» no está en el banco del concepto: la fila queda sin idea`] : f.avisos
+    return { ...f, fase: faseDelDia(mesa.fases, diaDeFila(c, f)), idea_ref, avisos }
+  })
+  return { filas, ignoradas: base.ignoradas }
+}
+
+function fusionarTandaDeHoy(esquema: Fila[], t: TandaAgente, e: Pick<Estrategia, 'piezas_fijas'>, c: CampanaFechas, tanda: number, formatos: FormatosPorRed): Fusion {
   const ignoradas: string[] = []
   const omitidos = new Set((t.ajustes_al_patron ?? []).filter((a: Ajuste) => a.accion === 'omitir').map((a) => `${a.semana}|${a.slot}`))
   const porId = new Map<string, Fila>()

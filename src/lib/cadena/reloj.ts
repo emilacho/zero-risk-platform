@@ -10,6 +10,7 @@ import { escalonQueToca, invarianteDeReloj, type Violacion } from './esperas'
 import { abrirEsperaDe, resolverEsperas } from './nucleo'
 import { pasarSinRevision } from './revision-jefatura'
 import { retomarPorCantidades } from './pasos'
+import { avisoDePrimeraSemana, cerrarMesasVencidas, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
 import type { Fila } from './tipos'
 
 /** `repetible`: un aviso de ESTADO (no de evento): mientras diga lo mismo, sale una sola vez; si cambia, o desaparece y vuelve, sale de nuevo (31-oct, «vigía sin ruido») */
@@ -57,6 +58,15 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
       await al.actualizarEspera(e.id, { estado: 'vencida', rung_enviado: 3 })
     }
   }
+
+  // 2a · 31-oct (nuevo orden · T3) · la gran idea sin decidir: UN aviso de estado cuando la primera semana está en riesgo (la decisión nunca es del tiempo); y las mesas de concepto que vencieron
+  for (const e of await al.esperasVivas()) {
+    if (e.objeto_tipo !== TIPO_DE_ESPERA_DE_CONCEPTO) continue
+    const c = await al.campana(e.campana_id)
+    const aviso = c ? await avisoDePrimeraSemana(al, c, ahora) : null
+    if (aviso) lineas.push({ repetible: true, campana_id: e.campana_id, texto: aviso })
+  }
+  for (const m of await cerrarMesasVencidas(al, ahora)) { aplicado.push(`mesa de concepto vencida en ${m.campana_id}`); lineas.push(m) }
 
   // 2b · barrido de campañas ATASCADAS (#466 C3 de CC#3): una campaña que sigue armando su estrategia o su calendario y cuya última llamada murió (vencida · fallida · cerrada por tope),
   //      sin ninguna en curso, no la mira nadie más: se avisa con «qué hacer». Una campaña sin llamadas (recién abierta) no es un atasco.
@@ -147,6 +157,13 @@ async function alVencer(al: Almacen, e: EsperaFila, ahora: string, lineas: Linea
       const c = await al.campana(e.campana_id)
       if (c && c.estado === 'pausada') await abrirEsperaDe(al, c, 'campana_pausada', c.id, 'sigue pausada: se revisa otra semana', ahora, {}, `pausa:${c.id}:${ahora.slice(0, 10)}`)
       return `pausa de ${e.campana_id} renovada`
+    }
+    case 'seguir_esperando': {
+      // 31-oct (nuevo orden · T3): la aprobación de la gran idea NO vence: el reloj se REARMA (otra espera igual, 72 h más) y re-avisa; la decisión es de Emilio, nunca del tiempo
+      const c = await al.campana(e.campana_id)
+      if (c) await abrirEsperaDe(al, c, e.objeto_tipo, e.objeto_id, e.motivo ?? 'sigue esperando la decisión', ahora, { fechaInicio: c.fecha_inicio, zona: c.zona_horaria }, `${e.dedup_key}:${ahora.slice(0, 13)}`)
+      lineas.push({ campana_id: e.campana_id, texto: `la gran idea (${e.objeto_id}) sigue esperando la decisión de Emilio: se vuelve a avisar en 72 h (no vence sola)` })
+      return `${e.objeto_tipo} ${e.objeto_id}: reloj rearmado`
     }
     default: return `${e.objeto_tipo} ${e.objeto_id}: ${e.accion_al_vencer}`
   }

@@ -2,7 +2,7 @@
  * LO QUE SE LE PIDE A CADA EMPLEADO · el texto de la tarea de cada paso de agente, armado por código con referencias a los artefactos (no con el hilo entero).
  * Agnóstico: ninguna frase nombra a un cliente. El formato de la respuesta lo hace cumplir `salida.ts`; aquí solo se explica el contrato en palabras.
  */
-import type { BriefLeido } from './brief'
+import { BRIEF_GUIA_NO_REGLA, type BriefLeido } from './brief'
 import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
 import type { Estado, Ficha } from './tipos'
 import type { FuentesCompletas } from './puertos'
@@ -48,7 +48,7 @@ export function describirReglas(r: ReglasDeImagen): string {
 /** la tarea de un paso de agente; las imágenes (URL) que se le muestran van aparte */
 export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fichas?: Ficha[]; errorDeFormato?: string }): { task: string; images: string[]; esquema: string } {
   const F = c.fuentes
-  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (guía, no regla al pie de la letra)\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}`
+  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}`
   const datosVerificados = `## Datos verificados del cliente (solo estos; no inventes otros)\nTeléfonos: ${F.propios.telefonos.join(', ') || '(no se pudieron leer)'}\nUsuarios: ${F.propios.handles.join(', ') || '(no se pudieron leer)'}\nPrecios de la carta: ${F.fuentes.precios.join(', ') || '(no hay carta guardada)'}`
   let task = '', esquema = '', images: string[] = []
   const finalizar = (t: string) => ({ task: extra?.errorDeFormato ? `${t}\n\n## Corrección de formato\n${extra.errorDeFormato}` : t, images, esquema })

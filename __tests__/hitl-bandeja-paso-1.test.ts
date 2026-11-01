@@ -28,7 +28,9 @@ vi.mock('@/lib/supabase', () => ({
       update: (datos: Record<string, unknown>) => ({
         eq: (_col: string, id: string) => {
           registro.push({ tabla, op: 'update', datos, id })
-          return { select: () => ({ single: async () => (errorDeUpdate ? { data: null, error: errorDeUpdate } : { data: { id, type: String(filaActual?.type ?? 'otro'), metadata: filaActual?.metadata ?? {}, ...datos }, error: null }) }) }
+          const fin = { select: () => ({ single: async () => (errorDeUpdate ? { data: null, error: errorDeUpdate } : { data: { id, type: String(filaActual?.type ?? 'otro'), metadata: filaActual?.metadata ?? {}, ...datos }, error: null }) }) }
+          // 31-oct (T3): el PATCH excluye la tarjeta de la gran idea (`or('type.is.null,type.neq.…')`) en la misma escritura; aquí la fila nunca es de ese tipo
+          return { ...fin, neq: () => fin, or: () => fin }
         },
       }),
       select: () => ({ eq: (_c: string, id: string) => ({ maybeSingle: async () => { registro.push({ tabla, op: 'select', id }); return tabla === 'client_historical_outputs' ? { data: salidaActual, error: errorDeLecturaDeSalida } : { data: filaActual, error: null } } }) }),

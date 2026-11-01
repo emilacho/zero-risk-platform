@@ -2,6 +2,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export
  function baseFalsa(config: Record<string, unknown>) {
+  // SIN `cadena_config` a propósito (31-oct · F2): el redactor del plan es opcional y el almacén real tolera una base sin esa tabla
+  // (la lectura falla y la plantilla usa su omisión). Así la prueba x1 sigue contando SOLO las tablas de finanzas.
   const t: Record<string, any[]> = { finanzas_config: [{ id: 1, ...config }], finanzas_encargos: [], finanzas_turnos: [], finanzas_artefactos: [] }
   let id = 0
   const from = (tabla: string) => {

@@ -22,6 +22,8 @@ export const MODELO_POR_DEFECTO = 'claude-opus-5-5'
 export const RAZONAMIENTO_POR_DEFECTO = 'low'
 export const DIAS_DE_CAMPANA = 90
 export const SEMANAS_DE_TANDA = 4
+export const TOTAL_SEMANAS = Math.ceil(DIAS_DE_CAMPANA / 7)
+export const TOTAL_DE_TANDAS = Math.ceil(TOTAL_SEMANAS / SEMANAS_DE_TANDA)
 /** semanas con fecha desde el día 1 (el panorama): se arma por código, sin modelo */
 export const SEMANAS_DE_PANORAMA = 12
 export const MAXIMO_DE_INTENTOS = 3

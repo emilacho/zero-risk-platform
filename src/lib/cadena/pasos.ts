@@ -6,13 +6,15 @@
 import type { Almacen, Campana, ContextoDelCliente, Corrida } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
-import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, DIAS_DE_CAMPANA, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, SEMANAS_DE_PANORAMA, SEMANAS_DE_TANDA, topeDelPaso, type Paso } from './constantes'
+import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, SEMANAS_DE_PANORAMA, SEMANAS_DE_TANDA, TOTAL_DE_TANDAS, TOTAL_SEMANAS, topeDelPaso, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
 import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
-import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_ESTRATEGIA } from './esquemas'
-import { expandirPatron, fusionarTanda } from './expandir-patron'
+import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V2, ESQUEMA_ESTRATEGIA } from './esquemas'
+import { conceptoParaElCalendario, etapaDeReentrada, nuevoOrdenEncendido, tramoDeReemision } from './mesas'
+import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
+import { metodoDeCalendario } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
@@ -23,12 +25,11 @@ import { problemasDeEsquema, validarEstrategia } from './validador-estrategia'
 import { validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
 import { fechasPedidasDe, retencionDe, retenerParaRevision } from './revision-jefatura'
 
-const TOTAL_SEMANAS = Math.ceil(DIAS_DE_CAMPANA / 7)
 export const semanasDeTanda = (tanda: number): number[] => {
   const ini = (tanda - 1) * SEMANAS_DE_TANDA + 1
   return Array.from({ length: SEMANAS_DE_TANDA }, (_, i) => ini + i).filter((s) => s <= TOTAL_SEMANAS)
 }
-export const TOTAL_DE_TANDAS = Math.ceil(TOTAL_SEMANAS / SEMANAS_DE_TANDA)
+export { TOTAL_DE_TANDAS }
 
 const formatosPermitidos = (f: FormatosPorRed): Record<string, string[]> => Object.fromEntries(Object.entries(f).map(([r, fs]) => [r, fs.map((x) => x.formato)]))
 
@@ -204,8 +205,11 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
     correccion = { fichas: abiertos.map((h) => h.ficha) as never[], fila_ids: [...new Set(abiertos.map((h) => h.fila_id).filter((x): x is string => !!x))], modo: 'tanda' }
   }
   if (!correccion && delaTanda.length > 0 && delaTanda.every((f) => f.estado !== 'propuesta')) return { status: 200, cuerpo: { ya_hecha: true, tanda } }
+  // 31-oct (nuevo orden · T3): con la palanca encendida la tanda ESPERA la gran idea aprobada (no es un fallo: el flujo vuelve a pasar); apagada, `mesa` es vacía y nada cambia
+  const mesa = await conceptoParaElCalendario(al, campana)
+  if (mesa.espera) return { status: 200, cuerpo: { accion: 'esperar_concepto', tanda, ...mesa.espera } }
   const semanas = semanasDeTanda(tanda)
-  const esquema = validarEsquemaDeSalida(ESQUEMA_CALENDARIO_TANDA)
+  const esquema = validarEsquemaDeSalida(mesa.concepto ? ESQUEMA_CALENDARIO_TANDA_V2 : ESQUEMA_CALENDARIO_TANDA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema del calendario no es válido')
   const modelo = await modeloDeLaCadena(al)
   const prep = await prepararCorrida(al, campana, 'calendario', `t${tanda}:v${version}:c${correccion ? 1 : 0}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash,
@@ -221,13 +225,18 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   const tarea = tareaDeCalendario({
     ctx, estrategia: estr.contenido, tanda, semanas, filasPrevias: todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema'),
     correccion: correccion ? { fichas: correccion.fichas ?? [], filas: filasMalas, modo: correccion.modo === 'filas' ? 'filas' : 'tanda' } : undefined,
+    concepto: mesa.concepto ? { leido: mesa.concepto, version: mesa.version ?? 0 } : undefined,
+    fechasEspeciales: mesa.concepto ? await fechasDeclaradas(al, ctx, estr.contenido, campana) : undefined,
+    // 31-oct (FIRMA de Emilio): el método de colocación como capa local, solo con la gran idea; `cadena_config.metodos.calendario` lo apaga o lo reemplaza
+    metodo: mesa.concepto ? await metodoDeCalendario(al) : undefined,
   })
   return {
     status: 200,
     cuerpo: {
       corrida_id: prep.corrida.id, tanda, semanas, calendario_version: version, intento: prep.corrida.intento, plazo_en: prep.corrida.plazo_en,
       headers: { [CABECERA_SALTAR_EDITOR]: '1' },
-      run_sdk: cuerpoDeRunSdk('calendario', modelo, tarea, esquema.valor, campana.client_id, { contrato: 'calendario_tanda.v1' }),
+      ...(mesa.concepto ? { concepto_version: mesa.version } : {}),
+      run_sdk: cuerpoDeRunSdk('calendario', modelo, tarea, esquema.valor, campana.client_id, { contrato: mesa.concepto ? 'calendario_tanda.v2' : 'calendario_tanda.v1' }),
     },
   }
 }
@@ -261,7 +270,9 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   const esqNuevo = expandirPatron(estr, campana, semanas, tanda, formatos)
   const base = esCorreccion && modo === 'filas' ? guardadas.filter((f) => f.tanda === tanda && f.estado !== 'esquema') : esqNuevo
   // las dependencias imposibles (misma fecha y hora, antecesora que sale después…) las arregla el código y las anota: nunca llegan a bloquear la campaña
-  let filas = resolverDependencias(fusionarTanda(base, objeto, estr, campana, tanda, formatos).filas, previas).filas
+  // 31-oct (T3): con la gran idea aprobada, las filas llevan `fase` e `idea_ref` (de la `idea_de_mesa` de cada pieza); sin palanca, byte a byte
+  const mesa = await conceptoParaElCalendario(al, campana)
+  let filas = resolverDependencias(fusionarTanda(base, objeto, estr, campana, tanda, formatos, mesa.concepto ? { banco: mesa.concepto.banco, fases: estr.fases } : null).filas, previas).filas
   const ajustes = esCorreccion ? [...(objeto.ajustes_al_patron ?? []), ...omitidosImplicitos(estr, semanas, filas)] : objeto.ajustes_al_patron ?? []
   let hs: Hallazgo[] = sinFaltantesSiCorrige(esCorreccion, validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, fechas, ahora, lexico)))
   await al.guardarValidaciones(campana.id, 'calendario', version, tanda, esCorreccion ? 2 : 1, hs, campana.seco)
@@ -300,7 +311,7 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
   const enInvestigacion = new Set(hs.filter((h) => h.severidad === 'aviso' && (h.chequeo === 'V14' || h.chequeo === 'V06') && h.fila_id).map((h) => h.fila_id as string))
   const finales: Fila[] = filas.map((f) => {
     if (f.estado === 'descartada_sin_fuente' || f.estado === 'espera_video') return f
-    return { ...f, estado: enInvestigacion.has(f.id) ? 'en_investigacion' : 'validada', avisos: [...f.avisos.filter(esNotaDeDependencias), ...hs.filter((h) => h.fila_id === f.id && h.severidad === 'aviso').map((h) => h.ficha.que)] }
+    return { ...f, estado: enInvestigacion.has(f.id) ? 'en_investigacion' : 'validada', avisos: [...f.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), ...hs.filter((h) => h.fila_id === f.id && h.severidad === 'aviso').map((h) => h.ficha.que)] }
   })
   const todas12 = tanda === 1 ? expandirPatron(estr, campana, Array.from({ length: SEMANAS_DE_PANORAMA }, (_, i) => i + 1).filter((s) => !semanas.includes(s)), 0, formatos).map((f) => ({ ...f, tanda: Math.ceil(f.semana / SEMANAS_DE_TANDA) })) : []
   await al.guardarFilas(campana.id, version, 1, [...finales, ...todas12], campana.seco)
@@ -360,17 +371,27 @@ export async function calendarioSiguiente(al: Almacen, cuerpo: Record<string, un
   if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
   const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
   if (noAut) return noAut
-  if (c.estado !== 'activa') return { status: 200, cuerpo: { tanda: null, motivo: `la campaña está ${c.estado}` } }
+  // 31-oct (nuevo orden · respuesta a CC2): con la palanca el vigía también reemite ANTES de la primera tanda (la campaña en `calendario` esperando la gran idea) y la respuesta trae `etapa`
+  // para la clave de idempotencia (`campana:tanda-N:<etapa>`); sin nada nuevo que hacer, `tanda: null` y silencio. Palanca apagada: byte a byte lo de hoy.
+  const encendida = await nuevoOrdenEncendido(al, c.client_id)
+  if (c.estado !== 'activa' && !(encendida && c.estado === 'calendario')) return { status: 200, cuerpo: { tanda: null, motivo: `la campaña está ${c.estado}` } }
   const version = Math.max(1, await al.ultimaVersionDeCalendario(id))
   const hechas = (await al.filas(id, version)).filter((f) => f.estado !== 'esquema')
   const ultima = hechas.reduce((m, f) => Math.max(m, f.tanda), 0)
-  if (ultima === 0) return { status: 200, cuerpo: { tanda: null, motivo: 'todavía no hay una primera tanda' } }
+  if (ultima === 0 && !encendida) return { status: 200, cuerpo: { tanda: null, motivo: 'todavía no hay una primera tanda' } }
   if (ultima >= TOTAL_DE_TANDAS) return { status: 200, cuerpo: { tanda: null, motivo: 'ya están todas las tandas' } }
-  const finDeLaTanda = fechaDeFila(c.fecha_inicio, semanasDeTanda(ultima).slice(-1)[0], 7)
-  const hoy = (cadena(cuerpo.hoy) ?? ahora).slice(0, 10)
-  const faltan = diasEntre(hoy, finDeLaTanda)
-  if (faltan > 14) return { status: 200, cuerpo: { tanda: null, motivo: `faltan ${faltan} días para que termine la tanda ${ultima} (se abre a los 14)` } }
-  return { status: 200, cuerpo: { tanda: ultima + 1, faltan_dias: faltan } }
+  let faltan: number | null = null
+  if (ultima > 0) {
+    const finDeLaTanda = fechaDeFila(c.fecha_inicio, semanasDeTanda(ultima).slice(-1)[0], 7)
+    const hoy = (cadena(cuerpo.hoy) ?? ahora).slice(0, 10)
+    faltan = diasEntre(hoy, finDeLaTanda)
+    if (faltan > 14) return { status: 200, cuerpo: { tanda: null, motivo: `faltan ${faltan} días para que termine la tanda ${ultima} (se abre a los 14)` } }
+  }
+  if (!encendida) return { status: 200, cuerpo: { tanda: ultima + 1, faltan_dias: faltan } }
+  const etapa = await etapaDeReentrada(al, c)
+  if (!etapa) return { status: 200, cuerpo: { tanda: null, motivo: `la tanda ${ultima + 1} espera a una mesa que trabaja o a la decisión de Emilio: nada que reemitir` } }
+  // hueco 2 de CC3: el respaldo lleva un tramo de medio día en la etapa (clave nueva por pasada del vigía mientras haya algo que hacer); ver `tramoDeReemision`
+  return { status: 200, cuerpo: { tanda: ultima + 1, etapa: `${etapa}:${tramoDeReemision(ahora)}`, ...(faltan === null ? {} : { faltan_dias: faltan }) } }
 }
 
 /**

@@ -47,14 +47,21 @@ export type DecisionDePuerta =
   | { accion: 'pasarela'; motivo: 'sin_familia' | 'oficina_apagada' | 'familia_no_activa' | 'cliente_fuera_del_ensayo' }
   | { accion: 'abrir'; familia: string }
   | { accion: 'rechazar'; motivo: 'origen_no_aceptado' }
+  /** T8 · una familia SIN pieza simple detrás (el video): si la oficina no la abre, el sobre NO sigue por la pasarela; espera (409 visible), nunca se convierte en una imagen */
+  | { accion: 'sin_sala'; familia: string; motivo: 'oficina_apagada' | 'familia_no_activa' | 'cliente_fuera_del_ensayo' }
+
+/** las familias que no tienen pasarela: un reel no se puede hacer como publicación con imagen */
+export const FAMILIAS_SIN_PASARELA: readonly string[] = ['video_mesa']
 
 /** `targetStepId` y `clientId` los pone la SALA (nunca vienen del payload) */
 export function decidirPuerta(sobre: Sobre, config: ConfigDeOficina, targetStepId: string, clientId: string): DecisionDePuerta {
   if (targetStepId !== TARGET_STEP_PRODUCIR) return { accion: 'rechazar', motivo: 'origen_no_aceptado' }
   if (!sobre.familia) return { accion: 'pasarela', motivo: 'sin_familia' }
-  if (config.estado === 'apagada') return { accion: 'pasarela', motivo: 'oficina_apagada' }
-  if (!config.familias_activas.includes(sobre.familia)) return { accion: 'pasarela', motivo: 'familia_no_activa' }
-  if (config.estado === 'ensayo' && !config.clientes_ensayo.includes(clientId)) return { accion: 'pasarela', motivo: 'cliente_fuera_del_ensayo' }
+  const noAbre = (motivo: 'oficina_apagada' | 'familia_no_activa' | 'cliente_fuera_del_ensayo'): DecisionDePuerta =>
+    FAMILIAS_SIN_PASARELA.includes(sobre.familia as string) ? { accion: 'sin_sala', familia: sobre.familia as string, motivo } : { accion: 'pasarela', motivo }
+  if (config.estado === 'apagada') return noAbre('oficina_apagada')
+  if (!config.familias_activas.includes(sobre.familia)) return noAbre('familia_no_activa')
+  if (config.estado === 'ensayo' && !config.clientes_ensayo.includes(clientId)) return noAbre('cliente_fuera_del_ensayo')
   return { accion: 'abrir', familia: sobre.familia }
 }
 

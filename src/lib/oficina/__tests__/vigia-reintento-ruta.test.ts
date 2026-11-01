@@ -19,6 +19,7 @@ vi.mock('@/lib/oficina/ruta', () => ({
 vi.mock('@/lib/oficina/vigia', () => ({
   vencerBandeja: async () => { h.orden.push('bandeja'); return { vencidas: ['a'] } },
   revisarPasosMuertos: async () => { h.orden.push('muertos'); return { reanudar: [], fallidos: [], cierres: [] } },
+  vencerMesasPorPlazo: async () => { h.orden.push('plazo'); return { vencidas: [] } },
 }))
 vi.mock('@/lib/oficina/reintento-adaptador', () => ({
   reintentoDeLaCadena: async (_db: unknown, env: unknown, o: { ejecutar: boolean }) => { h.orden.push(o.ejecutar ? 'reintento' : 'reintento_en_seco'); h.argsReintento.push({ env, o }); return h.reintento },
@@ -31,14 +32,14 @@ beforeEach(() => { h.orden = []; h.llaveOk = true; h.estado = 'encendida'; h.rei
 describe('POST /api/oficina/vigia con el reintento de piezas', () => {
   it('una pasada normal: primero la bandeja, luego los pasos muertos, DESPUÉS el reintento, y la respuesta lo trae', async () => {
     const r = await llamar({}); const j = await r.json()
-    expect(r.status).toBe(200); expect(h.orden).toEqual(['bandeja', 'muertos', 'reintento'])
+    expect(r.status).toBe(200); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento'])
     expect(j).toMatchObject({ accion: 'vigilado', vencidas: ['a'], reintento: { accion: 'vigilado', emitidos: 2 } })
     expect(h.argsReintento[0]).toMatchObject({ o: { ejecutar: true } })
   })
   it('si el reintento falla (devuelve error), lo demás ya quedó hecho y la respuesta sigue siendo 200', async () => {
     h.reintento = { accion: 'error', detalle: 'caída' }
     const r = await llamar({}); const j = await r.json()
-    expect(r.status).toBe(200); expect(h.orden).toEqual(['bandeja', 'muertos', 'reintento']); expect(j.reintento).toMatchObject({ accion: 'error' }); expect(j.vencidas).toEqual(['a'])
+    expect(r.status).toBe(200); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento']); expect(j.reintento).toMatchObject({ accion: 'error' }); expect(j.vencidas).toEqual(['a'])
   })
   it('«reintento_en_seco»: SOLO calcula el plan; no vence la bandeja, no toca pasos muertos y no ejecuta el reintento', async () => {
     const r = await llamar({ reintento_en_seco: true }); const j = await r.json()
@@ -57,6 +58,6 @@ describe('POST /api/oficina/vigia con el reintento de piezas', () => {
     expect((await llamar({})).status).toBe(401); expect((await llamar({ reintento_en_seco: true })).status).toBe(401); expect(h.orden).toEqual([])
   })
   it('un «reintento_en_seco» que no es el booleano verdadero NO cuenta como seco (corre la pasada normal)', async () => {
-    await llamar({ reintento_en_seco: 'true' }); expect(h.orden).toEqual(['bandeja', 'muertos', 'reintento'])
+    await llamar({ reintento_en_seco: 'true' }); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento'])
   })
 })

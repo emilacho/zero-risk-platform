@@ -45,6 +45,55 @@ export interface EstrategiaGuardada {
   seco: boolean
 }
 
+/** 31-oct (nuevo orden · T1): el brief creativo guardado (`cadena_brief_creativo` · contrato brief_creativo.v1) */
+export interface BriefCreativoGuardado {
+  campana_id: string
+  version: number
+  estado: 'borrador' | 'validada' | 'devuelta' | 'descartada'
+  texto_md: string | null
+  /** lo que leyó `leerBriefCreativo` (BriefCreativoLeido) · null mientras es borrador o si la mesa no entregó */
+  leido: Record<string, unknown> | null
+  /** los puntos por los que se devolvió (UNA re-petición; luego necesita_humano) */
+  devolucion_texto: string | null
+  /** por qué no hay texto (la mesa falló, venció o llegó al tope sin nada) */
+  motivo: string | null
+  costo_usd: number | null
+  encargo_id: string | null
+  /** red de seguridad (plazo de trabajo + holgura): pasado, el reloj deja el brief `descartada` y la campaña reabre una vez (migración 202610312003 · hueco 1 de CC3) */
+  plazo_en?: string | null
+  seco: boolean
+}
+/** 31-oct (nuevo orden · T1): el concepto guardado (`cadena_conceptos` · contrato concepto.v1) */
+export interface ConceptoGuardado {
+  campana_id: string
+  version: number
+  estado: 'abierta' | 'lista' | 'sin_mesa' | 'brief_devuelto'
+  /** la decisión de Emilio sobre la tarjeta de concepto · null mientras no hay tarjeta */
+  aprobacion: 'pendiente' | 'aprobado' | 'cambios' | null
+  texto_md: string | null
+  /** lo que leyó `leerConcepto` (ConceptoLeido) */
+  leido: Record<string, unknown> | null
+  /** texto de «## Devolución del brief» cuando la dirección devolvió el brief (la cadena abre brief v2 con ese marco) */
+  brief_devuelto: string | null
+  motivo: string | null
+  costo_usd: number | null
+  /** el plazo propio de la mesa (90 min): lo guarda la CADENA, la oficina no barre estas mesas */
+  plazo_en: string | null
+  encargo_id: string | null
+  hitl_id: string | null
+  nota_de_emilio: string | null
+  /** a qué apunta un «cambios»: al concepto (otra ronda de mesa) o al brief (brief v2) */
+  apunta_a: 'concepto' | 'brief' | null
+  decidido_en: string | null
+  seco: boolean
+}
+export type ObjetoDeValidacion = 'estrategia' | 'calendario' | 'brief' | 'brief_creativo' | 'concepto'
+
+/** 31-oct (T3): el `type` de la tarjeta «Gran idea» en `hitl_queue` · la bandeja de piezas la muestra aparte y las otras rutas la ignoran o rechazan (`metadata.tipo = 'concepto'`) */
+export const TIPO_TARJETA_DE_CONCEPTO = 'concepto_review'
+export interface TarjetaDeConcepto { client_id: string; campana_id: string; version: number; titulo: string; vista_previa: string; metadata: Record<string, unknown>; seco: boolean }
+export interface DecisionDeEmilio { hitl_id: string; accion: 'aprobar' | 'pedir_cambios'; comentario: string | null; autor: string; ahora: string }
+
 /** lo que la copia por filas HABRÍA escrito en `client_historical_outputs` (la fila del parte), más el lote y cuándo vence el ensayo */
 export interface ParteSecoAGuardar {
   client_id: string
@@ -100,6 +149,8 @@ export interface ContextoDelCliente {
   industria?: string | null
   /** r75 · H2 · el registro del cliente ya resuelto (manual > ficha > país); `sin_dato` = no se bloquea ni se impone nada */
   registro?: 'tu' | 'vos' | 'usted' | 'sin_dato'
+  /** 31-oct (T3 · idioma agnóstico): el idioma de la ficha (`clients.idioma`, p. ej. «español», «english», «português»); ausente = el del manual o el oficial del país (no se inventa) */
+  idioma?: string | null
   /** r74 · de dónde salió la zona: declarada en la ficha · por el país · por defecto de la casa · sin dato (UTC solo como cálculo, y se pregunta) */
   zonaHorariaOrigen?: 'declarada' | 'por_pais' | 'por_defecto_de_la_casa' | 'sin_dato'
   planTexto: string
@@ -143,13 +194,33 @@ export interface Almacen {
   // estrategias
   ultimaEstrategia(campanaId: string): Promise<EstrategiaGuardada | null>
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>
+  // 31-oct (nuevo orden · T1) · brief creativo y concepto: UNA fila por (campaña, versión); la primera entrega que cierra gana (único en la base)
+  ultimoBriefCreativo(campanaId: string): Promise<BriefCreativoGuardado | null>
+  /** 31-oct (T3 · hueco 1 de CC3): todas las versiones del brief de una campaña, de la 1 en adelante */
+  briefsDe(campanaId: string): Promise<BriefCreativoGuardado[]>
+  /** los briefs abiertos (`borrador`) cuyo plazo propio ya pasó (el vigía los deja `descartada`) */
+  briefsVencidos(ahora: string): Promise<BriefCreativoGuardado[]>
+  insertarBriefCreativo(b: BriefCreativoGuardado): Promise<void>
+  actualizarBriefCreativo(campanaId: string, version: number, patch: Partial<BriefCreativoGuardado>): Promise<void>
+  ultimoConcepto(campanaId: string): Promise<ConceptoGuardado | null>
+  insertarConcepto(c: ConceptoGuardado): Promise<void>
+  actualizarConcepto(campanaId: string, version: number, patch: Partial<ConceptoGuardado>): Promise<void>
+  /** los conceptos abiertos cuyo plazo propio ya pasó (el vigía los cierra `sin_mesa`) */
+  conceptosVencidos(ahora: string): Promise<ConceptoGuardado[]>
+  /** 31-oct (T3): todas las versiones del concepto de una campaña, de la 1 en adelante (para contar vueltas de cambios y reaperturas) */
+  conceptosDe(campanaId: string): Promise<ConceptoGuardado[]>
+  /** 31-oct (T3): la tarjeta «Gran idea» en la bandeja (`hitl_queue` · `metadata.origen = 'cadena'` · `metadata.tipo = 'concepto'` · sin vencimiento: `vencerBandeja` no la toca); devuelve su id */
+  abrirTarjetaDeConcepto(t: TarjetaDeConcepto): Promise<string>
+  cerrarTarjetaDeConcepto(hitlId: string, d: { status: 'approved' | 'rejected'; decision: Record<string, unknown> }): Promise<void>
+  /** 31-oct (T3): la decisión de Emilio sobre la gran idea queda en `eventos_de_emilio`; NUNCA lanza (el libro no frena la decisión) */
+  registrarDecisionDeEmilio(e: DecisionDeEmilio): Promise<void>
   // filas
   filas(campanaId: string, calendarioVersion?: number): Promise<Fila[]>
   guardarFilas(campanaId: string, calendarioVersion: number, estrategiaVersion: number, filas: Fila[], seco: boolean): Promise<void>
   cambiarEstadoDeFilas(campanaId: string, calendarioVersion: number, ids: string[], estado: Fila['estado']): Promise<void>
   ultimaVersionDeCalendario(campanaId: string): Promise<number>
   // validaciones
-  guardarValidaciones(campanaId: string, objeto: 'estrategia' | 'calendario' | 'brief', version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[], seco: boolean): Promise<void>
+  guardarValidaciones(campanaId: string, objeto: ObjetoDeValidacion, version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[], seco: boolean): Promise<void>
   /** r74 · los hallazgos que BLOQUEAN del último intento guardado de una tanda del calendario (para pedir la corrección si la llamada de corrección murió) */
   hallazgosQueBloquean(campanaId: string, tanda: number): Promise<Array<{ ficha: Ficha; fila_id: string | null; chequeo?: string }>>
   // corridas (guardarraíles 1–5)

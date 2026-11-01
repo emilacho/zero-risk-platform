@@ -89,9 +89,9 @@ export function tableroParaLaJefatura(libro: Aporte[], integracion: string, pert
 }
 
 /** cuántos aportes REALES (aporta/responde, con texto) hizo cada agente */
-export function participacion(libro: Aporte[]): Record<string, number> {
+export function participacion(libro: Aporte[], desdeN = 0): Record<string, number> {
   const c: Record<string, number> = {}
-  for (const a of libro) if ((a.tipo === 'aporta' || a.tipo === 'responde') && a.texto.trim()) c[a.de] = (c[a.de] ?? 0) + 1
+  for (const a of libro) if (a.n > desdeN && (a.tipo === 'aporta' || a.tipo === 'responde') && a.texto.trim()) c[a.de] = (c[a.de] ?? 0) + 1
   return c
 }
 

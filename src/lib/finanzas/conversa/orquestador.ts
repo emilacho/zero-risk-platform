@@ -16,7 +16,7 @@ import type { Bloque } from '../tipos'
 import { entradaDesdeLaConversa } from './entrada'
 import { extraerJson, normalizarEquilibrio, respuestaDeEquilibrioValida, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
 import { CANALES_VALIDOS, especialistasQueHablan } from './omision'
-import { AGENTES, PLANTILLA_FINANCIERA, reservaDelCierre2 } from './plantilla'
+import { AGENTES, PLANTILLA_FINANCIERA, plantillaConRedactor, reservaDelCierre2 } from './plantilla'
 import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type PuertosDeConversa, type Semilla, type TopeDePrueba, type TurnoDeConversa } from './puertos'
 import { sha256 } from './util'
 
@@ -237,11 +237,13 @@ async function conTopeDePrueba(P: PuertosDeConversa, client_id: string, semilla:
   return { ok: true, semilla: { ...semilla, tope_de_prueba: topeDePruebaAutomatico(semilla, g.total_usd, encargoId === undefined ? 0 : (g.por_encargo[encargoId] ?? 0)) }, nuevo: true }
 }
 /** la plantilla de ESTE encargo: igual a la financiera, con el tope propio de la semilla si es un número válido (solo sube, con techo; por encima del techo solo hasta el valor de una firma registrada) y el tope de la prueba si lo trae */
-export function plantillaDelEncargo(e: EncargoDeConversa, turnos?: TurnoDeConversa[]): Plantilla {
+export function plantillaDelEncargo(e: EncargoDeConversa, turnos?: TurnoDeConversa[], redactor?: string): Plantilla {
   const sem = e.semilla as Semilla | undefined
   // la reserva del cierre de la ronda 2 sale de lo que COSTÓ el cierre de la ronda 1 de este encargo (si ya se hizo)
   const cierre1 = (turnos ?? []).filter((x) => x.paso === 'cierre' && x.estado === 'hecho' && x.costo_usd > 0).at(-1)?.costo_usd
-  const base: Plantilla = cierre1 === undefined ? PLANTILLA_FINANCIERA : { ...PLANTILLA_FINANCIERA, pasos: PLANTILLA_FINANCIERA.pasos.map((p) => (p.clave === 'cierre_2' ? { ...p, tope_usd: reservaDelCierre2(cierre1) } : p)) }
+  // oficina de marketing (F2): el proponente es el redactor configurado (dato), no un nombre fijo en el código
+  const conRedactor = plantillaConRedactor(PLANTILLA_FINANCIERA, redactor)
+  const base: Plantilla = cierre1 === undefined ? conRedactor : { ...conRedactor, pasos: conRedactor.pasos.map((p) => (p.clave === 'cierre_2' ? { ...p, tope_usd: reservaDelCierre2(cierre1) } : p)) }
   const prueba = topeDePruebaValido(sem?.tope_de_prueba) ? { ...sem.tope_de_prueba } : undefined
   const tope = topeEfectivoDelEncargo(sem)
   if (tope === base.limites.tope_encargo_usd && !prueba) return base
@@ -291,7 +293,7 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
   const candado = P.almacen.tomarPaso ? await P.almacen.tomarPaso(e.id, P.ahora(), TTL_DEL_CANDADO_S) : null
   if (candado && candado.ok && !candado.tomado) return { status: 409, cuerpo: { error: 'paso_en_vuelo', detalle: 'otra llamada está ejecutando un paso de este encargo: léelo con «leer» antes de repetir' } }
   // si el candado MISMO no se puede tomar (columna sin migrar, base con error), el paso sigue SIN candado: no peor que antes del arreglo; el tope cobrado y el margen de reintento siguen activos
-  try { return await ejecutarUnPaso(P, e) } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
+  try { return await ejecutarUnPaso(P, e, cfg.redactor) } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
 }
 
 /**
@@ -326,7 +328,7 @@ export async function cerrarPorPlazo(P: PuertosDeConversa, encargo_id: string): 
   } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
 }
 
-async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Promise<Respuesta> {
+async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redactor?: string): Promise<Respuesta> {
   let e = e0
   // TOPE SOBRE LO COBRADO (arreglo del intento 4): el gasto del motor solo suma turnos GUARDADOS; lo cobrado y perdido (502, corte) también cuenta
   const cobrado = P.almacen.cobrado ? await P.almacen.cobrado(e.id).catch(() => null) : null
@@ -341,7 +343,7 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa): Prom
   }
   const arts = await P.almacen.artefactos(e.id)
   const turnosPrevios = await P.almacen.turnos(e.id).catch(() => [] as TurnoDeConversa[])
-  const plantilla = plantillaDelEncargo(e, turnosPrevios)
+  const plantilla = plantillaDelEncargo(e, turnosPrevios, redactor)
   const sig = siguientePaso(e.estado_del_motor, plantilla)
 
   // fin o tope: se cierra con lo que hay (nunca bloquea al plan)

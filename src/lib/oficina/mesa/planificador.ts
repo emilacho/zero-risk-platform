@@ -14,21 +14,22 @@
  */
 import { especialistasPertinentes, direccionDe } from './directorio'
 import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
-import { COTAS, type Accion, type Aporte, type EstadoMesa } from './tipos'
+import { COTAS, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 
-export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean }
+export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza }
 
 export const techoDe = (tope: number): number => +(tope * COTAS.TECHO_SOBRE_TOPE).toFixed(6)
 const fallosDe = (libro: Aporte[], agente: string): number => libro.filter((a) => a.tipo === 'nota' && a.de === agente && a.texto.startsWith('turno_fallido')).length
 const ultimaIntegracion = (libro: Aporte[]): Aporte | null => [...libro].reverse().find((a) => a.tipo === 'integra') ?? null
 
-/** lo que la pieza todavía gastará después de la mesa (imagen + observador + jefatura): la mesa no puede gastárselo conversando */
-export const reservaDeLoQueSigue = (hayImagenGenerada: boolean): number => (hayImagenGenerada ? COTAS.RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD : COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD)
+/** lo que la pieza todavía gastará después de la mesa (imagen + observador + jefatura; en el video, el brazo + la jefatura; en las mesas de la cadena, lo que diga `posterior`, 0): la mesa no puede gastárselo conversando */
+export const reservaDeLoQueSigue = (hayImagenGenerada: boolean, posterior?: number, tipo?: TipoDePieza): number =>
+  posterior !== undefined ? posterior : tipo === 'video' ? COTAS.RESERVA_DE_LO_QUE_SIGUE_VIDEO_USD : hayImagenGenerada ? COTAS.RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD : COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD
 
 /** ¿se agotó alguna cota que obliga a «cerrar con lo que hay»? devuelve la razón o null */
 export function cotaAgotada(est: EstadoMesa, ctx: ContextoDeLaMesa): string | null {
   if (est.turnos >= COTAS.MAX_TURNOS) return `se usaron los ${COTAS.MAX_TURNOS} turnos de la mesa`
-  const siguiente = reservaDeLoQueSigue(ctx.hayImagenGenerada)
+  const siguiente = reservaDeLoQueSigue(ctx.hayImagenGenerada, ctx.reserva_posterior_usd, ctx.tipo ?? est.tipo)
   if (ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + siguiente > ctx.tope_usd) return `el gasto (${ctx.gasto_usd.toFixed(2)}) más la reserva de un turno (${COTAS.RESERVA_POR_TURNO_USD}) y de lo que sigue (${siguiente}) pasa el tope de la pieza (${ctx.tope_usd})`
   return null
 }
@@ -46,7 +47,7 @@ export function pedidosAtendibles(est: EstadoMesa, libro: Aporte[]): Aporte[] {
 
 export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: ContextoDeLaMesa): Accion {
   if (ctx.gasto_usd >= techoDe(ctx.tope_usd)) return { accion: 'cierre_por_tope', razon: 'techo_de_gasto' }
-  const dir = direccionDe(est.directorio_congelado)
+  const dir = direccionDe(est.directorio_congelado, est.tipo)
   if (!dir) throw new Error('la mesa no tiene dirección creativa en el directorio')
   const porteroNombre = est.directorio_congelado.find((t) => t.rol === 'portero' && t.activo)?.agente ?? null
 
@@ -62,7 +63,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
     const ult = ultimaIntegracion(libro)
     const hayAportesNuevos = libro.some((a) => ['aporta', 'responde', 'material'].includes(a.tipo) && (!ult || a.n > ult.n))
     // la integración final puede pasar del tope (hasta el techo ×1,2), pero NUNCA se come lo que viene después: imagen, observador y jefatura también caben bajo el techo
-    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada) <= techoDe(ctx.tope_usd)
+    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada, ctx.reserva_posterior_usd, ctx.tipo ?? est.tipo) <= techoDe(ctx.tope_usd)
     if ((!ult || hayAportesNuevos) && puedeGastar && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO && est.marcas.integracion_forzada !== true) {
       return { accion: 'turno', agente: dir.agente, tipo: 'integrar', responde_a: null, motivo: `cierra con lo que hay: ${agotada}` }
     }
@@ -77,8 +78,12 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   if (aUnCompanero) return { accion: 'turno', agente: aUnCompanero.para as string, tipo: 'responder', responde_a: aUnCompanero.id, motivo: `pedido de ${aUnCompanero.de}` }
 
   // 5 · especialidades pertinentes sin aporte
-  const hizo = participacion(libro)
-  const faltan = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada).filter((a) => !hizo[a] && fallosDe(libro, a) < COTAS.REINTENTOS_DE_TURNO)
+  // con rondas mínimas > 1, cada ronda pide el aporte de todos DE NUEVO: se cuenta la participación desde la última integración mientras falten rondas
+  const rondasMin = ctx.rondas_minimas ?? 1
+  const integrasHechas = libro.filter((a) => a.tipo === 'integra').length
+  const ultInt = ultimaIntegracion(libro)
+  const hizo = participacion(libro, ultInt && integrasHechas < rondasMin ? ultInt.n : 0)
+  const faltan = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada, est.condiciones ?? []).filter((a) => !hizo[a] && fallosDe(libro, a) < COTAS.REINTENTOS_DE_TURNO)
   if (faltan.length) return { accion: 'turno', agente: faltan[0], tipo: 'aportar', responde_a: null, motivo: 'su especialidad es obligatoria en esta pieza' }
 
   // 6 · aportes nuevos desde la última integración → integra la dirección
@@ -90,7 +95,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   }
 
   // 7 · las citas de la integración (usó/descartó): la existencia y la cobertura las comprueba el código; la calidad, la jefatura
-  const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada)
+  const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada, est.condiciones ?? [])
   const v = verificarCitas(ult.texto, libro, pertinentes)
   if (!v.ok && est.devoluciones_por_citas < COTAS.MAX_DEVOLUCIONES_POR_CITAS && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO) {
     return { accion: 'turno', agente: dir.agente, tipo: 'devolver_citas', responde_a: ult.id, motivo: 'faltan citas de aportes usados o descartados' }

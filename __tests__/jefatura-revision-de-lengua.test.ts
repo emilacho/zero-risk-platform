@@ -47,9 +47,9 @@ describe('la corrida (seco, moldes)', () => {
     expect(t[0].paso).toBe('revision_lengua')
     expect((t[0].pedido as { headers_requeridos: Record<string, string> }).headers_requeridos['x-skip-editor-middleware']).toBe('1')
     const task = String((t[0].pedido as { task: string }).task)
-    expect(task).toMatch(/ortografía, gramática, tildes y puntuación/)
+    expect(task).toMatch(/ortografía, gramática y puntuación propias del idioma/)
     expect(task).toMatch(/No cambies el contenido, el estilo ni la voz/)
-    expect(task).toMatch(/tú o usted/)
+    expect(task).toMatch(/tú, vos o usted/)
     expect(c.turnos.map((x) => x.paso).indexOf('revision_lengua')).toBe(c.turnos.map((x) => x.paso).indexOf('revision_fondo') + 1)
   })
   it('una ficha de lengua que bloquea llega a la corrección del productor (no se queda sin dueño)', async () => {

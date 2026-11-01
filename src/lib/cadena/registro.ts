@@ -24,6 +24,12 @@ export function reglaDeRegistro(r: RegistroDelCliente | undefined): string {
   return 'El registro del cliente (tú · vos · usted) no está fijado ni por su manual ni por su país: no lo inventes y evita la segunda persona marcada en los temas.'
 }
 
+/** 31-oct (T3 · idioma agnóstico): la regla de IDIOMA de las indicaciones · solo si la ficha lo fija (`clients.idioma`); sin dato no se agrega NADA (byte a byte con hoy) */
+export function reglaDeIdioma(idioma: string | null | undefined): string | null {
+  const i = typeof idioma === 'string' ? idioma.trim() : ''
+  return i ? `Idioma de todo lo que escribas: ${i}. Si el manual del cliente fija otro idioma, manda el manual. Respeta el trato (tú, vos, usted u otro) que fije el manual; nunca lo cambies.` : null
+}
+
 /** las formas de OTRO registro en un tema, dado el del cliente · sin dato no se marca nada */
 export function formasDeOtroRegistro(r: RegistroDelCliente | undefined, tema: string): string[] {
   if (r !== 'tu' && r !== 'vos' && r !== 'usted') return []

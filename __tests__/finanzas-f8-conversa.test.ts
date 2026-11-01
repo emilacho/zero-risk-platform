@@ -30,7 +30,7 @@ function mundo(opts: { conversa?: ConfigDeFinanzas['conversa']; estado?: ConfigD
   const turnos: TurnoDeConversa[] = []
   const arts: Record<string, Record<string, unknown>> = {}
   const c = { llamadas: [] as PedidoAlModelo[], publicados: [] as string[], lecturas: 0, tableros: 0, firmas: 0, invocaciones: [] as string[] }
-  const guion: Guion = { 'campaign-brief-agent': [PLANTEO, PLANTEO], 'finance-fpa-analyst': [FPA, FPA], paid_media_paid_social_strategist: [REDES, REDES], 'paid_media_ppc_strategist': [BUSQ], 'tracking-specialist': [MEDI, MEDI], 'chief-financial-officer': [ACUERDO_OK, ACUERDO_OK], ...(opts.guion ?? {}) }
+  const guion: Guion = { [AGENTES.proponente]: [PLANTEO, PLANTEO], 'finance-fpa-analyst': [FPA, FPA], paid_media_paid_social_strategist: [REDES, REDES], 'paid_media_ppc_strategist': [BUSQ], 'tracking-specialist': [MEDI, MEDI], 'chief-financial-officer': [ACUERDO_OK, ACUERDO_OK], ...(opts.guion ?? {}) }
   const cuenta: Record<string, number> = {}
   let seq = 0
   const almacen: AlmacenDeConversa = {
@@ -133,7 +133,7 @@ describe('F8 · caso de oro (agentes simulados)', () => {
     expect(r.cuerpo.estado).toBe('cerrado')
     expect(pasos).toEqual(['abrir', 'planteo', 'fpa', 'redes', 'medicion', 'ajuste', 'calculo', 'cierre', 'firma'])
     // la búsqueda pagada no figura en el plan → no se llamó
-    expect(m.c.llamadas.map((l) => l.agente)).toEqual(['campaign-brief-agent', 'finance-fpa-analyst', 'paid_media_paid_social_strategist', 'tracking-specialist', 'campaign-brief-agent', 'chief-financial-officer'])
+    expect(m.c.llamadas.map((l) => l.agente)).toEqual([AGENTES.proponente, 'finance-fpa-analyst', 'paid_media_paid_social_strategist', 'tracking-specialist', AGENTES.proponente, 'chief-financial-officer'])
     expect(m.c.tableros).toBe(1)
     expect(m.c.firmas).toBe(1)
     expect(m.arts.cierre.estado).toBe('firmado')
@@ -178,7 +178,7 @@ describe('F8 · caso de oro (agentes simulados)', () => {
 
 describe('F8 · omisión por canal (R11)', () => {
   it('sin pauta solo habla FP&A; no hay bloque y el plan sigue', async () => {
-    const m = mundo({ guion: { 'campaign-brief-agent': [{ ...PLANTEO, canales: [{ canal: 'base_propia', peso: 1 }] }] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [{ ...PLANTEO, canales: [{ canal: 'base_propia', peso: 1 }] }] } })
     const id = String((await abrir(m)).cuerpo.encargo_id)
     const { r, pasos } = await correrTodo(m, id)
     expect(pasos).not.toContain('redes')
@@ -289,7 +289,7 @@ describe('F8 · tope, rondas y formato', () => {
     expect(m.arts.cierre.estado).toBe('firmado')
   })
   it('el modelo caído (sin guion) no tumba la conversación', async () => {
-    const m = mundo({ guion: { 'campaign-brief-agent': [] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [] } })
     const id = String((await abrir(m)).cuerpo.encargo_id)
     const { r } = await correrTodo(m, id)
     expect(m.arts.bloque.hay_bloque).toBe(false)
@@ -340,7 +340,7 @@ describe('ronda 3 de CC#3 · menores de F8', () => {
     expect(r.cuerpo.estado).toBe('cerrado')
   })
   it('«dado por verificado» no se comprueba: alerta, la confianza no sube y la salida solo es «con alerta»', async () => {
-    const m = mundo({ guion: { 'campaign-brief-agent': [{ ...PLANTEO, dado_por_verificado: ['ficha del mapa', 'Instagram'] }] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [{ ...PLANTEO, dado_por_verificado: ['ficha del mapa', 'Instagram'] }] } })
     const id = String((await abrir(m)).cuerpo.encargo_id)
     await correrTodo(m, id)
     expect(m.arts.acuerdo.salida).toBe('sale')
@@ -380,7 +380,7 @@ describe('F8 · el pedido corto y la procedencia', () => {
     const modelo = modeloRunSdk({ base: 'https://simulado.invalid', llave: 'k', workflow_id: 'AbC123xyz', fetch: (async (_u: string, init: any) => { vistos.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({ output: JSON.stringify(PLANTEO), cost_usd: 0.07 }) } }) as any })
     const r = await modelo.invocar({ agente: AGENTES.proponente, tarea: pedidoDelAgente(paso, {}), encargo_id: 'enc-1', client_id: CLIENTE, paso: 'planteo', tope_usd: 0.15, dry_run: true })
     expect(r.ok).toBe(true)
-    expect(vistos[0].agent).toBe('campaign-brief-agent')
+    expect(vistos[0].agent).toBe(AGENTES.proponente)
     const j = extraerJson((r as any).salida)
     expect(j.ok && validarPlanteo(j.valor).ok).toBe(true)
   })
@@ -433,7 +433,7 @@ describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la m
   const CON_RESPUESTA = { ...BAJO, meta_por_semana: 60, equilibrio_respuesta: { decision: 'subo_la_meta', motivo: 'la meta sube porque con 1 por semana el plan no se paga' } }
   const tareasDelAjuste = (m: ReturnType<typeof mundo>) => m.c.llamadas.filter((l) => l.paso === 'ajuste')
   it('el ajuste ve el equilibrio calculado por código y el pedido declara la obligación', async () => {
-    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, CON_RESPUESTA] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [BAJO, CON_RESPUESTA] } })
     const r = await abrir(m)
     await correrTodo(m, (r.cuerpo as any).encargo_id)
     const aj = tareasDelAjuste(m)
@@ -442,7 +442,7 @@ describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la m
     expect(aj[0].tarea).toMatch(/equilibrio_respuesta/)
   })
   it('una respuesta SIN equilibrio_respuesta se reintenta y, con ella, se acepta y queda en el planteo fijado', async () => {
-    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, SIN_RESPUESTA, CON_RESPUESTA] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [BAJO, SIN_RESPUESTA, CON_RESPUESTA] } })
     const r = await abrir(m)
     await correrTodo(m, (r.cuerpo as any).encargo_id)
     expect(tareasDelAjuste(m).length).toBe(2)
@@ -450,7 +450,7 @@ describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la m
     expect((m.arts.planteo_fijado as any).equilibrio_respuesta?.decision).toBe('subo_la_meta')
   })
   it('si nunca la trae, el planteo (válido) se CONSERVA con `equilibrio_sin_respuesta` y la alerta; la conversación SIGUE: nunca bloquea ni tira el trabajo del paso', async () => {
-    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, SIN_RESPUESTA, SIN_RESPUESTA] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [BAJO, SIN_RESPUESTA, SIN_RESPUESTA] } })
     const r = await abrir(m)
     const fin = await correrTodo(m, (r.cuerpo as any).encargo_id)
     expect(fin.r.status).toBe(200)
@@ -464,7 +464,7 @@ describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la m
   })
   it('🔴 31-oct · una respuesta al equilibrio MAL FORMADA (decisión inventada) ya no tira el turno entero: el planteo bueno se conserva marcado (antes: fallo, US$ 0,29 perdidos)', async () => {
     const MAL = { ...BAJO, equilibrio_respuesta: { decision: 'quizas', motivo: 'no sé' } }
-    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, MAL, MAL] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [BAJO, MAL, MAL] } })
     const r = await abrir(m)
     const fin = await correrTodo(m, (r.cuerpo as any).encargo_id)
     expect(fin.r.status).toBe(200)
@@ -476,7 +476,7 @@ describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la m
   })
   it('🔴 31-oct · decisión con mayúsculas/espacios («Mantengo la meta») y motivo de más de 400 caracteres: se normalizan y se aceptan al PRIMER intento', async () => {
     const LARGA = { ...BAJO, equilibrio_respuesta: { decision: ' Mantengo la meta ', motivo: 'porque '.repeat(80) } }
-    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, LARGA] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [BAJO, LARGA] } })
     const r = await abrir(m)
     await correrTodo(m, (r.cuerpo as any).encargo_id)
     expect(tareasDelAjuste(m).length).toBe(1)
@@ -486,13 +486,13 @@ describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la m
     expect(fijado.equilibrio_sin_respuesta).toBeUndefined()
   })
   it('control · si SÍ responde, no queda la marca', async () => {
-    const m = mundo({ guion: { 'campaign-brief-agent': [BAJO, CON_RESPUESTA] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [BAJO, CON_RESPUESTA] } })
     const r = await abrir(m)
     await correrTodo(m, (r.cuerpo as any).encargo_id)
     expect((m.arts.planteo_fijado as any).equilibrio_sin_respuesta).toBeUndefined()
   })
   it('control · con una meta que SÍ cubre el equilibrio no se exige nada', async () => {
-    const m = mundo({ guion: { 'campaign-brief-agent': [{ ...BAJO, meta_por_semana: 500 }, { ...BAJO, meta_por_semana: 500 }] } })
+    const m = mundo({ guion: { [AGENTES.proponente]: [{ ...BAJO, meta_por_semana: 500 }, { ...BAJO, meta_por_semana: 500 }] } })
     const r = await abrir(m)
     await correrTodo(m, (r.cuerpo as any).encargo_id)
     expect(tareasDelAjuste(m).length).toBe(1)

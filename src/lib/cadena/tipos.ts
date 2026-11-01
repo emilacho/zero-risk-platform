@@ -54,6 +54,8 @@ export interface PiezaAgente {
   semana: number; dia_semana: number; slot: string; hora: string; red: string; formato: string; pilar: string
   tema: string; sede: string; requiere_abierto: boolean; depende_de: string[]; pieza_fija: string
   datos: DatoDeterminado[]; pendientes: string[]
+  /** 31-oct (nuevo orden · `calendario_tanda.v2`): el id de la idea del banco del concepto que la pieza realiza (`C<fase>-I<nn>`) o «»; ausente en la cadena de hoy (v1) */
+  idea_de_mesa?: string
 }
 export interface Ajuste { semana: number; slot: string; accion: 'omitir' | 'mover' | 'agregar'; motivo: string }
 export interface TandaAgente { piezas: PiezaAgente[]; ajustes_al_patron: Ajuste[] }
@@ -83,6 +85,10 @@ export interface Fila {
   origen: 'agente' | 'patron'
   estado: EstadoFila
   avisos: string[]
+  /** 31-oct (nuevo orden): la fase del plan a la que pertenece la fila (clave de `estrategia.fases`); ausente en la cadena de hoy */
+  fase?: string | null
+  /** 31-oct (nuevo orden): la idea del banco del concepto que la fila realiza (`C<fase>-I<nn>`); null/ausente = sin idea (la hoja lo declara) */
+  idea_ref?: string | null
 }
 
 export type Severidad = 'bloquea' | 'aviso'
@@ -92,7 +98,7 @@ export interface Ficha { que: string; donde: string; contra_que: string; graveda
 export interface Hallazgo { chequeo: string; severidad: Severidad; fila_id: string | null; alcance: Alcance; ficha: Ficha }
 
 /** Red → formatos permitidos (de `cadena_formatos_por_red`). */
-export interface FormatoPermitido { formato: string; produccion: 'opera' | 'espera_brazo'; lead_dias: number; max_por_dia: number | null; /** r63 · familia de la oficina que produce este formato (dato de `cadena_formatos_por_red.familia`); ausente/null = sin sala */ familia?: string | null }
+export interface FormatoPermitido { formato: string; produccion: 'opera' | 'espera_brazo'; lead_dias: number; max_por_dia: number | null; /** r63 · familia de la oficina que produce este formato (dato de `cadena_formatos_por_red.familia`); ausente/null = sin sala. T8 (31-oct): un formato `espera_brazo` CON familia (`video_mesa`) ya no espera: es una pieza más (lote → hoja → mesa de video) */ familia?: string | null }
 export type FormatosPorRed = Record<string, FormatoPermitido[]>
 
 /** Horario de una sede: por día de la semana ISO, tramos [abre, cierra] en HH:MM. Un día sin tramos = cerrado. */
