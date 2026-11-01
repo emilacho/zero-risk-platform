@@ -32,11 +32,13 @@ let re = null
 try { re = $('Plan anterior · leer').first().json } catch (e) { re = null }
 if (!re || re.reescritura !== true) return [{ json: Object.assign({}, plan, { copia_del_plan_anterior: 'no' }) }]
 // la plataforma pega la sección «Qué cambió» a las versiones B y C (tras el título, en el lugar de la del modelo o al final): se quita de AMBOS textos, dondequiera que esté, desde su título hasta el siguiente título del mismo o mayor rango
-const sinQueCambio = function (t) {
+// dos cortes: el LARGO (hasta el siguiente título) y el CORTO (solo líneas en blanco y viñetas tras el título: la forma que arma el código); es copia si el resto coincide bajo CUALQUIERA de los dos (igualar bajo uno exige que todo lo demás sea idéntico)
+const sinQueCambio = function (t, corto) {
   const fuera = []; let rango = 0
   String(t == null ? '' : t).split(/\\r?\\n/).forEach(function (linea) {
     const h = /^\\s*(#{1,6})\\s/.exec(linea)
     if (rango && h && h[1].length <= rango) rango = 0
+    if (rango && corto && linea.trim() !== '' && !/^\\s*[-*•]\\s/.test(linea)) rango = 0
     if (!rango) {
       const t1 = /^\\s*(#{1,6})\\s*(?:\\*\\*)?\\s*qu[eé]\\s+cambi[oó]/i.exec(linea)
       const t2 = /^\\s*\\*\\*\\s*qu[eé]\\s+cambi[oó]|^\\s*qu[eé]\\s+cambi[oó]\\s*:/i.exec(linea)
@@ -47,11 +49,12 @@ const sinQueCambio = function (t) {
   })
   return fuera.join('\\n')
 }
-const normal = function (t) { return sinQueCambio(t).replace(/\\s+/g, ' ').trim() }
-const anterior = re.plan_anterior && typeof re.plan_anterior.texto === 'string' ? normal(re.plan_anterior.texto) : ''
+const normal = function (t, corto) { return sinQueCambio(t, corto).replace(/\\s+/g, ' ').trim() }
+const textoAnterior = re.plan_anterior && typeof re.plan_anterior.texto === 'string' ? re.plan_anterior.texto : ''
+const anterior = normal(textoAnterior)
 const nuevo = normal(plan.texto)
 if (!anterior || !nuevo) return [{ json: Object.assign({}, plan, { copia_del_plan_anterior: 'no', comparacion_fallo: true }) }]
-const esCopia = anterior === nuevo
+const esCopia = anterior === nuevo || normal(textoAnterior, true) === normal(plan.texto, true)
 if (!esCopia) return [{ json: Object.assign({}, plan, { copia_del_plan_anterior: 'no' }) }]
 if ($runIndex === 0) {
   const base = $('Redactor · elegir').last().json
