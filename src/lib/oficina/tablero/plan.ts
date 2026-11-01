@@ -11,6 +11,7 @@
  * Si el flujo no se pudo despertar (`despertado = false`) nada se gastó y la misma puerta se puede repetir: no queda un pedido ni una aprobación colgados para siempre.
  */
 import { consultasDeDireccion } from '../../cadena/almacen-supabase'
+import { CAMPO_DEL_ESTADO, estadoDeApertura, sedeQueNombra, textoDeEstado } from '../../sedes/por-abrir'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Db, type Fila, type Manejador, type Salida } from './comun'
 
 /** una campaña de ese plan en estos estados no vuelve a armar: la cadena respondería «ya abierta» (hallazgo de CC3, 01-nov) */
@@ -89,6 +90,23 @@ async function planDecidible(db: Db, planId: string, toca: Salida['toca']): Prom
   return { ok: true, plan: p.plan, t, colgado: a.fila, compuerta: c.fila }
 }
 
+/**
+ * (01-nov · firma de Emilio) «en esta ciudad solo por delivery» dicho al pedir cambios es también un dato de esa sede: sin esto la reescritura lo sabría y estrategia y calendario no.
+ * Solo si el texto dice CLARO ese estado y nombra EXACTAMENTE una sede (o el negocio tiene una sola). Fila nueva con origen dueño y su cita, igual que la puerta del dueño; la anterior no se borra. Nunca frena el pedido: si no se pudo, lo dice.
+ */
+async function declararSoloDelivery(db: Db, clientId: string, texto: string, cambioId: string, hora: string): Promise<{ sede: string; guardado: boolean; detalle?: string } | null> {
+  if (estadoDeApertura(texto) !== 'solo_delivery') return null
+  const r = await db.from('client_sedes').select('id, clave, ciudad').eq('client_id', clientId).limit(50)
+  if (r.error) return { sede: '', guardado: false, detalle: String(r.error.message ?? 'no se pudieron leer las sedes') }
+  const sedes = ((r.data as Fila[] | null) ?? []).map((s) => ({ id: String(s.id), clave: String(s.clave), ciudad: typeof s.ciudad === 'string' ? s.ciudad : null }))
+  const clave = sedes.length === 1 ? sedes[0].clave : sedeQueNombra(texto, sedes)
+  const sede = sedes.find((s) => s.clave === clave)
+  if (!sede) return null
+  const cita = `plan_cambios:${cambioId} · dashboard · ${hora.slice(0, 10)} · «${texto.slice(0, 200)}»`
+  const w = await db.from('client_sede_datos').insert({ client_id: clientId, sede_id: sede.id, campo: CAMPO_DEL_ESTADO, valor_texto: textoDeEstado('solo_delivery'), valor_norm: { estado: 'solo_delivery' }, fuente: 'dueno', fuente_ref: cita.slice(0, 500), alcance: 'sede', observado_en: hora })
+  return w.error ? { sede: sede.clave, guardado: false, detalle: String(w.error.message ?? 'no se guardó') } : { sede: sede.clave, guardado: true }
+}
+
 // ───────────────────────── plan-cambios (GASTA: el redactor reescribe y la jefatura revisa)
 export const planCambios: Manejador = async ({ db, ahora }, { cuerpo, reviewer }) => {
   if (typeof cuerpo.plan_id !== 'string' || !UUID.test(cuerpo.plan_id)) return rechazo(400, 'entrada_invalida', '`plan_id` debe ser un uuid')
@@ -118,9 +136,10 @@ export const planCambios: Manejador = async ({ db, ahora }, { cuerpo, reviewer }
   // la compuerta de ESTA versión queda «cambios pedidos» (si existe: los planes de antes de la compuerta no la tienen)
   const c = await db.from('plan_aprobaciones').update({ estado: 'cambios_pedidos', decidido_por: reviewer, decidido_en: hora, comentario: texto, actualizado_en: hora }).eq('plan_id', plan.id).in('estado', COMPUERTA_ABIERTA).select('id')
   if (c.error) return rechazo(500, 'planes_error', c.error.message, t)
+  const sedeDeclarada = await declararSoloDelivery(db, plan.client_id, texto, cambioId, hora)
   return {
     status: 200,
-    cuerpo: { ok: true, plan_cambio_id: cambioId, plan_id: plan.id, vuelta: plan.version, version_nueva: plan.version + 1, vueltas_restantes: TOPE_DE_VUELTAS - plan.version, tope_usd: g.tope, estado: 'pendiente', ...(colgado ? { reintento: true } : {}) },
+    cuerpo: { ok: true, ...(sedeDeclarada ? { sede_declarada: sedeDeclarada } : {}), plan_cambio_id: cambioId, plan_id: plan.id, vuelta: plan.version, version_nueva: plan.version + 1, vueltas_restantes: TOPE_DE_VUELTAS - plan.version, tope_usd: g.tope, estado: 'pendiente', ...(colgado ? { reintento: true } : {}) },
     toca: t,
     despertar_flujo: {
       camino: CAMINO_PLANEACION,

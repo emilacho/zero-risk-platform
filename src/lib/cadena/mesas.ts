@@ -25,6 +25,7 @@ import { metodoDe } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 import { reglaDeIdioma, reglaDeRegistro } from './registro'
 import type { Estrategia, FormatosPorRed } from './tipos'
+import { REGLA_SOLO_DELIVERY } from '../sedes/por-abrir'
 
 export const CAP_DE_VUELTAS_DE_CAMBIOS = 2
 /** versión 1 + UNA reapertura (brief devuelto · concepto sin_mesa); a la siguiente, necesita_humano */
@@ -89,6 +90,8 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     ...(a.metodo ? ['', '# GUÍA PARA LA DIRECCIÓN DEL BRIEF (campaign-brief-agent · no es formato)', a.metodo] : []),
     ...(a.devolucion ? ['', '# DEVOLUCIÓN (la versión anterior se devolvió por esto; corrígelo, no lo discutas)', a.devolucion] : []),
     ...(a.nota ? ['', '# CAMBIOS PEDIDOS POR EL CLIENTE', a.nota] : []),
+    // 01-nov: el brief no lista las sedes; solo se añade cuando una opera por delivery (sin ella, el pedido queda idéntico a hoy)
+    ...(a.ctx.sedes.some((s) => s.solo_delivery) ? ['', '# SEDES', ...a.ctx.sedes.filter((s) => s.solo_delivery).map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''} · ${REGLA_SOLO_DELIVERY}`)] : []),
     '',
     '# ESTRATEGIA · canales',
     canalesEnTexto(a.estrategia),
@@ -125,7 +128,7 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     canalesEnTexto(a.estrategia),
     a.estrategia.patron_semanal.map((s) => `- ${s.slot}: ${s.red} · ${s.formato} · día ${s.dia_semana} ${s.hora}`).join('\n') || '(sin patrón)',
     '',
-    `# SEDES\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}`).join('\n') : '(sin sedes)'}`,
+    `# SEDES\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}${s.solo_delivery ? ` · ${REGLA_SOLO_DELIVERY}` : ''}`).join('\n') : '(sin sedes)'}`,
     `# PALABRAS PROHIBIDAS DEL MANUAL\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}`,
   ].join('\n')
 }

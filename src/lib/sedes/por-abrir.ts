@@ -7,11 +7,12 @@
  *   1 · la ficha del cliente: `config.apify.sedes_estado = { "<clave de sede>": "por_abrir" | "abierta" }`;
  *   2 · un dato de la sede: `client_sede_datos` con campo `estado` (o `apertura`) y un valor como «por abrir»;
  *   3 · lo que dijo el dueño: la ficha vigente más nueva `dato_del_dueno` con `datos.tema_norm = apertura-sede` para esa sede; su respuesta se lee con `estadoDeApertura`.
+ * (01-nov · firma de Emilio) «solo_delivery»: la sede YA VENDE por domicilio aunque su local no haya abierto. No es «por abrir» ni «abierta»: se le planean piezas de domicilio y de awareness, sin prometer un local abierto.
  * Puro: no lee nada; quien llama le da lo que ya leyó.
  */
 import { normalizar } from '../manual/texto'
 
-export type EstadoDeSede = 'por_abrir' | 'abierta' | 'cerrada'
+export type EstadoDeSede = 'por_abrir' | 'abierta' | 'cerrada' | 'solo_delivery'
 
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const txt = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -23,10 +24,17 @@ const CERRADA = /\b(cerrad[oa]s?|cerro|cerramos|cerraron)\b/
 const DIA_U_HORA = /\b(lunes|martes|miercoles|jueves|viernes|sabados?|domingos?|dias?|horas?|desde|hasta|los|las|fines? de semana|feriados?)\b/
 const ABIERTA = /\b(ya (ha )?abrio|ya (esta|estamos) abiert[oa]s?|ya abrimos|ya atiende|ya atendemos|abrio (el|en|hace)|abierta al publico|funcionando|operando|inaugurad[oa])\b/
 
+/** «solo por delivery», «únicamente a domicilio», «sin local, por delivery». «no solo delivery» no cuenta: ahí hay más que domicilio */
+const SOLO_DELIVERY = /(?<!\bno )\b(solo|solamente|unicamente)( se)?( vende| vendemos| atiende| atendemos| opera| operamos| funciona| funcionamos)?( por| a| con| para)?( el)? (delivery|domicilios?|reparto)\b|\bsin local\b.*\b(delivery|domicilios?|reparto)\b|\b(delivery|domicilios?|reparto)\b.*\bsin local\b/
+/** ya abrió de verdad: un «antes solo delivery» dicho junto a esto no vale */
+const YA_ABRIO = /\b(ya (ha )?abrio|ya (esta|estamos) abiert[oa]s?|ya abrimos|inaugurad[oa])\b/
+
 /** lo que dice un texto libre sobre la apertura de una sede; `null` si no dice nada claro */
 export function estadoDeApertura(texto: string): EstadoDeSede | null {
   const t = normalizar(texto)
   if (!t) return null
+  // va primero: «solo por delivery, el local aún no abre» es una sede que ya vende, no una por abrir
+  if (SOLO_DELIVERY.test(t) && !YA_ABRIO.test(t)) return 'solo_delivery'
   if (ABIERTA.test(t) && !POR_ABRIR.test(t)) return 'abierta'
   if (POR_ABRIR.test(t)) return 'por_abrir'
   if (CERRADA_FIRME.test(t) || (CERRADA.test(t) && !DIA_U_HORA.test(t))) return 'cerrada'
@@ -37,9 +45,9 @@ export function estadoDeApertura(texto: string): EstadoDeSede | null {
 export const CAMPO_DEL_ESTADO = 'estado_de_la_sede'
 const CAMPOS_DE_ESTADO = new Set(['estado', 'apertura', 'estado de la sede'])
 /** cómo se escribe el estado en el dato de la sede */
-export const textoDeEstado = (e: EstadoDeSede): string => (e === 'por_abrir' ? 'por abrir' : e === 'cerrada' ? 'cerrada' : 'abierta')
+export const textoDeEstado = (e: EstadoDeSede): string => (e === 'por_abrir' ? 'por abrir' : e === 'cerrada' ? 'cerrada' : e === 'solo_delivery' ? 'solo delivery' : 'abierta')
 /** ¿el tema que preguntó la oficina habla del estado de una sede? (solo entonces lo que responde el dueño cuenta como estado) */
-export const esTemaDeEstadoDeSede = (tema: string): boolean => /\b(apertura|abrir|abierta|abierto|abrio|estado|inauguracion|inaugurar|cierre|cerrada|cerrado|funcionando|operando)\b/.test(normalizar(tema))
+export const esTemaDeEstadoDeSede = (tema: string): boolean => /\b(apertura|abrir|abierta|abierto|abrio|estado|inauguracion|inaugurar|cierre|cerrada|cerrado|funcionando|operando|delivery|domicilio|domicilios|reparto)\b/.test(normalizar(tema))
 /** la sede (o sedes) que nombra un texto, por su clave o su ciudad; solo si nombra EXACTAMENTE una se sabe de cuál habla */
 export function sedeQueNombra(texto: string, sedes: Array<{ clave: string; ciudad?: string | null }>): string | null {
   const t = ` ${normalizar(texto)} `
@@ -103,6 +111,11 @@ export const sedesPorAbrir = (e: EntradaDeEstadoDeSedes): Set<string> => new Set
 export const esLineaDeHorarioOAtencion = (linea: string): boolean => /\b(abiert[oa]s?|abre|abren|cierra|cierran|cerrad[oa]s?|horarios?|atiende|atienden|atencion|de lunes|hasta las|24 ?h|24 horas)\b/.test(normalizar(linea))
 
 export const sedesCerradas = (e: EntradaDeEstadoDeSedes): Set<string> => new Set([...estadoDeLasSedes(e)].filter(([, v]) => v === 'cerrada').map(([k]) => k))
+
+export const sedesSoloDelivery = (e: EntradaDeEstadoDeSedes): Set<string> => new Set([...estadoDeLasSedes(e)].filter(([, v]) => v === 'solo_delivery').map(([k]) => k))
+
+/** lo que un agente que planea debe saber de una sede solo por delivery: opera, y no se le promete un local */
+export const REGLA_SOLO_DELIVERY = 'SOLO DELIVERY: ya vende por domicilio aunque su local no haya abierto. SÍ se le planean piezas de domicilio y de awareness; ninguna promete local abierto ni invita a visitarlo; requiere_abierto siempre false'
 
 export const ROTULO_POR_ABRIR = 'por abrir'
 export const ROTULO_CERRADA = 'cerrada'
