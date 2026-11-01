@@ -13,6 +13,7 @@
  *       ok → guarda. (la 2.ª vez sin forma queda guardada como BORRADOR MARCADO `forma_invalida`, no se pierde) No ok la 1.ª vez → UN reintento al redactor con `correccion` pegada al final del pedido (con `force_restart`: sin él el corredor devuelve la respuesta vieja). No ok la 2.ª vez → alerta en Slack + `necesita_humano` y NO se guarda ni sigue.
  *       Una validación que no se pudo leer DETIENE (no se lee un error como «el plan está bien»).
  */
+import { construirCarpeta } from './carpeta.mjs'
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
 
 const ID = 'X9F0zp6LQ2xGEYVS'
@@ -191,6 +192,8 @@ export function construirPlaneacion() {
   construirMercado(f)
   // D · el validador de forma
   construirValidador(f)
+  // E · 01-nov · la CARPETA del cliente reemplaza la búsqueda (con_carpeta)
+  construirCarpeta(f)
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
   agregarNodo(f, codigo('Redactor · elegir', CODIGO_ELEGIR), 'Redactor (B4)', 440, 0)
