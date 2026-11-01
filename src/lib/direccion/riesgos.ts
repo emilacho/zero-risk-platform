@@ -148,7 +148,7 @@ export async function leerRiesgos(c: Contexto) {
   }
   for (const i of invocaciones) riesgos.push({ id: `invocacion:${String(i.id)}`, gravedad: 2, categoria: 'falla', titulo: `Invocación de ${String(i.agent_name)}: ${String(i.status)}`, detalle: sinSecretos(i.error_message), client_id: texto(i.client_id), desde: texto(i.started_at), fuente: 'agent_invocations' })
   for (const e of errores) riesgos.push({ id: `error:${String(e.id)}`, gravedad: gravedadDeSeveridad(e.severity), categoria: 'falla', titulo: sinSecretos(e.title, 300) ?? 'Error registrado', detalle: `origen ${String(e.source ?? 'sin dato')}`, client_id: null, desde: texto(e.created_at), fuente: 'error_events' })
-  for (const u of caidas) riesgos.push({ id: `caida:${String(u.id)}`, gravedad: 2, categoria: 'servicio', titulo: `Caída registrada: ${String(u.monitor_name ?? u.monitor_url ?? 'servicio')}`, detalle: 'El monitor no registra la recuperación: no se sabe si sigue caído.', client_id: null, desde: texto(u.created_at), fuente: 'uptime_incidents' })
+  for (const u of caidas) riesgos.push({ id: `caida:${String(u.id)}`, gravedad: 2, categoria: 'servicio', titulo: `Caída registrada: ${sinSecretos(u.monitor_name ?? u.monitor_url, 200) ?? 'servicio'}`, detalle: 'El monitor no registra la recuperación: no se sabe si sigue caído.', client_id: null, desde: texto(u.created_at), fuente: 'uptime_incidents' })
   const m = monitor[0]
   if (m) {
     const techo = numero(m.threshold_daily_aggregate_usd), gasto = numero(m.aggregate_24h_usd), pct = COSTO_PCT(gasto, techo)
