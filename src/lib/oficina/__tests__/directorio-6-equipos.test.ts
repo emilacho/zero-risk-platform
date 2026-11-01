@@ -85,7 +85,8 @@ describe('6 equipos · a qué equipo va cada tarjeta de hoy', () => {
     expect(SQL).toMatch(/IF estr <> 1 OR crea <> 12 THEN RAISE EXCEPTION/)
   })
   it('es agrupación, no asiento: no toca rol, pertinente_en ni indicacion, y solo llena lo vacío (idempotente)', () => {
-    expect(SQL).not.toMatch(/SET\s+(rol|pertinente_en|indicacion)\s*=/)
+    // E15 (menor de CC3): la asignación prohibida puede venir pegada al SET o detrás de una coma (`SET equipo = 'creativo', rol = 'miembro'`): se mira en TODO el cuerpo de cada UPDATE
+    for (const m of SQL.matchAll(/UPDATE public\.oficina_directorio[\s\S]*?;/g)) expect(m[0]).not.toMatch(/\b(rol|pertinente_en|indicacion|activo|especialidad|sabe_hacer|necesita|entrega)\s*=/)
     expect(SQL).not.toMatch(/INSERT INTO public\.oficina_directorio/)
     expect(SQL).not.toMatch(/DELETE FROM public\.oficina_directorio/)
     for (const m of SQL.matchAll(/UPDATE public\.oficina_directorio[\s\S]*?;/g)) expect(m[0]).toMatch(/AND equipo IS NULL/)
