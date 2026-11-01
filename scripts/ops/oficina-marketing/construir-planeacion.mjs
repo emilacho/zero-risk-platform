@@ -21,6 +21,7 @@ import { construirTextoLibreDelDueno } from './texto-libre-del-dueno.mjs'
 import { construirDatosDePruebaDelFlujo } from './datos-de-prueba-del-flujo.mjs'
 import { construirCicloDelPlan } from './ciclo-del-plan.mjs'
 import { construirJefaturaConCarpeta } from './jefatura-contexto.mjs'
+import { construirEsloganEnPlan } from './eslogan-del-cliente.mjs'
 import { construirSegundaMitad, escribirSegundaMitad } from './segunda-mitad.mjs'
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
 
@@ -213,6 +214,8 @@ export function construirPlaneacion() {
   construirCicloDelPlan(f)
   // I · 01-nov · la jefatura revisa con la MISMA carpeta que el redactor (resumen vivo + informes + páginas del sitio, enteros)
   construirJefaturaConCarpeta(f)
+  // J · 01-nov · el eslogan real del cliente llega al redactor del plan como HECHO (ADENDA 1 del manual · reparto con CC1)
+  construirEsloganEnPlan(f)
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
   agregarNodo(f, codigo('Redactor · elegir', CODIGO_ELEGIR), 'Redactor (B4)', 440, 0)
