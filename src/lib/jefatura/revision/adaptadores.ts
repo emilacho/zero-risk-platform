@@ -8,6 +8,7 @@
 import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGptConLibro } from '../../revision-comun'
 import { almacenDeSupabase, type Db } from './almacen-supabase'
 import { paginasPropiasDelSitio } from './carpeta-para-revisar'
+import type { CicloDelPlan } from './plan'
 import type { Puertos } from './puertos'
 
 type Fetch = typeof fetch
@@ -42,11 +43,29 @@ export function entornoDeProceso(env: Record<string, string | undefined> = proce
 
 export { ESPERAS_DEL_REVISOR_MS }
 
+/** del plan de partida: su versión real y, si nació de un «Pedir cambios», el texto que escribió el dueño. Lo que no se pudo leer se dice */
+export async function cicloDelPlanDeLaBase(db: Db, artifactId: string): Promise<CicloDelPlan> {
+  try {
+    const p = await db.from('client_historical_outputs').select('provenance_tag').eq('id', artifactId).limit(1)
+    if (p.error) return { version: null, pedido_del_dueno: null, aviso: 'No se pudo leer la versión ni lo que pidió el dueño: revísalo antes de aprobar.' }
+    const tag = ((p.data as Array<{ provenance_tag?: Record<string, unknown> }> | null)?.[0]?.provenance_tag ?? {}) as Record<string, unknown>
+    const version = Number(tag.version) > 0 ? Number(tag.version) : null
+    if (typeof tag.plan_cambio_id !== 'string') return { version, pedido_del_dueno: null }
+    const c = await db.from('plan_cambios').select('texto').eq('id', tag.plan_cambio_id).limit(1)
+    const texto = (c.data as Array<{ texto?: unknown }> | null)?.[0]?.texto
+    if (c.error || typeof texto !== 'string') return { version, pedido_del_dueno: null, aviso: 'No se pudo leer lo que pidió el dueño: revísalo antes de aprobar.' }
+    return { version, pedido_del_dueno: texto }
+  } catch {
+    return { version: null, pedido_del_dueno: null, aviso: 'No se pudo leer la versión ni lo que pidió el dueño: revísalo antes de aprobar.' }
+  }
+}
+
 export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () => Date = () => new Date()): Puertos {
   return {
     almacen: almacenDeSupabase(db),
     ahora,
     paginasDelSitio: (clientId) => paginasPropiasDelSitio(db as never, clientId),
+    cicloDelPlan: (artifactId) => cicloDelPlanDeLaBase(db, artifactId),
     async revisor(p) {
       if (p.dry_run) return { ok: true, texto: '', costo_usd: 0, modelo: 'simulado (dry_run)' }
       if (!env.openaiKey) return { ok: false, error: 'OPENAI_API_KEY no configurada', costo_usd: 0, intentos: [] }
