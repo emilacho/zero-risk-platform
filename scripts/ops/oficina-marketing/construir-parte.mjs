@@ -10,6 +10,7 @@
  * Todo lo de abajo (guardar el parte, Drive, marcar filas, autoproducir, cable de vuelta) queda intacto.
  */
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
+import { construirPalabrasDelManual } from './palabras-del-manual.mjs'
 
 const ID = 'BNXqlaX1oHSfZIpF'
 const URL_HOJAS = "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/hojas' }}"
@@ -164,6 +165,7 @@ export function construirParte() {
   const n = nodo(f, '④ Chequeos')
   if (n.parameters.jsCode.includes('hoja_por_codigo')) throw new Error('«④ Chequeos» ya trae el atajo de la hoja: ¿el vivo ya cambió?')
   n.parameters.jsCode = ATAJO_DE_LA_HOJA.replace(';(function () {})\n', '') + n.parameters.jsCode
+  construirPalabrasDelManual(f)
   return f
 }
 
