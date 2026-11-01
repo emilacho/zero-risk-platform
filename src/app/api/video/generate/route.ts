@@ -79,7 +79,7 @@ export async function POST(request: Request) {
 
   // 5 · libro (costo reservado)
   const libro = await registrarEnvioEnElLibro(getSupabaseAdmin() as never, {
-    requestId: env.pedido.request_id, clientId, agentSlug, modelo: pedido.modelo, ruta, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, conFotos: pedido.fotos.length,
+    requestId: env.pedido.request_id, clientId, agentSlug, prompt: pedido.prompt, modelo: pedido.modelo, ruta, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, conFotos: pedido.fotos.length,
     caller, costoEstimadoUsd: costo, startedAtMs: Date.now(), workflowId, workflowExecutionId, claveIdempotente, correlacion: env.pedido.correlacion,
   })
   return json(202, { ok: true, request_id: env.pedido.request_id, status: env.pedido.status, status_url: env.pedido.status_url, ...costos, libro: libro.ok ? (libro.existia ? 'ya_estaba' : 'anotado') : `no_anotado: ${libro.error}`, ...base })

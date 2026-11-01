@@ -5,10 +5,15 @@
  * `completed` (costo = el estimado, salvo que el proveedor dé otro) · `failed`/`nsfw`/`canceled` (costo 0: el proveedor no cobra ni reserva).
  * Una sola fila por pedido: `session_id = vid-<request_id>`; el que escribe comprueba antes si ya existe.
  */
+import { randomUUID } from 'node:crypto'
+import { guardarTextosDeInvocacion } from './../textos-de-invocacion'
+
 
 export const FLUJO_DE_VIDEO = 'api:video-generate'
 
 export interface DatosDelVideo {
+  /** lo que se le pidió, entero (observabilidad, punto 1) */
+  prompt?: string | null
   requestId: string
   clientId: string | null
   agentSlug: string | null
@@ -33,6 +38,7 @@ export const sessionIdDeVideo = (requestId: string) => `vid-${requestId}`
 export function filaDeEnvio(d: DatosDelVideo): Record<string, unknown> {
   const nombre = d.agentSlug ?? 'video-generation'
   return {
+    input_summary: d.prompt ? (d.prompt.length > 2000 ? `${d.prompt.slice(0, 2000)}…` : d.prompt) : null,
     session_id: sessionIdDeVideo(d.requestId),
     agent_id: nombre,
     agent_name: nombre,
@@ -85,8 +91,10 @@ export async function registrarEnvioEnElLibro(db: SupabaseLike, d: DatosDelVideo
   try {
     const ya = await db.from('agent_invocations').select('id').eq('session_id', sessionIdDeVideo(d.requestId)).limit(1)
     if (ya.data && ya.data.length) return { ok: true, existia: true }
-    const { error } = await db.from('agent_invocations').insert(filaDeEnvio(d))
+    const id = randomUUID()
+    const { error } = await db.from('agent_invocations').insert({ ...filaDeEnvio(d), id })
     if (error) { console.error(`[video/generate] el envío ${d.requestId} NO entró a agent_invocations · ${error.message}`); return { ok: false, error: error.message } }
+    await guardarTextosDeInvocacion(db as never, id, { entrada: d.prompt })
     return { ok: true }
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e)
