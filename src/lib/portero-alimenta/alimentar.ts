@@ -213,11 +213,12 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
         // las cuentas de TikTok y X se buscan ANTES (regla única: nombre exacto o cuenta, nunca un homónimo); los comentarios y las tendencias directas usan lo que ya está en la ficha
         const ejecutarApify = ejecutarEnApify({ token: common.token, fetchImpl: e.fetch as never })
         r.cuentas_de_redes = await descubrirCuentas({ cliente: cliente as never, clientId: e.client_id, ciudades: lista(sd.data).map((s) => String(s.ciudad ?? '')).filter(Boolean), urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora, ejecutar: ejecutarApify, fetchImpl: e.fetch as never })
-        const cm = await comentariosDeRedes({ cliente: cliente as never, clientId: e.client_id, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora, ejecutar: ejecutarComentarios({ token: common.token, fetchImpl: e.fetch as never }), fetchImpl: e.fetch as never })
+        const clienteVivo = (r.cuentas_de_redes.config_nueva ? { ...cliente, config: r.cuentas_de_redes.config_nueva } : cliente) as never
+        const cm = await comentariosDeRedes({ cliente: clienteVivo, clientId: e.client_id, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora, ejecutar: ejecutarComentarios({ token: common.token, fetchImpl: e.fetch as never }), fetchImpl: e.fetch as never })
         const deVideos = comentariosDeVideosDeLaCompetencia(lista(rr.data) as never, new Set(ctx.handles.map((h) => h.toLowerCase().replace(/^@/, ''))))
         const gv = deVideos.length ? await guardarComentariosDeLaCompetencia({ clientId: e.client_id, comentarios: deVideos, urlDeLaBase: common.urlDeLaBase, llave: common.llave, ahora, fetchImpl: e.fetch as never }) : { guardados: 0 }
         r.comentarios_de_redes = { ...cm, de_videos_de_la_competencia: { leidos: deVideos.length, guardados: gv.guardados, ...(gv.error ? { error: gv.error } : {}) } }
-        const tendCliente = await tendenciasDelCliente({ ...common, cliente: cliente as never, clientId: e.client_id, ciudades: lista(sd.data).map((s) => String(s.ciudad ?? '')).filter(Boolean), llamarModelo: e.llamarModelo })
+        const tendCliente = await tendenciasDelCliente({ ...common, cliente: clienteVivo, clientId: e.client_id, ciudades: lista(sd.data).map((s) => String(s.ciudad ?? '')).filter(Boolean), llamarModelo: e.llamarModelo })
         const iso = paisIsoDe(cliente.country ?? cliente.pais, cliente.market)
         const bodega = await bodegaDelMundo({ ...common, paises: iso ? [iso] : [] })
         r.tendencias = { cliente: tendCliente, bodega }

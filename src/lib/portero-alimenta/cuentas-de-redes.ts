@@ -100,7 +100,7 @@ export async function buscarCuenta(a: { red: RedDeCuenta; quien: QuienBuscamos; 
   }
 }
 
-export interface InformeDeCuentas { estado: 'corrida' | 'nada_que_buscar' | 'sin_token' | 'sin_base' | 'error'; busquedas: number; halladas: number; no_halladas: number; ambiguas: number; errores: number; guardadas: number; costo_usd: number; detalle?: ResultadoDeBusquedaDeCuentas[]; omitidas_por_tope?: number; mensaje?: string }
+export interface InformeDeCuentas { estado: 'corrida' | 'nada_que_buscar' | 'sin_token' | 'sin_base' | 'error'; busquedas: number; halladas: number; no_halladas: number; ambiguas: number; errores: number; guardadas: number; costo_usd: number; detalle?: ResultadoDeBusquedaDeCuentas[]; omitidas_por_tope?: number; mensaje?: string; /** la ficha ya con las cuentas nuevas (solo si se guardó): el resto de la corrida del día la usa sin esperar a mañana */ config_nueva?: Obj }
 
 const clave = (rol: 'propia' | 'competidor', quien: string, red: RedDeCuenta) => `${rol}:${compacto(quien)}:${red}`
 
@@ -178,7 +178,7 @@ export async function descubrirCuentas(a: { cliente: Obj; clientId: string; ciud
     const nueva = { ...fresca, apify: { ...apifyF, own_handles: own, busqueda_de_cuentas: busq, ...(lista.length ? { competitor_list: lista } : {}) } }
     const w = await traer(`${base}/rest/v1/clients?id=eq.${encodeURIComponent(a.clientId)}`, { method: 'PATCH', headers: { ...auth, 'content-type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ config: nueva }) })
     if (!w.ok) return { ...informe, guardadas: 0, mensaje: `la ficha respondió HTTP ${w.status}: lo hallado no se guardó` }
-    return informe
+    return { ...informe, config_nueva: nueva }
   } catch (e) {
     return { ...vacio, estado: 'error', mensaje: (e instanceof Error ? e.message : String(e)).slice(0, 160) }
   }

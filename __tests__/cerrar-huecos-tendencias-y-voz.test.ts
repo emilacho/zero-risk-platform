@@ -593,6 +593,7 @@ describe('4 · descubrir y dejar las cuentas en la ficha', () => {
     expect(cfg.apify.busqueda_de_cuentas['propia:naufrago:x']).toMatchObject({ resultado: 'no_hallada', buscado_en: '2026-11-01T15:00:00.000Z' })
     expect(cfg.apify.busqueda_de_cuentas['propia:naufrago:x'].descartados[0].handle).toBe('NaufragoBlog')
     expect(cfg.apify.busqueda_de_cuentas['propia:naufrago:tiktok']).toMatchObject({ resultado: 'hallada', handle: 'naufrago.olon', razon: 'nombre_y_lugar' })
+    expect(r.config_nueva).toEqual(cfg)
   })
   it('🔴 lo que ya está en la ficha no se busca ni se pisa; una búsqueda de menos de 30 días no se repite; pasados los 30 días sí', async () => {
     const a = await descubrirCuentas({ cliente, clientId: CID, ciudades: ['Olón'], urlDeLaBase: 'https://db', llave: 'k', token: 't', ahora, ejecutar: buscador(hallazgos), fetchImpl: mundo().fetchImpl, soloLeer: true })
@@ -616,6 +617,7 @@ describe('4 · descubrir y dejar las cuentas en la ficha', () => {
     expect(r2.mensaje).toMatch(/no se guardó/)
     const r3 = await descubrirCuentas({ cliente, clientId: CID, ciudades: ['Olón'], urlDeLaBase: 'https://db', llave: 'k', token: 't', ahora, ejecutar: buscador(hallazgos), fetchImpl: mundo({ escritura: 500 }).fetchImpl })
     expect(r3.guardadas).toBe(0)
+    expect(r3.config_nueva).toBeUndefined()
     expect(r3.mensaje).toMatch(/no se guardó/)
   })
   it('el tope de búsquedas por corrida se respeta y lo que sobra se declara; sin llave o sin base no busca', async () => {
