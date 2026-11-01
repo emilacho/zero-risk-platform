@@ -315,3 +315,17 @@ describe('el sub-flujo «Plan · segunda mitad (PDF → brief)»', () => {
     expect(JSON.stringify(n.parameters)).toMatch(/waitForSubWorkflow/)
   })
 })
+
+describe('el JSON es el archivo (los nodos pegados no se desvían de su fuente)', () => {
+  const fuente = (f: string) => fs.readFileSync(path.join(RAIZ, 'ciclo-nodos', f), 'utf8').replace(/\r\n/g, '\n')
+  const casos: [any, string, string][] = [
+    [sub, 'Sobre', 'segunda-mitad-sobre.js'], [sub, 'Plan vigente', 'segunda-mitad-plan-vigente.js'],
+    [nuevo, 'Plan anterior · leer', 'plan-anterior-leer.js'], [nuevo, 'Ciclo · armar cierres', 'ciclo-armar-cierres.js'],
+    [nuevo, 'Ciclo · comprobar', 'ciclo-comprobar.js'], [nuevo, 'Compuerta · esperar al dueño', 'compuerta-esperar.js'],
+    [nuevo, 'Hermanas · expandir', 'ciclo-expandir-hermanas.js'], [nuevo, 'Segunda mitad · sobre', 'segunda-mitad-llamar-sobre.js'],
+  ]
+  for (const [f, nodoNombre, archivo] of casos) it(`«${nodoNombre}» == ${archivo}`, () => { expect(codigo(f, nodoNombre).replace(/\r\n/g, '\n')).toBe(fuente(archivo)) })
+  it('la llamada al sub-flujo ya lleva un id real (no el marcador)', () => {
+    expect(JSON.stringify(nuevo)).not.toContain('PENDIENTE-SUBFLUJO-SEGUNDA-MITAD')
+  })
+})
