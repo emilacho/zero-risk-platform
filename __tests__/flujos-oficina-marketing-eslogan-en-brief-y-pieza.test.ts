@@ -8,6 +8,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { NODOS_BRIEF, NODOS_PIEZA } from '../scripts/ops/oficina-marketing/construir-palabras.mjs'
 import { construirPalabrasDelManual } from '../scripts/ops/oficina-marketing/palabras-del-manual.mjs'
+import { construirJerarquiaDeFuentes, construirPlanAprobado } from '../scripts/ops/oficina-marketing/plan-aprobado.mjs'
 import { recorrer } from './_emulador-n8n'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
@@ -19,7 +20,8 @@ const sig = (f: any, nodo: string): string => f.connections[nodo].main[0][0].nod
 const codigoDe = (f: any, nombre: string): string => f.nodes.find((n: any) => n.name === nombre).parameters.jsCode
 
 // el flujo SIN la parte 4 = el respaldo con las palabras del manual (lo que ya estaba certificado)
-const sinParte4 = (id: string) => { const f = leer('vivo', id); construirPalabrasDelManual(f); return f }
+// (más el plan aprobado y la jerarquía de fuentes, que se prueban aparte en flujos-oficina-marketing-plan-aprobado.test.ts)
+const sinParte4 = (id: string) => { const f = leer('vivo', id); construirPalabrasDelManual(f); if (id === BRIEF) { construirPlanAprobado(f); construirJerarquiaDeFuentes(f) } if (id === CADENA) construirJerarquiaDeFuentes(f); return f }
 
 const MANUAL = (extra: Record<string, unknown> = {}) => ({ id: 'm-1', version: 2, created_at: '2026-11-01T00:00:00Z', gate_outcome: 'paso_la_vara', forbidden_words: [], required_terminology: [], content_text: 'TEXTO DEL MANUAL', voice_description: 'Tutea siempre (tú/sabes/pides — nunca vos).', writing_style: null, tone_guidelines: {}, ...extra })
 

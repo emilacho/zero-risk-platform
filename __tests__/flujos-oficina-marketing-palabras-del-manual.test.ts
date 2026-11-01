@@ -47,13 +47,16 @@ describe('palabras prohibidas · contexto de marca', () => {
     expect(c).not.toMatch(/búsqueda literal · puede ser/)
   })
   it('solo cambian los nodos previstos frente al vivo respaldado', () => {
-    expect(cambiados(leer('vivo', BRIEF), leer('nuevo', BRIEF))).toEqual(['① Cargar manual vigente', '① GUARDA · sin manual aprobado se DETIENE', '③ Armar el cuerpo del redactor', '④ Chequeos']) // + parte 4 del manual (eslogan real): select, guarda y armado — se prueba aparte
+    expect(cambiados(leer('vivo', BRIEF), leer('nuevo', BRIEF)).sort()).toEqual(['① Cargar manual vigente', '① GUARDA · sin manual aprobado se DETIENE', '② Cargar plan vigente', '② GUARDA · sin plan se DETIENE', '② Cargar la aprobación del plan', '③ Armar el cuerpo del redactor', '④ Chequeos'].sort()) // + parte 4 del manual (eslogan real) y el plan aprobado (9a/9b): se prueban aparte
     expect(cambiados(leer('vivo', PIEZA), leer('nuevo', PIEZA))).toEqual(['② Cargar el manual vigente', '② GUARDA · sin manual aprobado se DETIENE', '⑤ Armar el cuerpo del productor', '⑦ Chequeos']) // + parte 4 del manual (eslogan real)
     const parte = cambiados(leer('vivo', PARTE), leer('nuevo', PARTE))
     expect(parte).toContain('③ Armar el cuerpo del redactor')
     expect(parte).toContain('④ Chequeos')
   })
   it('las conexiones no cambian en Brief y Pieza', () => {
-    for (const id of [BRIEF, PIEZA]) expect(leer('nuevo', id).connections).toEqual(leer('vivo', id).connections)
+    expect(leer('nuevo', PIEZA).connections).toEqual(leer('vivo', PIEZA).connections)
+    // el Brief suma el nodo de la aprobación del plan (9a): solo ese cambio de conexiones, se prueba en flujos-oficina-marketing-plan-aprobado.test.ts
+    const nb = leer('nuevo', BRIEF).connections
+    expect(Object.keys(nb).filter((k) => JSON.stringify(nb[k]) !== JSON.stringify(leer('vivo', BRIEF).connections[k])).sort()).toEqual(['② Cargar la aprobación del plan', '① GUARDA · sin manual aprobado se DETIENE'].sort())
   })
 })
