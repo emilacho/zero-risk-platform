@@ -5,7 +5,7 @@ const pb = wb.plan_base_id
 const hayBase = pb !== undefined && pb !== null && pb !== ''
 if (hayBase && (typeof pb !== 'string' || !UUID_CICLO.test(pb))) throw new Error('PLANEACION_PLAN_BASE_INVALIDO · plan_base_id solo admite un uuid (llegó ' + JSON.stringify(pb).slice(0, 60) + ') · se DETIENE antes de gastar')
 const cd = wb.cambios_del_dueno
-if (cd !== undefined && cd !== null && (typeof cd !== 'string' || cd.trim().length < 5 || cd.trim().length > 4000)) throw new Error('PLANEACION_CAMBIOS_INVALIDOS · cambios_del_dueno solo admite texto de 5 a 4000 caracteres · se DETIENE antes de gastar')
+if (cd !== undefined && cd !== null && (typeof cd !== 'string' || cd.trim().length < 5 || cd.trim().length > 100000)) throw new Error('PLANEACION_CAMBIOS_INVALIDOS · cambios_del_dueno solo admite texto de 5 a 100000 caracteres · se DETIENE antes de gastar')
 if (hayBase && !(typeof cd === 'string' && cd.trim().length >= 5)) throw new Error('PLANEACION_CAMBIOS_OBLIGATORIOS · con plan_base_id hay que decir qué cambios pidió el dueño (cambios_del_dueno) · se DETIENE antes de gastar')
 const pcid = wb.plan_cambio_id
 if (pcid !== undefined && pcid !== null && (typeof pcid !== 'string' || !UUID_CICLO.test(pcid))) throw new Error('PLANEACION_PLAN_CAMBIO_INVALIDO · plan_cambio_id solo admite un uuid · se DETIENE antes de gastar')

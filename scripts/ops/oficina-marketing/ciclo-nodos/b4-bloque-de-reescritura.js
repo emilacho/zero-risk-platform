@@ -3,8 +3,8 @@
 //     ...bloqueDeReescritura(REESCRITURA && REESCRITURA.plan_anterior, REESCRITURA && REESCRITURA.cambios_del_dueno, limpio),
 // donde REESCRITURA = (function () { try { const r = $('Plan anterior · leer').first().json; return r && r.reescritura === true ? r : null } catch (x) { return null } })()
 // Sin plan anterior o sin pedido del dueño devuelve [] y el pedido queda IDÉNTICO a hoy, byte por byte. `limpiar` = la misma función `limpio` de B4 (quita a las personas protegidas).
-var _RE_MAX_PLAN = 60000
-var _RE_MAX_CAMBIOS = 4000
+// 01-nov (encargo de Emilio «sin límites de tamaño arbitrarios»): el plan anterior va ENTERO, sin recorte. El pedido del dueño se rechaza en «⓪ Llave» ANTES de gastar si pasa de este techo de cordura, así que el corte de abajo nunca recorta en silencio.
+var _RE_MAX_CAMBIOS = 100000
 function bloqueDeReescritura(planAnterior, cambios, limpiar) {
   var p = planAnterior && typeof planAnterior === 'object' ? planAnterior : null
   var texto = p ? String(p.texto == null ? '' : p.texto).trim() : ''
@@ -12,8 +12,7 @@ function bloqueDeReescritura(planAnterior, cambios, limpiar) {
   if (!texto || !pedido) return []
   var lav = typeof limpiar === 'function' ? limpiar : function (t) { return t }
   var version = typeof p.version === 'number' && isFinite(p.version) && p.version >= 1 && Math.floor(p.version) === p.version ? p.version : 1
-  var recortado = texto.length > _RE_MAX_PLAN
-  var cuerpo = recortado ? texto.slice(0, _RE_MAX_PLAN) : texto
+  var cuerpo = texto
   // el delimitador no puede aparecer dentro de lo que pidió el dueño
   pedido = pedido.split('<<<').join('«').split('>>>').join('»').slice(0, _RE_MAX_CAMBIOS)
   return [
@@ -21,7 +20,7 @@ function bloqueDeReescritura(planAnterior, cambios, limpiar) {
     'El dueño del negocio leyó el plan anterior y pidió cambios. NO empieces de cero: toma el plan anterior como base, aplica lo que pidió y conserva TODO lo demás',
     '(secciones, cifras con su cita, decisiones) tal como estaba.',
     '',
-    '══════ EL PLAN ANTERIOR (versión ' + version + (recortado ? ', recortado a ' + _RE_MAX_PLAN + ' caracteres' : ', entero') + ') ══════',
+    '══════ EL PLAN ANTERIOR (versión ' + version + ', entero' + ') ══════',
     lav(cuerpo),
     '══════ FIN DEL PLAN ANTERIOR ══════',
     '',
