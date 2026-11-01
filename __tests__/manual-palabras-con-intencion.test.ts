@@ -11,6 +11,8 @@ import { palabrasProhibidasDelManual, limpiarManual } from '../src/lib/manual/li
 import { chequeosDePost, palabrasQueBloquean, type ContextoDeChequeo } from '../src/lib/oficina/chequeos'
 import { formatGuardrailsForPrompt } from '../src/lib/client-brain'
 import { renderManualLimpio } from '../src/lib/brand-book-render-limpio'
+import { reglasParaPrompts } from '../src/lib/oficina/ayudas'
+import { buildBrandBookRow } from '../src/app/api/brand-book/[clientId]/route'
 import { CAMPOS_PROPONIBLES } from '../src/lib/manual/propuesta'
 
 const CITA_LEGAL = { cita: 'Art. 12 de la norma sanitaria', origen: 'regulador' }
@@ -98,6 +100,17 @@ describe('la decisión del dueño', () => {
     const nueva = db.tablas['client_brand_books'].find((f) => f.version === 4)!
     expect(palabrasDuras(nueva as never)).toEqual(['nueva'])
   })
+  it('una decisión sobre otra palabra no borra el porqué de un estilo (W12 de CC3)', () => {
+    const conPorque = { forbidden_words: ['lujo', 'barato'], palabras_con_intencion: [{ texto: 'lujo', intencion: 'estilo', porque: 'la marca es de barrio' }] }
+    const r = aplicarDecisionDelDueno(conPorque, { texto: 'barato', decision: 'prohibir', por: 'e', en: '2026-11-01T12:00:00Z' })
+    expect(r.palabras_con_intencion.find((p) => p.texto === 'lujo')).toEqual({ texto: 'lujo', intencion: 'estilo', porque: 'la marca es de barrio' })
+  })
+  it('el texto de la palabra: 200 caracteres entran, 201 no (W22 de CC3)', async () => {
+    const db = new DbFalsa().semilla('client_brand_books', [manual()])
+    expect(await decidir(db, 'x'.repeat(201), 'prohibir')).toMatchObject({ ok: false, status: 400 })
+    expect(db.tablas['client_brand_books']).toHaveLength(1)
+    expect(await decidir(db, 'x'.repeat(200), 'prohibir')).toMatchObject({ ok: true })
+  })
   it('quitar la saca de la lista; contexto la devuelve a estilo', () => {
     const dura = aplicarDecisionDelDueno(manual(), { texto: 'barato', decision: 'prohibir', por: 'e', en: '2026-11-01T12:00:00Z' })
     const quitada = aplicarDecisionDelDueno(dura, { texto: 'BARATO', decision: 'quitar', por: 'e', en: '2026-11-01T12:00:00Z' })
@@ -136,6 +149,16 @@ describe('quién bloquea', () => {
     expect(sin).toMatch(/WORDS THE BRAND AVOIDS/); expect(sin).not.toMatch(/FORBIDDEN WORDS/)
     expect(formatGuardrailsForPrompt({ ...(base as object), hard_forbidden_words: ['gratis'] } as never)).toMatch(/FORBIDDEN WORDS[^\n]*gratis/)
   })
+  it('🔴 en los prompts de imagen solo se veta lo declarado y lo que el brief prohíbe por su cuenta (W16 de CC3)', () => {
+    const vetadas = (duras: string[], prohibido: string[] = []) => reglasParaPrompts(
+      { artefactos: {}, fichas: [] } as never,
+      { prohibido, visual_obligatorio: [], visual_prohibido: [] } as never,
+      { fuentes: { palabras_prohibidas: ['premium', 'barato'], palabras_duras: duras } } as never,
+    ).prohibido.flatMap((r) => r.claves ?? [])
+    expect(vetadas([])).toEqual([])
+    expect(vetadas(['barato'])).toEqual(['barato'])
+    expect(vetadas([], ['premium', 'otra']).sort()).toEqual(['otra'])
+  })
   it('🔴 la limpieza del manual solo quita lo declarado', () => {
     const texto = 'Somos premium en lo que hacemos. Nada de barato aquí señor.'
     expect(palabrasProhibidasDelManual({ forbidden_words: ['premium', 'barato'] })).toEqual([])
@@ -156,6 +179,14 @@ describe('el reparto firmado', () => {
   it('estrategia, misión, propósito, visión y propuestas de valor las propone quien hace estrategia; productos y sedes, quien tiene los datos', () => {
     for (const c of ['mision', 'proposito', 'vision', 'propuestas_de_valor', 'positioning']) expect(CAMPOS_PROPONIBLES[c].agente).toBe('brand-strategist')
     for (const c of ['productos', 'sedes']) expect(CAMPOS_PROPONIBLES[c].agente).toBe('jefe-client-success')
+  })
+})
+
+describe('el guardado del manual', () => {
+  it('lo que no sea lista no entra a la columna: su candado haría fallar todo el manual', () => {
+    const fila = (x: unknown) => buildBrandBookRow('c', { palabras_con_intencion: x } as never, {} as never, 1) as Record<string, unknown>
+    for (const x of ['texto', { a: 1 }, 3, null, undefined]) expect(fila(x).palabras_con_intencion).toEqual([])
+    expect(fila([{ texto: 'a', intencion: 'estilo' }]).palabras_con_intencion).toEqual([{ texto: 'a', intencion: 'estilo' }])
   })
 })
 
