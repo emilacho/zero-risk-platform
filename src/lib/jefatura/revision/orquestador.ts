@@ -7,6 +7,7 @@
  *   · `vigiar`          → un paso en «corriendo» más de 12 min no volverá: se marca muerto y se reintenta UNA vez; si vuelve a morir, `fallida` + aviso.
  * Sin ciclos: no existe `vuelve_a`; `max_cycles` de julio no se lee. Un bloqueo del código (`necesita_humano`) nunca se salta: con él la jefatura NO abre (regla 8).
  */
+import { controlarCoherenciaDelPlan } from '../../planeacion/coherencia-del-plan'
 import { armarQueCambio, ponerQueCambio, type FichaDelCambio } from './plan'
 import { conLasPaginasDelSitio } from './carpeta-para-revisar'
 import crypto from 'node:crypto'
@@ -48,6 +49,11 @@ const esDecision = (paso: Paso): boolean => paso.clave.startsWith('decision:')
 const esCorreccion = (paso: Paso): boolean => paso.clave.startsWith('correccion:')
 
 /** el estado inicial: el artefacto que se revisa es la versión A */
+/** los hallazgos del control por código, como fichas del ciclo */
+export function fichasDeCoherencia(texto: string, contexto: string, ahora: Date): Ficha[] {
+  return controlarCoherenciaDelPlan({ texto, contexto, referencia: ahora }).map((h, i) => fichaNueva(`codigo-${h.control}-${i}`, 'jefe', h.donde, h.estado === 'no_cuadra' ? 'bloquea' : 'sugerencia', h.que, 'control por código del plan', h.estado === 'no_cuadra' ? 'hacer que cuadre, o declarar el hueco' : 'no se comprobó: revisarlo a mano'))
+}
+
 function estadoDeApertura(entrada: EntradaDeRevision): Estado {
   const p = entrada.payload
   const base: Datos = { texto: p.texto, ...(p.imagenes?.length ? { imagenes: p.imagenes } : {}), ...(p.chequeos_previos ? { chequeos_previos: p.chequeos_previos } : {}), historial: [{ etiqueta: 'A', paso: 'abrir', texto: p.texto, largo: p.texto.length }] }
@@ -90,9 +96,12 @@ export async function abrirRevision(P: Puertos, cuerpo: unknown, o: { prueba?: b
   if (pol.reentrega !== 'ninguna' && productores.length === 0) return r(422, { error: 'sin_productores', detalle: 'el tipo tiene re-entrega y no hay quién reciba las correcciones' })
   // el flujo declara «sin páginas» cuando el camino no corre los brazos; el revisor recibe las de verdad
   if (p.contexto?.length && P.paginasDelSitio && p.contexto.some((x) => /^SIN P[AÁ]GINAS DEL SITIO/i.test(x.texto.trim()))) p.contexto = conLasPaginasDelSitio(p.contexto, await P.paginasDelSitio(entrada.client_id))
+  const apertura = estadoDeApertura(entrada)
+  // 01-nov · firma de Emilio: lo que el código halla en fechas y presupuesto entra como ficha al ciclo de siempre. Lo que no pudo leer se dice; no bloquea
+  if (entrada.artifact_type === 'plan' && pol.reentrega !== 'ninguna') apertura.fichas.push(...fichasDeCoherencia(p.texto, (p.contexto ?? []).map((x) => x.texto).join('\n'), P.ahora()))
   const c = await P.almacen.crearRevision({
     client_id: entrada.client_id, artifact_type: entrada.artifact_type, artifact_id: entrada.artifact_id, version: p.version ?? 1, journey_id: entrada.journey_id, productores, entrada: p,
-    devolver_a: p.devolver_a, policy: pol, tope_usd: +tope.toFixed(6), dry_run: p.dry_run, prueba: !!o.prueba, estado_del_motor: estadoDeApertura(entrada),
+    devolver_a: p.devolver_a, policy: pol, tope_usd: +tope.toFixed(6), dry_run: p.dry_run, prueba: !!o.prueba, estado_del_motor: apertura,
   })
   if (!c.ok) return r(500, { error: 'almacen_error', detalle: c.error })
   if (!c.nuevo) return r(200, { accion: 'ya_existia', revision_id: c.revision.id, estado: c.revision.estado, resultado: c.revision.resultado })
