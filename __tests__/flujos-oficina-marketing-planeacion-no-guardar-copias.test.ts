@@ -143,6 +143,13 @@ describe('candado 2 · «② ¿Es copia del plan anterior?» (el candado 1 puede
       expect((await comparar({ texto: ['# Plan', '', '## Semana 1', 'lanzar otra carta.'].join('\n'), client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('no')
     }
   })
+  it('sección justo tras el título y un párrafo suelto antes del primer subtítulo (donde la inserta la plataforma): corte corto ⇒ sigue siendo copia; si el párrafo cambia ⇒ NO', async () => {
+    const guardado = ['# Plan', '', '## Qué cambió', '- a', '- b', '', 'Párrafo suelto de intro.', '', '## Semana 1', 'lanzar la carta.'].join('\n')
+    const re = { ...REESCRITURA, plan_anterior: { ...REESCRITURA.plan_anterior, texto: guardado } }
+    expect((await comparar({ texto: ['# Plan', '', 'Párrafo suelto de intro.', '', '## Semana 1', 'lanzar la carta.'].join('\n'), client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('reintentar')
+    expect((await comparar({ texto: ['# Plan', '', 'Otro párrafo de intro.', '', '## Semana 1', 'lanzar la carta.'].join('\n'), client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('no')
+    expect((await comparar({ texto: ['# Plan', '', 'Párrafo suelto de intro.', '', '## Semana 1', 'lanzar la carta y más.'].join('\n'), client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('no')
+  })
   it('la sección termina en el siguiente título del mismo o mayor rango; lo que viene después SÍ cuenta', async () => {
     const guardado = '# Plan de 90 días\n\n## Qué cambió\n- A\n### detalle\n- B\n\n## Semana 1\nlanzar la carta de Olón.'
     const re = { ...REESCRITURA, plan_anterior: { ...REESCRITURA.plan_anterior, texto: guardado } }
