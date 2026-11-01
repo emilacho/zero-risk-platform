@@ -91,7 +91,9 @@ export async function leerCorrida({ db, ahora }: Contexto, id: string): Promise<
     leer(fuentes, 'agent_dispatches', db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, completed_at, metadata').eq('workflow_execution_id', base).limit(TOPE_FILAS), TOPE_FILAS),
     leer(fuentes, 'agent_dispatches:ramas', db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, completed_at, metadata').like('workflow_execution_id', `${base}:%`).limit(TOPE_FILAS), TOPE_FILAS),
   ])
-  const inv = [...i1, ...i2], des = [...d1, ...d2]
+  // en LIKE el «_» es comodín: `a_b:%` también trae `axb:…`. Lo que no sea de esta ejecución se descarta aquí
+  const deEsta = (f: Fila) => ejecucionBase(String(f.workflow_execution_id)) === base
+  const inv = [...i1, ...i2].filter(deEsta), des = [...d1, ...d2].filter(deEsta)
   if (!inv.length && !des.length) {
     if (!estaCompleto(fuentes)) return { status: 502, cuerpo: { ok: false, error: 'fuentes_no_disponibles', detalle: 'no se pudo leer la corrida: esto no significa que no exista', fuentes } }
     return { status: 404, cuerpo: { ok: false, error: 'corrida_inexistente', detalle: 'no hay invocaciones ni despachos con ese identificador', fuentes } }

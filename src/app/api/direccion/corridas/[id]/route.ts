@@ -10,8 +10,10 @@ export const runtime = 'nodejs'
 export async function GET(request: Request, ctx: { params: { id: string } }) {
   const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
+  let id: string
+  try { id = decodeURIComponent(ctx.params.id) } catch { return NextResponse.json({ ok: false, error: 'entrada_invalida', detalle: 'el identificador de la ejecución no es válido' }, { status: 400 }) }
   try {
-    const r = await leerCorrida({ db: getSupabaseAdmin(), ahora: () => new Date() }, decodeURIComponent(ctx.params.id))
+    const r = await leerCorrida({ db: getSupabaseAdmin(), ahora: () => new Date() }, id)
     return NextResponse.json(r.cuerpo, { status: r.status })
   } catch {
     return NextResponse.json({ ok: false, error: 'direccion_error', detalle: 'no se pudo armar la respuesta' }, { status: 500 })
