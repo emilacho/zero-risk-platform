@@ -110,6 +110,11 @@ describe('«Ciclo · armar cierres»', () => {
     const [seco] = nodo('ciclo-armar-cierres.js', { ...base(), ...hook({ client_id: C, dry_run: true }) }, {})
     expect(seco.json).toMatchObject({ seco: true, aprobacion: null })
   })
+  it('sin_compuerta:true no abre compuerta (la segunda mitad corre en la misma corrida: abrirla permitiría un segundo brief)', () => {
+    const [s] = nodo('ciclo-armar-cierres.js', { ...base(), ...hook({ client_id: C, sin_compuerta: true }) }, {})
+    expect(s.json.aprobacion).toBeNull(); expect(s.json.seco).toBe(false)
+    expect((s.json.sobre as Json).plan_id).toBe(P2)
+  })
   it('sin fila con id en «Plan vigente» → se DETIENE', () => {
     expect(() => nodo('ciclo-armar-cierres.js', { ...base(), 'Plan vigente': { body: [] } }, {})).toThrow('CICLO_SIN_PLAN_GUARDADO')
   })

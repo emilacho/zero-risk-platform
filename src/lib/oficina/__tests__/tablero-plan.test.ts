@@ -57,6 +57,47 @@ describe('plan-cambios', () => {
     }
     expect(db.tablas['plan_cambios'] ?? []).toHaveLength(0)
   })
+  it('EN REVISIÓN: el tag dice compuerta=true y aún no hay fila de compuerta (la jefatura sigue) → 409 plan_en_revision en las dos puertas y nada se escribe; compuerta=false (sin compuerta) se trata como plan de antes', async () => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan({ provenance_tag: { version: 1, vigente: true, compuerta: true } })])
+    for (const [accion, cuerpo] of [['plan-cambios', { plan_id: P1, texto: TEXTO, ...GASTO }], ['plan-aprobar', { plan_id: P1 }]] as const) {
+      const s = await llamar(accion, db, cuerpo)
+      expect(s.status).toBe(409); expect(s.cuerpo.error).toBe('plan_en_revision')
+    }
+    expect(db.tablas['client_historical_outputs'][0].status).toBe('draft')
+    expect(db.tablas['plan_cambios'] ?? []).toHaveLength(0)
+    const sin = await llamar('plan-aprobar', new DbFalsa().semilla('client_historical_outputs', [plan({ provenance_tag: { version: 1, vigente: true, compuerta: false } })]), { plan_id: P1 })
+    expect(sin.status).toBe(200); expect(sin.cuerpo.reanuda).toBe(false)
+  })
+  it('los botones viejos de la ficha del cliente (mandan campana_id, sin plan_id) → 400 y no tocan nada', async () => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan()])
+    expect((await llamar('plan-aprobar', db, { campana_id: P1 })).status).toBe(400)
+    expect((await llamar('plan-cambios', db, { campana_id: P1, comentario: 'Menos días de promoción' })).status).toBe(400)
+    expect(db.tablas['client_historical_outputs'][0].status).toBe('draft')
+  })
+  it('flujo que NO despertó (despertado=false): repetir reutiliza el MISMO pedido con el texto nuevo y lo vuelve a despertar; despertado=true o sin saber aún → sigue en curso', async () => {
+    const colgado = { id: 'c0', plan_id: P1, client_id: C, estado: 'pendiente', despertado: false, despertar_detalle: 'HTTP 503', texto: 'viejo', tope_usd: 3 }
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan()]).semilla('plan_cambios', [colgado]).semilla('plan_aprobaciones', [{ id: 'a1', plan_id: P1, client_id: C, estado: 'cambios_pedidos' }])
+    const s = await llamar('plan-cambios', db, { plan_id: P1, texto: TEXTO, ...GASTO })
+    expect(s.status).toBe(200); expect(s.cuerpo).toMatchObject({ plan_cambio_id: 'c0', reintento: true })
+    expect(db.tablas['plan_cambios']).toHaveLength(1)
+    expect(db.tablas['plan_cambios'][0]).toMatchObject({ texto: TEXTO, tope_usd: 6, despertado: null, despertar_detalle: null, estado: 'pendiente' })
+    expect((s.despertar_flujo?.cuerpo as Record<string, unknown>).plan_cambio_id).toBe('c0')
+    expect(db.tablas['plan_aprobaciones'][0].comentario).toBe(TEXTO)
+    for (const despertado of [true, null]) {
+      const r = await llamar('plan-cambios', new DbFalsa().semilla('client_historical_outputs', [plan()]).semilla('plan_cambios', [{ ...colgado, despertado }]), { plan_id: P1, texto: TEXTO, ...GASTO })
+      expect(r.status).toBe(409); expect(r.cuerpo.error).toBe('reescritura_en_curso')
+    }
+  })
+  it('dos pedidos simultáneos: el índice único de la base (23505) sale como 409 reescritura_en_curso, no como 500', async () => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan()])
+    const from = db.from.bind(db)
+    db.from = ((t: string) => {
+      if (t !== 'plan_cambios') return from(t)
+      return { select: () => ({ eq: () => ({ in: () => ({ limit: async () => ({ data: [], error: null }) }) }) }), insert: () => ({ select: () => ({ single: async () => ({ data: null, error: { code: '23505', message: 'duplicate key' } }) }) }) }
+    }) as typeof db.from
+    const s = await llamar('plan-cambios', db, { plan_id: P1, texto: TEXTO, ...GASTO })
+    expect(s.status).toBe(409); expect(s.cuerpo.error).toBe('reescritura_en_curso')
+  })
   it('inexistente o de otro tipo → 404', async () => {
     expect((await llamar('plan-cambios', new DbFalsa().semilla('client_historical_outputs', []), { plan_id: P1, texto: TEXTO, ...GASTO })).status).toBe(404)
     expect((await llamar('plan-cambios', new DbFalsa().semilla('client_historical_outputs', [plan({ output_type: 'campaign_plan_90d_borrador' })]), { plan_id: P1, texto: TEXTO, ...GASTO })).status).toBe(404)
@@ -132,11 +173,39 @@ describe('plan-aprobar', () => {
     const s = await llamar('plan-aprobar', db, { plan_id: P1 })
     expect(s.status).toBe(200); expect(s.cuerpo.reanuda).toBe(true); expect(db.tablas['plan_aprobaciones'][0].estado).toBe('aprobado')
   })
-  it('compuerta en otro estado (reemplazado) → se aprueba el plan pero no hay segunda mitad que reanudar', async () => {
+  it('compuerta «reemplazado» → 409 no_es_el_vigente y el plan no cambia', async () => {
     const db = new DbFalsa().semilla('client_historical_outputs', [plan()]).semilla('plan_aprobaciones', [{ id: 'a1', plan_id: P1, client_id: C, estado: 'reemplazado', sobre_de_reanudacion: SOBRE }])
     const s = await llamar('plan-aprobar', db, { plan_id: P1 })
-    expect(s.status).toBe(200); expect(s.cuerpo.reanuda).toBe(false); expect(String(s.cuerpo.motivo)).toContain('reemplazado'); expect(s.despertar_flujo).toBeUndefined()
+    expect(s.status).toBe(409); expect(s.cuerpo.error).toBe('no_es_el_vigente'); expect(s.despertar_flujo).toBeUndefined()
+    expect(db.tablas['client_historical_outputs'][0].status).toBe('draft')
     expect(db.tablas['plan_aprobaciones'][0].estado).toBe('reemplazado')
+  })
+  it('aprobar con un pedido que nunca despertó al flujo lo CANCELA y reanuda; con uno vivo sigue siendo 409', async () => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan()]).semilla('plan_aprobaciones', [{ id: 'a1', plan_id: P1, client_id: C, estado: 'cambios_pedidos', sobre_de_reanudacion: SOBRE }])
+      .semilla('plan_cambios', [{ id: 'c0', plan_id: P1, client_id: C, estado: 'pendiente', despertado: false }])
+    const s = await llamar('plan-aprobar', db, { plan_id: P1 })
+    expect(s.status).toBe(200); expect(s.cuerpo.reanuda).toBe(true)
+    expect(db.tablas['plan_cambios'][0].estado).toBe('cancelado')
+  })
+  it('segunda mitad que NO arrancó: repetir aprobar la vuelve a despertar una sola vez (despertado=false o aprobación cortada a mitad); ya despertada o sin compuerta → 409 y no se reanuda', async () => {
+    const semilla = (comp: Record<string, unknown>) => new DbFalsa().semilla('client_historical_outputs', [plan({ status: 'approved' })]).semilla('plan_aprobaciones', [{ id: 'a1', plan_id: P1, client_id: C, version: 2, sobre_de_reanudacion: SOBRE, ...comp }])
+    const sinDespertar = semilla({ estado: 'aprobado', despertado: false, despertar_detalle: 'HTTP 503' })
+    const r = await llamar('plan-aprobar', sinDespertar, { plan_id: P1 })
+    expect(r.status).toBe(200); expect(r.cuerpo).toMatchObject({ reanuda: true, reintento: true, version: 2, aprobacion_id: 'a1' })
+    expect(r.despertar_flujo?.camino).toBe(CAMINO_PLAN_APROBADO)
+    expect((r.despertar_flujo?.cuerpo as Record<string, unknown>)._journey_id).toBe('j1')
+    expect(sinDespertar.tablas['plan_aprobaciones'][0]).toMatchObject({ despertado: null, despertar_detalle: null })
+    // el segundo clic ya no encuentra despertado=false: no hay doble brief
+    const otra = await llamar('plan-aprobar', sinDespertar, { plan_id: P1 })
+    expect(otra.status).toBe(409); expect(otra.despertar_flujo).toBeUndefined()
+    const cortada = semilla({ estado: 'pendiente' })
+    const c = await llamar('plan-aprobar', cortada, { plan_id: P1 })
+    expect(c.status).toBe(200); expect(c.cuerpo.reintento).toBe(true)
+    expect(cortada.tablas['plan_aprobaciones'][0]).toMatchObject({ estado: 'aprobado', decidido_por: 'emilio' })
+    for (const comp of [{ estado: 'aprobado', despertado: true }, { estado: 'aprobado', despertado: null }]) {
+      const s = await llamar('plan-aprobar', semilla(comp), { plan_id: P1 })
+      expect(s.status).toBe(409); expect(s.cuerpo.error).toBe('plan_ya_aprobado'); expect(s.despertar_flujo).toBeUndefined()
+    }
   })
   it('409: ya aprobado · reescritura en curso · no es el vigente; 400: plan_id malo o comentario largo; nada cambia', async () => {
     const ya = await llamar('plan-aprobar', new DbFalsa().semilla('client_historical_outputs', [plan({ status: 'approved' })]), { plan_id: P1 })

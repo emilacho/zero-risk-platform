@@ -34,7 +34,8 @@ const sobre = {
 }
 return [{ json: {
   es_reescritura: esRe, version: version, seco: seco, plan_id: fila.id,
-  aprobacion: seco ? null : { client_id: fila.client_id, plan_id: fila.id, version: version, estado: 'pendiente', sobre_de_reanudacion: sobre, workflow_id: $workflow.id, workflow_execution_id: $execution.id },
+  // sin_compuerta = la segunda mitad corre aquí mismo: abrir una compuerta permitiría aprobar después y sacar un SEGUNDO brief
+  aprobacion: seco || body.sin_compuerta === true ? null : { client_id: fila.client_id, plan_id: fila.id, version: version, estado: 'pendiente', sobre_de_reanudacion: sobre, workflow_id: $workflow.id, workflow_execution_id: $execution.id },
   anterior: esRe ? { id: re.plan_anterior.id, provenance_tag: Object.assign({}, re.plan_anterior.tag || {}, { vigente: false, superseded_por: fila.id, superseded_en: ahora }) } : null,
   hermanas: hermanas,
   campana: esRe ? { client_id: String(fila.client_id), plan_id_anterior: String(re.plan_anterior.id), plan_id: String(fila.id), actualizada_en: ahora } : null,
