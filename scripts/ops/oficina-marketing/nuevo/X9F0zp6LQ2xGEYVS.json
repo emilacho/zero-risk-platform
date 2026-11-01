@@ -700,7 +700,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ dry_run: (($('Webhook · planeacion').first().json.body || {}).dry_run === true), agent: $json.redactor_elegido, task: $json.pedido, client_id: $json.cliente_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id, max_budget_usd: 2, callback_url: $execution.resumeUrl, callback_mode: 'runner', force_restart: ($json.reintento_forma === true) || (($(\"Webhook · planeacion\").first().json.body || {}).force_restart === true || ($(\"Webhook · planeacion\").first().json.body || {}).forceRestart === true) }) }}",
+        "jsonBody": "={{ JSON.stringify({ dry_run: (($('Webhook · planeacion').first().json.body || {}).dry_run === true), agent: $json.redactor_elegido, task: $json.pedido, client_id: $json.cliente_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id, max_budget_usd: 2.5, callback_url: $execution.resumeUrl, callback_mode: 'runner', force_restart: ($json.reintento_forma === true) || (($(\"Webhook · planeacion\").first().json.body || {}).force_restart === true || ($(\"Webhook · planeacion\").first().json.body || {}).forceRestart === true) }) }}",
         "options": {
           "timeout": 60000,
           "response": {
@@ -3941,6 +3941,50 @@
       }
     },
     {
+      "id": "b222e90d-5f3e-173d-2164-381037cdb9d3",
+      "position": [
+        2110,
+        460
+      ],
+      "typeVersion": 2,
+      "name": "Parar · ¿sin plan y con parar_en?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ (function () { try { return ['guardar_plan', 'plan_revisado'].indexOf($('Webhook · planeacion').first().json.body.parar_en) !== -1 ? 'si' : 'no' } catch (e) { return 'no' } })() }}",
+              "rightValue": "si",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e7c7df1f-5c34-6437-9e2a-4e139d4a147b",
+      "position": [
+        2330,
+        580
+      ],
+      "typeVersion": 2,
+      "name": "Parar · resumen (sin plan)",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// PARAR · RESUMEN (sin plan) · la corrida pidió detenerse (parar_en) y el redactor NO devolvió plan: no se guardó nada, no se pide el PDF ni el brief (sin plan_id no hay de qué briefear).\nreturn [{ json: { parado_en: 'sin_plan', parar_en: (function () { try { return $('Webhook · planeacion').first().json.body.parar_en || null } catch (e) { return null } })(), plan_guardado_id: null, redactor: (function () { try { return $('Redactor · elegir').last().json.redactor_elegido || null } catch (e) { return null } })() } }]\n"
+      }
+    },
+    {
       "id": "1c17bb5d-80ac-f843-1b6b-094939a408b2",
       "position": [
         2080,
@@ -4366,7 +4410,7 @@
         ],
         [
           {
-            "node": "¿Salió el PDF?",
+            "node": "Parar · ¿sin plan y con parar_en?",
             "type": "main",
             "index": 0
           }
@@ -5806,6 +5850,24 @@
         [
           {
             "node": "Plan → Drive (PDF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parar · ¿sin plan y con parar_en?": {
+      "main": [
+        [
+          {
+            "node": "Parar · resumen (sin plan)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Salió el PDF?",
             "type": "main",
             "index": 0
           }

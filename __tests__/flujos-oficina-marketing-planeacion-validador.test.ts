@@ -60,7 +60,8 @@ describe('el flujo nuevo se parece al vivo en lo demás', () => {
   it('«¿Hay plan?» ahora entra por «Validar · ¿se pide?» y no por «Guardar el plan»; el resto de su salida no cambia', () => {
     expect(vivo.connections['¿Hay plan?'].main[0].map((c: any) => c.node)).toEqual(['Guardar el plan'])
     expect(nuevo.connections['¿Hay plan?'].main[0].map((c: any) => c.node)).toEqual(['Validar · ¿se pide?'])
-    expect(nuevo.connections['¿Hay plan?'].main[1]).toEqual(vivo.connections['¿Hay plan?'].main[1])
+    // 01-nov · la rama sin plan ahora pasa por el corte «Parar · ¿sin plan y con parar_en?» (que sin parar_en sigue a «¿Salió el PDF?» como hoy)
+    expect(nuevo.connections['¿Hay plan?'].main[1].map((c: any) => c.node)).toEqual(['Parar · ¿sin plan y con parar_en?'])
   })
   it('apagado, el único camino por los nodos nuevos termina en «Guardar el plan»; encendido, hay 3 salidas (guarda · reintenta · alerta)', () => {
     expect(nuevo.connections['Validar · ¿se pide?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Validar · pedir'], ['Guardar el plan']])
@@ -116,9 +117,9 @@ describe('encendido · contra la ruta real', () => {
     }
     for (const fr of [false, true, undefined]) {
       const body = { client_id: CLIENTE, ...(fr === undefined ? {} : { force_restart: fr }) }
-      // 01-nov · lo único nuevo en el cuerpo es el tope del redactor (max_budget_usd: 2)
+      // 01-nov · lo único nuevo en el cuerpo es el tope del redactor (max_budget_usd: 2.5)
       const { max_budget_usd, ...resto } = await cuerpoDe(nuevo, BASE, body)
-      expect(max_budget_usd).toBe(2)
+      expect(max_budget_usd).toBe(2.5)
       expect(resto).toEqual(await cuerpoDe(vivo, BASE, body))
     }
     const reintento = await cuerpoDe(nuevo, { ...BASE, pedido: 'P2', reintento_forma: true }, { client_id: CLIENTE, force_restart: false })

@@ -57,8 +57,34 @@ describe('la compuerta después de «Plan vigente»', () => {
   })
 })
 
+describe('el camino sin plan', () => {
+  const vacio = { texto: '' }
+  it('con parar_en (cualquiera de los dos) termina en «Parar · resumen (sin plan)»: ni PDF, ni cable, ni brief', async () => {
+    for (const pe of ['guardar_plan', 'plan_revisado']) {
+      const r = await recorrer(nuevo, 'Parar · ¿sin plan y con parar_en?', vacio, { previos: WEBHOOK({ parar_en: pe }), hasta: ['¿Salió el PDF?'] })
+      expect(r.pasos).toEqual(['Parar · ¿sin plan y con parar_en?', 'Parar · resumen (sin plan)'])
+      expect(r.item).toEqual({ parado_en: 'sin_plan', parar_en: pe, plan_guardado_id: null, redactor: null })
+    }
+    expect(nuevo.connections['Parar · resumen (sin plan)']).toBeUndefined()
+  })
+  it('sin parar_en (o null, o disparo que no es webhook) sigue a «¿Salió el PDF?» como hoy', async () => {
+    for (const p of [WEBHOOK({ client_id: CLIENTE }), WEBHOOK({ parar_en: null }), {}]) {
+      const r = await recorrer(nuevo, 'Parar · ¿sin plan y con parar_en?', vacio, { previos: p, hasta: ['¿Salió el PDF?'] })
+      expect(r.pasos).toEqual(['Parar · ¿sin plan y con parar_en?', '¿Salió el PDF?'])
+    }
+  })
+  it('«¿Hay plan?» falso solo llega a «¿Salió el PDF?» pasando por el corte; el verdadero sigue al validador', () => {
+    expect(salidas(vivo, '¿Hay plan?')[1]).toEqual(['¿Salió el PDF?'])
+    expect(salidas(nuevo, '¿Hay plan?')).toEqual([['Validar · ¿se pide?'], ['Parar · ¿sin plan y con parar_en?']])
+    expect(salidas(nuevo, 'Parar · ¿sin plan y con parar_en?')).toEqual([['Parar · resumen (sin plan)'], ['¿Salió el PDF?']])
+  })
+})
+
 describe('el tope del redactor', () => {
-  it('«Pedir el plan al redactor» manda max_budget_usd: 2 y el resto del cuerpo no cambia', async () => {
+  it('🔴 el REINTENTO de forma (mismo nodo) también manda el tope', () => {
+    expect(salidas(nuevo, 'Validar · ¿reintenta?')[0]).toEqual(['Pedir el plan al redactor'])
+  })
+  it('«Pedir el plan al redactor» manda max_budget_usd: 2.5 y el resto del cuerpo no cambia', async () => {
     const cuerpo = async (flujo: any) => {
       let visto: any = null
       await recorrer(flujo, 'Pedir el plan al redactor', { pedido: 'P', cliente_id: CLIENTE, redactor_elegido: 'campaign-brief-agent' }, { env: ENV, http: async (_u: any, _h: any, c: any) => { visto = c; return { statusCode: 200, body: {} } }, previos: WEBHOOK({ dry_run: true }), hasta: ['Esperar al redactor'] })
@@ -66,7 +92,7 @@ describe('el tope del redactor', () => {
     }
     const n = await cuerpo(nuevo), v = await cuerpo(vivo)
     expect(v.max_budget_usd).toBeUndefined()
-    expect(n.max_budget_usd).toBe(2)
+    expect(n.max_budget_usd).toBe(2.5)
     const { max_budget_usd, ...resto } = n
     expect(resto).toEqual(v)
   })
