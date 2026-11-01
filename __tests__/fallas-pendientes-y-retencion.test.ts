@@ -7,7 +7,7 @@ import { crearBaseFalsa } from '../src/lib/portero-alimenta/__tests__/base-falsa
 import { alimentarCliente } from '../src/lib/portero-alimenta/alimentar'
 import { cerrarPaso, MAX_INTENTOS_DE_UN_PASO, PLAZO_DE_UN_PASO_MS, reclamarPaso, siguientePaso, type Db } from '../src/lib/portero-alimenta/pasos-diarios'
 import { correrUnPaso, correrElSiguientePaso } from '../src/lib/portero-alimenta/redes-ruta'
-import { costoDeWhisper, SIN_VOZ, textoDeVoz, transcribirVideos, TOPE_DE_TRANSCRIPCION_POR_CORRIDA_USD } from '../src/lib/portero-alimenta/transcripcion-de-videos'
+import { costoDeWhisper, SIN_AUDIO_LEGIBLE, SIN_VOZ, textoDeVoz, transcribirVideos, TOPE_DE_TRANSCRIPCION_POR_CORRIDA_USD } from '../src/lib/portero-alimenta/transcripcion-de-videos'
 import { DIAS_DE_UN_VIDEO_EN_LA_BODEGA, retenerLaBodega } from '../src/lib/portero-alimenta/retencion-de-la-bodega'
 import { crearEscritor } from '../src/lib/cerebro/portero/etiqueta-escritura'
 import { etiquetarPendientes } from '../src/lib/cerebro/portero/fotos-pendientes'
@@ -262,6 +262,13 @@ describe('2b · transcripción de los videos guardados', () => {
     expect(r.fallidos[0].causa).toMatch(/429/)
     expect(a.parches).toHaveLength(0)
     expect(r.sin_voz).toBe(0)
+  })
+  it('un archivo cuyo audio el servicio no puede leer (400) se MARCA y se dice: no se reintenta cada día ni se disfraza de «sin voz»', async () => {
+    const a = almacenFalso([v(1)], () => new Response('{"error":{"message":"The audio file could not be decoded or its format is not supported"}}', { status: 400 }))
+    const r = await transcribirVideos({ clientId: null, ...BASE, fetchImpl: a.traer })
+    expect(a.parches.map((p) => p.cuerpo.transcripcion)).toEqual([SIN_AUDIO_LEGIBLE])
+    expect(r.omitidos[0].causa).toMatch(/no pudo leer el audio/)
+    expect(r).toMatchObject({ transcritos: 0, sin_voz: 0, fallidos: [], costo_usd: 0 })
   })
   it('tope por corrida (cantidad y dinero) y costo exacto por minuto', async () => {
     expect(costoDeWhisper(60)).toBe(0.006)
