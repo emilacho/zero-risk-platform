@@ -7,6 +7,7 @@
  *   · `vigiar`          → un paso en «corriendo» más de 12 min no volverá: se marca muerto y se reintenta UNA vez; si vuelve a morir, `fallida` + aviso.
  * Sin ciclos: no existe `vuelve_a`; `max_cycles` de julio no se lee. Un bloqueo del código (`necesita_humano`) nunca se salta: con él la jefatura NO abre (regla 8).
  */
+import { conLasPaginasDelSitio } from './carpeta-para-revisar'
 import crypto from 'node:crypto'
 import { estadoInicial, fichaNueva, registrarPaso, siguientePaso, type Artefacto, type Estado, type Ficha, type Paso, type Plantilla, type ResultadoDePaso } from '../../revision-comun'
 import { desacuerdosDe, hayQueAvisar, resolverCierre, textoDelAviso, type Cierre } from './cierre'
@@ -86,6 +87,8 @@ export async function abrirRevision(P: Puertos, cuerpo: unknown, o: { prueba?: b
   const tope = Math.min(pol.tope_revision_usd, p.tope_restante_usd ?? Infinity, topeSimulado)
   const productores = p.productores ?? pol.productores
   if (pol.reentrega !== 'ninguna' && productores.length === 0) return r(422, { error: 'sin_productores', detalle: 'el tipo tiene re-entrega y no hay quién reciba las correcciones' })
+  // el flujo declara «sin páginas» cuando el camino no corre los brazos; el revisor recibe las de verdad
+  if (p.contexto?.length && P.paginasDelSitio && p.contexto.some((x) => /^SIN P[AÁ]GINAS DEL SITIO/i.test(x.texto.trim()))) p.contexto = conLasPaginasDelSitio(p.contexto, await P.paginasDelSitio(entrada.client_id))
   const c = await P.almacen.crearRevision({
     client_id: entrada.client_id, artifact_type: entrada.artifact_type, artifact_id: entrada.artifact_id, version: p.version ?? 1, journey_id: entrada.journey_id, productores, entrada: p,
     devolver_a: p.devolver_a, policy: pol, tope_usd: +tope.toFixed(6), dry_run: p.dry_run, prueba: !!o.prueba, estado_del_motor: estadoDeApertura(entrada),

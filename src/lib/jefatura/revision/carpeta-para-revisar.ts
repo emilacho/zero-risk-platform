@@ -5,6 +5,7 @@
  */
 import { datosDelDueno } from '../../manual/propuesta-rutas'
 import { adjuntoDelCliente, type ContextoDelCliente } from '../../portero-alimenta/contexto-del-cliente'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 import type { ContextoDelRevisor } from '../../revision-comun'
 
 type Db = { from(tabla: string): any }
@@ -31,10 +32,47 @@ export async function carpetaParaRevisar(db: Db, clientId: string): Promise<Cont
   } catch (e) { out.push(problema(dueno, fDueno, e)) }
   const sitio = 'Las páginas propias del sitio'
   const fSitio = 'lo que el negocio publica hoy: precios, frases, horarios y canales de pedido'
+  const p = await paginasPropiasDelSitio(db, clientId)
+  if (p.estado === 'hay') out.push({ titulo: sitio, funcion: fSitio, texto: p.texto })
+  else if (p.estado === 'no_se_pudo') out.push(problema(sitio, fSitio, p.detalle))
+  return out
+}
+
+/** cuánto del pedido pueden ocupar las páginas: la mitad del tope real, para que el resto del pedido siempre quepa */
+export const TOPE_DE_LAS_PAGINAS = TOPE_REAL_DEL_PEDIDO / 2
+export type PaginasDelSitio = { estado: 'hay'; texto: string } | { estado: 'no_hay' } | { estado: 'no_se_pudo'; detalle: string }
+
+/** las páginas propias del cliente, enteras. Nunca lanza. Si no cabe alguna, no se corta: queda fuera y se dice cuál */
+export async function paginasPropiasDelSitio(db: Db, clientId: string): Promise<PaginasDelSitio> {
   try {
     const r = (await db.from('client_web_pages').select('url, content_text').eq('client_id', clientId).is('competitor_id', null).eq('owner_role', 'propio')) as { data: Array<{ url?: string; content_text?: string }> | null; error: { message: string } | null }
-    if (r.error) out.push(problema(sitio, fSitio, r.error.message))
-    else { const paginas = (r.data ?? []).filter((p) => p.content_text?.trim()); if (paginas.length) out.push({ titulo: sitio, funcion: fSitio, texto: paginas.map((p) => `## ${p.url ?? 'página'}\n${p.content_text}`).join('\n\n') }) }
-  } catch (e) { out.push(problema(sitio, fSitio, e)) }
-  return out
+    if (r.error) return { estado: 'no_se_pudo', detalle: r.error.message }
+    const paginas = (r.data ?? []).filter((p) => p.content_text?.trim())
+    if (!paginas.length) return { estado: 'no_hay' }
+    const entran: string[] = []
+    const fuera: string[] = []
+    let usado = 0
+    for (const p of paginas) {
+      const t = `## ${p.url ?? 'página'}\n${p.content_text}`
+      if (usado + t.length > TOPE_DE_LAS_PAGINAS) { fuera.push(p.url ?? 'página'); continue }
+      entran.push(t); usado += t.length
+    }
+    const aviso = fuera.length ? `\n\n(Por tamaño no entraron estas páginas del sitio: ${fuera.join(', ')}. No las tomes como que no existen.)` : ''
+    return { estado: 'hay', texto: entran.join('\n\n') + aviso }
+  } catch (e) {
+    return { estado: 'no_se_pudo', detalle: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
+ * 01-nov · hallazgo en el primer «Pedir cambios»: ese camino no vuelve a correr los brazos, así que el flujo declara «SIN PÁGINAS DEL SITIO» aunque el cliente las tenga, y el revisor marcó como falsos un precio y una frase reales.
+ * Ese bloque se cambia por las páginas de verdad, y su advertencia desaparece. Si el cliente no tiene páginas, la declaración sigue. Puro.
+ */
+export function conLasPaginasDelSitio(contexto: ContextoDelRevisor[], p: PaginasDelSitio): ContextoDelRevisor[] {
+  return contexto.map((c) => {
+    if (!/^p[aá]ginas del sitio/i.test(c.titulo.trim()) || !/^SIN P[AÁ]GINAS DEL SITIO/i.test(c.texto.trim())) return c
+    if (p.estado === 'hay') return { ...c, texto: p.texto }
+    if (p.estado === 'no_se_pudo') return { ...c, texto: `(No se pudieron leer las páginas del sitio: ${p.detalle}. No las tomes como que no existen, ni marques como inventado lo que pudiera venir de ellas.)` }
+    return c
+  })
 }
