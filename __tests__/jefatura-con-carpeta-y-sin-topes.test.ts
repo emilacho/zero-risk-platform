@@ -160,6 +160,6 @@ describe('una lectura fallida de los datos del dueño', () => {
 describe('el vigía no le gana al turno que recoge la respuesta', () => {
   it('🔴 da por muerto un paso solo después de la espera del turno (hallazgo de CC3)', () => {
     expect(MINUTOS_QUE_ESPERA_EL_TURNO).toBe(31)
-    expect(MINUTOS_PARA_DAR_POR_MUERTO).toBeGreaterThan(MINUTOS_QUE_ESPERA_EL_TURNO)
+    expect(MINUTOS_PARA_DAR_POR_MUERTO).toBeGreaterThanOrEqual(MINUTOS_QUE_ESPERA_EL_TURNO + 3) // colchón: el turno necesita unos segundos para entregar lo que recogió
   })
 })
