@@ -238,3 +238,21 @@ describe('ORDEN PASO A · Whimsy en las piezas con condición, carousel-designer
     for (const t of ['Tono divertido y cercano', 'Con juegos de palabras en los títulos', 'Marca ocurrente y juguetona', 'Playful, witty tone', 'Queremos sorprender con humor']) expect(condicionesDeLaPieza('Plato del día', t)).toEqual(['si_whimsy'])
   })
 })
+
+describe('T9 · Whimsy también en el video (migración 202611011310)', () => {
+  const SQLV = fs.readFileSync(path.join(RAIZ, 'migrations', '202611011310_oficina_directorio_whimsy_en_video.sql'), 'utf8')
+  const REVV = fs.readFileSync(path.join(RAIZ, 'reversas', '202611011310_oficina_directorio_whimsy_en_video_REVERSA.sql'), 'utf8')
+  const whimsy: Tarjeta = { ...fila('whimsy-injector'), pertinente_en: ['concepto', 'carrusel:si_whimsy', 'kit:si_whimsy', 'video:si_whimsy'] }
+  it('la migración es aditiva e idempotente con su guarda; la reversa la deshace y se niega con encargos abiertos', () => {
+    expect(SQLV).toContain("array_append(pertinente_en, 'video:si_whimsy')")
+    expect(SQLV).toContain("NOT ('video:si_whimsy' = ANY(pertinente_en))")
+    expect(SQLV).toMatch(/IF w <> 1 THEN/)
+    expect(SQLV).not.toMatch(/DELETE|DROP|INSERT/i)
+    expect(REVV).toContain("array_remove(pertinente_en, 'video:si_whimsy')")
+    expect(REVV).toMatch(/estado IN \('abierto', 'en_paso'\)/)
+  })
+  it('en el video Whimsy entra solo con `si_whimsy`', () => {
+    expect(esPertinente(whimsy, 'video', false, [])).toBe(false)
+    expect(esPertinente(whimsy, 'video', false, ['si_whimsy'])).toBe(true)
+  })
+})
