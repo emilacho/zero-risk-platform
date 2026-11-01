@@ -184,7 +184,9 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       if (paso.tipo === 'jefatura') {
         // J8a · la pieza ya pasó los chequeos duros: se abre UNA revisión en la jefatura y se espera su cierre
         const material = familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : familiaDeVideo(pl) ? contextoDeRevisorV(pl, e) : contextoDelRevisor(contexto(e))
-        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: material.contexto })
+        // 01-nov · un revisor nunca tiene menos contexto que quien escribe; si el puerto falla, se dice y la revisión sigue
+        const carpeta = P.carpetaParaRevisar ? await P.carpetaParaRevisar(String(enc.client_id)).catch((x: unknown) => [{ titulo: 'La carpeta del cliente', funcion: 'lo que el negocio sabe', texto: `(no se pudo leer: ${x instanceof Error ? x.message : String(x)}. No lo tomes como que no existe.)` }]) : []
+        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...material.contexto, ...carpeta] })
         const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
         if (ap.estado === 'esperando') {
           const n = turnoDe(e)

@@ -8,6 +8,7 @@ import type { Estado, Ficha } from './tipos'
 import type { FuentesCompletas } from './puertos'
 import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
 import type { ReglasDeImagen } from './reglas-de-imagen'
+import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 
 export const AVISO_DEL_CEREBRO = 'Este cliente tiene un cerebro (almacén de conocimiento) que se actualiza a diario; lo esencial va abajo. Si necesitas algo que no está, dilo en el campo `necesito` de tu respuesta (máximo 3) y la sala se lo pide; lo que no se consiga se declara, no se inventa.'
 
@@ -135,4 +136,4 @@ export function contextoDelRevisor(c: ContextoDePedido): { pieza: string; imagen
     ],
   }
 }
-const recortaManual = (t: string) => recorta(t, 12000)
+const recortaManual = (t: string) => recorta(t, TOPE_REAL_DEL_PEDIDO)

@@ -180,8 +180,10 @@ function bateria(nombre: string, mk: () => ClienteFixture) {
       expect(bloqueos(hs)).toEqual([])
     })
 
-    it('V15: palabra prohibida del manual y voseo', () => {
-      expect(chequeos(val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: `Algo ${c.forbiddenWords[0]} hoy` })))).toContain('V15')
+    it('V15: una palabra que el manual evita es AVISO, nunca bloqueo (ADENDA de Emilio); el voseo sí bloquea', () => {
+      const conPalabra = val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: `Algo ${c.forbiddenWords[0]} hoy` }))
+      expect(chequeos(conPalabra)).not.toContain('V15')
+      expect(conPalabra.some((h) => h.chequeo === 'V15' && h.severidad === 'aviso')).toBe(true)
       expect(chequeos(val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: 'Vení a conocernos y decime qué pensás' })))).toContain('V15')
     })
 

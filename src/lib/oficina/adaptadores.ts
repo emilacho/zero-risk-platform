@@ -27,6 +27,7 @@ import { resolverCierre } from '../jefatura/revision/cierre'
 import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA, type SalidaDeRevision } from '../jefatura/revision/contrato'
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
 import { enviarPiezaASlack, leerNotasParaElProductor, piezaParaSlackDeLaBandeja, registrarAutorevision } from '../notas-del-dueno/adaptadores'
+import { carpetaParaRevisar } from '../jefatura/revision/carpeta-para-revisar'
 
 export const SIN_RECEPCION_DE_LA_CADENA = 'la cadena aún no conecta la recepción del brief y del concepto (T3)'
 
@@ -126,6 +127,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
   }
   const almacen = almacenDeSupabase(db)
   return {
+    carpetaParaRevisar: (clientId) => carpetaParaRevisar(db, clientId),
     almacen,
     mesa: puertoDeLaMesa(db, (clave) => almacenDeLaCadena().leerConfig(clave)),
     // 31-oct · las mesas de brief y de concepto entregan su tablero a la cadena por SU almacén (las tablas `cadena_*` solo se tocan allí). Mientras la cadena (T3 de CC1) no conecte su recepción, la entrega dice la verdad: no recibida, y la mesa cierra igual avisando a `alertas`

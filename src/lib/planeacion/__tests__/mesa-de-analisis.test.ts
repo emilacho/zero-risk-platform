@@ -61,14 +61,14 @@ describe('mesa de análisis · los topes', () => {
 })
 
 describe('mesa de análisis · el material', () => {
-  it('el resumen vivo va entero; las fichas van rotuladas con su id y se recortan al tope diciéndolo', () => {
+  it('el resumen vivo va entero; las fichas van rotuladas con su id y solo se recortan al tope real, diciéndolo', () => {
     const largo = 'x'.repeat(9000)
     const m = armarMaterial({ resumen_vivo: largo, fichas: [{ ficha_id: F1, clase: 'resenas', fecha: '2026-10-30T00:00:00Z', contenido: 'muy  rico\n volvería' }] })
     expect(m.texto).toContain(largo)
     expect(m.texto).toContain(`[${F1}] (resenas · 2026-10-30) muy rico volvería`)
     expect(m.ids).toEqual([F1]); expect(m.recortado).toBe(false); expect(m.con_resumen_vivo).toBe(true)
     const muchas = Array.from({ length: 30 }, (_, i) => ({ ficha_id: `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`, clase: 'sitio', fecha: null, contenido: 'y'.repeat(400) }))
-    const r = armarMaterial({ resumen_vivo: null, fichas: muchas })
+    const r = armarMaterial({ resumen_vivo: null, fichas: muchas.map((f) => ({ ...f, contenido: 'y'.repeat(TOPE_DEL_MATERIAL / 10) })) })
     expect(r.recortado).toBe(true)
     expect(r.ids.length).toBeLessThan(30)
     expect(r.texto).toMatch(new RegExp(`se recortó al tope de ${TOPE_DEL_MATERIAL}`))
@@ -133,7 +133,7 @@ describe('mesa de análisis · la tarea', () => {
       expect(t).toMatch(/el del manual del cliente; si no lo conoces, el idioma oficial de Ecuador/)
       expect(t).toMatch(/Trato: el que fija el manual del cliente/)
       expect(t).not.toMatch(/\b(español|inglés|English|Spanish)\b/)
-      expect(t).toContain(rotuloDe(a.tipo)); expect(t).toContain(`${TOPE_DEL_INFORME} caracteres`); expect(t).toContain(material.texto)
+      expect(t).toContain(rotuloDe(a.tipo)); expect(t).toContain(material.texto)
       expect(t).toContain('Para qué sirve en el plan: para el plan')
     }
     const con = tareaDeAnalisis({ analista: ANALISTAS.competencia, ficha, material, idioma: 'español', trato: 'tú', metodo: 'MÉTODO X' })

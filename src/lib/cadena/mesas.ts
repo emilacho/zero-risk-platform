@@ -99,7 +99,7 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     fasesEnTexto(a.estrategia),
     ...(a.informeDeMercado ? ['', '# INFORME DE MERCADO (PROPUESTA · no es dato del cliente · contexto, no mandato)', a.informeDeMercado] : []),
     '',
-    `# PALABRAS PROHIBIDAS DEL MANUAL\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}`,
+    `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}`,
     '',
     `# PLAN\n${a.ctx.planTexto}`,
   ].join('\n')
@@ -115,7 +115,7 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     '## Capítulo <clave de fase> · qué cuenta · «- serie: S1 · nombre · qué cuenta · redes» · y debajo «### Banco de ideas» con UNA idea por línea:',
     '`- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: … · protagonista: … · serie: S1 · foto:<id>|ninguna`',
     'Cada idea trae mensaje y gancho propios y distintos; ids únicos; mínimo por red = huecos del patrón semanal × semanas de la fase (si no alcanza, lo declaras en «## Banco parcial»).',
-    'Sin cifras con decimales inventadas, sin datos con valor (precios, horarios: los pone el estratega con su referencia), sin palabras prohibidas. ## Caminos descartados · ## Citas.',
+    'Sin cifras con decimales inventadas, sin datos con valor (precios, horarios: los pone el estratega con su referencia), sin claims propios que no se puedan probar. ## Caminos descartados · ## Citas.',
     'Si la dirección decide que el brief no sirve, escribe «## Devolución del brief» con los puntos de los 6 criterios que fallan (UNA sola vez por campaña) y la mesa cierra.',
     ...(a.nota ? ['', '# CAMBIOS PEDIDOS POR EL CLIENTE (sobre la versión anterior)', a.nota] : []),
     '',
@@ -129,7 +129,7 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     a.estrategia.patron_semanal.map((s) => `- ${s.slot}: ${s.red} · ${s.formato} · día ${s.dia_semana} ${s.hora}`).join('\n') || '(sin patrón)',
     '',
     `# SEDES\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
-    `# PALABRAS PROHIBIDAS DEL MANUAL\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}`,
+    `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}`,
   ].join('\n')
 }
 

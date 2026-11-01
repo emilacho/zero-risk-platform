@@ -32,7 +32,7 @@ describe('(a) el agente recibe TODOS los máximos de su esquema', () => {
   it('los casos que importan: razon 600 y respuestas 12 en las resoluciones; las fichas dicen sus cuatro textos; el plan dice su rango', () => {
     for (const id of ['resolucion_solo.v1', 'resolucion_objeto.v1', 'resolucion_parcial.v1', 'resolucion.v1', 'plan_texto_y_resolucion.v1']) { const t = limitesDelFormato(id); expect(t).toContain('razon: máximo 600 caracteres'); expect(t).toContain('respuestas: máximo 12 elementos') }
     const f = limitesDelFormato('fichas.v1'); for (const c of ['que: máximo 500', 'donde: máximo 200', 'contra_que: máximo 400', 'fichas: máximo 12 elementos']) expect(f).toContain(c)
-    expect(limitesDelFormato('plan_texto_y_resolucion.v1')).toMatch(/entre 1\.000 y 40\.000 caracteres/)
+    expect(limitesDelFormato('plan_texto_y_resolucion.v1')).toMatch(/entre 1\.000 y 600\.000 caracteres/)
   })
   it('pide una razón corta (400) y explica qué se recorta y qué se rechaza', () => {
     const t = limitesDelFormato('resolucion_solo.v1')
@@ -102,13 +102,13 @@ describe('(b) un texto de apoyo largo se recorta con marca y la decisión sobrev
     const f = procesarSalidaDeRevision(JSON.stringify({ fichas: [{ que: 'q'.repeat(800), donde: 'texto', contra_que: 'c'.repeat(700), gravedad: 'bloquea', propuesta: 'p'.repeat(5000) }] }), 'fichas.v1', 0, 1)
     expect(f.ok).toBe(true); if (f.ok) { const x = (f.valor.fichas as Array<Record<string, string>>)[0]; expect(x.que.length).toBeLessThanOrEqual(500); expect(x.contra_que.length).toBeLessThanOrEqual(400); expect(x.propuesta.length).toBeLessThanOrEqual(4000); expect(x.gravedad).toBe('bloquea'); expect(x.donde).toBe('texto'); expect(f.normalizados?.length).toBe(3) }
   })
-  it('🔴 lo que NO se recorta sigue rechazándose (reintento y luego falla visible): un id de 100 caracteres, un estado inválido, 13 respuestas, un pie de foto de 4.000, un plan de 41.000, un objeto/filas vacíos de contenido válido', () => {
+  it('🔴 lo que NO se recorta sigue rechazándose (reintento y luego falla visible): un id de 100 caracteres, un estado inválido, 13 respuestas, un pie de foto de 4.000, un plan de 600.001, un objeto/filas vacíos de contenido válido', () => {
     const rechazos: Array<[string, string]> = [
       [JSON.stringify({ respuestas: [{ id: 'i'.repeat(100), estado: 'tomada', razon: 'ok' }] }), 'resolucion_solo.v1'],
       [JSON.stringify({ respuestas: [{ id: 'a', estado: 'quizás', razon: 'ok' }] }), 'resolucion_solo.v1'],
       [JSON.stringify({ respuestas: Array.from({ length: 13 }, (_, i) => ({ id: `a${i}`, estado: 'tomada', razon: 'ok' })) }), 'resolucion_solo.v1'],
       [JSON.stringify({ respuestas: [{ id: 'a', estado: 'tomada', razon: 'ok' }], pieza: { pie_de_foto: 'p'.repeat(4000), hashtags: ['#a'] } }), 'resolucion.v1'],
-      [`${'P'.repeat(41000)}\n${BLOQUE('ok')}`, 'plan_texto_y_resolucion.v1'],
+      [`${'P'.repeat(600_001)}\n${BLOQUE('ok')}`, 'plan_texto_y_resolucion.v1'],
     ]
     for (const [salida, esquema] of rechazos) {
       const primero = procesarSalidaDeRevision(salida, esquema, 0, 1); expect(primero.ok, esquema).toBe(false); expect(!primero.ok && primero.accion).toBe('reintentar')

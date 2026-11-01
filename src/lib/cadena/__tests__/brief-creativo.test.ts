@@ -101,10 +101,12 @@ describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
     const b = leerBriefCreativo(con({ 'Que entren 30 desayunos': 'Que entren 30,77 desayunos' }), INS)
     expect(b.bloqueos.join('\n')).toMatch(/,77/)
   })
-  it('una prohibida fuera de la lista «prohibido» ⇒ devuelta; dentro de la lista no', () => {
+  it('una palabra de la lista que el manual evita, usada fuera de «prohibido», es un AVISO, nunca un bloqueo (ADENDA de Emilio)', () => {
     expect(leerBriefCreativo(BRIEF, INS).bloqueos).toEqual([])
     const b = leerBriefCreativo(con({ 'Hay mesa desde las siete.': 'Hay un desayuno delicioso desde las siete.' }), INS)
-    expect(b.bloqueos.join('\n')).toMatch(/«delicioso», prohibida por el manual/)
+    expect(b.bloqueos.join('\n')).not.toMatch(/delicioso/)
+    expect(b.avisos.join('\n')).toMatch(/«delicioso», que el manual evita/)
+    expect(b.estado).toBe('validada')
   })
   it('una prohibida citada en «contradicciones» no cuenta (ahí se dice que NO se usa)', () => {
     const b = leerBriefCreativo(con({ '- ninguna': '- el plan dice «promo de apertura» · el manual prohíbe promo · se dice «apertura»' }), INS)

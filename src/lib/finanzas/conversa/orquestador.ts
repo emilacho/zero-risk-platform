@@ -19,9 +19,10 @@ import { CANALES_VALIDOS, especialistasQueHablan } from './omision'
 import { AGENTES, PLANTILLA_FINANCIERA, plantillaConRedactor, reservaDelCierre2 } from './plantilla'
 import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type PuertosDeConversa, type Semilla, type TopeDePrueba, type TurnoDeConversa } from './puertos'
 import { sha256 } from './util'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
-const MAX_TAREA = 60_000
+const MAX_TAREA = TOPE_REAL_DEL_PEDIDO
 
 // ───────────────────────────────────────────────────────── la puerta
 export async function abrirConversacion(P: PuertosDeConversa, cuerpo: unknown): Promise<Respuesta> {

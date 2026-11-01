@@ -35,6 +35,7 @@ import { sinRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-bra
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { adjuntoDelCliente } from '@/lib/portero-alimenta/contexto-del-cliente'
 import { rutaConsultar } from '@/lib/portero-alimenta/consultar'
+import { idsCitadosEnElTexto } from '@/lib/portero-alimenta/contexto-del-cliente'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -86,7 +87,7 @@ async function materialDe(clientId: string, a: Analista) {
     const f = x as Record<string, unknown>
     return { ficha_id: String(f.ficha_id), clase: texto(f.clase), fecha: texto(f.fecha_de_la_fuente) ?? texto(f.fecha), contenido: String(f.contenido ?? '') }
   })
-  return { material: armarMaterial({ resumen_vivo: resumen, fichas }), fecha_de_corte: new Date().toISOString() }
+  return { material: armarMaterial({ resumen_vivo: resumen, fichas, ids_del_resumen: resumen ? await idsCitadosEnElTexto(base, clientId, resumen) : [] }), fecha_de_corte: new Date().toISOString() }
 }
 
 /** el método del analista según `cadena_config.metodos.<tipo>` · `mercado` tiene uno de omisión (F4); los demás solo si la configuración trae texto */

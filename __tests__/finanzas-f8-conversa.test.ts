@@ -368,8 +368,8 @@ describe('F8 · el pedido corto y la procedencia', () => {
     expect(t).toMatch(/NO fijes montos de pauta/)
   })
   it('cabe en el contrato de run-sdk y viaja con workflow_id y ejecución propios', () => {
-    const p = armarPedidoRunSdk({ agente: AGENTES.proponente, tarea: 'x'.repeat(130_000), encargo_id: 'enc-1', client_id: CLIENTE, paso: 'planteo', tope_usd: 0.15, dry_run: true }, 'AbC123xyz')
-    expect(p.task.length).toBeLessThanOrEqual(120_000)
+    const p = armarPedidoRunSdk({ agente: AGENTES.proponente, tarea: 'x'.repeat(700_000), encargo_id: 'enc-1', client_id: CLIENTE, paso: 'planteo', tope_usd: 0.15, dry_run: true }, 'AbC123xyz')
+    expect(p.task.length).toBeLessThanOrEqual(600_000)
     expect(p.workflow_id).toBe('AbC123xyz')
     expect(p.workflow_execution_id).toBe('enc-1:planteo')
     expect(p.dry_run).toBe(true)

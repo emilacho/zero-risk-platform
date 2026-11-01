@@ -301,7 +301,7 @@ export function formatGuardrailsForPrompt(guardrails: ClientGuardrails): string 
   }
 
   if (guardrails.forbidden_words.length > 0) {
-    lines.push(`FORBIDDEN WORDS (never use these): ${guardrails.forbidden_words.join(', ')}`)
+    lines.push(`WORDS THE BRAND AVOIDS (brand context, not a ban: reason about intent. Do not make an unprovable claim of your own; a customer's review, quoted and attributed, is fine): ${guardrails.forbidden_words.join(', ')}`)
   }
 
   if (guardrails.required_terminology.length > 0) {

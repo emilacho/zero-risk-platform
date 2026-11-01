@@ -55,6 +55,8 @@ export const PUEDEN_NOMBRARLAS = [
   /^__tests__\/cerrar-huecos-tendencias-y-voz\.test\.ts$/,
   /^supabase\/migrations\/202611011000_cerrar_huecos_tendencias_y_voz\.sql$/,
   /^supabase\/reversas\/202611011000_cerrar_huecos_tendencias_y_voz_REVERSA\.sql$/,
+  // 01-nov · JEFATURA CON CARPETA: su prueba siembra fichas en una base falsa para llevar el id corto del resumen vivo al id completo
+  /^__tests__\/jefatura-con-carpeta-y-sin-topes\.test\.ts$/,
   // 01-nov · RUTAS DE DIRECCIÓN (solo lectura, encargo de Lenovo firmado por Emilio): leen preguntas al dueño, pausas y alertas del portero para la sala del director; nunca fichas ni ingresos, y no escriben
   /^src\/lib\/direccion\/(decisiones|riesgos)\.ts$/,
   // 01-nov · FALLAS PENDIENTES Y RETENCIÓN: su prueba nombra `cerebro_fichas`/`cerebro_portero_corridas` (rastro del día) y las etiquetas de las capturas de la bodega; la migración crea la tabla de pasos diarios

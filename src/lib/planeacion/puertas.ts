@@ -25,6 +25,7 @@
  *   mismo orden, siempre. Un pedido que no sirve NO tumba a los demás: ocupa
  *   su lugar con su propio `sin_respuesta`.
  */
+import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 import { NextResponse } from 'next/server'
 import {
   resumirRecoleccion,
@@ -34,7 +35,7 @@ import {
   type RespuestaBrazo,
 } from './contrato-brazos'
 
-export const PEDIDO_MAXIMO = 100_000
+export const PEDIDO_MAXIMO = TOPE_REAL_DEL_PEDIDO
 
 /** Canon canonical · tope de pedidos por llamada. No es capricho: cada pedido
  *  de raspado es una corrida que se PAGA, y un sobre de 500 pedidos sería una

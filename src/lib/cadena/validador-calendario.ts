@@ -177,7 +177,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
 
     // ─── V15 · palabras prohibidas del manual y voseo
     const prohibidas = (ins.forbiddenWords ?? []).map(normalizar).filter(Boolean)
-    for (const p of prohibidas) if (new RegExp(`(?:^|[^a-z0-9])${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^a-z0-9]|$)`).test(nTema)) out.push(h('V15', 'bloquea', f, `el tema usa la palabra prohibida «${p}»`, 'palabras prohibidas del manual', 'reescribir sin esa palabra'))
+    for (const p of prohibidas) if (new RegExp(`(?:^|[^a-z0-9])${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^a-z0-9]|$)`).test(nTema)) out.push(h('V15', 'aviso', f, `el tema usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`, 'palabras que el manual evita', 'si es un claim propio, sostenerlo con evidencia o reformularlo'))
     // r75 · H2 · se bloquean las formas de OTRO registro SOLO si el registro del cliente está fijado (su manual o su país); sin dato no se impone ninguno
     const otro = formasDeOtroRegistro(ins.registro, f.tema ?? '')
     if (otro.length) out.push(h('V15', 'bloquea', f, `el tema usa formas de otro registro («${otro[0]}») y el del cliente es ${nombreDelRegistro(ins.registro)}`, `${nombreDelRegistro(ins.registro)} (registro del cliente, fijado por su manual o su país)`, `reescribir en ${nombreDelRegistro(ins.registro)}`))
