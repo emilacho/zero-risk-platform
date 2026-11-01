@@ -26,6 +26,7 @@
  *
  * Función PURA · sin IO · se prueba sin base y sin red.
  */
+import { palabrasDeEstilo, palabrasDuras } from './manual/palabras-con-intencion'
 import { extractTrailingCaveat, detectInternalTerms } from './brand-book-caveat-extractor'
 
 /** Ancho de línea del texto plano · el PDF lo respeta. */
@@ -218,6 +219,9 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     }
   }
 
+  // 01-nov · firma de Emilio: solo lo declarado es una prohibición; el resto de la lista es contexto
+  draft = { ...draft, _palabras_duras: palabrasDuras(draft as never), forbidden_words: palabrasDeEstilo(draft as never) }
+
   // las claves S1–S4 de los segmentos salen con el nombre que les da el propio resumen de a quién le hablamos
   const nombres = nombresDeSegmentos(draft.icp_summary)
   const secciones: string[] = []
@@ -259,7 +263,8 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     ['EL RECORRIDO DEL CLIENTE', 'customer_angle', 'prosa'],
     ['CÓMO SE FIDELIZA', 'retention_notes', 'prosa'],
     ['VOCABULARIO OBLIGATORIO', 'required_terminology', 'lista'],
-    ['PALABRAS PROHIBIDAS', 'forbidden_words', 'lista'],
+    ['PROHIBIDAS POR UNA NORMA O POR EL DUEÑO', '_palabras_duras', 'lista'],
+    ['PALABRAS QUE LA MARCA EVITA (contexto de marca, no prohibición)', 'forbidden_words', 'lista'],
   ]
 
   for (const [tit, campo, tipo] of bloques) {
@@ -270,7 +275,7 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
       o += titulo(tit) + ajustar(t) + '\n'
     } else {
       const a = draft[campo]
-      if (!lleno(a)) { omitidas.push(campo); continue }
+      if (!lleno(a)) { if (campo !== '_palabras_duras') omitidas.push(campo); continue } // no tener prohibiciones declaradas es lo normal: no es un hueco
       secciones.push(campo)
       o += titulo(tit) + vinetas(a, nombres) + '\n'
     }

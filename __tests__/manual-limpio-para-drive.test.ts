@@ -128,7 +128,7 @@ describe('🟢 CONTROL POSITIVO · el contenido de marca sobrevive entero', () =
       'PROPÓSITO', 'A QUIÉN LE HABLAMOS', 'CÓMO SUENA LA MARCA', 'PERSONALIDAD',
       'LEMAS PROPUESTOS', 'MENSAJES CLAVE', 'PROPUESTAS DE VALOR',
       'EL RECORRIDO DEL CLIENTE', 'CÓMO SE FIDELIZA', 'VOCABULARIO OBLIGATORIO',
-      'PALABRAS PROHIBIDAS'])
+      'PALABRAS QUE LA MARCA EVITA'])
       expect(r.texto).toContain(t)
   })
   it('el contenido real viaja · no sólo los títulos', () => {
@@ -157,7 +157,7 @@ describe('🟢 las secciones vacías se OMITEN y se declaran', () => {
       brand_book: { positioning: 'Solo esto.', forbidden_words: [], content_text: '' },
     })
     expect(r.texto).toContain('POSICIONAMIENTO')
-    expect(r.texto).not.toContain('PALABRAS PROHIBIDAS')
+    expect(r.texto).not.toContain('PALABRAS QUE LA MARCA EVITA')
     expect(r.texto).not.toContain('(vacío)')
     expect(r.omitidas).toContain('forbidden_words')
     expect(r.secciones).toEqual(['positioning'])

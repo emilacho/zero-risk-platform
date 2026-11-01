@@ -139,7 +139,7 @@ describe('fuentes del cliente leídas de la base', () => {
     const db = sembrar(); const P = crearPuertos(db, ENV, fetchFalso().f)
     const fu = await P.fuentes(CLIENTE)
     if ('error' in fu) throw new Error(fu.error)
-    expect(fu.fuentes).toMatchObject({ palabras_prohibidas: ['premium', 'calidad garantizada', 'el mejor', 'gourmet'], registro: 'tuteo', telefonos: ['997744288'], handles: ['@naufrago.ec'], competidores: ['Pez Azul'], telefonos_verificables: true, handles_verificables: true })
+    expect(fu.fuentes).toMatchObject({ palabras_duras: [], palabras_prohibidas: ['premium', 'calidad garantizada', 'el mejor', 'gourmet'], registro: 'tuteo', telefonos: ['997744288'], handles: ['@naufrago.ec'], competidores: ['Pez Azul'], telefonos_verificables: true, handles_verificables: true })
     expect(fu.fuentes.precios.sort()).toEqual(['5.50', '7.00']) // el precio 99.00 de la página de un competidor NO entra
     expect(fu.zona).toBe('America/Guayaquil')
     expect(fu.fotos).toHaveLength(16) // la foto de la competencia NO es del cliente

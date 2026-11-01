@@ -4,6 +4,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { limpiarManual, palabrasProhibidasDelManual, quitarNombresInternos, repararFragmentos, usaPalabraProhibida } from '../limpieza'
+// 01-nov · firma de Emilio: la limpieza solo quita lo declarado
+const dura = (...p: string[]) => ({ forbidden_words: p, palabras_con_intencion: p.map((texto) => ({ texto, intencion: 'legal', fuente: { cita: 'la norma' } })) })
 
 describe('comillas «…»: dentro de una cita no se corta ni se juzga', () => {
   it('un punto dentro de «…» no parte la oración, aunque lo que sigue empiece en minúscula', () => {
@@ -78,13 +80,13 @@ describe('las listas de términos NO son prosa', () => {
 
 describe('palabras prohibidas: largo mínimo', () => {
   it('una "palabra" de 2 letras no se toma (de, la, el vaciarían todo el manual)', () => {
-    expect(palabrasProhibidasDelManual({ forbidden_words: ['de', 'la', 'ab'] })).toEqual([])
-    const m = { forbidden_words: ['de'], voz: 'Cocina de la casa de siempre.' }
+    expect(palabrasProhibidasDelManual(dura('de', 'la', 'ab'))).toEqual([])
+    const m = { ...dura('de'), voz: 'Cocina de la casa de siempre.' }
     expect(limpiarManual(m).manual.voz).toBe(m.voz)
   })
   it('una de 3 letras SÍ se toma (borde): «gas» prohibida quita la oración que la usa', () => {
-    expect(palabrasProhibidasDelManual({ forbidden_words: ['gas'] })).toEqual(['gas'])
-    expect(limpiarManual({ forbidden_words: ['gas'], voz: 'Cocina a gas. Cercana y cálida.' }).manual.voz).toBe('Cercana y cálida.')
+    expect(palabrasProhibidasDelManual(dura('gas'))).toEqual(['gas'])
+    expect(limpiarManual({ ...dura('gas'), voz: 'Cocina a gas. Cercana y cálida.' }).manual.voz).toBe('Cercana y cálida.')
   })
   it('acepta frases ("calidad garantizada") y tolera el plural simple', () => {
     expect(usaPalabraProhibida('Ofrecemos calidad garantizada hoy', ['calidad garantizada'])).toBe('calidad garantizada')
@@ -112,7 +114,7 @@ describe('lo que se quitó queda registrado, con el texto (recortado a 200 carac
 
 describe('rutas profundas: una lista que se queda con un elemento vacío lo pierde, incluso anidada', () => {
   it('visual.reglas.debe[1] vacío tras la limpieza sale de la lista; el resto se queda en su orden', () => {
-    const m = { forbidden_words: ['artesanal'], visual: { reglas: { debe: ['Buena regla uno', 'Mostrar lo artesanal', 'Buena regla tres'] } } }
+    const m = { ...dura('artesanal'), visual: { reglas: { debe: ['Buena regla uno', 'Mostrar lo artesanal', 'Buena regla tres'] } } }
     expect((limpiarManual(m).manual as any).visual.reglas.debe).toEqual(['Buena regla uno', 'Buena regla tres'])
   })
   it('una ruta que atraviesa un nulo no rompe la limpieza', () => {

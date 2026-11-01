@@ -115,8 +115,8 @@ describe('las palabras del manual son contexto (ADENDA de Emilio)', () => {
   })
   it('ningún chequeo de la cadena bloquea por una palabra de la lista', () => {
     const lee = (p: string) => readFileSync(join(RAIZ, p), 'utf8')
-    expect(lee('src/lib/cadena/brief-creativo.ts')).not.toMatch(/contienePalabraEntera\(loQuePide, p\)\) bloqueos\.push/)
-    expect(lee('src/lib/cadena/validador-calendario.ts')).not.toMatch(/h\('V15', 'bloquea', f, `el tema usa la palabra/)
+    expect(lee('src/lib/cadena/brief-creativo.ts')).not.toMatch(/of ins\.prohibidas\)[^\n]*bloqueos\.push/)
+    expect(lee('src/lib/cadena/validador-calendario.ts')).not.toMatch(/of prohibidas\) if \(coincide\(p\)\) out\.push\(h\('V15', 'bloquea'/)
     expect(lee('src/lib/cadena/mesas.ts')).not.toMatch(/PALABRAS PROHIBIDAS|sin palabras prohibidas/)
     expect(lee('src/lib/client-brain.ts')).not.toMatch(/never use these/)
   })

@@ -86,6 +86,7 @@ export function buildBrandBookRow(
     client_id: clientId,
     voice_description: clean('voice_description', bb.voice_description ?? null),
     forbidden_words: bb.forbidden_words ?? [],
+    palabras_con_intencion: (bb as { palabras_con_intencion?: unknown }).palabras_con_intencion ?? [],
     required_terminology: bb.required_terminology ?? [],
     // H1.2 (2026-08-20) · el posicionamiento tiene columna propia. Antes se guardaba
     // prestado en `elevator_pitch` ("encaja", decía el comentario) · el cerebro lo

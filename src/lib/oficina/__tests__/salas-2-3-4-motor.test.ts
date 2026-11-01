@@ -279,7 +279,7 @@ describe('cifras que nadie le dio al autor', () => {
 
 describe('chequeos duros de las láminas', () => {
   const base = (): ContextoDeChequeoLaminas => ({
-    familia: 'carrusel', fuentes: { palabras_prohibidas: ['premium'], telefonos: ['+593 997 744 288'], handles: ['@mi.marca'], precios: ['7.00'], competidores: [], registro: 'tuteo' },
+    familia: 'carrusel', fuentes: { palabras_prohibidas: ['premium'], palabras_duras: ['premium'], telefonos: ['+593 997 744 288'], handles: ['@mi.marca'], precios: ['7.00'], competidores: [], registro: 'tuteo' },
     limites: { pie_de_foto_max: 2200, hashtags_max: 30, limites_verificados: false }, prohibidas_del_brief: [],
     texto_del_autor: { texto: 'Pruébalo hoy', hashtags: ['#plato'] }, textos_de_laminas: ['Pruébalo hoy'], fuentes_de_cifras: ['Pruébalo hoy'],
     imagen_generada: false, fonts_faltantes: [], imagenes_sin_lamina: [], fotos_reusadas: [], problemas_de_contrato: [], texto_fuera_del_autor: [], problemas_de_armado: [], problemas_de_kit: [],

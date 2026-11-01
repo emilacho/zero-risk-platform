@@ -107,7 +107,7 @@ const bloqueDeContexto = (docs: ContextoDelRevisor[]): string => {
 const FORMATO_DE_FICHAS = 'Devuelve solo el JSON {"fichas":[{"que":"…","donde":"…","contra_que":"…","gravedad":"bloquea|sugerencia","propuesta":"…"}]}. Si no hay nada que señalar, {"fichas":[]}.'
 
 /** 01-nov · ADENDA de Emilio: lo que el manual evita es contexto de marca. La ficha sale por veracidad, nunca por coincidencia literal */
-export const REGLA_DE_LAS_PALABRAS_DEL_MANUAL = 'Las palabras que el manual evita son contexto de marca, no una prohibición: razona la intención. Solo amerita ficha un claim propio que no se pueda comprobar. Una reseña de un cliente, citada y atribuida, no lo es, y coincidir con la lista no basta.'
+export const REGLA_DE_LAS_PALABRAS_DEL_MANUAL = 'Las palabras que el manual evita son contexto de marca, no una prohibición: razona la intención. Solo amerita ficha un claim propio que no se pueda comprobar. Una reseña de un cliente, citada y atribuida, no lo es, y coincidir con la lista no basta. Lo que el manual declara prohibido por una norma o por el dueño, con su cita, se respeta tal cual.'
 
 /** `jefe-marketing`: la línea de contexto del tipo y nada más (sin reglas ni criterios nuevos) */
 export function tareaDeRevisionDeFondo(a: { politica: PoliticaDeRevision; payload: PayloadDeRevision; tipo: TipoDeRevision; texto: string; duenos: Dueno[] }): { task: string; indicacion: string; esquema: string } {

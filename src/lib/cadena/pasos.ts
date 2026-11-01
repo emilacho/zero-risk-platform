@@ -181,7 +181,7 @@ function insumosDe(c: Campana, ctx: ContextoDelCliente, e: Estrategia, formatos:
   return {
     campana: { fecha_inicio: c.fecha_inicio, fecha_fin: c.fecha_fin, tanda, semanas }, estrategia: e, planTexto: ctx.planTexto, formatos, sedes: ctx.sedes,
     referencias: ctx.referencias, clientId: ctx.clientId, ahora: ahora.slice(0, 10), filas, filasPrevias: previas, ajustes, fechasEspeciales: fechas,
-    forbiddenWords: ctx.forbiddenWords, conocidos: [ctx.nombreDelNegocio], lexico, registro: ctx.registro,
+    forbiddenWords: ctx.forbiddenWords, palabrasDuras: ctx.palabrasDuras, conocidos: [ctx.nombreDelNegocio], lexico, registro: ctx.registro,
   }
 }
 

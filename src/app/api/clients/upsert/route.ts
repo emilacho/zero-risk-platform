@@ -301,6 +301,7 @@ export async function POST(request: Request) {
       primary_colors: bb.primary_colors ?? [],
       imagery_style: bb.imagery_style ?? null,
       forbidden_words: bb.forbidden_words ?? [],
+      palabras_con_intencion: bb.palabras_con_intencion ?? [],
       required_terminology: bb.required_terminology ?? [],
       competitor_mentions_policy: bb.competitor_mentions_policy ?? 'never_mention',
       content_text: bb.content_text ?? null,

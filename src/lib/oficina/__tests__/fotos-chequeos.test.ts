@@ -78,7 +78,7 @@ describe('candidatasFoto con la batería REAL de las 16 etiquetas del cliente pi
 describe('chequeos duros del post', () => {
   const ctx = (o: Partial<ContextoDeChequeo> & { pie?: string; tags?: string[] } = {}): ContextoDeChequeo => ({
     pieza: { pie_de_foto: o.pie ?? 'Ceviche a $7.00. Pídelo al 0997744288.', hashtags: o.tags ?? ['#ceviche', '#olon'] },
-    fuentes: { palabras_prohibidas: ['premium', 'el mejor'], telefonos: ['+593 997 744 288'], handles: ['@naufrago.ec'], precios: ['7.00', '9.50'], competidores: ['Pez Azul'], registro: 'tuteo', ...(o.fuentes ?? {}) },
+    fuentes: { palabras_prohibidas: ['premium', 'el mejor'], palabras_duras: ['premium', 'el mejor'], telefonos: ['+593 997 744 288'], handles: ['@naufrago.ec'], precios: ['7.00', '9.50'], competidores: ['Pez Azul'], registro: 'tuteo', ...(o.fuentes ?? {}) },
     limites: { pie_de_foto_max: 2200, hashtags_max: 30, limites_verificados: false, ...(o.limites ?? {}) },
     ...(o.prohibidas_del_brief ? { prohibidas_del_brief: o.prohibidas_del_brief } : {}), ...(o.imagen ? { imagen: o.imagen } : {}),
   })

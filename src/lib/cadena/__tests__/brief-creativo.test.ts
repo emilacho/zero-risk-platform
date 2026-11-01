@@ -106,6 +106,10 @@ describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
     const b = leerBriefCreativo(con({ 'Hay mesa desde las siete.': 'Hay un desayuno delicioso desde las siete.' }), INS)
     expect(b.bloqueos.join('\n')).not.toMatch(/delicioso/)
     expect(b.avisos.join('\n')).toMatch(/«delicioso», que el manual evita/)
+    // 01-nov · firma de Emilio: declarada, sí devuelve el brief
+    const dura = leerBriefCreativo(con({ 'Hay mesa desde las siete.': 'Hay un desayuno delicioso desde las siete.' }), { ...INS, duras: ['delicioso'] })
+    expect(dura.bloqueos.join('\n')).toMatch(/«delicioso», prohibida por una norma/)
+    expect(dura.avisos.join('\n')).not.toMatch(/«delicioso», que el manual evita/)
     expect(b.estado).toBe('validada')
   })
   it('una prohibida citada en «contradicciones» no cuenta (ahí se dice que NO se usa)', () => {

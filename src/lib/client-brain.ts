@@ -4,6 +4,7 @@
 // and get_client_guardrails()
 // =============================================================
 
+import { palabrasDuras } from './manual/palabras-con-intencion'
 import { getSupabaseAdmin } from './supabase'
 import { generateEmbedding as openaiEmbedding } from './brain/embed'
 
@@ -28,6 +29,8 @@ export interface BrainSearchResult {
 
 export interface ClientGuardrails {
   forbidden_words: string[]
+  /** 01-nov · firma de Emilio: las únicas que son una prohibición (norma o dueño, con su cita) */
+  hard_forbidden_words?: string[]
   required_terminology: string[]
   voice_description: string | null
   competitor_mentions_policy: string | null
@@ -257,6 +260,15 @@ export async function queryClientBrain(
  * Called BEFORE every content generation to inject constraints
  * into the agent's system prompt.
  */
+async function palabrasDurasVigentes(db: { from(t: string): any }, clientId: string): Promise<string[]> {
+  try {
+    const r = await db.from('client_brand_books').select('forbidden_words, palabras_con_intencion').eq('client_id', clientId).order('version', { ascending: false }).limit(1)
+    return r.error ? [] : palabrasDuras(r.data?.[0])
+  } catch {
+    return [] // sin este dato la lista sigue viajando entera como contexto
+  }
+}
+
 export async function getClientGuardrails(
   clientId: string
 ): Promise<ClientGuardrails | null> {
@@ -269,7 +281,9 @@ export async function getClientGuardrails(
   if (!data || data.length === 0) return null
 
   const row = data[0]
+  const duras = await palabrasDurasVigentes(supabase, clientId)
   return {
+    ...(duras.length ? { hard_forbidden_words: duras } : {}),
     forbidden_words: (row.forbidden_words ?? []) as string[],
     required_terminology: (row.required_terminology ?? []) as string[],
     voice_description: row.voice_description ?? null,
@@ -300,6 +314,9 @@ export function formatGuardrailsForPrompt(guardrails: ClientGuardrails): string 
     lines.push(`VOICE: ${guardrails.voice_description}`)
   }
 
+  if (guardrails.hard_forbidden_words?.length) {
+    lines.push(`FORBIDDEN WORDS (a legal rule or the owner's explicit order, on record: do not use them): ${guardrails.hard_forbidden_words.join(', ')}`)
+  }
   if (guardrails.forbidden_words.length > 0) {
     lines.push(`WORDS THE BRAND AVOIDS (brand context, not a ban: reason about intent. Do not make an unprovable claim of your own; a customer's review, quoted and attributed, is fine): ${guardrails.forbidden_words.join(', ')}`)
   }

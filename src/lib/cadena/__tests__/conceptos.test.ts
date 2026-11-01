@@ -170,11 +170,13 @@ describe('concepto.v1 · lo que bloquea (sin_concepto) y lo que solo se declara'
       .replace('la cuenta la paga la casa (una vez)', 'la cuenta la paga la casa: 12,77 dólares, BARATO')
       .replace('la mesa de los domingos', 'la mesa de los domingos a las 13:00')
       .replace('foto:f-02', 'foto:f-99')
+    // 01-nov · firma de Emilio: declarada, sí bloquea
+    expect(leerConcepto(md, { ...INS, duras: ['barato'] }).bloqueos.join('\n')).toMatch(/«barato», prohibida por una norma/)
     const c = leerConcepto(md, INS)
     expect(c.estado).toBe('ok')
     expect(c.avisos).toEqual(expect.arrayContaining([
       'hay una cifra «,77» (dato inventado)',
-      'palabra prohibida del manual: «barato»',
+      'usa «barato», que el manual evita: revisa si es un claim propio sin prueba',
       'la idea C2-I02 trae un dato con valor (precio, hora, cifra): el estratega lo pone con su referencia',
       'la idea C2-I03 trae un dato con valor (precio, hora, cifra): el estratega lo pone con su referencia',
       'la foto «f-99» no existe entre las fotos propias',

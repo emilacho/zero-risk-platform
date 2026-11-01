@@ -1,6 +1,7 @@
 /**
  * AYUDAS COMPARTIDAS del orquestador de la sala 1 (post con foto) y del de láminas (salas 2 y 3). Puras. Estaban dentro de `orquestador.ts`; se sacaron para no duplicarlas ni importar en círculo.
  */
+import { palabrasQueBloquean } from './chequeos'
 import type { BriefLeido } from './brief'
 import type { FuentesCompletas } from './puertos'
 import type { ReglasDeImagen } from './reglas-de-imagen'
@@ -18,7 +19,7 @@ export function reglasVisuales(e: Estado, brief: BriefLeido): ReglasDeImagen {
 /** para los prompts además se vigilan las palabras prohibidas del manual y del brief */
 export function reglasParaPrompts(e: Estado, brief: BriefLeido, F: FuentesCompletas): ReglasDeImagen {
   const v = reglasVisuales(e, brief)
-  const palabras = [...F.fuentes.palabras_prohibidas, ...brief.prohibido]
+  const palabras = palabrasQueBloquean(F.fuentes, brief.prohibido).bloquean // 01-nov · lo demás del manual es contexto de marca: no veta un prompt
   return { obligatorio: v.obligatorio, prohibido: [...v.prohibido, ...palabras.map((p, i) => ({ id: `txt-p${i + 1}`, texto: `palabra prohibida «${p}»`, claves: [p] }))] }
 }
 
