@@ -2,7 +2,8 @@
  * Orquesta las tendencias de UN cliente y la bodega del mundo (una vez por día cada una). Los términos del embudo los propone el modelo desde la ficha (rubro, país, ciudades);
  * sin modelo se arman por código con las palabras del rubro. Nunca tumba la corrida del portero.
  */
-import { competidoresDeLaFicha, correrConsultas, ejecutarEnApify, guardarTendencias, planDeLaBodega, planDeTendencias, TOPE_DEL_DIA_BODEGA_USD, TOPE_DEL_DIA_POR_CLIENTE_USD, yaSeMiroHoy, type Ejecutar, type ResultadoDeTendencias, type TerminosDelRubro } from './tendencias'
+import { competidoresDeLaFicha, correrConsultas, ejecutarEnApify, guardarTendencias, planDeLaBodega, planDeTendencias, TOPE_DEL_DIA_BODEGA_USD, TOPE_DEL_DIA_POR_CLIENTE_USD, videosDeTendencias, yaSeMiroHoy, type Ejecutar, type Pieza, type ResultadoDeTendencias, type TerminosDelRubro } from './tendencias'
+import { guardarVideos, type ResultadoDeVideos } from './videos-del-cerebro'
 
 type Fila = Record<string, unknown>
 type Traer = (url: string, init?: RequestInit) => Promise<Response>
@@ -35,11 +36,32 @@ export function terminosPorCodigo(rubro: string, ciudad: string): TerminosDelRub
 }
 
 export interface InformeDeTendencias extends Partial<ResultadoDeTendencias> {
+  /** los videos de las piezas, bajados como video (con capturas) y enlazados a su tendencia */
+  videos?: ResultadoDeVideos & { enlazados: number }
   estado: 'corrida' | 'ya_miradas_hoy' | 'apagado' | 'sin_token' | 'sin_base' | 'sin_consultas' | 'error'
   guardadas?: number
   terminos?: TerminosDelRubro & { fuente: 'modelo' | 'codigo' }
   costo_modelo_usd?: number
   detalle?: string
+}
+
+/** baja los mejores videos de las piezas de hoy (los enlaces caducan), los guarda como videos del cliente (o de la bodega si `clientId` es nulo) y los enlaza a su fila de tendencia. Nunca lanza. */
+export async function bajarVideosDeTendencias(a: { clientId: string | null; piezas: Pieza[]; urlDeLaBase: string; llave: string; ahora: Date; fetchImpl?: Traer; ffmpeg?: string | null; max?: number; plazoMs?: number }): Promise<(ResultadoDeVideos & { enlazados: number }) | undefined> {
+  try {
+    const elegidos = videosDeTendencias(a.piezas, a.max)
+    if (!elegidos.length) return undefined
+    const r = await guardarVideos({ clientId: a.clientId, candidatos: elegidos.map((e) => e.candidato), urlDeLaBase: a.urlDeLaBase, llave: a.llave, fetchImpl: a.fetchImpl, max: elegidos.length, plazoMs: a.plazoMs ?? 90_000, ffmpeg: a.ffmpeg })
+    const traer: Traer = a.fetchImpl ?? ((u, i) => fetch(u, i))
+    let enlazados = 0
+    for (const e of elegidos) {
+      const id = r.ids?.[`${e.candidato.rol}|${e.candidato.handle}|${e.candidato.post_id}`]
+      if (!id) continue
+      const filtro = a.clientId ? `client_id=eq.${encodeURIComponent(a.clientId)}` : 'client_id=is.null'
+      const w = await traer(`${a.urlDeLaBase.replace(/\/$/, '')}/rest/v1/cerebro_tendencias?${filtro}&red=eq.${e.red}&post_ref=eq.${encodeURIComponent(e.post_ref)}&observado_dia=eq.${a.ahora.toISOString().slice(0, 10)}`, { method: 'PATCH', headers: { apikey: a.llave, Authorization: `Bearer ${a.llave}`, 'content-type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ video_id: id }) }).catch(() => null)
+      if (w?.ok) enlazados++
+    }
+    return { ...r, enlazados }
+  } catch { return undefined }
 }
 
 export async function tendenciasDelCliente(a: {
@@ -55,6 +77,8 @@ export async function tendenciasDelCliente(a: {
   fetchImpl?: Traer
   /** gasto de Apify de hoy ya hecho para este cliente (el tope del día lo incluye) */
   gastoPrevioUsd?: number
+  /** no bajar los videos (pruebas) */
+  sinVideos?: boolean
 }): Promise<InformeDeTendencias> {
   try {
     if (!a.token) return { estado: 'sin_token', detalle: 'no hay llave de Apify en el servidor' }
@@ -81,15 +105,16 @@ export async function tendenciasDelCliente(a: {
     if (!plan.length) return { estado: 'sin_consultas', terminos, costo_modelo_usd: costoModelo }
     const r = await correrConsultas({ plan, ejecutar: a.ejecutar ?? ejecutarEnApify({ token: a.token, fetchImpl: a.fetchImpl }), topeDelDiaUsd: TOPE_DEL_DIA_POR_CLIENTE_USD, gastoPrevioUsd: 0 })
     const g = await guardarTendencias({ clientId: a.clientId, piezas: r.filas, urlDeLaBase: a.urlDeLaBase, llave: a.llave, ahora: a.ahora, fetchImpl: a.fetchImpl })
+    const videos = g.error || a.sinVideos ? undefined : await bajarVideosDeTendencias({ clientId: a.clientId, piezas: r.filas, urlDeLaBase: a.urlDeLaBase, llave: a.llave, ahora: a.ahora, fetchImpl: a.fetchImpl })
     const { filas: _f, ...resto } = r
     void _f
-    return { estado: 'corrida', ...resto, guardadas: g.guardadas, terminos, costo_modelo_usd: costoModelo, ...(g.error ? { detalle: g.error } : {}) }
+    return { estado: 'corrida', ...resto, guardadas: g.guardadas, ...(videos ? { videos } : {}), terminos, costo_modelo_usd: costoModelo, ...(g.error ? { detalle: g.error } : {}) }
   } catch (e) {
     return { estado: 'error', detalle: (e instanceof Error ? e.message : String(e)).slice(0, 160) }
   }
 }
 
-export async function bodegaDelMundo(a: { paises: string[]; urlDeLaBase: string; llave: string; token: string; ahora: Date; ejecutar?: Ejecutar; fetchImpl?: Traer }): Promise<InformeDeTendencias> {
+export async function bodegaDelMundo(a: { paises: string[]; urlDeLaBase: string; llave: string; token: string; ahora: Date; ejecutar?: Ejecutar; fetchImpl?: Traer; sinVideos?: boolean }): Promise<InformeDeTendencias> {
   try {
     if (!a.token) return { estado: 'sin_token' }
     if (!a.urlDeLaBase || !a.llave) return { estado: 'sin_base' }
@@ -98,9 +123,10 @@ export async function bodegaDelMundo(a: { paises: string[]; urlDeLaBase: string;
     if (ya) return { estado: 'ya_miradas_hoy' }
     const r = await correrConsultas({ plan: planDeLaBodega({ paises: a.paises }), ejecutar: a.ejecutar ?? ejecutarEnApify({ token: a.token, fetchImpl: a.fetchImpl }), topeDelDiaUsd: TOPE_DEL_DIA_BODEGA_USD })
     const g = await guardarTendencias({ clientId: null, piezas: r.filas, urlDeLaBase: a.urlDeLaBase, llave: a.llave, ahora: a.ahora, fetchImpl: a.fetchImpl })
+    const videos = g.error || a.sinVideos ? undefined : await bajarVideosDeTendencias({ clientId: null, piezas: r.filas, urlDeLaBase: a.urlDeLaBase, llave: a.llave, ahora: a.ahora, fetchImpl: a.fetchImpl })
     const { filas: _f, ...resto } = r
     void _f
-    return { estado: 'corrida', ...resto, guardadas: g.guardadas, ...(g.error ? { detalle: g.error } : {}) }
+    return { estado: 'corrida', ...resto, guardadas: g.guardadas, ...(videos ? { videos } : {}), ...(g.error ? { detalle: g.error } : {}) }
   } catch (e) {
     return { estado: 'error', detalle: (e instanceof Error ? e.message : String(e)).slice(0, 160) }
   }

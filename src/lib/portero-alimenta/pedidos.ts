@@ -31,6 +31,7 @@ import { TOPE_DEL_PORTERO_USD } from './datos'
 import type { RespuestaDeLlamada } from './juez'
 import { gastoDeHoy, reconciliarYEnviar, validar, type DepsDeRutas, type Respuesta } from './rutas'
 import { leerTodas } from './paginar'
+import { nivelDeFicha, ordenarPorEmbudo } from './embudo'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -79,6 +80,8 @@ export interface ResultadoDeHueco {
   detalle: string
   /** ids de las fichas del cerebro que responden (existentes o nuevas) */
   fichas: string[]
+  /** el nivel del embudo de cada ficha entregada (propio · competencia · directa): salen en ese orden, lo propio primero */
+  fichas_nivel?: Record<string, string>
   /** lo hallado y entregado (con su fuente y su cita literal) */
   hallazgos: Array<{ resumen: string; url: string; cita: string; alcance: 'cliente' | 'mercado' }>
   /** lo que se intentó cuando no se resolvió */
@@ -635,6 +638,7 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
     huecos.push(r)
   }
 
+  const alcanceDe = new Map<string, unknown>(c.fichas.map((f) => [f.id, f.alcance]))
   // archivar lo hallado (misma función que los brazos: idempotente por `ref`, nada se borra)
   if (nuevas.length && !p.dry_run) {
     const a = await archivarFichasDeBrazos({ db: deps.db, fichas: nuevas, ahora, dry_run: false, workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, nuevoId: deps.nuevoId })
@@ -642,6 +646,7 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
     if (!a.errores.length) {
       const ids = await deps.db.from('cerebro_fichas').select('id, ref').eq('client_id', p.client_id).in('ref', nuevas.map((f) => f.ref)).is('retirada_en', null).limit(100)
       const porRef = new Map(lista(ids.data).map((x) => [String(x.ref), String(x.id)]))
+      for (const f of nuevas) { const id = porRef.get(f.ref); if (id) alcanceDe.set(id, f.alcance) }
       for (const r of huecos) if (r.estado === 'traido_y_archivado') r.fichas = nuevas.filter((f) => r.hallazgos.some((x) => x.url === f.fuente_url)).map((f) => porRef.get(f.ref)).filter((x): x is string => !!x)
       // el puente lleva lo nuevo al índice donde las oficinas buscan
       if (deps.interruptores.puente_al_indice) {
@@ -662,6 +667,13 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
       r.cercano = { fichas: r.fichas, se_parece: cerca[0].par.se_parece, no_se_parece: cerca[0].par.no_se_parece }
       r.detalle = `no está exacto; lo más cercano que hay en el cerebro (${cerca.length} ficha(s), con su procedencia): ${r.cercano.se_parece}; ${r.cercano.no_se_parece}`.slice(0, 400)
     } else { r.nada_usable = true; r.detalle = `nada usable: ${r.detalle || 'no se halló nada cercano'}`.slice(0, 400) }
+  }
+  // 01-nov · el embudo en todo: las fichas de cada hueco salen en el orden del embudo (lo propio primero, luego global → país → competencia → directa) y con su nivel
+  for (const r of huecos) {
+    if (!r.fichas.length) continue
+    r.fichas = ordenarPorEmbudo(r.fichas, (id) => ({ nivel: nivelDeFicha(alcanceDe.get(id)), gusto: null }))
+    r.fichas_nivel = Object.fromEntries(r.fichas.map((id) => [id, nivelDeFicha(alcanceDe.get(id))]))
+    if (r.cercano?.fichas) r.cercano.fichas = r.fichas
   }
   // la cadena (catálogo): una sola vez por pedido
   let cadena: { ok: boolean; detalle: string; funciones: string[] } | undefined

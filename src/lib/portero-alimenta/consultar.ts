@@ -10,6 +10,7 @@
 import type { Db } from './alimentar'
 import { candidatasPorPalabras, fichasPorAtributo, type FichaCandidata } from './pedidos'
 import { leerTodas } from './paginar'
+import { nivelDeFicha, ordenarPorEmbudo } from './embudo'
 import { adjuntoDelCliente } from './contexto-del-cliente'
 import type { Respuesta } from './rutas'
 
@@ -78,12 +79,14 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
   }
   const vigente = (f: FichaCandidata) => !f.vigente_hasta || Date.parse(f.vigente_hasta) > ahora.getTime()
   // las frescas primero (se conserva el orden de relevancia dentro de cada grupo)
-  const ordenadas = [...elegidas.filter(vigente), ...elegidas.filter((f) => !vigente(f))].slice(0, limite)
+  const porRelevancia = [...elegidas.filter(vigente), ...elegidas.filter((f) => !vigente(f))].slice(0, limite)
+  // 01-nov · el embudo en todo: lo propio primero y luego global → país → competencia → directa; dentro de cada nivel se conserva el orden de relevancia (una ficha no trae cifra de gusto)
+  const ordenadas = ordenarPorEmbudo(porRelevancia, (c) => ({ nivel: nivelDeFicha(porId.get(c.id)?.alcance), gusto: null }))
   const resultados = ordenadas.map((c) => {
     const f = porId.get(c.id) as Fila
     const contenido = txt(f.contenido) || txt(f.que_es)
     return {
-      ficha_id: c.id, ref: c.ref, clase: c.clase, atributo: c.atributo || null, titulo: c.titulo || null,
+      ficha_id: c.id, nivel: nivelDeFicha(f.alcance), ref: c.ref, clase: c.clase, atributo: c.atributo || null, titulo: c.titulo || null,
       contenido: contenido.length > LARGO_DEL_CONTENIDO ? `${contenido.slice(0, LARGO_DEL_CONTENIDO)}…` : contenido,
       procedencia: procedenciaDe(f),
       fecha: f.observado_en ? String(f.observado_en) : null, fecha_de_la_fuente: f.fecha_fuente ? String(f.fecha_fuente) : null, reconfirmado_en: f.reconfirmado_en ? String(f.reconfirmado_en) : null,

@@ -16,6 +16,9 @@ import { copiarFotosDeMapasPropia, type ResultadoDeFotosDeMapas } from './fotos-
 import { leerDocumentosDeLosSitios } from './documentos-enlazados'
 import type { LectorOcr } from './ocr-de-pdf'
 import { bodegaDelMundo, tendenciasDelCliente, type InformeDeTendencias } from './tendencias-del-cliente'
+import { ejecutarEnApify } from './tendencias'
+import { descubrirCuentas, type InformeDeCuentas } from './cuentas-de-redes'
+import { comentariosDeRedes, comentariosDeVideosDeLaCompetencia, ejecutarComentarios, guardarComentariosDeLaCompetencia, type InformeDeComentarios } from './comentarios-de-redes'
 import { completarCapturas, guardarVideos, videosDeLasFilas, type ResultadoDeVideos } from './videos-del-cerebro'
 import { juzgar, type DecisionDelJuez, type ItemParaJuzgar, type RespuestaDeLlamada } from './juez'
 import { planDeArchivo, planDeReconfirmaciones, type FichaReconfirmable, type PlanDeArchivo } from './archivar'
@@ -86,6 +89,10 @@ export interface ResultadoDeAlimentar {
   videos?: ResultadoDeVideos
   /** tendencias del rubro (embudo) y bodega viral del mundo (31-oct); ausente = apagado (PORTERO_TENDENCIAS) */
   tendencias?: { cliente: InformeDeTendencias; bodega: InformeDeTendencias }
+  /** 01-nov · las cuentas de TikTok y X que el sistema descubrió (propias y de competidores), con la regla única */
+  cuentas_de_redes?: InformeDeCuentas
+  /** 01-nov · comentarios de TikTok, Facebook y X (propios → fichas; de la competencia → su tabla) y los que ya traían los videos de Instagram de la competencia */
+  comentarios_de_redes?: InformeDeComentarios & { de_videos_de_la_competencia?: { leidos: number; guardados: number; error?: string } }
   /** videos ya guardados a los que se les sacaron las capturas que les faltaban */
   capturas_completadas?: { revisados: number; completados: number; capturas: number; fallidos: Array<{ post_id: string; causa: string }> }
   /** lo que hicieron los nuevos brazos (ausente = ninguno encendido) */
@@ -203,6 +210,13 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
       const entorno = e.env ?? process.env
       if (String(entorno.PORTERO_TENDENCIAS ?? '').trim().toLowerCase() === 'on') {
         const common = { urlDeLaBase: entorno.NEXT_PUBLIC_SUPABASE_URL ?? entorno.SUPABASE_URL ?? '', llave: entorno.SUPABASE_SERVICE_ROLE_KEY ?? '', token: entorno.APIFY_API_TOKEN ?? entorno.APIFY_API_KEY ?? '', ahora, fetchImpl: e.fetch as never }
+        // las cuentas de TikTok y X se buscan ANTES (regla única: nombre exacto o cuenta, nunca un homónimo); los comentarios y las tendencias directas usan lo que ya está en la ficha
+        const ejecutarApify = ejecutarEnApify({ token: common.token, fetchImpl: e.fetch as never })
+        r.cuentas_de_redes = await descubrirCuentas({ cliente: cliente as never, clientId: e.client_id, ciudades: lista(sd.data).map((s) => String(s.ciudad ?? '')).filter(Boolean), urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora, ejecutar: ejecutarApify, fetchImpl: e.fetch as never })
+        const cm = await comentariosDeRedes({ cliente: cliente as never, clientId: e.client_id, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora, ejecutar: ejecutarComentarios({ token: common.token, fetchImpl: e.fetch as never }), fetchImpl: e.fetch as never })
+        const deVideos = comentariosDeVideosDeLaCompetencia(lista(rr.data) as never, new Set(ctx.handles.map((h) => h.toLowerCase().replace(/^@/, ''))))
+        const gv = deVideos.length ? await guardarComentariosDeLaCompetencia({ clientId: e.client_id, comentarios: deVideos, urlDeLaBase: common.urlDeLaBase, llave: common.llave, ahora, fetchImpl: e.fetch as never }) : { guardados: 0 }
+        r.comentarios_de_redes = { ...cm, de_videos_de_la_competencia: { leidos: deVideos.length, guardados: gv.guardados, ...(gv.error ? { error: gv.error } : {}) } }
         const tendCliente = await tendenciasDelCliente({ ...common, cliente: cliente as never, clientId: e.client_id, ciudades: lista(sd.data).map((s) => String(s.ciudad ?? '')).filter(Boolean), llamarModelo: e.llamarModelo })
         const iso = paisIsoDe(cliente.country ?? cliente.pais, cliente.market)
         const bodega = await bodegaDelMundo({ ...common, paises: iso ? [iso] : [] })

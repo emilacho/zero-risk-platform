@@ -10,6 +10,7 @@
  * quedó superada por la decisión de Emilio del 27-oct: se pueden usar para crear (él aprueba cada pieza) y por eso se rotulan, no se esconden.
  */
 import type { Consulta, Fila } from '../consulta'
+import { gustoDe, nivelDeOrigen, ordenarPorEmbudo } from '../../portero-alimenta/embudo'
 
 /** cuántas etiquetas por cliente y día (≈ US$ 0,08 con el costo medido de ~US$ 0,008 por foto; dentro del tope diario del cliente) */
 export const TOPE_DE_ETIQUETAS_POR_CLIENTE_Y_DIA = 10
@@ -54,6 +55,9 @@ export function idsDeFotosRepetidas(filas: Fila[]): Set<string> {
 export interface FotoVista {
   foto_id: string
   origen: OrigenDeFoto
+  /** nivel del embudo (propio · global · pais · competencia · directa) y el gusto con que se ordena: una captura de un video de tendencia hereda los de su video; una foto suelta no trae cifra (null) */
+  nivel: string
+  gusto: number | null
   cuenta: string | null
   tipo: string | null
   medio: string | null
@@ -72,7 +76,7 @@ export interface FotoVista {
   no_se_pudo_leer: boolean
 }
 
-const COLUMNAS_DE_LECTURA = ['id', 'owner_role', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'etiqueta_modelo', 'duplicado_de', 'hash_archivo']
+const COLUMNAS_DE_LECTURA = ['video_id', 'id', 'owner_role', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'etiqueta_modelo', 'duplicado_de', 'hash_archivo']
 
 export interface PedidoDeFotos { cliente: string; origen?: OrigenDeFoto | null; soloEtiquetadas?: boolean; limite?: number }
 export type RespuestaDeFotos =
@@ -88,17 +92,21 @@ export async function listarFotos(consulta: Consulta, p: PedidoDeFotos): Promise
   const r = await consulta({ tabla: 'client_social_images', columnas: COLUMNAS_DE_LECTURA, donde: { client_id: cliente, estado: 'ok' }, orden: { columna: 'created_at', descendente: true }, limite: 1000 })
   if (r.error) return { ok: false, error: 'error_de_lectura', detalle: r.error.slice(0, 200) }
   const repetidas = idsDeFotosRepetidas(r.filas)
+  // 01-nov · el nivel de una captura de un video que vino de una tendencia es el de esa tendencia
+  const tn = await consulta({ tabla: 'cerebro_tendencias', columnas: ['video_id', 'nivel', 'me_gusta', 'vistas'], donde: { client_id: cliente }, limite: 2000 })
+  if (tn.error) return { ok: false, error: 'error_de_lectura', detalle: tn.error.slice(0, 200) }
+  const deTendencia = new Map<string, Fila>(tn.filas.filter((f) => txt(f.video_id)).map((f) => [String(f.video_id), f]))
   const vistas: FotoVista[] = r.filas
     .filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)))
     .map((f) => ({
-      foto_id: String(f.id), origen: origenDeLaFoto(f.owner_role), cuenta: txt(f.handle), tipo: txt(f.tipo), medio: txt(f.medio), url: txt(f.url),
+      foto_id: String(f.id), origen: origenDeLaFoto(f.owner_role), nivel: nivelDeOrigen(origenDeLaFoto(f.owner_role), txt(deTendencia.get(String(f.video_id))?.nivel)), gusto: gustoDe(deTendencia.get(String(f.video_id)) ?? null), cuenta: txt(f.handle), tipo: txt(f.tipo), medio: txt(f.medio), url: txt(f.url),
       publicada_en: txt(f.posted_at), copiada_en: txt(f.created_at), etiquetada: !!txt(f.etiquetada_en), que_muestra: txt(f.que_muestra), producto_visto: lista(f.producto_visto),
       texto_visible: txt(f.texto_visible), confianza: txt(f.etiqueta_confianza), con_personas: typeof f.con_personas === 'boolean' ? f.con_personas : null,
       tipo_de_toma: txt(f.tipo_de_toma), formato: txt(f.formato), no_se_pudo_leer: txt(f.etiqueta_modelo) === 'sin-lectura',
     }))
   const por_origen = Object.fromEntries(ORIGENES_DE_FOTO.map((o) => [o, { total: 0, etiquetadas: 0 }])) as Record<OrigenDeFoto, { total: number; etiquetadas: number }>
   for (const v of vistas) { por_origen[v.origen].total++; if (v.etiquetada) por_origen[v.origen].etiquetadas++ }
-  const filtradas = vistas.filter((v) => (!p.origen || v.origen === p.origen) && (!p.soloEtiquetadas || v.etiquetada))
+  const filtradas = ordenarPorEmbudo(vistas.filter((v) => (!p.origen || v.origen === p.origen) && (!p.soloEtiquetadas || v.etiquetada)), (v) => ({ nivel: v.nivel, gusto: v.gusto }))
   return { ok: true, cliente, total: vistas.length, devueltas: Math.min(filtradas.length, limite), por_origen, sin_etiquetar: vistas.filter((v) => !v.etiquetada).length, fotos: filtradas.slice(0, limite), modelos_llamados: 0, costo_usd: 0 }
 }
 

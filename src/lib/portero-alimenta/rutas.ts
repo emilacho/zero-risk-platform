@@ -8,7 +8,7 @@ import { PRESUPUESTO_DE_RUTA_MS, PRESUPUESTO_DEL_PUENTE_EN_ALIMENTAR_MS, PRESUPU
 import { alimentarCliente, contextoDelCliente, type Db, type ResultadoDeAlimentar } from './alimentar'
 import { coincidePorPalabra } from '../texto/coincidencia'
 import { fichaPropiaDeMapas } from './mapas-propia'
-import { articulosParaLeer, descubrir, MAX_RESENAS_POR_CORRIDA, type AccionDelPortero, type PlanDelPortero } from './plan'
+import { articulosParaLeer, descubrir, publicacionesConComentarios, MAX_RESENAS_POR_CORRIDA, type AccionDelPortero, type PlanDelPortero } from './plan'
 import { armarMensajeDePropuestas, INSTRUCCION_DE_PROPUESTAS, validarBusquedas, type ResultadoDePropuestas } from './propuestas'
 import { COSTO_MAXIMO_POR_FUNCION, FLUJO_DEL_PORTERO, gastoDelDia, invocacionDelPortero, soloLoDelPortero, VIDEO_DE_INSTAGRAM_USD, type FilaDeRaspadoDeOrigen, type FilaDelLibro } from './gasto'
 import { TOPE_DEL_PORTERO_USD, type Interruptores } from './datos'
@@ -130,7 +130,7 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
   const ctx = contextoDelCliente(cliente, lista(sd.data))
   const cfg = (cliente.config ?? {}) as Record<string, unknown>
   const usuariosPropios = new Set(ctx.handles.map((h) => h.toLowerCase()))
-  const publicaciones = [...new Set(lista(vg.data).flatMap((f) => lista(f.respuesta)).filter((p) => usuariosPropios.has(String(p.username ?? '').toLowerCase())).flatMap((p) => lista(p.latestPosts)).map((p) => String(p.shortCode ?? p.id ?? '')).filter(Boolean))]
+  const publicaciones = publicacionesConComentarios(lista(vg.data).flatMap((f) => lista(f.respuesta)).filter((p) => usuariosPropios.has(String(p.username ?? '').toLowerCase())).flatMap((p) => lista(p.latestPosts)))
   // las CIUDADES de las sedes (no sus claves: «norte» o «centro» no son ciudades y gastaban las búsquedas de Mapas); sin sedes, lo que dice la ficha
   const ciudadesDeSedes = lista(sd.data).map((s) => String(s.ciudad ?? '').trim()).filter(Boolean)
   const ciudades = ciudadesDeSedes.length ? ciudadesDeSedes : ctx.ubicacion
