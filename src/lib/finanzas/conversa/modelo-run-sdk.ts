@@ -3,8 +3,9 @@
  * El `fetch` es INYECTADO: ninguna prueba ni ruta de esta rama lo llama de verdad (la conversación nace apagada). Sin `fetch` ni `base` → «no configurado», sin red.
  */
 import type { ModeloPuerto, PedidoAlModelo, RespuestaDeModelo } from './puertos'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
-export const MAX_TAREA_RUN_SDK = 120_000
+export const MAX_TAREA_RUN_SDK = TOPE_REAL_DEL_PEDIDO
 
 /** el `workflow_id` es el REAL del flujo de n8n que llama (lo manda el flujo en el cuerpo); un literal inventado no pasa la puerta de run-sdk y ensucia el libro */
 export const esWorkflowIdValido = (x: unknown): x is string => typeof x === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(x)

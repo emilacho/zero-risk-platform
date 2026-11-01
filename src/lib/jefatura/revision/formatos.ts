@@ -14,11 +14,12 @@
  * Lo que este módulo NO puede probar: que el modelo real respete el formato con un plan real. Eso exige UNA llamada real (≈ US$ 1) que queda «con aviso y dale de Emilio» y NO se corre en la construcción.
  */
 import { descartarIgnorados, ESQUEMAS, limpiarSalida, normalizarEnumerados, procesarSalida, validar, type Esq, type ResultadoDeSalida } from '../../revision-comun'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
 export const MARCA_DE_INICIO_DE_RESOLUCION = '<<<RESOLUCION>>>'
 export const MARCA_DE_FIN_DE_RESOLUCION = '<<<FIN_RESOLUCION>>>'
 /** tope del texto de un plan (≥ el máximo medido, 33.588 caracteres) */
-export const TOPE_DE_CARACTERES_DEL_PLAN = 40_000
+export const TOPE_DE_CARACTERES_DEL_PLAN = TOPE_REAL_DEL_PEDIDO
 /** un «plan» más corto que esto es un resumen o un recorte, no el plan (el medido más corto tiene ≈ 24.800) */
 export const MINIMO_DE_CARACTERES_DEL_PLAN = 1_000
 

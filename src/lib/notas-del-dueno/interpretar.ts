@@ -9,7 +9,7 @@ import { ACCION_APROBAR, ACCION_RECHAZAR } from './mensaje-pieza'
 export const CALLBACK_DEL_RECHAZO = 'nota_rechazo'
 export const BLOQUE_DEL_MOTIVO = 'motivo'
 export const CAMPO_DEL_MOTIVO = 'valor'
-const MAX_COMENTARIO = 2000
+import { TOPE_DEL_TEXTO_DEL_DUENO as MAX_COMENTARIO } from '../limites-de-tamano'
 
 export type Intencion =
   | { tipo: 'reto'; challenge: string }

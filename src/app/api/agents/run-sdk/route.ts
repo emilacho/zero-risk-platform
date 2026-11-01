@@ -64,6 +64,7 @@ import { makeCallbackAttemptLogger } from '@/lib/agent-async-callback/persist-at
 import { waitUntil } from '@vercel/functions'
 import { MODELOS_POR_CORRIDA, modeloPorCorridaValido } from '@/lib/modelo-por-corrida'
 import { resolverEsquema } from '@/lib/salida-estructurada'
+import { TOPE_REAL_DEL_PEDIDO } from '@/lib/limites-de-tamano'
 
 export const runtime = 'nodejs'
 // Sprint 12 Track U · P0 #2 bump 300→800s · Track R audit identified Journey B
@@ -341,7 +342,7 @@ const RAILWAY_FETCH_TIMEOUT_MS = 790_000
  * tope la rechazó, así que la revisión se cerró «fallida» sin corregir nada. Una reescritura suma además el plan anterior (~165.000 en el peor caso). 200.000 sigue
  * **5× por debajo** del 1 MB medido, y es la misma firma de Emilio: «no se recorta, se recibe». El rechazo por encima sigue siendo el 400 gratis.
  */
-export const TASK_MAX_CHARS = 200_000
+export const TASK_MAX_CHARS = TOPE_REAL_DEL_PEDIDO
 
 const RAILWAY_PROXY_MAX_ATTEMPTS = 3
 const RAILWAY_PROXY_BACKOFF_MS: readonly number[] = [2_000, 4_000]

@@ -262,8 +262,8 @@ describe('formatGuardrailsForPrompt', () => {
     expect(out.endsWith('</client_guardrails>')).toBe(true)
     // Order: VOICE → FORBIDDEN → REQUIRED → COMPETITOR → COMPLIANCE
     const idx = (s: string) => out.indexOf(s)
-    expect(idx('VOICE:')).toBeLessThan(idx('FORBIDDEN WORDS'))
-    expect(idx('FORBIDDEN WORDS')).toBeLessThan(idx('REQUIRED TERMINOLOGY'))
+    expect(idx('VOICE:')).toBeLessThan(idx('WORDS THE BRAND AVOIDS'))
+    expect(idx('WORDS THE BRAND AVOIDS')).toBeLessThan(idx('REQUIRED TERMINOLOGY'))
     expect(idx('REQUIRED TERMINOLOGY')).toBeLessThan(idx('COMPETITOR POLICY'))
     expect(idx('COMPETITOR POLICY')).toBeLessThan(idx('COMPLIANCE'))
     // Joins arrays with ", "

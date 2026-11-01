@@ -18,6 +18,7 @@
  *   · IDIOMA Y TRATO: los del manual del cliente (el flujo los trae en `params.idioma` / `params.trato`); ninguna indicación de aquí los fija.
  */
 import { contarSenales, declaraSinDato } from './brazos'
+import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 
 export const MESA = 'mesa_de_analisis'
 export const CLAVE_DE_LA_PALANCA = 'mesa_de_analisis'
@@ -69,8 +70,8 @@ export const TOPE_MAXIMO_POR_ANALISTA_USD = 2
 /** FIRMA de Emilio 01-nov 09:50Z: US$ 5 por sobre (5 analistas × US$ 1); antes US$ 4 dejaba fuera siempre al quinto */
 export const TOPE_DE_LA_MESA_USD = 5
 /** el informe que vuelve al plan (ADENDA 1: 6.000, no 2.500) y el material crudo que recibe cada analista */
-export const TOPE_DEL_INFORME = 6_000
-export const TOPE_DEL_MATERIAL = 6_000
+export const TOPE_DEL_INFORME = TOPE_REAL_DEL_PEDIDO
+export const TOPE_DEL_MATERIAL = TOPE_REAL_DEL_PEDIDO
 export const HALLAZGOS_ESPERADOS = { min: 3, max: 7 } as const
 
 export const rotuloDe = (tipo: TipoDeAnalisis): string => `[informe de análisis · ${tipo} · PROPUESTA: no es dato del cliente]`
@@ -112,7 +113,7 @@ export interface FichaDelMaterial { readonly ficha_id: string; readonly clase: s
 export interface Material { readonly texto: string; readonly ids: ReadonlyArray<string>; readonly fichas: number; readonly recortado: boolean; readonly con_resumen_vivo: boolean }
 
 /** el material del analista: el resumen vivo ENTERO (si lo hay) y las fichas del portero rotuladas con su id, hasta el tope (se declara el recorte) */
-export function armarMaterial(a: { resumen_vivo: string | null; fichas: ReadonlyArray<FichaDelMaterial> }): Material {
+export function armarMaterial(a: { resumen_vivo: string | null; fichas: ReadonlyArray<FichaDelMaterial>; /** las fichas que cita el resumen vivo: el analista las leyó ahí y citarlas es válido (corrida 210273: la consulta no trajo fichas y un informe bien citado se descartó) */ ids_del_resumen?: ReadonlyArray<string> }): Material {
   const ids: string[] = []
   const lineas: string[] = []
   let largo = 0
@@ -128,7 +129,7 @@ export function armarMaterial(a: { resumen_vivo: string | null; fichas: Readonly
     lineas.length ? `FICHAS DEL CEREBRO SOBRE EL TEMA (cita el id entre corchetes tal cual):\n${lineas.join('\n')}` : 'FICHAS DEL CEREBRO SOBRE EL TEMA: ninguna.',
     ...(recortado ? [`(el material se recortó al tope de ${TOPE_DEL_MATERIAL} caracteres: ${ids.length} de ${a.fichas.length} fichas)`] : []),
   ].join('\n\n')
-  return { texto, ids, fichas: ids.length, recortado, con_resumen_vivo: resumen.length > 0 }
+  return { texto, ids: [...new Set([...ids, ...(a.ids_del_resumen ?? [])])], fichas: ids.length, recortado, con_resumen_vivo: resumen.length > 0 }
 }
 
 // ─────────────────────────────────────────────────────────── la tarea
@@ -153,7 +154,6 @@ export function tareaDeAnalisis(a: { analista: Analista; ficha: FichaDelCliente;
     '- NO nombres a ninguna persona (dueños, empleados, clientes, autores de reseñas): habla del negocio y del público. NO escribas cifras del cliente que el material no traiga.',
     `- Encabeza el informe con el rótulo exacto: ${rotuloDe(an.tipo)}`,
     `- Idioma: ${idioma}. Trato: ${trato}. Esta regla manda sobre cualquier regla de tu identidad que fije otro idioma o trato para los informes.`,
-    `- El informe no pasa de ${TOPE_DEL_INFORME} caracteres.`,
     ...(a.metodo ? ['', a.metodo] : []),
     ...(a.proposito ? ['', `Para qué sirve en el plan: ${a.proposito}`] : []),
     '',

@@ -454,7 +454,7 @@ export async function brazoAnalisis(args: {
       if (!salida) return { hay: false as const, noSeMiro: true, motivo: 'el analista devolvió vacío · no hay informe' }
       const leido = args.leer(salida)
       if (leido.hallazgos === 0) {
-        if (leido.declara_sin_dato) return { hay: false as const, motivo: `fui, miré y no hay: el analista «${args.tipo}» declaró «sin dato» y no estimó · ` + salida.slice(0, 200) }
+        if (leido.declara_sin_dato) return { hay: false as const, motivo: (args.tipo === 'escucha_x' ? 'sin material de X todavía: el cerebro aún no trae publicaciones de X · no es una falla · ' : `fui, miré y no hay: el analista «${args.tipo}» declaró «sin dato» y no estimó · `) + salida.slice(0, 200) }
         return {
           hay: false as const, noSeMiro: true,
           motivo: leido.lineas_sin_sosten

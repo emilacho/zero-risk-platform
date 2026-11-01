@@ -112,3 +112,19 @@ export const tipoDeLaFicha = (f: Fila): string => {
 }
 /** la fecha de corte vive en `fecha_fuente` (la fecha del material en que se apoya el informe) */
 const corteDe = (f: Fila): string => txt(f.fecha_fuente)
+
+/**
+ * (01-nov · mesa de análisis) el resumen vivo cita sus fichas con el id corto `[ficha:xxxxxxxx · fecha]`: esto los lleva al id completo, solo de ESTE cliente.
+ * Un prefijo que casa con dos fichas no identifica a ninguna y no se cuenta. Si la lectura falla devuelve [] : el informe se juzga solo por las fichas de la consulta, como antes.
+ */
+export async function idsCitadosEnElTexto(db: Db, clientId: string, texto: string): Promise<string[]> {
+  const cortos = new Set([...texto.matchAll(/\[ficha:([0-9a-f]{8})/gi)].map((m) => m[1].toLowerCase()))
+  if (!cortos.size) return []
+  try {
+    const r = await db.from('cerebro_fichas').select('id').eq('client_id', clientId)
+    if (r.error) return []
+    const porCorto = new Map<string, string[]>()
+    for (const f of (r.data as Fila[] | null) ?? []) { const id = txt(f.id).toLowerCase(); const k = id.slice(0, 8); if (cortos.has(k)) porCorto.set(k, [...(porCorto.get(k) ?? []), id]) }
+    return [...porCorto.values()].filter((v) => v.length === 1).map((v) => v[0])
+  } catch { return [] }
+}

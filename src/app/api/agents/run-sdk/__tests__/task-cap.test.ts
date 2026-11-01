@@ -26,8 +26,8 @@ describe('los DOS topes del camino · atados', () => {
   const delContrato = (contrato as { properties: { task: { maxLength: number } } }).properties.task
     .maxLength
 
-  it('el contrato (el que RECHAZA) también está en 200.000', () => {
-    expect(delContrato).toBe(200_000)
+  it('el contrato (el que RECHAZA) también está en 600.000', () => {
+    expect(delContrato).toBe(600_000)
   })
 
   it('contrato y route.ts coinciden · si alguien mueve uno, este test cae', () => {
@@ -45,8 +45,8 @@ const delContratoTask = (contrato as { properties: { task: { maxLength: number }
   .task.maxLength
 
 describe('TASK_MAX_CHARS · el tope del endpoint', () => {
-  it('es 200.000 · techo medido (1 MB del corredor) con 5× de margen · cabe la corrección real del plan (125.108, corrida 210273)', () => {
-    expect(TASK_MAX_CHARS).toBe(200_000)
+  it('es 600.000 · el límite real del modelo, bajo el 1 MB del corredor · cabe la corrección real del plan (125.108, corrida 210273)', () => {
+    expect(TASK_MAX_CHARS).toBe(600_000)
     expect(TASK_MAX_CHARS).toBeGreaterThan(125_108)
   })
 
@@ -63,7 +63,7 @@ describe('TASK_MAX_CHARS · el tope del endpoint', () => {
 
   it('queda MUY por debajo del techo duro medido · el 1 MB del corredor', () => {
     const TECHO_DURO_CORREDOR = 1_000_000 // medido: 977 KB → 200 · 1,17 MB → 413
-    expect(TASK_MAX_CHARS).toBeLessThanOrEqual(TECHO_DURO_CORREDOR / 5)
+    expect(TASK_MAX_CHARS).toBeLessThan(TECHO_DURO_CORREDOR)
   })
 
   it('deja lugar sobre los 7.900 con que el grafo ya recorta sus prompts', () => {

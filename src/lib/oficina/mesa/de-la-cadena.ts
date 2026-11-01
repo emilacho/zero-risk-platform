@@ -9,6 +9,7 @@ import type { Respuesta } from '../orquestador'
 import type { FotoEtiquetada } from '../fotos'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import { estadoInicial, type Estado } from '../tipos'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
 export type TipoDeMesaDeLaCadena = 'brief' | 'concepto'
 export const FAMILIA_DE: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brief_mesa', concepto: 'concepto_mesa' }
@@ -49,7 +50,7 @@ export function validarSobreDeLaCadena(x: unknown): { ok: true; sobre: SobreDeLa
   if (typeof b.marco_texto !== 'string' || b.marco_texto.trim().length < 20) errores.push('`marco_texto` falta (el marco de la mesa)')
   if (b.condiciones !== undefined && (!Array.isArray(b.condiciones) || b.condiciones.some((c) => typeof c !== 'string' || !/^si_[a-z0-9_]{1,30}$/.test(c)))) errores.push('`condiciones` debe ser una lista de claves `si_…`')
   if (errores.length) return { ok: false, errores }
-  return { ok: true, sobre: { condiciones: ((b.condiciones as string[] | undefined) ?? []).slice(0, 20), tipo_de_mesa: b.tipo_de_mesa as TipoDeMesaDeLaCadena, client_id: b.client_id as string, campana_id: b.campana_id as string, version: b.version as number, marco_texto: (b.marco_texto as string).slice(0, 60_000), dry_run: b.dry_run as boolean } }
+  return { ok: true, sobre: { condiciones: ((b.condiciones as string[] | undefined) ?? []).slice(0, 20), tipo_de_mesa: b.tipo_de_mesa as TipoDeMesaDeLaCadena, client_id: b.client_id as string, campana_id: b.campana_id as string, version: b.version as number, marco_texto: (b.marco_texto as string).slice(0, TOPE_REAL_DEL_PEDIDO), dry_run: b.dry_run as boolean } }
 }
 
 /**

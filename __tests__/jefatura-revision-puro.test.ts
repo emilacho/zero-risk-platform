@@ -59,8 +59,8 @@ describe('contrato de entrada', () => {
 })
 
 describe('plan · texto plano + bloque de resolución (condición 1 de CC#3)', () => {
-  it('el tope del texto es ≥ 40.000 caracteres y el mínimo evita un resumen', () => {
-    expect(TOPE_DE_CARACTERES_DEL_PLAN).toBeGreaterThanOrEqual(40_000)
+  it('el tope del texto es ≥ 600.000 caracteres y el mínimo evita un resumen', () => {
+    expect(TOPE_DE_CARACTERES_DEL_PLAN).toBeGreaterThanOrEqual(600_000)
     expect(MINIMO_DE_CARACTERES_DEL_PLAN).toBe(1_000)
   })
   it('acepta un plan de 34.000 caracteres (el máximo medido) más su bloque, sin meterlo en un JSON', () => {
@@ -68,9 +68,9 @@ describe('plan · texto plano + bloque de resolución (condición 1 de CC#3)', (
     expect(r.ok).toBe(true)
     if (r.ok) { expect(r.texto).toHaveLength(34_000); expect(r.respuestas).toEqual(TOMADA) }
   })
-  it('el tope es 40.000 CARACTERES literales: 40.000 pasa y 40.001 no (no depende de la constante)', () => {
-    expect(separarTextoYResolucion(`${plan(40_000)}\n${bloque(TOMADA)}`, { exigirTexto: false }).ok).toBe(true)
-    expect(separarTextoYResolucion(`${plan(40_001)}\n${bloque(TOMADA)}`, { exigirTexto: false }).ok).toBe(false)
+  it('el tope es 600.000 CARACTERES literales: 600.000 pasa y 600.001 no (no depende de la constante)', () => {
+    expect(separarTextoYResolucion(`${plan(600_000)}\n${bloque(TOMADA)}`, { exigirTexto: false }).ok).toBe(true)
+    expect(separarTextoYResolucion(`${plan(600_001)}\n${bloque(TOMADA)}`, { exigirTexto: false }).ok).toBe(false)
   })
   it('rechaza un plan que pasa el tope', () => {
     const r = separarTextoYResolucion(`${plan(TOPE_DE_CARACTERES_DEL_PLAN + 1)}\n${bloque(TOMADA)}`, { exigirTexto: false })

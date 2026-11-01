@@ -9,6 +9,7 @@ import type { Estrategia, Ficha, Fila, Hallazgo } from './tipos'
 import { reglaDeIdioma, reglaDeRegistro, type RegistroDelCliente } from './registro'
 import type { FechaEspecialVerificada } from './validador-calendario'
 import { contextoDeEstado } from '../sedes/por-abrir'
+import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 
 const REGLAS_BASE = [
   'Respondes SOLO con el objeto que pide el formato de salida. No escribas nada fuera de él.',
@@ -147,7 +148,7 @@ export interface PedidoDeFechas { tipo: string; ambito: string; anio: number; pa
 
 /** Extraer fechas de un TIPO y un ÁMBITO que el cliente declaró, de páginas que el CÓDIGO ya descargó. El código luego comprueba cada cita contra la página. */
 export function tareaDeFechas(p: PedidoDeFechas): string {
-  const MAX = 40_000
+  const MAX = TOPE_REAL_DEL_PEDIDO
   let usado = 0
   const paginas = p.paginas.map((x) => { const t = x.texto.slice(0, Math.max(0, MAX - usado)); usado += t.length; return '## PÁGINA ' + x.url + '\n' + t }).join('\n\n')
   return [

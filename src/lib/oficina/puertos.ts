@@ -157,6 +157,8 @@ export interface PuertoDeVideo {
 }
 
 export interface Puertos {
+  /** (01-nov) lo que el revisor de la jefatura debe tener además del manual y el brief: resumen vivo, informes, lo que dijo el dueño y las páginas del sitio */
+  carpetaParaRevisar?(clientId: string): Promise<Array<{ titulo: string; funcion?: string; texto: string }>>
   almacen: Almacen
   /** LA CADENA (opcional): solo la mesa de creativos del calendario la usa. Sin él esa familia falla visible (y la cadena ordena el calendario sin ideas al vencer el plazo) */
   cadena?: PuertoDeLaCadena
