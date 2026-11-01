@@ -104,6 +104,8 @@ describe('3 · design-visual-storyteller: sonnet → opus + capa local corta, si
     expect(SQL_1300).toContain(`array_prepend(\n  $d$${CAPA_LOCAL}$d$,\n  indicacion)`)
     expect(SQL_1300).toMatch(/WHERE agente = 'design-visual-storyteller'\s+AND NOT EXISTS \(SELECT 1 FROM unnest\(indicacion\) i WHERE i LIKE 'En esta agencia tu trabajo es la dirección visual%'\)/)
     expect(SQL_1300).toMatch(/indicacion\[1\] LIKE 'En esta agencia tu trabajo es la dirección visual%'/)
+    // R29 (certificación CC3): la guarda d = 1 de la capa local existe y frena
+    expect(SQL_1300).toMatch(/IF d <> 1 THEN RAISE EXCEPTION 'falta la capa local del storyteller en su indicación'/)
     expect(REV_1300).toContain(`array_remove(indicacion,\n  $d$${CAPA_LOCAL}$d$)`)
     // en la mesa, la capa local llega como indicación del asiento (dato)
     const s = armarTarea({ tipo: 'aportar', agente: 'design-visual-storyteller', tarjeta: TRAS_1300.find((x) => x.agente === 'design-visual-storyteller'), est: estado('video'), libro: [], c: contexto('video') })
