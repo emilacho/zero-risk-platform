@@ -17,6 +17,7 @@ import { construirMesaDeAnalisis } from './mesa-de-analisis.mjs'
 import { construirParadaPlanRevisado } from './parar-plan-revisado.mjs'
 import { construirRecogerDelPuntoDeControl } from './recoger-del-punto-de-control.mjs'
 import { construirControlDeCifras } from './control-de-cifras.mjs'
+import { construirTextoLibreDelDueno } from './texto-libre-del-dueno.mjs'
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
 
 const ID = 'X9F0zp6LQ2xGEYVS'
@@ -202,6 +203,7 @@ export function construirPlaneacion() {
   // G · 01-nov · la vuelta del redactor que no llega por cable se recoge del punto de control
   construirRecogerDelPuntoDeControl(f)
   construirControlDeCifras(f)
+  construirTextoLibreDelDueno(f)
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
   agregarNodo(f, codigo('Redactor · elegir', CODIGO_ELEGIR), 'Redactor (B4)', 440, 0)
