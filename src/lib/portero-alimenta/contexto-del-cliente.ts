@@ -66,8 +66,8 @@ export async function adjuntoDelCliente(db: Db, clientId: string, ahora: Date = 
 /** del manual vigente; nunca lanza: sin este dato la carpeta viaja igual */
 async function esloganVigente(db: Db, clientId: string): Promise<ContextoDelCliente['eslogan'] | null> {
   try {
-    const r = await db.from('client_brand_books').select('tagline, content_text').eq('client_id', clientId).order('version', { ascending: false }).limit(1)
-    const fila = r.error ? null : lista(r.data)[0]
+    const r = await db.from('client_brand_books').select('tagline, content_text, version').eq('client_id', clientId)
+    const fila = r.error ? null : lista(r.data).reduce<Fila | null>((m, f) => (!m || Number(f.version) > Number(m.version) ? f : m), null)
     if (!fila) return null
     let borrador: Fila = {}
     try { borrador = (JSON.parse(txt(fila.content_text)) as { brand_book_draft?: Fila }).brand_book_draft ?? {} } catch { /* contenido ilegible: queda la columna */ }
