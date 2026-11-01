@@ -19,7 +19,7 @@ const bloqueHechosDelDueno = (function () {
     const tema = una(h.tema, 120);
     const sede = una(h.sede, 80);
     const neg = (Array.isArray(h.frases_negadas) ? h.frases_negadas : []).map(function (x) { return una(x, 120); }).filter(Boolean).slice(0, 6);
-    filas.push('- ' + (tema ? tema + ' ' : '') + (sede ? '[sede: ' + limpio(sede) + '] ' : '') + '→ ' + limpio(resp) + (neg.length ? ' · NO digas ni insinúes: ' + neg.map(function (x) { return '«' + limpio(x) + '»'; }).join(', ') : ''));
+    filas.push('- ' + (tema ? limpio(tema) + ' ' : '') + (sede ? '[sede: ' + limpio(sede) + '] ' : '') + '→ ' + limpio(resp) + (neg.length ? ' · NO digas ni insinúes: ' + neg.map(function (x) { return '«' + limpio(x) + '»'; }).join(', ') : ''));
   }
   if (!filas.length) return [];
   return [
