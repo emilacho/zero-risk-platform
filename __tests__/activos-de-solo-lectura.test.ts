@@ -24,6 +24,19 @@ describe('🔴 proponer tocarlo se marca', () => {
     expect(controlarActivosDeSoloLectura('Instalar píxel de Meta en mi-negocio.com.', [VARIOS])).toHaveLength(1)
     expect(controlarActivosDeSoloLectura('Corregir la discrepancia de horario entre el sitio (07:00-15:00) y el Instagram (08:00-16:00).', [VARIOS])).toHaveLength(1)
   })
+  it('🔴 palabra entera (hueco 1 de CC3): «web» no es «website» ni «webinar», con la palabra sí', () => {
+    const W = [{ tema: 'solo lectura · web' }]
+    expect(controlarActivosDeSoloLectura('Actualizar el website de la competencia.', W)).toEqual([])
+    expect(controlarActivosDeSoloLectura('Editar el webinar del mes.', W)).toEqual([])
+    expect(controlarActivosDeSoloLectura('Actualizar la web.', W)).toHaveLength(1)
+  })
+  it('un nombre de menos de 3 letras no cuenta (hueco 2 de CC3): si no, casi todo coincidiría', () => {
+    expect(controlarActivosDeSoloLectura('Editar el de la casa.', [{ tema: 'solo lectura · de' }])).toEqual([])
+  })
+  it('verbos en inglés y otro separador del tema (hueco 3 de CC3)', () => {
+    expect(controlarActivosDeSoloLectura('Update the store page.', [{ tema: 'Solo lectura - store page' }])).toHaveLength(1)
+    expect(activoDeSoloLectura('solo lectura – tienda')).toBe('tienda')
+  })
   it('marca cada frase, hasta tres', () => {
     expect(controlarActivosDeSoloLectura('Editar el sitio. Corregir el sitio. Cambiar el sitio. Actualizar el sitio.', [VARIOS])).toHaveLength(3)
   })
