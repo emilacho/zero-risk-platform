@@ -3,6 +3,7 @@
  * Fija el CONTRATO: las dos tablas con permisos (RLS + revoke + grant + policy), los estados y topes iguales a los del código, cero DDL sobre
  * client_historical_outputs, y una reversa que se niega con reescrituras abiertas.
  */
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -27,9 +28,9 @@ describe('migración 202611011900 · plan_aprobaciones + plan_cambios (NO se apl
       expect(MIG).toContain(`plan_id uuid not null references public.client_historical_outputs (id)`)
     }
   })
-  it('los estados y topes son los del código: vuelta 1..TOPE_DE_VUELTAS, texto 5..4000, una compuerta por plan, un solo pedido abierto por plan', () => {
+  it('los estados y topes son los del código: vuelta 1..TOPE_DE_VUELTAS, texto 5..TOPE_DEL_TEXTO_DEL_DUENO (ampliado por 202611012100), una compuerta por plan, un solo pedido abierto por plan', () => {
     expect(MIG).toContain(`vuelta int not null check (vuelta between 1 and ${TOPE_DE_VUELTAS})`)
-    expect(MIG).toContain(`check (char_length(texto) between 5 and 4000)`)
+    expect(readFileSync(join(process.cwd(), 'supabase/migrations/202611012100_textos_del_dueno_sin_tope_corto.sql'), 'utf8')).toContain(`CHECK (char_length(texto) BETWEEN 5 AND ${TOPE_DEL_TEXTO_DEL_DUENO})`)
     expect(MIG).toContain(`check (estado in ('pendiente', 'en_reescritura', 'aplicado', 'fallido', 'cancelado'))`)
     expect(MIG).toContain(`check (estado in ('pendiente', 'aprobado', 'cambios_pedidos', 'reemplazado'))`)
     expect(MIG).toMatch(/plan_aprobaciones \([\s\S]*?unique \(plan_id\)\s*\);/)

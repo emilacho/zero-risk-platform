@@ -42,12 +42,17 @@ describe('plan-cambios', () => {
     expect((await llamar('plan-cambios', db, { plan_id: P1, texto: TEXTO, ...GASTO })).status).toBe(200)
     expect(db.tablas['plan_aprobaciones'][0]).toMatchObject({ estado: 'cambios_pedidos', decidido_por: 'emilio', decidido_en: AHORA.toISOString(), comentario: TEXTO })
   })
+  it('un pedido de 100.000 caracteres pasa la puerta: el dueño no tiene un tope corto (encargo 01-nov)', async () => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan()])
+    const s = await llamar('plan-cambios', db, { plan_id: P1, texto: 'x'.repeat(100_000), ...GASTO })
+    expect(s.cuerpo.error).not.toBe('entrada_invalida')
+  })
   it('entradas malas → 400 sin tocar la base: plan_id, texto corto o largo, sin confirmar el gasto, tope por encima del máximo', async () => {
     const db = new DbFalsa().semilla('client_historical_outputs', [plan()])
     for (const [cuerpo, error] of [
       [{ plan_id: 'x', texto: TEXTO, ...GASTO }, 'entrada_invalida'],
       [{ plan_id: P1, texto: 'abc', ...GASTO }, 'entrada_invalida'],
-      [{ plan_id: P1, texto: 'x'.repeat(4001), ...GASTO }, 'entrada_invalida'],
+      [{ plan_id: P1, texto: 'x'.repeat(100_001), ...GASTO }, 'entrada_invalida'],
       [{ plan_id: P1, texto: TEXTO, tope_usd: 6 }, 'falta_confirmar_el_gasto'],
       [{ plan_id: P1, texto: TEXTO, confirmo_gasto: true }, 'falta_el_tope'],
       [{ plan_id: P1, texto: TEXTO, confirmo_gasto: true, tope_usd: TOPE_REESCRITURA_USD + 0.01 }, 'tope_demasiado_alto'],

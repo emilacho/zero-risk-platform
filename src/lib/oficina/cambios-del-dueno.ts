@@ -4,6 +4,8 @@
  * tienen su propio límite de 5 rondas. El comentario viaja en `sala_ref.cambios_del_dueno` y se entrega a cada agente en su tarea (seccionDeCambiosDelDueno).
  */
 
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../limites-de-tamano'
+
 export const MAX_RONDAS_DE_CAMBIOS = 5
 export const TIPO_PIEZA_DE_OFICINA_BANDEJA = 'content_piece_review'
 
@@ -25,7 +27,7 @@ export function erroresDeCambios(c: unknown): string[] {
   if (!esObjeto(c)) return ['`cambios_del_dueno` debe ser un objeto']
   const e: string[] = []
   if (!(Number.isInteger(c.ronda) && (c.ronda as number) >= 1 && (c.ronda as number) <= MAX_RONDAS_DE_CAMBIOS)) e.push(`\`cambios_del_dueno.ronda\` debe ser un entero de 1 a ${MAX_RONDAS_DE_CAMBIOS}`)
-  if (!(typeof c.comentario === 'string' && c.comentario.trim().length >= 5 && c.comentario.trim().length <= 2000)) e.push('`cambios_del_dueno.comentario` debe tener de 5 a 2000 caracteres')
+  if (!(typeof c.comentario === 'string' && c.comentario.trim().length >= 5 && c.comentario.trim().length <= TOPE_DEL_TEXTO_DEL_DUENO)) e.push(`\`cambios_del_dueno.comentario\` debe tener de 5 a ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`)
   if (!(Array.isArray(c.laminas) && c.laminas.length <= 20 && c.laminas.every((n) => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 20))) e.push('`cambios_del_dueno.laminas` debe ser una lista de números de lámina (1 a 20)')
   if (typeof c.desde_hitl !== 'string' || !c.desde_hitl) e.push('`cambios_del_dueno.desde_hitl` obligatorio')
   if (typeof c.pedido_por !== 'string' || !c.pedido_por) e.push('`cambios_del_dueno.pedido_por` obligatorio')

@@ -1,9 +1,10 @@
 /**
  * POST /api/oficina/cambios · el dueño devuelve una pieza cerrada con cambios (ventana de piezas, 29-oct).
- * Llave: `x-api-key` (INTERNAL_API_KEY), como `PATCH /api/hitl/[id]`. Cuerpo: { hitl_id (uuid), comentario (5–2000), laminas?: number[], reviewer?: string, despertar?: boolean }.
+ * Llave: `x-api-key` (INTERNAL_API_KEY), como `PATCH /api/hitl/[id]`. Cuerpo: { hitl_id (uuid), comentario (5 hasta TOPE_DEL_TEXTO_DEL_DUENO), laminas?: number[], reviewer?: string, despertar?: boolean }.
  * Efecto: la pieza pasa a «edited» (con la ronda y el comentario) y se abre la versión siguiente del mismo brief; NO cuenta para el tope de 3 versiones, su límite son 5 rondas.
  * 409: ya decidida (doble clic o Slack a la vez) · límite de rondas · el encargo no está cerrado · es un ensayo.
  */
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '@/lib/limites-de-tamano'
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { pedirCambios } from '@/lib/oficina/cambios'
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
   const errores: string[] = []
   if (typeof cuerpo.hitl_id !== 'string' || !UUID.test(cuerpo.hitl_id)) errores.push('`hitl_id` debe ser un uuid')
   const comentario = typeof cuerpo.comentario === 'string' ? cuerpo.comentario.trim() : ''
-  if (comentario.length < 5 || comentario.length > 2000) errores.push('`comentario` debe tener de 5 a 2000 caracteres')
+  if (comentario.length < 5 || comentario.length > TOPE_DEL_TEXTO_DEL_DUENO) errores.push(`\`comentario\` debe tener de 5 a ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`)
   const laminas = cuerpo.laminas === undefined ? [] : cuerpo.laminas
   if (!Array.isArray(laminas) || laminas.length > 20 || !laminas.every((n) => Number.isInteger(n) && n >= 1 && n <= 20)) errores.push('`laminas` debe ser una lista de números de lámina (1 a 20)')
   const reviewer = cuerpo.reviewer === undefined ? 'emilio' : cuerpo.reviewer

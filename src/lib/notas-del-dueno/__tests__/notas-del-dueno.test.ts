@@ -104,7 +104,7 @@ describe('interpretar lo que manda Slack', () => {
   it('el formulario del motivo ⇒ rechazar con el comentario (o sin él)', () => {
     expect(interpretarInteractividad(envio('Muy largo'))).toEqual({ tipo: 'rechazar', hitl_id: HITL, autor: EMILIO, canal: 'C1', ts: '1.1', comentario: 'Muy largo' })
     expect(interpretarInteractividad(envio())).toMatchObject({ tipo: 'rechazar', comentario: null })
-    expect(interpretarInteractividad(envio('x'.repeat(2500)))).toMatchObject({ comentario: 'x'.repeat(2000) })
+    expect(interpretarInteractividad(envio('x'.repeat(100_500)))).toMatchObject({ comentario: 'x'.repeat(100_000) })
   })
   it('ignora un formulario ajeno o con metadata rota', () => {
     expect(interpretarInteractividad(envio('x', 'otro')).tipo).toBe('ignorar')

@@ -27,7 +27,7 @@ describe('POST /api/oficina/cambios', () => {
   it.each([
     ['hitl_id que no es uuid', { hitl_id: 'x', comentario: 'cambia la portada' }],
     ['comentario vacío', { hitl_id: HITL, comentario: '   ' }],
-    ['comentario demasiado largo', { hitl_id: HITL, comentario: 'a'.repeat(2001) }],
+    ['comentario demasiado largo', { hitl_id: HITL, comentario: 'a'.repeat(100_001) }],
     ['láminas fuera de rango', { hitl_id: HITL, comentario: 'cambia la portada', laminas: [0, 21] }],
     ['láminas que no son números', { hitl_id: HITL, comentario: 'cambia la portada', laminas: ['2'] }],
     ['reviewer vacío', { hitl_id: HITL, comentario: 'cambia la portada', reviewer: ' ' }],
@@ -36,6 +36,11 @@ describe('POST /api/oficina/cambios', () => {
     mocks.db = new DbFalsa()
     const r = await POST(peticion('https://t.test/api/oficina/cambios', cuerpo))
     expect(r.status).toBe(400); expect((await r.json()).error).toBe('entrada_invalida')
+  })
+  it('un comentario de 100.000 caracteres llega a la lógica: el dueño no tiene un tope corto (encargo 01-nov)', async () => {
+    const { POST } = await import('@/app/api/oficina/cambios/route')
+    mocks.db = new DbFalsa().semilla('hitl_queue', [])
+    expect((await POST(peticion('https://t.test/api/oficina/cambios', { hitl_id: HITL, comentario: 'a'.repeat(100_000) }))).status).toBe(404)
   })
   it('una pieza inexistente llega a la lógica y responde 404', async () => {
     const { POST } = await import('@/app/api/oficina/cambios/route')

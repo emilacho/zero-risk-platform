@@ -10,6 +10,7 @@
  * Plan EN REVISIÓN = el tag dice `compuerta: true` y su fila de compuerta aún no existe: la jefatura sigue trabajando y nadie decide sobre él todavía.
  * Si el flujo no se pudo despertar (`despertado = false`) nada se gastó y la misma puerta se puede repetir: no queda un pedido ni una aprobación colgados para siempre.
  */
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 import { consultasDeDireccion } from '../../cadena/almacen-supabase'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Db, type Fila, type Manejador, type Salida } from './comun'
 
@@ -92,9 +93,9 @@ async function planDecidible(db: Db, planId: string, toca: Salida['toca']): Prom
 // ───────────────────────── plan-cambios (GASTA: el redactor reescribe y la jefatura revisa)
 export const planCambios: Manejador = async ({ db, ahora }, { cuerpo, reviewer }) => {
   if (typeof cuerpo.plan_id !== 'string' || !UUID.test(cuerpo.plan_id)) return rechazo(400, 'entrada_invalida', '`plan_id` debe ser un uuid')
-  const texto = textoEntre(cuerpo.texto, 5, 4000)
+  const texto = textoEntre(cuerpo.texto, 5, TOPE_DEL_TEXTO_DEL_DUENO)
   const toca = { output_id: cuerpo.plan_id, comentario: texto }
-  if (!texto) return rechazo(400, 'entrada_invalida', '`texto` (qué debe cambiar) debe tener de 5 a 4000 caracteres', toca)
+  if (!texto) return rechazo(400, 'entrada_invalida', `\`texto\` (qué debe cambiar) debe tener de 5 a ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`, toca)
   const g = confirmarGasto(cuerpo, TOPE_REESCRITURA_USD)
   if (!g.ok) return { ...g.salida, toca }
   const d = await planDecidible(db, cuerpo.plan_id, toca)

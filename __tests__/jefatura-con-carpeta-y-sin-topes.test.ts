@@ -12,6 +12,7 @@ import { MESA as _M, armarMaterial, leerInforme, TOPE_DEL_INFORME, TOPE_DEL_MATE
 import { PEDIDO_MAXIMO } from '../src/lib/planeacion/puertas'
 import { MAX_TAREA_RUN_SDK } from '../src/lib/finanzas/conversa/modelo-run-sdk'
 import { idsCitadosEnElTexto } from '../src/lib/portero-alimenta/contexto-del-cliente'
+import { erroresDeCambios } from '../src/lib/oficina/cambios-del-dueno'
 import { REGLA_DE_LAS_PALABRAS_DEL_MANUAL } from '../src/lib/jefatura/revision/pedidos'
 import { brazoAnalisis } from '../src/lib/planeacion/brazos'
 
@@ -131,5 +132,21 @@ describe('la jefatura de las piezas lleva la carpeta', () => {
     expect(o).toMatch(/contexto: \[\.\.\.material\.contexto, \.\.\.carpeta\]/)
     expect(o).toMatch(/P\.carpetaParaRevisar\(String\(enc\.client_id\)\)\.catch/)
     expect(readFileSync(join(RAIZ, 'src/lib/oficina/adaptadores.ts'), 'utf8')).toMatch(/carpetaParaRevisar: \(clientId\) => carpetaParaRevisar\(db, clientId\)/)
+  })
+})
+
+describe('lo que escribe el dueño no tiene un tope corto', () => {
+  it('el sobre de los cambios de una pieza admite 100.000 caracteres y rechaza uno más', () => {
+    const sobre = (n: number) => ({ ronda: 1, comentario: 'a'.repeat(n), laminas: [], desde_hitl: 'h', pedido_por: 'emilio' })
+    expect(erroresDeCambios(sobre(100_000)).join(' ')).not.toMatch(/comentario/)
+    expect(erroresDeCambios(sobre(100_001)).join(' ')).toMatch(/comentario/)
+  })
+})
+
+describe('una lectura fallida de los datos del dueño', () => {
+  it('🔴 viaja dicha: el revisor no la lee como que el dueño no dijo nada', async () => {
+    const tabla = (t: string) => { const c: Record<string, unknown> = {}; for (const m of ['select', 'eq', 'is', 'in', 'order', 'limit', 'maybeSingle']) c[m] = () => c; c.then = (ok: (v: unknown) => unknown) => ok({ data: t === 'client_sedes' ? null : [], error: t === 'client_sedes' ? { message: 'caída' } : null }); return c }
+    const carpeta = await carpetaParaRevisar({ from: tabla }, 'c1')
+    expect(carpeta.find((x) => x.titulo === 'Lo que dijo el dueño')?.texto).toMatch(/no se pudo leer.*No lo tomes como que no existe/)
   })
 })
