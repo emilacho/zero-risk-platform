@@ -193,3 +193,48 @@ describe('si_personas se calcula al abrir la pieza, del brief', () => {
     expect(especialistasPertinentes(DESPUES, 'carrusel', true, condicionesDeLaPieza('solo plato'))).not.toContain('inclusive-visuals-specialist')
   })
 })
+
+describe('ORDEN PASO A · Whimsy en las piezas con condición, carousel-designer visible, growth-hacker fuera (migración 2013)', () => {
+  const SQL13 = fs.readFileSync(path.join(RAIZ, 'migrations', '202610312013_oficina_directorio_whimsy_en_piezas_y_growth_fuera.sql'), 'utf8')
+  const REV13 = fs.readFileSync(path.join(RAIZ, 'reversas', '202610312013_oficina_directorio_whimsy_en_piezas_y_growth_fuera_REVERSA.sql'), 'utf8')
+  const CON_2013 = DESPUES.map((t) => (t.agente === 'whimsy-injector' ? { ...t, pertinente_en: [...t.pertinente_en, 'carrusel:si_whimsy', 'kit:si_whimsy'] } : t))
+
+  it('la migración es aditiva, idempotente y lleva sus tres guardas; la reversa la deshace y se niega con encargos abiertos', () => {
+    expect(SQL13).toContain("array_append(pertinente_en, 'carrusel:si_whimsy')")
+    expect(SQL13).toContain("array_append(pertinente_en, 'kit:si_whimsy')")
+    expect(SQL13).toContain("NOT ('carrusel:si_whimsy' = ANY(pertinente_en))")
+    expect(SQL13).toContain("NOT ('kit:si_whimsy' = ANY(pertinente_en))")
+    expect(SQL13).toMatch(/IF w <> 1 THEN[\s\S]*IF c <> 1 THEN|IF c <> 1 THEN/)
+    expect(SQL13).toMatch(/IF g <> 0 THEN/)
+    expect(SQL13).not.toMatch(/DELETE|DROP|INSERT/i)
+    expect(REV13).toContain("array_remove(array_remove(pertinente_en, 'carrusel:si_whimsy'), 'kit:si_whimsy')")
+    expect(REV13).toMatch(/estado IN \('abierto', 'en_paso'\)/)
+  })
+  it('Whimsy sigue FIJO en la gran idea y en las piezas entra solo con `si_whimsy`', () => {
+    expect(especialistasPertinentes(CON_2013, 'concepto', false, [])).toContain('whimsy-injector')
+    for (const tipo of ['carrusel', 'kit'] as const) {
+      expect(especialistasPertinentes(CON_2013, tipo, true, [])).not.toContain('whimsy-injector')
+      expect(especialistasPertinentes(CON_2013, tipo, true, ['si_whimsy'])).toContain('whimsy-injector')
+    }
+  })
+  it('carousel-designer figura en la mesa de piezas (carrusel) y el directorio no tiene a growth-hacker', () => {
+    expect(especialistasPertinentes(CON_2013, 'carrusel', true, [])).toContain('carousel-designer')
+    expect(CON_2013.some((t) => t.agente === 'growth-hacker')).toBe(false)
+  })
+  it('`si_whimsy` se calcula del brief, del manual o del plan; una negación pegada o una prohibición no la enciende', () => {
+    expect(condicionesDeLaPieza('Carrusel del plato del día', 'Tono cercano, divertido y con humor')).toEqual(['si_whimsy'])
+    expect(condicionesDeLaPieza('Una sorpresa para el fin de semana')).toEqual(['si_whimsy'])
+    expect(condicionesDeLaPieza('Primer plano del encebollado', null, 'Plan: juegos de palabras con la audiencia')).toEqual(['si_whimsy'])
+    expect(condicionesDeLaPieza('Playful tone, families smiling')).toEqual(['si_personas', 'si_whimsy'])
+    expect(condicionesDeLaPieza('Primer plano del encebollado', 'Tono sobrio y formal', undefined)).toEqual([])
+    expect(condicionesDeLaPieza('Plato del día', 'Sin humor ni bromas. Tono serio.')).toEqual([])
+    expect(condicionesDeLaPieza('Plato', '- TONO PROHIBIDO:\n  - divertido\n')).toEqual([])
+    expect(condicionesDeLaPieza('Plato', 'La marca no es divertida pero sí cálida')).toEqual([])
+    // tabla de la certificación de CC3 (paso A): nada de esto es un tono lúdico pedido
+    for (const t of ['Evita el humor y las bromas.', 'Tono serio; humor fuera.', 'Los pedidos ocurren a la hora del almuerzo.', 'Está en juego la reputación de la marca.', 'Un juego de luces cálidas en la mesa.', 'No usar humor.', 'Sin humor ni bromas', 'Nada de bromas: la marca es seria']) expect(condicionesDeLaPieza('Plato del día', t)).toEqual([])
+    // una fila por palabra de la negación (CC3 · menores del paso A)
+    for (const t of ['Excluye el humor', 'Descartamos las bromas', 'Avoid humor', 'Nada de humor', 'El humor excluido', 'Descartado el humor', 'Jokes out, humor out']) expect(condicionesDeLaPieza('Plato del día', t)).toEqual([])
+    // y lo que SÍ lo pide sigue encendiendo
+    for (const t of ['Tono divertido y cercano', 'Con juegos de palabras en los títulos', 'Marca ocurrente y juguetona', 'Playful, witty tone', 'Queremos sorprender con humor']) expect(condicionesDeLaPieza('Plato del día', t)).toEqual(['si_whimsy'])
+  })
+})

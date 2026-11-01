@@ -58,7 +58,7 @@ function oficina(o: { apagada?: boolean } = {}) {
 }
 
 /** los dos extremos reales, con un registro de lo que recibieron */
-function mundo(o: { palanca?: boolean; oficinaApagada?: boolean } = {}) {
+function mundo(o: { palanca?: boolean; oficinaApagada?: boolean; rechazo?: Record<string, unknown> } = {}) {
   const al = cadena({ palanca: o.palanca })
   const M = oficina({ apagada: o.oficinaApagada })
   const llamadas: Array<{ ruta: string; cuerpo: any }> = []
@@ -73,6 +73,7 @@ function mundo(o: { palanca?: boolean; oficinaApagada?: boolean } = {}) {
     }
     if (ruta === '/api/oficina/encargos') {
       if (headers['x-sala-dispatch-key'] !== 'llave-sala') return { statusCode: 401, body: { error: 'llave' } }
+      if (o.rechazo) return { statusCode: 409, body: o.rechazo }
       if (o.oficinaApagada) return { statusCode: 409, body: { error: 'oficina_no_abre', motivo: 'familia no activa' } }
       expect(cuerpo.origen).toBe('cadena')
       expect(cuerpo.despertar).toBe(true)
@@ -254,6 +255,14 @@ describe('la puerta con el nuevo orden hace el PRÓXIMO paso que falta, contra l
     const r = await desdeAbrir(m, 'brief')
     expect(m.llamadas.slice(antes).map((l) => l.ruta)).toEqual(['/api/cadena/brief'])
     expect(r.item).toMatchObject({ resultado: 'necesita_humano' })
+  })
+
+  it('T8 (CC1): los 409 `sin_sala` y `plantilla_inactiva` marcados `sin_pasarela` DETIENEN el flujo: no hay camino a ninguna pasarela', async () => {
+    for (const rechazo of [{ error: 'sin_sala', familia: 'video_mesa', motivo: 'familia_no_activa', sin_pasarela: true }, { error: 'plantilla_inactiva', familia: 'video_mesa', sin_pasarela: true }]) {
+      const m = mundo({ rechazo })
+      await expect(desdeAbrir(m, 'brief')).rejects.toThrow(/PUERTA_MESA_OFICINA_RECHAZADO/)
+      expect(m.llamadas.map((l) => l.ruta)).toEqual(['/api/cadena/brief', '/api/oficina/encargos'])
+    }
   })
 
   it('un error de la cadena que no es de los conocidos (p. ej. la palanca apagada) se DETIENE con su código', async () => {

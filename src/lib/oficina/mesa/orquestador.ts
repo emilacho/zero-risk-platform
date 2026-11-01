@@ -153,8 +153,8 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       const tipo = FAMILIAS_MESA[enc.familia as keyof typeof FAMILIAS_MESA]
       if (!tipo) return fallar(P, enc, `la familia «${enc.familia}» no es de la mesa`)
       if (!direccionDe(dir, tipo)) return fallar(P, enc, `el directorio de la mesa no tiene una dirección creativa activa para «${tipo}» (la pieza no abre)`)
-      // T8 · la mesa de video suma las condiciones de la red y el formato del brief de la hoja (`si_instagram`, `si_tiktok_o_reels`) a las del texto (`si_personas`)
-      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : (() => { const c = [...condicionesDeLaPieza(contextoDe(enc, estadoInicialDeLaMesa(tipo, dir)).brief_texto), ...(tipo === 'video' ? condicionesDelVideo(baseDeLaminas(enc.estado_del_motor).brief) : [])]; return c.length ? { condiciones: c } : {} })()) }
+      // T8 · la mesa de video suma las condiciones de la red y el formato del brief de la hoja (`si_instagram`, `si_tiktok_o_reels`) a las del texto (`si_personas`, `si_whimsy`: el brief, el manual o el plan)
+      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : (() => { const cx = contextoDe(enc, estadoInicialDeLaMesa(tipo, dir)); const c = [...condicionesDeLaPieza(cx.brief_texto, cx.manual_texto, cx.plan_texto), ...(tipo === 'video' ? condicionesDelVideo(baseDeLaminas(enc.estado_del_motor).brief) : [])]; return c.length ? { condiciones: c } : {} })()) }
       enc = await guardarMesa(P, enc, est)
     }
     const e = enc.estado_del_motor
