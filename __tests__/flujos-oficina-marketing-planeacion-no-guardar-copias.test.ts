@@ -122,6 +122,38 @@ describe('candado 2 · «② ¿Es copia del plan anterior?» (el candado 1 puede
       expect((await comparar({ texto: ANTERIOR, client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('reintentar')
     }
   })
+  it('«Qué cambió» tras el título, en medio o en el lugar de la del modelo ⇒ el mismo plan sigue siendo copia (la quita de AMBOS textos)', async () => {
+    const SEC = ['## Qué cambió', '- Más reels: aplicado', '- Otra cosa: aplicado', ''].join('\n')
+    const PLAN = ['# Plan de 90 días', '', '## Semana 1', 'lanzar la carta de Olón.', '', '## Semana 2', 'reels de producto.'].join('\n')
+    const conSeccion = [
+      PLAN.replace('## Semana 1', SEC + '\n## Semana 1'), // tras el título
+      PLAN.replace('## Semana 2', SEC + '\n## Semana 2'), // en medio
+      PLAN + '\n\n' + SEC, // al final
+    ]
+    for (const texto of conSeccion) {
+      const re = { ...REESCRITURA, plan_anterior: { ...REESCRITURA.plan_anterior, texto } }
+      expect((await comparar({ texto: PLAN, client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('reintentar')
+    }
+  })
+  it('«Qué cambió» en negritas o con dos puntos termina en el siguiente título de CUALQUIER rango', async () => {
+    for (const marca of ['**Qué cambió**', 'Qué cambió:']) {
+      const guardado = ['# Plan', '', marca, '- a', '', '## Semana 1', 'lanzar la carta.'].join('\n')
+      const re = { ...REESCRITURA, plan_anterior: { ...REESCRITURA.plan_anterior, texto: guardado } }
+      expect((await comparar({ texto: ['# Plan', '', '## Semana 1', 'lanzar la carta.'].join('\n'), client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('reintentar')
+      expect((await comparar({ texto: ['# Plan', '', '## Semana 1', 'lanzar otra carta.'].join('\n'), client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('no')
+    }
+  })
+  it('la sección termina en el siguiente título del mismo o mayor rango; lo que viene después SÍ cuenta', async () => {
+    const guardado = '# Plan de 90 días\n\n## Qué cambió\n- A\n### detalle\n- B\n\n## Semana 1\nlanzar la carta de Olón.'
+    const re = { ...REESCRITURA, plan_anterior: { ...REESCRITURA.plan_anterior, texto: guardado } }
+    expect((await comparar({ texto: '# Plan de 90 días\n\n## Semana 1\nlanzar la carta de Olón.', client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('reintentar')
+    expect((await comparar({ texto: '# Plan de 90 días\n\n## Semana 1\nlanzar la carta de Guayaquil.', client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('no')
+  })
+  it('dos secciones «Qué cambió» DISTINTAS con el resto igual ⇒ copia; un cambio real de una línea fuera de la sección ⇒ NO', async () => {
+    const A = { ...REESCRITURA, plan_anterior: { ...REESCRITURA.plan_anterior, texto: '# T\n\n## Qué cambió\n- uno\n\n## Resto\nigual' } }
+    expect((await comparar({ texto: '# T\n\n## Qué cambió\n- otro distinto\n\n## Resto\nigual', client_id: CLIENTE }, A, 0)).copia_del_plan_anterior).toBe('reintentar')
+    expect((await comparar({ texto: '# T\n\n## Qué cambió\n- uno\n\n## Resto\nigual y un poco más', client_id: CLIENTE }, A, 0)).copia_del_plan_anterior).toBe('no')
+  })
   it('lo que sobra al final del guardado NO es la sección «Qué cambió» (cambio real) ⇒ no es copia', async () => {
     const re = { ...REESCRITURA, plan_anterior: { ...REESCRITURA.plan_anterior, texto: ANTERIOR + '\n\nSemana 3: sorteo' } }
     expect((await comparar({ texto: ANTERIOR, client_id: CLIENTE }, re, 0)).copia_del_plan_anterior).toBe('no')
