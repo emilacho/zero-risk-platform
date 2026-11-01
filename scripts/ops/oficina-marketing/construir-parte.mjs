@@ -11,6 +11,8 @@
  */
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
 import { construirPalabrasDelManual } from './palabras-del-manual.mjs'
+import { construirEsloganEnBrief } from './eslogan-brief-y-pieza.mjs'
+import { NODOS_BRIEF } from './construir-palabras.mjs'
 
 const ID = 'BNXqlaX1oHSfZIpF'
 const URL_HOJAS = "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/hojas' }}"
@@ -166,6 +168,7 @@ export function construirParte() {
   if (n.parameters.jsCode.includes('hoja_por_codigo')) throw new Error('«④ Chequeos» ya trae el atajo de la hoja: ¿el vivo ya cambió?')
   n.parameters.jsCode = ATAJO_DE_LA_HOJA.replace(';(function () {})\n', '') + n.parameters.jsCode
   construirPalabrasDelManual(f)
+  construirEsloganEnBrief(f, NODOS_BRIEF) // 01-nov · parte 4 del manual · el eslogan real llega al pedido del redactor por filas
   return f
 }
 
