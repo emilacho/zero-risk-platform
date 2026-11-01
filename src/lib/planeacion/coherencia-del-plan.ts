@@ -135,6 +135,28 @@ export function controlarFrasesNegadas(texto: string, hechos: Array<{ tema: stri
   return f
 }
 
+/** punto 2 · el dueño declara un activo que la agencia no toca con un hecho de tema «solo lectura · <nombres separados por comas>»: un plan puede llamarlo de varias formas («sitio web, sitio, mi-negocio.com») */
+export const activoDeSoloLectura = (tema: string): string | null => /^\s*solo lectura\s*[·:\-–]\s*(.+)$/i.exec(tema)?.[1]?.trim() || null
+const EDITAR = /\b(editar|edita|edito|cambiar|cambia|actualizar|actualiza|modificar|modifica|corregir|corrige|agregar|agrega|anadir|anade|instalar|instala|quitar|quita|rediseñar|redisenar|optimizar|optimiza|edit|update|change|modify|install)\b/
+const PEDIDO_AL_DUENO = /\b(pedir|pedirle|pide|solicitar|solicitarle|sugerir|sugerirle|proponer|proponerle|recomendar|recomendarle|ask|request)\b[^.]{0,40}\b(dueno|duena|cliente|negocio|owner)\b|\b(dueno|duena|owner)\b[^.]{0,30}\b(debe|decide|puede|tendria|must|may)\b|\bno\s+(se\s+)?(edita|toca|cambia|modifica)/
+/** el plan propone editar lo que el dueño dijo que no se toca. Una propuesta como pedido al dueño no cuenta. Es por frase: mira verbos cerca del activo, y puede equivocarse: la corrección es reformularla */
+export function controlarActivosDeSoloLectura(texto: string, hechos: Array<{ tema: string }>): Array<Omit<HallazgoDeCoherencia, 'control'> & { control: 'dueno' }> {
+  const f: Array<Omit<HallazgoDeCoherencia, 'control'> & { control: 'dueno' }> = []
+  const frases = plegar(texto).split(/(?<=[.!?])\s+|\s*\|\s*/)
+  for (const h of hechos) {
+    const activo = activoDeSoloLectura(h.tema)
+    if (!activo) continue
+    // basta uno de sus nombres, completo y como palabra entera
+    const nombres = activo.split(',').map((n) => plegar(n).trim()).filter((n) => n.length >= 3)
+    if (!nombres.length) continue
+    const nombra = (x: string) => nombres.some((n) => new RegExp(`(?:^|[^\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^\\p{L}\\p{N}]|$)`, 'u').test(x))
+    // cada frase cuenta: el redactor tiene que corregirlas todas. Las tres primeras, para no llenar la ficha
+    const halladas = frases.filter((x) => nombra(x) && EDITAR.test(x) && !PEDIDO_AL_DUENO.test(x))
+    for (const hallada of halladas.slice(0, 3)) f.push({ control: 'dueno', estado: 'no_cuadra', que: `el plan propone tocar «${activo}», que el dueño declaró de solo lectura: «${hallada.slice(0, 110)}». Debe ir como pedido al dueño`, donde: 'todo el plan' })
+  }
+  return f
+}
+
 /** los dos controles juntos */
 export function controlarCoherenciaDelPlan(a: { texto: string; contexto: string; referencia: Date }): HallazgoDeCoherencia[] {
   return [...controlarFechas(a.texto, a.referencia), ...controlarPresupuesto(a.texto, pautaDeclarada(a.contexto))]
