@@ -325,12 +325,12 @@ export async function rutaTanda2(deps: DepsDeRutas, cuerpo: unknown): Promise<Re
  * `MAX_TROZOS_A_SACAR_POR_PASADA`; `quedan` dice cuánto falta (el flujo repite hasta 0). En seco solo cuenta. Una falla de lectura se DICE.
  */
 export async function reconciliarYEnviar(deps: DepsDeRutas, clientId: string, dryRun: boolean, presupuestoMs: number = PRESUPUESTO_DEL_PUENTE_PROPIO_MS): Promise<{ puente: Record<string, unknown>; errores: string[] }> {
-  const fi = await leerTodas(() => deps.db.from('cerebro_fichas').select('id, client_id, ref, clase, titulo, contenido, fecha_fuente, observado_en, creado_en, propiedad, origen, descartada, retirada_en, prueba, huella').eq('client_id', clientId).order('id', { ascending: true }))
+  const fi = await leerTodas(() => deps.db.from('cerebro_fichas').select('id, client_id, ref, clase, titulo, contenido, fecha_fuente, observado_en, creado_en, propiedad, origen, descartada, retirada_en, prueba, huella, atributo').eq('client_id', clientId).order('id', { ascending: true }))
   const ch = await leerTodas(() => deps.db.from('client_brain_chunks').select('source_id').eq('client_id', clientId).eq('source_table', 'cerebro_fichas').order('id', { ascending: true }))
   if (fi.error || ch.error) return { puente: { lectura_fallida: true }, errores: [`puente: lectura fallida (${(fi.error ?? ch.error)!.message})`] }
   const rec = reconciliarPuente(lista(fi.data) as unknown as FichaParaPuente[], lista(ch.data).map((x) => String(x.source_id)))
   const lote = { escribir: rec.escribir.slice(0, MAX_TROZOS_A_ESCRIBIR_POR_PASADA), sacar: rec.sacar.slice(0, MAX_TROZOS_A_SACAR_POR_PASADA) }
-  let puente: Record<string, unknown> = { pendientes: rec.escribir.length, a_sacar: rec.sacar.length, ya_buscables: rec.ya_buscables, repetidas: rec.duplicadas, esta_pasada: { escribir: lote.escribir.length, sacar: lote.sacar.length } }
+  let puente: Record<string, unknown> = { pendientes: rec.escribir.length, a_sacar: rec.sacar.length, ya_buscables: rec.ya_buscables, repetidas: rec.duplicadas, repetidas_resolubles: rec.resolubles.slice(0, 200), esta_pasada: { escribir: lote.escribir.length, sacar: lote.sacar.length } }
   const errores: string[] = []
   let quedan = rec.escribir.length + rec.sacar.length
   // sin presupuesto no se escribe nada (todo queda como `quedan` para la pasada propia del puente); con presupuesto, no se arranca nada pasada la hora límite

@@ -10,7 +10,8 @@
  *  2. el rastro de hoy no existe o no está `hecha`;
  *  3. gasto real del día > el umbral de apagado (dato · por omisión US$ 10; firma 15-oct). Entre el umbral de aviso (por omisión US$ 3) y el de apagado: UN aviso por día y cliente SIN apagar;
  *  4. nació una ficha VIVA de una unidad que el filtro no confirmó (ajena / sin confirmar / ruido);
- *  5. el puente deja `quedan > 0`, hay fichas vivas repetidas o fichas vivas sin trozo en el índice;
+ *  5. el puente deja `quedan > 0`, hay fichas vivas repetidas o fichas vivas sin trozo en el índice. Las repetidas que se resuelven SIN DUDAS (misma referencia, misma huella, mismo atributo: el mismo dato escrito dos veces)
+ *     las retira el vigilante con fecha y motivo y el cliente sigue (01-nov: Náufrago estuvo ~16 h pausado por una); solo pausa lo que no puede resolver;
  *  6. el propio vigilante no pudo comprobar algo (falla de lectura) ⇒ se trata como problema: ante la duda, apagado (el gasto recurrente no puede quedar sin ojos);
  *  7. auditoría de calidad (15-oct): una muestra de las fichas de HOY no verifica contra su fuente cruda (tasa de error sobre el umbral de `auditoria.ts`) y las citas del resumen vivo existen. Silenciosa si todo está bien.
  * No llama a Apify ni a ningún modelo.
@@ -21,6 +22,7 @@ import { auditarCliente, auditarCitasDelResumen, type ResultadoDeAuditoria } fro
 import { UMBRALES_DE_GASTO_POR_OMISION, type UmbralesDeGasto } from './datos'
 import { anomaliaDelCliente, ANOMALIA_POR_OMISION, type UmbralesDeAnomalia } from './anomalia'
 import { eldineroFrena, type ModoDelPortero } from './modo'
+import { retirarSobrantes } from './repetidas'
 import { gastoDeHoy, reconciliarYEnviar, type DepsDeRutas, type Respuesta } from './rutas'
 
 /** el umbral de APAGADO por omisión (el real es dato: `deps.umbrales`) */
@@ -61,7 +63,7 @@ export const esSoloNoPudeComprobar = (res: ResultadoDeCliente[]) => {
   return todos.length > 0 && todos.every((p) => p.startsWith(PREFIJO_NO_PUDE))
 }
 
-export interface ResultadoDeCliente { client_id: string; nombre: string | null; problemas: string[]; gasto_usd: number | null; auditoria?: ResultadoDeAuditoria | null; /** avisos que NO apagan (gasto entre el umbral de aviso y el de apagado) */ avisos?: string[] }
+export interface ResultadoDeCliente { client_id: string; nombre: string | null; problemas: string[]; gasto_usd: number | null; auditoria?: ResultadoDeAuditoria | null; /** avisos que NO apagan (gasto entre el umbral de aviso y el de apagado) */ avisos?: string[]; /** fichas sobrantes (misma referencia y contenido) que el vigilante retiró en vez de pausar */ repetidas_retiradas?: number }
 
 /** las condiciones que salen del CIERRE del flujo (sin leer la base) */
 export function problemasDelCierre(cierre: unknown, clientId: string): string[] {
@@ -81,7 +83,7 @@ export function problemasDelCierre(cierre: unknown, clientId: string): string[] 
 }
 
 /** `sinGasto`: el despertar con el raspado del alta no gasta (US$ 0): el gasto del día es del alta, no suyo, y no debe apagar nada */
-export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: string; nombre: string | null }, cierre: unknown, ahora: Date, dia: string, opciones: { sinGasto?: boolean } = {}): Promise<{ r: ResultadoDeCliente; rastro: Fila | null }> {
+export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: string; nombre: string | null }, cierre: unknown, ahora: Date, dia: string, opciones: { sinGasto?: boolean; /** retira por sí mismo las repetidas que se resuelven sin dudas (misma referencia, huella y atributo) en vez de pausar; solo con escritura real */ retirarRepetidas?: boolean } = {}): Promise<{ r: ResultadoDeCliente; rastro: Fila | null }> {
   const r: ResultadoDeCliente = { client_id: c.client_id, nombre: c.nombre, problemas: problemasDelCierre(cierre, c.client_id), gasto_usd: null }
   const falla = (que: string, m: string) => r.problemas.push(`${PREFIJO_NO_PUDE} ${que}: ${m}`.slice(0, 200))
 
@@ -146,7 +148,18 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
   if (!ci.ok) falla('las citas del resumen vivo', ci.detalle)
   else if (ci.problema) r.problemas.push(ci.problema)
 
-  const p = await reconciliarYEnviar(deps, c.client_id, true)
+  let p = await reconciliarYEnviar(deps, c.client_id, true)
+  // una repetida que se resuelve sin dudas (la misma ficha escrita dos veces) se retira con fecha y motivo y el cliente SIGUE; solo lo que no se puede resolver pausa
+  const resolubles = Array.isArray(p.puente.repetidas_resolubles) ? (p.puente.repetidas_resolubles as Array<{ id: string; queda: string }>) : []
+  if (opciones.retirarRepetidas && !p.errores.length && p.puente.lectura_fallida !== true && resolubles.length) {
+    const x = await retirarSobrantes(deps.db as never, c.client_id, resolubles, ahora, 'el vigilante')
+    if (x.errores.length) falla('retirar las fichas repetidas', x.errores[0])
+    if (x.retiradas) {
+      r.repetidas_retiradas = x.retiradas
+      // el índice se pone al día (sale el trozo de la retirada) y se recuenta: lo que sigue repetido de verdad sí pausa
+      p = await reconciliarYEnviar(deps, c.client_id, false)
+    }
+  }
   if (p.errores.length || p.puente.lectura_fallida === true) falla('el puente', p.errores[0] ?? 'lectura fallida')
   else {
     if (typeof p.puente.quedan === 'number' && p.puente.quedan > 0) r.problemas.push(`el índice tiene ${p.puente.quedan} trozo(s) por escribir o sacar (fichas vivas sin trozo o trozos de fichas retiradas)`)
@@ -199,7 +212,7 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
     const resultados: ResultadoDeCliente[] = []
     const rastros = new Map<string, Fila | null>()
     for (const o of objetivos) {
-      const { r, rastro } = await evaluarCliente(deps, o, cuerpo.cierre, ahora, dia)
+      const { r, rastro } = await evaluarCliente(deps, o, cuerpo.cierre, ahora, dia, { retirarRepetidas: !cuerpo.dry_run })
       resultados.push(r); rastros.set(o.client_id, rastro)
     }
     if (globales.length) resultados.push({ client_id: solo ?? 'general', nombre: null, problemas: globales, gasto_usd: null })
@@ -236,7 +249,7 @@ export async function rutaVigilar(deps: DepsDelVigilante, cuerpo: unknown): Prom
     if (!fila) continue
     const resumen = esObjeto(fila.resumen) ? fila.resumen : {}
     const marcaDeAviso = avisadosHoy.has(r.client_id) || yaAvisado(r.client_id) ? { aviso_de_gasto_dia: dia } : {}
-    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, auditoria: r.auditoria ? { elegidas: r.auditoria.elegidas, verificables: r.auditoria.verificables, errores: r.auditoria.errores, sin_verificar: r.auditoria.sin_verificar, tasa_de_error: r.auditoria.tasa_de_error, ...(r.auditoria.de_dias_anteriores ? { de_dias_anteriores: r.auditoria.de_dias_anteriores } : {}) } : null, ...(r.avisos?.length ? { avisos: r.avisos } : {}), ...marcaDeAviso, revisado_en: ahora.toISOString(), workflow_execution_id: ex, intentos } } }).eq('id', String(fila.id))
+    const u = await deps.db.from('cerebro_portero_corridas').update({ resumen: { ...resumen, vigilante: { ok: r.problemas.length === 0, problemas: r.problemas, gasto_usd: r.gasto_usd, auditoria: r.auditoria ? { elegidas: r.auditoria.elegidas, verificables: r.auditoria.verificables, errores: r.auditoria.errores, sin_verificar: r.auditoria.sin_verificar, tasa_de_error: r.auditoria.tasa_de_error, ...(r.auditoria.de_dias_anteriores ? { de_dias_anteriores: r.auditoria.de_dias_anteriores } : {}) } : null, ...(r.avisos?.length ? { avisos: r.avisos } : {}), ...(r.repetidas_retiradas ? { repetidas_retiradas: r.repetidas_retiradas } : {}), ...marcaDeAviso, revisado_en: ahora.toISOString(), workflow_execution_id: ex, intentos } } }).eq('id', String(fila.id))
     if (u.error) erroresDeRastro.push(`rastro ${r.client_id.slice(0, 8)}: ${u.error.message}`)
   }
   if (erroresDeRastro.length) body.errores_de_rastro = erroresDeRastro
