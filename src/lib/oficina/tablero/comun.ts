@@ -16,10 +16,12 @@ export interface Entrada { cuerpo: Fila; reviewer: string }
 export interface Salida {
   status: number
   cuerpo: Fila
-  /** a qué cliente / pieza / encargo toca (para el rastro) */
-  toca?: { client_id?: string | null; hitl_id?: string | null; encargo_id?: string | null; comentario?: string | null }
+  /** a qué cliente / pieza / encargo / documento toca (para el rastro) */
+  toca?: { client_id?: string | null; hitl_id?: string | null; encargo_id?: string | null; output_id?: string | null; comentario?: string | null }
   /** el primer turno de un agente: la ruta despierta al flujo de la oficina */
   despertar?: { encargo_id: string; turno: Fila }
+  /** (01-nov · ciclo del plan) despertar a OTRO flujo nuestro por su camino; `registrar` = en qué fila dejar si se pudo (despertado · despertar_detalle) */
+  despertar_flujo?: { camino: string; cuerpo: Fila; registrar?: { tabla: string; id: string } }
 }
 export type Manejador = (c: Contexto, e: Entrada) => Promise<Salida>
 
@@ -43,7 +45,7 @@ export async function rastroDelTablero(db: Db, r: Rastro): Promise<void> {
   try {
     const huella = crypto.createHash('sha256').update(JSON.stringify([r.autor, r.crudo])).digest('hex').slice(0, 24)
     await db.from('eventos_de_emilio').insert({
-      canal: 'dashboard', accion: 'tablero', autor: r.autor, client_id: r.toca?.client_id ?? null, hitl_id: r.toca?.hitl_id ?? null, encargo_id: r.toca?.encargo_id ?? null,
+      canal: 'dashboard', accion: 'tablero', autor: r.autor, client_id: r.toca?.client_id ?? null, hitl_id: r.toca?.hitl_id ?? null, encargo_id: r.toca?.encargo_id ?? null, output_id: r.toca?.output_id ?? null,
       comentario: r.toca?.comentario ?? null, decision: r.accion, resultado: r.resultado, crudo: r.crudo,
       clave_unica: `dashboard:tablero:${r.accion}:${huella}:${r.ahora.toISOString().slice(0, 16)}`,
     })
