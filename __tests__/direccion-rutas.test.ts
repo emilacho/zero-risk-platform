@@ -4,11 +4,11 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
-import { ejecucionBase, leerCorrida, leerCorridas, ramaDe } from '../corridas'
-import { esDePractica, estaCompleto, leer, sinSecretos, type Contexto, type Fuente } from '../comun'
-import { leerDecisiones, ordenarPorUrgencia } from '../decisiones'
-import { leerRiesgos } from '../riesgos'
+import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
+import { ejecucionBase, leerCorrida, leerCorridas, ramaDe } from '../src/lib/direccion/corridas'
+import { esDePractica, estaCompleto, leer, sinSecretos, type Contexto, type Fuente } from '../src/lib/direccion/comun'
+import { leerDecisiones, ordenarPorUrgencia } from '../src/lib/direccion/decisiones'
+import { leerRiesgos } from '../src/lib/direccion/riesgos'
 
 const mocks = vi.hoisted(() => ({ db: null as unknown }))
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => mocks.db }))
@@ -310,7 +310,7 @@ describe('las rutas', () => {
 })
 
 describe('el código', () => {
-  const raiz = join(__dirname, '..', '..', '..')
+  const raiz = join(__dirname, '..', 'src')
   const archivos = (d: string): string[] => readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? (n === '__tests__' ? [] : archivos(p)) : [p] })
   const fuentes = [...archivos(join(raiz, 'lib', 'direccion')), ...archivos(join(raiz, 'app', 'api', 'direccion'))]
   it('no contiene escrituras ni nombra a un cliente, y no pide columnas de secretos ni de prompts', () => {

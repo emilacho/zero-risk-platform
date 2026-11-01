@@ -41,6 +41,12 @@ async function fichaDelCliente(db: ReturnType<typeof getSupabaseAdmin>, clientId
 /** 31-oct (T3): las columnas del brief creativo (con `plazo_en`, migración 202610312003) */
 const COLUMNAS_DEL_BRIEF = 'campana_id, version, estado, texto_md, leido, devolucion_texto, motivo, costo_usd, encargo_id, seco, plazo_en'
 
+/** La sala del director (solo lectura): este archivo es el único que nombra las tablas de la cadena (guarda de generalidad). */
+export const consultasDeDireccion = (db: { from(tabla: string): any }) => ({
+  campanasDetenidas: (tope: number) => db.from('cadena_campanas').select('id, client_id, estado, estado_motivo, actualizada_en, seco').in('estado', ['pausada', 'necesita_humano']).limit(tope),
+  estadoDeLaCadena: () => db.from('cadena_config').select('valor').eq('clave', 'estado_cadena').limit(1),
+})
+
 export function almacenDeSupabase(): Almacen {
   const db = getSupabaseAdmin()
   const uno = async <T>(q: PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T | null> => { const { data, error } = await q; if (error) fallo(error); return (data as T | null) ?? null }

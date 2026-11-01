@@ -3,6 +3,8 @@
  * Lee la base y, solo de lectura, las cuentas de n8n y Apify. Un servicio que rechaza nuestra credencial ES un riesgo (credencial caducada) y se dice; lo demás de credenciales no tiene fuente.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { consultasDeDireccion } from '../cadena/almacen-supabase'
+import { consultaEstadoDeLaOficina } from '../oficina/lectura-de-direccion'
 import { decidirPlanApify, leerUsoDelPlan, pctMaximoDelPlan } from '../portero-alimenta/plan-apify'
 import { resolveClientCapContext, resolveClientFamily, resolveRunSpendCapUsd, techoDelCliente, techoGenericoDeArranque } from '../run-sdk-spend-gate'
 import { estaCompleto, leer, leerClientes, numero, redondear, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
@@ -123,11 +125,11 @@ export async function leerRiesgos(c: Contexto) {
     leer(fuentes, 'uptime_incidents', db.from('uptime_incidents').select('id, monitor_name, monitor_url, alert_details, created_at').gte('created_at', hace7d).limit(TOPE), TOPE),
     leer(fuentes, 'cost_monitor_runs', db.from('cost_monitor_runs').select('ran_at, aggregate_24h_usd, threshold_daily_aggregate_usd, is_breach, breach_count, error_message').order('ran_at', { ascending: false }).limit(1)),
     leer(fuentes, 'cerebro_portero_pausas', db.from('cerebro_portero_pausas').select('id, client_id, motivo, desde').is('levantada_en', null).limit(TOPE), TOPE),
-    leer(fuentes, 'cadena_campanas', db.from('cadena_campanas').select('id, client_id, estado, estado_motivo, actualizada_en, seco').in('estado', ['pausada', 'necesita_humano']).limit(TOPE), TOPE),
-    leer(fuentes, 'oficina_config', db.from('oficina_config').select('estado').eq('id', 1).limit(1)),
+    leer(fuentes, 'cadena_campanas', consultasDeDireccion(db).campanasDetenidas(TOPE), TOPE),
+    leer(fuentes, 'interruptor_de_la_oficina', consultaEstadoDeLaOficina(db)),
     leer(fuentes, 'finanzas_config', db.from('finanzas_config').select('estado').eq('id', 1).limit(1)),
     leer(fuentes, 'jefatura_config', db.from('jefatura_config').select('estado').eq('id', 1).limit(1)),
-    leer(fuentes, 'cadena_config', db.from('cadena_config').select('valor').eq('clave', 'estado_cadena').limit(1)),
+    leer(fuentes, 'cadena_config', consultasDeDireccion(db).estadoDeLaCadena()),
     leer(fuentes, 'plan_cambios', db.from('plan_cambios').select('id, client_id, plan_id, estado, despertado, despertar_detalle, actualizado_en').in('estado', ['pendiente', 'en_reescritura']).limit(TOPE), TOPE),
     leer(fuentes, 'plan_aprobaciones', db.from('plan_aprobaciones').select('id, client_id, plan_id, despertar_detalle, actualizado_en').eq('estado', 'aprobado').eq('despertado', false).limit(TOPE), TOPE),
   ])
