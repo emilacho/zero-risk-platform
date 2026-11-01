@@ -240,7 +240,7 @@ describe('corridas', () => {
   })
   it('🔴 un cliente repetido sale una sola vez, y client_id sigue siendo el primero para quien ya lo lee', async () => {
     const fila = (id: string, client_id: string, started_at: string) => ({ id, workflow_id: 'wf', workflow_execution_id: 'vercel-cron:x:1', client_id, agent_name: 'x', status: 'ok', cost_usd: 0, started_at, ended_at: started_at })
-    const r = await leerCorridas(ctx(base().semilla('agent_invocations', [fila('1', C2, '2026-11-01T14:03:00Z'), fila('2', C1, '2026-11-01T14:02:00Z'), fila('3', C2, '2026-11-01T14:01:00Z')])))
+    const r = await leerCorridas(ctx(base().semilla('agent_invocations', [fila('1', C2, '2026-11-01T14:03:00Z'), fila('2', C2, '2026-11-01T14:02:00Z'), fila('3', C1, '2026-11-01T14:01:00Z')])))
     expect(r.corridas[0].clientes).toEqual([C2, C1])
     expect(r.corridas[0].client_id).toBe(C2)
     expect(r.corridas[0].cliente).toBe('Dos')
