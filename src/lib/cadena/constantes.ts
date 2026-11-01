@@ -21,6 +21,8 @@ export const AGENTE_POR_PASO: Record<Paso, string> = {
 export const MODELO_POR_DEFECTO = 'claude-opus-5-5'
 export const RAZONAMIENTO_POR_DEFECTO = 'low'
 export const DIAS_DE_CAMPANA = 90
+/** techo de cordura de la duración que se pida: un año. No es un límite creativo: ataja un entero enorme */
+export const DIAS_MAXIMOS_DE_CAMPANA = 366
 export const SEMANAS_DE_TANDA = 4
 export const TOTAL_SEMANAS = Math.ceil(DIAS_DE_CAMPANA / 7)
 export const TOTAL_DE_TANDAS = Math.ceil(TOTAL_SEMANAS / SEMANAS_DE_TANDA)

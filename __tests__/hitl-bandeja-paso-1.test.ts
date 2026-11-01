@@ -219,6 +219,13 @@ describe('PATCH /api/hitl/[id]', () => {
       expect(r.json.error).toBe('frase_del_aprobador_invalid')
       expect(registro.filter((x) => x.op === 'update')).toHaveLength(0)
     })
+    it('🔴 una frase larga del dueño entra entera (01-nov · firma de Emilio)', async () => {
+      const frase = 'x'.repeat(5000)
+      const r = await patch({ status: 'rejected', frase_del_aprobador: frase })
+      expect(r.status).toBe(200)
+      const u = registro.find((x) => x.op === 'update')?.datos as Record<string, any>
+      expect(u.metadata.decision_humana.frase).toBe(frase)
+    })
     it('una frase con `in_review` o `expired` (no es una decisión) → 400', async () => {
       for (const status of ['in_review', 'expired']) {
         const r = await patch({ status, frase_del_aprobador: 'hola' })

@@ -5,10 +5,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   abrirCampana, avanzarCampana, cierreDeCampana, estrategiaPreparar, estrategiaGuardar, calendarioPreparar, calendarioGuardar, validarSinEscribir,
-  filasLotes, filasMarcar, filasListar, fechasCobertura, fechasGuardar, relojDeLaCadena, costoEfectivo, topeDelPaso, expiresInHours,
+  filasLotes, filasMarcar, filasListar, fechasCobertura, fechasGuardar, relojDeLaCadena, costoEfectivo, topeDelPaso, expiresInHours, calendarioSiguiente,
   type Estrategia,
 } from '../index'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
+import { siguienteDespuesDe } from '../mesas'
 import { clienteA, clienteB, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
@@ -66,12 +67,49 @@ describe('la medida de la campaña (01-nov · firma de Emilio)', () => {
     const r = await validarSinEscribir(al, { ...wf(), campana_id: id, tipo: 'estrategia', estrategia: { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 60 })) } }, AHORA)
     expect(JSON.stringify(r.cuerpo)).toMatch(/S01/)
   })
+  it('🔴 al GUARDAR, una estrategia con fases fuera de la campaña corta se marca: 60 días no caben en 30', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al, { dias_de_campana: 30 }))
+    const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    const larga = { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 60 })) }
+    await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(larga) }, AHORA)
+    expect(JSON.stringify(al.validaciones.filter((v) => v.objeto === 'estrategia'))).toContain('fuera de 1–30')
+  })
+  it('🔴 con 3 tandas por su medida, la tercera es la última: no se pide una cuarta', async () => {
+    const al = almacen({ config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta', nuevo_orden: { clientes: [A.clientId] } } })
+    const { id } = await conEstrategia(al)
+    const corta = idCampana({ cuerpo: { campana: await al.actualizarCampana(id, { estado: 'activa', fecha_fin: '2026-11-14', fecha_inicio: '2026-10-16', semanas_de_tanda: 2 }) } })
+    al.filasGuardadas.push({ campana_id: corta, calendario_version: 1, tanda: 3, estado: 'validada', fecha: '2026-11-13', semana: 5 } as never)
+    expect((await calendarioSiguiente(al, { ...wf(), campana_id: corta }, AHORA)).cuerpo).toMatchObject({ tanda: null, motivo: 'ya están todas las tandas' })
+    expect(await siguienteDespuesDe(al, corta)).toEqual({})
+  })
   it('🔴 una medida que no es un entero positivo se rechaza y no abre nada', async () => {
-    for (const raro of [{ dias_de_campana: 0 }, { dias_de_campana: 'noventa' }, { semanas_de_tanda: 0 }, { semanas_de_tanda: 1.5 }]) {
+    for (const raro of [{ dias_de_campana: 0 }, { dias_de_campana: 'noventa' }, { dias_de_campana: 367 }, { semanas_de_tanda: 0 }, { semanas_de_tanda: 1.5 }]) {
       const al = almacen()
       expect((await abrir(al, raro)).status).toBe(400)
       expect(al.campanas.length).toBe(0)
     }
+  })
+})
+
+describe('los pilares que no suman 100 se corrigen por código (01-nov · firma de Emilio)', () => {
+  const conPilares = (pcts: number[]) => ({ ...A.estrategia, pilares: pcts.map((pct, i) => ({ ...A.estrategia.pilares[i % A.estrategia.pilares.length], clave: `p${i}`, pct })) })
+  it('🔴 lo que se GUARDA es lo ajustado, sin reintento ni bloqueo, y el aviso S01 queda a la vista', async () => {
+    const al = almacen()
+    const { id, g } = await conEstrategia(al, conPilares([60, 30]))
+    expect(g.cuerpo.reintentar).toBeUndefined()
+    expect(g.cuerpo.necesita_humano).toBeUndefined()
+    const guardada = await al.ultimaEstrategia(id)
+    expect(guardada!.estado).toBe('validada')
+    expect(guardada!.contenido.pilares.map((p) => p.pct)).toEqual([67, 33])
+    expect(JSON.stringify(al.validaciones.filter((v) => v.objeto === 'estrategia'))).toMatch(/S01.*ajustó en proporción|ajustó en proporción.*S01/)
+  })
+  it('🔴 el ensayo sin escribir también ajusta y no bloquea', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    const r = await validarSinEscribir(al, { ...wf(), campana_id: id, tipo: 'estrategia', estrategia: conPilares([60, 30]) }, AHORA)
+    expect(JSON.stringify(r.cuerpo)).toContain('ajustó en proporción')
+    expect(JSON.stringify(r.cuerpo)).not.toContain('deben sumar 100')
   })
 })
 

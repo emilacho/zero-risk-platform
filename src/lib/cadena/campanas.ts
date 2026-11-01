@@ -4,7 +4,7 @@
 import type { Almacen, Campana, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
 import { arrancarAlActivar, type ResultadoDelArranque } from './arranque'
-import { DIAS_DE_CAMPANA, SEMANAS_DE_TANDA } from './constantes'
+import { DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, SEMANAS_DE_TANDA } from './constantes'
 import { fechaInicioPorRegla, sumarDias } from './fechas'
 import { nuevoOrdenEncendido } from './mesas'
 import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
@@ -31,7 +31,7 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   if (!s.ok) return s.r
   // 01-nov · firma de Emilio: la campaña puede pedir su propia medida; sin pedirla, la de siempre
   const dias = cuerpo.dias_de_campana ?? DIAS_DE_CAMPANA, semanasDeTanda = cuerpo.semanas_de_tanda ?? SEMANAS_DE_TANDA
-  if (!Number.isInteger(dias) || (dias as number) < 1) return err(400, 'E-DIAS-DE-CAMPANA', 'dias_de_campana debe ser un entero mayor que 0')
+  if (!Number.isInteger(dias) || (dias as number) < 1 || (dias as number) > DIAS_MAXIMOS_DE_CAMPANA) return err(400, 'E-DIAS-DE-CAMPANA', `dias_de_campana debe ser un entero entre 1 y ${DIAS_MAXIMOS_DE_CAMPANA}`)
   if (!Number.isInteger(semanasDeTanda) || (semanasDeTanda as number) < 1) return err(400, 'E-SEMANAS-DE-TANDA', 'semanas_de_tanda debe ser un entero mayor que 0')
   const noAut = await autorizarLlamada(al, cuerpo, clientId)
   if (noAut) return noAut
