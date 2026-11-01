@@ -64,7 +64,8 @@ describe('2 · el PDF (texto del manual limpio) presentable', () => {
     it(`${nombre}: los segmentos salen con su NOMBRE y como subtítulos; las etiquetas, como nota discreta`, () => {
       expect(t).toContain('Segmento 1 — Residente local o visitante de largo plazo en Olón'); expect(t).not.toContain('**')
       expect(t).toMatch(/«Residente local o visitante de largo plazo»/); expect(t).not.toMatch(/\b(goal|pain)\b/)
-      expect(t).toContain('«Cuando tengas esa hambre de... Náufrago te espera!» — frase del cliente')
+      // 01-nov · ADENDA de Emilio: la frase propia ya no va entre los lemas: sale como eslogan, con su fuente
+      expect(t).toMatch(/ESLOGAN QUE EL CLIENTE YA USA[\s\S]*Cuando tengas esa hambre de\.\.\. Náufrago te espera!/)
       expect(t).toMatch(/«El encebollado y ceviche que llegan a donde estás» — propuesta/)
     })
     it(`${nombre}: sin líneas cortadas: cada párrafo o viñeta es UNA línea (el documento acomoda el ancho)`, () => {

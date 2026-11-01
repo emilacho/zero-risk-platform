@@ -112,6 +112,27 @@ export function eslogan_declarado(opciones: unknown): string | null {
   return limpio || null
 }
 
+/**
+ * 01-nov · ADENDA de Emilio: el eslogan que el cliente YA usa es un HECHO, no una opción. Se lee en este orden: el declarado con su marca, la columna, y la única opción sin rótulo de propuesta cuando su procedencia dice que es frase propia
+ * (la marca se pierde por el camino y la procedencia queda). Sin esa procedencia no se adivina: un lema que propuso un modelo no pasa por eslogan. Puro.
+ */
+export const REGLA_DEL_ESLOGAN = 'es un activo de marca que el cliente ya usa: úsalo. Si propones otro, di por qué y déjalo como propuesta, sin reemplazarlo'
+const OPCION_PROPUESTA = /^\s*PROPUESTA\b|\[propuesta/i
+export function esloganDelCliente(bb: Record<string, unknown> | null | undefined): { texto: string; fuente: string } | null {
+  if (!bb) return null
+  const opciones = bb.tagline_opciones
+  const declarado = eslogan_declarado(opciones ?? bb.tagline)
+  const metas = bb._field_meta as Record<string, { fuente?: unknown }> | undefined
+  const fuente = typeof metas?.tagline_opciones?.fuente === 'string' ? metas.tagline_opciones.fuente : ''
+  const fuenteDeLaColumna = typeof metas?.tagline?.fuente === 'string' ? metas.tagline.fuente : ''
+  if (declarado) return { texto: declarado, fuente: fuente === 'dueno' ? 'lo declaró el dueño' : 'frase propia del cliente, declarada' }
+  if (typeof bb.tagline === 'string' && bb.tagline.trim()) return { texto: bb.tagline.trim(), fuente: fuenteDeLaColumna || 'hallada en sus propios canales' }
+  if (!/frase propia/i.test(fuente)) return null
+  const propias = (lista(opciones) ?? []).filter((o) => !OPCION_PROPUESTA.test(o) && !esLemaCitado(o))
+  if (propias.length !== 1) return null
+  return { texto: propias[0].trim(), fuente: 'frase propia hallada en su sitio o perfil' }
+}
+
 export interface ColumnasDelManual {
   readonly brand_purpose: string | null
   readonly brand_mission: string | null
@@ -135,7 +156,7 @@ export function columnasDelBorrador(bb: Record<string, unknown>, prosaLimpia: Re
     brand_values: lista(bb.valores ?? bb.brand_values),
     // un rasgo por línea: la columna es de texto y el cerebro la indexa como texto
     brand_personality: personalidad ? personalidad.join('\n') : null,
-    tagline: eslogan_declarado(bb.tagline_opciones ?? bb.tagline),
+    tagline: esloganDelCliente(bb)?.texto ?? null,
     key_messages: lista(bb.mensajes_clave ?? bb.key_messages),
     value_propositions: lista(bb.propuestas_de_valor ?? bb.value_propositions),
   }
