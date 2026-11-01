@@ -9,11 +9,11 @@ const AsyncFunction = Object.getPrototypeOf(async () => 0).constructor as new (.
 
 function entorno(env: Record<string, string>, historial: Record<string, Item[]>, entrada: Item) {
   const dolar = (n: string) => ({ last: () => ({ json: (historial[n] ?? [])[(historial[n] ?? []).length - 1] ?? {} }), first: () => ({ json: (historial[n] ?? [])[0] ?? {} }), all: () => (historial[n] ?? []).map((json) => ({ json })) })
-  return { $: dolar, $input: { first: () => ({ json: entrada }), all: () => [{ json: entrada }] }, $env: env, $workflow: { id: 'wf-puerta' }, $execution: { id: 'ex-1' }, $json: entrada }
+  return { $runIndex: 0, $: dolar, $input: { first: () => ({ json: entrada }), all: () => [{ json: entrada }] }, $env: env, $workflow: { id: 'wf-puerta' }, $execution: { id: 'ex-1' }, $json: entrada }
 }
 
 const evaluar = (cuerpo: string, ctx: ReturnType<typeof entorno>): any =>
-  new Function('$json', '$env', '$', '$workflow', '$execution', `return (${cuerpo})`)(ctx.$json, ctx.$env, ctx.$, ctx.$workflow, ctx.$execution)
+  new Function('$json', '$env', '$', '$workflow', '$execution', '$runIndex', `return (${cuerpo})`)(ctx.$json, ctx.$env, ctx.$, ctx.$workflow, ctx.$execution, ctx.$runIndex)
 
 /** `={{ x }}` devuelve el valor tal cual; `=texto {{ x }} texto` (expresión incrustada) devuelve el texto armado */
 const expr = (s: unknown, ctx: ReturnType<typeof entorno>): any => {
@@ -34,6 +34,7 @@ export async function recorrer(flujo: any, desde: string, entrada: Item, o: { en
     if (!n) throw new Error(`no existe el nodo «${nombre}»`)
     if (o.hasta?.includes(nombre)) { pasos.push(nombre); return { pasos, item, ultimo: nombre, historial, vacio: false } }
     const ctx = entorno(env, historial, item)
+    ctx.$runIndex = (historial[nombre] ?? []).length
     let salida = 0
     if (n.type.endsWith('.code')) {
       const f = new AsyncFunction('$input', '$', '$env', '$workflow', '$execution', '$runIndex', n.parameters.jsCode)
@@ -44,6 +45,8 @@ export async function recorrer(flujo: any, desde: string, entrada: Item, o: { en
       const c = n.parameters.conditions.conditions[0]
       const izq = expr(c.leftValue, ctx)
       salida = String(izq) === String(c.rightValue) ? 0 : 1
+    } else if (n.type.endsWith('.wait')) {
+      // la espera no cambia el item: el tiempo no se emula
     } else if (n.type.endsWith('.httpRequest')) {
       if (!o.http) throw new Error('el recorrido llegó a un nodo HTTP sin simulador')
       const url = expr(n.parameters.url, ctx)
