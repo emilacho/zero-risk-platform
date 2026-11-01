@@ -17,10 +17,15 @@ const GUARDA_TAGLINE = "    // 01-nov · el eslogan real del cliente (client_bra
 const GUARDA_PIEZA_ANCLA = '    manual_voz: { voice_description: m.voice_description || null'
 
 const bloque = (regla) => `// 01-nov · EL ESLOGAN QUE EL CLIENTE YA USA (activo de marca EXISTENTE) · viene de client_brand_books.tagline. Sin texto, el pedido queda idéntico a hoy.
-const bloqueEslogan = (typeof prev.manual_tagline === 'string' && prev.manual_tagline.trim())
+// 01-nov · UNA SOLA FUENTE: si el nodo «② Leer los datos del negocio» trajo el eslogan resuelto (el del dueño gana), ese es el que se imprime; la columna tagline solo sirve si la fuente no respondió.
+const _esloganDeLaFuente = (function () { try { const r = $('② Leer los datos del negocio').first().json; const e = r && r.body && !r.error ? r.body.eslogan : null; return e && typeof e === 'object' && typeof e.texto === 'string' && e.texto.replace(/\\s+/g, ' ').trim() ? e : null } catch (x) { return null } })();
+const _esloganTexto = _esloganDeLaFuente ? _esloganDeLaFuente.texto.replace(/\\s+/g, ' ').trim().slice(0, 300) : (typeof prev.manual_tagline === 'string' ? prev.manual_tagline.trim() : '');
+const _esloganFuente = _esloganDeLaFuente && typeof _esloganDeLaFuente.fuente === 'string' ? _esloganDeLaFuente.fuente.replace(/\\s+/g, ' ').trim().slice(0, 300) : '';
+const bloqueEslogan = _esloganTexto
   ? [
       '══════ ESLOGAN QUE EL CLIENTE YA USA (activo de marca EXISTENTE) ══════',
-      '«' + prev.manual_tagline.trim() + '»',
+      '«' + _esloganTexto + '»',
+      ...(_esloganFuente ? ['Fuente: ' + _esloganFuente] : []),
       ${JSON.stringify(regla)},
       '',
     ]

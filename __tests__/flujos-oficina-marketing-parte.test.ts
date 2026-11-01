@@ -7,6 +7,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { NODOS_BRIEF } from '../scripts/ops/oficina-marketing/construir-palabras.mjs'
+import { construirDatosDelNegocio } from '../scripts/ops/oficina-marketing/datos-del-negocio.mjs'
 import { construirEsloganEnBrief } from '../scripts/ops/oficina-marketing/eslogan-brief-y-pieza.mjs'
 import { construirJerarquiaDeFuentes } from '../scripts/ops/oficina-marketing/plan-aprobado.mjs'
 import { construirPalabrasDelManual } from '../scripts/ops/oficina-marketing/palabras-del-manual.mjs'
@@ -111,6 +112,7 @@ describe('el flujo nuevo se parece al vivo en todo menos en lo que debe cambiar'
   construirPalabrasDelManual(vivo)
   construirJerarquiaDeFuentes(vivo) // 9b, se prueba aparte
   construirEsloganEnBrief(vivo, NODOS_BRIEF) // el eslogan real (parte 4 del manual) se prueba aparte
+  construirDatosDelNegocio(vivo, { ...NODOS_BRIEF, guardaManual: NODOS_BRIEF.guarda, modo: 'brief' }) // la lectura única (adenda 3) se prueba aparte
   it('suma 5 nodos «③ Hoja · …», cambia solo el redireccionamiento de «③ Armar…» y el código de «④ Chequeos» (que ahora empieza con el atajo)', () => {
     const v = new Map(vivo.nodes.map((n: any) => [n.name, n]))
     const cambiados = nuevo.nodes.filter((n: any) => v.has(n.name) && JSON.stringify(v.get(n.name)) !== JSON.stringify(n)).map((n: any) => n.name)

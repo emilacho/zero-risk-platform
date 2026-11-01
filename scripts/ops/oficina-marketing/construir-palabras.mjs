@@ -7,6 +7,7 @@
 import { escribirNuevo, leerVivo } from './lib.mjs'
 import { construirEsloganEnBrief, construirEsloganEnPieza } from './eslogan-brief-y-pieza.mjs'
 import { construirPalabrasDelManual } from './palabras-del-manual.mjs'
+import { construirDatosDelNegocio } from './datos-del-negocio.mjs'
 import { construirJerarquiaDeFuentes, construirPlanAprobado } from './plan-aprobado.mjs'
 
 export const NODOS_BRIEF = { cargar: '① Cargar manual vigente', guarda: '① GUARDA · sin manual aprobado se DETIENE', armar: '③ Armar el cuerpo del redactor' }
@@ -18,6 +19,7 @@ if (process.argv[1] && process.argv[1].endsWith('construir-palabras.mjs')) {
     construirPalabrasDelManual(f)
     construirEslogan(f, nodos)
     if (id === 'PQdIgbuFexuBsoh8') { construirPlanAprobado(f); construirJerarquiaDeFuentes(f) } // 01-nov · 9a/9b: el brief lee el plan aprobado; la pieza no lee el plan
+    construirDatosDelNegocio(f, { ...nodos, guardaManual: nodos.guarda, modo: id === 'lVCLzxQCKNkd3uS0' ? 'pieza' : 'brief' }) // 01-nov · adenda 3: una sola fuente de datos del negocio
     console.log(escribirNuevo(f))
   }
 }

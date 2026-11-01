@@ -6,7 +6,7 @@
 import { cambiarCodigo } from './lib.mjs'
 
 const ANCLA_BLOQUE = '// 01-nov · EL ESLOGAN QUE EL CLIENTE YA USA (activo de marca EXISTENTE)'
-const BLOQUE = `// 01-nov · LO QUE DECLARÓ EL DUEÑO (hechos con la máxima precedencia) · viene en contexto_del_cliente.hechos_del_dueno = [{ tema, respuesta, sede, frases_negadas }]. Sin entradas válidas, el pedido queda idéntico a hoy.
+export const BLOQUE_HECHOS = `// 01-nov · LO QUE DECLARÓ EL DUEÑO (hechos con la máxima precedencia) · viene en contexto_del_cliente.hechos_del_dueno = [{ tema, respuesta, sede, frases_negadas }]. Sin entradas válidas, el pedido queda idéntico a hoy.
 const bloqueHechosDelDueno = (function () {
   const lista = carpeta && Array.isArray(carpeta.hechos_del_dueno) ? carpeta.hechos_del_dueno : [];
   const una = function (v, tope) { return String(v == null ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, tope); };
@@ -33,6 +33,6 @@ const bloqueHechosDelDueno = (function () {
 const ANCLA_USO = '...bloqueEslogan,\n'
 
 export function construirHechosDelDuenoEnPlan(f) {
-  cambiarCodigo(f, 'Redactor (B4)', ANCLA_BLOQUE, BLOQUE + ANCLA_BLOQUE)
+  cambiarCodigo(f, 'Redactor (B4)', ANCLA_BLOQUE, BLOQUE_HECHOS + ANCLA_BLOQUE)
   cambiarCodigo(f, 'Redactor (B4)', ANCLA_USO, ANCLA_USO + '...bloqueHechosDelDueno,\n')
 }
