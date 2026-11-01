@@ -11,3 +11,11 @@ scripts/worker-staging/E39-casilla-negocio/nodos/*.js -text
 src/agents/identities/*.md text eol=lf
 supabase/migrations/202610312010_*.sql text eol=lf
 supabase/reversas/202610312010_*.sql text eol=lf
+
+# Oficina de marketing (T8 + PASO A · 01-nov): las pruebas comparan el SQL multilínea tal cual y T9 aplica desde el blob; en Windows (autocrlf=true) quedaban CRLF (menor 1 de CC3).
+supabase/migrations/202610312011_*.sql text eol=lf
+supabase/migrations/202610312012_*.sql text eol=lf
+supabase/migrations/202611011300_*.sql text eol=lf
+supabase/reversas/202610312011_*.sql text eol=lf
+supabase/reversas/202610312012_*.sql text eol=lf
+supabase/reversas/202611011300_*.sql text eol=lf

@@ -134,9 +134,10 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     campo('OBJETIVO', porRed?.objetivo || b.objetivo),
     campo('PROTAGONISTA', idea?.protagonista || limpio(f.tema) || '(sin protagonista declarado)'),
     campo('MENSAJE (uno)', mensajeDe(idea, f, avisos, cab.id)),
-    campo('GANCHO', idea?.gancho ?? ''),
+    // FIRMA 01-nov «hoja sin reja»: el gancho de la hoja es SUGERIDO; el final lo escribe la mesa de piezas (video: el coach con el método scripter)
+    campo('GANCHO SUGERIDO', idea?.gancho ?? ''),
     campo('LÍMITES', `proporción ${proporcion} (por omisión del formato ${cab.formato})${esFormatoDeVideo(cab.formato) ? ` · ${NOTA_DE_VIDEO_EN_LIMITES}` : ''} · ${b.obligatorios.no_se_dice.length ? `no se dice: ${b.obligatorios.no_se_dice.join(', ')}` : 'sin «no se dice» en el brief'}${idea?.foto ? ` · foto citada: ${idea.foto}` : ''}`),
-    ...listaDe('VOCABULARIO OBLIGATORIO', b.obligatorios.vocabulario),
+    ...listaDe('VOCABULARIO DE LA MARCA', b.obligatorios.vocabulario),
     ...listaDe('PROHIBIDO', b.obligatorios.prohibido),
     campo('SINTAXIS', b.tono),
     campo('VISUAL', [c.como_se_ve, cap?.como_se_ve, idea?.foto && idea.foto !== 'ninguna' ? `foto ${idea.foto}` : ''].filter(Boolean).join(' · ') || '(el concepto no dice cómo se ve)'),

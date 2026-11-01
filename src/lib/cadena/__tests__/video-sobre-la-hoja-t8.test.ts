@@ -2,7 +2,7 @@
  * T8 · VIDEO SOBRE LA HOJA · lado de la CADENA (31-oct · plan v3 T8 · CC#1) · US$ 0, sin base ni red.
  *  · la única palanca es DATO: un formato `espera_brazo` SIN familia sigue naciendo `espera_video`; CON familia (`video_mesa`) es una fila más (esquema → lote → hoja);
  *  · la hoja escribe el brief de video con el encabezado que la oficina lee (`### <fila> · <Red> · reel|video|short`) y `esVideo`/`formatoDeVideo` lo leen de ahí;
- *  · la migración 202610312011 pone la familia a los 5 formatos de video y su reversa la quita.
+ *  · la migración 202610312011 pone la familia a los 4 formatos de video CORTO (el largo de YouTube es familia propia · FIRMA 01-nov) y su reversa la quita.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -85,7 +85,9 @@ describe('la hoja escribe el brief de video y la oficina lo reconoce como video'
     expect(esVideo(b)).toBe(true)
     expect(formatoDeVideo(b)).toBe('reel')
     expect(b.red).toBe('Instagram')
-    expect(b.texto).toContain('GANCHO: el vapor del pan')
+    // FIRMA 01-nov «hoja sin reja»: el gancho de la hoja es SUGERIDO (el final lo escribe la mesa de piezas)
+    expect(b.texto).toContain('GANCHO SUGERIDO: el vapor del pan')
+    expect(b.texto).not.toMatch(/^GANCHO:/m)
   })
   it('un video de TikTok se lee como formato `tiktok` del brazo; un short de YouTube como `short`; una foto NO es video', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-tt-v1', red: 'tiktok', formato: 'video', idea_ref: 'C1-I02' }), fila({ id: 'F1-S1-yt-s1', red: 'youtube', formato: 'short', idea_ref: null }), fila({ id: 'F1-S1-ig-f1', formato: 'foto', idea_ref: null })]))
@@ -115,10 +117,13 @@ describe('la hoja escribe el brief de video y la oficina lo reconoce como video'
 })
 
 describe('la migración 202610312011 y su reversa', () => {
-  it('pone familia video_mesa SOLO a los formatos espera_brazo (reel · video · short) con familia nula; idempotente; guardas de conteo', () => {
-    expect(SQL).toMatch(/UPDATE public\.cadena_formatos_por_red\s+SET familia = 'video_mesa'\s+WHERE familia IS NULL\s+AND produccion = 'espera_brazo'\s+AND formato IN \('reel', 'video', 'short'\)/)
-    expect(SQL).toMatch(/IF n < 5 THEN RAISE EXCEPTION/)
+  it('pone familia video_mesa SOLO a los formatos espera_brazo de video CORTO (reel · video · short, menos youtube·video) con familia nula; idempotente; guardas de conteo', () => {
+    expect(SQL).toMatch(/UPDATE public\.cadena_formatos_por_red\s+SET familia = 'video_mesa'\s+WHERE familia IS NULL\s+AND produccion = 'espera_brazo'\s+AND formato IN \('reel', 'video', 'short'\)\s+AND NOT \(red = 'youtube' AND formato = 'video'\)/)
+    // FIRMA 01-nov punto 4: el video largo de YouTube es familia propia (video_largo): 4 cortos con sala, el largo queda NULL y una guarda lo impide en video_mesa
+    expect(SQL).toMatch(/IF n < 4 THEN RAISE EXCEPTION/)
     expect(SQL).toMatch(/IF sin_sala <> 0 THEN RAISE EXCEPTION/)
+    expect(SQL).toMatch(/IF largo <> 0 THEN RAISE EXCEPTION 'el video largo de YouTube no entra en video_mesa/)
+    expect(SQL).toMatch(/video_largo/)
     expect(SQL).not.toMatch(/\b(DROP TABLE|DELETE FROM|TRUNCATE|INSERT INTO)\b/i)
     expect(SQL).toMatch(/NOTIFY pgrst, 'reload schema'/)
     expect(SQL).toMatch(/NO APLICADA/)
