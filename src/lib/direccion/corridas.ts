@@ -20,13 +20,15 @@ const FALLO = /error|fail|timeout|cancel/i
 const tokensDe = (f: Fila) => ({ entrada: numero(f.tokens_input), salida: numero(f.tokens_output), cache_lectura: numero(f.tokens_cache_read), cache_escritura: numero(f.tokens_cache_creation) })
 const totalTokens = (t: ReturnType<typeof tokensDe>) => t.entrada + t.salida + t.cache_lectura + t.cache_escritura
 
-export type EstadoCorrida = 'completa' | 'fallida' | 'en_curso' | 'atascada'
+export type EstadoCorrida = 'completa' | 'fallida' | 'en_curso' | 'atascada' | 'sin_cierre'
 function estadoDe(invocaciones: Fila[], despachos: Fila[], ahora: number): EstadoCorrida {
   if (invocaciones.some((i) => FALLO.test(String(i.status)) || !!texto(i.error_message)) || despachos.some((d) => d.status === 'error')) return 'fallida'
   // un despacho que quedó «running» pero cuyo empleado sí terminó (la vuelta se perdió) no es trabajo en curso: su falla la cuenta la reconciliación, en riesgos
   const terminados = new Set(invocaciones.map((i) => `${String(i.workflow_execution_id)}|${String(i.agent_name)}`))
-  const vivos = despachos.filter((d) => d.status === 'running' && !terminados.has(`${String(d.workflow_execution_id)}|${String(d.agent_name)}`))
+  const vivos = despachos.filter((d) => (d.status === 'running' || d.status === 'accepted') && !terminados.has(`${String(d.workflow_execution_id)}|${String(d.agent_name)}`))
   if (vivos.length) return vivos.every((d) => Date.parse(String(d.created_at)) < ahora - ATASCADA_MS) ? 'atascada' : 'en_curso'
+  // el ciclo de vida lo cerró y su empleado nunca dejó fila: no se sabe cómo terminó, y se dice
+  if (despachos.some((d) => d.status === 'sin_cierre' && !terminados.has(`${String(d.workflow_execution_id)}|${String(d.agent_name)}`))) return 'sin_cierre'
   return 'completa'
 }
 

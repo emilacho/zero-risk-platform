@@ -31,3 +31,5 @@ supabase/migrations/202611011700_*.sql text eol=lf
 supabase/reversas/202611011700_*.sql text eol=lf
 supabase/migrations/202611011900_*.sql text eol=lf
 supabase/reversas/202611011900_*.sql text eol=lf
+supabase/migrations/202611012000_*.sql text eol=lf
+supabase/reversas/202611012000_*.sql text eol=lf
