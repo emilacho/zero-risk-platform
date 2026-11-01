@@ -7,6 +7,7 @@
 import { escribirNuevo, leerVivo } from './lib.mjs'
 import { construirEsloganEnBrief, construirEsloganEnPieza } from './eslogan-brief-y-pieza.mjs'
 import { construirPalabrasDelManual } from './palabras-del-manual.mjs'
+import { construirJerarquiaDeFuentes, construirPlanAprobado } from './plan-aprobado.mjs'
 
 export const NODOS_BRIEF = { cargar: '① Cargar manual vigente', guarda: '① GUARDA · sin manual aprobado se DETIENE', armar: '③ Armar el cuerpo del redactor' }
 export const NODOS_PIEZA = { cargar: '② Cargar el manual vigente', guarda: '② GUARDA · sin manual aprobado se DETIENE', armar: '⑤ Armar el cuerpo del productor' }
@@ -16,6 +17,7 @@ if (process.argv[1] && process.argv[1].endsWith('construir-palabras.mjs')) {
     const f = leerVivo(id)
     construirPalabrasDelManual(f)
     construirEslogan(f, nodos)
+    if (id === 'PQdIgbuFexuBsoh8') { construirPlanAprobado(f); construirJerarquiaDeFuentes(f) } // 01-nov · 9a/9b: el brief lee el plan aprobado; la pieza no lee el plan
     console.log(escribirNuevo(f))
   }
 }
