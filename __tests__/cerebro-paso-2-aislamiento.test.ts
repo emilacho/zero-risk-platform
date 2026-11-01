@@ -57,6 +57,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^supabase\/reversas\/202611011000_cerrar_huecos_tendencias_y_voz_REVERSA\.sql$/,
   // 31-oct · VOZ DEL PÚBLICO Y RESUMEN SIEMPRE: su prueba arma fichas de prueba con columnas de la tabla (informes y resumen vivo)
   /^__tests__\/voz-del-publico-y-resumen-siempre\.test\.ts$/,
+  // 01-nov · MESA DE ANÁLISIS + CARPETA AL PLAN (FIRMA 08:42Z): sus pruebas arman una base falsa con fichas del cerebro (resumen vivo, informes, material) para probar
+  // las puertas de planeación, que solo LEEN por las funciones públicas del portero (`adjuntoDelCliente`, `rutaConsultar`) y no nombran la tabla en código
+  /^src\/lib\/planeacion\/__tests__\/(brazo-cerebro-carpeta|mesa-de-analisis-ruta)\.test\.ts$/,
   // 28-oct · LA MESA: el tablero del equipo MUESTRA al compañero la lista de fotos propias del cliente (solo LECTURA de las columnas de etiqueta ya cargadas); no escribe nada
   /^src\/lib\/oficina\/mesa\/pedidos\.ts$/,
   /^src\/app\/api\/brain\/portero\//,

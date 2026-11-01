@@ -7,7 +7,7 @@
  *
  * 🔴 Lo que agregó la corrección del 10-sep (tres puntos de Lenovo):
  *   ① la puerta recibe la LISTA y contesta UNA respuesta POR PEDIDO
- *   ② el cerebro busca por PARECIDO de verdad · no entrega los más nuevos
+ *   ② el cerebro entrega la CARPETA completa del portero (FIRMA 01-nov) · ya no busca por parecido
  *   ③ la corrida de raspado se firma con la firma REAL de quien llama, o no corre
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -47,7 +47,7 @@ const leer = async (r: Response) => {
 
 const cadenaSupabase = (resultado: { data?: unknown[]; error?: { message: string } }) => {
   const q: Record<string, any> = {}
-  for (const m of ['select', 'eq', 'order', 'limit', 'in']) q[m] = vi.fn(() => q)
+  for (const m of ['select', 'eq', 'order', 'limit', 'in', 'is', 'gte']) q[m] = vi.fn(() => q)
   q.then = (res: (v: unknown) => void) => res(resultado)
   supabaseMock.from.mockReturnValue(q)
   return q
@@ -168,8 +168,7 @@ describe('🔴 ① la puerta recibe la LISTA y contesta UNA respuesta POR PEDIDO
   })
 
   it('un pedido suelto (sin `pedidos`) sigue valiendo · y vuelve en la lista', async () => {
-    cadenaSupabase({ data: [] })
-    brain.queryClientBrain.mockResolvedValue([fragmento()])
+    cadenaSupabase({ data: [fichaResumen()] })
     const { sobre } = await leerSobre(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
     expect(sobre.respuestas).toHaveLength(1)
     expect(sobre.respuestas[0].estado).toBe('trajo')
@@ -604,39 +603,48 @@ describe('🔴 posthog · DECLARA que no puede atribuir · en TODOS los caminos'
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ② EL CEREBRO · por PARECIDO, no por fecha
+// ② EL CEREBRO · LA CARPETA COMPLETA, no una búsqueda (FIRMA de Emilio 01-nov 08:42Z · punto 2)
 // ═══════════════════════════════════════════════════════════════════════════
-describe('🔴 ② el cerebro busca por PARECIDO · no entrega «los más nuevos»', () => {
-  it('usa la búsqueda semántica que YA existe · con el texto de la pregunta', async () => {
-    const q = cadenaSupabase({ data: [] })
-    brain.queryClientBrain.mockResolvedValue([fragmento()])
-    await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: '¿qué tono usamos?', k: 5, secciones: ['brand_books'] } })
-    expect(brain.queryClientBrain).toHaveBeenCalledWith(expect.objectContaining({
-      client_id: 'c', query: '¿qué tono usamos?', match_count: 5, sections: ['brand_books'],
-    }))
-    // 🔴 el defecto viejo, clavado: ya NO se ordena por fecha de carga
+const RESUMEN_LARGO = 'r'.repeat(9000) // mucho más que el recorte viejo de 2.500 · va ENTERO
+const fichaResumen = (over: Record<string, unknown> = {}) => ({
+  id: 'rv', clase: 'resumen_vivo', atributo: 'resumen:cliente', contenido: RESUMEN_LARGO, que_es: '', observado_en: '2026-11-01T00:35:00Z',
+  fecha_fuente: null, creado_en: '2026-11-01T00:35:00Z', vigente_hasta: null, retirada_en: null, descartada: false, sede: null, provenance_tag: {}, ...over,
+})
+const fichaInforme = (over: Record<string, unknown> = {}) => fichaResumen({
+  id: 'inf', clase: 'informe_de_analisis', atributo: 'informe:competencia', contenido: 'informe de competencia', fecha_fuente: '2026-10-31T00:00:00Z',
+  provenance_tag: { datos: { tipo: 'competencia', mesa: 'mesa_de_analisis', agente: 'competitive-intelligence-agent', citas: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'] } }, ...over,
+})
+
+describe('🔴 ② el plan recibe la CARPETA completa · no busca por parecido', () => {
+  it('NO llama a la búsqueda semántica ni ordena por fecha: lee la carpeta del portero, y los parámetros de la búsqueda vieja se ignoran y se declaran', async () => {
+    const q = cadenaSupabase({ data: [fichaResumen()] })
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: '¿qué tono usamos?', k: 5, secciones: ['brand_books'] } }))
+    expect(brain.queryClientBrain).not.toHaveBeenCalled()
     expect(q.order).not.toHaveBeenCalled()
-  })
-
-  it('cada fragmento vuelve con su PARECIDO medido · y con su procedencia', async () => {
-    cadenaSupabase({ data: [{ id: 'ch1', provenance_tag: { trust: 'evidencia' }, created_at: 'ayer' }] })
-    brain.queryClientBrain.mockResolvedValue([fragmento({ similarity: 0.91 })])
-    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
     expect(json.estado).toBe('trajo')
-    expect(json.datos.cantidad).toBe(1)
-    expect(json.datos.fragmentos[0].similitud).toBe(0.91)
-    expect(json.datos.fragmentos[0].procedencia).toEqual({ trust: 'evidencia' })
-    // y la fuente DICE con qué texto se buscó · un número sin de dónde es un supuesto
-    expect(json.fuente).toMatch(/texto buscado/)
-    expect(json.fuente).toMatch(/tono/)
+    expect(json.fuente).toMatch(/sin búsqueda por parecido/)
+    expect(json.fuente).toMatch(/ignorados: query, k, secciones/)
   })
 
-  it('sin pregunta propia, busca por el OBJETIVO · y lo declara', async () => {
-    cadenaSupabase({ data: [] })
-    brain.queryClientBrain.mockResolvedValue([fragmento()])
-    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'competidores_precio' }))
-    expect(brain.queryClientBrain).toHaveBeenCalledWith(expect.objectContaining({ query: 'competidores_precio' }))
-    expect(json.fuente).toMatch(/texto buscado: «competidores_precio»/)
+  it('el resumen vivo vuelve ENTERO (sin el recorte de 2.500) y el estado de la carpeta se dice en una línea', async () => {
+    cadenaSupabase({ data: [fichaResumen()] })
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz' }))
+    expect(json.estado).toBe('trajo')
+    expect(json.datos.contexto_del_cliente.resumen_vivo.estado).toBe('vigente')
+    expect(json.datos.contexto_del_cliente.resumen_vivo.texto).toHaveLength(9000)
+    expect(json.datos.contexto_del_cliente.informes).toEqual([])
+    expect(json.datos.carpeta).toEqual({ resumen_vivo: 'vigente', informes: 0, informes_estado: 'ok' })
+    expect(json.datos.material_citado).toEqual({ ids: [], detalle: 'ningún informe cita material crudo' })
+  })
+
+  it('los informes vigentes de la mesa de análisis van uno por tipo con sus citas · y el material crudo solo por cita (ids para pedirlo al portero)', async () => {
+    cadenaSupabase({ data: [fichaResumen(), fichaInforme()] })
+    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz' }))
+    expect(json.estado).toBe('trajo')
+    expect(json.datos.contexto_del_cliente.informes).toHaveLength(1)
+    expect(json.datos.contexto_del_cliente.informes[0]).toMatchObject({ tipo: 'competencia', texto: 'informe de competencia', origen: 'sintesis_de_oficina', citas: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'] })
+    expect(json.datos.material_citado.ids).toEqual(['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'])
+    expect(json.datos.material_citado.detalle).toMatch(/se pide al portero por su id/)
   })
 
   it('un objetivo de puros espacios NO es un objetivo ⇒ hueco', async () => {
@@ -646,45 +654,29 @@ describe('🔴 ② el cerebro busca por PARECIDO · no entrega «los más nuevos
     expect(json.objetivo).toBe('(sin objetivo)')
     expect(brain.queryClientBrain).not.toHaveBeenCalled()
   })
-
-  it('si la procedencia no se puede leer, el fragmento igual vuelve · y se DECLARA', async () => {
-    cadenaSupabase({ error: { message: 'permission denied' } })
-    brain.queryClientBrain.mockResolvedValue([fragmento()])
-    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
-    expect(json.estado).toBe('trajo')
-    expect(json.datos.fragmentos[0].procedencia_leida).toBe(false)
-    expect(json.datos.fragmentos[0].procedencia).toBeNull()
-  })
 })
 
 describe('cerebro · se LEE, y el vacío es información', () => {
-  it('sin fragmentos ⇒ sin_dato · «todavía no tiene conocimiento cargado»', async () => {
-    brain.queryClientBrain.mockResolvedValue([])
+  it('sin resumen vivo ni informes ⇒ sin_dato · «el portero todavía no armó la carpeta»', async () => {
+    cadenaSupabase({ data: [] })
     const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
     expect(json.estado).toBe('sin_dato')
     expect(json.motivo).toMatch(/fui, miré y no hay/)
+    expect(json.motivo).toMatch(/no tiene carpeta todavía/)
   })
 
-  it('🔴 un error de la búsqueda NO es «el cliente no tiene conocimiento»', async () => {
-    brain.queryClientBrain.mockRejectedValue(new Error('connection reset'))
+  it('🔴 un error de la lectura NO es «el cliente no tiene carpeta»', async () => {
+    cadenaSupabase({ error: { message: 'connection reset' } })
     const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
     expect(json.estado).toBe('sin_respuesta')
     expect(json.motivo).toMatch(/connection reset/)
     expect(json.motivo).not.toMatch(/fui, mir/i)
   })
-
-  it('el texto largo se recorta Y SE DECLARA', async () => {
-    cadenaSupabase({ data: [] })
-    brain.queryClientBrain.mockResolvedValue([fragmento({ content_text: 'y'.repeat(5000) })])
-    const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', params: { query: 'tono' } }))
-    expect(json.datos.fragmentos[0].texto).toHaveLength(2000)
-    expect(json.datos.fragmentos[0].recortado).toBe(true)
-  })
 })
 
 describe('los dos campos opcionales viajan por las tres puertas', () => {
   it('limite_ms y proposito vuelven en la respuesta', async () => {
-    brain.queryClientBrain.mockResolvedValue([])
+    cadenaSupabase({ data: [] })
     const { json } = await leer(await pedir(cerebro, { client_id: 'c', objetivo: 'voz', limite_ms: 5000, proposito: 'no repetir trabajo' }))
     expect(json.limite_ms).toBe(5000)
     expect(json.proposito).toBe('no repetir trabajo')

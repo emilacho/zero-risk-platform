@@ -1,34 +1,33 @@
 /**
- * POST /api/planeacion/brazo/cerebro · la puerta del CEREBRO.
+ * POST /api/planeacion/brazo/cerebro · la puerta del CEREBRO hacia el plan.
  *
- * El cerebro se LEE, no se escribe (canon 06-sep · lo raspado es materia prima
- * y vive en su tabla). Esta puerta sólo busca y devuelve el contrato §4.2.
- *
- * 🔴 Cero fragmentos tras una búsqueda que SÍ respondió es `sin_dato` —
- * «este cliente todavía no tiene conocimiento cargado» es información real y
- * accionable para el plan. Que la búsqueda se rompa es `sin_respuesta`.
+ * El cerebro se LEE, no se escribe (canon 06-sep). Esta puerta devuelve el contrato §4.2.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * 🔴 SE BUSCA POR PARECIDO DE VERDAD · Y ANTES NO (corregido 10-sep · Lenovo)
+ * 🔴 EL PLAN RECIBE LA CARPETA COMPLETA, NO BUSCA (FIRMA de Emilio 01-nov 08:42Z · punto 2)
  * ═══════════════════════════════════════════════════════════════════════════
- * La primera versión pedía `order created_at desc limit 12` y entregaba eso
- * como si fueran los fragmentos que responden a la pregunta. **Traía los 12
- * más NUEVOS y los presentaba como los más PARECIDOS** — un rótulo que miente,
- * y de los peores: el plan razona sobre el material equivocado sin saberlo, y
- * un cliente con conocimiento cargado hace meses queda mudo por antigüedad.
+ * Hasta el 01-nov esta puerta buscaba por parecido («nombre · rubro» → pgvector) y el redactor
+ * recortaba lo que llegaba a ~2.500 caracteres (INFORME-CC3 «todo lo que recibe el jefe de
+ * marketing» §2, fallas A y B). Emilio: «eso debería venir desde antes: en el manual ya actúan
+ * agentes de investigación y raspadores». Por eso NO se mejora la pregunta: se REEMPLAZA.
  *
- * Ahora usa la búsqueda que YA existe y ya está certificada:
- * `queryClientBrain()` → huella semántica de 1536 (OpenAI) + `query_client_brain`
- * sobre pgvector. Cada fragmento vuelve **con su parecido medido** (`similitud`)
- * y con el texto que se usó para buscar declarado en `fuente`.
- *
- * 📌 `similarity` es lo único que justifica la palabra «parecido». Sin ese
- * número no hay forma de saber si el fragmento contesta o solamente existe.
+ * Lo que devuelve ahora (`datos`):
+ *   · `contexto_del_cliente` ENTERO, tal como lo arma el portero (`adjuntoDelCliente`): el resumen
+ *     vivo (cliente + sedes) y los informes vigentes de la mesa de análisis, UNO por tipo, con su
+ *     fecha de corte, sus citas y la marca «hay material nuevo desde el corte». SIN recorte;
+ *   · `material_citado`: los ids de las fichas crudas que algún informe cita (el material crudo
+ *     sigue disponible SOLO por esa vía: se le pide al portero por su id; esta puerta no lee las
+ *     tablas del cerebro, solo sus funciones públicas);
+ *   · `carpeta`: el estado en una línea (para el registro).
+ * Sin resumen vivo y sin informes es `sin_dato` (el portero todavía no armó la carpeta: información
+ * real para el plan); que la lectura se rompa es `sin_respuesta`. `params.k` / `params.secciones` /
+ * `params.query` de la búsqueda vieja se aceptan y se IGNORAN (se declara en `fuente`).
  */
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { queryClientBrain, type BrainSection } from '@/lib/client-brain'
-import { brazoCerebro } from '@/lib/planeacion/brazos'
+import type { Db } from '@/lib/portero-alimenta/alimentar'
+import { adjuntoDelCliente } from '@/lib/portero-alimenta/contexto-del-cliente'
+import { brazoCarpeta } from '@/lib/planeacion/brazos'
 import {
   conLimite,
   CUPO_EN_VUELO,
@@ -46,83 +45,29 @@ import { type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const FUENTE = 'cerebro · client_brain_chunks (pgvector) · búsqueda por parecido'
-const RECORTE = 2000
-
-/**
- * El texto con el que se busca · en este orden, y se DECLARA cuál se usó.
- * `objetivo` es el último recurso y NUNCA falta: la puerta ya rechaza el pedido
- * que no lo trae (`leerSobre`) ⇒ acá no hace falta una guarda de «no hay con
- * qué buscar», y poner una sería código que finge proteger.
- */
-function textoDeBusqueda(p: PedidoPuerta): string {
-  const q = p.params?.query ?? p.params?.pregunta ?? p.params?.texto
-  const candidatos = [typeof q === 'string' ? q : '', p.proposito ?? '', p.objetivo ?? '']
-  return candidatos.map((c) => c.trim()).find((c) => c.length > 0) ?? ''
-}
+const FUENTE = 'cerebro · carpeta del cliente que arma el portero (resumen vivo + informes vigentes de la mesa de análisis) · sin búsqueda por parecido'
+const txt = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
 
 async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   const objetivo = p.objetivo as string
   const extra = extraDe(p)
-
   if (!p.client_id) return pedidoInvalido('cerebro', FUENTE, p, 'falta client_id')
-
-  const texto = textoDeBusqueda(p)
-
-  const k = Math.min(Math.max(Number(p.params?.k ?? 12) || 12, 1), 50)
-  const secciones = Array.isArray(p.params?.secciones) ? (p.params?.secciones as BrainSection[]) : undefined
-  const fuente = FUENTE + ' · texto buscado: «' + texto.slice(0, 120) + '»' +
-    (secciones?.length ? ' · secciones: ' + secciones.join(', ') : '')
+  const clientId = p.client_id
+  const ignorados = ['query', 'pregunta', 'texto', 'k', 'secciones'].filter((k) => p.params?.[k] !== undefined)
+  const fuente = FUENTE + (ignorados.length ? ` · parámetros de la búsqueda vieja ignorados: ${ignorados.join(', ')}` : '')
 
   try {
-    return await brazoCerebro({
+    return await brazoCarpeta({
       objetivo,
       fuente,
       ...extra,
-      buscar: () => conLimite(p.limite_ms, async () => {
-        const hallados = await queryClientBrain({
-          client_id: p.client_id as string,
-          query: texto,
-          ...(secciones?.length ? { sections: secciones } : {}),
-          match_count: k,
-        })
-        if (!hallados.length) return []
-
-        // La procedencia no viene en la búsqueda (el RPC devuelve seis campos y
-        // `provenance_tag` no es uno) · se trae aparte. Si esa lectura falla, el
-        // fragmento igual vuelve: se DECLARA que la procedencia no se pudo leer,
-        // no se lo tira ni se lo entrega como si no tuviera.
-        const porId = new Map<string, { procedencia: unknown; cargado_el: unknown }>()
-        let procedenciaLeida = true
-        try {
-          const { data, error } = await getSupabaseAdmin()
-            .from('client_brain_chunks')
-            .select('id, provenance_tag, created_at')
-            .in('id', hallados.map((h) => h.chunk_id))
-          if (error) throw new Error(error.message)
-          for (const f of (data ?? []) as Array<Record<string, unknown>>) {
-            porId.set(String(f.id), { procedencia: f.provenance_tag ?? null, cargado_el: f.created_at ?? null })
-          }
-        } catch {
-          procedenciaLeida = false
+      leer: () => conLimite(p.limite_ms, async () => {
+        const contexto_del_cliente = await adjuntoDelCliente(getSupabaseAdmin() as unknown as Db, clientId)
+        const ids = [...new Set(contexto_del_cliente.informes.flatMap((i) => i.citas).map(txt).filter(Boolean))]
+        return {
+          contexto_del_cliente,
+          material_citado: { ids, detalle: ids.length ? 'el material crudo que los informes citan se pide al portero por su id (esta puerta no lee las tablas del cerebro)' : 'ningún informe cita material crudo' },
         }
-
-        return hallados.map((h) => {
-          const completo = String(h.content_text ?? '')
-          const extraDato = porId.get(h.chunk_id)
-          return {
-            seccion: h.label,
-            de_donde: h.source_table,
-            // el texto se recorta para no inflar la respuesta · se declara el recorte
-            texto: completo.slice(0, RECORTE),
-            recortado: completo.length > RECORTE,
-            // 🔴 el número que sostiene la palabra «parecido»
-            similitud: h.similarity,
-            procedencia: extraDato?.procedencia ?? null,
-            procedencia_leida: procedenciaLeida,
-            cargado_el: extraDato?.cargado_el ?? null,
-          }
-        })
       }),
     })
   } catch (e) {
