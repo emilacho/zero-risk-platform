@@ -4,7 +4,7 @@
  *   · «[BB] Fan-out prep» · la sección del editor pide, además de `forbidden_words[]` (que sigue plana), `palabras_con_intencion[]`: objetos
  *     `{ texto, intencion: 'estilo'|'legal', fuente?: { cita, origen }, porque }`. Por defecto `estilo`; `legal` solo con la cita literal de la evidencia; `del_dueno` nunca
  *     (solo lo declara el dueño). Superlativos y promesas genéricas no van aquí (regla E3 del manual).
- *   · «[BB] Consolidador» · une las tres lentes (como `_listaUnion`), sanea cada objeto (intención fuera del enum, `legal` sin cita, `del_dueno` sin cita y fecha ⇒ `estilo`),
+ *   · «[BB] Consolidador» · une las tres lentes (como `_listaUnion`), sanea cada objeto (intención fuera del enum, `legal` sin cita ⇒ `estilo`; cualquier `del_dueno` de una lente ⇒ `estilo`),
  *     deduplica sin distinguir mayúsculas (si dos lentes la nombran, gana la `legal` con cita) y, si una palabra con intención no está en `forbidden_words`, la AGREGA ahí (solo agrega).
  * «[BB] Promote prep» NO cambia: ya manda el borrador entero dentro de `brand_book` (`Object.assign({}, draft, …)`), así `palabras_con_intencion` viaja a `POST /api/brand-book/{cliente}`.
  * Sin la clave nueva en las lentes, el resultado es idéntico a hoy (lista vacía).
@@ -26,11 +26,10 @@ const _intencionSana = (o) => {
   if (!t) return null;
   const f = (o.fuente && typeof o.fuente === 'object') ? o.fuente : null;
   const cita = f ? String(f.cita == null ? '' : f.cita).trim() : '';
-  const fecha = f ? String(f.fecha == null ? '' : f.fecha).trim() : '';
   let i = String(o.intencion == null ? '' : o.intencion).trim().toLowerCase();
   if (i !== 'legal' && i !== 'del_dueno') i = 'estilo';
   if (i === 'legal' && !cita) i = 'estilo';
-  if (i === 'del_dueno' && !(cita && fecha)) i = 'estilo';
+  if (i === 'del_dueno') i = 'estilo'; // un agente NO fabrica un bloqueo «del dueño»: ese entra solo por la puerta del dueño (POST /api/tablero/manual-palabra)
   const out = { texto: t, intencion: i, porque: String(o.porque == null ? '' : o.porque).trim() };
   if (i !== 'estilo' && f) out.fuente = f;
   return out;
