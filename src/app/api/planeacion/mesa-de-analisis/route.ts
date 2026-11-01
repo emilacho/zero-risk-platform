@@ -14,7 +14,7 @@
  *   · un analista que no existe o está inactivo en `agents` se declara (`sin_respuesta`), no se adivina;
  *   · material = resumen vivo ENTERO + fichas del portero sobre el tema (`rutaConsultar`, se registra quién consultó, US$ 0),
  *     recortadas a 6.000 con el recorte dicho; una consulta por analista;
- *   · topes: US$ 1 por analista (≤ 2) y US$ 4 por mesa: el pedido que no cabe no se hace;
+ *   · topes: US$ 1 por analista (≤ 2) y US$ 5 por mesa (FIRMA 01-nov): el pedido que no cabe no se hace;
  *   · idioma y trato del manual del cliente (`params.idioma` · `params.trato` si el flujo los trae); nada de aquí los fija.
  * Del cerebro solo se LEE por sus funciones públicas (CC-CEREBRO); se ESCRIBE únicamente por su puerta HTTP, como cualquier oficina.
  */
@@ -26,7 +26,7 @@ import { CLAVE_DE_METODOS, METODOS_POR_OMISION, metodoSegunConfig } from '@/lib/
 import { brazoAnalisis, type ArchivadoDelInforme } from '@/lib/planeacion/brazos'
 import {
   ANALISTAS, armarMaterial, CLAVE_DE_LA_PALANCA, cuerpoDelInforme, esTipoDeAnalisis, HALLAZGOS_ESPERADOS, leerInforme, leerPalanca,
-  MESA, repartirTopes, rotuloDe, tareaDeAnalisis, TIPOS_DE_ANALISIS, type Analista, type FichaDelCliente, type FichaDelMaterial, type TipoDeAnalisis,
+  MESA, repartirTopes, rotuloDe, tareaDeAnalisis, TIPOS_DE_ANALISIS, TOPE_DE_LA_MESA_USD, type Analista, type FichaDelCliente, type FichaDelMaterial, type TipoDeAnalisis,
 } from '@/lib/planeacion/mesa-de-analisis'
 import {
   conLimite, CUPO_EN_VUELO, enParalelo, extraDe, firmaDeLaCorrida, leerSobre, pedidoInvalido, responderLista, seRompio, sobreInvalido, type PedidoPuerta,
@@ -135,7 +135,7 @@ async function atender(p: PedidoPuerta, tope: number): Promise<RespuestaBrazo> {
   // 🔴 el analista SOLO se invoca vía flujo · sin firma no hay llamada ni gasto
   const firma = firmaDeLaCorrida(p)
   if (!firma.ok) return pedidoInvalido('analisis', FUENTE, p, firma.motivo)
-  if (tope <= 0) return sinRespuesta({ brazo: 'analisis', objetivo, fuente, ...extra, motivo: 'el tope de la mesa (US$ 4 por sobre) no alcanza para este pedido · NO se preguntó' })
+  if (tope <= 0) return sinRespuesta({ brazo: 'analisis', objetivo, fuente, ...extra, motivo: `el tope de la mesa (US$ ${TOPE_DE_LA_MESA_USD} por sobre) no alcanza para este pedido · NO se preguntó` })
 
   try {
     // la palanca solo se exige para GASTAR: en ensayo se lee el material a US$ 0 y se declara que no se miró
