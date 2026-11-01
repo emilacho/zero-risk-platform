@@ -51,6 +51,10 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/lib\/cerebro\//,
   // 31-oct · TENDENCIAS Y REDES: su prueba nombra la URL de la tabla `cerebro_tendencias` (guardado y lectura de tendencias del rubro y de la bodega viral)
   /^__tests__\/tendencias-y-redes\.test\.ts$/,
+  // 01-nov · CERRAR HUECOS DE TENDENCIAS Y VOZ: su prueba nombra las tablas `cerebro_tendencias` y `cerebro_comentarios_competencia` (videos de tendencias enlazados, comentarios de la competencia) y la migración las crea/ajusta
+  /^__tests__\/cerrar-huecos-tendencias-y-voz\.test\.ts$/,
+  /^supabase\/migrations\/202611011000_cerrar_huecos_tendencias_y_voz\.sql$/,
+  /^supabase\/reversas\/202611011000_cerrar_huecos_tendencias_y_voz_REVERSA\.sql$/,
   // 31-oct · VOZ DEL PÚBLICO Y RESUMEN SIEMPRE: su prueba arma fichas de prueba con columnas de la tabla (informes y resumen vivo)
   /^__tests__\/voz-del-publico-y-resumen-siempre\.test\.ts$/,
   // 28-oct · LA MESA: el tablero del equipo MUESTRA al compañero la lista de fotos propias del cliente (solo LECTURA de las columnas de etiqueta ya cargadas); no escribe nada

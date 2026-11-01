@@ -160,6 +160,12 @@ export function unidadesDeRaspados(filas: FilaCruda[], o: OpcionesDeUnidades): U
         const t = normalizar(txt(it.text) || txt(it.comment)).slice(0, 800)
         if (t.length >= 9) poner({ ...base(f), fuente: 'comentarios', ref: f.apify_function, unidad_ref: txt(it.id) || huellaDeTexto(t), texto: t, clase_dato: 'acumula', atributo: null, autoria: 'tercero', de_ficha_propia: true, huella: huellaDeTexto(t), fecha_fuente: txt(it.timestamp) || null })
       }
+    } else if (f.apify_function === 'comentarios_tiktok' || f.apify_function === 'comentarios_x' || f.apify_function === 'comentarios_facebook') {
+      // 01-nov · comentarios de las publicaciones PROPIAS en TikTok, X y Facebook (el portero los pidió con su fecha real; ya sin datos personales)
+      for (const it of arr(f.respuesta)) {
+        const t = normalizar(txt(it.text)).slice(0, 800)
+        if (t.length >= 9) poner({ ...base(f), fuente: 'comentarios', ref: f.apify_function, unidad_ref: txt(it.id) || huellaDeTexto(t), texto: t, clase_dato: 'acumula', atributo: null, autoria: 'tercero', de_ficha_propia: true, huella: huellaDeTexto(t), fecha_fuente: txt(it.timestamp) || null, url: txt(it.postUrl) || null })
+      }
     } else if (f.apify_function === 'publicaciones_facebook') {
       for (const it of arr(f.respuesta)) {
         const t = normalizar(txt(it.text) || txt(it.message)).slice(0, 1500)
@@ -169,6 +175,14 @@ export function unidadesDeRaspados(filas: FilaCruda[], o: OpcionesDeUnidades): U
       for (const it of arr(f.respuesta)) {
         const t = normalizar(txt(it.transcript) || txt(it.caption) || txt(it.text)).slice(0, 2500)
         if (t.length >= 20) poner({ ...base(f), fuente: 'videos', ref: f.apify_function, unidad_ref: txt(it.id) || txt(it.shortCode) || huellaDeTexto(t), texto: t, clase_dato: 'acumula', atributo: null, autoria: 'propia', huella: huellaDeTexto(t), fecha_fuente: txt(it.timestamp) || null, url: txt(it.url) || null })
+        // 01-nov · los comentarios que YA trae el video (`latestComments`, hasta 10 con su fecha) son opiniones sobre el negocio solo si el video es de su cuenta; los de un competidor van aparte (comentarios de la competencia)
+        const dueno = txt(it.ownerUsername).toLowerCase().replace(/^@/, '')
+        if (f.apify_function === 'videos_instagram' && dueno && misHandles.has(dueno)) {
+          for (const c of arr(it.latestComments)) {
+            const ct = normalizar(txt(c.text)).slice(0, 800)
+            if (ct.length >= 9) poner({ ...base(f), fuente: 'comentarios', ref: 'videos_instagram', unidad_ref: txt(c.id) || huellaDeTexto(ct), texto: ct, clase_dato: 'acumula', atributo: null, autoria: 'tercero', de_ficha_propia: true, huella: huellaDeTexto(ct), fecha_fuente: txt(c.timestamp) || null, url: txt(it.url) || null })
+          }
+        }
       }
     } else if (f.apify_function === 'menciones_en_redes') {
       for (const it of arr(f.respuesta)) {

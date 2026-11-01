@@ -92,6 +92,24 @@ const accion = (fuente: FuenteDelPortero, funcion: string, params: Record<string
   return { fuente, funcion, params, metadata: { target_kind: kind, llamado_por: 'portero-alimentar' }, usd_max: c.usd, medido: c.medido, objetivo }
 }
 
+/**
+ * Las publicaciones propias de las que vale la pena pedir comentarios: solo las que TIENEN (el actor devuelve error «no_items» por cada publicación vacía y el pedido de Zero Risk quedaba en
+ * 3 direcciones fallidas), las más comentadas primero; sin el conteo en el dato crudo se conserva la publicación (no se descarta lo que no se sabe). Sin repetir.
+ */
+export function publicacionesConComentarios(posts: Array<Record<string, unknown>>): string[] {
+  const vistos = new Set<string>()
+  const con: Array<{ c: string; n: number }> = []
+  for (const p of posts) {
+    const c = String(p.shortCode ?? p.id ?? '')
+    if (!c || vistos.has(c)) continue
+    vistos.add(c)
+    const n = typeof p.commentsCount === 'number' && Number.isFinite(p.commentsCount) ? p.commentsCount : null
+    if (n === 0) continue
+    con.push({ c, n: n ?? 0 })
+  }
+  return con.map((x, i) => ({ ...x, i })).sort((a, b) => b.n - a.n || a.i - b.i).map((x) => x.c)
+}
+
 export function descubrir(e: EntradaDeDescubrir): PlanDelPortero {
   const idioma = idiomaDeBusqueda(e.pais)
   const nombre = String(e.cliente.name ?? '').trim()

@@ -34,7 +34,7 @@ export interface TendenciaVista {
   observado_en: string
   observado_dia: string
   pais: string | null
-  /** un video de tendencia se guarda por su dirección; descargarlo como archivo (con capturas y transcripción) aún no está construido */
+  /** el video de la pieza ya está bajado como archivo (con capturas); `video_id` lo enlaza con GET /api/brain/portero/videos */
   video_descargado: boolean
   video_id: string | null
 }

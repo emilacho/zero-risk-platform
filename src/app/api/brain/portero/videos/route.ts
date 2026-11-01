@@ -1,5 +1,5 @@
 /**
- * GET /api/brain/portero/videos?client_id=&origen=propia|competencia|referencia&tipo=reel|video_feed|historia|anuncio|video_web&limite= · lectura INSTANTÁNEA de los videos de un cliente (US$ 0, sin modelo):
+ * GET /api/brain/portero/videos?client_id=(o bodega=1 para los videos de la bodega viral del mundo)&origen=propia|competencia|referencia&tipo=reel|video_feed|historia|anuncio|video_web&limite= · lectura INSTANTÁNEA de los videos de un cliente (US$ 0, sin modelo):
  * cada video con sus subcategorías (tipo, origen, cuenta, fecha, duración, pie, métricas), su transcripción, sus capturas de momentos clave etiquetadas y una dirección FIRMADA (1 hora) del archivo.
  * Es la puerta hermana de `GET /api/brain/portero/fotos`. Llave interna (`x-api-key`).
  */
@@ -22,6 +22,7 @@ export async function GET(request: Request) {
   const u = new URL(request.url).searchParams
   const r = await listarVideos(consultaDelEntorno(), {
     cliente: u.get('client_id') ?? '',
+    bodega: u.get('bodega') === '1' || u.get('bodega') === 'true',
     origen: (u.get('origen') as OrigenDeFoto | null) || null,
     tipo: u.get('tipo') || null,
     limite: u.get('limite') ? Number(u.get('limite')) : undefined,

@@ -6,6 +6,7 @@
  */
 import type { Consulta, Fila } from '../consulta'
 import { origenDeLaFoto, type OrigenDeFoto, ORIGENES_DE_FOTO } from './fotos-pendientes'
+import { gustoDe, nivelDeOrigen, ordenarPorEmbudo } from '../../portero-alimenta/embudo'
 
 export const TIPOS_DE_VIDEO = ['reel', 'video_feed', 'historia', 'anuncio', 'video_web'] as const
 export type TipoDeVideoVisto = (typeof TIPOS_DE_VIDEO)[number]
@@ -27,15 +28,18 @@ export interface VideoVisto {
   bytes: number | null
   pie: string | null
   metricas: Record<string, number>
+  /** nivel del embudo (propio · global · pais · competencia · directa · mundo) y la cifra de gusto con que se ordena (me gusta, si no vistas); null = el video no trae cifras */
+  nivel: string
+  gusto: number | null
   post_url: string | null
   de_que_trata: string | null
   transcripcion: string | null
   archivo_url: string | null
   capturas: CapturaVista[]
 }
-export interface PedidoDeVideos { cliente: string; origen?: OrigenDeFoto | null; tipo?: string | null; limite?: number }
+export interface PedidoDeVideos { cliente: string; /** los videos de la BODEGA del mundo (sin cliente) */ bodega?: boolean; origen?: OrigenDeFoto | null; tipo?: string | null; limite?: number }
 export type RespuestaDeVideos =
-  | { ok: true; cliente: string; total: number; devueltos: number; por_tipo: Record<string, number>; por_origen: Record<OrigenDeFoto, number>; sin_descargar: number; videos: VideoVisto[]; archivo_firmado: boolean; modelos_llamados: 0; costo_usd: 0 }
+  | { ok: true; cliente: string | null; alcance: 'cliente' | 'bodega'; total: number; devueltos: number; por_tipo: Record<string, number>; por_origen: Record<OrigenDeFoto, number>; sin_descargar: number; videos: VideoVisto[]; archivo_firmado: boolean; modelos_llamados: 0; costo_usd: 0 }
   | { ok: false; error: string; detalle: string }
 
 const COLUMNAS_DE_VIDEO = ['id', 'owner_role', 'handle', 'post_id', 'tipo', 'estado', 'path', 'bytes', 'duracion_s', 'caption', 'posted_at', 'post_url', 'transcripcion', 'metricas', 'created_at']
@@ -50,12 +54,17 @@ export function deQueTrataElVideo(capturas: CapturaVista[], pie: string | null):
 }
 
 export async function listarVideos(consulta: Consulta, p: PedidoDeVideos, firmar?: (path: string) => Promise<string | null>): Promise<RespuestaDeVideos> {
-  const cliente = txt(p.cliente)
-  if (!cliente) return { ok: false, error: 'entrada_invalida', detalle: 'falta `client_id`' }
+  const bodega = p.bodega === true
+  const cliente = bodega ? null : txt(p.cliente)
+  if (!bodega && !cliente) return { ok: false, error: 'entrada_invalida', detalle: 'falta `client_id` (o `bodega=1` para los videos de la bodega viral del mundo)' }
   if (p.origen && !(ORIGENES_DE_FOTO as readonly string[]).includes(p.origen)) return { ok: false, error: 'entrada_invalida', detalle: `\`origen\` debe ser ${ORIGENES_DE_FOTO.join(', ')}` }
   if (p.tipo && !(TIPOS_DE_VIDEO as readonly string[]).includes(p.tipo)) return { ok: false, error: 'entrada_invalida', detalle: `\`tipo\` debe ser ${TIPOS_DE_VIDEO.join(', ')}` }
   const limite = Math.min(Math.max(Math.trunc(p.limite ?? LIMITE_POR_DEFECTO_DE_VIDEOS) || LIMITE_POR_DEFECTO_DE_VIDEOS, 1), LIMITE_MAXIMO_DE_VIDEOS)
   const v = await consulta({ tabla: 'client_videos', columnas: COLUMNAS_DE_VIDEO, donde: { client_id: cliente }, orden: { columna: 'created_at', descendente: true }, limite: 1000 })
+  // 01-nov · el nivel del embudo de un video que vino de una tendencia es el de esa tendencia
+  const tn = await consulta({ tabla: 'cerebro_tendencias', columnas: ['video_id', 'nivel', 'me_gusta', 'vistas'], donde: { client_id: cliente }, limite: 2000 })
+  if (tn.error) return { ok: false, error: 'error_de_lectura', detalle: tn.error.slice(0, 200) }
+  const deTendencia = new Map<string, Fila>(tn.filas.filter((f) => txt(f.video_id)).map((f) => [String(f.video_id), f]))
   if (v.error) return { ok: false, error: 'error_de_lectura', detalle: v.error.slice(0, 200) }
   const c = await consulta({ tabla: 'client_social_images', columnas: COLUMNAS_DE_CAPTURA, donde: { client_id: cliente, tipo: 'video_captura' }, orden: { columna: 'posicion', descendente: false }, limite: 2000 })
   if (c.error) return { ok: false, error: 'error_de_lectura', detalle: c.error.slice(0, 200) }
@@ -72,7 +81,9 @@ export async function listarVideos(consulta: Consulta, p: PedidoDeVideos, firmar
   const por_tipo: Record<string, number> = {}
   const por_origen = Object.fromEntries(ORIGENES_DE_FOTO.map((o) => [o, 0])) as Record<OrigenDeFoto, number>
   for (const f of todos) { por_tipo[String(f.tipo)] = (por_tipo[String(f.tipo)] ?? 0) + 1; por_origen[origenDeLaFoto(f.owner_role)]++ }
-  const elegidos = todos.filter((f) => (!p.origen || origenDeLaFoto(f.owner_role) === p.origen) && (!p.tipo || f.tipo === p.tipo)).slice(0, limite)
+  const nivelDe = (f: Fila) => (bodega ? 'mundo' : nivelDeOrigen(origenDeLaFoto(f.owner_role), txt(deTendencia.get(String(f.id))?.nivel)))
+  const gustoDelVideo = (f: Fila) => { const m = f.metricas && typeof f.metricas === 'object' ? (f.metricas as Record<string, unknown>) : {}; return gustoDe(m) ?? gustoDe(deTendencia.get(String(f.id)) ?? null) }
+  const elegidos = ordenarPorEmbudo(todos.filter((f) => (!p.origen || origenDeLaFoto(f.owner_role) === p.origen) && (!p.tipo || f.tipo === p.tipo)), (f) => ({ nivel: nivelDe(f), gusto: gustoDelVideo(f) })).slice(0, limite)
   const videos: VideoVisto[] = []
   for (const f of elegidos) {
     const caps = capturasDe.get(String(f.id)) ?? []
@@ -83,7 +94,7 @@ export async function listarVideos(consulta: Consulta, p: PedidoDeVideos, firmar
     const m = f.metricas && typeof f.metricas === 'object' ? (f.metricas as Record<string, unknown>) : {}
     const metricas: Record<string, number> = {}
     for (const [k, x] of Object.entries(m)) { const n = numero(x); if (n !== null) metricas[k] = n }
-    videos.push({ video_id: String(f.id), tipo: String(f.tipo), origen: origenDeLaFoto(f.owner_role), cuenta: txt(f.handle), publicado_en: txt(f.posted_at), copiado_en: txt(f.created_at), duracion_s: numero(f.duracion_s), bytes: numero(f.bytes), pie, metricas, post_url: txt(f.post_url), de_que_trata: deQueTrataElVideo(caps, pie), transcripcion: txt(f.transcripcion), archivo_url, capturas: caps })
+    videos.push({ video_id: String(f.id), tipo: String(f.tipo), origen: origenDeLaFoto(f.owner_role), nivel: nivelDe(f), gusto: gustoDelVideo(f), cuenta: txt(f.handle), publicado_en: txt(f.posted_at), copiado_en: txt(f.created_at), duracion_s: numero(f.duracion_s), bytes: numero(f.bytes), pie, metricas, post_url: txt(f.post_url), de_que_trata: deQueTrataElVideo(caps, pie), transcripcion: txt(f.transcripcion), archivo_url, capturas: caps })
   }
-  return { ok: true, cliente, total: todos.length, devueltos: videos.length, por_tipo, por_origen, sin_descargar, videos, archivo_firmado: !!firmar, modelos_llamados: 0, costo_usd: 0 }
+  return { ok: true, cliente, alcance: bodega ? 'bodega' : 'cliente', total: todos.length, devueltos: videos.length, por_tipo, por_origen, sin_descargar, videos, archivo_firmado: !!firmar, modelos_llamados: 0, costo_usd: 0 }
 }

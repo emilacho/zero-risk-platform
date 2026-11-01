@@ -9,6 +9,7 @@
  * Nunca tumba la corrida: devuelve lo que no pudo con su motivo.
  */
 import { createHash } from 'node:crypto'
+import type { VideoCandidato } from './videos-del-cerebro'
 
 export const NIVELES = ['global', 'pais', 'competencia', 'directa'] as const
 export type Nivel = (typeof NIVELES)[number] | 'mundo'
@@ -17,6 +18,9 @@ export const TOPE_POR_CORRIDA_USD = 0.1
 export const TOPE_DEL_DIA_POR_CLIENTE_USD = 0.6
 export const TOPE_DEL_DIA_BODEGA_USD = 0.4
 export const PIEZAS_POR_CONSULTA = 12
+export const CONSULTA_VIRAL_DE_X = 'min_faves:10000 -filter:replies'
+/** videos de tendencias que se bajan por corrida y por cliente (o por la bodega): pesan ~15 MB cada uno */
+export const VIDEOS_DE_TENDENCIAS_POR_CORRIDA = 4
 
 export const ACTORES: Record<Red, { actor: string; por_que: string }> = {
   tiktok: { actor: 'apidojo~tiktok-scraper', por_que: 'devuelve vistas, me gusta, compartidos y comentarios; 5 de 5 en US$ 0 y 11 s (clockworks exige un tope mínimo de US$ 0,50 por corrida)' },
@@ -36,6 +40,9 @@ export interface Pieza {
   texto: string | null
   tipo: 'video' | 'imagen' | 'post'
   media_url: string | null
+  /** el archivo del video (caduca a las pocas horas): se baja al raspar; null si la pieza no es un video o el actor no lo trae */
+  video_url: string | null
+  duracion_s: number | null
   vistas: number | null
   me_gusta: number | null
   compartidos: number | null
@@ -62,25 +69,25 @@ export function piezaDe(red: Red, it: unknown, c: ContextoDeConsulta): Pieza | n
     const id = txt(x.id) ?? (typeof x.id === 'number' ? String(x.id) : null)
     if (!id) return null
     const ch = obj(x.channel), v = obj(x.video)
-    return { ...base, post_ref: id, url: urlHttp(x.postPage), autor: txt(ch.username) ?? txt(ch.name), texto: txt(x.title), tipo: 'video', media_url: urlHttp(v.cover) ?? urlHttp(v.url), vistas: num(x.views), me_gusta: num(x.likes), compartidos: num(x.shares), comentarios: num(x.comments), publicado_en: fecha(x.uploadedAt) }
+    return { ...base, post_ref: id, url: urlHttp(x.postPage), autor: txt(ch.username) ?? txt(ch.name), texto: txt(x.title), tipo: 'video', media_url: urlHttp(v.cover) ?? urlHttp(v.url), video_url: urlHttp(v.url), duracion_s: num(v.duration), vistas: num(x.views), me_gusta: num(x.likes), compartidos: num(x.shares), comentarios: num(x.comments), publicado_en: fecha(x.uploadedAt) }
   }
   if (red === 'instagram') {
     const id = txt(x.shortCode) ?? txt(x.id)
     if (!id) return null
     const esVideo = /video/i.test(String(x.type ?? '')) || typeof x.videoUrl === 'string'
-    return { ...base, post_ref: id, url: urlHttp(x.url), autor: txt(x.ownerUsername), texto: txt(x.caption), tipo: esVideo ? 'video' : 'imagen', media_url: urlHttp(x.displayUrl), vistas: num(x.videoViewCount) ?? num(x.videoPlayCount), me_gusta: num(x.likesCount), compartidos: null, comentarios: num(x.commentsCount), publicado_en: fecha(x.timestamp) }
+    return { ...base, post_ref: id, url: urlHttp(x.url), autor: txt(x.ownerUsername), texto: txt(x.caption), tipo: esVideo ? 'video' : 'imagen', media_url: urlHttp(x.displayUrl), video_url: urlHttp(x.videoUrl), duracion_s: num(x.videoDuration), vistas: num(x.videoViewCount) ?? num(x.videoPlayCount), me_gusta: num(x.likesCount), compartidos: null, comentarios: num(x.commentsCount), publicado_en: fecha(x.timestamp) }
   }
   if (red === 'x') {
     const id = txt(x.id)
     if (!id) return null
     const au = obj(x.author)
     const media = Array.isArray(x.media) ? x.media : []
-    return { ...base, post_ref: id, url: urlHttp(x.url) ?? urlHttp(x.twitterUrl), autor: txt(au.userName), texto: txt(x.fullText) ?? txt(x.text), tipo: 'post', media_url: urlHttp(media[0]), vistas: num(x.viewCount), me_gusta: num(x.likeCount), compartidos: num(x.retweetCount), comentarios: num(x.replyCount), publicado_en: fecha(x.createdAt) }
+    return { ...base, post_ref: id, url: urlHttp(x.url) ?? urlHttp(x.twitterUrl), autor: txt(au.userName), texto: txt(x.fullText) ?? txt(x.text), tipo: 'post', media_url: urlHttp(media[0]), video_url: null, duracion_s: null, vistas: num(x.viewCount), me_gusta: num(x.likeCount), compartidos: num(x.retweetCount), comentarios: num(x.replyCount), publicado_en: fecha(x.createdAt) }
   }
   const ref = txt(x.activity_urn) ?? txt(x.post_url)
   if (!ref) return null
   const st = obj(x.stats), au = obj(x.author), pa = obj(x.posted_at)
-  return { ...base, post_ref: ref.slice(0, 200), url: urlHttp(x.post_url), autor: txt(au.name) ?? txt(au.username), texto: txt(x.text), tipo: 'post', media_url: null, vistas: null, me_gusta: num(st.total_reactions), compartidos: num(st.reposts), comentarios: num(st.comments), publicado_en: fecha(pa.timestamp ?? pa.date) }
+  return { ...base, post_ref: ref.slice(0, 200), url: urlHttp(x.post_url), autor: txt(au.name) ?? txt(au.username), texto: txt(x.text), tipo: 'post', media_url: null, video_url: null, duracion_s: null, vistas: null, me_gusta: num(st.total_reactions), compartidos: num(st.reposts), comentarios: num(st.comments), publicado_en: fecha(pa.timestamp ?? pa.date) }
 }
 
 export interface Consulta1 { red: Red; nivel: Nivel; origen: 'referencia' | 'competidor'; etiqueta: string; input: Obj; pais?: string | null }
@@ -131,9 +138,11 @@ export function planDeLaBodega(a: { paises: string[]; porNivel?: number }): Cons
     { red: 'tiktok', nivel: 'mundo', origen: 'referencia', etiqueta: '#fyp', pais: null, input: { startUrls: ['https://www.tiktok.com/tag/fyp'], maxItems: n } },
     { red: 'tiktok', nivel: 'mundo', origen: 'referencia', etiqueta: '#viral', pais: null, input: { startUrls: ['https://www.tiktok.com/tag/viral'], maxItems: n } },
     { red: 'instagram', nivel: 'mundo', origen: 'referencia', etiqueta: '#viral', pais: null, input: { hashtags: ['viral'], resultsType: 'posts', resultsLimit: n } },
-    { red: 'x', nivel: 'mundo', origen: 'referencia', etiqueta: 'min_faves:20000', pais: null, input: { searchTerms: ['min_faves:20000'], maxItems: n, sort: 'Top' } },
+    // 01-nov · `min_faves:20000` devolvía 0 (demasiado estricto para la ventana que mira el actor); medido: `min_faves:10000 -filter:replies` trae piezas reales, y en español `min_faves:3000 lang:es`
+    { red: 'x', nivel: 'mundo', origen: 'referencia', etiqueta: 'min_faves:10000 -filter:replies', pais: null, input: { searchTerms: [CONSULTA_VIRAL_DE_X], maxItems: n, sort: 'Top' } },
+    { red: 'x', nivel: 'mundo', origen: 'referencia', etiqueta: 'min_faves:3000 lang:es -filter:replies', pais: null, input: { searchTerms: ['min_faves:3000 lang:es -filter:replies'], maxItems: n, sort: 'Top' } },
   ]
-  for (const p of a.paises) out.push({ red: 'x', nivel: 'mundo', origen: 'referencia', etiqueta: `min_faves:2000 place_country:${p}`, pais: p, input: { searchTerms: [`min_faves:2000 place_country:${p}`], maxItems: n, sort: 'Top' } })
+  for (const p of a.paises) out.push({ red: 'x', nivel: 'mundo', origen: 'referencia', etiqueta: `min_faves:2000 place_country:${p} -filter:replies`, pais: p, input: { searchTerms: [`min_faves:2000 place_country:${p} -filter:replies`], maxItems: n, sort: 'Top' } })
   return out
 }
 
@@ -189,6 +198,26 @@ export const ORDEN_DE_NIVEL: Record<string, number> = { global: 0, pais: 1, comp
 export function ordenDelEmbudo<T extends { nivel: string; me_gusta: number | null; vistas: number | null }>(filas: T[]): T[] {
   return [...filas].sort((a, b) => (ORDEN_DE_NIVEL[a.nivel] ?? 9) - (ORDEN_DE_NIVEL[b.nivel] ?? 9) || (b.me_gusta ?? -1) - (a.me_gusta ?? -1) || (b.vistas ?? -1) - (a.vistas ?? -1))
 }
+
+const slugDe = (t: string | null) => (t ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9._]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'cuenta'
+
+/**
+ * Los videos de las piezas que se bajan como video (los enlaces de TikTok caducan a las horas). Se elige en orden de embudo: primero el MEJOR de cada nivel, luego los más gustados que falten.
+ * Lo de la competencia directa entra como «competidor»; lo demás como «referencia»; jamás «propio».
+ */
+export function videosDeTendencias(piezas: Pieza[], max = VIDEOS_DE_TENDENCIAS_POR_CORRIDA): VideoDeTendencia[] {
+  const con = ordenDelEmbudo(piezas.filter((p) => p.tipo === 'video' && p.video_url))
+  const porNivel = new Set<string>()
+  const primeros: Pieza[] = [], resto: Pieza[] = []
+  for (const p of con) { if (!porNivel.has(p.nivel)) { porNivel.add(p.nivel); primeros.push(p) } else resto.push(p) }
+  const elegidas = [...primeros, ...[...resto].sort((a, b) => (b.me_gusta ?? -1) - (a.me_gusta ?? -1))].slice(0, max)
+  return elegidas.map((p) => {
+    const metricas: Record<string, number> = {}
+    for (const [k, v] of [['views', p.vistas], ['likes', p.me_gusta], ['shares', p.compartidos], ['comments', p.comentarios]] as const) if (v !== null) metricas[k] = v
+    return { red: p.red, nivel: p.nivel, post_ref: p.post_ref, candidato: { rol: p.nivel === 'directa' ? 'competidor' as const : 'referencia' as const, handle: slugDe(p.autor), post_id: p.post_ref, tipo: 'video_feed' as const, url: p.video_url as string, fuente: 'tendencias', caption: p.texto ? p.texto.slice(0, 500) : null, posted_at: p.publicado_en, post_url: p.url, duracion_s: p.duracion_s, transcripcion: null, metricas } }
+  })
+}
+export interface VideoDeTendencia { red: Red; nivel: Nivel; post_ref: string; candidato: VideoCandidato }
 
 const hoy = (ahora: Date) => ahora.toISOString().slice(0, 10)
 type Traer = (url: string, init?: RequestInit) => Promise<Response>
