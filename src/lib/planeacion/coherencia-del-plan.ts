@@ -118,6 +118,23 @@ export function controlarPresupuesto(texto: string, declarada: number | null): H
   return f
 }
 
+const plegar = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ')
+/** punto 3 · una frase que el dueño negó, usada en el plan. Citarla para negarla («no viene de…») no cuenta. Literal: lo demás lo mira el revisor */
+export function controlarFrasesNegadas(texto: string, hechos: Array<{ tema: string; frases_negadas: string[] }>): Array<Omit<HallazgoDeCoherencia, 'control'> & { control: 'dueno' }> {
+  const t = plegar(texto)
+  const f: Array<Omit<HallazgoDeCoherencia, 'control'> & { control: 'dueno' }> = []
+  for (const h of hechos) for (const frase of h.frases_negadas) {
+    const p = plegar(frase).trim()
+    let i = t.indexOf(p); let usada = false
+    while (i >= 0 && !usada) {
+      if (!/\b(no|sin|nunca|jamas|ni|not|never)\b[^.]{0,30}$/.test(t.slice(Math.max(0, i - 40), i))) usada = true
+      i = t.indexOf(p, i + p.length)
+    }
+    if (usada) f.push({ control: 'dueno', estado: 'no_cuadra', que: `el plan usa «${frase}», y el dueño lo negó (${h.tema})`, donde: 'todo el plan' })
+  }
+  return f
+}
+
 /** los dos controles juntos */
 export function controlarCoherenciaDelPlan(a: { texto: string; contexto: string; referencia: Date }): HallazgoDeCoherencia[] {
   return [...controlarFechas(a.texto, a.referencia), ...controlarPresupuesto(a.texto, pautaDeclarada(a.contexto))]

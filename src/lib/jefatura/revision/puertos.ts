@@ -92,6 +92,8 @@ export interface Puertos {
   almacen: Almacen
   /** las páginas propias del cliente, para el revisor del camino que no corre los brazos; nunca lanza */
   paginasDelSitio?(client_id: string): Promise<PaginasDelSitio>
+  /** lo que el dueño declaró, con las frases que niega; nunca lanza */
+  hechosDelDueno?(client_id: string): Promise<Array<{ tema: string; frases_negadas: string[] }>>
   ahora(): Date
   /** el revisor ciego (otro proveedor); en `dry_run` el orquestador NO lo llama (usa la simulación) */
   revisor(p: { texto: string; imagenes_urls: string[]; dry_run: boolean; contexto: { revision_id: string; n: number; client_id: string } }): Promise<ResultadoDelRevisor>
