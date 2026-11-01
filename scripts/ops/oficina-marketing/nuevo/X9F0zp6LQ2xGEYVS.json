@@ -700,7 +700,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ dry_run: (($('Webhook · planeacion').first().json.body || {}).dry_run === true), agent: $json.redactor_elegido, task: $json.pedido, client_id: $json.cliente_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id, max_budget_usd: (function () { const t = Number(($('Webhook · planeacion').first().json.body || {}).tope_reescritura_usd); return t > 0 && t < 2.5 ? t : 2.5 })(), callback_url: $execution.resumeUrl, callback_mode: 'runner', force_restart: ($json.reintento_forma === true) || (($(\"Webhook · planeacion\").first().json.body || {}).force_restart === true || ($(\"Webhook · planeacion\").first().json.body || {}).forceRestart === true) }) }}",
+        "jsonBody": "={{ JSON.stringify({ dry_run: (($('Webhook · planeacion').first().json.body || {}).dry_run === true), agent: $json.redactor_elegido, task: $json.pedido, client_id: $json.cliente_id, workflow_id: $workflow.id, workflow_execution_id: $execution.id, max_budget_usd: (function () { const t = Number(($('Webhook · planeacion').first().json.body || {}).tope_reescritura_usd); return t > 0 && t < 2.5 ? t : 2.5 })(), callback_url: $execution.resumeUrl, callback_mode: 'runner', force_restart: (function () { try { return $('Plan anterior · leer').first().json.reescritura === true } catch (e) { return false } })() || ($json.reintento_forma === true) || (($(\"Webhook · planeacion\").first().json.body || {}).force_restart === true || ($(\"Webhook · planeacion\").first().json.body || {}).forceRestart === true) }) }}",
         "options": {
           "timeout": 60000,
           "response": {
@@ -893,7 +893,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, title: 'Plan de 90 dias · ' + new Date().toISOString().slice(0,10), output_type: 'campaign_plan_90d', content: $json.texto, content_text: $json.texto, producing_agent: $('Redactor · elegir').last().json.redactor_elegido, status: 'draft', provenance_tag: Object.assign({ fuente: 'planeacion', workflow_id: $workflow.id, workflow_execution_id: $execution.id, guardado_antes_de_drive: true, caracteres: $json.caracteres, registro_interno: $json.registro_interno || null, estado_del_plan: $json.estado_del_plan || null, pendientes: $json.pendientes || null }, (function () { try { const r = $('Plan anterior · leer').first().json; const re = !!(r && r.reescritura === true); return { version: re ? r.version_nueva : 1, reemplaza_a: re ? r.plan_anterior.id : null, vigente: true, plan_cambio_id: (r && r.plan_cambio_id) || null, compuerta: ($('Webhook · planeacion').first().json.body || {}).sin_compuerta !== true } } catch (e) { return { version: 1, reemplaza_a: null, vigente: true, plan_cambio_id: null, compuerta: true } } })()) }) }}",
+        "jsonBody": "={{ JSON.stringify({ client_id: $json.client_id, title: 'Plan de 90 dias · ' + new Date().toISOString().slice(0,10), output_type: 'campaign_plan_90d', content: $json.texto, content_text: $json.texto, producing_agent: $('Redactor · elegir').last().json.redactor_elegido, status: 'draft', provenance_tag: Object.assign({ fuente: 'planeacion', workflow_id: $workflow.id, workflow_execution_id: $execution.id, guardado_antes_de_drive: true, comparacion_fallo: $json.comparacion_fallo === true ? true : undefined, caracteres: $json.caracteres, registro_interno: $json.registro_interno || null, estado_del_plan: $json.estado_del_plan || null, pendientes: $json.pendientes || null }, (function () { try { const r = $('Plan anterior · leer').first().json; const re = !!(r && r.reescritura === true); return { version: re ? r.version_nueva : 1, reemplaza_a: re ? r.plan_anterior.id : null, vigente: true, plan_cambio_id: (r && r.plan_cambio_id) || null, compuerta: ($('Webhook · planeacion').first().json.body || {}).sin_compuerta !== true } } catch (e) { return { version: 1, reemplaza_a: null, vigente: true, plan_cambio_id: null, compuerta: true } } })()) }) }}",
         "options": {
           "timeout": 30000,
           "response": {
@@ -4858,6 +4858,223 @@
       "alwaysOutputData": true
     },
     {
+      "id": "964a4d00-b86f-956a-38ab-8a4cd44bad5a",
+      "position": [
+        1450,
+        160
+      ],
+      "typeVersion": 2,
+      "name": "② ¿Es copia del plan anterior?",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// 01-nov · ADENDA 5 · NO se guarda una copia del plan anterior. Compara el texto del redactor (tal cual llegó, SIN la sección «Qué cambió», que la arma la plataforma después) con el del plan anterior.\nconst plan = $input.first().json || {}\nlet re = null\ntry { re = $('Plan anterior · leer').first().json } catch (e) { re = null }\nif (!re || re.reescritura !== true) return [{ json: Object.assign({}, plan, { copia_del_plan_anterior: 'no' }) }]\nconst normal = function (t) { return String(t == null ? '' : t).replace(/\\s+/g, ' ').trim() }\nconst anterior = re.plan_anterior && typeof re.plan_anterior.texto === 'string' ? normal(re.plan_anterior.texto) : ''\nconst nuevo = normal(plan.texto)\nif (!anterior || !nuevo) return [{ json: Object.assign({}, plan, { copia_del_plan_anterior: 'no', comparacion_fallo: true }) }]\n// el plan guardado puede traer al final la sección «Qué cambió» (la pega la plataforma a las versiones B y C): el texto del redactor tal cual es copia si el guardado es ESE texto + solo esa sección\nconst resto = anterior.indexOf(nuevo) === 0 ? anterior.slice(nuevo.length).trim() : null\nconst esCopia = anterior === nuevo || (resto !== null && /^(?:#{1,6}\\s*)?(?:\\*\\*)?\\s*qu[eé]\\s+cambi[oó]/i.test(resto))\nif (!esCopia) return [{ json: Object.assign({}, plan, { copia_del_plan_anterior: 'no' }) }]\nif ($runIndex === 0) {\n  const base = $('Redactor · elegir').last().json\n  return [{ json: Object.assign({}, base, { veredicto: 'reintentar', reintento_forma: true, copia_del_plan_anterior: 'reintentar' }) }]\n}\nreturn [{ json: { copia_del_plan_anterior: 'detener', client_id: plan.client_id || null, client_name: plan.client_name || null, caracteres: plan.caracteres || 0 } }]\n"
+      }
+    },
+    {
+      "id": "8ca0b319-2988-3f74-4c96-743f6b1f34a7",
+      "position": [
+        1450,
+        320
+      ],
+      "typeVersion": 2,
+      "name": "② IF · ¿copia · reintentar?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.copia_del_plan_anterior }}",
+              "rightValue": "reintentar",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "cdea56cc-39d4-acc9-6f69-3a47270a9862",
+      "position": [
+        1450,
+        480
+      ],
+      "typeVersion": 2,
+      "name": "② IF · ¿copia · detener?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.copia_del_plan_anterior }}",
+              "rightValue": "detener",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5f44e4ee-f7e9-2f4d-d54a-e29288275569",
+      "position": [
+        1450,
+        640
+      ],
+      "typeVersion": 2,
+      "name": "② IF · ¿hay pedido de cambios?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ typeof ($('Webhook · planeacion').first().json.body || {}).plan_cambio_id === 'string' && ($('Webhook · planeacion').first().json.body || {}).plan_cambio_id !== '' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "347d3cfb-0079-2ebd-8f55-789457962d0d",
+      "position": [
+        1450,
+        800
+      ],
+      "typeVersion": 4.2,
+      "name": "② Cambio · sin cambios reales",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_cambios?id=eq.{{ ($('Webhook · planeacion').first().json.body || {}).plan_cambio_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ estado: 'fallido', despertar_detalle: \"sin cambios reales: el redactor devolvió el mismo plan que ya existía (dos intentos); no se guardó ninguna versión nueva\", workflow_execution_id: $execution.id, actualizado_en: new Date().toISOString() }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "5cc1c81a-563f-e734-1a33-e7e3dfdf6e80",
+      "position": [
+        1450,
+        960
+      ],
+      "typeVersion": 2,
+      "name": "② Resumen · sin cambios reales",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// 01-nov · ADENDA 5 · la corrida termina AQUÍ: el redactor devolvió dos veces el plan que ya existía. No se guardó nada.\nconst c = $input.first().json || {}\nreturn [{ json: {\n  corrio: true,\n  guardo_plan: false,\n  motivo: \"sin cambios reales: el redactor devolvió el mismo plan que ya existía (dos intentos); no se guardó ninguna versión nueva\",\n  pedido_marcado: c.statusCode ? [200, 204].indexOf(Number(c.statusCode)) !== -1 : null,\n} }]\n"
+      }
+    },
+    {
+      "id": "a71a12e5-07c0-3313-456a-93c3e7304bac",
+      "position": [
+        1450,
+        1120
+      ],
+      "typeVersion": 4.2,
+      "name": "② Cable de vuelta · sin cambios reales",
+      "type": "n8n-nodes-base.httpRequest",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-planeacion-X9F0zp6LQ2xGEYVS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ event_type: 'run_completed', worker_id: 'X9F0zp6LQ2xGEYVS', worker_name: 'planeacion', resultado: 'no_corrio_sin_cambios_reales', motivo: \"sin cambios reales: el redactor devolvió el mismo plan que ya existía (dos intentos); no se guardó ninguna versión nueva\", client_id: $('Webhook · planeacion').first().json.body.client_id ?? null, tenant_id: $('Webhook · planeacion').first().json.body.tenant_id ?? $('Webhook · planeacion').first().json.body.client_id ?? null, _sala_correlation_id: $('Webhook · planeacion').first().json.body._sala_correlation_id ?? null, _journey_id: $('Webhook · planeacion').first().json.body._journey_id ?? null, ts: new Date().toISOString() }) }}",
+        "options": {
+          "timeout": 900000
+        }
+      }
+    },
+    {
+      "id": "d41593c6-4fc5-14c0-1529-9a5d3946ac70",
+      "position": [
+        1450,
+        1280
+      ],
+      "typeVersion": 2,
+      "name": "② Cable · ¿volvió? · sin cambios reales",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// El cable de vuelta NO puede ser mudo (misma regla que «repetida»): la sala debe enterarse de que la corrida terminó sin versión nueva.\nconst r = $input.first().json || {};\nconst volvio = r.ok === true;\nlet corr = null;\ntry { corr = $('Webhook · planeacion').first().json.body._sala_correlation_id || null; } catch (e) { corr = null; }\nif (corr && !volvio) {\n  throw new Error('CABLE_DE_VUELTA_MUDO · la sala NO se entero de que la corrida termino · codigo ' + String(r.code || r.error || 'sin codigo'));\n}\nreturn [{ json: {\n  cierre: 'no_corrio_sin_cambios_reales',\n  vuelta_ok: volvio,\n  vuelta_detalle: volvio ? (r.event_id || 'sin event_id') : (r.code || r.detail || r.error || 'sin respuesta de la sala'),\n  despachado_por_la_sala: !!corr,\n} }];\n"
+      }
+    },
+    {
       "id": "1c17bb5d-80ac-f843-1b6b-094939a408b2",
       "position": [
         2080,
@@ -6591,7 +6808,7 @@
         ],
         [
           {
-            "node": "Guardar el plan",
+            "node": "② ¿Es copia del plan anterior?",
             "type": "main",
             "index": 0
           }
@@ -6624,7 +6841,7 @@
       "main": [
         [
           {
-            "node": "Guardar el plan",
+            "node": "② ¿Es copia del plan anterior?",
             "type": "main",
             "index": 0
           }
@@ -7101,6 +7318,115 @@
         [
           {
             "node": "Parar · ¿sin plan y con parar_en?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② ¿Es copia del plan anterior?": {
+      "main": [
+        [
+          {
+            "node": "② IF · ¿copia · reintentar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② IF · ¿copia · reintentar?": {
+      "main": [
+        [
+          {
+            "node": "Pedir el plan al redactor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "② IF · ¿copia · detener?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② IF · ¿copia · detener?": {
+      "main": [
+        [
+          {
+            "node": "② IF · ¿hay pedido de cambios?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar el plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② IF · ¿hay pedido de cambios?": {
+      "main": [
+        [
+          {
+            "node": "② Cambio · sin cambios reales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "② Resumen · sin cambios reales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Cambio · sin cambios reales": {
+      "main": [
+        [
+          {
+            "node": "② Resumen · sin cambios reales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Resumen · sin cambios reales": {
+      "main": [
+        [
+          {
+            "node": "② Cable de vuelta · sin cambios reales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Cable de vuelta · sin cambios reales": {
+      "main": [
+        [
+          {
+            "node": "② Cable · ¿volvió? · sin cambios reales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Cable · ¿volvió? · sin cambios reales": {
+      "main": [
+        [
+          {
+            "node": "V9 · armar el cierre",
             "type": "main",
             "index": 0
           }
