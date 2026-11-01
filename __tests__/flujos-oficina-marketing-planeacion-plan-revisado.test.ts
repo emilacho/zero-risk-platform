@@ -51,6 +51,10 @@ describe('la compuerta después de «Plan vigente»', () => {
     expect(r.pasos).toEqual(['Parar · ¿plan revisado?', 'Parar · resumen (plan revisado)'])
     expect(r.item).toEqual({ parado_en: 'plan_revisado', plan_vigente_id: 'plan-7', jefatura_fase: null, redactor: null })
   })
+  it('con la salida real de «Ciclo · comprobar» (trae plan_id, no id) el resumen NO dice plan_vigente_id: null', async () => {
+    const r = await recorrer(nuevo, 'Parar · ¿plan revisado?', { ok: true, plan_id: 'plan-9', version: 2, aprobacion_id: 'ap-1', seco: false }, { previos: WEBHOOK({ parar_en: 'plan_revisado' }), hasta: ['Plan → Drive (PDF)'] })
+    expect(r.item.plan_vigente_id).toBe('plan-9')
+  })
   it('con «guardar_plan», sin parar_en, null o en un disparo que no es webhook, sigue al PDF como hoy', async () => {
     for (const p of [WEBHOOK({ parar_en: 'guardar_plan' }), WEBHOOK({ client_id: CLIENTE }), WEBHOOK({ parar_en: null }), {}]) {
       const r = await recorrer(nuevo, 'Parar · ¿plan revisado?', vigente, { previos: p, hasta: ['¿Compuerta?'] })

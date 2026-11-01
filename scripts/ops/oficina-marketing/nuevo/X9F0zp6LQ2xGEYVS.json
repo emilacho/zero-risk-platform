@@ -3937,7 +3937,7 @@
       "name": "Parar · resumen (plan revisado)",
       "type": "n8n-nodes-base.code",
       "parameters": {
-        "jsCode": "// PARAR · RESUMEN (plan revisado) · la corrida pidió detenerse DESPUÉS de la jefatura (parar_en = plan_revisado): el plan vigente ya quedó elegido; NO sigue el PDF a Drive, ni el brief, ni nada de lo que cuelga de ahí.\nconst g = $input.first().json || {}\nconst fila = Array.isArray(g) ? g[0] : (Array.isArray(g.body) ? g.body[0] : (g.body || g))\nlet jef = {}\ntry { jef = $('JEF · aplicar').first().json.jef || {} } catch (e) { jef = {} }\nreturn [{ json: { parado_en: 'plan_revisado', plan_vigente_id: fila && fila.id ? fila.id : null, jefatura_fase: jef.fase || null, redactor: (function () { try { return $('Redactor · elegir').last().json.redactor_elegido || null } catch (e) { return null } })() } }]\n"
+        "jsCode": "// PARAR · RESUMEN (plan revisado) · la corrida pidió detenerse DESPUÉS de la jefatura (parar_en = plan_revisado): el plan vigente ya quedó elegido; NO sigue el PDF a Drive, ni el brief, ni nada de lo que cuelga de ahí.\nconst g = $input.first().json || {}\nconst fila = Array.isArray(g) ? g[0] : (Array.isArray(g.body) ? g.body[0] : (g.body || g))\nlet jef = {}\ntry { jef = $('JEF · aplicar').first().json.jef || {} } catch (e) { jef = {} }\nreturn [{ json: { parado_en: 'plan_revisado', plan_vigente_id: fila && (fila.plan_id || fila.id) ? (fila.plan_id || fila.id) : null, jefatura_fase: jef.fase || null, redactor: (function () { try { return $('Redactor · elegir').last().json.redactor_elegido || null } catch (e) { return null } })() } }]\n"
       }
     },
     {
