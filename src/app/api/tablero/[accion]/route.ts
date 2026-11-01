@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
-import { despertarAlFlujoDeLaOficina } from '@/lib/oficina/despertar'
+import { despertarAlFlujoDeLaOficina, despertarFlujo } from '@/lib/oficina/despertar'
 import { esObjeto, puertosReales } from '@/lib/oficina/ruta'
 import { ACCIONES } from '@/lib/oficina/tablero/acciones'
 import { cuerpoSeguro, rastroDelTablero } from '@/lib/oficina/tablero/comun'
@@ -36,6 +36,13 @@ export async function POST(request: Request, ctx: { params: { accion: string } }
       const { encargo_id, turno } = s.despertar
       const d = await despertarAlFlujoDeLaOficina(fetch, { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, encargo_id, turno)
       salida = { ...salida, despertado: d.despertado, ...(d.despertado ? {} : { motivo_sin_despertar: d.motivo }) }
+    }
+    if (s.despertar_flujo && s.status === 200) {
+      // (01-nov · ciclo del plan) la acción ya quedó guardada; si el flujo no se pudo despertar, la fila lo dice y el tablero lo muestra (nadie gastó)
+      const d = await despertarFlujo(fetch, { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, s.despertar_flujo.camino, s.despertar_flujo.cuerpo)
+      salida = { ...salida, despertado: d.despertado, ...(d.despertado ? {} : { motivo_sin_despertar: d.motivo }) }
+      const reg = s.despertar_flujo.registrar
+      if (reg) { try { await db.from(reg.tabla).update({ despertado: d.despertado, despertar_detalle: d.despertado ? `HTTP ${d.status}` : d.motivo, actualizado_en: ahora().toISOString() }).eq('id', reg.id) } catch { /* el registro del despertar nunca frena la respuesta */ } }
     }
     return NextResponse.json(salida, { status: s.status })
   } catch (e) {

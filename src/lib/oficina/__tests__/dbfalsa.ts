@@ -13,6 +13,7 @@ const UNICOS: Record<string, string[][]> = {
   eventos_de_emilio: [['clave_unica']],
   notas_del_dueno_envios: [['nota_id']],
   autorevisiones_del_productor: [['clave_unica']],
+  plan_aprobaciones: [['plan_id']],
 }
 const hay = (v: unknown) => v !== null && v !== undefined
 
@@ -106,6 +107,7 @@ class Consulta {
     else if (this.t === 'client_brand_books') o.id ??= `44444444-4444-4444-8444-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'clients') o.id ??= `55555555-5555-4555-8555-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'client_historical_outputs' || this.t === 'hitl_queue') o.id ??= `77777777-7777-4777-8777-${String(++this.db.secuencia).padStart(12, '0')}`
+    else if (this.t === 'plan_cambios' || this.t === 'plan_aprobaciones') { o.id ??= `33333333-3333-4333-8333-${String(++this.db.secuencia).padStart(12, '0')}`; o.estado ??= 'pendiente' }
     return o
   }
   private ejecutar(): { data: unknown; error: { message: string; code?: string } | null } {

@@ -1,10 +1,11 @@
 /**
  * Las acciones del tablero, TRAMO 1 (30-oct): rehacer una pieza que falló, el cliente (editar · nuevo · baja) y la oficina (encender/apagar · tope de gasto).
- * Pendientes de los tramos siguientes (responden 404 = «todavía no disponible»): plan-*. (manual-campos es la ruta PATCH /api/manual/{client_id}/campos; pieza-nueva se retiró: las piezas salen solo de la campaña.)
+ * Ciclo del plan (01-nov · tramo 2): plan-cambios · plan-aprobar (en `plan.ts`). (manual-campos es la ruta PATCH /api/manual/{client_id}/campos; pieza-nueva se retiró: las piezas salen solo de la campaña.)
  */
 import { almacenDeSupabase } from '../../cadena/almacen-supabase'
 import { abrirEncargo } from '../orquestador'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
+import { planAprobar, planCambios } from './plan'
 import { firmarTablero, revisionResolver } from './revisiones'
 import { empujarManualAlCerebro } from '../../brain/push-al-terminar'
 import { rutaValidarManual } from '../../manual/edicion-rutas'
@@ -212,4 +213,6 @@ export const ACCIONES: Record<string, Manejador> = {
   'cliente-tope': clienteTope,
   'oficina-estado': oficinaEstado,
   'oficina-tope': oficinaTope,
+  'plan-cambios': planCambios,
+  'plan-aprobar': planAprobar,
 }
