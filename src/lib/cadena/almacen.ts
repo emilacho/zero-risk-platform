@@ -156,6 +156,8 @@ export interface ContextoDelCliente {
   planTexto: string
   manualTexto: string
   forbiddenWords: string[]
+  /** 01-nov · firma de Emilio: las únicas de la lista que bloquean */
+  palabrasDuras?: string[]
   sedes: SedeInfo[]
   referencias: Referencia[]
   /** la fecha en que se guardó el plan (para la fecha de inicio por regla) */

@@ -30,7 +30,7 @@ export const FUENTES: FuentesCompletas = {
   cliente_nombre: 'Cliente de práctica',
   manual_texto: 'Voz directa y económica con las palabras. Tutea siempre, nunca vos. Copy corto: una idea por frase.',
   plan_texto: 'Plan de 90 días: serie de posts de producto antes de la pauta.',
-  fuentes: { palabras_prohibidas: ['premium', 'calidad garantizada', 'el mejor', 'gourmet', 'artesanal'], telefonos: ['+593 997 744 288'], handles: ['@naufrago.ec'], precios: ['7.00', '5.50'], competidores: ['Pez Azul'], registro: 'tuteo' },
+  fuentes: { palabras_prohibidas: ['premium', 'calidad garantizada', 'el mejor', 'gourmet', 'artesanal'], palabras_duras: ['premium', 'calidad garantizada', 'el mejor', 'gourmet', 'artesanal'], telefonos: ['+593 997 744 288'], handles: ['@naufrago.ec'], precios: ['7.00', '5.50'], competidores: ['Pez Azul'], registro: 'tuteo' },
   propios: { telefonos: ['+593 997 744 288'], handles: ['@naufrago.ec'], urls: ['https://www.naufrago.ec'], marcas_ajenas: ['rukutu'] },
   fotos: FOTOS, usos: {}, vocabulario_de_productos: ['Ceviches', 'Encebollados', 'Chifle', 'Pan'], zona: 'America/Guayaquil',
   slug: 'cliente-de-practica', marca: { colors: { primary: '#112233', secondary: '#445566' }, fonts: { family: 'Inter' }, brand_handle: '@naufrago.ec' },

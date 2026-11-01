@@ -14,6 +14,7 @@
 import { CAMPOS, evaluarCompletitud, quienValido, type CampoDelManual } from './campos-del-manual'
 import { enviarALaPuerta, type EntornoDeLaPuerta, type ResultadoDeEnvio } from '../notas-del-dueno/puerta-del-dueno'
 import { CANAL_DEL_MANUAL } from '../portero-alimenta/dueno'
+import { aplicarDecisionDelDueno, conservarPalabrasDuras, deUnaCorrida, leerPalabras, palabrasDuras, type DecisionDelDueno } from './palabras-con-intencion'
 
 type Fila = Record<string, unknown>
 export interface Db { from(tabla: string): any }
@@ -131,6 +132,50 @@ export async function editarManualDelDueno(db: Db, e: EntradaDeEdicion): Promise
   return { ok: true, version_nueva: r.version, source_id: r.id, cambios: [...cambios], completo: c?.completo ?? false, huecos: c?.huecos.map((h) => h.clave) ?? [] }
 }
 
+export type ResultadoDePalabra = { ok: true; version_nueva: number; source_id: string; decision: DecisionDelDueno; texto: string; duras: string[] } | { ok: false; status: number; error: string; detalle: string }
+
+/**
+ * 01-nov · firma de Emilio · el dueño decide sobre una palabra: la sube a prohibida (con su cita y su fecha), la deja como contexto o la quita. Versión `max+1`; la anterior queda.
+ * El campo queda como suyo (`_field_meta`), así una corrida posterior no le vuelve a poner lo que quitó.
+ */
+export async function decidirPalabraDelDueno(db: Db, e: { client_id: string; texto: unknown; decision: unknown; comentario?: string | null; reviewer: string; ahora?: Date }): Promise<ResultadoDePalabra> {
+  const invalido = (detalle: string): ResultadoDePalabra => ({ ok: false, status: 400, error: 'entrada_invalida', detalle })
+  if (!UUID.test(e.client_id)) return invalido('falta el cliente')
+  const texto = typeof e.texto === 'string' ? e.texto.trim() : ''
+  if (!texto || texto.length > 200) return invalido('`texto` debe tener entre 1 y 200 caracteres')
+  if (e.decision !== 'prohibir' && e.decision !== 'contexto' && e.decision !== 'quitar') return invalido('`decision` debe ser prohibir, contexto o quitar')
+  const decision: DecisionDelDueno = e.decision
+  const ahora = (e.ahora ?? new Date()).toISOString()
+  const cita = typeof e.comentario === 'string' && e.comentario.trim() ? e.comentario.trim().slice(0, 1000) : null
+  const k = (x: string) => x.trim().toLowerCase()
+  const previa = await leerVigente(db, e.client_id)
+  if (previa.error) return { ok: false, status: 502, error: 'no_se_pudo_leer', detalle: previa.error }
+  if (!previa.fila) return { ok: false, status: 404, error: 'sin_manual', detalle: 'el cliente todavía no tiene manual' }
+  if (decision !== 'prohibir' && !leerPalabras(previa.fila).some((p) => k(p.texto) === k(texto))) return { ok: false, status: 404, error: 'palabra_no_esta', detalle: `«${texto}» no está en la lista del manual` }
+  let duras: string[] = []
+  const r = await insertarVersion(db, e.client_id, (vigente) => {
+    const contenido = objeto(vigente.content_text)
+    const borrador: Fila = { ...objeto(contenido.brand_book_draft) }
+    const meta: Fila = { ...objeto(borrador._field_meta) }
+    const nueva = copiaSinIdentidad(vigente)
+    const d = aplicarDecisionDelDueno(vigente, { texto, decision, por: e.reviewer, en: ahora, cita })
+    nueva.forbidden_words = d.forbidden_words
+    nueva.palabras_con_intencion = d.palabras_con_intencion
+    borrador.forbidden_words = d.forbidden_words
+    borrador.palabras_con_intencion = d.palabras_con_intencion
+    meta.forbidden_words = { fuente: 'dueno', por: e.reviewer, en: ahora, valor_anterior: comoTexto(vigente.forbidden_words), cita: cita ?? `${decision}: ${texto}` }
+    borrador._field_meta = meta
+    nueva.content_text = JSON.stringify({ ...contenido, brand_book_draft: borrador })
+    nueva.version = Number(vigente.version) + 1
+    nueva.auto_generated_from = 'edicion_del_dueno'
+    nueva.provenance_tag = { ...objeto(vigente.provenance_tag), editado_por_dueno: { por: e.reviewer, en: ahora, campos: ['forbidden_words'] } }
+    duras = palabrasDuras(d)
+    return nueva
+  })
+  if (!r.ok) return { ok: false, status: r.sin_manual ? 404 : 502, error: r.sin_manual ? 'sin_manual' : 'no_se_pudo_guardar', detalle: r.error }
+  return { ok: true, version_nueva: r.version, source_id: r.id, decision, texto, duras }
+}
+
 export type ResultadoDeValidacion =
   | { ok: true; version_nueva: number | null; source_id: string; sin_cambios: boolean; aceptados: string[] }
   | { ok: false; status: number; error: string; detalle: string }
@@ -215,7 +260,8 @@ export async function empujarCamposAlCerebro(d: DepsDelCerebro, x: { client_id: 
  * (`_field_meta.<campo>.fuente === 'dueno'`) se vuelven a poner —valor y procedencia— en el borrador nuevo. Todo lo demás de la corrida queda igual. Puro.
  */
 export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila): { bb: Fila; conservados: string[] } {
-  if (!previa) return { bb, conservados: [] }
+  // 01-nov · hallazgo de CC3: una corrida no declara por el dueño, ni siquiera en un manual sin versión anterior
+  if (!previa) return Array.isArray(bb.palabras_con_intencion) ? { bb: { ...bb, palabras_con_intencion: deUnaCorrida(bb.palabras_con_intencion) }, conservados: [] } : { bb, conservados: [] }
   const borradorPrevio = objeto(objeto(previa.content_text).brand_book_draft)
   const metaPrevia = objeto(borradorPrevio._field_meta)
   const conservados: string[] = []
@@ -231,7 +277,11 @@ export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila): 
     meta[c.clave] = m
     conservados.push(c.clave)
   }
-  if (!conservados.length) return { bb, conservados }
-  nuevo._field_meta = meta
+  // 01-nov · firma de Emilio: las palabras declaradas (norma o dueño) tampoco las pierde una corrida
+  const hayDuras = palabrasDuras(previa).length > 0
+  const trae = Array.isArray(bb.palabras_con_intencion) && (bb.palabras_con_intencion as unknown[]).length > 0
+  if (!conservados.length && !hayDuras && !trae) return { bb, conservados }
+  if (conservados.length) nuevo._field_meta = meta
+  if (hayDuras || trae) Object.assign(nuevo, conservarPalabrasDuras(previa, nuevo))
   return { bb: nuevo, conservados }
 }

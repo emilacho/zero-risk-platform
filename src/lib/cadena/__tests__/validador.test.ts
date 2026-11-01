@@ -184,6 +184,8 @@ function bateria(nombre: string, mk: () => ClienteFixture) {
       const conPalabra = val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: `Algo ${c.forbiddenWords[0]} hoy` }))
       expect(chequeos(conPalabra)).not.toContain('V15')
       expect(conPalabra.some((h) => h.chequeo === 'V15' && h.severidad === 'aviso')).toBe(true)
+      // 01-nov · firma de Emilio: la misma palabra, declarada por una norma o por el dueño, sí bloquea
+      expect(chequeos(val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: `Algo ${c.forbiddenWords[0]} hoy` }), { palabrasDuras: [c.forbiddenWords[0]] }))).toContain('V15')
       expect(chequeos(val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: 'Vení a conocernos y decime qué pensás' })))).toContain('V15')
     })
 

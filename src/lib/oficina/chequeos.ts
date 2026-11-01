@@ -10,7 +10,10 @@ import { importesEnTexto, numeroDeImporte } from '@/lib/moneda/por-pais'
 export type Registro = 'tuteo' | 'voseo' | 'formal' | 'sin_dato'
 /** lo que el código sabe del cliente (de su manual, su ficha, su carta guardada y sus sedes) */
 export interface FuentesDelCliente {
+  /** toda la lista del manual; por omisión es contexto de marca y no bloquea */
   palabras_prohibidas: string[]
+  /** 01-nov · firma de Emilio: las únicas del manual que bloquean (norma o dueño, con su cita) */
+  palabras_duras?: string[]
   telefonos: string[]
   handles: string[]
   /** precios publicados (cifras exactas, p. ej. «7.00»); vacío = no hay carta guardada (no verificable) */
@@ -42,6 +45,17 @@ const ficha = (donde: string, gravedad: Ficha['gravedad'], que: string, contra_q
   id: `chk-${donde}-${n}`, origen: 'chequeo', donde, gravedad, estado: 'abierta', que, contra_que, propuesta,
 })
 
+/** 01-nov · firma de Emilio: bloquea lo declarado en el manual y lo que el brief prohíbe por su cuenta. Una palabra del manual que el brief solo repite sigue siendo contexto */
+export function palabrasQueBloquean(fuentes: Pick<FuentesDelCliente, 'palabras_prohibidas' | 'palabras_duras'>, delBrief: string[]): { bloquean: string[]; contexto: string[] } {
+  const k = (x: string) => x.trim().toLowerCase()
+  const duras = new Set((fuentes.palabras_duras ?? []).map(k))
+  const delManual = new Set(fuentes.palabras_prohibidas.map(k))
+  const bloquean = new Map<string, string>()
+  for (const p of [...(fuentes.palabras_duras ?? []), ...delBrief.filter((x) => !delManual.has(k(x)))]) if (p.trim()) bloquean.set(k(p), p)
+  const contexto = fuentes.palabras_prohibidas.filter((p) => p.trim() && !duras.has(k(p)) && !bloquean.has(k(p)))
+  return { bloquean: [...bloquean.values()], contexto }
+}
+
 export function chequeosDePost(c: ContextoDeChequeo): Ficha[] {
   const f: Ficha[] = []
   const texto = c.pieza.pie_de_foto
@@ -49,11 +63,14 @@ export function chequeosDePost(c: ContextoDeChequeo): Ficha[] {
   let n = 0
 
   // 1 · prohibidas del manual y del brief (en el pie, el llamado y los hashtags)
-  const prohibidas = [...c.fuentes.palabras_prohibidas, ...(c.prohibidas_del_brief ?? [])]
-  for (const p of prohibidas) {
-    if (!p.trim()) continue
-    if (contienePalabra(texto, p) || contienePalabra(c.pieza.llamado ?? '', p)) f.push(ficha('texto', 'bloquea', `usa la palabra prohibida «${p}»`, 'palabras prohibidas del manual y del brief', 'reescribir sin esa palabra', n++))
-    if ((c.pieza.hashtags ?? []).some((h) => contienePalabra(h.replace(/^#/, ''), p))) f.push(ficha('hashtags', 'bloquea', `un hashtag trae la palabra prohibida «${p}»`, 'palabras prohibidas del manual y del brief', 'quitar o cambiar el hashtag', n++))
+  const { bloquean, contexto } = palabrasQueBloquean(c.fuentes, c.prohibidas_del_brief ?? [])
+  for (const p of bloquean) {
+    if (contienePalabra(texto, p) || contienePalabra(c.pieza.llamado ?? '', p)) f.push(ficha('texto', 'bloquea', `usa la palabra prohibida «${p}»`, 'palabras prohibidas por norma, por el dueño o por el brief', 'reescribir sin esa palabra', n++))
+    if ((c.pieza.hashtags ?? []).some((h) => contienePalabra(h.replace(/^#/, ''), p))) f.push(ficha('hashtags', 'bloquea', `un hashtag trae la palabra prohibida «${p}»`, 'palabras prohibidas por norma, por el dueño o por el brief', 'quitar o cambiar el hashtag', n++))
+  }
+  // lo demás de la lista del manual es contexto de marca: se señala, nunca frena (quien revisa razona la intención)
+  for (const p of contexto) {
+    if (contienePalabra(texto, p) || contienePalabra(c.pieza.llamado ?? '', p)) f.push(ficha('texto', 'sugerencia', `usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`, 'palabras que el manual evita (contexto de marca)', 'si es un claim propio, sostenerlo con evidencia o reformularlo', n++))
   }
 
   // 2 · registro: el voseo solo es falla si el registro resuelto del cliente es tuteo (si no hay dato, solo sugerencia)

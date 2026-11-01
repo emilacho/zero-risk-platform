@@ -3,7 +3,7 @@
  *   PATCH /api/manual/{client_id}/campos   cuerpo: { campos:{<clave del tablero>: texto}, comentario?, reviewer, origen:'dashboard' }
  *   POST  /api/tablero/manual-validar      cuerpo: { client_id, reviewer, origen:'dashboard' }
  */
-import { editarManualDelDueno, empujarCamposAlCerebro, validarManualDelDueno, type Db, type DepsDelCerebro } from './edicion-del-dueno'
+import { decidirPalabraDelDueno, editarManualDelDueno, empujarCamposAlCerebro, validarManualDelDueno, type Db, type DepsDelCerebro } from './edicion-del-dueno'
 
 type Fila = Record<string, unknown>
 export interface DepsDeEdicion {
@@ -39,6 +39,17 @@ export async function rutaEditarManual(d: DepsDeEdicion, client_id: string, cuer
       ...(cerebro.pendientes.length ? { aviso: 'El manual quedó guardado, pero el cerebro no recibió todos los campos todavía: queda pendiente.' } : {}),
     },
   }
+}
+
+/** POST /api/tablero/manual-palabra · cuerpo: { client_id, texto, decision:'prohibir'|'contexto'|'quitar', comentario?, reviewer, origen:'dashboard' } */
+export async function rutaDecidirPalabra(d: DepsDeEdicion, cuerpo: Fila, reviewer: string): Promise<SalidaDeEdicion> {
+  const client_id = typeof cuerpo.client_id === 'string' ? cuerpo.client_id : ''
+  const comentario = typeof cuerpo.comentario === 'string' && cuerpo.comentario.trim() ? cuerpo.comentario.trim().slice(0, 1000) : null
+  const toca = { client_id: client_id || null, comentario }
+  const r = await decidirPalabraDelDueno(d.db, { client_id, texto: cuerpo.texto, decision: cuerpo.decision, comentario, reviewer, ahora: (d.ahora ?? (() => new Date()))() })
+  if (!r.ok) return { status: r.status, body: { ok: false, error: r.error, detalle: r.detalle }, toca }
+  const indice = d.empujarManual({ client_id, source_id: r.source_id })
+  return { status: 200, toca, body: { ok: true, version_nueva: r.version_nueva, decision: r.decision, texto: r.texto, prohibidas: r.duras, cerebro: { indice: indice.estado } } }
 }
 
 export async function rutaValidarManual(d: DepsDeEdicion, client_id: string, reviewer: string): Promise<SalidaDeEdicion> {

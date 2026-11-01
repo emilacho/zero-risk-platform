@@ -19,7 +19,7 @@ describe('los pedidos', () => {
   it('solo el campo pedido, al agente que es dueño de ese campo, con el manual y la evidencia', () => {
     const r = armarPedidos({ draft: DRAFT, fuentes: [F('s1', 'Somos un negocio que ofrece lo suyo a quien pasa por la zona.')], campos: ['mision'], cliente: 'Negocio Demo' })
     expect(r.pedidos.length).toBe(1)
-    expect(r.pedidos[0].agente).toBe('jefe-client-success'); expect(r.pedidos[0].campos).toEqual(['mision'])
+    expect(r.pedidos[0].agente).toBe('brand-strategist'); expect(r.pedidos[0].campos).toEqual(['mision'])
     expect(r.pedidos[0].task).toContain('«mision»'); expect(r.pedidos[0].task).toContain('EVIDENCIA DEL CLIENTE'); expect(r.pedidos[0].task).toContain('quien pasa por la zona')
     expect(r.pedidos[0].task.length).toBeLessThanOrEqual(14000)
   })
@@ -29,7 +29,7 @@ describe('los pedidos', () => {
   })
   it('varios campos de agentes distintos → un pedido por agente', () => {
     const r = armarPedidos({ draft: { ...DRAFT, mensajes_clave: [] }, fuentes: [], campos: ['mision', 'mensajes_clave'] })
-    expect(r.pedidos.map((p) => p.agente).sort()).toEqual(['editor-en-jefe', 'jefe-client-success'])
+    expect(r.pedidos.map((p) => p.agente).sort()).toEqual(['brand-strategist', 'editor-en-jefe'])
   })
 })
 

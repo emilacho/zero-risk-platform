@@ -99,7 +99,7 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     fasesEnTexto(a.estrategia),
     ...(a.informeDeMercado ? ['', '# INFORME DE MERCADO (PROPUESTA · no es dato del cliente · contexto, no mandato)', a.informeDeMercado] : []),
     '',
-    `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}`,
+    `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
     '',
     `# PLAN\n${a.ctx.planTexto}`,
   ].join('\n')
@@ -129,7 +129,7 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     a.estrategia.patron_semanal.map((s) => `- ${s.slot}: ${s.red} · ${s.formato} · día ${s.dia_semana} ${s.hora}`).join('\n') || '(sin patrón)',
     '',
     `# SEDES\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
-    `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}`,
+    `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
   ].join('\n')
 }
 
@@ -208,7 +208,7 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   }
   const estr = await al.ultimaEstrategia(campana.id)
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
-  const leido = leerBriefCreativo(p.texto as string, { planTexto: ctx?.planTexto ?? '', prohibidas: ctx?.forbiddenWords ?? [], redes: (estr?.contenido.canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red) })
+  const leido = leerBriefCreativo(p.texto as string, { planTexto: ctx?.planTexto ?? '', prohibidas: ctx?.forbiddenWords ?? [], duras: ctx?.palabrasDuras, redes: (estr?.contenido.canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red) })
   const bloquea = hallazgosDelBrief(leido).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
   const estado = bloquea.length ? 'devuelta' : 'validada'
   await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado, texto_md: p.texto, leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
@@ -284,7 +284,7 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
   if (!texto(p.texto)) return sinMesa(p.motivo ?? 'la mesa no entregó texto')
   const estr = await al.ultimaEstrategia(campana.id)
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
-  const ins = estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], []) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos: [] }
+  const ins = { ...(estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], []) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos: [] }), duras: ctx?.palabrasDuras }
   const leido = leerConcepto(p.texto as string, ins)
   if (leido.estado === 'sin_concepto') return sinMesa(`sin_concepto: ${leido.bloqueos.join(' · ')}`)
   const hallazgos = hallazgosDelConcepto(leido)

@@ -7,13 +7,14 @@
  *  3 · PALABRAS PROHIBIDAS PROPIAS: ninguna parte del manual usa las palabras que el mismo manual lista en `forbidden_words` (salvo para MENCIONARLAS: entre comillas o tras «nunca/evita/sin…»).
  * Todo lo que sale va SOLO al registro interno (nunca a la bandeja ni a Slack).
  */
+import { palabrasDuras } from './palabras-con-intencion'
 import { normalizar, palabrasDe } from './texto'
 
 export interface QuitadoPorLimpieza { ruta: string; texto: string; motivo: 'nombre_interno_citado' | 'fragmento' | 'palabra_prohibida_propia' }
 
 // ───────────────────────── recorrido de textos (con ruta «campo», «campo[2]», «campo.sub»)
 type Hoja = { ruta: string; valor: string }
-const CAMPOS_QUE_NO_SON_PROSA = ['client_id', 'forbidden_words', 'required_terminology', 'primary_colors', 'typography', 'tagline', 'tagline_opciones', 'frases_propias', 'eslogan_literal', 'competitor_mentions_policy', 'logo_usage_notes']
+const CAMPOS_QUE_NO_SON_PROSA = ['client_id', 'forbidden_words', 'palabras_con_intencion', 'required_terminology', 'primary_colors', 'typography', 'tagline', 'tagline_opciones', 'frases_propias', 'eslogan_literal', 'competitor_mentions_policy', 'logo_usage_notes']
 const esMeta = (k: string) => k.startsWith('_') || ['gated_fields_only', 'campos_gateados', 'campos_provisionales', 'campos_ausentes', 'lentes_ok', 'provisional'].includes(k)
 
 function hojas(valor: unknown, ruta: string, out: Hoja[]): void {
@@ -174,8 +175,8 @@ export function repararFragmentos(texto: string): { texto: string; quitadas: str
 const NEGACION_ANTES = /\b(nunca|jam[aá]s|evita\w*|evitar|prohib\w*|no\s+(?:uses?|usar|digas?|decir|emplees?|emplear|utilices?|utilizar)|sin)\b/i
 /** palabras que el propio manual prohíbe (normalizadas, en minúscula, con su plural simple) */
 export function palabrasProhibidasDelManual(manual: Record<string, unknown>): string[] {
-  const l = manual.forbidden_words
-  return (Array.isArray(l) ? l : []).filter((x): x is string => typeof x === 'string').map((x) => normalizar(x)).filter((x) => x.length >= 3)
+  // 01-nov · firma de Emilio: solo lo declarado (norma o dueño) quita una oración; el resto de la lista es contexto de marca
+  return palabrasDuras(manual).map((x) => normalizar(x)).filter((x) => x.length >= 3)
 }
 /** ¿esta oración USA (no menciona) alguna palabra prohibida? devuelve la palabra */
 export function usaPalabraProhibida(oracion: string, prohibidas: string[]): string | null {

@@ -2,6 +2,7 @@
  * ALMACÉN DE LA CADENA sobre Supabase · el ÚNICO archivo, con las rutas, que nombra las tablas `cadena_*` (lo vigila una prueba).
  * La migración NO está aplicada: hasta entonces nada llega aquí. `client_id` es TEXTO en todas las tablas de la cadena.
  */
+import { palabrasDuras } from '../manual/palabras-con-intencion'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeSupabase as almacenDeRecados } from '@/lib/sala-recados/almacen-supabase'
 import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
@@ -91,7 +92,7 @@ export function almacenDeSupabase(): Almacen {
       const planTexto = plan.content_text ?? plan.content ?? ''
       if (!planTexto) return null
       const cli = await fichaDelCliente(db, clientId)
-      const manual = (await lista<{ id: string; content_text: string | null; forbidden_words: unknown; voice_description?: string | null; writing_style?: string | null; tone_guidelines?: unknown }>(db.from('client_brand_books').select('id, content_text, forbidden_words, version, voice_description, writing_style, tone_guidelines').eq('client_id', clientId).order('version', { ascending: false }).limit(1)))[0]
+      const manual = (await lista<{ id: string; content_text: string | null; forbidden_words: unknown; palabras_con_intencion?: unknown; voice_description?: string | null; writing_style?: string | null; tone_guidelines?: unknown }>(db.from('client_brand_books').select('id, content_text, forbidden_words, palabras_con_intencion, version, voice_description, writing_style, tone_guidelines').eq('client_id', clientId).order('version', { ascending: false }).limit(1)))[0]
       const zonaPorDefecto = await almacen.leerConfig('zona_horaria_por_defecto')
       const refs: Referencia[] = [{ id: planId, client_id: clientId, origen: 'plan', texto: planTexto }]
       if (manual?.content_text) refs.push({ id: `manual:${manual.id}`, client_id: clientId, origen: 'manual', texto: manual.content_text })
@@ -130,7 +131,7 @@ export function almacenDeSupabase(): Almacen {
       return {
         clientId, nombreDelNegocio: cli?.name ?? '', pais: cli?.country ?? null, zonaHoraria: zonaCfg ?? porDefecto ?? 'UTC', zonaHorariaOrigen: zonaOrigen, registro: registroDelCliente(manual, cli).registro, industria: cli?.industry ?? null,
         idioma: typeof cli?.idioma === 'string' && cli.idioma.trim() ? cli.idioma.trim() : null,
-        planTexto, manualTexto: manual?.content_text ?? '', forbiddenWords: fw, sedes, referencias: refs, fechaDelPlan: plan.created_at.slice(0, 10),
+        planTexto, manualTexto: manual?.content_text ?? '', forbiddenWords: fw, palabrasDuras: palabrasDuras(manual), sedes, referencias: refs, fechaDelPlan: plan.created_at.slice(0, 10),
       }
     },
 

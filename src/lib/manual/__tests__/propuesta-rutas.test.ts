@@ -24,7 +24,7 @@ describe('preparar', () => {
     expect(r.status).toBe(200)
     expect(r.body).toMatchObject({ ok: true, version_base: 4, faltantes: expect.arrayContaining(['mision']) })
     const pedidos = r.body.pedidos as Array<{ agente: string; campos: string[]; task: string }>
-    expect(pedidos.length).toBe(1); expect(pedidos[0]).toMatchObject({ agente: 'jefe-client-success', campos: ['mision'] })
+    expect(pedidos.length).toBe(1); expect(pedidos[0]).toMatchObject({ agente: 'brand-strategist', campos: ['mision'] })
     expect(pedidos[0].task).toContain('cocina de casa')
   })
   it('validaciones: cuerpo, uuid, cliente sin manual', async () => {
@@ -35,7 +35,7 @@ describe('preparar', () => {
 })
 
 describe('aplicar', () => {
-  const cuerpo = (extra: Record<string, unknown> = {}) => ({ client_id: CID, dry_run: false, campos: ['mision'], version_base: 4, respuestas: [{ agente: 'jefe-client-success', response: RESPUESTA }], ...extra })
+  const cuerpo = (extra: Record<string, unknown> = {}) => ({ client_id: CID, dry_run: false, campos: ['mision'], version_base: 4, respuestas: [{ agente: 'brand-strategist', response: RESPUESTA }], ...extra })
   it('devuelve el cuerpo listo para guardar: SOLO cambia la misión, rotulada; lo demás igual; datos del veredicto de la versión base', async () => {
     const r = await rutaAplicarPropuesta(base(), cuerpo())
     expect(r.status).toBe(200)
@@ -51,14 +51,14 @@ describe('aplicar', () => {
     expect(r.status).toBe(409); expect(r.body.error).toBe('el_manual_cambio')
   })
   it('una respuesta ilegible, o de un agente al que no se le pidió, no aplica nada y lo dice', async () => {
-    const a = await rutaAplicarPropuesta(base(), cuerpo({ respuestas: [{ agente: 'jefe-client-success', response: 'no pude' }] }))
+    const a = await rutaAplicarPropuesta(base(), cuerpo({ respuestas: [{ agente: 'brand-strategist', response: 'no pude' }] }))
     expect(a.body).toMatchObject({ ok: true, aplicado: false }); expect((a.body.sin_leer as unknown[]).length).toBe(1)
     const b = await rutaAplicarPropuesta(base(), cuerpo({ respuestas: [{ agente: 'otro', response: RESPUESTA }] }))
     expect(b.body.aplicado).toBe(false)
   })
   it('una propuesta con un hecho sin respaldo se rechaza', async () => {
     const mala = JSON.stringify({ mision: { texto: 'Somos el mejor negocio certificado del país desde 1999.', razon: 'x' } })
-    const r = await rutaAplicarPropuesta(base(), cuerpo({ respuestas: [{ agente: 'jefe-client-success', response: mala }] }))
+    const r = await rutaAplicarPropuesta(base(), cuerpo({ respuestas: [{ agente: 'brand-strategist', response: mala }] }))
     expect(r.body.aplicado).toBe(false); expect(JSON.stringify(r.body.rechazadas)).toMatch(/sin respaldo/)
   })
   it('dry_run es obligatorio y booleano', async () => {
@@ -108,13 +108,13 @@ describe('lo que dijo el dueño manda y llega primero', () => {
   })
   const resp = JSON.stringify({ mision: { texto: 'Preparamos comida de la casa en nuestro restaurante de la costa y la llevamos a domicilio también en la capital.', razon: 'recoge lo que dijo el dueño sobre cada sede' } })
   it('aplicar: la propuesta nueva REEMPLAZA a la anterior, solo cambia la misión, y el chequeo de hechos acepta lo que respalda el dueño', async () => {
-    const r = await rutaAplicarPropuesta(baseConDueno(), { client_id: CID, dry_run: false, campos: ['mision'], reproponer: ['mision'], version_base: 5, respuestas: [{ agente: 'jefe-client-success', response: resp }] })
+    const r = await rutaAplicarPropuesta(baseConDueno(), { client_id: CID, dry_run: false, campos: ['mision'], reproponer: ['mision'], version_base: 5, respuestas: [{ agente: 'brand-strategist', response: resp }] })
     expect(r.body).toMatchObject({ ok: true, aplicado: true, aplicadas: ['mision'] })
     const dif = r.body.diferencias as Array<{ campo: string; antes: string; despues: string }>
     expect(dif.map((d) => d.campo)).toEqual(['mision']); expect(dif[0].antes).toBe(PREVIA); expect(dif[0].despues).toMatch(/restaurante de la costa[\s\S]*\[propuesta del agente — recoge/)
   })
   it('aplicar sin «reproponer»: no pisa la propuesta anterior', async () => {
-    const r = await rutaAplicarPropuesta(baseConDueno(), { client_id: CID, dry_run: false, campos: ['mision'], version_base: 5, respuestas: [{ agente: 'jefe-client-success', response: resp }] })
+    const r = await rutaAplicarPropuesta(baseConDueno(), { client_id: CID, dry_run: false, campos: ['mision'], version_base: 5, respuestas: [{ agente: 'brand-strategist', response: resp }] })
     expect(r.body.aplicado).toBe(false)
   })
 })

@@ -96,7 +96,8 @@ describe('5 · el manual no usa sus propias palabras prohibidas', () => {
     expect(reglas).toMatch(/artesanal/); expect(reglas).toMatch(/exclusiva/)
   })
   it('verde: tras la limpieza ninguna parte del manual las usa (el elemento de la regla sale entero y el resto de la lista se queda)', () => {
-    const r = limpiarManual(MANUAL)
+    // 01-nov · firma de Emilio: la limpieza solo quita lo declarado; aquí se declaran para seguir probando la limpieza
+    const r = limpiarManual({ ...MANUAL, palabras_con_intencion: (MANUAL.forbidden_words as string[]).map((texto) => ({ texto, intencion: 'legal', fuente: { cita: 'la norma' } })) })
     const prohibidas = palabrasProhibidasDelManual(r.manual)
     expect(prohibidas).toContain('artesanal')
     expect(usaPalabraProhibida(JSON.stringify((r.manual as Record<string, any>).visual.reglas), prohibidas)).toBeNull()

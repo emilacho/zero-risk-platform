@@ -8,7 +8,7 @@ import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { planAprobar, planCambios } from './plan'
 import { firmarTablero, revisionResolver } from './revisiones'
 import { empujarManualAlCerebro } from '../../brain/push-al-terminar'
-import { rutaValidarManual } from '../../manual/edicion-rutas'
+import { rutaDecidirPalabra, rutaValidarManual } from '../../manual/edicion-rutas'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -195,6 +195,12 @@ export const oficinaTope: Manejador = async ({ db }, { cuerpo }) => {
   return { status: 200, cuerpo: { ok: true, oficina, tope_usd: t, que_es: 'lo máximo que gasta UNA pieza de la mesa (carrusel y kit)', plantillas: cambiados } }
 }
 
+// ───────────────────────── manual-palabra (US$ 0): el dueño decide sobre una palabra de la lista
+export const manualPalabra: Manejador = async ({ db }, { cuerpo, reviewer }) => {
+  const s = await rutaDecidirPalabra({ db, cerebro: { env: { baseUrl: '', internalKey: '' } }, empujarManual: (x) => empujarManualAlCerebro(x) }, cuerpo, reviewer)
+  return { status: s.status, cuerpo: s.body, toca: s.toca }
+}
+
 // ───────────────────────── manual-validar (US$ 0): la vigente pasa a validada por el dueño
 export const manualValidar: Manejador = async ({ db }, { cuerpo, reviewer }) => {
   if (typeof cuerpo.client_id !== 'string' || !UUID.test(cuerpo.client_id)) return rechazo(400, 'entrada_invalida', '`client_id` debe ser un uuid')
@@ -204,6 +210,7 @@ export const manualValidar: Manejador = async ({ db }, { cuerpo, reviewer }) => 
 
 export const ACCIONES: Record<string, Manejador> = {
   'manual-validar': manualValidar,
+  'manual-palabra': manualPalabra,
   'revision-resolver': revisionResolver,
   'firmar-tablero': firmarTablero,
   'rehacer-pieza': rehacerPieza,

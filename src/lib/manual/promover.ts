@@ -7,6 +7,7 @@
  *  · empuja el manual al cerebro (no se espera) con la misma función que usa el alta; el PDF a Drive NO se dispara desde aquí (ver el papel de entrega).
  */
 import { buildBrandBookRow } from '../../app/api/brand-book/[clientId]/route'
+import { conservarPalabrasDuras } from './palabras-con-intencion'
 import { empujarManualAlCerebro, type EmpujeEntrada, type EmpujeResultado } from '../brain/push-al-terminar'
 import { TIPO_DE_BORRADOR } from './borrador'
 import type { Db } from './revision'
@@ -62,6 +63,8 @@ export async function promoverManualRevisado(db: Db, e: EntradaDePromocion): Pro
   const eslogan = typeof contenido.manual.tagline === 'string' && contenido.manual.tagline.trim() ? contenido.manual.tagline : (anterior?.tagline ?? null)
   if (eslogan) row.tagline = eslogan
   for (const c of COLUMNAS_QUE_SE_HEREDAN) if (row[c] == null && anterior?.[c] != null) row[c] = anterior[c]
+  // 01-nov · firma de Emilio: lo declarado (norma o dueño) no se pierde al promover
+  Object.assign(row, conservarPalabrasDuras(anterior, row))
 
   const ins = await db.from('client_brand_books').insert(row).select('id').single()
   if (ins.error) {
