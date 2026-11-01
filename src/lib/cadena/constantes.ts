@@ -24,6 +24,19 @@ export const DIAS_DE_CAMPANA = 90
 export const SEMANAS_DE_TANDA = 4
 export const TOTAL_SEMANAS = Math.ceil(DIAS_DE_CAMPANA / 7)
 export const TOTAL_DE_TANDAS = Math.ceil(TOTAL_SEMANAS / SEMANAS_DE_TANDA)
+export interface MedidaDeCampana { dias: number; semanasPorTanda: number; totalSemanas: number; totalTandas: number }
+/**
+ * 01-nov · firma de Emilio: la duración y el tamaño de la tanda son de cada campaña; 90 días y 4 semanas son solo el valor por omisión.
+ * Los días salen de sus propias fechas y la tanda de su columna. Lo que falte o no se pueda leer vale lo de siempre.
+ */
+export function medidaDeCampana(c?: { fecha_inicio?: string | null; fecha_fin?: string | null; semanas_de_tanda?: number | null }): MedidaDeCampana {
+  const desde = Date.parse(`${c?.fecha_inicio ?? ''}T00:00:00Z`), hasta = Date.parse(`${c?.fecha_fin ?? ''}T00:00:00Z`)
+  const leidos = Math.round((hasta - desde) / 86400000) + 1
+  const dias = Number.isInteger(leidos) && leidos > 0 ? leidos : DIAS_DE_CAMPANA
+  const semanasPorTanda = Number.isInteger(c?.semanas_de_tanda) && (c?.semanas_de_tanda as number) > 0 ? (c?.semanas_de_tanda as number) : SEMANAS_DE_TANDA
+  const totalSemanas = Math.ceil(dias / 7)
+  return { dias, semanasPorTanda, totalSemanas, totalTandas: Math.ceil(totalSemanas / semanasPorTanda) }
+}
 /** semanas con fecha desde el día 1 (el panorama): se arma por código, sin modelo */
 export const SEMANAS_DE_PANORAMA = 12
 export const MAXIMO_DE_INTENTOS = 3

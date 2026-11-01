@@ -99,7 +99,7 @@ export async function leerInsumos(db: Db, clientId: string, opciones: { sinManua
 }
 
 // ───────────────────────── S0 · S1 · S3 (todo código, US$ 0)
-/** la tarea del juez admite 14.000 caracteres (el corredor acepta 16.000): campos + instrucción + evidencia deben caber, y la evidencia es lo que cede */
+/** cuánta evidencia lee el juez: es una decisión de gasto, no un límite del corredor (el sitio de un cliente real pasa de 1 millón de caracteres); cede la evidencia y se declara `recortada` */
 export const TOPE_DE_EVIDENCIA_DEL_JUEZ = 10_000
 export interface Preparacion {
   /** el manual vigente tal cual (para el autor del ciclo) */

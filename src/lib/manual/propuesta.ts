@@ -7,6 +7,7 @@
 import { evaluarHechos, type InformeDeHechos } from './hechos'
 import type { Fuente } from './procedencia'
 import { ordenarMateria } from './materia'
+import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 
 export const ROTULO_DE_PROPUESTA = 'propuesta del agente'
 export type TipoDeCampo = 'texto' | 'lista'
@@ -47,13 +48,13 @@ export function camposFaltantes(draft: Record<string, unknown>): string[] {
 
 export interface Pedido { agente: string; campos: string[]; task: string }
 
-const TOPE_DEL_PEDIDO = 14_000
+const TOPE_DEL_PEDIDO = TOPE_REAL_DEL_PEDIDO
 const resumenDelManual = (draft: Record<string, unknown>, excluir: string[]): string => {
   const partes: string[] = []
   for (const k of ['positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes', 'proposito', 'mision', 'personalidad', 'mensajes_clave', 'propuestas_de_valor', 'tagline_opciones']) {
     if (excluir.includes(k) || vacio(draft[k])) continue
     const t = typeof draft[k] === 'string' ? (draft[k] as string) : JSON.stringify(draft[k])
-    partes.push(`- ${k}: ${t.length > 420 ? t.slice(0, 420) + ' ⟨…⟩' : t}`)
+    partes.push(`- ${k}: ${t}`)
   }
   return partes.join('\n')
 }

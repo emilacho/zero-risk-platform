@@ -43,6 +43,38 @@ async function tandaDe(al: AlmacenMemoria, id: string, tanda: number, objeto: un
   return { p, g }
 }
 
+describe('la medida de la campaña (01-nov · firma de Emilio)', () => {
+  it('🔴 sin pedirla: 90 días y sin columna escrita, como siempre', async () => {
+    const al = almacen()
+    const c = (await abrir(al)).cuerpo.campana as { fecha_inicio: string; fecha_fin: string; semanas_de_tanda?: number }
+    expect((Date.parse(c.fecha_fin) - Date.parse(c.fecha_inicio)) / 86400000 + 1).toBe(90)
+    expect('semanas_de_tanda' in c).toBe(false)
+  })
+  it('🔴 una campaña de 30 días con tandas de 2 semanas: sus fechas, sus tandas, y el pedido al agente dice 30 días', async () => {
+    const al = almacen()
+    const r = await abrir(al, { dias_de_campana: 30, semanas_de_tanda: 2 })
+    const c = r.cuerpo.campana as { id: string; fecha_inicio: string; fecha_fin: string; semanas_de_tanda?: number }
+    expect((Date.parse(c.fecha_fin) - Date.parse(c.fecha_inicio)) / 86400000 + 1).toBe(30)
+    expect(c.semanas_de_tanda).toBe(2)
+    const p = await estrategiaPreparar(al, { ...wf(), campana_id: c.id }, AHORA)
+    expect(JSON.stringify(p.cuerpo)).toContain('dentro de 30 días')
+    expect((await calendarioPreparar(al, { ...wf(), campana_id: c.id, tanda: 4 }, AHORA)).cuerpo.code).toBe('E-TANDA') // 5 semanas de a 2 = 3 tandas
+  })
+  it('🔴 una estrategia con fases más allá de la campaña corta se marca; dentro de 90 días ya no basta', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al, { dias_de_campana: 30 }))
+    const r = await validarSinEscribir(al, { ...wf(), campana_id: id, tipo: 'estrategia', estrategia: { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 60 })) } }, AHORA)
+    expect(JSON.stringify(r.cuerpo)).toMatch(/S01/)
+  })
+  it('🔴 una medida que no es un entero positivo se rechaza y no abre nada', async () => {
+    for (const raro of [{ dias_de_campana: 0 }, { dias_de_campana: 'noventa' }, { semanas_de_tanda: 0 }, { semanas_de_tanda: 1.5 }]) {
+      const al = almacen()
+      expect((await abrir(al, raro)).status).toBe(400)
+      expect(al.campanas.length).toBe(0)
+    }
+  })
+})
+
 describe('autorización y compuerta', () => {
   it('🔴 sin workflow_id o sin workflow_execution_id: 400 (la causa del 403 conocido de la revisión de agentes)', async () => {
     const al = almacen()
@@ -225,7 +257,7 @@ describe('la estrategia: preparar y guardar', () => {
   it('una estrategia inválida: UNA corrección con sus fichas; si sigue mal, necesita_humano (la estrategia no tiene «filas que salen»)', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
-    const mala = { ...A.estrategia, pilares: [{ clave: 'x', nombre: 'x', pct: 90 }] }
+    const mala = { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
     const p1 = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     const g1 = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p1.cuerpo.corrida_id, resultado: ok(mala) }, AHORA)
     expect(g1.cuerpo.correccion).toBe(true)
@@ -316,11 +348,11 @@ describe('el calendario: preparar, guardar, una corrección, filas que salen', (
   it('🔴 un bloqueo que NO es de dato (una revisión inventada) tras la corrección detiene la campaña en la bandeja de Emilio', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)
-    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, tema: 'Ritual de revisión de la semana' } : p)) }
+    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const { g } = await tandaDe(al, id, 1, mala)
     expect(g!.cuerpo.correccion).toBe(true)
     const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
-    const g2 = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [piezaBuena(A, 4, 'b', 'Ritual de revisión de la semana')], ajustes_al_patron: [] }) }, AHORA)
+    const g2 = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [{ ...piezaBuena(A, 4, 'b', 'Tema'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }) }, AHORA)
     expect(g2.cuerpo.necesita_humano).toBe(true)
     expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
     expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano' && e.estado === 'viva')).toBe(true)
@@ -549,7 +581,7 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
-    const mala = { ...A.estrategia, pilares: [{ clave: 'x', nombre: 'x', pct: 90 }] }
+    const mala = { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(mala) }, AHORA)
     const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect(otra.cuerpo.ya_hecha).toBeUndefined()
@@ -564,10 +596,10 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
   it('un bloqueo que no es de dato deja dicho POR QUÉ la campaña necesita a Emilio', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)
-    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, tema: 'Ritual de revisión de la semana' } : p)) }
+    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const { g } = await tandaDe(al, id, 1, mala)
     const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
-    await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [piezaBuena(A, 4, 'b', 'Ritual de revisión de la semana')], ajustes_al_patron: [] }) }, AHORA)
+    await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [{ ...piezaBuena(A, 4, 'b', 'Tema'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }) }, AHORA)
     expect(al.campanas[0].estado_motivo).toMatch(/tras la única corrección/)
   })
   it('una fila con un dato declarado PENDIENTE no sale a producción: queda en investigación con su reloj', async () => {

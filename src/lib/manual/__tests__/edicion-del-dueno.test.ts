@@ -51,12 +51,21 @@ describe('editar el manual · versión nueva con la procedencia del dueño', () 
   })
   it('rechaza lo que no se puede editar, lo vacío y lo demasiado largo; no escribe nada', async () => {
     const db = base()
-    const malos: Array<Record<string, unknown>> = [{ mision_x: 'a' }, { derivado: 'a' }, { proposito: '   ' }, { proposito: 'x'.repeat(2001) }, {}]
+    const malos: Array<Record<string, unknown>> = [{ mision_x: 'a' }, { derivado: 'a' }, { proposito: '   ' }, { proposito: 'x'.repeat(100_001) }, {}]
     for (const campos of malos) {
       const r = await editarManualDelDueno(db, { client_id: C, campos, reviewer: 'emilio' })
       expect(r.ok).toBe(false)
     }
     expect(db.tablas['client_brand_books']).toHaveLength(1)
+  })
+  it('🔴 un texto largo del dueño entra entero (01-nov · firma de Emilio)', async () => {
+    const db = base()
+    const largo = 'x'.repeat(5000)
+    const r = await editarManualDelDueno(db, { client_id: C, campos: { proposito: largo }, comentario: 'c'.repeat(3000), reviewer: 'emilio' })
+    expect(r.ok).toBe(true)
+    const ultima = db.tablas['client_brand_books'].at(-1) as Record<string, unknown>
+    expect(ultima.brand_purpose).toBe(largo)
+    expect(JSON.stringify(ultima)).toContain('c'.repeat(3000))
   })
   it('un cliente sin manual → 404; un client_id inválido → 400', async () => {
     expect(await editarManualDelDueno(new DbFalsa(), { client_id: C, campos: { proposito: 'x' }, reviewer: 'e' })).toMatchObject({ ok: false, status: 404 })

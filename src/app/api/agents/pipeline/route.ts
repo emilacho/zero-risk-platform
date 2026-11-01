@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
+import { TOPE_REAL_DEL_PEDIDO } from '@/lib/limites-de-tamano'
 
 interface PipelineInput {
   task: string
@@ -77,9 +78,9 @@ export async function POST(request: NextRequest) {
   const body = v.data
   const task = body.task.trim()
 
-  if (task.length > 2000) {
+  if (task.length > TOPE_REAL_DEL_PEDIDO) {
     return NextResponse.json(
-      { error: 'task exceeds 2000 chars', code: 'E-INPUT-TOO-LONG' },
+      { error: `task exceeds ${TOPE_REAL_DEL_PEDIDO} chars`, code: 'E-INPUT-TOO-LONG' },
       { status: 400 },
     )
   }

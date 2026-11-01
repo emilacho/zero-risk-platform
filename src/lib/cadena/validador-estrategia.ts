@@ -9,7 +9,7 @@ import type { Estrategia, FormatosPorRed, Hallazgo, Severidad } from './tipos'
 export interface InsumosEstrategia {
   planTexto: string
   formatos: FormatosPorRed
-  /** duración de la campaña en días (90 por defecto: lo fija el plan) */
+  /** duración de la campaña en días (90 por defecto; cada campaña trae la suya) */
   diasCampana?: number
 }
 
@@ -44,6 +44,23 @@ export function problemasDeEsquema(x: unknown): string[] {
   })
   e.pendientes.forEach((q, i) => { if (!q?.clave || !['portero', 'sistema'].includes(q?.pedir_a)) p.push(`pendientes[${i}].pedir_a (portero|sistema)`) })
   return p
+}
+
+/**
+ * 01-nov · firma de Emilio: unos pilares que no suman 100 se corrigen por código, sin reintento ni gasto. Reparte en proporción y lo dice con un aviso.
+ * Sin una base válida (suma 0 o valores que no son números) no adivina: el validador lo sigue marcando.
+ */
+export function normalizarPilares<T>(x: T): { estrategia: T; aviso: Hallazgo | null } {
+  const e = x as unknown as { pilares?: Array<{ pct?: unknown }> }
+  const pilares = Array.isArray(e?.pilares) ? e.pilares : null
+  if (!pilares?.length || !pilares.every((p) => typeof p?.pct === 'number' && Number.isFinite(p.pct) && p.pct >= 0)) return { estrategia: x, aviso: null }
+  const suma = pilares.reduce((s, p) => s + (p.pct as number), 0)
+  if (suma === 100 || suma <= 0) return { estrategia: x, aviso: null }
+  const nuevos = pilares.map((p) => Math.round(((p.pct as number) / suma) * 100))
+  const mayor = nuevos.indexOf(Math.max(...nuevos))
+  nuevos[mayor] += 100 - nuevos.reduce((s, n) => s + n, 0) // lo que falte por redondear va al más grande
+  const estrategia = { ...(x as object), pilares: pilares.map((p, i) => ({ ...p, pct: nuevos[i] })) } as unknown as T
+  return { estrategia, aviso: h('S01', 'aviso', 'pilares', `los pilares sumaban ${suma}: el código los ajustó en proporción a 100 (${nuevos.join(', ')})`, 'pilares[].pct', 'revisar si el reparto quedó como se quería') }
 }
 
 export function validarEstrategia(x: unknown, ins: InsumosEstrategia): Hallazgo[] {

@@ -69,18 +69,20 @@ describe('brief_creativo.v1 · lectura', () => {
 })
 
 describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
-  it('dos mensajes ⇒ devuelta', () => {
+  it('dos mensajes ⇒ aviso: es decisión creativa (01-nov · firma de Emilio)', () => {
     const b = leerBriefCreativo(con({ 'Hay mesa desde las siete.': 'Hay mesa desde las siete.\nY el pan es de masa madre.' }), INS)
-    expect(b.estado).toBe('devuelta')
-    expect(b.bloqueos.join('\n')).toMatch(/UN mensaje/)
+    expect(b.estado).toBe('validada')
+    expect(b.avisos.join('\n')).toMatch(/UN mensaje/)
   })
-  it('un mensaje de tres frases ⇒ devuelta (sospecha de varios mensajes)', () => {
+  it('un mensaje de tres frases ⇒ aviso', () => {
     const b = leerBriefCreativo(con({ 'Hay mesa desde las siete.': 'Hay mesa. Desde las siete. Para el barrio.' }), INS)
-    expect(b.bloqueos.join('\n')).toMatch(/3 frases/)
+    expect(b.bloqueos.join('\n')).not.toMatch(/3 frases/)
+    expect(b.avisos.join('\n')).toMatch(/3 frases/)
   })
-  it('un mensaje de más de 260 caracteres ⇒ devuelta', () => {
+  it('un mensaje de más de 260 caracteres ⇒ aviso', () => {
     const b = leerBriefCreativo(con({ 'Hay mesa desde las siete.': 'x'.repeat(270) }), INS)
-    expect(b.bloqueos.join('\n')).toMatch(/270 caracteres/)
+    expect(b.bloqueos.join('\n')).not.toMatch(/270 caracteres/)
+    expect(b.avisos.join('\n')).toMatch(/270 caracteres/)
   })
   it('la cita del plan tiene que estar LITERAL en el plan', () => {
     const ok = leerBriefCreativo(BRIEF, INS)
@@ -121,10 +123,11 @@ describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
     expect(b.estado).toBe('validada')
     expect(b.avisos).toEqual(['la prohibida del manual «barato» no está en la lista «prohibido» del brief'])
   })
-  it('el público «todos» ⇒ devuelta (si lo nombra); un público declarado pasa', () => {
+  it('el público «todos» ⇒ aviso (si lo nombra); un público declarado pasa', () => {
     const INSIGHT = 'La gente del barrio desayuna de pie porque cree que no hay dónde sentarse antes de las ocho.'
     const todos = leerBriefCreativo(con({ [INSIGHT]: `${INSIGHT}\n- público: todos` }), INS)
-    expect(todos.bloqueos.join('\n')).toMatch(/no es una audiencia declarada/)
+    expect(todos.bloqueos.join('\n')).not.toMatch(/no es una audiencia declarada/)
+    expect(todos.avisos.join('\n')).toMatch(/no es una audiencia declarada/)
     expect(leerBriefCreativo(con({ [INSIGHT]: `${INSIGHT}\n- público: vecinas del barrio que salen a trabajar antes de las ocho y desayunan fuera` }), INS).bloqueos).toEqual([])
     // en «Faltantes», «público: lo que falta» NO es la audiencia: no se juzga
     expect(leerBriefCreativo(con({ '- público: el manual no dice edades; se asume barrio, sin cifra': '- público: todos los datos faltan' }), INS).bloqueos).toEqual([])
@@ -148,7 +151,7 @@ describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
 
 describe('brief_creativo.v1 · salidas', () => {
   it('hallazgosDelBrief · un hallazgo por bloqueo (bloquea) y por aviso, alcance tanda, objeto brief_creativo', () => {
-    const b = leerBriefCreativo(con({ 'Hay mesa desde las siete.': 'Hay mesa desde las siete.\nY pan.' }), { ...INS, prohibidas: ['delicioso', 'promo', 'barato'] })
+    const b = leerBriefCreativo(con({ 'Que entren 30 desayunos': 'Que entren 30,77 desayunos' }), { ...INS, prohibidas: ['delicioso', 'promo', 'barato'] })
     const h = hallazgosDelBrief(b)
     expect(h.map((x) => [x.chequeo, x.severidad, x.alcance, x.fila_id])).toEqual([['brief_creativo', 'bloquea', 'tanda', null], ['brief_creativo', 'aviso', 'tanda', null]])
     expect(h[0].ficha.contra_que).toBe('brief_creativo.v1')

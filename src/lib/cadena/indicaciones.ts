@@ -30,7 +30,7 @@ const reglasComunes = (registro: RegistroDelCliente | undefined, idioma?: string
 }
 const lineas = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n')
 
-export interface PedidoDeEstrategia { ctx: ContextoDelCliente; formatosPermitidos: Record<string, string[]>; version: number; correccion?: Ficha[] }
+export interface PedidoDeEstrategia { ctx: ContextoDelCliente; formatosPermitidos: Record<string, string[]>; version: number; diasDeCampana?: number; correccion?: Ficha[] }
 
 export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
   const corr = p.correccion?.length
@@ -44,7 +44,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     lineas(reglasComunes(p.ctx.registro, p.ctx.idioma)),
     lineas([
       'Toda `cita_plan` es una frase LITERAL del plan (copiada tal cual). Si el plan no lo dice, no es una regla del plan: no lo cites; si lo propones tú, ponlo como propuesta con su motivo.',
-      'Los pilares suman 100. Las fases caen dentro de 90 días.',
+      `Los pilares suman 100. Las fases caen dentro de ${p.diasDeCampana ?? 90} días.`,
       '`fechas_que_importan` es una lista de TIPOS de fechas que le importan a ESTE negocio (feriados locales, temporadas, eventos del sector, fechas comerciales… o ninguna). Lo normal es la lista VACÍA: no inventes tipos «por si acaso». Si declaras uno, di su origen (plan | estrategia | alta) y un motivo concreto.',
       '`patron_semanal`: los slots que se repiten cada semana (día, hora, red, formato, pilar, sede). Usa solo redes y formatos permitidos. `requiere_abierto` solo si la pieza depende de que un local esté abierto; si el negocio no tiene local, siempre false.',
       '`pendientes`: lo que falta saber, con qué pieza desbloquea y quién lo pide (`portero` = el cerebro del cliente, `sistema` = investigarlo con fuente). Nunca se le pregunta nada a nadie del negocio.',
@@ -171,8 +171,7 @@ function referencias(ctx: ContextoDelCliente): string {
   if (!ctx.referencias.length) return '(no hay referencias: no escribas datos concretos)'
   return ctx.referencias
     .filter((r) => r.origen !== 'trozo' || r.confianza === 'system_trusted' || r.confianza === 'tenant_trusted')
-    .slice(0, 60)
-    .map((r) => `- ${r.id} [${r.origen}${r.firmada ? ', firmada' : ''}${r.fuente ? `, ${r.fuente}` : ''}${r.sede ? `, sede ${r.sede}` : ''}]: ${r.texto.replace(/\s+/g, ' ').slice(0, 280)}`)
+    .map((r) => `- ${r.id} [${r.origen}${r.firmada ? ', firmada' : ''}${r.fuente ? `, ${r.fuente}` : ''}${r.sede ? `, sede ${r.sede}` : ''}]: ${r.texto.replace(/\s+/g, ' ')}`)
     .join('\n')
 }
 
