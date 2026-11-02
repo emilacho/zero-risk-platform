@@ -6,6 +6,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+// @ts-expect-error módulo .mjs sin tipos
+import { LINEA_DEL_TOPE } from '../scripts/ops/oficina-marketing/reescritura-del-manual.mjs'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
 const leer = (c: string) => JSON.parse(fs.readFileSync(path.join(RAIZ, c, 'ssLtwYPt7zxuvnM2.json'), 'utf8'))
@@ -27,7 +29,8 @@ describe('juez independiente · el agente', () => {
     expect(j).not.toContain('editor-en-jefe')
   })
   it('lo demás del cuerpo del juez queda igual: umbral 0.85, marca de juez, rol y step_name', () => {
-    const quitar = (s: string) => s.replace('"agent": "market_research_analyst",', '"agent": "X",').replace('"agent": "editor-en-jefe",', '"agent": "X",')
+    const sinTope = (s: string) => s.replace('\n  ' + LINEA_DEL_TOPE, '') // 02-nov · el tope de gasto de «pedir cambios» es de otra parte
+    const quitar = (s: string) => sinTope(s).replace('"agent": "market_research_analyst",', '"agent": "X",').replace('"agent": "editor-en-jefe",', '"agent": "X",')
     expect(quitar(nodo(nuevo, JUEZ).parameters.jsonBody)).toBe(quitar(nodo(vivo, JUEZ).parameters.jsonBody))
     const j = nodo(nuevo, JUEZ).parameters.jsonBody
     expect(j).toContain('"threshold": 0.85')
@@ -35,7 +38,7 @@ describe('juez independiente · el agente', () => {
     expect(j).toContain('"role": "faithfulness_judge"')
   })
   it('quien escribe la voz NO se toca: la lente del editor y «pedir la voz otra vez» siguen con editor-en-jefe, y el juez ya no es ese', () => {
-    for (const n of ['Lente · editor-en-jefe', VOZ_OTRA_VEZ]) expect(nodo(nuevo, n).parameters.jsonBody).toBe(nodo(vivo, n).parameters.jsonBody)
+    for (const n of ['Lente · editor-en-jefe', VOZ_OTRA_VEZ]) expect(nodo(nuevo, n).parameters.jsonBody.replace('\n  ' + LINEA_DEL_TOPE, '')).toBe(nodo(vivo, n).parameters.jsonBody)
     expect(nodo(nuevo, VOZ_OTRA_VEZ).parameters.jsonBody).toContain('"agent": "editor-en-jefe"')
     const juez = /"agent": "([^"]+)"/.exec(nodo(nuevo, JUEZ).parameters.jsonBody)![1]
     const voz = /"agent": "([^"]+)"/.exec(nodo(nuevo, VOZ_OTRA_VEZ).parameters.jsonBody)![1]
