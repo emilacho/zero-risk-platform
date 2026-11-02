@@ -64,6 +64,22 @@ describe('🔴 la frase que el dueño negó', () => {
     expect(rev!.estado).toBe('cerrada')
     expect(armarSalida(rev!, resolverCierre(rev!.estado_del_motor, { tope: false, fallida: false, duenos: [] })).avisos?.[0]).toMatch(/el dueño lo negó/)
   })
+  it('🔴 el aviso de la pieza solo lee lo declarado por SU cliente, con dos clientes', async () => {
+    const correrCon = async (quienLoNego: string) => {
+      const { P } = puertosDePrueba()
+      const vistos: string[] = []
+      P.hechosDelDueno = async (c) => { vistos.push(c); return c === quienLoNego ? [MARISCO] : [] }
+      const c = await correr(P, sobre('pieza', { texto: 'Pieza con marisco de Olón', simulacion: { fichas: 'ninguna', gpt: 'vacio' } }))
+      const rev = await P.almacen.leerRevision(String(c.aperturas[0].cuerpo.revision_id))
+      return { rev, vistos }
+    }
+    const ajeno = await correrCon('otro-cliente')
+    expect(ajeno.rev!.client_id).toBe('cliente-prueba')
+    expect(ajeno.rev!.estado_del_motor.avisos).toBeUndefined()
+    expect(new Set(ajeno.vistos)).toEqual(new Set(['cliente-prueba']))
+    const propio = await correrCon('cliente-prueba')
+    expect(propio.rev!.estado_del_motor.avisos?.[0]).toMatch(/el dueño lo negó/)
+  })
   it('🔴 sin frase negada, o en una revisión fallida, la pieza no lleva aviso', async () => {
     const { P } = puertosDePrueba()
     P.hechosDelDueno = async () => [MARISCO]
