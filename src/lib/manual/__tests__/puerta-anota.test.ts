@@ -74,6 +74,16 @@ describe('lo que informa la puerta', () => {
   })
 })
 
+describe('lo que lee el panel (`content_text.brand_book_draft`)', () => {
+  it('🔴 llegan las notas de la puerta y del juez, y lo que declaró el equipo', () => {
+    const manual = { positioning: 'p', historia_y_origen: 'Nació en 2015', _equipo: { declarado: ['conserva lo validado: tono_por_canal'] }, _field_meta: { historia_y_origen: { notas_del_juez: [{ dato: '2015', motivo: 'sin fuente' }] } } }
+    const fila = buildBrandBookRow(C, pasar(manual).manual, {}) as unknown as Record<string, unknown>
+    const d = (JSON.parse(String(fila.content_text)) as { brand_book_draft: Record<string, unknown> }).brand_book_draft
+    expect(meta(d).historia_y_origen).toMatchObject({ notas_del_juez: [{ dato: '2015' }], datos_sin_fuente: [{ dato: '2015', motivo: MOTIVO_DE_DATO_SIN_FUENTE }] })
+    expect(d._equipo).toEqual({ declarado: ['conserva lo validado: tono_por_canal'] })
+  })
+})
+
 describe('lo demás sigue igual', () => {
   it('🔴 una palabra de certeza sin respaldo sigue saliendo, y no se anota como dato', () => {
     const r = pasar({ positioning: 'Somos el mejor restaurante de la costa, con buena comida para todos' })
