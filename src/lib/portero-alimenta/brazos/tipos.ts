@@ -12,8 +12,9 @@
  *   · NADA se borra: lo nuevo reemplaza a lo vigente por CÓDIGO (sin modelo) y lo viejo queda retirado con su fecha;
  *   · nada de datos personales de terceros: ni autores de reseñas ni usuarios de publicaciones ajenas.
  */
-export type NombreDeBrazo = 'contexto' | 'demanda' | 'competencia' | 'propios' | 'resumen' | 'pedido' | 'gustado'
-export type Alcance = 'cliente' | 'competidor' | 'mercado' | 'zona'
+export type NombreDeBrazo = 'contexto' | 'demanda' | 'competencia' | 'propios' | 'resumen' | 'pedido' | 'gustado' | 'anuncios_google' | 'busquedas_google' | 'horas' | 'eventos' | 'comentarios' | 'foros'
+/** `pais` (02-nov): lo que describe el país o las ciudades del cliente (interés de búsqueda, eventos); su nivel del embudo es «país» */
+export type Alcance = 'cliente' | 'competidor' | 'mercado' | 'zona' | 'pais'
 /** el `client_id` de las fichas de zona: texto reservado, nunca un uuid de cliente (la tabla guarda `client_id` como texto) */
 export { PREFIJO_DE_ZONA } from '../../cerebro/zona'
 

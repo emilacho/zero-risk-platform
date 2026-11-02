@@ -1,7 +1,7 @@
 /**
  * Un paso diario de redes de principio a fin: reclamarlo → correrlo → cerrarlo (hecha solo al terminar). Lo usan la ruta POST (un cliente y un paso) y el cron GET (el siguiente pendiente).
  */
-import { cerrarPaso, reabrirPaso, reclamarPaso, siguientePaso, type Paso, type PasoAbandonado } from './pasos-diarios'
+import { cerrarPaso, pasosDelDia, reabrirPaso, reclamarPaso, siguientePaso, type Paso, type PasoAbandonado } from './pasos-diarios'
 import { correrPasoDeRedes, tendenciasEncendidas, type EntradaDePasoDeRedes } from './redes-del-cliente'
 import { clientesActivos } from './clientes'
 
@@ -36,7 +36,7 @@ export async function correrElSiguientePaso(d: DepsDePaso & { clientes?: string[
     if (!act.ok) return { ok: false, estado: 'error', detalle: `clientes: ${act.detalle}`.slice(0, 200) }
     clientes = act.datos.clientes.map((c) => c.client_id)
   }
-  const sig = await siguientePaso(d.db, { clientes, dia: d.ahora.toISOString().slice(0, 10), ahora: d.ahora })
+  const sig = await siguientePaso(d.db, { clientes, dia: d.ahora.toISOString().slice(0, 10), ahora: d.ahora, pasos: pasosDelDia(d.ahora, d.env) })
   if (!sig.ok) return { ok: false, estado: 'error', detalle: sig.detalle }
   if (!sig.siguiente) return { ok: true, estado: 'no_hay_pendientes', pendientes: 0 }
   return correrUnPaso(d, { clientId: sig.siguiente.clientId, paso: sig.siguiente.paso, workflowId: a.workflowId, ejecucionId: a.ejecucionId, dry_run: false })

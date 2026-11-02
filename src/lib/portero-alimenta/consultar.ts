@@ -59,7 +59,7 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
   if (!UUID.test(clientId)) return err(400, 'entrada_invalida', '`client_id` debe ser un uuid')
   const oficina = txt(p.oficina).slice(0, 80), agente = txt(p.agente).slice(0, 80)
   if (!oficina || !agente) return err(400, 'entrada_invalida', '`oficina` y `agente` son obligatorios: se registra quién consulta (no hay lista de autorizados)')
-  const que = txt(p.que).slice(0, 400), atributo = txt(p.atributo).slice(0, 160), clase = txt(p.clase).slice(0, 80), sede = txt(p.sede_clave)
+  const que = txt(p.que).slice(0, 400), atributo = txt(p.atributo).slice(0, 160), clase = txt(p.clase).slice(0, 400), sede = txt(p.sede_clave)
   if (!que && !atributo && !clase) return err(400, 'entrada_invalida', 'pasa `que` (texto libre), `atributo` o `clase`: algo que buscar')
   const pedido = Number(p.limite)
   const todo = esSi(p.todo), contenidoCompleto = esSi(p.contenido_completo)
