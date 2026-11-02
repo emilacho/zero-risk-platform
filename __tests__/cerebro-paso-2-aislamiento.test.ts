@@ -112,6 +112,8 @@ export const PUEDEN_NOMBRARLAS = [
   // plan v3 · ventas del punto de venta como dato (16-oct): la prueba lee las 10 fichas reales de un archivo y arma una base EN MEMORIA; no toca la base real
   /^__tests__\/plan-v3-ventas-loyverse\.test\.ts$/,
   /^__tests__\/fixtures\/ventas-loyverse\//,
+  // fuentes nuevas (02-nov): la migración ADITIVA que amplía el CHECK de `alcance` (agrega «pais»); no toca filas
+  /^supabase\/migrations\/202611021900_alcance_pais_en_fichas\.sql$/,
   /^__tests__\/cerebro-paso-2-(aislamiento|migracion)\.test\.ts$/,
   /^__tests__\/cerebro-fotos-2-columnas\.test\.ts$/,
   // oficina de creativos (sala 1) · LECTURA de las etiquetas de las fotos para descartar las que no sirven: los ÚNICOS que las nombran son el lector `fotos.ts` y el adaptador que las SELECCIONA (`adaptadores.ts`); no escriben nada
