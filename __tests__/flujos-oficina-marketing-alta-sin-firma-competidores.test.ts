@@ -63,3 +63,31 @@ describe('no se rompe nada más', () => {
     expect(() => construirAltaSinFirmaCompetidores(JSON.parse(JSON.stringify(nuevo)))).toThrow(/ya no es un HTTP/)
   })
 })
+
+describe('el archivo que se aplica ES la salida del constructor (reserva 1 de CC3)', () => {
+  it('nuevo/LyVoKcrypS5uLyuu.json es exactamente lo que el constructor produce desde vivo/', () => {
+    const archivo = leer('scripts/ops/oficina-marketing/nuevo/LyVoKcrypS5uLyuu.json')
+    expect(archivo).toEqual(nuevo)
+  })
+  it('los nodos reemplazados no arrastran credenciales, reintentos ni parámetros del HTTP', () => {
+    for (const n of [CONFIRMAR, ESCALAR]) {
+      const x = nom(nuevo, n)
+      for (const k of ['credentials', 'retryOnFail', 'maxTries', 'waitBetweenTries']) expect(x[k]).toBeUndefined()
+      expect(Object.keys(x.parameters)).toEqual(['jsCode'])
+    }
+  })
+})
+
+describe('las guardas del constructor (A07 y A09 de CC3)', () => {
+  it('si el HTTP ya no apunta a la bandeja, se detiene en vez de reemplazarlo', () => {
+    const f = leer('scripts/ops/oficina-marketing/vivo/LyVoKcrypS5uLyuu.json')
+    nom(f, CONFIRMAR).parameters.url = 'https://otra.test/api/otra'
+    expect(() => construirAltaSinFirmaCompetidores(f)).toThrow(/no escribe en \/api\/hitl\/queue/)
+  })
+  it('credenciales y reintentos que traiga el HTTP no pasan al nodo nuevo', () => {
+    const f = leer('scripts/ops/oficina-marketing/vivo/LyVoKcrypS5uLyuu.json')
+    for (const n of [CONFIRMAR, ESCALAR]) Object.assign(nom(f, n), { credentials: { httpHeaderAuth: { id: '1', name: 'x' } }, retryOnFail: true, maxTries: 3, waitBetweenTries: 1000 })
+    const g = construirAltaSinFirmaCompetidores(f)
+    for (const n of [CONFIRMAR, ESCALAR]) for (const k of ['credentials', 'retryOnFail', 'maxTries', 'waitBetweenTries']) expect(nom(g, n)[k]).toBeUndefined()
+  })
+})
