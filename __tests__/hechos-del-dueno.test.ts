@@ -7,8 +7,8 @@ import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { controlarFrasesNegadas } from '../src/lib/planeacion/coherencia-del-plan'
 import { adjuntoDelCliente } from '../src/lib/portero-alimenta/contexto-del-cliente'
 import { textoDeLaCarpeta } from '../src/lib/jefatura/revision/carpeta-para-revisar'
-import { abrirRevision, fichasDeLoNegado } from '../src/lib/jefatura/revision/orquestador'
-import { puertosDePrueba, sobre } from './_helpers/jefatura-revision'
+import { abrirRevision, avisosDelPlan, elegirVersionDelPlan, fichasDeLoNegado } from '../src/lib/jefatura/revision/orquestador'
+import { puertosDePrueba, sobre, correr } from './_helpers/jefatura-revision'
 import { crearPuertos } from '../src/lib/jefatura/revision/adaptadores'
 
 const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
@@ -31,17 +31,32 @@ describe('🔴 la frase que el dueño negó', () => {
     expect(controlarFrasesNegadas('Texto cualquiera', [{ tema: 'x', frases_negadas: [] }])).toEqual([])
     expect(controlarFrasesNegadas('Texto cualquiera', [MARISCO])).toEqual([])
   })
-  it('bloquea y entra al ciclo', () => {
+  it('fuera del plan, bloquea y entra al ciclo', () => {
     expect(fichasDeLoNegado('marisco de Olón', [MARISCO])[0]).toMatchObject({ gravedad: 'bloquea', origen: 'jefe', estado: 'abierta', contra_que: 'lo que declaró el dueño' })
   })
-  it('🔴 al abrir la revisión queda la ficha, aunque el revisor no la vea; sin la lectura, nada se rompe', async () => {
+  it('🔴 en el plan no deja ficha: llega completo y con su aviso; sin la lectura, nada se rompe', async () => {
     const { P } = puertosDePrueba()
     P.hechosDelDueno = async () => [MARISCO]
-    const r = await abrirRevision(P, sobre('plan', { texto: 'Plan con marisco de Olón' }))
-    const rev = await P.almacen.leerRevision(String(r.cuerpo.revision_id))
-    expect(rev!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? ''))).toBe(true)
+    const notas: Array<Record<string, unknown>> = []
+    P.anotarPalabraDelDueno = async (x) => { notas.push(x as never) }
+    const c = await correr(P, sobre('plan', { texto: 'Plan con marisco de Olón', simulacion: { fichas: 'ninguna', gpt: 'vacio' } }))
+    const id = String(c.aperturas[0].cuerpo.revision_id)
+    const rev = await P.almacen.leerRevision(id)
+    expect(rev!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? ''))).toBe(false)
+    const leer = P.almacen.leerRevision.bind(P.almacen)
+    P.almacen.leerRevision = async (x) => { const f = await leer(x); return f ? { ...f, dry_run: false } : f }
+    const e = await elegirVersionDelPlan(P, id, { evaluaciones: [{ etiqueta: 'A', marcas: 0, largo: 24 }], idDeA: 'A-id', existentes: [] })
+    expect(e.cuerpo.adoptada).toBe('A')
+    expect(notas[0].detalle).toMatch(/Aviso: .*el dueño lo negó/)
     const { P: sin } = puertosDePrueba()
     expect((await abrirRevision(sin, sobre('plan', { id: 'otro', texto: 'Plan con marisco de Olón' }))).status).toBeLessThan(400)
+  })
+  it('🔴 en una pieza sigue bloqueando', async () => {
+    const { P } = puertosDePrueba()
+    P.hechosDelDueno = async () => [MARISCO]
+    const r = await abrirRevision(P, sobre('pieza', { texto: 'Pieza con marisco de Olón' }))
+    const rev = await P.almacen.leerRevision(String(r.cuerpo.revision_id))
+    expect(rev!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? '') && f.gravedad === 'bloquea')).toBe(true)
   })
 })
 
@@ -59,7 +74,7 @@ describe('🔴 viaja en la carpeta', () => {
     const reales = crearPuertos(db as never, {} as never)
     const hechos = await reales.hechosDelDueno!(C)
     expect(hechos).toEqual([expect.objectContaining({ tema: 'origen del marisco', frases_negadas: ['marisco de Olón'] })])
-    expect(fichasDeLoNegado('Nuestro marisco de Olón', hechos)[0]).toMatchObject({ gravedad: 'bloquea' })
+    expect(avisosDelPlan('Nuestro marisco de Olón', '', hechos, new Date('2026-11-02T00:00:00Z')).some((x) => /el dueño lo negó/.test(x))).toBe(true)
   })
   it('una lectura caída no tumba la revisión', async () => {
     const reales = crearPuertos({ from() { throw new Error('caída') } } as never, {} as never)

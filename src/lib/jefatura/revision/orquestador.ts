@@ -51,12 +51,18 @@ const esDecision = (paso: Paso): boolean => paso.clave.startsWith('decision:')
 const esCorreccion = (paso: Paso): boolean => paso.clave.startsWith('correccion:')
 
 /** el estado inicial: el artefacto que se revisa es la versión A */
-/** los hallazgos del control por código, como fichas del ciclo */
-export function fichasDeCoherencia(texto: string, contexto: string, ahora: Date): Ficha[] {
-  return controlarCoherenciaDelPlan({ texto, contexto, referencia: ahora }).map((h, i) => fichaNueva(`codigo-${h.control}-${i}`, 'jefe', h.donde, h.estado === 'no_cuadra' ? 'bloquea' : 'sugerencia', h.que, 'control por código del plan', h.estado === 'no_cuadra' ? 'hacer que cuadre, o declarar el hueco' : 'no se comprobó: revisarlo a mano'))
+/**
+ * 02-nov · firma de Emilio («quita candado»): en el plan, fechas, presupuesto y frases negadas no devuelven nada. Son avisos a la vista del dueño antes de aprobar: la protección es su aprobación.
+ * Se miden sobre la versión que quedó.
+ */
+export function avisosDelPlan(texto: string, contexto: string, hechos: Array<{ tema: string; frases_negadas: string[] }>, ahora: Date): string[] {
+  return [
+    ...controlarCoherenciaDelPlan({ texto, contexto, referencia: ahora }).map((h) => (h.estado === 'no_cuadra' ? `Aviso: ${h.que}` : `Sin comprobar: ${h.que}`)),
+    ...controlarFrasesNegadas(texto, hechos).map((h) => `Aviso: ${h.que}`),
+  ]
 }
 
-/** punto 3 · lo que contradice lo declarado por el dueño bloquea; lo mira el código, además del revisor */
+/** punto 3 · en lo que no es el plan, lo que contradice lo declarado por el dueño sigue bloqueando; lo mira el código, además del revisor */
 export function fichasDeLoNegado(texto: string, hechos: Array<{ tema: string; frases_negadas: string[] }>): Ficha[] {
   return controlarFrasesNegadas(texto, hechos).map((h, i) => fichaNueva(`codigo-dueno-${i}`, 'jefe', h.donde, 'bloquea', h.que, 'lo que declaró el dueño', 'quitar esa frase: lo declarado por el dueño manda'))
 }
@@ -111,9 +117,7 @@ export async function abrirRevision(P: Puertos, cuerpo: unknown, o: { prueba?: b
     else if (ciclo.aviso) p.orden_ilegible = true
   }
   const apertura = estadoDeApertura(entrada)
-  if (pol.reentrega !== 'ninguna' && P.hechosDelDueno) apertura.fichas.push(...fichasDeLoNegado(p.texto, await P.hechosDelDueno(entrada.client_id)))
-  // 01-nov · firma de Emilio: lo que el código halla en fechas y presupuesto entra como ficha al ciclo de siempre. Lo que no pudo leer se dice; no bloquea
-  if (entrada.artifact_type === 'plan' && pol.reentrega !== 'ninguna') apertura.fichas.push(...fichasDeCoherencia(p.texto, (p.contexto ?? []).map((x) => x.texto).join('\n'), P.ahora()))
+  if (entrada.artifact_type !== 'plan' && pol.reentrega !== 'ninguna' && P.hechosDelDueno) apertura.fichas.push(...fichasDeLoNegado(p.texto, await P.hechosDelDueno(entrada.client_id)))
   const c = await P.almacen.crearRevision({
     client_id: entrada.client_id, artifact_type: entrada.artifact_type, artifact_id: entrada.artifact_id, version: p.version ?? 1, journey_id: entrada.journey_id, productores, entrada: p,
     devolver_a: p.devolver_a, policy: pol, tope_usd: +tope.toFixed(6), dry_run: p.dry_run, prueba: !!o.prueba, estado_del_motor: apertura,
@@ -470,7 +474,8 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
   const guardado = planDeGuardado(ad, { idDeA: o.idDeA, existentes: o.existentes, produjo: producidas })
   const sinAplicar = veredicto?.sin_aplicar ?? []
   const orden_ilegible = rev.entrada.orden_ilegible === true
-  const palabra_del_dueno = { verificada, ordenes, por_version: veredicto?.por_version ?? {}, sin_aplicar: sinAplicar, salvaguardas: veredicto?.salvaguardas ?? [], orden_ilegible }
+  const avisos = avisosDelPlan(h.find((x) => x.etiqueta === ad.adoptada)?.texto ?? '', (rev.entrada.contexto ?? []).map((x) => x.texto).join('\n'), (await P.hechosDelDueno?.(rev.client_id)) ?? [], P.ahora())
+  const palabra_del_dueno = { verificada, ordenes, por_version: veredicto?.por_version ?? {}, sin_aplicar: sinAplicar, salvaguardas: veredicto?.salvaguardas ?? [], orden_ilegible, avisos }
   const fin = resultadoTrasElegir({ resultado: rev.resultado, marcas: rev.marcas }, ad.adoptoLaUltima)
   const anotaciones = [
     ...(orden_ilegible ? ['No se pudo leer lo que pediste: revísalo antes de aprobar.'] : []),
@@ -478,8 +483,10 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
     ...(veredicto?.por_version[ad.adoptada]?.sin_cumplir ?? []).map((x) => `Al verificador le parece que no se cumple: ${x.orden} (${x.motivo})`),
     ...(veredicto?.salvaguardas ?? []).map((x) => `Hay que confirmarla contigo, sin cambiarla: ${x.orden} (${x.motivo})`),
     ...sinAplicar.map((x) => `Se tomó como contexto y no como orden: ${x.orden} (${x.motivo})`),
+    // lo no comprobado acompaña a un aviso, pero solo no abre una nota: saldría en casi todos los planes
+    ...(avisos.some((x) => x.startsWith('Aviso:')) ? avisos : []),
   ]
-  if (anotaciones.length && !rev.dry_run) await P.anotarPalabraDelDueno?.({ client_id: rev.client_id, plan_id: rev.artifact_id, titulo: 'Plan de 90 días: revisa lo que pediste antes de aprobar', detalle: anotaciones.join('\n'), metadata: { revision_id: rev.id, origen: 'jefatura' } })
+  if (anotaciones.length && !rev.dry_run) await P.anotarPalabraDelDueno?.({ client_id: rev.client_id, plan_id: rev.artifact_id, titulo: 'Plan de 90 días: revisa estos avisos antes de aprobar', detalle: anotaciones.join('\n'), metadata: { revision_id: rev.id, origen: 'jefatura' } })
   if (fin.resultado !== rev.resultado || fin.marcas.con_desacuerdo !== rev.marcas.con_desacuerdo) {
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: rev.estado_del_motor, gasto_usd: rev.gasto_usd, resultado: fin.resultado, marcas: fin.marcas })
     if (rev.resultado === 'limpia' || rev.resultado === 'sin_segunda_mirada') {
