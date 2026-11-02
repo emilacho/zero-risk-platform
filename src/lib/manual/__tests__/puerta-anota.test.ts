@@ -23,7 +23,7 @@ describe('fechas y cifras sin fuente', () => {
     const r = pasar({ historia_y_origen: texto })
     expect(r.manual.historia_y_origen).toBe(texto)
     expect(r.retirados).toEqual([])
-    expect(meta(r.manual).historia_y_origen.datos_sin_fuente).toEqual([expect.objectContaining({ dato, marca, motivo: MOTIVO_DE_DATO_SIN_FUENTE })])
+    expect(meta(r.manual).historia_y_origen.datos_sin_fuente).toEqual([expect.objectContaining({ dato, marca, clausula: texto, motivo: MOTIVO_DE_DATO_SIN_FUENTE })])
   })
 
   it('🔴 nada queda PENDIENTE por código, aunque un campo tenga varias', () => {
