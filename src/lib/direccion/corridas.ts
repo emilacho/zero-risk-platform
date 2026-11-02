@@ -4,7 +4,7 @@
  */
 import { estaCompleto, leer, leerClientes, numero, redondear, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
 
-const COLUMNAS = 'id, agent_name, agent_id, model, workflow_id, workflow_execution_id, client_id, started_at, ended_at, duration_ms, cost_usd, tokens_input, tokens_output, tokens_cache_read, tokens_cache_creation, num_turns, status, error_message'
+export const COLUMNAS = 'id, agent_name, agent_id, model, workflow_id, workflow_execution_id, client_id, started_at, ended_at, duration_ms, cost_usd, tokens_input, tokens_output, tokens_cache_read, tokens_cache_creation, num_turns, status, error_message'
 /** PostgREST de Supabase no devuelve más de 1000 filas por consulta: llegar a esto se declara */
 const TOPE_FILAS = 1000
 export const ATASCADA_MS = 3_600_000
@@ -34,7 +34,7 @@ function estadoDe(invocaciones: Fila[], despachos: Fila[], ahora: number): Estad
   return 'completa'
 }
 
-function resumen(base: string, inv: Fila[], des: Fila[], ahora: number, nombre: (id: string | null) => string | null) {
+export function resumen(base: string, inv: Fila[], des: Fila[], ahora: number, nombre: (id: string | null) => string | null) {
   const tiempos = [...inv.map((i) => texto(i.started_at)), ...des.map((d) => texto(d.created_at))].filter((x): x is string => !!x).sort()
   const fines = [...inv.map((i) => texto(i.ended_at)), ...des.map((d) => texto(d.completed_at))].filter((x): x is string => !!x).sort()
   const inicio = tiempos[0] ?? null
