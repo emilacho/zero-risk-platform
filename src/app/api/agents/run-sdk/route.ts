@@ -62,6 +62,7 @@ import {
 } from '@/lib/agent-async-callback'
 import { makeCallbackAttemptLogger } from '@/lib/agent-async-callback/persist-attempt'
 import { waitUntil } from '@vercel/functions'
+import { pideLatido, responderConLatido } from '@/lib/latido-hacia-quien-llama'
 import { MODELOS_POR_CORRIDA, modeloPorCorridaValido } from '@/lib/modelo-por-corrida'
 import { resolverEsquema } from '@/lib/salida-estructurada'
 import { TOPE_REAL_DEL_PEDIDO } from '@/lib/limites-de-tamano'
@@ -571,7 +572,13 @@ export function buildInnerRequestWithoutCallback(
   })
 }
 
+// 02-nov · corte de Náufrago: quien lo pide recibe un latido mientras el empleado trabaja. Quien no lo pide, lo de siempre. Ver `lib/latido-hacia-quien-llama.ts`
 export async function POST(request: Request) {
+  if (!pideLatido(request)) return atender(request)
+  return responderConLatido(() => atender(request), { mantenerVivo: waitUntil })
+}
+
+async function atender(request: Request) {
   const auth = checkInternalKey(request)
   if (!auth.ok) {
     return NextResponse.json(
