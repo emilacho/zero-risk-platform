@@ -4,7 +4,9 @@
  * Se omiten clientes de práctica y dados de baja, y lo dice (`omitidas`).
  */
 import { TOPE_REESCRITURA_USD } from '../oficina/tablero/plan'
+import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
+import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
 
 export type TipoDecision = 'plan' | 'gran_idea' | 'pieza' | 'revision' | 'pregunta_al_dueno' | 'pregunta_de_finanzas' | 'firma_de_finanzas'
 export interface Decision {
@@ -15,7 +17,10 @@ export interface Decision {
   fuente: string
   client_id: string | null
   cliente: string | null
+  /** lo que lee el dueño: lenguaje claro, en tuteo y sin códigos */
   titulo: string
+  /** el título como lo guardó la fuente, con sus códigos */
+  titulo_interno: string
   desde: string | null
   vence: string | null
   vencida: boolean
@@ -45,6 +50,28 @@ const COSTO_PLAN = `aprobar no gasta por sí mismo pero arranca el PDF y el brie
 const uuidDelPlan = (f: Fila): string | null => texto(f.output_id) ?? (esObjeto(f.payload) ? texto(f.payload.plan_id) : null)
 const esEnsayo = (f: Fila): boolean => (esObjeto(f.payload) && f.payload.dry_run === true) || (esObjeto(f.metadata) && f.metadata.dry_run === true)
 
+/**
+ * 01-nov · firma de Emilio: el título que llega al dueño va en lenguaje claro y en tuteo. Quita códigos (P3, BRF-0001, versión 2, v2) y rótulos internos; el dato los conserva en `titulo_interno`.
+ * El tuteo se corrige al leer porque hay preguntas guardadas de antes del arreglo en origen.
+ */
+export function tituloParaElDueno(crudo: string): string {
+  const enTuteo = String((barrerTexto(crudo, { conPronombre: true }) as { texto?: unknown }).texto ?? crudo)
+  const limpio = enTuteo
+    .replace(/⚠️\s*REVISIÓN INCOMPLETA\s*·\s*/u, 'Revisión incompleta · ')
+    .replace(/(^|·\s*)Aprobación\s*·\s*/u, '$1')
+    .replace(/\bBRF-\d+\b/g, '')
+    .replace(/,?\s*\bversión\s+\d+\b/giu, '')
+    .replace(/\bv\d+\b/g, '')
+    .replace(/\bP\d{1,2}[a-z]?\s*·\s*/g, '')
+    .replace(/\bP\d{1,2}[a-z]?(?![\p{L}\d])/gu, '')
+    .replace(/\s+/g, ' ')
+    .replace(/(·\s*){2,}/g, '· ')
+    .replace(/^\s*·\s*|\s*·\s*$/g, '')
+    .replace(/\s+([:,·])/g, (_m, x: string) => (x === '·' ? ' ·' : x))
+    .trim()
+  return limpio || crudo
+}
+
 /** lo que vence primero arriba; después lo que no vence, de más viejo a más nuevo */
 export function ordenarPorUrgencia(a: Pick<Decision, 'vence' | 'desde'>, b: Pick<Decision, 'vence' | 'desde'>): number {
   if (a.vence && b.vence) return a.vence < b.vence ? -1 : a.vence > b.vence ? 1 : 0
@@ -64,7 +91,10 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     leer(fuentes, 'finanzas_preguntas', db.from('finanzas_preguntas').select('id, client_id, clave, texto, creado_en').eq('estado', 'enviada').limit(TOPE), TOPE),
     leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en').eq('estado', 'sin_firma').eq('vigente', true).eq('dry_run', false).limit(TOPE), TOPE),
   ])
-  const crudas: Omit<Decision, 'cliente' | 'vencida'>[] = []
+  const crudas: Omit<Decision, 'cliente' | 'vencida' | 'titulo_interno'>[] = []
+  // 01-nov · firma de Emilio: solo lo vigente pide firma. El reloj las cierra; aquí no se muestran aunque el reloj no haya pasado. Si los planes no se leen, se muestra todo.
+  const vigentes = await leerPlanesVigentes(db, [...new Set(bandeja.map((h) => texto(h.client_id)).filter((c): c is string => !!c))]).catch(() => null)
+  let reemplazadas = 0
   const planesConCompuerta = new Set(compuertas.map((c) => String(c.plan_id)))
   for (const c of compuertas) {
     crudas.push({ id: String(c.plan_id), tipo: 'plan', subtipo: 'compuerta', fuente: 'plan_aprobaciones', client_id: texto(c.client_id), titulo: `Plan de 90 días, versión ${Number(c.version) || 1}: espera tu decisión`, desde: texto(c.creado_en), vence: null, prioridad: null, decidir: { ruta: '/nuevo', accion: 'plan-aprobar' }, costo_usd: null, costo_nota: COSTO_PLAN })
@@ -72,6 +102,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   let ensayos = 0
   for (const h of bandeja) {
     if (esEnsayo(h)) { ensayos++; continue }
+    if (vigentes && motivoDeReemplazo(h, vigentes)) { reemplazadas++; continue }
     const subtipo = String(h.type ?? 'sin_tipo')
     const plan = uuidDelPlan(h)
     // el mismo plan no se pide dos veces: `plan-aprobar` resuelve también su nota de la bandeja
@@ -83,13 +114,13 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null })
   for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null })
 
-  const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos }
+  const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas }
   const decisiones: Decision[] = []
   for (const d of crudas) {
     const c = d.client_id ? clientes.get(d.client_id) : undefined
     if (c?.practica) { omitidas.clientes_de_practica++; continue }
     if (c?.de_baja) { omitidas.clientes_de_baja++; continue }
-    decisiones.push({ ...d, cliente: c?.nombre ?? null, vencida: !!d.vence && d.vence < hora })
+    decisiones.push({ ...d, titulo: tituloParaElDueno(d.titulo), titulo_interno: d.titulo, cliente: c?.nombre ?? null, vencida: !!d.vence && d.vence < hora })
   }
   decisiones.sort(ordenarPorUrgencia)
   return { ok: true, generado_en: hora, completo: estaCompleto(fuentes), total: decisiones.length, decisiones, omitidas, fuentes, sin_fuente: SIN_FUENTE_DECISIONES }

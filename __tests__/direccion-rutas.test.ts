@@ -104,7 +104,7 @@ describe('decisiones', () => {
     expect(r.total).toBe(7); expect(r.completo).toBe(true)
     const plan = r.decisiones[6]
     expect(plan).toMatchObject({ cliente: 'Uno', vence: null, vencida: false, decidir: { ruta: '/nuevo', accion: 'plan-aprobar' }, costo_usd: null })
-    expect(plan.titulo).toContain('versión 3'); expect(plan.costo_nota).toContain('US$ 8')
+    expect(plan.titulo_interno).toContain('versión 3'); expect(plan.titulo).not.toContain('versión 3'); expect(plan.costo_nota).toContain('US$ 8')
     expect(r.decisiones[0]).toMatchObject({ cliente: 'Dos', desde: '2026-10-29T00:00:00Z', vence: '2026-11-02T00:00:00Z', vencida: false })
     expect(r.decisiones[1].prioridad).toBe('high')
     expect(r.sin_fuente.map((s) => s.que)).toContain('gastos por aprobar')
@@ -120,10 +120,29 @@ describe('decisiones', () => {
     const sin = await leerDecisiones(ctx(base().semilla('hitl_queue', [nota])))
     expect(sin.decisiones).toHaveLength(1); expect(sin.decisiones[0]).toMatchObject({ id: 'n1', tipo: 'plan', subtipo: 'plan_con_pendientes' })
   })
+  it('🔴 solo lo vigente pide firma: la lista esconde lo reemplazado aunque el reloj no haya pasado, y lo DICE (01-nov · firma de Emilio)', async () => {
+    const planes = [{ id: 'viejo', client_id: C1, output_type: 'campaign_plan_90d', status: 'draft', provenance_tag: {}, created_at: '2026-10-30T00:00:00Z' }, { id: 'nuevo', client_id: C1, output_type: 'campaign_plan_90d', status: 'draft', provenance_tag: { vigente: true }, created_at: '2026-11-01T00:00:00Z' }]
+    const bandeja = [
+      { id: 'h-viejo', status: 'pending', type: 'plan_con_pendientes', client_id: C1, output_id: 'viejo', title: 'Plan viejo', created_at: '2026-10-30T01:00:00Z' },
+      { id: 'h-kit', status: 'pending', type: 'content_piece_review', client_id: C1, title: 'Kit viejo', created_at: '2026-10-31T00:00:00Z' },
+      { id: 'h-vivo', status: 'pending', type: 'plan_con_pendientes', client_id: C1, output_id: 'nuevo', title: 'Plan vigente', created_at: '2026-11-01T01:00:00Z' },
+    ]
+    const r = await leerDecisiones(ctx(base().semilla('client_historical_outputs', planes).semilla('hitl_queue', bandeja)))
+    expect(r.decisiones.map((d) => d.id)).toEqual(['h-vivo'])
+    expect(r.omitidas.reemplazadas).toBe(2)
+  })
+  it('🔴 si los planes no se pueden leer, la lista muestra todo: ante la duda, la decisión sigue a la vista', async () => {
+    const db = base().semilla('hitl_queue', [{ id: 'h-viejo', status: 'pending', type: 'plan_con_pendientes', client_id: C1, output_id: 'viejo', title: 'Plan viejo', created_at: '2026-10-30T01:00:00Z' }])
+    const de = db.from.bind(db)
+    db.from = ((t: string) => { if (t === 'client_historical_outputs') throw new Error('caída'); return de(t) }) as never
+    const r = await leerDecisiones(ctx(db))
+    expect(r.decisiones.map((d) => d.id)).toEqual(['h-viejo'])
+    expect(r.omitidas.reemplazadas).toBe(0)
+  })
   it('omite clientes de práctica y de baja y los ensayos, y lo DICE', async () => {
     const r = await leerDecisiones(ctx(base().semilla('hitl_queue', [{ id: '1', status: 'pending', type: 'x', client_id: CP }, { id: '2', status: 'pending', type: 'x', client_id: CB }, { id: '3', status: 'pending', type: 'x', client_id: C1, payload: { dry_run: true } }, { id: '4', status: 'pending', type: 'x', client_id: C1, metadata: { dry_run: true } }, { id: '5', status: 'pending', type: 'x', client_id: C1 }])))
     expect(r.decisiones.map((d) => d.id)).toEqual(['5'])
-    expect(r.omitidas).toEqual({ clientes_de_practica: 1, clientes_de_baja: 1, ensayos: 2 })
+    expect(r.omitidas).toEqual({ clientes_de_practica: 1, clientes_de_baja: 1, ensayos: 2, reemplazadas: 0 })
   })
   it('🔴 una fuente que falla NO se lee como «no hay nada»: completo=false y su motivo; una tabla que todavía no existe no rompe', async () => {
     const db = base(); db.fallar['hitl_queue'] = 'se cayó'

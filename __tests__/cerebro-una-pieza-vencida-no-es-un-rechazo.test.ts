@@ -23,6 +23,11 @@ describe('una pieza VENCIDA por la oficina no es un rechazo del dueño', () => {
   it('la pieza vencida (decision.vencida = true) NO cuenta como decisión del dueño', async () => {
     expect(await decisionDe([cola({ decision: { vencida: true }, resolution_notes: 'no aprobada antes de su fecha; no se publica' })])).toBeUndefined()
   })
+  it('🔴 la cerrada por reemplazo (vencida + reemplazada) tampoco es un rechazo del dueño', async () => {
+    const decision = { decision: 'rejected', por: 'sistema · decisión reemplazada', vencida: true, reemplazada: true, motivo: 'se hizo para el plan anterior' }
+    expect(await decisionDe([cola({ decision, resolution_notes: 'Reemplazada: se hizo para el plan anterior' })])).toBeUndefined()
+    expect((await leerDecisionesDeLaCola(ctx([cola({ decision })]))).lineas).toEqual([])
+  })
   it('y no aparece entre las decisiones del aprobador', async () => {
     const vencida = await leerDecisionesDeLaCola(ctx([cola({ decision: { vencida: true } })]))
     expect(vencida.lineas).toEqual([])
