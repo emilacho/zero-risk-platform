@@ -91,7 +91,7 @@ describe('🔴 la frase que el dueño negó', () => {
     expect(rev!.estado_del_motor.avisos).toBeUndefined()
   })
   for (const tipo of ['estrategia', 'calendario'] as const) {
-    it(`🔴 en ${tipo} no deja ficha ni se devuelve: se anota el aviso`, async () => {
+    it(`🔴 en ${tipo} no deja ficha, no se devuelve y no deja aviso`, async () => {
       const { P } = puertosDePrueba()
       P.hechosDelDueno = async () => [MARISCO]
       const notas: Array<Record<string, unknown>> = []
@@ -102,19 +102,7 @@ describe('🔴 la frase que el dueño negó', () => {
       expect(fin!.policy.reentrega).not.toBe('ninguna')
       expect(fin!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? ''))).toBe(false)
       expect(fin!.estado).toBe('cerrada')
-      expect(fin!.estado_del_motor.avisos?.[0]).toMatch(/^Aviso: .*el dueño lo negó/)
-      expect(fin!.client_id).toBeTruthy()
-      expect(notas.at(-1)).toMatchObject({ client_id: fin!.client_id, plan_id: `${tipo}:x:v1`, titulo: `${tipo}: revisa este aviso`, metadata: { artifact_type: tipo } })
-    })
-    it(`🔴 el ensayo seco de ${tipo} calcula el aviso pero no ensucia la bandeja del dueño`, async () => {
-      const { P } = puertosDePrueba()
-      P.hechosDelDueno = async () => [MARISCO]
-      const notas: unknown[] = []
-      P.anotarPalabraDelDueno = async (x) => { notas.push(x) }
-      const texto = tipo === 'estrategia' ? JSON.stringify({ ...A.estrategia, nota: 'marisco de Olón' }) : JSON.stringify({ filas: [{ fila_id: 'f1', tema: 'marisco de Olón' }] })
-      const c = await correr(P, sobre(tipo, { id: `${tipo}:x:v1`, texto, dry_run: true, simulacion: { fichas: 'ninguna', gpt: 'vacio' } }))
-      const fin = await P.almacen.leerRevision(String(c.aperturas[0].cuerpo.revision_id))
-      expect(fin!.estado_del_motor.avisos?.[0]).toMatch(/el dueño lo negó/)
+      expect(fin!.estado_del_motor.avisos).toBeUndefined()
       expect(notas).toEqual([])
     })
   }
@@ -127,12 +115,6 @@ describe('🔴 la frase que el dueño negó', () => {
     const fin = await P.almacen.leerRevision(String(c.aperturas[0].cuerpo.revision_id))
     expect(fin!.estado_del_motor.avisos?.[0]).toMatch(/el dueño lo negó/)
     expect(notas).toEqual([])
-  })
-  it('🔴 un documento sin id de salida se anota igual, sin chocar con la columna', async () => {
-    const db = new DbFalsa()
-    const reales = crearPuertos(db as never, {} as never)
-    await reales.anotarPalabraDelDueno!({ client_id: C, plan_id: 'estrategia-de-campana', titulo: 'T', detalle: 'D', metadata: {} })
-    expect(db.tablas['hitl_queue'][0]).toMatchObject({ client_id: C, output_id: null, type: 'palabra_del_dueno' })
   })
   it('🔴 el aviso viaja de la salida a los datos de la bandeja', () => {
     const e = { artefactos: { [ARTEFACTO_DE_LA_JEFATURA]: { datos: { jefatura: { resultado: 'limpia', avisos: ['Aviso: x'], incompleta: false, sin_revisar: false } } } } } as never
