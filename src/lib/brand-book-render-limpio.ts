@@ -26,7 +26,7 @@
  *
  * Función PURA · sin IO · se prueba sin base y sin red.
  */
-import { esloganDelCliente, REGLA_DEL_ESLOGAN } from './manual/campos-del-manual'
+import { esloganDelCliente, reglaDelEslogan } from './manual/campos-del-manual'
 import { palabrasDeEstilo, palabrasDuras } from './manual/palabras-con-intencion'
 import { extractTrailingCaveat, detectInternalTerms } from './brand-book-caveat-extractor'
 
@@ -221,7 +221,7 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
   }
 
   // 01-nov · firma de Emilio: solo lo declarado es una prohibición; el resto de la lista es contexto
-  // 01-nov · ADENDA de Emilio: el eslogan real es un hecho con su fuente; las opciones que quedan sí son propuestas
+  // 02-nov · ADENDA 3 de Emilio: la frase que el cliente usa es contexto, con su fuente; las opciones que quedan son propuestas
   const eslogan = esloganDelCliente(draft)
   if (eslogan) draft = { ...draft, _eslogan: [`${eslogan.texto} (${eslogan.fuente})`], tagline_opciones: (Array.isArray(draft.tagline_opciones) ? draft.tagline_opciones : []).filter((o) => typeof o !== 'string' || !o.includes(eslogan.texto)) }
   draft = { ...draft, _palabras_duras: palabrasDuras(draft as never), forbidden_words: palabrasDeEstilo(draft as never) }
@@ -261,7 +261,7 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     ['A QUIÉN LE HABLAMOS', 'icp_summary', 'prosa'],
     ['CÓMO SUENA LA MARCA', 'voice_description', 'prosa'],
     ['PERSONALIDAD', 'personalidad', 'lista'],
-    [`ESLOGAN QUE EL CLIENTE YA USA (${REGLA_DEL_ESLOGAN})`, '_eslogan', 'lista'],
+    [`UNA FRASE QUE EL CLIENTE USA (${reglaDelEslogan(eslogan?.fuente ?? '')})`, '_eslogan', 'lista'],
     ['LEMAS PROPUESTOS', 'tagline_opciones', 'lista'],
     ['MENSAJES CLAVE', 'mensajes_clave', 'lista'],
     ['PROPUESTAS DE VALOR', 'propuestas_de_valor', 'lista'],
