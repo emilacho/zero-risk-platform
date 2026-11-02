@@ -115,7 +115,7 @@ const ETIQUETAS = { tono_por_canal: 'Tono según el canal', reglas_de_escritura:
 const listaDe = (x) => (Array.isArray(x) ? x.map(String).filter(Boolean) : []);
 // qué campos de este tramo se escriben: sin reescritura, todos; con ella, los que el pedido NOMBRA o LIBERA; lo validado y no nombrado ni liberado se conserva
 const plan = (() => {
-  if (!RE) return { reescritura: false, objetivo: MIOS.slice(), protegidos: [], motivo: '' };
+  if (!RE) return { reescritura: false, objetivo: MIOS.slice(), protegidos: [], tocados_validados: [], motivo: '' };
   const texto = sinTildes((RE.seccion || '') + ' ' + (RE.cambios_del_dueno || ''));
   const validados = listaDe(RE.campos_validados);
   // un campo ya VALIDADO por el dueño solo se toca si el pedido lo nombra (su clave o su etiqueta) o si está liberado; las palabras sueltas («WhatsApp») valen solo para los no validados
@@ -123,7 +123,9 @@ const plan = (() => {
   const liberados = listaDe(RE.campos_liberados).filter((k) => MIOS.indexOf(k) !== -1);
   const objetivo = MIOS.filter((k) => nombrados.indexOf(k) !== -1 || liberados.indexOf(k) !== -1);
   const protegidos = listaDe(RE.campos_validados).filter((k) => MIOS.indexOf(k) !== -1 && objetivo.indexOf(k) === -1);
-  return { reescritura: true, objetivo, protegidos, motivo: objetivo.length ? '' : 'el pedido del dueño no nombra ningún campo de este tramo' };
+  // los validados que el pedido PARECE tocar por sus palabras («WhatsApp» está en el vocabulario del tono) y que no se liberó ni se nombró: son los que merecen el aviso «está validado; libéralo»
+  const tocados_validados = protegidos.filter((k) => (PALABRAS[k] || []).some((p) => texto.indexOf(p) !== -1));
+  return { reescritura: true, objetivo, protegidos, tocados_validados, motivo: objetivo.length ? '' : 'el pedido del dueño no nombra ningún campo de este tramo' };
 })();
 const vigente = (() => {
   if (!RE) return {};
@@ -343,7 +345,7 @@ export const CODIGO_NOTAS = String.raw`// (adenda 1) 02-nov · DECISIÓN DE EMIL
 const eq = j._equipo || {};
 const declarado = (eq.declarado || []).slice();
 // lo que el equipo declaró viaja DENTRO del borrador (Promote prep solo manda el borrador): la pantalla le dice a Emilio qué se conservó y por qué
-const resumen = (juez) => ({ reescritura: !!(eq.plan && eq.plan.reescritura), objetivo: ((eq.plan && eq.plan.objetivo) || []).slice(), protegidos: ((eq.plan && eq.plan.protegidos) || []).slice(), conservados: (eq.conservados || []).slice(), declarado: declarado.slice(0, 20).map((x) => t(x, 300)), integracion: eq.integracion || null, datos_duros_juez: juez });
+const resumen = (juez) => ({ reescritura: !!(eq.plan && eq.plan.reescritura), objetivo: ((eq.plan && eq.plan.objetivo) || []).slice(), protegidos: ((eq.plan && eq.plan.protegidos) || []).slice(), tocados_validados: ((eq.plan && eq.plan.tocados_validados) || []).slice(), conservados: (eq.conservados || []).slice(), declarado: declarado.slice(0, 20).map((x) => t(x, 300)), integracion: eq.integracion || null, datos_duros_juez: juez });
 const REVISADOS = ['positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes', 'vision', 'mision', 'proposito', 'propuestas_de_valor', 'productos', 'sedes'].concat(MIOS);
 const cuerpo = elegir(draft, REVISADOS);
 if (!Object.keys(cuerpo).length) { const juez = { corrio: false, motivo: 'no hay campos que revisar' }; return [{ json: Object.assign({}, j, { brand_book_draft: Object.assign({}, draft, { _equipo: resumen(juez) }), _equipo: Object.assign({}, eq, { datos_duros_juez: juez, declarado: declarado }) }) }]; }

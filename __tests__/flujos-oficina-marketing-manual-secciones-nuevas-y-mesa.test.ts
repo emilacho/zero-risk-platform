@@ -425,6 +425,26 @@ describe('5 · el juez anota los datos duros sin fuente (no borra, no cambia)', 
     const d = out.brand_book_draft._equipo.declarado
     expect(d).toHaveLength(20); expect(d.every((x: string) => x.length === 300)).toBe(true)
   })
+  it('tocados_validados: solo los validados que el pedido PARECE tocar por sus palabras y no se liberaron ni se nombraron (el dato justo del aviso)', async () => {
+    const RE = (extra: any = {}) => ({ cambios_del_dueno: '', seccion: '', campos_validados: [], campos_liberados: [], manual_vigente: JSON.stringify({}), tope_reescritura_usd: 8, ...extra })
+    const plan = async (extra: any) => (await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE({ campos_validados: ['tono_por_canal', 'reglas_de_escritura', 'valores'], ...extra }) })).out._equipo.plan
+    // «WhatsApp» está en el vocabulario del tono; Reglas y Valores ni se mencionaron
+    const a = await plan({ cambios_del_dueno: 'cambia el tono de WhatsApp a formal', seccion: '' })
+    expect(a.protegidos.sort()).toEqual(['reglas_de_escritura', 'tono_por_canal', 'valores']); expect(a.tocados_validados).toEqual(['tono_por_canal'])
+    // si se nombra por su etiqueta o se libera, ya no es «tocado sin liberar»: sí cambia
+    expect((await plan({ cambios_del_dueno: 'cambia Tono según el canal, en WhatsApp', seccion: '' })).tocados_validados).toEqual([])
+    expect((await plan({ cambios_del_dueno: 'cambia el tono de WhatsApp a formal', seccion: '', campos_liberados: ['tono_por_canal'] })).tocados_validados).toEqual([])
+    // un pedido sin palabras de ningún campo validado → lista vacía (el aviso será el general)
+    expect((await plan({ cambios_del_dueno: 'ajusta el eslogan', seccion: '' })).tocados_validados).toEqual([])
+    // sin «Pedir cambios» no hay nada
+    expect((await correr(EQUIPO.aportes, base(), respuestaAportes)).out._equipo.plan.tocados_validados).toEqual([])
+  })
+  it('el resumen del borrador lleva tocados_validados', async () => {
+    const RE3 = { cambios_del_dueno: 'cambia el tono de WhatsApp a formal', seccion: '', campos_validados: ['tono_por_canal', 'valores'], campos_liberados: [], manual_vigente: JSON.stringify({}), tope_reescritura_usd: 8 }
+    const e = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE3 })
+    const n = await correr(EQUIPO.notas, { ...base(), ...e.out }, () => ({ body: { response: JSON.stringify({ notas: [] }) } }), { reescritura: RE3 })
+    expect(n.out.brand_book_draft._equipo.tocados_validados).toEqual(['tono_por_canal'])
+  })
   it('sin campos que revisar no hay llamada', async () => {
     const { llamadas, out } = await correr(EQUIPO.notas, base({ brand_book_draft: { client_id: 'c-1' } }), () => { throw new Error('no debía llamar') })
     expect(llamadas).toHaveLength(0); expect(out._equipo.datos_duros_juez.corrio).toBe(false)
