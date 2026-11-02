@@ -102,6 +102,17 @@ describe('registrar', () => {
     expect((await registrarMetricas(d(db()), cuerpo({ red: 'google_maps', publicaciones: undefined, cuenta: { cuenta_externa: 'cid1', puntaje: 4.6, resenas: 120 } }), AHORA)).status).toBe(200)
   })
 
+  it.each(['metricas_cuentas', 'metricas_cuenta_mediciones', 'metricas_publicaciones', 'metricas_publicacion_mediciones'])('🔴 si falla %s lo dice, no responde ok', async (tabla) => {
+    const x = db()
+    x.fallar[tabla] = 'caída'
+    expect((await registrarMetricas(d(x), cuerpo(), AHORA)).status).toBe(500)
+  })
+
+  it('🔴 un cliente que no existe recibe un 404 claro', async () => {
+    const falsa = { from: () => ({ upsert: () => ({ select: () => ({ single: async () => ({ data: null, error: { message: 'violates foreign key', code: '23503' } }) }) }) }) }
+    expect(await registrarMetricas(falsa as unknown as Db, cuerpo(), AHORA)).toMatchObject({ status: 404, body: { error: 'sin_cliente' } })
+  })
+
   it('🔴 si la base falla lo dice, no responde ok', async () => {
     const x = db()
     x.fallar['metricas_publicacion_mediciones'] = 'caída'
@@ -128,6 +139,21 @@ describe('vincular con la pieza', () => {
     const x = base(OTRO)
     expect((await vincularPieza(d(x), { publicacion_id: P, hitl_id: H }, AHORA)).status).toBe(409)
     expect(filas(x, 'metricas_publicaciones')[0]).not.toHaveProperty('hitl_id')
+  })
+
+  it('🔴 volver a vincular una pieza sin revisión no borra a los autores ya copiados', async () => {
+    const x = base()
+    await vincularPieza(d(x), { publicacion_id: P, hitl_id: H }, AHORA)
+    x.tablas['hitl_queue'][0].metadata = {}
+    expect((await vincularPieza(d(x), { publicacion_id: P, hitl_id: H }, AHORA)).status).toBe(200)
+    expect(filas(x, 'metricas_publicaciones')[0].agentes).toEqual([{ donde: 'texto', agente: 'content-creator' }])
+  })
+
+  it('🔴 un encargo que no es uuid no llega a la base', async () => {
+    const x = base()
+    x.tablas['hitl_queue'][0].metadata = { oficina_encargo_id: 'no-es-uuid' }
+    expect((await vincularPieza(d(x), { publicacion_id: P, hitl_id: H }, AHORA)).status).toBe(200)
+    expect(filas(x, 'metricas_publicaciones')[0]).not.toHaveProperty('oficina_encargo_id')
   })
 
   it('sin publicación, sin pieza o sin ids, no escribe', async () => {
@@ -191,6 +217,16 @@ describe('leer', () => {
     expect(m[0].interaccion).toBe(91)
     expect(m.map((p) => p.interaccion)).toEqual([...m.map((p) => p.interaccion)].sort((a, b) => b - a))
     expect(r.body.general).toMatchObject({ vistas: 5 })
+  })
+
+  it('🔴 una pieza medida pero sin interacción no entra a las mejores, aunque haya lugar', async () => {
+    const x = db().semilla('metricas_publicaciones', [post('a'), post('b')]).semilla('metricas_publicacion_ultima', [{ publicacion_id: 'a', dia: '2026-11-02', me_gusta: 1 }, { publicacion_id: 'b', dia: '2026-11-02', vistas: 5 }])
+    expect((await leerResumen(d(x), C, 30, AHORA)).body.mejores_piezas).toHaveLength(1)
+  })
+
+  it('🔴 lo general no suma alcance entre redes: una persona puede estar en varias', async () => {
+    const x = db().semilla('metricas_publicaciones', [post('a')]).semilla('metricas_publicacion_ultima', [{ publicacion_id: 'a', dia: '2026-11-02', me_gusta: 1, alcance: 500 }])
+    expect((await leerResumen(d(x), C, 30, AHORA)).body.general).not.toHaveProperty('alcance')
   })
 
   it('🔴 la interacción suma lo que existe; sin nada es nula', () => {

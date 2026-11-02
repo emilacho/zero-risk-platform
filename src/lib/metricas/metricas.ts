@@ -14,7 +14,7 @@ const MAX_DIAS = 90
 const DIAS_POR_OMISION = 30
 
 type Fila = Record<string, unknown>
-interface Lectura { data: unknown; error: { message: string } | null }
+interface Lectura { data: unknown; error: { message: string; code?: string } | null }
 /** la parte de PostgREST que se usa aquí */
 interface Consulta extends PromiseLike<Lectura> {
   select(c?: string): Consulta
@@ -73,7 +73,7 @@ export async function registrarMetricas(db: Db, cuerpo: unknown, ahora: Date = n
     { client_id, red, cuenta_externa: texto(cuenta.cuenta_externa), actualizado_en: hora, ...soloMedido({ handle, url: texto(cuenta.url), acceso: fuente === 'api' ? 'api' : null }) },
     { onConflict: 'client_id,red,cuenta_externa' },
   ).select('id').single()
-  if (c.error) return mal(500, 'metricas_error', c.error.message)
+  if (c.error) return c.error.code === '23503' ? mal(404, 'sin_cliente', 'no existe ese cliente') : mal(500, 'metricas_error', c.error.message)
   const cuenta_id = (c.data as Fila).id
 
   const mc = await db.from('metricas_cuenta_mediciones').upsert(
@@ -113,16 +113,17 @@ export async function vincularPieza(db: Db, cuerpo: unknown, ahora: Date = new D
   if (!h.data) return mal(404, 'sin_pieza', 'no existe esa pieza')
   if ((h.data as Fila).client_id !== (p.data as Fila).client_id) return mal(409, 'otro_cliente', 'la pieza y la publicación son de clientes distintos')
   const metadata = esObjeto((h.data as Fila).metadata) ? (h.data as Fila).metadata as Fila : {}
-  let agentes: unknown[] = []
+  let agentes: unknown[] | null = null
   if (typeof metadata.jefatura_revision_id === 'string') {
     const rv = await db.from('jefatura_revisiones').select('productores').eq('id', metadata.jefatura_revision_id).maybeSingle()
     if (rv.error) return mal(500, 'metricas_error', rv.error.message)
     const productores = esObjeto(rv.data) ? rv.data.productores : null
     if (Array.isArray(productores)) agentes = productores
   }
-  const u = await db.from('metricas_publicaciones').update({ hitl_id: cuerpo.hitl_id, ...soloMedido({ oficina_encargo_id: texto(metadata.oficina_encargo_id) }), agentes, actualizado_en: ahora.toISOString() }).eq('id', cuerpo.publicacion_id)
+  const encargo = texto(metadata.oficina_encargo_id)
+  const u = await db.from('metricas_publicaciones').update({ hitl_id: cuerpo.hitl_id, ...soloMedido({ oficina_encargo_id: encargo && UUID.test(encargo) ? encargo : null, agentes }), actualizado_en: ahora.toISOString() }).eq('id', cuerpo.publicacion_id)
   if (u.error) return mal(500, 'metricas_error', u.error.message)
-  return { status: 200, body: { ok: true, publicacion_id: cuerpo.publicacion_id, hitl_id: cuerpo.hitl_id, agentes } }
+  return { status: 200, body: { ok: true, publicacion_id: cuerpo.publicacion_id, hitl_id: cuerpo.hitl_id, agentes: agentes ?? [] } }
 }
 
 /* ───────── leer ───────── */
