@@ -96,7 +96,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"brand-strategist\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-brand-strategist\",\n  \"task\": {{ JSON.stringify($json.tasks['brand-strategist']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"brand-strategist\" }\n}",
+        "jsonBody": "={\n  \"agent\": \"brand-strategist\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-brand-strategist\",\n  {{ (function () { try { const r = $('Validate Deal Data').first().json.reescritura; return (r && r.tope_reescritura_usd > 0) ? '\"max_budget_usd\": ' + (Math.round(r.tope_reescritura_usd / 5 * 100) / 100) + ',' : '' } catch (e) { return '' } })() }}\n  \"task\": {{ JSON.stringify($json.tasks['brand-strategist']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"brand-strategist\" }\n}",
         "options": {
           "response": {
             "response": {
@@ -134,7 +134,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-editor-en-jefe\",\n  \"task\": {{ JSON.stringify($json.tasks['editor-en-jefe']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"editor-en-jefe\" }\n}",
+        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-editor-en-jefe\",\n  {{ (function () { try { const r = $('Validate Deal Data').first().json.reescritura; return (r && r.tope_reescritura_usd > 0) ? '\"max_budget_usd\": ' + (Math.round(r.tope_reescritura_usd / 5 * 100) / 100) + ',' : '' } catch (e) { return '' } })() }}\n  \"task\": {{ JSON.stringify($json.tasks['editor-en-jefe']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"editor-en-jefe\" }\n}",
         "options": {
           "response": {
             "response": {
@@ -172,7 +172,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"jefe-client-success\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-jefe-client-success\",\n  \"task\": {{ JSON.stringify($json.tasks['jefe-client-success']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"jefe-client-success\" }\n}",
+        "jsonBody": "={\n  \"agent\": \"jefe-client-success\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-jefe-client-success\",\n  {{ (function () { try { const r = $('Validate Deal Data').first().json.reescritura; return (r && r.tope_reescritura_usd > 0) ? '\"max_budget_usd\": ' + (Math.round(r.tope_reescritura_usd / 5 * 100) / 100) + ',' : '' } catch (e) { return '' } })() }}\n  \"task\": {{ JSON.stringify($json.tasks['jefe-client-success']) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"jefe-client-success\" }\n}",
         "options": {
           "response": {
             "response": {
@@ -253,7 +253,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"market_research_analyst\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"{{ $json.judge_step_name }}\",\n  \"task\": {{ JSON.stringify($json.judge_task) }},\n  \"context\": { \"role\": \"faithfulness_judge\", \"threshold\": 0.85 },\n  \"extra\": { \"fidelity_judge\": true }\n}",
+        "jsonBody": "={\n  \"agent\": \"market_research_analyst\",\n  \"client_id\": \"{{ $json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"{{ $json.judge_step_name }}\",\n  {{ (function () { try { const r = $('Validate Deal Data').first().json.reescritura; return (r && r.tope_reescritura_usd > 0) ? '\"max_budget_usd\": ' + (Math.round(r.tope_reescritura_usd / 5 * 100) / 100) + ',' : '' } catch (e) { return '' } })() }}\n  \"task\": {{ JSON.stringify($json.judge_task) }},\n  \"context\": { \"role\": \"faithfulness_judge\", \"threshold\": 0.85 },\n  \"extra\": { \"fidelity_judge\": true }\n}",
         "options": {
           "response": {
             "response": {
@@ -879,7 +879,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-editor-en-jefe-uso\",\n  \"task\": {{ JSON.stringify($json._uso_pedido_voz) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"editor-en-jefe\", \"motivo\": \"uso_de_lo_disponible\" }\n}",
+        "jsonBody": "={\n  \"agent\": \"editor-en-jefe\",\n  \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n  \"workflow_id\": \"{{ $execution.id }}\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"step_name\": \"bb-lens-editor-en-jefe-uso\",\n  {{ (function () { try { const r = $('Validate Deal Data').first().json.reescritura; return (r && r.tope_reescritura_usd > 0) ? '\"max_budget_usd\": ' + (Math.round(r.tope_reescritura_usd / 5 * 100) / 100) + ',' : '' } catch (e) { return '' } })() }}\n  \"task\": {{ JSON.stringify($json._uso_pedido_voz) }},\n  \"context\": { \"role\": \"brand_book_lens\", \"lens\": \"editor-en-jefe\", \"motivo\": \"uso_de_lo_disponible\" }\n}",
         "options": {
           "response": {
             "response": {
