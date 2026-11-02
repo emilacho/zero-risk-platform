@@ -57,7 +57,7 @@ export function leerPalabras(manual: { forbidden_words?: unknown; palabras_con_i
   return [...salida.values()]
 }
 
-/** las únicas palabras que bloquean por coincidencia */
+/** las palabras declaradas por una norma o por el dueño. 02-nov, firma de Emilio: tampoco bloquean; se avisan aparte del resto */
 export function palabrasDuras(manual: Parameters<typeof leerPalabras>[0]): string[] {
   return leerPalabras(manual).filter((p) => p.intencion !== 'estilo').map((p) => p.texto)
 }

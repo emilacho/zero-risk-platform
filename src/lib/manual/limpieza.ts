@@ -4,13 +4,14 @@
  *  1 · NOMBRES INTERNOS CITADOS COMO FUENTE: «(discovery_summary)», «(icp_signals)», «[responde a pain point S4; … discovery_summary]», «ICP buying_process S3»… son etiquetas del sistema, no fuentes
  *      para un lector. Se quitan de la prosa (la fuente vive en los metadatos del campo). Se reconocen por FORMA (identificador con guion bajo, «ICP <campo>»), no por una lista de nombres.
  *  2 · FRAGMENTOS: al quitar una cita puede quedar «Según el análisis competitivo del mercado local. , lo que le otorga…» (oración sin sujeto + continuación huérfana). La oración sale entera.
- *  3 · PALABRAS PROHIBIDAS PROPIAS: ninguna parte del manual usa las palabras que el mismo manual lista en `forbidden_words` (salvo para MENCIONARLAS: entre comillas o tras «nunca/evita/sin…»).
- * Todo lo que sale va SOLO al registro interno (nunca a la bandeja ni a Slack).
+ *  3 · PALABRAS DECLARADAS: 02-nov, firma de Emilio: si el manual usa una palabra que él mismo declara por norma o por el dueño, el texto SE QUEDA y se anota a la vista (salvo que solo la MENCIONE: entre comillas o tras «nunca/evita/sin…»).
+ * Lo que sale por 1 y 2 va SOLO al registro interno (nunca a la bandeja ni a Slack).
  */
 import { palabrasDuras } from './palabras-con-intencion'
 import { normalizar, palabrasDe } from './texto'
 
-export interface QuitadoPorLimpieza { ruta: string; texto: string; motivo: 'nombre_interno_citado' | 'fragmento' | 'palabra_prohibida_propia' }
+export interface QuitadoPorLimpieza { ruta: string; texto: string; motivo: 'nombre_interno_citado' | 'fragmento' }
+export interface PalabraAnotada { ruta: string; palabra: string; texto: string }
 
 // ───────────────────────── recorrido de textos (con ruta «campo», «campo[2]», «campo.sub»)
 type Hoja = { ruta: string; valor: string }
@@ -175,7 +176,7 @@ export function repararFragmentos(texto: string): { texto: string; quitadas: str
 const NEGACION_ANTES = /\b(nunca|jam[aá]s|evita\w*|evitar|prohib\w*|no\s+(?:uses?|usar|digas?|decir|emplees?|emplear|utilices?|utilizar)|sin)\b/i
 /** palabras que el propio manual prohíbe (normalizadas, en minúscula, con su plural simple) */
 export function palabrasProhibidasDelManual(manual: Record<string, unknown>): string[] {
-  // 01-nov · firma de Emilio: solo lo declarado (norma o dueño) quita una oración; el resto de la lista es contexto de marca
+  // solo lo declarado (norma o dueño) se anota; el resto de la lista es contexto de marca
   return palabrasDuras(manual).map((x) => normalizar(x)).filter((x) => x.length >= 3)
 }
 /** ¿esta oración USA (no menciona) alguna palabra prohibida? devuelve la palabra */
@@ -194,11 +195,12 @@ export function usaPalabraProhibida(oracion: string, prohibidas: string[]): stri
 }
 
 // ───────────────────────── todo junto
-export interface ResultadoDeLimpieza { manual: Record<string, unknown>; quitados: QuitadoPorLimpieza[] }
+export interface ResultadoDeLimpieza { manual: Record<string, unknown>; quitados: QuitadoPorLimpieza[]; anotadas: PalabraAnotada[] }
 
 export function limpiarManual(manualEntrada: Record<string, unknown>): ResultadoDeLimpieza {
   const manual = clonar(manualEntrada)
   const quitados: QuitadoPorLimpieza[] = []
+  const anotadas: PalabraAnotada[] = []
   const prohibidas = palabrasProhibidasDelManual(manual)
   const listas = new Map<string, number[]>()
   for (const h of prosaDe(manual, false)) {
@@ -212,17 +214,10 @@ export function limpiarManual(manualEntrada: Record<string, unknown>): Resultado
     const f = repararFragmentos(t)
     for (const x of f.quitadas) quitados.push({ ruta: h.ruta, texto: x, motivo: 'fragmento' })
     t = f.texto
-    // 3 · palabras prohibidas propias (oración por oración; en listas, el elemento entero)
-    if (prohibidas.length) {
-      const enLista = /\[(\d+)\]$/.exec(h.ruta)
-      const partes = t.split('\n').map((linea) => oraciones(linea).filter((o) => {
-        const w = usaPalabraProhibida(o, prohibidas)
-        if (w) quitados.push({ ruta: h.ruta, texto: o.trim(), motivo: 'palabra_prohibida_propia' })
-        return !w
-      }).join(' '))
-      const nuevo = partes.join('\n').trim()
-      if (nuevo !== t.trim()) t = nuevo
-      void enLista
+    // 3 · palabras declaradas: se anota oración por oración; el texto no se toca
+    for (const linea of t.split('\n')) for (const o of oraciones(linea)) {
+      const w = usaPalabraProhibida(o, prohibidas)
+      if (w) anotadas.push({ ruta: h.ruta, palabra: w, texto: o.trim() })
     }
     if (t !== h.valor) {
       escribir(manual, h.ruta, t)
@@ -234,7 +229,7 @@ export function limpiarManual(manualEntrada: Record<string, unknown>): Resultado
     const lista = leer(manual, padre)
     if (Array.isArray(lista)) escribir(manual, padre, lista.filter((_, i) => !idx.includes(i)))
   }
-  return { manual, quitados }
+  return { manual, quitados, anotadas }
 }
 function leer(obj: unknown, ruta: string): unknown {
   let cur: unknown = obj

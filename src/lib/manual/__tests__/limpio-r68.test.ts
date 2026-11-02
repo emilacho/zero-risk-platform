@@ -90,20 +90,18 @@ describe('2 · los precios publicados por el cliente son fuente', () => {
   })
 })
 
-describe('5 · el manual no usa sus propias palabras prohibidas', () => {
+describe('5 · las palabras que el propio manual declara se anotan (02-nov, firma de Emilio)', () => {
   it('rojo: las reglas visuales de la repetición usan «artesanal» y «exclusiva», que el mismo manual prohíbe', () => {
     const reglas = JSON.stringify(MANUAL.visual.reglas)
     expect(reglas).toMatch(/artesanal/); expect(reglas).toMatch(/exclusiva/)
   })
-  it('verde: tras la limpieza ninguna parte del manual las usa (el elemento de la regla sale entero y el resto de la lista se queda)', () => {
-    // 01-nov · firma de Emilio: la limpieza solo quita lo declarado; aquí se declaran para seguir probando la limpieza
+  it('verde: tras la limpieza el texto sigue igual y queda anotado dónde se usan', () => {
     const r = limpiarManual({ ...MANUAL, palabras_con_intencion: (MANUAL.forbidden_words as string[]).map((texto) => ({ texto, intencion: 'legal', fuente: { cita: 'la norma' } })) })
     const prohibidas = palabrasProhibidasDelManual(r.manual)
     expect(prohibidas).toContain('artesanal')
-    expect(usaPalabraProhibida(JSON.stringify((r.manual as Record<string, any>).visual.reglas), prohibidas)).toBeNull()
-    expect((r.manual as Record<string, any>).visual.reglas.debe).toHaveLength(MANUAL.visual.reglas.debe.length - 1)
-    expect((r.manual as Record<string, any>).visual.reglas.no_debe).toHaveLength(MANUAL.visual.reglas.no_debe.length - 1)
-    expect(r.quitados.filter((q) => q.motivo === 'palabra_prohibida_propia').map((q) => q.ruta).every((x) => x.startsWith('visual.reglas'))).toBe(true)
+    expect((r.manual as Record<string, any>).visual.reglas).toEqual(MANUAL.visual.reglas)
+    expect(r.anotadas.map((q) => q.ruta).every((x) => x.startsWith('visual.reglas'))).toBe(true)
+    expect(r.anotadas.length).toBeGreaterThan(0)
   })
   it('MENCIONARLA no es usarla: entre comillas, o tras «nunca/evita/sin…», o en un texto del cliente citado', () => {
     const p = ['artesanal', 'reserva']

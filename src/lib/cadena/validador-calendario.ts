@@ -42,7 +42,7 @@ export interface InsumosCalendario {
   /** SOLO las de los tipos que el cliente declaró; lista vacía = no hay chequeo de fechas especiales más allá de la regla general */
   fechasEspeciales?: FechaEspecialVerificada[]
   forbiddenWords?: string[]
-  /** 01-nov · firma de Emilio: las únicas de la lista que bloquean (declaradas, con su cita) */
+  /** las declaradas, con su cita: 02-nov, firma de Emilio: tampoco bloquean, se avisan con su propio texto */
   palabrasDuras?: string[]
   /** r75 · H2 · el registro del cliente (tuteo · voseo · usted); sin dato no se bloquea ningún registro */
   registro?: RegistroDelCliente
@@ -180,7 +180,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     // ─── V15 · palabras prohibidas del manual y voseo
     const duras = new Set((ins.palabrasDuras ?? []).map(normalizar).filter(Boolean))
     const coincide = (p: string) => new RegExp(`(?:^|[^a-z0-9])${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^a-z0-9]|$)`).test(nTema)
-    for (const p of duras) if (coincide(p)) out.push(h('V15', 'bloquea', f, `el tema usa la palabra prohibida «${p}»`, 'palabras prohibidas por una norma o declaradas para este cliente', 'reescribir sin esa palabra'))
+    for (const p of duras) if (coincide(p)) out.push(h('V15', 'aviso', f, `el tema usa «${p}», declarada por una norma o para este cliente: revisa si corresponde`, 'palabras declaradas por una norma o para este cliente', 'revisar si corresponde'))
     const prohibidas = (ins.forbiddenWords ?? []).map(normalizar).filter((p) => p && !duras.has(p))
     for (const p of prohibidas) if (coincide(p)) out.push(h('V15', 'aviso', f, `el tema usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`, 'palabras que el manual evita', 'si es un claim propio, sostenerlo con evidencia o reformularlo'))
     // r75 · H2 · se bloquean las formas de OTRO registro SOLO si el registro del cliente está fijado (su manual o su país); sin dato no se impone ninguno

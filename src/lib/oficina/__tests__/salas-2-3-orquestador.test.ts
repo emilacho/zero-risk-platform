@@ -153,13 +153,14 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(JSON.stringify(arte(M, id, 'laminas'))).not.toMatch(/tiktok|open_questions|1x1/)
     expect(M.llamadas.renderPedidos[0].plataforma).toBe('instagram-feed')
   })
-  it('una palabra prohibida del manual en el texto del autor abre ficha que bloquea (chequeo duro) y el jefe ya la ve', async () => {
+  it('una palabra declarada del manual en el texto del autor abre ficha de aviso y el jefe ya la ve', async () => {
     const { M, id } = await abiertoC()
     const { tareas } = await correr(M, id, guionCarrusel({
       texto: () => ({ texto: j({ ...COPIA, pie_de_foto: 'Un plato premium te espera.' }) }),
     }))
     expect(tareas['revision_jefe'][0]).toMatch(/premium/)
-    expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && /premium/.test(f.que ?? ''))).toBe(true)
+    expect(fichas(M, id).filter((f) => /premium/.test(f.que ?? '')).every((f) => f.gravedad === 'sugerencia')).toBe(true)
+    expect(fichas(M, id).some((f) => /premium/.test(f.que ?? ''))).toBe(true)
   })
   it('un porcentaje inventado en las láminas bloquea', async () => {
     const { M, id } = await abiertoC()

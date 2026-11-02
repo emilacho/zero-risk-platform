@@ -169,6 +169,7 @@ function chequearPromptsRef(e: Estado, pl: Plantilla, esRe = false): SalidaCodig
     const lista = pr.find((x) => x.ref === ref)?.prompts ?? []
     const ch = chequearPrompts(lista.map((p) => p.prompt), reglas, b.F.propios, reglasDeInvencion(pl.limites, b.F.referencias))
     porRef[ref] = { indices: ch.pasan, prompts: ch.pasan.map((i) => lista[i]) }
+    ch.avisos.forEach((a, n) => fichas.push(fichaNueva(`prompts-aviso-${ref}-${e.pasos_ejecutados}-${n}`, 'chequeo', 'imagen', 'sugerencia', a, 'palabras declaradas por norma, por el dueño o por el brief', 'revisar si corresponde')))
     if (!ch.pasan.length) fichas.push(fichaNueva(`prompts-ninguno-${ref}`, 'chequeo', 'imagen', 'sugerencia', `ningún prompt de «${ref}» cumple las reglas del brief: esa lámina sale sin imagen generada`, 'reglas de imagen del brief', 'declarar la lámina sin imagen generada'))
   }
   const ninguno = gen.length > 0 && gen.every((r) => !porRef[r].prompts.length)

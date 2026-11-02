@@ -12,7 +12,7 @@ export type Registro = 'tuteo' | 'voseo' | 'formal' | 'sin_dato'
 export interface FuentesDelCliente {
   /** toda la lista del manual; por omisión es contexto de marca y no bloquea */
   palabras_prohibidas: string[]
-  /** 01-nov · firma de Emilio: las únicas del manual que bloquean (norma o dueño, con su cita) */
+  /** las declaradas del manual (norma o dueño, con su cita): 02-nov, firma de Emilio: se avisan, no bloquean */
   palabras_duras?: string[]
   telefonos: string[]
   handles: string[]
@@ -45,15 +45,15 @@ const ficha = (donde: string, gravedad: Ficha['gravedad'], que: string, contra_q
   id: `chk-${donde}-${n}`, origen: 'chequeo', donde, gravedad, estado: 'abierta', que, contra_que, propuesta,
 })
 
-/** 01-nov · firma de Emilio: bloquea lo declarado en el manual y lo que el brief prohíbe por su cuenta. Una palabra del manual que el brief solo repite sigue siendo contexto */
-export function palabrasQueBloquean(fuentes: Pick<FuentesDelCliente, 'palabras_prohibidas' | 'palabras_duras'>, delBrief: string[]): { bloquean: string[]; contexto: string[] } {
+/** 02-nov · firma de Emilio: ninguna palabra bloquea. Lo declarado en el manual y lo que el brief prohíbe por su cuenta se avisa con su propio texto; una palabra del manual que el brief solo repite sigue siendo contexto */
+export function palabrasDeclaradas(fuentes: Pick<FuentesDelCliente, 'palabras_prohibidas' | 'palabras_duras'>, delBrief: string[]): { declaradas: string[]; contexto: string[] } {
   const k = (x: string) => x.trim().toLowerCase()
   const duras = new Set((fuentes.palabras_duras ?? []).map(k))
   const delManual = new Set(fuentes.palabras_prohibidas.map(k))
-  const bloquean = new Map<string, string>()
-  for (const p of [...(fuentes.palabras_duras ?? []), ...delBrief.filter((x) => !delManual.has(k(x)))]) if (p.trim()) bloquean.set(k(p), p)
-  const contexto = fuentes.palabras_prohibidas.filter((p) => p.trim() && !duras.has(k(p)) && !bloquean.has(k(p)))
-  return { bloquean: [...bloquean.values()], contexto }
+  const declaradas = new Map<string, string>()
+  for (const p of [...(fuentes.palabras_duras ?? []), ...delBrief.filter((x) => !delManual.has(k(x)))]) if (p.trim()) declaradas.set(k(p), p)
+  const contexto = fuentes.palabras_prohibidas.filter((p) => p.trim() && !duras.has(k(p)) && !declaradas.has(k(p)))
+  return { declaradas: [...declaradas.values()], contexto }
 }
 
 export function chequeosDePost(c: ContextoDeChequeo): Ficha[] {
@@ -63,10 +63,10 @@ export function chequeosDePost(c: ContextoDeChequeo): Ficha[] {
   let n = 0
 
   // 1 · prohibidas del manual y del brief (en el pie, el llamado y los hashtags)
-  const { bloquean, contexto } = palabrasQueBloquean(c.fuentes, c.prohibidas_del_brief ?? [])
-  for (const p of bloquean) {
-    if (contienePalabra(texto, p) || contienePalabra(c.pieza.llamado ?? '', p)) f.push(ficha('texto', 'bloquea', `usa la palabra prohibida «${p}»`, 'palabras prohibidas por norma, por el dueño o por el brief', 'reescribir sin esa palabra', n++))
-    if ((c.pieza.hashtags ?? []).some((h) => contienePalabra(h.replace(/^#/, ''), p))) f.push(ficha('hashtags', 'bloquea', `un hashtag trae la palabra prohibida «${p}»`, 'palabras prohibidas por norma, por el dueño o por el brief', 'quitar o cambiar el hashtag', n++))
+  const { declaradas, contexto } = palabrasDeclaradas(c.fuentes, c.prohibidas_del_brief ?? [])
+  for (const p of declaradas) {
+    if (contienePalabra(texto, p) || contienePalabra(c.pieza.llamado ?? '', p)) f.push(ficha('texto', 'sugerencia', `usa «${p}», declarada por una norma, por el dueño o por el brief: revisa si corresponde`, 'palabras declaradas por norma, por el dueño o por el brief', 'revisar si corresponde', n++))
+    if ((c.pieza.hashtags ?? []).some((h) => contienePalabra(h.replace(/^#/, ''), p))) f.push(ficha('hashtags', 'sugerencia', `un hashtag trae «${p}», declarada por una norma, por el dueño o por el brief: revisa si corresponde`, 'palabras declaradas por norma, por el dueño o por el brief', 'revisar si corresponde', n++))
   }
   // lo demás de la lista del manual es contexto de marca: se señala, nunca frena (quien revisa razona la intención)
   for (const p of contexto) {

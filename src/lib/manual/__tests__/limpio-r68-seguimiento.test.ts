@@ -84,9 +84,11 @@ describe('palabras prohibidas: largo mínimo', () => {
     const m = { ...dura('de'), voz: 'Cocina de la casa de siempre.' }
     expect(limpiarManual(m).manual.voz).toBe(m.voz)
   })
-  it('una de 3 letras SÍ se toma (borde): «gas» prohibida quita la oración que la usa', () => {
+  it('una de 3 letras SÍ se toma (borde): «gas» declarada anota la oración que la usa, sin quitarla', () => {
     expect(palabrasProhibidasDelManual(dura('gas'))).toEqual(['gas'])
-    expect(limpiarManual({ ...dura('gas'), voz: 'Cocina a gas. Cercana y cálida.' }).manual.voz).toBe('Cercana y cálida.')
+    const r = limpiarManual({ ...dura('gas'), voz: 'Cocina a gas. Cercana y cálida.' })
+    expect(r.manual.voz).toBe('Cocina a gas. Cercana y cálida.')
+    expect(r.anotadas).toEqual([{ ruta: 'voz', palabra: 'gas', texto: 'Cocina a gas.' }])
   })
   it('acepta frases ("calidad garantizada") y tolera el plural simple', () => {
     expect(usaPalabraProhibida('Ofrecemos calidad garantizada hoy', ['calidad garantizada'])).toBe('calidad garantizada')
@@ -113,9 +115,11 @@ describe('lo que se quitó queda registrado, con el texto (recortado a 200 carac
 })
 
 describe('rutas profundas: una lista que se queda con un elemento vacío lo pierde, incluso anidada', () => {
-  it('visual.reglas.debe[1] vacío tras la limpieza sale de la lista; el resto se queda en su orden', () => {
+  it('visual.reglas.debe[1] con una palabra declarada se queda en la lista y se anota con su ruta', () => {
     const m = { ...dura('artesanal'), visual: { reglas: { debe: ['Buena regla uno', 'Mostrar lo artesanal', 'Buena regla tres'] } } }
-    expect((limpiarManual(m).manual as any).visual.reglas.debe).toEqual(['Buena regla uno', 'Buena regla tres'])
+    const r = limpiarManual(m)
+    expect((r.manual as any).visual.reglas.debe).toEqual(m.visual.reglas.debe)
+    expect(r.anotadas.map((a) => a.ruta)).toEqual(['visual.reglas.debe[1]'])
   })
   it('una ruta que atraviesa un nulo no rompe la limpieza', () => {
     expect(() => limpiarManual({ visual: { reglas: null }, forbidden_words: ['gas'], voz: 'Cálida.' })).not.toThrow()

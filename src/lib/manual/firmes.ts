@@ -9,7 +9,7 @@
  */
 import { datosSinFuenteDe, declaracionDelCliente, esSoloDatoSinFuente, PREFIJO_PENDIENTE, evaluarHechos, hojasDeTexto, type EntradaDeHechos, type Hecho, type InformeDeHechos } from './hechos'
 import { palabrasDe } from './texto'
-import { limpiarManual } from './limpieza'
+import { limpiarManual, type PalabraAnotada } from './limpieza'
 
 export type EstadoDeCampo = 'verificado' | 'afirmacion_del_cliente' | 'con_pendientes' | 'sin_hechos'
 export interface MetaDeCampo { estado: EstadoDeCampo; provisional: boolean; pendientes: number; hechos: number }
@@ -213,16 +213,28 @@ export interface Recomprobacion {
   /** true si el autor NO dejó nada sin respaldo (la puerta no tuvo que cerrar nada) */
   limpio: boolean
 }
+export const MOTIVO_DE_PALABRA_DECLARADA = 'usa una palabra declarada por una norma o por el dueño: revisa si corresponde'
+/** 02-nov · firma de Emilio: la palabra declarada no quita texto, queda en las notas del campo, sin repetirse */
+function anotarPalabras(manual: Record<string, unknown>, anotadas: PalabraAnotada[]): Record<string, unknown> {
+  if (!anotadas.length) return manual
+  const meta = { ...(manual._field_meta as Record<string, Record<string, unknown>> | undefined) }
+  for (const a of anotadas) {
+    const campo = a.ruta.split(/[.[]/)[0]
+    const notas = Array.isArray(meta[campo]?.notas_del_juez) ? (meta[campo].notas_del_juez as Array<{ dato?: unknown }>) : []
+    if (!notas.some((n) => n.dato === a.palabra)) meta[campo] = { ...meta[campo], notas_del_juez: [...notas, { dato: a.palabra, motivo: MOTIVO_DE_PALABRA_DECLARADA }] }
+  }
+  return { ...manual, _field_meta: meta }
+}
 /** S5 / S7: re-evalúa lo que devolvió el autor y cierra la puerta (lo que reintroduzca sin cita vuelve a salir). El resultado ya lleva `_field_meta` de todos los campos. */
 export function recomprobar(_antes: Record<string, unknown>, despuesCrudo: Record<string, unknown>, entrada: Omit<EntradaDeHechos, 'manual'>): Recomprobacion {
-  // r68 · primero el FORMATO por código: sin nombres internos citados, sin oraciones rotas, sin las palabras que el propio manual prohíbe. Lo quitado va solo al registro interno.
+  // r68 · primero el FORMATO por código: sin nombres internos citados, sin oraciones rotas, Lo quitado va solo al registro interno. Una palabra declarada no se quita: se anota a la vista.
   const lim = limpiarManual(despuesCrudo)
   const despues = lim.manual
   const informe = evaluarHechos({ ...entrada, manual: despues })
   const cierre = cerrarPuerta(despues, informe)
   const finalInforme = evaluarHechos({ ...entrada, manual: cierre.manual })
-  const manual = aplicarMeta(cierre.manual, finalInforme, entrada.excluir)
-  const motivoDe = { nombre_interno_citado: 'nombre interno citado como fuente', fragmento: 'oración rota', palabra_prohibida_propia: 'usa una palabra que el propio manual prohíbe' } as const
+  const manual = anotarPalabras(aplicarMeta(cierre.manual, finalInforme, entrada.excluir), lim.anotadas)
+  const motivoDe = { nombre_interno_citado: 'nombre interno citado como fuente', fragmento: 'oración rota' } as const
   const cambiosL = lim.quitados.map((q) => ({ ruta: q.ruta, de: q.texto, a: '', por: 'limpieza' as const }))
   const retiradosL = lim.quitados.map((q) => ({ ruta: q.ruta, clausula: q.texto, estado: 'sin_cita' as const, marca: q.motivo, motivo: motivoDe[q.motivo] }))
   return { manual, informe: finalInforme, introducidos: informe.sin_respaldo.filter((h) => h.estado !== 'con_duda' && !esSoloDatoSinFuente(h)), cambios: [...cambiosL, ...cierre.cambios], retirados: [...retiradosL, ...cierre.retirados], limpio: informe.sin_respaldo.every((h) => h.estado === 'con_duda' || esSoloDatoSinFuente(h)) && lim.quitados.length === 0 }

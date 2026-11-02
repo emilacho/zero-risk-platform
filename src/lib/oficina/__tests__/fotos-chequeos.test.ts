@@ -84,9 +84,9 @@ describe('chequeos duros del post', () => {
   })
   const mensajes = (c: ContextoDeChequeo) => chequeosDePost(c).map((f) => `${f.gravedad}:${f.donde}:${f.que}`).join(' | ')
   it('una pieza limpia no da fichas', () => { expect(chequeosDePost(ctx())).toEqual([]) })
-  it('palabra prohibida (sin tildes, mayúsculas ni plurales) en el pie y en un hashtag', () => {
-    expect(mensajes(ctx({ pie: 'El MEJOR ceviche, calidad PREMIUM' }))).toMatch(/palabra prohibida «premium»/)
-    expect(mensajes(ctx({ pie: 'Ceviche', tags: ['#Premium'] }))).toMatch(/bloquea:hashtags:.*premium/)
+  it('palabra declarada (sin tildes, mayúsculas ni plurales) en el pie y en un hashtag: aviso, nunca bloqueo', () => {
+    expect(mensajes(ctx({ pie: 'El MEJOR ceviche, calidad PREMIUM' }))).toMatch(/sugerencia:texto:usa «premium»/)
+    expect(mensajes(ctx({ pie: 'Ceviche', tags: ['#Premium'] }))).toMatch(/sugerencia:hashtags:.*premium/)
     expect(mensajes(ctx({ pie: 'ceviche super', prohibidas_del_brief: ['super'] }))).toMatch(/«super»/)
   })
   it('VOSEO: «pedilo», «mirá», «Pedí» fallan con registro tuteo; «pídelo», «mira» no', () => {

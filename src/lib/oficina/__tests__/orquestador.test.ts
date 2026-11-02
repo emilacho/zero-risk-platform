@@ -514,11 +514,11 @@ describe('rondas: jefe-marketing → el que escribe corrige → revisor ciego �
 })
 
 describe('chequeos duros del texto dentro del encargo', () => {
-  it('una palabra prohibida del manual abre ficha del chequeo y el jefe ya la ve', async () => {
+  it('una palabra declarada del manual abre ficha de aviso y el jefe ya la ve', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
     const { tareas } = await correr(M, id, guionGenerada({ texto: JSON.stringify({ pie_de_foto: 'El mejor ceviche premium a $7.00. Pídelo al 0997744288.', hashtags: ['#ceviche'] }) }))
-    expect(tareas['revision_jefe'][0]).toMatch(/palabra prohibida «premium»/)
+    expect(tareas['revision_jefe'][0]).toMatch(/usa «premium»/)
   })
   it('precio fuera de la carta bloquea ⇒ con desacuerdo si nadie lo corrige', async () => {
     const M = crearMemoria()
