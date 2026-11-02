@@ -12,7 +12,7 @@ vi.mock('@anthropic-ai/sdk', () => ({ default: class {} }))
 
 const servidor = readFileSync(pathResolve(__dirname, '../mcp/brand-section-server.js'), 'utf8')
 const propiedades = EMIT_BRAND_SECTION_TOOL.input_schema.properties as Record<string, { enum?: readonly string[] }>
-const NUEVOS = ['vision', 'valores', 'nunca_hace', 'productos', 'sedes']
+const NUEVOS = ['vision', 'valores', 'nunca_hace', 'productos', 'sedes', 'tono_por_canal', 'reglas_de_escritura', 'direccion_de_fotografia', 'uso_del_logo', 'jerarquia_tipografica', 'historia_y_origen']
 
 describe('la herramienta de las secciones del manual', () => {
   it('🔴 content-creator entra por los dos caminos, y las dos listas son iguales', () => {

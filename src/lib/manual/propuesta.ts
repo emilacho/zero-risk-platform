@@ -26,11 +26,18 @@ export const CAMPOS_PROPONIBLES: Record<string, CampoProponible> = {
   mensajes_clave: { tipo: 'lista', agente: 'content-creator', que: '3 a 5 mensajes desde lo que le importa al cliente' },
   propuestas_de_valor: { tipo: 'lista', agente: 'brand-strategist', que: '3 a 5 diferenciadores reales respecto de la alternativa' },
   // 30-oct · «el manual sale solo»: los obligatorios que ningún empleado producía (ver `campos-del-manual.ts`). Se proponen SOLO con lo que la evidencia sostiene; si no alcanza, el campo queda como hueco declarado.
-  vision: { tipo: 'texto', agente: 'brand-strategist', que: 'a dónde quiere llegar el negocio · 1 frase, solo si la evidencia lo sostiene' },
+  vision: { tipo: 'texto', agente: 'brand-strategist', que: 'a dónde quiere llegar el negocio · 1 frase, razonada con lo disponible del cliente' },
   valores: { tipo: 'lista', agente: 'content-creator', que: '3 a 5 valores que la marca demuestra en lo que hace y dice, no los que suenan bien' },
   productos: { tipo: 'lista', agente: 'jefe-client-success', que: 'los productos o servicios que el negocio ofrece, tal como los nombra la evidencia (sin precios ni cifras que no estén escritos)' },
   sedes: { tipo: 'lista', agente: 'jefe-client-success', que: 'los lugares donde atiende, tal como los nombra la evidencia (ciudad o dirección); si no atiende en un local, devuélvelo vacío' },
   nunca_hace: { tipo: 'lista', agente: 'content-creator', que: 'lo que la marca nunca dice ni hace, deducido de cómo habla y de lo que rechaza en la evidencia' },
+  // 02-nov · ADENDA 1 firmada por Emilio: las secciones nuevas
+  tono_por_canal: { tipo: 'lista', agente: 'content-creator', que: 'cómo cambia el tono en cada canal que usa el negocio, un renglón por canal (redes, mensajería, respuesta a reclamos)' },
+  reglas_de_escritura: { tipo: 'lista', agente: 'content-creator', que: 'reglas durables de escritura: trato, lenguaje, lugares que se nombran, emojis, hashtags, cómo se escriben los precios' },
+  direccion_de_fotografia: { tipo: 'lista', agente: 'creative-director-mesa', que: 'luz, encuadre, cómo se fotografía lo más representativo del negocio y qué no mostrar' },
+  uso_del_logo: { tipo: 'lista', agente: 'design-visual-storyteller', que: 'versiones del logo, fondo claro y oscuro, y qué no hacer con él' },
+  jerarquia_tipografica: { tipo: 'lista', agente: 'design-visual-storyteller', que: 'qué letra va en títulos y cuál en texto' },
+  historia_y_origen: { tipo: 'texto', agente: 'brand-strategist', que: 'de dónde viene el negocio y por qué existe, en un párrafo; sin fuente, narra sin fecha, cifra ni lugar exacto' },
 }
 
 const vacio = (v: unknown): boolean => {
@@ -89,7 +96,8 @@ export function armarPedidos(entrada: { draft: Record<string, unknown>; fuentes:
     const instr = [
       `Completa SOLO estos campos del manual de marca${entrada.cliente ? ' de ' + entrada.cliente : ''}, que quedaron vacíos: ${campos.map((c) => `«${c}»`).join(', ')}.`,
       ...campos.map((c) => `- ${c} (${CAMPOS_PROPONIBLES[c].tipo === 'lista' ? 'lista' : 'texto'}): ${CAMPOS_PROPONIBLES[c].que}.`),
-      'Es una PROPUESTA tuya, no un hecho: no escribas cifras, lugares, premios, certificaciones, citas ni comparaciones que la evidencia no sostenga. Si la evidencia no alcanza para un campo, devuélvelo con "texto": "" y explica en "razon" qué falta.',
+      // 02-nov · regla de Emilio: lo que no existe se propone razonando; los datos duros nunca se inventan
+      'Es una PROPUESTA tuya, no un hecho. Si algo no existe todavía, no lo dejes vacío: proponlo razonando con lo disponible del cliente y di por qué en "razon". La única excepción son los datos duros verificables (teléfonos, direcciones, horarios, precios, fechas, cifras, premios, certificaciones, citas): esos nunca se inventan; si faltan, déjalos fuera, y si el campo entero depende de ellos devuélvelo con "texto": "" o "items": [] y di en "razon" qué falta.',
       'Escribe en el mismo idioma y registro (tuteo, voseo o usted) que el resto del manual. Nada de paréntesis ni corchetes con fuentes dentro del texto.',
       'Responde SOLO un objeto JSON, sin texto antes ni después: {"<campo>": {"texto": "…", "razon": "por qué lo propones, en una frase"}} para los de texto, y {"<campo>": {"items": ["…","…"], "razon": "…"}} para los de lista.',
     ].join('\n')
