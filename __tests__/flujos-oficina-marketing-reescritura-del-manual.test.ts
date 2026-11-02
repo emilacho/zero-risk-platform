@@ -138,3 +138,48 @@ describe('alcance', () => {
     expect(sin).not.toContain('PENDIENTE-MANUAL-CAMBIOS')
   })
 })
+
+// ── tope de gasto por llamada ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+// @ts-expect-error módulo .mjs sin tipos
+import { LLAMADAS_CON_TOPE, DIVISOR_DEL_TOPE, LINEA_DEL_TOPE } from '../scripts/ops/oficina-marketing/reescritura-del-manual.mjs'
+
+/** arma el cuerpo de una llamada como lo hace n8n: cada `{{ expr }}` se evalúa con $json, $execution y $('nodo') */
+function cuerpoDe(nombre: string, validate: any | null) {
+  const n = nuevo.nodes.find((x: any) => x.name === nombre)
+  const crudo = String(n.parameters.jsonBody).replace(/^=/, '')
+  const nodos: Record<string, any> = validate ? { 'Validate Deal Data': validate } : {}
+  const $ = (k: string) => { if (!(k in nodos)) throw new Error(`Node '${k}' hasn't been executed`); return { first: () => ({ json: nodos[k] }) } }
+  const $json = { client_id: 'c-1', tasks: { 'brand-strategist': 't', 'editor-en-jefe': 't', 'jefe-client-success': 't' }, judge_step_name: 'j', judge_task: 'jt', _uso_pedido_voz: 'v' }
+  const texto = crudo.replace(/\{\{([\s\S]*?)\}\}/g, (_m, e) => { const v = new Function('$', '$json', '$execution', `return (${e})`)($, $json, { id: 'ex-1' }); return String(v) })
+  return JSON.parse(texto)
+}
+
+describe('tope de gasto por llamada (max_budget_usd)', () => {
+  it('en modo reescritura, las 5 llamadas al modelo llevan tope = tope del pedido ÷ 5, con dos decimales', () => {
+    expect(DIVISOR_DEL_TOPE).toBe(5)
+    for (const l of LLAMADAS_CON_TOPE) {
+      expect(cuerpoDe(l, { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: 4 } }).max_budget_usd).toBe(0.8)
+      expect(cuerpoDe(l, { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: 5 } }).max_budget_usd).toBe(1)
+      expect(cuerpoDe(l, { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: 0.07 } }).max_budget_usd).toBe(0.01)
+    }
+  })
+  it('las 5 llamadas que dice el plan son las únicas con tope, y son TODAS las del manual que llaman a run-sdk', () => {
+    const todas = nuevo.nodes.filter((n: any) => n.type.endsWith('httpRequest') && /run-sdk/.test(JSON.stringify(n.parameters.url))).map((n: any) => n.name).sort()
+    expect([...LLAMADAS_CON_TOPE].sort()).toEqual(todas)
+  })
+  it('sin `reescritura` (el alta) el cuerpo no trae la clave y es el mismo JSON de hoy', () => {
+    for (const l of LLAMADAS_CON_TOPE) {
+      const a = cuerpoDe(l, { client_id: 'c-1' })
+      expect('max_budget_usd' in a).toBe(false)
+      const n = nuevo.nodes.find((x: any) => x.name === l)
+      const hoyTxt = String(n.parameters.jsonBody).replace('\n  ' + LINEA_DEL_TOPE, '')
+      expect(hoyTxt).not.toContain('max_budget_usd')
+    }
+  })
+  it('un tope ausente, cero, negativo o que no es número no pone la clave (el sobre ya lo rechaza antes de gastar)', () => {
+    for (const t of [undefined, 0, -3, 'x', null]) expect('max_budget_usd' in cuerpoDe('Lente · editor-en-jefe', { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: t } })).toBe(false)
+  })
+  it('si el nodo de validación no corrió, no rompe la llamada (la clave simplemente no va)', () => {
+    expect('max_budget_usd' in cuerpoDe('Lente · editor-en-jefe', null)).toBe(false)
+  })
+})

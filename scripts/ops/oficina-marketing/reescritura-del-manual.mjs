@@ -67,4 +67,24 @@ export const SUSTITUCIONES = [
 
 export function construirReescrituraDelManual(f) {
   for (const [nodo, viejo, nuevo] of SUSTITUCIONES) cambiarCodigo(f, nodo, viejo, nuevo)
+  construirTopeDeLasLlamadas(f)
+}
+
+/**
+ * TOPE DE GASTO POR LLAMADA · las 5 llamadas al modelo del manual (3 lentes, juez, repetir la voz) llevan `max_budget_usd` = tope_reescritura_usd ÷ 5 SOLO en modo reescritura
+ * (`run-sdk` lo acepta en el cuerpo). Sin `reescritura` la expresión da '' y el cuerpo queda como hoy. Es un tope por llamada, no un total exacto: el ciclo de corrección (Lazo A)
+ * repite el juez y puede sumar; eso se declara en el LISTO.
+ */
+export const LLAMADAS_CON_TOPE = ['Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success', '[BB] Judge · run-sdk', '[BB] Uso · pedir la voz otra vez (editor-en-jefe)']
+export const DIVISOR_DEL_TOPE = 5
+export const LINEA_DEL_TOPE = `{{ (function () { try { const r = $('Validate Deal Data').first().json.reescritura; return (r && r.tope_reescritura_usd > 0) ? '"max_budget_usd": ' + (Math.round(r.tope_reescritura_usd / ${DIVISOR_DEL_TOPE} * 100) / 100) + ',' : '' } catch (e) { return '' } })() }}`
+export function construirTopeDeLasLlamadas(f) {
+  for (const nombre of LLAMADAS_CON_TOPE) {
+    const n = f.nodes.find((x) => x.name === nombre)
+    if (!n) throw new Error(`falta el nodo «${nombre}»`)
+    const cuerpo = String(n.parameters.jsonBody)
+    const ancla = '\n  "task": '
+    if (cuerpo.split(ancla).length !== 2) throw new Error(`«${nombre}»: el ancla del cuerpo debe aparecer exactamente una vez`)
+    n.parameters.jsonBody = cuerpo.replace(ancla, '\n  ' + LINEA_DEL_TOPE + ancla)
+  }
 }
