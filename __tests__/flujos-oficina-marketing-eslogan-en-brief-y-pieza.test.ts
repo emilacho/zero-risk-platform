@@ -101,4 +101,13 @@ describe('el pedido de la pieza', () => {
     expect(c).not.toMatch(/es un HECHO de la marca|no una opción|no_pude_cumplir. y rotula/i)
     expect(codigoDe(sinParte4(PIEZA), NODOS_PIEZA.armar)).not.toContain('bloqueEslogan')
   })
+  it('F08 · la pieza deja la decisión libre: puede usarla, adaptarla o proponer otra, y no exige justificar', () => {
+    const c = codigoDe(leer('nuevo', PIEZA), NODOS_PIEZA.armar)
+    const i = c.indexOf('UNA FRASE QUE EL CLIENTE USA (contexto)')
+    expect(i).toBeGreaterThan(-1)
+    const bloque = c.slice(i, i + 900) // el bloque de la frase, no el resto del armado
+    expect(bloque).toContain('puedes usarla, adaptarla o proponer otra mejor, libremente; tus propuestas son aporte creativo')
+    expect(bloque).not.toMatch(/justific/i)
+    expect(bloque).not.toMatch(/obligatori|debes usar|tienes que usar/i)
+  })
 })
