@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { resolve as pathResolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { CAMPOS } from '../../../../../src/lib/manual/campos-del-manual'
+import { BRAND_SECTION_ALLOW } from '../agent-mcp-registry'
 import { EMIT_BRAND_SECTION_TOOL } from '../forced-emit-messages'
 
 vi.mock('@anthropic-ai/sdk', () => ({ default: class {} }))
@@ -29,6 +30,11 @@ describe('la herramienta de las secciones del manual', () => {
   it.each(NUEVOS)('🔴 %s es opcional en el servidor: una entrega sin él no se rechaza', (campo) => {
     expect(servidor).toMatch(new RegExp(`^  ${campo}: PROV\\([^\\n]*\\n\\s*\\.optional\\(\\)`, 'm'))
     expect(EMIT_BRAND_SECTION_TOOL.input_schema.required).not.toContain(campo)
+  })
+
+  it.each(['content-creator', 'design-visual-storyteller', 'creative-director-mesa'])('🔴 %s puede entregar: está en la lista y en lens', (agente) => {
+    expect(BRAND_SECTION_ALLOW.has(agente)).toBe(true)
+    expect(propiedades.lens.enum).toContain(agente)
   })
 
   it('🔴 lo que se declara existe en la definición única del manual', () => {

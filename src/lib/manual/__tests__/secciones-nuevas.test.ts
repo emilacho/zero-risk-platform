@@ -69,6 +69,10 @@ describe('la regla de Emilio · lo que no existe se propone', () => {
     expect(hojasDeTexto({ [clave]: SECCIONES[clave].tipo === 'lista' ? ['Desde 1987'] : 'Desde 1987' }).map((h) => h.campo)).toEqual([clave])
   })
 
+  it('🔴 la historia sin fuente se narra sin fecha, cifra ni lugar exacto', () => {
+    expect(pedidos(['historia_y_origen'])[0].task).toMatch(/sin fuente, narra sin fecha, cifra ni lugar exacto/)
+  })
+
   it('🔴 los datos duros siguen sin inventarse', () => {
     const t = pedidos(['productos'])[0].task
     for (const dato of ['teléfonos', 'direcciones', 'horarios', 'precios', 'fechas', 'cifras']) expect(t).toContain(dato)
