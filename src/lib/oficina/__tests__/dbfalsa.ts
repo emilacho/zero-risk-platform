@@ -57,6 +57,7 @@ class Consulta {
   private conflicto: string[] | null = null
   private orden: { col: string; asc: boolean } | null = null
   private tope: number | null = null
+  private rango: [number, number] | null = null
   private proyeccion: string | null = null
   private uno: 'single' | 'maybe' | null = null
   private devuelve = false
@@ -90,6 +91,7 @@ class Consulta {
   is(c: string, v: unknown) { this.filtros.push((f) => (v === null ? !hay(leer(f, c)) : leer(f, c) === v)); return this }
   order(c: string, o?: { ascending?: boolean }) { this.orden = { col: c, asc: o?.ascending !== false }; return this }
   limit(n: number) { this.tope = n; return this }
+  range(a: number, b: number) { this.rango = [a, b]; return this }
   single() { this.uno = 'single'; return this }
   maybeSingle() { this.uno = 'maybe'; return this }
   private proy(f: Fila) { if (!this.proyeccion || this.proyeccion === '*') return { ...f }; const o: Fila = {}; for (const c of this.proyeccion.split(',').map((x) => x.trim())) o[c] = f[c]; return o }
@@ -135,6 +137,7 @@ class Consulta {
       data = filas.filter((f) => this.filtros.every((g) => g(f)))
       if (this.orden) { const { col, asc } = this.orden; data = [...data].sort((a, b) => (String(a[col]) < String(b[col]) ? -1 : 1) * (asc ? 1 : -1)) }
       if (this.tope !== null) data = data.slice(0, this.tope)
+      if (this.rango) data = data.slice(this.rango[0], this.rango[1] + 1)
     }
     if ((this.op === 'select' || this.devuelve) && this.uno) {
       if (data.length === 0) return this.uno === 'single' ? { data: null, error: { message: 'no rows' } } : { data: null, error: null }
