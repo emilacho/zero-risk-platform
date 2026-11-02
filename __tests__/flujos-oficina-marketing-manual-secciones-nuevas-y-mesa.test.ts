@@ -439,6 +439,12 @@ describe('5 · el juez anota los datos duros sin fuente (no borra, no cambia)', 
     // sin «Pedir cambios» no hay nada
     expect((await correr(EQUIPO.aportes, base(), respuestaAportes)).out._equipo.plan.tocados_validados).toEqual([])
   })
+  it('tocados_validados devuelve TODOS los validados tocados por palabras, no solo el primero', async () => {
+    const RE4 = { cambios_del_dueno: 'cambia el tono de WhatsApp y pon el logo sobre fondo claro', seccion: '', campos_validados: ['tono_por_canal', 'uso_del_logo', 'valores'], campos_liberados: [], manual_vigente: JSON.stringify({}), tope_reescritura_usd: 8 }
+    const { out } = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE4 })
+    expect(out._equipo.plan.tocados_validados.sort()).toEqual(['tono_por_canal', 'uso_del_logo'])
+    expect(out._equipo.plan.protegidos.sort()).toEqual(['tono_por_canal', 'uso_del_logo', 'valores'])
+  })
   it('el resumen del borrador lleva tocados_validados', async () => {
     const RE3 = { cambios_del_dueno: 'cambia el tono de WhatsApp a formal', seccion: '', campos_validados: ['tono_por_canal', 'valores'], campos_liberados: [], manual_vigente: JSON.stringify({}), tope_reescritura_usd: 8 }
     const e = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE3 })
