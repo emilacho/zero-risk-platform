@@ -267,7 +267,7 @@ export async function cargarEntradaDelResumen(db: Db, o: { client_id: string; no
   let datosDeSede: Array<{ clave: string; campo?: string | null; valor_texto?: string | null; observado_en?: string | null }> = []
   try {
     const claves = new Map<string, string>(o.sedes.map((s): [string, string] => [s.clave, s.clave]))
-    const sd = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, observado_en').eq('client_id', o.client_id).in('campo', [CAMPO_DEL_ESTADO, 'estado', 'apertura'])
+    const sd = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, observado_en').eq('client_id', o.client_id).in('campo', [CAMPO_DEL_ESTADO, 'estado', 'apertura']).is('retirada_en', null)
     // los ids de las sedes vienen de quien llama (ya las leyó); si no, se leen aquí
     const clavePorId = new Map<string, string>(o.sedes.filter((s) => s.id).map((s): [string, string] => [String(s.id), s.clave]))
     if (!clavePorId.size && o.sedes.length) { const ids = await db.from('client_sedes').select('id, clave').eq('client_id', o.client_id); for (const s of Array.isArray(ids.data) ? (ids.data as Array<Record<string, unknown>>) : []) clavePorId.set(String(s.id), String(s.clave ?? '')) }

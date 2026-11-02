@@ -11,6 +11,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { baseDeFicha, esPaginaDelClienteConPrueba } from '../propio/regla-propio'
+import { esPaginaDeReparto, retirarSedeDatosAjenos } from './ajenas'
 const L = require('./sedes-logica.js') as SedesLogica
 
 export interface Observacion {
@@ -121,6 +122,11 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     // homónimos que se volvían sedes del cliente). Sólo cuenta la página de SU dominio o de SU cuenta.
     const baseDelCliente = baseDeFicha(cli[0])
     const paginasDelCliente = paginas.filter((p) => esPaginaDelClienteConPrueba(baseDelCliente, p.url))
+    // una tienda de una app de reparto (Uber Eats, Rappi, PedidosYa…) es de quien la abrió, aunque lleve el nombre del cliente: no es dato de su sede, y se DECLARA (no entra en silencio ni con rótulo «sitio»)
+    const descartesDeReparto: ResultadoRecoleccion['descartes'] = paginas.filter((p) => esPaginaDeReparto(p.url) && !esPaginaDelClienteConPrueba(baseDelCliente, p.url)).map((p) => ({ fuente: 'reparto', motivo: 'página de una app de reparto sin prueba de ser del cliente: es referencia, no dato de su sede', ref: p.url }))
+    // lo que quedó guardado de antes desde una página ajena se RETIRA con motivo (nunca se borra); un fallo aquí se dice, no frena la lectura
+    const retiro = await retirarSedeDatosAjenos(supabase as never, { clientId, dry_run: false, quien: 'el recolector de sedes' })
+    if (!retiro.ok) descartesDeReparto.push({ fuente: 'sitio', motivo: 'no se pudo revisar si había datos de páginas ajenas: ' + (retiro.error ?? 'error'), ref: null })
     for (const p of paginasDelCliente) { const o = L.observacionesDelSitio(p.content_text || '', { url: p.url, crawled_at: p.crawled_at }); nSitio += o.length; obs.push(...o); for (const k of L.cuentasSocialesDe(p.content_text || '')) cuentasPropias.add(k) }
 
     const crudas = RAPIDO(await supabase.from('apify_raw').select('id,apify_function,params,respuesta,ensayo,created_at').eq('client_id', clientId).eq('ensayo', false).in('apify_function', ['instagram_scraper', 'google_maps_scraper', 'own_google_maps_profile']).order('created_at', { ascending: false }).limit(12), 'leer lo raspado') as FilaApify[]
@@ -141,7 +147,7 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     const sedesDeclaradas = L.descubrirSedes(obs)
     // D1 · lo ya visto en las fuentes PROPIAS (sitio · Instagram · la ficha) es contra lo que se prueba que una ficha de Mapas es del cliente: nombre + ciudad no alcanzan
     const pruebas = L.pruebasDePropiedad(obs, { website_url: cli[0].website_url, instagram: propio, cuentas: [...cuentasPropias] })
-    const descartes: ResultadoRecoleccion['descartes'] = []
+    const descartes: ResultadoRecoleccion['descartes'] = [...descartesDeReparto]
     const descartesVistos = new Set<string>()
     let nMapas = 0
     const aprobadas: { sede: string; id: string; item: Record<string, unknown>; prueba: string; ref: string | null; cuando: string }[] = []
@@ -171,7 +177,7 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
       const nuevas = RAPIDO(await supabase.from('client_sedes').insert(faltantes.map((s) => ({ client_id: clientId, clave: s.clave, ciudad: s.ciudad }))).select('id,clave,ciudad'), 'guardar las sedes') as Array<{ id: string; clave: string; ciudad: string }>
       for (const s of nuevas) porClave.set(s.clave, s)
     }
-    const guardadas = RAPIDO(await supabase.from('client_sede_datos').select('id,sede_id,campo,fuente,valor_norm,valor_texto,observado_en,reconfirmado_en').eq('client_id', clientId), 'leer las observaciones') as Array<{ id: string; reconfirmado_en: string | null; sede_id: string | null; campo: string; fuente: string; valor_norm: unknown; valor_texto: string; observado_en: string }>
+    const guardadas = RAPIDO(await supabase.from('client_sede_datos').select('id,sede_id,campo,fuente,valor_norm,valor_texto,observado_en,reconfirmado_en').eq('client_id', clientId).is('retirada_en', null), 'leer las observaciones') as Array<{ id: string; reconfirmado_en: string | null; sede_id: string | null; campo: string; fuente: string; valor_norm: unknown; valor_texto: string; observado_en: string }>
     const llave = (sedeId: string | null, campo: string, fuente: string, norm: unknown, texto: string, cuando: string | null) =>
       [sedeId || '', campo, fuente, JSON.stringify(norm ?? texto), String(cuando ? new Date(cuando).toISOString() : '')].join('|')
     const ya = new Set(guardadas.map((g) => llave(g.sede_id, g.campo, g.fuente, g.valor_norm, g.valor_texto, g.observado_en)))
@@ -220,7 +226,7 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     for (const [id, cuando] of reconfirmaciones) RAPIDO(await supabase.from('client_sede_datos').update({ reconfirmado_en: new Date(cuando).toISOString() }).eq('id', id).eq('client_id', clientId), 'anotar la reconfirmación')
 
     // ── la ficha resuelta, desde TODO lo guardado (no sólo lo de hoy) ──
-    const todas = RAPIDO(await supabase.from('client_sede_datos').select('sede_id,campo,valor_texto,valor_norm,fuente,fuente_ref,alcance,observado_en').eq('client_id', clientId), 'leer la ficha de sedes') as Array<{ sede_id: string | null; campo: Observacion['campo']; valor_texto: string; valor_norm: unknown; fuente: Observacion['fuente']; fuente_ref: string | null; alcance: Observacion['alcance']; observado_en: string }>
+    const todas = RAPIDO(await supabase.from('client_sede_datos').select('sede_id,campo,valor_texto,valor_norm,fuente,fuente_ref,alcance,observado_en').eq('client_id', clientId).is('retirada_en', null), 'leer la ficha de sedes') as Array<{ sede_id: string | null; campo: Observacion['campo']; valor_texto: string; valor_norm: unknown; fuente: Observacion['fuente']; fuente_ref: string | null; alcance: Observacion['alcance']; observado_en: string }>
     const clavePorId = new Map([...porClave.values()].map((s) => [s.id, s.clave]))
     const deLaBase: Observacion[] = todas.map((t) => ({ sede: t.sede_id ? clavePorId.get(t.sede_id) ?? null : null, ciudad: null, campo: t.campo, valor_texto: t.valor_texto, valor_norm: t.valor_norm, fuente: t.fuente, fuente_ref: t.fuente_ref, observado_en: t.observado_en, alcance: t.alcance }))
     const sedes = L.resolverSedes([...porClave.values()].map((s) => ({ clave: s.clave, ciudad: s.ciudad })), deLaBase)

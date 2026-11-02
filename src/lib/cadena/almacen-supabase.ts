@@ -111,7 +111,7 @@ export function almacenDeSupabase(): Almacen {
       //    Hasta que el portero tenga una puerta de LECTURA para la cadena, el cliente no aporta fichas firmadas (F0): la jerarquía corre sobre el manual, el plan y las observaciones de sede.
       const sedesDb = await lista<{ id: string; clave: string; ciudad: string }>(db.from('client_sedes').select('id, clave, ciudad').eq('client_id', clientId).limit(50))
       const datos = await lista<{ id: string; sede_id: string | null; campo: string; valor_texto: string; valor_norm: unknown; fuente: 'sitio' | 'instagram' | 'mapas'; observado_en: string }>(
-        db.from('client_sede_datos').select('id, sede_id, campo, valor_texto, valor_norm, fuente, observado_en').eq('client_id', clientId).order('observado_en', { ascending: false }).limit(500),
+        db.from('client_sede_datos').select('id, sede_id, campo, valor_texto, valor_norm, fuente, observado_en').eq('client_id', clientId).is('retirada_en', null).order('observado_en', { ascending: false }).limit(500),
       )
       const claveDe = new Map(sedesDb.map((s) => [s.id, s.clave]))
       const vistos = new Set<string>()
