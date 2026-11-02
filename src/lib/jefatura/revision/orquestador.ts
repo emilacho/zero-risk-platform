@@ -456,32 +456,31 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
   if (!esTerminal(rev) || !rev.resultado) return r(409, { error: 'revision_sin_cerrar', detalle: 'la revisión del plan todavía no cerró' })
   const h = historialDe(rev.estado_del_motor)
   const producidas = h.map((x) => x.etiqueta)
-  // 01-nov · firma de Emilio: lo que no cumple la orden del dueño no se adopta. El verificador informa; decide este código
+  // 02-nov · firma de Emilio (opción B): se elige como siempre. El verificador solo anota, a la vista del dueño antes de aprobar: nada se descarta ni se frena
   const ordenes = rev.entrada.ordenes_del_dueno ?? []
-  const veredicto = ordenes.length ? evaluarOrdenes(ordenes, Array.isArray(datos(rev.estado_del_motor, 'verificacion_de_ordenes')?.filas) ? (datos(rev.estado_del_motor, 'verificacion_de_ordenes')!.filas as FilaDeVerificacion[]) : null, h) : null
-  const vetadas = new Set(Object.entries(veredicto?.por_version ?? {}).filter(([, v]) => !v.cumple).map(([k]) => k))
+  const filas = datos(rev.estado_del_motor, 'verificacion_de_ordenes')?.filas
+  const verificada = ordenes.length > 0 && Array.isArray(filas)
+  const veredicto = verificada ? evaluarOrdenes(ordenes, filas as FilaDeVerificacion[], h) : null
   let ad
   try {
     const evaluadas = o.evaluaciones.map((x) => x.etiqueta).sort()
     if (JSON.stringify(evaluadas) !== JSON.stringify([...producidas].sort())) return r(400, { error: 'evaluaciones_no_coinciden', detalle: `se produjeron ${producidas.join(', ')} y se evaluaron ${evaluadas.join(', ')}` })
-    ad = elegirVersionPura(o.evaluaciones, vetadas)
+    ad = elegirVersionPura(o.evaluaciones)
   } catch (err) { return r(400, { error: 'evaluaciones_invalidas', detalle: err instanceof Error ? err.message : String(err) }) }
   const guardado = planDeGuardado(ad, { idDeA: o.idDeA, existentes: o.existentes, produjo: producidas })
-  // ninguna versión cumple (ni la de partida), la orden es un caso de salvaguarda, o no se pudo leer: va a la persona, con la orden intacta
   const sinAplicar = veredicto?.sin_aplicar ?? []
-  // «no aplica» es juicio del agente y el código no lo puede comprobar: si cubre más de la mitad de lo que pidió el dueño, no se le cree
-  const demasiadoSinAplicar = ordenes.length > 0 && sinAplicar.length * 2 > ordenes.length
-  const requiere_humano = vetadas.has(ad.adoptada) || (veredicto?.salvaguardas.length ?? 0) > 0 || rev.entrada.orden_ilegible === true || demasiadoSinAplicar
-  const descartadas = [...vetadas].filter((k) => k !== 'A' && k !== ad.adoptada)
-  const sin_entrar = descartadas.flatMap((k) => veredicto!.por_version[k].sin_cumplir.map((x) => `${x.orden} (${x.motivo})`))
-  const palabra_del_dueno = { verificada: !!veredicto, requiere_humano, ordenes, por_version: veredicto?.por_version ?? {}, sin_aplicar: veredicto?.sin_aplicar ?? [], salvaguardas: veredicto?.salvaguardas ?? [], orden_ilegible: rev.entrada.orden_ilegible === true }
-  const fin = resultadoTrasElegir({ resultado: rev.resultado, marcas: rev.marcas }, ad.adoptoLaUltima && !requiere_humano)
-  if (requiere_humano) fin.marcas.orden_sin_cumplir = true
-  if ((requiere_humano || descartadas.length || sinAplicar.length) && !rev.dry_run) {
-    const lo = rev.entrada.orden_ilegible ? 'No se pudo leer lo que pediste: revísalo antes de aprobar.' : [...(veredicto?.por_version[ad.adoptada]?.sin_cumplir ?? []).map((x) => `No se cumple: ${x.orden} (${x.motivo})`), ...(veredicto?.salvaguardas ?? []).map((x) => `Hay que confirmarla contigo, sin cambiarla: ${x.orden} (${x.motivo})`), ...sin_entrar.map((x) => `No entró por contradecirlo: ${x}`), ...sinAplicar.map((x) => `Se tomó como contexto y no como orden: ${x.orden} (${x.motivo})`)].join('\n')
-    await P.anotarPalabraDelDueno?.({ client_id: rev.client_id, plan_id: rev.artifact_id, titulo: requiere_humano ? 'Plan de 90 días: lo que pediste no quedó cumplido, revísalo' : descartadas.length ? 'Plan de 90 días: una revisión contradecía lo que pediste y no entró' : 'Plan de 90 días: revisa cómo se entendió lo que pediste', detalle: lo, metadata: { revision_id: rev.id, origen: 'jefatura', requiere_humano } })
-  }
-  if (fin.resultado !== rev.resultado || fin.marcas.con_desacuerdo !== rev.marcas.con_desacuerdo || fin.marcas.orden_sin_cumplir !== rev.marcas.orden_sin_cumplir) {
+  const orden_ilegible = rev.entrada.orden_ilegible === true
+  const palabra_del_dueno = { verificada, ordenes, por_version: veredicto?.por_version ?? {}, sin_aplicar: sinAplicar, salvaguardas: veredicto?.salvaguardas ?? [], orden_ilegible }
+  const fin = resultadoTrasElegir({ resultado: rev.resultado, marcas: rev.marcas }, ad.adoptoLaUltima)
+  const anotaciones = [
+    ...(orden_ilegible ? ['No se pudo leer lo que pediste: revísalo antes de aprobar.'] : []),
+    ...(ordenes.length && !verificada ? ['No se pudo comprobar si el plan cumple lo que pediste: revísalo antes de aprobar.'] : []),
+    ...(veredicto?.por_version[ad.adoptada]?.sin_cumplir ?? []).map((x) => `Al verificador le parece que no se cumple: ${x.orden} (${x.motivo})`),
+    ...(veredicto?.salvaguardas ?? []).map((x) => `Hay que confirmarla contigo, sin cambiarla: ${x.orden} (${x.motivo})`),
+    ...sinAplicar.map((x) => `Se tomó como contexto y no como orden: ${x.orden} (${x.motivo})`),
+  ]
+  if (anotaciones.length && !rev.dry_run) await P.anotarPalabraDelDueno?.({ client_id: rev.client_id, plan_id: rev.artifact_id, titulo: 'Plan de 90 días: revisa lo que pediste antes de aprobar', detalle: anotaciones.join('\n'), metadata: { revision_id: rev.id, origen: 'jefatura' } })
+  if (fin.resultado !== rev.resultado || fin.marcas.con_desacuerdo !== rev.marcas.con_desacuerdo) {
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: rev.estado_del_motor, gasto_usd: rev.gasto_usd, resultado: fin.resultado, marcas: fin.marcas })
     if (rev.resultado === 'limpia' || rev.resultado === 'sin_segunda_mirada') {
       await P.avisar({ canal: 'alertas', revision_id: rev.id, texto: `${rev.dry_run ? '🧪 (seco) ' : ''}⚠️ Plan con desacuerdo · ${rev.artifact_id}: la versión ${ad.ultima} no mejoró los chequeos; sigue la ${ad.adoptada}`, dry_run: rev.dry_run })
@@ -497,7 +496,7 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
       const texto = h.find((x) => x.etiqueta === g.etiqueta)?.texto
       if (typeof texto !== 'string') continue
       const hasta = g.etiqueta === 'B' ? fichas.filter((f) => f.origen !== 'externa') : fichas
-      textos_a_guardar[g.etiqueta as 'B' | 'C'] = ponerQueCambio(texto, armarQueCambio({ ciclo, fichas: hasta, sin_entrar }))
+      textos_a_guardar[g.etiqueta as 'B' | 'C'] = ponerQueCambio(texto, armarQueCambio({ ciclo, fichas: hasta }))
     }
   }
   return r(200, { accion: 'versiones_elegidas', adoptada: ad.adoptada, ultima: ad.ultima, adopto_la_ultima: ad.adoptoLaUltima, razones: ad.razones, plan_de_guardado: guardado, palabra_del_dueno, ...(textos_a_guardar ? { textos_a_guardar } : {}), resultado: fin.resultado, marcas: fin.marcas, simulado: rev.dry_run })

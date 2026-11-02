@@ -12,6 +12,7 @@ import { armarPedidoAlRevisor, preguntaAlRevisor, type ContextoDelRevisor, type 
 import type { PayloadDeRevision, Simulacion, TipoDeRevision } from './contrato'
 import { limitesDelFormato, MARCA_DE_FIN_DE_RESOLUCION, MARCA_DE_INICIO_DE_RESOLUCION } from './formatos'
 import type { Dueno, PoliticaDeRevision } from './politicas'
+import { bloqueDeOrdenesDelDueno } from './orden-del-dueno'
 
 /** el mismo valor que `CABECERA_SALTAR_EDITOR` de la cadena (una prueba lo vigila) */
 export const CABECERA_SALTAR_EDITOR = 'x-skip-editor-middleware'
@@ -150,7 +151,7 @@ export function tareaDeCorreccion(a: { politica: PoliticaDeRevision; payload: Pa
   const fichas = `## Fichas que te tocan (solo las que bloquean)\n${a.fichas.map(lineaDeFicha).join('\n')}`
   const indicacion = a.tipo === 'plan' ? TRES_LINEAS_DEL_PLAN.join(' ') : `Respondes ítem por ítem: tomada o no tomada, con la razón. Si tomas algo, corriges solo eso.`
   if (a.esquema === 'plan_texto_y_resolucion.v1') {
-    const partes = [(a.payload.pedido_del_plan ?? '').trim(), `## El plan actual (${a.version_actual})\n${a.texto.trim()}`, fichas, TRES_LINEAS_DEL_PLAN.join('\n'), FORMATO_DEL_PLAN(false)]
+    const partes = [(a.payload.pedido_del_plan ?? '').trim(), bloqueDeOrdenesDelDueno(a.payload.ordenes_del_dueno), `## El plan actual (${a.version_actual})\n${a.texto.trim()}`, fichas, TRES_LINEAS_DEL_PLAN.join('\n'), FORMATO_DEL_PLAN(false)]
     return { task: partes.filter(Boolean).join('\n\n'), indicacion, esquema: a.esquema }
   }
   const objeto = a.objeto !== undefined ? `## Lo actual (${tituloDeLoRevisado(a.tipo)})\n${JSON.stringify(a.objeto)}` : `## Lo actual (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`
@@ -167,7 +168,7 @@ export function tareaDeDecision(a: { politica: PoliticaDeRevision; payload: Payl
   const opinion = `## La opinión de un revisor externo (leyó ${tituloDeLoRevisado(a.tipo)} sin conocer el hilo de la revisión)\n${a.opinion.trim()}`
   if (a.esquema === 'plan_texto_y_resolucion.v1') {
     const indicacion = 'Decide qué tomas de esta opinión. Si no tomas nada, responde solo la resolución, sin texto del plan. Si tomas algo, escribe UNA versión final completa del plan con eso; es la última, no habrá otra revisión.'
-    const partes = [(a.payload.pedido_del_plan ?? '').trim(), `## El plan vigente (${a.version_actual})\n${a.texto.trim()}`, opinion, ids, indicacion, FORMATO_DEL_PLAN(true)]
+    const partes = [(a.payload.pedido_del_plan ?? '').trim(), bloqueDeOrdenesDelDueno(a.payload.ordenes_del_dueno), `## El plan vigente (${a.version_actual})\n${a.texto.trim()}`, opinion, ids, indicacion, FORMATO_DEL_PLAN(true)]
     return { task: partes.filter(Boolean).join('\n\n'), indicacion, esquema: a.esquema }
   }
   const indicacion = 'Decide qué tomas de la opinión, ítem por ítem, con la razón. Una corrección como máximo en este paso.'

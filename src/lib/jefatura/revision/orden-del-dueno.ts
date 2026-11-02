@@ -1,9 +1,8 @@
 /**
- * LA PALABRA DEL DUEÑO MANDA (01-nov · firma de Emilio «mi palabra manda»). Puro, sin base y sin modelo.
- * El significado de «condiciona» no se decide con texto: lo juzga un agente que no escribió el plan. Lo que se fuerza por código es el resultado:
- *  · las órdenes salen de lo que el dueño escribió, partidas por código: el agente no puede inventarlas ni omitirlas;
- *  · una fila que falta, sin cita literal o ilegible cuenta como «no cumple»; sin verificación, ninguna versión cumple;
- *  · la versión que no cumple no se adopta; si ninguna cumple, va a la persona.
+ * LA PALABRA DEL DUEÑO MANDA (02-nov · Emilio eligió la opción B). Puro, sin base y sin modelo.
+ * Lo que el dueño escribió llega aparte a quien corrige y decide, marcado como superior a la opinión de los revisores.
+ * Un agente que no escribió el plan anota lo que le parece que no se cumple, a la vista del dueño antes de aprobar. Nada se descarta y nada se frena: decide Emilio.
+ * Lo que fuerza el código es solo que la anotación sea honesta: las órdenes salen de lo que escribió el dueño, y un «cumple» sin cita literal se anota como no comprobado.
  */
 import { citaAparece, normalizar } from '../../cadena/texto'
 
@@ -15,7 +14,7 @@ export const ESQUEMA_DE_VERIFICACION = 'verificacion_de_ordenes.v1'
 export const MINIMO_DE_CARACTERES_DE_CITA = 15
 const MINIMO_DE_CARACTERES_DE_ORDEN = 12
 
-/** lista cerrada: fuera de esto, ninguna orden se escala. Escalar no quita ni cambia la orden: solo avisa a la persona */
+/** lista cerrada: fuera de esto, ninguna orden se señala. Señalarla no quita ni cambia la orden: solo avisa a la persona */
 export const CATEGORIAS_DE_SALVAGUARDA = ['ilegal', 'dano_a_personas'] as const
 export type CategoriaDeSalvaguarda = (typeof CATEGORIAS_DE_SALVAGUARDA)[number]
 
@@ -38,8 +37,8 @@ export interface VeredictoDeOrdenes {
   salvaguardas: Array<{ orden: string; categoria: CategoriaDeSalvaguarda; motivo: string }>
 }
 
-/** `filas` null = la verificación no ocurrió o no se pudo leer: ninguna versión cumple */
-export function evaluarOrdenes(ordenes: string[], filas: FilaDeVerificacion[] | null, versiones: VersionDelPlan[]): VeredictoDeOrdenes {
+/** solo produce lo que se anota: quien elige la versión no lo usa */
+export function evaluarOrdenes(ordenes: string[], filas: FilaDeVerificacion[], versiones: VersionDelPlan[]): VeredictoDeOrdenes {
   const sin_aplicar = new Map<string, string>()
   const salvaguardas: VeredictoDeOrdenes['salvaguardas'] = []
   const por_version: Record<string, VeredictoDeVersion> = {}
@@ -47,8 +46,8 @@ export function evaluarOrdenes(ordenes: string[], filas: FilaDeVerificacion[] | 
     const sin_cumplir: OrdenSinCumplir[] = []
     let algunaCumple = false
     ordenes.forEach((orden, i) => {
-      const suyas = (filas ?? []).filter((f) => f.version === v.etiqueta && f.orden === i + 1)
-      if (!suyas.length) return void sin_cumplir.push({ orden, motivo: filas ? 'el verificador no respondió por esta orden' : 'no se pudo verificar' })
+      const suyas = filas.filter((f) => f.version === v.etiqueta && f.orden === i + 1)
+      if (!suyas.length) return void sin_cumplir.push({ orden, motivo: 'el verificador no respondió por esta orden' })
       for (const f of suyas) {
         if (CATEGORIAS_DE_SALVAGUARDA.includes(f.salvaguarda as CategoriaDeSalvaguarda) && !salvaguardas.some((x) => x.orden === orden)) salvaguardas.push({ orden, categoria: f.salvaguarda as CategoriaDeSalvaguarda, motivo: String(f.motivo ?? '') })
       }
@@ -66,8 +65,14 @@ export function evaluarOrdenes(ordenes: string[], filas: FilaDeVerificacion[] | 
   return { por_version, sin_aplicar: [...sin_aplicar].map(([orden, motivo]) => ({ orden, motivo })), salvaguardas }
 }
 
+/** llega aparte a quien corrige y a quien decide: es lo único que manda sobre la opinión de los revisores */
+export function bloqueDeOrdenesDelDueno(ordenes: string[] | undefined): string {
+  if (!ordenes?.length) return ''
+  return `## Lo que ordenó el dueño (manda sobre lo que opinen los revisores)\n${ordenes.map((o) => `- ${o}`).join('\n')}\nSi una ficha o una opinión lo contradice, vale esto. Si crees que algo de aquí está mal, dilo en tu razón: no lo suavices ni lo aplaces.`
+}
+
 export function tareaDeVerificacionDeOrdenes(a: { ordenes: string[]; versiones: VersionDelPlan[] }): { task: string; indicacion: string; esquema: string } {
-  const indicacion = 'Comprueba si cada frase del dueño se respeta en cada versión del plan. No corriges el plan ni opinas sobre él.'
+  const indicacion = 'Comprueba si cada frase del dueño se respeta en cada versión del plan. No corriges el plan ni opinas sobre él. Tu respuesta no cambia ninguna versión: se le muestra al dueño antes de aprobar.'
   const task = [
     indicacion,
     `## Lo que escribió el dueño, frase por frase\n${a.ordenes.map((o, i) => `${i + 1}. ${o}`).join('\n')}`,

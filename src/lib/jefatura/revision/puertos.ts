@@ -97,7 +97,7 @@ export interface Puertos {
   hechosDelDueno?(client_id: string): Promise<Array<{ tema: string; frases_negadas: string[] }>>
   /** la versión real del plan y lo que pidió el dueño en este ciclo, leídos del plan de partida; nunca lanza */
   cicloDelPlan?(artifact_id: string): Promise<CicloDelPlan>
-  /** deja a la vista del dueño, en su lista de decisiones, lo que no se cumplió de su orden o lo que no entró por contradecirla. Una sola por plan; nunca lanza */
+  /** deja a la vista del dueño, en su lista de decisiones, lo que al verificador le parece que no se cumple de su orden. Una sola por plan; no frena nada y nunca lanza */
   anotarPalabraDelDueno?(p: { client_id: string; plan_id: string; titulo: string; detalle: string; metadata: Record<string, unknown> }): Promise<void>
   ahora(): Date
   /** el revisor ciego (otro proveedor); en `dry_run` el orquestador NO lo llama (usa la simulación) */

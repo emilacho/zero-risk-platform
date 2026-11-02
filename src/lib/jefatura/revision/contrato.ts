@@ -85,7 +85,7 @@ export interface EntradaDeRevision {
 }
 
 /** `ficha_sin_dueno` solo aparece (en true) cuando una ficha bloqueante del jefe no tiene a quién corregirla; ausente = no pasó (la forma de siempre no cambia) */
-export interface Marcas { con_desacuerdo: boolean; sin_segunda_mirada: boolean; ficha_sin_dueno?: boolean; orden_sin_cumplir?: boolean }
+export interface Marcas { con_desacuerdo: boolean; sin_segunda_mirada: boolean; ficha_sin_dueno?: boolean }
 
 export interface RespuestaDeFicha { ficha_id: string; origen: string; donde: string; estado: string; razon: string | null }
 
