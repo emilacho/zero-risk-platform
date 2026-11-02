@@ -91,6 +91,62 @@ describe('lo que no se pudo leer se declara', () => {
   })
 })
 
+describe('el proceso y el paso que cayó', () => {
+  const conDetalle = (detalles: Record<string, Fila | number>, nombres: Record<string, string> = { otro: 'Aprendizaje semanal', ssLtwYPt7zxuvnM2: 'Manual' }, lista: Fila[] = [SUELTA]) => (async (u: string) => {
+    const url = String(u)
+    const ej = /executions\/([^?]+)\?includeData/.exec(url)
+    if (ej) { const d = detalles[ej[1]]; return typeof d === 'number' || d === undefined ? new Response('{}', { status: typeof d === 'number' ? d : 404 }) : new Response(JSON.stringify(d)) }
+    const w = /workflows\/(.+)$/.exec(url)
+    if (w) return nombres[w[1]] ? new Response(JSON.stringify({ name: nombres[w[1]] })) : new Response('{}', { status: 404 })
+    return new Response(JSON.stringify({ data: lista }))
+  }) as unknown as typeof fetch
+  const CAIDA = { data: { resultData: { lastNodeExecuted: 'Invoke Optimization Agent', error: { message: 'Bad gateway - the service failed to handle your request' } } } }
+  it('🔴 una ejecución suelta trae proceso, paso y motivo real', async () => {
+    const { fallas } = await leer(ctx(dbCon([]), conDetalle({ 300: CAIDA })))
+    expect(fallas[0]).toMatchObject({ flujo: 'Aprendizaje semanal', nodo: 'Invoke Optimization Agent', motivo: 'El servicio del empleado no respondió', detalle: 'Bad gateway - the service failed to handle your request' })
+  })
+  it('🔴 un pedido enlazado gana el proceso y el paso, y conserva su propio motivo', async () => {
+    const { fallas } = await leer(ctx(dbCon([PEDIDO_NAUFRAGO]), conDetalle({ 212902: { data: { resultData: { lastNodeExecuted: 'Lente · brand-strategist', error: { message: 'otra cosa' } } } } }, undefined, [EJEC_NAUFRAGO])))
+    expect(fallas[0]).toMatchObject({ flujo: 'Manual', nodo: 'Lente · brand-strategist', motivo: 'Se cortó la conexión con el empleado' })
+    expect(String(fallas[0].detalle)).toContain('sin dejar una versión nueva')
+  })
+  it('🔴 un pedido sin ejecución enlazada no pide detalle ni falla', async () => {
+    const r = await leer(ctx(dbCon([PEDIDO_NAUFRAGO]), conDetalle({}, undefined, [])))
+    expect(r.fallas[0]).toMatchObject({ flujo: null, nodo: null })
+    expect(r.completo).toBe(true)
+  })
+  it('🔴 si n8n ya no tiene el detalle, la falla igual sale y queda declarado', async () => {
+    const r = await leer(ctx(dbCon([]), conDetalle({ 300: 404 })))
+    expect(r.total).toBe(1)
+    expect(r.fallas[0]).toMatchObject({ nodo: null, motivo: 'El proceso falló sin dar un motivo legible' })
+    expect(r.completo).toBe(false)
+    expect(r.fuentes.find((f) => f.fuente === 'n8n_detalle')).toMatchObject({ estado: 'error', filas: 0 })
+  })
+  it('🔴 el motivo crudo pasa por la limpieza de secretos', async () => {
+    const LLAVE = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789'
+    const { fallas } = await leer(ctx(dbCon([]), conDetalle({ 300: { data: { resultData: { error: { message: `falló ${LLAVE}` } } } } })))
+    expect(String(fallas[0].detalle)).not.toContain(LLAVE)
+  })
+  it('🔴 pide el nombre de cada proceso una sola vez', async () => {
+    const urls: string[] = []
+    const base = conDetalle({ 1: CAIDA, 2: CAIDA }, undefined, [{ ...SUELTA, id: '1' }, { ...SUELTA, id: '2' }])
+    await leer(ctx(dbCon([]), (async (u: string) => { urls.push(String(u)); return base(u as never) }) as unknown as typeof fetch))
+    expect(urls.filter((u) => u.includes('/workflows/'))).toHaveLength(1)
+  })
+  it('🔴 con más de 30 pide solo las 30 más recientes, de a 5, y lo declara', async () => {
+    const lista = Array.from({ length: 35 }, (_, i) => ({ ...SUELTA, id: String(i), stoppedAt: new Date(Date.parse(SUELTA.stoppedAt as string) - i * 1000).toISOString() }))
+    let vivas = 0, pico = 0, pedidas: string[] = []
+    const base = conDetalle(Object.fromEntries(lista.map((e) => [String(e.id), CAIDA])), undefined, lista)
+    const f = (async (u: string) => { if (String(u).includes('includeData')) { pedidas.push(String(u)); vivas++; pico = Math.max(pico, vivas); await new Promise((r) => setTimeout(r, 2)); vivas-- } return base(u as never) }) as unknown as typeof fetch
+    const r = await leer(ctx(dbCon([]), f))
+    expect(pedidas).toHaveLength(30)
+    expect(pedidas.some((u) => u.includes('/executions/34?'))).toBe(false)
+    expect(pico).toBeLessThanOrEqual(5)
+    expect(r.completo).toBe(false)
+    expect(r.fuentes.find((x) => x.fuente === 'n8n_detalle')).toMatchObject({ truncado: true })
+  })
+})
+
 describe('lo que se corta se declara', () => {
   it('🔴 a n8n solo le pide las ejecuciones en error', async () => {
     const urls: string[] = []
@@ -105,7 +161,7 @@ describe('lo que se corta se declara', () => {
   })
   it('🔴 con 99 ejecuciones no se declara corte', async () => {
     const r = await leer(ctx(dbCon([]), n8n(Array.from({ length: 99 }, (_, i) => ({ ...SUELTA, id: String(i) })))))
-    expect(r.completo).toBe(true)
+    expect(r.fuentes.find((f) => f.fuente === 'n8n')).not.toHaveProperty('truncado')
   })
   it('🔴 con 500 pedidos queda incompleto y pide ese tope', async () => {
     let tope = 0

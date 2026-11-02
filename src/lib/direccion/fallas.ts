@@ -12,6 +12,9 @@ const MS_DEL_DIA = 86_400_000
 export const MAX_DIAS_DE_FALLAS = 92
 const TOPE_DE_PEDIDOS = 500
 const PAGINA_DE_N8N = 100
+/** cada detalle de n8n trae la ejecución entera: se piden los más recientes, de a pocos */
+const TOPE_DE_DETALLES = 30
+const DETALLES_A_LA_VEZ = 5
 /** el pedido se cierra apenas vuelve el flujo: medido 0,2 s en la corrida 212902 */
 const MISMA_FALLA_MS = 10_000
 const inicioDelDia = (d: string): number => Date.parse(`${d}T00:00:00Z`) + ECUADOR_MS
@@ -27,6 +30,7 @@ export function motivoEnPalabras(detalle: string | null): string {
   const tope = /timed out after (\d+) seconds/i.exec(d)
   if (tope) return `Un paso pasó del límite de ${Math.round(Number(tope[1]) / 60)} min`
   if (/connection to the server was closed|socket hang up|ECONNRESET|terminated/i.test(d)) return 'Se cortó la conexión con el empleado'
+  if (/bad gateway|service unavailable/i.test(d)) return 'El servicio del empleado no respondió'
   if (/sin dejar una versi[oó]n nueva/i.test(d)) return 'El proceso terminó sin dejar una versión nueva'
   return 'El proceso falló sin dar un motivo legible'
 }
@@ -43,6 +47,9 @@ export interface Falla {
   detalle: string | null
   ejecucion_id: string | null
   workflow_id: string | null
+  /** nulos si n8n ya no lo tiene o la falla quedó fuera del tope de detalles */
+  flujo: string | null
+  nodo: string | null
 }
 export interface OpcionesDeFallas { desde?: unknown; hasta?: unknown; client_id?: unknown }
 
@@ -65,6 +72,41 @@ async function leerEjecuciones(fuentes: Fuente[], c: Contexto, a: number, b: num
     fuentes.push({ fuente: 'n8n', estado: 'error', filas: 0, detalle: sinSecretos(e instanceof Error ? e.message : String(e)) ?? 'error' })
     return []
   }
+}
+
+/** el nombre del proceso, el paso que cayó y su motivo. Lo que no se pudo leer queda nulo y se declara en `fuentes`: la falla igual se muestra */
+async function completarConN8n(fallas: Falla[], fuentes: Fuente[], c: Contexto): Promise<void> {
+  const env = c.env ?? process.env
+  const base = texto(env.N8N_BASE_URL)?.replace(/\/+$/, ''), llave = texto(env.N8N_API_KEY)
+  const conEjecucion = fallas.filter((x) => x.ejecucion_id)
+  if (!base || !llave || !conEjecucion.length) return
+  const f = c.fetchImpl ?? fetch
+  const pedir = async (ruta: string): Promise<Fila | null> => {
+    try {
+      const r = await f(`${base}${ruta}`, { headers: { 'X-N8N-API-KEY': llave, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) })
+      return r.ok ? (await r.json() as Fila) : null
+    } catch { return null }
+  }
+  const nombres = new Map<string, Promise<Fila | null>>()
+  const nombreDe = (id: string) => { const p = nombres.get(id) ?? pedir(`/api/v1/workflows/${encodeURIComponent(id)}`); nombres.set(id, p); return p }
+  const elegidas = conEjecucion.slice(0, TOPE_DE_DETALLES)
+  let leidas = 0
+  for (let i = 0; i < elegidas.length; i += DETALLES_A_LA_VEZ) {
+    await Promise.all(elegidas.slice(i, i + DETALLES_A_LA_VEZ).map(async (x) => {
+      const [ej, flujo] = await Promise.all([pedir(`/api/v1/executions/${encodeURIComponent(String(x.ejecucion_id))}?includeData=true`), x.workflow_id ? nombreDe(x.workflow_id) : null])
+      x.flujo = texto(flujo?.name)
+      const rd = ((ej?.data as Fila | undefined)?.resultData ?? null) as Fila | null
+      if (!rd) return
+      leidas++
+      x.nodo = texto(rd.lastNodeExecuted)
+      const crudo = texto((rd.error as Fila | undefined)?.message)
+      if (x.origen === 'ejecucion' && crudo) { x.detalle = sinSecretos(crudo); x.motivo = motivoEnPalabras(x.detalle) }
+    }))
+  }
+  const fuente: Fuente = { fuente: 'n8n_detalle', estado: leidas === elegidas.length ? 'ok' : 'error', filas: leidas }
+  if (leidas !== elegidas.length) fuente.detalle = `n8n no entregó el detalle de ${elegidas.length - leidas} de ${elegidas.length} fallas`
+  if (conEjecucion.length > elegidas.length) { fuente.truncado = true; fuente.detalle = `solo se pidió el detalle de las ${elegidas.length} más recientes` }
+  fuentes.push(fuente)
 }
 
 export async function leerFallasDelFlujo(c: Contexto, o: OpcionesDeFallas): Promise<{ status: number; cuerpo: Record<string, unknown> }> {
@@ -95,7 +137,7 @@ export async function leerFallasDelFlujo(c: Contexto, o: OpcionesDeFallas): Prom
     return {
       origen: 'pedido', id: String(f.id), client_id: texto(f.client_id), documento: texto(f.documento), empezo_en: texto(f.creado_en), ocurrio_en: String(f.actualizado_en),
       duracion_ms: Number.isNaN(cierre) || Number.isNaN(inicio) ? null : cierre - inicio, motivo: motivoEnPalabras(detalle), detalle,
-      ejecucion_id: misma ? String(misma.id) : null, workflow_id: misma ? texto(misma.workflowId) : null,
+      ejecucion_id: misma ? String(misma.id) : null, workflow_id: misma ? texto(misma.workflowId) : null, flujo: null, nodo: null,
     }
   })
   // sin filtro de cliente: una ejecución de n8n no dice de qué cliente es, así que con filtro no se puede afirmar que sea suya
@@ -105,10 +147,11 @@ export async function leerFallasDelFlujo(c: Contexto, o: OpcionesDeFallas): Prom
       const fin = String(e.stoppedAt ?? e.startedAt), t0 = Date.parse(String(e.startedAt)), t1 = Date.parse(fin)
       fallas.push({
         origen: 'ejecucion', id: String(e.id), client_id: null, documento: null, empezo_en: texto(e.startedAt), ocurrio_en: fin,
-        duracion_ms: Number.isNaN(t0) || Number.isNaN(t1) ? null : t1 - t0, motivo: motivoEnPalabras(null), detalle: null, ejecucion_id: String(e.id), workflow_id: texto(e.workflowId),
+        duracion_ms: Number.isNaN(t0) || Number.isNaN(t1) ? null : t1 - t0, motivo: motivoEnPalabras(null), detalle: null, ejecucion_id: String(e.id), workflow_id: texto(e.workflowId), flujo: null, nodo: null,
       })
     }
   }
   fallas.sort((x, y) => Date.parse(y.ocurrio_en) - Date.parse(x.ocurrio_en))
+  await completarConN8n(fallas, fuentes, c)
   return { status: 200, cuerpo: { ok: true, generado_en: c.ahora().toISOString(), desde: o.desde, hasta: o.hasta, completo: estaCompleto(fuentes), total: fallas.length, fallas, fuentes } }
 }
