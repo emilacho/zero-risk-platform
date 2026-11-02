@@ -67,6 +67,12 @@ export function palabrasDeEstilo(manual: Parameters<typeof leerPalabras>[0]): st
   return leerPalabras(manual).filter((p) => p.intencion === 'estilo').map((p) => p.texto)
 }
 
+/** 02-nov · el dueño reescribió la lista entera: lo declarado sigue si la palabra sigue; la que quitó deja de contar; la nueva es contexto, como toda palabra sin intención */
+export function declaradasQueSiguen(manual: Parameters<typeof leerPalabras>[0], listaNueva: string[]): PalabraConIntencion[] {
+  const siguen = new Set(listaNueva.map(clave))
+  return leerPalabras(manual).filter((p) => (p.intencion !== 'estilo' || p.porque) && siguen.has(clave(p.texto)))
+}
+
 /** lo que manda una corrida de agentes: nunca puede declarar por el dueño */
 export function deUnaCorrida(x: unknown): PalabraConIntencion[] {
   return (Array.isArray(x) ? x : []).map(leerEntrada).filter((p): p is PalabraConIntencion => !!p).map((p) => {

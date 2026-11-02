@@ -20,7 +20,7 @@ import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { hallazgosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
 import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, type ConceptoLeido } from './conceptos'
-import { TOTAL_DE_TANDAS } from './constantes'
+import { medidaDeCampana } from './constantes'
 import { metodoDe } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 import { reglaDeIdioma, reglaDeRegistro } from './registro'
@@ -99,7 +99,7 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     fasesEnTexto(a.estrategia),
     ...(a.informeDeMercado ? ['', '# INFORME DE MERCADO (PROPUESTA · no es dato del cliente · contexto, no mandato)', a.informeDeMercado] : []),
     '',
-    ...(a.ctx.eslogan ? [`# ESLOGAN QUE EL CLIENTE YA USA\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
+    ...(a.ctx.eslogan ? [`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
     `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
     '',
     `# PLAN\n${a.ctx.planTexto}`,
@@ -130,7 +130,7 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     a.estrategia.patron_semanal.map((s) => `- ${s.slot}: ${s.red} · ${s.formato} · día ${s.dia_semana} ${s.hora}`).join('\n') || '(sin patrón)',
     '',
     `# SEDES\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
-    ...(a.ctx.eslogan ? [`# ESLOGAN QUE EL CLIENTE YA USA\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
+    ...(a.ctx.eslogan ? [`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
     `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
   ].join('\n')
 }
@@ -395,7 +395,7 @@ export async function siguienteDespuesDe(al: Almacen, campanaId: string): Promis
   const c = await al.campana(campanaId)
   if (!c || (c.estado !== 'calendario' && c.estado !== 'activa')) return {}
   const tanda = await tandaQueEspera(al, c.id)
-  if (tanda > TOTAL_DE_TANDAS) return {}
+  if (tanda > medidaDeCampana(c).totalTandas) return {}
   const etapa = await etapaDeReentrada(al, c)
   return etapa ? { siguiente: { sobre: sobreDeTanda(c, tanda, etapa) } } : {}
 }

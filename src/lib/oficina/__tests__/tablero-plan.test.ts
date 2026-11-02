@@ -31,7 +31,7 @@ describe('plan-cambios', () => {
     expect(s.toca).toMatchObject({ client_id: C, output_id: P1, comentario: TEXTO })
     expect(s.despertar_flujo).toEqual({
       camino: CAMINO_PLANEACION,
-      cuerpo: { client_id: C, plan_base_id: P1, cambios_del_dueno: TEXTO, plan_cambio_id: fila.id, forzar: true, con_analisis: false, con_mercado: false, tope_reescritura_usd: 6, origen: 'tablero/plan-cambios', pedido_por: 'emilio' },
+      cuerpo: { client_id: C, plan_base_id: P1, cambios_del_dueno: TEXTO, plan_cambio_id: fila.id, forzar: true, force_restart: true, con_analisis: false, con_mercado: false, tope_reescritura_usd: 6, origen: 'tablero/plan-cambios', pedido_por: 'emilio' },
       registrar: { tabla: 'plan_cambios', id: String(fila.id) },
     })
     expect(db.tablas['client_historical_outputs'][0].status).toBe('draft')

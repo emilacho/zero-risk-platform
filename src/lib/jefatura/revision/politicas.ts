@@ -6,6 +6,7 @@
  */
 import type { Condicion, Paso, Plantilla } from '../../revision-comun'
 import { TIPOS_DE_REVISION, type Productor, type TipoDeRevision } from './contrato'
+import { CLAVE_DE_VERIFICACION, ESQUEMA_DE_VERIFICACION, VERIFICADOR_DE_ORDENES } from './orden-del-dueno'
 
 export type Reentrega = 'ninguna' | 'parcial' | 'completa' | 'version_nueva'
 export type DestinoDeCierre = 'bandeja' | 'siguiente_paso'
@@ -26,14 +27,14 @@ export interface PoliticaDeRevision {
   indicacion_fondo: string | null
   chequeos_previos: string[]
   tope_revision_usd: number
-  tope_paso_usd: { revision_fondo?: number; revision_lengua?: number; correccion?: number; segunda_mirada?: number; decision?: number }
+  tope_paso_usd: { revision_fondo?: number; revision_lengua?: number; correccion?: number; segunda_mirada?: number; decision?: number; verificar_ordenes?: number }
   destino_cierre: DestinoDeCierre
   reentrega: Reentrega
   is_active: boolean
 }
 
 export const TOPE_MAXIMO_DE_REVISION_USD = 10
-const TOPES_POR_OMISION = { revision_fondo: 0.2, revision_lengua: 0.05, correccion: 0.2, segunda_mirada: 0.5, decision: 0.2 }
+const TOPES_POR_OMISION = { revision_fondo: 0.2, revision_lengua: 0.05, correccion: 0.2, segunda_mirada: 0.5, decision: 0.2, verificar_ordenes: 0.4 }
 /** el corrector de lengua (Haiku): corrección DURA de ortografía, gramática y puntuación del idioma del texto; no juzga contenido ni estilo (31-oct, decisión de Emilio) */
 export const REVISOR_DE_LENGUA = 'spell-check-corrector'
 /** el paso existe en un tipo SOLO si su política declara su tope (`tope_paso_usd.revision_lengua`) y el tipo tiene re-entrega: es dato, no código */
@@ -86,7 +87,7 @@ export function politicaDeFila(f: Record<string, unknown>): { ok: true; politica
   }
 }
 
-export const topeDelPaso = (p: PoliticaDeRevision, paso: 'revision_fondo' | 'revision_lengua' | 'correccion' | 'segunda_mirada' | 'decision'): number => p.tope_paso_usd[paso] ?? TOPES_POR_OMISION[paso]
+export const topeDelPaso = (p: PoliticaDeRevision, paso: 'revision_fondo' | 'revision_lengua' | 'correccion' | 'segunda_mirada' | 'decision' | 'verificar_ordenes'): number => p.tope_paso_usd[paso] ?? TOPES_POR_OMISION[paso]
 
 /** los dueños distintos de la revisión, cada uno con los `donde` que le tocan (`*` = comodín: el único dueño de todo, p. ej. el plan) */
 export interface Dueno { agente: string; dondes: string[]; comodin: boolean }
@@ -152,7 +153,7 @@ export const CLAVE_DE_CORRECCION = (agente: string) => `correccion:${agente}`
 export const CLAVE_DE_DECISION = (agente: string) => `decision:${agente}`
 
 /** la plantilla de UNA revisión: pasos como dato para el motor común */
-export function plantillaDePolitica(p: PoliticaDeRevision, productores: Productor[], tope_usd: number): Plantilla {
+export function plantillaDePolitica(p: PoliticaDeRevision, productores: Productor[], tope_usd: number, o: { verificar_ordenes?: boolean } = {}): Plantilla {
   const duenos = duenosDe(productores)
   const sinWildcard = (d: Dueno): { donde?: string[] } => (d.comodin ? {} : { donde: d.dondes })
   const conRe = p.reentrega !== 'ninguna'
@@ -179,6 +180,8 @@ export function plantillaDePolitica(p: PoliticaDeRevision, productores: Producto
       pasos.push({ clave: CLAVE_DE_DECISION(d.agente), tipo: 'agente', quien: d.agente, condicion: c, ronda: 2, entrada: ['fichas_externas', 'revision'], salida_artefacto: 'revision', tope_usd: topeDelPaso(p, 'decision'), salida: { esquema: esquemaDelDueno(p, d), reintento_formato: 1 } })
     }
   }
+  // 01-nov · firma de Emilio: el agente compara y el código decide al elegir la versión. Quien escribe no se verifica a sí mismo: sin verificación, ninguna versión cumple
+  if (o.verificar_ordenes && !productores.some((x) => x.agente === VERIFICADOR_DE_ORDENES) && p.revisor_fondo !== VERIFICADOR_DE_ORDENES) pasos.push({ clave: CLAVE_DE_VERIFICACION, tipo: 'agente', quien: VERIFICADOR_DE_ORDENES, condicion: { tipo: 'siempre' }, ronda: 2, entrada: ['revision'], salida_artefacto: 'verificacion_de_ordenes', tope_usd: topeDelPaso(p, 'verificar_ordenes'), salida: { esquema: ESQUEMA_DE_VERIFICACION, reintento_formato: 1 } })
   pasos.push({ clave: 'cierre', tipo: 'codigo', quien: 'jefatura', funcion: 'cierre', condicion: { tipo: 'siempre' }, entrada: ['revision'], salida_artefacto: 'cierre', tope_usd: 0 })
   return {
     tipo: p.artifact_type, familia: p.artifact_type, pasos, indicaciones: {},

@@ -4,7 +4,7 @@
 import type { Almacen, Campana, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
 import { arrancarAlActivar, type ResultadoDelArranque } from './arranque'
-import { DIAS_DE_CAMPANA } from './constantes'
+import { DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, SEMANAS_DE_TANDA } from './constantes'
 import { fechaInicioPorRegla, sumarDias } from './fechas'
 import { nuevoOrdenEncendido } from './mesas'
 import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
@@ -29,6 +29,10 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   if (!clientId) return err(400, 'E-CLIENT-ID', 'falta client_id')
   const s = leerSeco(cuerpo)
   if (!s.ok) return s.r
+  // 01-nov · firma de Emilio: la campaña puede pedir su propia medida; sin pedirla, la de siempre
+  const dias = cuerpo.dias_de_campana ?? DIAS_DE_CAMPANA, semanasDeTanda = cuerpo.semanas_de_tanda ?? SEMANAS_DE_TANDA
+  if (!Number.isInteger(dias) || (dias as number) < 1 || (dias as number) > DIAS_MAXIMOS_DE_CAMPANA) return err(400, 'E-DIAS-DE-CAMPANA', `dias_de_campana debe ser un entero entre 1 y ${DIAS_MAXIMOS_DE_CAMPANA}`)
+  if (!Number.isInteger(semanasDeTanda) || (semanasDeTanda as number) < 1) return err(400, 'E-SEMANAS-DE-TANDA', 'semanas_de_tanda debe ser un entero mayor que 0')
   const noAut = await autorizarLlamada(al, cuerpo, clientId)
   if (noAut) return noAut
   const cerrada = await compuerta(al, clientId, s.seco)
@@ -68,7 +72,7 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   const ini = fechaInicioPorRegla(plan.fecha, nacionales.length ? new Set(nacionales.map((f) => f.fecha)) : null)
   let nueva: Campana
   try { nueva = await al.insertarCampana({
-    client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ini.fecha, fecha_inicio_origen: 'regla', fecha_fin: sumarDias(ini.fecha, DIAS_DE_CAMPANA - 1),
+    client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ini.fecha, fecha_inicio_origen: 'regla', fecha_fin: sumarDias(ini.fecha, (dias as number) - 1), ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
     zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ini.aviso, ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
     presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,

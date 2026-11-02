@@ -1,7 +1,7 @@
 /** Lo que falta lo proponen los agentes · rotulado «propuesta del agente», solo lo vacío, el resto letra por letra igual. Cuatro rubros inventados, sin modelo. */
 import { describe, expect, it } from 'vitest'
 import { BATERIA_DE_RUBROS } from '../../rubros-de-prueba/baterias'
-import { armarPedidos, camposFaltantes, fusionarPropuestas, leerRespuesta } from '../propuesta'
+import { CAMPOS_PROPONIBLES, armarPedidos, camposFaltantes, fusionarPropuestas, leerRespuesta } from '../propuesta'
 import type { Fuente } from '../procedencia'
 
 const F = (id: string, texto: string): Fuente => ({ id, tipo: 'primaria_propia', canal: 'sitio', rol: 'cuerpo', rotulo: 'sitio propio', texto } as Fuente)
@@ -29,7 +29,13 @@ describe('los pedidos', () => {
   })
   it('varios campos de agentes distintos → un pedido por agente', () => {
     const r = armarPedidos({ draft: { ...DRAFT, mensajes_clave: [] }, fuentes: [], campos: ['mision', 'mensajes_clave'] })
-    expect(r.pedidos.map((p) => p.agente).sort()).toEqual(['brand-strategist', 'editor-en-jefe'])
+    expect(r.pedidos.map((p) => p.agente).sort()).toEqual(['brand-strategist', 'content-creator'])
+  })
+  it.each(["voice_description","personalidad","tagline_opciones","mensajes_clave","valores","nunca_hace"])('🔴 la voz la escribe content-creator, no quien la revisa (01-nov · firma de Emilio): %s', (campo) => {
+    expect(CAMPOS_PROPONIBLES[campo as keyof typeof CAMPOS_PROPONIBLES].agente).toBe('content-creator')
+  })
+  it('🔴 el revisor de la voz no escribe ningún campo', () => {
+    expect(Object.values(CAMPOS_PROPONIBLES).map((c) => c.agente)).not.toContain('editor-en-jefe')
   })
 })
 
@@ -89,18 +95,18 @@ describe.each(BATERIA_DE_RUBROS)('misión propuesta · $rubro', (c) => {
 })
 
 describe('la evidencia nueva tiene su cupo: lo que dicen los clientes y lo que se dice en los videos entran aunque el sitio sea larguísimo', () => {
-  it('con un sitio de 30.000 caracteres, el pedido igual lleva reseñas y videos, y no pasa de 14.000', () => {
+  it('con un sitio de 30.000 caracteres, el pedido igual lleva reseñas y videos; el corte lo pone el bloque de la materia, no un tope del pedido (01-nov · firma de Emilio)', () => {
     const sitio = F('s1', 'Somos un negocio local. '.repeat(1500))
     const resena = { id: 'r', tipo: 'tercero', canal: 'resenas', rol: 'cuerpo', rotulo: 'reseñas públicas · Google Maps', texto: '★5 · «Nos atendieron rápido y con mucho cariño».' } as Fuente
     const video = { id: 'v', tipo: 'primaria_propia', canal: 'instagram', rol: 'cuerpo', rotulo: 'instagram propio · videos (lo que se dice)', texto: 'video · lo que se dice: «Todo lo hacemos al momento».' } as Fuente
     const r = armarPedidos({ draft: DRAFT, fuentes: [sitio, resena, video], campos: ['mision'] })
     const t = r.pedidos[0].task
-    expect(t).toContain('Nos atendieron rápido'); expect(t).toContain('Todo lo hacemos al momento'); expect(t.length).toBeLessThanOrEqual(14000)
+    expect(t).toContain('Nos atendieron rápido'); expect(t).toContain('Todo lo hacemos al momento'); expect(t.length).toBeLessThanOrEqual(600000)
     expect(t.indexOf('Lo que dicen los clientes')).toBeLessThan(t.indexOf('Somos un negocio local'))
   })
-  it('el manual hasta ahora va en extractos cortos (no se come el cupo de la evidencia)', () => {
+  it('🔴 el manual hasta ahora va entero (01-nov · firma de Emilio)', () => {
     const largo = { ...DRAFT, positioning: 'x'.repeat(5000) }
     const t = armarPedidos({ draft: largo, fuentes: [], campos: ['mision'] }).pedidos[0].task
-    expect(t.length).toBeLessThan(3500)
+    expect(t).toContain('x'.repeat(5000))
   })
 })

@@ -325,7 +325,7 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
   })
   it('🔴 una estrategia inválida dos veces: la campaña necesita a Emilio y el cable lo cuenta (la sala se entera, nada queda colgado)', async () => {
     const m = mundo()
-    const mala = { ...m.cliente.estrategia, pilares: [{ clave: 'x', nombre: 'x', pct: 90 }] }
+    const mala = { ...m.cliente.estrategia, fases: m.cliente.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
     const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [mala, mala] } }))
     expect(r[0].json.resultado).toBe('necesita_humano')
     expect(m.reg.cable[0]).toMatchObject({ resultado: 'necesita_humano', worker_id: IDS.puerta })
@@ -436,7 +436,7 @@ describe('COMPORTAMIENTO · el vigía', () => {
   })
   it('los avisos van agregados por campaña y, en ensayo, se REGISTRAN y no se mandan a Slack; encendida, sale UN mensaje con «qué hacer»', async () => {
     const m = mundo({ estado: 'ensayo' })
-    const mala = { ...m.cliente.estrategia, pilares: [{ clave: 'x', nombre: 'x', pct: 90 }] }
+    const mala = { ...m.cliente.estrategia, fases: m.cliente.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
     await correr(m, sobreAbrir({ _simulacros: { estrategia: [mala, mala] } }))
     await m.sim.ejecutar(ID_VIGIA, [{ json: {} }])
     expect(m.reg.slack).toHaveLength(0)
@@ -495,8 +495,8 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
   it('🔴 si el calendario no queda, el cable cuenta necesita_humano (no «cadena_abierta»)', async () => {
     const m = mundo()
     const t = tandaBuena(m.cliente)
-    const rev = { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, tema: 'Ritual de revisión de la semana' } : p)) }
-    const sigue = { piezas: [{ ...piezaBuena(m.cliente, 4, 'b', 'x'), tema: 'Ritual de revisión de la semana' }], ajustes_al_patron: [] }
+    const rev = { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
+    const sigue = { piezas: [{ ...piezaBuena(m.cliente, 4, 'b', 'x'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }
     const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [m.cliente.estrategia], calendario: [rev, sigue] } }))
     expect(r[0].json.resultado).toBe('necesita_humano')
     expect(m.reg.cable[0].resultado).toBe('necesita_humano')

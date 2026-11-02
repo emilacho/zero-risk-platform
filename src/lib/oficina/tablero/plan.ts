@@ -125,7 +125,7 @@ export const planCambios: Manejador = async ({ db, ahora }, { cuerpo, reviewer }
     toca: t,
     despertar_flujo: {
       camino: CAMINO_PLANEACION,
-      cuerpo: { client_id: plan.client_id, plan_base_id: plan.id, cambios_del_dueno: texto, plan_cambio_id: cambioId, forzar: true, con_analisis: false, con_mercado: false, tope_reescritura_usd: g.tope, origen: 'tablero/plan-cambios', pedido_por: reviewer },
+      cuerpo: { client_id: plan.client_id, plan_base_id: plan.id, cambios_del_dueno: texto, plan_cambio_id: cambioId, forzar: true, force_restart: true, con_analisis: false, con_mercado: false, tope_reescritura_usd: g.tope, origen: 'tablero/plan-cambios', pedido_por: reviewer },
       registrar: { tabla: 'plan_cambios', id: cambioId },
     },
   }
@@ -178,7 +178,7 @@ export const planAprobar: Manejador = async ({ db, ahora }, { cuerpo, reviewer }
   if (u.error) return rechazo(500, 'planes_error', u.error.message, t)
   if (((u.data as Fila[] | null) ?? []).length === 0) return rechazo(409, 'plan_ya_aprobado', 'otra decisión se tomó mientras tanto', t)
   // la nota «plan con pendientes» de la bandeja (si la hay) queda resuelta con la misma decisión · nunca frena
-  try { await db.from('hitl_queue').update({ status: 'approved', reviewer, resolved_by: reviewer, decided_at: hora, resolved_at: hora, decision: { via: 'tablero', tipo: 'plan_con_pendientes', decision: 'aprobar', resultado: 'aprobado así', origen: 'plan-aprobar' } }).eq('output_id', plan.id).eq('type', 'plan_con_pendientes').eq('status', 'pending') } catch { /* la bandeja no frena la aprobación */ }
+  try { await db.from('hitl_queue').update({ status: 'approved', reviewer, resolved_by: reviewer, decided_at: hora, resolved_at: hora, decision: { via: 'tablero', tipo: 'plan_con_pendientes', decision: 'aprobar', resultado: 'aprobado así', origen: 'plan-aprobar' } }).eq('output_id', plan.id).in('type', ['plan_con_pendientes', 'palabra_del_dueno']).eq('status', 'pending') } catch { /* la bandeja no frena la aprobación */ }
   const base = { ok: true, plan_id: plan.id, version: plan.version, estado: 'approved', aprobado_por: reviewer }
   if (!comp || !COMPUERTA_ABIERTA.includes(String(comp.estado))) {
     return { status: 200, cuerpo: { ...base, reanuda: false, motivo: comp ? `la compuerta de este plan está «${String(comp.estado)}»: no hay segunda mitad que reanudar` : 'este plan salió antes de la compuerta: su segunda mitad (PDF y brief) ya corrió sola' }, toca: t }

@@ -12,9 +12,13 @@ const h = vi.hoisted(() => ({
   argsReintento: [] as unknown[],
   cierres: 0,
   cierre: { cerradas: [{ id: 'h1', motivo: 'm' }], error: null } as { cerradas: unknown[]; error: string | null },
+  errorDePurga: null as string | null,
 }))
 vi.mock('@/lib/oficina/cerrar-decisiones-reemplazadas', () => ({
   cerrarDecisionesReemplazadas: async () => { h.cierres++; return h.cierre },
+}))
+vi.mock('@/lib/oficina/purgar-textos', () => ({
+  purgarTextosViejos: async () => { h.orden.push('purga'); return { error: h.errorDePurga } },
 }))
 vi.mock('@/lib/oficina/ruta', () => ({
   checkLlaveDeLaSala: () => (h.llaveOk ? { ok: true } : { ok: false, status: 401, error: 'unauthorized', detalle: 'falta la llave' }),
@@ -32,19 +36,28 @@ vi.mock('@/lib/oficina/reintento-adaptador', () => ({
 import { POST } from '@/app/api/oficina/vigia/route'
 
 const llamar = (cuerpo: unknown) => POST(new Request('https://app.test/api/oficina/vigia', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo) }))
-beforeEach(() => { h.orden = []; h.llaveOk = true; h.estado = 'encendida'; h.reintento = { accion: 'vigilado', emitidos: 2 }; h.argsReintento = []; h.cierres = 0; h.cierre = { cerradas: [{ id: 'h1', motivo: 'm' }], error: null }; delete process.env.DECISIONES_REEMPLAZADAS })
+beforeEach(() => { h.orden = []; h.llaveOk = true; h.estado = 'encendida'; h.reintento = { accion: 'vigilado', emitidos: 2 }; h.argsReintento = []; h.errorDePurga = null; h.cierres = 0; h.cierre = { cerradas: [{ id: 'h1', motivo: 'm' }], error: null }; delete process.env.DECISIONES_REEMPLAZADAS })
 
 describe('POST /api/oficina/vigia con el reintento de piezas', () => {
   it('una pasada normal: primero la bandeja, luego los pasos muertos, DESPUÉS el reintento, y la respuesta lo trae', async () => {
     const r = await llamar({}); const j = await r.json()
-    expect(r.status).toBe(200); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento'])
+    expect(r.status).toBe(200); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento', 'purga'])
     expect(j).toMatchObject({ accion: 'vigilado', vencidas: ['a'], reintento: { accion: 'vigilado', emitidos: 2 } })
     expect(h.argsReintento[0]).toMatchObject({ o: { ejecutar: true } })
   })
   it('si el reintento falla (devuelve error), lo demás ya quedó hecho y la respuesta sigue siendo 200', async () => {
     h.reintento = { accion: 'error', detalle: 'caída' }
     const r = await llamar({}); const j = await r.json()
-    expect(r.status).toBe(200); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento']); expect(j.reintento).toMatchObject({ accion: 'error' }); expect(j.vencidas).toEqual(['a'])
+    expect(r.status).toBe(200); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento', 'purga']); expect(j.reintento).toMatchObject({ accion: 'error' }); expect(j.vencidas).toEqual(['a'])
+  })
+  it('🔴 la purga de textos corre en cada pasada; si falla, lo dice y no frena nada', async () => {
+    const bien = await (await llamar({})).json()
+    expect(h.orden).toContain('purga')
+    expect(bien.purga_de_textos_error).toBeUndefined()
+    h.errorDePurga = 'caída'
+    const r = await llamar({})
+    expect(r.status).toBe(200)
+    expect((await r.json()).purga_de_textos_error).toBe('caída')
   })
   it('🔴 cada pasada cierra lo reemplazado y lo cuenta; si falla, lo dice y no frena nada', async () => {
     const bien = await (await llamar({})).json()
@@ -84,6 +97,6 @@ describe('POST /api/oficina/vigia con el reintento de piezas', () => {
     expect((await llamar({})).status).toBe(401); expect((await llamar({ reintento_en_seco: true })).status).toBe(401); expect(h.orden).toEqual([])
   })
   it('un «reintento_en_seco» que no es el booleano verdadero NO cuenta como seco (corre la pasada normal)', async () => {
-    await llamar({ reintento_en_seco: 'true' }); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento'])
+    await llamar({ reintento_en_seco: 'true' }); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento', 'purga'])
   })
 })

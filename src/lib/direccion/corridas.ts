@@ -9,11 +9,13 @@ const COLUMNAS = 'id, agent_name, agent_id, model, workflow_id, workflow_executi
 const TOPE_FILAS = 1000
 export const ATASCADA_MS = 3_600_000
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-export const ID_DE_EJECUCION = /^[A-Za-z0-9_.-]{1,120}(:[A-Za-z0-9_.-]{1,120})?$/
+export const ID_DE_EJECUCION = /^[A-Za-z0-9_.-]{1,120}(:[A-Za-z0-9_.-]{1,120})?$|^(vercel-cron|dueno)(:[A-Za-z0-9_.-]{1,120}){1,5}$/
 export const BRAINTRUST_SIN_ENLACE = { enlace: null, motivo: 'ninguna fila guarda el identificador de la traza: la plataforma todavía no puede armar el enlace a Braintrust' }
 
-export const ejecucionBase = (id: string): string => id.split(':')[0]
-export const ramaDe = (id: string): string | null => { const i = id.indexOf(':'); return i < 0 ? null : id.slice(i + 1) }
+/** 01-nov: el mantenimiento y lo que dispara el dueño no tienen número de ejecución: su identificador entero es la corrida (trae la tarea y la hora). Cortarlo en el primer «:» los juntaba todos en una */
+const SIN_NUMERO_DE_EJECUCION = /^(vercel-cron|dueno):/
+export const ejecucionBase = (id: string): string => (SIN_NUMERO_DE_EJECUCION.test(id) ? id : id.split(':')[0])
+export const ramaDe = (id: string): string | null => { if (SIN_NUMERO_DE_EJECUCION.test(id)) return null; const i = id.indexOf(':'); return i < 0 ? null : id.slice(i + 1) }
 const flujoDe = (filas: Fila[]): string | null => { const v = filas.map((f) => texto(f.workflow_id)).filter((x): x is string => !!x); return v.find((x) => !UUID.test(x)) ?? v[0] ?? null }
 const FALLO = /error|fail|timeout|cancel/i
 
@@ -38,9 +40,11 @@ function resumen(base: string, inv: Fila[], des: Fila[], ahora: number, nombre: 
   const inicio = tiempos[0] ?? null
   const fin = fines[fines.length - 1] ?? null
   const client_id = [...inv, ...des].map((f) => texto(f.client_id)).find(Boolean) ?? null
+  // una corrida puede tocar a varios clientes: `client_id` sigue siendo el primero, para quien ya lo lee
+  const clientes = [...new Set([...inv, ...des].map((f) => texto(f.client_id)).filter((x): x is string => !!x))]
   const estado = estadoDe(inv, des, ahora)
   return {
-    workflow_id: flujoDe([...inv, ...des]), workflow_execution_id: base, client_id, cliente: nombre(client_id),
+    workflow_id: flujoDe([...inv, ...des]), workflow_execution_id: base, client_id, cliente: nombre(client_id), clientes, clientes_nombres: clientes.map((c) => nombre(c) ?? c),
     inicio, fin: estado === 'en_curso' || estado === 'atascada' ? null : fin,
     duracion_ms: inicio && fin && estado !== 'en_curso' && estado !== 'atascada' ? Math.max(0, Date.parse(fin) - Date.parse(inicio)) : null,
     costo_usd: redondear(inv.reduce((s, i) => s + numero(i.cost_usd), 0)),

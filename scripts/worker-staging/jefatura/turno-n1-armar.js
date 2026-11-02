@@ -40,6 +40,18 @@ const SIMULADOS = {
   'resolucion_laminas.v1': (task) => ({ respuestas: respuestasDe(task) }),
   // estrategia (objeto completo), calendario (por fila o tanda) y plan (texto completo): la re-entrega de cada tipo
   'resolucion_objeto.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { objeto: { simulado: true } } : {}) } },
+  // 01-nov · la palabra del dueño: lo que diría el verificador, sin modelo. Todas cumplen, con una cita literal de cada versión; si el texto no se entiende, ninguna fila y la jefatura lo toma como «no cumple»
+  'verificacion_de_ordenes.v1': (task) => {
+    const partes = String(task).split('## Versión ')
+    const n = (partes[0].match(/^\d+\. /gm) || []).length
+    const filas = []
+    for (const parte of partes.slice(1)) {
+      const version = parte.slice(0, 1)
+      const cita = parte.split('\n').slice(1).join(' ').trim().slice(0, 80)
+      for (let i = 1; i <= n; i++) filas.push({ version, orden: i, estado: 'cumple', cita })
+    }
+    return { filas }
+  },
   'resolucion_parcial.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { filas: [] } : {}) } },
   // 🔴 el FORMATO real del texto largo del plan (bloque delimitado o esquema ≥ 40.000) lo decide la condición 1 de CC#3 (§13.5); este molde es lo único que cambia cuando se decida
   'resolucion_plan.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { texto_completo: textoDePlan() } : {}) } },

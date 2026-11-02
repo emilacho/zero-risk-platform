@@ -21,6 +21,7 @@ import { elegirVersion as elegirVersionPura, esProductoDeUnaRevision, etiquetaDe
 import { atiende, casarId, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpinion, duenosDe, normalizarDonde, plantillaDePolitica, topeDelPaso, type Dueno } from './politicas'
 import { ESTADOS_TERMINALES, type CambiosDeRevision, type PasoRegistrado, type Puertos, type Revision } from './puertos'
 import { moldeDelPaso, simulacionDelRevisor } from './simulacion'
+import { CLAVE_DE_VERIFICACION, evaluarOrdenes, partirOrdenes, tareaDeVerificacionDeOrdenes, type FilaDeVerificacion } from './orden-del-dueno'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -39,7 +40,7 @@ const esTerminal = (rev: Revision): boolean => (ESTADOS_TERMINALES as readonly s
 interface Historial { etiqueta: Etiqueta; paso: string; texto: string; largo: number }
 const historialDe = (e: Estado): Historial[] => ((datos(e, 'revision')?.historial as Historial[] | undefined) ?? [])
 
-function plantillaDe(rev: Revision): Plantilla { return plantillaDePolitica(rev.policy, rev.productores, rev.tope_usd) }
+function plantillaDe(rev: Revision): Plantilla { return plantillaDePolitica(rev.policy, rev.productores, rev.tope_usd, { verificar_ordenes: !!rev.entrada.ordenes_del_dueno?.length }) }
 function duenoDe(rev: Revision, paso: Paso): Dueno {
   const agente = paso.clave.includes(':') ? paso.clave.split(':').slice(1).join(':') : paso.quien
   const d = duenosDe(rev.productores).find((x) => x.agente === agente)
@@ -102,6 +103,13 @@ export async function abrirRevision(P: Puertos, cuerpo: unknown, o: { prueba?: b
   if (pol.reentrega !== 'ninguna' && productores.length === 0) return r(422, { error: 'sin_productores', detalle: 'el tipo tiene re-entrega y no hay quién reciba las correcciones' })
   // el flujo declara «sin páginas» cuando el camino no corre los brazos; el revisor recibe las de verdad
   if (p.contexto?.length && P.paginasDelSitio && p.contexto.some((x) => /^SIN P[AÁ]GINAS DEL SITIO/i.test(x.texto.trim()))) p.contexto = conLasPaginasDelSitio(p.contexto, await P.paginasDelSitio(entrada.client_id))
+  // 01-nov · firma de Emilio: las órdenes salen de lo que el dueño escribió, nunca del modelo. Si había pedido y no se pudo leer, se dice al elegir la versión
+  if (entrada.artifact_type === 'plan' && pol.reentrega !== 'ninguna' && P.cicloDelPlan) {
+    const ciclo = await P.cicloDelPlan(entrada.artifact_id)
+    const ordenes = partirOrdenes(ciclo.pedido_del_dueno)
+    if (ordenes.length) p.ordenes_del_dueno = ordenes
+    else if (ciclo.aviso) p.orden_ilegible = true
+  }
   const apertura = estadoDeApertura(entrada)
   if (pol.reentrega !== 'ninguna' && P.hechosDelDueno) apertura.fichas.push(...fichasDeLoNegado(p.texto, await P.hechosDelDueno(entrada.client_id)))
   // 01-nov · firma de Emilio: lo que el código halla en fechas y presupuesto entra como ficha al ciclo de siempre. Lo que no pudo leer se dice; no bloquea
@@ -129,7 +137,7 @@ async function aplicar(P: Puertos, rev: Revision, pl: Plantilla, indice: number,
   return { ...rev, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso' }
 }
 
-const ROL_DE: (clave: string) => string = (c) => (c === 'revision_fondo' ? 'fondo' : c === 'revision_lengua' ? 'lengua' : c === 'segunda_mirada' ? 'ciego' : c.startsWith('correccion:') ? 'productor_corrige' : 'productor_decide')
+const ROL_DE: (clave: string) => string = (c) => (c === 'revision_fondo' ? 'fondo' : c === 'revision_lengua' ? 'lengua' : c === 'segunda_mirada' ? 'ciego' : c === CLAVE_DE_VERIFICACION ? 'verificador' : c.startsWith('correccion:') ? 'productor_corrige' : 'productor_decide')
 /** la traza M1 de un paso: namespace `metadata.jefatura` (diseño §6) */
 function trazaM1(rev: Revision, paso: Paso, extra: Datos = {}): Record<string, unknown> {
   return { jefatura: { role: ROL_DE(paso.clave), review_id: rev.id, artifact_type: rev.artifact_type, artifact_id: rev.artifact_id, cycle: 0, nominal_agent: paso.quien, contra_que_ref: rev.policy.contra_que.map((d) => d.clave), policy_snapshot: { artifact_type: rev.policy.artifact_type, reentrega: rev.policy.reentrega, tope_revision_usd: rev.policy.tope_revision_usd }, ...extra } }
@@ -161,6 +169,8 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
   } else if (paso.clave === 'revision_lengua') {
     t = tareaDeRevisionDeLengua({ payload: p, tipo, texto, duenos })
     donde = p.simulacion?.donde ?? duenos.flatMap((d) => (d.comodin ? [] : d.dondes))[0] ?? 'general'
+  } else if (paso.clave === CLAVE_DE_VERIFICACION) {
+    t = tareaDeVerificacionDeOrdenes({ ordenes: p.ordenes_del_dueno ?? [], versiones: h })
   } else {
     const d = duenoDe(rev, paso)
     const mias = fichasPropias(rev, e, paso, d)
@@ -176,7 +186,7 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
   const pedido = armarPedidoDeAgente({ agente: paso.quien, task, esquema: t.esquema, imagenes: p.imagenes, indicacion: t.indicacion, paso: paso.clave, revision_id: rev.id, dispatch_key, max_budget_usd: paso.tope_usd, dry_run: rev.dry_run, client_id: rev.client_id, simulacion: p.simulacion, reintento_formato: errorDeFormato !== undefined })
   const malos = auditarPedidoDeAgente(pedido)
   if (malos.length) throw new Error(`pedido inválido (regla dura del editor): ${malos.join(' · ')}`)
-  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined }) : undefined
+  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined, ...(paso.clave === CLAVE_DE_VERIFICACION ? { ordenes: p.ordenes_del_dueno, versiones: h } : {}) }) : undefined
   return { agente: paso.quien, pedido: { ...pedido, ...(molde ? { molde } : {}) } as Record<string, unknown>, ...(molde ? { molde } : {}) }
 }
 
@@ -259,7 +269,13 @@ export async function recibirResultado(P: Puertos, revisionId: string, n: number
   const costo = Math.max(0, Number(res.costo_usd ?? 0))
   const intento = (e.vueltas[`fmt:${paso.clave}`] ?? 0) + 1
   const base = { paso: paso.clave, intento, tipo: 'agente' as const, agente: abierto.agente, dispatch_key: abierto.dispatch_key, concepto: 'modelo' as const, base: 'usage' as const, cost_usd: costo, workflow_id: res.workflow_id ?? null, workflow_execution_id: res.workflow_execution_id ?? null, tokens_in: res.tokens_in ?? null, tokens_out: res.tokens_out ?? null, traza: trazaM1(rev, paso) }
+  // si el verificador falla, la revisión sigue y cierra: sin su veredicto, ninguna versión cumple al elegir
+  const sinVerificacion = async (motivo: string): Promise<Respuesta> => {
+    await aplicar(P, rev, pl, sig.indice, { costo_usd: costo, artefacto: { fallo: motivo } }, { paso: { ...base, n, estado: 'fallo', error: motivo } })
+    return avanzar(P, rev.id)
+  }
   if (res.error || typeof res.texto !== 'string') {
+    if (paso.clave === CLAVE_DE_VERIFICACION) return sinVerificacion(res.error ?? 'respuesta vacía')
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), paso: { ...base, n, estado: 'fallo', error: res.error ?? 'respuesta vacía' } })
     return fallar(P, { ...rev, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, `el paso «${paso.clave}» falló: ${res.error ?? 'respuesta vacía'}`)
   }
@@ -275,6 +291,7 @@ export async function recibirResultado(P: Puertos, revisionId: string, n: number
   }
   if (!p.ok && p.accion === 'reintentar') return pedirReintento(p.mensaje_de_error, 'formato: reintento')
   if (!p.ok) {
+    if (paso.clave === CLAVE_DE_VERIFICACION) return sinVerificacion(p.errores.join(' · '))
     // regla 5: formato roto tras el único reintento ⇒ fallida; nunca relleno
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), paso: { ...base, n, estado: 'fallo', error: p.errores.join(' · ') } })
     return fallar(P, { ...rev, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, p.ficha.que ?? 'formato inválido')
@@ -302,6 +319,7 @@ export async function recibirResultado(P: Puertos, revisionId: string, n: number
 interface Procesado { res?: ResultadoDePaso; fallido?: string; reintentar?: string }
 
 function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e: Estado): Procesado {
+  if (paso.clave === CLAVE_DE_VERIFICACION) return { res: { costo_usd: 0, artefacto: { filas: v.filas } } }
   if (paso.clave === 'revision_fondo' || paso.clave === 'revision_lengua') {
     const duenosDeLaRevision = duenosDe(rev.productores)
     const dondeNormalizados: string[] = [], dondeAmbiguos: string[] = []
@@ -438,6 +456,11 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
   if (!esTerminal(rev) || !rev.resultado) return r(409, { error: 'revision_sin_cerrar', detalle: 'la revisión del plan todavía no cerró' })
   const h = historialDe(rev.estado_del_motor)
   const producidas = h.map((x) => x.etiqueta)
+  // 02-nov · firma de Emilio (opción B): se elige como siempre. El verificador solo anota, a la vista del dueño antes de aprobar: nada se descarta ni se frena
+  const ordenes = rev.entrada.ordenes_del_dueno ?? []
+  const filas = datos(rev.estado_del_motor, 'verificacion_de_ordenes')?.filas
+  const verificada = ordenes.length > 0 && Array.isArray(filas)
+  const veredicto = verificada ? evaluarOrdenes(ordenes, filas as FilaDeVerificacion[], h) : null
   let ad
   try {
     const evaluadas = o.evaluaciones.map((x) => x.etiqueta).sort()
@@ -445,7 +468,18 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
     ad = elegirVersionPura(o.evaluaciones)
   } catch (err) { return r(400, { error: 'evaluaciones_invalidas', detalle: err instanceof Error ? err.message : String(err) }) }
   const guardado = planDeGuardado(ad, { idDeA: o.idDeA, existentes: o.existentes, produjo: producidas })
+  const sinAplicar = veredicto?.sin_aplicar ?? []
+  const orden_ilegible = rev.entrada.orden_ilegible === true
+  const palabra_del_dueno = { verificada, ordenes, por_version: veredicto?.por_version ?? {}, sin_aplicar: sinAplicar, salvaguardas: veredicto?.salvaguardas ?? [], orden_ilegible }
   const fin = resultadoTrasElegir({ resultado: rev.resultado, marcas: rev.marcas }, ad.adoptoLaUltima)
+  const anotaciones = [
+    ...(orden_ilegible ? ['No se pudo leer lo que pediste: revísalo antes de aprobar.'] : []),
+    ...(ordenes.length && !verificada ? ['No se pudo comprobar si el plan cumple lo que pediste: revísalo antes de aprobar.'] : []),
+    ...(veredicto?.por_version[ad.adoptada]?.sin_cumplir ?? []).map((x) => `Al verificador le parece que no se cumple: ${x.orden} (${x.motivo})`),
+    ...(veredicto?.salvaguardas ?? []).map((x) => `Hay que confirmarla contigo, sin cambiarla: ${x.orden} (${x.motivo})`),
+    ...sinAplicar.map((x) => `Se tomó como contexto y no como orden: ${x.orden} (${x.motivo})`),
+  ]
+  if (anotaciones.length && !rev.dry_run) await P.anotarPalabraDelDueno?.({ client_id: rev.client_id, plan_id: rev.artifact_id, titulo: 'Plan de 90 días: revisa lo que pediste antes de aprobar', detalle: anotaciones.join('\n'), metadata: { revision_id: rev.id, origen: 'jefatura' } })
   if (fin.resultado !== rev.resultado || fin.marcas.con_desacuerdo !== rev.marcas.con_desacuerdo) {
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: rev.estado_del_motor, gasto_usd: rev.gasto_usd, resultado: fin.resultado, marcas: fin.marcas })
     if (rev.resultado === 'limpia' || rev.resultado === 'sin_segunda_mirada') {
@@ -465,7 +499,7 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
       textos_a_guardar[g.etiqueta as 'B' | 'C'] = ponerQueCambio(texto, armarQueCambio({ ciclo, fichas: hasta }))
     }
   }
-  return r(200, { accion: 'versiones_elegidas', adoptada: ad.adoptada, ultima: ad.ultima, adopto_la_ultima: ad.adoptoLaUltima, razones: ad.razones, plan_de_guardado: guardado, ...(textos_a_guardar ? { textos_a_guardar } : {}), resultado: fin.resultado, marcas: fin.marcas, simulado: rev.dry_run })
+  return r(200, { accion: 'versiones_elegidas', adoptada: ad.adoptada, ultima: ad.ultima, adopto_la_ultima: ad.adoptoLaUltima, razones: ad.razones, plan_de_guardado: guardado, palabra_del_dueno, ...(textos_a_guardar ? { textos_a_guardar } : {}), resultado: fin.resultado, marcas: fin.marcas, simulado: rev.dry_run })
 }
 
 // ───────────────────────── el vigía

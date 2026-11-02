@@ -7,6 +7,7 @@
 import { evaluarHechos, type InformeDeHechos } from './hechos'
 import type { Fuente } from './procedencia'
 import { ordenarMateria } from './materia'
+import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 
 export const ROTULO_DE_PROPUESTA = 'propuesta del agente'
 export type TipoDeCampo = 'texto' | 'lista'
@@ -17,19 +18,19 @@ export const CAMPOS_PROPONIBLES: Record<string, CampoProponible> = {
   mision: { tipo: 'texto', agente: 'brand-strategist', que: 'qué hace el negocio y para quién · 1-2 frases, solo con lo que la evidencia sostiene' },
   proposito: { tipo: 'texto', agente: 'brand-strategist', que: 'el «por qué» del negocio · aspiracional · 1 frase, sin inventar hechos' },
   positioning: { tipo: 'texto', agente: 'brand-strategist', que: 'cómo se posiciona frente a su alternativa más cercana · solo desde la evidencia' },
-  voice_description: { tipo: 'texto', agente: 'editor-en-jefe', que: 'cómo suena la marca, observado en sus propios textos' },
+  voice_description: { tipo: 'texto', agente: 'content-creator', que: 'cómo suena la marca, observado en sus propios textos' },
   customer_angle: { tipo: 'texto', agente: 'jefe-client-success', que: 'el recorrido del cliente con el negocio' },
   retention_notes: { tipo: 'texto', agente: 'jefe-client-success', que: 'cómo se fideliza a quien ya compró' },
-  personalidad: { tipo: 'lista', agente: 'editor-en-jefe', que: '3 a 6 rasgos de la voz observada en la evidencia' },
-  tagline_opciones: { tipo: 'lista', agente: 'editor-en-jefe', que: '2 o 3 lemas posibles · es una elección, no un hecho' },
-  mensajes_clave: { tipo: 'lista', agente: 'editor-en-jefe', que: '3 a 5 mensajes desde lo que le importa al cliente' },
+  personalidad: { tipo: 'lista', agente: 'content-creator', que: '3 a 6 rasgos de la voz observada en la evidencia' },
+  tagline_opciones: { tipo: 'lista', agente: 'content-creator', que: '2 o 3 lemas posibles · es una elección, no un hecho' },
+  mensajes_clave: { tipo: 'lista', agente: 'content-creator', que: '3 a 5 mensajes desde lo que le importa al cliente' },
   propuestas_de_valor: { tipo: 'lista', agente: 'brand-strategist', que: '3 a 5 diferenciadores reales respecto de la alternativa' },
   // 30-oct · «el manual sale solo»: los obligatorios que ningún empleado producía (ver `campos-del-manual.ts`). Se proponen SOLO con lo que la evidencia sostiene; si no alcanza, el campo queda como hueco declarado.
   vision: { tipo: 'texto', agente: 'brand-strategist', que: 'a dónde quiere llegar el negocio · 1 frase, solo si la evidencia lo sostiene' },
-  valores: { tipo: 'lista', agente: 'editor-en-jefe', que: '3 a 5 valores que la marca demuestra en lo que hace y dice, no los que suenan bien' },
+  valores: { tipo: 'lista', agente: 'content-creator', que: '3 a 5 valores que la marca demuestra en lo que hace y dice, no los que suenan bien' },
   productos: { tipo: 'lista', agente: 'jefe-client-success', que: 'los productos o servicios que el negocio ofrece, tal como los nombra la evidencia (sin precios ni cifras que no estén escritos)' },
   sedes: { tipo: 'lista', agente: 'jefe-client-success', que: 'los lugares donde atiende, tal como los nombra la evidencia (ciudad o dirección); si no atiende en un local, devuélvelo vacío' },
-  nunca_hace: { tipo: 'lista', agente: 'editor-en-jefe', que: 'lo que la marca nunca dice ni hace, deducido de cómo habla y de lo que rechaza en la evidencia' },
+  nunca_hace: { tipo: 'lista', agente: 'content-creator', que: 'lo que la marca nunca dice ni hace, deducido de cómo habla y de lo que rechaza en la evidencia' },
 }
 
 const vacio = (v: unknown): boolean => {
@@ -47,13 +48,13 @@ export function camposFaltantes(draft: Record<string, unknown>): string[] {
 
 export interface Pedido { agente: string; campos: string[]; task: string }
 
-const TOPE_DEL_PEDIDO = 14_000
+const TOPE_DEL_PEDIDO = TOPE_REAL_DEL_PEDIDO
 const resumenDelManual = (draft: Record<string, unknown>, excluir: string[]): string => {
   const partes: string[] = []
   for (const k of ['positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes', 'proposito', 'mision', 'personalidad', 'mensajes_clave', 'propuestas_de_valor', 'tagline_opciones']) {
     if (excluir.includes(k) || vacio(draft[k])) continue
     const t = typeof draft[k] === 'string' ? (draft[k] as string) : JSON.stringify(draft[k])
-    partes.push(`- ${k}: ${t.length > 420 ? t.slice(0, 420) + ' ⟨…⟩' : t}`)
+    partes.push(`- ${k}: ${t}`)
   }
   return partes.join('\n')
 }

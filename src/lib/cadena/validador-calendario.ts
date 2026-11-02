@@ -135,7 +135,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     // ─── V05 · red conocida, no excluida y prevista por la estrategia
     if (!ins.formatos[f.red]) out.push(h('V05', 'bloquea', f, `la red «${f.red}» no existe en los formatos permitidos`, 'cadena_formatos_por_red', 'usar una red conocida'))
     else if (excluidas.has(f.red)) out.push(h('V05', 'bloquea', f, `la red ${f.red} está excluida por el plan`, 'excluidos de la estrategia', 'quitar la pieza o cambiar de red'))
-    else if (!canalesActivos.has(f.red)) out.push(h('V05', 'bloquea', f, `la red ${f.red} no es un canal de la estrategia`, 'canales de la estrategia', 'usar un canal de la estrategia'))
+    else if (!canalesActivos.has(f.red)) out.push(h('V05', 'aviso', f, `la red ${f.red} no es un canal de la estrategia`, 'canales de la estrategia', 'usar un canal de la estrategia'))
     else {
       const c = canalesActivos.get(f.red)!
       if (c.formatos.length && !c.formatos.includes(f.formato)) out.push(h('V05', 'aviso', f, `el formato ${f.formato} no está entre los de la estrategia para ${f.red}`, 'formatos del canal', 'usar un formato del canal'))
@@ -167,7 +167,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
       if (!respaldo) out.push(h('V07', 'bloquea', f, 'el tema cita una fecha especial sin fuente verificada', 'ninguna fecha especial entra al calendario sin fuente', 'quitar la mención o respaldarla con una fecha verificada; si no hay fuente, la fila sale o se cambia'))
       else {
         const fe = verificadas.get(respaldo.ref.replace(/^fecha:/, ''))!
-        if (fe.fecha === f.fecha && f.requiere_abierto) out.push(h('V07', 'bloquea', f, `la fila cae en «${fe.nombre}» (${fe.fecha}) y exige local abierto`, 'fecha especial verificada', 'mover la pieza a otro día o cambiarla por una que no requiera local abierto'))
+        if (fe.fecha === f.fecha && f.requiere_abierto) out.push(h('V07', 'aviso', f, `la fila cae en «${fe.nombre}» (${fe.fecha}) y exige local abierto`, 'fecha especial verificada', 'mover la pieza a otro día o cambiarla por una que no requiera local abierto'))
       }
     }
 
@@ -247,7 +247,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
   for (const f of filas.filter(validable)) {
     if (/\b(?:revision|ritual de revision|checkpoint)\b/.test(normalizar(f.tema ?? ''))) {
       const dia = diaDeCampana(campana.fecha_inicio, f.fecha)
-      if (!diasRevision.includes(dia)) out.push(h('V12', 'bloquea', f, `una fila de revisión cae en el día ${dia} y el plan fija las revisiones en ${diasRevision.join(', ') || '(ninguna)'}`, 'hitos del plan', 'poner la revisión en un día del plan o quitarla'))
+      if (!diasRevision.includes(dia)) out.push(h('V12', 'aviso', f, `una fila de revisión cae en el día ${dia} y el plan fija las revisiones en ${diasRevision.join(', ') || '(ninguna)'}`, 'hitos del plan', 'poner la revisión en un día del plan o quitarla'))
     }
   }
 
@@ -357,11 +357,10 @@ function chequeoPilares(ins: InsumosCalendario): Hallazgo[] {
   for (const p of ins.estrategia.pilares) {
     const real = (vivas.filter((f) => f.pilar === p.clave).length / vivas.length) * 100
     const dif = Math.abs(real - p.pct)
-    if (dif > 10) out.push(h('V09', 'bloquea', null, `el pilar ${p.clave} pesa ${real.toFixed(0)} % y la meta es ${p.pct} %`, 'reparto de pilares', 'rebalancear', `pilar ${p.clave}`))
-    else if (dif > 5) out.push(h('V09', 'aviso', null, `el pilar ${p.clave} pesa ${real.toFixed(0)} % y la meta es ${p.pct} %`, 'reparto de pilares', 'rebalancear', `pilar ${p.clave}`))
+    if (dif > 5) out.push(h('V09', 'aviso', null, `el pilar ${p.clave} pesa ${real.toFixed(0)} % y la meta es ${p.pct} %`, 'reparto de pilares', 'rebalancear', `pilar ${p.clave}`))
   }
   const conocidas = new Set(ins.estrategia.pilares.map((p) => p.clave))
-  for (const f of vivas) if (!conocidas.has(f.pilar!)) out.push(h('V09', 'bloquea', f, `el pilar «${f.pilar}» no existe en la estrategia`, 'pilares de la estrategia', 'usar un pilar de la estrategia'))
+  for (const f of vivas) if (!conocidas.has(f.pilar!)) out.push(h('V09', 'aviso', f, `el pilar «${f.pilar}» no existe en la estrategia`, 'pilares de la estrategia', 'usar un pilar de la estrategia'))
   return out
 }
 

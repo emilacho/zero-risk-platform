@@ -94,6 +94,8 @@ describe('la ruta POST /api/images/generate', () => {
     expect(tablas['agent_image_generations']).toHaveLength(1)
     expect(tablas['agent_invocations']).toHaveLength(1)
     expect(tablas['agent_invocations'][0].cost_usd).toBe(tablas['agent_image_generations'][0].cost_usd)
+    // 01-nov · lo que se pidió queda en la fila
+    expect(String(tablas['agent_invocations'][0].input_summary ?? '').length).toBeGreaterThan(0)
     expect(tablas['agent_invocations'][0]).toMatchObject({ client_id: expect.any(String), session_id: expect.stringMatching(/^img-/), agent_name: 'design-image-prompt-engineer' })
     expect(tablas['agent_invocations'][0].cost_usd).toBeGreaterThan(0)
   })

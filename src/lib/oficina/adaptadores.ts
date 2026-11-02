@@ -20,7 +20,7 @@ import { mp4Simulado } from './orquestador-video'
 import { identidadVisualDelCliente } from './identidad-visual'
 import { separarFotos } from './material'
 import type { Registro } from './chequeos'
-import { avisoDeProvisionales } from '../manual/lectura'
+import { avisoDelManualConValidados } from '../manual/lectura'
 import { codificarPng } from './encaje'
 import { abrirRevision, armarSalida } from '../jefatura/revision/orquestador'
 import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDeLaJefatura } from '../jefatura/revision/adaptadores'
@@ -163,7 +163,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         const handles = Object.values(config.apify?.own_handles ?? {}).filter(Boolean).map((h) => (String(h).startsWith('@') ? String(h) : `@${h}`))
         const competidores = (config.apify?.competitor_list ?? []).map((c) => c.name ?? '').filter(Boolean)
         const nombre = String(cliente.name ?? 'cliente')
-        const avisoProvisional = avisoDeProvisionales(manual.content_text)
+        const avisoProvisional = avisoDelManualConValidados(manual.content_text)
         const manual_texto = renderManualLimpio({ brand_book: manual, client_name: nombre, country: (cliente.country as string | null) ?? null }).texto + (avisoProvisional ? `\n\n${avisoProvisional}` : '')
         const out: FuentesCompletas = {
           cliente_nombre: nombre, manual_texto, plan_texto: null,

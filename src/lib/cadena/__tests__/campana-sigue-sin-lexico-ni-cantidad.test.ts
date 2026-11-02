@@ -62,12 +62,12 @@ describe('bajarFaltantesDeCantidad (pura)', () => {
     for (const clase of ['feed', 'historias', 'anuncios']) {
       expect(leerV08(mensajeV08(3, 'tiktok', clase, 1, 4))).toEqual({ semana: 3, red: 'tiktok', clase, real: 1, meta: 4 })
       expect(bajarFaltantesDeCantidad([hall('V08', 'bloquea', mensajeV08(3, 'tiktok', clase, 1, 4))])[0].severidad).toBe('aviso')
-      expect(bajarFaltantesDeCantidad([hall('V08', 'bloquea', mensajeV08(3, 'tiktok', clase, 5, 4))])[0].severidad).toBe('bloquea')
+      expect(bajarFaltantesDeCantidad([hall('V08', 'bloquea', mensajeV08(3, 'tiktok', clase, 5, 4))])[0].severidad).toBe('aviso')
     }
   })
-  it('el EXCESO (real > meta) sigue bloqueando', () => {
+  it('🔴 el EXCESO (real > meta) también baja a aviso (01-nov · firma de Emilio)', () => {
     const [x] = bajarFaltantesDeCantidad([hall('V08', 'bloquea', mensajeV08(1, 'instagram', 'feed', 3, 2))])
-    expect(x.severidad).toBe('bloquea')
+    expect(x.severidad).toBe('aviso')
   })
   it('un V08 con forma desconocida sigue bloqueando (ante la duda, no se afloja)', () => {
     expect(bajarFaltantesDeCantidad([hall('V08', 'bloquea', 'texto raro')])[0].severidad).toBe('bloquea')
@@ -129,20 +129,21 @@ describe('cantidad por semana: el faltante no detiene; el exceso y lo demás sí
     expect(g2.cuerpo).toMatchObject({ ok: true, salieron_sin_fuente: ['s1-d4-d'] })
     expect(al.campanas.find((c) => c.id === id)!.estado).toBe('activa')
   })
-  it('🔴 exceso (Instagram pide 2 y el patrón da 3): sigue yendo a necesita_humano', async () => {
+  it('🔴 exceso (Instagram pide 2 y el patrón da 3): una corrección, vuelve igual y la campaña SIGUE con aviso (01-nov · firma de Emilio)', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al, conFrecuencia('instagram', 2))
     const { g } = await primera(al, id, tandaBuena(A))
     expect(g.cuerpo.correccion).toBe(true)
     const g2 = await corregir(al, id, g, tandaBuena(A), 'tanda')
-    expect(g2.cuerpo.necesita_humano).toBe(true)
-    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+    expect(g2.cuerpo.necesita_humano).toBeUndefined()
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('activa')
+    expect(JSON.stringify(al.validaciones.filter((v) => v.objeto === 'calendario'))).toContain('por confirmar')
   })
   it('🔴 faltante + un bloqueo que no es de cantidad: sigue yendo a necesita_humano', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al, conFrecuencia('facebook', 2))
     const t = tandaBuena(A)
-    const mala = { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, tema: 'Ritual de revisión de la semana' } : p)) }
+    const mala = { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const { g } = await primera(al, id, mala)
     const g2 = await corregir(al, id, g, mala, 'tanda')
     expect(g2.cuerpo.necesita_humano).toBe(true)
@@ -182,17 +183,17 @@ describe('el reloj retoma SOLO una campaña frenada únicamente por cantidades',
     expect((r.cuerpo.aplicado as string[]).some((x) => x.includes('retomada sola'))).toBe(false)
     expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
   })
-  it('🔴 con un EXCESO de cantidad: NO se retoma', async () => {
+  it('🔴 con un EXCESO de cantidad: también se retoma (01-nov · firma de Emilio)', async () => {
     const al = almacen()
     const id = await frenada(al, conFrecuencia('instagram', 2), tandaBuena(A))
     const r = await vigia(al)
-    expect((r.cuerpo.aplicado as string[]).some((x) => x.includes('retomada sola'))).toBe(false)
-    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
+    expect((r.cuerpo.aplicado as string[]).some((x) => x.includes('retomada sola'))).toBe(true)
+    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('activa')
   })
   it('🔴 con un bloqueo de otra clase (una revisión inventada) además del faltante: NO se retoma', async () => {
     const al = almacen()
     const t = tandaBuena(A)
-    const id = await frenada(al, conFrecuencia('facebook', 2), { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, tema: 'Ritual de revisión de la semana' } : p)) })
+    const id = await frenada(al, conFrecuencia('facebook', 2), { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) })
     await vigia(al)
     expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
   })
@@ -250,7 +251,7 @@ describe('el reloj retoma SOLO una campaña frenada únicamente por cantidades',
     expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
   })
   it('🔴 guardados que NO son de dato ni de cantidad faltante (V02 de fila, V08 de exceso): no autorizan a retomar aunque la re-validación de hoy salga limpia', async () => {
-    for (const raro of [{ ...hall('V02', 'bloquea', 'formato raro'), fila_id: 's1-d1-a' }, hall('V08', 'bloquea', mensajeV08(2, 'instagram', 'feed', 4, 3))]) {
+    for (const raro of [{ ...hall('V02', 'bloquea', 'formato raro'), fila_id: 's1-d1-a' }, hall('V09', 'bloquea', 'reparto raro')]) {
       const al = almacen()
       const id = await frenada(al, conFrecuencia('facebook', 2), tandaBuena(A))
       const v = Math.max(1, await al.ultimaVersionDeCalendario(id))

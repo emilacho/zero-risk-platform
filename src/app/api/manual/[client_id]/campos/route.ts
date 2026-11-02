@@ -1,6 +1,6 @@
 /**
  * PATCH /api/manual/{client_id}/campos · «Editar el manual» desde el dashboard (30-oct · US$ 0 · sin modelo).
- * Llave interna (`x-api-key`). Cuerpo: { campos:{ proposito|eslogan|voz|posicionamiento|publico|valores|nunca : texto }, comentario?, reviewer, origen:'dashboard' }.
+ * Llave interna (`x-api-key`). Cuerpo: { campos:{ <cualquier campo del manual, por su clave del borrador o la del tablero> : texto }, comentario?, reviewer, origen:'dashboard' }.
  * Versión `max+1` vigente con `_field_meta.<campo>{fuente:'dueno',por,en,valor_anterior,cita}`; la anterior queda; después cada campo va a la puerta del dueño del cerebro (con reintento).
  * Deja su fila en `eventos_de_emilio` (accion `tablero`, decision `manual-campos`), salga bien o mal.
  */
