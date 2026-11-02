@@ -142,6 +142,9 @@ export const BRAND_SECTION_ALLOW: ReadonlySet<string> = new Set([
   'jefe-client-success',
   // 02-nov · firma de Emilio (equipo del manual): el redactor de la voz es `content-creator`; `editor-en-jefe` la revisa
   'content-creator',
+  // 02-nov · ADENDA 1 firmada por Emilio: logo y tipografía, y dirección de fotografía
+  'design-visual-storyteller',
+  'creative-director-mesa',
   // F1.2 (CC#4 2026-07-04) · scorer SOMBRA de groundedness · sin rol en Lazo A ·
   // necesita emit_fidelity_scores + el gate de forced-emit para puntuar como el judge.
   // NOTA · `gpt-5.5-advisor` NO está en el registro (no es loadable vía run-sdk · en Camino

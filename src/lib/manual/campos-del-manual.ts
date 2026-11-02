@@ -51,6 +51,13 @@ export const CAMPOS: readonly CampoDelManual[] = [
   { clave: 'required_terminology', etiqueta: 'Palabras que sí usa', tipo: 'lista', columna: 'required_terminology', editable: true, obligatorio: false },
   { clave: 'customer_angle', etiqueta: 'Ángulo del cliente', tipo: 'texto', ruta: 'customer_angle', editable: true, obligatorio: false },
   { clave: 'retention_notes', etiqueta: 'Cómo se fideliza', tipo: 'texto', ruta: 'retention_notes', editable: true, obligatorio: false },
+  // 02-nov · ADENDA 1 firmada por Emilio: las secciones nuevas. No cuentan para el cierre: un manual sin ellas no se marca incompleto
+  { clave: 'tono_por_canal', etiqueta: 'Tono según el canal', tipo: 'lista', ruta: 'tono_por_canal', editable: true, obligatorio: false },
+  { clave: 'reglas_de_escritura', etiqueta: 'Reglas de escritura', tipo: 'lista', ruta: 'reglas_de_escritura', editable: true, obligatorio: false },
+  { clave: 'direccion_de_fotografia', etiqueta: 'Dirección de fotografía', tipo: 'lista', ruta: 'direccion_de_fotografia', editable: true, obligatorio: false },
+  { clave: 'uso_del_logo', etiqueta: 'Uso del logo', tipo: 'lista', ruta: 'uso_del_logo', editable: true, obligatorio: false },
+  { clave: 'jerarquia_tipografica', etiqueta: 'Jerarquía tipográfica', tipo: 'lista', ruta: 'jerarquia_tipografica', editable: true, obligatorio: false },
+  { clave: 'historia_y_origen', etiqueta: 'Historia y origen', tipo: 'texto', ruta: 'historia_y_origen', editable: true, obligatorio: false },
 ]
 
 export const CAMPO_POR_CLAVE: Readonly<Record<string, CampoDelManual>> = Object.fromEntries(CAMPOS.map((c) => [c.clave, c]))

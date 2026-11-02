@@ -6,13 +6,14 @@ import { readFileSync } from 'node:fs'
 import { resolve as pathResolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { CAMPOS } from '../../../../../src/lib/manual/campos-del-manual'
+import { BRAND_SECTION_ALLOW } from '../agent-mcp-registry'
 import { EMIT_BRAND_SECTION_TOOL } from '../forced-emit-messages'
 
 vi.mock('@anthropic-ai/sdk', () => ({ default: class {} }))
 
 const servidor = readFileSync(pathResolve(__dirname, '../mcp/brand-section-server.js'), 'utf8')
 const propiedades = EMIT_BRAND_SECTION_TOOL.input_schema.properties as Record<string, { enum?: readonly string[] }>
-const NUEVOS = ['vision', 'valores', 'nunca_hace', 'productos', 'sedes']
+const NUEVOS = ['vision', 'valores', 'nunca_hace', 'productos', 'sedes', 'tono_por_canal', 'reglas_de_escritura', 'direccion_de_fotografia', 'uso_del_logo', 'jerarquia_tipografica', 'historia_y_origen']
 
 describe('la herramienta de las secciones del manual', () => {
   it('🔴 content-creator entra por los dos caminos, y las dos listas son iguales', () => {
@@ -29,6 +30,11 @@ describe('la herramienta de las secciones del manual', () => {
   it.each(NUEVOS)('🔴 %s es opcional en el servidor: una entrega sin él no se rechaza', (campo) => {
     expect(servidor).toMatch(new RegExp(`^  ${campo}: PROV\\([^\\n]*\\n\\s*\\.optional\\(\\)`, 'm'))
     expect(EMIT_BRAND_SECTION_TOOL.input_schema.required).not.toContain(campo)
+  })
+
+  it.each(['content-creator', 'design-visual-storyteller', 'creative-director-mesa'])('🔴 %s puede entregar: está en la lista y en lens', (agente) => {
+    expect(BRAND_SECTION_ALLOW.has(agente)).toBe(true)
+    expect(propiedades.lens.enum).toContain(agente)
   })
 
   it('🔴 lo que se declara existe en la definición única del manual', () => {

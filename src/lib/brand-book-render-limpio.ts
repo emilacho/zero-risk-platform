@@ -258,6 +258,8 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     ['POSICIONAMIENTO', 'positioning', 'prosa'],
     ['MISIÓN', 'mision', 'prosa'],
     ['PROPÓSITO', 'proposito', 'prosa'],
+    ['VISIÓN', 'vision', 'prosa'],
+    ['HISTORIA Y ORIGEN', 'historia_y_origen', 'prosa'],
     ['A QUIÉN LE HABLAMOS', 'icp_summary', 'prosa'],
     ['CÓMO SUENA LA MARCA', 'voice_description', 'prosa'],
     ['PERSONALIDAD', 'personalidad', 'lista'],
@@ -265,6 +267,15 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     ['LEMAS PROPUESTOS', 'tagline_opciones', 'lista'],
     ['MENSAJES CLAVE', 'mensajes_clave', 'lista'],
     ['PROPUESTAS DE VALOR', 'propuestas_de_valor', 'lista'],
+    ['VALORES', 'valores', 'lista'],
+    ['PRODUCTOS O SERVICIOS', 'productos', 'lista'],
+    ['SEDES', 'sedes', 'lista'],
+    ['LO QUE NUNCA DICE NI HACE', 'nunca_hace', 'lista'],
+    ['TONO SEGÚN EL CANAL', 'tono_por_canal', 'lista'],
+    ['REGLAS DE ESCRITURA', 'reglas_de_escritura', 'lista'],
+    ['DIRECCIÓN DE FOTOGRAFÍA', 'direccion_de_fotografia', 'lista'],
+    ['USO DEL LOGO', 'uso_del_logo', 'lista'],
+    ['JERARQUÍA TIPOGRÁFICA', 'jerarquia_tipografica', 'lista'],
     ['EL RECORRIDO DEL CLIENTE', 'customer_angle', 'prosa'],
     ['CÓMO SE FIDELIZA', 'retention_notes', 'prosa'],
     ['VOCABULARIO OBLIGATORIO', 'required_terminology', 'lista'],
@@ -272,15 +283,17 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     ['PALABRAS QUE LA MARCA EVITA (contexto de marca, no prohibición)', 'forbidden_words', 'lista'],
   ]
 
+  // las secciones nuevas no cuentan para el cierre: si faltan, no se declaran como omitidas
+  const NUEVAS = new Set(['historia_y_origen', 'tono_por_canal', 'reglas_de_escritura', 'direccion_de_fotografia', 'uso_del_logo', 'jerarquia_tipografica'])
   for (const [tit, campo, tipo] of bloques) {
     if (tipo === 'prosa') {
       const t = prosa(campo)
-      if (!t) { omitidas.push(campo); continue }
+      if (!t) { if (!NUEVAS.has(campo)) omitidas.push(campo); continue }
       secciones.push(campo)
       o += titulo(tit) + ajustar(t) + '\n'
     } else {
       const a = draft[campo]
-      if (!lleno(a)) { if (campo !== '_palabras_duras' && campo !== '_eslogan') omitidas.push(campo); continue } // no tener prohibiciones declaradas es lo normal: no es un hueco
+      if (!lleno(a)) { if (campo !== '_palabras_duras' && campo !== '_eslogan' && !NUEVAS.has(campo)) omitidas.push(campo); continue } // no tener prohibiciones declaradas es lo normal: no es un hueco
       secciones.push(campo)
       o += titulo(tit) + vinetas(a, nombres) + '\n'
     }
