@@ -243,7 +243,9 @@ describe('la red de rescate busca y reintenta al empleado real de la casilla', (
 describe('alcance', () => {
   it('este paso suma cuatro nodos de revisión y toca solo lo de la voz y el rescate (más lo de las partes anteriores del archivo acumulado)', () => {
     const v = new Set(vivo.nodes.map((n: any) => n.name))
-    expect(nuevo.nodes.filter((n: any) => !v.has(n.name)).map((n: any) => n.name).sort()).toEqual(Object.values(REVISION).sort())
-    expect(nuevo.nodes.length).toBe(vivo.nodes.length + 4)
+    const suyos = new Set<string>(Object.values(REVISION))
+    const nuevosEnElArchivo = nuevo.nodes.filter((n: any) => !v.has(n.name)).map((n: any) => n.name)
+    expect(nuevosEnElArchivo.filter((x: string) => x.startsWith('[BB] Voz ·')).sort()).toEqual([...suyos].sort())   // los otros nuevos son de la revisión de estilo (c2)
+    expect(nuevosEnElArchivo.filter((x: string) => !x.startsWith('[BB] Voz ·') && !x.startsWith('[BB] Estilo ·'))).toEqual([])
   })
 })
