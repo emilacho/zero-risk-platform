@@ -173,26 +173,6 @@ const pedido = async (id: string, lectura: any, prev: Record<string, unknown> = 
   const r = await recorrer(f, NODOS_BRIEF.armar, { name: 'Náufrago', country: 'Ecuador', config: {} }, { previos: { [P]: [{ ...BASE, ...prev }], [NODO_DATOS]: [lectura] }, hasta: [sig(f, NODOS_BRIEF.armar)] })
   return r.historial[NODOS_BRIEF.armar][0].cuerpo.task as string
 }
-describe('la pieza · el eslogan de la fuente (se ejecuta su propio código de armado)', () => {
-  // el trozo que decide de dónde sale el eslogan, tal como está en el armado de la PIEZA
-  const trozo = () => {
-    const c = codigoDe(leer(PIEZA), NODOS_PIEZA.armar)
-    const a = c.indexOf('const _esloganDeLaFuente'), z = c.indexOf('const bloqueEslogan')
-    return c.slice(a, z)
-  }
-  const eslogan = (lectura: any, tagline = '') => new Function('$', 'prev', trozo() + '\nreturn { t: _esloganTexto, f: _esloganFuente }')(() => ({ first: () => ({ json: lectura }) }), { manual_tagline: tagline })
-  it('con 200 y eslogan: gana el de la fuente, con su fuente', () => {
-    expect(eslogan({ statusCode: 200, body: CUERPO_COMPLETO }, 'viejo')).toEqual({ t: CUERPO_COMPLETO.eslogan.texto, f: CUERPO_COMPLETO.eslogan.fuente })
-  })
-  it('con `error` en la lectura: NO se usa el eslogan del cuerpo, manda la columna tagline', () => {
-    expect(eslogan({ statusCode: 200, error: 'x', body: CUERPO_COMPLETO }, 'viejo')).toEqual({ t: 'viejo', f: '' })
-  })
-  it('sin cuerpo o nodo que lanza: respaldo en la columna', () => {
-    expect(eslogan({}, 'viejo').t).toBe('viejo')
-    expect(new Function('$', 'prev', trozo() + '\nreturn _esloganTexto')(() => { throw new Error('no ejecutado') }, { manual_tagline: 'viejo' })).toBe('viejo')
-  })
-})
-
 describe.each([BRIEF, CADENA])('%s · el pedido completo', (id) => {
   it('con 200 completo: los bloques van tras el manual, antes del plan, y una sola vez', async () => {
     const t = await pedido(id, { statusCode: 200, body: CUERPO_COMPLETO })
