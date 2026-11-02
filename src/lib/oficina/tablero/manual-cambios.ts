@@ -28,8 +28,10 @@ export const manualCambios: Manejador = async ({ db, ahora }, { cuerpo, reviewer
   if (!texto) return rechazo(400, 'entrada_invalida', `\`texto\` (qué debe cambiar) debe tener de 5 a ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`, toca)
   const seccion = cuerpo.seccion === undefined || cuerpo.seccion === null || cuerpo.seccion === '' ? null : textoEntre(cuerpo.seccion, 1, 80)
   if (cuerpo.seccion && !seccion) return rechazo(400, 'entrada_invalida', '`seccion` debe tener hasta 80 caracteres', toca)
-  const campos = cuerpo.campos === undefined || cuerpo.campos === null ? [] : cuerpo.campos
-  if (!Array.isArray(campos) || campos.some((c) => !CAMPOS.some((x) => x.clave === c))) return rechazo(400, 'entrada_invalida', '`campos` debe ser una lista de campos del manual', toca)
+  // el panel nombra los campos por su clave corta o por la del borrador, como en editar y validar
+  const pedidos = cuerpo.campos === undefined || cuerpo.campos === null ? [] : cuerpo.campos
+  const campos = Array.isArray(pedidos) ? pedidos.map((c) => CAMPOS.find((x) => x.clave === c || x.clave_del_tablero === c)?.clave) : null
+  if (!campos || campos.includes(undefined)) return rechazo(400, 'entrada_invalida', '`campos` debe ser una lista de campos del manual', toca)
   const g = confirmarGasto(cuerpo, TOPE_PEDIDO_AL_MANUAL_USD)
   if (!g.ok) return { ...g.salida, toca }
 

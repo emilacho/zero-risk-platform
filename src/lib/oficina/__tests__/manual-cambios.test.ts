@@ -30,6 +30,10 @@ describe('🔴 la puerta', () => {
     expect(s.cuerpo).toMatchObject({ ok: true, manual_cambio_id: fila.id, manual_id: 'v2', campos_liberados: ['voice_description'] })
     expect(s.despertar_flujo).toEqual({ camino: CAMINO_MANUAL_CAMBIOS, registrar: { tabla: 'plan_cambios', id: fila.id }, cuerpo: { client_id: C, manual_base_id: 'v2', cambios_del_dueno: BIEN.texto, manual_cambio_id: fila.id, seccion: 'Cómo habla', campos_validados: ['mision', 'voice_description'], campos_liberados: ['voice_description'], tope_reescritura_usd: 5, force_restart: true, origen: 'tablero/manual-cambios', pedido_por: 'emilio' } })
   })
+  it('🔴 acepta la clave corta del panel y libera el campo del borrador', async () => {
+    const s = await llamar(base(), { ...BIEN, seccion: 'Cómo habla', campos: ['voz'] })
+    expect(s.cuerpo).toMatchObject({ ok: true, campos_liberados: ['voice_description'] })
+  })
   it('🔴 el tope que confirma el dueño es el que viaja y queda guardado', async () => {
     const db = base()
     const s = await llamar(db, { ...BIEN, tope_usd: 3 })
