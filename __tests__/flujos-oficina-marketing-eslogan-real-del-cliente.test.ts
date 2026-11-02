@@ -109,8 +109,8 @@ const consolidar = async (flujo: any, materia: any) => {
 const HALLADA = { estado_frase_propia: 'hallado', frase_propia: 'Cuando tengas esa hambre de... Náufrago te espera!' }
 
 describe('manual · el Consolidador (código real)', () => {
-  it('solo cambian «[BB] Fan-out prep», «[BB] Consolidador» y «[BB] Judge · run-sdk» (partes 1, 2 y 3 acumuladas)', () => {
-    expect(cambiados(vivoManual, nuevoManual)).toEqual(['[BB] Consolidador', '[BB] Fan-out prep', '[BB] Judge · run-sdk'])
+  it('solo cambian «[BB] Fan-out prep», «[BB] Consolidador», «[BB] Judge · run-sdk» (partes 1, 2 y 3) y, con «pedir cambios al manual» (02-nov), «Validate Deal Data» y «[BB] Promote prep»', () => {
+    expect(cambiados(vivoManual, nuevoManual)).toEqual(['Validate Deal Data', '[BB] Consolidador', '[BB] Fan-out prep', '[BB] Judge · run-sdk', '[BB] Promote prep'])
   })
   it('frase hallada: el código YA NO escribe tagline ni lo marca como hecho; las propuestas del editor no se tocan', async () => {
     const b = await consolidar(nuevoManual, HALLADA)

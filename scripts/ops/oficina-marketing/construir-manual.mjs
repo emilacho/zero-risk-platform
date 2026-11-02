@@ -2,6 +2,7 @@
  * Equipo del manual de marca · el flujo del manual (`ssLtwYPt7zxuvnM2`) con las partes de CC2 aplicadas EN ORDEN sobre el respaldo vivo/.
  *   parte 1 · palabras con intención (palabras-con-intencion-manual.mjs)
  *   parte 2 · el juez de fidelidad deja de ser quien escribe la voz (juez-independiente-manual.mjs)
+ *   parte 4 · pedir cambios al manual (reescritura-del-manual.mjs) · solo actúa con `reescritura` en el sobre
  *   parte 3 · el eslogan real hallado llega como tagline con su fuente (eslogan-del-cliente.mjs)
  *   node scripts/ops/oficina-marketing/construir-manual.mjs · escribe nuevo/ssLtwYPt7zxuvnM2.json
  * Cada parte se certifica por separado; la ventana de aplicación es una sola, con el archivo acumulado.
@@ -9,8 +10,10 @@
 import { escribirNuevo, leerVivo } from './lib.mjs'
 import { construirJuezIndependiente } from './juez-independiente-manual.mjs'
 import { construirPalabrasConIntencion } from './palabras-con-intencion-manual.mjs'
+import { construirReescrituraDelManual } from './reescritura-del-manual.mjs'
 
 const f = leerVivo('ssLtwYPt7zxuvnM2')
 construirPalabrasConIntencion(f)
 construirJuezIndependiente(f)
+construirReescrituraDelManual(f) // 02-nov · pedir cambios al manual: solo actúa con `reescritura` en el sobre
 console.log(escribirNuevo(f))
