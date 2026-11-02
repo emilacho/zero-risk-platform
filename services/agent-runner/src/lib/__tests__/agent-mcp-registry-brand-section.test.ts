@@ -26,7 +26,7 @@ describe('brand-section MCP · activation gate', () => {
 
   it('REGISTERED para cada lente con flag=true', () => {
     process.env[FLAG] = 'true'
-    for (const slug of ['brand-strategist', 'editor-en-jefe', 'jefe-client-success']) {
+    for (const slug of ['brand-strategist', 'editor-en-jefe', 'jefe-client-success', 'content-creator', 'design-visual-storyteller', 'creative-director-mesa']) {
       const s = buildMcpServers({ agentSlug: slug })['brand-section']
       expect(s, `falta para ${slug}`).toBeDefined()
       expect(s?.args[0]).toMatch(/brand-section-server\.js$/)

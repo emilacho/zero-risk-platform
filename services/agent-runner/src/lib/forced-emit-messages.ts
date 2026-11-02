@@ -237,7 +237,7 @@ export const EMIT_BRAND_SECTION_TOOL = {
     type: 'object',
     required: ['lens'],
     properties: {
-      lens: { type: 'string', enum: ['brand-strategist', 'editor-en-jefe', 'jefe-client-success'] },
+      lens: { type: 'string', enum: ['brand-strategist', 'editor-en-jefe', 'jefe-client-success', 'content-creator', 'design-visual-storyteller', 'creative-director-mesa'] },
       // GATEADOS · tipo plano · byte-equivalentes al zod
       positioning: TEXTO,
       icp_summary: TEXTO,
@@ -253,6 +253,19 @@ export const EMIT_BRAND_SECTION_TOOL = {
       tagline_opciones: PROV_SCHEMA(LISTA_SCHEMA),
       mensajes_clave: PROV_SCHEMA(LISTA_SCHEMA),
       proposito: PROV_SCHEMA(TEXTO),
+      // 02-nov · equipo del manual: los que ya existen en `lib/manual/campos-del-manual.ts`; iguales al servidor
+      vision: PROV_SCHEMA(TEXTO),
+      valores: PROV_SCHEMA(LISTA_SCHEMA),
+      nunca_hace: PROV_SCHEMA(LISTA_SCHEMA),
+      productos: PROV_SCHEMA(LISTA_SCHEMA),
+      sedes: PROV_SCHEMA(LISTA_SCHEMA),
+      // 02-nov · ADENDA 1: las secciones nuevas; iguales al servidor
+      tono_por_canal: PROV_SCHEMA(LISTA_SCHEMA),
+      reglas_de_escritura: PROV_SCHEMA(LISTA_SCHEMA),
+      direccion_de_fotografia: PROV_SCHEMA(LISTA_SCHEMA),
+      uso_del_logo: PROV_SCHEMA(LISTA_SCHEMA),
+      jerarquia_tipografica: PROV_SCHEMA(LISTA_SCHEMA),
+      historia_y_origen: PROV_SCHEMA(TEXTO),
       _field_meta: { type: 'object' },
     },
   },
