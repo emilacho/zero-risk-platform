@@ -70,9 +70,13 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     cicloDelPlan: (artifactId) => cicloDelPlanDeLaBase(db, artifactId),
     async anotarPalabraDelDueno(p) {
       try {
-        const ya = await db.from('hitl_queue').select('id').eq('output_id', p.plan_id).eq('type', 'palabra_del_dueno').eq('status', 'pending').limit(1)
-        if (ya.error || ((ya.data as unknown[] | null) ?? []).length) return
-        await db.from('hitl_queue').insert({ client_id: p.client_id, output_id: p.plan_id, agent_name: 'jefatura · palabra del dueño', risk_type: 'strategic_decision', output_preview: p.detalle, type: 'palabra_del_dueno', title: p.titulo, priority: 'high', status: 'pending', payload: {}, metadata: p.metadata, expires_at: null })
+        // solo el plan y lo que tenga id de salida se anota contra él; un documento de la cadena se identifica por otro camino y no se deduplica aquí
+        const output_id = /^[0-9a-f-]{36}$/i.test(p.plan_id) ? p.plan_id : null
+        if (output_id) {
+          const ya = await db.from('hitl_queue').select('id').eq('output_id', output_id).eq('type', 'palabra_del_dueno').eq('status', 'pending').limit(1)
+          if (ya.error || ((ya.data as unknown[] | null) ?? []).length) return
+        }
+        await db.from('hitl_queue').insert({ client_id: p.client_id, output_id, agent_name: 'jefatura · palabra del dueño', risk_type: 'strategic_decision', output_preview: p.detalle, type: 'palabra_del_dueno', title: p.titulo, priority: 'high', status: 'pending', payload: {}, metadata: p.metadata, expires_at: null })
       } catch { /* la anotación no frena la elección de versión */ }
     },
     async revisor(p) {

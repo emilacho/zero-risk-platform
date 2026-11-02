@@ -3,16 +3,22 @@
  * Con el caso que ya ocurrió y con otro cliente. US$ 0, sin red.
  */
 import { describe, expect, it } from 'vitest'
+import { clienteA } from '../src/lib/cadena/__fixtures__/clientes'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { controlarFrasesNegadas } from '../src/lib/planeacion/coherencia-del-plan'
 import { adjuntoDelCliente } from '../src/lib/portero-alimenta/contexto-del-cliente'
 import { textoDeLaCarpeta } from '../src/lib/jefatura/revision/carpeta-para-revisar'
-import { abrirRevision, armarSalida, avisosDelPlan, elegirVersionDelPlan, fichasDeLoNegado } from '../src/lib/jefatura/revision/orquestador'
+import { abrirRevision, armarSalida, avisosDelPlan, elegirVersionDelPlan } from '../src/lib/jefatura/revision/orquestador'
 import { resolverCierre } from '../src/lib/jefatura/revision/cierre'
 import { ARTEFACTO_DE_LA_JEFATURA, metadataDeLaJefatura } from '../src/lib/oficina/paso-jefatura'
 import { puertosDePrueba, sobre, correr } from './_helpers/jefatura-revision'
 import { crearPuertos } from '../src/lib/jefatura/revision/adaptadores'
 
+const A = clienteA()
+/** corrida real, sin molde del seco: cada revisor responde que no halló nada */
+const SIN_FICHAS = (x: { paso: string; pedido: Record<string, unknown> }) => (x.paso.startsWith('decision:')
+  ? { texto: JSON.stringify({ respuestas: [...String(x.pedido.task).matchAll(/^- \[([^\]\n]+)\]/gm)].map((m) => ({ id: m[1], estado: 'no_tomada', razon: 'no aplica' })) }), costo_usd: 0.01 }
+  : { texto: JSON.stringify({ fichas: [] }), costo_usd: 0.01 })
 const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const MARISCO = { tema: 'origen del marisco', frases_negadas: ['marisco de Olón', 'pescado del día de Olón'] }
 const CLINICA = { tema: 'sede de Cuenca', frases_negadas: ['abierto los domingos'] }
@@ -32,9 +38,6 @@ describe('🔴 la frase que el dueño negó', () => {
   it('sin frases, o sin usarlas, no hay nada', () => {
     expect(controlarFrasesNegadas('Texto cualquiera', [{ tema: 'x', frases_negadas: [] }])).toEqual([])
     expect(controlarFrasesNegadas('Texto cualquiera', [MARISCO])).toEqual([])
-  })
-  it('fuera del plan, bloquea y entra al ciclo', () => {
-    expect(fichasDeLoNegado('marisco de Olón', [MARISCO])[0]).toMatchObject({ gravedad: 'bloquea', origen: 'jefe', estado: 'abierta', contra_que: 'lo que declaró el dueño' })
   })
   it('🔴 en el plan no deja ficha: llega completo y con su aviso; sin la lectura, nada se rompe', async () => {
     const { P } = puertosDePrueba()
@@ -71,13 +74,37 @@ describe('🔴 la frase que el dueño negó', () => {
     const rev = await P.almacen.leerRevision(String(c.aperturas[0].cuerpo.revision_id))
     expect(rev!.estado_del_motor.avisos).toBeUndefined()
   })
-  it('🔴 lo que no es plan ni pieza, con re-entrega, sigue bloqueando', async () => {
+  for (const tipo of ['estrategia', 'calendario'] as const) {
+    it(`🔴 en ${tipo} no deja ficha ni se devuelve: se anota el aviso`, async () => {
+      const { P } = puertosDePrueba()
+      P.hechosDelDueno = async () => [MARISCO]
+      const notas: Array<Record<string, unknown>> = []
+      P.anotarPalabraDelDueno = async (x) => { notas.push(x as never) }
+      const texto = tipo === 'estrategia' ? JSON.stringify({ ...A.estrategia, nota: 'marisco de Olón' }) : JSON.stringify({ filas: [{ fila_id: 'f1', tema: 'marisco de Olón' }] })
+      const c = await correr(P, sobre(tipo, { id: `${tipo}:x:v1`, texto, dry_run: false }), SIN_FICHAS)
+      const fin = await P.almacen.leerRevision(String(c.aperturas[0].cuerpo.revision_id))
+      expect(fin!.policy.reentrega).not.toBe('ninguna')
+      expect(fin!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? ''))).toBe(false)
+      expect(fin!.estado).toBe('cerrada')
+      expect(fin!.estado_del_motor.avisos?.[0]).toMatch(/^Aviso: .*el dueño lo negó/)
+      expect(notas.at(-1)).toMatchObject({ titulo: `${tipo}: revisa este aviso`, metadata: { artifact_type: tipo } })
+    })
+  }
+  it('🔴 la pieza no se anota aparte: lleva el aviso en su tarjeta', async () => {
     const { P } = puertosDePrueba()
     P.hechosDelDueno = async () => [MARISCO]
-    const r = await abrirRevision(P, sobre('estrategia', { texto: 'Estrategia con marisco de Olón' }))
-    const rev = await P.almacen.leerRevision(String(r.cuerpo.revision_id))
-    if (rev!.policy.reentrega === 'ninguna') throw new Error('esta prueba necesita un tipo con re-entrega')
-    expect(rev!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? '') && f.gravedad === 'bloquea')).toBe(true)
+    const notas: unknown[] = []
+    P.anotarPalabraDelDueno = async (x) => { notas.push(x) }
+    const c = await correr(P, sobre('pieza', { texto: 'Pieza con marisco de Olón', dry_run: false }), SIN_FICHAS)
+    const fin = await P.almacen.leerRevision(String(c.aperturas[0].cuerpo.revision_id))
+    expect(fin!.estado_del_motor.avisos?.[0]).toMatch(/el dueño lo negó/)
+    expect(notas).toEqual([])
+  })
+  it('🔴 un documento sin id de salida se anota igual, sin chocar con la columna', async () => {
+    const db = new DbFalsa()
+    const reales = crearPuertos(db as never, {} as never)
+    await reales.anotarPalabraDelDueno!({ client_id: C, plan_id: 'estrategia-de-campana', titulo: 'T', detalle: 'D', metadata: {} })
+    expect(db.tablas['hitl_queue'][0]).toMatchObject({ output_id: null, type: 'palabra_del_dueno' })
   })
   it('🔴 el aviso viaja de la salida a los datos de la bandeja', () => {
     const e = { artefactos: { [ARTEFACTO_DE_LA_JEFATURA]: { datos: { jefatura: { resultado: 'limpia', avisos: ['Aviso: x'], incompleta: false, sin_revisar: false } } } } } as never
