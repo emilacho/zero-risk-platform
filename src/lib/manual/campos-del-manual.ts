@@ -24,11 +24,11 @@ export interface CampoDelManual {
   /** el tipo de la COLUMNA cuando difiere del del campo (la personalidad es una lista en el borrador y un texto, un rasgo por línea, en la columna; el eslogan: varias opciones, una columna de texto) */
   tipo_de_columna?: TipoDeCampo
   ruta?: string
-  /** el dueño lo puede editar desde el tablero (los derivados no: salen de lo raspado) */
+  /** el dueño lo puede editar desde el tablero (02-nov · adenda de Emilio: todos, también los que salen de lo raspado) */
   editable: boolean
   /** obligatorio para todo negocio; los matices por tipo van en `REGLAS_POR_TIPO` */
   obligatorio: boolean
-  /** la clave con la que lo nombra el tablero (B1), si es editable */
+  /** la clave corta con la que lo nombra el tablero (B1), si tiene; la clave del borrador también sirve */
   clave_del_tablero?: string
 }
 
@@ -49,8 +49,8 @@ export const CAMPOS: readonly CampoDelManual[] = [
   { clave: 'nunca_hace', etiqueta: 'Lo que nunca dice ni hace', tipo: 'lista', ruta: 'nunca_hace', editable: true, obligatorio: true, clave_del_tablero: 'nunca' },
   { clave: 'forbidden_words', etiqueta: 'Palabras que no usa', tipo: 'lista', columna: 'forbidden_words', editable: true, obligatorio: false },
   { clave: 'required_terminology', etiqueta: 'Palabras que sí usa', tipo: 'lista', columna: 'required_terminology', editable: true, obligatorio: false },
-  { clave: 'customer_angle', etiqueta: 'Ángulo del cliente', tipo: 'texto', ruta: 'customer_angle', editable: false, obligatorio: false },
-  { clave: 'retention_notes', etiqueta: 'Cómo se fideliza', tipo: 'texto', ruta: 'retention_notes', editable: false, obligatorio: false },
+  { clave: 'customer_angle', etiqueta: 'Ángulo del cliente', tipo: 'texto', ruta: 'customer_angle', editable: true, obligatorio: false },
+  { clave: 'retention_notes', etiqueta: 'Cómo se fideliza', tipo: 'texto', ruta: 'retention_notes', editable: true, obligatorio: false },
 ]
 
 export const CAMPO_POR_CLAVE: Readonly<Record<string, CampoDelManual>> = Object.fromEntries(CAMPOS.map((c) => [c.clave, c]))

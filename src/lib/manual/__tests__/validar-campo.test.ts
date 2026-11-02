@@ -5,6 +5,7 @@ import { CAMPOS } from '../campos-del-manual'
 import { conservarLoDelDueno, editarManualDelDueno, validarCampoDelManual, validarManualDelDueno } from '../edicion-del-dueno'
 import { avisoDelManualConValidados, avisoDeProvisionales, camposDelManual } from '../lectura'
 import { ACCIONES } from '@/lib/oficina/tablero/acciones'
+import { palabrasDuras } from '../palabras-con-intencion'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
 
 const C = '5c2d2dd5-a49e-4da3-87c3-03b504b734f6'
@@ -31,8 +32,8 @@ describe('validar un campo', () => {
     expect(d.proposito).toBe('Propósito')
     expect(db.tablas['client_brand_books'][0].human_validated).toBe(false)
   })
-  it('🔴 sirve para cualquier campo con contenido, no solo los editables', async () => {
-    const claves = CAMPOS.filter((c) => !c.editable).map((c) => c.clave)
+  it('🔴 sirve para cualquier campo con contenido, no solo los que tienen clave del tablero', async () => {
+    const claves = CAMPOS.filter((c) => !c.clave_del_tablero).map((c) => c.clave)
     expect(claves.length).toBeGreaterThan(0)
     const db = base({}, Object.fromEntries(claves.map((k) => [k, 'algo'])))
     for (const k of claves) expect((await validar(db, k)).ok, k).toBe(true)
@@ -162,6 +163,58 @@ describe('que viaje como aceptado por el dueño', () => {
     const m = (JSON.parse(String(u.content_text)) as any).brand_book_draft._field_meta.proposito
     expect(m.fuente).toBe('dueno')
     expect(m.aceptado_por_el_dueno).toBeUndefined()
+  })
+})
+
+describe('🔴 editar cualquier campo (adenda de Emilio)', () => {
+  it('cada campo, por su clave del borrador, sin que el campo tuviera valor', async () => {
+    for (const c of CAMPOS) {
+      const db = new DbFalsa().semilla('client_brand_books', [{ id: 'v1', client_id: C, version: 1, updated_at: 't', content_text: JSON.stringify({ brand_book_draft: {} }) }])
+      const r = await editarManualDelDueno(db, { client_id: C, campos: { [c.clave]: 'Texto del dueño' }, reviewer: 'emilio', ahora: AHORA })
+      expect(r, c.clave).toMatchObject({ ok: true, version_nueva: 2, cambios: [{ clave: c.clave, valor: 'Texto del dueño', valor_anterior: null }] })
+      const u = db.tablas['client_brand_books'].find((x) => x.version === 2)!
+      const d = (JSON.parse(String(u.content_text)) as any).brand_book_draft
+      expect(d._field_meta[c.clave], c.clave).toMatchObject({ fuente: 'dueno', por: 'emilio' })
+      expect(JSON.stringify(d[c.clave]), c.clave).toContain('Texto del dueño')
+      if (c.columna) expect(JSON.stringify(u[c.columna]), c.clave).toContain('Texto del dueño')
+    }
+  })
+  it('las claves cortas del tablero siguen sirviendo', async () => {
+    const r = await editarManualDelDueno(base(), { client_id: C, campos: { voz: 'Otra voz' }, reviewer: 'emilio', ahora: AHORA })
+    expect(r).toMatchObject({ ok: true, cambios: [{ clave: 'voice_description', clave_del_tablero: 'voz' }] })
+  })
+  it('🔴 un campo inventado se rechaza, y el mismo campo por sus dos claves también', async () => {
+    expect(await editarManualDelDueno(base(), { client_id: C, campos: { inventado: 'x' }, reviewer: 'e' })).toMatchObject({ ok: false, status: 400, error: 'campo_no_editable' })
+    expect(await editarManualDelDueno(base(), { client_id: C, campos: { voz: 'a', voice_description: 'b' }, reviewer: 'e' })).toMatchObject({ ok: false, status: 400, error: 'entrada_invalida' })
+  })
+  it('🔴 una corrida posterior conserva un campo que antes no se podía editar', async () => {
+    const db = base()
+    await editarManualDelDueno(db, { client_id: C, campos: { vision: 'La visión de Emilio' }, reviewer: 'emilio', ahora: AHORA })
+    const u = db.tablas['client_brand_books'].find((x) => x.version === 2)!
+    expect(conservarLoDelDueno({ ...u, content_text: JSON.parse(String(u.content_text)) }, { vision: 'Otra', _field_meta: {} }).bb.vision).toBe('La visión de Emilio')
+  })
+  describe('la lista de palabras', () => {
+    const GRATIS = { texto: 'gratis', intencion: 'legal', fuente: { cita: 'la ley' } }
+    const conPalabras = () => {
+      const db = base()
+      Object.assign(db.tablas['client_brand_books'][0], { forbidden_words: ['barato', 'gratis', 'mejor'], palabras_con_intencion: [{ texto: 'barato', intencion: 'del_dueno', fuente: { cita: 'lo dijo', fecha: '2026-10-30' } }, GRATIS] })
+      return db
+    }
+    const final = (db: DbFalsa) => db.tablas['client_brand_books'].find((x) => x.version === 2)!
+    it('🔴 la palabra prohibida que el dueño quita deja de contar; la que sigue conserva su intención; la nueva es contexto', async () => {
+      const db = conPalabras()
+      await editarManualDelDueno(db, { client_id: C, campos: { forbidden_words: 'gratis; mejor; nueva' }, reviewer: 'emilio', ahora: AHORA })
+      const u = final(db)
+      expect(u.forbidden_words).toEqual(['gratis', 'mejor', 'nueva'])
+      expect(u.palabras_con_intencion).toEqual([GRATIS])
+      expect(palabrasDuras(u as never)).toEqual(['gratis'])
+      expect((JSON.parse(String(u.content_text)) as any).brand_book_draft.palabras_con_intencion).toEqual([GRATIS])
+    })
+    it('editar otro campo no las toca', async () => {
+      const db = conPalabras()
+      await editarManualDelDueno(db, { client_id: C, campos: { voz: 'x' }, reviewer: 'emilio', ahora: AHORA })
+      expect(palabrasDuras(final(db) as never)).toEqual(['barato', 'gratis'])
+    })
   })
 })
 

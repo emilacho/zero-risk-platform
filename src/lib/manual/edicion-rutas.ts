@@ -1,6 +1,6 @@
 /**
  * Las rutas de «editar y validar el manual desde el dashboard» (30-oct). Las dos hacen primero lo del manual y DESPUÉS lo del cerebro; si el cerebro falla, el manual ya quedó y el pendiente se dice.
- *   PATCH /api/manual/{client_id}/campos   cuerpo: { campos:{<clave del tablero>: texto}, comentario?, reviewer, origen:'dashboard' }
+ *   PATCH /api/manual/{client_id}/campos   cuerpo: { campos:{<clave del borrador o del tablero>: texto}, comentario?, reviewer, origen:'dashboard' }
  *   POST  /api/tablero/manual-validar      cuerpo: { client_id, reviewer, origen:'dashboard' }
  */
 import { decidirPalabraDelDueno, editarManualDelDueno, empujarCamposAlCerebro, validarCampoDelManual, validarManualDelDueno, type Db, type DepsDelCerebro } from './edicion-del-dueno'

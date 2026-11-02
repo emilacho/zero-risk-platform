@@ -14,7 +14,7 @@
 import { CAMPOS, esloganDelCliente, evaluarCompletitud, quienValido, type CampoDelManual } from './campos-del-manual'
 import { enviarALaPuerta, type EntornoDeLaPuerta, type ResultadoDeEnvio } from '../notas-del-dueno/puerta-del-dueno'
 import { CANAL_DEL_MANUAL } from '../portero-alimenta/dueno'
-import { aplicarDecisionDelDueno, conservarPalabrasDuras, deUnaCorrida, leerPalabras, palabrasDuras, type DecisionDelDueno } from './palabras-con-intencion'
+import { aplicarDecisionDelDueno, conservarPalabrasDuras, deUnaCorrida, leerPalabras, palabrasDuras, type DecisionDelDueno, declaradasQueSiguen } from './palabras-con-intencion'
 
 type Fila = Record<string, unknown>
 export interface Db { from(tabla: string): any }
@@ -28,9 +28,9 @@ const objeto = (v: unknown): Fila => {
 export const FLUJO_DEL_DASHBOARD_MANUAL = 'dashboard-manual'
 const MARCA_DEL_DUENO = '[frase propia del cliente, verbatim — escrita por el dueño]'
 
-/** los campos que el tablero puede editar, por la clave con que los nombra el tablero (B1) */
+/** los campos que el tablero puede editar, por su clave del borrador o por la clave corta del tablero (B1) */
 export const EDITABLES_DEL_TABLERO: Readonly<Record<string, CampoDelManual>> = Object.fromEntries(
-  CAMPOS.filter((c) => c.editable && c.clave_del_tablero).map((c) => [c.clave_del_tablero as string, c]),
+  CAMPOS.filter((c) => c.editable).flatMap((c) => [[c.clave, c], ...(c.clave_del_tablero ? [[c.clave_del_tablero, c]] : [])]),
 )
 
 export interface Cambio { clave: string; clave_del_tablero: string; etiqueta: string; valor: string; valor_anterior: string | null }
@@ -95,6 +95,7 @@ export async function editarManualDelDueno(db: Db, e: EntradaDeEdicion): Promise
   for (const [k, v] of Object.entries(e.campos)) {
     const campo = EDITABLES_DEL_TABLERO[k]
     if (!campo) return mal(400, 'campo_no_editable', `«${k}» no es un campo que se pueda editar`)
+    if (elegidos.some((x) => x.campo === campo)) return mal(400, 'entrada_invalida', `«${k}» viene dos veces`)
     const texto = typeof v === 'string' ? v.trim() : ''
     if (!texto || texto.length > 2000) return mal(400, 'entrada_invalida', `«${k}» debe tener entre 1 y 2.000 caracteres`)
     elegidos.push({ campo, clave_del_tablero: k, texto })
@@ -116,6 +117,7 @@ export async function editarManualDelDueno(db: Db, e: EntradaDeEdicion): Promise
       borrador[campo.clave] = bv
       if (campo.ruta && campo.ruta !== campo.clave) borrador[campo.ruta] = bv
       if (campo.columna) nueva[campo.columna] = columna
+      if (campo.clave === 'forbidden_words') nueva.palabras_con_intencion = borrador.palabras_con_intencion = declaradasQueSiguen(vigente, aLista(texto))
       meta[campo.clave] = { fuente: 'dueno', por: e.reviewer, en: ahora, valor_anterior: anterior, cita }
       cambios.push({ clave: campo.clave, clave_del_tablero, etiqueta: campo.etiqueta, valor: texto, valor_anterior: anterior })
     }
