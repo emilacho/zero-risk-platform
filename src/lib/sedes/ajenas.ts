@@ -39,14 +39,14 @@ export interface ResultadoDeRetiro {
   total: number
 }
 
-async function todas<T>(pedir: (desde: number, hasta: number) => PromiseLike<Q>): Promise<{ filas: T[]; error: string | null }> {
+async function todas<T>(pedir: (desde: number, hasta: number) => PromiseLike<Q>, unaPagina = false): Promise<{ filas: T[]; error: string | null }> {
   const filas: T[] = []
   for (let i = 0; ; i += 1000) {
     const q = await pedir(i, i + 999)
     if (q.error) return { filas, error: q.error.message }
     const lote = Array.isArray(q.data) ? (q.data as T[]) : []
     filas.push(...lote)
-    if (lote.length < 1000) return { filas, error: null }
+    if (unaPagina || lote.length < 1000) return { filas, error: null }
   }
 }
 
@@ -56,10 +56,12 @@ export async function retirarSedeDatosAjenos(db: DbSedes, o: { clientId?: string
   const quien = o.quien ?? 'el cerebro'
   const vacio: ResultadoDeRetiro = { ok: false, dry_run: o.dry_run, por_cliente: [], total: 0 }
   const filasQ = await todas<FilaDeSede>((a, b) => {
-    let q = db.from('client_sede_datos').select('id, client_id, fuente, fuente_ref, retirada_en').eq('fuente', 'sitio').is('retirada_en', null)
+    let q = db.from('client_sede_datos').select('id, client_id, fuente, fuente_ref, retirada_en').eq('fuente', 'sitio')
     if (o.clientId) q = q.eq('client_id', o.clientId)
-    return q.order('id', { ascending: true }).range(a, b)
-  })
+    q = q.order('id', { ascending: true })
+    // un cliente cabe en una lectura; para todos se pagina de a mil
+    return o.clientId ? q : q.range(a, b)
+  }, !!o.clientId)
   if (filasQ.error) return { ...vacio, error: `leer los datos de sede: ${filasQ.error}` }
   const ids = [...new Set(filasQ.filas.map((f) => f.client_id))]
   const bases = new Map<string, BaseDelCliente>()

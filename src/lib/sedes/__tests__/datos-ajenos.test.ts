@@ -146,6 +146,22 @@ describe('el recolector: la tienda homónima en una app de reparto no entra, se 
     expect(r.nuevas).toBeGreaterThan(0)
     expect(r.descartes.some((d) => d.fuente === 'reparto')).toBe(false)
   })
+  it('un dato retirado NO tapa al mismo dato leído después de una página que sí es del cliente: entra como fila vigente', async () => {
+    const c = DIEZ_CLIENTES[1]
+    const b = montar(c, `${dominio(c)}/contacto`, 'propio')
+    ;(b.tablas.client_sede_datos as unknown[]).length = 0
+    const primera = await recolectarSedes(b.db as never, c.id)
+    expect(primera.nuevas).toBeGreaterThan(0)
+    // la base falsa guarda una inserción por lotes como UNA fila: se siembran las filas sueltas, ya retiradas (como si hubieran venido de una página ajena)
+    const lote = b.escrituras.find((e) => e.tabla === 'client_sede_datos' && e.op === 'insert')!.fila as unknown as Array<Record<string, unknown>>
+    ;(b.tablas.client_sede_datos as unknown[]).length = 0
+    lote.forEach((f, i) => (b.tablas.client_sede_datos as Array<Record<string, unknown>>).push({ id: `ret${i}`, ...f, retirada_en: '2026-11-02T00:00:00Z', motivo_retirada: 'prueba' }))
+    // y la página del cliente se vuelve a leer más tarde, con lo mismo
+    ;(b.tablas.client_web_pages as Array<Record<string, unknown>>)[0].crawled_at = '2026-11-02T10:00:00Z'
+    const segunda = await recolectarSedes(b.db as never, c.id)
+    expect(segunda.nuevas).toBeGreaterThan(0)
+    expect(b.escrituras.some((e) => e.tabla === 'client_sede_datos' && e.op === 'update' && e.filtros?.some(([col, v]) => col === 'id' && String(v).startsWith('ret')))).toBe(false)
+  })
   it('una fila retirada no cuenta como lo último guardado ni sale en la ficha de sedes', async () => {
     const c = DIEZ_CLIENTES[1]
     const b = montar(c, `${dominio(c)}/contacto`, 'propio')

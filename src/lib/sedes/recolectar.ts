@@ -177,7 +177,7 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
       const nuevas = RAPIDO(await supabase.from('client_sedes').insert(faltantes.map((s) => ({ client_id: clientId, clave: s.clave, ciudad: s.ciudad }))).select('id,clave,ciudad'), 'guardar las sedes') as Array<{ id: string; clave: string; ciudad: string }>
       for (const s of nuevas) porClave.set(s.clave, s)
     }
-    const guardadas = RAPIDO(await supabase.from('client_sede_datos').select('id,sede_id,campo,fuente,valor_norm,valor_texto,observado_en,reconfirmado_en').eq('client_id', clientId).is('retirada_en', null), 'leer las observaciones') as Array<{ id: string; reconfirmado_en: string | null; sede_id: string | null; campo: string; fuente: string; valor_norm: unknown; valor_texto: string; observado_en: string }>
+    const guardadas = RAPIDO(await supabase.from('client_sede_datos').select('id,sede_id,campo,fuente,valor_norm,valor_texto,observado_en,reconfirmado_en,retirada_en').eq('client_id', clientId), 'leer las observaciones') as Array<{ retirada_en?: string | null; id: string; reconfirmado_en: string | null; sede_id: string | null; campo: string; fuente: string; valor_norm: unknown; valor_texto: string; observado_en: string }>
     const llave = (sedeId: string | null, campo: string, fuente: string, norm: unknown, texto: string, cuando: string | null) =>
       [sedeId || '', campo, fuente, JSON.stringify(norm ?? texto), String(cuando ? new Date(cuando).toISOString() : '')].join('|')
     const ya = new Set(guardadas.map((g) => llave(g.sede_id, g.campo, g.fuente, g.valor_norm, g.valor_texto, g.observado_en)))
@@ -188,7 +188,8 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     const ultimo = new Map<string, Ultimo>()
     const grupo = (sedeId: string | null, campo: string, fuente: string) => [sedeId || '', campo, fuente].join('|')
     const valorDe = (norm: unknown, texto: string) => JSON.stringify(norm ?? texto)
-    for (const g of guardadas) {
+    // lo retirado cuenta para no reinsertarlo (`ya`), pero NO como «lo último guardado» de su grupo
+    for (const g of guardadas.filter((x) => !x.retirada_en)) {
       const k = grupo(g.sede_id, g.campo, g.fuente)
       const c = new Date(g.observado_en).getTime()
       if (!ultimo.has(k) || c >= ultimo.get(k)!.cuando) ultimo.set(k, { cuando: c, valor: valorDe(g.valor_norm, g.valor_texto), reconf: g.reconfirmado_en ? new Date(g.reconfirmado_en).getTime() : 0, id: g.id, pendiente: null })
@@ -226,9 +227,9 @@ export async function recolectarSedes(supabase: SupabaseClient, clientId: string
     for (const [id, cuando] of reconfirmaciones) RAPIDO(await supabase.from('client_sede_datos').update({ reconfirmado_en: new Date(cuando).toISOString() }).eq('id', id).eq('client_id', clientId), 'anotar la reconfirmación')
 
     // ── la ficha resuelta, desde TODO lo guardado (no sólo lo de hoy) ──
-    const todas = RAPIDO(await supabase.from('client_sede_datos').select('sede_id,campo,valor_texto,valor_norm,fuente,fuente_ref,alcance,observado_en').eq('client_id', clientId).is('retirada_en', null), 'leer la ficha de sedes') as Array<{ sede_id: string | null; campo: Observacion['campo']; valor_texto: string; valor_norm: unknown; fuente: Observacion['fuente']; fuente_ref: string | null; alcance: Observacion['alcance']; observado_en: string }>
+    const todas = RAPIDO(await supabase.from('client_sede_datos').select('sede_id,campo,valor_texto,valor_norm,fuente,fuente_ref,alcance,observado_en,retirada_en').eq('client_id', clientId), 'leer la ficha de sedes') as Array<{ retirada_en?: string | null; sede_id: string | null; campo: Observacion['campo']; valor_texto: string; valor_norm: unknown; fuente: Observacion['fuente']; fuente_ref: string | null; alcance: Observacion['alcance']; observado_en: string }>
     const clavePorId = new Map([...porClave.values()].map((s) => [s.id, s.clave]))
-    const deLaBase: Observacion[] = todas.map((t) => ({ sede: t.sede_id ? clavePorId.get(t.sede_id) ?? null : null, ciudad: null, campo: t.campo, valor_texto: t.valor_texto, valor_norm: t.valor_norm, fuente: t.fuente, fuente_ref: t.fuente_ref, observado_en: t.observado_en, alcance: t.alcance }))
+    const deLaBase: Observacion[] = todas.filter((t) => !t.retirada_en).map((t) => ({ sede: t.sede_id ? clavePorId.get(t.sede_id) ?? null : null, ciudad: null, campo: t.campo, valor_texto: t.valor_texto, valor_norm: t.valor_norm, fuente: t.fuente, fuente_ref: t.fuente_ref, observado_en: t.observado_en, alcance: t.alcance }))
     const sedes = L.resolverSedes([...porClave.values()].map((s) => ({ clave: s.clave, ciudad: s.ciudad })), deLaBase)
     // ── qué aporta Mapas a cada sede · y si dos fichas distintas pasaron para la misma: se DECLARA, no se elige en silencio ──
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
