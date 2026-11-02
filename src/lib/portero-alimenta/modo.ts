@@ -3,6 +3,7 @@
  * `PORTERO_MODO` = `construccion` | `campana` es DATO (variable en Vercel): cambiar de modo no exige construir nada. Arranca en `construccion`.
  *  · construccion: 3 corridas COMPLETAS al día (12:30, 18:30 y 00:30 UTC) y el tope del raspado diario por cliente en US$ 3,00;
  *  · campana: 1 corrida completa (12:30 UTC) y el tope del raspado diario vuelve a US$ 1,00 (D-4).
+ * La FRECUENCIA se separó del modo el 2-nov (`PORTERO_CORRIDAS_POR_DIA`, ver `corridasPorDiaDelEntorno`): el modo sigue decidiendo el dinero y los topes.
  * Los umbrales firmados del gasto total (aviso > 3 / apaga > 10) NO dependen del modo. PURO.
  */
 export type ModoDelPortero = 'construccion' | 'campana'
@@ -26,6 +27,22 @@ export function modoDelEntorno(env: Record<string, string | undefined> = process
   return { modo: 'campana', origen: 'valor_roto', aviso: `PORTERO_MODO tiene un valor que no se entiende («${String(env.PORTERO_MODO).slice(0, 30)}»): se usa campana (1 corrida al día). Valores válidos: construccion | campana` }
 }
 
+/**
+ * CUÁNTAS corridas completas al día (2-nov · firma de Emilio, opción B): la frecuencia es DATO aparte del modo.
+ * `PORTERO_CORRIDAS_POR_DIA` = 1..3: toma las primeras N horas de la lista del modo (1 → solo 12:30 UTC). Ausente → las del modo (construcción: 3).
+ * Un valor roto cae a 1 (la forma barata). El dinero, el freno por anomalía y los avisos NO dependen de esto.
+ */
+export function corridasPorDiaDelEntorno(modo: ModoDelPortero, env: Record<string, string | undefined> = process.env): { n: number; origen: 'variable' | 'por_modo' | 'valor_roto'; aviso: string | null } {
+  const todas = CORRIDAS_POR_MODO[modo].length
+  const t = String(env.PORTERO_CORRIDAS_POR_DIA ?? '').trim()
+  if (t === '') return { n: todas, origen: 'por_modo', aviso: null }
+  const n = Number(t)
+  if (Number.isInteger(n) && n >= 1) return { n: Math.min(n, todas), origen: 'variable', aviso: null }
+  return { n: 1, origen: 'valor_roto', aviso: `PORTERO_CORRIDAS_POR_DIA tiene un valor que no se entiende («${t.slice(0, 30)}»): se usa 1 corrida al día. Valores válidos: 1, 2 o 3` }
+}
+/** las horas de corrida vigentes: las del modo recortadas a las que pide `PORTERO_CORRIDAS_POR_DIA` */
+export const horasDeCorrida = (modo: ModoDelPortero, env: Record<string, string | undefined> = process.env): ReadonlyArray<{ hhmm: string; minutos: number }> => CORRIDAS_POR_MODO[modo].slice(0, corridasPorDiaDelEntorno(modo, env).n)
+
 export const topeDiarioPorClienteUsd = (modo: ModoDelPortero): number => TOPE_DIARIO_POR_MODO_USD[modo]
 
 /** ¿el dinero frena el raspado en este modo? (Emilio 28-oct: en construcción el dinero no es un obstáculo; los parámetros económicos se definen con el sistema ya construido) */
@@ -41,15 +58,15 @@ const minutosUtc = (d: Date) => d.getUTCHours() * 60 + d.getUTCMinutes()
 const inicioDelDia = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 
 /** la hora (Date) de cada corrida del modo que cae en el día UTC de `ahora` */
-export function corridasDelDia(modo: ModoDelPortero, ahora: Date): Date[] {
+export function corridasDelDia(modo: ModoDelPortero, ahora: Date, env: Record<string, string | undefined> = process.env): Date[] {
   const base = inicioDelDia(ahora)
-  return CORRIDAS_POR_MODO[modo].map((c) => new Date(base + c.minutos * 60_000)).sort((a, b) => a.getTime() - b.getTime())
+  return horasDeCorrida(modo, env).map((c) => new Date(base + c.minutos * 60_000)).sort((a, b) => a.getTime() - b.getTime())
 }
 
 /** ¿ahora (con `margenMin` de holgura por el disparador) es una hora de corrida del modo? devuelve la hora programada o null */
-export function corridaProgramadaAhora(modo: ModoDelPortero, ahora: Date, margenMin = 20): Date | null {
+export function corridaProgramadaAhora(modo: ModoDelPortero, ahora: Date, margenMin = 20, env: Record<string, string | undefined> = process.env): Date | null {
   const m = minutosUtc(ahora)
-  for (const c of CORRIDAS_POR_MODO[modo]) {
+  for (const c of horasDeCorrida(modo, env)) {
     const d = Math.min(Math.abs(m - c.minutos), 1440 - Math.abs(m - c.minutos))
     if (d <= margenMin) {
       // la hora programada más cercana (puede ser la de ayer si son las 23:50 y la corrida es a las 00:30)
@@ -64,9 +81,9 @@ export function corridaProgramadaAhora(modo: ModoDelPortero, ahora: Date, margen
  * La corrida del modo que un vigía debe revisar AHORA: la más reciente cuya hora programada pasó hace entre `desdeMin` y `hastaMin` minutos.
  * Fuera de esas ventanas (p. ej. a las 20:15 en campaña, que solo tiene la de las 12:30) no hay nada que revisar y el vigía calla.
  */
-export function corridaQueSeRevisa(modo: ModoDelPortero, ahora: Date, desdeMin = 60, hastaMin = 180): Date | null {
+export function corridaQueSeRevisa(modo: ModoDelPortero, ahora: Date, desdeMin = 60, hastaMin = 180, env: Record<string, string | undefined> = process.env): Date | null {
   const t = ahora.getTime()
-  const todas = [-1, 0].flatMap((k) => CORRIDAS_POR_MODO[modo].map((c) => new Date(inicioDelDia(ahora) + k * 86_400_000 + c.minutos * 60_000)))
+  const todas = [-1, 0].flatMap((k) => horasDeCorrida(modo, env).map((c) => new Date(inicioDelDia(ahora) + k * 86_400_000 + c.minutos * 60_000)))
   const dentro = todas.filter((d) => t - d.getTime() >= desdeMin * 60_000 && t - d.getTime() <= hastaMin * 60_000)
   return dentro.sort((a, b) => b.getTime() - a.getTime())[0] ?? null
 }
