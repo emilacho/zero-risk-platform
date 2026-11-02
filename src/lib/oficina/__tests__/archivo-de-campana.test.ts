@@ -147,6 +147,14 @@ describe('archivar', () => {
     expect(filas(x, 'hitl_queue').find((f) => f.id === 'de-la-segunda')).not.toHaveProperty('archivada_en')
   })
 
+  it('🔴 una campaña anterior del mismo cliente no pone el límite', async () => {
+    const x = base()
+    x.semilla('cadena_campanas', [{ id: 'vieja', client_id: C, estado: 'cerrada', creada_en: '2026-09-01T00:00:00Z', seco: false }])
+    const r = await archivarCampana(d(x), { campana_id: K, dry_run: false }, AHORA)
+    expect(r.body).toMatchObject({ piezas: 1 })
+    expect(filas(x, 'hitl_queue').find((f) => f.id === H1)).toMatchObject({ archivo_motivo: MOTIVO_DE_ARCHIVO })
+  })
+
   it('🔴 no cambia cuántas filas, piezas ni encargos hay', async () => {
     const x = base()
     const cuantas = () => ['cadena_calendario_filas', 'hitl_queue', 'oficina_encargos', 'cadena_esperas', 'cadena_campanas'].map((n) => filas(x, n).length)
