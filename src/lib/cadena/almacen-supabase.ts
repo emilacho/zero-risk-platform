@@ -26,6 +26,13 @@ import type { FechaEspecialVerificada } from './validador-calendario'
 import { estadoDeLasSedes } from '../sedes/por-abrir'
 import { esloganDelCliente, reglaDelEslogan } from '../manual/campos-del-manual'
 
+/** las tablas de la cadena que usa el archivo de una campaña (`oficina/archivo-de-campana.ts`): solo este archivo las nombra */
+export const tablasDelArchivo = <D>(db: { from(t: string): D }) => ({
+  campanas: () => db.from('cadena_campanas'),
+  filas: () => db.from('cadena_calendario_filas'),
+  esperas: () => db.from('cadena_esperas'),
+})
+
 /** lee el eslogan del manual vigente; un contenido ilegible no tumba la lectura */
 export function esloganParaLaCadena(m: { tagline?: string | null; content_text?: string | null } | undefined): { texto: string; regla: string } | null {
   if (!m) return null
