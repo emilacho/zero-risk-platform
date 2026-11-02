@@ -7,7 +7,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { NODO_DATOS } from '../scripts/ops/oficina-marketing/datos-del-negocio.mjs'
 import { recorrer } from './_emulador-n8n'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
@@ -41,13 +40,12 @@ const guarda = async (aprobacion: Record<string, unknown>, planes: Record<string
 
 describe('alcance', () => {
   it('el Brief suma el nodo de la aprobación y cambia el GET del plan, su guarda y el armado; nada más frente al flujo sin esta parte', () => {
-    expect(brief.nodes.length).toBe(vivoBrief.nodes.length + 2) // la aprobación del plan y la lectura única (adenda 3)
+    expect(brief.nodes.length).toBe(vivoBrief.nodes.length + 1)
     const c = cambiados(vivoBrief, brief)
     for (const n of [APROB, CARGAR, GUARDA, ARMAR]) expect(c).toContain(n)
   })
   it('el nodo nuevo va entre la guarda del manual y la carga del plan', () => {
-    expect(sig(brief, GUARDA_MANUAL)).toBe(NODO_DATOS)
-    expect(sig(brief, NODO_DATOS)).toBe(APROB)
+    expect(sig(brief, GUARDA_MANUAL)).toBe(APROB)
     expect(sig(brief, APROB)).toBe(CARGAR)
   })
   it('la parte por filas NO suma nodos de aprobación (ya lee el plan de su campaña por id) y recibe la jerarquía', () => {

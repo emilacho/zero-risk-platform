@@ -9,7 +9,6 @@ import { describe, expect, it } from 'vitest'
 import { NODOS_BRIEF, NODOS_PIEZA } from '../scripts/ops/oficina-marketing/construir-palabras.mjs'
 import { construirPalabrasDelManual } from '../scripts/ops/oficina-marketing/palabras-del-manual.mjs'
 import { construirJerarquiaDeFuentes, construirPlanAprobado } from '../scripts/ops/oficina-marketing/plan-aprobado.mjs'
-import { NODO_DATOS } from '../scripts/ops/oficina-marketing/datos-del-negocio.mjs'
 import { recorrer } from './_emulador-n8n'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
@@ -29,8 +28,9 @@ const MANUAL = (extra: Record<string, unknown> = {}) => ({ id: 'm-1', version: 2
 describe('alcance · solo se toca lo previsto', () => {
   it.each([[BRIEF, NODOS_BRIEF], [CADENA, NODOS_BRIEF], [PIEZA, NODOS_PIEZA]])('%s: cambian el GET del manual, su guarda y el armado del pedido, nada más', (id, nodos) => {
     const a = sinParte4(id), b = leer('nuevo', id)
-    expect(cambiados(a, b).filter((n: string) => !n.startsWith('③ Hoja')).filter((n: string) => ![nodos.cargar, nodos.guarda, nodos.armar].includes(n) && n !== '④ Chequeos' && n !== '⑦ Chequeos' && n !== NODO_DATOS)).toEqual([]) // + el nodo de la lectura única (adenda 3), que se prueba aparte
+    expect(cambiados(a, b).filter((n: string) => !n.startsWith('③ Hoja')).filter((n: string) => ![nodos.cargar, nodos.guarda, nodos.armar].includes(n) && n !== '④ Chequeos' && n !== '⑦ Chequeos')).toEqual([])
     for (const n of [nodos.cargar, nodos.guarda, nodos.armar]) expect(cambiados(a, b)).toContain(n)
+    expect(b.connections).toEqual(id === CADENA ? b.connections : a.connections)
   })
   it.each([BRIEF, CADENA, PIEZA])('%s: el GET pide la columna `tagline` una sola vez', (id) => {
     const f = leer('nuevo', id)
@@ -63,8 +63,6 @@ const armado = async (f: any, nodo: string, prevNombre: string, prev: Record<str
   const r = await recorrer(f, nodo, entrada, { previos: { [prevNombre]: [prev], ...extraPrevios }, hasta: [sig(f, nodo)] }).catch((e) => { throw e })
   return r.historial[nodo][0].cuerpo.task as string
 }
-// la lectura única contestó 200 y sin datos: los bloques de la adenda 3 no imprimen nada y el pedido solo difiere por la parte 4
-const SIN_DATOS = { [NODO_DATOS]: [{ statusCode: 200, body: { ok: true, sedes: [], hechos_del_dueno: [], activos_solo_lectura: [], sin_dato: [], fallos: [] } }] }
 const BASE_BRIEF = { client_id: 'c-1', dry_run: false, manual_id: 'm-1', manual_version: 2, manual_texto: 'TEXTO DEL MANUAL', manual_voz: { voice_description: 'Tutea siempre (tú/sabes/pides — nunca vos).', writing_style: null, tone_guidelines: {} }, forbidden_words: [], required_terminology: [], plan_id: 'p-1', plan_texto: 'TEXTO DEL PLAN', plan_version: 1 }
 
 describe('el pedido del brief y de la cadena por filas', () => {
@@ -85,7 +83,7 @@ describe('el pedido del brief y de la cadena por filas', () => {
     for (const tag of [undefined, '', '   ', 42, null]) {
       const prev = { ...BASE_BRIEF, ...(tag === undefined ? {} : { manual_tagline: tag }) }
       const ficha = { name: 'Náufrago', country: 'Ecuador', config: {} }
-      expect(await armado(nuevo, NODOS_BRIEF.armar, '② ¿Ya hay parte de este plan? · guarda', prev, ficha, SIN_DATOS)).toBe(await armado(antes, NODOS_BRIEF.armar, '② ¿Ya hay parte de este plan? · guarda', prev, ficha, SIN_DATOS))
+      expect(await armado(nuevo, NODOS_BRIEF.armar, '② ¿Ya hay parte de este plan? · guarda', prev, ficha)).toBe(await armado(antes, NODOS_BRIEF.armar, '② ¿Ya hay parte de este plan? · guarda', prev, ficha))
     }
   })
 })
@@ -94,7 +92,7 @@ describe('el pedido de la pieza', () => {
   it('el armado de la pieza lleva el bloque antes del brief, una sola vez, con su regla', () => {
     const c = codigoDe(leer('nuevo', PIEZA), NODOS_PIEZA.armar)
     expect(c).toContain('ESLOGAN QUE EL CLIENTE YA USA (activo de marca EXISTENTE)')
-    expect(c).toContain("const pedido = [REGLAS, '', ...bloqueEslogan, ...bloquesDelNegocio, '════════ EL BRIEF ════════', prev.brief_texto]")
+    expect(c).toContain("const pedido = [REGLAS, '', ...bloqueEslogan, '════════ EL BRIEF ════════', prev.brief_texto]")
     expect(c).toContain('declara la diferencia en «no_pude_cumplir» y rotula cualquier otro como PROPUESTA')
     expect(codigoDe(sinParte4(PIEZA), NODOS_PIEZA.armar)).not.toContain('bloqueEslogan')
   })
