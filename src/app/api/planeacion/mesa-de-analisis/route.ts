@@ -80,14 +80,24 @@ async function materialDe(clientId: string, a: Analista) {
   const resumen = ctx.resumen_vivo.estado === 'vigente'
     ? [ctx.resumen_vivo.texto ?? '', ...(ctx.resumen_vivo.sedes ?? []).map((s) => `[sede ${s.clave}] ${s.texto}`)].filter(Boolean).join('\n')
     : null
-  const r = await rutaConsultar({ db: base }, { client_id: clientId, oficina: MESA, agente: a.agente, que: a.que, limite: 50 })
-  const cuerpo = r.body as { resultados?: unknown[]; error?: string; detalle?: string }
-  if (r.status !== 200) throw new Error(`el portero no contestó la consulta (${r.status} ${cuerpo.error ?? ''}) · ${cuerpo.detalle ?? ''}`.trim())
-  const fichas: FichaDelMaterial[] = (cuerpo.resultados ?? []).map((x) => {
+  // 02-nov · TODO lo que haya del tema, con el contenido entero y su fecha real: por páginas hasta que el portero diga que no hay más (el corte nunca es mudo)
+  const crudas: unknown[] = []
+  let encontradas = 0
+  let desde = 0
+  for (let pagina = 0; pagina < 40; pagina++) {
+    const r = await rutaConsultar({ db: base }, { client_id: clientId, oficina: MESA, agente: a.agente, que: a.que, ...(a.clases ? { clase: a.clases } : {}), todo: true, contenido_completo: true, desde })
+    const cuerpo = r.body as { resultados?: unknown[]; total_encontradas?: number; siguiente_desde?: number | null; error?: string; detalle?: string }
+    if (r.status !== 200) throw new Error(`el portero no contestó la consulta (${r.status} ${cuerpo.error ?? ''}) · ${cuerpo.detalle ?? ''}`.trim())
+    crudas.push(...(cuerpo.resultados ?? []))
+    encontradas = cuerpo.total_encontradas ?? crudas.length
+    if (typeof cuerpo.siguiente_desde !== 'number' || cuerpo.siguiente_desde <= desde) break
+    desde = cuerpo.siguiente_desde
+  }
+  const fichas: FichaDelMaterial[] = crudas.map((x) => {
     const f = x as Record<string, unknown>
     return { ficha_id: String(f.ficha_id), clase: texto(f.clase), fecha: texto(f.fecha_de_la_fuente) ?? texto(f.fecha), contenido: String(f.contenido ?? '') }
   })
-  return { material: armarMaterial({ resumen_vivo: resumen, fichas, ids_del_resumen: resumen ? await idsCitadosEnElTexto(base, clientId, resumen) : [] }), fecha_de_corte: new Date().toISOString() }
+  return { material: armarMaterial({ resumen_vivo: resumen, fichas, ids_del_resumen: resumen ? await idsCitadosEnElTexto(base, clientId, resumen) : [], encontradas }), fecha_de_corte: new Date().toISOString() }
 }
 
 /** el método del analista según `cadena_config.metodos.<tipo>` · `mercado` tiene uno de omisión (F4); los demás solo si la configuración trae texto */

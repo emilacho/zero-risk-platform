@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       const a = await consultarAprendizajeDelEntorno({ client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), destinatario: u.get('destinatario'), formato: u.get('formato'), tarea: u.get('tarea'), limite: u.get('limite'), marcar_uso: u.get('marcar_uso') !== '0' })
       return NextResponse.json(a.body, { status: a.status })
     }
-    const r = await rutaConsultar({ db: getSupabaseAdmin() as unknown as Db }, { client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), que: u.get('que'), atributo: u.get('atributo'), clase: u.get('clase'), sede_clave: u.get('sede_clave'), limite: u.get('limite') })
+    const r = await rutaConsultar({ db: getSupabaseAdmin() as unknown as Db }, { client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), que: u.get('que'), atributo: u.get('atributo'), clase: u.get('clase'), sede_clave: u.get('sede_clave'), limite: u.get('limite'), todo: u.get('todo'), desde: u.get('desde'), contenido_completo: u.get('contenido_completo') })
     // el estado del manual vigente (validado por el dueño / propuesta sin validar, versión, fecha) viaja con toda consulta del cliente
     const manual = r.status === 200 ? await leerEstadoDelManual(getSupabaseAdmin() as unknown as Db, String(u.get('client_id'))) : null
     return NextResponse.json(manual ? { ...r.body, manual } : r.body, { status: r.status })
