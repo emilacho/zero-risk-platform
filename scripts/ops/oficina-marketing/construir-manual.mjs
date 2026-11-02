@@ -8,6 +8,7 @@
  *   (d) · content-creator escribe la voz y el editor-en-jefe la revisa (voz-content-creator-manual.mjs)
  *   (c) · reparto de secciones: estrategia a brand-strategist; productos y sedes a jefe-client-success (reparto-de-secciones-manual.mjs)
  *   (c2) · piso visual: design-visual-storyteller lo escribe y style-consistency-reviewer lo revisa (piso-visual-equipo-manual.mjs)
+ *   ADENDA 1 · secciones nuevas + mesa creativa + regla de proponer (secciones-nuevas-y-mesa-manual.mjs)
  *   node scripts/ops/oficina-marketing/construir-manual.mjs · escribe nuevo/ssLtwYPt7zxuvnM2.json
  * Cada parte se certifica por separado; la ventana de aplicación es una sola, con el archivo acumulado.
  */
@@ -19,6 +20,7 @@ import { construirEsloganDelManualComoContexto } from './eslogan-manual-contexto
 import { construirVozConContentCreator } from './voz-content-creator-manual.mjs'
 import { construirRepartoDeSecciones } from './reparto-de-secciones-manual.mjs'
 import { construirPisoVisualConEquipo } from './piso-visual-equipo-manual.mjs'
+import { construirSeccionesNuevasYMesa } from './secciones-nuevas-y-mesa-manual.mjs'
 
 const f = leerVivo('ssLtwYPt7zxuvnM2')
 construirPalabrasConIntencion(f)
@@ -28,4 +30,5 @@ construirEsloganDelManualComoContexto(f) // 02-nov · (e) la frase que el client
 construirVozConContentCreator(f) // 02-nov · (d) content-creator escribe la voz; el editor-en-jefe la revisa (asesora)
 construirRepartoDeSecciones(f) // 02-nov · (c) estrategia a brand-strategist; productos y sedes a jefe-client-success
 construirPisoVisualConEquipo(f) // 02-nov · (c2) design-visual-storyteller escribe lo visual; style-consistency-reviewer lo revisa (asesora)
+construirSeccionesNuevasYMesa(f) // 02-nov · ADENDA 1: secciones nuevas + mesa creativa + regla de proponer (apoyada en (d) y (c2))
 console.log(escribirNuevo(f))

@@ -33,7 +33,7 @@ const PREVIOS = { 'Validate Deal Data': [{ client_id: 'c-1' }], '[BB] Fan-out pr
 async function cadena(item: Record<string, unknown>, respuesta: any, llamadas: any[] = []) {
   return recorrer(nuevo, REVISION.pedido, item, {
     previos: PREVIOS,
-    hasta: [REPETIR_HTTP, JUDGE_PREP],
+    hasta: [REPETIR_HTTP, JUDGE_PREP, '[BB] Equipo · aportes de los dueños'],
     http: async (url, _h, cuerpo) => { llamadas.push({ url, cuerpo }); if (respuesta instanceof Error) throw respuesta; return respuesta },
   })
 }
@@ -99,7 +99,7 @@ describe('la revisión asesora (código real)', () => {
     expect(t).toContain('discovery_summary')
     expect(t).toMatch(/la creatividad es libre/)
     expect(t).not.toMatch(/debes|obligatori|tal cual|siempre incluye/i)
-    expect(r.pasos).toEqual([REVISION.pedido, REVISION.si, REVISION.http, REVISION.anotar, USO, REPETIR_SI, JUDGE_PREP])
+    expect(r.pasos).toEqual([REVISION.pedido, REVISION.si, REVISION.http, REVISION.anotar, USO, REPETIR_SI, '[BB] Equipo · aportes de los dueños'])
   })
   it('segunda pasada, sin voz o sin evidencia: NO se llama a nadie y sigue como hoy', async () => {
     for (const item of [entrada({ _fidelity_cycle: 2 }), entrada({}, { voice_description: '' }), entrada({ _grounding_refs: {} })]) {
@@ -136,7 +136,7 @@ describe('lo que vuelve del revisor (código real)', () => {
     expect(m.item._voz_revision.observaciones).toHaveLength(1)
     expect(m.item._voz_revision.bloquea).toEqual([])
     expect(m.item._uso_repetir_voz).toBe(false)
-    expect(m.ultimo).toBe(JUDGE_PREP)
+    expect(m.ultimo).toBe('[BB] Equipo · aportes de los dueños')
   })
   it('tope 1: en la segunda pasada una observación grave ya no vuelve al escritor', async () => {
     const r = await recorrer(nuevo, USO, { ...entrada({ _fidelity_cycle: 2 }), _voz_revision: { corrio: true, observaciones: [], bloquea: [{ campo: 'voice_description', severidad: 'blocker', observacion: 'x', sugerencia: '' }] } }, { previos: PREVIOS, hasta: [REPETIR_HTTP, JUDGE_PREP] })
@@ -158,7 +158,7 @@ describe('lo que vuelve del revisor (código real)', () => {
       expect(r.item._voz_revision.corrio).toBe(false)
       expect(r.item._voz_revision.bloquea).toEqual([])
       expect(r.item._uso_repetir_voz).toBe(false)
-      expect(r.ultimo).toBe(JUDGE_PREP)
+      expect(r.ultimo).toBe('[BB] Equipo · aportes de los dueños')
     }
   })
   it('severidad desconocida cuenta como minor, se aceptan hasta 6 y se acotan los textos', async () => {
@@ -246,6 +246,6 @@ describe('alcance', () => {
     const suyos = new Set<string>(Object.values(REVISION))
     const nuevosEnElArchivo = nuevo.nodes.filter((n: any) => !v.has(n.name)).map((n: any) => n.name)
     expect(nuevosEnElArchivo.filter((x: string) => x.startsWith('[BB] Voz ·')).sort()).toEqual([...suyos].sort())   // los otros nuevos son de la revisión de estilo (c2)
-    expect(nuevosEnElArchivo.filter((x: string) => !x.startsWith('[BB] Voz ·') && !x.startsWith('[BB] Estilo ·'))).toEqual([])
+    expect(nuevosEnElArchivo.filter((x: string) => !x.startsWith('[BB] Voz ·') && !x.startsWith('[BB] Estilo ·') && !x.startsWith('[BB] Equipo ·'))).toEqual([])
   })
 })
