@@ -58,11 +58,30 @@ if (_re && _re.manual_cambio_id) promote_body.manual_cambio_id = String(_re.manu
 return [{ json: {
   promote_body,`
 
+const RET_VIEJO_1 = "\nreturn [{ json: {\n  fidelity_scores: fid.scores || {},"
+const RET_NUEVO_1 = `
+// 02-nov · PEDIR CAMBIOS AL MANUAL · en modo reescritura el padre (\`zero-risk/manual-cambios\`) necesita ver el RECIBO del guardado: versión ligada, «sin cambios reales» o error.
+// Sin \`reescritura\` esta clave no existe y la salida es la de siempre.
+let _recibo = null;
+try {
+  if ($('Validate Deal Data').first().json.reescritura) {
+    const pc = $('[BB] Promote → canon').first().json || {};
+    _recibo = { persisted: pc.persisted === undefined ? null : pc.persisted, sin_cambios_reales: pc.sin_cambios_reales === true, id: pc.id || null, manual_cambio_id: pc.manual_cambio_id || null,
+      error: pc.error ? String(pc.error).slice(0, 200) : null, detalle: pc.detail ? String(pc.detail).slice(0, 200) : null };
+  }
+} catch (e) { _recibo = null; }
+return [{ json: {
+  fidelity_scores: fid.scores || {},`
+const RET_VIEJO_2 = "  _cimiento_return: true\n} }];"
+const RET_NUEVO_2 = "  ...(_recibo ? { promote_recibo: _recibo } : {}),\n  _cimiento_return: true\n} }];"
+
 /** [nodo, fragmento de hoy, fragmento con esta parte]: las pruebas lo usan para reconstruir el código de «hoy» */
 export const SUSTITUCIONES = [
   ['Validate Deal Data', VAL_VIEJO, VAL_NUEVO],
   ['[BB] Fan-out prep', FAN_VIEJO, FAN_NUEVO],
   ['[BB] Promote prep', PROM_VIEJO, PROM_NUEVO],
+  ['Return scores a parent (grade-cimiento gate)', RET_VIEJO_1, RET_NUEVO_1],
+  ['Return scores a parent (grade-cimiento gate)', RET_VIEJO_2, RET_NUEVO_2],
 ]
 
 export function construirReescrituraDelManual(f) {

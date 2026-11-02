@@ -17,9 +17,11 @@ const codigo = (n: string): string => nuevo.nodes.find((x: any) => x.name === n)
 const VAL = 'Validate Deal Data', FAN = '[BB] Fan-out prep', PROM = '[BB] Promote prep'
 /** el código del nodo sin esta parte */
 const hoy = (n: string): string => {
-  const s = (SUSTITUCIONES as Array<[string, string, string]>).find((x) => x[0] === n)!
-  expect(codigo(n)).toContain(s[2])
-  return codigo(n).replace(s[2], s[1])
+  const ss = (SUSTITUCIONES as Array<[string, string, string]>).filter((x) => x[0] === n)
+  expect(ss.length).toBeGreaterThan(0)
+  let c = codigo(n)
+  for (const s of [...ss].reverse()) { expect(c).toContain(s[2]); c = c.replace(s[2], () => s[1]) } // un nodo puede llevar varias sustituciones: se deshacen al revés
+  return c
 }
 
 function correr(code: string, ctx: { nodos: Record<string, any>; todos?: Record<string, any[]>; input?: any[]; json?: any }) {
@@ -181,5 +183,35 @@ describe('tope de gasto por llamada (max_budget_usd)', () => {
   })
   it('si el nodo de validación no corrió, no rompe la llamada (la clave simplemente no va)', () => {
     expect('max_budget_usd' in cuerpoDe('Lente · editor-en-jefe', null)).toBe(false)
+  })
+})
+
+// ── el recibo del guardado, devuelto al padre solo en modo reescritura ──────────────────────────────────────────────────────────────────
+describe('«Return scores a parent» · promote_recibo', () => {
+  const RETN = 'Return scores a parent (grade-cimiento gate)'
+  const base = (re: any, recibo: any) => ({
+    nodos: {
+      'Validate Deal Data': { client_id: 'c-1', ...(re ? { reescritura: re } : {}) },
+      ...(recibo === null ? {} : { '[BB] Promote → canon': recibo }),
+      '[BB] Manual → Drive (PDF)': { ok: true },
+    } as Record<string, any>,
+    json: { fidelity: { pass: true, scores: { a: 1 } }, promote_body: { brand_book: {} }, brand_book_draft: { client_id: 'c-1' }, client_id: 'c-1' },
+  })
+  it('sin `reescritura`: la salida es EXACTAMENTE la de hoy y no existe la clave', () => {
+    const c = base(null, { persisted: true, id: 'v-1' })
+    const a = correr(codigo(RETN), c), b = correr(hoy(RETN), base(null, { persisted: true, id: 'v-1' }))
+    expect(a).toEqual(b)
+    expect('promote_recibo' in a[0].json).toBe(false)
+  })
+  it('con `reescritura`: devuelve el recibo (sin cambios reales, versión, error) y el resto de la salida no cambia', () => {
+    const sin = correr(codigo(RETN), base(RE, { persisted: false, sin_cambios_reales: true })), con = sin[0].json
+    expect(con.promote_recibo).toMatchObject({ persisted: false, sin_cambios_reales: true, id: null })
+    const { promote_recibo: _x, ...resto } = con
+    expect(resto).toEqual(correr(hoy(RETN), base(null, { persisted: true }))[0].json)
+    expect(correr(codigo(RETN), base(RE, { persisted: true, id: 'v-9', manual_cambio_id: 'cc-1' }))[0].json.promote_recibo).toMatchObject({ persisted: true, id: 'v-9', manual_cambio_id: 'cc-1', sin_cambios_reales: false })
+    expect(correr(codigo(RETN), base(RE, { error: 'x'.repeat(500) }))[0].json.promote_recibo.error.length).toBe(200)
+  })
+  it('si el guardado no corrió, no rompe: no hay recibo', () => {
+    expect('promote_recibo' in correr(codigo(RETN), base(RE, null))[0].json).toBe(false)
   })
 })

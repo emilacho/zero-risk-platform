@@ -108,9 +108,12 @@ try { armado = $('③ Armar la entrada del manual').first().json.fallo || null }
 if (armado) motivo = armado
 else if (!f) motivo = 'no se pudo releer el pedido al cerrar'
 else if (!f.manual_nuevo_id) {
-  let detalle = ''
-  try { const e = $('④ Llamar al flujo del manual').first().json; detalle = e && e.error ? ' · ' + String(e.error.message || e.error).slice(0, 200) : '' } catch (x) { detalle = '' }
-  motivo = 'el flujo terminó sin dejar una versión nueva del manual' + detalle
+  let detalle = '', recibo = null
+  try { const e = $('④ Llamar al flujo del manual').first().json; recibo = e && e.promote_recibo ? e.promote_recibo : null; detalle = e && e.error ? ' · ' + String(e.error.message || e.error).slice(0, 200) : '' } catch (x) { detalle = '' }
+  // el recibo del guardado (lo devuelve el flujo del manual en modo reescritura) dice POR QUÉ no hubo versión nueva
+  if (recibo && recibo.sin_cambios_reales === true) motivo = 'sin cambios reales: el equipo no cambió ningún campo del manual con este pedido; no se guardó una versión nueva'
+  else if (recibo && recibo.error) motivo = 'el guardado del manual respondió con error: ' + recibo.error + (recibo.detalle ? ' · ' + recibo.detalle : '')
+  else motivo = 'el flujo terminó sin dejar una versión nueva del manual' + detalle
 }
 const aplicado = !motivo
 return [{ json: {
