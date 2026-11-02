@@ -12,6 +12,7 @@ INSERT INTO public.oficina_directorio (agente, rol, especialidad, pertinente_en,
   ('jefe-marketing', 'miembro', 'dirige el departamento y escribe el plan de 90 días', '{}', false, 'direccion'),
   ('spell-check-corrector', 'miembro', 'ortografía y gramática antes de la revisión final', '{}', false, 'direccion'),
   ('revisor-externo-gpt', 'miembro', 'proveedor externo: da una segunda opinión, sin voto', '{}', false, 'direccion'),
+  ('editor_en_jefe', 'miembro', 'control de calidad de lo que sale: marca, exactitud y estrategia; revisa la voz', '{}', false, 'direccion'),
   ('social-media-strategist', 'miembro', 'estrategia de redes sociales y calendario', '{}', false, 'estrategia'),
   ('brand_strategist', 'miembro', 'estrategia de marca, posicionamiento y coherencia del manual', '{}', false, 'estrategia'),
   ('web_designer', 'miembro', 'diseño de landings y sitios de marketing', '{}', false, 'web'),
@@ -50,5 +51,9 @@ DELETE FROM public.departments WHERE id = 'fabeb80c-a5c7-48ff-9725-33c52ba0a322'
 UPDATE public.agents SET department_id = 'df6c193c-2584-40af-a869-7cea79c7059a', reports_to = NULL WHERE name = 'sales-enablement';
 DELETE FROM public.departments WHERE id = '3dbba4e0-e325-4dd4-8115-f899c386c4e4' AND name = 'ventas';
 UPDATE public.departments SET display_name = 'Ventas', updated_at = now() WHERE id = 'df6c193c-2584-40af-a869-7cea79c7059a' AND display_name <> 'Ventas';
+
+-- Respuesta de Lenovo 02-nov: editor_en_jefe pasa a Marketing y reporta a jefe-marketing (Servicios compartidos queda sin jefe, no se inventa); reporting_agent pasa a Marketing.
+UPDATE public.agents SET department_id = '9e45ceeb-063f-44e8-9033-9897b6aa8428', reports_to = '62ca50de-d9da-4b98-8861-3ae30ebe5377', role = 'empleado' WHERE name = 'editor_en_jefe';
+UPDATE public.agents SET department_id = '9e45ceeb-063f-44e8-9033-9897b6aa8428' WHERE name = 'reporting_agent';
 
 COMMIT;
