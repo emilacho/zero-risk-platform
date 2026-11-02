@@ -94,6 +94,20 @@ describe('la puerta del manual y lo propuesto', () => {
     expect(pasar({ vision: 'Ser la cocina que la gente recuerda', _field_meta: { vision: { estado: 'confirmado' } } })._field_meta.vision).toMatchObject({ estado: 'sin_hechos' })
   })
 
+  it.each(['Nació en 2015 en Quito', 'nacio en 2015', 'Fundada en 2015', 'Inaugurado en 2015', 'Abrimos en 2015', 'Desde 2015'])('🔴 «%s» sin fuente es una fecha por comprobar', (texto) => {
+    const inf = evaluarHechos({ manual: { historia_y_origen: texto }, fuentes: [] } as never)
+    expect(inf.sin_respaldo.length).toBe(1)
+  })
+
+  it('🔴 la misma fecha en sus fuentes sí vale', () => {
+    const inf = evaluarHechos({ manual: { historia_y_origen: 'Nació en 2015' }, fuentes: [{ id: 's', tipo: 'primaria_propia', rotulo: 'sitio', canal: 'sitio', texto: 'Abrimos en 2015 en la playa.' }] } as never)
+    expect(inf.sin_respaldo).toEqual([])
+  })
+
+  it('una visión hacia adelante no es un hecho por comprobar', () => {
+    expect(evaluarHechos({ manual: { vision: 'Ser la cocina que la gente recuerda en 2030' }, fuentes: [] } as never).sin_respaldo).toEqual([])
+  })
+
   it('🔴 con un dato duro sin fuente manda «con pendientes»: no se oculta tras la propuesta', () => {
     const r = pasar({ historia_y_origen: 'Fundado en 2015', _field_meta: { historia_y_origen: { estado: 'propuesta_del_agente', ...META } } })
     expect(r._field_meta.historia_y_origen).toMatchObject({ estado: 'con_pendientes', provisional: true })
