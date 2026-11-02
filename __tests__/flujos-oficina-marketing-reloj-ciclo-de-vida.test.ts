@@ -85,3 +85,27 @@ describe('el reconciliador reconstruido enseña el estado nuevo', () => {
     expect(rec.parameters.jsCode).toContain('const SOLO_LECTURA = false')
   })
 })
+
+describe('reservas de CC3 sobre el reloj (K14 y K12)', () => {
+  it('K14 · el código REAL del nodo «Reconciliar» clasifica un despacho sin_cierre como ok (no como hallazgo), venga de la edad que venga', async () => {
+    const fs = await import('node:fs')
+    const f = JSON.parse(fs.readFileSync('scripts/ops/oficina-marketing/nuevo/pZy6quQakQr9bdRr.json', 'utf8'))
+    const js: string = f.nodes.find((n: any) => n.name === 'Reconciliar').parameters.jsCode
+    const cuerpo = js.slice(0, js.indexOf('// «Reconciliar»') > 0 ? js.indexOf('// «Reconciliar»') : js.length)
+    // se evalúa el texto del nodo hasta donde termina la lógica pura, y se pide clasificar
+    const fn = new Function(cuerpo + '\nreturn clasificarDespacho;')() as (d: any, i: any, ints: any[], ahora: number) => any
+    const ahora = Date.parse('2026-11-02T12:00:00Z')
+    for (const dias of [0.1, 2, 40]) {
+      const d = { dispatch_key: 'x', status: 'sin_cierre', created_at: new Date(ahora - dias * 86400000).toISOString(), workflow_execution_id: 'e1', agent_name: 'a' }
+      expect(fn(d, null, [], ahora).clasificacion).toBe('ok')
+    }
+    // control: el mismo despacho en curso y viejo SÍ es hallazgo
+    const viejo = { dispatch_key: 'x', status: 'running', created_at: new Date(ahora - 40 * 86400000).toISOString(), workflow_execution_id: 'e1', agent_name: 'a' }
+    expect(fn(viejo, null, [], ahora).clasificacion).not.toBe('ok')
+  })
+  it('K12 · la llamada al ciclo tiene un tiempo límite fijo de 60 s y no se queda esperando por error', () => {
+    const n = flujo.nodes.find((x: any) => x.name === LLAMAR)
+    expect(n.parameters.options.timeout).toBe(60000)
+    expect(n.parameters.options.response.response.neverError).toBe(true)
+  })
+})
