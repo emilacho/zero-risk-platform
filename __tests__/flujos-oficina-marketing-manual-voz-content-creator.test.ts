@@ -79,11 +79,10 @@ describe('el borrador: la voz se rotula con quien la escribió', () => {
     expect(codigo(nuevo, '[BB] Uso · mezclar la voz')).toContain("lente: 'content-creator', reintento_uso: true")
     expect(codigo(nuevo, '[BB] Uso · mezclar la voz')).not.toContain("lente: 'editor-en-jefe'")
   })
-  it('el Consolidador rotula personalidad, tagline_opciones y mensajes_clave con content-creator; mision/proposito/propuestas siguen con jefe-client-success', () => {
+  it('el Consolidador rotula personalidad, tagline_opciones y mensajes_clave con content-creator (la estrategia y los datos del negocio los rotula el reparto de secciones (c))', () => {
     const c = codigo(nuevo, '[BB] Consolidador')
     for (const k of ['personalidad', 'tagline_opciones', 'mensajes_clave']) expect(c).toMatch(new RegExp(`_nuevo\\(editor, '${k}',\\s+'content-creator',`))
     expect(c).not.toMatch(/_nuevo\(editor, '[a-z_]+',\s+'editor-en-jefe'/)
-    expect(c).toMatch(/_nuevo\(cs,\s+'mision',\s+'jefe-client-success'/)
   })
 })
 
