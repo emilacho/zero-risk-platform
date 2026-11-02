@@ -242,7 +242,8 @@ export function evaluarHechos(e: EntradaDeHechos): InformeDeHechos {
         const cita = citaDe(e.citas, frase, clausula)
         for (const m of buscarCerteza(palabras, lista)) detalle.push({ marca: 'certeza', texto: m.palabra, s: soporteDeCerteza(m.id, clausula, frase, ix, lista, cita) })
         for (const d of extraerCifras(clausula)) detalle.push({ marca: 'cifra', texto: d, s: soporteDeCifra(d, ix, cita) })
-        const f = RE_FECHA.exec(clausula)
+        // el patrón está sin tildes: «Nació en 2015» se compara normalizado
+        const f = RE_FECHA.exec(normalizar(clausula))
         if (f) detalle.push({ marca: 'fecha', texto: f[2], s: soporteDeFecha(f[2], ix) })
         if (frasePideOrigen(clausula) && elObjetoEsUnBien(clausula, e.bienes)) {
           const lugares = lugaresMencionados(clausula)
