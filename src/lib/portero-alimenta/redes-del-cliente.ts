@@ -71,7 +71,7 @@ export async function correrPasoDeRedes(e: EntradaDePasoDeRedes): Promise<Result
     } else if (esFuenteNueva(e.paso)) {
       // las seis fuentes nuevas (02-nov): cada una su paso; el trabajo y el archivo viven en `fuentes-nuevas.ts`
       const f = await correrFuenteNueva({
-        db: e.db, fuente: e.paso, cliente: cliente as never, clientId: e.clientId, ciudadesDeSedes: ciudades, ahora: e.ahora, ejecutar: ejecutarEnApify({ token: common.token, fetchImpl: e.fetch as never, esperaMs: 120_000 }),
+        db: e.db, fuente: e.paso, cliente: cliente as never, clientId: e.clientId, ciudadesDeSedes: ciudades, ahora: e.ahora, ejecutar: ejecutarEnApify({ token: common.token, fetchImpl: e.fetch as never, esperaMs: e.paso === 'busquedas_google' ? 230_000 : e.paso === 'eventos_locales' ? 100_000 : 120_000 }),
         workflowId: e.registro?.workflowId, ejecucionId: e.registro?.ejecucionId,
         leerComentarios: async (cl) => {
           const cm = await comentariosDeRedes({ redes: REDES_DE_IG_Y_FB, cliente: cl, clientId: e.clientId, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora: e.ahora, ejecutar: ejecutarComentarios({ token: common.token, fetchImpl: e.fetch as never }), fetchImpl: e.fetch as never })

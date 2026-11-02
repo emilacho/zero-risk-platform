@@ -243,3 +243,49 @@ describe('el paso de punta a punta (actor falso → ficha en el cerebro)', () =>
     expect(n).toBe(0)
   })
 })
+
+describe('la base acepta lo que las fuentes escriben', () => {
+  it('todo alcance que las fuentes usan está permitido por una migración (la base falsa no lo habría dicho)', async () => {
+    const fs = await import('node:fs'), path = await import('node:path')
+    const dir = path.join(process.cwd(), 'supabase', 'migrations')
+    const sqls = fs.readdirSync(dir).filter((f) => /alcance/.test(f) || /fuentes_nuevas|alcance_pais/.test(f)).map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n')
+    expect(sqls).toMatch(/cerebro_fichas_alcance_valido[\s\S]*'pais'/)
+    const pasos = fs.readFileSync(path.join(dir, '202611021800_pasos_de_las_fuentes_nuevas.sql'), 'utf8')
+    for (const f of FUENTES_NUEVAS) expect(pasos).toContain(`'${f}'`)
+  })
+})
+
+describe('lo que la prueba real destapó', () => {
+  const tablas = () => ({ cerebro_fichas: [] as Array<Record<string, unknown>>, cerebro_ingresos: [] as Array<Record<string, unknown>>, apify_raw: [] as Array<Record<string, unknown>> })
+  it('búsquedas: si el actor oficial no llega a tiempo, el respaldo arma la MISMA ficha (sin relacionadas) y se dice', async () => {
+    const t = tablas()
+    const serie = Object.fromEntries(Array.from({ length: 90 }, (_, i) => [new Date(Date.parse('2026-08-03T00:00:00Z') + i * 86_400_000).toISOString().slice(0, 10), 5 + (i % 9)]))
+    const ejecutar: Ejecutar = async (actor) => { if (actor.includes('apify~google-trends')) throw new Error('se pasó del tiempo de espera'); return { items: [{ timeline_data: { 'seguridad industrial': serie }, region_data: [{ rank: 1, region: 'Provincia de Guayas', value: 100 }] }], costo_usd: 0.002 } }
+    const r = await correrFuenteNueva({ db: crearBaseFalsa(t).db, fuente: 'busquedas_google', cliente: ZERO_RISK, clientId: ZR, ciudadesDeSedes: [], ahora: AHORA, ejecutar })
+    expect(r.resumen).toMatchObject({ actor_usado: 'respaldo', fichas_armadas: 1 }); expect(t.cerebro_fichas).toHaveLength(1)
+    expect(t.cerebro_fichas[0].contenido).toContain('Guayas 100'); expect(t.cerebro_fichas[0].contenido).toContain('búsquedas relacionadas: sin dato')
+    expect(r.errores.join(' ')).toMatch(/tiempo de espera/)
+  })
+  it('foros: dos llamadas (general y dentro del subforo del país) y los hilos repetidos se guardan una vez', async () => {
+    const t = tablas(); const llamadas: Array<Record<string, unknown>> = []
+    const hilo = { parsedId: 'z1', title: 'Mejor restaurante de mariscos en Olón', body: 'Ecuador costa', communityName: 'ecuador', postUrl: 'https://r/z1', createdAt: '2026-10-30T10:00:00Z' }
+    const ejecutar: Ejecutar = async (_a, input) => { llamadas.push(input); return { items: [hilo], costo_usd: 0.04 } }
+    const r = await correrFuenteNueva({ db: crearBaseFalsa(t).db, fuente: 'foros', cliente: NAUFRAGO, clientId: CL, ciudadesDeSedes: [], ahora: AHORA, ejecutar })
+    expect(llamadas).toHaveLength(2); expect(llamadas[1]).toMatchObject({ withinCommunity: 'ecuador' }); expect(llamadas[0].withinCommunity).toBeUndefined()
+    expect(t.cerebro_fichas).toHaveLength(1); expect(r.gasto_usd).toBeCloseTo(0.08, 6)
+  })
+  it('anuncios: el costo se toma del número de anuncios cuando el actor no lo reporta', async () => {
+    const t = tablas()
+    const ad = (i: number) => ({ creativeId: `C${i}`, domain: 'veseind.com', format: 'TEXT', firstShown: '2026-09-01T00:00:00Z', lastShown: '2026-11-01T00:00:00Z', adHeadline: 'x' })
+    const r = await correrFuenteNueva({ db: crearBaseFalsa(t).db, fuente: 'anuncios_google', cliente: ZERO_RISK, clientId: ZR, ciudadesDeSedes: [], ahora: AHORA, ejecutar: async (_a, i) => ({ items: (i.domains as string[])[0] === 'veseind.com' ? [ad(1), ad(2), ad(3)] : [], costo_usd: 0 }) })
+    expect(r.gasto_usd).toBeCloseTo(0.006, 6)
+  })
+})
+
+describe('eventos: el paso vive 300 s', () => {
+  it('como máximo dos ciudades por paso', async () => {
+    const lugares: string[] = []
+    await correrFuenteNueva({ db: crearBaseFalsa({ cerebro_fichas: [], cerebro_ingresos: [], apify_raw: [] }).db, fuente: 'eventos_locales', cliente: NAUFRAGO, clientId: CL, ciudadesDeSedes: ['Quito', 'Guayaquil', 'Cuenca'], ahora: AHORA, ejecutar: async (_a, i) => { lugares.push(String(i.location)); return { items: [], costo_usd: 0 } } })
+    expect(lugares).toEqual(['Quito, Ecuador', 'Guayaquil, Ecuador'])
+  })
+})
