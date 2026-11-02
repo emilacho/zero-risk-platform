@@ -24,7 +24,7 @@ describe('las notas del juez', () => {
 
   it('🔴 sobreviven a la puerta', () => {
     const bb = borrador()
-    const r = aplicarMeta(bb as never, evaluarHechos({ manual: bb, fuentes: [] } as never))
+    const r = aplicarMeta(bb as Record<string, unknown>, evaluarHechos({ manual: bb, fuentes: [] } as never))
     expect((r._field_meta as Meta).historia_y_origen.notas_del_juez).toEqual(NOTA)
   })
 
