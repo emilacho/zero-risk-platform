@@ -158,7 +158,7 @@ export function tareaDeGanchoDeVideo(p: PedidoDeGanchoDeVideo): string {
     `# MEDIOS SINTÉTICOS\n${p.medios_sinteticos ? 'SÍ: el video usará medios sintéticos realistas.' : 'NO: el video se graba con medios reales.'}`,
     ...(p.estrategia_de_red ? ['', `# ESTRATEGIA DE LA RED (contexto · no es tuya la autoría del gancho)\n${p.estrategia_de_red}`] : []),
     '',
-    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${p.referencias.length ? p.referencias.map((r) => `- ${r.id}: ${r.texto.replace(/\s+/g, ' ').slice(0, 280)}`).join('\n') : '(no hay referencias: no escribas datos concretos)'}`,
+    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${p.referencias.length ? p.referencias.map((r) => `- ${r.id}: ${r.texto.replace(/\s+/g, ' ')}`).join('\n') : '(no hay referencias: no escribas datos concretos)'}`,
   ].join('\n')
 }
 

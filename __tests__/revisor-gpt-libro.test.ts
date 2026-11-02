@@ -27,7 +27,7 @@ const CAIDO = { status: 503, json: { error: { message: 'caído' }, usage: { inpu
 /** una base de mentira: guarda lo que se inserta; puede fallar con un código */
 const base = (falla?: { code?: string; message: string } | 'lanza') => {
   const filas: Array<[string, Record<string, unknown>]> = []
-  return { filas, db: { from: (t: string) => ({ insert: async (row: Record<string, unknown>) => { if (falla === 'lanza') throw new Error('red caída'); if (falla) return { error: falla }; filas.push([t, row]); return { error: null } } }) } }
+  return { filas, db: { from: (t: string) => ({ insert: async (row: Record<string, unknown>) => { if (falla === 'lanza') throw new Error('red caída'); if (falla) return { error: falla }; if (t !== 'agent_invocation_textos') filas.push([t, row]); return { error: null } } }) } }
 }
 
 describe('la fila del libro', () => {
@@ -79,6 +79,13 @@ describe('llamarRevisorGptConLibro · el mismo resultado de siempre + la fila', 
     expect(b.filas).toHaveLength(1)
     expect(b.filas[0][1]).toMatchObject({ client_id: 'c7', cost_usd: 0.03, workflow_id: 'wf', workflow_execution_id: 'ex', status: 'completed', session_id: 'gpt-jefatura-rev-9-2' })
     expect((b.filas[0][1].metadata as Record<string, unknown>).cost_basis).toBe('usage')
+  })
+  it('🔴 lo que se le mandó y lo que respondió llegan a la tabla de textos', async () => {
+    const textos: Array<Record<string, unknown>> = []
+    const db = { from: (t: string) => ({ insert: async (row: Record<string, unknown>) => { if (t === 'agent_invocation_textos') textos.push(row); return { error: null } } }) }
+    const r = await llamarRevisorGptConLibro(opciones(openai(BIEN).f), { supabase: db, origen: 'jefatura', refId: 'rev-9', n: 2, clientId: 'c7' })
+    expect(textos).toHaveLength(1)
+    expect(textos[0]).toMatchObject({ entrada: 'pieza', salida: r.ok ? r.texto : null })
   })
   it('con el precio por omisión (sin precios del entorno) la fila lo declara «estimado»', async () => {
     const b = base()

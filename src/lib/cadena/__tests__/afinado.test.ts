@@ -40,9 +40,10 @@ describe('afinando lo que las mutaciones dejaron vivo', () => {
     const filas = base.filas.map((f, i) => (i === 0 ? { ...f, fecha: sumarDias(f.fecha, 1) } : f))
     expect(dicen(validarTodo({ ...base, filas }), 'V04', /no es la que deriva el código/)).toBe(true)
   })
-  it('V09: un pilar que se aleja más de 10 puntos de su meta bloquea', () => {
+  it('V09: un pilar que se aleja de su meta es aviso, nunca bloqueo (01-nov · firma de Emilio)', () => {
     const t = { ...bueno, piezas: bueno.piezas.map((p) => ({ ...p, pilar: 'menu' })) }
-    expect(val(t).some((h) => h.chequeo === 'V09' && h.severidad === 'bloquea')).toBe(true)
+    expect(val(t).some((h) => h.chequeo === 'V09' && h.severidad === 'aviso')).toBe(true)
+    expect(val(t).some((h) => h.chequeo === 'V09' && h.severidad === 'bloquea')).toBe(false)
   })
   it('V11: una dependencia a una fila posterior, a una inexistente o a un video que espera, bloquea', () => {
     const base = insumos(c, bueno)

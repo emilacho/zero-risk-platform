@@ -94,10 +94,10 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   const mensaje = t('Mensaje').split('\n')[0]?.trim() ?? ''
   const lineasDeMensaje = t('Mensaje').split('\n').map((x) => x.trim()).filter(Boolean)
   if (mensaje) {
-    if (lineasDeMensaje.length > 1) bloqueos.push(`el mensaje tiene ${lineasDeMensaje.length} líneas · un brief = UN mensaje`)
+    if (lineasDeMensaje.length > 1) avisos.push(`el mensaje tiene ${lineasDeMensaje.length} líneas · un brief = UN mensaje`)
     const n = frasesDe(mensaje)
-    if (n > 2) bloqueos.push(`el mensaje tiene ${n} frases · sospecha de varios mensajes (máximo 2 frases, una idea)`)
-    if (mensaje.length > MAX_CARACTERES_DEL_MENSAJE) bloqueos.push(`el mensaje mide ${mensaje.length} caracteres · una idea cabe en ${MAX_CARACTERES_DEL_MENSAJE}`)
+    if (n > 2) avisos.push(`el mensaje tiene ${n} frases · sospecha de varios mensajes (máximo 2 frases, una idea)`)
+    if (mensaje.length > MAX_CARACTERES_DEL_MENSAJE) avisos.push(`el mensaje mide ${mensaje.length} caracteres · una idea cabe en ${MAX_CARACTERES_DEL_MENSAJE}`)
   }
 
   // la cita del plan es LITERAL
@@ -135,7 +135,7 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   // el público no es «todos» (si lo nombra): una línea «público:» / «- público:» en cualquier sección MENOS «Faltantes» (ahí «público: lo que falta» no es la audiencia)
   const textoSinFaltantes = secciones.filter((s) => tituloConocido(s) !== 'Faltantes').map((s) => `${s.titulo}\n${s.cuerpo}`).join('\n')
   const lineaPublico = /^\s*-?\s*p[úu]blico\s*:\s*(.+)$/imu.exec(textoSinFaltantes)
-  if (lineaPublico && publicoEsTodos(lineaPublico[1])) bloqueos.push(`el público dice «${lineaPublico[1].trim().slice(0, 60)}» · no es una audiencia declarada`)
+  if (lineaPublico && publicoEsTodos(lineaPublico[1])) avisos.push(`el público dice «${lineaPublico[1].trim().slice(0, 60)}» · no es una audiencia declarada`)
 
   // cifras ,77 y prohibidas fuera de la lista «prohibido» y de las contradicciones (ahí se citan para decir que NO se usan)
   if (tieneCifraInventada(md)) bloqueos.push('hay una cifra «,77» (dato inventado: copió el ejemplo en vez de pensar)')

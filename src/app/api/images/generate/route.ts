@@ -220,7 +220,7 @@ export async function POST(request: Request) {
 
   // El costo de la imagen entra TAMBIÉN al libro de invocaciones (una fila por imagen, atada a su generation_id): el freno §150 suma ese libro y antes no veía las imágenes.
   await registrarImagenEnElLibro(supabase, {
-    generationId: row?.id ?? generationId, clientId: resolvedClientId, agentSlug, model, size, quality, caller, costUsd, costBasis,
+    generationId: row?.id ?? generationId, clientId: resolvedClientId, agentSlug, model, size, quality, caller, costUsd, costBasis, prompt,
     startedAtMs, endedAtMs: Date.now(),
     workflowId: sanitizeString(body.workflow_id as string | undefined, 80) || null,
     workflowExecutionId: sanitizeString(body.workflow_execution_id as string | undefined, 120) || null,

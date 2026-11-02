@@ -107,6 +107,12 @@ describe('validador de la estrategia', () => {
     expect(chequeos(v({ ...c.estrategia, fechas_que_importan: [{ tipo: 'x', ambito: 'y', origen: 'dueno', motivo: 'lo dijo el dueño' }] }))).toContain('S01')
     expect(chequeos(v({ ...c.estrategia, pendientes: [{ clave: 'p', que_falta: 'x', desbloquea: ['a'], pedir_a: 'dueno' }] }))).toContain('S01')
   })
+  it('🔴 S02: la cita no falla por tildes, mayúsculas ni espacios (01-nov · firma de Emilio); sigue exigiendo que exista', () => {
+    const citaReal = c.estrategia.fases[0].cita_plan
+    const variante = `  ${citaReal.toUpperCase().replace(/A/g, 'Á').replace(/ /g, '   ')}  `
+    expect(chequeos(v({ ...c.estrategia, fases: c.estrategia.fases.map((f) => ({ ...f, cita_plan: variante })) }))).not.toContain('S02')
+    expect(chequeos(v({ ...c.estrategia, fases: c.estrategia.fases.map((f) => ({ ...f, cita_plan: 'una frase que el plan jamás dijo en ninguna parte' })) }))).toContain('S02')
+  })
   it('S02: una cita del plan que no existe se bloquea (nada de «día 28» inventado)', () => {
     const e = { ...c.estrategia, hitos: [{ clave: 'rev-28', dia: 28, tipo: 'revision' as const, cita_plan: 'Ritual de revisión el día 28' }] }
     expect(chequeos(v(e))).toContain('S02')
@@ -226,9 +232,10 @@ describe('los 7 errores del calendario real, inyectados (cliente A): el sistema 
     const hs = validarTodo({ ...base, filas })
     expect(chequeos(hs)).toContain('V04')
   })
-  it('#2 revisión inventada (día 28 y 70): V12 bloquea', () => {
+  it('#2 revisión inventada (día 28 y 70): V12 es aviso, no frena (01-nov · firma de Emilio)', () => {
     const hs = malo(conPieza(c, bueno, 4, 'b', { tema: 'Ritual de revisión de la semana' })) // semana 4, jueves = día 25
-    expect(chequeos(hs)).toContain('V12')
+    expect(chequeos(hs)).not.toContain('V12')
+    expect(hs.some((h) => h.chequeo === 'V12' && h.severidad === 'aviso')).toBe(true)
   })
   it('#3 anuncio antes de tener el grid listo: V11 bloquea', () => {
     const t = { ...bueno, piezas: [...bueno.piezas, { ...piezaBuena(c, 1, 'b', 'Primer anuncio'), slot: 'x', formato: 'anuncio_imagen', pieza_fija: 'anuncio-1' }] }
@@ -420,8 +427,8 @@ describe('el ciclo de UNA corrección', () => {
     const hs2 = validarTodo({ ...insumos(c, bueno), filas, ajustes: r.ajustes })
     expect(hs2.some((h) => h.chequeo === 'V08' && h.severidad === 'bloquea')).toBe(false)
   })
-  it('un bloqueo que no es de dato (p. ej. una revisión inventada) detiene la campaña en la bandeja de Emilio', () => {
-    const hs = validarTodo(insumos(c, conPieza(c, bueno, 4, 'b', { tema: 'Ritual de revisión' })))
+  it('un bloqueo que no es de dato (p. ej. un formato que no existe) detiene la campaña en la bandeja de Emilio', () => {
+    const hs = validarTodo(insumos(c, conPieza(c, bueno, 4, 'b', { formato: 'formato-inexistente' })))
     expect(resolverTrasCorreccion(hs, () => 4).estado).toBe('necesita_humano')
   })
   it('sin bloqueos tras la corrección: ok', () => {

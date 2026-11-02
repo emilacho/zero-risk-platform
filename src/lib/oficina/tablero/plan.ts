@@ -125,7 +125,7 @@ export const planCambios: Manejador = async ({ db, ahora }, { cuerpo, reviewer }
     toca: t,
     despertar_flujo: {
       camino: CAMINO_PLANEACION,
-      cuerpo: { client_id: plan.client_id, plan_base_id: plan.id, cambios_del_dueno: texto, plan_cambio_id: cambioId, forzar: true, con_analisis: false, con_mercado: false, tope_reescritura_usd: g.tope, origen: 'tablero/plan-cambios', pedido_por: reviewer },
+      cuerpo: { client_id: plan.client_id, plan_base_id: plan.id, cambios_del_dueno: texto, plan_cambio_id: cambioId, forzar: true, force_restart: true, con_analisis: false, con_mercado: false, tope_reescritura_usd: g.tope, origen: 'tablero/plan-cambios', pedido_por: reviewer },
       registrar: { tabla: 'plan_cambios', id: cambioId },
     },
   }

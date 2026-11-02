@@ -20,7 +20,7 @@ const esObjeto = (x: unknown): x is Fila => typeof x === 'object' && x !== null 
 export async function rutaEditarManual(d: DepsDeEdicion, client_id: string, cuerpo: unknown, reviewerPorOmision = 'emilio'): Promise<SalidaDeEdicion> {
   const b = esObjeto(cuerpo) ? cuerpo : {}
   const reviewer = typeof b.reviewer === 'string' && b.reviewer.trim() && b.reviewer.length <= 80 ? b.reviewer.trim() : reviewerPorOmision
-  const comentario = typeof b.comentario === 'string' && b.comentario.trim() ? b.comentario.trim().slice(0, 1000) : null
+  const comentario = typeof b.comentario === 'string' && b.comentario.trim() ? b.comentario.trim() : null
   const toca = { client_id, comentario }
   if (!esObjeto(b.campos)) return { status: 400, body: { ok: false, error: 'entrada_invalida', detalle: 'faltan los campos que cambian' }, toca }
   const ahora = (d.ahora ?? (() => new Date()))()
@@ -44,7 +44,7 @@ export async function rutaEditarManual(d: DepsDeEdicion, client_id: string, cuer
 /** POST /api/tablero/manual-palabra · cuerpo: { client_id, texto, decision:'prohibir'|'contexto'|'quitar', comentario?, reviewer, origen:'dashboard' } */
 export async function rutaDecidirPalabra(d: DepsDeEdicion, cuerpo: Fila, reviewer: string): Promise<SalidaDeEdicion> {
   const client_id = typeof cuerpo.client_id === 'string' ? cuerpo.client_id : ''
-  const comentario = typeof cuerpo.comentario === 'string' && cuerpo.comentario.trim() ? cuerpo.comentario.trim().slice(0, 1000) : null
+  const comentario = typeof cuerpo.comentario === 'string' && cuerpo.comentario.trim() ? cuerpo.comentario.trim() : null
   const toca = { client_id: client_id || null, comentario }
   const r = await decidirPalabraDelDueno(d.db, { client_id, texto: cuerpo.texto, decision: cuerpo.decision, comentario, reviewer, ahora: (d.ahora ?? (() => new Date()))() })
   if (!r.ok) return { status: r.status, body: { ok: false, error: r.error, detalle: r.detalle }, toca }

@@ -15,6 +15,7 @@ import { CAMPOS, esloganDelCliente, evaluarCompletitud, quienValido, type CampoD
 import { enviarALaPuerta, type EntornoDeLaPuerta, type ResultadoDeEnvio } from '../notas-del-dueno/puerta-del-dueno'
 import { CANAL_DEL_MANUAL } from '../portero-alimenta/dueno'
 import { aplicarDecisionDelDueno, conservarPalabrasDuras, deUnaCorrida, leerPalabras, palabrasDuras, type DecisionDelDueno, declaradasQueSiguen } from './palabras-con-intencion'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../limites-de-tamano'
 
 type Fila = Record<string, unknown>
 export interface Db { from(tabla: string): any }
@@ -97,11 +98,11 @@ export async function editarManualDelDueno(db: Db, e: EntradaDeEdicion): Promise
     if (!campo) return mal(400, 'campo_no_editable', `«${k}» no es un campo que se pueda editar`)
     if (elegidos.some((x) => x.campo === campo)) return mal(400, 'entrada_invalida', `«${k}» viene dos veces`)
     const texto = typeof v === 'string' ? v.trim() : ''
-    if (!texto || texto.length > 2000) return mal(400, 'entrada_invalida', `«${k}» debe tener entre 1 y 2.000 caracteres`)
+    if (!texto || texto.length > TOPE_DEL_TEXTO_DEL_DUENO) return mal(400, 'entrada_invalida', `«${k}» debe tener entre 1 y ${TOPE_DEL_TEXTO_DEL_DUENO.toLocaleString('es-EC')} caracteres`)
     elegidos.push({ campo, clave_del_tablero: k, texto })
   }
   const ahora = (e.ahora ?? new Date()).toISOString()
-  const cita = typeof e.comentario === 'string' && e.comentario.trim() ? e.comentario.trim().slice(0, 1000) : null
+  const cita = typeof e.comentario === 'string' && e.comentario.trim() ? e.comentario.trim() : null
   const cambios: Cambio[] = []
   let completitud: ReturnType<typeof evaluarCompletitud> | null = null
 
@@ -148,7 +149,7 @@ export async function decidirPalabraDelDueno(db: Db, e: { client_id: string; tex
   if (e.decision !== 'prohibir' && e.decision !== 'contexto' && e.decision !== 'quitar') return invalido('`decision` debe ser prohibir, contexto o quitar')
   const decision: DecisionDelDueno = e.decision
   const ahora = (e.ahora ?? new Date()).toISOString()
-  const cita = typeof e.comentario === 'string' && e.comentario.trim() ? e.comentario.trim().slice(0, 1000) : null
+  const cita = typeof e.comentario === 'string' && e.comentario.trim() ? e.comentario.trim() : null
   const k = (x: string) => x.trim().toLowerCase()
   const previa = await leerVigente(db, e.client_id)
   if (previa.error) return { ok: false, status: 502, error: 'no_se_pudo_leer', detalle: previa.error }

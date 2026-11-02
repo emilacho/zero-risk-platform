@@ -16,15 +16,15 @@ export function leerV08(que: string): { semana: number; red: string; clase: stri
   return m ? { semana: Number(m[1]), red: m[2], clase: m[3], real: Number(m[4]), meta: Number(m[5]) } : null
 }
 
-/** Un V08 que bloquea con real < meta pasa a `aviso`; todo lo demás queda igual. */
+/** Un V08 que bloquea pasa a `aviso`: el faltante (31-oct) y, desde el 01-nov por firma de Emilio, también el exceso. Cuántas piezas por semana es una guía. Lo que no se pueda leer queda igual. */
 export function bajarFaltantesDeCantidad(hs: Hallazgo[]): Hallazgo[] {
   return hs.map((x) => {
     if (x.chequeo !== 'V08' || x.severidad !== 'bloquea') return x
     const c = leerV08(x.ficha.que)
-    if (!c || c.real >= c.meta) return x
+    if (!c) return x
     return {
       ...x, severidad: 'aviso',
-      ficha: { ...x.ficha, gravedad: 'aviso', que: `por confirmar · ${x.ficha.que}`, propuesta: 'la campaña sigue con lo que tiene; el faltante viaja al brief' },
+      ficha: { ...x.ficha, gravedad: 'aviso', que: `por confirmar · ${x.ficha.que}`, propuesta: 'la campaña sigue con lo que tiene; la diferencia viaja al brief' },
     }
   })
 }
