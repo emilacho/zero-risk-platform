@@ -7,7 +7,7 @@
 import { cambiarCodigo } from './lib.mjs'
 
 const ANCLA_BLOQUE = '// 01-nov · LO QUE DECLARÓ EL DUEÑO (hechos con la máxima precedencia)'
-export const BLOQUE_SEDES = `// 01-nov · SEDES DEL CLIENTE (cada dato es de SU sede) · viene en contexto_del_cliente.sedes = [{ clave, ciudad, datos: [{ campo, valor, fuente }] }]. Sin entradas válidas, el pedido queda idéntico a hoy.
+const BLOQUE = `// 01-nov · SEDES DEL CLIENTE (cada dato es de SU sede) · viene en contexto_del_cliente.sedes = [{ clave, ciudad, datos: [{ campo, valor, fuente }] }]. Sin entradas válidas, el pedido queda idéntico a hoy.
 const bloqueSedes = (function () {
   const lista = carpeta && Array.isArray(carpeta.sedes) ? carpeta.sedes : [];
   const una = function (v, tope) { return String(v == null ? '' : v).replace(/\\s+/g, ' ').trim().slice(0, tope); };
@@ -41,6 +41,6 @@ const bloqueSedes = (function () {
 const ANCLA_USO = '...bloqueHechosDelDueno,\n'
 
 export function construirSedesEnPlan(f) {
-  cambiarCodigo(f, 'Redactor (B4)', ANCLA_BLOQUE, BLOQUE_SEDES + ANCLA_BLOQUE)
+  cambiarCodigo(f, 'Redactor (B4)', ANCLA_BLOQUE, BLOQUE + ANCLA_BLOQUE)
   cambiarCodigo(f, 'Redactor (B4)', ANCLA_USO, ANCLA_USO + '...bloqueSedes,\n')
 }
