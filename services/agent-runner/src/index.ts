@@ -57,7 +57,7 @@ const app = express()
 // Express defaults are fine for a single-machine service. Limit body size to
 // avoid abuse: the SDK accepts long prompts but 1MB is plenty (the route on
 // Vercel sanitizes to 8KB task + 50 char agent name long before we see it).
-app.use(express.json({ limit: '1mb' }))
+app.use(express.json({ limit: '4mb' }))
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 

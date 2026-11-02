@@ -14,7 +14,7 @@ import { esObjeto, puertosReales } from '@/lib/oficina/ruta'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 // reanudar el paso sigue al encargo hasta su siguiente pausa o su cierre
-export const maxDuration = 300
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const sala = (process.env.SALA_DISPATCH_KEY ?? '').trim()

@@ -30,7 +30,7 @@ interface PipelineCallbackInput {
  */
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 800
 
 export async function POST(request: NextRequest) {
   try {

@@ -22,7 +22,7 @@ import { validateObject } from '@/lib/input-validator'
 import { checkInternalKey } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 10
+export const maxDuration = 800
 
 const VALID_CLASSIFICATIONS = new Set(['depth-first', 'breadth-first', 'straightforward'])
 const VALID_COMPLEXITY = new Set(['low', 'medium', 'high', 'critical'])

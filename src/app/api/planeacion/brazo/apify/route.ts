@@ -39,7 +39,7 @@ import { sinDato, sinRespuesta, trajo, type RespuestaBrazo } from '@/lib/planeac
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 300
+export const maxDuration = 800
 
 const FUENTE = 'servicio apify · n8n 3lyknrP3PoS2KzUf'
 

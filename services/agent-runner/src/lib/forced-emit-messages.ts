@@ -166,7 +166,7 @@ export async function forceFidelityEmitViaMessagesApi(
 
   const resp = await client.messages.create({
     model: args.model,
-    max_tokens: 2000,
+    max_tokens: 20000,
     system: args.systemPrompt,
     messages: [
       { role: 'user', content: args.task },
@@ -374,7 +374,7 @@ export async function forceBrandSectionEmitViaMessagesApi(
     model: args.model,
     // 8.000 como el de descubrimiento (no 2.000 como el del judge): una sección puede
     // traer 7-13 campos de texto largo · el borrador real medido fue de 9.874 caracteres.
-    max_tokens: 8000,
+    max_tokens: 20000,
     system: args.systemPrompt,
     messages: [
       { role: 'user', content: args.task },
@@ -445,7 +445,7 @@ export async function forceEmitViaMessagesApi(args: ForceEmitArgs): Promise<Forc
 
   const resp = await client.messages.create({
     model: args.model,
-    max_tokens: 8000,
+    max_tokens: 20000,
     system: args.systemPrompt,
     messages: [
       { role: 'user', content: args.task },

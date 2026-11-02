@@ -24,7 +24,7 @@ import { sendTemplate, sendText } from "@/lib/whatsapp/meta-graph"
 import { getSupabaseAdmin } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
-export const maxDuration = 30
+export const maxDuration = 800
 
 type SendBody = {
   to?: string

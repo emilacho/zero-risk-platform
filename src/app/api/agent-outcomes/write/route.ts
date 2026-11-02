@@ -32,7 +32,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 10
+export const maxDuration = 800
 
 interface AgentOutcomeInput {
   agent_slug: string

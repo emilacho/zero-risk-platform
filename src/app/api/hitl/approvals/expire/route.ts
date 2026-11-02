@@ -20,7 +20,7 @@ import { validateObject } from '@/lib/input-validator'
 import { aprobacionLegada, crearAprobacion, resolverAprobacion, TABLA_BANDEJA } from '@/lib/hitl/bandeja'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 15
+export const maxDuration = 800
 
 export async function POST(request: NextRequest) {
   const auth = checkInternalKey(request)

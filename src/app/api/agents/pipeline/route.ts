@@ -29,7 +29,7 @@ interface PipelineInput {
  */
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 800
 
 // Wave 12 W11-D5 fix: removed deprecated zerorisk.app.n8n.cloud fallback.
 // Resolution order:

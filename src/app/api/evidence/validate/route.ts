@@ -30,7 +30,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 800
 
 type Verdict = 'PASS' | 'RETRY' | 'FAIL'
 

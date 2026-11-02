@@ -31,7 +31,7 @@ function defaultModel(): string {
 const DEFAULT_SIZE = '1024x1024'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)

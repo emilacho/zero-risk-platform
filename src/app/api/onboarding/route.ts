@@ -10,7 +10,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 // timeout is 60s · was killing cold runs mid-flight. Bump to the platform
 // ceiling (300s on Pro Fluid Compute) so the orchestrator completes when
 // invoked from the L1 dispatcher.
-export const maxDuration = 300
+export const maxDuration = 800
 
 /**
  * POST /api/onboarding — Start a new client onboarding (Day 1 auto-discovery)

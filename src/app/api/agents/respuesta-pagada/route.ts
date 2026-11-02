@@ -28,7 +28,7 @@ import {
 
 export const runtime = 'nodejs'
 // el tope de espera es 120 s · 180 deja aire para el sondeo y la lectura
-export const maxDuration = 180
+export const maxDuration = 800
 
 export async function POST(req: Request) {
   const auth = checkInternalKey(req)

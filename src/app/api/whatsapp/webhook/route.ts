@@ -22,7 +22,7 @@ import {
 import { getSupabaseAdmin } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
-export const maxDuration = 30
+export const maxDuration = 800
 
 const VERIFY_TOKEN_ENV = "WHATSAPP_WEBHOOK_VERIFY_TOKEN"
 

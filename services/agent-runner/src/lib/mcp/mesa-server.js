@@ -21,7 +21,7 @@ const PLATFORM_URL = (process.env.ZR_PLATFORM_URL || '').replace(/\/+$/, '')
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY || ''
 const ENCARGO_ID = process.env.ZR_ENCARGO_ID || ''
 const AGENTE = process.env.ZR_AGENTE || ''
-const TIMEOUT_MS = 20000
+const TIMEOUT_MS = 60000
 
 const fallo = (mensaje) => ({ isError: true, content: [{ type: 'text', text: mensaje }] })
 const bien = (cuerpo) => ({ content: [{ type: 'text', text: typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo) }] })

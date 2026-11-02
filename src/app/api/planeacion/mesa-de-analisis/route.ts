@@ -39,7 +39,7 @@ import { idsCitadosEnElTexto } from '@/lib/portero-alimenta/contexto-del-cliente
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 300
+export const maxDuration = 800
 
 const FUENTE = 'mesa de análisis · un analista por tipo vía /api/agents/run-sdk · PROPUESTA, no dato del cliente'
 export const PASO_DE_ANALISIS = (tipo: TipoDeAnalisis): string => `analisis-${tipo}`

@@ -16,7 +16,7 @@ import { checkInternalKey } from "@/lib/internal-auth"
 import { getSupabaseAdmin } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
-export const maxDuration = 15
+export const maxDuration = 800
 
 const VALID_STATUS = new Set([
   "scheduled",

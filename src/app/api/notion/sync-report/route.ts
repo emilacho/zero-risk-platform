@@ -36,7 +36,7 @@ import { NextResponse } from "next/server"
 import { checkInternalKey } from "@/lib/internal-auth"
 
 export const dynamic = "force-dynamic"
-export const maxDuration = 30
+export const maxDuration = 800
 
 type SyncReportType = "client" | "campaign" | "weekly"
 const VALID_TYPES = new Set<SyncReportType>(["client", "campaign", "weekly"])

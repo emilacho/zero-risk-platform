@@ -22,7 +22,7 @@ import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 800
 
 /** el bucket donde se copia el MP4 (el de la oficina, público): sin él la copia se omite y se devuelve solo la URL del proveedor, con aviso */
 const bucket = () => sanitizeString(process.env.OFICINA_BUCKET, 100) || null

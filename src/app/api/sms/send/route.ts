@@ -23,7 +23,7 @@ import { checkInternalKey } from "@/lib/internal-auth"
 import { sendSms } from "@/lib/sms/twilio"
 
 export const dynamic = "force-dynamic"
-export const maxDuration = 30
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)

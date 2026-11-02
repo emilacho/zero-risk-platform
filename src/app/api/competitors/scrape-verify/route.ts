@@ -31,7 +31,7 @@ import { persistChunks } from '@/lib/brain/persist-chunks'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 300
+export const maxDuration = 800
 
 /** Tope de tiempo por competidor (Lenovo agregado 1) · vencido → degrada honesto.
  *  Se lee por request (no module-const) · override por env `SCRAPE_VERIFY_TIMEOUT_MS`. */
