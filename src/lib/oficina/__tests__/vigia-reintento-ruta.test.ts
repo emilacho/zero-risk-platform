@@ -10,6 +10,11 @@ const h = vi.hoisted(() => ({
   estado: 'encendida' as 'apagada' | 'encendida',
   reintento: { accion: 'vigilado', emitidos: 2 } as Record<string, unknown>,
   argsReintento: [] as unknown[],
+  cierres: 0,
+  cierre: { cerradas: [{ id: 'h1', motivo: 'm' }], error: null } as { cerradas: unknown[]; error: string | null },
+}))
+vi.mock('@/lib/oficina/cerrar-decisiones-reemplazadas', () => ({
+  cerrarDecisionesReemplazadas: async () => { h.cierres++; return h.cierre },
 }))
 vi.mock('@/lib/oficina/ruta', () => ({
   checkLlaveDeLaSala: () => (h.llaveOk ? { ok: true } : { ok: false, status: 401, error: 'unauthorized', detalle: 'falta la llave' }),
@@ -27,7 +32,7 @@ vi.mock('@/lib/oficina/reintento-adaptador', () => ({
 import { POST } from '@/app/api/oficina/vigia/route'
 
 const llamar = (cuerpo: unknown) => POST(new Request('https://app.test/api/oficina/vigia', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(cuerpo) }))
-beforeEach(() => { h.orden = []; h.llaveOk = true; h.estado = 'encendida'; h.reintento = { accion: 'vigilado', emitidos: 2 }; h.argsReintento = [] })
+beforeEach(() => { h.orden = []; h.llaveOk = true; h.estado = 'encendida'; h.reintento = { accion: 'vigilado', emitidos: 2 }; h.argsReintento = []; h.cierres = 0; h.cierre = { cerradas: [{ id: 'h1', motivo: 'm' }], error: null }; delete process.env.DECISIONES_REEMPLAZADAS })
 
 describe('POST /api/oficina/vigia con el reintento de piezas', () => {
   it('una pasada normal: primero la bandeja, luego los pasos muertos, DESPUÉS el reintento, y la respuesta lo trae', async () => {
@@ -40,6 +45,27 @@ describe('POST /api/oficina/vigia con el reintento de piezas', () => {
     h.reintento = { accion: 'error', detalle: 'caída' }
     const r = await llamar({}); const j = await r.json()
     expect(r.status).toBe(200); expect(h.orden).toEqual(['bandeja', 'muertos', 'plazo', 'reintento']); expect(j.reintento).toMatchObject({ accion: 'error' }); expect(j.vencidas).toEqual(['a'])
+  })
+  it('🔴 cada pasada cierra lo reemplazado y lo cuenta; si falla, lo dice y no frena nada', async () => {
+    const bien = await (await llamar({})).json()
+    expect(h.cierres).toBe(1)
+    expect(bien.decisiones_reemplazadas).toBe(1)
+    expect(bien.decisiones_reemplazadas_error).toBeUndefined()
+    h.cierre = { cerradas: [], error: 'caída' }
+    const r = await llamar({})
+    expect(r.status).toBe(200)
+    expect((await r.json()).decisiones_reemplazadas_error).toBe('caída')
+  })
+  it('🔴 con el interruptor apagado no cierra nada; el resto de la pasada sigue', async () => {
+    process.env.DECISIONES_REEMPLAZADAS = 'apagado'
+    const j = await (await llamar({})).json()
+    expect(h.cierres).toBe(0)
+    expect(j.decisiones_reemplazadas).toBe(0)
+    expect(h.orden).toContain('bandeja')
+  })
+  it('🔴 en seco no cierra nada', async () => {
+    await llamar({ dry_run: true }); await llamar({ reintento_en_seco: true })
+    expect(h.cierres).toBe(0)
   })
   it('«reintento_en_seco»: SOLO calcula el plan; no vence la bandeja, no toca pasos muertos y no ejecuta el reintento', async () => {
     const r = await llamar({ reintento_en_seco: true }); const j = await r.json()

@@ -75,6 +75,14 @@ describe('decisiones', () => {
     expect(r.decisiones.map((d) => d.id)).toEqual(['h-vivo'])
     expect(r.omitidas.reemplazadas).toBe(2)
   })
+  it('🔴 si los planes no se pueden leer, la lista muestra todo: ante la duda, la decisión sigue a la vista', async () => {
+    const db = base().semilla('hitl_queue', [{ id: 'h-viejo', status: 'pending', type: 'plan_con_pendientes', client_id: C1, output_id: 'viejo', title: 'Plan viejo', created_at: '2026-10-30T01:00:00Z' }])
+    const de = db.from.bind(db)
+    db.from = ((t: string) => { if (t === 'client_historical_outputs') throw new Error('caída'); return de(t) }) as never
+    const r = await leerDecisiones(ctx(db))
+    expect(r.decisiones.map((d) => d.id)).toEqual(['h-viejo'])
+    expect(r.omitidas.reemplazadas).toBe(0)
+  })
   it('omite clientes de práctica y de baja y los ensayos, y lo DICE', async () => {
     const r = await leerDecisiones(ctx(base().semilla('hitl_queue', [{ id: '1', status: 'pending', type: 'x', client_id: CP }, { id: '2', status: 'pending', type: 'x', client_id: CB }, { id: '3', status: 'pending', type: 'x', client_id: C1, payload: { dry_run: true } }, { id: '4', status: 'pending', type: 'x', client_id: C1, metadata: { dry_run: true } }, { id: '5', status: 'pending', type: 'x', client_id: C1 }])))
     expect(r.decisiones.map((d) => d.id)).toEqual(['5'])

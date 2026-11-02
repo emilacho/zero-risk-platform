@@ -16,6 +16,9 @@ describe('cuál plan es el vigente', () => {
     const v = planesVigentes([...PLANES, plan('marcado', '2026-11-01T20:00:00Z', { vigente: false })])
     expect(v.get(C)?.id).toBe('v2')
   })
+  it('🔴 un plan con solo la marca de reemplazado (sin vigente:false) tampoco es vigente', () => {
+    expect(planesVigentes([plan('a', '2026-10-01'), plan('b', '2026-10-02', { superseded_por: 'a' })]).get(C)?.id).toBe('a')
+  })
   it('🔴 un plan rechazado o de ensayo no es vigente', () => {
     expect(planesVigentes([plan('a', '2026-10-01'), plan('b', '2026-10-02', {}, 'rejected'), plan('c', '2026-10-03', { dry_run: true })]).get(C)?.id).toBe('a')
   })
@@ -34,6 +37,9 @@ describe('qué decisión sigue viva', () => {
   it('🔴 una pieza anterior al plan vigente se cierra; una posterior sigue', () => {
     expect(motivoDeReemplazo(fila({ type: 'content_piece_review', created_at: '2026-10-31T00:00:00Z' }), vig)).toMatch(/plan anterior/)
     expect(motivoDeReemplazo(fila({ type: 'content_piece_review', created_at: '2026-11-01T21:00:00Z' }), vig)).toBeNull()
+  })
+  it('🔴 la gran idea anterior al plan vigente también se cierra', () => {
+    expect(motivoDeReemplazo(fila({ type: 'concepto_review', created_at: '2026-10-31T00:00:00Z' }), vig)).toMatch(/plan anterior/)
   })
   it('🔴 si el cliente tuvo un solo plan, la pieza anterior a él no se toca: nada se reemplazó', () => {
     const uno = planesVigentes([plan('unico', '2026-10-20T00:00:00Z')])
@@ -98,6 +104,26 @@ describe('el barrido del reloj', () => {
     await cerrarDecisionesReemplazadas(db, AHORA)
     expect(escrituras).toHaveLength(0)
   })
+  it('🔴 una fila de ensayo marcada en metadata tampoco se toca', async () => {
+    const { db, escrituras } = dbFalsa({ hitl: [{ ...VIEJO, metadata: { dry_run: true } }], planes: PLANES })
+    await cerrarDecisionesReemplazadas(db, AHORA)
+    expect(escrituras).toHaveLength(0)
+  })
+  it('🔴 si falla la escritura, se detiene, dice cuál y no lanza', async () => {
+    const llamadas: string[] = []
+    const db = { from: (t: string) => {
+      const q: Record<string, unknown> = {
+        select: () => q, eq: () => q, in: () => q, limit: () => q,
+        update: () => ({ eq: () => ({ eq: async () => { llamadas.push('escribe'); return { error: { message: 'sin permiso' } } } }) }),
+        then: (ok: (r: unknown) => unknown) => Promise.resolve({ data: t === 'hitl_queue' ? [VIEJO, { ...VIEJO, id: 'h9' }] : PLANES, error: null }).then(ok),
+      }
+      return q
+    } }
+    const r = await cerrarDecisionesReemplazadas(db, AHORA)
+    expect(r.error).toBe('sin permiso')
+    expect(r.cerradas).toEqual([])
+    expect(llamadas).toHaveLength(1)
+  })
   it('🔴 si no se leen los planes, no cierra nada y lo dice', async () => {
     const { db, escrituras } = dbFalsa({ hitl: [VIEJO, fila({ id: 'p', type: 'content_piece_review' })], planes: PLANES, errorEn: 'client_historical_outputs' })
     const r = await cerrarDecisionesReemplazadas(db, AHORA)
@@ -117,6 +143,7 @@ describe('el título que lee el dueño', () => {
     ['Plan de 90 días de Cliente con pendientes: P3 · lleva nombres internos · P4 · presupuesto incompleto', 'Plan de 90 días de Cliente con pendientes: lleva nombres internos · presupuesto incompleto'],
     ['Plan de 90 días, versión 2: espera tu decisión', 'Plan de 90 días: espera tu decisión'],
     ['Tablero financiero, versión 1: espera tu firma', 'Tablero financiero: espera tu firma'],
+    ['Kit del plan v2 listo', 'Kit del plan listo'],
   ])('%s', (crudo, esperado) => { expect(tituloParaElDueno(crudo)).toBe(esperado) })
   it('🔴 corrige el voseo con pronombre pegado', () => {
     expect(tituloParaElDueno('¿Cuál es el monto? Separalo en dos: equipo nuevo y recarga.')).toBe('¿Cuál es el monto? Sepáralo en dos: equipo nuevo y recarga.')
