@@ -49,6 +49,7 @@ export const CLASES_NUEVAS = {
 export const ACTORES_DE_FUENTES = {
   anuncios_google: 'scrapesage~google-ads-transparency-scraper',
   busquedas_google: 'apify~google-trends-scraper',
+  busquedas_respaldo: 'data_xplorer~google-trends-fast-scraper',
   eventos_locales: 'muhammadafzal~google-events',
   foros: 'harshmaur~reddit-scraper',
 } as const
@@ -59,6 +60,8 @@ export const TOPE_POR_PASO_USD = { anuncios_google: 0.4, busquedas_google: 0.1, 
 export const MAX_COMPETIDORES_CON_ANUNCIOS = 8
 export const ANUNCIOS_POR_COMPETIDOR = 10
 export const MAX_CIUDADES = 3
+/** eventos: una llamada por ciudad tarda 30-100 s y el paso vive 300 s: como máximo dos ciudades por paso */
+export const MAX_CIUDADES_DE_EVENTOS = 2
 export const DIAS_ADELANTE_DE_EVENTOS = 120
 export const DIAS_ATRAS_DE_FOROS = 180
 export const COMENTARIOS_POR_FICHA = 15
@@ -180,6 +183,17 @@ export function fichasDeAnuncios(items: unknown[], c: CompetidorDeFuente, ctx: C
 
 export const pedidoDeBusqueda = (termino: string, iso: string): Obj => ({ searchTerms: [termino], geo: iso.toUpperCase(), timeRange: 'today 3-m', viewedFrom: iso.toLowerCase(), maxItems: 3 })
 
+export const pedidoDeBusquedaRespaldo = (termino: string, iso: string): Obj => ({ mode: 'keyword', keyword: termino, predefinedTimeframe: 'today 3-m', geo: iso.toUpperCase(), fetchRegionalData: true })
+/** el respaldo trae otra forma (serie por día y regiones con rango): se pasa a la del actor oficial para armar UNA sola ficha */
+export function desdeElRespaldoDeBusquedas(it: unknown): Obj {
+  const x = obj(it)
+  const serie = obj(Object.values(obj(x.timeline_data))[0])
+  return {
+    interestOverTime_timelineData: Object.entries(serie).map(([f, v]) => ({ time: String(Date.parse(`${f}T00:00:00Z`) / 1000), value: [num(v) ?? 0], hasData: [(num(v) ?? 0) > 0] })),
+    interestBySubregion: arr(x.region_data).map((r) => ({ geoName: txt(r.region), value: [num(r.value) ?? 0], hasData: [(num(r.value) ?? 0) > 0] })),
+    interestByCity: [], relatedQueries_top: [], relatedQueries_rising: [],
+  }
+}
 const promedio = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
 const valorDe = (v: unknown): number | null => (Array.isArray(v) ? num(v[0]) : num(v))
 const conDato = (x: Obj): boolean => (Array.isArray(x.hasData) ? x.hasData[0] === true : x.hasData === true) && (valorDe(x.value) ?? 0) > 0
@@ -402,7 +416,9 @@ export async function correrFuenteNueva(e: EntradaDeFuente): Promise<ResultadoDe
     if (restante() < 0.01) { errores.push('se llegó al tope de gasto del paso: queda lo demás para la próxima corrida'); return null }
     try {
       const r = await e.ejecutar(actor, input, Math.min(tope, restante()))
-      gasto = redondea(gasto + r.costo_usd)
+      // los anuncios se cobran por anuncio (US$ 0,002) y el actor no lo reporta al terminar: se toma lo mayor entre lo reportado y lo medido
+      const costo = e.fuente === 'anuncios_google' ? Math.max(r.costo_usd, r.items.length * 0.002) : r.costo_usd
+      gasto = redondea(gasto + costo)
       // el crudo queda guardado (evidencia y gasto a la vista del vigilante); sus claves no coinciden con ninguna que el portero traduzca a fichas por su cuenta
       const w = await e.db.from('apify_raw').insert({ client_id: e.clientId, apify_function: `fuente_${e.fuente}`, params: input, respuesta: r.items, filas: r.items.length, ensayo: false, metadata: { llamado_por: 'portero-fuentes-nuevas', actor, fuente: e.fuente, costo_usd: r.costo_usd }, created_at: e.ahora.toISOString() })
       if (w.error) errores.push(`crudo de ${actor}: ${String(w.error.message).slice(0, 100)}`)
@@ -427,12 +443,17 @@ export async function correrFuenteNueva(e: EntradaDeFuente): Promise<ResultadoDe
       resumen.anuncios_por_competidor = porCompetidor
     } else if (e.fuente === 'busquedas_google') {
       if (!d.termino || !d.iso) { resumen.motivo = !d.iso ? 'la ficha no dice el país' : 'la ficha no dice el rubro'; return { resumen, errores, gasto_usd: 0 } }
-      const items = await pedir(ACTORES_DE_FUENTES.busquedas_google, pedidoDeBusqueda(d.termino, d.iso), TOPE_POR_LLAMADA_USD.busquedas_google, () => TOPE_POR_PASO_USD.busquedas_google - gasto)
+      let items = await pedir(ACTORES_DE_FUENTES.busquedas_google, pedidoDeBusqueda(d.termino, d.iso), TOPE_POR_LLAMADA_USD.busquedas_google, () => TOPE_POR_PASO_USD.busquedas_google - gasto)
+      if (!items) {
+        // el actor oficial (trae búsquedas relacionadas) a veces tarda más que el paso: respaldo rápido y barato, sin relacionadas (se declara)
+        const r = await pedir(ACTORES_DE_FUENTES.busquedas_respaldo, pedidoDeBusquedaRespaldo(d.termino, d.iso), TOPE_POR_LLAMADA_USD.busquedas_google, () => TOPE_POR_PASO_USD.busquedas_google - gasto)
+        if (r) { items = r.map(desdeElRespaldoDeBusquedas); resumen.actor_usado = 'respaldo' }
+      }
       if (items) { const r = fichaDeBusqueda(items, d, ctx); if (r.ficha) fichas.push(r.ficha); else resumen.motivo = r.motivo; resumen.termino = d.termino }
     } else if (e.fuente === 'eventos_locales') {
       if (!d.ciudades.length) { resumen.motivo = 'la ficha no dice ciudades'; return { resumen, errores, gasto_usd: 0 } }
       const porCiudad: Record<string, number> = {}
-      for (const ciudad of d.ciudades) {
+      for (const ciudad of d.ciudades.slice(0, MAX_CIUDADES_DE_EVENTOS)) {
         const items = await pedir(ACTORES_DE_FUENTES.eventos_locales, pedidoDeEventos(ciudad, d.pais), TOPE_POR_LLAMADA_USD.eventos_locales, () => TOPE_POR_PASO_USD.eventos_locales - gasto)
         if (!items) continue
         const r = fichasDeEventos(items, ciudad, d.pais, ctx)
@@ -442,8 +463,14 @@ export async function correrFuenteNueva(e: EntradaDeFuente): Promise<ResultadoDe
       resumen.eventos_por_ciudad = porCiudad
     } else if (e.fuente === 'foros') {
       if (!d.termino) { resumen.motivo = 'la ficha no dice el rubro'; return { resumen, errores, gasto_usd: 0 } }
-      const items = await pedir(ACTORES_DE_FUENTES.foros, pedidoDeForos(d.termino, d.pais), TOPE_POR_LLAMADA_USD.foros, () => TOPE_POR_PASO_USD.foros - gasto)
-      if (items) { const r = fichasDeForos(items, d, ctx); fichas.push(...r.fichas); resumen.hilos = r.informe }
+      const restante = () => TOPE_POR_PASO_USD.foros - gasto
+      const todos: unknown[] = []
+      const general = await pedir(ACTORES_DE_FUENTES.foros, pedidoDeForos(d.termino, d.pais), TOPE_POR_LLAMADA_USD.foros, restante)
+      if (general) todos.push(...general)
+      // y el subforo del propio país (r/ecuador, r/colombia…): ahí el lugar ya está dicho
+      const sub = d.pais ? slugDe(d.pais).replace(/-/g, '') : ''
+      if (sub) { const dentro = await pedir(ACTORES_DE_FUENTES.foros, { ...pedidoDeForos(d.termino, null), withinCommunity: sub }, TOPE_POR_LLAMADA_USD.foros, restante); if (dentro) todos.push(...dentro) }
+      if (general || todos.length) { const r = fichasDeForos(todos, d, ctx); fichas.push(...r.fichas); resumen.hilos = r.informe }
     } else if (e.fuente === 'horas_de_mas_gente') {
       const rr = await e.db.from('apify_raw').select('apify_function, respuesta, ensayo, created_at').eq('client_id', e.clientId).eq('ensayo', false).in('apify_function', ['own_google_maps_profile', 'google_maps_scraper']).order('created_at', { ascending: false }).limit(40)
       if (rr.error) errores.push(`apify_raw: ${String(rr.error.message).slice(0, 120)}`)
