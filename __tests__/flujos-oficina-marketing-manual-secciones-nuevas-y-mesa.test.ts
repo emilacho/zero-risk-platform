@@ -1,7 +1,6 @@
 /**
- * 02-nov · ADENDA 1 del manual (secciones nuevas · mesa creativa · regla de proponer). Ejecuta el CÓDIGO REAL de los cuatro nodos nuevos con empleados falsos.
- * Garantías: cada sección tiene UN dueño · la mesa solo ve lo creativo y solo aporta · el creador integra · una llamada caída se declara y no detiene · un dato duro que no está en lo que se sabe del cliente
- * no queda como hecho (guarda por código) · lo propuesto sale rotulado y estampado · las 11 claves llegan al borrador · la puerta de «Sacar lo sin fuente» no borra las propuestas.
+ * 02-nov · ADENDA 1 del manual (secciones nuevas · mesa creativa · regla de proponer). Ejecuta el CÓDIGO REAL de los cinco nodos nuevos con empleados falsos.
+ * Garantías: cada sección tiene UN dueño · la mesa solo ve lo creativo y solo aporta · el creador integra · una llamada caída se declara y no detiene · un dato duro sin fuente lo ANOTA el juez (sin guarda por código: nada se quita) · lo propuesto sale rotulado y estampado · las claves llegan al borrador · la puerta de «Sacar lo sin fuente» no borra las propuestas.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -58,7 +57,7 @@ const respuestaAportes = (l: Llamada): Respuesta => {
 
 describe('estructura del tramo', () => {
   const nombres = new Set(nuevo.nodes.map((n: any) => n.name))
-  it('los cuatro nodos nuevos existen y el vivo no los tenía', () => {
+  it('los cinco nodos nuevos existen y el vivo no los tenía', () => {
     const v = new Set(vivo.nodes.map((n: any) => n.name))
     for (const n of Object.values(EQUIPO)) { expect(nombres.has(n)).toBe(true); expect(v.has(n)).toBe(false) }
   })
@@ -166,7 +165,7 @@ describe('2 · mesa creativa', () => {
   })
 })
 
-describe('3 · integración y guarda de datos duros', () => {
+describe('3 · integración (sin guarda por código)', () => {
   const eq = (aportes: any, mesaAportes: any[] = []) => ({ aportes: { valores: aportes, meta: {} }, mesa: { corrio: true, aportes: mesaAportes }, declarado: [] })
   it('sin aportes de la mesa NO hay llamada; el creador integra solo cuando hay aportes', async () => {
     const sin = await correr(EQUIPO.integra, base({ _equipo: eq({ tono_por_canal: ['Instagram: cálido'] }) }), () => { throw new Error('no debía llamar') })
@@ -181,47 +180,35 @@ describe('3 · integración y guarda de datos duros', () => {
     const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({ tono_por_canal: ['Instagram: cálido'] }, [{ para: 'content-creator', campo: 'x', texto: 'y' }]) }), () => new Error('x'))
     expect(out.brand_book_draft.tono_por_canal).toEqual(['Instagram: cálido']); expect(out._equipo.integracion).toBe('no_se_pudo'); expect(out._equipo.declarado.join(' ')).toMatch(/integración/)
   })
-  it('DATOS DUROS: teléfono, precio, hora o año que NO están en lo que se sabe del cliente se quitan; los que sí están se conservan', async () => {
+  it('SIN GUARDA POR CÓDIGO (decisión de Emilio): nada de lo que escribe el agente se quita ni se cambia, ni siquiera un dato duro que no está en la evidencia', async () => {
     const aportes = { tono_por_canal: [
-      'WhatsApp: escribe al 0987654321 [propuesta del agente — razón]',          // teléfono inventado
-      'Atención: abrimos de 8 a 20h',                                            // horario que no está (en la evidencia es 9 a 17h)
-      'Precios: ceviche a $12.00',                                               // precio inventado
-      'Instagram: cercano y con humor [propuesta del agente — razón]',           // sin dato duro
-    ], reglas_de_escritura: ['Llama al 0991234567 solo para pedidos'] }          // teléfono REAL (está en la evidencia)
+      'WhatsApp: escribe al 0987654321 [propuesta del agente — razón]',
+      'Atención: abrimos de 8 a 20h',
+      'Precios: ceviche a $12.00',
+      'Instagram: cercano y con humor [propuesta del agente — razón]',
+    ], reglas_de_escritura: ['Llama al 0991234567 solo para pedidos'], historia_y_origen: 'Nació en 1987 con 5 hermanos. [propuesta del agente — razón]' }
     const { out } = await correr(EQUIPO.integra, base({ _equipo: eq(aportes) }), () => { throw new Error('no') })
-    expect(out.brand_book_draft.tono_por_canal).toEqual(['Instagram: cercano y con humor [propuesta del agente — razón]'])
-    expect(out.brand_book_draft.reglas_de_escritura).toEqual(['Llama al 0991234567 solo para pedidos'])
-    expect(out._equipo.guarda_datos_duros.map((q: any) => q.campo)).toEqual(['tono_por_canal', 'tono_por_canal', 'tono_por_canal'])
+    expect(out.brand_book_draft.tono_por_canal).toEqual(aportes.tono_por_canal)
+    expect(out.brand_book_draft.reglas_de_escritura).toEqual(aportes.reglas_de_escritura)
+    expect(out.brand_book_draft.historia_y_origen).toBe(aportes.historia_y_origen)
+    expect(out._equipo.guarda_datos_duros).toBeUndefined()
+    expect(JSON.stringify(out)).not.toMatch(/falta el dato duro/)
   })
-  it('las cifras de la RAZÓN del rótulo no cuentan como dato duro', async () => {
-    const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({ tono_por_canal: ['Instagram: cálido [propuesta del agente — publican a las 7pm todos los días desde 1999]'], historia_y_origen: 'Pescado del día desde 2012. [propuesta del agente — hay 5 posts que lo dicen]' }) }), () => { throw new Error('no') })
-    expect(out.brand_book_draft.tono_por_canal).toHaveLength(1); expect(out.brand_book_draft.tono_por_canal[0]).toMatch(/^Instagram: cálido/)
-    expect(out.brand_book_draft.historia_y_origen).toContain('desde 2012')
-  })
-  it('un campo que se queda sin nada dice PENDIENTE (falta el dato), no inventa ni queda vacío', async () => {
-    const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({ nunca_hace: ['Nunca cobra más de $99.99 [propuesta del agente — razón]'] }) }), () => { throw new Error('no') })
-    expect(out.brand_book_draft.nunca_hace).toHaveLength(1); expect(out.brand_book_draft.nunca_hace[0]).toMatch(/^PENDIENTE — falta el dato duro/)
+  it('un campo que dice PENDIENTE sigue estampado «ausente» (el agente lo declaró, el código no lo inventa ni lo vacía)', async () => {
+    const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({ nunca_hace: ['PENDIENTE — falta el teléfono'] }) }), () => { throw new Error('no') })
+    expect(out.brand_book_draft.nunca_hace).toEqual(['PENDIENTE — falta el teléfono'])
     expect(out.brand_book_draft._field_meta.nunca_hace.estado).toBe('ausente')
   })
-  it('historia y origen: TODA cifra no sostenida sale (años, socios); lo sostenido queda y el rótulo viaja', async () => {
-    const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({ historia_y_origen: 'Cocinan con pescado del día desde 2012. Fundaron el local con 3 socios en 1998 [propuesta del agente — razón]' }) }), () => { throw new Error('no') })
-    expect(out.brand_book_draft.historia_y_origen).toBe('Cocinan con pescado del día desde 2012. [propuesta del agente — razón]')
-    expect(out._equipo.guarda_datos_duros[0]).toMatchObject({ campo: 'historia_y_origen' })
+  it('la regla de los datos duros viaja como INSTRUCCIÓN en cada pedido a un dueño: «si no están en la evidencia, escribe "falta"»', async () => {
+    const a = await correr(EQUIPO.aportes, base(), respuestaAportes)
+    const m = await correr(EQUIPO.mesa, base({ _equipo: { aportes: { valores: {}, meta: {} }, declarado: [] } }), () => sec({ direccion_de_fotografia: ['x'] }))
+    const l = await correr(EQUIPO.logo, base({ _equipo: { corrio: true, declarado: [] } }), () => sec({ uso_del_logo: ['x'] }))
+    const i = await correr(EQUIPO.integra, base({ _equipo: eq({ tono_por_canal: ['a'], reglas_de_escritura: ['b'] }, [{ para: 'content-creator', campo: 'tono_por_canal', texto: 'y' }]) }), () => sec({ tono_por_canal: ['a'] }))
+    for (const llamada of [...a.llamadas, ...m.llamadas, ...l.llamadas, ...i.llamadas]) {
+      expect(llamada.task).toContain('NUNCA se inventan'); expect(llamada.task).toContain('si no están en la evidencia, escribe "falta"')
+    }
   })
-  it('historia: una cifra que no es año ni precio («3 socios») también sale; en una regla de escritura la misma cifra es estilo y queda', async () => {
-    const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({ historia_y_origen: 'Pescado del día desde 2012. Lo fundaron 3 socios.', reglas_de_escritura: ['Frases de máximo 3 líneas'] }) }), () => { throw new Error('no') })
-    expect(out.brand_book_draft.historia_y_origen).toBe('Pescado del día desde 2012.')
-    expect(out.brand_book_draft.reglas_de_escritura).toEqual(['Frases de máximo 3 líneas'])
-  })
-  it('un rango de horas con un extremo conocido y otro inventado («de 8 a 17h», la evidencia dice 9 a 17h) sale', async () => {
-    const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({ tono_por_canal: ['Atención: de 8 a 17h [propuesta del agente — razón]', 'Atención: de 9 a 17h'] }) }), () => { throw new Error('no') })
-    expect(out.brand_book_draft.tono_por_canal).toEqual(['Atención: de 9 a 17h'])
-  })
-  it('historia con todo inventado → PENDIENTE', async () => {
-    const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({ historia_y_origen: 'Nació en 1987 con 5 hermanos.' }) }), () => { throw new Error('no') })
-    expect(out.brand_book_draft.historia_y_origen).toMatch(/^PENDIENTE/)
-  })
-  it('lo propuesto queda estampado propuesta_del_agente; lo dicho por el cliente queda provisional sin rótulo; las 11 claves nuevas llegan al borrador', async () => {
+  it('lo propuesto queda estampado propuesta_del_agente; lo dicho por el cliente queda provisional sin rótulo; las claves nuevas llegan al borrador', async () => {
     const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({
       tono_por_canal: ['Instagram: cálido [propuesta del agente — razón]'], reglas_de_escritura: ['Tutea'], valores: ['Frescura: pescado del día'],
       nunca_hace: ['Nunca esconde el origen [propuesta del agente — razón]'], historia_y_origen: 'Pescado del día desde 2012.', direccion_de_fotografia: ['Luz natural [propuesta del agente — razón]'] }) }), () => { throw new Error('no') })
@@ -276,5 +263,145 @@ describe('las propuestas rotuladas sobreviven a «Sacar lo sin fuente» (puerta 
     expect(r.status).toBe(200)
     const m = (r.body as any).manual
     for (const k of ['tono_por_canal', 'reglas_de_escritura', 'direccion_de_fotografia', 'uso_del_logo', 'valores']) expect(m[k]).toEqual(draft[k])
+  })
+})
+
+describe('«Pedir cambios al manual» llega a los nodos nuevos y no pisa lo validado (reparo 1 de CC3)', () => {
+  const VIGENTE = { tono_por_canal: ['WhatsApp: cercano [propuesta del agente — razón]'], valores: ['Frescura validada por el dueño'], uso_del_logo: ['Siempre sobre blanco (validado)'], nunca_hace: ['Nunca esconde el origen'] }
+  const RE = (extra: any = {}) => ({ cambios_del_dueno: 'cambia el tono de WhatsApp a formal', seccion: 'tono_por_canal', campos_validados: ['valores', 'uso_del_logo'], campos_liberados: [], manual_vigente: JSON.stringify(VIGENTE), tope_reescritura_usd: 8, ...extra })
+  it('aportes: solo pide lo que el pedido nombra, con el pedido del dueño y el valor de hoy; no llama a quien no tiene nada que cambiar', async () => {
+    const { llamadas, out } = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE() })
+    expect(llamadas.map((l) => l.agent)).toEqual(['content-creator'])
+    const tarea = llamadas[0].task
+    expect(tarea).toContain('ESTA ES UNA REESCRITURA'); expect(tarea).toContain('cambia el tono de WhatsApp a formal'); expect(tarea).toContain('WhatsApp: cercano')
+    expect(tarea).toContain('tono_por_canal'); expect(tarea).not.toContain('nunca_hace: lista'); expect(tarea).not.toContain('valores: lista de valores')
+    expect(Object.keys(out._equipo.aportes.valores)).toEqual(['tono_por_canal'])       // lo validado y lo no nombrado no se escribe aunque el agente lo mande
+    expect(out._equipo.declarado.join(' ')).toMatch(/pedir cambios.*tono_por_canal.*conserva lo validado: valores, uso_del_logo/)
+  })
+  it('sin «Pedir cambios» todo sigue como antes: las dos llamadas y los cinco campos', async () => {
+    const { llamadas, out } = await correr(EQUIPO.aportes, base(), respuestaAportes)
+    expect(llamadas).toHaveLength(2); expect(Object.keys(out._equipo.aportes.valores)).toHaveLength(5)
+    for (const l of llamadas) expect(l.task).not.toContain('ESTA ES UNA REESCRITURA')
+  })
+  it('un campo VALIDADO que el dueño nombra o libera sí se reescribe; el que no, se protege', async () => {
+    const nombra = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE({ cambios_del_dueno: 'revisa los valores y el tono de Instagram' }) })
+    expect(Object.keys(nombra.out._equipo.aportes.valores).sort()).toEqual(['tono_por_canal', 'valores'])
+    const libera = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE({ campos_liberados: ['nunca_hace'] }) })
+    expect(Object.keys(libera.out._equipo.aportes.valores).sort()).toEqual(['nunca_hace', 'tono_por_canal'])
+  })
+  it('mesa: si el pedido no habla de fotografía, no llama a nadie y lo dice', async () => {
+    const { llamadas, out } = await correr(EQUIPO.mesa, base({ _equipo: { aportes: { valores: { tono_por_canal: ['x'] }, meta: {} }, declarado: [] } }), () => { throw new Error('no debía llamar') }, { reescritura: RE() })
+    expect(llamadas).toHaveLength(0); expect(out._equipo.mesa.corrio).toBe(false); expect(out._equipo.declarado.join(' ')).toMatch(/la mesa no corre/)
+    const conFoto = await correr(EQUIPO.mesa, base({ _equipo: { aportes: { valores: {}, meta: {} }, declarado: [] } }), () => sec({ direccion_de_fotografia: ['Luz natural'] }), { reescritura: RE({ cambios_del_dueno: 'más fotos de gente comiendo', seccion: 'direccion_de_fotografia' }) })
+    expect(conFoto.llamadas.map((l) => l.agent)).toEqual(['creative-director-mesa']); expect(conFoto.llamadas[0].task).toContain('más fotos de gente comiendo')
+  })
+  it('integración: lo validado VUELVE del manual vigente (no se pisa) y lo pedido se escribe', async () => {
+    const aportes = { tono_por_canal: ['WhatsApp: formal y breve [propuesta del agente — lo pidió el dueño]'], valores: ['PISADO por el agente'], nunca_hace: ['PISADO también'] }
+    const { out, llamadas } = await correr(EQUIPO.integra, base({ _equipo: { aportes: { valores: aportes, meta: {} }, mesa: { corrio: false, aportes: [] }, declarado: [] } }), () => { throw new Error('no') }, { reescritura: RE() })
+    expect(llamadas).toHaveLength(0)
+    expect(out.brand_book_draft.tono_por_canal).toEqual(aportes.tono_por_canal)
+    expect(out.brand_book_draft.valores).toEqual(VIGENTE.valores); expect(out.brand_book_draft.uso_del_logo).toEqual(VIGENTE.uso_del_logo); expect(out.brand_book_draft.nunca_hace).toEqual(VIGENTE.nunca_hace)
+    expect(out._equipo.conservados.sort()).toEqual(['nunca_hace', 'uso_del_logo', 'valores'])
+    expect(out.brand_book_draft._field_meta.tono_por_canal.estado).toBe('propuesta_del_agente')
+  })
+  it('integración: acepta el manual vigente como objeto con brand_book_draft y sin vigente no inventa nada', async () => {
+    const e = { aportes: { valores: { tono_por_canal: ['formal'] }, meta: {} }, mesa: { corrio: false, aportes: [] }, declarado: [] }
+    const a = await correr(EQUIPO.integra, base({ _equipo: e }), () => { throw new Error('no') }, { reescritura: RE({ manual_vigente: { brand_book_draft: VIGENTE } }) })
+    expect(a.out.brand_book_draft.valores).toEqual(VIGENTE.valores)
+    const b = await correr(EQUIPO.integra, base({ _equipo: e }), () => { throw new Error('no') }, { reescritura: RE({ manual_vigente: null }) })
+    expect(b.out.brand_book_draft.valores).toBeUndefined(); expect(b.out._equipo.conservados).toEqual([])
+  })
+  it('integración: el pedido del dueño llega a la llamada del creador y el valor de hoy de sus campos', async () => {
+    const e = { aportes: { valores: { tono_por_canal: ['WhatsApp: cercano'] }, meta: {} }, mesa: { corrio: true, aportes: [{ para: 'content-creator', campo: 'tono_por_canal', texto: 'Suma formalidad.' }] }, declarado: [] }
+    const { llamadas } = await correr(EQUIPO.integra, base({ _equipo: e }), () => sec({ tono_por_canal: ['WhatsApp: formal'] }), { reescritura: RE() })
+    expect(llamadas).toHaveLength(1); expect(llamadas[0].task).toContain('ESTA ES UNA REESCRITURA'); expect(llamadas[0].task).toContain('cambia el tono de WhatsApp a formal'); expect(llamadas[0].task).toContain('WhatsApp: cercano [propuesta')
+  })
+  it('integración: un campo validado que el manual vigente no trae tampoco se escribe, y lo conservado trae su ficha', async () => {
+    const e = { aportes: { valores: { tono_por_canal: ['formal'], valores: ['PISADO'] }, meta: {} }, mesa: { corrio: false, aportes: [] }, declarado: [] }
+    const sinValor = await correr(EQUIPO.integra, base({ _equipo: e }), () => { throw new Error('no') }, { reescritura: RE({ manual_vigente: JSON.stringify({ tono_por_canal: ['x'] }) }) })
+    expect(sinValor.out.brand_book_draft.valores).toBeUndefined()
+    const ficha = { estado: 'provisional', fuente: 'dueño', razon: 'validado' }
+    const conFicha = await correr(EQUIPO.integra, base({ _equipo: e }), () => { throw new Error('no') }, { reescritura: RE({ manual_vigente: JSON.stringify({ ...VIGENTE, _field_meta: { valores: ficha } }) }) })
+    expect(conFicha.out.brand_book_draft._field_meta.valores).toEqual(ficha)
+  })
+  it('logo y tipografía: no corren si el pedido no los nombra; si los libera el dueño, solo se pide el liberado', async () => {
+    const no = await correr(EQUIPO.logo, base({ _equipo: { corrio: true, declarado: [] } }), () => { throw new Error('no debía llamar') }, { reescritura: RE() })
+    expect(no.llamadas).toHaveLength(0); expect(no.out._equipo.declarado.join(' ')).toMatch(/logo y tipografía no corren/)
+    expect(no.out.brand_book_draft.uso_del_logo).toBeUndefined()
+    const si = await correr(EQUIPO.logo, base({ _equipo: { corrio: true, declarado: [] } }), () => sec({ uso_del_logo: ['Nuevo'], jerarquia_tipografica: ['Pisada'] }), { reescritura: RE({ campos_liberados: ['uso_del_logo'] }) })
+    expect(si.llamadas).toHaveLength(1); expect(si.llamadas[0].task).toContain('uso_del_logo'); expect(si.llamadas[0].task).toContain('cambia el tono de WhatsApp a formal')
+    expect(si.out.brand_book_draft.uso_del_logo).toEqual(['Nuevo']); expect(si.out.brand_book_draft.jerarquia_tipografica).toBeUndefined()
+  })
+  it('el gasto de una reescritura se reparte por llamada (tope ÷ 8): cada llamada lleva su parte', async () => {
+    const { llamadas } = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE({ tope_reescritura_usd: 4 }) })
+    expect(llamadas.every((l) => l.max_budget_usd === 0.5)).toBe(true)
+  })
+})
+
+describe('5 · el juez anota los datos duros sin fuente (no borra, no cambia)', () => {
+  const conDatos = () => base({ brand_book_draft: { ...DRAFT, tono_por_canal: ['WhatsApp: escribe al 0987654321 [propuesta del agente — razón]', 'Instagram: cercano'], historia_y_origen: 'Nació en 1987 con 5 hermanos.', positioning: 'Ceviche honesto del pescador al plato. Abrimos de 9 a 17h.' }, _equipo: { corrio: true, declarado: [] } })
+  const notas = (lista: any[]) => ({ body: { response: 'Aquí van: ' + JSON.stringify({ notas: lista }) } })
+  it('llama UNA vez a market_research_analyst, pide solo anotar y recibe la evidencia y los campos', async () => {
+    const { llamadas } = await correr(EQUIPO.notas, conDatos(), () => notas([]))
+    expect(llamadas.map((l) => l.agent)).toEqual(['market_research_analyst'])
+    const t = llamadas[0].task
+    expect(t).toContain('ANOTA'); expect(t).toContain('no corriges, no borras'); expect(t).toContain('Llámanos al 0991234567'); expect(t).toContain('0987654321'); expect(t.length).toBeLessThanOrEqual(15900)
+    expect(llamadas[0].step_name).toBe('bb-equipo-juez-datos-duros')
+  })
+  it('las notas quedan APARTE del texto: en _field_meta.<clave>.notas_del_juez y en notas_del_juez; ningún campo cambia', async () => {
+    const entrada = conDatos()
+    const { out } = await correr(EQUIPO.notas, entrada, () => notas([
+      { campo: 'tono_por_canal', dato: '0987654321', motivo: 'ese teléfono no aparece en la evidencia' },
+      { campo: 'historia_y_origen', dato: '1987', motivo: 'el año no está en la evidencia' },
+    ]))
+    const d = out.brand_book_draft
+    for (const k of Object.keys(entrada.brand_book_draft)) expect(d[k]).toEqual(entrada.brand_book_draft[k])      // ni un texto cambia
+    expect(d.notas_del_juez).toEqual([{ campo: 'tono_por_canal', dato: '0987654321', motivo: 'ese teléfono no aparece en la evidencia' }, { campo: 'historia_y_origen', dato: '1987', motivo: 'el año no está en la evidencia' }])
+    expect(d._field_meta.tono_por_canal.notas_del_juez).toEqual([{ dato: '0987654321', motivo: 'ese teléfono no aparece en la evidencia' }])
+    expect(d._field_meta.historia_y_origen.notas_del_juez[0].dato).toBe('1987')
+    expect(out._equipo.datos_duros_juez).toMatchObject({ corrio: true, notas_n: 2, descartadas: 0 })
+  })
+  it('una nota solo vale si el dato está tal cual en ese campo: lo inventado por el juez o con un campo ajeno se descarta', async () => {
+    const { out } = await correr(EQUIPO.notas, conDatos(), () => notas([
+      { campo: 'historia_y_origen', dato: '1987', motivo: 'ok' },
+      { campo: 'historia_y_origen', dato: '1999', motivo: 'no está en el campo' },
+      { campo: 'tono_por_canal', dato: '1987', motivo: 'está en otro campo' },
+      { campo: 'client_id', dato: 'c-1', motivo: 'campo que no se revisa' },
+      { campo: 'positioning', dato: '', motivo: 'sin dato' },
+      { dato: 'x' },
+    ]))
+    expect(out.brand_book_draft.notas_del_juez.map((n: any) => n.dato)).toEqual(['1987'])
+    expect(out._equipo.datos_duros_juez).toMatchObject({ notas_n: 1, descartadas: 5 })
+  })
+  it('ignora tildes y espacios al buscar el dato en el campo y anota a lo sumo 20', async () => {
+    const e = base({ brand_book_draft: { ...DRAFT, historia_y_origen: 'Atención: de   9 a 17h' }, _equipo: { corrio: true, declarado: [] } })
+    const a = await correr(EQUIPO.notas, e, () => notas([{ campo: 'historia_y_origen', dato: 'Atencion: de 9 a 17h', motivo: 'm' }]))
+    expect(a.out.brand_book_draft.notas_del_juez).toHaveLength(1)
+    const muchas = Array.from({ length: 30 }, () => ({ campo: 'historia_y_origen', dato: '9', motivo: 'm' }))
+    const b = await correr(EQUIPO.notas, e, () => notas(muchas))
+    expect(b.out.brand_book_draft.notas_del_juez).toHaveLength(20)
+  })
+  it('si el juez falla o no se le entiende, se DECLARA y el manual sale igual (nunca bloquea)', async () => {
+    const entrada = conDatos()
+    for (const r of [new Error('timeout'), { body: { response: 'no sé' } }] as any[]) {
+      const { out } = await correr(EQUIPO.notas, entrada, () => r)
+      expect(out.brand_book_draft).toEqual(entrada.brand_book_draft); expect(out._equipo.declarado.join(' ')).toMatch(/el juez de datos duros/); expect(out._equipo.datos_duros_juez.corrio).toBe(false)
+    }
+  })
+  it('sin campos que revisar no hay llamada', async () => {
+    const { llamadas, out } = await correr(EQUIPO.notas, base({ brand_book_draft: { client_id: 'c-1' } }), () => { throw new Error('no debía llamar') })
+    expect(llamadas).toHaveLength(0); expect(out._equipo.datos_duros_juez.corrio).toBe(false)
+  })
+  it('va entre «Sacar lo sin fuente» y el Promote; lo que la puerta saca no vuelve y las notas viajan', () => {
+    const a = (de: string) => nuevo.connections[de].main[0].map((x: any) => x.node)
+    expect(a('[BB] Sacar lo sin fuente (antes del Promote)')).toEqual([EQUIPO.notas]); expect(a(EQUIPO.notas)).toEqual(['[BB] Promote prep'])
+  })
+})
+
+describe('un dueño que falla se declara (nunca se calla)', () => {
+  it('brand-strategist caído: se declara por su nombre y content-creator sigue', async () => {
+    const { out } = await correr(EQUIPO.aportes, base(), (l) => (l.agent === 'brand-strategist' ? new Error('timeout') : respuestaAportes(l)))
+    expect(out._equipo.declarado.join(' ')).toMatch(/falló la llamada a brand-strategist/)
+    expect(Object.keys(out._equipo.aportes.valores).sort()).toEqual(['nunca_hace', 'reglas_de_escritura', 'tono_por_canal', 'valores'])
   })
 })
