@@ -37,9 +37,9 @@ describe('juez independiente · el agente', () => {
     expect(j).toContain('"fidelity_judge": true')
     expect(j).toContain('"role": "faithfulness_judge"')
   })
-  it('quien escribe la voz NO se toca: la lente del editor y «pedir la voz otra vez» siguen con editor-en-jefe, y el juez ya no es ese', () => {
-    for (const n of ['Lente · editor-en-jefe', VOZ_OTRA_VEZ]) expect(nodo(nuevo, n).parameters.jsonBody.replace('\n  ' + LINEA_DEL_TOPE, '')).toBe(nodo(vivo, n).parameters.jsonBody)
-    expect(nodo(nuevo, VOZ_OTRA_VEZ).parameters.jsonBody).toContain('"agent": "editor-en-jefe"')
+  it('quien escribe la voz es content-creator (equipo del manual (d), 02-nov): la lente de la casilla y «pedir la voz otra vez» van con él, y el juez no es ninguno de los escritores', () => {
+    for (const n of ['Lente · editor-en-jefe', VOZ_OTRA_VEZ]) expect(nodo(nuevo, n).parameters.jsonBody).toContain('"agent": "content-creator"')
+    expect(nodo(nuevo, VOZ_OTRA_VEZ).parameters.jsonBody).not.toContain('"agent": "editor-en-jefe"')
     const juez = /"agent": "([^"]+)"/.exec(nodo(nuevo, JUEZ).parameters.jsonBody)![1]
     const voz = /"agent": "([^"]+)"/.exec(nodo(nuevo, VOZ_OTRA_VEZ).parameters.jsonBody)![1]
     expect(juez).not.toBe(voz)
