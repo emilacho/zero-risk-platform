@@ -1,7 +1,7 @@
 /** Lo que falta lo proponen los agentes · rotulado «propuesta del agente», solo lo vacío, el resto letra por letra igual. Cuatro rubros inventados, sin modelo. */
 import { describe, expect, it } from 'vitest'
 import { BATERIA_DE_RUBROS } from '../../rubros-de-prueba/baterias'
-import { armarPedidos, camposFaltantes, fusionarPropuestas, leerRespuesta } from '../propuesta'
+import { CAMPOS_PROPONIBLES, armarPedidos, camposFaltantes, fusionarPropuestas, leerRespuesta } from '../propuesta'
 import type { Fuente } from '../procedencia'
 
 const F = (id: string, texto: string): Fuente => ({ id, tipo: 'primaria_propia', canal: 'sitio', rol: 'cuerpo', rotulo: 'sitio propio', texto } as Fuente)
@@ -29,7 +29,13 @@ describe('los pedidos', () => {
   })
   it('varios campos de agentes distintos → un pedido por agente', () => {
     const r = armarPedidos({ draft: { ...DRAFT, mensajes_clave: [] }, fuentes: [], campos: ['mision', 'mensajes_clave'] })
-    expect(r.pedidos.map((p) => p.agente).sort()).toEqual(['brand-strategist', 'editor-en-jefe'])
+    expect(r.pedidos.map((p) => p.agente).sort()).toEqual(['brand-strategist', 'content-creator'])
+  })
+  it.each(["voice_description","personalidad","tagline_opciones","mensajes_clave","valores","nunca_hace"])('🔴 la voz la escribe content-creator, no quien la revisa (01-nov · firma de Emilio): %s', (campo) => {
+    expect(CAMPOS_PROPONIBLES[campo as keyof typeof CAMPOS_PROPONIBLES].agente).toBe('content-creator')
+  })
+  it('🔴 el revisor de la voz no escribe ningún campo', () => {
+    expect(Object.values(CAMPOS_PROPONIBLES).map((c) => c.agente)).not.toContain('editor-en-jefe')
   })
 })
 
