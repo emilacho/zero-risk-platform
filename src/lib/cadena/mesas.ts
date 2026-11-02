@@ -20,7 +20,7 @@ import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { hallazgosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
 import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, type ConceptoLeido } from './conceptos'
-import { TOTAL_DE_TANDAS } from './constantes'
+import { medidaDeCampana } from './constantes'
 import { metodoDe } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 import { reglaDeIdioma, reglaDeRegistro } from './registro'
@@ -395,7 +395,7 @@ export async function siguienteDespuesDe(al: Almacen, campanaId: string): Promis
   const c = await al.campana(campanaId)
   if (!c || (c.estado !== 'calendario' && c.estado !== 'activa')) return {}
   const tanda = await tandaQueEspera(al, c.id)
-  if (tanda > TOTAL_DE_TANDAS) return {}
+  if (tanda > medidaDeCampana(c).totalTandas) return {}
   const etapa = await etapaDeReentrada(al, c)
   return etapa ? { siguiente: { sobre: sobreDeTanda(c, tanda, etapa) } } : {}
 }

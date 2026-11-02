@@ -6,7 +6,7 @@
 import type { Almacen, Campana, ContextoDelCliente, Corrida } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
-import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, SEMANAS_DE_PANORAMA, SEMANAS_DE_TANDA, TOTAL_DE_TANDAS, TOTAL_SEMANAS, topeDelPaso, type Paso } from './constantes'
+import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, medidaDeCampana, SEMANAS_DE_PANORAMA, TOTAL_DE_TANDAS, topeDelPaso, type MedidaDeCampana, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
 import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V2, ESQUEMA_ESTRATEGIA } from './esquemas'
@@ -21,13 +21,13 @@ import { diasEntre, fechaDeFila } from './fechas'
 import type { Ajuste, Estrategia, Fila, FormatosPorRed, Hallazgo, TandaAgente } from './tipos'
 import { type LexicoAfirmaciones } from './afirmaciones'
 import { lexicoDelCliente } from './lexico-por-rubro'
-import { problemasDeEsquema, validarEstrategia } from './validador-estrategia'
+import { problemasDeEsquema, normalizarPilares, validarEstrategia } from './validador-estrategia'
 import { validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
 import { fechasPedidasDe, retencionDe, retenerParaRevision } from './revision-jefatura'
 
-export const semanasDeTanda = (tanda: number): number[] => {
-  const ini = (tanda - 1) * SEMANAS_DE_TANDA + 1
-  return Array.from({ length: SEMANAS_DE_TANDA }, (_, i) => ini + i).filter((s) => s <= TOTAL_SEMANAS)
+export const semanasDeTanda = (tanda: number, m: MedidaDeCampana = medidaDeCampana()): number[] => {
+  const ini = (tanda - 1) * m.semanasPorTanda + 1
+  return Array.from({ length: m.semanasPorTanda }, (_, i) => ini + i).filter((s) => s <= m.totalSemanas)
 }
 export { TOTAL_DE_TANDAS }
 
@@ -111,7 +111,7 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
     return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: true, alerta: r.alerta } }
   }
   if (campana.estado === 'abierta') await al.actualizarCampana(campana.id, { estado: 'estrategia' })
-  const tarea = tareaDeEstrategia({ ctx, formatosPermitidos: formatosPermitidos(formatos), version, correccion: fichas ?? undefined })
+  const tarea = tareaDeEstrategia({ ctx, formatosPermitidos: formatosPermitidos(formatos), version, diasDeCampana: medidaDeCampana(campana).dias, correccion: fichas ?? undefined })
   return {
     status: 200,
     cuerpo: {
@@ -138,7 +138,8 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
     return { status: 200, cuerpo: { necesita_humano: true, alerta: r.alerta } }
   }
   const version = ((await al.ultimaEstrategia(campana.id))?.version ?? 0) + 1
-  const hs = validarEstrategia(objeto, { planTexto: ctx.planTexto, formatos })
+  const { estrategia: objetoAjustado, aviso: avisoDePilares } = normalizarPilares(objeto)
+  const hs = [...(avisoDePilares ? [avisoDePilares] : []), ...validarEstrategia(objetoAjustado, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias })]
   await al.guardarValidaciones(campana.id, 'estrategia', version, null, esCorreccion ? 2 : 1, hs, campana.seco)
   const plan = planDeCorreccion(hs)
   if (plan.necesita && !esCorreccion) return { status: 200, cuerpo: { correccion: true, modo: 'tanda', fichas: plan.fichas } }
@@ -147,7 +148,7 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
     const r = await ponerNecesitaHumano(al, campana, `la estrategia sigue con ${plan.fichas.length} bloqueo(s) tras la única corrección: ${plan.fichas.map((f) => f.que).join(' | ').slice(0, 300)}`, ahora)
     return { status: 200, cuerpo: { necesita_humano: true, fichas: plan.fichas, alerta: r.alerta } }
   }
-  await al.insertarEstrategia({ campana_id: campana.id, version, estado: 'validada', contenido: objeto as Estrategia, agente: AGENTE_POR_PASO.estrategia, modelo: corrida.modelo, costo_usd: leerResultado(cuerpo.resultado).cost_usd ?? null, workflow_execution_id: corrida.workflow_execution_id, seco: campana.seco })
+  await al.insertarEstrategia({ campana_id: campana.id, version, estado: 'validada', contenido: objetoAjustado as Estrategia, agente: AGENTE_POR_PASO.estrategia, modelo: corrida.modelo, costo_usd: leerResultado(cuerpo.resultado).cost_usd ?? null, workflow_execution_id: corrida.workflow_execution_id, seco: campana.seco })
   // J7 · el punto de espera «antes de pasar»: si la jefatura abriría una revisión de la estrategia, se guarda todo igual pero la campaña NO pasa a `calendario` hasta que la revisión cierre
   // (o venza la espera). Con la jefatura apagada `retener` es false y esto es BYTE A BYTE lo de siempre.
   const retencion = await retencionDe(al, 'estrategia', campana.client_id)
@@ -190,7 +191,8 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   if (!c.ok) return c.r
   const { campana, ctx, formatos } = c.p
   const tanda = Number(cuerpo.tanda ?? 1)
-  if (!Number.isInteger(tanda) || tanda < 1 || tanda > TOTAL_DE_TANDAS) return err(400, 'E-TANDA', `tanda debe ser un entero entre 1 y ${TOTAL_DE_TANDAS}`)
+  const totalDeTandas = medidaDeCampana(campana).totalTandas
+  if (!Number.isInteger(tanda) || tanda < 1 || tanda > totalDeTandas) return err(400, 'E-TANDA', `tanda debe ser un entero entre 1 y ${totalDeTandas}`)
   if (campana.estado !== 'calendario' && campana.estado !== 'activa') return err(409, 'E-ESTADO', `la campaña está ${campana.estado}: el calendario solo se prepara con la estrategia validada`)
   const estr = await al.ultimaEstrategia(campana.id)
   if (!estr || estr.estado !== 'validada') return err(409, 'E-SIN-ESTRATEGIA', 'no hay una estrategia validada')
@@ -208,7 +210,7 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   // 31-oct (nuevo orden · T3): con la palanca encendida la tanda ESPERA la gran idea aprobada (no es un fallo: el flujo vuelve a pasar); apagada, `mesa` es vacía y nada cambia
   const mesa = await conceptoParaElCalendario(al, campana)
   if (mesa.espera) return { status: 200, cuerpo: { accion: 'esperar_concepto', tanda, ...mesa.espera } }
-  const semanas = semanasDeTanda(tanda)
+  const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
   const esquema = validarEsquemaDeSalida(mesa.concepto ? ESQUEMA_CALENDARIO_TANDA_V2 : ESQUEMA_CALENDARIO_TANDA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema del calendario no es válido')
   const modelo = await modeloDeLaCadena(al)
@@ -263,7 +265,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   }
   const estr = (await al.ultimaEstrategia(campana.id))!.contenido
   const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
-  const semanas = semanasDeTanda(tanda)
+  const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
   const guardadas = (await al.filas(campana.id, version))
   const previas = guardadas.filter((f) => f.tanda < tanda && f.estado !== 'esquema')
   const fechas = await fechasDeclaradas(al, ctx, estr, campana)
@@ -313,7 +315,7 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
     if (f.estado === 'descartada_sin_fuente' || f.estado === 'espera_video') return f
     return { ...f, estado: enInvestigacion.has(f.id) ? 'en_investigacion' : 'validada', avisos: [...f.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), ...hs.filter((h) => h.fila_id === f.id && h.severidad === 'aviso').map((h) => h.ficha.que)] }
   })
-  const todas12 = tanda === 1 ? expandirPatron(estr, campana, Array.from({ length: SEMANAS_DE_PANORAMA }, (_, i) => i + 1).filter((s) => !semanas.includes(s)), 0, formatos).map((f) => ({ ...f, tanda: Math.ceil(f.semana / SEMANAS_DE_TANDA) })) : []
+  const todas12 = tanda === 1 ? expandirPatron(estr, campana, Array.from({ length: SEMANAS_DE_PANORAMA }, (_, i) => i + 1).filter((s) => !semanas.includes(s)), 0, formatos).map((f) => ({ ...f, tanda: Math.ceil(f.semana / medidaDeCampana(campana).semanasPorTanda) })) : []
   await al.guardarFilas(campana.id, version, 1, [...finales, ...todas12], campana.seco)
   for (const f of finales) {
     if (f.estado === 'espera_video') {
@@ -341,7 +343,8 @@ export async function validarSinEscribir(al: Almacen, cuerpo: Record<string, unk
   if (!c.ok) return c.r
   const { campana, ctx, formatos, lexico } = c.p
   if (cuerpo.tipo === 'estrategia') {
-    const hs = validarEstrategia(cuerpo.estrategia, { planTexto: ctx.planTexto, formatos })
+    const ajustada = normalizarPilares(cuerpo.estrategia)
+    const hs = [...(ajustada.aviso ? [ajustada.aviso] : []), ...validarEstrategia(ajustada.estrategia, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias })]
     return { status: 200, cuerpo: { hallazgos: hs, bloquea: hs.some((h) => h.severidad === 'bloquea'), forma_valida: problemasDeEsquema(cuerpo.estrategia).length === 0 } }
   }
   if (cuerpo.tipo === 'calendario') {
@@ -349,7 +352,7 @@ export async function validarSinEscribir(al: Almacen, cuerpo: Record<string, unk
     if (!estr) return err(409, 'E-SIN-ESTRATEGIA', 'no hay una estrategia guardada')
     if (!esTanda(cuerpo.tanda_agente)) return err(400, 'E-TANDA', 'tanda_agente debe traer piezas y ajustes_al_patron')
     const tanda = Number(cuerpo.tanda ?? 1)
-    const semanas = semanasDeTanda(tanda)
+    const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
     const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
     const previas = (await al.filas(campana.id, version)).filter((f) => f.tanda < tanda && f.estado !== 'esquema')
     const filas = resolverDependencias(fusionarTanda(expandirPatron(estr, campana, semanas, tanda, formatos), cuerpo.tanda_agente, estr, campana, tanda, formatos).filas, previas).filas
@@ -379,10 +382,10 @@ export async function calendarioSiguiente(al: Almacen, cuerpo: Record<string, un
   const hechas = (await al.filas(id, version)).filter((f) => f.estado !== 'esquema')
   const ultima = hechas.reduce((m, f) => Math.max(m, f.tanda), 0)
   if (ultima === 0 && !encendida) return { status: 200, cuerpo: { tanda: null, motivo: 'todavía no hay una primera tanda' } }
-  if (ultima >= TOTAL_DE_TANDAS) return { status: 200, cuerpo: { tanda: null, motivo: 'ya están todas las tandas' } }
+  if (ultima >= medidaDeCampana(c).totalTandas) return { status: 200, cuerpo: { tanda: null, motivo: 'ya están todas las tandas' } }
   let faltan: number | null = null
   if (ultima > 0) {
-    const finDeLaTanda = fechaDeFila(c.fecha_inicio, semanasDeTanda(ultima).slice(-1)[0], 7)
+    const finDeLaTanda = fechaDeFila(c.fecha_inicio, semanasDeTanda(ultima, medidaDeCampana(c)).slice(-1)[0], 7)
     const hoy = (cadena(cuerpo.hoy) ?? ahora).slice(0, 10)
     faltan = diasEntre(hoy, finDeLaTanda)
     if (faltan > 14) return { status: 200, cuerpo: { tanda: null, motivo: `faltan ${faltan} días para que termine la tanda ${ultima} (se abre a los 14)` } }
@@ -409,14 +412,14 @@ export async function retomarPorCantidades(al: Almacen, campana: Campana, ahora:
   const tanda = Math.min(...pendientes.map((f) => f.tanda))
   const bloqueos = await al.hallazgosQueBloquean(campana.id, tanda)
   // lo guardado por la regla VIEJA: V08 de cantidad faltante y V14 de fila (el léxico, que hoy ya no bloquea). Quien decide es la re-validación de abajo: si queda cualquier bloqueo, no se retoma.
-  const soloCantidad = bloqueos.length > 0 && bloqueos.every((b) => { if (b.fila_id !== null) return b.chequeo === 'V14'; const c = leerV08(b.ficha.que); return !!c && c.real < c.meta })
+  const soloCantidad = bloqueos.length > 0 && bloqueos.every((b) => { if (b.fila_id !== null) return b.chequeo === 'V14'; return !!leerV08(b.ficha.que) })
   if (!soloCantidad) return no('los bloqueos guardados no son solo de cantidad')
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
   const estr = (await al.ultimaEstrategia(campana.id))?.contenido
   if (!ctx || !estr) return no('falta el contexto o la estrategia')
   const formatos = await al.formatos()
   const lexico = lexicoDelCliente(ctx.industria, await al.leerConfig('lexico_afirmaciones'))
-  const semanas = semanasDeTanda(tanda)
+  const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
   const previas = todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema')
   const filas = todas.filter((f) => f.tanda === tanda && f.estado !== 'esquema')
   const salen = filas.filter((f) => f.estado === 'descartada_sin_fuente').map((f) => f.id)

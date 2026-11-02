@@ -120,6 +120,10 @@ describe('calendario · el método se pega SOLO con la gran idea y se gobierna p
 })
 
 describe('gancho de video corto · UNA voz, método short-video-scripter', () => {
+  it('🔴 las referencias del gancho llegan enteras (01-nov · firma de Emilio)', () => {
+    const t = tareaDeGanchoDeVideo({ ...pedido, referencias: [{ id: 'r-larga', texto: 'x'.repeat(1000) + 'FINAL' }] } as never)
+    expect(t).toContain('FINAL')
+  })
   const pedido = {
     ctx: { registro: 'vos' as const, idioma: null },
     idea: CONCEPTO.banco[0],

@@ -21,6 +21,7 @@ import { canalDelRevisor, espejoEncendido, registrarEventoDeEmilio, type AccionD
 import { empujeDelDashboard } from '@/lib/notas-del-dueno/ruta'
 import { TIPO_TARJETA_DE_CONCEPTO } from '@/lib/cadena/almacen'
 import { waitUntil } from '@vercel/functions'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '@/lib/limites-de-tamano'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -46,13 +47,13 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
   }
   const esDecision = body.status === 'approved' || body.status === 'rejected' || body.status === 'edited'
 
-  // la frase del aprobador (opcional): solo con una decisión; texto de 1 a 2000 caracteres; la hora de la frase, si viene, debe ser una fecha legible
+  // la frase del aprobador (opcional): solo con una decisión; texto del dueño hasta el tope común; la hora de la frase, si viene, debe ser una fecha legible
   const traeFrase = body.frase_del_aprobador !== undefined && body.frase_del_aprobador !== null
   let frase: string | null = null
   let horaDeLaFrase: string | null = null
   if (traeFrase) {
-    if (typeof body.frase_del_aprobador !== 'string' || !body.frase_del_aprobador.trim() || body.frase_del_aprobador.trim().length > 2000 || !esDecision) {
-      return NextResponse.json({ error: 'frase_del_aprobador_invalid', detail: 'la frase es un texto de 1 a 2000 caracteres y solo va con approved|rejected|edited' }, { status: 400 })
+    if (typeof body.frase_del_aprobador !== 'string' || !body.frase_del_aprobador.trim() || body.frase_del_aprobador.trim().length > TOPE_DEL_TEXTO_DEL_DUENO || !esDecision) {
+      return NextResponse.json({ error: 'frase_del_aprobador_invalid', detail: `la frase es un texto de 1 a ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres y solo va con approved|rejected|edited` }, { status: 400 })
     }
     frase = body.frase_del_aprobador.trim()
     if (body.hora_de_la_frase !== undefined && body.hora_de_la_frase !== null) {

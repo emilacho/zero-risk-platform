@@ -32,7 +32,7 @@ export async function ultimoManual(clientId: string): Promise<{ version: number;
   return { version: Number(version) || 0, manual }
 }
 
-const cortar = (s: unknown) => String(s ?? '').slice(0, 8000)
+const cortar = (s: unknown) => String(s ?? '')
 
 /** lo que escribieron los agentes del descubrimiento (documentos de ICP y panorama competitivo): sirve para detectar dudas, jamás como respaldo */
 export async function sintesisDelCliente(clientId: string): Promise<SintesisDeAgente[]> {
