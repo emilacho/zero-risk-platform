@@ -24,9 +24,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const LIMITE_POR_OMISION = 10
 export const LIMITE_MAXIMO = 50
 export const LARGO_DEL_CONTENIDO = 700
+/** 02-nov · «material completo»: con `todo` se entrega TODO lo que haya, por páginas de este tamaño (`desde` + `siguiente_desde`); el corte siempre se DECLARA */
+export const PAGINA_DE_TODO_POR_OMISION = 300
+export const PAGINA_DE_TODO_MAXIMA = 500
 
 export interface DepsDeConsultar { db: Db; ahora?: Date; reloj?: () => number }
-export interface ParametrosDeConsulta { client_id?: string | null; oficina?: string | null; agente?: string | null; que?: string | null; atributo?: string | null; clase?: string | null; sede_clave?: string | null; limite?: number | string | null }
+export interface ParametrosDeConsulta { client_id?: string | null; oficina?: string | null; agente?: string | null; que?: string | null; atributo?: string | null; clase?: string | null; sede_clave?: string | null; limite?: number | string | null
+  /** 02-nov · true/«1»: sin tope chico; entrega todo lo que haya (por páginas) */
+  todo?: boolean | string | null
+  /** 02-nov · desde qué posición seguir (páginas de `todo`) */
+  desde?: number | string | null
+  /** 02-nov · true/«1»: el contenido entero, sin el recorte de ${LARGO_DEL_CONTENIDO} caracteres */
+  contenido_completo?: boolean | string | null }
+const esSi = (v: unknown): boolean => v === true || ['1', 'true', 'si', 'sí'].includes(String(v ?? '').trim().toLowerCase())
 
 /** las sedes de una ficha: su columna `sede` (claves separadas por coma) o, si no, las de su rastro; vacío = vale para todas */
 function sedesDe(f: Fila): string[] {
@@ -52,7 +62,12 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
   const que = txt(p.que).slice(0, 400), atributo = txt(p.atributo).slice(0, 160), clase = txt(p.clase).slice(0, 80), sede = txt(p.sede_clave)
   if (!que && !atributo && !clase) return err(400, 'entrada_invalida', 'pasa `que` (texto libre), `atributo` o `clase`: algo que buscar')
   const pedido = Number(p.limite)
-  const limite = Number.isFinite(pedido) && pedido >= 1 ? Math.min(LIMITE_MAXIMO, Math.floor(pedido)) : LIMITE_POR_OMISION
+  const todo = esSi(p.todo), contenidoCompleto = esSi(p.contenido_completo)
+  const limite = todo
+    ? (Number.isFinite(pedido) && pedido >= 1 ? Math.min(PAGINA_DE_TODO_MAXIMA, Math.floor(pedido)) : PAGINA_DE_TODO_POR_OMISION)
+    : (Number.isFinite(pedido) && pedido >= 1 ? Math.min(LIMITE_MAXIMO, Math.floor(pedido)) : LIMITE_POR_OMISION)
+  const dd = Number(p.desde)
+  const desde = Number.isFinite(dd) && dd >= 0 ? Math.floor(dd) : 0
   const ahora = deps.ahora ?? new Date()
 
   const cl = await deps.db.from('clients').select('id').eq('id', clientId).limit(1)
@@ -72,14 +87,19 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
   const elegidas: FichaCandidata[] = []
   const ya = new Set<string>()
   const sumar = (xs: FichaCandidata[]) => { for (const x of xs) if (!ya.has(x.id)) { ya.add(x.id); elegidas.push(x) } }
-  if (atributo || clase) sumar(fichasPorAtributo({ tipo: atributo || undefined, fuente: clase || undefined }, cands))
+  // `clase` admite varias separadas por coma (02-nov: la mesa pide opiniones = comentarios, reseñas y menciones en una sola consulta)
+  if (atributo || clase) { const clases = clase.split(',').map((x) => x.trim()).filter(Boolean); if (clases.length > 1) { for (const c of clases) sumar(fichasPorAtributo({ tipo: atributo || undefined, fuente: c }, cands)) } else sumar(fichasPorAtributo({ tipo: atributo || undefined, fuente: clase || undefined }, cands)) }
   if (que) {
     sumar(fichasPorAtributo({ tipo: que }, cands))
-    sumar(candidatasPorPalabras(que, cands, limite * 2))
+    sumar(candidatasPorPalabras(que, cands, cands.length))
   }
   const vigente = (f: FichaCandidata) => !f.vigente_hasta || Date.parse(f.vigente_hasta) > ahora.getTime()
   // las frescas primero (se conserva el orden de relevancia dentro de cada grupo)
-  const porRelevancia = [...elegidas.filter(vigente), ...elegidas.filter((f) => !vigente(f))].slice(0, limite)
+  const orden = [...elegidas.filter(vigente), ...elegidas.filter((f) => !vigente(f))]
+  const porRelevancia = orden.slice(desde, desde + limite)
+  // 02-nov · el corte nunca es mudo: cuántas hay, cuántas van y desde dónde seguir
+  const totalEncontradas = orden.length
+  const siguienteDesde = desde + porRelevancia.length < totalEncontradas ? desde + porRelevancia.length : null
   // 01-nov · el embudo en todo: lo propio primero y luego global → país → competencia → directa; dentro de cada nivel se conserva el orden de relevancia (una ficha no trae cifra de gusto)
   const ordenadas = ordenarPorEmbudo(porRelevancia, (c) => ({ nivel: nivelDeFicha(porId.get(c.id)?.alcance), gusto: null }))
   const resultados = ordenadas.map((c) => {
@@ -87,7 +107,7 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
     const contenido = txt(f.contenido) || txt(f.que_es)
     return {
       ficha_id: c.id, nivel: nivelDeFicha(f.alcance), ref: c.ref, clase: c.clase, atributo: c.atributo || null, titulo: c.titulo || null,
-      contenido: contenido.length > LARGO_DEL_CONTENIDO ? `${contenido.slice(0, LARGO_DEL_CONTENIDO)}…` : contenido,
+      contenido: !contenidoCompleto && contenido.length > LARGO_DEL_CONTENIDO ? `${contenido.slice(0, LARGO_DEL_CONTENIDO)}…` : contenido,
       procedencia: procedenciaDe(f),
       fecha: f.observado_en ? String(f.observado_en) : null, fecha_de_la_fuente: f.fecha_fuente ? String(f.fecha_fuente) : null, reconfirmado_en: f.reconfirmado_en ? String(f.reconfirmado_en) : null,
       vigente_hasta: c.vigente_hasta, vencida: !vigente(c), sede: sedesDe(f).join(',') || null,
@@ -102,7 +122,9 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
     status: 200,
     body: {
       ok: true, client_id: clientId, consultado_por: { oficina, agente }, que: que || null, atributo: atributo || null, clase: clase || null, sede_clave: sede || null,
-      sin_dato: sinDato, total: ordenadas.length, resultados, contexto_del_cliente: contexto,
+      sin_dato: sinDato, total: ordenadas.length, resultados,
+      total_encontradas: totalEncontradas, entregadas: ordenadas.length, desde, cortada: siguienteDesde !== null, siguiente_desde: siguienteDesde,
+      ...(siguienteDesde !== null ? { aviso_de_corte: `hay ${totalEncontradas} fichas y van ${desde + ordenadas.length} (de la ${desde + 1} a la ${desde + ordenadas.length}): pide la siguiente página con desde=${siguienteDesde}${todo ? '' : ' (o todo=1 para traer todo por páginas)'}` } : {}), contexto_del_cliente: contexto,
       ...(sinDato ? { nota: 'el cerebro no tiene nada vigente sobre eso: no se inventa. Si lo necesitas, pídelo con POST /api/brain/alimentar/pedido (avisar_a te avisa cuando esté) o sigue declarando «sin dato del cerebro»' } : {}),
       registrada, ...(registrada ? {} : { registro_error: w.error?.message ?? 'sin detalle' }), ms, modelos_llamados: 0, costo_usd: 0,
     },

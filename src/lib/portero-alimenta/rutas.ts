@@ -17,7 +17,7 @@ import { cargarContextoDeBrazos } from './brazos/sistematica'
 import type { RespuestaDeLlamada } from './juez'
 import type { PuenteDeIndice } from './archivar'
 import { clientesActivos } from './clientes'
-import { COBERTURA_DEL_ALTA_HORAS, sinLoYaRaspado, type FilaDeRaspadoParaCubrir } from './cobertura'
+import { COBERTURA_DEL_ALTA_HORAS, sinLoYaRaspado, type FilaDeRaspadoParaCubrir, sinComentariosYaLeidosHoy, FUNCION_DE_COMENTARIOS_DE_INSTAGRAM, type FilaDeComentariosLeidos } from './cobertura'
 import { MAX_TROZOS_A_ESCRIBIR_POR_PASADA, MAX_TROZOS_A_SACAR_POR_PASADA, reconciliarPuente, type FichaParaPuente } from './puente'
 import { leerTodas } from './paginar'
 import { topeDiarioPorClienteUsd, topeQueCortaUsd, type ModoDelPortero } from './modo'
@@ -170,7 +170,17 @@ export async function rutaDescubrir(deps: DepsDeRutas, cuerpo: unknown): Promise
     cubierto_por_el_alta = sinLoYaRaspado(plan, lista(raw.data) as unknown as FilaDeRaspadoParaCubrir[], ahora)
     plan = { ...plan, hacer: cubierto_por_el_alta.hacer, costo_maximo_del_plan_usd: Math.round(cubierto_por_el_alta.hacer.reduce((x, a) => x + a.usd_max, 0) * 1e6) / 1e6 }
   }
-  return { status: 200, body: { dry_run: v.dry_run, tope_por_cliente_usd: plan.tope_usd, plan, cubierto_por_el_alta, gasto_de_hoy: g.gasto, propuestas, modelos_llamados: costoPropuestas > 0 || propuestas.aceptadas.length ? 1 : 0, costo_modelo_usd: costoPropuestas, ...(brazosCtxError ? { brazos_lectura_fallida: brazosCtxError } : {}) } }
+  // 02-nov · los comentarios de una publicación se piden UNA vez al día (aunque la corrida se repita o se reintente): se salta lo ya leído hoy
+  let comentarios_saltados_hoy: ReturnType<typeof sinComentariosYaLeidosHoy>['saltadas'] = []
+  if (plan.hacer.some((x) => x.funcion === FUNCION_DE_COMENTARIOS_DE_INSTAGRAM)) {
+    const dia0 = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate())).toISOString()
+    const ya = await deps.db.from('apify_raw').select('apify_function, params, filas, created_at').eq('client_id', v.client_id).eq('ensayo', false).eq('apify_function', FUNCION_DE_COMENTARIOS_DE_INSTAGRAM).gte('created_at', dia0).limit(50)
+    if (ya.error) return err(502, 'lectura_fallida', `apify_raw: ${ya.error.message}`)
+    const r = sinComentariosYaLeidosHoy(plan, lista(ya.data) as unknown as FilaDeComentariosLeidos[], ahora)
+    comentarios_saltados_hoy = r.saltadas
+    if (r.saltadas.length) plan = { ...plan, hacer: r.hacer, costo_maximo_del_plan_usd: Math.round(r.hacer.reduce((x, y) => x + y.usd_max, 0) * 1e6) / 1e6 }
+  }
+  return { status: 200, body: { dry_run: v.dry_run, tope_por_cliente_usd: plan.tope_usd, plan, cubierto_por_el_alta, comentarios_saltados_hoy, gasto_de_hoy: g.gasto, propuestas, modelos_llamados: costoPropuestas > 0 || propuestas.aceptadas.length ? 1 : 0, costo_modelo_usd: costoPropuestas, ...(brazosCtxError ? { brazos_lectura_fallida: brazosCtxError } : {}) } }
 }
 
 /**

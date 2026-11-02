@@ -55,3 +55,35 @@ export function sinLoYaRaspado(plan: Pick<PlanDelPortero, 'hacer'>, filas: FilaD
   }
   return { hacer, cubiertas, ahorro_usd: Math.round(cubiertas.reduce((s, c) => s + c.usd_max, 0) * 1e6) / 1e6 }
 }
+
+/**
+ * COMENTARIOS UNA VEZ AL DÍA (02-nov · firma de Emilio): una publicación cuyos comentarios YA se leyeron hoy (una llamada con datos, `filas > 0`) no se vuelve a pedir en el mismo día UTC,
+ * aunque la corrida se repita o se reintente. Se salta publicación por publicación: si queda alguna sin leer, se pide solo esa; si no queda ninguna, la acción sale del plan.
+ * Una llamada que no trajo nada (`filas = 0`) no cuenta como leída: se puede volver a intentar. Vale para el lector de comentarios de Instagram (el de TikTok, X y Facebook ya mira cada cuenta una vez cada 7 días).
+ */
+export const FUNCION_DE_COMENTARIOS_DE_INSTAGRAM = 'instagram_post_comments_scraper'
+export interface FilaDeComentariosLeidos { apify_function: string; params?: unknown; filas?: number | null; created_at: string }
+export interface PlanSinComentariosYaLeidos {
+  hacer: AccionDelPortero[]
+  saltadas: Array<{ objetivo: string; usd_max: number }>
+}
+export function sinComentariosYaLeidosHoy(plan: Pick<PlanDelPortero, 'hacer'>, filas: FilaDeComentariosLeidos[], ahora: Date): PlanSinComentariosYaLeidos {
+  const inicioDelDia = Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate())
+  const leidas = new Set<string>()
+  for (const f of filas) {
+    if (f.apify_function !== FUNCION_DE_COMENTARIOS_DE_INSTAGRAM || !((f.filas ?? 0) > 0) || !(Date.parse(f.created_at) >= inicioDelDia)) continue
+    for (const o of objetivosDeParams(f.params)) leidas.add(o)
+  }
+  const hacer: AccionDelPortero[] = []
+  const saltadas: PlanSinComentariosYaLeidos['saltadas'] = []
+  for (const a of plan.hacer) {
+    const urls = esObjeto(a.params) && Array.isArray(a.params.directUrls) ? (a.params.directUrls as unknown[]).filter((u): u is string => typeof u === 'string') : null
+    if (a.funcion !== FUNCION_DE_COMENTARIOS_DE_INSTAGRAM || !urls || !urls.length) { hacer.push(a); continue }
+    const pendientes = urls.filter((u) => !leidas.has(normalizarObjetivo(u)))
+    if (pendientes.length === urls.length) { hacer.push(a); continue }
+    const usd = Math.round(a.usd_max * ((urls.length - pendientes.length) / urls.length) * 1e6) / 1e6
+    saltadas.push({ objetivo: urls.filter((u) => leidas.has(normalizarObjetivo(u))).join(' '), usd_max: usd })
+    if (pendientes.length) hacer.push({ ...a, params: { ...(a.params as Record<string, unknown>), directUrls: pendientes }, objetivo: pendientes.join(' '), usd_max: Math.round((a.usd_max - usd) * 1e6) / 1e6 })
+  }
+  return { hacer, saltadas }
+}

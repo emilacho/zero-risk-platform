@@ -34,6 +34,8 @@ export interface Analista {
   readonly dimension: string
   /** el texto con que la mesa le pide al portero las fichas de ese tema (`GET /api/brain/consultar?que=`) */
   readonly que: string
+  /** 02-nov · clases de fichas que se piden COMPLETAS (coma = varias): todo lo que haya de ellas, con su fecha real */
+  readonly clases?: string
   /** qué sostiene un hallazgo: una cita a una ficha del material, o (mercado) fuente Y fecha como las señales de F4 */
   readonly exige: 'cita' | 'fuente_y_fecha'
   readonly reglas: ReadonlyArray<string>
@@ -52,7 +54,7 @@ export const ANALISTAS: Readonly<Record<TipoDeAnalisis, Analista>> = {
     reglas: ['Solo lo que las fichas muestran de los competidores: oferta, precio, mensaje, canales, ritmo. Di qué hueco dejan. NO inventes competidores ni cifras que las fichas no traen.'],
   },
   voz_del_publico: {
-    tipo: 'voz_del_publico', agente: 'feedback-synthesizer', dimension: 'qué dice el público: reseñas, comentarios y menciones', que: 'reseñas comentarios menciones público', exige: 'cita',
+    tipo: 'voz_del_publico', agente: 'feedback-synthesizer', dimension: 'qué dice el público: reseñas, comentarios y menciones', que: 'reseñas comentarios menciones público', clases: 'comentarios,resenas,mencion', exige: 'cita',
     reglas: ['Solo lo que el público dijo en las fichas: temas que se repiten, elogios, quejas, preguntas sin responder. Cuenta cuántas veces aparece cada tema. NO cites a ninguna persona por su nombre.'],
   },
   escucha_x: {
@@ -110,10 +112,10 @@ export function repartirTopes(pedidos: ReadonlyArray<PedidoConTope>): number[] {
 
 // ─────────────────────────────────────────────────────────── el material
 export interface FichaDelMaterial { readonly ficha_id: string; readonly clase: string | null; readonly fecha: string | null; readonly contenido: string }
-export interface Material { readonly texto: string; readonly ids: ReadonlyArray<string>; readonly fichas: number; readonly recortado: boolean; readonly con_resumen_vivo: boolean }
+export interface Material { readonly texto: string; readonly ids: ReadonlyArray<string>; readonly fichas: number; readonly recortado: boolean; readonly con_resumen_vivo: boolean; /** cuántas fichas del tema había en el cerebro (02-nov: para declarar si falta alguna) */ readonly encontradas?: number }
 
 /** el material del analista: el resumen vivo ENTERO (si lo hay) y las fichas del portero rotuladas con su id, hasta el tope (se declara el recorte) */
-export function armarMaterial(a: { resumen_vivo: string | null; fichas: ReadonlyArray<FichaDelMaterial>; /** las fichas que cita el resumen vivo: el analista las leyó ahí y citarlas es válido (corrida 210273: la consulta no trajo fichas y un informe bien citado se descartó) */ ids_del_resumen?: ReadonlyArray<string> }): Material {
+export function armarMaterial(a: { resumen_vivo: string | null; fichas: ReadonlyArray<FichaDelMaterial>; /** las fichas que cita el resumen vivo: el analista las leyó ahí y citarlas es válido (corrida 210273: la consulta no trajo fichas y un informe bien citado se descartó) */ ids_del_resumen?: ReadonlyArray<string>; /** cuántas fichas del tema tiene el cerebro (si es mayor que las que llegaron, se dice) */ encontradas?: number }): Material {
   const ids: string[] = []
   const lineas: string[] = []
   let largo = 0
@@ -127,9 +129,10 @@ export function armarMaterial(a: { resumen_vivo: string | null; fichas: Readonly
   const texto = [
     resumen ? `RESUMEN VIVO DEL CLIENTE (lo que el cerebro sabe hoy, entero):\n${resumen}` : 'RESUMEN VIVO DEL CLIENTE: no hay todavía.',
     lineas.length ? `FICHAS DEL CEREBRO SOBRE EL TEMA (cita el id entre corchetes tal cual):\n${lineas.join('\n')}` : 'FICHAS DEL CEREBRO SOBRE EL TEMA: ninguna.',
+    ...(!recortado && a.encontradas !== undefined && a.encontradas > a.fichas.length ? [`(llegaron ${a.fichas.length} de ${a.encontradas} fichas del tema: faltan ${a.encontradas - a.fichas.length})`] : []),
     ...(recortado ? [`(el material se recortó al tope de ${TOPE_DEL_MATERIAL} caracteres: ${ids.length} de ${a.fichas.length} fichas)`] : []),
   ].join('\n\n')
-  return { texto, ids: [...new Set([...ids, ...(a.ids_del_resumen ?? [])])], fichas: ids.length, recortado, con_resumen_vivo: resumen.length > 0 }
+  return { texto, ids: [...new Set([...ids, ...(a.ids_del_resumen ?? [])])], fichas: ids.length, recortado, con_resumen_vivo: resumen.length > 0, ...(a.encontradas !== undefined ? { encontradas: a.encontradas } : {}) }
 }
 
 // ─────────────────────────────────────────────────────────── la tarea
