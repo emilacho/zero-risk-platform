@@ -69,7 +69,8 @@ describe('🔴 los departamentos', () => {
 describe('🔴 la reversa', () => {
   it('devuelve los dos departamentos, las asignaciones y borra solo tarjetas apagadas de la lista', () => {
     for (const x of ['fabeb80c-a5c7-48ff-9725-33c52ba0a322', '3dbba4e0-e325-4dd4-8115-f899c386c4e4', "display_name = 'Sales'", "reports_to = '62ca50de-d9da-4b98-8861-3ae30ebe5377'", "role = 'jefe_departamento' WHERE name = 'editor_en_jefe'", "'530570e8-8ca2-4e63-b9f6-236c0c4a1d35' WHERE name = 'reporting_agent'", 'DELETE FROM public.oficina_directorio WHERE activo = false']) expect(REVERSA).toContain(x)
-    for (const x of tarjetas()) expect(REVERSA).toContain(`'${x.agente}'`)
+    const lista = REVERSA.slice(REVERSA.indexOf('DELETE FROM public.oficina_directorio'))
+    for (const x of tarjetas()) expect(lista).toContain(`'${x.agente}'`)
     for (const a of LAS_19_DE_HOY) expect(REVERSA).not.toContain(`'${a}'`)
   })
 })
