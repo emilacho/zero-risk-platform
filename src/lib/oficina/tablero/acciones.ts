@@ -8,7 +8,7 @@ import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { planAprobar, planCambios } from './plan'
 import { firmarTablero, revisionResolver } from './revisiones'
 import { empujarManualAlCerebro } from '../../brain/push-al-terminar'
-import { rutaDecidirPalabra, rutaValidarManual } from '../../manual/edicion-rutas'
+import { rutaDecidirPalabra, rutaValidarCampo, rutaValidarManual } from '../../manual/edicion-rutas'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -208,8 +208,15 @@ export const manualValidar: Manejador = async ({ db }, { cuerpo, reviewer }) => 
   return { status: s.status, cuerpo: s.body, toca: s.toca }
 }
 
+// ───────────────────────── manual-validar-campo (US$ 0): valida o desvalida un campo, sin versión nueva
+export const manualValidarCampo: Manejador = async ({ db }, { cuerpo, reviewer }) => {
+  const s = await rutaValidarCampo({ db }, cuerpo, reviewer)
+  return { status: s.status, cuerpo: s.body, toca: s.toca }
+}
+
 export const ACCIONES: Record<string, Manejador> = {
   'manual-validar': manualValidar,
+  'manual-validar-campo': manualValidarCampo,
   'manual-palabra': manualPalabra,
   'revision-resolver': revisionResolver,
   'firmar-tablero': firmarTablero,

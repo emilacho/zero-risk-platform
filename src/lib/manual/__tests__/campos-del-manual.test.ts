@@ -57,10 +57,9 @@ describe('la definición única · una fila por campo', () => {
     const t = chunksFromBrandBook(fila).find((x) => x.section_label === 'brand_mission')
     expect(t?.metadata).toMatchObject({ campo: 'mision', procedencia: { fuente: 'sitio', confianza: 0.9, estado: 'confirmado' } })
   })
-  it('los campos que el tablero edita tienen su clave de tablero y los derivados no se editan', () => {
+  it('el tablero conserva sus claves cortas y el dueño puede editar todos los campos', () => {
     expect(CAMPOS.filter((c) => c.clave_del_tablero).map((c) => c.clave_del_tablero).sort()).toEqual(['eslogan', 'nunca', 'posicionamiento', 'proposito', 'publico', 'valores', 'voz'])
-    expect(CAMPO_POR_CLAVE.icp_summary.editable).toBe(true)
-    expect(CAMPO_POR_CLAVE.customer_angle.editable).toBe(false)
+    expect(CAMPOS.filter((c) => !c.editable)).toEqual([])
   })
   it('N1 · valores, productos, sedes, lo que nunca hace y visión son obligatorios, además de los de siempre', () => {
     const o = obligatoriosPara()

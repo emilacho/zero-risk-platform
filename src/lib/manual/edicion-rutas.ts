@@ -1,9 +1,9 @@
 /**
  * Las rutas de «editar y validar el manual desde el dashboard» (30-oct). Las dos hacen primero lo del manual y DESPUÉS lo del cerebro; si el cerebro falla, el manual ya quedó y el pendiente se dice.
- *   PATCH /api/manual/{client_id}/campos   cuerpo: { campos:{<clave del tablero>: texto}, comentario?, reviewer, origen:'dashboard' }
+ *   PATCH /api/manual/{client_id}/campos   cuerpo: { campos:{<clave del borrador o del tablero>: texto}, comentario?, reviewer, origen:'dashboard' }
  *   POST  /api/tablero/manual-validar      cuerpo: { client_id, reviewer, origen:'dashboard' }
  */
-import { decidirPalabraDelDueno, editarManualDelDueno, empujarCamposAlCerebro, validarManualDelDueno, type Db, type DepsDelCerebro } from './edicion-del-dueno'
+import { decidirPalabraDelDueno, editarManualDelDueno, empujarCamposAlCerebro, validarCampoDelManual, validarManualDelDueno, type Db, type DepsDelCerebro } from './edicion-del-dueno'
 
 type Fila = Record<string, unknown>
 export interface DepsDeEdicion {
@@ -50,6 +50,16 @@ export async function rutaDecidirPalabra(d: DepsDeEdicion, cuerpo: Fila, reviewe
   if (!r.ok) return { status: r.status, body: { ok: false, error: r.error, detalle: r.detalle }, toca }
   const indice = d.empujarManual({ client_id, source_id: r.source_id })
   return { status: 200, toca, body: { ok: true, version_nueva: r.version_nueva, decision: r.decision, texto: r.texto, prohibidas: r.duras, cerebro: { indice: indice.estado } } }
+}
+
+/** POST /api/tablero/manual-validar-campo · cuerpo: { client_id, campo, validado?: boolean (true por omisión), reviewer, origen:'dashboard' } · sin versión nueva */
+export async function rutaValidarCampo(d: Pick<DepsDeEdicion, 'db' | 'ahora'>, cuerpo: Fila, reviewer: string): Promise<SalidaDeEdicion> {
+  const client_id = typeof cuerpo.client_id === 'string' ? cuerpo.client_id : ''
+  const toca = { client_id: client_id || null }
+  if (cuerpo.validado !== undefined && typeof cuerpo.validado !== 'boolean') return { status: 400, body: { ok: false, error: 'entrada_invalida', detalle: '`validado` debe ser verdadero o falso' }, toca }
+  const r = await validarCampoDelManual(d.db, { client_id, campo: cuerpo.campo, validado: cuerpo.validado !== false, reviewer, ahora: (d.ahora ?? (() => new Date()))() })
+  if (!r.ok) return { status: r.status, body: { ok: false, error: r.error, detalle: r.detalle }, toca }
+  return { status: 200, toca, body: { ...r } }
 }
 
 export async function rutaValidarManual(d: DepsDeEdicion, client_id: string, reviewer: string): Promise<SalidaDeEdicion> {
