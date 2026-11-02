@@ -405,8 +405,19 @@ describe('5 · el juez anota los datos duros sin fuente (no borra, no cambia)', 
     const entrada = conDatos()
     for (const r of [new Error('timeout'), { body: { response: 'no sé' } }] as any[]) {
       const { out } = await correr(EQUIPO.notas, entrada, () => r)
-      expect(out.brand_book_draft).toEqual(entrada.brand_book_draft); expect(out._equipo.declarado.join(' ')).toMatch(/el juez de datos duros/); expect(out._equipo.datos_duros_juez.corrio).toBe(false)
+      const { _equipo: resumen, ...sinResumen } = out.brand_book_draft; expect(sinResumen).toEqual(entrada.brand_book_draft); expect(resumen.declarado.join(' ')).toMatch(/el juez de datos duros/); expect(out._equipo.declarado.join(' ')).toMatch(/el juez de datos duros/); expect(out._equipo.datos_duros_juez.corrio).toBe(false)
     }
+  })
+  it('lo que el equipo declaró viaja DENTRO del borrador (el Promote solo manda el borrador): qué se pidió, qué se conservó por estar validado y qué falló', async () => {
+    const RE2 = { cambios_del_dueno: 'cambia el tono de WhatsApp a formal', seccion: '', campos_validados: ['tono_por_canal'], campos_liberados: [], manual_vigente: JSON.stringify({ tono_por_canal: ['x'] }), tope_reescritura_usd: 8 }
+    const e = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE2 })
+    const i = await correr(EQUIPO.integra, { ...base(), ...e.out }, () => { throw new Error('no') }, { reescritura: RE2 })
+    const n = await correr(EQUIPO.notas, { ...base(), ...i.out }, () => ({ body: { response: JSON.stringify({ notas: [] }) } }), { reescritura: RE2 })
+    const r = n.out.brand_book_draft._equipo
+    expect(r.reescritura).toBe(true); expect(r.protegidos).toEqual(['tono_por_canal']); expect(r.objetivo).toEqual([]); expect(r.conservados).toEqual(['tono_por_canal'])
+    expect(r.declarado.join(' ')).toMatch(/conserva lo validado: tono_por_canal/); expect(r.datos_duros_juez).toMatchObject({ corrio: true })
+    const sin = await correr(EQUIPO.notas, base({ brand_book_draft: { client_id: 'c-1' } }), () => { throw new Error('no') })
+    expect(sin.out.brand_book_draft._equipo).toMatchObject({ reescritura: false, objetivo: [], declarado: [] })
   })
   it('sin campos que revisar no hay llamada', async () => {
     const { llamadas, out } = await correr(EQUIPO.notas, base({ brand_book_draft: { client_id: 'c-1' } }), () => { throw new Error('no debía llamar') })

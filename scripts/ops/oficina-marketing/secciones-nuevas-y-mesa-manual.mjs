@@ -342,9 +342,11 @@ export const CODIGO_NOTAS = String.raw`// (adenda 1) 02-nov · DECISIÓN DE EMIL
 ` + COMUN + String.raw`
 const eq = j._equipo || {};
 const declarado = (eq.declarado || []).slice();
+// lo que el equipo declaró viaja DENTRO del borrador (Promote prep solo manda el borrador): la pantalla le dice a Emilio qué se conservó y por qué
+const resumen = (juez) => ({ reescritura: !!(eq.plan && eq.plan.reescritura), objetivo: ((eq.plan && eq.plan.objetivo) || []).slice(), protegidos: ((eq.plan && eq.plan.protegidos) || []).slice(), conservados: (eq.conservados || []).slice(), declarado: declarado.slice(0, 20).map((x) => t(x, 300)), integracion: eq.integracion || null, datos_duros_juez: juez });
 const REVISADOS = ['positioning', 'icp_summary', 'voice_description', 'customer_angle', 'retention_notes', 'vision', 'mision', 'proposito', 'propuestas_de_valor', 'productos', 'sedes'].concat(MIOS);
 const cuerpo = elegir(draft, REVISADOS);
-if (!Object.keys(cuerpo).length) return [{ json: Object.assign({}, j, { _equipo: Object.assign({}, eq, { datos_duros_juez: { corrio: false, motivo: 'no hay campos que revisar' }, declarado: declarado }) }) }];
+if (!Object.keys(cuerpo).length) { const juez = { corrio: false, motivo: 'no hay campos que revisar' }; return [{ json: Object.assign({}, j, { brand_book_draft: Object.assign({}, draft, { _equipo: resumen(juez) }), _equipo: Object.assign({}, eq, { datos_duros_juez: juez, declarado: declarado }) }) }]; }
 const { ev, omitidas } = evidenciaHasta(6500);
 const cabeza = 'Eres el evaluador de FIDELIDAD de un manual de marca. ANOTA (no corriges, no borras, no puntúas) cada DATO DURO escrito en los CAMPOS que NO aparece en la EVIDENCIA: teléfonos, direcciones, horarios, precios, fechas o años, y cifras (cantidad de socios, de sedes, de años…). ' +
   'Un dato que sí está en la evidencia (aunque con otro formato: espacios, puntos, mayúsculas) NO se anota. Las frases de estilo («máximo 3 líneas») y las propuestas de redacción no son datos duros. ' +
@@ -370,7 +372,9 @@ if (notas.length) {
   nuevo.notas_del_juez = notas;
 }
 if (!r.ok) declarado.push('el juez de datos duros: ' + r.error);
-return [{ json: Object.assign({}, j, { brand_book_draft: nuevo, _equipo: Object.assign({}, eq, { datos_duros_juez: { corrio: r.ok, notas_n: notas.length, descartadas: descartadas, evidencia_omitida: omitidas }, declarado: declarado }) }) }];`
+const juez = { corrio: r.ok, notas_n: notas.length, descartadas: descartadas, evidencia_omitida: omitidas };
+nuevo._equipo = resumen(juez);
+return [{ json: Object.assign({}, j, { brand_book_draft: nuevo, _equipo: Object.assign({}, eq, { datos_duros_juez: juez, declarado: declarado }) }) }];`
 
 export function construirSeccionesNuevasYMesa(f) {
   // el piso y la revisión de estilo deben existir (esta parte se apoya en (c2))
