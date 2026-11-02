@@ -10,7 +10,7 @@
 import { controlarCoherenciaDelPlan } from '../../planeacion/coherencia-del-plan'
 import { armarQueCambio, ponerQueCambio, type FichaDelCambio } from './plan'
 import { conLasPaginasDelSitio } from './carpeta-para-revisar'
-import { controlarFrasesNegadas } from '../../planeacion/coherencia-del-plan'
+import { controlarActivosDeSoloLectura, controlarFrasesNegadas } from '../../planeacion/coherencia-del-plan'
 import crypto from 'node:crypto'
 import { estadoInicial, fichaNueva, registrarPaso, siguientePaso, type Artefacto, type Estado, type Ficha, type Paso, type Plantilla, type ResultadoDePaso } from '../../revision-comun'
 import { desacuerdosDe, hayQueAvisar, resolverCierre, textoDelAviso, type Cierre } from './cierre'
@@ -57,7 +57,10 @@ export function fichasDeCoherencia(texto: string, contexto: string, ahora: Date)
 
 /** punto 3 · lo que contradice lo declarado por el dueño bloquea; lo mira el código, además del revisor */
 export function fichasDeLoNegado(texto: string, hechos: Array<{ tema: string; frases_negadas: string[] }>): Ficha[] {
-  return controlarFrasesNegadas(texto, hechos).map((h, i) => fichaNueva(`codigo-dueno-${i}`, 'jefe', h.donde, 'bloquea', h.que, 'lo que declaró el dueño', 'quitar esa frase: lo declarado por el dueño manda'))
+  return [
+    ...controlarFrasesNegadas(texto, hechos).map((h, i) => fichaNueva(`codigo-dueno-${i}`, 'jefe', h.donde, 'bloquea', h.que, 'lo que declaró el dueño', 'quitar esa frase: lo declarado por el dueño manda')),
+    ...controlarActivosDeSoloLectura(texto, hechos).map((h, i) => fichaNueva(`codigo-activo-${i}`, 'jefe', h.donde, 'bloquea', h.que, 'lo que declaró el dueño', 'reformularlo como un pedido al dueño; la agencia no lo toca')),
+  ]
 }
 
 function estadoDeApertura(entrada: EntradaDeRevision): Estado {
