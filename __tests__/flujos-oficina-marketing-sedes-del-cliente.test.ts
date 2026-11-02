@@ -5,10 +5,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { sinFraseSedes } from './_sin-frase-sedes'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
 const leer = (d: string) => JSON.parse(fs.readFileSync(path.join(RAIZ, d, 'X9F0zp6LQ2xGEYVS.json'), 'utf8'))
-const aplicado = leer('aplicado'), nuevo = leer('nuevo')
+const aplicado = leer('aplicado'), nuevo = sinFraseSedes(leer('nuevo'))
 const AsyncFunction = Object.getPrototypeOf(async () => 0).constructor
 
 const carpeta = (extra: Record<string, unknown> = {}) => ({ brazo: 'cerebro', estado: 'trajo', objetivo: 'cerebro', datos: { contexto_del_cliente: { resumen_vivo: { estado: 'vigente', texto: 'RESUMEN DEL CLIENTE' }, informes: [], ...extra } } })
