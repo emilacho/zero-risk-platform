@@ -27,7 +27,7 @@ import { estadoDeLasSedes } from '../sedes/por-abrir'
 import { esloganDelCliente, reglaDelEslogan } from '../manual/campos-del-manual'
 
 /** lee el eslogan del manual vigente; un contenido ilegible no tumba la lectura */
-function esloganParaLaCadena(m: { tagline?: string | null; content_text?: string | null } | undefined): { texto: string; regla: string } | null {
+export function esloganParaLaCadena(m: { tagline?: string | null; content_text?: string | null } | undefined): { texto: string; regla: string } | null {
   if (!m) return null
   let borrador: Record<string, unknown> = {}
   try { borrador = (JSON.parse(m.content_text ?? '') as { brand_book_draft?: Record<string, unknown> }).brand_book_draft ?? {} } catch { /* queda la columna */ }

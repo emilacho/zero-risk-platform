@@ -10,6 +10,9 @@ import { conservarLoDelDueno } from '../src/lib/manual/edicion-del-dueno'
 import { renderManualLimpio } from '../src/lib/brand-book-render-limpio'
 import { adjuntoDelCliente } from '../src/lib/portero-alimenta/contexto-del-cliente'
 import { textoDeLaCarpeta } from '../src/lib/jefatura/revision/carpeta-para-revisar'
+import { esloganParaLaCadena } from '../src/lib/cadena/almacen-supabase'
+import { marcoDelBrief, marcoDelConcepto } from '../src/lib/cadena/mesas'
+import { clienteA, contextoDe } from '../src/lib/cadena/__fixtures__/clientes'
 
 const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 // la forma que tiene hoy un manual real: la marca se perdió, la procedencia quedó
@@ -66,6 +69,30 @@ describe('🔴 ADENDA 3: contexto, salvo lo que declaró el dueño', () => {
   })
   it('🔴 la columna sin fuente no se rotula como hallada en sus canales', () => {
     expect(esloganDelCliente({ tagline: 'Algo' })?.fuente).toBe('según el manual')
+  })
+})
+
+describe('🔴 lo que reciben la cadena y el revisor (huecos que halló CC3)', () => {
+  const A = clienteA()
+  const ctx = (regla: string) => ({ ...contextoDe(A), eslogan: { texto: 'Frase de prueba', regla } })
+  it('el almacén antepone la fuente al aviso', () => {
+    expect(esloganParaLaCadena({ tagline: 'Algo', content_text: '' })).toEqual({ texto: 'Algo', regla: `según el manual; ${REGLA_DEL_ESLOGAN}` })
+  })
+  it('🔴 si la declaró el dueño, la cadena lo recibe como que manda', () => {
+    const r = esloganParaLaCadena({ content_text: JSON.stringify({ brand_book_draft: { tagline_opciones: 'Del mar [frase propia del cliente, verbatim — escrita por el dueño]', _field_meta: { tagline_opciones: { fuente: 'dueno' } } } }) })
+    expect(r?.regla).toMatch(/manda.*variantes/)
+  })
+  it('🔴 la carpeta del revisor dice que manda cuando la declaró el dueño, aunque el campo traiga el texto genérico', () => {
+    const c = { hechos_del_dueno: [], resumen_vivo: [], informes: [], eslogan: { texto: 'Del mar', fuente: 'lo declaró el dueño', regla: REGLA_DEL_ESLOGAN } }
+    expect(textoDeLaCarpeta(c as never)).toMatch(/Del mar.*manda.*variantes/)
+  })
+  it('🔴 las mesas de brief y de concepto la presentan como contexto', () => {
+    const brief = marcoDelBrief({ ctx: ctx(REGLA_DEL_ESLOGAN), estrategia: A.estrategia, version: 1, devolucion: null, nota: null })
+    const concepto = marcoDelConcepto({ ctx: ctx(REGLA_DEL_ESLOGAN), estrategia: A.estrategia, briefTexto: 'brief', version: 1, nota: null })
+    for (const t of [brief, concepto]) {
+      expect(t).toContain(`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«Frase de prueba»: ${REGLA_DEL_ESLOGAN}`)
+      expect(t).not.toMatch(/ESLOGAN QUE EL CLIENTE/)
+    }
   })
 })
 
