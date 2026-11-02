@@ -1,0 +1,190 @@
+{
+  "name": "Zero Risk — Reconciliador de despachos huérfanos (reloj · cada 5 min · CC#1)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "name": "Reloj · cada 5 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const SOLO_LECTURA = false\n// EL RECONCILIADOR DE DESPACHOS HUÉRFANOS · la lógica pura · CC#1 · 2026-09-30 · GO de Emilio (evaluación 30-sep §6/§10).\n// Un RELOJ aparte que mira el SÍNTOMA («despacho aceptado, sin recibo, sin vuelta») y no la causa, para que las dos causas medidas\n// (saldo agotado · tope de la vuelta de Vercel a los 800 s) y cualquier causa futura se VEAN en vez de perderse.\n// REGLA 8 de la evaluación: todo arreglo tiene que hacer DISTINGUIBLE «terminó y no pudo entregar» de «nunca arrancó».\n// Lógica PURA (sin red, sin `this`, sin `URL`, sin `require` fuera de este archivo): se prueba a costo cero y se pega en el nodo del reloj.\n//\n// Entradas por despacho (`agent_dispatches`): status accepted|running|completed|error · created_at · workflow_execution_id · agent_name.\n// Contexto: `invocacion` = la fila de `agent_invocations` (misma ejecución y agente, posterior al despacho; se escribe AL TERMINAR el trabajo)\n//           `intentos`   = filas de `agent_callback_attempts` cuya dirección trae esa ejecución (`/webhook-waiting/<ejecución>`).\n\nvar PARAMETROS = {\n  // un despacho aceptado que no llega a «running» en 3 min no arrancó (el marcador running se escribe a los segundos)\n  ACEPTADO_MAX_S: 180,\n  // un agente puede tardar mucho (medido: 32 min); pasada 1 h sin ninguna señal de vida, se da por muerto\n  CORRIENDO_MAX_S: 3600,\n  // el callback llega a los segundos de terminar el trabajo: 3 min de gracia antes de dar el resultado por «no entregado»\n  GRACIA_ENTREGA_S: 180,\n}\n\nvar CLASES = {\n  ok: { severidad: 'ok', que: 'despacho cerrado' },\n  en_curso: { severidad: 'ok', que: 'trabajando dentro de lo esperado' },\n  entregado_ledger_abierto: { severidad: 'info', que: 'la vuelta SÍ se entregó pero el registro del despacho quedó abierto' },\n  error_entregado: { severidad: 'info', que: 'falló y el error SÍ le llegó al que esperaba' },\n  error_callback_409: { severidad: 'info', que: 'falló; el que llamó no espera por callback (lo sondea): sus intentos dan 409' },\n  termino_y_no_entrego: { severidad: 'alta', que: 'TERMINÓ el trabajo y NADIE lo entregó · el resultado existe · el que esperaba no se enteró' },\n  nunca_arranco: { severidad: 'alta', que: 'se ACEPTÓ el trabajo y NUNCA arrancó' },\n  sin_senales_de_vida: { severidad: 'alta', que: 'lleva más de 1 h «corriendo» sin ninguna señal de vida · probablemente murió' },\n  error_sin_entrega: { severidad: 'alta', que: 'FALLÓ y el error NO le llegó al que esperaba (sin intentos de vuelta o todos fallaron) · su espera puede estar colgada' },\n}\n\nfunction segundos(desde, hasta) {\n  var a = new Date(desde).getTime()\n  var b = typeof hasta === 'number' ? hasta : new Date(hasta).getTime()\n  return Math.round((b - a) / 1000)\n}\n\n/** ¿La dirección de una fila de intentos es la de esta ejecución? (sin `URL`: solo texto) */\nfunction intentoDeLaEjecucion(url, ejecucion) {\n  if (!url || !ejecucion) return false\n  return String(url).indexOf('/webhook-waiting/' + String(ejecucion) + '?') !== -1 || String(url).slice(-('/webhook-waiting/' + String(ejecucion)).length) === '/webhook-waiting/' + String(ejecucion)\n}\n\n/** Empareja la invocación de un despacho: misma ejecución + mismo agente + creada DESPUÉS del despacho (menos 5 s de tolerancia). */\nfunction invocacionDe(despacho, invocaciones) {\n  var t0 = new Date(despacho.created_at).getTime() - 5000\n  var mejor = null\n  for (var i = 0; i < (invocaciones || []).length; i++) {\n    var v = invocaciones[i]\n    if (String(v.workflow_execution_id) !== String(despacho.workflow_execution_id)) continue\n    if (v.agent_name !== despacho.agent_name) continue\n    if (new Date(v.created_at).getTime() < t0) continue\n    if (!mejor || new Date(v.created_at) < new Date(mejor.created_at)) mejor = v\n  }\n  return mejor\n}\n\n/**\n * Clasifica UN despacho. Devuelve { clasificacion, severidad, que, evidencia }.\n * `ahora` en milisegundos. NO modifica nada.\n */\nfunction clasificarDespacho(despacho, invocacion, intentos, ahora, params) {\n  var P = params || PARAMETROS\n  var edad = segundos(despacho.created_at, ahora)\n  var ok = (intentos || []).filter(function (x) { return x.status === 'ok' })\n  var fallidos = (intentos || []).filter(function (x) { return x.status !== 'ok' })\n  var todos409 = (intentos || []).length > 0 && fallidos.length === (intentos || []).length && fallidos.every(function (x) { return Number(x.http_status_code) === 409 })\n  var evidencia = {\n    dispatch_key: despacho.dispatch_key || null,\n    agente: despacho.agent_name,\n    ejecucion: String(despacho.workflow_execution_id),\n    estado_del_registro: despacho.status,\n    edad_s: edad,\n    intentos_de_vuelta: (intentos || []).length,\n    intentos_ok: ok.length,\n    ultimo_intento: (intentos || []).length ? (intentos[intentos.length - 1].status + (intentos[intentos.length - 1].http_status_code ? '/' + intentos[intentos.length - 1].http_status_code : '')) : null,\n    invocacion: invocacion ? { id: invocacion.id || null, creada: invocacion.created_at, duracion_ms: invocacion.duration_ms, costo_usd: invocacion.cost_usd, estado: invocacion.status } : null,\n  }\n  var salir = function (clase, extra) {\n    return { clasificacion: clase, severidad: CLASES[clase].severidad, que: CLASES[clase].que, evidencia: extra ? Object.assign(evidencia, extra) : evidencia }\n  }\n\n  if (despacho.status === 'completed') return salir('ok')\n  // 01-nov · ya lo cerró el ciclo de vida de los incidentes, con su motivo: deja de ser un hallazgo\n  if (despacho.status === 'sin_cierre') return salir('ok')\n\n  if (despacho.status === 'error') {\n    if (ok.length) return salir('error_entregado')\n    if (todos409) return salir('error_callback_409')\n    return salir('error_sin_entrega')\n  }\n\n  // accepted | running → sin cerrar\n  if (ok.length) {\n    // entregada la vuelta pero el registro sigue abierto: solo se declara cuando ya pasó la gracia\n    return edad > P.GRACIA_ENTREGA_S ? salir('entregado_ledger_abierto') : salir('en_curso')\n  }\n  if (invocacion) {\n    var desdeQueTermino = segundos(invocacion.created_at, ahora)\n    if (desdeQueTermino >= P.GRACIA_ENTREGA_S) return salir('termino_y_no_entrego', { desde_que_termino_s: desdeQueTermino })\n    return salir('en_curso')\n  }\n  if (despacho.status === 'accepted') {\n    return edad > P.ACEPTADO_MAX_S ? salir('nunca_arranco') : salir('en_curso')\n  }\n  // running sin invocación (la fila aparece AL TERMINAR): solo se da por muerto pasado el tope de vida esperado\n  return edad > P.CORRIENDO_MAX_S ? salir('sin_senales_de_vida') : salir('en_curso')\n}\n\n/** Clasifica todos los despachos y devuelve solo lo que hay que registrar (severidad alta o info). */\nfunction reconciliar(despachos, invocaciones, intentos, ahora, params) {\n  var out = []\n  for (var i = 0; i < (despachos || []).length; i++) {\n    var d = despachos[i]\n    var inv = invocacionDe(d, invocaciones)\n    var ints = (intentos || []).filter(function (x) { return intentoDeLaEjecucion(x.callback_url, d.workflow_execution_id) })\n    ints.sort(function (a, b) { return new Date(a.attempted_at || a.created_at).getTime() - new Date(b.attempted_at || b.created_at).getTime() })\n    var c = clasificarDespacho(d, inv, ints, ahora, params)\n    out.push({ despacho: d, resultado: c })\n  }\n  return out\n}\n\n\n// «Reconciliar» · el cuerpo del nodo del reloj · CC#1 · 2026-09-30. La lógica pura `clasificar.js` va ANTEPUESTA por el constructor.\n// Lee (solo lectura) los despachos de las últimas 72 h + sus invocaciones + sus intentos de vuelta, los clasifica, y registra en\n// `agent_dispatch_reconciliations` lo que hay que ver. NO toca `agent_dispatches`, ni el corredor, ni Vercel, ni ningún flujo.\n// `SOLO_LECTURA` (lo inyecta el constructor: true SOLO en la copia de prueba) clasifica y devuelve, sin escribir ni avisar.\nconst SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'\nconst auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }\nconst VENTANA_H = 72\nconst ahora = Date.now()\nconst desde = new Date(ahora - VENTANA_H * 3600 * 1000).toISOString()\nconst leer = async (ruta) => this.helpers.httpRequest({ url: SB + '/rest/v1/' + ruta, method: 'GET', json: true, timeout: 30000, headers: auth })\nconst escribir = async (metodo, ruta, cuerpo, extra) => this.helpers.httpRequest({\n  url: SB + '/rest/v1/' + ruta, method: metodo, json: true, body: cuerpo, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 30000,\n  headers: { ...auth, 'Content-Type': 'application/json', ...(extra || {}) },\n})\n\nconst despachos = await leer('agent_dispatches?created_at=gte.' + desde + '&select=id,dispatch_key,workflow_execution_id,agent_name,client_id,status,created_at,running_at,completed_at&order=created_at&limit=1000')\nconst ejecs = [...new Set(despachos.map((d) => String(d.workflow_execution_id)).filter((x) => x && x !== 'null'))]\nconst invocaciones = ejecs.length\n  ? await leer('agent_invocations?workflow_execution_id=in.(' + ejecs.join(',') + ')&created_at=gte.' + new Date(ahora - (VENTANA_H + 1) * 3600 * 1000).toISOString() + '&select=id,workflow_execution_id,agent_name,created_at,duration_ms,cost_usd,status&limit=2000')\n  : []\nconst intentos = await leer('agent_callback_attempts?created_at=gte.' + desde + '&select=callback_url,attempt_number,status,http_status_code,attempted_at,created_at&limit=5000')\nconst clave = (d) => d.dispatch_key || 'id:' + d.id\nconst resultados = reconciliar(despachos, invocaciones, intentos, ahora)\nconst aRegistrar = resultados.filter((r) => r.resultado.severidad === 'alta' || r.resultado.severidad === 'info')\nconst resumen = { despachos: despachos.length, ok: resultados.filter((r) => r.resultado.severidad === 'ok').length, info: aRegistrar.filter((r) => r.resultado.severidad === 'info').length, alta: aRegistrar.filter((r) => r.resultado.severidad === 'alta').length }\nconst detalle = resultados.map((r) => ({ ejecucion: String(r.despacho.workflow_execution_id), agente: r.despacho.agent_name, estado: r.despacho.status, clasificacion: r.resultado.clasificacion, severidad: r.resultado.severidad }))\n\nif (SOLO_LECTURA) return [{ json: { modo: 'solo_lectura', resumen, detalle, avisos: [], escribio: false } }]\n\n// lo ya registrado y sin resolver (para no avisar dos veces y para marcar lo resuelto)\nconst existentes = await leer('agent_dispatch_reconciliations?resuelta_el=is.null&select=dispatch_key,avisado_el,clasificacion')\nconst yaAvisado = {}\nexistentes.forEach((e) => { yaAvisado[e.dispatch_key] = !!e.avisado_el })\n\nconst ts = new Date(ahora).toISOString()\nif (aRegistrar.length) {\n  const filas = aRegistrar.map((r) => ({\n    dispatch_key: clave(r.despacho), agente: r.despacho.agent_name, ejecucion: String(r.despacho.workflow_execution_id), cliente: r.despacho.client_id || null,\n    clasificacion: r.resultado.clasificacion, severidad: r.resultado.severidad, que: r.resultado.que, evidencia: r.resultado.evidencia, ultima_vez: ts, resuelta_el: null,\n  }))\n  // merge-duplicates: en una fila que ya existe solo se actualizan las columnas del cuerpo (primera_vez y avisado_el NO se pisan)\n  const w = await escribir('POST', 'agent_dispatch_reconciliations?on_conflict=dispatch_key', filas, { Prefer: 'resolution=merge-duplicates,return=minimal' })\n  if (w.statusCode >= 300) throw new Error('RECONCILIADOR_SIN_ANOTAR · la tabla respondió HTTP ' + w.statusCode + ' · ' + JSON.stringify(w.body).slice(0, 240))\n}\n// lo que ya no es un problema (el despacho se cerró / llegó la vuelta) se marca resuelto\nconst vigentes = {}\naRegistrar.forEach((r) => { vigentes[clave(r.despacho)] = true })\nconst resueltos = existentes.map((e) => e.dispatch_key).filter((k) => !vigentes[k])\nif (resueltos.length) {\n  const p = await escribir('PATCH', 'agent_dispatch_reconciliations?dispatch_key=in.(' + resueltos.map((k) => '\"' + k + '\"').join(',') + ')', { resuelta_el: ts }, { Prefer: 'return=minimal' })\n  if (p.statusCode >= 300) throw new Error('RECONCILIADOR_SIN_RESOLVER · HTTP ' + p.statusCode)\n}\nconst avisos = aRegistrar\n  .filter((r) => r.resultado.severidad === 'alta' && !yaAvisado[clave(r.despacho)])\n  .map((r) => ({\n    dispatch_key: clave(r.despacho), clasificacion: r.resultado.clasificacion, que: r.resultado.que, agente: r.despacho.agent_name,\n    ejecucion: String(r.despacho.workflow_execution_id), edad_s: r.resultado.evidencia.edad_s, invocacion: r.resultado.evidencia.invocacion,\n    intentos: r.resultado.evidencia.intentos_de_vuelta, ultimo_intento: r.resultado.evidencia.ultimo_intento,\n  }))\nreturn [{ json: { modo: 'real', resumen, avisos, resueltos: resueltos.length, escribio: true } }]\n"
+      },
+      "name": "Reconciliar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.avisos.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      },
+      "name": "¿Hay hallazgos nuevos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// «Armar el aviso» · CC#1 · 2026-09-30. Un solo mensaje por pasada con los hallazgos NUEVOS de severidad alta.\nconst a = $input.first().json\nconst base = ($env.N8N_BASE_URL || 'https://n8n-production-72be.up.railway.app').split('/').slice(0, 3).join('/')\nconst QUE_HACER = {\n  termino_y_no_entrego: 'el resultado EXISTE (agent_invocations / punto de control): recuperarlo y abrir la ejecución; su espera venció o vence',\n  nunca_arranco: 'el trabajo NO corrió (no costó): reintentar el despacho',\n  sin_senales_de_vida: 'revisar el corredor de Railway (¿se reinició?) y reintentar si no hay resultado',\n  error_sin_entrega: 'el flujo puede seguir esperando: abrir la ejecución y cancelarla',\n}\nconst lineas = a.avisos.slice(0, 8).map((x) => {\n  const inv = x.invocacion ? ' · invocación `' + String(x.invocacion.id || '?').slice(0, 8) + '` (' + Math.round((x.invocacion.duracion_ms || 0) / 1000) + ' s · US$ ' + x.invocacion.costo_usd + ')' : ''\n  return '• *' + x.clasificacion + '* — ' + x.que + '\\n   agente `' + x.agente + '` · ejecución <' + base + '/workflow/_/executions/' + x.ejecucion + '|' + x.ejecucion + '> · edad ' + Math.round(x.edad_s / 60) + ' min · intentos de vuelta ' + x.intentos + (x.ultimo_intento ? ' (' + x.ultimo_intento + ')' : '') + inv + '\\n   → ' + (QUE_HACER[x.clasificacion] || 'revisar')\n})\nconst extra = a.avisos.length > 8 ? '\\n… y ' + (a.avisos.length - 8) + ' más (ver agent_dispatch_reconciliations)' : ''\nreturn [{ json: { ...a, titulo: 'Despachos huérfanos: ' + a.avisos.length + ' nuevo(s)', texto: lineas.join('\\n') + extra, claves: a.avisos.map((x) => x.dispatch_key) } }]\n"
+      },
+      "name": "Armar el aviso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: 'C0B7XUUEBHA', text: '🔴 ' + $json.titulo, blocks: [ { type: 'section', text: { type: 'mrkdwn', text: '*🔴 ' + $json.titulo + '*' } }, { type: 'section', text: { type: 'mrkdwn', text: $json.texto } }, { type: 'context', elements: [ { type: 'mrkdwn', text: 'reconciliador de despachos huérfanos · CC#1 · un aviso por hallazgo (se marca avisado solo si Slack confirma)' } ] } ] }) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "AVISO · #alertas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        -100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// «Marcar avisados» · CC#1 · 2026-09-30. Lección E81 de los avisos: la marca «avisado» se pone SOLO cuando Slack confirma ok:true.\n// Si Slack no confirmó, NO se marca (el próximo reloj vuelve a intentar) y la corrida falla RUIDOSA para que se vea.\nconst previo = $('Armar el aviso').first().json\nconst r = $input.first().json || {}\nconst slack = r.body ? r.body : r\nif (!slack || slack.ok !== true) {\n  throw new Error('RECONCILIADOR_AVISO_NO_LLEGO · Slack no confirmó ok:true (' + String((slack && slack.error) || 'sin respuesta') + ') · los hallazgos NO se marcan avisados · se reintenta en el próximo reloj')\n}\nconst SB = 'https://ordaeyxvvvdqsznsecjx.supabase.co'\nconst auth = { apikey: $env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }\nconst w = await this.helpers.httpRequest({\n  url: SB + '/rest/v1/agent_dispatch_reconciliations?dispatch_key=in.(' + previo.claves.map((k) => '\"' + k + '\"').join(',') + ')', method: 'PATCH', json: true,\n  body: { avisado_el: new Date().toISOString() }, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 30000, headers: { ...auth, 'Content-Type': 'application/json', Prefer: 'return=minimal' },\n})\nif (w.statusCode >= 300) throw new Error('RECONCILIADOR_SIN_MARCAR · HTTP ' + w.statusCode)\nreturn [{ json: { avisados: previo.claves.length } }]\n"
+      },
+      "name": "Marcar avisados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Reloj · cada 5 minutos": {
+      "main": [
+        [
+          {
+            "node": "Reconciliar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reconciliar": {
+      "main": [
+        [
+          {
+            "node": "¿Hay hallazgos nuevos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay hallazgos nuevos?": {
+      "main": [
+        [
+          {
+            "node": "Armar el aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar el aviso": {
+      "main": [
+        [
+          {
+            "node": "AVISO · #alertas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AVISO · #alertas": {
+      "main": [
+        [
+          {
+            "node": "Marcar avisados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "pZy6quQakQr9bdRr"
+}

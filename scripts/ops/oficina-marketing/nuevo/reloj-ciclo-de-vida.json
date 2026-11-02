@@ -1,0 +1,102 @@
+{
+  "id": "PENDIENTE-RELOJ-CICLO-DE-VIDA",
+  "name": "Zero Risk — Reloj del ciclo de vida de incidentes (cada hora · A3 · CC#2)",
+  "nodes": [
+    {
+      "name": "Reloj · cada hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "7 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "① Aplicar el ciclo de vida",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/incidentes/ciclo-de-vida' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ejecutar: true }) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "name": "② Comprobar la respuesta (falla a la vista)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// A3 · el reloj NO decide nada: solo exige que la plataforma haya contestado bien. Cualquier otra cosa deja la ejecución en ERROR (visible en n8n).\nconst r = $input.first().json || {};\nconst estado = Number(r.statusCode);\nconst cuerpo = (r.body && typeof r.body === 'object') ? r.body : {};\nif (estado !== 200) throw new Error('CICLO_DE_VIDA_NO_200 · la plataforma contestó ' + (Number.isFinite(estado) ? estado : 'nada') + ' · ' + JSON.stringify(cuerpo).slice(0, 200));\nif (cuerpo.ok !== true) throw new Error('CICLO_DE_VIDA_SIN_OK · ' + JSON.stringify(cuerpo).slice(0, 200));\nif (cuerpo.ejecutado !== true) throw new Error('CICLO_DE_VIDA_NO_EJECUTO · la respuesta fue solo informativa (¿llegó el cuerpo {\"ejecutar\": true}?)');\nif (cuerpo.completo === false) throw new Error('CICLO_DE_VIDA_INCOMPLETO · alguna fuente no se pudo leer; lo ya cerrado queda cerrado · ' + JSON.stringify(cuerpo.fuentes || {}).slice(0, 200));\nreturn [{ json: { ok: true, ejecutado: true, total_cerrado: Number(cuerpo.total) || 0, generado_en: cuerpo.generado_en || null } }];"
+      },
+      "position": [
+        520,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Reloj · cada hora": {
+      "main": [
+        [
+          {
+            "node": "① Aplicar el ciclo de vida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "① Aplicar el ciclo de vida": {
+      "main": [
+        [
+          {
+            "node": "② Comprobar la respuesta (falla a la vista)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
