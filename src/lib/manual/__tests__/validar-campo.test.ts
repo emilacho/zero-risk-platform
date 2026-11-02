@@ -84,6 +84,18 @@ describe('validar un campo', () => {
     const u = [...db.tablas['client_brand_books']].sort((a, b) => Number(b.version) - Number(a.version))[0]
     expect((JSON.parse(String(u.content_text)) as any).brand_book_draft._field_meta.mision.aceptado_por_el_dueno).toEqual({ por: 'emilio', en: AHORA.toISOString(), campo: true })
   })
+  it('🔴 texto en blanco, lista vacía u objeto vacío no son contenido, en el borrador ni en la columna', async () => {
+    const libre = CAMPOS.find((c) => !c.columna)!
+    for (const v of ['', '   ', [], [''], ['', ' '], {}, { a: '' }]) {
+      const db = base({}, { [libre.clave]: v })
+      expect(await validar(db, libre.clave), JSON.stringify(v)).toMatchObject({ ok: false, error: 'campo_vacio' })
+    }
+    const conColumna = base({}, { mision: '' })
+    conColumna.tablas['client_brand_books'][0].brand_mission = '   '
+    expect(await validar(conColumna, 'mision')).toMatchObject({ ok: false, error: 'campo_vacio' })
+    const lista = base({}, { [libre.clave]: ['algo'] })
+    expect((await validar(lista, libre.clave)).ok).toBe(true)
+  })
   it('🔴 si otra escritura tocó la fila, no la pisa: reintenta y al final lo dice', async () => {
     const llamadas = { escribe: 0 }
     const fila = { id: 'v1', client_id: C, version: 1, updated_at: 't', brand_mission: 'M', content_text: JSON.stringify({ brand_book_draft: { mision: 'M' } }) }

@@ -220,6 +220,8 @@ export async function validarManualDelDueno(db: Db, e: { client_id: string; revi
  * 02-nov · firma de Emilio: validar (o desvalidar) UN campo no crea versión: marca el campo en la vigente, con quién y cuándo. La versión nueva queda para cuando cambia el contenido.
  * Lo validado así queda como `aceptado_por_el_dueno` con `campo: true`, para distinguirlo de «Validar el manual» entero: una corrida posterior lo conserva.
  */
+const tieneContenido = (v: unknown): boolean => (Array.isArray(v) ? v.some(tieneContenido) : esObjeto(v) ? Object.values(v).some(tieneContenido) : v != null && String(v).trim() !== '')
+
 export type ResultadoDeCampo =
   | { ok: true; campo: string; etiqueta: string; validado: boolean; por: string | null; en: string | null; version: number; sin_cambios: boolean }
   | { ok: false; status: number; error: string; detalle: string }
@@ -243,8 +245,7 @@ export async function validarCampoDelManual(db: Db, e: { client_id: string; camp
       if (!e.validado) return { ok: false, status: 409, error: 'escrito_por_el_dueno', detalle: 'este campo lo escribió el dueño: para cambiarlo, edítalo' }
       return { ok: true, ...base, validado: true, por: typeof m.por === 'string' ? m.por : null, en: typeof m.en === 'string' ? m.en : null, sin_cambios: true }
     }
-    const hayValor = (c.columna ? fila[c.columna] != null && String(fila[c.columna]).trim() !== '' : false) || borrador[c.clave] != null
-    if (e.validado && !hayValor) return { ok: false, status: 409, error: 'campo_vacio', detalle: 'este campo no tiene contenido que validar' }
+    if (e.validado && !tieneContenido(c.columna ? fila[c.columna] : null) && !tieneContenido(borrador[c.clave])) return { ok: false, status: 409, error: 'campo_vacio', detalle: 'este campo no tiene contenido que validar' }
     if (e.validado ? ya.campo === true : !Object.keys(ya).length) return { ok: true, ...base, validado: e.validado, por: e.validado ? String(ya.por ?? '') || null : null, en: e.validado ? String(ya.en ?? '') || null : null, sin_cambios: true }
     const { aceptado_por_el_dueno: _quitado, ...sinMarca } = m
     void _quitado
