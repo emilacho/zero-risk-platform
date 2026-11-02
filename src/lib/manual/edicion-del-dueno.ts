@@ -199,6 +199,7 @@ export async function validarManualDelDueno(db: Db, e: { client_id: string; revi
       const m = objeto(meta[c.clave])
       const hayValor = (c.columna ? vigente[c.columna] != null && String(vigente[c.columna]).trim() !== '' : false) || borrador[c.clave] != null
       if (m.fuente === 'dueno' || !hayValor) continue
+      if (objeto(m.aceptado_por_el_dueno).campo === true) continue // ya validado por separado: conserva su fecha y su marca
       meta[c.clave] = { ...m, aceptado_por_el_dueno: { por: e.reviewer, en: ahora } }
       aceptados.push(c.clave)
     }
@@ -213,6 +214,48 @@ export async function validarManualDelDueno(db: Db, e: { client_id: string; revi
   })
   if (!r.ok) return { ok: false, status: r.sin_manual ? 404 : 502, error: r.sin_manual ? 'sin_manual' : 'no_se_pudo_guardar', detalle: r.error }
   return { ok: true, version_nueva: r.version, source_id: r.id, sin_cambios: false, aceptados: [...aceptados] }
+}
+
+/**
+ * 02-nov · firma de Emilio: validar (o desvalidar) UN campo no crea versión: marca el campo en la vigente, con quién y cuándo. La versión nueva queda para cuando cambia el contenido.
+ * Lo validado así queda como `aceptado_por_el_dueno` con `campo: true`, para distinguirlo de «Validar el manual» entero: una corrida posterior lo conserva.
+ */
+export type ResultadoDeCampo =
+  | { ok: true; campo: string; etiqueta: string; validado: boolean; por: string | null; en: string | null; version: number; sin_cambios: boolean }
+  | { ok: false; status: number; error: string; detalle: string }
+
+export async function validarCampoDelManual(db: Db, e: { client_id: string; campo: unknown; validado: boolean; reviewer: string; ahora?: Date }): Promise<ResultadoDeCampo> {
+  if (!UUID.test(e.client_id)) return { ok: false, status: 400, error: 'entrada_invalida', detalle: 'falta el cliente' }
+  const c = CAMPOS.find((x) => x.clave === e.campo || x.clave_del_tablero === e.campo)
+  if (!c) return { ok: false, status: 400, error: 'campo_desconocido', detalle: `«${String(e.campo)}» no es un campo del manual` }
+  const ahora = (e.ahora ?? new Date()).toISOString()
+  for (let intento = 0; intento < INTENTOS_POR_CHOQUE; intento++) {
+    const { fila, error } = await leerVigente(db, e.client_id)
+    if (error) return { ok: false, status: 502, error: 'no_se_pudo_leer', detalle: `no pude leer el manual vigente: ${error}` }
+    if (!fila) return { ok: false, status: 404, error: 'sin_manual', detalle: 'el cliente todavía no tiene manual' }
+    const contenido = objeto(fila.content_text)
+    const borrador: Fila = { ...objeto(contenido.brand_book_draft) }
+    const meta: Fila = { ...objeto(borrador._field_meta) }
+    const m = objeto(meta[c.clave])
+    const ya = objeto(m.aceptado_por_el_dueno)
+    const base = { campo: c.clave, etiqueta: c.etiqueta, version: Number(fila.version) }
+    if (m.fuente === 'dueno') {
+      if (!e.validado) return { ok: false, status: 409, error: 'escrito_por_el_dueno', detalle: 'este campo lo escribió el dueño: para cambiarlo, edítalo' }
+      return { ok: true, ...base, validado: true, por: typeof m.por === 'string' ? m.por : null, en: typeof m.en === 'string' ? m.en : null, sin_cambios: true }
+    }
+    const hayValor = (c.columna ? fila[c.columna] != null && String(fila[c.columna]).trim() !== '' : false) || borrador[c.clave] != null
+    if (e.validado && !hayValor) return { ok: false, status: 409, error: 'campo_vacio', detalle: 'este campo no tiene contenido que validar' }
+    if (e.validado ? ya.campo === true : !Object.keys(ya).length) return { ok: true, ...base, validado: e.validado, por: e.validado ? String(ya.por ?? '') || null : null, en: e.validado ? String(ya.en ?? '') || null : null, sin_cambios: true }
+    const { aceptado_por_el_dueno: _quitado, ...sinMarca } = m
+    void _quitado
+    meta[c.clave] = e.validado ? { ...sinMarca, aceptado_por_el_dueno: { por: e.reviewer, en: ahora, campo: true } } : sinMarca
+    borrador._field_meta = meta
+    // si otra escritura tocó la fila, no se la pisa: se lee otra vez y se aplica sobre lo nuevo
+    const u = await db.from('client_brand_books').update({ content_text: JSON.stringify({ ...contenido, brand_book_draft: borrador }) }).eq('id', String(fila.id)).eq('updated_at', fila.updated_at).select('id')
+    if (u.error) return { ok: false, status: 502, error: 'no_se_pudo_guardar', detalle: String(u.error.message ?? u.error) }
+    if (((u.data as unknown[] | null) ?? []).length) return { ok: true, ...base, validado: e.validado, por: e.validado ? e.reviewer : null, en: e.validado ? ahora : null, sin_cambios: false }
+  }
+  return { ok: false, status: 409, error: 'otra_escritura', detalle: 'el manual cambió mientras se validaba: inténtalo otra vez' }
 }
 
 /* ───────── el cerebro, después ───────── */
@@ -269,7 +312,8 @@ export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila): 
   const meta: Fila = { ...objeto(bb._field_meta) }
   for (const c of CAMPOS) {
     const m = objeto(metaPrevia[c.clave])
-    if (m.fuente !== 'dueno') continue
+    // 02-nov · lo que validó campo por campo tampoco lo pisa una corrida; «Validar el manual» entero no entra aquí, como hasta hoy
+    if (m.fuente !== 'dueno' && objeto(m.aceptado_por_el_dueno).campo !== true) continue
     const valor = borradorPrevio[c.clave] ?? (c.columna ? previa[c.columna] : undefined)
     if (valor == null || (typeof valor === 'string' && !valor.trim())) continue
     nuevo[c.clave] = valor

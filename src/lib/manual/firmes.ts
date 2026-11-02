@@ -56,15 +56,17 @@ export function aplicarMeta<T extends Record<string, unknown>>(manual: T, inform
   return { ...manual, _field_meta: merged }
 }
 
-export interface CamposFirmes { firmes: string[]; provisionales: string[]; sin_revisar: string[] }
+export interface CamposFirmes { firmes: string[]; provisionales: string[]; sin_revisar: string[]; validados_por_el_dueno?: string[] }
 /** lo que leen los lectores: firmes (F0 si el manual está aprobado) · provisionales (F2 con aviso) · sin revisar (manual anterior al ciclo: ni se firma ni se condena) */
 export function camposFirmes(manual: Record<string, unknown>, excluir?: string[]): CamposFirmes {
-  const meta = (manual._field_meta && typeof manual._field_meta === 'object' ? manual._field_meta : {}) as Record<string, Partial<MetaDeCampo> & { provisional?: boolean }>
+  const meta = (manual._field_meta && typeof manual._field_meta === 'object' ? manual._field_meta : {}) as Record<string, Partial<MetaDeCampo> & { provisional?: boolean; aceptado_por_el_dueno?: { campo?: boolean } }>
   const out: CamposFirmes = { firmes: [], provisionales: [], sin_revisar: [] }
   for (const campo of new Set(hojasDeTexto(manual, excluir).map((h) => h.campo))) {
     const texto = hojasDeTexto({ [campo]: manual[campo] }, []).map((h) => h.texto).join('\n')
     const m = meta[campo]
-    if (cuentaPendientes(texto) > 0 || m?.provisional === true || m?.estado === 'con_pendientes') out.provisionales.push(campo)
+    // 02-nov · lo que el dueño validó campo por campo ya no se lee como provisional: lo aceptó él
+    if (m?.aceptado_por_el_dueno?.campo === true) { out.firmes.push(campo); (out.validados_por_el_dueno ??= []).push(campo) }
+    else if (cuentaPendientes(texto) > 0 || m?.provisional === true || m?.estado === 'con_pendientes') out.provisionales.push(campo)
     else if (!m || (m.estado === undefined && m.provisional === undefined)) out.sin_revisar.push(campo)
     else out.firmes.push(campo)
   }

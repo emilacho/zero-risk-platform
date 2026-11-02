@@ -14,5 +14,9 @@ export function camposDelManual(contentText: unknown): CamposFirmes | null {
 /** «Campos provisionales (sin respaldo completo en lo raspado): a, b.» — o '' si no hay ninguno */
 export function avisoDeProvisionales(contentText: unknown): string {
   const c = camposDelManual(contentText)
-  return c && c.provisionales.length ? `Campos provisionales (sin respaldo completo en lo raspado; se leen como orientación, no como dato firme): ${c.provisionales.join(', ')}.` : ''
+  if (!c) return ''
+  return [
+    c.validados_por_el_dueno?.length ? `Campos validados por el dueño, tal como están: ${c.validados_por_el_dueno.join(', ')}.` : '',
+    c.provisionales.length ? `Campos provisionales (sin respaldo completo en lo raspado; se leen como orientación, no como dato firme): ${c.provisionales.join(', ')}.` : '',
+  ].filter(Boolean).join(' ')
 }
