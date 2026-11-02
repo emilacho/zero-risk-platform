@@ -56,6 +56,21 @@ export interface InformeDeHechos { hechos: Hecho[]; resumen: Record<EstadoDeHech
 export const CAMPOS_EXCLUIDOS = ['forbidden_words', 'palabras_con_intencion', 'primary_colors', 'typography', 'tagline', 'frases_propias', 'eslogan_literal', 'client_id', 'competitor_mentions_policy', 'logo_usage_notes', 'visual']
 
 export const PREFIJO_PENDIENTE = 'PENDIENTE: '
+export const MOTIVO_DE_DATO_SIN_FUENTE = 'dato sin fuente en la evidencia'
+const SIN_APOYO: EstadoDeHecho[] = ['sin_cita', 'solo_sintesis']
+/**
+ * 02-nov · decisión de Emilio («no rejas, para eso tenemos un gran equipo razonando»): una fecha o una cifra sin fuente no se retira ni frena nada: se anota a la vista y el dueño decide al validar.
+ * Vale solo si eso es todo lo que le falta: si en la misma cláusula hay una palabra de certeza, un lugar de origen o una cita sin respaldo, sigue el camino de siempre.
+ */
+export function esSoloDatoSinFuente(h: Pick<Hecho, 'estado' | 'detalle'>): boolean {
+  if (!SIN_APOYO.includes(h.estado)) return false
+  const faltan = h.detalle.filter((d) => ESTADOS_SIN_RESPALDO.includes(d.estado))
+  return faltan.length > 0 && faltan.every((d) => d.marca === 'cifra' || d.marca === 'fecha')
+}
+export interface DatoSinFuente { dato: string; marca: Marca; clausula: string; motivo: string }
+export function datosSinFuenteDe(h: Pick<Hecho, 'detalle' | 'clausula'>): DatoSinFuente[] {
+  return h.detalle.filter((d) => ESTADOS_SIN_RESPALDO.includes(d.estado)).map((d) => ({ dato: d.texto, marca: d.marca, clausula: h.clausula, motivo: MOTIVO_DE_DATO_SIN_FUENTE }))
+}
 export const PREFIJO_DECLARACION = 'el cliente dice: '
 /** firma D2: lo que el cliente dice de sí mismo se escribe como cita literal */
 export const declaracionDelCliente = (literal: string): string => `${PREFIJO_DECLARACION}«${literal.trim().replace(/[«»]/g, '')}»`

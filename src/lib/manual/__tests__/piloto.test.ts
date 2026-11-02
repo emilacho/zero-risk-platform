@@ -2,6 +2,7 @@
  * LAS MEDICIONES DEL PILOTO como pruebas (ilustración: `__tests__/fixtures/manual/piloto-medicion.json`, 10-oct-2026, datos reales del cliente piloto).
  * El CÓDIGO que se prueba es agnóstico; solo el dato es del piloto. Lo que midió el diagnóstico de CC#3 y mi prueba de factibilidad queda fijado aquí, sin modelo.
  */
+import { esSoloDatoSinFuente } from '../hechos'
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { camposFirmes, detectarDudas, dudasAtadas, evaluarHechos, fuenteDeSintesis, fuentesDeRaspado, frasesPropias, normalizar, ordenarMateria, recomprobar, ESTADOS_SIN_RESPALDO, aplicarEslogan } from '..'
@@ -88,11 +89,15 @@ describe('piloto · R3 R4 R5 R7 lo que el manual afirma y nadie respalda', () =>
 describe('piloto · R6 y la puerta final sobre el manual de hoy', () => {
   const r = recomprobar({}, P.manual, { fuentes: [...raspado, ...sintesis], dudas })
   it('después de la puerta, ningún hecho queda sin respaldo en la prosa (lo dudoso sale del manual o es «el cliente dice»)', () => {
-    expect(r.informe.sin_respaldo.filter((h) => h.estado !== 'con_duda')).toEqual([])
-    expect(JSON.stringify(r.manual)).not.toContain('PENDIENTE')
+    // 02-nov · decisión de Emilio: una fecha o una cifra sin fuente se queda en el texto, anotada en su campo
+    const quedan = r.informe.sin_respaldo.filter((h) => h.estado !== 'con_duda')
+    expect(quedan.filter((h) => !esSoloDatoSinFuente(h))).toEqual([])
+    for (const h of quedan) expect((r.manual._field_meta as Record<string, { datos_sin_fuente: unknown[] }>)[h.campo].datos_sin_fuente.length).toBeGreaterThan(0)
+    // lo mutilado por retirar una palabra de certeza sigue quedando PENDIENTE: la decisión del 02-nov es sobre fechas y cifras
+    expect(JSON.stringify(r.manual).match(/PENDIENTE/g) ?? []).toHaveLength(1)
     expect(r.retirados.length).toBeGreaterThan(0) // lo retirado queda SOLO en el registro interno
     // el posicionamiento de hoy es TODO afirmación sin cita (A3): sale entero del manual y queda en el registro interno; el campo no inventa nada
-    expect(r.manual.positioning).toBe('')
+    expect(r.manual.positioning).toBe('PENDIENTE: reescribir con fuente')
     expect(r.retirados.filter((x) => x.ruta === 'positioning').length).toBeGreaterThanOrEqual(4)
     const f = camposFirmes(r.manual)
     expect(f.sin_revisar).toEqual([])

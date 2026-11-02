@@ -4,7 +4,7 @@
  * «propuesta del agente — <razón>» (como el eslogan). Solo se llena lo que está vacío: nunca se pisa lo que ya tiene contenido, y el resto del manual queda letra por letra igual.
  * El que lo ejecuta es un flujo de n8n (los agentes solo se invocan por flujos): `preparar` arma los pedidos, el flujo llama al agente, `aplicar` lee la respuesta y fusiona.
  */
-import { evaluarHechos, type InformeDeHechos } from './hechos'
+import { evaluarHechos, type InformeDeHechos, esSoloDatoSinFuente } from './hechos'
 import type { Fuente } from './procedencia'
 import { ordenarMateria } from './materia'
 import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
@@ -177,7 +177,9 @@ export function fusionarPropuestas(draft: Record<string, unknown>, propuestas: P
     // el chequeo de hechos mira el TEXTO propuesto (sin el rótulo): una cifra, un lugar de origen, una cita o una palabra de certeza sin fuente lo frenan
     const lista = Array.isArray(p.valor) ? p.valor : [p.valor]
     const informe = evaluarHechos({ manual: { [p.campo]: Array.isArray(p.valor) ? p.valor : p.valor }, fuentes, excluir: [] })
-    if (informe.sin_respaldo.length) { hechos_sin_respaldo = hechos_sin_respaldo.concat(informe.sin_respaldo); rechazadas.push({ campo: p.campo, motivo: `la propuesta afirma ${informe.sin_respaldo.length} hecho(s) sin respaldo: ${informe.sin_respaldo.slice(0, 2).map((h) => '«' + h.clausula.slice(0, 80) + '»').join(' · ')}` }); continue }
+    // 02-nov · decisión de Emilio: una fecha o una cifra sin fuente no frena la propuesta; la puerta la anota a la vista
+    const frenan = informe.sin_respaldo.filter((h) => !esSoloDatoSinFuente(h))
+    if (frenan.length) { hechos_sin_respaldo = hechos_sin_respaldo.concat(frenan); rechazadas.push({ campo: p.campo, motivo: `la propuesta afirma ${frenan.length} hecho(s) sin respaldo: ${frenan.slice(0, 2).map((h) => '«' + h.clausula.slice(0, 80) + '»').join(' · ')}` }); continue }
     nuevo[p.campo] = def.tipo === 'lista' ? lista.map((x) => rotular(x, p.razon)) : rotular(String(p.valor), p.razon)
     aplicadas.push(p.campo)
     const meta = (nuevo._field_meta && typeof nuevo._field_meta === 'object' ? nuevo._field_meta : {}) as Record<string, unknown>
