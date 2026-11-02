@@ -5,10 +5,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { sinFraseSedes } from './_sin-frase-sedes'
 import { recorrer } from './_emulador-n8n'
 import { BLOQUE_CARPETA_DE_LA_JEFATURA } from '../scripts/ops/oficina-marketing/jefatura-contexto.mjs'
 
-const flujo = JSON.parse(fs.readFileSync(path.join(__dirname, '../scripts/ops/oficina-marketing/nuevo/X9F0zp6LQ2xGEYVS.json'), 'utf8'))
+const flujo = sinFraseSedes(JSON.parse(fs.readFileSync(path.join(__dirname, '../scripts/ops/oficina-marketing/nuevo/X9F0zp6LQ2xGEYVS.json'), 'utf8')))
 const UUID = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
 
 const carpeta = (extra: Record<string, unknown> = {}) => ({

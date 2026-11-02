@@ -24,6 +24,7 @@ import { construirJefaturaConCarpeta } from './jefatura-contexto.mjs'
 import { construirEsloganEnPlan } from './eslogan-del-cliente.mjs'
 import { construirHechosDelDuenoEnPlan } from './hechos-del-dueno.mjs'
 import { construirSedesEnPlan } from './sedes-del-cliente.mjs'
+import { construirFraseSedesYPreguntar } from './frase-sedes-y-preguntar.mjs'
 import { construirQueCambioPorCodigo } from './que-cambio-por-codigo.mjs'
 import { construirNoGuardarCopias } from './no-guardar-copias.mjs'
 import { construirSegundaMitad, escribirSegundaMitad } from './segunda-mitad.mjs'
@@ -222,6 +223,7 @@ export function construirPlaneacion() {
   construirEsloganEnPlan(f)
   construirHechosDelDuenoEnPlan(f) // 01-nov · punto 3: lo que declaró el dueño llega al redactor del plan
   construirSedesEnPlan(f) // 01-nov · punto 1: las sedes como dato llegan al redactor del plan
+  construirFraseSedesYPreguntar(f) // 02-nov · frase de indicación: cada sede su carta; duda importante se pregunta al dueño
   construirQueCambioPorCodigo(f) // 01-nov · punto 6 de CC1: «Qué cambió» por código
   construirNoGuardarCopias(f) // 01-nov · adenda 5: «Pedir cambios» no guarda una copia del plan anterior
   // B · el redactor es un dato

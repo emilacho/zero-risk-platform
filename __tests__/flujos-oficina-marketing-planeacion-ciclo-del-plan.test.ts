@@ -8,11 +8,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { sinFraseSedes } from './_sin-frase-sedes'
 import { recorrer } from './_emulador-n8n'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
 const leer = (d: string, f = 'X9F0zp6LQ2xGEYVS') => JSON.parse(fs.readFileSync(path.join(RAIZ, d, f + '.json'), 'utf8'))
-const vivo = leer('vivo'), nuevo = leer('nuevo'), sub = leer('nuevo', 'segundaMitadDelPlan')
+const vivo = leer('vivo'), nuevo = sinFraseSedes(leer('nuevo')), sub = leer('nuevo', 'segundaMitadDelPlan')
 const AsyncFunction = Object.getPrototypeOf(async () => 0).constructor
 const CLIENTE = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
 const PLAN = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
