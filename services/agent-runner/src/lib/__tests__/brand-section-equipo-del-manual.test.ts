@@ -26,6 +26,11 @@ describe('la herramienta de las secciones del manual', () => {
     expect(propiedades).toHaveProperty(campo)
   })
 
+  it.each(NUEVOS)('🔴 %s es opcional en el servidor: una entrega sin él no se rechaza', (campo) => {
+    expect(servidor).toMatch(new RegExp(`^  ${campo}: PROV\\([^\\n]*\\n\\s*\\.optional\\(\\)`, 'm'))
+    expect(EMIT_BRAND_SECTION_TOOL.input_schema.required).not.toContain(campo)
+  })
+
   it('🔴 lo que se declara existe en la definición única del manual', () => {
     const claves = new Set(CAMPOS.map((c) => c.clave))
     expect(NUEVOS.filter((c) => !claves.has(c))).toEqual([])
