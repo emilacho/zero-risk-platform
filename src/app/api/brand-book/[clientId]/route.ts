@@ -12,6 +12,7 @@ import { sanitizeProseFields } from '@/lib/brand-book-caveat-extractor'
 import { empujarManualAlCerebro } from '@/lib/brain/push-al-terminar'
 import { columnasDelBorrador, evaluarCompletitud, fugasDeLasColumnas } from '@/lib/manual/campos-del-manual'
 import { conservarLoDelDueno } from '@/lib/manual/edicion-del-dueno'
+import { leerPedidoDelManual, selloDeLaVersionPedida, sinCambiosReales, type PedidoDelManual } from '@/lib/manual/pedido-de-cambios'
 import { completarVisualesDesdeLaFicha } from '@/lib/manual-visuales-desde-la-ficha'
 
 export const runtime = 'nodejs'
@@ -181,6 +182,15 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   const supabase = getSupabaseAdmin()
 
+  // 02-nov · «Pedir cambios al manual»: una versión por pedido, y el pedido dice qué campos del dueño libera
+  let pedido: PedidoDelManual | null = null
+  if (body.manual_cambio_id !== undefined) {
+    const p = await leerPedidoDelManual(supabase, clientId, body.manual_cambio_id)
+    if (!p.ok) return NextResponse.json({ persisted: false, error: p.error, detail: p.detalle }, { status: p.status })
+    if (p.pedido.manual_nuevo_id) return NextResponse.json({ persisted: true, ya_guardado: true, id: p.pedido.manual_nuevo_id, client_id: clientId })
+    pedido = p.pedido
+  }
+
   // E111 (CC#1 · 2026-09-23 · decisión de Emilio) · EL MANUAL SE VERSIONA. Antes (FIX
   // 2026-07-01) esta puerta era idempotente POR CLIENTE: si ya había una fila devolvía
   // `already_existed` sin insertar. Medido en E110 (cimiento 146732): el manual nuevo, que
@@ -216,7 +226,11 @@ export async function POST(req: Request, { params }: RouteContext) {
   previaId = previa.data?.id ?? null
 
   // 30-oct · lo que el dueño escribió desde el dashboard (`_field_meta.<campo>.fuente = 'dueno'`) no lo pisa una corrida posterior: se vuelve a poner en el borrador nuevo
-  dueno = conservarLoDelDueno((previa.data ?? null) as Record<string, unknown> | null, bb as Record<string, unknown>)
+  dueno = conservarLoDelDueno((previa.data ?? null) as Record<string, unknown> | null, bb as Record<string, unknown>, pedido ?? undefined)
+  // 02-nov · como en el plan: un pedido que no cambió nada no guarda copia. El flujo cierra el pedido con este recibo
+  if (pedido && sinCambiosReales(previa.data?.content_text, dueno.bb as Record<string, unknown>)) {
+    return NextResponse.json({ persisted: false, sin_cambios_reales: true, id: previaId, version: version - 1, client_id: clientId, manual_cambio_id: pedido.id })
+  }
   const rowBase = buildBrandBookRow(clientId, dueno.bb as typeof bb, body, version)
 
   // CABLE ② · COLORES Y TIPOGRAFÍA DEL SITIO (CC#1 · 2026-09-25 · §144 Emilio). El Servicio de Apify
@@ -234,7 +248,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     fichaVisualError = e instanceof Error ? e.message.slice(0, 200) : 'error'
   }
   visuales = completarVisualesDesdeLaFicha(rowBase, bb, fichaVisual)
-  row = visuales.row
+  row = pedido ? { ...visuales.row, provenance_tag: selloDeLaVersionPedida(pedido.id) } : visuales.row
 
   const ins = await supabase
     .from('client_brand_books')
@@ -263,6 +277,11 @@ export async function POST(req: Request, { params }: RouteContext) {
   // vuelve antes de que el empuje arranque, asi que la fila del manual no queda
   // colgada de que el cerebro conteste. Ver `lib/brain/push-al-terminar.ts`.
   const brain_push = empujarManualAlCerebro({ client_id: clientId, source_id: data?.id })
+  let pedidoSinLigar: string | null = null
+  if (pedido && data?.id) {
+    const l = await supabase.from('plan_cambios').update({ manual_nuevo_id: data.id, actualizado_en: new Date().toISOString() }).eq('id', pedido.id)
+    if (l.error) pedidoSinLigar = l.error.message?.slice(0, 200) ?? 'error'
+  }
 
   return NextResponse.json({
     persisted: true,
@@ -275,6 +294,8 @@ export async function POST(req: Request, { params }: RouteContext) {
     // E111 · el recibo dice QUÉ versión quedó vigente y cuál era la anterior (null = primera).
     version,
     previous_id: previaId,
+    ...(pedido ? { manual_cambio_id: pedido.id } : {}),
+    ...(pedidoSinLigar ? { pedido_sin_ligar: pedidoSinLigar } : {}),
     // El recibo DICE que se empujo (o por que no) · nunca silencioso.
     brain_push,
   })

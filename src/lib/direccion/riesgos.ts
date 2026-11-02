@@ -10,6 +10,9 @@ import { resolveClientCapContext, resolveClientFamily, resolveRunSpendCapUsd, te
 import { esObjeto, estaCompleto, leer, leerClientes, numero, redondear, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
 import { TIPO_PLAN } from '../oficina/tablero/plan'
 
+/** los pedidos de cambios son de la misma tabla: el título dice de qué documento */
+const delDocumento = (k: { documento?: unknown }, titulo: string): string => (k.documento === 'manual' ? titulo.replace('al plan', 'al manual') : titulo)
+
 const RECIENTE_MS = 7 * 24 * 60 * 60 * 1000
 /** la primera fila de cada cliente, en una lista que viene de más nueva a más vieja */
 const primeraDeCadaCliente = (filas: Fila[]): Fila[] => { const vistos = new Set<string>(); return filas.filter((f) => { const c = String(f.client_id); if (vistos.has(c)) return false; vistos.add(c); return true }) }
@@ -135,9 +138,9 @@ export async function leerRiesgos(c: Contexto) {
     leer(fuentes, 'finanzas_config', db.from('finanzas_config').select('estado').eq('id', 1).limit(1)),
     leer(fuentes, 'jefatura_config', db.from('jefatura_config').select('estado').eq('id', 1).limit(1)),
     leer(fuentes, 'cadena_config', consultasDeDireccion(db).estadoDeLaCadena()),
-    leer(fuentes, 'plan_cambios', db.from('plan_cambios').select('id, client_id, plan_id, estado, despertado, despertar_detalle, actualizado_en').in('estado', ['pendiente', 'en_reescritura']).limit(TOPE), TOPE),
+    leer(fuentes, 'plan_cambios', db.from('plan_cambios').select('id, client_id, plan_id, documento, estado, despertado, despertar_detalle, actualizado_en').in('estado', ['pendiente', 'en_reescritura']).limit(TOPE), TOPE),
     leer(fuentes, 'plan_aprobaciones', db.from('plan_aprobaciones').select('id, client_id, plan_id, despertar_detalle, actualizado_en').eq('estado', 'aprobado').eq('despertado', false).limit(TOPE), TOPE),
-    leer(fuentes, 'plan_cambios_ultimos', db.from('plan_cambios').select('id, client_id, estado, despertar_detalle, actualizado_en').gte('actualizado_en', new Date(now.getTime() - RECIENTE_MS).toISOString()).order('actualizado_en', { ascending: false }).limit(TOPE), TOPE),
+    leer(fuentes, 'plan_cambios_ultimos', db.from('plan_cambios').select('id, client_id, documento, estado, despertar_detalle, actualizado_en').gte('actualizado_en', new Date(now.getTime() - RECIENTE_MS).toISOString()).order('actualizado_en', { ascending: false }).limit(TOPE), TOPE),
     leer(fuentes, 'planes_ultimos', db.from('client_historical_outputs').select('id, client_id, provenance_tag, created_at').eq('output_type', TIPO_PLAN).gte('created_at', new Date(now.getTime() - RECIENTE_MS).toISOString()).order('created_at', { ascending: false }).limit(TOPE), TOPE),
   ])
   for (const a of alertas) {
@@ -176,13 +179,13 @@ export async function leerRiesgos(c: Contexto) {
   for (const k of cambios) {
     const noDesperto = k.despertado === false
     if (!noDesperto && Date.parse(String(k.actualizado_en)) > now.getTime() - REESCRITURA_ATASCADA_MS) continue
-    riesgos.push({ id: `cambios:${String(k.id)}`, gravedad: 2, categoria: 'falla', titulo: noDesperto ? 'Pedido de cambios al plan: no se pudo despertar la reescritura' : 'Pedido de cambios al plan atascado: no ha vuelto la versión nueva', detalle: sinSecretos(k.despertar_detalle), client_id: texto(k.client_id), desde: texto(k.actualizado_en), fuente: 'plan_cambios' })
+    riesgos.push({ id: `cambios:${String(k.id)}`, gravedad: 2, categoria: 'falla', titulo: delDocumento(k, noDesperto ? 'Pedido de cambios al plan: no se pudo despertar la reescritura' : 'Pedido de cambios al plan atascado: no ha vuelto la versión nueva'), detalle: sinSecretos(k.despertar_detalle), client_id: texto(k.client_id), desde: texto(k.actualizado_en), fuente: 'plan_cambios' })
   }
   // 01-nov · adenda 5: el dueño pidió cambios y no salió versión nueva. Solo cuenta el último pedido de cada cliente: si después salió bien, ya no es un riesgo.
-  for (const k of primeraDeCadaCliente(ultimosPedidos)) {
+  for (const k of [...primeraDeCadaCliente(ultimosPedidos.filter((x) => x.documento !== 'manual')), ...primeraDeCadaCliente(ultimosPedidos.filter((x) => x.documento === 'manual'))]) {
     if (k.estado !== 'fallido') continue
     const sinCambios = /^sin cambios reales/i.test(String(k.despertar_detalle ?? ''))
-    riesgos.push({ id: `cambios-sin-version:${String(k.id)}`, gravedad: 2, categoria: 'falla', titulo: sinCambios ? 'Pediste cambios al plan y el redactor devolvió el mismo texto: no se guardó ninguna versión nueva' : 'Pediste cambios al plan y no salió la versión nueva', detalle: sinSecretos(k.despertar_detalle), client_id: texto(k.client_id), desde: texto(k.actualizado_en), fuente: 'plan_cambios' })
+    riesgos.push({ id: `cambios-sin-version:${String(k.id)}`, gravedad: 2, categoria: 'falla', titulo: delDocumento(k, sinCambios ? 'Pediste cambios al plan y el redactor devolvió el mismo texto: no se guardó ninguna versión nueva' : 'Pediste cambios al plan y no salió la versión nueva'), detalle: sinSecretos(k.despertar_detalle), client_id: texto(k.client_id), desde: texto(k.actualizado_en), fuente: 'plan_cambios' })
   }
   // lo más nuevo de cada cliente: si no se pudo comparar con el anterior, puede ser una copia y se dice
   for (const k of primeraDeCadaCliente(ultimosPlanes)) {
