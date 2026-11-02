@@ -1,7 +1,7 @@
 /**
- * 01-nov · ADENDA 1 del equipo del manual · el eslogan real del cliente es un HECHO (reparto con CC1). US$ 0, sin red; se ejecuta el CÓDIGO REAL de «Redactor (B4)» (planeación) y de «[BB] Consolidador» (manual).
- * Fija: sin `contexto_del_cliente.eslogan` el pedido del plan queda IDÉNTICO a la base ya aplicada; con él, un bloque con la frase, su fuente, la regla de la plataforma y la del plan (se usa; otro eslogan = PROPUESTA rotulada).
- * En el manual, la frase propia hallada LITERAL llega como `tagline` con su fuente; sin frase hallada no hay tagline, y `tagline_opciones` no se toca.
+ * 02-nov · ADENDA 3 del equipo del manual (Emilio: sin regla dura) · LA FRASE QUE EL CLIENTE USA ES CONTEXTO. US$ 0, sin red; se ejecuta el CÓDIGO REAL de «Redactor (B4)» (planeación) y de «[BB] Consolidador» (manual).
+ * Fija: sin `contexto_del_cliente.eslogan` el pedido del plan queda IDÉNTICO a la base ya aplicada; con él, un bloque con la frase y su fuente COMO CONTEXTO (se usa, se adapta o se propone otra; la regla que mande la plataforma NO se copia;
+ * solo si la declaró el dueño manda). En el manual el código YA NO escribe `tagline` ni lo marca como hecho: la frase hallada llega a las lentes como contexto (relevo 62) y no cambia el borrador.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -45,30 +45,40 @@ describe('«Redactor (B4)» · el eslogan real (código real)', () => {
       expect(await b4(nuevoPlan, m)).toBe(await b4(aplicado, m))
     }
   })
-  it('con eslogan: bloque con la frase, su fuente, la regla de la plataforma y la del plan', async () => {
+  it('con eslogan: bloque con la frase y su fuente como CONTEXTO; la regla de la plataforma no se copia', async () => {
     const p = await b4(nuevoPlan, [carpeta({ eslogan: ESLOGAN })])
-    expect(p).toContain('ESLOGAN QUE EL CLIENTE YA USA (activo de marca EXISTENTE)')
+    expect(p).toContain('UNA FRASE QUE EL CLIENTE USA (contexto)')
     expect(p).toContain('«Cuando tengas esa hambre de... Náufrago te espera!»')
     expect(p).toContain('Fuente: Frase propia del cliente hallada en sitio/perfil — literal')
-    expect(p).toContain('Regla de la plataforma: Es del cliente: úsalo; otro eslogan va como propuesta.')
-    expect(p).toMatch(/es un HECHO de la marca, no una opción/)
-    expect(p).toMatch(/lo cambies en silencio/)
-    expect(p).toMatch(/rotulada como PROPUESTA/)
+    expect(p).not.toContain('Regla de la plataforma')
+    expect(p).not.toContain('Es del cliente: úsalo')
+    expect(p).toContain('Es contexto sobre cómo se presenta hoy el cliente, no una obligación')
+    expect(p).toContain('proponer otra mejor, libremente')
+    expect(p).toContain('no necesitan justificarse')
+    expect(p).not.toMatch(/es un HECHO de la marca|no una opción|lo cambies en silencio|rotulada como PROPUESTA/i)
+  })
+  it('si la fuente es el dueño, manda (palabra del dueño) y puede sugerir variantes rotuladas', async () => {
+    for (const fuente of ['Declarado por el dueño', 'dueno · manual']) {
+      const p = await b4(nuevoPlan, [carpeta({ eslogan: { texto: 'Frase X', fuente } })])
+      expect(p).toContain('Esta frase la declaró el dueño: manda')
+      expect(p).toContain('Puedes sugerir variantes como propuesta')
+      expect(p).not.toContain('no una obligación')
+    }
   })
   it('el bloque va antes de la carpeta, después del registro, y solo una vez', async () => {
     const p = await b4(nuevoPlan, [carpeta({ eslogan: ESLOGAN })])
-    expect(p.split('ESLOGAN QUE EL CLIENTE YA USA').length).toBe(2)
-    expect(p.indexOf('ESLOGAN QUE EL CLIENTE YA USA')).toBeLessThan(p.indexOf('LA CARPETA DEL CLIENTE (completa'))
-    expect(p.indexOf('EL MANUAL DE MARCA APROBADO')).toBeLessThan(p.indexOf('ESLOGAN QUE EL CLIENTE YA USA'))
+    expect(p.split('UNA FRASE QUE EL CLIENTE USA').length).toBe(2)
+    expect(p.indexOf('UNA FRASE QUE EL CLIENTE USA')).toBeLessThan(p.indexOf('LA CARPETA DEL CLIENTE (completa'))
+    expect(p.indexOf('EL MANUAL DE MARCA APROBADO')).toBeLessThan(p.indexOf('UNA FRASE QUE EL CLIENTE USA'))
   })
   it('el eslogan con carpeta ilegible/sin resumen igual llega (no depende de que haya informes)', async () => {
     const p = await b4(nuevoPlan, [{ brazo: 'cerebro', estado: 'trajo', objetivo: 'cerebro', datos: { contexto_del_cliente: { resumen_vivo: { estado: 'sin_resumen_vivo' }, informes: [], eslogan: ESLOGAN } } }])
     expect(p).toContain('«Cuando tengas esa hambre de... Náufrago te espera!»')
   })
-  it('sin fuente o sin regla: dice «no declarada» y omite la regla, sin romper', async () => {
+  it('sin fuente: dice «no declarada», sin romper (y no es del dueño)', async () => {
     const p = await b4(nuevoPlan, [carpeta({ eslogan: { texto: 'Frase X' } })])
     expect(p).toContain('Fuente: no declarada')
-    expect(p).not.toContain('Regla de la plataforma')
+    expect(p).toContain('no una obligación')
   })
   it('un texto larguísimo se acota; saltos de línea y espacios se colapsan (no rompe el bloque)', async () => {
     const p = await b4(nuevoPlan, [carpeta({ eslogan: { texto: 'a\n\n b '.repeat(200), fuente: 'f' } })])
@@ -102,35 +112,23 @@ describe('manual · el Consolidador (código real)', () => {
   it('solo cambian «[BB] Fan-out prep», «[BB] Consolidador» y «[BB] Judge · run-sdk» (partes 1, 2 y 3 acumuladas)', () => {
     expect(cambiados(vivoManual, nuevoManual)).toEqual(['[BB] Consolidador', '[BB] Fan-out prep', '[BB] Judge · run-sdk'])
   })
-  it('frase hallada: llega como tagline LITERAL, con la fuente y confianza 1, como hecho de código', async () => {
+  it('frase hallada: el código YA NO escribe tagline ni lo marca como hecho; las propuestas del editor no se tocan', async () => {
     const b = await consolidar(nuevoManual, HALLADA)
-    expect(b.tagline).toBe('Cuando tengas esa hambre de... Náufrago te espera!')
-    expect(b._field_meta.tagline).toMatchObject({ estado: 'hecho', provisional: false, gateado: false, fuente: expect.stringContaining('Frase propia del cliente hallada'), confianza: 1, lente: 'codigo' })
-    expect(b.tagline_opciones).toEqual(['Una propuesta']) // las propuestas del editor no se tocan
+    expect('tagline' in b).toBe(false)
+    expect(b._field_meta.tagline).toBeUndefined()
+    expect(b.tagline_opciones).toEqual(['Una propuesta'])
   })
-  it('no es provisional ni ausente: no cae en los baldes que se piden otra vez', async () => {
-    const b = await consolidar(nuevoManual, HALLADA)
-    const prov = Object.keys(b._field_meta).filter((k) => b._field_meta[k].estado === 'provisional')
-    expect(prov).not.toContain('tagline')
-  })
-  it('sin frase hallada (no hallado, ausente, no es texto, vacía): NO hay tagline ni meta de tagline', async () => {
-    for (const m of [{ estado_frase_propia: 'no_hallado' }, { estado_frase_propia: 'no_hallado', frase_propia: 'Una frase que no es del cliente' }, { estado_frase_propia: 'ambigua', frase_propia: 'Dos candidatas' }, null, undefined, { estado_frase_propia: 'hallado', frase_propia: 42 }, { estado_frase_propia: 'hallado' }, { estado_frase_propia: 'hallado', frase_propia: '   ' }]) {
-      const b = await consolidar(nuevoManual, m)
-      expect('tagline' in b).toBe(false)
-      expect(b._field_meta.tagline).toBeUndefined()
+  it('con o sin frase hallada (no hallado, ambigua, ausente, vacía, enorme) el borrador tiene los mismos campos que sin materia: la frase no cambia nada', async () => {
+    for (const m of [HALLADA, { estado_frase_propia: 'no_hallado' }, { estado_frase_propia: 'ambigua', frase_propia: 'Dos candidatas' }, null, undefined, { estado_frase_propia: 'hallado', frase_propia: ' \n ' }, { estado_frase_propia: 'hallado', frase_propia: 'x'.repeat(900) }]) {
+      const b = await consolidar(nuevoManual, m), hoy = await consolidar(nuevoManual, null)
+      expect(b.tagline).toBeUndefined()
+      expect(Object.keys(b).sort()).toEqual(Object.keys(hoy).sort())
     }
   })
-  it('un hallazgo vacío tras limpiar no crea tagline; espacios y saltos se colapsan; se acota a 300', async () => {
-    expect((await consolidar(nuevoManual, { estado_frase_propia: 'hallado', frase_propia: ' \n ' })).tagline).toBeUndefined()
-    expect((await consolidar(nuevoManual, { estado_frase_propia: 'hallado', frase_propia: 'a  b\n c' })).tagline).toBe('a b c')
-    expect((await consolidar(nuevoManual, { estado_frase_propia: 'hallado', frase_propia: 'x'.repeat(900) })).tagline.length).toBe(300)
+  it('el Consolidador no menciona la frase propia como hecho: el código del nodo no trae esa lógica', () => {
+    const c = nuevoManual.nodes.find((n: any) => n.name === '[BB] Consolidador').parameters.jsCode as string
+    expect(c).not.toMatch(/Frase propia del cliente hallada en su sitio y su perfil social/)
+    expect(c).not.toMatch(/_meta\.tagline\s*=/)
   })
-  it('sin la clave de materia, el borrador queda idéntico al de las partes 1 y 2 (solo agrega)', async () => {
-    const sin = await consolidar(nuevoManual, null)
-    expect(Object.keys(sin)).not.toContain('tagline')
-  })
-  it('el Consolidador de las partes anteriores (vivo) no tiene tagline: esta parte es la que lo agrega', async () => {
-    const hoy = await consolidar(vivoManual, HALLADA)
-    expect(hoy.tagline).toBeUndefined()
-  })
+
 })

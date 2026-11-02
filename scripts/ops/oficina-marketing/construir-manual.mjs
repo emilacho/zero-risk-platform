@@ -7,12 +7,10 @@
  * Cada parte se certifica por separado; la ventana de aplicación es una sola, con el archivo acumulado.
  */
 import { escribirNuevo, leerVivo } from './lib.mjs'
-import { construirEsloganEnManual } from './eslogan-del-cliente.mjs'
 import { construirJuezIndependiente } from './juez-independiente-manual.mjs'
 import { construirPalabrasConIntencion } from './palabras-con-intencion-manual.mjs'
 
 const f = leerVivo('ssLtwYPt7zxuvnM2')
 construirPalabrasConIntencion(f)
 construirJuezIndependiente(f)
-construirEsloganEnManual(f)
 console.log(escribirNuevo(f))

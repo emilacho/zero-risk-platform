@@ -5,7 +5,7 @@
  */
 import { cambiarCodigo } from './lib.mjs'
 
-const ANCLA_BLOQUE = '// 01-nov · EL ESLOGAN QUE EL CLIENTE YA USA (activo de marca EXISTENTE)'
+const ANCLA_BLOQUE = '// 02-nov · UNA FRASE QUE EL CLIENTE USA (contexto, sin obligación)'
 const BLOQUE = `// 01-nov · LO QUE DECLARÓ EL DUEÑO (hechos con la máxima precedencia) · viene en contexto_del_cliente.hechos_del_dueno = [{ tema, respuesta, sede, frases_negadas }]. Sin entradas válidas, el pedido queda idéntico a hoy.
 const bloqueHechosDelDueno = (function () {
   const lista = carpeta && Array.isArray(carpeta.hechos_del_dueno) ? carpeta.hechos_del_dueno : [];
