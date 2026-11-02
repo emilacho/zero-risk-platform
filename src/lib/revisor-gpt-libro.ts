@@ -8,11 +8,17 @@
  * Puro salvo `registrarRevisorEnElLibro`, que escribe; NUNCA lanza ni frena la revisión (la llamada ya ocurrió): un fallo queda en el registro del servidor con la fila a la vista.
  */
 import { llamarRevisorGpt, type OpcionesDeLlamada, type ResultadoDelRevisor } from './revisor-gpt'
+import { randomUUID } from 'node:crypto'
+import { guardarTextosDeInvocacion } from './textos-de-invocacion'
+const resumenDeEntrada = (t: string | null | undefined): string | null => (t ? (t.length > 2000 ? `${t.slice(0, 2000)}…` : t) : null)
 
 /** de quién es la llamada: la oficina (piezas), la jefatura (plan, estrategia, calendario, brief, piezas) o la revisión del manual */
 export type OrigenDelRevisor = 'oficina' | 'jefatura' | 'manual'
 
 export interface DatosDelRevisor {
+  /** lo que se le mandó y lo que respondió, enteros (observabilidad, punto 1) */
+  entrada?: string | null
+  salida?: string | null
   origen: OrigenDelRevisor
   /** el encargo (oficina), la revisión (jefatura) o el cliente (manual): lo que identifica la llamada junto con `n` */
   refId: string
@@ -61,6 +67,7 @@ export function filaDeInvocacionDelRevisor(d: DatosDelRevisor): Record<string, u
     status: d.ok ? 'completed' : 'failed',
     exit_code: d.ok ? 0 : 1,
     error_message: d.ok ? null : 'el revisor externo no respondió (el costo de los intentos sí se cobró)',
+    input_summary: resumenDeEntrada(d.entrada),
     output_summary: `revisor externo (${d.origen}) · ${d.ok ? 'opinión recibida' : 'sin segunda mirada'} · ${d.intentos} intento(s)`,
     metadata: { kind: 'revisor_externo', source: d.origen, ref_id: d.refId, n: d.n ?? 0, cost_basis: d.costBasis, intentos: d.intentos },
   }
@@ -69,8 +76,9 @@ export function filaDeInvocacionDelRevisor(d: DatosDelRevisor): Record<string, u
 type SupabaseLike = { from: (t: string) => { insert: (row: Record<string, unknown>) => PromiseLike<{ error: { code?: string; message: string } | null }> } }
 
 export async function registrarRevisorEnElLibro(supabase: SupabaseLike, d: DatosDelRevisor): Promise<{ ok: boolean; omitida?: boolean; repetida?: boolean; error?: string }> {
-  const fila = filaDeInvocacionDelRevisor(d)
-  if (!fila) return { ok: true, omitida: true }
+  const sinId = filaDeInvocacionDelRevisor(d)
+  if (!sinId) return { ok: true, omitida: true }
+  const fila: Record<string, unknown> & { id: string } = { ...sinId, id: randomUUID() }
   try {
     const { error } = await supabase.from('agent_invocations').insert(fila)
     if (error) {
@@ -79,6 +87,7 @@ export async function registrarRevisorEnElLibro(supabase: SupabaseLike, d: Datos
       console.error(`[revisor-gpt] el costo de la llamada ${String(fila.session_id)} NO entró a agent_invocations · ${error.code ?? '-'} · ${error.message} · fila=${JSON.stringify(fila).slice(0, 300)}`)
       return { ok: false, error: error.message }
     }
+    await guardarTextosDeInvocacion(supabase as never, fila.id, { entrada: d.entrada, salida: d.salida })
     return { ok: true }
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e)
@@ -111,6 +120,7 @@ export async function llamarRevisorGptConLibro(o: OpcionesDeLlamada, libro: Cont
     origen: libro.origen, refId: libro.refId, n: libro.n, clientId: libro.clientId,
     modelo: o.modelo ?? 'desconocido', costUsd: r.costo_usd ?? 0, costBasis: o.precioEntrada !== undefined && o.precioSalida !== undefined ? 'usage' : 'estimado',
     ok: r.ok, intentos: r.intentos?.length ?? 1, startedAtMs: t0, endedAtMs: t1, workflowId: libro.workflowId, workflowExecutionId: libro.workflowExecutionId,
+    entrada: o.texto, salida: r.ok ? r.texto : null,
   })
   return r
 }

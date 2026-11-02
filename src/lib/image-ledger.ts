@@ -6,8 +6,13 @@
  * Contabilidad: `agent_image_generations.cost_usd` es el detalle de las imágenes; `agent_invocations.cost_usd` es el TOTAL del gasto de la cuenta e incluye esas mismas
  * imágenes. Quien sume las dos tablas cuenta dos veces (el tablero lo declara).
  */
+import { randomUUID } from 'node:crypto'
+import { guardarTextosDeInvocacion } from './textos-de-invocacion'
+const resumenDeEntrada = (t: string | null | undefined): string | null => (t ? (t.length > 2000 ? `${t.slice(0, 2000)}…` : t) : null)
 
 export interface DatosDeImagen {
+  /** lo que se le pidió, entero (observabilidad, punto 1) */
+  prompt?: string | null
   generationId: string
   clientId: string | null
   agentSlug: string | null
@@ -53,6 +58,7 @@ export function filaDeInvocacionDeImagen(d: DatosDeImagen): Record<string, unkno
     status: 'completed',
     exit_code: 0,
     error_message: null,
+    input_summary: resumenDeEntrada(d.prompt),
     output_summary: `imagen generada ${d.size}${d.quality ? ` · calidad ${d.quality}` : ''}`,
     metadata: { kind: 'image_generation', source: 'images-generate', generation_id: d.generationId, cost_basis: d.costBasis, size: d.size, quality: d.quality, caller: d.caller },
   }
@@ -62,14 +68,16 @@ type SupabaseLike = { from: (t: string) => { insert: (row: Record<string, unknow
 
 /** escribe la fila; NUNCA lanza ni frena la imagen (la imagen ya se entregó): un fallo queda en el registro del servidor, con la fila a la vista para repararla */
 export async function registrarImagenEnElLibro(supabase: SupabaseLike, d: DatosDeImagen): Promise<{ ok: boolean; omitida?: boolean; error?: string }> {
-  const fila = filaDeInvocacionDeImagen(d)
-  if (!fila) return { ok: true, omitida: true }
+  const sinId = filaDeInvocacionDeImagen(d)
+  if (!sinId) return { ok: true, omitida: true }
+  const fila: Record<string, unknown> & { id: string } = { ...sinId, id: randomUUID() }
   try {
     const { error } = await supabase.from('agent_invocations').insert(fila)
     if (error) {
       console.error(`[images/generate] el costo de la imagen ${d.generationId} NO entró a agent_invocations · ${error.code ?? '-'} · ${error.message} · fila=${JSON.stringify(fila).slice(0, 300)}`)
       return { ok: false, error: error.message }
     }
+    await guardarTextosDeInvocacion(supabase as never, fila.id, { entrada: d.prompt })
     return { ok: true }
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e)

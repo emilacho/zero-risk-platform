@@ -49,6 +49,7 @@
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { guardarTextosDeInvocacion } from '@/lib/textos-de-invocacion'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -73,6 +74,8 @@ interface LogInvocationBody {
   exit_code?: number | null
   error_message?: string | null
   response_text?: string | null
+  /** lo que se le pidió al empleado, entero: `input_summary` guarda el comienzo y `agent_invocation_textos` el total */
+  input_text?: string | null
   started_at?: string | null
   ended_at?: string | null
   client_id?: string | null
@@ -195,6 +198,7 @@ export async function POST(request: Request) {
   // lo que se guardó. Una respuesta recortada no puede volver a leerse como entera.
   const RESPONSE_MAX_CHARS = 100_000
   const responseText = typeof body.response_text === 'string' ? body.response_text : ''
+  const inputText = typeof body.input_text === 'string' ? body.input_text : ''
   const responseTruncated = responseText.length > RESPONSE_MAX_CHARS
   const outputSummary = responseTruncated
     ? responseText.slice(0, RESPONSE_MAX_CHARS) + '…'
@@ -229,6 +233,7 @@ export async function POST(request: Request) {
     status,
     exit_code: typeof body.exit_code === 'number' ? body.exit_code : null,
     error_message: typeof body.error_message === 'string' ? body.error_message : null,
+    input_summary: inputText ? (inputText.length > 2000 ? `${inputText.slice(0, 2000)}…` : inputText) : null,
     output_summary: outputSummary,
     metadata: {
       ...(body.metadata && typeof body.metadata === 'object' ? body.metadata : {}),
@@ -260,6 +265,8 @@ export async function POST(request: Request) {
         { status: 500 },
       )
     }
+
+    await guardarTextosDeInvocacion(supabase, (data as { id: string }).id, { entrada: inputText, salida: responseText })
 
     return NextResponse.json(
       {

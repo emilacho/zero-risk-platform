@@ -192,6 +192,8 @@ describe('POST /api/video/generate', () => {
     expect(JSON.parse(String(est.init!.body))).toEqual(JSON.parse(String(env.init!.body))) // se estima EXACTAMENTE lo que se envía
     expect(JSON.parse(String(env.init!.body))).toMatchObject({ duration: 8, resolution: '480p', aspect_ratio: '9:16', generate_audio: true, image_urls: ['https://fotos/1.jpg'] })
     expect(insert.mock.calls[0][0]).toMatchObject({ session_id: 'vid-r1', status: 'running', client_id: 'c1', workflow_id: 'wf-1', workflow_execution_id: 'ex-1' })
+    // 01-nov · lo que se pidió queda en la fila
+    expect(typeof insert.mock.calls[0][0].input_summary).toBe('string')
     expect(insert.mock.calls[0][0].cost_usd).toBeCloseTo(1.1512, 3) // se reserva lo que de verdad se cobra (30 % vigente)
   })
   it('la prueba elegida (opción B): 720p · 8 s por omisión → estima US$ 3,70, cabe en el tope y se envía', async () => {
