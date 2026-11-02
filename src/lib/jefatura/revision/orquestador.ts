@@ -10,7 +10,6 @@
 import { controlarCoherenciaDelPlan } from '../../planeacion/coherencia-del-plan'
 import { armarQueCambio, ponerQueCambio, type FichaDelCambio } from './plan'
 import { conLasPaginasDelSitio } from './carpeta-para-revisar'
-import { controlarFrasesNegadas } from '../../planeacion/coherencia-del-plan'
 import crypto from 'node:crypto'
 import { estadoInicial, fichaNueva, registrarPaso, siguientePaso, type Artefacto, type Estado, type Ficha, type Paso, type Plantilla, type ResultadoDePaso } from '../../revision-comun'
 import { desacuerdosDe, hayQueAvisar, resolverCierre, textoDelAviso, type Cierre } from './cierre'
@@ -52,14 +51,11 @@ const esCorreccion = (paso: Paso): boolean => paso.clave.startsWith('correccion:
 
 /** el estado inicial: el artefacto que se revisa es la versión A */
 /**
- * 02-nov · firma de Emilio («quita candado»): en el plan, fechas, presupuesto y frases negadas no devuelven nada. Son avisos a la vista del dueño antes de aprobar: la protección es su aprobación.
+ * 02-nov · firma de Emilio («quita candado»): en el plan, fechas y presupuesto no devuelven nada. Son avisos a la vista del dueño antes de aprobar: la protección es su aprobación.
  * Se miden sobre la versión que quedó.
  */
-export function avisosDelPlan(texto: string, contexto: string, hechos: Array<{ tema: string; frases_negadas: string[] }>, ahora: Date): string[] {
-  return [
-    ...controlarCoherenciaDelPlan({ texto, contexto, referencia: ahora }).map((h) => (h.estado === 'no_cuadra' ? `Aviso: ${h.que}` : `Sin comprobar: ${h.que}`)),
-    ...controlarFrasesNegadas(texto, hechos).map((h) => `Aviso: ${h.que}`),
-  ]
+export function avisosDelPlan(texto: string, contexto: string, ahora: Date): string[] {
+  return controlarCoherenciaDelPlan({ texto, contexto, referencia: ahora }).map((h) => (h.estado === 'no_cuadra' ? `Aviso: ${h.que}` : `Sin comprobar: ${h.que}`))
 }
 
 function estadoDeApertura(entrada: EntradaDeRevision): Estado {
@@ -426,13 +422,6 @@ async function cerrar(P: Puertos, rev: Revision, o: { tope?: boolean; fallida?: 
   const e = rev.estado_del_motor
   const c = resolverCierre(e, { tope: !!o.tope, fallida: !!o.fallida, duenos: duenosDe(rev.productores) })
   const estado = o.fallida ? 'fallida' : o.tope ? 'cerrada_por_tope' : 'cerrada'
-  // 02-nov · Lenovo: en la pieza, igual que en el plan, la frase negada es aviso a la vista del dueño; se mide sobre lo que quedó
-  if (rev.artifact_type === 'pieza' && !o.fallida && P.hechosDelDueno) {
-    const { historial: _h, ...rd } = (datos(e, 'revision') ?? {}) as Datos
-    void _h
-    const avisos = controlarFrasesNegadas(typeof rd.texto === 'string' && rd.texto ? rd.texto : JSON.stringify(rd), await P.hechosDelDueno(rev.client_id)).map((h) => `Aviso: ${h.que}`)
-    if (avisos.length) e.avisos = avisos
-  }
   await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: rev.gasto_usd > e.gasto_usd ? rev.gasto_usd : e.gasto_usd, estado, resultado: c.resultado, marcas: c.marcas })
   const cerrada: Revision = { ...rev, estado, resultado: c.resultado, marcas: c.marcas }
   if (hayQueAvisar(c)) await P.avisar({ canal: 'alertas', revision_id: rev.id, texto: textoDelAviso(c, { tipo: rev.artifact_type, artifact_id: rev.artifact_id, gasto_usd: e.gasto_usd, simulado: rev.dry_run }) + (o.nota ? ` · ${o.nota}` : ''), dry_run: rev.dry_run })
@@ -476,7 +465,7 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
   const guardado = planDeGuardado(ad, { idDeA: o.idDeA, existentes: o.existentes, produjo: producidas })
   const sinAplicar = veredicto?.sin_aplicar ?? []
   const orden_ilegible = rev.entrada.orden_ilegible === true
-  const avisos = avisosDelPlan(h.find((x) => x.etiqueta === ad.adoptada)?.texto ?? '', (rev.entrada.contexto ?? []).map((x) => x.texto).join('\n'), (await P.hechosDelDueno?.(rev.client_id)) ?? [], P.ahora())
+  const avisos = avisosDelPlan(h.find((x) => x.etiqueta === ad.adoptada)?.texto ?? '', (rev.entrada.contexto ?? []).map((x) => x.texto).join('\n'), P.ahora())
   const palabra_del_dueno = { verificada, ordenes, por_version: veredicto?.por_version ?? {}, sin_aplicar: sinAplicar, salvaguardas: veredicto?.salvaguardas ?? [], orden_ilegible, avisos }
   const fin = resultadoTrasElegir({ resultado: rev.resultado, marcas: rev.marcas }, ad.adoptoLaUltima)
   const anotaciones = [
