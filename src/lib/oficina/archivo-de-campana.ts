@@ -21,6 +21,8 @@ interface Consulta extends PromiseLike<Lectura> {
   in(c: string, v: unknown[]): Consulta
   is(c: string, v: unknown): Consulta
   gte(c: string, v: unknown): Consulta
+  gt(c: string, v: unknown): Consulta
+  lt(c: string, v: unknown): Consulta
   update(p: Fila): Consulta
   maybeSingle(): Consulta
 }
@@ -55,7 +57,13 @@ export async function archivarCampana(db: Db, cuerpo: unknown, ahora: Date = new
   if (filas.error) return falla(filas.error.message)
   const esperas = await tablasDelArchivo(db).esperas().select('id').eq('campana_id', campana_id).eq('estado', 'viva')
   if (esperas.error) return falla(esperas.error.message)
-  const hq = await db.from('hitl_queue').select('id, status, metadata').eq('client_id', c.client_id).eq('type', TIPO_DE_PIEZA).gte('created_at', c.creada_en).is('archivada_en', null)
+  // las piezas se atan por fechas: desde que nació la campaña hasta que se archivó o nació la siguiente. Sin este límite, repetir arrastraría las piezas de la campaña nueva
+  const siguientes = await tablasDelArchivo(db).campanas().select('id, creada_en').eq('client_id', c.client_id).eq('seco', c.seco).neq('id', c.id).gt('creada_en', c.creada_en)
+  if (siguientes.error) return falla(siguientes.error.message)
+  const nacioOtra = filasDe(siguientes).map((x) => String(x.creada_en)).sort()[0]
+  const limite = typeof c.archivada_en === 'string' ? c.archivada_en : nacioOtra
+  const consultaDePiezas = db.from('hitl_queue').select('id, status, metadata').eq('client_id', c.client_id).eq('type', TIPO_DE_PIEZA).gte('created_at', c.creada_en).is('archivada_en', null)
+  const hq = await (limite ? consultaDePiezas.lt('created_at', limite) : consultaDePiezas)
   if (hq.error) return falla(hq.error.message)
   const aprobadas = filasDe(hq).filter((p) => p.status === 'approved')
   // lo que Emilio sacó del archivo no vuelve a entrar si esto se repite

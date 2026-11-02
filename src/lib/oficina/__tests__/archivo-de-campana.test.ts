@@ -109,6 +109,44 @@ describe('archivar', () => {
     expect(filas(x, 'hitl_queue').find((f) => f.id === H1)).toMatchObject({ status: 'pending', archivada_en: null })
   })
 
+  it('🔴 repetir después de abrir la campaña nueva no arrastra sus piezas', async () => {
+    const x = base()
+    await archivarCampana(d(x), { campana_id: K, dry_run: false }, AHORA)
+    x.semilla('cadena_campanas', [{ id: 'nueva', client_id: C, estado: 'activa', creada_en: '2026-11-03T13:00:00Z', seco: false }])
+    x.semilla('hitl_queue', [{ id: 'de-la-nueva', client_id: C, type: 'content_piece_review', status: 'pending', created_at: '2026-11-03T14:00:00Z', metadata: { oficina_encargo_id: 'enc-nueva' } }])
+    const r = await archivarCampana(d(x), { campana_id: K, dry_run: false }, new Date('2026-11-04T00:00:00Z'))
+    expect(r.body).toMatchObject({ piezas: 0, encargos: 0 })
+    expect(filas(x, 'hitl_queue').find((f) => f.id === 'de-la-nueva')).not.toHaveProperty('archivada_en')
+  })
+
+  it('🔴 archivar una campaña cerrada no arrastra las piezas de la que vino después, aunque no se hubiera archivado antes', async () => {
+    const x = base()
+    Object.assign(x.tablas['cadena_campanas'][0], { estado: 'cerrada' })
+    x.semilla('cadena_campanas', [{ id: 'nueva', client_id: C, estado: 'activa', creada_en: '2026-11-01T00:00:00Z', seco: false }, { id: 'otro-cliente', client_id: OTRO, estado: 'activa', creada_en: '2026-10-30T12:00:00Z', seco: false }, { id: 'ensayo', client_id: C, estado: 'activa', creada_en: '2026-10-30T12:00:00Z', seco: true }])
+    x.semilla('hitl_queue', [{ id: 'de-la-nueva', client_id: C, type: 'content_piece_review', status: 'pending', created_at: '2026-11-02T00:00:00Z', metadata: {} }])
+    const r = await archivarCampana(d(x), { campana_id: K, dry_run: false }, AHORA)
+    expect(filas(x, 'hitl_queue').find((f) => f.id === 'de-la-nueva')).not.toHaveProperty('archivada_en')
+    // las de antes de que naciera la siguiente sí entran; otro cliente y un ensayo no marcan el límite
+    expect(r.body).toMatchObject({ piezas: 1 })
+  })
+
+  it('🔴 lo creado después de archivar no entra al repetir, aunque aún no haya campaña nueva', async () => {
+    const x = base()
+    await archivarCampana(d(x), { campana_id: K, dry_run: false }, AHORA)
+    x.semilla('hitl_queue', [{ id: 'despues', client_id: C, type: 'content_piece_review', status: 'pending', created_at: '2026-11-03T14:00:00Z', metadata: {} }])
+    await archivarCampana(d(x), { campana_id: K, dry_run: false }, new Date('2026-11-04T00:00:00Z'))
+    expect(filas(x, 'hitl_queue').find((f) => f.id === 'despues')).not.toHaveProperty('archivada_en')
+  })
+
+  it('🔴 con varias campañas después, el límite lo pone la primera', async () => {
+    const x = base()
+    Object.assign(x.tablas['cadena_campanas'][0], { estado: 'cerrada' })
+    x.semilla('cadena_campanas', [{ id: 'segunda', client_id: C, estado: 'cerrada', creada_en: '2026-11-01T00:00:00Z', seco: false }, { id: 'tercera', client_id: C, estado: 'activa', creada_en: '2026-11-02T12:00:00Z', seco: false }])
+    x.semilla('hitl_queue', [{ id: 'de-la-segunda', client_id: C, type: 'content_piece_review', status: 'rejected', created_at: '2026-11-02T00:00:00Z', metadata: {} }])
+    await archivarCampana(d(x), { campana_id: K, dry_run: false }, AHORA)
+    expect(filas(x, 'hitl_queue').find((f) => f.id === 'de-la-segunda')).not.toHaveProperty('archivada_en')
+  })
+
   it('🔴 no cambia cuántas filas, piezas ni encargos hay', async () => {
     const x = base()
     const cuantas = () => ['cadena_calendario_filas', 'hitl_queue', 'oficina_encargos', 'cadena_esperas', 'cadena_campanas'].map((n) => filas(x, n).length)
