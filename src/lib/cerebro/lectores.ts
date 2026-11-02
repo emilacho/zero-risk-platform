@@ -214,8 +214,10 @@ const masNueva = (a: string | null, b: string | null): string | null => (a && b 
 export async function leerSedes(ctx: Contexto): Promise<Salida> {
   const [s, d] = await Promise.all([
     leer(ctx, { tabla: 'client_sedes', columnas: ['id', 'clave', 'ciudad', 'created_at', 'updated_at'], donde: { client_id: ctx.cliente } }),
-    leer(ctx, { tabla: 'client_sede_datos', columnas: ['id', 'sede_id', 'campo', 'valor_texto', 'fuente', 'alcance', 'observado_en', 'reconfirmado_en'], donde: { client_id: ctx.cliente } }),
+    leer(ctx, { tabla: 'client_sede_datos', columnas: ['id', 'sede_id', 'campo', 'valor_texto', 'fuente', 'alcance', 'observado_en', 'reconfirmado_en', 'retirada_en'], donde: { client_id: ctx.cliente } }),
   ])
+  // una fila retirada (no era del cliente) no se lee: ni como línea ni para el estado de la sede
+  if (!d.error) d.filas = d.filas.filter((f) => !f.retirada_en)
   const fuentes: Partial<Record<NombreDeFuente, EstadoDeFuente>> = {}
   const lineas: Ficha[] = []
   let fallidas = 0

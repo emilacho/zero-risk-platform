@@ -64,7 +64,7 @@ export async function cargarContextoDeBrazos(db: Db, clientId: string, cliente: 
   const sd = await db.from('client_sedes').select('id, ciudad, clave').eq('client_id', clientId)
   if (sd.error) errores.push(`client_sedes: ${sd.error.message}`)
   const ids = lista(sd.data).map((s) => String(s.id)).filter(Boolean)
-  const da = ids.length ? await db.from('client_sede_datos').select('sede_id, campo, valor_texto, observado_en').eq('client_id', clientId).in('campo', ['tipo_de_atencion', 'direccion', CAMPO_ESTADO_DE_LA_SEDE]).limit(200) : { data: [], error: null }
+  const da = ids.length ? await db.from('client_sede_datos').select('sede_id, campo, valor_texto, observado_en').eq('client_id', clientId).in('campo', ['tipo_de_atencion', 'direccion', CAMPO_ESTADO_DE_LA_SEDE]).is('retirada_en', null).limit(200) : { data: [], error: null }
   if (da.error) errores.push(`client_sede_datos: ${da.error.message}`)
   const rr = await db.from('apify_raw').select('id, apify_function, params, respuesta, ensayo, created_at').eq('client_id', clientId).eq('ensayo', false).in('apify_function', ['own_google_maps_profile', 'google_maps_scraper', 'competitor_website_scraper', 'instagram_scraper', 'facebook_ads_library_scraper']).order('created_at', { ascending: false }).limit(300)
   if (rr.error) errores.push(`apify_raw: ${rr.error.message}`)
