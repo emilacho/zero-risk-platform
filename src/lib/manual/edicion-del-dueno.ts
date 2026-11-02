@@ -306,7 +306,9 @@ export async function empujarCamposAlCerebro(d: DepsDelCerebro, x: { client_id: 
  * «Declarado obliga»: una corrida del alta o del cimiento arma su borrador desde cero. Antes de guardarlo como versión nueva, los campos que el dueño escribió en la vigente
  * (`_field_meta.<campo>.fuente === 'dueno'`) se vuelven a poner —valor y procedencia— en el borrador nuevo. Todo lo demás de la corrida queda igual. Puro.
  */
-export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila): { bb: Fila; conservados: string[] } {
+const nuevoTrae = (v: unknown): boolean => (Array.isArray(v) ? v.length > 0 : typeof v === 'string' ? v.trim() !== '' : v != null)
+
+export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila, pedido?: { campos_liberados: string[]; creado_en: string }): { bb: Fila; conservados: string[] } {
   // 01-nov · hallazgo de CC3: una corrida no declara por el dueño, ni siquiera en un manual sin versión anterior
   if (!previa) return Array.isArray(bb.palabras_con_intencion) ? { bb: { ...bb, palabras_con_intencion: deUnaCorrida(bb.palabras_con_intencion) }, conservados: [] } : { bb, conservados: [] }
   const borradorPrevio = objeto(objeto(previa.content_text).brand_book_draft)
@@ -318,6 +320,12 @@ export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila): 
     const m = objeto(metaPrevia[c.clave])
     // 02-nov · lo que validó campo por campo tampoco lo pisa una corrida; «Validar el manual» entero no entra aquí, como hasta hoy
     if (m.fuente !== 'dueno' && objeto(m.aceptado_por_el_dueno).campo !== true) continue
+    // 02-nov · un pedido del dueño libera lo suyo, salvo lo que escribió o validó después de pedirlo, y salvo que la reescritura lo haya dejado vacío
+    if (pedido?.campos_liberados.includes(c.clave)) {
+      const hecho = Date.parse(String(m.en ?? objeto(m.aceptado_por_el_dueno).en ?? ''))
+      const nuevo = nuevoTrae(bb[c.clave])
+      if (nuevo && !(hecho > Date.parse(pedido.creado_en))) continue
+    }
     const valor = borradorPrevio[c.clave] ?? (c.columna ? previa[c.columna] : undefined)
     if (valor == null || (typeof valor === 'string' && !valor.trim())) continue
     nuevo[c.clave] = valor

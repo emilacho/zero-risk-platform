@@ -8,6 +8,7 @@ import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { planAprobar, planCambios } from './plan'
 import { firmarTablero, revisionResolver } from './revisiones'
 import { empujarManualAlCerebro } from '../../brain/push-al-terminar'
+import { manualCambios } from './manual-cambios'
 import { rutaDecidirPalabra, rutaValidarCampo, rutaValidarManual } from '../../manual/edicion-rutas'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
 
@@ -215,6 +216,7 @@ export const manualValidarCampo: Manejador = async ({ db }, { cuerpo, reviewer }
 }
 
 export const ACCIONES: Record<string, Manejador> = {
+  'manual-cambios': manualCambios,
   'manual-validar': manualValidar,
   'manual-validar-campo': manualValidarCampo,
   'manual-palabra': manualPalabra,
