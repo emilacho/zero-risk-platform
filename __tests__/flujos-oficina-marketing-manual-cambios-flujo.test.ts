@@ -168,3 +168,34 @@ describe('alcance del flujo', () => {
     expect(flujo.settings.executionOrder).toBe('v1')
   })
 })
+
+describe('⑤ el cierre lee el recibo del guardado (CC1 #837 · «sin cambios reales»)', () => {
+  const cerrarCon = async (recibo: any, relee: any = [{ id: SOBRE.manual_cambio_id, estado: 'en_reescritura', manual_nuevo_id: null }]) => {
+    const s = sb({ relee })
+    await recorrer(flujo, '⑤ Releer el pedido', {}, {
+      http: s.http,
+      previos: { '⓪ Llave · Webhook · manual-cambios': [{ sobre: SOBRE }], '③ Armar la entrada del manual': [{ client_id: SOBRE.client_id }], '④ Llamar al flujo del manual': [recibo === undefined ? {} : { promote_recibo: recibo }] },
+    })
+    return s.llamadas.find((l) => l.m === 'PATCH')!.cuerpo
+  }
+  it('un recibo «sin cambios reales» cierra el pedido fallido con «sin cambios reales…»', async () => {
+    const p = await cerrarCon({ persisted: false, sin_cambios_reales: true, id: null })
+    expect(p.estado).toBe('fallido')
+    expect(p.despertar_detalle).toMatch(/^sin cambios reales/)
+  })
+  it('un recibo con error del guardado lo dice con su texto', async () => {
+    const p = await cerrarCon({ persisted: false, sin_cambios_reales: false, error: 'pedido_invalido', detalle: 'el pedido no existe' })
+    expect(p.estado).toBe('fallido')
+    expect(p.despertar_detalle).toContain('pedido_invalido')
+    expect(p.despertar_detalle).toContain('el pedido no existe')
+  })
+  it('sin recibo (el manual falló antes de guardar) queda el motivo genérico', async () => {
+    const p = await cerrarCon(undefined)
+    expect(p.estado).toBe('fallido')
+    expect(p.despertar_detalle).toContain('sin dejar una versión nueva')
+  })
+  it('con versión nueva ligada, el recibo no cambia el resultado: aplicado', async () => {
+    const p = await cerrarCon({ persisted: true, id: U(9) }, [{ id: SOBRE.manual_cambio_id, estado: 'en_reescritura', manual_nuevo_id: U(9) }])
+    expect(p.estado).toBe('aplicado')
+  })
+})

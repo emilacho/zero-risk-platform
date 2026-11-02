@@ -35,7 +35,7 @@ describe('palabras con intención · alcance', () => {
   it('esta parte cambia «[BB] Fan-out prep» y «[BB] Consolidador» (el archivo acumula la parte 2, que toca solo al juez, y «pedir cambios al manual», que toca Validate Deal Data y Promote prep)', () => {
     const v = new Map(vivo.nodes.map((n: any) => [n.name, JSON.stringify(n)]))
     expect(nuevo.nodes.length).toBe(vivo.nodes.length)
-    expect(nuevo.nodes.filter((n: any) => v.get(n.name) !== JSON.stringify(n)).map((n: any) => n.name).sort()).toEqual(['Validate Deal Data', '[BB] Fan-out prep', 'Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success', '[BB] Consolidador', '[BB] Judge · run-sdk', '[BB] Promote prep', '[BB] Uso · pedir la voz otra vez (editor-en-jefe)'].sort())
+    expect(nuevo.nodes.filter((n: any) => v.get(n.name) !== JSON.stringify(n)).map((n: any) => n.name).sort()).toEqual(['Validate Deal Data', '[BB] Fan-out prep', 'Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success', '[BB] Consolidador', '[BB] Judge · run-sdk', '[BB] Promote prep', '[BB] Uso · pedir la voz otra vez (editor-en-jefe)', 'Return scores a parent (grade-cimiento gate)'].sort())
     expect(codigo(nuevo, '[BB] Promote prep')).toContain('Object.assign({}, draft')
   })
   it('la sección del editor pide la lista, con «estilo» por defecto, «legal» solo con cita y nunca «del_dueno»', () => {

@@ -110,7 +110,7 @@ const HALLADA = { estado_frase_propia: 'hallado', frase_propia: 'Cuando tengas e
 
 describe('manual · el Consolidador (código real)', () => {
   it('solo cambian «[BB] Fan-out prep», «[BB] Consolidador», «[BB] Judge · run-sdk» (partes 1, 2 y 3) y, con «pedir cambios al manual» (02-nov), «Validate Deal Data» y «[BB] Promote prep»', () => {
-    expect([...cambiados(vivoManual, nuevoManual)].map((n: any) => n.name ?? n).sort()).toEqual(['Validate Deal Data', '[BB] Fan-out prep', 'Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success', '[BB] Consolidador', '[BB] Judge · run-sdk', '[BB] Promote prep', '[BB] Uso · pedir la voz otra vez (editor-en-jefe)'].sort()) // + el tope de gasto por llamada de «pedir cambios» (5 llamadas)
+    expect([...cambiados(vivoManual, nuevoManual)].map((n: any) => n.name ?? n).sort()).toEqual(['Validate Deal Data', '[BB] Fan-out prep', 'Lente · brand-strategist', 'Lente · editor-en-jefe', 'Lente · jefe-client-success', '[BB] Consolidador', '[BB] Judge · run-sdk', '[BB] Promote prep', '[BB] Uso · pedir la voz otra vez (editor-en-jefe)', 'Return scores a parent (grade-cimiento gate)'].sort()) // + el tope de gasto por llamada de «pedir cambios» (5 llamadas)
   })
   it('frase hallada: el código YA NO escribe tagline ni lo marca como hecho; las propuestas del editor no se tocan', async () => {
     const b = await consolidar(nuevoManual, HALLADA)
