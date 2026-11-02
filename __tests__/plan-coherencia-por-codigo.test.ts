@@ -99,7 +99,7 @@ describe('🔴 son avisos: el plan llega completo y decide Emilio', () => {
     return { P, id, rev, notas, e: await elegirVersionDelPlan(P, id, { evaluaciones: [{ etiqueta: 'A', marcas: 0, largo: texto.length }], idDeA: 'A-id', existentes: [] }) }
   }
   it('lo que no cuadra es aviso; lo no comprobado lo dice', () => {
-    const a = avisosDelPlan('PLAN DE 90 DÍAS · 16 de noviembre de 2026 – 7 de febrero de 2027', 'Presupuesto de pauta: 200 por semana', [], HOY)
+    const a = avisosDelPlan('PLAN DE 90 DÍAS · 16 de noviembre de 2026 – 7 de febrero de 2027', 'Presupuesto de pauta: 200 por semana', HOY)
     expect(a.find((x) => /dice 90/.test(x))).toMatch(/^Aviso: /)
     expect(a.find((x) => /no pude leer cifras/.test(x))).toMatch(/^Sin comprobar: /)
   })
