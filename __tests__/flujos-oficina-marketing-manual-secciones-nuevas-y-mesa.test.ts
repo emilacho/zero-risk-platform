@@ -9,6 +9,7 @@ import { EQUIPO, DUENOS } from '../scripts/ops/oficina-marketing/secciones-nueva
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { rutaRecomprobar } from '../src/lib/manual/rutas'
 import { filaInstagram, filaSitio } from '../src/lib/manual/__tests__/apoyo'
+import { recorrer } from './_emulador-n8n'
 
 const raiz = path.resolve(__dirname, '..', 'scripts/ops/oficina-marketing')
 const nuevo = JSON.parse(fs.readFileSync(path.join(raiz, 'nuevo/ssLtwYPt7zxuvnM2.json'), 'utf8'))
@@ -21,18 +22,30 @@ type Respuesta = any | Error
 const PIDE = 'emit_brand_section'
 interface Cfg { reescritura?: any }
 async function correr(nodoNombre: string, json: any, responder: (l: Llamada) => Respuesta, cfg: Cfg = {}) {
+  // el nodo del equipo se parte en preparar → llamar (HTTP) → recoger: aquí se ejecutan las tres fases con el MISMO código del flujo
   const llamadas: Llamada[] = []
-  const httpRequest = async (o: { url: string; body: Llamada }) => {
-    if (!o.url.endsWith('/api/agents/run-sdk')) throw new Error('url no prevista ' + o.url)
-    llamadas.push(o.body)
-    const r = responder(o.body)
-    if (r instanceof Error) throw r
-    return r
+  const $base = (n: string) => { if (n !== 'Validate Deal Data') throw new Error('nodo no previsto ' + n); return { first: () => ({ json: { client_id: 'c-1', ...(cfg.reescritura ? { reescritura: cfg.reescritura } : {}) } }) } }
+  const env = { ZERO_RISK_API_URL: 'https://app.test', INTERNAL_API_KEY: 'k' }
+  const ejecutar = async (nombre: string, $: any, $json: any) => {
+    const fn = new AsyncFunction('$', '$json', '$env', '$execution', codigoDe(nombre))
+    return (await fn.call({ helpers: {} }, $, $json, env, { id: '777' })) as Array<{ json: any }>
   }
-  const $ = (n: string) => { if (n !== 'Validate Deal Data') throw new Error('nodo no previsto ' + n); return { first: () => ({ json: { client_id: 'c-1', ...(cfg.reescritura ? { reescritura: cfg.reescritura } : {}) } }) } }
-  const fn = new AsyncFunction('$', '$json', '$env', '$execution', codigoDe(nodoNombre))
-  const out = (await fn.call({ helpers: { httpRequest } }, $, json, { ZERO_RISK_API_URL: 'https://app.test', INTERNAL_API_KEY: 'k' }, { id: '777' })) as Array<{ json: any }>
-  return { out: out[0].json, llamadas }
+  const nPre = nodoNombre + ' · preparar', nHttp = nodoNombre + ' · llamar'
+  const pre = await ejecutar(nPre, $base, json)
+  const pedidos = pre.filter((x) => !x.json._eq_sin_pedidos)
+  const respuestas = pedidos.map((x) => {
+    const cuerpo = x.json._eq_body as Llamada
+    llamadas.push(cuerpo)
+    const r = responder(cuerpo)
+    return { json: r instanceof Error ? { error: r.message } : { statusCode: 200, ...r } }
+  })
+  const $r = (n: string) => {
+    if (n === nPre) return { first: () => pre[0], all: () => pre }
+    if (n === nHttp) { if (!pedidos.length) throw new Error('el nodo no corrió'); return { first: () => respuestas[0], all: () => respuestas } }
+    return $base(n)
+  }
+  const out = await ejecutar(nodoNombre, $r, pedidos.length ? respuestas[0].json : pre[0].json)
+  return { out: out[0].json, llamadas, pedidos: pedidos.length }
 }
 const sec = (brand_section: any) => ({ body: { brand_section } })
 
@@ -66,13 +79,14 @@ describe('estructura del tramo', () => {
   })
   it('el tramo va ANTES del juez: las dos entradas de «Judge prep» desde la voz pasan por los aportes; el Lazo A sigue entrando directo', () => {
     const a = (de: string, salida = 0) => nuevo.connections[de].main[salida].map((x: any) => x.node)
-    expect(a('[BB] Uso · mezclar la voz')).toEqual([EQUIPO.aportes])
-    expect(a('[BB] Uso · ¿hay que repetir la voz?', 1)).toEqual([EQUIPO.aportes])
-    expect(a(EQUIPO.aportes)).toEqual([EQUIPO.mesa]); expect(a(EQUIPO.mesa)).toEqual([EQUIPO.integra]); expect(a(EQUIPO.integra)).toEqual(['[BB] Judge prep'])
+    const pre = (n: string) => n + ' · preparar'
+    expect(a('[BB] Uso · mezclar la voz')).toEqual([pre(EQUIPO.aportes)])
+    expect(a('[BB] Uso · ¿hay que repetir la voz?', 1)).toEqual([pre(EQUIPO.aportes)])
+    expect(a(EQUIPO.aportes)).toEqual([pre(EQUIPO.mesa)]); expect(a(EQUIPO.mesa)).toEqual([pre(EQUIPO.integra)]); expect(a(EQUIPO.integra)).toEqual(['[BB] Judge prep'])
     expect(a('[BB] Execute Lazo A corrección')).toEqual(['[BB] Judge prep'])
   })
   it('logo y tipografía van en el piso: el piso pasa por ellos antes de la revisión de estilo', () => {
-    expect(nuevo.connections['[BB] Piso visual (antes del Promote · CC#1)'].main[0].map((x: any) => x.node)).toEqual([EQUIPO.logo])
+    expect(nuevo.connections['[BB] Piso visual (antes del Promote · CC#1)'].main[0].map((x: any) => x.node)).toEqual([EQUIPO.logo + ' · preparar'])
     expect(nuevo.connections[EQUIPO.logo].main[0].map((x: any) => x.node)).toEqual(['[BB] Estilo · pedido de revisión'])
   })
   it('una sección = un dueño (tabla del contrato)', () => {
@@ -457,7 +471,64 @@ describe('5 · el juez anota los datos duros sin fuente (no borra, no cambia)', 
   })
   it('va entre «Sacar lo sin fuente» y el Promote; lo que la puerta saca no vuelve y las notas viajan', () => {
     const a = (de: string) => nuevo.connections[de].main[0].map((x: any) => x.node)
-    expect(a('[BB] Sacar lo sin fuente (antes del Promote)')).toEqual([EQUIPO.notas]); expect(a(EQUIPO.notas)).toEqual(['[BB] Promote prep'])
+    expect(a('[BB] Sacar lo sin fuente (antes del Promote)')).toEqual([EQUIPO.notas + ' · preparar']); expect(a(EQUIPO.notas)).toEqual(['[BB] Promote prep'])
+  })
+})
+
+describe('ningún nodo de código espera a un empleado (n8n corta una tarea de código a los 120 s)', () => {
+  const todos = Object.values(EQUIPO)
+  it('cada nodo del equipo es preparar → ¿hay llamada? → llamar (HTTP) → recoger; sin pedidos pasa directo a recoger', () => {
+    for (const n of todos) {
+      const salida = (de: string, i = 0) => (nuevo.connections[de].main[i] || []).map((x: any) => x.node)
+      expect(salida(n + ' · preparar')).toEqual([n + ' · ¿hay llamada?'])
+      expect(salida(n + ' · ¿hay llamada?', 0)).toEqual([n]); expect(salida(n + ' · ¿hay llamada?', 1)).toEqual([n + ' · llamar'])
+      expect(salida(n + ' · llamar')).toEqual([n])
+      const http = nuevo.nodes.find((x: any) => x.name === n + ' · llamar')
+      expect(http.type).toBe('n8n-nodes-base.httpRequest'); expect(http.parameters.options.timeout).toBe(800000)
+      expect(http.retryOnFail).toBe(true); expect(http.onError).toBe('continueRegularOutput')
+      expect(String(http.parameters.url)).toContain('/api/agents/run-sdk')
+    }
+  })
+  it('el código de los nodos de código NO hace llamadas de red (solo prepara y recoge)', () => {
+    for (const n of todos) for (const nombre of [n, n + ' · preparar']) {
+      const c = codigoDe(nombre)
+      expect(c.includes('httpRequest') || c.includes('fetch(') || c.includes('axios') || c.includes('helpers.')).toBe(false)
+    }
+  })
+  it('«preparar» no hace ninguna llamada: devuelve un item por pedido, con el cuerpo listo', async () => {
+    const r = await correr(EQUIPO.aportes, base(), respuestaAportes)
+    expect(r.pedidos).toBe(2); expect(r.llamadas.map((l) => l.agent).sort()).toEqual(['brand-strategist', 'content-creator'])
+  })
+  it('sin pedidos (el nodo ya corrió) no hay llamada y la salida es la misma', async () => {
+    const r = await correr(EQUIPO.aportes, base({ _equipo: { corrio: true } }), respuestaAportes)
+    expect(r.pedidos).toBe(0); expect(r.llamadas.length).toBe(0); expect(r.out._equipo.corrio).toBe(true)
+  })
+  it('un fallo del nodo HTTP (conexión perdida tras los reintentos de n8n) se DECLARA y no detiene', async () => {
+    const r = await correr(EQUIPO.aportes, base(), (l) => (l.agent === 'content-creator' ? new Error('The connection to the server was closed unexpectedly') : respuestaAportes(l)))
+    expect(JSON.stringify(r.out._equipo.declarado)).toMatch(/falló la llamada a content-creator/)
+    expect(JSON.stringify(r.out._equipo.aportes.valores)).toContain('Cocinan con pescado')
+  })
+  it('RECORRIDO REAL del grafo (cables y condición): con pedido pasa por el nodo HTTP; sin pedido salta directo a «recoger»', async () => {
+    const PREV = { 'Validate Deal Data': [{ client_id: 'c-1' }] }
+    const m = EQUIPO.mesa
+    const llamadas: any[] = []
+    const con = await recorrer(nuevo, m + ' · preparar', base(), { previos: PREV, hasta: [EQUIPO.integra + ' · preparar'], http: async (_u, h, cuerpo) => { llamadas.push({ h, cuerpo }); return { statusCode: 200, body: { brand_section: { direccion_de_fotografia: ['Luz natural [propuesta del agente — razón]'], aportes: [{ para: 'content-creator', campo: 'tono_por_canal', texto: 'Más cálido.' }] } } } } })
+    expect(con.pasos).toEqual([m + ' · preparar', m + ' · ¿hay llamada?', m + ' · llamar', m, EQUIPO.integra + ' · preparar'])
+    expect(llamadas.length).toBe(1); expect(llamadas[0].cuerpo.agent).toBe('creative-director-mesa'); expect(llamadas[0].h['x-api-key']).toBe('llave-interna')
+    expect(JSON.stringify(con.item._equipo.aportes.valores)).toContain('Luz natural')
+    // sin pedido (el tramo ya corrió): ni pasa por el HTTP ni llama a nadie
+    const sin = await recorrer(nuevo, m + ' · preparar', base({ _equipo: { corrio: true } }), { previos: PREV, hasta: [EQUIPO.integra + ' · preparar'] })
+    expect(sin.pasos).toEqual([m + ' · preparar', m + ' · ¿hay llamada?', m, EQUIPO.integra + ' · preparar'])
+  })
+  it('«¿hay llamada?» manda con pedido al HTTP (salida 1) y sin pedido a «recoger» (salida 0)', () => {
+    for (const n of Object.values(EQUIPO)) {
+      const c = nuevo.nodes.find((x: any) => x.name === n + ' · ¿hay llamada?').parameters.conditions.conditions[0]
+      expect(String(c.leftValue)).toContain('_eq_sin_pedidos === true'); expect(c.rightValue).toBe(true); expect(c.operator.operation).toBe('equals')
+    }
+  })
+  it('un HTTP 500 también se declara (el nodo HTTP no lanza con neverError)', async () => {
+    const r = await correr(EQUIPO.aportes, base(), (l) => (l.agent === 'brand-strategist' ? ({ statusCode: 500, body: { error: 'boom' } } as any) : respuestaAportes(l)))
+    expect(JSON.stringify(r.out._equipo.declarado)).toMatch(/falló la llamada a brand-strategist: HTTP 500/)
   })
 })
 

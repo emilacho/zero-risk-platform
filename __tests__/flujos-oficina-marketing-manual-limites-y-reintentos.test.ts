@@ -10,11 +10,7 @@ import { EQUIPO } from '../scripts/ops/oficina-marketing/secciones-nuevas-y-mesa
 
 const raiz = path.resolve(__dirname, '..', 'scripts/ops/oficina-marketing')
 const nuevo = JSON.parse(fs.readFileSync(path.join(raiz, 'nuevo/ssLtwYPt7zxuvnM2.json'), 'utf8'))
-const AsyncFunction = Object.getPrototypeOf(async function () { /* */ }).constructor as new (...a: string[]) => (...b: unknown[]) => Promise<any>
 const codigoDe = (n: string) => nuevo.nodes.find((x: any) => x.name === n).parameters.jsCode as string
-const sec = (brand_section: any) => ({ body: { brand_section } })
-const GROUNDING = { discovery_summary: 'Cevichería familiar en Olón.', materia_cliente: { sitio_estado: 'trajo', sitio_texto: 'Ceviche de camarón.' }, icp_signals: { segments: ['Familias'] } }
-const DRAFT = { client_id: 'c-1', positioning: 'Ceviche honesto.', icp_summary: 'Familias.', voice_description: 'Voz directa.', personalidad: ['cercana'], mensajes_clave: ['Fresco'] }
 
 async function aportes(responder: (agent: string, intento: number) => any) {
   const intentos: Record<string, number> = {}; const esperas: number[] = []
@@ -48,27 +44,18 @@ describe('nodos HTTP que llaman a un empleado', () => {
   it('la espera máxima es la de la plataforma (800 s)', () => { expect(ESPERA_MAXIMA_MS).toBe(800000) })
 })
 
-describe('llamadas del equipo nuevo (nodos de código)', () => {
-  it('esperan hasta el máximo, no 240 s', async () => {
-    const r = await aportes(buena)
-    expect(r.esperas.length).toBeGreaterThan(0)
-    for (const e of r.esperas) expect(e).toBe(ESPERA_MAXIMA_MS)
-    expect(codigoDe(EQUIPO.aportes)).not.toMatch(/240000/)
+describe('llamadas del equipo nuevo', () => {
+  it('las hacen nodos HTTP (800 s + un reintento), no nodos de código: n8n corta una tarea de código a los 120 s', () => {
+    for (const n of Object.values(EQUIPO)) {
+      const http = nuevo.nodes.find((x: any) => x.name === n + ' · llamar')
+      expect(http.type).toBe('n8n-nodes-base.httpRequest')
+      expect(http.parameters.options.timeout).toBe(ESPERA_MAXIMA_MS)
+      expect(http.retryOnFail).toBe(true); expect(http.maxTries).toBe(INTENTOS)
+      const c = codigoDe(n) + codigoDe(n + ' · preparar')
+      expect(c.includes('httpRequest') || c.includes('240000')).toBe(false)
+    }
   })
-  it('una conexión perdida se pide otra vez UNA vez y el resultado sale completo', async () => {
-    const r = await aportes((a, i) => (i === 1 ? new Error('The connection to the server was closed unexpectedly, perhaps it is offline.') : buena(a)))
-    expect(r.intentos['content-creator']).toBe(2); expect(r.intentos['brand-strategist']).toBe(2)
-    expect(JSON.stringify(r.out)).toContain('Frescura')
-    expect(JSON.stringify(r.out)).toContain('Cocinan con pescado')
-  })
-  it('si la conexión se pierde dos veces, se declara y no se pide una tercera', async () => {
-    const r = await aportes(() => new Error('socket hang up'))
-    expect(r.intentos['content-creator']).toBe(2)
-    expect(JSON.stringify(r.out)).toMatch(/falló la llamada/)
-  })
-  it('un error que NO es de conexión no se reintenta (no se paga dos veces por un fallo real)', async () => {
-    const r = await aportes((a) => (a === 'content-creator' ? new Error('401 sin permiso') : buena(a)))
-    expect(r.intentos['content-creator']).toBe(1)
-    expect(r.intentos['brand-strategist']).toBe(1)
+  it('si la conexión se pierde y n8n agota los reintentos, el nodo sigue con el resto (continueRegularOutput)', () => {
+    for (const n of Object.values(EQUIPO)) expect(nuevo.nodes.find((x: any) => x.name === n + ' · llamar').onError).toBe('continueRegularOutput')
   })
 })

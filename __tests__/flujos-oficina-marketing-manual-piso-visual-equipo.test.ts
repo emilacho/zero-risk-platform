@@ -56,7 +56,7 @@ describe('el nodo del piso visual (de CC1): solo cambian el empleado y la espera
 describe('el camino de la revisión de estilo', () => {
   it('piso → pedido → ¿se revisa? → llamada → anotar → «Sacar lo sin fuente» (y «no se revisa» salta directo)', () => {
     expect(destinos(vivo, PISO)).toEqual([SACAR])
-    expect(destinos(nuevo, PISO)).toEqual(['[BB] Equipo · logo y tipografía'])   // ADENDA 1: logo y tipografía se escriben en el piso, antes de la revisión
+    expect(destinos(nuevo, PISO)).toEqual(['[BB] Equipo · logo y tipografía · preparar'])   // ADENDA 1: logo y tipografía se escriben en el piso, antes de la revisión
     expect(destinos(nuevo, '[BB] Equipo · logo y tipografía')).toEqual([ESTILO.pedido])
     expect(destinos(nuevo, ESTILO.pedido)).toEqual([ESTILO.si])
     expect(destinos(nuevo, ESTILO.si, 0)).toEqual([ESTILO.http])

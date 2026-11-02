@@ -168,7 +168,8 @@ describe('tope de gasto por llamada (max_budget_usd)', () => {
   it('las 5 llamadas que dice el plan llevan tope y, con el equipo del manual (d) (02-nov), también la revisión de la voz: son TODAS las del manual que llaman a run-sdk', () => {
     const todas = nuevo.nodes.filter((n: any) => n.type.endsWith('httpRequest') && /run-sdk/.test(JSON.stringify(n.parameters.url))).map((n: any) => n.name).sort()
     const revisiones = ['[BB] Voz · revisión (editor-en-jefe)', '[BB] Estilo · revisión (style-consistency-reviewer)']   // (d) y (c2)
-    expect([...LLAMADAS_CON_TOPE, ...revisiones].sort()).toEqual(todas)
+    const equipoHttp = ['aportes de los dueños', 'mesa creativa', 'integración', 'logo y tipografía', 'el juez anota datos duros sin fuente'].map((n) => '[BB] Equipo · ' + n + ' · llamar')   // ADENDA 1: el tope viaja dentro del cuerpo que arma «preparar»
+    expect([...LLAMADAS_CON_TOPE, ...revisiones, ...equipoHttp].sort()).toEqual(todas)
     for (const revision of revisiones) {
       expect(cuerpoDe(revision, { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: 4 } }).max_budget_usd, revision).toBe(0.8)
       expect('max_budget_usd' in cuerpoDe(revision, { client_id: 'c-1' }), revision).toBe(false)

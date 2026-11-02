@@ -33,7 +33,7 @@ const PREVIOS = { 'Validate Deal Data': [{ client_id: 'c-1' }], '[BB] Fan-out pr
 async function cadena(item: Record<string, unknown>, respuesta: any, llamadas: any[] = []) {
   return recorrer(nuevo, REVISION.pedido, item, {
     previos: PREVIOS,
-    hasta: [REPETIR_HTTP, JUDGE_PREP, '[BB] Equipo · aportes de los dueños'],
+    hasta: [REPETIR_HTTP, JUDGE_PREP, '[BB] Equipo · aportes de los dueños · preparar'],
     http: async (url, _h, cuerpo) => { llamadas.push({ url, cuerpo }); if (respuesta instanceof Error) throw respuesta; return respuesta },
   })
 }
@@ -99,7 +99,7 @@ describe('la revisión asesora (código real)', () => {
     expect(t).toContain('discovery_summary')
     expect(t).toMatch(/la creatividad es libre/)
     expect(t).not.toMatch(/debes|obligatori|tal cual|siempre incluye/i)
-    expect(r.pasos).toEqual([REVISION.pedido, REVISION.si, REVISION.http, REVISION.anotar, USO, REPETIR_SI, '[BB] Equipo · aportes de los dueños'])
+    expect(r.pasos).toEqual([REVISION.pedido, REVISION.si, REVISION.http, REVISION.anotar, USO, REPETIR_SI, '[BB] Equipo · aportes de los dueños · preparar'])
   })
   it('segunda pasada, sin voz o sin evidencia: NO se llama a nadie y sigue como hoy', async () => {
     for (const item of [entrada({ _fidelity_cycle: 2 }), entrada({}, { voice_description: '' }), entrada({ _grounding_refs: {} })]) {
@@ -136,10 +136,10 @@ describe('lo que vuelve del revisor (código real)', () => {
     expect(m.item._voz_revision.observaciones).toHaveLength(1)
     expect(m.item._voz_revision.bloquea).toEqual([])
     expect(m.item._uso_repetir_voz).toBe(false)
-    expect(m.ultimo).toBe('[BB] Equipo · aportes de los dueños')
+    expect(m.ultimo).toBe('[BB] Equipo · aportes de los dueños · preparar')
   })
   it('tope 1: en la segunda pasada una observación grave ya no vuelve al escritor', async () => {
-    const r = await recorrer(nuevo, USO, { ...entrada({ _fidelity_cycle: 2 }), _voz_revision: { corrio: true, observaciones: [], bloquea: [{ campo: 'voice_description', severidad: 'blocker', observacion: 'x', sugerencia: '' }] } }, { previos: PREVIOS, hasta: [REPETIR_HTTP, JUDGE_PREP] })
+    const r = await recorrer(nuevo, USO, { ...entrada({ _fidelity_cycle: 2 }), _voz_revision: { corrio: true, observaciones: [], bloquea: [{ campo: 'voice_description', severidad: 'blocker', observacion: 'x', sugerencia: '' }] } }, { previos: PREVIOS, hasta: [REPETIR_HTTP, JUDGE_PREP, '[BB] Equipo · aportes de los dueños · preparar'] })
     expect(r.item._uso_repetir_voz).toBe(false)
   })
   it('la voz vacía (vara de uso) y una observación grave piden UNA sola vuelta con las dos cosas, y el pedido cabe en 15.900', async () => {
@@ -148,7 +148,7 @@ describe('lo que vuelve del revisor (código real)', () => {
     expect(r.item._uso_repetir_voz).toBe(true)
     expect(r.item._uso_pedido_voz).toContain('REPARO')
     expect(r.item._uso_pedido_voz).toContain('OBSERVACIONES DEL REVISOR')
-    const largo = await recorrer(nuevo, USO, { ...item, _voz_revision: { corrio: true, observaciones: [], bloquea: [{ campo: 'voice_description', severidad: 'major', observacion: 'o'.repeat(400), sugerencia: 's'.repeat(300) }] } }, { previos: { ...PREVIOS, '[BB] Fan-out prep': [{ tasks: { 'editor-en-jefe': 't'.repeat(16000) } }] }, hasta: [REPETIR_HTTP, JUDGE_PREP] })
+    const largo = await recorrer(nuevo, USO, { ...item, _voz_revision: { corrio: true, observaciones: [], bloquea: [{ campo: 'voice_description', severidad: 'major', observacion: 'o'.repeat(400), sugerencia: 's'.repeat(300) }] } }, { previos: { ...PREVIOS, '[BB] Fan-out prep': [{ tasks: { 'editor-en-jefe': 't'.repeat(16000) } }] }, hasta: [REPETIR_HTTP, JUDGE_PREP, '[BB] Equipo · aportes de los dueños · preparar'] })
     expect(largo.item._uso_pedido_voz.length).toBeLessThanOrEqual(15900)
     expect(largo.item._uso_pedido_voz).toContain('OBSERVACIONES DEL REVISOR')
   })
@@ -158,7 +158,7 @@ describe('lo que vuelve del revisor (código real)', () => {
       expect(r.item._voz_revision.corrio).toBe(false)
       expect(r.item._voz_revision.bloquea).toEqual([])
       expect(r.item._uso_repetir_voz).toBe(false)
-      expect(r.ultimo).toBe('[BB] Equipo · aportes de los dueños')
+      expect(r.ultimo).toBe('[BB] Equipo · aportes de los dueños · preparar')
     }
   })
   it('severidad desconocida cuenta como minor, se aceptan hasta 6 y se acotan los textos', async () => {
@@ -184,8 +184,8 @@ describe('sin revisión, «¿usó lo disponible?» es IDÉNTICO a hoy', () => {
     for (const d of [{}, { voice_description: 'PENDIENTE' }, { voice_description: 'Cercana y directa, habla de tú, usa el humor de la costa y nombra los platos.' }]) {
       for (const g of [grounding, { discovery_summary: 'x'.repeat(200) }]) {
         const it = entrada({ _grounding_refs: g }, d)
-        const a = await recorrer(vivo, USO, it, { previos: PREVIOS, hasta: [REPETIR_HTTP, JUDGE_PREP] })
-        const b = await recorrer(nuevo, USO, it, { previos: PREVIOS, hasta: [REPETIR_HTTP, JUDGE_PREP] })
+        const a = await recorrer(vivo, USO, it, { previos: PREVIOS, hasta: [REPETIR_HTTP, JUDGE_PREP, '[BB] Equipo · aportes de los dueños · preparar'] })
+        const b = await recorrer(nuevo, USO, it, { previos: PREVIOS, hasta: [REPETIR_HTTP, JUDGE_PREP, '[BB] Equipo · aportes de los dueños · preparar'] })
         expect(b.item._uso_repetir_voz).toBe(a.item._uso_repetir_voz)
         expect(b.item._uso_pedido_voz).toBe(a.item._uso_pedido_voz)
         expect(JSON.stringify(b.item._uso)).toBe(JSON.stringify(a.item._uso))

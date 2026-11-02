@@ -24,7 +24,7 @@
  * COSTO (ESTIMADO por medianas; nada ha corrido): +aportes ~0,5 · +mesa ~0,25 · +integración ~0,35 (solo con aportes) · +logo/tipografía ~0,2 · +juez que anota ~0,1–0,25.
  * El tope de gasto de una reescritura se reparte POR LLAMADA (tope ÷ 8), no es un tope total del tramo.
  */
-import { agregarNodo, cambiarCodigo, codigo, conectar, nodo, redirigir } from './lib.mjs'
+import { agregarNodo, cambiarCodigo, codigo, conectar, nodo, redirigir, si } from './lib.mjs'
 import { ESTILO } from './piso-visual-equipo-manual.mjs'
 
 const PISO = '[BB] Piso visual (antes del Promote · CC#1)'
@@ -51,10 +51,9 @@ export const DUENOS = {
 
 // ───────────────────────── piezas de código que se PEGAN TAL CUAL en los nodos (la prueba EJECUTA este mismo texto) ─────────────────────────
 export const COMUN = String.raw`
-const j = $json;
+const j = MODO === 'recoger' ? ORIGEN : $json;
 const draft = j.brand_book_draft || {};
 const grounding = j._grounding_refs || {};
-const ayuda = this.helpers;
 const API = ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app');
 const CLIENT = $('Validate Deal Data').first().json.client_id;
 const EXEC = String($execution.id);
@@ -143,23 +142,21 @@ const bloqueRE = (claves) => {
     (RE.seccion ? 'El pedido es sobre la sección «' + t(RE.seccion, 80) + '».\n' : '') + 'LO QUE PIDIÓ EL DUEÑO:\n«' + t(String(RE.cambios_del_dueno == null ? '' : RE.cambios_del_dueno).replace(/\s+/g, ' ').trim(), 2000) + '»\n' +
     'LO QUE HAY HOY EN TUS CAMPOS:\n' + t(JSON.stringify(hoy), 3000) + '\n';
 };
-// una llamada a un empleado: NUNCA lanza; devuelve { ok, seccion, extra, error }
-const llamar = async (agente, paso, tarea, rol, div, espera) => {
+// una llamada a un empleado: NUNCA lanza; devuelve { ok, seccion, extra, error }.
+// El nodo de código NO espera al empleado (n8n corta una tarea de código a los 120 s): en «preparar» solo anota el pedido, un nodo HTTP lo hace (800 s + reintento) y en «recoger» se lee la respuesta.
+const llamar = async (agente, paso, tarea, rol, div) => {
   const tope = topeDe(div);
   const cuerpo = Object.assign({ agent: agente, client_id: CLIENT, workflow_id: EXEC, workflow_execution_id: EXEC, step_name: paso, task: String(tarea).slice(0, 15900), context: { role: rol, motivo: 'equipo_del_manual' } }, tope > 0 ? { max_budget_usd: tope } : {});
-  for (let intento = 1; intento <= 2; intento++) {
-  try {
-    const x = await ayuda.httpRequest({ url: API + '/api/agents/run-sdk', method: 'POST', json: true, timeout: espera || 800000, headers: { 'Content-Type': 'application/json', 'x-api-key': $env.INTERNAL_API_KEY }, body: cuerpo });
-    const s = seccion(x);
-    const b = (x && x.body && typeof x.body === 'object') ? x.body : (x || {});
-    if (!s && !jsonDeTexto(x)) return { ok: false, error: 'la respuesta de ' + agente + ' no se entendió' + (b.error ? ': ' + t(b.error, 100) : ''), seccion: null, extra: null };
-    return { ok: true, seccion: s, extra: jsonDeTexto(x), error: '' };
-  } catch (e) {
-    // conexión perdida: la respuesta pudo escribirse del lado de la plataforma; se vuelve a pedir una sola vez (el punto de control devuelve lo ya escrito sin cobrar de nuevo)
-    if (intento === 1 && /closed unexpectedly|socket hang up|ECONNRESET|EPIPE|offline|network/i.test(String((e && e.message) || e))) continue;
-    return { ok: false, error: 'falló la llamada a ' + agente + ': ' + t((e && e.message) || e, 140), seccion: null, extra: null };
-  }
-  }
+  if (MODO === 'preparar') { PEDIDOS.push({ paso: paso, body: cuerpo }); return { ok: false, error: 'pendiente', seccion: null, extra: null }; }
+  const x = RESPUESTAS[paso];
+  const falla = (m) => ({ ok: false, error: 'falló la llamada a ' + agente + ': ' + t(m, 140), seccion: null, extra: null });
+  if (!x) return falla('no hubo respuesta');
+  if (x.error) return falla(typeof x.error === 'object' ? ((x.error.message) || JSON.stringify(x.error)) : x.error);
+  if (x.statusCode >= 400) return falla('HTTP ' + x.statusCode);
+  const s = seccion(x);
+  const b = (x && x.body && typeof x.body === 'object') ? x.body : (x || {});
+  if (!s && !jsonDeTexto(x)) return { ok: false, error: 'la respuesta de ' + agente + ' no se entendió' + (b.error ? ': ' + t(b.error, 100) : ''), seccion: null, extra: null };
+  return { ok: true, seccion: s, extra: jsonDeTexto(x), error: '' };
 };
 // de un resultado toma SOLO los campos del dueño que se pidieron (nada más), con su estampado
 const tomar = (res, campos, lente) => {
@@ -217,8 +214,8 @@ const CAMPOS_CC = quiero({ tono_por_canal: 'lista', reglas_de_escritura: 'lista'
 const CAMPOS_BS = quiero({ historia_y_origen: 'texto' });
 const omitir = { ok: true, omitida: true, seccion: null, extra: null, error: '' };
 const [rcc, rbs] = await Promise.all([
-  Object.keys(CAMPOS_CC).length ? llamar('content-creator', 'bb-equipo-aportes-voz', armar(Object.keys(CAMPOS_CC)), 'brand_book_aportes_content_creator', 8, 800000) : omitir,
-  Object.keys(CAMPOS_BS).length ? llamar('brand-strategist', 'bb-equipo-aportes-estrategia', armar(Object.keys(CAMPOS_BS)), 'brand_book_aportes_brand_strategist', 8, 800000) : omitir,
+  Object.keys(CAMPOS_CC).length ? llamar('content-creator', 'bb-equipo-aportes-voz', armar(Object.keys(CAMPOS_CC)), 'brand_book_aportes_content_creator', 8) : omitir,
+  Object.keys(CAMPOS_BS).length ? llamar('brand-strategist', 'bb-equipo-aportes-estrategia', armar(Object.keys(CAMPOS_BS)), 'brand_book_aportes_brand_strategist', 8) : omitir,
 ]);
 const a = tomar(rcc, CAMPOS_CC, 'content-creator');
 const b = tomar(rbs, CAMPOS_BS, 'brand-strategist');
@@ -250,7 +247,7 @@ const ev2 = '\n\nEVIDENCIA' + (omitidas.length ? ' (no cupo: ' + omitidas.join('
 const cola = '\n\nPARTES CREATIVAS YA ESCRITAS:\n';
 const resto = PRESUPUESTO_TAREA - (base.length + ev2.length + cola.length);
 const tarea = base + ev2 + cola + (resto > 0 ? JSON.stringify(creativo).slice(0, resto) : '');
-const r = await llamar('creative-director-mesa', 'bb-equipo-mesa-creativa', tarea, 'brand_book_mesa_creativa', 8, 800000);
+const r = await llamar('creative-director-mesa', 'bb-equipo-mesa-creativa', tarea, 'brand_book_mesa_creativa', 8);
 const m = tomar(r, { direccion_de_fotografia: 'lista' }, 'creative-director-mesa');
 const crudos = (r.ok && ((r.extra && Array.isArray(r.extra.aportes)) ? r.extra.aportes : ((r.seccion && Array.isArray(r.seccion.aportes)) ? r.seccion.aportes : []))) || [];
 const aportesMesa = crudos.filter((x) => x && typeof x === 'object' && typeof x.texto === 'string' && x.texto.trim()).slice(0, 6).map((x) => ({ para: x.para === 'content-creator' ? 'content-creator' : 'piso_visual', campo: t(x.campo, 40), texto: t(x.texto, 400) }));
@@ -277,7 +274,7 @@ if (paraVoz.length && Object.keys(CAMPOS_VOZ).length && (valores.tono_por_canal 
   const base = 'Eres el DUEÑO de tono_por_canal y reglas_de_escritura del manual de marca. La mesa creativa te deja APORTES: son aportes, no órdenes. Integra los que mejoren tu trabajo, descarta los que no, y vuelve a emitir con emit_brand_section tus campos COMPLETOS (' + Object.keys(CAMPOS_VOZ).join(' y ') + ', con _field_meta). ' + REGLA + bloqueRE(Object.keys(CAMPOS_VOZ)) + '\n\n';
   const cuerpo = '\n\nTUS CAMPOS ACTUALES:\n' + JSON.stringify(elegir(valores, Object.keys(CAMPOS_VOZ))) + '\n\nAPORTES DE LA MESA:\n' + JSON.stringify(paraVoz);
   const ev2 = '\n\nEVIDENCIA' + (omitidas.length ? ' (no cupo: ' + omitidas.join(', ') + ')' : '') + ':\n' + JSON.stringify(ev);
-  const r = await llamar('content-creator', 'bb-equipo-integracion', (base + cuerpo + ev2).slice(0, 15900), 'brand_book_integracion', 8, 800000);
+  const r = await llamar('content-creator', 'bb-equipo-integracion', (base + cuerpo + ev2).slice(0, 15900), 'brand_book_integracion', 8);
   const i = tomar(r, CAMPOS_VOZ, 'content-creator');
   if (!r.ok) { declarado.push('integración: ' + r.error); integro = 'no_se_pudo'; }
   else { Object.keys(i.valores).forEach((k) => { valores[k] = i.valores[k]; meta[k] = Object.assign({}, meta[k] || {}, i.meta[k]); }); integro = Object.keys(i.valores).length ? 'integrado' : 'sin_cambios'; if (i.falto.length) declarado.push('integración: content-creator dejó sin cambios ' + i.falto.join(', ')); }
@@ -329,7 +326,7 @@ const base = 'Eres el DUEÑO de ' + Object.keys(CAMPOS_LOGO).join(' y ') + ' del
 const obs = '\n\nLO QUE EL PISO VISUAL OBSERVÓ:\n' + JSON.stringify(observado);
 const aportesMesa = (eq.aportes_piso || []).length ? '\n\nAPORTES DE LA MESA CREATIVA (aportes, no órdenes; integra los que sirvan):\n' + JSON.stringify(eq.aportes_piso) : '';
 const ev2 = '\n\nEVIDENCIA' + (omitidas.length ? ' (no cupo: ' + omitidas.join(', ') + ')' : '') + ':\n' + JSON.stringify(ev);
-const r = await llamar('design-visual-storyteller', 'bb-equipo-logo-tipografia', (base + aportesMesa + ev2 + obs).slice(0, 15900), 'brand_book_logo_tipografia', 8, 800000);
+const r = await llamar('design-visual-storyteller', 'bb-equipo-logo-tipografia', (base + aportesMesa + ev2 + obs).slice(0, 15900), 'brand_book_logo_tipografia', 8);
 const g = tomar(r, CAMPOS_LOGO, 'design-visual-storyteller');
 if (!r.ok) declarado.push('logo y tipografía: ' + r.error); else if (g.falto.length) declarado.push('design-visual-storyteller no entregó: ' + g.falto.join(', '));
 const nuevo = Object.assign({}, draft);
@@ -361,7 +358,7 @@ const cabeza = 'Eres el evaluador de FIDELIDAD de un manual de marca. ANOTA (no 
   'Responde SOLO este JSON: {"notas":[{"campo":"<clave del campo>","dato":"<el dato COPIADO tal cual del campo>","motivo":"<por qué no hay fuente en la evidencia>"}]}. Si todo tiene fuente: {"notas":[]}. Máximo 20 notas.\n\n';
 const ev2 = 'EVIDENCIA' + (omitidas.length ? ' (no cupo: ' + omitidas.join(', ') + ')' : '') + ':\n' + JSON.stringify(ev) + '\n\nCAMPOS:\n';
 const resto = PRESUPUESTO_TAREA - (cabeza.length + ev2.length);
-const r = await llamar('market_research_analyst', 'bb-equipo-juez-datos-duros', cabeza + ev2 + JSON.stringify(cuerpo).slice(0, Math.max(0, resto)), 'brand_book_datos_duros', 8, 800000);
+const r = await llamar('market_research_analyst', 'bb-equipo-juez-datos-duros', cabeza + ev2 + JSON.stringify(cuerpo).slice(0, Math.max(0, resto)), 'brand_book_datos_duros', 8);
 const crudas = (r.ok && r.extra && Array.isArray(r.extra.notas)) ? r.extra.notas : [];
 const texto = (v) => sinTildes(JSON.stringify(v == null ? '' : v)).replace(/\s+/g, ' ');
 const notas = []; let descartadas = 0;
@@ -383,6 +380,62 @@ if (!r.ok) declarado.push('el juez de datos duros: ' + r.error);
 const juez = { corrio: r.ok, notas_n: notas.length, descartadas: descartadas, evidencia_omitida: omitidas };
 nuevo._equipo = resumen(juez);
 return [{ json: Object.assign({}, j, { brand_book_draft: nuevo, _equipo: Object.assign({}, eq, { datos_duros_juez: juez, declarado: declarado }) }) }];`
+
+/** el envoltorio de las dos fases: el cuerpo del nodo es EL MISMO; solo cambia de dónde sale `j` y qué hace `llamar` */
+export const envolver = (cuerpo, modo, nombrePre, nombreHttp) => `const MODO = ${JSON.stringify(modo)};
+const NODO_PRE = ${JSON.stringify(nombrePre)};
+const NODO_HTTP = ${JSON.stringify(nombreHttp)};
+const PEDIDOS = [];
+// fase «recoger»: el original viene de «preparar» (sin las marcas _eq_) y las respuestas del nodo HTTP, en el mismo orden que los pedidos
+const ORIGEN = (() => {
+  if (MODO !== 'recoger') return null;
+  const o = Object.assign({}, $(NODO_PRE).first().json);
+  Object.keys(o).filter((k) => k.indexOf('_eq_') === 0).forEach((k) => { delete o[k]; });
+  return o;
+})();
+const RESPUESTAS = (() => {
+  const r = {};
+  if (MODO !== 'recoger') return r;
+  let pre = []; let http = [];
+  try { pre = $(NODO_PRE).all(); } catch (e) { pre = []; }
+  try { http = $(NODO_HTTP).all(); } catch (e) { http = []; }
+  pre.forEach((p, i) => { if (p.json._eq_paso) r[p.json._eq_paso] = http[i] ? http[i].json : { error: 'sin respuesta' }; });
+  return r;
+})();
+const _nodo = async () => {
+${cuerpo}
+};
+${modo === 'preparar' ? PIE_PREPARAR : 'return await _nodo();'}`
+const PIE_PREPARAR = `try { await _nodo(); } catch (e) { /* si algo falla aquí, «recoger» lo declara: no se detiene */ }
+if (!PEDIDOS.length) return [{ json: Object.assign({}, $json, { _eq_sin_pedidos: true }) }];
+return PEDIDOS.map((p) => ({ json: Object.assign({}, $json, { _eq_paso: p.paso, _eq_body: p.body }) }));`
+
+export const nombresDeLaLlamada = (nombre) => ({ preparar: nombre + ' · preparar', hay: nombre + ' · ¿hay llamada?', llamar: nombre + ' · llamar' })
+
+/** parte un nodo del equipo en preparar → (¿hay llamada?) → llamar (HTTP) → recoger (el nodo original, con su nombre) */
+export function partirEnTresNodos(f, nombre, cuerpo) {
+  const n = nodo(f, nombre)
+  const nm = nombresDeLaLlamada(nombre)
+  const [x, y] = n.position
+  // los que entraban al nodo ahora entran a «preparar»
+  for (const [de, c] of Object.entries(f.connections)) for (const grupo of c.main) for (const d of grupo) if (d.node === nombre) d.node = nm.preparar
+  n.parameters.jsCode = envolver(cuerpo, 'recoger', nm.preparar, nm.llamar)
+  agregarNodo(f, codigo(nm.preparar, envolver(cuerpo, 'preparar', nm.preparar, nm.llamar)), nombre, -330, 0)
+  agregarNodo(f, si(nm.hay, '={{ $json._eq_sin_pedidos === true }}'), nombre, -220, 120)
+  agregarNodo(f, {
+    name: nm.llamar, type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2, onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST', url: "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/run-sdk",
+      sendHeaders: true, headerParameters: { parameters: [{ name: 'Content-Type', value: 'application/json' }, { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' }] },
+      sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify($json._eq_body) }}',
+      options: { timeout: 800000, batching: { batch: { batchSize: 5, batchInterval: 0 } }, response: { response: { fullResponse: true, neverError: true } } },
+    },
+  }, nombre, -110, 240)
+  conectar(f, nm.preparar, nm.hay)
+  conectar(f, nm.hay, nombre, 0)       // sin pedidos: directo a «recoger»
+  conectar(f, nm.hay, nm.llamar, 1)    // con pedidos: al nodo HTTP
+  conectar(f, nm.llamar, nombre)
+}
 
 export function construirSeccionesNuevasYMesa(f) {
   // el piso y la revisión de estilo deben existir (esta parte se apoya en (c2))
@@ -407,4 +460,10 @@ export function construirSeccionesNuevasYMesa(f) {
   agregarNodo(f, codigo(EQUIPO.notas, CODIGO_NOTAS), SACAR, 220, 0)
   redirigir(f, SACAR, PROMOTE_PREP, EQUIPO.notas)
   conectar(f, EQUIPO.notas, PROMOTE_PREP)
+  // ④ ningún nodo de código espera a un empleado (tope de 120 s de n8n): cada uno se parte en preparar → llamar (HTTP) → recoger
+  partirEnTresNodos(f, EQUIPO.aportes, CODIGO_APORTES)
+  partirEnTresNodos(f, EQUIPO.mesa, CODIGO_MESA)
+  partirEnTresNodos(f, EQUIPO.integra, CODIGO_INTEGRA)
+  partirEnTresNodos(f, EQUIPO.logo, CODIGO_LOGO)
+  partirEnTresNodos(f, EQUIPO.notas, CODIGO_NOTAS)
 }
