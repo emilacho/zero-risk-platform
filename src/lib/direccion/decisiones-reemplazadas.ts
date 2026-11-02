@@ -35,6 +35,8 @@ export function motivoDeReemplazo(f: Fila, vigentes: Map<string, PlanVigente>): 
   const cliente = texto(f.client_id)
   const vigente = cliente ? vigentes.get(cliente) : undefined
   if (!vigente) return null
+  // 03-nov · Emilio la sacó del archivo para reusarla: que sea del plan anterior ya se sabe
+  if (f.metadata && typeof f.metadata === 'object' && (f.metadata as Fila).recuperada_del_archivo) return null
   if (tipo === 'plan_con_pendientes') {
     const plan = planDeLaFila(f)
     return plan && plan !== vigente.id ? 'ese plan ya fue reemplazado por una versión más nueva' : null
