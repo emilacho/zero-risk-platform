@@ -132,7 +132,7 @@ describe('🔴 la frase que el dueño negó', () => {
     const db = new DbFalsa()
     const reales = crearPuertos(db as never, {} as never)
     await reales.anotarPalabraDelDueno!({ client_id: C, plan_id: 'estrategia-de-campana', titulo: 'T', detalle: 'D', metadata: {} })
-    expect(db.tablas['hitl_queue'][0]).toMatchObject({ output_id: null, type: 'palabra_del_dueno' })
+    expect(db.tablas['hitl_queue'][0]).toMatchObject({ client_id: C, output_id: null, type: 'palabra_del_dueno' })
   })
   it('🔴 el aviso viaja de la salida a los datos de la bandeja', () => {
     const e = { artefactos: { [ARTEFACTO_DE_LA_JEFATURA]: { datos: { jefatura: { resultado: 'limpia', avisos: ['Aviso: x'], incompleta: false, sin_revisar: false } } } } } as never
