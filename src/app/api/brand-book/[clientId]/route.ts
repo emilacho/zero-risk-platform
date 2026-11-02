@@ -12,7 +12,7 @@ import { sanitizeProseFields } from '@/lib/brand-book-caveat-extractor'
 import { empujarManualAlCerebro } from '@/lib/brain/push-al-terminar'
 import { columnasDelBorrador, evaluarCompletitud, fugasDeLasColumnas } from '@/lib/manual/campos-del-manual'
 import { conservarLoDelDueno } from '@/lib/manual/edicion-del-dueno'
-import { leerPedidoDelManual, selloDeLaVersionPedida, type PedidoDelManual } from '@/lib/manual/pedido-de-cambios'
+import { leerPedidoDelManual, selloDeLaVersionPedida, sinCambiosReales, type PedidoDelManual } from '@/lib/manual/pedido-de-cambios'
 import { completarVisualesDesdeLaFicha } from '@/lib/manual-visuales-desde-la-ficha'
 
 export const runtime = 'nodejs'
@@ -227,6 +227,10 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   // 30-oct · lo que el dueño escribió desde el dashboard (`_field_meta.<campo>.fuente = 'dueno'`) no lo pisa una corrida posterior: se vuelve a poner en el borrador nuevo
   dueno = conservarLoDelDueno((previa.data ?? null) as Record<string, unknown> | null, bb as Record<string, unknown>, pedido ?? undefined)
+  // 02-nov · como en el plan: un pedido que no cambió nada no guarda copia. El flujo cierra el pedido con este recibo
+  if (pedido && sinCambiosReales(previa.data?.content_text, dueno.bb as Record<string, unknown>)) {
+    return NextResponse.json({ persisted: false, sin_cambios_reales: true, id: previaId, version: version - 1, client_id: clientId, manual_cambio_id: pedido.id })
+  }
   const rowBase = buildBrandBookRow(clientId, dueno.bb as typeof bb, body, version)
 
   // CABLE ② · COLORES Y TIPOGRAFÍA DEL SITIO (CC#1 · 2026-09-25 · §144 Emilio). El Servicio de Apify

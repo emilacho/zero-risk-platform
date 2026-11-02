@@ -27,6 +27,23 @@ export function camposQueLibera(a: { delDueno: string[]; texto: string; campos: 
 /** el sello que la base pone a una versión nueva (ADR-012). Escribir la columna reemplaza ese valor: el pedido lo repite y agrega su marca. No hereda «validado»: el contenido cambió */
 export const selloDeLaVersionPedida = (manual_cambio_id: string): Fila => ({ type: 'evidence', source: 'legacy_pre_adr012', trust_level: 'unknown', manual_cambio_id })
 
+const comparable = (v: unknown): string => {
+  if (v == null) return ''
+  if (typeof v === 'string') return v.trim()
+  if (Array.isArray(v)) return JSON.stringify(v.map(comparable).filter(Boolean))
+  return JSON.stringify(v)
+}
+/** ¿la reescritura dejó todos los campos del manual como estaban? Entonces no hay versión nueva: costaría una reindexación del cerebro y no cambiaría nada. Solo mira los campos del manual, no sus marcas */
+export function sinCambiosReales(contenidoPrevio: unknown, nuevo: Fila): boolean {
+  let borrador: Fila = {}
+  try {
+    const c = typeof contenidoPrevio === 'string' ? (JSON.parse(contenidoPrevio) as unknown) : contenidoPrevio
+    borrador = objeto(objeto(c).brand_book_draft)
+  } catch { return false }
+  if (!Object.keys(borrador).length) return false
+  return CAMPOS.every((c) => comparable(borrador[c.clave]) === comparable(nuevo[c.clave]))
+}
+
 export interface PedidoDelManual { id: string; campos_liberados: string[]; creado_en: string; manual_nuevo_id: string | null }
 export type LecturaDelPedido = { ok: true; pedido: PedidoDelManual } | { ok: false; status: number; error: string; detalle: string }
 

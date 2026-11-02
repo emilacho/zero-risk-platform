@@ -4,7 +4,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ACCIONES } from '../tablero/acciones'
 import { CAMINO_MANUAL_CAMBIOS, TOPE_PEDIDO_AL_MANUAL_USD } from '../tablero/manual-cambios'
-import { camposDelDueno, camposQueLibera, leerPedidoDelManual } from '../../manual/pedido-de-cambios'
+import { camposDelDueno, camposQueLibera, leerPedidoDelManual, sinCambiosReales } from '../../manual/pedido-de-cambios'
 import { conservarLoDelDueno } from '../../manual/edicion-del-dueno'
 import { DbFalsa } from './dbfalsa'
 
@@ -121,6 +121,24 @@ describe('🔴 lo que se conserva al guardar', () => {
     expect(conservarLoDelDueno(previa, { mision: '  ', _field_meta: {} }, pedido(['mision'])).bb.mision).toBe('Misión de Emilio')
   })
   it('🔴 sin pedido, igual que siempre', () => expect(conservarLoDelDueno(previa, nuevo).bb.mision).toBe('Misión de Emilio'))
+})
+
+describe('🔴 sin cambios reales', () => {
+  const previa = { brand_book_draft: { mision: ' Igual ', valores: ['a', 'b'], _field_meta: { mision: { fuente: 'agente' } }, otra_cosa: 'x' } }
+  it('espacios y marcas no cuentan como cambio', () => {
+    expect(sinCambiosReales(JSON.stringify(previa), { mision: 'Igual', valores: [' a', 'b '], _field_meta: { mision: { fuente: 'dueno' } }, otra_cosa: 'y' })).toBe(true)
+  })
+  it('🔴 cambiar, quitar o reordenar un campo sí cuenta', () => {
+    expect(sinCambiosReales(previa, { mision: 'Otra', valores: ['a', 'b'] })).toBe(false)
+    expect(sinCambiosReales(previa, { valores: ['a', 'b'] })).toBe(false)
+    expect(sinCambiosReales(previa, { mision: 'Igual', valores: ['b', 'a'] })).toBe(false)
+    expect(sinCambiosReales(previa, { mision: 'Igual', valores: ['a', 'b'], vision: 'Nueva' })).toBe(false)
+  })
+  it('🔴 si no se puede leer lo anterior, no se afirma que es igual', () => {
+    expect(sinCambiosReales('no es json', {})).toBe(false)
+    expect(sinCambiosReales(null, {})).toBe(false)
+    expect(sinCambiosReales({ brand_book_draft: {} }, {})).toBe(false)
+  })
 })
 
 describe('🔴 leer el pedido al guardar', () => {

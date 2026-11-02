@@ -31,6 +31,24 @@ describe('🔴 guardar con un pedido', () => {
     expect(j).toMatchObject({ persisted: true, version: 2, manual_cambio_id: P })
     expect(db.tablas['plan_cambios'][0].manual_nuevo_id).toBe(u.id)
   })
+  it('🔴 un pedido sin cambios reales no guarda versión ni liga el pedido', async () => {
+    const db = base({ campos_liberados: [] }); m.db = db
+    db.tablas['client_brand_books'][0].content_text = JSON.stringify({ brand_book_draft: { positioning: 'Nueva', mision: 'Misión de Emilio', vision: 'Visión de Emilio', _field_meta: { mision: { fuente: 'dueno', en: '2026-10-01T00:00:00Z' }, vision: { fuente: 'dueno', en: '2026-10-01T00:00:00Z' } } } })
+    const r = await guardar({ manual_cambio_id: P })
+    expect(r.status).toBe(200)
+    expect(await r.json()).toMatchObject({ persisted: false, sin_cambios_reales: true, id: 'v1', version: 1, manual_cambio_id: P })
+    expect(db.tablas['client_brand_books']).toHaveLength(1)
+    expect(db.tablas['plan_cambios'][0].manual_nuevo_id).toBeNull()
+  })
+  it('🔴 sin pedido, un manual igual se guarda como siempre', async () => {
+    const db = base(); m.db = db
+    db.tablas['client_brand_books'][0].content_text = JSON.stringify({ brand_book_draft: { positioning: 'Nueva', mision: 'Misión nueva', vision: 'Visión nueva' } })
+    expect(await (await guardar({})).json()).toMatchObject({ persisted: true, version: 2 })
+  })
+  it('🔴 un pedido que sí cambió algo guarda', async () => {
+    const db = base({ campos_liberados: [] }); m.db = db
+    expect(await (await guardar({ manual_cambio_id: P })).json()).toMatchObject({ persisted: true, version: 2 })
+  })
   it('🔴 un pedido que ya generó versión no genera otra', async () => {
     const db = base({ manual_nuevo_id: 'v9' }); m.db = db
     const j = await (await guardar({ manual_cambio_id: P })).json()
