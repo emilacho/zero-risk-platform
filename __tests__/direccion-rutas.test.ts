@@ -5,7 +5,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
-import { ejecucionBase, leerCorrida, leerCorridas, ramaDe } from '../src/lib/direccion/corridas'
+import { ejecucionBase, ID_DE_EJECUCION, leerCorrida, leerCorridas, ramaDe } from '../src/lib/direccion/corridas'
 import { esDePractica, estaCompleto, leer, sinSecretos, type Contexto, type Fuente } from '../src/lib/direccion/comun'
 import { leerDecisiones, ordenarPorUrgencia } from '../src/lib/direccion/decisiones'
 import { leerRiesgos } from '../src/lib/direccion/riesgos'
@@ -216,6 +216,43 @@ describe('riesgos', () => {
 describe('corridas', () => {
   const inv = (x: Record<string, unknown>) => ({ id: 'i', agent_name: 'a', model: 'm', workflow_id: 'wf', workflow_execution_id: '100', client_id: C1, started_at: '2026-11-01T10:00:00Z', ended_at: '2026-11-01T10:01:00Z', duration_ms: 60000, cost_usd: 1, tokens_input: 10, tokens_output: 20, tokens_cache_read: 30, tokens_cache_creation: 40, num_turns: 2, status: 'completed', error_message: null, system_prompt: 'PROMPT-SECRETO', input_summary: 'ENTRADA-SECRETA', output_summary: 'SALIDA-SECRETA', metadata: { algo: 'META-SECRETA' }, ...x })
   const des = (x: Record<string, unknown>) => ({ dispatch_key: 'dispatch:wf:a:100', workflow_id: 'wf', workflow_execution_id: '100', agent_name: 'a', client_id: C1, status: 'completed', created_at: '2026-11-01T09:59:00Z', completed_at: '2026-11-01T10:01:00Z', metadata: {}, ...x })
+  it('🔴 el mantenimiento y lo del dueño no se agrupan: cada identificador es su corrida; las ramas de n8n siguen juntas', () => {
+    const a = 'vercel-cron:etiquetar-pendientes:2026-11-01T14:52', b = 'vercel-cron:etiquetar-pendientes:2026-11-01T14:56', d = 'dueno:aprendizaje:abc-1'
+    for (const x of [a, b, d]) { expect(ejecucionBase(x)).toBe(x); expect(ramaDe(x)).toBeNull(); expect(ID_DE_EJECUCION.test(x)).toBe(true) }
+    expect(ejecucionBase('205994:ajuste')).toBe('205994')
+    expect(ramaDe('205994:ajuste')).toBe('ajuste')
+    expect(ID_DE_EJECUCION.test('a b')).toBe(false)
+  })
+  it('🔴 la lista separa las corridas de mantenimiento y dice todos los clientes de cada una', async () => {
+    const fila = (id: string, workflow_execution_id: string, client_id: string | null) => ({ id, workflow_id: 'wf', workflow_execution_id, client_id, agent_name: 'x', status: 'ok', cost_usd: 0, started_at: '2026-11-01T14:00:00Z', ended_at: '2026-11-01T14:01:00Z' })
+    const a = 'vercel-cron:etiquetar-pendientes:2026-11-01T14:52', b = 'vercel-cron:etiquetar-pendientes:2026-11-01T14:56'
+    const r = await leerCorridas(ctx(base().semilla('agent_invocations', [fila('1', a, C1), fila('2', a, C2), fila('3', b, C1), fila('4', a, null)])))
+    const porId = new Map(r.corridas.map((c) => [c.workflow_execution_id, c]))
+    expect([...porId.keys()].sort()).toEqual([a, b])
+    expect(porId.get(a)).toMatchObject({ pasos: 3 })
+    expect([...porId.get(a)!.clientes].sort()).toEqual([C1, C2].sort())
+    expect([...porId.get(a)!.clientes_nombres].sort()).toEqual(['Dos', 'Uno'])
+    expect(porId.get(b)).toMatchObject({ clientes: [C1], pasos: 1 })
+  })
+  it('🔴 los identificadores largos tienen tope, también con esos prefijos', () => {
+    expect(ID_DE_EJECUCION.test('vercel-cron:a:b:c:d:e')).toBe(true)
+    expect(ID_DE_EJECUCION.test('vercel-cron:a:b:c:d:e:f')).toBe(false)
+  })
+  it('🔴 un cliente repetido sale una sola vez, y client_id sigue siendo el primero para quien ya lo lee', async () => {
+    const fila = (id: string, client_id: string, started_at: string) => ({ id, workflow_id: 'wf', workflow_execution_id: 'vercel-cron:x:1', client_id, agent_name: 'x', status: 'ok', cost_usd: 0, started_at, ended_at: started_at })
+    const r = await leerCorridas(ctx(base().semilla('agent_invocations', [fila('1', C2, '2026-11-01T14:03:00Z'), fila('2', C2, '2026-11-01T14:02:00Z'), fila('3', C1, '2026-11-01T14:01:00Z')])))
+    expect(r.corridas[0].clientes).toEqual([C2, C1])
+    expect(r.corridas[0].client_id).toBe(C2)
+    expect(r.corridas[0].cliente).toBe('Dos')
+  })
+  it('🔴 el detalle de una corrida de mantenimiento trae solo la suya', async () => {
+    const fila = (id: string, workflow_execution_id: string) => ({ id, workflow_id: 'wf', workflow_execution_id, client_id: C1, agent_name: 'x', status: 'ok', cost_usd: 0, started_at: '2026-11-01T14:00:00Z', ended_at: '2026-11-01T14:01:00Z' })
+    const a = 'vercel-cron:etiquetar-pendientes:2026-11-01T14:52', b = 'vercel-cron:etiquetar-pendientes:2026-11-01T14:56'
+    const r = await leerCorrida(ctx(base().semilla('agent_invocations', [fila('1', a), fila('2', b)])), a)
+    expect(r.status).toBe(200)
+    expect(JSON.stringify(r.cuerpo)).toContain('"1"')
+    expect(JSON.stringify(r.cuerpo)).not.toContain('14:56')
+  })
   it('ejecucionBase y ramaDe', () => { expect(ejecucionBase('1:analisis-voz')).toBe('1'); expect(ramaDe('1:analisis-voz')).toBe('analisis-voz'); expect(ramaDe('1')).toBeNull() })
   it('lista: las ramas son la MISMA corrida; suma costo y tokens; el flujo no se toma de un id de despacho; lo fuera de la ventana no entra', async () => {
     const db = base().semilla('agent_invocations', [
