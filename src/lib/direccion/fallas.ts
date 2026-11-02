@@ -1,6 +1,6 @@
 /**
  * GET /api/direccion/fallas · las fallas del FLUJO, no las del empleado (Lenovo 02-nov): dos corridas del manual fallaron con todos sus empleados en «completed», y «Lo que falló» no las veía.
- * Dos fuentes: los pedidos con `estado='fallido'`, que duran, y las ejecuciones en error de n8n, que solo duran unas horas (se declara en `fuentes`).
+ * Dos fuentes: los pedidos con `estado='fallido'`, que duran, y las ejecuciones en error de n8n, que solo duran unos días (se declara en `fuentes`).
  * Una ejecución que cayó justo antes de cerrarse un pedido es esa misma falla: va como dato del pedido, no como otro renglón. Solo lectura.
  */
 import { estaCompleto, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
@@ -59,7 +59,7 @@ async function leerEjecuciones(fuentes: Fuente[], c: Contexto, a: number, b: num
     // n8n entrega de la más nueva a la más vieja: con la página llena pueden quedar fallas más viejas fuera, y se declara
     const llena = todas.length >= PAGINA_DE_N8N
     const filas = todas.filter((e) => { const t = Date.parse(String(e.stoppedAt ?? e.startedAt)); return t >= a && t < b })
-    fuentes.push({ fuente: 'n8n', estado: 'ok', filas: filas.length, ...(llena ? { truncado: true } : {}), detalle: 'n8n conserva pocas horas de ejecuciones: esto no es el historial completo del período' })
+    fuentes.push({ fuente: 'n8n', estado: 'ok', filas: filas.length, ...(llena ? { truncado: true } : {}), detalle: 'n8n solo conserva las fallas de unos pocos días: esto no es el historial completo del período' })
     return filas
   } catch (e) {
     fuentes.push({ fuente: 'n8n', estado: 'error', filas: 0, detalle: sinSecretos(e instanceof Error ? e.message : String(e)) ?? 'error' })

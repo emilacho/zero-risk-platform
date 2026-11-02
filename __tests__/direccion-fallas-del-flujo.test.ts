@@ -85,9 +85,9 @@ describe('lo que no se pudo leer se declara', () => {
     const r = await leer(ctx(dbCon([]), n8n([]), {}))
     expect(r.fuentes.find((f) => f.fuente === 'n8n')).toMatchObject({ estado: 'sin_credencial' })
   })
-  it('🔴 avisa que n8n recuerda pocas horas', async () => {
+  it('🔴 avisa que n8n recuerda pocos días', async () => {
     const r = await leer(ctx(dbCon([])))
-    expect(String(r.fuentes.find((f) => f.fuente === 'n8n')!.detalle)).toContain('pocas horas')
+    expect(String(r.fuentes.find((f) => f.fuente === 'n8n')!.detalle)).toContain('pocos días')
   })
 })
 
