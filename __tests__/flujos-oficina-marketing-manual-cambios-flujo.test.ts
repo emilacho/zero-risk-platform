@@ -33,6 +33,16 @@ function sb(o: { pedido?: any; manual?: any; ficha?: any; relee?: any } = {}) {
 const hasta = ['④ Llamar al flujo del manual']
 const correr = (e: any, o = {}) => { const s = sb(o); return recorrer(flujo, '⓪ Llave · Webhook · manual-cambios', e, { http: s.http, hasta }).then((r) => ({ r, ...s })) }
 
+describe('el webhook responde al recibir (la sala no espera minutos ni se corta por tiempo)', () => {
+  it('es POST en la ruta acordada y su modo de respuesta es onReceived', () => {
+    const wh = flujo.nodes.filter((n: any) => n.type === 'n8n-nodes-base.webhook')
+    expect(wh).toHaveLength(1)
+    expect(wh[0].parameters.httpMethod).toBe('POST')
+    expect(wh[0].parameters.path).toBe('zero-risk/manual-cambios')
+    expect(wh[0].parameters.responseMode).toBe('onReceived')
+  })
+})
+
 describe('⓪ la llave y el sobre, antes de gastar', () => {
   it('sin llave de despacho, o con una distinta, se DETIENE', async () => {
     await expect(correr(entrada(SOBRE, {}))).rejects.toThrow(/FLUJO_PROCEDENCIA_INVALIDA/)
