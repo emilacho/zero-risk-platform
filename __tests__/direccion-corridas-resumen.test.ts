@@ -152,6 +152,14 @@ describe('el cliente y la entrada', () => {
     expect(grupos(await leer(db))[0]).toMatchObject({ client_id: 'c2', ejecuciones: 1 })
   })
 
+  it('🔴 también si la corrida de varios clientes solo tiene despachos', async () => {
+    const d = (dispatch_key: string, client_id: string, created_at: string) => ({ dispatch_key, workflow_id: 'flujo-a', workflow_execution_id: 'solo-despachos', agent_name: dispatch_key, client_id, status: 'completed', created_at, completed_at: created_at })
+    const db = new DbFalsa().semilla('agent_dispatches', [d('a', 'c1', '2026-11-02T12:00:00Z'), d('b', 'c2', '2026-11-02T13:00:00Z')])
+    const lista = await leerCorridas(ctx(db), { dias: 7 })
+    expect(lista.corridas[0].client_id).toBe('c2')
+    expect(grupos(await leer(db))[0]).toMatchObject({ client_id: 'c2' })
+  })
+
   it('una corrida sin cliente va en su propio renglón', async () => {
     const db = new DbFalsa().semilla('agent_invocations', [inv({ client_id: null })])
     expect(grupos(await leer(db))[0].client_id).toBeNull()
