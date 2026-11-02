@@ -425,3 +425,18 @@ describe('un dueño que falla se declara (nunca se calla)', () => {
     expect(Object.keys(out._equipo.aportes.valores).sort()).toEqual(['nunca_hace', 'reglas_de_escritura', 'tono_por_canal', 'valores'])
   })
 })
+
+describe('las etiquetas con las que el dueño nombra un campo validado son las del manual', () => {
+  it('cada una de las 8 claves lleva EXACTAMENTE la etiqueta de campos-del-manual.ts (si el manual la cambia, esta prueba avisa)', async () => {
+    const { CAMPOS } = await import('../src/lib/manual/campos-del-manual')
+    const { COMUN } = await import('../scripts/ops/oficina-marketing/secciones-nuevas-y-mesa-manual.mjs')
+    const bloque = /const ETIQUETAS = \{([^}]*)\}/.exec(COMUN as string)![1]
+    const claves = Object.values(DUENOS).flatMap((d) => Object.keys(d))
+    expect(claves).toHaveLength(8)
+    for (const k of claves) {
+      const campo = (CAMPOS as any[]).find((c) => c.clave === k)
+      expect(campo, k).toBeTruthy()
+      expect(bloque, k).toContain(`${k}: '${campo.etiqueta}'`)
+    }
+  })
+})
