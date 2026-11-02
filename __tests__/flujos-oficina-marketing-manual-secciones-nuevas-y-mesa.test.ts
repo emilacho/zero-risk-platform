@@ -526,6 +526,10 @@ describe('ningún nodo de código espera a un empleado (n8n corta una tarea de c
       expect(String(c.leftValue)).toContain('_eq_sin_pedidos === true'); expect(c.rightValue).toBe(true); expect(c.operator.operation).toBe('equals')
     }
   })
+  it('con el latido una falla tardía llega como 200 con success:false y estado_http: se declara, no pasa por éxito', async () => {
+    const r = await correr(EQUIPO.aportes, base(), (l) => (l.agent === 'brand-strategist' ? ({ statusCode: 200, body: { success: false, estado_http: 504, error: 'tardó' } } as any) : respuestaAportes(l)))
+    expect(JSON.stringify(r.out._equipo.declarado)).toMatch(/falló la llamada a brand-strategist: HTTP 504 tardó/)
+  })
   it('un HTTP 500 también se declara (el nodo HTTP no lanza con neverError)', async () => {
     const r = await correr(EQUIPO.aportes, base(), (l) => (l.agent === 'brand-strategist' ? ({ statusCode: 500, body: { error: 'boom' } } as any) : respuestaAportes(l)))
     expect(JSON.stringify(r.out._equipo.declarado)).toMatch(/falló la llamada a brand-strategist: HTTP 500/)

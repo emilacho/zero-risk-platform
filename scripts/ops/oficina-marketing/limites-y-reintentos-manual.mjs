@@ -10,6 +10,8 @@ export const ESPERA_MAXIMA_MS = 800000
 export const INTENTOS = 2
 export const ESPERA_ENTRE_INTENTOS_MS = 5000
 
+export const CABECERA_LATIDO = { name: 'x-zr-latido', value: '1' }
+
 export const esLlamadaAEmpleado = (n) => n.type === 'n8n-nodes-base.httpRequest' && String(n.parameters && n.parameters.url).includes('/api/agents/run-sdk')
 
 export function construirLimitesYReintentos(f) {
@@ -17,6 +19,10 @@ export function construirLimitesYReintentos(f) {
   for (const n of f.nodes) {
     if (!esLlamadaAEmpleado(n)) continue
     n.parameters.options = Object.assign({}, n.parameters.options, { timeout: ESPERA_MAXIMA_MS })
+    // latido (#857): la plataforma escribe un salto de línea cada 20 s, así la conexión no queda en silencio y nadie la corta a los ~5 min
+    const hp = (n.parameters.headerParameters && n.parameters.headerParameters.parameters) || []
+    n.parameters.sendHeaders = true
+    n.parameters.headerParameters = { parameters: hp.some((h) => h.name === CABECERA_LATIDO.name) ? hp : [...hp, { ...CABECERA_LATIDO }] }
     n.retryOnFail = true
     n.maxTries = INTENTOS
     n.waitBetweenTries = ESPERA_ENTRE_INTENTOS_MS

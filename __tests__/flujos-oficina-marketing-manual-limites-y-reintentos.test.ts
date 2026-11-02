@@ -41,6 +41,15 @@ describe('nodos HTTP que llaman a un empleado', () => {
     expect(otros.length).toBeGreaterThan(0)
     for (const n of otros) expect(n.retryOnFail).toBeUndefined()
   })
+  it('TODA llamada a un empleado manda la cabecera del latido x-zr-latido: 1 (sin ella la conexión queda en silencio y se corta a los ~5 min)', () => {
+    const llamadas = nuevo.nodes.filter((n: any) => esLlamadaAEmpleado(n))
+    expect(llamadas.length).toBeGreaterThan(10)
+    for (const n of llamadas) {
+      expect(n.parameters.sendHeaders).toBe(true)
+      expect(n.parameters.headerParameters.parameters.filter((h: any) => h.name === 'x-zr-latido' && h.value === '1').length).toBe(1)
+      expect(n.parameters.headerParameters.parameters.some((h: any) => h.name === 'x-api-key')).toBe(true)
+    }
+  })
   it('la espera máxima es la de la plataforma (800 s)', () => { expect(ESPERA_MAXIMA_MS).toBe(800000) })
 })
 

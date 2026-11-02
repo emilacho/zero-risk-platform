@@ -153,6 +153,8 @@ const llamar = async (agente, paso, tarea, rol, div) => {
   if (!x) return falla('no hubo respuesta');
   if (x.error) return falla(typeof x.error === 'object' ? ((x.error.message) || JSON.stringify(x.error)) : x.error);
   if (x.statusCode >= 400) return falla('HTTP ' + x.statusCode);
+  // con el latido una falla tardía llega como 200 con success:false y su código en estado_http
+  if (x.body && typeof x.body === 'object' && x.body.success === false) return falla('HTTP ' + (x.body.estado_http || '?') + (x.body.error ? ' ' + x.body.error : ''));
   const s = seccion(x);
   const b = (x && x.body && typeof x.body === 'object') ? x.body : (x || {});
   if (!s && !jsonDeTexto(x)) return { ok: false, error: 'la respuesta de ' + agente + ' no se entendió' + (b.error ? ': ' + t(b.error, 100) : ''), seccion: null, extra: null };
