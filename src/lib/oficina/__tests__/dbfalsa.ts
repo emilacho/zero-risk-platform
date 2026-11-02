@@ -14,6 +14,10 @@ const UNICOS: Record<string, string[][]> = {
   notas_del_dueno_envios: [['nota_id']],
   autorevisiones_del_productor: [['clave_unica']],
   plan_aprobaciones: [['plan_id']],
+  metricas_cuentas: [['client_id', 'red', 'cuenta_externa']],
+  metricas_cuenta_mediciones: [['cuenta_id', 'dia', 'fuente']],
+  metricas_publicaciones: [['client_id', 'red', 'post_externo']],
+  metricas_publicacion_mediciones: [['publicacion_id', 'dia', 'fuente']],
 }
 const hay = (v: unknown) => v !== null && v !== undefined
 
@@ -104,6 +108,7 @@ class Consulta {
     else if (this.t.startsWith('cerebro_')) o.id ??= `88888888-8888-4888-8888-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'eventos_de_emilio') { o.id ??= `99999999-9999-4999-8999-${String(++this.db.secuencia).padStart(12, '0')}` }
     else if (this.t === 'notas_del_dueno' || this.t === 'autorevisiones_del_productor') { o.id ??= `66666666-6666-4666-8666-${String(++this.db.secuencia).padStart(12, '0')}`; o.creada_en ??= new Date(Date.UTC(2026, 9, 21, 12, 0, this.db.secuencia)).toISOString() }
+    else if (this.t.startsWith('metricas_')) o.id ??= `77777777-7777-4777-8777-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'client_brand_books') o.id ??= `44444444-4444-4444-8444-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'clients') o.id ??= `55555555-5555-4555-8555-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'client_historical_outputs' || this.t === 'hitl_queue') o.id ??= `77777777-7777-4777-8777-${String(++this.db.secuencia).padStart(12, '0')}`
