@@ -87,7 +87,19 @@ describe('🔴 la frase que el dueño negó', () => {
       expect(fin!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? ''))).toBe(false)
       expect(fin!.estado).toBe('cerrada')
       expect(fin!.estado_del_motor.avisos?.[0]).toMatch(/^Aviso: .*el dueño lo negó/)
-      expect(notas.at(-1)).toMatchObject({ titulo: `${tipo}: revisa este aviso`, metadata: { artifact_type: tipo } })
+      expect(fin!.client_id).toBeTruthy()
+      expect(notas.at(-1)).toMatchObject({ client_id: fin!.client_id, plan_id: `${tipo}:x:v1`, titulo: `${tipo}: revisa este aviso`, metadata: { artifact_type: tipo } })
+    })
+    it(`🔴 el ensayo seco de ${tipo} calcula el aviso pero no ensucia la bandeja del dueño`, async () => {
+      const { P } = puertosDePrueba()
+      P.hechosDelDueno = async () => [MARISCO]
+      const notas: unknown[] = []
+      P.anotarPalabraDelDueno = async (x) => { notas.push(x) }
+      const texto = tipo === 'estrategia' ? JSON.stringify({ ...A.estrategia, nota: 'marisco de Olón' }) : JSON.stringify({ filas: [{ fila_id: 'f1', tema: 'marisco de Olón' }] })
+      const c = await correr(P, sobre(tipo, { id: `${tipo}:x:v1`, texto, dry_run: true, simulacion: { fichas: 'ninguna', gpt: 'vacio' } }))
+      const fin = await P.almacen.leerRevision(String(c.aperturas[0].cuerpo.revision_id))
+      expect(fin!.estado_del_motor.avisos?.[0]).toMatch(/el dueño lo negó/)
+      expect(notas).toEqual([])
     })
   }
   it('🔴 la pieza no se anota aparte: lleva el aviso en su tarjeta', async () => {
