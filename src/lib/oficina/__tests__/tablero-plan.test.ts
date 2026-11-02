@@ -150,6 +150,13 @@ describe('plan-cambios', () => {
 })
 
 describe('plan-aprobar', () => {
+  it('🔴 aprobar la versión vigente resuelve los avisos anotados sobre la primera versión, y no los de otro cliente', async () => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan()]).semilla('hitl_queue', [{ id: 'h1', type: 'palabra_del_dueno', status: 'pending', output_id: P2, client_id: C }, { id: 'h2', type: 'palabra_del_dueno', status: 'pending', output_id: P2, client_id: 'otro' }, { id: 'h3', type: 'palabra_del_dueno', status: 'rejected', output_id: P2, client_id: C }])
+    expect((await llamar('plan-aprobar', db, { plan_id: P1 })).status).toBe(200)
+    expect(db.tablas['hitl_queue'][0]).toMatchObject({ status: 'approved', decision: { origen: 'plan-aprobar' } })
+    expect(db.tablas['hitl_queue'][1].status).toBe('pending')
+    expect(db.tablas['hitl_queue'][2].status).toBe('rejected')
+  })
   const SOBRE = { _journey_id: 'j1', _sala_correlation_id: 'corr-1', client_name: 'Cliente', con_pendientes: false, dry_run: false }
   it('con la compuerta pendiente: el plan pasa a approved, la compuerta a aprobado, la nota de la bandeja se resuelve y se despierta la segunda mitad con el sobre', async () => {
     const db = new DbFalsa().semilla('client_historical_outputs', [plan()]).semilla('plan_aprobaciones', [{ id: 'a1', plan_id: P1, client_id: C, estado: 'pendiente', sobre_de_reanudacion: SOBRE }])

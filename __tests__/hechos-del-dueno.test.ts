@@ -7,8 +7,10 @@ import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { controlarFrasesNegadas } from '../src/lib/planeacion/coherencia-del-plan'
 import { adjuntoDelCliente } from '../src/lib/portero-alimenta/contexto-del-cliente'
 import { textoDeLaCarpeta } from '../src/lib/jefatura/revision/carpeta-para-revisar'
-import { abrirRevision, fichasDeLoNegado } from '../src/lib/jefatura/revision/orquestador'
-import { puertosDePrueba, sobre } from './_helpers/jefatura-revision'
+import { abrirRevision, armarSalida, avisosDelPlan, elegirVersionDelPlan, fichasDeLoNegado } from '../src/lib/jefatura/revision/orquestador'
+import { resolverCierre } from '../src/lib/jefatura/revision/cierre'
+import { ARTEFACTO_DE_LA_JEFATURA, metadataDeLaJefatura } from '../src/lib/oficina/paso-jefatura'
+import { puertosDePrueba, sobre, correr } from './_helpers/jefatura-revision'
 import { crearPuertos } from '../src/lib/jefatura/revision/adaptadores'
 
 const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
@@ -31,17 +33,57 @@ describe('🔴 la frase que el dueño negó', () => {
     expect(controlarFrasesNegadas('Texto cualquiera', [{ tema: 'x', frases_negadas: [] }])).toEqual([])
     expect(controlarFrasesNegadas('Texto cualquiera', [MARISCO])).toEqual([])
   })
-  it('bloquea y entra al ciclo', () => {
+  it('fuera del plan, bloquea y entra al ciclo', () => {
     expect(fichasDeLoNegado('marisco de Olón', [MARISCO])[0]).toMatchObject({ gravedad: 'bloquea', origen: 'jefe', estado: 'abierta', contra_que: 'lo que declaró el dueño' })
   })
-  it('🔴 al abrir la revisión queda la ficha, aunque el revisor no la vea; sin la lectura, nada se rompe', async () => {
+  it('🔴 en el plan no deja ficha: llega completo y con su aviso; sin la lectura, nada se rompe', async () => {
     const { P } = puertosDePrueba()
     P.hechosDelDueno = async () => [MARISCO]
-    const r = await abrirRevision(P, sobre('plan', { texto: 'Plan con marisco de Olón' }))
-    const rev = await P.almacen.leerRevision(String(r.cuerpo.revision_id))
-    expect(rev!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? ''))).toBe(true)
+    const notas: Array<Record<string, unknown>> = []
+    P.anotarPalabraDelDueno = async (x) => { notas.push(x as never) }
+    const c = await correr(P, sobre('plan', { texto: 'Plan con marisco de Olón', simulacion: { fichas: 'ninguna', gpt: 'vacio' } }))
+    const id = String(c.aperturas[0].cuerpo.revision_id)
+    const rev = await P.almacen.leerRevision(id)
+    expect(rev!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? ''))).toBe(false)
+    expect(rev!.estado_del_motor.avisos).toBeUndefined()
+    const leer = P.almacen.leerRevision.bind(P.almacen)
+    P.almacen.leerRevision = async (x) => { const f = await leer(x); return f ? { ...f, dry_run: false } : f }
+    const e = await elegirVersionDelPlan(P, id, { evaluaciones: [{ etiqueta: 'A', marcas: 0, largo: 24 }], idDeA: 'A-id', existentes: [] })
+    expect(e.cuerpo.adoptada).toBe('A')
+    expect(notas[0].detalle).toMatch(/Aviso: .*el dueño lo negó/)
     const { P: sin } = puertosDePrueba()
     expect((await abrirRevision(sin, sobre('plan', { id: 'otro', texto: 'Plan con marisco de Olón' }))).status).toBeLessThan(400)
+  })
+  it('🔴 en una pieza no deja ficha: se cierra con su aviso y llega a la bandeja', async () => {
+    const { P } = puertosDePrueba()
+    P.hechosDelDueno = async () => [MARISCO]
+    const c = await correr(P, sobre('pieza', { texto: 'Pieza con marisco de Olón', simulacion: { fichas: 'ninguna', gpt: 'vacio' } }))
+    const rev = await P.almacen.leerRevision(String(c.aperturas[0].cuerpo.revision_id))
+    expect(rev!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? ''))).toBe(false)
+    expect(rev!.estado_del_motor.avisos?.[0]).toMatch(/^Aviso: .*el dueño lo negó/)
+    expect(rev!.estado).toBe('cerrada')
+    expect(armarSalida(rev!, resolverCierre(rev!.estado_del_motor, { tope: false, fallida: false, duenos: [] })).avisos?.[0]).toMatch(/el dueño lo negó/)
+  })
+  it('🔴 sin frase negada, o en una revisión fallida, la pieza no lleva aviso', async () => {
+    const { P } = puertosDePrueba()
+    P.hechosDelDueno = async () => [MARISCO]
+    const c = await correr(P, sobre('pieza', { texto: 'Pieza limpia', simulacion: { fichas: 'ninguna', gpt: 'vacio' } }))
+    const rev = await P.almacen.leerRevision(String(c.aperturas[0].cuerpo.revision_id))
+    expect(rev!.estado_del_motor.avisos).toBeUndefined()
+  })
+  it('🔴 lo que no es plan ni pieza, con re-entrega, sigue bloqueando', async () => {
+    const { P } = puertosDePrueba()
+    P.hechosDelDueno = async () => [MARISCO]
+    const r = await abrirRevision(P, sobre('estrategia', { texto: 'Estrategia con marisco de Olón' }))
+    const rev = await P.almacen.leerRevision(String(r.cuerpo.revision_id))
+    if (rev!.policy.reentrega === 'ninguna') throw new Error('esta prueba necesita un tipo con re-entrega')
+    expect(rev!.estado_del_motor.fichas.some((f) => /el dueño lo negó/.test(f.que ?? '') && f.gravedad === 'bloquea')).toBe(true)
+  })
+  it('🔴 el aviso viaja de la salida a los datos de la bandeja', () => {
+    const e = { artefactos: { [ARTEFACTO_DE_LA_JEFATURA]: { datos: { jefatura: { resultado: 'limpia', avisos: ['Aviso: x'], incompleta: false, sin_revisar: false } } } } } as never
+    expect(metadataDeLaJefatura(e)).toMatchObject({ avisos_de_jefatura: ['Aviso: x'] })
+    const sin = { artefactos: { [ARTEFACTO_DE_LA_JEFATURA]: { datos: { jefatura: { resultado: 'limpia', incompleta: false, sin_revisar: false } } } } } as never
+    expect(metadataDeLaJefatura(sin)).not.toHaveProperty('avisos_de_jefatura')
   })
 })
 
@@ -59,7 +101,7 @@ describe('🔴 viaja en la carpeta', () => {
     const reales = crearPuertos(db as never, {} as never)
     const hechos = await reales.hechosDelDueno!(C)
     expect(hechos).toEqual([expect.objectContaining({ tema: 'origen del marisco', frases_negadas: ['marisco de Olón'] })])
-    expect(fichasDeLoNegado('Nuestro marisco de Olón', hechos)[0]).toMatchObject({ gravedad: 'bloquea' })
+    expect(avisosDelPlan('Nuestro marisco de Olón', '', hechos, new Date('2026-11-02T00:00:00Z')).some((x) => /el dueño lo negó/.test(x))).toBe(true)
   })
   it('una lectura caída no tumba la revisión', async () => {
     const reales = crearPuertos({ from() { throw new Error('caída') } } as never, {} as never)

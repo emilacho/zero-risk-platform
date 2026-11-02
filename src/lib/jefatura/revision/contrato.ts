@@ -102,6 +102,8 @@ export interface SalidaDeRevision {
   respuestas: RespuestaDeFicha[]
   opinion_externa: { texto: string; modelo: string | null } | null
   imagen_por_rehacer: boolean
+  /** pieza: frases que el dueño negó y siguen en lo revisado; se le avisan, no devuelven la pieza */
+  avisos?: string[]
   desacuerdos: string[]
   costo_usd: number
   pasos: number

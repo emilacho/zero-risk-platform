@@ -3,8 +3,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { controlarFechas, controlarPresupuesto, pautaDeclarada, rangoDelPlan, semanasDelPlan, TOLERANCIA_DE_IMPORTES } from '../src/lib/planeacion/coherencia-del-plan'
-import { abrirRevision, fichasDeCoherencia } from '../src/lib/jefatura/revision/orquestador'
-import { puertosDePrueba, sobre } from './_helpers/jefatura-revision'
+import { abrirRevision, avisosDelPlan, elegirVersionDelPlan } from '../src/lib/jefatura/revision/orquestador'
+import { puertosDePrueba, sobre, correr } from './_helpers/jefatura-revision'
 
 const HOY = new Date('2026-11-10T15:00:00Z')
 const tabla = (n: number, ini: string, fin: string) => `| ${n} | ${ini} - ${fin} | algo |`
@@ -84,19 +84,42 @@ describe('🔴 presupuesto', () => {
   })
 })
 
-describe('🔴 entran al ciclo de la jefatura', () => {
-  it('lo que no cuadra bloquea y vuelve al redactor; lo no comprobado es sugerencia', () => {
-    const f = fichasDeCoherencia('PLAN DE 90 DÍAS · 16 de noviembre de 2026 – 7 de febrero de 2027', 'Presupuesto de pauta: 200 por semana', HOY)
-    expect(f.find((x) => /dice 90/.test(x.que ?? ''))).toMatchObject({ gravedad: 'bloquea', origen: 'jefe', estado: 'abierta', contra_que: 'control por código del plan' })
-    expect(f.find((x) => /no pude leer cifras/.test(x.que ?? ''))).toMatchObject({ gravedad: 'sugerencia' })
-  })
-  it('al abrir la revisión de un plan quedan guardadas, con la fecha del sistema y el dato declarado del contexto', async () => {
+describe('🔴 son avisos: el plan llega completo y decide Emilio', () => {
+  const PLAN = 'PLAN DE 90 DÍAS · 16 de noviembre de 2099 – 7 de febrero de 2100\nOpción ambiciosa · Pauta: $300/semana'
+  const CTX = [{ titulo: 'Ficha', texto: 'Presupuesto de pauta: 200 por semana', funcion: 'x' }]
+  const elegir = async (texto: string) => {
     const { P } = puertosDePrueba()
-    const r = await abrirRevision(P, sobre('plan', { texto: 'PLAN DE 90 DÍAS · 16 de noviembre de 2099 – 7 de febrero de 2100\nPauta: $300/semana', payload: { contexto: [{ titulo: 'Ficha', texto: 'Presupuesto de pauta: 200 por semana', funcion: 'x' }] } }))
-    const rev = await P.almacen.leerRevision(String(r.cuerpo.revision_id))
-    const textos = rev!.estado_del_motor.fichas.map((f) => f.que ?? '')
-    expect(textos.some((x) => /dice 90 días/.test(x))).toBe(true)
-    expect(textos.some((x) => /\$300 por semana/.test(x))).toBe(true)
+    const notas: Array<Record<string, unknown>> = []
+    P.anotarPalabraDelDueno = async (x) => { notas.push(x as never) }
+    const c = await correr(P, sobre('plan', { texto, payload: { contexto: CTX }, simulacion: { fichas: 'ninguna', gpt: 'vacio' } }))
+    const id = String(c.aperturas[0].cuerpo.revision_id)
+    const rev = await P.almacen.leerRevision(id)
+    const leer = P.almacen.leerRevision.bind(P.almacen)
+    P.almacen.leerRevision = async (x) => { const f = await leer(x); return f ? { ...f, dry_run: false, estado_del_motor: f.estado_del_motor } : f }
+    return { P, id, rev, notas, e: await elegirVersionDelPlan(P, id, { evaluaciones: [{ etiqueta: 'A', marcas: 0, largo: texto.length }], idDeA: 'A-id', existentes: [] }) }
+  }
+  it('lo que no cuadra es aviso; lo no comprobado lo dice', () => {
+    const a = avisosDelPlan('PLAN DE 90 DÍAS · 16 de noviembre de 2026 – 7 de febrero de 2027', 'Presupuesto de pauta: 200 por semana', [], HOY)
+    expect(a.find((x) => /dice 90/.test(x))).toMatch(/^Aviso: /)
+    expect(a.find((x) => /no pude leer cifras/.test(x))).toMatch(/^Sin comprobar: /)
+  })
+  it('🔴 lo no comprobado, solo, no abre una nota; junto a un aviso, sí va', async () => {
+    const { notas, e } = await elegir('Un plan sin fechas ni cifras')
+    expect((e.cuerpo.palabra_del_dueno as { avisos: string[] }).avisos.some((x) => x.startsWith('Sin comprobar'))).toBe(true)
+    expect(notas).toEqual([])
+  })
+  it('🔴 un plan con $300 no deja ficha ni vuelve al redactor', async () => {
+    const { rev } = await elegir(PLAN)
+    expect(rev!.estado_del_motor.fichas.filter((f) => /dice 90 días|\$300 por semana/.test(f.que ?? ''))).toEqual([])
+  })
+  it('🔴 un plan con $300 llega entero, adoptado, y el aviso queda a la vista de Emilio', async () => {
+    const { e, notas } = await elegir(PLAN)
+    expect(e.cuerpo.adoptada).toBe('A')
+    expect(e.cuerpo.resultado).not.toBe('con_desacuerdo')
+    expect((e.cuerpo.palabra_del_dueno as { avisos: string[] }).avisos.some((x) => /\$300 por semana/.test(x))).toBe(true)
+    expect(notas).toHaveLength(1)
+    expect(notas[0]).toMatchObject({ titulo: expect.stringMatching(/avisos antes de aprobar/) })
+    expect(notas[0].detalle).toMatch(/Aviso: .*\$300 por semana/)
   })
   it('otro tipo de artefacto no pasa por este control', async () => {
     const { P } = puertosDePrueba()

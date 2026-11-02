@@ -179,6 +179,8 @@ export const planAprobar: Manejador = async ({ db, ahora }, { cuerpo, reviewer }
   if (((u.data as Fila[] | null) ?? []).length === 0) return rechazo(409, 'plan_ya_aprobado', 'otra decisión se tomó mientras tanto', t)
   // la nota «plan con pendientes» de la bandeja (si la hay) queda resuelta con la misma decisión · nunca frena
   try { await db.from('hitl_queue').update({ status: 'approved', reviewer, resolved_by: reviewer, decided_at: hora, resolved_at: hora, decision: { via: 'tablero', tipo: 'plan_con_pendientes', decision: 'aprobar', resultado: 'aprobado así', origen: 'plan-aprobar' } }).eq('output_id', plan.id).in('type', ['plan_con_pendientes', 'palabra_del_dueno']).eq('status', 'pending') } catch { /* la bandeja no frena la aprobación */ }
+  // los avisos se anotan sobre la primera versión del plan: al aprobar la vigente, se resuelven también
+  try { await db.from('hitl_queue').update({ status: 'approved', reviewer, resolved_by: reviewer, decided_at: hora, resolved_at: hora, decision: { via: 'tablero', tipo: 'palabra_del_dueno', decision: 'aprobar', resultado: 'aprobado así', origen: 'plan-aprobar' } }).eq('client_id', plan.client_id).eq('type', 'palabra_del_dueno').eq('status', 'pending') } catch { /* la bandeja no frena la aprobación */ }
   const base = { ok: true, plan_id: plan.id, version: plan.version, estado: 'approved', aprobado_por: reviewer }
   if (!comp || !COMPUERTA_ABIERTA.includes(String(comp.estado))) {
     return { status: 200, cuerpo: { ...base, reanuda: false, motivo: comp ? `la compuerta de este plan está «${String(comp.estado)}»: no hay segunda mitad que reanudar` : 'este plan salió antes de la compuerta: su segunda mitad (PDF y brief) ya corrió sola' }, toca: t }
