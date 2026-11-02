@@ -147,13 +147,19 @@ const bloqueRE = (claves) => {
 const llamar = async (agente, paso, tarea, rol, div, espera) => {
   const tope = topeDe(div);
   const cuerpo = Object.assign({ agent: agente, client_id: CLIENT, workflow_id: EXEC, workflow_execution_id: EXEC, step_name: paso, task: String(tarea).slice(0, 15900), context: { role: rol, motivo: 'equipo_del_manual' } }, tope > 0 ? { max_budget_usd: tope } : {});
+  for (let intento = 1; intento <= 2; intento++) {
   try {
-    const x = await ayuda.httpRequest({ url: API + '/api/agents/run-sdk', method: 'POST', json: true, timeout: espera || 240000, headers: { 'Content-Type': 'application/json', 'x-api-key': $env.INTERNAL_API_KEY }, body: cuerpo });
+    const x = await ayuda.httpRequest({ url: API + '/api/agents/run-sdk', method: 'POST', json: true, timeout: espera || 800000, headers: { 'Content-Type': 'application/json', 'x-api-key': $env.INTERNAL_API_KEY }, body: cuerpo });
     const s = seccion(x);
     const b = (x && x.body && typeof x.body === 'object') ? x.body : (x || {});
     if (!s && !jsonDeTexto(x)) return { ok: false, error: 'la respuesta de ' + agente + ' no se entendió' + (b.error ? ': ' + t(b.error, 100) : ''), seccion: null, extra: null };
     return { ok: true, seccion: s, extra: jsonDeTexto(x), error: '' };
-  } catch (e) { return { ok: false, error: 'falló la llamada a ' + agente + ': ' + t((e && e.message) || e, 140), seccion: null, extra: null }; }
+  } catch (e) {
+    // conexión perdida: la respuesta pudo escribirse del lado de la plataforma; se vuelve a pedir una sola vez (el punto de control devuelve lo ya escrito sin cobrar de nuevo)
+    if (intento === 1 && /closed unexpectedly|socket hang up|ECONNRESET|EPIPE|offline|network/i.test(String((e && e.message) || e))) continue;
+    return { ok: false, error: 'falló la llamada a ' + agente + ': ' + t((e && e.message) || e, 140), seccion: null, extra: null };
+  }
+  }
 };
 // de un resultado toma SOLO los campos del dueño que se pidieron (nada más), con su estampado
 const tomar = (res, campos, lente) => {
@@ -211,8 +217,8 @@ const CAMPOS_CC = quiero({ tono_por_canal: 'lista', reglas_de_escritura: 'lista'
 const CAMPOS_BS = quiero({ historia_y_origen: 'texto' });
 const omitir = { ok: true, omitida: true, seccion: null, extra: null, error: '' };
 const [rcc, rbs] = await Promise.all([
-  Object.keys(CAMPOS_CC).length ? llamar('content-creator', 'bb-equipo-aportes-voz', armar(Object.keys(CAMPOS_CC)), 'brand_book_aportes_content_creator', 8, 240000) : omitir,
-  Object.keys(CAMPOS_BS).length ? llamar('brand-strategist', 'bb-equipo-aportes-estrategia', armar(Object.keys(CAMPOS_BS)), 'brand_book_aportes_brand_strategist', 8, 240000) : omitir,
+  Object.keys(CAMPOS_CC).length ? llamar('content-creator', 'bb-equipo-aportes-voz', armar(Object.keys(CAMPOS_CC)), 'brand_book_aportes_content_creator', 8, 800000) : omitir,
+  Object.keys(CAMPOS_BS).length ? llamar('brand-strategist', 'bb-equipo-aportes-estrategia', armar(Object.keys(CAMPOS_BS)), 'brand_book_aportes_brand_strategist', 8, 800000) : omitir,
 ]);
 const a = tomar(rcc, CAMPOS_CC, 'content-creator');
 const b = tomar(rbs, CAMPOS_BS, 'brand-strategist');
@@ -244,7 +250,7 @@ const ev2 = '\n\nEVIDENCIA' + (omitidas.length ? ' (no cupo: ' + omitidas.join('
 const cola = '\n\nPARTES CREATIVAS YA ESCRITAS:\n';
 const resto = PRESUPUESTO_TAREA - (base.length + ev2.length + cola.length);
 const tarea = base + ev2 + cola + (resto > 0 ? JSON.stringify(creativo).slice(0, resto) : '');
-const r = await llamar('creative-director-mesa', 'bb-equipo-mesa-creativa', tarea, 'brand_book_mesa_creativa', 8, 240000);
+const r = await llamar('creative-director-mesa', 'bb-equipo-mesa-creativa', tarea, 'brand_book_mesa_creativa', 8, 800000);
 const m = tomar(r, { direccion_de_fotografia: 'lista' }, 'creative-director-mesa');
 const crudos = (r.ok && ((r.extra && Array.isArray(r.extra.aportes)) ? r.extra.aportes : ((r.seccion && Array.isArray(r.seccion.aportes)) ? r.seccion.aportes : []))) || [];
 const aportesMesa = crudos.filter((x) => x && typeof x === 'object' && typeof x.texto === 'string' && x.texto.trim()).slice(0, 6).map((x) => ({ para: x.para === 'content-creator' ? 'content-creator' : 'piso_visual', campo: t(x.campo, 40), texto: t(x.texto, 400) }));
@@ -271,7 +277,7 @@ if (paraVoz.length && Object.keys(CAMPOS_VOZ).length && (valores.tono_por_canal 
   const base = 'Eres el DUEÑO de tono_por_canal y reglas_de_escritura del manual de marca. La mesa creativa te deja APORTES: son aportes, no órdenes. Integra los que mejoren tu trabajo, descarta los que no, y vuelve a emitir con emit_brand_section tus campos COMPLETOS (' + Object.keys(CAMPOS_VOZ).join(' y ') + ', con _field_meta). ' + REGLA + bloqueRE(Object.keys(CAMPOS_VOZ)) + '\n\n';
   const cuerpo = '\n\nTUS CAMPOS ACTUALES:\n' + JSON.stringify(elegir(valores, Object.keys(CAMPOS_VOZ))) + '\n\nAPORTES DE LA MESA:\n' + JSON.stringify(paraVoz);
   const ev2 = '\n\nEVIDENCIA' + (omitidas.length ? ' (no cupo: ' + omitidas.join(', ') + ')' : '') + ':\n' + JSON.stringify(ev);
-  const r = await llamar('content-creator', 'bb-equipo-integracion', (base + cuerpo + ev2).slice(0, 15900), 'brand_book_integracion', 8, 240000);
+  const r = await llamar('content-creator', 'bb-equipo-integracion', (base + cuerpo + ev2).slice(0, 15900), 'brand_book_integracion', 8, 800000);
   const i = tomar(r, CAMPOS_VOZ, 'content-creator');
   if (!r.ok) { declarado.push('integración: ' + r.error); integro = 'no_se_pudo'; }
   else { Object.keys(i.valores).forEach((k) => { valores[k] = i.valores[k]; meta[k] = Object.assign({}, meta[k] || {}, i.meta[k]); }); integro = Object.keys(i.valores).length ? 'integrado' : 'sin_cambios'; if (i.falto.length) declarado.push('integración: content-creator dejó sin cambios ' + i.falto.join(', ')); }
@@ -323,7 +329,7 @@ const base = 'Eres el DUEÑO de ' + Object.keys(CAMPOS_LOGO).join(' y ') + ' del
 const obs = '\n\nLO QUE EL PISO VISUAL OBSERVÓ:\n' + JSON.stringify(observado);
 const aportesMesa = (eq.aportes_piso || []).length ? '\n\nAPORTES DE LA MESA CREATIVA (aportes, no órdenes; integra los que sirvan):\n' + JSON.stringify(eq.aportes_piso) : '';
 const ev2 = '\n\nEVIDENCIA' + (omitidas.length ? ' (no cupo: ' + omitidas.join(', ') + ')' : '') + ':\n' + JSON.stringify(ev);
-const r = await llamar('design-visual-storyteller', 'bb-equipo-logo-tipografia', (base + aportesMesa + ev2 + obs).slice(0, 15900), 'brand_book_logo_tipografia', 8, 240000);
+const r = await llamar('design-visual-storyteller', 'bb-equipo-logo-tipografia', (base + aportesMesa + ev2 + obs).slice(0, 15900), 'brand_book_logo_tipografia', 8, 800000);
 const g = tomar(r, CAMPOS_LOGO, 'design-visual-storyteller');
 if (!r.ok) declarado.push('logo y tipografía: ' + r.error); else if (g.falto.length) declarado.push('design-visual-storyteller no entregó: ' + g.falto.join(', '));
 const nuevo = Object.assign({}, draft);
@@ -355,7 +361,7 @@ const cabeza = 'Eres el evaluador de FIDELIDAD de un manual de marca. ANOTA (no 
   'Responde SOLO este JSON: {"notas":[{"campo":"<clave del campo>","dato":"<el dato COPIADO tal cual del campo>","motivo":"<por qué no hay fuente en la evidencia>"}]}. Si todo tiene fuente: {"notas":[]}. Máximo 20 notas.\n\n';
 const ev2 = 'EVIDENCIA' + (omitidas.length ? ' (no cupo: ' + omitidas.join(', ') + ')' : '') + ':\n' + JSON.stringify(ev) + '\n\nCAMPOS:\n';
 const resto = PRESUPUESTO_TAREA - (cabeza.length + ev2.length);
-const r = await llamar('market_research_analyst', 'bb-equipo-juez-datos-duros', cabeza + ev2 + JSON.stringify(cuerpo).slice(0, Math.max(0, resto)), 'brand_book_datos_duros', 8, 240000);
+const r = await llamar('market_research_analyst', 'bb-equipo-juez-datos-duros', cabeza + ev2 + JSON.stringify(cuerpo).slice(0, Math.max(0, resto)), 'brand_book_datos_duros', 8, 800000);
 const crudas = (r.ok && r.extra && Array.isArray(r.extra.notas)) ? r.extra.notas : [];
 const texto = (v) => sinTildes(JSON.stringify(v == null ? '' : v)).replace(/\s+/g, ' ');
 const notas = []; let descartadas = 0;
