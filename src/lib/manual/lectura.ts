@@ -11,12 +11,24 @@ export function camposDelManual(contentText: unknown): CamposFirmes | null {
   return d ? camposFirmes(d) : null
 }
 
+const lineaDeProvisionales = (campos: string[]): string => (campos.length ? `Campos provisionales (sin respaldo completo en lo raspado; se leen como orientación, no como dato firme): ${campos.join(', ')}.` : '')
+
 /** «Campos provisionales (sin respaldo completo en lo raspado): a, b.» — o '' si no hay ninguno */
 export function avisoDeProvisionales(contentText: unknown): string {
   const c = camposDelManual(contentText)
+  return c ? lineaDeProvisionales(c.provisionales) : ''
+}
+
+/**
+ * 02-nov · firma de Emilio: lo que declara el dueño vive en marketing, no en el cerebro. Este aviso es para quien lee en marketing: dice lo que él validó y deja de leerlo como provisional.
+ * El lector del cerebro sigue con `avisoDeProvisionales`, sin cambios.
+ */
+export function avisoDelManualConValidados(contentText: unknown): string {
+  const c = camposDelManual(contentText)
   if (!c) return ''
+  const validados = c.validados_por_el_dueno ?? []
   return [
-    c.validados_por_el_dueno?.length ? `Campos validados por el dueño, tal como están: ${c.validados_por_el_dueno.join(', ')}.` : '',
-    c.provisionales.length ? `Campos provisionales (sin respaldo completo en lo raspado; se leen como orientación, no como dato firme): ${c.provisionales.join(', ')}.` : '',
+    validados.length ? `Campos validados por el dueño, tal como están: ${validados.join(', ')}.` : '',
+    lineaDeProvisionales(c.provisionales.filter((x) => !validados.includes(x))),
   ].filter(Boolean).join(' ')
 }

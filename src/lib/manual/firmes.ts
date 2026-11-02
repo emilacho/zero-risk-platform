@@ -64,9 +64,9 @@ export function camposFirmes(manual: Record<string, unknown>, excluir?: string[]
   for (const campo of new Set(hojasDeTexto(manual, excluir).map((h) => h.campo))) {
     const texto = hojasDeTexto({ [campo]: manual[campo] }, []).map((h) => h.texto).join('\n')
     const m = meta[campo]
-    // 02-nov · lo que el dueño validó campo por campo ya no se lee como provisional: lo aceptó él
-    if (m?.aceptado_por_el_dueno?.campo === true) { out.firmes.push(campo); (out.validados_por_el_dueno ??= []).push(campo) }
-    else if (cuentaPendientes(texto) > 0 || m?.provisional === true || m?.estado === 'con_pendientes') out.provisionales.push(campo)
+    // 02-nov · lo que el dueño validó campo por campo se lista aparte: la clasificación no cambia, y quien lee en marketing decide con avisoDelManualConValidados
+    if (m?.aceptado_por_el_dueno?.campo === true) (out.validados_por_el_dueno ??= []).push(campo)
+    if (cuentaPendientes(texto) > 0 || m?.provisional === true || m?.estado === 'con_pendientes') out.provisionales.push(campo)
     else if (!m || (m.estado === undefined && m.provisional === undefined)) out.sin_revisar.push(campo)
     else out.firmes.push(campo)
   }

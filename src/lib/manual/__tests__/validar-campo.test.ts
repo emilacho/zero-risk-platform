@@ -1,8 +1,9 @@
 // 02-nov · firma de Emilio: validar cualquier campo por separado, sin versión nueva, y que viaje como aceptado por el dueño.
+import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { CAMPOS } from '../campos-del-manual'
 import { conservarLoDelDueno, editarManualDelDueno, validarCampoDelManual, validarManualDelDueno } from '../edicion-del-dueno'
-import { avisoDeProvisionales, camposDelManual } from '../lectura'
+import { avisoDelManualConValidados, avisoDeProvisionales, camposDelManual } from '../lectura'
 import { ACCIONES } from '@/lib/oficina/tablero/acciones'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
 
@@ -134,15 +135,23 @@ describe('que viaje como aceptado por el dueño', () => {
     expect(conservados).not.toContain('mision')
     expect(bb.mision).toBe('Otra')
   })
-  it('🔴 quien lee el manual lo ve validado, y deja de leerlo como provisional', async () => {
+  it('🔴 quien lee en marketing lo ve validado, y deja de leerlo como provisional', async () => {
     const db = base()
-    expect(avisoDeProvisionales(db.tablas['client_brand_books'][0].content_text)).toMatch(/provisionales.*mision/)
+    expect(avisoDelManualConValidados(db.tablas['client_brand_books'][0].content_text)).toMatch(/provisionales.*mision/)
     await validar(db, 'mision')
     const t = db.tablas['client_brand_books'][0].content_text
-    expect(avisoDeProvisionales(t)).toMatch(/validados por el dueño, tal como están: mision/)
-    expect(avisoDeProvisionales(t)).not.toMatch(/provisionales/)
+    expect(avisoDelManualConValidados(t)).toMatch(/validados por el dueño, tal como están: mision/)
+    expect(avisoDelManualConValidados(t)).not.toMatch(/provisionales/)
     expect(camposDelManual(t)).toMatchObject({ validados_por_el_dueno: ['mision'] })
-    expect(camposDelManual(t)!.firmes).toContain('mision')
+  })
+  it('🔴 lo que entrega el lector del cerebro no cambia al validar', async () => {
+    const db = base()
+    const antes = avisoDeProvisionales(db.tablas['client_brand_books'][0].content_text)
+    expect(antes).toMatch(/provisionales.*mision/)
+    await validar(db, 'mision')
+    expect(avisoDeProvisionales(db.tablas['client_brand_books'][0].content_text)).toBe(antes)
+    expect(fs.readFileSync('src/lib/cerebro/lectores.ts', 'utf8')).toContain('avisoDeProvisionales(f.content_text)')
+    expect(fs.readFileSync('src/lib/oficina/adaptadores.ts', 'utf8')).toContain('avisoDelManualConValidados(manual.content_text)')
   })
   it('🔴 editar el campo reemplaza la marca: ya es escrito por el dueño', async () => {
     const db = base()
