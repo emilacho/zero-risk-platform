@@ -141,6 +141,13 @@ describe('② Armar el pedido · moldes del modelo simulado', () => {
     const sinMolde = [...nombrados].filter((k) => !codigoArmar.includes(`'${k}'`))
     expect(sinMolde).toEqual([])
   })
+  it('🔴 el molde del verificador responde por cada frase y cada versión, con una cita de esa versión', () => {
+    const task = 'Comprueba.\n\n## Lo que escribió el dueño, frase por frase\n1. uno uno uno\n2. dos dos dos\n\n## Versión A del plan\nTexto de la A\n\n## Versión C del plan\nTexto de la C\n\n## Cómo responder\nx'
+    const j = textoDe(armar({ esquema: 'verificacion_de_ordenes.v1', task })) as { filas: Array<{ version: string; orden: number; cita: string }> }
+    expect(j.filas.map((x) => `${x.version}${x.orden}`)).toEqual(['A1', 'A2', 'C1', 'C2'])
+    expect(j.filas[0].cita).toContain('Texto de la A')
+    expect(j.filas[2].cita).toContain('Texto de la C')
+  })
   it('un esquema SIN molde devuelve un error visible al motor (no mata la ejecución ni la deja corriendo)', () => {
     const r = armar({ esquema: 'esquema_inventado.v1' })
     expect(r[0].resultado_body.texto).toBeUndefined(); expect(r[0].resultado_body.error).toMatch(/JEFATURA_SIN_MOLDE_SIMULADO/); expect(r[0].resultado_body.n).toBe(3); expect(r[0].resultado_body.revision_id).toBe(REV)

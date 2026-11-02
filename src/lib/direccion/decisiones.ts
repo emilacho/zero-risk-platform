@@ -32,6 +32,7 @@ const TIPOS_HITL: Record<string, { tipo: TipoDecision; ruta: string | null; acci
   content_piece_review: { tipo: 'pieza', ruta: '/piezas', accion: null },
   concepto_review: { tipo: 'gran_idea', ruta: '/piezas', accion: null },
   plan_con_pendientes: { tipo: 'plan', ruta: '/nuevo', accion: 'plan-aprobar' },
+  palabra_del_dueno: { tipo: 'plan', ruta: '/nuevo', accion: null },
   confirm_competitor_list: { tipo: 'revision', ruta: null, accion: 'revision-resolver' },
   editor_escalation: { tipo: 'revision', ruta: null, accion: 'revision-resolver' },
 }
