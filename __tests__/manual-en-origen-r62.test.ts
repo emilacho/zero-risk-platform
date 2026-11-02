@@ -190,7 +190,7 @@ describe('② «Sacar lo sin fuente» · el manual v1 de hoy contra la puerta RE
     }
     expect(m.positioning).toBe('PENDIENTE: reescribir con fuente')      // «marisco de Olón, fresco… En Olón.» ya no se guarda como si fuera el posicionamiento
     expect(m._field_meta.positioning).toMatchObject({ provisional: true })
-    expect(m.personalidad.length).toBeLessThan(MANUAL.personalidad.length) // lo mutilado se quitó entero, no se dejó «Transparente. no con adjetivos»
+    expect(m.personalidad.length).toBeLessThanOrEqual(MANUAL.personalidad.length) // lo mutilado se quita entero, no se deja «Transparente. no con adjetivos» (02-nov: las cifras y fechas ya no se retiran)
     const reg = (await (async () => { const db = baseFalsa(); await correrSacar(db); return db.tablas['client_historical_outputs'][0].provenance_tag as any })()).registro_interno.retirados as Array<{ marca: string }>
     expect(reg.some((x) => x.marca === 'fragmento')).toBe(true)         // lo quitado va solo al registro interno
     expect(JSON.stringify(m)).not.toMatch(/fragmento/)
@@ -200,7 +200,7 @@ describe('② «Sacar lo sin fuente» · el manual v1 de hoy contra la puerta RE
     const { out } = await correrSacar(db)
     const s = (out[0].json.brand_book_draft as any)._sacar
     expect(s.estado).toBe('sacado')
-    expect(s.retirados_n).toBeGreaterThanOrEqual(20)
+    expect(s.retirados_n).toBeGreaterThanOrEqual(15) // 02-nov: las cifras y fechas sin fuente ya no se retiran: se anotan
     expect(s.registro).toBe('guardado')
     const filas = db.tablas['client_historical_outputs'] ?? []
     expect(filas).toHaveLength(1)

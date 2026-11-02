@@ -7,7 +7,7 @@
  *    como «el cliente dice: «…»» (firma D2).
  *  · `recomprobar` = S5 sobre el manual que devolvió el autor: re-evalúa y cierra la puerta (lo que reintroduzca sin cita vuelve a salir).
  */
-import { declaracionDelCliente, PREFIJO_PENDIENTE, evaluarHechos, hojasDeTexto, type EntradaDeHechos, type Hecho, type InformeDeHechos } from './hechos'
+import { datosSinFuenteDe, declaracionDelCliente, esSoloDatoSinFuente, PREFIJO_PENDIENTE, evaluarHechos, hojasDeTexto, type EntradaDeHechos, type Hecho, type InformeDeHechos } from './hechos'
 import { palabrasDe } from './texto'
 import { limpiarManual } from './limpieza'
 
@@ -52,8 +52,10 @@ export function aplicarMeta<T extends Record<string, unknown>>(manual: T, inform
   const previa = (manual._field_meta && typeof manual._field_meta === 'object' ? manual._field_meta : {}) as Record<string, Record<string, unknown>>
   const nueva = metaDeCampos(manual, informe, excluir)
   const merged: Record<string, unknown> = { ...previa }
+  // lo que el dueño ve en el campo. Se recalcula en cada pasada: si el dato ya tiene fuente o salió del texto, su nota se va
+  const datosDe = (c: string) => informe.hechos.filter((h) => h.campo === c && esSoloDatoSinFuente(h)).flatMap(datosSinFuenteDe)
   // 02-nov · lo propuesto sigue siendo propuesta tras la puerta, salvo que le queden pendientes: el dueño lo ve «por validar», no como dato
-  for (const [c, m] of Object.entries(nueva)) merged[c] = { ...(previa[c] ?? {}), ...m, ...(previa[c]?.estado === 'propuesta_del_agente' && m.estado !== 'con_pendientes' ? { estado: 'propuesta_del_agente' } : {}) }
+  for (const [c, m] of Object.entries(nueva)) merged[c] = { ...(previa[c] ?? {}), ...m, ...(previa[c]?.estado === 'propuesta_del_agente' && m.estado !== 'con_pendientes' ? { estado: 'propuesta_del_agente' } : {}), datos_sin_fuente: datosDe(c) }
   return { ...manual, _field_meta: merged }
 }
 
@@ -111,7 +113,7 @@ export function cerrarPuerta<T extends Record<string, unknown>>(manual: T, infor
   const cambios: CambioDeCierre[] = []
   const retirados: RetiradoDelManual[] = []
   const no: Hecho[] = []
-  const sale = (h: Hecho) => h.estado === 'sin_cita' || h.estado === 'solo_sintesis'
+  const sale = (h: Hecho) => (h.estado === 'sin_cita' || h.estado === 'solo_sintesis') && !esSoloDatoSinFuente(h)
   const porOracion = new Map<string, number>()
   for (const h of informe.hechos) if (sale(h)) porOracion.set(h.ruta + '\u0000' + h.frase, (porOracion.get(h.ruta + '\u0000' + h.frase) ?? 0) + 1)
   const registrar = (h: Hecho) => {
@@ -223,5 +225,5 @@ export function recomprobar(_antes: Record<string, unknown>, despuesCrudo: Recor
   const motivoDe = { nombre_interno_citado: 'nombre interno citado como fuente', fragmento: 'oración rota', palabra_prohibida_propia: 'usa una palabra que el propio manual prohíbe' } as const
   const cambiosL = lim.quitados.map((q) => ({ ruta: q.ruta, de: q.texto, a: '', por: 'limpieza' as const }))
   const retiradosL = lim.quitados.map((q) => ({ ruta: q.ruta, clausula: q.texto, estado: 'sin_cita' as const, marca: q.motivo, motivo: motivoDe[q.motivo] }))
-  return { manual, informe: finalInforme, introducidos: informe.sin_respaldo.filter((h) => h.estado !== 'con_duda'), cambios: [...cambiosL, ...cierre.cambios], retirados: [...retiradosL, ...cierre.retirados], limpio: informe.sin_respaldo.every((h) => h.estado === 'con_duda') && lim.quitados.length === 0 }
+  return { manual, informe: finalInforme, introducidos: informe.sin_respaldo.filter((h) => h.estado !== 'con_duda' && !esSoloDatoSinFuente(h)), cambios: [...cambiosL, ...cierre.cambios], retirados: [...retiradosL, ...cierre.retirados], limpio: informe.sin_respaldo.every((h) => h.estado === 'con_duda' || esSoloDatoSinFuente(h)) && lim.quitados.length === 0 }
 }
