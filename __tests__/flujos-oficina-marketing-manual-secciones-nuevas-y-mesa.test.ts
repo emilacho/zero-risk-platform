@@ -289,6 +289,13 @@ describe('«Pedir cambios al manual» llega a los nodos nuevos y no pisa lo vali
     const libera = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE({ campos_liberados: ['nunca_hace'] }) })
     expect(Object.keys(libera.out._equipo.aportes.valores).sort()).toEqual(['nunca_hace', 'tono_por_canal'])
   })
+  it('un pedido que solo habla de la historia llama SOLO a brand-strategist (content-creator no se llama: es dinero)', async () => {
+    const { llamadas, out } = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: RE({ cambios_del_dueno: 'cuenta mejor la historia de cómo nació el local', seccion: 'historia_y_origen' }) })
+    expect(llamadas.map((l) => l.agent)).toEqual(['brand-strategist'])
+    expect(Object.keys(out._equipo.aportes.valores)).toEqual(['historia_y_origen'])
+    const nada = await correr(EQUIPO.aportes, base(), () => { throw new Error('no debía llamar') }, { reescritura: RE({ cambios_del_dueno: 'ajusta el eslogan', seccion: 'tagline_opciones' }) })
+    expect(nada.llamadas).toHaveLength(0)
+  })
   it('mesa: si el pedido no habla de fotografía, no llama a nadie y lo dice', async () => {
     const { llamadas, out } = await correr(EQUIPO.mesa, base({ _equipo: { aportes: { valores: { tono_por_canal: ['x'] }, meta: {} }, declarado: [] } }), () => { throw new Error('no debía llamar') }, { reescritura: RE() })
     expect(llamadas).toHaveLength(0); expect(out._equipo.mesa.corrio).toBe(false); expect(out._equipo.declarado.join(' ')).toMatch(/la mesa no corre/)
