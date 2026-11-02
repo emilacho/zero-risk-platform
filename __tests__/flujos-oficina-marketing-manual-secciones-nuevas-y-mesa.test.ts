@@ -296,6 +296,19 @@ describe('«Pedir cambios al manual» llega a los nodos nuevos y no pisa lo vali
     const nada = await correr(EQUIPO.aportes, base(), () => { throw new Error('no debía llamar') }, { reescritura: RE({ cambios_del_dueno: 'ajusta el eslogan', seccion: 'tagline_opciones' }) })
     expect(nada.llamadas).toHaveLength(0)
   })
+  it('un campo VALIDADO no se reescribe por una palabra suelta («WhatsApp» en un pedido sobre la historia); sí por su clave, su etiqueta o si está liberado', async () => {
+    const pedido = (extra: any) => RE({ cambios_del_dueno: 'en la historia di que atendemos por WhatsApp desde el primer día', seccion: 'historia_y_origen', campos_validados: ['tono_por_canal', 'valores'], ...extra })
+    const palabra = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: pedido({}) })
+    expect(palabra.llamadas.map((l) => l.agent)).toEqual(['brand-strategist']); expect(Object.keys(palabra.out._equipo.aportes.valores)).toEqual(['historia_y_origen'])
+    const clave = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: pedido({ cambios_del_dueno: 'ajusta tono_por_canal y la historia' }) })
+    expect(Object.keys(clave.out._equipo.aportes.valores).sort()).toEqual(['historia_y_origen', 'tono_por_canal'])
+    const etiqueta = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: pedido({ cambios_del_dueno: 'cambia el Tono según el canal y la historia' }) })
+    expect(Object.keys(etiqueta.out._equipo.aportes.valores).sort()).toEqual(['historia_y_origen', 'tono_por_canal'])
+    const libera = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: pedido({ campos_liberados: ['tono_por_canal'] }) })
+    expect(Object.keys(libera.out._equipo.aportes.valores).sort()).toEqual(['historia_y_origen', 'tono_por_canal'])
+    const noValidado = await correr(EQUIPO.aportes, base(), respuestaAportes, { reescritura: pedido({ campos_validados: [] }) })      // sin validar, la palabra suelta sí cuenta
+    expect(Object.keys(noValidado.out._equipo.aportes.valores).sort()).toEqual(['historia_y_origen', 'tono_por_canal'])
+  })
   it('mesa: si el pedido no habla de fotografía, no llama a nadie y lo dice', async () => {
     const { llamadas, out } = await correr(EQUIPO.mesa, base({ _equipo: { aportes: { valores: { tono_por_canal: ['x'] }, meta: {} }, declarado: [] } }), () => { throw new Error('no debía llamar') }, { reescritura: RE() })
     expect(llamadas).toHaveLength(0); expect(out._equipo.mesa.corrio).toBe(false); expect(out._equipo.declarado.join(' ')).toMatch(/la mesa no corre/)

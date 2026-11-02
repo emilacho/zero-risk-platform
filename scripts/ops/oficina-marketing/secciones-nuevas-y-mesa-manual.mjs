@@ -111,12 +111,15 @@ const PALABRAS = {
   uso_del_logo: ['logo', 'isotipo'],
   jerarquia_tipografica: ['tipograf', 'tipo de letra', 'letra', 'jerarquia'],
 };
+const ETIQUETAS = { tono_por_canal: 'Tono según el canal', reglas_de_escritura: 'Reglas de escritura', valores: 'Valores', nunca_hace: 'Lo que nunca dice ni hace', historia_y_origen: 'Historia y origen', direccion_de_fotografia: 'Dirección de fotografía', uso_del_logo: 'Uso del logo', jerarquia_tipografica: 'Jerarquía tipográfica' };
 const listaDe = (x) => (Array.isArray(x) ? x.map(String).filter(Boolean) : []);
 // qué campos de este tramo se escriben: sin reescritura, todos; con ella, los que el pedido NOMBRA o LIBERA; lo validado y no nombrado ni liberado se conserva
 const plan = (() => {
   if (!RE) return { reescritura: false, objetivo: MIOS.slice(), protegidos: [], motivo: '' };
   const texto = sinTildes((RE.seccion || '') + ' ' + (RE.cambios_del_dueno || ''));
-  const nombrados = MIOS.filter((k) => texto.indexOf(sinTildes(k)) !== -1 || (PALABRAS[k] || []).some((p) => texto.indexOf(p) !== -1));
+  const validados = listaDe(RE.campos_validados);
+  // un campo ya VALIDADO por el dueño solo se toca si el pedido lo nombra (su clave o su etiqueta) o si está liberado; las palabras sueltas («WhatsApp») valen solo para los no validados
+  const nombrados = MIOS.filter((k) => texto.indexOf(sinTildes(k)) !== -1 || texto.indexOf(sinTildes(ETIQUETAS[k])) !== -1 || (validados.indexOf(k) === -1 && (PALABRAS[k] || []).some((p) => texto.indexOf(p) !== -1)));
   const liberados = listaDe(RE.campos_liberados).filter((k) => MIOS.indexOf(k) !== -1);
   const objetivo = MIOS.filter((k) => nombrados.indexOf(k) !== -1 || liberados.indexOf(k) !== -1);
   const protegidos = listaDe(RE.campos_validados).filter((k) => MIOS.indexOf(k) !== -1 && objetivo.indexOf(k) === -1);
