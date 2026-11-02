@@ -151,3 +151,30 @@ describe('alcance', () => {
     expect(nuevo.nodes.filter((n: any) => !v.has(n.name) && n.name.startsWith('[BB] Estilo ·')).map((n: any) => n.name).sort()).toEqual(Object.values(ESTILO).sort())
   })
 })
+
+// ─────────── reserva 4 de CC3: la revisión de estilo NO se pierde en «Sacar lo sin fuente» (puerta REAL de M2 con base falsa)
+import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
+import { rutaRecomprobar } from '../src/lib/manual/rutas'
+import { filaInstagram, filaSitio } from '../src/lib/manual/__tests__/apoyo'
+const AsyncFunction = Object.getPrototypeOf(async function () { /* */ }).constructor as new (...a: string[]) => (...b: unknown[]) => Promise<any>
+describe('la revisión de estilo sobrevive a «Sacar lo sin fuente»', () => {
+  it('visual.revision_de_estilo llega entera al Promote aunque su texto hable de origen verificable (la capa visual no es prosa del autor)', async () => {
+    const C = '96864e88-79bc-47ff-8f8e-5bf88610ec7d'
+    const db = new DbFalsa()
+    db.semilla('clients', [{ id: C, name: 'Cliente de práctica', website_url: 'https://www.clinicaejemplo.test', country: 'EC', config: { apify: { own_handles: { instagram: 'clinicaejemplo' } } } }])
+    db.semilla('apify_raw', [filaSitio('s1', [{ url: 'https://www.clinicaejemplo.test/', title: 'x', text: 'Ceviche todos los días.' }]), filaInstagram('i1', 'clinicaejemplo', 'hola')].map((f: any) => ({ ...f, client_id: C, ensayo: false, created_at: '2026-10-10' })))
+    db.semilla('client_icp_documents', [])
+    const revision = { corrio: true, veredicto: 'revision_needed', severidad: 'medium', resumen: 'el origen verificable de la voz choca con reglas frías', hallazgos: [{ superficie: 'manual-voz', eje: 'voice_fidelity', severidad: 'medium', problema: 'denominación de origen implícita', arreglo: 'x', evidencia: ['origen costero verificable'] }], preguntas: [] }
+    const draft = { client_id: C, positioning: 'p', voice_description: 'Voz directa y conversacional.', visual: { ...VISUAL, revision_de_estilo: revision } }
+    const httpRequest = async (o: { url: string; body: any }) => {
+      if (o.url.endsWith('/api/manual/recomprobar')) { const r = await rutaRecomprobar(db as never, o.body); if (r.status !== 200) throw new Error(String(r.status)); return r.body }
+      if (o.url.endsWith('/rest/v1/client_historical_outputs')) return {}
+      throw new Error('url no prevista ' + o.url)
+    }
+    const $ = (n: string) => { if (n !== 'Validate Deal Data') throw new Error('nodo no previsto ' + n); return { first: () => ({ json: { client_id: C } }) } }
+    const fn = new AsyncFunction('$', '$json', '$env', '$execution', codigo(nuevo, SACAR))
+    const out = (await fn.call({ helpers: { httpRequest } }, $, { brand_book_draft: draft, fidelity: { pass: true }, cycle: 1 }, { ZERO_RISK_API_URL: 'https://app.test', INTERNAL_API_KEY: 'k', SUPABASE_SERVICE_ROLE_KEY: 's' }, { id: '999003' })) as Array<{ json: any }>
+    expect(out[0].json.brand_book_draft._sacar.estado).not.toBe('no_se_pudo')
+    expect(out[0].json.brand_book_draft.visual.revision_de_estilo).toEqual(revision)
+  })
+})
