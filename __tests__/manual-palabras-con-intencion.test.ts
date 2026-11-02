@@ -8,7 +8,7 @@ import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { aplicarDecisionDelDueno, conservarPalabrasDuras, deUnaCorrida, leerPalabras, palabrasDeEstilo, palabrasDuras } from '../src/lib/manual/palabras-con-intencion'
 import { conservarLoDelDueno, decidirPalabraDelDueno } from '../src/lib/manual/edicion-del-dueno'
 import { palabrasProhibidasDelManual, limpiarManual } from '../src/lib/manual/limpieza'
-import { chequeosDePost, palabrasQueBloquean, type ContextoDeChequeo } from '../src/lib/oficina/chequeos'
+import { chequeosDePost, palabrasDeclaradas, type ContextoDeChequeo } from '../src/lib/oficina/chequeos'
 import { formatGuardrailsForPrompt } from '../src/lib/client-brain'
 import { renderManualLimpio } from '../src/lib/brand-book-render-limpio'
 import { reglasParaPrompts } from '../src/lib/oficina/ayudas'
@@ -127,13 +127,13 @@ describe('la decisión del dueño', () => {
   })
 })
 
-describe('quién bloquea', () => {
-  it('🔴 en la pieza: bloquea lo declarado y lo que el brief prohíbe por su cuenta; lo que el brief solo repite del manual es contexto', () => {
-    const r = palabrasQueBloquean({ palabras_prohibidas: ['premium', 'barato'], palabras_duras: ['barato'] }, ['premium', 'competidor x'])
-    expect(r.bloquean.sort()).toEqual(['barato', 'competidor x'])
+describe('cómo se avisa (02-nov, firma de Emilio: ninguna palabra bloquea)', () => {
+  it('🔴 en la pieza: se avisa lo declarado y lo que el brief prohíbe por su cuenta; lo que el brief solo repite del manual es contexto', () => {
+    const r = palabrasDeclaradas({ palabras_prohibidas: ['premium', 'barato'], palabras_duras: ['barato'] }, ['premium', 'competidor x'])
+    expect(r.declaradas.sort()).toEqual(['barato', 'competidor x'])
     expect(r.contexto).toEqual(['premium'])
   })
-  it('🔴 en el chequeo de la pieza, la misma palabra bloquea si está declarada y es sugerencia si no (corrige lo que el 01-nov quedó sin cubrir)', () => {
+  it('🔴 en el chequeo de la pieza, la palabra es sugerencia esté o no declarada', () => {
     const ctx = (duras?: string[]) => ({
       pieza: { pie_de_foto: 'Un plato premium y rico', hashtags: ['#mar'] },
       fuentes: { palabras_prohibidas: ['premium'], ...(duras ? { palabras_duras: duras } : {}), telefonos: [], handles: [], precios: [], competidores: [], registro: 'tuteo' },
@@ -141,7 +141,7 @@ describe('quién bloquea', () => {
     }) as unknown as ContextoDeChequeo
     const de = (c: ContextoDeChequeo) => chequeosDePost(c).filter((f) => /premium/.test(f.que ?? ''))
     expect(de(ctx()).map((f) => f.gravedad)).toEqual(['sugerencia'])
-    expect(de(ctx(['premium'])).map((f) => f.gravedad)).toEqual(['bloquea'])
+    expect(de(ctx(['premium'])).map((f) => f.gravedad)).toEqual(['sugerencia'])
   })
   it('a los agentes les llega dicho cuál es prohibición y cuál es contexto', () => {
     const base = { forbidden_words: ['premium'], required_terminology: [], voice_description: null, competitor_mentions_policy: null, compliance_notes: null } as never
@@ -149,7 +149,7 @@ describe('quién bloquea', () => {
     expect(sin).toMatch(/WORDS THE BRAND AVOIDS/); expect(sin).not.toMatch(/FORBIDDEN WORDS/)
     expect(formatGuardrailsForPrompt({ ...(base as object), hard_forbidden_words: ['gratis'] } as never)).toMatch(/FORBIDDEN WORDS[^\n]*gratis/)
   })
-  it('🔴 en los prompts de imagen solo se veta lo declarado y lo que el brief prohíbe por su cuenta (W16 de CC3)', () => {
+  it('🔴 en los prompts de imagen solo se muestra lo declarado y lo que el brief prohíbe por su cuenta (W16 de CC3)', () => {
     const vetadas = (duras: string[], prohibido: string[] = []) => reglasParaPrompts(
       { artefactos: {}, fichas: [] } as never,
       { prohibido, visual_obligatorio: [], visual_prohibido: [] } as never,
@@ -159,12 +159,13 @@ describe('quién bloquea', () => {
     expect(vetadas(['barato'])).toEqual(['barato'])
     expect(vetadas([], ['premium', 'otra']).sort()).toEqual(['otra'])
   })
-  it('🔴 la limpieza del manual solo quita lo declarado', () => {
+  it('🔴 la limpieza del manual solo anota lo declarado, y no quita nada', () => {
     const texto = 'Somos premium en lo que hacemos. Nada de barato aquí señor.'
     expect(palabrasProhibidasDelManual({ forbidden_words: ['premium', 'barato'] })).toEqual([])
     expect(limpiarManual({ forbidden_words: ['premium'], voice_description: texto }).manual.voice_description).toContain('premium')
     const conDura = limpiarManual({ forbidden_words: ['premium'], palabras_con_intencion: [{ texto: 'premium', intencion: 'legal', fuente: CITA_LEGAL }], voice_description: texto })
-    expect(conDura.manual.voice_description).not.toContain('premium')
+    expect(conDura.manual.voice_description).toBe(texto)
+    expect(conDura.anotadas.map((a) => a.palabra)).toEqual(['premium'])
   })
   it('el manual leído separa lo prohibido de lo que evita', () => {
     const t = renderManualLimpio({ brand_book: { forbidden_words: ['premium', 'barato'], palabras_con_intencion: [{ texto: 'barato', intencion: 'del_dueno', fuente: CITA_DUENO }] }, client_name: 'X', country: null }).texto

@@ -285,10 +285,11 @@ describe('chequeos duros de las láminas', () => {
     imagen_generada: false, fonts_faltantes: [], imagenes_sin_lamina: [], fotos_reusadas: [], problemas_de_contrato: [], texto_fuera_del_autor: [], problemas_de_armado: [], problemas_de_kit: [],
   })
   it('una pieza limpia no da fichas', () => { expect(chequeosDeLaminas(base())).toEqual([]) })
-  it('la palabra prohibida, el voseo y un teléfono ajeno en el texto bloquean', () => {
+  it('el voseo y un teléfono ajeno en el texto bloquean; la palabra declarada solo avisa', () => {
     const c = base(); c.texto_del_autor = { texto: 'Un plato premium, pedilo al 0991112223', hashtags: [] }
     const q = chequeosDeLaminas(c).filter((x) => x.gravedad === 'bloquea').map((x) => x.que).join('|')
-    expect(q).toMatch(/premium/); expect(q).toMatch(/voseo/); expect(q).toMatch(/teléfono/)
+    expect(q).not.toMatch(/premium/); expect(q).toMatch(/voseo/); expect(q).toMatch(/teléfono/)
+    expect(chequeosDeLaminas(c).filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/premium/)
   })
   it('el contrato roto, el texto fuera del autor y la imagen sin lámina bloquean; la tipografía caída y la foto repetida avisan', () => {
     const c = base()

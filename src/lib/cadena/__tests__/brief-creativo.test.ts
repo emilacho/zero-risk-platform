@@ -108,9 +108,10 @@ describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
     const b = leerBriefCreativo(con({ 'Hay mesa desde las siete.': 'Hay un desayuno delicioso desde las siete.' }), INS)
     expect(b.bloqueos.join('\n')).not.toMatch(/delicioso/)
     expect(b.avisos.join('\n')).toMatch(/«delicioso», que el manual evita/)
-    // 01-nov · firma de Emilio: declarada, sí devuelve el brief
+    // 02-nov · firma de Emilio: declarada, tampoco devuelve el brief; se avisa con su texto
     const dura = leerBriefCreativo(con({ 'Hay mesa desde las siete.': 'Hay un desayuno delicioso desde las siete.' }), { ...INS, duras: ['delicioso'] })
-    expect(dura.bloqueos.join('\n')).toMatch(/«delicioso», prohibida por una norma/)
+    expect(dura.bloqueos).toEqual([])
+    expect(dura.avisos.join('\n')).toMatch(/«delicioso», declarada por una norma/)
     expect(dura.avisos.join('\n')).not.toMatch(/«delicioso», que el manual evita/)
     expect(b.estado).toBe('validada')
   })

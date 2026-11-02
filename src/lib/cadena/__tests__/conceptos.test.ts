@@ -170,8 +170,10 @@ describe('concepto.v1 · lo que bloquea (sin_concepto) y lo que solo se declara'
       .replace('la cuenta la paga la casa (una vez)', 'la cuenta la paga la casa: 12,77 dólares, BARATO')
       .replace('la mesa de los domingos', 'la mesa de los domingos a las 13:00')
       .replace('foto:f-02', 'foto:f-99')
-    // 01-nov · firma de Emilio: declarada, sí bloquea
-    expect(leerConcepto(md, { ...INS, duras: ['barato'] }).bloqueos.join('\n')).toMatch(/«barato», prohibida por una norma/)
+    // 02-nov · firma de Emilio: declarada, tampoco bloquea
+    const dura = leerConcepto(md, { ...INS, duras: ['barato'] })
+    expect(dura.bloqueos).toEqual([])
+    expect(dura.avisos.join('\n')).toMatch(/«barato», declarada por una norma/)
     const c = leerConcepto(md, INS)
     expect(c.estado).toBe('ok')
     expect(c.avisos).toEqual(expect.arrayContaining([

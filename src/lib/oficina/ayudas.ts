@@ -1,7 +1,7 @@
 /**
  * AYUDAS COMPARTIDAS del orquestador de la sala 1 (post con foto) y del de láminas (salas 2 y 3). Puras. Estaban dentro de `orquestador.ts`; se sacaron para no duplicarlas ni importar en círculo.
  */
-import { palabrasQueBloquean } from './chequeos'
+import { palabrasDeclaradas } from './chequeos'
 import type { BriefLeido } from './brief'
 import type { FuentesCompletas } from './puertos'
 import type { ReglasDeImagen } from './reglas-de-imagen'
@@ -16,11 +16,11 @@ export function reglasVisuales(e: Estado, brief: BriefLeido): ReglasDeImagen {
     prohibido: [...rv.prohibido, ...brief.visual_prohibido.map((t, i) => ({ id: `brief-p${i + 1}`, texto: t }))],
   }
 }
-/** para los prompts además se vigilan las palabras prohibidas del manual y del brief */
+/** para los prompts además se muestran las palabras declaradas del manual y del brief. 02-nov, firma de Emilio: llegan como contexto y solo avisan, no descartan un prompt */
 export function reglasParaPrompts(e: Estado, brief: BriefLeido, F: FuentesCompletas): ReglasDeImagen {
   const v = reglasVisuales(e, brief)
-  const palabras = palabrasQueBloquean(F.fuentes, brief.prohibido).bloquean // 01-nov · lo demás del manual es contexto de marca: no veta un prompt
-  return { obligatorio: v.obligatorio, prohibido: [...v.prohibido, ...palabras.map((p, i) => ({ id: `txt-p${i + 1}`, texto: `palabra prohibida «${p}»`, claves: [p] }))] }
+  const palabras = palabrasDeclaradas(F.fuentes, brief.prohibido).declaradas
+  return { obligatorio: v.obligatorio, prohibido: [...v.prohibido, ...palabras.map((p, i) => ({ id: `txt-p${i + 1}`, texto: `palabra prohibida «${p}»`, claves: [p], solo_aviso: true }))] }
 }
 
 /** la opinión libre del revisor externo y lo que decidió el autor con ella (null si no hubo opinión). Se guarda como OPINIÓN: nunca como dato confirmado. */

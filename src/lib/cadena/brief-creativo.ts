@@ -36,7 +36,7 @@ export interface InsumosDelBrief {
   planTexto: string
   /** palabras prohibidas del manual */
   prohibidas: string[]
-  /** 01-nov · firma de Emilio: las únicas de la lista que bloquean (declaradas, con su cita) */
+  /** las declaradas, con su cita: 02-nov, firma de Emilio: tampoco bloquean, se avisan con su propio texto */
   duras?: string[]
   /** redes principal/réplica de la estrategia: cada una necesita objetivo y llamado (falta ⇒ se declara) */
   redes?: string[]
@@ -142,7 +142,7 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   const loQuePide = secciones.filter((s) => tituloConocido(s) !== 'Contradicciones plan vs manual').map((s) => (tituloConocido(s) === 'Obligatorios' ? lineasConClave(textoDe(s, 'Obligatorios')).filter((l) => !/^prohibid|^lo que no se dice|^no se dice/.test(claveDeTexto(l.clave))).map((l) => l.valor).join('\n') : textoDe(s, tituloConocido(s) ?? s.titulo))).join('\n')
   // 01-nov · ADENDA de Emilio: una palabra de la lista es contexto de marca, no un bloqueo por coincidencia (una reseña citada y atribuida no es un superlativo propio)
   const duras = new Set((ins.duras ?? []).map(claveDeTexto))
-  for (const p of ins.duras ?? []) if (contienePalabraEntera(loQuePide, p)) bloqueos.push(`usa «${p}», prohibida por una norma o declarada para este cliente`)
+  for (const p of ins.duras ?? []) if (contienePalabraEntera(loQuePide, p)) avisos.push(`usa «${p}», declarada por una norma o para este cliente: revisa si corresponde`)
   for (const p of ins.prohibidas) if (!duras.has(claveDeTexto(p)) && contienePalabraEntera(loQuePide, p)) avisos.push(`usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`)
   for (const p of ins.prohibidas) if (!obligatorios.prohibido.some((x) => claveDeTexto(x) === claveDeTexto(p))) avisos.push(`la prohibida del manual «${p}» no está en la lista «prohibido» del brief`)
 

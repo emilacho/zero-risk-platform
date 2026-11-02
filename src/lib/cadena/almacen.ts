@@ -160,7 +160,7 @@ export interface ContextoDelCliente {
   /** 01-nov · el eslogan que el cliente ya usa, con su regla de uso */
   eslogan?: { texto: string; regla: string } | null
   forbiddenWords: string[]
-  /** 01-nov · firma de Emilio: las únicas de la lista que bloquean */
+  /** las declaradas: 02-nov, firma de Emilio: se avisan, no bloquean */
   palabrasDuras?: string[]
   sedes: SedeInfo[]
   referencias: Referencia[]

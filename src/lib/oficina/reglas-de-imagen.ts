@@ -8,7 +8,7 @@
 import { aparicionesDe, contienePalabra, datosDeContacto, esTelefonoDeLaLista, normalizar } from './texto'
 import { motivosDeInvencion, type ReglasDeInvencion } from './prompts-sin-invencion'
 
-export interface ReglaDeImagen { id: string; texto: string; claves?: string[]; cita?: string }
+export interface ReglaDeImagen { id: string; texto: string; claves?: string[]; cita?: string; /** una palabra declarada: se avisa, no descarta el prompt */ solo_aviso?: boolean }
 export interface ReglasDeImagen { obligatorio: ReglaDeImagen[]; prohibido: ReglaDeImagen[] }
 export interface PropiosDelCliente { telefonos: string[]; handles: string[]; urls: string[]; marcas_ajenas: string[] }
 
@@ -22,12 +22,13 @@ const RE_ASPECTO = /\b\d{1,2}\s?:\s?\d{1,2}\b/
 const RE_NOMBRA_AUTOR = /\b(?:al estilo de|en el estilo de|estilo de|inspirad[oa] en|in the style of|style of|by)\s+[A-ZÁÉÍÓÚÑ][\p{L}'’-]+/u
 
 export interface FalloDePrompt { indice: number; motivos: string[] }
-export interface ResultadoDeChequearPrompts { pasan: number[]; fallan: FalloDePrompt[]; ninguno: boolean }
+export interface ResultadoDeChequearPrompts { pasan: number[]; fallan: FalloDePrompt[]; ninguno: boolean; avisos: string[] }
 
 /** `invencion` (opcional, apagada por omisión): lo que una imagen generada sin foto no puede pedir ni copiar → prompts-sin-invencion.ts */
 export function chequearPrompts(prompts: string[], reglas: ReglasDeImagen, propios: Pick<PropiosDelCliente, 'marcas_ajenas'>, invencion?: ReglasDeInvencion | null): ResultadoDeChequearPrompts {
   const pasan: number[] = []
   const fallan: FalloDePrompt[] = []
+  const avisos = new Set<string>()
   prompts.forEach((p, i) => {
     const motivos: string[] = []
     for (const r of reglas.obligatorio) {
@@ -35,7 +36,8 @@ export function chequearPrompts(prompts: string[], reglas: ReglasDeImagen, propi
     }
     for (const r of reglas.prohibido) {
       const nombrado = clavesDe(r).some((c) => aparicionesDe(p, c).some((a) => !a.negada))
-      if (nombrado) motivos.push(`nombra el prohibido «${r.id}» (${r.texto}) sin negarlo`)
+      if (nombrado && r.solo_aviso) avisos.add(`un prompt nombra ${r.texto}: revisa si corresponde`)
+      else if (nombrado) motivos.push(`nombra el prohibido «${r.id}» (${r.texto}) sin negarlo`)
     }
     for (const m of propios.marcas_ajenas) if (m && contienePalabra(p, m)) motivos.push(`nombra una marca ajena («${m}»)`)
     if (RE_PARAMETRO.test(p)) motivos.push('trae parámetros del generador (--xx): el tamaño y los parámetros los fija la sala')
@@ -44,7 +46,7 @@ export function chequearPrompts(prompts: string[], reglas: ReglasDeImagen, propi
     if (invencion) motivos.push(...motivosDeInvencion(p, invencion))
     if (motivos.length) fallan.push({ indice: i, motivos }); else pasan.push(i)
   })
-  return { pasan, fallan, ninguno: pasan.length === 0 }
+  return { pasan, fallan, ninguno: pasan.length === 0, avisos: [...avisos] }
 }
 
 // ── ③ la imagen contra el brief ────────────────────────────────────────────────────

@@ -371,13 +371,15 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       const b = base(e)
       const prompts = ((datos(e, 'prompts')?.prompts ?? []) as Array<{ prompt: string; idea_en_una_linea: string }>)
       const ch = chequearPrompts(prompts.map((p) => p.prompt), reglasParaPrompts(e, b.brief, b.F), b.F.propios, reglasDeInvencion(pl.limites, b.F.referencias))
+      const fichasDeAviso = ch.avisos.map((a, n) => fichaNueva(`prompts-aviso-${e.pasos_ejecutados}-${n}`, 'chequeo', 'imagen', 'sugerencia', a, 'palabras declaradas por norma, por el dueño o por el brief', 'revisar si corresponde'))
       const esRe = paso.clave.startsWith('reimagen_')
       const repeticion = (e.vueltas['chequear_prompts'] ?? 0) >= 1
       if (esRe && ch.ninguno) return { res: { costo_usd: 0, artefacto: { indices: [], ninguno: true, fallan: ch.fallan, prompts: [] }, fichas: [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se queda la imagen anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
       const res: ResultadoDePaso = {
         costo_usd: 0,
         artefacto: { indices: ch.pasan, ninguno: ch.ninguno, fallan: ch.fallan, prompts: ch.pasan.map((i) => prompts[i]) },
-        ...(ch.ninguno && repeticion ? { fichas: [fichaNueva('prompts-ninguno', 'chequeo', 'imagen', 'bloquea', 'ningún prompt cumple las reglas del brief (ni tras repetir al ingeniero de prompts)', 'reglas de imagen del brief', 'declarar la pieza sin imagen generada')], reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' } } : {}),
+        ...(!(ch.ninguno && repeticion) && fichasDeAviso.length ? { fichas: fichasDeAviso } : {}),
+        ...(ch.ninguno && repeticion ? { fichas: [...fichasDeAviso, fichaNueva('prompts-ninguno', 'chequeo', 'imagen', 'bloquea', 'ningún prompt cumple las reglas del brief (ni tras repetir al ingeniero de prompts)', 'reglas de imagen del brief', 'declarar la pieza sin imagen generada')], reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' } } : {}),
       }
       return { res }
     }

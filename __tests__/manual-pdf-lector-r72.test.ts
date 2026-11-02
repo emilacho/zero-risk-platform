@@ -158,6 +158,6 @@ describe('bordes de la limpieza', () => {
   it('las listas de términos NO son prosa: no se tocan ni por defecto', () => {
     const m = { forbidden_words: ['gas'], palabras_con_intencion: [{ texto: 'gas', intencion: 'legal', fuente: { cita: 'la norma' } }], required_terminology: ['término (campo_x)'], voz: 'Cocina a gas. Cálida.' }
     const r = limpiarManual(m).manual as Record<string, any>
-    expect(r.forbidden_words).toEqual(['gas']); expect(r.required_terminology).toEqual(['término (campo_x)']); expect(r.voz).toBe('Cálida.')
+    expect(r.forbidden_words).toEqual(['gas']); expect(r.required_terminology).toEqual(['término (campo_x)']); expect(r.voz).toBe('Cocina a gas. Cálida.')
   })
 })

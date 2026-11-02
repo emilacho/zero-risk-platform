@@ -83,7 +83,7 @@ export interface InsumosDelConcepto {
   redes: Array<{ red: string; huecos_por_semana: number }>
   /** palabras prohibidas del manual */
   prohibidas: string[]
-  /** 01-nov · firma de Emilio: las únicas de la lista que bloquean (declaradas, con su cita) */
+  /** las declaradas, con su cita: 02-nov, firma de Emilio: tampoco bloquean, se avisan con su propio texto */
   duras?: string[]
   /** ids de las fotos propias que existen (toda `foto:<id>` debe estar aquí) */
   fotos: string[]
@@ -314,7 +314,7 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
   // texto: cifras inventadas, prohibidas, datos con valor en las ideas, fotos
   if (tieneCifraInventada(md)) avisos.push('hay una cifra «,77» (dato inventado)')
   const duras = new Set((ins.duras ?? []).map((x) => x.trim().toLowerCase()))
-  for (const p of ins.duras ?? []) if (contienePalabraEntera(md, p)) bloqueos.push(`usa «${p}», prohibida por una norma o declarada para este cliente`)
+  for (const p of ins.duras ?? []) if (contienePalabraEntera(md, p)) avisos.push(`usa «${p}», declarada por una norma o para este cliente: revisa si corresponde`)
   for (const p of ins.prohibidas) if (!duras.has(p.trim().toLowerCase()) && contienePalabraEntera(md, p)) avisos.push(`usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`)
   for (const i of banco) if (tieneDatoConValor(`${i.idea} ${i.mensaje} ${i.gancho}`)) avisos.push(`la idea ${i.id} trae un dato con valor (precio, hora, cifra): el estratega lo pone con su referencia`)
   const fotos_citadas = fotosCitadas(md)
