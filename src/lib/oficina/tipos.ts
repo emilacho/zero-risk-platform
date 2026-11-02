@@ -103,6 +103,8 @@ export interface Estado {
   vueltas: Record<string, number>
   artefactos: Record<string, Artefacto>
   fichas: Ficha[]
+  /** lo que se le avisa al dueño junto a lo revisado; no devuelve nada */
+  avisos?: string[]
 }
 
 export const estadoInicial = (): Estado => ({ ultimo: -1, pasos_ejecutados: 0, gasto_usd: 0, vueltas: {}, artefactos: {}, fichas: [] })

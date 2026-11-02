@@ -95,6 +95,8 @@ export interface DatosDeLaJefatura {
   /** la revisión no pudo abrirse (apagada, tipo no activo, sin presupuesto, error): la pieza sigue a la bandeja marcada «sin revisar» */
   sin_revisar: boolean
   motivo?: string
+  /** frases que el dueño negó y siguen en la pieza: viajan a la bandeja como aviso */
+  avisos?: string[]
   /** la jefatura mandó un costo que no es un número finito ≥ 0: se contó 0 y queda dicho aquí */
   costo_invalido?: true
 }
@@ -132,6 +134,7 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia'>, e: Estad
     revision_id: salida.revision_id ?? null, resultado: salida.resultado, marcas: salida.marcas ?? { con_desacuerdo: false, sin_segunda_mirada: false }, desacuerdos: salida.desacuerdos ?? [], respuestas,
     costo_usd: costoDeLaJefatura(salida.costo_usd), simulado: salida.simulado === true, incompleta, sin_revisar: false,
     ...(costoInvalido(salida.costo_usd) ? { costo_invalido: true as const } : {}),
+    ...(salida.avisos?.length ? { avisos: salida.avisos } : {}),
   }
   const otros: Record<string, Record<string, unknown>> = {}
   // el texto corregido (solo si la revisión no falló): la oficina lo recibe como una versión nueva de la pieza y vuelve a chequear por código (chequeos_2/3)
@@ -167,7 +170,7 @@ export function prefijoDeLaBandeja(e: Estado): string {
 export function metadataDeLaJefatura(e: Estado): Record<string, unknown> {
   const j = datosDeLaJefatura(e)
   if (!j) return {}
-  return { jefatura_resultado: j.resultado, ...(j.revision_id ? { jefatura_revision_id: j.revision_id } : {}), ...(j.incompleta ? { revision_incompleta: true } : {}), ...(j.sin_revisar ? { sin_revisar: true, motivo_sin_revisar: j.motivo ?? null } : {}) }
+  return { jefatura_resultado: j.resultado, ...(j.revision_id ? { jefatura_revision_id: j.revision_id } : {}), ...(j.incompleta ? { revision_incompleta: true } : {}), ...(j.sin_revisar ? { sin_revisar: true, motivo_sin_revisar: j.motivo ?? null } : {}), ...(j.avisos?.length ? { avisos_de_jefatura: j.avisos } : {}) }
 }
 /** ¿la jefatura dejó la pieza con marca de revisión incompleta o sin revisar? (cuenta como desacuerdo: una persona la mira antes de aprobarla) */
 export const revisionIncompleta = (e: Estado): boolean => { const j = datosDeLaJefatura(e); return !!j && (j.incompleta || j.sin_revisar) }

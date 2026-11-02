@@ -62,7 +62,7 @@ export function avisosDelPlan(texto: string, contexto: string, hechos: Array<{ t
   ]
 }
 
-/** punto 3 · en lo que no es el plan, lo que contradice lo declarado por el dueño sigue bloqueando; lo mira el código, además del revisor */
+/** punto 3 · en lo que no es plan ni pieza, lo que contradice lo declarado por el dueño sigue bloqueando; lo mira el código, además del revisor */
 export function fichasDeLoNegado(texto: string, hechos: Array<{ tema: string; frases_negadas: string[] }>): Ficha[] {
   return controlarFrasesNegadas(texto, hechos).map((h, i) => fichaNueva(`codigo-dueno-${i}`, 'jefe', h.donde, 'bloquea', h.que, 'lo que declaró el dueño', 'quitar esa frase: lo declarado por el dueño manda'))
 }
@@ -117,7 +117,7 @@ export async function abrirRevision(P: Puertos, cuerpo: unknown, o: { prueba?: b
     else if (ciclo.aviso) p.orden_ilegible = true
   }
   const apertura = estadoDeApertura(entrada)
-  if (entrada.artifact_type !== 'plan' && pol.reentrega !== 'ninguna' && P.hechosDelDueno) apertura.fichas.push(...fichasDeLoNegado(p.texto, await P.hechosDelDueno(entrada.client_id)))
+  if (entrada.artifact_type !== 'plan' && entrada.artifact_type !== 'pieza' && pol.reentrega !== 'ninguna' && P.hechosDelDueno) apertura.fichas.push(...fichasDeLoNegado(p.texto, await P.hechosDelDueno(entrada.client_id)))
   const c = await P.almacen.crearRevision({
     client_id: entrada.client_id, artifact_type: entrada.artifact_type, artifact_id: entrada.artifact_id, version: p.version ?? 1, journey_id: entrada.journey_id, productores, entrada: p,
     devolver_a: p.devolver_a, policy: pol, tope_usd: +tope.toFixed(6), dry_run: p.dry_run, prueba: !!o.prueba, estado_del_motor: apertura,
@@ -423,6 +423,7 @@ export function armarSalida(rev: Revision, c: Cierre): SalidaDeRevision {
     respuestas: c.respuestas,
     opinion_externa: typeof ext?.opinion === 'string' && ext.opinion ? { texto: ext.opinion, modelo: typeof ext.modelo === 'string' ? ext.modelo : null } : null,
     imagen_por_rehacer: e.fichas.some((f) => f.id === 'imagen-por-rehacer'),
+    ...(e.avisos?.length ? { avisos: e.avisos } : {}),
     desacuerdos: c.desacuerdos, costo_usd: e.gasto_usd, pasos: e.pasos_ejecutados, trace_id: `jefatura:${rev.id}`, devolver_a: rev.devolver_a, simulado: rev.dry_run,
   }
 }
@@ -431,6 +432,13 @@ async function cerrar(P: Puertos, rev: Revision, o: { tope?: boolean; fallida?: 
   const e = rev.estado_del_motor
   const c = resolverCierre(e, { tope: !!o.tope, fallida: !!o.fallida, duenos: duenosDe(rev.productores) })
   const estado = o.fallida ? 'fallida' : o.tope ? 'cerrada_por_tope' : 'cerrada'
+  // 02-nov · Lenovo: en la pieza, igual que en el plan, la frase negada es aviso a la vista del dueño; se mide sobre lo que quedó
+  if (rev.artifact_type === 'pieza' && !o.fallida && P.hechosDelDueno) {
+    const { historial: _h, ...rd } = (datos(e, 'revision') ?? {}) as Datos
+    void _h
+    const avisos = controlarFrasesNegadas(typeof rd.texto === 'string' && rd.texto ? rd.texto : JSON.stringify(rd), await P.hechosDelDueno(rev.client_id)).map((h) => `Aviso: ${h.que}`)
+    if (avisos.length) e.avisos = avisos
+  }
   await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: rev.gasto_usd > e.gasto_usd ? rev.gasto_usd : e.gasto_usd, estado, resultado: c.resultado, marcas: c.marcas })
   const cerrada: Revision = { ...rev, estado, resultado: c.resultado, marcas: c.marcas }
   if (hayQueAvisar(c)) await P.avisar({ canal: 'alertas', revision_id: rev.id, texto: textoDelAviso(c, { tipo: rev.artifact_type, artifact_id: rev.artifact_id, gasto_usd: e.gasto_usd, simulado: rev.dry_run }) + (o.nota ? ` · ${o.nota}` : ''), dry_run: rev.dry_run })
