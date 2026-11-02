@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { renderManualLimpio } from '@/lib/brand-book-render-limpio'
 import { CAMPOS, CAMPO_POR_CLAVE, evaluarCompletitud, obligatoriosPara } from '../campos-del-manual'
 import { editarManualDelDueno, EDITABLES_DEL_TABLERO } from '../edicion-del-dueno'
-import { hojasDeTexto } from '../hechos'
+import { aplicarMeta, camposFirmes } from '../firmes'
+import { evaluarHechos, hojasDeTexto } from '../hechos'
 import { armarPedidos, CAMPOS_PROPONIBLES, camposFaltantes } from '../propuesta'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
 
@@ -77,6 +78,47 @@ describe('la regla de Emilio · lo que no existe se propone', () => {
     const t = pedidos(['productos'])[0].task
     for (const dato of ['teléfonos', 'direcciones', 'horarios', 'precios', 'fechas', 'cifras']) expect(t).toContain(dato)
     expect(t).toMatch(/nunca se inventan/)
+  })
+})
+
+describe('la puerta del manual y lo propuesto', () => {
+  const pasar = (manual: Record<string, unknown>) => aplicarMeta(manual, evaluarHechos({ manual, fuentes: [] } as never))
+  const META = { fuente: 'propuesta del agente', razon: 'r' }
+
+  it('🔴 lo propuesto sigue siendo propuesta tras la puerta, con su fuente', () => {
+    const r = pasar({ vision: 'Ser la cocina que la gente recuerda [propuesta del agente — r]', _field_meta: { vision: { estado: 'propuesta_del_agente', ...META } } })
+    expect(r._field_meta.vision).toMatchObject({ estado: 'propuesta_del_agente', fuente: 'propuesta del agente', hechos: 0, provisional: false })
+  })
+
+  it('🔴 también sigue siendo propuesta si trae un dato con fuente', () => {
+    const manual = { mision: 'Abrimos desde 2012 en la playa [propuesta del agente — r]', _field_meta: { mision: { estado: 'propuesta_del_agente', ...META } } }
+    const inf = evaluarHechos({ manual, fuentes: [{ id: 's', tipo: 'primaria_propia', rotulo: 'sitio', canal: 'sitio', texto: 'Fundada en 2012 en el centro' }] } as never)
+    expect(inf.hechos.length).toBeGreaterThan(0)
+    expect(aplicarMeta(manual, inf)._field_meta.mision).toMatchObject({ estado: 'propuesta_del_agente', pendientes: 0 })
+  })
+
+  it('🔴 lo que no es propuesta recibe el estado de siempre', () => {
+    expect(pasar({ vision: 'Ser la cocina que la gente recuerda', _field_meta: { vision: { estado: 'confirmado' } } })._field_meta.vision).toMatchObject({ estado: 'sin_hechos' })
+  })
+
+  it.each(['Nació en 2015 en Quito', 'nacio en 2015', 'Fundada en 2015', 'Inaugurado en 2015', 'Abrimos en 2015', 'Desde 2015'])('🔴 «%s» sin fuente es una fecha por comprobar', (texto) => {
+    const inf = evaluarHechos({ manual: { historia_y_origen: texto }, fuentes: [] } as never)
+    expect(inf.sin_respaldo.length).toBe(1)
+  })
+
+  it('🔴 la misma fecha en sus fuentes sí vale', () => {
+    const inf = evaluarHechos({ manual: { historia_y_origen: 'Nació en 2015' }, fuentes: [{ id: 's', tipo: 'primaria_propia', rotulo: 'sitio', canal: 'sitio', texto: 'Abrimos en 2015 en la playa.' }] } as never)
+    expect(inf.sin_respaldo).toEqual([])
+  })
+
+  it('una visión hacia adelante no es un hecho por comprobar', () => {
+    expect(evaluarHechos({ manual: { vision: 'Ser la cocina que la gente recuerda en 2030' }, fuentes: [] } as never).sin_respaldo).toEqual([])
+  })
+
+  it('🔴 con un dato duro sin fuente manda «con pendientes»: no se oculta tras la propuesta', () => {
+    const r = pasar({ historia_y_origen: 'Fundado en 2015', _field_meta: { historia_y_origen: { estado: 'propuesta_del_agente', ...META } } })
+    expect(r._field_meta.historia_y_origen).toMatchObject({ estado: 'con_pendientes', provisional: true })
+    expect(camposFirmes(r).provisionales).toContain('historia_y_origen')
   })
 })
 

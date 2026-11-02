@@ -218,6 +218,14 @@ export function armarResumen(e: EntradaDelResumen, opciones: { candidatos?: bool
   const comp = por('competidor_vigilado')
   sec('competencia', 'Competencia vigilada', comp.map((f) => `- ${corto(f.titulo, 80)}: ${corto(f.contenido, 140)} ${cita(f)}`), 'no hay competidores vigilados')
 
+  // lo que se ve de la competencia en Google y en sus redes (02-nov): anuncios, comentarios del público y horas de más gente · cada línea cita su ficha y su fecha
+  const deAfuera = por('competidor_anuncios_google', 'competidor_comentarios', 'competidor_horas_de_mas_gente')
+  if (deAfuera.length) sec('competencia_afuera', 'Lo que se ve de la competencia (anuncios, comentarios, horas)', deAfuera.map((f) => `- ${corto(f.titulo.replace(/^Competidor · /, ''), 80)}: ${corto(f.contenido, 200)} ${cita(f)}`), '', 9)
+
+  // el mercado donde juega: búsquedas del rubro, eventos de sus ciudades, foros y sus propias horas de más gente (02-nov)
+  const delMercado = [...por('tendencia_busqueda'), ...por('evento_local').sort((a, b) => ((a.fecha_fuente ?? '') < (b.fecha_fuente ?? '') ? -1 : 1)), ...por('foro'), ...por('horas_de_mas_gente')]
+  if (delMercado.length) sec('mercado_afuera', 'Contexto de su mercado (búsquedas, eventos, foros, horas)', delMercado.map((f) => `- ${corto(f.contenido, 200)} ${cita(f)}`), '', 12)
+
   // contexto que le aplica (feriados y temporada del país)
   const ctx = e.zona.filter((f) => vigente(f, e.ahora)).slice(0, MAX_POR_SECCION)
   sec('contexto', 'Contexto que le aplica', ctx.map((f) => linea(f, 140)), 'no hay contexto de su país')

@@ -4,18 +4,30 @@
  * y su propio renglón en `cerebro_pasos_diarios`. El renglón dice «en curso» al empezar y «hecha» SOLO cuando el paso terminó de verdad. Una llamada cortada deja el renglón
  * «en curso»: pasado el plazo se retoma (nunca dos a la vez) y tras 3 intentos queda «abandonada» (no hay reintento infinito).
  */
+import { diaConCorrida } from './modo'
+import { FUENTES_NUEVAS, fuentesNuevasEncendidas } from './fuentes-nuevas'
+
 export type Db = { from(tabla: string): any }
 type Fila = Record<string, unknown>
 
-export const PASOS = ['cuentas_y_comentarios', 'tendencias', 'bodega', 'transcripcion'] as const
+/** los cuatro de siempre: corren TODOS los días */
+export const PASOS_DE_REDES = ['cuentas_y_comentarios', 'tendencias', 'bodega', 'transcripcion'] as const
+/** las seis fuentes nuevas (02-nov): cada una su paso con su rastro; corren SOLO los días con corrida (ver `pasosDelDia`) */
+export const PASOS_DE_FUENTES = FUENTES_NUEVAS
+export const PASOS = [...PASOS_DE_REDES, ...PASOS_DE_FUENTES] as const
 export type Paso = (typeof PASOS)[number]
 export const esPaso = (v: unknown): v is Paso => typeof v === 'string' && (PASOS as readonly string[]).includes(v)
 
 /** una llamada vive como máximo 300 s: pasado esto, un «en curso» es una llamada cortada */
 export const PLAZO_DE_UN_PASO_MS = 6 * 60_000
 export const MAX_INTENTOS_DE_UN_PASO = 3
-/** pasos que cada cliente tiene al día, en este orden */
-export const PASOS_DEL_DIA_DE_UN_CLIENTE: readonly Paso[] = PASOS
+/** pasos que cada cliente tiene al día, en este orden (los de redes; las fuentes nuevas se suman SOLO en días con corrida) */
+export const PASOS_DEL_DIA_DE_UN_CLIENTE: readonly Paso[] = PASOS_DE_REDES
+
+/** los pasos que toca hoy: los de redes siempre; las fuentes nuevas una vez por corrida (días sin corrida no gastan) y solo si están encendidas */
+export function pasosDelDia(dia: Date, env: Record<string, string | undefined> = process.env): readonly Paso[] {
+  return diaConCorrida(dia, env) && fuentesNuevasEncendidas(env) ? PASOS : PASOS_DE_REDES
+}
 
 export type Reclamo =
   | { ok: true; id: string; intento: number }
@@ -64,13 +76,13 @@ export async function cerrarPaso(db: Db, a: { id: string; ahora: Date; errores: 
 }
 
 /** el siguiente paso pendiente de hoy (en orden de clientes y de pasos); lo que ya está hecho, abandonado o en curso reciente se salta */
-export async function siguientePaso(db: Db, a: { clientes: string[]; dia: string; ahora: Date }): Promise<{ ok: true; siguiente: { clientId: string; paso: Paso } | null; pendientes: number } | { ok: false; detalle: string }> {
+export async function siguientePaso(db: Db, a: { clientes: string[]; dia: string; ahora: Date; /** los pasos de hoy (por omisión, los de redes) */ pasos?: readonly Paso[] }): Promise<{ ok: true; siguiente: { clientId: string; paso: Paso } | null; pendientes: number } | { ok: false; detalle: string }> {
   const r = await db.from('cerebro_pasos_diarios').select('client_id, paso, estado, intentos, iniciado_en').eq('dia', a.dia)
   if (r.error) return { ok: false, detalle: String(r.error.message).slice(0, 160) }
   const hoy = new Map(lista(r.data).map((f) => [`${f.client_id}|${f.paso}`, f]))
   const pendientes: Array<{ clientId: string; paso: Paso }> = []
   for (const clientId of a.clientes) {
-    for (const paso of PASOS_DEL_DIA_DE_UN_CLIENTE) {
+    for (const paso of a.pasos ?? PASOS_DEL_DIA_DE_UN_CLIENTE) {
       const f = hoy.get(`${clientId}|${paso}`)
       if (!f) { pendientes.push({ clientId, paso }); continue }
       if (f.estado === 'hecha' || f.estado === 'con_errores' || f.estado === 'abandonada') continue

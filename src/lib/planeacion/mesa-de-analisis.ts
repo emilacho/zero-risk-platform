@@ -43,18 +43,18 @@ export interface Analista {
 
 export const ANALISTAS: Readonly<Record<TipoDeAnalisis, Analista>> = {
   mercado: {
-    tipo: 'mercado', agente: 'market_research_analyst', dimension: 'tendencia y oportunidad de la categoría y de la plaza', que: 'mercado tendencia categoría plaza', exige: 'fuente_y_fecha',
+    tipo: 'mercado', agente: 'market_research_analyst', dimension: 'tendencia y oportunidad de la categoría y de la plaza', que: 'mercado tendencia categoría plaza', clases: 'tendencia_busqueda,evento_local,foro', exige: 'fuente_y_fecha',
     reglas: [
       'Solo tendencia y oportunidad de la categoría y la plaza. NO analices competidores ni al público: eso lo traen otros analistas.',
       'Una señal = UNA línea de lista con: señal · fuente (nombre y dónde se puede ver) · fecha · confianza (alta/media/baja y por qué) · oportunidad que abre. Sin fuente y fecha no es señal: escribe «sin dato».',
     ],
   },
   competencia: {
-    tipo: 'competencia', agente: 'competitive-intelligence-agent', dimension: 'qué hacen hoy los competidores vigilados y qué hueco dejan', que: 'competidor anuncios cuenta evaluación mapas', exige: 'cita',
+    tipo: 'competencia', agente: 'competitive-intelligence-agent', dimension: 'qué hacen hoy los competidores vigilados y qué hueco dejan', que: 'competidor anuncios cuenta evaluación mapas', clases: 'competidor_anuncios_google,competidor_comentarios,competidor_horas_de_mas_gente', exige: 'cita',
     reglas: ['Solo lo que las fichas muestran de los competidores: oferta, precio, mensaje, canales, ritmo. Di qué hueco dejan. NO inventes competidores ni cifras que las fichas no traen.'],
   },
   voz_del_publico: {
-    tipo: 'voz_del_publico', agente: 'feedback-synthesizer', dimension: 'qué dice el público: reseñas, comentarios y menciones', que: 'reseñas comentarios menciones público', clases: 'comentarios,resenas,mencion', exige: 'cita',
+    tipo: 'voz_del_publico', agente: 'feedback-synthesizer', dimension: 'qué dice el público: reseñas, comentarios y menciones', que: 'reseñas comentarios menciones público', clases: 'comentarios,resenas,mencion,foro,competidor_comentarios', exige: 'cita',
     reglas: ['Solo lo que el público dijo en las fichas: temas que se repiten, elogios, quejas, preguntas sin responder. Cuenta cuántas veces aparece cada tema. NO cites a ninguna persona por su nombre.'],
   },
   escucha_x: {
@@ -62,7 +62,7 @@ export const ANALISTAS: Readonly<Record<TipoDeAnalisis, Analista>> = {
     reglas: ['Solo la conversación en X que las fichas traen. Si el cerebro no tiene material de X, responde «sin dato» y qué habría que mirar: no lo reemplaces con otra red.'],
   },
   retencion: {
-    tipo: 'retencion', agente: 'growth-hacker', dimension: 'retención y recompra: qué hace volver a la gente y dónde se pierde', que: 'métricas retención recompra visitas', exige: 'cita',
+    tipo: 'retencion', agente: 'growth-hacker', dimension: 'retención y recompra: qué hace volver a la gente y dónde se pierde', que: 'métricas retención recompra visitas', clases: 'horas_de_mas_gente,metrica,resenas', exige: 'cita',
     reglas: ['Solo retención y recompra: qué muestran las métricas y las reseñas sobre volver o no volver. NO propongas pauta ni presupuesto: eso es del plan.'],
   },
 }

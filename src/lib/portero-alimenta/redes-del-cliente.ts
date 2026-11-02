@@ -11,7 +11,8 @@ import { paisIsoDe } from '../cerebro/zona'
 import { ejecutarEnApify } from './tendencias'
 import { bodegaDelMundo, tendenciasDelCliente } from './tendencias-del-cliente'
 import { descubrirCuentas } from './cuentas-de-redes'
-import { comentariosDeRedes, comentariosDeVideosDeLaCompetencia, ejecutarComentarios, guardarComentariosDeLaCompetencia } from './comentarios-de-redes'
+import { comentariosDeRedes, comentariosDeVideosDeLaCompetencia, ejecutarComentarios, guardarComentariosDeLaCompetencia, REDES_DE_IG_Y_FB, REDES_DEL_PASO_DE_SIEMPRE } from './comentarios-de-redes'
+import { correrFuenteNueva, esFuenteNueva } from './fuentes-nuevas'
 import { transcribirVideos } from './transcripcion-de-videos'
 import type { RespuestaDeLlamada } from './juez'
 import type { Paso } from './pasos-diarios'
@@ -56,7 +57,7 @@ export async function correrPasoDeRedes(e: EntradaDePasoDeRedes): Promise<Result
       const ejecutarApify = ejecutarEnApify({ token: common.token, fetchImpl: e.fetch as never })
       const cuentas = await descubrirCuentas({ cliente: cliente as never, clientId: e.clientId, ciudades, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora: e.ahora, ejecutar: ejecutarApify, fetchImpl: e.fetch as never })
       const clienteVivo = (cuentas.config_nueva ? { ...cliente, config: cuentas.config_nueva } : cliente) as never
-      const cm = await comentariosDeRedes({ cliente: clienteVivo, clientId: e.clientId, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora: e.ahora, ejecutar: ejecutarComentarios({ token: common.token, fetchImpl: e.fetch as never }), fetchImpl: e.fetch as never })
+      const cm = await comentariosDeRedes({ redes: REDES_DEL_PASO_DE_SIEMPRE, cliente: clienteVivo, clientId: e.clientId, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora: e.ahora, ejecutar: ejecutarComentarios({ token: common.token, fetchImpl: e.fetch as never }), fetchImpl: e.fetch as never })
       // los comentarios que ya traían los videos de Instagram de la competencia (del raspado que ya está en la base)
       const rr = await e.db.from('apify_raw').select('id, apify_function, params, respuesta, ensayo, metadata, created_at').eq('client_id', e.clientId).eq('ensayo', false).eq('apify_function', 'videos_instagram').order('created_at', { ascending: false }).limit(60)
       if (rr.error) errores.push(`apify_raw: ${rr.error.message}`)
@@ -67,6 +68,19 @@ export async function correrPasoDeRedes(e: EntradaDePasoDeRedes): Promise<Result
       resumen.cuentas_de_redes = cuentas
       resumen.comentarios_de_redes = { ...cm, de_videos_de_la_competencia: { leidos: deVideos.length, guardados: gv.guardados, ...(gv.error ? { error: gv.error } : {}) } }
       gasto += (cuentas.costo_usd ?? 0) + (cm.costo_usd ?? 0)
+    } else if (esFuenteNueva(e.paso)) {
+      // las seis fuentes nuevas (02-nov): cada una su paso; el trabajo y el archivo viven en `fuentes-nuevas.ts`
+      const f = await correrFuenteNueva({
+        db: e.db, fuente: e.paso, cliente: cliente as never, clientId: e.clientId, ciudadesDeSedes: ciudades, ahora: e.ahora, ejecutar: ejecutarEnApify({ token: common.token, fetchImpl: e.fetch as never, esperaMs: 120_000 }),
+        workflowId: e.registro?.workflowId, ejecucionId: e.registro?.ejecucionId,
+        leerComentarios: async (cl) => {
+          const cm = await comentariosDeRedes({ redes: REDES_DE_IG_Y_FB, cliente: cl, clientId: e.clientId, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora: e.ahora, ejecutar: ejecutarComentarios({ token: common.token, fetchImpl: e.fetch as never }), fetchImpl: e.fetch as never })
+          return { costo_usd: cm.costo_usd ?? 0, ...(cm.estado === 'error' || cm.estado === 'sin_base' || cm.estado === 'sin_token' ? { error: `comentarios de Instagram y Facebook: ${cm.estado}${cm.mensaje ? ` · ${cm.mensaje}` : ''}` } : {}), resumen: { estado: cm.estado, cuentas_conocidas: cm.cuentas_conocidas, leidas: cm.leidas, comentarios_nuevos: cm.competencia, por_red: cm.por_red, costo_usd: cm.costo_usd } }
+        },
+      })
+      resumen[e.paso] = f.resumen
+      f.errores.forEach((x) => errores.push(x))
+      gasto += f.gasto_usd
     } else if (e.paso === 'tendencias') {
       const t = await tendenciasDelCliente({ ...common, cliente: cliente as never, clientId: e.clientId, ciudades, llamarModelo: e.llamarModelo })
       resumen.tendencias = t

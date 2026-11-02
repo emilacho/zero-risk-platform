@@ -18,10 +18,11 @@ export function nivelDeOrigen(origen: string, nivelDeTendencia?: string | null):
   return origen === 'competencia' || origen === 'competidor' ? 'directa' : 'competencia'
 }
 
-/** una ficha por su alcance: del cliente → propio · de un competidor → directa · del mercado (rubro y zona) → competencia · sin alcance → propio */
+/** una ficha por su alcance: del cliente → propio · de un competidor → directa · del mercado (rubro y zona) → competencia · del país o sus ciudades (búsquedas, eventos) → país · sin alcance → propio */
 export function nivelDeFicha(alcance: unknown): NivelDeAfuera {
   if (alcance === 'competidor') return 'directa'
   if (alcance === 'mercado') return 'competencia'
+  if (alcance === 'pais') return 'pais'
   return 'propio'
 }
 

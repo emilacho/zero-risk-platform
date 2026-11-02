@@ -8,9 +8,12 @@
  */
 type Obj = Record<string, unknown>
 type Traer = (url: string, init?: RequestInit) => Promise<Response>
-export type RedDeComentarios = 'tiktok' | 'x' | 'facebook'
+export type RedDeComentarios = 'tiktok' | 'x' | 'facebook' | 'instagram'
 export type Rol = 'propia' | 'competidor'
 export const REDES_DE_COMENTARIOS: RedDeComentarios[] = ['tiktok', 'x', 'facebook']
+/** 02-nov: cada paso lee SUS redes (no se lee una cuenta en dos pasos): el de siempre TikTok y X; el de las fuentes nuevas Instagram y Facebook de la competencia */
+export const REDES_DEL_PASO_DE_SIEMPRE: RedDeComentarios[] = ['tiktok', 'x']
+export const REDES_DE_IG_Y_FB: RedDeComentarios[] = ['instagram', 'facebook']
 export const DIAS_ENTRE_LECTURAS_DE_UNA_CUENTA = 7
 export const MAX_CUENTAS_POR_CORRIDA = 8
 export const PUBLICACIONES_A_PEDIR = 6
@@ -22,6 +25,7 @@ export const ACTORES_DE_COMENTARIOS = {
   tiktok: { publicaciones: 'apidojo~tiktok-scraper', comentarios: 'clockworks~tiktok-comments-scraper' },
   x: { publicaciones: 'apidojo~tweet-scraper', comentarios: 'apidojo~tweet-scraper' },
   facebook: { publicaciones: 'apify~facebook-posts-scraper', comentarios: 'apify~facebook-comments-scraper' },
+  instagram: { publicaciones: 'apify~instagram-scraper', comentarios: 'apify~instagram-comment-scraper' },
 } as const
 
 const obj = (v: unknown): Obj => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : {})
@@ -29,7 +33,7 @@ const arr = (v: unknown): Obj[] => (Array.isArray(v) ? (v.filter((x) => x && typ
 const txt = (v: unknown): string => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '')
 const num = (v: unknown): number | null => { const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN; return Number.isFinite(n) && n >= 0 ? Math.round(n) : null }
 const usd = (v: unknown): number => { const n = typeof v === 'number' ? v : NaN; return Number.isFinite(n) && n >= 0 ? n : 0 }
-const manejo = (h: string) => h.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?(tiktok|x|twitter|facebook|fb)\.com\/@?/i, '').replace(/[/?#].*$/, '')
+const manejo = (h: string) => h.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?(tiktok|x|twitter|facebook|fb|instagram)\.com\/@?/i, '').replace(/[/?#].*$/, '')
 const fechaIso = (v: unknown): string | null => {
   if (v === null || v === undefined || v === '') return null
   const n = typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : Date.parse(String(v))
@@ -49,6 +53,7 @@ export function publicacionDe(red: RedDeComentarios, it: unknown): Publicacion |
   const x = obj(it)
   if (red === 'tiktok') { const ref = txt(x.id); const url = txt(x.postPage) || ''; return ref && url ? { ref, url, comentarios: num(x.comments) } : null }
   if (red === 'x') { const ref = txt(x.id); const url = txt(x.url) || txt(x.twitterUrl); return ref && url ? { ref, url, comentarios: num(x.replyCount) } : null }
+  if (red === 'instagram') { const url = txt(x.url); const ref = txt(x.shortCode) || txt(x.id); return ref && url ? { ref, url, comentarios: num(x.commentsCount) } : null }
   const url = txt(x.url) || txt(x.postUrl); const ref = txt(x.postId) || txt(x.id) || url
   return url && ref ? { ref, url, comentarios: num(x.comments) ?? num(x.commentsCount) } : null
 }
@@ -65,7 +70,8 @@ export function comentarioDe(red: RedDeComentarios, it: unknown, c: { cuenta: st
   else if (red === 'x') {
     if (x.noResults || obj(x.author).userName === c.cuenta) return null // el hilo del propio dueño no es un comentario de otros
     ref = txt(x.id); texto = txt(x.fullText) || txt(x.text); me_gusta = num(x.likeCount); fecha = fechaIso(x.createdAt)
-  } else { ref = txt(x.id) || txt(x.commentUrl); texto = txt(x.text); me_gusta = num(x.likesCount); fecha = fechaIso(x.date ?? x.createdAt ?? x.timestamp) }
+  } else if (red === 'instagram') { ref = txt(x.id); texto = txt(x.text); me_gusta = num(x.likesCount); fecha = fechaIso(x.timestamp) }
+  else { ref = txt(x.id) || txt(x.commentUrl); texto = txt(x.text); me_gusta = num(x.likesCount); fecha = fechaIso(x.date ?? x.createdAt ?? x.timestamp) }
   const limpio = limpiarComentario(texto)
   if (!ref || limpio.length < 9) return null
   return { red, cuenta: c.cuenta, rol: c.rol, post_ref: c.post.ref, post_url: c.post.url, comentario_ref: ref.slice(0, 200), texto: limpio, me_gusta, fecha }
@@ -76,14 +82,15 @@ export type EjecutarComentarios = (actor: string, input: Obj, maxUsd: number) =>
 export interface CuentaAMirar { red: RedDeComentarios; cuenta: string; rol: Rol; nombre?: string }
 
 /** las cuentas de la ficha: propias (`own_handles`, `own_social_handles`) y de cada competidor (`competitor_list[].handles`) */
-export function cuentasDeLaFicha(config: unknown): CuentaAMirar[] {
+export function cuentasDeLaFicha(config: unknown, redes: readonly RedDeComentarios[] = REDES_DE_COMENTARIOS): CuentaAMirar[] {
   const cfg = obj(config), apify = obj(cfg.apify)
   const propias = { ...obj(cfg.own_social_handles), ...obj(apify.own_handles) } as Record<string, unknown>
   const out: CuentaAMirar[] = []
-  for (const red of REDES_DE_COMENTARIOS) { const h = manejo(txt(propias[red])); if (h) out.push({ red, cuenta: h, rol: 'propia' }) }
+  // el Instagram PROPIO ya entra por su raspado de siempre: aquí solo el de la competencia
+  for (const red of redes) { if (red === 'instagram') continue; const h = manejo(txt(propias[red])); if (h) out.push({ red, cuenta: h, rol: 'propia' }) }
   for (const c of arr(apify.competitor_list)) {
     const m = obj(c.handles)
-    for (const red of REDES_DE_COMENTARIOS) { const h = manejo(txt(m[red] ?? (red === 'x' ? m.twitter : ''))); if (h) out.push({ red, cuenta: h, rol: 'competidor', nombre: txt(c.name) }) }
+    for (const red of redes) { const h = manejo(txt(m[red] ?? (red === 'x' ? m.twitter : red === 'instagram' ? c.instagram : ''))); if (h) out.push({ red, cuenta: h, rol: 'competidor', nombre: txt(c.name) }) }
   }
   const vistos = new Set<string>()
   return out.filter((c) => { const k = `${c.rol}|${c.red}|${c.cuenta.toLowerCase()}`; if (vistos.has(k)) return false; vistos.add(k); return true })
@@ -91,24 +98,26 @@ export function cuentasDeLaFicha(config: unknown): CuentaAMirar[] {
 
 const funcionDe = (rol: Rol, red: RedDeComentarios) => (rol === 'propia' ? `comentarios_${red}` : `comentarios_competencia_${red}`)
 
-const urlDeCuenta = (red: RedDeComentarios, h: string) => (red === 'tiktok' ? `https://www.tiktok.com/@${h}` : red === 'x' ? `https://x.com/${h}` : /^https?:/i.test(h) ? h : `https://www.facebook.com/${h}`)
+const urlDeCuenta = (red: RedDeComentarios, h: string) => (red === 'tiktok' ? `https://www.tiktok.com/@${h}` : red === 'x' ? `https://x.com/${h}` : red === 'instagram' ? `https://www.instagram.com/${h}/` : /^https?:/i.test(h) ? h : `https://www.facebook.com/${h}`)
 
 /** lo que se pide de las publicaciones de una cuenta, por red */
 function pedidoDePublicaciones(red: RedDeComentarios, cuenta: string): Obj {
   if (red === 'tiktok') return { startUrls: [urlDeCuenta('tiktok', cuenta)], maxItems: PUBLICACIONES_A_PEDIR }
   if (red === 'x') return { searchTerms: [`from:${cuenta}`], maxItems: PUBLICACIONES_A_PEDIR, sort: 'Top' }
+  if (red === 'instagram') return { directUrls: [urlDeCuenta('instagram', cuenta)], resultsType: 'posts', resultsLimit: PUBLICACIONES_A_PEDIR }
   return { startUrls: [{ url: urlDeCuenta('facebook', cuenta) }], resultsLimit: PUBLICACIONES_A_PEDIR }
 }
 function pedidosDeComentarios(red: RedDeComentarios, ps: Publicacion[]): Obj[] {
   if (red === 'tiktok') return [{ postURLs: ps.map((p) => p.url), commentsPerPost: COMENTARIOS_POR_PUBLICACION, maxRepliesPerComment: 0 }]
   if (red === 'x') return ps.map((p) => ({ searchTerms: [`conversation_id:${p.ref}`], maxItems: COMENTARIOS_POR_PUBLICACION, sort: 'Top' }))
+  if (red === 'instagram') return ps.map((p) => ({ directUrls: [p.url], resultsLimit: COMENTARIOS_POR_PUBLICACION }))
   return ps.map((p) => ({ startUrls: [{ url: p.url }], resultsLimit: COMENTARIOS_POR_PUBLICACION }))
 }
 
 export interface ResultadoDeCuenta { red: RedDeComentarios; cuenta: string; rol: Rol; publicaciones: number; con_comentarios: number; comentarios: number; costo_usd: number; causa?: string }
 
 /** lee UNA cuenta: publicaciones → las más comentadas → comentarios; nunca lanza */
-export async function leerComentariosDeUnaCuenta(c: CuentaAMirar, ejecutar: EjecutarComentarios, margenUsd: number): Promise<{ r: ResultadoDeCuenta; comentarios: Comentario[]; intento_valido: boolean }> {
+export async function leerComentariosDeUnaCuenta(c: CuentaAMirar, ejecutar: EjecutarComentarios, margenUsd: number, yaLeidas: ReadonlySet<string> = new Set()): Promise<{ r: ResultadoDeCuenta; comentarios: Comentario[]; intento_valido: boolean }> {
   const r: ResultadoDeCuenta = { red: c.red, cuenta: c.cuenta, rol: c.rol, publicaciones: 0, con_comentarios: 0, comentarios: 0, costo_usd: 0 }
   const comentarios: Comentario[] = []
   const gastar = (x: number) => { r.costo_usd = Math.round((r.costo_usd + x) * 1e6) / 1e6 }
@@ -118,9 +127,11 @@ export async function leerComentariosDeUnaCuenta(c: CuentaAMirar, ejecutar: Ejec
     const lp = await ejecutar(a.publicaciones, pedidoDePublicaciones(c.red, c.cuenta), tope)
     gastar(lp.costo_usd)
     // en X las publicaciones de la cuenta son ella misma; una respuesta de otro no cuenta como publicación suya
-    const posts = lp.items.map((it) => publicacionDe(c.red, it)).filter((p): p is Publicacion => !!p)
+    const todas = lp.items.map((it) => publicacionDe(c.red, it)).filter((p): p is Publicacion => !!p)
+    // UNA vez por publicación (02-nov): la que ya se leyó no se vuelve a pedir
+    const posts = todas.filter((p) => !yaLeidas.has(p.ref))
     r.publicaciones = posts.length
-    if (!posts.length) { r.causa = 'la cuenta no devolvió publicaciones (no existe, es privada o el actor no la leyó)'; return { r, comentarios, intento_valido: true } }
+    if (!posts.length) { r.causa = todas.length ? 'todas sus publicaciones recientes ya se leyeron antes' : 'la cuenta no devolvió publicaciones (no existe, es privada o el actor no la leyó)'; return { r, comentarios, intento_valido: true } }
     const elegidas = publicacionesParaComentarios(posts)
     r.con_comentarios = elegidas.length
     if (!elegidas.length) { r.causa = 'ninguna de sus publicaciones recientes tiene comentarios'; return { r, comentarios, intento_valido: true } }
@@ -150,7 +161,7 @@ export async function leerComentariosDeUnaCuenta(c: CuentaAMirar, ejecutar: Ejec
 export interface InformeDeComentarios { estado: 'corrida' | 'sin_cuentas' | 'todo_al_dia' | 'sin_token' | 'sin_base' | 'error'; cuentas_conocidas: number; leidas: number; omitidas_por_tope: number; comentarios: number; propios: number; competencia: number; por_red: Record<string, number>; costo_usd: number; cuentas: ResultadoDeCuenta[]; mensaje?: string }
 
 /** la corrida de un cliente: elige las cuentas que toca mirar (≥7 días desde la última), las lee y guarda según su rol */
-export async function comentariosDeRedes(a: { cliente: Obj; clientId: string; urlDeLaBase: string; llave: string; token: string; ahora: Date; ejecutar: EjecutarComentarios; fetchImpl?: Traer; soloLeer?: boolean; maxCuentas?: number }): Promise<InformeDeComentarios> {
+export async function comentariosDeRedes(a: { cliente: Obj; clientId: string; urlDeLaBase: string; llave: string; token: string; ahora: Date; ejecutar: EjecutarComentarios; fetchImpl?: Traer; soloLeer?: boolean; maxCuentas?: number; /** las redes de ESTE paso (por omisión todas) */ redes?: readonly RedDeComentarios[] }): Promise<InformeDeComentarios> {
   const informe: InformeDeComentarios = { estado: 'corrida', cuentas_conocidas: 0, leidas: 0, omitidas_por_tope: 0, comentarios: 0, propios: 0, competencia: 0, por_red: {}, costo_usd: 0, cuentas: [] }
   try {
     if (!a.token) return { ...informe, estado: 'sin_token' }
@@ -158,12 +169,12 @@ export async function comentariosDeRedes(a: { cliente: Obj; clientId: string; ur
     const traer: Traer = a.fetchImpl ?? ((u, i) => fetch(u, i))
     const base = a.urlDeLaBase.replace(/\/$/, '')
     const auth = { apikey: a.llave, Authorization: `Bearer ${a.llave}` }
-    const todas = cuentasDeLaFicha(a.cliente.config)
+    const todas = cuentasDeLaFicha(a.cliente.config, a.redes ?? REDES_DE_COMENTARIOS)
     informe.cuentas_conocidas = todas.length
     if (!todas.length) return { ...informe, estado: 'sin_cuentas' }
     // cuándo se miró cada cuenta: la última fila de intento de este cliente en los últimos 7 días
     const desde = new Date(a.ahora.getTime() - DIAS_ENTRE_LECTURAS_DE_UNA_CUENTA * 86_400_000).toISOString()
-    const funciones = REDES_DE_COMENTARIOS.flatMap((red) => [funcionDe('propia', red), funcionDe('competidor', red)])
+    const funciones = (a.redes ?? REDES_DE_COMENTARIOS).flatMap((red) => [funcionDe('propia', red), funcionDe('competidor', red)])
     const previas = await traer(`${base}/rest/v1/apify_raw?client_id=eq.${encodeURIComponent(a.clientId)}&ensayo=eq.false&apify_function=in.(${funciones.join(',')})&created_at=gte.${encodeURIComponent(desde)}&select=apify_function,metadata&limit=500`, { headers: auth })
     if (!previas.ok) return { ...informe, estado: 'sin_base', mensaje: `no se pudo leer lo ya mirado (HTTP ${previas.status})` }
     const yaMiradas = new Set(((await previas.json()) as Array<{ apify_function: string; metadata?: Obj }>).map((f) => `${f.apify_function}|${txt(obj(f.metadata).cuenta).toLowerCase()}`))
@@ -171,10 +182,20 @@ export async function comentariosDeRedes(a: { cliente: Obj; clientId: string; ur
     if (!pendientes.length) return { ...informe, estado: 'todo_al_dia' }
     const hoy = pendientes.slice(0, a.maxCuentas ?? MAX_CUENTAS_POR_CORRIDA)
     informe.omitidas_por_tope = pendientes.length - hoy.length
+    // las publicaciones de la competencia que ya tienen sus comentarios guardados: no se piden otra vez
+    const leidas = new Map<string, Set<string>>()
+    // solo el paso de Instagram y Facebook de la competencia lee lo ya guardado (el paso de siempre queda idéntico)
+    if (a.redes?.includes('instagram')) {
+      try {
+        const pl = await traer(`${base}/rest/v1/cerebro_comentarios_competencia?client_id=eq.${encodeURIComponent(a.clientId)}&select=red,cuenta,post_ref&limit=5000`, { headers: auth })
+        const filas = pl.ok ? ((await pl.json()) as Array<{ red: string; cuenta: string; post_ref: string }>) : []
+        for (const f of Array.isArray(filas) ? filas : []) { const k = `${f.red}|${String(f.cuenta).toLowerCase()}`; leidas.set(k, (leidas.get(k) ?? new Set()).add(String(f.post_ref))) }
+      } catch { /* sin lo ya leído: se pide como antes */ }
+    }
     for (let i = 0; i < hoy.length; i += 3) {
       const margen = TOPE_DEL_DIA_POR_CLIENTE_USD - informe.costo_usd
       if (margen <= 0.01) { informe.omitidas_por_tope += hoy.length - i; break }
-      const tanda = await Promise.all(hoy.slice(i, i + 3).map((c) => leerComentariosDeUnaCuenta(c, a.ejecutar, margen / 3)))
+      const tanda = await Promise.all(hoy.slice(i, i + 3).map((c) => leerComentariosDeUnaCuenta(c, a.ejecutar, margen / 3, leidas.get(`${c.red}|${c.cuenta.toLowerCase()}`))))
       for (const t of tanda) {
         informe.leidas++; informe.costo_usd = Math.round((informe.costo_usd + t.r.costo_usd) * 1e6) / 1e6
         informe.cuentas.push(t.r)
