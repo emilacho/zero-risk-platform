@@ -90,6 +90,13 @@ describe('la puerta del manual y lo propuesto', () => {
     expect(r._field_meta.vision).toMatchObject({ estado: 'propuesta_del_agente', fuente: 'propuesta del agente', hechos: 0, provisional: false })
   })
 
+  it('🔴 también sigue siendo propuesta si trae un dato con fuente', () => {
+    const manual = { mision: 'Abrimos desde 2012 en la playa [propuesta del agente — r]', _field_meta: { mision: { estado: 'propuesta_del_agente', ...META } } }
+    const inf = evaluarHechos({ manual, fuentes: [{ id: 's', tipo: 'primaria_propia', rotulo: 'sitio', canal: 'sitio', texto: 'Fundada en 2012 en el centro' }] } as never)
+    expect(inf.hechos.length).toBeGreaterThan(0)
+    expect(aplicarMeta(manual, inf)._field_meta.mision).toMatchObject({ estado: 'propuesta_del_agente', pendientes: 0 })
+  })
+
   it('🔴 lo que no es propuesta recibe el estado de siempre', () => {
     expect(pasar({ vision: 'Ser la cocina que la gente recuerda', _field_meta: { vision: { estado: 'confirmado' } } })._field_meta.vision).toMatchObject({ estado: 'sin_hechos' })
   })
