@@ -24,6 +24,9 @@ export function camposQueLibera(a: { delDueno: string[]; texto: string; campos: 
   return a.delDueno.filter((k) => a.campos.includes(k) || nombrado(k))
 }
 
+/** el sello que la base pone a una versión nueva (ADR-012). Escribir la columna reemplaza ese valor: el pedido lo repite y agrega su marca. No hereda «validado»: el contenido cambió */
+export const selloDeLaVersionPedida = (manual_cambio_id: string): Fila => ({ type: 'evidence', source: 'legacy_pre_adr012', trust_level: 'unknown', manual_cambio_id })
+
 export interface PedidoDelManual { id: string; campos_liberados: string[]; creado_en: string; manual_nuevo_id: string | null }
 export type LecturaDelPedido = { ok: true; pedido: PedidoDelManual } | { ok: false; status: number; error: string; detalle: string }
 

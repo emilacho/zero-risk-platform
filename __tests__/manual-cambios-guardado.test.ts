@@ -27,7 +27,7 @@ describe('🔴 guardar con un pedido', () => {
     const d = JSON.parse(String(u.content_text)).brand_book_draft
     expect(d.mision).toBe('Misión nueva')
     expect(d.vision).toBe('Visión de Emilio')
-    expect(u.provenance_tag).toEqual({ manual_cambio_id: P })
+    expect(u.provenance_tag).toEqual({ type: 'evidence', source: 'legacy_pre_adr012', trust_level: 'unknown', manual_cambio_id: P })
     expect(j).toMatchObject({ persisted: true, version: 2, manual_cambio_id: P })
     expect(db.tablas['plan_cambios'][0].manual_nuevo_id).toBe(u.id)
   })

@@ -12,7 +12,7 @@ import { sanitizeProseFields } from '@/lib/brand-book-caveat-extractor'
 import { empujarManualAlCerebro } from '@/lib/brain/push-al-terminar'
 import { columnasDelBorrador, evaluarCompletitud, fugasDeLasColumnas } from '@/lib/manual/campos-del-manual'
 import { conservarLoDelDueno } from '@/lib/manual/edicion-del-dueno'
-import { leerPedidoDelManual, type PedidoDelManual } from '@/lib/manual/pedido-de-cambios'
+import { leerPedidoDelManual, selloDeLaVersionPedida, type PedidoDelManual } from '@/lib/manual/pedido-de-cambios'
 import { completarVisualesDesdeLaFicha } from '@/lib/manual-visuales-desde-la-ficha'
 
 export const runtime = 'nodejs'
@@ -244,7 +244,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     fichaVisualError = e instanceof Error ? e.message.slice(0, 200) : 'error'
   }
   visuales = completarVisualesDesdeLaFicha(rowBase, bb, fichaVisual)
-  row = pedido ? { ...visuales.row, provenance_tag: { manual_cambio_id: pedido.id } } : visuales.row
+  row = pedido ? { ...visuales.row, provenance_tag: selloDeLaVersionPedida(pedido.id) } : visuales.row
 
   const ins = await supabase
     .from('client_brand_books')
