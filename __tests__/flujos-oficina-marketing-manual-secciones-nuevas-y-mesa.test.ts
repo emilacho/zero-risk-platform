@@ -419,6 +419,12 @@ describe('5 · el juez anota los datos duros sin fuente (no borra, no cambia)', 
     const sin = await correr(EQUIPO.notas, base({ brand_book_draft: { client_id: 'c-1' } }), () => { throw new Error('no') })
     expect(sin.out.brand_book_draft._equipo).toMatchObject({ reescritura: false, objetivo: [], declarado: [] })
   })
+  it('el resumen del borrador trae a lo sumo 20 declarados de 300 caracteres', async () => {
+    const largos = Array.from({ length: 30 }, (_, i) => 'x'.repeat(500) + i)
+    const { out } = await correr(EQUIPO.notas, base({ brand_book_draft: { client_id: 'c-1' }, _equipo: { corrio: true, declarado: largos } }), () => { throw new Error('no') })
+    const d = out.brand_book_draft._equipo.declarado
+    expect(d).toHaveLength(20); expect(d.every((x: string) => x.length === 300)).toBe(true)
+  })
   it('sin campos que revisar no hay llamada', async () => {
     const { llamadas, out } = await correr(EQUIPO.notas, base({ brand_book_draft: { client_id: 'c-1' } }), () => { throw new Error('no debía llamar') })
     expect(llamadas).toHaveLength(0); expect(out._equipo.datos_duros_juez.corrio).toBe(false)
