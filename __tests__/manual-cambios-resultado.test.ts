@@ -13,7 +13,7 @@ const P = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const ctx = { params: Promise.resolve({ clientId: C }) }
 const META = { tono_por_canal: { fuente: 'dueno' }, mision: { fuente: 'dueno' } }
 const VIGENTE = { positioning: 'Vieja', mision: 'Misión de Emilio', tono_por_canal: ['Instagram: cercano'], _field_meta: META }
-const EQUIPO = { reescritura: true, protegidos: ['tono_por_canal'], declarado: ['pedir cambios: conserva lo validado: tono_por_canal'] }
+const EQUIPO = { reescritura: true, protegidos: ['tono_por_canal', 'reglas_de_escritura'], tocados_validados: ['tono_por_canal'], declarado: ['pedir cambios: conserva lo validado: tono_por_canal'] }
 const guardar = (bb: Record<string, unknown>) => POST(new Request('http://x/', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'k' }, body: JSON.stringify({ brand_book: bb, manual_cambio_id: P }) }), ctx)
 const base = (p: Record<string, unknown> = {}) => new DbFalsa()
   .semilla('client_brand_books', [{ id: 'v1', client_id: C, version: 1, content_text: JSON.stringify({ brand_book_draft: VIGENTE }) }])
@@ -29,7 +29,7 @@ describe('🔴 los tres casos', () => {
     const j = await (await guardar({ ...VIGENTE, _equipo: EQUIPO })).json()
     expect(j).toMatchObject({ persisted: false, sin_cambios_reales: true })
     expect(db.tablas['client_brand_books']).toHaveLength(1)
-    expect(pedido(db).resultado).toEqual({ sin_cambios: true, protegidos: ['tono_por_canal'], declarado: EQUIPO.declarado })
+    expect(pedido(db).resultado).toEqual({ sin_cambios: true, protegidos: ['tono_por_canal', 'reglas_de_escritura'], tocados_validados: ['tono_por_canal'], declarado: EQUIPO.declarado })
     expect(pedido(db).manual_nuevo_id).toBeNull()
   })
 
@@ -37,14 +37,14 @@ describe('🔴 los tres casos', () => {
     const db = base(); m.db = db
     const j = await (await guardar({ ...VIGENTE, positioning: 'Nueva' })).json()
     expect(j).toMatchObject({ persisted: true, version: 2 })
-    expect(pedido(db).resultado).toEqual({ sin_cambios: false, protegidos: [], declarado: [] })
+    expect(pedido(db).resultado).toEqual({ sin_cambios: false, protegidos: [], tocados_validados: [], declarado: [] })
   })
 
   it('un pedido mixto: cambia lo no validado, y el aviso nombra solo lo que no se tocó', async () => {
     const db = base(); m.db = db
     const j = await (await guardar({ ...VIGENTE, positioning: 'Nueva', _equipo: EQUIPO })).json()
     expect(j).toMatchObject({ persisted: true, version: 2 })
-    expect(pedido(db).resultado).toMatchObject({ sin_cambios: false, protegidos: ['tono_por_canal'] })
+    expect(pedido(db).resultado).toMatchObject({ sin_cambios: false, tocados_validados: ['tono_por_canal'] })
     expect(pedido(db).manual_nuevo_id).not.toBeNull()
   })
 })
@@ -85,12 +85,21 @@ describe('🔴 sin efectos', () => {
 
 describe('resultadoDelPedido', () => {
   it('🔴 sin lo que declaró el equipo, sale vacío y no falla', () => {
-    expect(resultadoDelPedido({}, true)).toEqual({ sin_cambios: true, protegidos: [], declarado: [] })
-    expect(resultadoDelPedido({ _equipo: 'x', }, false)).toEqual({ sin_cambios: false, protegidos: [], declarado: [] })
+    expect(resultadoDelPedido({}, true)).toEqual({ sin_cambios: true, protegidos: [], tocados_validados: [], declarado: [] })
+    expect(resultadoDelPedido({ _equipo: 'x', }, false)).toEqual({ sin_cambios: false, protegidos: [], tocados_validados: [], declarado: [] })
   })
   it('🔴 solo nombra campos reales del manual, y sin repetir', () => {
     expect(resultadoDelPedido({ _equipo: { protegidos: ['vision', 'inventado', 'vision', 5] } }, true).protegidos).toEqual(['vision'])
   })
+  it('🔴 tocados_validados es lo que dice el equipo, no lo protegido: el aviso no nombra de más', () => {
+    const r = resultadoDelPedido({ _equipo: { protegidos: ['tono_por_canal', 'reglas_de_escritura', 'valores'], tocados_validados: ['tono_por_canal', 'tono_por_canal', 'inventado'] } }, true)
+    expect(r.tocados_validados).toEqual(['tono_por_canal'])
+    expect(r.protegidos).toHaveLength(3)
+  })
+  it('🔴 el pedido vago: nada que nombrar, y sigue siendo sin cambios', () => {
+    expect(resultadoDelPedido({ _equipo: { protegidos: ['valores'], tocados_validados: [] } }, true)).toMatchObject({ sin_cambios: true, tocados_validados: [] })
+  })
+
   it('🔴 lo declarado tiene tope, y solo son textos', () => {
     const r = resultadoDelPedido({ _equipo: { declarado: [...Array.from({ length: 30 }, () => 'x'.repeat(500)), 7, ''] } }, true)
     expect(r.declarado).toHaveLength(20)

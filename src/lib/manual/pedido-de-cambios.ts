@@ -45,15 +45,17 @@ export function sinCambiosReales(contenidoPrevio: unknown, nuevo: Fila): boolean
 }
 
 const textos = (x: unknown): string[] => (Array.isArray(x) ? x.filter((v): v is string => typeof v === 'string' && v.trim() !== '') : [])
-export interface ResultadoDelPedido { sin_cambios: boolean; protegidos: string[]; declarado: string[] }
+export interface ResultadoDelPedido { sin_cambios: boolean; protegidos: string[]; tocados_validados: string[]; declarado: string[] }
 /**
  * 02-nov · lo que dejó un pedido, para el pedido mismo: si no cambió nada no hay versión, y este es el único lugar donde el dueño puede leer por qué.
- * `protegidos`: los campos validados que no se tocaron, solo claves reales del manual. Solo informa: no cambia texto ni estado.
+ * `tocados_validados`: los validados que el pedido parece tocar por sus palabras y no liberó: son los que el aviso nombra. `protegidos`: todos los validados que no se tocaron; nombraría campos que el dueño ni mencionó.
+ * Solo claves reales del manual. Solo informa: no cambia texto ni estado.
  */
 export function resultadoDelPedido(bb: Fila, sin_cambios: boolean): ResultadoDelPedido {
   const equipo = objeto(bb._equipo)
   const claves = new Set(CAMPOS.map((c) => c.clave))
-  return { sin_cambios, protegidos: [...new Set(textos(equipo.protegidos))].filter((k) => claves.has(k)), declarado: textos(equipo.declarado).slice(0, 20).map((t) => t.slice(0, 300)) }
+  const campos = (x: unknown): string[] => [...new Set(textos(x))].filter((k) => claves.has(k))
+  return { sin_cambios, protegidos: campos(equipo.protegidos), tocados_validados: campos(equipo.tocados_validados), declarado: textos(equipo.declarado).slice(0, 20).map((t) => t.slice(0, 300)) }
 }
 
 export interface PedidoDelManual { id: string; campos_liberados: string[]; creado_en: string; manual_nuevo_id: string | null }
