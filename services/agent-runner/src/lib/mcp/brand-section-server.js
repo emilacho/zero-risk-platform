@@ -60,7 +60,7 @@ const LISTA = z.union([z.array(z.string()), z.string()])
 
 const BRAND_SECTION_INPUT_SCHEMA = {
   lens: z
-    .enum(['brand-strategist', 'editor-en-jefe', 'jefe-client-success'])
+    .enum(['brand-strategist', 'editor-en-jefe', 'jefe-client-success', 'content-creator'])
     .describe('Qué lente eres · determina qué campos llenas'),
   // ── GATEADOS · NO SE TOCAN (Consejero §77 · el gate se queda en 2) ────────
   // brand-strategist
@@ -104,6 +104,23 @@ const BRAND_SECTION_INPUT_SCHEMA = {
   proposito: PROV(z.string())
     .optional()
     .describe('Propósito · por qué existe la marca más allá de vender · PROVISIONAL (no gateado)'),
+
+  // 02-nov · equipo del manual: los campos que ya existen en `lib/manual/campos-del-manual.ts` y la herramienta no le mostraba al empleado
+  vision: PROV(z.string())
+    .optional()
+    .describe('Visión · a dónde quiere llegar el negocio · solo si la evidencia lo sostiene · PROVISIONAL (no gateado)'),
+  valores: PROV(LISTA)
+    .optional()
+    .describe('Valores que la marca demuestra en lo que hace y dice · lista · PROVISIONAL (no gateado)'),
+  nunca_hace: PROV(LISTA)
+    .optional()
+    .describe('Lo que la marca nunca dice ni hace, deducido de la evidencia · lista · PROVISIONAL (no gateado)'),
+  productos: PROV(LISTA)
+    .optional()
+    .describe('Productos o servicios tal como los nombra la evidencia · lista · PROVISIONAL (no gateado)'),
+  sedes: PROV(LISTA)
+    .optional()
+    .describe('Lugares donde atiende, tal como los nombra la evidencia · lista · PROVISIONAL (no gateado)'),
 
   // Estampado por campo · alternativa a la forma-objeto: en vez de envolver
   // cada valor, se manda la procedencia junta acá. El Consolidador la fusiona
