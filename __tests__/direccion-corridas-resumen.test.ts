@@ -122,12 +122,34 @@ describe('sin tope', () => {
   })
 })
 
+describe('el tope de páginas', () => {
+  it('🔴 una fuente que nunca termina se declara: completo es falso', async () => {
+    const filas = Array.from({ length: 1000 }, (_, i) => inv({ id: `t${i}` }))
+    let pag = 0
+    const consulta = (datos: unknown[]) => { const q = { select: () => q, gte: () => q, lt: () => q, eq: () => q, in: () => q, is: () => q, order: () => q, limit: () => q, maybeSingle: () => q, single: () => q, range: () => { pag++; return Promise.resolve({ data: datos.map((f, i) => ({ ...(f as object), id: `p${pag}-${i}`, dispatch_key: `p${pag}-${i}` })), error: null }) } }; return q }
+    const db = { from: (t: string) => consulta(t === 'agent_invocations' ? filas : []) }
+    const r = await leerResumenDeCorridas({ db, ahora: () => AHORA, env: {} } as never, { desde: '2026-11-02', hasta: '2026-11-02' })
+    expect(r.cuerpo.completo).toBe(false)
+    expect((r.cuerpo.fuentes as Array<Record<string, unknown>>).find((f) => f.fuente === 'agent_invocations')).toMatchObject({ truncado: true })
+  })
+})
+
 describe('el cliente y la entrada', () => {
   it('🔴 con client_id solo ese', async () => {
     const db = new DbFalsa().semilla('agent_invocations', [inv({ client_id: 'c1' }), inv({ client_id: 'c2' })])
     const g = grupos(await leer(db, { client_id: 'c2' }))
     expect(g).toHaveLength(1)
     expect(g[0].client_id).toBe('c2')
+  })
+
+  it('🔴 una corrida de varios clientes va al mismo renglón que en la lista', async () => {
+    const db = new DbFalsa().semilla('agent_invocations', [
+      inv({ id: 'a', workflow_execution_id: 'varios', client_id: 'c1', started_at: '2026-11-02T12:00:00Z' }),
+      inv({ id: 'b', workflow_execution_id: 'varios', client_id: 'c2', started_at: '2026-11-02T13:00:00Z' }),
+    ])
+    const lista = await leerCorridas(ctx(db), { dias: 7 })
+    expect(lista.corridas[0].client_id).toBe('c2')
+    expect(grupos(await leer(db))[0]).toMatchObject({ client_id: 'c2', ejecuciones: 1 })
   })
 
   it('una corrida sin cliente va en su propio renglón', async () => {

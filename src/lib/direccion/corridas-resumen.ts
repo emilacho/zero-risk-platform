@@ -66,6 +66,8 @@ export async function leerResumenDeCorridas({ db, ahora }: Contexto, o: Opciones
   const grupos = new Map<string, { inv: Fila[]; des: Fila[] }>()
   const grupo = (id: string) => { const g = grupos.get(id) ?? { inv: [], des: [] }; grupos.set(id, g); return g }
   let filas_sin_ejecucion = 0
+  // la lista lee de lo más nuevo a lo más viejo: una corrida de varios clientes va al mismo renglón si aquí se recorre igual
+  inv.reverse(); des.reverse()
   for (const i of inv) { const id = texto(i.workflow_execution_id); if (!id) { filas_sin_ejecucion++; continue } grupo(ejecucionBase(id)).inv.push(i) }
   for (const d of des) { const id = texto(d.workflow_execution_id); if (!id) { filas_sin_ejecucion++; continue } grupo(ejecucionBase(id)).des.push(d) }
 
