@@ -121,7 +121,7 @@ describe('1a · cada paso es su propia llamada y «hecha» solo al terminar', ()
   })
   it('el cron sin pendientes responde «no hay pendientes» y no corre nada', async () => {
     const { db, filas } = basePasos(['cuentas_y_comentarios', 'tendencias', 'bodega', 'transcripcion'].map((paso) => ({ client_id: CID, dia: DIA, paso, estado: 'hecha', intentos: 1, iniciado_en: ahora.toISOString() })))
-    const r = await correrElSiguientePaso({ db: db as never, ahora, env: { PORTERO_TENDENCIAS: 'on' }, clientes: [CID] }, { workflowId: 'w', ejecucionId: 'e' })
+    const r = await correrElSiguientePaso({ db: db as never, ahora, env: { PORTERO_TENDENCIAS: 'on', PORTERO_FUENTES_NUEVAS: 'off' }, clientes: [CID] }, { workflowId: 'w', ejecucionId: 'e' })
     expect(r).toMatchObject({ ok: true, estado: 'no_hay_pendientes', pendientes: 0 })
     expect(filas).toHaveLength(4)
   })
