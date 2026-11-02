@@ -113,10 +113,12 @@ export function eslogan_declarado(opciones: unknown): string | null {
 }
 
 /**
- * 01-nov · ADENDA de Emilio: el eslogan que el cliente YA usa es un HECHO, no una opción. Se lee en este orden: el declarado con su marca, la columna, y la única opción sin rótulo de propuesta cuando su procedencia dice que es frase propia
- * (la marca se pierde por el camino y la procedencia queda). Sin esa procedencia no se adivina: un lema que propuso un modelo no pasa por eslogan. Puro.
+ * 02-nov · ADENDA 3 de Emilio (deroga «es un hecho, úsalo»): la frase que el cliente usa viaja como CONTEXTO: los agentes la usan, la adaptan o proponen otra mejor, sin tener que explicar por qué.
+ * Solo si la declaró el dueño, manda, y aun así se pueden sugerir variantes. Se lee en este orden: el declarado con su marca, la columna, y la única opción sin rótulo de propuesta cuando su procedencia dice que es frase propia
+ * (la marca se pierde por el camino y la procedencia queda). Sin esa procedencia no se adivina: un lema que propuso un modelo no pasa por frase del cliente. Puro.
  */
-export const REGLA_DEL_ESLOGAN = 'es un activo de marca que el cliente ya usa: úsalo. Si propones otro, di por qué y déjalo como propuesta, sin reemplazarlo'
+export const REGLA_DEL_ESLOGAN = 'es contexto: úsala, adáptala o propón otra mejor'
+export const reglaDelEslogan = (fuente: string): string => (/due[nñ]o/i.test(fuente) ? 'la declaró el dueño: manda; puedes sugerir variantes como propuesta' : REGLA_DEL_ESLOGAN)
 const OPCION_PROPUESTA = /^\s*PROPUESTA\b|\[propuesta/i
 export function esloganDelCliente(bb: Record<string, unknown> | null | undefined): { texto: string; fuente: string } | null {
   if (!bb) return null
@@ -126,7 +128,7 @@ export function esloganDelCliente(bb: Record<string, unknown> | null | undefined
   const fuente = typeof metas?.tagline_opciones?.fuente === 'string' ? metas.tagline_opciones.fuente : ''
   const fuenteDeLaColumna = typeof metas?.tagline?.fuente === 'string' ? metas.tagline.fuente : ''
   if (declarado) return { texto: declarado, fuente: fuente === 'dueno' ? 'lo declaró el dueño' : 'frase propia del cliente, declarada' }
-  if (typeof bb.tagline === 'string' && bb.tagline.trim()) return { texto: bb.tagline.trim(), fuente: fuenteDeLaColumna || 'hallada en sus propios canales' }
+  if (typeof bb.tagline === 'string' && bb.tagline.trim()) return { texto: bb.tagline.trim(), fuente: fuenteDeLaColumna || 'según el manual' }
   if (!/frase propia/i.test(fuente)) return null
   const propias = (lista(opciones) ?? []).filter((o) => !OPCION_PROPUESTA.test(o) && !esLemaCitado(o))
   if (propias.length !== 1) return null

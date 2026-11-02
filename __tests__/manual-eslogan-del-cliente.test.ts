@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
-import { columnasDelBorrador, esloganDelCliente, REGLA_DEL_ESLOGAN } from '../src/lib/manual/campos-del-manual'
+import { columnasDelBorrador, esloganDelCliente, REGLA_DEL_ESLOGAN, reglaDelEslogan } from '../src/lib/manual/campos-del-manual'
 import { conservarLoDelDueno } from '../src/lib/manual/edicion-del-dueno'
 import { renderManualLimpio } from '../src/lib/brand-book-render-limpio'
 import { adjuntoDelCliente } from '../src/lib/portero-alimenta/contexto-del-cliente'
@@ -55,18 +55,32 @@ describe('una versión nueva', () => {
   })
 })
 
+describe('🔴 ADENDA 3: contexto, salvo lo que declaró el dueño', () => {
+  it('nada obliga ni pide explicación', () => {
+    expect(REGLA_DEL_ESLOGAN).toBe('es contexto: úsala, adáptala o propón otra mejor')
+    expect(reglaDelEslogan('hallada en su sitio')).toBe(REGLA_DEL_ESLOGAN)
+  })
+  it('🔴 si la declaró el dueño, manda y admite variantes', () => {
+    expect(reglaDelEslogan('lo declaró el dueño')).toMatch(/manda.*variantes/)
+    expect(reglaDelEslogan('dueno')).toMatch(/manda/)
+  })
+  it('🔴 la columna sin fuente no se rotula como hallada en sus canales', () => {
+    expect(esloganDelCliente({ tagline: 'Algo' })?.fuente).toBe('según el manual')
+  })
+})
+
 describe('🔴 el manual leído', () => {
   const leer = (bb: Record<string, unknown>) => renderManualLimpio({ brand_book: { content_text: JSON.stringify({ brand_book_draft: bb }) }, client_name: 'X', country: null })
-  it('lo presenta como hecho con su regla, y ya no entre los lemas propuestos', () => {
+  it('🔴 lo presenta como contexto, sin obligación ni pedir explicación, y ya no entre los lemas propuestos', () => {
     const t = leer(BORRADOR).texto
-    expect(t).toMatch(/ESLOGAN QUE EL CLIENTE YA USA[\s\S]*Cuando tengas esa sed/)
-    expect(t).toMatch(/si propones otro, di por qué/i)
+    expect(t).toMatch(/UNA FRASE QUE EL CLIENTE USA \(es contexto: úsala, adáptala o propón otra mejor\)[\s\S]*Cuando tengas esa sed/)
+    expect(t).not.toMatch(/úsalo|di por qué|YA USA/i)
     expect(t.slice(t.indexOf('LEMAS PROPUESTOS'))).not.toMatch(/Cuando tengas esa sed/)
     expect(t).toMatch(/LEMAS PROPUESTOS[\s\S]*Fresco y bueno/)
   })
   it('sin eslogan no imprime un título huérfano ni lo declara como hueco', () => {
     const r = leer({ tagline_opciones: ['PROPUESTA: uno'] })
-    expect(r.texto).not.toMatch(/ESLOGAN QUE EL CLIENTE/)
+    expect(r.texto).not.toMatch(/FRASE QUE EL CLIENTE/)
     expect(r.omitidas).not.toContain('_eslogan')
   })
 })
@@ -77,7 +91,8 @@ describe('🔴 la carpeta', () => {
     const db = new DbFalsa().semilla('client_brand_books', [manual({ version: 1, content_text: '{}', tagline: 'Viejo' }), manual({}), manual({ client_id: 'otro', version: 9, tagline: 'Ajeno' })]).semilla('cerebro_fichas', [])
     const c = await adjuntoDelCliente(db as never, C)
     expect(c.eslogan).toMatchObject({ texto: 'Cuando tengas esa sed, aquí estamos!', regla: REGLA_DEL_ESLOGAN })
-    expect(textoDeLaCarpeta(c)).toMatch(/Eslogan que el cliente ya usa[\s\S]*Cuando tengas esa sed[\s\S]*si propones otro/i)
+    expect(textoDeLaCarpeta(c)).toMatch(/Una frase que el cliente usa \(contexto\)[\s\S]*Cuando tengas esa sed[\s\S]*propón otra mejor/i)
+    expect(textoDeLaCarpeta(c)).not.toMatch(/úsalo|di por qué|ya usa/i)
   })
   it('🔴 si la lectura del manual falla o lanza, la carpeta viaja igual (E15 de CC3)', async () => {
     const fichas = new DbFalsa().semilla('cerebro_fichas', [])

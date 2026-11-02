@@ -24,7 +24,7 @@ import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia,
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
 import { estadoDeLasSedes } from '../sedes/por-abrir'
-import { esloganDelCliente, REGLA_DEL_ESLOGAN } from '../manual/campos-del-manual'
+import { esloganDelCliente, reglaDelEslogan } from '../manual/campos-del-manual'
 
 /** lee el eslogan del manual vigente; un contenido ilegible no tumba la lectura */
 function esloganParaLaCadena(m: { tagline?: string | null; content_text?: string | null } | undefined): { texto: string; regla: string } | null {
@@ -32,7 +32,7 @@ function esloganParaLaCadena(m: { tagline?: string | null; content_text?: string
   let borrador: Record<string, unknown> = {}
   try { borrador = (JSON.parse(m.content_text ?? '') as { brand_book_draft?: Record<string, unknown> }).brand_book_draft ?? {} } catch { /* queda la columna */ }
   const e = esloganDelCliente({ ...borrador, ...(m.tagline ? { tagline: m.tagline } : {}) })
-  return e ? { texto: e.texto, regla: REGLA_DEL_ESLOGAN } : null
+  return e ? { texto: e.texto, regla: `${e.fuente}; ${reglaDelEslogan(e.fuente)}` } : null
 }
 
 const fallo = (e: { message?: string; code?: string } | null): never => { throw Object.assign(new Error(e?.message ?? 'error de la base'), { code: e?.code }) }
