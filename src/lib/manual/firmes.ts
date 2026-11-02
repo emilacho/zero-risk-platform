@@ -52,7 +52,8 @@ export function aplicarMeta<T extends Record<string, unknown>>(manual: T, inform
   const previa = (manual._field_meta && typeof manual._field_meta === 'object' ? manual._field_meta : {}) as Record<string, Record<string, unknown>>
   const nueva = metaDeCampos(manual, informe, excluir)
   const merged: Record<string, unknown> = { ...previa }
-  for (const [c, m] of Object.entries(nueva)) merged[c] = { ...(previa[c] ?? {}), ...m }
+  // 02-nov · lo propuesto sigue siendo propuesta tras la puerta, salvo que le queden pendientes: el dueño lo ve «por validar», no como dato
+  for (const [c, m] of Object.entries(nueva)) merged[c] = { ...(previa[c] ?? {}), ...m, ...(previa[c]?.estado === 'propuesta_del_agente' && m.estado !== 'con_pendientes' ? { estado: 'propuesta_del_agente' } : {}) }
   return { ...manual, _field_meta: merged }
 }
 

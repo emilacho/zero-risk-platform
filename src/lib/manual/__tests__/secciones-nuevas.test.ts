@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { renderManualLimpio } from '@/lib/brand-book-render-limpio'
 import { CAMPOS, CAMPO_POR_CLAVE, evaluarCompletitud, obligatoriosPara } from '../campos-del-manual'
 import { editarManualDelDueno, EDITABLES_DEL_TABLERO } from '../edicion-del-dueno'
-import { hojasDeTexto } from '../hechos'
+import { aplicarMeta, camposFirmes } from '../firmes'
+import { evaluarHechos, hojasDeTexto } from '../hechos'
 import { armarPedidos, CAMPOS_PROPONIBLES, camposFaltantes } from '../propuesta'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
 
@@ -77,6 +78,26 @@ describe('la regla de Emilio · lo que no existe se propone', () => {
     const t = pedidos(['productos'])[0].task
     for (const dato of ['teléfonos', 'direcciones', 'horarios', 'precios', 'fechas', 'cifras']) expect(t).toContain(dato)
     expect(t).toMatch(/nunca se inventan/)
+  })
+})
+
+describe('la puerta del manual y lo propuesto', () => {
+  const pasar = (manual: Record<string, unknown>) => aplicarMeta(manual, evaluarHechos({ manual, fuentes: [] } as never))
+  const META = { fuente: 'propuesta del agente', razon: 'r' }
+
+  it('🔴 lo propuesto sigue siendo propuesta tras la puerta, con su fuente', () => {
+    const r = pasar({ vision: 'Ser la cocina que la gente recuerda [propuesta del agente — r]', _field_meta: { vision: { estado: 'propuesta_del_agente', ...META } } })
+    expect(r._field_meta.vision).toMatchObject({ estado: 'propuesta_del_agente', fuente: 'propuesta del agente', hechos: 0, provisional: false })
+  })
+
+  it('🔴 lo que no es propuesta recibe el estado de siempre', () => {
+    expect(pasar({ vision: 'Ser la cocina que la gente recuerda', _field_meta: { vision: { estado: 'confirmado' } } })._field_meta.vision).toMatchObject({ estado: 'sin_hechos' })
+  })
+
+  it('🔴 con un dato duro sin fuente manda «con pendientes»: no se oculta tras la propuesta', () => {
+    const r = pasar({ historia_y_origen: 'Fundado en 2015', _field_meta: { historia_y_origen: { estado: 'propuesta_del_agente', ...META } } })
+    expect(r._field_meta.historia_y_origen).toMatchObject({ estado: 'con_pendientes', provisional: true })
+    expect(camposFirmes(r).provisionales).toContain('historia_y_origen')
   })
 })
 
