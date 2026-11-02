@@ -1,10 +1,9 @@
 /**
- * 01-nov · ADENDA 1 del equipo del manual · PARTE 4 · EL ESLOGAN REAL LLEGA AL BRIEF, A LA CADENA POR FILAS Y A LA PIEZA.
- * Hallazgo (HALLAZGO-CC2-brief-y-pieza-no-reciben-el-eslogan): los tres flujos piden el manual con una lista FIJA de columnas de `client_brand_books` y `tagline` no estaba. Con #817 el eslogan queda guardado ahí.
- * Ahora: (1) el GET trae `tagline`; (2) la guarda lo pasa como `manual_tagline` (texto acotado, sin saltos); (3) el nodo que arma el pedido imprime «ESLOGAN QUE EL CLIENTE YA USA» con la misma regla que el plan:
- * es un hecho de la marca, se usa; otro eslogan va como PROPUESTA, declarada. Sin `tagline`, el pedido queda IDÉNTICO a hoy.
+ * 02-nov · ADENDA 3 del equipo del manual · LA FRASE QUE EL CLIENTE USA LLEGA AL BRIEF, A LA CADENA POR FILAS Y A LA PIEZA COMO CONTEXTO (reemplaza la parte 4 del 01-nov, que la trataba como hecho obligatorio).
+ * Los tres flujos piden el manual con una lista FIJA de columnas de `client_brand_books`; el GET trae `tagline`, la guarda lo pasa como `manual_tagline` y el nodo que arma el pedido imprime «UNA FRASE QUE EL CLIENTE USA (contexto)».
+ * Sin obligación: se usa, se adapta o se propone otra mejor; las propuestas son aporte creativo y no se justifican. Solo si la declaró el dueño manda (palabra del dueño). Sin `tagline`, el pedido queda IDÉNTICO a hoy.
  *   · Brief `PQdIgbuFexuBsoh8` y copia por filas `BNXqlaX1oHSfZIpF` (mismo código): el bloque va tras el texto del manual.
- *   · Pieza `lVCLzxQCKNkd3uS0`: el bloque va antes del brief; si el brief pide otro, se declara en `no_pude_cumplir`.
+ *   · Pieza `lVCLzxQCKNkd3uS0`: el bloque va antes del brief.
  */
 import { cambiarCodigo, nodo } from './lib.mjs'
 
@@ -16,10 +15,10 @@ const GUARDA_ANCLA_TEXTO = "    manual_texto: String(m.content_text || ''),\n"
 const GUARDA_TAGLINE = "    // 01-nov · el eslogan real del cliente (client_brand_books.tagline) viaja al nodo que arma el pedido; vacío ⇒ ''\n    manual_tagline: typeof m.tagline === 'string' ? m.tagline.replace(/\\s+/g, ' ').trim().slice(0, 300) : '',\n"
 const GUARDA_PIEZA_ANCLA = '    manual_voz: { voice_description: m.voice_description || null'
 
-const bloque = (regla) => `// 01-nov · EL ESLOGAN QUE EL CLIENTE YA USA (activo de marca EXISTENTE) · viene de client_brand_books.tagline. Sin texto, el pedido queda idéntico a hoy.
+const bloque = (regla) => `// 02-nov · UNA FRASE QUE EL CLIENTE USA (contexto, sin obligación) · viene de client_brand_books.tagline. Sin texto, el pedido queda idéntico a hoy.
 const bloqueEslogan = (typeof prev.manual_tagline === 'string' && prev.manual_tagline.trim())
   ? [
-      '══════ ESLOGAN QUE EL CLIENTE YA USA (activo de marca EXISTENTE) ══════',
+      '══════ UNA FRASE QUE EL CLIENTE USA (contexto) ══════',
       '«' + prev.manual_tagline.trim() + '»',
       ${JSON.stringify(regla)},
       '',
@@ -27,8 +26,8 @@ const bloqueEslogan = (typeof prev.manual_tagline === 'string' && prev.manual_ta
   : [];
 `
 
-const REGLA_BRIEF = 'REGLA: este eslogan es un HECHO de la marca, no una opción. Úsalo cuando el entregable pide eslogan o hilo de marca. Si el plan o tú proponen otro, dilo con todas sus letras en «contradicciones_plan_vs_manual» y rotúlalo PROPUESTA; no lo cambies en silencio.'
-const REGLA_PIEZA = 'REGLA: este eslogan es un HECHO de la marca, no una opción. Si la pieza lleva eslogan, es éste. Si el brief pide otro, no lo reemplaces en silencio: declara la diferencia en «no_pude_cumplir» y rotula cualquier otro como PROPUESTA.'
+const REGLA_BRIEF = 'Es contexto sobre cómo se presenta hoy el cliente, no una obligación: úsala, adáptala o propón otra mejor, libremente; tus propuestas son aporte creativo y no necesitan justificarse. Si la declaró el dueño (palabra del dueño), manda, y aun así puedes sugerir variantes como propuesta.'
+const REGLA_PIEZA = 'Es contexto sobre cómo se presenta hoy el cliente, no una obligación: si la pieza lleva frase de marca puedes usarla, adaptarla o proponer otra mejor, libremente; tus propuestas son aporte creativo. Si la declaró el dueño (palabra del dueño), manda, y aun así puedes sugerir variantes como propuesta.'
 
 function selectNuevo(f, nombre) {
   const n = nodo(f, nombre)
