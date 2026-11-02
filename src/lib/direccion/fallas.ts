@@ -11,6 +11,7 @@ const ECUADOR_MS = 5 * 3_600_000
 const MS_DEL_DIA = 86_400_000
 export const MAX_DIAS_DE_FALLAS = 92
 const TOPE_DE_PEDIDOS = 500
+const PAGINA_DE_N8N = 100
 /** el pedido se cierra apenas vuelve el flujo: medido 0,2 s en la corrida 212902 */
 const MISMA_FALLA_MS = 10_000
 const inicioDelDia = (d: string): number => Date.parse(`${d}T00:00:00Z`) + ECUADOR_MS
@@ -51,11 +52,14 @@ async function leerEjecuciones(fuentes: Fuente[], c: Contexto, a: number, b: num
   if (!base || !llave) { fuentes.push({ fuente: 'n8n', estado: 'sin_credencial', filas: 0, detalle: 'este entorno no tiene la dirección o la llave de n8n' }); return [] }
   const f = c.fetchImpl ?? fetch
   try {
-    const r = await f(`${base.replace(/\/+$/, '')}/api/v1/executions?status=error&limit=100`, { headers: { 'X-N8N-API-KEY': llave, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) })
+    const r = await f(`${base.replace(/\/+$/, '')}/api/v1/executions?status=error&limit=${PAGINA_DE_N8N}`, { headers: { 'X-N8N-API-KEY': llave, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) })
     if (!r.ok) { fuentes.push({ fuente: 'n8n', estado: 'error', filas: 0, detalle: `n8n respondió HTTP ${r.status}` }); return [] }
     const j = await r.json() as { data?: Fila[] }
-    const filas = (Array.isArray(j.data) ? j.data : []).filter((e) => { const t = Date.parse(String(e.stoppedAt ?? e.startedAt)); return t >= a && t < b })
-    fuentes.push({ fuente: 'n8n', estado: 'ok', filas: filas.length, detalle: 'n8n conserva pocas horas de ejecuciones: esto no es el historial completo del período' })
+    const todas = Array.isArray(j.data) ? j.data : []
+    // n8n entrega de la más nueva a la más vieja: con la página llena pueden quedar fallas más viejas fuera, y se declara
+    const llena = todas.length >= PAGINA_DE_N8N
+    const filas = todas.filter((e) => { const t = Date.parse(String(e.stoppedAt ?? e.startedAt)); return t >= a && t < b })
+    fuentes.push({ fuente: 'n8n', estado: 'ok', filas: filas.length, ...(llena ? { truncado: true } : {}), detalle: 'n8n conserva pocas horas de ejecuciones: esto no es el historial completo del período' })
     return filas
   } catch (e) {
     fuentes.push({ fuente: 'n8n', estado: 'error', filas: 0, detalle: sinSecretos(e instanceof Error ? e.message : String(e)) ?? 'error' })

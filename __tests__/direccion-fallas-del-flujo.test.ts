@@ -91,6 +91,43 @@ describe('lo que no se pudo leer se declara', () => {
   })
 })
 
+describe('lo que se corta se declara', () => {
+  it('🔴 a n8n solo le pide las ejecuciones en error', async () => {
+    const urls: string[] = []
+    const f = (async (u: string) => { urls.push(String(u)); return new Response(JSON.stringify({ data: [] })) }) as unknown as typeof fetch
+    await leer(ctx(dbCon([]), f))
+    expect(urls[0]).toContain('status=error')
+  })
+  it('🔴 con la página de n8n llena queda incompleto: las más viejas pudieron quedar fuera', async () => {
+    const r = await leer(ctx(dbCon([]), n8n(Array.from({ length: 100 }, (_, i) => ({ ...SUELTA, id: String(i) })))))
+    expect(r.completo).toBe(false)
+    expect(r.fuentes.find((f) => f.fuente === 'n8n')).toMatchObject({ truncado: true })
+  })
+  it('🔴 con 99 ejecuciones no se declara corte', async () => {
+    const r = await leer(ctx(dbCon([]), n8n(Array.from({ length: 99 }, (_, i) => ({ ...SUELTA, id: String(i) })))))
+    expect(r.completo).toBe(true)
+  })
+  it('🔴 con 500 pedidos queda incompleto y pide ese tope', async () => {
+    let tope = 0
+    const q: Record<string, unknown> = {}
+    for (const m of ['select', 'eq', 'gte', 'lt', 'order']) q[m] = () => q
+    q.limit = async (n: number) => { tope = n; return { data: Array.from({ length: 500 }, (_, i) => ({ ...PEDIDO_NAUFRAGO, id: String(i) })), error: null } }
+    const r = await leer(ctx({ from: () => q }))
+    expect(tope).toBe(500)
+    expect(r.completo).toBe(false)
+    expect(r.fuentes.find((f) => f.fuente === 'plan_cambios')).toMatchObject({ truncado: true })
+  })
+  it('🔴 con 499 pedidos no se declara corte', async () => {
+    const r = await leer(ctx(dbCon(Array.from({ length: 499 }, (_, i) => ({ ...PEDIDO_NAUFRAGO, id: String(i) })))))
+    expect(r.completo).toBe(true)
+  })
+  it('🔴 el detalle del pedido sale sin secretos', async () => {
+    const LLAVE = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789'
+    const { fallas } = await leer(ctx(dbCon([{ ...PEDIDO_NAUFRAGO, despertar_detalle: `falló con la llave ${LLAVE}` }])))
+    expect(String(fallas[0].detalle)).not.toContain(LLAVE)
+  })
+})
+
 describe('la entrada se valida', () => {
   it.each([[{ desde: 'x', hasta: '2026-11-02' }], [{ desde: '2026-11-03', hasta: '2026-11-02' }], [{ desde: '2026-01-01', hasta: '2026-11-02' }], [{ ...HOY, client_id: "a'; drop" }], [{ desde: '2026-02-31', hasta: '2026-03-01' }]])('🔴 rechaza %j', async (o) => {
     expect((await leerFallasDelFlujo(ctx(dbCon([])), o)).status).toBe(400)
