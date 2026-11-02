@@ -27,7 +27,7 @@ import {
 } from "@/lib/forms/tally-webhook"
 
 export const dynamic = "force-dynamic"
-export const maxDuration = 30
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   // Read raw body BEFORE parse · HMAC needs exact bytes

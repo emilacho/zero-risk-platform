@@ -13,7 +13,7 @@ import { cuerpoSeguro, rastroDelTablero } from '@/lib/oficina/tablero/comun'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 800
 
 export async function PATCH(request: Request, ctx: { params: { client_id: string } }) {
   const auth = checkInternalKey(request)

@@ -11,7 +11,7 @@ import type { Db } from '@/lib/manual/revision'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   // la llave interna se comprueba AQUÍ (el lint de canon la exige en el archivo de la ruta); `autorizar` añade la llave de despacho donde corresponde

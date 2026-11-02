@@ -32,7 +32,7 @@ import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 800
 
 interface CalcomWebhookEvent {
   triggerEvent?: string

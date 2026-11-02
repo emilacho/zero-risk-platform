@@ -28,7 +28,7 @@ import { sendEmail } from '@/lib/email/resend'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 800
 
 const SUNSET_DATE = '2026-06-03' // 2 weeks post-Sprint-3-D2 ship
 

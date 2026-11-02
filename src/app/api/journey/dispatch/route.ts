@@ -21,7 +21,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 800
 
 function checkInternalKey(req: Request): { ok: boolean; reason?: string } {
   const headerKey = req.headers.get('x-api-key') || ''

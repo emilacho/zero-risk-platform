@@ -24,7 +24,7 @@ import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 90
+export const maxDuration = 800
 
 interface InfluencerTarget {
   /** IG handle WITHOUT the @ · e.g. "naufrago.ec" */

@@ -11,7 +11,7 @@ import { esObjeto, puertosReales } from '@/lib/oficina/ruta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const sala = (process.env.SALA_DISPATCH_KEY ?? '').trim()

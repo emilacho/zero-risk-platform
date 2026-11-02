@@ -320,7 +320,7 @@ Si no hay suficientes datos para detectar patterns significativos, devuelve arra
       },
       body: JSON.stringify({
         model,
-        max_tokens: 4096,
+        max_tokens: 20000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       }),

@@ -8,7 +8,7 @@ import { registrarMetricas, type Db } from '@/lib/metricas/metricas'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const llave = checkInternalKey(request)

@@ -41,7 +41,7 @@ import type {
 } from "@/lib/cascade-types"
 
 export const runtime = "nodejs"
-export const maxDuration = 300 // 5 min · cascade ~120-180s typical
+export const maxDuration = 800 // 5 min · cascade ~120-180s typical
 
 const STORAGE_BUCKET = "client-websites"
 

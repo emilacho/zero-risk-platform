@@ -114,7 +114,7 @@ Responde en JSON con este formato:
       },
       body: JSON.stringify({
         model: DEFAULT_ANALYSIS_MODEL,
-        max_tokens: 2000,
+        max_tokens: 20000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       }),

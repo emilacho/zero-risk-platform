@@ -39,7 +39,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 // canon · canon canon-Vercel · canon-canon-trigger wire es delgado ·
 // canon-canon-default 60s (post-shadow no hace dispatch · sólo append +
 // decide + log) · canon-canon-no need bumping.
-export const maxDuration = 60
+export const maxDuration = 800
 
 const ACCEPTED_SOURCES: ReadonlySet<TriggerSource> = new Set([
   'synthetic',

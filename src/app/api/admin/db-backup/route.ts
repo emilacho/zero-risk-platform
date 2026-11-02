@@ -38,7 +38,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { volcarTodo } from '@/lib/db-backup/volcado'
 
 export const runtime = 'nodejs'
-export const maxDuration = 290
+export const maxDuration = 800
 // La base vive en eu-west-1 (Irlanda): la función corre en Dublín para que cada ida y vuelta del volcado cueste milisegundos, no ~80 ms desde EE. UU.
 export const preferredRegion = 'dub1'
 

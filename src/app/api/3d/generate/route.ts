@@ -37,7 +37,7 @@ const PRICING_BY_MODE: Record<string, number> = {
 }
 
 export const runtime = 'nodejs'
-export const maxDuration = 300
+export const maxDuration = 800
 
 const VALID_FORMATS = ['glb', 'fbx', 'obj', 'usdz'] as const
 const VALID_TYPES = ['object', 'character', 'environment'] as const

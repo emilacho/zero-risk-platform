@@ -12,7 +12,7 @@ import { puertosDeSupabase } from '@/lib/planeacion/prevuelo-supabase'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 800
 
 const STATUS: Record<string, number> = {
   entrada_invalida: 400, dry_run_no_booleano: 400,

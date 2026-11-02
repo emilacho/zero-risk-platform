@@ -10,7 +10,7 @@ import { configuracionReal, encendido, firmaDeLaPeticion, puertosReales, reinten
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const cuerpo = await request.text()

@@ -24,7 +24,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 800
 
 const VALID_PHASES = new Set([
   'DISCOVER', 'STRATEGIZE', 'SCAFFOLD', 'BUILD', 'HARDEN', 'LAUNCH', 'OPERATE', 'DONE', 'FAILED',

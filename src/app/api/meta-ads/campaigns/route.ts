@@ -19,7 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 800
 
 const META_GRAPH_BASE = 'https://graph.facebook.com/v21.0'
 

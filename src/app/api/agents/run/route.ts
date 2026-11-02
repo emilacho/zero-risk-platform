@@ -607,7 +607,7 @@ export async function POST(request: Request) {
         stepName: (context.step_name as string | null) ?? null,
         extra: (context.extra as Record<string, unknown> | undefined) ?? undefined,
       }),
-      signal: AbortSignal.timeout(290_000),
+      signal: AbortSignal.timeout(790_000),
     })
 
     if (!railwayResp.ok) {

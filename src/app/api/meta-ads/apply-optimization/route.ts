@@ -33,7 +33,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 800
 
 const META_GRAPH_BASE = 'https://graph.facebook.com/v21.0'
 const VALID_ACTIONS = new Set(['pause', 'resume', 'update_budget', 'kill_creative'])

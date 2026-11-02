@@ -353,7 +353,7 @@ Genera JSON:
       },
       body: JSON.stringify({
         model: this.model,
-        max_tokens: 4096,
+        max_tokens: 20000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       }),

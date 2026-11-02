@@ -29,7 +29,7 @@ import {
 // timeout, which we need for parallel font fetch + N renders.
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 800
 
 
 const VALID_PLATFORMS: CarouselPlatform[] = [

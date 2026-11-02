@@ -36,7 +36,7 @@ import { dispatchCostMonitorAlert } from '@/lib/cost-monitor-alert'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30 // seconds · aggregation is light
+export const maxDuration = 800 // seconds · aggregation is light
 
 // Canonical thresholds (USD). Snapshotted into each cost_monitor_runs row so
 // historical rows stay interpretable when thresholds tune later.

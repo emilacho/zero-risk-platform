@@ -86,7 +86,7 @@ export async function POST(request: Request) {
           },
           body: JSON.stringify({
             model: 'claude-haiku-4-5-20251001',
-            max_tokens: 250,
+            max_tokens: 4096,
             system: `Eres RUFLO, clasificador de leads de Zero Risk Ecuador (seguridad industrial: EPP, extintores, señalización, capacitaciones). Clasifica leads como "caliente" (urgencia + presupuesto), "tibio" (interesado sin urgencia), o "frio" (spam/no relevante). Responde SOLO JSON válido.`,
             messages: [{
               role: 'user',
