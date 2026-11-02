@@ -12,7 +12,7 @@ import { sanitizeProseFields } from '@/lib/brand-book-caveat-extractor'
 import { empujarManualAlCerebro } from '@/lib/brain/push-al-terminar'
 import { columnasDelBorrador, evaluarCompletitud, fugasDeLasColumnas } from '@/lib/manual/campos-del-manual'
 import { conservarLoDelDueno } from '@/lib/manual/edicion-del-dueno'
-import { leerPedidoDelManual, selloDeLaVersionPedida, sinCambiosReales, type PedidoDelManual } from '@/lib/manual/pedido-de-cambios'
+import { leerPedidoDelManual, resultadoDelPedido, selloDeLaVersionPedida, sinCambiosReales, type PedidoDelManual } from '@/lib/manual/pedido-de-cambios'
 import { completarVisualesDesdeLaFicha } from '@/lib/manual-visuales-desde-la-ficha'
 
 export const runtime = 'nodejs'
@@ -229,7 +229,9 @@ export async function POST(req: Request, { params }: RouteContext) {
   dueno = conservarLoDelDueno((previa.data ?? null) as Record<string, unknown> | null, bb as Record<string, unknown>, pedido ?? undefined)
   // 02-nov · como en el plan: un pedido que no cambió nada no guarda copia. El flujo cierra el pedido con este recibo
   if (pedido && sinCambiosReales(previa.data?.content_text, dueno.bb as Record<string, unknown>)) {
-    return NextResponse.json({ persisted: false, sin_cambios_reales: true, id: previaId, version: version - 1, client_id: clientId, manual_cambio_id: pedido.id })
+    // sin versión, lo que declaró el equipo solo puede quedar en el pedido. Si no se pudo escribir, el recibo lo dice y el pedido se cierra igual
+    const g = await supabase.from('plan_cambios').update({ resultado: resultadoDelPedido(dueno.bb as Record<string, unknown>, true), actualizado_en: new Date().toISOString() }).eq('id', pedido.id)
+    return NextResponse.json({ persisted: false, sin_cambios_reales: true, id: previaId, version: version - 1, client_id: clientId, manual_cambio_id: pedido.id, ...(g.error ? { resultado_sin_guardar: g.error.message?.slice(0, 200) ?? 'error' } : {}) })
   }
   const rowBase = buildBrandBookRow(clientId, dueno.bb as typeof bb, body, version)
 
@@ -279,7 +281,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   const brain_push = empujarManualAlCerebro({ client_id: clientId, source_id: data?.id })
   let pedidoSinLigar: string | null = null
   if (pedido && data?.id) {
-    const l = await supabase.from('plan_cambios').update({ manual_nuevo_id: data.id, actualizado_en: new Date().toISOString() }).eq('id', pedido.id)
+    const l = await supabase.from('plan_cambios').update({ manual_nuevo_id: data.id, resultado: resultadoDelPedido(dueno.bb as Record<string, unknown>, false), actualizado_en: new Date().toISOString() }).eq('id', pedido.id)
     if (l.error) pedidoSinLigar = l.error.message?.slice(0, 200) ?? 'error'
   }
 
