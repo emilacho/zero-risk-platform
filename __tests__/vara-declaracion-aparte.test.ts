@@ -60,6 +60,8 @@ describe('el bloque nuevo solo cambia eso', () => {
       [BASE, CON_TEXTO_PROPIO], [{ ...BASE, voice_description: 'PENDIENTE' }, SIN_TEXTO_PROPIO], [{ ...BASE, positioning: '' }, CON_TEXTO_PROPIO],
       [{ ...BASE, icp_summary: 'corto' }, SIN_TEXTO_PROPIO], [{ positioning: '', icp_summary: '', voice_description: '' }, {}], [{ ...BASE, voice_description: 'PROPUESTA (no es dato del cliente): ' + VOZ }, SIN_TEXTO_PROPIO],
     ]
-    for (const [d, g] of casos) expect(usoDeLoDisponible(d, g)).toEqual(viejo(d, g))
+    // el texto del motivo del rótulo cambia a propósito (pide declarar aparte, ya no escribir el prefijo); lo demás es idéntico
+    const sinMotivoDelRotulo = (r: any) => ({ ...r, sin_usar: (r.sin_usar ?? []).map((x: any) => (x.rotulo ? { ...x, motivo: '(rótulo)' } : x)) })
+    for (const [d, g] of casos) expect(sinMotivoDelRotulo(usoDeLoDisponible(d, g))).toEqual(sinMotivoDelRotulo(viejo(d, g)))
   })
 })

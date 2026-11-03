@@ -8,10 +8,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { recorrer } from './_emulador-n8n'
+import { sinPropuestaAparte } from './_sin-propuesta-aparte'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
 const leer = (c: string) => JSON.parse(fs.readFileSync(path.join(RAIZ, c, 'ssLtwYPt7zxuvnM2.json'), 'utf8'))
-const nuevo = leer('nuevo')
+const nuevo = sinPropuestaAparte(leer('nuevo'))
 const vivo = leer('vivo')
 const codigo = (f: any, n: string): string => f.nodes.find((x: any) => x.name === n).parameters.jsCode
 

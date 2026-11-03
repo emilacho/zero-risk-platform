@@ -7,13 +7,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { sinFraseSedes } from './_sin-frase-sedes'
+import { sinPropuestaAparte } from './_sin-propuesta-aparte'
 import { recorrer } from './_emulador-n8n'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
 const leer = (d: string, id: string) => JSON.parse(fs.readFileSync(path.join(RAIZ, d, `${id}.json`), 'utf8'))
 const PLAN = 'X9F0zp6LQ2xGEYVS', MANUAL = 'ssLtwYPt7zxuvnM2'
 const aplicado = leer('aplicado', PLAN), nuevoPlan = sinFraseSedes(leer('nuevo', PLAN))
-const vivoManual = leer('vivo', MANUAL), nuevoManual = leer('nuevo', MANUAL)
+const vivoManual = leer('vivo', MANUAL), nuevoManual = sinPropuestaAparte(leer('nuevo', MANUAL))
 const AsyncFunction = Object.getPrototypeOf(async () => 0).constructor
 
 const ESLOGAN = { texto: 'Cuando tengas esa hambre de... Náufrago te espera!', fuente: 'Frase propia del cliente hallada en sitio/perfil — literal', regla: 'Es del cliente: úsalo; otro eslogan va como propuesta.' }

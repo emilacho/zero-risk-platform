@@ -6,12 +6,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { sinPropuestaAparte } from './_sin-propuesta-aparte'
 // @ts-expect-error módulo .mjs sin tipos
 import { LINEA_DEL_TOPE } from '../scripts/ops/oficina-marketing/reescritura-del-manual.mjs'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
 const leer = (c: string) => JSON.parse(fs.readFileSync(path.join(RAIZ, c, 'ssLtwYPt7zxuvnM2.json'), 'utf8'))
-const nuevo = leer('nuevo')
+const nuevo = sinPropuestaAparte(leer('nuevo'))
 const vivo = leer('vivo')
 const nodo = (f: any, n: string) => f.nodes.find((x: any) => x.name === n)
 
