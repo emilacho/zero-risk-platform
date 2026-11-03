@@ -37,6 +37,20 @@ describe('cierre al esperar al dueño', () => {
     expect((await correr({ plan_v3: true, dry_run: false, client_id: C })).aplica).toBe(false)
     expect((await correr({ plan_v3: true, dry_run: false, corrida: R })).aplica).toBe(false)
   })
+  it('la condición del «¿cerrar?» exige aplica === true (un plan sin plan_v3 no manda una llamada vacía)', () => {
+    expect(JSON.stringify(nodo(plan, 'V9 · ¿cerrar al esperar al dueño?').parameters.conditions.conditions[0].leftValue)).toBe(JSON.stringify('={{ $json.aplica === true }}'))
+  })
+  it('si la llamada falla, la corrida sigue (continueRegularOutput) y el cierre usa la misma ruta que el de la segunda mitad', () => {
+    const h = nodo(plan, 'V9 · cerrar al esperar al dueño'), h2 = nodo(sub, 'V9 · cerrar la corrida')
+    expect(h.onError).toBe('continueRegularOutput')
+    expect(h.parameters.url).toBe(h2.parameters.url)
+    expect(h.parameters.jsonBody).toBe(h2.parameters.jsonBody)
+  })
+  it('otro plan para un cliente que ya tiene uno lo frena la guarda «¿Ya tiene un plan?», no la corrida viva (así «hecha» no duplica la aprobación)', () => {
+    const g = nodo(plan, '⑥ ¿Ya tiene un plan?').parameters.url as string
+    expect(g).toContain('output_type=eq.campaign_plan_90d')
+    expect(g).toContain('status=not.in.(retired,archived,rejected,deleted)')
+  })
   it('el HTTP no falla la corrida si la fila ya está cerrada (neverError + continueRegularOutput)', () => {
     const h = nodo(plan, 'V9 · cerrar al esperar al dueño')
     expect(h.parameters.options.response.response.neverError).toBe(true)
