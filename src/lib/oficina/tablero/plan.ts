@@ -12,6 +12,7 @@
  */
 import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 import { consultasDeDireccion } from '../../cadena/almacen-supabase'
+import { planEsperaAlManual } from '../../manual/manual-primero'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Db, type Fila, type Manejador, type Salida } from './comun'
 
 /** una campaña de ese plan en estos estados no vuelve a armar: la cadena respondería «ya abierta» (hallazgo de CC3, 01-nov) */
@@ -75,6 +76,10 @@ async function planDecidible(db: Db, planId: string, toca: Salida['toca']): Prom
   if (p.plan.status === 'rejected') return { ok: false, salida: rechazo(409, 'plan_rechazado', 'ese plan está rechazado: no se decide sobre él', t) }
   if (!p.plan.vigente) return { ok: false, salida: rechazo(409, 'no_es_el_vigente', p.plan.por_que_no ?? 'ese plan no es el vigente', t) }
   if (p.plan.status === 'approved') return { ok: false, salida: rechazo(409, 'plan_ya_aprobado', 'ese plan ya está aprobado: su siguiente fase ya arrancó', t) }
+  // 3-nov · firma de Emilio: un plan no se firma ni se cambia antes de aprobar su manual
+  const m = await planEsperaAlManual(db, p.plan.client_id)
+  if (!m.ok) return { ok: false, salida: rechazo(500, 'planes_error', `no pude leer el manual: ${m.error}`, t) }
+  if (m.espera) return { ok: false, salida: rechazo(409, 'plan_espera_al_manual', 'Plan: espera que apruebes el manual. Al aprobarlo, el plan se rehace con ese manual.', t) }
   const c = await leerCompuerta(db, planId)
   if (!c.ok) return { ok: false, salida: rechazo(500, 'planes_error', c.mensaje, t) }
   if (p.plan.tag.compuerta === true && !c.fila) return { ok: false, salida: rechazo(409, 'plan_en_revision', 'ese plan todavía está en revisión de la jefatura: se decide cuando termine', t) }
