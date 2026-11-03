@@ -46,9 +46,9 @@ describe('🔴 la columna', () => {
 })
 
 describe('🔴 el aviso si el pedido cambia', () => {
-  it('el proceso del manual sigue pidiendo con el texto que la regla reconoce', () => {
+  it('la copia guardada del proceso del manual pide con el texto que la regla reconoce (la del 30-oct: no vigila el motor en vivo)', () => {
     const flujo = readFileSync('scripts/worker-staging/ssLtwYPt7zxuvnM2/ssLtwYPt7zxuvnM2-ARREGLADO-e3-2026-10-30.json', 'utf8')
-    expect(flujo).toContain('Eres el DUEÑO ')
+    expect(flujo).toContain('Construye TU sección del brand book')
   })
 })
 
