@@ -18,7 +18,8 @@ const VAL = { client_id: 'c-1', _journey_id: 'j-1', dry_run: false, force_restar
 /** evalúa las expresiones {{ … }} del cuerpo con un «Validate Deal Data» de prueba */
 const evaluar = (plantilla: string) => {
   const $ = (n: string) => { if (n !== 'Validate Deal Data') throw new Error('nodo no previsto ' + n); return { first: () => ({ json: VAL }) } }
-  return plantilla.replace(/\{\{([\s\S]*?)\}\}/g, (_m, e) => String(new Function('$', '$env', `return (${e})`)($, ENV)))
+  const $execution = { id: 'ex-9' }
+  return plantilla.replace(/\{\{([\s\S]*?)\}\}/g, (_m, e) => String(new Function('$', '$env', '$execution', `return (${e})`)($, ENV, $execution)))
 }
 
 describe('E57 guarda en la espera del dueño', () => {
@@ -39,7 +40,9 @@ describe('E57 guarda en la espera del dueño', () => {
   it('el cuerpo es JSON válido: cliente, tipo «manual», journey y el MISMO sobre que hoy sale a la sala', () => {
     const nuevo = JSON.parse(evaluar(nodo(despues, SOBRE).parameters.jsonBody.slice(1)))
     const viejo = JSON.parse(evaluar(nodo(antes, SOBRE).parameters.jsonBody.slice(1)))
-    expect(nuevo).toEqual({ client_id: 'c-1', tipo: 'manual', journey_id: 'j-1', sobre: viejo })
+    // contrato de CC1 (03-nov): sin journey_id aparte (la clave sale de sobre.idempotency_key); con el rastro de auditoría
+    expect(nuevo).toEqual({ client_id: 'c-1', tipo: 'manual', workflow_id: 'LyVoKcrypS5uLyuu', workflow_execution_id: 'ex-9', sobre: viejo })
+    expect(nuevo.sobre.client_id).toBe(nuevo.client_id)
     expect(nuevo.sobre.intent).toBe('planear')
     expect(nuevo.sobre.idempotency_key).toBe('j-1:planear')
   })

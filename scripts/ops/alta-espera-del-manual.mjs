@@ -22,7 +22,7 @@ export function guardarSobreEnEspera(alta) {
   if (!/^=\{/.test(String(p.jsonBody))) throw new Error('el cuerpo del sobre no tiene la forma esperada ("={ … }")')
   const cuerpoSala = String(p.jsonBody).slice(1) // el sobre EXACTO que hoy sale hacia la sala
   p.url = URL_ESPERA
-  p.jsonBody = `={\n  "client_id": "{{ ${V}.client_id }}",\n  "tipo": "manual",\n  "journey_id": "{{ ${V}._journey_id }}",\n  "sobre": ${cuerpoSala}\n}`
+  p.jsonBody = `={\n  "client_id": "{{ ${V}.client_id }}",\n  "tipo": "manual",\n  "workflow_id": "LyVoKcrypS5uLyuu",\n  "workflow_execution_id": "{{ $execution.id }}",\n  "sobre": ${cuerpoSala}\n}`
   const h = p.headerParameters.parameters
   const key = h.find((x) => x.name === 'x-api-key')
   if (!key) throw new Error('el sobre no trae x-api-key')
