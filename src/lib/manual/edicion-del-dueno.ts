@@ -9,6 +9,7 @@
  *  · Editables = los de la definición única (`campos-del-manual.ts`, `editable`); los derivados no se escriben a mano.
  *  · Validar = la vigente pasa a validada POR EL DUEÑO (nueva versión `max+1`, igual que la promoción de la bandeja; los campos no tocados quedan «aceptados por el dueño»).
  *    Quien lo lee lo ve con `quienValido()` (dueño > jefatura > propuesta).
+ *  · Retirar (3-nov): un texto vacío o `null` en `campos.<clave>` deja el campo vacío en una versión nueva, con `_field_meta.<campo>.retirado = true` y su valor anterior. Sin texto no hay nada que empujar a la puerta del dueño.
  * No llama a ningún modelo. La puerta del cerebro entra por parámetro (probable sin red).
  */
 import { CAMPOS, esloganDelCliente, evaluarCompletitud, quienValido, type CampoDelManual } from './campos-del-manual'
@@ -34,7 +35,7 @@ export const EDITABLES_DEL_TABLERO: Readonly<Record<string, CampoDelManual>> = O
   CAMPOS.filter((c) => c.editable).flatMap((c) => [[c.clave, c], ...(c.clave_del_tablero ? [[c.clave_del_tablero, c]] : [])]),
 )
 
-export interface Cambio { clave: string; clave_del_tablero: string; etiqueta: string; valor: string; valor_anterior: string | null }
+export interface Cambio { clave: string; clave_del_tablero: string; etiqueta: string; valor: string; valor_anterior: string | null; retirado?: true }
 
 const comoTexto = (v: unknown): string | null => {
   if (Array.isArray(v)) { const t = v.map((x) => String(x).trim()).filter(Boolean); return t.length ? t.join('\n') : null }
@@ -97,8 +98,9 @@ export async function editarManualDelDueno(db: Db, e: EntradaDeEdicion): Promise
     const campo = EDITABLES_DEL_TABLERO[k]
     if (!campo) return mal(400, 'campo_no_editable', `«${k}» no es un campo que se pueda editar`)
     if (elegidos.some((x) => x.campo === campo)) return mal(400, 'entrada_invalida', `«${k}» viene dos veces`)
-    const texto = typeof v === 'string' ? v.trim() : ''
-    if (!texto || texto.length > TOPE_DEL_TEXTO_DEL_DUENO) return mal(400, 'entrada_invalida', `«${k}» debe tener entre 1 y ${TOPE_DEL_TEXTO_DEL_DUENO.toLocaleString('es-EC')} caracteres`)
+    if (v !== null && typeof v !== 'string') return mal(400, 'entrada_invalida', `«${k}» debe ser un texto`)
+    const texto = (v ?? '').trim()
+    if (texto.length > TOPE_DEL_TEXTO_DEL_DUENO) return mal(400, 'entrada_invalida', `«${k}» debe tener hasta ${TOPE_DEL_TEXTO_DEL_DUENO.toLocaleString('es-EC')} caracteres`)
     elegidos.push({ campo, clave_del_tablero: k, texto })
   }
   const ahora = (e.ahora ?? new Date()).toISOString()
@@ -113,14 +115,14 @@ export async function editarManualDelDueno(db: Db, e: EntradaDeEdicion): Promise
     const meta: Fila = { ...objeto(borrador._field_meta) }
     const nueva = copiaSinIdentidad(vigente)
     for (const { campo, clave_del_tablero, texto } of elegidos) {
-      const { borrador: bv, columna } = valoresNuevos(campo, texto)
+      const { borrador: bv, columna } = texto ? valoresNuevos(campo, texto) : { borrador: null, columna: null }
       const anterior = comoTexto(campo.columna ? vigente[campo.columna] : null) ?? comoTexto(borrador[campo.clave]) ?? (campo.ruta ? comoTexto(borrador[campo.ruta]) : null)
       borrador[campo.clave] = bv
       if (campo.ruta && campo.ruta !== campo.clave) borrador[campo.ruta] = bv
       if (campo.columna) nueva[campo.columna] = columna
       if (campo.clave === 'forbidden_words') nueva.palabras_con_intencion = borrador.palabras_con_intencion = declaradasQueSiguen(vigente, aLista(texto))
-      meta[campo.clave] = { fuente: 'dueno', por: e.reviewer, en: ahora, valor_anterior: anterior, cita }
-      cambios.push({ clave: campo.clave, clave_del_tablero, etiqueta: campo.etiqueta, valor: texto, valor_anterior: anterior })
+      meta[campo.clave] = { fuente: 'dueno', por: e.reviewer, en: ahora, valor_anterior: anterior, cita, ...(texto ? {} : { retirado: true }) }
+      cambios.push({ clave: campo.clave, clave_del_tablero, etiqueta: campo.etiqueta, valor: texto, valor_anterior: anterior, ...(texto ? {} : { retirado: true as const }) })
     }
     borrador._field_meta = meta
     completitud = evaluarCompletitud(borrador, {})
@@ -287,6 +289,7 @@ export async function empujarCamposAlCerebro(d: DepsDelCerebro, x: { client_id: 
   const enviados: string[] = []
   const pendientes: PendienteDelCerebro[] = []
   for (const cambio of x.cambios) {
+    if (cambio.retirado) continue
     const cuerpo = cuerpoParaElCerebro({ client_id: x.client_id, version: x.version, cambio, reviewer: x.reviewer, en: x.en })
     let ultimo: ResultadoDeEnvio = { ok: false, permanente: false, error: 'sin intentar' }
     for (let i = 0; i < 3; i++) {
