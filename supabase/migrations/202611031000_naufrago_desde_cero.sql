@@ -116,7 +116,7 @@ DELETE FROM public.agent_invocation_textos x WHERE x.invocation_id::text IN (SEL
 DELETE FROM public.agents_log x WHERE (x::text ~* 'n[aá]ufrago' OR x::text ILIKE '%0a2ffbd4-957c-4315-a37f-b9e4fbbbb312%');
 
 UPDATE public.agent_invocations x
-SET command = NULL, task_id = NULL, journey_id = NULL, error_message = NULL, metadata = NULL, system_prompt = NULL, input_summary = NULL, output_summary = NULL
+SET session_id = 'vaciada', command = NULL, task_id = NULL, journey_id = NULL, error_message = NULL, metadata = NULL, system_prompt = NULL, input_summary = NULL, output_summary = NULL
 WHERE x.client_id::text = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312';
 UPDATE public.agent_dispatches x SET metadata = '{}'::jsonb WHERE x.client_id::text = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312';
 UPDATE public.agent_dispatch_reconciliations x SET que = 'Trabajo de un cliente reiniciado', evidencia = '{}'::jsonb WHERE x.cliente IN ('0a2ffbd4-957c-4315-a37f-b9e4fbbbb312', 'naufrago', 'naufrago-ec');

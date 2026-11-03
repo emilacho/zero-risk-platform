@@ -20,6 +20,8 @@ describe('🔴 Náufrago desde cero', () => {
     const libro = /UPDATE public\.agent_invocations x\nSET ([^\n]*)\n/.exec(CUERPO)![1]
     for (const c of ['cost_usd', 'started_at', 'ended_at', 'tokens_input', 'tokens_output', 'model', 'client_id', 'created_at']) expect(libro).not.toContain(c)
     for (const c of ['system_prompt', 'input_summary', 'output_summary', 'metadata', 'command', 'error_message']) expect(libro).toContain(`${c} = NULL`)
+    // la columna no admite vacío: sin el id original nadie puede reanudar una conversación vieja
+    expect(libro).toContain("session_id = 'vaciada'")
     expect(CUERPO).toContain('el libro cambió de importe')
   })
   it('🔴 la ficha no se borra: cae en cascada sobre el cerebro. Se limpia por campos y conserva cuentas y tope', () => {
