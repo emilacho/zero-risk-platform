@@ -35,6 +35,7 @@ describe('🔴 cada tipo tiene su documento', () => {
     ["tipo = 'confirm_competitor_list' then 'competidores'"],
   ])('%s', (regla) => expect(SQL).toContain(regla))
   it('un tipo nuevo cae en «otro», sin romper ni esconderse', () => expect(SQL).toMatch(/else 'otro'\s*end\s*\$\$/))
+  it('un pedido del editor que no se reconoce cae en «otro», no en un panel', () => expect(SQL).toMatch(/then 'pieza'\s*else 'otro'\s*end\s*else 'otro'/))
 })
 
 describe('🔴 la columna', () => {
