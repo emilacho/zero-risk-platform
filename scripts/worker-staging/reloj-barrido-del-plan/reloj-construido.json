@@ -73,7 +73,88 @@
     0
    ],
    "parameters": {
-    "jsCode": "// 03-nov · el barrido contestó 200 «barrido» o ESTA corrida falla. El nodo HTTP no rompe con un rechazo (neverError): sin este cierre un 401/404/500 pasaría en silencio\n// (la ruta devolvió 404 hasta que se publicó #868 y nadie lo habría visto). El resultado queda en el registro de la corrida.\nconst r = $input.first().json;\nconst estado = Number(r.statusCode);\nconst cuerpo = (r.body && typeof r.body === \"object\") ? r.body : {};\nif (estado !== 200 || cuerpo.accion !== \"barrido\") {\n  throw new Error(\"BARRIDO_SIN_RESPUESTA · estado \" + (Number.isFinite(estado) ? estado : \"desconocido\") + \" · \" + JSON.stringify(cuerpo).slice(0, 300));\n}\nconsole.log(\"[reloj-barrido-del-plan] \" + JSON.stringify(cuerpo).slice(0, 500));\nreturn [{ json: { ok: true, barrido: cuerpo } }];"
+    "jsCode": "// 03-nov · el barrido contestó 200 «barrido» o ESTA corrida falla (una sola vez por incidente). El nodo HTTP no rompe con un rechazo (neverError): sin este cierre un 401/404/500 pasaría\n// en silencio. Regla de Emilio: UNA alarma por incidente. El incidente se recuerda en la memoria del flujo: el 1.er fallo lanza (avisa el flujo de errores); los siguientes no repiten.\nconst r = $input.first().json;\nconst estado = Number(r.statusCode);\nconst cuerpo = (r.body && typeof r.body === \"object\") ? r.body : {};\nconst mem = $getWorkflowStaticData(\"global\");\nconst bien = estado === 200 && cuerpo.accion === \"barrido\";\nif (!bien) {\n  const detalle = \"estado \" + (Number.isFinite(estado) ? estado : \"desconocido\") + \" · \" + JSON.stringify(cuerpo).slice(0, 300);\n  if (mem.incidente_desde) {\n    console.log(\"[reloj-barrido-del-plan] SIGUE FALLANDO (ya avisado desde \" + mem.incidente_desde + \") · \" + detalle);\n    return [{ json: { ok: false, sigue_fallando: true, volvio: false } }];\n  }\n  mem.incidente_desde = new Date().toISOString();\n  throw new Error(\"BARRIDO_SIN_RESPUESTA · \" + detalle);\n}\nconsole.log(\"[reloj-barrido-del-plan] \" + JSON.stringify(cuerpo).slice(0, 500));\nreturn [{ json: { ok: true, volvio: !!mem.incidente_desde, desde: mem.incidente_desde || null, barrido: cuerpo } }];"
+   }
+  },
+  {
+   "id": "rb-0004",
+   "name": "¿Volvió a funcionar?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    780,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "strict",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "volvio",
+       "leftValue": "={{ $json.volvio }}",
+       "rightValue": true,
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "rb-0005",
+   "name": "AVISO · #alertas · el reloj volvió",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1040,
+    -80
+   ],
+   "onError": "continueRegularOutput",
+   "parameters": {
+    "method": "POST",
+    "url": "https://slack.com/api/chat.postMessage",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Authorization",
+       "value": "=Bearer {{ $env.SLACK_BOT_TOKEN }}"
+      },
+      {
+       "name": "Content-Type",
+       "value": "application/json; charset=utf-8"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ channel: \"C0B7XUUEBHA\", text: \"✅ El reloj del barrido de corridas del plan volvió a funcionar (fallaba desde \" + $json.desde + \").\" }) }}",
+    "options": {
+     "timeout": 30000
+    }
+   }
+  },
+  {
+   "id": "rb-0006",
+   "name": "Cierre del incidente · solo si el aviso llegó",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    1300,
+    -80
+   ],
+   "parameters": {
+    "jsCode": "// 03-nov · el incidente se cierra solo cuando el aviso de recuperación LLEGÓ (Slack ok:true). Si no llegó, queda abierto y el siguiente tic vuelve a avisar.\nconst respuesta = $input.first().json || {};\nif (respuesta.ok !== true) {\n  console.log(\"[reloj-barrido-del-plan] el aviso de recuperación no llegó a Slack · el incidente sigue abierto · \" + JSON.stringify(respuesta).slice(0, 200));\n  return [{ json: { cerrado: false } }];\n}\nconst mem = $getWorkflowStaticData(\"global\");\nmem.incidente_desde = null;\nreturn [{ json: { cerrado: true } }];"
    }
   }
  ],
@@ -94,6 +175,40 @@
     [
      {
       "node": "Cierre · el barrido contestó o la corrida falla",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Cierre · el barrido contestó o la corrida falla": {
+   "main": [
+    [
+     {
+      "node": "¿Volvió a funcionar?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "¿Volvió a funcionar?": {
+   "main": [
+    [
+     {
+      "node": "AVISO · #alertas · el reloj volvió",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    []
+   ]
+  },
+  "AVISO · #alertas · el reloj volvió": {
+   "main": [
+    [
+     {
+      "node": "Cierre del incidente · solo si el aviso llegó",
       "type": "main",
       "index": 0
      }
