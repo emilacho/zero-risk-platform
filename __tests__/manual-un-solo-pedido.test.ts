@@ -89,6 +89,7 @@ describe('🔴 nada a medias: lo que se rechaza no escribe', () => {
     ['valor que no es texto', { campos: { vision: 3 } }, 'vision'],
     ['retirar que no es lista', { retirar: 'vision' }, 'retirar'],
     ['el mismo campo en los dos', { campos: { vision: 'x' }, retirar: ['vision'] }, 'dos veces'],
+    ['valor directo por encima del tope', { campos: { vision: 'a'.repeat(TOPE_DEL_TEXTO_DEL_DUENO + 1) } }, 'hasta'],
     ['observación sin campo', { ...GASTO, observaciones_por_campo: [{ campo: 'nada', texto: 'x' }] }, 'observación'],
     ['observación sin texto', { ...GASTO, observaciones_por_campo: [{ campo: 'mision', texto: ' ' }] }, 'observación'],
     ['observaciones que no son lista', { ...GASTO, observaciones_por_campo: 'x' }, 'observaciones_por_campo'],

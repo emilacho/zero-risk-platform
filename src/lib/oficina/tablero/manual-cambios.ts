@@ -158,7 +158,7 @@ export const manualCambios = async (c: Contexto, e: Entrada): Promise<Salida> =>
   ...c,
   editarDirecto: (client_id, campos, reviewer) => rutaEditarManual({
     db: c.db,
-    cerebro: { env: { baseUrl: c.origen ?? process.env.ZERO_RISK_API_URL ?? 'https://zero-risk-platform.vercel.app', internalKey: process.env.INTERNAL_API_KEY ?? '' } },
+    cerebro: { env: { baseUrl: process.env.ZERO_RISK_API_URL ?? c.origen ?? 'https://zero-risk-platform.vercel.app', internalKey: process.env.INTERNAL_API_KEY ?? '' } },
     empujarManual: (x) => empujarManualAlCerebro(x),
     ahora: c.ahora,
   }, client_id, { campos, reviewer }, reviewer),
