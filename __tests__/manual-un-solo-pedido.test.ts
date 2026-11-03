@@ -150,6 +150,30 @@ describe('🔴 si algo falla después de lo directo', () => {
     expect(s.despertar_flujo).toBeUndefined()
   })
 
+  it('🔴 reintentar SOLO la reescritura: no crea otra versión, lo directo sigue y es la misma fila', async () => {
+    const db = base(), { deps, editarDirecto } = armar(db)
+    await pedir(deps, { ...GASTO, campos: { vision: 'Visión mía' }, observaciones_por_campo: [{ campo: 'mision', texto: 'más cercana' }] })
+    Object.assign(db.tablas['plan_cambios'][0], { despertado: false })
+    const s = await pedir(deps, { ...GASTO, observaciones_por_campo: [{ campo: 'mision', texto: 'más cercana' }] })
+    expect(s.status).toBe(200)
+    expect(s.cuerpo).toMatchObject({ reescribe: true, reintento: true, manual_cambio_id: db.tablas['plan_cambios'][0].id })
+    expect(editarDirecto).toHaveBeenCalledTimes(1)
+    expect(versiones(db)).toHaveLength(2)
+    expect(db.tablas['plan_cambios']).toHaveLength(1)
+    expect(draftDe(versiones(db)[1]).vision).toBe('Visión mía')
+  })
+
+  it('🔴 si la reescritura falló del todo, lo directo sigue y se puede pedir otra vez sin repetirlo', async () => {
+    const db = base(), { deps, editarDirecto } = armar(db)
+    await pedir(deps, { ...GASTO, campos: { vision: 'Visión mía' }, texto: 'Hazlo más cercano' })
+    Object.assign(db.tablas['plan_cambios'][0], { estado: 'fallido' })
+    const s = await pedir(deps, { ...GASTO, texto: 'Hazlo más cercano' })
+    expect(s.status).toBe(200)
+    expect(editarDirecto).toHaveBeenCalledTimes(1)
+    expect(draftDe(versiones(db)[1]).vision).toBe('Visión mía')
+    expect(db.tablas['plan_cambios'][1]).toMatchObject({ estado: 'pendiente', manual_id: versiones(db)[1].id })
+  })
+
   it('si la edición falla, no se pide nada y no se gasta', async () => {
     const db = base(), { deps } = armar(db)
     const conFalla = { ...deps, editarDirecto: vi.fn(async () => ({ status: 502, body: { ok: false, error: 'no_se_pudo_guardar' }, toca: { client_id: C } })) } as DepsDelPedido
