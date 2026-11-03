@@ -75,9 +75,9 @@ describe('fusionar', () => {
     const r = fusionarPropuestas(DRAFT, [{ campo: 'proposito', valor: 'Otro propósito cualquiera.', razon: 'x' }], [])
     expect(r.aplicadas).toEqual([]); expect(r.rechazadas[0].motivo).toMatch(/nunca lo pisa/); expect(r.draft.proposito).toBe(DRAFT.proposito)
   })
-  it('una propuesta que afirma un hecho sin respaldo NO se aplica (no es la puerta trasera)', () => {
+  it('una propuesta que afirma un hecho sin respaldo se aplica: la revisión es del dueño (03-nov), y el hecho se devuelve aparte', () => {
     const r = fusionarPropuestas(DRAFT, [{ campo: 'mision', valor: 'Somos el mejor negocio certificado de la región, con 25 años de experiencia.', razon: 'x' }], [])
-    expect(r.aplicadas).toEqual([]); expect(r.rechazadas[0].motivo).toMatch(/hecho\(s\) sin respaldo/); expect(r.hechos_sin_respaldo.length).toBeGreaterThan(0)
+    expect(r.aplicadas).toEqual(['mision']); expect(r.rechazadas).toEqual([]); expect(String(r.draft.mision)).toContain('Somos el mejor negocio certificado de la región'); expect(r.hechos_sin_respaldo.length).toBeGreaterThan(0)
   })
   it('listas: cada elemento lleva su rótulo', () => {
     const r = fusionarPropuestas(DRAFT, [{ campo: 'tagline_opciones', valor: ['Algo cercano', 'Algo claro'], razon: 'desde su voz' }], [])

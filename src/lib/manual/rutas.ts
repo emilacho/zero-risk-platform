@@ -82,7 +82,7 @@ export async function rutaRecomprobar(db: Db, cuerpo: unknown): Promise<Respuest
   const despues = manualDe(v.cuerpo, ins, 'despues'); if (esRespuesta(despues)) return despues
   if (v.cuerpo.despues === undefined) return err(400, 'entrada_invalida', 'falta `despues` (el manual que devolvió el autor)')
   const r = cerrarRevision(ins, despues, { sinEslogan: v.cuerpo.sin_eslogan === true })
-  // `retirados` es el REGISTRO INTERNO: lo recibe el flujo para guardarlo en el borrador; no es para ninguna bandeja ni canal
+  // `cambios` y `retirados` van siempre vacíos: el flujo vivo del manual exige la lista para seguir
   return { status: 200, body: { manual: r.manual, limpio: r.limpio, introducidos: r.introducidos.map((h) => ({ ruta: h.ruta, clausula: h.clausula, estado: h.estado })), cambios: r.cambios, retirados: r.retirados, eslogan: r.eslogan } }
 }
 

@@ -113,17 +113,17 @@ describe('M2 · /revisar (S0/S1/S3) y las rutas puras: US$ 0, sin modelo, sin es
   })
 })
 
-describe('M2 · S5/S7 · lo que el autor devuelve pasa por la puerta (registro interno, no bandeja)', () => {
-  it('lo que no tiene cita SALE, queda en `retirados`, el eslogan lo escribe el código y el autor no puede reintroducirlo', async () => {
+describe('M2 · S5/S7 · lo que el autor devuelve pasa por la puerta y sale igual', () => {
+  it('lo que no tiene cita se queda, no hay retirados y el eslogan lo escribe el código', async () => {
     const db = base()
     const despues = { ...MANUAL, positioning: 'Una clínica cálida y cercana, con garantía total de resultados.' }
     const r = await rutaRecomprobar(db, { client_id: C, despues })
     expect(r.status).toBe(200)
     const b = r.body as Record<string, any>
-    expect(b.manual.mision).toBe('Cuidar sonrisas.')
-    expect(b.manual.positioning).not.toMatch(/garant/)
+    expect(b.manual.mision).toBe(MANUAL.mision)
+    expect(b.manual.positioning).toBe(despues.positioning)
     expect(b.manual.tagline).toBe('Sonríe sin miedo, siempre contigo!')
-    expect(b.retirados.map((x: any) => x.clausula).join('|')).toMatch(/trazabilidad/)
+    expect(b.retirados).toEqual([]); expect(b.cambios).toEqual([])
     expect(JSON.stringify(b.manual)).not.toContain('PENDIENTE')
     expect(b.limpio).toBe(false)
     expect(b.manual._field_meta).toBeDefined()
@@ -153,7 +153,7 @@ describe('M2 · /opinion (S6) · una sola pregunta, ciego, 3 reintentos', () => 
   })
 })
 
-describe('M2 · el borrador y la bandeja (S8) · LO QUITADO SIN FUENTE NO VA A EMILIO', () => {
+describe('M2 · el borrador y la bandeja (S8)', () => {
   const cuerpo = { client_id: C, manual: MANUAL, costo_usd: 0.42, opinion: { ok: true, texto: 'GPT dice algo.' }, respuesta_del_autor: [{ punto: 'p1', decision: 'tomada', razon: 'porque sí' }] }
   it('dry_run: devuelve la tarjeta y NO escribe', async () => {
     const db = base()
@@ -174,13 +174,13 @@ describe('M2 · el borrador y la bandeja (S8) · LO QUITADO SIN FUENTE NO VA A E
     expect(JSON.stringify(db.tablas['client_brand_books'])).toBe(antes) // ninguna fila del manual se edita ni se agrega
     expect((out.provenance_tag as any)).toMatchObject({ workflow_id: 'wf-1', workflow_execution_id: 'ex-1', version_base: 2 })
   })
-  it('lo retirado queda SOLO en el registro interno del borrador; la tarjeta (título, vista previa, metadata) no lo trae, ni siquiera como «texto anterior»', async () => {
+  it('el borrador lleva el texto entero y su registro de retirados va vacío; la tarjeta no habla de retiros y las diferencias no traen «texto anterior»', async () => {
     const db = base()
     await rutaBorrador(db, { ...cuerpo, validador: 'bandeja', dry_run: false, ...WF })
     const out = db.tablas['client_historical_outputs'][0]
-    expect(JSON.stringify((out.provenance_tag as any).registro_interno.retirados)).toMatch(/trazabilidad/)
+    expect((out.provenance_tag as any).registro_interno.retirados).toEqual([])
     const hitl = JSON.stringify(db.tablas['hitl_queue'][0])
-    expect(hitl).not.toMatch(/trazabilidad|verificable|retirad|registro_interno/i)
+    expect(hitl).not.toMatch(/retirad|registro_interno/i)
     const meta = db.tablas['hitl_queue'][0].metadata as any
     expect(meta.diferencias.every((d: any) => !('antes' in d))).toBe(true)
     // lo que sí lleva: opinión rotulada, respuesta del autor, costo, versión, hechos con su cita
@@ -223,7 +223,7 @@ describe('M2 · la promoción (aprobar) y la nota (rechazar)', () => {
     expect(filas).toHaveLength(2); expect(JSON.stringify(filas[0])).toBe(anterior)
     expect(filas[1]).toMatchObject({ client_id: C, version: 3, human_validated: true, auto_generated_from: 'revision_del_manual', tagline: 'Sonríe sin miedo, siempre contigo!', primary_colors: ['#112233'], typography: { h: 'Serif' } })
     expect(filas[1].provenance_tag).toMatchObject({ type: 'evidence', trust_level: 'tenant_trusted' })
-    expect(String(filas[1].content_text)).not.toMatch(/trazabilidad verificable/)
+    expect(String(filas[1].content_text)).toMatch(/trazabilidad verificable/)
     expect(empujar).toHaveBeenCalledWith({ client_id: C, source_id: String(filas[1].id) })
     expect(db.tablas['client_historical_outputs'][0]).toMatchObject({ status: 'approved' })
   })

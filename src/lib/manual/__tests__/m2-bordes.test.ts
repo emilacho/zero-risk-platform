@@ -1,13 +1,11 @@
 /** M2 · bordes que las mutaciones dejaron vivos (hallazgos reales de comportamiento, no de relleno). */
 import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
-import { cerrarPuerta, localizar } from '../firmes'
 import { borradorDeContentText, leerInsumos, prepararRevision, type Insumos } from '../revision'
 import { guardarBorrador, armarTarjeta } from '../borrador'
 import { cerrarRevision } from '../revision'
 import { promoverManualRevisado } from '../promover'
 import { rutaBorrador, rutaOpinion, validarCuerpo } from '../rutas'
-import { evaluarHechos } from '..'
 import { F, filaInstagram, filaSitio, PROPIOS } from './apoyo'
 
 const C = '11111111-1111-4111-8111-111111111111'
@@ -46,30 +44,6 @@ describe('leerInsumos / borradorDeContentText', () => {
     expect(r.insumos.client_name).toBe('cliente'); expect(r.insumos.version_vigente).toBe(4)
     expect(r.insumos.fuentes.some((f) => f.tipo === 'humana' && f.texto === 'city: Ciudad Ejemplo')).toBe(true)
     expect(r.insumos.fuentes.some((f) => f.tipo === 'primaria_propia' && f.canal === 'instagram')).toBe(true)
-  })
-})
-
-describe('cerrarPuerta · bordes del retiro', () => {
-  it('una oración que pierde DOS cláusulas sale ENTERA (no quedan fragmentos); con una sola, solo esa cláusula', () => {
-    const fuentes = [F('s', 'primaria_propia', 'Algo distinto del cliente.')]
-    const dos = { m: 'Servicio cálido, con garantía total, y trazabilidad verificable.' }
-    const rd = cerrarPuerta(dos, evaluarHechos({ manual: dos, fuentes }))
-    expect(rd.retirados.length).toBeGreaterThanOrEqual(2)
-    expect(rd.manual.m).toBe('')
-    const uno = { m: 'Servicio cálido, con garantía total.' }
-    const ru = cerrarPuerta(uno, evaluarHechos({ manual: uno, fuentes }))
-    expect(ru.manual.m).toBe('Servicio cálido.')
-  })
-  it('una cláusula que ya no está en el texto no rompe: queda en `no_aplicados`', () => {
-    const m = { a: 'Texto distinto.' }
-    const hecho = { campo: 'a', ruta: 'a', frase: 'Dice algo.', clausula: 'algo que no está', marcas: ['certeza'], estado: 'afirmacion_del_cliente', cita_literal: 'Somos únicos', fuente: null, motivo: null, duda: null, detalle: [] }
-    const r = cerrarPuerta(m, { hechos: [hecho as never], resumen: {} as never, sin_respaldo: [] })
-    expect(r.no_aplicados).toHaveLength(1); expect(r.manual).toEqual(m)
-  })
-  it('localizar encuentra una cláusula con UNA cita enmascarada (dos trozos) y no inventa si falta un trozo', () => {
-    expect(localizar('Dicen «hola» que es único', 'Dicen   que es único')).toMatchObject({ i: 0 })
-    expect(localizar('Dicen «hola» que es otro', 'Dicen   que es único')).toBeNull()
-    expect(localizar('nada', 'solo un trozo')).toBeNull()
   })
 })
 
@@ -129,7 +103,7 @@ describe('guardarBorrador · sin cambios no escribe aunque dry_run sea false (y 
   it('dry_run=true con cambios ⇒ no escribe; sin cambios ⇒ no escribe', async () => {
     const insu = ins({ manual: { m: 'Con garantía total.' }, fuentes: [F('s', 'primaria_propia', 'otra cosa')] })
     const db = new DbFalsa()
-    const conCambio = await guardarBorrador(db, { insumos: insu, cierre: cerrarRevision(insu, insu.manual), costo_usd: 0, workflow_id: 'w', workflow_execution_id: 'e', dry_run: true })
+    const conCambio = await guardarBorrador(db, { insumos: insu, cierre: cerrarRevision(insu, { m: 'Otro texto.' }), costo_usd: 0, workflow_id: 'w', workflow_execution_id: 'e', dry_run: true })
     expect(conCambio).toMatchObject({ simulado: true, sin_cambios: false }); expect(db.tablas['client_historical_outputs']).toBeUndefined()
     const igual = ins({ manual: { m: 'Texto sin marcas.' } })
     const r = await guardarBorrador(db, { insumos: igual, cierre: cerrarRevision(igual, igual.manual), costo_usd: 0, workflow_id: 'w', workflow_execution_id: 'e', dry_run: false })

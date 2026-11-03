@@ -4,7 +4,7 @@ import { reglasParaPrompts } from '../src/lib/oficina/ayudas'
 import { chequeosDePost, palabrasDeclaradas, type ContextoDeChequeo } from '../src/lib/oficina/chequeos'
 import { chequearPrompts } from '../src/lib/oficina/reglas-de-imagen'
 import { MOTIVO_DE_PALABRA_DECLARADA, recomprobar } from '../src/lib/manual/firmes'
-import { limpiarManual } from '../src/lib/manual/limpieza'
+import { palabrasDeclaradasEnUso } from '../src/lib/manual/palabras-anotadas'
 import { formatGuardrailsForPrompt } from '../src/lib/client-brain'
 import { REGLA_DE_LAS_PALABRAS_DEL_MANUAL } from '../src/lib/jefatura/revision/pedidos'
 
@@ -66,26 +66,22 @@ describe('en los prompts de imagen', () => {
 
 describe('en el manual', () => {
   const manual = { forbidden_words: ['premium'], palabras_con_intencion: [LEGAL], voice_description: 'Somos premium en todo. Nada más.', valores: ['Lo premium', 'Cercanía'] }
-  it('🔴 la limpieza no quita ni una letra', () => {
-    const r = limpiarManual(manual)
-    expect(r.manual.voice_description).toBe(manual.voice_description)
-    expect(r.manual.valores).toEqual(manual.valores)
-    expect(r.quitados).toEqual([])
-  })
-  it('🔴 y anota dónde está, también en las listas', () => {
-    expect(limpiarManual(manual).anotadas).toEqual([
+  it('🔴 anota dónde está, también en las listas', () => {
+    expect(palabrasDeclaradasEnUso(manual)).toEqual([
       { ruta: 'voice_description', palabra: 'premium', texto: 'Somos premium en todo.' },
       { ruta: 'valores[0]', palabra: 'premium', texto: 'Lo premium' },
     ])
   })
   it('🔴 mencionarla para evitarla no se anota', () => {
-    expect(limpiarManual({ ...manual, voice_description: 'Nunca digas premium.', valores: [] }).anotadas).toEqual([])
+    expect(palabrasDeclaradasEnUso({ ...manual, voice_description: 'Nunca digas premium.', valores: [] })).toEqual([])
   })
   it('🔴 una palabra de estilo no se anota', () => {
-    expect(limpiarManual({ forbidden_words: ['premium'], voice_description: 'Somos premium.' }).anotadas).toEqual([])
+    expect(palabrasDeclaradasEnUso({ forbidden_words: ['premium'], voice_description: 'Somos premium.' })).toEqual([])
   })
-  it('🔴 lo demás de la limpieza sigue igual', () => {
-    expect(limpiarManual({ voice_description: 'Somos cercanos (discovery_summary).' }).quitados.map((q) => q.motivo)).toEqual(['nombre_interno_citado'])
+  it('🔴 un nombre interno tampoco se quita: la limpieza por código ya no existe', () => {
+    const r = recomprobar({}, { voice_description: 'Somos cercanos (discovery_summary).' }, { fuentes: [] } as never)
+    expect(r.manual.voice_description).toBe('Somos cercanos (discovery_summary).')
+    expect(r.retirados).toEqual([])
   })
   const entrada = { fuentes: [] } as never
   type Meta = Record<string, { notas_del_juez?: Array<{ dato: string; motivo: string }> }>

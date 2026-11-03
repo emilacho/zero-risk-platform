@@ -1,7 +1,7 @@
 /** Ronda 67 · la lista de términos OBLIGATORIOS entra al chequeo de hechos (en el tramo 1 se coló «origen verificable» ahí). Cliente sintético: una clínica dental inventada. Sin modelo. */
 import { describe, expect, it } from 'vitest'
 import { CAMPOS_EXCLUIDOS, evaluarHechos } from '../hechos'
-import { cerrarPuerta } from '../firmes'
+import { recomprobar } from '../firmes'
 import { F } from './apoyo'
 
 const manual = () => ({
@@ -16,18 +16,13 @@ describe('required_terminology se chequea; forbidden_words no', () => {
     expect(CAMPOS_EXCLUIDOS).not.toContain('required_terminology')
     expect(CAMPOS_EXCLUIDOS).toContain('forbidden_words')
   })
-  it('un término con certeza y sin fuente («trazabilidad verificable») sale; los demás se quedan; el elemento no queda vacío ni como hueco', () => {
+  it('un término con certeza y sin fuente («trazabilidad verificable») se detecta; el texto y las listas se quedan', () => {
     const m = manual()
-    const informe = evaluarHechos({ manual: m, fuentes: [propia] })
-    const cierre = cerrarPuerta(m, informe)
-    expect(cierre.manual.required_terminology).toEqual(['cita previa', 'implantes', 'atención cercana'])
-    expect(cierre.retirados.map((r) => r.clausula)).toEqual(['trazabilidad verificable'])
-    expect(cierre.manual.forbidden_words).toEqual(['barato', 'garantizado', 'el mejor']) // intacta
-    expect(cierre.manual.positioning).toBe('Clínica dental de barrio.')
-  })
-  it('sin ninguna fuente, los términos sin marca de hecho siguen intactos (solo sale lo que afirma)', () => {
-    const m = manual()
-    const cierre = cerrarPuerta(m, evaluarHechos({ manual: m, fuentes: [] }))
-    expect(cierre.manual.required_terminology).toEqual(['cita previa', 'implantes', 'atención cercana'])
+    expect(evaluarHechos({ manual: m, fuentes: [propia] }).sin_respaldo.map((h) => h.clausula)).toEqual(['trazabilidad verificable'])
+    const r = recomprobar({}, m, { fuentes: [propia] })
+    expect(r.manual.required_terminology).toEqual(m.required_terminology)
+    expect(r.retirados).toEqual([])
+    expect(r.manual.forbidden_words).toEqual(['barato', 'garantizado', 'el mejor'])
+    expect(r.manual.positioning).toBe('Clínica dental de barrio.')
   })
 })
