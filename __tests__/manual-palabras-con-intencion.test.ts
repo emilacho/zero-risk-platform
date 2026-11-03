@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { aplicarDecisionDelDueno, conservarPalabrasDuras, deUnaCorrida, leerPalabras, palabrasDeEstilo, palabrasDuras } from '../src/lib/manual/palabras-con-intencion'
 import { conservarLoDelDueno, decidirPalabraDelDueno } from '../src/lib/manual/edicion-del-dueno'
-import { palabrasProhibidasDelManual, limpiarManual } from '../src/lib/manual/limpieza'
+import { palabrasProhibidasDelManual, palabrasDeclaradasEnUso } from '../src/lib/manual/palabras-anotadas'
 import { chequeosDePost, palabrasDeclaradas, type ContextoDeChequeo } from '../src/lib/oficina/chequeos'
 import { formatGuardrailsForPrompt } from '../src/lib/client-brain'
 import { renderManualLimpio } from '../src/lib/brand-book-render-limpio'
@@ -159,13 +159,11 @@ describe('cómo se avisa (02-nov, firma de Emilio: ninguna palabra bloquea)', ()
     expect(vetadas(['barato'])).toEqual(['barato'])
     expect(vetadas([], ['premium', 'otra']).sort()).toEqual(['otra'])
   })
-  it('🔴 la limpieza del manual solo anota lo declarado, y no quita nada', () => {
+  it('🔴 en el manual solo se anota lo declarado', () => {
     const texto = 'Somos premium en lo que hacemos. Nada de barato aquí señor.'
     expect(palabrasProhibidasDelManual({ forbidden_words: ['premium', 'barato'] })).toEqual([])
-    expect(limpiarManual({ forbidden_words: ['premium'], voice_description: texto }).manual.voice_description).toContain('premium')
-    const conDura = limpiarManual({ forbidden_words: ['premium'], palabras_con_intencion: [{ texto: 'premium', intencion: 'legal', fuente: CITA_LEGAL }], voice_description: texto })
-    expect(conDura.manual.voice_description).toBe(texto)
-    expect(conDura.anotadas.map((a) => a.palabra)).toEqual(['premium'])
+    expect(palabrasDeclaradasEnUso({ forbidden_words: ['premium'], voice_description: texto })).toEqual([])
+    expect(palabrasDeclaradasEnUso({ forbidden_words: ['premium'], palabras_con_intencion: [{ texto: 'premium', intencion: 'legal', fuente: CITA_LEGAL }], voice_description: texto }).map((a) => a.palabra)).toEqual(['premium'])
   })
   it('el manual leído separa lo prohibido de lo que evita', () => {
     const t = renderManualLimpio({ brand_book: { forbidden_words: ['premium', 'barato'], palabras_con_intencion: [{ texto: 'barato', intencion: 'del_dueno', fuente: CITA_DUENO }] }, client_name: 'X', country: null }).texto

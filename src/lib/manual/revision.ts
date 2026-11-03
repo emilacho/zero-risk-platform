@@ -132,10 +132,10 @@ export function prepararRevision(ins: Insumos): Preparacion {
 export interface ResultadoDeCierre extends Recomprobacion {
   /** M1-b: el eslogan que el código propuso, literal, con sus fuentes y la advertencia visible cuando solo hay UNA */
   eslogan: { aplicado: boolean; motivo?: string; una_sola_fuente?: boolean; literal?: string; fuentes?: Array<{ rotulo: string; canal: string; rol: string }>; advertencia?: string | null }
-  /** los hechos CON respaldo (o declarados por el cliente, o con duda) tal como los vio la puerta ANTES de cerrar: lo que la bandeja puede mostrar con su cita. Nunca incluye lo retirado. */
+  /** los hechos CON respaldo (o declarados por el cliente, o con duda) tal como los vio la puerta: lo que la bandeja puede mostrar con su cita. */
   hechos_visibles: InformeDeHechos['hechos']
 }
-/** lo que devolvió el autor pasa por la puerta: re-evalúa, retira lo que no tiene cita (queda SOLO en `retirados`), y el código escribe el eslogan si `tagline` está vacío */
+/** lo que devolvió el autor pasa por la puerta: re-evalúa, anota, y el código escribe el eslogan si `tagline` está vacío */
 export function cerrarRevision(ins: Insumos, despues: Record<string, unknown>, opciones: { sinEslogan?: boolean } = {}): ResultadoDeCierre {
   const r = recomprobar(ins.manual, despues, { fuentes: ins.fuentes, dudas: ins.dudas })
   const fp = frasesPropias(ins.fuentes)

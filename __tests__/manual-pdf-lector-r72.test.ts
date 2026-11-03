@@ -1,16 +1,15 @@
 /**
  * Ronda 72 · el PDF del manual LISTO PARA UN LECTOR (certificación CC#3 §B.3–B.5): sin «\!», frases de segmento bien escritas, sin palabras de oficina,
- * «En las piezas no se nombra a la competencia» · y una prueba por cada mutación viva del renderizador y de la limpieza (§B.4).
- * Datos REALES de Náufrago (manual v1 pasado por la limpieza).
+ * «En las piezas no se nombra a la competencia» · y una prueba por cada mutación viva del renderizador (§B.4).
+ * Datos REALES de Náufrago (manual-v1-limpia.json: v1 con la salida congelada de la limpieza por código, quitada el 03-nov).
  */
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { esTroncoSinVerbo, limpiarManual, quitarNombresInternos } from '../src/lib/manual/limpieza'
 import { nombreCorto, nombreDelManual, palabrasLlanas, ponerNombresDeSegmento, renderManualLimpio, sinMarkdown } from '../src/lib/brand-book-render-limpio'
 
 const D = 'src/lib/manual/__tests__/fixtures/repeticion-r68'
-const V1 = JSON.parse(fs.readFileSync(`${D}/manual-v1.json`, 'utf8')) as Record<string, any>
-const real = renderManualLimpio({ brand_book: limpiarManual(V1).manual as Record<string, unknown>, client_name: 'Náufrago', industry: 'restaurante costero', country: 'Ecuador', website: 'https://www.naufrago.ec', created_at: '2026-10-11T10:00:00Z' }).texto
+const V1_LIMPIA = JSON.parse(fs.readFileSync(D + '/manual-v1-limpia.json', 'utf8')) as Record<string, unknown>
+const real = renderManualLimpio({ brand_book: V1_LIMPIA, client_name: 'Náufrago', industry: 'restaurante costero', country: 'Ecuador', website: 'https://www.naufrago.ec', created_at: '2026-10-11T10:00:00Z' }).texto
 const N = { 1: 'Locales', 2: 'Turistas de fin de semana', 3: 'Residentes y veraneantes de temporada en Olón', 4: 'Visitantes de playa' }
 
 describe('el PDF real: se lee como escrito por una persona', () => {
@@ -137,27 +136,8 @@ describe('subtítulos «Segmento N» con línea en blanco, solo en el resumen de
   })
 })
 
-describe('bordes de la limpieza', () => {
+describe('nombre corto', () => {
   it('nombre corto: exactamente 2 palabras tras recortar se quedan con el recorte', () => {
     expect(nombreCorto('Turistas locales en Olón')).toBe('Turistas locales'); expect(nombreCorto('Turistas en Playa')).toBe('Turistas en Playa')
-  })
-  it('bloques sin cerrar o con cierre suelto: lo balanceado se limpia, lo roto se deja', () => {
-    expect(quitarNombresInternos('Abre (jueves sin cerrar y (campo_x) fin').texto).toBe('Abre (jueves sin cerrar y fin')
-    expect(quitarNombresInternos('Cierra suelto) y (campo_x) fin').texto).toBe('Cierra suelto) y fin')
-    expect(quitarNombresInternos('Solo ( abre').texto).toBe('Solo ( abre')
-  })
-  it('anidados muy hondos (más de 8 niveles): el bloque externo con nombre interno se quita igual', () => {
-    const hondo = '('.repeat(10) + 'x' + ')'.repeat(10)
-    expect(quitarNombresInternos(`Dato (campo_x: ${hondo}) fin.`).texto).toBe('Dato fin.')
-    expect(quitarNombresInternos(`Dato (nota ${hondo}) fin.`).texto).toBe(`Dato (nota ${hondo}) fin.`)
-  })
-  it('tronco sin verbo: 12 palabras todavía; 13 ya no; vacío no', () => {
-    const con = (n: number) => 'La objeción sobre ' + Array(n - 3).fill('frescura').join(' ') + '.'
-    expect(esTroncoSinVerbo(con(12))).toBe(true); expect(esTroncoSinVerbo(con(13))).toBe(false); expect(esTroncoSinVerbo('')).toBe(false)
-  })
-  it('las listas de términos NO son prosa: no se tocan ni por defecto', () => {
-    const m = { forbidden_words: ['gas'], palabras_con_intencion: [{ texto: 'gas', intencion: 'legal', fuente: { cita: 'la norma' } }], required_terminology: ['término (campo_x)'], voz: 'Cocina a gas. Cálida.' }
-    const r = limpiarManual(m).manual as Record<string, any>
-    expect(r.forbidden_words).toEqual(['gas']); expect(r.required_terminology).toEqual(['término (campo_x)']); expect(r.voz).toBe('Cocina a gas. Cálida.')
   })
 })

@@ -60,7 +60,7 @@ export const MOTIVO_DE_DATO_SIN_FUENTE = 'dato sin fuente en la evidencia'
 const SIN_APOYO: EstadoDeHecho[] = ['sin_cita', 'solo_sintesis']
 /**
  * 02-nov · decisión de Emilio («no rejas, para eso tenemos un gran equipo razonando»): una fecha o una cifra sin fuente no se retira ni frena nada: se anota a la vista y el dueño decide al validar.
- * Vale solo si eso es todo lo que le falta: si en la misma cláusula hay una palabra de certeza, un lugar de origen o una cita sin respaldo, sigue el camino de siempre.
+ * Vale solo si eso es todo lo que le falta. 03-nov: la puerta ya no retira nada; esto solo decide si frena una propuesta (propuesta.ts).
  */
 export function esSoloDatoSinFuente(h: Pick<Hecho, 'estado' | 'detalle'>): boolean {
   if (!SIN_APOYO.includes(h.estado)) return false
@@ -68,8 +68,11 @@ export function esSoloDatoSinFuente(h: Pick<Hecho, 'estado' | 'detalle'>): boole
   return faltan.length > 0 && faltan.every((d) => d.marca === 'cifra' || d.marca === 'fecha')
 }
 export interface DatoSinFuente { dato: string; marca: Marca; clausula: string; motivo: string }
+const esDatoSinApoyo = (d: DetalleDeMarca): boolean => ESTADOS_SIN_RESPALDO.includes(d.estado) && (d.marca === 'cifra' || d.marca === 'fecha')
+/** 03-nov · lo único que se anota al campo: una cifra o una fecha sin fuente, aunque la misma cláusula traiga otra marca (una palabra de certeza, un lugar o una cita ya no cuentan) */
+export const tieneDatoSinFuente = (h: Pick<Hecho, 'detalle'>): boolean => h.detalle.some(esDatoSinApoyo)
 export function datosSinFuenteDe(h: Pick<Hecho, 'detalle' | 'clausula'>): DatoSinFuente[] {
-  return h.detalle.filter((d) => ESTADOS_SIN_RESPALDO.includes(d.estado)).map((d) => ({ dato: d.texto, marca: d.marca, clausula: h.clausula, motivo: MOTIVO_DE_DATO_SIN_FUENTE }))
+  return h.detalle.filter(esDatoSinApoyo).map((d) => ({ dato: d.texto, marca: d.marca, clausula: h.clausula, motivo: MOTIVO_DE_DATO_SIN_FUENTE }))
 }
 export const PREFIJO_DECLARACION = 'el cliente dice: '
 /** firma D2: lo que el cliente dice de sí mismo se escribe como cita literal */
