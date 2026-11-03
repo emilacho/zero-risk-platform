@@ -92,6 +92,10 @@ describe('el recorte del plan', () => {
 })
 
 describe('el cliente', () => {
+  it.each([['texto', 'true'], ['texto falso', 'false'], ['número', 1], ['objeto', {}]])('🔴 solo el verdadero real marca cliente propio: %s no', async (_n, valor) => {
+    const { f } = loyverse([])
+    expect((await leer(ctx(dbCon([{ ...CLIENTE, config: { cliente_propio: valor } }]), f))).c.cliente_propio).toBe(false)
+  })
   it('🔴 dice si es un cliente propio y su moneda', async () => {
     const { f } = loyverse([{ receipts: [] }])
     expect((await leer(ctx(dbCon([CLIENTE]), f))).c).toMatchObject({ cliente_propio: true, moneda: 'USD' })
