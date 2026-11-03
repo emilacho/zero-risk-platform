@@ -181,6 +181,30 @@ export function construirCicloDelPlan(f) {
   conectar(f, compuerta.name, 'Segunda mitad · sobre', 1)
   conectar(f, 'Segunda mitad · sobre', 'Segunda mitad · llamar')
 
+  // ── A.7b · 03-nov · el plan que ESPERA la firma del dueño no bloquea al cliente ni vence como «fallido» a los 100 min: al abrirse la compuerta (real, no ensayo) la corrida pasa a «hecha · esperando al dueño».
+  //    La segunda mitad vuelve a cerrar al aprobar: `cerrar` sobre una fila ya terminal responde 409 `corrida_no_viva` y su HTTP es neverError + continueRegularOutput → inofensivo.
+  const cierreCodigo = [
+    "// V9 · la corrida del plan queda «hecha» cuando el plan espera al dueño (compuerta abierta). Sin plan_v3 o en ensayo no actúa.",
+    "const sobre = ($('Webhook · planeacion').first().json.body || {})",
+    "const pide = sobre.plan_v3 === true && sobre.dry_run !== true && typeof sobre.corrida === 'string' && sobre.corrida.length > 0 && typeof sobre.client_id === 'string' && sobre.client_id.length > 0",
+    "if (!pide) return [{ json: { aplica: false } }]",
+    "return [{ json: { aplica: true, cuerpo: { accion: 'cerrar', client_id: sobre.client_id, corrida: sobre.corrida, estado: 'hecha', motivo: 'plan entregado · espera la aprobación del dueño' } } }]",
+  ].join('\n')
+  agregarNodo(f, codigo('V9 · armar el cierre al esperar al dueño', cierreCodigo), 'Compuerta · esperar al dueño', 220, 0)
+  const cierreIf = agregarNodo(f, si('V9 · ¿cerrar al esperar al dueño?', '={{ $json.aplica === true }}'), 'Compuerta · esperar al dueño', 440, 0)
+  const cierreHttp = agregarNodo(f, {
+    name: 'V9 · cerrar al esperar al dueño', type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
+    parameters: {
+      method: 'POST', url: "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/planeacion/corrida' }}",
+      sendHeaders: true, headerParameters: { parameters: [{ name: 'Content-Type', value: 'application/json' }, { name: 'x-api-key', value: '={{ $env.INTERNAL_API_KEY }}' }] },
+      sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify($json.cuerpo) }}', options: OPC,
+    },
+  }, 'Compuerta · esperar al dueño', 660, 0)
+  cierreHttp.onError = 'continueRegularOutput'
+  conectar(f, 'Compuerta · esperar al dueño', 'V9 · armar el cierre al esperar al dueño')
+  conectar(f, 'V9 · armar el cierre al esperar al dueño', cierreIf.name)
+  conectar(f, cierreIf.name, cierreHttp.name, 0)
+
   // ── A.8 · sin plan con un pedido del dueño: el pedido queda «fallido» ─────────────────────────────────────────
   const fallido = pasoCondicional(f, {
     nombre: 'Sin plan · cerrar el pedido', cond: `typeof ${cuerpoWebhook}.plan_cambio_id === 'string' && ${cuerpoWebhook}.plan_cambio_id !== ''`,

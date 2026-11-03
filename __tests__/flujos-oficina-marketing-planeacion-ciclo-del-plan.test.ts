@@ -249,7 +249,8 @@ describe('el cableado del ciclo', () => {
     expect(salidas(nuevo, 'Segunda mitad · sobre')).toEqual([['Segunda mitad · llamar']])
   })
   it('🔴 con compuerta la corrida TERMINA en la compuerta: el PDF y el brief no cuelgan de la planeación en el camino del plan', () => {
-    expect(nuevo.connections['Compuerta · esperar al dueño']).toBeUndefined()
+    // 03-nov · la compuerta ya no es hoja del todo: solo la sigue el cierre «hecha · espera al dueño» (V9); nada del PDF ni del brief
+    expect(nuevo.connections['Compuerta · esperar al dueño'].main.flat().map((c: any) => c.node)).toEqual(['V9 · armar el cierre al esperar al dueño'])
     expect(nuevo.connections['Segunda mitad · llamar']).toBeUndefined()
     const haciaElPdf = Object.entries(nuevo.connections).filter(([, c]: any) => JSON.stringify(c).includes('"Plan → Drive (PDF)"')).map(([de]) => de)
     expect(haciaElPdf).toEqual([])

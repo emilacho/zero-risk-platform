@@ -4782,6 +4782,90 @@
       }
     },
     {
+      "id": "3647d067-1365-07c4-1262-6794c556cd2a",
+      "position": [
+        7330,
+        1340
+      ],
+      "typeVersion": 2,
+      "name": "V9 · armar el cierre al esperar al dueño",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// V9 · la corrida del plan queda «hecha» cuando el plan espera al dueño (compuerta abierta). Sin plan_v3 o en ensayo no actúa.\nconst sobre = ($('Webhook · planeacion').first().json.body || {})\nconst pide = sobre.plan_v3 === true && sobre.dry_run !== true && typeof sobre.corrida === 'string' && sobre.corrida.length > 0 && typeof sobre.client_id === 'string' && sobre.client_id.length > 0\nif (!pide) return [{ json: { aplica: false } }]\nreturn [{ json: { aplica: true, cuerpo: { accion: 'cerrar', client_id: sobre.client_id, corrida: sobre.corrida, estado: 'hecha', motivo: 'plan entregado · espera la aprobación del dueño' } } }]"
+      }
+    },
+    {
+      "id": "2f158add-07fd-a4eb-d708-5ec1cd24f378",
+      "position": [
+        7550,
+        1340
+      ],
+      "typeVersion": 2,
+      "name": "V9 · ¿cerrar al esperar al dueño?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.aplica === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "19cb4260-75ed-e010-6688-6a19a06482d0",
+      "position": [
+        7770,
+        1340
+      ],
+      "typeVersion": 4.2,
+      "name": "V9 · cerrar al esperar al dueño",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/planeacion/corrida' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
       "id": "290a4bce-7535-ee00-8623-70bf1d469010",
       "position": [
         2110,
@@ -7289,6 +7373,39 @@
         [
           {
             "node": "Segunda mitad · llamar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compuerta · esperar al dueño": {
+      "main": [
+        [
+          {
+            "node": "V9 · armar el cierre al esperar al dueño",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "V9 · armar el cierre al esperar al dueño": {
+      "main": [
+        [
+          {
+            "node": "V9 · ¿cerrar al esperar al dueño?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "V9 · ¿cerrar al esperar al dueño?": {
+      "main": [
+        [
+          {
+            "node": "V9 · cerrar al esperar al dueño",
             "type": "main",
             "index": 0
           }
