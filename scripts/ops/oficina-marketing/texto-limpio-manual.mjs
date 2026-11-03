@@ -46,8 +46,30 @@ export function construirPropuestaAparte(f) {
   cambiarCodigo(f, NODO, REGLA_VIEJA, REGLA_NUEVA)
   for (const j of JUECES_DE_USO) cambiarCodigo(f, j, BLOQUE_VIEJO(), BLOQUE_NUEVO())
   for (const [v, n] of REPAROS) cambiarCodigo(f, JUECES_DE_USO[1], v, n)
+  construirFuenteDeLaVoz(f)
   for (const nombre of NODOS_CONTENT_CREATOR) {
     const ps = nodo(f, nombre).parameters.headerParameters.parameters
     if (!ps.some((h) => h.name === CABECERA_SALTO.name)) ps.push({ ...CABECERA_SALTO })
   }
+}
+
+// 03-nov · hallazgo de CC1: el Consolidador no guardaba el `_meta` de la voz y la vara de uso, que lee justo después, no veía la declaración «propuesta» (pedía otra voz: ≈ US$ 0,25 de más y 2-3 min).
+// Se copia SOLO la fuente (sin `estado: provisional`, que cambiaría cómo la tratan los demás); si la lente no declaró fuente, no se escribe nada y el borrador queda idéntico a hoy.
+export const CONSOLIDADOR = '[BB] Consolidador'
+export const ANCLA_BORRADOR = 'const brandBookDraft = {'
+export const FUENTE_DE_LA_VOZ = [
+  '// 03-nov · la declaración de la voz (p. ej. «propuesta») viaja a `_field_meta.voice_description.fuente`: la vara de uso la lee en el borrador.',
+  'const _fuenteVoz = (function () {',
+  '  const st = editor.structured || {};',
+  '  const v = st.voice_description;',
+  '  const dir = (v && typeof v === "object" && !Array.isArray(v) && typeof v.fuente === "string") ? v.fuente : "";',
+  '  const top = (st._field_meta && typeof st._field_meta === "object" && st._field_meta.voice_description) || (st._meta && typeof st._meta === "object" && st._meta.voice_description) || {};',
+  '  const f = dir || (typeof top.fuente === "string" ? top.fuente : "");',
+  '  return f.trim() ? f.slice(0, 200) : "";',
+  '})();',
+  'if (_fuenteVoz) _meta.voice_description = { fuente: _fuenteVoz, lente: "content-creator" };',
+  '',
+].join('\n')
+export function construirFuenteDeLaVoz(f) {
+  cambiarCodigo(f, CONSOLIDADOR, ANCLA_BORRADOR, FUENTE_DE_LA_VOZ + ANCLA_BORRADOR)
 }
