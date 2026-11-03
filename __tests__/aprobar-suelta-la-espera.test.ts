@@ -54,6 +54,44 @@ describe('aprobar suelta la espera', () => {
     expect(enviado(f).idempotency_key).toBe('manual:v2:planear')
   })
 
+  describe('el pedido por versión deja su fila', () => {
+    const porVersion = (db: DbFalsa) => db.tablas['esperas_del_dueno'].filter((f) => f.clave === 'manual:v2:planear')
+
+    it('🔴 botón → la sala falla → recargar: queda escrito que falta, y reintentar lo cierra en la misma fila con la misma clave', async () => {
+      const db = base([]), malo = sala({ ok: false, code: 'caida' })
+      expect(await soltarEsperaYPedirPlan(db as BaseDeEsperas, pedido(), entorno(malo))).toMatchObject({ pedido: false })
+      expect(porVersion(db)).toHaveLength(1)
+      expect(porVersion(db)[0]).toMatchObject({ client_id: C, tipo: 'manual', estado: 'soltada', manual_id: 'v2', soltada_por: 'emilio', despertado: false, despertar_detalle: expect.stringContaining('caida') })
+      const bueno = sala()
+      expect(await soltarEsperaYPedirPlan(db as BaseDeEsperas, pedido(), entorno(bueno))).toMatchObject({ pedido: true })
+      expect(bueno).toHaveBeenCalledTimes(1)
+      expect(enviado(bueno).idempotency_key).toBe('manual:v2:planear')
+      expect(porVersion(db)).toHaveLength(1)
+      expect(porVersion(db)[0]).toMatchObject({ despertado: true, despertar_detalle: 'aceptado' })
+    })
+
+    it('🔴 aprobó antes de que el alta guardara y la sala falló: el reintento cierra la fila por versión, no la del alta', async () => {
+      const db = base([]), malo = sala({ ok: false, code: 'caida' })
+      db.semilla('client_brand_books', [{ id: 'v2', client_id: C, version: 2, human_validated: true, provenance_tag: { validado_por: 'dueno' } }])
+      await soltarEsperaYPedirPlan(db as BaseDeEsperas, pedido(), entorno(malo))
+      await guardarEsperaDelManual(db as BaseDeEsperas, { client_id: C, tipo: 'manual', sobre: { ...SOBRE, client_id: C } })
+      const bueno = sala()
+      await soltarEsperaYPedirPlan(db as BaseDeEsperas, pedido(), entorno(bueno))
+      expect(enviado(bueno).idempotency_key).toBe('manual:v2:planear')
+      expect(porVersion(db)[0]).toMatchObject({ despertado: true })
+    })
+
+    it('🔴 si no se puede dejar la fila, el pedido ya salió y no se repite ni se niega', async () => {
+      const f = sala(), log = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const db = base([])
+      const sinFila = { from: (t: string) => { const q = db.from(t) as unknown as Record<string, unknown>; q.upsert = async () => ({ data: null, error: { message: 'caída' } }); return q } }
+      expect(await soltarEsperaYPedirPlan(sinFila as BaseDeEsperas, pedido(), entorno(f))).toMatchObject({ pedido: true })
+      expect(f).toHaveBeenCalledTimes(1)
+      expect(log).toHaveBeenCalled()
+      log.mockRestore()
+    })
+  })
+
   it('🔴 un manual nuevo, con la espera ya soltada por otro, pide por su versión y no repite el sobre viejo', async () => {
     const db = base([{ id: 'e1', client_id: C, tipo: 'manual', clave: 'j1:planear', sobre: SOBRE, estado: 'soltada', manual_id: 'v2', creado_en: '2026-11-03T10:00:00Z' }]), f = sala()
     await soltarEsperaYPedirPlan(db as BaseDeEsperas, pedido('v3'), entorno(f))

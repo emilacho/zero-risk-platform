@@ -9,6 +9,7 @@ const UNICOS: Record<string, string[][]> = {
   oficina_uso_de_fotos: [['encargo_id', 'foto_id']],
   cerebro_diario_corridas: [['client_id', 'dia']],
   cadena_config: [['clave']],
+  esperas_del_dueno: [['tipo', 'clave']],
   notas_del_dueno: [['clave_unica']],
   eventos_de_emilio: [['clave_unica']],
   notas_del_dueno_envios: [['nota_id']],
@@ -114,6 +115,7 @@ class Consulta {
     else if (this.t === 'client_brand_books') o.id ??= `44444444-4444-4444-8444-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'clients') o.id ??= `55555555-5555-4555-8555-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'client_historical_outputs' || this.t === 'hitl_queue') o.id ??= `77777777-7777-4777-8777-${String(++this.db.secuencia).padStart(12, '0')}`
+    else if (this.t === 'esperas_del_dueno') { o.id ??= `22222222-2222-4222-8222-${String(++this.db.secuencia).padStart(12, '0')}`; o.creado_en ??= new Date(Date.UTC(2026, 10, 3, 12, 0, this.db.secuencia)).toISOString() }
     else if (this.t === 'plan_cambios' || this.t === 'plan_aprobaciones') { o.id ??= `33333333-3333-4333-8333-${String(++this.db.secuencia).padStart(12, '0')}`; o.estado ??= 'pendiente' }
     return o
   }

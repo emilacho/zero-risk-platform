@@ -42,6 +42,7 @@ interface ConsultaDeEsperas extends PromiseLike<{ data: Fila[] | null; error: { 
 }
 export interface BaseDeEsperas { from(tabla: string): unknown }
 const SOLTADA_ANTES_DE_GUARDAR = 'aprobado_antes_de_guardar'
+const detalleDe = (r: ResultadoDelPedidoDePlan) => (r.pedido ? (r.repetido ? 'repetido' : 'aceptado') : r.error)
 
 /**
  * LA PAUSA (ajuste de Emilio, 14:49Z: «pausas que se quitan cuando yo hago las aprobaciones»). El alta deja guardado el sobre del plan; aprobar lo suelta y la cadena sigue con SU sobre y SU clave.
@@ -58,7 +59,15 @@ export async function soltarEsperaYPedirPlan(db: BaseDeEsperas, p: PedidoDePlan 
   if (lectura.error) return { pedido: false, error: `no pude leer la espera del manual: ${lectura.error.message.slice(0, 160)}` }
   const espera = lectura.data?.[0]
   const estaViva = espera?.estado === 'esperando'
-  if (!espera || (!estaViva && (espera.manual_id !== p.manual_id || espera.soltada_por === SOLTADA_ANTES_DE_GUARDAR))) return pedirPlanDelManual(pedido, e)
+  if (!espera || (!estaViva && (espera.manual_id !== p.manual_id || espera.soltada_por === SOLTADA_ANTES_DE_GUARDAR))) {
+    // el pedido por versión también deja su fila (Lenovo, 15:25Z): si la sala falla y Emilio recarga, el tablero sigue viendo que falta y no esconde el botón
+    const sobre = sobreDelPlan(pedido)
+    const r = await mandarSobre(sobre, e)
+    const hora = p.ahora.toISOString()
+    const fila = await (esperas() as ConsultaDeEsperas & { upsert(v: Fila, o: { onConflict: string }): ConsultaDeEsperas }).upsert({ client_id: p.client_id, tipo: 'manual', clave: String(sobre.idempotency_key), sobre, estado: 'soltada', manual_id: p.manual_id, soltada_por: p.reviewer, soltada_en: hora, despertado: r.pedido, despertar_detalle: detalleDe(r), actualizado_en: hora }, { onConflict: 'tipo,clave' })
+    if (fila.error) console.error(`[pedir-plan] el pedido salió, pero no pude dejar su fila: ${fila.error.message.slice(0, 160)}`)
+    return r
+  }
 
   const hora = p.ahora.toISOString()
   if (estaViva) {
@@ -73,7 +82,7 @@ export async function soltarEsperaYPedirPlan(db: BaseDeEsperas, p: PedidoDePlan 
     await esperas().update({ estado: 'reemplazada', actualizado_en: hora }).eq('client_id', p.client_id).eq('tipo', 'manual').eq('estado', 'esperando')
   }
   const r = await mandarSobre(espera.sobre as Record<string, unknown>, e)
-  await esperas().update({ despertado: r.pedido, despertar_detalle: r.pedido ? (r.repetido ? 'repetido' : 'aceptado') : r.error, actualizado_en: new Date().toISOString() }).eq('id', espera.id)
+  await esperas().update({ despertado: r.pedido, despertar_detalle: detalleDe(r), actualizado_en: new Date().toISOString() }).eq('id', espera.id)
   return r
 }
 
