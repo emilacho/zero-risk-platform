@@ -328,7 +328,7 @@ const visual = (draft.visual && typeof draft.visual === 'object') ? draft.visual
 const observado = visual ? elegir(visual, ['capa_grafica', 'reglas', 'capa_producto', 'muestra']) : {};
 const hayObservado = Object.keys(observado).length > 0;
 const { ev, omitidas } = evidenciaHasta(plan.reescritura ? 3500 : 5000);
-const base = 'Eres el DUEÑO de ' + Object.keys(CAMPOS_LOGO).join(' y ') + ' del manual de marca. uso_del_logo: lista de reglas de uso del logo (versiones, fondos, márgenes, tamaño mínimo, qué no hacer). jerarquia_tipografica: lista de niveles (título, subtítulo, cuerpo, destacados) con la letra y el peso que la marca usa. ' +
+const base = 'Eres el DUEÑO de ' + Object.keys(CAMPOS_LOGO).join(' y ') + ' del manual de marca. uso_del_logo: lista de reglas de uso del logo (versiones, fondos, márgenes, tamaño mínimo, qué no hacer). jerarquia_tipografica: lista de niveles (título, subtítulo, cuerpo, destacados) con la letra y el peso que la marca usa; el uso de cada nivel dice dónde y para qué sirve, SIN repetir el nombre de la letra. ' +
   (hayObservado ? 'PARTE DE LO QUE EL PISO VISUAL OBSERVÓ en las fotos del cliente (colores, letras y logo reales): eso manda sobre cualquier suposición. ' : 'El piso visual no trajo lo observado de las fotos: propón con la evidencia y rotula. ') +
   'Emite SOLO esos campos con emit_brand_section (y su _field_meta). ' + REGLA + bloqueRE(Object.keys(CAMPOS_LOGO)) + '\n\n';
 const obs = '\n\nLO QUE EL PISO VISUAL OBSERVÓ:\n' + JSON.stringify(observado);
