@@ -3,7 +3,7 @@
  * Contrato: RESPUESTA de Cerebro (§1–§4): versión max+1 vigente con _field_meta.<campo>{fuente:'dueno',por,en,valor_anterior,cita}; la anterior queda; después cada campo a la puerta del dueño
  * del cerebro (sin acumula, canal «dashboard · manual», con reintento); validar = la vigente pasa a validada por el dueño; lo que escribe el dueño no lo pisa una corrida posterior.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildBrandBookRow } from '@/app/api/brand-book/[clientId]/route'
 import { quienValido } from '../campos-del-manual'
 import { conservarLoDelDueno, cuerpoParaElCerebro, editarManualDelDueno, empujarCamposAlCerebro, validarManualDelDueno, EDITABLES_DEL_TABLERO } from '../edicion-del-dueno'
@@ -200,12 +200,17 @@ describe('validar el manual · la vigente pasa a validada por el dueño', () => 
   })
   it('la acción del tablero «manual-validar» la ejecuta y deja su resultado', async () => {
     const db = base()
+    // el botón pide el plan: aquí sin red, para que una prueba nunca le hable a la sala de verdad
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, kind: 'accepted' }) })))
+    vi.stubEnv('INTERNAL_API_KEY', 'k')
     const s = await manualValidar({ db, puertos: (() => ({})) as never, ahora: () => AHORA }, { cuerpo: { client_id: C }, reviewer: 'emilio' })
     expect(s.status).toBe(200)
     expect(s.cuerpo).toMatchObject({ ok: true, validado_por: 'dueno', version_nueva: 2 })
     expect(s.toca).toMatchObject({ client_id: C })
+    expect(s.cuerpo).toMatchObject({ plan: { pedido: true } })
     const mala = await manualValidar({ db, puertos: (() => ({})) as never, ahora: () => AHORA }, { cuerpo: { client_id: 'no' }, reviewer: 'emilio' })
     expect(mala.status).toBe(400)
+    vi.unstubAllGlobals(); vi.unstubAllEnvs()
   })
   it('rutaValidarManual: el índice del cerebro se re-hace solo si hubo versión nueva', async () => {
     const llamadas: string[] = []

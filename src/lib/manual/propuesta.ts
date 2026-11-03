@@ -173,6 +173,9 @@ export function fusionarPropuestas(draft: Record<string, unknown>, propuestas: P
     const def = CAMPOS_PROPONIBLES[p.campo]
     if (!def) { rechazadas.push({ campo: p.campo, motivo: 'campo que no se propone' }); continue }
     const reemplazaPropuesta = (opciones.reproponer ?? []).includes(p.campo) && tieneRotulo(draft[p.campo])
+    // 3-nov · firma de Emilio: un campo que retiró no se vuelve a proponer solo; lo pide él con «Pedir cambios»
+    const metaPrevia = (draft._field_meta && typeof draft._field_meta === 'object' ? draft._field_meta : {}) as Record<string, { retirado?: unknown } | undefined>
+    if (metaPrevia[p.campo]?.retirado === true) { rechazadas.push({ campo: p.campo, motivo: 'el dueño lo retiró: solo vuelve si lo pide' }); continue }
     if (!vacio(draft[p.campo]) && !reemplazaPropuesta) { rechazadas.push({ campo: p.campo, motivo: 'ya tiene contenido: una propuesta nunca lo pisa' }); continue }
     // 03-nov · decisión de Emilio («quita esas reglas, para eso están mis observaciones»): ningún hecho sin respaldo frena la propuesta. Se devuelve para quien quiera leerlo; los datos duros no se inventan por instrucción del agente, no por este código
     const lista = Array.isArray(p.valor) ? p.valor : [p.valor]

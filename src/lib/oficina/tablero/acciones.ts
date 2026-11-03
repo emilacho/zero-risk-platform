@@ -10,6 +10,7 @@ import { firmarTablero, revisionResolver } from './revisiones'
 import { empujarManualAlCerebro } from '../../brain/push-al-terminar'
 import { manualCambios } from './manual-cambios'
 import { rutaDecidirPalabra, rutaValidarCampo, rutaValidarManual } from '../../manual/edicion-rutas'
+import { soltarEsperaYPedirPlan } from '../../manual/pedir-plan'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -202,10 +203,10 @@ export const manualPalabra: Manejador = async ({ db }, { cuerpo, reviewer }) => 
   return { status: s.status, cuerpo: s.body, toca: s.toca }
 }
 
-// ───────────────────────── manual-validar (US$ 0): la vigente pasa a validada por el dueño
+// ───────────────────────── manual-validar: la vigente pasa a validada por el dueño. Validar es US$ 0, pero pide el plan, y el plan gasta: es lo que aprueba Emilio en la confirmación
 export const manualValidar: Manejador = async ({ db }, { cuerpo, reviewer }) => {
   if (typeof cuerpo.client_id !== 'string' || !UUID.test(cuerpo.client_id)) return rechazo(400, 'entrada_invalida', '`client_id` debe ser un uuid')
-  const s = await rutaValidarManual({ db, cerebro: { env: { baseUrl: '', internalKey: '' } }, empujarManual: (x) => empujarManualAlCerebro(x) }, cuerpo.client_id, reviewer)
+  const s = await rutaValidarManual({ db, cerebro: { env: { baseUrl: '', internalKey: '' } }, empujarManual: (x) => empujarManualAlCerebro(x), pedirPlan: (p) => soltarEsperaYPedirPlan(db, { ...p, reviewer, ahora: new Date() }) }, cuerpo.client_id, reviewer)
   return { status: s.status, cuerpo: s.body, toca: s.toca }
 }
 
