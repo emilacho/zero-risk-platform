@@ -23,6 +23,43 @@ function base(extra: Record<string, unknown> = {}) {
 const versiones = (db: DbFalsa) => [...db.tablas['client_brand_books']].sort((a, b) => Number(a.version) - Number(b.version))
 const draftDe = (f: Record<string, unknown>) => (JSON.parse(String(f.content_text)) as { brand_book_draft: Record<string, unknown> }).brand_book_draft
 
+describe('retirar un campo entero', () => {
+  it.each([['texto vacío', ''], ['solo espacios', '   '], ['null', null]])('🔴 %s: versión nueva con el campo vacío y su valor anterior; la anterior queda', async (_n, valor) => {
+    const db = base()
+    const r = await editarManualDelDueno(db, { client_id: C, campos: { proposito: valor }, comentario: 'no lo usamos', reviewer: 'emilio', ahora: AHORA })
+    expect(r).toMatchObject({ ok: true, version_nueva: 2 })
+    const [v1, v2] = versiones(db)
+    expect(v1.brand_purpose).toBe('Propósito viejo')
+    expect(v2.brand_purpose).toBeNull()
+    expect(draftDe(v2).proposito).toBeNull()
+    expect((draftDe(v2)._field_meta as Record<string, unknown>).proposito).toEqual({ fuente: 'dueno', por: 'emilio', en: AHORA.toISOString(), valor_anterior: 'Propósito viejo', cita: 'no lo usamos', retirado: true })
+  })
+  it('🔴 también una lista entera, sin tocar los otros campos', async () => {
+    const db = base()
+    expect((await editarManualDelDueno(db, { client_id: C, campos: { valores: '' }, reviewer: 'emilio', ahora: AHORA })).ok).toBe(true)
+    const v2 = versiones(db)[1]
+    expect(v2.brand_values).toBeNull()
+    expect(draftDe(v2).valores).toBeNull()
+    expect(v2.brand_mission).toBe('Misión escrita por el sistema')
+  })
+  it('🔴 volver a escribirlo quita la marca de retirado', async () => {
+    const db = base()
+    await editarManualDelDueno(db, { client_id: C, campos: { proposito: '' }, reviewer: 'emilio', ahora: AHORA })
+    await editarManualDelDueno(db, { client_id: C, campos: { proposito: 'Otro propósito' }, reviewer: 'emilio', ahora: AHORA })
+    const v3 = versiones(db)[2]
+    expect(v3.brand_purpose).toBe('Otro propósito')
+    expect((draftDe(v3)._field_meta as Record<string, Record<string, unknown>>).proposito.retirado).toBeUndefined()
+  })
+  it('🔴 lo retirado no va a la puerta del dueño del cerebro, y la ruta lo dice', async () => {
+    const enviados: string[] = []
+    const s = await rutaEditarManual({ db: base(), ahora: () => AHORA, cerebro: { env: { baseUrl: 'x', internalKey: 'k' }, esperar: async () => {}, enviar: async (_e, _f, cuerpo) => { enviados.push(String(cuerpo.tema)); return { ok: true, repetida: false } } }, empujarManual: () => ({ estado: 'agendado' }) }, C, { campos: { proposito: '', mision: 'Misión nueva' } })
+    expect(s.status).toBe(200)
+    expect(enviados).toEqual(['manual · mision'])
+    expect(s.body.cambios).toEqual(expect.arrayContaining([expect.objectContaining({ campo: 'proposito', valor: '', retirado: true })]))
+    expect(s.body.cerebro).toMatchObject({ pendientes: [] })
+  })
+})
+
 describe('editar el manual · versión nueva con la procedencia del dueño', () => {
   it('una edición crea la versión max+1 vigente, deja la anterior y marca el campo como del dueño con valor anterior y cita', async () => {
     const db = base()
@@ -49,9 +86,9 @@ describe('editar el manual · versión nueva con la procedencia del dueño', () 
     expect(d.icp_summary).toBe('Familias de la costa')
     expect((d._field_meta as Record<string, Record<string, unknown>>).nunca_hace).toMatchObject({ fuente: 'dueno' })
   })
-  it('rechaza lo que no se puede editar, lo vacío y lo demasiado largo; no escribe nada', async () => {
+  it('rechaza lo que no se puede editar, lo que no es texto y lo demasiado largo; no escribe nada', async () => {
     const db = base()
-    const malos: Array<Record<string, unknown>> = [{ mision_x: 'a' }, { derivado: 'a' }, { proposito: '   ' }, { proposito: 'x'.repeat(100_001) }, {}]
+    const malos: Array<Record<string, unknown>> = [{ mision_x: 'a' }, { derivado: 'a' }, { proposito: 7 }, { proposito: 'x'.repeat(100_001) }, {}]
     for (const campos of malos) {
       const r = await editarManualDelDueno(db, { client_id: C, campos, reviewer: 'emilio' })
       expect(r.ok).toBe(false)
