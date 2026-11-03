@@ -3,12 +3,12 @@
  "name": "Zero Risk â€” Client Onboarding E2E v2 (Webhook: Deal Won)",
  "description": null,
  "active": true,
- "activeVersionId": "26ba2cbe-79fa-4972-882f-cd759f4b43ae",
+ "activeVersionId": "3c62fd3c-563e-4e72-b2ea-6bd49809f842",
  "createdAt": "2026-04-18T15:45:06.415Z",
- "updatedAt": "2026-11-02T21:24:41.312Z",
+ "updatedAt": "2026-11-03T16:01:03.013Z",
  "isArchived": false,
- "versionId": "26ba2cbe-79fa-4972-882f-cd759f4b43ae",
- "versionCounter": 262,
+ "versionId": "3c62fd3c-563e-4e72-b2ea-6bd49809f842",
+ "versionCounter": 263,
  "sourceWorkflowId": null,
  "triggerCount": 1,
  "nodes": [
@@ -2363,7 +2363,7 @@
   {
    "id": "e57-sobre-planeacion-0001-000000000001",
    "name": "E57 · sobre · pedir planeación a la sala",
-   "notes": "E71 (CC#1 2026-09-17) · cuelga de «Llamar · Segunda Fase del alta»: el final REAL alcanzable del alta (la segunda fase emite el journey_completed verdadero). Antes colgaba de un journey_completed HUÉRFANO que ningún disparador alcanza (cola vieja del alta, movida a wu1D el 03-sep). Llave de idempotencia <journey_id>:planear intacta.\nE73 (CC#1 2026-09-17) · logical_period FIJO por recorrido («alta:<_journey_id>»), no $now: la clave de dedup de la puerta y el stream_id llevan logical_period; con la fecha del momento, el mismo pedido reintentado OTRO día entraba como sobre nuevo y pagaba dos planeaciones (E72 · CC#2).\nE108 · el sobre lleva `dry_run: false` explícito: el ensayo se decide en el origen · planeación lo pasa tal cual a los brazos.\nE111 · payload.forzar y payload.force_restart = trato.force_restart === true (el guardia ⑥ y el redactor de planeación). · Noche 19-oct (CC#1): el sobre lleva plan_v3:true + corrida para que la planeación haga el pre-vuelo, el dato v1 y llame a la oficina financiera DESDE su flujo.",
+   "notes": "E71 (CC#1 2026-09-17) · cuelga de «Llamar · Segunda Fase del alta»: el final REAL alcanzable del alta (la segunda fase emite el journey_completed verdadero). Antes colgaba de un journey_completed HUÉRFANO que ningún disparador alcanza (cola vieja del alta, movida a wu1D el 03-sep). Llave de idempotencia <journey_id>:planear intacta.\nE73 (CC#1 2026-09-17) · logical_period FIJO por recorrido («alta:<_journey_id>»), no $now: la clave de dedup de la puerta y el stream_id llevan logical_period; con la fecha del momento, el mismo pedido reintentado OTRO día entraba como sobre nuevo y pagaba dos planeaciones (E72 · CC#2).\nE108 · el sobre lleva `dry_run: false` explícito: el ensayo se decide en el origen · planeación lo pasa tal cual a los brazos.\nE111 · payload.forzar y payload.force_restart = trato.force_restart === true (el guardia ⑥ y el redactor de planeación). · Noche 19-oct (CC#1): el sobre lleva plan_v3:true + corrida para que la planeación haga el pre-vuelo, el dato v1 y llame a la oficina financiera DESDE su flujo.\n03-nov (señal 14:49Z): ya no pide el plan a la sala; GUARDA el sobre en la espera del dueño. El botón «Aprobar el manual» lo suelta.",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
    "retryOnFail": true,
@@ -2375,7 +2375,7 @@
    ],
    "parameters": {
     "method": "POST",
-    "url": "={{ $env.SALA_INTAKE_URL || 'https://zero-risk-platform.vercel.app/api/sala/intake' }}",
+    "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/esperas-del-dueno",
     "sendHeaders": true,
     "headerParameters": {
      "parameters": [
@@ -2385,17 +2385,17 @@
       },
       {
        "name": "x-api-key",
-       "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+       "value": "={{ $env.INTERNAL_API_KEY }}"
       },
       {
        "name": "x-source",
-       "value": "n8n-e57-alta-journey-completed"
+       "value": "n8n-e57-alta-espera-del-manual"
       }
      ]
     },
     "sendBody": true,
     "specifyBody": "json",
-    "jsonBody": "={\n  \"source\": \"alta/journey-completed\",\n  \"intent\": \"planear\",\n  \"payload\": {\n    \"pedido\": \"plan de 90 dias\", \"dry_run\": {{ $('Validate Deal Data').first().json.dry_run === true }},\n    \"plan_v3\": true,\n    \"corrida\": \"{{ $('Validate Deal Data').first().json._journey_id }}:planear\",\n    \"forzar\": {{ $('Validate Deal Data').first().json.force_restart === true }},\n    \"force_restart\": {{ $('Validate Deal Data').first().json.force_restart === true }},\n    \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n    \"desde_worker\": \"LyVoKcrypS5uLyuu\",\n    \"journey_id\": \"{{ $('Validate Deal Data').first().json._journey_id }}\"\n  },\n  \"idempotency_key\": \"{{ $('Validate Deal Data').first().json._journey_id }}:planear\",\n  \"logical_period\": \"alta:{{ $('Validate Deal Data').first().json._journey_id }}\",\n  \"tenant_id\": \"{{ $('Validate Deal Data').first().json.tenant_id || $('Validate Deal Data').first().json.client_id }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n  \"correlation_id\": \"{{ $('Validate Deal Data').first().json._sala_correlation_id }}\"\n}",
+    "jsonBody": "={\n  \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n  \"tipo\": \"manual\",\n  \"workflow_id\": \"LyVoKcrypS5uLyuu\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"sobre\": {\n  \"source\": \"alta/journey-completed\",\n  \"intent\": \"planear\",\n  \"payload\": {\n    \"pedido\": \"plan de 90 dias\", \"dry_run\": {{ $('Validate Deal Data').first().json.dry_run === true }},\n    \"plan_v3\": true,\n    \"corrida\": \"{{ $('Validate Deal Data').first().json._journey_id }}:planear\",\n    \"forzar\": {{ $('Validate Deal Data').first().json.force_restart === true }},\n    \"force_restart\": {{ $('Validate Deal Data').first().json.force_restart === true }},\n    \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n    \"desde_worker\": \"LyVoKcrypS5uLyuu\",\n    \"journey_id\": \"{{ $('Validate Deal Data').first().json._journey_id }}\"\n  },\n  \"idempotency_key\": \"{{ $('Validate Deal Data').first().json._journey_id }}:planear\",\n  \"logical_period\": \"alta:{{ $('Validate Deal Data').first().json._journey_id }}\",\n  \"tenant_id\": \"{{ $('Validate Deal Data').first().json.tenant_id || $('Validate Deal Data').first().json.client_id }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n  \"correlation_id\": \"{{ $('Validate Deal Data').first().json._sala_correlation_id }}\"\n}\n}",
     "options": {
      "response": {
       "response": {
@@ -4332,7 +4332,7 @@
   }
  ],
  "activeVersion": {
-  "versionId": "26ba2cbe-79fa-4972-882f-cd759f4b43ae",
+  "versionId": "3c62fd3c-563e-4e72-b2ea-6bd49809f842",
   "workflowId": "LyVoKcrypS5uLyuu",
   "nodes": [
    {
@@ -6686,7 +6686,7 @@
    {
     "id": "e57-sobre-planeacion-0001-000000000001",
     "name": "E57 · sobre · pedir planeación a la sala",
-    "notes": "E71 (CC#1 2026-09-17) · cuelga de «Llamar · Segunda Fase del alta»: el final REAL alcanzable del alta (la segunda fase emite el journey_completed verdadero). Antes colgaba de un journey_completed HUÉRFANO que ningún disparador alcanza (cola vieja del alta, movida a wu1D el 03-sep). Llave de idempotencia <journey_id>:planear intacta.\nE73 (CC#1 2026-09-17) · logical_period FIJO por recorrido («alta:<_journey_id>»), no $now: la clave de dedup de la puerta y el stream_id llevan logical_period; con la fecha del momento, el mismo pedido reintentado OTRO día entraba como sobre nuevo y pagaba dos planeaciones (E72 · CC#2).\nE108 · el sobre lleva `dry_run: false` explícito: el ensayo se decide en el origen · planeación lo pasa tal cual a los brazos.\nE111 · payload.forzar y payload.force_restart = trato.force_restart === true (el guardia ⑥ y el redactor de planeación). · Noche 19-oct (CC#1): el sobre lleva plan_v3:true + corrida para que la planeación haga el pre-vuelo, el dato v1 y llame a la oficina financiera DESDE su flujo.",
+    "notes": "E71 (CC#1 2026-09-17) · cuelga de «Llamar · Segunda Fase del alta»: el final REAL alcanzable del alta (la segunda fase emite el journey_completed verdadero). Antes colgaba de un journey_completed HUÉRFANO que ningún disparador alcanza (cola vieja del alta, movida a wu1D el 03-sep). Llave de idempotencia <journey_id>:planear intacta.\nE73 (CC#1 2026-09-17) · logical_period FIJO por recorrido («alta:<_journey_id>»), no $now: la clave de dedup de la puerta y el stream_id llevan logical_period; con la fecha del momento, el mismo pedido reintentado OTRO día entraba como sobre nuevo y pagaba dos planeaciones (E72 · CC#2).\nE108 · el sobre lleva `dry_run: false` explícito: el ensayo se decide en el origen · planeación lo pasa tal cual a los brazos.\nE111 · payload.forzar y payload.force_restart = trato.force_restart === true (el guardia ⑥ y el redactor de planeación). · Noche 19-oct (CC#1): el sobre lleva plan_v3:true + corrida para que la planeación haga el pre-vuelo, el dato v1 y llame a la oficina financiera DESDE su flujo.\n03-nov (señal 14:49Z): ya no pide el plan a la sala; GUARDA el sobre en la espera del dueño. El botón «Aprobar el manual» lo suelta.",
     "type": "n8n-nodes-base.httpRequest",
     "typeVersion": 4.2,
     "retryOnFail": true,
@@ -6698,7 +6698,7 @@
     ],
     "parameters": {
      "method": "POST",
-     "url": "={{ $env.SALA_INTAKE_URL || 'https://zero-risk-platform.vercel.app/api/sala/intake' }}",
+     "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/esperas-del-dueno",
      "sendHeaders": true,
      "headerParameters": {
       "parameters": [
@@ -6708,17 +6708,17 @@
        },
        {
         "name": "x-api-key",
-        "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+        "value": "={{ $env.INTERNAL_API_KEY }}"
        },
        {
         "name": "x-source",
-        "value": "n8n-e57-alta-journey-completed"
+        "value": "n8n-e57-alta-espera-del-manual"
        }
       ]
      },
      "sendBody": true,
      "specifyBody": "json",
-     "jsonBody": "={\n  \"source\": \"alta/journey-completed\",\n  \"intent\": \"planear\",\n  \"payload\": {\n    \"pedido\": \"plan de 90 dias\", \"dry_run\": {{ $('Validate Deal Data').first().json.dry_run === true }},\n    \"plan_v3\": true,\n    \"corrida\": \"{{ $('Validate Deal Data').first().json._journey_id }}:planear\",\n    \"forzar\": {{ $('Validate Deal Data').first().json.force_restart === true }},\n    \"force_restart\": {{ $('Validate Deal Data').first().json.force_restart === true }},\n    \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n    \"desde_worker\": \"LyVoKcrypS5uLyuu\",\n    \"journey_id\": \"{{ $('Validate Deal Data').first().json._journey_id }}\"\n  },\n  \"idempotency_key\": \"{{ $('Validate Deal Data').first().json._journey_id }}:planear\",\n  \"logical_period\": \"alta:{{ $('Validate Deal Data').first().json._journey_id }}\",\n  \"tenant_id\": \"{{ $('Validate Deal Data').first().json.tenant_id || $('Validate Deal Data').first().json.client_id }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n  \"correlation_id\": \"{{ $('Validate Deal Data').first().json._sala_correlation_id }}\"\n}",
+     "jsonBody": "={\n  \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n  \"tipo\": \"manual\",\n  \"workflow_id\": \"LyVoKcrypS5uLyuu\",\n  \"workflow_execution_id\": \"{{ $execution.id }}\",\n  \"sobre\": {\n  \"source\": \"alta/journey-completed\",\n  \"intent\": \"planear\",\n  \"payload\": {\n    \"pedido\": \"plan de 90 dias\", \"dry_run\": {{ $('Validate Deal Data').first().json.dry_run === true }},\n    \"plan_v3\": true,\n    \"corrida\": \"{{ $('Validate Deal Data').first().json._journey_id }}:planear\",\n    \"forzar\": {{ $('Validate Deal Data').first().json.force_restart === true }},\n    \"force_restart\": {{ $('Validate Deal Data').first().json.force_restart === true }},\n    \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n    \"desde_worker\": \"LyVoKcrypS5uLyuu\",\n    \"journey_id\": \"{{ $('Validate Deal Data').first().json._journey_id }}\"\n  },\n  \"idempotency_key\": \"{{ $('Validate Deal Data').first().json._journey_id }}:planear\",\n  \"logical_period\": \"alta:{{ $('Validate Deal Data').first().json._journey_id }}\",\n  \"tenant_id\": \"{{ $('Validate Deal Data').first().json.tenant_id || $('Validate Deal Data').first().json.client_id }}\",\n  \"client_id\": \"{{ $('Validate Deal Data').first().json.client_id }}\",\n  \"correlation_id\": \"{{ $('Validate Deal Data').first().json._sala_correlation_id }}\"\n}\n}",
      "options": {
       "response": {
        "response": {
@@ -8623,32 +8623,32 @@
   "name": null,
   "description": null,
   "autosaved": false,
-  "createdAt": "2026-11-02T21:24:41.319Z",
-  "updatedAt": "2026-11-02T21:24:41.319Z",
+  "createdAt": "2026-11-03T16:01:03.017Z",
+  "updatedAt": "2026-11-03T16:01:03.017Z",
   "workflowPublishHistory": [
    {
-    "id": 3423,
+    "id": 3632,
     "workflowId": "LyVoKcrypS5uLyuu",
-    "versionId": "26ba2cbe-79fa-4972-882f-cd759f4b43ae",
+    "versionId": "3c62fd3c-563e-4e72-b2ea-6bd49809f842",
     "event": "activated",
     "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
-    "createdAt": "2026-11-02T21:24:41.477Z"
+    "createdAt": "2026-11-03T16:01:03.204Z"
    },
    {
-    "id": 3424,
+    "id": 3633,
     "workflowId": "LyVoKcrypS5uLyuu",
-    "versionId": "26ba2cbe-79fa-4972-882f-cd759f4b43ae",
+    "versionId": "3c62fd3c-563e-4e72-b2ea-6bd49809f842",
     "event": "deactivated",
     "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
-    "createdAt": "2026-11-02T21:24:41.666Z"
+    "createdAt": "2026-11-03T16:01:03.459Z"
    },
    {
-    "id": 3425,
+    "id": 3634,
     "workflowId": "LyVoKcrypS5uLyuu",
-    "versionId": "26ba2cbe-79fa-4972-882f-cd759f4b43ae",
+    "versionId": "3c62fd3c-563e-4e72-b2ea-6bd49809f842",
     "event": "activated",
     "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
-    "createdAt": "2026-11-02T21:24:41.920Z"
+    "createdAt": "2026-11-03T16:01:03.813Z"
    }
   ]
  },
