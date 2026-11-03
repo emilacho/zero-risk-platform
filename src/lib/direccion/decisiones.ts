@@ -3,6 +3,7 @@
  * Fuentes: compuerta del plan (si la tabla existe) · bandeja (`hitl_queue` pending, todos sus tipos: ninguno se esconde) · preguntas al dueño · preguntas y firmas de finanzas.
  * Se omiten clientes de práctica y dados de baja, y lo dice (`omitidas`).
  */
+import { planEsperaAlManual } from '../manual/manual-primero'
 import { TOPE_REESCRITURA_USD } from '../oficina/tablero/plan'
 import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
@@ -116,12 +117,17 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null })
   for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null })
 
-  const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas }
+  const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas, esperan_el_manual: 0 }
+  // 3-nov · firma de Emilio: un plan no pide firma antes de su manual. Si el manual no se puede leer, se muestra: mejor una firma de más que una escondida; la puerta del plan igual la frena
+  const clientesConPlan = [...new Set(crudas.filter((d) => d.tipo === 'plan' && d.client_id).map((d) => d.client_id as string))]
+  const lecturas = await Promise.all(clientesConPlan.map(async (c) => [c, await planEsperaAlManual(db, c).catch(() => ({ ok: false as const, error: 'lectura' }))] as const))
+  const esperanElManual = new Set(lecturas.filter(([, l]) => l.ok && l.espera).map(([c]) => c))
   const decisiones: Decision[] = []
   for (const d of crudas) {
     const c = d.client_id ? clientes.get(d.client_id) : undefined
     if (c?.practica) { omitidas.clientes_de_practica++; continue }
     if (c?.de_baja) { omitidas.clientes_de_baja++; continue }
+    if (d.tipo === 'plan' && d.client_id && esperanElManual.has(d.client_id)) { omitidas.esperan_el_manual++; continue }
     decisiones.push({ ...d, titulo: tituloParaElDueno(d.titulo), titulo_interno: d.titulo, cliente: c?.nombre ?? null, vencida: !!d.vence && d.vence < hora })
   }
   decisiones.sort(ordenarPorUrgencia)

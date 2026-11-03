@@ -4,6 +4,7 @@
  *   POST  /api/tablero/manual-validar      cuerpo: { client_id, reviewer, origen:'dashboard' } · aprobar el manual es lo que pide el plan (firma de Emilio, 3-nov)
  */
 import { hayBorrador } from './borrador-del-dueno'
+import { cerrarFirmasDelPlanAnterior } from './manual-primero'
 import type { PedidoDePlan, ResultadoDelPedidoDePlan } from './pedir-plan'
 import { decidirPalabraDelDueno, editarManualDelDueno, empujarCamposAlCerebro, validarCampoDelManual, validarManualDelDueno, type Db, type DepsDelCerebro } from './edicion-del-dueno'
 
@@ -92,6 +93,8 @@ export async function rutaValidarManual(d: DepsDeEdicion, client_id: string, rev
   if (!r.ok) return { status: r.status, body: { ok: false, error: r.error, detalle: r.detalle }, toca }
   const indice = r.sin_cambios ? { estado: 'sin_cambios' } : d.empujarManual({ client_id, source_id: r.source_id })
   const plan = d.pedirPlan ? await d.pedirPlan({ client_id, manual_id: r.source_id }) : null
+  // un pedido repetido no cierra nada: el plan que hay puede ser ya el nuevo
+  if (plan?.pedido && !plan.repetido) await cerrarFirmasDelPlanAnterior(d.db, client_id, ahora)
   return {
     status: 200,
     toca,
