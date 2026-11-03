@@ -6,10 +6,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { recorrer } from './_emulador-n8n'
+import { sinFraseSedes } from './_sin-frase-sedes'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
 const leer = (d: string) => JSON.parse(fs.readFileSync(path.join(RAIZ, d, 'X9F0zp6LQ2xGEYVS.json'), 'utf8'))
-const nuevo = leer('nuevo'), aplicado = leer('aplicado')
+const nuevo = sinFraseSedes(leer('nuevo')), aplicado = leer('aplicado')
 const sig = (f: any, nodo: string): string => f.connections[nodo].main[0][0].node
 const GUARDADO = 'JEF · plan · el plan de guardado'
 const TEXTO_B = 'PLAN B\n## Qué cambió (versión 2)\n- pidió Guayaquil'

@@ -12,5 +12,12 @@ export const sinFraseSedes = <T>(flujo: T): T => {
   }
   quitar('Redactor (B4)', "'" + FRASE_SEDES_Y_PREGUNTAR + "',\n'',\n")
   quitar('JEF · armar', '; ' + FRASE_SEDES_JEFATURA)
+  // 03-nov · el cierre «hecha · espera al dueño» (V9) tiene su propia prueba (flujos-oficina-marketing-planeacion-cierre-al-esperar-al-dueno): aquí se quita para medir solo lo de cada paso
+  const CIERRE = ['V9 · armar el cierre al esperar al dueño', 'V9 · ¿cerrar al esperar al dueño?', 'V9 · cerrar al esperar al dueño']
+  if (f.nodes && f.connections && CIERRE.every((n) => f.nodes.some((x: any) => x.name === n))) {
+    f.nodes = f.nodes.filter((x: any) => !CIERRE.includes(x.name))
+    for (const n of CIERRE) delete f.connections[n]
+    delete f.connections['Compuerta · esperar al dueño']
+  }
   return f as T
 }
