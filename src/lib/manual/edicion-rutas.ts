@@ -3,6 +3,7 @@
  *   PATCH /api/manual/{client_id}/campos   cuerpo: { campos:{<clave del borrador o del tablero>: texto, o vacío o null para retirarlo}, comentario?, reviewer, origen:'dashboard' }
  *   POST  /api/tablero/manual-validar      cuerpo: { client_id, reviewer, origen:'dashboard' } · aprobar el manual es lo que pide el plan (firma de Emilio, 3-nov)
  */
+import { hayBorrador } from './borrador-del-dueno'
 import type { PedidoDePlan, ResultadoDelPedidoDePlan } from './pedir-plan'
 import { decidirPalabraDelDueno, editarManualDelDueno, empujarCamposAlCerebro, validarCampoDelManual, validarManualDelDueno, type Db, type DepsDelCerebro } from './edicion-del-dueno'
 
@@ -73,6 +74,10 @@ async function queImpideAprobar(db: Db, client_id: string): Promise<{ status: nu
   const p = (await db.from('plan_corridas').select('id').eq('client_id', client_id).in('estado', ['esperando', 'corriendo'])) as { data: Fila[] | null; error: { message: string } | null }
   if (p.error) return { status: 502, error: 'no_se_pudo_leer', detalle: `no pude leer las corridas del plan: ${p.error.message}` }
   if ((p.data ?? []).length) return { status: 409, error: 'plan_en_curso', detalle: 'Ya hay un plan en marcha para este cliente. Podrás aprobar cuando termine.' }
+  // 3-nov · lo que marcó y no pidió debe contar antes de seguir con el plan
+  const b = await hayBorrador(db, client_id, 'manual')
+  if (b.error) return { status: 502, error: 'no_se_pudo_leer', detalle: `no pude leer el borrador: ${b.error}` }
+  if (b.hay) return { status: 409, error: 'borrador_pendiente', detalle: 'Tienes cambios sin pedir en el manual. Pídelos o descártalos antes de aprobar.' }
   return null
 }
 
