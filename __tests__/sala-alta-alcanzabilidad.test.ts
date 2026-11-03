@@ -15,7 +15,6 @@ import {
   analizar,
   veredicto,
   huecos,
-  guardaSeComporta,
   sucesores,
   compararConMotor,
   HUERFANOS_CONOCIDOS,
@@ -32,14 +31,16 @@ const alta = JSON.parse(readFileSync(join(DIR, ultima), 'utf8')) as Parameters<t
 const r = analizar(alta)
 
 describe(`E71 · alcanzabilidad del alta · foto ${ultima} · versionId ${r.versionId}`, () => {
-  it('el sobre de planeación existe y es ALCANZABLE desde el disparador', () => {
-    expect(r.sobre_existe, `falta «${SOBRE}»`).toBe(true)
-    expect(r.sobre_alcanzable, `«${SOBRE}» no se alcanza desde «${DISPARADOR}» · el pedido de planeación nunca saldría`).toBe(true)
+  it('03-nov · el alta NO pide el plan: no existe el sobre ni ningún nodo con intent «planear» (firma de Emilio 14:46Z · el plan sale al aprobar el manual)', () => {
+    expect(r.sobre_existe, `«${SOBRE}» sigue en el alta`).toBe(false)
+    expect(r.nodos_que_piden_planeacion).toEqual([])
+    expect(alta.nodes.map((n: { name: string }) => n.name)).not.toContain(GUARDA)
   })
 
-  it('cuelga del final REAL del alta (la segunda fase), no de la cola huérfana', () => {
-    expect(r.pasa_por_final_real, `el camino al sobre no pasa por «${FINAL_REAL}» · camino: ${r.camino.join(' → ')}`).toBe(true)
-    expect(r.camino[r.camino.length - 2]).toBe(FINAL_REAL)
+  it('«Llamar · Segunda Fase del alta» sigue siendo alcanzable: es el FINAL del alta (Notion, agenda, aviso, cierre) y nada cuelga de él', () => {
+    expect(r.final_real_alcanzable, `«${FINAL_REAL}» no se alcanza desde «${DISPARADOR}»`).toBe(true)
+    expect(r.camino[r.camino.length - 1]).toBe(FINAL_REAL)
+    expect(sucesores(alta, FINAL_REAL)).toEqual([])
   })
 
   it('no hay huérfanos NUEVOS · los 24 conocidos están declarados por nombre', () => {
@@ -48,49 +49,33 @@ describe(`E71 · alcanzabilidad del alta · foto ${ultima} · versionId ${r.vers
     expect(r.huerfanos.length).toBeLessThanOrEqual(HUERFANOS_CONOCIDOS.length)
   })
 
-  it('el journey_completed huérfano ya NO alimenta al sobre (una sola fuente · no salen dos sobres)', () => {
-    const entradas = Object.entries(alta.connections as Record<string, { main?: Array<Array<{ node: string }>> }>)
-      .filter(([, c]) => (c.main ?? []).some((arr) => (arr ?? []).some((x) => x.node === SOBRE)))
-      .map(([k]) => k)
-    expect(entradas).toEqual([FINAL_REAL])
-  })
-
   it('el veredicto del script coincide', () => {
     expect(veredicto(r, alta)).toEqual({ ok: true, problemas: [] })
   })
 
-  // ── E73 · los huecos de E72 (CC#2) ──
+  it('🔴 mutante · si el sobre vuelve a colgar de la segunda fase, el veredicto FALLA', () => {
+    const m = JSON.parse(JSON.stringify(alta)) as typeof alta
+    m.nodes.push({ name: SOBRE, type: 'n8n-nodes-base.httpRequest', parameters: { jsonBody: '={ "intent": "planear" }' } })
+    m.connections[FINAL_REAL] = { main: [[{ node: SOBRE, type: 'main', index: 0 }]] }
+    const v = veredicto(analizar(m), m)
+    expect(v.ok).toBe(false)
+    expect(v.problemas.join(' ')).toMatch(/sigue en el alta/)
+  })
+
+  it('🔴 mutante · con OTRO nombre pero que pide planeación (intent «planear») también falla', () => {
+    const m = JSON.parse(JSON.stringify(alta)) as typeof alta
+    m.nodes.push({ name: 'Pedir plan por otra puerta', type: 'n8n-nodes-base.httpRequest', parameters: { jsonBody: '={ "source": "x", "intent": "planear" }' } })
+    m.connections[FINAL_REAL] = { main: [[{ node: 'Pedir plan por otra puerta', type: 'main', index: 0 }]] }
+    expect(veredicto(analizar(m), m).problemas.join(' ')).toMatch(/piden planeación/)
+  })
+
+  // ── E73 · los huecos de E72 (CC#2) que siguen vigentes ──
   it('E73 · hueco 1 · ningún nodo del camino está DESACTIVADO y «Llamar» espera a la segunda fase', () => {
     const byName = new Map((alta.nodes as Array<{ name: string; disabled?: boolean; parameters?: { options?: { waitForSubWorkflow?: boolean } } }>).map((n) => [n.name, n]))
     const desactivados = r.camino.filter((n) => byName.get(n)?.disabled)
     expect(desactivados, `desactivados en el camino: ${desactivados.join(' · ')}`).toEqual([])
     expect(byName.get(FINAL_REAL)?.parameters?.options?.waitForSubWorkflow).not.toBe(false)
-  })
-
-  it('E73 · hueco 2 · la GUARDA existe, es la salida del sobre y lanza cuando ok !== true', () => {
-    const guarda = (alta.nodes as Array<{ name: string; disabled?: boolean; parameters?: { jsCode?: string } }>).find((n) => n.name === GUARDA)
-    expect(guarda, `falta «${GUARDA}»`).toBeDefined()
-    expect(guarda?.disabled).not.toBe(true)
-    expect(sucesores(alta, SOBRE)).toEqual([GUARDA])
-    // E75 · comportamiento, no palabras: la guarda se EJECUTA en banco
-    const g = guardaSeComporta(String(guarda?.parameters?.jsCode ?? ''))
-    expect(g.lanza_con_rechazo, 'la GUARDA no lanza con ok:false').toBe(true)
-    expect(g.pasa_con_duplicate, 'la GUARDA no deja pasar un duplicate').toBe(true)
     expect(huecos(alta, r)).toEqual([])
-  })
-
-  it('E75 · una guarda NEUTRALIZADA que conserva las palabras en comentarios ya NO pasa (H2c de E74)', () => {
-    const neutralizada = [
-      '// antes: if (cuerpo.ok !== true) { throw new Error("SOBRE_RECHAZADO") }',
-      'const r = $input.first().json;',
-      'return [{ json: { dejado_en_la_puerta: true, kind: (r.body || r).kind } }];',
-    ].join('\n')
-    const g = guardaSeComporta(neutralizada)
-    expect(g.lanza_con_rechazo).toBe(false)
-    const mutada = JSON.parse(JSON.stringify(alta)) as typeof alta
-    const gm = (mutada.nodes as Array<{ name: string; parameters: { jsCode?: string } }>).find((n) => n.name === GUARDA)!
-    gm.parameters.jsCode = neutralizada
-    expect(huecos(mutada, analizar(mutada)).some((p) => /ya no lanza/.test(p))).toBe(true)
   })
 
   it('E73 · hueco 3 · la foto es la misma versión que el motor (sólo con N8N_API_KEY · secreto de GitHub)', async () => {
