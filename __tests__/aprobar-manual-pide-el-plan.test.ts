@@ -70,6 +70,16 @@ describe('el botón aprueba y pide el plan', () => {
     expect(d.pedirPlan).not.toHaveBeenCalled()
   })
 
+  it.each([['plan_cambios'], ['plan_corridas']])('🔴 si no puede leer %s no aprueba ni pide nada: no se aprueba a ciegas', async (tabla) => {
+    const db = base(), d = deps(db)
+    const rota = () => { const c: Record<string, unknown> = {}; for (const m of ['select', 'eq', 'in']) c[m] = () => c; c.then = (ok: (v: unknown) => void) => ok({ data: null, error: { message: 'caída' } }); return c }
+    const s = await rutaValidarManual({ ...d, db: { from: (t: string) => (t === tabla ? rota() : db.from(t)) } as never }, C, 'emilio')
+    expect(s.status).toBe(502)
+    expect(s.body).toMatchObject({ ok: false, error: 'no_se_pudo_leer' })
+    expect(versiones(db)).toHaveLength(1)
+    expect(d.pedirPlan).not.toHaveBeenCalled()
+  })
+
   it('🔴 si la sala falla, el manual queda aprobado, se dice, y aprobar otra vez reintenta sin otra versión', async () => {
     const db = base()
     const pedir = vi.fn(async () => ({ pedido: false as const, error: 'no' }))

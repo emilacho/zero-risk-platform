@@ -41,22 +41,24 @@ interface ConsultaDeEsperas extends PromiseLike<{ data: Fila[] | null; error: { 
   update(v: Fila): ConsultaDeEsperas
 }
 export interface BaseDeEsperas { from(tabla: string): unknown }
+const SOLTADA_ANTES_DE_GUARDAR = 'aprobado_antes_de_guardar'
 
 /**
  * LA PAUSA (ajuste de Emilio, 14:49Z: «pausas que se quitan cuando yo hago las aprobaciones»). El alta deja guardado el sobre del plan; aprobar lo suelta y la cadena sigue con SU sobre y SU clave.
  *   · espera viva              → se suelta y se manda su sobre.
  *   · ya soltada por este manual → se manda el mismo sobre: la clave hace que un doble clic o un reintento no pidan dos planes.
  *   · sin espera, o soltada por otro manual → sobre propio por versión (un cliente cuya alta ya terminó, o un manual nuevo).
+ *   · el dueño aprobó antes de que el alta guardara → el plan salió por versión: un reintento repite ESE sobre. El del alta lleva otra clave y pediría un segundo plan.
  * Si la base falla NO se pide nada: leer un error como «no hay espera» mandaría un segundo plan.
  */
 export async function soltarEsperaYPedirPlan(db: BaseDeEsperas, p: PedidoDePlan & { reviewer: string; ahora: Date }, e: EntornoDelPedido = {}): Promise<ResultadoDelPedidoDePlan> {
   const esperas = () => db.from('esperas_del_dueno') as ConsultaDeEsperas
   const pedido = { client_id: p.client_id, manual_id: p.manual_id }
-  const lectura = await esperas().select('id, estado, manual_id, sobre').eq('client_id', p.client_id).eq('tipo', 'manual').in('estado', ['esperando', 'soltada']).order('creado_en', { ascending: false }).limit(1)
+  const lectura = await esperas().select('id, estado, manual_id, soltada_por, sobre').eq('client_id', p.client_id).eq('tipo', 'manual').in('estado', ['esperando', 'soltada']).order('creado_en', { ascending: false }).limit(1)
   if (lectura.error) return { pedido: false, error: `no pude leer la espera del manual: ${lectura.error.message.slice(0, 160)}` }
   const espera = lectura.data?.[0]
   const estaViva = espera?.estado === 'esperando'
-  if (!espera || (!estaViva && espera.manual_id !== p.manual_id)) return pedirPlanDelManual(pedido, e)
+  if (!espera || (!estaViva && (espera.manual_id !== p.manual_id || espera.soltada_por === SOLTADA_ANTES_DE_GUARDAR))) return pedirPlanDelManual(pedido, e)
 
   const hora = p.ahora.toISOString()
   if (estaViva) {
@@ -107,10 +109,10 @@ export async function guardarEsperaDelManual(db: BaseDeEsperas, entrada: unknown
   const id = String(hecha.data?.[0]?.id ?? '')
 
   const manual = await (db.from('client_brand_books') as ConsultaDeEsperas).select('id, human_validated, provenance_tag').eq('client_id', client_id).order('version', { ascending: false }).limit(1)
-  // sin poder leer el manual, la espera se queda viva: lo peor es que se suelte al aprobar, nunca dos planes
+  // sin poder leer el manual, la espera se queda viva. Si el dueño ya había aprobado y vuelve a tocar el botón, saldría un segundo plan: exige este fallo y ese clic juntos, y es mejor que perder el pedido
   if (manual.error || !manual.data?.[0] || quienValido(manual.data[0]) !== 'dueno') return { status: 200, cuerpo: { ok: true, kind: 'guardada', espera_id: id } }
   const hora = ahora.toISOString()
-  await esperas().update({ estado: 'soltada', manual_id: String(manual.data[0].id), soltada_por: 'aprobado_antes_de_guardar', soltada_en: hora, despertar_detalle: 'el botón ya había pedido el plan', actualizado_en: hora }).eq('tipo', 'manual').eq('clave', clave).eq('estado', 'esperando')
+  await esperas().update({ estado: 'soltada', manual_id: String(manual.data[0].id), soltada_por: SOLTADA_ANTES_DE_GUARDAR, soltada_en: hora, despertar_detalle: 'el botón ya había pedido el plan', actualizado_en: hora }).eq('tipo', 'manual').eq('clave', clave).eq('estado', 'esperando')
   return { status: 200, cuerpo: { ok: true, kind: 'ya_aprobada', espera_id: id } }
 }
 

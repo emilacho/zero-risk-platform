@@ -79,6 +79,15 @@ describe('aprobar suelta la espera', () => {
     expect(enviado(f).idempotency_key).toBe('manual:v2:planear')
   })
 
+  it('🔴 soltar es atómico: si otro clic la soltó entre la lectura y el cambio, no se pisa ni se manda por otro manual', async () => {
+    const db = base(), f = sala()
+    let llamadas = 0
+    const conOtroClic = { from: (t: string) => { if (++llamadas === 2) Object.assign(fila(db), { estado: 'soltada', manual_id: 'v9' }); return db.from(t) } }
+    expect(await soltarEsperaYPedirPlan(conOtroClic as BaseDeEsperas, pedido(), entorno(f))).toMatchObject({ pedido: false })
+    expect(fila(db).manual_id).toBe('v9')
+    expect(f).not.toHaveBeenCalled()
+  })
+
   it('🔴 si no se puede leer la espera NO pide nada: un error no se lee como «no hay espera»', async () => {
     const f = sala()
     const roto = { from: () => { const c: Record<string, unknown> = {}; for (const m of ['select', 'eq', 'in', 'order', 'limit', 'update']) c[m] = () => c; c.then = (ok: (v: unknown) => void) => ok({ data: null, error: { message: 'caída' } }); return c } }
@@ -142,6 +151,16 @@ describe('el alta guarda la espera', () => {
     const db = conManual(SIN_APROBAR)
     expect((await guardarEsperaDelManual(db as BaseDeEsperas, cuerpo(extra))).status).toBe(400)
     expect(db.tablas['esperas_del_dueno']).toHaveLength(0)
+  })
+
+  it('🔴 aprobó antes de que el alta guardara y vuelve a tocar el botón: repite el sobre por versión, no el del alta (CC3: salían dos planes)', async () => {
+    const db = conManual(APROBADO), f = sala()
+    await soltarEsperaYPedirPlan(db as BaseDeEsperas, pedido(), entorno(f))
+    expect((await guardarEsperaDelManual(db as BaseDeEsperas, cuerpo())).cuerpo).toMatchObject({ kind: 'ya_aprobada' })
+    await soltarEsperaYPedirPlan(db as BaseDeEsperas, pedido(), entorno(f))
+    expect(f).toHaveBeenCalledTimes(2)
+    expect(enviado(f, 0).idempotency_key).toBe('manual:v2:planear')
+    expect(enviado(f, 1).idempotency_key).toBe('manual:v2:planear')
   })
 
   it('🔴 de punta a punta: el alta guarda, el botón suelta y sale un solo sobre con la clave del alta', async () => {
