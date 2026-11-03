@@ -329,6 +329,14 @@ export function conservarLoDelDueno(previa: Fila | null | undefined, bb: Fila, p
       const nuevo = nuevoTrae(bb[c.clave])
       if (nuevo && !(hecho > Date.parse(pedido.creado_en))) continue
     }
+    // 3-nov · firma de Emilio: lo que retiró queda retirado; solo vuelve si lo pide con «Pedir cambios», y eso ya salió arriba
+    if (m.retirado === true) {
+      nuevo[c.clave] = null
+      if (c.ruta && c.ruta !== c.clave) nuevo[c.ruta] = null
+      meta[c.clave] = m
+      conservados.push(c.clave)
+      continue
+    }
     const valor = borradorPrevio[c.clave] ?? (c.columna ? previa[c.columna] : undefined)
     if (valor == null || (typeof valor === 'string' && !valor.trim())) continue
     nuevo[c.clave] = valor
