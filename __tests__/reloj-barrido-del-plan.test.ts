@@ -104,6 +104,27 @@ describe('una alarma por incidente', () => {
     expect((correr(CODIGO_CIERRE, BIEN, mem) as any[])[0].json.volvio).toBe(false)
     expect(lanza(MAL[1])).toBe(true) // incidente nuevo → avisa otra vez
   })
+  it('🔴 ANEXO 2 CC3 · la condición de «¿Volvió a funcionar?» exige `$json.volvio` VERDADERO: el aviso ✅ sale solo al recuperarse, nunca en cada tic bueno', () => {
+    // se evalúa la condición REAL del nodo IF con las dos salidas del cierre (tic bueno sin incidente / tic bueno tras incidente)
+    const evalua = (nodoIf: any, json: Record<string, unknown>) => {
+      const c = nodoIf.parameters.conditions.conditions[0]
+      const izquierda = new Function('$json', `return (${String(c.leftValue).replace(/^=\{\{\s*|\s*\}\}$/g, '')})`)(json)
+      expect(c.operator).toEqual({ type: 'boolean', operation: 'true', singleValue: true })
+      return c.rightValue === true ? izquierda === true : izquierda !== true
+    }
+    const sinIncidente = correr(CODIGO_CIERRE, BIEN, {}) as any[]
+    const traIncidente = correr(CODIGO_CIERRE, BIEN, { incidente_desde: '2026-11-03T16:00:00.000Z' }) as any[]
+    expect(evalua(nodo(N_SI_VOLVIO), sinIncidente[0].json), 'tic bueno sin incidente: NO avisa').toBe(false)
+    expect(evalua(nodo(N_SI_VOLVIO), traIncidente[0].json), 'tic bueno tras incidente: SÍ avisa').toBe(true)
+    // mutante de CC3: rightValue true → false invierte el aviso (96 al día y nunca al recuperarse)
+    const m = JSON.parse(JSON.stringify(nodo(N_SI_VOLVIO)))
+    m.parameters.conditions.conditions[0].rightValue = false
+    expect(evalua(m, sinIncidente[0].json)).toBe(true)
+    expect(evalua(m, traIncidente[0].json)).toBe(false)
+    expect(evalua(m, sinIncidente[0].json) === evalua(nodo(N_SI_VOLVIO), sinIncidente[0].json), 'el mutante cambia el resultado: la prueba lo atrapa').toBe(false)
+    expect(nodo(N_SI_VOLVIO).parameters.conditions.conditions[0].rightValue).toBe(true)
+    expect(nodo(N_SI_VOLVIO).parameters.conditions.conditions[0].leftValue).toBe('={{ $json.volvio }}')
+  })
   it('el aviso de recuperación va a #alertas con la llave de Slack del entorno y no rompe la corrida si Slack falla', () => {
     const n = nodo(N_AVISO_VOLVIO)
     expect(n.parameters.url).toBe('https://slack.com/api/chat.postMessage')
