@@ -7,6 +7,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { FRASE_SEDES_JEFATURA, FRASE_SEDES_Y_PREGUNTAR } from '../scripts/ops/oficina-marketing/frase-sedes-y-preguntar.mjs'
+import { FRASE_PLAN_LIMPIO } from '../scripts/ops/oficina-marketing/plan-texto-limpio.mjs'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
 const leer = (d: string) => JSON.parse(fs.readFileSync(path.join(RAIZ, d, 'X9F0zp6LQ2xGEYVS.json'), 'utf8'))
@@ -39,7 +40,7 @@ describe('el pedido del redactor', () => {
   })
   it('solo gana esa frase: quitada, el pedido es idéntico al del flujo ya aplicado (sin sedes; con sedes ya lo fija la prueba de sedes)', async () => {
     for (const m of [[carpeta()], []]) {
-      const nuevoSinFrase = (await b4(nuevo, m)).replace(FRASE_SEDES_Y_PREGUNTAR + '\n\n', '')
+      const nuevoSinFrase = (await b4(nuevo, m)).replace(FRASE_PLAN_LIMPIO + '\n\n', '').replace(FRASE_SEDES_Y_PREGUNTAR + '\n\n', '')
       expect(nuevoSinFrase).toBe(await b4(aplicado, m))
     }
   })
@@ -51,7 +52,7 @@ describe('el pedido del redactor', () => {
     expect(Object.keys(n).sort()).toEqual(Object.keys(a).sort())
     const sinLargo = (o: any) => JSON.parse(JSON.stringify(o, (k, v) => (k === 'caracteres_del_pedido' ? undefined : v)))
     for (const k of Object.keys(a)) if (k !== 'pedido') expect(sinLargo(n[k])).toEqual(sinLargo(a[k]))
-    expect(n.pedido.length - a.pedido.length).toBe(FRASE_SEDES_Y_PREGUNTAR.length + 2)
+    expect(n.pedido.length - a.pedido.length).toBe(FRASE_SEDES_Y_PREGUNTAR.length + 2 + FRASE_PLAN_LIMPIO.length + 2)
   })
 })
 

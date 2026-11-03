@@ -3,6 +3,7 @@
  * y tiene su propia prueba (flujos-oficina-marketing-frase-sedes-y-preguntar). Esta ayuda devuelve el flujo SIN esa frase para que cada prueba siga midiendo solo lo suyo.
  */
 import { FRASE_SEDES_JEFATURA, FRASE_SEDES_Y_PREGUNTAR } from '../scripts/ops/oficina-marketing/frase-sedes-y-preguntar.mjs'
+import { FRASE_PLAN_LIMPIO } from '../scripts/ops/oficina-marketing/plan-texto-limpio.mjs'
 
 export const sinFraseSedes = <T>(flujo: T): T => {
   const f = JSON.parse(JSON.stringify(flujo)) as any
@@ -10,6 +11,7 @@ export const sinFraseSedes = <T>(flujo: T): T => {
     const n = (f.nodes ?? []).find((x: any) => x.name === nombre)
     if (n && typeof n.parameters?.jsCode === 'string') n.parameters.jsCode = n.parameters.jsCode.replace(viejo, '')
   }
+  quitar('Redactor (B4)', "'" + FRASE_PLAN_LIMPIO + "',\n'',\n")
   quitar('Redactor (B4)', "'" + FRASE_SEDES_Y_PREGUNTAR + "',\n'',\n")
   quitar('JEF · armar', '; ' + FRASE_SEDES_JEFATURA)
   // 03-nov · el cierre «hecha · espera al dueño» (V9) tiene su propia prueba (flujos-oficina-marketing-planeacion-cierre-al-esperar-al-dueno): aquí se quita para medir solo lo de cada paso
