@@ -47,6 +47,31 @@ const COSTO_PCT = (usado: number, techo: number): number => (techo > 0 ? Math.ro
 export interface Saldo { proveedor: string; plan: string; usado_usd: number; credito_usd: number; pct: number; ciclo_hasta: string | null }
 export interface Tope { client_id: string; cliente: string; gastado_24h_usd: number; techo_usd: number; pct: number }
 
+/** la hora de la última ejecución sana de cada proceso (solo lectura); sin respuesta, vacío: la falla se sigue mostrando */
+async function ultimasEjecucionesSanas(base: string, llave: string, f: typeof fetch): Promise<Map<string, string>> {
+  const sanas = new Map<string, string>()
+  try {
+    const r = await f(`${base.replace(/\/+$/, '')}/api/v1/executions?status=success&limit=100`, { headers: { 'X-N8N-API-KEY': llave, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) })
+    if (!r.ok) return sanas
+    const j = await r.json() as { data?: Fila[] }
+    for (const e of Array.isArray(j.data) ? j.data : []) {
+      const id = String(e.workflowId), t = String(e.startedAt)
+      if (t > (sanas.get(id) ?? '')) sanas.set(id, t)
+    }
+  } catch { /* sin lectura: no se cierra nada */ }
+  return sanas
+}
+
+/** un proceso que alguien apagó a propósito no es una falla abierta; si no se puede saber, se sigue mostrando */
+async function procesoApagado(base: string, llave: string, flujo: string, f: typeof fetch): Promise<boolean> {
+  try {
+    const r = await f(`${base.replace(/\/+$/, '')}/api/v1/workflows/${encodeURIComponent(flujo)}`, { headers: { 'X-N8N-API-KEY': llave, Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) })
+    if (!r.ok) return false
+    const j = await r.json() as { active?: unknown }
+    return j.active === false
+  } catch { return false }
+}
+
 async function leerFallasDeN8n(fuentes: Fuente[], riesgos: Omit<Riesgo, 'cliente'>[], c: Contexto): Promise<void> {
   const env = c.env ?? process.env
   const base = texto(env.N8N_BASE_URL), llave = texto(env.N8N_API_KEY)
@@ -65,9 +90,13 @@ async function leerFallasDeN8n(fuentes: Fuente[], riesgos: Omit<Riesgo, 'cliente
     const recientes = (Array.isArray(j.data) ? j.data : []).filter((e) => Date.parse(String(e.startedAt)) >= desde)
     fuentes.push({ fuente: 'n8n', estado: 'ok', filas: recientes.length, detalle: 'n8n conserva pocas horas de ejecuciones: esto no es el historial completo de 24 h' })
     const porFlujo = new Map<string, Fila[]>()
+    const sanasPorFlujo = await ultimasEjecucionesSanas(base, llave, f)
     for (const e of recientes) porFlujo.set(String(e.workflowId), [...(porFlujo.get(String(e.workflowId)) ?? []), e])
     for (const [flujo, ex] of porFlujo) {
       const ultima = ex.map((e) => String(e.startedAt)).sort().pop() ?? null
+      // un riesgo se cierra cuando su fuente dice que ya está bien: el proceso se apagó a propósito, o corrió sano después de la última falla
+      if (await procesoApagado(base, llave, flujo, f)) continue
+      if (ultima && (sanasPorFlujo.get(flujo) ?? '') > ultima) continue
       riesgos.push({ id: `n8n:${flujo}`, gravedad: 2, categoria: 'falla', titulo: `Proceso operativo con ${ex.length} ${ex.length === 1 ? 'ejecución fallida' : 'ejecuciones fallidas'}`, detalle: `flujo ${flujo}`, client_id: null, desde: ultima, fuente: 'n8n' })
     }
   } catch (e) {
