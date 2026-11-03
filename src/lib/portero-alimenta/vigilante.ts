@@ -63,7 +63,7 @@ export const esSoloNoPudeComprobar = (res: ResultadoDeCliente[]) => {
   return todos.length > 0 && todos.every((p) => p.startsWith(PREFIJO_NO_PUDE))
 }
 
-export interface ResultadoDeCliente { client_id: string; nombre: string | null; problemas: string[]; gasto_usd: number | null; auditoria?: ResultadoDeAuditoria | null; /** avisos que NO apagan (gasto entre el umbral de aviso y el de apagado) */ avisos?: string[]; /** fichas sobrantes (misma referencia y contenido) que el vigilante retiró en vez de pausar */ repetidas_retiradas?: number }
+export interface ResultadoDeCliente { client_id: string; nombre: string | null; problemas: string[]; gasto_usd: number | null; auditoria?: ResultadoDeAuditoria | null; /** avisos que NO apagan (gasto entre el umbral de aviso y el de apagado) */ avisos?: string[]; /** fichas sobrantes (misma referencia y contenido) que el vigilante retiró en vez de pausar */ repetidas_retiradas?: number; /** 03-nov: fichas que el filtro de entrada del índice rechazó: HUECOS declarados (no problemas: no pausan ni bloquean el «listo») */ huecos_declarados?: Array<{ ficha: string; clase: string; razon: string }> }
 
 /** las condiciones que salen del CIERRE del flujo (sin leer la base) */
 export function problemasDelCierre(cierre: unknown, clientId: string): string[] {
@@ -163,6 +163,9 @@ export async function evaluarCliente(deps: DepsDelVigilante, c: { client_id: str
   if (p.errores.length || p.puente.lectura_fallida === true) falla('el puente', p.errores[0] ?? 'lectura fallida')
   else {
     if (typeof p.puente.quedan === 'number' && p.puente.quedan > 0) r.problemas.push(`el índice tiene ${p.puente.quedan} trozo(s) por escribir o sacar (fichas vivas sin trozo o trozos de fichas retiradas)`)
+    // lo que el filtro rechazó es un hueco declarado: queda a la vista en el resultado, pero no pausa ni apaga nada
+    const rech = Array.isArray(p.puente.rechazadas) ? (p.puente.rechazadas as Array<{ id: string; clase: string; razon: string }>) : []
+    if (rech.length) r.huecos_declarados = rech.slice(0, 50).map((x) => ({ ficha: x.id, clase: x.clase, razon: x.razon }))
     if (typeof p.puente.repetidas === 'number' && p.puente.repetidas > 0) r.problemas.push(`hay ${p.puente.repetidas} ficha(s) viva(s) repetida(s)`)
   }
   return { r, rastro }

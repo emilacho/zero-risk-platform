@@ -11,6 +11,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { modeloRegistrado } from '@/lib/portero-alimenta/entorno'
 import { FLUJO_DEL_PORTERO } from '@/lib/portero-alimenta/gasto'
 import { avisarPorIncidente } from '@/lib/portero-alimenta/alertas'
+import { vigiarPausasDeAlta } from '@/lib/portero-alimenta/pausa-de-alta'
 import { esPaso, textoDelAvisoDePasoAbandonado } from '@/lib/portero-alimenta/pasos-diarios'
 import { correrElSiguientePaso, correrUnPaso, type DepsDePaso } from '@/lib/portero-alimenta/redes-ruta'
 
@@ -42,8 +43,10 @@ export async function GET(request: Request) {
   if (!esDelCron(request) && !checkInternalKey(request).ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001' }, { status: 401 })
   try {
     const t = new Date().toISOString()
+    // 03-nov: la vigía de pausas «hasta la alta» corre en cada tic del cron (solo lee la base; US$ 0): a las 3 h avisa/cierra, a las 24 h cierra la de borrado sin alta. Su falla se dice, no tumba los pasos
+    const pausas = await vigiarPausasDeAlta(getSupabaseAdmin() as never, new Date(), avisarPorIncidente({ db: getSupabaseAdmin() as never })).catch((e: unknown) => ({ abiertas: 0, avisadas: 0, cerradas: 0, errores: [e instanceof Error ? e.message : String(e)] }))
     const r = await correrElSiguientePaso(dependencias(request), { workflowId: process.env.PORTERO_WORKFLOW_ID || FLUJO_DEL_PORTERO, ejecucionId: `vercel-cron:redes:${t.slice(0, 16)}` })
-    return NextResponse.json(r, { status: r.ok || r.estado !== 'error' ? 200 : 502 })
+    return NextResponse.json({ ...r, vigia_de_pausas: pausas }, { status: r.ok || r.estado !== 'error' ? 200 : 502 })
   } catch (e) {
     return NextResponse.json({ error: 'redes_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

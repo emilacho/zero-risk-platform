@@ -5,9 +5,9 @@
  */
 import type { Db } from './alimentar'
 import { validar, type Respuesta } from './rutas'
-import { FIN_ALTA_TERMINADA } from './pausa-de-alta'
+import { FIN_ALTA_TERMINADA, TIPO_BORRADO } from './pausa-de-alta'
 
-export { FIN_ALTA_TERMINADA, cerrarPausasDeAlta } from './pausa-de-alta'
+export { FIN_ALTA_TERMINADA, TIPO_BORRADO, cerrarPausasDeAlta } from './pausa-de-alta'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -51,16 +51,18 @@ export async function rutaPausarHastaLaAlta(deps: { db: Db; ahora?: Date }, cuer
   const motivo = txt(v.cuerpo.motivo), por = txt(v.cuerpo.por)
   if (!motivo || !por) return err(400, 'entrada_invalida', '`motivo` (por qué se pausa) y `por` (quién) son obligatorios: queda en la historia')
   const ahora = deps.ahora ?? new Date()
+  // 03-nov: `tipo: 'borrado'` marca la pausa de un borrado (ver vigia-de-pausas.ts: a las 3 h solo avisa; sin alta a las 24 h se cierra sola)
+  const tipo = txt(v.cuerpo.tipo) === TIPO_BORRADO ? TIPO_BORRADO : null
   const q = await deps.db.from('cerebro_portero_pausas').select('id, termina_con').eq('client_id', v.client_id).is('levantada_en', null).limit(5)
   if (q.error) return err(502, 'lectura_fallida', `cerebro_portero_pausas: ${q.error.message}`)
   const abiertas = lista(q.data)
   if (v.dry_run) return { status: 200, body: { ok: true, dry_run: true, haria: abiertas.length ? 'convertir la pausa abierta en «hasta la alta»' : 'abrir una pausa «hasta la alta»', nota: 'dry_run: no se escribió nada' } }
   if (abiertas.length) {
-    const u = await deps.db.from('cerebro_portero_pausas').update({ termina_con: FIN_ALTA_TERMINADA }).eq('client_id', v.client_id).is('levantada_en', null)
+    const u = await deps.db.from('cerebro_portero_pausas').update({ termina_con: FIN_ALTA_TERMINADA, ...(tipo ? { motivo_tipo: tipo } : {}) }).eq('client_id', v.client_id).is('levantada_en', null)
     if (u.error) return err(502, 'escritura_fallida', `cerebro_portero_pausas: ${u.error.message}`)
     return { status: 200, body: { ok: true, convertida: true, pausas: abiertas.length, termina_con: FIN_ALTA_TERMINADA, nota: 'se cierra sola cuando la alta avise que terminó' } }
   }
-  const i = await deps.db.from('cerebro_portero_pausas').insert({ client_id: v.client_id, motivo: motivo.slice(0, 300), problemas: [{ por: por.slice(0, 120) }], desde: ahora.toISOString(), termina_con: FIN_ALTA_TERMINADA })
+  const i = await deps.db.from('cerebro_portero_pausas').insert({ client_id: v.client_id, motivo: motivo.slice(0, 300), problemas: [{ por: por.slice(0, 120) }], desde: ahora.toISOString(), termina_con: FIN_ALTA_TERMINADA, ...(tipo ? { motivo_tipo: tipo } : {}) })
   if (i.error) return err(502, 'escritura_fallida', `cerebro_portero_pausas: ${i.error.message}`)
   return { status: 200, body: { ok: true, abierta: true, termina_con: FIN_ALTA_TERMINADA, nota: 'se cierra sola cuando la alta avise que terminó' } }
 }
