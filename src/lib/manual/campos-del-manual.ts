@@ -225,7 +225,10 @@ export function evaluarCompletitud(bb: Record<string, unknown>, opciones: { tipo
   const propuestos: string[] = []
   const huecos: Completitud['huecos'] = []
   const donde = opciones.buscadoEn?.length ? opciones.buscadoEn.join(', ') : 'lo raspado del sitio, las redes y los mapas'
+  const meta = (bb._field_meta && typeof bb._field_meta === 'object' ? bb._field_meta : {}) as Record<string, { retirado?: unknown } | undefined>
   for (const clave of obligatoriosPara(opciones.tipo)) {
+    // lo que el dueño retiró no es un hueco que falte llenar
+    if (meta[clave]?.retirado === true) continue
     const campo = CAMPO_POR_CLAVE[clave]
     const e = estadoDelCampo(bb[clave])
     if (e === 'lleno') llenos.push(clave)

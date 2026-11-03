@@ -1,8 +1,9 @@
 /**
  * Las rutas de «editar y validar el manual desde el dashboard» (30-oct). Las dos hacen primero lo del manual y DESPUÉS lo del cerebro; si el cerebro falla, el manual ya quedó y el pendiente se dice.
  *   PATCH /api/manual/{client_id}/campos   cuerpo: { campos:{<clave del borrador o del tablero>: texto, o vacío o null para retirarlo}, comentario?, reviewer, origen:'dashboard' }
- *   POST  /api/tablero/manual-validar      cuerpo: { client_id, reviewer, origen:'dashboard' }
+ *   POST  /api/tablero/manual-validar      cuerpo: { client_id, reviewer, origen:'dashboard' } · aprobar el manual es lo que pide el plan (firma de Emilio, 3-nov)
  */
+import type { PedidoDePlan, ResultadoDelPedidoDePlan } from './pedir-plan'
 import { decidirPalabraDelDueno, editarManualDelDueno, empujarCamposAlCerebro, validarCampoDelManual, validarManualDelDueno, type Db, type DepsDelCerebro } from './edicion-del-dueno'
 
 type Fila = Record<string, unknown>
@@ -12,6 +13,8 @@ export interface DepsDeEdicion {
   /** re-indexa la versión nueva en el cerebro (retira los trozos de las anteriores); en producción es `empujarManualAlCerebro` */
   empujarManual: (x: { client_id: string; source_id: string }) => { estado: string; detalle?: string }
   ahora?: () => Date
+  /** aprobar el manual pide el plan; en producción es `pedirPlanDelManual` */
+  pedirPlan?: (p: PedidoDePlan) => Promise<ResultadoDelPedidoDePlan>
 }
 export interface SalidaDeEdicion { status: number; body: Fila; toca: { client_id: string | null; comentario?: string | null } }
 
@@ -62,11 +65,35 @@ export async function rutaValidarCampo(d: Pick<DepsDeEdicion, 'db' | 'ahora'>, c
   return { status: 200, toca, body: { ...r } }
 }
 
+/** lo que impide aprobar ahora: un manual que se está regenerando, o un plan que ya está corriendo. Un error de lectura también frena: no se aprueba a ciegas */
+async function queImpideAprobar(db: Db, client_id: string): Promise<{ status: number; error: string; detalle: string } | null> {
+  const c = (await db.from('plan_cambios').select('id, manual_id').eq('client_id', client_id).in('estado', ['pendiente', 'en_reescritura'])) as { data: Fila[] | null; error: { message: string } | null }
+  if (c.error) return { status: 502, error: 'no_se_pudo_leer', detalle: `no pude leer los pedidos de cambios: ${c.error.message}` }
+  if ((c.data ?? []).some((f) => f.manual_id)) return { status: 409, error: 'regeneracion_en_curso', detalle: 'El manual se está regenerando. Podrás aprobarlo cuando termine.' }
+  const p = (await db.from('plan_corridas').select('id').eq('client_id', client_id).in('estado', ['esperando', 'corriendo'])) as { data: Fila[] | null; error: { message: string } | null }
+  if (p.error) return { status: 502, error: 'no_se_pudo_leer', detalle: `no pude leer las corridas del plan: ${p.error.message}` }
+  if ((p.data ?? []).length) return { status: 409, error: 'plan_en_curso', detalle: 'Ya hay un plan en marcha para este cliente. Podrás aprobar cuando termine.' }
+  return null
+}
+
 export async function rutaValidarManual(d: DepsDeEdicion, client_id: string, reviewer: string): Promise<SalidaDeEdicion> {
   const toca = { client_id }
   const ahora = (d.ahora ?? (() => new Date()))()
+  if (d.pedirPlan) {
+    const impide = await queImpideAprobar(d.db, client_id)
+    if (impide) return { status: impide.status, body: { ok: false, ...impide }, toca }
+  }
   const r = await validarManualDelDueno(d.db, { client_id, reviewer, ahora })
   if (!r.ok) return { status: r.status, body: { ok: false, error: r.error, detalle: r.detalle }, toca }
   const indice = r.sin_cambios ? { estado: 'sin_cambios' } : d.empujarManual({ client_id, source_id: r.source_id })
-  return { status: 200, toca, body: { ok: true, validado_por: 'dueno', version_nueva: r.version_nueva, sin_cambios: r.sin_cambios, aceptados_por_el_dueno: r.aceptados, cerebro: { indice: indice.estado } } }
+  const plan = d.pedirPlan ? await d.pedirPlan({ client_id, manual_id: r.source_id }) : null
+  return {
+    status: 200,
+    toca,
+    body: {
+      ok: true, validado_por: 'dueno', version_nueva: r.version_nueva, sin_cambios: r.sin_cambios, aceptados_por_el_dueno: r.aceptados, cerebro: { indice: indice.estado },
+      ...(plan ? { plan } : {}),
+      ...(plan && !plan.pedido ? { aviso: 'El manual quedó aprobado, pero el plan no se pudo pedir. Vuelve a aprobar para reintentar.' } : {}),
+    },
+  }
 }
