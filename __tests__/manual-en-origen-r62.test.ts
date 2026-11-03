@@ -6,7 +6,7 @@
  *   ① cimiento · Fan-out prep: las 3 lentes reciben las reglas de evidencia · SOLO la lente del eslogan recibe la frase propia (primera opción de tagline_opciones)
  *      · el tope sube lo que suman, la evidencia no cede un carácter más · sin frase hallada, nada nuevo salvo las reglas
  *   ② cimiento · nodo «Sacar lo sin fuente»: corre el código REAL del nodo contra la puerta REAL de M2 (rutaRecomprobar) con una base falsa
- *      · saca lo sin fuente, deja lo creativo y la capa visual intactos, NO escribe el eslogan, el registro interno no va a la bandeja · ruta caída ⇒ sigue y lo declara
+ *      · 03-nov, decisión de Emilio: la puerta no recorta; el nodo pasa el texto entero, no registra nada y lo declara · NO escribe el eslogan · ruta caída ⇒ sigue y lo declara
  *   ③ Lazo A · Re-síntesis prep: el que reescribe recibe las mismas reglas sin perder evidencia
  *   ④ nada más cambió respecto de los respaldos ANTES · los dos flujos siguen inactivos
  */
@@ -149,76 +149,40 @@ async function correrSacar(db: DbFalsa, opciones: { fallaRuta?: number; fallaReg
 }
 const MALAS = ['origen costero verificable', 'denominación de origen implícita', 'el origen es la prueba', 'Origen verificable', 'frescura verificable', 'origen geográfico específico', 'el lugar de origen del marisco', 'origen manabita']
 
-describe('② «Sacar lo sin fuente» · el manual v1 de hoy contra la puerta REAL de M2', () => {
-  it('el manual v1 trae lo que se midió (rojo): las frases sin fuente están en el borrador de entrada', () => {
+describe('② «Sacar lo sin fuente» · el manual v1 de hoy contra la puerta REAL de M2 (03-nov: ya no saca nada)', () => {
+  it('el manual v1 trae lo que se midió: las frases sin fuente están en el borrador de entrada', () => {
     const t = JSON.stringify(MANUAL)
     for (const m of MALAS) expect(t).toContain(m)
     expect(MANUAL.tagline).toBeUndefined()
   })
-  it('saca lo sin fuente · deja la capa visual, las listas y lo creativo intactos · NO escribe el eslogan · pasa el resto del ítem', async () => {
+  it('deja TODO el texto igual · NO escribe el eslogan · pasa el resto del ítem', async () => {
     const db = baseFalsa()
     const { out, llamadas, j } = await correrSacar(db)
     const m = out[0].json.brand_book_draft as Record<string, any>
-    const t = JSON.stringify(m)
-    for (const mala of MALAS) expect(t).not.toContain(mala)
-    expect(m.visual).toEqual(MANUAL.visual)                                   // la capa visual la arma el código: no es prosa del autor
-    expect(m.forbidden_words).toEqual(MANUAL.forbidden_words)
-    // r67 · los términos obligatorios SÍ se chequean: sale «origen verificable» (la certeza que se había colado ahí) y los demás se quedan, sin hueco
-    expect(m.required_terminology).toEqual(MANUAL.required_terminology.filter((x: string) => x !== 'origen verificable'))
-    expect(m.required_terminology).not.toContain('origen verificable')
-    expect(m.required_terminology).toContain('frescura de origen')
-    expect(m.tagline_opciones).toEqual(MANUAL.tagline_opciones)               // las opciones del eslogan no se tocan
+    for (const k of Object.keys(MANUAL)) if (!k.startsWith('_')) expect(m[k], k).toEqual(MANUAL[k])
     expect(m.tagline).toBeUndefined()                                         // NO se escribe el eslogan por código
-    expect(m.voice_description).toContain('Voz directa y conversacional')    // lo creativo se respeta
-    expect(m.client_id).toBe(MANUAL.client_id)
+    expect(m._field_meta).toBeDefined()
     expect(out[0].json.fidelity).toEqual(j.fidelity)                          // el resto del ítem viaja intacto (Promote prep lo necesita)
     expect(out[0].json.cycle).toBe(1)
     expect(llamadas[0].body).toMatchObject({ client_id: C, sin_manual_previo: true, sin_eslogan: true })
     expect(llamadas.filter((l) => l.url.endsWith('/api/manual/recomprobar'))).toHaveLength(1)
   })
-  it('r63 · SIN FRAGMENTOS: ningún texto del manual que sale empieza en minúscula ni trae puntuación huérfana; lo mutilado queda PENDIENTE y provisional; en listas se quita el elemento entero', async () => {
-    const { out } = await correrSacar(baseFalsa())
-    const m = out[0].json.brand_book_draft as Record<string, any>
-    const hojas: Array<[string, string]> = []
-    const ver = (v: unknown, r: string): void => { if (typeof v === 'string') { hojas.push([r, v]); return } if (Array.isArray(v)) v.forEach((x, i) => ver(x, `${r}[${i}]`)); else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) ver(x, `${r}.${k}`) }
-    for (const c of ['positioning', 'icp_summary', 'voice_description', 'mision', 'personalidad', 'mensajes_clave', 'propuestas_de_valor']) ver(m[c], c)
-    expect(hojas.length).toBeGreaterThan(5)
-    for (const [r, t] of hojas) {
-      if (r.includes('[')) expect(t.trim(), r).not.toBe('')            // un elemento de lista vacío no se deja (un campo suelto que sale entero queda vacío: A3)
-      expect(t, r).not.toMatch(/^\s*[a-záéíóúñ]/)                        // «sabés exactamente…» · «sirviendo a comensales…»
-      expect(t, r).not.toMatch(/\.\s+:|(?<!\b(?:vs|etc|ej))\.\s+[a-záéíóúñ]|(^|\s)[:;,]\s/)  // «. :» · «Cercano. el trato…» · coma/dos puntos sueltos
-    }
-    expect(m.positioning).toBe('PENDIENTE: reescribir con fuente')      // «marisco de Olón, fresco… En Olón.» ya no se guarda como si fuera el posicionamiento
-    expect(m._field_meta.positioning).toMatchObject({ provisional: true })
-    expect(m.personalidad.length).toBeLessThanOrEqual(MANUAL.personalidad.length) // lo mutilado se quita entero, no se deja «Transparente. no con adjetivos» (02-nov: las cifras y fechas ya no se retiran)
-    const reg = (await (async () => { const db = baseFalsa(); await correrSacar(db); return db.tablas['client_historical_outputs'][0].provenance_tag as any })()).registro_interno.retirados as Array<{ marca: string }>
-    expect(reg.some((x) => x.marca === 'fragmento')).toBe(true)         // lo quitado va solo al registro interno
-    expect(JSON.stringify(m)).not.toMatch(/fragmento/)
-  })
-  it('el registro interno guarda lo sacado (con su cláusula y motivo) · NUNCA bandeja · el manual no lleva el texto sacado', async () => {
+  it('el nodo vivo sigue funcionando con las listas vacías: lo declara limpio y no escribe registro ni bandeja', async () => {
     const db = baseFalsa()
-    const { out } = await correrSacar(db)
-    const s = (out[0].json.brand_book_draft as any)._sacar
-    expect(s.estado).toBe('sacado')
-    expect(s.retirados_n).toBeGreaterThanOrEqual(15) // 02-nov: las cifras y fechas sin fuente ya no se retiran: se anotan
-    expect(s.registro).toBe('guardado')
-    const filas = db.tablas['client_historical_outputs'] ?? []
-    expect(filas).toHaveLength(1)
-    expect(filas[0]).toMatchObject({ client_id: C, output_type: 'manual_sacado_en_origen', status: 'draft' })
-    const reg = (filas[0].provenance_tag as any).registro_interno.retirados as Array<{ clausula: string; motivo: string }>
-    expect(reg.length).toBe(s.retirados_n)
-    expect(reg.every((r) => r.clausula && r.motivo)).toBe(true)
-    expect(reg.some((r) => /origen/i.test(r.clausula))).toBe(true)
-    expect(JSON.stringify(s)).not.toMatch(/origen/i)                         // el resumen que viaja en el manual no repite lo sacado
-    expect(db.tablas['hitl_queue']?.length ?? 0).toBe(0)                      // ni bandeja
+    const { out, llamadas } = await correrSacar(db)
+    expect((out[0].json.brand_book_draft as any)._sacar).toEqual({ estado: 'limpio', retirados_n: 0, cambios_n: 0, registro: 'sin_nada_que_registrar' })
+    expect(llamadas.filter((l) => l.url.endsWith('/rest/v1/client_historical_outputs'))).toEqual([])
+    expect(db.tablas['client_historical_outputs']).toBeUndefined()
+    expect(db.tablas['hitl_queue']?.length ?? 0).toBe(0)
   })
-  it('es idempotente: lo que ya salió limpio vuelve a pasar sin sacar nada y sin otro registro', async () => {
+  it('es idempotente: lo que ya pasó vuelve a pasar igual', async () => {
     const db = baseFalsa()
     const uno = await correrSacar(db)
     const limpio = uno.out[0].json.brand_book_draft as Record<string, any>
     const dos = await correrSacar(db, { draft: limpio })
     expect((dos.out[0].json.brand_book_draft as any)._sacar).toMatchObject({ estado: 'limpio', retirados_n: 0, registro: 'sin_nada_que_registrar' })
-    expect(db.tablas['client_historical_outputs']).toHaveLength(1)
+    expect((dos.out[0].json.brand_book_draft as any).positioning).toBe(MANUAL.positioning)
+    expect(db.tablas['client_historical_outputs']).toBeUndefined()
   })
   it('ruta caída: reintenta UNA vez · si sigue caída el manual sigue SIN revisar y lo DECLARA (no para el alta)', async () => {
     const db = baseFalsa()
@@ -232,14 +196,13 @@ describe('② «Sacar lo sin fuente» · el manual v1 de hoy contra la puerta RE
   })
   it('una caída de la primera llamada se recupera con el reintento', async () => {
     const { out } = await correrSacar(baseFalsa(), { fallaRuta: 1 })
-    expect((out[0].json.brand_book_draft as any)._sacar.estado).toBe('sacado')
+    expect((out[0].json.brand_book_draft as any)._sacar.estado).toBe('limpio')
   })
-  it('registro que no se puede escribir: el manual sale limpio igual y se DECLARA', async () => {
+  it('con el registro caído nada cambia: ya no hay nada que escribir', async () => {
     const { out } = await correrSacar(baseFalsa(), { fallaRegistro: true })
     const m = out[0].json.brand_book_draft as Record<string, any>
-    expect(m._sacar.estado).toBe('sacado')
-    expect(m._sacar.registro).toMatch(/^no_se_pudo/)
-    expect(JSON.stringify(m)).not.toContain('origen costero verificable')
+    expect(m._sacar).toMatchObject({ estado: 'limpio', registro: 'sin_nada_que_registrar' })
+    expect(JSON.stringify(m)).toContain('origen costero verificable')
   })
   it('sin borrador: no llama a nada y lo declara', async () => {
     const { out, llamadas } = await correrSacar(baseFalsa(), { draft: {} })
@@ -341,14 +304,5 @@ describe('④ solo lo pedido cambió · los dos flujos siguen apagados', () => {
     expect(c).toContain('sin_eslogan: true')
     expect(c).not.toMatch(/hitl_queue|\/api\/hitl|chat\.postMessage|hooks\.slack|tagline\s*[:=]/i)
     expect(c).toContain("'manual_sacado_en_origen'")
-  })
-})
-
-describe('② quitarClausula · al inicio del texto no queda un guion ni dos puntos colgando', () => {
-  it('«— marisco…» y «: sabés…» pierden la puntuación huérfana; el resto no cambia', async () => {
-    const { quitarClausula } = await import('../src/lib/manual/firmes')
-    expect(quitarClausula('Se diferencia por X — marisco fresco, artesanal.', 'Se diferencia por X')).toBe('marisco fresco, artesanal.')
-    expect(quitarClausula('Cliente: algo falso: lo demás se queda.', 'Cliente: algo falso')).toBe('lo demás se queda.')
-    expect(quitarClausula('Primera parte. Algo falso. Última parte.', 'Algo falso')).toBe('Primera parte. Última parte.')
   })
 })

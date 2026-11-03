@@ -11,7 +11,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DbFalsa } from '../../oficina/__tests__/dbfalsa'
 import { armarTarjeta } from '../borrador'
-import { buscarCerteza, camposFirmes, cerrarPuerta, esFilaPropia, evaluarHechos, fuentesDeRaspado, metaDeCampos, palabrasDe } from '..'
+import { buscarCerteza, camposFirmes, esFilaPropia, evaluarHechos, fuentesDeRaspado, metaDeCampos, palabrasDe, recomprobar } from '..'
 import { promoverManualRevisado } from '../promover'
 import { cerrarRevision, leerInsumos, type Insumos } from '../revision'
 import { F, filaInstagram, PROPIOS } from './apoyo'
@@ -73,46 +73,28 @@ describe('M1-c · las palabras de certeza son PATRONES con objeto, no palabras s
     const r = hechosDe({ positioning: 'La única cocina de este tipo, con trazabilidad desde el origen, y ningún competidor lo hace.' })
     expect(r.hechos.length).toBeGreaterThan(0); expect(r.sin_respaldo.length).toBeGreaterThan(0)
   })
-  it('la prosa creativa del ejemplo de CC#3 pasa intacta por la puerta y no queda texto roto', () => {
+  it('la prosa creativa del ejemplo de CC#3 pasa intacta por la puerta', () => {
     const m = { voz: 'Cocina de origen marino, con delivery. Cercana y cálida. Una experiencia única, siempre.' }
-    const c = cerrarPuerta(m, hechosDe(m)); expect(c.manual).toEqual(m); expect(c.retirados).toEqual([])
-  })
-})
-
-describe('M1-c · lo que la puerta retira deja texto gramatical', () => {
-  const fuentes = [F('s', 'primaria_propia', 'Algo distinto del cliente.')]
-  it('si de la oración solo queda un fragmento («siempre.»), sale la oración ENTERA', () => {
-    const m = { voz: 'Cercana y cálida. Garantía total de resultados, siempre.' }
-    const c = cerrarPuerta(m, evaluarHechos({ manual: m, fuentes }))
-    expect(c.manual.voz).toBe('Cercana y cálida.'); expect(c.retirados.length).toBeGreaterThan(0)
-  })
-  it('si el resto de la oración sí es una frase (≥ 3 palabras), solo sale la cláusula', () => {
-    const m = { voz: 'Atendemos con calidez todos los días, con garantía total.' }
-    expect(cerrarPuerta(m, evaluarHechos({ manual: m, fuentes })).manual.voz).toBe('Atendemos con calidez todos los días.')
-  })
-  it('nunca queda un texto que empiece en minúscula suelta o con puntuación huérfana', () => {
-    for (const t of ['Garantía total, siempre.', 'Servicio cálido. Garantía total, hoy.', 'Con garantía total y listo.', 'Calidad garantizada: siempre.']) {
-      const out = String(cerrarPuerta({ v: t }, evaluarHechos({ manual: { v: t }, fuentes })).manual.v)
-      expect(out, t).not.toMatch(/(^|\.\s)[a-záéíóúñ]/); expect(out, t).not.toMatch(/(^|\s)[,;:]|\.\s*\./)
-    }
+    const r = recomprobar({}, m, { fuentes: [F('s', 'primaria_propia', 'Atendemos con cita previa en el consultorio.')] })
+    expect(r.manual.voz).toBe(m.voz); expect(r.retirados).toEqual([]); expect(r.informe.sin_respaldo).toEqual([])
   })
 })
 
 // ───────────────────────── d · comillas
-describe('M1-d · una afirmación fuerte entre comillas, presentada como promesa de la marca, no se escapa', () => {
+describe('M1-d · una afirmación fuerte entre comillas, presentada como promesa de la marca, no se escapa del chequeo', () => {
   const fuentes = [F('s', 'primaria_propia', 'Atendemos con cita previa en el consultorio.')]
-  it('«Trazabilidad total desde el origen» entre comillas SIN atribución se chequea y se retira entera', () => {
+  it('«Trazabilidad total desde el origen» entre comillas SIN atribución se chequea; el texto se queda', () => {
     const m = { promesa: 'La promesa de la marca: «Trazabilidad total desde el origen».' }
-    const r = evaluarHechos({ manual: m, fuentes }); expect(r.sin_respaldo.length).toBeGreaterThan(0)
-    const c = cerrarPuerta(m, r)
-    expect(JSON.stringify(c.manual)).not.toMatch(/Trazabilidad|«|»/)
-    expect(c.retirados.length).toBeGreaterThan(0)
+    const r = recomprobar({}, m, { fuentes })
+    expect(r.informe.sin_respaldo.length).toBeGreaterThan(0)
+    expect(r.manual.promesa).toBe(m.promesa); expect(r.retirados).toEqual([])
   })
-  it('si el cliente SÍ lo dice textualmente en lo suyo, queda como «el cliente dice: «…»»', () => {
+  it('si el cliente SÍ lo dice textualmente en lo suyo, es afirmación del cliente y el texto se queda', () => {
     const f = [F('s', 'primaria_propia', 'Nuestro lema: Trazabilidad total desde el origen.')]
     const m = { promesa: 'La promesa de la marca: «Trazabilidad total desde el origen».' }
-    const c = cerrarPuerta(m, evaluarHechos({ manual: m, fuentes: f }))
-    expect(JSON.stringify(c.manual)).toMatch(/el cliente dice: «/); expect(c.retirados).toEqual([])
+    const r = recomprobar({}, m, { fuentes: f })
+    expect(r.informe.hechos.some((h) => h.estado === 'afirmacion_del_cliente')).toBe(true)
+    expect(r.manual.promesa).toBe(m.promesa); expect(r.retirados).toEqual([])
   })
   it('un ejemplo de redacción entre comillas SIN certeza sigue siendo creativo (no se mira)', () => {
     const m = { ejemplos: 'Ejemplo de titular: «Pedí hoy lo que querés». Otro: «Sonríe sin miedo, siempre contigo».' }
@@ -213,32 +195,13 @@ describe('M1-e · huecos de la mutación de CC#3 sobre M2', () => {
   })
 })
 
-// ───────────────────────── r63 · el relato de origen COMO AFIRMACIÓN sigue saliendo (CC#3 §4 de #490) y la puerta no deja fragmentos
-describe('r63 · origen como afirmación sale; origen como adorno o voz se queda', () => {
+// ───────────────────────── r63 · qué cuenta como relato de origen (CC#3 §4 de #490)
+describe('r63 · origen como afirmación marca; origen como adorno o voz, no', () => {
   const sale = (t: string) => ids(t).includes('origen')
   it.each(['Náufrago se diferencia por un origen geográfico específico', 'La transparencia: el origen es la prueba, no el eslogan', 'Está el restaurante en el lugar de origen del marisco', 'Funciona como denominación de origen implícita'])('«%s» SÍ', (t) => {
     expect(sale(t), t).toBe(true)
   })
   it.each(['Storytelling de origen costero', 'Orgulloso de origen', 'Cocina de origen marino', 'La narrativa de origen la acompaña', 'Un claim de origen costero propio'])('«%s» NO', (t) => {
     expect(sale(t), t).toBe(false)
-  })
-})
-describe('r63 · lo mutilado no se guarda: campo → PENDIENTE; lista → se quita el elemento', () => {
-  const fuentes = [F('s', 'primaria_propia', 'Hola somos un restaurante familiar.')]
-  const cierra = (manual: Record<string, unknown>) => cerrarPuerta(manual, evaluarHechos({ manual, fuentes }))
-  it('un campo largo que pierde más de la mitad queda PENDIENTE y lo que sobraba va solo al registro interno', () => {
-    const largo = 'Garantía total de resultados en cada pedido que sale de la cocina de la casa y llega hasta tu puerta cada día de la semana. Pedidos garantizados con trazabilidad verificable de cada ingrediente y cada proveedor del mercado. Sí.'
-    const c = cierra({ posicion: largo })
-    expect(c.manual.posicion).toBe('PENDIENTE: reescribir con fuente')
-    expect(c.retirados.some((r) => r.marca === 'fragmento')).toBe(true)
-  })
-  it('en una lista, el elemento mutilado o vacío sale ENTERO (nunca queda «», ni «Transparente. no con adjetivos»)', () => {
-    const c = cierra({ personalidad: ['Cercana y simple siempre.', 'Garantía total, siempre.', 'Transparente: el origen es la prueba, no con adjetivos'] })
-    expect(c.manual.personalidad).toEqual(['Cercana y simple siempre.'])
-    expect(c.retirados.length).toBeGreaterThanOrEqual(2)
-  })
-  it('un campo sano no se toca; «vs.» y «etc.» no cuentan como oración cortada', () => {
-    const m = { a: 'Rápido vs. los demás, etc. y siempre cercano.' }
-    expect(cierra(m).manual).toEqual(m)
   })
 })

@@ -61,13 +61,13 @@ describe('fechas y cifras sin fuente', () => {
 })
 
 describe('lo que informa la puerta', () => {
-  it('🔴 lo solo anotado cuenta como limpio y no como introducido: la puerta no cerró nada', () => {
+  it('🔴 lo solo anotado cuenta como limpio y no como introducido', () => {
     const r = pasar({ historia_y_origen: 'Nació en 2015' })
     expect(r.limpio).toBe(true)
     expect(r.introducidos).toEqual([])
   })
 
-  it('🔴 lo que sí se retira no cuenta como limpio', () => {
+  it('🔴 una palabra de certeza sin respaldo no cuenta como limpio, aunque se quede en el texto', () => {
     const r = pasar({ positioning: 'Somos el mejor restaurante de la costa, con buena comida para todos' })
     expect(r.limpio).toBe(false)
     expect(r.introducidos.length).toBeGreaterThan(0)
@@ -85,13 +85,16 @@ describe('lo que lee el panel (`content_text.brand_book_draft`)', () => {
 })
 
 describe('lo demás sigue igual', () => {
-  it('🔴 una palabra de certeza sin respaldo sigue saliendo, y no se anota como dato', () => {
-    const r = pasar({ positioning: 'Somos el mejor restaurante de la costa, con buena comida para todos' })
-    expect(JSON.stringify(r.manual.positioning)).not.toContain('el mejor')
-    expect(r.retirados.length).toBeGreaterThan(0)
+  it('🔴 03-nov · una palabra de certeza sin respaldo se queda, no se retira y no se anota como dato', () => {
+    const texto = 'Somos el mejor restaurante de la costa, con buena comida para todos'
+    const r = pasar({ positioning: texto })
+    expect(r.manual.positioning).toBe(texto)
+    expect(r.retirados).toEqual([])
+    expect(meta(r.manual).positioning.datos_sin_fuente).toEqual([])
+    expect(meta(r.manual).positioning.provisional).toBe(false)
   })
 
-  it('🔴 si en la misma cláusula hay certeza y cifra, manda la certeza: sale', () => {
+  it('🔴 esSoloDatoSinFuente: si en la misma cláusula hay certeza y cifra, no es solo dato', () => {
     const h = { estado: 'sin_cita', detalle: [{ marca: 'cifra', estado: 'sin_cita' }, { marca: 'certeza', estado: 'sin_cita' }] }
     expect(esSoloDatoSinFuente(h as never)).toBe(false)
     expect(esSoloDatoSinFuente({ estado: 'sin_cita', detalle: [{ marca: 'cifra', estado: 'sin_cita' }, { marca: 'fecha', estado: 'solo_sintesis' }] } as never)).toBe(true)
@@ -112,9 +115,10 @@ describe('la propuesta del agente', () => {
     expect(String(r.draft.historia_y_origen)).toContain('Nació en 2015')
   })
 
-  it('🔴 una palabra de certeza sin respaldo sí la frena', () => {
+  it('🔴 03-nov · una palabra de certeza sin respaldo tampoco la frena', () => {
     const r = fusionarPropuestas({}, [{ campo: 'positioning', valor: 'Somos el mejor restaurante de la costa', razon: 'r' }], [])
-    expect(r.aplicadas).toEqual([])
-    expect(r.rechazadas[0]?.motivo).toMatch(/sin respaldo/)
+    expect(r.aplicadas).toEqual(['positioning'])
+    expect(r.rechazadas).toEqual([])
+    expect(String(r.draft.positioning)).toContain('Somos el mejor restaurante de la costa')
   })
 })

@@ -1,15 +1,12 @@
 /**
- * R6 · «PROVISIONAL» VIAJA · y la PUERTA FINAL (S5): lo que sigue sin respaldo y el cliente NO dijo SALE del manual (queda solo en un registro interno) y el autor no puede reintroducirlo. PURO.
+ * R6 · «PROVISIONAL» VIAJA · y la PUERTA FINAL (S5). 03-nov, decisión de Emilio («quita esas reglas, para eso están mis observaciones»): la puerta NO toca el texto del manual; solo anota. PURO.
  *
  *  · `metaDeCampos` deja un estado en TODOS los campos de texto (también `positioning`, `icp_summary`…): {estado, provisional, pendientes}.
  *  · `camposFirmes(manual)` es lo que leen TODOS los lectores (planeación, el manual en limpio, la oficina, la cadena): un campo provisional NO es F0, entra como F2 con aviso.
- *  · `cerrarPuerta` QUITA SOLO la cláusula con la marca sin respaldo (el resto de la frase creativa se respeta; regla A3 de Lenovo, 10-oct) y escribe lo que el cliente dice de sí mismo
- *    como «el cliente dice: «…»» (firma D2).
- *  · `recomprobar` = S5 sobre el manual que devolvió el autor: re-evalúa y cierra la puerta (lo que reintroduzca sin cita vuelve a salir).
+ *  · `recomprobar` = S5 sobre el manual que devolvió el autor: devuelve el mismo texto con su `_field_meta`. Una cifra o una fecha sin fuente se anotan al campo; una palabra de certeza, un lugar o una cita, no.
  */
-import { datosSinFuenteDe, declaracionDelCliente, esSoloDatoSinFuente, PREFIJO_PENDIENTE, evaluarHechos, hojasDeTexto, type EntradaDeHechos, type Hecho, type InformeDeHechos } from './hechos'
-import { palabrasDe } from './texto'
-import { limpiarManual, type PalabraAnotada } from './limpieza'
+import { datosSinFuenteDe, ESTADOS_SIN_RESPALDO, esSoloDatoSinFuente, evaluarHechos, hojasDeTexto, tieneDatoSinFuente, type EntradaDeHechos, type Hecho, type InformeDeHechos } from './hechos'
+import { palabrasDeclaradasEnUso, type PalabraAnotada } from './palabras-anotadas'
 
 export type EstadoDeCampo = 'verificado' | 'afirmacion_del_cliente' | 'con_pendientes' | 'sin_hechos'
 export interface MetaDeCampo { estado: EstadoDeCampo; provisional: boolean; pendientes: number; hechos: number }
@@ -38,9 +35,10 @@ export function metaDeCampos(manual: Record<string, unknown>, informe: InformeDe
   const out: Record<string, MetaDeCampo> = {}
   const campos = [...new Set(hojasDeTexto(manual, excluir).map((h) => h.campo))]
   for (const campo of campos) {
-    const hs = informe.hechos.filter((h) => h.campo === campo)
+    // 03-nov · una palabra de certeza, un lugar o una cita sin respaldo ya no cuentan: ni dejan el campo provisional ni se leen como «verificado»
+    const hs = informe.hechos.filter((h) => h.campo === campo && (h.estado === 'con_duda' || !ESTADOS_SIN_RESPALDO.includes(h.estado) || tieneDatoSinFuente(h)))
     const texto = hojasDeTexto({ [campo]: manual[campo] }, []).map((h) => h.texto).join('\n')
-    const pendientes = cuentaPendientes(texto) + hs.filter((h) => h.estado === 'sin_cita' || h.estado === 'solo_sintesis' || h.estado === 'con_duda').length
+    const pendientes = cuentaPendientes(texto) + hs.filter((h) => ESTADOS_SIN_RESPALDO.includes(h.estado)).length
     const estado: EstadoDeCampo = !hs.length && !pendientes ? 'sin_hechos' : pendientes ? 'con_pendientes' : hs.some((h) => h.estado === 'afirmacion_del_cliente') ? 'afirmacion_del_cliente' : 'verificado'
     out[campo] = { estado, provisional: pendientes > 0, pendientes, hechos: hs.length }
   }
@@ -53,7 +51,7 @@ export function aplicarMeta<T extends Record<string, unknown>>(manual: T, inform
   const nueva = metaDeCampos(manual, informe, excluir)
   const merged: Record<string, unknown> = { ...previa }
   // lo que el dueño ve en el campo. Se recalcula en cada pasada: si el dato ya tiene fuente o salió del texto, su nota se va
-  const datosDe = (c: string) => informe.hechos.filter((h) => h.campo === c && esSoloDatoSinFuente(h)).flatMap(datosSinFuenteDe)
+  const datosDe = (c: string) => informe.hechos.filter((h) => h.campo === c).flatMap(datosSinFuenteDe)
   // 02-nov · lo propuesto sigue siendo propuesta tras la puerta, salvo que le queden pendientes: el dueño lo ve «por validar», no como dato
   for (const [c, m] of Object.entries(nueva)) merged[c] = { ...(previa[c] ?? {}), ...m, ...(previa[c]?.estado === 'propuesta_del_agente' && m.estado !== 'con_pendientes' ? { estado: 'propuesta_del_agente' } : {}), datos_sin_fuente: datosDe(c) }
   return { ...manual, _field_meta: merged }
@@ -78,111 +76,7 @@ export function camposFirmes(manual: Record<string, unknown>, excluir?: string[]
 
 // ───────────────────────── la puerta final
 export interface CambioDeCierre { ruta: string; de: string; a: string; por: 'retirada' | 'declaracion_del_cliente' | 'limpieza' }
-/** lo que sale del manual y queda SOLO aquí (auditoría interna) · NUNCA a la bandeja ni a Slack (firma de Emilio 10-oct: «si no existe no es necesario para mí verlo») */
 export interface RetiradoDelManual { ruta: string; clausula: string; estado: Hecho['estado']; marca: string; motivo: string }
-const MOTIVO: Record<string, string> = { certeza: 'afirmación de certeza sin cita', cifra: 'cifra sin cita', lugar: 'origen sin cita', fecha: 'fecha sin cita' }
-
-const escapar = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-/** dónde está la cláusula en el texto real. Las citas entre comillas se enmascaran al evaluar (quedan como espacios en la cláusula): ahí puede haber una cita cualquiera. */
-export function localizar(texto: string, clausula: string): { i: number; largo: number } | null {
-  const i = texto.indexOf(clausula)
-  if (i >= 0) return { i, largo: clausula.length }
-  const trozos = clausula.split(/\s{2,}/).filter(Boolean)
-  if (trozos.length < 2) return null
-  const m = new RegExp(trozos.map((t) => escapar(t.trim())).join('\\s*(?:"[^"]*"|«[^»]*»|“[^”]*”)?\\s*')).exec(texto)
-  return m ? { i: m.index, largo: m[0].length } : null
-}
-
-/** quita la cláusula (con su puntuación de cola) y deja el texto ordenado: sin coma ni punto colgando, sin paréntesis vacíos */
-export function quitarClausula(texto: string, clausula: string): string {
-  const loc = localizar(texto, clausula)
-  if (!loc) return texto
-  const cola = texto.slice(loc.i + loc.largo)
-  const antes = texto.slice(0, loc.i).replace(/[\s,;:(]+$/, (m) => (m.includes('(') ? m.replace(/[\s,;:]*\([\s,;:(]*$/, '') : ''))
-  const despues = cola.replace(/^[\s.!?…,;)]+/, '')
-  if (antes && despues) return `${/[.!?…]$/.test(antes) ? antes : `${antes}.`} ${despues}`.trim()
-  if (antes) return `${antes}${cola.match(/^[\s,;)]*([.!?…]+)/)?.[1] ?? ''}`
-  // r62 · al inicio del texto no queda un guion ni unos dos puntos colgando
-  return despues.replace(/^[\s—–:;,-]+/, '').trim()
-}
-
-/** A3 (Lenovo 10-oct): la cláusula sin respaldo que el cliente NO dijo SALE del manual (queda en `retirados`); D2: lo que el cliente dijo se escribe «el cliente dice: «…»».
- *  Si una misma oración pierde DOS o más cláusulas, sale la oración entera (lo que sobraría son fragmentos sin sentido). */
-export function cerrarPuerta<T extends Record<string, unknown>>(manual: T, informe: InformeDeHechos): { manual: T; cambios: CambioDeCierre[]; retirados: RetiradoDelManual[]; no_aplicados: Hecho[] } {
-  let cur = manual
-  const cambios: CambioDeCierre[] = []
-  const retirados: RetiradoDelManual[] = []
-  const no: Hecho[] = []
-  const sale = (h: Hecho) => (h.estado === 'sin_cita' || h.estado === 'solo_sintesis') && !esSoloDatoSinFuente(h)
-  const porOracion = new Map<string, number>()
-  for (const h of informe.hechos) if (sale(h)) porOracion.set(h.ruta + '\u0000' + h.frase, (porOracion.get(h.ruta + '\u0000' + h.frase) ?? 0) + 1)
-  const registrar = (h: Hecho) => {
-    const d = h.detalle.find((x) => x.estado === h.estado) ?? h.detalle[0]
-    retirados.push({ ruta: h.ruta, clausula: h.clausula, estado: h.estado, marca: d.marca, motivo: MOTIVO[d.marca] ?? 'cita sin fuente' })
-  }
-  const oracionesQuitadas = new Set<string>()
-  for (const h of informe.hechos) {
-    if (sale(h)) {
-      const actual = leerRuta(cur, h.ruta)
-      const clave = h.ruta + '\u0000' + h.frase
-      // M1-c · si de la oración solo quedaría un fragmento sin sentido (una palabra, o un resto que empieza en minúscula: «siempre.»), sale la oración ENTERA
-      const resto = quitarClausula(h.frase, h.clausula).trim()
-      const fragmento = typeof actual === 'string' && (palabrasDe(resto).length < 2 || /^[a-záéíóúñ]/.test(resto) || restoRoto(resto))
-      const entera = (porOracion.get(clave) ?? 0) >= 2 || fragmento
-      if (entera && oracionesQuitadas.has(clave)) { registrar(h); continue }
-      const objetivo = entera && typeof actual === 'string' && localizar(actual, h.frase) ? h.frase : h.clausula
-      if (typeof actual !== 'string' || !localizar(actual, objetivo)) { no.push(h); continue }
-      cur = ponerRuta(cur, h.ruta, quitarClausula(actual, objetivo))
-      cambios.push({ ruta: h.ruta, de: objetivo, a: '', por: 'retirada' })
-      if (entera) oracionesQuitadas.add(clave)
-      registrar(h)
-    } else if (h.estado === 'afirmacion_del_cliente' && h.cita_literal) {
-      const actual = leerRuta(cur, h.ruta)
-      const loc = typeof actual === 'string' ? localizar(actual, h.clausula) : null
-      if (typeof actual !== 'string' || !loc) { no.push(h); continue }
-      const nuevo = declaracionDelCliente(h.cita_literal)
-      cur = ponerRuta(cur, h.ruta, actual.slice(0, loc.i) + nuevo + actual.slice(loc.i + loc.largo))
-      cambios.push({ ruta: h.ruta, de: h.clausula, a: nuevo, por: 'declaracion_del_cliente' })
-    }
-  }
-  // r63 · sin fragmentos: un campo que quedó mutilado NO se guarda como si estuviera bien
-  const rutasTocadas = [...new Set(cambios.filter((c) => c.por === 'retirada').map((c) => c.ruta))]
-  const aQuitar = new Map<string, number[]>()
-  for (const ruta of rutasTocadas) {
-    const antes = leerRuta(manual, ruta)
-    const ahora = leerRuta(cur, ruta)
-    if (typeof antes !== 'string' || typeof ahora !== 'string') continue
-    const enLista = /^(.*)\[(\d+)\]$/.exec(ruta)
-    if (enLista && !ahora.trim()) { aQuitar.set(enLista[1], [...(aQuitar.get(enLista[1]) ?? []), Number(enLista[2])]); continue } // un elemento de lista que quedó vacío no se deja como «»
-    if (!mutilado(antes, ahora)) continue
-    retirados.push({ ruta, clausula: ahora.trim(), estado: 'sin_cita', marca: 'fragmento', motivo: enLista ? 'elemento de lista mutilado por el retiro · se quita entero' : 'campo mutilado por el retiro · queda PENDIENTE de reescribir' })
-    if (enLista) aQuitar.set(enLista[1], [...(aQuitar.get(enLista[1]) ?? []), Number(enLista[2])])
-    else { cur = ponerRuta(cur, ruta, `${PREFIJO_PENDIENTE}reescribir con fuente`); cambios.push({ ruta, de: ahora, a: `${PREFIJO_PENDIENTE}reescribir con fuente`, por: 'retirada' }) }
-  }
-  for (const [padre, idx] of aQuitar) {
-    const lista = leerRuta(cur, padre)
-    if (!Array.isArray(lista)) continue
-    cur = ponerRuta(cur, padre, lista.filter((_, i) => !idx.includes(i)))
-    for (const i of idx) cambios.push({ ruta: `${padre}[${i}]`, de: String(leerRuta(manual, `${padre}[${i}]`) ?? ''), a: '', por: 'retirada' })
-  }
-  return { manual: cur, cambios, retirados, no_aplicados: no }
-}
-
-/** lo que queda de una oración tras quitarle una cláusula: puntuación huérfana, minúscula tras punto o paréntesis sin par */
-const PUNTO_Y_MINUSCULA = /(?<!\b(?:vs|etc|ej|sr|sra|dr|dra|aprox|núm|num))\.\s+[a-záéíóúñ]/ // «vs. competidores» o «etc. y» son abreviaturas, no una oración cortada
-const restoRoto = (t: string): boolean => PUNTO_Y_MINUSCULA.test(t) || /(^|\s)[:;,]/.test(t) || /\s[:;,]\s*\.?$/.test(t) || (t.match(/\(/g) ?? []).length !== (t.match(/\)/g) ?? []).length
-
-const LARGO_QUE_JUSTIFICA_LA_REGLA_DE_LA_MITAD = 150
-/** ¿el retiro dejó el texto mutilado? (r63 · CC#3 §3): queda vacío, empieza en minúscula, trae puntuación huérfana, o perdió más de la mitad de un campo largo */
-export function mutilado(antes: string, ahora: string): boolean {
-  const t = ahora.trim()
-  if (!t) return false // vacío del todo: no queda nada que esté mutilado (A3)
-  if (/^[a-záéíóúñ¿¡]/.test(t) && !/^[a-záéíóúñ¿¡]/.test(antes.trim())) return true
-  if (/(^|\s)[:;,]/.test(t) && !/(^|\s)[:;,]/.test(antes)) return true
-  if (PUNTO_Y_MINUSCULA.test(t) && !PUNTO_Y_MINUSCULA.test(antes)) return true
-  return antes.length >= LARGO_QUE_JUSTIFICA_LA_REGLA_DE_LA_MITAD && t.length < antes.length / 2
-}
-
 /** el autor no puede quitar un `PENDIENTE`: si falta en su versión, se vuelve a poner al final del mismo campo */
 export function restituirPendientes<T extends Record<string, unknown>>(antes: Record<string, unknown>, despues: T): { manual: T; restituidos: Array<{ ruta: string; pendiente: string }> } {
   let cur = despues
@@ -205,12 +99,12 @@ export function restituirPendientes<T extends Record<string, unknown>>(antes: Re
 export interface Recomprobacion {
   manual: Record<string, unknown>
   informe: InformeDeHechos
-  /** lo que el autor dejó sin respaldo (ya retirado del manual) */
+  /** lo que el autor dejó sin respaldo: sigue en el texto; la revisión es de Emilio */
   introducidos: Hecho[]
   cambios: CambioDeCierre[]
-  /** registro interno (auditoría): lo que salió del manual · NO va a la bandeja ni a Slack */
+  /** siempre vacío desde el 03-nov: el flujo vivo del manual y el borrador leen esta lista */
   retirados: RetiradoDelManual[]
-  /** true si el autor NO dejó nada sin respaldo (la puerta no tuvo que cerrar nada) */
+  /** true si el autor NO dejó nada sin respaldo */
   limpio: boolean
 }
 export const MOTIVO_DE_PALABRA_DECLARADA = 'usa una palabra declarada por una norma o por el dueño: revisa si corresponde'
@@ -225,17 +119,9 @@ function anotarPalabras(manual: Record<string, unknown>, anotadas: PalabraAnotad
   }
   return { ...manual, _field_meta: meta }
 }
-/** S5 / S7: re-evalúa lo que devolvió el autor y cierra la puerta (lo que reintroduzca sin cita vuelve a salir). El resultado ya lleva `_field_meta` de todos los campos. */
-export function recomprobar(_antes: Record<string, unknown>, despuesCrudo: Record<string, unknown>, entrada: Omit<EntradaDeHechos, 'manual'>): Recomprobacion {
-  // r68 · primero el FORMATO por código: sin nombres internos citados, sin oraciones rotas, Lo quitado va solo al registro interno. Una palabra declarada no se quita: se anota a la vista.
-  const lim = limpiarManual(despuesCrudo)
-  const despues = lim.manual
+/** S5 / S7: re-evalúa lo que devolvió el autor y anota. El texto sale igual que entró; el resultado ya lleva `_field_meta` de todos los campos. */
+export function recomprobar(_antes: Record<string, unknown>, despues: Record<string, unknown>, entrada: Omit<EntradaDeHechos, 'manual'>): Recomprobacion {
   const informe = evaluarHechos({ ...entrada, manual: despues })
-  const cierre = cerrarPuerta(despues, informe)
-  const finalInforme = evaluarHechos({ ...entrada, manual: cierre.manual })
-  const manual = anotarPalabras(aplicarMeta(cierre.manual, finalInforme, entrada.excluir), lim.anotadas)
-  const motivoDe = { nombre_interno_citado: 'nombre interno citado como fuente', fragmento: 'oración rota' } as const
-  const cambiosL = lim.quitados.map((q) => ({ ruta: q.ruta, de: q.texto, a: '', por: 'limpieza' as const }))
-  const retiradosL = lim.quitados.map((q) => ({ ruta: q.ruta, clausula: q.texto, estado: 'sin_cita' as const, marca: q.motivo, motivo: motivoDe[q.motivo] }))
-  return { manual, informe: finalInforme, introducidos: informe.sin_respaldo.filter((h) => h.estado !== 'con_duda' && !esSoloDatoSinFuente(h)), cambios: [...cambiosL, ...cierre.cambios], retirados: [...retiradosL, ...cierre.retirados], limpio: informe.sin_respaldo.every((h) => h.estado === 'con_duda' || esSoloDatoSinFuente(h)) && lim.quitados.length === 0 }
+  const manual = anotarPalabras(aplicarMeta(despues, informe, entrada.excluir), palabrasDeclaradasEnUso(despues))
+  return { manual, informe, introducidos: informe.sin_respaldo.filter((h) => h.estado !== 'con_duda' && !esSoloDatoSinFuente(h)), cambios: [], retirados: [], limpio: informe.sin_respaldo.every((h) => h.estado === 'con_duda' || esSoloDatoSinFuente(h)) }
 }
