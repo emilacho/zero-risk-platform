@@ -21,7 +21,7 @@ const accion = (codigo: string, json: unknown, mem: Mem) => (correr(codigo, json
 /** un tic completo: cierre → (alarma | respuesta en el hilo) con lo que contestaría Slack */
 const tic = (json: unknown, mem: Mem, slackOk = true) => {
   const d = accion(CODIGO_CIERRE, json, mem)
-  if (d.accion === 'avisar_fallo') { accion(CODIGO_ANOTA, slackOk ? { ok: true, ts: '171.001' } : { ok: false, error: 'channel_not_found' }, mem); return { avisos: 1, hilo: null, d } }
+  if (d.accion === 'avisar_fallo') { try { accion(CODIGO_ANOTA, slackOk ? { ok: true, ts: '171.001' } : { ok: false, error: 'channel_not_found' }, mem) } catch { /* ejecución en rojo: lo recoge el aviso de errores */ } return { avisos: 1, hilo: null, d } }
   if (d.accion === 'avisar_volvio') { accion(CODIGO_LIMPIA, slackOk ? { ok: true } : { ok: false }, mem); return { avisos: 1, hilo: d.hilo, d } }
   return { avisos: 0, hilo: null, d }
 }
@@ -137,6 +137,13 @@ describe('una alarma por incidente, sus cambios en su hilo', () => {
     expect(nodo(N_ALARMA).parameters.jsonBody).not.toContain('thread_ts')
     expect(f.connections[N_ALARMA].main[0][0].node).toBe(N_ANOTA)
     expect(f.connections[N_AVISO_VOLVIO].main[0][0].node).toBe(N_LIMPIA)
+  })
+  it('🔴 si Slack no acepta la alarma la ejecución sale en ROJO (no queda en verde y mudo) y el incidente no se abre', () => {
+    const mem: Mem = {}
+    accion(CODIGO_CIERRE, MAL[0], mem)
+    expect(() => accion(CODIGO_ANOTA, { ok: false, error: 'invalid_auth' }, mem)).toThrow(/no pudo avisar en Slack/)
+    expect(() => accion(CODIGO_ANOTA, { ok: true }, mem)).toThrow()
+    expect(mem.incidente_desde).toBeUndefined()
   })
   it('🔴 mutantes: sin memoria repite la alarma; abrir sin esperar a Slack; cerrar sin esperar a Slack; responder sin hilo', () => {
     const sinMemoria = CODIGO_CIERRE.replace('if (mem.incidente_desde) {\n  console.log("[reloj-barrido-del-plan] SIGUE', 'if (false) {\n  console.log("[reloj-barrido-del-plan] SIGUE')
