@@ -108,6 +108,9 @@ async function rutaListoBase(deps: DepsDeRutas, cuerpo: unknown): Promise<Respue
     for (const a of lista(comp.falta)) if (!llegaron.has(String(a.funcion))) huecos.push({ fuente: String(a.fuente ?? ''), funcion: String(a.funcion ?? ''), objetivo: String(a.objetivo ?? '') })
   }
   if (venciada && !huecos.length) huecos.push({ fuente: 'cadena', funcion: 'cadena_del_despertar', objetivo: `no terminó en ${ESPERA_MAXIMA_DEL_DESPERTAR_MIN} min` })
+  // 03-nov: lo que el filtro de entrada del índice rechazó es un hueco DECLARADO: el cerebro queda listo igual y el plan no espera por esto
+  const rechazadas = Array.isArray(p.puente.rechazadas) ? (p.puente.rechazadas as Array<{ id: string; clase: string; razon: string }>) : []
+  for (const x of rechazadas) huecos.push({ fuente: 'indice', funcion: 'rechazado_por_el_filtro', objetivo: `${x.clase} ${x.id.slice(0, 8)}: ${x.razon}` })
   const conHuecos = huecos.length ? ` · con ${huecos.length} hueco(s) declarado(s)` : ''
   // la alta terminó (despertar/completar listo): cierra SOLAS las pausas «hasta la alta» de este cliente (no frenan a la alta; solo a la corrida diaria)
   const cierre = dsp || tipo === 'despertar' ? await cerrarPausasDeAlta(deps.db, clientId, new Date(t), ahora) : { cerradas: 0 }

@@ -12,6 +12,8 @@ import { crearRegistrador } from '../cerebro/portero/registro'
 import type { RespuestaDeLlamada } from './juez'
 import type { PuenteDeIndice } from './archivar'
 import type { Db } from './alimentar'
+import { avisarPorIncidente } from './alertas'
+import { pasaElTopeDeRechazos } from './puente'
 
 export const MAX_TOKENS_DEL_PORTERO = 1500
 
@@ -56,11 +58,12 @@ export function agenteDelRoster(o: { origen: string; llaveInterna: string; workf
 export const PLAZO_DEL_PULIDO_MS = 40_000
 const TROZOS_A_LA_VEZ = 3
 
-export function puenteAlIndice(o: { origen: string; llaveInterna: string; db: Db; fetchImpl?: (u: string, i?: RequestInit) => Promise<Response> }) {
+export function puenteAlIndice(o: { origen: string; llaveInterna: string; db: Db; fetchImpl?: (u: string, i?: RequestInit) => Promise<Response>; avisar?: (texto: string, clave?: string) => Promise<unknown> }) {
   const traer = o.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i))
   return async (p: { escribir: PuenteDeIndice[]; sacar: string[]; client_id: string; hasta?: number }) => {
     const errores: string[] = []
-    let escritos = 0, sacados = 0
+    let escritos = 0, sacados = 0, intentados = 0
+    const rechazados: Array<{ source_id: string; razon: string }> = []
     // cada trozo pasa por el modelo de huellas (~1-2 s): pocos a la vez y SIN arrancar otro pasada la hora límite (lo que no cupo queda como `quedan` y sigue la próxima pasada)
     await enTandas(p.escribir, TROZOS_A_LA_VEZ, async (x) => {
       try {
@@ -68,13 +71,29 @@ export function puenteAlIndice(o: { origen: string; llaveInterna: string; db: Db
           method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': o.llaveInterna },
           body: JSON.stringify({ client_id: x.client_id, source_table: x.source_table, source_id: x.source_id, sections: x.sections, metadata: x.metadata, source: 'apify_scrape', scrape_trace: true }),
         })
-        if (r.ok) escritos++; else errores.push(`ingest-source respondió ${r.status} para ${x.source_id}`)
+        intentados++
+        if (!r.ok) { errores.push(`ingest-source respondió ${r.status} para ${x.source_id}`); return }
+        // 03-nov: el filtro de entrada puede rechazar el texto y aun así contestar 200 (`sections_rejected`, 0 trozos): eso NO es «escrito», es un HUECO que se marca en la ficha (con el porqué) y se declara
+        const j = (typeof r.json === 'function' ? await r.json().catch(() => null) : null) as { chunks_upserted?: number; chunks_inserted?: number; chunks_updated?: number; sections_rejected?: number; ingress_filter?: { rejected?: Array<{ reason?: string }> } } | null
+        const entraron = (j?.chunks_upserted ?? 0) + (j?.chunks_inserted ?? 0) + (j?.chunks_updated ?? 0)
+        if (j && (j.sections_rejected ?? 0) > 0 && entraron === 0) {
+          const razon = String(j.ingress_filter?.rejected?.[0]?.reason ?? 'rechazado por el filtro').slice(0, 120)
+          rechazados.push({ source_id: x.source_id, razon })
+          const m = await o.db.from('cerebro_fichas').update({ indice_rechazado_en: new Date().toISOString(), indice_rechazo: razon }).eq('id', x.source_id).eq('client_id', x.client_id)
+          if (m.error) errores.push(`marcar el rechazo de ${x.source_id}: ${m.error.message}`)
+        } else escritos++
       } catch (e) { errores.push(e instanceof Error ? e.message : String(e)) }
     }, p.hasta)
+    // el tope de Emilio: más de 3 trozos o más del 5 % rechazados en la pasada → UNA alarma en #alertas (cliente, cuántos, por qué). Solo avisa: nunca bloquea el «listo» ni el plan
+    if (pasaElTopeDeRechazos(rechazados.length, intentados)) {
+      const razones = [...new Set(rechazados.map((x) => x.razon))].join(', ')
+      const dia = new Date().toISOString().slice(0, 10)
+      try { await (o.avisar ?? avisarPorIncidente({ db: o.db }))(`🟠 Índice del cerebro · el filtro de entrada rechazó ${rechazados.length} de ${intentados} trozo(s) (cliente ${p.client_id.slice(0, 8)}): ${razones} · quedan declarados como hueco, el «listo» y el plan NO esperan`, `indice-rechazos:${p.client_id}:${dia}`) } catch { /* el aviso no tumba la pasada */ }
+    }
     await enTandas(p.sacar, 10, async (id) => {
       const d = await o.db.from('client_brain_chunks').delete().eq('client_id', p.client_id).eq('source_table', 'cerebro_fichas').eq('source_id', id)
       if (d.error) errores.push(`sacar ${id}: ${d.error.message}`); else sacados++
     }, p.hasta)
-    return { escritos, sacados, errores }
+    return { escritos, sacados, errores, rechazados, intentados }
   }
 }
