@@ -14,6 +14,7 @@ const UNICOS: Record<string, string[][]> = {
   eventos_de_emilio: [['clave_unica']],
   notas_del_dueno_envios: [['nota_id']],
   autorevisiones_del_productor: [['clave_unica']],
+  borradores_del_dueno: [['client_id', 'documento']],
   plan_aprobaciones: [['plan_id']],
   metricas_cuentas: [['client_id', 'red', 'cuenta_externa']],
   metricas_cuenta_mediciones: [['cuenta_id', 'dia', 'fuente']],
@@ -52,7 +53,7 @@ export class DbFalsa {
 }
 
 class Consulta {
-  private op: 'select' | 'insert' | 'update' | 'upsert' = 'select'
+  private op: 'select' | 'insert' | 'update' | 'upsert' | 'delete' = 'select'
   private filtros: Array<(f: Fila) => boolean> = []
   private payload: Fila | Fila[] | null = null
   private conflicto: string[] | null = null
@@ -66,6 +67,7 @@ class Consulta {
   select(c?: string) { if (this.op === 'select') this.proyeccion = c ?? '*'; else { this.devuelve = true; this.proyeccion = c ?? '*' } return this }
   insert(p: Fila | Fila[]) { this.op = 'insert'; this.payload = p; return this }
   update(p: Fila) { this.op = 'update'; this.payload = p; return this }
+  delete() { this.op = 'delete'; return this }
   upsert(p: Fila | Fila[], o?: { onConflict?: string }) { this.op = 'upsert'; this.payload = p; this.conflicto = o?.onConflict ? o.onConflict.split(',') : null; return this }
   eq(c: string, v: unknown) { this.filtros.push((f) => leer(f, c) === v); return this }
   neq(c: string, v: unknown) { this.filtros.push((f) => leer(f, c) !== v); return this }
@@ -133,6 +135,8 @@ class Consulta {
           Object.assign(choque, fila, choque.id !== undefined ? { id: choque.id } : {}); data.push(choque)
         } else { filas.push(fila); data.push(fila) }
       }
+    } else if (this.op === 'delete') {
+      this.db.tablas[this.t] = filas.filter((f) => !this.filtros.every((g) => g(f)))
     } else if (this.op === 'update') {
       for (const f of filas) if (this.filtros.every((g) => g(f))) { Object.assign(f, this.payload as Fila); data.push(f) }
     } else {
