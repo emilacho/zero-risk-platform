@@ -1292,6 +1292,10 @@
               "value": "={{ $env.INTERNAL_API_KEY }}"
             },
             {
+              "name": "x-skip-editor-middleware",
+              "value": "1"
+            },
+            {
               "name": "x-zr-latido",
               "value": "1"
             }
@@ -1484,6 +1488,10 @@
             {
               "name": "x-api-key",
               "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-skip-editor-middleware",
+              "value": "1"
             },
             {
               "name": "x-zr-latido",

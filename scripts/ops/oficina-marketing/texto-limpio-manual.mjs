@@ -31,7 +31,8 @@ const bloque = (a) => fs.readFileSync(path.join(STAGING, a), 'utf8').replace(/\r
 export const BLOQUE_VIEJO = () => bloque('bloque-uso-de-lo-disponible-2026-10-20.js').trim()
 export const BLOQUE_NUEVO = () => bloque('bloque-uso-de-lo-disponible-2026-11-03.js').trim()
 export const JUECES_DE_USO = ['[BB] Faithfulness judge', '[BB] Uso · ¿usó lo disponible?']
-export const NODOS_CONTENT_CREATOR = ['Lente · editor-en-jefe', '[BB] Uso · pedir la voz otra vez (editor-en-jefe)']
+// content-creator escribe en 4 llamadas del manual (CERT CC3): la lente, el rescate de la voz y las dos del equipo (aportes de los dueños —también lleva a brand-strategist— e integración)
+export const NODOS_CONTENT_CREATOR = ['Lente · editor-en-jefe', '[BB] Uso · pedir la voz otra vez (editor-en-jefe)', '[BB] Equipo · aportes de los dueños · llamar', '[BB] Equipo · integración · llamar']
 export const REGLA_VIEJA = 'escribe cada campo así armado EMPEZANDO por «PROPUESTA (no es dato del cliente): …» (en `_meta.<campo>.fuente` pon «propuesta»). Lo que SÍ viene del cliente lleva su cita literal. Esta es la única excepción a «sin cita no lo escribas»: una PROPUESTA rotulada.'
 export const REGLA_NUEVA = 'escribe cada campo así armado como texto limpio, en voz de la marca y sin prefijo; declara la propuesta aparte: `_meta.<campo>.fuente` = «propuesta». Lo que SÍ viene del cliente lleva su cita literal. Única excepción a «sin cita no lo escribas».'
 export const REPAROS = [

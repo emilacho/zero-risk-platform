@@ -33,9 +33,16 @@ describe('la propuesta se declara aparte', () => {
     expect(c).not.toContain('sin rotular')
     expect(c).toContain('sin declarar')
   })
-  it('opción A: solo los 2 nodos de content-creator saltan al editor', () => {
-    const conCabecera = f.nodes.filter((n: any) => (n.parameters?.headerParameters?.parameters ?? []).some((h: any) => h.name === 'x-skip-editor-middleware')).map((n: any) => n.name).sort()
-    expect(conCabecera).toEqual([...CC].sort())
-    for (const n of CC) expect(nodo(n).parameters.jsonBody).toContain('content-creator')
+  it('opción A: TODAS las llamadas con content-creator saltan al editor (la lente, el rescate de la voz y las del equipo: aportes e integración) y ninguna otra', () => {
+    const conCabecera = (n: any) => (n.parameters?.headerParameters?.parameters ?? []).some((h: any) => h.name === 'x-skip-editor-middleware' && h.value === '1')
+    const llamadas = f.nodes.filter((n: any) => n.type === 'n8n-nodes-base.httpRequest' && String(n.parameters?.url ?? '').includes('/api/agents/run-sdk'))
+    const esContentCreator = (n: any) => {
+      if (/"agent":\s*"content-creator"/.test(String(n.parameters.jsonBody ?? ''))) return true
+      const prep = nodo(String(n.name).replace(/ · llamar$/, ' · preparar'))
+      return !!prep && /llamar\('content-creator'/.test(prep.parameters.jsCode ?? '')
+    }
+    const deberian = llamadas.filter(esContentCreator).map((n: any) => n.name).sort()
+    expect(deberian.length).toBeGreaterThanOrEqual(4)
+    expect(llamadas.filter(conCabecera).map((n: any) => n.name).sort()).toEqual(deberian)
   })
 })
