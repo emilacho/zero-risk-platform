@@ -28,7 +28,8 @@ describe('🔴 Náufrago desde cero', () => {
     expect(BORRADAS).not.toContain('clients')
     const ficha = /UPDATE public\.clients\nSET ([^\n]*)\n/.exec(CUERPO)![1]
     expect(ficha).toContain("config = config - 'business_model' - 'moneda'")
-    for (const c of ['market', 'brand_colors', 'brand_fonts']) expect(ficha).toContain(`${c} = NULL`)
+    // el alta solo escribe la industria si el trato la trae: si queda la vieja, nadie la descubre de nuevo
+    for (const c of ['industry', 'market', 'brand_colors', 'brand_fonts']) expect(ficha).toContain(`${c} = NULL`)
     expect(ficha).not.toMatch(/\b(name|slug|website_url)\b/)
     expect(CUERPO).toContain("config ? 'apify' AND config ? 'spend_cap_usd'")
   })

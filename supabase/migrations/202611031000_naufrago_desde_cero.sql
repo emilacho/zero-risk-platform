@@ -2,7 +2,7 @@
 --   Se borra lo producido para trabajar al cliente. Se quedan el cerebro con todo lo que recolectó (raspados, fotos, videos, páginas y sedes), la landing, la ficha limpia por campos, el tope de gasto y los importes.
 --   Los conteos se escriben al generar este archivo: se regenera justo antes de aplicar. Si uno no calza, nada se aplica.
 --   Respaldo previo fuera del sistema: raw/estado/respaldo-naufrago-2026-11-03/. IRREVERSIBLE salvo reimportar ese respaldo.
---   Falta: los 90 trozos copiados del cerebro (decide Cerebro) y los valores de industria, país e idioma (dato de Emilio). eventos_de_emilio no entra: la tabla no deja borrar ni cambiar sus filas.
+--   Falta: los 90 trozos copiados del cerebro, que decide Cerebro. La industria queda vacía para que la descubra el alta (trato de Emilio, 03-nov). eventos_de_emilio no entra: la tabla no deja borrar ni cambiar sus filas.
 BEGIN;
 
 CREATE TEMP TABLE _antes ON COMMIT DROP AS SELECT (SELECT coalesce(sum(cost_usd), 0) FROM public.agent_invocations WHERE client_id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS libro, (SELECT count(*) FROM public.agent_invocations WHERE client_id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS filas_libro, (SELECT count(*) FROM public.cerebro_fichas WHERE client_id::text = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS fichas, (SELECT count(*) FROM public.client_brain_chunks WHERE client_id::text = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS trozos;
@@ -122,7 +122,7 @@ UPDATE public.agent_dispatches x SET metadata = '{}'::jsonb WHERE x.client_id::t
 UPDATE public.agent_dispatch_reconciliations x SET que = 'Trabajo de un cliente reiniciado', evidencia = '{}'::jsonb WHERE x.cliente IN ('0a2ffbd4-957c-4315-a37f-b9e4fbbbb312', 'naufrago', 'naufrago-ec');
 
 UPDATE public.clients
-SET market = NULL, brand_colors = NULL, brand_fonts = NULL, config = config - 'business_model' - 'moneda'
+SET industry = NULL, market = NULL, brand_colors = NULL, brand_fonts = NULL, config = config - 'business_model' - 'moneda'
 WHERE id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312';
 
 DO $$
