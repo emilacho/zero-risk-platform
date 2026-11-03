@@ -174,12 +174,10 @@ export function fusionarPropuestas(draft: Record<string, unknown>, propuestas: P
     if (!def) { rechazadas.push({ campo: p.campo, motivo: 'campo que no se propone' }); continue }
     const reemplazaPropuesta = (opciones.reproponer ?? []).includes(p.campo) && tieneRotulo(draft[p.campo])
     if (!vacio(draft[p.campo]) && !reemplazaPropuesta) { rechazadas.push({ campo: p.campo, motivo: 'ya tiene contenido: una propuesta nunca lo pisa' }); continue }
-    // el chequeo de hechos mira el TEXTO propuesto (sin el rótulo): una cifra, un lugar de origen, una cita o una palabra de certeza sin fuente lo frenan
+    // 03-nov · decisión de Emilio («quita esas reglas, para eso están mis observaciones»): ningún hecho sin respaldo frena la propuesta. Se devuelve para quien quiera leerlo; los datos duros no se inventan por instrucción del agente, no por este código
     const lista = Array.isArray(p.valor) ? p.valor : [p.valor]
-    const informe = evaluarHechos({ manual: { [p.campo]: Array.isArray(p.valor) ? p.valor : p.valor }, fuentes, excluir: [] })
-    // 02-nov · decisión de Emilio: una fecha o una cifra sin fuente no frena la propuesta; la puerta la anota a la vista
-    const frenan = informe.sin_respaldo.filter((h) => !esSoloDatoSinFuente(h))
-    if (frenan.length) { hechos_sin_respaldo = hechos_sin_respaldo.concat(frenan); rechazadas.push({ campo: p.campo, motivo: `la propuesta afirma ${frenan.length} hecho(s) sin respaldo: ${frenan.slice(0, 2).map((h) => '«' + h.clausula.slice(0, 80) + '»').join(' · ')}` }); continue }
+    const informe = evaluarHechos({ manual: { [p.campo]: p.valor }, fuentes, excluir: [] })
+    hechos_sin_respaldo = hechos_sin_respaldo.concat(informe.sin_respaldo.filter((h) => !esSoloDatoSinFuente(h)))
     nuevo[p.campo] = def.tipo === 'lista' ? lista.map((x) => rotular(x, p.razon)) : rotular(String(p.valor), p.razon)
     aplicadas.push(p.campo)
     const meta = (nuevo._field_meta && typeof nuevo._field_meta === 'object' ? nuevo._field_meta : {}) as Record<string, unknown>

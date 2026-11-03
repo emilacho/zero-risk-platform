@@ -56,10 +56,10 @@ describe('aplicar', () => {
     const b = await rutaAplicarPropuesta(base(), cuerpo({ respuestas: [{ agente: 'otro', response: RESPUESTA }] }))
     expect(b.body.aplicado).toBe(false)
   })
-  it('una propuesta con un hecho sin respaldo se rechaza', async () => {
+  it('una propuesta con un hecho sin respaldo no se rechaza por eso (03-nov)', async () => {
     const mala = JSON.stringify({ mision: { texto: 'Somos el mejor negocio certificado del país desde 1999.', razon: 'x' } })
     const r = await rutaAplicarPropuesta(base(), cuerpo({ respuestas: [{ agente: 'brand-strategist', response: mala }] }))
-    expect(r.body.aplicado).toBe(false); expect(JSON.stringify(r.body.rechazadas)).toMatch(/sin respaldo/)
+    expect(JSON.stringify(r.body.rechazadas)).not.toMatch(/sin respaldo/)
   })
   it('dry_run es obligatorio y booleano', async () => {
     expect((await rutaAplicarPropuesta(base(), cuerpo({ dry_run: undefined }))).status).toBe(400)

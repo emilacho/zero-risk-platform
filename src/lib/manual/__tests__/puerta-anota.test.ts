@@ -94,7 +94,7 @@ describe('lo demás sigue igual', () => {
     expect(meta(r.manual).positioning.provisional).toBe(false)
   })
 
-  it('🔴 esSoloDatoSinFuente: si en la misma cláusula hay certeza y cifra, no es solo dato (la propuesta se frena)', () => {
+  it('🔴 esSoloDatoSinFuente: si en la misma cláusula hay certeza y cifra, no es solo dato', () => {
     const h = { estado: 'sin_cita', detalle: [{ marca: 'cifra', estado: 'sin_cita' }, { marca: 'certeza', estado: 'sin_cita' }] }
     expect(esSoloDatoSinFuente(h as never)).toBe(false)
     expect(esSoloDatoSinFuente({ estado: 'sin_cita', detalle: [{ marca: 'cifra', estado: 'sin_cita' }, { marca: 'fecha', estado: 'solo_sintesis' }] } as never)).toBe(true)
@@ -115,9 +115,10 @@ describe('la propuesta del agente', () => {
     expect(String(r.draft.historia_y_origen)).toContain('Nació en 2015')
   })
 
-  it('🔴 una palabra de certeza sin respaldo sí la frena', () => {
+  it('🔴 03-nov · una palabra de certeza sin respaldo tampoco la frena', () => {
     const r = fusionarPropuestas({}, [{ campo: 'positioning', valor: 'Somos el mejor restaurante de la costa', razon: 'r' }], [])
-    expect(r.aplicadas).toEqual([])
-    expect(r.rechazadas[0]?.motivo).toMatch(/sin respaldo/)
+    expect(r.aplicadas).toEqual(['positioning'])
+    expect(r.rechazadas).toEqual([])
+    expect(String(r.draft.positioning)).toContain('Somos el mejor restaurante de la costa')
   })
 })
