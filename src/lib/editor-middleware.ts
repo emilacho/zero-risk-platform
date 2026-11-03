@@ -7,10 +7,14 @@
  *
  * Llamado desde /api/agents/run DESPUÉS de que el agente productor ejecuta.
  * Usa x-skip-editor-middleware:1 en calls internas para evitar recursión.
+ *
+ * 03-nov · orden de Emilio: un revisor caído no es una decisión para él. Se reintenta una vez y, si sigue sin contestar, no cuenta como veredicto:
+ * si ninguno contestó, el texto sigue como está y va un aviso a #alertas, uno por incidente. Solo escala lo que un revisor encontró de verdad.
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { crearAprobacion } from '@/lib/hitl/bandeja'
+import { avisarAAlertas } from '@/lib/buzon-dueno/alertas'
 import {
   EditorVerdict,
   EditorVerdictStatus,
@@ -57,6 +61,8 @@ export interface MiddlewareResult {
     disagreement_reason?: string
     revisions?: number
     reason?: string
+    /** los revisores que no contestaron, tras el reintento */
+    sin_responder?: string[]
   }
   escalated_to_hitl?: boolean
   hitl_item_id?: string | null
@@ -83,8 +89,19 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
       ? (context.client_id as string)
       : null)
 
+  const noDisponible = async (sinResponder: string[], revisiones: number, textoActual?: string): Promise<MiddlewareResult> => {
+    await avisarRevisoresCaidos({ supabase, agentSlug, clientId: effectiveClientId, sinResponder })
+    return {
+      editor_review: { verdict: 'revision_no_disponible', severity: 'low', revisions: revisiones, sin_responder: sinResponder, reason: 'Ningún revisor contestó: falla técnica, no un veredicto' },
+      ...(textoActual === undefined ? {} : { response: textoActual, output: textoActual, result: textoActual }),
+    }
+  }
+
   // Initial dual review
-  const aggregateVerdict = await invokeAllReviewersParallel({ content, agentSlug, task, context, config, baseUrl, clientId: effectiveClientId })
+  const ronda = await invokeAllReviewersParallel({ content, agentSlug, task, context, config, baseUrl, clientId: effectiveClientId })
+  if (!ronda.veredicto) return noDisponible(ronda.sin_responder, 0)
+  const aggregateVerdict = ronda.veredicto
+  const sinResponder = ronda.sin_responder.length ? { sin_responder: ronda.sin_responder } : {}
 
   // Approved — no escalation needed
   if (aggregateVerdict.status === 'approved') {
@@ -95,6 +112,7 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
         reviewers: aggregateVerdict.reviewers,
         disagreement: aggregateVerdict.disagreement,
         revisions: 0,
+        ...sinResponder,
       },
     }
   }
@@ -123,6 +141,7 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
         disagreement: aggregateVerdict.disagreement,
         disagreement_reason: aggregateVerdict.disagreement_reason,
         revisions: 0,
+        ...sinResponder,
       },
       escalated_to_hitl: true,
       hitl_item_id: hitlId,
@@ -152,7 +171,7 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
     if (!revisionResponse?.success) break
 
     currentContent = revisionResponse.response || currentContent
-    currentVerdict = await invokeAllReviewersParallel({
+    const otraRonda = await invokeAllReviewersParallel({
       content: currentContent,
       agentSlug,
       task,
@@ -161,6 +180,8 @@ export async function runDualReviewMiddleware(params: MiddlewareParams): Promise
       baseUrl,
       clientId: effectiveClientId,
     })
+    if (!otraRonda.veredicto) return noDisponible(otraRonda.sin_responder, revision, currentContent)
+    currentVerdict = otraRonda.veredicto
 
     if (currentVerdict.status === 'approved') {
       return {
@@ -227,7 +248,7 @@ async function invokeAllReviewersParallel(params: {
   config: EditorRoutingConfig
   baseUrl: string
   clientId: string | null
-}): Promise<AggregateVerdict> {
+}): Promise<{ veredicto: AggregateVerdict | null; sin_responder: string[] }> {
   const roleSpecs: Array<{
     role: ReviewerRole
     reviewerSlug: string
@@ -254,11 +275,41 @@ async function invokeAllReviewersParallel(params: {
     ),
   )
 
-  const inputs: ReviewerInput[] = roleSpecs.map((spec, i) => ({
-    role: spec.role,
-    verdict: verdicts[i],
-  }))
-  return aggregateVerdictsN(inputs)
+  // el que no contestó tiene un reintento; si sigue sin contestar, no vota
+  const finales = await Promise.all(
+    verdicts.map((v, i) => (v.falla_tecnica ? invokeReviewer({ reviewerSlug: roleSpecs[i].reviewerSlug, reviewerType: roleSpecs[i].reviewerType, ...params }) : v)),
+  )
+  const sin_responder = roleSpecs.filter((_, i) => finales[i].falla_tecnica).map((spec) => spec.reviewerSlug)
+  const inputs: ReviewerInput[] = roleSpecs.map((spec, i) => ({ role: spec.role, verdict: finales[i] })).filter((x) => !x.verdict.falla_tecnica)
+  return { veredicto: inputs.length ? aggregateVerdictsN(inputs) : null, sin_responder }
+}
+
+export const CLAVE_AVISO_REVISORES_CAIDOS = 'editor.aviso_revisores_caidos'
+const HORAS_ENTRE_AVISOS = 24
+
+/** un aviso por incidente: dentro de 24 h no se repite. NUNCA lanza: un aviso que falla no frena al empleado */
+export async function avisarRevisoresCaidos(p: {
+  supabase: SupabaseClient
+  agentSlug: string
+  clientId: string | null
+  sinResponder: string[]
+  ahora?: Date
+  avisar?: (texto: string) => Promise<void>
+}): Promise<void> {
+  console.error(`[revision-del-editor] sin respuesta · ${p.agentSlug} · ${p.sinResponder.join(', ')}`)
+  try {
+    const ahora = p.ahora ?? new Date()
+    const leida = await p.supabase.from('settings').select('value').eq('key', CLAVE_AVISO_REVISORES_CAIDOS).maybeSingle()
+    if (leida.error) throw new Error(leida.error.message)
+    const ultimo = Date.parse(String((leida.data as { value?: unknown } | null)?.value ?? ''))
+    if (Number.isFinite(ultimo) && ahora.getTime() - ultimo < HORAS_ENTRE_AVISOS * 3_600_000) return
+    const escrita = await p.supabase.from('settings').upsert({ key: CLAVE_AVISO_REVISORES_CAIDOS, value: ahora.toISOString(), category: 'notifications' }, { onConflict: 'key' })
+    if (escrita.error) throw new Error(escrita.error.message)
+    const avisar = p.avisar ?? avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '' })
+    await avisar(`Falla técnica: los revisores del editor no contestan (${p.sinResponder.join(', ')}). Los textos siguen sin esa revisión y no llegan a la bandeja de Emilio. Primer caso: ${p.agentSlug}${p.clientId ? ` · cliente ${p.clientId.slice(0, 8)}` : ''}.`)
+  } catch (e) {
+    console.error('[revision-del-editor] el aviso falló', e)
+  }
 }
 
 type ReviewerInvokeType = 'editor' | 'brand_deep' | 'client_success'
@@ -309,6 +360,7 @@ async function invokeReviewer(params: {
     issues: [`${params.reviewerSlug} unavailable`],
     feedback: '',
     severity: 'low',
+    falla_tecnica: true,
   }
 
   try {
@@ -480,6 +532,7 @@ function parseEditorVerdict(rawResponse: string): EditorVerdict {
     issues: ['Could not parse reviewer response'],
     feedback: rawResponse.substring(0, 500),
     severity: 'low',
+    falla_tecnica: true,
   }
 
   try {

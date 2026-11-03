@@ -30,6 +30,8 @@ export interface EditorVerdict {
   issues: string[]
   feedback: string
   severity: EditorVerdictSeverity
+  /** el revisor no opinó: no contestó o su respuesta no se pudo leer. No es un veredicto y no cuenta como tal */
+  falla_tecnica?: boolean
 }
 
 export interface EditorRoutingConfig {
