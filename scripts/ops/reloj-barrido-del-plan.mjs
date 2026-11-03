@@ -13,7 +13,8 @@ import path from 'node:path'
 
 export const NOMBRE = 'Zero Risk — Reloj del barrido de corridas del plan (cada 15 min · CC#2)'
 export const CRON = '*/15 * * * *'
-export const RUTA = '/api/planeacion/corrida/barrer'
+export const AVISO_DE_ERROR = '5fkPLbZvQsQa1bcd' // Zero Risk — Aviso de error → #alertas (E73 · CC#1)
+export const RUTA ='/api/planeacion/corrida/barrer'
 export const N_RELOJ = 'Reloj · cada 15 minutos'
 export const N_BARRER = 'Barrer · corridas del plan vencidas'
 export const N_CIERRE = 'Cierre · el barrido contestó o la corrida falla'
@@ -57,7 +58,9 @@ export function construir() {
       [N_RELOJ]: { main: [[{ node: N_BARRER, type: 'main', index: 0 }]] },
       [N_BARRER]: { main: [[{ node: N_CIERRE, type: 'main', index: 0 }]] },
     },
-    settings: { executionOrder: 'v1', saveDataErrorExecution: 'all', saveManualExecutions: true },
+    // CERT CC#3 (reserva 1): un fallo del reloj no puede quedar mudo (n8n guarda las ejecuciones ~4 h). Es el aviso de errores que ya usan otros flujos
+    // («Aviso de error → #alertas», E73): un aviso por flujo+nodo cada 10 min, con enlace a la corrida.
+    settings: { executionOrder: 'v1', saveDataErrorExecution: 'all', saveManualExecutions: true, errorWorkflow: AVISO_DE_ERROR },
   }
 }
 

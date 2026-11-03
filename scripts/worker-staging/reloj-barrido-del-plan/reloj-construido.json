@@ -104,6 +104,7 @@
  "settings": {
   "executionOrder": "v1",
   "saveDataErrorExecution": "all",
-  "saveManualExecutions": true
+  "saveManualExecutions": true,
+  "errorWorkflow": "5fkPLbZvQsQa1bcd"
  }
 }

@@ -3,7 +3,7 @@
  * Fija los 6 guardarraíles de la agencia: cadencia definida, reintentos con tope, sin costo ni agentes, rastro, y que un rechazo de la ruta HAGA FALLAR la corrida.
  */
 import { describe, expect, it } from 'vitest'
-import { CODIGO_CIERRE, CRON, N_BARRER, N_CIERRE, N_RELOJ, RUTA, construir } from '../scripts/ops/reloj-barrido-del-plan.mjs'
+import { AVISO_DE_ERROR, CODIGO_CIERRE, CRON, N_BARRER, N_CIERRE, N_RELOJ, RUTA, construir } from '../scripts/ops/reloj-barrido-del-plan.mjs'
 
 const f = construir() as any
 const nodo = (n: string) => f.nodes.find((x: any) => x.name === n)
@@ -30,6 +30,10 @@ describe('el reloj del barrido', () => {
     expect(n.retryOnFail).toBe(true)
     expect(n.maxTries).toBe(3)
     expect(n.waitBetweenTries).toBeGreaterThan(0)
+  })
+  it('CERT CC3 reserva 1 · un fallo NO queda mudo: el flujo enlaza el aviso de errores que ya usan otros (E73 → #alertas)', () => {
+    expect(f.settings.errorWorkflow).toBe(AVISO_DE_ERROR)
+    expect(AVISO_DE_ERROR).toBe('5fkPLbZvQsQa1bcd')
   })
   it('sin costo: ningún nodo llama a agentes, a modelos ni a la sala', () => {
     expect(JSON.stringify(f)).not.toMatch(/agents\/run|sala\/intake|anthropic|openai/i)
