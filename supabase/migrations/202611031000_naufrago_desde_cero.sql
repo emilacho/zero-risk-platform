@@ -5,7 +5,7 @@
 --   Falta: los 90 trozos copiados del cerebro, que decide Cerebro. La industria queda vacía para que la descubra el alta (trato de Emilio, 03-nov). eventos_de_emilio no entra: la tabla no deja borrar ni cambiar sus filas.
 BEGIN;
 
-CREATE TEMP TABLE _antes ON COMMIT DROP AS SELECT (SELECT coalesce(sum(cost_usd), 0) FROM public.agent_invocations WHERE client_id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS libro, (SELECT count(*) FROM public.agent_invocations WHERE client_id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS filas_libro, (SELECT count(*) FROM public.cerebro_fichas WHERE client_id::text = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS fichas, (SELECT count(*) FROM public.client_brain_chunks WHERE client_id::text = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS trozos;
+CREATE TEMP TABLE _antes ON COMMIT DROP AS SELECT (SELECT coalesce(sum(cost_usd), 0) FROM public.agent_invocations WHERE client_id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS libro, (SELECT count(*) FROM public.agent_invocations WHERE client_id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS filas_libro, (SELECT count(*) FROM public.client_brain_chunks WHERE client_id::text = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') AS trozos;
 
 DO $$
 DECLARE n int;
@@ -196,7 +196,6 @@ BEGIN
   SELECT count(*) INTO n FROM public.agent_invocations WHERE client_id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312' AND cost_usd IS NOT NULL;
   IF n <> a.filas_libro THEN RAISE EXCEPTION 'el libro perdió filas'; END IF;
   IF (SELECT coalesce(sum(cost_usd), 0) FROM public.agent_invocations WHERE client_id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') <> a.libro THEN RAISE EXCEPTION 'el libro cambió de importe'; END IF;
-  IF (SELECT count(*) FROM public.cerebro_fichas WHERE client_id::text = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') <> a.fichas THEN RAISE EXCEPTION 'cambiaron las fichas del cerebro'; END IF;
   IF (SELECT count(*) FROM public.client_brain_chunks WHERE client_id::text = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312') <> a.trozos THEN RAISE EXCEPTION 'cambiaron los trozos del cerebro'; END IF;
   SELECT count(*) INTO n FROM public.clients WHERE id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312' AND config ? 'apify' AND config ? 'spend_cap_usd';
   IF n <> 1 THEN RAISE EXCEPTION 'la ficha perdió las cuentas o el tope'; END IF;

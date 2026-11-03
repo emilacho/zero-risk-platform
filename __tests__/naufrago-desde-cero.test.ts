@@ -10,9 +10,10 @@ const antes = (hija: string, madre: string) => expect(BORRADAS.indexOf(hija), `$
 
 describe('🔴 Náufrago desde cero', () => {
   it('🔴 lo recolectado por el cerebro no se toca', () => {
-    for (const t of ['cerebro_comentarios_competencia', 'cerebro_consultas', 'cerebro_credenciales', 'cerebro_ingresos', 'cerebro_tendencias', 'cerebro_unidades_vistas', 'apify_raw', 'client_social_images', 'client_videos', 'client_web_pages', 'client_sedes', 'client_sede_datos']) expect(CUERPO).not.toContain(t)
-    expect(BORRADAS.filter((t) => t.startsWith('cerebro_') || t === 'client_brain_chunks')).toEqual([])
-    expect(CUERPO).not.toMatch(/(DELETE FROM|UPDATE) public\.(cerebro_fichas|client_brain_chunks)/)
+    expect(CUERPO).not.toMatch(/public\.cerebro_/)
+    for (const t of ['apify_raw', 'client_social_images', 'client_videos', 'client_web_pages', 'client_sedes', 'client_sede_datos']) expect(CUERPO).not.toContain(t)
+    expect(BORRADAS).not.toContain('client_brain_chunks')
+    expect(CUERPO).not.toMatch(/(DELETE FROM|UPDATE) public\.client_brain_chunks/)
   })
   it('🔴 los importes se conservan: el libro solo pierde textos y costos no se toca', () => {
     expect(BORRADAS).not.toContain('agent_invocations')
@@ -57,7 +58,6 @@ describe('🔴 Náufrago desde cero', () => {
   })
   it('🔴 comprueba al final que no quedó nada y que el cerebro sigue igual', () => {
     for (const t of BORRADAS) expect(CUERPO).toContain(`quedaron filas en ${t}`)
-    expect(CUERPO).toContain('cambiaron las fichas del cerebro')
     expect(CUERPO).toContain('cambiaron los trozos del cerebro')
   })
 })
