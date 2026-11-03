@@ -75,8 +75,8 @@ export function analizar(workflow) {
     }
   }
   const camino = []
-  if (vistos.has(FINAL_REAL)) {
-    let cur = FINAL_REAL
+  if (vistos.has(SOBRE)) {
+    let cur = SOBRE
     while (cur) { camino.unshift(cur); cur = padre.get(cur) }
   }
   const huerfanos = [...nombres].filter((n) => !vistos.has(n))
@@ -87,10 +87,10 @@ export function analizar(workflow) {
     nodos: nombres.size,
     alcanzables: vistos.size,
     sobre_existe: nombres.has(SOBRE),
+    // 03-nov (señal 14:49Z) · el sobre GUARDA en la espera del dueño; si vuelve a POSTear a la sala, el plan sale sin que Emilio apruebe el manual
+    sobre_url: String((workflow.nodes ?? []).find((n) => n.name === SOBRE)?.parameters?.url ?? ''),
     sobre_alcanzable: vistos.has(SOBRE),
-    final_real_alcanzable: vistos.has(FINAL_REAL),
     pasa_por_final_real: camino.includes(FINAL_REAL),
-    nodos_que_piden_planeacion: (workflow.nodes ?? []).filter((n) => /intent[\\]*"\s*:\s*[\\]*"planear/.test(JSON.stringify(n.parameters ?? {}))).map((n) => n.name),
     camino,
     huerfanos,
     huerfanos_nuevos: huerfanosNuevos,
@@ -130,20 +130,31 @@ export function huecos(workflow, r) {
   const byName = new Map((workflow.nodes ?? []).map((n) => [n.name, n]))
   const problemas = []
   const desactivados = r.camino.filter((n) => byName.get(n)?.disabled)
-  if (desactivados.length) problemas.push(`nodos DESACTIVADOS en el camino al final del alta (dejan pasar los datos sin correr): ${desactivados.join(' · ')}`)
+  if (desactivados.length) problemas.push(`nodos DESACTIVADOS en el camino al sobre (dejan pasar los datos sin correr): ${desactivados.join(' · ')}`)
   const llamar = byName.get(FINAL_REAL)
-  if (llamar && llamar.parameters?.options?.waitForSubWorkflow === false) problemas.push(`«${FINAL_REAL}» no espera a la segunda fase (waitForSubWorkflow=false) · el alta cerraría antes de terminar`)
-  if (byName.has(GUARDA)) problemas.push(`«${GUARDA}» sigue en el alta · era la salida del sobre que ya no existe`)
+  if (llamar && llamar.parameters?.options?.waitForSubWorkflow === false) problemas.push(`«${FINAL_REAL}» no espera a la segunda fase (waitForSubWorkflow=false) · el sobre saldría antes de terminar`)
+  const guarda = byName.get(GUARDA)
+  if (!guarda) problemas.push(`falta «${GUARDA}» · un rechazo de la puerta volvería a ser 200 y silencio`)
+  else {
+    const salidas = sucesores(workflow, SOBRE)
+    if (!salidas.includes(GUARDA)) problemas.push(`«${GUARDA}» no es la salida del sobre (salidas: ${salidas.join(', ') || 'ninguna'})`)
+    const code = String(guarda.parameters?.jsCode ?? '')
+    // E75 · no se buscan palabras (un comentario las conserva): se EJECUTA la guarda en un banco
+    const g = guardaSeComporta(code)
+    if (!g.lanza_con_rechazo) problemas.push(`«${GUARDA}» ya no lanza con un rechazo de la puerta (ok:false)${g.error ? ' · ' + g.error : ''}`)
+    if (!g.pasa_con_duplicate) problemas.push(`«${GUARDA}» ya no deja pasar un duplicate (ok:true · kind duplicate)`)
+    if (guarda.disabled) problemas.push(`«${GUARDA}» está desactivada`)
+  }
   return problemas
 }
 
-/** 03-nov · FIRMA DE EMILIO 14:46Z · la cadena NO sigue hasta que él apruebe el manual: el alta termina en «${FINAL_REAL}» y NO pide el plan.
- *  El plan lo pide el botón «Aprobar el manual» con el mismo sobre (intent «planear»). Una vuelta del sobre al alta rompe la firma. */
 export function veredicto(r, workflow) {
   const problemas = []
-  if (r.sobre_existe) problemas.push(`«${SOBRE}» sigue en el alta · el plan NO puede salir antes de que Emilio apruebe el manual`)
-  if (r.nodos_que_piden_planeacion.length) problemas.push(`nodos del alta que piden planeación (intent planear): ${r.nodos_que_piden_planeacion.join(' · ')}`)
-  if (!r.final_real_alcanzable) problemas.push(`«${FINAL_REAL}» NO es alcanzable desde «${DISPARADOR}» · la segunda fase del alta nunca correría`)
+  if (!r.sobre_existe) problemas.push(`falta el nodo «${SOBRE}»`)
+  if (!r.sobre_alcanzable) problemas.push(`«${SOBRE}» NO es alcanzable desde «${DISPARADOR}» · el pedido de planeación nunca saldría`)
+  if (r.sobre_alcanzable && !r.pasa_por_final_real) problemas.push(`el sobre no cuelga del final real («${FINAL_REAL}»)`)
+  if (r.sobre_existe && /sala\/intake/.test(r.sobre_url)) problemas.push(`«${SOBRE}» manda el plan a la sala sin esperar: el plan debe salir al aprobar el manual (espera del dueño)`)
+  if (r.sobre_existe && !/\/api\/esperas-del-dueno/.test(r.sobre_url)) problemas.push(`«${SOBRE}» no guarda el sobre en la espera del dueño (/api/esperas-del-dueno)`)
   if (r.huerfanos_nuevos.length) problemas.push(`huérfanos NUEVOS (no declarados): ${r.huerfanos_nuevos.join(' · ')}`)
   if (workflow) problemas.push(...huecos(workflow, r))
   return { ok: problemas.length === 0, problemas }
@@ -194,8 +205,8 @@ if (esMain) {
     const r = analizar(wf)
     const v = veredicto(r, wf)
     console.log(JSON.stringify({ fuente: archivo ?? 'motor', versionId: r.versionId, nodos: r.nodos, alcanzables: r.alcanzables, huerfanos: r.huerfanos.length, huerfanos_nuevos: r.huerfanos_nuevos, sobre_alcanzable: r.sobre_alcanzable, pasa_por_final_real: r.pasa_por_final_real }, null, 2))
-    console.log('camino al final del alta:\n  ' + (r.camino.length ? r.camino.join('\n  → ') : '(ninguno)'))
-    console.log('\nVEREDICTO ·', v.ok ? 'EL ALTA TERMINA EN LA SEGUNDA FASE · no pide el plan · sin huérfanos nuevos' : '🔴 ' + v.problemas.join(' | '))
+    console.log('camino al sobre:\n  ' + (r.camino.length ? r.camino.join('\n  → ') : '(ninguno)'))
+    console.log('\nVEREDICTO ·', v.ok ? 'EL SOBRE SALE · alcanzable por el final real · sin huérfanos nuevos' : '🔴 ' + v.problemas.join(' | '))
     process.exit(v.ok ? 0 : 1)
   } catch (e) {
     console.error('no se pudo comprobar ·', e.message)
