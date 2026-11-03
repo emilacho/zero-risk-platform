@@ -11,7 +11,7 @@ export type Fila = Record<string, unknown>
 export const esObjeto = (x: unknown): x is Fila => typeof x === 'object' && x !== null && !Array.isArray(x)
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export interface Contexto { db: Db; puertos: () => Puertos; ahora: () => Date }
+export interface Contexto { db: Db; puertos: () => Puertos; ahora: () => Date; origen?: string }
 export interface Entrada { cuerpo: Fila; reviewer: string }
 export interface Salida {
   status: number

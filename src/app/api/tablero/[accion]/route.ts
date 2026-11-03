@@ -29,7 +29,7 @@ export async function POST(request: Request, ctx: { params: { accion: string } }
   try {
     const { P, db } = puertosReales(request)
     const ahora = () => new Date()
-    const s = await manejador({ db, puertos: () => P, ahora }, { cuerpo, reviewer: reviewer.trim() })
+    const s = await manejador({ db, puertos: () => P, ahora, origen: new URL(request.url).origin }, { cuerpo, reviewer: reviewer.trim() })
     await rastroDelTablero(db, { accion, autor: reviewer.trim(), toca: s.toca, resultado: { status: s.status, ...s.cuerpo }, crudo: cuerpoSeguro(cuerpo), ahora: ahora() })
     let salida = s.cuerpo
     if (s.despertar && s.status === 200) {
