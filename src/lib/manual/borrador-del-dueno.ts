@@ -52,13 +52,14 @@ export async function guardarBorrador(db: BaseDelBorrador, cuerpo: unknown, ahor
   if (typeof b.documento_id !== 'string' || !b.documento_id.trim()) return mal(400, 'entrada_invalida', 'falta `documento_id`: la versión sobre la que se hizo el borrador')
   if (b.revision_base !== undefined && (!Number.isInteger(b.revision_base) || Number(b.revision_base) < 0)) return mal(400, 'entrada_invalida', '`revision_base` debe ser un entero')
   if (JSON.stringify(b.acciones).length > TOPE_REAL_DEL_PEDIDO) return mal(400, 'entrada_invalida', `el borrador pasa de ${TOPE_REAL_DEL_PEDIDO} caracteres`)
-  if (!Object.keys(b.acciones).length) return borrarBorrador(db, k.client_id, k.documento)
 
   const previa = await leerFila(db, k)
   if (previa.error) return mal(502, 'no_se_pudo_leer', previa.error)
   const choque = (borrador: Fila | null): Salida => ({ status: 409, cuerpo: { ok: false, error: 'borrador_cambio', detalle: 'Este borrador cambió en otro equipo.', borrador } })
   const revisionPrevia = previa.fila ? Number(previa.fila.revision) : 0
   if (b.revision_base !== undefined && Number(b.revision_base) !== revisionPrevia) return choque(previa.fila)
+  // va después de la revisión: una pantalla vieja que guarda «vacío» no borra lo que otro equipo acaba de marcar
+  if (!Object.keys(b.acciones).length) return borrarBorrador(db, k.client_id, k.documento)
 
   const datos = { documento_id: b.documento_id.trim(), acciones: b.acciones, actualizado_por: typeof b.reviewer === 'string' && b.reviewer.trim() ? b.reviewer.trim().slice(0, 80) : 'emilio', actualizado_en: ahora.toISOString() }
   if (!previa.fila) {

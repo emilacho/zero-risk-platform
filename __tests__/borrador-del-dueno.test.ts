@@ -67,6 +67,24 @@ describe('🔴 dos equipos no se pisan', () => {
     expect((await guardarBorrador(nueva, { ...CUERPO, revision_base: 0 }, AHORA)).status).toBe(200)
   })
 
+  it('🔴 una pantalla vieja que guarda «vacío» no borra lo que otro equipo marcó', async () => {
+    const db = base()
+    await guardarBorrador(db, CUERPO, AHORA)
+    await guardarBorrador(db, { ...CUERPO, acciones: { a: 1 }, revision_base: 1 }, AHORA)
+    expect((await guardarBorrador(db, { ...CUERPO, acciones: {}, revision_base: 1 }, AHORA)).status).toBe(409)
+    expect(filas(db)[0].acciones).toEqual({ a: 1 })
+    expect((await guardarBorrador(db, { ...CUERPO, acciones: {}, revision_base: 2 }, AHORA)).status).toBe(200)
+    expect(filas(db)).toHaveLength(0)
+  })
+
+  it('🔴 si otro equipo crea el borrador entre la lectura y el guardado, choca y devuelve el suyo', async () => {
+    const db = base()
+    let n = 0
+    const carrera = { from: (t: string) => { if (++n === 2) filas(db).push({ client_id: C, documento: 'manual', documento_id: 'v3', acciones: { suyo: 1 }, revision: 1 }); return db.from(t) } }
+    expect(await guardarBorrador(carrera, CUERPO, AHORA)).toMatchObject({ status: 409, cuerpo: { error: 'borrador_cambio', borrador: { acciones: { suyo: 1 } } } })
+    expect(filas(db)).toHaveLength(1)
+  })
+
   it('🔴 si otro cambio entra entre la lectura y la escritura, tampoco lo pisa', async () => {
     const db = base()
     await guardarBorrador(db, CUERPO, AHORA)
