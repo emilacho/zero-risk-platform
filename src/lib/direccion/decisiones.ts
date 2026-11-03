@@ -41,6 +41,8 @@ const TIPOS_HITL: Record<string, { tipo: TipoDecision; ruta: string | null; acci
   confirm_competitor_list: { tipo: 'revision', ruta: null, accion: 'revision-resolver' },
   editor_escalation: { tipo: 'revision', ruta: null, accion: 'revision-resolver' },
 }
+/** 03-nov · la revisión que no trae ruta propia va al panel de su documento (`hitl_queue.documento`, calculada en la base) */
+const RUTA_POR_DOCUMENTO: Record<string, string> = { manual: '/nuevo', plan: '/nuevo', pieza: '/piezas' }
 export const SIN_FUENTE_DECISIONES = [
   { que: 'gastos por aprobar', motivo: 'ninguna tabla guarda un gasto a la espera de aprobación: hoy los gastos se confirman en el momento de cada acción' },
   { que: 'recados de la sala al dueño', motivo: 'el destino «dueño» de los recados está apagado: los recados van a herramientas y agentes' },
@@ -86,7 +88,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   const hora = ahora().toISOString()
   const [compuertas, bandeja, preguntas, deFinanzas, tableros] = await Promise.all([
     leer(fuentes, 'plan_aprobaciones', db.from('plan_aprobaciones').select('id, client_id, plan_id, version, creado_en').eq('estado', 'pendiente').limit(TOPE), TOPE),
-    leer(fuentes, 'hitl_queue', db.from('hitl_queue').select('id, client_id, output_id, type, title, output_preview, priority, payload, metadata, created_at, expires_at').eq('status', 'pending').limit(TOPE), TOPE),
+    leer(fuentes, 'hitl_queue', db.from('hitl_queue').select('id, client_id, output_id, type, documento, title, output_preview, priority, payload, metadata, created_at, expires_at').eq('status', 'pending').limit(TOPE), TOPE),
     leer(fuentes, 'cerebro_dueno_preguntas', db.from('cerebro_dueno_preguntas').select('id, client_id, tema, pregunta, creado_en').eq('estado', 'pendiente').limit(TOPE), TOPE),
     leer(fuentes, 'finanzas_preguntas', db.from('finanzas_preguntas').select('id, client_id, clave, texto, creado_en').eq('estado', 'enviada').limit(TOPE), TOPE),
     leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en').eq('estado', 'sin_firma').eq('vigente', true).eq('dry_run', false).limit(TOPE), TOPE),
@@ -108,7 +110,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     // el mismo plan no se pide dos veces: `plan-aprobar` resuelve también su nota de la bandeja
     if (subtipo === 'plan_con_pendientes' && plan && planesConCompuerta.has(plan)) continue
     const m = TIPOS_HITL[subtipo] ?? { tipo: 'revision' as const, ruta: null, accion: null }
-    crudas.push({ id: String(h.id), tipo: m.tipo, subtipo, fuente: 'hitl_queue', client_id: texto(h.client_id), titulo: sinSecretos(h.title ?? h.output_preview, 300) ?? `Revisión pendiente (${subtipo})`, desde: texto(h.created_at), vence: texto(h.expires_at), prioridad: texto(h.priority), decidir: { ruta: m.ruta, accion: m.accion }, costo_usd: null, costo_nota: m.tipo === 'plan' ? 'aprobar no gasta por sí mismo' : null })
+    crudas.push({ id: String(h.id), tipo: m.tipo, subtipo, fuente: 'hitl_queue', client_id: texto(h.client_id), titulo: sinSecretos(h.title ?? h.output_preview, 300) ?? `Revisión pendiente (${subtipo})`, desde: texto(h.created_at), vence: texto(h.expires_at), prioridad: texto(h.priority), decidir: { ruta: m.ruta ?? RUTA_POR_DOCUMENTO[String(h.documento)] ?? null, accion: m.accion }, costo_usd: null, costo_nota: m.tipo === 'plan' ? 'aprobar no gasta por sí mismo' : null })
   }
   for (const p of preguntas) crudas.push({ id: String(p.id), tipo: 'pregunta_al_dueno', subtipo: String(p.tema ?? 'pregunta'), fuente: 'cerebro_dueno_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta al dueño'), desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null })
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null })
