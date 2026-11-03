@@ -1,7 +1,7 @@
 /**
  * 02-nov · ADENDA 1 (firmada por Emilio 13:42Z; topología confirmada por Lenovo 14:15Z) · SECCIONES NUEVAS DEL MANUAL + MESA CREATIVA + REGLA DE PROPONER.
  * Contrato de la forma del dato: `2026-11-02-CONTRATO-CC1-a-CC6-CC2-secciones-nuevas-del-manual.md` (listas de textos y un texto; `_field_meta.<clave>.estado = 'propuesta_del_agente'`;
- * el texto termina en « [propuesta del agente — razón]»). Los 8 campos nuevos llegan al borrador por nodos nuevos:
+ * 03-nov: el texto va LIMPIO; la razón va en `_field_meta.<clave>.razon`). Los 8 campos nuevos llegan al borrador por nodos nuevos:
  *
  *   ANTES DEL JUEZ (entre «¿hay que repetir la voz?»/«mezclar la voz» y «Judge prep»):
  *     1 · «[BB] Equipo · aportes de los dueños»: dos llamadas EN PARALELO con la evidencia entera por clave:
@@ -61,7 +61,8 @@ const ROTULO = 'propuesta del agente';
 const t = (v, n) => String(v == null ? '' : v).slice(0, n);
 const topeDe = (div) => { try { const r = $('Validate Deal Data').first().json.reescritura; return (r && r.tope_reescritura_usd > 0) ? Math.round(r.tope_reescritura_usd / div * 100) / 100 : 0; } catch (e) { return 0; } };
 const REGLA = 'REGLA DEL DUEÑO DEL NEGOCIO: si algo NO existe en la evidencia, no lo dejes vacío: PROPÓNLO razonando con lo disponible (el público ideal, los competidores, el sitio, el perfil, las prácticas del rubro). ' +
-  'Todo lo que propongas TERMINA en « [propuesta del agente — razón en una frase]» y lo declaras en _field_meta.<clave>.estado = "propuesta_del_agente". Lo que sí está en la evidencia va sin rótulo y con su cita. ' +
+  'El TEXTO de cada campo lleva SOLO lo que se le puede mostrar al cliente: sin corchetes, sin rótulos, sin «— razón», sin «responde a la objeción…», sin «dicho por el cliente», sin códigos de segmento (S1, S3…) ni nombres de fichas internas, sin evidencia ni reglas del sistema. ' +
+  'Lo que propongas lo declaras APARTE (para la jefatura, nunca dentro del texto): _field_meta.<clave>.estado = "propuesta_del_agente" y _field_meta.<clave>.razon = la razón en una frase. Lo que sí está en la evidencia va como texto limpio y su cita va también en _field_meta.<clave>.fuente. ' +
   'EXCEPCIÓN: teléfonos, direcciones, horarios, precios, fechas y cifras NUNCA se inventan: si no están en la evidencia, escribe "falta" (en una lista, un renglón «PENDIENTE — falta <el dato>»). No dejes un campo vacío por no tener el dato duro: propón todo lo demás.';
 const seccion = (x) => {
   const b = (x && x.body && typeof x.body === 'object') ? x.body : (x || {});
@@ -182,12 +183,17 @@ const tomar = (res, campos, lente) => {
 /** el estampado (se pega en «integración» y en «logo y tipografía»): ningún control quita ni cambia lo que escribió el agente */
 export const ESTAMPA = String.raw`
 const tienePropuesta = (v) => JSON.stringify(v == null ? '' : v).toLowerCase().indexOf('[' + ROTULO) !== -1;
+// 03-nov · TEXTO LIMPIO: si el agente igual pegó « [propuesta del agente — razón]» al texto, se saca del texto y la razón pasa al registro aparte (_field_meta); el texto del cliente queda sin anotaciones
+const sacarRotulo = (s) => { let razon = ''; const t = String(s).replace(/\s*\[\s*propuesta del agente\s*(?:[—–-]\s*([^\]]*))?\]?/gi, (_m, r) => { razon = razon || String(r || '').trim(); return ''; }).trim(); return { t: t, razon: razon, hubo: t !== String(s).trim() }; };
 // el campo que el agente declaró propuesta (o que lleva el rótulo) queda « propuesta_del_agente »; el que dice PENDIENTE es « ausente »
 const estampar = (clave, valor, m) => {
   const vacio = Array.isArray(valor) ? valor.every((x) => /^\s*pendiente/i.test(x)) : /^\s*pendiente/i.test(valor);
   if (vacio) return { v: valor, meta: { estado: 'ausente', fuente: '', razon: m.razon || 'falta el dato', lente: m.lente } };
-  const declarada = tienePropuesta(valor);
-  return { v: valor, meta: { estado: declarada ? 'propuesta_del_agente' : 'provisional', fuente: declarada ? ROTULO : (m.fuente || ''), razon: m.razon || null, lente: m.lente } };
+  let razonRotulo = '';
+  const limpiar = (x) => { if (typeof x !== 'string') return x; const q = sacarRotulo(x); if (q.razon && !razonRotulo) razonRotulo = q.razon; return q.t; };
+  const declarada = tienePropuesta(valor) || m.estado === 'propuesta_del_agente';
+  const limpio = Array.isArray(valor) ? valor.map(limpiar) : limpiar(valor);
+  return { v: limpio, meta: { estado: declarada ? 'propuesta_del_agente' : 'provisional', fuente: declarada ? ROTULO : (m.fuente || ''), razon: m.razon || razonRotulo || null, lente: m.lente } };
 };
 `
 

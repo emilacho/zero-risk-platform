@@ -9,6 +9,7 @@
  *   (c) · reparto de secciones: estrategia a brand-strategist; productos y sedes a jefe-client-success (reparto-de-secciones-manual.mjs)
  *   (c2) · piso visual: design-visual-storyteller lo escribe y style-consistency-reviewer lo revisa (piso-visual-equipo-manual.mjs)
  *   ADENDA 1 · secciones nuevas + mesa creativa + regla de proponer (secciones-nuevas-y-mesa-manual.mjs)
+ *   03-nov · texto limpio (texto-limpio-manual.mjs)
  *   node scripts/ops/oficina-marketing/construir-manual.mjs · escribe nuevo/ssLtwYPt7zxuvnM2.json
  * Cada parte se certifica por separado; la ventana de aplicación es una sola, con el archivo acumulado.
  */
@@ -21,6 +22,7 @@ import { construirVozConContentCreator } from './voz-content-creator-manual.mjs'
 import { construirRepartoDeSecciones } from './reparto-de-secciones-manual.mjs'
 import { construirPisoVisualConEquipo } from './piso-visual-equipo-manual.mjs'
 import { construirSeccionesNuevasYMesa } from './secciones-nuevas-y-mesa-manual.mjs'
+import { construirTextoLimpio } from './texto-limpio-manual.mjs'
 import { construirLimitesYReintentos } from './limites-y-reintentos-manual.mjs'
 
 const f = leerVivo('ssLtwYPt7zxuvnM2')
@@ -32,5 +34,6 @@ construirVozConContentCreator(f) // 02-nov · (d) content-creator escribe la voz
 construirRepartoDeSecciones(f) // 02-nov · (c) estrategia a brand-strategist; productos y sedes a jefe-client-success
 construirPisoVisualConEquipo(f) // 02-nov · (c2) design-visual-storyteller escribe lo visual; style-consistency-reviewer lo revisa (asesora)
 construirSeccionesNuevasYMesa(f) // 02-nov · ADENDA 1: secciones nuevas + mesa creativa + regla de proponer (apoyada en (d) y (c2))
+construirTextoLimpio(f) // 03-nov · punto B: el texto del manual lleva solo lo presentable al cliente (razón y fuente van aparte)
 construirLimitesYReintentos(f) // 02-nov · ADENDA límites al máximo: espera 800 s y un reintento si la conexión se pierde (US$ 0 de más: el punto de control devuelve lo ya escrito)
 console.log(escribirNuevo(f))

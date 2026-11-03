@@ -34,8 +34,9 @@ if (dealData.reescritura && typeof dealData.reescritura === 'object') {
   const bloque = [
     '',
     '══════ ESTA ES UNA REESCRITURA ══════',
-    'El dueño pidió cambios sobre el manual vigente. Parte de ese manual y aplícale lo que pidió; lo que no pidió cambiar, déjalo como está.',
-    'Lo que pidió el dueño es SU PALABRA: se respeta. Si crees que algo de lo pedido no conviene, dilo en tu razón; no lo suavices ni lo aplaces.',
+    'El dueño pidió cambios sobre el manual vigente. LEE con cuidado lo que escribió y razona sobre ESO: qué quiere de verdad, qué le molesta de lo que hay. Rehaz lo pedido de verdad: ni lo escribas desde cero ni lo toques con retoques mínimos. Lo que no pidió cambiar, déjalo como está.',
+    'Lo que pidió el dueño es SU PALABRA: se respeta. Si crees que algo de lo pedido no conviene, dilo en la razón del registro aparte (_field_meta.<clave>.razon); no lo suavices ni lo aplaces.',
+    'El TEXTO del manual lleva SOLO lo presentable al cliente: sin justificaciones pegadas («— responde a…»), sin «dicho por el cliente», sin códigos de segmento, sin evidencia ni reglas del sistema. Tu razonamiento va aparte, para la jefatura.',
     seccion ? 'El pedido es sobre la sección «' + seccion + '». Es el foco, no un límite: si ves algo que también conviene cambiar fuera de ella, propónlo y dilo.' : 'El pedido es general sobre el manual.',
     validados.length ? 'El dueño ya validó estos campos y se conservan como los dejó, salvo que su pedido los nombre: ' + validados.join(', ') + '.' + (liberados.length ? ' Su pedido libera: ' + liberados.join(', ') + '.' : '') : '',
     '',

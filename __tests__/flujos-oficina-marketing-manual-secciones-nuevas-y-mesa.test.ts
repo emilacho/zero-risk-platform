@@ -202,9 +202,12 @@ describe('3 · integración (sin guarda por código)', () => {
       'Instagram: cercano y con humor [propuesta del agente — razón]',
     ], reglas_de_escritura: ['Llama al 0991234567 solo para pedidos'], historia_y_origen: 'Nació en 1987 con 5 hermanos. [propuesta del agente — razón]' }
     const { out } = await correr(EQUIPO.integra, base({ _equipo: eq(aportes) }), () => { throw new Error('no') })
-    expect(out.brand_book_draft.tono_por_canal).toEqual(aportes.tono_por_canal)
+    // 03-nov · texto limpio: SOLO se saca el rótulo « [propuesta del agente — …]»; el dato (aunque sea duro y sin fuente) no se toca, y la razón pasa a _field_meta
+    expect(out.brand_book_draft.tono_por_canal).toEqual(['WhatsApp: escribe al 0987654321', 'Atención: abrimos de 8 a 20h', 'Precios: ceviche a $12.00', 'Instagram: cercano y con humor'])
     expect(out.brand_book_draft.reglas_de_escritura).toEqual(aportes.reglas_de_escritura)
-    expect(out.brand_book_draft.historia_y_origen).toBe(aportes.historia_y_origen)
+    expect(out.brand_book_draft.historia_y_origen).toBe('Nació en 1987 con 5 hermanos.')
+    expect(out.brand_book_draft._field_meta.tono_por_canal.estado).toBe('propuesta_del_agente'); expect(out.brand_book_draft._field_meta.tono_por_canal.razon).toBe('razón')
+    expect(out.brand_book_draft.tono_por_canal.join(' ') + out.brand_book_draft.historia_y_origen).not.toMatch(/propuesta del agente|[\[\]]/)
     expect(out._equipo.guarda_datos_duros).toBeUndefined()
     expect(JSON.stringify(out)).not.toMatch(/falta el dato duro/)
   })
@@ -333,7 +336,7 @@ describe('«Pedir cambios al manual» llega a los nodos nuevos y no pisa lo vali
     const aportes = { tono_por_canal: ['WhatsApp: formal y breve [propuesta del agente — lo pidió el dueño]'], valores: ['PISADO por el agente'], nunca_hace: ['PISADO también'] }
     const { out, llamadas } = await correr(EQUIPO.integra, base({ _equipo: { aportes: { valores: aportes, meta: {} }, mesa: { corrio: false, aportes: [] }, declarado: [] } }), () => { throw new Error('no') }, { reescritura: RE() })
     expect(llamadas).toHaveLength(0)
-    expect(out.brand_book_draft.tono_por_canal).toEqual(aportes.tono_por_canal)
+    expect(out.brand_book_draft.tono_por_canal).toEqual(['WhatsApp: formal y breve']); expect(out.brand_book_draft._field_meta.tono_por_canal.razon).toBe('lo pidió el dueño')
     expect(out.brand_book_draft.valores).toEqual(VIGENTE.valores); expect(out.brand_book_draft.uso_del_logo).toEqual(VIGENTE.uso_del_logo); expect(out.brand_book_draft.nunca_hace).toEqual(VIGENTE.nunca_hace)
     expect(out._equipo.conservados.sort()).toEqual(['nunca_hace', 'uso_del_logo', 'valores'])
     expect(out.brand_book_draft._field_meta.tono_por_canal.estado).toBe('propuesta_del_agente')

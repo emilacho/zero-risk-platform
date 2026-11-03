@@ -76,7 +76,7 @@ describe('[BB] Fan-out prep', () => {
       expect(t).toContain('voice_description')
       expect(t).toContain('sección «Cómo habla». Es el foco, no un límite')
       expect(t).toContain('SU PALABRA')
-      expect(t).toContain('dilo en tu razón')
+      expect(t).toContain('dilo en la razón del registro aparte')
     }
     expect(out._reescritura).toMatchObject({ manual_cambio_id: 'cc-1', recortado: false })
   })
@@ -95,14 +95,14 @@ describe('[BB] Fan-out prep', () => {
     expect((b.match(/x/g) ?? []).length).toBeLessThanOrEqual(TOPE_BLOQUE_REESCRITURA)
   })
   it('el pedido largo se corta a 2.000 caracteres y los espacios se normalizan; no rompe con campos ausentes', () => {
-    const t = correr(codigo(FAN), ctxFan({ manual_vigente: MANUAL, cambios_del_dueno: 'a  \n b ' + 'z'.repeat(5000) }))[0].json.tasks['brand-strategist'] as string
-    expect(t).toContain('«a b z')
-    expect((t.slice(t.indexOf('ESTA ES UNA REESCRITURA')).match(/z/g) ?? []).length).toBeLessThanOrEqual(2000)
+    const t = correr(codigo(FAN), ctxFan({ manual_vigente: MANUAL, cambios_del_dueno: 'a  \n b ' + 'Q'.repeat(5000) }))[0].json.tasks['brand-strategist'] as string
+    expect(t).toContain('«a b Q')
+    expect((t.slice(t.indexOf('ESTA ES UNA REESCRITURA')).match(/Q/g) ?? []).length).toBeLessThanOrEqual(2000)
   })
   it('no pone reglas duras: el bloque no ordena descartar ni exige justificar nada', () => {
     const t = correr(codigo(FAN), ctxFan(RE))[0].json.tasks['brand-strategist'] as string
     const bloque = t.slice(t.indexOf('ESTA ES UNA REESCRITURA'))
-    expect(bloque).not.toMatch(/justific|no puedes|prohib|obligatori/i)
+    expect(bloque).not.toMatch(/no puedes|prohib|obligatori|exige justificar/i)
   })
 })
 
