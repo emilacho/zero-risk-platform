@@ -53,13 +53,15 @@ describe('la declaración aparte', () => {
   })
 })
 
-describe('el bloque nuevo solo cambia eso', () => {
+describe('el bloque nuevo solo cambia eso y su motivo', () => {
   it('🔴 fuera de la declaración, da lo mismo que el del 20-oct', () => {
     const viejo = leerBloque('bloque-uso-de-lo-disponible-2026-10-20.js').usoDeLoDisponible
     const casos = [
       [BASE, CON_TEXTO_PROPIO], [{ ...BASE, voice_description: 'PENDIENTE' }, SIN_TEXTO_PROPIO], [{ ...BASE, positioning: '' }, CON_TEXTO_PROPIO],
       [{ ...BASE, icp_summary: 'corto' }, SIN_TEXTO_PROPIO], [{ positioning: '', icp_summary: '', voice_description: '' }, {}], [{ ...BASE, voice_description: 'PROPUESTA (no es dato del cliente): ' + VOZ }, SIN_TEXTO_PROPIO],
     ]
-    for (const [d, g] of casos) expect(usoDeLoDisponible(d, g)).toEqual(viejo(d, g))
+    // el motivo de la voz sin declarar cambió a propósito: se compara el resultado y qué campos faltan
+    const forma = (r: { ok: boolean; sin_usar: Array<{ campo: string }> }) => ({ ok: r.ok, campos: r.sin_usar.map((x) => x.campo) })
+    for (const [d, g] of casos) expect(forma(usoDeLoDisponible(d, g))).toEqual(forma(viejo(d, g)))
   })
 })
