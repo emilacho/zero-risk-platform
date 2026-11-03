@@ -211,6 +211,15 @@ describe('3 · integración (sin guarda por código)', () => {
     expect(out._equipo.guarda_datos_duros).toBeUndefined()
     expect(JSON.stringify(out)).not.toMatch(/falta el dato duro/)
   })
+  it('03-nov · quitar el rótulo: con corchetes dentro de la razón no deja basura, y un rótulo SIN cerrar no se come el texto', async () => {
+    const aportes = { tono_por_canal: ['Texto bueno [propuesta del agente — el contraste [4.5:1] importa] y luego más.', 'Otro dato. [propuesta del agente — razón.', 'Uno [propuesta del agente — a] dos [propuesta del agente — b] tres'] }
+    const { out } = await correr(EQUIPO.integra, base({ _equipo: eq(aportes) }), () => { throw new Error('no') })
+    const v = out.brand_book_draft.tono_por_canal
+    expect(v[0]).toBe('Texto bueno y luego más.')
+    expect(v[1]).toBe('Otro dato. [propuesta del agente — razón.')
+    expect(v[2]).toBe('Uno dos tres')
+    expect(out.brand_book_draft._field_meta.tono_por_canal.razon).toBe('el contraste [4.5:1] importa')
+  })
   it('un campo que dice PENDIENTE sigue estampado «ausente» (el agente lo declaró, el código no lo inventa ni lo vacía)', async () => {
     const { out } = await correr(EQUIPO.integra, base({ _equipo: eq({ nunca_hace: ['PENDIENTE — falta el teléfono'] }) }), () => { throw new Error('no') })
     expect(out.brand_book_draft.nunca_hace).toEqual(['PENDIENTE — falta el teléfono'])

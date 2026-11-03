@@ -183,8 +183,8 @@ const tomar = (res, campos, lente) => {
 /** el estampado (se pega en «integración» y en «logo y tipografía»): ningún control quita ni cambia lo que escribió el agente */
 export const ESTAMPA = String.raw`
 const tienePropuesta = (v) => JSON.stringify(v == null ? '' : v).toLowerCase().indexOf('[' + ROTULO) !== -1;
-// 03-nov · TEXTO LIMPIO: si el agente igual pegó « [propuesta del agente — razón]» al texto, se saca del texto y la razón pasa al registro aparte (_field_meta); el texto del cliente queda sin anotaciones
-const sacarRotulo = (s) => { let razon = ''; const t = String(s).replace(/\s*\[\s*propuesta del agente\s*(?:[—–-]\s*([^\]]*))?\]?/gi, (_m, r) => { razon = razon || String(r || '').trim(); return ''; }).trim(); return { t: t, razon: razon, hubo: t !== String(s).trim() }; };
+// 03-nov · TEXTO LIMPIO (corchetes anidados bien; un rótulo SIN cerrar NO se toca: nunca se come texto del agente): si el agente igual pegó « [propuesta del agente — razón]» al texto, se saca del texto y la razón pasa al registro aparte (_field_meta); el texto del cliente queda sin anotaciones
+const sacarRotulo = (s) => { let t = String(s), razon = '', hubo = false; const re = /\[\s*propuesta del agente/i; for (let g = 0; g < 10; g++) { const m = re.exec(t); if (!m) break; let d = 0, f = -1; for (let i = m.index; i < t.length; i++) { if (t[i] === '[') d++; else if (t[i] === ']') { d--; if (d === 0) { f = i; break; } } } if (f < 0) break; const r = t.slice(m.index, f + 1).replace(/^\[\s*propuesta del agente\s*[—–-]?\s*/i, '').replace(/\]$/, '').trim(); razon = razon || r; const antes = t.slice(0, m.index).replace(/\s+$/, ''), despues = t.slice(f + 1).replace(/^\s+/, ''); t = (antes + (despues && !/^[.,;:]/.test(despues) ? ' ' : '') + despues).trim(); hubo = true; } return { t: t, razon: razon, hubo: hubo }; };
 // el campo que el agente declaró propuesta (o que lleva el rótulo) queda « propuesta_del_agente »; el que dice PENDIENTE es « ausente »
 const estampar = (clave, valor, m) => {
   const vacio = Array.isArray(valor) ? valor.every((x) => /^\s*pendiente/i.test(x)) : /^\s*pendiente/i.test(valor);
