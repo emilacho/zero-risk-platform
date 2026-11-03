@@ -87,6 +87,8 @@ export function analizar(workflow) {
     nodos: nombres.size,
     alcanzables: vistos.size,
     sobre_existe: nombres.has(SOBRE),
+    // 03-nov (señal 14:49Z) · el sobre GUARDA en la espera del dueño; si vuelve a POSTear a la sala, el plan sale sin que Emilio apruebe el manual
+    sobre_url: String((workflow.nodes ?? []).find((n) => n.name === SOBRE)?.parameters?.url ?? ''),
     sobre_alcanzable: vistos.has(SOBRE),
     pasa_por_final_real: camino.includes(FINAL_REAL),
     camino,
@@ -151,6 +153,8 @@ export function veredicto(r, workflow) {
   if (!r.sobre_existe) problemas.push(`falta el nodo «${SOBRE}»`)
   if (!r.sobre_alcanzable) problemas.push(`«${SOBRE}» NO es alcanzable desde «${DISPARADOR}» · el pedido de planeación nunca saldría`)
   if (r.sobre_alcanzable && !r.pasa_por_final_real) problemas.push(`el sobre no cuelga del final real («${FINAL_REAL}»)`)
+  if (r.sobre_existe && /sala\/intake/.test(r.sobre_url)) problemas.push(`«${SOBRE}» manda el plan a la sala sin esperar: el plan debe salir al aprobar el manual (espera del dueño)`)
+  if (r.sobre_existe && !/\/api\/esperas-del-dueno/.test(r.sobre_url)) problemas.push(`«${SOBRE}» no guarda el sobre en la espera del dueño (/api/esperas-del-dueno)`)
   if (r.huerfanos_nuevos.length) problemas.push(`huérfanos NUEVOS (no declarados): ${r.huerfanos_nuevos.join(' · ')}`)
   if (workflow) problemas.push(...huecos(workflow, r))
   return { ok: problemas.length === 0, problemas }
