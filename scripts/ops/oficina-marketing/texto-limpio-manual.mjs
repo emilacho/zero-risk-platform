@@ -12,7 +12,7 @@ export const NODO = '[BB] Fan-out prep'
 export const SUSTITUCIONES = [
   [
     'ni etiquetas como «ICP …». Lo que el cliente dice de sí mismo se escribe «el cliente dice: «cita»», NUNCA como hecho comprobado.',
-    'ni etiquetas como «ICP …», ni códigos de segmento (S1, S3…), ni justificaciones pegadas («— responde a…»): el TEXTO, solo lo presentable al cliente; razón y fuente en `_field_meta.<campo>` (.razon, .fuente). Lo que el cliente dice de sí mismo en la voz de la marca, sin «el cliente dice», NUNCA como hecho comprobado.',
+    'ni etiquetas como «ICP …», ni códigos de segmento (S1…), ni justificaciones pegadas («— responde a…», «· porque…»): el TEXTO, solo lo presentable; razón y fuente en `_field_meta.<campo>`. Lo que el cliente dice de sí mismo en la voz de la marca, sin «el cliente dice» ni la cita al inicio, jamás como hecho comprobado.',
   ],
 ]
 export function construirTextoLimpio(f) {

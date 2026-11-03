@@ -9,9 +9,9 @@ describe('03-nov · punto B · el equipo del manual escribe solo el texto presen
   it('las reglas de las tres lentes ya no piden «el cliente dice:» dentro del texto y prohíben segmentos y justificaciones pegadas', () => {
     const c = codigo('[BB] Fan-out prep')
     expect(c).not.toContain('se escribe «el cliente dice: «cita»»')
-    expect(c).toMatch(/códigos de segmento \(S1, S3…\)/)
+    expect(c).toMatch(/códigos de segmento \((S1…)\)/)
     expect(c).toMatch(/justificaciones pegadas/)
-    expect(c).toContain('(.razon, .fuente)')
+    expect(c).toContain("razón y fuente en `_field_meta.<campo>`")
   })
   it('la regla de proponer del dueño ya no manda terminar el texto en « [propuesta del agente — razón]»', () => {
     const c = codigo('[BB] Equipo · integración · preparar')
