@@ -17,7 +17,12 @@ function bdFalsa(ajustes: Fila = {}) {
       if (tabla === 'settings') {
         return {
           select: () => ({ eq: (_c: string, k: string) => ({ maybeSingle: async () => ({ data: k in ajustesGuardados ? { value: ajustesGuardados[k] } : null, error: null }) }) }),
-          upsert: async (f: { key: string; value: string }) => { ajustesGuardados[f.key] = f.value; return { error: null } },
+          // la misma regla que la tabla real: otra categoría da error y el aviso no sale
+          upsert: async (f: { key: string; value: string; category: string }) => {
+            if (!['general', 'api_keys', 'notifications', 'agents'].includes(f.category)) return { error: { message: 'settings_category_check' } }
+            ajustesGuardados[f.key] = f.value
+            return { error: null }
+          },
         }
       }
       return { insert: (f: Fila) => { hitl.push(f); return { select: () => ({ single: async () => ({ data: { id: 'h1' }, error: null }) }) } } }

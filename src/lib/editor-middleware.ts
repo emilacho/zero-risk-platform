@@ -303,7 +303,7 @@ export async function avisarRevisoresCaidos(p: {
     if (leida.error) throw new Error(leida.error.message)
     const ultimo = Date.parse(String((leida.data as { value?: unknown } | null)?.value ?? ''))
     if (Number.isFinite(ultimo) && ahora.getTime() - ultimo < HORAS_ENTRE_AVISOS * 3_600_000) return
-    const escrita = await p.supabase.from('settings').upsert({ key: CLAVE_AVISO_REVISORES_CAIDOS, value: ahora.toISOString(), category: 'avisos' }, { onConflict: 'key' })
+    const escrita = await p.supabase.from('settings').upsert({ key: CLAVE_AVISO_REVISORES_CAIDOS, value: ahora.toISOString(), category: 'notifications' }, { onConflict: 'key' })
     if (escrita.error) throw new Error(escrita.error.message)
     const avisar = p.avisar ?? avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '' })
     await avisar(`Falla técnica: los revisores del editor no contestan (${p.sinResponder.join(', ')}). Los textos siguen sin esa revisión y no llegan a la bandeja de Emilio. Primer caso: ${p.agentSlug}${p.clientId ? ` · cliente ${p.clientId.slice(0, 8)}` : ''}.`)
