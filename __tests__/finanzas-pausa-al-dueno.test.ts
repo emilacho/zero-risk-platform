@@ -450,6 +450,15 @@ describe('el pre-vuelo al volver', () => {
     const P = { ...(w.P as object), ahora: () => new Date('2026-11-05T02:00:00Z'), corridas: { ...(w.P as { corridas: object }).corridas, ahora: () => new Date('2026-11-05T02:00:00Z') } } as never
     expect((await prevuelo(pedir(), P)).calendario?.arranque).toBe('2026-11-04')
   })
+  it('🔴 el día del país también en el arranque normal y en la pausa larga', async () => {
+    const hora = () => new Date('2026-11-05T02:00:00Z')
+    const con = (w: ReturnType<typeof puertos>, extra: object = {}) => ({ ...(w.P as object), ahora: hora, corridas: { ...(w.P as { corridas: object }).corridas, ahora: hora }, ...extra }) as never
+    const normal = await prevuelo({ client_id: 'cliente-1', corrida: 'plan-x' }, con(puertos('esperando'), { cupo: async () => ({ ok: true, cap_usd: 100, generico_usd: 100, override_usd: null, gastado_24h_usd: 0 }) }))
+    expect(normal.calendario?.arranque).toBe('2026-11-04')
+    const larga = await prevuelo(pedir(), con(puertos('en_pausa', { client_id: 'cliente-1', corrida: 'plan-x', estado: 'soltada', creado_en: '2026-10-01T00:00:00Z' })))
+    expect(larga.material_viejo).toBe(true)
+    expect(larga.calendario?.arranque).toBe('2026-11-04')
+  })
   it('🔴 un plan que arranca normal también recibe su calendario, y uno que espera no', async () => {
     const w = puertos('esperando')
     const P = { ...(w.P as object), cupo: async () => ({ ok: true, cap_usd: 100, generico_usd: 100, override_usd: null, gastado_24h_usd: 0 }) } as never
