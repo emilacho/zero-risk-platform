@@ -7,7 +7,7 @@
  *   · Al reanudar, el vigía de CC#1 vuelve a llamar al plan con el `sobre` + `reanudar_esperas_id` (sin `finanzas_id`): «⓪ Llave» lo valida (uuid o ausente) · «elegir brazos» NO pide ningún brazo
  *     (pedidos vacíos = ninguna llamada de pago) y no se detiene por «ningún brazo salió» · tras la Junta, «Reanudar · …» pone el material guardado en su lugar y el plan sigue hasta el redactor.
  *     Si el material guardado no se puede leer, la ejecución falla en rojo (no se escribe un plan a ciegas).
- *   · Pausa de más de 7 días (visto Lenovo 15:51Z): el pre-vuelo contesta `material_viejo:true` → NO se usa lo guardado; «elegir brazos» pide como siempre y la Junta sale fresca. El pre-vuelo recibe `reanudar_esperas_id`.
+ *   · Pausa de más de 3 días (umbral de Emilio · lo calcula el pre-vuelo) (visto Lenovo 15:51Z): el pre-vuelo contesta `material_viejo:true` → NO se usa lo guardado; «elegir brazos» pide como siempre y la Junta sale fresca. El pre-vuelo recibe `reanudar_esperas_id`.
  *   · Apertura con el manual completo (GO punto 6): la semilla lleva `manual_completo` (los campos del manual de «① GUARDA»). La ruta de CC#1 debe dejarlo pasar al abrir.
  * Con `reanudar_esperas_id` ausente y sin respuesta `esperando`, el plan es EXACTAMENTE el de hoy (la pausa nunca se activa hasta que la plataforma conteste `esperando`).
  */
@@ -38,7 +38,7 @@ const N_ELEGIR = 'elegir brazos'
 const N_SEMILLA = 'FIN · armar la semilla'
 const WH = "$('Webhook · planeacion').first().json.body"
 
-// con `material_viejo` (la pausa pasó de 7 días · lo avisa el pre-vuelo) NO se reanuda con lo guardado: los brazos se piden de nuevo, frescos
+// con `material_viejo` (la pausa pasó de 3 días · lo avisa el pre-vuelo) NO se reanuda con lo guardado: los brazos se piden de nuevo, frescos
 const SI_REANUDA = `(function () { try { const x = ${WH}.reanudar_esperas_id; if (!(typeof x === 'string' && x.length > 0)) return false; try { return $('V9 · decidir').first().json.material_viejo !== true } catch (e2) { return true } } catch (e) { return false } })()`
 
 export const CODIGO_PAUSA_OK = [
