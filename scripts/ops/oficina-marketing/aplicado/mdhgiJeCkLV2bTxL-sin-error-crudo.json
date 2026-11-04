@@ -1,0 +1,1498 @@
+{
+  "id": "mdhgiJeCkLV2bTxL",
+  "name": "Plan · segunda mitad (PDF → brief)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "471c5807-14d9-4fab-8adf-107aa113b6ec",
+  "createdAt": "2026-11-01T14:07:23.560Z",
+  "updatedAt": "2026-11-02T21:24:42.538Z",
+  "isArchived": false,
+  "versionId": "471c5807-14d9-4fab-8adf-107aa113b6ec",
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "id": "9edf7f11-500a-e613-45a2-edf97d56e948",
+      "name": "Webhook · plan-aprobado",
+      "webhookId": "79fe12dd-5e9b-1a16-a1c8-8e539f047686",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/plan-aprobado",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "1d07d1b4-5c27-7873-4e03-4ad4508f3d41",
+      "name": "Entrada · desde la planeación",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "87f43853-a986-9e61-6c57-c6e1dee65021",
+      "name": "⓪ Llave · plan-aprobado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ⓪ LA LLAVE · CC#2 · relevo 15 (2026-10-08) · mismo patrón que `zero-risk/brief` y `zero-risk/pieza` (lección E67).\n// Este sub-flujo GASTA (PDF, cable a la sala, brief) (modelo, Apify, imagen o video) o PUBLICA hacia afuera (redes, correo). Por eso exige la llave de despacho del motor en la cabecera\n// `x-sala-dispatch-key` (la misma `SALA_DISPATCH_KEY` del entorno de n8n; no se copia a ningún otro sitio) y, si falta, se DETIENE antes de tocar nada.\n// Falla CERRADO: sin la llave en el entorno, el flujo queda cerrado. Los disparos con horario (cron) y las llamadas internas entre flujos no pasan por aquí.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta o publica y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta o publica y solo lo despierta la sala · E67.')\n}\nreturn $input.all()\n"
+      }
+    },
+    {
+      "id": "ec9db32b-290a-0d8a-7ef4-d99b9e4d7e7d",
+      "name": "Sobre",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        120
+      ],
+      "parameters": {
+        "jsCode": "// CICLO DEL PLAN · tramo 2 · CC1 · 01-nov · sub-flujo «Plan · segunda mitad (PDF → brief)» · nodo Code «Sobre».\n// El sub-flujo entra por DOS puertas: el webhook `zero-risk/plan-aprobado` (lo despierta la puerta `plan-aprobar` con la llave de despacho; antes pasa por\n// una «⓪ Llave» igual a la de planeación) o la llamada directa desde la planeación (Execute Workflow, cuando NO hay compuerta: ensayo o `sin_compuerta`).\n// Deja UN solo sobre normalizado en `body`: los nodos copiados de la cola de planeación leen `$('Sobre').first().json.body` donde antes leían `$('Webhook · planeacion').first().json.body`.\nconst e = $input.first().json || {}\nconst b = e.body && typeof e.body === 'object' && !Array.isArray(e.body) ? e.body : e\nconst UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i\nif (typeof b.plan_id !== 'string' || !UUID.test(b.plan_id)) throw new Error('SEGUNDA_MITAD_SIN_PLAN · el sobre no trae plan_id (uuid) · se DETIENE antes de tocar nada')\nif (typeof b.client_id !== 'string' || !UUID.test(b.client_id)) throw new Error('SEGUNDA_MITAD_SIN_CLIENTE · el sobre no trae client_id (uuid) · se DETIENE antes de tocar nada')\nreturn [{ json: { body: {\n  client_id: b.client_id, plan_id: b.plan_id, tenant_id: typeof b.tenant_id === 'string' && b.tenant_id ? b.tenant_id : b.client_id,\n  aprobacion_id: typeof b.aprobacion_id === 'string' && UUID.test(b.aprobacion_id) ? b.aprobacion_id : null,\n  client_name: typeof b.client_name === 'string' && b.client_name.trim() ? b.client_name.trim() : null,\n  con_pendientes: b.con_pendientes === true, dry_run: b.dry_run === true, plan_v3: b.plan_v3 === true,\n  corrida: typeof b.corrida === 'string' && b.corrida ? b.corrida : null,\n  _journey_id: typeof b._journey_id === 'string' && b._journey_id ? b._journey_id : null,\n  _sala_correlation_id: typeof b._sala_correlation_id === 'string' && b._sala_correlation_id ? b._sala_correlation_id : null,\n  aprobado_por: typeof b.aprobado_por === 'string' ? b.aprobado_por : null,\n  origen: typeof b.origen === 'string' ? b.origen : 'planeacion/directo',\n} } }]\n"
+      }
+    },
+    {
+      "id": "04dc73f1-ace7-6356-7fdd-3d146fcefcaf",
+      "name": "¿Compuerta · en marcha?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ !!$('Sobre').first().json.body.aprobacion_id }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f120e536-8438-1b19-453d-f4c3f9783cce",
+      "name": "Compuerta · en marcha",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        880,
+        60
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_aprobaciones?id=eq.{{ $('Sobre').first().json.body.aprobacion_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "a3357e1f-2d81-6699-7f76-0a8077ba68dd",
+      "name": "Plan · pedir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        120
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/client_historical_outputs?select=id,client_id,output_type,status,content_text,content,provenance_tag&id=eq.{{ $('Sobre').first().json.body.plan_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "868009c4-53eb-a920-8ac5-30d5b1f07f44",
+      "name": "Plan vigente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        120
+      ],
+      "parameters": {
+        "jsCode": "// CICLO DEL PLAN · tramo 2 · CC1 · 01-nov · sub-flujo «Plan · segunda mitad (PDF → brief)» · nodo Code «Plan vigente» (MISMO nombre que en planeación, a propósito:\n// los nodos copiados —«Plan → Drive (PDF)», «¿Salió el PDF?», «BRIEF · sobre»— leen `$('Plan vigente').first().json` y `.jef_vigente` sin tocarlos).\n// Va después de «Plan · pedir» (HTTP GET `…/rest/v1/client_historical_outputs?select=id,client_id,output_type,status,content_text,content,provenance_tag&id=eq.{{ $('Sobre').first().json.body.plan_id }}`\n// con fullResponse + neverError). Sin fila, sin texto o de otro cliente: se DETIENE (no hay PDF ni brief de un plan que no existe).\nconst s = $('Sobre').first().json.body\nconst r = $input.first().json || {}\nif (r.error && typeof r.error === 'object') throw new Error('SEGUNDA_MITAD_PLAN_NO_LEGIBLE · la lectura del plan falló antes de recibir respuesta (' + String(r.error.message || r.error.name || 'sin detalle').slice(0, 160) + ')')\nif (Number(r.statusCode) !== 200) throw new Error('SEGUNDA_MITAD_PLAN_NO_LEGIBLE · la base contestó ' + String(r.statusCode))\nconst filas = Array.isArray(r.body) ? r.body : []\nconst fila = filas[0]\nif (!fila || !fila.id) throw new Error('SEGUNDA_MITAD_PLAN_INEXISTENTE · no existe el plan ' + String(s.plan_id))\nif (String(fila.client_id) !== String(s.client_id)) throw new Error('SEGUNDA_MITAD_PLAN_DE_OTRO_CLIENTE · el plan no es de este cliente')\nif (fila.output_type !== 'campaign_plan_90d') throw new Error('SEGUNDA_MITAD_NO_ES_UN_PLAN · la fila no es un plan de 90 días (' + String(fila.output_type) + ')')\nconst texto = String(fila.content_text || fila.content || '').trim()\nif (!texto) throw new Error('SEGUNDA_MITAD_PLAN_SIN_TEXTO · el plan no tiene texto')\nreturn [{ json: Object.assign({}, fila, { jef_vigente: {\n  texto: texto, caracteres: texto.length, con_pendientes: s.con_pendientes === true, pendientes: null, estado_del_plan: s.con_pendientes === true ? 'con_pendientes' : 'listo',\n  client_id: fila.client_id, client_name: s.client_name || 'cliente', llego_la_vuelta: true, etiqueta: s.aprobacion_id ? 'aprobada' : 'directa',\n} }) }]\n"
+      }
+    },
+    {
+      "id": "910b3961-5d87-6e80-8cc6-6b63f6367a00",
+      "name": "Plan → Drive (PDF)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        1540,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-production-72be.up.railway.app/webhook/zero-risk/texto-a-drive",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_id: ($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json).client_id, client_name: (($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json).client_name || 'cliente'), nombre: (($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json).con_pendientes ? 'CON PENDIENTES · ' : '') + 'Plan de 90 dias · ' + new Date().toISOString().slice(0,10), texto: String(($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json).texto || '') }) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-sala-dispatch-key",
+              "value": "={{ $env.SALA_DISPATCH_KEY }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "35b015ce-342a-b1cd-d271-b510fc3aca2c",
+      "name": "¿Salió el PDF?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        120
+      ],
+      "parameters": {
+        "jsCode": "// 🔴 UNA CORRIDA SIN PDF NO PUEDE SALIR EXITOSA (2026-09-12 · CC#3)\n//\n// Ahora hay TRES cosas que pueden faltar, y se dicen por separado:\n//   la vuelta del redactor · el guardado del plan · el PDF\n// El guardado va ANTES de Drive a propósito: si Drive falla, el plan NO se pierde\n// (medido el 12-sep: un plan de 22.060 caracteres se perdió entero porque nadie\n// lo había guardado · el registro de invocaciones sólo conserva 2.000).\n// 04-nov · las dos lecturas se atrapan: en este flujo «¿Llegó la vuelta?» no existe y, sin `jef_vigente`, daba un error crudo\nlet _pv = null; try { _pv = $('Plan vigente').first().json } catch (e) { _pv = null }\nlet _lv = {}; try { _lv = $('¿Llegó la vuelta?').first().json } catch (e) { _lv = {} }\nconst v = ((_pv && _pv.jef_vigente) || _lv || {});\nconst texto = String(v.texto || '');\nconst hayPlan = texto.trim().length > 0;\n\nlet guardado = false, guardado_id = null;\ntry {\n  const g = $('Plan vigente').first().json;\n  const gb = (g && g.body) ? g.body : g;\n  const fila = Array.isArray(gb) ? gb[0] : gb;\n  guardado = !!(fila && fila.id);\n  guardado_id = fila && fila.id || null;\n} catch (x) { guardado = false; }\n\nlet rec = null;\ntry { const d = $('Plan → Drive (PDF)').first().json; rec = (d && d.body) ? d.body : d; } catch (x) { rec = null; }\nconst hayPdf = !!(rec && rec.ok === true && rec.file_id);\n\nconst problemas = [];\nif (!hayPlan) problemas.push(v.motivo || 'el redactor no devolvió texto');\nif (hayPlan && !guardado) problemas.push('el plan NO quedó guardado · si Drive falla se pierde');\nif (!hayPdf) problemas.push(hayPlan\n  ? ('Drive no devolvió un archivo (' + String((rec && rec.motivo) || 'sin motivo') + ')')\n  : 'no se llamó a Drive porque no había plan que escribir');\n\nreturn [{ json: {\n  ok: problemas.length === 0,\n  llego_la_vuelta: v.llego_la_vuelta === true,\n  hay_plan: hayPlan,\n  caracteres_del_plan: texto.length,\n  plan_guardado: guardado,\n  plan_guardado_id: guardado_id,\n  hay_pdf: hayPdf,\n  file_id: rec && rec.file_id || null,\n  url: rec && rec.url || null,\n  carpeta: rec && rec.folder_id || null,\n  problemas: problemas,\n  client_id: v.client_id,\n  client_name: v.client_name,\n} }];"
+      }
+    },
+    {
+      "id": "bba01c6f-eef9-1844-7df2-e6d5dfa24755",
+      "name": "IF · ¿hay PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "hay-pdf",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "1c87f6d8-5b14-61ee-aaa5-ed180cb59949",
+      "name": "Cable de vuelta · sala",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        2200,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-planeacion-X9F0zp6LQ2xGEYVS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ event_type: 'run_completed', worker_id: 'X9F0zp6LQ2xGEYVS', worker_name: 'planeacion', resultado: 'plan_terminado', client_id: $('Sobre').first().json.body.client_id ?? null, tenant_id: $('Sobre').first().json.body.tenant_id ?? $('Sobre').first().json.body.client_id ?? null, _sala_correlation_id: $('Sobre').first().json.body._sala_correlation_id ?? null, _journey_id: $('Sobre').first().json.body._journey_id ?? null, ts: new Date().toISOString() }) }}",
+        "options": {
+          "timeout": 900000
+        }
+      }
+    },
+    {
+      "id": "630d4299-36bf-6fa6-42d7-1a421dde4d4e",
+      "name": "Cable · ¿volvió? · plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        120
+      ],
+      "parameters": {
+        "jsCode": "// El cable de vuelta NO puede ser mudo. Si no volvio, la sala NUNCA se entera\n// de que la corrida termino y su marca queda sin resolver: la ventana del doble\n// pago quedaria cerrada solo en el papel.\nconst r = $input.first().json || {};\nconst volvio = r.ok === true;\nlet corr = null;\ntry { corr = $('Sobre').first().json.body._sala_correlation_id || null; } catch (e) { corr = null; }\n// Falla RUIDOSA solo si la sala lo despacho: un disparo a mano no tiene a quien\n// contestarle, y marcar eso en rojo seria ruido.\nif (corr && !volvio) {\n  throw new Error('CABLE_DE_VUELTA_MUDO · la sala NO se entero de que la corrida termino · codigo ' + String(r.code || r.error || 'sin codigo'));\n}\nreturn [{ json: {\n  cierre: 'plan_terminado',\n  vuelta_ok: volvio,\n  vuelta_detalle: volvio ? (r.event_id || 'sin event_id') : (r.code || r.detail || r.error || 'sin respuesta de la sala'),\n  despachado_por_la_sala: !!corr,\n} }];"
+      }
+    },
+    {
+      "id": "b751bd78-d063-cc0d-f32c-fe014cc77795",
+      "name": "BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)",
+      "notes": "E-brief · CC#2 · 2026-09-29. MEDIDO: planeacion NO dejaba sobre — sus dos nodos de sala van a /api/sala/callback, que escribe step_id=\"journey_completed\", y el repartidor solo recoge los que empiezan por \"intake.\" (INTAKE_STEP_PREFIX). Este nodo deja el sobre que la sala si puede despachar al flujo del brief. ADITIVO: no toca ningun nodo existente.",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "position": [
+        2640,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_INTAKE_URL || \"https://zero-risk-platform.vercel.app/api/sala/intake\" }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: \"planeacion/plan-listo\", intent: \"briefear\", payload: { client_id: $('Sobre').first().json.body.client_id ?? null, plan_id: (function(){ try { const g = $('Plan vigente').first().json; return (Array.isArray(g) ? (g[0]||{}).id : g.id) ?? null } catch(e) { return null } })(), dry_run: $('Sobre').first().json.body.dry_run === true, desde_worker: \"X9F0zp6LQ2xGEYVS\" }, idempotency_key: ($('Sobre').first().json.body._journey_id ?? \"sin-journey\") + \":briefear\", logical_period: \"alta:\" + ($('Sobre').first().json.body._journey_id ?? \"sin-journey\"), tenant_id: $('Sobre').first().json.body.tenant_id ?? $('Sobre').first().json.body.client_id ?? null, client_id: $('Sobre').first().json.body.client_id ?? null, correlation_id: $('Sobre').first().json.body._sala_correlation_id || undefined }) }}",
+        "options": {
+          "timeout": 800000
+        }
+      }
+    },
+    {
+      "id": "af54327a-dc1b-e9b1-5ffa-3b48d7893909",
+      "name": "Nota perdida · sobre del brief",
+      "notes": "E-brief · CC#2 · declara si el sobre no fue aceptado.",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// Si la puerta no acepto el sobre, NO se calla. Mismo patron que el resto de la casa (E101):\n// una nota perdida se DECLARA, no se traga. No corrige nada.\nconst r = $input.first().json || {};\nconst cuerpo = r.body || r;\nconst ok = !!cuerpo && (cuerpo.ok === true || cuerpo.kind === 'accepted' || cuerpo.kind === 'duplicate');\nif (!ok) {\n  return [{ json: { _nota_perdida: true, motivo: 'SOBRE_DEL_BRIEF_NO_ACEPTADO',\n    detalle: (cuerpo && (cuerpo.detail || cuerpo.code)) || 'sin detalle',\n    flujo: 'X9F0zp6LQ2xGEYVS', nodo: \"BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)\" } }];\n}\nreturn [{ json: { _nota_perdida: false, sobre: cuerpo.kind || 'accepted', event_id: cuerpo.event_id || null } }];"
+      }
+    },
+    {
+      "id": "bd977fda-8d1a-f991-3b45-d29247741b18",
+      "name": "Armar el aviso · sin PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// 🔴 EL AVISO DICE QUÉ HACER · no sólo que falló.\nconst r = $input.first().json;\nconst pasos = [];\nif (!r.llego_la_vuelta) {\n  pasos.push('1) la vuelta NO llegó · el plan PUEDE estar escrito: mira agent_invocations por client_id y fíjate response_length');\n  pasos.push('2) si response_length es grande, el texto completo NO está en la base (guarda 2.000) · búscalo en Braintrust por session_id');\n  pasos.push('3) comprueba el saldo del proveedor ANTES de reintentar · y NO repagues el raspado: reusa el pedido que armó «Redactor (B4)»');\n} else if (!r.plan_guardado) {\n  pasos.push('1) el plan llegó (' + r.caracteres_del_plan + ' caracteres) pero NO se guardó · revisa los permisos de client_historical_outputs');\n  pasos.push('2) el texto está en esta corrida de n8n · copialo de «¿Llegó la vuelta?» antes de que caduque el historial (~4 h)');\n} else {\n  pasos.push('1) el plan está guardado (' + String(r.plan_guardado_id).slice(0, 8) + '…) · NO hay que volver a pagar al redactor');\n  pasos.push('2) lo que falló es Drive · mira la credencial de Google en n8n · caduca cada 7 días si la app OAuth no está publicada');\n  pasos.push('3) reintenta sólo Drive: POST a /webhook/zero-risk/texto-a-drive con client_id, client_name, nombre y el texto guardado');\n}\nreturn [{ json: {\n  texto: ':rotating_light: *Plan sin PDF* — la corrida de planeación terminó sin documento en Drive.\\n' +\n    '• cliente: `' + String(r.client_name || r.client_id || '?') + '`\\n' +\n    '• qué falló: ' + r.problemas.join(' · ') + '\\n' +\n    '• plan escrito: ' + (r.hay_plan ? (r.caracteres_del_plan + ' caracteres') : 'NO') +\n    ' · guardado: ' + (r.plan_guardado ? 'SÍ' : 'NO') + '\\n' +\n    '*Qué hacer:*\\n' + pasos.map((p) => '  ' + p).join('\\n'),\n} }];"
+      }
+    },
+    {
+      "id": "f2f097c5-8412-0593-6f2a-2407b9db32dc",
+      "name": "Campana · plan sin PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        1980,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.texto }) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "8c2b0eaa-0d18-769c-53b8-c701f3f9952a",
+      "name": "V9 · armar el cierre",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// V9 · al TERMINAR la corrida (plan entregado, o «repetida» ya sin gasto) se cierra la fila de `plan_corridas`. Si V9 no actuó (sin `plan_v3`), no hace nada.\nconst sobre = ($('Sobre').first().json.body || {})\nconst pide = sobre.plan_v3 === true && typeof sobre.corrida === \"string\" && sobre.corrida.length > 0 && typeof sobre.client_id === \"string\" && sobre.client_id.length > 0\nif (!pide) return [{ json: { aplica: false } }]\nlet repetida = false\ntry { $('Cable · ¿volvió? · repetida').first(); repetida = true } catch (e) { repetida = false }\nreturn [{ json: { aplica: true, cuerpo: {\n  accion: \"cerrar\", client_id: sobre.client_id, corrida: sobre.corrida,\n  estado: repetida ? \"fallida\" : \"hecha\",\n  motivo: repetida ? \"el cliente ya tenía un plan (corrida repetida): no se gastó\" : \"plan entregado\",\n} } }]\n"
+      }
+    },
+    {
+      "id": "8c80b1d1-a880-62bb-7b3c-2ac740a2cace",
+      "name": "V9 · ¿cerrar la corrida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.aplica === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "365e2799-23d7-67c5-945d-c7e2b417ab81",
+      "name": "V9 · cerrar la corrida",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2640,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/planeacion/corrida' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook · plan-aprobado": {
+      "main": [
+        [
+          {
+            "node": "⓪ Llave · plan-aprobado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⓪ Llave · plan-aprobado": {
+      "main": [
+        [
+          {
+            "node": "Sobre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada · desde la planeación": {
+      "main": [
+        [
+          {
+            "node": "Sobre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sobre": {
+      "main": [
+        [
+          {
+            "node": "¿Compuerta · en marcha?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Compuerta · en marcha?": {
+      "main": [
+        [
+          {
+            "node": "Compuerta · en marcha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan · pedir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compuerta · en marcha": {
+      "main": [
+        [
+          {
+            "node": "Plan · pedir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan · pedir": {
+      "main": [
+        [
+          {
+            "node": "Plan vigente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan → Drive (PDF)": {
+      "main": [
+        [
+          {
+            "node": "¿Salió el PDF?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Salió el PDF?": {
+      "main": [
+        [
+          {
+            "node": "IF · ¿hay PDF?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF · ¿hay PDF?": {
+      "main": [
+        [
+          {
+            "node": "Cable de vuelta · sala",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Armar el aviso · sin PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cable de vuelta · sala": {
+      "main": [
+        [
+          {
+            "node": "Cable · ¿volvió? · plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cable · ¿volvió? · plan": {
+      "main": [
+        [
+          {
+            "node": "BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "V9 · armar el cierre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)": {
+      "main": [
+        [
+          {
+            "node": "Nota perdida · sobre del brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar el aviso · sin PDF": {
+      "main": [
+        [
+          {
+            "node": "Campana · plan sin PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Campana · plan sin PDF": {
+      "main": [
+        [
+          {
+            "node": "Cable de vuelta · sala",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "V9 · armar el cierre": {
+      "main": [
+        [
+          {
+            "node": "V9 · ¿cerrar la corrida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "V9 · ¿cerrar la corrida?": {
+      "main": [
+        [
+          {
+            "node": "V9 · cerrar la corrida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan vigente": {
+      "main": [
+        [
+          {
+            "node": "Plan → Drive (PDF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "mdhgiJeCkLV2bTxL",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-11-01T14:07:23.560Z",
+      "updatedAt": "2026-11-01T14:07:23.560Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "471c5807-14d9-4fab-8adf-107aa113b6ec",
+    "workflowId": "mdhgiJeCkLV2bTxL",
+    "nodes": [
+      {
+        "id": "9edf7f11-500a-e613-45a2-edf97d56e948",
+        "name": "Webhook · plan-aprobado",
+        "webhookId": "79fe12dd-5e9b-1a16-a1c8-8e539f047686",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "zero-risk/plan-aprobado",
+          "responseMode": "onReceived",
+          "options": {}
+        }
+      },
+      {
+        "id": "1d07d1b4-5c27-7873-4e03-4ad4508f3d41",
+        "name": "Entrada · desde la planeación",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          240
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "87f43853-a986-9e61-6c57-c6e1dee65021",
+        "name": "⓪ Llave · plan-aprobado",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ⓪ LA LLAVE · CC#2 · relevo 15 (2026-10-08) · mismo patrón que `zero-risk/brief` y `zero-risk/pieza` (lección E67).\n// Este sub-flujo GASTA (PDF, cable a la sala, brief) (modelo, Apify, imagen o video) o PUBLICA hacia afuera (redes, correo). Por eso exige la llave de despacho del motor en la cabecera\n// `x-sala-dispatch-key` (la misma `SALA_DISPATCH_KEY` del entorno de n8n; no se copia a ningún otro sitio) y, si falta, se DETIENE antes de tocar nada.\n// Falla CERRADO: sin la llave en el entorno, el flujo queda cerrado. Los disparos con horario (cron) y las llamadas internas entre flujos no pasan por aquí.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) {\n  throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta o publica y queda cerrado hasta que exista · E67.')\n}\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) {\n  throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta o publica y solo lo despierta la sala · E67.')\n}\nreturn $input.all()\n"
+        }
+      },
+      {
+        "id": "ec9db32b-290a-0d8a-7ef4-d99b9e4d7e7d",
+        "name": "Sobre",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          120
+        ],
+        "parameters": {
+          "jsCode": "// CICLO DEL PLAN · tramo 2 · CC1 · 01-nov · sub-flujo «Plan · segunda mitad (PDF → brief)» · nodo Code «Sobre».\n// El sub-flujo entra por DOS puertas: el webhook `zero-risk/plan-aprobado` (lo despierta la puerta `plan-aprobar` con la llave de despacho; antes pasa por\n// una «⓪ Llave» igual a la de planeación) o la llamada directa desde la planeación (Execute Workflow, cuando NO hay compuerta: ensayo o `sin_compuerta`).\n// Deja UN solo sobre normalizado en `body`: los nodos copiados de la cola de planeación leen `$('Sobre').first().json.body` donde antes leían `$('Webhook · planeacion').first().json.body`.\nconst e = $input.first().json || {}\nconst b = e.body && typeof e.body === 'object' && !Array.isArray(e.body) ? e.body : e\nconst UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i\nif (typeof b.plan_id !== 'string' || !UUID.test(b.plan_id)) throw new Error('SEGUNDA_MITAD_SIN_PLAN · el sobre no trae plan_id (uuid) · se DETIENE antes de tocar nada')\nif (typeof b.client_id !== 'string' || !UUID.test(b.client_id)) throw new Error('SEGUNDA_MITAD_SIN_CLIENTE · el sobre no trae client_id (uuid) · se DETIENE antes de tocar nada')\nreturn [{ json: { body: {\n  client_id: b.client_id, plan_id: b.plan_id, tenant_id: typeof b.tenant_id === 'string' && b.tenant_id ? b.tenant_id : b.client_id,\n  aprobacion_id: typeof b.aprobacion_id === 'string' && UUID.test(b.aprobacion_id) ? b.aprobacion_id : null,\n  client_name: typeof b.client_name === 'string' && b.client_name.trim() ? b.client_name.trim() : null,\n  con_pendientes: b.con_pendientes === true, dry_run: b.dry_run === true, plan_v3: b.plan_v3 === true,\n  corrida: typeof b.corrida === 'string' && b.corrida ? b.corrida : null,\n  _journey_id: typeof b._journey_id === 'string' && b._journey_id ? b._journey_id : null,\n  _sala_correlation_id: typeof b._sala_correlation_id === 'string' && b._sala_correlation_id ? b._sala_correlation_id : null,\n  aprobado_por: typeof b.aprobado_por === 'string' ? b.aprobado_por : null,\n  origen: typeof b.origen === 'string' ? b.origen : 'planeacion/directo',\n} } }]\n"
+        }
+      },
+      {
+        "id": "04dc73f1-ace7-6356-7fdd-3d146fcefcaf",
+        "name": "¿Compuerta · en marcha?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          660,
+          120
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ !!$('Sobre').first().json.body.aprobacion_id }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "f120e536-8438-1b19-453d-f4c3f9783cce",
+        "name": "Compuerta · en marcha",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "position": [
+          880,
+          60
+        ],
+        "parameters": {
+          "method": "PATCH",
+          "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_aprobaciones?id=eq.{{ $('Sobre').first().json.body.aprobacion_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ workflow_id: $workflow.id, workflow_execution_id: $execution.id }) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "a3357e1f-2d81-6699-7f76-0a8077ba68dd",
+        "name": "Plan · pedir",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "position": [
+          1100,
+          120
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/client_historical_outputs?select=id,client_id,output_type,status,content_text,content,provenance_tag&id=eq.{{ $('Sobre').first().json.body.plan_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "868009c4-53eb-a920-8ac5-30d5b1f07f44",
+        "name": "Plan vigente",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1320,
+          120
+        ],
+        "parameters": {
+          "jsCode": "// CICLO DEL PLAN · tramo 2 · CC1 · 01-nov · sub-flujo «Plan · segunda mitad (PDF → brief)» · nodo Code «Plan vigente» (MISMO nombre que en planeación, a propósito:\n// los nodos copiados —«Plan → Drive (PDF)», «¿Salió el PDF?», «BRIEF · sobre»— leen `$('Plan vigente').first().json` y `.jef_vigente` sin tocarlos).\n// Va después de «Plan · pedir» (HTTP GET `…/rest/v1/client_historical_outputs?select=id,client_id,output_type,status,content_text,content,provenance_tag&id=eq.{{ $('Sobre').first().json.body.plan_id }}`\n// con fullResponse + neverError). Sin fila, sin texto o de otro cliente: se DETIENE (no hay PDF ni brief de un plan que no existe).\nconst s = $('Sobre').first().json.body\nconst r = $input.first().json || {}\nif (r.error && typeof r.error === 'object') throw new Error('SEGUNDA_MITAD_PLAN_NO_LEGIBLE · la lectura del plan falló antes de recibir respuesta (' + String(r.error.message || r.error.name || 'sin detalle').slice(0, 160) + ')')\nif (Number(r.statusCode) !== 200) throw new Error('SEGUNDA_MITAD_PLAN_NO_LEGIBLE · la base contestó ' + String(r.statusCode))\nconst filas = Array.isArray(r.body) ? r.body : []\nconst fila = filas[0]\nif (!fila || !fila.id) throw new Error('SEGUNDA_MITAD_PLAN_INEXISTENTE · no existe el plan ' + String(s.plan_id))\nif (String(fila.client_id) !== String(s.client_id)) throw new Error('SEGUNDA_MITAD_PLAN_DE_OTRO_CLIENTE · el plan no es de este cliente')\nif (fila.output_type !== 'campaign_plan_90d') throw new Error('SEGUNDA_MITAD_NO_ES_UN_PLAN · la fila no es un plan de 90 días (' + String(fila.output_type) + ')')\nconst texto = String(fila.content_text || fila.content || '').trim()\nif (!texto) throw new Error('SEGUNDA_MITAD_PLAN_SIN_TEXTO · el plan no tiene texto')\nreturn [{ json: Object.assign({}, fila, { jef_vigente: {\n  texto: texto, caracteres: texto.length, con_pendientes: s.con_pendientes === true, pendientes: null, estado_del_plan: s.con_pendientes === true ? 'con_pendientes' : 'listo',\n  client_id: fila.client_id, client_name: s.client_name || 'cliente', llego_la_vuelta: true, etiqueta: s.aprobacion_id ? 'aprobada' : 'directa',\n} }) }]\n"
+        }
+      },
+      {
+        "id": "910b3961-5d87-6e80-8cc6-6b63f6367a00",
+        "name": "Plan → Drive (PDF)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "position": [
+          1540,
+          120
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://n8n-production-72be.up.railway.app/webhook/zero-risk/texto-a-drive",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ client_id: ($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json).client_id, client_name: (($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json).client_name || 'cliente'), nombre: (($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json).con_pendientes ? 'CON PENDIENTES · ' : '') + 'Plan de 90 dias · ' + new Date().toISOString().slice(0,10), texto: String(($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json).texto || '') }) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          },
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-sala-dispatch-key",
+                "value": "={{ $env.SALA_DISPATCH_KEY }}"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "35b015ce-342a-b1cd-d271-b510fc3aca2c",
+        "name": "¿Salió el PDF?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1760,
+          120
+        ],
+        "parameters": {
+          "jsCode": "// 🔴 UNA CORRIDA SIN PDF NO PUEDE SALIR EXITOSA (2026-09-12 · CC#3)\n//\n// Ahora hay TRES cosas que pueden faltar, y se dicen por separado:\n//   la vuelta del redactor · el guardado del plan · el PDF\n// El guardado va ANTES de Drive a propósito: si Drive falla, el plan NO se pierde\n// (medido el 12-sep: un plan de 22.060 caracteres se perdió entero porque nadie\n// lo había guardado · el registro de invocaciones sólo conserva 2.000).\nconst v = ($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json);\nconst texto = String(v.texto || '');\nconst hayPlan = texto.trim().length > 0;\n\nlet guardado = false, guardado_id = null;\ntry {\n  const g = $('Plan vigente').first().json;\n  const gb = (g && g.body) ? g.body : g;\n  const fila = Array.isArray(gb) ? gb[0] : gb;\n  guardado = !!(fila && fila.id);\n  guardado_id = fila && fila.id || null;\n} catch (x) { guardado = false; }\n\nlet rec = null;\ntry { const d = $('Plan → Drive (PDF)').first().json; rec = (d && d.body) ? d.body : d; } catch (x) { rec = null; }\nconst hayPdf = !!(rec && rec.ok === true && rec.file_id);\n\nconst problemas = [];\nif (!hayPlan) problemas.push(v.motivo || 'el redactor no devolvió texto');\nif (hayPlan && !guardado) problemas.push('el plan NO quedó guardado · si Drive falla se pierde');\nif (!hayPdf) problemas.push(hayPlan\n  ? ('Drive no devolvió un archivo (' + String((rec && rec.motivo) || 'sin motivo') + ')')\n  : 'no se llamó a Drive porque no había plan que escribir');\n\nreturn [{ json: {\n  ok: problemas.length === 0,\n  llego_la_vuelta: v.llego_la_vuelta === true,\n  hay_plan: hayPlan,\n  caracteres_del_plan: texto.length,\n  plan_guardado: guardado,\n  plan_guardado_id: guardado_id,\n  hay_pdf: hayPdf,\n  file_id: rec && rec.file_id || null,\n  url: rec && rec.url || null,\n  carpeta: rec && rec.folder_id || null,\n  problemas: problemas,\n  client_id: v.client_id,\n  client_name: v.client_name,\n} }];"
+        }
+      },
+      {
+        "id": "bba01c6f-eef9-1844-7df2-e6d5dfa24755",
+        "name": "IF · ¿hay PDF?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1980,
+          120
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "hay-pdf",
+                "leftValue": "={{ $json.ok }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "1c87f6d8-5b14-61ee-aaa5-ed180cb59949",
+        "name": "Cable de vuelta · sala",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "position": [
+          2200,
+          120
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+              },
+              {
+                "name": "x-source",
+                "value": "n8n-planeacion-X9F0zp6LQ2xGEYVS"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ event_type: 'run_completed', worker_id: 'X9F0zp6LQ2xGEYVS', worker_name: 'planeacion', resultado: 'plan_terminado', client_id: $('Sobre').first().json.body.client_id ?? null, tenant_id: $('Sobre').first().json.body.tenant_id ?? $('Sobre').first().json.body.client_id ?? null, _sala_correlation_id: $('Sobre').first().json.body._sala_correlation_id ?? null, _journey_id: $('Sobre').first().json.body._journey_id ?? null, ts: new Date().toISOString() }) }}",
+          "options": {
+            "timeout": 900000
+          }
+        }
+      },
+      {
+        "id": "630d4299-36bf-6fa6-42d7-1a421dde4d4e",
+        "name": "Cable · ¿volvió? · plan",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          120
+        ],
+        "parameters": {
+          "jsCode": "// El cable de vuelta NO puede ser mudo. Si no volvio, la sala NUNCA se entera\n// de que la corrida termino y su marca queda sin resolver: la ventana del doble\n// pago quedaria cerrada solo en el papel.\nconst r = $input.first().json || {};\nconst volvio = r.ok === true;\nlet corr = null;\ntry { corr = $('Sobre').first().json.body._sala_correlation_id || null; } catch (e) { corr = null; }\n// Falla RUIDOSA solo si la sala lo despacho: un disparo a mano no tiene a quien\n// contestarle, y marcar eso en rojo seria ruido.\nif (corr && !volvio) {\n  throw new Error('CABLE_DE_VUELTA_MUDO · la sala NO se entero de que la corrida termino · codigo ' + String(r.code || r.error || 'sin codigo'));\n}\nreturn [{ json: {\n  cierre: 'plan_terminado',\n  vuelta_ok: volvio,\n  vuelta_detalle: volvio ? (r.event_id || 'sin event_id') : (r.code || r.detail || r.error || 'sin respuesta de la sala'),\n  despachado_por_la_sala: !!corr,\n} }];"
+        }
+      },
+      {
+        "id": "b751bd78-d063-cc0d-f32c-fe014cc77795",
+        "name": "BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)",
+        "notes": "E-brief · CC#2 · 2026-09-29. MEDIDO: planeacion NO dejaba sobre — sus dos nodos de sala van a /api/sala/callback, que escribe step_id=\"journey_completed\", y el repartidor solo recoge los que empiezan por \"intake.\" (INTAKE_STEP_PREFIX). Este nodo deja el sobre que la sala si puede despachar al flujo del brief. ADITIVO: no toca ningun nodo existente.",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "position": [
+          2640,
+          120
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SALA_INTAKE_URL || \"https://zero-risk-platform.vercel.app/api/sala/intake\" }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.SALA_INGRESS_API_KEY || $env.INTERNAL_API_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ source: \"planeacion/plan-listo\", intent: \"briefear\", payload: { client_id: $('Sobre').first().json.body.client_id ?? null, plan_id: (function(){ try { const g = $('Plan vigente').first().json; return (Array.isArray(g) ? (g[0]||{}).id : g.id) ?? null } catch(e) { return null } })(), dry_run: $('Sobre').first().json.body.dry_run === true, desde_worker: \"X9F0zp6LQ2xGEYVS\" }, idempotency_key: ($('Sobre').first().json.body._journey_id ?? \"sin-journey\") + \":briefear\", logical_period: \"alta:\" + ($('Sobre').first().json.body._journey_id ?? \"sin-journey\"), tenant_id: $('Sobre').first().json.body.tenant_id ?? $('Sobre').first().json.body.client_id ?? null, client_id: $('Sobre').first().json.body.client_id ?? null, correlation_id: $('Sobre').first().json.body._sala_correlation_id || undefined }) }}",
+          "options": {
+            "timeout": 800000
+          }
+        }
+      },
+      {
+        "id": "af54327a-dc1b-e9b1-5ffa-3b48d7893909",
+        "name": "Nota perdida · sobre del brief",
+        "notes": "E-brief · CC#2 · declara si el sobre no fue aceptado.",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1540,
+          320
+        ],
+        "parameters": {
+          "jsCode": "// Si la puerta no acepto el sobre, NO se calla. Mismo patron que el resto de la casa (E101):\n// una nota perdida se DECLARA, no se traga. No corrige nada.\nconst r = $input.first().json || {};\nconst cuerpo = r.body || r;\nconst ok = !!cuerpo && (cuerpo.ok === true || cuerpo.kind === 'accepted' || cuerpo.kind === 'duplicate');\nif (!ok) {\n  return [{ json: { _nota_perdida: true, motivo: 'SOBRE_DEL_BRIEF_NO_ACEPTADO',\n    detalle: (cuerpo && (cuerpo.detail || cuerpo.code)) || 'sin detalle',\n    flujo: 'X9F0zp6LQ2xGEYVS', nodo: \"BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)\" } }];\n}\nreturn [{ json: { _nota_perdida: false, sobre: cuerpo.kind || 'accepted', event_id: cuerpo.event_id || null } }];"
+        }
+      },
+      {
+        "id": "bd977fda-8d1a-f991-3b45-d29247741b18",
+        "name": "Armar el aviso · sin PDF",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1760,
+          320
+        ],
+        "parameters": {
+          "jsCode": "// 🔴 EL AVISO DICE QUÉ HACER · no sólo que falló.\nconst r = $input.first().json;\nconst pasos = [];\nif (!r.llego_la_vuelta) {\n  pasos.push('1) la vuelta NO llegó · el plan PUEDE estar escrito: mira agent_invocations por client_id y fíjate response_length');\n  pasos.push('2) si response_length es grande, el texto completo NO está en la base (guarda 2.000) · búscalo en Braintrust por session_id');\n  pasos.push('3) comprueba el saldo del proveedor ANTES de reintentar · y NO repagues el raspado: reusa el pedido que armó «Redactor (B4)»');\n} else if (!r.plan_guardado) {\n  pasos.push('1) el plan llegó (' + r.caracteres_del_plan + ' caracteres) pero NO se guardó · revisa los permisos de client_historical_outputs');\n  pasos.push('2) el texto está en esta corrida de n8n · copialo de «¿Llegó la vuelta?» antes de que caduque el historial (~4 h)');\n} else {\n  pasos.push('1) el plan está guardado (' + String(r.plan_guardado_id).slice(0, 8) + '…) · NO hay que volver a pagar al redactor');\n  pasos.push('2) lo que falló es Drive · mira la credencial de Google en n8n · caduca cada 7 días si la app OAuth no está publicada');\n  pasos.push('3) reintenta sólo Drive: POST a /webhook/zero-risk/texto-a-drive con client_id, client_name, nombre y el texto guardado');\n}\nreturn [{ json: {\n  texto: ':rotating_light: *Plan sin PDF* — la corrida de planeación terminó sin documento en Drive.\\n' +\n    '• cliente: `' + String(r.client_name || r.client_id || '?') + '`\\n' +\n    '• qué falló: ' + r.problemas.join(' · ') + '\\n' +\n    '• plan escrito: ' + (r.hay_plan ? (r.caracteres_del_plan + ' caracteres') : 'NO') +\n    ' · guardado: ' + (r.plan_guardado ? 'SÍ' : 'NO') + '\\n' +\n    '*Qué hacer:*\\n' + pasos.map((p) => '  ' + p).join('\\n'),\n} }];"
+        }
+      },
+      {
+        "id": "f2f097c5-8412-0593-6f2a-2407b9db32dc",
+        "name": "Campana · plan sin PDF",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "position": [
+          1980,
+          320
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ text: $json.texto }) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "8c2b0eaa-0d18-769c-53b8-c701f3f9952a",
+        "name": "V9 · armar el cierre",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2200,
+          320
+        ],
+        "parameters": {
+          "jsCode": "// V9 · al TERMINAR la corrida (plan entregado, o «repetida» ya sin gasto) se cierra la fila de `plan_corridas`. Si V9 no actuó (sin `plan_v3`), no hace nada.\nconst sobre = ($('Sobre').first().json.body || {})\nconst pide = sobre.plan_v3 === true && typeof sobre.corrida === \"string\" && sobre.corrida.length > 0 && typeof sobre.client_id === \"string\" && sobre.client_id.length > 0\nif (!pide) return [{ json: { aplica: false } }]\nlet repetida = false\ntry { $('Cable · ¿volvió? · repetida').first(); repetida = true } catch (e) { repetida = false }\nreturn [{ json: { aplica: true, cuerpo: {\n  accion: \"cerrar\", client_id: sobre.client_id, corrida: sobre.corrida,\n  estado: repetida ? \"fallida\" : \"hecha\",\n  motivo: repetida ? \"el cliente ya tenía un plan (corrida repetida): no se gastó\" : \"plan entregado\",\n} } }]\n"
+        }
+      },
+      {
+        "id": "8c80b1d1-a880-62bb-7b3c-2ac740a2cace",
+        "name": "V9 · ¿cerrar la corrida?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          320
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.aplica === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "365e2799-23d7-67c5-945d-c7e2b417ab81",
+        "name": "V9 · cerrar la corrida",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          2640,
+          320
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/planeacion/corrida' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.INTERNAL_API_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Webhook · plan-aprobado": {
+        "main": [
+          [
+            {
+              "node": "⓪ Llave · plan-aprobado",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⓪ Llave · plan-aprobado": {
+        "main": [
+          [
+            {
+              "node": "Sobre",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Entrada · desde la planeación": {
+        "main": [
+          [
+            {
+              "node": "Sobre",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sobre": {
+        "main": [
+          [
+            {
+              "node": "¿Compuerta · en marcha?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "¿Compuerta · en marcha?": {
+        "main": [
+          [
+            {
+              "node": "Compuerta · en marcha",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Plan · pedir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Compuerta · en marcha": {
+        "main": [
+          [
+            {
+              "node": "Plan · pedir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Plan · pedir": {
+        "main": [
+          [
+            {
+              "node": "Plan vigente",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Plan → Drive (PDF)": {
+        "main": [
+          [
+            {
+              "node": "¿Salió el PDF?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "¿Salió el PDF?": {
+        "main": [
+          [
+            {
+              "node": "IF · ¿hay PDF?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF · ¿hay PDF?": {
+        "main": [
+          [
+            {
+              "node": "Cable de vuelta · sala",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Armar el aviso · sin PDF",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Cable de vuelta · sala": {
+        "main": [
+          [
+            {
+              "node": "Cable · ¿volvió? · plan",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Cable · ¿volvió? · plan": {
+        "main": [
+          [
+            {
+              "node": "BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "V9 · armar el cierre",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "BRIEF · sobre · pedir el parte a la sala (E-brief · CC#2)": {
+        "main": [
+          [
+            {
+              "node": "Nota perdida · sobre del brief",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Armar el aviso · sin PDF": {
+        "main": [
+          [
+            {
+              "node": "Campana · plan sin PDF",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Campana · plan sin PDF": {
+        "main": [
+          [
+            {
+              "node": "Cable de vuelta · sala",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "V9 · armar el cierre": {
+        "main": [
+          [
+            {
+              "node": "V9 · ¿cerrar la corrida?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "V9 · ¿cerrar la corrida?": {
+        "main": [
+          [
+            {
+              "node": "V9 · cerrar la corrida",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Plan vigente": {
+        "main": [
+          [
+            {
+              "node": "Plan → Drive (PDF)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-11-02T21:24:42.540Z",
+    "updatedAt": "2026-11-02T21:24:42.540Z",
+    "workflowPublishHistory": [
+      {
+        "id": 3427,
+        "workflowId": "mdhgiJeCkLV2bTxL",
+        "versionId": "471c5807-14d9-4fab-8adf-107aa113b6ec",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-02T21:24:42.631Z"
+      },
+      {
+        "id": 3428,
+        "workflowId": "mdhgiJeCkLV2bTxL",
+        "versionId": "471c5807-14d9-4fab-8adf-107aa113b6ec",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-02T21:24:42.772Z"
+      },
+      {
+        "id": 3429,
+        "workflowId": "mdhgiJeCkLV2bTxL",
+        "versionId": "471c5807-14d9-4fab-8adf-107aa113b6ec",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-02T21:24:42.949Z"
+      }
+    ]
+  },
+  "parentFolder": null
+}
