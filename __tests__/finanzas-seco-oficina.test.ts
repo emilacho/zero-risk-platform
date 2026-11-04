@@ -137,6 +137,32 @@ describe('la matriz completa, por la ruta real y con agentes simulados (US$ 0)',
   })
 })
 
+describe('las ventas del sitio al abrir (04-nov · firma de Emilio)', () => {
+  const SEM = { evento: 'mensaje', dias_activos_por_semana: 5 }
+  /** la base falsa de la oficina, más lo que lee el lector de ventas */
+  const conPedidos = (filas: unknown[], error: unknown = null) => {
+    const consulta = (data: unknown[], err: unknown = null) => { const c: any = {}; for (const m of ['select', 'eq', 'in', 'order', 'range', 'limit']) c[m] = () => c; c.maybeSingle = async () => ({ data: data[0] ?? null, error: err }); c.then = (ok: (r: unknown) => unknown) => ok({ data: err ? null : data, error: err }); return c }
+    h.db = {
+      ...(fake.db as object),
+      from: (t: string) => (t === 'clients' ? consulta([{ slug: 'sitio', config: {} }]) : t === 'client_sedes' || t === 'client_sede_datos' ? consulta([]) : (fake.db as any).from(t)),
+      schema: () => ({ from: () => consulta(filas, error) }),
+    }
+  }
+  it('🔴 la ruta las lee ella misma de los pedidos y no de lo que le manden', async () => {
+    conPedidos([{ status: 'DELIVERED', payment_status: 'CAPTURED', es_prueba: false, total_usd: 12, created_at: '2026-11-02T10:00:00Z' }, { status: 'DELIVERED', payment_status: 'CAPTURED', es_prueba: true, total_usd: 99, created_at: '2026-11-02T10:00:00Z' }])
+    const a = await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: { ...SEM, ventas_del_sitio: { pedidos_reales: 500 } } })
+    expect(a.status).toBe(200)
+    expect(fake.t.finanzas_encargos[0].semilla.ventas_del_sitio).toMatchObject({ estado: 'medido', pedidos_reales: 1, ingreso_usd: 12, pruebas_excluidas: 1 })
+  })
+  it('🔴 si la lectura falla el encargo igual abre y no afirma «sin ventas»', async () => {
+    conPedidos([], { code: '42703' })
+    expect((await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: SEM })).status).toBe(200)
+    const v = fake.t.finanzas_encargos[0].semilla.ventas_del_sitio
+    expect(v.estado).toBe('no_se_pudo')
+    expect(v.texto).not.toContain('sin ventas reales')
+  })
+})
+
 describe('la puerta de la simulación', () => {
   const SEM = { evento: 'mensaje', dias_activos_por_semana: 5 }
   it('sobre un encargo REAL (dry_run=false) la simulación responde 409 y no llama ni a un agente simulado', async () => {
