@@ -30,3 +30,22 @@ export function construirPlanContraElActa(f) {
   cambiarCodigo(f, 'Redactor (B4)', 'manual_limites: limitesDelManual(manual) }, FIN ?',
     "manual_limites: limitesDelManual(manual) }, (typeof ACT !== 'undefined' && ACT ? { acta: ACT } : {}), FIN ?")
 }
+
+const INICIO_MODULO = '// 04-nov · EL PLAN CONTRA EL ACTA DE LA MESA'
+const FIN_MODULO = 'function revisarPlan(texto, ctx) {'
+
+/**
+ * Vuelve a pegar el módulo cuando CC#1 cambia `plan-contra-el-acta.js` (primer caso: #907, «Lo que no hacemos»). `construirPlanContraElActa` no sirve para esto: pegaría el módulo dos veces.
+ * Cambia SOLO el texto entre el inicio del módulo y `revisarPlan`, en los 3 nodos; la marca P21 y el `acta` del contexto ya están. Si un nodo no lleva el módulo exactamente una vez, se detiene sin dejar nada a medias en ese nodo.
+ */
+export function repegarPlanContraElActa(f) {
+  const CRLF = String.fromCharCode(13, 10), LF = String.fromCharCode(10)
+  for (const n of NODOS_DEL_ACTA) {
+    const nd = nodo(f, n)
+    const c = nd.parameters.jsCode
+    const i = c.indexOf(INICIO_MODULO), j = c.indexOf(FIN_MODULO)
+    if (i < 0 || j < i || c.indexOf(INICIO_MODULO, i + 1) >= 0) throw new Error(`«${n}»: el módulo del acta no está exactamente una vez`)
+    const texto = c.includes(CRLF) ? MODULO_ACTA.split(LF).join(CRLF) : MODULO_ACTA
+    nd.parameters.jsCode = c.slice(0, i) + texto + c.slice(j)
+  }
+}
