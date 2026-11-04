@@ -38,6 +38,8 @@ export interface PedidoDeAgente {
   headers_requeridos: Record<string, string>
   /** solo con `dry_run = true`: las ramas que fuerza la simulación (los flujos del seco la leen) */
   simulacion?: Simulacion
+  trabajo_tipo?: 'pieza'
+  trabajo_id?: string
   /** `true` en el pedido que repite un paso por formato roto (el seco lo usa para romper solo el primer intento) */
   reintento_formato?: true
 }
@@ -54,6 +56,8 @@ export interface DatosDelPedido {
   max_budget_usd: number
   dry_run: boolean
   client_id: string
+  /** 04-nov · de qué trabajo es la llamada · sin él, «sin dato» */
+  trabajo?: { trabajo_tipo: 'pieza'; trabajo_id: string }
   /** lo que un llamador intentara meter en `extra`: se rechaza lo que no esté en la lista */
   extra_ajeno?: Record<string, unknown>
   simulacion?: Simulacion
@@ -65,6 +69,7 @@ export function armarPedidoDeAgente(a: DatosDelPedido): PedidoDeAgente {
   for (const k of Object.keys(a.extra_ajeno ?? {})) throw new Error(`la jefatura no admite «${k}» en extra (solo ${CLAVES_PERMITIDAS_EN_EXTRA.join(', ')}; los ids de ejecución van arriba del cuerpo)`)
   return {
     agent_name: a.agente, task: a.task, images: (a.imagenes ?? []).map((url) => ({ url })), esquema: a.esquema,
+    ...(a.trabajo ?? {}),
     extra: { indicacion_jefatura: a.indicacion, paso_de_la_jefatura: a.paso, revision_id: a.revision_id, dispatch_key: a.dispatch_key },
     max_budget_usd: a.max_budget_usd, thinking_mode: 'disabled', dry_run: a.dry_run, client_id: a.client_id, workflow_hint: WORKFLOW_HINT,
     force_restart: true, callback_mode: 'runner',

@@ -316,9 +316,11 @@ export function seccionDeMetodo(agente: string, metodos: unknown, fichas: unknow
 }
 
 /** el pedido que consume el flujo de turnos de n8n (mismo molde que la v1: `agent_name`, `task`, `images`, `esquema`…) */
-export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number }): Record<string, unknown> {
+export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number; es_pieza?: boolean }): Record<string, unknown> {
   return {
     agent_name: o.agente, task: o.task, images: [], esquema: 'opinion_libre.v1',
+    // 04-nov · de qué trabajo es la llamada: el encargo es la pieza · las cadenas (brief, concepto) aún no tienen id firmado: «sin dato»
+    ...(o.es_pieza ? { trabajo_tipo: 'pieza', trabajo_id: o.encargo_id } : {}),
     extra: { indicacion_oficina: 'Mesa de trabajo: aportas como profesional de tu especialidad; texto libre.', paso_de_la_oficina: o.paso, encargo_id: o.encargo_id, mesa: true, mesa_agente: o.agente },
     max_budget_usd: o.reserva_usd, thinking_mode: 'disabled', dry_run: o.dry_run, client_id: o.client_id, workflow_hint: 'oficina · turno',
     // 31-oct: la mesa NO pasa por el editor de run-sdk (los jueces de la jefatura quedan fuera de la mesa, ADR-020); la cabecera va SIEMPRE
