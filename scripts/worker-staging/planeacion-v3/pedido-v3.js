@@ -31,7 +31,7 @@ function _v3Entra(d) {
 function _v3FilaDeTabla(d) {
   var marcas = (d.marcas || []).filter(function (m) { return m !== 'contradice' }).join(',')
   return [
-    d.id, d.tipo_id + (d.atributo ? ' (' + d.atributo + ')' : ''), _v3Valor(d), d.origen, d.estado,
+    d.id, d.tipo_id + (d.atributo ? ' (' + d.atributo + ')' : '') + (d.sede ? ' · sede ' + d.sede : ''), _v3Valor(d), d.origen, d.estado,
     d.medido_en ? String(d.medido_en).slice(0, 10) : 'sin fecha',
     d.identidad ? d.identidad.estado : '—', d.frescura ? d.frescura.estado : '—', d.alcance || '—', d.confianza || '—',
     d.contradice && d.contradice.con && d.contradice.con.length ? 'CONTRADICE ' + d.contradice.con.join('/') + (d.contradice.gana ? ' (gana ' + d.contradice.gana + ')' : '') : '',

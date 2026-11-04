@@ -12,6 +12,8 @@ export const ESTADOS_TERMINALES: readonly EstadoDeEncargo[] = ['cerrado', 'sin_a
 
 /** lo que el plan (o quien despierta la conversación) entrega al abrir: SOLO datos del cliente y del expediente; ningún nombre concreto vive en el código */
 export interface Semilla {
+  /** 04-nov · la corrida que abrió el encargo: otra corrida no lo hereda */
+  corrida?: string
   rubro?: string | null
   pais?: string | null
   moneda?: string | null
