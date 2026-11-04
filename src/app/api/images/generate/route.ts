@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString } from '@/lib/validation'
+import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { capture } from '@/lib/posthog'
 import { PRICING_BY_SIZE, costForImage, type ImageUsage } from '@/lib/image-pricing'
@@ -222,6 +223,7 @@ export async function POST(request: Request) {
   await registrarImagenEnElLibro(supabase, {
     generationId: row?.id ?? generationId, clientId: resolvedClientId, agentSlug, model, size, quality, caller, costUsd, costBasis, prompt,
     startedAtMs, endedAtMs: Date.now(),
+    trabajo: trabajoDeLaLlamada(body, (nombre) => request.headers.get(nombre)),
     workflowId: sanitizeString(body.workflow_id as string | undefined, 80) || null,
     workflowExecutionId: sanitizeString(body.workflow_execution_id as string | undefined, 120) || null,
   })

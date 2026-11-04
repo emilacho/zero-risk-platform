@@ -7,6 +7,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { guardarTextosDeInvocacion } from './../textos-de-invocacion'
+import { metadataDelTrabajo, type TrabajoDeLaLlamada } from './../trabajo-de-la-llamada'
 
 
 export const FLUJO_DE_VIDEO = 'api:video-generate'
@@ -26,6 +27,8 @@ export interface DatosDelVideo {
   caller: string
   costoEstimadoUsd: number
   startedAtMs: number
+  /** 04-nov · de qué trabajo es el video (columnas propias · sin datos no agrega llaves) */
+  trabajo?: TrabajoDeLaLlamada
   workflowId?: string | null
   workflowExecutionId?: string | null
   claveIdempotente: string
@@ -39,6 +42,7 @@ export function filaDeEnvio(d: DatosDelVideo): Record<string, unknown> {
   const nombre = d.agentSlug ?? 'video-generation'
   return {
     input_summary: d.prompt ? (d.prompt.length > 2000 ? `${d.prompt.slice(0, 2000)}…` : d.prompt) : null,
+    ...(d.trabajo?.columnas ?? {}),
     session_id: sessionIdDeVideo(d.requestId),
     agent_id: nombre,
     agent_name: nombre,
@@ -61,7 +65,7 @@ export function filaDeEnvio(d: DatosDelVideo): Record<string, unknown> {
     exit_code: null,
     error_message: null,
     output_summary: `video enviado · ${d.segundos} s · ${d.resolucion} · ${d.relacion} · ${d.conFotos} foto(s) de referencia`,
-    metadata: { kind: 'video_generation', source: 'video-generate', request_id: d.requestId, ruta: d.ruta, cost_basis: 'estimate_formula', segundos: d.segundos, resolucion: d.resolucion, relacion: d.relacion, con_fotos: d.conFotos, caller: d.caller, idempotency_key: d.claveIdempotente, correlation_id: d.correlacion ?? null },
+    metadata: { ...(d.trabajo ? metadataDelTrabajo(d.trabajo) : {}), kind: 'video_generation', source: 'video-generate', request_id: d.requestId, ruta: d.ruta, cost_basis: 'estimate_formula', segundos: d.segundos, resolucion: d.resolucion, relacion: d.relacion, con_fotos: d.conFotos, caller: d.caller, idempotency_key: d.claveIdempotente, correlation_id: d.correlacion ?? null },
   }
 }
 

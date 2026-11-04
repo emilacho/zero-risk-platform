@@ -31,6 +31,7 @@ import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
+import { crudoDeLaLlamada, metadataDelTrabajo, trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { leerImagenesDelPedido, campoImagenesDelProxy } from '@/lib/imagenes-del-pedido'
@@ -267,6 +268,7 @@ interface DiscoveryToolCallProxyMeta {
 
 interface AgentRunResultProxy {
   success: boolean
+  invocationId?: string
   response: string
   sessionId: string | null
   inputTokens: number
@@ -638,6 +640,7 @@ async function atender(request: Request) {
     // INSERT de `agent_invocations` sigue viviendo en el trabajo (waitUntil) e
     // intacto (completed-only). dispatch_key idempotente anclado en workflow_id.
     let dispatchKey: string
+    const trabajoDelDespacho = trabajoDeLaLlamada(body, (nombre) => request.headers.get(nombre))
     try {
       const rec = await recordDispatchIntent(getSupabaseAdmin(), {
         dispatch_key: (body as { dispatch_key?: string | null }).dispatch_key ?? null,
@@ -645,7 +648,8 @@ async function atender(request: Request) {
         workflow_execution_id: cbAttr.workflow_execution_id ?? null,
         agent_name: cbAgentSlug,
         client_id: cbClientId,
-        metadata: { track: 'O' },
+        metadata: { track: 'O', ...metadataDelTrabajo(trabajoDelDespacho) },
+        trabajo: trabajoDelDespacho.columnas,
       })
       dispatchKey = rec.dispatch_key
     } catch (e) {
@@ -1107,6 +1111,8 @@ async function atender(request: Request) {
       clientId,
       pipelineId: body.pipeline_id || null,
       stepName: body.step_name || null,
+      // 04-nov · de qué trabajo es la llamada · los valida y los escribe el corredor
+      ...crudoDeLaLlamada(body, (nombre) => request.headers.get(nombre)),
       // Sprint 8D workflow attribution · forwarded to Railway so the
       // downstream observability writer persists workflow_id + execution_id
       // on `agent_invocations` (no more NULL rows · auditable per-workflow).
@@ -1412,6 +1418,7 @@ async function atender(request: Request) {
         : undefined
     result = {
       success: !!result.success,
+      ...(typeof result.invocationId === 'string' ? { invocationId: result.invocationId } : {}),
       response: typeof result.response === 'string' ? result.response : '',
       sessionId: result.sessionId ?? null,
       inputTokens: typeof result.inputTokens === 'number' ? result.inputTokens : 0,
@@ -1727,8 +1734,9 @@ async function atender(request: Request) {
  *  · `cerrada_por_tope`: el tope saltó AL CERRAR y `response` es el texto final completo (solo está la llave cuando pasó)
  *  · SALIDA ESTRUCTURADA (opt-in): el objeto y si es válido; ausentes ⇒ la respuesta de siempre
  */
-export function camposDeLaVueltaDelCorredor(result: { cerradaPorTope?: boolean; structuredOutputValid?: boolean; structuredOutput?: unknown }): Record<string, unknown> {
+export function camposDeLaVueltaDelCorredor(result: { invocationId?: string; cerradaPorTope?: boolean; structuredOutputValid?: boolean; structuredOutput?: unknown }): Record<string, unknown> {
   return {
+    ...(result.invocationId ? { invocation_id: result.invocationId } : {}),
     ...(result.cerradaPorTope === true ? { cerrada_por_tope: true } : {}),
     ...(result.structuredOutputValid !== undefined ? { structured_output_valid: result.structuredOutputValid } : {}),
     ...(result.structuredOutput !== undefined ? { structured_output: result.structuredOutput } : {}),

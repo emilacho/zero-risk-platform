@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { sanitizeString } from '@/lib/validation'
+import { metadataDelTrabajo, trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { buildAgentContext } from '@/lib/client-brain'
 import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
@@ -730,9 +731,11 @@ export async function POST(request: Request) {
     }).catch(() => ({ client_id: resolvedClientId, source: 'none' as const, attempted_lookups: [] }))
     const enrichedClientId = enrichment.client_id
 
+    const trabajoDeLaFila = trabajoDeLaLlamada(body, (nombre) => request.headers.get(nombre))
     void supabase
       .from('agent_invocations')
       .insert({
+        ...trabajoDeLaFila.columnas,
         session_id: sessionIdForInsert,
         agent_id: canonicalSlug,
         agent_name: (agentConfig.display_name as string) || canonicalSlug,
@@ -765,6 +768,7 @@ export async function POST(request: Request) {
         metadata: {
           source: 'api_agents_run',
           caller,
+          ...metadataDelTrabajo(trabajoDeLaFila),
           // Sprint 12 · Drift B paso D · explicit legacy-endpoint markers so
           // the §144 pre-rankeada migration list can be built from
           // `agent_invocations` directly via JSONB query · canonical spread

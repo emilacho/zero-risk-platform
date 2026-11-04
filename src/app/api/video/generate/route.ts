@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { sanitizeString } from '@/lib/validation'
+import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { VARIABLE_DE_LA_LLAVE, costoEstimadoUsd, enviar, estado, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
 import { TOPE_POR_VIDEO_USD, armarPedido, conDescuento, cuerpoParaHiggsfield, rutaDelModelo } from '@/lib/video/parametros'
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
   // 5 · libro (costo reservado)
   const libro = await registrarEnvioEnElLibro(getSupabaseAdmin() as never, {
     requestId: env.pedido.request_id, clientId, agentSlug, prompt: pedido.prompt, modelo: pedido.modelo, ruta, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, conFotos: pedido.fotos.length,
-    caller, costoEstimadoUsd: costo, startedAtMs: Date.now(), workflowId, workflowExecutionId, claveIdempotente, correlacion: env.pedido.correlacion,
+    caller, trabajo: trabajoDeLaLlamada(body, (nombre) => request.headers.get(nombre)), costoEstimadoUsd: costo, startedAtMs: Date.now(), workflowId, workflowExecutionId, claveIdempotente, correlacion: env.pedido.correlacion,
   })
   return json(202, { ok: true, request_id: env.pedido.request_id, status: env.pedido.status, status_url: env.pedido.status_url, ...costos, libro: libro.ok ? (libro.existia ? 'ya_estaba' : 'anotado') : `no_anotado: ${libro.error}`, ...base })
 }

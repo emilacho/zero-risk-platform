@@ -18,6 +18,7 @@
  * el 2º se trata como éxito idempotente (NO como error que haría 5xx a un retry legítimo).
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ColumnasDeLaLlamada } from './trabajo-de-la-llamada'
 
 export const DISPATCHES_TABLE = 'agent_dispatches'
 
@@ -32,6 +33,8 @@ export interface DispatchIntent {
   readonly agent_name?: string | null
   readonly client_id?: string | null
   readonly metadata?: Record<string, unknown>
+  /** 04-nov · de qué trabajo es · sin datos no agrega llaves */
+  readonly trabajo?: ColumnasDeLaLlamada
 }
 
 export interface RecordDispatchResult {
@@ -81,6 +84,7 @@ export async function recordDispatchIntent(
     created_at: nowIso,
     updated_at: nowIso,
     metadata: intent.metadata ?? {},
+    ...(intent.trabajo ?? {}),
   })
 
   if (error) {

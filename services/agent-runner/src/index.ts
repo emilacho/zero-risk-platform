@@ -14,6 +14,7 @@
 
 // Sentry must init before any other module runs · keep this the FIRST import.
 import './instrument.js'
+import { trabajoDeLaLlamada } from './lib/trabajo-de-la-llamada.js'
 import * as Sentry from '@sentry/node'
 import express, { type Request, type Response } from 'express'
 import { runAgentViaSDK, type AgentRunInput } from './lib/agent-sdk-runner.js'
@@ -117,6 +118,11 @@ interface RunSdkBody {
   pipeline_id?: unknown
   stepName?: unknown
   step_name?: unknown
+  /** 04-nov · de qué trabajo es la llamada · también por `context` o encabezados x-zr-* (ver trabajo-de-la-llamada.ts) */
+  trabajo_tipo?: unknown
+  trabajo_id?: unknown
+  paso?: unknown
+  llamada_padre?: unknown
   /**
    * Sprint 8D workflow attribution (§149) · the Vercel proxy forwards the
    * workflow_id / workflow_execution_id it received from n8n. Accepted in
@@ -402,6 +408,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     clientId: clientId ?? null,
     pipelineId: pipelineId ?? null,
     stepName: stepName ?? null,
+    trabajo: trabajoDeLaLlamada(body, (nombre) => req.headers[nombre]),
     workflowId: workflowId ?? null,
     workflowExecutionId: workflowExecutionId ?? null,
     forceRestart,
