@@ -1,0 +1,1112 @@
+{
+  "id": "ujka3yHnKbjzXJJS",
+  "name": "Zero Risk — Manual · pedir cambios (reescritura) · CC#2",
+  "description": null,
+  "active": true,
+  "activeVersionId": "5aca586c-df58-466f-bedc-f396990b11da",
+  "createdAt": "2026-11-02T10:39:55.045Z",
+  "updatedAt": "2026-11-02T21:25:31.250Z",
+  "isArchived": false,
+  "versionId": "5aca586c-df58-466f-bedc-f396990b11da",
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "id": "mc-1",
+      "name": "Webhook · manual-cambios",
+      "webhookId": "a3d2c8e0-7b1f-4c54-9d3a-5e6f7a8b9c01",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/manual-cambios",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "mc-2",
+      "name": "⓪ Llave · Webhook · manual-cambios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ⓪ LA LLAVE · CC#2 · 02-nov · «pedir cambios al manual» · mismo patrón que `zero-risk/planeacion` (lección E67).\n// Este flujo GASTA (3 lentes + juez de fidelidad + corrección). Exige la llave de despacho del motor en `x-sala-dispatch-key` y valida el sobre ANTES de tocar nada.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta y queda cerrado hasta que exista · E67.')\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta y solo lo despierta la sala · E67.')\nconst b = w.body && typeof w.body === 'object' && !Array.isArray(w.body) ? w.body : {}\nconst UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i\nconst falla = (c, m) => { throw new Error('MANUAL_CAMBIOS_' + c + ' · ' + m + ' · se DETIENE antes de gastar') }\nfor (const k of ['client_id', 'manual_base_id', 'manual_cambio_id']) if (typeof b[k] !== 'string' || !UUID.test(b[k])) falla('SOBRE_INVALIDO', k + ' debe ser un uuid')\nconst texto = typeof b.cambios_del_dueno === 'string' ? b.cambios_del_dueno.replace(/\\s+/g, ' ').trim() : ''\nif (texto.length < 5 || texto.length > 20000) falla('SOBRE_INVALIDO', 'cambios_del_dueno debe tener de 5 a 20.000 caracteres')\nconst lista = (x, k) => {\n  if (x === undefined || x === null) return []\n  if (!Array.isArray(x) || x.some((y) => typeof y !== 'string' || !y.trim() || y.length > 80) || x.length > 60) falla('SOBRE_INVALIDO', k + ' debe ser una lista de textos cortos')\n  return x.map((y) => y.trim())\n}\nconst seccion = b.seccion === undefined || b.seccion === null || b.seccion === '' ? null : (typeof b.seccion === 'string' && b.seccion.length <= 80 ? b.seccion.trim() : falla('SOBRE_INVALIDO', 'seccion debe ser un texto de hasta 80 caracteres'))\nconst tr = b.tope_reescritura_usd\nif (tr !== undefined && tr !== null && (typeof tr !== 'number' || !isFinite(tr) || tr <= 0 || tr > 20)) falla('TOPE_INVALIDO', 'tope_reescritura_usd debe ser un número mayor que 0 y hasta 20')\nreturn [{ json: { sobre: {\n  client_id: b.client_id, manual_base_id: b.manual_base_id, manual_cambio_id: b.manual_cambio_id,\n  cambios_del_dueno: texto, seccion, campos_validados: lista(b.campos_validados, 'campos_validados'), campos_liberados: lista(b.campos_liberados, 'campos_liberados'),\n  tope_reescritura_usd: (tr === undefined || tr === null) ? 5 : tr, force_restart: b.force_restart === true, pedido_por: typeof b.pedido_por === 'string' ? b.pedido_por.slice(0, 60) : null,\n} } }]"
+      }
+    },
+    {
+      "id": "mc-3",
+      "name": "① Leer el pedido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_cambios?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.manual_cambio_id }}&select=id,client_id,documento,estado,manual_nuevo_id,creado_en",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "mc-4",
+      "name": "① Guardia del pedido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ① GUARDIA DEL PEDIDO · el pedido debe existir, ser de este cliente y de un MANUAL; uno que ya tiene versión nueva (o ya terminó) NO se repite (clave única `manual_cambio_id`, sin gastar).\nconst sobre = $('⓪ Llave · Webhook · manual-cambios').first().json.sobre\nconst r = $input.first().json\nif (r.statusCode !== 200) throw new Error('MANUAL_CAMBIOS_PEDIDO_NO_LEIDO · plan_cambios respondió ' + r.statusCode + ' · se DETIENE antes de gastar')\nconst f = Array.isArray(r.body) ? r.body[0] : null\nif (!f) throw new Error('MANUAL_CAMBIOS_PEDIDO_INEXISTENTE · no hay un pedido con ese manual_cambio_id · se DETIENE antes de gastar')\nif (f.documento !== 'manual' || f.client_id !== sobre.client_id) throw new Error('MANUAL_CAMBIOS_PEDIDO_AJENO · el pedido no es un cambio del manual de este cliente · se DETIENE antes de gastar')\nif (f.manual_nuevo_id) return []        // ya tiene versión nueva: nada que repetir ni cobrar\nif (f.estado === 'aplicado' || f.estado === 'cancelado') return []   // ya resuelto\nif (f.estado === 'en_reescritura' && !sobre.force_restart) return []   // ya hay una corrida viva de este pedido\nreturn [{ json: { sobre, pedido: f } }]"
+      }
+    },
+    {
+      "id": "mc-5",
+      "name": "① Marcar en reescritura",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_cambios?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.manual_cambio_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ estado: 'en_reescritura', workflow_execution_id: String($execution.id), workflow_id: String($workflow.id), actualizado_en: new Date().toISOString() }) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "mc-6",
+      "name": "② Leer el manual vigente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/client_brand_books?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.manual_base_id }}&select=id,client_id,version,content_text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "mc-7",
+      "name": "② Leer la ficha del cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/clients?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.client_id }}&select=id,name,industry,website_url,domain",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "mc-8",
+      "name": "③ Armar la entrada del manual",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ③ ARMAR LA ENTRADA DEL MANUAL EN MODO REESCRITURA · sin repetir el descubrimiento: el manual vigente + la ficha + lo que el cerebro entrega por lectura (el flujo lo lee solo). Nada del cerebro se toca.\nconst sobre = $('⓪ Llave · Webhook · manual-cambios').first().json.sobre\nconst mal = (m) => [{ json: { fallo: m } }]   // no lanza: el cierre lee el motivo y marca el pedido fallido (nunca queda en_reescritura)\nconst lib = $('② Leer el manual vigente').first().json\nconst ficha = $('② Leer la ficha del cliente').first().json\nconst fb = Array.isArray(lib.body) ? lib.body[0] : null\nconst fc = Array.isArray(ficha.body) ? ficha.body[0] : null\nif (lib.statusCode !== 200 || !fb) return mal('MANUAL_CAMBIOS_SIN_MANUAL_BASE · no se pudo leer el manual vigente (manual_base_id)')\nif (fb.client_id !== sobre.client_id) return mal('MANUAL_CAMBIOS_MANUAL_AJENO · el manual base no es de este cliente')\nif (ficha.statusCode !== 200 || !fc) return mal('MANUAL_CAMBIOS_SIN_FICHA · no se pudo leer la ficha del cliente')\nlet draft = fb.content_text\nif (typeof draft === 'string') { try { draft = JSON.parse(draft) } catch (e) { draft = null } }\nconst vigente = draft && typeof draft === 'object' ? (draft.brand_book_draft && typeof draft.brand_book_draft === 'object' ? draft.brand_book_draft : draft) : null\nif (!vigente || !Object.keys(vigente).length) return mal('MANUAL_CAMBIOS_MANUAL_VACIO · el manual base no trae contenido legible')\nreturn [{ json: {\n  client_id: sobre.client_id, client_name: fc.name, industry: fc.industry || 'unknown', website: fc.website_url || fc.domain || null,\n  discovery_package: { discovery_summary: 'Reescritura sobre el manual vigente (versión ' + (fb.version == null ? '?' : fb.version) + '): no se repitió el descubrimiento; el equipo parte del manual vigente, la ficha y el cerebro.', reescritura: true },\n  dry_run: false,\n  reescritura: {\n    manual_base_id: sobre.manual_base_id, manual_cambio_id: sobre.manual_cambio_id, cambios_del_dueno: sobre.cambios_del_dueno, seccion: sobre.seccion,\n    campos_validados: sobre.campos_validados, campos_liberados: sobre.campos_liberados, tope_reescritura_usd: sobre.tope_reescritura_usd, manual_vigente: vigente,\n  },\n} }]"
+      }
+    },
+    {
+      "id": "mc-9",
+      "name": "③ ¿Se pudo armar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ !$json.fallo }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "mc-10",
+      "name": "④ Llamar al flujo del manual",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ssLtwYPt7zxuvnM2",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "mc-11",
+      "name": "⑤ Releer el pedido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_cambios?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.manual_cambio_id }}&select=id,estado,manual_nuevo_id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "mc-12",
+      "name": "⑤ Cierre · armar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ⑤ CIERRE · lee el pedido otra vez: si el guardado ligó una versión nueva → aplicado; si no → fallido con el motivo (también cuando el flujo del manual falló). Nunca queda en_reescritura para siempre.\nconst sobre = $('⓪ Llave · Webhook · manual-cambios').first().json.sobre\nconst r = $input.first().json\nconst f = r.statusCode === 200 && Array.isArray(r.body) ? r.body[0] : null\nlet motivo = null\nlet armado = null\ntry { armado = $('③ Armar la entrada del manual').first().json.fallo || null } catch (x) { armado = null }\nif (armado) motivo = armado\nelse if (!f) motivo = 'no se pudo releer el pedido al cerrar'\nelse if (!f.manual_nuevo_id) {\n  let detalle = '', recibo = null\n  try { const e = $('④ Llamar al flujo del manual').first().json; recibo = e && e.promote_recibo ? e.promote_recibo : null; detalle = e && e.error ? ' · ' + String(e.error.message || e.error).slice(0, 200) : '' } catch (x) { detalle = '' }\n  // el recibo del guardado (lo devuelve el flujo del manual en modo reescritura) dice POR QUÉ no hubo versión nueva\n  if (recibo && recibo.sin_cambios_reales === true) motivo = 'sin cambios reales: el equipo no cambió ningún campo del manual con este pedido; no se guardó una versión nueva'\n  else if (recibo && recibo.error) motivo = 'el guardado del manual respondió con error: ' + recibo.error + (recibo.detalle ? ' · ' + recibo.detalle : '')\n  else motivo = 'el flujo terminó sin dejar una versión nueva del manual' + detalle\n}\nconst aplicado = !motivo\nreturn [{ json: {\n  manual_cambio_id: sobre.manual_cambio_id, aplicado, manual_nuevo_id: f ? f.manual_nuevo_id || null : null,\n  parche: aplicado ? { estado: 'aplicado', actualizado_en: new Date().toISOString() } : { estado: 'fallido', despertar_detalle: String(motivo).slice(0, 400), actualizado_en: new Date().toISOString() },\n} }]"
+      }
+    },
+    {
+      "id": "mc-13",
+      "name": "⑤ Cerrar el pedido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        0
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_cambios?id=eq.{{ $json.manual_cambio_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.parche) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook · manual-cambios": {
+      "main": [
+        [
+          {
+            "node": "⓪ Llave · Webhook · manual-cambios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⓪ Llave · Webhook · manual-cambios": {
+      "main": [
+        [
+          {
+            "node": "① Leer el pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "① Leer el pedido": {
+      "main": [
+        [
+          {
+            "node": "① Guardia del pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "① Guardia del pedido": {
+      "main": [
+        [
+          {
+            "node": "① Marcar en reescritura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "① Marcar en reescritura": {
+      "main": [
+        [
+          {
+            "node": "② Leer el manual vigente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Leer el manual vigente": {
+      "main": [
+        [
+          {
+            "node": "② Leer la ficha del cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Leer la ficha del cliente": {
+      "main": [
+        [
+          {
+            "node": "③ Armar la entrada del manual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "③ Armar la entrada del manual": {
+      "main": [
+        [
+          {
+            "node": "③ ¿Se pudo armar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "③ ¿Se pudo armar?": {
+      "main": [
+        [
+          {
+            "node": "④ Llamar al flujo del manual",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "⑤ Releer el pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "④ Llamar al flujo del manual": {
+      "main": [
+        [
+          {
+            "node": "⑤ Releer el pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⑤ Releer el pedido": {
+      "main": [
+        [
+          {
+            "node": "⑤ Cierre · armar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⑤ Cierre · armar": {
+      "main": [
+        [
+          {
+            "node": "⑤ Cerrar el pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "ujka3yHnKbjzXJJS",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-11-02T10:39:55.045Z",
+      "updatedAt": "2026-11-02T10:39:55.045Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "5aca586c-df58-466f-bedc-f396990b11da",
+    "workflowId": "ujka3yHnKbjzXJJS",
+    "nodes": [
+      {
+        "id": "mc-1",
+        "name": "Webhook · manual-cambios",
+        "webhookId": "a3d2c8e0-7b1f-4c54-9d3a-5e6f7a8b9c01",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "zero-risk/manual-cambios",
+          "responseMode": "onReceived"
+        }
+      },
+      {
+        "id": "mc-2",
+        "name": "⓪ Llave · Webhook · manual-cambios",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          240,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ⓪ LA LLAVE · CC#2 · 02-nov · «pedir cambios al manual» · mismo patrón que `zero-risk/planeacion` (lección E67).\n// Este flujo GASTA (3 lentes + juez de fidelidad + corrección). Exige la llave de despacho del motor en `x-sala-dispatch-key` y valida el sobre ANTES de tocar nada.\nconst w = $input.first().json || {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) throw new Error('FLUJO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) en su entorno · este flujo gasta y queda cerrado hasta que exista · E67.')\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) throw new Error('FLUJO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · este flujo gasta y solo lo despierta la sala · E67.')\nconst b = w.body && typeof w.body === 'object' && !Array.isArray(w.body) ? w.body : {}\nconst UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i\nconst falla = (c, m) => { throw new Error('MANUAL_CAMBIOS_' + c + ' · ' + m + ' · se DETIENE antes de gastar') }\nfor (const k of ['client_id', 'manual_base_id', 'manual_cambio_id']) if (typeof b[k] !== 'string' || !UUID.test(b[k])) falla('SOBRE_INVALIDO', k + ' debe ser un uuid')\nconst texto = typeof b.cambios_del_dueno === 'string' ? b.cambios_del_dueno.replace(/\\s+/g, ' ').trim() : ''\nif (texto.length < 5 || texto.length > 2000) falla('SOBRE_INVALIDO', 'cambios_del_dueno debe tener de 5 a 2.000 caracteres')\nconst lista = (x, k) => {\n  if (x === undefined || x === null) return []\n  if (!Array.isArray(x) || x.some((y) => typeof y !== 'string' || !y.trim() || y.length > 80) || x.length > 60) falla('SOBRE_INVALIDO', k + ' debe ser una lista de textos cortos')\n  return x.map((y) => y.trim())\n}\nconst seccion = b.seccion === undefined || b.seccion === null || b.seccion === '' ? null : (typeof b.seccion === 'string' && b.seccion.length <= 80 ? b.seccion.trim() : falla('SOBRE_INVALIDO', 'seccion debe ser un texto de hasta 80 caracteres'))\nconst tr = b.tope_reescritura_usd\nif (tr !== undefined && tr !== null && (typeof tr !== 'number' || !isFinite(tr) || tr <= 0 || tr > 20)) falla('TOPE_INVALIDO', 'tope_reescritura_usd debe ser un número mayor que 0 y hasta 20')\nreturn [{ json: { sobre: {\n  client_id: b.client_id, manual_base_id: b.manual_base_id, manual_cambio_id: b.manual_cambio_id,\n  cambios_del_dueno: texto, seccion, campos_validados: lista(b.campos_validados, 'campos_validados'), campos_liberados: lista(b.campos_liberados, 'campos_liberados'),\n  tope_reescritura_usd: (tr === undefined || tr === null) ? 5 : tr, force_restart: b.force_restart === true, pedido_por: typeof b.pedido_por === 'string' ? b.pedido_por.slice(0, 60) : null,\n} } }]"
+        }
+      },
+      {
+        "id": "mc-3",
+        "name": "① Leer el pedido",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          480,
+          0
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_cambios?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.manual_cambio_id }}&select=id,client_id,documento,estado,manual_nuevo_id,creado_en",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "mc-4",
+        "name": "① Guardia del pedido",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          720,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ① GUARDIA DEL PEDIDO · el pedido debe existir, ser de este cliente y de un MANUAL; uno que ya tiene versión nueva (o ya terminó) NO se repite (clave única `manual_cambio_id`, sin gastar).\nconst sobre = $('⓪ Llave · Webhook · manual-cambios').first().json.sobre\nconst r = $input.first().json\nif (r.statusCode !== 200) throw new Error('MANUAL_CAMBIOS_PEDIDO_NO_LEIDO · plan_cambios respondió ' + r.statusCode + ' · se DETIENE antes de gastar')\nconst f = Array.isArray(r.body) ? r.body[0] : null\nif (!f) throw new Error('MANUAL_CAMBIOS_PEDIDO_INEXISTENTE · no hay un pedido con ese manual_cambio_id · se DETIENE antes de gastar')\nif (f.documento !== 'manual' || f.client_id !== sobre.client_id) throw new Error('MANUAL_CAMBIOS_PEDIDO_AJENO · el pedido no es un cambio del manual de este cliente · se DETIENE antes de gastar')\nif (f.manual_nuevo_id) return []        // ya tiene versión nueva: nada que repetir ni cobrar\nif (f.estado === 'aplicado' || f.estado === 'cancelado') return []   // ya resuelto\nif (f.estado === 'en_reescritura' && !sobre.force_restart) return []   // ya hay una corrida viva de este pedido\nreturn [{ json: { sobre, pedido: f } }]"
+        }
+      },
+      {
+        "id": "mc-5",
+        "name": "① Marcar en reescritura",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          960,
+          0
+        ],
+        "parameters": {
+          "method": "PATCH",
+          "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_cambios?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.manual_cambio_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ estado: 'en_reescritura', workflow_execution_id: String($execution.id), workflow_id: String($workflow.id), actualizado_en: new Date().toISOString() }) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "mc-6",
+        "name": "② Leer el manual vigente",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1200,
+          0
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/client_brand_books?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.manual_base_id }}&select=id,client_id,version,content_text",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "mc-7",
+        "name": "② Leer la ficha del cliente",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1440,
+          0
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/clients?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.client_id }}&select=id,name,industry,website_url,domain",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "mc-8",
+        "name": "③ Armar la entrada del manual",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1680,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ③ ARMAR LA ENTRADA DEL MANUAL EN MODO REESCRITURA · sin repetir el descubrimiento: el manual vigente + la ficha + lo que el cerebro entrega por lectura (el flujo lo lee solo). Nada del cerebro se toca.\nconst sobre = $('⓪ Llave · Webhook · manual-cambios').first().json.sobre\nconst mal = (m) => [{ json: { fallo: m } }]   // no lanza: el cierre lee el motivo y marca el pedido fallido (nunca queda en_reescritura)\nconst lib = $('② Leer el manual vigente').first().json\nconst ficha = $('② Leer la ficha del cliente').first().json\nconst fb = Array.isArray(lib.body) ? lib.body[0] : null\nconst fc = Array.isArray(ficha.body) ? ficha.body[0] : null\nif (lib.statusCode !== 200 || !fb) return mal('MANUAL_CAMBIOS_SIN_MANUAL_BASE · no se pudo leer el manual vigente (manual_base_id)')\nif (fb.client_id !== sobre.client_id) return mal('MANUAL_CAMBIOS_MANUAL_AJENO · el manual base no es de este cliente')\nif (ficha.statusCode !== 200 || !fc) return mal('MANUAL_CAMBIOS_SIN_FICHA · no se pudo leer la ficha del cliente')\nlet draft = fb.content_text\nif (typeof draft === 'string') { try { draft = JSON.parse(draft) } catch (e) { draft = null } }\nconst vigente = draft && typeof draft === 'object' ? (draft.brand_book_draft && typeof draft.brand_book_draft === 'object' ? draft.brand_book_draft : draft) : null\nif (!vigente || !Object.keys(vigente).length) return mal('MANUAL_CAMBIOS_MANUAL_VACIO · el manual base no trae contenido legible')\nreturn [{ json: {\n  client_id: sobre.client_id, client_name: fc.name, industry: fc.industry || 'unknown', website: fc.website_url || fc.domain || null,\n  discovery_package: { discovery_summary: 'Reescritura sobre el manual vigente (versión ' + (fb.version == null ? '?' : fb.version) + '): no se repitió el descubrimiento; el equipo parte del manual vigente, la ficha y el cerebro.', reescritura: true },\n  dry_run: false,\n  reescritura: {\n    manual_base_id: sobre.manual_base_id, manual_cambio_id: sobre.manual_cambio_id, cambios_del_dueno: sobre.cambios_del_dueno, seccion: sobre.seccion,\n    campos_validados: sobre.campos_validados, campos_liberados: sobre.campos_liberados, tope_reescritura_usd: sobre.tope_reescritura_usd, manual_vigente: vigente,\n  },\n} }]"
+        }
+      },
+      {
+        "id": "mc-9",
+        "name": "③ ¿Se pudo armar?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1800,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ !$json.fallo }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "mc-10",
+        "name": "④ Llamar al flujo del manual",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          1920,
+          0
+        ],
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "ssLtwYPt7zxuvnM2",
+            "mode": "id"
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "mc-11",
+        "name": "⑤ Releer el pedido",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2160,
+          0
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_cambios?id=eq.{{ $('⓪ Llave · Webhook · manual-cambios').first().json.sobre.manual_cambio_id }}&select=id,estado,manual_nuevo_id",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "mc-12",
+        "name": "⑤ Cierre · armar",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2400,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ⑤ CIERRE · lee el pedido otra vez: si el guardado ligó una versión nueva → aplicado; si no → fallido con el motivo (también cuando el flujo del manual falló). Nunca queda en_reescritura para siempre.\nconst sobre = $('⓪ Llave · Webhook · manual-cambios').first().json.sobre\nconst r = $input.first().json\nconst f = r.statusCode === 200 && Array.isArray(r.body) ? r.body[0] : null\nlet motivo = null\nlet armado = null\ntry { armado = $('③ Armar la entrada del manual').first().json.fallo || null } catch (x) { armado = null }\nif (armado) motivo = armado\nelse if (!f) motivo = 'no se pudo releer el pedido al cerrar'\nelse if (!f.manual_nuevo_id) {\n  let detalle = '', recibo = null\n  try { const e = $('④ Llamar al flujo del manual').first().json; recibo = e && e.promote_recibo ? e.promote_recibo : null; detalle = e && e.error ? ' · ' + String(e.error.message || e.error).slice(0, 200) : '' } catch (x) { detalle = '' }\n  // el recibo del guardado (lo devuelve el flujo del manual en modo reescritura) dice POR QUÉ no hubo versión nueva\n  if (recibo && recibo.sin_cambios_reales === true) motivo = 'sin cambios reales: el equipo no cambió ningún campo del manual con este pedido; no se guardó una versión nueva'\n  else if (recibo && recibo.error) motivo = 'el guardado del manual respondió con error: ' + recibo.error + (recibo.detalle ? ' · ' + recibo.detalle : '')\n  else motivo = 'el flujo terminó sin dejar una versión nueva del manual' + detalle\n}\nconst aplicado = !motivo\nreturn [{ json: {\n  manual_cambio_id: sobre.manual_cambio_id, aplicado, manual_nuevo_id: f ? f.manual_nuevo_id || null : null,\n  parche: aplicado ? { estado: 'aplicado', actualizado_en: new Date().toISOString() } : { estado: 'fallido', despertar_detalle: String(motivo).slice(0, 400), actualizado_en: new Date().toISOString() },\n} }]"
+        }
+      },
+      {
+        "id": "mc-13",
+        "name": "⑤ Cerrar el pedido",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2640,
+          0
+        ],
+        "parameters": {
+          "method": "PATCH",
+          "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/plan_cambios?id=eq.{{ $json.manual_cambio_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.parche) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Webhook · manual-cambios": {
+        "main": [
+          [
+            {
+              "node": "⓪ Llave · Webhook · manual-cambios",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⓪ Llave · Webhook · manual-cambios": {
+        "main": [
+          [
+            {
+              "node": "① Leer el pedido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "① Leer el pedido": {
+        "main": [
+          [
+            {
+              "node": "① Guardia del pedido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "① Guardia del pedido": {
+        "main": [
+          [
+            {
+              "node": "① Marcar en reescritura",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "① Marcar en reescritura": {
+        "main": [
+          [
+            {
+              "node": "② Leer el manual vigente",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Leer el manual vigente": {
+        "main": [
+          [
+            {
+              "node": "② Leer la ficha del cliente",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Leer la ficha del cliente": {
+        "main": [
+          [
+            {
+              "node": "③ Armar la entrada del manual",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "③ Armar la entrada del manual": {
+        "main": [
+          [
+            {
+              "node": "③ ¿Se pudo armar?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "③ ¿Se pudo armar?": {
+        "main": [
+          [
+            {
+              "node": "④ Llamar al flujo del manual",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "⑤ Releer el pedido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "④ Llamar al flujo del manual": {
+        "main": [
+          [
+            {
+              "node": "⑤ Releer el pedido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⑤ Releer el pedido": {
+        "main": [
+          [
+            {
+              "node": "⑤ Cierre · armar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⑤ Cierre · armar": {
+        "main": [
+          [
+            {
+              "node": "⑤ Cerrar el pedido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-11-02T21:25:31.252Z",
+    "updatedAt": "2026-11-02T21:25:31.252Z",
+    "workflowPublishHistory": [
+      {
+        "id": 3539,
+        "workflowId": "ujka3yHnKbjzXJJS",
+        "versionId": "5aca586c-df58-466f-bedc-f396990b11da",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-02T21:25:31.338Z"
+      },
+      {
+        "id": 3540,
+        "workflowId": "ujka3yHnKbjzXJJS",
+        "versionId": "5aca586c-df58-466f-bedc-f396990b11da",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-02T21:25:31.462Z"
+      },
+      {
+        "id": 3541,
+        "workflowId": "ujka3yHnKbjzXJJS",
+        "versionId": "5aca586c-df58-466f-bedc-f396990b11da",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-02T21:25:31.654Z"
+      }
+    ]
+  },
+  "parentFolder": null
+}

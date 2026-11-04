@@ -24,6 +24,7 @@ import { construirPisoVisualConEquipo } from './piso-visual-equipo-manual.mjs'
 import { construirSeccionesNuevasYMesa } from './secciones-nuevas-y-mesa-manual.mjs'
 import { construirTextoLimpio, construirPropuestaAparte } from './texto-limpio-manual.mjs'
 import { construirLimitesYReintentos } from './limites-y-reintentos-manual.mjs'
+import { construirManualCompleto } from './manual-llega-completo.mjs'
 
 const f = leerVivo('ssLtwYPt7zxuvnM2')
 construirPalabrasConIntencion(f)
@@ -37,4 +38,5 @@ construirSeccionesNuevasYMesa(f) // 02-nov · ADENDA 1: secciones nuevas + mesa 
 construirTextoLimpio(f)
 construirPropuestaAparte(f) // 03-nov · punto B: el texto del manual lleva solo lo presentable al cliente (razón y fuente van aparte)
 construirLimitesYReintentos(f) // 02-nov · ADENDA límites al máximo: espera 800 s y un reintento si la conexión se pierde (US$ 0 de más: el punto de control devuelve lo ya escrito)
+construirManualCompleto(f) // 04-nov · el manual llega a los agentes solo con sus campos y sin cortes de 14.000/2.000/3.000/15.900 (ver el módulo)
 console.log(escribirNuevo(f))
