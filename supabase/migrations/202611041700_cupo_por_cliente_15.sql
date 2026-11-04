@@ -1,6 +1,10 @@
 -- 04-nov · CUPO POR CLIENTE A US$ 15 AL DÍA («dale» de Emilio 16:47Z) · CC1
 -- El freno real es la variable `RUN_SPEND_CAP_USD` (se pone en 15, sin cambiar código); esta fila no la lee ningún freno hoy: se sube para que el catálogo no la contradiga. Versión nueva, la anterior queda como historia.
 -- REVERSA: `supabase/reversas/202611041700_cupo_por_cliente_15_REVERSA.sql`.
+-- la tabla no admitía topes de más de US$ 10
+alter table public.plan_catalogo_topes drop constraint if exists plan_catalogo_topes_usd_check;
+alter table public.plan_catalogo_topes add constraint plan_catalogo_topes_usd_check check (usd >= 0 and usd <= 15);
+
 do $$
 declare siguiente integer;
 begin

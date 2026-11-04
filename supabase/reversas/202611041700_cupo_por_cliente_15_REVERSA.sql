@@ -9,3 +9,5 @@ begin
     delete from public.plan_catalogo_topes where tope_id = 'tope_cupo_ficha' and version = ultima;
   end if;
 end $$;
+alter table public.plan_catalogo_topes drop constraint if exists plan_catalogo_topes_usd_check;
+alter table public.plan_catalogo_topes add constraint plan_catalogo_topes_usd_check check (usd >= 0 and usd <= 10);
