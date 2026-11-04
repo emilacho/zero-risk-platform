@@ -10,8 +10,8 @@ vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => mocks.db }))
 
 const CL = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 // los estados reales de la tabla de pedidos de Náufrago, medidos el 4-nov
-const pedido = (status: string, es_prueba: boolean, total_usd = 10, created_at = '2026-11-02T10:00:00Z', payment_status: string | null = null) => ({ status, es_prueba, total_usd, created_at, payment_status })
-const conPago = (status: string, payment_status: string) => pedido(status, false, 19.22, '2026-11-02T10:00:00Z', payment_status)
+const pedido = (status: string, es_prueba: boolean, total_usd = 10, created_at = '2026-11-02T10:00:00Z', payment_status = 'CAPTURED', payment_method = 'PAYPHONE') => ({ status, es_prueba, total_usd, created_at, payment_status, payment_method })
+const conPago = (status: string, payment_status: string, metodo = 'PAYPHONE') => pedido(status, false, 19.22, '2026-11-02T10:00:00Z', payment_status, metodo)
 
 /** una base falsa con lo justo: tablas públicas y el área del sitio */
 function base(o: { areas?: Record<string, unknown[]>; errorDeArea?: { code: string; message?: string }; slug?: unknown; sedes?: unknown[]; datos?: unknown[]; config?: unknown; explotar?: boolean } = {}) {
@@ -43,37 +43,44 @@ describe('qué cuenta como venta', () => {
     const r = resumirPedidos([pedido('DELIVERED', true), pedido('ACCEPTED', true), pedido('READY', true)])
     expect(r).toMatchObject({ pedidos_reales: 0, ingreso_usd: 0, pruebas_excluidas: 3, primera_venta: null })
   })
-  it.each(['PENDING_PAYMENT', 'PENDING_LOCATION', 'PENDING_OPERATOR', 'PENDING_LOCATION_DETAIL', 'CANCELLED', 'pending_payment', 'FAILED', 'REJECTED', 'EXPIRED', 'REFUNDED', 'ABANDONED', '', '  '])('🔴 «%s» sin marca no es venta', (s) => {
+  it.each(['CANCELLED', 'cancelled', 'FAILED', 'REJECTED', 'EXPIRED', 'REFUNDED', 'ABANDONED', '', '  '])('🔴 «%s» sin marca no es venta, aunque esté cobrado', (s) => {
     expect(resumirPedidos([pedido(s, false)])).toMatchObject({ pedidos_reales: 0, no_concretados: 1, ingreso_usd: 0 })
+  })
+  it.each(['PENDING_PAYMENT', 'PENDING_LOCATION', 'PENDING_OPERATOR', 'PENDING_LOCATION_DETAIL', 'CONFIRMED', 'pending_payment'])('🔴 %s sin cobrar no es venta', (s) => {
+    expect(resumirPedidos([conPago(s, 'PENDING')])).toMatchObject({ pedidos_reales: 0, no_concretados: 1, ingreso_usd: 0 })
   })
   it.each(['ACCEPTED', 'READY', 'DELIVERED', 'NEEDS_ATTENTION', 'PENDING'])('🔴 %s sin marca sí es venta', (s) => {
     expect(resumirPedidos([pedido(s, false, 19.22)])).toMatchObject({ pedidos_reales: 1, ingreso_usd: 19.22 })
   })
-  // las combinaciones de estado y pago de la tabla real, medidas el 4-nov, más la que señaló el certificador
+  // regla de CC4: las combinaciones de la tabla real, medidas el 4-nov, más la que señaló el certificador
   it.each([
-    ['PENDING', 'CAPTURED'], // cobrado y despachado: el sitio lo deja así hasta que la cocina lo mueve
-    ['PENDING', 'PENDING'], // efectivo recién colocado
-    ['DELIVERED', 'PENDING'], // efectivo entregado: el pago nunca pasa a cobrado
-    ['ACCEPTED', 'CAPTURED'],
-    ['READY', 'CAPTURED'],
-    ['DELIVERED', 'CAPTURED'],
-    ['DELIVERED', 'PARTIAL_REFUND'],
-    ['PENDING_LOCATION', 'CAPTURED'], // ya se cobró: falta la ubicación
-    ['PENDING_PAYMENT', 'PARTIAL_REFUND'],
-  ])('🔴 %s con pago %s es venta', (estado, pago) => {
-    expect(resumirPedidos([conPago(estado, pago)])).toMatchObject({ pedidos_reales: 1, no_concretados: 0, ingreso_usd: 19.22 })
+    ['PENDING', 'CAPTURED', 'PAYPHONE'], // cobrado y despachado: el sitio lo deja así hasta que la cocina lo mueve
+    ['ACCEPTED', 'CAPTURED', 'CARD_DEBIT'],
+    ['READY', 'CAPTURED', 'PAYPHONE'],
+    ['DELIVERED', 'CAPTURED', 'PAYPHONE'],
+    ['NEEDS_ATTENTION', 'CAPTURED', 'PAYPHONE'], // cobrado sin motorizado
+    ['PENDING_LOCATION', 'CAPTURED', 'PAYPHONE'], // ya se cobró: falta la ubicación
+    ['DELIVERED', 'PARTIAL_REFUND', 'PAYPHONE'],
+    ['DELIVERED', 'PENDING', 'CASH_ON_DELIVERY'], // el efectivo nunca pasa a cobrado
+  ])('🔴 %s con pago %s por %s es venta', (estado, pago, metodo) => {
+    expect(resumirPedidos([conPago(estado, pago, metodo)])).toMatchObject({ pedidos_reales: 1, no_concretados: 0, ingreso_usd: 19.22 })
   })
   it.each([
-    ['CANCELLED', 'CAPTURED'], // cobrado y cancelado: no quedó en venta
-    ['PENDING_PAYMENT', 'PENDING'],
-    ['PENDING_PAYMENT', 'AUTHORIZED'], // retenido, todavía sin cobrar
-    ['PENDING_LOCATION', 'PENDING'], // efectivo sin ubicación: nadie va a entregarlo todavía
-    ['DELIVERED', 'FAILED'],
-    ['DELIVERED', 'REFUNDED'],
-    ['PENDING', 'REFUNDED'],
-    ['PENDING', 'FAILED'],
-  ])('🔴 %s con pago %s no es venta', (estado, pago) => {
-    expect(resumirPedidos([conPago(estado, pago)])).toMatchObject({ pedidos_reales: 0, no_concretados: 1, ingreso_usd: 0 })
+    ['CANCELLED', 'CAPTURED', 'PAYPHONE'], // cobrado y cancelado: ese dinero se devuelve
+    ['CANCELLED', 'PENDING', 'CASH_ON_DELIVERY'],
+    ['PENDING_PAYMENT', 'PENDING', 'PAYPHONE'],
+    ['PENDING_PAYMENT', 'AUTHORIZED', 'PAYPHONE'], // retenido, todavía sin cobrar
+    ['PENDING_LOCATION', 'PENDING', 'CASH_ON_DELIVERY'],
+    ['PENDING', 'PENDING', 'CASH_ON_DELIVERY'], // efectivo sin entregar: puede no concretarse
+    ['ACCEPTED', 'PENDING', 'CASH_ON_DELIVERY'],
+    ['READY', 'PENDING', 'CASH_ON_DELIVERY'],
+    ['DELIVERED', 'PENDING', 'PAYPHONE'], // entregado, pero no es efectivo y no se cobró
+    ['DELIVERED', 'FAILED', 'PAYPHONE'],
+    ['DELIVERED', 'REFUNDED', 'PAYPHONE'],
+    ['DELIVERED', 'REFUNDED', 'CASH_ON_DELIVERY'], // efectivo devuelto
+    ['PENDING', 'FAILED', 'PAYPHONE'],
+  ])('🔴 %s con pago %s por %s no es venta', (estado, pago, metodo) => {
+    expect(resumirPedidos([conPago(estado, pago, metodo)])).toMatchObject({ pedidos_reales: 0, no_concretados: 1, ingreso_usd: 0 })
   })
   it('🔴 la venta pagada del certificador ya no dice «sin ventas»', () => {
     expect(resumirPedidos([conPago('PENDING', 'CAPTURED')]).texto).toContain('1 pedido real por el sitio, US$ 19.22')
@@ -105,7 +112,7 @@ describe('leer de la base', () => {
   const porAbrir = [{ sede_id: 's1', campo: 'estado_de_la_sede', valor_texto: 'por abrir', observado_en: '2026-10-15T22:13:16Z' }]
 
   it('🔴 lee el área del cliente y la sede sale de la base', async () => {
-    const r = await leerVentasDelSitio(base({ areas: { naufrago: [pedido('DELIVERED', true), pedido('PENDING_PAYMENT', false)] }, sedes, datos: porAbrir }).db, CL)
+    const r = await leerVentasDelSitio(base({ areas: { naufrago: [pedido('DELIVERED', true), conPago('PENDING_PAYMENT', 'PENDING')] }, sedes, datos: porAbrir }).db, CL)
     expect(r).toMatchObject({ estado: 'medido', pedidos_reales: 0, pruebas_excluidas: 1, no_concretados: 1, sedes_por_abrir: ['Guayaquil'] })
     expect(r.texto).toBe('sin ventas reales por el sitio todavía; la sede de Guayaquil aún no abre')
   })
@@ -143,10 +150,11 @@ describe('leer de la base', () => {
     const r = await leerVentasDelSitio(base({ explotar: true }).db, null)
     expect(r).toMatchObject({ estado: 'sin_fuente', texto: 'no se indicó el cliente: no se sabe cuánto vende por el sitio' })
   })
-  it('🔴 lee el pago, sin el cual no se distingue una venta cobrada', async () => {
+  it('🔴 lee el pago y el método, sin los cuales no se distingue una venta', async () => {
     const b = base({ areas: { naufrago: [conPago('PENDING', 'CAPTURED')] } })
     expect(await leerVentasDelSitio(b.db, CL)).toMatchObject({ pedidos_reales: 1 })
     expect(b.pedidas.join(',')).toContain('payment_status')
+    expect(b.pedidas.join(',')).toContain('payment_method')
   })
   it('🔴 si los pedidos no caben en el tope de páginas no dice «medido»: una suma incompleta no es una cifra', async () => {
     const pagina = Array.from({ length: 1000 }, () => pedido('DELIVERED', false, 1))

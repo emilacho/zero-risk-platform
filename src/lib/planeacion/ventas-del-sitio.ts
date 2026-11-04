@@ -1,6 +1,6 @@
 /**
  * VENTAS DEL SITIO · salen de los pedidos, no de la analítica (firma de Emilio, 4-nov). Solo lectura.
- * Cada sitio guarda sus pedidos en el área de la base que lleva el slug del cliente (`<slug>.orders`). Cuenta lo no marcado como prueba y que no se quedó sin pagar o se canceló (`noEsVenta`).
+ * Cada sitio guarda sus pedidos en el área de la base que lleva el slug del cliente (`<slug>.orders`). Cuenta lo no marcado como prueba que se cobró o, en efectivo, se entregó (`esVenta`).
  * «Sin ventas» solo se afirma si la tabla se pudo leer: un cliente sin tabla o una lectura fallida dicen que no se sabe. No se piden datos del comprador.
  */
 import { estadoDeLaSede } from '../portero-alimenta/brazos/sedes'
@@ -41,24 +41,23 @@ const SLUG_DE_AREA = /^[a-z][a-z0-9_]{0,62}$/
 /** el área o la tabla no existen: el cliente no tiene pedidos conectados, no es un fallo */
 const NO_EXISTE = new Set(['PGRST106', 'PGRST205', '42P01', '3F000'])
 const SE_CAYO = /^(CANCEL|FAIL|REJECT|EXPIR|REFUND|ABANDON)/i
-/** `PENDING_PAYMENT`, `PENDING_LOCATION`, `PENDING_OPERATOR`…: el pedido espera algo. `PENDING` a secas NO entra: ahí está el pedido ya cobrado y despachado, y el de efectivo ya colocado */
-const A_MEDIO_CAMINO = /^PENDING_/i
 const PAGO_CAIDO = /^(FAILED|REFUNDED)$/i
 const PAGO_COBRADO = /^(CAPTURED|PARTIAL_REFUND)$/i
 
 /**
- * ¿Este pedido sin marca de prueba no llegó a ser venta? Lo cancelado no es venta aunque se haya cobrado; lo que espera algo solo es venta si ya se cobró.
- * El efectivo no se cobra hasta la entrega: si está colocado (`PENDING` o más adelante) cuenta como venta, y si se cae pasa a cancelado y deja de contar.
+ * ¿Este pedido sin marca de prueba llegó a ser venta? (regla de CC4, dueño del sitio, 4-nov)
+ * Lo que se cobró cuenta en cualquier estado: `PENDING` a secas es también un pedido cobrado y despachado. Lo cancelado no cuenta aunque se haya cobrado: ese dinero se devuelve.
+ * El efectivo nunca pasa a cobrado, así que cuenta al entregarse; antes puede no concretarse. Una devolución parcial sigue siendo venta: decir «sin ventas» sería falso.
  */
-const noEsVenta = (f: Fila): boolean => {
+const esVenta = (f: Fila): boolean => {
   const estado = String(f.status ?? '').trim()
   const pago = String(f.payment_status ?? '').trim()
-  if (!estado || SE_CAYO.test(estado) || PAGO_CAIDO.test(pago)) return true
-  return A_MEDIO_CAMINO.test(estado) && !PAGO_COBRADO.test(pago)
+  if (!estado || SE_CAYO.test(estado) || PAGO_CAIDO.test(pago)) return false
+  return PAGO_COBRADO.test(pago) || (/^CASH_ON_DELIVERY$/i.test(String(f.payment_method ?? '').trim()) && /^DELIVERED$/i.test(estado))
 }
 
 export const SIN_VENTAS_DEL_SITIO = 'sin ventas reales por el sitio todavía'
-export const INGRESO_ES = 'lo que pagó el comprador en total, con el envío si el sitio lo cobra: no es lo que le queda al local'
+export const INGRESO_ES = 'lo que pagó el comprador en total, con el envío si el sitio lo cobra y sin restar devoluciones parciales: no es lo que le queda al local'
 export const NOTA_DE_LA_ANALITICA = 'Esta lectura es solo conducta de visitas: no cuenta ventas ni sirve para calcular una tasa de cierre. Las ventas del sitio están en `ventas_del_sitio`, con toda su historia y no con los días de esta lectura: no se dividen entre sí.'
 
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -82,7 +81,7 @@ export function resumirPedidos(filas: readonly Fila[], sedes_por_abrir: readonly
   let primera_venta: string | null = null, ultima_venta: string | null = null
   for (const f of filas) {
     if (f.es_prueba === true) { pruebas_excluidas++; continue }
-    if (noEsVenta(f)) { no_concretados++; continue }
+    if (!esVenta(f)) { no_concretados++; continue }
     pedidos_reales++
     const total = Number(f.total_usd)
     if (Number.isFinite(total)) ingreso += total
@@ -127,7 +126,7 @@ export async function leerVentasDelSitio(db: DbDeVentas, client_id: string | nul
     if (!SLUG_DE_AREA.test(slug)) return sinTabla()
     const filas: Fila[] = []
     for (let i = 0; i < MAX_PAGINAS; i++) {
-      const r = await (db.schema(slug).from('orders') as Consulta).select('status,payment_status,es_prueba,total_usd,created_at').order('created_at').range(i * POR_PAGINA, (i + 1) * POR_PAGINA - 1)
+      const r = await (db.schema(slug).from('orders') as Consulta).select('status,payment_status,payment_method,es_prueba,total_usd,created_at').order('created_at').range(i * POR_PAGINA, (i + 1) * POR_PAGINA - 1)
       if (r.error) return NO_EXISTE.has(String(r.error.code)) ? sinTabla() : noSePudo(por_abrir)
       const p = lista(r.data)
       filas.push(...p)
