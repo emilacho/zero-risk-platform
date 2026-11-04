@@ -217,6 +217,27 @@ describe('buzonAbiertos · el almacén real (base falsa con eq/gte/in)', () => {
     expect(await almacenDeConversa(base({ ...t, finanzas_artefactos: [art('a', 1)] }, 'finanzas_artefactos')).buzonAbiertos!(AHORA, 72)).toBeNull()
     expect(await almacenDeConversa(base({ finanzas_artefactos: [art('a', 1)], finanzas_encargos: [enc('a')] }, 'finanzas_encargos')).buzonAbiertos!(AHORA, 72)).toBeNull()
   })
+  describe('el vigía sigue viendo la espera soltada cuyo plan no arrancó (05-nov)', () => {
+    const suelta = (id: string, o: Record<string, unknown> = {}) => ({ clave: `finanzas:${id}`, tipo: 'finanzas', estado: 'soltada', despertado: true, client_id: 'c', sobre: { corrida: id }, ...o })
+    const cor = (corrida: string, o: Record<string, unknown> = {}) => ({ client_id: 'c', corrida, estado: 'en_pausa', dry_run: false, ...o })
+    const con = (t: Record<string, any[]>, falla?: string) => almacenDeConversa(base({ finanzas_artefactos: [], finanzas_encargos: [], ...t }, falla)).buzonAbiertos!(AHORA, 72)
+    it('🔴 recibió el pedido y su corrida sigue en pausa: entra', async () => {
+      expect(await con({ esperas_del_dueno: [suelta('quieta')], plan_corridas: [cor('quieta')] })).toEqual(['quieta'])
+    })
+    it('🔴 recibió el pedido y su corrida ya corre: no entra', async () => {
+      expect(await con({ esperas_del_dueno: [suelta('anda')], plan_corridas: [cor('anda', { estado: 'corriendo' })] })).toEqual([])
+    })
+    it('🔴 la corrida en pausa de otro cliente o de un ensayo no cuenta', async () => {
+      expect(await con({ esperas_del_dueno: [suelta('x')], plan_corridas: [cor('x', { client_id: 'otro' })] })).toEqual([])
+      expect(await con({ esperas_del_dueno: [suelta('x')], plan_corridas: [cor('x', { dry_run: true })] })).toEqual([])
+    })
+    it('🔴 la que no pudo despertar sigue entrando', async () => {
+      expect(await con({ esperas_del_dueno: [suelta('sin', { despertado: false })], plan_corridas: [] })).toEqual(['sin'])
+    })
+    it('🔴 si no se pueden leer las corridas no devuelve una lista a medias', async () => {
+      expect(await con({ esperas_del_dueno: [suelta('x')] }, 'plan_corridas')).toBeNull()
+    })
+  })
   it('🔴 un error de lectura NUNCA se devuelve como lista vacía: null en cualquiera de las dos lecturas y también si la base lanza', async () => {
     const t = { finanzas_artefactos: [art('a', 1)], finanzas_encargos: [enc('a')] }
     expect(await almacenDeConversa(base(t, 'finanzas_artefactos')).buzonAbiertos!(AHORA, 72)).toBeNull()

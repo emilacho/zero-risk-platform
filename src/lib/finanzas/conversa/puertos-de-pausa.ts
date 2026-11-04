@@ -22,6 +22,6 @@ export function puertosDePausa(env: Record<string, string | undefined>, db: Db, 
     nombreDelCliente: nombreDelClienteDe(db),
     avisar: avisarAAlertas({ token: env.SLACK_BOT_TOKEN ?? '', canal: env.FINANZAS_CANAL_ALERTAS }),
     esperas: esperasDeFinanzas(db),
-    despertar: despertarPorElFlujo({ base: env.N8N_BASE_URL, llave: env.INTERNAL_API_KEY }),
+    despertar: despertarPorElFlujo({ base: env.N8N_BASE_URL, llave: env.SALA_DISPATCH_KEY }),
   }
 }

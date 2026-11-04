@@ -91,7 +91,7 @@ export async function POST(request: Request) {
         // una pregunta que no pudo salir avisa a #alertas (antes se callaba)
         avisar: avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '', canal: process.env.FINANZAS_CANAL_ALERTAS }),
         esperas: esperasDeFinanzas(db),
-        despertar: despertarPorElFlujo({ base: process.env.N8N_BASE_URL, llave: process.env.INTERNAL_API_KEY }),
+        despertar: despertarPorElFlujo({ base: process.env.N8N_BASE_URL, llave: process.env.SALA_DISPATCH_KEY }),
       }
       r = c.accion === 'buzon_abiertos' ? await listarAbiertos(B) : c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id as string) : await atenderPausa(B, c.encargo_id as string)
     }
