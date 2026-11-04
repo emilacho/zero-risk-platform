@@ -86,7 +86,7 @@ export function leerDatosDePrueba(entrada: unknown): DatosDePrueba | null {
 }
 
 // lo que hace un comprador, no un visitante. Agnóstico: los nombres de evento de los sitios que construimos y los habituales
-// 04-nov · el corte NO va como condición dentro de la consulta: en producción contestó 504 con `match` y con `like` (la misma consulta sin él tarda ~18 s; la causa exacta en la analítica no se conoce). Se pregunta aparte y se funde en el código
+// 04-nov · el corte NO va como condición dentro de la consulta: en producción contestó 504 con `match` y con `like` (la misma consulta sin él sí responde; la causa exacta en la analítica no se conoce). Se pregunta aparte y se funde en el código
 const ES_EVENTO_DE_VENTA = /^(cart|checkout|order|payment|purchase|pedido|pago|compra)/
 // para cualquier cliente: todo pedido cuenta salvo el que apenas se abre, se mira o se cae
 const ES_VENTA_CERRADA = /^(order_(?!viewed|created|started|opened|abandoned|failed|cancel)|payment_(succeeded|completed|confirmed)|checkout_completed|purchase|pedido(?!_(iniciado|abierto|visto|cancelado|fallido))|pago(?!_(iniciado|fallido|rechazado))|compra(?!_(iniciada|cancelada|fallida)))/i
