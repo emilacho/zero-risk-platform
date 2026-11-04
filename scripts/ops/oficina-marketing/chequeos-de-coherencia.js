@@ -1,8 +1,8 @@
 // 04-nov · QUE LA JEFATURA VEA DOS INCOHERENCIAS DEL PLAN (GO de Emilio 17:02Z, puntos 9 y 11). JS plano: se pega tal cual en los 3 nodos de los chequeos. Agnóstico: nada aquí sabe de un cliente, un lugar ni un rubro.
 // Marcan, nunca bloquean: la marca le llega al jefe que revisa, que la comprueba y le pone su ficha. Si no encuentran con qué comparar, callan.
 var _DIAS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-function _sinTildes(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() }
-function _dia(s) { return _DIAS.indexOf(_sinTildes(s).replace(/(sabado|domingo)s$/, '$1')) }
+function _cohSinTildes(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() }
+function _dia(s) { return _DIAS.indexOf(_cohSinTildes(s).replace(/(sabado|domingo)s$/, '$1')) }
 var _NOMBRE_DE_DIA = 'lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bados?|domingos?'
 
 /** los umbrales de la regla de pauta tienen que hablar de lo mismo que el costo estimado: misma unidad, mismo orden de magnitud */
