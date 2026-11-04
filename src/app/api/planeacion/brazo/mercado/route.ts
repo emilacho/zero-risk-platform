@@ -15,6 +15,7 @@
  * El idioma del informe es el del manual del cliente (`params.idioma` si el flujo lo trae; si no,
  * el del país de la ficha); ninguna indicación de esta puerta fija un idioma ni un trato.
  */
+import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { baseDeRunSdk, modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
@@ -109,7 +110,7 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
     if (!ficha.ficha.rubro) return pedidoInvalido('mercado', FUENTE, p, 'falta industry en la ficha')
 
     const tope = topeDe(p)
-    const modelo = modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch: globalThis.fetch, workflow_id: firma.workflow_id })
+    const modelo = modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch: globalThis.fetch, workflow_id: firma.workflow_id, trabajo: trabajoDeLaLlamada(p).columnas })
     const tarea = tareaDeMercado({ ficha: ficha.ficha, idioma: texto(p.params?.idioma), metodo: await metodoDelAnalista(), ...(p.proposito ? { proposito: p.proposito } : {}) })
     const fuente = `${FUENTE} · rubro «${ficha.ficha.rubro}» · plaza «${ficha.ficha.plaza ?? ficha.ficha.pais ?? 'sin dato'}» · tope US$ ${tope.toFixed(2)}`
 

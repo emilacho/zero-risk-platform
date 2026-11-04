@@ -18,6 +18,7 @@
  *   · idioma y trato del manual del cliente (`params.idioma` · `params.trato` si el flujo los trae); nada de aquí los fija.
  * Del cerebro solo se LEE por sus funciones públicas (CC-CEREBRO); se ESCRIBE únicamente por su puerta HTTP, como cualquier oficina.
  */
+import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { baseDeRunSdk, modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
@@ -164,7 +165,7 @@ async function atender(p: PedidoPuerta, tope: number): Promise<RespuestaBrazo> {
       analista, ficha: ficha.ficha, material, idioma: texto(p.params?.idioma), trato: texto(p.params?.trato), metodo: await metodoDe(tipo),
       ...(p.proposito ? { proposito: p.proposito } : {}),
     })
-    const modelo = modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch: globalThis.fetch, workflow_id: firma.workflow_id })
+    const modelo = modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch: globalThis.fetch, workflow_id: firma.workflow_id, trabajo: trabajoDeLaLlamada(p).columnas })
     const fuenteCompleta = `${fuente} · rubro «${ficha.ficha.rubro ?? 'sin dato'}» · plaza «${ficha.ficha.plaza ?? ficha.ficha.pais ?? 'sin dato'}» · material: ${material.fichas} ficha(s)${material.con_resumen_vivo ? ' + resumen vivo' : ''}${material.recortado ? ' (recortado)' : ''} · tope US$ ${tope.toFixed(2)}`
     const clientId = p.client_id
 

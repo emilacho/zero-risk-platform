@@ -2,6 +2,7 @@
  * F8 · el adaptador del modelo sobre `/api/agents/run-sdk` (contrato verificado: {agent, task ≤120.000, client_id, workflow_id, workflow_execution_id, dry_run, force_restart}).
  * El `fetch` es INYECTADO: ninguna prueba ni ruta de esta rama lo llama de verdad (la conversación nace apagada). Sin `fetch` ni `base` → «no configurado», sin red.
  */
+import type { ColumnasDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import type { ModeloPuerto, PedidoAlModelo, RespuestaDeModelo } from './puertos'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
@@ -19,7 +20,7 @@ export function baseDeRunSdk(env: Record<string, string | undefined>): string {
   return limpio(env.FINANZAS_RUN_SDK_BASE) || limpio(env.ZERO_RISK_API_URL) || 'https://zero-risk-platform.vercel.app'
 }
 
-export interface PedidoRunSdk {
+export interface PedidoRunSdk extends ColumnasDeLaLlamada {
   agent: string
   task: string
   client_id: string
@@ -32,8 +33,11 @@ export interface PedidoRunSdk {
 }
 
 /** arma el cuerpo; función pura (se prueba sin red). Un turno = una ejecución con id propio, así el libro (agent_invocations) correlaciona por execution id */
-export function armarPedidoRunSdk(p: PedidoAlModelo, workflow_id: string): PedidoRunSdk {
+export function armarPedidoRunSdk(p: PedidoAlModelo, workflow_id: string, trabajo?: ColumnasDeLaLlamada): PedidoRunSdk {
   return {
+    // 04-nov · de qué trabajo es la llamada, lo trae quien llama · el paso es el de este turno
+    ...(trabajo ?? {}),
+    paso: p.paso,
     agent: p.agente,
     task: p.tarea.length > MAX_TAREA_RUN_SDK ? p.tarea.slice(0, MAX_TAREA_RUN_SDK) : p.tarea,
     client_id: p.client_id,
@@ -52,6 +56,8 @@ export interface AjustesDelModelo {
   fetch: typeof fetch | undefined
   /** id real del flujo que llama; sin él NO se llama al modelo (run-sdk rechaza lo que no viene de un flujo) */
   workflow_id: string | undefined
+  /** 04-nov · de qué trabajo son las llamadas · sin él, «sin dato» */
+  trabajo?: ColumnasDeLaLlamada
 }
 
 /** extrae el texto de la respuesta de run-sdk sin asumir su forma exacta */
@@ -78,7 +84,7 @@ export function modeloRunSdk(a: AjustesDelModelo): ModeloPuerto {
         const r = await a.fetch(`${a.base.replace(/\/+$/, '')}/api/agents/run-sdk`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': a.llave },
-          body: JSON.stringify(armarPedidoRunSdk(p, a.workflow_id)),
+          body: JSON.stringify(armarPedidoRunSdk(p, a.workflow_id, a.trabajo)),
         })
         const j: unknown = await r.json().catch(() => null)
         if (!r.ok) return { ok: false, error: `run_sdk_${r.status}`, costo_usd: costoDe(j) }

@@ -7,6 +7,7 @@
  *   · `vigiar`          → un paso en «corriendo» más de 12 min no volverá: se marca muerto y se reintenta UNA vez; si vuelve a morir, `fallida` + aviso.
  * Sin ciclos: no existe `vuelve_a`; `max_cycles` de julio no se lee. Un bloqueo del código (`necesita_humano`) nunca se salta: con él la jefatura NO abre (regla 8).
  */
+import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { controlarCoherenciaDelPlan } from '../../planeacion/coherencia-del-plan'
 import { armarQueCambio, ponerQueCambio, type FichaDelCambio } from './plan'
 import { conLasPaginasDelSitio } from './carpeta-para-revisar'
@@ -177,7 +178,7 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
     }
   }
   const task = errorDeFormato ? `${t.task}\n\n${errorDeFormato}` : t.task
-  const pedido = armarPedidoDeAgente({ agente: paso.quien, task, esquema: t.esquema, imagenes: p.imagenes, indicacion: t.indicacion, paso: paso.clave, revision_id: rev.id, dispatch_key, max_budget_usd: paso.tope_usd, dry_run: rev.dry_run, client_id: rev.client_id, simulacion: p.simulacion, reintento_formato: errorDeFormato !== undefined, ...(rev.artifact_type === 'pieza' ? { trabajo: { trabajo_tipo: 'pieza' as const, trabajo_id: rev.artifact_id } } : {}) })
+  const pedido = armarPedidoDeAgente({ agente: paso.quien, task, esquema: t.esquema, imagenes: p.imagenes, indicacion: t.indicacion, paso: paso.clave, revision_id: rev.id, dispatch_key, max_budget_usd: paso.tope_usd, dry_run: rev.dry_run, client_id: rev.client_id, simulacion: p.simulacion, reintento_formato: errorDeFormato !== undefined, trabajo: rev.artifact_type === 'pieza' ? { trabajo_tipo: 'pieza', trabajo_id: rev.artifact_id } : trabajoDeLaLlamada(p).columnas })
   const malos = auditarPedidoDeAgente(pedido)
   if (malos.length) throw new Error(`pedido inválido (regla dura del editor): ${malos.join(' · ')}`)
   const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined, ...(paso.clave === CLAVE_DE_VERIFICACION ? { ordenes: p.ordenes_del_dueno, versiones: h } : {}) }) : undefined
