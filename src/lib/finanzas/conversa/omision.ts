@@ -2,7 +2,7 @@
  * F8 · R11 de CC#3: «el especialista solo habla si su canal está activo o se le pide evaluarlo». PURA: una función de `canales[]`.
  *  · `fpa` y el jefe: siempre.
  *  · `redes`: si algún canal de redes está activo (Meta+Instagram es el mínimo del 60 %: casi siempre).
- *  · `busqueda`: si el plan activa O difiere la búsqueda pagada (se le pide evaluar la señal); si no figura en `canales[]`, NO se llama.
+ *  · `busqueda`: si el plan activa O difiere un canal de búsqueda, pagada o local (se le pide evaluar la señal); si no figura en `canales[]`, NO se llama.
  *  · `medicion`: si hay algún canal PAGADO activo (define qué cuenta como resultado).
  * Un cliente sin pauta (solo base propia o ficha local) corre solo FP&A, el planteo, el ajuste y el jefe.
  * El mapa canal → especialista es DATO (claves del catálogo `finanzas_canales`), no una regla por rubro.
@@ -30,7 +30,8 @@ export function especialistasQueHablan(canales: CanalMinimo[]): QuienHabla {
     fpa: true,
     redes: activos.some((c) => ESPECIALISTA_POR_CANAL[c.canal] === 'redes'),
     // activar O diferir: se le pide evaluar; un canal que no figura, no se evalúa
-    busqueda: canales.some((c) => ESPECIALISTA_POR_CANAL[c.canal] === 'busqueda' && c.canal === 'busqueda_pagada'),
+    // 04-nov · la propuesta del plan real le dio 25 % a búsqueda local sin que nadie de búsqueda opinara: habla con cualquier canal de búsqueda en la lista
+    busqueda: canales.some((c) => ESPECIALISTA_POR_CANAL[c.canal] === 'busqueda'),
     medicion: hayPaga,
     sin_pauta: !hayPaga,
   }

@@ -191,7 +191,7 @@ describe('F8 · omisión por canal (R11)', () => {
   it('especialistasQueHablan: función pura del catálogo', () => {
     expect(especialistasQueHablan([{ canal: 'meta_ig' }])).toMatchObject({ redes: true, busqueda: false, medicion: true, sin_pauta: false })
     expect(especialistasQueHablan([{ canal: 'meta_ig' }, { canal: 'busqueda_pagada', activo: false }]).busqueda).toBe(true)
-    expect(especialistasQueHablan([{ canal: 'busqueda_local' }]).busqueda).toBe(false)
+    expect(especialistasQueHablan([{ canal: 'busqueda_local' }]).busqueda).toBe(true)
     expect(especialistasQueHablan([]).sin_pauta).toBe(true)
   })
 })
