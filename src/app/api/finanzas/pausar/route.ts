@@ -6,14 +6,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeFinanzas, type Db } from '@/lib/finanzas/almacen-supabase'
-import { almacenDeConversa } from '@/lib/finanzas/conversa/almacen-supabase'
-import { baseDeRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
-import { nombreDelClienteDe } from '@/lib/finanzas/conversa/nombre'
 import { pausarOficina } from '@/lib/finanzas/conversa/pausa'
-import { despertarPorElFlujo, esperasDeFinanzas } from '@/lib/finanzas/conversa/esperas-supabase'
-import { slackMdPuerto } from '@/lib/buzon-dueno/slack-md'
-import { cerebroDelDueno } from '@/lib/buzon-dueno/cerebro-dueno'
-import { avisarAAlertas } from '@/lib/buzon-dueno/alertas'
+import { puertosDePausa } from '@/lib/finanzas/conversa/puertos-de-pausa'
 import { checkInternalKey } from '@/lib/finanzas/ruta'
 
 export const dynamic = 'force-dynamic'
@@ -32,21 +26,8 @@ export async function POST(request: Request) {
   let cfg
   try { cfg = await almacenDeFinanzas(db).leerConfig() } catch (e) { return NextResponse.json({ error: 'config_ilegible', detalle: e instanceof Error ? e.message : String(e) }, { status: 503 }) }
   if (cfg.estado === 'apagada' || cfg.conversa === 'apagado') return NextResponse.json({ error: 'conversa_apagada' }, { status: 409 })
-  const crudo = (process.env.FINANZAS_CANAL_PREGUNTAS ?? '').trim()
-  const canal = /^[CG][A-Z0-9]{8,}$/.test(crudo) ? crudo : undefined
   try {
-    const r = await pausarOficina({
-      almacen: almacenDeConversa(db),
-      canal,
-      slack: slackMdPuerto({ token: process.env.SLACK_BOT_TOKEN ?? '', dueno_id: process.env.FINANZAS_EMILIO_ID ?? '', ...(canal ? { canal } : {}) }),
-      cerebro: cerebroDelDueno({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id: c.workflow_id, workflow_execution_id: c.workflow_execution_id, ...(canal ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
-      modo: cfg.preguntas_slack,
-      ahora: () => new Date(),
-      nombreDelCliente: nombreDelClienteDe(db),
-      avisar: avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '', canal: process.env.FINANZAS_CANAL_ALERTAS }),
-      esperas: esperasDeFinanzas(db),
-      despertar: despertarPorElFlujo({ base: process.env.N8N_BASE_URL, llave: process.env.INTERNAL_API_KEY }),
-    }, c)
+    const r = await pausarOficina(puertosDePausa(db, cfg.preguntas_slack, c.workflow_id, c.workflow_execution_id), c)
     return NextResponse.json(r.cuerpo, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'pausar_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

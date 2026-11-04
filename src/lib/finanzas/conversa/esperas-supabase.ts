@@ -31,6 +31,12 @@ export function esperasDeFinanzas(db: Db): PuertoDeEsperas {
       return ya ? { ok: true, id: ya.id, nueva: false } : { ok: false, error: 'la espera chocó y no se pudo releer' }
     },
     delEncargo: (encargo_id) => leer('clave', claveDe(encargo_id)),
+    async vivaDelCliente(client_id) {
+      const r = await db.from(TABLA).select(COLS).eq('tipo', 'finanzas').eq('estado', 'esperando').eq('client_id', client_id).limit(1)
+      if (r.error) throw new Error(`no pude leer la espera del cliente: ${r.error.message}`)
+      const f = (r.data as Fila[] | null)?.[0]
+      return f ? aEspera(f) : null
+    },
     async soltar(id, ahora) {
       const hora = ahora.toISOString()
       const r = await db.from(TABLA).update({ estado: 'soltada', soltada_por: 'respuesta_del_dueno', soltada_en: hora, actualizado_en: hora }).eq('id', id).eq('estado', 'esperando').select('id')

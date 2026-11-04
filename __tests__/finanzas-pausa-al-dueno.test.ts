@@ -7,7 +7,7 @@ import { estadoInicial } from '../src/lib/oficina/tipos'
 import { prepararPreguntas, type PuertosDelBuzon } from '../src/lib/finanzas/conversa/buzon'
 import { armarMensaje } from '../src/lib/finanzas/preguntas'
 import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
-import { atenderPausa, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
+import { atenderPausa, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
 import { despertarPorElFlujo } from '../src/lib/finanzas/conversa/esperas-supabase'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import { prevuelo } from '../src/lib/planeacion/prevuelo'
@@ -18,11 +18,12 @@ const preg = (clave: string, o: Record<string, unknown> = {}) => ({ clave, texto
 const CINCO = [preg('comision'), preg('turistas'), preg('temporada'), preg('whatsapp', { frena_la_firma: true }), preg('pixel', { frena_la_firma: true })]
 const acuerdo = (preguntas: unknown[] = CINCO, criticos = 3) => ({ acuerdo: { criticos, requiere_ronda_2: criticos > 0, preguntas_a_emilio: preguntas, hallazgos: [] } })
 
-function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; despierta?: boolean; pausaEncendida?: boolean } = {}) {
+function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; despierta?: boolean; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
   const e: EncargoDeConversa = { id: 'enc-1', client_id: 'cli', estado: o.estado ?? 'esperando_al_dueno', estado_del_motor: estadoInicial(), gasto_usd: 1.2, slack_canal: o.slackTs ? 'C123456789' : null, slack_ts: o.slackTs ?? null, leido_hasta: o.slackTs ?? null, tablero_id: null, dry_run: false, semilla: { corrida: 'cor-1', ...(o.semilla ?? {}) } }
   const arts: Record<string, Record<string, unknown>> = { ...acuerdo(), ...(o.arts ?? {}) }
   const guardados: Array<Record<string, unknown>> = [], avisos: string[] = [], enviados: string[] = [], despertares: Array<Record<string, unknown>> = [], enHilo: string[] = [], corridasPausadas: string[] = []
   let llamadasModelo = 0
+  const alCerebro: Array<Record<string, unknown>> = []
   const mensajes = [...(o.mensajes ?? [])]
   let materialGuardado: unknown = null
   let espera: EsperaDeFinanzas | null = o.espera === null || o.espera === undefined ? null : { id: 'esp-1', client_id: 'cli', encargo_id: 'enc-1', corrida: 'plan-x', estado: 'esperando', sobre: { corrida: 'plan-x', client_id: 'cli' }, despertado: null, intentos_de_despertar: 0, ...o.espera }
@@ -44,9 +45,9 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
     almacen,
     modo: 'envia',
     canal: 'C123456789',
-    ahora: () => new Date('2026-11-04T16:00:00Z'),
+    ahora: () => new Date(o.hora ?? '2026-11-04T16:00:00Z'),
     avisar: async (t) => { avisos.push(t) },
-    cerebro: { async registrarPregunta() { return (o.registrar ?? { ok: true, estado: 'registrada', pregunta_id: 'p1' }) as never }, async registrarRespuesta() { return { ok: true } } },
+    cerebro: { async registrarPregunta() { return (o.registrar ?? { ok: true, estado: 'registrada', pregunta_id: 'p1' }) as never }, async registrarRespuesta(r) { alCerebro.push(r as never); return o.cerebroCaido ? { ok: false, error: 'http_500' } : { ok: true } } },
     slack: {
       async enviarAlDueno(t: string) { enviados.push(t); return { ok: true as const, canal: 'C123456789', ts: '100.1' } },
       async enHilo(_c: string, _t: string, x: string) { enHilo.push(x); return { ok: true as const } },
@@ -56,6 +57,7 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
     esperas: {
       async guardar(f) { if (espera) return { ok: true, id: espera.id, nueva: false }; espera = { id: 'esp-1', client_id: f.client_id, encargo_id: f.encargo_id, corrida: String(f.sobre.corrida), estado: 'esperando', sobre: f.sobre, despertado: null, intentos_de_despertar: 0 }; materialGuardado = f.material; return { ok: true, id: 'esp-1', nueva: true } },
       async delEncargo() { return espera && { ...espera } },
+      async vivaDelCliente(c) { return espera && espera.estado === 'esperando' && espera.client_id === c ? { ...espera } : null },
       async soltar() { if (!espera || espera.estado !== 'esperando') return false; espera.estado = 'soltada'; return true },
       async marcarDespertar(_i, d, n) { if (espera) { espera.despertado = d; espera.intentos_de_despertar = n } },
       async pausarCorrida(id) { corridasPausadas.push(id) },
@@ -68,7 +70,7 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
     slack: { async publicar() { return { ok: false } }, async leer(x: { desde_ts: string | null }) { return { ok: false, mensajes: [], leido_hasta: x.desde_ts } } },
     config: async () => ({ estado: 'encendida', clientes_ensayo: [], preguntas_slack: 'envia', conversa: 'enciende', pausa_al_dueno: o.pausaEncendida !== false }),
   }
-  return { e, arts, P, C, guardados, avisos, enviados, despertares, enHilo, corridasPausadas, mensajes, modelo: () => llamadasModelo, espera: () => espera, material: () => materialGuardado }
+  return { e, arts, P, C, guardados, avisos, enviados, despertares, enHilo, corridasPausadas, alCerebro, mensajes, modelo: () => llamadasModelo, espera: () => espera, material: () => materialGuardado }
 }
 
 describe('cuándo pausa', () => {
@@ -260,6 +262,58 @@ describe('la respuesta suelta la pausa', () => {
     expect(llamadas[0][0]).toBe('https://n8n.x/webhook/zero-risk/planeacion')
     expect((llamadas[0][1].headers as Record<string, string>)['x-api-key']).toBe('k')
     expect((await despertarPorElFlujo({ fetchImpl: f })({})).ok).toBe(false)
+  })
+})
+
+describe('contestar en Tu oficina (Emilio, 16:20Z)', () => {
+  const pedir = (o: Record<string, unknown> = {}) => ({ client_id: 'cli', tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio', ...o })
+  const dos = { ...acuerdo([preg('whatsapp'), preg('pixel')]) }
+  it('🔴 aplica la respuesta, la guarda en el cerebro y dice cuáles faltan', async () => {
+    const m = mundo({ espera: {}, arts: dos })
+    const r = await responderEnLaOficina(m.P, pedir())
+    expect(r.cuerpo).toMatchObject({ en_pausa: true, es_de_la_pausa: true, aplicada: true, clave: 'whatsapp', en_el_cerebro: true, faltan: ['pixel'] })
+    expect(m.e.semilla.respuestas_del_dueno).toEqual([{ clave: 'whatsapp', valor: 'sí, ya lo tengo', literal: 'sí, ya lo tengo' }])
+    expect(m.alCerebro[0]).toMatchObject({ tema: 'whatsapp', respuesta: 'sí, ya lo tengo' })
+    expect(m.despertares).toEqual([])
+  })
+  it('🔴 con la última, el plan sigue en el acto y una sola vez', async () => {
+    const m = mundo({ espera: {}, arts: dos, semilla: { respuestas_del_dueno: [{ clave: 'pixel', valor: 'no', literal: 'no' }] } })
+    expect((await responderEnLaOficina(m.P, pedir())).cuerpo).toMatchObject({ soltada: true, faltan: [] })
+    expect(m.despertares).toHaveLength(1)
+    expect(m.e.estado).toBe('en_curso')
+    expect((await responderEnLaOficina(m.P, pedir())).cuerpo).toEqual({ en_pausa: false })
+    expect(m.despertares).toHaveLength(1)
+  })
+  it('🔴 contestar otra vez la misma reemplaza, no duplica', async () => {
+    const m = mundo({ espera: {}, arts: dos })
+    await responderEnLaOficina(m.P, pedir())
+    await responderEnLaOficina(m.P, pedir({ respuesta: 'mejor no' }))
+    expect(m.e.semilla.respuestas_del_dueno).toEqual([{ clave: 'whatsapp', valor: 'mejor no', literal: 'mejor no' }])
+  })
+  it('🔴 mientras sigue contestando el plan no arranca; pasado el margen sí', async () => {
+    const m = mundo({ espera: {}, arts: dos, slackTs: '100.1' })
+    await responderEnLaOficina(m.P, pedir())
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo.esperando).toBe(true)
+    m.P.ahora = () => new Date('2026-11-04T16:16:00Z')
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ soltada: true })
+  })
+  it('🔴 sin pausa o con una pregunta ajena no toca nada y lo dice', async () => {
+    expect((await responderEnLaOficina(mundo({ espera: null }).P, pedir())).cuerpo).toEqual({ en_pausa: false })
+    const m = mundo({ espera: {}, arts: dos })
+    expect((await responderEnLaOficina(m.P, pedir({ tema: 'otra cosa' }))).cuerpo).toEqual({ en_pausa: true, es_de_la_pausa: false })
+    expect(m.alCerebro).toEqual([])
+  })
+  it('🔴 otro cliente no entra en esta pausa', async () => {
+    const m = mundo({ espera: {}, arts: dos })
+    expect((await responderEnLaOficina(m.P, pedir({ client_id: 'otro' }))).cuerpo).toEqual({ en_pausa: false })
+  })
+  it('🔴 si el cerebro falla, el plan igual la usa y lo dice', async () => {
+    const m = mundo({ espera: {}, arts: dos, cerebroCaido: true })
+    expect((await responderEnLaOficina(m.P, pedir())).cuerpo).toMatchObject({ aplicada: true, en_el_cerebro: false })
+    expect(m.e.semilla.respuestas_del_dueno).toHaveLength(1)
+  })
+  it('🔴 pide todo lo necesario', async () => {
+    for (const k of ['client_id', 'tema', 'respuesta', 'quien']) expect((await responderEnLaOficina(mundo({ espera: {} }).P, pedir({ [k]: ' ' }))).status).toBe(400)
   })
 })
 
