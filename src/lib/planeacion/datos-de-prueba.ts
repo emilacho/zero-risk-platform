@@ -86,7 +86,9 @@ export function leerDatosDePrueba(entrada: unknown): DatosDePrueba | null {
 }
 
 // lo que hace un comprador, no un visitante. Agnóstico: los nombres de evento de los sitios que construimos y los habituales
-const PATRON_DE_VENTA = '^(cart|checkout|order|payment|purchase|pedido|pago|compra)'
+// 04-nov · por prefijo, sin `match`: en producción esa condición hacía contestar 504 a la analítica en todas las pruebas, y sin ella la misma consulta responde. Medido con fecha reciente y antigua; la causa exacta en la analítica no se conoce
+const PREFIJOS_DE_VENTA = ['cart', 'checkout', 'order', 'payment', 'purchase', 'pedido', 'pago', 'compra']
+const ES_EVENTO_DE_VENTA = '(' + PREFIJOS_DE_VENTA.map((p) => "event like '" + p + "%'").join(' or ') + ')'
 // para cualquier cliente: todo pedido cuenta salvo el que apenas se abre, se mira o se cae
 const ES_VENTA_CERRADA = /^(order_(?!viewed|created|started|opened|abandoned|failed|cancel)|payment_(succeeded|completed|confirmed)|checkout_completed|purchase|pedido(?!_(iniciado|abierto|visto|cancelado|fallido))|pago(?!_(iniciado|fallido|rechazado))|compra(?!_(iniciada|cancelada|fallida)))/i
 
@@ -102,7 +104,7 @@ export function condicionesHogQL(dp: DatosDePrueba | null): string {
   if (dp.distinct_ids.length) q += ' and distinct_id not in (' + dp.distinct_ids.map(lit).join(', ') + ')'
   for (const r of dp.rangos) q += ' and not (timestamp >= parseDateTimeBestEffort(' + lit(r.desde) + ') and timestamp < parseDateTimeBestEffort(' + lit(r.hasta) + '))'
   if (dp.evento_bandera) q += " and coalesce(toString(properties." + dp.evento_bandera + "), '') not in ('true', '1')"
-  if (dp.pedidos_de_prueba_hasta) q += " and not (match(event, '" + PATRON_DE_VENTA + "') and timestamp < parseDateTimeBestEffort(" + lit(dp.pedidos_de_prueba_hasta) + '))'
+  if (dp.pedidos_de_prueba_hasta) q += ' and not (' + ES_EVENTO_DE_VENTA + ' and timestamp < parseDateTimeBestEffort(' + lit(dp.pedidos_de_prueba_hasta) + '))'
   return q
 }
 
