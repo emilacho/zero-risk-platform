@@ -156,6 +156,7 @@ describe('🔴 4-nov · el falso «cambió en otro equipo» (Emilio, 08:50Z)', (
   it.each([
     ['solo espacios', { ...VACIO_DEL_PANEL, libre: '   ' }],
     ['listas vacías', { retirar: [], observaciones: [] }],
+    ['listas de vacíos', { retirar: ['', '  '], observaciones: [{ campo: '', texto: null }] }],
     ['null', { libre: null }],
   ])('🔴 %s también es vacío', async (_n, acciones) => {
     const db = base()
