@@ -332,10 +332,10 @@ describe('el pre-vuelo al volver', () => {
     expect(w.leidoCupo()).toBe(0)
     expect(d.material_viejo).toBeUndefined()
   })
-  it('🔴 a los 7 días exactos el material sirve; pasados, se lee de nuevo y el relleno depende del cerebro listo', async () => {
+  it('🔴 a los 3 días exactos el material sirve; pasados, se lee de nuevo y el relleno depende del cerebro listo', async () => {
     const espera = (creado_en: string) => ({ client_id: 'cliente-1', corrida: 'plan-x', estado: 'soltada', creado_en })
-    expect((await prevuelo(pedir(), puertos('en_pausa', espera('2026-10-29T10:00:00Z')).P)).material_viejo).toBeUndefined()
-    const d = await prevuelo(pedir(), puertos('en_pausa', espera('2026-10-29T09:59:00Z')).P)
+    expect((await prevuelo(pedir(), puertos('en_pausa', espera('2026-11-02T10:00:00Z')).P)).material_viejo).toBeUndefined()
+    const d = await prevuelo(pedir(), puertos('en_pausa', espera('2026-11-02T09:59:00Z')).P)
     expect(d).toMatchObject({ decision: 'correr', material_viejo: true, relleno_permitido: true, corrida_id: 'cor-1' })
   })
   it('🔴 un segundo disparo no corre otro plan', async () => {

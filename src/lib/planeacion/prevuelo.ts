@@ -80,14 +80,14 @@ export interface Decision {
   declara: string[]
   sube_la_ficha_a?: number
   corrida?: string
-  /** 04-nov · volvió de una pausa de más de 7 días: el flujo lee los brazos de nuevo en vez de usar lo guardado (Lenovo, 15:51Z) */
+  /** 04-nov · volvió de una pausa de más de 3 días: el flujo lee los brazos de nuevo en vez de usar lo guardado (Lenovo, 15:57Z) */
   material_viejo?: boolean
   /** `plan_corridas.id` · 04-nov (firma de Lenovo): es el `trabajo_id` de tipo `plan` de cada llamada · no está si la corrida no se abrió */
   corrida_id?: string
 }
 
 const UUIDISH = /^[A-Za-z0-9_-]{8,64}$/
-export const DIAS_DE_VIGENCIA_DEL_MATERIAL = 7
+export const DIAS_DE_VIGENCIA_DEL_MATERIAL = 3
 const r2 = (x: number) => Math.round(x * 100) / 100
 const base = (dry: boolean): Decision => ({ decision: 'no_corre', motivo: '', relleno_permitido: false, dry_run: dry, huecos_tipos: [], huecos_sin_tipo: [], declara: [] })
 const noCorre = (dry: boolean, motivo: MotivoDeNoCorre, detalle?: string, extra: Partial<Decision> = {}): Decision => ({ ...base(dry), decision: 'no_corre', motivo, ...(detalle ? { detalle } : {}), ...extra })
