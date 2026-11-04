@@ -55,9 +55,9 @@ describe('la fórmula del tope de prueba · POR PEDIDO', () => {
     expect(topeDePruebaAutomatico({ tope_encargo_usd: 2, firma_tope: { ...FIRMA, valor: 2.5 } }, 0, 0).limite_usd).toBe(2.5)
     expect(topeDePruebaAutomatico({}, 0, 0).limite_usd).toBe(1.5) // nunca «sin tope»: el de la plantilla
     expect(topeDePruebaAutomatico({ tope_encargo_usd: 2.5 }, 0, 0).limite_usd).toBe(2.5)
-    expect(topeDePruebaAutomatico({ tope_encargo_usd: 9 }, 0, 0).limite_usd).toBe(3) // sin firma, el techo de 3,00
+    expect(topeDePruebaAutomatico({ tope_encargo_usd: 9 }, 0, 0).limite_usd).toBe(5) // sin firma, el techo
     for (const f of [{ ...FIRMA, quien: '' }, { ...FIRMA, valor: Number.NaN }, { ...FIRMA, papel: ' ' }, null]) {
-      expect(topeDePruebaAutomatico({ tope_encargo_usd: 9, firma_tope: f as never }, 0, 0).limite_usd).toBe(3)
+      expect(topeDePruebaAutomatico({ tope_encargo_usd: 9, firma_tope: f as never }, 0, 0).limite_usd).toBe(5)
     }
   })
   it('el TOTAL del cliente solo con firma_tope_total válida: límite = lo firmado y base = todo lo cobrado al cliente', () => {

@@ -61,12 +61,12 @@ const tieneLetras = (s: string) => /[a-záéíóúñ]/i.test(s)
 type Preguntada = { clave: string; texto: string; pregunta_id: string | null }
 type SinCerebro = { clave: string; respuesta: string; ts: string }
 
-type PreguntaConImpacto = Pregunta & { impacto?: 'alto' | 'medio' | 'bajo' }
+type PreguntaConImpacto = Pregunta & { impacto?: 'alto' | 'medio' | 'bajo'; frena_la_firma?: boolean }
 function preguntasDelAcuerdo(arts: Record<string, Record<string, unknown>>): PreguntaConImpacto[] {
   // el acuerdo VIGENTE: si hubo ronda 2, manda `acuerdo_2` (sus preguntas son las que quedan sin responder); si no, el de la ronda 1
   const l = (arts.acuerdo_2 ?? arts.acuerdo)?.preguntas_a_emilio
   if (!Array.isArray(l)) return []
-  return l.filter(objeto).map((q) => ({ clave: String(q.clave ?? ''), texto: String(q.texto ?? ''), recomendacion: String(q.recomendacion ?? ''), supuesto_si_no_responde: String(q.supuesto_si_no_responde ?? ''), ...(q.impacto === 'alto' || q.impacto === 'medio' || q.impacto === 'bajo' ? { impacto: q.impacto } : {}) }))
+  return l.filter(objeto).map((q) => ({ clave: String(q.clave ?? ''), texto: String(q.texto ?? ''), recomendacion: String(q.recomendacion ?? ''), supuesto_si_no_responde: String(q.supuesto_si_no_responde ?? ''), ...(q.impacto === 'alto' || q.impacto === 'medio' || q.impacto === 'bajo' ? { impacto: q.impacto } : {}), ...(q.frena_la_firma === true ? { frena_la_firma: true } : {}) }))
 }
 
 const ES_PRESUPUESTO = /presupuesto/i
@@ -93,6 +93,8 @@ export interface PreparacionDePreguntas {
   presupuesto_agregado: boolean
   /** cuántas candidatas había (0 = nada que preguntar) */
   candidatas: number
+  /** en una pausa: las aprobadas sin las que el plan no sigue */
+  frenan: string[]
 }
 
 /**
@@ -101,16 +103,18 @@ export interface PreparacionDePreguntas {
  *  · el PRESUPUESTO de pauta va primero: si el plan lo trae en «no sé» y nadie lo preguntó (ni el dueño ya lo dio), se agrega; si el jefe ya lo preguntó, se sube al primer lugar.
  *  · el resto, por impacto (alto, medio, bajo; sin dato = medio) y, a igual impacto, en el orden del jefe. Tope de 3 por mensaje.
  */
-export function prepararPreguntas(arts: Record<string, Record<string, unknown>>, semilla?: Semilla | null): PreparacionDePreguntas {
+export function prepararPreguntas(arts: Record<string, Record<string, unknown>>, semilla?: Semilla | null, opc: { pausa?: boolean } = {}): PreparacionDePreguntas {
   const del = preguntasDelAcuerdo(arts)
   const dadas = Array.isArray(semilla?.respuestas_del_dueno) ? semilla!.respuestas_del_dueno! : []
   const yaPreguntado = del.some((q) => ES_PRESUPUESTO.test(`${q.clave} ${q.texto}`))
   const yaDado = dadas.some((d) => ES_PRESUPUESTO.test(d.clave))
   const falta = !yaPreguntado && !yaDado && textosDeNoSe(arts).some((t) => ES_PRESUPUESTO.test(t))
   const candidatas: PreguntaConImpacto[] = falta ? [{ ...PREGUNTA_DE_PRESUPUESTO, impacto: 'alto' }, ...del] : del
-  const peso = (q: PreguntaConImpacto) => (ES_PRESUPUESTO.test(`${q.clave} ${q.texto}`) ? -1 : q.impacto === 'alto' ? 0 : q.impacto === 'bajo' ? 2 : 1)
+  // 04-nov · frena la firma lo que el jefe marca o, si no marca nada, lo de impacto alto. En una pausa, lo que marcó el jefe va primero: en la corrida r3 se quedaron fuera justo las de dos críticos
+  const frena = (q: PreguntaConImpacto) => q.frena_la_firma === true || q.impacto === 'alto' || ES_PRESUPUESTO.test(`${q.clave} ${q.texto}`)
+  const peso = (q: PreguntaConImpacto) => (opc.pausa && q.frena_la_firma === true ? -2 : ES_PRESUPUESTO.test(`${q.clave} ${q.texto}`) ? -1 : q.impacto === 'alto' ? 0 : q.impacto === 'bajo' ? 2 : 1)
   const orden = candidatas.map((q, i) => ({ q, i })).sort((a, b) => peso(a.q) - peso(b.q) || a.i - b.i).map((x) => x.q)
-  const lista: Pregunta[] = [], vistas = new Set<string>()
+  const lista: Pregunta[] = [], vistas = new Set<string>(), frenan = new Set<string>()
   const rechazadas: PreparacionDePreguntas['rechazadas'] = [], tuteadas: string[] = [], limpiadas: string[] = []
   for (const original of orden) {
     const { impacto: _impacto, ...base } = original
@@ -123,8 +127,12 @@ export function prepararPreguntas(arts: Record<string, Record<string, unknown>>,
     if (vistas.has(p.clave)) continue
     vistas.add(p.clave)
     lista.push(p)
+    if (frena(original)) frenan.add(p.clave)
   }
-  return { aprobadas: lista.slice(0, MAX_PREGUNTAS_POR_MENSAJE), rechazadas, tuteadas, limpiadas, sobrantes: lista.slice(MAX_PREGUNTAS_POR_MENSAJE).map((q) => q.clave), presupuesto_agregado: falta, candidatas: candidatas.length }
+  // en una pausa salen TODAS las que frenan; las demás, solo si queda lugar en el mensaje de siempre
+  const cuantas = opc.pausa ? Math.max(frenan.size, MAX_PREGUNTAS_POR_MENSAJE) : MAX_PREGUNTAS_POR_MENSAJE
+  const enOrden = opc.pausa ? [...lista.filter((q) => frenan.has(q.clave)), ...lista.filter((q) => !frenan.has(q.clave))] : lista
+  return { aprobadas: enOrden.slice(0, cuantas), rechazadas, tuteadas, limpiadas, sobrantes: enOrden.slice(cuantas).map((q) => q.clave), presupuesto_agregado: falta, candidatas: candidatas.length, frenan: [...frenan] }
 }
 
 /** una pregunta rechazada HABLA: queda el rastro en el encargo y UNA línea a #alertas (la misma lista de rechazos no se avisa dos veces) */
@@ -189,7 +197,7 @@ function fusionar(actuales: Dada[], nuevas: Dada[]): { lista: Dada[]; aplicadas:
 }
 
 // ───────────────────────────────────────────────────────── PREGUNTAR
-export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): Promise<Respuesta> {
+export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, opc: { pausa?: boolean } = {}): Promise<Respuesta> {
   if (P.modo !== 'envia') return { status: 200, cuerpo: { enviado: false, motivo: 'buzon_apagado', modo: P.modo } }
   const c = await cargar(P, encargo_id)
   if (!('e' in c)) return c
@@ -198,7 +206,7 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
   const yaEnviado = (x: EncargoDeConversa) => destinoValido(P, x.slack_canal) && !!x.slack_ts
   if (yaEnviado(e)) return { status: 200, cuerpo: { enviado: false, motivo: 'ya_enviado', slack_ts: e.slack_ts } }
   const arts = await P.almacen.artefactos(encargo_id).catch(() => ({}) as Record<string, Record<string, unknown>>)
-  const prep = prepararPreguntas(arts, e.semilla)
+  const prep = prepararPreguntas(arts, e.semilla, opc)
   const { tuteadas, limpiadas } = prep
   const hechas = prep.aprobadas
   if (!prep.candidatas) return { status: 200, cuerpo: { enviado: false, motivo: 'sin_preguntas' } }
@@ -206,11 +214,12 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
   if (prep.rechazadas.length) await declararRechazo(P, e, arts, prep)
   if (!hechas.length) return { status: 200, cuerpo: { enviado: false, motivo: 'pregunta_mal_formada', errores: prep.rechazadas.flatMap((r) => r.errores.map((x) => r.clave + ': ' + x)), ...rechazo } }
   // la forma se valida ANTES de registrar nada en el cerebro (no se dejan preguntas pendientes de un mensaje que no sale)
-  const prueba = armarMensaje({ cliente: 'x', preguntas: hechas })
+  const prueba = armarMensaje({ cliente: 'x', preguntas: hechas, pausa: opc.pausa })
   if (!prueba.ok) return { status: 200, cuerpo: { enviado: false, motivo: 'pregunta_mal_formada', errores: prueba.errores } }
   if (!puedeEnviarAhora(P.modo, { si: true })) return { status: 200, cuerpo: { enviado: false, motivo: 'no_envia' } }
   // sin el método (almacén de prueba) = 0; si EXISTE y no se pudo leer, se frena (un tope que no se puede medir no es un tope)
-  const env = P.almacen.contarBuzon ? await P.almacen.contarBuzon(e.client_id, P.ahora()).catch(() => null) : { cliente_24h: 0, hoy: 0 }
+  // los topes de envío no frenan una pausa (Lenovo, 15:33Z): sin esa pregunta el plan no sigue
+  const env = opc.pausa ? { cliente_24h: 0, hoy: 0 } : P.almacen.contarBuzon ? await P.almacen.contarBuzon(e.client_id, P.ahora()).catch(() => null) : { cliente_24h: 0, hoy: 0 }
   if (!env) return { status: 200, cuerpo: { enviado: false, motivo: 'topes_ilegibles' } }
   if (env.cliente_24h >= TOPE_POR_CLIENTE_24H) return { status: 200, cuerpo: { enviado: false, motivo: 'tope: un mensaje por cliente cada 24 h' } }
   if (env.hoy >= TOPE_POR_DIA_TOTAL) return { status: 200, cuerpo: { enviado: false, motivo: 'tope: 3 mensajes por día entre todos los clientes' } }
@@ -229,7 +238,8 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
       const v = await P.cerebro.registrarPregunta({ client_id: e.client_id, tema: temaDe(q.clave), pregunta: q.texto }).catch(() => ({ ok: false as const, error: 'red' }))
       if (!v.ok) return { status: 200, cuerpo: { enviado: false, motivo: 'cerebro_caido', aviso: `el cerebro no respondió (${v.error}): no se le escribe al dueño y el encargo sigue con supuestos`, sigue_con_supuestos: true } }
       if (v.estado === 'ya_respondida') dadas.push({ clave: q.clave, valor: v.respuestas[0].respuesta, literal: v.respuestas[0].respuesta })
-      else if (v.estado === 'ya_preguntada') esperando.push(q.clave)
+      // en una pausa se pregunta igual: la respuesta al mensaje viejo le llegaría a otro encargo y este esperaría para siempre
+      else if (v.estado === 'ya_preguntada' && !opc.pausa) esperando.push(q.clave)
       // `repetida` = la registré yo en un intento que no llegó a enviarse (el encargo no tiene MD): se pregunta
       else aPreguntar.push({ clave: q.clave, texto: q.texto, pregunta_id: v.estado === 'registrada' ? v.pregunta_id : null })
     }
@@ -247,7 +257,7 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string): 
     // nunca el id del cliente en un mensaje a una persona (20-oct): sin nombre de ficha, «tu negocio»
     const nombreFicha = (await P.nombreDelCliente?.(e.client_id).catch(() => null)) || ''
     const nombre = nombreFicha && !pareceUnId(nombreFicha) ? nombreFicha : NOMBRE_SIN_FICHA
-    const msg = armarMensaje({ cliente: nombre, preguntas: aPreguntar.map((a) => porClave.get(a.clave) as Pregunta) })
+    const msg = armarMensaje({ cliente: nombre, preguntas: aPreguntar.map((a) => porClave.get(a.clave) as Pregunta), pausa: opc.pausa })
     if (!msg.ok) return { status: 200, cuerpo: { enviado: false, motivo: 'pregunta_mal_formada', errores: msg.errores } }
     // pregunta larga: el «si no respondes» va como primera respuesta del hilo; sin ese método no se manda nada (no se esconde el supuesto)
     if (msg.supuestos && !P.slack.enHilo) return { status: 200, cuerpo: { enviado: false, motivo: 'sin_hilo' } }

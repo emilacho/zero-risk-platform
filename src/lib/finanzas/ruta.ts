@@ -17,6 +17,8 @@ export interface ConfigDeFinanzas {
   estado: EstadoDeLaOficina; clientes_ensayo: string[]; preguntas_slack: 'apagado' | 'borrador' | 'envia'; conversa: 'apagado' | 'ensayo' | 'enciende'
   /** oficina de marketing (F2 31-oct): quién redacta el plan y por eso propone y ajusta en la conversación financiera · DATO `cadena_config.planeacion.redactor`; ausente = el redactor por omisión de la plantilla */
   redactor?: string
+  /** 04-nov · la pausa al dueño: nace apagada y se enciende cuando el flujo del plan ya sepa pausar y volver */
+  pausa_al_dueno?: boolean
 }
 
 export const MAX_BYTES_DE_ENTRADA = 20_000

@@ -7,7 +7,7 @@ import type { LecturaDeHilo } from '../hilo-slack'
 import type { ConfigDeFinanzas, PuertosDeTablero } from '../ruta'
 import type { DatoConProcedencia } from './esquemas'
 
-export type EstadoDeEncargo = 'abierto' | 'en_curso' | 'cerrado' | 'sin_acuerdo' | 'cierre_por_tope' | 'fallido'
+export type EstadoDeEncargo = 'abierto' | 'en_curso' | 'esperando_al_dueno' | 'cerrado' | 'sin_acuerdo' | 'cierre_por_tope' | 'fallido'
 export const ESTADOS_TERMINALES: readonly EstadoDeEncargo[] = ['cerrado', 'sin_acuerdo', 'cierre_por_tope', 'fallido']
 
 /** lo que el plan (o quien despierta la conversación) entrega al abrir: SOLO datos del cliente y del expediente; ningún nombre concreto vive en el código */
@@ -24,6 +24,10 @@ export interface Semilla {
   /** resúmenes ya acotados (el pedido de cada agente NO lleva el expediente entero) */
   ficha_resumen?: string
   manual_resumen?: string
+  /** 04-nov · el manual de marca aprobado, entero: toda la oficina lee lo mismo que el redactor */
+  manual_completo?: unknown
+  /** 04-nov · el dueño ya revisó la ronda de preguntas: lo que no contestó sigue abierto en la oficina, pero no vuelve a detener el plan */
+  pausa_atendida?: boolean
   brazos_resumen?: string
   derivado?: unknown
   /** datos con su procedencia: un dato de ensayo NUNCA entra como medido */

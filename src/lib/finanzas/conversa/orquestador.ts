@@ -16,7 +16,8 @@ import type { Bloque } from '../tipos'
 import { entradaDesdeLaConversa } from './entrada'
 import { extraerJson, normalizarEquilibrio, respuestaDeEquilibrioValida, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
 import { CANALES_VALIDOS, especialistasQueHablan } from './omision'
-import { AGENTES, PLANTILLA_FINANCIERA, plantillaConRedactor, reservaDelCierre2 } from './plantilla'
+import { AGENTES, PLANTILLA_FINANCIERA, plantillaConRedactor, reservaDelCierre2, TOPE_DEL_ENCARGO_USD } from './plantilla'
+import { prepararPreguntas } from './buzon'
 import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type PuertosDeConversa, type Semilla, type TopeDePrueba, type TurnoDeConversa } from './puertos'
 import { sha256 } from './util'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
@@ -36,14 +37,17 @@ export async function abrirConversacion(P: PuertosDeConversa, cuerpo: unknown): 
   if (typeof c.client_id !== 'string' || !c.client_id.trim()) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`client_id` es obligatorio'] } }
   if ((cfg.estado === 'ensayo' || cfg.conversa === 'ensayo') && !cfg.clientes_ensayo.includes(c.client_id)) return { status: 409, cuerpo: { error: 'cliente_fuera_de_ensayo' } }
   if (typeof c.semilla !== 'object' || c.semilla === null || Array.isArray(c.semilla)) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`semilla` es obligatoria y debe ser un objeto'] } }
-  if (JSON.stringify(c.semilla).length > 40_000) return { status: 413, cuerpo: { error: 'semilla_demasiado_grande', maximo: 40_000 } }
+  // 04-nov · la semilla trae el manual entero: el límite es el del pedido, no uno propio
+  if (JSON.stringify(c.semilla).length > MAX_TAREA) return { status: 413, cuerpo: { error: 'semilla_demasiado_grande', maximo: MAX_TAREA } }
   // plan v3 · V4: `semilla.datos` se VALIDA (antes pasaba cualquier cosa): forma inválida ⇒ 400 con la lista de errores
   const datosCrudos = (c.semilla as Record<string, unknown>).datos
   if (datosCrudos !== undefined) {
     const v = validarProcedencia(datosCrudos)
     if (!v.ok) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: v.errores } }
   }
-  const conTope = await conTopeDePrueba(P, c.client_id.trim(), c.semilla as Semilla)
+  // 04-nov · la corrida del plan nace con el tope de hoy: el de la plantilla queda de piso
+  const semillaDelPlan: Semilla = typeof c.trabajo_id === 'string' && c.trabajo_id.trim() ? { tope_encargo_usd: TOPE_DEL_ENCARGO_USD, ...(c.semilla as Semilla) } : (c.semilla as Semilla)
+  const conTope = await conTopeDePrueba(P, c.client_id.trim(), semillaDelPlan)
   if (!conTope.ok) return { status: 503, cuerpo: { error: 'libro_ilegible', sin_bloque: true, detalle: conTope.detalle } }
   // 04-nov · la corrida que la abre: el id que manda el plan como `trabajo_id`
   const corrida = typeof c.trabajo_id === 'string' && c.trabajo_id.trim() ? c.trabajo_id.trim() : null
@@ -71,7 +75,7 @@ const POR_PASO: Record<string, string> = {
   busqueda: 'Eres el especialista en búsqueda. Di si conviene ACTIVAR la búsqueda pagada o diferirla, su mínimo y la señal de activación; recuerda que la búsqueda local gratuita va primero. ' + ESQUEMA_DE_CONSULTA,
   medicion: 'Eres el especialista en medición. Di qué cuenta como resultado según el evento, cómo se enlaza con la venta sin tocar el destino, la hoja mínima y los umbrales. ' + ESQUEMA_DE_CONSULTA,
   ajuste: FORMA_DEL_PLANTEO + ' ' + 'Lee las respuestas de los especialistas, AJUSTA tu planteo (meta, fases, reparto) y contesta lo que te piden. Devuelve el planteo FIJADO con el mismo esquema planteo.v1. ' + LISTA_DE_CANALES + ' No fijes montos de pauta. Si el contexto trae `equilibrio` con `cubre: false`, la meta NO paga el plan: DEBES agregar `equilibrio_respuesta: { decision: "subo_la_meta" | "mantengo_la_meta", motivo }` (si subes la meta, sube `meta_por_semana` y di de dónde sale: es un supuesto; si la mantienes, di por qué). La meta de equilibrio la calculó el código: no la recalcules.',
-  cierre: 'Eres el jefe de finanzas. Resuelve los conflictos y emite la SALIDA: sale, sale_ajustada o sale_con_alerta (nunca «no sale»: lo financiero no bloquea). Lista los hallazgos con severidad (critico, alto, medio, bajo) y a quién aluden (fpa, redes, busqueda, medicion, plan). Cada hallazgo lleva su ESTADO: «abierto» (sigue pendiente) o «resuelto» (tú mismo lo resolviste en este cierre); un crítico resuelto no bloquea la firma, y escribir «RESUELTO» en el texto sin el campo estado NO cuenta (el código lo toma como abierto y lo avisa). Si una cifra que manda está «sin base», solo puedes emitir sale_con_alerta. Esquema acuerdo.v1: {salida, hallazgos[{severidad, que, alude?, estado}], conflictos_resueltos[], dato_que_no_bloquea?, preguntas_a_emilio[{clave, texto, recomendacion, supuesto_si_no_responde, impacto?}]}. PREGUNTAS AL DUEÑO: pregunta solo lo que cambia el resultado y no se arregla con un supuesto; cada una con su impacto (alto, medio o bajo = cuánto cambia el plan) y escrita en lenguaje llano para el dueño (sin nombres internos ni palabras técnicas como «tablero»). Si el planteo dice «no sé» el presupuesto de pauta y el dueño no lo ha dado, la PRIMERA pregunta es el presupuesto semanal de pauta.',
+  cierre: 'Eres el jefe de finanzas. Resuelve los conflictos y emite la SALIDA: sale, sale_ajustada o sale_con_alerta (nunca «no sale»: lo financiero no bloquea). Lista los hallazgos con severidad (critico, alto, medio, bajo) y a quién aluden (fpa, redes, busqueda, medicion, plan). Cada hallazgo lleva su ESTADO: «abierto» (sigue pendiente) o «resuelto» (tú mismo lo resolviste en este cierre); un crítico resuelto no bloquea la firma, y escribir «RESUELTO» en el texto sin el campo estado NO cuenta (el código lo toma como abierto y lo avisa). Si una cifra que manda está «sin base», solo puedes emitir sale_con_alerta. Esquema acuerdo.v1: {salida, hallazgos[{severidad, que, alude?, estado}], conflictos_resueltos[], dato_que_no_bloquea?, preguntas_a_emilio[{clave, texto, recomendacion, supuesto_si_no_responde, impacto?, frena_la_firma?}]}. PREGUNTAS AL DUEÑO: pregunta solo lo que cambia el resultado y no se arregla con un supuesto; cada una con su impacto (alto, medio o bajo = cuánto cambia el plan), con `frena_la_firma: true` si de esa respuesta depende cerrar un hallazgo crítico (el plan espera esa respuesta), y escrita en lenguaje llano para el dueño (sin nombres internos ni palabras técnicas como «tablero»). Si el planteo dice «no sé» el presupuesto de pauta y el dueño no lo ha dado, la PRIMERA pregunta es el presupuesto semanal de pauta. Si el contexto trae `del_dueno_en_el_hilo`, marca `resuelto` el hallazgo que esa respuesta cierre y no vuelvas a preguntar lo que ya contestó.',
 }
 export function pedidoDelAgente(paso: Paso, contexto: Record<string, unknown>): string {
   const base = paso.clave.replace(/_2$/, '')
@@ -96,7 +100,7 @@ function abrirFinanciera(e: EncargoDeConversa): ResultadoDePaso {
     costo_usd: 0,
     artefacto: {
       cliente: e.client_id, rubro: s.rubro ?? null, pais: s.pais ?? null, moneda: s.moneda ?? null, fecha: s.fecha ?? null,
-      ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
+      ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, ...(s.manual_completo !== undefined && s.manual_completo !== null ? { manual_completo: s.manual_completo } : {}), brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
       datos, linea_base_por_semana: typeof s.linea_base_por_semana === 'number' && s.linea_base_por_semana > 0 ? s.linea_base_por_semana : null, referencias: s.referencias ?? [], evento_alterno: s.evento_alterno ?? {}, pisos: s.pisos ?? {},
       corrida_es_de_ensayo: s.corrida_es_de_ensayo === true, planteo_inicial: planteoInicial, notas_del_dueno: [], datos_del_dueno: [],
     },
@@ -131,14 +135,16 @@ function entradaDelMomento(a: Arts, ronda: 1 | 2): EntradaDelMomento {
 
 function calcularBloque(e: EncargoDeConversa, a: Arts, ronda: 1 | 2): ResultadoDePaso {
   const previo = (a.bloque ?? null) as { huella?: string } | null
-  const sinBloque = (motivo: string, errores: string[] = []): ResultadoDePaso => ({ costo_usd: 0, artefacto: { hay_bloque: false, cambio: ronda === 2 && !!previo?.huella, motivo, errores, huella: null } })
+  // `cambio` decide si el jefe vuelve a cerrar: cambiaron los números o contestó el dueño. Sin esto, el crítico que su respuesta resuelve quedaba abierto
+  const contesto = respuestasDeLaSemilla(e.semilla).length > 0
+  const sinBloque = (motivo: string, errores: string[] = []): ResultadoDePaso => ({ costo_usd: 0, artefacto: { hay_bloque: false, cambio: ronda === 2 && (!!previo?.huella || contesto), motivo, errores, huella: null } })
   const m = entradaDelMomento(a, ronda)
   if (!m.ok) return sinBloque(m.motivo, m.errores)
   const planteo = m.planteo
   const r = calcular(m.entrada)
   if (!r.ok) return sinBloque('entrada_invalida', r.errores)
   const huella = huellaDe(r)
-  return { costo_usd: 0, artefacto: { hay_bloque: true, bloque: r as unknown as Record<string, unknown>, entrada: m.entrada as unknown as Record<string, unknown>, alertas_de_entrada: [...m.alertas, ...(Array.isArray((planteo as { dado_por_verificado?: unknown }).dado_por_verificado) && ((planteo as { dado_por_verificado: unknown[] }).dado_por_verificado).length ? ['el plan dio por verificado algo que el código no comprueba: la confianza no sube y la salida solo puede ser «con alerta»'] : [])], huella, cambio: ronda === 2 ? huella !== previo?.huella : false } }
+  return { costo_usd: 0, artefacto: { hay_bloque: true, bloque: r as unknown as Record<string, unknown>, entrada: m.entrada as unknown as Record<string, unknown>, alertas_de_entrada: [...m.alertas, ...(Array.isArray((planteo as { dado_por_verificado?: unknown }).dado_por_verificado) && ((planteo as { dado_por_verificado: unknown[] }).dado_por_verificado).length ? ['el plan dio por verificado algo que el código no comprueba: la confianza no sube y la salida solo puede ser «con alerta»'] : [])], huella, cambio: ronda === 2 ? huella !== previo?.huella || contesto : false } }
 }
 
 /** plan v3 · V7 · lo que el ajuste DEBE ver: la meta de equilibrio calculada por código con los supuestos que ya hay (o null si todavía no hay con qué) */
@@ -200,13 +206,13 @@ async function recogerDelHilo(P: PuertosDeConversa, e: EncargoDeConversa, claves
 }
 
 // ───────────────────────────────────────────────────────── avanzar UN paso
-/** el tope propio de un encargo nunca pasa de aquí, salvo con una firma registrada en la semilla (la plantilla sigue en 1,50) */
-export const TOPE_MAXIMO_POR_ENCARGO_USD = 3
+/** el tope propio de un encargo nunca pasa de aquí, salvo con una firma registrada en la semilla */
+export const TOPE_MAXIMO_POR_ENCARGO_USD = TOPE_DEL_ENCARGO_USD
 /** la firma que habilita un tope por encima del techo: bien formada = quién, cuándo, valor numérico y ruta del papel, todo presente */
 export function firmaDeTopeValida(f: FirmaDeTope | undefined): f is FirmaDeTope {
   return !!f && typeof f === 'object' && [f.quien, f.cuando, f.papel].every((x) => typeof x === 'string' && x.trim() !== '') && typeof f.valor === 'number' && Number.isFinite(f.valor)
 }
-/** el tope de ESTE encargo: el de la plantilla (1,50) o el propio de la semilla si es un número válido (solo sube; por encima del techo solo hasta el valor de una firma registrada) */
+/** el tope de ESTE encargo: el de la plantilla o el propio de la semilla si es un número válido (solo sube; por encima del techo solo hasta el valor de una firma registrada) */
 export function topeEfectivoDelEncargo(sem: Semilla | undefined): number {
   const base = PLANTILLA_FINANCIERA.limites.tope_encargo_usd
   const t = sem?.tope_encargo_usd
@@ -292,11 +298,13 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
   const e = await P.almacen.leerEncargo(encargo_id)
   if (!e) return { status: 404, cuerpo: { error: 'encargo_inexistente' } }
   if ((ESTADOS_TERMINALES as readonly string[]).includes(e.estado)) return { status: 200, cuerpo: { encargo_id: e.id, estado: e.estado, terminado: true, gasto_usd: e.gasto_usd } }
+  // en pausa no se gasta ni se avanza: quien la suelta es la respuesta del dueño
+  if (e.estado === ESPERANDO_AL_DUENO) return { status: 200, cuerpo: enPausa(e) }
   // CANDADO (arreglo del intento 4): una sola llamada por encargo a la vez; el turno de un agente dura minutos y una repetida pagaba dos veces
   const candado = P.almacen.tomarPaso ? await P.almacen.tomarPaso(e.id, P.ahora(), TTL_DEL_CANDADO_S) : null
   if (candado && candado.ok && !candado.tomado) return { status: 409, cuerpo: { error: 'paso_en_vuelo', detalle: 'otra llamada está ejecutando un paso de este encargo: léelo con «leer» antes de repetir' } }
   // si el candado MISMO no se puede tomar (columna sin migrar, base con error), el paso sigue SIN candado: no peor que antes del arreglo; el tope cobrado y el margen de reintento siguen activos
-  try { return await ejecutarUnPaso(P, e, cfg.redactor) } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
+  try { return await ejecutarUnPaso(P, e, cfg.redactor, cfg.pausa_al_dueno === true && cfg.preguntas_slack === 'envia') } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
 }
 
 /**
@@ -311,6 +319,8 @@ export async function cerrarPorPlazo(P: PuertosDeConversa, encargo_id: string): 
   const e = await P.almacen.leerEncargo(encargo_id)
   if (!e) return { status: 404, cuerpo: { error: 'encargo_inexistente' } }
   if ((ESTADOS_TERMINALES as readonly string[]).includes(e.estado)) return { status: 200, cuerpo: { encargo_id: e.id, estado: e.estado, terminado: true, gasto_usd: e.gasto_usd, turnos: await P.almacen.turnos(e.id) } }
+  // el plazo no corre durante una pausa
+  if (e.estado === ESPERANDO_AL_DUENO) return { status: 200, cuerpo: enPausa(e) }
   // el mismo candado que `avanzar`: si un paso está en vuelo NO se cierra debajo de él (lo cobraría y lo perdería); el plan puede volver a pedirlo
   const candado = P.almacen.tomarPaso ? await P.almacen.tomarPaso(e.id, P.ahora(), TTL_DEL_CANDADO_S) : null
   if (candado && candado.ok && !candado.tomado) return { status: 409, cuerpo: { error: 'paso_en_vuelo', detalle: 'hay un paso de este encargo en ejecución: vuelve a pedir el cierre cuando termine' } }
@@ -331,7 +341,21 @@ export async function cerrarPorPlazo(P: PuertosDeConversa, encargo_id: string): 
   } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
 }
 
-async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redactor?: string): Promise<Respuesta> {
+/** la oficina se detiene aquí: 04-nov · Emilio: si necesita respuestas para firmar, el plan espera hasta que él conteste */
+export const ESPERANDO_AL_DUENO = 'esperando_al_dueno' as const
+const enPausa = (e: EncargoDeConversa): Record<string, unknown> => ({ encargo_id: e.id, estado: ESPERANDO_AL_DUENO, esperando: true, terminado: false, gasto_usd: e.gasto_usd })
+/** lo que falta contestar para seguir: las preguntas que frenan la firma y que el dueño aún no respondió */
+export function preguntasQueFaltan(arts: Arts, semilla: Semilla | undefined): string[] {
+  const dadas = new Set(respuestasDeLaSemilla(semilla).map((x) => x.clave))
+  return prepararPreguntas(arts, semilla, { pausa: true }).frenan.filter((k) => !dadas.has(k))
+}
+/** pausa UNA vez: tras el cierre de la ronda 1, con críticos abiertos y preguntas sin contestar. Lo que el dueño no contestó o el jefe deje abierto queda en la oficina y no vuelve a pausar (Emilio, 15:37Z). En seco no se le pregunta a nadie */
+export function debePausar(e: EncargoDeConversa, arts: Arts): boolean {
+  const a = arts.acuerdo as { criticos?: unknown } | undefined
+  return !e.dry_run && e.semilla?.pausa_atendida !== true && !arts.acuerdo_2 && !arts.cierre && Number(a?.criticos) > 0 && preguntasQueFaltan(arts, e.semilla).length > 0
+}
+
+async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redactor?: string, pausaEncendida = false): Promise<Respuesta> {
   let e = e0
   // TOPE SOBRE LO COBRADO (arreglo del intento 4): el gasto del motor solo suma turnos GUARDADOS; lo cobrado y perdido (502, corte) también cuenta
   const cobrado = P.almacen.cobrado ? await P.almacen.cobrado(e.id).catch(() => null) : null
@@ -346,6 +370,10 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redac
   }
   const arts = await P.almacen.artefactos(e.id)
   const turnosPrevios = await P.almacen.turnos(e.id).catch(() => [] as TurnoDeConversa[])
+  if (pausaEncendida && debePausar(e, arts)) {
+    await P.almacen.guardar({ encargo_id: e.id, estado_del_motor: e.estado_del_motor, gasto_usd: e.gasto_usd, estado: ESPERANDO_AL_DUENO })
+    return { status: 200, cuerpo: enPausa(e) }
+  }
   const plantilla = plantillaDelEncargo(e, turnosPrevios, redactor)
   const sig = siguientePaso(e.estado_del_motor, plantilla)
 
@@ -391,7 +419,10 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redac
     const contexto: Record<string, unknown> = {}
     for (const nombre of paso.entrada) if (arts[nombre]) contexto[nombre] = arts[nombre]
     const dadas = respuestasDeLaSemilla(e.semilla)
-    if (hilo.notas.length || hilo.respuestas.length || dadas.length) contexto.del_dueno_en_el_hilo = { notas: hilo.notas.map((x) => ({ ...x, marca: 'nota del dueño: no es un dato confirmado' })), respuestas: [...dadas.map((x) => ({ ...x, marca: 'respuesta del dueño: dato confirmado por él' })), ...hilo.respuestas.map((x) => ({ ...x, marca: 'respuesta numerada del dueño, con su fecha' }))] }
+    // 04-nov · lo que el dueño escribió sin responder a una pregunta queda en el registro del buzón: el hilo de esta ruta no lee nada (`slackNoConfigurado`) y sin esto nadie lo veía
+    const delBuzon = Array.isArray(arts.buzon_respuestas?.notas) ? (arts.buzon_respuestas.notas as Array<{ ts?: unknown; literal?: unknown }>).filter((x) => typeof x?.literal === 'string' && x.literal.trim()).map((x) => ({ ts: String(x.ts ?? ''), texto: String(x.literal) })) : []
+    const notasDelDueno = [...hilo.notas, ...delBuzon]
+    if (notasDelDueno.length || hilo.respuestas.length || dadas.length) contexto.del_dueno_en_el_hilo = { notas: notasDelDueno.map((x) => ({ ...x, marca: 'nota del dueño: no es un dato confirmado' })), respuestas: [...dadas.map((x) => ({ ...x, marca: 'respuesta del dueño: dato confirmado por él' })), ...hilo.respuestas.map((x) => ({ ...x, marca: 'respuesta numerada del dueño, con su fecha' }))] }
     // plan v3 · V7: el ajuste ve la meta de equilibrio (la calcula el código con lo que ya dijeron los especialistas) y, si la meta no la cubre, DEBE responderla
     const esAjuste = paso.clave.replace(/_2$/, '') === 'ajuste'
     const equilibrio = esAjuste ? equilibrioParaElAjuste(arts, paso.clave === 'ajuste_2' ? 2 : 1) : null
