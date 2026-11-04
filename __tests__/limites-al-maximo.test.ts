@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 const TOPE_DEL_PLAN = 800
 const CEREBRO = /^(brain|client-brain|cerebro|portero)\//
 // su espera está atada al nodo de n8n que las llama (hay pruebas de eso): suben juntas con el flujo, no antes
-const ATADAS_A_N8N = ['jefatura/revisiones', 'jefatura/turnos', 'jefatura/vigia', 'manual/opinion', 'oficina/encargos', 'oficina/turnos', 'oficina/vigia']
+const ATADAS_A_N8N = ['oficina/encargos']
 
 const raiz = path.join(process.cwd(), 'src/app/api')
 const rutas = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => {

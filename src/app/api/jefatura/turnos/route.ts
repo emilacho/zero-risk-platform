@@ -12,7 +12,7 @@ import { checkLlaveDeLaSala, esObjeto, numero, puertosReales, UUID, webhookDelTu
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 300
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const auth = checkLlaveDeLaSala(request)

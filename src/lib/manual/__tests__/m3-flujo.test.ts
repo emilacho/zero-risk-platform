@@ -65,10 +65,10 @@ describe('M3 · la forma del flujo', () => {
     for (const f of fs.readdirSync(DIR).filter((x) => x.endsWith('.js'))) expect(fs.readFileSync(`${DIR}/${f}`, 'utf8')).not.toMatch(/sk-[A-Za-z0-9]{10,}|eyJ[A-Za-z0-9_-]{20,}/)
     expect(j).toContain('$env.INTERNAL_API_KEY')
   })
-  it('los tiempos caben: opinión 300 s (la ruta vive 300 s) y los agentes 800 s (el corredor corta a 800 s)', () => {
-    expect(nodo(N.opHttp).parameters.options.timeout).toBe(300000)
+  it('los tiempos caben: opinión 800 s (la ruta vive 800 s) y los agentes 800 s (el corredor corta a 800 s)', () => {
+    expect(nodo(N.opHttp).parameters.options.timeout).toBe(800000)
     for (const n of [N.autorRun, N.juezRun, N.resRun]) expect(nodo(n).parameters.options.timeout).toBe(800000)
-    expect(fs.readFileSync('src/app/api/manual/opinion/route.ts', 'utf8')).toMatch(/maxDuration = 300/)
+    expect(fs.readFileSync('src/app/api/manual/opinion/route.ts', 'utf8')).toMatch(/maxDuration = 800/)
   })
   it('con dry_run NINGÚN paso de modelo es alcanzable: desde la rama «no sigue» de la guarda no se llega a ningún run-sdk, ni a GPT, ni al borrador', () => {
     const prohibidos = new Set([N.autorRun, N.juezRun, N.resRun, N.opHttp, N.borHttp])

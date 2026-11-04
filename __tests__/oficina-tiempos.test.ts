@@ -17,8 +17,8 @@ const nodos = (f: unknown): Nodo[] => (f as { nodes: Nodo[] }).nodes
 const timeoutDe = (f: unknown, fragmento: string): number => nodos(f).find((n) => n.type === 'n8n-nodes-base.httpRequest' && String(n.parameters.url).includes(fragmento))?.parameters.options?.timeout ?? 0
 
 describe('los tiempos de la oficina', () => {
-  it('turnos y vigía tienen hasta 300 s; abrir un encargo, 120 s', () => {
-    expect(duracion('turnos')).toBe(300); expect(duracion('vigia')).toBe(300); expect(duracion('encargos')).toBe(120)
+  it('turnos y vigía tienen hasta 800 s; abrir un encargo, 120 s', () => {
+    expect(duracion('turnos')).toBe(800); expect(duracion('vigia')).toBe(800); expect(duracion('encargos')).toBe(120)
   })
   it('el flujo de turnos NO corta antes que la ruta: registrar y re-armar esperan al menos lo que la ruta puede tardar', () => {
     const f = construirTurno()

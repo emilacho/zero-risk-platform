@@ -84,7 +84,7 @@ export function construirManual({ path = 'zero-risk/manual-revision', nombre = '
     code(N.juezVeredicto, 'n5-juez-veredicto.js', x(11, -150)),
     // ⑤ GPT ciego: una sola pregunta, 3 reintentos dentro de la ruta; si falla NO bloquea
     code(N.opPedido, 'n6-opinion-pedido.js', x(12, -150)),
-    http(N.opHttp, `${VERCEL}/api/manual/opinion`, x(13, -150), { headers: [LLAVE_INTERNA, LLAVE_DESPACHO], body: '={{ JSON.stringify($json.opinion_body) }}', timeout: 300000 }),
+    http(N.opHttp, `${VERCEL}/api/manual/opinion`, x(13, -150), { headers: [LLAVE_INTERNA, LLAVE_DESPACHO], body: '={{ JSON.stringify($json.opinion_body) }}', timeout: 800000 }),
     code(N.opVuelta, 'n7-opinion-vuelta.js', x(14, -150)),
     cond(N.ifOpino, '={{ $json.hay_opinion }}', esVerdadero, x(15, -150)),
     // ⑥ el autor responde (una pasada) y la puerta vuelve a cerrar
