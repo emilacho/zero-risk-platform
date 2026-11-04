@@ -77,6 +77,19 @@ describe('cada corrida abre su encargo de finanzas', () => {
     expect(r).toMatchObject({ ok: true, nuevo: false })
     expect(db.tablas['finanzas_encargos'][0]).toMatchObject({ estado: 'en_curso' })
   })
+  it('🔴 si otra llamada ya lo cerró en este instante, no se pisa su estado', async () => {
+    const db = new DbFalsa()
+    db.semilla('finanzas_encargos', [abierto('r2')])
+    const from = db.from.bind(db)
+    // entre la lectura y el cierre, otro lo cierra: la escritura solo debe tocar lo que sigue abierto
+    let lecturas = 0
+    db.from = ((tabla: string) => {
+      if (tabla === 'finanzas_encargos' && lecturas++ === 1) db.tablas['finanzas_encargos'][0].estado = 'cerrado'
+      return from(tabla)
+    }) as typeof db.from
+    await almacenDeConversa(db as never).crearEncargo(base('r3'))
+    expect(db.tablas['finanzas_encargos'].find((f) => f.id === 'viejo')).toMatchObject({ estado: 'cerrado' })
+  })
   it('🔴 lo que quedó abierto sin corrida (de antes) tampoco se hereda', async () => {
     const { r } = await crear([abierto()], 'r3')
     expect(r).toMatchObject({ ok: true, nuevo: true })
