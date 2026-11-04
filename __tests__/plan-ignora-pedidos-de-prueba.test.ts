@@ -70,7 +70,7 @@ describe('fundir las dos consultas', () => {
   it.each(['cart_opened', 'checkout_started', 'order_submitted', 'payment_succeeded', 'purchase', 'pedido_entregado', 'pago_confirmado', 'compra'])('🔴 %s se trata como venta', (e) => {
     expect(fundirConElCorte([fila(e, 3)], [])).toEqual([])
   })
-  it.each(['$pageview', 'menu_viewed', 'ruleta_spun', 'error_en_el_navegador'])('🔴 %s no se trata como venta', (e) => {
+  it.each(['$pageview', 'menu_viewed', 'ruleta_spun', 'error_en_el_navegador', 'reorder', 'ver_carta'])('🔴 %s no se trata como venta', (e) => {
     expect(fundirConElCorte([fila(e, 3)], [])).toHaveLength(1)
   })
 })
@@ -111,6 +111,12 @@ describe('el brazo con corte, de punta a punta con la analítica falsa', () => {
     const r = await pedir({ dominio: 'sitio.ec' })
     expect(sqls).toHaveLength(1)
     expect(r.datos.embudo.map((f) => f.evento)).toContain('order_delivered')
+  })
+  it('🔴 si falla la consulta completa, no inventa cero visitas: avisa', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: { body: string }) => (JSON.parse(init.body).query.query.includes('parseDateTimeBestEffort') ? new Response(JSON.stringify({ results: [['order_submitted', 1, 1]] }), { status: 200 }) : new Response('{}', { status: 504 }))))
+    const r = await pedir({ dominio: 'sitio.ec', datos_de_prueba: { pedidos_de_prueba_hasta: '2026-11-04T20:39:48Z' } })
+    expect(r.estado).toBe('sin_respuesta')
+    expect(r.motivo).toContain('504')
   })
   it('🔴 si falla la consulta del corte, el brazo no entrega ventas de prueba como reales: avisa', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_u: string, init: { body: string }) => (JSON.parse(init.body).query.query.includes('parseDateTimeBestEffort') ? new Response('{}', { status: 504 }) : new Response(JSON.stringify({ results: [['order_submitted', 3, 2]] }), { status: 200 }))))
