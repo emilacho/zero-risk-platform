@@ -4,7 +4,7 @@
  */
 import { estadoInicial } from '../../oficina/tipos'
 import type { Db } from '../almacen-supabase'
-import type { AlmacenDeConversa, CambiosDeEncargo, EncargoDeConversa, TurnoDeConversa } from './puertos'
+import type { AlmacenDeConversa, CambiosDeEncargo, EncargoDeConversa, Semilla, TurnoDeConversa } from './puertos'
 
 type Fila = Record<string, unknown>
 function ok<T>(r: { data: T; error: { message: string; code?: string } | null }, que: string): T {
@@ -28,7 +28,13 @@ export function almacenDeConversa(db: Db): AlmacenDeConversa {
       try {
         // una sola conversación ABIERTA por cliente: si hay una, se devuelve esa (no se abre otra ni se pisa)
         const abiertos = ok(await db.from('finanzas_encargos').select('*').eq('client_id', n.client_id).in('estado', ['abierto', 'en_curso']).limit(1), 'leer el abierto') as Fila[] | null
-        if (abiertos?.[0]) return { ok: true as const, encargo: aEncargo(abiertos[0]), nuevo: false }
+        // 04-nov · cada corrida abre el suyo: lo que quedó abierto de OTRA corrida se cierra, y no se hereda ni su gasto ni sus pasos. Sin corrida en el pedido, como siempre
+        const corrida = n.semilla?.corrida
+        if (abiertos?.[0]) {
+          const previa = (abiertos[0].semilla as Semilla | null)?.corrida
+          if (!corrida || previa === corrida) return { ok: true as const, encargo: aEncargo(abiertos[0]), nuevo: false }
+          ok(await db.from('finanzas_encargos').update({ estado: 'fallido', estado_del_motor: { ...(abiertos[0].estado_del_motor as object), cerrado_por: 'otra_corrida', corrida_nueva: corrida }, actualizado_en: new Date().toISOString() }).eq('id', abiertos[0].id).in('estado', ['abierto', 'en_curso']), 'cerrar el de otra corrida')
+        }
         const fila = { client_id: n.client_id, estado: 'abierto', estado_del_motor: estadoInicial(), gasto_usd: 0, dry_run: n.dry_run, semilla: n.semilla }
         const r = await db.from('finanzas_encargos').insert(fila).select('*').single()
         if (r.error) {

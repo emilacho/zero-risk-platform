@@ -195,7 +195,8 @@ export function resolverContradicciones(datos: DatoV1[], snap: CatalogoSnapshot)
     const tipo = snap.tipo(d.tipo_id)
     if (tipo?.clase_dato === 'acumula') continue
     const familia = [d.tipo_id, ...(tipo?.comparable_con ?? [])].sort().join('+')
-    const k = `${familia}|${d.atributo ?? ''}`
+    // 04-nov · el mismo producto en dos sedes no se contradice: cada sede tiene su precio
+    const k = `${familia}|${d.atributo ?? ''}|${d.sede ?? ''}`
     grupos.set(k, [...(grupos.get(k) ?? []), d])
   }
   for (const todos of grupos.values()) {
@@ -294,7 +295,7 @@ export function normalizarDatos(entradas: EntradaCruda[], ctx: ContextoDeNormali
     const confianza = op.resolverConfianza({ origen, identidad: ident, frescura, tipo, n: e.n, juzgado_por: e.juzgado_por, propiedad: e.propiedad, marcas })
     const confTerminal = frescura.estado === 'sin_fecha' && confianza === 'alta' ? 'media' : confianza
     datos.push({
-      id, fuente_id: e.fuente_id, tipo_id: e.tipo_id, atributo: e.atributo ?? null, valor, origen, estado, medido_en: e.medido_en ?? null, ejecucion: e.ejecucion ?? null, periodo, alcance, identidad: ident, frescura,
+      id, fuente_id: e.fuente_id, tipo_id: e.tipo_id, atributo: e.atributo ?? null, ...(e.sede ? { sede: e.sede } : {}), valor, origen, estado, medido_en: e.medido_en ?? null, ejecucion: e.ejecucion ?? null, periodo, alcance, identidad: ident, frescura,
       contradice: null, truncado: e.truncado ?? { si: false }, derivado: { si: false, de: [] }, confianza: confTerminal, motivo, marcas, via: e.via ?? null,
       citable: (origen === 'medido' || origen === 'supuesto' || origen === 'dueno') && !marcas.includes('contenido_con_imperativos'), fuente_url: e.fuente_url ?? null,
       rotulo: marcas.includes('moneda_supuesta') ? snap.monedaDePais(ctx.pais)?.rotulo ?? null : e.origen_ficha === 'dueno' ? 'indicado por el dueño, sin firmar por la puerta' : e.fuente_id === 'manual_vigente' ? 'del manual vigente' : null,

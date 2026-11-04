@@ -43,7 +43,7 @@ export function aProcedencia(d: DatoV1): DatoConProcedencia {
     procedencia: d.origen,
     fuente: d.fuente_id,
     ...(d.medido_en ? { fecha: d.medido_en, medido_en: d.medido_en } : {}),
-    resumen: corto(`${d.tipo_id}${d.atributo ? ` (${d.atributo})` : ''}: ${vtxt} — ${cola}`, MAX_RESUMEN),
+    resumen: corto(`${d.tipo_id}${d.atributo ? ` (${d.atributo})` : ''}${d.sede ? ` · sede ${d.sede}` : ''}: ${vtxt} — ${cola}`, MAX_RESUMEN),
     estado: d.estado === 'viejo_reciclado' ? 'viejo_reciclado' : d.estado,
     identidad: d.identidad.estado,
     ...(d.frescura.edad_h !== null ? { frescura_h: d.frescura.edad_h } : {}),
