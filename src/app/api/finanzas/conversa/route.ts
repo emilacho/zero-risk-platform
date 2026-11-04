@@ -8,6 +8,7 @@
  * Modelo: solo si hay `FINANZAS_RUN_SDK_BASE` (nunca en la rama apagada).
  * SECO (CC#2 · 14-oct): `{ accion: 'avanzar', encargo_id, simulacion }` → los agentes contestan el guion (SOLO con un encargo `dry_run = true`; con uno real, 409): el seco a US$ 0, sin modelo.
  */
+import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeFinanzas, type Db } from '@/lib/finanzas/almacen-supabase'
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
   const tableros = almacenDeFinanzas(db)
   const P: PuertosDeConversa = {
     almacen: almacenDeConversa(db),
-    modelo: modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch, workflow_id: typeof cuerpo === 'object' && cuerpo !== null ? ((cuerpo as Record<string, unknown>).workflow_id as string | undefined) : undefined }),
+    modelo: modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch, trabajo: trabajoDeLaLlamada(cuerpo, (nombre) => request.headers.get(nombre)).columnas, workflow_id: typeof cuerpo === 'object' && cuerpo !== null ? ((cuerpo as Record<string, unknown>).workflow_id as string | undefined) : undefined }),
     slack: slackNoConfigurado,
     tableros,
     config: () => tableros.leerConfig(),

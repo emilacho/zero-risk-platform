@@ -7,6 +7,7 @@
  *    (si lo hiciera, resucitan los 3 revisores de julio: 3 llamadas de pago por texto y reescritura con `[REVISION]`). Los ids de ejecución van arriba del cuerpo; en `extra` solo las 4 claves de la lista.
  * Todo texto interno va en TUTEO (firma 11-oct); el registro de las piezas lo deciden su manual o su país, nunca estas instrucciones.
  */
+import type { ColumnasDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { requiresEditorReview } from '../../editor-routing'
 import { armarPedidoAlRevisor, preguntaAlRevisor, type ContextoDelRevisor, type Estado, type HuecosDeLaPregunta, type PedidoAlRevisor } from '../../revision-comun'
 import type { PayloadDeRevision, Simulacion, TipoDeRevision } from './contrato'
@@ -38,8 +39,9 @@ export interface PedidoDeAgente {
   headers_requeridos: Record<string, string>
   /** solo con `dry_run = true`: las ramas que fuerza la simulación (los flujos del seco la leen) */
   simulacion?: Simulacion
-  trabajo_tipo?: 'pieza'
+  trabajo_tipo?: string
   trabajo_id?: string
+  llamada_padre?: string
   /** `true` en el pedido que repite un paso por formato roto (el seco lo usa para romper solo el primer intento) */
   reintento_formato?: true
 }
@@ -57,7 +59,7 @@ export interface DatosDelPedido {
   dry_run: boolean
   client_id: string
   /** 04-nov · de qué trabajo es la llamada · sin él, «sin dato» */
-  trabajo?: { trabajo_tipo: 'pieza'; trabajo_id: string }
+  trabajo?: ColumnasDeLaLlamada
   /** lo que un llamador intentara meter en `extra`: se rechaza lo que no esté en la lista */
   extra_ajeno?: Record<string, unknown>
   simulacion?: Simulacion

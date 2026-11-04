@@ -74,6 +74,10 @@ export interface PayloadDeRevision {
   generado_por_jefatura?: string | null
   /** versión del artefacto que se revisa (por omisión 1) */
   version?: number
+  /** 04-nov · de qué trabajo es la revisión, lo trae quien la abre · la de una pieza no lo necesita: es su `artifact_id` */
+  trabajo_tipo?: string
+  trabajo_id?: string
+  llamada_padre?: string
 }
 
 export interface EntradaDeRevision {

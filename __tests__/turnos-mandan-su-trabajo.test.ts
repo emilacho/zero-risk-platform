@@ -34,7 +34,7 @@ describe('jefatura', () => {
     expect(armarPedidoDeAgente({ ...jefatura, trabajo: { trabajo_tipo: 'pieza', trabajo_id: 'enc-1' } })).toMatchObject({ trabajo_tipo: 'pieza', trabajo_id: 'enc-1' })
     expect(armarPedidoDeAgente(jefatura)).not.toHaveProperty('trabajo_tipo')
   })
-  it('🔴 solo la revisión de una pieza declara trabajo, y es su `artifact_id`', () => {
-    expect(LEE('src/lib/jefatura/revision/orquestador.ts')).toContain("rev.artifact_type === 'pieza' ? { trabajo: { trabajo_tipo: 'pieza' as const, trabajo_id: rev.artifact_id } }")
+  it('🔴 la revisión de una pieza declara su `artifact_id`', () => {
+    expect(LEE('src/lib/jefatura/revision/orquestador.ts')).toContain("rev.artifact_type === 'pieza' ? { trabajo_tipo: 'pieza', trabajo_id: rev.artifact_id }")
   })
 })

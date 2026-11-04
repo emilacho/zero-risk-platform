@@ -59,6 +59,10 @@ export interface PedidoPuerta {
   // ── la firma de la corrida · ver `firmaDeLaCorrida()` ──────────────────
   readonly workflow_id?: string
   readonly workflow_execution_id?: string
+  // 04-nov · de qué trabajo es la corrida: lo lee quien llama a un empleado
+  readonly trabajo_tipo?: string
+  readonly trabajo_id?: string
+  readonly llamada_padre?: string
   // ── lo que el Servicio de Apify exige que se DECIDA, no que se herede ──
   readonly dry_run?: boolean
   readonly callback_url?: string
@@ -81,6 +85,9 @@ export interface Sobre {
 
 /** los campos que el sobre puede poner UNA vez para todos los pedidos */
 const HEREDABLES = [
+  'trabajo_tipo',
+  'trabajo_id',
+  'llamada_padre',
   'client_id',
   'proposito',
   'limite_ms',
