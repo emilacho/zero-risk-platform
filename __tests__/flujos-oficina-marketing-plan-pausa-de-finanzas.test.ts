@@ -61,9 +61,27 @@ describe('plan · la pausa de finanzas', () => {
     expect(c).toContain('pedidos: REANUDA ? [] : pedidos,')
     expect(c).toContain('if (!REANUDA && !pedidos.some(')
     const expr = c.slice(c.indexOf('const REANUDA = ') + 16, c.indexOf(';\r\nif (!REANUDA') > 0 ? c.indexOf(';\r\nif (!REANUDA') : c.indexOf(';\nif (!REANUDA'))
-    const reanuda = (b: Record<string, unknown> | 'sin') => new Function('$', 'return ' + expr)(() => ({ first: () => { if (b === 'sin') throw new Error('x'); return { json: { body: b } } } }))
+    // `viejo`: lo que contesta «V9 · decidir» (undefined = ese nodo no corrió)
+    const reanuda = (b: Record<string, unknown> | 'sin', viejo?: boolean) => new Function('$', 'return ' + expr)((n: string) => ({ first: () => {
+      if (n === 'V9 · decidir') { if (viejo === undefined) throw new Error('no corrió'); return { json: { material_viejo: viejo } } }
+      if (b === 'sin') throw new Error('x'); return { json: { body: b } }
+    } }))
     expect(reanuda({ reanudar_esperas_id: 'u' })).toBe(true); expect(reanuda({})).toBe(false); expect(reanuda('sin')).toBe(false)
+    // pausa de más de 7 días: el pre-vuelo avisa `material_viejo` → NO se reanuda con lo guardado (los brazos se piden frescos)
+    expect(reanuda({ reanudar_esperas_id: 'u' }, true)).toBe(false); expect(reanuda({ reanudar_esperas_id: 'u' }, false)).toBe(true)
     expect(cod(base(), 'elegir brazos')).not.toContain('REANUDA')
+  })
+  it('el pre-vuelo recibe `reanudar_esperas_id` y «V9 · decidir» deja pasar `material_viejo`; sin ellos, igual que hoy', () => {
+    const f = nuevo()
+    const cuerpo = (ff: Flujo, b: Record<string, unknown>) => JSON.parse(new Function('$', 'return ' + ((ff.nodes.find((x) => x.name === 'V9 · pre-vuelo') as Nodo).parameters.jsonBody as string).replace(/^={{/, '').replace(/}}$/, ''))(() => ({ first: () => ({ json: { body: b } }) })))
+    const b0 = { client_id: 'c', corrida: 'k', dry_run: false }
+    expect(cuerpo(f, { ...b0, reanudar_esperas_id: 'u1' })).toEqual({ client_id: 'c', corrida: 'k', dry_run: false, reanudar_esperas_id: 'u1' })
+    expect(cuerpo(f, b0)).toEqual({ client_id: 'c', corrida: 'k', dry_run: false })
+    expect(cuerpo(base() as Flujo, { ...b0, reanudar_esperas_id: 'u1' })).toEqual({ client_id: 'c', corrida: 'k', dry_run: false })
+    const dec = (ff: Flujo, body: Record<string, unknown>) => new Function('$input', '$runIndex', cod(ff, 'V9 · decidir'))({ first: () => ({ json: { statusCode: 200, body } }) }, 0)[0].json
+    expect(dec(f, { decision: 'correr', material_viejo: true })).toMatchObject({ ruta: 'seguir', material_viejo: true })
+    expect(dec(f, { decision: 'correr' })).toMatchObject({ ruta: 'seguir', material_viejo: false })
+    expect(dec(base() as Flujo, { decision: 'correr', material_viejo: true }).material_viejo).toBeUndefined()
   })
   it('después de la Junta: al reanudar el material guardado ocupa su lugar; si no se puede leer, falla en rojo', () => {
     const f = nuevo()
@@ -82,9 +100,9 @@ describe('plan · la pausa de finanzas', () => {
     expect(cod(nuevo(), 'FIN · armar la semilla')).toContain('semilla.manual_completo = mc')
     expect(cod(base(), 'FIN · armar la semilla')).not.toContain('manual_completo')
   })
-  it('solo cambian los 4 nodos esperados y se suman 6', () => {
+  it('solo cambian los 6 nodos esperados y se suman 6', () => {
     const a = base().nodes, d = nuevo().nodes
     expect(d.length).toBe(a.length + 6)
-    expect(a.filter((n) => JSON.stringify(n) !== JSON.stringify(d.find((y) => y.name === n.name))).map((n) => n.name).sort()).toEqual(['FIN · armar la semilla', 'FIN · decidir', 'elegir brazos', '⓪ Llave · Webhook · planeacion'].sort())
+    expect(a.filter((n) => JSON.stringify(n) !== JSON.stringify(d.find((y) => y.name === n.name))).map((n) => n.name).sort()).toEqual(['FIN · armar la semilla', 'FIN · decidir', 'V9 · decidir', 'V9 · pre-vuelo', 'elegir brazos', '⓪ Llave · Webhook · planeacion'].sort())
   })
 })
