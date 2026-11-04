@@ -2,6 +2,7 @@
  * PLAN v3 · V8 · los PUERTOS del pre-vuelo sobre Supabase (service_role). Sin lógica de decisión: solo traduce cada puerto a lecturas con COLUMNAS NOMBRADAS.
  * Cada lectura que falla devuelve `{ ok: false }` (nunca un «vacío»): el pre-vuelo lo dice y no corre.
  */
+import { mesaEncendida } from './mesa/interruptor'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveClientCapContext, resolveClientFamily, resolveRunSpendCapUsd, techoDelCliente, techoGenericoDeArranque } from '../run-sdk-spend-gate'
 import { notifySpendGateDegradation } from '../spend-gate-alert'
@@ -15,12 +16,14 @@ import type { LecturaDeCupo, LecturaDeFicha, LecturaDeSenal, PuertosDePrevuelo }
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
 
+// la mesa de estrategia pesa en el cupo solo si está encendida
 export function puertosDeSupabase(db: SupabaseClient, ahora: () => Date = () => new Date()): PuertosDePrevuelo {
   const d = db as unknown as Db
   return {
     ahora,
     corridas: almacenDeCorridas(d, ahora),
     catalogo: () => leerCatalogo(d),
+    mesaEncendida: () => mesaEncendida(d),
 
     async esperaDeReanudacion(id) {
       const r = await db.from('esperas_del_dueno').select('client_id, estado, sobre, creado_en').eq('id', id).eq('tipo', 'finanzas').limit(1)

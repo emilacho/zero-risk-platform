@@ -145,6 +145,26 @@ describe('V8 · el ensayo sin manual (tramo 5 del ensayo de punta a punta · 20-
 
 describe('V8 · el cupo (§13.1)', () => {
   const cupo = (over: Partial<CupoDelCliente>): LecturaDeCupo => ({ ok: true, cap_usd: 8, generico_usd: 8, override_usd: null, gastado_24h_usd: 0, ...over })
+  describe('04-nov · la mesa de estrategia', () => {
+    const conMesa = crearSnapshot({ ...FILAS, topes: [...FILAS.topes, { ...FILAS.topes[0], tope_id: 'tope_mesa', tramo: 'mesa', fuente_id: null, usd: 3, contador: 'plantilla_mesa' }] } as FilasDelCatalogo)
+    const conElla = (encendida: () => Promise<boolean>, c: LecturaDeCupo) => ({ ...mundo({ cupo: c, catalogo: async () => ({ ok: true as const, snapshot: conMesa }) }).P, mesaEncendida: encendida })
+    it('🔴 apagada, la decisión es la de hoy: mismo cupo y ni un campo de más', async () => {
+      const r = await prevuelo(entrada(), conElla(async () => false, cupo({ cap_usd: 3.4, override_usd: 3.4 })))
+      expect(r.decision).toBe('correr')
+      expect(r).not.toHaveProperty('mesa')
+      const sinPuerto = await prevuelo(entrada({ corrida: 'z' }), mundo({ cupo: cupo({}) }).P)
+      expect(sinPuerto).not.toHaveProperty('mesa')
+    })
+    it('🔴 encendida, su tope cuenta en el cupo y el flujo se entera', async () => {
+      const r = await prevuelo(entrada(), conElla(async () => true, cupo({ cap_usd: 3.4, override_usd: 3.4 })))
+      expect(r).toMatchObject({ decision: 'no_corre', motivo: 'falta_cupo' })
+      expect(r).not.toHaveProperty('mesa')
+      expect(await prevuelo(entrada(), conElla(async () => true, cupo({ cap_usd: 6.4, override_usd: 6.4 })))).toMatchObject({ decision: 'correr', mesa: true })
+    })
+    it('🔴 no poder leer el interruptor no se lee como apagada', async () => {
+      expect(await prevuelo(entrada(), conElla(async () => { throw new Error('caída') }, cupo({})))).toMatchObject({ decision: 'no_corre', motivo: 'lectura_fallida' })
+    })
+  })
   it('la suma de topes sale del catálogo (3,40)', () => {
     expect(sumaDeTopes(snap)).toBe(3.4)
   })
