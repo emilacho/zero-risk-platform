@@ -35,7 +35,7 @@ describe('el plan sin rótulos internos (Emilio, 15:37Z)', () => {
     const e = de(N.revisarPlan(PLAN_B, CTX), 'P15')!
     expect(e.ejemplos.join(' ')).toMatch(/sin firma|oficina financiera/i)
   })
-  it.each(['La oficina financiera estimó el costo.', 'Costo de $3 (estimación sin firma).', 'Es un supuesto de la oficina.', 'Dato pendiente de confirmación.', 'Quedó una pregunta sin responder.', 'Esto no tiene respuesta todavía.', 'La oficina propone $434.'])('🔴 marca «%s»', (frase) => {
+  it.each(['La oficina financiera estimó el costo.', 'Lo revisó la oficina financiera.', 'Costo de $3 (estimación sin firma).', 'Es un supuesto de la oficina.', 'Dato pendiente de confirmación.', 'Quedó una pregunta sin responder.', 'Esto no tiene respuesta todavía.', 'La oficina propone $434.'])('🔴 marca «%s»', (frase) => {
     expect(cod(N.revisarPlan('# Plan\n\n' + frase + '\n', CTX))).toContain('P15')
   })
   it.each(['Responder en menos de una hora los mensajes sin responder en Instagram.', 'Abrimos cerca de la oficina de turismo.', 'Una estimación de 30 visitas al día.', 'La fuente es [D12].'])('🔴 no marca «%s»', (frase) => {
