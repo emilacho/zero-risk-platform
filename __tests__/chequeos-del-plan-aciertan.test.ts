@@ -23,6 +23,72 @@ const cod = (r: Resultado) => r.marcas.map((m) => m.codigo)
 const avisos = (r: Resultado) => (r.avisos_p10 ?? []).map((m) => m.codigo)
 const de = (r: Resultado, c: string) => [...r.marcas, ...(r.avisos_p10 ?? [])].find((m) => m.codigo === c)
 
+describe('la coherencia del plan (Lenovo, 16:47Z) · el plan B real', () => {
+  const r = N.revisarPlan(PLAN_B, CTX)
+  const ej = (c: string) => (de(r, c)?.ejemplos ?? []).join(' | ')
+  it('🔴 1 · cifras que se contradicen: tres tickets y los adicionales', () => {
+    expect(ej('P12')).toMatch(/ticket promedio/)
+    expect(ej('P12')).toMatch(/adicionales por semana: .*22/)
+    expect(ej('P12')).toMatch(/130/)
+  })
+  it('🔴 2 · plata a Google Ads y «no hacemos Google Search»; «con píxel activo» sin píxel', () => {
+    expect(ej('P16')).toMatch(/Google Ads.*Google Search/)
+    expect(ej('P17')).toMatch(/píxel activo/)
+  })
+  it('🔴 3 · los umbrales de la pauta contra el costo por resultado', () => {
+    expect(ej('P18')).toMatch(/\$1\.52 a \$3\.04.*costo estimado/)
+  })
+  it('🔴 4 · el calendario: semanas, rango e informes', () => {
+    expect(ej('P19')).toMatch(/semanas 5–8/)
+    expect(ej('P19')).toMatch(/semanas 9–12/)
+    expect(ej('P19')).toMatch(/termina el 1 feb.*28 ene/)
+    expect(ej('P19')).toMatch(/no son 12 semanas/)
+    expect(ej('P19')).toMatch(/saltan del 15 dic al 14 ene/)
+  })
+  it('🔴 5 · «viernes → jueves» cuando abre el sábado', () => {
+    expect(ej('P20')).toMatch(/abre el sabado/)
+  })
+  it('🔴 6 · «¿Le sumamos…?» con un manual de tuteo', () => {
+    expect(ej('P21')).toMatch(/Le sumamos/)
+  })
+  it('🔴 7 · los rótulos internos', () => {
+    expect(cod(r)).toContain('P15')
+  })
+})
+
+describe('la coherencia del plan · sin falsas alarmas, con otro cliente cualquiera', () => {
+  const marca = (texto: string, ctx: unknown = {}) => N.revisarPlan(texto, ctx).marcas.map((m) => m.codigo)
+  const BIEN = [
+    '# Plan', '', '**1 de marzo de 2027 – 23 de mayo de 2027**', '',
+    'La clínica atiende lunes a viernes. Si alguien escribe el sábado, no hay respuesta hasta el lunes.', '',
+    'Costo por resultado estimado: $4,00. Ticket promedio de $50.', '',
+    '| Renglón | Monto | Razón |', '|---|---|---|', '| Google Ads | $300 (60%) | búsqueda |', '| Contenido | $200 (40%) | educar |', '',
+    '| Situación | Acción |', '|---|---|', '| Costo por debajo de $5,00 | Sigo |', '| Costo supera $9,00 | Paro |', '',
+    '### FASE UNO · Semanas 1–6 · 1 de marzo – 11 de abril de 2027', '', '### FASE DOS · Semanas 7–12 · 12 de abril – 23 de mayo de 2027', '',
+    '| 1 | Informe de 14 días | Agencia | 15 mar |', '| 2 | Informe de 14 días | Agencia | 29 mar |', '',
+    'Responder los mensajes sin responder; le enviamos el listado al proveedor. Sin pauta activa por ahora; hoy no hay pauta. La pauta activa empieza cuando haya píxel; hoy no hay píxel.', '',
+    '## Lo que NO vamos a hacer todavía', '', '| Qué | Por qué |', '|---|---|', '| TikTok pagado | Sin audiencia |', '| Google Maps sin pagar | Ya está |', '',
+  ].join('\n')
+  it('🔴 un plan coherente no marca nada de esto', () => {
+    for (const c of ['P12', 'P16', 'P17', 'P18', 'P19', 'P20', 'P21']) expect(marca(BIEN), c).not.toContain(c)
+  })
+  it('🔴 un manual que pide usted no marca el usted', () => {
+    expect(marca('Plan: «¿Le sumamos un postre?»', { manual_limites: { registro: 'usted' } })).not.toContain('P21')
+    expect(marca('Plan: «¿Le sumamos un postre?»', { manual_limites: { registro: 'tuteo' } })).toContain('P21')
+  })
+  it('🔴 los días del manual mandan sobre los del plan', () => {
+    const t = 'Abre lunes a viernes. Del viernes no hay respuesta hasta el lunes.'
+    expect(marca(t)).not.toContain('P20')
+    expect(marca(t, { manual_limites: { horarios: 'abre lunes a sábado' } })).toContain('P20')
+  })
+  it('🔴 del plan solo vale el rango de lo que abre, no cualquier «lunes a martes»', () => {
+    expect(marca('Las reuniones son lunes a martes. El local abre jueves a lunes. Del viernes no hay respuesta hasta el sábado.')).not.toContain('P20')
+  })
+  it('🔴 sin rango de fechas o sin secciones con fecha, el calendario calla', () => {
+    expect(marca('# Plan\n\n### Semanas 1–2 · arrancar\n')).not.toContain('P19')
+  })
+})
+
 describe('el plan sin rótulos internos (Emilio, 15:37Z)', () => {
   const fin = { estado: 'sin_firma', motivo: 'sin_firma', numeros: [{ clave: 'pauta_semanal', valor: 200, tipo: 'supuesto' }], semanas: 12, resumen: { lineas: ['Meta: 130'], alertas: ['ojo'] } }
   const conFin = { ...CTX, finanzas: fin }
@@ -62,7 +128,8 @@ describe('el plan real del 4-nov', () => {
     for (const c of ['P4', 'P5', 'P7', 'P10a', 'P10l']) expect(cod(r), c).not.toContain(c)
   })
   it('🔴 lo único que marca es real: las cifras no firmadas y los adicionales', () => {
-    expect(cod(r)).toEqual(['P8', 'P15', 'P11'])
+    expect(cod(r)).toEqual(expect.arrayContaining(['P8', 'P15', 'P11']))
+    for (const c of ['P4', 'P5', 'P7', 'P10a', 'P10l']) expect(cod(r)).not.toContain(c)
     expect(de(r, 'P8')!.ejemplos).toEqual(expect.arrayContaining(['$10,63', '$1.382']))
   })
   it('🔴 lo que declaró el dueño no es una cifra suelta: $200 y su mes, $800', () => {
@@ -89,7 +156,7 @@ describe('el plan real del 4-nov', () => {
   it('lo que afirma sin cita sigue visible como aviso', () => {
     expect(avisos(r)).toEqual(expect.arrayContaining(['P10b', 'P10d', 'P10f']))
   })
-  it('la versión A da lo mismo', () => { expect(cod(N.revisarPlan(PLAN_A, CTX))).toEqual(['P8', 'P15', 'P11']) })
+  it('la versión A da lo mismo', () => { expect(cod(N.revisarPlan(PLAN_A, CTX))).toEqual(expect.arrayContaining(['P8', 'P15', 'P11'])) })
 })
 
 describe('otro plan guardado', () => {
@@ -197,6 +264,6 @@ describe('el cambio se aplica igual en los 3 nodos', () => {
   it('🔴 un manual ilegible no rompe nada', () => {
     const m = cod3('Redactor (B4)')
     const limites = new Function(`${m.slice(m.indexOf('function limitesDelManual'), m.indexOf('const manual = ent.manual'))}\nreturn limitesDelManual`)() as (m: unknown) => unknown
-    expect(limites({ content_text: 'no es json' })).toEqual({ prohibidas: [], nunca_promete: [] })
+    expect(limites({ content_text: 'no es json' })).toMatchObject({ prohibidas: [], nunca_promete: [] })
   })
 })

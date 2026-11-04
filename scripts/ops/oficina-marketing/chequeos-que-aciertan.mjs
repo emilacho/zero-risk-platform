@@ -13,11 +13,15 @@
  * Texto limpio (Emilio, 04-nov 15:37Z, misma regla que el manual): el plan no lleva rótulos internos. Lo no firmado o no respondido vive en la oficina, no en el plan.
  *  · P9 ya no exige que el plan diga «sin firma» ni que rotule cifras: era lo contrario de lo que se quiere. Al redactor tampoco se le pide.
  *  · P15 · marca el rótulo que se escape. Las citas [D#] no cuentan: el redactor las necesita y se quitan al mostrar el plan.
+ * Coherencia (encargo de Lenovo 16:47Z, `chequeos-de-coherencia.js`): P12 sube de aviso a marca · P16 reparte plata a lo que dice que no hará · P17 afirma lo que el propio plan dice que falta · P18 umbrales de la pauta en otra unidad que el costo · P19 calendario · P20 horarios · P21 trato de usted.
  * Lo que agrega:
  *  · P11 · marca · los adicionales no pueden ser iguales a la meta total.
  *  · Avisos · un mismo indicador con varios valores · lo que el manual dice que nunca se promete · una palabra prohibida del manual.
  */
+import fs from 'node:fs'
 import { cambiarCodigo, nodo } from './lib.mjs'
+
+const COHERENCIA = fs.readFileSync(new URL('./chequeos-de-coherencia.js', import.meta.url), 'utf8').split('\r\n').join('\n')
 
 export const NODOS_DEL_MODULO = ['Redactor (B4)', '¿Llegó la vuelta?', 'JEF · plan · evaluar']
 
@@ -125,7 +129,10 @@ const LIMITES_DEL_MANUAL = [
   "    if (typeof f !== 'string' || !/\\b(?:promete|ofrece|garantiza)\\b/i.test(f)) return",
   "    ;(f.replace(/^\\s*\\S+/, '').match(/[A-ZÁÉÍÓÚÑ][\\wÁÉÍÓÚÑáéíóúñ]+(?:\\s+[A-ZÁÉÍÓÚÑ][\\wÁÉÍÓÚÑáéíóúñ]+)*/g) || []).forEach(function (n) { if (nunca.indexOf(n) < 0) nunca.push(n) })",
   "  })",
-  "  return { prohibidas: prohibidas, nunca_promete: nunca }",
+  "  // los días que abre, tal como los dice el manual, y el trato con el cliente: la prueba de horarios y la de usted los leen de aquí",
+  "  var horarios = (JSON.stringify(d).match(/[^\"]{0,60}(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bados?|domingos?)\\s+a\\s+(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bados?|domingos?)[^\"]{0,60}/i) || [''])[0]",
+  "  var reg = manual.registro_del_manual && manual.registro_del_manual.registro",
+  "  return { prohibidas: prohibidas, nunca_promete: nunca, horarios: horarios, registro: typeof reg === 'string' ? reg : null }",
   "}",
   "",
 ].join('\n')
@@ -165,18 +172,30 @@ export const PARCHES = [
   // P8 · lo que declaró el dueño no es una cifra suelta: el monto y su mes (por semana × 4)
   ["  if (ctx && ctx.finanzas) { marcas = marcas.concat(revisarCifrasFinanzas(texto, ctx.finanzas)) }\n", "  if (ctx && ctx.finanzas) { marcas = marcas.concat(revisarCifrasFinanzas(texto, Object.assign({}, ctx.finanzas, { declaradas: (ctx.finanzas.declaradas || []).concat(_montosDelDueno(ctx)) }))) }\n"],
   // la bandeja dice también los avisos que el dueño debe leer: los de las cifras sin cita quedan en el registro del chequeo, porque casi siempre son números del propio plan
-  ["    return m.codigo + ' · ' + t\n  }).join(' · ')\n", "    return m.codigo + ' · ' + t\n  }).concat((r.avisos_p10 || []).filter(function (a) { return /^P1[234]$/.test(a.codigo) }).map(function (a) { return 'Aviso ' + a.codigo + ' · ' + a.que })).join(' · ')\n"],
+  ["    return m.codigo + ' · ' + t\n  }).join(' · ')\n", "    return m.codigo + ' · ' + t\n  }).concat((r.avisos_p10 || []).filter(function (a) { return /^P1[34]$/.test(a.codigo) }).map(function (a) { return 'Aviso ' + a.codigo + ' · ' + a.que })).join(' · ')\n"],
   // etiquetas de la bandeja
-  ["P7: 'nombra a una persona o dice quién dio un dato' }", "P7: 'nombra a una persona o dice quién dio un dato', P11: 'cifras del plan que no cuadran entre sí', P15: 'lleva rótulos internos que el cliente no debe ver' }"],
+  ["P7: 'nombra a una persona o dice quién dio un dato' }", "P7: 'nombra a una persona o dice quién dio un dato', P11: 'cifras del plan que no cuadran entre sí', P15: 'lleva rótulos internos que el cliente no debe ver', P12: 'un mismo indicador con valores distintos', P16: 'plata para lo que dice que no hará', P17: 'afirma lo que dice que falta', P18: 'umbrales en otra unidad que el costo', P19: 'el calendario no cuadra', P20: 'horarios que no coinciden con el negocio', P21: 'le habla de usted al cliente' }"],
   // P11 y avisos
-  ["function revisarPlan(texto, ctx) {", NUEVO_ANTES_DE_REVISAR + "function revisarPlan(texto, ctx) {"],
+  ["function revisarPlan(texto, ctx) {", NUEVO_ANTES_DE_REVISAR + COHERENCIA + "function revisarPlan(texto, ctx) {"],
   ["  var _r = { ok: marcas.length === 0, marcas: marcas }\n  if (_avisosP10.length) _r.avisos_p10 = _avisosP10\n", [
     "  var _rot = _rotulosInternos(t)",
     "  if (_rot.length) marcas.push({ codigo: 'P15', que: 'el plan lleva rótulos internos que el cliente no debe ver: la oficina, firmas o lo que falta responder', ejemplos: _rot.slice(0, 4) })",
     "  var _adic = _adicionalesComoMeta(t, ctx)",
     "  if (_adic.length) marcas.push({ codigo: 'P11', que: 'los adicionales valen lo mismo que la meta total: una de las dos cifras está mal nombrada', ejemplos: _adic.slice(0, 3) })",
-    "  var _varios = _indicadoresConVariosValores(t)",
-    "  if (_varios.length) _avisosP10.push({ codigo: 'P12', que: 'un mismo indicador aparece con valores distintos: revisa que cada uno diga su periodo', ejemplos: _varios })",
+    "  var _varios = _indicadoresConVariosValores(t).concat(_adicionalesDistintos(t))",
+    "  if (_varios.length) marcas.push({ codigo: 'P12', que: 'un mismo indicador aparece con valores distintos en el plan', ejemplos: _varios })",
+    "  var _noHacer = _presupuestoContraNoHacer(t)",
+    "  if (_noHacer.length) marcas.push({ codigo: 'P16', que: 'el presupuesto le pone plata a algo que el plan dice que no hará', ejemplos: _noHacer.slice(0, 4) })",
+    "  var _falta = _afirmaLoQueFalta(t)",
+    "  if (_falta.length) marcas.push({ codigo: 'P17', que: 'afirma como activo algo que el propio plan dice que falta', ejemplos: _falta.slice(0, 4) })",
+    "  var _umbral = _umbralesContraElCosto(t, ctx)",
+    "  if (_umbral.length) marcas.push({ codigo: 'P18', que: 'los umbrales de la pauta no están en la misma unidad que el costo estimado', ejemplos: _umbral })",
+    "  var _cal = _calendarioDelPlan(t)",
+    "  if (_cal.length) marcas.push({ codigo: 'P19', que: 'el calendario no cuadra: las semanas, el rango o los informes', ejemplos: _cal.slice(0, 6) })",
+    "  var _hor = _horariosContraElManual(t, ctx)",
+    "  if (_hor.length) marcas.push({ codigo: 'P20', que: 'lo que dice de los horarios no coincide con los días que abre el negocio', ejemplos: _hor.slice(0, 4) })",
+    "  var _usted = _tratoDeUsted(t, ctx)",
+    "  if (_usted.length) marcas.push({ codigo: 'P21', que: 'le habla de usted al cliente y el manual no lo pide', ejemplos: _usted })",
     "  var _lim = _contraLosLimitesDelManual(t, ctx && ctx.manual_limites)",
     "  if (_lim.palabras.length) _avisosP10.push({ codigo: 'P13', que: 'usa palabras que el manual prohíbe', ejemplos: _lim.palabras })",
     "  if (_lim.promesas.length) _avisosP10.push({ codigo: 'P14', que: 'nombra algo que el manual dice que nunca promete: confirma que esté activo', ejemplos: _lim.promesas })",
