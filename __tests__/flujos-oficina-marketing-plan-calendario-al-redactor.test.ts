@@ -46,7 +46,7 @@ describe('plan · el calendario al redactor', () => {
     expect(t).toContain('EXACTAMENTE estas fechas')
   })
   it('falla CERRADO: ausente o mal formado = no se escribe nada ni se inventa un calendario', () => {
-    for (const malo of [undefined, null, {}, { ...CAL, semanas: [] }, { ...CAL, arranque: '4-nov' }, { ...CAL, termina: undefined }, { ...CAL, semanas: [{ semana: 1, desde: 'hoy', hasta: '2026-11-10' }] }, { ...CAL, semanas: [{ semana: 'x', desde: '2026-11-04', hasta: '2026-11-10' }] }, { ...CAL, semanas: Array(61).fill(SEMANAS[0]) }]) {
+    for (const malo of [undefined, null, {}, { ...CAL, semanas: [] }, { ...CAL, arranque: '4-nov' }, { ...CAL, termina: undefined }, { ...CAL, semanas: [{ semana: 1, desde: 'hoy', hasta: '2026-11-10' }] }, { ...CAL, semanas: [{ semana: 1, desde: '2026-11-04', hasta: '10-nov' }] }, { ...CAL, semanas: [SEMANAS[0], { semana: 2, desde: '2026-11-11', hasta: undefined }] }, { ...CAL, semanas: [{ semana: 'x', desde: '2026-11-04', hasta: '2026-11-10' }] }, { ...CAL, semanas: Array(61).fill(SEMANAS[0]) }]) {
       const r = bloque(malo); expect(r.CAL).toBeNull(); expect(r.lineas).toEqual([])
     }
     expect(bloque(CAL, false).lineas).toEqual([]) // «V9 · decidir» no corrió (plan sin plan_v3)
@@ -57,7 +57,8 @@ describe('plan · el calendario al redactor', () => {
     const i = b4.indexOf('...bloqueCalendario,'), j = b4.indexOf('bloquePlata,'), k = b4.indexOf('══════ REGLAS QUE NO SE NEGOCIAN')
     expect(j).toBeGreaterThan(0); expect(i).toBeGreaterThan(j); expect(k).toBeGreaterThan(i)
     expect(b4.indexOf('const CAL = ')).toBeLessThan(b4.indexOf('const pedido = ['))
-    expect(b4).toContain('calendario_usado:')
+    expect(b4).toContain('...(CAL ? { calendario_usado: { arranque: CAL.arranque, termina: CAL.termina, semanas: CAL.semanas.length } } : {}),') // lo que permite ver en la primera corrida real que el redactor lo recibió
+    expect(b4.indexOf('calendario_usado')).toBeGreaterThan(b4.indexOf('const pedido = ['))
     expect(f.nodes.length).toBe(a.nodes.length); expect(f.connections).toEqual(a.connections)
     expect(f.nodes.filter((n) => JSON.stringify(n) !== JSON.stringify(a.nodes.find((y) => y.name === n.name))).map((n) => n.name).sort()).toEqual(['Redactor (B4)', 'V9 · decidir'])
     expect(cod(a, 'Redactor (B4)')).not.toContain('bloqueCalendario')
