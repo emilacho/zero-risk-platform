@@ -1,0 +1,1674 @@
+{
+  "id": "o8qaF7bI0PKv2XGZ",
+  "name": "Zero Risk — Jefatura · un turno (agente → resultado → siguiente) · CC#2",
+  "description": null,
+  "active": true,
+  "activeVersionId": "66c82b38-1ca6-40f7-a702-9c897f989982",
+  "createdAt": "2026-10-13T18:17:52.815Z",
+  "updatedAt": "2026-11-02T21:24:45.840Z",
+  "isArchived": false,
+  "versionId": "66c82b38-1ca6-40f7-a702-9c897f989982",
+  "versionCounter": 4,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "id": "caba1ff8-1560-482b-8e0f-8023c13baee6",
+      "name": "Webhook · jefatura turno",
+      "webhookId": "jefatura-turno-0001",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zero-risk/jefatura-turno",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "9288bb86-ab44-4a51-8752-a8b45e319424",
+      "name": "⓪ Entrada · llave",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ⓪ ENTRADA · LLAVE · CC#2 · J4 · 2026-10-13 · flujo `zero-risk/jefatura-turno` (UN paso de una revisión de la jefatura por ejecución). INACTIVO.\n// Lo despierta la ruta de la jefatura (o el vigía, o este mismo flujo para el paso siguiente) con { revision_id, turno } y la llave de despacho. Nada de aquí paga: solo valida.\n// A diferencia de la oficina, aquí NO hay portero: el portero y la llamada a GPT viven DENTRO de la ruta (diseño v4 §10); este flujo solo ejecuta pasos de AGENTE.\nconst w = $input.first().json || {}\nconst body = w.body && typeof w.body === 'object' && !Array.isArray(w.body) ? w.body : {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\n\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) throw new Error('JEFATURA_TURNO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) · el flujo queda cerrado · E67.')\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) throw new Error('JEFATURA_TURNO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · E67.')\n\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(body.revision_id || ''))) throw new Error('JEFATURA_TURNO_SIN_REVISION · revision_id no es un uuid · se DETIENE')\nconst t = body.turno && typeof body.turno === 'object' ? body.turno : null\nif (!t || !Number.isInteger(t.n) || t.n < 1) throw new Error('JEFATURA_TURNO_SIN_NUMERO · falta turno.n (entero ≥ 1) · se DETIENE')\nif (t.tipo !== 'agente') throw new Error('JEFATURA_TURNO_TIPO_INVALIDO · este flujo solo ejecuta pasos de agente (llegó ' + JSON.stringify(t.tipo) + ')')\nif (!t.pedido || typeof t.pedido !== 'object') throw new Error('JEFATURA_TURNO_SIN_PEDIDO · falta turno.pedido · se DETIENE')\nif (typeof t.pedido.agent_name !== 'string' || typeof t.pedido.task !== 'string' || !t.pedido.task) throw new Error('JEFATURA_TURNO_PEDIDO_INVALIDO · el pedido de un agente necesita agent_name y task')\nif (typeof t.pedido.esquema !== 'string' || !t.pedido.esquema) throw new Error('JEFATURA_TURNO_SIN_ESQUEMA · el pedido de un agente necesita su esquema de salida (sin esquema no hay molde ni contrato)')\n// dry_run OBLIGATORIO y booleano (diseño v4 §2): ausente o no booleano = se DETIENE, nunca se lee como «real»\nif (typeof t.pedido.dry_run !== 'boolean') throw new Error('JEFATURA_TURNO_SIN_DRY_RUN · turno.pedido.dry_run debe ser booleano (true/false) · se DETIENE')\n\nreturn [{ json: { revision_id: String(body.revision_id), turno: t, dry_run: t.pedido.dry_run === true } }]\n"
+      }
+    },
+    {
+      "id": "3112350d-4845-4218-b978-10e473484af4",
+      "name": "② Armar el pedido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ② ARMAR EL PEDIDO · CC#2 · J4 · 2026-10-13 · el cuerpo que se manda a /api/agents/run-sdk (el agente solo se invoca desde un flujo con workflow_id) o, en modo seco, la respuesta SIMULADA.\n// 🔴 En modo seco NO se llama a ningún proveedor ni al corredor: la respuesta sale de un molde válido por esquema (el «modelo simulado»), como en el turno de la oficina (r78).\n// 🔴 Un esquema SIN molde no mata la ejecución ni la deja «corriendo»: devuelve un error VISIBLE al motor y la revisión cierra `fallida`.\n// 🔴 `force_restart: true` y `dispatch_key` propios del paso: una respuesta vieja guardada no se reutiliza (lección del flujo de prueba).\n// 🔴 Regla dura del editor (diseño v4 §2 y §9): `extra` lleva SOLO claves de una lista cerrada; JAMÁS `workflow_execution_id` (los ids de ejecución van arriba del cuerpo). Y el nodo «Agente» manda siempre `x-skip-editor-middleware: 1`.\n// `pedido.simulacion` (solo con dry_run=true) fuerza ramas: fichas ninguna|sugerencia|bloquea · toma todo|nada · productor ok|formato_roto|formato_roto_siempre|muerto · version_nueva mejora|empeora|demasiado_corta · largo_a (largo del plan A) · donde.\nconst e = $input.first().json\nconst t = e.turno\nconst p = t.pedido\n\n// ── lectura del propio pedido: las fichas («- [id] (gravedad) en …», como las arma la oficina) y los refs del kit / carrusel / imágenes\nconst idsDeFichas = (task) => [...String(task).matchAll(/^- \\[([^\\]\\n]+)\\] \\((?:bloquea|sugerencia)\\)/gm)].map((m) => m[1])\nconst indices = (task) => [...String(task).matchAll(/índice (\\d+)/g)].map((m) => Number(m[1]))\nconst refsDeKit = (task) => [...String(task).matchAll(/^- (e\\d+):/gm)].map((m) => m[1])\nconst refsDe = (task) => { const kit = refsDeKit(task); if (kit.length) return kit; const m = /Roles de lámina posibles[^:\\n]*:\\s*([^\\n]+)/.exec(String(task)); return m ? m[1].split(',').map((x) => x.trim()).filter(Boolean) : [] }\nconst refsAGenerar = (task) => { const i = String(task).search(/## Imágenes que hay que GENERAR/); if (i < 0) return []; const sec = String(task).slice(i).split(/\\n## /)[0]; return [...sec.matchAll(/^- ([^:\\n]+):/gm)].map((m) => m[1].trim()) }\nconst sim = e.dry_run === true && p.simulacion && typeof p.simulacion === 'object' ? p.simulacion : {}\nconst toma = sim.toma === 'nada' ? 'nada' : 'todo'\nconst respuestasDe = (task) => idsDeFichas(task).map((id) => (toma === 'nada' ? { id, estado: 'no_tomada', razon: '(simulado) no lo tomo' } : { id, estado: 'tomada', razon: '(simulado) lo tomo' }))\nconst algunaTomada = (rs) => rs.some((r) => r.estado === 'tomada')\n// el plan simulado: tres largos según el caso (la comparación contra A la hace el código de la planeación; aquí solo se fabrica el texto)\nconst textoDePlan = () => {\n  const a = Number.isFinite(Number(sim.largo_a)) && Number(sim.largo_a) > 0 ? Number(sim.largo_a) : 25000\n  const objetivo = sim.version_nueva === 'demasiado_corta' ? Math.floor(a * 0.3) : a\n  const marca = sim.version_nueva === 'empeora' ? ' A calcular · TBD ·' : ''\n  const base = '(simulado) línea del plan corregido.' + marca + '\\n'\n  return base.repeat(Math.ceil(objetivo / base.length)).slice(0, objetivo)\n}\n\n// ── moldes del modelo simulado: UNO por esquema que la jefatura puede pedir (los de la oficina, que la jefatura reutiliza, y los nuevos de re-entrega por tipo)\nconst SIMULADOS = {\n  // jefe-marketing\n  'fichas.v1': () => ({ fichas: sim.fichas === 'bloquea' || sim.fichas === 'sugerencia' ? [{ que: '(simulado) hallazgo de prueba', donde: String(sim.donde || 'texto'), contra_que: '(simulado) el manual', gravedad: sim.fichas, propuesta: '(simulado) propuesta de prueba' }] : [] }),\n  // pieza (oficina): resoluciones por dueño\n  'resolucion.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { pieza: { pie_de_foto: '(simulado) pie de foto corregido', hashtags: [] } } : {}) } },\n  'resolucion_solo.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  'resolucion_copy_base.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  'resolucion_copy_kit.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  'resolucion_estructura.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  'resolucion_laminas.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  // estrategia (objeto completo), calendario (por fila o tanda) y plan (texto completo): la re-entrega de cada tipo\n  'resolucion_objeto.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { objeto: { simulado: true } } : {}) } },\n  // 01-nov · la palabra del dueño: lo que diría el verificador, sin modelo. Todas cumplen, con una cita literal de cada versión; si el texto no se entiende, ninguna fila y la jefatura lo toma como «no cumple»\n  'verificacion_de_ordenes.v1': (task) => {\n    const partes = String(task).split('## Versión ')\n    const n = (partes[0].match(/^\\d+\\. /gm) || []).length\n    const filas = []\n    for (const parte of partes.slice(1)) {\n      const version = parte.slice(0, 1)\n      const cita = parte.split('\\n').slice(1).join(' ').trim().slice(0, 80)\n      for (let i = 1; i <= n; i++) filas.push({ version, orden: i, estado: 'cumple', cita })\n    }\n    return { filas }\n  },\n  'resolucion_parcial.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { filas: [] } : {}) } },\n  // 🔴 el FORMATO real del texto largo del plan (bloque delimitado o esquema ≥ 40.000) lo decide la condición 1 de CC#3 (§13.5); este molde es lo único que cambia cuando se decida\n  'resolucion_plan.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { texto_completo: textoDePlan() } : {}) } },\n  // 🔴 EL PLAN REAL (condición 1 de CC#3): texto plano + bloque de resolución al final (no un JSON con 25–34 mil caracteres adentro). Si no se tomó nada, solo el bloque.\n  'plan_texto_y_resolucion.v1': (task) => { const rs = respuestasDe(task); const bloque = '<<<RESOLUCION>>>' + String.fromCharCode(10) + JSON.stringify({ respuestas: rs }) + String.fromCharCode(10) + '<<<FIN_RESOLUCION>>>'; return algunaTomada(rs) ? textoDePlan() + String.fromCharCode(10) + bloque : bloque },\n  // oficina: pasos de producción que la jefatura NO ejecuta pero cuyos moldes se conservan idénticos para la prueba de igualdad (§13.3)\n  'visual_direction.v1': () => ({ resumen: '(simulado) dirección visual', decision: { modo: 'generada', motivo: '(simulado)' }, reglas_de_imagen: { obligatorio: [], prohibido: [] } }),\n  'prompts.v1': () => ({ prompts: [{ prompt: '(simulado) un plato visto desde arriba con luz natural lateral, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) cenital' }, { prompt: '(simulado) el mismo plato a nivel de mesa con fondo desenfocado, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) nivel de mesa' }] }),\n  'observacion_imagen.v1': (task) => { const ix = indices(task); return { imagenes: ix.map((indice) => ({ indice, reglas: [], texto_en_imagen: [], marcas: [], personas: 0 })), preferencia: ix } },\n  'observacion_imagenes.v1': (task) => { const ix = indices(task); return { imagenes: ix.map((indice) => ({ indice, reglas: [], texto_en_imagen: [], marcas: [], personas: 0 })), preferencia: ix } },\n  'pieza_post.v1': () => ({ pie_de_foto: '(simulado) pie de foto de prueba', hashtags: [] }),\n  'direccion_imagenes.v1': (task) => { const refs = refsDe(task); return { resumen: '(simulado) dirección visual', estilo: '(simulado)', imagenes: refs.length ? [{ ref: refs[0], modo: 'generada', motivo: '(simulado)' }] : [], reglas_de_imagen: { obligatorio: [], prohibido: [] } } },\n  'prompts_por_ref.v1': (task) => ({ imagenes: refsAGenerar(task).map((ref) => ({ ref, prompts: [{ prompt: '(simulado) un plato visto desde arriba con luz natural lateral, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) cenital' }, { prompt: '(simulado) el mismo plato a nivel de mesa con fondo desenfocado, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) nivel de mesa' }] })) }),\n  'copy_base.v1': () => ({ texto_base: 'Primera línea simulada\\nSegunda línea simulada\\nTercera línea simulada\\nCuarta línea simulada\\nEscríbenos', pie_de_foto: '(simulado) pie de foto de prueba', hashtags: [] }),\n  'laminas.v1': () => ({ laminas: [{ rol: 'hook', headline: 'Primera línea simulada' }, { rol: 'problem', headline: 'Segunda línea simulada' }, { rol: 'reframe', headline: 'Tercera línea simulada' }, { rol: 'benefit', headline: 'Cuarta línea simulada' }, { rol: 'cta', headline: 'Escríbenos', cta: 'Escríbenos' }] }),\n  'estructura.v1': (task) => ({ elementos: refsDeKit(task).map((ref) => ({ ref, rol: '(simulado) rol', beat: '(simulado) beat', mood: '(simulado) mood' })) }),\n  'copy_kit.v1': (task) => ({ elementos: refsDeKit(task).map((ref) => ({ ref, headline: '(simulado) titular' })) }),\n}\n\nconst ERROR = (msg) => ({ ...e, simulado: true, resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, error: msg, costo_usd: 0, workflow_execution_id: $execution.id } })\n\nif (e.dry_run === true) {\n  // FUENTE ÚNICA DE MOLDES (certificación de CC#3 · J2/J3 reparo 2): si la ruta entregó su `pedido.molde`, el seco contesta ESO (lo que la ruta sabe leer); los moldes de abajo son solo el respaldo cuando la ruta no trae molde (`molde_de: 'flujo'`)\n  const deLaRuta = p.molde && typeof p.molde === 'object' && !Array.isArray(p.molde) ? p.molde : null\n  if (deLaRuta) {\n    if (typeof deLaRuta.texto !== 'string') {\n      // el productor murió en la simulación de la ruta: no contesta (el vigía lo re-arma); cualquier otro motivo es un error visible, nunca «corriendo»\n      if (sim.productor === 'muerto') return []\n      return [{ json: { ...ERROR('JEFATURA_MOLDE_DE_LA_RUTA_SIN_TEXTO · ' + String(deLaRuta.error || 'la ruta no entregó texto para este paso')), molde_de: 'ruta' } }]\n    }\n    return [{ json: { ...e, simulado: true, molde_de: 'ruta', resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, texto: deLaRuta.texto, costo_usd: 0, workflow_execution_id: $execution.id } } }]\n  }\n  const molde = SIMULADOS[p.esquema]\n  // un esquema sin molde NO mata la ejecución (la revisión se quedaría «corriendo» en silencio): el motor recibe el error y la revisión falla visible\n  if (!molde) return [{ json: ERROR('JEFATURA_SIN_MOLDE_SIMULADO · no hay respuesta simulada para el esquema ' + JSON.stringify(p.esquema)) }]\n  // productor muerto: no contesta nunca (el vigía lo re-arma a los 12 min); en el seco la ejecución termina sin registrar nada, a propósito\n  if (sim.productor === 'muerto') return []\n  const roto = sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && p.reintento_formato !== true)\n  const m = roto ? null : molde(p.task)\n  const texto = roto ? '{\"respuestas\": [ {\"id\": ' : (typeof m === 'string' ? m : JSON.stringify(m)) // un molde de TEXTO (el plan) devuelve la cadena tal cual\n  return [{ json: { ...e, simulado: true, molde_de: 'flujo', resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, texto, costo_usd: 0, workflow_execution_id: $execution.id } } }]\n}\n\n// ── real: el pedido a run-sdk. Sin tope de gasto del paso NO se paga (el SDK acota el costo con max_budget_usd)\nif (!(typeof p.max_budget_usd === 'number' && p.max_budget_usd > 0)) throw new Error('JEFATURA_SIN_TOPE_DEL_PASO · el pedido real no trae max_budget_usd (> 0) · no se paga un paso sin tope · se DETIENE')\nconst PERMITIDAS = ['indicacion_jefatura', 'paso_de_la_jefatura', 'revision_id', 'dispatch_key']\nconst extra = {}\nfor (const k of PERMITIDAS) if (p.extra && p.extra[k] !== undefined) extra[k] = p.extra[k]\nextra.dispatch_key = t.dispatch_key\nconst cuerpo = {\n  agent: p.agent_name,\n  task: p.task,\n  client_id: p.client_id,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  callback_url: $execution.resumeUrl,\n  // la vuelta la entrega el corredor cuando el agente puede; si no puede, run-sdk lo ignora y la vuelta sigue por Vercel con la recuperación del resultado\n  callback_mode: 'runner',\n  force_restart: true,\n  dry_run: false,\n  max_budget_usd: p.max_budget_usd,\n  thinking_mode: p.thinking_mode || 'disabled',\n  ...(function () { const g = (k) => String((p && p[k]) || (e && e[k]) || '').trim(); const ti = g('trabajo_tipo'), id = g('trabajo_id'); return ti && id ? { trabajo_tipo: ti, trabajo_id: id, paso: g('paso') || ('turno-' + (t && t.n)) } : {}; })(),\n  extra,\n  ...(Array.isArray(p.images) && p.images.length ? { images: p.images, images_mode: 'base64' } : {}),\n}\nreturn [{ json: { ...e, simulado: false, cuerpo } }]"
+      }
+    },
+    {
+      "id": "6f988606-28f5-474c-8376-4866e4abeb3c",
+      "name": "② ¿Modo seco?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.simulado }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a0ae8616-4a6b-43dc-b5ef-4d856916a9d0",
+      "name": "② Agente (run-sdk)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1040,
+        150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-platform.vercel.app/api/agents/run-sdk",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-skip-editor-middleware",
+              "value": "1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "dbbfd6db-ee4e-4cdc-9dfe-6e0668e8d26d",
+      "name": "② ¿Aceptó el pedido?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// ② ¿ACEPTÓ EL PEDIDO? · CC#2 · 2026-10-09 · mismo criterio que la pieza: run-sdk contesta SÍNCRONO 202 `{accepted:true}` si acepta (la vuelta llega después por el callback) o un RECHAZO con `error`.\n// Un rechazo síncrono significa que el agente NO arrancó: se avisa YA a la jefatura (resultado con error) en lugar de esperar la espera entera.\nconst c = $('② Armar el pedido').first().json\nconst e = $input.first().json || {}\nconst r = e.body && typeof e.body === 'object' ? e.body : e\n// el nodo HTTP falló (red, tiempo): n8n entrega `{error:{message…}}` con `error` OBJETO · el rechazo de run-sdk trae `error` como TEXTO\nif (r.error && typeof r.error === 'object') {\n  return [{ json: { ...c, aceptado: false, resultado_body: { accion: 'resultado', revision_id: c.revision_id, n: c.turno.n, error: 'JEFATURA_PEDIDO_NO_LLEGO · ' + String(r.error.message || r.error.name || 'sin detalle').slice(0, 200), costo_usd: 0, workflow_execution_id: $execution.id } } }]\n}\nif (r.accepted === true) return [{ json: { ...c, aceptado: true } }]\nconst partes = [r.error, r.code, r.detail].filter((x) => x !== undefined && x !== null && x !== '')\nreturn [{ json: { ...c, aceptado: false, resultado_body: { accion: 'resultado', revision_id: c.revision_id, n: c.turno.n, error: 'JEFATURA_PEDIDO_RECHAZADO · ' + (partes.length ? partes.map(String).join(' · ').slice(0, 240) : JSON.stringify(r).slice(0, 200)), costo_usd: 0, workflow_execution_id: $execution.id } } }]\n"
+      }
+    },
+    {
+      "id": "05e54320-e06c-45a7-af94-241bb16322a2",
+      "name": "② ¿Aceptó?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.aceptado }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "70a032d7-9df7-4839-8913-2540cf9589ad",
+      "name": "② Esperar al agente",
+      "webhookId": "jefatura-turno-0001-espera",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1820,
+        50
+      ],
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "limitWaitTime": true,
+        "resumeAmount": 900,
+        "resumeUnit": "seconds",
+        "options": {}
+      }
+    },
+    {
+      "id": "44bc8a54-4123-405c-b88b-41f50743619b",
+      "name": "② Vuelta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        50
+      ],
+      "parameters": {
+        "jsCode": "// ② LA VUELTA DEL AGENTE (o el portero) · CC#2 · 2026-10-09 · convierte lo que volvió en el cuerpo de `POST /api/jefatura/turnos {accion:'resultado'}`.\n// Un fallo declarado del agente (`success:false`: corte por tope, etc.) NO es una vuelta: su texto, si trae, es PARCIAL y no se manda como respuesta (se manda el error).\n// El costo es el que reporta el corredor (el libro de la sala lo suma); sin costo reportado se manda 0 y la sala lo declara.\nconst c = $('② Armar el pedido').first().json\nconst e = $input.first().json || {}\nconst cuerpo = e.body ? e.body : e\nconst fallo = cuerpo.success === false ? String(cuerpo.error || cuerpo.error_kind || 'sin detalle') : null\nconst texto = fallo ? '' : String(cuerpo.response || cuerpo.result || cuerpo.output || cuerpo.text || '')\nconst costo = typeof cuerpo.cost_usd === 'number' ? cuerpo.cost_usd : (typeof cuerpo.costUsd === 'number' ? cuerpo.costUsd : 0)\nconst body = { accion: 'resultado', revision_id: c.revision_id, n: c.turno.n, costo_usd: costo, workflow_execution_id: $execution.id, workflow_id: $workflow.id }\nif (fallo) body.error = 'el agente FALLÓ · ' + fallo + (cuerpo.partial === true ? ' · (había texto parcial: no se usa)' : '')\nelse if (texto.trim() === '') body.error = 'la vuelta del agente llegó vacía (o se agotó la espera)'\nelse body.texto = texto\nif (typeof cuerpo.tokens_in === 'number') body.tokens_in = cuerpo.tokens_in\nif (typeof cuerpo.tokens_out === 'number') body.tokens_out = cuerpo.tokens_out\nreturn [{ json: { ...c, resultado_body: body } }]\n"
+      }
+    },
+    {
+      "id": "3b7500d1-632a-4527-8188-6ec8ee1b1540",
+      "name": "③ Registrar el resultado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2340,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://zero-risk-platform.vercel.app/api/jefatura/turnos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-sala-dispatch-key",
+              "value": "={{ $env.SALA_DISPATCH_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.resultado_body) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "91ff9dc7-9164-442b-b8b2-b236e30cf90f",
+      "name": "③ ¿Y ahora?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ③ ¿Y AHORA? · CC#2 · J4 · 2026-10-13 · decide qué sigue con la respuesta REAL de `POST /api/jefatura/turnos` (statusCode + body).\n//   200 `esperar` → el SIGUIENTE paso: se vuelve a despertar este mismo flujo (una ejecución por paso: ninguna pasa de unos minutos)\n//   200 `cerrado` → la revisión terminó (limpia, con desacuerdo, sin segunda mirada, incompleta por tope o fallida): se ENTREGA al llamador según `devolver_a`:\n//                     · `devolver.tipo = 'webhook'` → se manda `devolver.cuerpo` a `devolver.url` (SOLO si la dirección es de nuestro n8n o de nuestro Vercel: nada sale a un tercero)\n//                     · `devolver.tipo = 'sala_ref'` o ausente con `sala_ref` → el CABLE a la sala con el resultado REAL\n//                     · `devolver.tipo = 'ninguno'` → nada (la ruta ya guardó todo; p. ej. las pruebas de la jefatura)\n//   cualquier otra respuesta (409 turno no esperado, 5xx…) → se DETIENE con su motivo (nunca se da por bien)\nconst c = $('⓪ Entrada · llave').first().json\nconst e = $input.first().json || {}\nif (e.error && typeof e.error === 'object') throw new Error('JEFATURA_RESULTADO_NO_LLEGO · POST /api/jefatura/turnos falló antes de recibir respuesta (' + String(e.error.message || e.error.name || 'sin detalle').slice(0, 160) + ')')\nconst status = Number(e.statusCode)\nconst b = e.body && typeof e.body === 'object' ? e.body : {}\n// «ya hay un paso esperando respuesta» llega como `esperar` SIN pedido: aquí no se despierta nada (se DETIENE con su motivo, no se manda un turno vacío a otro flujo)\nif (status === 200 && b.accion === 'esperar' && b.turno && !b.turno.pedido) throw new Error('JEFATURA_ESPERA_SIN_PEDIDO · la ruta contestó «esperar» sin el pedido del paso (' + String(b.nota || 'sin nota').slice(0, 120) + ') · se DETIENE')\nif (status === 200 && b.accion === 'esperar' && b.turno) return [{ json: { ruta: 'esperar', turno_body: { revision_id: c.revision_id, turno: b.turno } } }]\nif (status === 200 && b.accion === 'cerrado') {\n  const dev = b.devolver && typeof b.devolver === 'object' ? b.devolver : null\n  const ref = b.sala_ref && typeof b.sala_ref === 'object' ? b.sala_ref : {}\n  const tipo = dev && typeof dev.tipo === 'string' ? dev.tipo : (b.sala_ref ? 'sala_ref' : 'ninguno')\n  if (tipo === 'webhook') {\n    // solo destinos REALES de un llamador (certificación de CC#3 · J4 reparo 4): los webhooks de nuestro n8n (la base ya es `…/webhook`) y SOLO las rutas `/api/jefatura/` de nuestro Vercel (no cualquier ruta suya); la llave de despacho viaja en esta entrega\n    const permitidas = [String($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\\/+$/, '') + '/', 'https://zero-risk-platform.vercel.app/api/jefatura/']\n    const url = String(dev.url || '')\n    if (!permitidas.some((p) => url.startsWith(p))) throw new Error('JEFATURA_DESTINO_NO_PERMITIDO · devolver.url no es de nuestro n8n ni de nuestro Vercel · no se entrega a un tercero · se DETIENE (' + url.slice(0, 80) + ')')\n    return [{ json: { ruta: 'webhook', entrega_url: url, entrega_cuerpo: { revision_id: c.revision_id, resultado: String(b.resultado || 'fallida'), ...(dev.cuerpo && typeof dev.cuerpo === 'object' ? dev.cuerpo : {}) } } }]\n  }\n  if (tipo === 'sala_ref') {\n    return [{ json: { ruta: 'cable', payload_cable: {\n      event_type: 'run_completed', worker_id: $workflow.id, worker_name: 'jefatura',\n      resultado: String(b.resultado_para_la_sala || b.resultado || 'fallido'), revision_id: c.revision_id, con_desacuerdo: b.marcas && b.marcas.con_desacuerdo === true, sin_segunda_mirada: b.marcas && b.marcas.sin_segunda_mirada === true, simulado: b.simulado === true,\n      _sala_correlation_id: ref._sala_correlation_id || null, _journey_id: ref._journey_id || null, ts: new Date().toISOString(),\n    } } }]\n  }\n  return [{ json: { ruta: 'nada' } }]\n}\nthrow new Error('JEFATURA_TURNO_RECHAZADO · /api/jefatura/turnos contestó ' + status + ' · ' + String(b.error || b.detalle || JSON.stringify(b)).slice(0, 240) + ' · se DETIENE')\n"
+      }
+    },
+    {
+      "id": "3acf0eac-c013-4fb9-9063-b823304c4051",
+      "name": "③ ¿Siguiente paso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ruta }}",
+              "rightValue": "esperar",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2e9ab4da-e0c5-41b8-b386-3d001be466e8",
+      "name": "③ Siguiente paso",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3120,
+        -150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\\/+$/, '') }}/zero-risk/jefatura-turno",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-sala-dispatch-key",
+              "value": "={{ $env.SALA_DISPATCH_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.turno_body) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "8c216980-9ea5-4c46-8b81-1e740e58f47e",
+      "name": "③ ¿Entrega por webhook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        50
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ruta }}",
+              "rightValue": "webhook",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bcc48204-d4ea-4269-b843-3e335cb66c1e",
+      "name": "③ Entregar al llamador",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3380,
+        -50
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.entrega_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-sala-dispatch-key",
+              "value": "={{ $env.SALA_DISPATCH_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.entrega_cuerpo) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "b886950b-ce12-46a0-bd5d-448ab0ab2cce",
+      "name": "③ ¿Cable a la sala?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3380,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ruta }}",
+              "rightValue": "cable",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "140c27e0-4a8c-455a-9b1f-16cedb013403",
+      "name": "③ Cable de vuelta · sala",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3640,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-source",
+              "value": "n8n-jefatura"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload_cable) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "6ef5ba96-f70e-d58b-057d-bb3916aef80c",
+      "name": "② Vuelta · leer el punto de control",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        2040,
+        50
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/workflow_checkpoints?workflow_execution_id=eq.{{ $execution.id }}&step_name=eq.{{ encodeURIComponent($('② Armar el pedido').first().json.cuerpo.agent) }}&select=step_status,created_at,texto:output_ref->>response,truncado:output_ref->>response_truncated&order=created_at.desc&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "91f9bc17-ee2c-24ef-cbd3-782966e9872a",
+      "name": "② Vuelta · completar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2260,
+        50
+      ],
+      "parameters": {
+        "jsCode": "// ② VUELTA · COMPLETAR · si la vuelta por cable no llegó, la respuesta del agente puede estar en el punto de control (workflow_checkpoints) de ESTA ejecución. Si no, todo igual que hoy.\nconst orig = $('② Esperar al agente').last().json || {}\nconst cuerpoO = orig.body ? orig.body : orig\nconst textoO = String(cuerpoO.response || cuerpoO.result || cuerpoO.output || cuerpoO.text || '')\nif (textoO.trim().length > 0 || cuerpoO.success === false) return [{ json: orig }]\nconst r = $input.first().json || {}\nconst filas = Array.isArray(r.body) ? r.body : []\nconst f = Number(r.statusCode) === 200 && filas.length && filas[0] && typeof filas[0] === 'object' ? filas[0] : null\nif (!f || f.step_status !== 'completed' || String(f.truncado) === 'true' || !String(f.texto || '').trim()) return [{ json: orig }]\nlet ack = null\ntry { const a = $('② Agente (run-sdk)').last().json; ack = (a.body && a.body.ack_timestamp) || a.ack_timestamp || null } catch (e) { ack = null }\nconst desde = ack ? new Date(ack).getTime() : NaN\nconst creado = new Date(f.created_at).getTime()\nif (!(desde > 0) || !(creado >= desde - 10000)) return [{ json: orig }]\nreturn [{ json: { body: { response: String(f.texto), recuperada_del_punto_de_control: true } } }]\n"
+      }
+    },
+    {
+      "id": "def0e9b9-6d80-951f-f2e2-3047d25c32ae",
+      "name": "② Vuelta · ¿sigue corriendo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        50
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ (function () { try { const c = $('② Vuelta · completar').last().json || {}; const cu = c.body ? c.body : c; if (cu.recuperada_del_punto_de_control === true || cu.success === false) return false; if (String(cu.response || cu.result || cu.output || cu.text || '').trim()) return false; const r = $('② Vuelta · leer el punto de control').last().json || {}; const f = Array.isArray(r.body) ? r.body[0] : null; return !!f && f.step_status === 'running' && $runIndex < 8 } catch (e) { return false } })() }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dced32d3-07b5-ceea-a816-68ff5714a193",
+      "name": "② Vuelta · esperar un poco",
+      "webhookId": "jefatura-turno-0002-relectura",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2480,
+        210
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 120,
+        "unit": "seconds"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook · jefatura turno": {
+      "main": [
+        [
+          {
+            "node": "⓪ Entrada · llave",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⓪ Entrada · llave": {
+      "main": [
+        [
+          {
+            "node": "② Armar el pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Armar el pedido": {
+      "main": [
+        [
+          {
+            "node": "② ¿Modo seco?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② ¿Modo seco?": {
+      "main": [
+        [
+          {
+            "node": "③ Registrar el resultado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "② Agente (run-sdk)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Agente (run-sdk)": {
+      "main": [
+        [
+          {
+            "node": "② ¿Aceptó el pedido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② ¿Aceptó el pedido?": {
+      "main": [
+        [
+          {
+            "node": "② ¿Aceptó?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② ¿Aceptó?": {
+      "main": [
+        [
+          {
+            "node": "② Esperar al agente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "③ Registrar el resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Esperar al agente": {
+      "main": [
+        [
+          {
+            "node": "② Vuelta · leer el punto de control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Vuelta": {
+      "main": [
+        [
+          {
+            "node": "③ Registrar el resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "③ Registrar el resultado": {
+      "main": [
+        [
+          {
+            "node": "③ ¿Y ahora?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "③ ¿Y ahora?": {
+      "main": [
+        [
+          {
+            "node": "③ ¿Siguiente paso?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "③ ¿Siguiente paso?": {
+      "main": [
+        [
+          {
+            "node": "③ Siguiente paso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "③ ¿Entrega por webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "③ ¿Entrega por webhook?": {
+      "main": [
+        [
+          {
+            "node": "③ Entregar al llamador",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "③ ¿Cable a la sala?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "③ ¿Cable a la sala?": {
+      "main": [
+        [
+          {
+            "node": "③ Cable de vuelta · sala",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Vuelta · leer el punto de control": {
+      "main": [
+        [
+          {
+            "node": "② Vuelta · completar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Vuelta · completar": {
+      "main": [
+        [
+          {
+            "node": "② Vuelta · ¿sigue corriendo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Vuelta · ¿sigue corriendo?": {
+      "main": [
+        [
+          {
+            "node": "② Vuelta · esperar un poco",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "② Vuelta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Vuelta · esperar un poco": {
+      "main": [
+        [
+          {
+            "node": "② Vuelta · leer el punto de control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "o8qaF7bI0PKv2XGZ",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-10-13T18:17:52.815Z",
+      "updatedAt": "2026-10-13T18:17:52.815Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "66c82b38-1ca6-40f7-a702-9c897f989982",
+    "workflowId": "o8qaF7bI0PKv2XGZ",
+    "nodes": [
+      {
+        "id": "caba1ff8-1560-482b-8e0f-8023c13baee6",
+        "name": "Webhook · jefatura turno",
+        "webhookId": "jefatura-turno-0001",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "zero-risk/jefatura-turno",
+          "responseMode": "onReceived",
+          "options": {}
+        }
+      },
+      {
+        "id": "9288bb86-ab44-4a51-8752-a8b45e319424",
+        "name": "⓪ Entrada · llave",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          260,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ⓪ ENTRADA · LLAVE · CC#2 · J4 · 2026-10-13 · flujo `zero-risk/jefatura-turno` (UN paso de una revisión de la jefatura por ejecución). INACTIVO.\n// Lo despierta la ruta de la jefatura (o el vigía, o este mismo flujo para el paso siguiente) con { revision_id, turno } y la llave de despacho. Nada de aquí paga: solo valida.\n// A diferencia de la oficina, aquí NO hay portero: el portero y la llamada a GPT viven DENTRO de la ruta (diseño v4 §10); este flujo solo ejecuta pasos de AGENTE.\nconst w = $input.first().json || {}\nconst body = w.body && typeof w.body === 'object' && !Array.isArray(w.body) ? w.body : {}\nconst headers = w.headers && typeof w.headers === 'object' ? w.headers : {}\n\nconst esperada = String($env.SALA_DISPATCH_KEY || '').trim()\nif (!esperada) throw new Error('JEFATURA_TURNO_CERRADO · el motor no tiene la llave de despacho (SALA_DISPATCH_KEY) · el flujo queda cerrado · E67.')\nconst recibida = String(headers['x-sala-dispatch-key'] || '')\nlet ok = recibida.length === esperada.length\nfor (let i = 0; i < esperada.length; i++) ok = recibida.charCodeAt(i) === esperada.charCodeAt(i) && ok\nif (!ok) throw new Error('JEFATURA_TURNO_PROCEDENCIA_INVALIDA · llave de despacho ausente o incorrecta · E67.')\n\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(body.revision_id || ''))) throw new Error('JEFATURA_TURNO_SIN_REVISION · revision_id no es un uuid · se DETIENE')\nconst t = body.turno && typeof body.turno === 'object' ? body.turno : null\nif (!t || !Number.isInteger(t.n) || t.n < 1) throw new Error('JEFATURA_TURNO_SIN_NUMERO · falta turno.n (entero ≥ 1) · se DETIENE')\nif (t.tipo !== 'agente') throw new Error('JEFATURA_TURNO_TIPO_INVALIDO · este flujo solo ejecuta pasos de agente (llegó ' + JSON.stringify(t.tipo) + ')')\nif (!t.pedido || typeof t.pedido !== 'object') throw new Error('JEFATURA_TURNO_SIN_PEDIDO · falta turno.pedido · se DETIENE')\nif (typeof t.pedido.agent_name !== 'string' || typeof t.pedido.task !== 'string' || !t.pedido.task) throw new Error('JEFATURA_TURNO_PEDIDO_INVALIDO · el pedido de un agente necesita agent_name y task')\nif (typeof t.pedido.esquema !== 'string' || !t.pedido.esquema) throw new Error('JEFATURA_TURNO_SIN_ESQUEMA · el pedido de un agente necesita su esquema de salida (sin esquema no hay molde ni contrato)')\n// dry_run OBLIGATORIO y booleano (diseño v4 §2): ausente o no booleano = se DETIENE, nunca se lee como «real»\nif (typeof t.pedido.dry_run !== 'boolean') throw new Error('JEFATURA_TURNO_SIN_DRY_RUN · turno.pedido.dry_run debe ser booleano (true/false) · se DETIENE')\n\nreturn [{ json: { revision_id: String(body.revision_id), turno: t, dry_run: t.pedido.dry_run === true } }]\n"
+        }
+      },
+      {
+        "id": "3112350d-4845-4218-b978-10e473484af4",
+        "name": "② Armar el pedido",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ② ARMAR EL PEDIDO · CC#2 · J4 · 2026-10-13 · el cuerpo que se manda a /api/agents/run-sdk (el agente solo se invoca desde un flujo con workflow_id) o, en modo seco, la respuesta SIMULADA.\n// 🔴 En modo seco NO se llama a ningún proveedor ni al corredor: la respuesta sale de un molde válido por esquema (el «modelo simulado»), como en el turno de la oficina (r78).\n// 🔴 Un esquema SIN molde no mata la ejecución ni la deja «corriendo»: devuelve un error VISIBLE al motor y la revisión cierra `fallida`.\n// 🔴 `force_restart: true` y `dispatch_key` propios del paso: una respuesta vieja guardada no se reutiliza (lección del flujo de prueba).\n// 🔴 Regla dura del editor (diseño v4 §2 y §9): `extra` lleva SOLO claves de una lista cerrada; JAMÁS `workflow_execution_id` (los ids de ejecución van arriba del cuerpo). Y el nodo «Agente» manda siempre `x-skip-editor-middleware: 1`.\n// `pedido.simulacion` (solo con dry_run=true) fuerza ramas: fichas ninguna|sugerencia|bloquea · toma todo|nada · productor ok|formato_roto|formato_roto_siempre|muerto · version_nueva mejora|empeora|demasiado_corta · largo_a (largo del plan A) · donde.\nconst e = $input.first().json\nconst t = e.turno\nconst p = t.pedido\n\n// ── lectura del propio pedido: las fichas («- [id] (gravedad) en …», como las arma la oficina) y los refs del kit / carrusel / imágenes\nconst idsDeFichas = (task) => [...String(task).matchAll(/^- \\[([^\\]\\n]+)\\] \\((?:bloquea|sugerencia)\\)/gm)].map((m) => m[1])\nconst indices = (task) => [...String(task).matchAll(/índice (\\d+)/g)].map((m) => Number(m[1]))\nconst refsDeKit = (task) => [...String(task).matchAll(/^- (e\\d+):/gm)].map((m) => m[1])\nconst refsDe = (task) => { const kit = refsDeKit(task); if (kit.length) return kit; const m = /Roles de lámina posibles[^:\\n]*:\\s*([^\\n]+)/.exec(String(task)); return m ? m[1].split(',').map((x) => x.trim()).filter(Boolean) : [] }\nconst refsAGenerar = (task) => { const i = String(task).search(/## Imágenes que hay que GENERAR/); if (i < 0) return []; const sec = String(task).slice(i).split(/\\n## /)[0]; return [...sec.matchAll(/^- ([^:\\n]+):/gm)].map((m) => m[1].trim()) }\nconst sim = e.dry_run === true && p.simulacion && typeof p.simulacion === 'object' ? p.simulacion : {}\nconst toma = sim.toma === 'nada' ? 'nada' : 'todo'\nconst respuestasDe = (task) => idsDeFichas(task).map((id) => (toma === 'nada' ? { id, estado: 'no_tomada', razon: '(simulado) no lo tomo' } : { id, estado: 'tomada', razon: '(simulado) lo tomo' }))\nconst algunaTomada = (rs) => rs.some((r) => r.estado === 'tomada')\n// el plan simulado: tres largos según el caso (la comparación contra A la hace el código de la planeación; aquí solo se fabrica el texto)\nconst textoDePlan = () => {\n  const a = Number.isFinite(Number(sim.largo_a)) && Number(sim.largo_a) > 0 ? Number(sim.largo_a) : 25000\n  const objetivo = sim.version_nueva === 'demasiado_corta' ? Math.floor(a * 0.3) : a\n  const marca = sim.version_nueva === 'empeora' ? ' A calcular · TBD ·' : ''\n  const base = '(simulado) línea del plan corregido.' + marca + '\\n'\n  return base.repeat(Math.ceil(objetivo / base.length)).slice(0, objetivo)\n}\n\n// ── moldes del modelo simulado: UNO por esquema que la jefatura puede pedir (los de la oficina, que la jefatura reutiliza, y los nuevos de re-entrega por tipo)\nconst SIMULADOS = {\n  // jefe-marketing\n  'fichas.v1': () => ({ fichas: sim.fichas === 'bloquea' || sim.fichas === 'sugerencia' ? [{ que: '(simulado) hallazgo de prueba', donde: String(sim.donde || 'texto'), contra_que: '(simulado) el manual', gravedad: sim.fichas, propuesta: '(simulado) propuesta de prueba' }] : [] }),\n  // pieza (oficina): resoluciones por dueño\n  'resolucion.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { pieza: { pie_de_foto: '(simulado) pie de foto corregido', hashtags: [] } } : {}) } },\n  'resolucion_solo.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  'resolucion_copy_base.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  'resolucion_copy_kit.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  'resolucion_estructura.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  'resolucion_laminas.v1': (task) => ({ respuestas: respuestasDe(task) }),\n  // estrategia (objeto completo), calendario (por fila o tanda) y plan (texto completo): la re-entrega de cada tipo\n  'resolucion_objeto.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { objeto: { simulado: true } } : {}) } },\n  // 01-nov · la palabra del dueño: lo que diría el verificador, sin modelo. Todas cumplen, con una cita literal de cada versión; si el texto no se entiende, ninguna fila y la jefatura lo toma como «no cumple»\n  'verificacion_de_ordenes.v1': (task) => {\n    const partes = String(task).split('## Versión ')\n    const n = (partes[0].match(/^\\d+\\. /gm) || []).length\n    const filas = []\n    for (const parte of partes.slice(1)) {\n      const version = parte.slice(0, 1)\n      const cita = parte.split('\\n').slice(1).join(' ').trim().slice(0, 80)\n      for (let i = 1; i <= n; i++) filas.push({ version, orden: i, estado: 'cumple', cita })\n    }\n    return { filas }\n  },\n  'resolucion_parcial.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { filas: [] } : {}) } },\n  // 🔴 el FORMATO real del texto largo del plan (bloque delimitado o esquema ≥ 40.000) lo decide la condición 1 de CC#3 (§13.5); este molde es lo único que cambia cuando se decida\n  'resolucion_plan.v1': (task) => { const rs = respuestasDe(task); return { respuestas: rs, ...(algunaTomada(rs) ? { texto_completo: textoDePlan() } : {}) } },\n  // 🔴 EL PLAN REAL (condición 1 de CC#3): texto plano + bloque de resolución al final (no un JSON con 25–34 mil caracteres adentro). Si no se tomó nada, solo el bloque.\n  'plan_texto_y_resolucion.v1': (task) => { const rs = respuestasDe(task); const bloque = '<<<RESOLUCION>>>' + String.fromCharCode(10) + JSON.stringify({ respuestas: rs }) + String.fromCharCode(10) + '<<<FIN_RESOLUCION>>>'; return algunaTomada(rs) ? textoDePlan() + String.fromCharCode(10) + bloque : bloque },\n  // oficina: pasos de producción que la jefatura NO ejecuta pero cuyos moldes se conservan idénticos para la prueba de igualdad (§13.3)\n  'visual_direction.v1': () => ({ resumen: '(simulado) dirección visual', decision: { modo: 'generada', motivo: '(simulado)' }, reglas_de_imagen: { obligatorio: [], prohibido: [] } }),\n  'prompts.v1': () => ({ prompts: [{ prompt: '(simulado) un plato visto desde arriba con luz natural lateral, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) cenital' }, { prompt: '(simulado) el mismo plato a nivel de mesa con fondo desenfocado, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) nivel de mesa' }] }),\n  'observacion_imagen.v1': (task) => { const ix = indices(task); return { imagenes: ix.map((indice) => ({ indice, reglas: [], texto_en_imagen: [], marcas: [], personas: 0 })), preferencia: ix } },\n  'observacion_imagenes.v1': (task) => { const ix = indices(task); return { imagenes: ix.map((indice) => ({ indice, reglas: [], texto_en_imagen: [], marcas: [], personas: 0 })), preferencia: ix } },\n  'pieza_post.v1': () => ({ pie_de_foto: '(simulado) pie de foto de prueba', hashtags: [] }),\n  'direccion_imagenes.v1': (task) => { const refs = refsDe(task); return { resumen: '(simulado) dirección visual', estilo: '(simulado)', imagenes: refs.length ? [{ ref: refs[0], modo: 'generada', motivo: '(simulado)' }] : [], reglas_de_imagen: { obligatorio: [], prohibido: [] } } },\n  'prompts_por_ref.v1': (task) => ({ imagenes: refsAGenerar(task).map((ref) => ({ ref, prompts: [{ prompt: '(simulado) un plato visto desde arriba con luz natural lateral, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) cenital' }, { prompt: '(simulado) el mismo plato a nivel de mesa con fondo desenfocado, sin personas, sin texto, sin logotipos', idea_en_una_linea: '(simulado) nivel de mesa' }] })) }),\n  'copy_base.v1': () => ({ texto_base: 'Primera línea simulada\\nSegunda línea simulada\\nTercera línea simulada\\nCuarta línea simulada\\nEscríbenos', pie_de_foto: '(simulado) pie de foto de prueba', hashtags: [] }),\n  'laminas.v1': () => ({ laminas: [{ rol: 'hook', headline: 'Primera línea simulada' }, { rol: 'problem', headline: 'Segunda línea simulada' }, { rol: 'reframe', headline: 'Tercera línea simulada' }, { rol: 'benefit', headline: 'Cuarta línea simulada' }, { rol: 'cta', headline: 'Escríbenos', cta: 'Escríbenos' }] }),\n  'estructura.v1': (task) => ({ elementos: refsDeKit(task).map((ref) => ({ ref, rol: '(simulado) rol', beat: '(simulado) beat', mood: '(simulado) mood' })) }),\n  'copy_kit.v1': (task) => ({ elementos: refsDeKit(task).map((ref) => ({ ref, headline: '(simulado) titular' })) }),\n}\n\nconst ERROR = (msg) => ({ ...e, simulado: true, resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, error: msg, costo_usd: 0, workflow_execution_id: $execution.id } })\n\nif (e.dry_run === true) {\n  // FUENTE ÚNICA DE MOLDES (certificación de CC#3 · J2/J3 reparo 2): si la ruta entregó su `pedido.molde`, el seco contesta ESO (lo que la ruta sabe leer); los moldes de abajo son solo el respaldo cuando la ruta no trae molde (`molde_de: 'flujo'`)\n  const deLaRuta = p.molde && typeof p.molde === 'object' && !Array.isArray(p.molde) ? p.molde : null\n  if (deLaRuta) {\n    if (typeof deLaRuta.texto !== 'string') {\n      // el productor murió en la simulación de la ruta: no contesta (el vigía lo re-arma); cualquier otro motivo es un error visible, nunca «corriendo»\n      if (sim.productor === 'muerto') return []\n      return [{ json: { ...ERROR('JEFATURA_MOLDE_DE_LA_RUTA_SIN_TEXTO · ' + String(deLaRuta.error || 'la ruta no entregó texto para este paso')), molde_de: 'ruta' } }]\n    }\n    return [{ json: { ...e, simulado: true, molde_de: 'ruta', resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, texto: deLaRuta.texto, costo_usd: 0, workflow_execution_id: $execution.id } } }]\n  }\n  const molde = SIMULADOS[p.esquema]\n  // un esquema sin molde NO mata la ejecución (la revisión se quedaría «corriendo» en silencio): el motor recibe el error y la revisión falla visible\n  if (!molde) return [{ json: ERROR('JEFATURA_SIN_MOLDE_SIMULADO · no hay respuesta simulada para el esquema ' + JSON.stringify(p.esquema)) }]\n  // productor muerto: no contesta nunca (el vigía lo re-arma a los 12 min); en el seco la ejecución termina sin registrar nada, a propósito\n  if (sim.productor === 'muerto') return []\n  const roto = sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && p.reintento_formato !== true)\n  const m = roto ? null : molde(p.task)\n  const texto = roto ? '{\"respuestas\": [ {\"id\": ' : (typeof m === 'string' ? m : JSON.stringify(m)) // un molde de TEXTO (el plan) devuelve la cadena tal cual\n  return [{ json: { ...e, simulado: true, molde_de: 'flujo', resultado_body: { accion: 'resultado', revision_id: e.revision_id, n: t.n, texto, costo_usd: 0, workflow_execution_id: $execution.id } } }]\n}\n\n// ── real: el pedido a run-sdk. Sin tope de gasto del paso NO se paga (el SDK acota el costo con max_budget_usd)\nif (!(typeof p.max_budget_usd === 'number' && p.max_budget_usd > 0)) throw new Error('JEFATURA_SIN_TOPE_DEL_PASO · el pedido real no trae max_budget_usd (> 0) · no se paga un paso sin tope · se DETIENE')\nconst PERMITIDAS = ['indicacion_jefatura', 'paso_de_la_jefatura', 'revision_id', 'dispatch_key']\nconst extra = {}\nfor (const k of PERMITIDAS) if (p.extra && p.extra[k] !== undefined) extra[k] = p.extra[k]\nextra.dispatch_key = t.dispatch_key\nconst cuerpo = {\n  agent: p.agent_name,\n  task: p.task,\n  client_id: p.client_id,\n  workflow_id: $workflow.id,\n  workflow_execution_id: $execution.id,\n  callback_url: $execution.resumeUrl,\n  // la vuelta la entrega el corredor cuando el agente puede; si no puede, run-sdk lo ignora y la vuelta sigue por Vercel con la recuperación del resultado\n  callback_mode: 'runner',\n  force_restart: true,\n  dry_run: false,\n  max_budget_usd: p.max_budget_usd,\n  thinking_mode: p.thinking_mode || 'disabled',\n  extra,\n  ...(Array.isArray(p.images) && p.images.length ? { images: p.images, images_mode: 'base64' } : {}),\n}\nreturn [{ json: { ...e, simulado: false, cuerpo } }]"
+        }
+      },
+      {
+        "id": "6f988606-28f5-474c-8376-4866e4abeb3c",
+        "name": "② ¿Modo seco?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          780,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.simulado }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "a0ae8616-4a6b-43dc-b5ef-4d856916a9d0",
+        "name": "② Agente (run-sdk)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          1040,
+          150
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://zero-risk-platform.vercel.app/api/agents/run-sdk",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.INTERNAL_API_KEY }}"
+              },
+              {
+                "name": "x-skip-editor-middleware",
+                "value": "1"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "dbbfd6db-ee4e-4cdc-9dfe-6e0668e8d26d",
+        "name": "② ¿Aceptó el pedido?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          150
+        ],
+        "parameters": {
+          "jsCode": "// ② ¿ACEPTÓ EL PEDIDO? · CC#2 · 2026-10-09 · mismo criterio que la pieza: run-sdk contesta SÍNCRONO 202 `{accepted:true}` si acepta (la vuelta llega después por el callback) o un RECHAZO con `error`.\n// Un rechazo síncrono significa que el agente NO arrancó: se avisa YA a la jefatura (resultado con error) en lugar de esperar la espera entera.\nconst c = $('② Armar el pedido').first().json\nconst e = $input.first().json || {}\nconst r = e.body && typeof e.body === 'object' ? e.body : e\n// el nodo HTTP falló (red, tiempo): n8n entrega `{error:{message…}}` con `error` OBJETO · el rechazo de run-sdk trae `error` como TEXTO\nif (r.error && typeof r.error === 'object') {\n  return [{ json: { ...c, aceptado: false, resultado_body: { accion: 'resultado', revision_id: c.revision_id, n: c.turno.n, error: 'JEFATURA_PEDIDO_NO_LLEGO · ' + String(r.error.message || r.error.name || 'sin detalle').slice(0, 200), costo_usd: 0, workflow_execution_id: $execution.id } } }]\n}\nif (r.accepted === true) return [{ json: { ...c, aceptado: true } }]\nconst partes = [r.error, r.code, r.detail].filter((x) => x !== undefined && x !== null && x !== '')\nreturn [{ json: { ...c, aceptado: false, resultado_body: { accion: 'resultado', revision_id: c.revision_id, n: c.turno.n, error: 'JEFATURA_PEDIDO_RECHAZADO · ' + (partes.length ? partes.map(String).join(' · ').slice(0, 240) : JSON.stringify(r).slice(0, 200)), costo_usd: 0, workflow_execution_id: $execution.id } } }]\n"
+        }
+      },
+      {
+        "id": "05e54320-e06c-45a7-af94-241bb16322a2",
+        "name": "② ¿Aceptó?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1560,
+          150
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.aceptado }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "70a032d7-9df7-4839-8913-2540cf9589ad",
+        "name": "② Esperar al agente",
+        "webhookId": "jefatura-turno-0001-espera",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          1820,
+          50
+        ],
+        "parameters": {
+          "resume": "webhook",
+          "httpMethod": "POST",
+          "limitWaitTime": true,
+          "resumeAmount": 900,
+          "resumeUnit": "seconds",
+          "options": {}
+        }
+      },
+      {
+        "id": "44bc8a54-4123-405c-b88b-41f50743619b",
+        "name": "② Vuelta",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2080,
+          50
+        ],
+        "parameters": {
+          "jsCode": "// ② LA VUELTA DEL AGENTE (o el portero) · CC#2 · 2026-10-09 · convierte lo que volvió en el cuerpo de `POST /api/jefatura/turnos {accion:'resultado'}`.\n// Un fallo declarado del agente (`success:false`: corte por tope, etc.) NO es una vuelta: su texto, si trae, es PARCIAL y no se manda como respuesta (se manda el error).\n// El costo es el que reporta el corredor (el libro de la sala lo suma); sin costo reportado se manda 0 y la sala lo declara.\nconst c = $('② Armar el pedido').first().json\nconst e = $input.first().json || {}\nconst cuerpo = e.body ? e.body : e\nconst fallo = cuerpo.success === false ? String(cuerpo.error || cuerpo.error_kind || 'sin detalle') : null\nconst texto = fallo ? '' : String(cuerpo.response || cuerpo.result || cuerpo.output || cuerpo.text || '')\nconst costo = typeof cuerpo.cost_usd === 'number' ? cuerpo.cost_usd : (typeof cuerpo.costUsd === 'number' ? cuerpo.costUsd : 0)\nconst body = { accion: 'resultado', revision_id: c.revision_id, n: c.turno.n, costo_usd: costo, workflow_execution_id: $execution.id, workflow_id: $workflow.id }\nif (fallo) body.error = 'el agente FALLÓ · ' + fallo + (cuerpo.partial === true ? ' · (había texto parcial: no se usa)' : '')\nelse if (texto.trim() === '') body.error = 'la vuelta del agente llegó vacía (o se agotó la espera)'\nelse body.texto = texto\nif (typeof cuerpo.tokens_in === 'number') body.tokens_in = cuerpo.tokens_in\nif (typeof cuerpo.tokens_out === 'number') body.tokens_out = cuerpo.tokens_out\nreturn [{ json: { ...c, resultado_body: body } }]\n"
+        }
+      },
+      {
+        "id": "3b7500d1-632a-4527-8188-6ec8ee1b1540",
+        "name": "③ Registrar el resultado",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          2340,
+          0
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://zero-risk-platform.vercel.app/api/jefatura/turnos",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-sala-dispatch-key",
+                "value": "={{ $env.SALA_DISPATCH_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.resultado_body) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "neverError": true,
+                "fullResponse": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "91ff9dc7-9164-442b-b8b2-b236e30cf90f",
+        "name": "③ ¿Y ahora?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2600,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ③ ¿Y AHORA? · CC#2 · J4 · 2026-10-13 · decide qué sigue con la respuesta REAL de `POST /api/jefatura/turnos` (statusCode + body).\n//   200 `esperar` → el SIGUIENTE paso: se vuelve a despertar este mismo flujo (una ejecución por paso: ninguna pasa de unos minutos)\n//   200 `cerrado` → la revisión terminó (limpia, con desacuerdo, sin segunda mirada, incompleta por tope o fallida): se ENTREGA al llamador según `devolver_a`:\n//                     · `devolver.tipo = 'webhook'` → se manda `devolver.cuerpo` a `devolver.url` (SOLO si la dirección es de nuestro n8n o de nuestro Vercel: nada sale a un tercero)\n//                     · `devolver.tipo = 'sala_ref'` o ausente con `sala_ref` → el CABLE a la sala con el resultado REAL\n//                     · `devolver.tipo = 'ninguno'` → nada (la ruta ya guardó todo; p. ej. las pruebas de la jefatura)\n//   cualquier otra respuesta (409 turno no esperado, 5xx…) → se DETIENE con su motivo (nunca se da por bien)\nconst c = $('⓪ Entrada · llave').first().json\nconst e = $input.first().json || {}\nif (e.error && typeof e.error === 'object') throw new Error('JEFATURA_RESULTADO_NO_LLEGO · POST /api/jefatura/turnos falló antes de recibir respuesta (' + String(e.error.message || e.error.name || 'sin detalle').slice(0, 160) + ')')\nconst status = Number(e.statusCode)\nconst b = e.body && typeof e.body === 'object' ? e.body : {}\n// «ya hay un paso esperando respuesta» llega como `esperar` SIN pedido: aquí no se despierta nada (se DETIENE con su motivo, no se manda un turno vacío a otro flujo)\nif (status === 200 && b.accion === 'esperar' && b.turno && !b.turno.pedido) throw new Error('JEFATURA_ESPERA_SIN_PEDIDO · la ruta contestó «esperar» sin el pedido del paso (' + String(b.nota || 'sin nota').slice(0, 120) + ') · se DETIENE')\nif (status === 200 && b.accion === 'esperar' && b.turno) return [{ json: { ruta: 'esperar', turno_body: { revision_id: c.revision_id, turno: b.turno } } }]\nif (status === 200 && b.accion === 'cerrado') {\n  const dev = b.devolver && typeof b.devolver === 'object' ? b.devolver : null\n  const ref = b.sala_ref && typeof b.sala_ref === 'object' ? b.sala_ref : {}\n  const tipo = dev && typeof dev.tipo === 'string' ? dev.tipo : (b.sala_ref ? 'sala_ref' : 'ninguno')\n  if (tipo === 'webhook') {\n    // solo destinos REALES de un llamador (certificación de CC#3 · J4 reparo 4): los webhooks de nuestro n8n (la base ya es `…/webhook`) y SOLO las rutas `/api/jefatura/` de nuestro Vercel (no cualquier ruta suya); la llave de despacho viaja en esta entrega\n    const permitidas = [String($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\\/+$/, '') + '/', 'https://zero-risk-platform.vercel.app/api/jefatura/']\n    const url = String(dev.url || '')\n    if (!permitidas.some((p) => url.startsWith(p))) throw new Error('JEFATURA_DESTINO_NO_PERMITIDO · devolver.url no es de nuestro n8n ni de nuestro Vercel · no se entrega a un tercero · se DETIENE (' + url.slice(0, 80) + ')')\n    return [{ json: { ruta: 'webhook', entrega_url: url, entrega_cuerpo: { revision_id: c.revision_id, resultado: String(b.resultado || 'fallida'), ...(dev.cuerpo && typeof dev.cuerpo === 'object' ? dev.cuerpo : {}) } } }]\n  }\n  if (tipo === 'sala_ref') {\n    return [{ json: { ruta: 'cable', payload_cable: {\n      event_type: 'run_completed', worker_id: $workflow.id, worker_name: 'jefatura',\n      resultado: String(b.resultado_para_la_sala || b.resultado || 'fallido'), revision_id: c.revision_id, con_desacuerdo: b.marcas && b.marcas.con_desacuerdo === true, sin_segunda_mirada: b.marcas && b.marcas.sin_segunda_mirada === true, simulado: b.simulado === true,\n      _sala_correlation_id: ref._sala_correlation_id || null, _journey_id: ref._journey_id || null, ts: new Date().toISOString(),\n    } } }]\n  }\n  return [{ json: { ruta: 'nada' } }]\n}\nthrow new Error('JEFATURA_TURNO_RECHAZADO · /api/jefatura/turnos contestó ' + status + ' · ' + String(b.error || b.detalle || JSON.stringify(b)).slice(0, 240) + ' · se DETIENE')\n"
+        }
+      },
+      {
+        "id": "3acf0eac-c013-4fb9-9063-b823304c4051",
+        "name": "③ ¿Siguiente paso?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2860,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.ruta }}",
+                "rightValue": "esperar",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "2e9ab4da-e0c5-41b8-b386-3d001be466e8",
+        "name": "③ Siguiente paso",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          3120,
+          -150
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\\/+$/, '') }}/zero-risk/jefatura-turno",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-sala-dispatch-key",
+                "value": "={{ $env.SALA_DISPATCH_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.turno_body) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "8c216980-9ea5-4c46-8b81-1e740e58f47e",
+        "name": "③ ¿Entrega por webhook?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          3120,
+          50
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.ruta }}",
+                "rightValue": "webhook",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "bcc48204-d4ea-4269-b843-3e335cb66c1e",
+        "name": "③ Entregar al llamador",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          3380,
+          -50
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.entrega_url }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-sala-dispatch-key",
+                "value": "={{ $env.SALA_DISPATCH_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.entrega_cuerpo) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "b886950b-ce12-46a0-bd5d-448ab0ab2cce",
+        "name": "③ ¿Cable a la sala?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          3380,
+          150
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.ruta }}",
+                "rightValue": "cable",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "140c27e0-4a8c-455a-9b1f-16cedb013403",
+        "name": "③ Cable de vuelta · sala",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          3640,
+          100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SALA_CALLBACK_URL || 'https://zero-risk-platform.vercel.app/api/sala/callback' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.SALA_CALLBACK_API_KEY || $env.INTERNAL_API_KEY }}"
+              },
+              {
+                "name": "x-source",
+                "value": "n8n-jefatura"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.payload_cable) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "6ef5ba96-f70e-d58b-057d-bb3916aef80c",
+        "name": "② Vuelta · leer el punto de control",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "position": [
+          2040,
+          50
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/workflow_checkpoints?workflow_execution_id=eq.{{ $execution.id }}&step_name=eq.{{ encodeURIComponent($('② Armar el pedido').first().json.cuerpo.agent) }}&select=step_status,created_at,texto:output_ref->>response,truncado:output_ref->>response_truncated&order=created_at.desc&limit=1",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "91f9bc17-ee2c-24ef-cbd3-782966e9872a",
+        "name": "② Vuelta · completar",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2260,
+          50
+        ],
+        "parameters": {
+          "jsCode": "// ② VUELTA · COMPLETAR · si la vuelta por cable no llegó, la respuesta del agente puede estar en el punto de control (workflow_checkpoints) de ESTA ejecución. Si no, todo igual que hoy.\nconst orig = $('② Esperar al agente').last().json || {}\nconst cuerpoO = orig.body ? orig.body : orig\nconst textoO = String(cuerpoO.response || cuerpoO.result || cuerpoO.output || cuerpoO.text || '')\nif (textoO.trim().length > 0 || cuerpoO.success === false) return [{ json: orig }]\nconst r = $input.first().json || {}\nconst filas = Array.isArray(r.body) ? r.body : []\nconst f = Number(r.statusCode) === 200 && filas.length && filas[0] && typeof filas[0] === 'object' ? filas[0] : null\nif (!f || f.step_status !== 'completed' || String(f.truncado) === 'true' || !String(f.texto || '').trim()) return [{ json: orig }]\nlet ack = null\ntry { const a = $('② Agente (run-sdk)').last().json; ack = (a.body && a.body.ack_timestamp) || a.ack_timestamp || null } catch (e) { ack = null }\nconst desde = ack ? new Date(ack).getTime() : NaN\nconst creado = new Date(f.created_at).getTime()\nif (!(desde > 0) || !(creado >= desde - 10000)) return [{ json: orig }]\nreturn [{ json: { body: { response: String(f.texto), recuperada_del_punto_de_control: true } } }]\n"
+        }
+      },
+      {
+        "id": "def0e9b9-6d80-951f-f2e2-3047d25c32ae",
+        "name": "② Vuelta · ¿sigue corriendo?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2480,
+          50
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ (function () { try { const c = $('② Vuelta · completar').last().json || {}; const cu = c.body ? c.body : c; if (cu.recuperada_del_punto_de_control === true || cu.success === false) return false; if (String(cu.response || cu.result || cu.output || cu.text || '').trim()) return false; const r = $('② Vuelta · leer el punto de control').last().json || {}; const f = Array.isArray(r.body) ? r.body[0] : null; return !!f && f.step_status === 'running' && $runIndex < 8 } catch (e) { return false } })() }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "dced32d3-07b5-ceea-a816-68ff5714a193",
+        "name": "② Vuelta · esperar un poco",
+        "webhookId": "jefatura-turno-0002-relectura",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          2480,
+          210
+        ],
+        "parameters": {
+          "resume": "timeInterval",
+          "amount": 120,
+          "unit": "seconds"
+        }
+      }
+    ],
+    "connections": {
+      "Webhook · jefatura turno": {
+        "main": [
+          [
+            {
+              "node": "⓪ Entrada · llave",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⓪ Entrada · llave": {
+        "main": [
+          [
+            {
+              "node": "② Armar el pedido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Armar el pedido": {
+        "main": [
+          [
+            {
+              "node": "② ¿Modo seco?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② ¿Modo seco?": {
+        "main": [
+          [
+            {
+              "node": "③ Registrar el resultado",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "② Agente (run-sdk)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Agente (run-sdk)": {
+        "main": [
+          [
+            {
+              "node": "② ¿Aceptó el pedido?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② ¿Aceptó el pedido?": {
+        "main": [
+          [
+            {
+              "node": "② ¿Aceptó?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② ¿Aceptó?": {
+        "main": [
+          [
+            {
+              "node": "② Esperar al agente",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "③ Registrar el resultado",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Esperar al agente": {
+        "main": [
+          [
+            {
+              "node": "② Vuelta · leer el punto de control",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Vuelta": {
+        "main": [
+          [
+            {
+              "node": "③ Registrar el resultado",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "③ Registrar el resultado": {
+        "main": [
+          [
+            {
+              "node": "③ ¿Y ahora?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "③ ¿Y ahora?": {
+        "main": [
+          [
+            {
+              "node": "③ ¿Siguiente paso?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "③ ¿Siguiente paso?": {
+        "main": [
+          [
+            {
+              "node": "③ Siguiente paso",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "③ ¿Entrega por webhook?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "③ ¿Entrega por webhook?": {
+        "main": [
+          [
+            {
+              "node": "③ Entregar al llamador",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "③ ¿Cable a la sala?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "③ ¿Cable a la sala?": {
+        "main": [
+          [
+            {
+              "node": "③ Cable de vuelta · sala",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Vuelta · leer el punto de control": {
+        "main": [
+          [
+            {
+              "node": "② Vuelta · completar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Vuelta · completar": {
+        "main": [
+          [
+            {
+              "node": "② Vuelta · ¿sigue corriendo?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Vuelta · ¿sigue corriendo?": {
+        "main": [
+          [
+            {
+              "node": "② Vuelta · esperar un poco",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "② Vuelta",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Vuelta · esperar un poco": {
+        "main": [
+          [
+            {
+              "node": "② Vuelta · leer el punto de control",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-11-02T21:24:45.843Z",
+    "updatedAt": "2026-11-02T21:24:45.843Z",
+    "workflowPublishHistory": [
+      {
+        "id": 3443,
+        "workflowId": "o8qaF7bI0PKv2XGZ",
+        "versionId": "66c82b38-1ca6-40f7-a702-9c897f989982",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-02T21:24:45.943Z"
+      },
+      {
+        "id": 3444,
+        "workflowId": "o8qaF7bI0PKv2XGZ",
+        "versionId": "66c82b38-1ca6-40f7-a702-9c897f989982",
+        "event": "deactivated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-02T21:24:46.080Z"
+      },
+      {
+        "id": 3445,
+        "workflowId": "o8qaF7bI0PKv2XGZ",
+        "versionId": "66c82b38-1ca6-40f7-a702-9c897f989982",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-02T21:24:46.259Z"
+      }
+    ]
+  },
+  "parentFolder": null
+}
