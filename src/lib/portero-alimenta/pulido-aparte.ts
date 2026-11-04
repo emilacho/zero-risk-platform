@@ -11,7 +11,7 @@ import { cargarEntradaDelResumen, fichasDeResumen } from './resumen-vivo'
 import { pulirResumen, AGENTE_DEL_PULIDO } from './resumen-pulido'
 import { archivarFichasDeBrazos, huellaDeFicha } from './brazos/archivo'
 import { TOPE_DEL_PORTERO_USD, TOPE_DEL_PULIDO_APARTE_USD, UMBRALES_DE_GASTO_POR_OMISION, type Interruptores, type UmbralesDeGasto } from './datos'
-import { gastoDeHoy, validar, type Respuesta } from './rutas'
+import { gastoDeHoy, reconciliarYEnviar, validar, type DepsDeRutas, type Respuesta } from './rutas'
 import { idDeZona, paisIsoDe } from '../cerebro/zona'
 
 type Db = { from(tabla: string): any }
@@ -31,7 +31,11 @@ export interface DepsDePulir {
   avisar?: (texto: string, clave?: string) => Promise<{ ok: boolean; detalle: string }>
   /** umbrales de gasto del día (aviso / apagado); por omisión los del portero */
   umbrales?: UmbralesDeGasto
+  /** 04-nov: el puente al índice; el pulido archiva una ficha NUEVA y retira la vieja DESPUÉS del cierre, así que deja el índice al día él mismo (ausente = no se escribe, y `quedan` lo dice) */
+  puente?: DepsDeRutas['puente']
 }
+/** pasadas máximas del puente al terminar el pulido (el pulido deja ~1 trozo por escribir y 1 por sacar; sobra margen) */
+const MAX_PASADAS_DEL_PUENTE_DEL_PULIDO = 4
 
 /**
  * EL GASTO DEL DÍA, CON EL PULIDO DENTRO. El vigilante (⑥) lee el gasto ANTES de que corra el pulido (⑧): el pulido real (hasta US$ 0,30) quedaba fuera de la cifra del día, de su rastro y de su aviso.
@@ -118,6 +122,17 @@ export async function rutaPulir(deps: DepsDePulir, cuerpo: unknown): Promise<Res
     escritas = ar.escritas
     errores.push(...ar.errores.map((m) => `resumen pulido: ${m}`))
   }
+  // 04-nov: el índice queda al día EN ESTA MISMA corrida. El pulido (⑧) corre DESPUÉS de que ④ bis cerró el puente: la versión pulida es una ficha nueva sin trozo y la anterior queda retirada con su trozo
+  // por sacar, así que sin esto «cerebro listo» salía en falso hasta una pasada extra. Se repite hasta quedan = 0; una falla se DICE (no se lee como «al día»)
+  let puente: Fila | null = null
+  if (pr.usado && deps.interruptores.puente_al_indice) {
+    for (let i = 0; i < MAX_PASADAS_DEL_PUENTE_DEL_PULIDO; i++) {
+      const x = await reconciliarYEnviar({ db: deps.db, interruptores: deps.interruptores, puente: deps.puente, ahora }, v.client_id, false)
+      puente = x.puente
+      errores.push(...x.errores)
+      if (x.errores.length || x.puente.lectura_fallida === true || x.puente.quedan === 0) break
+    }
+  }
   const gastoDelDia = await incluirElPulidoEnElGastoDelDia(deps, v.client_id, (cliente.name as string | null) ?? null, ahora, hoy)
-  return { status: 200, body: { ok: errores.length === 0, pulido, escritas, errores, gasto_del_dia: gastoDelDia, modelos_llamados: 1 } }
+  return { status: 200, body: { ok: errores.length === 0, pulido, escritas, ...(puente ? { puente } : {}), errores, gasto_del_dia: gastoDelDia, modelos_llamados: 1 } }
 }
