@@ -8,6 +8,7 @@
  *     "distinct_ids":   ["id-interno-1", …],            // cuentas / visitantes internos de la analítica (máx. 50)
  *     "rangos":         [{ "desde": "2026-10-02", "hasta": "2026-10-03", "nota": "ensayo de cobro" }, …],  // ventanas en que TODO lo registrado es prueba (máx. 10; hasta exclusivo)
  *     "evento_bandera": "es_prueba",                    // propiedad del evento que, valiendo true/1, lo marca como prueba
+ *     "pedidos_de_prueba_hasta": "2026-11-04",           // antes de esta fecha, todo lo de venta (carrito, cobro, pedido) es prueba; las visitas sí cuentan (hasta exclusivo)
  *     "nota":           "texto libre para quien lea la carpeta"
  *   }
  *
@@ -20,6 +21,7 @@ export interface DatosDePrueba {
   readonly distinct_ids: readonly string[]
   readonly rangos: readonly RangoDePrueba[]
   readonly evento_bandera: string | null
+  readonly pedidos_de_prueba_hasta: string | null
   readonly nota: string | null
   /** lo que venía en la ficha y no se pudo usar (para decirlo, no para ocultarlo) */
   readonly descartado: readonly string[]
@@ -73,9 +75,20 @@ export function leerDatosDePrueba(entrada: unknown): DatosDePrueba | null {
   }
   const nota = typeof crudo.nota === 'string' && crudo.nota.trim() ? crudo.nota.trim().slice(0, 300) : null
 
-  if (!ids.length && !rangos.length && !bandera) return descartado.length ? { distinct_ids: [], rangos: [], evento_bandera: null, nota, descartado } : null
-  return { distinct_ids: ids, rangos, evento_bandera: bandera, nota, descartado }
+  let pedidosHasta: string | null = null
+  if (crudo.pedidos_de_prueba_hasta !== undefined && crudo.pedidos_de_prueba_hasta !== null) {
+    const f = String(crudo.pedidos_de_prueba_hasta).trim()
+    if (RE_FECHA.test(f)) pedidosHasta = f
+    else descartado.push('pedidos_de_prueba_hasta no es una fecha')
+  }
+  if (!ids.length && !rangos.length && !bandera && !pedidosHasta) return descartado.length ? { distinct_ids: [], rangos: [], evento_bandera: null, pedidos_de_prueba_hasta: null, nota, descartado } : null
+  return { distinct_ids: ids, rangos, evento_bandera: bandera, pedidos_de_prueba_hasta: pedidosHasta, nota, descartado }
 }
+
+// lo que hace un comprador, no un visitante. Agnóstico: los nombres de evento de los sitios que construimos y los habituales
+const PATRON_DE_VENTA = '^(cart|checkout|order|payment|purchase|pedido|pago|compra)'
+// para cualquier cliente: todo pedido cuenta salvo el que apenas se abre, se mira o se cae
+const ES_VENTA_CERRADA = /^(order_(?!viewed|created|started|opened|abandoned|failed|cancel)|payment_(succeeded|completed|confirmed)|checkout_completed|purchase|pedido(?!_(iniciado|abierto|visto|cancelado|fallido))|pago(?!_(iniciado|fallido|rechazado))|compra(?!_(iniciada|cancelada|fallida)))/i
 
 const lit = (s: string) => "'" + s.replace(/\\/g, '\\\\').replace(/'/g, "''") + "'"
 
@@ -89,8 +102,20 @@ export function condicionesHogQL(dp: DatosDePrueba | null): string {
   if (dp.distinct_ids.length) q += ' and distinct_id not in (' + dp.distinct_ids.map(lit).join(', ') + ')'
   for (const r of dp.rangos) q += ' and not (timestamp >= parseDateTimeBestEffort(' + lit(r.desde) + ') and timestamp < parseDateTimeBestEffort(' + lit(r.hasta) + '))'
   if (dp.evento_bandera) q += " and coalesce(toString(properties." + dp.evento_bandera + "), '') not in ('true', '1')"
+  if (dp.pedidos_de_prueba_hasta) q += " and not (match(event, '" + PATRON_DE_VENTA + "') and timestamp < parseDateTimeBestEffort(" + lit(dp.pedidos_de_prueba_hasta) + '))'
   return q
 }
+
+/**
+ * 04-nov · para cualquier sitio, sin tocar su ficha: un evento que el sitio marque `es_prueba` nunca cuenta (la marca es parte de la plantilla de los sitios).
+ * Sin marca, el evento pasa: una propiedad ausente no excluye nada.
+ */
+export const BANDERA_DE_LA_CASA = 'es_prueba'
+export const condicionDeLaCasa = (): string => " and coalesce(toString(properties." + BANDERA_DE_LA_CASA + "), '') not in ('true', '1')"
+
+/** ¿queda algo de venta en lo que se contó? Si no, el plan debe saberlo en vez de leer un embudo vacío */
+export const hayVentasEnElEmbudo = (eventos: readonly string[]): boolean => eventos.some((e) => ES_VENTA_CERRADA.test(e))
+export const SIN_VENTAS_DEL_SITIO = 'sin ventas reales por el sitio todavía'
 
 /** Lo que viaja pegado al dato para que quien lo lea sepa qué se dejó fuera. */
 export function rotuloDeExclusion(dp: DatosDePrueba | null): string | null {
@@ -99,6 +124,7 @@ export function rotuloDeExclusion(dp: DatosDePrueba | null): string | null {
   if (dp.distinct_ids.length) partes.push(`${dp.distinct_ids.length} cuenta(s) interna(s)`)
   if (dp.rangos.length) partes.push(`${dp.rangos.length} ventana(s) de prueba`)
   if (dp.evento_bandera) partes.push(`eventos marcados «${dp.evento_bandera}»`)
+  if (dp.pedidos_de_prueba_hasta) partes.push(`lo de venta anterior al ${dp.pedidos_de_prueba_hasta.slice(0, 10)}`)
   if (!partes.length) return null
   return 'Se dejó fuera lo que son pruebas del dueño o de la agencia, no clientes: ' + partes.join(' · ') + '.'
 }

@@ -79,7 +79,7 @@ describe('rotuloDeExclusion', () => {
   })
   it('sin nada que excluir ⇒ null', () => {
     expect(rotuloDeExclusion(null)).toBeNull()
-    expect(rotuloDeExclusion(leerDatosDePrueba({ nota: 'solo nota', distinct_ids: ['x'] }) && { distinct_ids: [], rangos: [], evento_bandera: null, nota: 'n', descartado: [] })).toBeNull()
+    expect(rotuloDeExclusion(leerDatosDePrueba({ nota: 'solo nota', distinct_ids: ['x'] }) && { distinct_ids: [], rangos: [], evento_bandera: null, pedidos_de_prueba_hasta: null, nota: 'n', descartado: [] })).toBeNull()
   })
 })
 
@@ -106,10 +106,10 @@ describe('el brazo de PostHog aplica la convención', () => {
     const j = await r.json()
     return (Array.isArray(j) ? j[0] : (j.respuestas ?? [j])[0]) as { datos: Record<string, any> }
   }
-  it('sin `datos_de_prueba`: la consulta es EXACTAMENTE la de hoy y el dato no lleva rótulo', async () => {
+  it('sin `datos_de_prueba`: solo se deja fuera lo marcado por el sitio y el dato no lleva rótulo', async () => {
     const r = await pedir({ dominio: 'sitio.ec' })
-    expect(sqls[0]).toContain("in ('sitio.ec', 'www.sitio.ec') group by event")
-    expect(sqls[0]).not.toMatch(/distinct_id not in|parseDateTime|not in \(/)
+    expect(sqls[0]).toContain("in ('sitio.ec', 'www.sitio.ec') and coalesce(toString(properties.es_prueba), '') not in ('true', '1') group by event")
+    expect(sqls[0]).not.toMatch(/distinct_id not in|parseDateTime/)
     expect(r.datos.pruebas_excluidas).toBeUndefined()
     expect(r.datos.pruebas_descartadas).toBeUndefined()
   })
