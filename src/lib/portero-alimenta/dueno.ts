@@ -8,6 +8,7 @@
  *  · EXCEPCIÓN (21-oct): con `acumula: true` la respuesta es una NOTA que se suma: nunca retira a otra del mismo tema (comentarios de una pieza, avisos sueltos). Solo se deduplica la idéntica (huella del texto + `mensaje_ref`).
  *  · Precedencia máxima: el origen `dueno` va primero donde el cerebro ordena por origen, y el resumen vivo la muestra aparte; lo medido o supuesto no se mezcla con ella (cada ficha conserva su cita).
  *  · Privacidad: se guarda lo que dijo el dueño; correos, teléfonos y @usuarios de terceros se omiten.
+ *  · DESCARTAR (04-nov · firma de Emilio): el evento `descartar` (pregunta_id o tema + motivo) archiva preguntas pendientes como «obsoleta» con fecha y motivo; nada se borra y NO crea ficha de respuesta.
  *  · `dry_run` obligatorio; con false exige workflow_id y workflow_execution_id. Detrás de `PORTERO_DUENO` (apagado por omisión). US$ 0: no llama a ningún modelo.
  */
 import { createHash, randomUUID } from 'node:crypto'
@@ -193,10 +194,39 @@ export function estadoDeSedeDichoPorElDueno(n: { tema: string; sede_clave: strin
   return sede ? { sede: { id: sede.id, clave: sede.clave }, estado } : null
 }
 
-/** POST · registra una respuesta del dueño o una pregunta que se le hizo */
+export const MAX_MOTIVO_DE_DESCARTE = 300
+/**
+ * EVENTO `descartar` · archiva como «obsoleta» las preguntas PENDIENTES que ya no se van a contestar (p. ej. las que vivían en Slack y ahora se contestan en Tu oficina).
+ * Por `pregunta_id` (una) o por `tema` (todas las pendientes de ese cliente con el mismo tema, de cualquier antigüedad; con `sede_clave` solo esa sede). `motivo` obligatorio.
+ * Nada se borra (queda estado + fecha + motivo) y NO crea ficha de respuesta: el cerebro no aprende nada de un descarte. Con `dry_run: true` solo lista qué descartaría.
+ */
+async function descartarPreguntas(deps: DepsDeDueno, v: { dry_run: boolean; cuerpo: Record<string, unknown> }): Promise<Respuesta> {
+  const c = v.cuerpo
+  const clientId = txt(c.client_id), preguntaId = txt(c.pregunta_id), tema = txt(c.tema), motivo = txt(c.motivo), sede = txt(c.sede_clave)
+  if (!preguntaId && !tema) return err(400, 'entrada_invalida', '`descartar` necesita `pregunta_id` o `tema`')
+  if (!motivo || motivo.length > MAX_MOTIVO_DE_DESCARTE) return err(400, 'entrada_invalida', `\`motivo\` es obligatorio (hasta ${MAX_MOTIVO_DE_DESCARTE} caracteres)`)
+  if (!deps.activo) return { status: 200, body: { apagado: true, detalle: 'PORTERO_DUENO está apagado: no se leyó ni se escribió nada', modelos_llamados: 0 } }
+  const ahora = deps.ahora ?? new Date()
+  const pe = await deps.db.from('cerebro_dueno_preguntas').select('*').eq('client_id', clientId).eq('estado', 'pendiente').limit(500)
+  if (pe.error) return err(502, 'lectura_fallida', `cerebro_dueno_preguntas: ${pe.error.message}`)
+  const hallas = lista(pe.data).filter((p) => (preguntaId ? String(p.id) === preguntaId : esElMismoTema(txt(p.tema), tema) && (!sede || (txt(p.sede_clave) || '') === sede)))
+  const resumen = hallas.map((p) => ({ pregunta_id: String(p.id), tema: txt(p.tema), creada: txt(p.creado_en), oficina: txt(p.preguntado_por_oficina) }))
+  if (!hallas.length) return { status: 200, body: { ok: true, dry_run: v.dry_run, descartadas: 0, preguntas: [], nota: 'no hay preguntas pendientes que coincidan (las ya respondidas, vencidas u obsoletas no se tocan)' } }
+  if (v.dry_run) return { status: 200, body: { ok: true, dry_run: true, descartadas: 0, descartaria: resumen.length, preguntas: resumen, nota: 'dry_run: no se escribió nada' } }
+  const errores: string[] = []
+  let hechas = 0
+  for (const p of hallas) {
+    const u = await deps.db.from('cerebro_dueno_preguntas').update({ estado: 'obsoleta', obsoleta_en: ahora.toISOString(), motivo_descarte: motivo }).eq('id', String(p.id)).eq('estado', 'pendiente')
+    if (u.error) errores.push(`pregunta ${String(p.id)}: ${u.error.message}`); else hechas++
+  }
+  return { status: errores.length ? 502 : 200, body: { ok: errores.length === 0, dry_run: false, descartadas: hechas, preguntas: resumen, errores, nota: 'archivadas como obsoletas con fecha y motivo; no se creó ninguna ficha' } }
+}
+
+/** POST · registra una respuesta del dueño, una pregunta que se le hizo, o descarta preguntas pendientes */
 export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Respuesta> {
   const v = validar(cuerpo)
   if ('status' in v) return v
+  if (v.cuerpo.evento === 'descartar') return descartarPreguntas(deps, v)
   const n = normalizar_(v.cuerpo)
   if ('status' in n) return n
   if (!deps.activo) return { status: 200, body: { apagado: true, detalle: 'PORTERO_DUENO está apagado: no se leyó ni se escribió nada', modelos_llamados: 0 } }
