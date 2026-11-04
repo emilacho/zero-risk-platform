@@ -9,14 +9,14 @@
  *     «completando» y responde `pedir_ahora: true`; el alta encadena a continuación la MISMA cadena del portero (descubrir → ampliar → artículos → reseñas y videos → alimentar → puente → vigilar)
  *     con el mismo planificador, filtro, archivar, cobertura y tope. Esa cadena reemplaza la fila del despertar (la corrida diaria) y `cerebro_listo` pasa a true (ver `listo.ts`: espera máxima
  *     y huecos declarados);
- *  5. el vigilante se aplica igual: si algo falla apaga el portero y avisa a #alertas; si todo va bien, silencio.
+ *  5. el vigilante se aplica igual: si algo falla PAUSA SOLO a ese cliente (con su cierre automático) y avisa UNA vez a #alertas; el flujo diario de los demás NUNCA se apaga por esto (04-nov); si todo va bien, silencio.
  * Señal «cerebro listo» = la cadena que pide lo que falta TERMINÓ (o se venció la espera y se declaran huecos) + `quedan = 0` + vigilante sin problemas; aquí siempre sale false con `completando`. `dry_run` obligatorio; con false exige workflow_id + workflow_execution_id (el alta).
  */
 import { alimentarCliente, type Db } from './alimentar'
 import { FLUJO_DEL_PORTERO_POR_OMISION } from './no-corrio'
 import { cerrarPausasDeAlta } from './pausa-de-alta'
 import { gastoDeHoy, reconciliarYEnviar, rutaDescubrir, validar, type DepsDeRutas, type Respuesta } from './rutas'
-import { ESPERA_DEL_REINTENTO_MS, esSoloNoPudeComprobar, evaluarCliente, lineaDeAlerta, type ResultadoDeCliente } from './vigilante'
+import { ESPERA_DEL_REINTENTO_MS, esSoloNoPudeComprobar, evaluarCliente, lineaDePausa, type ResultadoDeCliente } from './vigilante'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -25,7 +25,7 @@ const esRespuesta = (x: unknown): x is Respuesta => esObjeto(x) && typeof (x as 
 export const MAX_PASADAS_DEL_PUENTE = 12
 
 export interface DepsDeDespertar extends DepsDeRutas {
-  /** apaga el flujo del portero diario si el despertar deja un problema; en pruebas es un registro */
+  /** 04-nov: el despertar YA NO apaga el flujo diario (lo apagó el 03-nov y se perdió la corrida de todos los clientes): un problema de un cliente pausa SOLO a ese cliente. Se conserva el campo para no romper a quien lo pase; no se usa */
   apagar?: (workflowId: string) => Promise<{ ok: boolean; detalle: string }>
   avisar?: (texto: string, clave?: string) => Promise<{ ok: boolean; detalle: string }>
   esperar?: (ms: number) => Promise<void>
@@ -135,12 +135,28 @@ export async function rutaDespertar(deps: DepsDeDespertar, cuerpo: unknown): Pro
   if (sinRaspado) body.sin_raspado_del_alta = true
   body.vigilante = { ok: !hayProblemas, problemas: res.problemas, intentos }
   if (hayProblemas) {
+    // 04-nov (firma de Emilio): ni el despertar ni el vigilante apagan el flujo diario por un caso puntual. Se pausa SOLO a este cliente (la pausa se cierra sola con el fin del alta, #867) y se avisa UNA vez
     const wf = deps.workflowIdPortero || FLUJO_DEL_PORTERO_POR_OMISION
-    const ap = deps.apagar ? await deps.apagar(wf).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin forma de apagar el flujo' }
-    const texto = lineaDeAlerta([res], ap.ok, wf, intentos, 'al despertar con el alta')
-    const av = deps.avisar ? await deps.avisar(texto, `despertar-apagado:${deps.workflowIdPortero || FLUJO_DEL_PORTERO_POR_OMISION}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
-    body.apagado = ap; body.aviso = { ...av, texto }
-    return { status: ap.ok && av.ok ? 200 : 502, body: { ...body, ok: false } }
+    const abierta = await deps.db.from('cerebro_portero_pausas').select('id').eq('client_id', v.client_id).is('levantada_en', null).limit(1)
+    let pausa: { ok: boolean; ya_estaba: boolean; detalle?: string } = { ok: false, ya_estaba: false, detalle: abierta.error?.message }
+    if (!abierta.error && lista(abierta.data).length) pausa = { ok: true, ya_estaba: true }
+    else if (!abierta.error) {
+      const w = await deps.db.from('cerebro_portero_pausas').insert({ client_id: v.client_id, motivo: res.problemas[0].slice(0, 300), problemas: res.problemas, termina_con: 'alta_terminada', workflow_id: wf, workflow_execution_id: v.workflow_execution_id || null, desde: ahora.toISOString() })
+      pausa = w.error ? { ok: false, ya_estaba: false, detalle: w.error.message } : { ok: true, ya_estaba: false }
+    }
+    body.apagado = { ok: false, detalle: 'el flujo diario NO se apaga por un cliente: se pausa solo a este cliente' }
+    body.pausado = pausa
+    if (!pausa.ok) {
+      // sin poder pausar, el problema se DICE (nunca se calla ni se apaga a todos)
+      const av = deps.avisar ? await deps.avisar(`🔴 Portero del cerebro (al despertar con el alta) · ${nombre ?? v.client_id.slice(0, 8)}: ${res.problemas[0]} · NO pude pausarlo (${String(pausa.detalle ?? 'sin detalle').slice(0, 80)}) · el flujo diario sigue encendido`, `despertar-sin-pausa:${v.client_id}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+      body.aviso = av
+      return { status: 502, body: { ...body, ok: false } }
+    }
+    if (pausa.ya_estaba) return { status: 200, body: { ...body, ok: false } }
+    const texto = lineaDePausa([res], wf, intentos)
+    const av = deps.avisar ? await deps.avisar(texto, `pausa:${v.client_id}`).catch((e: unknown) => ({ ok: false, detalle: e instanceof Error ? e.message : String(e) })) : { ok: false, detalle: 'sin canal de aviso' }
+    body.aviso = { ...av, texto }
+    return { status: av.ok ? 200 : 502, body: { ...body, ok: false } }
   }
   return { status: conErrores ? 502 : 200, body }
 }

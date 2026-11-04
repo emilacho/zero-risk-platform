@@ -112,7 +112,7 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(enc.tope_usd) - enc.estado_del_motor.gasto_usd))
-  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4) }) }
+  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo) }) }
 }
 
 /**

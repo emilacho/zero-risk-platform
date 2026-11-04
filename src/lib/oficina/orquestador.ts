@@ -308,6 +308,8 @@ export function pedidoDe(enc: Encargo, pl: Plantilla, paso: Paso, agente: string
   }
   return {
     agent_name: agente, task: t!.task, images: t!.images.map((url) => ({ url })), esquema: t!.esquema,
+    // 04-nov · de qué trabajo es la llamada: el encargo es la pieza (el mismo id que recibe la jefatura como `artifact_id`)
+    trabajo_tipo: 'pieza', trabajo_id: enc.id,
     extra: { indicacion_oficina: indicacionDe(pl, agente), paso_de_la_oficina: paso.clave, encargo_id: enc.id }, max_budget_usd: paso.tope_usd, thinking_mode: 'disabled', dry_run: enc.dry_run, client_id: enc.client_id,
     workflow_hint: 'oficina · turno',
     headers_requeridos: { [CABECERA_SALTAR_EDITOR]: '1' },
