@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   try {
     const cfg = await almacenDeFinanzas(db).leerConfig()
     // la puerta del cerebro pide de dónde viene: aquí no hay flujo, viene del tablero
-    const r = await responderEnLaOficina(puertosDePausa(db, cfg.preguntas_slack, 'tablero-tu-oficina', `tablero:${randomUUID()}`), cuerpo as Record<string, unknown>)
+    const r = await responderEnLaOficina(puertosDePausa(db, cfg.preguntas_slack, 'tablero-tu-oficina', `tablero:${randomUUID()}`, 'dashboard · Tu oficina'), cuerpo as Record<string, unknown>)
     return NextResponse.json(r.cuerpo, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'responder_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

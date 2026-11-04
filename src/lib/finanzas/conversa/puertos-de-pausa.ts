@@ -9,14 +9,14 @@ import { slackMdPuerto } from '../../buzon-dueno/slack-md'
 import { cerebroDelDueno } from '../../buzon-dueno/cerebro-dueno'
 import { avisarAAlertas } from '../../buzon-dueno/alertas'
 
-export function puertosDePausa(db: Db, modo: PuertosDePausa['modo'], workflow_id: string, workflow_execution_id: string): PuertosDePausa {
+export function puertosDePausa(db: Db, modo: PuertosDePausa['modo'], workflow_id: string, workflow_execution_id: string, canal_etiqueta?: string): PuertosDePausa {
   const crudo = (process.env.FINANZAS_CANAL_PREGUNTAS ?? '').trim()
   const canal = /^[CG][A-Z0-9]{8,}$/.test(crudo) ? crudo : undefined
   return {
     almacen: almacenDeConversa(db),
     canal,
     slack: slackMdPuerto({ token: process.env.SLACK_BOT_TOKEN ?? '', dueno_id: process.env.FINANZAS_EMILIO_ID ?? '', ...(canal ? { canal } : {}) }),
-    cerebro: cerebroDelDueno({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id, workflow_execution_id, ...(canal ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
+    cerebro: cerebroDelDueno({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id, workflow_execution_id, ...(canal_etiqueta ? { canal_etiqueta } : canal ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
     modo,
     ahora: () => new Date(),
     nombreDelCliente: nombreDelClienteDe(db),
