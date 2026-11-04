@@ -9,7 +9,7 @@ import { armarMensaje } from '../src/lib/finanzas/preguntas'
 import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
 import { atenderPausa, MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
 import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conversa/esperas-supabase'
-import { puertosDePausa } from '../src/lib/finanzas/conversa/puertos-de-pausa'
+import { despertarDelEntorno, puertosDePausa } from '../src/lib/finanzas/conversa/puertos-de-pausa'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import { prevuelo } from '../src/lib/planeacion/prevuelo'
 import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
@@ -326,6 +326,8 @@ describe('recibido no es arrancó (05-nov · hallazgo de CC2)', () => {
     expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: false })
     db.tablas['plan_corridas'].push({ id: '4', client_id: 'c', corrida: 'r', estado: 'esperando' })
     expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: true })
+    db.tablas['plan_corridas'].find((f: Record<string, unknown>) => f.id === '4')!.estado = 'corriendo'
+    expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: true })
     expect(await E.estadoDeLaCorrida({ ...esp, corrida: null })).toEqual({ estado: null, otra_activa: false })
     expect(await E.estadoDeLaCorrida({ ...esp, client_id: 'nadie' })).toEqual({ estado: null, otra_activa: false })
   })
@@ -349,12 +351,17 @@ describe('recibido no es arrancó (05-nov · hallazgo de CC2)', () => {
     expect((await esperasDeFinanzas({ from: () => api } as never).delEncargo('x'))?.despertado_en).toBe(hace(60))
     expect(pedidas[0].split(',')).toContain('actualizado_en')
   })
-  it('🔴 las dos puertas usan la llave de despacho del entorno', async () => {
-    for (const a of ['src/lib/finanzas/conversa/puertos-de-pausa.ts', 'src/app/api/finanzas/conversa/route.ts']) {
-      const linea = fs.readFileSync(a, 'utf8').split('\n').find((l) => l.includes('despertarPorElFlujo({'))
-      expect(linea).toContain('SALA_DISPATCH_KEY')
-      expect(linea).not.toContain('INTERNAL_API_KEY')
-    }
+  it('🔴 las dos rutas llaman al plan con la llave de despacho del entorno, nunca con la interna', async () => {
+    const llamadas: Array<Record<string, string>> = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_u: string, i: RequestInit) => { llamadas.push(i.headers as Record<string, string>); return { ok: true, status: 200 } }) as never
+    try {
+      expect(await despertarDelEntorno({ N8N_BASE_URL: 'https://n8n.x', SALA_DISPATCH_KEY: 'despacho', INTERNAL_API_KEY: 'interna' })({})).toEqual({ ok: true })
+      expect(await puertosDePausa({ N8N_BASE_URL: 'https://n8n.x', SALA_DISPATCH_KEY: 'despacho', INTERNAL_API_KEY: 'interna' }, new DbFalsa() as never, 'envia', 'wf', 'ex').despertar({})).toEqual({ ok: true })
+    } finally { globalThis.fetch = original }
+    for (const h of llamadas) { expect(h['x-sala-dispatch-key']).toBe('despacho'); expect(JSON.stringify(h)).not.toContain('interna') }
+    expect(llamadas).toHaveLength(2)
+    expect(fs.readFileSync('src/app/api/finanzas/conversa/route.ts', 'utf8')).toContain('despertar: despertarDelEntorno(process.env)')
   })
 })
 
