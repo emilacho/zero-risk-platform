@@ -32,6 +32,8 @@ export interface Produccion { fraccion?: number; monto?: number; origen: 'plan' 
 export interface EventoAlterno { nombre: string; referencia: Referencia }
 
 export interface Entrada {
+  /** 04-nov · el reparto lo decidió la mesa de estrategia (Emilio, opción A): `canales` trae todos, también Meta, y no rige el mínimo de Meta */
+  reparto_de_la_mesa?: boolean
   /** resultados FINALES (ventas, citas atendidas, altas…) por semana: la unidad de todo el cálculo */
   meta_por_semana: number
   pasos?: Paso[]
@@ -73,7 +75,7 @@ export interface Bloque {
   techo: { por_resultado: number; ajusto_hasta: number; recorte_desde: number; paro_desde: number; sin_valor_monetario: boolean }
   aprendizaje: { resultados_por_semana: number; diario: number; minimo_por_conjunto: number; conjuntos: number; dilucion: boolean; limitado: boolean }
   alterno: null | { nombre: string; costo: number; minimo_por_conjunto: number; conjuntos: number }
-  reparto: { total_mes: number; meta_ig: number; marca: number; rendimiento: number; produccion: { monto: number; fraccion: number; origen: string }; otros: FilaDeReparto[]; sumado_a_meta_ig: number; parte_meta_ig: number }
+  reparto: { de_la_mesa?: boolean; total_mes: number; meta_ig: number; marca: number; rendimiento: number; produccion: { monto: number; fraccion: number; origen: string }; otros: FilaDeReparto[]; sumado_a_meta_ig: number; parte_meta_ig: number }
   calendario: { por_semana: number[]; rendimiento_total: number; meta_ig_total: number; produccion_total: number; total: number; prueba: { diez: number; quince: number; veinte: number } }
   primera_lectura_dia: number
   costo_por_venta: number

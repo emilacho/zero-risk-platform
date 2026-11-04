@@ -15,6 +15,9 @@ export interface ActaV1 {
   prueba: string
   no_se_hace: NoSeHace[]
   no_se: string[]
+  /** los pone el CÓDIGO al entregarla: el costo que dio cada especialista y quién no aportó. Finanzas calcula con esto; nadie los inventa */
+  costos_de_la_mesa?: Record<string, RangoDeCosto>
+  aportes_que_faltan?: string[]
 }
 export interface RangoDeCosto { min: number; max: number; base?: number }
 /** lo que aporta cada especialista: su recomendación con razón y, si le toca, el costo por resultado con rango */
