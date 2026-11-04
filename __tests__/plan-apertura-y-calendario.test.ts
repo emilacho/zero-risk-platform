@@ -2,7 +2,7 @@
  * 04-nov · ADENDA 2 del GO de Lenovo: la oficina financiera recibe lo que sirve para números (punto 7) y el sistema calcula las semanas del plan (punto 10).
  */
 import { describe, expect, it } from 'vitest'
-import { armarSemillaCompacta, sirveParaNumeros } from '../src/lib/planeacion/dato-v1/semilla-compacta'
+import { aProcedencia, armarSemillaCompacta, sirveParaNumeros } from '../src/lib/planeacion/dato-v1/semilla-compacta'
 import type { DatoV1 } from '../src/lib/planeacion/dato-v1/tipos'
 import { calendarioDesde, hoyEnElPais } from '../src/lib/planeacion/calendario-del-plan'
 
@@ -25,7 +25,18 @@ describe('7 · lo que sirve para números entra siempre', () => {
     expect(armarSemillaCompacta(muchos).datos).toHaveLength(300)
   })
   it('🔴 un hueco no cuenta como número, aunque traiga cifra', () => {
-    expect(sirveParaNumeros(dato(1, { origen: 'hueco', valor: { numero: 1 } }))).toBe(false)
+    expect(sirveParaNumeros(aProcedencia(dato(1, { origen: 'hueco', valor: { numero: 1 } })))).toBe(false)
+  })
+  it('🔴 lo que dijo el dueño entra aunque los textos llenen todo antes', () => {
+    const largos = Array.from({ length: 300 }, (_, i) => dato(i + 1, { valor: { texto_corto: 'x'.repeat(600) } }))
+    const del = dato(999, { tipo_id: 'dato_del_dueno', origen: 'supuesto', valor: { texto_corto: 'y'.repeat(600) } })
+    expect(armarSemillaCompacta([...largos, del]).datos.map((d) => d.id)).toContain('D999')
+  })
+  it('🔴 un cero es una cifra: «0 ventas» entra', () => {
+    const largos = Array.from({ length: 300 }, (_, i) => dato(i + 1, { valor: { texto_corto: 'x'.repeat(600) } }))
+    const cero = dato(998, { tipo_id: 'ventas_mes', origen: 'supuesto', valor: { numero: 0 } })
+    expect(sirveParaNumeros(aProcedencia(cero))).toBe(true)
+    expect(armarSemillaCompacta([...largos, cero]).datos.map((d) => d.id)).toContain('D998')
   })
   it('🔴 los ids y el orden no cambian: las citas siguen sirviendo', () => {
     const ids = s.datos.map((d) => Number(String(d.id).slice(1)))

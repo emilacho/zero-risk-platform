@@ -440,6 +440,16 @@ describe('el pre-vuelo al volver', () => {
     ;(w.P as { corridas: { avanzarSi: unknown } }).corridas.avanzarSi = async () => { throw new Error('23505') }
     expect(await prevuelo(pedir(), w.P)).toMatchObject({ decision: 'no_corre', motivo: 'corrida_activa' })
   })
+  it('🔴 una pausa larga también vuelve con su calendario', async () => {
+    const d = await prevuelo(pedir(), puertos('en_pausa', { client_id: 'cliente-1', corrida: 'plan-x', estado: 'soltada', creado_en: '2026-10-01T00:00:00Z' }).P)
+    expect(d.material_viejo).toBe(true)
+    expect(d.calendario?.arranque).toBe('2026-11-05')
+  })
+  it('🔴 el arranque es el día del país: en Ecuador a las 02:00Z todavía es ayer', async () => {
+    const w = puertos('en_pausa')
+    const P = { ...(w.P as object), ahora: () => new Date('2026-11-05T02:00:00Z'), corridas: { ...(w.P as { corridas: object }).corridas, ahora: () => new Date('2026-11-05T02:00:00Z') } } as never
+    expect((await prevuelo(pedir(), P)).calendario?.arranque).toBe('2026-11-04')
+  })
   it('🔴 un plan que arranca normal también recibe su calendario, y uno que espera no', async () => {
     const w = puertos('esperando')
     const P = { ...(w.P as object), cupo: async () => ({ ok: true, cap_usd: 100, generico_usd: 100, override_usd: null, gastado_24h_usd: 0 }) } as never

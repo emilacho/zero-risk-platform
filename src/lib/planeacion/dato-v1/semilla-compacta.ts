@@ -13,8 +13,10 @@ import type { DatoV1 } from './tipos'
 
 /** lo que no sirve para números (textos del sitio, reseñas, menciones) cabe hasta aquí */
 export const PRESUPUESTO_DE_DATOS = 24_000
-/** agnóstico: cualquier cifra, o lo que dijo el dueño (presupuesto, costo, frecuencia…) */
-export const sirveParaNumeros = (d: DatoV1): boolean => d.origen !== 'hueco' && (d.valor.numero !== undefined || d.tipo_id === 'dato_del_dueno')
+/**
+ * agnóstico: cualquier cifra, o lo que dijo el dueño (presupuesto, costo, frecuencia…). Sobre lo que viaja: el seco usa esta misma regla. Sin techo (Emilio: límites al máximo); el único límite es el del pedido, y una marca de costo no recorta datos
+ */
+export const sirveParaNumeros = (p: DatoConProcedencia): boolean => p.procedencia !== 'hueco' && (p.tipo_id === 'dato_del_dueno' || (typeof p.valor === 'object' && p.valor !== null && (p.valor as { numero?: unknown }).numero !== undefined))
 
 export interface SemillaCompacta {
   datos: DatoConProcedencia[]
@@ -60,8 +62,8 @@ export function armarSemillaCompacta(datos: DatoV1[], o: { snapshot?: CatalogoSn
   const critico = (d: DatoV1) => o.snapshot?.tipo(d.tipo_id)?.critico === true
   const idN = (d: DatoV1) => Number(d.id.replace(/\D/g, '')) || 0
   // prioridad: críticos primero; luego medidos > declarados > huecos > ensayo; desempata por id (estable)
-  const siempre = datos.filter(sirveParaNumeros)
-  const orden = datos.filter((d) => !sirveParaNumeros(d)).sort((a, b) => Number(critico(b)) - Number(critico(a)) || (RANGO_ORIGEN[a.origen] ?? 9) - (RANGO_ORIGEN[b.origen] ?? 9) || idN(a) - idN(b))
+  const siempre = datos.filter((d) => sirveParaNumeros(aProcedencia(d)))
+  const orden = datos.filter((d) => !sirveParaNumeros(aProcedencia(d))).sort((a, b) => Number(critico(b)) - Number(critico(a)) || (RANGO_ORIGEN[a.origen] ?? 9) - (RANGO_ORIGEN[b.origen] ?? 9) || idN(a) - idN(b))
   const entran: DatoV1[] = [...siempre]
   const omitidos: string[] = []
   let largo = 2 // los corchetes del arreglo
