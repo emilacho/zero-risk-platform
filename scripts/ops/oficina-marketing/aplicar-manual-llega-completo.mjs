@@ -8,6 +8,7 @@ import { construirManualCompleto, construirPedirCambiosCompleto } from './manual
 import { construirTrabajoDeCadaLlamadaManual } from './trabajo-de-cada-llamada-manual.mjs'
 import { construirTrabajoDeCadaLlamadaAlta } from './trabajo-de-cada-llamada-alta.mjs'
 import { construirTrabajoDeCadaLlamadaTurnos } from './trabajo-de-cada-llamada-turnos.mjs'
+import { construirTrabajoDeCadaLlamadaPlanPlataforma } from './trabajo-de-cada-llamada-plan-plataforma.mjs'
 import { construirTrabajoDeCadaLlamadaPlan } from './trabajo-de-cada-llamada-plan.mjs'
 import { construirPlanEsperaPdfYCierre } from './plan-espera-pdf-y-cierre.mjs'
 import { corregirFuenteDeAprobacionDelDueno } from './plan-guarda-acepta-aprobacion-humana.mjs'
@@ -15,8 +16,8 @@ import { construirPlanMuereAvisandoYCerrando } from './plan-guarda-acepta-aproba
 import { construirGuardaAceptaAprobacionHumana } from './plan-guarda-acepta-aprobacion-humana.mjs'
 
 const [cual, entrada, salida] = process.argv.slice(2)
-if (!['manual', 'pedir', 'trabajo-manual', 'trabajo-alta', 'trabajo-turnos', 'plan-guarda', 'plan-guarda-fuente', 'plan-espera', 'trabajo-plan'].includes(cual) || !entrada || !salida) { console.error('uso: <manual|pedir> <respaldo.json> <salida.json>'); process.exit(1) }
+if (!['manual', 'pedir', 'trabajo-manual', 'trabajo-alta', 'trabajo-turnos', 'plan-guarda', 'plan-guarda-fuente', 'plan-espera', 'trabajo-plan', 'trabajo-plan-plataforma'].includes(cual) || !entrada || !salida) { console.error('uso: <manual|pedir> <respaldo.json> <salida.json>'); process.exit(1) }
 const f = JSON.parse(fs.readFileSync(entrada, 'utf8'))
-if (cual === 'manual') construirManualCompleto(f); else if (cual === 'trabajo-plan') construirTrabajoDeCadaLlamadaPlan(f); else if (cual === 'plan-espera') construirPlanEsperaPdfYCierre(f); else if (cual === 'plan-guarda-fuente') corregirFuenteDeAprobacionDelDueno(f); else if (cual === 'plan-guarda') { construirGuardaAceptaAprobacionHumana(f); construirPlanMuereAvisandoYCerrando(f) } else if (cual === 'trabajo-turnos') construirTrabajoDeCadaLlamadaTurnos(f); else if (cual === 'trabajo-alta') construirTrabajoDeCadaLlamadaAlta(f); else if (cual === 'trabajo-manual') construirTrabajoDeCadaLlamadaManual(f); else construirPedirCambiosCompleto(f)
+if (cual === 'manual') construirManualCompleto(f); else if (cual === 'trabajo-plan-plataforma') construirTrabajoDeCadaLlamadaPlanPlataforma(f); else if (cual === 'trabajo-plan') construirTrabajoDeCadaLlamadaPlan(f); else if (cual === 'plan-espera') construirPlanEsperaPdfYCierre(f); else if (cual === 'plan-guarda-fuente') corregirFuenteDeAprobacionDelDueno(f); else if (cual === 'plan-guarda') { construirGuardaAceptaAprobacionHumana(f); construirPlanMuereAvisandoYCerrando(f) } else if (cual === 'trabajo-turnos') construirTrabajoDeCadaLlamadaTurnos(f); else if (cual === 'trabajo-alta') construirTrabajoDeCadaLlamadaAlta(f); else if (cual === 'trabajo-manual') construirTrabajoDeCadaLlamadaManual(f); else construirPedirCambiosCompleto(f)
 fs.writeFileSync(salida, JSON.stringify(f, null, 2) + '\n')
 console.log('ok →', salida)
