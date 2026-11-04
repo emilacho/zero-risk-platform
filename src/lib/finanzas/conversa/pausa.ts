@@ -58,7 +58,7 @@ async function avisarUnaVez(P: PuertosDePausa, encargo_id: string, motivo: strin
   await P.avisar?.(texto).catch(() => undefined)
 }
 
-const SALIO = new Set(['ya_enviado', 'respondidas_en_el_cerebro'])
+const SALIO = new Set(['ya_enviado', 'respondidas_en_el_cerebro', 'registrada', 'ya_registrada'])
 /** pregunta en modo pausa; si no pudo salir, lo dice en #alertas una vez y la pausa sigue: el vigía reintenta */
 async function preguntarEnPausa(P: PuertosDePausa, encargo_id: string): Promise<Respuesta> {
   const r = await preguntarAlDueno(P, encargo_id, { pausa: true })

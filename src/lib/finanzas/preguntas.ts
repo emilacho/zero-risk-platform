@@ -27,7 +27,7 @@ export interface ContextoDeFiltro {
   /** el hilo del cliente ya la resolvió (condición 7) */
   resuelta_en_el_hilo: boolean
   cliente_real: boolean
-  modo: 'apagado' | 'borrador' | 'envia'
+  modo: 'apagado' | 'borrador' | 'envia' | 'registra'
   /** mensajes ya enviados por este cliente en las últimas 24 h y entre todos hoy */
   enviados_cliente_24h: number
   enviados_hoy_total: number
@@ -64,6 +64,9 @@ export function esPreguntaNecesaria(c: ContextoDeFiltro): { si: boolean; motivo?
  * «¿se envía AHORA?»: que la pregunta sea necesaria NO basta. En `borrador` la función `esPreguntaNecesaria` dice «sí» y aun así NO se envía: lo garantiza esta guarda
  * (y la ausencia de un adaptador de envío). El envío real (F8) debe pasar por aquí.
  */
+/** 05-nov · Emilio no usa Slack: en `registra` la pregunta queda en su registro y se contesta en Tu oficina › Decisiones. Con cualquiera de los dos, el dueño recibe preguntas y la pausa puede esperarlo */
+export const elDuenoRecibePreguntas = (modo: ContextoDeFiltro['modo']): boolean => modo === 'envia' || modo === 'registra'
+
 export function puedeEnviarAhora(modo: ContextoDeFiltro['modo'], necesaria: { si: boolean }): boolean {
   return modo === 'envia' && necesaria.si === true
 }

@@ -8,6 +8,7 @@ import { prepararPreguntas, type PuertosDelBuzon } from '../src/lib/finanzas/con
 import { armarMensaje } from '../src/lib/finanzas/preguntas'
 import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
 import { atenderPausa, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
+import { elDuenoRecibePreguntas } from '../src/lib/finanzas/preguntas'
 import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conversa/esperas-supabase'
 import { puertosDePausa } from '../src/lib/finanzas/conversa/puertos-de-pausa'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
@@ -19,7 +20,7 @@ const preg = (clave: string, o: Record<string, unknown> = {}) => ({ clave, texto
 const CINCO = [preg('comision'), preg('turistas'), preg('temporada'), preg('whatsapp', { frena_la_firma: true }), preg('pixel', { frena_la_firma: true })]
 const acuerdo = (preguntas: unknown[] = CINCO, criticos = 3) => ({ acuerdo: { criticos, requiere_ronda_2: criticos > 0, preguntas_a_emilio: preguntas, hallazgos: [] } })
 
-function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; despierta?: boolean; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
+function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; modo?: PuertosDePausa['modo']; despierta?: boolean; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
   const e: EncargoDeConversa = { id: 'enc-1', client_id: 'cli', estado: o.estado ?? 'esperando_al_dueno', estado_del_motor: estadoInicial(), gasto_usd: 1.2, slack_canal: o.slackTs ? 'C123456789' : null, slack_ts: o.slackTs ?? null, leido_hasta: o.slackTs ?? null, tablero_id: null, dry_run: false, semilla: { corrida: 'cor-1', ...(o.semilla ?? {}) } }
   const arts: Record<string, Record<string, unknown>> = { ...acuerdo(), ...(o.arts ?? {}) }
   const guardados: Array<Record<string, unknown>> = [], avisos: string[] = [], enviados: string[] = [], despertares: Array<Record<string, unknown>> = [], enHilo: string[] = [], corridasPausadas: string[] = []
@@ -44,7 +45,7 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
   }
   const P: PuertosDePausa = {
     almacen,
-    modo: 'envia',
+    modo: o.modo ?? 'envia',
     canal: 'C123456789',
     ahora: () => new Date(o.hora ?? '2026-11-04T16:00:00Z'),
     avisar: async (t) => { avisos.push(t) },
@@ -263,6 +264,62 @@ describe('la respuesta suelta la pausa', () => {
     expect(llamadas[0][0]).toBe('https://n8n.x/webhook/zero-risk/planeacion')
     expect((llamadas[0][1].headers as Record<string, string>)['x-api-key']).toBe('k')
     expect((await despertarPorElFlujo({ fetchImpl: f })({})).ok).toBe(false)
+  })
+})
+
+describe('la pausa sin Slack (05-nov · decisión de Emilio)', () => {
+  const pedirPausa = { encargo_id: 'enc-1', sobre: { corrida: 'plan-x', client_id: 'cli' }, material: { a: 1 }, workflow_id: 'wf', workflow_execution_id: 'ex' }
+  it('🔴 pausa, registra la pregunta, no toca Slack y no avisa de ningún fallo', async () => {
+    const m = mundo({ modo: 'registra' })
+    const r = await pausarOficina(m.P, pedirPausa)
+    expect(r.cuerpo).toMatchObject({ pausado: true, enviado: false, motivo: 'registrada' })
+    expect(m.enviados).toEqual([])
+    expect(m.avisos).toEqual([])
+    expect(m.despertares).toEqual([])
+  })
+  it('🔴 el vigía no repite ni avisa mientras espera', async () => {
+    const m = mundo({ modo: 'registra' })
+    await pausarOficina(m.P, pedirPausa)
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ esperando: true })
+    expect(m.enviados).toEqual([])
+    expect(m.avisos).toEqual([])
+  })
+  it('🔴 si el cerebro no pudo registrar la pregunta, avisa una sola vez y lo reintenta', async () => {
+    const m = mundo({ modo: 'registra', registrar: { ok: false, error: 'http_500' } })
+    await pausarOficina(m.P, pedirPausa)
+    await atenderPausa(m.P, 'enc-1')
+    expect(m.avisos).toHaveLength(1)
+    expect(m.arts.buzon_respuestas).toBeUndefined()
+  })
+  it('🔴 contestando en la oficina, el plan vuelve sin haber pasado por Slack', async () => {
+    const m = mundo({ modo: 'registra' })
+    await pausarOficina(m.P, pedirPausa)
+    for (const tema of preguntasQueFaltan(m.arts, m.e.semilla).map((c) => c.replace(/_/g, ' '))) await responderEnLaOficina(m.P, { client_id: 'cli', tema, respuesta: 'sí, ya lo tengo', quien: 'emilio' })
+    expect(m.despertares).toHaveLength(1)
+    expect(m.enviados).toEqual([])
+    expect(m.enHilo).toEqual([])
+  })
+  it('🔴 la pregunta queda rotulada como de Tu oficina, y con Slack sigue su rótulo', async () => {
+    const cuerpos: Array<Record<string, unknown>> = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_u: string, i: RequestInit) => { cuerpos.push(JSON.parse(String(i.body))); return { status: 200, json: async () => ({ ok: true, registrada: true }) } }) as never
+    const env = { INTERNAL_API_KEY: 'k', FINANZAS_CANAL_PREGUNTAS: 'C123456789' }
+    try {
+      const q = { client_id: 'c', tema: 't', pregunta: 'p' }
+      await puertosDePausa(env, new DbFalsa() as never, 'registra', 'wf', 'ex').cerebro.registrarPregunta(q)
+      await puertosDePausa(env, new DbFalsa() as never, 'envia', 'wf', 'ex').cerebro.registrarPregunta(q)
+    } finally { globalThis.fetch = original }
+    expect(cuerpos[0].canal).toBe('dashboard · Tu oficina')
+    expect(String(cuerpos[1].canal)).toContain('buzon-de-preguntas')
+    const ruta = fs.readFileSync('src/app/api/finanzas/conversa/route.ts', 'utf8')
+    expect(ruta).toContain("cfg.preguntas_slack === 'registra' ? { canal_etiqueta: ETIQUETA_DE_TU_OFICINA }")
+  })
+  it('🔴 la oficina se pausa también en este modo', () => {
+    expect(elDuenoRecibePreguntas('registra')).toBe(true)
+    expect(elDuenoRecibePreguntas('envia')).toBe(true)
+    expect(elDuenoRecibePreguntas('apagado')).toBe(false)
+    expect(elDuenoRecibePreguntas('borrador')).toBe(false)
+    expect(fs.readFileSync('src/lib/finanzas/conversa/orquestador.ts', 'utf8')).toContain('cfg.pausa_al_dueno === true && elDuenoRecibePreguntas(cfg.preguntas_slack)')
   })
 })
 

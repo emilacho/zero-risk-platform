@@ -9,9 +9,10 @@
  *  · Cada recogida deja un registro versionado (`buzon_respuestas`, con el bloque `evento`) en `finanzas_artefactos`. Aquí NO se escribe en tablas del cerebro: solo se llama a su puerta.
  *  · TEXTO LIBRE (16-oct · decisión de Lenovo): con UNA sola pregunta abierta, la respuesta en texto libre del dueño se aplica a esa pregunta (valor = su texto literal). Con varias abiertas sigue exigiendo «n: …» y el texto queda como NOTA
  *    (la respuesta lo dice: `aclaracion_necesaria`). Una nota libre ANTERIOR (de una recogida pasada) se aplica en la siguiente recogida si hoy hay una sola abierta: así se recupera lo que antes solo quedó como nota.
+ *  · SIN SLACK (`registra`, 05-nov · decisión de Emilio): la pregunta se registra en el cerebro y el dueño la contesta en Tu oficina › Decisiones. No se envía ni se lee nada de Slack; los avisos a #alertas siguen. Cada llamada vuelve a mirar el cerebro, y así una respuesta dada en la oficina le llega al encargo.
  *  · Slack caído o sin permiso: el encargo sigue con los supuestos (nunca lanza). Recoger NO dispara la siguiente ronda: el encargo queda listo para ella.
  */
-import { armarMensaje, erroresDePregunta, HORAS_PARA_VENCER, leerRespuesta, limpiarPregunta, MAX_PREGUNTAS_POR_MENSAJE, puedeEnviarAhora, TOPE_POR_CLIENTE_24H, TOPE_POR_DIA_TOTAL, voseoEn, type Pregunta } from '../preguntas'
+import { armarMensaje, elDuenoRecibePreguntas, erroresDePregunta, HORAS_PARA_VENCER, leerRespuesta, limpiarPregunta, MAX_PREGUNTAS_POR_MENSAJE, puedeEnviarAhora, TOPE_POR_CLIENTE_24H, TOPE_POR_DIA_TOTAL, voseoEn, type Pregunta } from '../preguntas'
 // la barredora de la casa (.mjs): se usa solo su función pura
 import { barrerTexto } from '../../../../scripts/ops/barrer-voseo.mjs'
 import type { CerebroDelDueno } from '../../buzon-dueno/cerebro-dueno'
@@ -29,7 +30,7 @@ export interface PuertosDelBuzon {
   /** la puerta del dueño en el cerebro */
   cerebro: CerebroDelDueno
   /** `finanzas_config.preguntas_slack` */
-  modo: 'apagado' | 'borrador' | 'envia'
+  modo: 'apagado' | 'borrador' | 'envia' | 'registra'
   ahora(): Date
   /** el nombre con que se habla del cliente en el mensaje (por omisión, su id) */
   nombreDelCliente?(client_id: string): Promise<string | null>
@@ -38,6 +39,8 @@ export interface PuertosDelBuzon {
 }
 
 const TTL_DEL_ENVIO_S = 120
+/** de dónde sale la respuesta cuando el dueño contesta en el tablero; lo guarda el cerebro */
+export const ETIQUETA_DE_TU_OFICINA = 'dashboard · Tu oficina'
 const esMd = (canal: string | null) => typeof canal === 'string' && /^D[A-Z0-9]+$/.test(canal)
 /** el destino guardado en el encargo es válido si es un MD, o EXACTAMENTE el canal configurado del buzón */
 const destinoValido = (P: { canal?: string }, canal: string | null) => esMd(canal) || (!!P.canal && canal === P.canal)
@@ -165,7 +168,7 @@ export function tutearPregunta(q: Pregunta): { q: Pregunta; cambiada: boolean } 
 
 /** los MD abiertos (enviados hace menos de 72 h) de los que el vigía `finanzas · buzón` recoge respuestas · apagado = lista vacía, 0 lecturas */
 export async function listarAbiertos(P: PuertosDelBuzon): Promise<Respuesta> {
-  if (P.modo !== 'envia') return { status: 200, cuerpo: { abiertos: [], motivo: 'buzon_apagado', modo: P.modo } }
+  if (!elDuenoRecibePreguntas(P.modo)) return { status: 200, cuerpo: { abiertos: [], motivo: 'buzon_apagado', modo: P.modo } }
   if (!P.almacen.buzonAbiertos) return { status: 200, cuerpo: { abiertos: [], motivo: 'sin_lista' } }
   const ids = await P.almacen.buzonAbiertos(P.ahora(), HORAS_PARA_VENCER).catch(() => null)
   // un tope que no se puede medir no es «ninguno»: se dice (503) para que el vigía lo avise en vez de callarse
@@ -198,7 +201,7 @@ function fusionar(actuales: Dada[], nuevas: Dada[]): { lista: Dada[]; aplicadas:
 
 // ───────────────────────────────────────────────────────── PREGUNTAR
 export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, opc: { pausa?: boolean } = {}): Promise<Respuesta> {
-  if (P.modo !== 'envia') return { status: 200, cuerpo: { enviado: false, motivo: 'buzon_apagado', modo: P.modo } }
+  if (!elDuenoRecibePreguntas(P.modo)) return { status: 200, cuerpo: { enviado: false, motivo: 'buzon_apagado', modo: P.modo } }
   const c = await cargar(P, encargo_id)
   if (!('e' in c)) return c
   let e = c.e
@@ -216,10 +219,11 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, o
   // la forma se valida ANTES de registrar nada en el cerebro (no se dejan preguntas pendientes de un mensaje que no sale)
   const prueba = armarMensaje({ cliente: 'x', preguntas: hechas, pausa: opc.pausa })
   if (!prueba.ok) return { status: 200, cuerpo: { enviado: false, motivo: 'pregunta_mal_formada', errores: prueba.errores } }
-  if (!puedeEnviarAhora(P.modo, { si: true })) return { status: 200, cuerpo: { enviado: false, motivo: 'no_envia' } }
+  const soloRegistra = P.modo === 'registra'
+  if (!soloRegistra && !puedeEnviarAhora(P.modo, { si: true })) return { status: 200, cuerpo: { enviado: false, motivo: 'no_envia' } }
   // sin el método (almacén de prueba) = 0; si EXISTE y no se pudo leer, se frena (un tope que no se puede medir no es un tope)
-  // los topes de envío no frenan una pausa (Lenovo, 15:33Z): sin esa pregunta el plan no sigue
-  const env = opc.pausa ? { cliente_24h: 0, hoy: 0 } : P.almacen.contarBuzon ? await P.almacen.contarBuzon(e.client_id, P.ahora()).catch(() => null) : { cliente_24h: 0, hoy: 0 }
+  // los topes de envío no frenan una pausa (Lenovo, 15:33Z): sin esa pregunta el plan no sigue. Tampoco aplican si no se envía nada
+  const env = opc.pausa || soloRegistra ? { cliente_24h: 0, hoy: 0 } : P.almacen.contarBuzon ? await P.almacen.contarBuzon(e.client_id, P.ahora()).catch(() => null) : { cliente_24h: 0, hoy: 0 }
   if (!env) return { status: 200, cuerpo: { enviado: false, motivo: 'topes_ilegibles' } }
   if (env.cliente_24h >= TOPE_POR_CLIENTE_24H) return { status: 200, cuerpo: { enviado: false, motivo: 'tope: un mensaje por cliente cada 24 h' } }
   if (env.hoy >= TOPE_POR_DIA_TOTAL) return { status: 200, cuerpo: { enviado: false, motivo: 'tope: 3 mensajes por día entre todos los clientes' } }
@@ -252,8 +256,25 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, o
       return { status: 200, cuerpo: { enviado: false, motivo: dadas.length ? 'respondidas_en_el_cerebro' : 'otra_oficina_espera', usadas_del_cerebro: dadas.map((d) => d.clave), esperando } }
     }
 
-    // 2 · un solo MD con lo que de verdad falta
     const porClave = new Map(hechas.map((q) => [q.clave, q]))
+    if (soloRegistra) {
+      const claves = aPreguntar.map((a) => a.clave)
+      const previo = (await P.almacen.artefactos(encargo_id)).buzon_respuestas as { claves?: unknown } | undefined
+      if (Array.isArray(previo?.claves) && previo.claves.length) {
+        if (fus.aplicadas.length) await P.almacen.guardarBuzon?.({ encargo_id, semilla })
+        return { status: 200, cuerpo: { enviado: false, motivo: 'ya_registrada', claves, usadas_del_cerebro: dadas.map((d) => d.clave) } }
+      }
+      // la recomendación y el «si no respondes» quedan en el registro: el cerebro solo guarda el texto de la pregunta
+      const preguntas = aPreguntar.map((a) => ({ ...a, recomendacion: porClave.get(a.clave)?.recomendacion ?? '', supuesto_si_no_responde: porClave.get(a.clave)?.supuesto_si_no_responde ?? '' }))
+      const registro = {
+        n: 1, evento: { tipo: 'preguntas_registradas_para_el_dueno', client_id: e.client_id, encargo_id, claves, usadas_del_cerebro: dadas.map((d) => d.clave), en: P.ahora().toISOString() },
+        claves, preguntas, sin_cerebro: [] as SinCerebro[], canal: null, ts: null, respuestas: [], notas: [],
+      }
+      await P.almacen.guardarBuzon?.({ encargo_id, ...(fus.aplicadas.length ? { semilla } : {}), artefacto: { tipo: 'buzon_respuestas', version: 1, contenido: registro, sha256: sha256(registro) } })
+      return { status: 200, cuerpo: { enviado: false, motivo: 'registrada', preguntas: claves.length, claves, usadas_del_cerebro: dadas.map((d) => d.clave), esperando, ...(tuteadas.length ? { tuteadas } : {}), ...(limpiadas.length ? { limpiadas } : {}), ...rechazo, ...(prep.sobrantes.length ? { sobrantes: prep.sobrantes } : {}), ...(prep.presupuesto_agregado ? { presupuesto_agregado: true } : {}) } }
+    }
+
+    // 2 · un solo MD con lo que de verdad falta
     // nunca el id del cliente en un mensaje a una persona (20-oct): sin nombre de ficha, «tu negocio»
     const nombreFicha = (await P.nombreDelCliente?.(e.client_id).catch(() => null)) || ''
     const nombre = nombreFicha && !pareceUnId(nombreFicha) ? nombreFicha : NOMBRE_SIN_FICHA
