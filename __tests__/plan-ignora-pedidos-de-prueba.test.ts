@@ -38,8 +38,20 @@ describe('lo de venta anterior a una fecha', () => {
   })
 })
 
+describe('la fecha de corte con hora (el valor real de la ficha)', () => {
+  const corte = '2026-11-04T18:06:00Z'
+  const dp = leerDatosDePrueba({ pedidos_de_prueba_hasta: corte })
+  it('🔴 se acepta y llega entera a la consulta', () => {
+    expect(dp?.pedidos_de_prueba_hasta).toBe(corte)
+    expect(dp?.descartado).toEqual([])
+    expect(condicionesHogQL(dp)).toContain("timestamp < parseDateTimeBestEffort('2026-11-04T18:06:00Z')")
+  })
+})
+
 describe('sin ventas reales', () => {
   it('🔴 con un pedido real no lo dice', () => { expect(hayVentasEnElEmbudo(['$pageview', 'order_submitted'])).toBe(true) })
   it('🔴 abrir un carrito no es una venta', () => { expect(hayVentasEnElEmbudo(['$pageview', 'cart_opened', 'checkout_started'])).toBe(false) })
   it('🔴 sin eventos de venta, lo dice', () => { expect(hayVentasEnElEmbudo(['$pageview', 'menu_viewed'])).toBe(false) })
+  it.each(['order_submitted', 'order_delivered', 'order_paid', 'order_completed', 'order_placed', 'order_confirmed', 'checkout_completed', 'payment_succeeded', 'payment_completed', 'purchase', 'pedido_entregado', 'pago_confirmado', 'compra'])('🔴 %s es una venta', (e) => { expect(hayVentasEnElEmbudo([e])).toBe(true) })
+  it.each(['order_viewed', 'order_created', 'order_cancelled', 'order_failed', 'cart_opened', 'checkout_started', 'payment_failed', 'pedido_iniciado', 'pago_fallido', 'compra_cancelada'])('🔴 %s no es una venta', (e) => { expect(hayVentasEnElEmbudo([e])).toBe(false) })
 })

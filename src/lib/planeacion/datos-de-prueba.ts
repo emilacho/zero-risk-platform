@@ -87,7 +87,8 @@ export function leerDatosDePrueba(entrada: unknown): DatosDePrueba | null {
 
 // lo que hace un comprador, no un visitante. Agnóstico: los nombres de evento de los sitios que construimos y los habituales
 const PATRON_DE_VENTA = '^(cart|checkout|order|payment|purchase|pedido|pago|compra)'
-const ES_VENTA_CERRADA = /^(order_(submitted|delivered|paid|completed)|payment_(succeeded|completed)|purchase|pedido|pago|compra)/i
+// para cualquier cliente: todo pedido cuenta salvo el que apenas se abre, se mira o se cae
+const ES_VENTA_CERRADA = /^(order_(?!viewed|created|started|opened|abandoned|failed|cancel)|payment_(succeeded|completed|confirmed)|checkout_completed|purchase|pedido(?!_(iniciado|abierto|visto|cancelado|fallido))|pago(?!_(iniciado|fallido|rechazado))|compra(?!_(iniciada|cancelada|fallida)))/i
 
 const lit = (s: string) => "'" + s.replace(/\\/g, '\\\\').replace(/'/g, "''") + "'"
 
