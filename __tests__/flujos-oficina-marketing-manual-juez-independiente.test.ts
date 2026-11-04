@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 /**
  * 01-nov · EQUIPO DEL MANUAL · parte 2 · el juez de fidelidad del flujo del manual (`ssLtwYPt7zxuvnM2`) deja de ser quien escribe la voz.
  * Fija: el juez pasa a `market_research_analyst` (slug con guion bajo, autorizado en el corredor para emitir puntajes); «Uso · pedir la voz otra vez» y la lente del editor NO cambian

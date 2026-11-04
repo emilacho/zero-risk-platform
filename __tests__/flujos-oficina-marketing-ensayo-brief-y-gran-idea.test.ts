@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 /**
  * 01-nov · ENSAYO EN SECO de punta a punta del tramo «plan aprobado → brief de campaña → gran idea → tarjeta a Emilio» (ENCARGO LENOVO a CC2/CC3). US$ 0, sin red, sin modelo.
  * Se ejecuta el CÓDIGO REAL de los nodos de los flujos publicados (`nuevo/*.json`) y cada llamada HTTP llega a la RUTA REAL de la otra pieza (cadena en memoria + oficina en memoria).

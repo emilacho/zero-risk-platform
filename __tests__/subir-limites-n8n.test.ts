@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 import { describe, it, expect } from 'vitest'
 // @ts-ignore · script de operación en .mjs
 import { cambiosDe, aplicarA, MAXIMO_MS } from '../scripts/ops/subir-limites-n8n.mjs'

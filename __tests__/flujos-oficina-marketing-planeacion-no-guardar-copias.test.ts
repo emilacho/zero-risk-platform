@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 /**
  * 01-nov · ADENDA 5 · «Pedir cambios» no guarda una versión que es COPIA del plan anterior. US$ 0, sin red; se ejecuta el CÓDIGO REAL de los nodos.
  * Dos candados INDEPENDIENTES (cada uno se prueba solo, con el otro apagado):

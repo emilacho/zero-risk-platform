@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 /**
  * 02-nov · «PEDIR CAMBIOS AL MANUAL» · el flujo aparte `zero-risk/manual-cambios`. US$ 0, sin red: se ejecuta el CÓDIGO REAL de sus nodos con el emulador y un HTTP simulado.
  * Fija: la llave y el sobre se validan ANTES de gastar; un pedido repetido/ajeno/ya resuelto se DETIENE sin gastar; se marca en_reescritura con la ejecución; la entrada del manual

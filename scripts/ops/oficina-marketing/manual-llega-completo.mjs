@@ -53,13 +53,28 @@ const BASE_NUEVA = [
   "  } catch (e) { base = ''; }",
 ].join('\n')
 
+/** [viejo, nuevo] de `[BB] Fan-out prep`, en orden · las pruebas viejas deshacen esto para reconstruir «lo de antes» */
+export const CAMBIOS_FAN_OUT_PREP = [
+  [BASE_VIEJA, BASE_NUEVA],
+  ['const TOPE_BASE = 14000;', `const TOPE_BASE = ${TOPE_MANUAL};`],
+  [".replace(/\\s+/g, ' ').trim().slice(0, 2000);", `.replace(/\\s+/g, ' ').trim().slice(0, ${TOPE_PEDIDO});`],
+  ["'MANUAL VIGENTE' + (recortado ? ' (recortado a ' + TOPE_BASE + ' caracteres)' : '') + ':',",
+    "'MANUAL VIGENTE (solo sus campos)' + (recortado ? ' (recortado a ' + TOPE_BASE + ' caracteres)' : '') + ':' + (aparte ? '\\n' + aparte : ''),"],
+]
+
+/** el código de `[BB] Fan-out prep` tal como era antes de este cambio */
+export function deshacerFanOutPrep(codigoNuevo) {
+  let c = codigoNuevo
+  for (const [viejo, nuevo] of [...CAMBIOS_FAN_OUT_PREP].reverse()) {
+    if (!c.includes(nuevo)) throw new Error('no puedo deshacer: falta ' + nuevo.slice(0, 60))
+    c = c.replace(nuevo, () => viejo)
+  }
+  return c
+}
+
 export function construirManualCompleto(f) {
   const FAN = '[BB] Fan-out prep'
-  cambiarCodigo(f, FAN, BASE_VIEJA, BASE_NUEVA)
-  cambiarCodigo(f, FAN, 'const TOPE_BASE = 14000;', `const TOPE_BASE = ${TOPE_MANUAL};`)
-  cambiarCodigo(f, FAN, ".replace(/\\s+/g, ' ').trim().slice(0, 2000);", `.replace(/\\s+/g, ' ').trim().slice(0, ${TOPE_PEDIDO});`)
-  cambiarCodigo(f, FAN, "'MANUAL VIGENTE' + (recortado ? ' (recortado a ' + TOPE_BASE + ' caracteres)' : '') + ':',",
-    "'MANUAL VIGENTE (solo sus campos)' + (recortado ? ' (recortado a ' + TOPE_BASE + ' caracteres)' : '') + ':' + (aparte ? '\\n' + aparte : ''),")
+  for (const [viejo, nuevo] of CAMBIOS_FAN_OUT_PREP) cambiarCodigo(f, FAN, viejo, nuevo)
 
   for (const nombre of EQUIPO) {
     cambiarCodigo(f, nombre, "t(String(RE.cambios_del_dueno == null ? '' : RE.cambios_del_dueno).replace(/\\s+/g, ' ').trim(), 2000)",

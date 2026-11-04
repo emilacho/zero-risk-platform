@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 /**
  * 02-nov · «PEDIR CAMBIOS AL MANUAL» · la parte del flujo del manual (`ssLtwYPt7zxuvnM2`). US$ 0, sin red; se ejecuta el CÓDIGO REAL de «Validate Deal Data», «[BB] Fan-out prep» y «[BB] Promote prep».
  * Fija: SIN `reescritura` en el sobre los tres nodos devuelven exactamente lo de hoy (el alta no cambia); CON ella, el sobre pasa, las 3 lentes reciben el bloque
@@ -8,12 +9,16 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 // @ts-expect-error módulo .mjs sin tipos
-import { SUSTITUCIONES, TOPE_BLOQUE_REESCRITURA } from '../scripts/ops/oficina-marketing/reescritura-del-manual.mjs'
+import { SUSTITUCIONES } from '../scripts/ops/oficina-marketing/reescritura-del-manual.mjs'
+// @ts-expect-error módulo .mjs sin tipos
+import { deshacerFanOutPrep, TOPE_MANUAL, TOPE_PEDIDO } from '../scripts/ops/oficina-marketing/manual-llega-completo.mjs'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
 const nuevo = JSON.parse(fs.readFileSync(path.join(RAIZ, 'nuevo', 'ssLtwYPt7zxuvnM2.json'), 'utf8'))
 const EV44 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'scripts', 'worker-staging', 'ssLtwYPt7zxuvnM2', 'evidencia-146544-e109.json'), 'utf8')) as { nodos: Record<string, any>; todos: Record<string, any[]> }
-const codigo = (n: string): string => nuevo.nodes.find((x: any) => x.name === n).parameters.jsCode
+// 04-nov · el nodo `[BB] Fan-out prep` además lleva «el manual llega completo» (manual-llega-completo.mjs): aquí se deshace para comparar con la parte de 02-nov; sus topes se prueban abajo
+const codigoCompleto = (n: string): string => nuevo.nodes.find((x: any) => x.name === n).parameters.jsCode
+const codigo = (n: string): string => (n === '[BB] Fan-out prep' ? deshacerFanOutPrep(codigoCompleto(n)) : codigoCompleto(n))
 const VAL = 'Validate Deal Data', FAN = '[BB] Fan-out prep', PROM = '[BB] Promote prep'
 /** el código del nodo sin esta parte */
 const hoy = (n: string): string => {
@@ -87,17 +92,17 @@ describe('[BB] Fan-out prep', () => {
     expect(t).not.toContain('Es el foco')
   })
   it('un manual vigente enorme se recorta al tope y SE DECLARA (en el texto y en el dato)', () => {
-    const gran = 'x'.repeat(TOPE_BLOQUE_REESCRITURA * 2)
-    const out = correr(codigo(FAN), ctxFan({ ...RE, manual_vigente: gran }))[0].json
+    const gran = 'x'.repeat(TOPE_MANUAL * 2)
+    const out = correr(codigoCompleto(FAN), ctxFan({ ...RE, manual_vigente: gran }))[0].json
     expect(out._reescritura.recortado).toBe(true)
-    for (const l of LENTES) expect(out.tasks[l]).toContain('recortado a ' + TOPE_BLOQUE_REESCRITURA + ' caracteres')
+    for (const l of LENTES) expect(out.tasks[l]).toContain('recortado a ' + TOPE_MANUAL + ' caracteres')
     const b = (out.tasks['brand-strategist'] as string).slice((out.tasks['brand-strategist'] as string).indexOf('ESTA ES UNA REESCRITURA'))
-    expect((b.match(/x/g) ?? []).length).toBeLessThanOrEqual(TOPE_BLOQUE_REESCRITURA)
+    expect((b.match(/x/g) ?? []).length).toBeLessThanOrEqual(TOPE_MANUAL)
   })
-  it('el pedido largo se corta a 2.000 caracteres y los espacios se normalizan; no rompe con campos ausentes', () => {
-    const t = correr(codigo(FAN), ctxFan({ manual_vigente: MANUAL, cambios_del_dueno: 'a  \n b ' + 'Q'.repeat(5000) }))[0].json.tasks['brand-strategist'] as string
+  it('el pedido largo se corta a 20.000 caracteres (antes 2.000) y los espacios se normalizan; no rompe con campos ausentes', () => {
+    const t = correr(codigoCompleto(FAN), ctxFan({ manual_vigente: MANUAL, cambios_del_dueno: 'a  \n b ' + 'Q'.repeat(TOPE_PEDIDO + 5000) }))[0].json.tasks['brand-strategist'] as string
     expect(t).toContain('«a b Q')
-    expect((t.slice(t.indexOf('ESTA ES UNA REESCRITURA')).match(/Q/g) ?? []).length).toBeLessThanOrEqual(2000)
+    expect((t.slice(t.indexOf('ESTA ES UNA REESCRITURA')).match(/Q/g) ?? []).length).toBeLessThanOrEqual(TOPE_PEDIDO)
   })
   it('no pone reglas duras: el bloque no ordena descartar ni exige justificar nada', () => {
     const t = correr(codigo(FAN), ctxFan(RE))[0].json.tasks['brand-strategist'] as string

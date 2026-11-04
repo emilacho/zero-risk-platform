@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 /**
  * 02-nov · ADENDA «límites al máximo» + corte a los 5 min. Garantías: toda llamada a un empleado espera hasta el máximo de la plataforma (800 s) y reintenta UNA vez si la conexión se pierde
  * (el punto de control devuelve lo ya escrito, sin cobrar de nuevo); un fallo que no es de conexión NO se reintenta (no se paga dos veces por un error real); los topes de gasto no se tocan.

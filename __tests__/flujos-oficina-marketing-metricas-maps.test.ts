@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 /**
  * 02-nov · recolector de métricas de Google Maps (CC#2 · cola punto 3). Ejecuta el CÓDIGO REAL de los nodos con una base y un destino falsos.
  * Garantías: nace APAGADO, en ENSAYO y SIN negocio elegido (nada se registra hasta que el dueño lo fije) · US$ 0 · solo el negocio elegido (nunca uno de nombre parecido) ·

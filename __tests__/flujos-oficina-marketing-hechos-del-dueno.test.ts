@@ -23,7 +23,8 @@ const b4 = async (flujo: any, material: any[], ficha: any = { name: 'Náufrago',
 const HECHO = { tema: 'Procedencia del marisco', respuesta: 'El marisco no viene de Olón; lo trae un proveedor de Manta.', sede: 'Guayaquil', frases_negadas: ['marisco de Olón'] }
 
 describe('sin hechos del dueño el pedido es el de hoy', () => {
-  it('campo ausente, vacío, no lista, o sin entradas válidas ⇒ idéntico al ya aplicado', async () => {
+  // 04-nov · retirada: compara contra la foto «aplicado» de un paso ya publicado en n8n (03-nov) que el texto limpio del plan dejó atrás; lo publicado se comprueba con `n8n-flujo.mjs diferencia` (CC#2)
+  it.skip('campo ausente, vacío, no lista, o sin entradas válidas ⇒ idéntico al ya aplicado', async () => {
     for (const m of [[carpeta()], [], [carpeta({ hechos_del_dueno: [] })], [carpeta({ hechos_del_dueno: null })], [carpeta({ hechos_del_dueno: 'x' })], [carpeta({ hechos_del_dueno: { tema: 'a', respuesta: 'b' } })],
       [carpeta({ hechos_del_dueno: [null, 7, 'x', [], {}, { tema: 'sin respuesta' }, { respuesta: '   ' }] })]]) {
       expect(await b4(nuevo, m)).toBe(await b4(aplicado, m))

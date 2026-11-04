@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 /**
  * 02-nov · recolector de métricas de Instagram (CC#2 · encargo de métricas de redes). Ejecuta el CÓDIGO REAL de los nodos con una base y un destino falsos.
  * Garantías: nace APAGADO y en ENSAYO · US$ 0 (no llama a Apify ni a modelos) · lo no medido se OMITE (nunca 0) · cada post lleva su AUTOR · solo lecturas de la cuenta PROPIA ·

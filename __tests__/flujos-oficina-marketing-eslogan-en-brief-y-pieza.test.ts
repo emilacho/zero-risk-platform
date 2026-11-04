@@ -1,3 +1,4 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
 /**
  * 01-nov · ADENDA 1 del equipo del manual · PARTE 4 · el eslogan real del cliente llega al Brief (`PQdIgbuFexuBsoh8`), a la parte por filas (`BNXqlaX1oHSfZIpF`) y a la Pieza (`lVCLzxQCKNkd3uS0`). US$ 0, sin red.
  * Se ejecuta el CÓDIGO REAL de los nodos (guarda del manual y armado del pedido). Fija: el GET trae `tagline`; la guarda lo pasa como `manual_tagline`; el pedido lleva el bloque como contexto (sin regla dura);
