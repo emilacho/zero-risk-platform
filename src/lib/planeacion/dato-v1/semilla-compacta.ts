@@ -1,8 +1,8 @@
 /**
  * PLAN v3 · V4 · EL ARMADOR DE LA SEMILLA COMPACTA (diseño §6 + N7). De `dato.v1[]` a `procedencia.v1.1` para la oficina financiera (F8).
  *   · por dato SOLO viajan: id, tipo_id, procedencia, medido_en, valor normalizado y un `resumen` ≤ 160 caracteres. El contenido completo de la ficha NO viaja;
- *   · el tope de la semilla es 40.000 caracteres (F8 responde 413): el armador TRUNCA POR PRIORIDAD (críticos y medidos primero) y declara `datos_omitidos: n`
- *     con sus ids (nunca parte un dato por la mitad ni cambia un id: las citas `[D#]` siguen siendo las mismas);
+ *   · 04-nov (Emilio, punto 7): lo que sirve para sacar números entra SIEMPRE: en la corrida del 4-nov la oficina recibió 45 datos, ninguno de ventas, tickets, costo o presupuesto, y preguntó lo que el dueño ya había contestado;
+ *   · el resto (textos del sitio, reseñas) sí tiene presupuesto: se recorta por prioridad y se declara `datos_omitidos: n` con sus ids (nunca parte un dato por la mitad ni cambia un id: las citas `[D#]` siguen siendo las mismas);
  *   · un `hueco` viaja SIN valor: le sirve a la oficina para decir «sin base: falta X, lo aclara Y», nunca como base de cálculo.
  * PURO. Nadie lo llama todavía (V6 lo usa para armar el pedido; V9 lo cablea).
  */
@@ -11,8 +11,10 @@ import { MAX_RESUMEN } from '../../finanzas/conversa/esquemas'
 import type { CatalogoSnapshot } from './catalogo'
 import type { DatoV1 } from './tipos'
 
-/** de los 40.000 de F8 se deja el resto a la ficha, el manual y los resúmenes */
+/** lo que no sirve para números (textos del sitio, reseñas, menciones) cabe hasta aquí */
 export const PRESUPUESTO_DE_DATOS = 24_000
+/** agnóstico: cualquier cifra, o lo que dijo el dueño (presupuesto, costo, frecuencia…) */
+export const sirveParaNumeros = (d: DatoV1): boolean => d.origen !== 'hueco' && (d.valor.numero !== undefined || d.tipo_id === 'dato_del_dueno')
 
 export interface SemillaCompacta {
   datos: DatoConProcedencia[]
@@ -58,8 +60,9 @@ export function armarSemillaCompacta(datos: DatoV1[], o: { snapshot?: CatalogoSn
   const critico = (d: DatoV1) => o.snapshot?.tipo(d.tipo_id)?.critico === true
   const idN = (d: DatoV1) => Number(d.id.replace(/\D/g, '')) || 0
   // prioridad: críticos primero; luego medidos > declarados > huecos > ensayo; desempata por id (estable)
-  const orden = [...datos].sort((a, b) => Number(critico(b)) - Number(critico(a)) || (RANGO_ORIGEN[a.origen] ?? 9) - (RANGO_ORIGEN[b.origen] ?? 9) || idN(a) - idN(b))
-  const entran: DatoV1[] = []
+  const siempre = datos.filter(sirveParaNumeros)
+  const orden = datos.filter((d) => !sirveParaNumeros(d)).sort((a, b) => Number(critico(b)) - Number(critico(a)) || (RANGO_ORIGEN[a.origen] ?? 9) - (RANGO_ORIGEN[b.origen] ?? 9) || idN(a) - idN(b))
+  const entran: DatoV1[] = [...siempre]
   const omitidos: string[] = []
   let largo = 2 // los corchetes del arreglo
   for (const d of orden) {

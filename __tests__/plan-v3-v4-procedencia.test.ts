@@ -135,7 +135,8 @@ describe('V4 · la semilla compacta', () => {
     const idPrecio = datos.find((d) => d.tipo_id === 'precio')!.id
     const idSeg = datos.find((d) => d.tipo_id === 'seguidores')!.id
     const s = armarSemillaCompacta(datos, { snapshot: snap })
-    expect(JSON.stringify(s.datos).length).toBeLessThanOrEqual(PRESUPUESTO_DE_DATOS)
+    // las cifras no cuentan: entran siempre (Emilio, 04-nov); el presupuesto es para los textos
+    expect(JSON.stringify(s.datos.filter((x) => x.id !== idPrecio && x.id !== idSeg)).length).toBeLessThanOrEqual(PRESUPUESTO_DE_DATOS)
     expect(s.datos_omitidos).toBeGreaterThan(0)
     expect(s.omitidos.length).toBe(s.datos_omitidos)
     expect(s.datos.map((x) => x.id)).toContain(idPrecio)
@@ -149,15 +150,15 @@ describe('V4 · la semilla compacta', () => {
   it('sin la regla de prioridad un crítico se perdería: el orden por críticos es el que lo salva (mutación)', () => {
     const muchos: EntradaCruda[] = [
       ...Array.from({ length: 400 }, (_, i) => entrada({ fuente_id: 'cerebro_vivo', tipo_id: 'texto_sitio', contenido: `línea ${i} del sitio con un texto razonablemente largo para ocupar espacio en la semilla` })),
-      entrada({ fuente_id: 'cerebro_vivo', tipo_id: 'precio', atributo: 'precio:silla', contenido: '45', moneda: 'USD' }),
+      entrada({ fuente_id: 'cerebro_vivo', tipo_id: 'precio', atributo: 'precio:silla', contenido: 'a consultar' }),
     ]
     const datos = norm(muchos)
-    const idPrecio = datos.find((d) => d.tipo_id === 'precio')!.id
-    // sin snapshot no se conoce lo crítico: el precio (último) cae igual que el resto de lo «medido» por id ⇒ se omite
+    const idCritico = datos.find((d) => d.tipo_id === 'precio')!.id
+    // sin snapshot no se conoce lo crítico: el dato (último) cae igual que el resto de lo «medido» por id ⇒ se omite
     const ciego = armarSemillaCompacta(datos, {})
     const informado = armarSemillaCompacta(datos, { snapshot: snap })
-    expect(ciego.omitidos).toContain(idPrecio)
-    expect(informado.omitidos).not.toContain(idPrecio)
+    expect(ciego.omitidos).toContain(idCritico)
+    expect(informado.omitidos).not.toContain(idCritico)
   })
   it('todo lo que el armador emite pasa la validación de la puerta de F8 (el circuito cierra)', () => {
     const datos = norm([

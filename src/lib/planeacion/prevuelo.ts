@@ -16,6 +16,7 @@
 import { abrir, correr, EN_PAUSA, reanudar, reintentar, CADA_REINTENTO_S, ESPERA_MAXIMA_MIN, type PuertoDeCorridas } from './corridas'
 import type { CatalogoSnapshot } from './dato-v1/catalogo'
 import type { LecturaDeCatalogo } from './catalogo/leer'
+import { calendarioDesde, hoyEnElPais, type CalendarioDelPlan } from './calendario-del-plan'
 
 export interface FichaDelCliente {
   existe: boolean
@@ -82,6 +83,8 @@ export interface Decision {
   corrida?: string
   /** 04-nov · volvió de una pausa de más de 3 días: el flujo lee los brazos de nuevo en vez de usar lo guardado (Lenovo, 15:57Z) */
   material_viejo?: boolean
+  /** 04-nov · las 12 semanas del plan, calculadas por el sistema: las recibe el redactor como dato. Solo cuando el plan va a correr */
+  calendario?: CalendarioDelPlan
   /** `plan_corridas.id` · 04-nov (firma de Lenovo): es el `trabajo_id` de tipo `plan` de cada llamada · no está si la corrida no se abrió */
   corrida_id?: string
 }
@@ -162,11 +165,12 @@ export async function prevuelo(
     try { r = await reanudar(P.corridas, { client_id, corrida }) } catch (x) { return noCorre(dry, 'corrida_activa', `no se pudo reanudar: ${x instanceof Error ? x.message : String(x)}`.slice(0, 300)) }
     if (r.status !== 200 || r.accion === 'perdiste_la_carrera') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'otro disparo la reanudó primero', ...comunDeLaPausa }
     const viejo = P.ahora().getTime() - Date.parse(espera.creado_en) > DIAS_DE_VIGENCIA_DEL_MATERIAL * 86_400_000
-    if (!viejo) return { ...base(dry), decision: 'correr', motivo: 'vuelve de la pausa: el dueño contestó', ...comunDeLaPausa, vence_en: r.fila.vence_en }
+    const calendario = calendarioDesde(hoyEnElPais(P.ahora(), f.pais))
+    if (!viejo) return { ...base(dry), decision: 'correr', motivo: 'vuelve de la pausa: el dueño contestó', ...comunDeLaPausa, vence_en: r.fila.vence_en, calendario }
     // los brazos salen de nuevo: el relleno de Apify sigue exigiendo el «cerebro listo» leído en esta llamada
     const lec = await P.senal(client_id)
     const senal = lec.ok ? lec.senal : null
-    return { ...base(dry), decision: 'correr', motivo: 'vuelve de una pausa larga: el material se lee de nuevo', ...comunDeLaPausa, vence_en: r.fila.vence_en, material_viejo: true, relleno_permitido: reglas.autorizaRelleno(senal) }
+    return { ...base(dry), decision: 'correr', motivo: 'vuelve de una pausa larga: el material se lee de nuevo', ...comunDeLaPausa, vence_en: r.fila.vence_en, material_viejo: true, relleno_permitido: reglas.autorizaRelleno(senal), calendario }
   }
 
   // 4 · el cupo (solo si va a gastar: un ensayo no gasta)
@@ -201,7 +205,7 @@ export async function prevuelo(
     const r = await correr(P.corridas, { client_id, corrida, motivo: motivo.slice(0, 200) })
     if (r.status !== 200) return noCorre(dry, 'corrida_no_viva', `no se pudo arrancar la corrida (${'estado' in r ? String(r.estado) : r.error})`, comun)
     if (r.accion === 'perdiste_la_carrera') return noCorre(dry, 'otro_re_disparo_gano', 'otro re-disparo arrancó la corrida primero: este no hace nada', comun)
-    return { ...base(dry), ...comun, minutos_esperados: minutos, ...extra }
+    return { ...base(dry), ...comun, minutos_esperados: minutos, calendario: calendarioDesde(hoyEnElPais(P.ahora(), f.pais)), ...extra }
   }
 
   // ensayo sin manual: no hay cerebro que esperar (un cliente sin manual no tiene cerebro listo) y el ensayo no llama a Apify: corre ya, declarado, sin relleno

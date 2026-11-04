@@ -224,7 +224,8 @@ export function correrCelda(celda: Celda, js: Js = cargarJs(), filas: FilasDelCa
       exige(pedido.lineas.filter((l) => /^D\d+ \| /.test(l)).every((l) => l.split(' | ').length === 14), 'se partió una fila de la tabla')
       break
     case 'S40':
-      exige(JSON.stringify(semillaC.datos).length <= 24_000, 'la semilla pasa su presupuesto')
+      // las cifras y lo que dijo el dueño entran siempre; el presupuesto es para lo demás
+      exige(JSON.stringify(semillaC.datos.filter((d) => !(d.tipo_id === 'dato_del_dueno' || (typeof d.valor === 'object' && d.valor !== null && 'numero' in d.valor)))).length <= 24_000, 'la semilla pasa su presupuesto')
       exige(semillaC.datos_omitidos > 0 && semillaC.nota.includes('datos_omitidos:'), 'no declaró lo que no cupo')
       break
     case 'M2': {
