@@ -135,11 +135,14 @@ async function leerAnalitica(p: PedidoPuerta, ventas: VentasDelSitio | null): Pr
           "and coalesce(properties.$host, domain(properties.$current_url)) in ('" + escapado + "', 'www." + escapado + "')" + exclusion + ' ' +
           'group by event order by n desc limit 40',
         )
-        const filas = soloConducta((q.results ?? []).map((f) => ({ evento: String(f[0]), veces: Number(f[1]), personas: Number(f[2]) })))
+        const crudas = q.results ?? []
+        const filas = soloConducta(crudas.map((f) => ({ evento: String(f[0]), veces: Number(f[1]), personas: Number(f[2]) })))
         if (!filas.length) {
           return {
             hay: false as const,
-            motivo: 'fui, miré y no hay: el proyecto respondió y no registra ningún evento para el dominio ' +
+            motivo: (crudas.length
+              ? 'fui, miré y no hay conducta de visitas: el proyecto respondió y solo registra eventos de venta, que aquí no se cuentan, para el dominio '
+              : 'fui, miré y no hay: el proyecto respondió y no registra ningún evento para el dominio ') +
               dominio + ' en ' + dias + ' días · ' + LIMITACION,
           }
         }
@@ -147,6 +150,9 @@ async function leerAnalitica(p: PedidoPuerta, ventas: VentasDelSitio | null): Pr
         return {
           hay: true as const,
           datos: {
+            // quien redacta recibe los datos de cada brazo cortados a un largo fijo: las ventas y su nota van antes que la lista, que puede ser larga
+            ...(ventas ? { ventas_del_sitio: ventas } : {}),
+            nota_de_la_lectura: NOTA_DE_LA_ANALITICA,
             // 🔴 la limitación viaja PEGADA al dato · quien lo lea no la puede saltear
             atribucion: 'POR DOMINIO, NO POR CLIENTE',
             dominio_leido_de: '$host, o el host de $current_url en los eventos de conducta (que no traen $host)',
@@ -158,8 +164,6 @@ async function leerAnalitica(p: PedidoPuerta, ventas: VentasDelSitio | null): Pr
             visitas: visitas ? visitas.veces : 0,
             personas_distintas: visitas ? visitas.personas : 0,
             conducta_de_visitas: filas,
-            nota_de_la_lectura: NOTA_DE_LA_ANALITICA,
-            ...(ventas ? { ventas_del_sitio: ventas } : {}),
           },
         }
       }),

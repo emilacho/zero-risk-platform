@@ -10,7 +10,8 @@ vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => mocks.db }))
 
 const CL = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 // los estados reales de la tabla de pedidos de Náufrago, medidos el 4-nov
-const pedido = (status: string, es_prueba: boolean, total_usd = 10, created_at = '2026-11-02T10:00:00Z') => ({ status, es_prueba, total_usd, created_at })
+const pedido = (status: string, es_prueba: boolean, total_usd = 10, created_at = '2026-11-02T10:00:00Z', payment_status: string | null = null) => ({ status, es_prueba, total_usd, created_at, payment_status })
+const conPago = (status: string, payment_status: string) => pedido(status, false, 19.22, '2026-11-02T10:00:00Z', payment_status)
 
 /** una base falsa con lo justo: tablas públicas y el área del sitio */
 function base(o: { areas?: Record<string, unknown[]>; errorDeArea?: { code: string; message?: string }; slug?: unknown; sedes?: unknown[]; datos?: unknown[]; config?: unknown; explotar?: boolean } = {}) {
@@ -42,11 +43,44 @@ describe('qué cuenta como venta', () => {
     const r = resumirPedidos([pedido('DELIVERED', true), pedido('ACCEPTED', true), pedido('READY', true)])
     expect(r).toMatchObject({ pedidos_reales: 0, ingreso_usd: 0, pruebas_excluidas: 3, primera_venta: null })
   })
-  it.each(['PENDING_PAYMENT', 'PENDING_LOCATION', 'CANCELLED', 'pending_payment', 'FAILED', ''])('🔴 %s sin marca no es venta', (s) => {
+  it.each(['PENDING_PAYMENT', 'PENDING_LOCATION', 'PENDING_OPERATOR', 'PENDING_LOCATION_DETAIL', 'CANCELLED', 'pending_payment', 'FAILED', 'REJECTED', 'EXPIRED', 'REFUNDED', 'ABANDONED', '', '  '])('🔴 «%s» sin marca no es venta', (s) => {
     expect(resumirPedidos([pedido(s, false)])).toMatchObject({ pedidos_reales: 0, no_concretados: 1, ingreso_usd: 0 })
   })
-  it.each(['ACCEPTED', 'READY', 'DELIVERED'])('🔴 %s sin marca sí es venta', (s) => {
+  it.each(['ACCEPTED', 'READY', 'DELIVERED', 'NEEDS_ATTENTION', 'PENDING'])('🔴 %s sin marca sí es venta', (s) => {
     expect(resumirPedidos([pedido(s, false, 19.22)])).toMatchObject({ pedidos_reales: 1, ingreso_usd: 19.22 })
+  })
+  // las combinaciones de estado y pago de la tabla real, medidas el 4-nov, más la que señaló el certificador
+  it.each([
+    ['PENDING', 'CAPTURED'], // cobrado y despachado: el sitio lo deja así hasta que la cocina lo mueve
+    ['PENDING', 'PENDING'], // efectivo recién colocado
+    ['DELIVERED', 'PENDING'], // efectivo entregado: el pago nunca pasa a cobrado
+    ['ACCEPTED', 'CAPTURED'],
+    ['READY', 'CAPTURED'],
+    ['DELIVERED', 'CAPTURED'],
+    ['DELIVERED', 'PARTIAL_REFUND'],
+    ['PENDING_LOCATION', 'CAPTURED'], // ya se cobró: falta la ubicación
+    ['PENDING_PAYMENT', 'PARTIAL_REFUND'],
+  ])('🔴 %s con pago %s es venta', (estado, pago) => {
+    expect(resumirPedidos([conPago(estado, pago)])).toMatchObject({ pedidos_reales: 1, no_concretados: 0, ingreso_usd: 19.22 })
+  })
+  it.each([
+    ['CANCELLED', 'CAPTURED'], // cobrado y cancelado: no quedó en venta
+    ['PENDING_PAYMENT', 'PENDING'],
+    ['PENDING_PAYMENT', 'AUTHORIZED'], // retenido, todavía sin cobrar
+    ['PENDING_LOCATION', 'PENDING'], // efectivo sin ubicación: nadie va a entregarlo todavía
+    ['DELIVERED', 'FAILED'],
+    ['DELIVERED', 'REFUNDED'],
+    ['PENDING', 'REFUNDED'],
+    ['PENDING', 'FAILED'],
+  ])('🔴 %s con pago %s no es venta', (estado, pago) => {
+    expect(resumirPedidos([conPago(estado, pago)])).toMatchObject({ pedidos_reales: 0, no_concretados: 1, ingreso_usd: 0 })
+  })
+  it('🔴 la venta pagada del certificador ya no dice «sin ventas»', () => {
+    expect(resumirPedidos([conPago('PENDING', 'CAPTURED')]).texto).toContain('1 pedido real por el sitio, US$ 19.22')
+  })
+  it('🔴 dice qué es la suma, también sin ventas: lleva el envío y no es lo que le queda al local', () => {
+    expect(resumirPedidos([pedido('DELIVERED', false)]).ingreso_es).toContain('con el envío')
+    expect(resumirPedidos([]).ingreso_es).toContain('no es lo que le queda al local')
   })
   it('🔴 suma, redondea y dice el período', () => {
     const r = resumirPedidos([pedido('DELIVERED', false, 10.1, '2026-11-03T00:00:00Z'), pedido('READY', false, 0.2, '2026-11-01T00:00:00Z'), pedido('DELIVERED', true, 99, '2026-10-01T00:00:00Z')])
@@ -105,7 +139,23 @@ describe('leer de la base', () => {
     expect(r.estado).toBe('no_se_pudo')
     expect(r.texto).not.toContain(SIN_VENTAS_DEL_SITIO)
   })
-  it('sin cliente no se consulta nada', async () => { expect((await leerVentasDelSitio(base().db, null)).estado).toBe('sin_fuente') })
+  it('🔴 sin cliente no se consulta nada y lo dice, sin confundirlo con un cliente sin pedidos conectados', async () => {
+    const r = await leerVentasDelSitio(base({ explotar: true }).db, null)
+    expect(r).toMatchObject({ estado: 'sin_fuente', texto: 'no se indicó el cliente: no se sabe cuánto vende por el sitio' })
+  })
+  it('🔴 lee el pago, sin el cual no se distingue una venta cobrada', async () => {
+    const b = base({ areas: { naufrago: [conPago('PENDING', 'CAPTURED')] } })
+    expect(await leerVentasDelSitio(b.db, CL)).toMatchObject({ pedidos_reales: 1 })
+    expect(b.pedidas.join(',')).toContain('payment_status')
+  })
+  it('🔴 si los pedidos no caben en el tope de páginas no dice «medido»: una suma incompleta no es una cifra', async () => {
+    const pagina = Array.from({ length: 1000 }, () => pedido('DELIVERED', false, 1))
+    const db = base().db
+    const llena = () => { const c: Record<string, unknown> = { select: () => c, order: () => c, range: () => c, then: (ok: (r: unknown) => unknown) => ok({ data: pagina, error: null }) }; return c }
+    const r = await leerVentasDelSitio({ from: db.from.bind(db), schema: () => ({ from: llena }) }, CL)
+    expect(r).toMatchObject({ estado: 'no_se_pudo', pedidos_reales: 0 })
+    expect(r.texto).not.toContain(SIN_VENTAS_DEL_SITIO)
+  })
   it('🔴 no pide datos del comprador', async () => {
     const b = base({ areas: { naufrago: [] } })
     await leerVentasDelSitio(b.db, CL)
@@ -165,6 +215,36 @@ describe('el brazo de punta a punta, con analítica y base falsas', () => {
     const r = await pedir()
     expect(r.datos.ventas_del_sitio).toMatchObject({ pedidos_reales: 0, pruebas_excluidas: 2 })
     expect(r.datos.ventas_del_sitio.texto).toBe('sin ventas reales por el sitio todavía; la sede de Guayaquil aún no abre')
+  })
+  describe('el redactor corta los datos de cada brazo a 2.500 caracteres', () => {
+    const CORTE = 2500
+    const cuarentaEventos = Array.from({ length: 40 }, (_, i) => ['evento_de_conducta_numero_' + i, 100 - i, 50])
+    beforeEach(() => { vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: cuarentaEventos }), { status: 200 }))) })
+    it('🔴 con el tope de 40 tipos de evento, las ventas y su nota igual llegan', async () => {
+      const r = await pedir()
+      expect(r.datos.conducta_de_visitas).toHaveLength(40)
+      const leido = JSON.stringify(r.datos).slice(0, CORTE)
+      expect(JSON.stringify(r.datos).length).toBeGreaterThan(CORTE)
+      expect(leido).toContain('sin ventas reales por el sitio todavía; la sede de Guayaquil aún no abre')
+      expect(leido).toContain('no cuenta ventas')
+    })
+    it('🔴 las ventas van antes que la lista de eventos', async () => {
+      const llaves = Object.keys((await pedir()).datos)
+      expect(llaves.indexOf('ventas_del_sitio')).toBeLessThan(llaves.indexOf('conducta_de_visitas'))
+      expect(llaves.indexOf('nota_de_la_lectura')).toBeLessThan(llaves.indexOf('conducta_de_visitas'))
+    })
+  })
+  it('🔴 si la analítica solo trae eventos de venta no dice que no registra ninguno, y las ventas igual llegan', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: [['order_submitted', 3, 2]] }), { status: 200 })))
+    const r = await pedir()
+    expect(r.estado).not.toBe('trajo')
+    expect(r.motivo).toContain('solo registra eventos de venta')
+    expect(r.motivo).not.toContain('no registra ningún evento')
+    expect(r.motivo).toContain('sin ventas reales por el sitio todavía')
+  })
+  it('🔴 si la analítica responde vacía sigue diciendo que no registra ninguno', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: [] }), { status: 200 })))
+    expect((await pedir()).motivo).toContain('no registra ningún evento')
   })
   it('🔴 una sola consulta a la analítica, con la marca de la casa', async () => {
     await pedir()
