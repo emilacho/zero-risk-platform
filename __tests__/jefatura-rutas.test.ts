@@ -415,6 +415,6 @@ describe('regla dura del editor y `extra.workflow_execution_id` (diseño §9.4)'
 
 describe('las rutas son nodejs, dinámicas y con tiempo para GPT', () => {
   it('exports de runtime', () => {
-    for (const m of [revisionesRuta, turnosRuta, vigiaRuta]) { expect(m.dynamic).toBe('force-dynamic'); expect(m.runtime).toBe('nodejs'); expect(m.maxDuration).toBe(300) }
+    for (const m of [revisionesRuta, turnosRuta, vigiaRuta]) { expect(m.dynamic).toBe('force-dynamic'); expect(m.runtime).toBe('nodejs'); expect(m.maxDuration).toBe(800) }
   })
 })

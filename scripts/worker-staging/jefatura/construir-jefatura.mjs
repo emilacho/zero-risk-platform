@@ -90,7 +90,7 @@ export function construirTurno({ path = 'zero-risk/jefatura-turno', nombre = 'Ze
     // la espera vive más que el trabajo (un paso dura minutos; el plan reescrito, hasta ~6); 1.800 s (30 min) cubren con holgura y el SDK acota el COSTO con max_budget_usd
     { parameters: { resume: 'webhook', httpMethod: 'POST', limitWaitTime: true, resumeAmount: 1800, resumeUnit: 'seconds', options: {} }, name: N.espera, type: 'n8n-nodes-base.wait', typeVersion: 1.1, position: x(7, 50), webhookId: webhookId + '-espera' },
     code(N.vuelta, 'turno-n3-vuelta.js', x(8, 50)),
-    http(N.registrar, `${VERCEL}/api/jefatura/turnos`, x(9, 0), { headers: [LLAVE], body: '={{ JSON.stringify($json.resultado_body) }}', timeout: 300000 }),
+    http(N.registrar, `${VERCEL}/api/jefatura/turnos`, x(9, 0), { headers: [LLAVE], body: '={{ JSON.stringify($json.resultado_body) }}', timeout: 800000 }),
     code(N.sigue, 'turno-n4-sigue.js', x(10, 0)),
     cond(N.ifEsperar, '={{ $json.ruta }}', esIgual, x(11, 0), 'esperar'),
     SIGUIENTE(N.siguiente, x(12, -150)),
@@ -118,10 +118,10 @@ export function construirVigia({ nombre = 'Zero Risk — Jefatura · el vigía (
   const N = { reloj: 'Reloj · cada 10 min', vigia: '① Vigilar', pend: '① Qué hacer con cada pendiente', esRean: '② ¿Reanudar?', rearmar: '② Re-armar el paso', paso: '② Re-armar · resultado', turno: 'Turno · arrancar', ifWebhook: '③ ¿Entrega por webhook?', entrega: '③ Entregar al llamador', cable: 'Cable de vuelta · sala' }
   const nodes = [
     { parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 10 }] } }, name: N.reloj, type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position: x(0) },
-    http(N.vigia, `${VERCEL}/api/jefatura/vigia`, x(1), { headers: [LLAVE], body: '={{ JSON.stringify({}) }}', timeout: 300000 }),
+    http(N.vigia, `${VERCEL}/api/jefatura/vigia`, x(1), { headers: [LLAVE], body: '={{ JSON.stringify({}) }}', timeout: 800000 }),
     code(N.pend, 'vigia-n1-reanudar.js', x(2)),
     cond(N.esRean, '={{ $json.tipo }}', esIgual, x(3), 'reanudar'),
-    http(N.rearmar, `${VERCEL}/api/jefatura/turnos`, x(4, -120), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "siguiente", revision_id: $json.revision_id }) }}', timeout: 300000 }),
+    http(N.rearmar, `${VERCEL}/api/jefatura/turnos`, x(4, -120), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "siguiente", revision_id: $json.revision_id }) }}', timeout: 800000 }),
     code(N.paso, 'vigia-n2-rearmar.js', x(5, -120)),
     SIGUIENTE(N.turno, x(6, -120)),
     cond(N.ifWebhook, '={{ $json.tipo }}', esIgual, x(4, 150), 'webhook'),
