@@ -202,18 +202,19 @@ describe('el vigilante se aplica igual', () => {
     expect(r.body.cerebro_listo).toBe(false) // aún espera la cadena; el vigilante no apagó nada
     expect(m.apagados).toEqual([]); expect(m.avisos).toEqual([])
   })
-  it('el puente falla ⇒ apaga el portero diario, avisa (una línea que dice «al despertar con el alta») y el cerebro NO queda listo', async () => {
+  it('el puente falla ⇒ PAUSA solo a ese cliente (el flujo diario NO se apaga), avisa UNA vez y el cerebro NO queda listo', async () => {
     const c = CASOS[0]
     const t = tablas(c)
     const m = montar(t, { puenteFalla: true })
     const r = await rutaDespertar(m.deps, { client_id: c.id, ...REAL })
     expect(r.body.cerebro_listo).toBe(false)
-    expect(m.apagados).toEqual([PORTERO])
+    expect(m.apagados).toEqual([])
+    expect(t.cerebro_portero_pausas).toHaveLength(1); expect(t.cerebro_portero_pausas[0]).toMatchObject({ client_id: c.id, termina_con: 'alta_terminada' }); expect(t.cerebro_portero_pausas[0].levantada_en ?? null).toBeNull()
     expect(m.avisos).toHaveLength(1)
-    expect(m.avisos[0]).toMatch(/al despertar con el alta/)
+    expect(m.avisos[0]).toMatch(/PAUSADO solo para/)
     expect(t.cerebro_portero_corridas[0].estado).toBe('con_errores')
   })
-  it('una ficha viva nacida hoy de una unidad que el filtro NO confirmó ⇒ apaga y avisa, y el cerebro no queda listo', async () => {
+  it('una ficha viva nacida hoy de una unidad que el filtro NO confirmó ⇒ pausa solo a ese cliente y avisa, y el cerebro no queda listo', async () => {
     const c = CASOS[0]
     const t = tablas(c)
     t.cerebro_fichas.push({ id: 'ajena-1', client_id: c.id, ref: 'portero:x:1', clase: 'texto', titulo: 't', contenido: 'texto de otro negocio', fecha_fuente: null, observado_en: '2026-10-15T10:00:00Z', creado_en: '2026-10-15T10:00:00Z', propiedad: 'propia', origen: 'su_fuente', descartada: false, retirada_en: null, huella: 'h-ajena' })
@@ -221,7 +222,8 @@ describe('el vigilante se aplica igual', () => {
     const m = montar(t)
     const r = await rutaDespertar(m.deps, { client_id: c.id, ...REAL })
     expect(r.body.cerebro_listo).toBe(false)
-    expect(m.apagados).toEqual([PORTERO])
+    expect(m.apagados).toEqual([])
+    expect(t.cerebro_portero_pausas).toHaveLength(1)
     expect(m.avisos).toHaveLength(1)
     expect(m.avisos[0]).toMatch(/no confirmó como propia/)
   })
@@ -242,13 +244,15 @@ describe('reintento del vigilante en el despertar y mirada «a esa hora»', () =
     expect((r.body.vigilante as { intentos: number }).intentos).toBe(2)
     expect(m.apagados).toEqual([]); expect(m.avisos).toEqual([])
   })
-  it('si la lectura falla las dos veces ⇒ apaga y avisa («falló 2 veces»)', async () => {
+  it('si la lectura falla las dos veces ⇒ pausa solo a ese cliente y avisa («falló 2 veces»), nunca apaga el flujo', async () => {
     const c = CASOS[1]
-    const m = montar(tablas(c), { fallaEn: 'cerebro_portero_corridas', saltar: 4 })
+    const t = tablas(c)
+    const m = montar(t, { fallaEn: 'cerebro_portero_corridas', saltar: 4 })
     const r = await rutaDespertar(m.deps, { client_id: c.id, ...REAL })
     expect(m.esperas).toHaveLength(1)
     expect(r.body.cerebro_listo).toBe(false)
-    expect(m.apagados).toEqual([PORTERO])
+    expect(m.apagados).toEqual([])
+    expect(t.cerebro_portero_pausas).toHaveLength(1)
     expect(m.avisos[0]).toMatch(/falló 2 veces/)
   })
   it('solo mira el raspado que YA existe a esa hora: lo posterior no entra', async () => {
