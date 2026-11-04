@@ -8,7 +8,8 @@ import { prepararPreguntas, type PuertosDelBuzon } from '../src/lib/finanzas/con
 import { armarMensaje } from '../src/lib/finanzas/preguntas'
 import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
 import { atenderPausa, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
-import { despertarPorElFlujo } from '../src/lib/finanzas/conversa/esperas-supabase'
+import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conversa/esperas-supabase'
+import { puertosDePausa } from '../src/lib/finanzas/conversa/puertos-de-pausa'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import { prevuelo } from '../src/lib/planeacion/prevuelo'
 import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
@@ -311,6 +312,34 @@ describe('contestar en Tu oficina (Emilio, 16:20Z)', () => {
     const m = mundo({ espera: {}, arts: dos, cerebroCaido: true })
     expect((await responderEnLaOficina(m.P, pedir())).cuerpo).toMatchObject({ aplicada: true, en_el_cerebro: false })
     expect(m.e.semilla.respuestas_del_dueno).toHaveLength(1)
+  })
+  it('🔴 la espera viva del cliente es solo la suya, de finanzas y sin soltar', async () => {
+    const db = new DbFalsa()
+    const fila = (id: string, o: Record<string, unknown>) => ({ id, client_id: 'c', tipo: 'finanzas', clave: `finanzas:${id}`, estado: 'esperando', sobre: { corrida: 'p' }, despertado: null, despertar_intentos: 0, ...o })
+    db.semilla('esperas_del_dueno', [fila('soltada', { estado: 'soltada' }), fila('reemplazada', { estado: 'reemplazada' }), fila('manual', { tipo: 'manual' }), fila('ajena', { client_id: 'otro' })])
+    expect(await esperasDeFinanzas(db as never).vivaDelCliente('c')).toBeNull()
+    db.tablas['esperas_del_dueno'].push(fila('viva', {}))
+    expect(await esperasDeFinanzas(db as never).vivaDelCliente('c')).toMatchObject({ id: 'viva', encargo_id: 'viva', corrida: 'p' })
+  })
+  it('🔴 lo que contesta en Tu oficina llega al cerebro con ese canal, no como Slack', async () => {
+    const cuerpos: Array<Record<string, unknown>> = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_u: string, i: RequestInit) => { cuerpos.push(JSON.parse(String(i.body))); return { status: 200, json: async () => ({ ok: true }) } }) as never
+    const antes = { i: process.env.INTERNAL_API_KEY, c: process.env.FINANZAS_CANAL_PREGUNTAS }
+    process.env.INTERNAL_API_KEY = 'k'
+    process.env.FINANZAS_CANAL_PREGUNTAS = 'C123456789'
+    try {
+      const entrada = { client_id: 'c', tema: 't', pregunta: 'p', respuesta: 'r', mensaje_ref: 'm', respondido_en: '2026-11-04T00:00:00Z', pregunta_id: null }
+      await puertosDePausa(new DbFalsa() as never, 'envia', 'wf', 'ex', 'dashboard · Tu oficina').cerebro.registrarRespuesta(entrada)
+      await puertosDePausa(new DbFalsa() as never, 'envia', 'wf', 'ex').cerebro.registrarRespuesta(entrada)
+    } finally {
+      globalThis.fetch = original
+      process.env.INTERNAL_API_KEY = antes.i
+      process.env.FINANZAS_CANAL_PREGUNTAS = antes.c
+    }
+    expect(cuerpos[0].canal).toBe('dashboard · Tu oficina')
+    expect(String(cuerpos[1].canal)).toContain('buzon-de-preguntas')
+    expect(fs.readFileSync('src/app/api/finanzas/responder/route.ts', 'utf8')).toContain("'dashboard · Tu oficina'")
   })
   it('🔴 pide todo lo necesario', async () => {
     for (const k of ['client_id', 'tema', 'respuesta', 'quien']) expect((await responderEnLaOficina(mundo({ espera: {} }).P, pedir({ [k]: ' ' }))).status).toBe(400)
