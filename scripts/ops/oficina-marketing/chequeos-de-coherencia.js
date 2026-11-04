@@ -97,6 +97,8 @@ function _afirmaLoQueFalta(t) {
     while ((m = re.exec(l)) !== null) {
       var antes = l.slice(Math.max(0, m.index - 40), m.index)
       if (/\b(?:sin|no|cuando|una vez|despu[eé]s|hasta|si|tras)\b[^.|]*$/i.test(antes)) continue
+      // «la pauta activa empieza cuando haya píxel» habla del futuro, no afirma que hoy esté activa
+      if (/^\s*(?:empieza|arranca|inicia|cuando|una vez|despu[eé]s|tras|si)\b/i.test(l.slice(m.index + m[0].length))) continue
       var cosa = m[1]
       if (new RegExp('(?:^|[^a-záéíóúñ])(?:sin|no\\s+hay|no\\s+tiene|falta)\\s+(?:[a-záéíóúñ]+\\s+)?' + cosa + '(?![a-záéíóúñ])', 'i').test(s)) { out.push(l.slice(Math.max(0, m.index - 40), m.index + 40).trim()); break }
     }
