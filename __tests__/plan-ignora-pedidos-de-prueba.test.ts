@@ -14,11 +14,11 @@ const pedido = (status: string, es_prueba: boolean, total_usd = 10, created_at =
 const conPago = (status: string, payment_status: string, metodo = 'PAYPHONE') => pedido(status, false, 19.22, '2026-11-02T10:00:00Z', payment_status, metodo)
 
 /** una base falsa con lo justo: tablas públicas y el área del sitio */
-function base(o: { areas?: Record<string, unknown[]>; errorDeArea?: { code: string; message?: string }; slug?: unknown; sedes?: unknown[]; datos?: unknown[]; config?: unknown; explotar?: boolean } = {}) {
+function base(o: { areas?: Record<string, unknown[]>; errorDeArea?: { code: string; message?: string }; slug?: unknown; sedes?: unknown[]; datos?: unknown[]; config?: unknown; explotar?: boolean; fichas?: unknown[]; errorDeFichas?: boolean } = {}) {
   const pedidas: string[] = []
   const consulta = (filas: unknown[], error: unknown = null) => {
     const c: Record<string, unknown> = {}
-    for (const m of ['select', 'eq', 'in', 'order']) c[m] = (...a: unknown[]) => { if (m === 'select') pedidas.push(String(a[0])); return c }
+    for (const m of ['select', 'eq', 'in', 'order', 'is', 'or', 'limit']) c[m] = (...a: unknown[]) => { if (m === 'select') pedidas.push(String(a[0])); return c }
     c.range = (a: number, b: number) => { c.pagina = filas.slice(a, b + 1); return c }
     c.then = (ok: (r: unknown) => unknown) => ok({ data: error ? null : (c.pagina ?? filas), error })
     return c
@@ -29,6 +29,7 @@ function base(o: { areas?: Record<string, unknown[]>; errorDeArea?: { code: stri
       if (t === 'clients') return consulta([{ slug: 'slug' in o ? o.slug : 'naufrago', config: o.config ?? {} }])
       if (t === 'client_sedes') return consulta(o.sedes ?? [])
       if (t === 'client_sede_datos') return consulta(o.datos ?? [])
+      if (t === 'cerebro_fichas') return consulta(o.fichas ?? [], o.errorDeFichas ? { code: '500', message: 'caída' } : null)
       throw new Error('tabla inesperada ' + t)
     },
     schema(s: string) {
@@ -205,7 +206,7 @@ describe('el brazo de punta a punta, con analítica y base falsas', () => {
     }))
   })
   afterEach(() => vi.unstubAllGlobals())
-  type R = { estado: string; motivo?: string; datos: { visitas: number; conducta_de_visitas: { evento: string }[]; embudo?: unknown; nota_de_la_lectura: string; ventas_del_sitio: { pedidos_reales: number; pruebas_excluidas: number; texto: string } } }
+  type R = { estado: string; motivo?: string; datos: { visitas: number; conducta_de_visitas: { evento: string }[]; embudo?: unknown; nota_de_la_lectura: string; ventas_del_negocio: { texto: string; estado: string; por_la_web: { pedidos_reales: number; pruebas_excluidas: number; texto: string } } } }
   const pedir = async () => {
     const { POST } = await import('@/app/api/planeacion/brazo/posthog/route')
     const r = await POST(new Request('https://x.test/api/planeacion/brazo/posthog', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'k' }, body: JSON.stringify({ client_id: CL, pedidos: [{ brazo: 'posthog', objetivo: 'analitica_propia', params: { dominio: 'sitio.ec' } }] }) }))
@@ -221,8 +222,19 @@ describe('el brazo de punta a punta, con analítica y base falsas', () => {
   })
   it('🔴 las ventas salen de los pedidos, con la frase firmada', async () => {
     const r = await pedir()
-    expect(r.datos.ventas_del_sitio).toMatchObject({ pedidos_reales: 0, pruebas_excluidas: 2 })
-    expect(r.datos.ventas_del_sitio.texto).toBe('sin ventas reales por el sitio todavía; la sede de Guayaquil aún no abre')
+    expect(r.datos.ventas_del_negocio.por_la_web).toMatchObject({ pedidos_reales: 0, pruebas_excluidas: 2 })
+    expect(r.datos.ventas_del_negocio.por_la_web.texto).toBe('sin ventas reales por el sitio todavía; la sede de Guayaquil aún no abre')
+  })
+  it('🔴 la caja llega con lo del sitio como desglose', async () => {
+    mocks.db = base({ areas: { naufrago: [pedido('DELIVERED', true)] }, fichas: [
+      { atributo: 'metrica:loyverse:ingreso:ultimos_30_dias', provenance_tag: { metrica: { valor: 5799.3 }, datos: { ventana_hasta: '2026-11-04' } } },
+      { atributo: 'metrica:loyverse:tickets:ultimos_30_dias', provenance_tag: { metrica: { valor: 524 } } },
+    ] }).db
+    const r = await pedir()
+    expect(r.datos.ventas_del_negocio.estado).toBe('medido')
+    expect(r.datos.ventas_del_negocio.texto).toContain('5799.30 en 524 tickets')
+    expect(r.datos.ventas_del_negocio.texto).toContain('no se suma')
+    expect(r.datos.ventas_del_negocio.por_la_web.pedidos_reales).toBe(0)
   })
   describe('el redactor corta los datos de cada brazo a 2.500 caracteres', () => {
     const CORTE = 2500
@@ -236,9 +248,20 @@ describe('el brazo de punta a punta, con analítica y base falsas', () => {
       expect(leido).toContain('sin ventas reales por el sitio todavía; la sede de Guayaquil aún no abre')
       expect(leido).toContain('no cuenta ventas')
     })
+    it('🔴 la cifra de la caja entra en lo que lee el redactor, también con el tope de eventos', async () => {
+      mocks.db = base({ fichas: [
+        { atributo: 'metrica:loyverse:ingreso:ultimos_30_dias', provenance_tag: { metrica: { valor: 5799.3 }, datos: { ventana_hasta: '2026-11-04' } } },
+        { atributo: 'metrica:loyverse:tickets:ultimos_30_dias', provenance_tag: { metrica: { valor: 524 } } },
+      ] }).db
+      const r = await pedir()
+      const leido = JSON.stringify(r.datos).slice(0, CORTE)
+      expect(JSON.stringify(r.datos).length).toBeGreaterThan(CORTE)
+      expect(leido).toContain('5799.30 en 524 tickets')
+      expect(leido).toContain('no se suma')
+    })
     it('🔴 las ventas van antes que la lista de eventos', async () => {
       const llaves = Object.keys((await pedir()).datos)
-      expect(llaves.indexOf('ventas_del_sitio')).toBeLessThan(llaves.indexOf('conducta_de_visitas'))
+      expect(llaves.indexOf('ventas_del_negocio')).toBeLessThan(llaves.indexOf('conducta_de_visitas'))
       expect(llaves.indexOf('nota_de_la_lectura')).toBeLessThan(llaves.indexOf('conducta_de_visitas'))
     })
   })
@@ -271,6 +294,6 @@ describe('el brazo de punta a punta, con analítica y base falsas', () => {
     const r = await pedir()
     expect(r.estado).toBe('trajo')
     expect(r.datos.visitas).toBe(1000)
-    expect(r.datos.ventas_del_sitio.texto).not.toContain(SIN_VENTAS_DEL_SITIO)
+    expect(r.datos.ventas_del_negocio.por_la_web.texto).not.toContain(SIN_VENTAS_DEL_SITIO)
   })
 })
