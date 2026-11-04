@@ -104,11 +104,13 @@ export function fichasAEntradas(fichas: Fila[], snap: CatalogoSnapshot): { entra
     return true
   })
   // D4 · dos vivas del mismo atributo (corrida del portero a medias): manda la más nueva por `creado_en`; la otra se declara `reemplazada`
+  // 04-nov · por atributo Y sede: el mismo producto en otra sede es otro dato, no una versión vieja
   const porAtributo = new Map<string, Fila[]>()
   const sueltas: Fila[] = []
-  for (const f of vivas) { const a = texto(f.atributo); if (a) porAtributo.set(a, [...(porAtributo.get(a) ?? []), f]); else sueltas.push(f) }
+  for (const f of vivas) { const a = texto(f.atributo); if (a) { const k = `${a}|${texto(f.sede) ?? ''}`; porAtributo.set(k, [...(porAtributo.get(k) ?? []), f]) } else sueltas.push(f) }
   const elegidas: Fila[] = [...sueltas]
-  for (const [a, grupo] of porAtributo) {
+  for (const grupo of porAtributo.values()) {
+    const a = String(grupo[0].atributo)
     const orden = [...grupo].sort((x, y) => String(y.creado_en ?? '').localeCompare(String(x.creado_en ?? '')) || String(y.id).localeCompare(String(x.id)))
     elegidas.push(orden[0])
     for (const otra of orden.slice(1)) resumen.reemplazadas.push({ ficha_id: String(otra.id), atributo: a })
@@ -136,7 +138,7 @@ export function fichasAEntradas(fichas: Fila[], snap: CatalogoSnapshot): { entra
     const origen = f.origen as EntradaCruda['origen_ficha']
     const propiedad = f.propiedad === 'ajena' ? 'tercero' : f.propiedad === 'propia' || f.propiedad === 'incierta' ? (f.propiedad as 'propia' | 'incierta') : null
     entradas.push({
-      fuente_id: 'cerebro_vivo', tipo_id: tipo.tipo_id, atributo: texto(f.atributo), estado: 'trajo', via: 'cerebro', contenido,
+      fuente_id: 'cerebro_vivo', tipo_id: tipo.tipo_id, atributo: texto(f.atributo), ...(texto(f.sede) ? { sede: texto(f.sede) } : {}), estado: 'trajo', via: 'cerebro', contenido,
       // la fecha de la OBSERVACIÓN, no `fecha_fuente` (que es la del contenido): sin ella el dato es un hueco `sin_fecha`
       medido_en: texto(f.observado_en), vigente_hasta: texto(f.vigente_hasta), identidad: { via: 'portero' },
       origen_ficha: origen ?? null, juzgado_por: (f.juzgado_por as EntradaCruda['juzgado_por']) ?? null, propiedad,

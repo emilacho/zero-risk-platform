@@ -45,7 +45,9 @@ export async function abrirConversacion(P: PuertosDeConversa, cuerpo: unknown): 
   }
   const conTope = await conTopeDePrueba(P, c.client_id.trim(), c.semilla as Semilla)
   if (!conTope.ok) return { status: 503, cuerpo: { error: 'libro_ilegible', sin_bloque: true, detalle: conTope.detalle } }
-  const r = await P.almacen.crearEncargo({ client_id: c.client_id.trim(), dry_run: c.dry_run, semilla: conTope.semilla })
+  // 04-nov · la corrida que la abre: el id que manda el plan como `trabajo_id`
+  const corrida = typeof c.trabajo_id === 'string' && c.trabajo_id.trim() ? c.trabajo_id.trim() : null
+  const r = await P.almacen.crearEncargo({ client_id: c.client_id.trim(), dry_run: c.dry_run, semilla: corrida ? { ...conTope.semilla, corrida } : conTope.semilla })
   if (!r.ok) return { status: 500, cuerpo: { error: 'no_se_pudo_abrir', sin_bloque: true, detalle: r.error } }
   return { status: 200, cuerpo: { encargo_id: r.encargo.id, nuevo: r.nuevo, estado: r.encargo.estado, pasos_ejecutados: r.encargo.estado_del_motor.pasos_ejecutados } }
 }

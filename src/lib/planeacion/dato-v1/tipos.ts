@@ -27,6 +27,8 @@ export interface DatoV1 {
   tipo_id: string
   /** clave del atributo (p. ej. «precio:limpieza dental»): dos datos del MISMO atributo pueden contradecirse; dos del mismo tipo con otro atributo no */
   atributo: string | null
+  /** 04-nov · la sede a la que pertenece el dato, si la ficha la dice: el precio de una sede no es el de otra */
+  sede?: string | null
   valor: ValorDeDato
   origen: Origen
   estado: EstadoDeDato
@@ -69,6 +71,8 @@ export interface EntradaCruda {
   fuente_id: string
   tipo_id: string
   atributo?: string | null
+  /** la sede de la ficha */
+  sede?: string | null
   /** lo que dijo el brazo: `trajo` | `sin_dato` | `sin_respuesta` | lo demás del §3 */
   estado: EstadoDeDato | 'sin_dato'
   /** lo leído: número, texto u objeto de campos; null/ausente = nada */
