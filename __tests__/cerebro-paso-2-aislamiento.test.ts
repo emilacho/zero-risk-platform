@@ -36,7 +36,7 @@ export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|pr
 /** quién PUEDE nombrarlas: la migración y su reversa, los guiones de auditoría, el cerebro (su carpeta), la ruta del portero y estas dos pruebas */
 export const PUEDEN_NOMBRARLAS = [
   // 04-nov · DOBLE CHEQUEO EN SECO: la foto previa LEE fichas para la base en memoria; solo GET, no escribe
-  C:/Program Files/Git/^scripts/ops/seco-plataforma/foto/.mjs$/,
+  /^scripts\/ops\/seco-plataforma\/foto\.mjs$/,
   // 01-nov · HECHOS DEL DUEÑO: su prueba siembra fichas en una base falsa para ejercer la carpeta; no toca la real
   /^__tests__\/hechos-del-dueno\.test\.ts$/,
   // 01-nov · ESLOGAN REAL: su prueba siembra una tabla vacía en una base falsa para ejercer la carpeta; no toca la real
