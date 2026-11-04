@@ -21,7 +21,9 @@ describe('lo de venta anterior a una fecha', () => {
   const dp = leerDatosDePrueba({ pedidos_de_prueba_hasta: '2026-11-04' })
   it('🔴 deja fuera carrito, cobro y pedido anteriores; las visitas siguen', () => {
     const q = condicionesHogQL(dp)
-    expect(q).toContain("not (match(event, '^(cart|checkout|order|payment|purchase|pedido|pago|compra)') and timestamp < parseDateTimeBestEffort('2026-11-04'))")
+    expect(q).toContain("not ((event like 'cart%' or event like 'checkout%' or event like 'order%' or event like 'payment%' or event like 'purchase%' or event like 'pedido%' or event like 'pago%' or event like 'compra%') and timestamp < parseDateTimeBestEffort('2026-11-04'))")
+    // en producción esta condición hacía contestar 504 a la analítica
+    expect(q).not.toContain('match(')
     expect(new RegExp('^(cart|checkout|order|payment|purchase|pedido|pago|compra)').test('$pageview')).toBe(false)
     expect(new RegExp('^(cart|checkout|order|payment|purchase|pedido|pago|compra)').test('menu_viewed')).toBe(false)
   })
