@@ -31,7 +31,8 @@ export async function POST(request: Request) {
       : null
     if (!r) return NextResponse.json({ error: 'entrada_invalida', errores: ['`accion` debe ser abrir, reintentar, correr o cerrar'] }, { status: 400 })
     const { status, ...cuerpo } = r
-    return NextResponse.json(cuerpo, { status })
+    // 04-nov (firma de Lenovo): `corrida_id` = `plan_corridas.id`, el `trabajo_id` de tipo `plan` de cada llamada · no está si la respuesta no trae la fila
+    return NextResponse.json('fila' in cuerpo ? { ...cuerpo, corrida_id: cuerpo.fila.id } : cuerpo, { status })
   } catch (e) {
     return NextResponse.json({ error: 'plan_corridas_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

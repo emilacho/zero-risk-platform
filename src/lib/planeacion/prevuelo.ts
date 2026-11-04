@@ -78,6 +78,8 @@ export interface Decision {
   declara: string[]
   sube_la_ficha_a?: number
   corrida?: string
+  /** `plan_corridas.id` · 04-nov (firma de Lenovo): es el `trabajo_id` de tipo `plan` de cada llamada · no está si la corrida no se abrió */
+  corrida_id?: string
 }
 
 const UUIDISH = /^[A-Za-z0-9_-]{8,64}$/
@@ -157,9 +159,9 @@ export async function prevuelo(
     if (ab.error === 'corrida_activa') return noCorre(dry, 'corrida_activa', `el cliente ya tiene la corrida «${ab.corrida_activa}» ${ab.estado} desde ${ab.desde}`, { corrida: ab.corrida_activa })
     return noCorre(dry, 'dry_run_distinto', 'un re-disparo real no continúa una corrida de ensayo (ni al revés)')
   }
-  if (ab.accion === 'terminada') return { ...base(dry), decision: 'terminada', motivo: `la corrida ya terminó (${ab.fila.estado})`, corrida, espera_desde: ab.fila.espera_desde, vence_en: ab.fila.vence_en, intentos: ab.fila.intentos }
+  if (ab.accion === 'terminada') return { ...base(dry), decision: 'terminada', motivo: `la corrida ya terminó (${ab.fila.estado})`, corrida, corrida_id: ab.fila.id, espera_desde: ab.fila.espera_desde, vence_en: ab.fila.vence_en, intentos: ab.fila.intentos }
   const fila = ab.fila
-  const comun = { corrida, espera_desde: fila.espera_desde, vence_en: fila.vence_en, intentos: fila.intentos }
+  const comun = { corrida, corrida_id: fila.id, espera_desde: fila.espera_desde, vence_en: fila.vence_en, intentos: fila.intentos }
   if (fila.estado === 'corriendo') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'la corrida ya está corriendo: este re-disparo no hace nada (un solo plan)', ...comun }
 
   // 6 · la señal «cerebro listo» (se lee ANTES de vencer: la lectura del 45:00 cuenta)
@@ -205,7 +207,7 @@ export async function prevuelo(
 }
 
 /** un re-disparo que espera: avanza `intentos` con compare-and-set (gana UNO); el que pierde NO hace nada */
-async function esperarMas(P: PuertosDePrevuelo, client_id: string, dry: boolean, comun: Pick<Decision, 'corrida' | 'espera_desde' | 'vence_en' | 'intentos'>, minutos: number, motivo: string, completando: boolean, relleno: boolean): Promise<Decision> {
+async function esperarMas(P: PuertosDePrevuelo, client_id: string, dry: boolean, comun: Pick<Decision, 'corrida' | 'corrida_id' | 'espera_desde' | 'vence_en' | 'intentos'>, minutos: number, motivo: string, completando: boolean, relleno: boolean): Promise<Decision> {
   const r = await reintentar(P.corridas, { client_id, corrida: comun.corrida as string, intentos_esperado: comun.intentos as number })
   if (r.status === 409) return noCorre(dry, 'corrida_no_viva', 'la corrida ya no está viva', comun)
   if (r.status === 400) return noCorre(dry, 'entrada_invalida', r.errores.join('; '), comun)
