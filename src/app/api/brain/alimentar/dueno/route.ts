@@ -1,5 +1,5 @@
 /**
- * POST /api/brain/alimentar/dueno · una oficina registra lo que respondió el dueño (`evento: 'respuesta'`, por omisión) o una pregunta que le hizo (`evento: 'pregunta'`).
+ * POST /api/brain/alimentar/dueno · una oficina registra lo que respondió el dueño (`evento: 'respuesta'`, por omisión), una pregunta que le hizo (`evento: 'pregunta'`) o descarta preguntas pendientes como obsoletas (`evento: 'descartar'`, 04-nov).
  *   Respuesta → ficha «confirmada por el dueño» (origen dueno, cita literal, canal, fecha); una respuesta nueva al mismo tema REEMPLAZA a la anterior (la vieja queda archivada).
  *   Pregunta  → antes de registrarla dice si ya se respondió o si otra oficina ya la hizo y espera.
  * GET  /api/brain/alimentar/dueno?client_id=&tema=&sede_clave=&canal=&limite= (canal exacto; limite 1-100, por omisión 20 o 5 con tema; `total` y `recortado` en la respuesta) · ¿ya se respondió? cuándo, por qué canal, y qué preguntas siguen pendientes. El agente decide si la respuesta sigue vigente.

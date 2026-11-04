@@ -7,7 +7,7 @@
  *  · La ronda 2 la conduce el mismo plan al volver: «abrir» con la misma corrida devuelve este encargo. No hay un segundo conductor.
  *  · Sin vencimiento y sin gasto mientras espera. Lo que no pueda salir avisa UNA vez en #alertas.
  */
-import { preguntarAlDueno, recogerRespuestas, type PuertosDelBuzon } from './buzon'
+import { prepararPreguntas, preguntarAlDueno, recogerRespuestas, temaDe, type PuertosDelBuzon } from './buzon'
 import { ESPERANDO_AL_DUENO, preguntasQueFaltan, type Respuesta } from './orquestador'
 import { sha256 } from './util'
 
@@ -26,6 +26,8 @@ export interface PuertoDeEsperas {
   guardar(f: { client_id: string; encargo_id: string; sobre: Record<string, unknown>; material: Record<string, unknown>; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; id: string; nueva: boolean } | { ok: false; error: string }>
   /** una lectura fallida LANZA: leer un error como «no hay espera» dejaría al plan sin volver */
   delEncargo(encargo_id: string): Promise<EsperaDeFinanzas | null>
+  /** la espera viva de un cliente: hay una sola, porque otro plan reemplaza a la anterior */
+  vivaDelCliente(client_id: string): Promise<EsperaDeFinanzas | null>
   /** de `esperando` a `soltada`: gana UNA llamada */
   soltar(id: string, ahora: Date): Promise<boolean>
   marcarDespertar(id: string, despertado: boolean, intentos: number, detalle: string): Promise<void>
@@ -39,6 +41,8 @@ export interface PuertosDePausa extends PuertosDelBuzon { esperas: PuertoDeEsper
 /** tras este número de fallos deja de insistir y avisa: un plan que no despierta lo arregla una persona */
 export const MAX_INTENTOS_DE_DESPERTAR = 3
 export const MAX_MATERIAL = 4_000_000
+/** contestó parte desde Tu oficina: se le da este margen para seguir contestando antes de que el plan arranque */
+export const SILENCIO_TRAS_RESPONDER_MIN = 15
 
 const objeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const textoDe = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
@@ -119,11 +123,41 @@ export async function atenderPausa(P: PuertosDePausa, encargo_id: string, opc: {
   // contestó todo, o contestó algo y ya no escribe más: sigue. Sin ninguna respuesta, o si aún está escribiendo, espera
   const contesto = Array.isArray(e.semilla?.respuestas_del_dueno) && e.semilla.respuestas_del_dueno.length > 0
   const siguioEscribiendo = Array.isArray(recogido.aplicadas) && recogido.aplicadas.length > 0
-  if (faltan.length && (!contesto || siguioEscribiendo)) return { status: 200, cuerpo: { esperando: true, faltan, ...recogido } }
+  const ultima = e.semilla?.ultima_respuesta_en
+  const reciente = typeof ultima === 'string' && P.ahora().getTime() - Date.parse(ultima) < SILENCIO_TRAS_RESPONDER_MIN * 60_000
+  if (faltan.length && (!contesto || siguioEscribiendo || reciente)) return { status: 200, cuerpo: { esperando: true, faltan, ...recogido } }
   if (!(await P.esperas.soltar(f.id, P.ahora()))) return { status: 200, cuerpo: { soltada: false, motivo: 'otra_llamada_la_solto' } }
   await P.almacen.guardarBuzon?.({ encargo_id, semilla: { ...e.semilla, pausa_atendida: true } })
   await P.almacen.guardar({ encargo_id, estado_del_motor: e.estado_del_motor, gasto_usd: e.gasto_usd, estado: 'en_curso' })
   return despertarAlPlan(P, { ...f, estado: 'soltada' })
+}
+
+/**
+ * `POST /api/finanzas/responder` · `{ client_id, tema, respuesta, quien }`: Emilio contesta en Tu oficina. `tema` es el de la pregunta en `cerebro_dueno_preguntas` (el `subtipo` de la decisión).
+ * Si no hay pausa, o la pregunta no es de ella, no toca nada y lo dice: quien llama la guarda por su camino de siempre. Si contestó todo, el plan sigue en el acto.
+ */
+export async function responderEnLaOficina(P: PuertosDePausa, c: Record<string, unknown>): Promise<Respuesta> {
+  const client_id = textoDe(c.client_id), tema = textoDe(c.tema), respuesta = textoDe(c.respuesta), quien = textoDe(c.quien)
+  const errores = [!client_id && '`client_id`', !tema && '`tema`', !respuesta && '`respuesta`', !quien && '`quien`'].filter(Boolean)
+  if (errores.length) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: errores.map((x) => `${x} es obligatorio`) } }
+  const f = await P.esperas.vivaDelCliente(client_id as string)
+  if (!f) return { status: 200, cuerpo: { en_pausa: false } }
+  const e = await P.almacen.leerEncargo(f.encargo_id)
+  if (!e || e.estado !== ESPERANDO_AL_DUENO) return { status: 200, cuerpo: { en_pausa: false } }
+  const arts = await P.almacen.artefactos(e.id)
+  const clave = prepararPreguntas(arts, e.semilla, { pausa: true }).aprobadas.map((q) => q.clave).find((k) => temaDe(k) === temaDe(tema as string))
+  if (!clave) return { status: 200, cuerpo: { en_pausa: true, es_de_la_pausa: false } }
+  const hora = P.ahora().toISOString()
+  const previas = Array.isArray(e.semilla?.respuestas_del_dueno) ? e.semilla.respuestas_del_dueno : []
+  const nueva = { clave, valor: respuesta as string, literal: respuesta as string }
+  const semilla = { ...e.semilla, respuestas_del_dueno: [...previas.filter((x) => x.clave !== clave), nueva], ultima_respuesta_en: hora }
+  await P.almacen.guardarBuzon?.({ encargo_id: e.id, semilla })
+  // si el cerebro falla, la respuesta ya sirve para este plan: se dice, y la decisión seguiría viva en la bandeja
+  const registro = (arts.buzon_respuestas as { preguntas?: Array<{ clave?: string; texto?: string; pregunta_id?: string | null }> } | undefined)?.preguntas?.find((x) => x.clave === clave)
+  const texto = prepararPreguntas(arts, e.semilla, { pausa: true }).aprobadas.find((q) => q.clave === clave)?.texto ?? (tema as string)
+  const guardada = await P.cerebro.registrarRespuesta({ client_id: e.client_id, tema: temaDe(clave), pregunta: registro?.texto ?? texto, respuesta: respuesta as string, mensaje_ref: `tu-oficina:${quien}:${hora}`, respondido_en: hora, pregunta_id: registro?.pregunta_id ?? null }).catch(() => ({ ok: false as const, error: 'red' }))
+  const a = await atenderPausa(P, e.id, { sinRecoger: true })
+  return { status: 200, cuerpo: { en_pausa: true, es_de_la_pausa: true, aplicada: true, clave, en_el_cerebro: guardada.ok, ...(guardada.ok ? {} : { aviso: 'el cerebro no recibió la respuesta: el plan sí la usa' }), faltan: Array.isArray(a.cuerpo.faltan) ? a.cuerpo.faltan : [], ...(a.cuerpo.soltada ? { soltada: true } : {}) } }
 }
 
 /** con varias preguntas abiertas, un texto sin número no se adivina; pero en una pausa, callarse dejaría al dueño creyendo que ya contestó */
