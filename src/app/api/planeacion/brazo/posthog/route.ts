@@ -57,7 +57,7 @@ import {
   type PedidoPuerta,
 } from '@/lib/planeacion/puertas'
 import { envolverBrazo, sinRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
-import { condicionDeLaCasa, condicionesHogQL, hayVentasEnElEmbudo, leerDatosDePrueba, rotuloDeExclusion, SIN_VENTAS_DEL_SITIO } from '@/lib/planeacion/datos-de-prueba'
+import { condicionDeLaCasa, condicionDesdeElCorte, condicionesHogQL, fundirConElCorte, hayVentasEnElEmbudo, leerDatosDePrueba, rotuloDeExclusion, SIN_VENTAS_DEL_SITIO } from '@/lib/planeacion/datos-de-prueba'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -119,14 +119,20 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
       fuente: FUENTE + ' · dominio ' + dominio + ' · últimos ' + dias + ' días',
       ...extra,
       ejecutar: () => conLimite(p.limite_ms, async () => {
-        const q = await consultar(
-          "select event, count() as n, count(distinct distinct_id) as personas from events " +
-          "where timestamp > now() - interval " + dias + " day " +
-          // el dominio sale de `$host` o, si el evento no lo trae (los de conducta), del host de `$current_url` (medido 30-sep)
-          "and coalesce(properties.$host, domain(properties.$current_url)) in ('" + escapado + "', 'www." + escapado + "')" + exclusion + ' ' +
-          'group by event order by n desc limit 40',
-        )
-        const filas = (q.results ?? []).map((f) => ({ evento: String(f[0]), veces: Number(f[1]), personas: Number(f[2]) }))
+        const embudo = async (ademas: string) => {
+          const q = await consultar(
+            "select event, count() as n, count(distinct distinct_id) as personas from events " +
+            "where timestamp > now() - interval " + dias + " day " +
+            // el dominio sale de `$host` o, si el evento no lo trae (los de conducta), del host de `$current_url` (medido 30-sep)
+            "and coalesce(properties.$host, domain(properties.$current_url)) in ('" + escapado + "', 'www." + escapado + "')" + exclusion + ademas + ' ' +
+            'group by event order by n desc limit 40',
+          )
+          return (q.results ?? []).map((f) => ({ evento: String(f[0]), veces: Number(f[1]), personas: Number(f[2]) }))
+        }
+        const desdeElCorte = condicionDesdeElCorte(prueba)
+        const filas = desdeElCorte
+          ? fundirConElCorte(...(await Promise.all([embudo(''), embudo(desdeElCorte)])))
+          : await embudo('')
         if (!filas.length) {
           return {
             hay: false as const,
