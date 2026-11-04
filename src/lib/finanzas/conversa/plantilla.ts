@@ -81,6 +81,19 @@ export const PLANTILLA_FINANCIERA: Plantilla = {
 
 export const MAX_TURNOS_DE_MODELO = 13
 
+/** 04-nov · con el acta de la mesa, finanzas solo mide viabilidad: se quitan el planteo, el ajuste y los especialistas de marketing, que ya hablaron en la mesa. Quedan el analista, el cálculo, el jefe y la firma */
+const FUERA_CON_ACTA = new Set(['redes', 'busqueda', 'medicion', 'ajuste', 'redes_2', 'busqueda_2', 'medicion_2', 'ajuste_2'])
+export function plantillaConActa(p: Plantilla): Plantilla {
+  return {
+    ...p,
+    pasos: p.pasos.flatMap((x): Paso[] => {
+      if (x.clave === 'planteo') return [codigo('planteo_del_acta', 'planteo_del_acta', R1, 'planteo')]
+      if (FUERA_CON_ACTA.has(x.clave)) return []
+      return [x.entrada.includes('planteo_fijado') ? { ...x, entrada: [...x.entrada, 'planteo'] } : x]
+    }),
+  }
+}
+
 /** el proponente de UNA plantilla: quien hace el paso `planteo` (el redactor configurado), o la omisión */
 export const proponenteDe = (p: Plantilla): string => p.pasos.find((x) => x.clave === 'planteo' && x.tipo === 'agente')?.quien ?? AGENTES.proponente
 

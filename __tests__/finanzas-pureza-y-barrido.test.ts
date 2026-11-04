@@ -53,7 +53,9 @@ export function sinDatos(texto: string, archivo: string): string {
 export function barrer(texto: string, archivo: string): string[] {
   const completo = texto.toLowerCase()
   const codigo = sinDatos(quitarComentarios(texto, archivo), archivo).toLowerCase()
-  return [...NOMBRES_CONCRETOS.filter((p) => completo.includes(p)), ...PALABRAS_DE_NEGOCIO.filter((p) => codigo.includes(p))]
+  // 04-nov · WhatsApp es una clave de canal por decisión de Emilio (18:42Z), como las demás: solo en los dos archivos que nombran canales
+  const esClaveDeCanal = (p: string) => p === 'whatsapp' && /(^|\/)(omision|sobre-el-acta)\.ts$/.test(archivo)
+  return [...NOMBRES_CONCRETOS.filter((p) => completo.includes(p)), ...PALABRAS_DE_NEGOCIO.filter((p) => codigo.includes(p) && !esClaveDeCanal(p))]
 }
 
 const DE_CARPETA = [...archivosDe('src/lib/finanzas'), ...archivosDe('src/app/api/finanzas')].filter((x) => /\.(ts|tsx|js|mjs)$/.test(x))

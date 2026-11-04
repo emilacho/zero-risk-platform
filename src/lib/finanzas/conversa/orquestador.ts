@@ -16,7 +16,9 @@ import type { Bloque } from '../tipos'
 import { entradaDesdeLaConversa } from './entrada'
 import { extraerJson, normalizarEquilibrio, respuestaDeEquilibrioValida, sanearProcedencia, validarAcuerdo, validarConsulta, validarPlanteo, validarProcedencia, type AcuerdoV1, type ConsultaV1, type PlanteoV1 } from './esquemas'
 import { CANALES_VALIDOS, especialistasQueHablan } from './omision'
-import { AGENTES, PLANTILLA_FINANCIERA, plantillaConRedactor, reservaDelCierre2, TOPE_DEL_ENCARGO_USD } from './plantilla'
+import { AGENTES, PLANTILLA_FINANCIERA, plantillaConActa, plantillaConRedactor, reservaDelCierre2, TOPE_DEL_ENCARGO_USD } from './plantilla'
+import { validarActa, type ActaV1 } from '../../planeacion/mesa/acta'
+import { LA_MESA_YA_DECIDIO, planteoDelActa, viabilidadDelBloque } from './sobre-el-acta'
 import { prepararPreguntas } from './buzon'
 import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type PuertosDeConversa, type Semilla, type TopeDePrueba, type TurnoDeConversa } from './puertos'
 import { sha256 } from './util'
@@ -44,6 +46,12 @@ export async function abrirConversacion(P: PuertosDeConversa, cuerpo: unknown): 
   if (datosCrudos !== undefined) {
     const v = validarProcedencia(datosCrudos)
     if (!v.ok) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: v.errores } }
+  }
+  // 04-nov · un acta mal formada no se ignora: sin esto, el plan seguiría calculando con otro reparto sin decirlo
+  const actaCruda = (c.semilla as Record<string, unknown>).acta
+  if (actaCruda !== undefined) {
+    const v = validarActa(actaCruda)
+    if (!v.ok) return { status: 400, cuerpo: { error: 'acta_invalida', errores: v.errores } }
   }
   // 04-nov · la corrida del plan nace con el tope de hoy: el de la plantilla queda de piso
   const semillaDelPlan: Semilla = typeof c.trabajo_id === 'string' && c.trabajo_id.trim() ? { tope_encargo_usd: TOPE_DEL_ENCARGO_USD, ...(c.semilla as Semilla) } : (c.semilla as Semilla)
@@ -100,6 +108,7 @@ function abrirFinanciera(e: EncargoDeConversa): ResultadoDePaso {
     costo_usd: 0,
     artefacto: {
       cliente: e.client_id, rubro: s.rubro ?? null, pais: s.pais ?? null, moneda: s.moneda ?? null, fecha: s.fecha ?? null,
+      ...(s.acta ? { acta: s.acta } : {}),
       ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, ...(s.manual_completo !== undefined && s.manual_completo !== null ? { manual_completo: s.manual_completo } : {}), brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
       datos, linea_base_por_semana: typeof s.linea_base_por_semana === 'number' && s.linea_base_por_semana > 0 ? s.linea_base_por_semana : null, referencias: s.referencias ?? [], evento_alterno: s.evento_alterno ?? {}, pisos: s.pisos ?? {},
       corrida_es_de_ensayo: s.corrida_es_de_ensayo === true, planteo_inicial: planteoInicial, notas_del_dueno: [], datos_del_dueno: [],
@@ -251,7 +260,7 @@ export function plantillaDelEncargo(e: EncargoDeConversa, turnos?: TurnoDeConver
   // la reserva del cierre de la ronda 2 sale de lo que COSTÓ el cierre de la ronda 1 de este encargo (si ya se hizo)
   const cierre1 = (turnos ?? []).filter((x) => x.paso === 'cierre' && x.estado === 'hecho' && x.costo_usd > 0).at(-1)?.costo_usd
   // oficina de marketing (F2): el proponente es el redactor configurado (dato), no un nombre fijo en el código
-  const conRedactor = plantillaConRedactor(PLANTILLA_FINANCIERA, redactor)
+  const conRedactor = sem?.acta ? plantillaConActa(plantillaConRedactor(PLANTILLA_FINANCIERA, redactor)) : plantillaConRedactor(PLANTILLA_FINANCIERA, redactor)
   const base: Plantilla = cierre1 === undefined ? conRedactor : { ...conRedactor, pasos: conRedactor.pasos.map((p) => (p.clave === 'cierre_2' ? { ...p, tope_usd: reservaDelCierre2(cierre1) } : p)) }
   const prueba = topeDePruebaValido(sem?.tope_de_prueba) ? { ...sem.tope_de_prueba } : undefined
   const tope = topeEfectivoDelEncargo(sem)
@@ -399,11 +408,14 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redac
   if (paso.tipo === 'codigo') {
     switch (paso.funcion) {
       case 'abrir_financiera': resultado = abrirFinanciera(e); break
+      case 'planteo_del_acta': resultado = { costo_usd: 0, artefacto: planteoDelActa(e.semilla.acta as ActaV1, (arts.expediente ?? {}) as never) }; break
       case 'calcular_bloque': resultado = calcularBloque(e, arts, 1); break
       case 'calcular_bloque_2': resultado = calcularBloque(e, arts, 2); break
       case 'cierre_financiero': {
         const c = await cerrar(P, e, arts)
-        resultado = { costo_usd: 0, artefacto: c.artefacto }
+        // con la mesa, la firma dice si el plan se paga: es lo que le da a la mesa su única vuelta
+        const delBloque = ((arts.bloque_2 as { hay_bloque?: unknown; bloque?: unknown } | undefined)?.hay_bloque ? arts.bloque_2 : arts.bloque) as { bloque?: Bloque } | undefined
+        resultado = { costo_usd: 0, artefacto: e.semilla.acta ? { ...c.artefacto, viabilidad: viabilidadDelBloque(delBloque?.bloque) } : c.artefacto }
         tablero_id = c.tablero_id ?? tablero_id
         estadoFinal = c.sin_acuerdo ? 'sin_acuerdo' : 'cerrado'
         break
@@ -418,6 +430,7 @@ async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redac
     // 2 · el contexto del agente: solo los artefactos que su paso declara
     const contexto: Record<string, unknown> = {}
     for (const nombre of paso.entrada) if (arts[nombre]) contexto[nombre] = arts[nombre]
+    if (e.semilla.acta) contexto.la_mesa_ya_decidio = LA_MESA_YA_DECIDIO
     const dadas = respuestasDeLaSemilla(e.semilla)
     // 04-nov · lo que el dueño escribió sin responder a una pregunta queda en el registro del buzón: el hilo de esta ruta no lee nada (`slackNoConfigurado`) y sin esto nadie lo veía
     const delBuzon = Array.isArray(arts.buzon_respuestas?.notas) ? (arts.buzon_respuestas.notas as Array<{ ts?: unknown; literal?: unknown }>).filter((x) => typeof x?.literal === 'string' && x.literal.trim()).map((x) => ({ ts: String(x.ts ?? ''), texto: String(x.literal) })) : []

@@ -32,6 +32,10 @@ const rangoDe = (v: unknown, nombre: string, e: string[], opciones: { positivo?:
 // ───────────────────────────────────────────────────────── planteo.v1
 export interface CanalPlanteado { canal: string; peso: number; piso_diario?: number; activo?: boolean; condicion?: string }
 export interface PlanteoV1 {
+  /** 04-nov · lo pone el CÓDIGO cuando el planteo sale del acta de la mesa: el reparto es el suyo */
+  reparto_de_la_mesa?: boolean
+  referencia_de_la_mesa?: { min: number; max: number; base?: number }
+  huecos_de_la_mesa?: string[]
   meta_por_semana: number
   meta_ambiciosa_por_semana?: number
   zonas: string[]

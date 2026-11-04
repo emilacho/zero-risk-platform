@@ -353,3 +353,20 @@ describe('P21 · hallazgo de CC2: el título natural de la sección', () => {
   it.each(['Lo que no hacemos', 'Lo que NO hacemos', 'Lo que no hagamos'])('🔴 bajo «%s» no marca', (titulo) => { expect(chequeo('## ' + titulo + '\n- TikTok cada semana', ctx)).toEqual([]) })
   it('🔴 la misma viñeta fuera de esa sección sí marca', () => { expect(chequeo('## Hoja de ruta\n- TikTok cada semana', ctx)).toHaveLength(1) })
 })
+
+describe('lo que la mesa le entrega a finanzas', () => {
+  it('🔴 el acta lleva el costo de cada especialista y quién no aportó', async () => {
+    const m = mundo({ responder: (a) => (a === INTEGRANTES.crecimiento ? 'no es json' : undefined) })
+    const r = await hastaElFin(m.P, (await abrir(m.P)).cuerpo.encargo_id as string)
+    const acta = r.cuerpo.acta as { costos_de_la_mesa: Record<string, unknown>; aportes_que_faltan: string[] }
+    expect(acta.costos_de_la_mesa).toMatchObject({ redes: { min: 1, max: 2 }, medicion: { min: 1, max: 2 } })
+    expect(acta.aportes_que_faltan).toEqual(['crecimiento'])
+    expect(validarActa(acta).ok).toBe(true)
+  })
+  it('🔴 un aporte sin costo no aparece con costo inventado', async () => {
+    const { costo_por_resultado: _c, ...sin } = APORTE
+    const m = mundo({ responder: (a, p) => (p !== PASO_CONSOLIDA && p !== 'mesa-estrategia-jefe-marketing' && a === INTEGRANTES.redes ? sin : undefined) })
+    const r = await hastaElFin(m.P, (await abrir(m.P)).cuerpo.encargo_id as string)
+    expect((r.cuerpo.acta as { costos_de_la_mesa: Record<string, unknown> }).costos_de_la_mesa).not.toHaveProperty('redes')
+  })
+})
