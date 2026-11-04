@@ -57,7 +57,9 @@ import {
   type PedidoPuerta,
 } from '@/lib/planeacion/puertas'
 import { envolverBrazo, sinRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
-import { condicionDeLaCasa, condicionDesdeElCorte, condicionesHogQL, fundirConElCorte, hayVentasEnElEmbudo, leerDatosDePrueba, rotuloDeExclusion, SIN_VENTAS_DEL_SITIO } from '@/lib/planeacion/datos-de-prueba'
+import { condicionDeLaCasa, condicionesHogQL, leerDatosDePrueba, rotuloDeExclusion, soloConducta } from '@/lib/planeacion/datos-de-prueba'
+import { leerVentasDelSitio, NOTA_DE_LA_ANALITICA, type DbDeVentas, type VentasDelSitio } from '@/lib/planeacion/ventas-del-sitio'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -71,6 +73,13 @@ export const LIMITACION =
 interface Consulta { readonly results?: ReadonlyArray<ReadonlyArray<unknown>> }
 
 async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
+  // las ventas no dependen de la analítica: se leen aunque ella falle
+  const ventas = await (async () => leerVentasDelSitio(getSupabaseAdmin() as unknown as DbDeVentas, p.client_id))().catch((): VentasDelSitio | null => null)
+  const r = await leerAnalitica(p, ventas)
+  return r.estado === 'trajo' || !ventas ? r : { ...r, motivo: String(r.motivo ?? '') + ' · Ventas del sitio: ' + ventas.texto }
+}
+
+async function leerAnalitica(p: PedidoPuerta, ventas: VentasDelSitio | null): Promise<RespuestaBrazo> {
   const obj = p.objetivo as string
   const extra = extraDe(p)
 
@@ -119,20 +128,14 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
       fuente: FUENTE + ' · dominio ' + dominio + ' · últimos ' + dias + ' días',
       ...extra,
       ejecutar: () => conLimite(p.limite_ms, async () => {
-        const embudo = async (ademas: string) => {
-          const q = await consultar(
-            "select event, count() as n, count(distinct distinct_id) as personas from events " +
-            "where timestamp > now() - interval " + dias + " day " +
-            // el dominio sale de `$host` o, si el evento no lo trae (los de conducta), del host de `$current_url` (medido 30-sep)
-            "and coalesce(properties.$host, domain(properties.$current_url)) in ('" + escapado + "', 'www." + escapado + "')" + exclusion + ademas + ' ' +
-            'group by event order by n desc limit 40',
-          )
-          return (q.results ?? []).map((f) => ({ evento: String(f[0]), veces: Number(f[1]), personas: Number(f[2]) }))
-        }
-        const desdeElCorte = condicionDesdeElCorte(prueba)
-        const filas = desdeElCorte
-          ? fundirConElCorte(...(await Promise.all([embudo(''), embudo(desdeElCorte)])))
-          : await embudo('')
+        const q = await consultar(
+          "select event, count() as n, count(distinct distinct_id) as personas from events " +
+          "where timestamp > now() - interval " + dias + " day " +
+          // el dominio sale de `$host` o, si el evento no lo trae (los de conducta), del host de `$current_url` (medido 30-sep)
+          "and coalesce(properties.$host, domain(properties.$current_url)) in ('" + escapado + "', 'www." + escapado + "')" + exclusion + ' ' +
+          'group by event order by n desc limit 40',
+        )
+        const filas = soloConducta((q.results ?? []).map((f) => ({ evento: String(f[0]), veces: Number(f[1]), personas: Number(f[2]) })))
         if (!filas.length) {
           return {
             hay: false as const,
@@ -154,8 +157,9 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
             ventana_dias: dias,
             visitas: visitas ? visitas.veces : 0,
             personas_distintas: visitas ? visitas.personas : 0,
-            embudo: filas,
-            ...(hayVentasEnElEmbudo(filas.map((f) => f.evento)) ? {} : { ventas_por_el_sitio: SIN_VENTAS_DEL_SITIO }),
+            conducta_de_visitas: filas,
+            nota_de_la_lectura: NOTA_DE_LA_ANALITICA,
+            ...(ventas ? { ventas_del_sitio: ventas } : {}),
           },
         }
       }),
