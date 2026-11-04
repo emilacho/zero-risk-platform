@@ -23,6 +23,36 @@ const cod = (r: Resultado) => r.marcas.map((m) => m.codigo)
 const avisos = (r: Resultado) => (r.avisos_p10 ?? []).map((m) => m.codigo)
 const de = (r: Resultado, c: string) => [...r.marcas, ...(r.avisos_p10 ?? [])].find((m) => m.codigo === c)
 
+describe('el plan sin rótulos internos (Emilio, 15:37Z)', () => {
+  const fin = { estado: 'sin_firma', motivo: 'sin_firma', numeros: [{ clave: 'pauta_semanal', valor: 200, tipo: 'supuesto' }], semanas: 12, resumen: { lineas: ['Meta: 130'], alertas: ['ojo'] } }
+  const conFin = { ...CTX, finanzas: fin }
+  const limpio = '# Plan\n\nLa pauta es de $200 por semana.\n'
+  it('🔴 P9 ya no pide decir «sin firma» ni rotular cifras', () => {
+    expect(V.revisarPlan(limpio, conFin).marcas.map((m) => m.codigo)).toContain('P9')
+    expect(N.revisarPlan(limpio, conFin).marcas.map((m) => m.codigo)).not.toContain('P9')
+  })
+  it('🔴 P15 marca lo que el plan real traía', () => {
+    const e = de(N.revisarPlan(PLAN_B, CTX), 'P15')!
+    expect(e.ejemplos.join(' ')).toMatch(/sin firma|oficina financiera/i)
+  })
+  it.each(['La oficina financiera estimó el costo.', 'Costo de $3 (estimación sin firma).', 'Es un supuesto de la oficina.', 'Dato pendiente de confirmación.', 'Quedó una pregunta sin responder.', 'Esto no tiene respuesta todavía.', 'La oficina propone $434.'])('🔴 marca «%s»', (frase) => {
+    expect(cod(N.revisarPlan('# Plan\n\n' + frase + '\n', CTX))).toContain('P15')
+  })
+  it.each(['Responder en menos de una hora los mensajes sin responder en Instagram.', 'Abrimos cerca de la oficina de turismo.', 'Una estimación de 30 visitas al día.', 'La fuente es [D12].'])('🔴 no marca «%s»', (frase) => {
+    expect(cod(N.revisarPlan('# Plan\n\n' + frase + '\n', CTX))).not.toContain('P15')
+  })
+  it('🔴 el pedido al redactor ya no le ordena declararlo', () => {
+    const js = parcharModulo(CRUDO)
+    if (!js.includes('function lineasDeFinanzas(')) return
+    const lineas = new Function(js + '\nreturn lineasDeFinanzas')() as (f: unknown) => string[]
+    for (const caso of [fin, { estado: 'firmado', numeros: fin.numeros, resumen: fin.resumen }, { motivo: 'vencido' }]) {
+      const t = lineas(caso).join('\n')
+      expect(t).not.toMatch(/SIN FIRMA|DICE de forma visible|el plan los dice|NO están firmados/)
+      expect(t).toContain('NUNCA menciones a la oficina financiera')
+    }
+  })
+})
+
 describe('el plan real del 4-nov', () => {
   const v = V.revisarPlan(PLAN_B, CTX), r = N.revisarPlan(PLAN_B, CTX)
   it('antes daba las falsas alarmas que vio CC3 · la prueba mide un cambio de verdad', () => {
@@ -32,7 +62,7 @@ describe('el plan real del 4-nov', () => {
     for (const c of ['P4', 'P5', 'P7', 'P10a', 'P10l']) expect(cod(r), c).not.toContain(c)
   })
   it('🔴 lo único que marca es real: las cifras no firmadas y los adicionales', () => {
-    expect(cod(r)).toEqual(['P8', 'P11'])
+    expect(cod(r)).toEqual(['P8', 'P15', 'P11'])
     expect(de(r, 'P8')!.ejemplos).toEqual(expect.arrayContaining(['$10,63', '$1.382']))
   })
   it('🔴 lo que declaró el dueño no es una cifra suelta: $200 y su mes, $800', () => {
@@ -59,7 +89,7 @@ describe('el plan real del 4-nov', () => {
   it('lo que afirma sin cita sigue visible como aviso', () => {
     expect(avisos(r)).toEqual(expect.arrayContaining(['P10b', 'P10d', 'P10f']))
   })
-  it('la versión A da lo mismo', () => { expect(cod(N.revisarPlan(PLAN_A, CTX))).toEqual(['P8', 'P11']) })
+  it('la versión A da lo mismo', () => { expect(cod(N.revisarPlan(PLAN_A, CTX))).toEqual(['P8', 'P15', 'P11']) })
 })
 
 describe('otro plan guardado', () => {
