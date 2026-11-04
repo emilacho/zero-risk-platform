@@ -16,6 +16,8 @@ describe('al jefe le llega lo que marcó el código', () => {
     expect(t).toContain('Compruébalo')
     expect(t).toContain('a la firmada')
     expect(t).toContain('Si no es real, no le pongas ficha')
+    // «bloquea» decide si hay corrección: como sugerencia, nadie la corregiría
+    expect(t).toContain('ponle tu ficha con «bloquea»')
   })
   it('🔴 sin marcas el pedido queda como antes', () => { expect(fondo('plan')).not.toContain('chequeo por código') })
   it('🔴 solo en el plan', () => {

@@ -55,6 +55,9 @@ describe('umbrales y horarios · sin falsas alarmas, con otro cliente cualquiera
   it('🔴 del plan solo vale el rango de lo que abre, no cualquier «lunes a martes»', () => {
     expect(marca('Las reuniones son lunes a martes. El local abre jueves a lunes. Del viernes no hay respuesta hasta el sábado.')).not.toContain('P20')
   })
+  it('🔴 umbrales muy por debajo del costo también son otra unidad', () => {
+    expect(marca('Costo por resultado estimado: $40,00.\n\n| Costo por debajo de $5,00 | Sigo |\n| Costo supera $9,00 | Paro |\n')).toContain('P18')
+  })
   it('🔴 sin costo o sin umbrales, calla', () => {
     expect(marca('| Costo por debajo de $5,00 | Sigo |')).not.toContain('P18')
     expect(marca('Costo por resultado estimado: $4,00.')).not.toContain('P18')
