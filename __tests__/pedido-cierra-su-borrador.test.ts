@@ -51,7 +51,7 @@ describe('🔴 lo que no se mandó se queda, y se dice qué es', () => {
     const f = filas(db)[0]
     expect(f.documento_id).not.toBe('v1')
     expect(f.revision).toBe(18)
-    expect(f.acciones).toMatchObject({ campos: { eslogan: 'Otro eslogan' }, como: { eslogan: 'elegir' }, notas: {}, libre: '', detalle: {} })
+    expect(f.acciones).toEqual({ campos: { eslogan: 'Otro eslogan' }, como: { eslogan: 'elegir' }, notas: {}, libre: '', detalle: {} })
   })
   it('🔴 el mismo campo con otro texto no se borra: es otro cambio', async () => {
     const db = base(acciones({ campos: { vision: 'Otra visión, escrita después' } }))
