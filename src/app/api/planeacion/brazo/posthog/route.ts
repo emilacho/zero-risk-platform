@@ -57,7 +57,7 @@ import {
   type PedidoPuerta,
 } from '@/lib/planeacion/puertas'
 import { envolverBrazo, sinRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
-import { condicionesHogQL, leerDatosDePrueba, rotuloDeExclusion } from '@/lib/planeacion/datos-de-prueba'
+import { condicionDeLaCasa, condicionesHogQL, hayVentasEnElEmbudo, leerDatosDePrueba, rotuloDeExclusion, SIN_VENTAS_DEL_SITIO } from '@/lib/planeacion/datos-de-prueba'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -109,7 +109,7 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   const base = dominio.toLowerCase().replace(/^www\./, '')
   // 01-nov · pruebas del dueño / de la agencia (convención `clients.config.datos_de_prueba`): se dejan fuera ANTES de contar. Ausente = nada cambia.
   const prueba = leerDatosDePrueba(p.params?.datos_de_prueba)
-  const exclusion = condicionesHogQL(prueba)
+  const exclusion = condicionesHogQL(prueba) + condicionDeLaCasa()
   const escapado = base.replace(/'/g, "''")
 
   try {
@@ -149,6 +149,7 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
             visitas: visitas ? visitas.veces : 0,
             personas_distintas: visitas ? visitas.personas : 0,
             embudo: filas,
+            ...(hayVentasEnElEmbudo(filas.map((f) => f.evento)) ? {} : { ventas_por_el_sitio: SIN_VENTAS_DEL_SITIO }),
           },
         }
       }),
