@@ -97,7 +97,7 @@ describe('el sobre', () => {
   it('🔴 va por la misma regla de la sala que usaba el alta, y pide rehacer aunque el cliente ya tenga plan', () => {
     const s = sobreDelPlan({ client_id: C, manual_id: 'm1' }, 'c-1') as { source: string; intent: string; payload: Record<string, unknown>; idempotency_key: string; correlation_id: string }
     expect(s).toMatchObject({ source: 'alta/journey-completed', intent: 'planear', idempotency_key: 'manual:m1:planear', logical_period: 'manual:m1', tenant_id: C, client_id: C, correlation_id: 'c-1' })
-    expect(s.payload).toMatchObject({ plan_v3: true, corrida: 'manual:m1:planear', forzar: true, force_restart: false, dry_run: false, client_id: C })
+    expect(s.payload).toMatchObject({ plan_v3: true, corrida: 'manual:m1:planear', forzar: true, force_restart: true, dry_run: false, client_id: C })
     expect(String(s.payload.corrida).length).toBeLessThanOrEqual(120)
   })
 

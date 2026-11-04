@@ -11,12 +11,18 @@ export type ResultadoDelPedidoDePlan =
   | { pedido: true; repetido: boolean; event_id: string | null }
   | { pedido: false; error: string }
 
+/**
+ * 04-nov · aprobar el manual pide un plan NUEVO: sin `force_restart`, el redactor del plan contesta con lo guardado por empleado, escrito con el manual anterior, a US$ 0 y sin avisar.
+ * No duplica planes: de eso se encarga la clave de la corrida, una por versión del manual o por alta.
+ */
+const conPlanNuevo = (sobre: Record<string, unknown>): Record<string, unknown> => ({ ...sobre, payload: { ...((sobre.payload ?? {}) as Record<string, unknown>), force_restart: true } })
+
 export function sobreDelPlan(p: PedidoDePlan, correlation_id: string = randomUUID()): Record<string, unknown> {
   const corrida = `manual:${p.manual_id}:planear`
   return {
     source: 'alta/journey-completed',
     intent: 'planear',
-    payload: { pedido: 'plan de 90 dias', dry_run: false, plan_v3: true, corrida, forzar: true, force_restart: false, client_id: p.client_id, desde_worker: 'tablero-aprobar-manual', journey_id: p.manual_id },
+    payload: { pedido: 'plan de 90 dias', dry_run: false, plan_v3: true, corrida, forzar: true, force_restart: true, client_id: p.client_id, desde_worker: 'tablero-aprobar-manual', journey_id: p.manual_id },
     idempotency_key: corrida,
     logical_period: `manual:${p.manual_id}`,
     tenant_id: p.client_id,
@@ -81,7 +87,7 @@ export async function soltarEsperaYPedirPlan(db: BaseDeEsperas, p: PedidoDePlan 
     // el alta guardó esperas más viejas de este cliente: ya no las suelta nadie
     await esperas().update({ estado: 'reemplazada', actualizado_en: hora }).eq('client_id', p.client_id).eq('tipo', 'manual').eq('estado', 'esperando')
   }
-  const r = await mandarSobre(espera.sobre as Record<string, unknown>, e)
+  const r = await mandarSobre(conPlanNuevo(espera.sobre as Record<string, unknown>), e)
   await esperas().update({ despertado: r.pedido, despertar_detalle: detalleDe(r), actualizado_en: new Date().toISOString() }).eq('id', espera.id)
   return r
 }
