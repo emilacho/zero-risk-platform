@@ -52,6 +52,8 @@ export interface PuertosDePrevuelo {
   ficha(client_id: string): Promise<LecturaDeFicha>
   cupo(client_id: string): Promise<LecturaDeCupo>
   senal(client_id: string): Promise<LecturaDeSenal>
+  /** 04-nov · el interruptor de la mesa de estrategia: encendida suma su tope a lo que exige el cupo y le avisa al flujo; sin él, apagada */
+  mesaEncendida?(): Promise<boolean>
   /** la espera con la que vuelve una corrida que pausó la oficina financiera */
   esperaDeReanudacion?(id: string): Promise<{ client_id: string; corrida: string | null; estado: string; creado_en: string } | null>
 }
@@ -63,6 +65,8 @@ export type MotivoDeNoCorre =
 
 export interface Decision {
   decision: 'correr' | 'esperar' | 'correr_con_lo_del_alta' | 'ya_en_marcha' | 'terminada' | 'no_corre'
+  /** 04-nov · solo si la mesa de estrategia está encendida: el flujo pasa por ella. Apagada, el campo no existe */
+  mesa?: true
   motivo: string
   detalle?: string
   /** SOLO con `listo:true` leído en esta llamada: es lo único que autoriza salir a Apify a buscar lo que falta */
@@ -95,9 +99,9 @@ const r2 = (x: number) => Math.round(x * 100) / 100
 const base = (dry: boolean): Decision => ({ decision: 'no_corre', motivo: '', relleno_permitido: false, dry_run: dry, huecos_tipos: [], huecos_sin_tipo: [], declara: [] })
 const noCorre = (dry: boolean, motivo: MotivoDeNoCorre, detalle?: string, extra: Partial<Decision> = {}): Decision => ({ ...base(dry), decision: 'no_corre', motivo, ...(detalle ? { detalle } : {}), ...extra })
 
-/** la suma de topes por tramo del catálogo (recolección + oficina + redacción + jefatura): lo que el plan puede gastar como máximo, SIN el cupo de la ficha */
-export function sumaDeTopes(snap: CatalogoSnapshot): number {
-  return r2(['recoleccion', 'oficina', 'redaccion', 'jefatura'].reduce((a, t) => a + (snap.tope(t) ?? 0), 0))
+/** la suma de topes por tramo del catálogo (recolección + oficina + redacción + jefatura, y la mesa si está encendida): lo que el plan puede gastar como máximo, SIN el cupo de la ficha. Con la mesa apagada, su tope no cuenta */
+export function sumaDeTopes(snap: CatalogoSnapshot, conMesa = false): number {
+  return r2([...(conMesa ? ['mesa'] : []), 'recoleccion', 'oficina', 'redaccion', 'jefatura'].reduce((a, t) => a + (snap.tope(t) ?? 0), 0))
 }
 
 /** lo que `huecos[]` dice (por `funcion`) traducido a los tipos del catálogo que esa fuente provee */
@@ -113,6 +117,7 @@ export function huecosATipos(huecos: SenalDeListo['huecos'], snap: CatalogoSnaps
   return { tipos: [...tipos], sin_tipo: sin }
 }
 
+export interface EntradaDelPrevuelo { client_id: unknown; corrida: unknown; dry_run?: unknown; espera_max_min?: number; reanudar_esperas_id?: unknown }
 export interface ReglasDePrevuelo {
   /** ¿la señal, leída en esta llamada, autoriza el relleno de Apify? (la mutación del seco rompe ESTA regla) */
   autorizaRelleno(s: SenalDeListo | null): boolean
@@ -120,9 +125,22 @@ export interface ReglasDePrevuelo {
 export const REGLAS_DE_PREVUELO: ReglasDePrevuelo = { autorizaRelleno: (s) => s !== null && s.listo === true }
 
 export async function prevuelo(
-  e: { client_id: unknown; corrida: unknown; dry_run?: unknown; espera_max_min?: number; reanudar_esperas_id?: unknown },
+  e: EntradaDelPrevuelo,
   P: PuertosDePrevuelo,
   reglas: ReglasDePrevuelo = REGLAS_DE_PREVUELO,
+): Promise<Decision> {
+  let conMesa = false
+  try { conMesa = P.mesaEncendida ? await P.mesaEncendida() : false } catch (x) { return noCorre(e.dry_run === true, 'lectura_fallida', `interruptor de la mesa: ${x instanceof Error ? x.message : String(x)}`) }
+  const d = await decidir(e, P, reglas, conMesa)
+  // apagada, la decisión no cambia en nada: ni un campo de más
+  return conMesa && d.decision !== 'no_corre' ? { ...d, mesa: true } : d
+}
+
+async function decidir(
+  e: EntradaDelPrevuelo,
+  P: PuertosDePrevuelo,
+  reglas: ReglasDePrevuelo,
+  conMesa: boolean,
 ): Promise<Decision> {
   // 1 · entrada · `dry_run` ausente = REAL
   if (typeof e.client_id !== 'string' || !UUIDISH.test(e.client_id)) return noCorre(false, 'entrada_invalida', '`client_id` es obligatorio')
@@ -177,7 +195,7 @@ export async function prevuelo(
   if (!dry) {
     const c = await P.cupo(client_id)
     if (!c.ok) return noCorre(dry, 'lectura_fallida', `cupo: ${c.error}`)
-    const necesita = sumaDeTopes(snap)
+    const necesita = sumaDeTopes(snap, conMesa)
     const libre = r2(c.cap_usd - c.gastado_24h_usd)
     if (libre + 1e-9 < necesita) {
       const sube = Math.ceil((c.gastado_24h_usd + necesita + 0.5) * 2) / 2
