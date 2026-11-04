@@ -40,7 +40,7 @@ function _planContraElActa(t, ctx) {
     return { que: String(n && n.que), familia: _actaFamilia(txt), claves: txt.split(/[^a-z0-9ñ]+/).filter(function (w) { return w.length >= 5 && _ACTA_NO_CUENTAN.indexOf(w) < 0 }) }
   })
   lineas.forEach(function (l) {
-    if (/^\s*#/.test(l)) { seccionDeNoHacer = /\bno\b.*\b(hacer|hace|hare|haremos|vamos)\b/.test(_actaSinTildes(l)); return }
+    if (/^\s*#/.test(l)) { seccionDeNoHacer = /\bno\b.*\b(hacer|hace|hare|haremos|hacemos|hagamos|vamos)\b/.test(_actaSinTildes(l)); return }
     if (/^\s*\|/.test(l)) {
       var celdas = l.split('|').slice(1, -1), f = celdas.length > 1 ? _actaFamilia(celdas[0]) : null, peso = celdas.length > 1 ? _actaPesoDeLaFila(celdas) : null
       if (f && peso !== null) delPlan[f] = { peso: (delPlan[f] ? delPlan[f].peso : 0) + peso, fila: celdas[0].trim() }

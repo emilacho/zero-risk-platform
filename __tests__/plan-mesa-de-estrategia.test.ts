@@ -345,3 +345,11 @@ describe('hallazgos de CC3 sobre #903', () => {
     expect(pedidoDelTurno(paso, { expediente: { texto: 'x' } })).not.toContain('AVISO')
   })
 })
+
+describe('P21 · hallazgo de CC2: el título natural de la sección', () => {
+  const codigo = fs.readFileSync('scripts/ops/oficina-marketing/plan-contra-el-acta.js', 'utf8')
+  const chequeo = new Function(codigo + '\nreturn _planContraElActa')() as (t: string, c: unknown) => string[]
+  const ctx = { acta: { canales: [{ canal: 'meta_ig', peso: 1 }], no_se_hace: [{ que: 'TikTok', por_que: 'x' }] } }
+  it.each(['Lo que no hacemos', 'Lo que NO hacemos', 'Lo que no hagamos'])('🔴 bajo «%s» no marca', (titulo) => { expect(chequeo('## ' + titulo + '\n- TikTok cada semana', ctx)).toEqual([]) })
+  it('🔴 la misma viñeta fuera de esa sección sí marca', () => { expect(chequeo('## Hoja de ruta\n- TikTok cada semana', ctx)).toHaveLength(1) })
+})
