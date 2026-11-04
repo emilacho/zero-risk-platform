@@ -343,3 +343,18 @@ describe('V8 · solo lee (salvo la fila de la corrida) y no llama a nada de pago
     }
   })
 })
+
+describe('04-nov · el pre-vuelo devuelve `plan_corridas.id`: es el `trabajo_id` de tipo `plan`', () => {
+  it('🔴 al correr, al esperar, ya en marcha y ya terminada: el id de la fila', async () => {
+    const m = mundo()
+    const d = await prevuelo(entrada({ dry_run: true }), m.P)
+    expect(d.decision).toBe('correr')
+    expect(d.corrida_id).toBe(m.filas[0].id)
+    expect(await prevuelo(entrada({ dry_run: true }), m.P)).toMatchObject({ decision: 'ya_en_marcha', corrida_id: m.filas[0].id })
+    m.filas[0].estado = 'hecha'
+    expect(await prevuelo(entrada({ dry_run: true }), m.P)).toMatchObject({ decision: 'terminada', corrida_id: m.filas[0].id })
+  })
+  it('🔴 si la corrida no se abrió, no inventa uno', async () => {
+    expect(await prevuelo({ client_id: '', corrida: 'x' }, mundo().P)).not.toHaveProperty('corrida_id')
+  })
+})
