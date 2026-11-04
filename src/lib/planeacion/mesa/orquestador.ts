@@ -37,7 +37,8 @@ function resumenDeLaMesa(arts: Arts): { acta: ActaV1 | null; aportes: Record<str
     else aportes[k.slice('aporte_'.length)] = v as unknown as AporteV1
   }
   const a = validarActa(arts.acta)
-  return { acta: a.ok ? a.valor : null, aportes, faltan }
+  const costos = Object.fromEntries(Object.entries(aportes).flatMap(([k, v]) => (v.costo_por_resultado ? [[k, v.costo_por_resultado]] : [])))
+  return { acta: a.ok ? { ...a.valor, costos_de_la_mesa: costos, aportes_que_faltan: faltan } : null, aportes, faltan }
 }
 const salidaDe = (e: EncargoDeConversa, arts: Arts) => ({ encargo_id: e.id, estado: e.estado, gasto_usd: e.gasto_usd, ...resumenDeLaMesa(arts) })
 

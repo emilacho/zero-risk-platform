@@ -31,8 +31,11 @@ export function entradaDesdeLaConversa(p: { planteo: PlanteoV1; consultas: Consu
 
   // referencia de costo por resultado: la del especialista de redes; si no, la de la tabla de referencias para el evento; si no, NO se inventa (rechazo con motivo)
   let referencia: Referencia | null = null
+  const mesa = planteo.reparto_de_la_mesa === true
   const c = consultas.redes?.supuestos.costo_por_resultado
-  if (c) referencia = { min: c.min, max: c.max, ...(c.base !== undefined ? { base: c.base } : {}), tipo: 'supuesto', fuente: `consulta de ${consultas.redes!.agente} (supuesto con rango)`, fecha: expediente.fecha }
+  const dm = planteo.referencia_de_la_mesa
+  if (dm) referencia = { min: dm.min, max: dm.max, ...(dm.base !== undefined ? { base: dm.base } : {}), tipo: 'supuesto', fuente: 'aportes de la mesa de estrategia (supuesto con rango, ponderado por el peso de cada canal)', fecha: expediente.fecha }
+  else if (c) referencia = { min: c.min, max: c.max, ...(c.base !== undefined ? { base: c.base } : {}), tipo: 'supuesto', fuente: `consulta de ${consultas.redes!.agente} (supuesto con rango)`, fecha: expediente.fecha }
   else {
     const r = (expediente.referencias ?? []).find((x) => x.evento === planteo.evento)
     if (r) referencia = { min: r.min, max: r.max, ...(r.base !== undefined ? { base: r.base } : {}), tipo: r.tipo, fuente: r.fuente, fecha: r.fecha }
@@ -43,12 +46,14 @@ export function entradaDesdeLaConversa(p: { planteo: PlanteoV1; consultas: Consu
   if (tasa === undefined) alertas.push('sin tasa de cierre: se asume que el resultado es la venta')
   const alt = consultas.redes?.supuestos.costo_por_resultado_alterno
   const nombreAlterno = expediente.evento_alterno?.[planteo.evento] ?? null
-  const canales: Canal[] = planteo.canales.filter((x) => x.canal !== 'meta_ig').map((x) => ({
+  if (mesa) for (const h of planteo.huecos_de_la_mesa ?? []) alertas.push(h)
+  const canales: Canal[] = planteo.canales.filter((x) => mesa || x.canal !== 'meta_ig').map((x) => ({
     canal: x.canal, peso: x.peso, piso_diario: x.piso_diario ?? expediente.pisos?.[x.canal] ?? 0,
     ...(x.activo === false ? { activo: false } : {}), ...(x.condicion ? { condicion: x.condicion } : {}),
   }))
   const base = lineaBaseSemanal({ datos: expediente.datos, dada: expediente.linea_base_por_semana })
   const entrada: Entrada = {
+    ...(mesa ? { reparto_de_la_mesa: true } : {}),
     meta_por_semana: planteo.meta_por_semana,
     ...(base ? { base_por_semana: base.por_semana, base_fuente: base.fuente } : {}),
     ...(tasa !== undefined ? { pasos: [{ tasa, fuente: de('tasa_cierre', consultas.fpa?.agente ?? 'finanzas') ?? undefined }] } : {}),
@@ -66,6 +71,6 @@ export function entradaDesdeLaConversa(p: { planteo: PlanteoV1; consultas: Consu
     ...(alt && nombreAlterno ? { evento_alterno: { nombre: nombreAlterno, referencia: { min: alt.min, max: alt.max, ...(alt.base !== undefined ? { base: alt.base } : {}), tipo: 'supuesto' as const, fuente: `consulta de ${consultas.redes!.agente} (supuesto con rango)` } } } : {}),
     ...(consultas.redes?.minimo_diario_por_conjunto ? { piso_plataforma: 0 } : {}),
   }
-  if ((planteo.canales.some((x) => x.canal === 'meta_ig')) === false) alertas.push('el plan no nombró Meta+Instagram: se aplica igual el mínimo del 60 % (firma)')
+  if (!mesa && (planteo.canales.some((x) => x.canal === 'meta_ig')) === false) alertas.push('el plan no nombró Meta+Instagram: se aplica igual el mínimo del 60 % (firma)')
   return { ok: true, entrada, alertas }
 }

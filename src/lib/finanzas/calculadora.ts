@@ -136,6 +136,28 @@ export function repartoInverso(p: { metaIgNecesario: number; produccion: Entrada
   return { totalMes: total, montoProd, otros, sumado, metaIg }
 }
 
+/**
+ * 04-nov · EL REPARTO DE LA MESA (Emilio 18:42Z, opción A; reemplaza las firmas del 12-sep y 14-oct cuando hay mesa). Lo que el plan necesita se reparte como lo decidió marketing: sin mínimo para Meta.
+ * Un canal que no llega a su piso conserva su parte y se dice: el peso no es de finanzas. Producción sigue siendo un renglón aparte, con su tope.
+ */
+export function repartoDeLaMesa(p: { necesario: number; produccion: Entrada['produccion']; canales: NonNullable<Entrada['canales']> }) {
+  const prod = p.produccion ?? null
+  const total = prod == null ? p.necesario
+    : prod.monto != null ? Math.min(p.necesario + prod.monto, p.necesario / (1 - TOPE_PRODUCCION))
+    : p.necesario / (1 - Math.min(prod.fraccion ?? 0, TOPE_PRODUCCION))
+  const montoProd = total - p.necesario
+  const activos = p.canales.filter((c) => c.activo !== false)
+  const ws = activos.reduce((s, c) => s + c.peso, 0)
+  const montoDe = (c: { canal: string; peso: number }) => (ws > 0 ? (c.peso / ws) * p.necesario : 0)
+  const metaIg = activos.filter((c) => c.canal === 'meta_ig').reduce((s, c) => s + montoDe(c), 0)
+  const otros: FilaDeReparto[] = p.canales.filter((c) => c.canal !== 'meta_ig').map((c) => {
+    if (c.activo === false) return { canal: c.canal, monto: 0, activo: false, motivo: `diferido por el plan${c.condicion ? ' (cuando se active: ' + c.condicion + ')' : ''}` }
+    const monto = montoDe(c)
+    return { canal: c.canal, monto, activo: true, ...(monto / DIAS_DEL_MES < c.piso_diario ? { motivo: `no alcanza su piso de ${c.piso_diario} por día: la mesa decide si lo mantiene` } : {}) }
+  })
+  return { totalMes: total, montoProd, otros, sumado: 0, metaIg }
+}
+
 /** las cifras que mandan: si alguna es «sin base», el tablero no puede salir «sale» (solo «sale con alerta») */
 export const CIFRAS_QUE_MANDAN = ['costo_por_resultado_ref', 'costo_por_resultado_arranque', 'techo_por_resultado'] as const
 
@@ -239,7 +261,9 @@ export function calcular(e: Entrada): Resultado {
   const rendMes = rendSem * SEMANAS_POR_MES
   const metaIgNecesario = rendMes / (1 - marca)
   const prod = e.produccion ?? null
-  const rp = repartoInverso({ metaIgNecesario, produccion: prod, canales: e.canales ?? [] })
+  const mesa = e.reparto_de_la_mesa === true
+  const repartir = (necesario: number) => (mesa ? repartoDeLaMesa({ necesario, produccion: prod, canales: e.canales ?? [] }) : repartoInverso({ metaIgNecesario: necesario, produccion: prod, canales: e.canales ?? [] }))
+  const rp = repartir(metaIgNecesario)
   const { totalMes, montoProd, otros, sumado, metaIg } = rp
   if (prod && prod.fraccion != null && prod.fraccion > TOPE_PRODUCCION) alertas.push(`producción: ${prod.fraccion} excede el tope de ${TOPE_PRODUCCION}; se topa`)
   if (prod && prod.monto != null && prod.monto > TOPE_PRODUCCION * totalMes) alertas.push(`producción: el monto fijo excede el ${TOPE_PRODUCCION * 100} % del total; se topa`)
@@ -253,10 +277,12 @@ export function calcular(e: Entrada): Resultado {
   const porSemana = cal.map((f) => f * rendSem)
   const rendTotal = porSemana.reduce((s, x) => s + x, 0)
   const meses = Math.max(1, Math.ceil(cal.length / SEMANAS_POR_MES))
-  const metaIgTotal = rendTotal / (1 - marca)
+  const pautaTotal = rendTotal / (1 - marca)
+  // con la mesa, lo de Meta es solo su parte; sin ella, toda la pauta es de Meta
+  const metaIgTotal = mesa && metaIgNecesario > 0 ? pautaTotal * (metaIg / metaIgNecesario) : pautaTotal
   const produccionTotal = montoProd * meses
   const calendario = {
-    por_semana: porSemana.map(r2), rendimiento_total: r2(rendTotal), meta_ig_total: r2(metaIgTotal), produccion_total: r2(produccionTotal), total: r2(metaIgTotal + produccionTotal),
+    por_semana: porSemana.map(r2), rendimiento_total: r2(rendTotal), meta_ig_total: r2(metaIgTotal), produccion_total: r2(produccionTotal), total: r2(pautaTotal + produccionTotal),
     prueba: { diez: r2(rendTotal * 0.1), quince: r2(rendTotal * 0.15), veinte: r2(rendTotal * 0.2) },
   }
 
@@ -287,8 +313,8 @@ export function calcular(e: Entrada): Resultado {
     pauta_diaria: cifra(diario, { tipo: 'supuesto', fuente: 'pauta semanal ÷ días activos', formula: 'P ÷ n' }),
     minimo_por_conjunto: cifra(minimo, { tipo: 'supuesto', fuente: 'costo × 50 ÷ días activos', formula: 'máx(piso, e × 50 ÷ n)' }),
     techo_por_resultado: cifra(T, { tipo: 'supuesto', fuente: conValor ? 'ticket × margen × períodos − entrega, × h × q' : 'referencia de mercado sin arranque', formula: conValor ? 'T = (t×m×períodos − env) × h × q' : 'T = ref' }),
-    total_mes: cifra(totalMes, { tipo: 'supuesto', fuente: 'reparto inverso', formula: 'Meta+IG necesario ÷ parte de Meta+IG' }),
-    meta_ig_mes: cifra(parte('meta_ig'), { tipo: 'supuesto', fuente: 'total − producción − otros', formula: '≥ 60 % del total' }),
+    total_mes: cifra(totalMes, mesa ? { tipo: 'supuesto', fuente: 'lo necesario + producción', formula: 'pauta necesaria ÷ (1 − marca) + producción' } : { tipo: 'supuesto', fuente: 'reparto inverso', formula: 'Meta+IG necesario ÷ parte de Meta+IG' }),
+    meta_ig_mes: cifra(parte('meta_ig'), mesa ? { tipo: 'supuesto', fuente: 'peso de Meta en el acta de la mesa', formula: 'pauta necesaria × peso' } : { tipo: 'supuesto', fuente: 'total − producción − otros', formula: '≥ 60 % del total' }),
     produccion_mes: prod
       ? cifra(parte('produccion'), { tipo: prod.origen === 'plan' ? 'dato' : 'supuesto', fuente: `producción (${prod.origen}), monto fijo` })
       : { valor: null, tipo: 'sin_base', fuente: 'no la trajo el plan', motivo: 'sin base: el plan no declaró producción' },
@@ -299,7 +325,7 @@ export function calcular(e: Entrada): Resultado {
   // ── plan v3 · V7 · la meta de equilibrio (supuesto; no entra a la confianza ni al techo: es un aviso para el ajuste)
   const contribucion = conValor ? e.ticket! * e.margen! * periodos - entrega : null
   // `totalPara` recibe los resultados que paga la pauta (con línea base: los que SE AÑADEN; sin ella: la meta)
-  const totalPara = (resultados: number) => repartoInverso({ metaIgNecesario: ((resultados / q) * costo.base * SEMANAS_POR_MES) / (1 - marca), produccion: prod, canales: e.canales ?? [] }).totalMes
+  const totalPara = (resultados: number) => repartir(((resultados / q) * costo.base * SEMANAS_POR_MES) / (1 - marca)).totalMes
   const equilibrio = metaDeEquilibrio({ contribucion, meta: e.meta_por_semana, totalPara, base: baseSem })
   if (equilibrio.meta_de_equilibrio_semana !== null) {
     cifras.meta_de_equilibrio_semana = cifra(equilibrio.meta_de_equilibrio_semana, { tipo: 'supuesto', fuente: 'la contribución por venta paga el total mensual del plan', formula: 'total_mes(W) ÷ (W × 52 ÷ 12) = ticket × margen × períodos − entrega' })
@@ -316,6 +342,7 @@ export function calcular(e: Entrada): Resultado {
       total_mes: centavos.total, meta_ig: parte('meta_ig'), marca: r2(parte('meta_ig') * marca), rendimiento: r2(parte('meta_ig') * (1 - marca)),
       produccion: { monto: parte('produccion'), fraccion: totalMes > 0 ? Math.round((parte('produccion') / totalMes) * 1000) / 1000 : 0, origen: prod?.origen ?? 'sin_base' },
       otros: otros.map((o) => ({ ...o, monto: parte('otros:' + o.canal) })), sumado_a_meta_ig: r2(sumado), parte_meta_ig: totalMes > 0 ? Math.round((parte('meta_ig') / totalMes) * 1000) / 1000 : 0,
+      ...(mesa ? { de_la_mesa: true } : {}),
     },
     calendario, primera_lectura_dia: primeraLecturaDia(e.horizonte_dias, e.ciclo_dias), costo_por_venta: r2(costoPorVenta), alertas,
     equilibrio,

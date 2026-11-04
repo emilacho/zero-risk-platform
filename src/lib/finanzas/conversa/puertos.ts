@@ -2,6 +2,7 @@
  * F8 · LOS PUERTOS de la conversación (CC#1 · 14-oct): todo lo que toca el mundo entra por aquí, así el orquestador se prueba con modelo y Slack SIMULADOS (US$ 0, 0 envíos).
  * Los adaptadores reales (base, `run-sdk`, Slack) viven aparte y NO se encienden: la conversación nace apagada (`finanzas_config.conversa = 'apagado'` → 409).
  */
+import type { ActaV1 } from '../../planeacion/mesa/acta'
 import type { Estado } from '../../oficina/tipos'
 import type { LecturaDeHilo } from '../hilo-slack'
 import type { ConfigDeFinanzas, PuertosDeTablero } from '../ruta'
@@ -12,6 +13,8 @@ export const ESTADOS_TERMINALES: readonly EstadoDeEncargo[] = ['cerrado', 'sin_a
 
 /** lo que el plan (o quien despierta la conversación) entrega al abrir: SOLO datos del cliente y del expediente; ningún nombre concreto vive en el código */
 export interface Semilla {
+  /** 04-nov · lo que decidió la mesa de estrategia: con ella, finanzas calcula sobre su reparto */
+  acta?: ActaV1
   /** 04-nov · la corrida que abrió el encargo: otra corrida no lo hereda */
   corrida?: string
   rubro?: string | null

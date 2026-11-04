@@ -15,7 +15,7 @@ const consulta = (extra: Record<string, unknown> = {}) => ({ agente: 'x', resume
 
 describe('A · las claves de canal: lista cerrada, en el pedido y en la validación', () => {
   it('la lista cerrada es la unión del mapa canal→especialista y de los canales sin pauta', () => {
-    expect([...CANALES_VALIDOS].sort()).toEqual(['base_propia', 'busqueda_local', 'busqueda_pagada', 'influencers', 'meta_ig', 'profesional_b2b', 'video_corto', 'video_largo'])
+    expect([...CANALES_VALIDOS].sort()).toEqual(['base_propia', 'busqueda_local', 'busqueda_pagada', 'influencers', 'meta_ig', 'profesional_b2b', 'video_corto', 'video_largo', 'whatsapp'])
   })
   it('el pedido del planteo y el del ajuste NOMBRAN todas las claves válidas', () => {
     for (const clave of ['planteo', 'ajuste']) {
