@@ -48,6 +48,16 @@ describe('plan · la devolución de finanzas a la mesa', () => {
     expect(f.nodes.some((n) => /FIN2 · .*pausa|FIN2 · .*pausar/.test(n.name))).toBe(false)
   })
 
+  it('la 2ª pasada SÍ pregunta al dueño, pero por SU encargo (decisión de CC2 tras la reserva de CC3); sin pausa', () => {
+    const f = nuevo(), p = nod(f, dos('FIN · preguntar al dueño'))
+    expect(p).toBeDefined()
+    expect(p.parameters.jsonBody).toContain("accion: 'preguntar'")
+    expect(p.parameters.jsonBody).toContain("$('" + dos('FIN · decidir') + "').first().json.encargo_id")
+    expect(p.parameters.jsonBody).not.toContain("$('FIN · decidir')")
+    expect(destinos(f, dos('FIN · cerrar la oficina'))[0]).toContain(p.name)
+    expect(f.nodes.some((n) => /^FIN2 · .*paus/.test(n.name))).toBe(false)
+  })
+
   it('CADA nodo nuevo solo nombra nodos que corren antes de él (la lección de CC3), y la 2ª pasada no nombra nada de la 1ª', () => {
     const f = nuevo()
     const previos = (nombre: string) => {
