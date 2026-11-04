@@ -78,6 +78,7 @@ describe('qué cuenta como venta', () => {
     ['DELIVERED', 'FAILED', 'PAYPHONE'],
     ['DELIVERED', 'REFUNDED', 'PAYPHONE'],
     ['DELIVERED', 'REFUNDED', 'CASH_ON_DELIVERY'], // efectivo devuelto
+    ['DELIVERED', 'FAILED', 'CASH_ON_DELIVERY'],
     ['PENDING', 'FAILED', 'PAYPHONE'],
   ])('🔴 %s con pago %s por %s no es venta', (estado, pago, metodo) => {
     expect(resumirPedidos([conPago(estado, pago, metodo)])).toMatchObject({ pedidos_reales: 0, no_concretados: 1, ingreso_usd: 0 })
