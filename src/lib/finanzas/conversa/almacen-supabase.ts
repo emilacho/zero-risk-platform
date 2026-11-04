@@ -35,7 +35,8 @@ export function almacenDeConversa(db: Db): AlmacenDeConversa {
           if (!corrida || previa === corrida) return { ok: true as const, encargo: aEncargo(abiertos[0]), nuevo: false }
           ok(await db.from('finanzas_encargos').update({ estado: 'fallido', estado_del_motor: { ...(abiertos[0].estado_del_motor as object), cerrado_por: 'otra_corrida', corrida_nueva: corrida }, actualizado_en: new Date().toISOString() }).eq('id', abiertos[0].id).in('estado', ['abierto', 'en_curso', 'esperando_al_dueno']), 'cerrar el de otra corrida')
         }
-        if (abiertos?.[0]?.estado === 'esperando_al_dueno') {
+        // la que pausó, o la que ya se soltó pero no pudo volver porque este plan le ganó: ninguna queda colgada
+        if (abiertos?.[0]) {
           const hora = new Date().toISOString()
           ok(await db.from('esperas_del_dueno').update({ estado: 'reemplazada', actualizado_en: hora }).eq('tipo', 'finanzas').eq('clave', `finanzas:${String(abiertos[0].id)}`).eq('estado', 'esperando'), 'reemplazar la espera')
           const vieja = (abiertos[0].semilla as Semilla | null)?.corrida

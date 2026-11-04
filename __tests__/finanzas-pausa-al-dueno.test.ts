@@ -11,6 +11,8 @@ import { atenderPausa, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, t
 import { despertarPorElFlujo } from '../src/lib/finanzas/conversa/esperas-supabase'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import { prevuelo } from '../src/lib/planeacion/prevuelo'
+import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
+import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 
 const preg = (clave: string, o: Record<string, unknown> = {}) => ({ clave, texto: `¿Pregunta sobre ${clave.replace(/_/g, ' ')}?`, recomendacion: 'Lo que te conviene hacer.', supuesto_si_no_responde: 'Lo que supongo sin tu respuesta.', impacto: 'alto', ...o })
 const CINCO = [preg('comision'), preg('turistas'), preg('temporada'), preg('whatsapp', { frena_la_firma: true }), preg('pixel', { frena_la_firma: true })]
@@ -230,6 +232,13 @@ describe('la respuesta suelta la pausa', () => {
     expect(m.despertares).toHaveLength(MAX_INTENTOS_DE_DESPERTAR)
     expect(m.avisos).toHaveLength(1)
   })
+  it('🔴 si otra llamada ya la soltó, esta no despierta al plan otra vez', async () => {
+    const m = mundo({ espera: {}, slackTs: '100.1', mensajes: [{ ts: '200.1', texto: TODAS }], arts: { buzon_respuestas: { n: 1, claves: CINCO.map((p) => p.clave), preguntas: [] } } })
+    m.P.esperas.soltar = async () => false
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ soltada: false })
+    expect(m.despertares).toEqual([])
+    expect(m.e.estado).toBe('esperando_al_dueno')
+  })
   it('🔴 una espera reemplazada no despierta a nadie', async () => {
     const m = mundo({ espera: { estado: 'reemplazada' } })
     await atenderPausa(m.P, 'enc-1')
@@ -338,6 +347,18 @@ describe('el pre-vuelo al volver', () => {
     const d = await prevuelo(pedir(), puertos('en_pausa', espera('2026-11-02T09:59:00Z')).P)
     expect(d).toMatchObject({ decision: 'correr', material_viejo: true, relleno_permitido: true, corrida_id: 'cor-1' })
   })
+  it('🔴 otro plan del cliente en marcha: no corre, lo dice y no revive esta', async () => {
+    const w = puertos('en_pausa')
+    ;(w.P as { corridas: { activaDe: unknown } }).corridas.activaDe = async () => ({ corrida: 'plan-y', estado: 'corriendo', espera_desde: 'x' })
+    const d = await prevuelo(pedir(), w.P)
+    expect(d).toMatchObject({ decision: 'no_corre', motivo: 'corrida_activa', corrida: 'plan-y' })
+    expect(w.f.estado).toBe('en_pausa')
+  })
+  it('🔴 si el otro le gana justo al escribir (el índice), tampoco se cae', async () => {
+    const w = puertos('en_pausa')
+    ;(w.P as { corridas: { avanzarSi: unknown } }).corridas.avanzarSi = async () => { throw new Error('23505') }
+    expect(await prevuelo(pedir(), w.P)).toMatchObject({ decision: 'no_corre', motivo: 'corrida_activa' })
+  })
   it('🔴 un segundo disparo no corre otro plan', async () => {
     expect((await prevuelo(pedir(), puertos('corriendo').P)).decision).toBe('ya_en_marcha')
   })
@@ -357,6 +378,24 @@ describe('el pre-vuelo al volver', () => {
     const d = await prevuelo({ client_id: 'cliente-1', corrida: 'plan-x' }, { ...w.P as object, catalogo: async () => ({ ok: true, snapshot: { monedaDePais: () => 'USD', tope: () => 0, filas: { fuentes: [] } } }) } as never)
     expect(d.decision).toBe('ya_en_marcha')
     expect(w.f.estado).toBe('en_pausa')
+  })
+})
+
+describe('otro plan del mismo cliente reemplaza al que esperaba', () => {
+  const crear = async (estado: string) => {
+    const db = new DbFalsa()
+    db.semilla('finanzas_encargos', [{ id: 'viejo', client_id: 'c', estado, gasto_usd: 1, dry_run: false, semilla: { corrida: 'cor-a' }, estado_del_motor: { pasos_ejecutados: 8 } }])
+    db.semilla('esperas_del_dueno', [{ id: 'esp', tipo: 'finanzas', clave: 'finanzas:viejo', estado: 'esperando' }])
+    db.semilla('plan_corridas', [{ id: 'cor-a', estado: 'en_pausa' }])
+    const r = await almacenDeConversa(db as never).crearEncargo({ client_id: 'c', dry_run: false, semilla: { corrida: 'cor-b' } })
+    return { db, r }
+  }
+  it.each(['esperando_al_dueno', 'en_curso'])('🔴 desde «%s»: el viejo se cierra, su espera y su corrida no quedan colgadas', async (estado) => {
+    const { db, r } = await crear(estado)
+    expect(r).toMatchObject({ ok: true, nuevo: true })
+    expect(db.tablas['finanzas_encargos'].find((f) => f.id === 'viejo')).toMatchObject({ estado: 'fallido' })
+    expect(db.tablas['esperas_del_dueno'][0]).toMatchObject({ estado: 'reemplazada' })
+    expect(db.tablas['plan_corridas'][0]).toMatchObject({ estado: 'fallida' })
   })
 })
 

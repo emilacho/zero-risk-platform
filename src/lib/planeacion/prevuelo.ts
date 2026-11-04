@@ -154,7 +154,12 @@ export async function prevuelo(
     const comunDeLaPausa = { corrida, corrida_id: previa.id, espera_desde: previa.espera_desde, vence_en: previa.vence_en, intentos: previa.intentos }
     if (previa.estado === 'corriendo') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'la corrida ya volvió de la pausa: este disparo no hace nada (un solo plan)', ...comunDeLaPausa }
     if (previa.estado !== EN_PAUSA) return { ...base(dry), decision: 'terminada', motivo: `la corrida ya terminó (${previa.estado})`, ...comunDeLaPausa }
-    const r = await reanudar(P.corridas, { client_id, corrida })
+    // otro plan del cliente arrancó mientras esta esperaba: ese manda, y al llegar a la oficina cierra esta. No corre: el flujo avisa en #alertas y la respuesta del dueño ya está guardada para el plan que sigue
+    const otra = await P.corridas.activaDe(client_id)
+    if (otra) return noCorre(dry, 'corrida_activa', `el cliente ya tiene la corrida «${otra.corrida}» ${otra.estado} desde ${otra.espera_desde}`, { corrida: otra.corrida })
+    let r: Awaited<ReturnType<typeof reanudar>>
+    // la misma carrera por el índice de «una activa por cliente», si el otro arranca justo ahora
+    try { r = await reanudar(P.corridas, { client_id, corrida }) } catch (x) { return noCorre(dry, 'corrida_activa', `no se pudo reanudar: ${x instanceof Error ? x.message : String(x)}`.slice(0, 300)) }
     if (r.status !== 200 || r.accion === 'perdiste_la_carrera') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'otro disparo la reanudó primero', ...comunDeLaPausa }
     const viejo = P.ahora().getTime() - Date.parse(espera.creado_en) > DIAS_DE_VIGENCIA_DEL_MATERIAL * 86_400_000
     if (!viejo) return { ...base(dry), decision: 'correr', motivo: 'vuelve de la pausa: el dueño contestó', ...comunDeLaPausa, vence_en: r.fila.vence_en }
