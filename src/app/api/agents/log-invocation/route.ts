@@ -49,6 +49,7 @@
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { metadataDelTrabajo, trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { guardarTextosDeInvocacion } from '@/lib/textos-de-invocacion'
 
 export const dynamic = 'force-dynamic'
@@ -211,6 +212,7 @@ export async function POST(request: Request) {
   }
 
   // Build canonical row
+  const trabajoDeLaFila = trabajoDeLaLlamada(body, (nombre) => request.headers.get(nombre))
   const row = {
     session_id: sessionId,
     agent_id: typeof body.agent_id === 'string' && body.agent_id.length > 0 ? body.agent_id : agentName,
@@ -235,7 +237,9 @@ export async function POST(request: Request) {
     error_message: typeof body.error_message === 'string' ? body.error_message : null,
     input_summary: inputText ? (inputText.length > 2000 ? `${inputText.slice(0, 2000)}…` : inputText) : null,
     output_summary: outputSummary,
+    ...trabajoDeLaFila.columnas,
     metadata: {
+      ...metadataDelTrabajo(trabajoDeLaFila),
       ...(body.metadata && typeof body.metadata === 'object' ? body.metadata : {}),
       canonical_pattern: 'log-invocation-local-session',
       logged_via: 'log-invocation-endpoint',

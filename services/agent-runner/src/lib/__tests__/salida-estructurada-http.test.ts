@@ -64,3 +64,18 @@ describe('POST /run-sdk · output_schema', () => {
     expect('outputSchema' in llamadas[antes]).toBe(false)
   })
 })
+
+describe('POST /run-sdk · de qué trabajo es la llamada (04-nov)', () => {
+  it('🔴 del cuerpo, de `context` y de los encabezados llega al corredor', async () => {
+    const esperado = { trabajo_tipo: 'pedido', trabajo_id: 'p1', paso: 'consolidar', llamada_padre: 'i1' }
+    for (const cuerpo of [{ ...base, ...esperado }, { ...base, context: esperado }]) {
+      const antes = llamadas.length
+      expect((await post(cuerpo)).status).toBe(200)
+      expect((llamadas[antes].trabajo as { columnas: unknown }).columnas).toEqual(esperado)
+    }
+    const antes = llamadas.length
+    const r = await fetch(`http://127.0.0.1:${PUERTO}/run-sdk`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'llave-de-prueba', 'x-zr-trabajo-tipo': 'alta', 'x-zr-trabajo-id': 'j1' }, body: JSON.stringify(base) })
+    expect(r.status).toBe(200)
+    expect((llamadas[antes].trabajo as { columnas: unknown }).columnas).toEqual({ trabajo_tipo: 'alta', trabajo_id: 'j1' })
+  })
+})

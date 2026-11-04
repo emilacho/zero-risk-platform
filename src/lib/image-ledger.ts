@@ -8,6 +8,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { guardarTextosDeInvocacion } from './textos-de-invocacion'
+import { metadataDelTrabajo, type TrabajoDeLaLlamada } from './trabajo-de-la-llamada'
 const resumenDeEntrada = (t: string | null | undefined): string | null => (t ? (t.length > 2000 ? `${t.slice(0, 2000)}…` : t) : null)
 
 export interface DatosDeImagen {
@@ -25,6 +26,8 @@ export interface DatosDeImagen {
   startedAtMs: number
   endedAtMs: number
   /** si el llamador es un empleado de un flujo, su identificador de flujo y de ejecución (el §149 los pide); si no, el marcador de esta ruta */
+  /** 04-nov · de qué trabajo es la imagen (columnas propias · sin datos no agrega llaves) */
+  trabajo?: TrabajoDeLaLlamada
   workflowId?: string | null
   workflowExecutionId?: string | null
 }
@@ -37,6 +40,7 @@ export function filaDeInvocacionDeImagen(d: DatosDeImagen): Record<string, unkno
   if (!(typeof d.costUsd === 'number' && Number.isFinite(d.costUsd) && d.costUsd > 0)) return null
   const nombre = d.agentSlug ?? 'image-generation'
   return {
+    ...(d.trabajo?.columnas ?? {}),
     session_id: `img-${d.generationId}`,
     agent_id: nombre,
     agent_name: nombre,
@@ -60,7 +64,7 @@ export function filaDeInvocacionDeImagen(d: DatosDeImagen): Record<string, unkno
     error_message: null,
     input_summary: resumenDeEntrada(d.prompt),
     output_summary: `imagen generada ${d.size}${d.quality ? ` · calidad ${d.quality}` : ''}`,
-    metadata: { kind: 'image_generation', source: 'images-generate', generation_id: d.generationId, cost_basis: d.costBasis, size: d.size, quality: d.quality, caller: d.caller },
+    metadata: { ...(d.trabajo ? metadataDelTrabajo(d.trabajo) : {}), kind: 'image_generation', source: 'images-generate', generation_id: d.generationId, cost_basis: d.costBasis, size: d.size, quality: d.quality, caller: d.caller },
   }
 }
 

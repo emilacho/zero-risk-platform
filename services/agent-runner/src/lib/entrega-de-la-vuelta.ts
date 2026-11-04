@@ -137,6 +137,7 @@ export async function entregarLaVuelta(opts: {
 export function cuerpoDeLaVuelta(
   result: {
     success?: boolean
+    invocationId?: string
     response?: string
     sessionId?: string | null
     model?: string
@@ -152,7 +153,7 @@ export function cuerpoDeLaVuelta(
   },
   contexto: { agentName: string; dispatchKey: string | null },
 ): Record<string, unknown> {
-  const marca = { delivered_by: 'runner', dispatch_key: contexto.dispatchKey }
+  const marca = { delivered_by: 'runner', dispatch_key: contexto.dispatchKey, ...(result.invocationId ? { invocation_id: result.invocationId } : {}) }
   if (!result.success) {
     return {
       success: false,

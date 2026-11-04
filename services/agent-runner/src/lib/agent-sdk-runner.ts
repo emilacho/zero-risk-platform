@@ -52,6 +52,7 @@ import {
   type ShouldSkipResult,
 } from './workflow-checkpoint.js'
 import { buildDryRunFakeResponse } from './dry-run-mode.js'
+import { metadataDelTrabajo, type TrabajoDeLaLlamada } from './trabajo-de-la-llamada.js'
 import { costoDeBusquedasWeb, costoEfectivoDeCorrida } from './libro-de-costos.js'
 
 // Local message shapes — the SDK's d.ts has internal type errors that cause
@@ -143,6 +144,8 @@ export interface AgentRunInput {
   pipelineId?: string | null
   /** Nombre del step (para logs). */
   stepName?: string | null
+  /** 04-nov · de qué trabajo es esta llamada: va a las columnas propias de `agent_invocations` (ver trabajo-de-la-llamada.ts) */
+  trabajo?: TrabajoDeLaLlamada
   /**
    * Sprint 8D workflow attribution (Emilio canon 2026-05-24 · "agentes
    * solo se invocan vía workflows"). Forwarded by the Vercel proxy after
@@ -259,6 +262,8 @@ export interface DiscoveryToolCallCapture {
 export interface AgentRunResult {
   success: boolean
   response: string
+  /** 04-nov · `id` de la fila de esta llamada: el flujo lo manda como `llamada_padre` en la siguiente · en lo ya guardado, el de la corrida original */
+  invocationId?: string
   /** el tope de gasto saltó AL CERRAR y `response` es el texto final completo (no un parcial) · solo está cuando pasó */
   cerradaPorTope?: boolean
   /** el objeto que el SDK entregó contra el `output_schema` pedido · solo está cuando se pidió esquema Y llegó */
@@ -976,6 +981,7 @@ export function isDiscoveryCheckpointUsable(
 function logExecution(
   supabase: SupabaseAdmin,
   args: {
+    invocationId: string
     canonicalSlug: string
     input: AgentRunInput
     skills: Skill[]
@@ -1067,9 +1073,10 @@ function logExecution(
   // shape so dashboards consuming agent_invocations are caller-agnostic.
   const endedAtMs = startedAtMs + durationMs
   const sessionIdForInsert = drain.sessionId ?? `runner-${startedAtMs}-${Math.random().toString(36).slice(2, 8)}`
-  const invocationId = randomUUID()
+  const invocationId = args.invocationId
   const invocationRow: Record<string, unknown> = {
     id: invocationId,
+    ...(input.trabajo?.columnas ?? {}),
     session_id: sessionIdForInsert,
     agent_id: canonicalSlug,
     agent_name: canonicalSlug,
@@ -1105,6 +1112,7 @@ function logExecution(
     metadata: {
       source: 'agent-runner-railway',
       caller: 'agent-runner',
+      ...(input.trabajo ? metadataDelTrabajo(input.trabajo) : {}),
       // F1.2 (CC#4 2026-07-04) · CONDICIÓN DE HONESTIDAD del consejero (mismo principio que
       // #266) · el modelo REAL que corrió · el slug del agente puede ser engañoso · p.ej.
       // `gpt-5.5-advisor` corre en Sonnet 4.6 porque el runner NO rutea gpt-5.5 (MODEL_MAP
@@ -1706,8 +1714,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   //    Dual-write · `agents_log` (Railway runner forensics) + `agent_invocations`
   //    (canonical Sprint 8D audit trail · workflow_id column for enforcement
   //    query). See agent-invocations-log.ts for dual-write rationale.
+  const invocationId = randomUUID()
   logExecution(supabase, {
-    canonicalSlug, input, skills, drain, modelId, startedAtMs: startedAt, durationMs, costUsd,
+    invocationId, canonicalSlug, input, skills, drain, modelId, startedAtMs: startedAt, durationMs, costUsd,
     brainEnrichment: brainEnrichmentMeta,
     cacheMetrics: cacheMetricsMeta,
     fidelityForcedEmit: fidelityForcedEmitDebug,
@@ -1717,6 +1726,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   })
 
   const result: AgentRunResult = {
+    invocationId,
     // un corte por presupuesto o un error del resultado es un FALLO declarado, nunca un éxito con texto parcial
     success: falloFinal === null,
     ...(falloFinal !== null ? { error: falloFinal } : {}),
@@ -1781,6 +1791,7 @@ function serializeResultForCheckpoint(r: AgentRunResult): Record<string, unknown
     : r.response
   return {
     schema_version: 1,
+    ...(r.invocationId ? { invocationId: r.invocationId } : {}),
     response: responseClipped,
     response_truncated: r.response.length > RESPONSE_CAP,
     sessionId: r.sessionId,
@@ -1816,6 +1827,7 @@ function rehydrateFromCheckpoint(
   )
   return {
     success: true,
+    ...(typeof cached.invocationId === 'string' ? { invocationId: cached.invocationId } : {}),
     response: String(cached.response ?? ''),
     sessionId: (cached.sessionId as string | null) ?? null,
     inputTokens: 0, // cache hit · no new tokens
