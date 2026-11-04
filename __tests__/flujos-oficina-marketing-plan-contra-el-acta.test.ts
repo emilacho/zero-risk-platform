@@ -27,6 +27,7 @@ const PLAN_B = fs.readFileSync(`${DIR}/plan-4-nov-b.md`, 'utf8').replace(/\r\n/g
 const ACTA = { esquema: 'acta.v1', numero: { meta: 40, por_que: 'p' }, servicio: 's', audiencia: 'a', oferta: 'o', camino: 'c', prueba: 'pr', canales: [{ canal: 'Meta', peso: 0.6, razon: 'r1' }, { canal: 'Búsqueda paga', peso: 0.4, razon: 'r2' }], no_se_hace: [{ que: 'TikTok', por_que: 'no hay video' }], no_se: [] }
 const PLAN_OK = ['# Plan', '| Canal | Presupuesto |', '|---|---|', '| Meta Ads | $480 (60%) |', '| Google Ads | $320 (40%) |'].join('\n')
 const PLAN_MAL = ['# Plan', '| Canal | Presupuesto |', '|---|---|', '| Meta Ads | $200 (25%) |', '| WhatsApp | $600 (75%) |', '', '- Campañas de TikTok cada semana'].join('\n')
+const NL = String.fromCharCode(10)
 const codigos = (r: Resultado) => r.marcas.map((m) => m.codigo)
 
 describe('plan · P21 el plan contra el acta (pegado en los nodos)', () => {
@@ -53,6 +54,24 @@ describe('plan · P21 el plan contra el acta (pegado en los nodos)', () => {
       const ej = mal.marcas.find((m) => m.codigo === 'P21')!.ejemplos.join(' | ')
       expect(ej).toMatch(/25 % a «Meta Ads» y el acta acordó 60 %/); expect(ej).toMatch(/75 % a «WhatsApp» y ese canal no está activo en el acta/); expect(ej).toMatch(/«TikTok» está en lo que no se hace/)
     }
+  })
+
+  it('lo que CC3 pidió probar de la vara: canal diferido, sección «lo que no se hace», borde de la tolerancia y no repetir', () => {
+    const { revisarPlan } = armar(modulo('JEF · plan · evaluar'))
+    const ACTA_D = { ...ACTA, canales: [{ canal: 'Meta', peso: 0.6, razon: 'r' }, { canal: 'Búsqueda paga', peso: 0.3, razon: 'r' }, { canal: 'WhatsApp', peso: 0.1, razon: 'r', activo: false, condicion: 'solo si hay verificación' }] }
+    const tabla = (m: number, g: number, w?: number) => ['# Plan', '| Canal | Presupuesto |', '|---|---|', `| Meta Ads | $1 (${m}%) |`, `| Google Ads | $1 (${g}%) |`, w ? `| WhatsApp | $1 (${w}%) |` : ''].join(NL)
+    const ej = (t: string, a: unknown) => revisarPlan(t, { ...CTX, acta: a }).marcas.filter((m) => m.codigo === 'P21').flatMap((m) => m.ejemplos)
+    // 1 · un canal diferido (activo:false) NO cuenta como activo
+    expect(ej(tabla(60, 30, 10), ACTA_D).join(' | ')).toMatch(/10 % a «WhatsApp» y ese canal no está activo en el acta/)
+    expect(ej(tabla(60, 30), ACTA_D)).toEqual([])
+    // 3 · el borde: 3 puntos no marca, 5 exactos no marca, 8 sí
+    expect(ej(tabla(63, 30), ACTA_D)).toEqual([]); expect(ej(tabla(65, 30), ACTA_D)).toEqual([])
+    expect(ej(tabla(68, 30), ACTA_D).join(' | ')).toMatch(/68 % a «Meta Ads» y el acta acordó 60 %/)
+    // 2 · la sección de lo que NO se hace nombra el canal para decir que no se hace: viñetas SIN «no» no marcan; la misma viñeta fuera de esa sección sí
+    for (const h of ['Lo que no se hace', 'Lo que no haremos']) expect(ej(['## ' + h, '- TikTok cada semana', '- Reels de TikTok diarios', ''].join(NL), ACTA), h).toEqual([])
+    expect(ej(['## Qué hacemos', '- TikTok cada semana', ''].join(NL), ACTA).join(' | ')).toMatch(/«TikTok» está en lo que no se hace/)
+    // 4 · el mismo «no se hace» se marca UNA vez aunque el plan lo repita
+    expect(ej(['## Qué hacemos', '- TikTok cada semana', '- Reels de TikTok diarios', '- Más TikTok', ''].join(NL), ACTA).filter((x) => /TikTok/.test(x)).length).toBe(1)
   })
 
   it('sin acta (mesa apagada o plan que no pasó por la mesa) el chequeo calla: el resultado es el de hoy', () => {

@@ -111,6 +111,7 @@ const ACT = (function () {
 const bloqueActa = ACT ? [
   '══════ LO QUE ACORDÓ LA MESA DE ESTRATEGIA ══════',
   'Escribe el plan SOBRE esto: no vuelvas a decidir canales, pesos, meta ni oferta. Es la decisión de marketing, ya tomada.',
+  'Esto MANDA sobre cualquier otra línea de este pedido que diga que tú propones el reparto entre canales: el reparto entre canales es el de esta acta, tal cual. Dentro de cada canal, los montos salen de las cifras firmadas.',
   'Meta: ' + ACT.numero.meta + ' · ' + String(ACT.numero.por_que || ''),
   'Servicio: ' + String(ACT.servicio || ''), 'Audiencia: ' + String(ACT.audiencia || ''), 'Oferta: ' + String(ACT.oferta || ''),
   'Canales y su peso:',
@@ -176,6 +177,9 @@ export function construirMesaDeEstrategia(f) {
   // 4 · el redactor escribe SOBRE el acta
   cambiarCodigo(f, N_B4, 'const pedido = [\n\'Eres el redactor de planes de campana de esta agencia.', CODIGO_ACTA + "const pedido = [\n'Eres el redactor de planes de campana de esta agencia.")
   cambiarCodigo(f, N_B4, '...bloqueCalendario,\n', '...bloqueActa,\n...bloqueCalendario,\n')
+  // opción A de Emilio sobre el 60 % (18:42Z): con acta, el reparto ENTRE CANALES no lo propone el redactor; sin acta, la regla 7 es la de hoy
+  cambiarCodigo(f, N_B4, "'7. El reparto del presupuesto entre renglones lo propones tú, desde la meta y las fuentes de ESTE cliente (ver «EL PLAN A PRIMER NIVEL»).',",
+    "ACT ? '7. El reparto del presupuesto ENTRE CANALES ya lo acordó la mesa de estrategia (ver arriba): úsalo tal cual y no lo cambies. Dentro de cada canal, los montos los calculas desde la meta y las fuentes de ESTE cliente (ver «EL PLAN A PRIMER NIVEL»).' : '7. El reparto del presupuesto entre renglones lo propones tú, desde la meta y las fuentes de ESTE cliente (ver «EL PLAN A PRIMER NIVEL»).',")
   cambiarCodigo(f, N_B4, '    claves_internas_quitadas_de_la_ficha: fichaSinInternos.quitadas,',
     "    ...(ACT ? { acta_usada: { canales: ACT.canales.length, meta: ACT.numero.meta } } : {}),\n    claves_internas_quitadas_de_la_ficha: fichaSinInternos.quitadas,")
 }

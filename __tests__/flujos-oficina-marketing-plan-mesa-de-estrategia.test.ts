@@ -143,6 +143,12 @@ describe('plan · la mesa de estrategia (lazo n8n)', () => {
     expect(b4.indexOf('...bloqueActa,')).toBeLessThan(b4.indexOf('...bloqueCalendario,'))
     expect(b4.indexOf('const ACT = ')).toBeLessThan(b4.indexOf('const pedido = ['))
     expect(b4).toContain('...(ACT ? { acta_usada: { canales: ACT.canales.length, meta: ACT.numero.meta } } : {}),')
+    // opción A del 60 % (Emilio 18:42Z): con acta el reparto entre canales es el de la mesa; sin acta, la regla 7 es la de hoy, palabra por palabra
+    const R7 = "'7. El reparto del presupuesto entre renglones lo propones tú, desde la meta y las fuentes de ESTE cliente (ver «EL PLAN A PRIMER NIVEL»).',"
+    expect(cod(base(), 'Redactor (B4)')).toContain(R7)
+    expect(b4).toContain("ACT ? '7. El reparto del presupuesto ENTRE CANALES ya lo acordó la mesa de estrategia")
+    expect(b4).toContain(": " + R7.slice(0, -1) + ",") // la rama sin acta es la regla de hoy
+    expect(b4).toContain('Esto MANDA sobre cualquier otra línea de este pedido que diga que tú propones el reparto entre canales')
     const i = b4.indexOf('const ACT = '), j = b4.indexOf('] : [];', b4.indexOf('const bloqueActa')) + 7
     const modulo = b4.slice(i, j)
     const bloque = (m: any) => new Function('$', modulo + '\nreturn { ACT, bloqueActa }')((n: string) => ({ first: () => { if (n !== N_CERRAR || m === 'no') throw new Error('no corrió'); return { json: m } } }))
