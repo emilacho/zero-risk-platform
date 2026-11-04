@@ -11,6 +11,8 @@ alter table public.plan_corridas add constraint plan_corridas_estado_check check
 
 alter table public.finanzas_config add column if not exists pausa_al_dueno boolean not null default false;
 alter table public.esperas_del_dueno add column if not exists despertar_intentos integer not null default 0;
+-- lo que el plan ya pagó: `{ material, sobre }`. Aparte de `sobre` para no traerlo en cada lectura
+alter table public.esperas_del_dueno add column if not exists sobre_de_reanudacion jsonb;
 
 -- el cupo que el pre-vuelo exige debe cubrir el tope nuevo de la oficina (US$ 1,50 → 5): versión nueva, la anterior queda como historia
 do $$

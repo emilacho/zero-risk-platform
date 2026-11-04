@@ -1,6 +1,7 @@
 /**
  * LA PAUSA DE LA OFICINA FINANCIERA (Emilio, 04-nov 15:18Z: «si financiera necesita respuestas para poder enviar el informe al creador del plan, debe haber una pausa en el flujo hasta que yo conteste»).
  * Misma forma que la pausa del manual: NADA queda corriendo. El plan guarda aquí su pedido y el material ya pagado y termina; la respuesta del dueño lo suelta una sola vez y el plan vuelve con ese mismo pedido.
+ * Emilio, 15:37Z: si ya revisó la ronda y no contestó alguna, el plan sigue; lo no contestado queda abierto en la oficina y el plan no lo menciona. «Ya revisó» = contestó algo y en la vuelta siguiente del vigía no hay nada nuevo (o contestó todo).
  *  · `pausarOficina`: guarda la espera, deja la corrida `en_pausa` y pregunta.
  *  · `atenderPausa`: la llama el vigía del buzón cada 10 min. Reintenta lo que no salió, recoge y, si ya no falta nada, suelta y despierta al plan.
  *  · La ronda 2 la conduce el mismo plan al volver: «abrir» con la misma corrida devuelve este encargo. No hay un segundo conductor.
@@ -16,17 +17,15 @@ export interface EsperaDeFinanzas {
   encargo_id: string
   corrida: string | null
   estado: 'esperando' | 'soltada' | 'reemplazada'
-  cuerpo: Record<string, unknown>
-  material: unknown
+  sobre: Record<string, unknown>
   despertado: boolean | null
   intentos_de_despertar: number
 }
 
 export interface PuertoDeEsperas {
-  guardar(f: { client_id: string; encargo_id: string; cuerpo: Record<string, unknown>; material: unknown; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; id: string; nueva: boolean } | { ok: false; error: string }>
+  guardar(f: { client_id: string; encargo_id: string; sobre: Record<string, unknown>; material: Record<string, unknown>; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; id: string; nueva: boolean } | { ok: false; error: string }>
   /** una lectura fallida LANZA: leer un error como «no hay espera» dejaría al plan sin volver */
   delEncargo(encargo_id: string): Promise<EsperaDeFinanzas | null>
-  porId(id: string): Promise<EsperaDeFinanzas | null>
   /** de `esperando` a `soltada`: gana UNA llamada */
   soltar(id: string, ahora: Date): Promise<boolean>
   marcarDespertar(id: string, despertado: boolean, intentos: number, detalle: string): Promise<void>
@@ -39,6 +38,7 @@ export interface PuertosDePausa extends PuertosDelBuzon { esperas: PuertoDeEsper
 
 /** tras este número de fallos deja de insistir y avisa: un plan que no despierta lo arregla una persona */
 export const MAX_INTENTOS_DE_DESPERTAR = 3
+export const MAX_MATERIAL = 4_000_000
 
 const objeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const textoDe = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
@@ -63,16 +63,18 @@ async function preguntarEnPausa(P: PuertosDePausa, encargo_id: string): Promise<
   return r
 }
 
-/** `{ accion: 'pausar', encargo_id, cuerpo, material, workflow_id, workflow_execution_id }` · idempotente: una segunda llamada encuentra la misma espera */
+/** `POST /api/finanzas/pausar` · `{ encargo_id, sobre, material, workflow_id, workflow_execution_id }` · idempotente: una segunda llamada encuentra la misma espera */
 export async function pausarOficina(P: PuertosDePausa, c: Record<string, unknown>): Promise<Respuesta> {
   const encargo_id = textoDe(c.encargo_id)
   if (!encargo_id) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`encargo_id` es obligatorio'] } }
-  if (!objeto(c.cuerpo) || !textoDe(c.cuerpo.corrida)) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`cuerpo` es el pedido original del plan y lleva `corrida`'] } }
+  if (!objeto(c.sobre) || !textoDe(c.sobre.corrida)) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`sobre` es el pedido original del plan y lleva `corrida`'] } }
   if (!objeto(c.material)) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`material` es el resultado de la junta de brazos'] } }
+  // lo que cabe en una llamada a Vercel (4,5 MB): el material medido pesa ~100 mil caracteres
+  if (JSON.stringify(c.material).length > MAX_MATERIAL) return { status: 413, cuerpo: { error: 'material_demasiado_grande', maximo: MAX_MATERIAL } }
   const e = await P.almacen.leerEncargo(encargo_id)
   if (!e) return { status: 404, cuerpo: { error: 'encargo_inexistente' } }
   if (e.estado !== ESPERANDO_AL_DUENO) return { status: 409, cuerpo: { error: 'no_esta_en_pausa', estado: e.estado } }
-  const g = await P.esperas.guardar({ client_id: e.client_id, encargo_id, cuerpo: c.cuerpo, material: c.material, workflow_id: textoDe(c.workflow_id), workflow_execution_id: textoDe(c.workflow_execution_id) })
+  const g = await P.esperas.guardar({ client_id: e.client_id, encargo_id, sobre: c.sobre, material: c.material, workflow_id: textoDe(c.workflow_id), workflow_execution_id: textoDe(c.workflow_execution_id) })
   if (!g.ok) return { status: 502, cuerpo: { error: 'no_se_pudo_guardar', detalle: g.error } }
   const corrida_id = e.semilla?.corrida
   if (typeof corrida_id === 'string' && corrida_id) await P.esperas.pausarCorrida(corrida_id)
@@ -82,17 +84,9 @@ export async function pausarOficina(P: PuertosDePausa, c: Record<string, unknown
   return { status: 200, cuerpo: { pausado: true, espera_id: g.id, nueva: g.nueva, enviado: envio.cuerpo.enviado === true, ...(envio.cuerpo.motivo ? { motivo: envio.cuerpo.motivo } : {}), ...(Array.isArray(envio.cuerpo.claves) ? { claves: envio.cuerpo.claves } : {}), ...(atendida.cuerpo.soltada ? { soltada: true } : {}) } }
 }
 
-/** `{ accion: 'material', espera_id }`: lo que el plan guardó al pausar, para seguir sin volver a pagarlo */
-export async function materialDeLaEspera(P: Pick<PuertosDePausa, 'esperas'>, espera_id: unknown): Promise<Respuesta> {
-  const id = textoDe(espera_id)
-  if (!id) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: ['`espera_id` es obligatorio'] } }
-  const f = await P.esperas.porId(id)
-  return f ? { status: 200, cuerpo: { espera_id: f.id, estado: f.estado, material: f.material } } : { status: 404, cuerpo: { error: 'espera_inexistente' } }
-}
-
 async function despertarAlPlan(P: PuertosDePausa, f: EsperaDeFinanzas): Promise<Respuesta> {
   const intentos = f.intentos_de_despertar + 1
-  const r = await P.despertar({ ...f.cuerpo, reanudar_esperas_id: f.id }).catch((x) => ({ ok: false as const, error: x instanceof Error ? x.message : String(x) }))
+  const r = await P.despertar({ ...f.sobre, reanudar_esperas_id: f.id }).catch((x) => ({ ok: false as const, error: x instanceof Error ? x.message : String(x) }))
   await P.esperas.marcarDespertar(f.id, r.ok, intentos, r.ok ? 'el plan recibió el pedido' : `fallo ${intentos}: ${r.error}`.slice(0, 300))
   if (!r.ok && intentos >= MAX_INTENTOS_DE_DESPERTAR) await avisarUnaVez(P, f.encargo_id, 'no_despierta', `🚨 El dueño ya contestó, pero el plan no pudo volver a arrancar tras ${intentos} intentos (encargo ${f.encargo_id.slice(0, 8)}). Último error: ${r.error}`.slice(0, 500))
   return { status: 200, cuerpo: { soltada: true, despertado: r.ok, intentos } }
@@ -122,8 +116,12 @@ export async function atenderPausa(P: PuertosDePausa, encargo_id: string, opc: {
   }
   const arts = await P.almacen.artefactos(encargo_id)
   const faltan = preguntasQueFaltan(arts, e.semilla)
-  if (faltan.length) return { status: 200, cuerpo: { esperando: true, faltan, ...recogido } }
+  // contestó todo, o contestó algo y ya no escribe más: sigue. Sin ninguna respuesta, o si aún está escribiendo, espera
+  const contesto = Array.isArray(e.semilla?.respuestas_del_dueno) && e.semilla.respuestas_del_dueno.length > 0
+  const siguioEscribiendo = Array.isArray(recogido.aplicadas) && recogido.aplicadas.length > 0
+  if (faltan.length && (!contesto || siguioEscribiendo)) return { status: 200, cuerpo: { esperando: true, faltan, ...recogido } }
   if (!(await P.esperas.soltar(f.id, P.ahora()))) return { status: 200, cuerpo: { soltada: false, motivo: 'otra_llamada_la_solto' } }
+  await P.almacen.guardarBuzon?.({ encargo_id, semilla: { ...e.semilla, pausa_atendida: true } })
   await P.almacen.guardar({ encargo_id, estado_del_motor: e.estado_del_motor, gasto_usd: e.gasto_usd, estado: 'en_curso' })
   return despertarAlPlan(P, { ...f, estado: 'soltada' })
 }

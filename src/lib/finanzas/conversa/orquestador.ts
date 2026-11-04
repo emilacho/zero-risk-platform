@@ -45,7 +45,9 @@ export async function abrirConversacion(P: PuertosDeConversa, cuerpo: unknown): 
     const v = validarProcedencia(datosCrudos)
     if (!v.ok) return { status: 400, cuerpo: { error: 'entrada_invalida', errores: v.errores } }
   }
-  const conTope = await conTopeDePrueba(P, c.client_id.trim(), c.semilla as Semilla)
+  // 04-nov · la corrida del plan nace con el tope de hoy: el de la plantilla queda de piso
+  const semillaDelPlan: Semilla = typeof c.trabajo_id === 'string' && c.trabajo_id.trim() ? { tope_encargo_usd: TOPE_DEL_ENCARGO_USD, ...(c.semilla as Semilla) } : (c.semilla as Semilla)
+  const conTope = await conTopeDePrueba(P, c.client_id.trim(), semillaDelPlan)
   if (!conTope.ok) return { status: 503, cuerpo: { error: 'libro_ilegible', sin_bloque: true, detalle: conTope.detalle } }
   // 04-nov · la corrida que la abre: el id que manda el plan como `trabajo_id`
   const corrida = typeof c.trabajo_id === 'string' && c.trabajo_id.trim() ? c.trabajo_id.trim() : null
@@ -98,7 +100,7 @@ function abrirFinanciera(e: EncargoDeConversa): ResultadoDePaso {
     costo_usd: 0,
     artefacto: {
       cliente: e.client_id, rubro: s.rubro ?? null, pais: s.pais ?? null, moneda: s.moneda ?? null, fecha: s.fecha ?? null,
-      ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, ...(s.manual !== undefined && s.manual !== null ? { manual: s.manual } : {}), brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
+      ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, ...(s.manual_completo !== undefined && s.manual_completo !== null ? { manual_completo: s.manual_completo } : {}), brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
       datos, linea_base_por_semana: typeof s.linea_base_por_semana === 'number' && s.linea_base_por_semana > 0 ? s.linea_base_por_semana : null, referencias: s.referencias ?? [], evento_alterno: s.evento_alterno ?? {}, pisos: s.pisos ?? {},
       corrida_es_de_ensayo: s.corrida_es_de_ensayo === true, planteo_inicial: planteoInicial, notas_del_dueno: [], datos_del_dueno: [],
     },
@@ -347,10 +349,10 @@ export function preguntasQueFaltan(arts: Arts, semilla: Semilla | undefined): st
   const dadas = new Set(respuestasDeLaSemilla(semilla).map((x) => x.clave))
   return prepararPreguntas(arts, semilla, { pausa: true }).frenan.filter((k) => !dadas.has(k))
 }
-/** pausa UNA vez: tras el cierre de la ronda 1, con críticos abiertos y preguntas sin contestar. Lo que el jefe deje abierto tras la ronda 2 no vuelve a pausar. En seco no se le pregunta a nadie */
+/** pausa UNA vez: tras el cierre de la ronda 1, con críticos abiertos y preguntas sin contestar. Lo que el dueño no contestó o el jefe deje abierto queda en la oficina y no vuelve a pausar (Emilio, 15:37Z). En seco no se le pregunta a nadie */
 export function debePausar(e: EncargoDeConversa, arts: Arts): boolean {
   const a = arts.acuerdo as { criticos?: unknown } | undefined
-  return !e.dry_run && !arts.acuerdo_2 && !arts.cierre && Number(a?.criticos) > 0 && preguntasQueFaltan(arts, e.semilla).length > 0
+  return !e.dry_run && e.semilla?.pausa_atendida !== true && !arts.acuerdo_2 && !arts.cierre && Number(a?.criticos) > 0 && preguntasQueFaltan(arts, e.semilla).length > 0
 }
 
 async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redactor?: string, pausaEncendida = false): Promise<Respuesta> {

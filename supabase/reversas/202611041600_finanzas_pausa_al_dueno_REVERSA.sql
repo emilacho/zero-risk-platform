@@ -11,6 +11,7 @@ alter table public.plan_corridas drop constraint if exists plan_corridas_estado_
 alter table public.plan_corridas add constraint plan_corridas_estado_check check (estado in ('esperando', 'corriendo', 'hecha', 'vencida', 'fallida'));
 alter table public.finanzas_config drop column if exists pausa_al_dueno;
 alter table public.esperas_del_dueno drop column if exists despertar_intentos;
+alter table public.esperas_del_dueno drop column if exists sobre_de_reanudacion;
 do $$
 declare ultima integer;
 begin

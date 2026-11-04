@@ -246,9 +246,9 @@ describe('LA RUTA · buzon_abiertos pasa por las MISMAS guardas que preguntar y 
     const rama = ruta.slice(ruta.indexOf("c.accion === 'buzon_abiertos'"), ruta.indexOf("else r = { status: 400, cuerpo: { error: 'accion_invalida'"))
     for (const guarda of ["error: 'config_ilegible'", "error: 'conversa_apagada'", "typeof c.workflow_id !== 'string'", "typeof c.workflow_execution_id !== 'string'", 'listarAbiertos(B)', 'modo: cfg.preguntas_slack'])
       expect(rama, guarda).toContain(guarda)
-    expect(ruta).toContain("'recoger', 'buzon_abiertos', 'pausar', 'material']")
+    expect(ruta).toContain("'recoger', 'buzon_abiertos']")
   })
   it('no exige encargo_id para listar (no hay uno) pero sí para preguntar y recoger', () => {
-    expect(ruta).toContain("(c.accion === 'buzon_abiertos' || c.accion === 'pausar' || ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string'))")
+    expect(ruta).toContain("(c.accion === 'buzon_abiertos' || ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string'))")
   })
 })

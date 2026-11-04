@@ -6,7 +6,7 @@
  *  · `{ accion: 'cerrar', encargo_id }` → cierra por plazo un encargo abandonado (estado terminal `cierre_por_tope`, sin firma, US$ 0); idempotente.
  * Llave: `x-api-key` = `INTERNAL_API_KEY` (nunca la llave de la sala). Slack del hilo: sin adaptador real (puerto «no configurado»). BUZÓN (MD al dueño): `{ accion: 'preguntar'|'recoger', encargo_id, workflow_id, workflow_execution_id }`, apagado salvo `preguntas_slack = 'envia'`; `{ accion: 'buzon_abiertos', workflow_id, workflow_execution_id }` lista los encargos con un MD abierto (< 72 h) para el vigía `finanzas · buzón`.
  * Modelo: solo si hay `FINANZAS_RUN_SDK_BASE` (nunca en la rama apagada).
- * PAUSA (04-nov): `{ accion: 'pausar', encargo_id, cuerpo, material, workflow_id, workflow_execution_id }` guarda el pedido y el material del plan y pregunta; `{ accion: 'material', espera_id }` los devuelve. `recoger` suelta la pausa cuando el dueño ya contestó.
+ * PAUSA (04-nov): `recoger` suelta la pausa cuando el dueño ya contestó; la pausa se guarda por `/api/finanzas/pausar`.
  * SECO (CC#2 · 14-oct): `{ accion: 'avanzar', encargo_id, simulacion }` → los agentes contestan el guion (SOLO con un encargo `dry_run = true`; con uno real, 409): el seco a US$ 0, sin modelo.
  */
 import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
@@ -20,7 +20,7 @@ import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
 import { nombreDelClienteDe } from '@/lib/finanzas/conversa/nombre'
 import { listarAbiertos, preguntarAlDueno } from '@/lib/finanzas/conversa/buzon'
-import { atenderPausa, materialDeLaEspera, pausarOficina } from '@/lib/finanzas/conversa/pausa'
+import { atenderPausa } from '@/lib/finanzas/conversa/pausa'
 import { despertarPorElFlujo, esperasDeFinanzas } from '@/lib/finanzas/conversa/esperas-supabase'
 import { slackMdPuerto } from '@/lib/buzon-dueno/slack-md'
 import { cerebroDelDueno } from '@/lib/buzon-dueno/cerebro-dueno'
@@ -65,8 +65,7 @@ export async function POST(request: Request) {
   else if (c.accion === 'avanzar' && typeof c.encargo_id === 'string') r = c.simulacion !== undefined ? await avanzarConSimulacion(P, c.encargo_id, c.simulacion) : await avanzar(P, c.encargo_id)
   else if (c.accion === 'leer' && typeof c.encargo_id === 'string') r = await leerConversacion(P, c.encargo_id)
   else if (c.accion === 'cerrar' && typeof c.encargo_id === 'string') r = await cerrarPorPlazo(P, c.encargo_id)
-  else if (c.accion === 'material') r = await materialDeLaEspera({ esperas: esperasDeFinanzas(db) }, c.espera_id)
-  else if ((c.accion === 'buzon_abiertos' || c.accion === 'pausar' || ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string'))) {
+  else if ((c.accion === 'buzon_abiertos' || ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string'))) {
     // BUZÓN por MD: apagado = 0 envíos y 0 lecturas (`preguntas_slack` ≠ 'envia'); el id del dueño y las llaves salen del entorno, nunca del cuerpo
     // una configuración que no se pudo leer NO es «apagada» (503), igual que en abrir/avanzar/leer
     let cfg
@@ -93,9 +92,9 @@ export async function POST(request: Request) {
         esperas: esperasDeFinanzas(db),
         despertar: despertarPorElFlujo({ base: process.env.N8N_BASE_URL, llave: process.env.INTERNAL_API_KEY }),
       }
-      r = c.accion === 'buzon_abiertos' ? await listarAbiertos(B) : c.accion === 'pausar' ? await pausarOficina(B, c) : c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id as string) : await atenderPausa(B, c.encargo_id as string)
+      r = c.accion === 'buzon_abiertos' ? await listarAbiertos(B) : c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id as string) : await atenderPausa(B, c.encargo_id as string)
     }
   }
-  else r = { status: 400, cuerpo: { error: 'accion_invalida', acciones: ['abrir', 'avanzar', 'leer', 'cerrar', 'preguntar', 'recoger', 'buzon_abiertos', 'pausar', 'material'] } }
+  else r = { status: 400, cuerpo: { error: 'accion_invalida', acciones: ['abrir', 'avanzar', 'leer', 'cerrar', 'preguntar', 'recoger', 'buzon_abiertos'] } }
   return NextResponse.json(r.cuerpo, { status: r.status })
 }

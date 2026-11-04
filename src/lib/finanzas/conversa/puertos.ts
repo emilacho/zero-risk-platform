@@ -25,7 +25,9 @@ export interface Semilla {
   ficha_resumen?: string
   manual_resumen?: string
   /** 04-nov · el manual de marca aprobado, entero: toda la oficina lee lo mismo que el redactor */
-  manual?: unknown
+  manual_completo?: unknown
+  /** 04-nov · el dueño ya revisó la ronda de preguntas: lo que no contestó sigue abierto en la oficina, pero no vuelve a detener el plan */
+  pausa_atendida?: boolean
   brazos_resumen?: string
   derivado?: unknown
   /** datos con su procedencia: un dato de ensayo NUNCA entra como medido */

@@ -8,11 +8,10 @@ const COLS = 'id,client_id,clave,estado,sobre,despertado,despertar_intentos'
 const claveDe = (encargo_id: string) => `finanzas:${encargo_id}`
 
 function aEspera(f: Fila): EsperaDeFinanzas {
-  const sobre = (f.sobre && typeof f.sobre === 'object' ? f.sobre : {}) as { cuerpo?: Record<string, unknown>; material?: unknown }
-  const cuerpo = sobre.cuerpo ?? {}
+  const sobre = (f.sobre && typeof f.sobre === 'object' ? f.sobre : {}) as Record<string, unknown>
   return {
-    id: String(f.id), client_id: String(f.client_id), encargo_id: String(f.clave).replace(/^finanzas:/, ''), corrida: typeof cuerpo.corrida === 'string' ? cuerpo.corrida : null,
-    estado: f.estado as EsperaDeFinanzas['estado'], cuerpo, material: sobre.material ?? null, despertado: typeof f.despertado === 'boolean' ? f.despertado : null, intentos_de_despertar: Number(f.despertar_intentos ?? 0),
+    id: String(f.id), client_id: String(f.client_id), encargo_id: String(f.clave).replace(/^finanzas:/, ''), corrida: typeof sobre.corrida === 'string' ? sobre.corrida : null,
+    estado: f.estado as EsperaDeFinanzas['estado'], sobre, despertado: typeof f.despertado === 'boolean' ? f.despertado : null, intentos_de_despertar: Number(f.despertar_intentos ?? 0),
   }
 }
 
@@ -25,14 +24,13 @@ export function esperasDeFinanzas(db: Db): PuertoDeEsperas {
   }
   return {
     async guardar(f) {
-      const r = await db.from(TABLA).insert({ client_id: f.client_id, tipo: 'finanzas', clave: claveDe(f.encargo_id), sobre: { cuerpo: f.cuerpo, material: f.material }, estado: 'esperando', workflow_id: f.workflow_id, workflow_execution_id: f.workflow_execution_id }).select('id')
+      const r = await db.from(TABLA).insert({ client_id: f.client_id, tipo: 'finanzas', clave: claveDe(f.encargo_id), sobre: f.sobre, sobre_de_reanudacion: { material: f.material, sobre: f.sobre }, estado: 'esperando', workflow_id: f.workflow_id, workflow_execution_id: f.workflow_execution_id }).select('id')
       if (!r.error) return { ok: true, id: String((r.data as Fila[])[0].id), nueva: true }
       if (r.error.code !== '23505') return { ok: false, error: r.error.message }
       const ya = await leer('clave', claveDe(f.encargo_id))
       return ya ? { ok: true, id: ya.id, nueva: false } : { ok: false, error: 'la espera chocó y no se pudo releer' }
     },
     delEncargo: (encargo_id) => leer('clave', claveDe(encargo_id)),
-    porId: (id) => leer('id', id),
     async soltar(id, ahora) {
       const hora = ahora.toISOString()
       const r = await db.from(TABLA).update({ estado: 'soltada', soltada_por: 'respuesta_del_dueno', soltada_en: hora, actualizado_en: hora }).eq('id', id).eq('estado', 'esperando').select('id')

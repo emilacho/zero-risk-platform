@@ -87,12 +87,14 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   const fuentes: Fuente[] = []
   const clientes = await leerClientes(db, fuentes)
   const hora = ahora().toISOString()
-  const [compuertas, bandeja, preguntas, deFinanzas, tableros] = await Promise.all([
+  const [compuertas, bandeja, preguntas, deFinanzas, tableros, enPausa] = await Promise.all([
     leer(fuentes, 'plan_aprobaciones', db.from('plan_aprobaciones').select('id, client_id, plan_id, version, creado_en').eq('estado', 'pendiente').limit(TOPE), TOPE),
     leer(fuentes, 'hitl_queue', db.from('hitl_queue').select('id, client_id, output_id, type, documento, title, output_preview, priority, payload, metadata, created_at, expires_at').eq('status', 'pending').limit(TOPE), TOPE),
     leer(fuentes, 'cerebro_dueno_preguntas', db.from('cerebro_dueno_preguntas').select('id, client_id, tema, pregunta, creado_en').eq('estado', 'pendiente').limit(TOPE), TOPE),
     leer(fuentes, 'finanzas_preguntas', db.from('finanzas_preguntas').select('id, client_id, clave, texto, creado_en').eq('estado', 'enviada').limit(TOPE), TOPE),
     leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en').eq('estado', 'sin_firma').eq('vigente', true).eq('dry_run', false).limit(TOPE), TOPE),
+    // 04-nov · sin pedir el `sobre`: lleva el material del plan y pesa cientos de KB
+    leer(fuentes, 'esperas_del_dueno', db.from('esperas_del_dueno').select('id, client_id, creado_en').eq('tipo', 'finanzas').eq('estado', 'esperando').limit(TOPE), TOPE),
   ])
   const crudas: Omit<Decision, 'cliente' | 'vencida' | 'titulo_interno'>[] = []
   // 01-nov · firma de Emilio: solo lo vigente pide firma. El reloj las cierra; aquí no se muestran aunque el reloj no haya pasado. Si los planes no se leen, se muestra todo.
@@ -113,6 +115,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     const m = TIPOS_HITL[subtipo] ?? { tipo: 'revision' as const, ruta: null, accion: null }
     crudas.push({ id: String(h.id), tipo: m.tipo, subtipo, fuente: 'hitl_queue', client_id: texto(h.client_id), titulo: sinSecretos(h.title ?? h.output_preview, 300) ?? `Revisión pendiente (${subtipo})`, desde: texto(h.created_at), vence: texto(h.expires_at), prioridad: texto(h.priority), decidir: { ruta: m.ruta ?? RUTA_POR_DOCUMENTO[String(h.documento)] ?? null, accion: m.accion }, costo_usd: null, costo_nota: m.tipo === 'plan' ? 'aprobar no gasta por sí mismo' : null })
   }
+  for (const p of enPausa) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_en_pausa', fuente: 'esperas_del_dueno', client_id: texto(p.client_id), titulo: 'El plan está en pausa: la oficina financiera espera tus respuestas en el buzón de preguntas', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null })
   for (const p of preguntas) crudas.push({ id: String(p.id), tipo: 'pregunta_al_dueno', subtipo: String(p.tema ?? 'pregunta'), fuente: 'cerebro_dueno_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta al dueño'), desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null })
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null })
   for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null })
