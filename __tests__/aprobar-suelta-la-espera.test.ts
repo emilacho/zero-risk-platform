@@ -22,6 +22,12 @@ function base(filas: Array<Record<string, unknown>> = [{ id: 'e1', client_id: C,
 const fila = (db: DbFalsa, id = 'e1') => db.tablas['esperas_del_dueno'].find((f) => f.id === id)!
 
 describe('aprobar suelta la espera', () => {
+  it('🔴 aprobar pide un plan NUEVO aunque el alta guardara el sobre sin forzar: el redactor no reusa lo escrito con el manual anterior', async () => {
+    const db = base([{ id: 'e1', client_id: C, tipo: 'manual', clave: 'j1:planear', sobre: { ...SOBRE, payload: { ...SOBRE.payload, force_restart: false } }, estado: 'esperando', manual_id: null, creado_en: '2026-11-03T10:00:00Z' }]), f = sala()
+    await soltarEsperaYPedirPlan(db as BaseDeEsperas, pedido(), entorno(f))
+    expect(JSON.parse(f.mock.calls[0][1].body).payload).toMatchObject({ force_restart: true, corrida: 'j1:planear', client_id: C })
+  })
+
   it('🔴 manda el sobre que el alta dejó guardado, con su clave, y la espera queda soltada', async () => {
     const db = base(), f = sala()
     expect(await soltarEsperaYPedirPlan(db as BaseDeEsperas, pedido(), entorno(f))).toMatchObject({ pedido: true, repetido: false })
