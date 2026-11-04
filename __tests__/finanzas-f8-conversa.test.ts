@@ -120,7 +120,7 @@ describe('F8 · apagada', () => {
   })
   it('una semilla enorme se rechaza con 413', async () => {
     const m = mundo()
-    expect((await abrirConversacion(m.P, { client_id: CLIENTE, dry_run: false, semilla: { ficha_resumen: 'x'.repeat(41_000) } })).status).toBe(413)
+    expect((await abrirConversacion(m.P, { client_id: CLIENTE, dry_run: false, semilla: { ficha_resumen: 'x'.repeat(700_000) } })).status).toBe(413)
   })
 })
 

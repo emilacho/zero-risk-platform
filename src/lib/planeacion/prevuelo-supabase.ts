@@ -22,6 +22,15 @@ export function puertosDeSupabase(db: SupabaseClient, ahora: () => Date = () => 
     corridas: almacenDeCorridas(d, ahora),
     catalogo: () => leerCatalogo(d),
 
+    async esperaDeReanudacion(id) {
+      const r = await db.from('esperas_del_dueno').select('client_id, estado, sobre, creado_en').eq('id', id).eq('tipo', 'finanzas').limit(1)
+      if (r.error) throw new Error(`esperas_del_dueno: ${r.error.message}`)
+      const f = lista(r.data)[0]
+      if (!f) return null
+      const corrida = (f.sobre as { corrida?: unknown } | null)?.corrida
+      return { client_id: String(f.client_id), estado: String(f.estado), corrida: typeof corrida === 'string' ? corrida : null, creado_en: String(f.creado_en) }
+    },
+
     async ficha(client_id): Promise<LecturaDeFicha> {
       try {
         const c = await db.from('clients').select('id, config, country').eq('id', client_id).limit(1)

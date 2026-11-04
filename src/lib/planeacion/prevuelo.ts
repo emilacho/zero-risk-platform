@@ -13,7 +13,7 @@
  *    (desde el 30-oct subir la ficha del cliente sí arregla la falta de cupo: su tope manda).
  * PURO: todo lo de afuera entra por puertos (se prueba con reloj simulado, sin red, sin gasto). NADIE lo llama todavía.
  */
-import { abrir, correr, reintentar, CADA_REINTENTO_S, ESPERA_MAXIMA_MIN, type PuertoDeCorridas } from './corridas'
+import { abrir, correr, EN_PAUSA, reanudar, reintentar, CADA_REINTENTO_S, ESPERA_MAXIMA_MIN, type PuertoDeCorridas } from './corridas'
 import type { CatalogoSnapshot } from './dato-v1/catalogo'
 import type { LecturaDeCatalogo } from './catalogo/leer'
 
@@ -51,12 +51,14 @@ export interface PuertosDePrevuelo {
   ficha(client_id: string): Promise<LecturaDeFicha>
   cupo(client_id: string): Promise<LecturaDeCupo>
   senal(client_id: string): Promise<LecturaDeSenal>
+  /** la espera con la que vuelve una corrida que pausó la oficina financiera */
+  esperaDeReanudacion?(id: string): Promise<{ client_id: string; corrida: string | null; estado: string; creado_en: string } | null>
 }
 
 export type MotivoDeNoCorre =
   | 'entrada_invalida' | 'dry_run_no_booleano' | 'catalogo_no_aplicado' | 'catalogo_incompleto' | 'lectura_fallida'
   | 'cliente_inexistente' | 'sin_manual_vigente' | 'sin_moneda' | 'falta_cupo' | 'techo_generico_insuficiente'
-  | 'corrida_activa' | 'dry_run_distinto' | 'otro_re_disparo_gano' | 'corrida_no_viva'
+  | 'corrida_activa' | 'dry_run_distinto' | 'otro_re_disparo_gano' | 'corrida_no_viva' | 'espera_invalida'
 
 export interface Decision {
   decision: 'correr' | 'esperar' | 'correr_con_lo_del_alta' | 'ya_en_marcha' | 'terminada' | 'no_corre'
@@ -78,11 +80,14 @@ export interface Decision {
   declara: string[]
   sube_la_ficha_a?: number
   corrida?: string
+  /** 04-nov · volvió de una pausa de más de 3 días: el flujo lee los brazos de nuevo en vez de usar lo guardado (Lenovo, 15:57Z) */
+  material_viejo?: boolean
   /** `plan_corridas.id` · 04-nov (firma de Lenovo): es el `trabajo_id` de tipo `plan` de cada llamada · no está si la corrida no se abrió */
   corrida_id?: string
 }
 
 const UUIDISH = /^[A-Za-z0-9_-]{8,64}$/
+export const DIAS_DE_VIGENCIA_DEL_MATERIAL = 3
 const r2 = (x: number) => Math.round(x * 100) / 100
 const base = (dry: boolean): Decision => ({ decision: 'no_corre', motivo: '', relleno_permitido: false, dry_run: dry, huecos_tipos: [], huecos_sin_tipo: [], declara: [] })
 const noCorre = (dry: boolean, motivo: MotivoDeNoCorre, detalle?: string, extra: Partial<Decision> = {}): Decision => ({ ...base(dry), decision: 'no_corre', motivo, ...(detalle ? { detalle } : {}), ...extra })
@@ -112,7 +117,7 @@ export interface ReglasDePrevuelo {
 export const REGLAS_DE_PREVUELO: ReglasDePrevuelo = { autorizaRelleno: (s) => s !== null && s.listo === true }
 
 export async function prevuelo(
-  e: { client_id: unknown; corrida: unknown; dry_run?: unknown; espera_max_min?: number },
+  e: { client_id: unknown; corrida: unknown; dry_run?: unknown; espera_max_min?: number; reanudar_esperas_id?: unknown },
   P: PuertosDePrevuelo,
   reglas: ReglasDePrevuelo = REGLAS_DE_PREVUELO,
 ): Promise<Decision> {
@@ -140,6 +145,30 @@ export async function prevuelo(
   const paisMoneda = snap.monedaDePais(f.pais)
   if (!f.moneda_declarada && !paisMoneda) return noCorre(dry, 'sin_moneda', 'sin moneda declarada ni fila de país en el catálogo: la oficina no calcula dinero (la aclara la agencia)')
 
+  // 04-nov · vuelve de la pausa: esta corrida ya pasó su cupo y su cerebro listo, y el material ya está pagado. Si no se dejara seguir, el dueño habría contestado para nada
+  if (e.reanudar_esperas_id !== undefined) {
+    const espera = typeof e.reanudar_esperas_id === 'string' && P.esperaDeReanudacion ? await P.esperaDeReanudacion(e.reanudar_esperas_id) : null
+    if (!espera || espera.client_id !== client_id || espera.corrida !== corrida || espera.estado !== 'soltada') return noCorre(dry, 'espera_invalida', 'la espera no es de esta corrida o todavía no se soltó')
+    const previa = await P.corridas.leer(client_id, corrida)
+    if (!previa) return noCorre(dry, 'corrida_no_viva', 'la corrida que pausó ya no existe')
+    const comunDeLaPausa = { corrida, corrida_id: previa.id, espera_desde: previa.espera_desde, vence_en: previa.vence_en, intentos: previa.intentos }
+    if (previa.estado === 'corriendo') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'la corrida ya volvió de la pausa: este disparo no hace nada (un solo plan)', ...comunDeLaPausa }
+    if (previa.estado !== EN_PAUSA) return { ...base(dry), decision: 'terminada', motivo: `la corrida ya terminó (${previa.estado})`, ...comunDeLaPausa }
+    // otro plan del cliente arrancó mientras esta esperaba: ese manda, y al llegar a la oficina cierra esta. No corre: el flujo avisa en #alertas y la respuesta del dueño ya está guardada para el plan que sigue
+    const otra = await P.corridas.activaDe(client_id)
+    if (otra) return noCorre(dry, 'corrida_activa', `el cliente ya tiene la corrida «${otra.corrida}» ${otra.estado} desde ${otra.espera_desde}`, { corrida: otra.corrida })
+    let r: Awaited<ReturnType<typeof reanudar>>
+    // la misma carrera por el índice de «una activa por cliente», si el otro arranca justo ahora
+    try { r = await reanudar(P.corridas, { client_id, corrida }) } catch (x) { return noCorre(dry, 'corrida_activa', `no se pudo reanudar: ${x instanceof Error ? x.message : String(x)}`.slice(0, 300)) }
+    if (r.status !== 200 || r.accion === 'perdiste_la_carrera') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'otro disparo la reanudó primero', ...comunDeLaPausa }
+    const viejo = P.ahora().getTime() - Date.parse(espera.creado_en) > DIAS_DE_VIGENCIA_DEL_MATERIAL * 86_400_000
+    if (!viejo) return { ...base(dry), decision: 'correr', motivo: 'vuelve de la pausa: el dueño contestó', ...comunDeLaPausa, vence_en: r.fila.vence_en }
+    // los brazos salen de nuevo: el relleno de Apify sigue exigiendo el «cerebro listo» leído en esta llamada
+    const lec = await P.senal(client_id)
+    const senal = lec.ok ? lec.senal : null
+    return { ...base(dry), decision: 'correr', motivo: 'vuelve de una pausa larga: el material se lee de nuevo', ...comunDeLaPausa, vence_en: r.fila.vence_en, material_viejo: true, relleno_permitido: reglas.autorizaRelleno(senal) }
+  }
+
   // 4 · el cupo (solo si va a gastar: un ensayo no gasta)
   if (!dry) {
     const c = await P.cupo(client_id)
@@ -162,6 +191,7 @@ export async function prevuelo(
   if (ab.accion === 'terminada') return { ...base(dry), decision: 'terminada', motivo: `la corrida ya terminó (${ab.fila.estado})`, corrida, corrida_id: ab.fila.id, espera_desde: ab.fila.espera_desde, vence_en: ab.fila.vence_en, intentos: ab.fila.intentos }
   const fila = ab.fila
   const comun = { corrida, corrida_id: fila.id, espera_desde: fila.espera_desde, vence_en: fila.vence_en, intentos: fila.intentos }
+  if (fila.estado === EN_PAUSA) return { ...base(dry), decision: 'ya_en_marcha', motivo: 'la corrida espera la respuesta del dueño: la suelta su respuesta, no un re-disparo', ...comun }
   if (fila.estado === 'corriendo') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'la corrida ya está corriendo: este re-disparo no hace nada (un solo plan)', ...comun }
 
   // 6 · la señal «cerebro listo» (se lee ANTES de vencer: la lectura del 45:00 cuenta)

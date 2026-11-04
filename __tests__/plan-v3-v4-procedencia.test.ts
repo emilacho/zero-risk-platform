@@ -77,7 +77,7 @@ describe('V4 · la puerta de F8 VALIDA `semilla.datos` (antes los dejaba pasar)'
   })
   it('el 413 sigue mandando antes (semilla enorme)', async () => {
     const { P } = puertos()
-    expect((await abrirConversacion(P, { client_id: 'c', dry_run: false, semilla: { ficha_resumen: 'x'.repeat(41_000) } })).status).toBe(413)
+    expect((await abrirConversacion(P, { client_id: 'c', dry_run: false, semilla: { ficha_resumen: 'x'.repeat(700_000) } })).status).toBe(413)
   })
 })
 

@@ -40,7 +40,7 @@ export function almacenDeCorridas(db: Db, ahora: () => Date = () => new Date()):
     },
     async avanzarSi(client_id, corrida, intentosEsperado, cambios) {
       const r = (await db.from(TABLA).update({ ...cambios, actualizado_en: new Date().toISOString() })
-        .eq('client_id', client_id).eq('corrida', corrida).eq('intentos', intentosEsperado).in('estado', ['esperando', 'corriendo']).select(COLS)) as Res
+        .eq('client_id', client_id).eq('corrida', corrida).eq('intentos', intentosEsperado).in('estado', ['esperando', 'corriendo', 'en_pausa']).select(COLS)) as Res
       if (r.error) return falla('avanzar', r.error)
       return una(r.data)
     },

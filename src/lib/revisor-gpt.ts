@@ -64,10 +64,10 @@ export type ResultadoDelRevisor =
   | { ok: false; error: string; costo_usd?: number; intentos?: IntentoDelRevisor[] }
 
 export const ESPERAS_DEL_REVISOR_MS = [5_000, 20_000, 60_000]
-/** tiempo límite de CADA intento: un fetch colgado cuenta como fallo de red y se reintenta (condición de CC#3 sobre #477) */
-export const TIEMPO_LIMITE_POR_INTENTO_MS = 60_000
-/** total máximo de la llamada con sus reintentos: la ruta de turnos vive 300 s y le quedan otros pasos; si el siguiente intento no cabe, se deja de reintentar */
-export const PRESUPUESTO_TOTAL_MS = 200_000
+/** tiempo límite de CADA intento: un fetch colgado cuenta como fallo de red y se reintenta (condición de CC#3 sobre #477). 04-nov (GO de Lenovo, regla de límites al máximo): de 60 s a 600 s: un plan lleva ~144.000 caracteres y se cortaba siempre */
+export const TIEMPO_LIMITE_POR_INTENTO_MS = 600_000
+/** total máximo de la llamada con sus reintentos: la ruta de turnos vive 800 s y le quedan otros pasos; si el siguiente intento no cabe, se deja de reintentar */
+export const PRESUPUESTO_TOTAL_MS = 750_000
 const sumaDeIntentos = (xs: IntentoDelRevisor[]) => +xs.reduce((a, x) => a + x.costo_usd, 0).toFixed(8)
 
 export interface OpcionesDeLlamada {

@@ -4,7 +4,7 @@
  */
 import { estadoInicial } from '../../oficina/tipos'
 import type { Db } from '../almacen-supabase'
-import type { AlmacenDeConversa, CambiosDeEncargo, EncargoDeConversa, TurnoDeConversa } from './puertos'
+import type { AlmacenDeConversa, CambiosDeEncargo, EncargoDeConversa, Semilla, TurnoDeConversa } from './puertos'
 
 type Fila = Record<string, unknown>
 function ok<T>(r: { data: T; error: { message: string; code?: string } | null }, que: string): T {
@@ -27,8 +27,21 @@ export function almacenDeConversa(db: Db): AlmacenDeConversa {
     async crearEncargo(n) {
       try {
         // una sola conversación ABIERTA por cliente: si hay una, se devuelve esa (no se abre otra ni se pisa)
-        const abiertos = ok(await db.from('finanzas_encargos').select('*').eq('client_id', n.client_id).in('estado', ['abierto', 'en_curso']).limit(1), 'leer el abierto') as Fila[] | null
-        if (abiertos?.[0]) return { ok: true as const, encargo: aEncargo(abiertos[0]), nuevo: false }
+        const abiertos = ok(await db.from('finanzas_encargos').select('*').eq('client_id', n.client_id).in('estado', ['abierto', 'en_curso', 'esperando_al_dueno']).limit(1), 'leer el abierto') as Fila[] | null
+        // 04-nov · cada corrida abre el suyo: lo que quedó abierto de OTRA corrida se cierra, y no se hereda ni su gasto ni sus pasos. Sin corrida en el pedido, como siempre
+        const corrida = n.semilla?.corrida
+        if (abiertos?.[0]) {
+          const previa = (abiertos[0].semilla as Semilla | null)?.corrida
+          if (!corrida || previa === corrida) return { ok: true as const, encargo: aEncargo(abiertos[0]), nuevo: false }
+          ok(await db.from('finanzas_encargos').update({ estado: 'fallido', estado_del_motor: { ...(abiertos[0].estado_del_motor as object), cerrado_por: 'otra_corrida', corrida_nueva: corrida }, actualizado_en: new Date().toISOString() }).eq('id', abiertos[0].id).in('estado', ['abierto', 'en_curso', 'esperando_al_dueno']), 'cerrar el de otra corrida')
+        }
+        // la que pausó, o la que ya se soltó pero no pudo volver porque este plan le ganó: ninguna queda colgada
+        if (abiertos?.[0]) {
+          const hora = new Date().toISOString()
+          ok(await db.from('esperas_del_dueno').update({ estado: 'reemplazada', actualizado_en: hora }).eq('tipo', 'finanzas').eq('clave', `finanzas:${String(abiertos[0].id)}`).eq('estado', 'esperando'), 'reemplazar la espera')
+          const vieja = (abiertos[0].semilla as Semilla | null)?.corrida
+          if (vieja) ok(await db.from('plan_corridas').update({ estado: 'fallida', motivo: 'la reemplazó otro plan mientras esperaba al dueño', actualizado_en: hora }).eq('id', vieja).eq('estado', 'en_pausa'), 'cerrar la corrida en pausa')
+        }
         const fila = { client_id: n.client_id, estado: 'abierto', estado_del_motor: estadoInicial(), gasto_usd: 0, dry_run: n.dry_run, semilla: n.semilla }
         const r = await db.from('finanzas_encargos').insert(fila).select('*').single()
         if (r.error) {
@@ -124,16 +137,22 @@ export function almacenDeConversa(db: Db): AlmacenDeConversa {
     },
     async buzonAbiertos(ahora, horas) {
       try {
+        // 04-nov · una pausa no vence: entra siempre, primero, aunque aún no haya salido su mensaje; y también la que se soltó y no pudo despertar al plan
+        const pausadas = await db.from('finanzas_encargos').select('id').eq('estado', 'esperando_al_dueno').eq('dry_run', false)
+        if (pausadas.error || !Array.isArray(pausadas.data)) return null
+        const sueltas = await db.from('esperas_del_dueno').select('clave,despertado').eq('tipo', 'finanzas').eq('estado', 'soltada')
+        if (sueltas.error || !Array.isArray(sueltas.data)) return null
+        const enPausa = [...(pausadas.data as Fila[]).map((f) => String(f.id)), ...(sueltas.data as Fila[]).filter((f) => f.despertado !== true).map((f) => String(f.clave).replace(/^finanzas:/, ''))]
         const desde = new Date(ahora.getTime() - horas * 3600 * 1000).toISOString()
         const a = await db.from('finanzas_artefactos').select('encargo_id,creado_en').eq('tipo', 'buzon_respuestas').eq('version', 1).gte('creado_en', desde)
         if (a.error || !Array.isArray(a.data)) return null
         // los más recientes primero: si hubiera más de 20, el tope deja los del último día y no unos cualesquiera
         const ids = [...new Set((a.data as Fila[]).sort((x, y) => String(y.creado_en).localeCompare(String(x.creado_en))).map((f) => String(f.encargo_id)))]
-        if (!ids.length) return []
+        if (!ids.length) return [...new Set(enPausa)].slice(0, 20)
         const enc = await db.from('finanzas_encargos').select('id,slack_canal,slack_ts,dry_run').in('id', ids)
         if (enc.error || !Array.isArray(enc.data)) return null
         const buenos = new Set((enc.data as Fila[]).filter((f) => f.dry_run !== true && !!f.slack_canal && !!f.slack_ts).map((f) => String(f.id)))
-        return ids.filter((i) => buenos.has(i)).slice(0, 20)
+        return [...new Set([...enPausa, ...ids.filter((i) => buenos.has(i))])].slice(0, 20)
       } catch { return null }
     },
     async guardarBuzon(c) {

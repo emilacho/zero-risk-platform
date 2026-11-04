@@ -9,12 +9,12 @@ const base = { apiKey: 'sk-test', modelo: 'm', texto: 'x', esperar: async () => 
 const colgado = ((_u: unknown, init?: RequestInit) => new Promise((_res, rej) => { init?.signal?.addEventListener('abort', () => rej(init.signal!.reason)) })) as unknown as typeof fetch
 
 describe('revisor GPT · tiempo límite por intento', () => {
-  it('por omisión: 60 s por intento y 200 s en total, y el peor caso cabe en los 300 s de la ruta', () => {
-    expect(TIEMPO_LIMITE_POR_INTENTO_MS).toBe(60_000)
-    expect(PRESUPUESTO_TOTAL_MS).toBe(200_000)
-    expect(PRESUPUESTO_TOTAL_MS).toBeLessThan(300_000)
-    // aun sin presupuesto, 4 intentos de 60 s + 85 s de esperas serían 325 s: por eso existe el tope total
-    expect(4 * TIEMPO_LIMITE_POR_INTENTO_MS + ESPERAS_DEL_REVISOR_MS.reduce((a, b) => a + b, 0)).toBeGreaterThan(300_000)
+  it('por omisión: 600 s por intento y 750 s en total, y el peor caso cabe en los 800 s de la ruta', () => {
+    expect(TIEMPO_LIMITE_POR_INTENTO_MS).toBe(600_000)
+    expect(PRESUPUESTO_TOTAL_MS).toBe(750_000)
+    expect(PRESUPUESTO_TOTAL_MS).toBeLessThan(800_000)
+    // sin presupuesto, 4 intentos + esperas se pasarían de la ruta: por eso existe el tope total
+    expect(4 * TIEMPO_LIMITE_POR_INTENTO_MS + ESPERAS_DEL_REVISOR_MS.reduce((a, b) => a + b, 0)).toBeGreaterThan(800_000)
   })
 
   it('un fetch que no responde se corta al vencer el tiempo del intento y se cuenta como fallo de red (se reintenta)', async () => {
@@ -33,11 +33,11 @@ describe('revisor GPT · tiempo límite por intento', () => {
   it('presupuesto total: si la espera + otro intento ya no caben, deja de reintentar y lo dice', async () => {
     let t = 0
     let n = 0
-    const f = (async () => { n++; t += 60_000; throw new TypeError('fetch failed') }) as unknown as typeof fetch
+    const f = (async () => { n++; t += 600_000; throw new TypeError('fetch failed') }) as unknown as typeof fetch
     const dormidas: number[] = []
     const r = await llamarRevisorGpt({ ...base, f, ahora: () => t, esperar: async (ms) => { dormidas.push(ms); t += ms } })
-    // intento 1 (0→60 s) · espera 5 s + intento 2 (→125 s) · espera 20 s + 60 s = 205 s > 200 s ⇒ no hay tercero
-    expect(n).toBe(2); expect(dormidas).toEqual([5_000])
+    // intento 1 (0→600 s) · espera 5 s + otro intento de 600 s = 1.205 s > 750 s ⇒ no hay segundo: un corte por tiempo no se reintenta
+    expect(n).toBe(1); expect(dormidas).toEqual([])
     expect(r.ok).toBe(false)
     expect((r as { error: string }).error).toContain('sin presupuesto')
     expect(t).toBeLessThanOrEqual(PRESUPUESTO_TOTAL_MS)

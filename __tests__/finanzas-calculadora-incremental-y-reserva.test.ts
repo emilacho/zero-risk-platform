@@ -158,8 +158,8 @@ describe('RESERVA DEL CIERRE · lo medido + margen, sin bajar la defensa', () =>
     const s = siguientePaso(estadoAntesDelCierre2(2.70), nueva)
     expect(s.accion).toBe('cierre_por_tope')
     expect(s.accion === 'cierre_por_tope' && s.razon).toBe('tope_de_gasto')
-    // y el tope del encargo sigue sin pasar de 3,00 aunque la semilla pida más
-    expect(plantillaDelEncargo(enc(0, 9), [turno('cierre', 0.22)]).limites.tope_encargo_usd).toBe(3)
+    // y el tope del encargo sigue sin pasar del techo aunque la semilla pida más
+    expect(plantillaDelEncargo(enc(0, 9), [turno('cierre', 0.22)]).limites.tope_encargo_usd).toBe(5)
   })
 })
 

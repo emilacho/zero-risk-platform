@@ -196,7 +196,7 @@ describe('buzonAbiertos · el almacén real (base falsa con eq/gte/in)', () => {
         eq: (c: string, v: unknown) => { filtros.push((f) => f[c] === v); return api },
         gte: (c: string, v: string) => { filtros.push((f) => String(f[c]) >= v); return api },
         in: (c: string, v: unknown[]) => { filtros.push((f) => v.includes(f[c])); return api },
-        then: (ok: any) => ok(falla === tabla ? { data: null, error: { message: 'caída' } } : { data: t[tabla].filter((f) => filtros.every((fn) => fn(f))).map((f) => structuredClone(f)), error: null }),
+        then: (ok: any) => ok(falla === tabla ? { data: null, error: { message: 'caída' } } : { data: (t[tabla] ?? []).filter((f) => filtros.every((fn) => fn(f))).map((f) => structuredClone(f)), error: null }),
       }
       return api
     }
