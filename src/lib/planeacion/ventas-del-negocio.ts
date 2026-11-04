@@ -1,5 +1,5 @@
 /**
- * VENTAS DEL NEGOCIO · la cifra total es la de su caja, y lo del sitio es un desglose de ella (Emilio, 4-nov: «¿no sería un dato más real las ventas en Loyverse?»). Solo lectura.
+ * VENTAS DEL NEGOCIO · la cifra total es la de su caja, y lo del sitio es un desglose de ella (Emilio, 4-nov: el dato real es el del punto de venta, porque el sitio aún no abre). Solo lectura.
  * La caja se mide a diario y queda en las fichas `metrica:<proveedor>:ingreso|tickets:<periodo>`: aquí no se llama a la caja, ni hace falta su llave, y sirve para cualquier proveedor.
  * NUNCA se suman: cada pedido entregado por el sitio también entra a la caja. «No se sabe» nunca se dice como «sin ventas».
  */

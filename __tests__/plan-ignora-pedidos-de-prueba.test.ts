@@ -248,6 +248,17 @@ describe('el brazo de punta a punta, con analítica y base falsas', () => {
       expect(leido).toContain('sin ventas reales por el sitio todavía; la sede de Guayaquil aún no abre')
       expect(leido).toContain('no cuenta ventas')
     })
+    it('🔴 la cifra de la caja entra en lo que lee el redactor, también con el tope de eventos', async () => {
+      mocks.db = base({ fichas: [
+        { atributo: 'metrica:loyverse:ingreso:ultimos_30_dias', provenance_tag: { metrica: { valor: 5799.3 }, datos: { ventana_hasta: '2026-11-04' } } },
+        { atributo: 'metrica:loyverse:tickets:ultimos_30_dias', provenance_tag: { metrica: { valor: 524 } } },
+      ] }).db
+      const r = await pedir()
+      const leido = JSON.stringify(r.datos).slice(0, CORTE)
+      expect(JSON.stringify(r.datos).length).toBeGreaterThan(CORTE)
+      expect(leido).toContain('5799.30 en 524 tickets')
+      expect(leido).toContain('no se suma')
+    })
     it('🔴 las ventas van antes que la lista de eventos', async () => {
       const llaves = Object.keys((await pedir()).datos)
       expect(llaves.indexOf('ventas_del_negocio')).toBeLessThan(llaves.indexOf('conducta_de_visitas'))
