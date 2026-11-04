@@ -13,7 +13,7 @@
  *    (desde el 30-oct subir la ficha del cliente sí arregla la falta de cupo: su tope manda).
  * PURO: todo lo de afuera entra por puertos (se prueba con reloj simulado, sin red, sin gasto). NADIE lo llama todavía.
  */
-import { abrir, correr, reintentar, CADA_REINTENTO_S, ESPERA_MAXIMA_MIN, type PuertoDeCorridas } from './corridas'
+import { abrir, correr, EN_PAUSA, reanudar, reintentar, CADA_REINTENTO_S, ESPERA_MAXIMA_MIN, type PuertoDeCorridas } from './corridas'
 import type { CatalogoSnapshot } from './dato-v1/catalogo'
 import type { LecturaDeCatalogo } from './catalogo/leer'
 
@@ -51,12 +51,14 @@ export interface PuertosDePrevuelo {
   ficha(client_id: string): Promise<LecturaDeFicha>
   cupo(client_id: string): Promise<LecturaDeCupo>
   senal(client_id: string): Promise<LecturaDeSenal>
+  /** la espera con la que vuelve una corrida que pausó la oficina financiera */
+  esperaDeReanudacion?(id: string): Promise<{ client_id: string; corrida: string | null; estado: string } | null>
 }
 
 export type MotivoDeNoCorre =
   | 'entrada_invalida' | 'dry_run_no_booleano' | 'catalogo_no_aplicado' | 'catalogo_incompleto' | 'lectura_fallida'
   | 'cliente_inexistente' | 'sin_manual_vigente' | 'sin_moneda' | 'falta_cupo' | 'techo_generico_insuficiente'
-  | 'corrida_activa' | 'dry_run_distinto' | 'otro_re_disparo_gano' | 'corrida_no_viva'
+  | 'corrida_activa' | 'dry_run_distinto' | 'otro_re_disparo_gano' | 'corrida_no_viva' | 'espera_invalida'
 
 export interface Decision {
   decision: 'correr' | 'esperar' | 'correr_con_lo_del_alta' | 'ya_en_marcha' | 'terminada' | 'no_corre'
@@ -112,7 +114,7 @@ export interface ReglasDePrevuelo {
 export const REGLAS_DE_PREVUELO: ReglasDePrevuelo = { autorizaRelleno: (s) => s !== null && s.listo === true }
 
 export async function prevuelo(
-  e: { client_id: unknown; corrida: unknown; dry_run?: unknown; espera_max_min?: number },
+  e: { client_id: unknown; corrida: unknown; dry_run?: unknown; espera_max_min?: number; reanudar_esperas_id?: unknown },
   P: PuertosDePrevuelo,
   reglas: ReglasDePrevuelo = REGLAS_DE_PREVUELO,
 ): Promise<Decision> {
@@ -140,6 +142,20 @@ export async function prevuelo(
   const paisMoneda = snap.monedaDePais(f.pais)
   if (!f.moneda_declarada && !paisMoneda) return noCorre(dry, 'sin_moneda', 'sin moneda declarada ni fila de país en el catálogo: la oficina no calcula dinero (la aclara la agencia)')
 
+  // 04-nov · vuelve de la pausa: esta corrida ya pasó su cupo y su cerebro listo, y el material ya está pagado. Si no se dejara seguir, el dueño habría contestado para nada
+  if (e.reanudar_esperas_id !== undefined) {
+    const espera = typeof e.reanudar_esperas_id === 'string' && P.esperaDeReanudacion ? await P.esperaDeReanudacion(e.reanudar_esperas_id) : null
+    if (!espera || espera.client_id !== client_id || espera.corrida !== corrida || espera.estado !== 'soltada') return noCorre(dry, 'espera_invalida', 'la espera no es de esta corrida o todavía no se soltó')
+    const previa = await P.corridas.leer(client_id, corrida)
+    if (!previa) return noCorre(dry, 'corrida_no_viva', 'la corrida que pausó ya no existe')
+    const comunDeLaPausa = { corrida, corrida_id: previa.id, espera_desde: previa.espera_desde, vence_en: previa.vence_en, intentos: previa.intentos }
+    if (previa.estado === 'corriendo') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'la corrida ya volvió de la pausa: este disparo no hace nada (un solo plan)', ...comunDeLaPausa }
+    if (previa.estado !== EN_PAUSA) return { ...base(dry), decision: 'terminada', motivo: `la corrida ya terminó (${previa.estado})`, ...comunDeLaPausa }
+    const r = await reanudar(P.corridas, { client_id, corrida })
+    if (r.status !== 200 || r.accion === 'perdiste_la_carrera') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'otro disparo la reanudó primero', ...comunDeLaPausa }
+    return { ...base(dry), decision: 'correr', motivo: 'vuelve de la pausa: el dueño contestó', ...comunDeLaPausa, vence_en: r.fila.vence_en }
+  }
+
   // 4 · el cupo (solo si va a gastar: un ensayo no gasta)
   if (!dry) {
     const c = await P.cupo(client_id)
@@ -162,6 +178,7 @@ export async function prevuelo(
   if (ab.accion === 'terminada') return { ...base(dry), decision: 'terminada', motivo: `la corrida ya terminó (${ab.fila.estado})`, corrida, corrida_id: ab.fila.id, espera_desde: ab.fila.espera_desde, vence_en: ab.fila.vence_en, intentos: ab.fila.intentos }
   const fila = ab.fila
   const comun = { corrida, corrida_id: fila.id, espera_desde: fila.espera_desde, vence_en: fila.vence_en, intentos: fila.intentos }
+  if (fila.estado === EN_PAUSA) return { ...base(dry), decision: 'ya_en_marcha', motivo: 'la corrida espera la respuesta del dueño: la suelta su respuesta, no un re-disparo', ...comun }
   if (fila.estado === 'corriendo') return { ...base(dry), decision: 'ya_en_marcha', motivo: 'la corrida ya está corriendo: este re-disparo no hace nada (un solo plan)', ...comun }
 
   // 6 · la señal «cerebro listo» (se lee ANTES de vencer: la lectura del 45:00 cuenta)

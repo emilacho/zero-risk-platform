@@ -153,7 +153,7 @@ export interface AcuerdoV1 {
   hallazgos: HallazgoDelJefe[]
   conflictos_resueltos: string[]
   dato_que_no_bloquea?: string
-  preguntas_a_emilio: Array<{ clave: string; texto: string; recomendacion: string; supuesto_si_no_responde: string; impacto?: 'alto' | 'medio' | 'bajo' }>
+  preguntas_a_emilio: Array<{ clave: string; texto: string; recomendacion: string; supuesto_si_no_responde: string; impacto?: 'alto' | 'medio' | 'bajo'; frena_la_firma?: boolean }>
 }
 export function validarAcuerdo(v: unknown): Resultado<AcuerdoV1> {
   const e: string[] = []

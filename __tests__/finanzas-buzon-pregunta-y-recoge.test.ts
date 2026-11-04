@@ -196,7 +196,7 @@ describe('buzonAbiertos · el almacén real (base falsa con eq/gte/in)', () => {
         eq: (c: string, v: unknown) => { filtros.push((f) => f[c] === v); return api },
         gte: (c: string, v: string) => { filtros.push((f) => String(f[c]) >= v); return api },
         in: (c: string, v: unknown[]) => { filtros.push((f) => v.includes(f[c])); return api },
-        then: (ok: any) => ok(falla === tabla ? { data: null, error: { message: 'caída' } } : { data: t[tabla].filter((f) => filtros.every((fn) => fn(f))).map((f) => structuredClone(f)), error: null }),
+        then: (ok: any) => ok(falla === tabla ? { data: null, error: { message: 'caída' } } : { data: (t[tabla] ?? []).filter((f) => filtros.every((fn) => fn(f))).map((f) => structuredClone(f)), error: null }),
       }
       return api
     }
@@ -246,9 +246,9 @@ describe('LA RUTA · buzon_abiertos pasa por las MISMAS guardas que preguntar y 
     const rama = ruta.slice(ruta.indexOf("c.accion === 'buzon_abiertos'"), ruta.indexOf("else r = { status: 400, cuerpo: { error: 'accion_invalida'"))
     for (const guarda of ["error: 'config_ilegible'", "error: 'conversa_apagada'", "typeof c.workflow_id !== 'string'", "typeof c.workflow_execution_id !== 'string'", 'listarAbiertos(B)', 'modo: cfg.preguntas_slack'])
       expect(rama, guarda).toContain(guarda)
-    expect(ruta).toContain("'recoger', 'buzon_abiertos']")
+    expect(ruta).toContain("'recoger', 'buzon_abiertos', 'pausar', 'material']")
   })
   it('no exige encargo_id para listar (no hay uno) pero sí para preguntar y recoger', () => {
-    expect(ruta).toContain("(c.accion === 'buzon_abiertos' || ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string'))")
+    expect(ruta).toContain("(c.accion === 'buzon_abiertos' || c.accion === 'pausar' || ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string'))")
   })
 })
