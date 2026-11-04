@@ -1,7 +1,9 @@
 /**
  * 04-nov · volver a pegar P21 tras #907 («Lo que no hacemos»). En seco (US$ 0): parte de un flujo con el módulo VIEJO, tal como está el vivo.
  */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { construirMesaDeEstrategia } from '../scripts/ops/oficina-marketing/plan-mesa-de-estrategia.mjs'
@@ -68,5 +70,27 @@ describe('P21 · volver a pegar el módulo', () => {
     const b = doble.nodes.find((y) => y.name === NODOS_DEL_ACTA[2])!
     b.parameters.jsCode = MODULO_ACTA + b.parameters.jsCode
     expect(() => repegarPlanContraElActa(doble)).toThrow(/exactamente una vez/)
+  })
+
+  it('se detiene si `revisarPlan` va antes del módulo', () => {
+    const f = conModuloViejo()
+    const x = f.nodes.find((y) => y.name === NODOS_DEL_ACTA[0])!
+    x.parameters.jsCode = 'function revisarPlan(texto, ctx) {}' + LF + x.parameters.jsCode.replace('function revisarPlan(texto, ctx) {', 'function otraCosa(texto, ctx) {')
+    expect(() => repegarPlanContraElActa(f)).toThrow(/exactamente una vez/)
+  })
+
+  it('el comando real `plan-acta-repegar` escribe el flujo con el módulo nuevo, y repetirlo no cambia nada', () => {
+    const dir = fs.mkdtempSync(join(os.tmpdir(), 'repegar-p21-'))
+    try {
+      const aplicador = join(process.cwd(), 'scripts/ops/oficina-marketing/aplicar-manual-llega-completo.mjs')
+      const [entrada, salida, otra] = ['entrada.json', 'salida.json', 'otra.json'].map((n) => join(dir, n))
+      fs.writeFileSync(entrada, JSON.stringify(conModuloViejo()))
+      execFileSync(process.execPath, [aplicador, 'plan-acta-repegar', entrada, salida], { stdio: 'pipe' })
+      expect(JSON.parse(fs.readFileSync(salida, 'utf8'))).toEqual(conModuloNuevo())
+      execFileSync(process.execPath, [aplicador, 'plan-acta-repegar', salida, otra], { stdio: 'pipe' })
+      expect(fs.readFileSync(otra, 'utf8')).toBe(fs.readFileSync(salida, 'utf8'))
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
