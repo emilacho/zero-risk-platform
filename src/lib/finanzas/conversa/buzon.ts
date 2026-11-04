@@ -42,7 +42,7 @@ const esMd = (canal: string | null) => typeof canal === 'string' && /^D[A-Z0-9]+
 /** el destino guardado en el encargo es válido si es un MD, o EXACTAMENTE el canal configurado del buzón */
 const destinoValido = (P: { canal?: string }, canal: string | null) => esMd(canal) || (!!P.canal && canal === P.canal)
 const objeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-const temaDe = (clave: string) => clave.replace(/_/g, ' ').trim()
+export const temaDe = (clave: string) => clave.replace(/_/g, ' ').trim()
 
 type Dada = { clave: string; valor: unknown; literal: string }
 type Nota = { ts: string; literal: string; motivo?: string }

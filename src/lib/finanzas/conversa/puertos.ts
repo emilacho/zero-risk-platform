@@ -28,6 +28,8 @@ export interface Semilla {
   manual_completo?: unknown
   /** 04-nov · el dueño ya revisó la ronda de preguntas: lo que no contestó sigue abierto en la oficina, pero no vuelve a detener el plan */
   pausa_atendida?: boolean
+  /** 04-nov · cuándo contestó por última vez desde Tu oficina: mientras siga contestando, el plan no arranca */
+  ultima_respuesta_en?: string
   brazos_resumen?: string
   derivado?: unknown
   /** datos con su procedencia: un dato de ensayo NUNCA entra como medido */
