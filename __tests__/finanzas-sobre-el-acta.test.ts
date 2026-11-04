@@ -252,3 +252,26 @@ describe('el equilibrio con el reparto de la mesa', () => {
     expect(r.equilibrio.cubre).toBe(true)
   })
 })
+
+describe('reservas de CC3 sobre #908', () => {
+  const EXPED = { fecha: '2026-11-04' } as never
+  const delActa = (canales: ActaV1['canales']) => entradaDesdeLaConversa({ planteo: planteoDelActa({ ...ACTA, canales }, EXP) as never, consultas: {} as never, expediente: EXPED })
+  it('🔴 un canal para después no entra al reparto: monto 0 y su motivo', () => {
+    const e = delActa([{ canal: 'Instagram', peso: 1, razon: 'r' }, { canal: 'TikTok', peso: 0.5, razon: 'r', activo: false, condicion: 'cuando haya video' }])
+    if (!e.ok) throw new Error('sin entrada')
+    const r = calcular(e.entrada)
+    if (!r.ok) throw new Error('no calculó')
+    const fila = r.reparto.otros.find((x) => x.canal === 'video_corto')
+    expect(fila).toMatchObject({ monto: 0, activo: false })
+    expect(fila?.motivo).toMatch(/diferido.*cuando haya video/)
+    expect(r.reparto.parte_meta_ig).toBeCloseTo(1, 2)
+  })
+  it('🔴 un acta sin Meta no recibe la alerta del 60 %', () => {
+    const e = delActa([{ canal: 'Google Ads', peso: 1, razon: 'r' }])
+    expect(e.ok).toBe(false)
+    const conCosto = entradaDesdeLaConversa({ planteo: planteoDelActa({ ...ACTA, canales: [{ canal: 'Google Ads', peso: 1, razon: 'r' }], costos_de_la_mesa: { busqueda: { min: 1, max: 2 } } }, EXP) as never, consultas: {} as never, expediente: EXPED })
+    if (!conCosto.ok) throw new Error('sin entrada')
+    expect(conCosto.alertas.join()).not.toMatch(/60 %|Meta\+Instagram/)
+  })
+  it('🔴 sin cálculo lo dice', () => { expect(viabilidadDelBloque(null).motivo).toBe('sin cálculo: no se pudo medir') })
+})
