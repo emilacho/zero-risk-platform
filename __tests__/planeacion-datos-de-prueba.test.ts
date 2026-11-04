@@ -79,7 +79,7 @@ describe('rotuloDeExclusion', () => {
   })
   it('sin nada que excluir ⇒ null', () => {
     expect(rotuloDeExclusion(null)).toBeNull()
-    expect(rotuloDeExclusion(leerDatosDePrueba({ nota: 'solo nota', distinct_ids: ['x'] }) && { distinct_ids: [], rangos: [], evento_bandera: null, pedidos_de_prueba_hasta: null, nota: 'n', descartado: [] })).toBeNull()
+    expect(rotuloDeExclusion(leerDatosDePrueba({ nota: 'solo nota', distinct_ids: ['x'] }) && { distinct_ids: [], rangos: [], evento_bandera: null, nota: 'n', descartado: [] })).toBeNull()
   })
 })
 

@@ -225,12 +225,12 @@ describe('③ y ④ el brazo de PostHog · el filtro y el comentario', () => {
     expect(sqls[0]).toMatch(/coalesce\(properties\.\$host, domain\(properties\.\$current_url\)\) in \('naufrago\.ec', 'www\.naufrago\.ec'\)/)
     expect(sqls[0]).not.toMatch(/properties\.\$host = /) // el filtro viejo, sólo por $host
   })
-  it('sigue devolviendo el embudo completo con la limitación pegada, y dice de dónde leyó el dominio', async () => {
+  it('devuelve solo la conducta con la limitación pegada, y dice de dónde leyó el dominio', async () => {
     const j = await pedir('naufrago.ec')
     const r = Array.isArray(j) ? j[0] : (j.respuestas ?? [j])[0]
     expect(r.estado).toBe('trajo')
     expect(r.datos.visitas).toBe(488)
-    expect(r.datos.embudo.map((f: { evento: string }) => f.evento)).toEqual(['$pageview', 'menu_viewed', 'cart_opened'])
+    expect(r.datos.conducta_de_visitas.map((f: { evento: string }) => f.evento)).toEqual(['$pageview', 'menu_viewed'])
     expect(r.datos.atribucion).toBe('POR DOMINIO, NO POR CLIENTE')
     expect(r.datos.dominio_leido_de).toMatch(/\$current_url/)
   })

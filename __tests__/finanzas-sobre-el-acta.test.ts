@@ -237,6 +237,15 @@ describe('de punta a punta, con modelo falso', () => {
     expect(m.arts.expediente).not.toHaveProperty('acta')
     expect((m.arts.bloque as { bloque: Bloque }).bloque.reparto).not.toHaveProperty('de_la_mesa')
   })
+
+  it('🔴 las ventas del sitio llegan al expediente que leen los especialistas', async () => {
+    const m = mundo(100)
+    const ventas = { estado: 'medido', pedidos_reales: 0, texto: 'sin ventas reales por el sitio todavía' }
+    const a = await abrirConversacion(m.P, { client_id: 'c', dry_run: false, semilla: { evento: 'pedido', dias_activos_por_semana: 5, ventas_del_sitio: ventas } as never })
+    for (let i = 0; i < 25; i++) { const r = await avanzar(m.P, a.cuerpo.encargo_id as string); if (r.cuerpo.terminado) break }
+    expect(m.arts.expediente).toMatchObject({ ventas_del_sitio: ventas })
+    expect(m.llamadas.find((l) => l.paso === 'fpa')?.tarea).toContain('sin ventas reales por el sitio todavía')
+  })
 })
 
 describe('el equilibrio con el reparto de la mesa', () => {
