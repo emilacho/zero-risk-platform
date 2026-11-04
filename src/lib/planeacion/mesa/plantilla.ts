@@ -52,20 +52,21 @@ export const PLANTILLA_MESA: Plantilla = {
 }
 
 export interface CanalDelPlanteo { canal?: unknown; activo?: unknown }
-/** quién opina más allá de los de siempre: lo decide el código con lo que propuso el jefe, sin nombrar clientes. Redes pagas, medición y crecimiento van siempre */
+/** quién opina más allá de los de siempre: lo decide el código con lo que propuso el jefe, sin nombrar clientes. Redes pagas, medición y crecimiento van siempre.
+ * El jefe escribe los canales en sus palabras (hallazgo 1 de CC3, #903): no hay lista cerrada, porque limitaría lo que puede proponer. Se leen sin tildes ni mayúsculas, y lo que no se reconozca queda a la vista en el planteo */
 export function quienHablaEnLaMesa(canales: CanalDelPlanteo[], negocio_local: boolean): { busqueda: boolean; seo: boolean; organico: boolean } {
-  const nombres = canales.filter((c) => typeof c?.canal === 'string').map((c) => String(c.canal).toLowerCase())
+  const nombres = canales.filter((c) => typeof c?.canal === 'string').map((c) => String(c.canal).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())
   return {
-    busqueda: nombres.some((n) => /busqueda_pagada|search|ppc/.test(n)),
-    seo: negocio_local || nombres.some((n) => /busqueda_local|seo|mapas|maps/.test(n)),
-    organico: nombres.some((n) => /organic/.test(n)),
+    busqueda: nombres.some((n) => /busqueda[ _](paga|de pago)|search|ppc|adwords|google[ _]ads|(^|[^a-z])sem([^a-z]|$)/.test(n)),
+    seo: negocio_local || nombres.some((n) => /busqueda[ _]local|(^|[^a-z])seo([^a-z]|$)|mapas|maps|perfil de google/.test(n)),
+    organico: nombres.some((n) => /organic|contenido|comunidad/.test(n)),
   }
 }
 
 const SIEMPRE_EN_TUTEO = 'Responde SOLO con un objeto JSON válido (sin texto antes ni después, sin bloques de código), en español y tuteando. Todo el contexto va en este mensaje.'
 
 export const INSTRUCCION_POR_PASO: Record<string, string> = {
-  planteo_mesa: `${SIEMPRE_EN_TUTEO}\nEres quien dirige la mesa de estrategia de marketing. Con el manual, los datos y la investigación, propón: objetivo, tesis, audiencia, oferta, y los canales que el objetivo pide con su peso. No fijes montos: eso lo revisa finanzas después. Devuelve {"objetivo", "tesis", "audiencia", "oferta", "canales":[{"canal","peso","razon"}], "negocio_local": true|false, "no_se":[...]}. El peso sale del objetivo del negocio, no de una costumbre de canal.`,
+  planteo_mesa: `${SIEMPRE_EN_TUTEO}\nEres quien dirige la mesa de estrategia de marketing. Con el manual, los datos y la investigación, propón: objetivo, tesis, audiencia, oferta, y los canales que el objetivo pide con su peso. No fijes montos: eso lo revisa finanzas después. Devuelve {"objetivo", "tesis", "audiencia", "oferta", "canales":[{"canal","peso","razon"}], "negocio_local": true|false, "no_se":[...]}. Nombra cada canal con claridad, en tus palabras (por ejemplo: Instagram pagado, Google Ads, búsqueda local, redes orgánicas, WhatsApp). El peso sale del objetivo del negocio, no de una costumbre de canal.`,
   aporte: `${SIEMPRE_EN_TUTEO}\nEres especialista y opinas de tu parte sobre el planteo del jefe de marketing. Di qué harías y por qué, y qué cambiarías. Si tu canal se paga, da el costo por resultado con un rango y dilo como supuesto. Devuelve {"resumen", "recomendaciones":[{"que","razon"}], "costo_por_resultado"?:{"min","max","base"?}, "alertas":[...]}. Si no tienes base para un costo, no lo pongas: no lo inventes.`,
-  acta: `${SIEMPRE_EN_TUTEO}\nConsolidas la reunión: lee los aportes y decide. Di cada canal con su peso y su razón, y lo que no se hace con su porqué: quien escriba el plan no volverá a decidirlo. Si el contexto trae \`devolucion\`, finanzas te devuelve el plan con su motivo: ajusta el reparto o la meta para resolverlo. Devuelve el esquema acta.v1 exacto: {"numero":{"meta":<número>,"por_que"}, "servicio", "audiencia", "oferta", "canales":[{"canal","peso":<0 a 1>,"razon","activo"?,"condicion"?}], "camino", "prueba", "no_se_hace":[{"que","por_que"}], "no_se":[...]}. Los pesos de los canales activos suman 1.`,
+  acta: `${SIEMPRE_EN_TUTEO}\nConsolidas la reunión: lee los aportes y decide. Di cada canal con su peso y su razón, y lo que no se hace con su porqué: quien escriba el plan no volverá a decidirlo. Si un canal tuyo no tuvo especialista que opinara (mira \`habla\` en el planteo), dilo en \`no_se\`. Si el contexto trae \`devolucion\`, finanzas te devuelve el plan con su motivo: ajusta el reparto o la meta para resolverlo. Devuelve el esquema acta.v1 exacto: {"numero":{"meta":<número>,"por_que"}, "servicio", "audiencia", "oferta", "canales":[{"canal","peso":<0 a 1>,"razon","activo"?,"condicion"?}], "camino", "prueba", "no_se_hace":[{"que","por_que"}], "no_se":[...]}. Los pesos de los canales activos suman 1.`,
 }

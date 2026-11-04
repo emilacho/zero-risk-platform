@@ -9,8 +9,8 @@ import { mesaEncendida } from '../src/lib/planeacion/mesa/interruptor'
 import { sumaDeTopes } from '../src/lib/planeacion/prevuelo'
 import type { AlmacenDeConversa, EncargoDeConversa } from '../src/lib/finanzas/conversa/puertos'
 import { actaParaElRedactor, validarActa, validarAporte } from '../src/lib/planeacion/mesa/acta'
-import { abrirMesa, avanzarMesa, devolverALaMesa, leerMesa, type PuertosDeMesa } from '../src/lib/planeacion/mesa/orquestador'
-import { INTEGRANTES, PASO_CONSOLIDA, PLANTILLA_MESA, quienHablaEnLaMesa, TOPE_DE_LA_MESA_USD } from '../src/lib/planeacion/mesa/plantilla'
+import { abrirMesa, avanzarMesa, devolverALaMesa, leerMesa, pedidoDelTurno, type PuertosDeMesa } from '../src/lib/planeacion/mesa/orquestador'
+import { INSTRUCCION_POR_PASO, INTEGRANTES, PASO_CONSOLIDA, PLANTILLA_MESA, quienHablaEnLaMesa, TOPE_DE_LA_MESA_USD } from '../src/lib/planeacion/mesa/plantilla'
 
 const ACTA = { numero: { meta: 40, por_que: 'x' }, servicio: 's', audiencia: 'a', oferta: 'o', canales: [{ canal: 'whatsapp', peso: 0.9, razon: 'r' }, { canal: 'meta_ig', peso: 0.1, razon: 'r' }], camino: 'c', prueba: 'p', no_se_hace: [{ que: 'TikTok', por_que: 'no' }], no_se: [] }
 const PLANTEO = { objetivo: 'o', tesis: 't', canales: [{ canal: 'whatsapp', peso: 0.9, razon: 'r' }], negocio_local: false, no_se: [] }
@@ -278,5 +278,70 @@ describe('el plan contra el acta (P21)', () => {
     const coh = fs.readFileSync('scripts/ops/oficina-marketing/chequeos-de-coherencia.js', 'utf8')
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
     expect(() => new AsyncFunction(coh + codigo)).not.toThrow()
+  })
+})
+
+describe('hallazgos de CC3 sobre #903', () => {
+  it.each([['Google Ads', 'busqueda'], ['google_ads', 'busqueda'], ['Búsqueda paga', 'busqueda'], ['busqueda_pagada', 'busqueda'], ['google_search', 'busqueda'], ['SEM', 'busqueda'], ['PPC', 'busqueda'], ['Búsqueda local', 'seo'], ['Google Maps', 'seo'], ['SEO', 'seo'], ['Instagram orgánico', 'organico'], ['TikTok orgánico', 'organico'], ['instagram_organico', 'organico'], ['Contenido en redes', 'organico']] as const)('🔴 «%s» hace hablar a %s', (canal, quien) => {
+    expect(quienHablaEnLaMesa([{ canal }], false)[quien]).toBe(true)
+  })
+  it.each(['WhatsApp', 'Instagram pagado', 'Museo local', 'Semana de ofertas'])('🔴 «%s» no llama a búsqueda, SEO ni orgánico', (canal) => {
+    expect(quienHablaEnLaMesa([{ canal }], false)).toEqual({ busqueda: false, seo: false, organico: false })
+  })
+  it('🔴 la instrucción no da una lista cerrada, y el canal sin especialista se declara', () => {
+    expect(INSTRUCCION_POR_PASO.planteo_mesa).toContain('en tus palabras')
+    expect(INSTRUCCION_POR_PASO.acta).toContain('no tuvo especialista')
+  })
+  it('🔴 el tope mira lo cobrado, no solo lo guardado', async () => {
+    const m = mundo()
+    const id = (await abrir(m.P)).cuerpo.encargo_id as string
+    await avanzarMesa(m.P, id)
+    m.P.almacen.cobrado = async () => TOPE_DE_LA_MESA_USD - 0.05
+    expect((await avanzarMesa(m.P, id)).cuerpo).toMatchObject({ estado: 'cierre_por_tope', terminado: true })
+    expect(m.llamadas).toEqual([])
+  })
+  it('🔴 no reintenta pasado el margen: cobraría dos veces', async () => {
+    const m = mundo({ responder: () => 'no es json' })
+    let ms = 0
+    m.P.ahora = () => new Date(ms)
+    const invocar = m.P.modelo.invocar
+    m.P.modelo.invocar = async (x) => { ms += 200_000; return invocar(x) }
+    const id = (await abrir(m.P)).cuerpo.encargo_id as string
+    await avanzarMesa(m.P, id)
+    await avanzarMesa(m.P, id)
+    expect(m.llamadas).toHaveLength(1)
+  })
+  it('🔴 dentro del margen sí reintenta el formato', async () => {
+    const m = mundo({ responder: () => 'no es json' })
+    const id = (await abrir(m.P)).cuerpo.encargo_id as string
+    await avanzarMesa(m.P, id)
+    await avanzarMesa(m.P, id)
+    expect(m.llamadas).toHaveLength(2)
+  })
+  it('🔴 con un paso en vuelo no corre el mismo turno dos veces', async () => {
+    const m = mundo()
+    const id = (await abrir(m.P)).cuerpo.encargo_id as string
+    m.P.almacen.tomarPaso = async () => ({ ok: true as const, tomado: false })
+    expect(await avanzarMesa(m.P, id)).toMatchObject({ status: 409, cuerpo: { error: 'paso_en_vuelo' } })
+    expect(m.turnos).toEqual([])
+  })
+  it('🔴 suelta el paso al terminar, también si falla', async () => {
+    const m = mundo()
+    const id = (await abrir(m.P)).cuerpo.encargo_id as string
+    let soltado = 0
+    m.P.almacen.tomarPaso = async () => ({ ok: true as const, tomado: true })
+    m.P.almacen.soltarPaso = async () => { soltado++ }
+    await avanzarMesa(m.P, id)
+    expect(soltado).toBe(1)
+    m.P.modelo.invocar = async () => { throw new Error('caída') }
+    await expect(avanzarMesa(m.P, id)).rejects.toThrow('caída')
+    expect(soltado).toBe(2)
+  })
+  it('🔴 un pedido demasiado grande lo declara, sin pasar del límite', () => {
+    const paso = PLANTILLA_MESA.pasos[1]
+    const r = pedidoDelTurno(paso, { expediente: { texto: 'x'.repeat(700_000) } })
+    expect(r.length).toBeLessThanOrEqual(600_000)
+    expect(r).toMatch(/AVISO: este pedido se recortó; faltan \d+ caracteres/)
+    expect(pedidoDelTurno(paso, { expediente: { texto: 'x' } })).not.toContain('AVISO')
   })
 })

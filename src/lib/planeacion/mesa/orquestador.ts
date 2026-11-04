@@ -133,7 +133,10 @@ export function pedidoDelTurno(paso: Paso, arts: Arts): string {
   const contexto: Record<string, unknown> = {}
   for (const nombre of paso.entrada) if (arts[nombre]) contexto[nombre] = arts[nombre]
   const tarea = `${INSTRUCCION_POR_PASO[ESQUEMA_A_INSTRUCCION[String(paso.salida?.esquema)]]}\n\nCONTEXTO (JSON):\n${JSON.stringify(contexto)}`
-  return tarea.length > TOPE_REAL_DEL_PEDIDO ? tarea.slice(0, TOPE_REAL_DEL_PEDIDO) : tarea
+  if (tarea.length <= TOPE_REAL_DEL_PEDIDO) return tarea
+  // nunca en silencio: quien lee sabe que le falta contexto y lo declara
+  const aviso = `\n\nAVISO: este pedido se recortó; faltan ${tarea.length - TOPE_REAL_DEL_PEDIDO} caracteres del contexto. Dilo en lo que no sabes.`
+  return tarea.slice(0, TOPE_REAL_DEL_PEDIDO - aviso.length) + aviso
 }
 
 function validarTurno(paso: Paso, v: unknown): { ok: true; artefacto: Record<string, unknown> } | { ok: false; errores: string[] } {
