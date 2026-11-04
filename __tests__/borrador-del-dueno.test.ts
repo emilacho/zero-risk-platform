@@ -141,6 +141,63 @@ describe('🔴 entradas malas no escriben', () => {
   })
 })
 
+describe('🔴 4-nov · el falso «cambió en otro equipo» (Emilio, 08:50Z)', () => {
+  const VACIO_DEL_PANEL = { campos: {}, como: {}, notas: {}, libre: '', detalle: {} }
+  const conFilaVacia = () => base().semilla('borradores_del_dueno', [{ client_id: C, documento: 'manual', documento_id: 'v3', acciones: VACIO_DEL_PANEL, revision: 5, actualizado_por: 'emilio' }])
+
+  it('🔴 «Descartar todo» manda las claves del panel sin nada: eso borra la fila', async () => {
+    const db = base()
+    await guardarBorrador(db, CUERPO, AHORA)
+    const g = await guardarBorrador(db, { ...CUERPO, acciones: VACIO_DEL_PANEL, revision_base: 1 }, AHORA)
+    expect(g).toMatchObject({ status: 200, cuerpo: { ok: true, borrador: null } })
+    expect(filas(db)).toHaveLength(0)
+  })
+
+  it.each([
+    ['solo espacios', { ...VACIO_DEL_PANEL, libre: '   ' }],
+    ['listas vacías', { retirar: [], observaciones: [] }],
+    ['null', { libre: null }],
+  ])('🔴 %s también es vacío', async (_n, acciones) => {
+    const db = base()
+    await guardarBorrador(db, CUERPO, AHORA)
+    await guardarBorrador(db, { ...CUERPO, acciones }, AHORA)
+    expect(filas(db)).toHaveLength(0)
+  })
+
+  it.each([
+    ['texto libre', { ...VACIO_DEL_PANEL, libre: 'Hazlo más cercano' }],
+    ['un campo elegido', { ...VACIO_DEL_PANEL, campos: { eslogan: 'Mar y fuego' } }],
+    ['un número', { peso: 0 }],
+    ['un falso', { marcado: false }],
+  ])('%s no es vacío: se guarda', async (_n, acciones) => {
+    const db = base()
+    await guardarBorrador(db, { ...CUERPO, acciones }, AHORA)
+    expect(filas(db)).toHaveLength(1)
+  })
+
+  it('🔴 lo que le pasó a Emilio: fila vacía de otra sesión + escribir con revisión 0: no hay choque, y su texto queda', async () => {
+    const db = conFilaVacia()
+    const g = await guardarBorrador(db, { ...CUERPO, acciones: { ...VACIO_DEL_PANEL, libre: 'Mi observación' }, revision_base: 0 }, AHORA)
+    expect(g).toMatchObject({ status: 200, cuerpo: { ok: true, borrador: { revision: 6, acciones: { libre: 'Mi observación' } } } })
+  })
+
+  it('🔴 un choque real sigue siendo choque: el otro equipo sí dejó algo', async () => {
+    const db = base()
+    await guardarBorrador(db, CUERPO, AHORA)
+    expect((await guardarBorrador(db, { ...CUERPO, acciones: { ...VACIO_DEL_PANEL, libre: 'Otro' }, revision_base: 0 }, AHORA)).status).toBe(409)
+    expect(filas(db)[0].acciones).toEqual(CUERPO.acciones)
+  })
+
+  it('🔴 una fila vacía no frena aprobar el manual', async () => {
+    expect(await hayBorrador(conFilaVacia(), C, 'manual')).toEqual({ hay: false })
+  })
+  it('una con algo sí', async () => {
+    const db = base()
+    await guardarBorrador(db, CUERPO, AHORA)
+    expect(await hayBorrador(db, C, 'manual')).toEqual({ hay: true })
+  })
+})
+
 describe('🔴 si no puede leer lo que hay', () => {
   it('no escribe a ciegas: un error de lectura no es «no hay borrador»', async () => {
     const db = base()

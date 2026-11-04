@@ -14,6 +14,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const COLUMNAS = 'client_id, documento, documento_id, acciones, revision, actualizado_por, actualizado_en'
 const mal = (status: number, error: string, detalle: string): Salida => ({ status, cuerpo: { ok: false, error, detalle: detalle.slice(0, 300) } })
 const esObjeto = (x: unknown): x is Fila => typeof x === 'object' && x !== null && !Array.isArray(x)
+/** 4-nov · vacío de verdad: «Descartar todo» manda las claves del panel sin nada adentro. Mirar solo si hay claves dejaba una fila vacía que frenaba aprobar y daba un falso «cambió en otro equipo» */
+export function sinNada(v: unknown): boolean {
+  if (v === null || v === undefined) return true
+  if (typeof v === 'string') return !v.trim()
+  if (Array.isArray(v)) return v.every(sinNada)
+  if (esObjeto(v)) return Object.values(v).every(sinNada)
+  return false
+}
 
 function llave(client_id: unknown, documento: unknown): { client_id: string; documento: string } | Salida {
   if (typeof client_id !== 'string' || !UUID.test(client_id)) return mal(400, 'entrada_invalida', '`client_id` debe ser un uuid')
@@ -57,9 +65,11 @@ export async function guardarBorrador(db: BaseDelBorrador, cuerpo: unknown, ahor
   if (previa.error) return mal(502, 'no_se_pudo_leer', previa.error)
   const choque = (borrador: Fila | null): Salida => ({ status: 409, cuerpo: { ok: false, error: 'borrador_cambio', detalle: 'Este borrador cambió en otro equipo.', borrador } })
   const revisionPrevia = previa.fila ? Number(previa.fila.revision) : 0
-  if (b.revision_base !== undefined && Number(b.revision_base) !== revisionPrevia) return choque(previa.fila)
+  // una fila sin nada no tiene qué proteger: no hay choque que avisar
+  const hayQueProteger = !!previa.fila && !sinNada(previa.fila.acciones)
+  if (hayQueProteger && b.revision_base !== undefined && Number(b.revision_base) !== revisionPrevia) return choque(previa.fila)
   // va después de la revisión: una pantalla vieja que guarda «vacío» no borra lo que otro equipo acaba de marcar
-  if (!Object.keys(b.acciones).length) return borrarBorrador(db, k.client_id, k.documento)
+  if (sinNada(b.acciones)) return borrarBorrador(db, k.client_id, k.documento)
 
   const datos = { documento_id: b.documento_id.trim(), acciones: b.acciones, actualizado_por: typeof b.reviewer === 'string' && b.reviewer.trim() ? b.reviewer.trim().slice(0, 80) : 'emilio', actualizado_en: ahora.toISOString() }
   if (!previa.fila) {
@@ -78,5 +88,5 @@ export async function guardarBorrador(db: BaseDelBorrador, cuerpo: unknown, ahor
 /** ¿hay cambios sin pedir? Aprobar el manual lo consulta: lo retirado o elegido debe contar antes de seguir con el plan */
 export async function hayBorrador(db: BaseDelBorrador, client_id: string, documento: string): Promise<{ hay: boolean; error?: string }> {
   const { fila, error } = await leerFila(db, { client_id, documento })
-  return error ? { hay: false, error } : { hay: !!fila }
+  return error ? { hay: false, error } : { hay: !!fila && !sinNada(fila.acciones) }
 }
