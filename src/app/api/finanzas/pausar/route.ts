@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   try { cfg = await almacenDeFinanzas(db).leerConfig() } catch (e) { return NextResponse.json({ error: 'config_ilegible', detalle: e instanceof Error ? e.message : String(e) }, { status: 503 }) }
   if (cfg.estado === 'apagada' || cfg.conversa === 'apagado') return NextResponse.json({ error: 'conversa_apagada' }, { status: 409 })
   try {
-    const r = await pausarOficina(puertosDePausa(db, cfg.preguntas_slack, c.workflow_id, c.workflow_execution_id), c)
+    const r = await pausarOficina(puertosDePausa(process.env, db, cfg.preguntas_slack, c.workflow_id, c.workflow_execution_id), c)
     return NextResponse.json(r.cuerpo, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'pausar_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

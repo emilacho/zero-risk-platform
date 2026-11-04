@@ -325,17 +325,13 @@ describe('contestar en Tu oficina (Emilio, 16:20Z)', () => {
     const cuerpos: Array<Record<string, unknown>> = []
     const original = globalThis.fetch
     globalThis.fetch = (async (_u: string, i: RequestInit) => { cuerpos.push(JSON.parse(String(i.body))); return { status: 200, json: async () => ({ ok: true }) } }) as never
-    const antes = { i: process.env.INTERNAL_API_KEY, c: process.env.FINANZAS_CANAL_PREGUNTAS }
-    process.env.INTERNAL_API_KEY = 'k'
-    process.env.FINANZAS_CANAL_PREGUNTAS = 'C123456789'
+    const env = { INTERNAL_API_KEY: 'k', FINANZAS_CANAL_PREGUNTAS: 'C123456789' }
     try {
       const entrada = { client_id: 'c', tema: 't', pregunta: 'p', respuesta: 'r', mensaje_ref: 'm', respondido_en: '2026-11-04T00:00:00Z', pregunta_id: null }
-      await puertosDePausa(new DbFalsa() as never, 'envia', 'wf', 'ex', 'dashboard · Tu oficina').cerebro.registrarRespuesta(entrada)
-      await puertosDePausa(new DbFalsa() as never, 'envia', 'wf', 'ex').cerebro.registrarRespuesta(entrada)
+      await puertosDePausa(env, new DbFalsa() as never, 'envia', 'wf', 'ex', 'dashboard · Tu oficina').cerebro.registrarRespuesta(entrada)
+      await puertosDePausa(env, new DbFalsa() as never, 'envia', 'wf', 'ex').cerebro.registrarRespuesta(entrada)
     } finally {
       globalThis.fetch = original
-      process.env.INTERNAL_API_KEY = antes.i
-      process.env.FINANZAS_CANAL_PREGUNTAS = antes.c
     }
     expect(cuerpos[0].canal).toBe('dashboard · Tu oficina')
     expect(String(cuerpos[1].canal)).toContain('buzon-de-preguntas')
