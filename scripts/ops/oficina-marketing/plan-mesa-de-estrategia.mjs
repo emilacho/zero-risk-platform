@@ -134,7 +134,8 @@ export function construirMesaDeEstrategia(f) {
     p.url = "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/planeacion/mesa' }}"
     if (accion === 'avanzar') {
       const av = JSON.parse(JSON.stringify(nodo(f, 'FIN · avanzar un paso').parameters))
-      p.jsonBody = av.jsonBody
+      // el encargo lo da la propia mesa: «FIN · decidir» aún no corrió cuando la mesa avanza (CC#3 lo halló, 4-nov)
+      p.jsonBody = av.jsonBody.split("$('FIN · decidir')").join("$('" + N_DECIDIR + "')")
     }
     if (!p.jsonBody.includes("accion: '" + accion + "'")) throw new Error('el cuerpo de «FIN · ' + accion + '» cambió de forma')
     return { name: nombre, type: 'n8n-nodes-base.httpRequest', typeVersion: fa.typeVersion, onError: 'continueRegularOutput', parameters: p }

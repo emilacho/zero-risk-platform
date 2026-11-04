@@ -70,6 +70,25 @@ describe('plan · la mesa de estrategia (lazo n8n)', () => {
     expect(nod(f, N_AVANZAR).parameters.jsonBody).toContain('encargo_id')
   })
 
+  it('CADA nodo MESA · … solo nombra nodos que ya corrieron antes de él (lección de CC3: «avanzar» leía el encargo de FIN · decidir, que aún no existía)', () => {
+    const f = nuevo()
+    const previos = (nombre: string) => { // todos los nodos desde los que se llega a `nombre` (incluye los del propio lazo de la mesa)
+      const vistos = new Set<string>(), pila = [nombre]
+      while (pila.length) { const x = pila.pop() as string; for (const [de, v] of Object.entries(f.connections)) if (v.main.some((s) => (s || []).some((c) => c.node === x)) && !vistos.has(de)) { vistos.add(de); pila.push(de) } }
+      return vistos
+    }
+    const hojas = (v: unknown): string[] => (typeof v === 'string' ? [v] : v && typeof v === 'object' ? Object.values(v as object).flatMap(hojas) : [])
+    const nombres = (n: Nodo) => hojas(n.parameters).flatMap((t) => [...t.matchAll(/\$\('([^']+)'\)/g)].map((m) => m[1]))
+    const mesa = f.nodes.filter((n) => n.name.startsWith('MESA · '))
+    expect(mesa.length).toBe(7)
+    for (const n of mesa) {
+      const ok = previos(n.name), citados = nombres(n)
+      for (const c of citados) expect(ok.has(c) || c === n.name, `«${n.name}» nombra «${c}», que no corre antes de él`).toBe(true)
+    }
+    expect(JSON.stringify(nod(f, N_AVANZAR).parameters)).not.toContain('FIN ·')
+    expect(nod(f, N_AVANZAR).parameters.jsonBody).toContain("$('" + N_DECIDIR + "').first().json.encargo_id")
+  })
+
   it('la semilla lleva el manual completo, la ficha, el material y lo del dueño, y respeta dry_run', async () => {
     const p = { ficha: { industry: 'bar', country: 'EC', config: { moneda: 'USD' } }, manual: { contenido_del_manual: { voz: 'x' } }, referencia: 'ref', icp: [1], material: [1, 2], hechos_del_dueno: [3], texto_libre_del_dueno: [4], descartados: [] }
     const s = await corre(nuevo(), N_SEMILLA, { ...WEB, 'Unir el texto libre del dueño al paquete': p, 'PV3 · paquete': { plan_version: 'v3', semilla: { datos: [{ d: 1 }], datos_omitidos: 2 }, dry_run: true } })
