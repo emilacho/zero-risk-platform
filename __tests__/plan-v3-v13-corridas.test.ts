@@ -326,7 +326,7 @@ describe('adaptador de Supabase · traduce el puerto sin lógica propia', () => 
     const llamadas: string[] = []
     const q: any = { update: () => q, eq: (k: string, v: unknown) => { llamadas.push(`eq:${k}=${String(v)}`); return q }, in: (k: string, v: unknown[]) => { llamadas.push(`in:${k}=${v.join('|')}`); return q }, select: async () => ({ data: [], error: null }) }
     expect(await almacenDeCorridas({ from: () => q }).avanzarSi('a', 'c', 3, { intentos: 4 })).toBeNull()
-    expect(llamadas).toEqual(expect.arrayContaining(['eq:intentos=3', 'in:estado=esperando|corriendo', 'eq:client_id=a', 'eq:corrida=c']))
+    expect(llamadas).toEqual(expect.arrayContaining(['eq:intentos=3', 'in:estado=esperando|corriendo|en_pausa', 'eq:client_id=a', 'eq:corrida=c']))
   })
 })
 

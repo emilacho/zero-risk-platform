@@ -10,7 +10,9 @@
 
 export const ESTADOS_VIVOS = ['esperando', 'corriendo'] as const
 export const ESTADOS_TERMINALES = ['hecha', 'vencida', 'fallida'] as const
-export type EstadoDeCorrida = (typeof ESTADOS_VIVOS)[number] | (typeof ESTADOS_TERMINALES)[number]
+/** 04-nov · la oficina financiera espera al dueño: nada corre, no ocupa el cupo de «una activa por cliente» y el barrido no la toca (no vence) */
+export const EN_PAUSA = 'en_pausa' as const
+export type EstadoDeCorrida = (typeof ESTADOS_VIVOS)[number] | (typeof ESTADOS_TERMINALES)[number] | typeof EN_PAUSA
 
 /** espera máxima del «cerebro listo»: 45 min (AVISO-LENOVO 15-oct: el despertar completo tarda más que los 30 del §16; 10 lecturas cada 5 min). Reanudable; vencida ⇒ corre con lo del alta y lo declara, nunca Apify en su lugar. Fila del catálogo cuando exista (V1); este valor es el de omisión. */
 export const ESPERA_MAXIMA_MIN = 45
@@ -115,6 +117,14 @@ export async function correr(P: PuertoDeCorridas, e: { client_id: string; corrid
   const f = await P.leer(e.client_id, e.corrida)
   if (!f || f.estado !== 'esperando') return { status: 409, error: 'corrida_no_viva', estado: f?.estado ?? null }
   const n = await P.avanzarSi(e.client_id, e.corrida, f.intentos, { estado: 'corriendo', vence_en: minutos(P.ahora(), o.techo_min ?? TECHO_DE_CORRIDA_MIN), ...(e.motivo ? { motivo: e.motivo.slice(0, 300) } : {}) })
+  return n ? { status: 200, accion: 'avanzada', fila: n } : { status: 200, accion: 'perdiste_la_carrera' }
+}
+
+/** vuelve de la pausa con el techo de una corrida en marcha; solo desde `en_pausa`, y gana UNO: el doble disparo no corre dos planes */
+export async function reanudar(P: PuertoDeCorridas, e: { client_id: string; corrida: string }, o: { techo_min?: number } = {}): Promise<ResultadoDeAvance> {
+  const f = await P.leer(e.client_id, e.corrida)
+  if (!f || f.estado !== EN_PAUSA) return { status: 409, error: 'corrida_no_viva', estado: f?.estado ?? null }
+  const n = await P.avanzarSi(e.client_id, e.corrida, f.intentos, { estado: 'corriendo', vence_en: minutos(P.ahora(), o.techo_min ?? TECHO_DE_CORRIDA_MIN), motivo: 'vuelve de la pausa: el dueño contestó' })
   return n ? { status: 200, accion: 'avanzada', fila: n } : { status: 200, accion: 'perdiste_la_carrera' }
 }
 

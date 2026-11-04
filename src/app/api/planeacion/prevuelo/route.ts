@@ -16,7 +16,7 @@ export const maxDuration = 800
 
 const STATUS: Record<string, number> = {
   entrada_invalida: 400, dry_run_no_booleano: 400,
-  corrida_activa: 409, dry_run_distinto: 409, otro_re_disparo_gano: 409, corrida_no_viva: 409,
+  corrida_activa: 409, dry_run_distinto: 409, otro_re_disparo_gano: 409, corrida_no_viva: 409, espera_invalida: 409,
   catalogo_no_aplicado: 503, catalogo_incompleto: 409, lectura_fallida: 502,
 }
 
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   let c: Record<string, unknown>
   try { const j: unknown = await request.json(); if (typeof j !== 'object' || j === null || Array.isArray(j)) throw new Error('no objeto'); c = j as Record<string, unknown> } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
   try {
-    const d = await prevuelo({ client_id: c.client_id, corrida: c.corrida, dry_run: c.dry_run }, puertosDeSupabase(getSupabaseAdmin()))
+    const d = await prevuelo({ client_id: c.client_id, corrida: c.corrida, dry_run: c.dry_run, ...(c.reanudar_esperas_id !== undefined ? { reanudar_esperas_id: c.reanudar_esperas_id } : {}) }, puertosDeSupabase(getSupabaseAdmin()))
     return NextResponse.json(d, { status: d.decision === 'no_corre' ? STATUS[d.motivo] ?? 200 : 200 })
   } catch (e) {
     return NextResponse.json({ error: 'prevuelo_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

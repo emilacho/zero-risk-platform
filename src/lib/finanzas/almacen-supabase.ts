@@ -26,12 +26,16 @@ export function almacenDeFinanzas(db: Db): PuertosDeTablero {
       // reserva 5 de CC3 (31-oct): solo un slug de agente (`[a-z0-9_-]`); cualquier otro texto se ignora (omisión). Si el slug no existe como agente, run-sdk lo rechaza y el turno del planteo queda `fallo` declarado (mismo camino que la respuesta fuera de esquema).
       const crudo = p && p.valor && typeof p.valor === 'object' && !Array.isArray(p.valor) && typeof (p.valor as { redactor?: unknown }).redactor === 'string' ? (p.valor as { redactor: string }).redactor.trim() : ''
       const redactor = /^[a-z0-9][a-z0-9_-]{1,59}$/.test(crudo) ? crudo : undefined
+      // 04-nov · la pausa nace apagada y va aparte: una base sin la columna deja la pausa apagada, no la oficina ilegible
+      let pausa: { pausa_al_dueno?: unknown } | null = null
+      try { pausa = ok(await db.from('finanzas_config').select('pausa_al_dueno').eq('id', 1).maybeSingle(), 'leer la pausa') as { pausa_al_dueno?: unknown } | null } catch { pausa = null }
       return {
         estado,
         clientes_ensayo: Array.isArray(r?.clientes_ensayo) ? (r!.clientes_ensayo as string[]) : [],
         preguntas_slack: r && ['apagado', 'borrador', 'envia'].includes(String(r.preguntas_slack)) ? (String(r.preguntas_slack) as ConfigDeFinanzas['preguntas_slack']) : 'apagado',
         conversa: r && ['apagado', 'ensayo', 'enciende'].includes(String(r.conversa)) ? (String(r.conversa) as ConfigDeFinanzas['conversa']) : 'apagado',
         ...(redactor ? { redactor } : {}),
+        ...(pausa?.pausa_al_dueno === true ? { pausa_al_dueno: true } : {}),
       }
     },
     async guardarTablero(t) {

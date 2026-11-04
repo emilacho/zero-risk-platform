@@ -173,20 +173,22 @@ export function erroresDePregunta(p: Pregunta): string[] {
 export const cabeJunto = (q: Pregunta): boolean => `${q.texto} ${q.recomendacion} ${q.supuesto_si_no_responde}`.length <= MAX_CARACTERES_POR_PREGUNTA
 
 /** si alguna pregunta no cabe entera en MAX, el «si no respondes» de TODAS sale aparte (`supuestos`), para mandarlo como primera respuesta del hilo; si todas caben, un solo mensaje como siempre */
-export function armarMensaje(p: { cliente: string; preguntas: Pregunta[]; enlace_al_hilo?: string }): { ok: true; texto: string; claves: string[]; supuestos?: string } | { ok: false; errores: string[] } {
+export function armarMensaje(p: { cliente: string; preguntas: Pregunta[]; enlace_al_hilo?: string; pausa?: boolean }): { ok: true; texto: string; claves: string[]; supuestos?: string } | { ok: false; errores: string[] } {
   if (!p.cliente?.trim()) return { ok: false, errores: ['falta el nombre del cliente'] }
   if (!p.preguntas.length) return { ok: false, errores: ['no hay preguntas'] }
-  if (p.preguntas.length > MAX_PREGUNTAS_POR_MENSAJE) return { ok: false, errores: [`máximo ${MAX_PREGUNTAS_POR_MENSAJE} preguntas por mensaje`] }
+  // 04-nov · en una pausa salen todas las que frenan la firma, y el plan espera: no hay «si no respondes»
+  if (!p.pausa && p.preguntas.length > MAX_PREGUNTAS_POR_MENSAJE) return { ok: false, errores: [`máximo ${MAX_PREGUNTAS_POR_MENSAJE} preguntas por mensaje`] }
   const claves = p.preguntas.map((q) => q.clave)
   if (new Set(claves).size !== claves.length) return { ok: false, errores: ['claves repetidas'] }
   const errores = p.preguntas.flatMap((q, i) => erroresDePregunta(q).map((x) => `pregunta ${i + 1}: ${x}`))
   if (errores.length) return { ok: false, errores }
   const n = p.preguntas.length
-  const aparte = !p.preguntas.every(cabeJunto)
-  const cuerpo = p.preguntas.map((q, i) => `${i + 1}) ${q.texto.trim()}\n   Lo que recomiendo: ${q.recomendacion.trim()}${aparte ? '' : `\n   Si no respondes: ${q.supuesto_si_no_responde.trim()}`}`).join('\n')
+  const aparte = !p.pausa && !p.preguntas.every(cabeJunto)
+  const sinSupuesto = p.pausa || aparte
+  const cuerpo = p.preguntas.map((q, i) => `${i + 1}) ${q.texto.trim()}\n   Lo que recomiendo: ${q.recomendacion.trim()}${sinSupuesto ? '' : `\n   Si no respondes: ${q.supuesto_si_no_responde.trim()}`}`).join('\n')
   const supuestos = aparte ? `Si no respondes, esto es lo que supondré:\n${p.preguntas.map((q, i) => `${i + 1}) ${q.supuesto_si_no_responde.trim()}`).join('\n')}` : undefined
   const respuesta = n === 1 ? 'Responde «1 sí», «1 no» o escribe tu cifra' : 'Responde con el número de cada pregunta y «sí», «no» o tu cifra'
-  const enlace = p.enlace_al_hilo ? `\nResponde en este hilo: ${p.enlace_al_hilo}` : ''
+  const enlace = (p.pausa ? '\nEl plan queda en pausa hasta que contestes.' : '') + (p.enlace_al_hilo ? `\nResponde en este hilo: ${p.enlace_al_hilo}` : '')
   return { ok: true, claves, ...(supuestos ? { supuestos } : {}), texto: `Hola Emilio. Para el plan de ${p.cliente.trim()} necesito tu decisión en ${n === 1 ? 'una cosa' : n + ' cosas'}:\n${cuerpo}\n${respuesta}.${enlace}` }
 }
 

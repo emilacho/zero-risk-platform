@@ -2,7 +2,7 @@
  * F8 · la plantilla `financiera.v1` (DATO) sobre el motor puro de la oficina (`src/lib/oficina/motor.ts`, sin tocarlo). Diseño v2 rev. 9 §6b.3 y §6b.4.
  * Turnos: apertura (código) → planteo (el plan) → los 4 especialistas «en paralelo» (en fila: cada uno lee SOLO el planteo y el expediente) → ajuste (el plan) → cálculo (código) → cierre (el jefe)
  *        → [ronda 2, UNA sola vuelta: solo los especialistas aludidos → ajuste → cálculo → cierre si la huella cambió] → firma (código).
- * Tope de rondas = 2 · tope del encargo US$ 1,50 · un solo turno por agente por ronda (cada paso corre una vez; la ronda 2 usa pasos propios).
+ * Tope de rondas = 2 · tope de la plantilla US$ 1,50 (el piso; el plan abre cada encargo con su tope propio de US$ 5, ver `TOPE_DEL_ENCARGO_USD`) · un solo turno por agente por ronda (cada paso corre una vez; la ronda 2 usa pasos propios).
  */
 import type { Paso, Plantilla } from '../../oficina/tipos'
 
@@ -49,6 +49,8 @@ export function reservaDelCierre2(costoDelCierre1?: number | null): number {
 }
 
 const R1 = ['expediente']
+/** 04-nov · el techo del tope propio de un encargo; el plan lo abre con este valor en `semilla.tope_encargo_usd` (Emilio vía Lenovo: límites al máximo, ronda 2 incluida): las dos rondas con el mayor costo medido suman ≈ US$ 3 antes de leer el manual completo */
+export const TOPE_DEL_ENCARGO_USD = 5
 export const PLANTILLA_FINANCIERA: Plantilla = {
   tipo: 'financiera.v1',
   familia: 'financiera',
@@ -69,7 +71,7 @@ export const PLANTILLA_FINANCIERA: Plantilla = {
     agente('medicion_2', AGENTES.medicion, ['expediente', 'planteo_fijado', 'acuerdo'], 'consulta_medicion_2', 0.15, si('acuerdo', 'alude.medicion'), 2),
     agente('ajuste_2', AGENTES.proponente, ['expediente', 'planteo_fijado', 'acuerdo', 'consulta_fpa_2', 'consulta_redes_2', 'consulta_busqueda_2', 'consulta_medicion_2'], 'planteo_fijado_2', 0.15, si('acuerdo', 'requiere_ronda_2'), 2, 'planteo.v1'),
     codigo('calculo_2', 'calcular_bloque_2', ['expediente', 'planteo_fijado_2', 'consulta_fpa', 'consulta_redes', 'consulta_fpa_2', 'consulta_redes_2'], 'bloque_2', si('acuerdo', 'requiere_ronda_2'), 2),
-    // si la huella no cambió entre las dos rondas, NO hay segundo cierre (cierra en el acto)
+    // si la huella no cambió entre las dos rondas y el dueño no contestó nada, NO hay segundo cierre (cierra en el acto). Con respuesta suya el jefe vuelve a cerrar: si no, el crítico que esa respuesta resuelve queda abierto
     agente('cierre_2', AGENTES.jefe, ['expediente', 'planteo_fijado_2', 'bloque_2', 'acuerdo'], 'acuerdo_2', PISO_DE_RESERVA_DEL_RECIERRE_USD, si('bloque_2', 'cambio'), 2, 'acuerdo.v1'),
     codigo('firma', 'cierre_financiero', ['expediente', 'bloque', 'acuerdo', 'bloque_2', 'acuerdo_2'], 'cierre'),
   ],
