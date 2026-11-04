@@ -1,0 +1,473 @@
+# Plan de campaña · Náufrago · 90 días
+**4 de noviembre de 2026 – 1 de febrero de 2027**
+
+
+## Resumen ejecutivo
+
+Tres apuestas que mueven el negocio en estos 90 días:
+
+1. **Instalar la infraestructura antes de gastar.** Hoy no hay píxel, no hay WhatsApp Business y el embudo del sitio cierra en solo el 0,3% de las visitas. Sin esas tres piezas, cada peso de pauta se gasta a ciegas. Las semanas 1–2 las dedicamos a resolverlas.
+
+2. **Capturar la temporada alta en Olón.** Diciembre y enero son el pico de turismo en la costa de Santa Elena. Con el encebollado de la casa como protagonista y pauta en Meta activa desde la semana 3, la meta es pasar de ~108 tickets/semana a 130 en temporada alta, aprovechando que todos los competidores directos en Olón operan sin canales digitales propios.
+
+3. **Preparar la apertura de Guayaquil con lista de espera.** La sede de Guayaquil no ha abierto aún. Las semanas 5–8 sirven para generar expectativa y una lista de contactos antes de que encienda la cocina; las semanas 9–12 arrancan con la primera pauta propia en la ciudad.
+
+**Resultado que perseguimos al día 90:** 130 tickets/semana en Olón en el pico de diciembre, apertura de Guayaquil con al menos 50 pedidos en la semana de inauguración, y una base de contactos propia que hoy no existe. Los dos primeros números son supuestos de la oficina financiera (sin firma); el plan los ajusta según los primeros 14 días de pauta real.
+
+---
+
+## Las cuatro puertas
+
+Antes de proponer cualquier acción:
+
+**Puerta 1 · Capacidad de atender**
+
+Olón opera jueves a lunes [D36], con pico en domingos (152 tickets), sábados (149 tickets) y viernes (79 tickets) en octubre. Las horas más cargadas son 13:00, 10:00 y 12:00. El mediodía de fin de semana recibe unos 20 clientes [D63]. Si la pauta trae más pedidos en esas ventanas, la cocina podría saturarse.
+
+**Pregunta abierta al dueño del negocio (respuesta necesaria esta semana):** ¿Cuántos pedidos simultáneos puede manejar la cocina de Olón en hora pico? ¿Y la de Guayaquil cuando abra? Hasta tener esa respuesta, la pauta sube de forma gradual. Un plan que trae más gente de la que puede atenderse hace daño.
+
+Guayaquil es solo entrega [confirmado]; el límite real lo pone el motorizado de PedidosYa, no la cocina. El tiempo de entrega del sitio corresponde a la sede de Olón y se validará para Guayaquil al momento de apertura [D82].
+
+**Puerta 2 · Medición mínima viva antes de gastar**
+
+No hay píxel instalado [D70]. Sin él, la plataforma de anuncios no puede optimizar por ventas reales: solo optimiza por tráfico o clics, que son métricas vacías para un restaurante. El primer movimiento antes de cualquier pauta es instalar el píxel de Meta. La agencia lo hace; lo que se le pide al dueño del negocio es el acceso a la cuenta de Meta Business Manager.
+
+El sitio tiene análisis activo (PostHog) y registra el embudo completo: 988 visitas → 69 carritos abiertos → 3 pedidos [analítica del sitio, 90 días]. Esa es una tasa de cierre del 0,3% sobre visitas. Hay algo que frena la conversión entre carrito y pago, y eso se investiga antes de lanzar la primera pauta.
+
+**Puerta 3 · El cuello de botella real**
+
+El problema no es tráfico: 988 visitas en 90 días, 420 personas distintas, y solo 3 pedidos completados [analítica del sitio]. El cuello está en la conversión del sitio, no en la adquisición. Lanzar pauta sin resolverlo es tirar dinero en tráfico que no convierte.
+
+Hay un segundo cuello posible: sin WhatsApp Business [D92], los pedidos que llegan por WhatsApp no tienen respuesta automática ni horario visible. Si alguien escribe a las 11pm del viernes, no hay respuesta hasta el jueves siguiente (el negocio cierra martes y miércoles [D36]). Eso mata la conversión antes de que empiece.
+
+**Puerta 4 · Las primeras 24–72 horas**
+
+Hoy el canal de respuesta es WhatsApp personal. El sitio promete respuesta dentro de 24 horas laborables [D43]. Para pedidos de comida, 24 horas no es una promesa válida. Plan de respuesta: instalado WhatsApp Business, la agencia prepara una plantilla automática para los horarios en que el negocio está cerrado y un mensaje de bienvenida activo en horario de atención. El dueño del negocio o quien opere responde los pedidos dentro del horario; la agencia no opera el WhatsApp.
+
+---
+
+## Marco estratégico
+
+**Categoría:** restaurante costero ecuatoriano de mariscos — encebollado y ceviche con producto del día. No compite en precio ni en variedad: compite en frescura y en historia.
+
+**Dos mercados, dos lógicas:**
+
+| | Olón | Guayaquil |
+|---|---|---|
+| Formato | Local físico + delivery | Solo delivery (ghost kitchen, por abrir) |
+| Público hoy | Turistas de playa, surfistas, visitantes de la costa, algunos regulares que vuelven al menos una vez/semana [D115] | Residente de zona norte (Alborada, Samanes, Kennedy) que quiere encebollado de calidad sin salir de casa |
+| Competencia más cercana | Ceviches Don Villón a 100 m [competitive landscape], ningún competidor con presencia digital estructurada | La Casa del Encebollado (cadena, 10+ locales), Cuarto de Libra (zona norte, 24hrs), Cevichería Pepe 3 (benchmark digital: 4,8★, Premio Raíces, activa en Uber Eats y PedidosYa) |
+| Ventaja real | Presencia digital en mercado analógico: sitio web, Instagram @naufrago.ec, delivery por WhatsApp | Canal propio en mercado donde los de zona norte no tienen delivery WhatsApp integrado con presencia digital consistente |
+
+**Público exacto que perseguimos:**
+
+En Olón: el turista que llega por surf, foil o playa, busca en Maps o ve la etiqueta en Instagram, y quiere comer bien sin complicarse. Momento de decisión: impulso en la hora del hambre (pico 13:00, 10:00, 12:00). Decide por Maps, por etiqueta de un conocido, o porque ya fue antes.
+
+En Guayaquil: el residente de zona norte que el domingo en la mañana no quiere salir y busca encebollado a domicilio. Decide por Maps, por Instagram, o porque alguien se lo recomendó.
+
+**Reglas de voz que ninguna pieza puede romper:**
+
+El manual declara tuteo («tú», «tienes», «quieres», «elige») [registro declarado en el manual]. Toda pieza pensada para publicarse o para que la lea quien compra va en ese registro. La frase del negocio manda: **«Cuando tengas esa hambre… Náufrago te espera»** [D13, D45]. No se propone reemplazarla; sí se proponen variantes de apoyo rotuladas como propuesta.
+
+Colores del manual: #1a0828 (principal), #2d1135 (secundario), #51d4b4 (acento turquesa), más #663772, #38154b, #4b2855. Tipografías: Caveat para titulares de campaña y portadas de historias, Bebas Neue para subtítulos y llamadas a la acción, Inter para cuerpo de texto [D27].
+
+---
+
+## Estado actual
+
+**Lo que ya funciona:**
+- Google Maps Olón: 4,9 estrellas [D20], 28 reseñas [D42] — muy buen puntaje con poca masa crítica. Las reseñas son el canal de adquisición más barato que existe
+- Instagram @naufrago.ec: 1.236 seguidores [D88], 19 publicaciones [D71]. Hay contenido de terceros que etiqueta al negocio espontáneamente ([D126], [D8], [D77]) — ese es el canal de boca a boca digital que ya opera solo
+- Sitio web con carrito propio, programa Tesoro de Náufrago (4% de cada pedido en crédito [D171]) y delivery integrado con PedidosYa [D74]
+- Ventas de Olón en octubre: $4.530,00 en 443 tickets [D9, D55], ticket promedio $10,23 [D94]. Los últimos 30 días el ticket sube a $10,63 [D142]
+
+**Lo que está trabado:**
+- No hay pauta propia activa hoy — la biblioteca pública de anuncios no encontró pautas propias del negocio (hallazgo confirmado, no hueco)
+- Embudo del sitio con fuga severa: 988 visitas → 69 carritos → 3 pedidos [analítica del sitio]
+- Sin WhatsApp Business [D92], sin píxel [D70], sin lista propia de clientes [D65]
+- Guayaquil sin abrir [D79]: la sede existe en el sitio y en los datos, pero aún no atiende
+
+**Lo que está en marcha:**
+- El programa Tesoro capta datos de quienes compran por el sitio (aunque el volumen es bajo: solo 4 pedidos entregados en 90 días [analítica del sitio])
+- El contenido orgánico de Instagram genera menciones espontáneas de visitantes y surfistas
+
+**Lo que no existe todavía y bloquea el plan:**
+- Píxel de Meta: sin él, no arranca la pauta
+- WhatsApp Business: sin él, los pedidos de Guayaquil no tienen canal de respuesta estructurado
+
+**Equipo:** los datos recibidos no declaran el tamaño ni la composición del equipo operativo. Se deja como pregunta abierta: ¿cuántas personas operan la cocina de Olón en fin de semana? ¿Y quién responderá los pedidos de WhatsApp de Guayaquil cuando abra?
+
+---
+
+## Adquisición
+
+**Canales actuales:**
+
+| Canal | Estado | Lo que aporta hoy |
+|---|---|---|
+| Google Maps (ficha Olón) | Activo, 4,9★, 28 reseñas [D20, D42] | Visibilidad orgánica local — el turista que busca «encebollado Olón» lo encuentra aquí |
+| Instagram @naufrago.ec | Activo, 1.236 seguidores, 19 pubs [D88, D71] | Contenido orgánico + menciones de terceros |
+| WhatsApp personal | Activo como canal de pedidos [D66] | Funciona, pero sin automatización ni horario visible |
+| Sitio web con carrito | Activo | 988 visitas en 90 días → 3 pedidos [analítica del sitio]; bajo rendimiento |
+| Boca a boca + etiquetas | Activo (espontáneo) | El canal más poderoso; sin activar sistemáticamente |
+
+**Canales que se activan en los 90 días:**
+
+1. **Pauta Meta/Instagram** — arranque en semana 3, después de tener píxel. Es el canal con mejor relación costo/alcance en este mercado y el que la oficina financiera modeló. Dos audiencias: turistas Olón radio 30 km, y residentes zona norte Guayaquil para la pre-apertura.
+
+2. **Google Maps (crecimiento de reseñas)** — no es pauta sino solicitud sistemática. Pasar de 28 a ~56 reseñas en 90 días. La agencia diseña la secuencia; el dueño del negocio la ejecuta en el local (ver sección de lo que falta).
+
+3. **Instagram orgánico con ritmo** — hoy hay 19 publicaciones [D71]; se propone pasar a 3–4 por semana con la agencia produciendo el contenido. El contenido generado por terceros se amplifica sistemáticamente en historias.
+
+**Canales descartados en estos 90 días:** ver sección «Lo que no vamos a hacer todavía».
+
+**Movimientos de adquisición en los primeros 90 días:**
+
+- Semanas 1–2: sin pauta (infraestructura)
+- Semanas 3–4: primera pauta Olón, contenido orgánico, solicitud de reseñas
+- Semanas 5–8: pauta en pico navideño Olón + contenido de expectativa Guayaquil
+- Semanas 9–12: apertura Guayaquil con primera pauta propia en la ciudad
+
+---
+
+## Activación
+
+**Lo que pasa la primera vez que alguien llega:**
+
+En Olón presencial: el cliente entra, pide en el mostrador (el único accidente de servicio documentado en reseñas fue no tener señalización de que se pide en mostrador [D104]; ese aviso debe estar visible). La conversión ocurre en el local — el trabajo es traer a más gente a ese momento.
+
+En el sitio web: alguien entra, ve el menú, abre el carrito, y en el 95,7% de los casos no termina de pagar [analítica del sitio]. El problema está en el paso entre «carrito abierto» y «checkout iniciado» — 69 carritos vs. 48 checkouts iniciados — y entre checkout iniciado y pedido enviado — 48 iniciados vs. 3 enviados. La agencia revisa ese flujo en PostHog en la semana 1 e identifica el paso exacto de abandono.
+
+**Lo que convierte:**
+
+- Para los que llegan por Maps: el puntaje de 4,9★ [D20] con reseñas que dicen «the best encebollado ever» [D16] o «the best soup in Ecuador» [D126] hacen el trabajo de convicción antes de que el cliente llegue
+- Para los que llegan por Instagram: el contenido visual del plato y la historia de Olón generan el impulso
+- En el sitio: el programa Tesoro (4% de crédito en cada pedido [D171]) y el mensaje «sin esperar mesa, sin salir de casa» [D133] son las razones de conversión que ya existen y no están siendo comunicadas en la pauta. Se incorporan como mensaje central.
+
+---
+
+## Retención
+
+**Lo que hace que el cliente repita:** el dueño del negocio declara que el cliente regular vuelve al menos una vez/semana [D115]. Ese ritmo es una base sólida. El Encebollado Náufrago es el motor: 409 unidades en octubre [datos de octubre], el plato que genera hábito.
+
+**Lo que evita que se vaya:** hoy no hay mecanismo de retención digital activo porque no existe lista propia de clientes [D65]. El programa Tesoro capta datos de quienes compran por el sitio, pero el volumen es bajo (4 pedidos entregados en 90 días [analítica del sitio]). A medida que el volumen crece, la lista crece.
+
+**Plan de recompra (lo que se activa en los 90 días):**
+
+1. **Seguimiento a las 72 horas:** quien compra por el sitio tiene cuenta. La agencia diseña un mensaje de seguimiento (WhatsApp Business o email) a las 72 horas del primer pedido: «¿Cómo estuvo tu encebollado? La próxima vez tienes [X] puntos de Tesoro esperándote.»
+
+2. **Señal de reactivación:** si un cliente no pide en 14 días, es candidato a un mensaje de «Cuando tengas esa hambre de nuevo, aquí estamos» — con el crédito Tesoro acumulado como incentivo.
+
+3. **Para el cliente de local en Olón:** el mecanismo es presencial; el dueño del negocio o quien atiende menciona el programa Tesoro al momento de pagar.
+
+**Cómo se recupera al que se fue:** sin lista de clientes no se puede contactar a quien no ha vuelto. La base de retención empieza a construirse desde la semana 1 con WhatsApp Business y los datos del sitio. El primer ciclo de recuperación real está disponible en el mes 2.
+
+---
+
+## Referidos
+
+**Lo que ya ocurre sin activarlo:** surfistas, foileros y turistas etiquetan a @naufrago.ec espontáneamente en Instagram ([D126], [D8], [D77], [D10], [D178], [D179]). Es el canal de adquisición más poderoso y no tiene costo. El problema es que hoy esas menciones no tienen una respuesta sistemática.
+
+**Lo que se activa en los 90 días:**
+
+1. **Respuesta sistemática a etiquetas:** la agencia configura el proceso — re-compartir menciones en historias, agradecer públicamente, invitar a seguir el perfil. Convierte el boca a boca espontáneo en contenido del negocio.
+
+2. **Frase de referido en el local:** «Si te gustó, cuéntale a alguien.» El dueño del negocio la comunica verbalmente; la agencia diseña una tarjeta física simple para dejar en la mesa con el QR del Instagram y el número de WhatsApp.
+
+3. **Mecanismo digital (propuesta):** el programa Tesoro ya acumula el 4% de cada pedido [D171]. Se propone añadir crédito adicional por referido — quien trae a un cliente nuevo recibe puntos extra. La implementación técnica requiere confirmación de si el sistema actual soporta este flujo.
+
+**Pregunta abierta:** ¿El programa Tesoro puede vincular hoy quién refirió a quién? Si no, el mecanismo de referido digital queda como propuesta para el mes 2, y en las primeras semanas funciona solo el mecanismo presencial.
+
+---
+
+## Ingresos
+
+**Los precios vigentes (sede Olón, confirmados en el sitio):**
+
+| Producto | Precio |
+|---|---|
+| Encebollado Náufrago | Pendiente de confirmación — ver nota abajo |
+| Encebollado Mixto | $6,00 [D175] |
+| Encebollado Junior | $3,50 [D59] |
+| Ceviche Náufrago | $7,00 [D76] |
+| Ceviche Mixto | $9,00 [D21] |
+| Café pasado | $2,00 [D3] |
+| Jugo natural del día | $2,00 [D22] |
+| Cerveza grande | $3,00 [D38] |
+| Cola grande | $2,00 [D75] |
+| Pan | $0,50 [D72] |
+| Agua | $1,00 [D110] |
+| Aguacate | $1,00 [D157] |
+
+**Nota sobre el Encebollado Náufrago:** hay una discrepancia entre fuentes que debe resolverse antes de lanzar cualquier pauta. El sitio publica el plato a $4,00 [D169]; reseñas anteriores lo citan a $3,50 [D73]. Publicar pauta que mencione el precio antes de confirmar el valor vigente genera fricción en el momento de pago. La acción está agendada para el 7 de noviembre (ver sección de lo que tiene que pasar de tu lado esta semana). Una vez confirmado, todas las referencias al precio del Encebollado Náufrago en el plan y en las piezas se actualizarán al valor único declarado. Si el precio vigente es $4,00, la propuesta de accesibilidad del Encebollado Junior a $3,50 sirve como precio ancla de entrada.
+
+**El número que persigue el plan:**
+
+Ticket promedio actual (últimos 30 días): $10,63 [D142]. Meta: 130 tickets/semana en Olón en temporada alta → $1.382/semana → $5.908/mes aproximado (supuesto de la oficina financiera, sin firma).
+
+Punto de partida octubre: 443 tickets en el mes [D55] → ~108 tickets/semana. Llegar a 130 es un crecimiento del 20% en temporada alta.
+
+**Venta adicional natural:** el Ceviche Mixto ($9,00 [D21]) como complemento del encebollado. En el punto de venta, el mensaje «¿Le sumamos el ceviche?» en el momento de pedir aumenta el ticket sin esfuerzo adicional.
+
+---
+
+## El presupuesto
+
+**Moneda de trabajo:** los datos vienen en USD. Ecuador opera con dólar y todos los precios del sitio están en USD. La moneda no fue declarada explícitamente — se usa USD porque es la moneda que traen todos los datos, pero el dueño del negocio debe confirmar si hay operaciones en otra moneda.
+
+**Presupuesto declarado:** $200/semana en pauta [D123].
+
+---
+
+### Cómo se calcula desde la meta
+
+**Paso a · La meta en ventas:**
+130 tickets/semana. Con ticket promedio de $10,63 [D142] → $1.382/semana. Desde los ~108 tickets/semana de octubre, hacen falta ~22 tickets adicionales/semana.
+
+**Paso b · El costo por cliente nuevo:**
+
+No hay historial de pauta propia del negocio (hallazgo: no se encontraron pautas activas en la biblioteca pública de anuncios). El costo real solo se conoce con 14 días de pauta corriendo.
+
+La oficina financiera estimó el costo por resultado en $0,23 (rango $0,10–$0,56) y el costo por venta en $3,34 con solo pauta, o $6,96 con el plan completo incluyendo producción de contenido. Estos son **estimaciones sin firma de la oficina financiera** — el modelo tiene 12 supuestos de 14 items (ver sección de qué asumimos). No son promesas; son el punto de partida para medir.
+
+**Paso c · Los escenarios:**
+
+| | Escenario base ($200/semana declarados) | Escenario propuesto por la oficina (estimación sin firma) |
+|---|---|---|
+| Inversión este mes | $800 | ~$1.884 |
+| Costo por venta estimado | $6,96 (supuesto) | $3,34 (supuesto, solo pauta) |
+| Ventas adicionales/semana esperadas | ~29 (supuesto) | ~130 (supuesto) |
+| Para no perder | El negocio ya tiene ingreso en Olón; la pauta busca crecer, no cubrir costos fijos | Mismo criterio |
+
+La oficina financiera propone $434/semana para alcanzar directamente la meta de 130 tickets. Esta es **una propuesta que requiere la aprobación del dueño del negocio**, no un número fijo. El plan arranca con los $200 declarados y sube si los primeros 14 días muestran señal positiva.
+
+**Aviso de la oficina:** el modelo tiene 12 supuestos de 14 items — es una orientación, no una garantía. La oficina también advierte que sin línea base de ventas previas (el negocio no ha corrido pauta) la pauta puede quedar sobredimensionada si el negocio ya vende bien sin ella.
+
+**Reparto propuesto del presupuesto mensual** (cada porcentaje va con su razón):
+
+| Renglón | Con $800/mes (declarado) | Con ~$1.884/mes (propuesto por oficina) | Razón |
+|---|---|---|---|
+| Meta/Instagram (pauta + marca) | $480 (60%) | $1.130 (60%) | Es el único canal con píxel activo al arrancar; mínimo 60% porque concentra la capacidad de medir y optimizar |
+| Búsqueda local (Google Maps y Google Ads local) | $200 (25%) | $471 (25%) | Olón tiene competidor a 100 m; Google Maps es donde se decide el pedido del turista |
+| Producción de contenido | $120 (15%) | $283 (15%) | El negocio tiene 19 publicaciones [D71]; sin contenido sostenido, la pauta no tiene material que funcione |
+
+**Regla de la pauta (con los supuestos de la oficina):**
+
+| Situación | Acción |
+|---|---|
+| Costo por resultado por debajo de $1,52 (supuesto) | Sigo |
+| Costo sube a $2,13 y se mantiene 7 días | Ajusto (recorto 20% del gasto diario) |
+| Costo supera $3,04 durante 7 días | Paro y revisamos |
+| 0 resultados después de gastar 3× el techo | Pausa técnica inmediata |
+| Respuesta al WhatsApp con más de 30 minutos sostenida | Pausa técnica hasta resolver |
+
+Nada se juzga antes de que se cumplan las últimas de estas condiciones: el día 14, o 15 resultados medidos. Revisión interna cada 7 días e informe al dueño del negocio cada 14.
+
+---
+
+## La prueba — lo que falta y cómo se resuelve en 7–10 días
+
+| Qué falta | Por qué importa | Cómo se resuelve | Quién | Fecha límite |
+|---|---|---|---|---|
+| Píxel de Meta | Sin él, la pauta no puede optimizar por ventas | Agencia instala el píxel una vez que el dueño del negocio da acceso a Meta Business Manager | Agencia + dueño del negocio (acceso) | 10 nov |
+| WhatsApp Business | Sin él, los pedidos caen en personal sin automatización ni horario | El dueño del negocio crea la cuenta; la agencia configura bienvenida y plantillas | Dueño del negocio (creación) + agencia (configuración) | 10 nov |
+| Embudo del sitio con fuga en checkout | 69 carritos → 3 pedidos [analítica del sitio] | Agencia revisa el flujo en PostHog e identifica el paso de abandono | Agencia | 10 nov |
+| Sin lista de clientes [D65] | No hay con quién comunicarse directamente | WhatsApp Business comienza a construir la lista; Tesoro capta emails en el sitio | Proceso continuo desde sem 1 | Proceso continuo |
+| Pocas reseñas (28) [D42] | 28 reseñas son insuficientes para ganar visibilidad en Maps frente a más masa crítica | Agencia diseña la secuencia de solicitud; el dueño del negocio la ejecuta en el local | Agencia (secuencia) + dueño del negocio (ejecución) | Semana 2 |
+| Sin pauta activa | Hallazgo confirmado — el negocio no corre pauta hoy | Agencia lanza la primera campaña en semana 3 | Agencia | Semana 3 |
+| Precio del Encebollado Náufrago sin confirmar | Sitio dice $4,00 [D169]; reseñas anteriores citan $3,50 [D73] — la discrepancia no puede aparecer en ninguna pieza de pauta | El dueño del negocio confirma el precio vigente; hasta entonces, ninguna pieza de pauta menciona el precio del Encebollado Náufrago | Dueño del negocio | 7 nov |
+
+---
+
+## Hoja de ruta · 90 días por semanas con fechas
+
+### DESBLOQUEAR · Semanas 1–2 · 4–17 de noviembre de 2026
+
+**Objetivo:** tener la infraestructura mínima antes de gastar el primer dólar.
+
+| Sem | Qué | Responsable | Fecha |
+|---|---|---|---|
+| 1 | El dueño del negocio da acceso a Meta Business Manager | Dueño del negocio | 7 nov |
+| 1 | El dueño del negocio crea WhatsApp Business con el número existente | Dueño del negocio | 7 nov |
+| 1 | El dueño del negocio confirma precio actual del Encebollado Náufrago y capacidad de la cocina | Dueño del negocio | 7 nov |
+| 1 | Agencia instala píxel de Meta en el sitio | Agencia | 10 nov |
+| 1 | Agencia configura WhatsApp Business: mensaje de bienvenida, plantilla de pedido, horario | Agencia | 10 nov |
+| 1 | Agencia revisa embudo en PostHog e identifica paso de abandono | Agencia | 10 nov |
+| 1 | 2 posts orgánicos en @naufrago.ec: presentar el encebollado de la casa y la historia de Olón | Agencia | 10–14 nov |
+| 2 | Agencia propone el ajuste del paso roto del embudo | Agencia | 17 nov |
+| 2 | Agencia produce 5 piezas de contenido para las primeras 2 semanas de pauta | Agencia | 17 nov |
+| 2 | Agencia diseña la secuencia de solicitud de reseña (texto simple que el dueño del negocio usa en el local) | Agencia | 17 nov |
+| 2 | Agencia configura Meta Business Manager: audiencias, conjuntos de anuncios, primer lote de creativos | Agencia | 17 nov |
+
+---
+
+### CIMIENTOS · Semanas 3–4 · 18 de noviembre – 1 de diciembre de 2026
+
+**Objetivo:** lanzar la primera pauta con medición real, llegar a 40 reseñas en Maps, contenido de expectativa para Guayaquil.
+
+| Sem | Qué | Responsable | Fecha |
+|---|---|---|---|
+| 3 | Lanzar primera campaña Meta: Encebollado Náufrago (con precio confirmado), público Olón radio 30 km | Agencia | 18 nov |
+| 3 | Dueño del negocio ejecuta solicitud de reseña con cada cliente satisfecho en el local | Dueño del negocio | Desde 18 nov |
+| 3 | Primera revisión interna de pauta (costo por resultado vs. techo) | Agencia | 24 nov |
+| 3 | Contenido «Pronto en Guayaquil» en Instagram (stories + 1 post): expectativa de la nueva sede, sin mencionar fecha ni horario de atención | Agencia | 25 nov |
+| 4 | Primer informe de 14 días al dueño del negocio (20 minutos) | Agencia | 1 dic |
+| 4 | Ajuste de puja y público según los primeros 14 días | Agencia | 1 dic |
+| 4 | Formulario de lista de espera Guayaquil activo en bio de Instagram | Agencia | 1 dic |
+
+**Tema de contenido semanas 3–4:** «El encebollado que viene del mar» — mostrar el proceso, el producto fresco, la cocina en Olón. Fondo #1a0828, acento #51d4b4, tipografía Caveat en titulares. Tuteo en todos los textos.
+
+---
+
+### VELOCIDAD · Semanas 5–8 · 2–30 de diciembre de 2026
+
+**Objetivo:** capturar la temporada alta navideña en Olón; maximizar la lista de espera para Guayaquil.
+
+Diciembre es temporada alta en la costa de Santa Elena: turistas nacionales e internacionales, vacaciones, Navidad (25 de diciembre), fin de año (31 de diciembre). La pauta llega a su punto máximo en estas semanas.
+
+| Sem | Qué | Responsable | Fecha |
+|---|---|---|---|
+| 5 | Subir presupuesto de pauta si los primeros 14 días confirman costo por debajo del techo | Dueño del negocio (aprueba) + agencia (ejecuta) | 2 dic |
+| 5 | Campaña temporada navideña Olón: «Cuando tengas esa hambre… en Navidad» | Agencia | 2 dic |
+| 6 | Segundo informe de 14 días al dueño del negocio | Agencia | 15 dic |
+| 6 | 3–4 posts/semana en @naufrago.ec con serie navideña: platos en mesa, cocina, Olón y el mar | Agencia | 10–16 dic |
+| 7 | Semana previa a Navidad: mayor presión de pauta en Olón (encebollado y ceviche para las fiestas) | Agencia | 18 dic |
+| 7 | Preparar contenido de lanzamiento para Año Nuevo en Guayaquil | Agencia | 22 dic |
+| 8 | Fin de año: pauta activa en Olón (física) y Guayaquil (expectativa) | Agencia | 28 dic |
+| 8 | Respuesta sistemática en historias a todas las etiquetas recibidas en diciembre | Agencia | 28 dic |
+
+**Contenido semanas 5–8:** serie de fiestas — «El encebollado de Navidad», «El mar en tu mesa esta noche», «Cuando tengas esa hambre… el 31». Reels del plato, cocina en acción, Olón de noche. Púrpura oscuro (#1a0828) + turquesa (#51d4b4) + Caveat para titulares.
+
+---
+
+### ACUMULAR · Semanas 9–12 · 31 de diciembre de 2026 – 28 de enero de 2027
+
+**Objetivo:** apertura de Guayaquil, retención de clientes de Olón, construir la base para el primer trimestre de 2027.
+
+La apertura de Guayaquil en estas semanas depende de que el dueño del negocio confirme la fecha. Si la apertura se retrasa, las semanas 9–12 se dedican a construir la lista de espera más grande posible y se pospone la primera pauta en Guayaquil.
+
+| Sem | Qué | Responsable | Fecha |
+|---|---|---|---|
+| 9 | Año Nuevo: primera pauta Guayaquil (con la lista de espera acumulada) | Agencia | 5 ene |
+| 9 | Primer mensaje de retención a clientes que pidieron en diciembre por el sitio | Agencia | 7 ene |
+| 9 | Tercer informe de 14 días al dueño del negocio | Agencia | 14 ene |
+| 10 | Apertura operativa de Guayaquil (si el dueño del negocio confirma la fecha) | Dueño del negocio | Sem 10 o antes |
+| 10 | Ajustar pauta Guayaquil según primeros 14 días de operación | Agencia | 15–20 ene |
+| 11 | Revisión de reseñas: ¿llegamos a 50? Ajustar la solicitud si el ritmo es menor | Agencia + dueño del negocio | 20 ene |
+| 12 | Informe final de 90 días + propuesta de plan para el siguiente trimestre | Agencia | 28 ene |
+
+---
+
+## Más allá de los 90 días
+
+| Lo que se activa después | Condición que lo desbloquea |
+|---|---|
+| TikTok | Instagram tiene más de 3.000 seguidores y hay ritmo de producción de video establecido |
+| Email marketing | La lista del programa Tesoro tiene más de 100 contactos con consentimiento explícito [D113] |
+| PedidosYa como canal de adquisición en Guayaquil | El flujo de pedidos propios (WhatsApp/sitio) está rodado y se puede absorber el volumen extra de la plataforma |
+| Vacaciones escolares de la Costa (1 feb – 31 mar 2027) | Pico de turismo en Olón: subir pauta en Olón y preparar Guayaquil para volumen de trabajadores de vacaciones |
+| Carnaval (8–9 feb 2027) | Feriado con alta afluencia en la costa: el plan del segundo trimestre lo contempla |
+| Referido digital con Tesoro | Confirmación técnica de que el sistema puede vincular quién refirió a quién |
+
+---
+
+## Herramientas y canales que ejecutan cada movimiento
+
+| Herramienta / canal | Para qué | Estado |
+|---|---|---|
+| Instagram @naufrago.ec | Contenido orgánico + pauta Meta | Activo, 1.236 seguidores [D88] |
+| Meta Business Manager | Plataforma de pauta, píxel | Por configurar — píxel pendiente de instalación |
+| WhatsApp +593997744288 [D149] | Pedidos y atención al cliente | Activo como personal; por migrar a Business |
+| Sitio web naufrago.ec | Carrito de pedidos, menú, Tesoro de Náufrago | Activo, con embudo roto por diagnosticar |
+| PostHog (analítica del sitio) | Monitorear el embudo y el comportamiento en el sitio | Activo |
+| Google Maps ficha Olón | Visibilidad local, reseñas | Activo, 4,9★, 28 reseñas [D20, D42] |
+| Google Maps ficha Guayaquil (si existe) | Visibilidad local para la apertura | Verificar si ya existe ficha activa |
+
+---
+
+## Lo que NO vamos a hacer todavía y por qué
+
+| Qué | Por qué no ahora | Qué lo activaría |
+|---|---|---|
+| TikTok | No hay cuenta propia (búsqueda no halló perfil del negocio); crear desde cero requiere producción de video que aún no existe | Cuando el ritmo de contenido en Instagram esté consolidado (semana 8+) |
+| X / Twitter | No se halló cuenta propia del negocio; la audiencia de mariscos ecuatorianos no opera en esa plataforma | No hay condición que lo active en estos 90 días |
+| Email marketing masivo | No tiene lista de clientes [D65]; el programa Tesoro capta emails pero el volumen de pedidos en el sitio es muy bajo (3 pedidos en 90 días [analítica del sitio]) | Cuando la lista tenga 100+ contactos con consentimiento |
+| Influencers pagados | Hay contenido orgánico de surf y foil que llega solo ([D126], [D8], [D30]); pagar por lo que ya viene gratis quema presupuesto | Cuando el alcance orgánico esté saturado y se necesite escala |
+| PedidosYa como canal de adquisición en Guayaquil | El sitio ya tiene delivery propio integrado con PedidosYa [D74]; abrir un canal de marketplace antes de optimizar el propio es regalar margen de comisión | Para Guayaquil, puede evaluarse en el mes 4 si el volumen lo justifica |
+| Pauta en Google Search | El Maps orgánico con 4,9★ [D20] hace el mismo trabajo sin costo en un mercado como Olón; en Guayaquil se evalúa en el mes 4 | Cuando las reseñas bajen o la competencia en Maps suba significativamente |
+| Blog o SEO de contenido | Náufrago vende por impulso y por boca a boca, no por intención de búsqueda transaccional planificada con días de anticipación | No hay condición que lo active en estos 90 días |
+
+---
+
+## Medición y decisiones abiertas
+
+**El indicador principal:** tickets en el punto de venta por semana (Olón y Guayaquil separados).
+
+**Indicadores adelantados:**
+
+| Indicador | Señal que da | Frecuencia de revisión |
+|---|---|---|
+| Costo por resultado en pauta | Si la pauta está comprando bien o mal | Cada 7 días |
+| Nuevas reseñas en Google Maps | Si el local está funcionando y el boca a boca crece | Cada 14 días |
+| Seguidores en Instagram | Si el contenido está resonando | Cada 14 días |
+| Tasa de cierre del carrito (PostHog) | Si el embudo del sitio mejora después del ajuste | Cada 14 días |
+
+**El ritual:** el dueño del negocio y la agencia se revisan cada 10–14 días, 15–20 minutos. La agencia prepara el informe con dos números: cuánto gastamos y cuántos clientes nuevos llegaron. Si hay una decisión que no puede esperar, la agencia la comunica antes del ritual.
+
+**El dueño del resultado:** el dueño del negocio aprueba presupuestos y cambios de dirección; la agencia ejecuta y recomienda.
+
+**Decisiones incómodas que están sobre la mesa:**
+
+1. **El presupuesto de $200/semana puede ser insuficiente para la meta de 130 tickets/semana.** La oficina financiera estima que hacen falta ~$434/semana (supuesto, sin firma). El plan arranca con $200 y la prueba de las primeras 2 semanas define si hay que subir o si la meta se ajusta a lo que $200/semana puede comprar.
+
+2. **Guayaquil no tiene fecha de apertura confirmada [D79].** Las semanas 9–12 están construidas sobre el supuesto de que abre en ese período. Si se retrasa, el plan de esas semanas cambia completamente. El dueño del negocio debe confirmar una fecha orientativa antes del 17 de noviembre.
+
+3. **El embudo del sitio tiene una fuga entre carrito y pago.** Si el problema es técnico y requiere desarrollo, puede tomar más de 7–10 días. En ese caso, la agencia comunica el tiempo real y ajusta la fecha de lanzamiento de pauta si es necesario.
+
+4. **El precio del Encebollado Náufrago debe confirmarse antes de la semana 3.** Si la pauta anuncia un precio y el local cobra otro, el cliente se decepciona antes de sentarse. Ninguna pieza que mencione el precio del Encebollado Náufrago se publica hasta tener la confirmación.
+
+---
+
+## Qué asumimos y de dónde lo sacamos
+
+| Qué se asume | Por qué | Base o fuente |
+|---|---|---|
+| Moneda: USD | Ecuador opera con dólar; todos los precios del sitio están en USD [D169, D59, D21, etc.]. La moneda no fue declarada explícitamente por el negocio | Suposición por país + precios observados en el sitio |
+| Meta de 130 tickets/semana | Viene de los números de la oficina financiera | Estimación de la oficina financiera, sin firma (12 de 14 items son supuestos) |
+| Costo por resultado: $0,23 (rango $0,10–$0,56) | No hay historial de pauta propia; es el rango estimado por la oficina | Estimación de la oficina financiera, sin firma |
+| Costo por venta: $3,34 (solo pauta) / $6,96 (plan completo) | Mismo origen | Estimación de la oficina financiera, sin firma |
+| Pauta de rendimiento: $434/semana | Estimación de la oficina para alcanzar la meta | Estimación de la oficina financiera, sin firma |
+| Primera venta neta tras el plan completo: $2,03 (supuesto de la oficina) | Calculado por la oficina con sus supuestos; advertencia: el modelo tiene 12 supuestos de 14 items | Estimación de la oficina financiera, sin firma |
+| 50 pedidos en la primera semana de Guayaquil | No hay dato del negocio; es un objetivo de arranque para una ghost kitchen nueva | Supuesto del plan, sin base estadística propia |
+| El cliente regular vuelve al menos 1 vez/semana | Comportamiento general declarado | Dueño del negocio [D115]; no se especificó cuántos clientes tienen este patrón |
+| La deuda del embudo se resuelve sin desarrollo adicional | El problema podría ser técnico; si requiere desarrollo, el tiempo real es otro | Supuesto de la agencia — a confirmar en semana 1 |
+
+**Huecos reales (no pudo verificarse, no se puede afirmar ni negar):**
+
+- Costo de pauta en la plataforma: no se leyó el costo real. Se conocerá solo con los primeros 14 días de pauta corriendo. Los $0,23 por resultado y los $3,34 por venta son estimaciones de la oficina, no datos medidos.
+- Precio del Encebollado Náufrago en Olón: el sitio publica $4,00 [D169] pero reseñas anteriores citan $3,50 [D73]. La discrepancia no está resuelta — es un hueco activo hasta que el dueño del negocio confirme el valor vigente el 7 de noviembre.
+- Capacidad máxima de la cocina de Olón en hora pico: no está declarada en los datos. Pregunta abierta al dueño del negocio.
+- Fecha de apertura de Guayaquil: no confirmada más allá de «sin abrir» [D79].
+- Si existe ficha activa de Google Maps para Guayaquil: no verificado en los datos recibidos.
+- Tiempo de entrega de Guayaquil: el dato de 20 a 35 minutos [D82] corresponde a la operación de Olón y no puede proyectarse sobre Guayaquil hasta que la sede esté operativa.
+
+---
+
+## Qué tiene que pasar de tu lado esta semana
+
+Cinco acciones que solo el dueño del negocio puede hacer, antes del 10 de noviembre:
+
+1. **Dar acceso a Meta Business Manager** a la agencia (el correo de acceso lo coordina la agencia). Sin esto, el píxel no se instala y la pauta no arranca. Tiempo estimado: 10 minutos.
+
+2. **Crear la cuenta de WhatsApp Business** con el número +593997744288 [D149]. La agencia configura el resto. Tiempo estimado: 20 minutos.
+
+3. **Confirmar el precio actual del Encebollado Náufrago**: el sitio publica $4,00 y reseñas anteriores citan $3,50 — hay una discrepancia que bloquea la pauta. Un mensaje a la agencia es suficiente.
+
+4. **Confirmar la capacidad de la cocina de Olón en hora pico**: ¿cuántos pedidos simultáneos puede manejar? En el mismo mensaje.
+
+5. **Confirmar la fecha orientativa de apertura de Guayaquil**: «diciembre», «enero», «aún sin fecha» — cualquier respuesta ajusta el calendario. Sin esa respuesta, las semanas 9–12 quedan en pausa técnica.
+
+---
+
+*Plan redactado por el equipo de Zero Risk · 4 de noviembre de 2026*
+*Dueño del resultado: el dueño del negocio aprueba presupuestos y cambios de dirección · próxima revisión: 18 de noviembre de 2026, 15–20 minutos*
