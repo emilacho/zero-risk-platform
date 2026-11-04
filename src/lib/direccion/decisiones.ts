@@ -8,7 +8,7 @@ import { TOPE_REESCRITURA_USD } from '../oficina/tablero/plan'
 import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
-import { DIAS_DEL_REGISTRO, PARA_QUE_DE_LA_FIRMA, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
+import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, leerCriticosDeTableros, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, paraQueDeLaFirma, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
 
 export type TipoDecision = 'plan' | 'gran_idea' | 'pieza' | 'revision' | 'pregunta_al_dueno' | 'pregunta_de_finanzas' | 'firma_de_finanzas'
 export interface Decision {
@@ -103,11 +103,11 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     leer(fuentes, 'hitl_queue', db.from('hitl_queue').select('id, client_id, output_id, type, documento, title, output_preview, priority, payload, metadata, created_at, expires_at').eq('status', 'pending').limit(TOPE), TOPE),
     leer(fuentes, 'cerebro_dueno_preguntas', db.from('cerebro_dueno_preguntas').select('id, client_id, tema, pregunta, creado_en, preguntado_por_oficina, preguntado_por_agente').eq('estado', 'pendiente').limit(TOPE), TOPE),
     leer(fuentes, 'finanzas_preguntas', db.from('finanzas_preguntas').select('id, client_id, clave, texto, creado_en').eq('estado', 'enviada').limit(TOPE), TOPE),
-    leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en').eq('estado', 'sin_firma').eq('vigente', true).eq('dry_run', false).limit(TOPE), TOPE),
+    leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en, workflow_execution_id').eq('estado', 'sin_firma').eq('vigente', true).eq('dry_run', false).limit(TOPE), TOPE),
     // 04-nov · sin pedir el `sobre`: lleva el material del plan y pesa cientos de KB
-    leer(fuentes, 'esperas_del_dueno', db.from('esperas_del_dueno').select('id, client_id, clave, creado_en').eq('tipo', 'finanzas').eq('estado', 'esperando').limit(TOPE), TOPE),
+    leer(fuentes, 'esperas_del_dueno', db.from('esperas_del_dueno').select('id, client_id, clave, creado_en').eq('tipo', 'finanzas').eq('estado', 'esperando').order('creado_en', { ascending: true }).limit(TOPE), TOPE),
     // 04-nov · el plan que no volvió tras tu respuesta. Pasada la semana ya lo reemplazó otro o lo atendió una persona
-    leer(fuentes, 'esperas_del_dueno', db.from('esperas_del_dueno').select('id, client_id, clave, estado, soltada_en, creado_en, despertado, despertar_intentos, despertar_detalle').eq('tipo', 'finanzas').eq('estado', 'soltada').eq('despertado', false).gte('creado_en', new Date(Date.parse(hora) - DIAS_DEL_REGISTRO * 86_400_000).toISOString()).limit(TOPE), TOPE),
+    leer(fuentes, 'esperas_del_dueno', db.from('esperas_del_dueno').select('id, client_id, clave, estado, soltada_en, creado_en, despertado, despertar_intentos, despertar_detalle, corrida:sobre->>corrida').eq('tipo', 'finanzas').eq('estado', 'soltada').eq('despertado', false).gte('creado_en', new Date(Date.parse(hora) - DIAS_DEL_REGISTRO * 86_400_000).toISOString()).limit(TOPE), TOPE),
   ])
   // 04-nov · qué preguntas pertenecen a cada pausa. Si esto no se lee, `detiene` no viene y el tablero usa lo que sabe: no afecta a `completo`, la lista sigue entera
   const delEncargo = await leerPreguntasDeEncargos(db, [], enPausa.map((p) => encargoDeLaEspera(p.clave)).filter((x): x is string => !!x)).catch(() => new Map<string, { id: string | null; tema: string }[]>())
@@ -118,7 +118,14 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     return qs ? qs.some((q) => q.id === String(p.id) || temaNormal(q.tema) === temaNormal(p.tema)) : null
   }
   const faltanDe = (client: unknown) => preguntas.filter((p) => String(p.client_id) === String(client) && esDeLaPausa(p) === true).length
+  const destrabaDe = (client: unknown) => { const n = faltanDe(client); return n > 0 ? { destraba: destrabaDeLaPausa(n) } : {} }
   const FINANCIERA = { oficina: 'financiera', agente: null }
+  // 05-nov · corrección de CC7: lo que dice una firma antes de firmar. Si no se lee, un texto que vale en todos los casos: no afecta a `completo`
+  const criticos = tableros.length ? await leerCriticosDeTableros(db, tableros) : new Map<string, number>()
+  // 05-nov · corrección de CC7: la tarjeta no se puede quitar a mano, así que se va sola cuando otro plan corrió. Si esto no se lee, se queda: mejor un aviso de más que uno escondido
+  const sueltas = noVolvieron.filter(noVolvio)
+  const corridasDeSueltas = sueltas.length ? await leer([], 'plan_corridas', db.from('plan_corridas').select('client_id, corrida, estado, espera_desde').in('client_id', [...new Set(sueltas.map((e) => String(e.client_id)))]).in('estado', [...ESTADOS_DE_PLAN_QUE_CORRIO]).order('espera_desde', { ascending: false }).limit(TOPE), TOPE) : []
+  const noVolvieronVigentes = sueltas.filter((e) => !yaLoSuperoOtroPlan(e, corridasDeSueltas))
   const crudas: Omit<Decision, 'cliente' | 'vencida' | 'titulo_interno'>[] = []
   // 01-nov · firma de Emilio: solo lo vigente pide firma. El reloj las cierra; aquí no se muestran aunque el reloj no haya pasado. Si los planes no se leen, se muestra todo.
   const vigentes = await leerPlanesVigentes(db, [...new Set(bandeja.map((h) => texto(h.client_id)).filter((c): c is string => !!c))]).catch(() => null)
@@ -138,8 +145,8 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     const m = TIPOS_HITL[subtipo] ?? { tipo: 'revision' as const, ruta: null, accion: null }
     crudas.push({ id: String(h.id), tipo: m.tipo, subtipo, fuente: 'hitl_queue', client_id: texto(h.client_id), titulo: sinSecretos(h.title ?? h.output_preview, 300) ?? `Revisión pendiente (${subtipo})`, desde: texto(h.created_at), vence: texto(h.expires_at), prioridad: texto(h.priority), decidir: { ruta: m.ruta ?? RUTA_POR_DOCUMENTO[String(h.documento)] ?? null, accion: m.accion }, costo_usd: null, costo_nota: m.tipo === 'plan' ? 'aprobar no gasta por sí mismo' : null })
   }
-  for (const p of enPausa) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_en_pausa', fuente: 'esperas_del_dueno', client_id: texto(p.client_id), titulo: 'El plan está en pausa: la oficina financiera espera tus respuestas en el buzón de preguntas', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, para_que: PARA_QUE_DE_LA_PAUSA, destraba: destrabaDeLaPausa(faltanDe(p.client_id)), detiene: true })
-  for (const e of noVolvieron) if (noVolvio(e)) crudas.push({ id: String(e.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_no_volvio', fuente: 'esperas_del_dueno', client_id: texto(e.client_id), titulo: TITULO_NO_VOLVIO, desde: texto(e.soltada_en) ?? texto(e.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, detiene: true, volvio: { motivo: motivoDeNoVolver(e) } })
+  for (const p of enPausa) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_en_pausa', fuente: 'esperas_del_dueno', client_id: texto(p.client_id), titulo: 'El plan está en pausa: la oficina financiera espera tus respuestas en el buzón de preguntas', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, para_que: PARA_QUE_DE_LA_PAUSA, ...destrabaDe(p.client_id), detiene: true })
+  for (const e of noVolvieronVigentes) crudas.push({ id: String(e.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_no_volvio', fuente: 'esperas_del_dueno', client_id: texto(e.client_id), titulo: TITULO_NO_VOLVIO, desde: texto(e.soltada_en) ?? texto(e.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, detiene: true, volvio: { motivo: motivoDeNoVolver(e) } })
   for (const p of preguntas) {
     const oficina = texto(p.preguntado_por_oficina), dePausa = esDeLaPausa(p)
     crudas.push({
@@ -147,13 +154,13 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
       permite: ['responder', 'descartar'],
       ...(oficina ? { pregunta_de: { oficina, agente: texto(p.preguntado_por_agente) } } : {}),
       ...(dePausa === null ? {} : { detiene: dePausa }),
-      ...(dePausa ? { para_que: PARA_QUE_DE_LA_PAUSA, destraba: destrabaDeLaPausa(faltanDe(p.client_id)) } : {}),
+      ...(dePausa ? { para_que: PARA_QUE_DE_LA_PAUSA, ...destrabaDe(p.client_id) } : {}),
     })
   }
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA })
-  for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, permite: ['aceptar'], pregunta_de: FINANCIERA, para_que: PARA_QUE_DE_LA_FIRMA })
+  for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, permite: ['aceptar'], pregunta_de: FINANCIERA, para_que: paraQueDeLaFirma(criticos.get(String(t.id))) })
 
-  const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas, esperan_el_manual: 0 }
+  const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas, esperan_el_manual: 0, planes_ya_superados: sueltas.length - noVolvieronVigentes.length }
   // 3-nov · firma de Emilio: un plan no pide firma antes de su manual. Si el manual no se puede leer, se muestra: mejor una firma de más que una escondida; la puerta del plan igual la frena
   const clientesConPlan = [...new Set(crudas.filter((d) => d.tipo === 'plan' && d.client_id).map((d) => d.client_id as string))]
   const lecturas = await Promise.all(clientesConPlan.map(async (c) => [c, await planEsperaAlManual(db, c).catch(() => ({ ok: false as const, error: 'lectura' }))] as const))

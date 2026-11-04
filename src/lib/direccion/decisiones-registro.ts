@@ -34,10 +34,15 @@ const TOPE_DE_ARTEFACTOS = TOPE_DEL_REGISTRO * 4
 const TOPE_DE_CITA = 300
 
 export const PARA_QUE_DE_LA_PAUSA = 'La oficina financiera lo necesita para pasarle sus cuentas al redactor del plan de 90 días.'
-export const PARA_QUE_DE_LA_FIRMA = 'La oficina financiera dejó hallazgos críticos abiertos: tu firma da por buenas sus cifras.'
+/** 05-nov · corrección de CC7: el código también deja sin firma por falta de acuerdo o por no verificar al jefe. Los críticos se nombran solo si constan en el cierre */
+export function paraQueDeLaFirma(criticos: number | null | undefined): string {
+  if (!criticos || criticos < 1) return 'La oficina financiera no dejó firmado este tablero: tu firma da por buenas sus cifras.'
+  return criticos === 1 ? 'La oficina financiera dejó 1 hallazgo crítico abierto: tu firma da por buenas sus cifras.' : `La oficina financiera dejó ${criticos} hallazgos críticos abiertos: tu firma da por buenas sus cifras.`
+}
 export const TITULO_NO_VOLVIO = 'Contestaste, pero el plan no volvió a arrancar'
+/** solo con preguntas por contestar: sin ellas el plan puede estar en el margen o esperando otra cosa, y eso no se promete */
 export function destrabaDeLaPausa(faltan: number): string {
-  return faltan <= 1
+  return faltan === 1
     ? 'El plan de 90 días sigue apenas contestes.'
     : `El plan de 90 días sigue cuando contestes las ${faltan} preguntas, o unos ${SILENCIO_TRAS_RESPONDER_MIN} minutos después de tu última respuesta.`
 }
@@ -62,9 +67,53 @@ export async function leerPreguntasDeEncargos(db: Db, fuentes: Fuente[], encargo
   return salida
 }
 
+/** cuántos críticos abiertos dejó el cierre de cada tablero (la última versión del cierre de su encargo). Lo que no conste no se afirma */
+export async function leerCriticosDeTableros(db: Db, tableros: Fila[]): Promise<Map<string, number>> {
+  const salida = new Map<string, number>()
+  const encargos = [...new Set(tableros.map((t) => texto(t.workflow_execution_id)).filter((w): w is string => !!w?.startsWith('conversa:')).map((w) => w.slice('conversa:'.length)))]
+  if (!encargos.length) return salida
+  const filas = await leer([], 'finanzas_artefactos', db.from('finanzas_artefactos').select('encargo_id, version, tablero:contenido->>finanzas_id, criticos:contenido->criticos_abiertos').eq('tipo', 'cierre').in('encargo_id', encargos).order('version', { ascending: false }).limit(TOPE_DE_ARTEFACTOS), TOPE_DE_ARTEFACTOS)
+  for (const f of filas) {
+    const t = texto(f.tablero)
+    if (t && !salida.has(t) && typeof f.criticos === 'number') salida.set(t, f.criticos)
+  }
+  return salida
+}
+
+const fechaDe = (v: unknown): number | null => { const t = Date.parse(String(v ?? '')); return Number.isNaN(t) ? null : t }
+const creadaEn = (e: Fila): number => fechaDe(e.creado_en) ?? 0
+const deMasNuevaAMasVieja = (a: Fila, b: Fila): number => creadaEn(b) - creadaEn(a) || String(b.id).localeCompare(String(a.id))
+/** ¿la pausa seguía escuchando a esta hora? Soltada o reemplazada, ya no usa lo que llegue. Sin fecha de cierre no se afirma que sí */
+const seguiaAbierta = (e: Fila, hora: number): boolean => e.estado === 'esperando' || hora <= (fechaDe(e.soltada_en) ?? fechaDe(e.actualizado_en) ?? -1)
+
+/**
+ * 05-nov · corrección de CC7. La pausa que usó esta respuesta, o ninguna: el mismo resultado en cualquier orden.
+ * Una respuesta solo pertenece a una pausa abierta a esa hora; el tema no basta, porque se repite entre pausas y con preguntas sueltas.
+ * Por id puede ser anterior a la pausa: se pregunta justo antes de guardarla, y «ya tenía las respuestas» la suelta enseguida.
+ */
+export function esperaDeLaRespuesta(respondidaEn: unknown, porId: Fila[], porTema: Fila[]): Fila | null {
+  const hora = fechaDe(respondidaEn)
+  if (hora === null) return null
+  const enCurso = (e: Fila) => creadaEn(e) <= hora && seguiaAbierta(e, hora)
+  const conId = [...porId].sort(deMasNuevaAMasVieja)
+  return conId.find(enCurso) ?? [...conId].reverse().find((e) => creadaEn(e) > hora) ?? [...porTema].sort(deMasNuevaAMasVieja).find(enCurso) ?? null
+}
+
 /** ¿esta espera ya agotó sus intentos sin despertar al plan? Antes de eso el vigía sigue reintentando: no es asunto del dueño todavía */
 export const noVolvio = (e: Fila): boolean => e.estado === 'soltada' && e.despertado === false && Number(e.despertar_intentos ?? 0) >= MAX_INTENTOS_DE_DESPERTAR
 export const motivoDeNoVolver = (e: Fila): string => sinSecretos(e.despertar_detalle, TOPE_DE_CITA) ?? 'El plan no pudo volver a arrancar.'
+/** los estados en que consta que un plan arrancó. `fallida` no: también cierra corridas que nunca salieron de la espera */
+export const ESTADOS_DE_PLAN_QUE_CORRIO = ['corriendo', 'en_pausa', 'hecha'] as const
+/** 05-nov · corrección de CC7: la pausa ya no detiene nada si después corrió otro plan del cliente, o si su propia corrida terminó */
+export function yaLoSuperoOtroPlan(e: Fila, corridas: Fila[]): boolean {
+  const desde = fechaDe(e.soltada_en) ?? fechaDe(e.creado_en)
+  return corridas.some((c) => {
+    if (String(c.client_id) !== String(e.client_id)) return false
+    if (c.corrida === e.corrida) return c.estado === 'hecha'
+    const inicio = fechaDe(c.espera_desde)
+    return desde !== null && inicio !== null && inicio > desde && (ESTADOS_DE_PLAN_QUE_CORRIO as readonly unknown[]).includes(c.estado)
+  })
+}
 
 /** qué le pasó al plan después de la respuesta. Los pasos son los que constan en la espera y en la corrida */
 export function pasosDelPlan(espera: Fila | null, corrida: Fila | null): { pasos: PasoDelRegistro[]; resultado: ResultadoDeContestada | null; motivo: string | null } {
@@ -99,17 +148,18 @@ export async function leerContestadas(db: Db, hora: string, clientes: Map<string
   const desde = new Date(Date.parse(hora) - DIAS_DEL_REGISTRO * 86_400_000).toISOString()
   const [firmas, esperas] = await Promise.all([
     leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en, firmado_en').eq('estado', 'firmado').eq('dry_run', false).gte('firmado_en', desde).order('firmado_en', { ascending: false }).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
-    // sin pedir el `sobre` entero: lleva el material del plan y pesa cientos de KB
-    leer(fuentes, 'esperas_del_dueno', db.from('esperas_del_dueno').select('id, client_id, clave, estado, soltada_en, despertado, despertar_intentos, despertar_detalle, actualizado_en, corrida:sobre->>corrida').eq('tipo', 'finanzas').gte('creado_en', desde).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
+    // sin pedir el `sobre` entero: lleva el material del plan y pesa cientos de KB. Sin ventana de fechas: una pausa vieja puede seguir abierta y recibir la respuesta de hoy
+    leer(fuentes, 'esperas_del_dueno', db.from('esperas_del_dueno').select('id, client_id, clave, estado, creado_en, soltada_en, despertado, despertar_intentos, despertar_detalle, actualizado_en, corrida:sobre->>corrida').eq('tipo', 'finanzas').order('creado_en', { ascending: false }).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
   ])
   const delEncargo = await leerPreguntasDeEncargos(db, fuentes, esperas.map((e) => encargoDeLaEspera(e.clave)).filter((x): x is string => !!x))
   const corridas = [...new Set(esperas.map((e) => texto(e.corrida)).filter((x): x is string => !!x))]
   const filasDeCorrida = corridas.length ? await leer(fuentes, 'plan_corridas', db.from('plan_corridas').select('client_id, corrida, estado, motivo, actualizado_en').in('corrida', corridas).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO) : []
   const corridaDe = (e: Fila) => filasDeCorrida.find((c) => String(c.client_id) === String(e.client_id) && c.corrida === e.corrida) ?? null
-  const esperaPorPregunta = new Map<string, Fila>(), esperaPorTema = new Map<string, Fila>()
+  const esperasPorPregunta = new Map<string, Fila[]>(), esperasPorTema = new Map<string, Fila[]>()
+  const anotar = (m: Map<string, Fila[]>, k: string, e: Fila) => m.set(k, [...(m.get(k) ?? []), e])
   for (const e of esperas) for (const q of delEncargo.get(encargoDeLaEspera(e.clave) ?? '') ?? []) {
-    if (q.id) esperaPorPregunta.set(q.id, e)
-    esperaPorTema.set(claveDeTema(e.client_id, q.tema), e)
+    if (q.id) anotar(esperasPorPregunta, q.id, e)
+    anotar(esperasPorTema, claveDeTema(e.client_id, q.tema), e)
   }
 
   const contestadas: Contestada[] = []
@@ -119,7 +169,7 @@ export async function leerContestadas(db: Db, hora: string, clientes: Map<string
   for (const p of respondidas) {
     if (!vivo(p.client_id)) continue
     const cuando = texto(p.respondida_en), ficha = texto(p.ficha_id)
-    const espera = esperaPorPregunta.get(String(p.id)) ?? esperaPorTema.get(claveDeTema(p.client_id, p.tema)) ?? null
+    const espera = esperaDeLaRespuesta(p.respondida_en, esperasPorPregunta.get(String(p.id)) ?? [], esperasPorTema.get(claveDeTema(p.client_id, p.tema)) ?? [])
     const plan = pasosDelPlan(espera, espera ? corridaDe(espera) : null)
     contestadas.push({
       id: String(p.id), tipo: 'pregunta_al_dueno', fuente: 'cerebro_dueno_preguntas', client_id: texto(p.client_id), cliente: nombre(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta'), resuelta_en: cuando, resultado: plan.resultado ?? 'guardada', motivo: plan.motivo,

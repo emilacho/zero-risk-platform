@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import type { Contexto } from '../src/lib/direccion/comun'
 import { leerDecisiones } from '../src/lib/direccion/decisiones'
-import { DIAS_DEL_REGISTRO, pasosDelPlan, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO } from '../src/lib/direccion/decisiones-registro'
+import { DIAS_DEL_REGISTRO, esperaDeLaRespuesta, pasosDelPlan, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, yaLoSuperoOtroPlan } from '../src/lib/direccion/decisiones-registro'
 import { MAX_INTENTOS_DE_DESPERTAR } from '../src/lib/finanzas/conversa/pausa'
 
 const AHORA = new Date('2026-11-04T20:00:00Z')
@@ -38,7 +38,7 @@ describe('campos de cada decisión', () => {
     const r = await leerDecisiones(ctx(base().semilla('finanzas_tableros', [{ id: 't', client_id: C1, version: 2, estado: 'sin_firma', vigente: true, dry_run: false, creado_en: hace(1) }])))
     expect(r.decisiones[0].permite).toEqual(['aceptar'])
     expect(r.decisiones[0].pregunta_de?.oficina).toBe('financiera')
-    expect(r.decisiones[0].para_que).toMatch(/hallazgos críticos/)
+    expect(r.decisiones[0].para_que).toMatch(/no dejó firmado/)
   })
   it('🔴 la tarjeta de la pausa solo avisa: no permite nada', async () => {
     const r = await leerDecisiones(ctx(base().semilla('esperas_del_dueno', [espera()])))
@@ -162,7 +162,7 @@ describe('el registro de lo contestado', () => {
     expect(estados(c).at(-1)).toBe('espera'); expect(c.resultado).toBe('espera')
   })
   it('🔴 reemplazada: tu respuesta no llegó a usarse', async () => {
-    const c = (await leerDecisiones(ctx(conPlan({ estado: 'reemplazada' })))).contestadas[0]
+    const c = (await leerDecisiones(ctx(conPlan({ estado: 'reemplazada', actualizado_en: hace(0.4) })))).contestadas[0]
     expect(c.resultado).toBe('fallo'); expect(c.motivo).toMatch(/reemplazó/)
   })
   it('🔴 la pregunta de otra espera no se confunde', async () => {
@@ -207,4 +207,211 @@ describe('el registro de lo contestado', () => {
 
 describe('pasosDelPlan', () => {
   it('sin espera no afirma nada', () => { expect(pasosDelPlan(null, null)).toEqual({ pasos: [], resultado: null, motivo: null }) })
+  const corrida = (estado: string, x: Record<string, unknown> = {}) => ({ client_id: C1, corrida: 'corr-1', estado, actualizado_en: hace(0.1), ...x })
+  const despierta = { estado: 'soltada', despertado: true, soltada_en: hace(0.4) }
+  it('🔴 una corrida vencida también es un plan que no terminó', () => {
+    expect(pasosDelPlan(despierta, corrida('vencida', { motivo: 'venció' }))).toMatchObject({ resultado: 'fallo', motivo: 'venció' })
+    expect(pasosDelPlan(despierta, corrida('vencida')).motivo).toBe('El plan no terminó.')
+  })
+  it('🔴 sigue en pausa: lo dice aunque su corrida diga otra cosa, y sin inventar hora', () => {
+    const p = pasosDelPlan({ estado: 'esperando', despertado: true }, corrida('hecha'))
+    expect(p.resultado).toBe('espera'); expect(p.pasos).toHaveLength(1); expect(p.pasos[0]).toMatchObject({ cuando: null, quien: 'sistema', estado: 'espera' }); expect(p.pasos[0].texto).toMatch(/sigue en pausa/)
+  })
+  it('🔴 soltada y todavía sin despertar: no afirma que arrancó ni que falló', () => {
+    for (const e of [{ estado: 'soltada', despertado: false, despertar_intentos: MAX_INTENTOS_DE_DESPERTAR - 1, soltada_en: hace(0.4) }, { estado: 'soltada', despertado: null, soltada_en: hace(0.4) }]) {
+      const p = pasosDelPlan(e, corrida('hecha'))
+      expect(p.resultado).toBe('espera'); expect(p.pasos[0].texto).toMatch(/todavía no vuelve/)
+    }
+  })
+  it('🔴 despertó y la corrida sigue en pausa o no se conoce: solo consta que retomó', () => {
+    expect(pasosDelPlan(despierta, corrida('en_pausa')).resultado).toBe('retomada'); expect(pasosDelPlan(despierta, null).resultado).toBe('retomada')
+  })
+  it('🔴 un secreto en el motivo de la corrida no sale', () => {
+    expect(JSON.stringify(pasosDelPlan(despierta, corrida('fallida', { motivo: 'fallo sk-ant-api03-ABCDEFGHIJKLMN' })))).not.toContain('ABCDEFGHIJKLMN')
+  })
+})
+
+describe('05-nov · a qué pausa pertenece una respuesta (corrección 1 y 2 de CC7)', () => {
+  const respondida = (x: Record<string, unknown> = {}) => pregunta({ estado: 'respondida', respondida_en: hace(0.5), ficha_id: 'f1', ...x })
+  const E2 = '88888888-8888-4888-8888-888888888888'
+  /** dos pausas del mismo tema, por encargos distintos: la vieja con corrida fallida y la nueva con corrida hecha */
+  const pausaVieja = espera({ id: 'vieja', estado: 'soltada', despertado: true, creado_en: hace(6.5), soltada_en: hace(6), actualizado_en: hace(6), sobre: { corrida: 'corr-vieja' } })
+  const pausaNueva = espera({ id: 'nueva', clave: `finanzas:${E2}`, estado: 'soltada', despertado: true, creado_en: hace(1), soltada_en: hace(0.4), actualizado_en: hace(0.4), sobre: { corrida: 'corr-nueva' } })
+  const corridas = [{ client_id: C1, corrida: 'corr-vieja', estado: 'fallida', motivo: 'se agotó el tope', actualizado_en: hace(5.9) }, { client_id: C1, corrida: 'corr-nueva', estado: 'hecha', actualizado_en: hace(0.3) }]
+  const buzones = [buzon([{ clave: 'cupo_diario', pregunta_id: null }], 1, ENC), buzon([{ clave: 'cupo_diario', pregunta_id: null }], 1, E2)]
+
+  it('🔴 CC7-1: una pregunta suelta de hoy no hereda el fallo de la pausa de hace 6 días del mismo tema', async () => {
+    const db = base().semilla('cerebro_dueno_preguntas', [respondida()]).semilla('esperas_del_dueno', [pausaVieja]).semilla('finanzas_artefactos', [buzones[0]]).semilla('plan_corridas', [corridas[0]])
+    const c = (await leerDecisiones(ctx(db))).contestadas[0]
+    expect(c).toMatchObject({ resultado: 'guardada', motivo: null }); expect(c.registro.map((p) => p.estado)).toEqual(['pregunto', 'respondiste', 'guardado'])
+  })
+  it('🔴 CC7-2: con dos pausas del mismo tema da la que corresponde, en cualquier orden', async () => {
+    for (const esperas of [[pausaVieja, pausaNueva], [pausaNueva, pausaVieja]]) for (const arts of [buzones, [...buzones].reverse()]) {
+      const db = base().semilla('cerebro_dueno_preguntas', [respondida()]).semilla('esperas_del_dueno', esperas).semilla('finanzas_artefactos', arts).semilla('plan_corridas', corridas)
+      expect((await leerDecisiones(ctx(db))).contestadas[0].resultado).toBe('terminada')
+    }
+  })
+  it('🔴 CC7-2: la respuesta de aquella semana da la pausa de aquella semana', async () => {
+    const db = base().semilla('cerebro_dueno_preguntas', [respondida({ respondida_en: hace(6.2) })]).semilla('esperas_del_dueno', [pausaNueva, pausaVieja]).semilla('finanzas_artefactos', buzones).semilla('plan_corridas', corridas)
+    expect((await leerDecisiones(ctx(db))).contestadas[0]).toMatchObject({ resultado: 'fallo', motivo: 'se agotó el tope' })
+  })
+  it('🔴 la que llegó después de soltarse no se usó, aunque traiga su id: no dice que el plan arrancó con ella', async () => {
+    const db = base().semilla('cerebro_dueno_preguntas', [respondida({ respondida_en: hace(0.2) })]).semilla('esperas_del_dueno', [pausaNueva]).semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }], 1, E2)]).semilla('plan_corridas', corridas)
+    expect((await leerDecisiones(ctx(db))).contestadas[0].resultado).toBe('guardada')
+  })
+  it('🔴 por tema: enlaza si la pausa estaba abierta, aunque la pregunta fuera anterior', async () => {
+    const db = base().semilla('cerebro_dueno_preguntas', [respondida({ creado_en: hace(3) })]).semilla('esperas_del_dueno', [pausaNueva]).semilla('finanzas_artefactos', [buzones[1]]).semilla('plan_corridas', corridas)
+    expect((await leerDecisiones(ctx(db))).contestadas[0].resultado).toBe('terminada')
+  })
+  it('🔴 por tema: la pausa de otro cliente no cuenta', async () => {
+    const db = base().semilla('cerebro_dueno_preguntas', [respondida({ client_id: C2 })]).semilla('esperas_del_dueno', [pausaNueva]).semilla('finanzas_artefactos', [buzones[1]]).semilla('plan_corridas', corridas)
+    expect((await leerDecisiones(ctx(db))).contestadas[0].resultado).toBe('guardada')
+  })
+  it('🔴 por id: enlaza aunque el tema sea distinto', async () => {
+    const db = base().semilla('cerebro_dueno_preguntas', [respondida({ tema: 'otro tema del todo' })]).semilla('esperas_del_dueno', [pausaNueva]).semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }], 1, E2)]).semilla('plan_corridas', corridas)
+    expect((await leerDecisiones(ctx(db))).contestadas[0].resultado).toBe('terminada')
+  })
+  it('🔴 una pausa vieja que sigue abierta recibe la respuesta de hoy: no la corta la semana', async () => {
+    const db = base().semilla('cerebro_dueno_preguntas', [respondida()]).semilla('esperas_del_dueno', [espera({ creado_en: hace(DIAS_DEL_REGISTRO + 3) })]).semilla('finanzas_artefactos', [buzones[0]])
+    expect((await leerDecisiones(ctx(db))).contestadas[0].resultado).toBe('espera')
+  })
+  it('🔴 si la lectura de esperas se recorta, se queda con las más nuevas', async () => {
+    const viejas = Array.from({ length: TOPE_DEL_REGISTRO }, (_, i) => espera({ id: `v${i}`, clave: `finanzas:v${i}`, estado: 'soltada', despertado: true, creado_en: hace(30), soltada_en: hace(29), actualizado_en: hace(29) }))
+    const db = base().semilla('cerebro_dueno_preguntas', [respondida()]).semilla('esperas_del_dueno', [...viejas, pausaNueva]).semilla('finanzas_artefactos', [buzones[1]]).semilla('plan_corridas', corridas)
+    expect((await leerDecisiones(ctx(db))).contestadas[0].resultado).toBe('terminada')
+  })
+  describe('esperaDeLaRespuesta', () => {
+    const a = { id: 'a', estado: 'esperando', creado_en: hace(3) }, b = { id: 'b', estado: 'esperando', creado_en: hace(1) }
+    it('🔴 sin fecha de respuesta no adivina', () => { expect(esperaDeLaRespuesta(null, [a], [a])).toBeNull() })
+    it('🔴 dos abiertas: la más nueva, en cualquier orden', () => { expect(esperaDeLaRespuesta(hace(0.5), [], [a, b])?.id).toBe('b'); expect(esperaDeLaRespuesta(hace(0.5), [], [b, a])?.id).toBe('b') })
+    it('🔴 mismo instante: desempata igual en cualquier orden', () => { const c = { id: 'c', estado: 'esperando', creado_en: hace(1) }; expect(esperaDeLaRespuesta(hace(0.5), [], [b, c])?.id).toBe('c'); expect(esperaDeLaRespuesta(hace(0.5), [], [c, b])?.id).toBe('c') })
+    it('🔴 el id gana al tema', () => { expect(esperaDeLaRespuesta(hace(0.5), [a], [b])?.id).toBe('a') })
+    it('🔴 por tema no enlaza con una pausa posterior a la respuesta', () => { expect(esperaDeLaRespuesta(hace(2), [], [b])).toBeNull() })
+    it('🔴 por id sí: se pregunta justo antes de guardar la pausa', () => { expect(esperaDeLaRespuesta(hace(2), [b], [])?.id).toBe('b') })
+    it('🔴 por id con la respuesta antes de dos pausas: la primera que llegó', () => { const c = { id: 'c', estado: 'esperando', creado_en: hace(1.5) }; expect(esperaDeLaRespuesta(hace(2), [b, c], [])?.id).toBe('c') })
+    it('🔴 cerrada sin fecha de cierre: no afirma que la usó', () => { expect(esperaDeLaRespuesta(hace(0.5), [], [{ id: 'x', estado: 'soltada', creado_en: hace(1) }])).toBeNull() })
+    it('🔴 justo a la hora de soltarse, todavía cuenta', () => { const h = hace(0.5); expect(esperaDeLaRespuesta(h, [], [{ id: 'x', estado: 'soltada', creado_en: hace(1), soltada_en: h }])?.id).toBe('x') })
+  })
+})
+
+describe('05-nov · la tarjeta del plan que no volvió se va sola (corrección 3 de CC7)', () => {
+  const soltada = (x: Record<string, unknown> = {}) => espera({ estado: 'soltada', despertado: false, despertar_intentos: MAX_INTENTOS_DE_DESPERTAR, soltada_en: hace(3), creado_en: hace(4), ...x })
+  const corrida = (x: Record<string, unknown> = {}) => ({ client_id: C1, corrida: 'corr-2', estado: 'hecha', espera_desde: hace(1), ...x })
+  const con = (...corridas: Record<string, unknown>[]) => leerDecisiones(ctx(base().semilla('esperas_del_dueno', [soltada()]).semilla('plan_corridas', corridas)))
+  it('🔴 un plan posterior terminado la quita, y queda contada', async () => {
+    const r = await con(corrida()); expect(r.total).toBe(0); expect(r.omitidas.planes_ya_superados).toBe(1)
+  })
+  it('🔴 también si ese plan está corriendo o en pausa', async () => {
+    for (const estado of ['corriendo', 'en_pausa']) expect((await con(corrida({ estado }))).total).toBe(0)
+  })
+  it('🔴 sigue si el posterior no consta que corriera', async () => {
+    for (const estado of ['esperando', 'vencida', 'fallida']) expect((await con(corrida({ estado }))).total).toBe(1)
+  })
+  it('🔴 sigue si la corrida es anterior', async () => { expect((await con(corrida({ espera_desde: hace(5) }))).total).toBe(1) })
+  it('🔴 sigue si la corrida es de otro cliente', async () => { const r = await con(corrida({ client_id: C2 })); expect(r.total).toBe(1); expect(r.omitidas.planes_ya_superados).toBe(0) })
+  it('🔴 su propia corrida en marcha no la quita; terminada, sí', async () => {
+    expect((await con(corrida({ corrida: 'corr-1', estado: 'corriendo' }))).total).toBe(1)
+    expect((await con(corrida({ corrida: 'corr-1', estado: 'hecha', espera_desde: hace(5) }))).total).toBe(0)
+  })
+  it('🔴 si las corridas no se leen, la tarjeta se queda y la lista sigue completa', async () => {
+    const db = base().semilla('esperas_del_dueno', [soltada()]).semilla('plan_corridas', [corrida()]); db.fallar['plan_corridas'] = 'se cayó'
+    const r = await leerDecisiones(ctx(db)); expect(r.total).toBe(1); expect(r.completo).toBe(true)
+  })
+  it('🔴 con dos clientes, el plan de uno no le quita la tarjeta al otro', async () => {
+    const r = await leerDecisiones(ctx(base().semilla('esperas_del_dueno', [soltada(), soltada({ id: 'e2', client_id: C2, clave: 'finanzas:otro' })]).semilla('plan_corridas', [corrida()])))
+    expect(r.decisiones.map((d) => d.client_id)).toEqual([C2]); expect(r.omitidas.planes_ya_superados).toBe(1)
+  })
+  it('🔴 una corrida fallida no consta que corriera, aunque llegue a la cuenta', () => {
+    expect(yaLoSuperoOtroPlan({ client_id: C1, corrida: 'corr-1', creado_en: hace(4) }, [corrida({ estado: 'fallida' })])).toBe(false)
+  })
+  it('🔴 trae quién preguntaba', async () => { expect((await con()).decisiones[0].pregunta_de).toEqual({ oficina: 'financiera', agente: null }) })
+  it('🔴 sin soltada_en mide desde que se creó', () => {
+    expect(yaLoSuperoOtroPlan({ client_id: C1, corrida: 'corr-1', creado_en: hace(4) }, [corrida()])).toBe(true)
+    expect(yaLoSuperoOtroPlan({ client_id: C1, corrida: 'corr-1' }, [corrida()])).toBe(false)
+  })
+})
+
+describe('05-nov · reservas de CC7: nada de promesas ni motivos falsos', () => {
+  const conPausa = () => base().semilla('esperas_del_dueno', [espera()])
+  const tarjeta = (r: { decisiones: { subtipo: string; destraba?: string }[] }) => r.decisiones.find((d) => d.subtipo === 'plan_en_pausa')
+  const tres = [pregunta(), pregunta({ id: 'p2', tema: 'dias abiertos' }), pregunta({ id: 'p3', tema: 'ticket' })]
+  it('🔴 con el buzón sin leer no promete «apenas contestes»', async () => {
+    const db = conPausa().semilla('cerebro_dueno_preguntas', tres); db.fallar['finanzas_artefactos'] = 'se cayó'
+    const r = await leerDecisiones(ctx(db)); expect(tarjeta(r)).not.toHaveProperty('destraba'); expect(r.decisiones.find((x) => x.id === 'p1')).not.toHaveProperty('destraba')
+  })
+  it('🔴 sin preguntas por contestar no promete nada', async () => {
+    const r = await leerDecisiones(ctx(conPausa().semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }])])))
+    expect(tarjeta(r)).not.toHaveProperty('destraba')
+  })
+  it('🔴 cuenta solo las de esta pausa y este cliente', async () => {
+    const db = conPausa().semilla('cerebro_dueno_preguntas', [pregunta(), pregunta({ id: 'p2', tema: 'color del logo' }), pregunta({ id: 'p3', client_id: C2 })]).semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }])])
+    expect(tarjeta(await leerDecisiones(ctx(db)))?.destraba).toMatch(/apenas contestes/)
+  })
+  it('🔴 con dos clientes en pausa, cada uno cuenta las suyas', async () => {
+    const E2 = '88888888-8888-4888-8888-888888888888'
+    const db = base().semilla('esperas_del_dueno', [espera(), espera({ id: 'e2', client_id: C2, clave: `finanzas:${E2}` })])
+      .semilla('cerebro_dueno_preguntas', [pregunta(), pregunta({ id: 'q2', client_id: C2 }), pregunta({ id: 'q3', client_id: C2, tema: 'dias abiertos' })])
+      .semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }]), buzon([{ clave: 'cupo_diario', pregunta_id: 'q2' }, { clave: 'dias_abiertos', pregunta_id: 'q3' }], 1, E2)])
+    const r = await leerDecisiones(ctx(db))
+    expect(r.decisiones.find((x) => x.id === 'p1')?.destraba).toMatch(/apenas contestes/); expect(r.decisiones.find((x) => x.id === 'q2')?.destraba).toMatch(/las 2 preguntas/)
+  })
+  const tablero = (x: Record<string, unknown> = {}) => ({ id: 't', client_id: C1, version: 2, estado: 'sin_firma', vigente: true, dry_run: false, creado_en: hace(1), workflow_execution_id: `conversa:${ENC}`, ...x })
+  const cierre = (contenido: Record<string, unknown>, version = 1) => ({ encargo_id: ENC, tipo: 'cierre', version, contenido })
+  const firma = async (t: Record<string, unknown>, ...arts: Record<string, unknown>[]) => (await leerDecisiones(ctx(base().semilla('finanzas_tableros', [t]).semilla('finanzas_artefactos', arts)))).decisiones[0].para_que
+  it('🔴 la firma nombra los críticos que constan en su cierre', async () => {
+    expect(await firma(tablero(), cierre({ finanzas_id: 't', criticos_abiertos: 3 }))).toMatch(/dejó 3 hallazgos críticos abiertos/)
+    expect(await firma(tablero(), cierre({ finanzas_id: 't', criticos_abiertos: 1 }))).toMatch(/dejó 1 hallazgo crítico abierto/)
+  })
+  it('🔴 sin firma por otro motivo no habla de críticos', async () => {
+    expect(await firma(tablero(), cierre({ finanzas_id: 't', criticos_abiertos: 0 }))).toMatch(/no dejó firmado/)
+    expect(await firma(tablero())).toMatch(/no dejó firmado/)
+    expect(await firma(tablero({ workflow_execution_id: null }), cierre({ finanzas_id: 't', criticos_abiertos: 3 }))).toMatch(/no dejó firmado/)
+  })
+  it('🔴 el cierre de otro tablero no cuenta; de los suyos, el último', async () => {
+    expect(await firma(tablero(), cierre({ finanzas_id: 'otro', criticos_abiertos: 3 }))).toMatch(/no dejó firmado/)
+    expect(await firma(tablero(), cierre({ finanzas_id: 't', criticos_abiertos: 5 }, 1), cierre({ finanzas_id: 't', criticos_abiertos: 2 }, 2))).toMatch(/dejó 2 hallazgos/)
+  })
+  it('🔴 solo el artefacto de cierre cuenta', async () => {
+    expect(await firma(tablero(), { encargo_id: ENC, tipo: 'acuerdo', version: 9, contenido: { finanzas_id: 't', criticos_abiertos: 7 } })).toMatch(/no dejó firmado/)
+  })
+  it('🔴 si el cierre no se lee, el texto sigue siendo cierto y la lista completa', async () => {
+    const db = base().semilla('finanzas_tableros', [tablero()]); db.fallar['finanzas_artefactos'] = 'se cayó'
+    const r = await leerDecisiones(ctx(db)); expect(r.decisiones[0].para_que).toMatch(/no dejó firmado/); expect(r.completo).toBe(true)
+  })
+})
+
+describe('05-nov · lo que los mutantes de CC7 dejaron sin sostener', () => {
+  const de = (x: Record<string, unknown>) => pregunta({ estado: 'obsoleta', obsoleta_en: hace(0.2), motivo_descarte: 'Emilio la descartó', ...x })
+  const firmada = (x: Record<string, unknown> = {}) => ({ id: 't', client_id: C1, version: 1, estado: 'firmado', dry_run: false, firmado_en: hace(0.2), creado_en: hace(1), ...x })
+  const CB = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  const conBaja = () => new DbFalsa().semilla('clients', [...CLIENTES, { id: CB, name: 'Baja', industry: 'x', status: 'churned' }])
+  it('🔴 el cliente de práctica no sale ni en descartes ni en firmas', async () => {
+    const r = await leerDecisiones(ctx(base().semilla('cerebro_dueno_preguntas', [de({ client_id: CP })]).semilla('finanzas_tableros', [firmada({ client_id: CP })])))
+    expect(r.contestadas).toEqual([])
+  })
+  it('🔴 el cliente de baja no sale en ninguno', async () => {
+    const r = await leerDecisiones(ctx(conBaja().semilla('cerebro_dueno_preguntas', [de({ client_id: CB }), pregunta({ id: 'r', client_id: CB, estado: 'respondida', respondida_en: hace(0.3) })]).semilla('finanzas_tableros', [firmada({ client_id: CB })])))
+    expect(r.contestadas).toEqual([])
+  })
+  it('🔴 descartes y firmas de más de 7 días no salen', async () => {
+    const r = await leerDecisiones(ctx(base().semilla('cerebro_dueno_preguntas', [de({ obsoleta_en: hace(DIAS_DEL_REGISTRO + 1) })]).semilla('finanzas_tableros', [firmada({ firmado_en: hace(DIAS_DEL_REGISTRO + 1) })])))
+    expect(r.contestadas).toEqual([])
+  })
+  it('🔴 un secreto en el motivo del descarte no sale', async () => {
+    const r = await leerDecisiones(ctx(base().semilla('cerebro_dueno_preguntas', [de({ motivo_descarte: 'Emilio: sk-ant-api03-ABCDEFGHIJKLMN' })])))
+    expect(JSON.stringify(r.contestadas)).not.toContain('ABCDEFGHIJKLMN')
+  })
+  it('🔴 mezcla los tres tipos de más nuevo a más viejo', async () => {
+    const r = await leerDecisiones(ctx(base().semilla('cerebro_dueno_preguntas', [de({ id: 'd', obsoleta_en: hace(0.3) }), pregunta({ id: 'r', estado: 'respondida', respondida_en: hace(0.1) })]).semilla('finanzas_tableros', [firmada({ firmado_en: hace(0.2) })])))
+    expect(r.contestadas.map((c) => c.id)).toEqual(['r', 't', 'd'])
+  })
+  it('🔴 recorta al tope entre los tres tipos y lo declara, aunque ninguna lectura se haya recortado', async () => {
+    const n = TOPE_DEL_REGISTRO - 20
+    const filas = [...Array.from({ length: n }, (_, i) => pregunta({ id: `r${i}`, estado: 'respondida', respondida_en: new Date(AHORA.getTime() - i * 60_000).toISOString() })), ...Array.from({ length: n }, (_, i) => de({ id: `d${i}`, obsoleta_en: new Date(AHORA.getTime() - (i + n) * 60_000).toISOString() }))]
+    const r = await leerDecisiones(ctx(base().semilla('cerebro_dueno_preguntas', filas)))
+    expect(r.contestadas).toHaveLength(TOPE_DEL_REGISTRO); expect(r.contestadas[0].id).toBe('r0'); expect(r.registro_completo).toBe(false)
+  })
+  it('🔴 sin recortar, el registro está completo', async () => {
+    expect((await leerDecisiones(ctx(base().semilla('cerebro_dueno_preguntas', [de({})])))).registro_completo).toBe(true)
+  })
 })
