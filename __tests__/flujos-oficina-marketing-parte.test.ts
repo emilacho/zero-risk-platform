@@ -6,6 +6,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { NODOS_BRIEF } from '../scripts/ops/oficina-marketing/construir-palabras.mjs'
+import { construirEsloganEnBrief } from '../scripts/ops/oficina-marketing/eslogan-brief-y-pieza.mjs'
+import { construirJerarquiaDeFuentes } from '../scripts/ops/oficina-marketing/plan-aprobado.mjs'
+import { construirPalabrasDelManual } from '../scripts/ops/oficina-marketing/palabras-del-manual.mjs'
 import { AlmacenMemoria } from '../src/lib/cadena/__fixtures__/almacen-memoria'
 import { clienteA, contextoDe } from '../src/lib/cadena/__fixtures__/clientes'
 import { ACCIONES } from '../src/lib/cadena/acciones'
@@ -102,7 +106,11 @@ const CONTEXTO = {
 }
 
 describe('el flujo nuevo se parece al vivo en todo menos en lo que debe cambiar', () => {
+  // el vivo ya con el parche de las palabras del manual (01-nov): ese cambio se prueba aparte en flujos-oficina-marketing-palabras-del-manual.test.ts
   const vivo = leer('vivo'), nuevo = leer('nuevo')
+  construirPalabrasDelManual(vivo)
+  construirJerarquiaDeFuentes(vivo) // 9b, se prueba aparte
+  construirEsloganEnBrief(vivo, NODOS_BRIEF) // el eslogan real (parte 4 del manual) se prueba aparte
   it('suma 5 nodos «③ Hoja · …», cambia solo el redireccionamiento de «③ Armar…» y el código de «④ Chequeos» (que ahora empieza con el atajo)', () => {
     const v = new Map(vivo.nodes.map((n: any) => [n.name, n]))
     const cambiados = nuevo.nodes.filter((n: any) => v.has(n.name) && JSON.stringify(v.get(n.name)) !== JSON.stringify(n)).map((n: any) => n.name)

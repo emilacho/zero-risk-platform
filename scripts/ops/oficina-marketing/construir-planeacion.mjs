@@ -13,6 +13,22 @@
  *       ok → guarda. (la 2.ª vez sin forma queda guardada como BORRADOR MARCADO `forma_invalida`, no se pierde) No ok la 1.ª vez → UN reintento al redactor con `correccion` pegada al final del pedido (con `force_restart`: sin él el corredor devuelve la respuesta vieja). No ok la 2.ª vez → alerta en Slack + `necesita_humano` y NO se guarda ni sigue.
  *       Una validación que no se pudo leer DETIENE (no se lee un error como «el plan está bien»).
  */
+import { construirMesaDeAnalisis } from './mesa-de-analisis.mjs'
+import { construirParadaPlanRevisado } from './parar-plan-revisado.mjs'
+import { construirRecogerDelPuntoDeControl } from './recoger-del-punto-de-control.mjs'
+import { construirControlDeCifras } from './control-de-cifras.mjs'
+import { construirTextoLibreDelDueno } from './texto-libre-del-dueno.mjs'
+import { construirDatosDePruebaDelFlujo } from './datos-de-prueba-del-flujo.mjs'
+import { construirCicloDelPlan } from './ciclo-del-plan.mjs'
+import { construirJefaturaConCarpeta } from './jefatura-contexto.mjs'
+import { construirEsloganEnPlan } from './eslogan-del-cliente.mjs'
+import { construirHechosDelDuenoEnPlan } from './hechos-del-dueno.mjs'
+import { construirSedesEnPlan } from './sedes-del-cliente.mjs'
+import { construirFraseSedesYPreguntar } from './frase-sedes-y-preguntar.mjs'
+import { construirPlanTextoLimpio } from './plan-texto-limpio.mjs'
+import { construirQueCambioPorCodigo } from './que-cambio-por-codigo.mjs'
+import { construirNoGuardarCopias } from './no-guardar-copias.mjs'
+import { construirSegundaMitad, escribirSegundaMitad } from './segunda-mitad.mjs'
 import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, nodo, redirigir, si } from './lib.mjs'
 
 const ID = 'X9F0zp6LQ2xGEYVS'
@@ -181,7 +197,7 @@ export function construirPlaneacion() {
   const f = leerVivo(ID)
   // A · parar_en
   cambiarCodigo(f, '⓪ Llave · Webhook · planeacion', 'return $input.all()',
-    "// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · validar_forma: pasa el plan por el validador de forma (US$ 0) antes de guardarlo · solo true/false/ausente\nconst vf = w.body && typeof w.body === 'object' ? w.body.validar_forma : undefined\nif (vf !== undefined && vf !== null && typeof vf !== 'boolean') throw new Error('PLANEACION_VALIDAR_FORMA_INVALIDO · validar_forma solo admite true o false (llegó ' + JSON.stringify(vf).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()")
+    "// T5 · parar_en: el único valor admitido es 'guardar_plan' (parar justo después de guardar el plan); cualquier otro se rechaza ANTES de gastar. Ausente = el flujo de hoy.\nconst pe = w.body && typeof w.body === 'object' ? w.body.parar_en : undefined\nif (pe !== undefined && pe !== null && pe !== 'guardar_plan' && pe !== 'plan_revisado') throw new Error('PLANEACION_PARAR_EN_INVALIDO · parar_en solo admite \"guardar_plan\" o \"plan_revisado\" (llegó ' + JSON.stringify(pe).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · con_mercado: pide el informe de mercado (gasta hasta el tope de esa ruta) · solo true/false/ausente; otro valor se rechaza ANTES de gastar\nconst cm = w.body && typeof w.body === 'object' ? w.body.con_mercado : undefined\nif (cm !== undefined && cm !== null && typeof cm !== 'boolean') throw new Error('PLANEACION_CON_MERCADO_INVALIDO · con_mercado solo admite true o false (llegó ' + JSON.stringify(cm).slice(0, 60) + ') · se DETIENE antes de gastar')\n// T5 · validar_forma: pasa el plan por el validador de forma (US$ 0) antes de guardarlo · solo true/false/ausente\nconst vf = w.body && typeof w.body === 'object' ? w.body.validar_forma : undefined\nif (vf !== undefined && vf !== null && typeof vf !== 'boolean') throw new Error('PLANEACION_VALIDAR_FORMA_INVALIDO · validar_forma solo admite true o false (llegó ' + JSON.stringify(vf).slice(0, 60) + ') · se DETIENE antes de gastar')\nreturn $input.all()")
   agregarNodo(f, si('Parar · ¿corta aquí?', "={{ (function () { try { return $('Webhook · planeacion').first().json.body.parar_en } catch (e) { return null } })() }}", 'guardar_plan', 'equals', 'string'), 'Guardar el plan', 220, 0)
   agregarNodo(f, codigo('Parar · resumen', CODIGO_PARADO), 'Guardar el plan', 440, -120)
   redirigir(f, 'Guardar el plan', 'JEF · armar', 'Parar · ¿corta aquí?')
@@ -191,6 +207,27 @@ export function construirPlaneacion() {
   construirMercado(f)
   // D · el validador de forma
   construirValidador(f)
+  // E · 01-nov · la CARPETA del cliente reemplaza la búsqueda (con_carpeta)
+  construirMesaDeAnalisis(f)
+  // F · 01-nov · parar_en 'plan_revisado' + tope del redactor
+  construirParadaPlanRevisado(f)
+  // G · 01-nov · la vuelta del redactor que no llega por cable se recoge del punto de control
+  construirRecogerDelPuntoDeControl(f)
+  construirControlDeCifras(f)
+  construirTextoLibreDelDueno(f)
+  construirDatosDePruebaDelFlujo(f)
+  // H · 01-nov · CICLO DEL PLAN (tramo 2): reescritura sobre el plan anterior, versiones, compuerta y la segunda mitad como sub-flujo
+  construirCicloDelPlan(f)
+  // I · 01-nov · la jefatura revisa con la MISMA carpeta que el redactor (resumen vivo + informes + páginas del sitio, enteros)
+  construirJefaturaConCarpeta(f)
+  // J · 01-nov · el eslogan real del cliente llega al redactor del plan como HECHO (ADENDA 1 del manual · reparto con CC1)
+  construirEsloganEnPlan(f)
+  construirHechosDelDuenoEnPlan(f) // 01-nov · punto 3: lo que declaró el dueño llega al redactor del plan
+  construirSedesEnPlan(f) // 01-nov · punto 1: las sedes como dato llegan al redactor del plan
+  construirFraseSedesYPreguntar(f) // 02-nov · frase de indicación: cada sede su carta; duda importante se pregunta al dueño
+  construirPlanTextoLimpio(f) // 03-nov · el plan se lee como documento para el cliente; supuestos dichos como supuestos
+  construirQueCambioPorCodigo(f) // 01-nov · punto 6 de CC1: «Qué cambió» por código
+  construirNoGuardarCopias(f) // 01-nov · adenda 5: «Pedir cambios» no guarda una copia del plan anterior
   // B · el redactor es un dato
   agregarNodo(f, structuredClone(LEER_CONFIG), 'Redactor (B4)', 220, 0)
   agregarNodo(f, codigo('Redactor · elegir', CODIGO_ELEGIR), 'Redactor (B4)', 440, 0)
@@ -210,4 +247,8 @@ export function construirPlaneacion() {
   return f
 }
 
-if (process.argv[1] && process.argv[1].endsWith('construir-planeacion.mjs')) console.log(escribirNuevo(construirPlaneacion()))
+if (process.argv[1] && process.argv[1].endsWith('construir-planeacion.mjs')) {
+  const planeacion = construirPlaneacion()
+  console.log(escribirNuevo(planeacion))
+  console.log(escribirSegundaMitad(construirSegundaMitad(planeacion)))
+}

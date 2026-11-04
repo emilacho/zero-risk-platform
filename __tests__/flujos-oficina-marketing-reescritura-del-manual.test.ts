@@ -1,0 +1,228 @@
+// @ts-nocheck · pruebas de los constructores de n8n: tipan mal a propósito los nodos de código (CI 04-nov)
+/**
+ * 02-nov · «PEDIR CAMBIOS AL MANUAL» · la parte del flujo del manual (`ssLtwYPt7zxuvnM2`). US$ 0, sin red; se ejecuta el CÓDIGO REAL de «Validate Deal Data», «[BB] Fan-out prep» y «[BB] Promote prep».
+ * Fija: SIN `reescritura` en el sobre los tres nodos devuelven exactamente lo de hoy (el alta no cambia); CON ella, el sobre pasa, las 3 lentes reciben el bloque
+ * (pedido del dueño como palabra suya, manual vigente, campos validados/liberados, sección como foco y no límite) y el guardado lleva `manual_cambio_id`.
+ * Ninguna regla dura: el bloque informa y pide. El código de «hoy» se reconstruye deshaciendo las sustituciones del constructor.
+ */
+import fs from 'node:fs'
+import path from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
+// @ts-expect-error módulo .mjs sin tipos
+import { SUSTITUCIONES } from '../scripts/ops/oficina-marketing/reescritura-del-manual.mjs'
+// @ts-expect-error módulo .mjs sin tipos
+import { deshacerFanOutPrep, TOPE_MANUAL, TOPE_PEDIDO } from '../scripts/ops/oficina-marketing/manual-llega-completo.mjs'
+
+const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
+const nuevo = JSON.parse(fs.readFileSync(path.join(RAIZ, 'nuevo', 'ssLtwYPt7zxuvnM2.json'), 'utf8'))
+const EV44 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'scripts', 'worker-staging', 'ssLtwYPt7zxuvnM2', 'evidencia-146544-e109.json'), 'utf8')) as { nodos: Record<string, any>; todos: Record<string, any[]> }
+// 04-nov · el nodo `[BB] Fan-out prep` además lleva «el manual llega completo» (manual-llega-completo.mjs): aquí se deshace para comparar con la parte de 02-nov; sus topes se prueban abajo
+const codigoCompleto = (n: string): string => nuevo.nodes.find((x: any) => x.name === n).parameters.jsCode
+const codigo = (n: string): string => (n === '[BB] Fan-out prep' ? deshacerFanOutPrep(codigoCompleto(n)) : codigoCompleto(n))
+const VAL = 'Validate Deal Data', FAN = '[BB] Fan-out prep', PROM = '[BB] Promote prep'
+/** el código del nodo sin esta parte */
+const hoy = (n: string): string => {
+  const ss = (SUSTITUCIONES as Array<[string, string, string]>).filter((x) => x[0] === n)
+  expect(ss.length).toBeGreaterThan(0)
+  let c = codigo(n)
+  for (const s of [...ss].reverse()) { expect(c).toContain(s[2]); c = c.replace(s[2], () => s[1]) } // un nodo puede llevar varias sustituciones: se deshacen al revés
+  return c
+}
+
+function correr(code: string, ctx: { nodos: Record<string, any>; todos?: Record<string, any[]>; input?: any[]; json?: any }) {
+  const $ = (n: string) => {
+    if (!(n in ctx.nodos)) throw new Error(`Node '${n}' hasn't been executed`)
+    return { first: () => ({ json: ctx.nodos[n] }), all: () => (ctx.todos?.[n] ?? [ctx.nodos[n]]).map((j) => ({ json: j })), item: { json: ctx.nodos[n] } }
+  }
+  const items = (ctx.input ?? []).map((j) => ({ json: j }))
+  const $input = { all: () => items, first: () => items[0], item: items[0] }
+  return new Function('$', '$input', '$json', '$workflow', '$execution', code)($, $input, ctx.json ?? items[0]?.json ?? {}, { id: 'ssLtwYPt7zxuvnM2' }, { id: '1' }) as Array<{ json: any }>
+}
+
+const MANUAL = { positioning: 'Cocina de mar sin pretensión', voice_description: 'Cercana y directa', mission: 'Que comer bien sea fácil' }
+const RE = { manual_base_id: 'b-1', manual_cambio_id: 'cc-1', cambios_del_dueno: 'Que la voz sea más cálida y menos formal', seccion: 'Cómo habla', campos_validados: ['mission'], campos_liberados: ['voice_description'], manual_vigente: MANUAL }
+const ENTRADA = { client_id: 'c-1', client_name: 'Náufrago', industry: 'restaurante', discovery_package: { discovery_summary: 'resumen' } }
+
+describe('Validate Deal Data', () => {
+  it('sin `reescritura`: la salida es EXACTAMENTE la de hoy (sin la clave)', () => {
+    const a = correr(codigo(VAL), { nodos: {}, input: [ENTRADA] }), b = correr(hoy(VAL), { nodos: {}, input: [ENTRADA] })
+    expect(a).toEqual(b)
+    expect('reescritura' in a[0].json).toBe(false)
+  })
+  it('con `reescritura` objeto: pasa tal cual; un valor que no es objeto (texto, lista, null) NO pasa', () => {
+    expect(correr(codigo(VAL), { nodos: {}, input: [{ ...ENTRADA, reescritura: RE }] })[0].json.reescritura).toEqual(RE)
+    for (const malo of ['texto', ['x'], null, 5]) expect('reescritura' in correr(codigo(VAL), { nodos: {}, input: [{ ...ENTRADA, reescritura: malo }] })[0].json).toBe(false)
+  })
+})
+
+const ctxFan = (re?: any) => {
+  const nodos = JSON.parse(JSON.stringify(EV44.nodos)), todos = JSON.parse(JSON.stringify(EV44.todos))
+  if (re) { nodos[VAL] = { ...nodos[VAL], reescritura: re }; if (todos[VAL]) todos[VAL] = [nodos[VAL]] }
+  return { nodos, todos, json: nodos['[BB] Load ICP (canon)'] }
+}
+const LENTES = ['brand-strategist', 'editor-en-jefe', 'jefe-client-success']
+
+describe('[BB] Fan-out prep', () => {
+  it('sin `reescritura`: idéntico a hoy, tarea por tarea', () => {
+    const a = correr(codigo(FAN), ctxFan()), b = correr(hoy(FAN), ctxFan())
+    expect(a).toEqual(b)
+    expect('_reescritura' in a[0].json).toBe(false)
+  })
+  it('con `reescritura`: las TRES lentes reciben el bloque con el pedido, el manual vigente, los campos y la sección como foco', () => {
+    const base = correr(hoy(FAN), ctxFan())[0].json
+    const out = correr(codigo(FAN), ctxFan(RE))[0].json
+    for (const l of LENTES) {
+      const t = out.tasks[l] as string
+      expect(t.startsWith(base.tasks[l])).toBe(true) // lo de hoy queda intacto; el bloque va al final
+      expect(t).toContain('ESTA ES UNA REESCRITURA')
+      expect(t).toContain('«Que la voz sea más cálida y menos formal»')
+      expect(t).toContain('Cocina de mar sin pretensión')
+      expect(t).toContain('mission')
+      expect(t).toContain('voice_description')
+      expect(t).toContain('sección «Cómo habla». Es el foco, no un límite')
+      expect(t).toContain('SU PALABRA')
+      expect(t).toContain('dilo en la razón del registro aparte')
+    }
+    expect(out._reescritura).toMatchObject({ manual_cambio_id: 'cc-1', recortado: false })
+  })
+  it('sin sección: dice que el pedido es general; sin campos validados no inventa la línea de protegidos', () => {
+    const t = correr(codigo(FAN), ctxFan({ ...RE, seccion: null, campos_validados: [], campos_liberados: [] }))[0].json.tasks['editor-en-jefe'] as string
+    expect(t).toContain('El pedido es general sobre el manual')
+    expect(t).not.toContain('ya validó estos campos')
+    expect(t).not.toContain('Es el foco')
+  })
+  it('un manual vigente enorme se recorta al tope y SE DECLARA (en el texto y en el dato)', () => {
+    const gran = 'x'.repeat(TOPE_MANUAL * 2)
+    const out = correr(codigoCompleto(FAN), ctxFan({ ...RE, manual_vigente: gran }))[0].json
+    expect(out._reescritura.recortado).toBe(true)
+    for (const l of LENTES) expect(out.tasks[l]).toContain('recortado a ' + TOPE_MANUAL + ' caracteres')
+    const b = (out.tasks['brand-strategist'] as string).slice((out.tasks['brand-strategist'] as string).indexOf('ESTA ES UNA REESCRITURA'))
+    expect((b.match(/x/g) ?? []).length).toBeLessThanOrEqual(TOPE_MANUAL)
+  })
+  it('el pedido largo se corta a 20.000 caracteres (antes 2.000) y los espacios se normalizan; no rompe con campos ausentes', () => {
+    const t = correr(codigoCompleto(FAN), ctxFan({ manual_vigente: MANUAL, cambios_del_dueno: 'a  \n b ' + 'Q'.repeat(TOPE_PEDIDO + 5000) }))[0].json.tasks['brand-strategist'] as string
+    expect(t).toContain('«a b Q')
+    expect((t.slice(t.indexOf('ESTA ES UNA REESCRITURA')).match(/Q/g) ?? []).length).toBeLessThanOrEqual(TOPE_PEDIDO)
+  })
+  it('no pone reglas duras: el bloque no ordena descartar ni exige justificar nada', () => {
+    const t = correr(codigo(FAN), ctxFan(RE))[0].json.tasks['brand-strategist'] as string
+    const bloque = t.slice(t.indexOf('ESTA ES UNA REESCRITURA'))
+    expect(bloque).not.toMatch(/no puedes|prohib|obligatori|exige justificar/i)
+  })
+})
+
+const ctxProm = (re?: any) => {
+  const nodos: Record<string, any> = { 'Validate Deal Data': { client_id: 'c-1', ...(re ? { reescritura: re } : {}) }, '[BB] Guardia de procedencia': { _procedencia: 'padre' } }
+  return { nodos, json: { fidelity: { pass: true, scores: { a: 1 }, threshold: 0.85 }, brand_book_draft: { positioning: 'x', _field_meta: {} }, client_id: 'c-1' } }
+}
+
+describe('[BB] Promote prep', () => {
+  vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-02T10:00:00Z')) // `approved_at` es la hora: se congela para comparar con hoy
+  it('sin pedido: el cuerpo del guardado es EXACTAMENTE el de hoy (sin `manual_cambio_id`)', () => {
+    const a = correr(codigo(PROM), ctxProm()), b = correr(hoy(PROM), ctxProm())
+    expect(a).toEqual(b)
+    expect('manual_cambio_id' in a[0].json.promote_body).toBe(false)
+  })
+  it('con pedido: el cuerpo lleva `manual_cambio_id` (la puerta de CC1 liga la versión y no crea una segunda)', () => {
+    const o = correr(codigo(PROM), ctxProm(RE))[0].json
+    expect(o.promote_body.manual_cambio_id).toBe('cc-1')
+    const sin = correr(hoy(PROM), ctxProm(RE))[0].json
+    expect({ ...o.promote_body, manual_cambio_id: undefined }).toEqual({ ...sin.promote_body, manual_cambio_id: undefined })
+  })
+  it('un `reescritura` sin `manual_cambio_id` no pone la clave', () => {
+    expect('manual_cambio_id' in correr(codigo(PROM), ctxProm({ ...RE, manual_cambio_id: '' }))[0].json.promote_body).toBe(false)
+  })
+  it('la guarda de procedencia sigue: sin padre no promueve ni con pedido', () => {
+    const c = ctxProm(RE); c.nodos['[BB] Guardia de procedencia']._procedencia = 'manual'
+    expect(() => correr(codigo(PROM), c)).toThrow(/CIMIENTO_PROMOCION_SIN_PADRE/)
+  })
+})
+
+describe('alcance', () => {
+  it('esta parte cambia solo los tres nodos del manual que dice el plan (los otros dos del archivo acumulado son de partes ya certificadas)', () => {
+    for (const [n, , nuevoTxt] of SUSTITUCIONES as Array<[string, string, string]>) expect(codigo(n)).toContain(nuevoTxt)
+    const sin = JSON.stringify(nuevo)
+    expect(sin).not.toContain('PENDIENTE-MANUAL-CAMBIOS')
+  })
+})
+
+// ── tope de gasto por llamada ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+// @ts-expect-error módulo .mjs sin tipos
+import { LLAMADAS_CON_TOPE, DIVISOR_DEL_TOPE, LINEA_DEL_TOPE } from '../scripts/ops/oficina-marketing/reescritura-del-manual.mjs'
+
+/** arma el cuerpo de una llamada como lo hace n8n: cada `{{ expr }}` se evalúa con $json, $execution y $('nodo') */
+function cuerpoDe(nombre: string, validate: any | null) {
+  const n = nuevo.nodes.find((x: any) => x.name === nombre)
+  const crudo = String(n.parameters.jsonBody).replace(/^=/, '')
+  const nodos: Record<string, any> = validate ? { 'Validate Deal Data': validate } : {}
+  const $ = (k: string) => { if (!(k in nodos)) throw new Error(`Node '${k}' hasn't been executed`); return { first: () => ({ json: nodos[k] }) } }
+  const $json = { client_id: 'c-1', tasks: { 'brand-strategist': 't', 'editor-en-jefe': 't', 'jefe-client-success': 't' }, judge_step_name: 'j', judge_task: 'jt', _uso_pedido_voz: 'v', _voz_revision_pedido: 'r', _estilo_revision_pedido: 'e' }
+  const texto = crudo.replace(/\{\{([\s\S]*?)\}\}/g, (_m, e) => { const v = new Function('$', '$json', '$execution', `return (${e})`)($, $json, { id: 'ex-1' }); return String(v) })
+  return JSON.parse(texto)
+}
+
+describe('tope de gasto por llamada (max_budget_usd)', () => {
+  it('en modo reescritura, las 5 llamadas al modelo llevan tope = tope del pedido ÷ 5, con dos decimales', () => {
+    expect(DIVISOR_DEL_TOPE).toBe(5)
+    for (const l of LLAMADAS_CON_TOPE) {
+      expect(cuerpoDe(l, { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: 4 } }).max_budget_usd).toBe(0.8)
+      expect(cuerpoDe(l, { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: 5 } }).max_budget_usd).toBe(1)
+      expect(cuerpoDe(l, { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: 0.07 } }).max_budget_usd).toBe(0.01)
+    }
+  })
+  it('las 5 llamadas que dice el plan llevan tope y, con el equipo del manual (d) (02-nov), también la revisión de la voz: son TODAS las del manual que llaman a run-sdk', () => {
+    const todas = nuevo.nodes.filter((n: any) => n.type.endsWith('httpRequest') && /run-sdk/.test(JSON.stringify(n.parameters.url))).map((n: any) => n.name).sort()
+    const revisiones = ['[BB] Voz · revisión (editor-en-jefe)', '[BB] Estilo · revisión (style-consistency-reviewer)']   // (d) y (c2)
+    const equipoHttp = ['aportes de los dueños', 'mesa creativa', 'integración', 'logo y tipografía', 'el juez anota datos duros sin fuente'].map((n) => '[BB] Equipo · ' + n + ' · llamar')   // ADENDA 1: el tope viaja dentro del cuerpo que arma «preparar»
+    expect([...LLAMADAS_CON_TOPE, ...revisiones, ...equipoHttp].sort()).toEqual(todas)
+    for (const revision of revisiones) {
+      expect(cuerpoDe(revision, { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: 4 } }).max_budget_usd, revision).toBe(0.8)
+      expect('max_budget_usd' in cuerpoDe(revision, { client_id: 'c-1' }), revision).toBe(false)
+    }
+  })
+  it('sin `reescritura` (el alta) el cuerpo no trae la clave y es el mismo JSON de hoy', () => {
+    for (const l of LLAMADAS_CON_TOPE) {
+      const a = cuerpoDe(l, { client_id: 'c-1' })
+      expect('max_budget_usd' in a).toBe(false)
+      const n = nuevo.nodes.find((x: any) => x.name === l)
+      const hoyTxt = String(n.parameters.jsonBody).replace('\n  ' + LINEA_DEL_TOPE, '')
+      expect(hoyTxt).not.toContain('max_budget_usd')
+    }
+  })
+  it('un tope ausente, cero, negativo o que no es número no pone la clave (el sobre ya lo rechaza antes de gastar)', () => {
+    for (const t of [undefined, 0, -3, 'x', null]) expect('max_budget_usd' in cuerpoDe('Lente · editor-en-jefe', { client_id: 'c-1', reescritura: { ...RE, tope_reescritura_usd: t } })).toBe(false)
+  })
+  it('si el nodo de validación no corrió, no rompe la llamada (la clave simplemente no va)', () => {
+    expect('max_budget_usd' in cuerpoDe('Lente · editor-en-jefe', null)).toBe(false)
+  })
+})
+
+// ── el recibo del guardado, devuelto al padre solo en modo reescritura ──────────────────────────────────────────────────────────────────
+describe('«Return scores a parent» · promote_recibo', () => {
+  const RETN = 'Return scores a parent (grade-cimiento gate)'
+  const base = (re: any, recibo: any) => ({
+    nodos: {
+      'Validate Deal Data': { client_id: 'c-1', ...(re ? { reescritura: re } : {}) },
+      ...(recibo === null ? {} : { '[BB] Promote → canon': recibo }),
+      '[BB] Manual → Drive (PDF)': { ok: true },
+    } as Record<string, any>,
+    json: { fidelity: { pass: true, scores: { a: 1 } }, promote_body: { brand_book: {} }, brand_book_draft: { client_id: 'c-1' }, client_id: 'c-1' },
+  })
+  it('sin `reescritura`: la salida es EXACTAMENTE la de hoy y no existe la clave', () => {
+    const c = base(null, { persisted: true, id: 'v-1' })
+    const a = correr(codigo(RETN), c), b = correr(hoy(RETN), base(null, { persisted: true, id: 'v-1' }))
+    expect(a).toEqual(b)
+    expect('promote_recibo' in a[0].json).toBe(false)
+  })
+  it('con `reescritura`: devuelve el recibo (sin cambios reales, versión, error) y el resto de la salida no cambia', () => {
+    const sin = correr(codigo(RETN), base(RE, { persisted: false, sin_cambios_reales: true })), con = sin[0].json
+    expect(con.promote_recibo).toMatchObject({ persisted: false, sin_cambios_reales: true, id: null })
+    const { promote_recibo: _x, ...resto } = con
+    expect(resto).toEqual(correr(hoy(RETN), base(null, { persisted: true }))[0].json)
+    expect(correr(codigo(RETN), base(RE, { persisted: true, id: 'v-9', manual_cambio_id: 'cc-1' }))[0].json.promote_recibo).toMatchObject({ persisted: true, id: 'v-9', manual_cambio_id: 'cc-1', sin_cambios_reales: false })
+    expect(correr(codigo(RETN), base(RE, { error: 'x'.repeat(500) }))[0].json.promote_recibo.error.length).toBe(200)
+  })
+  it('si el guardado no corrió, no rompe: no hay recibo', () => {
+    expect('promote_recibo' in correr(codigo(RETN), base(RE, null))[0].json).toBe(false)
+  })
+})

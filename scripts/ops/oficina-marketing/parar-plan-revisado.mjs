@@ -1,0 +1,41 @@
+/**
+ * 01-nov · `parar_en: 'plan_revisado'` (encargo de CC1 en PRESUPUESTO-CC1-corrida-corta-del-plan) + tope del redactor.
+ *   A · el corte: DESPUÉS de «Plan vigente» (la jefatura ya revisó y el plan vigente quedó elegido y marcado) y ANTES del PDF a Drive y de todo lo que lleva al brief
+ *       (PDF → cable de vuelta → «BRIEF · sobre»). Las ramas laterales de «Plan vigente» que son de la revisión (marca de «revisión incompleta», aviso de plan con pendientes) siguen corriendo:
+ *       un plan mal revisado no puede quedar sin su marca por haber parado. Ausente o 'guardar_plan' = lo de hoy.
+ *   B · «Pedir el plan al redactor» manda `max_budget_usd: 2` (hoy no mandaba tope; máximo histórico de una llamada ≈ US$ 1,99 · el tope va por encima para no cortar planes legítimos). El reintento de forma pasa por el mismo nodo: lo manda también (y se cobra otra vez).
+ *   C · el camino SIN PLAN (`¿Hay plan?` falso): con `parar_en` presente (cualquiera de los dos valores) termina en «Parar · resumen (sin plan)» y no sigue a «¿Salió el PDF?» → cable → BRIEF con `plan_id` nulo. Sin `parar_en`, igual que hoy. Como los otros dos cortes, no manda cable de vuelta a la sala.
+ */
+import { agregarNodo, codigo, conectar, redirigir, si } from './lib.mjs'
+
+export const TOPE_REDACTOR_USD = 2.5
+
+export const CODIGO_PARADO_REVISADO = `// PARAR · RESUMEN (plan revisado) · la corrida pidió detenerse DESPUÉS de la jefatura (parar_en = plan_revisado): el plan vigente ya quedó elegido; NO sigue el PDF a Drive, ni el brief, ni nada de lo que cuelga de ahí.
+const g = $input.first().json || {}
+const fila = Array.isArray(g) ? g[0] : (Array.isArray(g.body) ? g.body[0] : (g.body || g))
+let jef = {}
+try { jef = $('JEF · aplicar').first().json.jef || {} } catch (e) { jef = {} }
+return [{ json: { parado_en: 'plan_revisado', plan_vigente_id: fila && (fila.plan_id || fila.id) ? (fila.plan_id || fila.id) : null, jefatura_fase: jef.fase || null, redactor: (function () { try { return $('Redactor · elegir').last().json.redactor_elegido || null } catch (e) { return null } })() } }]
+`
+
+export const CODIGO_PARADO_SIN_PLAN = `// PARAR · RESUMEN (sin plan) · la corrida pidió detenerse (parar_en) y el redactor NO devolvió plan: no se guardó nada, no se pide el PDF ni el brief (sin plan_id no hay de qué briefear).
+return [{ json: { parado_en: 'sin_plan', parar_en: (function () { try { return $('Webhook · planeacion').first().json.body.parar_en || null } catch (e) { return null } })(), plan_guardado_id: null, redactor: (function () { try { return $('Redactor · elegir').last().json.redactor_elegido || null } catch (e) { return null } })() } }]
+`
+
+export function construirParadaPlanRevisado(f) {
+  agregarNodo(f, si('Parar · ¿plan revisado?', "={{ (function () { try { return $('Webhook · planeacion').first().json.body.parar_en } catch (e) { return null } })() }}", 'plan_revisado', 'equals', 'string'), 'Plan vigente', 220, 160)
+  agregarNodo(f, codigo('Parar · resumen (plan revisado)', CODIGO_PARADO_REVISADO), 'Plan vigente', 440, 280)
+  redirigir(f, 'Plan vigente', 'Plan → Drive (PDF)', 'Parar · ¿plan revisado?')
+  conectar(f, 'Parar · ¿plan revisado?', 'Parar · resumen (plan revisado)', 0)
+  conectar(f, 'Parar · ¿plan revisado?', 'Plan → Drive (PDF)', 1)
+  // C · sin plan
+  agregarNodo(f, si('Parar · ¿sin plan y con parar_en?', "={{ (function () { try { return ['guardar_plan', 'plan_revisado'].indexOf($('Webhook · planeacion').first().json.body.parar_en) !== -1 ? 'si' : 'no' } catch (e) { return 'no' } })() }}", 'si', 'equals', 'string'), '¿Hay plan?', 220, 160)
+  agregarNodo(f, codigo('Parar · resumen (sin plan)', CODIGO_PARADO_SIN_PLAN), '¿Hay plan?', 440, 280)
+  redirigir(f, '¿Hay plan?', '¿Salió el PDF?', 'Parar · ¿sin plan y con parar_en?', 1)
+  conectar(f, 'Parar · ¿sin plan y con parar_en?', 'Parar · resumen (sin plan)', 0)
+  conectar(f, 'Parar · ¿sin plan y con parar_en?', '¿Salió el PDF?', 1)
+  const pedir = f.nodes.find((n) => n.name === 'Pedir el plan al redactor')
+  const ancla = 'workflow_execution_id: $execution.id,'
+  if (pedir.parameters.jsonBody.split(ancla).length !== 2) throw new Error('«Pedir el plan al redactor» ya no trae workflow_execution_id una sola vez')
+  pedir.parameters.jsonBody = pedir.parameters.jsonBody.replace(ancla, () => ancla + ' max_budget_usd: ' + TOPE_REDACTOR_USD + ',')
+}

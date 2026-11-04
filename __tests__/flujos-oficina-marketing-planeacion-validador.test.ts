@@ -60,20 +60,21 @@ describe('el flujo nuevo se parece al vivo en lo demás', () => {
   it('«¿Hay plan?» ahora entra por «Validar · ¿se pide?» y no por «Guardar el plan»; el resto de su salida no cambia', () => {
     expect(vivo.connections['¿Hay plan?'].main[0].map((c: any) => c.node)).toEqual(['Guardar el plan'])
     expect(nuevo.connections['¿Hay plan?'].main[0].map((c: any) => c.node)).toEqual(['Validar · ¿se pide?'])
-    expect(nuevo.connections['¿Hay plan?'].main[1]).toEqual(vivo.connections['¿Hay plan?'].main[1])
+    // 01-nov · la rama sin plan ahora pasa por el corte «Parar · ¿sin plan y con parar_en?» (que sin parar_en sigue a «¿Salió el PDF?» como hoy)
+    expect(nuevo.connections['¿Hay plan?'].main[1].map((c: any) => c.node)).toEqual(['¿Sin plan · cerrar el pedido?'])
   })
   it('apagado, el único camino por los nodos nuevos termina en «Guardar el plan»; encendido, hay 3 salidas (guarda · reintenta · alerta)', () => {
-    expect(nuevo.connections['Validar · ¿se pide?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Validar · pedir'], ['Guardar el plan']])
-    expect(nuevo.connections['Validar · ¿pasó?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Guardar el plan'], ['Validar · ¿reintenta?']])
+    expect(nuevo.connections['Validar · ¿se pide?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Validar · pedir'], ['② ¿Es copia del plan anterior?']])
+    expect(nuevo.connections['Validar · ¿pasó?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['② ¿Es copia del plan anterior?'], ['Validar · ¿reintenta?']])
     expect(nuevo.connections['Validar · ¿reintenta?'].main.map((g: any[]) => g.map((c) => c.node))).toEqual([['Pedir el plan al redactor'], ['Validar · guardar borrador']])
     expect(nuevo.connections['Validar · resumen']).toBeUndefined()
   })
 })
 
 describe('«⓪ Llave» · validar_forma', () => {
-  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?'] })
+  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?', 'Plan anterior · pedir'] })
   it('true, false, null o ausente pasan; cualquier otro valor DETIENE antes de gastar', async () => {
-    for (const v of [true, false, null, undefined]) expect((await llave({ client_id: CLIENTE, validar_forma: v })).ultimo).toBe('V9 · ¿pide el pre-vuelo?')
+    for (const v of [true, false, null, undefined]) expect((await llave({ client_id: CLIENTE, validar_forma: v })).ultimo).toBe('Plan anterior · pedir')
     for (const raro of ['true', 'si', 1, 0, [], {}]) await expect(llave({ client_id: CLIENTE, validar_forma: raro })).rejects.toThrow(/PLANEACION_VALIDAR_FORMA_INVALIDO/)
   })
 })
@@ -83,7 +84,7 @@ describe('apagado es el flujo de hoy', () => {
     for (const body of [{ client_id: CLIENTE }, { client_id: CLIENTE, validar_forma: false }]) {
       const visto = { llamadas: 0 }
       const r = await desdeValidar(PLAN_ROTO, body, { http: rutaEnMemoria(visto) })
-      expect(r.pasos).toEqual(['Validar · ¿se pide?', 'Guardar el plan'])
+      expect(r.pasos).toEqual(['Validar · ¿se pide?', '② ¿Es copia del plan anterior?', '② IF · ¿copia · reintentar?', '② IF · ¿copia · detener?', 'Guardar el plan'])
       expect(visto.llamadas).toBe(0)
     }
     const r = await desdeValidar(PLAN_ROTO, {}, { previos: { 'Webhook · planeacion': [] } })
@@ -95,7 +96,7 @@ describe('encendido · contra la ruta real', () => {
   it('un plan con forma (el real de Náufrago) pasa INTACTO a «Guardar el plan» con la firma de la corrida', async () => {
     const visto: any = { llamadas: 0 }
     const r = await desdeValidar(PLAN_BUENO, { client_id: CLIENTE, validar_forma: true }, { http: rutaEnMemoria(visto) })
-    expect(r.pasos).toEqual(['Validar · ¿se pide?', 'Validar · pedir', 'Validar · ¿qué dijo?', 'Validar · ¿pasó?', 'Guardar el plan'])
+    expect(r.pasos).toEqual(['Validar · ¿se pide?', 'Validar · pedir', 'Validar · ¿qué dijo?', 'Validar · ¿pasó?', '② ¿Es copia del plan anterior?', '② IF · ¿copia · reintentar?', '② IF · ¿copia · detener?', 'Guardar el plan'])
     expect(visto.llamadas).toBe(1)
     expect(r.item).toMatchObject({ ...planItem(PLAN_BUENO), veredicto: 'ok', validacion_forma: { ok: true, intentos: 1 } })
   })
@@ -116,7 +117,10 @@ describe('encendido · contra la ruta real', () => {
     }
     for (const fr of [false, true, undefined]) {
       const body = { client_id: CLIENTE, ...(fr === undefined ? {} : { force_restart: fr }) }
-      expect(await cuerpoDe(nuevo, BASE, body)).toEqual(await cuerpoDe(vivo, BASE, body))
+      // 01-nov · lo único nuevo en el cuerpo es el tope del redactor (max_budget_usd: 2.5)
+      const { max_budget_usd, ...resto } = await cuerpoDe(nuevo, BASE, body)
+      expect(max_budget_usd).toBe(2.5)
+      expect(resto).toEqual(await cuerpoDe(vivo, BASE, body))
     }
     const reintento = await cuerpoDe(nuevo, { ...BASE, pedido: 'P2', reintento_forma: true }, { client_id: CLIENTE, force_restart: false })
     expect(reintento).toMatchObject({ force_restart: true, task: 'P2', agent: 'campaign-brief-agent', client_id: CLIENTE })

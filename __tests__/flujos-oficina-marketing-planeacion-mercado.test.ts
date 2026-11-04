@@ -39,14 +39,14 @@ beforeEach(() => {
 
 describe('el cableado de la rama nueva', () => {
   it('sale de «elegir brazos», pasa por su firma y entra por la 4.ª entrada de la junta (4 entradas)', () => {
-    expect(nuevo.connections['elegir brazos'].main[0].map((c: any) => c.node)).toEqual([...vivo.connections['elegir brazos'].main[0].map((c: any) => c.node), 'Brazo · mercado'])
+    expect(nuevo.connections['elegir brazos'].main[0].map((c: any) => c.node)).toEqual([...vivo.connections['elegir brazos'].main[0].map((c: any) => c.node), 'Brazo · mercado', 'Mesa de análisis'])
     expect(nuevo.connections['Brazo · mercado'].main[0]).toEqual([{ node: 'firma de la rama · mercado', type: 'main', index: 0 }])
     expect(nuevo.connections['firma de la rama · mercado'].main[0]).toEqual([{ node: 'Junta · esperar los 3 brazos', type: 'main', index: 3 }])
-    expect(nuevo.nodes.find((n: any) => n.name === 'Junta · esperar los 3 brazos').parameters.numberInputs).toBe(4)
+    expect(nuevo.nodes.find((n: any) => n.name === 'Junta · esperar los 3 brazos').parameters.numberInputs).toBe(5)
     // las otras tres entradas siguen donde estaban
     const entradas = Object.entries(nuevo.connections).flatMap(([de, c]: any) => (c.main ?? []).flat().filter((x: any) => x.node === 'Junta · esperar los 3 brazos').map((x: any) => [de, x.index]))
     expect(Object.fromEntries(entradas)).toMatchObject({ 'firma de la rama · mercado': 3 })
-    expect(entradas.map((e: any) => e[1]).sort()).toEqual([0, 1, 2, 3])
+    expect(entradas.map((e: any) => e[1]).sort()).toEqual([0, 1, 2, 3, 4])
   })
   it('«Brazo · mercado» es hermano de «Brazo · PostHog» (misma forma, otra ruta y otro nombre de brazo)', () => {
     const a = vivo.nodes.find((n: any) => n.name === 'Brazo · PostHog'), b = nuevo.nodes.find((n: any) => n.name === 'Brazo · mercado')
@@ -60,9 +60,9 @@ describe('el cableado de la rama nueva', () => {
 })
 
 describe('«⓪ Llave» · con_mercado', () => {
-  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?'] })
+  const llave = (body: Record<string, unknown>) => recorrer(nuevo, '⓪ Llave · Webhook · planeacion', web(body), { env: ENV, hasta: ['V9 · ¿pide el pre-vuelo?', 'Plan anterior · pedir'] })
   it('true, false, null o ausente pasan', async () => {
-    for (const cm of [true, false, null, undefined]) expect((await llave({ client_id: CLIENTE, con_mercado: cm })).ultimo).toBe('V9 · ¿pide el pre-vuelo?')
+    for (const cm of [true, false, null, undefined]) expect((await llave({ client_id: CLIENTE, con_mercado: cm })).ultimo).toBe('Plan anterior · pedir')
   })
   it('🔴 cualquier otro valor DETIENE antes de gastar (un «true» entre comillas no enciende un gasto)', async () => {
     for (const raro of ['true', 'si', 1, 0, [], {}]) await expect(llave({ client_id: CLIENTE, con_mercado: raro })).rejects.toThrow(/PLANEACION_CON_MERCADO_INVALIDO/)
