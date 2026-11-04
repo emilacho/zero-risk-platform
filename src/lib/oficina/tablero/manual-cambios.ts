@@ -8,6 +8,7 @@
  */
 import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 import { empujarManualAlCerebro } from '../../brain/push-al-terminar'
+import { quitarDelBorrador, type LoEnviado } from '../../manual/borrador-del-dueno'
 import { CAMPOS } from '../../manual/campos-del-manual'
 import { EDITABLES_DEL_TABLERO } from '../../manual/edicion-del-dueno'
 import { rutaEditarManual, type SalidaDeEdicion } from '../../manual/edicion-rutas'
@@ -104,16 +105,19 @@ export async function pedirCambiosAlManual({ db, ahora, editarDirecto }: DepsDel
   const colgado = abierto?.estado === 'pendiente' && abierto.despertado === false
   if (abierto && !colgado) return rechazo(409, 'reescritura_en_curso', 'ya hay un pedido de cambios sobre este manual: espera la versión nueva', toca)
 
+  // lo que este pedido se lleva del borrador: lo directo en cuanto queda guardado, el resto cuando el pedido queda guardado
+  const soloLoDirecto: LoEnviado = { campos: directos.campos, notas: {}, libre: '' }
+  const notasEnviadas = Object.fromEntries((Array.isArray(cuerpo.observaciones_por_campo) ? cuerpo.observaciones_por_campo : []).filter(esObjeto).map((o) => [String(o.campo), String(o.texto ?? '')]))
   // lo directo, primero: la reescritura trabaja sobre esa versión
   let directo: Fila | null = null
   if (hayDirectos) {
     const e = await editarDirecto(client_id, directos.campos, reviewer)
     if (e.status !== 200) return { status: e.status, cuerpo: e.body, toca }
     directo = e.body
-    if (soloDirectos) return { status: 200, cuerpo: { ok: true, reescribe: false, directo }, toca }
+    if (soloDirectos) return { status: 200, cuerpo: { ok: true, reescribe: false, directo, borrador: await quitarDelBorrador(db, client_id, soloLoDirecto, ahora()) }, toca }
   }
   const conDirecto = directo ? { directo } : {}
-  const mal = (status: number, error: string, detalle: string, t: Salida['toca'] = toca): Salida => ({ status, cuerpo: { ok: false, error, detalle, ...conDirecto }, toca: t })
+  const mal = async (status: number, error: string, detalle: string, t: Salida['toca'] = toca): Promise<Salida> => ({ status, cuerpo: { ok: false, error, detalle, ...conDirecto, ...(directo ? { borrador: await quitarDelBorrador(db, client_id, soloLoDirecto, ahora()) } : {}) }, toca: t })
 
   const v = await db.from('client_brand_books').select('id, content_text').eq('client_id', client_id).order('version', { ascending: false }).limit(1)
   if (v.error) return mal(500, 'manual_error', v.error.message)
@@ -142,9 +146,10 @@ export async function pedirCambiosAlManual({ db, ahora, editarDirecto }: DepsDel
     if (ins.error || !ins.data) return mal(500, 'manual_error', ins.error?.message ?? 'no se guardó el pedido de cambios', t)
     cambioId = String((ins.data as Fila).id)
   }
+  const borrador = await quitarDelBorrador(db, client_id, { campos: directos.campos, notas: notasEnviadas, libre }, ahora())
   return {
     status: 200,
-    cuerpo: { ok: true, reescribe: true, manual_cambio_id: cambioId, manual_id, tope_usd: tope, estado: 'pendiente', seccion, campos_validados: validados, campos_liberados: liberados, ...conDirecto, ...(colgado ? { reintento: true } : {}) },
+    cuerpo: { ok: true, reescribe: true, borrador, manual_cambio_id: cambioId, manual_id, tope_usd: tope, estado: 'pendiente', seccion, campos_validados: validados, campos_liberados: liberados, ...conDirecto, ...(colgado ? { reintento: true } : {}) },
     toca: t,
     despertar_flujo: {
       camino: CAMINO_MANUAL_CAMBIOS,
