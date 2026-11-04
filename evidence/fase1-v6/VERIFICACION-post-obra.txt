@@ -1,0 +1,44 @@
+
+===== ssLtw · POST-OBRA =====
+V1 nodos            : 20 (esperado 20) ✅
+V2 claves connections: 17 (esperado 17) ✅
+V3 aristas colgando  : 0 ✅
+V4 huérfanos nuevos  : 0 ✅
+V5 huella (16 nodos intactos)
+     pre : 68415e1dc05132a0b9c4bd2873a24dfb6423add7d498270b0df432cb6cb21766
+     post: 68415e1dc05132a0b9c4bd2873a24dfb6423add7d498270b0df432cb6cb21766
+     ✅ IDÉNTICA
+V6 settings          : {"executionOrder":"v1"}
+     diferencias vs baseline: ninguna ✅
+V7 active            : false (debe ser false · pausado hasta la prueba) ✅
+
+===== LyVoK · POST-OBRA =====
+V1 nodos            : 73 (esperado 73) ✅
+V2 claves connections: 58 (esperado 58) ✅
+V3 aristas colgando  : 0 ✅
+V4 huérfanos nuevos  : 0 ✅
+V5 huella (70 nodos intactos)
+     pre : e07526c74891e18703f843ca87013b26552b8b14e22e46ca23615e94e03fb371
+     post: e07526c74891e18703f843ca87013b26552b8b14e22e46ca23615e94e03fb371
+     ✅ IDÉNTICA
+V6 settings          : {"executionOrder":"v1","saveManualExecutions":true,"callerPolicy":"workflowsFromSameOwner","availableInMCP":false,"saveDataSuccessExecution":"all","saveDataErrorExecution":"all","saveExecutionProgress":true,"binaryMode":"separate"}
+     diferencias vs baseline: ninguna ✅
+V7 active            : false (debe ser false · pausado hasta la prueba) ✅
+
+===== CAMINO P4 (el corazón de la honestidad) =====
+[JEFATURA] Execute Cimiento Track main#0 → IF track_pass (¿el cimiento pasó de verdad?)
+[JEFATURA] Execute Cimiento Track main#1 → Stop and Error · cimiento no promovido
+IF track_pass (¿el cimiento pasó de verdad?) main#0 → [MODELB] Emit · cimiento.promoted
+IF track_pass (¿el cimiento pasó de verdad?) main#1 → [MODELB] Emit · cimiento.failed (honesto)
+[MODELB] Emit · cimiento.failed (honesto) main#0 → Stop and Error · cimiento no promovido
+Stop and Error · cimiento no promovido → (terminal)
+
+===== CAMINO DEL ESCRITOR (Pieza A) =====
+[BB] IF · fidelidad PASS · ENCENDIDO ✅ → main#0: [BB] Promote prep | main#1: [BB] IF · ciclos agotados
+[BB] Promote prep · ENCENDIDO ✅ → main#0: [BB] Promote → canon
+[BB] Promote → canon · ENCENDIDO ✅ → main#0: Return scores a parent (grade-cimiento gate)
+
+===== VENTANA DEL DAÑO (sonda que sí se aplicó) =====
+últimas ejecuciones de LyVoK: 65469@2026-07-24T22:30:05.130Z(success) · 65164@2026-07-24T17:30:04.379Z(success) · 65105@2026-07-24T16:39:01.406Z(success)
+
+>>> VEREDICTO: ✅ VERDE

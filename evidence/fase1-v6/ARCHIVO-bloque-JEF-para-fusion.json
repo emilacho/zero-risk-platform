@@ -1,0 +1,546 @@
+{
+  "nota": "Bloque [JEF] (lazo de recorrección) + gate del padre · sacados en Fase 1 v6 · se re-integran en la fusión JEFATURA.",
+  "fecha": "2026-07-30",
+  "origen": "LyVoKcrypS5uLyuu",
+  "versionId_origen": "36c2e165-3ee7-49f2-80a1-84d34a8bf99f",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Persist Canon · Fase 5 · solo tras PASS Camino III\n// Escribe brand_book, ICP, análisis competitivo via API.\n// RECIÉN AQUÍ se persisten los datos canonizados.\n\nconst stagingPkg = $json.staging_package || {};\nconst clientId = $('Validate Deal Data').first().json.client_id;\nconst apiUrl = $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app';\nconst apiKey = $env.INTERNAL_API_KEY;\n\nconst headers = {\n  'Content-Type': 'application/json',\n  'x-api-key': apiKey\n};\n\n// 1. POST brand_book\nlet brandBookResult = null;\ntry {\n  const bbResp = await fetch(apiUrl + '/api/clients/' + clientId + '/brand-book', {\n    method: 'POST',\n    headers: headers,\n    body: JSON.stringify({\n      brand_book: stagingPkg.brand_book_draft,\n      source: 'onboarding_e2e_5phase',\n      camino_iii_approved: true,\n      approved_at: new Date().toISOString()\n    })\n  });\n  brandBookResult = { status: bbResp.status, ok: bbResp.ok };\n} catch(e) {\n  brandBookResult = { status: 'error', message: e.message };\n}\n\n// 2. POST ICP\nlet icpResult = null;\ntry {\n  const icpResp = await fetch(apiUrl + '/api/clients/' + clientId + '/icp', {\n    method: 'POST',\n    headers: headers,\n    body: JSON.stringify({\n      icp: stagingPkg.icp_draft,\n      source: 'onboarding_e2e_5phase',\n      camino_iii_approved: true\n    })\n  });\n  icpResult = { status: icpResp.status, ok: icpResp.ok };\n} catch(e) {\n  icpResult = { status: 'error', message: e.message };\n}\n\n// 3. POST competitive analysis al Brain como evidencia CANON (no provisional)\nlet brainResult = null;\ntry {\n  const brainResp = await fetch(apiUrl + '/api/brain/ingest-source', {\n    method: 'POST',\n    headers: headers,\n    body: JSON.stringify({\n      client_id: clientId,\n      source_type: 'competitive_intelligence',\n      content: JSON.stringify(stagingPkg.competitive_analysis_draft),\n      metadata: {\n        provenance: 'onboarding_e2e_5phase_post_camino_iii',\n        confidence: 'canon',\n        type: 'evidencia_canon',\n        camino_iii_approved: true,\n        approved_at: new Date().toISOString()\n      }\n    })\n  });\n  brainResult = { status: brainResp.status, ok: brainResp.ok };\n} catch(e) {\n  brainResult = { status: 'error', message: e.message };\n}\n\nreturn [{\n  json: {\n    ...$json,\n    persist_canon_results: {\n      brand_book: brandBookResult,\n      icp: icpResult,\n      brain_canon: brainResult,\n      persisted_at: new Date().toISOString()\n    }\n  }\n}];\n"
+      },
+      "id": "persist-canon-fase5",
+      "name": "Persist Canon · brand_book + ICP + analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5910,
+        580
+      ]
+    },
+    {
+      "id": "cc3-jf-grade",
+      "name": "[JEFATURA] grade-cimiento (gate único)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5640,
+        840
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/jefatura/grade-cimiento",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ artifact_id: 'brand_book:' + $json.client_id, client_id: $json.client_id, journey_id: $('Validate Deal Data').first().json._journey_id || null, brand_book_draft: $json.brand_book_draft, fidelity_scores: $json.fidelity_scores, evidence: { client_name: $('Validate Deal Data').first().json.client_name, industry: $('Validate Deal Data').first().json.industry }, evidence_refs: [] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "cc3-jf-identity",
+      "name": "[JEFATURA] Aserción identidad (ABORT si ≠ Peniche)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5880,
+        840
+      ],
+      "parameters": {
+        "jsCode": "// precisión 3 + fail-safe (consejero 19:19 pt3) · identidad ANTES de promote · contaminación\n// imposible de PERSISTIR. Compara el client_id del ARTEFACTO que devolvió el track vs el cliente\n// del JOURNEY. Identidad NO VERIFICABLE (artefacto sin client_id / undefined / track ausente) =\n// MISMATCH → ABORT → HITL · JAMÁS se promueve (misma clase de bug del 5º: campo ausente ≠ pasa).\nconst grade = $json.body || $json;                              // respuesta de grade-cimiento\nlet trackOut = {};\ntry { trackOut = $('[JEFATURA] Execute Cimiento Track').first().json || {}; } catch (e) { trackOut = {}; }\nconst journeyClient = String(($('Validate Deal Data').first().json.client_id) || '').trim();\nconst artifactClient = String((trackOut.client_id) || (trackOut.brand_book_draft && trackOut.brand_book_draft.client_id) || '').trim();\nconst idVerifiable = journeyClient.length > 0 && artifactClient.length > 0;   // ambos presentes\nconst idOk = idVerifiable && artifactClient === journeyClient;                // y coinciden\nreturn [{ json: {\n  __ABORT: !idOk,                                              // fail-safe: no-verificable ⇒ ABORT\n  reason: idOk ? null : (idVerifiable ? 'IDENTIDAD_MISMATCH' : 'IDENTIDAD_NO_VERIFICABLE'),\n  journeyClient, artifactClient,\n  client_id: journeyClient,\n  verdict: grade.verdict || 'UNKNOWN',\n  action: idOk ? (grade.action || 'escalate_hitl') : 'abort',\n  scores: grade.scores, grounding: grade.grounding, provisional: !!grade.provisional,\n  corrections: grade.corrections || [], trace_id: grade.trace_id\n} }];"
+      }
+    },
+    {
+      "id": "cc3-jf-if",
+      "name": "[JEFATURA] IF promote (identidad OK + PASS)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6120,
+        840
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.__ABORT }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            },
+            {
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "promote",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cc3-jf-promote",
+      "name": "[JEFATURA] Promote → canon (gate único)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6360,
+        840
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/brand-book/{{ $json.client_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ brand_book: $('[JEFATURA] Execute Cimiento Track').first().json.brand_book_draft, fidelity_scores: $('[JEFATURA] Execute Cimiento Track').first().json.fidelity_scores, fidelity_passed: true, source: 'onboarding_e2e_jefatura_gate', approved_by: 'grade-cimiento', grounding: $json.grounding, provisional: $json.provisional }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "cc3-jf-log",
+      "name": "[JEFATURA] log-invocation metadata.jefatura",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6600,
+        1040
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/agents/log-invocation",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow_id: $workflow.id, workflow_execution_id: $execution.id, agent_name: 'jefatura-grade-cimiento', client_id: $('Validate Deal Data').first().json.client_id, cost_usd: 0, metadata: { jefatura: { review_id: 'brand_book:' + $('Validate Deal Data').first().json.client_id, verdict: $json.verdict, scores: $json.scores, grounding: $json.grounding, provisional: $json.provisional, action: $json.action, aborted: !!$json.__ABORT, note: 'gate único de decisión/persistencia · track loop interno propio (sin Lazo A central)' } } }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "jef-if-recorrect",
+      "name": "[JEF] IF · action==recorrect",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5900,
+        840
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "recorrect",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "jef-build-recorrect",
+      "name": "[JEF] Build recorrect input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5900,
+        990
+      ],
+      "parameters": {
+        "jsCode": "// Cartero · arma el input del creador para la re-síntesis (pass-2 · anti-#255: draft NO se pisa;\n// el Consolidador lo re-crea con corrections + _fidelity_cycle). Reusa el input REAL del track.\nconst trackInput = $(\"[JEFATURA] Transform discovery→package\").first().json || {};\nconst grade = $json || {};\nconst corrections = Array.isArray(grade.corrections) ? grade.corrections : [];\nreturn [{ json: Object.assign({}, trackInput, { corrections, _fidelity_cycle: 0 }) }];"
+      }
+    },
+    {
+      "id": "jef-re-execute-cimiento",
+      "name": "[JEF] Re-Execute Cimiento",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        5900,
+        1140
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ssLtwYPt7zxuvnM2",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "jef-grade-cimiento-2",
+      "name": "[JEF] grade-cimiento(2)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5900,
+        1290
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/jefatura/grade-cimiento",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ artifact_id: 'brand_book:' + $json.client_id, client_id: $json.client_id, journey_id: $('Validate Deal Data').first().json._journey_id || null, brand_book_draft: $json.brand_book_draft, fidelity_scores: $json.fidelity_scores, evidence: { client_name: $('Validate Deal Data').first().json.client_name, industry: $('Validate Deal Data').first().json.industry }, evidence_refs: [], fidelity_cycle: 1, cycle: 1 }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "jef-identidad-2",
+      "name": "[JEF] Aserción identidad (2)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5900,
+        1440
+      ],
+      "parameters": {
+        "jsCode": "// precisión 3 + fail-safe (consejero 19:19 pt3) · identidad ANTES de promote · contaminación\n// imposible de PERSISTIR. Compara el client_id del ARTEFACTO que devolvió el track vs el cliente\n// del JOURNEY. Identidad NO VERIFICABLE (artefacto sin client_id / undefined / track ausente) =\n// MISMATCH → ABORT → HITL · JAMÁS se promueve (misma clase de bug del 5º: campo ausente ≠ pasa).\nconst grade = $json.body || $json;                              // respuesta de grade-cimiento\nlet trackOut = {};\ntry { trackOut = $('[JEF] Re-Execute Cimiento').first().json || {}; } catch (e) { trackOut = {}; }\nconst journeyClient = String(($('Validate Deal Data').first().json.client_id) || '').trim();\nconst artifactClient = String((trackOut.client_id) || (trackOut.brand_book_draft && trackOut.brand_book_draft.client_id) || '').trim();\nconst idVerifiable = journeyClient.length > 0 && artifactClient.length > 0;   // ambos presentes\nconst idOk = idVerifiable && artifactClient === journeyClient;                // y coinciden\nreturn [{ json: {\n  __ABORT: !idOk,                                              // fail-safe: no-verificable ⇒ ABORT\n  reason: idOk ? null : (idVerifiable ? 'IDENTIDAD_MISMATCH' : 'IDENTIDAD_NO_VERIFICABLE'),\n  journeyClient, artifactClient,\n  client_id: journeyClient,\n  verdict: grade.verdict || 'UNKNOWN',\n  action: idOk ? (grade.action || 'escalate_hitl') : 'abort',\n  scores: grade.scores, grounding: grade.grounding, provisional: !!grade.provisional,\n  corrections: grade.corrections || [], trace_id: grade.trace_id\n} }];"
+      }
+    },
+    {
+      "id": "jef-if-promote-2",
+      "name": "[JEF] IF promote (2)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5900,
+        1590
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.__ABORT }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            },
+            {
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "promote",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "jef-promote-canon-2",
+      "name": "[JEF] Promote → canon (2)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5900,
+        1740
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app' }}/api/brand-book/{{ $json.client_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ brand_book: $('[JEF] Re-Execute Cimiento').first().json.brand_book_draft, fidelity_scores: $('[JEF] Re-Execute Cimiento').first().json.fidelity_scores, fidelity_passed: true, source: 'onboarding_e2e_jefatura_gate', approved_by: 'grade-cimiento', grounding: $json.grounding, provisional: $json.provisional }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Persist Canon · brand_book + ICP + analysis": {
+      "main": [
+        [
+          {
+            "node": "Spell Check Pass (in-cascade)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEFATURA] grade-cimiento (gate único)": {
+      "main": [
+        [
+          {
+            "node": "[JEF] IF · action==recorrect",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[APIFY-WIRE] POST /api/hitl/queue (canon)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEFATURA] Aserción identidad (ABORT si ≠ Peniche)": {
+      "main": [
+        [
+          {
+            "node": "[JEFATURA] IF promote (identidad OK + PASS)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "[JEFATURA] log-invocation metadata.jefatura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEFATURA] IF promote (identidad OK + PASS)": {
+      "main": [
+        [
+          {
+            "node": "[JEFATURA] Promote → canon (gate único)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[APIFY-WIRE] POST /api/hitl/queue (canon)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEF] IF · action==recorrect": {
+      "main": [
+        [
+          {
+            "node": "[JEF] Build recorrect input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[JEFATURA] Aserción identidad (ABORT si ≠ Peniche)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEF] Build recorrect input": {
+      "main": [
+        [
+          {
+            "node": "[JEF] Re-Execute Cimiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEF] Re-Execute Cimiento": {
+      "main": [
+        [
+          {
+            "node": "[JEF] grade-cimiento(2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEF] grade-cimiento(2)": {
+      "main": [
+        [
+          {
+            "node": "[JEF] Aserción identidad (2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEF] Aserción identidad (2)": {
+      "main": [
+        [
+          {
+            "node": "[JEF] IF promote (2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEF] IF promote (2)": {
+      "main": [
+        [
+          {
+            "node": "[JEF] Promote → canon (2)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "[APIFY-WIRE] POST /api/hitl/queue (canon)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEF] Promote → canon (2)": {
+      "main": [
+        [
+          {
+            "node": "[MODELB] Emit · cimiento.promoted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "[JEFATURA] Promote → canon (gate único)": {
+      "main": [
+        [
+          {
+            "node": "[MODELB] Emit · cimiento.promoted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

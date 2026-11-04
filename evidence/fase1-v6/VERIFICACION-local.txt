@@ -1,0 +1,29 @@
+
+===== ssLtw (Pieza A + B + P3 + hook) =====
+nodos: 20 → 20
+claves connections: 17 → 17
+aristas colgando: 0
+huérfanos preexistentes: [BB] Promote prep | [BB] HITL último recurso (no Emilio)
+huérfanos nuevos ESPERADOS (plan v6 A4): [BB] Trigger Onboarding Report · ¿todos deshabilitados? ✅ sí (inertes)
+HUÉRFANOS NUEVOS NO PREVISTOS: 0 ✅
+huella sobre 16 nodos NO tocados y sobrevivientes:
+  pre : 68415e1dc05132a0b9c4bd2873a24dfb6423add7d498270b0df432cb6cb21766
+  post: 68415e1dc05132a0b9c4bd2873a24dfb6423add7d498270b0df432cb6cb21766
+  ✅ IDÉNTICA · lo único que pasó fue el cambio intencional
+
+===== LyVoK (Pieza C) =====
+nodos: 83 → 73
+claves connections: 68 → 58
+aristas colgando: 0
+huérfanos preexistentes: [APIFY-WIRE] Split per function (onboarding_e2e)
+HUÉRFANOS NUEVOS NO PREVISTOS: 0 ✅
+huella sobre 70 nodos NO tocados y sobrevivientes:
+  pre : e07526c74891e18703f843ca87013b26552b8b14e22e46ca23615e94e03fb371
+  post: e07526c74891e18703f843ca87013b26552b8b14e22e46ca23615e94e03fb371
+  ✅ IDÉNTICA · lo único que pasó fue el cambio intencional
+
+===== CONTEO DERIVADO (no fijado a ojo) =====
+LyVoK: 83 − 13 quitados + 3 nuevos = 73  (esperado 73)
+nodos nuevos: IF track_pass (¿el cimiento pasó de verdad?) · [MODELB] Emit · cimiento.failed (honesto) · Stop and Error · cimiento no promovido
+
+>>> VEREDICTO LOCAL: ✅ VERDE · listo para PUT
