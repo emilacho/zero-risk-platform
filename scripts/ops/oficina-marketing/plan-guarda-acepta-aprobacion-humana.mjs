@@ -79,3 +79,18 @@ export function construirPlanMuereAvisandoYCerrando(f) {
   // el aviso de error del motor (E73) enlazado: antes este flujo moría en silencio
   f.settings = { ...(f.settings || {}), errorWorkflow: FLUJO_AVISO_DE_ERROR }
 }
+
+/**
+ * Corrección 04-nov (RESPUESTA CC1 «la señal fiable de aprobación del dueño»): `human_validated` solo no basta, también queda en verdadero cuando valida la JEFATURA.
+ * La regla de la plataforma es `human_validated = true` Y `provenance_tag.validado_por` distinto de `jefatura`. Se aplica SOBRE lo ya publicado (A del mismo día).
+ */
+export function corregirFuenteDeAprobacionDelDueno(f) {
+  const GET = nodo(f, '① Cargar el manual de marca')
+  const url = GET.parameters.url
+  const viejo = 'select=id,client_id,gate_outcome,human_validated,version,created_at,'
+  if (typeof url !== 'string' || url.split(viejo).length !== 2) throw new Error('«① Cargar el manual de marca»: no tiene el pedido de la parte A')
+  GET.parameters.url = url.replace(viejo, 'select=id,client_id,gate_outcome,human_validated,provenance_tag,version,created_at,')
+  cambiarCodigo(f, '① GUARDA · sin manual aprobado se DETIENE',
+    "const aprobado = m.gate_outcome === 'paso_la_vara' || m.human_validated === true;",
+    "const _pt = (function () { try { return typeof m.provenance_tag === 'string' ? JSON.parse(m.provenance_tag) : (m.provenance_tag || {}); } catch (e) { return {}; } })();\nconst aprobado = m.gate_outcome === 'paso_la_vara' || (m.human_validated === true && _pt.validado_por !== 'jefatura');")
+}
