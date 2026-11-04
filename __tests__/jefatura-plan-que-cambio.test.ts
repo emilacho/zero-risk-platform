@@ -107,7 +107,7 @@ describe('🔴 de punta a punta: al elegir la versión del plan', () => {
     const textos = r.cuerpo.textos_a_guardar as Record<string, string>
     expect(Object.keys(textos).sort()).toEqual(['B', 'C'])
     for (const k of ['B', 'C']) {
-      expect(textos[k]).toContain('QUÉ CAMBIÓ EN ESTA VERSIÓN (v2)')
+      expect(textos[k]).toContain(`QUÉ CAMBIÓ EN ESTA VERSIÓN (v2 · ${k})`)
       expect(textos[k]).toContain(PEDIDO)
     }
   })

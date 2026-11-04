@@ -495,7 +495,7 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
       const texto = h.find((x) => x.etiqueta === g.etiqueta)?.texto
       if (typeof texto !== 'string') continue
       const hasta = g.etiqueta === 'B' ? fichas.filter((f) => f.origen !== 'externa') : fichas
-      textos_a_guardar[g.etiqueta as 'B' | 'C'] = ponerQueCambio(texto, armarQueCambio({ ciclo, fichas: hasta }))
+      textos_a_guardar[g.etiqueta as 'B' | 'C'] = ponerQueCambio(texto, armarQueCambio({ ciclo, fichas: hasta, etiqueta: g.etiqueta as 'B' | 'C' }))
     }
   }
   return r(200, { accion: 'versiones_elegidas', adoptada: ad.adoptada, ultima: ad.ultima, adopto_la_ultima: ad.adoptoLaUltima, razones: ad.razones, plan_de_guardado: guardado, palabra_del_dueno, ...(textos_a_guardar ? { textos_a_guardar } : {}), resultado: fin.resultado, marcas: fin.marcas, simulado: rev.dry_run })

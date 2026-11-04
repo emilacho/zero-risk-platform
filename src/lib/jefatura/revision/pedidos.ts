@@ -117,12 +117,21 @@ const FORMATO_DE_FICHAS = 'Devuelve solo el JSON {"fichas":[{"que":"…","donde"
 /** 01-nov · ADENDA de Emilio: lo que el manual evita es contexto de marca. La ficha sale por veracidad, nunca por coincidencia literal */
 export const REGLA_DE_LAS_PALABRAS_DEL_MANUAL = 'Las palabras que el manual evita son contexto de marca, no una prohibición: razona la intención. Solo amerita ficha un claim propio que no se pueda comprobar. Una reseña de un cliente, citada y atribuida, no lo es, y coincidir con la lista no basta. Lo que el manual declara por una norma o por el dueño, con su cita, se anota como sugerencia con su cita y no frena.'
 
-/** `jefe-marketing`: la línea de contexto del tipo y nada más (sin reglas ni criterios nuevos) */
+/**
+ * 04-nov · GO de Emilio 17:02Z: la jefatura compara y corrige lo que el código ya encontró en el plan (cifras contra las firmadas, unidad de los umbrales, horarios contra el manual). Antes estas marcas se guardaban y ningún jefe las leía.
+ * No es un criterio nuevo: son hallazgos para comprobar. El jefe decide, porque el código se puede equivocar.
+ */
+export function bloqueDeLoMarcado(tipo: TipoDeRevision, marcas: string[] | undefined): string {
+  if (tipo !== 'plan' || !marcas?.length) return ''
+  return `## Lo que el chequeo por código marcó en este plan\nCompruébalo contra el manual y el resto de la carpeta. Si es real, ponle tu ficha con «bloquea» y la corrección en la propuesta: una cifra se corrige a la firmada, un umbral a la misma unidad del costo estimado y un horario al del manual. Si no es real, no le pongas ficha.\n${marcas.map((m) => `- ${m}`).join('\n')}`
+}
+
+/** `jefe-marketing`: la línea de contexto del tipo y lo que marcó el código (sin reglas ni criterios nuevos) */
 export function tareaDeRevisionDeFondo(a: { politica: PoliticaDeRevision; payload: PayloadDeRevision; tipo: TipoDeRevision; texto: string; duenos: Dueno[] }): { task: string; indicacion: string; esquema: string } {
   const linea = (a.politica.indicacion_fondo ?? `Estás revisando ${tituloDeLoRevisado(a.tipo)} contra {documentos}.`).replace('{documentos}', documentosDeLaLinea(a.politica))
   const dondes = a.duenos.flatMap((d) => (d.comodin ? [] : d.dondes))
   const donde = dondes.length ? `En «donde» pon SOLO una de estas palabras, tal cual: ${unir(dondes.map((d) => `«${d}»`))}. El detalle (qué línea, qué etiqueta) va en «que», nunca en «donde». Ejemplo válido: {"que":"las etiquetas son 2 y el manual pide 3","donde":"${dondes[0]}","contra_que":"…","gravedad":"bloquea","propuesta":"…"}.` : 'En «donde» pon la sección o el pasaje al que se refiere.'
-  const partes = [linea, `## Lo que revisas (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, bloqueDeContexto(a.payload.contexto ?? []), REGLA_DE_LAS_PALABRAS_DEL_MANUAL, `${FORMATO_DE_FICHAS} ${donde}`, limitesDelFormato('fichas.v1')]
+  const partes = [linea, `## Lo que revisas (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, bloqueDeContexto(a.payload.contexto ?? []), REGLA_DE_LAS_PALABRAS_DEL_MANUAL, bloqueDeLoMarcado(a.tipo, a.payload.chequeos_previos?.marcas), `${FORMATO_DE_FICHAS} ${donde}`, limitesDelFormato('fichas.v1')]
   return { task: partes.filter(Boolean).join('\n\n'), indicacion: linea, esquema: 'fichas.v1' }
 }
 
