@@ -165,6 +165,8 @@ async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   }
 }
 
+export const maxDuration = 800
+
 export async function POST(req: Request) {
   const auth = checkInternalKey(req)
   if (!auth.ok) {
