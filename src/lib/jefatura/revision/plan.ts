@@ -158,8 +158,10 @@ export interface FichaDelCambio { origen?: string; estado?: string; que?: string
 export interface CicloDelPlan { version: number | null; pedido_del_dueno: string | null; aviso?: string }
 
 /** la sección completa: la versión real del sistema, lo que pidió el dueño tal cual y lo que se tomó de los revisores */
-export function armarQueCambio(a: { ciclo: CicloDelPlan; fichas: FichaDelCambio[] }): string {
-  const titulo = `## QUÉ CAMBIÓ EN ESTA VERSIÓN${a.ciclo.version ? ` (v${a.ciclo.version})` : ''}`
+export function armarQueCambio(a: { ciclo: CicloDelPlan; fichas: FichaDelCambio[]; etiqueta?: 'B' | 'C' }): string {
+  // 04-nov · GO de Emilio: el número y la letra los pone el sistema: el texto es de la versión que se guarda, no de la v1 a secas
+  const cual = [a.ciclo.version ? `v${a.ciclo.version}` : '', a.etiqueta ?? ''].filter(Boolean).join(' · ')
+  const titulo = `## QUÉ CAMBIÓ EN ESTA VERSIÓN${cual ? ` (${cual})` : ''}`
   const lineas: string[] = []
   if (a.ciclo.pedido_del_dueno?.trim()) lineas.push(`- **Lo que pidió el dueño:** ${a.ciclo.pedido_del_dueno.trim().replace(/\s+/g, ' ')}`)
   if (a.ciclo.aviso) lineas.push(`- ${a.ciclo.aviso}`)
