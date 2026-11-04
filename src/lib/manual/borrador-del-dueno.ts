@@ -85,6 +85,45 @@ export async function guardarBorrador(db: BaseDelBorrador, cuerpo: unknown, ahor
   return { status: 200, cuerpo: { ok: true, borrador: guardada } }
 }
 
+export interface LoEnviado { campos: Record<string, string | null>; notas: Record<string, string>; libre: string }
+export type CierreDelBorrador = { estado: 'sin_borrador' | 'borrado' } | { estado: 'queda'; queda: string[] } | { estado: 'error'; detalle: string }
+
+/**
+ * 4-nov · Emilio: tras «Pedir los cambios» quedaba un borrador «de la versión anterior» con lo que ya había mandado. Un pedido se lleva del borrador lo que envió, con el texto exacto: si no queda nada, se borra;
+ * si queda algo (lo marcó en otro equipo mientras tanto), sigue sobre la versión vigente y se dice qué es. Lo que no coincide no se toca. Nunca lanza: el pedido ya salió.
+ */
+export async function quitarDelBorrador(db: BaseDelBorrador, client_id: string, enviado: LoEnviado, ahora: Date = new Date()): Promise<CierreDelBorrador> {
+  try {
+    const k = { client_id, documento: 'manual' }
+    const { fila, error } = await leerFila(db, k)
+    if (error) return { estado: 'error', detalle: error.slice(0, 200) }
+    if (!fila) return { estado: 'sin_borrador' }
+    const a = esObjeto(fila.acciones) ? fila.acciones : {}
+    const texto = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+    const campos: Fila = { ...(esObjeto(a.campos) ? a.campos : {}) }, notas: Fila = { ...(esObjeto(a.notas) ? a.notas : {}) }
+    const como: Fila = { ...(esObjeto(a.como) ? a.como : {}) }, detalle: Fila = { ...(esObjeto(a.detalle) ? a.detalle : {}) }
+    for (const c of Object.keys(campos)) {
+      if (!(c in enviado.campos) || texto(enviado.campos[c]) !== texto(campos[c])) continue
+      delete campos[c]; delete como[c]; delete detalle[c]
+    }
+    for (const c of Object.keys(notas)) if (c in enviado.notas && texto(enviado.notas[c]) === texto(notas[c])) delete notas[c]
+    const libre = texto(a.libre) && texto(a.libre) === texto(enviado.libre) ? '' : a.libre
+    const resto = { ...a, campos, como, notas, detalle, libre }
+    if (sinNada({ campos, notas, libre })) {
+      const b = await borrarBorrador(db, client_id, 'manual')
+      return b.status === 200 ? { estado: 'borrado' } : { estado: 'error', detalle: String(b.cuerpo.detalle ?? 'no se pudo borrar') }
+    }
+    const v = await db.from('client_brand_books').select('id').eq('client_id', client_id).order('version', { ascending: false }).limit(1)
+    const vigente = v.error ? null : ((v.data as Fila[] | null) ?? [])[0]
+    const hora = ahora.toISOString()
+    const u = await db.from('borradores_del_dueno').update({ acciones: resto, revision: Number(fila.revision) + 1, actualizado_en: hora, ...(vigente ? { documento_id: String(vigente.id) } : {}) }).eq('client_id', client_id).eq('documento', 'manual').eq('revision', Number(fila.revision))
+    if (u.error) return { estado: 'error', detalle: String(u.error.message ?? u.error).slice(0, 200) }
+    return { estado: 'queda', queda: [...Object.keys(campos), ...Object.keys(notas), ...(texto(libre) ? ['texto libre'] : [])] }
+  } catch (e) {
+    return { estado: 'error', detalle: e instanceof Error ? e.message.slice(0, 200) : 'error' }
+  }
+}
+
 /** ¿hay cambios sin pedir? Aprobar el manual lo consulta: lo retirado o elegido debe contar antes de seguir con el plan */
 export async function hayBorrador(db: BaseDelBorrador, client_id: string, documento: string): Promise<{ hay: boolean; error?: string }> {
   const { fila, error } = await leerFila(db, { client_id, documento })
