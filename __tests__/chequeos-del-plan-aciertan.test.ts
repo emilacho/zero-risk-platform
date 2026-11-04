@@ -227,6 +227,10 @@ describe('el cambio se aplica igual en los 3 nodos', () => {
   ] }
   construirChequeosQueAciertan(flujo as never)
   const cod3 = (n: string) => flujo.nodes.find((x) => x.name === n)!.parameters.jsCode
+  it('🔴 cada nodo parchado compila: un nombre repetido con lo que ya tiene el nodo lo rompe y el plan no arranca', () => {
+    const AsyncFunction = Object.getPrototypeOf(async function () { /* compila */ }).constructor as new (c: string) => unknown
+    for (const n of flujo.nodes) expect(() => new AsyncFunction(n.parameters.jsCode), n.name).not.toThrow()
+  })
   it('🔴 los 3 traen las reglas nuevas', () => { for (const n of NODOS_DEL_MODULO) expect(cod3(n)).toContain('_adicionalesComoMeta') })
   it('🔴 el redactor le pasa al chequeo los límites del manual', () => {
     expect(cod3('Redactor (B4)')).toContain('manual_limites: limitesDelManual(manual)')
