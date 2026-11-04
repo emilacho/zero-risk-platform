@@ -42,7 +42,7 @@ const MESES_QUE_VIAJAN = 3
 const VENTANA = 'ultimos_30_dias'
 /** sin tienda al final: la cifra de una tienda ya está dentro de la del negocio */
 const CIFRA_DE_CAJA = /^metrica:([^:]+):(ingreso|tickets):(\d{4}-\d{2}|ultimos_30_dias)$/
-export const REGLA_DE_LAS_VENTAS = 'La cifra total es la de la caja. Lo que vino por la web ya está dentro de ella: es un desglose y nunca se suma.'
+export const REGLA_DE_LAS_VENTAS = 'La cifra total es la de la caja. Lo que vino por la web y las cifras por tienda ya están dentro de ella: son desgloses y nunca se suman.'
 
 const obj = (x: unknown): Fila => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Fila) : {})
 const cifra = (n: number) => n.toFixed(2)
