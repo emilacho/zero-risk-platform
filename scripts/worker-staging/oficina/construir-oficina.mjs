@@ -101,7 +101,7 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
     { parameters: { httpMethod: 'POST', path, responseMode: 'onReceived', options: {} }, name: N.web, type: 'n8n-nodes-base.webhook', typeVersion: 2, position: x(0), webhookId },
     code(N.entrada, 'turno-n0-entrada.js', x(1)),
     // 28-oct · TRASPASO: el flujo acusa el turno (atómico en la sala); un segundo despertar del mismo turno se detiene aquí y no paga
-    http(N.acuse, `${VERCEL}/api/oficina/turnos`, x(1, -150), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "acuse", encargo_id: $json.encargo_id, n: $json.turno.n, workflow_execution_id: String($execution.id) }) }}', timeout: 300000 }),
+    http(N.acuse, `${VERCEL}/api/oficina/turnos`, x(1, -150), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "acuse", encargo_id: $json.encargo_id, n: $json.turno.n, workflow_execution_id: String($execution.id) }) }}', timeout: 800000 }),
     code(N.tomo, 'turno-n0b-tomar.js', x(1, 150)),
     cond(N.esPortero, "={{ $json.turno.tipo }}", esIgual, x(2), 'portero'),
     // ── portero (una pregunta al cerebro: no escribe en ninguna tabla)
@@ -120,7 +120,7 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
     { parameters: { resume: 'webhook', httpMethod: 'POST', limitWaitTime: true, resumeAmount: 1800, resumeUnit: 'seconds', options: {} }, name: N.espera, type: 'n8n-nodes-base.wait', typeVersion: 1.1, position: x(8, 250), webhookId: webhookId + '-espera' },
     code(N.vuelta, 'turno-n3-vuelta.js', x(9, 250)),
     // ── registrar y seguir
-    http(N.registrar, `${VERCEL}/api/oficina/turnos`, x(10, 0), { headers: [LLAVE], body: '={{ JSON.stringify($json.resultado_body) }}', timeout: 300000 }),
+    http(N.registrar, `${VERCEL}/api/oficina/turnos`, x(10, 0), { headers: [LLAVE], body: '={{ JSON.stringify($json.resultado_body) }}', timeout: 800000 }),
     code(N.sigue, 'turno-n4-sigue.js', x(11, 0)),
     cond(N.ifEsperar, '={{ $json.ruta }}', esIgual, x(12, 0), 'esperar'),
     SIGUIENTE(N.siguiente, x(13, -100)),
@@ -145,10 +145,10 @@ export function construirVigia({ nombre = 'Zero Risk — Oficina · el vigía (v
   const llaveEnv = { name: 'x-sala-dispatch-key', value: '={{ $env.SALA_DISPATCH_KEY }}' }
   const nodes = [
     { parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 2 }] } }, name: N.reloj, type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position: x(0) },
-    http(N.vigia, `${VERCEL}/api/oficina/vigia`, x(1), { headers: [llaveEnv], body: '={{ JSON.stringify({}) }}', timeout: 300000 }),
+    http(N.vigia, `${VERCEL}/api/oficina/vigia`, x(1), { headers: [llaveEnv], body: '={{ JSON.stringify({}) }}', timeout: 800000 }),
     code(N.pend, 'vigia-n1-reanudar.js', x(2)),
     cond(N.esRean, '={{ $json.tipo }}', esIgual, x(3), 'reanudar'),
-    http(N.rearmar, `${VERCEL}/api/oficina/turnos`, x(4, -120), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "siguiente", encargo_id: $json.encargo_id }) }}', timeout: 300000 }),
+    http(N.rearmar, `${VERCEL}/api/oficina/turnos`, x(4, -120), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "siguiente", encargo_id: $json.encargo_id }) }}', timeout: 800000 }),
     code(N.paso, 'vigia-n2-rearmar.js', x(5, -120)),
     SIGUIENTE(N.turno, x(6, -120)),
     CABLE(N.cable, x(4, 150)),

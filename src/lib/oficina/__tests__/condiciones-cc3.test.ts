@@ -75,12 +75,12 @@ describe('CC#1 · condiciones que quedaban', () => {
     for (const t of ['Desde el 2026 10 09', 'el 09 10 2026']) expect(tel(t), t).toBe(0)
     for (const t of ['Escríbenos al 099 123 4567', 'al 042 345 678', 'Tel 2 345 678', 'WhatsApp +593 99 123 4567']) expect(tel(t), t).toBe(1)
   })
-  it('el nodo «Vigilar» del vigía espera 300 s (lo mismo que su ruta) y el resto de los tiempos de #474 siguen', () => {
+  it('el nodo «Vigilar» del vigía espera 800 s (lo mismo que su ruta) y el resto de los tiempos de #474 siguen', () => {
     const src = fs.readFileSync('scripts/worker-staging/oficina/construir-oficina.mjs', 'utf8')
-    expect(/http\(N\.vigia,[^\n]*timeout: 300000/.test(src)).toBe(true)
-    expect(/http\(N\.registrar,[^\n]*timeout: 300000/.test(src)).toBe(true)
-    expect(/http\(N\.rearmar,[^\n]*timeout: 300000/.test(src)).toBe(true)
+    expect(/http\(N\.vigia,[^\n]*timeout: 800000/.test(src)).toBe(true)
+    expect(/http\(N\.registrar,[^\n]*timeout: 800000/.test(src)).toBe(true)
+    expect(/http\(N\.rearmar,[^\n]*timeout: 800000/.test(src)).toBe(true)
     expect(/http\(N\.abrir,[^\n]*timeout: 120000/.test(src)).toBe(true)
-    expect(fs.readFileSync('src/app/api/oficina/vigia/route.ts', 'utf8')).toMatch(/maxDuration = 300/)
+    expect(fs.readFileSync('src/app/api/oficina/vigia/route.ts', 'utf8')).toMatch(/maxDuration = 800/)
   })
 })

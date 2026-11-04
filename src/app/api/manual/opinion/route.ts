@@ -11,7 +11,7 @@ import type { Db } from '@/lib/manual/revision'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 300
+export const maxDuration = 800
 
 const entorno = (): EntornoDeRutas => {
   const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : undefined)
