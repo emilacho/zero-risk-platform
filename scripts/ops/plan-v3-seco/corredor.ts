@@ -12,7 +12,7 @@ import { fichasAEntradas, faltantesDeLasVias } from '../../../src/lib/planeacion
 import { normalizarDatos } from '../../../src/lib/planeacion/dato-v1/normalizador'
 import { planificarRelleno } from '../../../src/lib/planeacion/dato-v1/relleno'
 import { planificarRefresco } from '../../../src/lib/planeacion/dato-v1/refresco'
-import { armarSemillaCompacta } from '../../../src/lib/planeacion/dato-v1/semilla-compacta'
+import { armarSemillaCompacta, sirveParaNumeros } from '../../../src/lib/planeacion/dato-v1/semilla-compacta'
 import { sanearProcedencia, validarProcedencia } from '../../../src/lib/finanzas/conversa/esquemas'
 import type { DatoV1, EntradaCruda } from '../../../src/lib/planeacion/dato-v1/tipos'
 import semilla from '../../../src/lib/planeacion/catalogo/semilla.json'
@@ -224,7 +224,8 @@ export function correrCelda(celda: Celda, js: Js = cargarJs(), filas: FilasDelCa
       exige(pedido.lineas.filter((l) => /^D\d+ \| /.test(l)).every((l) => l.split(' | ').length === 14), 'se partió una fila de la tabla')
       break
     case 'S40':
-      exige(JSON.stringify(semillaC.datos).length <= 24_000, 'la semilla pasa su presupuesto')
+      // las cifras y lo que dijo el dueño entran siempre; el presupuesto es para lo demás
+      exige(JSON.stringify(semillaC.datos.filter((d) => !sirveParaNumeros(d))).length <= 24_000, 'la semilla pasa su presupuesto')
       exige(semillaC.datos_omitidos > 0 && semillaC.nota.includes('datos_omitidos:'), 'no declaró lo que no cupo')
       break
     case 'M2': {

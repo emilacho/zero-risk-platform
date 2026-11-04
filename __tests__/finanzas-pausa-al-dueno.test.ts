@@ -419,6 +419,8 @@ describe('el pre-vuelo al volver', () => {
     expect(w.f.estado).toBe('corriendo')
     expect(w.leidoCupo()).toBe(0)
     expect(d.material_viejo).toBeUndefined()
+    expect(d.calendario?.arranque).toBe('2026-11-05')
+    expect(d.calendario?.semanas).toHaveLength(12)
   })
   it('🔴 a los 3 días exactos el material sirve; pasados, se lee de nuevo y el relleno depende del cerebro listo', async () => {
     const espera = (creado_en: string) => ({ client_id: 'cliente-1', corrida: 'plan-x', estado: 'soltada', creado_en })
@@ -437,6 +439,36 @@ describe('el pre-vuelo al volver', () => {
     const w = puertos('en_pausa')
     ;(w.P as { corridas: { avanzarSi: unknown } }).corridas.avanzarSi = async () => { throw new Error('23505') }
     expect(await prevuelo(pedir(), w.P)).toMatchObject({ decision: 'no_corre', motivo: 'corrida_activa' })
+  })
+  it('🔴 una pausa larga también vuelve con su calendario', async () => {
+    const d = await prevuelo(pedir(), puertos('en_pausa', { client_id: 'cliente-1', corrida: 'plan-x', estado: 'soltada', creado_en: '2026-10-01T00:00:00Z' }).P)
+    expect(d.material_viejo).toBe(true)
+    expect(d.calendario?.arranque).toBe('2026-11-05')
+  })
+  it('🔴 el arranque es el día del país: en Ecuador a las 02:00Z todavía es ayer', async () => {
+    const w = puertos('en_pausa')
+    const P = { ...(w.P as object), ahora: () => new Date('2026-11-05T02:00:00Z'), corridas: { ...(w.P as { corridas: object }).corridas, ahora: () => new Date('2026-11-05T02:00:00Z') } } as never
+    expect((await prevuelo(pedir(), P)).calendario?.arranque).toBe('2026-11-04')
+  })
+  it('🔴 el día del país también en el arranque normal y en la pausa larga', async () => {
+    const hora = () => new Date('2026-11-05T02:00:00Z')
+    const con = (w: ReturnType<typeof puertos>, extra: object = {}) => ({ ...(w.P as object), ahora: hora, corridas: { ...(w.P as { corridas: object }).corridas, ahora: hora }, ...extra }) as never
+    const normal = await prevuelo({ client_id: 'cliente-1', corrida: 'plan-x' }, con(puertos('esperando'), { cupo: async () => ({ ok: true, cap_usd: 100, generico_usd: 100, override_usd: null, gastado_24h_usd: 0 }) }))
+    expect(normal.calendario?.arranque).toBe('2026-11-04')
+    const larga = await prevuelo(pedir(), con(puertos('en_pausa', { client_id: 'cliente-1', corrida: 'plan-x', estado: 'soltada', creado_en: '2026-10-01T00:00:00Z' })))
+    expect(larga.material_viejo).toBe(true)
+    expect(larga.calendario?.arranque).toBe('2026-11-04')
+  })
+  it('🔴 un plan que arranca normal también recibe su calendario, y uno que espera no', async () => {
+    const w = puertos('esperando')
+    const P = { ...(w.P as object), cupo: async () => ({ ok: true, cap_usd: 100, generico_usd: 100, override_usd: null, gastado_24h_usd: 0 }) } as never
+    const d = await prevuelo({ client_id: 'cliente-1', corrida: 'plan-x' }, P)
+    expect(d.decision).toBe('correr')
+    expect(d.calendario?.semanas[0]).toEqual({ semana: 1, desde: '2026-11-05', hasta: '2026-11-11' })
+    const noListo = { ...(P as object), senal: async () => ({ ok: true, senal: { listo: false, completando: false, motivo: 'no', desde: null, huecos: [] } }) } as never
+    const e = await prevuelo({ client_id: 'cliente-1', corrida: 'plan-x' }, { ...(noListo as object), corridas: { ...(w.P as { corridas: object }).corridas, leer: async () => ({ ...w.f, estado: 'esperando', espera_desde: '2026-11-05T09:50:00Z' }) } } as never)
+    expect(e.decision).toBe('esperar')
+    expect(e.calendario).toBeUndefined()
   })
   it('🔴 un segundo disparo no corre otro plan', async () => {
     expect((await prevuelo(pedir(), puertos('corriendo').P)).decision).toBe('ya_en_marcha')
