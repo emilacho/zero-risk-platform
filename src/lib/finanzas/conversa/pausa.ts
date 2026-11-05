@@ -10,6 +10,7 @@
 import { prepararPreguntas, preguntarAlDueno, recogerRespuestas, temaDe, type PuertosDelBuzon } from './buzon'
 import { ESPERANDO_AL_DUENO, preguntasQueFaltan, type Respuesta } from './orquestador'
 import { sha256 } from './util'
+import { EN_PAUSA } from '../../planeacion/corridas'
 
 export interface EsperaDeFinanzas {
   id: string
@@ -20,6 +21,8 @@ export interface EsperaDeFinanzas {
   sobre: Record<string, unknown>
   despertado: boolean | null
   intentos_de_despertar: number
+  /** cuándo se anotó el último intento de despertar */
+  despertado_en: string | null
 }
 
 export interface PuertoDeEsperas {
@@ -31,6 +34,8 @@ export interface PuertoDeEsperas {
   /** de `esperando` a `soltada`: gana UNA llamada */
   soltar(id: string, ahora: Date): Promise<boolean>
   marcarDespertar(id: string, despertado: boolean, intentos: number, detalle: string): Promise<void>
+  /** en qué quedó la corrida de esta espera y si el cliente tiene otra en marcha. Una lectura fallida LANZA: no es «no arrancó» */
+  estadoDeLaCorrida(f: EsperaDeFinanzas): Promise<{ estado: string | null; otra_activa: boolean }>
   /** la corrida (`plan_corridas.id`) pasa de `corriendo` a `en_pausa` */
   pausarCorrida(corrida_id: string): Promise<void>
 }
@@ -40,6 +45,8 @@ export interface PuertosDePausa extends PuertosDelBuzon { esperas: PuertoDeEsper
 
 /** tras este número de fallos deja de insistir y avisa: un plan que no despierta lo arregla una persona */
 export const MAX_INTENTOS_DE_DESPERTAR = 3
+/** la puerta del plan contesta «recibido» antes de correr. Su pre-vuelo es el primer paso y saca la corrida de la pausa en segundos: pasado este margen, no arrancó */
+export const MARGEN_PARA_ARRANCAR_MIN = 5
 export const MAX_MATERIAL = 4_000_000
 /** contestó parte desde Tu oficina: se le da este margen para seguir contestando antes de que el plan arranque */
 export const SILENCIO_TRAS_RESPONDER_MIN = 15
@@ -96,14 +103,36 @@ async function despertarAlPlan(P: PuertosDePausa, f: EsperaDeFinanzas): Promise<
   return { status: 200, cuerpo: { soltada: true, despertado: r.ok, intentos } }
 }
 
+/**
+ * «Recibido» no es «arrancó» (05-nov · hallazgo de CC2): el plan pudo morir tras contestar 200. La corrida lo dice: si sigue en pausa pasado el margen, se le llama otra vez con el mismo tope.
+ * Es seguro repetir: el pre-vuelo reanuda una sola vez. Con otra corrida en marcha no se insiste: el flujo ya avisó y esa corrida decide.
+ */
+async function revisarQueArranco(P: PuertosDePausa, f: EsperaDeFinanzas): Promise<Respuesta> {
+  const base = { soltada: true, despertado: true }
+  const desde = f.despertado_en ? Date.parse(f.despertado_en) : NaN
+  if (!(P.ahora().getTime() - desde >= MARGEN_PARA_ARRANCAR_MIN * 60_000)) return { status: 200, cuerpo: base }
+  let c: { estado: string | null; otra_activa: boolean }
+  try { c = await P.esperas.estadoDeLaCorrida(f) } catch (x) {
+    return { status: 200, cuerpo: { ...base, arranco: 'no_se_pudo_leer', detalle: x instanceof Error ? x.message : String(x) } }
+  }
+  if (c.estado !== EN_PAUSA) return { status: 200, cuerpo: base }
+  if (c.otra_activa) return { status: 200, cuerpo: { ...base, arranco: false, motivo: 'otra_corrida_activa' } }
+  if (f.intentos_de_despertar >= MAX_INTENTOS_DE_DESPERTAR) {
+    await avisarUnaVez(P, f.encargo_id, 'no_arranco', `🚨 El dueño ya contestó y el plan recibió el pedido ${f.intentos_de_despertar} veces, pero no arrancó: la corrida sigue en pausa (encargo ${f.encargo_id.slice(0, 8)}). Hay que revisar el flujo del plan.`)
+    return { status: 200, cuerpo: { ...base, arranco: false } }
+  }
+  return despertarAlPlan(P, f)
+}
+
 /** lo que hace el vigía por cada encargo. Sin espera de finanzas es el buzón de siempre */
 export async function atenderPausa(P: PuertosDePausa, encargo_id: string, opc: { sinRecoger?: boolean } = {}): Promise<Respuesta> {
   const f = await P.esperas.delEncargo(encargo_id)
   if (!f) return opc.sinRecoger ? { status: 200, cuerpo: { pausa: false } } : recogerRespuestas(P, encargo_id)
   if (f.estado === 'reemplazada') return { status: 200, cuerpo: { pausa: false, motivo: 'reemplazada' } }
-  // ya se soltó: lo único que puede faltar es que el plan reciba el pedido
+  // ya se soltó: lo único que puede faltar es que el plan reciba el pedido y arranque
   if (f.estado === 'soltada') {
-    if (f.despertado === true || f.intentos_de_despertar >= MAX_INTENTOS_DE_DESPERTAR) return { status: 200, cuerpo: { soltada: true, despertado: f.despertado === true } }
+    if (f.despertado === true) return revisarQueArranco(P, f)
+    if (f.intentos_de_despertar >= MAX_INTENTOS_DE_DESPERTAR) return { status: 200, cuerpo: { soltada: true, despertado: false } }
     return despertarAlPlan(P, f)
   }
   let e = await P.almacen.leerEncargo(encargo_id)

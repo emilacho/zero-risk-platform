@@ -140,12 +140,16 @@ export function almacenDeConversa(db: Db, tablas: TablasDeConversa = TABLAS_DE_F
     },
     async buzonAbiertos(ahora, horas) {
       try {
-        // 04-nov · una pausa no vence: entra siempre, primero, aunque aún no haya salido su mensaje; y también la que se soltó y no pudo despertar al plan
+        // 04-nov · una pausa no vence: entra siempre, primero, aunque aún no haya salido su mensaje; y también la que se soltó y no pudo despertar al plan, o lo despertó y su corrida sigue en pausa
         const pausadas = await db.from(tablas.encargos).select('id').eq('estado', 'esperando_al_dueno').eq('dry_run', false)
         if (pausadas.error || !Array.isArray(pausadas.data)) return null
-        const sueltas = await db.from('esperas_del_dueno').select('clave,despertado').eq('tipo', 'finanzas').eq('estado', 'soltada')
+        const sueltas = await db.from('esperas_del_dueno').select('clave,despertado,client_id,sobre').eq('tipo', 'finanzas').eq('estado', 'soltada')
         if (sueltas.error || !Array.isArray(sueltas.data)) return null
-        const enPausa = [...(pausadas.data as Fila[]).map((f) => String(f.id)), ...(sueltas.data as Fila[]).filter((f) => f.despertado !== true).map((f) => String(f.clave).replace(/^finanzas:/, ''))]
+        const quietas = await db.from('plan_corridas').select('client_id,corrida').eq('estado', 'en_pausa').eq('dry_run', false)
+        if (quietas.error || !Array.isArray(quietas.data)) return null
+        const sinArrancar = new Set((quietas.data as Fila[]).map((c) => `${String(c.client_id)}|${String(c.corrida)}`))
+        const corridaDe = (f: Fila) => (f.sobre as { corrida?: unknown } | null)?.corrida
+        const enPausa = [...(pausadas.data as Fila[]).map((f) => String(f.id)), ...(sueltas.data as Fila[]).filter((f) => f.despertado !== true || sinArrancar.has(`${String(f.client_id)}|${String(corridaDe(f))}`)).map((f) => String(f.clave).replace(/^finanzas:/, ''))]
         const desde = new Date(ahora.getTime() - horas * 3600 * 1000).toISOString()
         const a = await db.from(tablas.artefactos).select('encargo_id,creado_en').eq('tipo', 'buzon_respuestas').eq('version', 1).gte('creado_en', desde)
         if (a.error || !Array.isArray(a.data)) return null
