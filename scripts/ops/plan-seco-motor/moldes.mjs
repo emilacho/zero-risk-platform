@@ -42,6 +42,8 @@ export async function responder(c, ctx) {
   if (paso.startsWith('consulta') || ['fpa', 'redes', 'busqueda', 'medicion'].includes(paso)) return ESC.formato_roto === paso && intento <= (ESC.formato_roto_veces ?? 2) ? '(simulado) texto sin JSON' : CONSULTA(ag)
   if (paso === 'cierre' || paso === 'cierre_2') { cierres++; return ESC.formato_roto === paso ? '(simulado) texto sin JSON' : ACUERDO((ESC.pregunta === true && intento === 1) || ESC.pregunta_en_cierre === cierres) }
   if (c.extra && c.extra.revision_id) return jefatura(c)
+  // el primer plan sale sin la tabla de calendario que el chequeo sabe leer; el reintento la trae
+  if (ag === 'jefe-marketing' && c.callback_url && ESC.plan_sin_calendario_primero && !globalThis.__yaRechazado) { globalThis.__yaRechazado = true; return PLAN_LARGO().split('## Calendario')[0] }
   if (ag === 'jefe-marketing' && c.callback_url) return PLAN_LARGO()
   return `(simulado) ${ag} ${paso}`
 }
