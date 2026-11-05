@@ -200,12 +200,17 @@ function fusionar(actuales: Dada[], nuevas: Dada[]): { lista: Dada[]; aplicadas:
   return { lista, aplicadas }
 }
 
-/** tras guardar una respuesta, nada de ese tema queda pendiente. Nunca lanza: la respuesta ya sirve; lo que quede abierto lo dice la lista de Decisiones */
-export async function cerrarLoContestado(P: Pick<PuertosDelBuzon, 'cerebro'>, client_id: string, tema: string): Promise<boolean> {
-  const r = await (P.cerebro.cerrarPendientes?.({ client_id, tema, motivo: 'el dueño ya contestó este tema' }) ?? Promise.resolve({ ok: false as const, error: 'sin_cierre' })).catch(() => ({ ok: false as const, error: 'red' }))
+/**
+ * tras guardar una respuesta, se cierra la pregunta que ESTE encargo registró, de cualquier antigüedad. Una de otra sede u otra oficina sigue viva, aunque el tema se parezca.
+ * Sin id en el registro (la fila la creó otro, o un intento anterior) no se cierra nada: la puerta ya cerró por su cuenta lo de las últimas 72 horas. Nunca lanza: la respuesta ya sirve.
+ */
+export async function cerrarLoContestado(P: Pick<PuertosDelBuzon, 'cerebro'>, client_id: string, pregunta_id: unknown): Promise<boolean> {
+  if (typeof pregunta_id !== 'string' || !pregunta_id) return false
+  const r = await (P.cerebro.cerrarPendiente?.({ client_id, pregunta_id, motivo: 'el dueño ya contestó esta pregunta' }) ?? Promise.resolve({ ok: false as const, error: 'sin_cierre' })).catch(() => ({ ok: false as const, error: 'red' }))
   return r.ok
 }
-const cerrarLoRecogido = async (P: PuertosDelBuzon, client_id: string, claves: string[]) => { for (const k of claves) await cerrarLoContestado(P, client_id, temaDe(k)) }
+const idDelRegistro = (registro: Record<string, unknown> | undefined, clave: string): unknown => (Array.isArray(registro?.preguntas) ? (registro.preguntas as Array<Record<string, unknown>>).find((x) => x?.clave === clave)?.pregunta_id : null)
+const cerrarLoRecogido = async (P: PuertosDelBuzon, client_id: string, registro: Record<string, unknown> | undefined, claves: string[]) => { for (const k of claves) await cerrarLoContestado(P, client_id, idDelRegistro(registro, k)) }
 
 // ───────────────────────────────────────────────────────── PREGUNTAR
 export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, opc: { pausa?: boolean } = {}): Promise<Respuesta> {
@@ -278,7 +283,7 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, o
 
     if (!aPreguntar.length) {
       if (fus.aplicadas.length) await P.almacen.guardarBuzon?.({ encargo_id, semilla })
-      await cerrarLoRecogido(P, e.client_id, recogidas)
+      await cerrarLoRecogido(P, e.client_id, previo, recogidas)
       return { status: 200, cuerpo: { enviado: false, motivo: dadas.length ? 'respondidas_en_el_cerebro' : esperando.length ? 'otra_oficina_espera' : 'ya_registrada', usadas_del_cerebro: dadas.map((d) => d.clave), esperando } }
     }
 
@@ -293,7 +298,7 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, o
         claves: [...enElRegistro, ...claves], preguntas: [...(Array.isArray(previo?.preguntas) ? previo.preguntas : []), ...preguntas], sin_cerebro: [] as SinCerebro[], canal: null, ts: null, respuestas: [], notas: [],
       }
       await P.almacen.guardarBuzon?.({ encargo_id, ...(fus.aplicadas.length ? { semilla } : {}), artefacto: { tipo: 'buzon_respuestas', version: n, contenido: registro, sha256: sha256(registro) } })
-      await cerrarLoRecogido(P, e.client_id, recogidas)
+      await cerrarLoRecogido(P, e.client_id, previo, recogidas)
       return { status: 200, cuerpo: { enviado: false, motivo: 'registrada', preguntas: claves.length, claves, usadas_del_cerebro: dadas.map((d) => d.clave), esperando, ...(tuteadas.length ? { tuteadas } : {}), ...(limpiadas.length ? { limpiadas } : {}), ...rechazo, ...(prep.sobrantes.length ? { sobrantes: prep.sobrantes } : {}), ...(prep.presupuesto_agregado ? { presupuesto_agregado: true } : {}) } }
     }
 
