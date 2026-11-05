@@ -4,6 +4,7 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { estadoInicial } from '../src/lib/oficina/tipos'
+import { mensajeDeCorte } from '../services/agent-runner/src/lib/tope-por-corrida'
 import { almacenDeConversa, almacenDeMesa } from '../src/lib/finanzas/conversa/almacen-supabase'
 import { mesaEncendida } from '../src/lib/planeacion/mesa/interruptor'
 import { sumaDeTopes } from '../src/lib/planeacion/prevuelo'
@@ -372,7 +373,7 @@ describe('lo que la mesa le entrega a finanzas', () => {
 })
 
 describe('un turno cortado no se pierde', () => {
-  const montar = async (fallas: Array<string | null>, paso = PASO_CONSOLIDA) => {
+  const montar = async (fallas: Array<string | { error: string; fallo: string } | null>, paso = PASO_CONSOLIDA) => {
     const m = mundo()
     const original = m.P.modelo.invocar.bind(m.P.modelo)
     const pedidos: Array<Record<string, unknown>> = []
@@ -381,6 +382,7 @@ describe('un turno cortado no se pierde', () => {
       if (p.paso !== paso) return original(p)
       pedidos.push(p as never)
       const f = fallas[i++]
+      if (f && typeof f === 'object') return { ok: false, error: f.error, fallo_del_empleado: f.fallo, costo_usd: 0 }
       return f ? { ok: false, error: f, costo_usd: 0 } : original(p)
     } }
     const id = (await abrir(m.P)).cuerpo.encargo_id as string
@@ -510,6 +512,67 @@ describe('un turno cortado no se pierde', () => {
     await devolverALaMesa(m.P, m.id, { motivo: 'no cuadra' })
     await hastaElFin(m.P, m.id)
     expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, false])
+  })
+  // CC6 y CC7, 05-nov: el corredor deja su punto de control «en curso» cuando el empleado falla; esa fila no significa que siga trabajando
+  const FALLA = { error: 'run_sdk_500', fallo: 'el proveedor del modelo devolvió un error' }
+  const SIEMPRE_EN_VUELO = async () => true
+  const pasoDeAporte = () => PLANTILLA_MESA.pasos.find((p) => p.clave.startsWith('mesa-estrategia-') && p.clave !== PASO_CONSOLIDA && p.clave !== 'mesa-estrategia-jefe-marketing')!.clave
+  it('🔴 el empleado que falló con la fila en curso no se espera: se repite enseguida y en fresco', async () => {
+    const m = await montar([FALLA, null]); await m.hastaPaso()
+    m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
+    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { error: 'turno_cortado', intento: 1 } })
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toMatchObject({ turno_en_curso: { paso: PASO_CONSOLIDA, intentos: 1, termino: true } })
+    expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
+    expect(m.pedidos).toHaveLength(2)
+    expect(m.pedidos[1].reanudar).toBe(false)
+    expect(m.arts[m.id].acta).toBeTruthy()
+  })
+  it('🔴 un acta que falla siempre termina en tres intentos, sin acuerdo y sin esperar', async () => {
+    const m = await montar([FALLA, FALLA, FALLA]); await m.hastaPaso()
+    m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
+    expect(m.pedidos).toHaveLength(3)
+    expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'sin_acuerdo' })
+  })
+  it('🔴 un aporte que falla siempre se declara y la reunión entrega su acta', async () => {
+    const m = await montar([FALLA, FALLA, FALLA], pasoDeAporte()); await m.hastaPaso()
+    m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
+    m.P.turnoEnVuelo = undefined
+    expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'cerrado' })
+  })
+  it('🔴 un corte por tope no se repite: con el mismo tope se paga otra vez y termina igual', async () => {
+    const m = await montar([{ error: 'run_sdk_500', fallo: mensajeDeCorte(0.4, 0.41) }], pasoDeAporte()); await m.hastaPaso()
+    m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
+    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 200, cuerpo: { degradado: true } })
+    expect(m.pedidos).toHaveLength(1)
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).not.toHaveProperty('turno_en_curso')
+  })
+  it('un corte de conexión tras un fallo del empleado vuelve a preguntar si sigue en vuelo', async () => {
+    const m = await montar([FALLA, 'red:x', null]); await m.hastaPaso()
+    const preguntas: string[] = []
+    m.P.turnoEnVuelo = async (c) => { preguntas.push(c); return false }
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect(preguntas).toHaveLength(0)
+    await avanzarMesa(m.P, m.id)
+    expect(preguntas).toHaveLength(1)
+    expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, false, true])
+  })
+  it('🔴 la devolución con un corte antes de entrar no recoge el acta anterior: tiene su propia clave', async () => {
+    const m = await montar([null, 'run_sdk_502', null]); await hastaElFin(m.P, m.id)
+    await devolverALaMesa(m.P, m.id, { motivo: 'no cuadra' })
+    await avanzarMesa(m.P, m.id)
+    const preguntas: string[] = []
+    m.P.turnoEnVuelo = async (c) => { preguntas.push(c); return false }
+    await avanzarMesa(m.P, m.id)
+    expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, false, true])
+    const claves = m.pedidos.map((p) => p.clave_de_turno)
+    expect(claves[0]).toBe(claveDelTurno(m.id, PASO_CONSOLIDA))
+    expect(claves[1]).toBe(claveDelTurno(m.id, PASO_CONSOLIDA + ':devolucion-1'))
+    expect(claves[2]).toBe(claves[1])
+    expect(preguntas).toEqual([claves[1]])
   })
   it('la clave no se cruza entre encargos ni entre pasos', () => {
     expect(claveDelTurno('a', 'x')).not.toBe(claveDelTurno('b', 'x'))

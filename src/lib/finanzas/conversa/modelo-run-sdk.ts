@@ -11,6 +11,9 @@ export const MAX_TAREA_RUN_SDK = TOPE_REAL_DEL_PEDIDO
 
 /** el `workflow_id` es el REAL del flujo de n8n que llama (lo manda el flujo en el cuerpo); un literal inventado no pasa la puerta de run-sdk y ensucia el libro */
 /** 05-nov · lo pasajero: un corte, una conexión caída o un 5xx. Un 4xx (freno, llave, validación) es una respuesta y no se repite */
+/** 05-nov · el corte por tope de gasto del corredor (su `mensajeDeCorte`): repetirlo con el mismo tope se paga y no lo arregla */
+export const esCortePorTope = (fallo: string | null | undefined): boolean => typeof fallo === 'string' && fallo.startsWith('error_max_budget_usd')
+
 export const esFallaPasajera = (error: string | null | undefined): boolean => typeof error === 'string' && /^(red:|run_sdk_5\d\d$)/.test(error)
 
 export const esWorkflowIdValido = (x: unknown): x is string => typeof x === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(x)
@@ -67,6 +70,12 @@ export interface AjustesDelModelo {
 }
 
 /** extrae el texto de la respuesta de run-sdk sin asumir su forma exacta */
+/** el fallo que declara el corredor: `{ success:false, error }` en un 5xx. Un 502 del camino (`agent-runner upstream failed`) no lo trae: ahí no se sabe si el empleado sigue */
+function falloDeclarado(j: unknown): string | null {
+  if (typeof j !== 'object' || j === null) return null
+  const o = j as Record<string, unknown>
+  return o.success === false && typeof o.error === 'string' ? o.error : null
+}
 function textoDe(j: unknown): string | null {
   if (typeof j !== 'object' || j === null) return null
   const o = j as Record<string, unknown>
@@ -97,7 +106,10 @@ export function modeloRunSdk(a: AjustesDelModelo): ModeloPuerto {
         // con latido, lo que tardó se compromete en 200 y su código verdadero viaja en el cuerpo; un 200 sin cuerpo es una conexión que murió a medias
         const estado = typeof j === 'object' && j !== null ? (j as { estado_http?: unknown }).estado_http : undefined
         const http = typeof estado === 'number' ? estado : r.status
-        if (http < 200 || http >= 300) return { ok: false, error: `run_sdk_${http}`, costo_usd: costoDe(j) }
+        if (http < 200 || http >= 300) {
+          const fallo = http >= 500 ? falloDeclarado(j) : null
+          return { ok: false, error: `run_sdk_${http}`, costo_usd: costoDe(j), ...(fallo !== null ? { fallo_del_empleado: fallo } : {}) }
+        }
         if (j === null) return { ok: false, error: 'red:cuerpo_cortado', costo_usd: 0 }
         const t = textoDe(j)
         if (t === null) return { ok: false, error: 'respuesta_sin_texto', costo_usd: costoDe(j) }

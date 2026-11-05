@@ -3,7 +3,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { armarPedidoRunSdk, esFallaPasajera, modeloRunSdk } from '../src/lib/finanzas/conversa/modelo-run-sdk'
+import { armarPedidoRunSdk, esCortePorTope, esFallaPasajera, modeloRunSdk } from '../src/lib/finanzas/conversa/modelo-run-sdk'
+import { mensajeDeCorte } from '../services/agent-runner/src/lib/tope-por-corrida'
 import { turnoEnVueloEnElCorredor, VENCE_EL_TURNO_EN_VUELO_MS } from '../src/lib/planeacion/mesa/turno-en-vuelo'
 
 const BASE = { agente: 'a', tarea: 't', encargo_id: 'e', client_id: 'c', paso: 'p', tope_usd: 1, dry_run: false }
@@ -44,6 +45,18 @@ describe('el latido', () => {
   it('cualquier 2xx es una respuesta buena, también dentro del cuerpo', async () => {
     expect((await llamar(201, '{"output":"x"}')).r).toMatchObject({ ok: true, salida: 'x' })
     expect((await llamar(200, '\n{"output":"x","estado_http":201}')).r).toMatchObject({ ok: true, salida: 'x' })
+  })
+  it('el fallo que declara el corredor se distingue de un corte del camino', async () => {
+    const declarado = '{"success":false,"error":"el modelo falló"}'
+    expect((await llamar(500, declarado)).r).toEqual({ ok: false, error: 'run_sdk_500', costo_usd: 0, fallo_del_empleado: 'el modelo falló' })
+    expect((await llamar(200, '\n{"success":false,"error":"el modelo falló","estado_http":500}')).r).toMatchObject({ fallo_del_empleado: 'el modelo falló' })
+    expect((await llamar(502, '{"error":"agent-runner upstream failed","upstream_status":503}')).r).not.toHaveProperty('fallo_del_empleado')
+    expect((await llamar(504, '{"error":"agent-runner timeout"}')).r).not.toHaveProperty('fallo_del_empleado')
+    expect((await llamar(429, declarado)).r).not.toHaveProperty('fallo_del_empleado')
+  })
+  it('reconoce el corte por tope con el mensaje real del corredor', () => {
+    expect(esCortePorTope(mensajeDeCorte(0.4, 0.41))).toBe(true)
+    for (const x of ['el modelo falló', '', null, undefined]) expect(esCortePorTope(x)).toBe(false)
   })
   it('lo demás sigue igual', async () => {
     expect((await llamar(503, '{}')).r).toMatchObject({ ok: false, error: 'run_sdk_503' })

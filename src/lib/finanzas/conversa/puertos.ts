@@ -144,7 +144,7 @@ export interface AlmacenDeConversa {
   guardarBuzon?(c: { encargo_id: string; slack_canal?: string | null; slack_ts?: string | null; leido_hasta?: string | null; semilla?: Semilla; artefacto?: ArtefactoGuardado }): Promise<void>
 }
 
-export type RespuestaDeModelo = { ok: true; salida: unknown; costo_usd: number } | { ok: false; error: string; costo_usd: number }
+export type RespuestaDeModelo = { ok: true; salida: unknown; costo_usd: number } | { ok: false; error: string; costo_usd: number; /** 05-nov · el corredor contestó que el empleado terminó y falló: no hay nada en vuelo, aunque su punto de control siga «en curso» */ fallo_del_empleado?: string }
 export interface PedidoAlModelo {
   /** 05-nov · la clave propia del turno en el corredor: con ella se puede recoger lo ya hecho. Sin ella, como siempre */
   clave_de_turno?: string

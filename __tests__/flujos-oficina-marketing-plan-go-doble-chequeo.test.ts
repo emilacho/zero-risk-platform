@@ -442,10 +442,21 @@ describe('los informes de la mesa de análisis llegan a finanzas y al redactor',
     it('recibe los vigentes y los de esta corrida, marcados como análisis', async () => {
       const s = await semilla([carpeta([vigente('el viejo')]), hecho1('el nuevo')])
       expect(s.informes_de_analisis).toEqual([
-        { de: 'vigente del cerebro', tipo: 'mercado', autor: { mesa: 'analisis', agente: 'a' }, fecha_de_corte: '2026-11-01', informe: 'el viejo', citas: ['ficha-2'], es_dato_del_cliente: false },
+        { de: 'vigente del cerebro', tipo: 'mercado', autor: 'a', fecha_de_corte: '2026-11-01', informe: 'el viejo', citas: ['ficha-2'], es_dato_del_cliente: false },
         { de: 'hecho en esta corrida', tipo: 'competencia', autor: 'analista-competencia', informe: 'el nuevo', citas: ['ficha-1'], rotulo: 'propuesta', es_dato_del_cliente: false },
       ])
     })
+    it('un autor sin agente queda con su mesa; uno en texto, tal cual; sin autor, nada', async () => {
+      const s = await semilla([carpeta([vigente('a', { autor: { mesa: 'analisis' } }), vigente('b', { autor: 'alguien' }), vigente('c', { autor: null })])])
+      expect(s.informes_de_analisis.map((i: { autor: unknown }) => i.autor)).toEqual(['analisis', 'alguien', null])
+    })
+    it('si algo revienta, el plan sigue y queda escrito en la semilla', async () => {
+      const malo = { brazo: 'analisis', estado: 'trajo', datos: { informe: { toString() { throw new Error('informe ilegible') } } } }
+      const s = await semilla([malo])
+      expect(s.informes_de_analisis).toBeUndefined()
+      expect(s.informes_de_analisis_fallo).toBe('informe ilegible')
+    })
+    it('sin problema no deja rastro de fallo', async () => { expect((await semilla([hecho1('x')])).informes_de_analisis_fallo).toBeUndefined() })
     it('avisa si el vigente puede estar atrasado', async () => {
       const s = await semilla([carpeta([vigente('v', { hay_material_nuevo_desde_el_corte: true })])])
       expect(s.informes_de_analisis[0].aviso).toContain('material nuevo')

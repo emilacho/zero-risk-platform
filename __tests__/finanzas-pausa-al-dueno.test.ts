@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { estadoInicial } from '../src/lib/oficina/tipos'
 import { prepararPreguntas, preguntarAlDueno, type PuertosDelBuzon } from '../src/lib/finanzas/conversa/buzon'
 import { armarMensaje } from '../src/lib/finanzas/preguntas'
-import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
+import { TOPE_REAL_DEL_PEDIDO } from '../src/lib/limites-de-tamano'
+import { pedidoDelAgente, avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
 import { atenderPausa, MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
 import { elDuenoRecibePreguntas } from '../src/lib/finanzas/preguntas'
 import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conversa/esperas-supabase'
@@ -993,3 +994,23 @@ describe('la migración', () => {
 
 // para que el tipo del buzón siga siendo la base de los puertos de la pausa
 export type _Base = PuertosDelBuzon
+
+describe('el pedido a un empleado de finanzas', () => {
+  const PASO = { clave: 'fpa' } as never
+  it('🔴 si no cabe, llega declarado y sin pasarse del tope', () => {
+    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO + 10) })
+    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
+    expect(t.endsWith('decláralo.]')).toBe(true)
+    expect(t).toContain('LLEGA RECORTADO')
+  })
+  it('si cabe, sin aviso', () => {
+    const t = pedidoDelAgente(PASO, { datos: 'x' })
+    expect(t).not.toContain('LLEGA RECORTADO')
+  })
+  it('el borde: lo que cabe justo entra entero', () => {
+    const vacio = pedidoDelAgente(PASO, { datos: '' })
+    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO - vacio.length) })
+    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
+    expect(t).not.toContain('LLEGA RECORTADO')
+  })
+})

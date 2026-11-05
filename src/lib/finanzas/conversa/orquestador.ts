@@ -92,7 +92,10 @@ export function pedidoDelAgente(paso: Paso, contexto: Record<string, unknown>): 
   const ronda2 = paso.ronda === 2 ? '\nEs la RONDA 2 (la última): contesta SOLO lo que el jefe te alude en `acuerdo.hallazgos`.' : ''
   const ctx = JSON.stringify(contexto)
   const tarea = `${REGLAS_COMUNES.join('\n')}\n\n${instruccion}${ronda2}\n\nCONTEXTO (JSON):\n${ctx}`
-  return tarea.length > MAX_TAREA ? tarea.slice(0, MAX_TAREA) : tarea
+  if (tarea.length <= MAX_TAREA) return tarea
+  // 05-nov · nunca en silencio: el corte cae al final del contexto, y quien lee sabe que le falta algo
+  const aviso = '\n\n[ESTE PEDIDO LLEGA RECORTADO PARA CABER: falta el final del contexto. No afirmes nada sobre lo que no ves y decláralo.]'
+  return tarea.slice(0, MAX_TAREA - aviso.length) + aviso
 }
 
 // ───────────────────────────────────────────────────────── funciones de código
