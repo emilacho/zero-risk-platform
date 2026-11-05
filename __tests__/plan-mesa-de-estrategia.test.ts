@@ -517,14 +517,15 @@ describe('un turno cortado no se pierde', () => {
   const FALLA = { error: 'run_sdk_500', fallo: 'el proveedor del modelo devolvió un error' }
   const SIEMPRE_EN_VUELO = async () => true
   const pasoDeAporte = () => PLANTILLA_MESA.pasos.find((p) => p.clave.startsWith('mesa-estrategia-') && p.clave !== PASO_CONSOLIDA && p.clave !== 'mesa-estrategia-jefe-marketing')!.clave
-  it('🔴 el empleado que falló con la fila en curso no se espera: se repite enseguida y en fresco', async () => {
+  it('🔴 el empleado que falló con la fila en curso no se espera: se repite enseguida, sin reinicio forzado', async () => {
     const m = await montar([FALLA, null]); await m.hastaPaso()
     m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
     expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { error: 'turno_cortado', intento: 1, detalle: 'run_sdk_500 · el proveedor del modelo devolvió un error' } })
     expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toMatchObject({ turno_en_curso: { paso: PASO_CONSOLIDA, intentos: 1, termino: true } })
     expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
     expect(m.pedidos).toHaveLength(2)
-    expect(m.pedidos[1].reanudar).toBe(false)
+    // CC7, 05-nov · sin reinicio: si la ruta reventó después de un éxito, se recoge; si falló, la fila sigue «en curso» y el corredor lo corre
+    expect(m.pedidos[1].reanudar).toBe(true)
     expect(m.arts[m.id].acta).toBeTruthy()
   })
   it('🔴 un acta que falla siempre termina en tres intentos, sin acuerdo y sin esperar', async () => {
@@ -541,7 +542,25 @@ describe('un turno cortado no se pierde', () => {
     await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
     expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
     m.P.turnoEnVuelo = undefined
-    expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'cerrado' })
+    // CC7, 05-nov · el último intento se declara: lo que no llegó se dice
+    const quien = pasoDeAporte().slice('mesa-estrategia-'.length)
+    expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'cerrado', faltan: [quien] })
+  })
+  for (const [nombre, fallo] of [['no llega (502 del camino)', 'run_sdk_502'], ['se corta la red', 'red:x']] as const) {
+    it(`🔴 un aporte que ${nombre} tres veces también se declara`, async () => {
+      const m = await montar([fallo, fallo, fallo], pasoDeAporte()); await m.hastaPaso()
+      await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+      expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
+      const quien = pasoDeAporte().slice('mesa-estrategia-'.length)
+      expect(m.arts[m.id]['aporte_' + quien]).toMatchObject({ sin_aporte: true })
+      expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ faltan: [quien] })
+    })
+  }
+  it('🔴 un planteo que falla siempre se declara como «sin planteo», no como vacío', async () => {
+    const m = await montar([FALLA, FALLA, FALLA], 'mesa-estrategia-jefe-marketing'); await m.hastaPaso()
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
+    expect(m.arts[m.id].planteo).toMatchObject({ sin_planteo: true })
   })
   it('🔴 un corte por tope no se repite: con el mismo tope se paga otra vez y termina igual', async () => {
     const m = await montar([{ error: 'run_sdk_500', fallo: mensajeDeCorte(0.4, 0.41) }], pasoDeAporte()); await m.hastaPaso()
@@ -558,7 +577,7 @@ describe('un turno cortado no se pierde', () => {
     expect(preguntas).toHaveLength(0)
     await avanzarMesa(m.P, m.id)
     expect(preguntas).toHaveLength(1)
-    expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, false, true])
+    expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, true, true])
   })
   it('🔴 la devolución con un corte antes de entrar no recoge el acta anterior: tiene su propia clave', async () => {
     const m = await montar([null, 'run_sdk_502', null]); await hastaElFin(m.P, m.id)
