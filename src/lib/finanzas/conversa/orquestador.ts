@@ -4,6 +4,7 @@
  * Nace APAGADO: con `finanzas_config.conversa = 'apagado'` → 409 antes de leer, llamar al modelo o escribir.
  */
 import { registrarPaso, siguientePaso, type ResultadoDePaso } from '../../oficina/motor'
+import { elDuenoRecibePreguntas } from '../preguntas'
 import type { Estado, Paso, Plantilla } from '../../oficina/tipos'
 import { estadoInicial } from '../../oficina/tipos'
 import { calcular } from '../calculadora'
@@ -314,7 +315,7 @@ export async function avanzar(P: PuertosDeConversa, encargo_id: string): Promise
   const candado = P.almacen.tomarPaso ? await P.almacen.tomarPaso(e.id, P.ahora(), TTL_DEL_CANDADO_S) : null
   if (candado && candado.ok && !candado.tomado) return { status: 409, cuerpo: { error: 'paso_en_vuelo', detalle: 'otra llamada está ejecutando un paso de este encargo: léelo con «leer» antes de repetir' } }
   // si el candado MISMO no se puede tomar (columna sin migrar, base con error), el paso sigue SIN candado: no peor que antes del arreglo; el tope cobrado y el margen de reintento siguen activos
-  try { return await ejecutarUnPaso(P, e, cfg.redactor, cfg.pausa_al_dueno === true && cfg.preguntas_slack === 'envia') } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
+  try { return await ejecutarUnPaso(P, e, cfg.redactor, cfg.pausa_al_dueno === true && elDuenoRecibePreguntas(cfg.preguntas_slack)) } finally { if (candado && candado.ok && candado.tomado) await P.almacen.soltarPaso?.(e.id).catch(() => undefined) }
 }
 
 /**
