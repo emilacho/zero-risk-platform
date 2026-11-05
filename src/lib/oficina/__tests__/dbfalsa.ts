@@ -98,7 +98,7 @@ class Consulta {
   range(a: number, b: number) { this.rango = [a, b]; return this }
   single() { this.uno = 'single'; return this }
   maybeSingle() { this.uno = 'maybe'; return this }
-  private proy(f: Fila) { if (!this.proyeccion || this.proyeccion === '*') return { ...f }; const o: Fila = {}; for (const c of this.proyeccion.split(',').map((x) => x.trim())) o[c] = f[c]; return o }
+  private proy(f: Fila) { if (!this.proyeccion || this.proyeccion === '*') return { ...f }; const o: Fila = {}; for (const c of this.proyeccion.split(',').map((x) => x.trim())) { const alias = c.indexOf(':'); if (alias > 0) o[c.slice(0, alias)] = leer(f, c.slice(alias + 1)); else o[c] = f[c] } return o }
   private chocaCon(fila: Fila): Fila | null {
     for (const u of UNICOS[this.t] ?? []) {
       if (u.some((c) => !hay(fila[c]))) continue
