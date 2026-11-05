@@ -35,7 +35,8 @@ export const MAXIMO_OBSERVADO_DEL_CIERRE_USD = 0.25
 export const FACTOR_DE_RESERVA_DEL_CIERRE = 1.3
 export const TECHO_DE_RESERVA_DEL_CIERRE_USD = 0.4
 const redondeaArriba = (x: number) => Math.ceil(x * 100 - 1e-9) / 100
-export const RESERVA_DEL_CIERRE_USD = redondeaArriba(MAXIMO_OBSERVADO_DEL_CIERRE_USD * FACTOR_DE_RESERVA_DEL_CIERRE)
+// 05-nov (GO de Lenovo): 0,45. El 04-nov el cierre costó 0,349 sobre una reserva de 0,33: el medido de arriba ya quedó corto
+export const RESERVA_DEL_CIERRE_USD = 0.45
 // el piso es la reserva general: el cierre de la ronda 2 trae más entradas (acuerdo + bloque_2 + planteo fijado 2) y la reserva es también el máximo que esa llamada puede cobrar
 export const PISO_DE_RESERVA_DEL_CIERRE_USD = RESERVA_DEL_CIERRE_USD
 // RE-CIERRE (19-oct): el cierre de la ronda 2 llega con hallazgos resueltos y el jefe los desglosa: medido, la MISMA entrada (~38-40 mil tokens) dio 5.293 tokens de salida en la v1 y 11.528 en la v2
@@ -57,7 +58,7 @@ export const PLANTILLA_FINANCIERA: Plantilla = {
   pasos: [
     codigo('abrir', 'abrir_financiera', [], 'expediente'),
     agente('planteo', AGENTES.proponente, R1, 'planteo', 0.15, siempre, 1, 'planteo.v1'),
-    agente('fpa', AGENTES.fpa, ['expediente', 'planteo'], 'consulta_fpa', 0.25, si('planteo', 'habla.fpa')),
+    agente('fpa', AGENTES.fpa, ['expediente', 'planteo'], 'consulta_fpa', 0.4, si('planteo', 'habla.fpa')),
     agente('redes', AGENTES.redes, ['expediente', 'planteo'], 'consulta_redes', 0.25, si('planteo', 'habla.redes')),
     agente('busqueda', AGENTES.busqueda, ['expediente', 'planteo'], 'consulta_busqueda', 0.18, si('planteo', 'habla.busqueda')),
     agente('medicion', AGENTES.medicion, ['expediente', 'planteo'], 'consulta_medicion', 0.15, si('planteo', 'habla.medicion')),
@@ -65,7 +66,7 @@ export const PLANTILLA_FINANCIERA: Plantilla = {
     codigo('calculo', 'calcular_bloque', ['expediente', 'planteo_fijado', 'consulta_fpa', 'consulta_redes'], 'bloque'),
     agente('cierre', AGENTES.jefe, ['expediente', 'planteo_fijado', 'bloque', 'consulta_fpa', 'consulta_redes', 'consulta_busqueda', 'consulta_medicion'], 'acuerdo', RESERVA_DEL_CIERRE_USD, si('bloque', 'hay_bloque'), 1, 'acuerdo.v1'),
     // ── ronda 2: una sola vuelta, solo los aludidos
-    agente('fpa_2', AGENTES.fpa, ['expediente', 'planteo_fijado', 'acuerdo'], 'consulta_fpa_2', 0.25, si('acuerdo', 'alude.fpa'), 2),
+    agente('fpa_2', AGENTES.fpa, ['expediente', 'planteo_fijado', 'acuerdo'], 'consulta_fpa_2', 0.4, si('acuerdo', 'alude.fpa'), 2),
     agente('redes_2', AGENTES.redes, ['expediente', 'planteo_fijado', 'acuerdo'], 'consulta_redes_2', 0.25, si('acuerdo', 'alude.redes'), 2),
     agente('busqueda_2', AGENTES.busqueda, ['expediente', 'planteo_fijado', 'acuerdo'], 'consulta_busqueda_2', 0.18, si('acuerdo', 'alude.busqueda'), 2),
     agente('medicion_2', AGENTES.medicion, ['expediente', 'planteo_fijado', 'acuerdo'], 'consulta_medicion_2', 0.15, si('acuerdo', 'alude.medicion'), 2),

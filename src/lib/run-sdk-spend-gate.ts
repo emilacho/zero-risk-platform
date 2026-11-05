@@ -47,6 +47,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { notifySpendGateDegradation } from './spend-gate-alert'
+import { TOPE_DEL_PLAN_COMPLETO_USD } from './planeacion/mesa/plantilla'
 import {
   fugaAcotadaUsd,
   recordGateFailure,
@@ -118,6 +119,16 @@ export const DEFAULT_SYSTEM_SPEND_CAP_USD = 2.0
  */
 export const DEFAULT_RUN_SCOPED_CAP_USD = 5.0
 
+/**
+ * VARA POR PLAN (GO de Lenovo tras el doble chequeo, 05-nov). Cada turno de la mesa, de finanzas y de la jefatura es otra ejecución, así que la vara por corrida no los ve juntos.
+ * Esta suma todo lo que lleve `trabajo_tipo='plan'` y el mismo `trabajo_id` (`plan_corridas.id`), sin ventana de 24 h: una pausa no la reinicia.
+ * Una llamada sin ese rótulo no entra en la suma ni se frena por esta vara. TUNABLE por env `PLAN_CAP_USD`.
+ */
+export function resolvePlanCapUsd(): number {
+  const n = Number(process.env.PLAN_CAP_USD)
+  return Number.isFinite(n) && n > 0 ? n : TOPE_DEL_PLAN_COMPLETO_USD
+}
+
 export interface SpendGateResult {
   readonly blocked: boolean
   readonly reason:
@@ -133,6 +144,8 @@ export interface SpendGateResult {
     | 'system_over_cap'
     /** La VARA POR CORRIDA cortó · una sola corrida paso su techo (§ arriba). */
     | 'run_over_cap'
+    /** La VARA POR PLAN cortó · la corrida de plan completa pasó su techo. */
+    | 'plan_over_cap'
   readonly cap_usd?: number
   /** el techo de 24 h fue el CUPO DE ARRANQUE (cliente `onboarding` en sus primeros días); `cap_generico_usd` es el que habría regido */
   readonly cupo_de_arranque?: boolean
@@ -150,6 +163,9 @@ export interface SpendGateResult {
   readonly run_spent_usd?: number
   /** true si la corrida no traía identificador · la vara no se evaluó y se AVISÓ. */
   readonly run_unidentified?: boolean
+  /** Techo y gasto de la corrida de plan · solo si la llamada dice ser de una. */
+  readonly plan_cap_usd?: number
+  readonly plan_spent_usd?: number
 }
 
 export interface SpendGateOptions {
@@ -159,6 +175,8 @@ export interface SpendGateOptions {
   /** Identificador de ESTA corrida · `workflow_execution_id`. Lo pasan las dos puertas,
    *  que ya lo tienen resuelto en ámbito. Ausente ⇒ camino ruidoso (§ vara por corrida). */
   readonly runId?: string | null
+  /** de qué trabajo dice ser la llamada (`trabajoDeLaLlamada`): con `plan`, entra la vara por plan */
+  readonly trabajo?: { readonly trabajo_tipo?: string; readonly trabajo_id?: string }
   /** true SOLO para una MEDICIÓN PREVIA (p. ej. el reparto de piezas de la cadena mide el gasto antes de emitir sobres): no es una corrida de empleado, así que no hay
    *  identificador que pasar y NO se avisa `run_scoped_unidentified`. Mide y bloquea igual (vara por cliente/24 h). Las dos puertas de empleados NO lo usan: sin identificador siguen avisando. */
   readonly medicionPrevia?: boolean
@@ -520,6 +538,17 @@ export async function checkRunSdkSpendCap(
     const runSpent = sumCostOfRun(data, runId)
     if (runSpent >= runCap) {
       return { blocked: true, reason: 'run_over_cap', ...base, run_spent_usd: runSpent }
+    }
+
+    // ── VARA POR PLAN · toda la corrida de plan, sumando sus ejecuciones ──
+    if (opts.trabajo?.trabajo_tipo === 'plan' && opts.trabajo.trabajo_id) {
+      const planCap = resolvePlanCapUsd()
+      const plan = await supabase.from('agent_invocations').select('cost_usd').eq('trabajo_tipo', 'plan').eq('trabajo_id', opts.trabajo.trabajo_id)
+      if (plan.error) {
+        return onQueryFailure(notify, 'Falló la consulta del gasto del plan · la corrida pasa SIN su tope de plan.', { client_id: String(clientId), agent_slug: agentSlug })
+      }
+      const planSpent = sumCost(plan.data)
+      if (planSpent >= planCap) return { blocked: true, reason: 'plan_over_cap', ...base, run_spent_usd: runSpent, plan_cap_usd: planCap, plan_spent_usd: planSpent }
     }
 
     // ── VARA POR CLIENTE / 24 h · la acumulación ──

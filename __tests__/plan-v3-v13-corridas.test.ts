@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { abrir, barrer, cerrar, correr, ESPERA_MAXIMA_MIN, GRACIA_DEL_BARRIDO_MIN, reintentar, TECHO_DE_CORRIDA_MIN, vencibles, type FilaDeCorrida, type PuertoDeCorridas } from '../src/lib/planeacion/corridas'
+import { abrir, barrer, cerrar, correr, ENTREGO_TARDE, ESPERA_MAXIMA_MIN, GRACIA_DEL_BARRIDO_MIN, MAX_PRORROGAS, PRORROGA_MIN, reintentar, renovar, TECHO_DE_CORRIDA_MIN, vencibles, type FilaDeCorrida, type PuertoDeCorridas } from '../src/lib/planeacion/corridas'
 import { almacenDeCorridas } from '../src/lib/planeacion/corridas-supabase'
 
 const MIN = 60_000
@@ -35,6 +35,7 @@ function mundo(o: { sinIndiceParcial?: boolean; sinCompareAndSet?: boolean; sinI
       return { ...f }
     },
     async vivasVencidas(iso) { return filas.filter((x) => vivo(x) && x.vence_en < iso).map((x) => ({ ...x })) },
+    async anotarEntregaTardia(c, k, motivo) { const f = filas.find((x) => x.client_id === c && x.corrida === k && x.estado === 'fallida'); if (!f) return false; f.motivo = motivo; return true },
   }
   return { P, filas, avanzar: (min: number) => { t += min * MIN }, hora: () => new Date(t).toISOString() }
 }
@@ -118,7 +119,7 @@ describe('corrección 1 de CC#3 · el barrido no mata la última lectura (gracia
     await abrir(w.P, E)
     w.avanzar(ESPERA_MAXIMA_MIN) // 45:00 · vence_en
     w.avanzar(1 / 60) // 45:01
-    expect(await barrer(w.P)).toEqual({ vencidas: [], falladas: [], saltadas: [] })
+    expect(await barrer(w.P)).toEqual({ vencidas: [], falladas: [], saltadas: [], prorrogadas: [], liberadas_a_ciegas: [] })
     expect(w.filas[0].estado).toBe('esperando')
     const r = await abrir(w.P, E) // el re-disparo de la última lectura
     expect(r.status === 200 && r.accion === 'continua' && r.vencida).toBe(true)
@@ -276,6 +277,110 @@ describe('correr y cerrar', () => {
   })
 })
 
+describe('05-nov · renovar el techo al pedirle el plan al redactor', () => {
+  const corriendo = async () => { const w = mundo(); await abrir(w.P, E); await correr(w.P, E); return w }
+  it('🔴 cuenta desde ahora, y el barrido ya no la da por fallida a la hora de antes', async () => {
+    const w = await corriendo()
+    w.avanzar(TECHO_DE_CORRIDA_MIN - 1)
+    const r = await renovar(w.P, E)
+    expect(r).toMatchObject({ status: 200, accion: 'avanzada' })
+    if (r.status === 200 && r.accion === 'avanzada') expect(Date.parse(r.fila.vence_en)).toBe(Date.parse(w.hora()) + TECHO_DE_CORRIDA_MIN * MIN)
+    w.avanzar(2)
+    expect((await barrer(w.P)).falladas).toHaveLength(0)
+  })
+  it.each(['esperando', 'en_pausa', 'hecha', 'vencida', 'fallida'] as const)('🔴 desde «%s» no renueva: 409 y la fila no cambia', async (estado) => {
+    const w = await corriendo()
+    w.filas[0].estado = estado
+    const antes = { ...w.filas[0] }
+    expect(await renovar(w.P, E)).toMatchObject({ status: 409, error: 'corrida_no_viva', estado })
+    expect(w.filas[0]).toEqual(antes)
+  })
+  it('🔴 una corrida que no existe: 409', async () => {
+    expect(await renovar(mundo().P, E)).toMatchObject({ status: 409, error: 'corrida_no_viva', estado: null })
+  })
+  it('🔴 no acorta un plazo más largo, y no toca el estado ni los intentos', async () => {
+    const w = await corriendo()
+    const largo = new Date(Date.parse(w.hora()) + 2 * TECHO_DE_CORRIDA_MIN * MIN).toISOString()
+    w.filas[0].vence_en = largo
+    const { intentos } = w.filas[0]
+    await renovar(w.P, E)
+    expect(w.filas[0]).toMatchObject({ vence_en: largo, estado: 'corriendo', intentos })
+  })
+  it('🔴 entrada inválida: 400', async () => {
+    expect((await renovar(mundo().P, { client_id: '', corrida: '' })).status).toBe(400)
+  })
+})
+
+describe('05-nov · E4: antes de dar por fallida, se pregunta si sigue viva', () => {
+  const vencida = async () => { const w = mundo(); await abrir(w.P, E); await correr(w.P, E); w.avanzar(TECHO_DE_CORRIDA_MIN + 1); return w }
+  it('🔴 viva: se extiende, no se libera al cliente y otra corrida no abre', async () => {
+    const w = await vencida()
+    const r = await barrer(w.P, { sigueViva: async () => true })
+    expect(r).toMatchObject({ falladas: [], liberadas_a_ciegas: [] })
+    expect(r.prorrogadas).toHaveLength(1)
+    expect(w.filas[0]).toMatchObject({ estado: 'corriendo', prorrogas: 1 })
+    expect(Date.parse(w.filas[0].vence_en)).toBe(Date.parse(w.hora()) + PRORROGA_MIN * MIN)
+    expect(await abrir(w.P, { ...E, corrida: 'c-2' })).toMatchObject({ status: 409, error: 'corrida_activa' })
+  })
+  it('🔴 muerta: fallida como siempre, sin alarma', async () => {
+    const w = await vencida()
+    const r = await barrer(w.P, { sigueViva: async () => false })
+    expect(r.falladas).toHaveLength(1)
+    expect(r.liberadas_a_ciegas).toEqual([])
+  })
+  it.each([['no contesta', async () => null], ['revienta', async () => { throw new Error('n8n') }]])('🔴 si n8n %s: libera como hoy, y lo dice', async (_n, sigueViva) => {
+    const w = await vencida()
+    const r = await barrer(w.P, { sigueViva: sigueViva as never })
+    expect(r.falladas).toHaveLength(1)
+    expect(r.liberadas_a_ciegas).toMatchObject([{ corrida: E.corrida, por: 'sin_lectura' }])
+  })
+  it('🔴 tope duro: viva para siempre no retiene al cliente para siempre', async () => {
+    const w = await vencida()
+    for (let i = 0; i < MAX_PRORROGAS; i++) {
+      expect((await barrer(w.P, { sigueViva: async () => true })).prorrogadas).toHaveLength(1)
+      w.avanzar(PRORROGA_MIN + 1)
+    }
+    const r = await barrer(w.P, { sigueViva: async () => true })
+    expect(r.falladas).toHaveLength(1)
+    expect(r.liberadas_a_ciegas).toMatchObject([{ por: 'tope_de_prorrogas' }])
+    expect(w.filas[0].estado).toBe('fallida')
+  })
+  it('🔴 una espera vencida no pregunta: no hay nada trabajando', async () => {
+    const w = mundo()
+    await abrir(w.P, E)
+    w.avanzar(ESPERA_MAXIMA_MIN + GRACIA_DEL_BARRIDO_MIN + 1)
+    let preguntas = 0
+    const r = await barrer(w.P, { sigueViva: async () => { preguntas++; return true } })
+    expect(preguntas).toBe(0)
+    expect(r.vencidas).toHaveLength(1)
+  })
+})
+
+describe('05-nov · E4: el plan que entrega sobre una corrida ya fallida', () => {
+  const fallida = async () => { const w = mundo(); await abrir(w.P, E); await correr(w.P, E); w.avanzar(TECHO_DE_CORRIDA_MIN + 1); await barrer(w.P); return w }
+  it('🔴 sigue fallida, queda dicho que entregó y avisa una sola vez', async () => {
+    const w = await fallida()
+    expect(await cerrar(w.P, { ...E, estado: 'hecha', motivo: 'plan abc' })).toMatchObject({ status: 409, error: 'corrida_no_viva', estado: 'fallida', entrega_tardia: true })
+    expect(w.filas[0].estado).toBe('fallida')
+    expect(w.filas[0].motivo).toContain(ENTREGO_TARDE)
+    expect(w.filas[0].motivo).toContain('plan abc')
+    const otra = await cerrar(w.P, { ...E, estado: 'hecha' })
+    expect(otra).toMatchObject({ status: 409 })
+    expect(otra).not.toHaveProperty('entrega_tardia')
+  })
+  it('🔴 cerrar «fallida» sobre una fallida no anota entrega', async () => {
+    const w = await fallida()
+    const r = await cerrar(w.P, { ...E, estado: 'fallida' })
+    expect(r).not.toHaveProperty('entrega_tardia')
+    expect(w.filas[0].motivo).not.toContain(ENTREGO_TARDE)
+  })
+  it('🔴 una corrida ya «hecha» o «vencida» no se toca', async () => {
+    const w = await fallida()
+    w.filas[0].estado = 'vencida'
+    expect(await cerrar(w.P, { ...E, estado: 'hecha' })).not.toHaveProperty('entrega_tardia')
+  })
+})
+
 describe('barrido · vence_en pasa a vencida/fallida y libera al cliente', () => {
   it('esperando vencida ⇒ vencida; corriendo vencida ⇒ fallida; lo que no venció no se toca', async () => {
     const w = mundo()
@@ -287,7 +392,7 @@ describe('barrido · vence_en pasa a vencida/fallida y libera al cliente', () =>
     await abrir(w.P, { client_id: 'd', corrida: 'cd', dry_run: true }) // fresca
     const r1 = await barrer(w.P)
     expect(r1.vencidas).toHaveLength(2) // a y c (esperando)
-    expect(r1.falladas).toHaveLength(0) // b corre con techo de 100 min
+    expect(r1.falladas).toHaveLength(0) // b corre con su techo
     w.avanzar(TECHO_DE_CORRIDA_MIN)
     const r2 = await barrer(w.P)
     expect(r2.falladas).toHaveLength(1) // b
@@ -300,7 +405,7 @@ describe('barrido · vence_en pasa a vencida/fallida y libera al cliente', () =>
     await abrir(w.P, E)
     w.avanzar(ESPERA_MAXIMA_MIN + GRACIA_DEL_BARRIDO_MIN + 1)
     await barrer(w.P)
-    expect(await barrer(w.P)).toEqual({ vencidas: [], falladas: [], saltadas: [] })
+    expect(await barrer(w.P)).toEqual({ vencidas: [], falladas: [], saltadas: [], prorrogadas: [], liberadas_a_ciegas: [] })
     expect((await abrir(w.P, { ...E, corrida: 'c-2' })).status).toBe(200)
   })
   it('un avance justo antes del barrido no se pisa (compare-and-set): queda «saltada»', async () => {

@@ -1,6 +1,7 @@
 /** La espera de la oficina financiera sobre `esperas_del_dueno` (tipo `finanzas`) y `plan_corridas`. Sin lógica: solo traduce el puerto de `pausa.ts` a consultas. */
 import type { Db } from '../almacen-supabase'
 import type { DespertarAlPlan, EsperaDeFinanzas, PuertoDeEsperas } from './pausa'
+import { temasDescartadosPorElDueno } from '../../direccion/decisiones-registro'
 
 type Fila = Record<string, unknown>
 const TABLA = 'esperas_del_dueno'
@@ -56,6 +57,7 @@ export function esperasDeFinanzas(db: Db): PuertoDeEsperas {
       if (a.error) throw new Error(`no pude leer las corridas activas: ${a.error.message}`)
       return { estado: typeof estado === 'string' ? estado : null, otra_activa: ((a.data as Fila[] | null) ?? []).length > 0 }
     },
+    temasDescartados: (client_id, temas) => temasDescartadosPorElDueno(db, client_id, temas),
     async pausarCorrida(corrida_id) {
       const r = await db.from('plan_corridas').update({ estado: 'en_pausa', motivo: 'la oficina financiera espera la respuesta del dueño', actualizado_en: new Date().toISOString() }).eq('id', corrida_id).eq('estado', 'corriendo')
       if (r.error) throw new Error(`no pude pausar la corrida: ${r.error.message}`)

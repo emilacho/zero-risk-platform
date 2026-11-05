@@ -23,6 +23,8 @@ export interface MetaFijadaPorElDueno {
 export interface Semilla {
   /** la pone la plataforma al abrir, leyendo la última firma con cambios; lo que venga de fuera se ignora */
   meta_fijada_por_el_dueno?: MetaFijadaPorElDueno
+  /** 05-nov · la abre el plan tras una devolución a la mesa: es la segunda pasada de finanzas y no pausa */
+  segunda_pasada?: boolean
   /** las ventas del sitio, leídas de los pedidos al abrir (no de la analítica) */
   ventas_del_negocio?: unknown
   /** 04-nov · lo que decidió la mesa de estrategia: con ella, finanzas calcula sobre su reparto */

@@ -17,6 +17,7 @@ import { abrir, correr, EN_PAUSA, reanudar, reintentar, CADA_REINTENTO_S, ESPERA
 import type { CatalogoSnapshot } from './dato-v1/catalogo'
 import type { LecturaDeCatalogo } from './catalogo/leer'
 import { calendarioDesde, hoyEnElPais, type CalendarioDelPlan } from './calendario-del-plan'
+import { TOPE_DEL_PLAN_COMPLETO_USD } from './mesa/plantilla'
 
 export interface FichaDelCliente {
   existe: boolean
@@ -99,9 +100,15 @@ const r2 = (x: number) => Math.round(x * 100) / 100
 const base = (dry: boolean): Decision => ({ decision: 'no_corre', motivo: '', relleno_permitido: false, dry_run: dry, huecos_tipos: [], huecos_sin_tipo: [], declara: [] })
 const noCorre = (dry: boolean, motivo: MotivoDeNoCorre, detalle?: string, extra: Partial<Decision> = {}): Decision => ({ ...base(dry), decision: 'no_corre', motivo, ...(detalle ? { detalle } : {}), ...extra })
 
-/** la suma de topes por tramo del catálogo (recolección + oficina + redacción + jefatura, y la mesa si está encendida): lo que el plan puede gastar como máximo, SIN el cupo de la ficha. Con la mesa apagada, su tope no cuenta */
-export function sumaDeTopes(snap: CatalogoSnapshot, conMesa = false): number {
-  return r2([...(conMesa ? ['mesa'] : []), 'recoleccion', 'oficina', 'redaccion', 'jefatura'].reduce((a, t) => a + (snap.tope(t) ?? 0), 0))
+/**
+ * Lo que el plan puede gastar como máximo, SIN el cupo de la ficha (GO de Lenovo, D3, 05-nov).
+ *   · Los agentes del plan: oficina + redacción + jefatura; con la mesa encendida, la mesa y una SEGUNDA pasada de finanzas (la devolución abre otro encargo, con su propio tope). Su suma no puede pasar del tope del plan completo: ese corta.
+ *   · Aparte: la recolección, y el análisis si se pidió: no son parte de ese tope.
+ */
+export function sumaDeTopes(snap: CatalogoSnapshot, conMesa = false, conAnalisis = false): number {
+  const t = (tramo: string) => snap.tope(tramo) ?? 0
+  const agentes = t('oficina') * (conMesa ? 2 : 1) + t('redaccion') + t('jefatura') + (conMesa ? t('mesa') : 0)
+  return r2(Math.min(agentes, TOPE_DEL_PLAN_COMPLETO_USD) + t('recoleccion') + (conAnalisis ? t('analisis') : 0))
 }
 
 /** lo que `huecos[]` dice (por `funcion`) traducido a los tipos del catálogo que esa fuente provee */
@@ -117,7 +124,7 @@ export function huecosATipos(huecos: SenalDeListo['huecos'], snap: CatalogoSnaps
   return { tipos: [...tipos], sin_tipo: sin }
 }
 
-export interface EntradaDelPrevuelo { client_id: unknown; corrida: unknown; dry_run?: unknown; espera_max_min?: number; reanudar_esperas_id?: unknown }
+export interface EntradaDelPrevuelo { client_id: unknown; corrida: unknown; dry_run?: unknown; espera_max_min?: number; reanudar_esperas_id?: unknown; con_analisis?: unknown }
 export interface ReglasDePrevuelo {
   /** ¿la señal, leída en esta llamada, autoriza el relleno de Apify? (la mutación del seco rompe ESTA regla) */
   autorizaRelleno(s: SenalDeListo | null): boolean
@@ -195,7 +202,7 @@ async function decidir(
   if (!dry) {
     const c = await P.cupo(client_id)
     if (!c.ok) return noCorre(dry, 'lectura_fallida', `cupo: ${c.error}`)
-    const necesita = sumaDeTopes(snap, conMesa)
+    const necesita = sumaDeTopes(snap, conMesa, e.con_analisis === true)
     const libre = r2(c.cap_usd - c.gastado_24h_usd)
     if (libre + 1e-9 < necesita) {
       const sube = Math.ceil((c.gastado_24h_usd + necesita + 0.5) * 2) / 2

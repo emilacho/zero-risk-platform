@@ -1004,6 +1004,8 @@ async function atender(request: Request) {
         // VARA POR CORRIDA · el identificador ya está resuelto arriba (L574) y el
         // enforcement de L604 garantiza que no sea nulo acá.
         runId: wfAttr.workflow_execution_id,
+        // VARA POR PLAN · 05-nov · el mismo rótulo que queda en la fila
+        trabajo: trabajoDeLaLlamada(body, (nombre) => request.headers.get(nombre)).columnas,
       })
       if (gate.blocked) {
         console.warn(

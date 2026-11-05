@@ -7,6 +7,7 @@ import { estadoInicial } from '../src/lib/oficina/tipos'
 import { prepararPreguntas, preguntarAlDueno, type PuertosDelBuzon } from '../src/lib/finanzas/conversa/buzon'
 import { armarMensaje } from '../src/lib/finanzas/preguntas'
 import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
+import { temaDe } from '../src/lib/finanzas/conversa/buzon'
 import { atenderPausa, MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
 import { elDuenoRecibePreguntas } from '../src/lib/finanzas/preguntas'
 import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conversa/esperas-supabase'
@@ -26,7 +27,7 @@ const preg = (clave: string, o: Record<string, unknown> = {}) => ({ clave, texto
 const CINCO = [preg('comision'), preg('turistas'), preg('temporada'), preg('whatsapp', { frena_la_firma: true }), preg('pixel', { frena_la_firma: true })]
 const acuerdo = (preguntas: unknown[] = CINCO, criticos = 3) => ({ acuerdo: { criticos, requiere_ronda_2: criticos > 0, preguntas_a_emilio: preguntas, hallazgos: [] } })
 
-function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; modo?: PuertosDePausa['modo']; despierta?: boolean; corrida?: { estado: string | null; otra_activa: boolean } | 'caida'; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
+function mundo(o: { descartados?: string[] | 'caida'; semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; modo?: PuertosDePausa['modo']; despierta?: boolean; corrida?: { estado: string | null; otra_activa: boolean } | 'caida'; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
   const e: EncargoDeConversa = { id: 'enc-1', client_id: 'cli', estado: o.estado ?? 'esperando_al_dueno', estado_del_motor: estadoInicial(), gasto_usd: 1.2, slack_canal: o.slackTs ? 'C123456789' : null, slack_ts: o.slackTs ?? null, leido_hasta: o.slackTs ?? null, tablero_id: null, dry_run: false, semilla: { corrida: 'cor-1', ...(o.semilla ?? {}) } }
   const arts: Record<string, Record<string, unknown>> = { ...acuerdo(), ...(o.arts ?? {}) }
   const guardados: Array<Record<string, unknown>> = [], avisos: string[] = [], enviados: string[] = [], despertares: Array<Record<string, unknown>> = [], enHilo: string[] = [], corridasPausadas: string[] = []
@@ -70,6 +71,7 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
       async marcarDespertar(_i, d, n) { if (espera) { espera.despertado = d; espera.intentos_de_despertar = n; espera.despertado_en = P.ahora().toISOString() } },
       async estadoDeLaCorrida() { if (o.corrida === 'caida') throw new Error('caída'); return o.corrida ?? { estado: 'corriendo', otra_activa: false } },
       async pausarCorrida(id) { corridasPausadas.push(id) },
+      async temasDescartados() { if (o.descartados === 'caida') throw new Error('caída'); return o.descartados ?? [] },
     },
     despertar: async (c) => { despertares.push(c); return o.despierta === false ? { ok: false, error: 'el plan contestó 502' } : { ok: true } },
   }
@@ -173,6 +175,38 @@ describe('pausar', () => {
     const m = mundo({ registrar: { ok: true, estado: 'ya_preguntada' } })
     expect((await pausarOficina(m.P, pedir())).cuerpo.enviado).toBe(true)
     expect(m.enviados).toHaveLength(1)
+  })
+  describe('05-nov · el dueño descarta preguntas (GO de Lenovo)', () => {
+    const conDescartes = async (descartados: string[] | 'caida') => {
+      const m = mundo({ descartados })
+      await pausarOficina(m.P, pedir())
+      return m
+    }
+    const todas = (m: ReturnType<typeof mundo>): string[] => preguntasQueFaltan(m.arts as never, m.e.semilla)
+    it('🔴 descartó todas: el plan sigue solo', async () => {
+      const previa = mundo()
+      await pausarOficina(previa.P, pedir())
+      const temas = todas(previa).map(temaDe)
+      expect(temas.length).toBeGreaterThan(0)
+      const m = await conDescartes(temas)
+      expect(m.despertares).toHaveLength(1)
+    })
+    it('🔴 descartó parte y la otra sigue sin respuesta: espera', async () => {
+      const previa = mundo()
+      await pausarOficina(previa.P, pedir())
+      const temas = todas(previa).map(temaDe)
+      const m = await conDescartes(temas.length > 1 ? temas.slice(1) : [])
+      expect(m.despertares).toEqual([])
+    })
+    it('🔴 sin leer los descartes, espera: no suelta el plan a ciegas', async () => {
+      const m = await conDescartes('caida')
+      expect(m.despertares).toEqual([])
+      expect(m.e.estado).toBe('esperando_al_dueno')
+    })
+    it('🔴 un tema descartado de otra cosa no cuenta', async () => {
+      const m = await conDescartes(['otro_tema_cualquiera'])
+      expect(m.despertares).toEqual([])
+    })
   })
   it('🔴 si no pudo salir avisa UNA vez y sigue en pausa', async () => {
     const m = mundo({ registrar: { ok: false, error: 'http_500' } })

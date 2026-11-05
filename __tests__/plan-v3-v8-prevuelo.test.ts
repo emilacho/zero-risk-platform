@@ -159,7 +159,7 @@ describe('V8 · el cupo (§13.1)', () => {
       const r = await prevuelo(entrada(), conElla(async () => true, cupo({ cap_usd: 3.4, override_usd: 3.4 })))
       expect(r).toMatchObject({ decision: 'no_corre', motivo: 'falta_cupo' })
       expect(r).not.toHaveProperty('mesa')
-      expect(await prevuelo(entrada(), conElla(async () => true, cupo({ cap_usd: 6.4, override_usd: 6.4 })))).toMatchObject({ decision: 'correr', mesa: true })
+      expect(await prevuelo(entrada(), conElla(async () => true, cupo({ cap_usd: 7.9, override_usd: 7.9 })))).toMatchObject({ decision: 'correr', mesa: true })
     })
     it('🔴 no poder leer el interruptor no se lee como apagada', async () => {
       expect(await prevuelo(entrada(), conElla(async () => { throw new Error('caída') }, cupo({})))).toMatchObject({ decision: 'no_corre', motivo: 'lectura_fallida' })

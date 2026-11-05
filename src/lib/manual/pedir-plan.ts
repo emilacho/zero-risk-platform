@@ -15,14 +15,16 @@ export type ResultadoDelPedidoDePlan =
  * 04-nov · aprobar el manual pide un plan NUEVO: sin `force_restart`, el redactor del plan contesta con lo guardado por empleado, escrito con el manual anterior, a US$ 0 y sin avisar.
  * No duplica planes: de eso se encarga la clave de la corrida, una por versión del manual o por alta.
  */
-const conPlanNuevo = (sobre: Record<string, unknown>): Record<string, unknown> => ({ ...sobre, payload: { ...((sobre.payload ?? {}) as Record<string, unknown>), force_restart: true } })
+// 05-nov (GO de Lenovo, D1): con análisis y con chequeo de forma. Emilio aprobó el paso 0 el 31-oct: calidad sobre precio. Sin esto, la mesa de análisis no corría y un plan malformado pasaba sin verse
+const PEDIDO_COMPLETO = { force_restart: true, con_analisis: true, validar_forma: true } as const
+const conPlanNuevo = (sobre: Record<string, unknown>): Record<string, unknown> => ({ ...sobre, payload: { ...((sobre.payload ?? {}) as Record<string, unknown>), ...PEDIDO_COMPLETO } })
 
 export function sobreDelPlan(p: PedidoDePlan, correlation_id: string = randomUUID()): Record<string, unknown> {
   const corrida = `manual:${p.manual_id}:planear`
   return {
     source: 'alta/journey-completed',
     intent: 'planear',
-    payload: { pedido: 'plan de 90 dias', dry_run: false, plan_v3: true, corrida, forzar: true, force_restart: true, client_id: p.client_id, desde_worker: 'tablero-aprobar-manual', journey_id: p.manual_id },
+    payload: { pedido: 'plan de 90 dias', dry_run: false, plan_v3: true, corrida, forzar: true, ...PEDIDO_COMPLETO, client_id: p.client_id, desde_worker: 'tablero-aprobar-manual', journey_id: p.manual_id },
     idempotency_key: corrida,
     logical_period: `manual:${p.manual_id}`,
     tenant_id: p.client_id,

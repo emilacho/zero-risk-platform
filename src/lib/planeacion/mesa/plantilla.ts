@@ -5,13 +5,14 @@
  * Si finanzas devuelve el plan, se vuelve a consolidar UNA vez, con el mismo paso.
  *
  * QUÉ CUBRE CADA TOPE (punto 1 de la revisión de CC3):
- *   · `limites.tope_encargo_usd` = US$ 3: SOLO esta mesa. La oficina financiera tiene su propio tope de US$ 5 y el plan completo se calcula en US$ 10. Ninguno corta a otro.
+ *   · `limites.tope_encargo_usd` = US$ 4: SOLO esta mesa. La oficina financiera tiene su propio tope de US$ 5. Ninguno corta a otro.
+ *   · `TOPE_DEL_PLAN_COMPLETO_USD` = US$ 15 (GO de Lenovo, 05-nov): este sí corta. Lo aplica el freno de gasto a toda llamada que diga ser de esa corrida.
  *   · `tope_usd` de cada paso: lo que se reserva para ese turno antes de lanzarlo.
  */
 import type { Paso, Plantilla } from '../../oficina/tipos'
 
-export const TOPE_DE_LA_MESA_USD = 3
-export const TOPE_DEL_PLAN_COMPLETO_USD = 10
+export const TOPE_DE_LA_MESA_USD = 4
+export const TOPE_DEL_PLAN_COMPLETO_USD = 15
 export const PASO_CONSOLIDA = 'mesa-estrategia-consolida'
 export const MAX_DEVOLUCIONES = 1
 
@@ -45,7 +46,7 @@ export const PLANTILLA_MESA: Plantilla = {
     APORTE('organico', INTEGRANTES.organico, si('habla.organico')),
     APORTE('medicion', INTEGRANTES.medicion),
     APORTE('crecimiento', INTEGRANTES.crecimiento),
-    agente(PASO_CONSOLIDA, INTEGRANTES.jefe, ENTRADA_DE_LA_REUNION, 'acta', 0.7, siempre, 'acta.v1'),
+    agente(PASO_CONSOLIDA, INTEGRANTES.jefe, ENTRADA_DE_LA_REUNION, 'acta', 1, siempre, 'acta.v1'),
   ],
   limites: { margen: 3, tope_encargo_usd: TOPE_DE_LA_MESA_USD, max_rondas: 1 },
   indicaciones: {},
