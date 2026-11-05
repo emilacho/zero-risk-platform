@@ -138,6 +138,16 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
     expect(rs[0].estado).toBe('trajo')
     expect((rs[0].datos as Record<string, unknown>).archivado).toMatchObject({ ok: false, detalle: expect.stringMatching(/no archivó \(403\) · portero_apagado/) })
   })
+  it('🔴 la puerta apagada contesta 200 sin guardar: eso no se reporta como archivado', async () => {
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+      if (String(url).endsWith('/api/agents/run-sdk')) return respuestaDelCorredor()
+      return new Response(JSON.stringify({ apagado: true, detalle: 'PORTERO_INFORMES está apagado: no se leyó ni se escribió nada' }), { status: 200 })
+    })
+    configs = { mesa_de_analisis: { encendida: true, clientes: [C] } }
+    const rs = await respuestas(await POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: [pedido('competencia')] })))
+    expect((rs[0].datos as Record<string, unknown>).archivado).toMatchObject({ ok: false, detalle: expect.stringMatching(/su puerta está apagada/) })
+  })
   it('un informe sin hallazgos sostenidos no se usa; «sin dato» declarado es sin_dato; nada se archiva en esos casos', async () => {
     respuestaDelCorredor = () => new Response(JSON.stringify({ output: '- esto lo estimo sin cita', cost_usd: 0.1 }), { status: 200 })
     const r1 = await respuestas(await POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: [pedido('competencia')] })))

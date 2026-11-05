@@ -194,6 +194,9 @@ describe('el calendario con la fecha en su propia columna', () => {
   it('🔴 sin fecha en la columna de fecha no cuenta', () => {
     expect(semanasFechadas('| Sem | Qué | Quién | Fecha |\n|---|---|---|---|\n| 1 | Post | Agencia | pronto |')).toBe(0)
   })
+  it('🔴 el título de la columna puede venir en negrita', () => {
+    expect(semanasFechadas('| **Semana** | **Qué** | **Quién** | **Fecha** |\n|---|---|---|---|\n| 3 | Post | Agencia | 24 nov |')).toBe(1)
+  })
   it('🔴 la columna de fecha termina con su tabla: no se le pega a la siguiente', () => {
     expect(semanasFechadas('| Sem | Qué | Quién | Fecha |\n|---|---|---|---|\n| 1 | Post | Agencia | 10 nov |\n\nTexto.\n\n| 2 | Post | Agencia | 17 nov |')).toBe(1)
   })

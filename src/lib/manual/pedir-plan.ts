@@ -5,6 +5,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { quienValido } from './campos-del-manual'
+import { CLAVE_DE_LA_PALANCA, leerPalanca } from '../planeacion/mesa-de-analisis'
 
 export interface PedidoDePlan { client_id: string; manual_id: string }
 export type ResultadoDelPedidoDePlan =
@@ -33,7 +34,29 @@ export function sobreDelPlan(p: PedidoDePlan, correlation_id: string = randomUUI
   }
 }
 
-export interface EntornoDelPedido { url?: string; llave?: string; fetchImpl?: typeof fetch }
+export interface EntornoDelPedido { url?: string; llave?: string; fetchImpl?: typeof fetch; /** lee `cadena_config`; en producción, el almacén de la cadena */ leerConfig?: (clave: string) => Promise<unknown> }
+
+const LIMITE_DE_LA_PALANCA_MS = 5000
+const leerConfigDeLaBase = async (clave: string): Promise<unknown> => (await import('../cadena/almacen-supabase')).almacenDeSupabase().leerConfig(clave)
+
+/**
+ * 05-nov (GO de Lenovo, «que corra uno solo») · UN solo informe de mercado por corrida. El flujo pide el paso 0 salvo que el disparo traiga `con_mercado: false`, y la mesa de análisis tiene su propio analista de mercado, que es el MISMO empleado.
+ * Se queda el de la mesa: lee el material del cerebro y se archiva con sus citas; el paso 0 no trae citas y no se puede archivar.
+ * Solo se apaga el paso 0 si la mesa va a correr de verdad para ESTE cliente. Con la palanca apagada, o si no se pudo leer, el sobre sale igual: mejor pagar dos veces que quedarse sin informe de mercado.
+ */
+export async function conUnSoloMercado(sobre: Record<string, unknown>, leerConfig: (clave: string) => Promise<unknown>): Promise<Record<string, unknown>> {
+  const payload = (sobre.payload ?? {}) as Record<string, unknown>
+  if (payload.con_analisis !== true || payload.con_mercado !== undefined || typeof payload.client_id !== 'string') return sobre
+  try {
+    let vencer: ReturnType<typeof setTimeout> | undefined
+    const limite = new Promise<never>((_, rechazar) => { vencer = setTimeout(() => rechazar(new Error('la palanca tardó demasiado')), LIMITE_DE_LA_PALANCA_MS) })
+    const config = await Promise.race([leerConfig(CLAVE_DE_LA_PALANCA), limite]).finally(() => clearTimeout(vencer))
+    return leerPalanca(config, payload.client_id).encendida ? { ...sobre, payload: { ...payload, con_mercado: false } } : sobre
+  } catch (err) {
+    console.error(`[pedir-plan] no pude leer la palanca de la mesa: el paso 0 de mercado queda pedido · ${err instanceof Error ? err.message.slice(0, 160) : 'error'}`)
+    return sobre
+  }
+}
 
 export async function pedirPlanDelManual(p: PedidoDePlan, e: EntornoDelPedido = {}): Promise<ResultadoDelPedidoDePlan> {
   return mandarSobre(sobreDelPlan(p), e)
@@ -133,11 +156,12 @@ export async function guardarEsperaDelManual(db: BaseDeEsperas, entrada: unknown
   return { status: 200, cuerpo: { ok: true, kind: 'ya_aprobada', espera_id: id } }
 }
 
-async function mandarSobre(sobre: Record<string, unknown>, e: EntornoDelPedido): Promise<ResultadoDelPedidoDePlan> {
+async function mandarSobre(sobreBase: Record<string, unknown>, e: EntornoDelPedido): Promise<ResultadoDelPedidoDePlan> {
   const url = e.url ?? process.env.SALA_INTAKE_URL ?? 'https://zero-risk-platform.vercel.app/api/sala/intake'
   const llave = e.llave ?? process.env.SALA_INGRESS_API_KEY ?? process.env.INTERNAL_API_KEY ?? ''
   if (!llave) return { pedido: false, error: 'falta la llave de la sala: no se llamó a nadie' }
   const f = e.fetchImpl ?? fetch
+  const sobre = await conUnSoloMercado(sobreBase, e.leerConfig ?? leerConfigDeLaBase)
   try {
     const r = await f(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': llave, 'x-source': 'tablero-aprobar-manual' }, body: JSON.stringify(sobre) })
     const j = (await r.json().catch(() => ({}))) as { ok?: unknown; kind?: unknown; event_id?: unknown; code?: unknown; detail?: unknown }

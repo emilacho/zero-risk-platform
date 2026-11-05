@@ -128,6 +128,8 @@ function archivador(a: { client_id: string; analista: Analista; fecha_de_corte: 
     })
     const j = (await r.json().catch(() => null)) as Record<string, unknown> | null
     if (!r.ok) return { ok: false, detalle: `el portero no archivó (${r.status}) · ${String(j?.error ?? '')} ${String(j?.detalle ?? '')}`.trim().slice(0, 300) }
+    // la puerta apagada contesta 200 sin guardar nada: eso no es «archivado»
+    if (j?.apagado === true) return { ok: false, detalle: `el portero no archivó: su puerta está apagada · ${String(j?.detalle ?? '')}`.trim().slice(0, 300) }
     return { ok: true, detalle: `archivado por el portero (${r.status})`, ficha_id: typeof j?.ficha_id === 'string' ? j.ficha_id : null }
   }
 }
