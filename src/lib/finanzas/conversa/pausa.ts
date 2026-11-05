@@ -23,6 +23,8 @@ export interface EsperaDeFinanzas {
   intentos_de_despertar: number
   /** cuándo se anotó el último intento de despertar */
   despertado_en: string | null
+  /** cuándo se abrió: lo descartado antes no responde a esta espera */
+  creado_en: string
 }
 
 export interface PuertoDeEsperas {
@@ -38,6 +40,8 @@ export interface PuertoDeEsperas {
   estadoDeLaCorrida(f: EsperaDeFinanzas): Promise<{ estado: string | null; otra_activa: boolean }>
   /** la corrida (`plan_corridas.id`) pasa de `corriendo` a `en_pausa` */
   pausarCorrida(corrida_id: string): Promise<void>
+  /** de estos temas, los que el dueño descartó desde `desde`. Una lectura fallida LANZA: no es «no descartó nada» y tampoco «descartó todo» */
+  temasDescartados?(client_id: string, temas: string[], desde: string): Promise<string[]>
 }
 
 export type DespertarAlPlan = (cuerpo: Record<string, unknown>) => Promise<{ ok: true } | { ok: false; error: string }>
@@ -148,7 +152,10 @@ export async function atenderPausa(P: PuertosDePausa, encargo_id: string, opc: {
     e = (await P.almacen.leerEncargo(encargo_id)) ?? e
   }
   const arts = await P.almacen.artefactos(encargo_id)
-  const faltan = preguntasQueFaltan(arts, e.semilla)
+  const sinContestar = preguntasQueFaltan(arts, e.semilla)
+  // 05-nov (GO de Lenovo): si el dueño descartó todas durante esta espera, el plan sigue solo: ya no hay nada que esperar. Si no se puede leer, se sigue esperando: la pausa no gasta
+  const descartadas = new Set(sinContestar.length && P.esperas.temasDescartados ? await P.esperas.temasDescartados(e.client_id, sinContestar.map(temaDe), f.creado_en).catch(() => [] as string[]) : [])
+  const faltan = sinContestar.filter((k) => !descartadas.has(temaDe(k)))
   // contestó todo, o contestó algo y ya no escribe más: sigue. Sin ninguna respuesta, o si aún está escribiendo, espera
   // sin Slack, lo que el cerebro ya sabía antes de la pausa no cuenta como «ya revisó la ronda»: soltaría el plan sin que el dueño haya visto la pregunta
   const contesto = P.modo === 'registra' ? typeof e.semilla?.ultima_respuesta_en === 'string' : Array.isArray(e.semilla?.respuestas_del_dueno) && e.semilla.respuestas_del_dueno.length > 0

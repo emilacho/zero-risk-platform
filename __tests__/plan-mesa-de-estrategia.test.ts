@@ -183,8 +183,12 @@ describe('el acta', () => {
 
 describe('los pasos y los topes', () => {
   it('🔴 el que consolida se llama como lo espera la escena', () => { expect(PASO_CONSOLIDA).toBe('mesa-estrategia-consolida') })
-  it('🔴 el tope de la mesa es de US$ 3 y cubre solo la mesa', () => {
-    expect(PLANTILLA_MESA.limites.tope_encargo_usd).toBe(3)
+  it('🔴 el tope de la mesa es de US$ 4 y cubre solo la mesa', () => {
+    expect(PLANTILLA_MESA.limites.tope_encargo_usd).toBe(4)
+    expect(PLANTILLA_MESA.pasos.find((p) => p.clave === PASO_CONSOLIDA)?.tope_usd).toBe(1)
+    // los turnos completos caben, con holgura para que un reintento de formato no corte antes del acta
+    const suma = PLANTILLA_MESA.pasos.reduce((a, p) => a + p.tope_usd, 0)
+    expect(suma).toBeLessThanOrEqual(4)
     expect(fs.readFileSync('src/lib/planeacion/mesa/plantilla.ts', 'utf8')).toContain('SOLO esta mesa')
   })
 })
@@ -233,7 +237,8 @@ describe('el interruptor', () => {
   it('🔴 el tope de la mesa solo pesa en el cupo si está encendida', () => {
     const snap = { tope: (t: string) => ({ mesa: 3, recoleccion: 1, oficina: 5, redaccion: 0.4, jefatura: 0.5 } as Record<string, number>)[t] } as never
     expect(sumaDeTopes(snap)).toBe(6.9)
-    expect(sumaDeTopes(snap, true)).toBe(9.9)
+    // con la mesa cuenta también la segunda pasada de finanzas: 3 + 5 × 2 + 0,4 + 0,5 + 1
+    expect(sumaDeTopes(snap, true)).toBe(14.9)
   })
 })
 

@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn(), addBreadcrumb: vi.fn(), setTag: vi.fn(), withScope: (fn: (s: unknown) => void) => fn({ setTag: vi.fn(), setExtra: vi.fn() }) }))
 vi.mock('@/lib/posthog', () => ({ capture: vi.fn() }))
 const medirFreno = vi.fn()
-vi.mock('@/lib/run-sdk-spend-gate', () => ({ checkRunSdkSpendCap: (...a: unknown[]) => medirFreno(...a) }))
+vi.mock('@/lib/run-sdk-spend-gate', async (real) => ({ ...(await real<typeof import('@/lib/run-sdk-spend-gate')>()), checkRunSdkSpendCap: (...a: unknown[]) => medirFreno(...a) }))
 const promesas: Promise<unknown>[] = []
 vi.mock('@vercel/functions', () => ({ waitUntil: (p: Promise<unknown>) => { promesas.push(p) } }))
 vi.mock('@/lib/supabase', () => ({
@@ -74,6 +74,16 @@ describe('lo de siempre NO cambia: un pedido válido SÍ mide el freno (antes de
     medirFreno.mockResolvedValue({ blocked: true, spent_usd: 9, cap_usd: 8 })
     const r = await POST(req(pedido({ dry_run: false })))
     expect(r.status).toBe(429)
+    expect(alCorredor).toHaveLength(0)
+  })
+  it('🔴 el corte del plan contesta sus cifras, no las de 24 h', async () => {
+    medirFreno.mockResolvedValue({ blocked: true, reason: 'plan_over_cap', spent_usd: 9, cap_usd: 30, plan_spent_usd: 15.2, plan_cap_usd: 15 })
+    const r = await POST(req(pedido({ dry_run: false })))
+    expect(r.status).toBe(429)
+    const j = await r.json()
+    expect(j).toMatchObject({ error: 'cost_cap_exceeded', code: 'E-CAP-150', reason: 'plan_over_cap', spent_usd: 15.2, cap_usd: 15 })
+    expect(j.detail).toContain('$15.20')
+    expect(j.detail).not.toContain('24h')
     expect(alCorredor).toHaveLength(0)
   })
 })

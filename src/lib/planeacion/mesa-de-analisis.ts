@@ -110,6 +110,40 @@ export function repartirTopes(pedidos: ReadonlyArray<PedidoConTope>): number[] {
   })
 }
 
+/** la puerta muere a los 800 s con los 5 analistas adentro: cada llamada termina antes, y el que se corta no se lleva a los demás */
+export const LIMITE_DE_LA_PUERTA_MS = 780_000
+/** el analista más lento medido tardó 191 s (corridas del 01-nov): con menos que esto no se llama, ni por primera vez ni para reintentar */
+export const TIEMPO_MINIMO_PARA_LLAMAR_MS = 200_000
+/** el analista más caro medido costó US$ 0,29; con menos cupo que esto, reintentar sería cortarlo a medias */
+export const CUPO_MINIMO_PARA_REINTENTAR_USD = 0.5
+
+export interface CuentaDeLaMesa {
+  tiempoRestanteMs(): number
+  hayTiempoParaLlamar(): boolean
+  /** terminó una llamada: lo que no gastó de su tope vuelve al cupo. Una llamada cortada no llama a esto: no se sabe cuánto gastó */
+  liquidar(tope: number, costo: number): void
+  pedirReintento(tope: number): { ok: true; tope: number } | { ok: false; motivo: string }
+}
+/** 05-nov · el reintento cuenta contra el tope FIRMADO de la mesa (US$ 5 por sobre) y contra el reloj de la puerta: cabe con lo que los demás no gastaron */
+export function crearCuentaDeLaMesa(topes: ReadonlyArray<number>, ahora: () => number = Date.now): CuentaDeLaMesa {
+  const inicio = ahora()
+  let comprometido = topes.reduce((s, t) => s + t, 0)
+  const tiempoRestanteMs = () => LIMITE_DE_LA_PUERTA_MS - (ahora() - inicio)
+  const hayTiempoParaLlamar = () => tiempoRestanteMs() >= TIEMPO_MINIMO_PARA_LLAMAR_MS
+  return {
+    tiempoRestanteMs,
+    hayTiempoParaLlamar,
+    liquidar(tope, costo) { comprometido -= Math.max(0, tope - (Number.isFinite(costo) ? costo : tope)) },
+    pedirReintento(tope) {
+      if (!hayTiempoParaLlamar()) return { ok: false, motivo: 'no queda tiempo en la puerta' }
+      const cupo = Math.min(tope, TOPE_DE_LA_MESA_USD - comprometido)
+      if (cupo < CUPO_MINIMO_PARA_REINTENTAR_USD) return { ok: false, motivo: 'no queda cupo en el tope de la mesa' }
+      comprometido += cupo
+      return { ok: true, tope: cupo }
+    },
+  }
+}
+
 // ─────────────────────────────────────────────────────────── el material
 export interface FichaDelMaterial { readonly ficha_id: string; readonly clase: string | null; readonly fecha: string | null; readonly contenido: string }
 export interface Material { readonly texto: string; readonly ids: ReadonlyArray<string>; readonly fichas: number; readonly recortado: boolean; readonly con_resumen_vivo: boolean; /** cuántas fichas del tema había en el cerebro (02-nov: para declarar si falta alguna) */ readonly encontradas?: number }

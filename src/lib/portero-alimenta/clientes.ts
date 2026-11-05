@@ -3,6 +3,8 @@
  * (15-oct · firma de Emilio) el plan de 90 días no es requisito para quien ya despertó: el cerebro sigue trabajando desde el despertar.
  * Es el mismo criterio que usaba el plan viejo del diario (`diario/plan`, RETIRADO): vive aquí para que el flujo no dependa de rutas retiradas. Solo LEE.
  */
+import { motivoSinPlan, planesDeNoventaDias } from './plan-vigente'
+
 export type Db = { from(tabla: string): any }
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -39,14 +41,14 @@ export async function clientesActivos(db: Db, opciones: { pasanPausasDeAlta?: bo
     const mb = await db.from('client_brand_books').select('id').eq('client_id', id).limit(1)
     if (mb.error) return { ok: false, detalle: `client_brand_books: ${mb.error.message}` }
     if (!lista(mb.data).length) motivos.push('sin manual de marca')
-    const pl = await db.from('client_historical_outputs').select('id, provenance_tag').eq('client_id', id).eq('output_type', 'campaign_plan_90d').limit(5)
-    if (pl.error) return { ok: false, detalle: `client_historical_outputs: ${pl.error.message}` }
-    const planReal = lista(pl.data).filter((p) => !(esObjeto(p.provenance_tag) && Object.keys(p.provenance_tag).some((k) => k.startsWith('prueba'))))
-    if (!planReal.length) {
+    // 05-nov (encargo de Lenovo): un plan rechazado, reemplazado o vencido en la plataforma no es un plan real · misma lectura de vigencia que el cerebro
+    const pl = await planesDeNoventaDias(db, id)
+    if (!pl.ok) return { ok: false, detalle: pl.detalle }
+    if (!pl.vigentes.length) {
       // 15-oct (firma de Emilio): el cliente cuyo cerebro YA despertó con el alta entra a la corrida diaria aunque su plan de 90 días aún no exista
       const dp = await db.from('cerebro_portero_corridas').select('estado, resumen').eq('client_id', id).order('dia', { ascending: false }).limit(60)
       if (dp.error) return { ok: false, detalle: `cerebro_portero_corridas: ${dp.error.message}` }
-      if (!huboDespertar(lista(dp.data))) motivos.push('sin plan de 90 días')
+      if (!huboDespertar(lista(dp.data))) motivos.push(motivoSinPlan(pl))
     }
     if (pausadas.has(id)) motivos.push(`pausado por el vigilante (${pausadas.get(id)})`)
     if (motivos.length) out.excluidos.push({ client_id: id, motivos })

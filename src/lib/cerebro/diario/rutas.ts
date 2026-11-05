@@ -7,6 +7,7 @@ import { correrDiario, type Db, type ResultadoDeCorrida } from './correr'
 import { codigosDePublicaciones } from './observar'
 import { planDeAmpliacion, type PlanDeAmpliacion, type FuenteDeAmpliacion } from './plan'
 import { TOPE_DIARIO_POR_CLIENTE_USD } from './topes'
+import { motivoSinPlan, planesDeNoventaDias } from '../../portero-alimenta/plan-vigente'
 
 export interface Respuesta { status: number; body: Record<string, unknown> }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -64,11 +65,10 @@ export async function rutaPlan(db: Db, cuerpo: unknown, ahora: Date = new Date()
     const mb = await db.from('client_brand_books').select('id').eq('client_id', id).limit(1)
     if (mb.error) return err(502, 'lectura_fallida', `client_brand_books: ${mb.error.message}`)
     if (!lista(mb.data).length) motivos.push('sin manual de marca')
-    // «cliente activo» = ALTA REALIZADA (criterio del flujo de la mañana): manual de marca Y plan de 90 días real (no de prueba)
-    const pl = await db.from('client_historical_outputs').select('id, provenance_tag').eq('client_id', id).eq('output_type', 'campaign_plan_90d').limit(5)
-    if (pl.error) return err(502, 'lectura_fallida', `client_historical_outputs: ${pl.error.message}`)
-    const planReal = lista(pl.data).filter((p) => !(esObjeto(p.provenance_tag) && Object.keys(p.provenance_tag).some((k) => k.startsWith('prueba'))))
-    if (!planReal.length) motivos.push('sin plan de 90 días')
+    // «cliente activo» = ALTA REALIZADA (criterio del flujo de la mañana): manual de marca Y plan de 90 días real (no de prueba, ni rechazado, reemplazado o vencido · 05-nov)
+    const pl = await planesDeNoventaDias(db, id)
+    if (!pl.ok) return err(502, 'lectura_fallida', pl.detalle)
+    if (!pl.vigentes.length) motivos.push(motivoSinPlan(pl))
     if (motivos.length) { excluidos.push({ client_id: id, motivos }); continue }
     const vg = await db.from('cerebro_vigilancia').select('fuente, ref, contenido, observado_en, reconfirmado_en').eq('client_id', id).is('retirada_en', null)
     if (vg.error) return err(502, 'lectura_fallida', `cerebro_vigilancia: ${vg.error.message}`)

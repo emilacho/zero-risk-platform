@@ -7,6 +7,7 @@ import { estadoInicial } from '../src/lib/oficina/tipos'
 import { prepararPreguntas, preguntarAlDueno, type PuertosDelBuzon } from '../src/lib/finanzas/conversa/buzon'
 import { armarMensaje } from '../src/lib/finanzas/preguntas'
 import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
+import { temaDe } from '../src/lib/finanzas/conversa/buzon'
 import { atenderPausa, MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
 import { elDuenoRecibePreguntas } from '../src/lib/finanzas/preguntas'
 import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conversa/esperas-supabase'
@@ -26,7 +27,7 @@ const preg = (clave: string, o: Record<string, unknown> = {}) => ({ clave, texto
 const CINCO = [preg('comision'), preg('turistas'), preg('temporada'), preg('whatsapp', { frena_la_firma: true }), preg('pixel', { frena_la_firma: true })]
 const acuerdo = (preguntas: unknown[] = CINCO, criticos = 3) => ({ acuerdo: { criticos, requiere_ronda_2: criticos > 0, preguntas_a_emilio: preguntas, hallazgos: [] } })
 
-function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; modo?: PuertosDePausa['modo']; despierta?: boolean; corrida?: { estado: string | null; otra_activa: boolean } | 'caida'; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
+function mundo(o: { descartados?: string[] | 'caida'; desdes?: string[]; semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; modo?: PuertosDePausa['modo']; despierta?: boolean; corrida?: { estado: string | null; otra_activa: boolean } | 'caida'; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
   const e: EncargoDeConversa = { id: 'enc-1', client_id: 'cli', estado: o.estado ?? 'esperando_al_dueno', estado_del_motor: estadoInicial(), gasto_usd: 1.2, slack_canal: o.slackTs ? 'C123456789' : null, slack_ts: o.slackTs ?? null, leido_hasta: o.slackTs ?? null, tablero_id: null, dry_run: false, semilla: { corrida: 'cor-1', ...(o.semilla ?? {}) } }
   const arts: Record<string, Record<string, unknown>> = { ...acuerdo(), ...(o.arts ?? {}) }
   const guardados: Array<Record<string, unknown>> = [], avisos: string[] = [], enviados: string[] = [], despertares: Array<Record<string, unknown>> = [], enHilo: string[] = [], corridasPausadas: string[] = []
@@ -34,7 +35,7 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
   const alCerebro: Array<Record<string, unknown>> = []
   const mensajes = [...(o.mensajes ?? [])]
   let materialGuardado: unknown = null
-  let espera: EsperaDeFinanzas | null = o.espera === null || o.espera === undefined ? null : { id: 'esp-1', client_id: 'cli', encargo_id: 'enc-1', corrida: 'plan-x', estado: 'esperando', sobre: { corrida: 'plan-x', client_id: 'cli' }, despertado: null, intentos_de_despertar: 0, despertado_en: null, ...o.espera }
+  let espera: EsperaDeFinanzas | null = o.espera === null || o.espera === undefined ? null : { id: 'esp-1', client_id: 'cli', encargo_id: 'enc-1', corrida: 'plan-x', estado: 'esperando', sobre: { corrida: 'plan-x', client_id: 'cli' }, despertado: null, intentos_de_despertar: 0, despertado_en: null, creado_en: '2026-11-05T09:00:00.000Z', ...o.espera }
   const almacen: AlmacenDeConversa = {
     async crearEncargo() { return { ok: true, encargo: e, nuevo: false } },
     async leerEncargo() { return structuredClone(e) },
@@ -63,13 +64,14 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
       async leer(x: { desde_ts: string | null }) { return { ok: true as const, mensajes: [...mensajes], leido_hasta: x.desde_ts } },
     } as never,
     esperas: {
-      async guardar(f) { if (espera) return { ok: true, id: espera.id, nueva: false }; espera = { id: 'esp-1', despertado_en: null, client_id: f.client_id, encargo_id: f.encargo_id, corrida: String(f.sobre.corrida), estado: 'esperando', sobre: f.sobre, despertado: null, intentos_de_despertar: 0 }; materialGuardado = f.material; return { ok: true, id: 'esp-1', nueva: true } },
+      async guardar(f) { if (espera) return { ok: true, id: espera.id, nueva: false }; espera = { id: 'esp-1', despertado_en: null, creado_en: '2026-11-05T09:00:00.000Z', client_id: f.client_id, encargo_id: f.encargo_id, corrida: String(f.sobre.corrida), estado: 'esperando', sobre: f.sobre, despertado: null, intentos_de_despertar: 0 }; materialGuardado = f.material; return { ok: true, id: 'esp-1', nueva: true } },
       async delEncargo() { return espera && { ...espera } },
       async vivaDelCliente(c) { return espera && espera.estado === 'esperando' && espera.client_id === c ? { ...espera } : null },
       async soltar() { if (!espera || espera.estado !== 'esperando') return false; espera.estado = 'soltada'; return true },
       async marcarDespertar(_i, d, n) { if (espera) { espera.despertado = d; espera.intentos_de_despertar = n; espera.despertado_en = P.ahora().toISOString() } },
       async estadoDeLaCorrida() { if (o.corrida === 'caida') throw new Error('caída'); return o.corrida ?? { estado: 'corriendo', otra_activa: false } },
       async pausarCorrida(id) { corridasPausadas.push(id) },
+      async temasDescartados(_c, _t, desde) { o.desdes?.push(desde); if (o.descartados === 'caida') throw new Error('caída'); return o.descartados ?? [] },
     },
     despertar: async (c) => { despertares.push(c); return o.despierta === false ? { ok: false, error: 'el plan contestó 502' } : { ok: true } },
   }
@@ -173,6 +175,45 @@ describe('pausar', () => {
     const m = mundo({ registrar: { ok: true, estado: 'ya_preguntada' } })
     expect((await pausarOficina(m.P, pedir())).cuerpo.enviado).toBe(true)
     expect(m.enviados).toHaveLength(1)
+  })
+  describe('05-nov · el dueño descarta preguntas (GO de Lenovo)', () => {
+    const conDescartes = async (descartados: string[] | 'caida') => {
+      const m = mundo({ descartados })
+      await pausarOficina(m.P, pedir())
+      return m
+    }
+    const todas = (m: ReturnType<typeof mundo>): string[] => preguntasQueFaltan(m.arts as never, m.e.semilla)
+    it('🔴 descartó todas: el plan sigue solo', async () => {
+      const previa = mundo()
+      await pausarOficina(previa.P, pedir())
+      const temas = todas(previa).map(temaDe)
+      expect(temas.length).toBeGreaterThan(0)
+      const m = await conDescartes(temas)
+      expect(m.despertares).toHaveLength(1)
+    })
+    it('🔴 descartó parte y la otra sigue sin respuesta: espera', async () => {
+      const previa = mundo()
+      await pausarOficina(previa.P, pedir())
+      const temas = todas(previa).map(temaDe)
+      const m = await conDescartes(temas.length > 1 ? temas.slice(1) : [])
+      expect(m.despertares).toEqual([])
+    })
+    it('🔴 sin leer los descartes, espera: no suelta el plan a ciegas', async () => {
+      const m = await conDescartes('caida')
+      expect(m.despertares).toEqual([])
+      expect(m.e.estado).toBe('esperando_al_dueno')
+    })
+    it('🔴 solo pregunta por lo descartado desde que se abrió esta espera', async () => {
+      const desdes: string[] = []
+      const m = mundo({ descartados: [], desdes })
+      await pausarOficina(m.P, pedir())
+      expect(desdes.length).toBeGreaterThan(0)
+      expect(new Set(desdes)).toEqual(new Set(['2026-11-05T09:00:00.000Z']))
+    })
+    it('🔴 un tema descartado de otra cosa no cuenta', async () => {
+      const m = await conDescartes(['otro_tema_cualquiera'])
+      expect(m.despertares).toEqual([])
+    })
   })
   it('🔴 si no pudo salir avisa UNA vez y sigue en pausa', async () => {
     const m = mundo({ registrar: { ok: false, error: 'http_500' } })
@@ -676,7 +717,7 @@ describe('recibido no es arrancó (05-nov · hallazgo de CC2)', () => {
     const db = new DbFalsa()
     db.semilla('plan_corridas', [{ id: '1', client_id: 'c', corrida: 'p', estado: 'en_pausa' }, { id: '2', client_id: 'otro', corrida: 'p', estado: 'hecha' }, { id: '3', client_id: 'otro', corrida: 'q', estado: 'corriendo' }])
     const E = esperasDeFinanzas(db as never)
-    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null }
+    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null, creado_en: '2026-11-05T09:00:00.000Z' }
     expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: false })
     db.tablas['plan_corridas'].push({ id: '4', client_id: 'c', corrida: 'r', estado: 'esperando' })
     expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: true })
@@ -689,7 +730,7 @@ describe('recibido no es arrancó (05-nov · hallazgo de CC2)', () => {
     expect(MARGEN_PARA_ARRANCAR_MIN).toBe(5)
   })
   it('🔴 una caída al leer la corrida LANZA, en cualquiera de las dos lecturas: nunca se lee como «no hay corrida»', async () => {
-    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null }
+    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null, creado_en: '2026-11-05T09:00:00.000Z' }
     const conFallo = (cual: number) => {
       let n = 0
       const api = { select: () => api, eq: () => api, in: () => api, limit: async () => (++n === cual ? { data: null, error: { message: 'caída' } } : { data: [{ estado: 'en_pausa' }], error: null }) }

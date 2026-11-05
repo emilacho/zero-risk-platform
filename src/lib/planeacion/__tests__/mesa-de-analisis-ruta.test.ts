@@ -138,6 +138,16 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
     expect(rs[0].estado).toBe('trajo')
     expect((rs[0].datos as Record<string, unknown>).archivado).toMatchObject({ ok: false, detalle: expect.stringMatching(/no archivó \(403\) · portero_apagado/) })
   })
+  it('🔴 la puerta apagada contesta 200 sin guardar: eso no se reporta como archivado', async () => {
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+      if (String(url).endsWith('/api/agents/run-sdk')) return respuestaDelCorredor()
+      return new Response(JSON.stringify({ apagado: true, detalle: 'PORTERO_INFORMES está apagado: no se leyó ni se escribió nada' }), { status: 200 })
+    })
+    configs = { mesa_de_analisis: { encendida: true, clientes: [C] } }
+    const rs = await respuestas(await POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: [pedido('competencia')] })))
+    expect((rs[0].datos as Record<string, unknown>).archivado).toMatchObject({ ok: false, detalle: expect.stringMatching(/su puerta está apagada/) })
+  })
   it('un informe sin hallazgos sostenidos no se usa; «sin dato» declarado es sin_dato; nada se archiva en esos casos', async () => {
     respuestaDelCorredor = () => new Response(JSON.stringify({ output: '- esto lo estimo sin cita', cost_usd: 0.1 }), { status: 200 })
     const r1 = await respuestas(await POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: [pedido('competencia')] })))
@@ -153,7 +163,155 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
     expect(rs).toHaveLength(6)
     expect(String(rs[5].motivo)).toMatch(/el tope de la mesa \(US\$ 5 por sobre\) no alcanza/)
     expect(rs.slice(0, 5).every((r) => !/tope de la mesa/.test(String(r.motivo ?? '')))).toBe(true)
-    expect(llamadas.filter((l) => l.url.endsWith('/run-sdk'))).toHaveLength(5)
-    expect(llamadas.filter((l) => l.url.endsWith('/run-sdk')).every((l) => l.cuerpo.max_budget_usd === 1)).toBe(true)
+    const primeras = llamadas.filter((l) => l.url.endsWith('/run-sdk') && !String(l.cuerpo.paso).endsWith('-reintento'))
+    expect(primeras).toHaveLength(5)
+    expect(primeras.every((l) => l.cuerpo.max_budget_usd === 1)).toBe(true)
+  })
+  describe('05-nov · el analista que falla se reintenta una vez, y si vuelve a fallar se dice', () => {
+    const SIRVE = () => new Response(JSON.stringify({ output: `- Repiten «lento» [${F1}]\n- Preguntan precios [${F2}]\n- Elogian el local [${F1}]`, cost_usd: 0.2 }), { status: 200 })
+    const ROTO = () => new Response(JSON.stringify({ error: 'se cayó' }), { status: 500 })
+    const corredor = () => llamadas.filter((l) => l.url.endsWith('/run-sdk'))
+    const corrida = async (tipos: string[] = ['competencia']) => {
+      configs = { mesa_de_analisis: { encendida: true, clientes: [C] } }
+      return respuestas(await POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: tipos.map((t) => pedido(t)) })))
+    }
+
+    it('🔴 falla una vez y el segundo intento sirve: hay informe, se archiva una vez, y el reintento lleva su rótulo', async () => {
+      const cola = [ROTO, SIRVE]
+      respuestaDelCorredor = () => (cola.shift() as () => Response)()
+      const rs = await corrida()
+      expect(rs[0].estado).toBe('trajo')
+      expect(corredor().map((l) => l.cuerpo.paso)).toEqual(['analisis-competencia', 'analisis-competencia-reintento'])
+      expect(corredor().map((l) => l.cuerpo.workflow_execution_id)).toEqual(['424242:analisis-competencia', '424242:analisis-competencia-reintento'])
+      expect(llamadas.filter((l) => l.url.endsWith('/informe'))).toHaveLength(1)
+    })
+    it('🔴 el costo que informa suma los dos intentos', async () => {
+      const cola = [() => new Response(JSON.stringify({ output: '- estimo sin cita', cost_usd: 0.1 }), { status: 200 }), SIRVE]
+      respuestaDelCorredor = () => (cola.shift() as () => Response)()
+      const rs = await corrida()
+      expect((rs[0].datos as Record<string, unknown>).costo_usd).toBeCloseTo(0.3)
+    })
+    it('🔴 falla dos veces: una sola repetición, sin informe, sin archivar, y dice por qué los dos intentos', async () => {
+      respuestaDelCorredor = ROTO
+      const rs = await corrida()
+      expect(corredor()).toHaveLength(2)
+      expect(rs[0].estado).toBe('sin_respuesta')
+      expect(String(rs[0].motivo)).toMatch(/^no hubo informe: el analista falló en los 2 intentos · 1\.º: .*run_sdk_500.* · 2\.º: .*run_sdk_500/)
+      expect(llamadas.filter((l) => l.url.endsWith('/informe'))).toEqual([])
+    })
+    it('🔴 un informe sin nada sostenido también es una falla y se reintenta', async () => {
+      respuestaDelCorredor = () => new Response(JSON.stringify({ output: '- esto lo estimo sin cita', cost_usd: 0.1 }), { status: 200 })
+      await corrida()
+      expect(corredor()).toHaveLength(2)
+    })
+    it('🔴 vale igual para cualquier analista: el reintento no distingue el tipo', async () => {
+      respuestaDelCorredor = ROTO
+      const rs = await corrida(['competencia', 'mercado', 'retencion'])
+      for (const r of rs) expect(String(r.motivo)).toMatch(/^no hubo informe/)
+      expect(corredor()).toHaveLength(6)
+    })
+    it('🔴 «sin dato» declarado NO es una falla: no se reintenta', async () => {
+      respuestaDelCorredor = () => new Response(JSON.stringify({ output: 'sin dato: el cerebro no trae eso', cost_usd: 0.05 }), { status: 200 })
+      const rs = await corrida()
+      expect(rs[0].estado).toBe('sin_dato')
+      expect(corredor()).toHaveLength(1)
+    })
+    it('🔴 la mesa apagada no gasta ni reintenta', async () => {
+      configs = {}
+      const rs = await respuestas(await POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: [pedido('competencia')] })))
+      expect(rs[0].estado).toBe('sin_respuesta')
+      expect(corredor()).toEqual([])
+    })
+    it('🔴 un analista colgado se corta antes de que la plataforma mate la puerta, y lo dice', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+          llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+          return new Promise<Response>(() => {})
+        })
+        configs = { mesa_de_analisis: { encendida: true, clientes: [C] } }
+        const salida = POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: [pedido('competencia')] }))
+        await vi.advanceTimersByTimeAsync(780_000)
+        const rs = await respuestas(await salida)
+        expect(String(rs[0].motivo)).toMatch(/^no hubo informe: el analista no entregó y no se pudo reintentar · no queda tiempo/)
+        expect(corredor()).toHaveLength(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+    it('🔴 reparo de CC6: si 4 se cuelgan, el quinto no entra, y la puerta contesta antes de que la maten', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+          llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+          return new Promise<Response>(() => {})
+        })
+        configs = { mesa_de_analisis: { encendida: true, clientes: [C] } }
+        const salida = POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: ['competencia', 'competencia', 'competencia', 'competencia', 'competencia'].map((t) => pedido(t)) }))
+        await vi.advanceTimersByTimeAsync(780_000)
+        const rs = await respuestas(await salida)
+        expect(corredor()).toHaveLength(4)
+        expect(rs).toHaveLength(5)
+        for (const r of rs) expect(String(r.motivo)).toMatch(/^no hubo informe/)
+        expect(String(rs[4].motivo)).toMatch(/no quedó tiempo en la puerta para llamarlo/)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+    it('🔴 reparo de CC6: el reintento se paga con lo que queda, no con el tope entero', async () => {
+      let n = 0
+      vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+        llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+        if (String(url).endsWith('/api/brain/alimentar/informe')) return new Response(JSON.stringify({ ok: true, ficha_id: 'x' }), { status: 200 })
+        n += 1
+        if (n <= 4) return new Response(JSON.stringify({ output: `- Uno [${F1}]\n- Dos [${F2}]\n- Tres [${F1}]`, cost_usd: 0.95 }), { status: 200 })
+        if (n === 5) { await new Promise((listo) => setTimeout(listo, 30)); return new Response(JSON.stringify({ output: '- estimo sin cita', cost_usd: 0.6 }), { status: 200 }) }
+        return new Response(JSON.stringify({ output: `- Uno [${F1}]\n- Dos [${F2}]\n- Tres [${F1}]`, cost_usd: 0.3 }), { status: 200 })
+      })
+      await corrida(['competencia', 'competencia', 'competencia', 'competencia', 'competencia'])
+      expect(corredor()).toHaveLength(6)
+      expect(Number(corredor()[5].cuerpo.max_budget_usd)).toBeCloseTo(0.6)
+    })
+    it('🔴 reparo de CC7: una sola cuenta por mesa: cada reintento ve lo que ya comprometieron los demás y lo que devolvieron', async () => {
+      let n = 0
+      vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+        llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+        if (String(url).endsWith('/api/brain/alimentar/informe')) return new Response(JSON.stringify({ ok: true, ficha_id: 'x' }), { status: 200 })
+        n += 1
+        const sirve = (costo: number) => new Response(JSON.stringify({ output: `- Uno [${F1}]\n- Dos [${F2}]\n- Tres [${F1}]`, cost_usd: costo }), { status: 200 })
+        const falla = (costo: number) => new Response(JSON.stringify({ output: '- estimo sin cita', cost_usd: costo }), { status: 200 })
+        if (n <= 3) return sirve(0.95)
+        if (n === 4) { await new Promise((listo) => setTimeout(listo, 10)); return falla(0.5) }
+        if (n === 5) { await new Promise((listo) => setTimeout(listo, 60)); return falla(0.7) }
+        return sirve(0.1)
+      })
+      await corrida(['competencia', 'competencia', 'competencia', 'competencia', 'competencia'])
+      expect(corredor()).toHaveLength(7)
+      // 5,00 firmados · 3 × 0,95 devuelven 0,15 · el 4.º costó 0,50 y devuelve 0,50: quedan 0,65 para su reintento
+      expect(Number(corredor()[5].cuerpo.max_budget_usd)).toBeCloseTo(0.65)
+      // ese reintento costó 0,10 de sus 0,65 (no de 1,00) y el 5.º costó 0,70: quedan 0,85
+      expect(Number(corredor()[6].cuerpo.max_budget_usd)).toBeCloseTo(0.85)
+    })
+    it('🔴 el límite que trae el pedido manda si es menor', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+          llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+          return new Promise<Response>(() => {})
+        })
+        configs = { mesa_de_analisis: { encendida: true, clientes: [C] } }
+        const salida = POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: [pedido('competencia', { limite_ms: 1000 })] }))
+        await vi.advanceTimersByTimeAsync(2000)
+        const rs = await respuestas(await salida)
+        expect(String(rs[0].motivo)).toMatch(/1000 ms.*1000 ms/)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+    it('🔴 el reintento recibe el tope del analista, sin pasar del tope firmado', async () => {
+      respuestaDelCorredor = ROTO
+      await corrida()
+      expect(corredor().map((l) => l.cuerpo.max_budget_usd)).toEqual([1, 1])
+    })
   })
 })

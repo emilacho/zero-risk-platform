@@ -383,7 +383,8 @@ export function preguntasQueFaltan(arts: Arts, semilla: Semilla | undefined): st
 /** pausa UNA vez: tras el cierre de la ronda 1, con críticos abiertos y preguntas sin contestar. Lo que el dueño no contestó o el jefe deje abierto queda en la oficina y no vuelve a pausar (Emilio, 15:37Z). En seco no se le pregunta a nadie */
 export function debePausar(e: EncargoDeConversa, arts: Arts): boolean {
   const a = arts.acuerdo as { criticos?: unknown } | undefined
-  return !e.dry_run && e.semilla?.pausa_atendida !== true && !arts.acuerdo_2 && !arts.cierre && Number(a?.criticos) > 0 && preguntasQueFaltan(arts, e.semilla).length > 0
+  // 05-nov (D4 del GO): la segunda pasada no pausa: el plan sigue y la pregunta queda viva en la oficina financiera. La pausa es solo la de la primera
+  return !e.dry_run && e.semilla?.segunda_pasada !== true && e.semilla?.pausa_atendida !== true && !arts.acuerdo_2 && !arts.cierre && Number(a?.criticos) > 0 && preguntasQueFaltan(arts, e.semilla).length > 0
 }
 
 async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redactor?: string, pausaEncendida = false): Promise<Respuesta> {

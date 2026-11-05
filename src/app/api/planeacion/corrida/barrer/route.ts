@@ -7,7 +7,8 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { checkInternalKey } from '@/lib/finanzas/ruta'
 import { barrer, vencibles } from '@/lib/planeacion/corridas'
-import { almacenDeCorridas, type Db } from '@/lib/planeacion/corridas-supabase'
+import { almacenDeCorridas, sigueVivaEnN8n, type Db } from '@/lib/planeacion/corridas-supabase'
+import { avisarAAlertas } from '@/lib/portero-alimenta/avisos'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -21,7 +22,12 @@ export async function POST(request: Request) {
   try {
     const P = almacenDeCorridas(getSupabaseAdmin() as unknown as Db)
     if (dry === true) { const v = await vencibles(P); return NextResponse.json({ accion: 'dry_run', vencibles: v.map((f) => ({ id: f.id, estado: f.estado })), escribio: false }, { status: 200 }) }
-    return NextResponse.json({ accion: 'barrido', ...(await barrer(P)) }, { status: 200 })
+    const r = await barrer(P, { sigueViva: sigueVivaEnN8n() })
+    if (r.liberadas_a_ciegas.length) {
+      const avisar = avisarAAlertas({ db: getSupabaseAdmin() as never })
+      for (const x of r.liberadas_a_ciegas) await avisar(`La corrida «${x.corrida}» se dio por fallida y su cliente quedó libre, pero ${x.por === 'sin_lectura' ? 'no se pudo comprobar si sigue trabajando' : 'seguía trabajando tras todas sus prórrogas'}. No relances sin mirar n8n: podría pagarse dos veces.`, `plan-liberada-a-ciegas:${x.corrida}`)
+    }
+    return NextResponse.json({ accion: 'barrido', ...r }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'plan_corridas_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

@@ -9,7 +9,7 @@ import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
 import { AL_EDITAR_LA_FIRMA, DESTRABA_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, sePuedeEditar, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
-import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, MAX_INTENTOS_DE_DESPERTAR, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
+import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, MAX_INTENTOS_DE_DESPERTAR, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, loDescartoElDueno, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
 
 export type TipoDecision = 'plan' | 'gran_idea' | 'pieza' | 'revision' | 'pregunta_al_dueno' | 'pregunta_de_finanzas' | 'firma_de_finanzas'
 export interface Decision {
@@ -199,4 +199,16 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   const registro: LecturaDelRegistro = await leerContestadas(db, hora, clientes, { respondidas, descartadas, fuentes: fuentesDePreguntas }).catch(() => ({ contestadas: [], fuentes: fuentesDePreguntas, completo: false }))
   const contestadas = registro.contestadas.map((c) => ({ ...c, titulo: tituloParaElDueno(c.titulo) }))
   return { ok: true, generado_en: hora, completo: estaCompleto(fuentes), total: decisiones.length, decisiones, omitidas, fuentes, sin_fuente: SIN_FUENTE_DECISIONES, contestadas, registro_completo: registro.completo, fuentes_del_registro: registro.fuentes }
+}
+
+/**
+ * 05-nov · de estos temas, los que el dueño descartó DESPUÉS de abrirse la espera (`desde`): con todos descartados, la pausa del plan se levanta. Una lectura fallida LANZA.
+ * Lo archivado antes no responde a esta pregunta, y lo que archivó el sistema no es del dueño: con cualquiera de los dos, el plan seguiría sin que Emilio alcanzara a contestar.
+ */
+export async function temasDescartadosPorElDueno(db: { from(tabla: string): any }, client_id: string, temas: string[], desde: string): Promise<string[]> {
+  if (!temas.length) return []
+  if (!Number.isFinite(Date.parse(desde))) throw new Error('no sé desde cuándo espera el plan: no se puede decir qué descartó el dueño')
+  const r = await db.from('cerebro_dueno_preguntas').select('tema,motivo_descarte').eq('client_id', client_id).eq('estado', 'obsoleta').in('tema', temas).gte('obsoleta_en', desde)
+  if (r.error) throw new Error(`no pude leer las preguntas descartadas: ${r.error.message}`)
+  return ((r.data as Array<{ tema: unknown; motivo_descarte: unknown }> | null) ?? []).filter((x) => loDescartoElDueno(x.motivo_descarte)).map((x) => String(x.tema))
 }

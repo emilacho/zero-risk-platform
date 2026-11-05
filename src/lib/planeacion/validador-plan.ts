@@ -45,6 +45,8 @@ const RE_SEMANA_FECHADA = new RegExp(`\\b(?:semana|sem\\.?|week|wk\\.?)\\s*(\\d{
 /** la primera celda de una fila del calendario: «3» · «Sem. 3» · «Semana 3» · «Week 3» · «W3» */
 const RE_CELDA_DE_SEMANA = /^(?:sem(?:ana)?\.?|week|wk\.?|w)?\s*(\d{1,2})$/i
 const RE_CABECERA_DE_SEMANA = /^(?:semana|sem\.?|week|wk\.?|w)$/i
+/** el título de una columna que trae la fecha, esté donde esté: «Fecha» · «Fecha límite» · «Período» · «Cuándo» · «Plazo» · «Entrega» · «Días» · «Date» · «When» · «Due» */
+const RE_CABECERA_DE_FECHA = /\b(?:fechas?|dates?|per[ií]odos?|periods?|cu[aá]ndo|when|plazos?|entregas?|vence|vencimiento|deadline|due|d[ií]as?|days?)\b/i
 /** la palabra que anuncia una meta (español e inglés) */
 const RE_PALABRA_META = /\b(?:metas?|objetivos?|goals?|targets?|kpis?)\b/i
 /** «por semana» en sus formas (español e inglés) */
@@ -75,16 +77,33 @@ function celdasDe(linea: string): string[] | null {
 }
 const esFilaDeEncabezados = (lineas: string[], i: number) => i + 1 < lineas.length && RE_SEPARADOR_DE_TABLA.test(lineas[i + 1].trim()) && /-/.test(lineas[i + 1])
 
-/** cuántas semanas distintas trae el calendario con un período al lado (filas de tabla «| N | período |» o líneas «Semana N · período») */
+/** las columnas de fecha de una tabla, solo si su primera columna es la semana: una lista numerada «| # | Tarea | Fecha |» no es un calendario, y sus 12 filas no son 12 semanas */
+function columnasDeFecha(cabecera: string[]): number[] {
+  const limpia = (c: string) => c.replace(/[*_`]/g, '').trim()
+  if (!RE_CABECERA_DE_SEMANA.test(limpia(cabecera[0] ?? '').replace(/s$/i, ''))) return []
+  return cabecera.flatMap((c, k) => (k > 0 && RE_CABECERA_DE_FECHA.test(limpia(c)) ? [k] : []))
+}
+
+/**
+ * cuántas semanas distintas trae el calendario con un período al lado: filas de tabla «| N | período |», filas con la fecha en su columna «| N | qué | quién | 10 nov |» (así salieron los planes reales del 04-nov)
+ * o líneas «Semana N · período».
+ */
 export function semanasFechadas(texto: string): number {
   const semanas = new Set<number>()
   const lineas = texto.split('\n')
+  let deFecha: number[] = []
   lineas.forEach((l, i) => {
     const celdas = celdasDe(l)
-    if (!celdas || celdas.length < 2 || esFilaDeEncabezados(lineas, i)) return
+    if (!celdas) {
+      // la línea que separa el título de las filas sigue siendo la misma tabla; cualquier otra la termina
+      if (!RE_SEPARADOR_DE_TABLA.test(l.trim())) deFecha = []
+      return
+    }
+    if (esFilaDeEncabezados(lineas, i)) { deFecha = columnasDeFecha(celdas); return }
+    if (celdas.length < 2) return
     const n = RE_CELDA_DE_SEMANA.exec(celdas[0])
     if (!n) return
-    const periodo = celdas.slice(1, 3).some((c) => RE_PERIODO.test(c))
+    const periodo = celdas.slice(1, 3).some((c) => RE_PERIODO.test(c)) || deFecha.some((k) => RE_PERIODO.test(celdas[k] ?? ''))
     if (periodo) semanas.add(Number(n[1]))
   })
   let m: RegExpExecArray | null

@@ -159,7 +159,13 @@ describe('V8 · el cupo (§13.1)', () => {
       const r = await prevuelo(entrada(), conElla(async () => true, cupo({ cap_usd: 3.4, override_usd: 3.4 })))
       expect(r).toMatchObject({ decision: 'no_corre', motivo: 'falta_cupo' })
       expect(r).not.toHaveProperty('mesa')
-      expect(await prevuelo(entrada(), conElla(async () => true, cupo({ cap_usd: 6.4, override_usd: 6.4 })))).toMatchObject({ decision: 'correr', mesa: true })
+      expect(await prevuelo(entrada(), conElla(async () => true, cupo({ cap_usd: 7.9, override_usd: 7.9 })))).toMatchObject({ decision: 'correr', mesa: true })
+    })
+    it('🔴 el análisis pedido cuenta en el cupo que se exige (D3)', async () => {
+      const conAnalisis = crearSnapshot({ ...FILAS, topes: [...FILAS.topes, { ...FILAS.topes[0], tope_id: 'tope_analisis', tramo: 'analisis', fuente_id: null, usd: 5, contador: 'plantilla_mesa' }] } as FilasDelCatalogo)
+      const P = () => mundo({ cupo: cupo({ cap_usd: 4, override_usd: 4 }), catalogo: async () => ({ ok: true as const, snapshot: conAnalisis }) }).P
+      expect((await prevuelo(entrada(), P())).decision).toBe('correr')
+      expect(await prevuelo(entrada({ con_analisis: true }), P())).toMatchObject({ decision: 'no_corre', motivo: 'falta_cupo' })
     })
     it('🔴 no poder leer el interruptor no se lee como apagada', async () => {
       expect(await prevuelo(entrada(), conElla(async () => { throw new Error('caída') }, cupo({})))).toMatchObject({ decision: 'no_corre', motivo: 'lectura_fallida' })

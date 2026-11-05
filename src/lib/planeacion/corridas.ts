@@ -16,8 +16,16 @@ export type EstadoDeCorrida = (typeof ESTADOS_VIVOS)[number] | (typeof ESTADOS_T
 
 /** espera máxima del «cerebro listo»: 45 min (AVISO-LENOVO 15-oct: el despertar completo tarda más que los 30 del §16; 10 lecturas cada 5 min). Reanudable; vencida ⇒ corre con lo del alta y lo declara, nunca Apify en su lugar. Fila del catálogo cuando exista (V1); este valor es el de omisión. */
 export const ESPERA_MAXIMA_MIN = 45
-/** techo de una corrida en marcha: el plan mide ≈ 80 min en el peor caso (§10.3) + holgura; pasado esto el barrido la da por fallida y libera al cliente */
-export const TECHO_DE_CORRIDA_MIN = 100
+/**
+ * 05-nov · LA CUENTA DEL TECHO (GO de Lenovo tras el doble chequeo): el techo vale por tramo, y se renueva al pedirle el plan al redactor (`renovar`) y al volver de una pausa.
+ *   · antes del redactor: análisis + mesa + finanzas 30 + devolución a la mesa + segunda pasada 30. La mesa no tiene plazo de reloj, solo su tope de gasto: si esto se queda corto, lo cubre la prórroga del barrido.
+ *   · desde el redactor: redactor 80 + jefatura 50 = 130. Si el chequeo pide reintento del redactor, se renueva otra vez.
+ * Es un plazo para liberar al cliente si la corrida murió, no para apurar a nadie: lo normal son 60-75 min en total. Pasado esto, el barrido pregunta si sigue viva antes de darla por fallida.
+ */
+export const TECHO_DE_CORRIDA_MIN = 180
+/** cuánto se extiende una corrida vencida que n8n dice que sigue viva, y cuántas veces: hay un tope duro para que un motor colgado no retenga al cliente para siempre */
+export const PRORROGA_MIN = 30
+export const MAX_PRORROGAS = 4
 export const CADA_REINTENTO_S = 300
 /** gracia del barrido sobre una espera: el re-disparo de la ÚLTIMA lectura (a `vence_en`) llega con retraso; el barrido no toca una `esperando` hasta `vence_en + gracia` (≥ 2 re-disparos), así la
  * última lectura corre y el plan sale «con lo del alta, declarado» (§16) en vez de encontrar la fila ya `vencida`. Solo afecta a `esperando`; `corriendo` ya tiene su techo. */
@@ -34,6 +42,8 @@ export interface FilaDeCorrida {
   motivo: string | null
   dry_run: boolean
   actualizado_en: string
+  /** cuántas veces el barrido la extendió porque seguía viva en n8n */
+  prorrogas?: number
 }
 
 export interface PuertoDeCorridas {
@@ -43,7 +53,9 @@ export interface PuertoDeCorridas {
   leer(client_id: string, corrida: string): Promise<FilaDeCorrida | null>
   activaDe(client_id: string): Promise<FilaDeCorrida | null>
   /** `UPDATE … WHERE client_id AND corrida AND intentos = :n AND estado IN (vivos)`: 0 filas ⇒ `null` (perdió la carrera o ya no está viva) */
-  avanzarSi(client_id: string, corrida: string, intentosEsperado: number, cambios: Partial<Pick<FilaDeCorrida, 'estado' | 'intentos' | 'vence_en' | 'motivo'>>): Promise<FilaDeCorrida | null>
+  avanzarSi(client_id: string, corrida: string, intentosEsperado: number, cambios: Partial<Pick<FilaDeCorrida, 'estado' | 'intentos' | 'vence_en' | 'motivo' | 'prorrogas'>>): Promise<FilaDeCorrida | null>
+  /** el cierre de una corrida que ya se dio por fallida: la fila sigue `fallida`, pero queda dicho que sí entregó. `false` = no se anotó (no estaba fallida) */
+  anotarEntregaTardia?(client_id: string, corrida: string, motivo: string): Promise<boolean>
   vivasVencidas(ahoraIso: string): Promise<FilaDeCorrida[]>
 }
 
@@ -97,7 +109,7 @@ function continuar(f: FilaDeCorrida, ahora: Date, espera: number): ResultadoDeAb
   return { status: 200, accion: 'continua', fila: f, vencida, reintentar_en_s: CADA_REINTENTO_S }
 }
 
-export type ResultadoDeAvance = { status: 200; accion: 'avanzada'; fila: FilaDeCorrida } | { status: 200; accion: 'perdiste_la_carrera' } | { status: 409; error: 'corrida_no_viva'; estado: EstadoDeCorrida | null } | { status: 400; error: 'entrada_invalida'; errores: string[] }
+export type ResultadoDeAvance = { status: 200; accion: 'avanzada'; fila: FilaDeCorrida } | { status: 200; accion: 'perdiste_la_carrera' } | { status: 409; error: 'corrida_no_viva'; estado: EstadoDeCorrida | null; entrega_tardia?: boolean } | { status: 400; error: 'entrada_invalida'; errores: string[] }
 
 /** un re-disparo: `intentos_esperado` = lo que leyó; compare-and-set, gana UNO */
 export async function reintentar(P: PuertoDeCorridas, e: { client_id: string; corrida: string; intentos_esperado: number }): Promise<ResultadoDeAvance> {
@@ -128,18 +140,46 @@ export async function reanudar(P: PuertoDeCorridas, e: { client_id: string; corr
   return n ? { status: 200, accion: 'avanzada', fila: n } : { status: 200, accion: 'perdiste_la_carrera' }
 }
 
+/**
+ * 05-nov · al pedirle el plan al redactor: el techo vuelve a contar desde aquí. Solo desde `corriendo`: si ya no vive, `409 corrida_no_viva` y el flujo no paga. Nunca acorta un plazo.
+ */
+export async function renovar(P: PuertoDeCorridas, e: { client_id: string; corrida: string }, o: { techo_min?: number } = {}): Promise<ResultadoDeAvance> {
+  const errores = validarEntrada(e, false)
+  if (errores.length) return { status: 400, error: 'entrada_invalida', errores }
+  const f = await P.leer(e.client_id, e.corrida)
+  if (!f || f.estado !== 'corriendo') return { status: 409, error: 'corrida_no_viva', estado: f?.estado ?? null }
+  const nuevo = minutos(P.ahora(), o.techo_min ?? TECHO_DE_CORRIDA_MIN)
+  const n = await P.avanzarSi(e.client_id, e.corrida, f.intentos, { vence_en: Date.parse(nuevo) > Date.parse(f.vence_en) ? nuevo : f.vence_en })
+  return n ? { status: 200, accion: 'avanzada', fila: n } : { status: 200, accion: 'perdiste_la_carrera' }
+}
+
 /** cierre: `hecha` o `fallida` (con motivo); libera al cliente. Solo desde un estado vivo. */
 export async function cerrar(P: PuertoDeCorridas, e: { client_id: string; corrida: string; estado: 'hecha' | 'fallida'; motivo?: string }): Promise<ResultadoDeAvance> {
   const errores = validarEntrada(e, false)
   if (e.estado !== 'hecha' && e.estado !== 'fallida') errores.push('`estado` debe ser «hecha» o «fallida»')
   if (errores.length) return { status: 400, error: 'entrada_invalida', errores }
   const f = await P.leer(e.client_id, e.corrida)
+  // 05-nov · entregó después de que el barrido la diera por fallida: sigue fallida (el cliente ya se liberó), pero el plan existe y eso queda dicho. Una sola vez
+  if (f?.estado === 'fallida' && e.estado === 'hecha' && !f.motivo?.includes(ENTREGO_TARDE) && P.anotarEntregaTardia) {
+    const anotada = await P.anotarEntregaTardia(e.client_id, e.corrida, `${f.motivo ?? ''} · ${ENTREGO_TARDE}${e.motivo ? `: ${e.motivo}` : ''}`.slice(0, 300))
+    return { status: 409, error: 'corrida_no_viva', estado: f.estado, entrega_tardia: anotada }
+  }
   if (!f || !(ESTADOS_VIVOS as readonly string[]).includes(f.estado)) return { status: 409, error: 'corrida_no_viva', estado: f?.estado ?? null }
   const n = await P.avanzarSi(e.client_id, e.corrida, f.intentos, { estado: e.estado, ...(e.motivo ? { motivo: e.motivo.slice(0, 300) } : {}) })
   return n ? { status: 200, accion: 'avanzada', fila: n } : { status: 200, accion: 'perdiste_la_carrera' }
 }
 
-export interface ResultadoDelBarrido { vencidas: string[]; falladas: string[]; saltadas: string[] }
+export const ENTREGO_TARDE = 'entregó después de vencer'
+
+export interface ResultadoDelBarrido {
+  vencidas: string[]; falladas: string[]; saltadas: string[]
+  /** siguen vivas en n8n: se les extendió el plazo */
+  prorrogadas: string[]
+  /** se dieron por fallidas sin saber si seguían vivas (n8n no contestó) o agotadas sus prórrogas: pueden seguir gastando, y el cliente ya quedó libre. Alarma */
+  liberadas_a_ciegas: Array<{ id: string; client_id: string; corrida: string; por: 'sin_lectura' | 'tope_de_prorrogas' }>
+}
+/** ¿sigue viva en n8n? `null` = no se pudo saber */
+export type SigueViva = (f: FilaDeCorrida) => Promise<boolean | null>
 
 /** lo que el barrido puede liberar AHORA: `corriendo` pasado su `vence_en`; `esperando` solo pasado `vence_en + gracia` (la última lectura todavía puede llegar) */
 export async function vencibles(P: PuertoDeCorridas): Promise<FilaDeCorrida[]> {
@@ -149,15 +189,25 @@ export async function vencibles(P: PuertoDeCorridas): Promise<FilaDeCorrida[]> {
 }
 
 /** el barrido: libera lo vivo que pasó su `vence_en`. Idempotente: una fila ya terminal no entra; el compare-and-set protege contra un avance justo antes. */
-export async function barrer(P: PuertoDeCorridas): Promise<ResultadoDelBarrido> {
-  const ahora = P.ahora()
-  const r: ResultadoDelBarrido = { vencidas: [], falladas: [], saltadas: [] }
-  void ahora
+export async function barrer(P: PuertoDeCorridas, o: { sigueViva?: SigueViva } = {}): Promise<ResultadoDelBarrido> {
+  const r: ResultadoDelBarrido = { vencidas: [], falladas: [], saltadas: [], prorrogadas: [], liberadas_a_ciegas: [] }
   for (const f of await vencibles(P)) {
+    // 05-nov (E4) · antes de dar por fallida una corrida en marcha se pregunta: darla por muerta con n8n trabajando deja abrir otra y pagar dos veces
+    if (f.estado === 'corriendo' && o.sigueViva) {
+      const viva = await o.sigueViva(f).catch(() => null)
+      const hechas = f.prorrogas ?? 0
+      if (viva === true && hechas < MAX_PRORROGAS) {
+        const p = await P.avanzarSi(f.client_id, f.corrida, f.intentos, { vence_en: minutos(P.ahora(), PRORROGA_MIN), prorrogas: hechas + 1 })
+        if (p) r.prorrogadas.push(f.id)
+        else r.saltadas.push(f.id)
+        continue
+      }
+      if (viva !== false) r.liberadas_a_ciegas.push({ id: f.id, client_id: f.client_id, corrida: f.corrida, por: viva === null ? 'sin_lectura' : 'tope_de_prorrogas' })
+    }
     const destino: EstadoDeCorrida = f.estado === 'esperando' ? 'vencida' : 'fallida'
     const motivo = f.estado === 'esperando' ? 'espera vencida sin re-disparo: se declara y se libera al cliente' : 'sin cierre antes de su plazo (vence_en): se da por fallida y se libera al cliente'
     const n = await P.avanzarSi(f.client_id, f.corrida, f.intentos, { estado: destino, motivo })
-    if (!n) r.saltadas.push(f.id)
+    if (!n) { r.saltadas.push(f.id); r.liberadas_a_ciegas = r.liberadas_a_ciegas.filter((x) => x.id !== f.id) }
     else (destino === 'vencida' ? r.vencidas : r.falladas).push(f.id)
   }
   return r
