@@ -375,6 +375,21 @@ describe('el plan declara lo que no llegó', () => {
       it('🔴 un texto pegado debajo de la lista, sin línea en blanco: se queda', () => {
         expect(limpio('# Plan\n\n## Informes de análisis que no llegaron\n- a\nTexto pegado.\n')).toContain('Texto pegado.')
       })
+      it('🔴 los casos de CC6: «Qué cambió» en negrita con su lista, una tabla, una frase y un título que siguen de largo', () => {
+        const titulo = '## Informes de análisis que no llegaron\n- a\n\n'
+        expect(limpio(`# P\n\n${titulo}**Qué cambió**\n- x\n- y\n`)).toContain('**Qué cambió**\n- x\n- y')
+        expect(limpio(`# P\n\n${titulo}| Mes | Monto |\n|---|---|\n| 1 | 10 |\n`)).toContain('| Mes | Monto |\n|---|---|\n| 1 | 10 |')
+        const frase = '**Informes de análisis que no llegaron** afectan el mes 2: queda provisional.'
+        expect(limpio(`# P\n\n${frase}\n\nSigue.\n`)).toContain(`${frase}\n\nSigue.`)
+        const largo = '## Informes de análisis que no llegaron a tiempo y su efecto en el mes 2'
+        expect(limpio(`# P\n\n${largo}\nSu párrafo.\n`)).toContain(`${largo}\nSu párrafo.`)
+      })
+      it('🔴 un plan con saltos de Windows: reconoce el título y no pierde nada', () => {
+        const t = limpio('# P\r\n\r\n## Informes de análisis que no llegaron\r\n- a\r\n\r\nSigue.\r\n')
+        expect(t).toContain('Sigue.')
+        expect(t).not.toMatch(/^- a\r?$/m)
+        expect(veces(t)).toBe(1)
+      })
       it('🔴 prosa bajo el título: se queda, sin el título', () => {
         const t = limpio('# Plan\n\n## Informes de análisis que no llegaron\nUn texto del modelo.\n')
         expect(t).toContain('Un texto del modelo.')
