@@ -35,7 +35,7 @@ export async function responder(c, ctx) {
   const paso = String(c.paso || c.step_name || '')
   const ag = String(c.agent || '')
   const intento = ctx.intento
-  if (paso === 'mesa-estrategia-jefe-marketing') return j(PLANTEO_MESA)
+  if (paso === 'mesa-estrategia-jefe-marketing') return j(ESC.seis_aportes ? { ...PLANTEO_MESA, canales: [{ canal: 'Instagram', activo: true }, { canal: 'Búsqueda paga (Google Ads)', activo: true }, { canal: 'SEO local', activo: true }, { canal: 'Contenido orgánico', activo: true }] } : PLANTEO_MESA)
   if (paso === 'mesa-estrategia-consolida' || /consolida/.test(paso)) { consolidas++; const m = consolidas === 1 ? ESC.acta_meta : ESC.acta_meta_2 ?? ESC.acta_meta; return ESC.formato_roto === 'consolida' ? '(simulado) texto sin JSON' : j(m ? { ...ACTA, numero: { ...ACTA.numero, meta: m } } : ACTA) }
   if (paso.startsWith('mesa-estrategia-')) return ESC.formato_roto === paso ? '(simulado) texto sin JSON' : APORTE(ag)
   if (paso === 'planteo' || paso === 'ajuste' || paso === 'ajuste_2') return j(PLANTEO_FIN)
