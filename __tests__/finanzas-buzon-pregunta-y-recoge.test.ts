@@ -45,7 +45,7 @@ function mundo(preguntas: unknown[], extra: Partial<AlmacenDeConversa> = {}) {
   }
   return { e, almacen, arts }
 }
-const cerebro = () => { const registradas: any[] = []; const c: CerebroDelDueno = { async registrarPregunta(p) { registradas.push(p); return { ok: true, estado: 'registrada', pregunta_id: 'pid' } }, async registrarRespuesta() { return { ok: true } } }; return { c, registradas } }
+const cerebro = () => { const registradas: any[] = []; const c: CerebroDelDueno = { async registrarPregunta(p) { registradas.push(p); return { ok: true, estado: 'registrada', pregunta_id: 'pid' } }, async registrarRespuesta() { return { ok: true } }, async leerRespuestas() { return { ok: true, respuestas: [] } }, async cerrarPendientes() { return { ok: true } } }; return { c, registradas } }
 const puertos = (almacen: AlmacenDeConversa, s: ReturnType<typeof slackFalso>, c: CerebroDelDueno, modo: PuertosDelBuzon['modo'] = 'envia'): PuertosDelBuzon =>
   ({ almacen, slack: slackMdPuerto({ token: 'xoxb-falso', dueno_id: DUENO, fetch: s.f }), cerebro: c, modo, ahora: () => new Date(1_700_000_000_000) })
 
@@ -70,14 +70,14 @@ describe('las preguntas al dueño sin Slack (05-nov · decisión de Emilio)', ()
     const m = abrir()
     await preguntarAlDueno(m.P, 'enc-1')
     const primero = m.arts.buzon_respuestas
-    m.c.c.registrarPregunta = async () => ({ ok: true, estado: 'repetida' })
     expect((await preguntarAlDueno(m.P, 'enc-1')).cuerpo).toMatchObject({ enviado: false, motivo: 'ya_registrada' })
     expect(m.arts.buzon_respuestas).toBe(primero)
+    expect(m.c.registradas).toHaveLength(1)
   })
   it('🔴 lo que el dueño contestó en la oficina le llega al encargo en la llamada siguiente', async () => {
     const m = abrir()
     await preguntarAlDueno(m.P, 'enc-1')
-    m.c.c.registrarPregunta = async () => ({ ok: true, estado: 'ya_respondida', respuestas: [{ respuesta: '200 al mes' }] })
+    m.c.c.leerRespuestas = async () => ({ ok: true, respuestas: [{ respuesta: '200 al mes' }] })
     expect((await preguntarAlDueno(m.P, 'enc-1')).cuerpo).toMatchObject({ motivo: 'respondidas_en_el_cerebro', usadas_del_cerebro: ['presupuesto_mensual'] })
     expect(m.e.semilla.respuestas_del_dueno).toEqual([{ clave: 'presupuesto_mensual', valor: '200 al mes', literal: '200 al mes' }])
   })
@@ -85,8 +85,8 @@ describe('las preguntas al dueño sin Slack (05-nov · decisión de Emilio)', ()
     const O = { clave: 'whatsapp', texto: '¿Tienes el número de WhatsApp?', recomendacion: 'Escribe el número', supuesto_si_no_responde: 'se supone que no' }
     const s = slackFalso(), c = cerebro(), w = mundo([Q, O]), P = puertos(w.almacen, s, c.c, 'registra')
     await preguntarAlDueno(P, 'enc-1')
-    c.c.registrarPregunta = async (q) => (q.tema === 'whatsapp' ? { ok: true, estado: 'ya_respondida', respuestas: [{ respuesta: 'sí' }] } : { ok: true, estado: 'repetida' })
-    expect((await preguntarAlDueno(P, 'enc-1')).cuerpo).toMatchObject({ motivo: 'ya_registrada', usadas_del_cerebro: ['whatsapp'] })
+    c.c.leerRespuestas = async (q) => ({ ok: true, respuestas: q.tema === 'whatsapp' ? [{ respuesta: 'sí' }] : [] })
+    expect((await preguntarAlDueno(P, 'enc-1')).cuerpo).toMatchObject({ motivo: 'respondidas_en_el_cerebro', usadas_del_cerebro: ['whatsapp'] })
     expect(w.e.semilla.respuestas_del_dueno).toHaveLength(1)
   })
   it('🔴 en el primer registro, lo que el cerebro ya sabía queda en el encargo y solo se pregunta el resto', async () => {
