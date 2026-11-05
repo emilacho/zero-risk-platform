@@ -465,7 +465,8 @@ describe('el plan declara lo que no llegó', () => {
         }
       })
       it('🔴 pedido de CC6: con una segunda corrección, el PDF sale de la versión C, no de la B', () => {
-        const est = guardado({ B: version('# B de hoy\n'), C: version('# C de hoy\n') }, { B: '# B guardada\n', C: '# C guardada\n## QUÉ CAMBIÓ\n- y\n' })
+        const base = guardado({ B: version('# B de hoy\n'), C: version('# C de hoy\n') }, { B: '# B guardada\n', C: '# C guardada\n## QUÉ CAMBIÓ\n- y\n' })
+        const est = { ...base, guardar: [...base.guardar, { etiqueta: 'C', version: 3, version_de: 'B' }] }
         const nodos = { 'Guardar el plan': { body: [fila] }, 'JEF · plan · el plan de guardado': est, '¿Llegó la vuelta?': { client_id: 'c1', client_name: 'Z' }, 'JEF · plan · guardar B': { statusCode: 201, body: [{ id: 'b1' }] }, 'JEF · plan · guardar C': { statusCode: 201, body: [{ id: 'c1' }] } }
         const v = correrNodo('Plan vigente', nodos)[0].json
         expect(v.jef_vigente.etiqueta).toBe('C')
