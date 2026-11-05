@@ -91,7 +91,7 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; hfEstado?: 
       const s = falEstados.shift() ?? 'COMPLETED'
       return json(s === 'COMPLETED' && op.falError ? { status: s, error: 'mesh failed', error_type: 'runtime' } : { status: s })
     }
-    if (url === 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1') return json({ model_mesh: { url: 'https://v3.fal.media/files/x/modelo.glb', content_type: 'model/gltf-binary', file_name: 'modelo.glb' }, model_urls: { glb: { url: 'https://v3.fal.media/files/x/modelo.glb', file_name: 'modelo.glb' } } })
+    if (url === 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1') return json({ rendered_image: { url: 'https://v3.fal.media/files/x/vista.webp' }, model_mesh: { url: 'https://v3.fal.media/files/x/modelo.glb', content_type: 'model/gltf-binary', file_name: 'modelo.glb' }, model_urls: { glb: { url: 'https://v3.fal.media/files/x/modelo.glb', file_name: 'modelo.glb' } } })
     if (url === 'https://v3.fal.media/files/x/modelo.glb') return new Response(GLB, { status: 200 })
     if (url.startsWith('https://api.higgsfield.ai/estimate/')) return json({ type: 'description', pricing_description: 'Each 1,000 video tokens costs $0.01 at 480p or 720p and $0.02 at 1080p.' })
     if (url.startsWith('https://api.higgsfield.ai/bytedance/')) return json({ request_id: 'hf-1', status: 'queued', status_url: 'https://api.higgsfield.ai/requests/hf-1/status' })
@@ -175,6 +175,16 @@ describe('imagen', () => {
     expect(d.p.llamadas.some((l) => l.url === 'https://api.openai.com/v1/images/edits')).toBe(true)
     expect(d.base.subidas.some((s) => s.ruta.startsWith(`estudio/${CLIENTE}/partidas/`))).toBe(true)
   })
+  it('el doble clic con foto no la vuelve a subir ni a cotizar', async () => {
+    const d = deps()
+    const p = pedido({ tipo: 'imagen', prompt: 'misma escena de noche', foto_b64: PNG.toString('base64') })
+    await crear(d, p)
+    const subidas = d.base.subidas.length, llamadas = d.p.llamadas.length
+    const r = await crear(d, p)
+    expect(r.ok && r.valor.ya_existia).toBe(true)
+    expect(d.base.subidas.length).toBe(subidas)
+    expect(d.p.llamadas.length).toBe(llamadas)
+  })
   it('una foto que no es imagen se rechaza sin gastar', async () => {
     const d = deps()
     const r = await crear(d, pedido({ tipo: 'imagen', prompt: 'x y z', foto_b64: Buffer.from('hola, no soy una imagen').toString('base64') }))
@@ -231,6 +241,15 @@ describe('3D', () => {
     // otra pregunta después de cerrar: no anota de nuevo
     await avanzar(d, p.id)
     expect(d.base.t.costs).toHaveLength(2)
+  })
+  it('dos preguntas a la vez cierran una sola vez y anotan fal una sola vez', async () => {
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED', 'COMPLETED'] }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'termo naranja' }))
+    if (!r.ok) throw new Error('no creó')
+    const [a, b] = await Promise.all([avanzar(d, r.valor.pieza.id), avanzar(d, r.valor.pieza.id)])
+    expect(a.ok && a.valor.estado).toBe('lista')
+    expect(b.ok && b.valor.estado).toBe('lista')
+    expect(d.base.t.costs.filter((c) => c.service === 'estudio:fal')).toHaveLength(1)
   })
   it('si fal falla queda fallida, con lo gastado en la imagen y sin cobro de fal', async () => {
     const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED'], falError: true }))
