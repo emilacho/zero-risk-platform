@@ -10,6 +10,8 @@
  *   Un corte a medias sigue esperando: no se puede saber si arrancó.
  * Mesa · el plazo ya no corta antes del acta: lo pagado no se tira por el reloj. Frenan su tope de gasto, «sin contestar» y el tope de vueltas (24 → 80: una vuelta en vuelo son 20 s).
  * Jefatura · lee el estado de la corrida justo antes. Si está `fallida` o `vencida` no abre (no paga). El plan A ya quedó guardado antes. Si no se pudo leer, sigue: no sabe que esté muerta.
+ * Plan sin forma · tras su reintento el flujo terminaba con la corrida `corriendo` y el cliente bloqueado hasta el barrido. Ahora el botón siempre pide el chequeo, así que se cierra como `fallida`; el borrador sigue guardado.
+ * Cables de la plataforma · `con_analisis` al pre-vuelo y `segunda_pasada` en la semilla de la segunda pasada. El rótulo del plan ya viajaba en el flujo vivo: no se toca.
  * Segunda mitad · con corrida muerta se llama igual: el PDF y el cable no cuestan y el plan ya está pagado. Lo único que se salta es el parte a la sala, que sí puede lanzar trabajo pagado.
  *   Si la llama la aprobación del dueño, sigue como hoy: decidió una persona.
  *
@@ -44,6 +46,20 @@ export const N_SI_MAS = 'Vuelta · ¿sigue esperando?'
 export const N_OTRA = 'Vuelta · esperar otra vez'
 export const N_ESTADO = 'JEF · ¿sigue viva la corrida?'
 export const N_BRIEF_VIVA = 'BRIEF · ¿la corrida sigue viva?'
+
+const VALIDAR_RESUMEN = 'Validar · resumen'
+export const N_VALIDAR_ARMAR = 'Validar · armar el cierre'
+export const N_VALIDAR_SI = 'Validar · ¿cerrar la corrida?'
+export const N_VALIDAR_CERRAR = 'Validar · cerrar la corrida'
+
+export const CODIGO_VALIDAR_ARMAR = [
+  '// 05-nov · el botón ahora pide siempre el chequeo de forma. Si el plan no pasa tras su reintento, la corrida se cierra: el borrador queda guardado y espera a una persona.',
+  'const j = $input.first().json || {}',
+  "const s = ($('" + WEBHOOK + "').first().json.body || {})",
+  "const aplica = s.plan_v3 === true && typeof s.corrida === 'string' && s.corrida.length > 0 && typeof s.client_id === 'string' && s.client_id.length > 0",
+  "if (!aplica) return [{ json: { ...j, aplica: false } }]",
+  "return [{ json: { ...j, aplica: true, cuerpo: { accion: 'cerrar', client_id: s.client_id, corrida: s.corrida, estado: 'fallida', motivo: 'el plan no pasó el chequeo de forma tras su reintento: el borrador quedó guardado y espera a una persona' } } }]",
+].join('\n')
 
 export const CODIGO_PREPARAR = [
   '// 05-nov · antes de pagar al redactor: se anota la hora de este intento y se arma la renovación del plazo de la corrida',
@@ -112,6 +128,8 @@ export function construirGoDobleChequeo(f) {
   cambiarCodigo(f, ACUSE, 'if (!rechazado) return [{ json: { ...r, redactor_rechazado: false } }]', 'if (!rechazado) return [{ json: { ...r, redactor_rechazado: false, esperando_desde: Date.now() } }]')
   cambiarCodigo(f, ACUSE, "const texto = typeof r.error === 'string' ? r.error : ''", "// conexión rechazada: el pedido nunca entró, así que no hay nada que esperar\nconst noEntro = !!r.error && typeof r.error === 'object' && /ECONNREFUSED|ENOTFOUND|refused the connection/.test(JSON.stringify(r.error))\nconst texto = typeof r.error === 'string' ? r.error : (noEntro ? 'no se pudo conectar con la plataforma' : '')")
   cambiarCodigo(f, ACUSE, "const dudoso = texto === 'agent-runner timeout' || r.upstream_status === 0", "// sin configuración también trae upstream_status 0, pero ahí el empleado no arrancó: es rechazo\nconst sinConfigurar = /not configured/.test(texto)\nconst dudoso = !sinConfigurar && (texto === 'agent-runner timeout' || r.upstream_status === 0)")
+  // ahora hay dos topes (24 h de la ficha y US$ 15 del plan) y la respuesta no dice cuál fue
+  cambiarCodigo(f, ACUSE, "'el freno de gasto del cliente no dejó pedir el plan (se llegó al tope de 24 h)'", "'el freno de gasto no dejó pedir el plan (se llegó a uno de sus topes)'")
   cambiarCodigo(f, COMPLETAR, "try { ack = $('" + PEDIR + "').last().json.ack_timestamp } catch (e) { ack = null }", "try { ack = $('" + PEDIR + "').last().json.ack_timestamp } catch (e) { ack = null }\n// corte dudoso: sin acuse, cuenta desde la hora en que se pidió este intento\nif (!ack) { try { ack = $('" + N_PREPARAR + "').last().json.pedido_en } catch (e) { ack = null } }")
   agregarNodo(f, codigo(N_MAS, CODIGO_MAS), COMPLETAR, 200, 180)
   agregarNodo(f, si(N_SI_MAS, '={{ $json.esperar_mas }}'), COMPLETAR, 400, 180)
@@ -131,6 +149,23 @@ export function construirGoDobleChequeo(f) {
     if (!/const MAX_PASOS = \d+/.test(m.parameters.jsCode)) throw new Error('«' + n + '» cambió de forma: no se aplica a ciegas')
     m.parameters.jsCode = m.parameters.jsCode.replace(/const MAX_PASOS = \d+/, 'const MAX_PASOS = ' + MAX_VUELTAS_DE_MESA).replace(/const PLAZO_MS = \d+\n/, '').replace(/const t0 = .*\n/, '')
   }
+
+  // los dos cables que pidió la plataforma (CC1, #928)
+  const previo = nodo(f, 'V9 · pre-vuelo')
+  const anclaPrevuelo = 'if (b.dry_run !== undefined) o.dry_run = b.dry_run;'
+  if (!previo.parameters.jsonBody.includes(anclaPrevuelo)) throw new Error('«V9 · pre-vuelo» cambió de forma: no se aplica a ciegas')
+  previo.parameters.jsonBody = previo.parameters.jsonBody.replace(anclaPrevuelo, anclaPrevuelo + ' if (b.con_analisis !== undefined) o.con_analisis = b.con_analisis;')
+  const anclaActa = '// 04-nov · si la mesa de estrategia cerró un acta, finanzas la recibe en la semilla'
+  cambiarCodigo(f, 'FIN2 · armar la semilla', anclaActa, '// 05-nov · D4: una pregunta en esta pasada no frena el plan; queda viva en la oficina\nsemilla.segunda_pasada = true\n' + anclaActa)
+
+  // plan sin forma tras su reintento: el flujo termina y la corrida quedaba `corriendo`, con el cliente bloqueado hasta que venciera
+  agregarNodo(f, codigo(N_VALIDAR_ARMAR, CODIGO_VALIDAR_ARMAR), VALIDAR_RESUMEN, 200, 0)
+  agregarNodo(f, si(N_VALIDAR_SI, '={{ $json.aplica }}'), VALIDAR_RESUMEN, 400, 0)
+  const cerrarValidar = agregarNodo(f, { name: N_VALIDAR_CERRAR, type: 'n8n-nodes-base.httpRequest', typeVersion: cerrar.typeVersion, onError: 'continueRegularOutput', parameters: JSON.parse(JSON.stringify(cerrar.parameters)) }, VALIDAR_RESUMEN, 600, 0)
+  cerrarValidar.parameters.options = { ...cerrarValidar.parameters.options, timeout: 60000 }
+  conectar(f, VALIDAR_RESUMEN, N_VALIDAR_ARMAR)
+  conectar(f, N_VALIDAR_ARMAR, N_VALIDAR_SI)
+  conectar(f, N_VALIDAR_SI, N_VALIDAR_CERRAR, 0)
 
   // la jefatura: no pagar sobre una corrida muerta
   const leer = nodo(f, LEER)

@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CODIGO_MAS, CODIGO_PREPARAR, CODIGO_VIVA, ESPERA_S, MAX_VUELTAS_DE_MESA, N_BRIEF_VIVA, N_ESTADO, N_MAS, N_OTRA, N_PREPARAR, N_RENOVAR, N_SI_MAS, N_SI_RENUEVA, N_VIVA, RELECTURAS, RELECTURA_S, construirGoDobleChequeo, construirGoDobleChequeoMitad } from '../scripts/ops/oficina-marketing/plan-go-doble-chequeo.mjs'
+import { CODIGO_MAS, CODIGO_PREPARAR, CODIGO_VALIDAR_ARMAR, CODIGO_VIVA, N_VALIDAR_ARMAR, N_VALIDAR_CERRAR, N_VALIDAR_SI, ESPERA_S, MAX_VUELTAS_DE_MESA, N_BRIEF_VIVA, N_ESTADO, N_MAS, N_OTRA, N_PREPARAR, N_RENOVAR, N_SI_MAS, N_SI_RENUEVA, N_VIVA, RELECTURAS, RELECTURA_S, construirGoDobleChequeo, construirGoDobleChequeoMitad } from '../scripts/ops/oficina-marketing/plan-go-doble-chequeo.mjs'
 
 type Nodo = { name: string; type: string; onError?: string; parameters: Record<string, any> }
 type Flujo = { nodes: Nodo[]; connections: Record<string, any> }
@@ -133,6 +133,12 @@ describe('lo que no arrancó avisa al momento', () => {
       expect(r.detalle).toMatch(/no se pudo conectar/)
     }
   })
+  it('el freno no afirma cuál de sus topes fue', async () => {
+    const r = await acuse(hecho(), { error: 'cost_cap_exceeded', code: 'E-CAP-150' })
+    expect(r.redactor_rechazado).toBe(true)
+    expect(r.motivo).toMatch(/freno de gasto/)
+    expect(r.motivo).not.toMatch(/24 h/)
+  })
   it('lo dudoso sigue esperando y anota desde cuándo', async () => {
     for (const r of [{ error: 'agent-runner timeout' }, { error: 'agent-runner upstream failed', upstream_status: 0 }, { error: { message: 'socket hang up' } }, {}, { accepted: true }]) {
       const s = await acuse(hecho(), r)
@@ -166,6 +172,42 @@ describe('la mesa llega al acta aunque pase el plazo', () => {
   it('los plazos de finanzas no se tocan', () => {
     const f = hecho()
     for (const n of ['FIN · decidir', 'FIN2 · decidir']) expect(cod(f, n)).toBe(cod(PLAN, n))
+  })
+})
+
+describe('un plan sin forma cierra su corrida', () => {
+  const armar = (s: unknown) => correr(CODIGO_VALIDAR_ARMAR, { [WEB]: { body: s } }, { parado_en: 'validar_forma', plan_guardado_id: 'p' })
+  it('cierra como fallida, con motivo, y no pierde el resumen', async () => {
+    const r = await armar(SOBRE)
+    expect(r).toMatchObject({ aplica: true, parado_en: 'validar_forma', plan_guardado_id: 'p', cuerpo: { accion: 'cerrar', client_id: 'c1', corrida: 'r1', estado: 'fallida' } })
+    expect(r.cuerpo.motivo).toMatch(/chequeo de forma/)
+  })
+  it('sin corrida del plan nuevo no pretende cerrar', async () => {
+    for (const s of [{}, { ...SOBRE, plan_v3: false }, { ...SOBRE, corrida: '' }, { ...SOBRE, client_id: 5 }]) expect((await armar(s)).aplica).toBe(false)
+  })
+  it('el cableado: resumen → armar → ¿cerrar? → cerrar, con la ruta de V9', () => {
+    const f = hecho()
+    expect(destinos(f, 'Validar · resumen')).toEqual([N_VALIDAR_ARMAR])
+    expect(destinos(f, N_VALIDAR_ARMAR)).toEqual([N_VALIDAR_SI])
+    expect(destinos(f, N_VALIDAR_SI, 0)).toEqual([N_VALIDAR_CERRAR])
+    expect(nodo(f, N_VALIDAR_CERRAR).parameters.url).toBe(nodo(f, 'V9 · cerrar la corrida').parameters.url)
+    expect(nodo(f, N_VALIDAR_CERRAR).parameters.jsonBody).toContain('$json.cuerpo')
+    expect(nodo(f, N_VALIDAR_CERRAR).onError).toBe('continueRegularOutput')
+  })
+})
+
+describe('los dos cables que pidió la plataforma', () => {
+  it('el pre-vuelo recibe con_analisis tal como llega, y no lo inventa si no vino', () => {
+    const b = nodo(hecho(), 'V9 · pre-vuelo').parameters.jsonBody.replace(/^=\{\{|\}\}$/g, '')
+    const pv = (body: unknown) => JSON.parse(new Function('$', 'return ' + b)(sel({ [WEB]: { body } })))
+    expect(pv({ client_id: 'c', corrida: 'r', con_analisis: true }).con_analisis).toBe(true)
+    expect(pv({ client_id: 'c', corrida: 'r', con_analisis: false }).con_analisis).toBe(false)
+    expect('con_analisis' in pv({ client_id: 'c', corrida: 'r' })).toBe(false)
+  })
+  it('la segunda pasada lo dice en su semilla, y la primera no', () => {
+    const f = hecho()
+    expect(cod(f, 'FIN2 · armar la semilla')).toContain('semilla.segunda_pasada = true')
+    expect(cod(f, 'FIN · armar la semilla')).not.toContain('segunda_pasada')
   })
 })
 
@@ -216,9 +258,9 @@ describe('sobre una corrida muerta no se paga', () => {
 
 describe('el resto queda igual', () => {
   it('no cambia ningún otro nodo', () => {
-    const f = hecho(); const toca = new Set(['Esperar al redactor', 'Redactor · ¿aceptó el pedido?', 'Vuelta · completar', 'MESA · decidir', 'MESA · decidir la devolución', 'JEF · armar', 'Segunda mitad · sobre'])
+    const f = hecho(); const toca = new Set(['Esperar al redactor', 'Redactor · ¿aceptó el pedido?', 'Vuelta · completar', 'MESA · decidir', 'MESA · decidir la devolución', 'JEF · armar', 'Segunda mitad · sobre', 'V9 · pre-vuelo', 'FIN2 · armar la semilla'])
     for (const v of PLAN.nodes) if (!toca.has(v.name)) expect(nodo(f, v.name), v.name).toEqual(v)
-    expect(f.nodes.length).toBe(PLAN.nodes.length + 8)
+    expect(f.nodes.length).toBe(PLAN.nodes.length + 11)
   })
   it('todo nodo de código compila', () => {
     for (const f of [hecho(), mitad()]) for (const n of f.nodes) if (n.parameters.jsCode) expect(() => new Function('$', '$input', '$runIndex', '$execution', '$workflow', '$env', '$json', 'return (async () => {' + n.parameters.jsCode + '\n})()'), n.name).not.toThrow()
