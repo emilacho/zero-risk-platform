@@ -13,7 +13,7 @@ export interface RetiroDeLoCerrado { retiradas: Array<{ ficha_id: string; ref: s
 export async function retirarFichasDeLoCerrado(db: Db, clientId: string, o: { dryRun: boolean; ahora?: Date }): Promise<RetiroDeLoCerrado> {
   const [salidas, cola, aprobaciones] = await Promise.all([
     db.from('client_historical_outputs').select('id, status, provenance_tag').eq('client_id', clientId),
-    db.from('hitl_queue').select('output_id, status, decision, resolved_at, created_at').eq('client_id', clientId),
+    db.from('hitl_queue').select('output_id, type, status, decision, reviewer, resolved_by, resolved_at, created_at').eq('client_id', clientId),
     db.from('plan_aprobaciones').select('plan_id, estado, version, creado_en').eq('client_id', clientId),
   ])
   const fallo = salidas.error ?? cola.error ?? aprobaciones.error
@@ -23,7 +23,8 @@ export async function retirarFichasDeLoCerrado(db: Db, clientId: string, o: { dr
   const motivos = new Map<string, string>()
   for (const f of (salidas.data ?? []) as Fila[]) {
     const id = String(f.id), d = decisiones.get(id)
-    const e = estadoDeLaSalida(f, { decision: d?.decision ?? null, decision_en: d?.en ?? null, vencida_en: vencimientos.get(id) ?? null, aprobacion: aprob.get(id) ?? null })
+    const v = vencimientos.get(id)
+    const e = estadoDeLaSalida(f, { decision: d?.decision ?? null, decision_en: d?.en ?? null, decision_por: d?.por ?? null, vencida_en: v?.en ?? null, vencida_por: v?.por ?? null, aprobacion: aprob.get(id) ?? null })
     if (e.cerrada && e.motivo) motivos.set(`client_historical_outputs:${id}`, e.motivo)
   }
   if (!motivos.size) return { retiradas: [], errores: [] }

@@ -82,6 +82,22 @@ describe('el puente va por pasadas (sin 504)', () => {
     expect(r.status).toBe(502)
     expect(String((r.body.errores as string[])[0])).toContain('estado en la plataforma')
   })
+  it('sin poder leer el estado: una alarma con clave fija, en seco ninguna; al recuperarse, se cierra', async () => {
+    const alarmas: Array<[string, string]> = [], cierres: string[] = []
+    const avisos = { avisarIncidente: async (t: string, c: string) => { alarmas.push([t, c]) }, resolverIncidente: async (c: string) => { cierres.push(c) } }
+    const caida = crearBaseFalsa({ cerebro_fichas: [], client_brain_chunks: [], client_historical_outputs: [], hitl_queue: [], plan_aprobaciones: [] } as never, { fallaEn: 'plan_aprobaciones' })
+    await rutaPuente({ db: caida.db, interruptores: ON, ...avisos }, { client_id: C, dry_run: true })
+    expect([alarmas, cierres]).toEqual([[], []])
+    await rutaPuente({ db: caida.db, interruptores: ON, puente: async () => ({ escritos: 0, sacados: 0, errores: [] }), ...avisos }, { client_id: C, dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' })
+    expect(alarmas).toHaveLength(1)
+    expect(alarmas[0][1]).toBe('puente:estado-en-plataforma')
+    expect(alarmas[0][0]).toContain('no se están retirando')
+    expect(cierres).toEqual([])
+    const sana = crearBaseFalsa({ cerebro_fichas: [], client_brain_chunks: [], client_historical_outputs: [], hitl_queue: [], plan_aprobaciones: [] } as never)
+    await rutaPuente({ db: sana.db, interruptores: ON, puente: async () => ({ escritos: 0, sacados: 0, errores: [] }), ...avisos }, { client_id: C, dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' })
+    expect(alarmas).toHaveLength(1)
+    expect(cierres).toEqual(['puente:estado-en-plataforma'])
+  })
   it('203 pendientes se envían de 40 en 40: 6 pasadas, cada una dice cuánto QUEDA, y la última deja 0', async () => {
     const t = tablas(203)
     const base = crearBaseFalsa(t as never)

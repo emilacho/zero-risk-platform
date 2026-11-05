@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { construirListaCorta } from '../lista-corta'
-import { aprobacionesPorPlan, estadoDeLaSalida, manualCerrado } from '../estado-en-plataforma'
+import { aprobacionesPorPlan, estadoDeLaSalida, filaConDecisionReal, manualCerrado, manualRechazado, quienResolvio } from '../estado-en-plataforma'
 import { estadoDelManual, leerEstadoDelManual } from '../../portero-alimenta/estado-del-manual'
 import { retirarFichasDeLoCerrado } from '../../portero-alimenta/retiro-de-lo-cerrado'
 import { crearBaseFalsa as basePortero } from '../../portero-alimenta/__tests__/base-falsa'
@@ -80,6 +80,26 @@ describe('el clasificador, señal por señal', () => {
   ]
   it.each(casos)('%s', (_n, f, s, estado, cerrada) => {
     expect(estadoDeLaSalida(f, s)).toMatchObject({ estado, cerrada })
+  })
+  it('el motivo dice quién decidió, y nunca da por hecho que fue el dueño', () => {
+    expect(estadoDeLaSalida({ status: 'draft' }, { decision: 'rechazada', decision_en: dias(1), decision_por: 'emilio' }).motivo).toBe('rechazado en la revisión por emilio')
+    expect(estadoDeLaSalida({ status: 'draft' }, { decision: 'rechazada', decision_en: dias(1) }).motivo).toBe('rechazado en la revisión')
+    expect(estadoDeLaSalida({ status: 'rejected', provenance_tag: { rechazado_por: 'emilio', nota_de_rechazo: 'caro' } }).motivo).toBe('rechazado en la plataforma por emilio: caro')
+    expect(estadoDeLaSalida({ status: 'draft' }, { vencida_en: dias(1), vencida_por: 'hitl-inbox-processor' }).motivo).toBe('su revisión venció sin aprobación; la cerró hitl-inbox-processor')
+    expect(estadoDeLaSalida({ status: 'draft' }, { vencida_en: dias(1) }).motivo).toBe('su revisión venció sin aprobación')
+  })
+  it('una salida rechazada con la marca de que nadie decidió no se cierra', () => {
+    for (const tag of [{ no_es_decision_del_dueno: true }, { superada: true }, { archivada: true }]) expect(estadoDeLaSalida({ status: 'rejected', provenance_tag: tag })).toMatchObject({ estado: 'abierto', cerrada: false })
+    expect(estadoDeLaSalida({ status: 'rejected', provenance_tag: { no_es_decision_del_dueno: false } })).toMatchObject({ estado: 'rechazado', cerrada: true })
+  })
+  it('qué fila de la cola recoge una decisión real', () => {
+    for (const decision of [{ no_es_decision_del_dueno: true }, { no_es_decision_de_nadie: true }, { superada: true }, { archivada: true }, { por: 'sistema · limpieza' }]) expect(filaConDecisionReal({ decision })).toBe(false)
+    expect(filaConDecisionReal({ decision: {}, reviewer: 'limpieza-cc2' })).toBe(false)
+    expect(filaConDecisionReal({ decision: {}, resolved_by: 'limpieza-cc2' })).toBe(false)
+    for (const f of [{ decision: {} }, { decision: { por: 'dueño · ejecuta CC1' }, reviewer: 'emilio' }, { decision: { superada: false, no_es_decision_del_dueno: false } }]) expect(filaConDecisionReal(f)).toBe(true)
+    expect(quienResolvio({ decision: { por: 'a' }, resolved_by: 'b', reviewer: 'c' })).toBe('a')
+    expect(quienResolvio({ decision: {}, resolved_by: 'b', reviewer: 'c' })).toBe('b')
+    expect(quienResolvio({ decision: {}, reviewer: 'c' })).toBe('c')
   })
   it('lo cerrado siempre dice por qué; lo abierto no', () => {
     for (const [, f, s, , cerrada] of casos) {
@@ -170,10 +190,27 @@ describe.each(DIEZ_CLIENTES.map((c) => [c.nombre, c.id] as const))('cualquier sa
     expect(r.errores).toEqual([])
     expect(r.retiradas.map((x) => x.ficha_id).sort()).toEqual(['f1', 'f6'])
     const filas = base.tablas.cerebro_fichas as Fila[]
+    for (const e of base.escrituras.filter((x) => x.tabla === 'cerebro_fichas')) expect(e.filtros).toContainEqual(['client_id', C])
     expect(filas.find((x) => x.id === 'f1')).toMatchObject({ retirada_en: AHORA.toISOString(), motivo_retirada: expect.stringContaining('no va') })
     expect(filas.find((x) => x.id === 'f6')?.motivo_retirada).toContain('venció')
     for (const id of ['f2', 'f3', 'f4', 'f7', 'f8']) expect(filas.find((x) => x.id === id)?.retirada_en).toBeNull()
     expect(filas).toHaveLength(8)
+  })
+  it('una limpieza o la decisión sobre una sola parte no retiran fichas', async () => {
+    const f = (id: string, ref: string) => ({ id, client_id: C, ref, retirada_en: null, motivo_retirada: null })
+    const base = basePortero({
+      client_historical_outputs: [fila(C, 'marca', 'draft', 3), fila(C, 'autor', 'draft', 3), fila(C, 'palabra', 'draft', 3), fila(C, 'real', 'draft', 3)],
+      hitl_queue: [
+        cola(C, 'h1', 'marca', 'rejected', 1, { superada: true, no_es_decision_del_dueno: true }),
+        { ...cola(C, 'h2', 'autor', 'rejected', 1), reviewer: 'limpieza-cc2' },
+        { ...cola(C, 'h3', 'palabra', 'rejected', 1), type: 'palabra_del_dueno' },
+        { ...cola(C, 'h4', 'real', 'rejected', 1), reviewer: 'emilio' },
+      ],
+      plan_aprobaciones: [],
+      cerebro_fichas: ['marca', 'autor', 'palabra', 'real'].map((x) => f(x, `client_historical_outputs:${x}`)),
+    })
+    const r = await retirarFichasDeLoCerrado(base.db as never, C, { dryRun: true, ahora: AHORA })
+    expect(r.retiradas).toEqual([{ ficha_id: 'real', ref: 'client_historical_outputs:real', motivo: 'rechazado en la revisión por emilio' }])
   })
   it('sin certeza del estado no se retira nada, y se dice', async () => {
     const db = { from: (t: string) => { const q: Record<string, unknown> = { select: () => q, eq: () => q, then: (ok: (v: unknown) => void) => ok(t === 'plan_aprobaciones' ? { data: null, error: { message: 'boom' } } : { data: [fila(C, 'x', 'rejected', 1)], error: null }) }; return q } }
@@ -188,7 +225,73 @@ describe('la aprobación más reciente', () => {
   })
 })
 
+describe('el caso real · Zero Risk Seguridad Industrial: limpiezas que el dueño no hizo', () => {
+  const C = 'df7e47cc-0000-4000-8000-000000000000'
+  const pz = (id: string, antig: number, brief: string) => fila(C, id, 'draft', antig, { brief_id: brief, parte_id: 'P' }, 'campaign_piece')
+  const hq = (id: string, out: string, type: string, status: string, antig: number, decision: Fila, reviewer: string | null, resolved_by: string | null, notas: string | null = null) =>
+    ({ id, client_id: C, type, status, output_id: out, decision, reviewer, resolved_by, resolution_notes: notas, resolved_at: dias(antig), created_at: dias(antig + 1) })
+  const salidas = [fila(C, 'a58df0c4', 'draft', 16), pz('4d6ded22', 14, 'BRF-0001'), pz('b682fc72', 13, 'BRF-0002'), pz('c9b4cb6d', 12, 'BRF-0002')]
+  const colaReal = [
+    hq('30eac3c3', 'a58df0c4', 'plan_con_pendientes', 'rejected', 6, { orden: 'ADENDA 2', archivada: true, no_es_decision_del_dueno: true }, 'limpieza-cc2', 'limpieza-cc2', 'Archivada por orden de Emilio (30-oct): lo resuelven los agentes, no el dueño'),
+    hq('1604fafd', 'b682fc72', 'content_piece_review', 'rejected', 5, { motivo: 'fila duplicada', superada: true, superada_por: '353067d1', no_es_decision_del_dueno: true }, 'limpieza-cc2', null),
+    hq('9ccb6924', '4d6ded22', 'content_piece_review', 'rejected', 4, { por: 'sistema · limpieza', motivo: 'Pieza de una campaña en pausa', vencida: true, decision: 'rejected' }, 'sistema · limpieza', 'sistema · limpieza'),
+    hq('353067d1', 'c9b4cb6d', 'content_piece_review', 'rejected', 3, { superada: true, superada_por: '5db4c541', no_es_decision_del_dueno: true }, 'oficina-superada', 'oficina-superada'),
+  ]
+  it('el plan archivado y la pieza de la limpieza siguen vigentes, sin aviso de cierre', async () => {
+    const l = await listaDe(C, { salidas, cola: colaReal })
+    expect(vigentes(l).sort()).toEqual(['4d6ded22', 'a58df0c4', 'c9b4cb6d'])
+    for (const id of ['a58df0c4', '4d6ded22', 'b682fc72', 'c9b4cb6d']) {
+      const f = linea(l, id)
+      expect(f.estado).toBe('borrador sin aprobar')
+      expect(f.aviso ?? '').not.toContain('NO VIGENTE')
+      expect(f.decision_del_dueno).toBeUndefined()
+    }
+  })
+  it('ninguna limpieza sale como decisión del dueño', async () => {
+    const l = await listaDe(C, { salidas, cola: colaReal })
+    expect(l.lineas.filter((x) => x.clase === 'decision_del_aprobador')).toEqual([])
+    expect(JSON.stringify(l)).not.toContain('rechazado por el dueño')
+  })
+  it('pero un rechazo real de la misma pieza sí la cierra y dice de quién', async () => {
+    const l = await listaDe(C, { salidas: [pz('p', 9, 'B')], cola: [hq('h', 'p', 'content_piece_review', 'rejected', 1, {}, 'emilio', null)] })
+    expect(vigentes(l)).toEqual([])
+    expect(linea(l, 'p').aviso).toContain('rechazado en la revisión por emilio')
+  })
+})
+
+describe('una decisión sobre una sola parte no decide la salida entera', () => {
+  const C = 'df7e47cc-0000-4000-8000-000000000000'
+  const parte = (status: string, decision: Fila = {}) => ({ ...cola(C, 'h', 'p', status, 1, decision), type: 'palabra_del_dueno' })
+  it('rechazar una palabra no cierra el plan; la decisión sigue listada, sin atarse a él', async () => {
+    const l = await listaDe(C, { salidas: [fila(C, 'p', 'draft', 9)], cola: [parte('rejected')] })
+    expect(vigentes(l)).toEqual(['p'])
+    expect(linea(l, 'p').estado).toBe('borrador sin aprobar')
+    expect(linea(l, 'p').decision_del_dueno).toBeUndefined()
+    const d = l.lineas.find((x) => x.clase === 'decision_del_aprobador')
+    expect(d?.ref).toBe('hitl_queue:h')
+    expect(d?.de_la_cosa).toBeUndefined()
+  })
+  it('aprobar una palabra no aprueba el plan', async () => {
+    const l = await listaDe(C, { salidas: [fila(C, 'p', 'draft', 9)], cola: [parte('approved')] })
+    expect(linea(l, 'p').estado).toBe('borrador sin aprobar')
+  })
+  it('el vencimiento de una palabra no cierra el plan', async () => {
+    const l = await listaDe(C, { salidas: [fila(C, 'p', 'draft', 9)], cola: [parte('rejected', { vencida: true })] })
+    expect(vigentes(l)).toEqual(['p'])
+  })
+})
+
 describe('el manual cerrado', () => {
+  it('reemplazado no es rechazado', async () => {
+    const C = 'df7e47cc-0000-4000-8000-000000000000'
+    const m = (version: number, tag: Fila = {}) => ({ id: `m${version}`, client_id: C, version, human_validated: false, created_at: dias(10 - version), provenance_tag: tag, content_text: 'x' })
+    const base = crearBaseFalsa({ clients: [{ id: C, name: 'c' }], client_brand_books: [m(1), m(2, { vigente: false }), m(3, { rechazado_por: 'dueño', no_es_decision_del_dueno: true })] })
+    const l = await construirListaCorta(base.consulta, C, { ahora: AHORA })
+    const de = (id: string) => l.lineas.find((x) => x.ref === `client_brand_books:${id}`)
+    expect(de('m2')).toMatchObject({ estado: 'borrador sin aprobar', vigente: false, reemplazada: true })
+    expect(de('m3')).toMatchObject({ estado: 'borrador sin aprobar', vigente: true })
+    expect(manualRechazado({ provenance_tag: { vigente: false } })).toBe(false)
+  })
   it('solo por marca real en la etiqueta', () => {
     expect(manualCerrado({ provenance_tag: {} })).toBe(false)
     expect(manualCerrado({ provenance_tag: { vigente: true } })).toBe(false)

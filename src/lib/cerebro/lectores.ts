@@ -12,7 +12,7 @@ import { type ClaseDePlazo, type Plazos, vigenciaDe } from './plazos'
 import { resumirTexto } from './resumen'
 import { type DecisionAtada, type DecisionDelDueno, type Estado, type EstadoDeFuente, type Ficha, type NombreDeFuente, type Origen, pesoDeTexto } from './tipos'
 import { derivarVersiones } from './versiones'
-import { aprobacionesPorPlan, estadoDeLaSalida, manualCerrado, vencimientosDeLaCola } from './estado-en-plataforma'
+import { aprobacionesPorPlan, esDeUnaParte, estadoDeLaSalida, filaConDecisionReal, manualCerrado, manualRechazado, quienResolvio, vencimientosDeLaCola } from './estado-en-plataforma'
 import { avisoDeProvisionales } from '../manual/lectura'
 import { validacionDelManual, versionVigente } from '../manual/campos-del-manual'
 import { AVISO_DE_HORARIO_CERRADA, AVISO_DE_HORARIO_POR_ABRIR, estadoDeLasSedes, esLineaDeHorarioOAtencion } from '../sedes/por-abrir'
@@ -113,7 +113,7 @@ export async function leerManual(ctx: Contexto): Promise<Salida> {
     return linea(ctx, {
       ref: `client_brand_books:${f.id}`, estante: 'E1', clase: 'manual', titulo: `Manual de marca · versión ${version}`,
       que_es: `Manual de marca (voz, valores, posicionamiento, vocabulario y palabras prohibidas) · ${validacion.rotulo}${vigente && avisoDeProvisionales(f.content_text) ? ` · ${avisoDeProvisionales(f.content_text)}` : ''}`,
-      origen: 'producido', estado: manualCerrado(f) ? 'rechazado' : validacion.aprobado ? 'aprobado' : 'borrador sin aprobar',
+      origen: 'producido', estado: manualRechazado(f) ? 'rechazado' : validacion.aprobado ? 'aprobado' : 'borrador sin aprobar',
       fecha: iso(f.created_at), plazo: 'sin_plazo', version, vigente, reemplazada: !vigente, versiones_anteriores: vigente ? filas.length - 1 : 0,
       peso: pesoDeTexto(cuerpo), ...(vigente ? { contenido: cuerpo } : {}),
     })
@@ -384,7 +384,7 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
   const [r, cola, aprobaciones] = await Promise.all([
     leer(ctx, { tabla: 'client_historical_outputs', columnas: ['id', 'output_type', 'title', 'status', 'created_at', 'updated_at', 'content_text', 'provenance_tag', 'hitl_verdict', 'human_edits'], donde: { client_id: ctx.cliente } }),
     // la decisión del dueño vive en la cola de revisión: sin leerla no se sabe cuál versión está aprobada
-    leer(ctx, { tabla: 'hitl_queue', columnas: ['id', 'type', 'status', 'output_id', 'decision', 'resolution_notes', 'resolved_at', 'created_at'], donde: { client_id: ctx.cliente } }),
+    leer(ctx, { tabla: 'hitl_queue', columnas: ['id', 'type', 'status', 'output_id', 'decision', 'reviewer', 'resolved_by', 'resolution_notes', 'resolved_at', 'created_at'], donde: { client_id: ctx.cliente } }),
     // la aprobación del plan: también dice si está aprobado o reemplazado
     leer(ctx, { tabla: 'plan_aprobaciones', columnas: ['plan_id', 'estado', 'version', 'creado_en'], donde: { client_id: ctx.cliente } }),
   ])
@@ -395,15 +395,15 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
   const filas = r.filas.filter((f) => !esDePrueba(objeto(f.provenance_tag)) && !TIPOS_DE_REGISTRO_INTERNO.includes(String(f.output_type)))
 
   // la ÚLTIMA decisión de la cola sobre cada pieza (sin importar el orden en que lleguen las filas)
-  const ultimaPorPieza = new Map<string, { decision: DecisionDelDueno; fecha: string | null; id: string; detalle: string | null }>()
+  const ultimaPorPieza = new Map<string, { decision: DecisionDelDueno; fecha: string | null; id: string; detalle: string | null; por: string | null }>()
   if (!cola.error) {
     for (const f of cola.filas) {
       const decision = DECISION_DE_LA_COLA[String(f.status)]
       const salida = f.output_id === null || f.output_id === undefined ? '' : String(f.output_id)
-      if (!decision || !salida || esVencida(f)) continue
+      if (!decision || !salida || esVencida(f) || !filaConDecisionReal(f) || esDeUnaParte(f)) continue
       const fecha = iso(f.resolved_at) ?? iso(f.created_at)
       const previa = ultimaPorPieza.get(salida)
-      if (!previa || String(fecha ?? '') > String(previa.fecha ?? '') || (fecha === previa.fecha && String(f.id) > previa.id)) ultimaPorPieza.set(salida, { decision, fecha, id: String(f.id), detalle: detalleDeLaCola(f) })
+      if (!previa || String(fecha ?? '') > String(previa.fecha ?? '') || (fecha === previa.fecha && String(f.id) > previa.id)) ultimaPorPieza.set(salida, { decision, fecha, id: String(f.id), detalle: detalleDeLaCola(f), por: quienResolvio(f) })
     }
   }
 
@@ -411,8 +411,8 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
   const vencimientos = vencimientosDeLaCola(cola.filas)
   const aprobacionDe = aprobacionesPorPlan(aprobaciones.filas)
   const enPlataforma = new Map(filas.map((f) => {
-    const id = String(f.id), d = ultimaPorPieza.get(id)
-    return [id, estadoDeLaSalida(f, { decision: d?.decision ?? null, decision_en: d?.fecha ?? null, vencida_en: vencimientos.get(id) ?? null, aprobacion: aprobacionDe.get(id) ?? null })]
+    const id = String(f.id), d = ultimaPorPieza.get(id), v = vencimientos.get(id)
+    return [id, estadoDeLaSalida(f, { decision: d?.decision ?? null, decision_en: d?.fecha ?? null, decision_por: d?.por ?? null, vencida_en: v?.en ?? null, vencida_por: v?.por ?? null, aprobacion: aprobacionDe.get(id) ?? null })]
   }))
   const versiones = derivarVersiones(filas.map((f) => {
     const e = enPlataforma.get(String(f.id))!
@@ -478,12 +478,14 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
 
 // ── decisiones resueltas en la cola de revisión humana ────────────────────────────────
 export async function leerDecisionesDeLaCola(ctx: Contexto): Promise<Salida> {
-  const r = await leer(ctx, { tabla: 'hitl_queue', columnas: ['id', 'type', 'status', 'output_id', 'decision', 'resolution_notes', 'resolved_at', 'created_at'], donde: { client_id: ctx.cliente } })
+  const r = await leer(ctx, { tabla: 'hitl_queue', columnas: ['id', 'type', 'status', 'output_id', 'decision', 'reviewer', 'resolved_by', 'resolution_notes', 'resolved_at', 'created_at'], donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['decisiones_del_aprobador'], r.error)
-  const lineas = r.filas.filter((f) => DECISION_DE_LA_COLA[String(f.status)] && !esVencida(f)).map((f) => {
+  // una limpieza no se presenta como dicho por el dueño
+  const lineas = r.filas.filter((f) => DECISION_DE_LA_COLA[String(f.status)] && !esVencida(f) && filaConDecisionReal(f)).map((f) => {
     const dec = objeto(f.decision)
     const contenido = [`${texto(f.type) ?? 'revisión'} · ${f.status}`, Object.keys(dec).length ? JSON.stringify(dec) : null, texto(f.resolution_notes)].filter(Boolean).join(' · ')
-    const salida = f.output_id === null || f.output_id === undefined || String(f.output_id) === '' ? null : String(f.output_id)
+    // la decisión sobre una sola parte sigue listada, pero no se ata a la salida entera
+    const salida = f.output_id === null || f.output_id === undefined || String(f.output_id) === '' || esDeUnaParte(f) ? null : String(f.output_id)
     return linea(ctx, {
       ref: `hitl_queue:${f.id}`, estante: 'E7', clase: 'decision_del_aprobador', titulo: `Decisión · ${texto(f.type) ?? 'revisión'} · ${f.status}`, que_es: recorte(contenido, 300), contenido,
       origen: 'dueno', estado: 'dicho_por_dueno', fecha: iso(f.resolved_at) ?? iso(f.created_at), plazo: 'sin_plazo', peso: pesoDeTexto(contenido),
