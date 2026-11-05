@@ -21,7 +21,7 @@ import { abrirConversacion, avanzar, cerrarPorPlazo, leerConversacion } from '@/
 import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
 import { nombreDelClienteDe } from '@/lib/finanzas/conversa/nombre'
-import { listarAbiertos, preguntarAlDueno } from '@/lib/finanzas/conversa/buzon'
+import { ETIQUETA_DE_TU_OFICINA, listarAbiertos, preguntarAlDueno } from '@/lib/finanzas/conversa/buzon'
 import { atenderPausa } from '@/lib/finanzas/conversa/pausa'
 import { esperasDeFinanzas } from '@/lib/finanzas/conversa/esperas-supabase'
 import { despertarDelEntorno } from '@/lib/finanzas/conversa/puertos-de-pausa'
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   else if (c.accion === 'leer' && typeof c.encargo_id === 'string') r = await leerConversacion(P, c.encargo_id)
   else if (c.accion === 'cerrar' && typeof c.encargo_id === 'string') r = await cerrarPorPlazo(P, c.encargo_id)
   else if ((c.accion === 'buzon_abiertos' || ((c.accion === 'preguntar' || c.accion === 'recoger') && typeof c.encargo_id === 'string'))) {
-    // BUZÓN por MD: apagado = 0 envíos y 0 lecturas (`preguntas_slack` ≠ 'envia'); el id del dueño y las llaves salen del entorno, nunca del cuerpo
+    // BUZÓN por MD: apagado = 0 envíos y 0 lecturas (`preguntas_slack` ≠ 'envia'; en 'registra' no se toca Slack: la pregunta se contesta en Tu oficina); el id del dueño y las llaves salen del entorno, nunca del cuerpo
     // una configuración que no se pudo leer NO es «apagada» (503), igual que en abrir/avanzar/leer
     let cfg
     let fallo: { status: number; cuerpo: Record<string, unknown> } | null = null
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
         // CANAL del buzón (opcional): `FINANZAS_CANAL_PREGUNTAS` = id del canal privado (C…/G…); sin él (o mal formado) se usa el MD al dueño
         canal: canalDelBuzon,
         slack: slackMdPuerto({ token: process.env.SLACK_BOT_TOKEN ?? '', dueno_id: P.emilio_id, ...(canalDelBuzon ? { canal: canalDelBuzon } : {}) }),
-        cerebro: cerebroDelDueno({ base: baseDelCerebro(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id: c.workflow_id, workflow_execution_id: c.workflow_execution_id, ...(canalDelBuzon ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
+        cerebro: cerebroDelDueno({ base: baseDelCerebro(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id: c.workflow_id, workflow_execution_id: c.workflow_execution_id, ...(cfg.preguntas_slack === 'registra' ? { canal_etiqueta: ETIQUETA_DE_TU_OFICINA } : canalDelBuzon ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
         modo: cfg.preguntas_slack,
         ahora: P.ahora,
         // el nombre de la ficha para el mensaje al dueño (sin esto salía el id del cliente)
