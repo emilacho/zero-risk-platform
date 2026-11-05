@@ -146,7 +146,8 @@ describe('privacidad sin aplanar', () => {
   })
   it('un comentario de redes conserva sus saltos; correos, @usuarios y números se quitan sin cruzar líneas', () => {
     expect(limpiarComentario('¡Me encantó!\n\nVolveré pronto 🙂')).toBe('¡Me encantó!\n\nVolveré pronto 🙂')
-    expect(limpiarComentario('Escríbeme a a@b.com\nllama al +593 99 123 4567')).toBe('Escríbeme a  \nllama al')
+    expect(limpiarComentario('Escríbeme a a@b.com\nllama al +593 99 123 4567')).toBe('Escríbeme a \nllama al')
+    expect(limpiarComentario('hola @ana   qué rico\n\n  sí')).toBe('hola qué rico\n\n  sí')
     expect(limpiarComentario('Año 2024\n2025 mejor')).toBe('Año 2024\n2025 mejor')
   })
 })
