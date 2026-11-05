@@ -390,6 +390,9 @@ describe('el plan declara lo que no llegó', () => {
         expect(t).not.toMatch(/^- a\r?$/m)
         expect(veces(t)).toBe(1)
       })
+      it('🔴 pedido de CC6: una negrita justo debajo del título no es un punto de lista', () => {
+        expect(limpio('# P\n\n## Informes de análisis que no llegaron\n**Presupuesto**\nMil dólares.\n')).toContain('**Presupuesto**\nMil dólares.')
+      })
       it('🔴 prosa bajo el título: se queda, sin el título', () => {
         const t = limpio('# Plan\n\n## Informes de análisis que no llegaron\nUn texto del modelo.\n')
         expect(t).toContain('Un texto del modelo.')
