@@ -520,7 +520,7 @@ describe('un turno cortado no se pierde', () => {
   it('🔴 el empleado que falló con la fila en curso no se espera: se repite enseguida y en fresco', async () => {
     const m = await montar([FALLA, null]); await m.hastaPaso()
     m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
-    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { error: 'turno_cortado', intento: 1 } })
+    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { error: 'turno_cortado', intento: 1, detalle: 'run_sdk_500 · el proveedor del modelo devolvió un error' } })
     expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toMatchObject({ turno_en_curso: { paso: PASO_CONSOLIDA, intentos: 1, termino: true } })
     expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
     expect(m.pedidos).toHaveLength(2)
