@@ -10,5 +10,5 @@ begin
     end if;
   end loop;
 end $$;
-delete from public.plan_catalogo_topes where tope_id = 'tope_analisis';
+delete from public.plan_catalogo_topes where tope_id in ('tope_analisis', 'tope_mercado');
 update public.clients set config = jsonb_set(coalesce(config, '{}'::jsonb), '{spend_cap_usd}', '20'::jsonb) where id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312';

@@ -1,5 +1,5 @@
 -- 05-nov · GO de Lenovo tras el doble chequeo · CC1. Versión nueva de cada fila, la anterior queda como historia.
--- Mesa 3 → 4. Redacción 0,80 → 2,50 (su tope real por intento: el pre-vuelo contaba de menos). Análisis 5 (nuevo: el botón ahora lo pide siempre). Ficha de Náufrago: US$ 30 por 24 h (D3).
+-- Mesa 3 → 4. Redacción 0,80 → 2,50 (su tope real por intento: el pre-vuelo contaba de menos). Análisis 5 (nuevo: el botón ahora lo pide siempre). Informe de mercado 1 (nuevo: su tope por omisión; queda fuera del corte del plan y el pre-vuelo lo cuenta aparte). Ficha de Náufrago: US$ 30 por 24 h (D3).
 -- REVERSA: `supabase/reversas/202611051110_topes_del_go_doble_chequeo_REVERSA.sql`.
 alter table public.plan_catalogo_topes drop constraint if exists plan_catalogo_topes_usd_check;
 alter table public.plan_catalogo_topes add constraint plan_catalogo_topes_usd_check check (usd >= 0 and usd <= 50);
@@ -22,6 +22,10 @@ end $$;
 insert into public.plan_catalogo_topes (tope_id, tramo, fuente_id, usd, contador, version, vigente, pais)
   select 'tope_analisis', 'analisis', null, 5, 'mesa_de_analisis', 1, true, null
   where not exists (select 1 from public.plan_catalogo_topes where tope_id = 'tope_analisis');
+
+insert into public.plan_catalogo_topes (tope_id, tramo, fuente_id, usd, contador, version, vigente, pais)
+  select 'tope_mercado', 'mercado', null, 1, 'informe_de_mercado', 1, true, null
+  where not exists (select 1 from public.plan_catalogo_topes where tope_id = 'tope_mercado');
 
 update public.clients set config = jsonb_set(coalesce(config, '{}'::jsonb), '{spend_cap_usd}', '30'::jsonb)
   where id = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312';

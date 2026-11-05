@@ -103,12 +103,13 @@ const noCorre = (dry: boolean, motivo: MotivoDeNoCorre, detalle?: string, extra:
 /**
  * Lo que el plan puede gastar como máximo, SIN el cupo de la ficha (GO de Lenovo, D3, 05-nov).
  *   · Los agentes del plan: oficina + redacción + jefatura; con la mesa encendida, la mesa y una SEGUNDA pasada de finanzas (la devolución abre otro encargo, con su propio tope). Su suma no puede pasar del tope del plan completo: ese corta.
- *   · Aparte: la recolección, y el análisis si se pidió: no son parte de ese tope.
+ *   · Aparte, porque el corte del plan no los frena (GO de Lenovo, 05-nov 12:52Z): la recolección; el informe de mercado, que el flujo pide salvo que se apague; y el análisis, si se pidió.
+ *     Mercado y análisis cuentan DOS veces: volver de una pausa larga los pide de nuevo (`material_viejo`), y esa vuelta no pasa otra vez por este cupo.
  */
 export function sumaDeTopes(snap: CatalogoSnapshot, conMesa = false, conAnalisis = false): number {
   const t = (tramo: string) => snap.tope(tramo) ?? 0
   const agentes = t('oficina') * (conMesa ? 2 : 1) + t('redaccion') + t('jefatura') + (conMesa ? t('mesa') : 0)
-  return r2(Math.min(agentes, TOPE_DEL_PLAN_COMPLETO_USD) + t('recoleccion') + (conAnalisis ? t('analisis') : 0))
+  return r2(Math.min(agentes, TOPE_DEL_PLAN_COMPLETO_USD) + t('recoleccion') + t('mercado') * 2 + (conAnalisis ? t('analisis') * 2 : 0))
 }
 
 /** lo que `huecos[]` dice (por `funcion`) traducido a los tipos del catálogo que esa fuente provee */
