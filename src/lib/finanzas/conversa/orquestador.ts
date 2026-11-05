@@ -21,7 +21,7 @@ import { AGENTES, PLANTILLA_FINANCIERA, plantillaConActa, plantillaConRedactor, 
 import { validarActa, type ActaV1 } from '../../planeacion/mesa/acta'
 import { LA_MESA_YA_DECIDIO, planteoDelActa, viabilidadDelBloque } from './sobre-el-acta'
 import { prepararPreguntas } from './buzon'
-import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type PuertosDeConversa, type Semilla, type TopeDePrueba, type TurnoDeConversa } from './puertos'
+import { ESTADOS_TERMINALES, type EncargoDeConversa, type FirmaDeTope, type MetaFijadaPorElDueno, type PuertosDeConversa, type Semilla, type TopeDePrueba, type TurnoDeConversa } from './puertos'
 import { sha256 } from './util'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
@@ -60,13 +60,27 @@ export async function abrirConversacion(P: PuertosDeConversa, cuerpo: unknown): 
   if (!conTope.ok) return { status: 503, cuerpo: { error: 'libro_ilegible', sin_bloque: true, detalle: conTope.detalle } }
   // 04-nov · la corrida que la abre: el id que manda el plan como `trabajo_id`
   const corrida = typeof c.trabajo_id === 'string' && c.trabajo_id.trim() ? c.trabajo_id.trim() : null
-  const r = await P.almacen.crearEncargo({ client_id: c.client_id.trim(), dry_run: c.dry_run, semilla: corrida ? { ...conTope.semilla, corrida } : conTope.semilla })
+  // 05-nov · la meta que el dueño firmó manda en esta corrida y en las siguientes. Sin poder leerla no se abre: calcular con otra meta sería ignorar su firma sin decirlo
+  const { meta_fijada_por_el_dueno: _deFuera, ...semillaSinFirma } = conTope.semilla
+  const firma = P.almacen.ultimaFirmaConCambios ? await P.almacen.ultimaFirmaConCambios(c.client_id.trim()) : { ok: true as const, firma: null }
+  if (!firma.ok) return { status: 503, cuerpo: { error: 'firma_ilegible', sin_bloque: true, detalle: firma.error } }
+  const fijada = metaDeLaFirma(firma.firma)
+  if (firma.firma && !fijada) return { status: 503, cuerpo: { error: 'firma_ilegible', sin_bloque: true, detalle: 'la última firma con cambios no trae una meta válida' } }
+  const semillaConFirma: Semilla = fijada ? { ...semillaSinFirma, meta_fijada_por_el_dueno: fijada } : semillaSinFirma
+  const r = await P.almacen.crearEncargo({ client_id: c.client_id.trim(), dry_run: c.dry_run, semilla: corrida ? { ...semillaConFirma, corrida } : semillaConFirma })
   if (!r.ok) return { status: 500, cuerpo: { error: 'no_se_pudo_abrir', sin_bloque: true, detalle: r.error } }
   return { status: 200, cuerpo: { encargo_id: r.encargo.id, nuevo: r.nuevo, estado: r.encargo.estado, pasos_ejecutados: r.encargo.estado_del_motor.pasos_ejecutados } }
 }
 
+/** la meta de una firma con cambios; null si no trae un número positivo */
+export function metaDeLaFirma(f: Record<string, unknown> | null): MetaFijadaPorElDueno | null {
+  if (!f || typeof f.meta_por_semana !== 'number' || !Number.isFinite(f.meta_por_semana) || f.meta_por_semana <= 0) return null
+  return { meta_por_semana: f.meta_por_semana, total_mes: typeof f.total_mes === 'number' && Number.isFinite(f.total_mes) ? f.total_mes : null, por: typeof f.por === 'string' ? f.por : null, en: typeof f.en === 'string' ? f.en : null }
+}
+
 // ───────────────────────────────────────────────────────── el pedido de cada agente
 const REGLAS_COMUNES = [
+  'Si el expediente trae `meta_fijada_por_el_dueno`, esa meta ya la firmó el dueño: razona con ella. Si crees que no conviene, dilo como hallazgo; el cálculo la usará igual.',
   'Esta tarea NO es un brief de campaña ni un documento: es una respuesta corta y estructurada dentro de una conversación de oficina.',
   'Responde SOLO con un objeto JSON válido (sin texto antes ni después, sin bloques de código), en español, y tutea.',
   'Todo el contexto necesario va en este mensaje: no consultes el Client Brain, no busques en la web ni uses herramientas.',
@@ -109,6 +123,7 @@ function abrirFinanciera(e: EncargoDeConversa): ResultadoDePaso {
     costo_usd: 0,
     artefacto: {
       cliente: e.client_id, rubro: s.rubro ?? null, pais: s.pais ?? null, moneda: s.moneda ?? null, fecha: s.fecha ?? null,
+      ...(s.meta_fijada_por_el_dueno ? { meta_fijada_por_el_dueno: s.meta_fijada_por_el_dueno } : {}),
       ...(s.acta ? { acta: s.acta } : {}),
       ...(s.ventas_del_negocio ? { ventas_del_negocio: s.ventas_del_negocio } : {}),
       ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, ...(s.manual_completo !== undefined && s.manual_completo !== null ? { manual_completo: s.manual_completo } : {}), brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
@@ -129,8 +144,12 @@ type EntradaDelMomento =
 /** la entrada de la calculadora con lo que hay en este momento (la MISMA para el cálculo y para el equilibrio que ve el ajuste) */
 function entradaDelMomento(a: Arts, ronda: 1 | 2): EntradaDelMomento {
   const sano = (k: string) => (a[k] && !a[k].sin_supuestos_del_agente ? a[k] : undefined)
-  const planteo = ronda === 2 ? (sano('planteo_fijado_2') ?? sano('planteo_fijado') ?? sano('planteo')) : (sano('planteo_fijado') ?? sano('planteo'))
+  const propuesto = ronda === 2 ? (sano('planteo_fijado_2') ?? sano('planteo_fijado') ?? sano('planteo')) : (sano('planteo_fijado') ?? sano('planteo'))
   const exp = a.expediente ?? {}
+  // la meta firmada por el dueño manda, sea cual sea el camino del planteo (agente o mesa); el cálculo lo dice en sus alertas
+  const fijada = metaDeLaFirma((exp.meta_fijada_por_el_dueno ?? null) as Record<string, unknown> | null)
+  const planteo = propuesto && fijada ? { ...propuesto, meta_por_semana: fijada.meta_por_semana } : propuesto
+  const avisoDeFirma = propuesto && fijada ? [`meta_fijada_por_el_dueno: se usó ${fijada.meta_por_semana} por semana, firmada${fijada.por ? ` por ${fijada.por}` : ''}${fijada.en ? ` el ${fijada.en.slice(0, 10)}` : ''}${(propuesto as { meta_por_semana?: unknown }).meta_por_semana !== fijada.meta_por_semana ? `; la oficina proponía ${String((propuesto as { meta_por_semana?: unknown }).meta_por_semana)}` : ''}`] : []
   const consultas = ronda === 2
     ? { fpa: consultaDe(a, 'consulta_fpa_2') ?? consultaDe(a, 'consulta_fpa'), redes: consultaDe(a, 'consulta_redes_2') ?? consultaDe(a, 'consulta_redes'), busqueda: consultaDe(a, 'consulta_busqueda_2') ?? consultaDe(a, 'consulta_busqueda'), medicion: consultaDe(a, 'consulta_medicion_2') ?? consultaDe(a, 'consulta_medicion') }
     : { fpa: consultaDe(a, 'consulta_fpa'), redes: consultaDe(a, 'consulta_redes'), busqueda: consultaDe(a, 'consulta_busqueda'), medicion: consultaDe(a, 'consulta_medicion') }
@@ -141,7 +160,7 @@ function entradaDelMomento(a: Arts, ronda: 1 | 2): EntradaDelMomento {
   if (!ent.ok) return { ok: false, motivo: 'sin_base', errores: ent.errores }
   // el planteo se conservó sin responder al equilibrio: el bloque lo DICE (alerta), no lo oculta
   const sinResp = (planteo as { equilibrio_sin_respuesta?: unknown }).equilibrio_sin_respuesta === true
-  return { ok: true, entrada: ent.entrada, alertas: sinResp ? [...ent.alertas, 'equilibrio_sin_respuesta: la meta no cubre el equilibrio y el ajuste no lo respondió; el planteo se conservó sin esa decisión'] : ent.alertas, planteo: planteo as unknown as PlanteoV1 }
+  return { ok: true, entrada: ent.entrada, alertas: [...avisoDeFirma, ...ent.alertas, ...(sinResp ? ['equilibrio_sin_respuesta: la meta no cubre el equilibrio y el ajuste no lo respondió; el planteo se conservó sin esa decisión'] : [])], planteo: planteo as unknown as PlanteoV1 }
 }
 
 function calcularBloque(e: EncargoDeConversa, a: Arts, ronda: 1 | 2): ResultadoDePaso {

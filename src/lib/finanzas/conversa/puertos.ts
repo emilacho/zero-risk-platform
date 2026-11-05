@@ -12,7 +12,17 @@ export type EstadoDeEncargo = 'abierto' | 'en_curso' | 'esperando_al_dueno' | 'c
 export const ESTADOS_TERMINALES: readonly EstadoDeEncargo[] = ['cerrado', 'sin_acuerdo', 'cierre_por_tope', 'fallido']
 
 /** lo que el plan (o quien despierta la conversación) entrega al abrir: SOLO datos del cliente y del expediente; ningún nombre concreto vive en el código */
+/** 05-nov · la meta que el dueño firmó al cambiar una cifra: manda sobre lo que proponga la oficina hasta que firme otra */
+export interface MetaFijadaPorElDueno {
+  meta_por_semana: number
+  total_mes: number | null
+  por: string | null
+  en: string | null
+}
+
 export interface Semilla {
+  /** la pone la plataforma al abrir, leyendo la última firma con cambios; lo que venga de fuera se ignora */
+  meta_fijada_por_el_dueno?: MetaFijadaPorElDueno
   /** las ventas del sitio, leídas de los pedidos al abrir (no de la analítica) */
   ventas_del_negocio?: unknown
   /** 04-nov · lo que decidió la mesa de estrategia: con ella, finanzas calcula sobre su reparto */
@@ -122,6 +132,8 @@ export interface AlmacenDeConversa {
   leerEncargo(id: string): Promise<EncargoDeConversa | null>
   /** lo REALMENTE cobrado en la oficina financiera a ESTE cliente: suma del libro (`agent_invocations` de `<encargo>:<paso>`) de todos sus encargos, y por encargo; null si no se pudo leer. El mantenimiento del portero/cerebro NO entra */
   gastoDeLaOficina?(client_id: string): Promise<{ total_usd: number; por_encargo: Record<string, number> } | null>
+  /** la última firma con cambios del cliente; `firma: null` = nunca cambió una cifra. No se pudo leer = `ok: false` (una cifra firmada no se pierde en silencio) */
+  ultimaFirmaConCambios?(client_id: string): Promise<{ ok: true; firma: Record<string, unknown> | null } | { ok: false; error: string }>
   guardar(c: CambiosDeEncargo): Promise<void>
   /** los artefactos vigentes del encargo (por tipo) */
   artefactos(encargo_id: string): Promise<Record<string, Record<string, unknown>>>

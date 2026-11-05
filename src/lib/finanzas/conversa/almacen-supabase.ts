@@ -104,6 +104,14 @@ export function almacenDeConversa(db: Db, tablas: TablasDeConversa = TABLAS_DE_F
         return Math.round((r.data as Fila[]).reduce((s, f) => s + (Number(f.cost_usd) || 0), 0) * 1e6) / 1e6
       } catch { return null }
     },
+    async ultimaFirmaConCambios(client_id) {
+      try {
+        const r = await db.from('finanzas_tableros').select('firma_con_cambios').eq('client_id', client_id).eq('dry_run', false).not('firma_con_cambios', 'is', null).order('version', { ascending: false }).limit(1)
+        if (r.error) return { ok: false, error: String(r.error.message ?? 'lectura') }
+        const f = (r.data as Array<{ firma_con_cambios?: unknown }> | null)?.[0]?.firma_con_cambios
+        return { ok: true, firma: f && typeof f === 'object' && !Array.isArray(f) ? (f as Record<string, unknown>) : null }
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+    },
     async gastoDeLaOficina(client_id) {
       try {
         const enc = await db.from(tablas.encargos).select('id').eq('client_id', client_id)
