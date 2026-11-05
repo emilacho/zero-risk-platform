@@ -209,7 +209,11 @@ describe.each(DIEZ_CLIENTES.map((c) => [c.nombre, c.id] as const))('cualquier sa
       plan_aprobaciones: [],
       cerebro_fichas: ['marca', 'autor', 'palabra', 'real'].map((x) => f(x, `client_historical_outputs:${x}`)),
     })
-    const r = await retirarFichasDeLoCerrado(base.db as never, C, { dryRun: true, ahora: AHORA })
+    // la base falsa no valida columnas: se comprueba aparte que el retiro pida las que necesita para reconocer una limpieza
+    const pedidas: string[] = []
+    const db = { from: (t: string) => { const q = base.db.from(t) as unknown as Record<string, (...a: unknown[]) => unknown>; return { ...q, select: (c: string) => { if (t === 'hitl_queue') pedidas.push(c); return q.select(c) } } } }
+    const r = await retirarFichasDeLoCerrado(db as never, C, { dryRun: true, ahora: AHORA })
+    for (const col of ['type', 'decision', 'reviewer', 'resolved_by']) expect(pedidas[0].split(', ')).toContain(col)
     expect(r.retiradas).toEqual([{ ficha_id: 'real', ref: 'client_historical_outputs:real', motivo: 'rechazado en la revisión por emilio' }])
   })
   it('sin certeza del estado no se retira nada, y se dice', async () => {
