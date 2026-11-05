@@ -57,6 +57,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^scripts\/audit\/cerebro-tablas-no-las-usa-nadie\.mjs$/,
   /^scripts\/audit\/cerebro-paso-2-verifica-base\.mjs$/,
   /^src\/lib\/cerebro\//,
+  // 05-nov · INFORMES CON FORMATO: guion de una sola vez que recupera el formato de lo ya aplanado (informes desde su original en Braintrust; marca en las respuestas del dueño sin original).
+  //   Lee `cerebro_fichas` y `cerebro_comentarios_competencia`; con --escribir actualiza SOLO `contenido` y `provenance_tag` de esas fichas, por id y cliente
+  /^scripts\/ops\/recuperar-formato-aplanado\.ts$/,
   // 31-oct · TENDENCIAS Y REDES: su prueba nombra la URL de la tabla `cerebro_tendencias` (guardado y lectura de tendencias del rubro y de la bodega viral)
   /^__tests__\/tendencias-y-redes\.test\.ts$/,
   // 01-nov · CERRAR HUECOS DE TENDENCIAS Y VOZ: su prueba nombra las tablas `cerebro_tendencias` y `cerebro_comentarios_competencia` (videos de tendencias enlazados, comentarios de la competencia) y la migración las crea/ajusta

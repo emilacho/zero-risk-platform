@@ -299,7 +299,8 @@ describe('2 · videos, fotos y consulta salen en el orden del embudo con su nive
 describe('3b · limpiar y leer cada red', () => {
   it('sin datos personales: fuera @usuarios, correos y teléfonos', () => {
     expect(limpiarComentario('@marta_22 escríbeme a marta@mail.com o al +593 99 123 4567 que el ceviche está rico')).toBe('escríbeme a o al que el ceviche está rico')
-    expect(limpiarComentario('   Muy   rico \n todo  ')).toBe('Muy rico todo')
+    // 05-nov · «informes con formato»: el texto queda tal cual llega (antes se aplanaba a una línea); solo se recortan los bordes
+    expect(limpiarComentario('   Muy   rico \n todo  ')).toBe('Muy   rico \n todo')
   })
   const post = { ref: '7001', url: 'https://www.tiktok.com/@a/video/7001', comentarios: 9 }
   it('TikTok: id, texto, me gusta y la fecha real en ISO', () => {
