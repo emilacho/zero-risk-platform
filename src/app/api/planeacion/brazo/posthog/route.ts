@@ -58,7 +58,8 @@ import {
 } from '@/lib/planeacion/puertas'
 import { envolverBrazo, sinRespuesta, type RespuestaBrazo } from '@/lib/planeacion/contrato-brazos'
 import { condicionDeLaCasa, condicionesHogQL, leerDatosDePrueba, rotuloDeExclusion, soloConducta } from '@/lib/planeacion/datos-de-prueba'
-import { leerVentasDelSitio, NOTA_DE_LA_ANALITICA, type DbDeVentas, type VentasDelSitio } from '@/lib/planeacion/ventas-del-sitio'
+import { NOTA_DE_LA_ANALITICA, type DbDeVentas } from '@/lib/planeacion/ventas-del-sitio'
+import { leerVentasDelNegocio, type VentasDelNegocio } from '@/lib/planeacion/ventas-del-negocio'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -74,12 +75,12 @@ interface Consulta { readonly results?: ReadonlyArray<ReadonlyArray<unknown>> }
 
 async function atender(p: PedidoPuerta): Promise<RespuestaBrazo> {
   // las ventas no dependen de la analítica: se leen aunque ella falle
-  const ventas = await (async () => leerVentasDelSitio(getSupabaseAdmin() as unknown as DbDeVentas, p.client_id))().catch((): VentasDelSitio | null => null)
+  const ventas = await (async () => leerVentasDelNegocio(getSupabaseAdmin() as unknown as DbDeVentas, p.client_id))().catch((): VentasDelNegocio | null => null)
   const r = await leerAnalitica(p, ventas)
-  return r.estado === 'trajo' || !ventas ? r : { ...r, motivo: String(r.motivo ?? '') + ' · Ventas del sitio: ' + ventas.texto }
+  return r.estado === 'trajo' || !ventas ? r : { ...r, motivo: String(r.motivo ?? '') + ' · Ventas: ' + ventas.texto }
 }
 
-async function leerAnalitica(p: PedidoPuerta, ventas: VentasDelSitio | null): Promise<RespuestaBrazo> {
+async function leerAnalitica(p: PedidoPuerta, ventas: VentasDelNegocio | null): Promise<RespuestaBrazo> {
   const obj = p.objetivo as string
   const extra = extraDe(p)
 
@@ -151,7 +152,7 @@ async function leerAnalitica(p: PedidoPuerta, ventas: VentasDelSitio | null): Pr
           hay: true as const,
           datos: {
             // quien redacta recibe los datos de cada brazo cortados a un largo fijo: las ventas y su nota van antes que la lista, que puede ser larga
-            ...(ventas ? { ventas_del_sitio: ventas } : {}),
+            ...(ventas ? { ventas_del_negocio: ventas } : {}),
             nota_de_la_lectura: NOTA_DE_LA_ANALITICA,
             // 🔴 la limitación viaja PEGADA al dato · quien lo lea no la puede saltear
             atribucion: 'POR DOMINIO, NO POR CLIENTE',

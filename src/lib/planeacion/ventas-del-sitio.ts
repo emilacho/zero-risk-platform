@@ -1,5 +1,5 @@
 /**
- * VENTAS DEL SITIO · salen de los pedidos, no de la analítica (firma de Emilio, 4-nov). Solo lectura.
+ * VENTAS DEL SITIO · salen de los pedidos, no de la analítica (firma de Emilio, 4-nov). Solo lectura. Son solo lo que vino por la web: la cifra del negocio es la de su caja (`ventas-del-negocio.ts`).
  * Cada sitio guarda sus pedidos en el área de la base que lleva el slug del cliente (`<slug>.orders`). Cuenta lo no marcado como prueba que se cobró o, en efectivo, se entregó (`esVenta`).
  * «Sin ventas» solo se afirma si la tabla se pudo leer: un cliente sin tabla o una lectura fallida dicen que no se sabe. No se piden datos del comprador.
  */
@@ -58,7 +58,7 @@ const esVenta = (f: Fila): boolean => {
 
 export const SIN_VENTAS_DEL_SITIO = 'sin ventas reales por el sitio todavía'
 export const INGRESO_ES = 'lo que pagó el comprador en total, con el envío si el sitio lo cobra y sin restar devoluciones parciales: no es lo que le queda al local'
-export const NOTA_DE_LA_ANALITICA = 'Esta lectura es solo conducta de visitas: no cuenta ventas ni sirve para calcular una tasa de cierre. Las ventas del sitio están en `ventas_del_sitio`, con toda su historia y no con los días de esta lectura: no se dividen entre sí.'
+export const NOTA_DE_LA_ANALITICA = 'Esta lectura es solo conducta de visitas: no cuenta ventas ni sirve para calcular una tasa de cierre. Las ventas están en `ventas_del_negocio`, en otros periodos que los de esta lectura: no se dividen entre sí.'
 
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
 const obj = (x: unknown): Fila => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Fila) : {})

@@ -37,6 +37,10 @@ export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|pr
 export const PUEDEN_NOMBRARLAS = [
   // 04-nov · DOBLE CHEQUEO EN SECO: la foto previa LEE fichas para la base en memoria; solo GET, no escribe
   /^scripts\/ops\/seco-plataforma\/foto\.mjs$/,
+  // 04-nov · VENTAS DEL NEGOCIO: LEE las fichas de la caja (metrica:<proveedor>:ingreso|tickets) para el plan y finanzas; no escribe
+  /^src\/lib\/planeacion\/ventas-del-negocio\.ts$/,
+  // sus pruebas: siembran o sirven fichas en una base falsa; no tocan la real
+  /^__tests__\/(ventas-del-negocio|plan-ignora-pedidos-de-prueba|finanzas-seco-oficina)\.test\.ts$/,
   // 01-nov · HECHOS DEL DUEÑO: su prueba siembra fichas en una base falsa para ejercer la carpeta; no toca la real
   /^__tests__\/hechos-del-dueno\.test\.ts$/,
   // 01-nov · ESLOGAN REAL: su prueba siembra una tabla vacía en una base falsa para ejercer la carpeta; no toca la real
