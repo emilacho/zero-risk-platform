@@ -272,6 +272,26 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
       expect(corredor()).toHaveLength(6)
       expect(Number(corredor()[5].cuerpo.max_budget_usd)).toBeCloseTo(0.6)
     })
+    it('🔴 reparo de CC7: una sola cuenta por mesa: cada reintento ve lo que ya comprometieron los demás y lo que devolvieron', async () => {
+      let n = 0
+      vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+        llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+        if (String(url).endsWith('/api/brain/alimentar/informe')) return new Response(JSON.stringify({ ok: true, ficha_id: 'x' }), { status: 200 })
+        n += 1
+        const sirve = (costo: number) => new Response(JSON.stringify({ output: `- Uno [${F1}]\n- Dos [${F2}]\n- Tres [${F1}]`, cost_usd: costo }), { status: 200 })
+        const falla = (costo: number) => new Response(JSON.stringify({ output: '- estimo sin cita', cost_usd: costo }), { status: 200 })
+        if (n <= 3) return sirve(0.95)
+        if (n === 4) { await new Promise((listo) => setTimeout(listo, 10)); return falla(0.5) }
+        if (n === 5) { await new Promise((listo) => setTimeout(listo, 60)); return falla(0.7) }
+        return sirve(0.1)
+      })
+      await corrida(['competencia', 'competencia', 'competencia', 'competencia', 'competencia'])
+      expect(corredor()).toHaveLength(7)
+      // 5,00 firmados · 3 × 0,95 devuelven 0,15 · el 4.º costó 0,50 y devuelve 0,50: quedan 0,65 para su reintento
+      expect(Number(corredor()[5].cuerpo.max_budget_usd)).toBeCloseTo(0.65)
+      // ese reintento costó 0,10 de sus 0,65 (no de 1,00) y el 5.º costó 0,70: quedan 0,85
+      expect(Number(corredor()[6].cuerpo.max_budget_usd)).toBeCloseTo(0.85)
+    })
     it('🔴 el límite que trae el pedido manda si es menor', async () => {
       vi.useFakeTimers()
       try {
