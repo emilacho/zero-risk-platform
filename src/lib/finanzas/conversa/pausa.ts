@@ -186,7 +186,7 @@ export async function responderEnLaOficina(P: PuertosDePausa, c: Record<string, 
   const registro = (arts.buzon_respuestas as { preguntas?: Array<{ clave?: string; texto?: string; pregunta_id?: string | null }> } | undefined)?.preguntas?.find((x) => x.clave === clave)
   const texto = prepararPreguntas(arts, e.semilla, { pausa: true }).aprobadas.find((q) => q.clave === clave)?.texto ?? (tema as string)
   const guardada = await P.cerebro.registrarRespuesta({ client_id: e.client_id, tema: temaDe(clave), pregunta: registro?.texto ?? texto, respuesta: respuesta as string, mensaje_ref: `tu-oficina:${quien}:${hora}`, respondido_en: hora, pregunta_id: registro?.pregunta_id ?? null }).catch(() => ({ ok: false as const, error: 'red' }))
-  const cerrada = guardada.ok ? await cerrarLoContestado(P, e.client_id, temaDe(clave)) : false
+  const cerrada = guardada.ok ? await cerrarLoContestado(P, e.client_id, registro?.pregunta_id) : false
   const a = await atenderPausa(P, e.id, { sinRecoger: true })
   return { status: 200, cuerpo: { en_pausa: true, es_de_la_pausa: true, aplicada: true, clave, en_el_cerebro: guardada.ok, tema_cerrado: cerrada, ...(guardada.ok ? {} : { aviso: 'el cerebro no recibió la respuesta: el plan sí la usa' }), faltan: Array.isArray(a.cuerpo.faltan) ? a.cuerpo.faltan : [], ...(a.cuerpo.soltada ? { soltada: true } : {}) } }
 }
