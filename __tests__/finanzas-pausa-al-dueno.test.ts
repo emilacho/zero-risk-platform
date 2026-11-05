@@ -14,6 +14,9 @@ import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conv
 import { despertarDelEntorno, puertosDePausa } from '../src/lib/finanzas/conversa/puertos-de-pausa'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import { prevuelo } from '../src/lib/planeacion/prevuelo'
+// 05-nov · el pedido de finanzas declara su recorte
+import { pedidoDelAgente } from '../src/lib/finanzas/conversa/orquestador'
+import { TOPE_REAL_DEL_PEDIDO } from '../src/lib/limites-de-tamano'
 import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { rutaDueno, rutaLeerDueno } from '../src/lib/portero-alimenta/dueno'
@@ -83,6 +86,26 @@ function mundo(o: { descartados?: string[] | 'caida'; desdes?: string[]; semilla
   }
   return { e, arts, P, C, guardados, avisos, enviados, despertares, enHilo, corridasPausadas, alCerebro, mensajes, modelo: () => llamadasModelo, espera: () => espera, material: () => materialGuardado }
 }
+
+describe('el pedido a un empleado de finanzas', () => {
+  const PASO = { clave: 'fpa' } as never
+  it('🔴 si no cabe, llega declarado y sin pasarse del tope', () => {
+    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO + 10) })
+    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
+    expect(t.endsWith('decláralo.]')).toBe(true)
+    expect(t).toContain('LLEGA RECORTADO')
+  })
+  it('si cabe, sin aviso', () => {
+    const t = pedidoDelAgente(PASO, { datos: 'x' })
+    expect(t).not.toContain('LLEGA RECORTADO')
+  })
+  it('el borde: lo que cabe justo entra entero', () => {
+    const vacio = pedidoDelAgente(PASO, { datos: '' })
+    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO - vacio.length) })
+    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
+    expect(t).not.toContain('LLEGA RECORTADO')
+  })
+})
 
 describe('cuándo pausa', () => {
   const enc = (semilla: Semilla = {}, dry_run = false) => ({ dry_run, semilla }) as unknown as EncargoDeConversa
@@ -880,6 +903,21 @@ describe('tope y manual', () => {
     expect(r.cuerpo.paso).toBe('abrir')
     const g = m.guardados[0] as { artefacto: { contenido: { manual_completo: unknown } } }
     expect(g.artefacto.contenido.manual_completo).toEqual({ voz: 'cercana' })
+  })
+  it('🔴 y también los informes de la mesa de análisis: los lee toda la oficina', async () => {
+    const informes = [{ de: 'hecho en esta corrida', tipo: 'competencia', informe: 'texto', es_dato_del_cliente: false }]
+    const m = mundo({ estado: 'en_curso', pausaEncendida: false, semilla: { informes_de_analisis: informes }, arts: { acuerdo: {} } })
+    delete (m.arts as Record<string, unknown>).acuerdo
+    await avanzar(m.C, 'enc-1')
+    expect((m.guardados[0] as { artefacto: { contenido: { informes_de_analisis: unknown } } }).artefacto.contenido.informes_de_analisis).toEqual(informes)
+  })
+  it('sin informes el expediente queda igual que hoy', async () => {
+    for (const semilla of [{}, { informes_de_analisis: [] }, { informes_de_analisis: 'x' }]) {
+      const m = mundo({ estado: 'en_curso', pausaEncendida: false, semilla, arts: { acuerdo: {} } })
+      delete (m.arts as Record<string, unknown>).acuerdo
+      await avanzar(m.C, 'enc-1')
+      expect((m.guardados[0] as { artefacto: { contenido: object } }).artefacto.contenido).not.toHaveProperty('informes_de_analisis')
+    }
   })
 })
 

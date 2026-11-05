@@ -4,6 +4,7 @@
  *  · Una mesa por corrida: abrir dos veces devuelve la misma, también si ya cerró. Sin segunda mesa ni segundo cobro al volver de una pausa.
  *  · Si un aporte falla se declara y la reunión sigue con los demás. Si no hay acta válida, la mesa termina `sin_acuerdo` y el flujo para: no se escribe un plan a ciegas.
  */
+import { esCortePorTope, esFallaPasajera } from '../../finanzas/conversa/modelo-run-sdk'
 import { extraerJson } from '../../finanzas/conversa/esquemas'
 import { registrarPaso, siguientePaso, type ResultadoDePaso } from '../../oficina/motor'
 import type { Paso } from '../../oficina/tipos'
@@ -20,11 +21,24 @@ export interface PuertosDeMesa {
   /** el interruptor de la mesa; si no se puede leer, lanza */
   encendida(): Promise<boolean>
   ahora(): Date
+  /** 05-nov · ¿el corredor sigue trabajando este turno? `null` si no se pudo saber */
+  /** `desde`: cuándo el corredor contestó que el empleado falló. Una fila «en curso» que no cambió desde entonces es la del fallo, no un trabajo vivo */
+  turnoEnVuelo?(clave: string, client_id: string, desde?: string): Promise<boolean | null>
 }
 
 type Arts = Record<string, Record<string, unknown>>
 const TERMINALES = ['cerrado', 'sin_acuerdo', 'cierre_por_tope', 'fallido']
 export const TTL_DEL_CANDADO_S = 900
+/** 05-nov · cuántas veces se intenta un turno que se corta por algo pasajero. Después queda como hoy: el aporte se declara y el acta termina sin acuerdo */
+export const INTENTOS_DEL_TURNO = 3
+/** clave propia del turno en el corredor: por encargo y paso, nunca se cruza con otra corrida */
+export const claveDelTurno = (encargo_id: string, paso: string) => `mesa:${encargo_id}:${paso}`
+/** la devolución es otro turno: con la misma clave, un corte antes de entrar recogería el acta anterior y el motivo de finanzas se perdería sin aviso */
+const claveDelTurnoDe = (e: EncargoDeConversa, paso: string): string => { const d = e.estado_del_motor.vueltas.devolucion ?? 0; return claveDelTurno(e.id, d > 0 ? `${paso}:devolucion-${d}` : paso) }
+/** `termino`: el corredor contestó que el empleado falló. Su punto de control se queda «en curso» para siempre: no hay a quién esperar ni nada que recoger */
+/** `fallo_en`: cuándo llegó ese fallo. Sobrevive a un corte posterior: así no se espera 35 min a la fila del fallo (CC6, 05-nov) */
+type MarcaDelTurno = { paso: string; intentos: number; termino?: boolean; fallo_en?: string }
+type ConMarca = { turno_en_curso?: MarcaDelTurno }
 export const LIMITE_PARA_REINTENTAR_MS = 150_000
 const objeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
@@ -115,7 +129,27 @@ async function unPaso(P: PuertosDeMesa, e0: EncargoDeConversa): Promise<Respuest
   }
   const paso = sig.paso
   const n = e.estado_del_motor.pasos_ejecutados + 1
-  const hecho = paso.tipo === 'codigo' ? { resultado: { costo_usd: 0, artefacto: abrirExpediente(e) } as ResultadoDePaso, error: null } : await turnoDeAgente(P, e, paso, arts)
+  // 05-nov · un turno que no terminó deja su marca: el siguiente pedido sabe que repite, no paga lo que el corredor ya hizo y espera lo que sigue haciendo
+  const previo = (e.estado_del_motor as ConMarca).turno_en_curso
+  const repite = paso.tipo === 'agente' && previo?.paso === paso.clave
+  // CC7, 05-nov · tras un fallo declarado se pide sin reinicio: si en verdad terminó, se recoge; si no, la fila sigue «en curso» y el corredor lo corre
+  const reanudar = repite
+  const preguntar = repite && previo?.termino !== true
+  const intentos = repite && previo ? previo.intentos : 0
+  // CC7, 05-nov · el último intento no vuelve como pasajero: sigue a la declaración de siempre (sin aporte, sin planteo, sin acta)
+  const ultimo = intentos + 1 >= INTENTOS_DEL_TURNO
+  if (preguntar && P.turnoEnVuelo && (await P.turnoEnVuelo(claveDelTurnoDe(e, paso.clave), e.client_id, previo?.fallo_en).catch(() => null)) === true) return { status: 409, cuerpo: { error: 'paso_en_vuelo' } }
+  if (paso.tipo === 'agente') {
+    const marcado = { ...e.estado_del_motor, turno_en_curso: { paso: paso.clave, intentos: intentos + 1, ...(repite && previo?.fallo_en ? { fallo_en: previo.fallo_en } : {}) } }
+    await P.almacen.guardar({ encargo_id: e.id, estado_del_motor: marcado, gasto_usd: e.gasto_usd, estado: 'en_curso' })
+    e = { ...e, estado_del_motor: marcado }
+  }
+  const hecho = paso.tipo === 'codigo' ? { resultado: { costo_usd: 0, artefacto: abrirExpediente(e) } as ResultadoDePaso, error: null, pasajera: false } : await turnoDeAgente(P, e, paso, arts, reanudar, ultimo)
+  if (hecho.pasajera && intentos + 1 < INTENTOS_DEL_TURNO) {
+    if (hecho.termino) await P.almacen.guardar({ encargo_id: e.id, estado_del_motor: { ...e.estado_del_motor, turno_en_curso: { paso: paso.clave, intentos: intentos + 1, termino: true, fallo_en: P.ahora().toISOString() } } as typeof e.estado_del_motor, gasto_usd: e.gasto_usd, estado: 'en_curso' })
+    return { status: 503, cuerpo: { error: 'turno_cortado', paso: paso.clave, intento: intentos + 1, detalle: hecho.error } }
+  }
+  // registrarPaso arma un estado nuevo: la marca del turno no pasa, así que un turno terminado no la deja
   const estado_del_motor = registrarPaso(e.estado_del_motor, PLANTILLA_MESA, sig.indice, hecho.resultado)
   const art = hecho.resultado.artefacto ?? {}
   const turno: TurnoDeConversa = { n, paso: paso.clave, agente: paso.tipo === 'agente' ? paso.quien : null, ronda: 1, estado: hecho.error ? 'fallo' : 'hecho', costo_usd: hecho.resultado.costo_usd, salida: art, error: hecho.error }
@@ -148,16 +182,22 @@ function validarTurno(paso: Paso, v: unknown): { ok: true; artefacto: Record<str
   return { ok: true, artefacto: { ...v, habla: quienHablaEnLaMesa(v.canales as never, v.negocio_local === true) } }
 }
 
-async function turnoDeAgente(P: PuertosDeMesa, e: EncargoDeConversa, paso: Paso, arts: Arts): Promise<{ resultado: ResultadoDePaso; error: string | null }> {
+async function turnoDeAgente(P: PuertosDeMesa, e: EncargoDeConversa, paso: Paso, arts: Arts, reanudar: boolean, ultimo: boolean): Promise<{ resultado: ResultadoDePaso; error: string | null; pasajera?: boolean; termino?: boolean }> {
   const tarea = pedidoDelTurno(paso, arts)
   const inicio = P.ahora().getTime()
   let costo = 0, error = 'sin respuesta'
   for (let i = 0; i < 2; i++) {
     // reintentar pasado el margen pierde el turno entero y cobra dos veces
     if (i > 0 && P.ahora().getTime() - inicio > LIMITE_PARA_REINTENTAR_MS) break
-    const r = await P.modelo.invocar({ agente: paso.quien, tarea: i === 0 ? tarea : `${tarea}\n\nTu respuesta anterior no cumplió el formato (${error}). Devuelve SOLO el objeto JSON.`, encargo_id: e.id, client_id: e.client_id, paso: paso.clave, tope_usd: paso.tope_usd, dry_run: e.dry_run })
+    const r = await P.modelo.invocar({ agente: paso.quien, tarea: i === 0 ? tarea : `${tarea}\n\nTu respuesta anterior no cumplió el formato (${error}). Devuelve SOLO el objeto JSON.`, encargo_id: e.id, client_id: e.client_id, paso: paso.clave, tope_usd: paso.tope_usd, dry_run: e.dry_run , clave_de_turno: claveDelTurnoDe(e, paso.clave), reanudar: reanudar && i === 0 })
     costo += r.costo_usd
-    if (!r.ok) { error = r.error; break }
+    // 05-nov · lo pasajero no se resuelve aquí: el turno queda marcado y vuelve a pedirse, recogiendo lo que el corredor haya terminado
+    // el que el empleado declara se repite sin esperar; un corte por tope no: con el mismo tope se paga otra vez y termina igual
+    if (!r.ok) {
+      error = r.fallo_del_empleado ? `${r.error} · ${r.fallo_del_empleado}` : r.error
+      if (!ultimo && esFallaPasajera(r.error) && !esCortePorTope(r.fallo_del_empleado)) return { resultado: { costo_usd: costo }, error, pasajera: true, termino: r.fallo_del_empleado !== undefined }
+      break
+    }
     const j = extraerJson(r.salida)
     if (!j.ok) { error = j.error; continue }
     const v = validarTurno(paso, j.valor)
