@@ -186,6 +186,15 @@ export function confianzaDe(cifras: Record<string, Cifra>): Confianza {
  * Siempre es un SUPUESTO (usa el costo por resultado de arranque y la tasa de resultado a venta); nunca un dato. Sin ticket/margen o sin contribución positiva: `null` con su motivo.
  * `totalPara(W)` es la MISMA cadena de `calcular` (pauta → Meta+IG necesario → reparto inverso): una sola verdad.
  */
+/** cómo se lee una meta firmada, en la cifra y en las alertas */
+export const PREFIJO_DE_META_FIRMADA = 'firmada'
+function fuenteDeLaFirma(f: NonNullable<Entrada['meta_firmada']>): string {
+  return `${PREFIJO_DE_META_FIRMADA}${f.por ? ` por ${f.por}` : ' por el dueño'}${f.en ? ` el ${f.en.slice(0, 10)}` : ''}${f.proponia !== null ? `; la oficina proponía ${r2(f.proponia)}` : ''}`
+}
+
+/** más de esto en «cuántas veces compra un cliente» suele ser otra unidad (días o semanas) */
+export const PERIODOS_PARA_DUDAR = 60
+
 export function metaDeEquilibrio(p: { contribucion: number | null; meta: number; totalPara: (meta: number) => number; base?: number }): Equilibrio {
   // con línea base, la variable del equilibrio son los resultados que SE AÑADEN (los que paga la pauta): `totalPara` recibe ESA cantidad y las metas se muestran sumando la base
   const b0 = finito(p.base) && p.base > 0 ? p.base : 0
@@ -223,6 +232,8 @@ export function calcular(e: Entrada): Resultado {
   const bruto = conValor ? e.ticket! * e.margen! * periodos - entrega : 0
   const valorDeVenta = conValor ? Math.max(0, bruto * h) : null
   if (conValor && bruto <= 0) alertas.push('la venta no deja contribución positiva: no hay techo posible (paro)')
+  // 05-nov · un tablero real traía 365 (días de un ciclo anual) y la venta valía 38.824. No se corrige ni se frena: se dice
+  if (conValor && periodos > PERIODOS_PARA_DUDAR) alertas.push(`dato que no bloquea: cada venta se cuenta como ${r2(periodos)} compras del mismo cliente; si ese número son días y no compras, la contribución sale inflada`)
   const T = conValor ? (valorDeVenta as number) * q : refBase
   if (!conValor) alertas.push('sin ticket o margen: el techo es la referencia de mercado sin arranque (se compara con el mercado)')
   const veredictos = {
@@ -296,9 +307,12 @@ export function calcular(e: Entrada): Resultado {
     if (costoTotalPorVenta > dejaPrimera) alertas.push(`dato que no bloquea: con marca y producción cada venta cuesta ${r2(costoTotalPorVenta)} y la primera venta deja ${r2(dejaPrimera)}`)
   }
 
+  const firmada = e.meta_firmada && e.meta_firmada.meta === e.meta_por_semana ? e.meta_firmada : null
+  if (firmada) alertas.push(`meta fijada por el dueño: se usó ${r2(e.meta_por_semana)} por semana, ${fuenteDeLaFirma(firmada)}`)
+
   const cifra = (valor: number, o: Omit<Cifra, 'valor'>): Cifra => ({ valor: r2(valor), ...o })
   const cifras: Record<string, Cifra> = {
-    meta_por_semana: cifra(e.meta_por_semana, { tipo: 'dato', fuente: 'plan / planteo fijado' }),
+    meta_por_semana: cifra(e.meta_por_semana, { tipo: 'dato', fuente: firmada ? fuenteDeLaFirma(firmada) : 'plan / planteo fijado' }),
     costo_por_resultado_ref: cifra(refBase, { min: r2(ref.min), max: r2(ref.max), tipo: ref.tipo, fuente: ref.fuente, fecha: ref.fecha, formula: 'referencia de mercado (punto medio por omisión)' }),
     costo_por_resultado_arranque: cifra(costo.base, { min: r2(costo.cota_baja), max: r2(costo.cota_alta), tipo: 'supuesto', fuente: 'referencia × (1 + arranque)', formula: 'e = ref × (1 + a)' }),
     tasa_resultado_a_venta: cifra(q, { tipo: (e.pasos ?? []).length ? 'supuesto' : 'dato', fuente: (e.pasos ?? []).length ? 'producto de los pasos' : 'el resultado es la meta', formula: 'q = Π tasas' }),

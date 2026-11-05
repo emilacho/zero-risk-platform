@@ -142,7 +142,7 @@ describe('decisiones', () => {
   it('omite clientes de práctica y de baja y los ensayos, y lo DICE', async () => {
     const r = await leerDecisiones(ctx(base().semilla('hitl_queue', [{ id: '1', status: 'pending', type: 'x', client_id: CP }, { id: '2', status: 'pending', type: 'x', client_id: CB }, { id: '3', status: 'pending', type: 'x', client_id: C1, payload: { dry_run: true } }, { id: '4', status: 'pending', type: 'x', client_id: C1, metadata: { dry_run: true } }, { id: '5', status: 'pending', type: 'x', client_id: C1 }])))
     expect(r.decisiones.map((d) => d.id)).toEqual(['5'])
-    expect(r.omitidas).toEqual({ clientes_de_practica: 1, clientes_de_baja: 1, ensayos: 2, reemplazadas: 0, esperan_el_manual: 0 })
+    expect(r.omitidas).toEqual({ clientes_de_practica: 1, clientes_de_baja: 1, ensayos: 2, reemplazadas: 0, esperan_el_manual: 0, planes_ya_superados: 0 })
   })
   it('🔴 una fuente que falla NO se lee como «no hay nada»: completo=false y su motivo; una tabla que todavía no existe no rompe', async () => {
     const db = base(); db.fallar['hitl_queue'] = 'se cayó'

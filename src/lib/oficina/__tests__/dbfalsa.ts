@@ -91,13 +91,14 @@ class Consulta {
     return this
   }
   gte(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) >= String(v)); return this }
+  not(c: string, op: string, v: unknown) { if (op !== 'is' || v !== null) throw new Error(`DbFalsa: not(${op}) no implementado`); this.filtros.push((f) => hay(leer(f, c))); return this }
   is(c: string, v: unknown) { this.filtros.push((f) => (v === null ? !hay(leer(f, c)) : leer(f, c) === v)); return this }
   order(c: string, o?: { ascending?: boolean }) { this.orden = { col: c, asc: o?.ascending !== false }; return this }
   limit(n: number) { this.tope = n; return this }
   range(a: number, b: number) { this.rango = [a, b]; return this }
   single() { this.uno = 'single'; return this }
   maybeSingle() { this.uno = 'maybe'; return this }
-  private proy(f: Fila) { if (!this.proyeccion || this.proyeccion === '*') return { ...f }; const o: Fila = {}; for (const c of this.proyeccion.split(',').map((x) => x.trim())) o[c] = f[c]; return o }
+  private proy(f: Fila) { if (!this.proyeccion || this.proyeccion === '*') return { ...f }; const o: Fila = {}; for (const c of this.proyeccion.split(',').map((x) => x.trim())) { const alias = c.indexOf(':'); if (alias > 0) o[c.slice(0, alias)] = leer(f, c.slice(alias + 1)); else o[c] = f[c] } return o }
   private chocaCon(fila: Fila): Fila | null {
     for (const u of UNICOS[this.t] ?? []) {
       if (u.some((c) => !hay(fila[c]))) continue
@@ -114,6 +115,7 @@ class Consulta {
     else if (this.t === 'eventos_de_emilio') { o.id ??= `99999999-9999-4999-8999-${String(++this.db.secuencia).padStart(12, '0')}` }
     else if (this.t === 'notas_del_dueno' || this.t === 'autorevisiones_del_productor') { o.id ??= `66666666-6666-4666-8666-${String(++this.db.secuencia).padStart(12, '0')}`; o.creada_en ??= new Date(Date.UTC(2026, 9, 21, 12, 0, this.db.secuencia)).toISOString() }
     else if (this.t.startsWith('metricas_')) o.id ??= `77777777-7777-4777-8777-${String(++this.db.secuencia).padStart(12, '0')}`
+    else if (this.t === 'finanzas_tableros') o.id ??= `33333333-3333-4333-8333-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'client_brand_books') o.id ??= `44444444-4444-4444-8444-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'clients') o.id ??= `55555555-5555-4555-8555-${String(++this.db.secuencia).padStart(12, '0')}`
     else if (this.t === 'client_historical_outputs' || this.t === 'hitl_queue') o.id ??= `77777777-7777-4777-8777-${String(++this.db.secuencia).padStart(12, '0')}`

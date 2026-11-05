@@ -8,6 +8,25 @@ import type { Bloque, Entrada } from '../src/lib/finanzas/tipos'
 const base = (meta: number, tasa: number, n = 5): Entrada => ({ meta_por_semana: meta, pasos: [{ tasa }], ticket: 10, margen: 0.5, referencia: { min: 0.4, max: 1.2, tipo: 'supuesto', fuente: 'prueba' }, dias_activos_por_semana: n })
 const ok = (e: Entrada) => calcular(e) as Bloque
 
+describe('períodos que parecen días (05-nov · hallazgo de CC7, tablero f4d46f59)', () => {
+  const AVISO = /se cuenta como 365 compras.*días y no compras/
+  const alertasCon = (periodos: number) => ok({ ...base(5, 0.2), periodos }).alertas
+  it('🔴 con 365 avisa, y no cambia la cifra: la decisión es de quien lee', () => {
+    expect(alertasCon(365).some((a) => AVISO.test(a))).toBe(true)
+    expect(ok({ ...base(5, 0.2), periodos: 365 }).equilibrio.contribucion_por_venta).toBe(1825)
+  })
+  it('🔴 no se recortan: los períodos cuentan completos en el techo', () => {
+    expect(ok({ ...base(5, 0.2), periodos: 365 }).cifras.techo_por_resultado!.valor).toBeCloseTo(ok({ ...base(5, 0.2), periodos: 1 }).cifras.techo_por_resultado!.valor! * 365, 1)
+  })
+  it('🔴 sin ticket ni margen no hay nada que dudar: no avisa', () => {
+    expect(ok({ ...base(5, 0.2), ticket: null, margen: null, periodos: 365 }).alertas.some((a) => a.includes('días y no compras'))).toBe(false)
+  })
+  it('🔴 el borde: 60 no avisa, 61 sí', () => {
+    expect(alertasCon(60).some((a) => a.includes('días y no compras'))).toBe(false)
+    expect(alertasCon(61).some((a) => a.includes('61 compras'))).toBe(true)
+  })
+})
+
 describe('el borde del piso: resultados por semana EXACTAMENTE 50', () => {
   for (const [meta, tasa] of [[7, 0.14], [14, 0.28], [17, 0.34], [15, 0.3], [10, 0.2], [25, 0.5], [35, 0.7], [3, 0.06], [9, 0.18], [13, 0.26], [21, 0.42]] as Array<[number, number]>) {
     it(`meta ${meta} y tasa ${tasa}: 50 resultados, 1 conjunto, sin «dilución» ni «aprendizaje limitado»`, () => {

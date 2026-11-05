@@ -6,6 +6,7 @@ import { almacenDeSupabase } from '../../cadena/almacen-supabase'
 import { abrirEncargo } from '../orquestador'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { planAprobar, planCambios } from './plan'
+import { recalcularTablero } from './firmar-con-cambios'
 import { firmarTablero, revisionResolver } from './revisiones'
 import { empujarManualAlCerebro } from '../../brain/push-al-terminar'
 import { manualCambios } from './manual-cambios'
@@ -223,6 +224,7 @@ export const ACCIONES: Record<string, Manejador> = {
   'manual-palabra': manualPalabra,
   'revision-resolver': revisionResolver,
   'firmar-tablero': firmarTablero,
+  'recalcular-tablero': recalcularTablero,
   'rehacer-pieza': rehacerPieza,
   'cliente-nuevo': clienteNuevo,
   'cliente-editar': clienteEditar,

@@ -16,7 +16,9 @@ export interface PreguntaAlCerebro {
 export type VeredictoDePregunta =
   | { ok: true; estado: 'registrada'; pregunta_id: string | null }
   | { ok: true; estado: 'ya_respondida'; respuestas: Array<{ respuesta: string; canal?: string; respondido_en?: string }> }
-  | { ok: true; estado: 'ya_preguntada' | 'repetida' }
+  | { ok: true; estado: 'ya_preguntada' }
+  /** la pregunta es de esta misma oficina y sigue pendiente: trae su id para poder cerrarla al contestar */
+  | { ok: true; estado: 'repetida'; pregunta_id: string | null }
   | { ok: false; error: string }
 export interface RespuestaAlCerebro {
   client_id: string
@@ -30,6 +32,10 @@ export interface RespuestaAlCerebro {
 export interface CerebroDelDueno {
   registrarPregunta(p: PreguntaAlCerebro): Promise<VeredictoDePregunta>
   registrarRespuesta(p: RespuestaAlCerebro): Promise<{ ok: true } | { ok: false; error: string }>
+  /** ¿ya contestó? Solo lee: a diferencia de `registrarPregunta`, nunca crea una fila */
+  leerRespuestas?(p: { client_id: string; tema: string }): Promise<{ ok: true; respuestas: Array<{ respuesta: string }> } | { ok: false; error: string }>
+  /** cierra UNA pregunta, de cualquier antigüedad, sin tocar las de otra sede u otra oficina. Se usa tras guardar una respuesta: la puerta solo cierra sola las de las últimas 72 horas */
+  cerrarPendiente?(p: { client_id: string; pregunta_id: string; motivo: string }): Promise<{ ok: true } | { ok: false; error: string }>
 }
 
 const OFICINA = { oficina: 'financiera', agente: 'chief-financial-officer' }
@@ -64,8 +70,24 @@ export function cerebroDelDueno(p: { base: string; llave: string; workflow_id: s
           : { ok: false, error: 'ya_respondida_sin_respuesta' }
       }
       if (j.ya_preguntada === true) return { ok: true, estado: 'ya_preguntada' }
-      if (j.repetida === true) return { ok: true, estado: 'repetida' }
+      if (j.repetida === true) return { ok: true, estado: 'repetida', pregunta_id: typeof j.pregunta_id === 'string' ? j.pregunta_id : null }
       return { ok: false, error: 'respuesta_no_entendida' }
+    },
+    async leerRespuestas(q) {
+      if (sin) return { ok: false, error: 'cerebro_no_configurado' }
+      try {
+        const r = await f(`${url}?client_id=${encodeURIComponent(q.client_id)}&tema=${encodeURIComponent(q.tema)}`, { method: 'GET', headers: { 'x-api-key': p.llave } })
+        const j = (await r.json().catch(() => ({}))) as Record<string, any>
+        if (r.status < 200 || r.status >= 300) return { ok: false, error: `http_${r.status}` }
+        // con la puerta apagada no se leyó nada: eso no es «no contestó»
+        if (j.ok !== true || !Array.isArray(j.respuestas)) return { ok: false, error: j.apagado === true ? 'puerta_apagada' : 'respuesta_no_entendida' }
+        return { ok: true, respuestas: (j.respuestas as Array<Record<string, unknown>>).filter((x) => typeof x?.respuesta === 'string' && String(x.respuesta).trim()).map((x) => ({ respuesta: String(x.respuesta) })) }
+      } catch { return { ok: false, error: 'red' } }
+    },
+    async cerrarPendiente(q) {
+      const r = await post({ evento: 'descartar', client_id: q.client_id, pregunta_id: q.pregunta_id, motivo: q.motivo })
+      if (!r.ok) return r
+      return r.j.ok === true ? { ok: true } : { ok: false, error: r.j.apagado === true ? 'puerta_apagada' : 'no_cerrada' }
     },
     async registrarRespuesta(x) {
       const r = await post({ evento: 'respuesta', client_id: x.client_id, tema: x.tema, pregunta: x.pregunta, respuesta: x.respuesta, canal: etiqueta, mensaje_ref: x.mensaje_ref, respondido_en: x.respondido_en, ...(x.pregunta_id ? { pregunta_id: x.pregunta_id } : {}) })

@@ -32,7 +32,7 @@ export function almacenDeFinanzas(db: Db): PuertosDeTablero {
       return {
         estado,
         clientes_ensayo: Array.isArray(r?.clientes_ensayo) ? (r!.clientes_ensayo as string[]) : [],
-        preguntas_slack: r && ['apagado', 'borrador', 'envia'].includes(String(r.preguntas_slack)) ? (String(r.preguntas_slack) as ConfigDeFinanzas['preguntas_slack']) : 'apagado',
+        preguntas_slack: r && ['apagado', 'borrador', 'envia', 'registra'].includes(String(r.preguntas_slack)) ? (String(r.preguntas_slack) as ConfigDeFinanzas['preguntas_slack']) : 'apagado',
         conversa: r && ['apagado', 'ensayo', 'enciende'].includes(String(r.conversa)) ? (String(r.conversa) as ConfigDeFinanzas['conversa']) : 'apagado',
         ...(redactor ? { redactor } : {}),
         ...(pausa?.pausa_al_dueno === true ? { pausa_al_dueno: true } : {}),
