@@ -26,7 +26,7 @@ function leerCambios(v: unknown): CambioDeCifra[] | null {
   return salida
 }
 
-type Preparado = { ok: true; tablero: Fila; toca: Record<string, unknown>; r: Extract<Recalculo, { ok: true }> } | { ok: false; salida: Salida }
+type Preparado = { ok: true; tablero: Fila; toca: Salida['toca']; r: Extract<Recalculo, { ok: true }> } | { ok: false; salida: Salida }
 
 /** todo lo que debe cumplirse para mostrar o firmar el cambio. No escribe */
 async function preparar({ db }: Pick<Contexto, 'db'>, cuerpo: Record<string, unknown>): Promise<Preparado> {
@@ -38,7 +38,7 @@ async function preparar({ db }: Pick<Contexto, 'db'>, cuerpo: Record<string, unk
   if (r.error) return no(rechazo(500, 'finanzas_error', r.error.message))
   const t = ((r.data as Fila[] | null) ?? [])[0]
   if (!t) return no(rechazo(404, 'tablero_inexistente', 'no existe ese tablero'))
-  const toca = { client_id: String(t.client_id) }
+  const toca: Salida['toca'] = { client_id: String(t.client_id) }
   if (t.estado !== 'sin_firma') return no(rechazo(409, 'no_esta_sin_firma', `solo se firma un tablero «sin_firma» (este está «${String(t.estado)}»)`, toca))
   if (t.dry_run === true) return no(rechazo(409, 'es_un_ensayo', 'un tablero de ensayo no se firma', toca))
   if (t.vigente !== true) return no(rechazo(409, 'no_es_el_vigente', 'solo se firma el tablero vigente del cliente', toca))
@@ -48,7 +48,7 @@ async function preparar({ db }: Pick<Contexto, 'db'>, cuerpo: Record<string, unk
   if (vivas.error) return no(rechazo(500, 'corridas_error', vivas.error.message, toca))
   if (((vivas.data as Fila[] | null) ?? []).length) return no(rechazo(409, 'corrida_viva', 'hay un plan corriendo: terminaría con la cifra anterior. Espera a que termine', toca))
   const c = recalcularConCambios(t.entrada as unknown as Entrada, t.bloque as unknown as Bloque, cambios)
-  if (!c.ok) return no(rechazo(409, c.error, c.detalle, { ...toca, ...(c.minimo === undefined ? {} : { minimo: c.minimo }) }))
+  if (!c.ok) { const s = rechazo(409, c.error, c.detalle, toca); return no(c.alcanzable === undefined ? s : { ...s, cuerpo: { ...s.cuerpo, alcanzable: c.alcanzable } }) }
   return { ok: true, tablero: t, toca, r: c }
 }
 
@@ -80,10 +80,18 @@ export const firmarConCambios: Manejador = async ({ db, ahora }, { cuerpo, revie
   if (!p.ok) return p.salida
   const { tablero: t, r, toca } = p
   const anterior = t.bloque as unknown as Bloque
+  // se toma antes de tocar nada: dos firmas a la vez no pueden pasar las dos, y una firma tal cual tampoco entra por el medio
+  const toma = await db.from('finanzas_tableros').update({ estado: 'borrador' }).eq('id', String(t.id)).eq('estado', 'sin_firma').eq('vigente', true).select('id')
+  if (toma.error) return rechazo(500, 'finanzas_error', toma.error.message, toca)
+  if (((toma.data as Fila[] | null) ?? []).length === 0) return rechazo(409, 'no_esta_sin_firma', 'otra decisión se tomó mientras tanto', toca)
   let g: { id: string; version: number }
   try {
     g = await almacenDeFinanzas(db as unknown as DbDeFinanzas).guardarTablero({ client_id: String(t.client_id), entrada: r.entrada, bloque: r.bloque, huella: r.huella, numeros: r.numeros, workflow_execution_id: typeof t.workflow_execution_id === 'string' ? t.workflow_execution_id : `firma-con-cambios:${String(t.id)}` })
-  } catch (e) { return rechazo(500, 'finanzas_error', e instanceof Error ? e.message : String(e), toca) }
+  } catch (e) {
+    // `guardarTablero` ya compensó, pero devuelve el estado que encontró: el de la toma
+    const b = await db.from('finanzas_tableros').update({ vigente: true, estado: 'sin_firma' }).eq('id', String(t.id))
+    return rechazo(500, 'finanzas_error', `${e instanceof Error ? e.message : String(e)}${b.error ? ` · COMPENSACIÓN INCOMPLETA: anterior ${String(t.id)} sin restaurar: ${b.error.message}` : ''}`, toca)
+  }
   const hora = ahora().toISOString()
   const u = await db.from('finanzas_tableros').update({
     estado: 'firmado', firmado_por: reviewer, firmado_en: hora,

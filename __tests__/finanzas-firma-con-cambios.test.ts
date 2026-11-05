@@ -82,7 +82,7 @@ describe('cambiar el presupuesto', () => {
     const pruebas = Array.from({ length: 400 }, (_, i) => Math.round(t * (0.05 + i * 0.005)))
     const rechazos = pruebas.map((p) => recalcularConCambios(conPiso, b, [{ clave: 'total_mes', propuesto: t, firmado: p }])).filter((x) => !x.ok)
     expect(rechazos.length).toBeGreaterThan(0)
-    expect(rechazos[0]).toMatchObject({ error: 'presupuesto_no_cuadra', minimo: expect.any(Number) })
+    expect(rechazos[0]).toMatchObject({ error: 'presupuesto_no_cuadra', alcanzable: expect.any(Number) })
   })
   it('🔴 con línea base: la meta nunca baja de lo que el negocio ya vende si hay dinero que la pague', () => {
     const conBase: Entrada = { ...ENTRADA, base_por_semana: 4 }, b = tablero(conBase), t = valor(b, 'total_mes')

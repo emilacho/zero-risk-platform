@@ -20,7 +20,7 @@ export const FUENTE_DESPEJADA = 'despejada del presupuesto que firmó el dueño'
 export type ErrorDeCambios = 'sin_cambios' | 'cifra_no_editable' | 'valor_invalido' | 'cifras_cambiaron' | 'una_cifra_a_la_vez' | 'no_se_puede_recalcular' | 'presupuesto_no_cuadra'
 export type Recalculo =
   | { ok: true; entrada: Entrada; bloque: Bloque; huella: string; numeros: FilaDeNumero[]; cambios: CambioDeCifra[]; meta_por_semana: number; total_mes: number }
-  | { ok: false; error: ErrorDeCambios; detalle: string; minimo?: number }
+  | { ok: false; error: ErrorDeCambios; detalle: string; alcanzable?: number }
 
 /** un centavo: las cifras guardadas van redondeadas a dos decimales */
 const TOLERANCIA = 0.005
@@ -45,7 +45,7 @@ export function entradaReproduceElTablero(entrada: Entrada, bloque: Bloque): boo
 const conMeta = (entrada: Entrada, meta: number): Entrada => ({ ...entrada, meta_por_semana: meta })
 
 /** la meta cuyo presupuesto total es `objetivo`. El presupuesto no baja al subir la meta: búsqueda por mitades */
-function metaParaElPresupuesto(entrada: Entrada, objetivo: number): { ok: true; meta: number } | { ok: false; error: 'presupuesto_no_cuadra'; detalle: string; minimo?: number } {
+function metaParaElPresupuesto(entrada: Entrada, objetivo: number): { ok: true; meta: number } | { ok: false; error: 'presupuesto_no_cuadra'; detalle: string; alcanzable?: number } {
   const total = (meta: number): number | null => { const r = calcular(conMeta(entrada, meta)); return r.ok ? totalDe(r) : null }
   let lo = META_MINIMA, hi = Math.max(entrada.meta_por_semana, 1)
   for (let i = 0; i < DOBLES_MAXIMOS && (total(hi) ?? Infinity) < objetivo; i++) hi *= 2
@@ -56,7 +56,7 @@ function metaParaElPresupuesto(entrada: Entrada, objetivo: number): { ok: true; 
   }
   const final = total(hi)
   // un salto del reparto (un canal que entra con su mínimo) puede dejar cifras a las que no se llega: se dice, no se firma otra
-  if (final === null || !igual(final, objetivo)) return { ok: false, error: 'presupuesto_no_cuadra', detalle: `con ese dinero el reparto no cuadra: la cifra alcanzable más cercana es ${final}`, ...(final === null ? {} : { minimo: final }) }
+  if (final === null || !igual(final, objetivo)) return { ok: false, error: 'presupuesto_no_cuadra', detalle: `con ese dinero el reparto no cuadra: la cifra alcanzable más cercana es ${final}`, ...(final === null ? {} : { alcanzable: final }) }
   return { ok: true, meta: hi }
 }
 
