@@ -16,7 +16,9 @@ export interface PreguntaAlCerebro {
 export type VeredictoDePregunta =
   | { ok: true; estado: 'registrada'; pregunta_id: string | null }
   | { ok: true; estado: 'ya_respondida'; respuestas: Array<{ respuesta: string; canal?: string; respondido_en?: string }> }
-  | { ok: true; estado: 'ya_preguntada' | 'repetida' }
+  | { ok: true; estado: 'ya_preguntada' }
+  /** la pregunta es de esta misma oficina y sigue pendiente: trae su id para poder cerrarla al contestar */
+  | { ok: true; estado: 'repetida'; pregunta_id: string | null }
   | { ok: false; error: string }
 export interface RespuestaAlCerebro {
   client_id: string
@@ -68,7 +70,7 @@ export function cerebroDelDueno(p: { base: string; llave: string; workflow_id: s
           : { ok: false, error: 'ya_respondida_sin_respuesta' }
       }
       if (j.ya_preguntada === true) return { ok: true, estado: 'ya_preguntada' }
-      if (j.repetida === true) return { ok: true, estado: 'repetida' }
+      if (j.repetida === true) return { ok: true, estado: 'repetida', pregunta_id: typeof j.pregunta_id === 'string' ? j.pregunta_id : null }
       return { ok: false, error: 'respuesta_no_entendida' }
     },
     async leerRespuestas(q) {

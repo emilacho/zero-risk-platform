@@ -273,7 +273,7 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, o
       // en una pausa se pregunta igual: la respuesta al mensaje viejo le llegaría a otro encargo y este esperaría para siempre
       else if (v.estado === 'ya_preguntada' && !opc.pausa) esperando.push(q.clave)
       // `repetida` = la registré yo en un intento que no llegó a enviarse (el encargo no tiene MD): se pregunta
-      else aPreguntar.push({ clave: q.clave, texto: q.texto, pregunta_id: v.estado === 'registrada' ? v.pregunta_id : null })
+      else aPreguntar.push({ clave: q.clave, texto: q.texto, pregunta_id: v.estado === 'registrada' || v.estado === 'repetida' ? v.pregunta_id : null })
     }
     const semilla: Semilla = { ...(e.semilla ?? {}) }
     const fus = fusionar(Array.isArray(semilla.respuestas_del_dueno) ? semilla.respuestas_del_dueno : [], dadas)
