@@ -9,6 +9,8 @@ import { DIAS_DEL_REGISTRO, esperaDeLaRespuesta, pasosDelPlan, TITULO_NO_VOLVIO,
 import { cifrasDelBloque, unidadDeDinero } from '../src/lib/direccion/decisiones-firma'
 import { MAX_INTENTOS_DE_DESPERTAR } from '../src/lib/finanzas/conversa/pausa'
 import { TIPO_PLAN } from '../src/lib/oficina/tablero/plan'
+import { calcular } from '../src/lib/finanzas/calculadora'
+import type { Bloque, Entrada } from '../src/lib/finanzas/tipos'
 
 const AHORA = new Date('2026-11-04T20:00:00Z')
 const MS = AHORA.getTime()
@@ -37,7 +39,7 @@ describe('campos de cada decisión', () => {
     const d = (await leerDecisiones(ctx(base().semilla('cerebro_dueno_preguntas', [pregunta()])))).decisiones[0]
     expect(d.para_que).toBeUndefined(); expect(d.destraba).toBeUndefined()
   })
-  it('🔴 la firma de finanzas solo permite aceptar: editar cifras no tiene ruta', async () => {
+  it('🔴 una firma sin la entrada que dio sus cifras solo permite aceptar', async () => {
     const r = await leerDecisiones(ctx(base().semilla('finanzas_tableros', [{ id: 't', client_id: C1, version: 2, estado: 'sin_firma', vigente: true, dry_run: false, creado_en: hace(1) }])))
     expect(r.decisiones[0].permite).toEqual(['aceptar'])
     expect(r.decisiones[0].pregunta_de?.oficina).toBe('financiera')
@@ -566,5 +568,43 @@ describe('05-nov · los 4 mutantes que CC7 dejó vivos en 02046bf', () => {
       const r = await leerDecisiones(ctx(base().semilla('esperas_del_dueno', esperas).semilla('cerebro_dueno_preguntas', [pregunta()]).semilla('finanzas_artefactos', [buzon([{ clave: 'otra_cosa', pregunta_id: 'x' }], 1, ENC), buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }], 1, E2)])))
       expect(r.decisiones.find((d) => d.id === 'p1')?.detiene).toBe(true)
     }
+  })
+})
+
+describe('firmar con cambios · lo que ve la tarjeta', () => {
+  const ENTRADA: Entrada = {
+    meta_por_semana: 10, dias_activos_por_semana: 5, pasos: [{ tasa: 0.5 }], ticket: 40, margen: 0.5, periodos: 1, costo_entrega: 2,
+    referencia: { min: 2, max: 4, base: 3, tipo: 'supuesto', fuente: 'mercado', fecha: '2026-11-01' } as Entrada['referencia'], marca: 0.2,
+    produccion: { monto: 100, origen: 'plan' },
+  }
+  const B = calcular(ENTRADA) as Bloque
+  const tablero = (x: Record<string, unknown> = {}) => ({ id: 't', client_id: C1, version: 2, estado: 'sin_firma', vigente: true, dry_run: false, creado_en: hace(1), entrada: ENTRADA, bloque: B, ...x })
+  const leer = async (t: Record<string, unknown>) => (await leerDecisiones(ctx(base().semilla('finanzas_tableros', [t])))).decisiones[0]
+  it('🔴 si recalcular da lo mismo que muestra, se puede editar, y solo la meta y el presupuesto', async () => {
+    const d = await leer(tablero())
+    expect(d.permite).toEqual(['aceptar', 'editar'])
+    expect(d.cifras?.filter((c) => c.editable).map((c) => c.clave)).toEqual(['meta_por_semana', 'total_mes'])
+    expect(d.cifras?.find((c) => c.clave === 'pauta_diaria')).not.toHaveProperty('editable')
+    expect(d.al_editar).toMatch(/plan ya escrito no cambia/)
+  })
+  it.each<[string, Record<string, unknown>]>([['entrada que no da el tablero', { entrada: { ...ENTRADA, marca: 0.4 } }], ['sin entrada', { entrada: null }], ['entrada rota', { entrada: { meta_por_semana: 'x' } }]])('🔴 %s: solo aceptar, y ninguna cifra se ofrece', async (_n, x) => {
+    const d = await leer(tablero(x))
+    expect(d.permite).toEqual(['aceptar']); expect(d.cifras?.some((c) => c.editable)).toBe(false); expect(d).not.toHaveProperty('al_editar')
+  })
+  const firmado = (x: Record<string, unknown>) => ({ id: 't', client_id: C1, version: 3, estado: 'firmado', dry_run: false, firmado_en: hace(0.2), creado_en: hace(1), ...x })
+  const pasos = async (t: Record<string, unknown>) => (await leerDecisiones(ctx(base().semilla('finanzas_tableros', [t])))).contestadas[0].registro.filter((p) => p.estado === 'firmaste')[0]
+  it('🔴 el registro dice qué propuso la oficina y qué firmaste', async () => {
+    const p = await pasos(firmado({ firma_con_cambios: { cambios: [{ clave: 'total_mes', propuesto: 1341.27, firmado: 900 }] } }))
+    expect(p.texto).toBe('Firmaste con cambios'); expect(p.cita).toBe('Presupuesto total al mes: la oficina propuso 1341.27, firmaste 900')
+  })
+  it('🔴 al cambiar el presupuesto, el registro dice la meta que quedó; al cambiar la meta, no la repite', async () => {
+    const p = await pasos(firmado({ firma_con_cambios: { cambios: [{ clave: 'total_mes', propuesto: 1341.27, firmado: 939 }], meta_por_semana: 3.4999871 } }))
+    expect(p.cita).toBe('Presupuesto total al mes: la oficina propuso 1341.27, firmaste 939 · la meta de ventas por semana queda en 3.5')
+    const q = await pasos(firmado({ firma_con_cambios: { cambios: [{ clave: 'meta_por_semana', propuesto: 5, firmado: 7 }], meta_por_semana: 7 } }))
+    expect(q.cita).toBe('Meta de ventas por semana: la oficina propuso 5, firmaste 7')
+  })
+  it.each<[string, unknown]>([['sin cambios', undefined], ['nulo', null], ['lista vacía', { cambios: [] }], ['roto', 'x']])('🔴 %s: firmaste y nada más', async (_n, firma_con_cambios) => {
+    const p = await pasos(firmado({ firma_con_cambios }))
+    expect(p.texto).toBe('Firmaste'); expect(p).not.toHaveProperty('cita')
   })
 })

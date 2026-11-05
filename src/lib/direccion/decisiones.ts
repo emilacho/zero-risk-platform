@@ -7,7 +7,7 @@ import { planEsperaAlManual } from '../manual/manual-primero'
 import { TOPE_REESCRITURA_USD } from '../oficina/tablero/plan'
 import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
-import { DESTRABA_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
+import { AL_EDITAR_LA_FIRMA, DESTRABA_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, sePuedeEditar, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
 import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, MAX_INTENTOS_DE_DESPERTAR, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
 
@@ -47,6 +47,8 @@ export interface Decision {
   cifras?: CifraDeFirma[]
   /** los hallazgos críticos que siguen abiertos, en palabras de la oficina */
   criticos?: string[]
+  /** qué pasa si cambia una cifra. Solo viene si se puede editar */
+  al_editar?: string
 }
 
 const TOPE = 200
@@ -108,7 +110,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     leer(fuentes, 'hitl_queue', db.from('hitl_queue').select('id, client_id, output_id, type, documento, title, output_preview, priority, payload, metadata, created_at, expires_at').eq('status', 'pending').limit(TOPE), TOPE),
     leer(fuentes, 'cerebro_dueno_preguntas', db.from('cerebro_dueno_preguntas').select('id, client_id, tema, pregunta, creado_en, preguntado_por_oficina, preguntado_por_agente').eq('estado', 'pendiente').limit(TOPE), TOPE),
     leer(fuentes, 'finanzas_preguntas', db.from('finanzas_preguntas').select('id, client_id, clave, texto, creado_en').eq('estado', 'enviada').limit(TOPE), TOPE),
-    leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en, workflow_execution_id, bloque').eq('estado', 'sin_firma').eq('vigente', true).eq('dry_run', false).limit(TOPE), TOPE),
+    leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en, workflow_execution_id, entrada, bloque').eq('estado', 'sin_firma').eq('vigente', true).eq('dry_run', false).limit(TOPE), TOPE),
     // 04-nov · sin pedir el `sobre`: lleva el material del plan y pesa cientos de KB
     leer(fuentes, 'esperas_del_dueno', db.from('esperas_del_dueno').select('id, client_id, clave, creado_en').eq('tipo', 'finanzas').eq('estado', 'esperando').order('creado_en', { ascending: true }).limit(TOPE), TOPE),
     // 04-nov · el plan que no volvió tras tu respuesta. Pasada la semana ya lo reemplazó otro o lo atendió una persona
@@ -126,8 +128,8 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   const destrabaDe = (client: unknown) => { const n = faltanDe(client); return n > 0 ? { destraba: destrabaDeLaPausa(n) } : {} }
   const FINANCIERA = { oficina: 'financiera', agente: null }
   const loQueSeFirma = (t: Fila) => {
-    const f = firmas.get(String(t.id)), cifras = cifrasDelBloque(t.bloque, f?.unidad ?? null)
-    return { para_que: paraQueDeLaFirma(f?.abiertos), destraba: DESTRABA_DE_LA_FIRMA, detiene: false, ...(cifras.length ? { cifras } : {}), ...(f?.criticos.length ? { criticos: f.criticos } : {}) }
+    const f = firmas.get(String(t.id)), editar = sePuedeEditar(t), cifras = cifrasDelBloque(t.bloque, f?.unidad ?? null, editar)
+    return { permite: (editar ? ['aceptar', 'editar'] : ['aceptar']) as AccionDeDecision[], ...(editar ? { al_editar: AL_EDITAR_LA_FIRMA } : {}), para_que: paraQueDeLaFirma(f?.abiertos), destraba: DESTRABA_DE_LA_FIRMA, detiene: false, ...(cifras.length ? { cifras } : {}), ...(f?.criticos.length ? { criticos: f.criticos } : {}) }
   }
   // 05-nov · corrección de Lenovo: qué se firma. Si esto no se lee, un texto que vale en todos los casos: no afecta a `completo`
   const firmas = tableros.length ? await leerLoQueSeFirma(db, tableros) : new Map<string, LoQueSeFirma>()
@@ -170,7 +172,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     })
   }
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA })
-  for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, permite: ['aceptar'], pregunta_de: FINANCIERA, ...loQueSeFirma(t) })
+  for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, pregunta_de: FINANCIERA, ...loQueSeFirma(t) })
 
   const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas, esperan_el_manual: 0, planes_ya_superados: sueltas.length - noVolvieronVigentes.length }
   // 3-nov · firma de Emilio: un plan no pide firma antes de su manual. Si el manual no se puede leer, se muestra: mejor una firma de más que una escondida; la puerta del plan igual la frena

@@ -3,6 +3,7 @@
  * (Las piezas se deciden por `/api/hitl/[id]` y `/api/oficina/cambios`; aquí no.)
  */
 import { rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
+import { firmarConCambios } from './firmar-con-cambios'
 
 /** tipos de revisión que el tablero sabe resolver · aprobar=approved · rechazar=rejected (la bandeja solo admite pending/approved/rejected/edited) */
 export const TIPOS_RESOLUBLES = ['confirm_competitor_list', 'editor_escalation', 'plan_con_pendientes'] as const
@@ -40,7 +41,10 @@ export const revisionResolver: Manejador = async ({ db, ahora }, { cuerpo, revie
 }
 
 /** Firma con nombre y fecha un tablero que el código dejó `sin_firma` (hallazgos críticos abiertos tras la única corrección): es la firma de una persona sobre ese tablero tal cual (su huella no cambia). */
-export const firmarTablero: Manejador = async ({ db, ahora }, { cuerpo, reviewer }) => {
+export const firmarTablero: Manejador = async (c, e) => {
+  // 05-nov · con cifras cambiadas es otro camino: se calcula un tablero nuevo. Sin `cambios`, todo sigue igual
+  if (e.cuerpo.cambios !== undefined) return firmarConCambios(c, e)
+  const { db, ahora } = c, { cuerpo, reviewer } = e
   if (typeof cuerpo.tablero_id !== 'string' || !UUID.test(cuerpo.tablero_id)) return rechazo(400, 'entrada_invalida', '`tablero_id` debe ser un uuid')
   const r = await db.from('finanzas_tableros').select('id, client_id, estado, vigente, dry_run, huella').eq('id', cuerpo.tablero_id).limit(1)
   if (r.error) return rechazo(500, 'finanzas_error', r.error.message)
