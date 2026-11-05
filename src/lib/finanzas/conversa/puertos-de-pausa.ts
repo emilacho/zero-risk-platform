@@ -1,6 +1,7 @@
 /** Los puertos reales de la pausa: los usan `/api/finanzas/pausar` y `/api/finanzas/responder`. Las llaves salen del entorno que pasa la ruta, nunca del cuerpo. */
 import type { Db } from '../almacen-supabase'
 import { almacenDeConversa } from './almacen-supabase'
+import { ETIQUETA_DE_TU_OFICINA } from './buzon'
 import { despertarPorElFlujo, esperasDeFinanzas } from './esperas-supabase'
 import { baseDeRunSdk } from './modelo-run-sdk'
 import { nombreDelClienteDe } from './nombre'
@@ -19,7 +20,7 @@ export function puertosDePausa(env: Record<string, string | undefined>, db: Db, 
     almacen: almacenDeConversa(db),
     canal,
     slack: slackMdPuerto({ token: env.SLACK_BOT_TOKEN ?? '', dueno_id: env.FINANZAS_EMILIO_ID ?? '', ...(canal ? { canal } : {}) }),
-    cerebro: cerebroDelDueno({ base: baseDeRunSdk(env), llave: env.INTERNAL_API_KEY ?? '', workflow_id, workflow_execution_id, ...(canal_etiqueta ? { canal_etiqueta } : canal ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
+    cerebro: cerebroDelDueno({ base: baseDeRunSdk(env), llave: env.INTERNAL_API_KEY ?? '', workflow_id, workflow_execution_id, ...(canal_etiqueta ? { canal_etiqueta } : modo === 'registra' ? { canal_etiqueta: ETIQUETA_DE_TU_OFICINA } : canal ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
     modo,
     ahora: () => new Date(),
     nombreDelCliente: nombreDelClienteDe(db),
