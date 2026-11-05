@@ -14,6 +14,7 @@ const POR_CLIENTE = {
   client_icp_documents: 'limit=5',
   client_competitive_landscape: 'limit=40',
   client_sedes: 'limit=20',
+  client_sede_datos: 'limit=200',
   client_historical_outputs: "output_type=like.*plan*&order=created_at.desc&limit=6",
 }
 const COMPLETAS = {

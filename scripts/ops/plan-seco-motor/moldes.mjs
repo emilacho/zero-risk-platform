@@ -47,6 +47,8 @@ export async function responder(c, ctx) {
 }
 
 export const rutas = {
+  // la puerta del cerebro para las preguntas del dueño: registra en memoria del arnés; nunca toca el cerebro real
+  '/api/brain/alimentar/dueno': async (c) => ({ status: 200, cuerpo: c && c.evento === 'pregunta' ? { registrada: true, pregunta_id: '00000000-0000-4000-8000-000000000001' } : { ok: true, respuestas: [] } }),
   '/drive': async () => ({ status: 200, cuerpo: { ok: true, simulado: true, file_id: 'seco', url: 'https://drive.invalid/seco' } }),
   '/openai/v1/responses': async () => { if (ESC.demora_gpt_s) await new Promise((r) => setTimeout(r, ESC.demora_gpt_s * 1000)); return ESC.gpt_status ? { status: ESC.gpt_status, cuerpo: { error: { message: 'simulado' } } } : { status: 200, cuerpo: { output_text: '(simulado) Lectura independiente: opinión simulada para el doble chequeo.', usage: { input_tokens: 1000, output_tokens: 200 } } } },
   '/openai/v1/embeddings': async () => ({ status: 200, cuerpo: { data: [{ embedding: new Array(1536).fill(0.001) }], usage: { total_tokens: 1 } } }),

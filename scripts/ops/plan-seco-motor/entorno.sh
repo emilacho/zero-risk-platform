@@ -23,4 +23,6 @@ export SLACK_BOT_TOKEN=seco-local
 export N8N_WEBHOOK_BASE=http://localhost:5678/webhook
 export N8N_LOCAL_URL=http://localhost:5678
 export N8N_BASE_URL=http://localhost:5678
+# la plataforma pregunta a n8n por el arnés, que lee la base real del n8n local (el n8n local no tiene llave de API)
+export SECO_PLATAFORMA_N8N=http://localhost:4100 N8N_API_KEY=seco-local
 export OPENAI_API_KEY=seco-local JEFATURA_REVISOR_MODEL=gpt-simulado JEFATURA_REVISOR_PRECIO_ENTRADA_USD_M=5 JEFATURA_REVISOR_PRECIO_SALIDA_USD_M=30

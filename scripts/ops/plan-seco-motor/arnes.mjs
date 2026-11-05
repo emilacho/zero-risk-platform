@@ -173,7 +173,9 @@ async function runSdk(cuerpo, res) {
     const filas = filasDe('agent_invocations').filter((x) => x.client_id === cuerpo.client_id)
     const gastado = filas.reduce((a, x) => a + (Number(x.cost_usd) || 0), 0)
     const deCorrida = filas.filter((x) => String(x.workflow_execution_id ?? '') === String(cuerpo.workflow_execution_id ?? '')).reduce((a, x) => a + (Number(x.cost_usd) || 0), 0)
-    const razon = deCorrida >= (ESCENARIO.freno.por_corrida ?? 5) ? 'run_over_cap' : gastado >= ESCENARIO.freno.cliente ? 'over_cap' : null
+    // la vara por plan (#928): suma todo lo rotulado con esa corrida, sin ventana
+    const delPlan = cuerpo.trabajo_tipo === 'plan' && cuerpo.trabajo_id ? filas.filter((x) => x.trabajo_tipo === 'plan' && x.trabajo_id === cuerpo.trabajo_id).reduce((a, x) => a + (Number(x.cost_usd) || 0), 0) : 0
+    const razon = deCorrida >= (ESCENARIO.freno.por_corrida ?? 5) ? 'run_over_cap' : gastado >= ESCENARIO.freno.cliente ? 'over_cap' : ESCENARIO.freno.plan !== undefined && delPlan >= ESCENARIO.freno.plan ? 'plan_over_cap' : null
     if (razon) {
       anotar({ tipo: 'freno_429', razon, agente: cuerpo.agent, paso: cuerpo.paso || cuerpo.step_name || null, gastado, de_corrida: deCorrida })
       res.writeHead(429, { 'content-type': 'application/json' })
@@ -186,7 +188,7 @@ async function runSdk(cuerpo, res) {
   // costo SIMULADO (no sale plata): lo que el escenario diga por paso o «*». Se escribe en el libro en memoria como lo hace el corredor, para que los topes y frenos reales lo vean.
   const pasoCosto = String(cuerpo.paso || cuerpo.step_name || '')
   const costoSim = Number((ESCENARIO.costo || {})[pasoCosto] ?? (ESCENARIO.costo || {})[cuerpo.agent] ?? (ESCENARIO.costo || {})['*'] ?? 0)
-  if (costoSim > 0) filasDe('agent_invocations').push(armarFila('agent_invocations', { agent_name: cuerpo.agent, client_id: cuerpo.client_id, cost_usd: costoSim, started_at: new Date().toISOString(), workflow_id: cuerpo.workflow_id, workflow_execution_id: String(cuerpo.workflow_execution_id || ''), status: 'simulado', paso: pasoCosto }))
+  if (costoSim > 0) filasDe('agent_invocations').push(armarFila('agent_invocations', { agent_name: cuerpo.agent, client_id: cuerpo.client_id, cost_usd: costoSim, trabajo_tipo: cuerpo.trabajo_tipo ?? null, trabajo_id: cuerpo.trabajo_id ?? null, started_at: new Date().toISOString(), workflow_id: cuerpo.workflow_id, workflow_execution_id: String(cuerpo.workflow_execution_id || ''), status: 'simulado', paso: pasoCosto }))
   const demoraSim = Number((ESCENARIO.demora_s || {})[pasoCosto] ?? 0)
   if (demoraSim > 0 && !cuerpo.callback_url) await dormir(demoraSim * 1000)
   // La regla real de reuso del corredor (services/agent-runner · shouldSkipStep): con punto de control completo para (flujo, cliente, paso o agente) y SIN force_restart, devuelve lo guardado a US$ 0.
@@ -195,8 +197,17 @@ async function runSdk(cuerpo, res) {
   if (guardado !== undefined) anotar({ tipo: 'reuso_del_punto_de_control', agente: cuerpo.agent, paso: cuerpo.paso || cuerpo.step_name || null, chars: String(guardado).length })
   const texto = guardado !== undefined ? guardado : typeof moldes.responder === 'function' ? await moldes.responder(cuerpo, { intento, tablas }) : `[SECO] respuesta simulada de ${cuerpo.agent}`
   if (cuerpo.workflow_id && cuerpo.client_id) puntosDeControl.set(claveReuso, texto)
-  const reg = { tipo: 'agente', agente: cuerpo.agent, paso: cuerpo.paso || cuerpo.step_name || null, intento, chars_entrada: String(cuerpo.task || '').length, chars_salida: String(texto).length, tope_usd: cuerpo.max_budget_usd ?? null, dry_run: cuerpo.dry_run ?? null, force_restart: cuerpo.force_restart ?? null, con_vuelta: !!cuerpo.callback_url, trabajo: cuerpo.trabajo_tipo ? `${cuerpo.trabajo_tipo}:${cuerpo.trabajo_id}` : null, ejecucion: cuerpo.workflow_execution_id ?? null }
+  const reg = { tipo: 'agente', trabajo_tipo: cuerpo.trabajo_tipo ?? cuerpo.context?.trabajo_tipo ?? null, trabajo_id: cuerpo.trabajo_id ?? cuerpo.context?.trabajo_id ?? null, agente: cuerpo.agent, paso: cuerpo.paso || cuerpo.step_name || null, intento, chars_entrada: String(cuerpo.task || '').length, chars_salida: String(texto).length, tope_usd: cuerpo.max_budget_usd ?? null, dry_run: cuerpo.dry_run ?? null, force_restart: cuerpo.force_restart ?? null, con_vuelta: !!cuerpo.callback_url, trabajo: cuerpo.trabajo_tipo ? `${cuerpo.trabajo_tipo}:${cuerpo.trabajo_id}` : null, ejecucion: cuerpo.workflow_execution_id ?? null }
   const f = (ESCENARIO.fallar_agente || []).find((x) => (x.agente === cuerpo.agent || x.paso === reg.paso) && (x.intentos || [1]).includes(intento))
+  // la corrida muere mientras este empleado trabaja (el barrido la cerró, por ejemplo)
+  if (ESCENARIO.matar_corrida_tras === cuerpo.agent || ESCENARIO.matar_corrida_tras === reg.paso) { for (const c of filasDe('plan_corridas')) c.estado = ESCENARIO.matar_corrida_como || 'fallida'; anotar({ tipo: 'corrida_muerta_provocada', agente: cuerpo.agent, estado: ESCENARIO.matar_corrida_como || 'fallida' }) }
+  const puntoDeControl = () => filasDe('workflow_checkpoints').push(armarFila('workflow_checkpoints', { workflow_id: cuerpo.workflow_id, workflow_execution_id: String(cuerpo.workflow_execution_id), client_id: cuerpo.client_id, step_name: cuerpo.step_name || cuerpo.agent, step_status: 'completed', output_ref: { response: texto, response_truncated: false } }))
+  // corte de conexión con el empleado trabajando: sin acuse, y su texto aparece N s después
+  const corte = (ESCENARIO.corte_y_termina_s || {})[reg.paso]
+  if (corte !== undefined && cuerpo.callback_url) { anotar({ ...reg, fallo_provocado: 'corte_y_termina', en_s: corte }); res.destroy(); await dormir(corte * 1000); puntoDeControl(); anotar({ tipo: 'punto_de_control_tarde', agente: cuerpo.agent }); return }
+  // aceptado, sin vuelta por cable, y su texto aparece N s después
+  const tarde = (ESCENARIO.termina_tarde_s || {})[reg.paso]
+  if (tarde !== undefined && cuerpo.callback_url) { anotar({ ...reg, termina_en_s: tarde }); res.writeHead(202, { 'content-type': 'application/json' }); res.end(JSON.stringify({ accepted: true, delivered_by: 'runner', dispatch_key: crypto.randomUUID(), ack_timestamp: new Date().toISOString() })); await dormir(tarde * 1000); puntoDeControl(); anotar({ tipo: 'punto_de_control_tarde', agente: cuerpo.agent }); return }
   if (f && f.status === 'red') { anotar({ ...reg, fallo_provocado: 'red' }); return res.destroy() }
   if (f) { anotar({ ...reg, fallo_provocado: f.status || 500 }); res.writeHead(f.status || 500, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ success: false, error: 'fallo provocado', cost_usd: f.costo_usd ?? 0 })) }
   anotar(reg)
@@ -240,9 +251,25 @@ const srv = http.createServer(async (req, res) => {
     if (url.pathname === '/__tabla') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify(tablas.get(url.searchParams.get('t')) || [])) }
     if (url.pathname.startsWith('/rest/v1/')) return postgrest(req, url, cuerpo, res)
     if (url.pathname === '/api/agents/run-sdk') return await runSdk(cuerpo, res)
+    // la pregunta del barrido a n8n: contesta lo que de verdad hay en la base del n8n local
+    if (url.pathname === '/api/v1/executions') {
+      const { DatabaseSync } = await import('node:sqlite')
+      const db = new DatabaseSync(process.env.SECO_RAIZ + '/n8n-datos/.n8n/database.sqlite', { readOnly: true })
+      const data = db.prepare('select id from execution_entity where workflowId = ? and status = ? limit 1').all(url.searchParams.get('workflowId'), url.searchParams.get('status'))
+      db.close()
+      anotar({ tipo: 'pregunta_a_n8n', status: url.searchParams.get('status'), filas: data.length })
+      res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ data }))
+    }
+    // la plataforma llega a n8n por el arnés: lo que despierta un flujo sigue de verdad al n8n local
+    if (url.pathname.startsWith('/webhook')) {
+      const h = {}; for (const [k, v] of Object.entries(req.headers)) if (!['host', 'content-length', 'connection'].includes(k)) h[k] = v
+      const rr = await fetch('http://localhost:5678' + url.pathname + url.search, { method: req.method, headers: h, body: req.method === 'GET' ? undefined : crudo })
+      anotar({ tipo: 'despertar_n8n', ruta: url.pathname, status: rr.status })
+      res.writeHead(rr.status, { 'content-type': rr.headers.get('content-type') || 'application/json' }); return res.end(await rr.text())
+    }
     const ruta = simulados[url.pathname]
     const salida = ruta ? await ruta(cuerpo, { tablas, url }) : { status: 200, cuerpo: { ok: true, simulado: true } }
-    anotar({ tipo: 'simulado', metodo: req.method, ruta: url.pathname, chars: crudo.length, con_molde: !!ruta, status: salida.status })
+    anotar({ tipo: 'simulado', metodo: req.method, ruta: url.pathname, chars: crudo.length, con_molde: !!ruta, status: salida.status, ...(url.pathname.includes('slack') ? { texto: String(cuerpo?.text ?? '').slice(0, 300), canal: cuerpo?.channel ?? null } : {}) })
     res.writeHead(salida.status, { 'content-type': 'application/json' })
     res.end(JSON.stringify(salida.cuerpo))
   } catch (e) {
