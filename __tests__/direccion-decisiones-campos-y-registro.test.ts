@@ -5,10 +5,13 @@ import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import type { Contexto } from '../src/lib/direccion/comun'
 import { leerDecisiones } from '../src/lib/direccion/decisiones'
-import { DIAS_DEL_REGISTRO, esperaDeLaRespuesta, pasosDelPlan, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, yaLoSuperoOtroPlan } from '../src/lib/direccion/decisiones-registro'
+import { DIAS_DEL_REGISTRO, esperaDeLaRespuesta, pasosDelPlan, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, yaLoSuperoOtroPlan, noVolvio } from '../src/lib/direccion/decisiones-registro'
+import { cifrasDelBloque, unidadDeDinero } from '../src/lib/direccion/decisiones-firma'
 import { MAX_INTENTOS_DE_DESPERTAR } from '../src/lib/finanzas/conversa/pausa'
+import { TIPO_PLAN } from '../src/lib/oficina/tablero/plan'
 
 const AHORA = new Date('2026-11-04T20:00:00Z')
+const MS = AHORA.getTime()
 const C1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const C2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const CP = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
@@ -206,28 +209,28 @@ describe('el registro de lo contestado', () => {
 })
 
 describe('pasosDelPlan', () => {
-  it('sin espera no afirma nada', () => { expect(pasosDelPlan(null, null)).toEqual({ pasos: [], resultado: null, motivo: null }) })
+  it('sin espera no afirma nada', () => { expect(pasosDelPlan(null, null, MS)).toEqual({ pasos: [], resultado: null, motivo: null }) })
   const corrida = (estado: string, x: Record<string, unknown> = {}) => ({ client_id: C1, corrida: 'corr-1', estado, actualizado_en: hace(0.1), ...x })
   const despierta = { estado: 'soltada', despertado: true, soltada_en: hace(0.4) }
   it('🔴 una corrida vencida también es un plan que no terminó', () => {
-    expect(pasosDelPlan(despierta, corrida('vencida', { motivo: 'venció' }))).toMatchObject({ resultado: 'fallo', motivo: 'venció' })
-    expect(pasosDelPlan(despierta, corrida('vencida')).motivo).toBe('El plan no terminó.')
+    expect(pasosDelPlan(despierta, corrida('vencida', { motivo: 'venció' }), MS)).toMatchObject({ resultado: 'fallo', motivo: 'venció' })
+    expect(pasosDelPlan(despierta, corrida('vencida'), MS).motivo).toBe('El plan no terminó.')
   })
   it('🔴 sigue en pausa: lo dice aunque su corrida diga otra cosa, y sin inventar hora', () => {
-    const p = pasosDelPlan({ estado: 'esperando', despertado: true }, corrida('hecha'))
+    const p = pasosDelPlan({ estado: 'esperando', despertado: true }, corrida('hecha'), MS)
     expect(p.resultado).toBe('espera'); expect(p.pasos).toHaveLength(1); expect(p.pasos[0]).toMatchObject({ cuando: null, quien: 'sistema', estado: 'espera' }); expect(p.pasos[0].texto).toMatch(/sigue en pausa/)
   })
   it('🔴 soltada y todavía sin despertar: no afirma que arrancó ni que falló', () => {
     for (const e of [{ estado: 'soltada', despertado: false, despertar_intentos: MAX_INTENTOS_DE_DESPERTAR - 1, soltada_en: hace(0.4) }, { estado: 'soltada', despertado: null, soltada_en: hace(0.4) }]) {
-      const p = pasosDelPlan(e, corrida('hecha'))
+      const p = pasosDelPlan(e, corrida('hecha'), MS)
       expect(p.resultado).toBe('espera'); expect(p.pasos[0].texto).toMatch(/todavía no vuelve/)
     }
   })
-  it('🔴 despertó y la corrida sigue en pausa o no se conoce: solo consta que retomó', () => {
-    expect(pasosDelPlan(despierta, corrida('en_pausa')).resultado).toBe('retomada'); expect(pasosDelPlan(despierta, null).resultado).toBe('retomada')
+  it('🔴 despertó: con la corrida en marcha arrancó; sin verla, no se afirma', () => {
+    expect(pasosDelPlan(despierta, corrida('corriendo'), MS).pasos[0].texto).toMatch(/volvió a arrancar/); const p = pasosDelPlan(despierta, null, MS); expect(p.resultado).toBe('retomada'); expect(p.pasos[0].texto).toMatch(/no consta/)
   })
   it('🔴 un secreto en el motivo de la corrida no sale', () => {
-    expect(JSON.stringify(pasosDelPlan(despierta, corrida('fallida', { motivo: 'fallo sk-ant-api03-ABCDEFGHIJKLMN' })))).not.toContain('ABCDEFGHIJKLMN')
+    expect(JSON.stringify(pasosDelPlan(despierta, corrida('fallida', { motivo: 'fallo sk-ant-api03-ABCDEFGHIJKLMN' }), MS))).not.toContain('ABCDEFGHIJKLMN')
   })
 })
 
@@ -413,5 +416,145 @@ describe('05-nov · lo que los mutantes de CC7 dejaron sin sostener', () => {
   })
   it('🔴 sin recortar, el registro está completo', async () => {
     expect((await leerDecisiones(ctx(base().semilla('cerebro_dueno_preguntas', [de({})])))).registro_completo).toBe(true)
+  })
+})
+
+describe('05-nov · corrección de CC7 sobre #917: recibió el pedido no es arrancó', () => {
+  const soltada = (x: Record<string, unknown> = {}) => espera({ estado: 'soltada', despertado: true, actualizado_en: hace(0.2), despertar_intentos: MAX_INTENTOS_DE_DESPERTAR, soltada_en: hace(1), creado_en: hace(2), ...x })
+  const enPausa = (x: Record<string, unknown> = {}) => ({ client_id: C1, corrida: 'corr-1', estado: 'en_pausa', espera_desde: hace(2), ...x })
+  const respondida = pregunta({ estado: 'respondida', respondida_en: hace(1.5), ficha_id: 'f1' })
+  const con = (e: Record<string, unknown>, ...corridas: Record<string, unknown>[]) => base().semilla('cerebro_dueno_preguntas', [respondida]).semilla('esperas_del_dueno', [e]).semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }])]).semilla('plan_corridas', corridas)
+  it('🔴 CC7-4: agotados los intentos con la corrida en pausa, vuelve la tarjeta y el registro dice que falló', async () => {
+    const r = await leerDecisiones(ctx(con(soltada(), enPausa())))
+    expect(r.decisiones.find((d) => d.subtipo === 'plan_no_volvio')).toMatchObject({ detiene: true, volvio: { motivo: expect.stringMatching(/no arrancó/) } })
+    expect(r.contestadas[0]).toMatchObject({ resultado: 'fallo', motivo: expect.stringMatching(/no arrancó/) }); expect(JSON.stringify(r.contestadas[0].registro)).not.toMatch(/volvió a arrancar con/)
+  })
+  it('🔴 con intentos por delante no molesta, y el registro no dice que arrancó', async () => {
+    const r = await leerDecisiones(ctx(con(soltada({ despertar_intentos: MAX_INTENTOS_DE_DESPERTAR - 1 }), enPausa())))
+    expect(r.decisiones.some((d) => d.subtipo === 'plan_no_volvio')).toBe(false)
+    expect(r.contestadas[0].resultado).toBe('espera'); expect(r.contestadas[0].registro.at(-1)?.texto).toMatch(/todavía no arranca/)
+  })
+  it('🔴 dentro del margen tampoco: puede estar arrancando', () => {
+    const e = soltada({ actualizado_en: new Date(MS - 60_000).toISOString() })
+    expect(noVolvio(e, enPausa(), MS)).toBe(false)
+    expect(noVolvio(soltada({ actualizado_en: new Date(MS - 5 * 60_000).toISOString() }), enPausa(), MS)).toBe(true)
+  })
+  it('🔴 sin el dato de si despertó, aunque la corrida siga en pausa, no afirma que falló', () => { expect(noVolvio(soltada({ despertado: null }), enPausa(), MS)).toBe(false) })
+  it('🔴 la corrida en pausa de otro cliente con el mismo nombre no enciende la tarjeta', async () => {
+    const r = await leerDecisiones(ctx(base().semilla('esperas_del_dueno', [soltada(), soltada({ id: 'e2', client_id: C2, clave: 'finanzas:otro' })]).semilla('plan_corridas', [enPausa({ client_id: C2 })])))
+    expect(r.decisiones.filter((d) => d.subtipo === 'plan_no_volvio').map((d) => d.client_id)).toEqual([C2])
+  })
+  it('🔴 sin saber cuándo se despertó no afirma que falló', () => { expect(noVolvio(soltada({ actualizado_en: null }), enPausa(), MS)).toBe(false) })
+  it('🔴 con la corrida en marcha o sin verla, no hay tarjeta', async () => {
+    expect((await leerDecisiones(ctx(con(soltada(), enPausa({ estado: 'corriendo' }))))).decisiones.some((d) => d.subtipo === 'plan_no_volvio')).toBe(false)
+    expect((await leerDecisiones(ctx(con(soltada())))).decisiones.some((d) => d.subtipo === 'plan_no_volvio')).toBe(false)
+  })
+  it('🔴 su propia corrida en pausa no la cuenta como superada; otro plan posterior sí', async () => {
+    expect((await leerDecisiones(ctx(con(soltada(), enPausa())))).omitidas.planes_ya_superados).toBe(0)
+    const r = await leerDecisiones(ctx(con(soltada(), enPausa(), enPausa({ corrida: 'corr-2', estado: 'hecha', espera_desde: hace(0.1) }))))
+    expect(r.decisiones.some((d) => d.subtipo === 'plan_no_volvio')).toBe(false); expect(r.omitidas.planes_ya_superados).toBe(1)
+  })
+  it('🔴 no se le pregunta a una espera con intentos por delante', async () => {
+    expect((await leerDecisiones(ctx(base().semilla('esperas_del_dueno', [espera({ estado: 'soltada', despertado: false, despertar_intentos: 1, soltada_en: hace(1) })])))).total).toBe(0)
+  })
+})
+
+describe('05-nov · corrección de Lenovo: la firma trae qué se firma', () => {
+  const cifra = (valor: number | null, x: Record<string, unknown> = {}) => ({ valor, tipo: 'supuesto', fuente: 'calculadora', ...x })
+  const bloque = { cifras: { meta_por_semana: cifra(10, { tipo: 'dato' }), total_mes: cifra(1000), pauta_diaria: cifra(20), costo_por_venta: cifra(5, { min: 4, max: 6 }), meta_de_equilibrio_semana: cifra(8), techo_por_resultado: cifra(99) }, reparto: { total_mes: 1000 }, costo_por_venta: 5 }
+  const tablero = (x: Record<string, unknown> = {}) => ({ id: 't', client_id: C1, version: 2, estado: 'sin_firma', vigente: true, dry_run: false, creado_en: hace(1), workflow_execution_id: `conversa:${ENC}`, bloque, ...x })
+  const decision = async (t: Record<string, unknown>, arts: Record<string, unknown>[] = [], encs: Record<string, unknown>[] = []) => (await leerDecisiones(ctx(base().semilla('finanzas_tableros', [t]).semilla('finanzas_artefactos', arts).semilla('finanzas_encargos', encs)))).decisiones[0]
+  const cierre = (x: Record<string, unknown> = {}) => ({ encargo_id: ENC, tipo: 'cierre', version: 1, contenido: { finanzas_id: 't', criticos_abiertos: 2, ronda_2: false, ronda_2_incompleta: false, ...x } })
+  const acuerdo = (que: string, tipo = 'acuerdo', x: Record<string, unknown> = {}) => ({ encargo_id: ENC, tipo, version: 1, contenido: { hallazgos: [{ que, severidad: 'critico', estado: 'abierto', ...x }, { que: 'menor', severidad: 'alto', estado: 'abierto' }] } })
+  it('🔴 trae las cifras propuestas, con su nombre, unidad y si son supuesto', async () => {
+    const d = await decision(tablero(), [], [{ id: ENC, semilla: { pais: 'EC' } }])
+    expect(d.cifras?.map((c) => c.clave)).toEqual(['meta_por_semana', 'total_mes', 'pauta_diaria', 'costo_por_venta', 'costo_por_venta_plan_completo', 'meta_de_equilibrio_semana'])
+    expect(d.cifras?.find((c) => c.clave === 'total_mes')).toEqual({ clave: 'total_mes', nombre: 'Presupuesto total al mes', valor: 1000, unidad: 'US$', nota: 'Supuesto' })
+    expect(d.cifras?.find((c) => c.clave === 'meta_por_semana')).toMatchObject({ unidad: 'ventas', nota: 'Dato' })
+    expect(d.cifras?.find((c) => c.clave === 'costo_por_venta')?.nota).toBe('Supuesto · entre 4 y 6')
+  })
+  it('🔴 los dos costos por venta van juntos: 1000 al mes entre 10 por semana', async () => {
+    const c = (await decision(tablero())).cifras?.find((x) => x.clave === 'costo_por_venta_plan_completo')
+    expect(c?.valor).toBeCloseTo(1000 / (10 * 52 / 12), 1)
+  })
+  it('🔴 una cifra sin base no se inventa', async () => {
+    const d = await decision(tablero({ bloque: { cifras: { total_mes: cifra(null, { tipo: 'sin_base' }), pauta_diaria: cifra(20) } } }))
+    expect(d.cifras?.map((c) => c.clave)).toEqual(['pauta_diaria'])
+  })
+  it('🔴 sin cifras legibles no viene el campo: la pantalla no ofrece firmar', async () => {
+    for (const b of [null, {}, { cifras: {} }, { cifras: { total_mes: cifra(null) } }]) expect(await decision(tablero({ bloque: b }))).not.toHaveProperty('cifras')
+  })
+  it('🔴 dice qué destraba, sin inventar que el plan espera', async () => {
+    const d = await decision(tablero()); expect(d.destraba).toMatch(/no espera esta firma/); expect(d.detiene).toBe(false)
+  })
+  it('🔴 trae los críticos abiertos en palabras de la oficina, solo los críticos abiertos', async () => {
+    const d = await decision(tablero(), [cierre(), acuerdo('falta medir el ticket')])
+    expect(d.criticos).toEqual(['falta medir el ticket']); expect(d.para_que).toMatch(/dejó 2 hallazgos/)
+    expect(await decision(tablero(), [cierre(), acuerdo('ya está', 'acuerdo', { estado: 'resuelto' })])).not.toHaveProperty('criticos')
+  })
+  it('🔴 del acuerdo que usó el cierre: ronda 2 completa, sí; a medias, no', async () => {
+    expect((await decision(tablero(), [cierre({ ronda_2: true }), acuerdo('uno'), acuerdo('dos', 'acuerdo_2')])).criticos).toEqual(['dos'])
+    expect((await decision(tablero(), [cierre({ ronda_2: true, ronda_2_incompleta: true }), acuerdo('uno'), acuerdo('dos', 'acuerdo_2')])).criticos).toEqual(['uno'])
+    expect((await decision(tablero(), [cierre(), acuerdo('uno'), acuerdo('dos', 'acuerdo_2')])).criticos).toEqual(['uno'])
+  })
+  it('🔴 el cierre de otro tablero no presta sus críticos', async () => {
+    const d = await decision(tablero(), [cierre({ finanzas_id: 'otro' }), acuerdo('ajeno')]); expect(d).not.toHaveProperty('criticos'); expect(d.para_que).toMatch(/no dejó firmado/)
+  })
+  it('🔴 un secreto en un hallazgo no sale', async () => { expect(JSON.stringify(await decision(tablero(), [cierre(), acuerdo('fallo sk-ant-api03-ABCDEFGHIJKLMN')]))).not.toContain('ABCDEFGHIJKLMN') })
+  it('🔴 si críticos no es un número, no se afirma', async () => {
+    expect((await decision(tablero(), [cierre({ criticos_abiertos: '3' })])).para_que).toMatch(/no dejó firmado/)
+  })
+  it('🔴 un encargo con otra forma no se consulta: la columna es uuid y rompería la lectura', async () => {
+    const db = base().semilla('finanzas_tableros', [tablero({ workflow_execution_id: 'conversa:no-es-uuid' })])
+    const pedidos: string[] = []; const f = db.from.bind(db); db.from = ((t: string) => { pedidos.push(t); return f(t) }) as typeof db.from
+    const r = await leerDecisiones(ctx(db)); expect(pedidos).not.toContain('finanzas_encargos'); expect(r.decisiones[0].cifras?.length).toBeGreaterThan(0)
+  })
+  it('🔴 si encargo o artefactos no se leen, las cifras siguen y la lista está completa', async () => {
+    const db = base().semilla('finanzas_tableros', [tablero()]); db.fallar['finanzas_artefactos'] = 'x'; db.fallar['finanzas_encargos'] = 'x'
+    const r = await leerDecisiones(ctx(db)); expect(r.completo).toBe(true); expect(r.decisiones[0].cifras?.find((c) => c.clave === 'total_mes')?.unidad).toBeNull()
+  })
+  it('🔴 la moneda: la del encargo; sin ella solo Ecuador; sin saberla, ninguna', () => {
+    expect(unidadDeDinero('USD', 'MX')).toBe('US$'); expect(unidadDeDinero('MXN', 'EC')).toBe('MXN'); expect(unidadDeDinero(null, 'ec')).toBe('US$'); expect(unidadDeDinero(null, 'MX')).toBeNull(); expect(unidadDeDinero(null, null)).toBeNull()
+  })
+  it('🔴 un bloque roto no tumba la lista', () => { expect(cifrasDelBloque({ cifras: { total_mes: 'x' } }, null)).toEqual([]) })
+  it('🔴 la moneda del encargo llega a las cifras de dinero, y a las de ventas no', async () => {
+    const d = await decision(tablero(), [], [{ id: ENC, semilla: { moneda: 'USD' } }])
+    expect(d.cifras?.find((c) => c.clave === 'pauta_diaria')?.unidad).toBe('US$'); expect(d.cifras?.find((c) => c.clave === 'meta_de_equilibrio_semana')?.unidad).toBe('ventas')
+  })
+})
+
+describe('05-nov · lo superado no pide firma', () => {
+  const compuerta = { id: 'a', client_id: C1, plan_id: 'plan-viejo', version: 1, estado: 'pendiente', creado_en: hace(2) }
+  const plan = (id: string, x: Record<string, unknown> = {}) => ({ id, client_id: C1, output_type: TIPO_PLAN, status: 'approved', provenance_tag: {}, created_at: hace(1), ...x })
+  it('🔴 la aprobación de un plan ya superado no sale, y queda contada', async () => {
+    const r = await leerDecisiones(ctx(base().semilla('plan_aprobaciones', [compuerta]).semilla('client_historical_outputs', [plan('plan-nuevo')])))
+    expect(r.decisiones.some((d) => d.id === 'plan-viejo')).toBe(false); expect(r.omitidas.reemplazadas).toBe(1)
+  })
+  it('🔴 la del plan vigente sí', async () => {
+    const r = await leerDecisiones(ctx(base().semilla('plan_aprobaciones', [compuerta]).semilla('client_historical_outputs', [plan('plan-viejo')])))
+    expect(r.decisiones.some((d) => d.id === 'plan-viejo')).toBe(true)
+  })
+  it('🔴 si los planes no se leen, se muestra', async () => {
+    const db = base().semilla('plan_aprobaciones', [compuerta]).semilla('client_historical_outputs', [plan('plan-nuevo')]); db.fallar['client_historical_outputs'] = 'x'
+    expect((await leerDecisiones(ctx(db))).decisiones.some((d) => d.id === 'plan-viejo')).toBe(true)
+  })
+})
+
+describe('05-nov · los 4 mutantes que CC7 dejó vivos en 02046bf', () => {
+  it('🔴 una pregunta de la pausa se reconoce por su id aunque el tema sea otro', async () => {
+    const r = await leerDecisiones(ctx(base().semilla('esperas_del_dueno', [espera()]).semilla('cerebro_dueno_preguntas', [pregunta({ tema: 'otro tema del todo' })]).semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }])])))
+    expect(r.decisiones.find((d) => d.id === 'p1')?.detiene).toBe(true)
+  })
+  it('🔴 por id con dos pausas abiertas: la más nueva, en cualquier orden', () => {
+    const a = { id: 'a', estado: 'esperando', creado_en: hace(3) }, b = { id: 'b', estado: 'esperando', creado_en: hace(1) }
+    expect(esperaDeLaRespuesta(hace(0.5), [a, b], [])?.id).toBe('b'); expect(esperaDeLaRespuesta(hace(0.5), [b, a], [])?.id).toBe('b')
+  })
+  it('🔴 con dos pausas abiertas del cliente, manda la más nueva en cualquier orden', async () => {
+    const E2 = '88888888-8888-4888-8888-888888888888'
+    const vieja = espera({ id: 'vieja', creado_en: hace(3) }), nueva = espera({ id: 'nueva', clave: `finanzas:${E2}`, creado_en: hace(1) })
+    for (const esperas of [[vieja, nueva], [nueva, vieja]]) {
+      const r = await leerDecisiones(ctx(base().semilla('esperas_del_dueno', esperas).semilla('cerebro_dueno_preguntas', [pregunta()]).semilla('finanzas_artefactos', [buzon([{ clave: 'otra_cosa', pregunta_id: 'x' }], 1, ENC), buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }], 1, E2)])))
+      expect(r.decisiones.find((d) => d.id === 'p1')?.detiene).toBe(true)
+    }
   })
 })

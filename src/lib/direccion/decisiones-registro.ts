@@ -5,7 +5,7 @@
  * Lo que no se sabe no se inventa: sin enlace, el registro termina en lo último que sí consta.
  * Las preguntas las lee `decisiones.ts`; aquí no se nombra ninguna tabla del cerebro. Las fichas no se leen: el texto de la respuesta queda en el cerebro (dominio de Cerebro).
  */
-import { MAX_INTENTOS_DE_DESPERTAR, SILENCIO_TRAS_RESPONDER_MIN } from '../finanzas/conversa/pausa'
+import { MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, SILENCIO_TRAS_RESPONDER_MIN } from '../finanzas/conversa/pausa'
 import { temaDe } from '../finanzas/conversa/buzon'
 import { esObjeto, leer, sinSecretos, texto, type Db, type Fila, type Fuente } from './comun'
 
@@ -34,11 +34,6 @@ const TOPE_DE_ARTEFACTOS = TOPE_DEL_REGISTRO * 4
 const TOPE_DE_CITA = 300
 
 export const PARA_QUE_DE_LA_PAUSA = 'La oficina financiera lo necesita para pasarle sus cuentas al redactor del plan de 90 días.'
-/** 05-nov · corrección de CC7: el código también deja sin firma por falta de acuerdo o por no verificar al jefe. Los críticos se nombran solo si constan en el cierre */
-export function paraQueDeLaFirma(criticos: number | null | undefined): string {
-  if (!criticos || criticos < 1) return 'La oficina financiera no dejó firmado este tablero: tu firma da por buenas sus cifras.'
-  return criticos === 1 ? 'La oficina financiera dejó 1 hallazgo crítico abierto: tu firma da por buenas sus cifras.' : `La oficina financiera dejó ${criticos} hallazgos críticos abiertos: tu firma da por buenas sus cifras.`
-}
 export const TITULO_NO_VOLVIO = 'Contestaste, pero el plan no volvió a arrancar'
 /** solo con preguntas por contestar: sin ellas el plan puede estar en el margen o esperando otra cosa, y eso no se promete */
 export function destrabaDeLaPausa(faltan: number): string {
@@ -50,6 +45,7 @@ export function destrabaDeLaPausa(faltan: number): string {
 const OFICINAS: Record<string, string> = { financiera: 'La oficina financiera', finanzas: 'La oficina financiera', planeacion: 'La oficina de planeación', creativa: 'La oficina creativa', jefatura: 'La jefatura', marketing: 'El departamento de marketing', cerebro: 'El cerebro del cliente', portero: 'El cerebro del cliente', alta: 'La oficina de altas', onboarding: 'La oficina de altas' }
 const nombreDeOficina = (o: string | null): string => (o ? OFICINAS[o.toLowerCase()] ?? `La oficina ${o.replace(/[-_]+/g, ' ')}` : 'Una oficina')
 
+export { MAX_INTENTOS_DE_DESPERTAR }
 export const encargoDeLaEspera = (clave: unknown): string | null => { const c = texto(clave); return c?.startsWith('finanzas:') ? c.slice('finanzas:'.length) : null }
 export const temaNormal = (t: unknown): string => temaDe(String(t ?? '')).toLowerCase()
 const claveDeTema = (client: unknown, tema: unknown): string => `${String(client)}|${temaNormal(tema)}`
@@ -63,19 +59,6 @@ export async function leerPreguntasDeEncargos(db: Db, fuentes: Fuente[], encargo
     const e = String(f.encargo_id)
     if (salida.has(e) || !esObjeto(f.contenido) || !Array.isArray(f.contenido.preguntas)) continue
     salida.set(e, (f.contenido.preguntas as unknown[]).filter(esObjeto).map((p) => ({ id: texto(p.pregunta_id), tema: String(p.clave ?? '') })))
-  }
-  return salida
-}
-
-/** cuántos críticos abiertos dejó el cierre de cada tablero (la última versión del cierre de su encargo). Lo que no conste no se afirma */
-export async function leerCriticosDeTableros(db: Db, tableros: Fila[]): Promise<Map<string, number>> {
-  const salida = new Map<string, number>()
-  const encargos = [...new Set(tableros.map((t) => texto(t.workflow_execution_id)).filter((w): w is string => !!w?.startsWith('conversa:')).map((w) => w.slice('conversa:'.length)))]
-  if (!encargos.length) return salida
-  const filas = await leer([], 'finanzas_artefactos', db.from('finanzas_artefactos').select('encargo_id, version, tablero:contenido->>finanzas_id, criticos:contenido->criticos_abiertos').eq('tipo', 'cierre').in('encargo_id', encargos).order('version', { ascending: false }).limit(TOPE_DE_ARTEFACTOS), TOPE_DE_ARTEFACTOS)
-  for (const f of filas) {
-    const t = texto(f.tablero)
-    if (t && !salida.has(t) && typeof f.criticos === 'number') salida.set(t, f.criticos)
   }
   return salida
 }
@@ -99,9 +82,19 @@ export function esperaDeLaRespuesta(respondidaEn: unknown, porId: Fila[], porTem
   return conId.find(enCurso) ?? [...conId].reverse().find((e) => creadaEn(e) > hora) ?? [...porTema].sort(deMasNuevaAMasVieja).find(enCurso) ?? null
 }
 
-/** ¿esta espera ya agotó sus intentos sin despertar al plan? Antes de eso el vigía sigue reintentando: no es asunto del dueño todavía */
-export const noVolvio = (e: Fila): boolean => e.estado === 'soltada' && e.despertado === false && Number(e.despertar_intentos ?? 0) >= MAX_INTENTOS_DE_DESPERTAR
-export const motivoDeNoVolver = (e: Fila): string => sinSecretos(e.despertar_detalle, TOPE_DE_CITA) ?? 'El plan no pudo volver a arrancar.'
+/**
+ * ¿esta espera ya agotó sus intentos sin que el plan vuelva? Antes de eso el vigía sigue reintentando: no es asunto del dueño todavía.
+ * 05-nov · corrección de CC7 sobre #917: «recibió el pedido» no es «arrancó». Con `despertado` true y su corrida aún en pausa pasado el margen, el plan sigue parado.
+ */
+export function noVolvio(e: Fila, corrida: Fila | null, ahora: number): boolean {
+  if (e.estado !== 'soltada' || Number(e.despertar_intentos ?? 0) < MAX_INTENTOS_DE_DESPERTAR) return false
+  if (e.despertado === false) return true
+  if (e.despertado !== true || corrida?.estado !== 'en_pausa') return false
+  // el último intento escribe `actualizado_en` (`finanzas/conversa/esperas-supabase.ts`)
+  const desde = fechaDe(e.actualizado_en)
+  return desde !== null && ahora - desde >= MARGEN_PARA_ARRANCAR_MIN * 60_000
+}
+export const motivoDeNoVolver = (e: Fila): string => e.despertado === true ? 'El plan recibió el pedido, pero no arrancó: sigue en pausa.' : sinSecretos(e.despertar_detalle, TOPE_DE_CITA) ?? 'El plan no pudo volver a arrancar.'
 /** los estados en que consta que un plan arrancó. `fallida` no: también cierra corridas que nunca salieron de la espera */
 export const ESTADOS_DE_PLAN_QUE_CORRIO = ['corriendo', 'en_pausa', 'hecha'] as const
 /** 05-nov · corrección de CC7: la pausa ya no detiene nada si después corrió otro plan del cliente, o si su propia corrida terminó */
@@ -116,7 +109,7 @@ export function yaLoSuperoOtroPlan(e: Fila, corridas: Fila[]): boolean {
 }
 
 /** qué le pasó al plan después de la respuesta. Los pasos son los que constan en la espera y en la corrida */
-export function pasosDelPlan(espera: Fila | null, corrida: Fila | null): { pasos: PasoDelRegistro[]; resultado: ResultadoDeContestada | null; motivo: string | null } {
+export function pasosDelPlan(espera: Fila | null, corrida: Fila | null, ahora: number): { pasos: PasoDelRegistro[]; resultado: ResultadoDeContestada | null; motivo: string | null } {
   if (!espera) return { pasos: [], resultado: null, motivo: null }
   const cuando = texto(espera.soltada_en) ?? texto(espera.actualizado_en)
   if (espera.estado === 'esperando') return { pasos: [{ cuando: null, quien: 'sistema', estado: 'espera', texto: 'El plan sigue en pausa: faltan respuestas o está corriendo el margen' }], resultado: 'espera', motivo: null }
@@ -124,12 +117,15 @@ export function pasosDelPlan(espera: Fila | null, corrida: Fila | null): { pasos
     const motivo = 'Otro plan reemplazó a este antes de usar tu respuesta.'
     return { pasos: [{ cuando, quien: 'sistema', estado: 'fallo', texto: motivo }], resultado: 'fallo', motivo }
   }
-  if (noVolvio(espera)) {
+  if (noVolvio(espera, corrida, ahora)) {
     const motivo = motivoDeNoVolver(espera)
     return { pasos: [{ cuando, quien: 'sistema', estado: 'fallo', texto: TITULO_NO_VOLVIO, cita: motivo }], resultado: 'fallo', motivo }
   }
   if (espera.despertado !== true) return { pasos: [{ cuando, quien: 'sistema', estado: 'espera', texto: 'El plan todavía no vuelve a arrancar: el sistema lo sigue intentando' }], resultado: 'espera', motivo: null }
-  const pasos: PasoDelRegistro[] = [{ cuando, quien: 'sistema', estado: 'retomado', texto: 'El plan volvió a arrancar con tu respuesta' }]
+  // recibió el pedido y no arrancó todavía: el vigía lo revisa (#917)
+  if (corrida?.estado === 'en_pausa') return { pasos: [{ cuando, quien: 'sistema', estado: 'espera', texto: 'El plan recibió tu respuesta, pero todavía no arranca: el sistema lo sigue intentando' }], resultado: 'espera', motivo: null }
+  // sin ver su corrida solo consta que recibió el pedido
+  const pasos: PasoDelRegistro[] = [{ cuando, quien: 'sistema', estado: 'retomado', texto: corrida ? 'El plan volvió a arrancar con tu respuesta' : 'El plan recibió tu respuesta; no consta todavía que haya arrancado' }]
   if (corrida?.estado === 'hecha') return { pasos: [...pasos, { cuando: texto(corrida.actualizado_en), quien: 'sistema', estado: 'terminado', texto: 'El plan terminó' }], resultado: 'terminada', motivo: null }
   if (corrida?.estado === 'fallida' || corrida?.estado === 'vencida') {
     const motivo = sinSecretos(corrida.motivo, TOPE_DE_CITA) ?? 'El plan no terminó.'
@@ -170,7 +166,7 @@ export async function leerContestadas(db: Db, hora: string, clientes: Map<string
     if (!vivo(p.client_id)) continue
     const cuando = texto(p.respondida_en), ficha = texto(p.ficha_id)
     const espera = esperaDeLaRespuesta(p.respondida_en, esperasPorPregunta.get(String(p.id)) ?? [], esperasPorTema.get(claveDeTema(p.client_id, p.tema)) ?? [])
-    const plan = pasosDelPlan(espera, espera ? corridaDe(espera) : null)
+    const plan = pasosDelPlan(espera, espera ? corridaDe(espera) : null, Date.parse(hora))
     contestadas.push({
       id: String(p.id), tipo: 'pregunta_al_dueno', fuente: 'cerebro_dueno_preguntas', client_id: texto(p.client_id), cliente: nombre(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta'), resuelta_en: cuando, resultado: plan.resultado ?? 'guardada', motivo: plan.motivo,
       registro: [pregunto(p), { cuando, quien: 'tu', estado: 'respondiste', texto: 'Respondiste' }, ...(ficha ? [{ cuando, quien: 'sistema' as const, estado: 'guardado' as const, texto: 'Quedó guardada en el cerebro del cliente' }] : []), ...plan.pasos],
