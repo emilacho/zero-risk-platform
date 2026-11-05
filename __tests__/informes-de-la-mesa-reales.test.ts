@@ -182,6 +182,9 @@ describe('la cuenta del reintento: tiempo y tope firmado', () => {
     expect(c.pedirReintento(1)).toMatchObject({ ok: false, motivo: expect.stringMatching(/tiempo/) })
     reloj = LIMITE_DE_LA_PUERTA_MS - 200_000
     expect(c.pedirReintento(1).ok).toBe(true)
+    expect(c.hayTiempoParaLlamar()).toBe(true)
+    reloj += 1
+    expect(c.hayTiempoParaLlamar()).toBe(false)
   })
   it('🔴 un costo que no es número no devuelve cupo', () => {
     const c = crearCuentaDeLaMesa(cinco, () => 0)
@@ -194,8 +197,13 @@ describe('la cuenta del reintento: tiempo y tope firmado', () => {
 })
 
 describe('el plan declara lo que no llegó', () => {
-  const correr = (items: Array<Record<string, unknown>> | 'sin_rama'): string => {
-    const dolar = (nombre: string) => ({ all: () => { if (items === 'sin_rama' || nombre !== 'firma de la rama · analisis') throw new Error('sin ejecutar'); return items.map((json) => ({ json })) } })
+  const correr = (items: Array<Record<string, unknown>> | 'sin_rama', o: { body?: Record<string, unknown>; guardado?: unknown } = {}): string => {
+    const dolar = (nombre: string) => {
+      if (nombre === 'firma de la rama · analisis') return { all: () => { if (items === 'sin_rama') throw new Error('sin ejecutar'); return items.map((json) => ({ json })) } }
+      if (nombre === 'Webhook · planeacion') return { first: () => ({ json: { body: o.body ?? {} } }) }
+      if (nombre === 'Reanudar · poner el material guardado') return { first: () => { if (o.guardado === undefined) throw new Error('sin ejecutar'); return { json: { material: o.guardado } } } }
+      throw new Error('nodo inesperado: ' + nombre)
+    }
     return new Function('$', CODIGO_INFORMES_QUE_NO_LLEGARON + ' return bloqueInformesQueNoLlegaron;')(dolar)
   }
   const FALLO = 'no hubo informe: el analista falló en los 2 intentos · 1.º: el analista no contestó · run_sdk_500 · 2.º: el analista no contestó · run_sdk_500'
@@ -218,6 +226,34 @@ describe('el plan declara lo que no llegó', () => {
       { estado: 'sin_respuesta', objetivo: 'd', motivo: 'la mesa está encendida pero este cliente no está' },
       { estado: 'sin_respuesta', objetivo: 'e', motivo: 'NO SE MIRÓ DE VERDAD · fue un ensayo (dry-run)' },
     ])).toBe('')
+  })
+  it('🔴 reparo de CC6: mesa apagada y paso 0 quitado: no hubo ninguno de los dos, y se declara en llano', () => {
+    const apagada = { estado: 'sin_respuesta', objetivo: 'informe de mercado', motivo: 'la mesa está apagada (`cadena_config.mesa_de_analisis.encendida` no es true)' }
+    const b = correr([apagada], { body: { con_mercado: false } })
+    expect(b).toMatch(/- informe de mercado — la mesa de análisis estaba apagada cuando le tocó correr/)
+    expect(b).not.toMatch(/cadena_config/)
+    expect(correr([apagada], { body: {} })).toBe('')
+    expect(correr([apagada], { body: { con_mercado: true } })).toBe('')
+  })
+  it('🔴 un ensayo no se declara ni con el paso 0 quitado', () => {
+    expect(correr([{ estado: 'sin_respuesta', objetivo: 'e', motivo: 'NO SE MIRÓ DE VERDAD · fue un ensayo (dry-run)' }], { body: { con_mercado: false } })).toBe('')
+  })
+  it('🔴 reparo de CC6: al volver de una pausa la mesa no corre, y lo que faltó se lee de lo guardado', () => {
+    const guardado = [
+      { brazo: 'analisis', estado: 'sin_respuesta', objetivo: 'informe de mercado', motivo: FALLO },
+      { brazo: 'analisis', estado: 'trajo', objetivo: 'informe de retención' },
+      { brazo: 'apify', estado: 'sin_respuesta', objetivo: 'otra cosa', motivo: 'no contestó' },
+    ]
+    const b = correr('sin_rama', { guardado })
+    expect(b).toMatch(/- informe de mercado — no hubo informe/)
+    expect(b).not.toMatch(/retención|otra cosa/)
+    expect(correr([], { guardado })).toMatch(/- informe de mercado/)
+  })
+  it('🔴 lo guardado no pisa lo que sí corrió', () => {
+    expect(correr([{ estado: 'trajo', objetivo: 'a' }], { guardado: [{ brazo: 'analisis', estado: 'sin_respuesta', objetivo: 'viejo', motivo: 'x' }] })).toBe('')
+  })
+  it('🔴 lo guardado sin forma no tumba el plan', () => {
+    expect(correr('sin_rama', { guardado: 'raro' })).toBe('')
   })
   it('🔴 otro motivo de no contestar sí se declara: por omisión se dice', () => {
     expect(correr([{ estado: 'sin_respuesta', objetivo: 'x', motivo: 'el tope de la mesa no alcanza para este pedido' }])).toMatch(/- x — el tope de la mesa no alcanza/)

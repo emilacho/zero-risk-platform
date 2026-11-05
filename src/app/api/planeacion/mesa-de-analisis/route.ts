@@ -177,6 +177,8 @@ async function atender(p: PedidoPuerta, tope: number, cuenta: CuentaDeLaMesa): P
       objetivo, fuente: fuenteCompleta, ...extra,
       tipo, agente: analista.agente, rotulo: rotuloDe(tipo), dry_run: p.dry_run, esperados: HALLAZGOS_ESPERADOS,
       pedir: async (intento) => {
+        // 🔴 reparo de CC6: si los que entraron antes se colgaron, el que sigue no entra. Un límite de 0 o menos significaría «sin límite», y la plataforma mataría la puerta con todos adentro
+        if (!cuenta.hayTiempoParaLlamar()) return { ok: false, error: 'no quedó tiempo en la puerta para llamarlo', costo_usd: 0 }
         const r = await conLimite(Math.min(p.limite_ms ?? Infinity, cuenta.tiempoRestanteMs()), () => modelo.invocar({
           // el reintento lleva su propio rótulo: sus filas no se confunden con las del primero y se cuentan aparte
           agente: analista.agente, tarea, encargo_id: firma.workflow_execution_id, client_id: clientId, paso: intento === 1 ? PASO_DE_ANALISIS(tipo) : `${PASO_DE_ANALISIS(tipo)}-reintento`, tope_usd: topeDeLaLlamada, dry_run: p.dry_run as boolean,

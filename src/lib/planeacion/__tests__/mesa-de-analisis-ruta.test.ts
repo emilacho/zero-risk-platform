@@ -239,6 +239,55 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
         vi.useRealTimers()
       }
     })
+    it('🔴 reparo de CC6: si 4 se cuelgan, el quinto no entra, y la puerta contesta antes de que la maten', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+          llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+          return new Promise<Response>(() => {})
+        })
+        configs = { mesa_de_analisis: { encendida: true, clientes: [C] } }
+        const salida = POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: ['competencia', 'competencia', 'competencia', 'competencia', 'competencia'].map((t) => pedido(t)) }))
+        await vi.advanceTimersByTimeAsync(780_000)
+        const rs = await respuestas(await salida)
+        expect(corredor()).toHaveLength(4)
+        expect(rs).toHaveLength(5)
+        for (const r of rs) expect(String(r.motivo)).toMatch(/^no hubo informe/)
+        expect(String(rs[4].motivo)).toMatch(/no quedó tiempo en la puerta para llamarlo/)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+    it('🔴 reparo de CC6: el reintento se paga con lo que queda, no con el tope entero', async () => {
+      let n = 0
+      vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+        llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+        if (String(url).endsWith('/api/brain/alimentar/informe')) return new Response(JSON.stringify({ ok: true, ficha_id: 'x' }), { status: 200 })
+        n += 1
+        if (n <= 4) return new Response(JSON.stringify({ output: `- Uno [${F1}]\n- Dos [${F2}]\n- Tres [${F1}]`, cost_usd: 0.95 }), { status: 200 })
+        if (n === 5) { await new Promise((listo) => setTimeout(listo, 30)); return new Response(JSON.stringify({ output: '- estimo sin cita', cost_usd: 0.6 }), { status: 200 }) }
+        return new Response(JSON.stringify({ output: `- Uno [${F1}]\n- Dos [${F2}]\n- Tres [${F1}]`, cost_usd: 0.3 }), { status: 200 })
+      })
+      await corrida(['competencia', 'competencia', 'competencia', 'competencia', 'competencia'])
+      expect(corredor()).toHaveLength(6)
+      expect(Number(corredor()[5].cuerpo.max_budget_usd)).toBeCloseTo(0.6)
+    })
+    it('🔴 el límite que trae el pedido manda si es menor', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+          llamadas.push({ url: String(url), cuerpo: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> })
+          return new Promise<Response>(() => {})
+        })
+        configs = { mesa_de_analisis: { encendida: true, clientes: [C] } }
+        const salida = POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: [pedido('competencia', { limite_ms: 1000 })] }))
+        await vi.advanceTimersByTimeAsync(2000)
+        const rs = await respuestas(await salida)
+        expect(String(rs[0].motivo)).toMatch(/1000 ms.*1000 ms/)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
     it('🔴 el reintento recibe el tope del analista, sin pasar del tope firmado', async () => {
       respuestaDelCorredor = ROTO
       await corrida()
