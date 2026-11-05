@@ -532,6 +532,49 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       await atenderPausa(a.P, 'enc-1')
       expect(a.filas().map((p) => [p.tema, p.estado])).toEqual([['whatsapp', 'obsoleta'], ['pixel', 'pendiente']])
     })
+    it('🔴 si el cerebro cayó a mitad del primer registro, la repetida guarda su id y se cierra pasadas las 72 horas', async () => {
+      let caido = false, llamadas = 0
+      const a = armar({ caido: () => caido })
+      const real = a.P.cerebro.registrarPregunta
+      a.P.cerebro.registrarPregunta = async (q) => { if (++llamadas === 2) { caido = true; try { return await real(q) } finally { caido = false } } return real(q) }
+      await pausarOficina(a.P, a.pedir)
+      expect(a.filas().map((p) => p.tema)).toEqual(['whatsapp'])
+      a.minutos(10)
+      await atenderPausa(a.P, 'enc-1')
+      expect(a.filas().map((p) => p.tema)).toEqual(['whatsapp', 'pixel'])
+      const registro = a.m.arts.buzon_respuestas as { preguntas: Array<{ clave: string; pregunta_id: string | null }> }
+      expect(registro.preguntas.map((p) => [p.clave, p.pregunta_id])).toEqual([['whatsapp', a.filas()[0].id], ['pixel', a.filas()[1].id]])
+      a.horas(73)
+      await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })
+      expect(a.filas()[0].estado).toBe('obsoleta')
+    })
+    it('🔴 una pregunta de otra oficina no guarda id: su fila no se cierra desde aquí', async () => {
+      const a = armar({ preguntas: [preg('whatsapp')] })
+      a.t.cerebro_dueno_preguntas.push({ id: '00000000-0000-4000-9000-000000000009', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿whatsapp?', estado: 'pendiente', creado_en: a.hora(), preguntado_por_oficina: 'creativa', canal: 'otra' })
+      await pausarOficina(a.P, a.pedir)
+      const registro = a.m.arts.buzon_respuestas as { preguntas: Array<{ pregunta_id: string | null }> }
+      expect(registro.preguntas[0].pregunta_id).toBeNull()
+    })
+    it('🔴 si en una vuelta se recogen varias respuestas, se cierran todas', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      for (const tema of ['whatsapp', 'pixel']) expect((await contestarPorLaPuerta(a, tema)).status).toBe(200)
+      await atenderPausa(a.P, 'enc-1')
+      expect(a.filas().map((p) => p.estado)).toEqual(['obsoleta', 'obsoleta'])
+    })
+    it('🔴 un cierre que lanza no rompe la respuesta y dice que no cerró', async () => {
+      const m = mundo({ modo: 'registra', espera: {}, arts: acuerdo([preg('whatsapp'), preg('pixel')]) })
+      m.P.cerebro.cerrarPendiente = async () => { throw new Error('red') }
+      m.arts.buzon_respuestas = { n: 1, claves: ['whatsapp', 'pixel'], preguntas: [{ clave: 'whatsapp', pregunta_id: 'p1' }, { clave: 'pixel', pregunta_id: 'p2' }] }
+      expect((await responderEnLaOficina(m.P, { client_id: 'cli', tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ aplicada: true, en_el_cerebro: true, tema_cerrado: false })
+    })
+    it('🔴 un cierre que falla dice que no cerró', async () => {
+      const m = mundo({ modo: 'registra', espera: {}, arts: acuerdo([preg('whatsapp'), preg('pixel')]) })
+      m.P.cerebro.cerrarPendiente = async () => ({ ok: false, error: 'no_cerrada' })
+      m.arts.buzon_respuestas = { n: 1, claves: ['whatsapp', 'pixel'], preguntas: [{ clave: 'whatsapp', pregunta_id: 'p1' }, { clave: 'pixel', pregunta_id: 'p2' }] }
+      expect((await responderEnLaOficina(m.P, { client_id: 'cli', tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ en_el_cerebro: true, tema_cerrado: false })
+    })
     it('🔴 sin id en el registro no cierra nada, ni por tema', async () => {
       const m = mundo({ modo: 'registra', espera: {}, arts: acuerdo([preg('whatsapp'), preg('pixel')]) })
       const cierres: unknown[] = []
