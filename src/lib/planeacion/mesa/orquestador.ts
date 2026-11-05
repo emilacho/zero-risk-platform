@@ -22,7 +22,8 @@ export interface PuertosDeMesa {
   encendida(): Promise<boolean>
   ahora(): Date
   /** 05-nov · ¿el corredor sigue trabajando este turno? `null` si no se pudo saber */
-  turnoEnVuelo?(clave: string, client_id: string): Promise<boolean | null>
+  /** `desde`: cuándo el corredor contestó que el empleado falló. Una fila «en curso» que no cambió desde entonces es la del fallo, no un trabajo vivo */
+  turnoEnVuelo?(clave: string, client_id: string, desde?: string): Promise<boolean | null>
 }
 
 type Arts = Record<string, Record<string, unknown>>
@@ -35,7 +36,8 @@ export const claveDelTurno = (encargo_id: string, paso: string) => `mesa:${encar
 /** la devolución es otro turno: con la misma clave, un corte antes de entrar recogería el acta anterior y el motivo de finanzas se perdería sin aviso */
 const claveDelTurnoDe = (e: EncargoDeConversa, paso: string): string => { const d = e.estado_del_motor.vueltas.devolucion ?? 0; return claveDelTurno(e.id, d > 0 ? `${paso}:devolucion-${d}` : paso) }
 /** `termino`: el corredor contestó que el empleado falló. Su punto de control se queda «en curso» para siempre: no hay a quién esperar ni nada que recoger */
-type MarcaDelTurno = { paso: string; intentos: number; termino?: boolean }
+/** `fallo_en`: cuándo llegó ese fallo. Sobrevive a un corte posterior: así no se espera 35 min a la fila del fallo (CC6, 05-nov) */
+type MarcaDelTurno = { paso: string; intentos: number; termino?: boolean; fallo_en?: string }
 type ConMarca = { turno_en_curso?: MarcaDelTurno }
 export const LIMITE_PARA_REINTENTAR_MS = 150_000
 const objeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -136,15 +138,15 @@ async function unPaso(P: PuertosDeMesa, e0: EncargoDeConversa): Promise<Respuest
   const intentos = repite && previo ? previo.intentos : 0
   // CC7, 05-nov · el último intento no vuelve como pasajero: sigue a la declaración de siempre (sin aporte, sin planteo, sin acta)
   const ultimo = intentos + 1 >= INTENTOS_DEL_TURNO
-  if (preguntar && P.turnoEnVuelo && (await P.turnoEnVuelo(claveDelTurnoDe(e, paso.clave), e.client_id).catch(() => null)) === true) return { status: 409, cuerpo: { error: 'paso_en_vuelo' } }
+  if (preguntar && P.turnoEnVuelo && (await P.turnoEnVuelo(claveDelTurnoDe(e, paso.clave), e.client_id, previo?.fallo_en).catch(() => null)) === true) return { status: 409, cuerpo: { error: 'paso_en_vuelo' } }
   if (paso.tipo === 'agente') {
-    const marcado = { ...e.estado_del_motor, turno_en_curso: { paso: paso.clave, intentos: intentos + 1 } }
+    const marcado = { ...e.estado_del_motor, turno_en_curso: { paso: paso.clave, intentos: intentos + 1, ...(repite && previo?.fallo_en ? { fallo_en: previo.fallo_en } : {}) } }
     await P.almacen.guardar({ encargo_id: e.id, estado_del_motor: marcado, gasto_usd: e.gasto_usd, estado: 'en_curso' })
     e = { ...e, estado_del_motor: marcado }
   }
   const hecho = paso.tipo === 'codigo' ? { resultado: { costo_usd: 0, artefacto: abrirExpediente(e) } as ResultadoDePaso, error: null, pasajera: false } : await turnoDeAgente(P, e, paso, arts, reanudar, ultimo)
   if (hecho.pasajera && intentos + 1 < INTENTOS_DEL_TURNO) {
-    if (hecho.termino) await P.almacen.guardar({ encargo_id: e.id, estado_del_motor: { ...e.estado_del_motor, turno_en_curso: { paso: paso.clave, intentos: intentos + 1, termino: true } } as typeof e.estado_del_motor, gasto_usd: e.gasto_usd, estado: 'en_curso' })
+    if (hecho.termino) await P.almacen.guardar({ encargo_id: e.id, estado_del_motor: { ...e.estado_del_motor, turno_en_curso: { paso: paso.clave, intentos: intentos + 1, termino: true, fallo_en: P.ahora().toISOString() } } as typeof e.estado_del_motor, gasto_usd: e.gasto_usd, estado: 'en_curso' })
     return { status: 503, cuerpo: { error: 'turno_cortado', paso: paso.clave, intento: intentos + 1, detalle: hecho.error } }
   }
   // registrarPaso arma un estado nuevo: la marca del turno no pasa, así que un turno terminado no la deja

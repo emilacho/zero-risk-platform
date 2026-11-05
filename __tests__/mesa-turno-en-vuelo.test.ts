@@ -86,6 +86,14 @@ describe('¿sigue en vuelo?', () => {
     expect(await turnoEnVueloEnElCorredor(db([{ step_status: 'in_progress', updated_at: hace2(36) }]), Q, AHORA)).toBe(false)
   })
   it('terminado, fallido o sin fila: no', async () => { for (const d of [[], [{ step_status: 'completed', updated_at: hace(1) }], [{ step_status: 'failed', updated_at: hace(1) }]]) expect(await turnoEnVueloEnElCorredor(db(d), Q, AHORA)).toBe(false) })
+  it('la fila del fallo declarado no es trabajo vivo; si se escribió después, sí (CC6, 05-nov)', async () => {
+    const fila = [{ step_status: 'in_progress', updated_at: hace(60_000) }]
+    expect(await turnoEnVueloEnElCorredor(db(fila), { ...Q, desde: hace(30_000) }, AHORA)).toBe(false)
+    expect(await turnoEnVueloEnElCorredor(db(fila), { ...Q, desde: hace(60_000) }, AHORA)).toBe(false)
+    expect(await turnoEnVueloEnElCorredor(db(fila), { ...Q, desde: hace(90_000) }, AHORA)).toBe(true)
+    // sin fecha de fallo, o ilegible: como siempre
+    for (const desde of [undefined, 'nada']) expect(await turnoEnVueloEnElCorredor(db(fila), { ...Q, desde }, AHORA)).toBe(true)
+  })
   it('sin poder leer, o sin fecha: no se sabe', async () => {
     expect(await turnoEnVueloEnElCorredor(db(null, { message: 'x' }), Q, AHORA)).toBeNull()
     expect(await turnoEnVueloEnElCorredor(db(null), Q, AHORA)).toBeNull()
@@ -99,5 +107,5 @@ describe('la ruta de la mesa', () => {
     expect(s).toContain('if (!pideLatido(request)) return atender(request)')
     expect(s).toContain('responderConLatido(() => atender(request), { mantenerVivo: waitUntil })')
   })
-  it('pregunta al corredor con el flujo que llama', () => { expect(s).toContain('turnoEnVueloEnElCorredor(db, { workflow_id: c.workflow_id, client_id, clave }, new Date())') })
+  it('pregunta al corredor con el flujo que llama, y desde cuándo falló', () => { expect(s).toContain("turnoEnVuelo: async (clave, client_id, desde) => (typeof c.workflow_id === 'string' ? turnoEnVueloEnElCorredor(db, { workflow_id: c.workflow_id, client_id, clave, desde }, new Date())") })
 })

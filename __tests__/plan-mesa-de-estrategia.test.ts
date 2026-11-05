@@ -579,6 +579,25 @@ describe('un turno cortado no se pierde', () => {
     expect(preguntas).toHaveLength(1)
     expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, true, true])
   })
+  it('un fallo y luego un corte: el tercer intento pregunta con la hora del fallo, que sobrevive al corte (CC6)', async () => {
+    const m = await montar([FALLA, 'red:x', null]); await m.hastaPaso()
+    const vistas: Array<string | undefined> = []
+    m.P.turnoEnVuelo = async (_c, _cl, desde) => { vistas.push(desde); return false }
+    await avanzarMesa(m.P, m.id)
+    const fallo_en = ((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor as unknown as { turno_en_curso: { fallo_en?: string } }).turno_en_curso.fallo_en
+    expect(typeof fallo_en).toBe('string')
+    await avanzarMesa(m.P, m.id)
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toMatchObject({ turno_en_curso: { intentos: 2, fallo_en } })
+    expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
+    expect(vistas).toEqual([fallo_en])
+  })
+  it('sin fallo previo se pregunta sin hora: un corte solo sigue esperando lo que trabaja', async () => {
+    const m = await montar(['red:x', null]); await m.hastaPaso()
+    const vistas: Array<string | undefined> = []
+    m.P.turnoEnVuelo = async (_c, _cl, desde) => { vistas.push(desde); return false }
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect(vistas).toEqual([undefined])
+  })
   it('🔴 la devolución con un corte antes de entrar no recoge el acta anterior: tiene su propia clave', async () => {
     const m = await montar([null, 'run_sdk_502', null]); await hastaElFin(m.P, m.id)
     await devolverALaMesa(m.P, m.id, { motivo: 'no cuadra' })

@@ -41,7 +41,7 @@ async function atender(request: Request) {
     modelo: modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch, trabajo: trabajoDeLaLlamada(cuerpo, (nombre) => request.headers.get(nombre)).columnas, workflow_id: typeof c.workflow_id === 'string' ? c.workflow_id : undefined }),
     encendida: () => mesaEncendida(db),
     ahora: () => new Date(),
-    turnoEnVuelo: async (clave, client_id) => (typeof c.workflow_id === 'string' ? turnoEnVueloEnElCorredor(db, { workflow_id: c.workflow_id, client_id, clave }, new Date()) : null),
+    turnoEnVuelo: async (clave, client_id, desde) => (typeof c.workflow_id === 'string' ? turnoEnVueloEnElCorredor(db, { workflow_id: c.workflow_id, client_id, clave, desde }, new Date()) : null),
   }
   try {
     if (c.accion === 'vivas') {
