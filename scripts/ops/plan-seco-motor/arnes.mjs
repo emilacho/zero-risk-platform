@@ -173,9 +173,10 @@ async function runSdk(cuerpo, res) {
     const filas = filasDe('agent_invocations').filter((x) => x.client_id === cuerpo.client_id)
     const gastado = filas.reduce((a, x) => a + (Number(x.cost_usd) || 0), 0)
     const deCorrida = filas.filter((x) => String(x.workflow_execution_id ?? '') === String(cuerpo.workflow_execution_id ?? '')).reduce((a, x) => a + (Number(x.cost_usd) || 0), 0)
-    // la vara por plan (#928): suma todo lo rotulado con esa corrida, sin ventana
-    const delPlan = cuerpo.trabajo_tipo === 'plan' && cuerpo.trabajo_id ? filas.filter((x) => x.trabajo_tipo === 'plan' && x.trabajo_id === cuerpo.trabajo_id).reduce((a, x) => a + (Number(x.cost_usd) || 0), 0) : 0
-    const razon = deCorrida >= (ESCENARIO.freno.por_corrida ?? 5) ? 'run_over_cap' : gastado >= ESCENARIO.freno.cliente ? 'over_cap' : ESCENARIO.freno.plan !== undefined && delPlan >= ESCENARIO.freno.plan ? 'plan_over_cap' : null
+    // la vara por plan (#928 61caf1b): suma lo rotulado con esa corrida, sin ventana; el paso 0 ni suma ni se frena aquí
+    const fueraDelPlan = (p) => typeof p === 'string' && (p.startsWith('analisis-') || p === 'informe-mercado')
+    const delPlan = cuerpo.trabajo_tipo === 'plan' && cuerpo.trabajo_id && !fueraDelPlan(cuerpo.paso) ? filas.filter((x) => x.trabajo_tipo === 'plan' && x.trabajo_id === cuerpo.trabajo_id && !fueraDelPlan(x.paso)).reduce((a, x) => a + (Number(x.cost_usd) || 0), 0) : 0
+    const razon = deCorrida >= (ESCENARIO.freno.por_corrida ?? 5) ? 'run_over_cap' : gastado >= ESCENARIO.freno.cliente ? 'over_cap' : ESCENARIO.freno.plan !== undefined && cuerpo.trabajo_tipo === 'plan' && !fueraDelPlan(cuerpo.paso) && delPlan + (ESCENARIO.freno.ya_gastado ?? 0) >= ESCENARIO.freno.plan ? 'plan_over_cap' : null
     if (razon) {
       anotar({ tipo: 'freno_429', razon, agente: cuerpo.agent, paso: cuerpo.paso || cuerpo.step_name || null, gastado, de_corrida: deCorrida })
       res.writeHead(429, { 'content-type': 'application/json' })
@@ -259,6 +260,27 @@ const srv = http.createServer(async (req, res) => {
       db.close()
       anotar({ tipo: 'pregunta_a_n8n', status: url.searchParams.get('status'), filas: data.length })
       res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ data }))
+    }
+    // la pausa falla de verdad si el caso lo pide
+    if (url.pathname === '/__pausar') {
+      const h = {}; for (const [k, v] of Object.entries(req.headers)) if (!['host', 'content-length', 'connection'].includes(k)) h[k] = v
+      if (ESCENARIO.pausa_falla) { anotar({ tipo: 'pausa_fallida_provocada' }); res.writeHead(500, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'fallo provocado' })) }
+      const rr = await fetch('http://localhost:4200/api/finanzas/pausar', { method: req.method, headers: h, body: crudo })
+      res.writeHead(rr.status, { 'content-type': 'application/json' }); return res.end(await rr.text())
+    }
+    // la mesa pasa por aquí para provocarle cortes: antes de entrar, soltando el turno en marcha, o colgando la conexión
+    if (url.pathname === '/__mesa') {
+      globalThis.__llamadasMesa = (globalThis.__llamadasMesa || 0) + 1
+      const n = globalThis.__llamadasMesa, f = ESCENARIO.mesa_falla
+      const toca = f && n >= f.desde && n < f.desde + f.veces
+      const h = {}; for (const [k, v] of Object.entries(req.headers)) if (!['host', 'content-length', 'connection'].includes(k)) h[k] = v
+      const seguir = () => fetch('http://localhost:4200/api/planeacion/mesa', { method: req.method, headers: h, body: crudo })
+      anotar({ tipo: 'mesa_llamada', n, provocado: toca ? f.modo : null })
+      if (toca && f.modo === 'corte') { req.socket.destroy(); return }
+      if (toca && f.modo === 'suelta') seguir().catch(() => undefined)
+      if (toca) { res.writeHead(f.status || 504, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'corte provocado' })) }
+      const rr = await seguir()
+      res.writeHead(rr.status, { 'content-type': 'application/json' }); return res.end(await rr.text())
     }
     // la plataforma llega a n8n por el arnés: lo que despierta un flujo sigue de verdad al n8n local
     if (url.pathname.startsWith('/webhook')) {
