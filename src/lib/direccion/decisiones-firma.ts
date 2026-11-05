@@ -49,9 +49,12 @@ export function cifrasDelBloque(bloque: unknown, dinero: string | null): CifraDe
   const salida: CifraDeFirma[] = []
   const poner = (clave: string, nombre: string, unidad: string | null) => {
     const c = cs[clave]
-    if (esObjeto(c) && typeof c.valor === 'number' && Number.isFinite(c.valor)) salida.push({ clave, nombre, valor: c.valor, unidad, nota: clave === 'meta_por_semana' && typeof c.fuente === 'string' && c.fuente.startsWith(PREFIJO_DE_META_FIRMADA) ? `Meta ${c.fuente}` : notaDe(c) })
+    if (esObjeto(c) && typeof c.valor === 'number' && Number.isFinite(c.valor)) salida.push({ clave, nombre, valor: c.valor, unidad, nota: notaDe(c) })
   }
   poner('meta_por_semana', 'Meta de ventas por semana', 'ventas')
+  // 05-nov · si esa meta ya la firmó el dueño, quien firma lo lee aquí: la tarjeta no muestra las alertas
+  const meta = cs.meta_por_semana
+  if (salida[0]?.clave === 'meta_por_semana' && esObjeto(meta) && typeof meta.fuente === 'string' && meta.fuente.startsWith(PREFIJO_DE_META_FIRMADA)) salida[0].nota = `Meta ${meta.fuente}`
   poner('total_mes', 'Presupuesto total al mes', dinero)
   poner('pauta_diaria', 'Pauta por día', dinero)
   poner('costo_por_venta', 'Costo por venta, solo con la pauta', dinero)
