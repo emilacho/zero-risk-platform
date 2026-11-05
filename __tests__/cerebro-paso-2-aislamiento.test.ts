@@ -35,6 +35,10 @@ const leer = (rel: string): string => fs.readFileSync(path.join(RAIZ, rel), 'utf
 export const NOMBRES_NUEVOS = /\b(cerebro_ingresos|cerebro_fichas|que_muestra|producto_visto|etiquetada_en|etiqueta_modelo|texto_visible|etiqueta_confianza|con_personas|tipo_de_toma)\b/
 /** quién PUEDE nombrarlas: la migración y su reversa, los guiones de auditoría, el cerebro (su carpeta), la ruta del portero y estas dos pruebas */
 export const PUEDEN_NOMBRARLAS = [
+  // 04-nov · VENTAS DEL NEGOCIO: LEE las fichas de la caja (metrica:<proveedor>:ingreso|tickets) para el plan y finanzas; no escribe
+  /^src\/lib\/planeacion\/ventas-del-negocio\.ts$/,
+  // sus pruebas: siembran o sirven fichas en una base falsa; no tocan la real
+  /^__tests__\/(ventas-del-negocio|plan-ignora-pedidos-de-prueba|finanzas-seco-oficina)\.test\.ts$/,
   // 01-nov · HECHOS DEL DUEÑO: su prueba siembra fichas en una base falsa para ejercer la carpeta; no toca la real
   /^__tests__\/hechos-del-dueno\.test\.ts$/,
   // 01-nov · ESLOGAN REAL: su prueba siembra una tabla vacía en una base falsa para ejercer la carpeta; no toca la real

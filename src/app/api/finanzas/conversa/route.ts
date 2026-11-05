@@ -15,7 +15,8 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeFinanzas, type Db } from '@/lib/finanzas/almacen-supabase'
 import { almacenDeConversa } from '@/lib/finanzas/conversa/almacen-supabase'
 import { baseDeRunSdk, modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
-import { leerVentasDelSitio, type DbDeVentas } from '@/lib/planeacion/ventas-del-sitio'
+import type { DbDeVentas } from '@/lib/planeacion/ventas-del-sitio'
+import { leerVentasDelNegocio } from '@/lib/planeacion/ventas-del-negocio'
 import { abrirConversacion, avanzar, cerrarPorPlazo, leerConversacion } from '@/lib/finanzas/conversa/orquestador'
 import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
   }
   const c = (typeof cuerpo === 'object' && cuerpo !== null ? cuerpo : {}) as Record<string, unknown>
   let r: { status: number; cuerpo: Record<string, unknown> }
-  if (c.accion === 'abrir') r = await abrirConversacion(P, c.semilla && typeof c.semilla === 'object' && !Array.isArray(c.semilla) ? { ...c, semilla: { ...(c.semilla as object), ventas_del_sitio: await leerVentasDelSitio(db as unknown as DbDeVentas, c.client_id as string).catch(() => null) } } : c)
+  if (c.accion === 'abrir') r = await abrirConversacion(P, c.semilla && typeof c.semilla === 'object' && !Array.isArray(c.semilla) ? { ...c, semilla: { ...(c.semilla as object), ventas_del_negocio: await leerVentasDelNegocio(db as unknown as DbDeVentas, c.client_id as string).catch(() => null) } } : c)
   else if (c.accion === 'avanzar' && typeof c.encargo_id === 'string') r = c.simulacion !== undefined ? await avanzarConSimulacion(P, c.encargo_id, c.simulacion) : await avanzar(P, c.encargo_id)
   else if (c.accion === 'leer' && typeof c.encargo_id === 'string') r = await leerConversacion(P, c.encargo_id)
   else if (c.accion === 'cerrar' && typeof c.encargo_id === 'string') r = await cerrarPorPlazo(P, c.encargo_id)
