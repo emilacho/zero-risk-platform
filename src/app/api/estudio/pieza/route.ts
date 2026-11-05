@@ -8,7 +8,7 @@ import { avanzar } from '@/lib/estudio/servicio'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 120
+export const maxDuration = 800
 
 export async function GET(request: Request) {
   const auth = checkInternalKey(request)
