@@ -56,7 +56,8 @@ describe('el latido', () => {
   })
   it('reconoce el corte por tope con el mensaje real del corredor', () => {
     expect(esCortePorTope(mensajeDeCorte(0.4, 0.41))).toBe(true)
-    for (const x of ['el modelo falló', '', null, undefined]) expect(esCortePorTope(x)).toBe(false)
+    // solo el corte del corredor: otro error que nombre un tope (de tokens, de tiempo) sí se repite
+    for (const x of ['el modelo falló', 'se pasó el tope de tokens de salida', 'x · error_max_budget_usd', '', null, undefined]) expect(esCortePorTope(x)).toBe(false)
   })
   it('lo demás sigue igual', async () => {
     expect((await llamar(503, '{}')).r).toMatchObject({ ok: false, error: 'run_sdk_503' })

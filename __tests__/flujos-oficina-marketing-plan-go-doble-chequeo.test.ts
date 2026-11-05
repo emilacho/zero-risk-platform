@@ -455,6 +455,8 @@ describe('los informes de la mesa de análisis llegan a finanzas y al redactor',
       const s = await semilla([malo])
       expect(s.informes_de_analisis).toBeUndefined()
       expect(s.informes_de_analisis_fallo).toBe('informe ilegible')
+      const largo = { brazo: 'analisis', estado: 'trajo', datos: { informe: { toString() { throw new Error('y'.repeat(1000)) } } } }
+      expect((await semilla([largo])).informes_de_analisis_fallo).toBe('y'.repeat(300))
     })
     it('sin problema no deja rastro de fallo', async () => { expect((await semilla([hecho1('x')])).informes_de_analisis_fallo).toBeUndefined() })
     it('avisa si el vigente puede estar atrasado', async () => {
