@@ -312,6 +312,12 @@ describe('05-nov · renovar el techo al pedirle el plan al redactor', () => {
 })
 
 describe('05-nov · E4: antes de dar por fallida, se pregunta si sigue viva', () => {
+  it('🔴 quien pierde la carrera al liberar no alarma: otro ya la cerró', async () => {
+    const w = await vencida()
+    const r = await barrer({ ...w.P, avanzarSi: async () => null }, { sigueViva: async () => null })
+    expect(r.saltadas).toHaveLength(1)
+    expect(r.liberadas_a_ciegas).toEqual([])
+  })
   const vencida = async () => { const w = mundo(); await abrir(w.P, E); await correr(w.P, E); w.avanzar(TECHO_DE_CORRIDA_MIN + 1); return w }
   it('🔴 viva: se extiende, no se libera al cliente y otra corrida no abre', async () => {
     const w = await vencida()

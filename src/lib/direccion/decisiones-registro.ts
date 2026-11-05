@@ -183,7 +183,7 @@ export async function leerContestadas(db: Db, hora: string, clientes: Map<string
   }
   for (const p of descartadas) {
     if (!vivo(p.client_id)) continue
-    const cuando = texto(p.obsoleta_en), motivo = sinSecretos(p.motivo_descarte, TOPE_DE_CITA), tuya = /^Emilio\b/.test(motivo ?? '')
+    const cuando = texto(p.obsoleta_en), motivo = sinSecretos(p.motivo_descarte, TOPE_DE_CITA), tuya = loDescartoElDueno(motivo)
     contestadas.push({
       id: String(p.id), tipo: 'pregunta_al_dueno', fuente: 'cerebro_dueno_preguntas', client_id: texto(p.client_id), cliente: nombre(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta'), resuelta_en: cuando, resultado: 'descartada', motivo: null,
       registro: [pregunto(p), { cuando, quien: tuya ? 'tu' : 'sistema', estado: 'descartaste', texto: tuya ? 'La descartaste' : 'Se archivó', ...(motivo ? { cita: motivo } : {}) }],
@@ -201,3 +201,6 @@ export async function leerContestadas(db: Db, hora: string, clientes: Map<string
   const recortada = contestadas.length > TOPE_DEL_REGISTRO
   return { contestadas: contestadas.slice(0, TOPE_DEL_REGISTRO), fuentes, completo: !recortada && fuentes.every((f) => (f.estado === 'ok' || f.estado === 'no_existe') && !f.truncado) }
 }
+
+/** Tu oficina escribe «Emilio la descartó en Tu oficina…». Lo demás es archivo del sistema («el dueño ya contestó…», «las preguntas dejaron Slack…») */
+export const loDescartoElDueno = (motivo: unknown): boolean => typeof motivo === 'string' && /^Emilio\b/.test(motivo)

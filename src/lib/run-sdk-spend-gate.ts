@@ -189,6 +189,16 @@ export interface SpendGateOptions {
  * la PRIMERA capa · sólo se desactiva con un kill-switch EXPLÍCITO
  * `RUN_SPEND_CAP_ENFORCE` en 'false' / '0' / 'off'. Un env ausente = ON.
  */
+/** Las cifras y el texto del 429. El corte del plan dice las SUYAS: con las de 24 h se leería «9 >= 30» y nadie entendería por qué cortó */
+export function cifrasDelCorte(gate: SpendGateResult): { reason?: string; cap_usd: number; spent_usd: number; detail: string } {
+  if (gate.reason === 'plan_over_cap') {
+    const cap = gate.plan_cap_usd ?? 0, gastado = gate.plan_spent_usd ?? 0
+    return { reason: gate.reason, cap_usd: cap, spent_usd: gastado, detail: `plan completo · esta corrida de plan gastó $${gastado.toFixed(2)} >= tope $${cap.toFixed(2)} · invocation blocked` }
+  }
+  const cap = gate.cap_usd ?? 0, gastado = gate.spent_usd ?? 0
+  return { reason: gate.reason, cap_usd: cap, spent_usd: gastado, detail: `§150 spend cap · client cumulative $${gastado.toFixed(2)} >= cap $${cap.toFixed(2)} (24h window) · invocation blocked` }
+}
+
 export function isRunSpendCapEnforced(): boolean {
   const raw = (process.env.RUN_SPEND_CAP_ENFORCE ?? '').trim().toLowerCase()
   return !(raw === 'false' || raw === '0' || raw === 'off' || raw === 'no')

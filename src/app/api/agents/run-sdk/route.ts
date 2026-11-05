@@ -40,7 +40,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
 import { normalizeFidelityToolInput } from '@/lib/jefatura/fidelity-grader'
-import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
+import { checkRunSdkSpendCap, cifrasDelCorte } from '@/lib/run-sdk-spend-gate'
 import { buscarFilaDelEmpleado, recuperarRespuestaPagada as recuperarRespuestaPagadaImpl } from '@/lib/respuesta-pagada'
 import { recuperarVueltaPerdida, PRESUPUESTO_DE_LA_FUNCION_MS, MARGEN_PARA_ENTREGAR_MS, topeDeRecuperacionInterna } from '@/lib/vuelta-perdida'
 import {
@@ -1008,24 +1008,24 @@ async function atender(request: Request) {
         trabajo: trabajoDeLaLlamada(body, (nombre) => request.headers.get(nombre)).columnas,
       })
       if (gate.blocked) {
+        const corte = cifrasDelCorte(gate)
         console.warn(
-          `[run-sdk] §150 CAP BLOCK · client=${String(clientId).slice(0, 8)} · ` +
-            `spent=$${(gate.spent_usd ?? 0).toFixed(2)} >= cap=$${(gate.cap_usd ?? 0).toFixed(2)}`,
+          `[run-sdk] §150 CAP BLOCK · client=${String(clientId).slice(0, 8)} · ${corte.reason ?? ''} · ` +
+            `spent=$${corte.spent_usd.toFixed(2)} >= cap=$${corte.cap_usd.toFixed(2)}`,
         )
         capture('agent_run_cap_blocked', String(clientId || 'system'), {
           agent_slug: agentName,
-          spent_usd: gate.spent_usd,
-          cap_usd: gate.cap_usd,
+          spent_usd: corte.spent_usd,
+          cap_usd: corte.cap_usd,
         })
         return NextResponse.json(
           {
             error: 'cost_cap_exceeded',
             code: 'E-CAP-150',
-            cap_usd: gate.cap_usd,
-            spent_usd: gate.spent_usd,
-            detail:
-              `§150 spend cap · client cumulative $${(gate.spent_usd ?? 0).toFixed(2)} ` +
-              `>= cap $${(gate.cap_usd ?? 0).toFixed(2)} (24h window) · invocation blocked`,
+            reason: corte.reason,
+            cap_usd: corte.cap_usd,
+            spent_usd: corte.spent_usd,
+            detail: corte.detail,
           },
           { status: 429 },
         )

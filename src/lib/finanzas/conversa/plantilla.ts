@@ -29,11 +29,10 @@ const codigo = (clave: string, funcion: string, entrada: string[], salida: strin
   ({ clave, tipo: 'codigo', quien: 'sala', funcion, condicion, entrada, salida_artefacto: salida, tope_usd: 0, ronda })
 
 // RESERVA DEL CIERRE (16-oct): el jefe de finanzas cobró 0,19–0,25 por cierre en lo medido (libro); reservar 0,40 fijo cortó la ronda 2 por 0,003. La reserva es lo MEDIDO + margen
-// (0,25 × 1,3 ≈ 0,33) y el cierre de la ronda 2 usa el costo REAL del cierre de la ronda 1 de ese mismo encargo × 1,3 (piso 0,25, techo 0,40). La defensa no baja:
+// (0,25 × 1,3 ≈ 0,33) y el cierre de la ronda 2 usa el costo REAL del cierre de la ronda 1 de ese mismo encargo × 1,3 (piso y techo propios, abajo). La defensa no baja:
 // el motor sigue exigiendo gasto + reserva ≤ tope del encargo, y la reserva es también el máximo que esa llamada puede cobrar.
 export const MAXIMO_OBSERVADO_DEL_CIERRE_USD = 0.25
 export const FACTOR_DE_RESERVA_DEL_CIERRE = 1.3
-export const TECHO_DE_RESERVA_DEL_CIERRE_USD = 0.4
 const redondeaArriba = (x: number) => Math.ceil(x * 100 - 1e-9) / 100
 // 05-nov (GO de Lenovo): 0,45. El 04-nov el cierre costó 0,349 sobre una reserva de 0,33: el medido de arriba ya quedó corto
 export const RESERVA_DEL_CIERRE_USD = 0.45
