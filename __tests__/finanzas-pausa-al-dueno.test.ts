@@ -840,6 +840,21 @@ describe('tope y manual', () => {
     const g = m.guardados[0] as { artefacto: { contenido: { manual_completo: unknown } } }
     expect(g.artefacto.contenido.manual_completo).toEqual({ voz: 'cercana' })
   })
+  it('🔴 y también los informes de la mesa de análisis: los lee toda la oficina', async () => {
+    const informes = [{ de: 'hecho en esta corrida', tipo: 'competencia', informe: 'texto', es_dato_del_cliente: false }]
+    const m = mundo({ estado: 'en_curso', pausaEncendida: false, semilla: { informes_de_analisis: informes }, arts: { acuerdo: {} } })
+    delete (m.arts as Record<string, unknown>).acuerdo
+    await avanzar(m.C, 'enc-1')
+    expect((m.guardados[0] as { artefacto: { contenido: { informes_de_analisis: unknown } } }).artefacto.contenido.informes_de_analisis).toEqual(informes)
+  })
+  it('sin informes el expediente queda igual que hoy', async () => {
+    for (const semilla of [{}, { informes_de_analisis: [] }, { informes_de_analisis: 'x' }]) {
+      const m = mundo({ estado: 'en_curso', pausaEncendida: false, semilla, arts: { acuerdo: {} } })
+      delete (m.arts as Record<string, unknown>).acuerdo
+      await avanzar(m.C, 'enc-1')
+      expect((m.guardados[0] as { artefacto: { contenido: object } }).artefacto.contenido).not.toHaveProperty('informes_de_analisis')
+    }
+  })
 })
 
 describe('el pre-vuelo al volver', () => {

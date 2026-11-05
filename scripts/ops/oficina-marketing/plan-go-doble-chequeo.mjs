@@ -16,6 +16,7 @@
  * Altos deliberados · (una corrida ya `en_pausa` no se puede cerrar: si la pausa se guardó y se perdió la respuesta, sigue esperando y la suelta el dueño) sin acta, validador ilegible, pausa no guardada y reanudar sin material lanzan por la salida de error: se cierra la corrida como `fallida` y se vuelve a lanzar el mismo error, para que el aviso siga llegando. Un error inesperado en otro paso sigue con el barrido.
  * Acta y turnos largos (reparo de CC6 · decisión de Lenovo) · la mesa pide el latido: la conexión no queda en silencio a los 340 s. Si responde `turno_cortado` (5xx, también dentro del cuerpo) se vuelve a pedir; la mesa recoge lo ya hecho sin pagarlo.
  * Abrir la mesa · abrir no gasta y devuelve la de esa corrida: un corte o un 5xx vuelve a pedirla hasta 2 veces.
+ * Informes de la mesa de análisis (GO Lenovo 05-nov) · finanzas los recibe en su semilla; el redactor los recibe enteros, sin el corte de 6.000 (solo el tope real del pedido, y lo que se recorte se declara); y la frase «no hay informes» ya no convive con los recién hechos.
  * Avisos · cada parada muere en su propio nodo: el freno de avisos (1 por flujo y nodo cada 10 min) no calla a una parada por otra de distinto tipo.
  * Segunda mitad · con corrida muerta se llama igual: el PDF y el cable no cuestan y el plan ya está pagado. Lo único que se salta es el parte a la sala, que sí puede lanzar trabajo pagado.
  *   Si la llama la aprobación del dueño, sigue como hoy: decidió una persona.
@@ -65,6 +66,34 @@ export const N_ALTO_ROJO = 'Alto · parar en rojo'
 export const N_ALTO_CUAL = 'Alto · ¿cuál parada?'
 export const ROJOS = { PLAN_MESA_SIN_ACTA: 'Alto · parar en rojo · sin acta', PLAN_VALIDADOR_NO_LEGIBLE: 'Alto · parar en rojo · chequeo de forma', PLAN_PAUSA_NO_GUARDADA: 'Alto · parar en rojo · pausa', PLAN_REANUDAR_SIN_MATERIAL: 'Alto · parar en rojo · reanudar' }
 export const N_REABRIR = 'MESA · ¿volver a abrir?'
+// la mitad del tope real del pedido (600.000): el pedido real más grande medido, sin informes, es 155.547. Solo actúa si los informes no caben; lo que se recorta se declara
+export const TOPE_DE_INFORMES_EN_EL_PEDIDO = 300000
+const FIN_SEMILLA = 'FIN · armar la semilla'
+const REDACTOR = 'Redactor (B4)'
+export const CODIGO_INFORMES_A_FINANZAS = [
+  "// 05-nov · finanzas lee los informes de la mesa de análisis: los vigentes del cerebro y los de esta corrida. Son análisis, no datos medidos del cliente",
+  "try {",
+  "  const informes = []",
+  "  for (const m of material) {",
+  "    if (!m || typeof m !== 'object' || !m.datos || typeof m.datos !== 'object') continue",
+  "    const vigentes = m.brazo === 'cerebro' && m.datos.contexto_del_cliente && Array.isArray(m.datos.contexto_del_cliente.informes) ? m.datos.contexto_del_cliente.informes : []",
+  "    for (const i of vigentes) if (i && typeof i === 'object' && String(i.texto || '').trim()) informes.push({ de: 'vigente del cerebro', tipo: i.tipo || null, autor: i.autor || null, fecha_de_corte: i.fecha_de_corte || null, informe: String(i.texto), citas: Array.isArray(i.citas) ? i.citas : [], ...(i.hay_material_nuevo_desde_el_corte ? { aviso: 'entró material nuevo después de este corte: puede estar atrasado' } : {}), es_dato_del_cliente: false })",
+  "    if (m.brazo === 'analisis' && m.estado === 'trajo' && String(m.datos.informe || '').trim()) informes.push({ de: 'hecho en esta corrida', tipo: m.datos.tipo || null, autor: m.datos.agente || null, informe: String(m.datos.informe), citas: Array.isArray(m.datos.citas) ? m.datos.citas : [], rotulo: m.datos.rotulo || null, es_dato_del_cliente: false })",
+  "  }",
+  "  const total = informes.reduce((a, i) => a + i.informe.length, 0)",
+  "  const parte = total > " + TOPE_DE_INFORMES_EN_EL_PEDIDO + " ? " + TOPE_DE_INFORMES_EN_EL_PEDIDO + " / total : 1",
+  "  if (parte < 1) for (const i of informes) { const largo = i.informe.length; i.informe = i.informe.slice(0, Math.floor(largo * parte)); i.recorte_declarado = 'este informe llega recortado para caber en el pedido: ' + i.informe.length + ' de ' + largo + ' caracteres' }",
+  "  if (informes.length) semilla.informes_de_analisis = informes",
+  "} catch (x) {}",
+].join('\n')
+export const CODIGO_INFORMES_AL_REDACTOR = [
+  "// 05-nov · los informes de esta corrida van ENTEROS: el único límite es el tope real del pedido, y lo que se recorte se declara",
+  "const _hechosAhora = material.filter((m) => m && m.brazo === 'analisis' && m.estado === 'trajo' && m.datos && typeof m.datos === 'object' && String(m.datos.informe || '').trim());",
+  "const _largoHechos = _hechosAhora.reduce((a, m) => a + String(m.datos.informe).length, 0);",
+  "const _cabenHechos = Math.max(0, " + TOPE_DE_INFORMES_EN_EL_PEDIDO + " - _informes.reduce((a, i) => a + String(i.texto).length, 0));",
+  "const _parteHechos = _largoHechos > _cabenHechos ? _cabenHechos / _largoHechos : 1;",
+].join('\n')
+
 const ABRIR = 'MESA · abrir la mesa'
 const SEMILLA = 'MESA · armar la semilla'
 const SIGUE = 'MESA · ¿sigue la reunión?'
@@ -261,6 +290,14 @@ export function construirGoDobleChequeo(f) {
   conectar(f, N_ESTADO, JEF)
   const ancla = 'if (!v || v.llego_la_vuelta !== true'
   cambiarCodigo(f, JEF, ancla, VER_ESTADO + '\n' + ancla)
+
+  // los informes de la mesa de análisis: finanzas los recibe; el redactor, enteros y sin la frase que los contradice
+  cambiarCodigo(f, FIN_SEMILLA, "// 04-nov · si la mesa de estrategia cerró un acta,", CODIGO_INFORMES_A_FINANZAS + "\n// 04-nov · si la mesa de estrategia cerró un acta,")
+  cambiarCodigo(f, REDACTOR, "// 01-nov · la carpeta NUNCA va dentro del recorte de 2.500 (se imprime aparte y entera) · la mesa de análisis lleva su informe con tope de 6.000 (el de la puerta) · el resto de los brazos, como hoy\n", CODIGO_INFORMES_AL_REDACTOR + "\n// 01-nov · la carpeta NUNCA va dentro del recorte de 2.500 (se imprime aparte y entera) · el resto de los brazos, como hoy\n")
+  cambiarCodigo(f, REDACTOR, "  return JSON.stringify(d).slice(0, m.brazo === 'analisis' ? 6000 : 2500);", "  if (m.brazo !== 'analisis') return JSON.stringify(d).slice(0, 2500);\n  if (_parteHechos < 1 && typeof d.informe === 'string') { const largo = d.informe.length; d.informe = d.informe.slice(0, Math.floor(largo * _parteHechos)); d.recorte_declarado = 'este informe llega recortado para caber en el pedido: ' + d.informe.length + ' de ' + largo + ' caracteres'; }\n  return JSON.stringify(d);")
+  cambiarCodigo(f, REDACTOR, "  if (!_informes.length) L.push('⚪ No hay informes de análisis vigentes para este cliente.');", "  if (!_informes.length) L.push(_hechosAhora.length ? '⚪ Este cliente no tenía informes de análisis de corridas anteriores. Los de ESTA corrida están más abajo, en TRAJO DATO: úsalos y no digas que no hubo análisis.' : '⚪ No hay informes de análisis vigentes para este cliente.');")
+  // con la carpeta vacía el cerebro también dice «ni informes vigentes»: no debe leerse como que no hubo análisis
+  cambiarCodigo(f, REDACTOR, "  (m.motivo ? '\\n      motivo: ' + m.motivo : '') +", "  (m.motivo ? '\\n      motivo: ' + m.motivo + (m.brazo === 'cerebro' && _hechosAhora.length ? ' · ojo: eso habla de corridas anteriores; los informes de ESTA corrida están en TRAJO DATO' : '') : '') +")
 
   // el aviso a la segunda mitad
   cambiarCodigo(f, SOBRE_MITAD, "{ aprobacion_id: null, origen: 'planeacion/directo' }", "{ aprobacion_id: null, origen: 'planeacion/directo', corrida_muerta: (function () { try { return $('" + JEF + "').first().json.jef.corrida_muerta === true } catch (e) { return false } })() }")

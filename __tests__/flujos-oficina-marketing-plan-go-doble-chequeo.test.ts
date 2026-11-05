@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { N_ALTO_CUAL, N_REABRIR, ROJOS, ALTOS, CODIGO_ALTO_ARMAR, CODIGO_ALTO_ROJO, N_ALTO_ARMAR, N_ALTO_CERRAR, N_ALTO_ROJO, N_ALTO_SI, REINTENTOS_DE_TURNO, CODIGO_MAS, CODIGO_PREPARAR, CODIGO_VALIDAR_ARMAR, CODIGO_VIVA, N_VALIDAR_ARMAR, N_VALIDAR_CERRAR, N_VALIDAR_SI, ESPERA_S, MAX_VUELTAS_DE_MESA, N_BRIEF_VIVA, N_ESTADO, N_MAS, N_OTRA, N_PREPARAR, N_RENOVAR, N_SI_MAS, N_SI_RENUEVA, N_VIVA, RELECTURAS, RELECTURA_S, construirGoDobleChequeo, construirGoDobleChequeoMitad } from '../scripts/ops/oficina-marketing/plan-go-doble-chequeo.mjs'
+import { TOPE_DE_INFORMES_EN_EL_PEDIDO, N_ALTO_CUAL, N_REABRIR, ROJOS, ALTOS, CODIGO_ALTO_ARMAR, CODIGO_ALTO_ROJO, N_ALTO_ARMAR, N_ALTO_CERRAR, N_ALTO_ROJO, N_ALTO_SI, REINTENTOS_DE_TURNO, CODIGO_MAS, CODIGO_PREPARAR, CODIGO_VALIDAR_ARMAR, CODIGO_VIVA, N_VALIDAR_ARMAR, N_VALIDAR_CERRAR, N_VALIDAR_SI, ESPERA_S, MAX_VUELTAS_DE_MESA, N_BRIEF_VIVA, N_ESTADO, N_MAS, N_OTRA, N_PREPARAR, N_RENOVAR, N_SI_MAS, N_SI_RENUEVA, N_VIVA, RELECTURAS, RELECTURA_S, construirGoDobleChequeo, construirGoDobleChequeoMitad } from '../scripts/ops/oficina-marketing/plan-go-doble-chequeo.mjs'
 
 type Nodo = { name: string; type: string; onError?: string; parameters: Record<string, any> }
 type Flujo = { nodes: Nodo[]; connections: Record<string, any> }
@@ -431,9 +431,103 @@ describe('sobre una corrida muerta no se paga', () => {
   })
 })
 
+describe('los informes de la mesa de análisis llegan a finanzas y al redactor', () => {
+  const FICHA = { id: 'c1', industry: 'bar', country: 'EC', config: {} }
+  const hecho1 = (texto: string, tipo = 'competencia') => ({ brazo: 'analisis', estado: 'trajo', objetivo: 'x', fuente: 'mesa', datos: { tipo, agente: 'analista-' + tipo, informe: texto, rotulo: 'propuesta', es_dato_del_cliente: false, citas: ['ficha-1'] } })
+  const carpeta = (informes: unknown[]) => ({ brazo: 'cerebro', estado: 'trajo', objetivo: 'y', fuente: 'portero', datos: { contexto_del_cliente: { resumen_vivo: { estado: 'vigente', texto: 'resumen' }, informes } } })
+  const vigente = (texto: string, extra: object = {}) => ({ tipo: 'mercado', texto, autor: { mesa: 'analisis', agente: 'a' }, fecha_de_corte: '2026-11-01', citas: ['ficha-2'], ...extra })
+
+  describe('finanzas', () => {
+    const semilla = async (material: unknown[]) => (await correr(cod(hecho(), 'FIN · armar la semilla'), { [WEB]: { body: { client_id: 'c1' } }, 'Unir lo del dueño al paquete': { ficha: FICHA, material, descartados: [] } }, {})).semilla
+    it('recibe los vigentes y los de esta corrida, marcados como análisis', async () => {
+      const s = await semilla([carpeta([vigente('el viejo')]), hecho1('el nuevo')])
+      expect(s.informes_de_analisis).toEqual([
+        { de: 'vigente del cerebro', tipo: 'mercado', autor: { mesa: 'analisis', agente: 'a' }, fecha_de_corte: '2026-11-01', informe: 'el viejo', citas: ['ficha-2'], es_dato_del_cliente: false },
+        { de: 'hecho en esta corrida', tipo: 'competencia', autor: 'analista-competencia', informe: 'el nuevo', citas: ['ficha-1'], rotulo: 'propuesta', es_dato_del_cliente: false },
+      ])
+    })
+    it('avisa si el vigente puede estar atrasado', async () => {
+      const s = await semilla([carpeta([vigente('v', { hay_material_nuevo_desde_el_corte: true })])])
+      expect(s.informes_de_analisis[0].aviso).toContain('material nuevo')
+    })
+    it('un informe largo llega entero', async () => {
+      const largo = 'x'.repeat(50_000)
+      const s = await semilla([hecho1(largo)])
+      expect(s.informes_de_analisis[0].informe).toBe(largo)
+      expect(s.informes_de_analisis[0].recorte_declarado).toBeUndefined()
+    })
+    it('justo en el tope no se recorta; por encima se recorta en proporción y se declara', async () => {
+      const justo = await semilla([hecho1('a'.repeat(TOPE_DE_INFORMES_EN_EL_PEDIDO))])
+      expect(justo.informes_de_analisis[0].recorte_declarado).toBeUndefined()
+      const s = await semilla([hecho1('a'.repeat(TOPE_DE_INFORMES_EN_EL_PEDIDO * 1.5)), hecho1('b'.repeat(TOPE_DE_INFORMES_EN_EL_PEDIDO * 0.5), 'mercado')])
+      const [a, b] = s.informes_de_analisis
+      expect(a.informe.length + b.informe.length).toBeLessThanOrEqual(TOPE_DE_INFORMES_EN_EL_PEDIDO)
+      expect(a.informe.length).toBe(TOPE_DE_INFORMES_EN_EL_PEDIDO * 0.75)
+      expect(b.informe.length).toBe(TOPE_DE_INFORMES_EN_EL_PEDIDO * 0.25)
+      expect(a.recorte_declarado).toContain(a.informe.length + ' de ' + TOPE_DE_INFORMES_EN_EL_PEDIDO * 1.5)
+    })
+    it('sin informes el campo no aparece, y lo que no es informe no entra', async () => {
+      for (const m of [[], [carpeta([])], [carpeta([{ tipo: 'x', texto: '  ' }, null])], [{ ...hecho1('x'), estado: 'sin_dato' }], [hecho1('  ')], [null, { brazo: 'analisis' }]]) expect(await semilla(m)).not.toHaveProperty('informes_de_analisis')
+    })
+  })
+
+  describe('el redactor', () => {
+    const pedido = async (material: unknown[]) => (await correr(cod(hecho(), 'Redactor (B4)'), {}, { ficha: FICHA, material, descartados: [], manual: {}, referencia: 'ref' })).pedido as string
+    const FRASE = 'No hay informes de análisis vigentes'
+    it('un informe de más de 6.000 llega entero, con sus citas', async () => {
+      const t = 'hallazgo '.repeat(2000)
+      const q = await pedido([carpeta([]), hecho1(t)])
+      expect(q).toContain(t.trim())
+      expect(q).toContain('ficha-1')
+      expect(q).not.toContain('recorte_declarado')
+    })
+    it('los demás brazos siguen con su recorte de 2.500', async () => {
+      const q = await pedido([{ brazo: 'seo', estado: 'trajo', objetivo: 'o', fuente: 'f', datos: { largo: 'z'.repeat(9000) } }])
+      expect(q).not.toContain('z'.repeat(2600))
+      expect(q).toContain('z'.repeat(2400))
+    })
+    it('con informes recién hechos la frase «no hay informes» no sale, y dice dónde están', async () => {
+      const q = await pedido([carpeta([]), hecho1('el nuevo')])
+      expect(q).not.toContain(FRASE)
+      expect(q).toContain('Los de ESTA corrida están más abajo, en TRAJO DATO')
+    })
+    it('sin informes de ningún tipo la frase sigue saliendo', async () => {
+      for (const m of [[carpeta([])], [carpeta([]), { ...hecho1('x'), estado: 'sin_dato', motivo: 'nada' }], [carpeta([]), { ...hecho1(''), estado: 'trajo' }]]) {
+        const q = await pedido(m)
+        expect(q).toContain(FRASE)
+        expect(q).not.toContain('Los de ESTA corrida')
+      }
+    })
+    it('con vigentes no sale ninguna de las dos frases', async () => {
+      const q = await pedido([carpeta([vigente('el viejo')]), hecho1('el nuevo')])
+      expect(q).not.toContain(FRASE)
+      expect(q).not.toContain('Los de ESTA corrida')
+    })
+    it('la carpeta vacía del cerebro aclara que habla de corridas anteriores, solo si hay informes nuevos', async () => {
+      const vacio = { ...carpeta([]), estado: 'sin_dato', motivo: 'ni resumen vivo ni informes vigentes de la mesa de análisis' }
+      const OJO = 'eso habla de corridas anteriores'
+      expect(await pedido([vacio, hecho1('el nuevo')])).toContain(OJO)
+      expect(await pedido([vacio])).not.toContain(OJO)
+      expect(await pedido([{ ...hecho1('x'), estado: 'sin_dato', motivo: 'm' }, hecho1('el nuevo', 'mercado')])).not.toContain('m · ojo')
+    })
+    it('si los informes no caben se recortan en proporción y el pedido lo declara', async () => {
+      const q = await pedido([carpeta([]), hecho1('a'.repeat(TOPE_DE_INFORMES_EN_EL_PEDIDO * 2))])
+      expect(q).toContain('este informe llega recortado para caber en el pedido: ' + TOPE_DE_INFORMES_EN_EL_PEDIDO + ' de ' + TOPE_DE_INFORMES_EN_EL_PEDIDO * 2 + ' caracteres')
+      expect(q).toContain('a'.repeat(TOPE_DE_INFORMES_EN_EL_PEDIDO))
+      expect(q).not.toContain('a'.repeat(TOPE_DE_INFORMES_EN_EL_PEDIDO + 1))
+    })
+    it('los vigentes, que van enteros, gastan primero el tope; en el tope justo nada se recorta', async () => {
+      const q = await pedido([carpeta([vigente('v'.repeat(TOPE_DE_INFORMES_EN_EL_PEDIDO - 100))]), hecho1('b'.repeat(400))])
+      expect(q).toContain('v'.repeat(TOPE_DE_INFORMES_EN_EL_PEDIDO - 100))
+      expect(q).toContain('recortado para caber en el pedido: 100 de 400')
+      expect(await pedido([carpeta([vigente('v'.repeat(TOPE_DE_INFORMES_EN_EL_PEDIDO - 100))]), hecho1('b'.repeat(100))])).not.toContain('recortado para caber')
+    })
+  })
+})
+
 describe('el resto queda igual', () => {
   it('no cambia ningún otro nodo', () => {
-    const f = hecho(); const toca = new Set([...ALTOS, 'MESA · abrir la mesa', 'MESA · avanzar un paso', 'MESA · avanzar la devolución', 'Esperar al redactor', 'Redactor · ¿aceptó el pedido?', 'Vuelta · completar', 'MESA · decidir', 'MESA · decidir la devolución', 'JEF · armar', 'Segunda mitad · sobre', 'V9 · pre-vuelo', 'FIN2 · armar la semilla'])
+    const f = hecho(); const toca = new Set([...ALTOS, 'FIN · armar la semilla', 'Redactor (B4)', 'MESA · abrir la mesa', 'MESA · avanzar un paso', 'MESA · avanzar la devolución', 'Esperar al redactor', 'Redactor · ¿aceptó el pedido?', 'Vuelta · completar', 'MESA · decidir', 'MESA · decidir la devolución', 'JEF · armar', 'Segunda mitad · sobre', 'V9 · pre-vuelo', 'FIN2 · armar la semilla'])
     for (const v of PLAN.nodes) if (!toca.has(v.name)) expect(nodo(f, v.name), v.name).toEqual(v)
     expect(f.nodes.length).toBe(PLAN.nodes.length + 21)
   })

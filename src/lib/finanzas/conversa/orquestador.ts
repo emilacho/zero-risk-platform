@@ -111,7 +111,7 @@ function abrirFinanciera(e: EncargoDeConversa): ResultadoDePaso {
       cliente: e.client_id, rubro: s.rubro ?? null, pais: s.pais ?? null, moneda: s.moneda ?? null, fecha: s.fecha ?? null,
       ...(s.acta ? { acta: s.acta } : {}),
       ...(s.ventas_del_negocio ? { ventas_del_negocio: s.ventas_del_negocio } : {}),
-      ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, ...(s.manual_completo !== undefined && s.manual_completo !== null ? { manual_completo: s.manual_completo } : {}), brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
+      ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, ...(s.manual_completo !== undefined && s.manual_completo !== null ? { manual_completo: s.manual_completo } : {}), ...(Array.isArray(s.informes_de_analisis) && s.informes_de_analisis.length ? { informes_de_analisis: s.informes_de_analisis } : {}), brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
       datos, linea_base_por_semana: typeof s.linea_base_por_semana === 'number' && s.linea_base_por_semana > 0 ? s.linea_base_por_semana : null, referencias: s.referencias ?? [], evento_alterno: s.evento_alterno ?? {}, pisos: s.pisos ?? {},
       corrida_es_de_ensayo: s.corrida_es_de_ensayo === true, planteo_inicial: planteoInicial, notas_del_dueno: [], datos_del_dueno: [],
     },

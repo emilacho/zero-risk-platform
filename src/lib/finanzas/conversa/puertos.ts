@@ -31,6 +31,8 @@ export interface Semilla {
   manual_resumen?: string
   /** 04-nov · el manual de marca aprobado, entero: toda la oficina lee lo mismo que el redactor */
   manual_completo?: unknown
+  /** 05-nov · los informes de la mesa de análisis, vigentes y de esta corrida: análisis, no datos medidos del cliente */
+  informes_de_analisis?: unknown
   /** 04-nov · el dueño ya revisó la ronda de preguntas: lo que no contestó sigue abierto en la oficina, pero no vuelve a detener el plan */
   pausa_atendida?: boolean
   /** 04-nov · cuándo contestó por última vez desde Tu oficina: mientras siga contestando, el plan no arranca */
