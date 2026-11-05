@@ -41,14 +41,21 @@ let bloqueDeInformes = ''
 try { bloqueDeInformes = String($('¿Llegó la vuelta?').first().json.bloque_informes_que_no_llegaron || '') } catch (x) { bloqueDeInformes = '' }
 const reponerInformes = (t) => {
   if (!bloqueDeInformes || typeof t !== 'string' || !t.trim()) return t
-  const inicio = /^(?:#{1,6}\\s*\\**\\s*|\\*\\*\\s*)Informes de análisis que no llegaron[^\\n]*$/imu
-  let resto = t
-  for (let m = inicio.exec(resto); m; m = inicio.exec(resto)) {
-    const tras = resto.slice(m.index + m[0].length)
-    const fin = /\\n(?:-{3,}\\s*\\n|#{1,6}\\s)/.exec(tras)
-    resto = resto.slice(0, m.index) + (fin ? tras.slice(fin.index + 1) : '')
+  // solo el título (la línea entera es el título) y la lista pegada a él: lo demás es del plan y se queda, aunque a lo sumo algo se lea dos veces
+  const esTitulo = (l) => /^(?:#{1,6}\\s*\\**\\s*|\\*\\*\\s*)Informes de análisis que no llegaron\\**\\s*:?\\s*(?:\\([^)]*\\))?\\s*:?\\s*\\**\\s*$/iu.test(l)
+  const esDeLista = (l) => /^\\s*(?:[-*+•]|\\d+[.)])\\s/u.test(l)
+  const lineas = t.split('\\n')
+  const quedan = []
+  for (let i = 0; i < lineas.length; i++) {
+    if (!esTitulo(lineas[i])) { quedan.push(lineas[i]); continue }
+    let j = i + 1
+    while (j < lineas.length && !lineas[j].trim()) j++
+    if (j < lineas.length && esDeLista(lineas[j])) {
+      while (j < lineas.length && esDeLista(lineas[j])) j++
+      i = j - 1
+    }
   }
-  return resto.replace(/\\s+$/, '') + '\\n' + bloqueDeInformes
+  return quedan.join('\\n').replace(/\\s+$/, '') + '\\n' + bloqueDeInformes
 }
 const procesadasConInformes = {}
 for (const k of Object.keys(ev.procesadas || {})) {

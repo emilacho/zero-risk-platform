@@ -345,6 +345,52 @@ describe('el plan declara lo que no llegó', () => {
       expect(j.procesadas.B.texto).toContain('---\n\nTexto que sigue sin título.')
       expect(j.procesadas.B.texto).not.toMatch(/- a\n/)
     })
+    describe('reparo de CC7: la limpieza no borra plan', () => {
+      const limpio = (t: string) => guardado({ B: version(t) }, {}).procesadas.B.texto as string
+      it('🔴 títulos en negrita después de la sección: se quedan', () => {
+        const t = limpio('# Plan\n\n## Informes de análisis que no llegaron\n- a\n\n**Presupuesto**\nMil dólares.\n\n**Calendario**\nEnero.\n')
+        expect(t).toContain('**Presupuesto**\nMil dólares.\n\n**Calendario**\nEnero.')
+        expect(t).not.toMatch(/^- a$/m)
+        expect(t.endsWith(SECCION)).toBe(true)
+      })
+      it('🔴 un párrafo suelto después de la sección: se queda', () => {
+        expect(limpio('# Plan\n\n## Informes de análisis que no llegaron\n- a\n\nUn párrafo suelto.\n')).toContain('Un párrafo suelto.')
+      })
+      it('🔴 una frase que empieza con esas palabras no es un título', () => {
+        const frase = '**Informes de análisis que no llegaron** no invalidan el mes 1.'
+        const t = limpio(`# Plan\n\n${frase}\n\nOtro párrafo.\n`)
+        expect(t).toContain(frase)
+        expect(t).toContain('Otro párrafo.')
+      })
+      it('🔴 un título más largo es otra sección: se queda con lo suyo', () => {
+        const t = limpio('# Plan\n\n### informes de análisis que no llegaron y qué hacemos\n- plan alterno\n')
+        expect(t).toContain('### informes de análisis que no llegaron y qué hacemos\n- plan alterno')
+        expect(t.endsWith(SECCION)).toBe(true)
+      })
+      it('🔴 el pie en cursiva debajo de la sección: se queda', () => {
+        const t = limpio('# Plan\n\n## Informes de análisis que no llegaron\n- a\n\n*Próxima revisión: 18 de noviembre.*\n')
+        expect(t).toContain('*Próxima revisión: 18 de noviembre.*')
+        expect(t).not.toMatch(/^- a$/m)
+      })
+      it('🔴 un texto pegado debajo de la lista, sin línea en blanco: se queda', () => {
+        expect(limpio('# Plan\n\n## Informes de análisis que no llegaron\n- a\nTexto pegado.\n')).toContain('Texto pegado.')
+      })
+      it('🔴 prosa bajo el título: se queda, sin el título', () => {
+        const t = limpio('# Plan\n\n## Informes de análisis que no llegaron\nUn texto del modelo.\n')
+        expect(t).toContain('Un texto del modelo.')
+        expect(veces(t)).toBe(1)
+      })
+      it('🔴 la lista termina donde termina: una lista aparte, tras un párrafo, se queda', () => {
+        const t = limpio('# Plan\n\n## Informes de análisis que no llegaron\n\n- a\n- b\n\nAcciones:\n- c\n')
+        expect(t).not.toMatch(/^- [ab]$/m)
+        expect(t).toContain('Acciones:\n- c')
+      })
+      it('🔴 también limpia lista numerada, y título con dos puntos o entre paréntesis', () => {
+        expect(limpio('# P\n\n## Informes de análisis que no llegaron:\n1. a\n2) b\n')).toBe('# P\n' + SECCION)
+        expect(limpio('# P\n\n**Informes de análisis que no llegaron:**\n* a\n')).toBe('# P\n' + SECCION)
+        expect(limpio('# P\n\n## Informes de análisis que no llegaron (nota)\n+ a\n')).toBe('# P\n' + SECCION)
+      })
+    })
     it('🔴 B y C la llevan las dos', () => {
       const j = guardado({ B: version('# B\n'), C: version('# C\n') }, { B: '# B q\n', C: '# C q\n' })
       for (const k of ['B', 'C']) { expect(veces(j.procesadas[k].texto)).toBe(1); expect(veces(j.textos_a_guardar[k])).toBe(1) }
