@@ -2,6 +2,7 @@
  * F8 · LOS PUERTOS de la conversación (CC#1 · 14-oct): todo lo que toca el mundo entra por aquí, así el orquestador se prueba con modelo y Slack SIMULADOS (US$ 0, 0 envíos).
  * Los adaptadores reales (base, `run-sdk`, Slack) viven aparte y NO se encienden: la conversación nace apagada (`finanzas_config.conversa = 'apagado'` → 409).
  */
+import type { ColumnasDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import type { ActaV1 } from '../../planeacion/mesa/acta'
 import type { Estado } from '../../oficina/tipos'
 import type { LecturaDeHilo } from '../hilo-slack'
@@ -165,6 +166,8 @@ export interface PedidoAlModelo {
   paso: string
   tope_usd: number
   dry_run: boolean
+  /** de qué trabajo es ESTA llamada, si quien la hace lo sabe mejor que quien abrió el puerto */
+  trabajo?: ColumnasDeLaLlamada
 }
 export interface ModeloPuerto { invocar(p: PedidoAlModelo): Promise<RespuestaDeModelo> }
 

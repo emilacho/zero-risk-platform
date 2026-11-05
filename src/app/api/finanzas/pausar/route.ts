@@ -4,6 +4,7 @@
  * La pausa la suelta la respuesta del dueño: el vigía del buzón llama a `recoger` en `/api/finanzas/conversa`.
  */
 import { NextResponse } from 'next/server'
+import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeFinanzas, type Db } from '@/lib/finanzas/almacen-supabase'
 import { pausarOficina } from '@/lib/finanzas/conversa/pausa'
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   try { cfg = await almacenDeFinanzas(db).leerConfig() } catch (e) { return NextResponse.json({ error: 'config_ilegible', detalle: e instanceof Error ? e.message : String(e) }, { status: 503 }) }
   if (cfg.estado === 'apagada' || cfg.conversa === 'apagado') return NextResponse.json({ error: 'conversa_apagada' }, { status: 409 })
   try {
-    const r = await pausarOficina(puertosDePausa(process.env, db, cfg.preguntas_slack, c.workflow_id, c.workflow_execution_id), c)
+    const r = await pausarOficina(puertosDePausa(process.env, db, cfg.preguntas_slack, c.workflow_id, c.workflow_execution_id, undefined, trabajoDeLaLlamada(c, (nombre) => request.headers.get(nombre)).columnas), c)
     return NextResponse.json(r.cuerpo, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'pausar_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

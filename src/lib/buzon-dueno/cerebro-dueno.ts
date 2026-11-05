@@ -29,11 +29,17 @@ export interface RespuestaAlCerebro {
   respondido_en: string
   pregunta_id?: string | null
 }
+/** una respuesta guardada de un tema parecido: el cerebro no decide si responde a la pregunta */
+export interface ParecidaDelDueno { ficha_id: string; tema: string; respuesta: string; fecha: string }
+/** una pregunta de tema parecido que sigue sin responder */
+export type PendienteParecida = Record<string, unknown>
 export interface CerebroDelDueno {
   registrarPregunta(p: PreguntaAlCerebro): Promise<VeredictoDePregunta>
   registrarRespuesta(p: RespuestaAlCerebro): Promise<{ ok: true } | { ok: false; error: string }>
   /** ¿ya contestó? Solo lee: a diferencia de `registrarPregunta`, nunca crea una fila */
   leerRespuestas?(p: { client_id: string; tema: string }): Promise<{ ok: true; respuestas: Array<{ respuesta: string }> } | { ok: false; error: string }>
+  /** lo parecido a este tema, para que el agente que pregunta razone. Solo lee. La puerta sin esos campos = nada parecido */
+  leerParecidas?(p: { client_id: string; tema: string }): Promise<{ ok: true; respondida: boolean; parecidas: ParecidaDelDueno[]; pendientes_parecidas: PendienteParecida[] } | { ok: false; error: string }>
   /** cierra UNA pregunta, de cualquier antigüedad, sin tocar las de otra sede u otra oficina. Se usa tras guardar una respuesta: la puerta solo cierra sola las de las últimas 72 horas */
   cerrarPendiente?(p: { client_id: string; pregunta_id: string; motivo: string }): Promise<{ ok: true } | { ok: false; error: string }>
 }
@@ -82,6 +88,17 @@ export function cerebroDelDueno(p: { base: string; llave: string; workflow_id: s
         // con la puerta apagada no se leyó nada: eso no es «no contestó»
         if (j.ok !== true || !Array.isArray(j.respuestas)) return { ok: false, error: j.apagado === true ? 'puerta_apagada' : 'respuesta_no_entendida' }
         return { ok: true, respuestas: (j.respuestas as Array<Record<string, unknown>>).filter((x) => typeof x?.respuesta === 'string' && String(x.respuesta).trim()).map((x) => ({ respuesta: String(x.respuesta) })) }
+      } catch { return { ok: false, error: 'red' } }
+    },
+    async leerParecidas(q) {
+      if (sin) return { ok: false, error: 'cerebro_no_configurado' }
+      try {
+        const r = await f(`${url}?client_id=${encodeURIComponent(q.client_id)}&tema=${encodeURIComponent(q.tema)}`, { method: 'GET', headers: { 'x-api-key': p.llave } })
+        const j = (await r.json().catch(() => ({}))) as Record<string, any>
+        if (r.status < 200 || r.status >= 300) return { ok: false, error: `http_${r.status}` }
+        if (j.ok !== true) return { ok: false, error: j.apagado === true ? 'puerta_apagada' : 'respuesta_no_entendida' }
+        const parecidas = (Array.isArray(j.parecidas) ? (j.parecidas as Array<Record<string, unknown>>) : []).filter((x) => typeof x?.ficha_id === 'string' && typeof x?.respuesta === 'string' && String(x.respuesta).trim()).map((x) => ({ ficha_id: String(x.ficha_id), tema: String(x.tema ?? ''), respuesta: String(x.respuesta), fecha: String(x.fecha ?? '') }))
+        return { ok: true, respondida: j.respondida === true, parecidas, pendientes_parecidas: Array.isArray(j.pendientes_parecidas) ? (j.pendientes_parecidas as PendienteParecida[]) : [] }
       } catch { return { ok: false, error: 'red' } }
     },
     async cerrarPendiente(q) {

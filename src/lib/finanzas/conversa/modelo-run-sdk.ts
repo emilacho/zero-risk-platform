@@ -35,8 +35,9 @@ export interface PedidoRunSdk extends ColumnasDeLaLlamada {
 /** arma el cuerpo; función pura (se prueba sin red). Un turno = una ejecución con id propio, así el libro (agent_invocations) correlaciona por execution id */
 export function armarPedidoRunSdk(p: PedidoAlModelo, workflow_id: string, trabajo?: ColumnasDeLaLlamada): PedidoRunSdk {
   return {
+    // la llamada que sabe de qué corrida es manda sobre el rótulo del puerto
     // 04-nov · de qué trabajo es la llamada, lo trae quien llama · el paso es el de este turno
-    ...(trabajo ?? {}),
+    ...(p.trabajo ?? trabajo ?? {}),
     paso: p.paso,
     agent: p.agente,
     task: p.tarea.length > MAX_TAREA_RUN_SDK ? p.tarea.slice(0, MAX_TAREA_RUN_SDK) : p.tarea,

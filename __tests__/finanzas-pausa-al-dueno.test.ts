@@ -18,6 +18,7 @@ import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { rutaDueno, rutaLeerDueno } from '../src/lib/portero-alimenta/dueno'
 import { cerebroDelDueno } from '../src/lib/buzon-dueno/cerebro-dueno'
+import { armarPedidoRunSdk } from '../src/lib/finanzas/conversa/modelo-run-sdk'
 import { crearBaseFalsa } from '../src/lib/portero-alimenta/__tests__/base-falsa'
 import { DIEZ_CLIENTES } from '../src/lib/portero-alimenta/__tests__/diez-clientes.fixtures'
 import { tablasDe } from '../src/lib/portero-alimenta/__tests__/diez-clientes.tablas'
@@ -396,6 +397,199 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
   }
   const contestarPorLaPuerta = (a: ReturnType<typeof armar>, tema: string) => rutaDueno(a.deps(), { evento: 'respuesta', client_id: a.c.id, tema, pregunta: `¿${tema}?`, respuesta: 'sí, por el chat', canal: 'chat de Tu oficina', mensaje_ref: 'chat:1', respondido_en: a.hora(), preguntado_por: { oficina: 'tu-oficina', agente: 'dueno' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
 
+  describe('05-nov · el jefe de finanzas mira lo parecido antes de preguntar (opción A de Emilio)', () => {
+    type Pedido = { agente: string; tarea: string; paso: string; tope_usd: number; trabajo?: Record<string, string> }
+    /** el agente simulado: decide con la ficha que le llega, y queda lo que pidió */
+    const agente = (a: { P: PuertosDePausa }, decidir: (fichas: Array<{ ficha_id: string; respuesta: string }>, tarea: string) => unknown, costo = 0.05) => {
+      const pedidos: Pedido[] = []
+      a.P.modelo = { invocar: async (p) => {
+        pedidos.push(p as never)
+        const fichas = JSON.parse(p.tarea.slice(p.tarea.indexOf('[\n'))).flatMap((q: { respuestas_parecidas: unknown[] }) => q.respuestas_parecidas)
+        const salida = decidir(fichas, p.tarea)
+        return salida instanceof Error ? { ok: false as const, error: salida.message, costo_usd: costo } : { ok: true as const, salida: typeof salida === 'string' ? salida : JSON.stringify(salida), costo_usd: costo }
+      } }
+      return pedidos
+    }
+    const contestar = (a: ReturnType<typeof armar>, tema: string, respuesta: string) => rutaDueno(a.deps(), { evento: 'respuesta', client_id: a.c.id, tema, pregunta: `¿${tema}?`, respuesta, canal: 'chat de Tu oficina', mensaje_ref: 'chat:1', respondido_en: a.hora(), preguntado_por: { oficina: 'dueno', agente: 'dueno' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+    const conPresupuesto = async () => {
+      const a = armar({ preguntas: [] })
+      a.m.arts.planteo = { no_se: ['no sé el presupuesto de pauta'] }
+      const g = await contestar(a, 'presupuesto de pauta', '200 por semana')
+      expect(g.status).toBe(200)
+      return a
+    }
+
+    it('🔴 el caso real: «presupuesto de pauta» responde a la pregunta fija y Emilio no vuelve a contestar', async () => {
+      const a = await conPresupuesto()
+      const pedidos = agente(a, (f) => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'ya_contestada', ficha_id: f[0].ficha_id, por_que: 'es la misma cifra semanal' }] }))
+      await pausarOficina(a.P, a.pedir)
+      expect(pedidos).toHaveLength(1)
+      expect(pedidos[0]).toMatchObject({ agente: 'chief-financial-officer', paso: 'revisar_parecidas', tope_usd: 0.4 })
+      expect(pedidos[0].tarea).toContain('200 por semana')
+      expect(pedidos[0].tarea).toContain('presupuesto de pauta')
+      expect(a.filas()).toHaveLength(0)
+      expect(a.m.e.semilla?.respuestas_del_dueno).toEqual([{ clave: 'presupuesto_semanal_pauta', valor: '200 por semana', literal: '200 por semana' }])
+      expect(a.m.despertares).toHaveLength(1)
+      expect((a.m.arts.buzon_parecidas as { veredictos: Record<string, unknown> }).veredictos.presupuesto_semanal_pauta).toMatchObject({ decision: 'ya_contestada', por_que: 'es la misma cifra semanal' })
+    })
+    it('🔴 puede preguntar igual, y queda dicho por qué lo parecido no alcanza', async () => {
+      const a = await conPresupuesto()
+      agente(a, () => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'preguntar', ficha_id: null, por_que: 'esa cifra es de hace meses y cambió de temporada' }] }))
+      await pausarOficina(a.P, a.pedir)
+      expect(a.filas().map((p) => p.tema)).toContain('presupuesto semanal pauta')
+      expect(a.m.despertares).toEqual([])
+      const reg = a.m.arts.buzon_respuestas as { preguntas: Array<Record<string, unknown>> }
+      expect(reg.preguntas[0].por_que_se_pregunta_igual).toBe('esa cifra es de hace meses y cambió de temporada')
+    })
+    it('🔴 la cifra sale de la ficha: lo que escriba el agente no entra como dicho por el dueño', async () => {
+      const a = await conPresupuesto()
+      agente(a, (f) => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'ya_contestada', ficha_id: f[0].ficha_id, respuesta: '9000 por semana', por_que: 'x' }] }))
+      await pausarOficina(a.P, a.pedir)
+      expect(JSON.stringify(a.m.e.semilla?.respuestas_del_dueno)).not.toContain('9000')
+      expect(JSON.stringify(a.m.e.semilla?.respuestas_del_dueno)).toContain('200 por semana')
+    })
+    it('🔴 una ficha que no estaba entre las parecidas no vale: se pregunta y queda el rastro', async () => {
+      const a = await conPresupuesto()
+      agente(a, () => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'ya_contestada', ficha_id: 'inventada', por_que: 'x' }] }))
+      await pausarOficina(a.P, a.pedir)
+      expect(a.filas()).toHaveLength(1)
+      expect(a.m.e.semilla?.respuestas_del_dueno ?? []).toEqual([])
+      expect((a.m.arts.buzon_parecidas as { veredictos: Record<string, { sin_razonar?: string }> }).veredictos.presupuesto_semanal_pauta.sin_razonar).toContain('inventada')
+    })
+    for (const [nombre, decidir] of [
+      ['el agente falla', () => new Error('run_sdk_429')],
+      ['contesta algo que no se lee', () => 'no sabría decirte'],
+      ['no dice nada de esa pregunta', () => ({ veredictos: [] })],
+      ['da una decisión rara', () => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'tal_vez' }] })],
+    ] as Array<[string, () => unknown]>) {
+      it(`🔴 si ${nombre}: se pregunta como siempre, y el vigía no vuelve a pagar`, async () => {
+        const a = await conPresupuesto()
+        const pedidos = agente(a, decidir)
+        await pausarOficina(a.P, a.pedir)
+        expect(a.filas()).toHaveLength(1)
+        expect(a.m.despertares).toEqual([])
+        for (let i = 0; i < 3; i++) { a.minutos(10); await atenderPausa(a.P, 'enc-1') }
+        expect(pedidos).toHaveLength(1)
+        expect(a.filas()).toHaveLength(1)
+      })
+    }
+    it('🔴 lo que no llegó a razonar queda dicho, con su motivo', async () => {
+      const a = await conPresupuesto()
+      agente(a, () => new Error('run_sdk_429'))
+      await pausarOficina(a.P, a.pedir)
+      const v = (a.m.arts.buzon_parecidas as { veredictos: Record<string, { decision: string; sin_razonar?: string }> }).veredictos.presupuesto_semanal_pauta
+      expect(v.decision).toBe('preguntar')
+      expect(v.sin_razonar).toContain('run_sdk_429')
+    })
+    it('🔴 una decisión que no se entiende se pregunta como siempre, y queda dicho', async () => {
+      const a = await conPresupuesto()
+      agente(a, () => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'tal_vez' }] }))
+      await pausarOficina(a.P, a.pedir)
+      const v = (a.m.arts.buzon_parecidas as { veredictos: Record<string, { decision: string; sin_razonar?: string }> }).veredictos.presupuesto_semanal_pauta
+      expect(v.decision).toBe('preguntar')
+      expect(v.sin_razonar).toContain('tal_vez')
+    })
+    it('🔴 lo ya decidido no se paga dos veces, aunque la pregunta aún no se haya registrado', async () => {
+      const a = armar({ preguntas: [preg('whatsapp_business', { frena_la_firma: true })] })
+      await rutaDueno(a.deps(), { evento: 'pregunta', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿Tienes WhatsApp?', canal: 'chat', preguntado_por: { oficina: 'creativa', agente: 'content-creator' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+      const pedidos = agente(a, () => ({ veredictos: [{ clave: 'whatsapp_business', decision: 'pendiente_cubre', ficha_id: null, por_que: 'la creativa ya lo preguntó' }] }))
+      await preguntarAlDueno(a.P, 'enc-1')
+      const r = await preguntarAlDueno(a.P, 'enc-1')
+      expect(pedidos).toHaveLength(1)
+      expect(r.cuerpo).toMatchObject({ motivo: 'otra_oficina_espera' })
+    })
+    it('🔴 lo ya registrado no se vuelve a revisar, aunque se pierda el rastro', async () => {
+      const a = await conPresupuesto()
+      const pedidos = agente(a, () => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'preguntar', ficha_id: null, por_que: 'x' }] }))
+      await pausarOficina(a.P, a.pedir)
+      expect(pedidos).toHaveLength(1)
+      delete a.m.arts.buzon_parecidas
+      a.minutos(10); await atenderPausa(a.P, 'enc-1')
+      expect(pedidos).toHaveLength(1)
+    })
+    it('🔴 el rótulo de la llamada manda sobre el del puerto', () => {
+      const p = { agente: 'a', tarea: 't', encargo_id: 'e', client_id: 'c', paso: 'x', tope_usd: 0.4, dry_run: false, trabajo: { trabajo_tipo: 'plan', trabajo_id: 'corrida-1' } }
+      expect(armarPedidoRunSdk(p, 'wf')).toMatchObject({ trabajo_tipo: 'plan', trabajo_id: 'corrida-1' })
+      expect(armarPedidoRunSdk(p, 'wf', { trabajo_tipo: 'pedido', trabajo_id: 'otro' })).toMatchObject({ trabajo_tipo: 'plan', trabajo_id: 'corrida-1' })
+      expect(armarPedidoRunSdk({ ...p, trabajo: undefined }, 'wf', { trabajo_tipo: 'pedido', trabajo_id: 'otro' })).toMatchObject({ trabajo_tipo: 'pedido', trabajo_id: 'otro' })
+      expect(armarPedidoRunSdk(p, 'wf')).not.toHaveProperty('trabajo')
+    })
+    it('🔴 sin nada parecido no se llama a nadie: no se gasta', async () => {
+      const a = armar()
+      const pedidos = agente(a, () => { throw new Error('no debía llamarse') })
+      await pausarOficina(a.P, a.pedir)
+      expect(pedidos).toEqual([])
+      expect(a.filas()).toHaveLength(2)
+      expect(a.m.arts.buzon_parecidas).toBeUndefined()
+    })
+    it('🔴 si ya hay respuesta del MISMO tema, lo resuelve la puerta: el agente no se paga', async () => {
+      const a = armar({ preguntas: [preg('whatsapp', { frena_la_firma: true })] })
+      await contestar(a, 'whatsapp', 'sí lo tengo')
+      await contestar(a, 'whatsapp de la sede', 'no en esta sede')
+      const pedidos = agente(a, () => { throw new Error('no debía llamarse') })
+      await pausarOficina(a.P, a.pedir)
+      expect(pedidos).toEqual([])
+      expect(a.m.e.semilla?.respuestas_del_dueno?.[0]).toMatchObject({ clave: 'whatsapp', literal: 'sí lo tengo' })
+    })
+    it('🔴 si no se pueden leer las parecidas, se sigue: queda el rastro y nadie paga', async () => {
+      let caido = true
+      const a = armar({ preguntas: [preg('whatsapp', { frena_la_firma: true })], caido: () => caido })
+      const pedidos = agente(a, () => { throw new Error('no debía llamarse') })
+      const original = a.P.cerebro.leerParecidas!
+      a.P.cerebro = { ...a.P.cerebro, leerParecidas: (q) => { caido = true; const r = original(q); return r.finally(() => { caido = false }) } }
+      await pausarOficina(a.P, a.pedir)
+      expect(pedidos).toEqual([])
+      expect((a.m.arts.buzon_parecidas as { veredictos: Record<string, { sin_razonar?: string }> }).veredictos.whatsapp.sin_razonar).toContain('http_500')
+      expect(a.filas()).toHaveLength(1)
+    })
+    it('🔴 otra pregunta parecida sin responder: en la pausa se pregunta igual, porque esa respuesta no le llegaría a este encargo', async () => {
+      const a = armar({ preguntas: [preg('whatsapp_business', { frena_la_firma: true })] })
+      await rutaDueno(a.deps(), { evento: 'pregunta', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿Tienes WhatsApp?', canal: 'chat', preguntado_por: { oficina: 'creativa', agente: 'content-creator' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+      const pedidos = agente(a, () => ({ veredictos: [{ clave: 'whatsapp_business', decision: 'pendiente_cubre', ficha_id: null, por_que: 'la creativa ya lo preguntó' }] }))
+      await pausarOficina(a.P, a.pedir)
+      expect(pedidos[0].tarea).toContain('creativa')
+      expect(a.filas().map((p) => p.tema)).toContain('whatsapp business')
+      expect(a.m.espera()?.estado).toBe('esperando')
+    })
+    it('🔴 fuera de una pausa, si otra pregunta ya lo cubre, no se le repite al dueño', async () => {
+      const a = armar({ preguntas: [preg('whatsapp_business', { frena_la_firma: true })] })
+      await rutaDueno(a.deps(), { evento: 'pregunta', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿Tienes WhatsApp?', canal: 'chat', preguntado_por: { oficina: 'creativa', agente: 'content-creator' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+      agente(a, () => ({ veredictos: [{ clave: 'whatsapp_business', decision: 'pendiente_cubre', ficha_id: null, por_que: 'la creativa ya lo preguntó' }] }))
+      const r = await preguntarAlDueno(a.P, 'enc-1')
+      expect(r.cuerpo).toMatchObject({ enviado: false, motivo: 'otra_oficina_espera', esperando: ['whatsapp_business'] })
+      expect(a.filas().map((p) => p.tema)).not.toContain('whatsapp business')
+    })
+    it('🔴 «pendiente_cubre» sin ninguna pendiente no vale: se pregunta', async () => {
+      const a = await conPresupuesto()
+      agente(a, () => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'pendiente_cubre', ficha_id: null, por_que: 'x' }] }))
+      const r = await preguntarAlDueno(a.P, 'enc-1')
+      expect(r.cuerpo.esperando ?? []).toEqual([])
+      expect(a.filas()).toHaveLength(1)
+    })
+    it('🔴 la llamada de un plan lleva el rótulo de su corrida: cuenta en el tope del plan', async () => {
+      const a = await conPresupuesto()
+      a.m.e.semilla = { ...a.m.e.semilla, corrida: 'corrida-1' }
+      const pedidos = agente(a, () => ({ veredictos: [] }))
+      await preguntarAlDueno(a.P, 'enc-1')
+      expect(pedidos[0].trabajo).toEqual({ trabajo_tipo: 'plan', trabajo_id: 'corrida-1' })
+    })
+    it('🔴 en seco no se lee ni se llama', async () => {
+      const a = await conPresupuesto()
+      a.m.e.dry_run = true
+      const pedidos = agente(a, () => { throw new Error('no debía llamarse') })
+      expect((await preguntarAlDueno(a.P, 'enc-1')).cuerpo).toMatchObject({ motivo: 'encargo_en_seco' })
+      expect(pedidos).toEqual([])
+    })
+    it('🔴 la puerta sin esos campos se lee como nada parecido', async () => {
+      const f = (async () => ({ status: 200, json: async () => ({ ok: true, respondida: false, respuestas: [] }) })) as never
+      const c = cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f })
+      expect(await c.leerParecidas!({ client_id: 'c', tema: 't' })).toEqual({ ok: true, respondida: false, parecidas: [], pendientes_parecidas: [] })
+    })
+    it('🔴 los dos caminos reales le dan el agente al buzón', () => {
+      expect(fs.readFileSync('src/app/api/finanzas/conversa/route.ts', 'utf8')).toContain('modelo: P.modelo,')
+      expect(puertosDePausa({ INTERNAL_API_KEY: 'k' }, new DbFalsa() as never, 'registra', 'wf', 'ex').modelo).toBeDefined()
+    })
+  })
   it('🔴 una pregunta descartada no vuelve con el vigía', async () => {
     const a = armar()
     await pausarOficina(a.P, a.pedir)
