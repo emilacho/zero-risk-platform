@@ -14,6 +14,9 @@
  * Cables de la plataforma · `con_analisis` al pre-vuelo y `segunda_pasada` en la semilla de la segunda pasada. El rótulo del plan ya viajaba en el flujo vivo: no se toca.
  * Turno de mesa cortado · un corte o un 5xx ya no termina la mesa: se vuelve a pedir el paso, hasta 2 veces seguidas. Si el turno sigue trabajando, el candado responde `paso_en_vuelo` y se espera. Si ya se cobró, repetirlo se paga otra vez, dentro del tope de la mesa, que mira lo cobrado.
  * Altos deliberados · (una corrida ya `en_pausa` no se puede cerrar: si la pausa se guardó y se perdió la respuesta, sigue esperando y la suelta el dueño) sin acta, validador ilegible, pausa no guardada y reanudar sin material lanzan por la salida de error: se cierra la corrida como `fallida` y se vuelve a lanzar el mismo error, para que el aviso siga llegando. Un error inesperado en otro paso sigue con el barrido.
+ * Acta y turnos largos (reparo de CC6 · decisión de Lenovo) · la mesa pide el latido: la conexión no queda en silencio a los 340 s. Si responde `turno_cortado` (5xx, también dentro del cuerpo) se vuelve a pedir; la mesa recoge lo ya hecho sin pagarlo.
+ * Abrir la mesa · abrir no gasta y devuelve la de esa corrida: un corte o un 5xx vuelve a pedirla hasta 2 veces.
+ * Avisos · cada parada muere en su propio nodo: el freno de avisos (1 por flujo y nodo cada 10 min) no calla a una parada por otra de distinto tipo.
  * Segunda mitad · con corrida muerta se llama igual: el PDF y el cable no cuestan y el plan ya está pagado. Lo único que se salta es el parte a la sala, que sí puede lanzar trabajo pagado.
  *   Si la llama la aprobación del dueño, sigue como hoy: decidió una persona.
  *
@@ -24,7 +27,8 @@ import { agregarNodo, cambiarCodigo, codigo, conectar, nodo, redirigir, si } fro
 export const ESPERA_S = 3600
 export const RELECTURA_S = 600
 export const RELECTURAS = 2
-export const MAX_VUELTAS_DE_MESA = 80
+// 120 vueltas de 20 s: 40 min, más que los 35 que la mesa espera a un empleado en vuelo
+export const MAX_VUELTAS_DE_MESA = 120
 export const REINTENTOS_DE_TURNO = 2
 
 const WEBHOOK = 'Webhook · planeacion'
@@ -58,6 +62,12 @@ export const N_ALTO_ARMAR = 'Alto · armar el cierre'
 export const N_ALTO_SI = 'Alto · ¿cerrar la corrida?'
 export const N_ALTO_CERRAR = 'Alto · cerrar la corrida'
 export const N_ALTO_ROJO = 'Alto · parar en rojo'
+export const N_ALTO_CUAL = 'Alto · ¿cuál parada?'
+export const ROJOS = { PLAN_MESA_SIN_ACTA: 'Alto · parar en rojo · sin acta', PLAN_VALIDADOR_NO_LEGIBLE: 'Alto · parar en rojo · chequeo de forma', PLAN_PAUSA_NO_GUARDADA: 'Alto · parar en rojo · pausa', PLAN_REANUDAR_SIN_MATERIAL: 'Alto · parar en rojo · reanudar' }
+export const N_REABRIR = 'MESA · ¿volver a abrir?'
+const ABRIR = 'MESA · abrir la mesa'
+const SEMILLA = 'MESA · armar la semilla'
+const SIGUE = 'MESA · ¿sigue la reunión?'
 export const ALTOS = ['MESA · cerrar el acta', 'Validar · ¿qué dijo?', 'FIN · la pausa quedó guardada', 'Reanudar · poner el material guardado']
 
 export const CODIGO_VALIDAR_ARMAR = [
@@ -119,7 +129,7 @@ export const CODIGO_ALTO_ARMAR = [
   "const codigo = (mensaje.match(/^PLAN_[A-Z_]+/) || [''])[0]",
   "const s = ($('" + WEBHOOK + "').first().json.body || {})",
   "const aplica = s.plan_v3 === true && typeof s.corrida === 'string' && s.corrida.length > 0 && typeof s.client_id === 'string' && s.client_id.length > 0",
-  "return [{ json: { mensaje, aplica, cuerpo: aplica ? { accion: 'cerrar', client_id: s.client_id, corrida: s.corrida, estado: 'fallida', motivo: 'el plan se detuvo: ' + (RAZON[codigo] || mensaje.replace(/^PLAN_[A-Z_]+ · /, '').slice(0, 400)) } : null } }]",
+  "return [{ json: { mensaje, codigo, aplica, cuerpo: aplica ? { accion: 'cerrar', client_id: s.client_id, corrida: s.corrida, estado: 'fallida', motivo: 'el plan se detuvo: ' + (RAZON[codigo] || mensaje.replace(/^PLAN_[A-Z_]+ · /, '').slice(0, 400)) } : null } }]",
 ].join('\n')
 
 export const CODIGO_ALTO_ROJO = "throw new Error($('" + N_ALTO_ARMAR + "').last().json.mensaje)"
@@ -173,10 +183,31 @@ export function construirGoDobleChequeo(f) {
     cambiarCodigo(f, n, sinContestar, '// 05-nov · un corte (sin respuesta) o un 5xx no termina la mesa: se vuelve a pedir el paso. Si sigue trabajando, responde paso_en_vuelo. Lo cobrado cuenta contra su tope\n' + previos + "\nif (!(http === 200) && (!Number.isFinite(http) || http >= 500) && fallosPrevios < " + REINTENTOS_DE_TURNO + " && vuelta < MAX_PASOS) {\n  try { await new Promise(function (ok) { setTimeout(ok, ESPERA_MS * (fallosPrevios + 1)) }) } catch (x) {}\n  return [{ json: { fin: false, encargo_id: id, fallos: fallosPrevios + 1 } }]\n}\n" + sinContestar)
     // mientras espera a un turno en vuelo, la cuenta de fallos no vuelve a cero
     cambiarCodigo(f, n, fin + "\n  return [{ json: { fin: false, encargo_id: id } }]\n}", fin + "\n  return [{ json: { fin: false, encargo_id: id, fallos: (function () { try { return Number($('" + n + "').first().json.fallos) || 0 } catch (x) { return 0 } })() } }]\n}")
+    // con latido, lo que tardó llega en 200 con su código verdadero en el cuerpo; un 200 sin cuerpo es una conexión que murió a medias
+    cambiarCodigo(f, n, 'const http = Number(r.statusCode)', "const http = r.body && typeof r.body === 'object' ? (Number(b.estado_http) || Number(r.statusCode)) : Number(r.statusCode) === 200 ? NaN : Number(r.statusCode)")
     const m = nodo(f, n)
     if (!/const MAX_PASOS = \d+/.test(m.parameters.jsCode)) throw new Error('«' + n + '» cambió de forma: no se aplica a ciegas')
     m.parameters.jsCode = m.parameters.jsCode.replace(/const MAX_PASOS = \d+/, 'const MAX_PASOS = ' + MAX_VUELTAS_DE_MESA).replace(/const PLAZO_MS = \d+\n/, '').replace(/const t0 = .*\n/, '')
   }
+
+  // la mesa pide el latido en cada turno
+  for (const n of ['MESA · avanzar un paso', 'MESA · avanzar la devolución']) {
+    const h = nodo(f, n).parameters.headerParameters?.parameters
+    if (!Array.isArray(h)) throw new Error('«' + n + '» cambió de forma: no se aplica a ciegas')
+    h.push({ name: 'x-zr-latido', value: '1' })
+  }
+
+  // abrir la mesa no gasta y devuelve la de esa corrida: un corte tiene otra oportunidad
+  cambiarCodigo(f, 'MESA · decidir', 'if (vuelta === 0) {', "const yaAbierta = vuelta === 0 ? '' : ($('MESA · decidir').first().json.encargo_id || '')\nif (!yaAbierta) {")
+  cambiarCodigo(f, 'MESA · decidir', "  if (!(http === 200 && typeof b.encargo_id === 'string' && b.encargo_id)) return [{ json: { fin: true, motivo: 'sin_abrir'", "  const fallosDeAbrir = (function () { try { return Number($('MESA · decidir').first().json.fallos) || 0 } catch (x) { return 0 } })()\n  if (!(http === 200) && (!Number.isFinite(http) || http >= 500) && fallosDeAbrir < " + REINTENTOS_DE_TURNO + ") {\n    try { await new Promise(function (ok) { setTimeout(ok, ESPERA_MS * (fallosDeAbrir + 1)) }) } catch (x) {}\n    return [{ json: { fin: false, reabrir: true, fallos: fallosDeAbrir + 1 } }]\n  }\n  if (!(http === 200 && typeof b.encargo_id === 'string' && b.encargo_id)) return [{ json: { fin: true, motivo: 'sin_abrir'")
+  const abrir = nodo(f, ABRIR)
+  const cuerpoAbrir = abrir.parameters.jsonBody
+  for (const c of ['client_id', 'dry_run', 'semilla']) if (!cuerpoAbrir.includes(c + ': $json.' + c)) throw new Error('«' + ABRIR + '» cambió de forma: no se aplica a ciegas')
+  abrir.parameters.jsonBody = cuerpoAbrir.replace(/: \$json\.(client_id|dry_run|semilla)/g, (_, c) => ": $('" + SEMILLA + "').first().json." + c)
+  agregarNodo(f, si(N_REABRIR, '={{ $json.reabrir === true }}'), SIGUE, -200, 180)
+  redirigir(f, 'MESA · decidir', SIGUE, N_REABRIR)
+  conectar(f, N_REABRIR, ABRIR, 0)
+  conectar(f, N_REABRIR, SIGUE, 1)
 
   // los dos cables que pidió la plataforma (CC1, #928)
   const previo = nodo(f, 'V9 · pre-vuelo')
@@ -200,11 +231,18 @@ export function construirGoDobleChequeo(f) {
   agregarNodo(f, si(N_ALTO_SI, '={{ $json.aplica }}'), ALTOS[0], 200, 400)
   const cerrarAlto = agregarNodo(f, { name: N_ALTO_CERRAR, type: 'n8n-nodes-base.httpRequest', typeVersion: cerrar.typeVersion, onError: 'continueRegularOutput', parameters: JSON.parse(JSON.stringify(cerrar.parameters)) }, ALTOS[0], 400, 300)
   cerrarAlto.parameters.options = { ...cerrarAlto.parameters.options, timeout: 60000 }
-  agregarNodo(f, codigo(N_ALTO_ROJO, CODIGO_ALTO_ROJO), ALTOS[0], 600, 400)
+  agregarNodo(f, codigo(N_ALTO_ROJO, CODIGO_ALTO_ROJO), ALTOS[0], 800, 680)
   conectar(f, N_ALTO_ARMAR, N_ALTO_SI)
   conectar(f, N_ALTO_SI, N_ALTO_CERRAR, 0)
-  conectar(f, N_ALTO_SI, N_ALTO_ROJO, 1)
-  conectar(f, N_ALTO_CERRAR, N_ALTO_ROJO)
+  // cada parada muere en su nodo: el freno de avisos cuenta por flujo y nodo, y una no debe callar a otra
+  agregarNodo(f, { name: N_ALTO_CUAL, type: 'n8n-nodes-base.switch', typeVersion: 3.2, parameters: { mode: 'rules', options: { fallbackOutput: 'extra' }, rules: { values: Object.keys(ROJOS).map((c) => ({ conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, combinator: 'and', conditions: [{ leftValue: "={{ $('" + N_ALTO_ARMAR + "').last().json.codigo }}", rightValue: c, operator: { type: 'string', operation: 'equals' } }] }, renameOutput: false })) } } }, ALTOS[0], 600, 400)
+  conectar(f, N_ALTO_SI, N_ALTO_CUAL, 1)
+  conectar(f, N_ALTO_CERRAR, N_ALTO_CUAL)
+  Object.values(ROJOS).forEach((n, i) => {
+    agregarNodo(f, codigo(n, CODIGO_ALTO_ROJO), ALTOS[0], 800, 200 + i * 120)
+    conectar(f, N_ALTO_CUAL, n, i)
+  })
+  conectar(f, N_ALTO_CUAL, N_ALTO_ROJO, Object.keys(ROJOS).length)
   for (const a of ALTOS) {
     const alto = nodo(f, a)
     if (alto.onError) throw new Error('«' + a + '» ya maneja sus errores: no se aplica a ciegas')

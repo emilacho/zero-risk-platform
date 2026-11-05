@@ -144,6 +144,10 @@ export interface AlmacenDeConversa {
 
 export type RespuestaDeModelo = { ok: true; salida: unknown; costo_usd: number } | { ok: false; error: string; costo_usd: number }
 export interface PedidoAlModelo {
+  /** 05-nov · la clave propia del turno en el corredor: con ella se puede recoger lo ya hecho. Sin ella, como siempre */
+  clave_de_turno?: string
+  /** 05-nov · este pedido repite un turno que se cortó: si el corredor ya lo terminó, devuelve ese resultado sin cobrar otra vez */
+  reanudar?: boolean
   agente: string
   tarea: string
   encargo_id: string

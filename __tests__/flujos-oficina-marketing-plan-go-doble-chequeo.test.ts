@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ALTOS, CODIGO_ALTO_ARMAR, CODIGO_ALTO_ROJO, N_ALTO_ARMAR, N_ALTO_CERRAR, N_ALTO_ROJO, N_ALTO_SI, REINTENTOS_DE_TURNO, CODIGO_MAS, CODIGO_PREPARAR, CODIGO_VALIDAR_ARMAR, CODIGO_VIVA, N_VALIDAR_ARMAR, N_VALIDAR_CERRAR, N_VALIDAR_SI, ESPERA_S, MAX_VUELTAS_DE_MESA, N_BRIEF_VIVA, N_ESTADO, N_MAS, N_OTRA, N_PREPARAR, N_RENOVAR, N_SI_MAS, N_SI_RENUEVA, N_VIVA, RELECTURAS, RELECTURA_S, construirGoDobleChequeo, construirGoDobleChequeoMitad } from '../scripts/ops/oficina-marketing/plan-go-doble-chequeo.mjs'
+import { N_ALTO_CUAL, N_REABRIR, ROJOS, ALTOS, CODIGO_ALTO_ARMAR, CODIGO_ALTO_ROJO, N_ALTO_ARMAR, N_ALTO_CERRAR, N_ALTO_ROJO, N_ALTO_SI, REINTENTOS_DE_TURNO, CODIGO_MAS, CODIGO_PREPARAR, CODIGO_VALIDAR_ARMAR, CODIGO_VIVA, N_VALIDAR_ARMAR, N_VALIDAR_CERRAR, N_VALIDAR_SI, ESPERA_S, MAX_VUELTAS_DE_MESA, N_BRIEF_VIVA, N_ESTADO, N_MAS, N_OTRA, N_PREPARAR, N_RENOVAR, N_SI_MAS, N_SI_RENUEVA, N_VIVA, RELECTURAS, RELECTURA_S, construirGoDobleChequeo, construirGoDobleChequeoMitad } from '../scripts/ops/oficina-marketing/plan-go-doble-chequeo.mjs'
 
 type Nodo = { name: string; type: string; onError?: string; parameters: Record<string, any> }
 type Flujo = { nodes: Nodo[]; connections: Record<string, any> }
@@ -186,7 +186,12 @@ describe('la mesa llega al acta aunque pase el plazo', () => {
       expect(await correr(c(), mapa, { statusCode: 200, body: { terminado: true, estado: 'x', acta: 'a' } }, 5)).toMatchObject({ fin: true, acta: 'a' })
     })
   }
-  it('el tope de vueltas es 80', () => { expect(MAX_VUELTAS_DE_MESA).toBe(80); expect(cod(hecho(), 'MESA · decidir')).toContain('const MAX_PASOS = 80') })
+  it('el tope de vueltas alcanza para esperar a un empleado en vuelo (35 min)', () => {
+    expect(MAX_VUELTAS_DE_MESA).toBe(120)
+    expect((MAX_VUELTAS_DE_MESA * 20) / 60).toBeGreaterThan(35)
+    expect(cod(hecho(), 'MESA · decidir')).toContain('const MAX_PASOS = 120')
+    expect(cod(hecho(), 'MESA · decidir la devolución')).toContain('const MAX_PASOS = 120')
+  })
   it('los plazos de finanzas no se tocan', () => {
     const f = hecho()
     for (const n of ['FIN · decidir', 'FIN2 · decidir']) expect(cod(f, n)).toBe(cod(PLAN, n))
@@ -263,14 +268,107 @@ describe('los altos deliberados cierran la corrida', () => {
     const f = hecho()
     expect(destinos(f, N_ALTO_ARMAR)).toEqual([N_ALTO_SI])
     expect(destinos(f, N_ALTO_SI, 0)).toEqual([N_ALTO_CERRAR])
-    expect(destinos(f, N_ALTO_SI, 1)).toEqual([N_ALTO_ROJO])
-    expect(destinos(f, N_ALTO_CERRAR)).toEqual([N_ALTO_ROJO])
+    expect(destinos(f, N_ALTO_SI, 1)).toEqual([N_ALTO_CUAL])
+    expect(destinos(f, N_ALTO_CERRAR)).toEqual([N_ALTO_CUAL])
     expect(nodo(f, N_ALTO_CERRAR).parameters.url).toBe(nodo(f, 'V9 · cerrar la corrida').parameters.url)
     expect(nodo(f, N_ALTO_CERRAR).parameters.jsonBody).toContain('$json.cuerpo')
     expect(nodo(f, N_ALTO_CERRAR).onError).toBe('continueRegularOutput')
     expect(nodo(f, N_ALTO_ROJO).onError).toBeUndefined()
   })
   it('son 2 reintentos', () => { expect(REINTENTOS_DE_TURNO).toBe(2) })
+})
+
+describe('la mesa con latido', () => {
+  const MESAS = [
+    ['MESA · decidir', 'MESA · avanzar un paso', { 'MESA · decidir': { encargo_id: 'e' } }],
+    ['MESA · decidir la devolución', 'MESA · avanzar la devolución', { 'MESA · preparar la devolución': { encargo_id: 'e', t0: 1 } }],
+  ] as const
+  for (const [n, h, base] of MESAS) {
+    const c = () => cod(hecho(), n).replace('const ESPERA_MS = 20000', 'const ESPERA_MS = 1')
+    const mapa = { [n]: { encargo_id: 'e' }, ...base }
+    it(h + ' pide el latido, y lo demás de sus cabeceras sigue', () => {
+      const v = nodo(hecho(), h).parameters.headerParameters.parameters
+      expect(v).toContainEqual({ name: 'x-zr-latido', value: '1' })
+      for (const x of nodo(PLAN, h).parameters.headerParameters.parameters) expect(v).toContainEqual(x)
+      const { headerParameters: _a, ...resto } = nodo(hecho(), h).parameters
+      const { headerParameters: _b, ...antes } = nodo(PLAN, h).parameters
+      expect(resto).toEqual(antes)
+    })
+    it(n + ': un 5xx dentro del cuerpo se vuelve a pedir', async () => {
+      expect(await correr(c(), mapa, { statusCode: 200, body: { error: 'turno_cortado', estado_http: 503 } }, 5)).toEqual({ fin: false, encargo_id: 'e', fallos: 1 })
+    })
+    it(n + ': un 4xx dentro del cuerpo no se repite', async () => {
+      expect(await correr(c(), mapa, { statusCode: 200, body: { error: 'x', estado_http: 400 } }, 5)).toMatchObject({ fin: true, motivo: 'sin_contestar' })
+    })
+    it(n + ': turno en vuelo dentro del cuerpo se espera', async () => {
+      expect((await correr(c(), mapa, { statusCode: 200, body: { error: 'paso_en_vuelo', estado_http: 409 } }, 5)).fin).toBe(false)
+    })
+    it(n + ': un 200 sin cuerpo es una conexión que murió, no un turno hecho', async () => {
+      for (const body of ['', '\n\n', undefined]) expect(await correr(c(), mapa, { statusCode: 200, body }, 5)).toEqual({ fin: false, encargo_id: 'e', fallos: 1 })
+    })
+    it(n + ': el 200 de verdad sigue, y su acta se entrega', async () => {
+      expect((await correr(c(), mapa, { statusCode: 200, body: { paso: 'x' } }, 5)).fallos).toBeUndefined()
+      expect(await correr(c(), mapa, { statusCode: 200, body: { terminado: true, estado: 'cerrado', acta: 'a' } }, 5)).toMatchObject({ fin: true, acta: 'a' })
+    })
+  }
+})
+
+describe('abrir la mesa tiene otra oportunidad', () => {
+  const c = () => cod(hecho(), 'MESA · decidir').replace('const ESPERA_MS = 20000', 'const ESPERA_MS = 1')
+  const abierta = { statusCode: 200, body: { encargo_id: 'e' } }
+  it('un corte o un 5xx vuelve a pedirla, hasta 2 veces', async () => {
+    for (const r of [{ statusCode: 500 }, { statusCode: 504 }, { error: { message: 'x' } }]) {
+      expect(await correr(c(), {}, r, 0)).toEqual({ fin: false, reabrir: true, fallos: 1 })
+      expect(await correr(c(), { 'MESA · decidir': { reabrir: true, fallos: 1 } }, r, 1)).toEqual({ fin: false, reabrir: true, fallos: 2 })
+      expect(await correr(c(), { 'MESA · decidir': { reabrir: true, fallos: 2 } }, r, 2)).toMatchObject({ fin: true, motivo: 'sin_abrir' })
+    }
+  })
+  it('un rechazo no se repite, y la apagada se respeta', async () => {
+    expect(await correr(c(), {}, { statusCode: 400, body: {} }, 0)).toMatchObject({ fin: true, motivo: 'sin_abrir' })
+    expect(await correr(c(), {}, { statusCode: 409, body: { error: 'mesa_apagada' } }, 0)).toEqual({ fin: true, resultado: 'apagada' })
+  })
+  it('la vuelta en que abre, sigue con su id, también en el reintento', async () => {
+    expect(await correr(c(), {}, abierta, 0)).toEqual({ fin: false, encargo_id: 'e' })
+    expect(await correr(c(), { 'MESA · decidir': { reabrir: true, fallos: 1 } }, abierta, 1)).toEqual({ fin: false, encargo_id: 'e' })
+  })
+  it('ya abierta, una vuelta posterior no vuelve a abrir', async () => {
+    expect((await correr(c(), { 'MESA · decidir': { encargo_id: 'e' } }, { statusCode: 500 }, 3)).reabrir).toBeUndefined()
+  })
+  it('el cableado vuelve a abrir, y abrir lee la semilla de su nodo', () => {
+    const f = hecho()
+    expect(destinos(f, 'MESA · decidir')).toEqual([N_REABRIR])
+    expect(destinos(f, N_REABRIR, 0)).toEqual(['MESA · abrir la mesa'])
+    expect(destinos(f, N_REABRIR, 1)).toEqual(['MESA · ¿sigue la reunión?'])
+    expect(nodo(f, N_REABRIR).parameters.conditions.conditions[0].leftValue).toBe('={{ $json.reabrir === true }}')
+    const b = nodo(f, 'MESA · abrir la mesa').parameters.jsonBody
+    expect(b).not.toContain('$json.')
+    for (const k of ['client_id', 'dry_run', 'semilla']) expect(b).toContain(k + ": $('MESA · armar la semilla').first().json." + k)
+  })
+})
+
+describe('cada parada muere en su nodo', () => {
+  it('cada código va a su nodo, y uno desconocido al general', () => {
+    const f = hecho(); const s = nodo(f, N_ALTO_CUAL)
+    const reglas = s.parameters.rules.values
+    expect(reglas.map((r: any) => r.conditions.conditions[0].rightValue)).toEqual(Object.keys(ROJOS))
+    for (const r of reglas) expect(r.conditions.conditions[0].leftValue).toBe("={{ $('" + N_ALTO_ARMAR + "').last().json.codigo }}")
+    Object.values(ROJOS).forEach((n, i) => expect(destinos(f, N_ALTO_CUAL, i)).toEqual([n]))
+    expect(destinos(f, N_ALTO_CUAL, Object.keys(ROJOS).length)).toEqual([N_ALTO_ROJO])
+    expect(s.parameters.options.fallbackOutput).toBe('extra')
+  })
+  it('todos vuelven a lanzar el error, sin manejarlo', () => {
+    const f = hecho()
+    for (const n of [...Object.values(ROJOS), N_ALTO_ROJO]) {
+      expect(cod(f, n)).toBe(CODIGO_ALTO_ROJO)
+      expect(nodo(f, n).onError).toBeUndefined()
+    }
+    expect(new Set(Object.values(ROJOS)).size).toBe(4)
+  })
+  it('el cierre arma el código de la parada', async () => {
+    const r = await correr(CODIGO_ALTO_ARMAR, { [WEB]: { body: SOBRE } }, { error: 'PLAN_PAUSA_NO_GUARDADA · algo' })
+    expect(r.codigo).toBe('PLAN_PAUSA_NO_GUARDADA')
+    expect((await correr(CODIGO_ALTO_ARMAR, { [WEB]: { body: SOBRE } }, { error: 'algo sin código' })).codigo).toBe('')
+  })
 })
 
 describe('los dos cables que pidió la plataforma', () => {
@@ -335,9 +433,9 @@ describe('sobre una corrida muerta no se paga', () => {
 
 describe('el resto queda igual', () => {
   it('no cambia ningún otro nodo', () => {
-    const f = hecho(); const toca = new Set([...ALTOS, 'Esperar al redactor', 'Redactor · ¿aceptó el pedido?', 'Vuelta · completar', 'MESA · decidir', 'MESA · decidir la devolución', 'JEF · armar', 'Segunda mitad · sobre', 'V9 · pre-vuelo', 'FIN2 · armar la semilla'])
+    const f = hecho(); const toca = new Set([...ALTOS, 'MESA · abrir la mesa', 'MESA · avanzar un paso', 'MESA · avanzar la devolución', 'Esperar al redactor', 'Redactor · ¿aceptó el pedido?', 'Vuelta · completar', 'MESA · decidir', 'MESA · decidir la devolución', 'JEF · armar', 'Segunda mitad · sobre', 'V9 · pre-vuelo', 'FIN2 · armar la semilla'])
     for (const v of PLAN.nodes) if (!toca.has(v.name)) expect(nodo(f, v.name), v.name).toEqual(v)
-    expect(f.nodes.length).toBe(PLAN.nodes.length + 15)
+    expect(f.nodes.length).toBe(PLAN.nodes.length + 21)
   })
   it('todo nodo de código compila', () => {
     for (const f of [hecho(), mitad()]) for (const n of f.nodes) if (n.parameters.jsCode) expect(() => new Function('$', '$input', '$runIndex', '$execution', '$workflow', '$env', '$json', 'return (async () => {' + n.parameters.jsCode + '\n})()'), n.name).not.toThrow()
