@@ -111,7 +111,7 @@ describe('2 · vigencia, versiones, retiradas y descartes', () => {
   })
   it('lo RETIRADO se muestra con su marca y su motivo (como lo vencido): nunca se oculta, y no vence', async () => {
     const f = de(await lista(A), 'fa-7')
-    expect(f.aviso).toMatch(/^RETIRADA desde /)
+    expect(f.aviso).toMatch(/^NO VIGENTE · RETIRADA desde /)
     expect(f.aviso).toMatch(/ya no está en su fuente/)
     expect([f.vencido, f.vigente_hasta]).toEqual([false, null])
   })
