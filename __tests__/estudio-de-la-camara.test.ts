@@ -4,9 +4,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { archivoDe3D, armarPedido, cotizarSinRed, type Pedido } from '@/lib/estudio/catalogo'
+import { archivoDe3D, armarAnimacion, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
+import { BIBLIOTECA_DE_MOVIMIENTOS } from '@/lib/estudio/movimientos'
 import { esDeLaCola } from '@/lib/estudio/fal'
-import { avanzar, crear, listar, cotizar, type Deps } from '@/lib/estudio/servicio'
+import { avanzar, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
 
 const CLIENTE = 'a0000000-0000-4000-8000-0000000000e1'
 const OTRO = 'b0000000-0000-4000-8000-0000000000e2'
@@ -77,8 +78,10 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}
 }
 
 interface Llamada { url: string; init?: RequestInit }
-function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[] } = {}) {
+function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' } = {}) {
   const llamadas: Llamada[] = []
+  const ANIM = 'https://queue.fal.run/fal-ai/meshy/requests/anim-1'
+  let pedidosDeAnimacion: number[] = []
   const falEstados = [...(op.falEstado ?? ['IN_PROGRESS', 'COMPLETED'])]
   const hfEstados = [...(op.hfEstado ?? ['in_progress', 'completed'])]
   const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } })
@@ -94,6 +97,18 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchi
     if (url === 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1' && op.falSinArchivo) return json({ seed: 7 })
     if (url === 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1') return json({ rendered_image: { url: 'https://v3.fal.media/files/x/vista.webp' }, model_mesh: { url: 'https://v3.fal.media/files/x/modelo.glb', content_type: 'model/gltf-binary', file_name: 'modelo.glb' }, model_urls: { glb: { url: 'https://v3.fal.media/files/x/modelo.glb', file_name: 'modelo.glb' } } })
     if (url === 'https://v3.fal.media/files/x/modelo.glb') return new Response(GLB, { status: 200 })
+    // animar (fal-ai/meshy/rigging/multi-animation)
+    if (url === 'https://queue.fal.run/fal-ai/meshy/rigging/multi-animation') {
+      if (op.animar === 'envio_no_humanoide') return json({ detail: 'Rigging requires a humanoid character with clearly defined limbs' }, 422)
+      pedidosDeAnimacion = (JSON.parse(String(init!.body)) as { animation_action_ids: number[] }).animation_action_ids
+      return json({ request_id: 'anim-1', status_url: `${ANIM}/status`, response_url: ANIM })
+    }
+    if (url === `${ANIM}/status`) return json(op.animar === 'no_humanoide' ? { status: 'COMPLETED', error: 'Model is not a humanoid, rigging failed', error_type: 'runtime' } : { status: 'COMPLETED' })
+    if (url === ANIM) {
+      const ids = op.animar === 'falta_uno' ? pedidosDeAnimacion.slice(1) : op.animar === 'sin_clips' ? [] : pedidosDeAnimacion
+      return json({ rig_task_id: 'r1', rigged_character_glb: { url: 'https://v3.fal.media/files/a/rig.glb' }, animations: ids.map((id) => ({ action_id: id, animation_glb: { url: `https://v3.fal.media/files/a/${id}.glb` }, animation_fbx: { url: `https://v3.fal.media/files/a/${id}.fbx` } })) })
+    }
+    if (url.startsWith('https://v3.fal.media/files/a/')) return new Response(GLB, { status: 200 })
     if (url.startsWith('https://api.higgsfield.ai/estimate/')) return json({ type: 'description', pricing_description: 'Each 1,000 video tokens costs $0.01 at 480p or 720p and $0.02 at 1080p.' })
     if (url.startsWith('https://api.higgsfield.ai/bytedance/')) return json({ request_id: 'hf-1', status: 'queued', status_url: 'https://api.higgsfield.ai/requests/hf-1/status' })
     if (url === 'https://api.higgsfield.ai/requests/hf-1/status') { const s = hfEstados.shift() ?? 'completed'; return json({ status: s, ...(s === 'completed' ? { video: { url: 'https://cdn.higgsfield.ai/v/hf-1.mp4' } } : {}) }) }
@@ -317,5 +332,127 @@ describe('galería', () => {
     await crear(d, { ...pedido({ tipo: 'imagen', prompt: 'otra' }), client_id: OTRO, clave: 'clic-otro-001' })
     const l = await listar(d, CLIENTE, null)
     expect(l.ok && l.valor.map((x) => x.client_id)).toEqual([CLIENTE])
+  })
+})
+
+describe('animar un modelo 3D (GO 06-nov)', () => {
+  // un modelo 3D listo del cliente, hecho por el camino normal
+  async function modeloListo(op: Parameters<typeof proveedores>[0] = {}) {
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED'], ...op }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    const a = await avanzar(d, r.valor.pieza.id)
+    if (!a.ok || a.valor.estado !== 'lista') throw new Error('el modelo no quedó listo')
+    return { d, modelo: a.valor }
+  }
+  const animacion = (e: Record<string, unknown>) => {
+    const a = armarAnimacion({ client_id: CLIENTE, clave: 'animar-0000001', ...e }, movimientoExiste)
+    if (!a.ok) throw new Error(a.errores.join('; '))
+    return a.pedido
+  }
+  const librosDeFal = (d: ReturnType<typeof deps>) => d.base.t.costs.filter((c) => c.service === 'estudio:fal').length
+
+  it('el costo es esqueleto 0,20 + 0,12 por movimiento, a la vista antes de crear', async () => {
+    expect(cotizarAnimacion(1).total_usd).toBe(0.32)
+    expect(cotizarAnimacion(3).total_usd).toBe(0.56)
+    const { d, modelo } = await modeloListo()
+    const c = await cotizarLaAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0, 28] }))
+    expect(c.ok && c.valor.total_usd).toBe(0.44)
+  })
+  it('el pedido exige cliente, clave, modelo y de 1 a 10 movimientos que existan en la biblioteca', () => {
+    expect(BIBLIOTECA_DE_MOVIMIENTOS).toHaveLength(656)
+    for (const m of MOVIMIENTOS_COMUNES) expect(movimientoExiste(m.id)).toBe(true)
+    expect(MOVIMIENTOS_COMUNES.map((m) => m.nombre)).toEqual(['Quieto', 'Caminar', 'Correr', 'Saludar', 'Bailar'])
+    const base = { client_id: CLIENTE, clave: 'animar-0000001', origen_pieza_id: CLIENTE }
+    expect(armarAnimacion({ ...base, movimientos: [] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [697] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [2] }, movimientoExiste).ok).toBe(movimientoExiste(2))
+    expect(armarAnimacion({ ...base, clave: 'x', movimientos: [0] }, movimientoExiste).ok).toBe(false)
+    const a = armarAnimacion({ ...base, movimientos: [28, 28, 0] }, movimientoExiste)
+    expect(a.ok && a.pedido.movimientos).toEqual([28, 0])
+  })
+  it('crea una pieza nueva ligada al modelo; al terminar guarda GLB y FBX de cada movimiento y anota lo cobrado una vez', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [30, 28] }))
+    if (!r.ok) throw new Error(r.error)
+    expect(r.valor.pieza.modelo).toBe('meshy-animar')
+    expect(r.valor.pieza.tipo).toBe('3d')
+    expect(r.valor.pieza.parametros.origen_pieza_id).toBe(modelo.id)
+    const envio = d.p.llamadas.find((l) => l.url === 'https://queue.fal.run/fal-ai/meshy/rigging/multi-animation')!
+    expect(JSON.parse(String(envio.init!.body))).toEqual({ model_url: modelo.archivo_url, height_meters: 1.7, animation_action_ids: [30, 28], enable_safety_checker: true })
+    expect((envio.init!.headers as Record<string, string>)['X-Fal-No-Retry']).toBe('1')
+    const [a, b] = await Promise.all([avanzar(d, r.valor.pieza.id), avanzar(d, r.valor.pieza.id)])
+    expect(a.ok && a.valor.estado).toBe('lista')
+    expect(b.ok && b.valor.estado).toBe('lista')
+    const fin = d.base.t.estudio_piezas.find((p) => p.id === r.valor.pieza.id)!
+    const archivos = (fin.parametros as { archivos: Array<{ action_id: number; nombre: string; glb: string; fbx: string }> }).archivos
+    expect(archivos.map((x) => [x.action_id, x.nombre])).toEqual([[30, 'Casual_Walk'], [28, 'Big_Wave_Hello']])
+    for (const x of archivos) { expect(x.glb).toMatch(/^https:\/\/almacen\.test\/oficina-creativos\/estudio\/.+\.glb$/); expect(x.fbx).toMatch(/\.fbx$/) }
+    expect(fin.archivo_url).toBe(archivos[0].glb)
+    expect(fin.archivo_tipo).toBe('glb')
+    expect(Number(fin.costo_usd)).toBe(0.44)
+    expect(librosDeFal(d)).toBe(2) // el modelo original + la animación, una sola vez
+    const fila = d.base.t.costs.filter((c) => c.service === 'estudio:fal').at(-1)!
+    expect(Number(fila.amount_usd_exact)).toBe(0.44)
+    expect(JSON.parse(String(fila.description))).toMatchObject({ pieza_id: r.valor.pieza.id, client_id: CLIENTE, parte: 'animación' })
+  })
+  it('si el modelo no es una figura humana, se dice claro y no se cobra (al enviar o al terminar)', async () => {
+    for (const caso of ['no_humanoide', 'envio_no_humanoide'] as const) {
+      const { d, modelo } = await modeloListo({ animar: caso })
+      const antes = librosDeFal(d)
+      const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+      if (!r.ok) throw new Error(r.error)
+      const fin = caso === 'no_humanoide' ? await avanzar(d, r.valor.pieza.id) : { ok: true as const, valor: r.valor.pieza }
+      expect(fin.ok && fin.valor.estado).toBe('fallida')
+      expect(fin.ok && fin.valor.error).toMatch(/no parece una figura humana.*No se cobró/)
+      expect(fin.ok && Number(fin.valor.costo_usd)).toBe(0)
+      expect(librosDeFal(d)).toBe(antes)
+    }
+  })
+  it('fal termina sin ningún movimiento: la pieza y el libro dicen la misma cifra; si falta uno, se avisa', async () => {
+    const s = await modeloListo({ animar: 'sin_clips' })
+    const r = await crearAnimacion(s.d, animacion({ origen_pieza_id: s.modelo.id, movimientos: [0] }))
+    if (!r.ok) throw new Error(r.error)
+    const f = await avanzar(s.d, r.valor.pieza.id)
+    expect(f.ok && f.valor.estado).toBe('fallida')
+    expect(f.ok && Number(f.valor.costo_usd)).toBe(0.32)
+    expect(Number(s.d.base.t.costs.at(-1)!.amount_usd_exact)).toBe(0.32)
+    const u = await modeloListo({ animar: 'falta_uno' })
+    const r2 = await crearAnimacion(u.d, animacion({ origen_pieza_id: u.modelo.id, movimientos: [0, 28] }))
+    if (!r2.ok) throw new Error(r2.error)
+    const g = await avanzar(u.d, r2.valor.pieza.id)
+    expect(g.ok && g.valor.estado).toBe('lista')
+    expect(g.ok && g.valor.aviso).toMatch(/no devolvió: Idle/)
+  })
+  it('solo se anima un modelo 3D listo del mismo cliente, y nunca una animación', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const ajeno = await crearAnimacion(d, { ...animacion({ origen_pieza_id: modelo.id, movimientos: [0] }), client_id: OTRO })
+    expect(!ajeno.ok && ajeno.status).toBe(404)
+    const img = await crear(d, { ...pedido({ tipo: 'imagen', prompt: 'una ola' }), clave: 'clic-imagen-01' })
+    if (!img.ok) throw new Error('no creó')
+    const deImagen = await crearAnimacion(d, animacion({ origen_pieza_id: img.valor.pieza.id, movimientos: [0] }))
+    expect(!deImagen.ok && deImagen.error).toBe('modelo_no_animable')
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+    if (!r.ok) throw new Error(r.error)
+    await avanzar(d, r.valor.pieza.id)
+    const deAnimacion = await crearAnimacion(d, animacion({ origen_pieza_id: r.valor.pieza.id, movimientos: [0], clave: 'animar-0000002' }))
+    expect(!deAnimacion.ok && deAnimacion.detalle).toMatch(/ya es una animación/)
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(1)
+  })
+  it('el doble clic no cobra dos veces', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const p = animacion({ origen_pieza_id: modelo.id, movimientos: [0] })
+    const [a, b] = await Promise.all([crearAnimacion(d, p), crearAnimacion(d, p)])
+    expect(a.ok && b.ok).toBe(true)
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(1)
+    expect(d.base.t.estudio_piezas.filter((x) => x.modelo === 'meshy-animar')).toHaveLength(1)
+  })
+  it('la ruta exige la llave interna y el catálogo trae precio, comunes y biblioteca', () => {
+    const ruta = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'estudio', 'animar', 'route.ts'), 'utf8')
+    expect(ruta).toContain('checkInternalKey(request)')
+    expect(ruta).toContain('export const maxDuration = 800')
+    const cat = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'estudio', 'catalogo', 'route.ts'), 'utf8')
+    expect(cat).toContain('animar: { precio: ANIMAR.precio, maximo: ANIMAR.maximo, comunes: MOVIMIENTOS_COMUNES, biblioteca: BIBLIOTECA_DE_MOVIMIENTOS }')
   })
 })

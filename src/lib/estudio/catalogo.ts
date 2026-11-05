@@ -193,3 +193,68 @@ export function miniaturaDe3D(salida: Record<string, unknown>): string | null {
   }
   return null
 }
+
+// ── animar un modelo 3D (GO de Lenovo 06-nov · firma de Emilio: sin boceto solo esta vez) ─────────────────
+/**
+ * fal.ai `fal-ai/meshy/rigging/multi-animation` (leída 06-nov): pone esqueleto al GLB y genera un clip por movimiento.
+ *  · entrada: `model_url` (GLB público), `height_meters` (1,7 por omisión), `animation_action_ids` (1 a 10, ids 0-696), `enable_safety_checker`.
+ *  · salida: `animations[] {action_id, animation_glb, animation_fbx}`, `rigged_character_glb/fbx`, `basic_animations` (caminar y correr).
+ *  · precio: US$ 0,20 por pedido + US$ 0,12 por movimiento. Solo figuras humanas con brazos y piernas definidos.
+ */
+export const ANIMAR = {
+  id: 'meshy-animar',
+  nombre: 'Meshy · animar',
+  endpoint: 'fal-ai/meshy/rigging/multi-animation',
+  precio: { base: 0.2, por_movimiento: 0.12 },
+  maximo: 10,
+  altura_m: 1.7,
+} as const
+/** los más comunes primero (ids de la biblioteca de Meshy) */
+export const MOVIMIENTOS_COMUNES: ReadonlyArray<{ id: number; nombre: string }> = [
+  { id: 0, nombre: 'Quieto' },
+  { id: 30, nombre: 'Caminar' },
+  { id: 14, nombre: 'Correr' },
+  { id: 28, nombre: 'Saludar' },
+  { id: 591, nombre: 'Bailar' },
+]
+
+export interface PedidoDeAnimacion { client_id: string; clave: string; origen_pieza_id: string; movimientos: number[] }
+
+export function armarAnimacion(e: Record<string, unknown>, existe: (id: number) => boolean): { ok: true; pedido: PedidoDeAnimacion } | { ok: false; errores: string[] } {
+  const errores: string[] = []
+  const client_id = texto(e.client_id)
+  if (!UUID.test(client_id)) errores.push('`client_id` es obligatorio: toda pieza pertenece a un cliente')
+  const clave = texto(e.clave)
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(clave)) errores.push('`clave` es obligatoria (8 a 80 letras, números, guion): sin ella un doble clic cobraría dos veces')
+  const origen_pieza_id = texto(e.origen_pieza_id)
+  if (!UUID.test(origen_pieza_id)) errores.push('`origen_pieza_id` es el modelo 3D que se anima')
+  const crudos = Array.isArray(e.movimientos) ? e.movimientos : []
+  const movimientos = [...new Set(crudos.map((x) => Number(x)))]
+  if (!movimientos.length) errores.push('elige al menos un movimiento')
+  else if (movimientos.length > ANIMAR.maximo) errores.push(`hasta ${ANIMAR.maximo} movimientos por vez`)
+  else if (movimientos.some((x) => !Number.isInteger(x) || !existe(x))) errores.push('hay un movimiento que no está en la biblioteca')
+  if (errores.length) return { ok: false, errores }
+  return { ok: true, pedido: { client_id, clave, origen_pieza_id, movimientos } }
+}
+
+export function cotizarAnimacion(n: number): Cotizacion {
+  const partes = [{ que: 'esqueleto', usd: ANIMAR.precio.base }, { que: `${n} movimiento${n === 1 ? '' : 's'}`, usd: +(ANIMAR.precio.por_movimiento * n).toFixed(4) }]
+  return { total_usd: +partes.reduce((s, x) => s + x.usd, 0).toFixed(4), partes }
+}
+
+/** lo que se manda a fal para animar */
+export const entradaDeAnimacion = (modeloUrl: string, movimientos: number[]) => ({ model_url: modeloUrl, height_meters: ANIMAR.altura_m, animation_action_ids: movimientos, enable_safety_checker: true })
+
+/** los clips de la respuesta, en el orden pedido (solo los que traen archivo) */
+export function clipsDeAnimacion(salida: Record<string, unknown>): Array<{ action_id: number; glb: string | null; fbx: string | null }> {
+  const url = (v: unknown) => (v && typeof v === 'object' && typeof (v as { url?: unknown }).url === 'string' ? (v as { url: string }).url : null)
+  const lista = Array.isArray(salida.animations) ? salida.animations : []
+  return lista
+    .map((c) => (c && typeof c === 'object' ? (c as Record<string, unknown>) : {}))
+    .map((c) => ({ action_id: Number(c.action_id), glb: url(c.animation_glb), fbx: url(c.animation_fbx) }))
+    .filter((c) => Number.isInteger(c.action_id) && (c.glb || c.fbx))
+}
+
+/** un fallo de fal que dice que el modelo no se puede montar en un esqueleto humano: se explica en claro */
+export const noEsHumanoide = (error: string) => /humanoid|rig|limb|skeleton|biped|pose/i.test(error)
+export const AVISO_NO_HUMANOIDE = 'Este modelo no parece una figura humana con brazos y piernas definidos, así que no se puede animar. No se cobró.'
