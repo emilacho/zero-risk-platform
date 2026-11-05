@@ -186,9 +186,34 @@ async function runSdk(cuerpo, res) {
   const clave = `${cuerpo.workflow_execution_id || ''}|${cuerpo.paso || cuerpo.step_name || cuerpo.agent}`
   const intento = (intentosPorPaso.get(clave) || 0) + 1
   intentosPorPaso.set(clave, intento)
+  const pasoDelPedido = cuerpo.paso || cuerpo.step_name || null
+  // para comprobar qué recibió cada empleado: el pedido entero, solo en la carpeta del caso
+  if (ESCENARIO.guardar_pedidos) fs.appendFileSync(path.join(SALIDA, 'pedidos.jsonl'), JSON.stringify({ agente: cuerpo.agent, paso: pasoDelPedido, tarea: cuerpo.task }) + '\n')
+  const claveDelPunto = `${cuerpo.workflow_id}|${cuerpo.client_id}|${cuerpo.step_name || cuerpo.agent}`
+  const reusa = !cuerpo.force_restart && cuerpo.workflow_id && cuerpo.client_id && puntosDeControl.has(claveDelPunto)
+  // el corredor falló sin hacer nada: ni cobra ni deja punto de control
+  const antes = (ESCENARIO.corredor_cae || []).find((x) => x.paso === pasoDelPedido && (x.intentos || [1]).includes(intento))
+  if (antes) { anotar({ tipo: 'corredor_cae', paso: pasoDelPedido, intento, status: antes.status || 502 }); if (antes.status === 'red') return res.destroy(); res.writeHead(antes.status || 502, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ success: false, error: 'corredor caído (provocado)' })) }
+  // la conexión se cae pero el empleado sigue trabajando: su punto de control queda «en curso» N s y luego termina
+  const sigue = ESCENARIO.sigue_en_vuelo && ESCENARIO.sigue_en_vuelo.paso === pasoDelPedido && intento === 1 ? ESCENARIO.sigue_en_vuelo : null
+  if (sigue) {
+    const fila = armarFila('workflow_checkpoints', { workflow_id: cuerpo.workflow_id, workflow_execution_id: String(cuerpo.workflow_execution_id), client_id: cuerpo.client_id, step_name: cuerpo.step_name || cuerpo.agent, step_status: 'in_progress', output_ref: null, updated_at: new Date().toISOString() })
+    filasDe('workflow_checkpoints').push(fila)
+    anotar({ tipo: 'sigue_en_vuelo', paso: pasoDelPedido, s: sigue.s })
+    res.writeHead(502, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ success: false, error: 'conexión caída (provocado)' }))
+    const costoLento = Number((ESCENARIO.costo || {})['*'] ?? 0)
+    await dormir(sigue.s * 1000)
+    if (costoLento > 0) filasDe('agent_invocations').push(armarFila('agent_invocations', { agent_name: cuerpo.agent, client_id: cuerpo.client_id, cost_usd: costoLento, trabajo_tipo: cuerpo.trabajo_tipo ?? null, trabajo_id: cuerpo.trabajo_id ?? null, started_at: new Date().toISOString(), workflow_id: cuerpo.workflow_id, workflow_execution_id: cuerpo.workflow_execution_id, paso: pasoDelPedido }))
+    const textoLento = typeof moldes.responder === 'function' ? await moldes.responder(cuerpo, { intento, tablas }) : ''
+    puntosDeControl.set(claveDelPunto, textoLento)
+    fila.step_status = 'completed'; fila.updated_at = new Date().toISOString()
+    anotar({ tipo: 'agente', agente: cuerpo.agent, paso: pasoDelPedido, intento, trabajo_tipo: cuerpo.trabajo_tipo ?? null, trabajo_id: cuerpo.trabajo_id ?? null, termino_tarde: true })
+    return
+  }
   // costo SIMULADO (no sale plata): lo que el escenario diga por paso o «*». Se escribe en el libro en memoria como lo hace el corredor, para que los topes y frenos reales lo vean.
   const pasoCosto = String(cuerpo.paso || cuerpo.step_name || '')
-  const costoSim = Number((ESCENARIO.costo || {})[pasoCosto] ?? (ESCENARIO.costo || {})[cuerpo.agent] ?? (ESCENARIO.costo || {})['*'] ?? 0)
+  const costoSim = reusa ? 0 : Number((ESCENARIO.costo || {})[pasoCosto] ?? (ESCENARIO.costo || {})[cuerpo.agent] ?? (ESCENARIO.costo || {})['*'] ?? 0)
   if (costoSim > 0) filasDe('agent_invocations').push(armarFila('agent_invocations', { agent_name: cuerpo.agent, client_id: cuerpo.client_id, cost_usd: costoSim, trabajo_tipo: cuerpo.trabajo_tipo ?? null, trabajo_id: cuerpo.trabajo_id ?? null, started_at: new Date().toISOString(), workflow_id: cuerpo.workflow_id, workflow_execution_id: String(cuerpo.workflow_execution_id || ''), status: 'simulado', paso: pasoCosto }))
   const demoraSim = Number((ESCENARIO.demora_s || {})[pasoCosto] ?? 0)
   if (demoraSim > 0 && !cuerpo.callback_url) await dormir(demoraSim * 1000)
@@ -210,6 +235,8 @@ async function runSdk(cuerpo, res) {
   const tarde = (ESCENARIO.termina_tarde_s || {})[reg.paso]
   if (tarde !== undefined && cuerpo.callback_url) { anotar({ ...reg, termina_en_s: tarde }); res.writeHead(202, { 'content-type': 'application/json' }); res.end(JSON.stringify({ accepted: true, delivered_by: 'runner', dispatch_key: crypto.randomUUID(), ack_timestamp: new Date().toISOString() })); await dormir(tarde * 1000); puntoDeControl(); anotar({ tipo: 'punto_de_control_tarde', agente: cuerpo.agent }); return }
   if (f && f.status === 'red') { anotar({ ...reg, fallo_provocado: 'red' }); return res.destroy() }
+  // con latido, lo que tardó llega en 200 con su código verdadero en el cuerpo
+  if (f && f.en_cuerpo) { anotar({ ...reg, fallo_provocado: f.status || 500, en_cuerpo: true }); res.writeHead(200, { 'content-type': 'application/json' }); return res.end('\n\n' + JSON.stringify({ success: false, error: 'fallo provocado', estado_http: f.status || 500 })) }
   if (f) { anotar({ ...reg, fallo_provocado: f.status || 500 }); res.writeHead(f.status || 500, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ success: false, error: 'fallo provocado', cost_usd: f.costo_usd ?? 0 })) }
   anotar(reg)
   if (cuerpo.callback_url) {
@@ -269,6 +296,17 @@ const srv = http.createServer(async (req, res) => {
       res.writeHead(rr.status, { 'content-type': 'application/json' }); return res.end(await rr.text())
     }
     // la mesa pasa por aquí para provocarle cortes: antes de entrar, soltando el turno en marcha, o colgando la conexión
+    // abrir la mesa también pasa por el arnés: sus cortes se provocan aparte, para no mover la cuenta de los turnos
+    if (url.pathname === '/__mesa_abrir') {
+      globalThis.__llamadasAbrir = (globalThis.__llamadasAbrir || 0) + 1
+      const n = globalThis.__llamadasAbrir, f = ESCENARIO.abrir_falla
+      const toca = f && n <= f.veces
+      const h = {}; for (const [k, v] of Object.entries(req.headers)) if (!['host', 'content-length', 'connection'].includes(k)) h[k] = v
+      anotar({ tipo: 'abrir_llamada', n, provocado: toca ? (f.status || 504) : null })
+      if (toca) { res.writeHead(f.status || 504, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'corte provocado al abrir' })) }
+      const rr = await fetch('http://localhost:4200/api/planeacion/mesa', { method: req.method, headers: h, body: crudo })
+      res.writeHead(rr.status, { 'content-type': 'application/json' }); return res.end(await rr.text())
+    }
     if (url.pathname === '/__mesa') {
       globalThis.__llamadasMesa = (globalThis.__llamadasMesa || 0) + 1
       const n = globalThis.__llamadasMesa, f = ESCENARIO.mesa_falla

@@ -22,7 +22,7 @@ const COMPLETAS = {
   cadena_config: '',
   jefatura_grading_policies: '',
   jefatura_config: '',
-  agents: 'select=id,name,model,status',
+  agents: 'select=id,name,model,status,is_active',
   plan_catalogo_fuentes: 'vigente=eq.true',
   plan_catalogo_tipos: 'vigente=eq.true',
   plan_catalogo_reglas: 'vigente=eq.true',

@@ -35,6 +35,16 @@ export async function responder(c, ctx) {
   const paso = String(c.paso || c.step_name || '')
   const ag = String(c.agent || '')
   const intento = ctx.intento
+  // un analista de la mesa de análisis: lista de hallazgos que cita las fichas de su material; la última línea sirve para comprobar que nada se cortó
+  if (paso.startsWith('analisis-')) {
+    const ids = [...String(c.task || '').matchAll(/\[([0-9a-f-]{36})\]/g)].map((m) => m[1])
+    const cita = ids.length ? ' [' + ids[0] + ']' : ''
+    const largo = Number(ESC.largo_informe) || 800
+    const L = []; let n = 0, t = 0
+    while (t < largo) { const l = '- Hallazgo ' + paso + ' número ' + ++n + ' con su explicación larga de lo que se observó en el material' + cita; L.push(l); t += l.length + 1 }
+    L.push('- ULTIMA-LINEA-' + paso + cita)
+    return L.join('\n')
+  }
   if (paso === 'mesa-estrategia-jefe-marketing') return j(ESC.seis_aportes ? { ...PLANTEO_MESA, canales: [{ canal: 'Instagram', activo: true }, { canal: 'Búsqueda paga (Google Ads)', activo: true }, { canal: 'SEO local', activo: true }, { canal: 'Contenido orgánico', activo: true }] } : PLANTEO_MESA)
   if (paso === 'mesa-estrategia-consolida' || /consolida/.test(paso)) { consolidas++; const m = consolidas === 1 ? ESC.acta_meta : ESC.acta_meta_2 ?? ESC.acta_meta; return ESC.formato_roto === 'consolida' ? '(simulado) texto sin JSON' : j(m ? { ...ACTA, numero: { ...ACTA.numero, meta: m } } : ACTA) }
   if (paso.startsWith('mesa-estrategia-')) return ESC.formato_roto === paso ? '(simulado) texto sin JSON' : APORTE(ag)

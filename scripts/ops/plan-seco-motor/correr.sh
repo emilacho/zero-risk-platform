@@ -17,6 +17,10 @@ curl -s -XPATCH "localhost:4100/rest/v1/finanzas_config?id=eq.1" -H 'content-typ
 AHORA="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; HOY="${AHORA%%T*}"
 [ -n "${SECO_SIN_PORTERO:-}" ] || curl -s -XPOST "localhost:4100/rest/v1/cerebro_portero_corridas" -H 'content-type: application/json' -d "{\"client_id\":\"0a2ffbd4-957c-4315-a37f-b9e4fbbbb312\",\"dia\":\"$HOY\",\"estado\":\"hecha\",\"creado_en\":\"$AHORA\",\"resumen\":{\"unidades\":1,\"vigilante\":{\"ok\":true,\"revisado_en\":\"$AHORA\"}}}" -o /dev/null
 # ventas de la caja: solo el atributo y su procedencia de las 12 métricas reales (foto aparte, fuera del repositorio); en memoria, nunca se toca el cerebro real
+# la mesa de análisis encendida para este cliente, solo en memoria; y, si se pide, una carpeta con informes vigentes
+[ -z "${SECO_ANALISIS:-}" ] || curl -s -XPATCH "localhost:4100/rest/v1/cadena_config?clave=eq.mesa_de_analisis" -H 'content-type: application/json' -d '{"valor":{"encendida":true,"clientes":["0a2ffbd4-957c-4315-a37f-b9e4fbbbb312"]}}' -o /dev/null
+[ -z "${SECO_FICHAS:-}" ] || curl -s -XPOST "localhost:4100/rest/v1/cerebro_fichas" -H 'content-type: application/json' --data-binary "@$SECO_FICHAS" -o /dev/null
+[ -z "${SECO_TROZOS:-}" ] || curl -s -XPOST "localhost:4100/rest/v1/client_brain_chunks" -H 'content-type: application/json' --data-binary "@$SECO_TROZOS" -o /dev/null
 [ -z "${SECO_CAJA:-}" ] || curl -s -XPOST "localhost:4100/rest/v1/cerebro_fichas" -H 'content-type: application/json' --data-binary "@$SECO_CAJA" -o /dev/null
 # cupo: gastado de las últimas 24 h y tope de la ficha, solo en memoria
 [ -z "${SECO_GASTADO:-}" ] || curl -s -XPOST "localhost:4100/rest/v1/agent_invocations" -H 'content-type: application/json' -d "{\"agent_name\":\"siembra\",\"client_id\":\"0a2ffbd4-957c-4315-a37f-b9e4fbbbb312\",\"cost_usd\":$SECO_GASTADO,\"started_at\":\"$AHORA\",\"workflow_execution_id\":\"siembra\"}" -o /dev/null
