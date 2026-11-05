@@ -193,7 +193,17 @@ async function runSdk(cuerpo, res) {
   const reusa = !cuerpo.force_restart && cuerpo.workflow_id && cuerpo.client_id && puntosDeControl.has(claveDelPunto)
   // el corredor falló sin hacer nada: ni cobra ni deja punto de control
   const antes = (ESCENARIO.corredor_cae || []).find((x) => x.paso === pasoDelPedido && (x.intentos || [1]).includes(intento))
-  if (antes) { anotar({ tipo: 'corredor_cae', paso: pasoDelPedido, intento, status: antes.status || 502 }); if (antes.status === 'red') return res.destroy(); res.writeHead(antes.status || 502, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ success: false, error: 'corredor caído (provocado)' })) }
+  if (antes) { anotar({ tipo: 'corredor_cae', paso: pasoDelPedido, intento, status: antes.status || 502 }); if (antes.status === 'red') return res.destroy(); res.writeHead(antes.status || 502, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'agent-runner upstream failed', upstream_status: 503 })) }
+  // CC6/CC7, 05-nov · el empleado termina y falla: el corredor deja su fila «en curso» para siempre y contesta 500 con su error
+  const falla = (ESCENARIO.empleado_falla || []).find((x) => x.paso === pasoDelPedido && (x.intentos || [1]).includes(intento))
+  if (falla) {
+    const lista = filasDe('workflow_checkpoints'), paso = cuerpo.step_name || cuerpo.agent
+    const ya = lista.find((x) => x.workflow_id === cuerpo.workflow_id && x.client_id === cuerpo.client_id && x.step_name === paso)
+    if (ya) { ya.step_status = 'in_progress'; ya.updated_at = new Date().toISOString() } else lista.push(armarFila('workflow_checkpoints', { workflow_id: cuerpo.workflow_id, workflow_execution_id: String(cuerpo.workflow_execution_id), client_id: cuerpo.client_id, step_name: paso, step_status: 'in_progress', output_ref: null, updated_at: new Date().toISOString() }))
+    anotar({ tipo: 'empleado_falla', paso: pasoDelPedido, intento, tope: !!falla.tope, force_restart: !!cuerpo.force_restart })
+    res.writeHead(500, { 'content-type': 'application/json' })
+    return res.end(JSON.stringify({ success: false, error: falla.tope ? 'error_max_budget_usd · el empleado alcanzó el tope de gasto de la corrida y se DETUVO' : 'el proveedor del modelo devolvió un error' }))
+  }
   // la conexión se cae pero el empleado sigue trabajando: su punto de control queda «en curso» N s y luego termina
   const sigue = ESCENARIO.sigue_en_vuelo && ESCENARIO.sigue_en_vuelo.paso === pasoDelPedido && intento === 1 ? ESCENARIO.sigue_en_vuelo : null
   if (sigue) {
@@ -201,7 +211,7 @@ async function runSdk(cuerpo, res) {
     filasDe('workflow_checkpoints').push(fila)
     anotar({ tipo: 'sigue_en_vuelo', paso: pasoDelPedido, s: sigue.s })
     res.writeHead(502, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ success: false, error: 'conexión caída (provocado)' }))
+    res.end(JSON.stringify({ error: 'agent-runner upstream failed', upstream_status: 503 }))
     const costoLento = Number((ESCENARIO.costo || {})['*'] ?? 0)
     await dormir(sigue.s * 1000)
     if (costoLento > 0) filasDe('agent_invocations').push(armarFila('agent_invocations', { agent_name: cuerpo.agent, client_id: cuerpo.client_id, cost_usd: costoLento, trabajo_tipo: cuerpo.trabajo_tipo ?? null, trabajo_id: cuerpo.trabajo_id ?? null, started_at: new Date().toISOString(), workflow_id: cuerpo.workflow_id, workflow_execution_id: cuerpo.workflow_execution_id, paso: pasoDelPedido }))
@@ -236,8 +246,8 @@ async function runSdk(cuerpo, res) {
   if (tarde !== undefined && cuerpo.callback_url) { anotar({ ...reg, termina_en_s: tarde }); res.writeHead(202, { 'content-type': 'application/json' }); res.end(JSON.stringify({ accepted: true, delivered_by: 'runner', dispatch_key: crypto.randomUUID(), ack_timestamp: new Date().toISOString() })); await dormir(tarde * 1000); puntoDeControl(); anotar({ tipo: 'punto_de_control_tarde', agente: cuerpo.agent }); return }
   if (f && f.status === 'red') { anotar({ ...reg, fallo_provocado: 'red' }); return res.destroy() }
   // con latido, lo que tardó llega en 200 con su código verdadero en el cuerpo
-  if (f && f.en_cuerpo) { anotar({ ...reg, fallo_provocado: f.status || 500, en_cuerpo: true }); res.writeHead(200, { 'content-type': 'application/json' }); return res.end('\n\n' + JSON.stringify({ success: false, error: 'fallo provocado', estado_http: f.status || 500 })) }
-  if (f) { anotar({ ...reg, fallo_provocado: f.status || 500 }); res.writeHead(f.status || 500, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ success: false, error: 'fallo provocado', cost_usd: f.costo_usd ?? 0 })) }
+  if (f && f.en_cuerpo) { anotar({ ...reg, fallo_provocado: f.status || 500, en_cuerpo: true }); res.writeHead(200, { 'content-type': 'application/json' }); return res.end('\n\n' + JSON.stringify({ error: 'agent-runner upstream failed', estado_http: f.status || 500 })) }
+  if (f) { anotar({ ...reg, fallo_provocado: f.status || 500 }); res.writeHead(f.status || 500, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ ...((f.status || 500) === 500 ? { success: false, error: 'fallo provocado' } : { error: 'agent-runner upstream failed' }), cost_usd: f.costo_usd ?? 0 })) }
   anotar(reg)
   if (cuerpo.callback_url) {
     res.writeHead(202, { 'content-type': 'application/json' })
