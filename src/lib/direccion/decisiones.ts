@@ -200,3 +200,11 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   const contestadas = registro.contestadas.map((c) => ({ ...c, titulo: tituloParaElDueno(c.titulo) }))
   return { ok: true, generado_en: hora, completo: estaCompleto(fuentes), total: decisiones.length, decisiones, omitidas, fuentes, sin_fuente: SIN_FUENTE_DECISIONES, contestadas, registro_completo: registro.completo, fuentes_del_registro: registro.fuentes }
 }
+
+/** 05-nov · de estos temas, los que el dueño descartó: con todos descartados, la pausa del plan se levanta. Una lectura fallida LANZA */
+export async function temasDescartadosPorElDueno(db: { from(tabla: string): any }, client_id: string, temas: string[]): Promise<string[]> {
+  if (!temas.length) return []
+  const r = await db.from('cerebro_dueno_preguntas').select('tema').eq('client_id', client_id).eq('estado', 'obsoleta').in('tema', temas)
+  if (r.error) throw new Error(`no pude leer las preguntas descartadas: ${r.error.message}`)
+  return ((r.data as Array<{ tema: unknown }> | null) ?? []).map((x) => String(x.tema))
+}

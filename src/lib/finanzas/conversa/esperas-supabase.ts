@@ -1,7 +1,7 @@
 /** La espera de la oficina financiera sobre `esperas_del_dueno` (tipo `finanzas`) y `plan_corridas`. Sin lógica: solo traduce el puerto de `pausa.ts` a consultas. */
 import type { Db } from '../almacen-supabase'
 import type { DespertarAlPlan, EsperaDeFinanzas, PuertoDeEsperas } from './pausa'
-import { temasDescartadosPorElDueno } from '../../direccion/decisiones-registro'
+import { temasDescartadosPorElDueno } from '../../direccion/decisiones'
 
 type Fila = Record<string, unknown>
 const TABLA = 'esperas_del_dueno'
