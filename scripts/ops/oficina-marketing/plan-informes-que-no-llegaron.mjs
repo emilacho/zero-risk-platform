@@ -17,7 +17,7 @@ const informesQueNoLlegaron = itemsDeLaMesa.filter((j) => {
   return j.estado === 'sin_respuesta' && !/la mesa está (apagada|encendida pero)|fue un ensayo/.test(String(j.motivo || ''));
 });
 const bloqueInformesQueNoLlegaron = informesQueNoLlegaron.length
-  ? '\\n## Informes de análisis que no llegaron (lo declara el sistema, no el redactor)\\n' + informesQueNoLlegaron.map((j) => '- ' + String(j.objetivo || 'un informe de análisis').split('_').join(' ') + ' — ' + (j.error !== undefined && j.error !== null ? 'la mesa de análisis no contestó' : String(j.motivo || 'sin motivo declarado').split(' · ')[0].split('_').join(' '))).join('\\n') + '\\nNada de este plan se apoya en esos informes.\\n'
+  ? '\\n## Informes de análisis que no llegaron (lo declara el sistema, no el redactor)\\n' + informesQueNoLlegaron.map((j) => '- ' + String(j.objetivo || 'un informe de análisis').split('_').join(' ') + ' — ' + (j.error !== undefined && j.error !== null ? 'la mesa de análisis no contestó' : String(j.motivo || 'sin motivo declarado').split(' · ')[0].split('_').join(' '))).join('\\n') + '\\n'
   : '';
 `
 
