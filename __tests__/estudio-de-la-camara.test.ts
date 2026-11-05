@@ -24,7 +24,7 @@ const COLUMNAS: Record<string, Set<string>> = {
 }
 
 type Fila = Record<string, unknown>
-function baseFalsa(clientes = [CLIENTE, OTRO]) {
+function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}) {
   const t: Record<string, Fila[]> = { estudio_piezas: [], costs: [], clients: clientes.map((id) => ({ id })) }
   const subidas: Array<{ ruta: string; bytes: number; tipo: string }> = []
   let n = 0
@@ -67,7 +67,7 @@ function baseFalsa(clientes = [CLIENTE, OTRO]) {
     storage: {
       from(b: string) {
         return {
-          upload: async (ruta: string, bytes: Buffer, o: { contentType: string }) => { subidas.push({ ruta, bytes: bytes.length, tipo: o.contentType }); return { error: null } },
+          upload: async (ruta: string, bytes: Buffer, o: { contentType: string }) => { if (op.subirFalla) return { error: { message: 'almacén lleno' } }; subidas.push({ ruta, bytes: bytes.length, tipo: o.contentType }); return { error: null } },
           getPublicUrl: (ruta: string) => ({ data: { publicUrl: `https://almacen.test/${b}/${ruta}` } }),
         }
       },
@@ -77,7 +77,7 @@ function baseFalsa(clientes = [CLIENTE, OTRO]) {
 }
 
 interface Llamada { url: string; init?: RequestInit }
-function proveedores(op: { falEstado?: string[]; falError?: boolean; hfEstado?: string[] } = {}) {
+function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[] } = {}) {
   const llamadas: Llamada[] = []
   const falEstados = [...(op.falEstado ?? ['IN_PROGRESS', 'COMPLETED'])]
   const hfEstados = [...(op.hfEstado ?? ['in_progress', 'completed'])]
@@ -91,6 +91,7 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; hfEstado?: 
       const s = falEstados.shift() ?? 'COMPLETED'
       return json(s === 'COMPLETED' && op.falError ? { status: s, error: 'mesh failed', error_type: 'runtime' } : { status: s })
     }
+    if (url === 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1' && op.falSinArchivo) return json({ seed: 7 })
     if (url === 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1') return json({ rendered_image: { url: 'https://v3.fal.media/files/x/vista.webp' }, model_mesh: { url: 'https://v3.fal.media/files/x/modelo.glb', content_type: 'model/gltf-binary', file_name: 'modelo.glb' }, model_urls: { glb: { url: 'https://v3.fal.media/files/x/modelo.glb', file_name: 'modelo.glb' } } })
     if (url === 'https://v3.fal.media/files/x/modelo.glb') return new Response(GLB, { status: 200 })
     if (url.startsWith('https://api.higgsfield.ai/estimate/')) return json({ type: 'description', pricing_description: 'Each 1,000 video tokens costs $0.01 at 480p or 720p and $0.02 at 1080p.' })
@@ -259,6 +260,25 @@ describe('3D', () => {
     expect(a.ok && a.valor.estado).toBe('fallida')
     expect(a.ok && Number(a.valor.costo_usd)).toBe(0.01327)
     expect(d.base.t.costs.map((c) => c.service)).toEqual(['estudio:openai'])
+  })
+  it('si fal termina sin archivo, la pieza y el libro dicen la misma cifra (CC7 · 933)', async () => {
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED', 'COMPLETED'], falSinArchivo: true }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'termo naranja' }))
+    if (!r.ok) throw new Error('no creó')
+    const [a, b] = await Promise.all([avanzar(d, r.valor.pieza.id), avanzar(d, r.valor.pieza.id)])
+    expect(a.ok && a.valor.estado).toBe('fallida')
+    expect(b.ok && b.valor.estado).toBe('fallida')
+    const libro = d.base.t.costs.reduce((s, c) => s + Number(c.amount_usd_exact), 0)
+    expect(d.base.t.costs.map((c) => c.service).sort()).toEqual(['estudio:fal', 'estudio:openai'])
+    expect(+libro.toFixed(6)).toBe(Number(d.base.t.estudio_piezas[0].costo_usd))
+  })
+  it('una imagen cobrada que no se pudo guardar: la pieza dice lo mismo que el libro (CC7 · 933)', async () => {
+    const d = deps(baseFalsa([CLIENTE, OTRO], { subirFalla: true }))
+    const r = await crear(d, pedido({ tipo: 'imagen', prompt: 'vaso en la playa', formato: '9:16' }))
+    expect(r.ok && r.valor.pieza.estado).toBe('fallida')
+    expect(d.base.t.costs).toHaveLength(1)
+    expect(Number(d.base.t.estudio_piezas[0].costo_usd)).toBe(Number(d.base.t.costs[0].amount_usd_exact))
+    expect(Number(d.base.t.estudio_piezas[0].costo_usd)).not.toBe(Number(d.base.t.estudio_piezas[0].costo_estimado_usd))
   })
   it('una dirección de estado que no es de fal no recibe la llave', async () => {
     const d = deps()

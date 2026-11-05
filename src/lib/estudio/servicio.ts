@@ -150,16 +150,18 @@ async function resolverFoto(d: Deps, p: Pedido): Promise<Resultado<{ url: string
 }
 
 /** crea la imagen con OpenAI, la guarda y anota su costo. Devuelve dirección, costo y aviso del libro */
-async function imagenGuardada(d: Deps, x: { piezaId: string; clientId: string; prompt: string; formato: string; foto: { bytes: Buffer; tipo: string } | null; ruta: string; parte: string }): Promise<Resultado<{ url: string; usd: number; aviso: string | null }>> {
+// un fallo dice cuánto quedó cobrado (lo mismo que se anotó en el libro), para que la pieza y el libro digan la misma cifra
+type FallaCobrada = ReturnType<typeof falla> & { cobrado_usd: number }
+async function imagenGuardada(d: Deps, x: { piezaId: string; clientId: string; prompt: string; formato: string; foto: { bytes: Buffer; tipo: string } | null; ruta: string; parte: string }): Promise<{ ok: true; valor: { url: string; usd: number; aviso: string | null } } | FallaCobrada> {
   const tamano = TAMANO_POR_FORMATO[x.formato] ?? '1024x1024'
   const img = await crearImagen(d.fetch, d.llaves.openai, { prompt: x.prompt, modelo: d.modeloDeImagen, tamano, foto: x.foto })
-  if (!img.ok) return falla(502, 'imagen_fallida', `OpenAI ${img.status} · ${img.error}`)
+  if (!img.ok) return { ...falla(502, 'imagen_fallida', `OpenAI ${img.status} · ${img.error}`), cobrado_usd: 0 }
   const costo = costForImage({ model: d.modeloDeImagen, size: tamano, usage: img.usage })
   const fmt = sniffImageFormat(img.bytes)
   // el cobro ya ocurrió: se anota antes de intentar guardar el archivo
   const aviso = await anotarCosto(d, { piezaId: x.piezaId, clientId: x.clientId, proveedor: 'openai', modelo: d.modeloDeImagen, parte: x.parte, usd: costo.cost_usd, base: costo.basis })
   const up = await subir(d, `${x.ruta}.${fmt.ext}`, img.bytes, fmt.contentType)
-  if (!up.ok) return { ok: false, status: up.status, error: up.error, detalle: `imagen cobrada (US$ ${costo.cost_usd}) pero no guardada: ${up.detalle ?? ''}` }
+  if (!up.ok) return { ok: false, status: up.status, error: up.error, detalle: `imagen cobrada (US$ ${costo.cost_usd}) pero no guardada: ${up.detalle ?? ''}`, cobrado_usd: costo.cost_usd }
   return { ok: true, valor: { url: up.valor, usd: costo.cost_usd, aviso } }
 }
 
@@ -195,7 +197,7 @@ export async function crear(d: Deps, p: Pedido): Promise<Resultado<{ pieza: Piez
 
   if (p.tipo === 'imagen') {
     const r = await imagenGuardada(d, { piezaId: pieza.id, clientId: p.client_id, prompt: p.prompt, formato: p.formato, foto: foto.valor, ruta: base, parte: 'imagen' })
-    if (!r.ok) return { ok: true, valor: { pieza: (await fallar(d, pieza.id, `${r.error}${r.detalle ? ` · ${r.detalle}` : ''}`, /cobrada/.test(r.detalle ?? '') ? cot.valor.total_usd : 0)) ?? pieza, ya_existia: false } }
+    if (!r.ok) return { ok: true, valor: { pieza: (await fallar(d, pieza.id, `${r.error}${r.detalle ? ` · ${r.detalle}` : ''}`, r.cobrado_usd)) ?? pieza, ya_existia: false } }
     const fin = await actualizar(d, pieza.id, { estado: 'lista', paso: null, costo_usd: r.valor.usd, archivo_url: r.valor.url, archivo_tipo: 'image', miniatura_url: r.valor.url, aviso: r.valor.aviso, terminado_en: new Date(d.ahora()).toISOString() }, true)
     return { ok: true, valor: { pieza: fin ?? pieza, ya_existia: false } }
   }
@@ -215,7 +217,7 @@ export async function crear(d: Deps, p: Pedido): Promise<Resultado<{ pieza: Piez
   let aviso: string | null = null
   if (!urlDeImagen) {
     const r = await imagenGuardada(d, { piezaId: pieza.id, clientId: p.client_id, prompt: promptDeImagenPara3D(p.prompt), formato: '1:1', foto: null, ruta: `${base}-partida`, parte: 'imagen previa al 3D' })
-    if (!r.ok) return { ok: true, valor: { pieza: (await fallar(d, pieza.id, `${r.error}${r.detalle ? ` · ${r.detalle}` : ''}`)) ?? pieza, ya_existia: false } }
+    if (!r.ok) return { ok: true, valor: { pieza: (await fallar(d, pieza.id, `${r.error}${r.detalle ? ` · ${r.detalle}` : ''}`, r.cobrado_usd)) ?? pieza, ya_existia: false } }
     urlDeImagen = r.valor.url
     gastado = r.valor.usd
     aviso = r.valor.aviso
@@ -260,7 +262,13 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   const m = modeloDe3D(pieza.modelo)
   const calidad = (pieza.parametros?.calidad === 'alta' ? 'alta' : 'normal') as 'normal' | 'alta'
   const precio = m ? m.precio[calidad] : Number(pieza.costo_estimado_usd)
-  if (!archivo) return { ok: true, valor: (await fallar(d, id, 'fal terminó sin archivo 3D', yaGastado + precio)) ?? pieza }
+  if (!archivo) {
+    // fal terminó (y cobra) sin archivo: la pieza suma su precio y el libro anota esa misma fila; solo quien la marca fallida anota
+    const f = await fallar(d, id, 'fal terminó sin archivo 3D', yaGastado + precio)
+    if (!f) return { ok: true, valor: (await leerPieza(d, id)) ?? pieza }
+    const avisoLibro = await anotarCosto(d, { piezaId: id, clientId: pieza.client_id, proveedor: 'fal', modelo: pieza.modelo, parte: pieza.tipo, usd: precio, base: 'lista_publicada' })
+    return { ok: true, valor: avisoLibro ? ((await actualizar(d, id, { aviso: [f.aviso, avisoLibro].filter(Boolean).join(' · ') })) ?? f) : f }
+  }
   const ext = archivo.tipo === 'model/obj' ? 'obj' : archivo.tipo.includes('gltf') || (archivo.nombre ?? archivo.url).toLowerCase().includes('.glb') ? 'glb' : 'bin'
   return cerrar(d, pieza, { urlProveedor: archivo.url, ruta: `estudio/${pieza.client_id}/${id}.${ext}`, tipo: ext === 'glb' ? 'model/gltf-binary' : archivo.tipo, archivoTipo: ext === 'glb' ? 'glb' : ext, miniatura: miniaturaDe3D(res.salida) ?? pieza.foto_partida_url, proveedor: 'fal', usd: precio, base: 'lista_publicada', previo: yaGastado, ahoraIso })
 }
