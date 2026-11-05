@@ -115,5 +115,21 @@ describe('lo que no se acepta', () => {
     expect(entradaReproduceElTablero(otra, B)).toBe(false); expect(error(otra, B, [cambio('total_mes', 500)])).toBe('no_se_puede_recalcular')
   })
   it('🔴 una entrada que ya no calcula, tampoco', () => { expect(entradaReproduceElTablero({ ...ENTRADA, referencia: null }, B)).toBe(false) })
+  it('🔴 una meta que se guardaría como 0 no se firma: ni por presupuesto ni por meta', () => {
+    expect(error(ENTRADA, B, [cambio('total_mes', 0.01)])).toBe('meta_en_cero')
+    expect(error(ENTRADA, B, [cambio('meta_por_semana', 0.001)])).toBe('meta_en_cero')
+    const justa = recalcularConCambios(ENTRADA, B, [cambio('meta_por_semana', 0.01)])
+    expect(justa.ok).toBe(true)
+  })
+  it('🔴 una cifra que no cabe en la tabla se rechaza antes de firmar', () => {
+    expect(error(ENTRADA, B, [cambio('meta_por_semana', 1e15)])).toBe('cifra_demasiado_grande')
+    expect(error(ENTRADA, B, [cambio('total_mes', 1e15)])).not.toBe('ok')
+    expect(recalcularConCambios(ENTRADA, B, [cambio('meta_por_semana', 1e6)]).ok).toBe(true)
+  })
+  it.each(['total_mes', 'pauta_diaria', 'costo_por_venta', 'meta_por_semana'])('🔴 con %s nula en un solo lado no recalcula', (k) => {
+    const sinCifra: Bloque = { ...B, cifras: { ...B.cifras, [k]: { ...B.cifras[k], valor: null } } }
+    expect(entradaReproduceElTablero(ENTRADA, sinCifra)).toBe(false)
+    expect(error(ENTRADA, sinCifra, [cambio('meta_por_semana', 14)])).not.toBe('ok')
+  })
   it('🔴 la entrada íntegra sí reproduce su tablero', () => { expect(entradaReproduceElTablero(ENTRADA, B)).toBe(true) })
 })

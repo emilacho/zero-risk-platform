@@ -59,6 +59,14 @@ describe('firmar con cambios', () => {
     expect(f.total_mes).toBe(firmado); expect(f.meta_por_semana).toBeLessThan(10); expect(f.meta_por_semana).toBeGreaterThan(0)
     expect(f.meta_por_semana).toBe(nuevoDe(db).entrada.meta_por_semana)
   })
+  it('🔴 el tablero nuevo sigue atado a su corrida: de ahí salen sus críticos y su moneda', async () => {
+    const db = base()
+    await llamar('firmar-tablero', db, { tablero_id: T, cambios: META })
+    expect(nuevoDe(db).workflow_execution_id).toBe('conversa:x')
+    const sinCorrida = base({ workflow_execution_id: null })
+    await llamar('firmar-tablero', sinCorrida, { tablero_id: T, cambios: META })
+    expect(nuevoDe(sinCorrida).workflow_execution_id).toBe(`firma-con-cambios:${T}`)
+  })
   it('🔴 sin `cambios`, firma como siempre: el mismo tablero, sin columna nueva', async () => {
     const db = base()
     expect((await llamar('firmar-tablero', db, { tablero_id: T })).status).toBe(200)
@@ -144,6 +152,10 @@ describe('recalcular-tablero · ver antes de firmar', () => {
   it('🔴 con las mismas guardas: corrida viva, no sin firma', async () => {
     expect((await llamar('recalcular-tablero', base().semilla('plan_corridas', [{ id: 'p', client_id: 'c1', estado: 'corriendo' }]), { tablero_id: T, cambios: META })).cuerpo.error).toBe('corrida_viva')
     expect((await llamar('recalcular-tablero', base({ estado: 'firmado' }), { tablero_id: T, cambios: META })).cuerpo.error).toBe('no_esta_sin_firma')
+  })
+  it('🔴 devuelve las alertas del tablero que resultaría', async () => {
+    const s = await llamar('recalcular-tablero', base(), { tablero_id: T, cambios: [{ clave: 'total_mes', propuesto: TOTAL, firmado: 50 }] })
+    expect((s.cuerpo.alertas as unknown[]).length).toBeGreaterThan(0)
   })
   it('🔴 lo que recalcula es lo mismo que firma', async () => {
     const db = base(), v = await llamar('recalcular-tablero', db, { tablero_id: T, cambios: META }), f = await llamar('firmar-tablero', db, { tablero_id: T, cambios: META })

@@ -17,7 +17,7 @@ export interface CambioDeCifra { clave: string; propuesto: number; firmado: numb
 export const FUENTE_DEL_DUENO = 'cambiada por el dueño al firmar'
 export const FUENTE_DESPEJADA = 'despejada del presupuesto que firmó el dueño'
 
-export type ErrorDeCambios = 'sin_cambios' | 'cifra_no_editable' | 'valor_invalido' | 'cifras_cambiaron' | 'una_cifra_a_la_vez' | 'no_se_puede_recalcular' | 'presupuesto_no_cuadra'
+export type ErrorDeCambios = 'sin_cambios' | 'cifra_no_editable' | 'valor_invalido' | 'cifras_cambiaron' | 'una_cifra_a_la_vez' | 'no_se_puede_recalcular' | 'presupuesto_no_cuadra' | 'meta_en_cero' | 'cifra_demasiado_grande'
 export type Recalculo =
   | { ok: true; entrada: Entrada; bloque: Bloque; huella: string; numeros: FilaDeNumero[]; cambios: CambioDeCifra[]; meta_por_semana: number; total_mes: number }
   | { ok: false; error: ErrorDeCambios; detalle: string; alcanzable?: number }
@@ -27,6 +27,8 @@ const TOLERANCIA = 0.005
 const VUELTAS_DE_BUSQUEDA = 80
 const DOBLES_MAXIMOS = 40
 const META_MINIMA = 1e-6
+/** la tabla de números guarda numeric(18,4): de aquí para arriba no cabe, y firmar fallaría a medias */
+const TOPE_DE_LA_TABLA = 1e14
 const finito = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x)
 const igual = (a: number, b: number) => Math.abs(a - b) < TOLERANCIA
 const totalDe = (b: Bloque): number | null => { const v = b.cifras.total_mes?.valor; return finito(v) ? v : null }
@@ -91,5 +93,10 @@ export function recalcularConCambios(entrada: Entrada, bloque: Bloque, pedidos: 
     cifras.meta_por_semana = { ...cifras.meta_por_semana, tipo: 'supuesto', fuente: FUENTE_DESPEJADA }
   }
   const final: Bloque = { ...r, cifras, confianza: confianzaDe(cifras) }
-  return { ok: true, entrada: nueva, bloque: final, huella: huellaDe(final), numeros: numerosDelBloque(final), cambios, meta_por_semana: meta, total_mes: totalDe(final) as number }
+  // redondeada daría «0 ventas» en el tablero, y la corrida siguiente la usaría (CC7: US$ 1 daba meta 0,0037)
+  const metaGuardada = final.cifras.meta_por_semana?.valor
+  if (!finito(metaGuardada) || metaGuardada <= 0) return { ok: false, error: 'meta_en_cero', detalle: 'con esa cifra la meta de ventas queda en cero: no hay plan que firmar' }
+  const numeros = numerosDelBloque(final)
+  if (numeros.some((n) => [n.valor, n.minimo, n.maximo].some((x) => finito(x) && Math.abs(x) >= TOPE_DE_LA_TABLA))) return { ok: false, error: 'cifra_demasiado_grande', detalle: 'esa cifra da un resultado demasiado grande para guardarlo' }
+  return { ok: true, entrada: nueva, bloque: final, huella: huellaDe(final), numeros, cambios, meta_por_semana: meta, total_mes: totalDe(final) as number }
 }

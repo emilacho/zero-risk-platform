@@ -597,6 +597,12 @@ describe('firmar con cambios · lo que ve la tarjeta', () => {
     const p = await pasos(firmado({ firma_con_cambios: { cambios: [{ clave: 'total_mes', propuesto: 1341.27, firmado: 900 }] } }))
     expect(p.texto).toBe('Firmaste con cambios'); expect(p.cita).toBe('Presupuesto total al mes: la oficina propuso 1341.27, firmaste 900')
   })
+  it('🔴 al cambiar el presupuesto, el registro dice la meta que quedó; al cambiar la meta, no la repite', async () => {
+    const p = await pasos(firmado({ firma_con_cambios: { cambios: [{ clave: 'total_mes', propuesto: 1341.27, firmado: 939 }], meta_por_semana: 3.4999871 } }))
+    expect(p.cita).toBe('Presupuesto total al mes: la oficina propuso 1341.27, firmaste 939 · la meta de ventas por semana queda en 3.5')
+    const q = await pasos(firmado({ firma_con_cambios: { cambios: [{ clave: 'meta_por_semana', propuesto: 5, firmado: 7 }], meta_por_semana: 7 } }))
+    expect(q.cita).toBe('Meta de ventas por semana: la oficina propuso 5, firmaste 7')
+  })
   it.each<[string, unknown]>([['sin cambios', undefined], ['nulo', null], ['lista vacía', { cambios: [] }], ['roto', 'x']])('🔴 %s: firmaste y nada más', async (_n, firma_con_cambios) => {
     const p = await pasos(firmado({ firma_con_cambios }))
     expect(p.texto).toBe('Firmaste'); expect(p).not.toHaveProperty('cita')

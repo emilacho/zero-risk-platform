@@ -138,7 +138,8 @@ export function pasosDelPlan(espera: Fila | null, corrida: Fila | null, ahora: n
 function textoDeLaFirma(f: unknown): { texto: string; cita?: string } {
   const cambios = esObjeto(f) && Array.isArray(f.cambios) ? (f.cambios as unknown[]).filter(esObjeto) : []
   if (!cambios.length) return { texto: 'Firmaste' }
-  return { texto: 'Firmaste con cambios', cita: cambios.map((c) => `${NOMBRE_DE_CIFRA[String(c.clave)] ?? 'Una cifra'}: la oficina propuso ${String(c.propuesto)}, firmaste ${String(c.firmado)}`).join(' · ') }
+  const meta = esObjeto(f) && typeof f.meta_por_semana === 'number' && cambios.some((c) => c.clave === 'total_mes') ? ` · la meta de ventas por semana queda en ${Math.round(f.meta_por_semana * 100) / 100}` : ''
+  return { texto: 'Firmaste con cambios', cita: cambios.map((c) => `${NOMBRE_DE_CIFRA[String(c.clave)] ?? 'Una cifra'}: la oficina propuso ${String(c.propuesto)}, firmaste ${String(c.firmado)}`).join(' · ') + meta }
 }
 const NOMBRE_DE_CIFRA: Record<string, string> = { meta_por_semana: 'Meta de ventas por semana', total_mes: 'Presupuesto total al mes' }
 
