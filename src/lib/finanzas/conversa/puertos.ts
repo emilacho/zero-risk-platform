@@ -14,7 +14,7 @@ export const ESTADOS_TERMINALES: readonly EstadoDeEncargo[] = ['cerrado', 'sin_a
 /** lo que el plan (o quien despierta la conversación) entrega al abrir: SOLO datos del cliente y del expediente; ningún nombre concreto vive en el código */
 export interface Semilla {
   /** las ventas del sitio, leídas de los pedidos al abrir (no de la analítica) */
-  ventas_del_sitio?: unknown
+  ventas_del_negocio?: unknown
   /** 04-nov · lo que decidió la mesa de estrategia: con ella, finanzas calcula sobre su reparto */
   acta?: ActaV1
   /** 04-nov · la corrida que abrió el encargo: otra corrida no lo hereda */

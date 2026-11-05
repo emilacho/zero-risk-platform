@@ -15,14 +15,16 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeFinanzas, type Db } from '@/lib/finanzas/almacen-supabase'
 import { almacenDeConversa } from '@/lib/finanzas/conversa/almacen-supabase'
 import { baseDeRunSdk, modeloRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
-import { leerVentasDelSitio, type DbDeVentas } from '@/lib/planeacion/ventas-del-sitio'
+import type { DbDeVentas } from '@/lib/planeacion/ventas-del-sitio'
+import { leerVentasDelNegocio } from '@/lib/planeacion/ventas-del-negocio'
 import { abrirConversacion, avanzar, cerrarPorPlazo, leerConversacion } from '@/lib/finanzas/conversa/orquestador'
 import { avanzarConSimulacion } from '@/lib/finanzas/conversa/simulado'
 import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/puertos'
 import { nombreDelClienteDe } from '@/lib/finanzas/conversa/nombre'
 import { listarAbiertos, preguntarAlDueno } from '@/lib/finanzas/conversa/buzon'
 import { atenderPausa } from '@/lib/finanzas/conversa/pausa'
-import { despertarPorElFlujo, esperasDeFinanzas } from '@/lib/finanzas/conversa/esperas-supabase'
+import { esperasDeFinanzas } from '@/lib/finanzas/conversa/esperas-supabase'
+import { despertarDelEntorno } from '@/lib/finanzas/conversa/puertos-de-pausa'
 import { slackMdPuerto } from '@/lib/buzon-dueno/slack-md'
 import { cerebroDelDueno } from '@/lib/buzon-dueno/cerebro-dueno'
 import { avisarAAlertas } from '@/lib/buzon-dueno/alertas'
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
   }
   const c = (typeof cuerpo === 'object' && cuerpo !== null ? cuerpo : {}) as Record<string, unknown>
   let r: { status: number; cuerpo: Record<string, unknown> }
-  if (c.accion === 'abrir') r = await abrirConversacion(P, c.semilla && typeof c.semilla === 'object' && !Array.isArray(c.semilla) ? { ...c, semilla: { ...(c.semilla as object), ventas_del_sitio: await leerVentasDelSitio(db as unknown as DbDeVentas, c.client_id as string).catch(() => null) } } : c)
+  if (c.accion === 'abrir') r = await abrirConversacion(P, c.semilla && typeof c.semilla === 'object' && !Array.isArray(c.semilla) ? { ...c, semilla: { ...(c.semilla as object), ventas_del_negocio: await leerVentasDelNegocio(db as unknown as DbDeVentas, c.client_id as string).catch(() => null) } } : c)
   else if (c.accion === 'avanzar' && typeof c.encargo_id === 'string') r = c.simulacion !== undefined ? await avanzarConSimulacion(P, c.encargo_id, c.simulacion) : await avanzar(P, c.encargo_id)
   else if (c.accion === 'leer' && typeof c.encargo_id === 'string') r = await leerConversacion(P, c.encargo_id)
   else if (c.accion === 'cerrar' && typeof c.encargo_id === 'string') r = await cerrarPorPlazo(P, c.encargo_id)
@@ -91,7 +93,7 @@ export async function POST(request: Request) {
         // una pregunta que no pudo salir avisa a #alertas (antes se callaba)
         avisar: avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '', canal: process.env.FINANZAS_CANAL_ALERTAS }),
         esperas: esperasDeFinanzas(db),
-        despertar: despertarPorElFlujo({ base: process.env.N8N_BASE_URL, llave: process.env.INTERNAL_API_KEY }),
+        despertar: despertarDelEntorno(process.env),
       }
       r = c.accion === 'buzon_abiertos' ? await listarAbiertos(B) : c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id as string) : await atenderPausa(B, c.encargo_id as string)
     }

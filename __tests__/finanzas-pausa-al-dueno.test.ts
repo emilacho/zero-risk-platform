@@ -7,9 +7,9 @@ import { estadoInicial } from '../src/lib/oficina/tipos'
 import { prepararPreguntas, type PuertosDelBuzon } from '../src/lib/finanzas/conversa/buzon'
 import { armarMensaje } from '../src/lib/finanzas/preguntas'
 import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
-import { atenderPausa, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
+import { atenderPausa, MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
 import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conversa/esperas-supabase'
-import { puertosDePausa } from '../src/lib/finanzas/conversa/puertos-de-pausa'
+import { despertarDelEntorno, puertosDePausa } from '../src/lib/finanzas/conversa/puertos-de-pausa'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import { prevuelo } from '../src/lib/planeacion/prevuelo'
 import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
@@ -19,7 +19,7 @@ const preg = (clave: string, o: Record<string, unknown> = {}) => ({ clave, texto
 const CINCO = [preg('comision'), preg('turistas'), preg('temporada'), preg('whatsapp', { frena_la_firma: true }), preg('pixel', { frena_la_firma: true })]
 const acuerdo = (preguntas: unknown[] = CINCO, criticos = 3) => ({ acuerdo: { criticos, requiere_ronda_2: criticos > 0, preguntas_a_emilio: preguntas, hallazgos: [] } })
 
-function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; despierta?: boolean; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
+function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; despierta?: boolean; corrida?: { estado: string | null; otra_activa: boolean } | 'caida'; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
   const e: EncargoDeConversa = { id: 'enc-1', client_id: 'cli', estado: o.estado ?? 'esperando_al_dueno', estado_del_motor: estadoInicial(), gasto_usd: 1.2, slack_canal: o.slackTs ? 'C123456789' : null, slack_ts: o.slackTs ?? null, leido_hasta: o.slackTs ?? null, tablero_id: null, dry_run: false, semilla: { corrida: 'cor-1', ...(o.semilla ?? {}) } }
   const arts: Record<string, Record<string, unknown>> = { ...acuerdo(), ...(o.arts ?? {}) }
   const guardados: Array<Record<string, unknown>> = [], avisos: string[] = [], enviados: string[] = [], despertares: Array<Record<string, unknown>> = [], enHilo: string[] = [], corridasPausadas: string[] = []
@@ -27,7 +27,7 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
   const alCerebro: Array<Record<string, unknown>> = []
   const mensajes = [...(o.mensajes ?? [])]
   let materialGuardado: unknown = null
-  let espera: EsperaDeFinanzas | null = o.espera === null || o.espera === undefined ? null : { id: 'esp-1', client_id: 'cli', encargo_id: 'enc-1', corrida: 'plan-x', estado: 'esperando', sobre: { corrida: 'plan-x', client_id: 'cli' }, despertado: null, intentos_de_despertar: 0, ...o.espera }
+  let espera: EsperaDeFinanzas | null = o.espera === null || o.espera === undefined ? null : { id: 'esp-1', client_id: 'cli', encargo_id: 'enc-1', corrida: 'plan-x', estado: 'esperando', sobre: { corrida: 'plan-x', client_id: 'cli' }, despertado: null, intentos_de_despertar: 0, despertado_en: null, ...o.espera }
   const almacen: AlmacenDeConversa = {
     async crearEncargo() { return { ok: true, encargo: e, nuevo: false } },
     async leerEncargo() { return structuredClone(e) },
@@ -56,11 +56,12 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
       async leer(x: { desde_ts: string | null }) { return { ok: true as const, mensajes: [...mensajes], leido_hasta: x.desde_ts } },
     } as never,
     esperas: {
-      async guardar(f) { if (espera) return { ok: true, id: espera.id, nueva: false }; espera = { id: 'esp-1', client_id: f.client_id, encargo_id: f.encargo_id, corrida: String(f.sobre.corrida), estado: 'esperando', sobre: f.sobre, despertado: null, intentos_de_despertar: 0 }; materialGuardado = f.material; return { ok: true, id: 'esp-1', nueva: true } },
+      async guardar(f) { if (espera) return { ok: true, id: espera.id, nueva: false }; espera = { id: 'esp-1', despertado_en: null, client_id: f.client_id, encargo_id: f.encargo_id, corrida: String(f.sobre.corrida), estado: 'esperando', sobre: f.sobre, despertado: null, intentos_de_despertar: 0 }; materialGuardado = f.material; return { ok: true, id: 'esp-1', nueva: true } },
       async delEncargo() { return espera && { ...espera } },
       async vivaDelCliente(c) { return espera && espera.estado === 'esperando' && espera.client_id === c ? { ...espera } : null },
       async soltar() { if (!espera || espera.estado !== 'esperando') return false; espera.estado = 'soltada'; return true },
-      async marcarDespertar(_i, d, n) { if (espera) { espera.despertado = d; espera.intentos_de_despertar = n } },
+      async marcarDespertar(_i, d, n) { if (espera) { espera.despertado = d; espera.intentos_de_despertar = n; espera.despertado_en = P.ahora().toISOString() } },
+      async estadoDeLaCorrida() { if (o.corrida === 'caida') throw new Error('caída'); return o.corrida ?? { estado: 'corriendo', otra_activa: false } },
       async pausarCorrida(id) { corridasPausadas.push(id) },
     },
     despertar: async (c) => { despertares.push(c); return o.despierta === false ? { ok: false, error: 'el plan contestó 502' } : { ok: true } },
@@ -256,13 +257,111 @@ describe('la respuesta suelta la pausa', () => {
     m.P.esperas.delEncargo = async () => { throw new Error('caída') }
     await expect(atenderPausa(m.P, 'enc-1')).rejects.toThrow('caída')
   })
-  it('🔴 despertar llama a la puerta del plan con la llave interna, y dice si no pudo', async () => {
+  it('🔴 despertar llama a la puerta del plan con la llave de despacho, nunca con la interna, y dice si no pudo', async () => {
     const llamadas: Array<[string, RequestInit]> = []
     const f = (async (u: string, i: RequestInit) => { llamadas.push([u, i]); return { ok: true, status: 200 } }) as never
     expect(await despertarPorElFlujo({ base: 'https://n8n.x/', llave: 'k', fetchImpl: f })({ a: 1 })).toEqual({ ok: true })
     expect(llamadas[0][0]).toBe('https://n8n.x/webhook/zero-risk/planeacion')
-    expect((llamadas[0][1].headers as Record<string, string>)['x-api-key']).toBe('k')
+    expect((llamadas[0][1].headers as Record<string, string>)['x-sala-dispatch-key']).toBe('k')
+    expect((llamadas[0][1].headers as Record<string, string>)['x-api-key']).toBeUndefined()
     expect((await despertarPorElFlujo({ fetchImpl: f })({})).ok).toBe(false)
+  })
+})
+
+describe('recibido no es arrancó (05-nov · hallazgo de CC2)', () => {
+  const AHORA = '2026-11-05T12:00:00.000Z'
+  const hace = (min: number) => new Date(Date.parse(AHORA) - min * 60_000).toISOString()
+  const quieta = { estado: 'en_pausa', otra_activa: false }
+  const soltada = (min: number, intentos = 1) => ({ estado: 'soltada' as const, despertado: true, intentos_de_despertar: intentos, despertado_en: hace(min) })
+
+  it('🔴 la corrida sigue en pausa pasado el margen: lo llama otra vez y cuenta el intento', async () => {
+    const m = mundo({ espera: soltada(MARGEN_PARA_ARRANCAR_MIN), corrida: quieta, hora: AHORA })
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ soltada: true, despertado: true, intentos: 2 })
+    expect(m.despertares).toEqual([{ corrida: 'plan-x', client_id: 'cli', reanudar_esperas_id: 'esp-1' }])
+    expect(m.espera()?.intentos_de_despertar).toBe(2)
+  })
+  it('🔴 antes del margen no insiste: el plan puede estar arrancando', async () => {
+    const m = mundo({ espera: soltada(MARGEN_PARA_ARRANCAR_MIN - 1), corrida: quieta, hora: AHORA })
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toEqual({ soltada: true, despertado: true })
+    expect(m.despertares).toEqual([])
+  })
+  it('🔴 si la corrida ya arrancó o ya terminó, no lo llama', async () => {
+    for (const estado of ['corriendo', 'hecha', 'fallida', null]) {
+      const m = mundo({ espera: soltada(60), corrida: { estado, otra_activa: false }, hora: AHORA })
+      expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toEqual({ soltada: true, despertado: true })
+      expect(m.despertares).toEqual([])
+      expect(m.avisos).toEqual([])
+    }
+  })
+  it('🔴 con otra corrida en marcha no insiste ni avisa: esa decide', async () => {
+    const m = mundo({ espera: soltada(60, MAX_INTENTOS_DE_DESPERTAR), corrida: { estado: 'en_pausa', otra_activa: true }, hora: AHORA })
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ arranco: false, motivo: 'otra_corrida_activa' })
+    expect(m.despertares).toEqual([])
+    expect(m.avisos).toEqual([])
+  })
+  it('🔴 una lectura caída no se toma por «no arrancó»: ni llama ni avisa', async () => {
+    const m = mundo({ espera: soltada(60, MAX_INTENTOS_DE_DESPERTAR), corrida: 'caida', hora: AHORA })
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ arranco: 'no_se_pudo_leer' })
+    expect(m.despertares).toEqual([])
+    expect(m.avisos).toEqual([])
+  })
+  it('🔴 agotado el tope deja de llamar y avisa una sola vez', async () => {
+    const m = mundo({ espera: soltada(60, MAX_INTENTOS_DE_DESPERTAR), corrida: quieta, hora: AHORA })
+    await atenderPausa(m.P, 'enc-1')
+    await atenderPausa(m.P, 'enc-1')
+    expect(m.despertares).toEqual([])
+    expect(m.avisos).toHaveLength(1)
+    expect(m.avisos[0]).toContain('no arrancó')
+  })
+  it('🔴 sin hora del último intento no concluye nada', async () => {
+    const m = mundo({ espera: { ...soltada(60), despertado_en: null }, corrida: quieta, hora: AHORA })
+    await atenderPausa(m.P, 'enc-1')
+    expect(m.despertares).toEqual([])
+  })
+  it('🔴 la lectura real busca la corrida de ese cliente y ve si hay otra activa', async () => {
+    const db = new DbFalsa()
+    db.semilla('plan_corridas', [{ id: '1', client_id: 'c', corrida: 'p', estado: 'en_pausa' }, { id: '2', client_id: 'otro', corrida: 'p', estado: 'hecha' }, { id: '3', client_id: 'otro', corrida: 'q', estado: 'corriendo' }])
+    const E = esperasDeFinanzas(db as never)
+    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null }
+    expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: false })
+    db.tablas['plan_corridas'].push({ id: '4', client_id: 'c', corrida: 'r', estado: 'esperando' })
+    expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: true })
+    db.tablas['plan_corridas'].find((f: Record<string, unknown>) => f.id === '4')!.estado = 'corriendo'
+    expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: true })
+    expect(await E.estadoDeLaCorrida({ ...esp, corrida: null })).toEqual({ estado: null, otra_activa: false })
+    expect(await E.estadoDeLaCorrida({ ...esp, client_id: 'nadie' })).toEqual({ estado: null, otra_activa: false })
+  })
+  it('🔴 el margen son 5 minutos: el vigía entra cada 10 y el pre-vuelo tarda segundos', () => {
+    expect(MARGEN_PARA_ARRANCAR_MIN).toBe(5)
+  })
+  it('🔴 una caída al leer la corrida LANZA, en cualquiera de las dos lecturas: nunca se lee como «no hay corrida»', async () => {
+    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null }
+    const conFallo = (cual: number) => {
+      let n = 0
+      const api = { select: () => api, eq: () => api, in: () => api, limit: async () => (++n === cual ? { data: null, error: { message: 'caída' } } : { data: [{ estado: 'en_pausa' }], error: null }) }
+      return esperasDeFinanzas({ from: () => api } as never)
+    }
+    await expect(conFallo(1).estadoDeLaCorrida(esp)).rejects.toThrow('caída')
+    await expect(conFallo(2).estadoDeLaCorrida(esp)).rejects.toThrow('caída')
+  })
+  it('🔴 la espera trae la hora del último intento: sin ella la revisión nunca concluye nada', async () => {
+    const pedidas: string[] = []
+    const fila = { id: 'e', client_id: 'c', clave: 'finanzas:x', estado: 'soltada', sobre: { corrida: 'p' }, despertado: true, despertar_intentos: 1, actualizado_en: hace(60) }
+    const api = { select: (c: string) => { pedidas.push(c); return api }, eq: () => api, limit: async () => ({ data: [fila], error: null }) }
+    expect((await esperasDeFinanzas({ from: () => api } as never).delEncargo('x'))?.despertado_en).toBe(hace(60))
+    expect(pedidas[0].split(',')).toContain('actualizado_en')
+  })
+  it('🔴 las dos rutas llaman al plan con la llave de despacho del entorno, nunca con la interna', async () => {
+    const llamadas: Array<Record<string, string>> = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_u: string, i: RequestInit) => { llamadas.push(i.headers as Record<string, string>); return { ok: true, status: 200 } }) as never
+    try {
+      expect(await despertarDelEntorno({ N8N_BASE_URL: 'https://n8n.x', SALA_DISPATCH_KEY: 'despacho', INTERNAL_API_KEY: 'interna' })({})).toEqual({ ok: true })
+      expect(await puertosDePausa({ N8N_BASE_URL: 'https://n8n.x', SALA_DISPATCH_KEY: 'despacho', INTERNAL_API_KEY: 'interna' }, new DbFalsa() as never, 'envia', 'wf', 'ex').despertar({})).toEqual({ ok: true })
+    } finally { globalThis.fetch = original }
+    for (const h of llamadas) { expect(h['x-sala-dispatch-key']).toBe('despacho'); expect(JSON.stringify(h)).not.toContain('interna') }
+    expect(llamadas).toHaveLength(2)
+    expect(fs.readFileSync('src/app/api/finanzas/conversa/route.ts', 'utf8')).toContain('despertar: despertarDelEntorno(process.env)')
   })
 })
 
