@@ -136,8 +136,8 @@ async function unPaso(P: PuertosDeMesa, e0: EncargoDeConversa): Promise<Respuest
   }
   const hecho = paso.tipo === 'codigo' ? { resultado: { costo_usd: 0, artefacto: abrirExpediente(e) } as ResultadoDePaso, error: null, pasajera: false } : await turnoDeAgente(P, e, paso, arts, reanudar)
   if (hecho.pasajera && intentos + 1 < INTENTOS_DEL_TURNO) return { status: 503, cuerpo: { error: 'turno_cortado', paso: paso.clave, intento: intentos + 1, detalle: hecho.error } }
-  const { turno_en_curso: _hecho, ...sinMarca } = registrarPaso(e.estado_del_motor, PLANTILLA_MESA, sig.indice, hecho.resultado) as ReturnType<typeof registrarPaso> & ConMarca
-  const estado_del_motor = sinMarca as ReturnType<typeof registrarPaso>
+  // registrarPaso arma un estado nuevo: la marca del turno no pasa, así que un turno terminado no la deja
+  const estado_del_motor = registrarPaso(e.estado_del_motor, PLANTILLA_MESA, sig.indice, hecho.resultado)
   const art = hecho.resultado.artefacto ?? {}
   const turno: TurnoDeConversa = { n, paso: paso.clave, agente: paso.tipo === 'agente' ? paso.quien : null, ronda: 1, estado: hecho.error ? 'fallo' : 'hecho', costo_usd: hecho.resultado.costo_usd, salida: art, error: hecho.error }
   await P.almacen.guardar({ encargo_id: e.id, estado_del_motor, gasto_usd: estado_del_motor.gasto_usd, estado: 'en_curso', turno, artefacto: { tipo: paso.salida_artefacto, version: estado_del_motor.artefactos[paso.salida_artefacto]?.version ?? 1, contenido: art, sha256: sha256(art) } })

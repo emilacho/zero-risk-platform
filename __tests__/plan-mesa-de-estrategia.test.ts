@@ -395,6 +395,32 @@ describe('un turno cortado no se pierde', () => {
     expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'cerrado' })
     expect(m.pedidos).toHaveLength(2)
   })
+  it('al terminar, el turno no deja su marca', async () => {
+    const m = await montar(['run_sdk_502', null]); await m.hastaPaso()
+    await avanzarMesa(m.P, m.id)
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toHaveProperty('turno_en_curso')
+    await avanzarMesa(m.P, m.id)
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).not.toHaveProperty('turno_en_curso')
+  })
+  it('la marca de OTRO paso no vale: este turno arranca desde cero y con su cuenta en cero', async () => {
+    const m = await montar(['run_sdk_502', 'run_sdk_502', null]); await m.hastaPaso()
+    const e = (await m.P.almacen.leerEncargo(m.id))!
+    await m.P.almacen.guardar({ encargo_id: m.id, estado_del_motor: { ...e.estado_del_motor, turno_en_curso: { paso: 'otro_paso', intentos: 2 } } as never, gasto_usd: e.gasto_usd, estado: 'en_curso' })
+    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { intento: 1 } })
+    expect(m.pedidos[0]).toMatchObject({ reanudar: false })
+  })
+  it('lo cobrado en el último intento cuenta para el tope', async () => {
+    const m = mundo()
+    const original = m.P.modelo.invocar.bind(m.P.modelo)
+    m.P.modelo = { async invocar(p) { return p.paso === PASO_CONSOLIDA ? { ok: false, error: 'run_sdk_502', costo_usd: 0.2 } : original(p) } }
+    const id = (await abrir(m.P)).cuerpo.encargo_id as string
+    for (let k = 0; k < 20; k++) { const e = await m.P.almacen.leerEncargo(id); if (PLANTILLA_MESA.pasos[e!.estado_del_motor.ultimo + 1]?.clave === PASO_CONSOLIDA) break; await avanzarMesa(m.P, id) }
+    const antes = (await m.P.almacen.leerEncargo(id))!.gasto_usd
+    await avanzarMesa(m.P, id); await avanzarMesa(m.P, id)
+    expect((await m.P.almacen.leerEncargo(id))!.gasto_usd).toBeCloseTo(antes)
+    await avanzarMesa(m.P, id)
+    expect((await m.P.almacen.leerEncargo(id))!.gasto_usd).toBeCloseTo(antes + 0.2)
+  })
   it('la red y el cuerpo cortado cuentan como pasajeros', async () => {
     for (const f of ['red:fetch failed', 'red:cuerpo_cortado', 'run_sdk_500', 'run_sdk_504']) {
       const m = await montar([f, null]); await m.hastaPaso()

@@ -41,6 +41,10 @@ describe('el latido', () => {
   it('un 200 sin cuerpo entero es una conexión que murió, no una respuesta rara', async () => {
     for (const c of ['', '\n\n', '\n{"output":"cor']) expect((await llamar(200, c)).r).toEqual({ ok: false, error: 'red:cuerpo_cortado', costo_usd: 0 })
   })
+  it('cualquier 2xx es una respuesta buena, también dentro del cuerpo', async () => {
+    expect((await llamar(201, '{"output":"x"}')).r).toMatchObject({ ok: true, salida: 'x' })
+    expect((await llamar(200, '\n{"output":"x","estado_http":201}')).r).toMatchObject({ ok: true, salida: 'x' })
+  })
   it('lo demás sigue igual', async () => {
     expect((await llamar(503, '{}')).r).toMatchObject({ ok: false, error: 'run_sdk_503' })
     expect((await llamar(200, '{"nada":1}')).r).toMatchObject({ ok: false, error: 'respuesta_sin_texto' })
@@ -61,6 +65,11 @@ describe('¿sigue en vuelo?', () => {
   it('en curso pero viejo: el empleado murió', async () => {
     expect(await turnoEnVueloEnElCorredor(db([{ step_status: 'in_progress', updated_at: hace(VENCE_EL_TURNO_EN_VUELO_MS - 1) }]), Q, AHORA)).toBe(true)
     expect(await turnoEnVueloEnElCorredor(db([{ step_status: 'in_progress', updated_at: hace(VENCE_EL_TURNO_EN_VUELO_MS) }]), Q, AHORA)).toBe(false)
+  })
+  it('el plazo es más largo que el empleado más largo medido (32 min)', async () => {
+    const hace2 = (min: number) => new Date(AHORA.getTime() - min * 60_000).toISOString()
+    expect(await turnoEnVueloEnElCorredor(db([{ step_status: 'in_progress', updated_at: hace2(34) }]), Q, AHORA)).toBe(true)
+    expect(await turnoEnVueloEnElCorredor(db([{ step_status: 'in_progress', updated_at: hace2(36) }]), Q, AHORA)).toBe(false)
   })
   it('terminado, fallido o sin fila: no', async () => { for (const d of [[], [{ step_status: 'completed', updated_at: hace(1) }], [{ step_status: 'failed', updated_at: hace(1) }]]) expect(await turnoEnVueloEnElCorredor(db(d), Q, AHORA)).toBe(false) })
   it('sin poder leer, o sin fecha: no se sabe', async () => {
