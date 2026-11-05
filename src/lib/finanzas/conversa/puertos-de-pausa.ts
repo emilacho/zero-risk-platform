@@ -5,10 +5,13 @@ import { ETIQUETA_DE_TU_OFICINA } from './buzon'
 import { despertarPorElFlujo, esperasDeFinanzas } from './esperas-supabase'
 import { baseDeRunSdk } from './modelo-run-sdk'
 import { nombreDelClienteDe } from './nombre'
-import type { PuertosDePausa } from './pausa'
+import type { DespertarAlPlan, PuertosDePausa } from './pausa'
 import { slackMdPuerto } from '../../buzon-dueno/slack-md'
 import { cerebroDelDueno } from '../../buzon-dueno/cerebro-dueno'
 import { avisarAAlertas } from '../../buzon-dueno/alertas'
+
+/** cómo se llama al plan: el único lugar que conoce su llave de despacho. La puerta de entrada de las rutas de finanzas sigue siendo la llave interna */
+export const despertarDelEntorno = (env: Record<string, string | undefined>): DespertarAlPlan => despertarPorElFlujo({ base: env.N8N_BASE_URL, llave: env.SALA_DISPATCH_KEY })
 
 export function puertosDePausa(env: Record<string, string | undefined>, db: Db, modo: PuertosDePausa['modo'], workflow_id: string, workflow_execution_id: string, canal_etiqueta?: string): PuertosDePausa {
   const crudo = (env.FINANZAS_CANAL_PREGUNTAS ?? '').trim()
@@ -23,6 +26,6 @@ export function puertosDePausa(env: Record<string, string | undefined>, db: Db, 
     nombreDelCliente: nombreDelClienteDe(db),
     avisar: avisarAAlertas({ token: env.SLACK_BOT_TOKEN ?? '', canal: env.FINANZAS_CANAL_ALERTAS }),
     esperas: esperasDeFinanzas(db),
-    despertar: despertarPorElFlujo({ base: env.N8N_BASE_URL, llave: env.INTERNAL_API_KEY }),
+    despertar: despertarDelEntorno(env),
   }
 }

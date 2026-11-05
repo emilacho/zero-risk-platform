@@ -23,7 +23,8 @@ import type { PuertosDeConversa, SlackPuerto } from '@/lib/finanzas/conversa/pue
 import { nombreDelClienteDe } from '@/lib/finanzas/conversa/nombre'
 import { ETIQUETA_DE_TU_OFICINA, listarAbiertos, preguntarAlDueno } from '@/lib/finanzas/conversa/buzon'
 import { atenderPausa } from '@/lib/finanzas/conversa/pausa'
-import { despertarPorElFlujo, esperasDeFinanzas } from '@/lib/finanzas/conversa/esperas-supabase'
+import { esperasDeFinanzas } from '@/lib/finanzas/conversa/esperas-supabase'
+import { despertarDelEntorno } from '@/lib/finanzas/conversa/puertos-de-pausa'
 import { slackMdPuerto } from '@/lib/buzon-dueno/slack-md'
 import { cerebroDelDueno } from '@/lib/buzon-dueno/cerebro-dueno'
 import { avisarAAlertas } from '@/lib/buzon-dueno/alertas'
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
         // una pregunta que no pudo salir avisa a #alertas (antes se callaba)
         avisar: avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '', canal: process.env.FINANZAS_CANAL_ALERTAS }),
         esperas: esperasDeFinanzas(db),
-        despertar: despertarPorElFlujo({ base: process.env.N8N_BASE_URL, llave: process.env.INTERNAL_API_KEY }),
+        despertar: despertarDelEntorno(process.env),
       }
       r = c.accion === 'buzon_abiertos' ? await listarAbiertos(B) : c.accion === 'preguntar' ? await preguntarAlDueno(B, c.encargo_id as string) : await atenderPausa(B, c.encargo_id as string)
     }
