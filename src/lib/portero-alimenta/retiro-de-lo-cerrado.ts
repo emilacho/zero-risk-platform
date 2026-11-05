@@ -4,7 +4,7 @@ import { aprobacionesPorPlan, decisionesDeLaCola, estadoDeLaSalida, vencimientos
 type Fila = Record<string, unknown>
 interface Db { from: (t: string) => any }
 
-export interface RetiroDeLoCerrado { retiradas: Array<{ ficha_id: string; ref: string; motivo: string }>; errores: string[] }
+export interface RetiroDeLoCerrado { retiradas: Array<{ ficha_id: string; ref: string; motivo: string }>; errores: string[]; /** 05-nov · no se pudo LEER (la base, para todos); ≠ no se pudo escribir una ficha de este cliente */ lectura_fallida?: true }
 
 /**
  * Una ficha sacada de una salida (`ref = client_historical_outputs:<id>`) no sobrevive a su salida: si la plataforma la rechazó, reemplazó o venció, la ficha se retira sola, con motivo; nada se borra.
@@ -17,7 +17,7 @@ export async function retirarFichasDeLoCerrado(db: Db, clientId: string, o: { dr
     db.from('plan_aprobaciones').select('plan_id, estado, version, creado_en').eq('client_id', clientId),
   ])
   const fallo = salidas.error ?? cola.error ?? aprobaciones.error
-  if (fallo) return { retiradas: [], errores: [`estado en la plataforma: ${String(fallo.message ?? fallo)}`] }
+  if (fallo) return { retiradas: [], errores: [`estado en la plataforma: ${String(fallo.message ?? fallo)}`], lectura_fallida: true }
   const filasCola = (cola.data ?? []) as Fila[]
   const decisiones = decisionesDeLaCola(filasCola), vencimientos = vencimientosDeLaCola(filasCola), aprob = aprobacionesPorPlan((aprobaciones.data ?? []) as Fila[])
   const motivos = new Map<string, string>()
@@ -29,7 +29,7 @@ export async function retirarFichasDeLoCerrado(db: Db, clientId: string, o: { dr
   }
   if (!motivos.size) return { retiradas: [], errores: [] }
   const fi = await db.from('cerebro_fichas').select('id, ref').eq('client_id', clientId).in('ref', [...motivos.keys()]).is('retirada_en', null)
-  if (fi.error) return { retiradas: [], errores: [`cerebro_fichas: ${String(fi.error.message ?? fi.error)}`] }
+  if (fi.error) return { retiradas: [], errores: [`cerebro_fichas: ${String(fi.error.message ?? fi.error)}`], lectura_fallida: true }
   const retiradas: RetiroDeLoCerrado['retiradas'] = [], errores: string[] = []
   for (const f of (fi.data ?? []) as Fila[]) {
     const ref = String(f.ref), motivo = motivos.get(ref) as string

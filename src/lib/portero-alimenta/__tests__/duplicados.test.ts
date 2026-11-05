@@ -1,7 +1,7 @@
 /** PR de duplicados (14-oct): la misma línea en varias páginas es UNA unidad; el índice no repite; el puente va por pasadas de ≤ 40; lo viejo sin lector está retirado. US$ 0. */
 import { describe, expect, it } from 'vitest'
 import { MAX_TROZOS_A_ESCRIBIR_POR_PASADA, MAX_TROZOS_A_SACAR_POR_PASADA, reconciliarPuente, sinRepetidas, type FichaParaPuente } from '../puente'
-import { rutaClientes, rutaPuente } from '../rutas'
+import { claveDelRetiroDe, rutaClientes, rutaPuente } from '../rutas'
 import { unidadesDeRaspados } from '../unidades'
 import { crearBaseFalsa } from './base-falsa'
 import { POST as correrPOST } from '../../../app/api/brain/diario/correr/route'
@@ -96,7 +96,7 @@ describe('el puente va por pasadas (sin 504)', () => {
     const sana = crearBaseFalsa({ cerebro_fichas: [], client_brain_chunks: [], client_historical_outputs: [], hitl_queue: [], plan_aprobaciones: [] } as never)
     await rutaPuente({ db: sana.db, interruptores: ON, puente: async () => ({ escritos: 0, sacados: 0, errores: [] }), ...avisos }, { client_id: C, dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' })
     expect(alarmas).toHaveLength(1)
-    expect(cierres).toEqual(['puente:estado-en-plataforma'])
+    expect(cierres).toEqual(['puente:estado-en-plataforma', claveDelRetiroDe(C)]) // 05-nov · se cierra la común y la del cliente
   })
   it('203 pendientes se envían de 40 en 40: 6 pasadas, cada una dice cuánto QUEDA, y la última deja 0', async () => {
     const t = tablas(203)

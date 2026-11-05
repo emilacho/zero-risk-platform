@@ -35,8 +35,13 @@ export interface Ficha {
   /** solo en lo que se versiona: la versión que manda hoy */
   vigente?: boolean
   reemplazada?: boolean
-  /** solo en lo reemplazado: la referencia de la versión que manda hoy */
+  /** solo en lo reemplazado: la referencia de la versión que manda hoy (solo si ESA está vigente) */
   ref_de_la_vigente?: string
+  /** 05-nov · solo en lo reemplazado cuya versión más nueva TAMPOCO está vigente (retirada, rechazada, cerrada o vencida): cuál es, y por qué no vale */
+  ref_de_la_ultima_version?: string
+  ultima_version_no_vigente?: string
+  /** 05-nov · ninguna versión de esta cosa está vigente */
+  sin_version_vigente?: boolean
   /** solo en una cosa con versiones: la última decisión del dueño sobre ESTA versión (si la hay) */
   decision_del_dueno?: DecisionAtada
   /** solo en una línea de decisión: qué decidió el dueño (si se sabe leer), sobre qué cosa y sobre cuál versión (null = la cosa ya no está en la lista) */

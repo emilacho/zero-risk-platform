@@ -146,6 +146,23 @@ export function avisoNoVigente(f: Pick<Ficha, 'aviso'>): string | null {
  * Regla general para toda línea, de cualquier fuente: lo que no está vigente no muestra plazo de frescura («vigente hasta» o «VENCIDO desde» hablan de la fuente, no de esto)
  * y lleva «NO VIGENTE» con su motivo. Las líneas sin versión no se tocan: su vigencia es solo la de su plazo.
  */
+/**
+ * 05-nov · regla general para todo lector que apunte a «la vigente»: una versión reemplazada nunca nombra como vigente a una que no lo está.
+ * Si la versión más nueva de la cadena está retirada, rechazada, cerrada o vencida (o ni siquiera está en la lista), la línea dice
+ * cuál es la última, por qué tampoco vale, y que la cosa queda SIN versión vigente. Va después de `sinPlazoLoNoVigente` (la última ya trae su «NO VIGENTE»).
+ */
+export function sinVigenteQueNoLoEs(lineas: Ficha[]): Ficha[] {
+  const porRef = new Map(lineas.map((f) => [f.ref, f]))
+  return lineas.map((f) => {
+    if (!f.ref_de_la_vigente) return f
+    const ultima = porRef.get(f.ref_de_la_vigente)
+    if (ultima && ultima.vigente === true && ultima.reemplazada !== true) return f
+    const { ref_de_la_vigente: ref, ...resto } = f
+    const motivo = ultima ? avisoNoVigente(ultima) ?? 'no está vigente' : 'no está en la lista: no se puede afirmar que esté vigente'
+    return { ...resto, ref_de_la_ultima_version: ref, ultima_version_no_vigente: motivo, sin_version_vigente: true }
+  })
+}
+
 export function sinPlazoLoNoVigente(f: Ficha): Ficha {
   if (f.vigente !== false && f.reemplazada !== true) return f
   const motivo = f.reemplazada === true ? 'reemplazado por una versión más nueva' : f.valida === false ? 'marcado como no válido' : 'no es la versión vigente'

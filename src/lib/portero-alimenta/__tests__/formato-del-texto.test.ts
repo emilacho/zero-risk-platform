@@ -141,6 +141,22 @@ describe('privacidad sin aplanar', () => {
     const l = 'Llamadas recibidas por día:\n120\n135\n142'
     expect(sinDatosPersonales(l)).toEqual({ texto: l, redactado: false })
   })
+  it('05-nov · un teléfono escrito con ESPACIOS DUROS (u+00A0) también se quita, en el dueño y en los comentarios', () => {
+    const duro = '099 123 4567'
+    const d = sinDatosPersonales(`Llámame al ${duro}\nGracias`)
+    expect(d).toEqual({ texto: 'Llámame al [teléfono omitido]\nGracias', redactado: true })
+    expect(sinDatosPersonales(`Mi número: +593 99 123 4567`).texto).toBe('Mi número: [teléfono omitido]')
+    expect(limpiarComentario(`Escríbeme al ${duro} porfa`)).toBe('Escríbeme al porfa')
+    // la línea que era solo el teléfono queda con el espacio que lo reemplaza: los saltos no se tocan
+    expect(limpiarComentario(`Info:\n+593 99 123 4567\ngracias`)).toBe('Info:\n \ngracias')
+    // y la palabra de la línea siguiente no hace pasar el número por una cantidad («Gracias» no es «gr»)
+    expect(sinDatosPersonales('Llámame al 099 123 4567\nGracias').redactado).toBe(true)
+    expect(sinDatosPersonales('Pesa 1500 gr').redactado).toBe(false)
+    // cada arreglo por separado: sin palabra de contacto, «Gracias» sola tampoco lo vuelve cantidad…
+    expect(sinDatosPersonales('099 123 4567\nGracias').redactado).toBe(true)
+    // …y «Llámame» con tilde es palabra de contacto (un fijo de 7 cifras solo se reconoce por ella)
+    expect(sinDatosPersonales('Llámame al 234 5678').redactado).toBe(true)
+  })
   it('solo recorta los bordes; espacios y tabulaciones de adentro quedan', () => {
     expect(sinDatosPersonales('  a  b\tc\r\n\r\nd  ').texto).toBe('a  b\tc\r\n\r\nd')
   })

@@ -7,7 +7,7 @@
  */
 import { esClienteDePrueba } from './cliente-de-prueba'
 import type { Consulta } from './consulta'
-import { sinPlazoLoNoVigente } from './estado-en-plataforma'
+import { sinPlazoLoNoVigente, sinVigenteQueNoLoEs } from './estado-en-plataforma'
 import {
   type Contexto, type Salida, leerCompetencia, leerDecisionesDeLaCola, leerFichaDelCliente, leerFichas, leerFotos, leerManual, leerPerfilDeClienteIdeal,
   leerSedes, leerSitio, leerTrabajosHechos, leerTrozosSinLector,
@@ -95,7 +95,7 @@ export async function construirListaCorta(consulta: Consulta, clienteId: string,
     const restantes = Math.max(0, fuentes.fichas.n - n)
     fuentes.fichas = { estado: restantes > 0 ? 'ok' : 'sin_material', n: restantes, detalle: `${n} ficha${n > 1 ? 's' : ''} omitida${n > 1 ? 's' : ''} por ser la misma foto que ya vive en client_social_images` }
   }
-  const lineas = atarDecisionesALaVersion(sinDuplicadas.lineas).map(sinPlazoLoNoVigente).sort((a, b) => (orden(a) < orden(b) ? -1 : 1))
+  const lineas = sinVigenteQueNoLoEs(atarDecisionesALaVersion(sinDuplicadas.lineas).map(sinPlazoLoNoVigente)).sort((a, b) => (orden(a) < orden(b) ? -1 : 1))
   const estado: ListaCorta['estado'] = fallidas === 0 ? 'ok' : fallidas >= lecturas ? 'error_de_lectura' : 'parcial'
   return { ...base, estado, fuentes, lineas }
 }
