@@ -58,7 +58,9 @@ export function cifrasDelBloque(bloque: unknown, dinero: string | null, editable
   let completo: number | null = null
   try { completo = dosCostos(bloque as unknown as Bloque).plan_completo } catch { completo = null }
   if (typeof completo === 'number' && Number.isFinite(completo)) salida.push({ clave: 'costo_por_venta_plan_completo', nombre: 'Costo por venta, con todo el plan', valor: completo, unidad: dinero, nota: 'Calculado: el total del mes entre las ventas que se añaden' })
-  poner('meta_de_equilibrio_semana', 'Ventas por semana para pagar el plan', 'ventas')
+  // 0 es una señal de la calculadora («cualquier meta cubre»), no una cantidad: «0 ventas para pagar el plan» diría que se paga solo (CC7, tableros reales)
+  const equilibrio = cs.meta_de_equilibrio_semana
+  if (esObjeto(equilibrio) && typeof equilibrio.valor === 'number' && equilibrio.valor > 0) poner('meta_de_equilibrio_semana', 'Ventas por semana para pagar el plan', 'ventas')
   return salida
 }
 

@@ -519,6 +519,16 @@ describe('05-nov · corrección de Lenovo: la firma trae qué se firma', () => {
     expect(unidadDeDinero('USD', 'MX')).toBe('US$'); expect(unidadDeDinero('MXN', 'EC')).toBe('MXN'); expect(unidadDeDinero(null, 'ec')).toBe('US$'); expect(unidadDeDinero(null, 'MX')).toBeNull(); expect(unidadDeDinero(null, null)).toBeNull()
   })
   it('🔴 un bloque roto no tumba la lista', () => { expect(cifrasDelBloque({ cifras: { total_mes: 'x' } }, null)).toEqual([]) })
+  it.each<[string, unknown]>([['texto', '5'], ['nulo', null], ['no finito', Infinity], ['NaN', NaN]])('🔴 un valor %s no se cuela como cifra', (_n, valor) => {
+    expect(cifrasDelBloque({ cifras: { total_mes: { valor }, pauta_diaria: { valor }, meta_de_equilibrio_semana: { valor } } }, 'US$')).toEqual([])
+  })
+  it('🔴 «0 ventas para pagar el plan» no se dice: es una señal de la calculadora, no una cantidad', () => {
+    const conEquilibrio = (valor: number) => cifrasDelBloque({ cifras: { total_mes: { valor: 3923 }, meta_de_equilibrio_semana: { valor } } }, 'US$').map((c) => c.clave)
+    expect(conEquilibrio(0)).toEqual(['total_mes'])
+    expect(conEquilibrio(-1)).toEqual(['total_mes'])
+    expect(conEquilibrio(8)).toEqual(['total_mes', 'meta_de_equilibrio_semana'])
+    expect(conEquilibrio(0.5)).toEqual(['total_mes', 'meta_de_equilibrio_semana'])
+  })
   it('🔴 la moneda del encargo llega a las cifras de dinero, y a las de ventas no', async () => {
     const d = await decision(tablero(), [], [{ id: ENC, semilla: { moneda: 'USD' } }])
     expect(d.cifras?.find((c) => c.clave === 'pauta_diaria')?.unidad).toBe('US$'); expect(d.cifras?.find((c) => c.clave === 'meta_de_equilibrio_semana')?.unidad).toBe('ventas')
