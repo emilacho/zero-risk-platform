@@ -7,6 +7,8 @@
  * Lo rechazado, reemplazado o vencido sigue en el historial, pero nunca es lo vigente. «Aprobado» solo con una aprobación real.
  * Solo una decisión real saca algo de vigente, y el motivo dice quién decidió: una limpieza o una fila superada no es una decisión, y la decisión sobre una sola parte no decide la salida entera.
  */
+import type { Ficha } from './tipos'
+
 type Fila = Record<string, unknown>
 
 export type EstadoEnPlataforma = 'aprobado' | 'abierto' | 'rechazado' | 'reemplazado' | 'vencido'
@@ -85,6 +87,11 @@ export function manualCerrado(f: { provenance_tag?: unknown }): boolean {
   const pt = objeto(f.provenance_tag)
   return manualRechazado(f) || reemplazadaEnLaEtiqueta(pt)
 }
+/** por qué un manual rechazado no es vigente, en palabras */
+export function motivoDelManualRechazado(f: { provenance_tag?: unknown }): string {
+  const r = rechazoEnLaEtiqueta(objeto(f.provenance_tag))
+  return conNota(conAutor('rechazado', r?.por), r?.nota ?? null)
+}
 /** el manual lo rechazó alguien de verdad (reemplazado no es rechazado) */
 export function manualRechazado(f: { provenance_tag?: unknown }): boolean {
   const pt = objeto(f.provenance_tag)
@@ -125,4 +132,24 @@ export function decisionesDeLaCola(cola: Fila[]): Map<string, { decision: Decisi
     if (en >= (salida.get(id)?.en ?? '')) salida.set(id, { decision, en, por: quienResolvio(f) })
   }
   return salida
+}
+
+const MARCA_NO_VIGENTE = 'NO VIGENTE'
+/** el aviso de frescura de la fuente: en lo que ya no está vigente solo confunde */
+const AVISO_DE_FRESCURA = /VENCIDO desde .*?verifícalo antes de afirmarlo( · )?/
+/** lo que una línea dice de su no vigencia, desde la marca; null si la línea no la lleva */
+export function avisoNoVigente(f: Pick<Ficha, 'aviso'>): string | null {
+  const i = f.aviso ? f.aviso.indexOf(MARCA_NO_VIGENTE) : -1
+  return i >= 0 ? (f.aviso as string).slice(i) : null
+}
+/**
+ * Regla general para toda línea, de cualquier fuente: lo que no está vigente no muestra plazo de frescura («vigente hasta» o «VENCIDO desde» hablan de la fuente, no de esto)
+ * y lleva «NO VIGENTE» con su motivo. Las líneas sin versión no se tocan: su vigencia es solo la de su plazo.
+ */
+export function sinPlazoLoNoVigente(f: Ficha): Ficha {
+  if (f.vigente !== false && f.reemplazada !== true) return f
+  const motivo = f.reemplazada === true ? 'reemplazado por una versión más nueva' : f.valida === false ? 'marcado como no válido' : 'no es la versión vigente'
+  const resto = (f.aviso ?? '').replace(AVISO_DE_FRESCURA, '').replace(/( · )$/, '')
+  const aviso = resto.includes(MARCA_NO_VIGENTE) ? resto : [`${MARCA_NO_VIGENTE} · ${motivo}`, resto].filter(Boolean).join(' · ')
+  return { ...f, vigente_hasta: null, vencido: false, aviso }
 }

@@ -4,7 +4,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { construirListaCorta } from '../lista-corta'
-import { aprobacionesPorPlan, estadoDeLaSalida, filaConDecisionReal, manualCerrado, manualRechazado, quienResolvio } from '../estado-en-plataforma'
+import { lineaParaElModelo, numerarLista } from '../portero/lista-numerada'
+import { aprobacionesPorPlan, avisoNoVigente, estadoDeLaSalida, filaConDecisionReal, manualCerrado, manualRechazado, quienResolvio, sinPlazoLoNoVigente } from '../estado-en-plataforma'
 import { estadoDelManual, leerEstadoDelManual } from '../../portero-alimenta/estado-del-manual'
 import { retirarFichasDeLoCerrado } from '../../portero-alimenta/retiro-de-lo-cerrado'
 import { crearBaseFalsa as basePortero } from '../../portero-alimenta/__tests__/base-falsa'
@@ -55,6 +56,82 @@ describe('el caso real · los 3 planes de Náufrago', () => {
   it('las dos versiones reemplazadas se declaran reemplazadas aunque no haya vigente', async () => {
     const l = await listaDe(C, salidas)
     for (const id of ['0b8e7c16', '85d5bb1c']) expect([linea(l, id).vigente, linea(l, id).reemplazada]).toEqual([false, true])
+  })
+})
+
+describe('lo que no está vigente no muestra plazo y lo dice en su línea', () => {
+  const C = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
+  const r3 = fila(C, '7554b590', 'rejected', 2, { version: 3, vigente: true, rechazado_por: 'dueño', nota_de_rechazo: 'plan con errores de fondo' })
+  it('la línea real de r3: NO VIGENTE con su motivo, sin «vigente hasta»; ningún plan vigente', async () => {
+    const l = await listaDe(C, { salidas: [r3] })
+    const n = numerarLista(l)
+    const texto = n.lineas.filter((x) => x.ficha.ref.endsWith('7554b590')).map((x) => lineaParaElModelo(x.numero, x.ficha)).join()
+    expect(texto).toContain('NO VIGENTE · rechazado en la plataforma por dueño: plan con errores de fondo')
+    expect(texto).not.toContain('vigente hasta')
+    expect(texto).not.toMatch(/v\d+ vigente/)
+    expect(linea(l, '7554b590')).toMatchObject({ vigente_hasta: null, vencido: false })
+    expect(vigentes(l)).toEqual([])
+  })
+  it('la línea con NO VIGENTE no lleva ninguna clase de plazo, venga de donde venga', () => {
+    const f = { ref: 'x:1', estante: 'E8', clase: 'nota', titulo: 't', que_es: 'q', origen: 'su_fuente', estado: 'rechazado', fecha_fuente: dias(9), vigente_hasta: dias(-9), vencido: false, peso_estimado: 1, aviso: 'NO VIGENTE · x' } as never
+    const t = lineaParaElModelo(1, f)
+    expect(t).toContain('NO VIGENTE · x')
+    expect(t).not.toContain('vigente hasta')
+    expect(t).not.toContain('sin plazo')
+  })
+  it('una versión abierta sigue mostrando su plazo', async () => {
+    const l = await listaDe(C, { salidas: [fila(C, 'p', 'draft', 1)] })
+    const f = linea(l, 'p')
+    expect(f.vigente_hasta).toBeTruthy()
+    expect(lineaParaElModelo(1, f)).toContain('vigente hasta')
+    expect(lineaParaElModelo(1, f)).toMatch(/v1 vigente/)
+    expect(lineaParaElModelo(1, f)).not.toContain('NO VIGENTE')
+  })
+  it('lo cerrado y muy viejo no dice VENCIDO: el aviso de frescura no se mezcla', async () => {
+    const l = await listaDe(C, { salidas: [fila(C, 'p', 'rejected', 900)] })
+    const f = linea(l, 'p')
+    expect(f.vencido).toBe(false)
+    expect(f.aviso).toBe('NO VIGENTE · rechazado en la plataforma')
+    expect(lineaParaElModelo(1, f)).not.toContain('VENCIDO')
+  })
+  it('una versión reemplazada por la regla de versiones también lo dice', async () => {
+    const pz = (id: string, antig: number) => fila(C, id, 'draft', antig, { brief_id: 'E', parte_id: 'P' }, 'campaign_piece')
+    const f = linea(await listaDe(C, { salidas: [pz('a', 9), pz('b', 1)] }), 'a')
+    expect(f).toMatchObject({ reemplazada: true, vigente_hasta: null, aviso: 'NO VIGENTE · reemplazado por una versión más nueva' })
+  })
+  it('una ficha retirada no dice vigente y lleva su motivo; una reemplazada tampoco muestra plazo', async () => {
+    const ficha = (id: string, extra: Fila) => ({ id, client_id: C, clase: 'nota', titulo: id, que_es: id, contenido: 'x', origen: 'su_fuente', propiedad: 'propia', creado_en: dias(30), retirada_en: null, version_de: null, plazo: 'sitio_propio', ...extra })
+    const base = crearBaseFalsa({ clients: [{ id: C, name: 'c' }], cerebro_fichas: [ficha('r', { retirada_en: dias(1), motivo_retirada: 'ya no aplica', vigente_hasta: dias(-300) }), ficha('v1', { creado_en: dias(9), plazo: 'sitio_propio' }), ficha('v2', { creado_en: dias(2), version_de: 'v1' })] })
+    const l = await construirListaCorta(base.consulta, C, { ahora: AHORA })
+    const de = (id: string) => l.lineas.find((x) => x.ref === `cerebro_fichas:${id}`)!
+    expect(de('r').vigente).toBe(false)
+    const t = lineaParaElModelo(1, de('r'))
+    expect(t).toContain('NO VIGENTE · RETIRADA desde')
+    expect(t).toContain('ya no aplica')
+    expect(t).not.toMatch(/v\d+ vigente/)
+    expect(de('v1')).toMatchObject({ reemplazada: true, vigente_hasta: null, aviso: 'NO VIGENTE · reemplazado por una versión más nueva' })
+    expect(de('v2').aviso ?? '').not.toContain('NO VIGENTE')
+  })
+  it('el manual rechazado dice quién y por qué; el reemplazado, solo que fue reemplazado', async () => {
+    const m = (version: number, tag: Fila = {}) => ({ id: `m${version}`, client_id: C, version, human_validated: false, created_at: dias(10 - version), provenance_tag: tag, content_text: 'x' })
+    const base = crearBaseFalsa({ clients: [{ id: C, name: 'c' }], client_brand_books: [m(1), m(2, { vigente: false }), m(3, { rechazado_por: 'dueño', nota_de_rechazo: 'caro' })] })
+    const l = await construirListaCorta(base.consulta, C, { ahora: AHORA })
+    const de = (id: string) => l.lineas.find((x) => x.ref === `client_brand_books:${id}`)!
+    expect(de('m3').aviso).toBe('NO VIGENTE · rechazado por dueño: caro')
+    expect(de('m2').aviso).toBe('NO VIGENTE · reemplazado por una versión más nueva')
+    expect(de('m1').aviso ?? '').not.toContain('NO VIGENTE')
+  })
+  it('sinPlazoLoNoVigente: no toca lo que no lleva versión, y conserva otros avisos', () => {
+    const base = { ref: 'x:1', vigente_hasta: dias(-5), vencido: false } as never as Parameters<typeof sinPlazoLoNoVigente>[0]
+    expect(sinPlazoLoNoVigente(base)).toBe(base)
+    const inval = sinPlazoLoNoVigente({ ...base, vigente: false, valida: false, aviso: '⛔ NO VÁLIDO' })
+    expect(inval.aviso).toBe('NO VIGENTE · marcado como no válido · ⛔ NO VÁLIDO')
+    expect(sinPlazoLoNoVigente({ ...base, vigente: false }).aviso).toBe('NO VIGENTE · no es la versión vigente')
+    expect(sinPlazoLoNoVigente({ ...base, vigente: false, aviso: 'VENCIDO desde 2026-01-01 · última verificación 2025-01-01 · verifícalo antes de afirmarlo · otro' }).aviso).toBe('NO VIGENTE · no es la versión vigente · otro')
+    expect(avisoNoVigente({ aviso: 'antes · NO VIGENTE · x' })).toBe('NO VIGENTE · x')
+    expect(sinPlazoLoNoVigente({ ...base, reemplazada: true })).toMatchObject({ vigente_hasta: null, aviso: 'NO VIGENTE · reemplazado por una versión más nueva' })
+    expect(sinPlazoLoNoVigente({ ...base, vigente: false, aviso: 'otro · VENCIDO desde 2026-01-01 · última verificación 2025-01-01 · verifícalo antes de afirmarlo' }).aviso).toBe('NO VIGENTE · no es la versión vigente · otro')
+    expect(avisoNoVigente({})).toBeNull()
   })
 })
 
@@ -247,9 +324,11 @@ describe('el caso real · Zero Risk Seguridad Industrial: limpiezas que el dueñ
     for (const id of ['a58df0c4', '4d6ded22', 'b682fc72', 'c9b4cb6d']) {
       const f = linea(l, id)
       expect(f.estado).toBe('borrador sin aprobar')
-      expect(f.aviso ?? '').not.toContain('NO VIGENTE')
+      expect(f.aviso ?? '').not.toContain('rechazado')
       expect(f.decision_del_dueno).toBeUndefined()
     }
+    for (const id of ['a58df0c4', '4d6ded22', 'c9b4cb6d']) expect(linea(l, id).aviso ?? '').not.toContain('NO VIGENTE')
+    expect(linea(l, 'b682fc72').aviso).toBe('NO VIGENTE · reemplazado por una versión más nueva')
   })
   it('ninguna limpieza sale como decisión del dueño', async () => {
     const l = await listaDe(C, { salidas, cola: colaReal })

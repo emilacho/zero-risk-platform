@@ -12,7 +12,7 @@ import { type ClaseDePlazo, type Plazos, vigenciaDe } from './plazos'
 import { resumirTexto } from './resumen'
 import { type DecisionAtada, type DecisionDelDueno, type Estado, type EstadoDeFuente, type Ficha, type NombreDeFuente, type Origen, pesoDeTexto } from './tipos'
 import { derivarVersiones } from './versiones'
-import { aprobacionesPorPlan, esDeUnaParte, estadoDeLaSalida, filaConDecisionReal, manualCerrado, manualRechazado, quienResolvio, vencimientosDeLaCola } from './estado-en-plataforma'
+import { aprobacionesPorPlan, esDeUnaParte, estadoDeLaSalida, filaConDecisionReal, manualCerrado, manualRechazado, motivoDelManualRechazado, quienResolvio, vencimientosDeLaCola } from './estado-en-plataforma'
 import { avisoDeProvisionales } from '../manual/lectura'
 import { validacionDelManual, versionVigente } from '../manual/campos-del-manual'
 import { AVISO_DE_HORARIO_CERRADA, AVISO_DE_HORARIO_POR_ABRIR, estadoDeLasSedes, esLineaDeHorarioOAtencion } from '../sedes/por-abrir'
@@ -115,7 +115,7 @@ export async function leerManual(ctx: Contexto): Promise<Salida> {
       que_es: `Manual de marca (voz, valores, posicionamiento, vocabulario y palabras prohibidas) · ${validacion.rotulo}${vigente && avisoDeProvisionales(f.content_text) ? ` · ${avisoDeProvisionales(f.content_text)}` : ''}`,
       origen: 'producido', estado: manualRechazado(f) ? 'rechazado' : validacion.aprobado ? 'aprobado' : 'borrador sin aprobar',
       fecha: iso(f.created_at), plazo: 'sin_plazo', version, vigente, reemplazada: !vigente, versiones_anteriores: vigente ? filas.length - 1 : 0,
-      peso: pesoDeTexto(cuerpo), ...(vigente ? { contenido: cuerpo } : {}),
+      peso: pesoDeTexto(cuerpo), ...(vigente ? { contenido: cuerpo } : {}), ...(manualRechazado(f) ? { aviso: `NO VIGENTE · ${motivoDelManualRechazado(f)}` } : {}),
     })
   })
   return exito({ manual: estadoDeFuente(lineas.length) }, lineas)
@@ -571,7 +571,7 @@ export async function leerFichas(ctx: Contexto): Promise<Salida> {
     let vig: { vigente_hasta: string | null; vencido: boolean }
     if (retirada) {
       vig = { vigente_hasta: null, vencido: false }
-      avisos.push(`RETIRADA desde ${retirada.slice(0, 10)}${texto(f.motivo_retirada) ? ` · ${texto(f.motivo_retirada)}` : ''}`)
+      avisos.push(`NO VIGENTE · RETIRADA desde ${retirada.slice(0, 10)}${texto(f.motivo_retirada) ? ` · ${texto(f.motivo_retirada)}` : ''}`)
     } else if (explicita) {
       const vencido = new Date(explicita).getTime() < t0
       vig = { vigente_hasta: explicita, vencido }
@@ -589,7 +589,7 @@ export async function leerFichas(ctx: Contexto): Promise<Salida> {
       que_es: `${recorte(texto(f.que_es) ?? texto(f.titulo) ?? 'ficha del cerebro', 200)}${archivo}`,
       origen: mapa.origen, estado: f.propiedad === 'incierta' ? 'propiedad_incierta' : mapa.estado, fecha_fuente: iso(f.fecha_fuente) ?? iso(f.creado_en),
       vigente_hasta: vig.vigente_hasta, vencido: vig.vencido, peso_estimado: pesoDeTexto(contenido ?? `${texto(f.titulo) ?? ''} ${texto(f.que_es) ?? ''}${archivo}`),
-      version: profundidad(id), vigente: !reemplazada, reemplazada, versiones_anteriores: reemplazada ? 0 : profundidad(id) - 1,
+      version: profundidad(id), vigente: !reemplazada && !retirada, reemplazada, versiones_anteriores: reemplazada ? 0 : profundidad(id) - 1,
     }
     if (reemplazada) salida.ref_de_la_vigente = `cerebro_fichas:${hoja(id)}`
     if (avisos.length) salida.aviso = avisos.join(' · ')
