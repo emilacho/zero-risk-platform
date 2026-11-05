@@ -146,10 +146,11 @@ function entradaDelMomento(a: Arts, ronda: 1 | 2): EntradaDelMomento {
   const sano = (k: string) => (a[k] && !a[k].sin_supuestos_del_agente ? a[k] : undefined)
   const propuesto = ronda === 2 ? (sano('planteo_fijado_2') ?? sano('planteo_fijado') ?? sano('planteo')) : (sano('planteo_fijado') ?? sano('planteo'))
   const exp = a.expediente ?? {}
-  // la meta firmada por el dueño manda, sea cual sea el camino del planteo (agente o mesa); el cálculo lo dice en sus alertas
+  // la meta firmada por el dueño manda, sea cual sea el camino del planteo (agente o mesa). Va en la entrada para que el bloque y la tarjeta de firma lo digan, y la huella lo cubra
   const fijada = metaDeLaFirma((exp.meta_fijada_por_el_dueno ?? null) as Record<string, unknown> | null)
   const planteo = propuesto && fijada ? { ...propuesto, meta_por_semana: fijada.meta_por_semana } : propuesto
-  const avisoDeFirma = propuesto && fijada ? [`meta_fijada_por_el_dueno: se usó ${fijada.meta_por_semana} por semana, firmada${fijada.por ? ` por ${fijada.por}` : ''}${fijada.en ? ` el ${fijada.en.slice(0, 10)}` : ''}${(propuesto as { meta_por_semana?: unknown }).meta_por_semana !== fijada.meta_por_semana ? `; la oficina proponía ${String((propuesto as { meta_por_semana?: unknown }).meta_por_semana)}` : ''}`] : []
+  const proponia = (propuesto as { meta_por_semana?: unknown } | undefined)?.meta_por_semana
+  const metaFirmada = propuesto && fijada ? { meta: fijada.meta_por_semana, por: fijada.por, en: fijada.en, proponia: typeof proponia === 'number' && proponia !== fijada.meta_por_semana ? proponia : null } : null
   const consultas = ronda === 2
     ? { fpa: consultaDe(a, 'consulta_fpa_2') ?? consultaDe(a, 'consulta_fpa'), redes: consultaDe(a, 'consulta_redes_2') ?? consultaDe(a, 'consulta_redes'), busqueda: consultaDe(a, 'consulta_busqueda_2') ?? consultaDe(a, 'consulta_busqueda'), medicion: consultaDe(a, 'consulta_medicion_2') ?? consultaDe(a, 'consulta_medicion') }
     : { fpa: consultaDe(a, 'consulta_fpa'), redes: consultaDe(a, 'consulta_redes'), busqueda: consultaDe(a, 'consulta_busqueda'), medicion: consultaDe(a, 'consulta_medicion') }
@@ -160,7 +161,7 @@ function entradaDelMomento(a: Arts, ronda: 1 | 2): EntradaDelMomento {
   if (!ent.ok) return { ok: false, motivo: 'sin_base', errores: ent.errores }
   // el planteo se conservó sin responder al equilibrio: el bloque lo DICE (alerta), no lo oculta
   const sinResp = (planteo as { equilibrio_sin_respuesta?: unknown }).equilibrio_sin_respuesta === true
-  return { ok: true, entrada: ent.entrada, alertas: [...avisoDeFirma, ...ent.alertas, ...(sinResp ? ['equilibrio_sin_respuesta: la meta no cubre el equilibrio y el ajuste no lo respondió; el planteo se conservó sin esa decisión'] : [])], planteo: planteo as unknown as PlanteoV1 }
+  return { ok: true, entrada: metaFirmada ? { ...ent.entrada, meta_firmada: metaFirmada } : ent.entrada, alertas: [...ent.alertas, ...(sinResp ? ['equilibrio_sin_respuesta: la meta no cubre el equilibrio y el ajuste no lo respondió; el planteo se conservó sin esa decisión'] : [])], planteo: planteo as unknown as PlanteoV1 }
 }
 
 function calcularBloque(e: EncargoDeConversa, a: Arts, ronda: 1 | 2): ResultadoDePaso {

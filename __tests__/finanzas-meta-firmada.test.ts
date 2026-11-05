@@ -5,6 +5,10 @@
 import { describe, expect, it } from 'vitest'
 import { abrirConversacion, avanzar, metaDeLaFirma } from '../src/lib/finanzas/conversa/orquestador'
 import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
+import { calcular } from '../src/lib/finanzas/calculadora'
+import { huellaDe } from '../src/lib/finanzas/firma'
+import { cifrasDelBloque } from '../src/lib/direccion/decisiones-firma'
+import type { Bloque, Entrada } from '../src/lib/finanzas/tipos'
 import { estadoInicial } from '../src/lib/oficina/tipos'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa } from '../src/lib/finanzas/conversa/puertos'
 import { AGENTES } from '../src/lib/finanzas/conversa/plantilla'
@@ -55,7 +59,7 @@ function mundo(firma?: { ok: true; firma: Record<string, unknown> | null } | { o
 const abrir = (m: ReturnType<typeof mundo>, semilla: Record<string, unknown> = {}) => abrirConversacion(m.P, { client_id: CLIENTE, dry_run: false, semilla: { evento: 'mensaje', dias_activos_por_semana: 7, ...semilla } })
 async function hastaElBloque(m: ReturnType<typeof mundo>) {
   for (let i = 0; i < 30 && !m.arts.bloque; i++) { const r = await avanzar(m.P, 'enc-1'); if (r.status !== 200 || r.cuerpo.terminado) break }
-  return m.arts.bloque as { entrada: { meta_por_semana: number }; alertas_de_entrada?: string[] } & Record<string, unknown>
+  return m.arts.bloque as { entrada: { meta_por_semana: number }; bloque: Bloque; alertas_de_entrada?: string[] } & Record<string, unknown>
 }
 
 describe('la meta firmada por el dueño manda en el plan', () => {
@@ -64,15 +68,16 @@ describe('la meta firmada por el dueño manda en el plan', () => {
     expect((await abrir(m)).status).toBe(200)
     const b = await hastaElBloque(m)
     expect(b.entrada.meta_por_semana).toBe(3.5)
-    const alertas = JSON.stringify(b)
-    expect(alertas).toContain('meta_fijada_por_el_dueno: se usó 3.5 por semana, firmada por emilio el 2026-11-05; la oficina proponía 14')
+    expect(b.bloque.alertas).toContain('meta fijada por el dueño: se usó 3.5 por semana, firmada por emilio el 2026-11-05; la oficina proponía 14')
+    expect(b.bloque.cifras.meta_por_semana).toMatchObject({ valor: 3.5, fuente: 'firmada por emilio el 2026-11-05; la oficina proponía 14' })
+    expect(cifrasDelBloque(b.bloque, 'US$').find((c) => c.clave === 'meta_por_semana')?.nota).toBe('Meta firmada por emilio el 2026-11-05; la oficina proponía 14')
   })
   it('🔴 si el agente ya propone la firmada, no dice que proponía otra', async () => {
     const m = mundo({ ok: true, firma: { ...FIRMA, meta_por_semana: 14 } })
     await abrir(m)
     const b = await hastaElBloque(m)
     expect(b.entrada.meta_por_semana).toBe(14)
-    expect(JSON.stringify(b)).toContain('se usó 14 por semana')
+    expect(b.bloque.alertas).toContain('meta fijada por el dueño: se usó 14 por semana, firmada por emilio el 2026-11-05')
     expect(JSON.stringify(b)).not.toContain('la oficina proponía')
   })
   it('🔴 sin firma, todo sigue igual: manda lo que propone la oficina', async () => {
@@ -80,7 +85,8 @@ describe('la meta firmada por el dueño manda en el plan', () => {
     await abrir(m)
     const b = await hastaElBloque(m)
     expect(b.entrada.meta_por_semana).toBe(14)
-    expect(JSON.stringify(b)).not.toContain('meta_fijada_por_el_dueno')
+    expect(JSON.stringify(b)).not.toContain('meta fijada por el dueño')
+    expect(JSON.stringify(b)).not.toContain('meta_firmada')
   })
   it('🔴 los agentes reciben el dato en el expediente', async () => {
     const m = mundo({ ok: true, firma: FIRMA })
@@ -118,6 +124,44 @@ describe('la meta firmada por el dueño manda en el plan', () => {
     expect(metaDeLaFirma(null)).toBeNull()
     expect(metaDeLaFirma({ meta_por_semana: 2 })).toEqual({ meta_por_semana: 2, total_mes: null, por: null, en: null })
     expect(metaDeLaFirma({ meta_por_semana: 2, total_mes: 'x', por: 1, en: 2 })).toEqual({ meta_por_semana: 2, total_mes: null, por: null, en: null })
+  })
+})
+
+describe('quien firma ve que esa meta ya es suya (05-nov · hallazgo de CC7)', () => {
+  const base = (meta: number): Entrada => ({ meta_por_semana: meta, pasos: [{ tasa: 0.2 }], ticket: 10, margen: 0.5, referencia: { min: 0.4, max: 1.2, tipo: 'supuesto', fuente: 'prueba' }, dias_activos_por_semana: 7 })
+  const firmar = (meta: number, f: { por?: string | null; en?: string | null; proponia?: number | null } = {}) => calcular({ ...base(meta), meta_firmada: { meta, por: null, en: null, proponia: null, ...f } }) as Bloque
+  const notaDeLaMeta = (b: Bloque) => cifrasDelBloque(b, 'US$').find((c) => c.clave === 'meta_por_semana')?.nota
+  it('🔴 sin firma, la tarjeta y el tablero siguen como estaban', () => {
+    const b = calcular(base(5)) as Bloque
+    expect(notaDeLaMeta(b)).toBe('Dato')
+    expect(b.cifras.meta_por_semana.fuente).toBe('plan / planteo fijado')
+    expect(b.alertas.some((a) => a.includes('meta fijada'))).toBe(false)
+  })
+  it('🔴 solo la meta se lee así: otra cifra con una fuente parecida no', () => {
+    const b = firmar(5)
+    b.cifras.total_mes.fuente = 'firmada por alguien'
+    expect(cifrasDelBloque(b, 'US$').find((c) => c.clave === 'total_mes')?.nota).not.toContain('firmada')
+  })
+  it('🔴 el aviso redondea, porque un presupuesto firmado da una meta larga', () => {
+    const b = firmar(6.295739644970414, { por: 'emilio', proponia: 14.123456 })
+    expect(b.alertas).toContain('meta fijada por el dueño: se usó 6.3 por semana, firmada por emilio; la oficina proponía 14.12')
+  })
+  it('🔴 el cálculo sigue con la cifra exacta', () => {
+    expect(firmar(6.295739644970414).cifras.total_mes.valor).toBe((calcular(base(6.295739644970414)) as Bloque).cifras.total_mes.valor)
+    expect(firmar(6.295739644970414).cifras.total_mes.valor).not.toBe((calcular(base(6.3)) as Bloque).cifras.total_mes.valor)
+  })
+  it('🔴 sin nombre ni fecha no los inventa', () => {
+    expect(firmar(5).alertas).toContain('meta fijada por el dueño: se usó 5 por semana, firmada por el dueño')
+  })
+  it('🔴 entra en la huella: otra firma es otra huella', () => {
+    expect(huellaDe(firmar(5, { por: 'a' }))).not.toBe(huellaDe(firmar(5, { por: 'b' })))
+    expect(huellaDe(firmar(5))).not.toBe(huellaDe(calcular(base(5))))
+  })
+  it('🔴 si se recalcula con otra meta, deja de decir que esa la firmó', () => {
+    const b = calcular({ ...base(7), meta_firmada: { meta: 5, por: 'emilio', en: null, proponia: null } }) as Bloque
+    expect(b.alertas.some((a) => a.includes('meta fijada'))).toBe(false)
+    expect(b.cifras.meta_por_semana.fuente).toBe('plan / planteo fijado')
+    expect(notaDeLaMeta(b)).toBe('Dato')
   })
 })
 

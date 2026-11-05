@@ -2,6 +2,7 @@
  * QUÉ SE FIRMA (05-nov · corrección de Lenovo: la tarjeta de firma se veía vacía). SOLO LECTURA.
  * Las cifras salen del bloque que calculó el código; los críticos, del acuerdo que usó el cierre de ese tablero. Lo que no conste no viene: el tablero no ofrece firmar sin cifras.
  */
+import { PREFIJO_DE_META_FIRMADA } from '../finanzas/calculadora'
 import { dosCostos } from '../finanzas/dos-costos'
 import type { Bloque } from '../finanzas/tipos'
 import { esObjeto, leer, sinSecretos, texto, type Db, type Fila } from './comun'
@@ -48,7 +49,7 @@ export function cifrasDelBloque(bloque: unknown, dinero: string | null): CifraDe
   const salida: CifraDeFirma[] = []
   const poner = (clave: string, nombre: string, unidad: string | null) => {
     const c = cs[clave]
-    if (esObjeto(c) && typeof c.valor === 'number' && Number.isFinite(c.valor)) salida.push({ clave, nombre, valor: c.valor, unidad, nota: notaDe(c) })
+    if (esObjeto(c) && typeof c.valor === 'number' && Number.isFinite(c.valor)) salida.push({ clave, nombre, valor: c.valor, unidad, nota: clave === 'meta_por_semana' && typeof c.fuente === 'string' && c.fuente.startsWith(PREFIJO_DE_META_FIRMADA) ? `Meta ${c.fuente}` : notaDe(c) })
   }
   poner('meta_por_semana', 'Meta de ventas por semana', 'ventas')
   poner('total_mes', 'Presupuesto total al mes', dinero)
