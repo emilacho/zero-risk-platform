@@ -4,22 +4,29 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { estadoInicial } from '../src/lib/oficina/tipos'
-import { prepararPreguntas, type PuertosDelBuzon } from '../src/lib/finanzas/conversa/buzon'
+import { prepararPreguntas, preguntarAlDueno, type PuertosDelBuzon } from '../src/lib/finanzas/conversa/buzon'
 import { armarMensaje } from '../src/lib/finanzas/preguntas'
 import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
 import { atenderPausa, MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
+import { elDuenoRecibePreguntas } from '../src/lib/finanzas/preguntas'
 import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conversa/esperas-supabase'
 import { despertarDelEntorno, puertosDePausa } from '../src/lib/finanzas/conversa/puertos-de-pausa'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import { prevuelo } from '../src/lib/planeacion/prevuelo'
 import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
+import { rutaDueno, rutaLeerDueno } from '../src/lib/portero-alimenta/dueno'
+import { cerebroDelDueno } from '../src/lib/buzon-dueno/cerebro-dueno'
+import { crearBaseFalsa } from '../src/lib/portero-alimenta/__tests__/base-falsa'
+import { DIEZ_CLIENTES } from '../src/lib/portero-alimenta/__tests__/diez-clientes.fixtures'
+import { tablasDe } from '../src/lib/portero-alimenta/__tests__/diez-clientes.tablas'
+import { ON } from '../src/lib/portero-alimenta/__tests__/fixtures-despertar'
 
 const preg = (clave: string, o: Record<string, unknown> = {}) => ({ clave, texto: `¿Pregunta sobre ${clave.replace(/_/g, ' ')}?`, recomendacion: 'Lo que te conviene hacer.', supuesto_si_no_responde: 'Lo que supongo sin tu respuesta.', impacto: 'alto', ...o })
 const CINCO = [preg('comision'), preg('turistas'), preg('temporada'), preg('whatsapp', { frena_la_firma: true }), preg('pixel', { frena_la_firma: true })]
 const acuerdo = (preguntas: unknown[] = CINCO, criticos = 3) => ({ acuerdo: { criticos, requiere_ronda_2: criticos > 0, preguntas_a_emilio: preguntas, hallazgos: [] } })
 
-function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; despierta?: boolean; corrida?: { estado: string | null; otra_activa: boolean } | 'caida'; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
+function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; modo?: PuertosDePausa['modo']; despierta?: boolean; corrida?: { estado: string | null; otra_activa: boolean } | 'caida'; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
   const e: EncargoDeConversa = { id: 'enc-1', client_id: 'cli', estado: o.estado ?? 'esperando_al_dueno', estado_del_motor: estadoInicial(), gasto_usd: 1.2, slack_canal: o.slackTs ? 'C123456789' : null, slack_ts: o.slackTs ?? null, leido_hasta: o.slackTs ?? null, tablero_id: null, dry_run: false, semilla: { corrida: 'cor-1', ...(o.semilla ?? {}) } }
   const arts: Record<string, Record<string, unknown>> = { ...acuerdo(), ...(o.arts ?? {}) }
   const guardados: Array<Record<string, unknown>> = [], avisos: string[] = [], enviados: string[] = [], despertares: Array<Record<string, unknown>> = [], enHilo: string[] = [], corridasPausadas: string[] = []
@@ -44,11 +51,11 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
   }
   const P: PuertosDePausa = {
     almacen,
-    modo: 'envia',
+    modo: o.modo ?? 'envia',
     canal: 'C123456789',
     ahora: () => new Date(o.hora ?? '2026-11-04T16:00:00Z'),
     avisar: async (t) => { avisos.push(t) },
-    cerebro: { async registrarPregunta() { return (o.registrar ?? { ok: true, estado: 'registrada', pregunta_id: 'p1' }) as never }, async registrarRespuesta(r) { alCerebro.push(r as never); return o.cerebroCaido ? { ok: false, error: 'http_500' } : { ok: true } } },
+    cerebro: { async registrarPregunta() { return (o.registrar ?? { ok: true, estado: 'registrada', pregunta_id: 'p1' }) as never }, async leerRespuestas() { return { ok: true as const, respuestas: [] } }, async cerrarPendiente() { return { ok: true as const } }, async registrarRespuesta(r) { alCerebro.push(r as never); return o.cerebroCaido ? { ok: false, error: 'http_500' } : { ok: true } } },
     slack: {
       async enviarAlDueno(t: string) { enviados.push(t); return { ok: true as const, canal: 'C123456789', ts: '100.1' } },
       async enHilo(_c: string, _t: string, x: string) { enHilo.push(x); return { ok: true as const } },
@@ -265,6 +272,353 @@ describe('la respuesta suelta la pausa', () => {
     expect((llamadas[0][1].headers as Record<string, string>)['x-sala-dispatch-key']).toBe('k')
     expect((llamadas[0][1].headers as Record<string, string>)['x-api-key']).toBeUndefined()
     expect((await despertarPorElFlujo({ fetchImpl: f })({})).ok).toBe(false)
+  })
+})
+
+describe('la pausa sin Slack (05-nov · decisión de Emilio)', () => {
+  const pedirPausa = { encargo_id: 'enc-1', sobre: { corrida: 'plan-x', client_id: 'cli' }, material: { a: 1 }, workflow_id: 'wf', workflow_execution_id: 'ex' }
+  it('🔴 pausa, registra la pregunta, no toca Slack y no avisa de ningún fallo', async () => {
+    const m = mundo({ modo: 'registra' })
+    const r = await pausarOficina(m.P, pedirPausa)
+    expect(r.cuerpo).toMatchObject({ pausado: true, enviado: false, motivo: 'registrada' })
+    expect(m.enviados).toEqual([])
+    expect(m.avisos).toEqual([])
+    expect(m.despertares).toEqual([])
+  })
+  it('🔴 el vigía no repite ni avisa mientras espera', async () => {
+    const m = mundo({ modo: 'registra' })
+    await pausarOficina(m.P, pedirPausa)
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ esperando: true })
+    expect(m.enviados).toEqual([])
+    expect(m.avisos).toEqual([])
+  })
+  it('🔴 si el cerebro no pudo registrar la pregunta, avisa una sola vez y lo reintenta', async () => {
+    const m = mundo({ modo: 'registra', registrar: { ok: false, error: 'http_500' } })
+    await pausarOficina(m.P, pedirPausa)
+    await atenderPausa(m.P, 'enc-1')
+    expect(m.avisos).toHaveLength(1)
+    expect(m.arts.buzon_respuestas).toBeUndefined()
+  })
+  it('🔴 contestando en la oficina, el plan vuelve sin haber pasado por Slack', async () => {
+    const m = mundo({ modo: 'registra' })
+    await pausarOficina(m.P, pedirPausa)
+    for (const tema of preguntasQueFaltan(m.arts, m.e.semilla).map((c) => c.replace(/_/g, ' '))) await responderEnLaOficina(m.P, { client_id: 'cli', tema, respuesta: 'sí, ya lo tengo', quien: 'emilio' })
+    expect(m.despertares).toHaveLength(1)
+    expect(m.enviados).toEqual([])
+    expect(m.enHilo).toEqual([])
+  })
+  it('🔴 la pregunta queda rotulada como de Tu oficina, y con Slack sigue su rótulo', async () => {
+    const cuerpos: Array<Record<string, unknown>> = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_u: string, i: RequestInit) => { cuerpos.push(JSON.parse(String(i.body))); return { status: 200, json: async () => ({ ok: true, registrada: true }) } }) as never
+    const env = { INTERNAL_API_KEY: 'k', FINANZAS_CANAL_PREGUNTAS: 'C123456789' }
+    try {
+      const q = { client_id: 'c', tema: 't', pregunta: 'p' }
+      await puertosDePausa(env, new DbFalsa() as never, 'registra', 'wf', 'ex').cerebro.registrarPregunta(q)
+      await puertosDePausa(env, new DbFalsa() as never, 'envia', 'wf', 'ex').cerebro.registrarPregunta(q)
+    } finally { globalThis.fetch = original }
+    expect(cuerpos[0].canal).toBe('dashboard · Tu oficina')
+    expect(String(cuerpos[1].canal)).toContain('buzon-de-preguntas')
+    const ruta = fs.readFileSync('src/app/api/finanzas/conversa/route.ts', 'utf8')
+    expect(ruta).toContain("cfg.preguntas_slack === 'registra' ? { canal_etiqueta: ETIQUETA_DE_TU_OFICINA }")
+  })
+  it('🔴 la oficina se pausa también en este modo', () => {
+    expect(elDuenoRecibePreguntas('registra')).toBe(true)
+    expect(elDuenoRecibePreguntas('envia')).toBe(true)
+    expect(elDuenoRecibePreguntas('apagado')).toBe(false)
+    expect(elDuenoRecibePreguntas('borrador')).toBe(false)
+    expect(fs.readFileSync('src/lib/finanzas/conversa/orquestador.ts', 'utf8')).toContain('cfg.pausa_al_dueno === true && elDuenoRecibePreguntas(cfg.preguntas_slack)')
+  })
+})
+
+describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)', () => {
+  const armar = (o: { preguntas?: unknown[]; semilla?: Semilla; caido?: () => boolean } = {}) => {
+    const c = DIEZ_CLIENTES[0]
+    let hora = new Date('2026-11-05T12:00:00Z').getTime()
+    const t: Record<string, Array<Record<string, unknown>>> = { ...(tablasDe(c) as unknown as Record<string, Array<Record<string, unknown>>>), cerebro_dueno_preguntas: [] }
+    const base = crearBaseFalsa(t as never, { reloj: () => new Date(hora).toISOString() })
+    let n = 0
+    const deps = () => ({ db: base.db, interruptores: ON, ahora: new Date(hora), activo: true, nuevoId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` }) as never
+    const fetchF = async (u: string, i: RequestInit) => {
+      if (o.caido?.()) return { status: 500, json: async () => ({ error: 'caída' }) }
+      const q = new URL(u).searchParams
+      const r = i.method === 'GET' ? await rutaLeerDueno({ db: base.db, ahora: new Date(hora) } as never, { client_id: q.get('client_id') ?? '', tema: q.get('tema') }) : await rutaDueno(deps(), JSON.parse(String(i.body)))
+      return { status: r.status, json: async () => r.body }
+    }
+    const m = mundo({ modo: 'registra', semilla: o.semilla, arts: acuerdo((o.preguntas ?? [preg('whatsapp'), preg('pixel')]) as typeof CINCO) })
+    m.e.client_id = c.id
+    const P = { ...m.P, ahora: () => new Date(hora), cerebro: cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'wf', workflow_execution_id: 'ex', canal_etiqueta: 'dashboard · Tu oficina', fetch: fetchF as never }) } as PuertosDePausa
+    const filas = () => t.cerebro_dueno_preguntas
+    const pendientes = () => filas().filter((p) => p.estado === 'pendiente').length
+    const pedir = { encargo_id: 'enc-1', sobre: { corrida: 'plan-x', client_id: c.id }, material: { a: 1 }, workflow_id: 'wf', workflow_execution_id: 'ex' }
+    return { c, t, m, P, filas, pendientes, pedir, deps, horas: (h: number) => { hora += h * 3_600_000 }, minutos: (x: number) => { hora += x * 60_000 }, hora: () => new Date(hora).toISOString() }
+  }
+  const contestarPorLaPuerta = (a: ReturnType<typeof armar>, tema: string) => rutaDueno(a.deps(), { evento: 'respuesta', client_id: a.c.id, tema, pregunta: `¿${tema}?`, respuesta: 'sí, por el chat', canal: 'chat de Tu oficina', mensaje_ref: 'chat:1', respondido_en: a.hora(), preguntado_por: { oficina: 'tu-oficina', agente: 'dueno' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+
+  it('🔴 una pregunta descartada no vuelve con el vigía', async () => {
+    const a = armar()
+    await pausarOficina(a.P, a.pedir)
+    expect(a.filas()).toHaveLength(2)
+    const d = await rutaDueno(a.deps(), { evento: 'descartar', client_id: a.c.id, pregunta_id: a.filas()[0].id, motivo: 'la descartó', dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+    expect(d.status).toBe(200)
+    for (let i = 0; i < 3; i++) { a.minutos(10); await atenderPausa(a.P, 'enc-1') }
+    expect(a.filas()).toHaveLength(2)
+    expect(a.pendientes()).toBe(1)
+  })
+  it('🔴 una pausa de más de 72 horas no duplica, y contestar cierra todo', async () => {
+    const a = armar()
+    await pausarOficina(a.P, a.pedir)
+    a.horas(73); await atenderPausa(a.P, 'enc-1')
+    a.horas(73); await atenderPausa(a.P, 'enc-1')
+    expect(a.filas()).toHaveLength(2)
+    for (const tema of ['whatsapp', 'pixel']) expect((await responderEnLaOficina(a.P, { client_id: a.c.id, tema, respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ aplicada: true, en_el_cerebro: true, tema_cerrado: true })
+    expect(a.pendientes()).toBe(0)
+    expect(a.m.despertares).toHaveLength(1)
+  })
+  it('🔴 dentro de las 72 horas la pregunta queda respondida, no obsoleta', async () => {
+    const a = armar()
+    await pausarOficina(a.P, a.pedir)
+    for (let i = 0; i < 12; i++) { a.minutos(10); await atenderPausa(a.P, 'enc-1') }
+    for (const tema of ['whatsapp', 'pixel']) await responderEnLaOficina(a.P, { client_id: a.c.id, tema, respuesta: 'sí, ya lo tengo', quien: 'emilio' })
+    expect(a.filas().map((p) => p.estado)).toEqual(['respondida', 'respondida'])
+    expect(a.m.despertares).toHaveLength(1)
+  })
+  it('🔴 una respuesta por otra puerta espera el margen antes de soltar el plan, y luego lo suelta', async () => {
+    const a = armar()
+    await pausarOficina(a.P, a.pedir)
+    expect((await contestarPorLaPuerta(a, 'whatsapp')).status).toBe(200)
+    a.minutos(1); await atenderPausa(a.P, 'enc-1')
+    expect(a.m.despertares).toEqual([])
+    expect(a.m.e.semilla.respuestas_del_dueno).toEqual([expect.objectContaining({ clave: 'whatsapp', literal: 'sí, por el chat' })])
+    expect(a.m.e.semilla.ultima_respuesta_en).toBe(a.hora())
+    a.minutos(14); await atenderPausa(a.P, 'enc-1')
+    expect(a.m.despertares).toEqual([])
+    a.minutos(2); await atenderPausa(a.P, 'enc-1')
+    expect(a.m.despertares).toHaveLength(1)
+  })
+  it('🔴 sin haber contestado nada, el plan sigue esperando aunque pasen días', async () => {
+    const a = armar()
+    await pausarOficina(a.P, a.pedir)
+    a.horas(200); await atenderPausa(a.P, 'enc-1')
+    expect(a.m.despertares).toEqual([])
+  })
+  it('🔴 lo que el cerebro ya sabía antes de la pausa no suelta el plan con otra pregunta abierta', async () => {
+    const a = armar()
+    expect((await contestarPorLaPuerta(a, 'whatsapp')).status).toBe(200)
+    expect((await pausarOficina(a.P, a.pedir)).cuerpo).toMatchObject({ pausado: true })
+    a.minutos(20); await atenderPausa(a.P, 'enc-1')
+    expect(a.m.despertares).toEqual([])
+    expect(a.pendientes()).toBe(1)
+  })
+  it('🔴 con el cerebro caído en la primera vuelta, reintenta y registra una sola vez', async () => {
+    let caido = true
+    const a = armar({ caido: () => caido })
+    await pausarOficina(a.P, a.pedir)
+    expect(a.filas()).toEqual([])
+    expect(a.m.avisos).toHaveLength(1)
+    caido = false
+    a.minutos(10); await atenderPausa(a.P, 'enc-1')
+    expect(a.filas()).toHaveLength(2)
+    a.minutos(10); await atenderPausa(a.P, 'enc-1')
+    expect(a.filas()).toHaveLength(2)
+  })
+  it('🔴 con el cerebro caído después de registrar, ni duplica ni suelta', async () => {
+    let caido = false
+    const a = armar({ caido: () => caido })
+    await pausarOficina(a.P, a.pedir)
+    caido = true
+    a.minutos(10); await atenderPausa(a.P, 'enc-1')
+    expect(a.m.avisos).toHaveLength(1)
+    expect(a.m.despertares).toEqual([])
+    expect(a.filas()).toHaveLength(2)
+  })
+  it('🔴 si no se puede leer el registro, no pregunta otra vez', async () => {
+    const a = armar()
+    await pausarOficina(a.P, a.pedir)
+    const original = a.P.almacen.artefactos
+    let n = 0
+    a.P.almacen.artefactos = async (id: string) => { if (++n === 2) throw new Error('caída'); return original(id) }
+    expect((await preguntarAlDueno(a.P, 'enc-1')).cuerpo).toMatchObject({ motivo: 'registro_ilegible' })
+    expect(a.filas()).toHaveLength(2)
+  })
+  it('🔴 sin pausa, la respuesta le llega al encargo solo si el plan vuelve a preguntar', async () => {
+    const a = armar()
+    a.m.e.estado = 'en_curso'
+    await preguntarAlDueno(a.P, 'enc-1')
+    await contestarPorLaPuerta(a, 'whatsapp')
+    expect(a.m.e.semilla.respuestas_del_dueno).toBeUndefined()
+    expect((await preguntarAlDueno(a.P, 'enc-1')).cuerpo).toMatchObject({ motivo: 'respondidas_en_el_cerebro', usadas_del_cerebro: ['whatsapp'] })
+    expect(a.m.e.semilla.respuestas_del_dueno).toHaveLength(1)
+  })
+  it('🔴 una segunda ronda guarda las claves nuevas sin perder las anteriores', async () => {
+    const a = armar({ preguntas: [preg('whatsapp')] })
+    await preguntarAlDueno(a.P, 'enc-1')
+    a.m.arts.acuerdo_2 = acuerdo([preg('whatsapp'), preg('pixel')]).acuerdo as never
+    expect((await preguntarAlDueno(a.P, 'enc-1')).cuerpo).toMatchObject({ motivo: 'registrada', claves: ['pixel'] })
+    expect(a.filas()).toHaveLength(2)
+    const r = a.m.arts.buzon_respuestas as { n: number; claves: string[]; preguntas: Array<{ clave: string; recomendacion: string }> }
+    expect(r.n).toBe(2)
+    expect(r.claves).toEqual(['whatsapp', 'pixel'])
+    expect(r.preguntas.map((q) => q.clave)).toEqual(['whatsapp', 'pixel'])
+    expect(r.preguntas[1].recomendacion).toBe('Lo que te conviene hacer.')
+  })
+  it('🔴 una respuesta por otra puerta a una pregunta de más de 72 horas también la cierra', async () => {
+    const a = armar()
+    await pausarOficina(a.P, a.pedir)
+    a.horas(73)
+    expect((await contestarPorLaPuerta(a, 'whatsapp')).status).toBe(200)
+    expect(a.pendientes()).toBe(2)
+    await atenderPausa(a.P, 'enc-1')
+    expect(a.pendientes()).toBe(1)
+  })
+  it('🔴 lo ya contestado no se vuelve a leer', async () => {
+    const a = armar()
+    await pausarOficina(a.P, a.pedir)
+    await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })
+    const leidos: string[] = []
+    const leer = a.P.cerebro.leerRespuestas!
+    a.P.cerebro.leerRespuestas = async (q) => { leidos.push(q.tema); return leer(q) }
+    await preguntarAlDueno(a.P, 'enc-1')
+    expect(leidos).toEqual(['pixel'])
+  })
+  describe('al contestar se cierra solo lo de este encargo (05-nov · hallazgo de CC7)', () => {
+    const deOtraOficina = (a: ReturnType<typeof armar>) => {
+      const ajenas = [['00000000-0000-4000-9000-000000000001', 'whatsapp', 'olon'], ['00000000-0000-4000-9000-000000000002', 'whatsapp de la tienda de olon', null], ['00000000-0000-4000-9000-000000000003', 'horario de la tienda', null]].map(([id, tema, sede_clave]) => ({ id, client_id: a.c.id, tema, sede_clave, pregunta: `¿${tema}?`, estado: 'pendiente', creado_en: a.hora(), preguntado_por_oficina: 'creativa' }))
+      a.t.cerebro_dueno_preguntas.push(...ajenas)
+      return () => a.filas().filter((p) => String(p.id).startsWith('00000000-0000-4000-9000')).map((p) => p.estado)
+    }
+    it('🔴 contestar en Tu oficina deja viva la pregunta de otra sede u otra oficina', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      const ajenas = deOtraOficina(a)
+      expect((await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ en_el_cerebro: true, tema_cerrado: true })
+      expect(ajenas()).toEqual(['pendiente', 'pendiente', 'pendiente'])
+      expect(a.filas().filter((p) => p.tema === 'whatsapp' && !p.sede_clave).map((p) => p.estado)).toEqual(['respondida'])
+    })
+    it('🔴 pasadas las 72 horas también se cierra la propia, y las ajenas siguen vivas', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      const ajenas = deOtraOficina(a)
+      await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })
+      expect(ajenas()).toEqual(['pendiente', 'pendiente', 'pendiente'])
+      expect(a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)).toMatchObject({ estado: 'obsoleta', motivo_descarte: 'el dueño ya contestó esta pregunta' })
+    })
+    it('🔴 una respuesta recogida del cerebro cierra la propia y no toca las ajenas', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      const propia = () => a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)
+      expect((await contestarPorLaPuerta(a, 'whatsapp')).status).toBe(200)
+      const ajenas = deOtraOficina(a)
+      await atenderPausa(a.P, 'enc-1')
+      expect(ajenas()).toEqual(['pendiente', 'pendiente', 'pendiente'])
+      expect(propia()).toMatchObject({ estado: 'obsoleta' })
+    })
+    it('🔴 lo recogido cierra su propia pregunta, no la primera del registro', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      expect((await contestarPorLaPuerta(a, 'pixel')).status).toBe(200)
+      await atenderPausa(a.P, 'enc-1')
+      expect(a.filas().map((p) => [p.tema, p.estado])).toEqual([['whatsapp', 'pendiente'], ['pixel', 'obsoleta']])
+    })
+    it('🔴 una ronda nueva también cierra lo que recogió', async () => {
+      const a = armar({ preguntas: [preg('whatsapp')] })
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      expect((await contestarPorLaPuerta(a, 'whatsapp')).status).toBe(200)
+      a.m.arts.acuerdo = acuerdo([preg('whatsapp'), preg('pixel')]).acuerdo
+      await atenderPausa(a.P, 'enc-1')
+      expect(a.filas().map((p) => [p.tema, p.estado])).toEqual([['whatsapp', 'obsoleta'], ['pixel', 'pendiente']])
+    })
+    it('🔴 si el cerebro cayó a mitad del primer registro, la repetida guarda su id y se cierra pasadas las 72 horas', async () => {
+      let caido = false, llamadas = 0
+      const a = armar({ caido: () => caido })
+      const real = a.P.cerebro.registrarPregunta
+      a.P.cerebro.registrarPregunta = async (q) => { if (++llamadas === 2) { caido = true; try { return await real(q) } finally { caido = false } } return real(q) }
+      await pausarOficina(a.P, a.pedir)
+      expect(a.filas().map((p) => p.tema)).toEqual(['whatsapp'])
+      a.minutos(10)
+      await atenderPausa(a.P, 'enc-1')
+      expect(a.filas().map((p) => p.tema)).toEqual(['whatsapp', 'pixel'])
+      const registro = a.m.arts.buzon_respuestas as { preguntas: Array<{ clave: string; pregunta_id: string | null }> }
+      expect(registro.preguntas.map((p) => [p.clave, p.pregunta_id])).toEqual([['whatsapp', a.filas()[0].id], ['pixel', a.filas()[1].id]])
+      a.horas(73)
+      await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })
+      expect(a.filas()[0].estado).toBe('obsoleta')
+    })
+    it('🔴 una pregunta de otra oficina no guarda id: su fila no se cierra desde aquí', async () => {
+      const a = armar({ preguntas: [preg('whatsapp')] })
+      a.t.cerebro_dueno_preguntas.push({ id: '00000000-0000-4000-9000-000000000009', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿whatsapp?', estado: 'pendiente', creado_en: a.hora(), preguntado_por_oficina: 'creativa', canal: 'otra' })
+      await pausarOficina(a.P, a.pedir)
+      const registro = a.m.arts.buzon_respuestas as { preguntas: Array<{ pregunta_id: string | null }> }
+      expect(registro.preguntas[0].pregunta_id).toBeNull()
+    })
+    it('🔴 si en una vuelta se recogen varias respuestas, se cierran todas', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      for (const tema of ['whatsapp', 'pixel']) expect((await contestarPorLaPuerta(a, tema)).status).toBe(200)
+      await atenderPausa(a.P, 'enc-1')
+      expect(a.filas().map((p) => p.estado)).toEqual(['obsoleta', 'obsoleta'])
+    })
+    it('🔴 un cierre que lanza no rompe la respuesta y dice que no cerró', async () => {
+      const m = mundo({ modo: 'registra', espera: {}, arts: acuerdo([preg('whatsapp'), preg('pixel')]) })
+      m.P.cerebro.cerrarPendiente = async () => { throw new Error('red') }
+      m.arts.buzon_respuestas = { n: 1, claves: ['whatsapp', 'pixel'], preguntas: [{ clave: 'whatsapp', pregunta_id: 'p1' }, { clave: 'pixel', pregunta_id: 'p2' }] }
+      expect((await responderEnLaOficina(m.P, { client_id: 'cli', tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ aplicada: true, en_el_cerebro: true, tema_cerrado: false })
+    })
+    it('🔴 un cierre que falla dice que no cerró', async () => {
+      const m = mundo({ modo: 'registra', espera: {}, arts: acuerdo([preg('whatsapp'), preg('pixel')]) })
+      m.P.cerebro.cerrarPendiente = async () => ({ ok: false, error: 'no_cerrada' })
+      m.arts.buzon_respuestas = { n: 1, claves: ['whatsapp', 'pixel'], preguntas: [{ clave: 'whatsapp', pregunta_id: 'p1' }, { clave: 'pixel', pregunta_id: 'p2' }] }
+      expect((await responderEnLaOficina(m.P, { client_id: 'cli', tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ en_el_cerebro: true, tema_cerrado: false })
+    })
+    it('🔴 sin id en el registro no cierra nada, ni por tema', async () => {
+      const m = mundo({ modo: 'registra', espera: {}, arts: acuerdo([preg('whatsapp'), preg('pixel')]) })
+      const cierres: unknown[] = []
+      m.P.cerebro.cerrarPendiente = async (q) => { cierres.push(q); return { ok: true } }
+      m.arts.buzon_respuestas = { n: 1, claves: ['whatsapp', 'pixel'], preguntas: [{ clave: 'whatsapp', pregunta_id: null }, { clave: 'pixel', pregunta_id: 'p2' }] }
+      expect((await responderEnLaOficina(m.P, { client_id: 'cli', tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ en_el_cerebro: true, tema_cerrado: false })
+      expect(cierres).toEqual([])
+    })
+    it('🔴 el cierre le pide a la puerta esa pregunta y ningún tema', async () => {
+      const cuerpos: Array<Record<string, unknown>> = []
+      const f = (async (_u: string, i: RequestInit) => { cuerpos.push(JSON.parse(String(i.body))); return { status: 200, json: async () => ({ ok: true }) } }) as never
+      await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
+      expect(cuerpos[0]).toMatchObject({ evento: 'descartar', client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
+      expect(cuerpos[0].tema).toBeUndefined()
+    })
+    it('🔴 la lectura lleva la llave', async () => {
+      const hs: unknown[] = []
+      const f = (async (_u: string, i: RequestInit) => { hs.push(i.headers); return { status: 200, json: async () => ({ ok: true, respuestas: [] }) } }) as never
+      await cerebroDelDueno({ base: 'https://x', llave: 'la-llave', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).leerRespuestas!({ client_id: 'c', tema: 't' })
+      expect(hs).toEqual([expect.objectContaining({ 'x-api-key': 'la-llave' })])
+    })
+    it('🔴 una respuesta vacía no cuenta como contestada', async () => {
+      const f = (async () => ({ status: 200, json: async () => ({ ok: true, respuestas: [{ respuesta: '   ' }, { respuesta: 'sí' }, { otra: 1 }] }) })) as never
+      expect(await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: true, respuestas: [{ respuesta: 'sí' }] })
+    })
+  })
+  it('🔴 si la respuesta no llegó al cerebro, no cierra nada', async () => {
+    const m = mundo({ modo: 'registra', espera: {}, cerebroCaido: true, arts: acuerdo([preg('whatsapp'), preg('pixel')]) })
+    let cierres = 0
+    m.P.cerebro.cerrarPendiente = async () => { cierres++; return { ok: true } }
+    m.arts.buzon_respuestas = { n: 1, claves: ['whatsapp', 'pixel'], preguntas: [{ clave: 'whatsapp', pregunta_id: 'p1' }, { clave: 'pixel', pregunta_id: 'p2' }] }
+    expect((await responderEnLaOficina(m.P, { client_id: 'cli', tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ en_el_cerebro: false, tema_cerrado: false })
+    expect(cierres).toBe(0)
+  })
+  it('🔴 la lectura dice «no se pudo» con un error de la puerta, aunque el cuerpo parezca bueno', async () => {
+    const f = (async () => ({ status: 500, json: async () => ({ ok: true, respuestas: [] }) })) as never
+    expect(await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'http_500' })
+  })
+  it('🔴 la lectura dice «no se pudo» con la puerta apagada, nunca «no contestó»', async () => {
+    const f = (async () => ({ status: 200, json: async () => ({ apagado: true }) })) as never
+    const c = cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f })
+    expect(await c.leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'puerta_apagada' })
+    expect(await c.cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })).toEqual({ ok: false, error: 'puerta_apagada' })
+    expect(await cerebroDelDueno({ base: '', llave: '', workflow_id: '', workflow_execution_id: '', fetch: f }).leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'cerebro_no_configurado' })
   })
 })
 

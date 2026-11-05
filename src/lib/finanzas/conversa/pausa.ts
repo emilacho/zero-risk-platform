@@ -7,7 +7,7 @@
  *  · La ronda 2 la conduce el mismo plan al volver: «abrir» con la misma corrida devuelve este encargo. No hay un segundo conductor.
  *  · Sin vencimiento y sin gasto mientras espera. Lo que no pueda salir avisa UNA vez en #alertas.
  */
-import { prepararPreguntas, preguntarAlDueno, recogerRespuestas, temaDe, type PuertosDelBuzon } from './buzon'
+import { cerrarLoContestado, prepararPreguntas, preguntarAlDueno, recogerRespuestas, temaDe, type PuertosDelBuzon } from './buzon'
 import { ESPERANDO_AL_DUENO, preguntasQueFaltan, type Respuesta } from './orquestador'
 import { sha256 } from './util'
 import { EN_PAUSA } from '../../planeacion/corridas'
@@ -65,7 +65,7 @@ async function avisarUnaVez(P: PuertosDePausa, encargo_id: string, motivo: strin
   await P.avisar?.(texto).catch(() => undefined)
 }
 
-const SALIO = new Set(['ya_enviado', 'respondidas_en_el_cerebro'])
+const SALIO = new Set(['ya_enviado', 'respondidas_en_el_cerebro', 'registrada', 'ya_registrada'])
 /** pregunta en modo pausa; si no pudo salir, lo dice en #alertas una vez y la pausa sigue: el vigía reintenta */
 async function preguntarEnPausa(P: PuertosDePausa, encargo_id: string): Promise<Respuesta> {
   const r = await preguntarAlDueno(P, encargo_id, { pausa: true })
@@ -150,7 +150,8 @@ export async function atenderPausa(P: PuertosDePausa, encargo_id: string, opc: {
   const arts = await P.almacen.artefactos(encargo_id)
   const faltan = preguntasQueFaltan(arts, e.semilla)
   // contestó todo, o contestó algo y ya no escribe más: sigue. Sin ninguna respuesta, o si aún está escribiendo, espera
-  const contesto = Array.isArray(e.semilla?.respuestas_del_dueno) && e.semilla.respuestas_del_dueno.length > 0
+  // sin Slack, lo que el cerebro ya sabía antes de la pausa no cuenta como «ya revisó la ronda»: soltaría el plan sin que el dueño haya visto la pregunta
+  const contesto = P.modo === 'registra' ? typeof e.semilla?.ultima_respuesta_en === 'string' : Array.isArray(e.semilla?.respuestas_del_dueno) && e.semilla.respuestas_del_dueno.length > 0
   const siguioEscribiendo = Array.isArray(recogido.aplicadas) && recogido.aplicadas.length > 0
   const ultima = e.semilla?.ultima_respuesta_en
   const reciente = typeof ultima === 'string' && P.ahora().getTime() - Date.parse(ultima) < SILENCIO_TRAS_RESPONDER_MIN * 60_000
@@ -185,8 +186,9 @@ export async function responderEnLaOficina(P: PuertosDePausa, c: Record<string, 
   const registro = (arts.buzon_respuestas as { preguntas?: Array<{ clave?: string; texto?: string; pregunta_id?: string | null }> } | undefined)?.preguntas?.find((x) => x.clave === clave)
   const texto = prepararPreguntas(arts, e.semilla, { pausa: true }).aprobadas.find((q) => q.clave === clave)?.texto ?? (tema as string)
   const guardada = await P.cerebro.registrarRespuesta({ client_id: e.client_id, tema: temaDe(clave), pregunta: registro?.texto ?? texto, respuesta: respuesta as string, mensaje_ref: `tu-oficina:${quien}:${hora}`, respondido_en: hora, pregunta_id: registro?.pregunta_id ?? null }).catch(() => ({ ok: false as const, error: 'red' }))
+  const cerrada = guardada.ok ? await cerrarLoContestado(P, e.client_id, registro?.pregunta_id) : false
   const a = await atenderPausa(P, e.id, { sinRecoger: true })
-  return { status: 200, cuerpo: { en_pausa: true, es_de_la_pausa: true, aplicada: true, clave, en_el_cerebro: guardada.ok, ...(guardada.ok ? {} : { aviso: 'el cerebro no recibió la respuesta: el plan sí la usa' }), faltan: Array.isArray(a.cuerpo.faltan) ? a.cuerpo.faltan : [], ...(a.cuerpo.soltada ? { soltada: true } : {}) } }
+  return { status: 200, cuerpo: { en_pausa: true, es_de_la_pausa: true, aplicada: true, clave, en_el_cerebro: guardada.ok, tema_cerrado: cerrada, ...(guardada.ok ? {} : { aviso: 'el cerebro no recibió la respuesta: el plan sí la usa' }), faltan: Array.isArray(a.cuerpo.faltan) ? a.cuerpo.faltan : [], ...(a.cuerpo.soltada ? { soltada: true } : {}) } }
 }
 
 /** con varias preguntas abiertas, un texto sin número no se adivina; pero en una pausa, callarse dejaría al dueño creyendo que ya contestó */
