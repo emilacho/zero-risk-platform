@@ -83,6 +83,26 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
   return { e, arts, P, C, guardados, avisos, enviados, despertares, enHilo, corridasPausadas, alCerebro, mensajes, modelo: () => llamadasModelo, espera: () => espera, material: () => materialGuardado }
 }
 
+describe('el pedido a un empleado de finanzas', () => {
+  const PASO = { clave: 'fpa' } as never
+  it('🔴 si no cabe, llega declarado y sin pasarse del tope', () => {
+    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO + 10) })
+    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
+    expect(t.endsWith('decláralo.]')).toBe(true)
+    expect(t).toContain('LLEGA RECORTADO')
+  })
+  it('si cabe, sin aviso', () => {
+    const t = pedidoDelAgente(PASO, { datos: 'x' })
+    expect(t).not.toContain('LLEGA RECORTADO')
+  })
+  it('el borde: lo que cabe justo entra entero', () => {
+    const vacio = pedidoDelAgente(PASO, { datos: '' })
+    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO - vacio.length) })
+    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
+    expect(t).not.toContain('LLEGA RECORTADO')
+  })
+})
+
 describe('cuándo pausa', () => {
   const enc = (semilla: Semilla = {}, dry_run = false) => ({ dry_run, semilla }) as unknown as EncargoDeConversa
   it('🔴 con críticos abiertos y preguntas sin contestar', () => expect(debePausar(enc(), acuerdo())).toBe(true))
@@ -994,23 +1014,3 @@ describe('la migración', () => {
 
 // para que el tipo del buzón siga siendo la base de los puertos de la pausa
 export type _Base = PuertosDelBuzon
-
-describe('el pedido a un empleado de finanzas', () => {
-  const PASO = { clave: 'fpa' } as never
-  it('🔴 si no cabe, llega declarado y sin pasarse del tope', () => {
-    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO + 10) })
-    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
-    expect(t.endsWith('decláralo.]')).toBe(true)
-    expect(t).toContain('LLEGA RECORTADO')
-  })
-  it('si cabe, sin aviso', () => {
-    const t = pedidoDelAgente(PASO, { datos: 'x' })
-    expect(t).not.toContain('LLEGA RECORTADO')
-  })
-  it('el borde: lo que cabe justo entra entero', () => {
-    const vacio = pedidoDelAgente(PASO, { datos: '' })
-    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO - vacio.length) })
-    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
-    expect(t).not.toContain('LLEGA RECORTADO')
-  })
-})
