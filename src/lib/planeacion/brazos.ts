@@ -478,7 +478,7 @@ export async function brazoAnalisis(args: {
       let costo = primero.costo_usd
       if (primero.fallo !== null) {
         const permiso = args.segundoIntento ? args.segundoIntento() : { ok: false as const, motivo: 'no hay segundo intento en esta puerta' }
-        if (!permiso.ok) return { hay: false as const, noSeMiro: true, motivo: `no hubo informe: el analista falló y no se pudo reintentar · ${permiso.motivo} · ${primero.fallo}` }
+        if (!permiso.ok) return { hay: false as const, noSeMiro: true, motivo: `no hubo informe: el analista no entregó y no se pudo reintentar · ${permiso.motivo} · ${primero.fallo}` }
         vale = await intentoDeAnalisis(args, 2)
         costo += vale.costo_usd
         if (vale.fallo !== null) return { hay: false as const, noSeMiro: true, motivo: `no hubo informe: el analista falló en los 2 intentos · 1.º: ${primero.fallo} · 2.º: ${vale.fallo}` }

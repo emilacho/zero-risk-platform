@@ -233,7 +233,7 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
         const salida = POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: [pedido('competencia')] }))
         await vi.advanceTimersByTimeAsync(780_000)
         const rs = await respuestas(await salida)
-        expect(String(rs[0].motivo)).toMatch(/^no hubo informe: el analista falló y no se pudo reintentar · no queda tiempo/)
+        expect(String(rs[0].motivo)).toMatch(/^no hubo informe: el analista no entregó y no se pudo reintentar · no queda tiempo/)
         expect(corredor()).toHaveLength(1)
       } finally {
         vi.useRealTimers()

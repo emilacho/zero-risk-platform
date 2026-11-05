@@ -134,7 +134,7 @@ describe('el brazo: qué pasa con el segundo intento', () => {
     const r = await correr({ pedir, segundoIntento: () => ({ ok: false, motivo: 'no queda cupo en el tope de la mesa' }) })
     expect(pedir).toHaveBeenCalledTimes(1)
     expect(r.estado).toBe('sin_respuesta')
-    expect(String(r.motivo)).toMatch(/^no hubo informe: el analista falló y no se pudo reintentar · no queda cupo/)
+    expect(String(r.motivo)).toMatch(/^no hubo informe: el analista no entregó y no se pudo reintentar · no queda cupo/)
   })
   it('🔴 nunca más de 2 llamadas', async () => {
     const pedir = vi.fn().mockResolvedValue({ ok: false, error: 'x', costo_usd: 0 })
