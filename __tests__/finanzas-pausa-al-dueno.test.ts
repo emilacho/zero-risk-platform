@@ -55,7 +55,7 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
     canal: 'C123456789',
     ahora: () => new Date(o.hora ?? '2026-11-04T16:00:00Z'),
     avisar: async (t) => { avisos.push(t) },
-    cerebro: { async registrarPregunta() { return (o.registrar ?? { ok: true, estado: 'registrada', pregunta_id: 'p1' }) as never }, async leerRespuestas() { return { ok: true as const, respuestas: [] } }, async cerrarPendientes() { return { ok: true as const } }, async registrarRespuesta(r) { alCerebro.push(r as never); return o.cerebroCaido ? { ok: false, error: 'http_500' } : { ok: true } } },
+    cerebro: { async registrarPregunta() { return (o.registrar ?? { ok: true, estado: 'registrada', pregunta_id: 'p1' }) as never }, async leerRespuestas() { return { ok: true as const, respuestas: [] } }, async cerrarPendiente() { return { ok: true as const } }, async registrarRespuesta(r) { alCerebro.push(r as never); return o.cerebroCaido ? { ok: false, error: 'http_500' } : { ok: true } } },
     slack: {
       async enviarAlDueno(t: string) { enviados.push(t); return { ok: true as const, canal: 'C123456789', ts: '100.1' } },
       async enHilo(_c: string, _t: string, x: string) { enHilo.push(x); return { ok: true as const } },
@@ -481,10 +481,88 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     await preguntarAlDueno(a.P, 'enc-1')
     expect(leidos).toEqual(['pixel'])
   })
+  describe('al contestar se cierra solo lo de este encargo (05-nov · hallazgo de CC7)', () => {
+    const deOtraOficina = (a: ReturnType<typeof armar>) => {
+      const ajenas = [['00000000-0000-4000-9000-000000000001', 'whatsapp', 'olon'], ['00000000-0000-4000-9000-000000000002', 'whatsapp de la tienda de olon', null], ['00000000-0000-4000-9000-000000000003', 'horario de la tienda', null]].map(([id, tema, sede_clave]) => ({ id, client_id: a.c.id, tema, sede_clave, pregunta: `¿${tema}?`, estado: 'pendiente', creado_en: a.hora(), preguntado_por_oficina: 'creativa' }))
+      a.t.cerebro_dueno_preguntas.push(...ajenas)
+      return () => a.filas().filter((p) => String(p.id).startsWith('00000000-0000-4000-9000')).map((p) => p.estado)
+    }
+    it('🔴 contestar en Tu oficina deja viva la pregunta de otra sede u otra oficina', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      const ajenas = deOtraOficina(a)
+      expect((await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ en_el_cerebro: true, tema_cerrado: true })
+      expect(ajenas()).toEqual(['pendiente', 'pendiente', 'pendiente'])
+      expect(a.filas().filter((p) => p.tema === 'whatsapp' && !p.sede_clave).map((p) => p.estado)).toEqual(['respondida'])
+    })
+    it('🔴 pasadas las 72 horas también se cierra la propia, y las ajenas siguen vivas', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      const ajenas = deOtraOficina(a)
+      await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })
+      expect(ajenas()).toEqual(['pendiente', 'pendiente', 'pendiente'])
+      expect(a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)).toMatchObject({ estado: 'obsoleta', motivo_descarte: 'el dueño ya contestó esta pregunta' })
+    })
+    it('🔴 una respuesta recogida del cerebro cierra la propia y no toca las ajenas', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      const propia = () => a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)
+      expect((await contestarPorLaPuerta(a, 'whatsapp')).status).toBe(200)
+      const ajenas = deOtraOficina(a)
+      await atenderPausa(a.P, 'enc-1')
+      expect(ajenas()).toEqual(['pendiente', 'pendiente', 'pendiente'])
+      expect(propia()).toMatchObject({ estado: 'obsoleta' })
+    })
+    it('🔴 lo recogido cierra su propia pregunta, no la primera del registro', async () => {
+      const a = armar()
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      expect((await contestarPorLaPuerta(a, 'pixel')).status).toBe(200)
+      await atenderPausa(a.P, 'enc-1')
+      expect(a.filas().map((p) => [p.tema, p.estado])).toEqual([['whatsapp', 'pendiente'], ['pixel', 'obsoleta']])
+    })
+    it('🔴 una ronda nueva también cierra lo que recogió', async () => {
+      const a = armar({ preguntas: [preg('whatsapp')] })
+      await pausarOficina(a.P, a.pedir)
+      a.horas(73)
+      expect((await contestarPorLaPuerta(a, 'whatsapp')).status).toBe(200)
+      a.m.arts.acuerdo = acuerdo([preg('whatsapp'), preg('pixel')]).acuerdo
+      await atenderPausa(a.P, 'enc-1')
+      expect(a.filas().map((p) => [p.tema, p.estado])).toEqual([['whatsapp', 'obsoleta'], ['pixel', 'pendiente']])
+    })
+    it('🔴 sin id en el registro no cierra nada, ni por tema', async () => {
+      const m = mundo({ modo: 'registra', espera: {}, arts: acuerdo([preg('whatsapp'), preg('pixel')]) })
+      const cierres: unknown[] = []
+      m.P.cerebro.cerrarPendiente = async (q) => { cierres.push(q); return { ok: true } }
+      m.arts.buzon_respuestas = { n: 1, claves: ['whatsapp', 'pixel'], preguntas: [{ clave: 'whatsapp', pregunta_id: null }, { clave: 'pixel', pregunta_id: 'p2' }] }
+      expect((await responderEnLaOficina(m.P, { client_id: 'cli', tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ en_el_cerebro: true, tema_cerrado: false })
+      expect(cierres).toEqual([])
+    })
+    it('🔴 el cierre le pide a la puerta esa pregunta y ningún tema', async () => {
+      const cuerpos: Array<Record<string, unknown>> = []
+      const f = (async (_u: string, i: RequestInit) => { cuerpos.push(JSON.parse(String(i.body))); return { status: 200, json: async () => ({ ok: true }) } }) as never
+      await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
+      expect(cuerpos[0]).toMatchObject({ evento: 'descartar', client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
+      expect(cuerpos[0].tema).toBeUndefined()
+    })
+    it('🔴 la lectura lleva la llave', async () => {
+      const hs: unknown[] = []
+      const f = (async (_u: string, i: RequestInit) => { hs.push(i.headers); return { status: 200, json: async () => ({ ok: true, respuestas: [] }) } }) as never
+      await cerebroDelDueno({ base: 'https://x', llave: 'la-llave', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).leerRespuestas!({ client_id: 'c', tema: 't' })
+      expect(hs).toEqual([expect.objectContaining({ 'x-api-key': 'la-llave' })])
+    })
+    it('🔴 una respuesta vacía no cuenta como contestada', async () => {
+      const f = (async () => ({ status: 200, json: async () => ({ ok: true, respuestas: [{ respuesta: '   ' }, { respuesta: 'sí' }, { otra: 1 }] }) })) as never
+      expect(await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: true, respuestas: [{ respuesta: 'sí' }] })
+    })
+  })
   it('🔴 si la respuesta no llegó al cerebro, no cierra nada', async () => {
     const m = mundo({ modo: 'registra', espera: {}, cerebroCaido: true, arts: acuerdo([preg('whatsapp'), preg('pixel')]) })
     let cierres = 0
-    m.P.cerebro.cerrarPendientes = async () => { cierres++; return { ok: true } }
+    m.P.cerebro.cerrarPendiente = async () => { cierres++; return { ok: true } }
+    m.arts.buzon_respuestas = { n: 1, claves: ['whatsapp', 'pixel'], preguntas: [{ clave: 'whatsapp', pregunta_id: 'p1' }, { clave: 'pixel', pregunta_id: 'p2' }] }
     expect((await responderEnLaOficina(m.P, { client_id: 'cli', tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })).cuerpo).toMatchObject({ en_el_cerebro: false, tema_cerrado: false })
     expect(cierres).toBe(0)
   })
@@ -496,7 +574,7 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     const f = (async () => ({ status: 200, json: async () => ({ apagado: true }) })) as never
     const c = cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f })
     expect(await c.leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'puerta_apagada' })
-    expect(await c.cerrarPendientes!({ client_id: 'c', tema: 't', motivo: 'm' })).toEqual({ ok: false, error: 'puerta_apagada' })
+    expect(await c.cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })).toEqual({ ok: false, error: 'puerta_apagada' })
     expect(await cerebroDelDueno({ base: '', llave: '', workflow_id: '', workflow_execution_id: '', fetch: f }).leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'cerebro_no_configurado' })
   })
 })

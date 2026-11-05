@@ -45,7 +45,7 @@ function mundo(preguntas: unknown[], extra: Partial<AlmacenDeConversa> = {}) {
   }
   return { e, almacen, arts }
 }
-const cerebro = () => { const registradas: any[] = []; const c: CerebroDelDueno = { async registrarPregunta(p) { registradas.push(p); return { ok: true, estado: 'registrada', pregunta_id: 'pid' } }, async registrarRespuesta() { return { ok: true } }, async leerRespuestas() { return { ok: true, respuestas: [] } }, async cerrarPendientes() { return { ok: true } } }; return { c, registradas } }
+const cerebro = () => { const registradas: any[] = []; const c: CerebroDelDueno = { async registrarPregunta(p) { registradas.push(p); return { ok: true, estado: 'registrada', pregunta_id: 'pid' } }, async registrarRespuesta() { return { ok: true } }, async leerRespuestas() { return { ok: true, respuestas: [] } }, async cerrarPendiente() { return { ok: true } } }; return { c, registradas } }
 const puertos = (almacen: AlmacenDeConversa, s: ReturnType<typeof slackFalso>, c: CerebroDelDueno, modo: PuertosDelBuzon['modo'] = 'envia'): PuertosDelBuzon =>
   ({ almacen, slack: slackMdPuerto({ token: 'xoxb-falso', dueno_id: DUENO, fetch: s.f }), cerebro: c, modo, ahora: () => new Date(1_700_000_000_000) })
 
