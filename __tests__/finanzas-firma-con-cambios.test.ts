@@ -67,8 +67,7 @@ describe('cambiar el presupuesto', () => {
   it('🔴 la meta deja de ser un dato: es un supuesto, y lo dice', () => {
     const r = recalcularConCambios(ENTRADA, B, [cambio('total_mes', Math.round(total * 0.6))])
     if (!r.ok) throw new Error(r.detalle)
-    expect(r.bloque.cifras.meta_por_semana).toMatchObject({ tipo: 'supuesto', fuente: FUENTE_DESPEJADA }); expect(r.bloque.cifras.total_mes.fuente).toBe(FUENTE_DEL_DUENO)
-    expect(r.bloque.confianza).toEqual(expect.anything()); expect(r.bloque.confianza).not.toEqual(B.confianza)
+    expect(r.bloque.cifras.meta_por_semana).toMatchObject({ tipo: 'supuesto', fuente: FUENTE_DESPEJADA }); expect(r.bloque.cifras.total_mes).toMatchObject({ tipo: 'dato', fuente: FUENTE_DEL_DUENO })
   })
   it('🔴 con poco dinero la producción se recorta: sigue cuadrando y avisa', () => {
     const r = recalcularConCambios(ENTRADA, B, [cambio('total_mes', 50)])
@@ -130,6 +129,24 @@ describe('lo que no se acepta', () => {
     const sinCifra: Bloque = { ...B, cifras: { ...B.cifras, [k]: { ...B.cifras[k], valor: null } } }
     expect(entradaReproduceElTablero(ENTRADA, sinCifra)).toBe(false)
     expect(error(ENTRADA, sinCifra, [cambio('meta_por_semana', 14)])).not.toBe('ok')
+  })
+  it('🔴 el presupuesto que firmó el dueño se guarda como dato, y la confianza lo cuenta', () => {
+    const r = recalcularConCambios(ENTRADA, B, [cambio('total_mes', Math.round(total * 0.6))])
+    if (!r.ok) throw new Error(r.error)
+    expect(r.numeros.find((n) => n.clave === 'total_mes')?.tipo).toBe('dato')
+  })
+  it('🔴 el aviso de equilibrio no entra al conteo: lo firmado se cuenta sobre las mismas cifras que lo propuesto', () => {
+    expect(B.cifras.meta_de_equilibrio_semana).toBeDefined()
+    const AVISOS = ['meta_de_equilibrio_semana', 'meta_sugerida_semana']
+    for (const c of [cambio('total_mes', Math.round(total * 0.6)), cambio('meta_por_semana', 14)]) {
+      const r = recalcularConCambios(ENTRADA, B, [c])
+      if (!r.ok) throw new Error(r.error)
+      expect(r.bloque.cifras.meta_de_equilibrio_semana).toBeDefined()
+      expect(r.bloque.confianza.total).toBe(B.confianza.total)
+      // lo que dice la confianza es lo que hay de verdad en las cifras firmadas
+      const cuentan = Object.entries(r.bloque.cifras).filter(([k]) => !AVISOS.includes(k)).map(([, v]) => v.tipo)
+      expect(r.bloque.confianza).toMatchObject({ datos: cuentan.filter((t) => t === 'dato').length, supuestos: cuentan.filter((t) => t === 'supuesto').length, total: cuentan.length })
+    }
   })
   it('🔴 la entrada íntegra sí reproduce su tablero', () => { expect(entradaReproduceElTablero(ENTRADA, B)).toBe(true) })
 })

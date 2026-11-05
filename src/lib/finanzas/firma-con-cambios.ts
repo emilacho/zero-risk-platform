@@ -5,7 +5,7 @@
  *   · presupuesto total al mes: se busca la meta que ese dinero paga. El costo por resultado no depende de nosotros: con menos dinero, menos ventas.
  * Meta y presupuesto están atados: cambiar los dos a la vez no tiene una sola respuesta, así que se rechaza.
  */
-import { calcular, confianzaDe } from './calculadora'
+import { calcular } from './calculadora'
 import { huellaDe, numerosDelBloque, type FilaDeNumero } from './firma'
 import type { Bloque, Entrada } from './tipos'
 
@@ -89,10 +89,12 @@ export function recalcularConCambios(entrada: Entrada, bloque: Bloque, pedidos: 
   const cifras = { ...r.cifras }
   if (cambio.clave === 'meta_por_semana') cifras.meta_por_semana = { ...cifras.meta_por_semana, fuente: FUENTE_DEL_DUENO }
   else {
-    cifras.total_mes = { ...cifras.total_mes, fuente: FUENTE_DEL_DUENO }
+    // la fijó el dueño: ya no es un supuesto, igual que la meta cuando cambia la meta
+    cifras.total_mes = { ...cifras.total_mes, tipo: 'dato', fuente: FUENTE_DEL_DUENO }
     cifras.meta_por_semana = { ...cifras.meta_por_semana, tipo: 'supuesto', fuente: FUENTE_DESPEJADA }
   }
-  const final: Bloque = { ...r, cifras, confianza: confianzaDe(cifras) }
+  // la confianza de `calcular` sigue valiendo: si cambia el presupuesto, entra él como dato y sale la meta, uno por uno; y sin contar el aviso de equilibrio
+  const final: Bloque = { ...r, cifras }
   // redondeada daría «0 ventas» en el tablero, y la corrida siguiente la usaría (CC7: US$ 1 daba meta 0,0037)
   const metaGuardada = final.cifras.meta_por_semana?.valor
   if (!finito(metaGuardada) || metaGuardada <= 0) return { ok: false, error: 'meta_en_cero', detalle: 'con esa cifra la meta de ventas queda en cero: no hay plan que firmar' }
