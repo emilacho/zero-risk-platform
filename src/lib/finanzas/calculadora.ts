@@ -186,6 +186,9 @@ export function confianzaDe(cifras: Record<string, Cifra>): Confianza {
  * Siempre es un SUPUESTO (usa el costo por resultado de arranque y la tasa de resultado a venta); nunca un dato. Sin ticket/margen o sin contribución positiva: `null` con su motivo.
  * `totalPara(W)` es la MISMA cadena de `calcular` (pauta → Meta+IG necesario → reparto inverso): una sola verdad.
  */
+/** más de esto en «cuántas veces compra un cliente» suele ser otra unidad (días o semanas) */
+export const PERIODOS_PARA_DUDAR = 60
+
 export function metaDeEquilibrio(p: { contribucion: number | null; meta: number; totalPara: (meta: number) => number; base?: number }): Equilibrio {
   // con línea base, la variable del equilibrio son los resultados que SE AÑADEN (los que paga la pauta): `totalPara` recibe ESA cantidad y las metas se muestran sumando la base
   const b0 = finito(p.base) && p.base > 0 ? p.base : 0
@@ -223,6 +226,8 @@ export function calcular(e: Entrada): Resultado {
   const bruto = conValor ? e.ticket! * e.margen! * periodos - entrega : 0
   const valorDeVenta = conValor ? Math.max(0, bruto * h) : null
   if (conValor && bruto <= 0) alertas.push('la venta no deja contribución positiva: no hay techo posible (paro)')
+  // 05-nov · un tablero real traía 365 (días de un ciclo anual) y la venta valía 38.824. No se corrige ni se frena: se dice
+  if (conValor && periodos > PERIODOS_PARA_DUDAR) alertas.push(`dato que no bloquea: cada venta se cuenta como ${r2(periodos)} compras del mismo cliente; si ese número son días y no compras, la contribución sale inflada`)
   const T = conValor ? (valorDeVenta as number) * q : refBase
   if (!conValor) alertas.push('sin ticket o margen: el techo es la referencia de mercado sin arranque (se compara con el mercado)')
   const veredictos = {
