@@ -134,6 +134,14 @@ export function pasosDelPlan(espera: Fila | null, corrida: Fila | null, ahora: n
   return { pasos, resultado: 'retomada', motivo: null }
 }
 
+/** con cambios, el registro dice qué propuso la oficina y qué firmaste */
+function textoDeLaFirma(f: unknown): { texto: string; cita?: string } {
+  const cambios = esObjeto(f) && Array.isArray(f.cambios) ? (f.cambios as unknown[]).filter(esObjeto) : []
+  if (!cambios.length) return { texto: 'Firmaste' }
+  return { texto: 'Firmaste con cambios', cita: cambios.map((c) => `${NOMBRE_DE_CIFRA[String(c.clave)] ?? 'Una cifra'}: la oficina propuso ${String(c.propuesto)}, firmaste ${String(c.firmado)}`).join(' · ') }
+}
+const NOMBRE_DE_CIFRA: Record<string, string> = { meta_por_semana: 'Meta de ventas por semana', total_mes: 'Presupuesto total al mes' }
+
 export interface LecturaDelRegistro { contestadas: Contestada[]; fuentes: Fuente[]; completo: boolean }
 type ClienteVisto = { nombre?: string | null; practica?: boolean; de_baja?: boolean }
 
@@ -143,7 +151,7 @@ export async function leerContestadas(db: Db, hora: string, clientes: Map<string
   const fuentes: Fuente[] = [...preguntas.fuentes]
   const desde = new Date(Date.parse(hora) - DIAS_DEL_REGISTRO * 86_400_000).toISOString()
   const [firmas, esperas] = await Promise.all([
-    leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en, firmado_en').eq('estado', 'firmado').eq('dry_run', false).gte('firmado_en', desde).order('firmado_en', { ascending: false }).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
+    leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en, firmado_en, firma_con_cambios').eq('estado', 'firmado').eq('dry_run', false).gte('firmado_en', desde).order('firmado_en', { ascending: false }).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
     // sin pedir el `sobre` entero: lleva el material del plan y pesa cientos de KB. Sin ventana de fechas: una pausa vieja puede seguir abierta y recibir la respuesta de hoy
     leer(fuentes, 'esperas_del_dueno', db.from('esperas_del_dueno').select('id, client_id, clave, estado, creado_en, soltada_en, despertado, despertar_intentos, despertar_detalle, actualizado_en, corrida:sobre->>corrida').eq('tipo', 'finanzas').order('creado_en', { ascending: false }).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
   ])
@@ -185,7 +193,7 @@ export async function leerContestadas(db: Db, hora: string, clientes: Map<string
     const cuando = texto(t.firmado_en)
     contestadas.push({
       id: String(t.id), tipo: 'firma_de_finanzas', fuente: 'finanzas_tableros', client_id: texto(t.client_id), cliente: nombre(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}`, resuelta_en: cuando, resultado: 'firmada', motivo: null,
-      registro: [{ cuando: texto(t.creado_en), quien: 'oficina', estado: 'pregunto', texto: 'La oficina financiera pidió tu firma' }, { cuando, quien: 'tu', estado: 'firmaste', texto: 'Firmaste' }],
+      registro: [{ cuando: texto(t.creado_en), quien: 'oficina', estado: 'pregunto', texto: 'La oficina financiera pidió tu firma' }, { cuando, quien: 'tu', estado: 'firmaste', ...textoDeLaFirma(t.firma_con_cambios) }],
     })
   }
   contestadas.sort((a, b) => String(b.resuelta_en ?? '').localeCompare(String(a.resuelta_en ?? '')))

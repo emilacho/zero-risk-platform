@@ -3,10 +3,11 @@
  * Las cifras salen del bloque que calculó el código; los críticos, del acuerdo que usó el cierre de ese tablero. Lo que no conste no viene: el tablero no ofrece firmar sin cifras.
  */
 import { dosCostos } from '../finanzas/dos-costos'
-import type { Bloque } from '../finanzas/tipos'
+import { entradaReproduceElTablero, esEditable } from '../finanzas/firma-con-cambios'
+import type { Bloque, Entrada } from '../finanzas/tipos'
 import { esObjeto, leer, sinSecretos, texto, type Db, type Fila } from './comun'
 
-export interface CifraDeFirma { clave: string; nombre: string; valor: number; unidad: string | null; nota: string | null }
+export interface CifraDeFirma { clave: string; nombre: string; valor: number; unidad: string | null; nota: string | null; editable?: boolean }
 export interface LoQueSeFirma { abiertos: number | null; criticos: string[]; unidad: string | null }
 
 const TOPE = 200
@@ -42,13 +43,13 @@ const notaDe = (c: Fila, extra?: string): string | null => {
 }
 
 /** las cifras que el dueño lee antes de firmar. Los dos costos por venta van siempre juntos: uno solo hace creer que el plan se paga (`finanzas/dos-costos.ts`) */
-export function cifrasDelBloque(bloque: unknown, dinero: string | null): CifraDeFirma[] {
+export function cifrasDelBloque(bloque: unknown, dinero: string | null, editables = false): CifraDeFirma[] {
   if (!esObjeto(bloque) || !esObjeto(bloque.cifras)) return []
   const cs = bloque.cifras as Record<string, unknown>
   const salida: CifraDeFirma[] = []
   const poner = (clave: string, nombre: string, unidad: string | null) => {
     const c = cs[clave]
-    if (esObjeto(c) && typeof c.valor === 'number' && Number.isFinite(c.valor)) salida.push({ clave, nombre, valor: c.valor, unidad, nota: notaDe(c) })
+    if (esObjeto(c) && typeof c.valor === 'number' && Number.isFinite(c.valor)) salida.push({ clave, nombre, valor: c.valor, unidad, nota: notaDe(c), ...(editables && esEditable(clave) ? { editable: true } : {}) })
   }
   poner('meta_por_semana', 'Meta de ventas por semana', 'ventas')
   poner('total_mes', 'Presupuesto total al mes', dinero)
@@ -60,6 +61,15 @@ export function cifrasDelBloque(bloque: unknown, dinero: string | null): CifraDe
   poner('meta_de_equilibrio_semana', 'Ventas por semana para pagar el plan', 'ventas')
   return salida
 }
+
+/** ¿se puede ofrecer cambiar sus cifras? Solo si recalcular daría las mismas que muestra: si no, cambiaría cifras que nadie tocó */
+export function sePuedeEditar(t: Fila): boolean {
+  if (!esObjeto(t.entrada) || !esObjeto(t.bloque) || !esObjeto(t.bloque.cifras)) return false
+  try { return entradaReproduceElTablero(t.entrada as unknown as Entrada, t.bloque as unknown as Bloque) } catch { return false }
+}
+
+/** el aviso de la tarjeta al cambiar una cifra (CC1): lo que firma no toca el plan ya escrito, y lo que queda fijo es la meta */
+export const AL_EDITAR_LA_FIRMA = 'El plan ya escrito no cambia. La próxima corrida usará la meta que firmes; si cambian los costos, la meta queda fija y el presupuesto se ajusta.'
 
 /** críticos abiertos y moneda de cada tablero, por su encargo. Falle lo que falle, devuelve lo que pudo: no afecta a `completo` */
 export async function leerLoQueSeFirma(db: Db, tableros: Fila[]): Promise<Map<string, LoQueSeFirma>> {
