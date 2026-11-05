@@ -15,6 +15,12 @@ describe('períodos que parecen días (05-nov · hallazgo de CC7, tablero f4d46f
     expect(alertasCon(365).some((a) => AVISO.test(a))).toBe(true)
     expect(ok({ ...base(5, 0.2), periodos: 365 }).equilibrio.contribucion_por_venta).toBe(1825)
   })
+  it('🔴 no se recortan: los períodos cuentan completos en el techo', () => {
+    expect(ok({ ...base(5, 0.2), periodos: 365 }).cifras.techo_por_resultado!.valor).toBeCloseTo(ok({ ...base(5, 0.2), periodos: 1 }).cifras.techo_por_resultado!.valor! * 365, 1)
+  })
+  it('🔴 sin ticket ni margen no hay nada que dudar: no avisa', () => {
+    expect(ok({ ...base(5, 0.2), ticket: null, margen: null, periodos: 365 }).alertas.some((a) => a.includes('días y no compras'))).toBe(false)
+  })
   it('🔴 el borde: 60 no avisa, 61 sí', () => {
     expect(alertasCon(60).some((a) => a.includes('días y no compras'))).toBe(false)
     expect(alertasCon(61).some((a) => a.includes('61 compras'))).toBe(true)

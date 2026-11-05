@@ -27,7 +27,8 @@ function baseFalsa(config: Record<string, unknown>) {
     const q: any = { op: 'select', filtros: [] as Array<(f: any) => boolean>, orden: null, lim: Infinity, fila: null, conflicto: null }
     const ejecutar = () => {
       // el libro de costos (`agent_invocations`) se LEE vacío y NO se registra como tabla escrita: el seco no gasta (la prueba de abajo vigila que solo se toquen las cuatro de la oficina)
-      const filas = t[tabla] ?? (tabla === 'agent_invocations' ? [] : t[tabla])
+      // 05-nov · la última firma con cambios también se lee, vacía
+      const filas = t[tabla] ?? (tabla === 'agent_invocations' || tabla === 'finanzas_tableros' ? [] : t[tabla])
       const sel = filas.filter((f) => q.filtros.every((fn: any) => fn(f)))
       if (q.op === 'insert') {
         if (tabla === 'finanzas_encargos' && filas.some((f) => f.client_id === q.fila.client_id && ['abierto', 'en_curso'].includes(f.estado))) return { data: null, error: { message: 'duplicate key', code: '23505' } }
@@ -52,6 +53,7 @@ function baseFalsa(config: Record<string, unknown>) {
       update: (f: any) => { q.op = 'update'; q.fila = f; return api },
       upsert: (f: any, o: any) => { q.op = 'upsert'; q.fila = f; q.conflicto = o?.onConflict; return api },
       eq: (k: string, v: unknown) => { q.filtros.push((f: any) => f[k] === v); return api },
+      not: (k: string, _op: string, _v: unknown) => { q.filtros.push((f: any) => f[k] !== null && f[k] !== undefined); return api },
       like: (k: string, v: string) => { const pre = v.replace(/%$/, ''); q.filtros.push((f: any) => String(f[k] ?? '').startsWith(pre)); return api },
       in: (k: string, v: unknown[]) => { q.filtros.push((f: any) => v.includes(f[k])); return api },
       order: (k: string, o: any) => { q.orden = [k, o?.ascending !== false]; return api },
@@ -141,7 +143,7 @@ describe('las ventas al abrir (04-nov · firma de Emilio)', () => {
   const SEM = { evento: 'mensaje', dias_activos_por_semana: 5 }
   /** la base falsa de la oficina, más lo que lee el lector de ventas */
   const conPedidos = (filas: unknown[], error: unknown = null) => {
-    const consulta = (data: unknown[], err: unknown = null) => { const c: any = {}; for (const m of ['select', 'eq', 'in', 'order', 'range', 'limit', 'is', 'or']) c[m] = () => c; c.maybeSingle = async () => ({ data: data[0] ?? null, error: err }); c.then = (ok: (r: unknown) => unknown) => ok({ data: err ? null : data, error: err }); return c }
+    const consulta = (data: unknown[], err: unknown = null) => { const c: any = {}; for (const m of ['select', 'eq', 'not', 'in', 'order', 'range', 'limit', 'is', 'or']) c[m] = () => c; c.maybeSingle = async () => ({ data: data[0] ?? null, error: err }); c.then = (ok: (r: unknown) => unknown) => ok({ data: err ? null : data, error: err }); return c }
     h.db = {
       ...(fake.db as object),
       from: (t: string) => (t === 'clients' ? consulta([{ slug: 'sitio', config: {} }]) : t === 'client_sedes' || t === 'client_sede_datos' || t === 'cerebro_fichas' ? consulta([]) : (fake.db as any).from(t)),

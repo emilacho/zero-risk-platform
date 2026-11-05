@@ -91,6 +91,7 @@ class Consulta {
     return this
   }
   gte(c: string, v: unknown) { this.filtros.push((f) => hay(leer(f, c)) && String(leer(f, c)) >= String(v)); return this }
+  not(c: string, op: string, v: unknown) { if (op !== 'is' || v !== null) throw new Error(`DbFalsa: not(${op}) no implementado`); this.filtros.push((f) => hay(leer(f, c))); return this }
   is(c: string, v: unknown) { this.filtros.push((f) => (v === null ? !hay(leer(f, c)) : leer(f, c) === v)); return this }
   order(c: string, o?: { ascending?: boolean }) { this.orden = { col: c, asc: o?.ascending !== false }; return this }
   limit(n: number) { this.tope = n; return this }

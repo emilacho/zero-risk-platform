@@ -2,6 +2,7 @@
  * QUÉ SE FIRMA (05-nov · corrección de Lenovo: la tarjeta de firma se veía vacía). SOLO LECTURA.
  * Las cifras salen del bloque que calculó el código; los críticos, del acuerdo que usó el cierre de ese tablero. Lo que no conste no viene: el tablero no ofrece firmar sin cifras.
  */
+import { PREFIJO_DE_META_FIRMADA } from '../finanzas/calculadora'
 import { dosCostos } from '../finanzas/dos-costos'
 import { entradaReproduceElTablero, esEditable } from '../finanzas/firma-con-cambios'
 import type { Bloque, Entrada } from '../finanzas/tipos'
@@ -52,6 +53,9 @@ export function cifrasDelBloque(bloque: unknown, dinero: string | null, editable
     if (esObjeto(c) && typeof c.valor === 'number' && Number.isFinite(c.valor)) salida.push({ clave, nombre, valor: c.valor, unidad, nota: notaDe(c), ...(editables && esEditable(clave) ? { editable: true } : {}) })
   }
   poner('meta_por_semana', 'Meta de ventas por semana', 'ventas')
+  // 05-nov · si esa meta ya la firmó el dueño, quien firma lo lee aquí: la tarjeta no muestra las alertas
+  const meta = cs.meta_por_semana
+  if (salida[0]?.clave === 'meta_por_semana' && esObjeto(meta) && typeof meta.fuente === 'string' && meta.fuente.startsWith(PREFIJO_DE_META_FIRMADA)) salida[0].nota = `Meta ${meta.fuente}`
   poner('total_mes', 'Presupuesto total al mes', dinero)
   poner('pauta_diaria', 'Pauta por día', dinero)
   poner('costo_por_venta', 'Costo por venta, solo con la pauta', dinero)

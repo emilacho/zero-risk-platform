@@ -36,6 +36,8 @@ export interface Entrada {
   reparto_de_la_mesa?: boolean
   /** resultados FINALES (ventas, citas atendidas, altas…) por semana: la unidad de todo el cálculo */
   meta_por_semana: number
+  /** 05-nov · esta meta la firmó el dueño: la cifra y las alertas lo dicen, y entra en la huella. Solo vale si `meta` es la meta de esta entrada: recalcular con otra meta ya no es lo que firmó */
+  meta_firmada?: { meta: number; por: string | null; en: string | null; proponia: number | null }
   pasos?: Paso[]
   ticket?: number | null
   margen?: number | null
