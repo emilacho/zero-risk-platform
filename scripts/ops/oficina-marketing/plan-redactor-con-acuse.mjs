@@ -5,7 +5,7 @@
  *   Nodo nuevo «Redactor · ¿aceptó el pedido?»:
  *     · `accepted: true` ⇒ sigue a la espera, como hoy.
  *     · la plataforma contestó que no (`error` en texto o `success: false`) ⇒ cierra la corrida como `fallida`, para en rojo y el aviso de error del motor manda la alarma.
- *     · sin respuesta clara (conexión cortada, cuerpo sin esos campos) ⇒ sigue a la espera: el pedido pudo entrar y el empleado estar trabajando; pararlo tiraría trabajo pagado.
+ *     · sin respuesta clara (conexión cortada, `agent-runner timeout`, `upstream_status: 0`, cuerpo sin esos campos) ⇒ sigue a la espera: el pedido pudo entrar y el empleado estar trabajando; pararlo tiraría trabajo pagado.
  *       Si nunca vuelve, la espera vence y «¿Llegó la vuelta?» la declara como hoy.
  *
  * H10 · La vuelta perdida (el motor caído 6 s durante sus 3 intentos) se recupera del punto de control recién al vencer la espera. Con 24 h, eso ocurre mucho después del
@@ -38,7 +38,9 @@ export const CODIGO_ACUSE = [
   'const r = $input.first().json || {}',
   "const sobre = ($('Webhook · planeacion').first().json.body || {})",
   "const texto = typeof r.error === 'string' ? r.error : ''",
-  "const rechazado = r.accepted !== true && sobre.dry_run !== true && (texto !== '' || r.success === false)",
+  "// la plataforma avisa que perdió al corredor: 790 s sin respuesta o conexión caída (upstream_status 0). El empleado pudo seguir trabajando: dudoso. Con un estado real del corredor (503) sí es rechazo.",
+  "const dudoso = texto === 'agent-runner timeout' || r.upstream_status === 0",
+  "const rechazado = r.accepted !== true && sobre.dry_run !== true && !dudoso && (texto !== '' || r.success === false)",
   'if (!rechazado) return [{ json: { ...r, redactor_rechazado: false } }]',
   "const cid = typeof sobre.client_id === 'string' ? sobre.client_id : ''",
   "const corrida = typeof sobre.corrida === 'string' ? sobre.corrida : ''",

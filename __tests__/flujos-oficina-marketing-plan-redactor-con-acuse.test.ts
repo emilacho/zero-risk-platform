@@ -36,6 +36,12 @@ describe('el pedido al redactor mira la respuesta', () => {
   it('dudoso (conexión cortada, sin campos): NO para, el empleado pudo arrancar', () => {
     for (const r of [{ error: { message: 'socket hang up' } }, {}, { data: '<html>' }]) expect(acuse(r).redactor_rechazado).toBe(false)
   })
+  it('la plataforma perdió al corredor (790 s o conexión caída): dudoso, NO para', () => {
+    expect(acuse({ error: 'agent-runner timeout' }).redactor_rechazado).toBe(false)
+    expect(acuse({ error: 'agent-runner upstream failed', upstream_status: 0 }).redactor_rechazado).toBe(false)
+  })
+  it('el corredor contestó con un estado real: sí es rechazo', () => { expect(acuse({ error: 'agent-runner upstream failed', upstream_status: 503 }).redactor_rechazado).toBe(true) })
+  it('el freno de gasto se reconoce también sin código', () => { expect(acuse({ error: 'cost_cap_exceeded' }).motivo).toMatch(/freno de gasto/) })
   it('sin corrida en el sobre, no pretende cerrarla', () => { expect(acuse({ error: 'x' }, {}).aplica).toBe(false) })
   it('en ensayo no para', () => { expect(acuse({ error: 'x' }, { ...SOBRE, dry_run: true }).redactor_rechazado).toBe(false) })
   it('parar lanza en rojo y usa la última pasada, por los reintentos', () => {
