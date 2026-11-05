@@ -585,6 +585,23 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       const c = cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f })
       expect(await c.leerParecidas!({ client_id: 'c', tema: 't' })).toEqual({ ok: true, respondida: false, parecidas: [], pendientes_parecidas: [] })
     })
+    it('🔴 la lectura de parecidas lleva su llave: sin ella la puerta contesta 401 y todo se leería como «preguntar»', async () => {
+      const pedidos: Array<{ u: string; i: RequestInit }> = []
+      const f = (async (u: string, i: RequestInit) => { pedidos.push({ u, i }); return { status: 200, json: async () => ({ ok: true, respondida: false, respuestas: [] }) } }) as never
+      await cerebroDelDueno({ base: 'https://x', llave: 'la-llave', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).leerParecidas!({ client_id: 'c 1', tema: 'tema con espacios' })
+      expect((pedidos[0].i.headers as Record<string, string>)['x-api-key']).toBe('la-llave')
+      expect(pedidos[0].i.method).toBe('GET')
+      const q = new URL(pedidos[0].u).searchParams
+      expect([q.get('client_id'), q.get('tema')]).toEqual(['c 1', 'tema con espacios'])
+    })
+    it('🔴 ficha inventada con respuesta inventada: el texto no entra como dicho por el dueño', async () => {
+      const a = await conPresupuesto()
+      agente(a, () => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'ya_contestada', ficha_id: 'inventada', respuesta: '9000 por semana', por_que: 'x' }] }))
+      await pausarOficina(a.P, a.pedir)
+      expect(a.m.e.semilla?.respuestas_del_dueno ?? []).toEqual([])
+      expect(JSON.stringify(a.m.arts.buzon_parecidas)).not.toContain('9000')
+      expect(a.filas()).toHaveLength(1)
+    })
     it('🔴 los dos caminos reales le dan el agente al buzón', () => {
       expect(fs.readFileSync('src/app/api/finanzas/conversa/route.ts', 'utf8')).toContain('modelo: P.modelo,')
       expect(puertosDePausa({ INTERNAL_API_KEY: 'k' }, new DbFalsa() as never, 'registra', 'wf', 'ex').modelo).toBeDefined()
