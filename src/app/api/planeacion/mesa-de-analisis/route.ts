@@ -4,7 +4,7 @@
  *
  * Generaliza `/api/planeacion/brazo/mercado` (F4): el sobre trae UN pedido por analista (`params.tipo` ∈ mercado · competencia ·
  * voz_del_publico · escucha_x · retencion) y cada uno contesta el contrato §4.2 (`brazo: 'analisis'`). Los informes vuelven al
- * plan en la respuesta (fuente propia del redactor, tope 6.000) y, en corrida real, se archivan en el cerebro por la puerta del
+ * plan en la respuesta (fuente propia del redactor) y, en corrida real, se archivan en el cerebro por la puerta del
  * portero (`POST /api/brain/alimentar/informe`, detrás de `PORTERO_INFORMES`): archivar o no NUNCA tumba el informe.
  *
  * Lo que esta puerta decide, y por qué:
