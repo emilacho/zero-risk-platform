@@ -8,7 +8,7 @@ const ESC = process.env.SECO_ESCENARIO_JSON ? JSON.parse(process.env.SECO_ESCENA
 const planFijo = process.env.SECO_PLAN_FIJO && fs.existsSync(process.env.SECO_PLAN_FIJO) ? fs.readFileSync(process.env.SECO_PLAN_FIJO, 'utf8') : null
 
 const j = (o) => JSON.stringify(o)
-const APORTE = (agente) => j({ agente, resumen: `(simulado) lectura de ${agente}`, recomendaciones: [{ que: '(simulado) priorizar el canal principal', razon: '(simulado) es lo que el dato sugiere' }], costo_por_resultado: { min: 1, max: 3, base: 2 }, alertas: [] })
+const APORTE = (agente) => j({ agente, resumen: `(simulado) lectura de ${agente}`, recomendaciones: [{ que: '(simulado) priorizar el canal principal', razon: '(simulado) es lo que el dato sugiere' }], costo_por_resultado: ESC.aporte_caro ? { min: 40, max: 90, base: 70 } : { min: 1, max: 3, base: 2 }, alertas: [] })
 const CANALES = [{ canal: 'Instagram', peso: 0.6, razon: '(simulado) canal principal' }, { canal: 'Google Maps', peso: 0.4, razon: '(simulado) búsqueda local' }]
 const ACTA = { esquema: 'acta.v1', numero: { meta: 40, por_que: '(simulado) meta de la mesa' }, servicio: '(simulado) servicio', audiencia: '(simulado) audiencia', oferta: '(simulado) oferta', canales: CANALES, camino: '(simulado) camino', prueba: '(simulado) prueba', no_se_hace: [{ que: 'TikTok', por_que: '(simulado) no aplica ahora' }], no_se: [] }
 const PLANTEO_MESA = { objetivo: '(simulado)', tesis: '(simulado)', audiencia: '(simulado)', oferta: '(simulado)', canales: CANALES.map((c) => ({ canal: c.canal, activo: true })), habla: { busqueda: true, seo: true, organico: true } }

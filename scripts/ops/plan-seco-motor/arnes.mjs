@@ -168,6 +168,18 @@ const intentosPorPaso = new Map()
 const puntosDeControl = new Map()
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms))
 async function runSdk(cuerpo, res) {
+  // El freno REAL de la plataforma (src/lib/run-sdk-spend-gate.ts · run-sdk L1002), que aquí la ruta falsa reemplaza: mismo orden (por corrida, luego cliente/24 h), mismo 429, sin gasto. Solo con el escenario `freno`.
+  if (ESCENARIO.freno) {
+    const filas = filasDe('agent_invocations').filter((x) => x.client_id === cuerpo.client_id)
+    const gastado = filas.reduce((a, x) => a + (Number(x.cost_usd) || 0), 0)
+    const deCorrida = filas.filter((x) => String(x.workflow_execution_id ?? '') === String(cuerpo.workflow_execution_id ?? '')).reduce((a, x) => a + (Number(x.cost_usd) || 0), 0)
+    const razon = deCorrida >= (ESCENARIO.freno.por_corrida ?? 5) ? 'run_over_cap' : gastado >= ESCENARIO.freno.cliente ? 'over_cap' : null
+    if (razon) {
+      anotar({ tipo: 'freno_429', razon, agente: cuerpo.agent, paso: cuerpo.paso || cuerpo.step_name || null, gastado, de_corrida: deCorrida })
+      res.writeHead(429, { 'content-type': 'application/json' })
+      return res.end(JSON.stringify({ error: 'cost_cap_exceeded', code: 'E-CAP-150', cap_usd: ESCENARIO.freno.cliente, spent_usd: gastado, detail: 'freno simulado' }))
+    }
+  }
   const clave = `${cuerpo.workflow_execution_id || ''}|${cuerpo.paso || cuerpo.step_name || cuerpo.agent}`
   const intento = (intentosPorPaso.get(clave) || 0) + 1
   intentosPorPaso.set(clave, intento)
@@ -197,8 +209,16 @@ async function runSdk(cuerpo, res) {
     if ((ESCENARIO.sin_vuelta || []).includes(cuerpo.agent)) { anotar({ tipo: 'agente_sin_vuelta', agente: cuerpo.agent }); return }
     await dormir(espera * 1000)
     const url = String(cuerpo.callback_url).replace('https://n8n-production-72be.up.railway.app', process.env.N8N_LOCAL_URL || 'http://localhost:5678')
-    const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ success: true, agent: cuerpo.agent, response: ESCENARIO.vuelta_sin_texto ? undefined : texto, cost_usd: costoSim, delivered_by: 'runner' }) }).catch((e) => ({ status: `red:${e.message}` }))
-    anotar({ tipo: 'vuelta', agente: cuerpo.agent, status: r.status, url: url.replace(/\/[^/]*$/, '/…') })
+    // como src/lib/agent-async-callback: 3 intentos, separados 2 s y 4 s. Si n8n no está, la vuelta se pierde igual que en producción.
+    const cuerpoVuelta = JSON.stringify({ success: true, agent: cuerpo.agent, response: ESCENARIO.vuelta_sin_texto ? undefined : texto, cost_usd: costoSim, delivered_by: 'runner' })
+    for (const [i, pausa] of [0, 2000, 4000].entries()) {
+      await dormir(pausa)
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: cuerpoVuelta })
+        anotar({ tipo: 'vuelta', agente: cuerpo.agent, status: r.status, intento: i + 1, url: url.split('/').slice(0, -1).join('/') + '/…' })
+        if (r.ok) break
+      } catch (e) { anotar({ tipo: 'vuelta_fallida', agente: cuerpo.agent, intento: i + 1, error: String(e?.message || e) }) }
+    }
     return
   }
   res.writeHead(200, { 'content-type': 'application/json' })

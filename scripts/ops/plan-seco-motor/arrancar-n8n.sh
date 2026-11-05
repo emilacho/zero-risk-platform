@@ -10,10 +10,12 @@ export N8N_PORT=5678 N8N_HOST=localhost WEBHOOK_URL=http://localhost:5678/ N8N_E
 export EXECUTIONS_DATA_SAVE_ON_SUCCESS=all EXECUTIONS_DATA_SAVE_ON_ERROR=all EXECUTIONS_DATA_MAX_AGE=720
 export NODE_OPTIONS="--require $SIN_RED --max-old-space-size=12288"
 B="$N8N/node_modules/.bin/n8n"
+[ -n "${SECO_SIN_IMPORTAR:-}" ] && exec "$B" start
 for f in "$FLUJOS"/*.json; do
   case "$f" in *cambios.json) continue;; esac
   "$B" import:workflow --input="$f" 2>&1 | tail -1 | cut -c1-140
 done
+[ -n "${SECO_SIN_IMPORTAR:-}" ] && exec "$B" start
 for f in "$FLUJOS"/*.json; do
   case "$f" in *cambios.json) continue;; esac
   id=$(basename "$f" .json)
