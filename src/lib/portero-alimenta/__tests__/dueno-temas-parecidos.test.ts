@@ -244,6 +244,13 @@ describe('los límites de lo parecido', () => {
     expect(misma.body).toMatchObject({ repetida: true })
     expect((misma.body.parecidas as unknown[]).length).toBe(1)
   })
+  it('la lectura con `canal`: los parecidos también respetan ese filtro', async () => {
+    const m = montar(c)
+    await rutaDueno(m.deps, responder(c, 'ventas de enero', 'por el tablero'))
+    await rutaDueno(m.deps, responder(c, 'ventas de marzo', 'por Slack', { canal: 'MD de Slack' }))
+    const l = await rutaLeerDueno({ db: m.base.db as never, ahora: AHORA }, { client_id: c.id, tema: 'ventas', canal: 'MD de Slack' })
+    expect((l.body.parecidas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['por Slack'])
+  })
   it('dry_run: dice lo parecido y no guarda la pregunta', async () => {
     const m = montar(c)
     await rutaDueno(m.deps, responder(c, 'ventas', '80'))
