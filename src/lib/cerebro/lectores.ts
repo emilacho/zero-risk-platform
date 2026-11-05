@@ -12,6 +12,7 @@ import { type ClaseDePlazo, type Plazos, vigenciaDe } from './plazos'
 import { resumirTexto } from './resumen'
 import { type DecisionAtada, type DecisionDelDueno, type Estado, type EstadoDeFuente, type Ficha, type NombreDeFuente, type Origen, pesoDeTexto } from './tipos'
 import { derivarVersiones } from './versiones'
+import { aprobacionesPorPlan, estadoDeLaSalida, manualCerrado, vencimientosDeLaCola } from './estado-en-plataforma'
 import { avisoDeProvisionales } from '../manual/lectura'
 import { validacionDelManual, versionVigente } from '../manual/campos-del-manual'
 import { AVISO_DE_HORARIO_CERRADA, AVISO_DE_HORARIO_POR_ABRIR, estadoDeLasSedes, esLineaDeHorarioOAtencion } from '../sedes/por-abrir'
@@ -102,7 +103,8 @@ export async function leerManual(ctx: Contexto): Promise<Salida> {
   const r = await leer(ctx, { tabla: 'client_brand_books', columnas: ['id', 'version', 'human_validated', 'provenance_tag', 'created_at', 'content_text'], donde: { client_id: ctx.cliente }, orden: { columna: 'version', descendente: true } })
   if (r.error) return fallo(['manual'], r.error)
   const filas = r.filas
-  const vigenteId = versionVigente(filas)?.id
+  // lo rechazado o reemplazado sigue en la lista, pero nunca es lo vigente
+  const vigenteId = versionVigente(filas.filter((f) => !manualCerrado(f)))?.id
   const lineas = filas.map((f) => {
     const version = Number(f.version) || 0
     const vigente = f.id === vigenteId
@@ -111,7 +113,7 @@ export async function leerManual(ctx: Contexto): Promise<Salida> {
     return linea(ctx, {
       ref: `client_brand_books:${f.id}`, estante: 'E1', clase: 'manual', titulo: `Manual de marca · versión ${version}`,
       que_es: `Manual de marca (voz, valores, posicionamiento, vocabulario y palabras prohibidas) · ${validacion.rotulo}${vigente && avisoDeProvisionales(f.content_text) ? ` · ${avisoDeProvisionales(f.content_text)}` : ''}`,
-      origen: 'producido', estado: validacion.aprobado ? 'aprobado' : 'borrador sin aprobar',
+      origen: 'producido', estado: manualCerrado(f) ? 'rechazado' : validacion.aprobado ? 'aprobado' : 'borrador sin aprobar',
       fecha: iso(f.created_at), plazo: 'sin_plazo', version, vigente, reemplazada: !vigente, versiones_anteriores: vigente ? filas.length - 1 : 0,
       peso: pesoDeTexto(cuerpo), ...(vigente ? { contenido: cuerpo } : {}),
     })
@@ -379,12 +381,15 @@ const TIPOS_DE_REGISTRO_INTERNO = ['manual_sacado_en_origen', 'correccion_del_du
 const DECISIONES_NO_LEIDAS = 'las decisiones del dueño no se pudieron leer · la versión vigente puede no reflejar su aprobación'
 
 export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
-  const [r, cola] = await Promise.all([
+  const [r, cola, aprobaciones] = await Promise.all([
     leer(ctx, { tabla: 'client_historical_outputs', columnas: ['id', 'output_type', 'title', 'status', 'created_at', 'updated_at', 'content_text', 'provenance_tag', 'hitl_verdict', 'human_edits'], donde: { client_id: ctx.cliente } }),
     // la decisión del dueño vive en la cola de revisión: sin leerla no se sabe cuál versión está aprobada
     leer(ctx, { tabla: 'hitl_queue', columnas: ['id', 'type', 'status', 'output_id', 'decision', 'resolution_notes', 'resolved_at', 'created_at'], donde: { client_id: ctx.cliente } }),
+    // la aprobación del plan: también dice si está aprobado o reemplazado
+    leer(ctx, { tabla: 'plan_aprobaciones', columnas: ['plan_id', 'estado', 'version', 'creado_en'], donde: { client_id: ctx.cliente } }),
   ])
   if (r.error) return fallo(['trabajos_hechos', 'decisiones_del_aprobador'], r.error)
+  const estadoNoLeido = cola.error ?? aprobaciones.error
   // P1 · una fila marcada como PRUEBA (`provenance_tag.prueba_*`) no existe para la lista ni cuenta como versión
   // r63 · una fila del REGISTRO INTERNO (lo que el chequeo sacó del manual) tampoco es un trabajo hecho: no entra al catálogo
   const filas = r.filas.filter((f) => !esDePrueba(objeto(f.provenance_tag)) && !TIPOS_DE_REGISTRO_INTERNO.includes(String(f.output_type)))
@@ -402,16 +407,22 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
     }
   }
 
+  // lo que dice la plataforma manda sobre todo lo demás: lo rechazado, reemplazado o vencido nunca es lo vigente
+  const vencimientos = vencimientosDeLaCola(cola.filas)
+  const aprobacionDe = aprobacionesPorPlan(aprobaciones.filas)
+  const enPlataforma = new Map(filas.map((f) => {
+    const id = String(f.id), d = ultimaPorPieza.get(id)
+    return [id, estadoDeLaSalida(f, { decision: d?.decision ?? null, decision_en: d?.fecha ?? null, vencida_en: vencimientos.get(id) ?? null, aprobacion: aprobacionDe.get(id) ?? null })]
+  }))
   const versiones = derivarVersiones(filas.map((f) => {
-    const d = ultimaPorPieza.get(String(f.id))
-    const aprobadaPorEstado = f.status === 'approved' || f.status === 'published'
+    const e = enPlataforma.get(String(f.id))!
     return {
       id: String(f.id),
       clave: CLAVE_DE_VERSION[String(f.output_type)]?.(f) ?? `propia|${f.id}`,
       creado: iso(f.created_at) ?? '',
       // lo que dijo el dueño en la cola manda sobre el estado de la fila: aprobó → aprobada · rechazó o pidió un cambio → ya no lo está
-      aprobada: d ? d.decision === 'aprobada' : aprobadaPorEstado,
-      valida: esValido(objeto(f.provenance_tag)),
+      aprobada: e.estado === 'aprobado',
+      valida: esValido(objeto(f.provenance_tag)) && !e.cerrada,
     }
   }))
   const lineas: Ficha[] = []
@@ -427,21 +438,27 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
     const veredicto = texto(f.hitl_verdict), cambios = texto(f.human_edits)
     const deLaCola = ultimaPorPieza.get(String(f.id))
     const delVeredicto = decisionDelVeredicto(veredicto, cambios)
+    const e = enPlataforma.get(String(f.id))!
+    const rechazoEnLaFila = e.estado === 'rechazado' && f.status === 'rejected' && e.rechazo?.por ? e.rechazo : null
     const decisionAtada: DecisionAtada | undefined = deLaCola
       ? { decision: deLaCola.decision, version: v?.version ?? null, ref_de_la_decision: `hitl_queue:${deLaCola.id}`, fecha: deLaCola.fecha, detalle: deLaCola.detalle }
       : delVeredicto
         ? { decision: delVeredicto, version: v?.version ?? null, ref_de_la_decision: `${ref}#decision`, fecha: iso(f.updated_at) ?? iso(f.created_at), detalle: cambios ? recorte(cambios, 600) : null }
-        : undefined
-    const estado: Estado = deLaCola ? (deLaCola.decision === 'aprobada' ? 'aprobado' : deLaCola.decision === 'rechazada' ? 'rechazado' : 'borrador sin aprobar') : estadoDeTrabajo(f.status)
+        : rechazoEnLaFila
+          ? { decision: 'rechazada', version: v?.version ?? null, ref_de_la_decision: `${ref}#rechazo`, fecha: iso(rechazoEnLaFila.en) ?? iso(f.updated_at), detalle: rechazoEnLaFila.nota ? recorte(rechazoEnLaFila.nota, 600) : null }
+          : undefined
+    // reemplazado o vencido conserva lo que fue (una versión aprobada y reemplazada sigue siendo la que se aprobó); lo demás sale de la plataforma
+    const estado: Estado = e.estado === 'rechazado' ? 'rechazado' : e.estado === 'aprobado' ? 'aprobado' : e.estado === 'abierto' ? 'borrador sin aprobar' : deLaCola ? (deLaCola.decision === 'aprobada' ? 'aprobado' : deLaCola.decision === 'rechazada' ? 'rechazado' : 'borrador sin aprobar') : estadoDeTrabajo(f.status)
     const avisos = [
       !valida ? `${esParte ? 'PARTE NO VÁLIDO' : tipo === 'campaign_piece' ? 'PIEZA NO VÁLIDA' : 'NO VÁLIDO'} · ${texto(pt.motivo_invalido) ?? 'sin motivo declarado'}` : null,
-      cola.error ? DECISIONES_NO_LEIDAS : null,
+      e.cerrada ? `NO VIGENTE · ${e.motivo}` : null,
+      estadoNoLeido ? DECISIONES_NO_LEIDAS : null,
     ].filter(Boolean) as string[]
     lineas.push(linea(ctx, {
       ref, estante: esPlan || esParte ? 'E1' : 'E6', clase: esPlan ? 'plan' : esParte ? 'parte_de_trabajo' : tipo === 'campaign_piece' ? 'pieza' : 'trabajo_hecho',
       titulo: texto(f.title) ?? tipo, que_es: `${tipo} · ${texto(f.status) ?? 'sin estado'}`, origen: 'producido', estado,
       fecha: iso(f.created_at), plazo: esPlan ? 'plan' : 'sin_plazo', peso: pesoDeTexto(texto(f.content_text)),
-      version: v?.version, vigente: v?.vigente, reemplazada: v?.reemplazada, versiones_anteriores: v?.versiones_anteriores, valida,
+      version: v?.version, vigente: v?.vigente, reemplazada: v?.reemplazada || e.estado === 'reemplazado', versiones_anteriores: v?.versiones_anteriores, valida,
       ...(v?.reemplazada && v.vigente_id ? { ref_de_la_vigente: `client_historical_outputs:${v.vigente_id}` } : {}),
       ...(decisionAtada ? { decision_del_dueno: decisionAtada } : {}),
       ...(avisos.length ? { aviso: avisos.join(' · ') } : {}),
@@ -455,8 +472,8 @@ export async function leerTrabajosHechos(ctx: Contexto): Promise<Salida> {
       }))
     }
   }
-  const estadoTrabajos: EstadoDeFuente = cola.error ? { estado: 'error_de_lectura', n: lineas.length, detalle: `la cola de revisión no se pudo leer: ${cola.error}` } : estadoDeFuente(lineas.length)
-  return { fuentes: { trabajos_hechos: estadoTrabajos, decisiones_del_aprobador: estadoDeFuente(decisiones.length) }, lineas: [...lineas, ...decisiones], lecturas: 2, fallidas: cola.error ? 1 : 0 }
+  const estadoTrabajos: EstadoDeFuente = estadoNoLeido ? { estado: 'error_de_lectura', n: lineas.length, detalle: cola.error ? `la cola de revisión no se pudo leer: ${cola.error}` : `las aprobaciones del plan no se pudieron leer: ${aprobaciones.error}` } : estadoDeFuente(lineas.length)
+  return { fuentes: { trabajos_hechos: estadoTrabajos, decisiones_del_aprobador: estadoDeFuente(decisiones.length) }, lineas: [...lineas, ...decisiones], lecturas: 3, fallidas: (cola.error ? 1 : 0) + (aprobaciones.error ? 1 : 0) }
 }
 
 // ── decisiones resueltas en la cola de revisión humana ────────────────────────────────
