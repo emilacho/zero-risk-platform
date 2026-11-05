@@ -502,7 +502,7 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       const ajenas = deOtraOficina(a)
       await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })
       expect(ajenas()).toEqual(['pendiente', 'pendiente', 'pendiente'])
-      expect(a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)).toMatchObject({ estado: 'obsoleta', motivo_descarte: 'el dueño ya contestó esta pregunta' })
+      expect(a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)).toMatchObject({ estado: 'respondida', ficha_id: expect.any(String) })
     })
     it('🔴 una respuesta recogida del cerebro cierra la propia y no toca las ajenas', async () => {
       const a = armar()
@@ -546,7 +546,7 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       expect(registro.preguntas.map((p) => [p.clave, p.pregunta_id])).toEqual([['whatsapp', a.filas()[0].id], ['pixel', a.filas()[1].id]])
       a.horas(73)
       await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })
-      expect(a.filas()[0].estado).toBe('obsoleta')
+      expect(a.filas()[0].estado).toBe('respondida')
     })
     it('🔴 una pregunta de otra oficina no guarda id: su fila no se cierra desde aquí', async () => {
       const a = armar({ preguntas: [preg('whatsapp')] })
