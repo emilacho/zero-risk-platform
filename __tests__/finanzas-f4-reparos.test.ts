@@ -112,3 +112,23 @@ describe('ronda 2 de CC#3 · P8 con puntuación final, P9 con un decimal y con m
     expect(codigos(M.revisarCifrasFinanzas(plan('Se invierten 11,5 USD.'), fin('pauta_diaria', 1.5)))).not.toContain('P9')
   })
 })
+
+describe('P8 · miles con espacio («1 234,50 dólares») se lee como UN monto (menor de F4 · CC#1 14-oct)', () => {
+  const firmado = (valores: Array<[string, number]>) => ({ numeros: valores.map(([clave, valor]) => ({ clave, valor, minimo: null, maximo: null, tipo: 'dato' })), semanas: 12 })
+  const f = firmado([['total_mes', 1234.5]])
+  it('«1 234,50 dólares» y «US$ 1 234,50» firmados no marcan P8', () => {
+    expect(codigos(M.revisarCifrasFinanzas(plan('Inversión total: 1 234,50 dólares al mes.'), f))).not.toContain('P8')
+    expect(codigos(M.revisarCifrasFinanzas(plan('Inversión total: US$ 1 234,50 al mes.'), f))).not.toContain('P8')
+  })
+  it('con espacio duro (U+00A0) tampoco marca', () => {
+    expect(codigos(M.revisarCifrasFinanzas(plan('Inversión total: 1\u00a0234,50 dólares al mes.'), f))).not.toContain('P8')
+  })
+  it('un monto distinto con espacio SÍ marca, y el texto marcado es el monto entero', () => {
+    const r = M.revisarCifrasFinanzas(plan('Inversión total: 1 999,00 dólares al mes.'), f)
+    expect(codigos(r)).toContain('P8')
+    expect(r[0].ejemplos).toContain('1 999,00 dólares')
+  })
+  it('control: sin espacio («1.234,50 dólares») sigue sin marcar', () => {
+    expect(codigos(M.revisarCifrasFinanzas(plan('Inversión total: 1.234,50 dólares al mes.'), f))).not.toContain('P8')
+  })
+})

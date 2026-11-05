@@ -34,7 +34,8 @@ function _finSeccionDePresupuesto(texto) {
 }
 
 function _finMontosDe(seccion) {
-  var re = /(?:US\$|USD|\$|€|COP|MXN|PEN)\s?\d[\d.,]*|\d[\d.,]*\s?(?:US\$|USD|d[oó]lares|pesos|soles|COP|MXN|PEN)\b/gi
+  // el número admite miles con espacio («1 234,50», también con espacio duro): primero el grupo con espacio, después el corriente
+  var re = /(?:US\$|USD|\$|€|COP|MXN|PEN)\s?(?:\d{1,3}(?:[  ]\d{3})+(?![\d])(?:[.,]\d+)?|\d[\d.,]*)|(?:\d{1,3}(?:[  ]\d{3})+(?![\d])(?:[.,]\d+)?|\d[\d.,]*)\s?(?:US\$|USD|d[oó]lares|pesos|soles|COP|MXN|PEN)\b/gi
   var out = [], m
   while ((m = re.exec(seccion)) !== null) {
     var v = _finNumeroDe(m[0])
