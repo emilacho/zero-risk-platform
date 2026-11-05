@@ -71,9 +71,17 @@ const NUEVO_GUARDADO = CODIGO_REPONER_INFORMES + 'return [{ json: { jef: ev.jef,
 const VIEJO_TEXTOS = "!Array.isArray(b.textos_a_guardar) ? b.textos_a_guardar : {} } }]"
 const NUEVO_TEXTOS = "!Array.isArray(b.textos_a_guardar) ? textosConInformes(b.textos_a_guardar) : {} } }]"
 
+// 05-nov · decisión de Lenovo: el PDF sale de `jef_vigente.texto`, y ese texto no llevaba «Qué cambió» (la fila guardada sí).
+// Ahora `Plan vigente` toma el mismo texto que `armar B/C` guarda: el de la plataforma si lo devolvió, y si no, el de hoy. Sin versión nueva, nada cambia.
+const VIEJO_VIGENTE = 'return [{ json: { ...ultima, jef_vigente: { texto: p.texto, caracteres: p.caracteres,'
+const NUEVO_VIGENTE = "// 05-nov · el PDF lleva el mismo texto que se guardó: con «Qué cambió» y la sección de informes que no llegaron\n"
+  + "const _txv = est.textos_a_guardar && typeof est.textos_a_guardar[etiqueta] === 'string' && est.textos_a_guardar[etiqueta].trim() ? est.textos_a_guardar[etiqueta] : null\n"
+  + 'return [{ json: { ...ultima, jef_vigente: { texto: _txv || p.texto, caracteres: _txv ? _txv.length : p.caracteres,'
+
 export function construirPlanInformesQueNoLlegaron(f) {
   cambiarCodigo(f, '¿Llegó la vuelta?', VIEJO, NUEVO)
   cambiarCodigo(f, '¿Llegó la vuelta?', VIEJO_SALIDA, NUEVO_SALIDA)
   cambiarCodigo(f, 'JEF · plan · el plan de guardado', VIEJO_GUARDADO, NUEVO_GUARDADO)
   cambiarCodigo(f, 'JEF · plan · el plan de guardado', VIEJO_TEXTOS, NUEVO_TEXTOS)
+  cambiarCodigo(f, 'Plan vigente', VIEJO_VIGENTE, NUEVO_VIGENTE)
 }

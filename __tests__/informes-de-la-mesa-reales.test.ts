@@ -285,7 +285,7 @@ describe('el plan declara lo que no llegó', () => {
     construirPlanInformesQueNoLlegaron(f)
     type N = { name: string; parameters: { jsCode: string } }
     const cambiados = (f.nodes as N[]).filter((n, i) => JSON.stringify(n) !== JSON.stringify(a.nodes[i]))
-    expect(cambiados.map((n) => n.name)).toEqual(['¿Llegó la vuelta?', 'JEF · plan · el plan de guardado'])
+    expect(cambiados.map((n) => n.name)).toEqual(['¿Llegó la vuelta?', 'JEF · plan · el plan de guardado', 'Plan vigente'])
     for (const n of cambiados) expect(() => new Function('$', '$input', '$execution', '$runIndex', '$workflow', '$json', '$now', 'require', n.parameters.jsCode)).not.toThrow()
     expect(cambiados[0].parameters.jsCode).toContain("+ '\\n' + bloqueInformesQueNoLlegaron : textoDelRedactor")
     expect(cambiados[0].parameters.jsCode).toContain("bloque_informes_que_no_llegaron: llego ? bloqueInformesQueNoLlegaron : ''")
@@ -435,6 +435,39 @@ describe('el plan declara lo que no llegó', () => {
       expect(vigente.jef_vigente.etiqueta).toBe('B')
       expect(vigente.jef_vigente.texto.endsWith(SECCION)).toBe(true)
       expect(vigente.jef_vigente.caracteres).toBe(vigente.jef_vigente.texto.length)
+    })
+
+    describe('decisión de Lenovo: el PDF sale de la versión vigente, con «Qué cambió» y la sección', () => {
+      const fila = { id: 'a1', provenance_tag: {} }
+      const cadena = (textos: unknown, vuelta: unknown = { bloque_informes_que_no_llegaron: SECCION }) => {
+        const est = guardado({ B: version('# Plan corregido\n\n## Mes 1\nAlgo.\n') }, textos, vuelta)
+        const armado = correrNodo('JEF · plan · armar B', { 'JEF · plan · el plan de guardado': est, 'Guardar el plan': { body: [fila] }, 'Redactor · elegir': { redactor_elegido: 'x' } })[0].json
+        const vigente = correrNodo('Plan vigente', { 'Guardar el plan': { body: [fila] }, 'JEF · plan · el plan de guardado': est, 'JEF · plan · guardar B': { statusCode: 201, body: [{ id: 'b1' }] }, '¿Llegó la vuelta?': { client_id: 'c1', client_name: 'Z' } })[0].json
+        return { guardado: armado.fila_base.content as string, pdf: vigente.jef_vigente.texto as string, largo: vigente.jef_vigente.caracteres as number }
+      }
+      it('🔴 con «Qué cambió» de la plataforma: el PDF lleva lo mismo que se guardó', () => {
+        const r = cadena({ B: '# Plan corregido\n## QUÉ CAMBIÓ EN ESTA VERSIÓN (v2 · B)\n- **Lo que pidió el dueño:** x\n\n## Mes 1\nAlgo.\n' })
+        expect(r.pdf).toBe(r.guardado)
+        expect(r.pdf).toContain('## QUÉ CAMBIÓ EN ESTA VERSIÓN (v2 · B)')
+        expect(r.pdf.endsWith(SECCION)).toBe(true)
+        expect(r.largo).toBe(r.pdf.length)
+      })
+      it('🔴 aunque nada faltara, el PDF lleva «Qué cambió»', () => {
+        const r = cadena({ B: '# Plan corregido\n## QUÉ CAMBIÓ\n- x\n' }, { bloque_informes_que_no_llegaron: '' })
+        expect(r.pdf).toBe('# Plan corregido\n## QUÉ CAMBIÓ\n- x\n')
+        expect(r.pdf).toBe(r.guardado)
+      })
+      it('🔴 si la plataforma no devolvió el texto, el PDF sale del de hoy, igual que lo guardado', () => {
+        for (const textos of [{}, { B: '' }, { B: '   ' }, { C: 'otro' }]) {
+          const r = cadena(textos)
+          expect(r.pdf).toBe(r.guardado)
+          expect(r.pdf.startsWith('# Plan corregido\n\n## Mes 1')).toBe(true)
+        }
+      })
+      it('🔴 el PDF y el resto de la cadena leen ese texto', () => {
+        const http = (f.nodes as Array<{ name: string; parameters: Record<string, unknown> }>).find((n) => n.name === 'Plan → Drive (PDF)')!
+        expect(JSON.stringify(http.parameters)).toContain("($('Plan vigente').first().json.jef_vigente || $('¿Llegó la vuelta?').first().json).texto")
+      })
     })
   })
 })

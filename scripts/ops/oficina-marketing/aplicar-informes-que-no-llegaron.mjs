@@ -12,7 +12,7 @@ if (!entrada || !salida) throw new Error('uso: node aplicar-informes-que-no-lleg
 const leido = JSON.parse(fs.readFileSync(entrada, 'utf8'))
 const f = leido.workflow || leido
 construirPlanInformesQueNoLlegaron(f)
-for (const nombre of ['¿Llegó la vuelta?', 'JEF · plan · el plan de guardado']) {
+for (const nombre of ['¿Llegó la vuelta?', 'JEF · plan · el plan de guardado', 'Plan vigente']) {
   new Function('$', '$input', '$execution', '$runIndex', '$workflow', '$json', '$now', 'require', f.nodes.find((n) => n.name === nombre).parameters.jsCode)
 }
 fs.writeFileSync(salida, JSON.stringify(leido, null, 2) + '\n')
