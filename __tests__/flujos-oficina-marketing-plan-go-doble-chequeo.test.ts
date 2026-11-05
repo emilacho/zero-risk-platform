@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CODIGO_MAS, CODIGO_PREPARAR, CODIGO_VALIDAR_ARMAR, CODIGO_VIVA, N_VALIDAR_ARMAR, N_VALIDAR_CERRAR, N_VALIDAR_SI, ESPERA_S, MAX_VUELTAS_DE_MESA, N_BRIEF_VIVA, N_ESTADO, N_MAS, N_OTRA, N_PREPARAR, N_RENOVAR, N_SI_MAS, N_SI_RENUEVA, N_VIVA, RELECTURAS, RELECTURA_S, construirGoDobleChequeo, construirGoDobleChequeoMitad } from '../scripts/ops/oficina-marketing/plan-go-doble-chequeo.mjs'
+import { ALTOS, CODIGO_ALTO_ARMAR, CODIGO_ALTO_ROJO, N_ALTO_ARMAR, N_ALTO_CERRAR, N_ALTO_ROJO, N_ALTO_SI, REINTENTOS_DE_TURNO, CODIGO_MAS, CODIGO_PREPARAR, CODIGO_VALIDAR_ARMAR, CODIGO_VIVA, N_VALIDAR_ARMAR, N_VALIDAR_CERRAR, N_VALIDAR_SI, ESPERA_S, MAX_VUELTAS_DE_MESA, N_BRIEF_VIVA, N_ESTADO, N_MAS, N_OTRA, N_PREPARAR, N_RENOVAR, N_SI_MAS, N_SI_RENUEVA, N_VIVA, RELECTURAS, RELECTURA_S, construirGoDobleChequeo, construirGoDobleChequeoMitad } from '../scripts/ops/oficina-marketing/plan-go-doble-chequeo.mjs'
 
 type Nodo = { name: string; type: string; onError?: string; parameters: Record<string, any> }
 type Flujo = { nodes: Nodo[]; connections: Record<string, any> }
@@ -163,8 +163,26 @@ describe('la mesa llega al acta aunque pase el plazo', () => {
         expect(await correr(c(), mapa, r, MAX_VUELTAS_DE_MESA)).toMatchObject({ fin: true, motivo: 'vencido' })
       }
     })
-    it(n + ': sin contestar sigue cortando, y el acta se entrega', async () => {
-      expect(await correr(c(), mapa, { statusCode: 500 }, 5)).toMatchObject({ fin: true, motivo: 'sin_contestar' })
+    const conFallos = (fallos: number) => ({ ...mapa, [n]: { encargo_id: 'e', fallos } })
+    it(n + ': un corte o un 5xx tiene otra oportunidad, hasta 2 veces seguidas', async () => {
+      for (const r of [{ statusCode: 500 }, { statusCode: 504 }, { error: { message: 'timeout' } }]) {
+        expect(await correr(c(), mapa, r, 5)).toEqual({ fin: false, encargo_id: 'e', fallos: 1 })
+        expect(await correr(c(), conFallos(1), r, 6)).toEqual({ fin: false, encargo_id: 'e', fallos: 2 })
+        expect(await correr(c(), conFallos(2), r, 7)).toMatchObject({ fin: true, motivo: 'sin_contestar' })
+      }
+    })
+    it(n + ': un rechazo 4xx no se reintenta', async () => {
+      for (const statusCode of [400, 401, 404]) expect(await correr(c(), mapa, { statusCode }, 5)).toMatchObject({ fin: true, motivo: 'sin_contestar' })
+    })
+    it(n + ': el reintento también respeta el tope de vueltas', async () => {
+      expect(await correr(c(), mapa, { statusCode: 500 }, MAX_VUELTAS_DE_MESA - 1)).toMatchObject({ fin: false })
+      expect(await correr(c(), mapa, { statusCode: 500 }, MAX_VUELTAS_DE_MESA)).toMatchObject({ fin: true, motivo: 'sin_contestar' })
+    })
+    it(n + ': esperar un turno en vuelo no borra la cuenta de fallos; un turno hecho sí', async () => {
+      expect(await correr(c(), conFallos(2), { statusCode: 409, body: { error: 'paso_en_vuelo' } }, 6)).toEqual({ fin: false, encargo_id: 'e', fallos: 2 })
+      expect((await correr(c(), conFallos(2), { statusCode: 200, body: { paso: 'aporte' } }, 6)).fallos).toBeUndefined()
+    })
+    it(n + ': el acta se entrega', async () => {
       expect(await correr(c(), mapa, { statusCode: 200, body: { terminado: true, estado: 'x', acta: 'a' } }, 5)).toMatchObject({ fin: true, acta: 'a' })
     })
   }
@@ -194,6 +212,65 @@ describe('un plan sin forma cierra su corrida', () => {
     expect(nodo(f, N_VALIDAR_CERRAR).parameters.jsonBody).toContain('$json.cuerpo')
     expect(nodo(f, N_VALIDAR_CERRAR).onError).toBe('continueRegularOutput')
   })
+})
+
+describe('los altos deliberados cierran la corrida', () => {
+  const armar = (s: unknown, j: unknown = { error: 'PLAN_MESA_SIN_ACTA · la mesa no entregó acta' }) => correr(CODIGO_ALTO_ARMAR, { [WEB]: { body: s } }, j)
+  it('cierra como fallida; el motivo sin el código y el error entero para volver a lanzarlo', async () => {
+    const r = await armar(SOBRE)
+    expect(r.aplica).toBe(true)
+    expect(r.mensaje).toBe('PLAN_MESA_SIN_ACTA · la mesa no entregó acta')
+    expect(r.cuerpo).toEqual({ accion: 'cerrar', client_id: 'c1', corrida: 'r1', estado: 'fallida', motivo: 'el plan se detuvo: la mesa de estrategia no entregó su acta' })
+  })
+  it('cada alto dice su razón en palabras de la empresa, sin códigos', async () => {
+    for (const [codigo, razon] of [['PLAN_VALIDADOR_NO_LEGIBLE', /chequeo de forma/], ['PLAN_PAUSA_NO_GUARDADA', /guardar la pausa/], ['PLAN_REANUDAR_SIN_MATERIAL', /material guardado/]] as const) {
+      const { cuerpo } = await armar(SOBRE, { error: codigo + ' · HTTP 500 [line 4]' })
+      expect(cuerpo.motivo).toMatch(razon)
+      expect(cuerpo.motivo).not.toMatch(/PLAN_|HTTP|line/)
+    }
+    expect((await armar(SOBRE, { error: 'PLAN_OTRO · algo raro' })).cuerpo.motivo).toBe('el plan se detuvo: algo raro')
+  })
+  it('el error que se vuelve a lanzar no acumula la marca de línea', async () => {
+    expect((await armar(SOBRE, { error: 'PLAN_X · algo [line 4] [line 1]' })).mensaje).toBe('PLAN_X · algo')
+    expect((await armar(SOBRE, { error: 'PLAN_X · algo [line 4] sigue' })).mensaje).toBe('PLAN_X · algo [line 4] sigue')
+  })
+  it('entiende el error como objeto y no se queda sin mensaje', async () => {
+    expect((await armar(SOBRE, { error: { message: 'PLAN_X · algo' } })).mensaje).toBe('PLAN_X · algo')
+    expect((await armar(SOBRE, { message: 'otro' })).mensaje).toBe('otro')
+    expect((await armar(SOBRE, {})).mensaje).toBe('el plan se detuvo')
+  })
+  it('sin corrida del plan nuevo no pretende cerrar', async () => {
+    for (const s of [{}, { ...SOBRE, plan_v3: false }, { ...SOBRE, corrida: '' }, { ...SOBRE, client_id: 5 }]) {
+      const r = await armar(s)
+      expect(r.aplica).toBe(false)
+      expect(r.cuerpo).toBeNull()
+    }
+  })
+  it('vuelve a lanzar el mismo error, para que el aviso siga llegando', async () => {
+    await expect(correr(CODIGO_ALTO_ROJO, { [N_ALTO_ARMAR]: { mensaje: 'PLAN_X · algo' } }, {})).rejects.toThrow('PLAN_X · algo')
+  })
+  it('son los 4 altos, por su salida de error, y lo que ya hacían sigue igual', () => {
+    const f = hecho()
+    expect(ALTOS).toEqual(['MESA · cerrar el acta', 'Validar · ¿qué dijo?', 'FIN · la pausa quedó guardada', 'Reanudar · poner el material guardado'])
+    for (const a of ALTOS) {
+      expect(nodo(f, a).onError).toBe('continueErrorOutput')
+      expect(destinos(f, a, 1)).toEqual([N_ALTO_ARMAR])
+      expect(destinos(f, a, 0)).toEqual(PLAN.connections[a]?.main[0]?.map((x: any) => x.node) ?? [])
+      expect(cod(f, a)).toBe(cod(PLAN, a))
+    }
+  })
+  it('el cableado: armar → ¿cerrar? → cerrar → rojo; sin corrida va directo al rojo', () => {
+    const f = hecho()
+    expect(destinos(f, N_ALTO_ARMAR)).toEqual([N_ALTO_SI])
+    expect(destinos(f, N_ALTO_SI, 0)).toEqual([N_ALTO_CERRAR])
+    expect(destinos(f, N_ALTO_SI, 1)).toEqual([N_ALTO_ROJO])
+    expect(destinos(f, N_ALTO_CERRAR)).toEqual([N_ALTO_ROJO])
+    expect(nodo(f, N_ALTO_CERRAR).parameters.url).toBe(nodo(f, 'V9 · cerrar la corrida').parameters.url)
+    expect(nodo(f, N_ALTO_CERRAR).parameters.jsonBody).toContain('$json.cuerpo')
+    expect(nodo(f, N_ALTO_CERRAR).onError).toBe('continueRegularOutput')
+    expect(nodo(f, N_ALTO_ROJO).onError).toBeUndefined()
+  })
+  it('son 2 reintentos', () => { expect(REINTENTOS_DE_TURNO).toBe(2) })
 })
 
 describe('los dos cables que pidió la plataforma', () => {
@@ -258,9 +335,9 @@ describe('sobre una corrida muerta no se paga', () => {
 
 describe('el resto queda igual', () => {
   it('no cambia ningún otro nodo', () => {
-    const f = hecho(); const toca = new Set(['Esperar al redactor', 'Redactor · ¿aceptó el pedido?', 'Vuelta · completar', 'MESA · decidir', 'MESA · decidir la devolución', 'JEF · armar', 'Segunda mitad · sobre', 'V9 · pre-vuelo', 'FIN2 · armar la semilla'])
+    const f = hecho(); const toca = new Set([...ALTOS, 'Esperar al redactor', 'Redactor · ¿aceptó el pedido?', 'Vuelta · completar', 'MESA · decidir', 'MESA · decidir la devolución', 'JEF · armar', 'Segunda mitad · sobre', 'V9 · pre-vuelo', 'FIN2 · armar la semilla'])
     for (const v of PLAN.nodes) if (!toca.has(v.name)) expect(nodo(f, v.name), v.name).toEqual(v)
-    expect(f.nodes.length).toBe(PLAN.nodes.length + 11)
+    expect(f.nodes.length).toBe(PLAN.nodes.length + 15)
   })
   it('todo nodo de código compila', () => {
     for (const f of [hecho(), mitad()]) for (const n of f.nodes) if (n.parameters.jsCode) expect(() => new Function('$', '$input', '$runIndex', '$execution', '$workflow', '$env', '$json', 'return (async () => {' + n.parameters.jsCode + '\n})()'), n.name).not.toThrow()
