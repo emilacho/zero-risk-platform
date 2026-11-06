@@ -34,6 +34,12 @@ function versionYDecision(f: Ficha, porRef: Map<string, Ficha>): Record<string, 
         salida.ref_de_la_vigente = f.ref_de_la_vigente
         const v = porRef.get(f.ref_de_la_vigente)
         salida.aviso = [f.aviso, `NO es la versión vigente: la vigente es ${f.ref_de_la_vigente}${v?.version !== undefined ? ` (versión ${v.version})` : ''}`].filter(Boolean).join(' · ')
+      } else if (f.ref_de_la_ultima_version) {
+        // 05-nov · la más nueva TAMPOCO está vigente: nunca se la nombra como «la vigente»
+        salida.ref_de_la_ultima_version = f.ref_de_la_ultima_version
+        salida.sin_version_vigente = true
+        const v = porRef.get(f.ref_de_la_ultima_version)
+        salida.aviso = [f.aviso, `NO es la versión vigente: la última versión es ${f.ref_de_la_ultima_version}${v?.version !== undefined ? ` (versión ${v.version})` : ''} y tampoco está vigente (${f.ultima_version_no_vigente ?? 'no está vigente'}) · sin versión vigente`].filter(Boolean).join(' · ')
       }
     }
   }
