@@ -77,18 +77,79 @@ describe('la entrada y la lectura', () => {
     expect(r.status).toBe(400)
     expect(leyo).toBe(false)
   })
+  // base falsa: cada consulta encadenada guarda sus filtros y devuelve lo que la tabla tendría con esos filtros
+  type Filtro = [string, ...unknown[]]
+  const baseFalsa = (tabla: Array<Record<string, unknown>>, opc: { error?: string } = {}) => {
+    const consultas: Filtro[][] = []
+    const db = {
+      from: (_t: string) => {
+        const fs: Filtro[] = []
+        consultas.push(fs)
+        const q: any = new Proxy({}, {
+          get: (_x, m: string) => m === 'then'
+            ? (ok: (v: unknown) => void) => {
+                if (opc.error) return ok({ data: null, error: { message: opc.error } })
+                let d = tabla
+                let lim = Infinity
+                for (const [op, a, b] of fs) {
+                  if (op === 'eq') d = d.filter((r) => r[a as string] === b)
+                  if (op === 'in') d = d.filter((r) => (b as unknown[]).includes(r[a as string]))
+                  if (op === 'gte') d = d.filter((r) => String(r[a as string]) >= String(b))
+                  if (op === 'limit') lim = a as number
+                }
+                ok({ data: d.slice(0, lim), error: null })
+              }
+            : (...a: unknown[]) => { fs.push([m, ...a]); return q },
+        })
+        return q
+      },
+    }
+    return { db, consultas }
+  }
+  const AHORA = () => new Date('2026-11-06T23:10:00Z')
+  const real = { id: '5405751f-964c-4a42-9112-7f0054c875f2', client_id: C, tema: 'fecha apertura guayaquil', pregunta: '¿fecha?', estado: 'respondida', preguntado_por_oficina: 'financiera', motivo_descarte: null, workflow_id: 'X9F0zp6LQ2xGEYVS', workflow_execution_id: '220399', creado_en: '2026-11-05T23:09:42.010Z' }
+
   it('la lectura de Supabase filtra por cliente, flujo y ejecuciones, y mapea la fila real', async () => {
-    const llamadas: Array<[string, ...unknown[]]> = []
-    const real = { id: '5405751f-964c-4a42-9112-7f0054c875f2', client_id: C, tema: 'fecha apertura guayaquil', pregunta: '¿fecha?', estado: 'respondida', preguntado_por_oficina: 'financiera', motivo_descarte: null, workflow_id: 'X9F0zp6LQ2xGEYVS', workflow_execution_id: '220399' }
-    const q: any = new Proxy({}, { get: (_t, m: string) => m === 'then' ? (ok: (v: unknown) => void) => ok({ data: [real, { ...real, id: 'x', estado: 'asumida', supuesto_asumido: 'en marzo' }], error: null }) : (...a: unknown[]) => { llamadas.push([m, ...a]); return q } })
-    const db = { from: (t: string) => { llamadas.push(['from', t]); return q } }
-    const ps = await compuertaDeSupabase(db).preguntasDeLaCorrida(ENTRADA)
-    expect(llamadas).toEqual([['from', 'cerebro_dueno_preguntas'], ['select', '*'], ['eq', 'client_id', C], ['eq', 'workflow_id', 'X9F0zp6LQ2xGEYVS'], ['in', 'workflow_execution_id', ['220399']], ['limit', 500]])
+    const { db, consultas } = baseFalsa([real, { ...real, id: 'x', estado: 'asumida', supuesto_asumido: 'en marzo' }])
+    const ps = await compuertaDeSupabase(db, AHORA).preguntasDeLaCorrida(ENTRADA)
+    expect(consultas[0]).toEqual([['select', '*'], ['eq', 'client_id', C], ['eq', 'workflow_id', 'X9F0zp6LQ2xGEYVS'], ['in', 'workflow_execution_id', ['220399']], ['limit', 501]])
     expect(ps[0]).toEqual({ id: real.id, tema: real.tema, pregunta: '¿fecha?', estado: 'respondida', oficina: 'financiera', motivo_descarte: null, supuesto: null, asumida_en: null })
     expect(ps[1].supuesto).toBe('en marzo')
   })
+  it('🔴 de CC7 · relanzamiento: la pregunta sigue PENDIENTE con la ejecución vieja (la puerta dijo «repetida» y no creó fila) ⇒ la compuerta la ve y ESPERA', async () => {
+    const pendienteDeLaR4 = { ...real, estado: 'pendiente', creado_en: '2026-11-06T22:00:00Z' }
+    const { db, consultas } = baseFalsa([pendienteDeLaR4])
+    const relanzada = { ...ENTRADA, workflow_execution_ids: ['230001'] }
+    const r = await compuerta(relanzada, compuertaDeSupabase(db, AHORA))
+    expect(r.status).toBe(200)
+    expect(r.cuerpo).toMatchObject({ decision: 'espera', abiertas: [{ id: real.id, motivo: 'sin_contestar' }] })
+    expect(consultas[1]).toEqual([['select', '*'], ['eq', 'client_id', C], ['eq', 'estado', 'pendiente'], ['gte', 'creado_en', '2026-11-03T23:10:00.000Z'], ['limit', 501]])
+  })
+  it('una pendiente del cliente registrada por OTRO flujo (buzón, tablero) también frena; otro cliente no', async () => {
+    const delTablero = { ...real, id: 't', estado: 'pendiente', workflow_id: 'tablero-tu-oficina', workflow_execution_id: 'x', creado_en: '2026-11-06T20:00:00Z' }
+    const otroCliente = { ...delTablero, id: 'o', client_id: '11111111-1111-4111-8111-111111111111' }
+    const r = await compuerta(ENTRADA, compuertaDeSupabase(baseFalsa([real, delTablero, otroCliente]).db, AHORA))
+    expect((r.cuerpo.abiertas as Array<{ id: string }>).map((a) => a.id)).toEqual(['t'])
+  })
+  it('una pendiente más vieja que la ventana de la puerta (72 h) no es de esta ronda: no frena', async () => {
+    const vieja = { ...real, id: 'v', estado: 'pendiente', workflow_execution_id: '1', creado_en: '2026-11-03T23:00:00Z' }
+    const r = await compuerta(ENTRADA, compuertaDeSupabase(baseFalsa([real, vieja]).db, AHORA))
+    expect(r.cuerpo.decision).toBe('sigue')
+  })
+  it('la misma pregunta que sale en las dos lecturas cuenta una sola vez', async () => {
+    const pend = { ...real, estado: 'pendiente', creado_en: '2026-11-06T22:00:00Z' }
+    const ps = await compuertaDeSupabase(baseFalsa([pend]).db, AHORA).preguntasDeLaCorrida(ENTRADA)
+    expect(ps).toHaveLength(1)
+  })
+  it('si una lectura trae más de 500 filas, LANZA: no se recorta en silencio (⇒ 502 «espera»)', async () => {
+    const muchas = Array.from({ length: 501 }, (_, i) => ({ ...real, id: 'r' + i }))
+    const r = await compuerta(ENTRADA, compuertaDeSupabase(baseFalsa(muchas).db, AHORA))
+    expect(r).toMatchObject({ status: 502, cuerpo: { decision: 'espera' } })
+    expect(String(r.cuerpo.detalle)).toMatch(/más de 500 filas/)
+    const justas = Array.from({ length: 500 }, (_, i) => ({ ...real, id: 'r' + i }))
+    expect((await compuerta(ENTRADA, compuertaDeSupabase(baseFalsa(justas).db, AHORA))).status).toBe(200)
+  })
   it('la lectura de Supabase LANZA con error de la base (no lo lee como «sin preguntas»)', async () => {
-    const q: any = new Proxy({}, { get: (_t, m: string) => m === 'then' ? (ok: (v: unknown) => void) => ok({ data: null, error: { message: 'permission denied' } }) : () => q })
-    await expect(compuertaDeSupabase({ from: () => q }).preguntasDeLaCorrida(ENTRADA)).rejects.toThrow(/permission denied/)
+    await expect(compuertaDeSupabase(baseFalsa([], { error: 'permission denied' }).db, AHORA).preguntasDeLaCorrida(ENTRADA)).rejects.toThrow(/permission denied/)
   })
 })
