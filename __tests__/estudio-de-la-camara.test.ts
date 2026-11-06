@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { archivoDe3D, armarAnimacion, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
+import { archivoDe3D, armarAnimacion, noEsHumanoide, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from '@/lib/estudio/movimientos'
 import { esDeLaCola } from '@/lib/estudio/fal'
 import { avanzar, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
@@ -447,6 +447,44 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
     expect(a.ok && b.ok).toBe(true)
     expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(1)
     expect(d.base.t.estudio_piezas.filter((x) => x.modelo === 'meshy-animar')).toHaveLength(1)
+  })
+  it('lo que dice «no es figura humana» se reconoce por palabra entera; un error cualquiera no', () => {
+    for (const t of ['Model is not a humanoid', 'Auto rigging failed', 'could not rig the mesh', 'no limbs detected', 'Skeleton generation failed', 'biped not found', 'pose estimation error']) expect(noEsHumanoide(t)).toBe(true)
+    for (const t of ['timeout', 'Internal Server Error', 'invalid origin header', 'purpose not allowed', 'trigger failed', 'exposed url']) expect(noEsHumanoide(t)).toBe(false)
+  })
+  it('un modelo 3D que todavía se está creando no se anima', async () => {
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['IN_PROGRESS'], animar: 'ok' }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    const fila = d.base.t.estudio_piezas.find((p) => p.id === r.valor.pieza.id)!
+    // aunque ya tuviera archivo, sigue «creando»: no se anima
+    Object.assign(fila, { archivo_url: 'https://almacen.test/oficina-creativos/estudio/x.glb', archivo_tipo: 'glb' })
+    const a = await crearAnimacion(d, animacion({ origen_pieza_id: r.valor.pieza.id, movimientos: [0] }))
+    expect(!a.ok && a.error).toBe('modelo_no_animable')
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(0)
+  })
+  it('repetir el mismo clic más tarde devuelve la misma pieza, sin otro envío', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const p = animacion({ origen_pieza_id: modelo.id, movimientos: [0] })
+    const a = await crearAnimacion(d, p)
+    const b = await crearAnimacion(d, p)
+    expect(a.ok && a.valor.ya_existia).toBe(false)
+    expect(b.ok && b.valor.ya_existia).toBe(true)
+    expect(b.ok && a.ok && b.valor.pieza.id).toBe(a.ok ? a.valor.pieza.id : null)
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(1)
+    // lo ya pedido se devuelve antes de mirar llaves o modelo: aunque falte la llave, no da error
+    const c = await crearAnimacion({ ...d, llaves: { ...d.llaves, fal: '' } }, p)
+    expect(c.ok && c.valor.ya_existia).toBe(true)
+  })
+  it('fal sin movimientos y dos preguntas a la vez: el libro se anota una sola vez', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'sin_clips' })
+    const antes = librosDeFal(d)
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+    if (!r.ok) throw new Error(r.error)
+    const [x, y] = await Promise.all([avanzar(d, r.valor.pieza.id), avanzar(d, r.valor.pieza.id)])
+    expect(x.ok && x.valor.estado).toBe('fallida')
+    expect(y.ok && y.valor.estado).toBe('fallida')
+    expect(librosDeFal(d)).toBe(antes + 1)
   })
   it('la ruta exige la llave interna y el catálogo trae precio, comunes y biblioteca', () => {
     const ruta = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'estudio', 'animar', 'route.ts'), 'utf8')

@@ -256,5 +256,6 @@ export function clipsDeAnimacion(salida: Record<string, unknown>): Array<{ actio
 }
 
 /** un fallo de fal que dice que el modelo no se puede montar en un esqueleto humano: se explica en claro */
-export const noEsHumanoide = (error: string) => /humanoid|rig|limb|skeleton|biped|pose/i.test(error)
+// palabras enteras: «rig» no debe saltar con «origin» ni «pose» con «purpose»
+export const noEsHumanoide = (error: string) => /humanoid|\brig(?:ging|ged)?\b|\blimbs?\b|\bskeleton\b|\bbiped\b|\bpose\b/i.test(error)
 export const AVISO_NO_HUMANOIDE = 'Este modelo no parece una figura humana con brazos y piernas definidos, así que no se puede animar. No se cobró.'
