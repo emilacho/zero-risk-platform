@@ -260,7 +260,7 @@ export function clipsDeAnimacion(salida: Record<string, unknown>): Array<{ actio
 // solo palabras que dicen «no es humano»; «rigging», «skeleton» o «pose» aparecen también en fallos de otra causa
 // (06-nov: el error de demasiados triángulos dice «limit for rigging» y salía como «no es figura humana»)
 export const noEsHumanoide = (error: string) => /humanoid|\blimbs?\b|\bbiped\b/i.test(error)
-export const AVISO_NO_HUMANOIDE = 'Este modelo no parece una figura humana con brazos y piernas definidos, así que no se puede animar. No se cobró.'
+export const AVISO_NO_HUMANOIDE = 'Este modelo no parece una figura humana con brazos y piernas definidos, así que no se puede animar. No se registró ningún cobro.'
 
 /** fal rechaza el esqueleto porque el modelo tiene demasiados triángulos (medido 06-nov: 1.456.114 contra un tope de 380.000) */
 export function demasiadoDetalle(error: string): { tiene: number; tope: number } | null {

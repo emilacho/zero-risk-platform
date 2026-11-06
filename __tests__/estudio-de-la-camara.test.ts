@@ -412,7 +412,8 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
       if (!r.ok) throw new Error(r.error)
       const fin = caso === 'no_humanoide' ? await avanzar(d, r.valor.pieza.id) : { ok: true as const, valor: r.valor.pieza }
       expect(fin.ok && fin.valor.estado).toBe('fallida')
-      expect(fin.ok && fin.valor.error).toMatch(/no parece una figura humana.*No se cobró/)
+      // los tres avisos de Animar dicen lo mismo del cobro (menor CC7 #947)
+      expect(fin.ok && fin.valor.error).toMatch(/^Este modelo no parece una figura humana con brazos y piernas definidos, así que no se puede animar\. No se registró ningún cobro\. \(/)
       expect(fin.ok && Number(fin.valor.costo_usd)).toBe(0)
       expect(librosDeFal(d)).toBe(antes)
     }
