@@ -260,3 +260,22 @@ export function clipsDeAnimacion(salida: Record<string, unknown>): Array<{ actio
 // palabras enteras: «rig» no debe saltar con «origin» ni «pose» con «purpose»
 export const noEsHumanoide = (error: string) => /humanoid|\brig(?:ging|ged)?\b|\blimbs?\b|\bskeleton\b|\bbiped\b|\bpose\b/i.test(error)
 export const AVISO_NO_HUMANOIDE = 'Este modelo no parece una figura humana con brazos y piernas definidos, así que no se puede animar. No se cobró.'
+
+/** fal rechaza el esqueleto porque el modelo tiene demasiados triángulos (medido 06-nov: 1.456.114 contra un tope de 380.000) */
+export function demasiadoDetalle(error: string): { tiene: number; tope: number } | null {
+  const m = /([\d,.]+)\s*triangles?\s+which exceeds the\s+([\d,.]+)\s*triangle limit/i.exec(error)
+  if (!m) return /triangle limit|polycount/i.test(error) ? { tiene: NaN, tope: NaN } : null
+  const n = (s: string) => Number(s.replace(/[,.]/g, ''))
+  return { tiene: n(m[1]), tope: n(m[2]) }
+}
+const miles = (x: number) => x.toLocaleString('es-EC')
+
+/** el motivo de un fallo al animar, en claro: primero «demasiado detalle» (su error también nombra el esqueleto), después «no es figura humana» */
+export function motivoDeAnimacion(error: string): string {
+  const det = demasiadoDetalle(error)
+  if (det) {
+    const cifras = Number.isFinite(det.tiene) ? ` (${miles(det.tiene)} triángulos; el proveedor acepta hasta ${miles(det.tope)})` : ''
+    return `Este modelo tiene demasiado detalle para ponerle esqueleto${cifras}, así que no se puede animar tal cual. No se registró ningún cobro. (${error})`
+  }
+  return noEsHumanoide(error) ? `${AVISO_NO_HUMANOIDE} (${error})` : error
+}

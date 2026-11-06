@@ -16,7 +16,7 @@ import { sniffImageFormat } from '@/lib/image-response'
 import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 import { conDescuento } from '@/lib/video/parametros'
 import { costoEstimadoUsd, enviar as enviarAHiggsfield, estado as estadoEnHiggsfield, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
-import { ANIMAR, AVISO_NO_HUMANOIDE, archivoDe3D, clipsDeAnimacion, cotizarAnimacion, cotizarSinRed, entradaDe3D, entradaDeAnimacion, miniaturaDe3D, modeloDe3D, noEsHumanoide, promptDeImagenPara3D, TAMANO_POR_FORMATO, UUID, type Cotizacion, type Pedido, type PedidoDeAnimacion } from './catalogo'
+import { ANIMAR, archivoDe3D, clipsDeAnimacion, cotizarAnimacion, cotizarSinRed, entradaDe3D, entradaDeAnimacion, miniaturaDe3D, modeloDe3D, motivoDeAnimacion, promptDeImagenPara3D, TAMANO_POR_FORMATO, UUID, type Cotizacion, type Pedido, type PedidoDeAnimacion } from './catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from './movimientos'
 import { enviarAFal, estadoEnFal, resultadoDeFal } from './fal'
 import { crearImagen } from './openai-imagen'
@@ -33,7 +33,9 @@ export interface Deps {
 
 export const TABLA = 'estudio_piezas'
 /** el almacén de la oficina admite 20 MB por archivo */
-export const TOPE_DEL_ARCHIVO_BYTES = 20 * 1024 * 1024
+// todo lo creado se guarda en el almacén del cliente, del tamaño que sea (Lenovo 06-nov, regla 10 «límites al máximo»).
+// El tope real es la memoria de la función: el archivo se baja entero antes de subirlo. 1 GiB deja margen dentro de los 2 GiB de Vercel.
+export const TOPE_DEL_ARCHIVO_BYTES = 1024 * 1024 * 1024
 const COLUMNAS = 'id, client_id, tipo, estado, paso, prompt, modelo, parametros, foto_partida_url, costo_estimado_usd, costo_usd, archivo_url, archivo_tipo, miniatura_url, aviso, error, creado_en, terminado_en'
 
 export interface Pieza {
@@ -257,8 +259,8 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   if (!e.ok || e.e.estado === 'en_cola' || e.e.estado === 'en_curso') return { ok: true, valor: pieza }
   const yaGastado = Number(pieza.costo_usd) || 0
   const esAnimacion = pieza.modelo === ANIMAR.id
-  // un fallo anota 0; si fal dice que no es una figura humana, se explica en claro
-  const motivo = (t: string) => (esAnimacion && noEsHumanoide(t) ? `${AVISO_NO_HUMANOIDE} (${t})` : t)
+  // un fallo anota 0; el motivo de una animación se explica en claro (demasiado detalle, no es figura humana)
+  const motivo = (t: string) => (esAnimacion ? motivoDeAnimacion(t) : t)
   if (e.e.estado === 'fallido') return { ok: true, valor: (await fallar(d, id, motivo(`fal · ${e.e.error}`), yaGastado)) ?? pieza }
   const res = await resultadoDeFal(d.fetch, d.llaves.fal, responseUrl)
   if (!res.ok) return { ok: true, valor: (await fallar(d, id, motivo(`fal ${res.status} · ${res.error}`), yaGastado)) ?? pieza }
@@ -346,7 +348,7 @@ export async function crearAnimacion(d: Deps, p: PedidoDeAnimacion): Promise<Res
   const env = await enviarAFal(d.fetch, d.llaves.fal, ANIMAR.endpoint, entradaDeAnimacion(o.valor.archivo_url!, p.movimientos))
   if (!env.ok) {
     const t = `fal ${env.status} · ${env.error}`
-    return { ok: true, valor: { pieza: (await fallar(d, pieza.id, noEsHumanoide(env.error) ? `${AVISO_NO_HUMANOIDE} (${t})` : t)) ?? pieza, ya_existia: false } }
+    return { ok: true, valor: { pieza: (await fallar(d, pieza.id, motivoDeAnimacion(t))) ?? pieza, ya_existia: false } }
   }
   const fin = await actualizar(d, pieza.id, { proveedor_request_id: env.envio.request_id, proveedor_status_url: env.envio.status_url, proveedor_response_url: env.envio.response_url }, true)
   return { ok: true, valor: { pieza: fin ?? pieza, ya_existia: false } }
@@ -403,5 +405,67 @@ export async function listar(d: Deps, clientId: string, tipo: string | null, lim
   if (tipo) q = q.eq('tipo', tipo)
   const r = await q.order('creado_en', { ascending: false }).limit(Math.min(Math.max(limite, 1), 200))
   if (r.error) return falla(500, 'base_fallida', r.error.message)
-  return { ok: true, valor: (r.data ?? []) as Pieza[] }
+  const piezas = (r.data ?? []) as Pieza[]
+  // al leer la galería, lo que todavía vive solo en el proveedor se copia al almacén (unas pocas por lectura, para no demorarla)
+  let rescates = 0
+  for (const [i, p] of piezas.entries()) {
+    if (rescates >= RESCATES_POR_LECTURA || !hayQueRescatar(d, p)) continue
+    rescates++
+    piezas[i] = await rescatar(d, p)
+  }
+  return { ok: true, valor: piezas }
+}
+
+// ── rescatar: lo que quedó solo en el proveedor (vence en días) pasa al almacén ──
+const RESCATES_POR_LECTURA = 3
+const AVISO_DEL_PROVEEDOR = /^queda solo en el proveedor \(vence en días\)/
+// estos motivos llevan un detalle detrás, también separado por « · » («archivo_muy_grande · 50.3 MB»)
+const CON_DETALLE = /: (descarga_rechazada|descarga_fallida|archivo_muy_grande)$/
+/** quita del aviso lo que decía que el archivo quedó en el proveedor (con su detalle); deja lo demás */
+export function sinAvisoDelProveedor(aviso: string): string | null {
+  const partes = aviso.split(' · '), quedan: string[] = []
+  for (let i = 0; i < partes.length; i++) {
+    if (!AVISO_DEL_PROVEEDOR.test(partes[i])) { quedan.push(partes[i]); continue }
+    if (CON_DETALLE.test(partes[i])) i++
+  }
+  return quedan.join(' · ') || null
+}
+const prefijoDelAlmacen = (d: Deps) => (d.bucket ? d.db.storage.from(d.bucket).getPublicUrl('').data.publicUrl : null)
+const esDelAlmacen = (d: Deps, url: string | null | undefined) => { const pre = prefijoDelAlmacen(d); return !url || (!!pre && url.startsWith(pre)) }
+type ArchivoDeAnimacion = { action_id: number; nombre: string; glb: string | null; fbx: string | null }
+const archivosDe = (p: Pieza): ArchivoDeAnimacion[] => (Array.isArray(p.parametros?.archivos) ? (p.parametros.archivos as ArchivoDeAnimacion[]) : [])
+const TIPO_DEL_ARCHIVO: Record<string, { ext: string; tipo: string }> = { glb: { ext: 'glb', tipo: 'model/gltf-binary' }, fbx: { ext: 'fbx', tipo: 'application/octet-stream' }, video: { ext: 'mp4', tipo: 'video/mp4' }, image: { ext: 'png', tipo: 'image/png' } }
+
+export function hayQueRescatar(d: Deps, p: Pieza): boolean {
+  if (p.estado !== 'lista' || !d.bucket) return false
+  return !esDelAlmacen(d, p.archivo_url) || archivosDe(p).some((a) => !esDelAlmacen(d, a.glb) || !esDelAlmacen(d, a.fbx))
+}
+
+/** copia al almacén el archivo (y los movimientos de una animación) que siguen en el proveedor; si no se puede, la pieza queda como estaba */
+export async function rescatar(d: Deps, p: Pieza): Promise<Pieza> {
+  const base = `estudio/${p.client_id}/${p.id}`
+  const nuevo = async (url: string | null, ruta: string, tipo: string) => (url && !esDelAlmacen(d, url) ? (await copiar(d, url, ruta, tipo)) : { url, aviso: null })
+  const antes = archivosDe(p)
+  const archivos: ArchivoDeAnimacion[] = []
+  for (const a of antes) {
+    const glb = await nuevo(a.glb, `${base}-${a.action_id}.glb`, TIPO_DEL_ARCHIVO.glb.tipo)
+    const fbx = await nuevo(a.fbx, `${base}-${a.action_id}.fbx`, TIPO_DEL_ARCHIVO.fbx.tipo)
+    archivos.push({ ...a, glb: glb.url, fbx: fbx.url })
+  }
+  // el archivo principal de una animación es su primer movimiento: se toma la copia ya hecha
+  const igual = antes.findIndex((a) => a.glb === p.archivo_url || a.fbx === p.archivo_url)
+  const t = TIPO_DEL_ARCHIVO[p.archivo_tipo ?? ''] ?? { ext: p.archivo_tipo ?? 'bin', tipo: 'application/octet-stream' }
+  const principal = igual >= 0 ? { url: antes[igual].glb === p.archivo_url ? archivos[igual].glb : archivos[igual].fbx, aviso: null } : await nuevo(p.archivo_url, `${base}.${t.ext}`, t.tipo)
+  const cambios: Record<string, unknown> = {}
+  if (principal.url !== p.archivo_url) cambios.archivo_url = principal.url
+  if (archivos.some((a, i) => a.glb !== antes[i].glb || a.fbx !== antes[i].fbx)) cambios.parametros = { ...p.parametros, archivos }
+  if (!Object.keys(cambios).length) return p
+  const quedaAfuera = !esDelAlmacen(d, principal.url) || archivos.some((a) => !esDelAlmacen(d, a.glb) || !esDelAlmacen(d, a.fbx))
+  if (!quedaAfuera && p.aviso) cambios.aviso = sinAvisoDelProveedor(p.aviso)
+  // solo si nadie la cambió mientras tanto (misma dirección, sigue lista)
+  let q = d.db.from(TABLA).update({ ...cambios, actualizado_en: new Date(d.ahora()).toISOString() }).eq('id', p.id).eq('estado', 'lista')
+  if (p.archivo_url) q = q.eq('archivo_url', p.archivo_url)
+  const r = await q.select(COLUMNAS)
+  if (r.error) return p
+  return (r.data?.[0] as Pieza | undefined) ?? p
 }

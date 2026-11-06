@@ -4,10 +4,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { archivoDe3D, armarAnimacion, noEsHumanoide, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
+import { archivoDe3D, armarAnimacion, demasiadoDetalle, motivoDeAnimacion, noEsHumanoide, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from '@/lib/estudio/movimientos'
 import { esDeLaCola } from '@/lib/estudio/fal'
-import { avanzar, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
+import { avanzar, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, rescatar, sinAvisoDelProveedor, TOPE_DEL_ARCHIVO_BYTES, type Deps, type Pieza } from '@/lib/estudio/servicio'
 
 const CLIENTE = 'a0000000-0000-4000-8000-0000000000e1'
 const OTRO = 'b0000000-0000-4000-8000-0000000000e2'
@@ -78,7 +78,7 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}
 }
 
 interface Llamada { url: string; init?: RequestInit }
-function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' | 'uno_sin_archivo' } = {}) {
+function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' | 'uno_sin_archivo' | 'demasiado_detalle' } = {}) {
   const llamadas: Llamada[] = []
   const ANIM = 'https://queue.fal.run/fal-ai/meshy/requests/anim-1'
   let pedidosDeAnimacion: number[] = []
@@ -103,6 +103,7 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchi
       pedidosDeAnimacion = (JSON.parse(String(init!.body)) as { animation_action_ids: number[] }).animation_action_ids
       return json({ request_id: 'anim-1', status_url: `${ANIM}/status`, response_url: ANIM })
     }
+    if (url === `${ANIM}/status` && op.animar === 'demasiado_detalle') return json({ status: 'COMPLETED', error: 'The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API', error_type: 'runtime' })
     if (url === `${ANIM}/status`) return json(op.animar === 'no_humanoide' ? { status: 'COMPLETED', error: 'Model is not a humanoid, rigging failed', error_type: 'runtime' } : { status: 'COMPLETED' })
     if (url === ANIM) {
       const ids = op.animar === 'falta_uno' ? pedidosDeAnimacion.slice(1) : op.animar === 'sin_clips' ? [] : pedidosDeAnimacion
@@ -410,6 +411,17 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
       expect(librosDeFal(d)).toBe(antes)
     }
   })
+  it('una animación que falla por demasiado detalle lo dice con las cifras y no cobra', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'demasiado_detalle' })
+    const antes = librosDeFal(d)
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+    if (!r.ok) throw new Error(r.error)
+    const fin = await avanzar(d, r.valor.pieza.id)
+    expect(fin.ok && fin.valor.estado).toBe('fallida')
+    expect(fin.ok && fin.valor.error).toMatch(/^Este modelo tiene demasiado detalle para ponerle esqueleto \(1\.456\.114 triángulos/)
+    expect(fin.ok && Number(fin.valor.costo_usd)).toBe(0)
+    expect(librosDeFal(d)).toBe(antes)
+  })
   it('fal termina sin ningún movimiento: la pieza y el libro dicen la misma cifra; si falta uno, se avisa', async () => {
     const s = await modeloListo({ animar: 'sin_clips' })
     const r = await crearAnimacion(s.d, animacion({ origen_pieza_id: s.modelo.id, movimientos: [0] }))
@@ -520,5 +532,110 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
     expect(ruta).toContain('export const maxDuration = 800')
     const cat = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'estudio', 'catalogo', 'route.ts'), 'utf8')
     expect(cat).toContain('animar: { precio: ANIMAR.precio, maximo: ANIMAR.maximo, comunes: MOVIMIENTOS_COMUNES, biblioteca: BIBLIOTECA_DE_MOVIMIENTOS }')
+  })
+})
+
+describe('todo lo creado queda en el almacén del cliente, del tamaño que sea (Lenovo 06-nov)', () => {
+  const ERROR_REAL = '{"detail":[{"loc":["body"],"msg":"The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API"}]}'
+  const FAL = 'https://v3b.fal.media/files/b/0ab14d5a/modelo.glb'
+  const lista = (x: Partial<Fila> = {}): Fila => ({ id: '00000000-0000-4000-8000-0000000000a1', client_id: CLIENTE, tipo: '3d', estado: 'lista', paso: null, prompt: 'mesero', modelo: 'tripo-h3.1', parametros: {}, foto_partida_url: null, costo_estimado_usd: 0.4, costo_usd: 0.4, archivo_url: FAL, archivo_tipo: 'glb', miniatura_url: null, aviso: 'queda solo en el proveedor (vence en días): archivo_muy_grande · 50.3 MB', error: null, clave: 'clave-0000000a1', creado_en: '2026-11-05T22:39:00Z', terminado_en: '2026-11-05T22:41:00Z', ...x })
+  const conFal = (urls: string[]) => {
+    const p = proveedores()
+    const f = (async (u: RequestInfo | URL, init?: RequestInit) => (urls.includes(String(u)) ? (p.llamadas.push({ url: String(u), init }), new Response(GLB, { status: 200 })) : p.f(u, init))) as typeof fetch
+    return { ...p, f }
+  }
+
+  it('el tope de la copia es 1 GiB: un modelo de 50 MB ya se guarda', () => {
+    expect(TOPE_DEL_ARCHIVO_BYTES).toBe(1024 * 1024 * 1024)
+  })
+  it('un modelo ya creado que vive solo en el proveedor se copia al leer la galería, y el aviso se limpia', async () => {
+    const base = baseFalsa(); base.t.estudio_piezas.push(lista())
+    const p = conFal([FAL])
+    const d = deps(base, p)
+    const r = await listar(d, CLIENTE, null)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.valor[0].archivo_url).toBe(`https://almacen.test/oficina-creativos/estudio/${CLIENTE}/00000000-0000-4000-8000-0000000000a1.glb`)
+    expect(r.valor[0].aviso).toBeNull()
+    expect(base.subidas.map((s) => [s.ruta, s.tipo])).toEqual([[`estudio/${CLIENTE}/00000000-0000-4000-8000-0000000000a1.glb`, 'model/gltf-binary']])
+    expect(base.t.estudio_piezas[0].archivo_url).toBe(r.valor[0].archivo_url)
+    // la segunda lectura ya no baja nada
+    const llamadas = p.llamadas.length
+    await listar(d, CLIENTE, null)
+    expect(p.llamadas.length).toBe(llamadas)
+  })
+  it('una animación copia cada movimiento (GLB y FBX) y su archivo principal es la copia del primero', async () => {
+    const W = 'https://v3.fal.media/files/a/30.glb', WF = 'https://v3.fal.media/files/a/30.fbx'
+    const base = baseFalsa()
+    base.t.estudio_piezas.push(lista({ modelo: 'meshy-animar', archivo_url: W, aviso: null, parametros: { origen_pieza_id: 'x', archivos: [{ action_id: 30, nombre: 'Casual_Walk', glb: W, fbx: WF }] } }))
+    const d = deps(base, proveedores())
+    const r = await listar(d, CLIENTE, null)
+    if (!r.ok) throw new Error(r.error)
+    const id = '00000000-0000-4000-8000-0000000000a1'
+    const archivos = (r.valor[0].parametros as { archivos: Array<{ glb: string; fbx: string; nombre: string }> }).archivos
+    expect(archivos[0]).toEqual({ action_id: 30, nombre: 'Casual_Walk', glb: `https://almacen.test/oficina-creativos/estudio/${CLIENTE}/${id}-30.glb`, fbx: `https://almacen.test/oficina-creativos/estudio/${CLIENTE}/${id}-30.fbx` })
+    expect(r.valor[0].archivo_url).toBe(archivos[0].glb)
+    expect(base.subidas).toHaveLength(2)
+  })
+  it('si la copia falla, la pieza queda como estaba (con su aviso); lo que ya está en el almacén no se toca', async () => {
+    const base = baseFalsa(); base.t.estudio_piezas.push(lista({ archivo_url: 'https://v3b.fal.media/files/b/ya-vencio.glb' }))
+    const r = await listar(deps(base, proveedores()), CLIENTE, null)
+    expect(r.ok && r.valor[0].archivo_url).toBe('https://v3b.fal.media/files/b/ya-vencio.glb')
+    expect(r.ok && r.valor[0].aviso).toMatch(/queda solo en el proveedor/)
+    const nuestra = baseFalsa(); nuestra.t.estudio_piezas.push(lista({ archivo_url: 'https://almacen.test/oficina-creativos/estudio/x.glb', aviso: null }))
+    const p = proveedores()
+    await listar(deps(nuestra, p), CLIENTE, null)
+    expect(p.llamadas).toHaveLength(0)
+  })
+  it('solo 3 rescates por lectura, para no demorar la galería; ni una pieza fallida ni «creando»', async () => {
+    const base = baseFalsa()
+    for (let i = 1; i <= 5; i++) base.t.estudio_piezas.push(lista({ id: `00000000-0000-4000-8000-00000000000${i}`, clave: `clave-00000000${i}`, archivo_url: FAL }))
+    base.t.estudio_piezas.unshift(lista({ id: '00000000-0000-4000-8000-000000000009', clave: 'clave-000000009', estado: 'creando', archivo_url: FAL, creado_en: '2026-11-06T09:00:00Z' }))
+    base.t.estudio_piezas.unshift(lista({ id: '00000000-0000-4000-8000-000000000008', clave: 'clave-000000008', estado: 'fallida', archivo_url: FAL, creado_en: '2026-11-06T09:01:00Z' }))
+    await listar(deps(base, conFal([FAL])), CLIENTE, null)
+    expect(base.subidas).toHaveLength(3)
+    expect(base.t.estudio_piezas.filter((p) => p.estado !== 'lista').map((p) => p.archivo_url)).toEqual([FAL, FAL])
+    expect(base.t.estudio_piezas.filter((p) => String(p.archivo_url).startsWith('https://almacen.test/'))).toHaveLength(3)
+  })
+  it('no pisa una pieza que cambió mientras se copiaba', async () => {
+    const base = baseFalsa(); base.t.estudio_piezas.push(lista())
+    const d = deps(base, conFal([FAL]))
+    const p = base.t.estudio_piezas[0] as unknown as Pieza
+    const copia = { ...p }
+    base.t.estudio_piezas[0].archivo_url = 'https://almacen.test/oficina-creativos/otra.glb'
+    const r = await rescatar(d, copia)
+    expect(base.t.estudio_piezas[0].archivo_url).toBe('https://almacen.test/oficina-creativos/otra.glb')
+    expect(r.archivo_url).toBe(FAL)
+  })
+  it('no pisa una pieza que dejó de estar lista mientras se copiaba', async () => {
+    const base = baseFalsa(); base.t.estudio_piezas.push(lista())
+    const d = deps(base, conFal([FAL]))
+    const copia = { ...(base.t.estudio_piezas[0] as unknown as Pieza) }
+    base.t.estudio_piezas[0].estado = 'fallida'
+    await rescatar(d, copia)
+    expect(base.t.estudio_piezas[0].archivo_url).toBe(FAL)
+  })
+  it('si un movimiento no se pudo copiar, el aviso del proveedor se queda', async () => {
+    const W = 'https://v3.fal.media/files/a/30.glb', ROTO = 'https://v3b.fal.media/files/b/ya-vencio.fbx'
+    const base = baseFalsa()
+    base.t.estudio_piezas.push(lista({ modelo: 'meshy-animar', archivo_url: W, parametros: { archivos: [{ action_id: 30, nombre: 'Casual_Walk', glb: W, fbx: ROTO }] } }))
+    const r = await listar(deps(base, proveedores()), CLIENTE, null)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.valor[0].archivo_url).toMatch(/^https:\/\/almacen\.test\//)
+    expect(r.valor[0].aviso).toMatch(/queda solo en el proveedor/)
+  })
+  it('el aviso pierde lo del proveedor con su detalle y conserva lo demás', () => {
+    expect(sinAvisoDelProveedor('queda solo en el proveedor (vence en días): archivo_muy_grande · 50.3 MB')).toBeNull()
+    expect(sinAvisoDelProveedor('libro: sin fila · queda solo en el proveedor (vence en días): descarga_fallida · el proveedor respondió 503 · otro')).toBe('libro: sin fila · otro')
+    expect(sinAvisoDelProveedor('queda solo en el proveedor (vence en días): descarga_vacia · libro: sin fila')).toBe('libro: sin fila')
+  })
+  it('«demasiado detalle» se dice en claro, con las cifras, antes que «no es figura humana» (el error real de Emilio, 06-nov)', () => {
+    expect(demasiadoDetalle(ERROR_REAL)).toEqual({ tiene: 1456114, tope: 380000 })
+    const m = motivoDeAnimacion(ERROR_REAL)
+    expect(m).toMatch(/^Este modelo tiene demasiado detalle para ponerle esqueleto \(1\.456\.114 triángulos; el proveedor acepta hasta 380\.000\), así que no se puede animar tal cual\. No se registró ningún cobro\./)
+    expect(m).not.toMatch(/figura humana/)
+    expect(motivoDeAnimacion('Model is not a humanoid')).toMatch(/^Este modelo no parece una figura humana/)
+    expect(motivoDeAnimacion('exceeds the polycount')).toMatch(/^Este modelo tiene demasiado detalle para ponerle esqueleto, así que/)
+    expect(motivoDeAnimacion('timeout')).toBe('timeout')
+    expect(demasiadoDetalle('timeout')).toBeNull()
   })
 })
