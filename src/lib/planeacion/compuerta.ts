@@ -4,14 +4,15 @@
  * Justo antes del redactor, la compuerta mira las preguntas que hizo esta corrida (cualquier oficina) y dice `sigue` o `espera`.
  * Este tramo NO pausa, NO despierta y NO está cableado en el flujo: solo decide. El cableado (tramo 2) va cuando exista `asumida` en el cerebro.
  *
- * Cómo se cierra cada estado de `cerebro_dueno_preguntas`:
+ * Cómo se cierra cada estado de `dueno_preguntas` (la lista de la plataforma · 06-nov):
  *  · `respondida` → contestada.
- *  · `asumida` (estado nuevo de Cerebro) → asumida, y su supuesto pasa al redactor como «supuesto aceptado por el dueño». Sin texto de supuesto NO cierra: nunca se inventa.
+ *  · `descartada` (el dueño la descartó con motivo) → descartada.
+ *  · `asumida` → asumida, y su supuesto pasa al redactor como «supuesto aceptado por el dueño». Sin texto de supuesto NO cierra: nunca se inventa.
  *  · `obsoleta` con motivo del dueño («Emilio …», la misma regla de Decisiones) → descartada.
  *  · `obsoleta` por el sistema → reemplazada: otra pregunta tomó su lugar; el dueño ya no la ve y no puede contestarla, así que no frena.
  *  · `pendiente` y `vencida` → abiertas. Vencer no es contestar.
  *  · cualquier estado desconocido → abierta (más estricto, nunca más laxo).
- * Ground truth 06-nov: `finanzas_preguntas` tiene 0 filas; las preguntas de finanzas viven en `cerebro_dueno_preguntas` con su oficina, el flujo y la ejecución del plan.
+ * Ground truth 06-nov: `finanzas_preguntas` tiene 0 filas; las preguntas de finanzas vivían en `cerebro_dueno_preguntas` y CC-CEREBRO las migra a `dueno_preguntas` con el mismo id.
  * ¿Limita a un agente? Sí, al redactor: con una pregunta abierta, espera. Hoy escribe igual (la compuerta no está cableada). Ejemplo bueno que frenaría: un plan
  * urgente que Emilio quiere ver con supuestos; para eso están «Asumir» y «Descartar», que lo sueltan en el momento.
  */
@@ -45,6 +46,7 @@ const texto = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : nu
 export function cierreDe(p: PreguntaDelPlan): Cierre | MotivoAbierta {
   switch (p.estado) {
     case 'respondida': return 'contestada'
+    case 'descartada': return 'descartada'
     case 'asumida': return texto(p.supuesto) ? 'asumida' : 'asumida_sin_supuesto'
     case 'obsoleta': return loDescartoElDueno(p.motivo_descarte) ? 'descartada' : 'reemplazada'
     case 'pendiente': return 'sin_contestar'

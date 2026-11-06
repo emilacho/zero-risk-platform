@@ -17,6 +17,7 @@ describe('cómo se cierra cada pregunta', () => {
     expect(cierreDe(fila())).toBe('contestada')
     expect(cierreDe(fila({ estado: 'asumida', supuesto: 'unos US$ 3.000 al mes' }))).toBe('asumida')
     expect(cierreDe(fila({ estado: 'obsoleta', motivo_descarte: 'Emilio la descartó en Decisiones' }))).toBe('descartada')
+    expect(cierreDe(fila({ estado: 'descartada', motivo_descarte: 'ya no aplica' }))).toBe('descartada')
     expect(cierreDe(ARCHIVADA)).toBe('reemplazada')
   })
   it('pendiente, vencida, asumida sin supuesto y un estado desconocido quedan ABIERTAS', () => {
@@ -81,8 +82,10 @@ describe('la entrada y la lectura', () => {
   type Filtro = [string, ...unknown[]]
   const baseFalsa = (tabla: Array<Record<string, unknown>>, opc: { error?: string } = {}) => {
     const consultas: Filtro[][] = []
+    const tablas: string[] = []
     const db = {
-      from: (_t: string) => {
+      from: (t: string) => {
+        tablas.push(t)
         const fs: Filtro[] = []
         consultas.push(fs)
         const q: any = new Proxy({}, {
@@ -104,17 +107,19 @@ describe('la entrada y la lectura', () => {
         return q
       },
     }
-    return { db, consultas }
+    return { db, consultas, tablas }
   }
   const AHORA = () => new Date('2026-11-06T23:10:00Z')
-  const real = { id: '5405751f-964c-4a42-9112-7f0054c875f2', client_id: C, tema: 'fecha apertura guayaquil', pregunta: '¿fecha?', estado: 'respondida', preguntado_por_oficina: 'financiera', motivo_descarte: null, workflow_id: 'X9F0zp6LQ2xGEYVS', workflow_execution_id: '220399', creado_en: '2026-11-05T23:09:42.010Z' }
+  const real = { id: '5405751f-964c-4a42-9112-7f0054c875f2', client_id: C, tema: 'fecha apertura guayaquil', pregunta: '¿fecha?', estado: 'respondida', oficina: 'financiera', motivo: null, workflow_id: 'X9F0zp6LQ2xGEYVS', workflow_execution_id: '220399', creado_en: '2026-11-05T23:09:42.010Z' }
 
   it('la lectura de Supabase filtra por cliente, flujo y ejecuciones, y mapea la fila real', async () => {
-    const { db, consultas } = baseFalsa([real, { ...real, id: 'x', estado: 'asumida', supuesto_asumido: 'en marzo' }])
+    const { db, consultas, tablas } = baseFalsa([real, { ...real, id: 'x', estado: 'asumida', supuesto: 'en marzo', decidido_en: '2026-11-06T02:00:00Z' }])
     const ps = await compuertaDeSupabase(db, AHORA).preguntasDeLaCorrida(ENTRADA)
     expect(consultas[0]).toEqual([['select', '*'], ['eq', 'client_id', C], ['eq', 'workflow_id', 'X9F0zp6LQ2xGEYVS'], ['in', 'workflow_execution_id', ['220399']], ['limit', 501]])
     expect(ps[0]).toEqual({ id: real.id, tema: real.tema, pregunta: '¿fecha?', estado: 'respondida', oficina: 'financiera', motivo_descarte: null, supuesto: null, asumida_en: null })
-    expect(ps[1].supuesto).toBe('en marzo')
+    expect(ps[1]).toMatchObject({ supuesto: 'en marzo', asumida_en: '2026-11-06T02:00:00Z' })
+    // la lista de la PLATAFORMA, nunca una tabla del cerebro
+    expect(tablas).toEqual(['dueno_preguntas', 'dueno_preguntas'])
   })
   it('🔴 de CC7 · relanzamiento: la pregunta sigue PENDIENTE con la ejecución vieja (la puerta dijo «repetida» y no creó fila) ⇒ la compuerta la ve y ESPERA', async () => {
     const pendienteDeLaR4 = { ...real, estado: 'pendiente', creado_en: '2026-11-06T22:00:00Z' }
