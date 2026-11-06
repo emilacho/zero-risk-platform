@@ -229,7 +229,8 @@ export function armarAnimacion(e: Record<string, unknown>, existe: (id: number) 
   const origen_pieza_id = texto(e.origen_pieza_id)
   if (!UUID.test(origen_pieza_id)) errores.push('`origen_pieza_id` es el modelo 3D que se anima')
   const crudos = Array.isArray(e.movimientos) ? e.movimientos : []
-  const movimientos = [...new Set(crudos.map((x) => Number(x)))]
+  // solo números o texto de dígitos: `true` no es el movimiento 1, ni `""` el 0
+  const movimientos = [...new Set(crudos.map((x) => (typeof x === 'number' ? x : typeof x === 'string' && /^\d+$/.test(x) ? Number(x) : NaN)))]
   if (!movimientos.length) errores.push('elige al menos un movimiento')
   else if (movimientos.length > ANIMAR.maximo) errores.push(`hasta ${ANIMAR.maximo} movimientos por vez`)
   else if (movimientos.some((x) => !Number.isInteger(x) || !existe(x))) errores.push('hay un movimiento que no está en la biblioteca')

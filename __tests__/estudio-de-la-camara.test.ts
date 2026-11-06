@@ -78,7 +78,7 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}
 }
 
 interface Llamada { url: string; init?: RequestInit }
-function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' } = {}) {
+function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' | 'uno_sin_archivo' } = {}) {
   const llamadas: Llamada[] = []
   const ANIM = 'https://queue.fal.run/fal-ai/meshy/requests/anim-1'
   let pedidosDeAnimacion: number[] = []
@@ -106,7 +106,7 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchi
     if (url === `${ANIM}/status`) return json(op.animar === 'no_humanoide' ? { status: 'COMPLETED', error: 'Model is not a humanoid, rigging failed', error_type: 'runtime' } : { status: 'COMPLETED' })
     if (url === ANIM) {
       const ids = op.animar === 'falta_uno' ? pedidosDeAnimacion.slice(1) : op.animar === 'sin_clips' ? [] : pedidosDeAnimacion
-      return json({ rig_task_id: 'r1', rigged_character_glb: { url: 'https://v3.fal.media/files/a/rig.glb' }, animations: ids.map((id) => ({ action_id: id, animation_glb: { url: `https://v3.fal.media/files/a/${id}.glb` }, animation_fbx: { url: `https://v3.fal.media/files/a/${id}.fbx` } })) })
+      return json({ rig_task_id: 'r1', rigged_character_glb: { url: 'https://v3.fal.media/files/a/rig.glb' }, animations: ids.map((id, i) => (op.animar === 'uno_sin_archivo' && i === 0 ? { action_id: id } : { action_id: id, animation_glb: { url: `https://v3.fal.media/files/a/${id}.glb` }, animation_fbx: { url: `https://v3.fal.media/files/a/${id}.fbx` } })) })
     }
     if (url.startsWith('https://v3.fal.media/files/a/')) return new Response(GLB, { status: 200 })
     if (url.startsWith('https://api.higgsfield.ai/estimate/')) return json({ type: 'description', pricing_description: 'Each 1,000 video tokens costs $0.01 at 480p or 720p and $0.02 at 1080p.' })
@@ -485,6 +485,34 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
     expect(x.ok && x.valor.estado).toBe('fallida')
     expect(y.ok && y.valor.estado).toBe('fallida')
     expect(librosDeFal(d)).toBe(antes + 1)
+  })
+  it('un movimiento tiene que ser un número de verdad: `true`, vacío o texto no cuentan (CC7 #935)', () => {
+    const base = { client_id: CLIENTE, clave: 'animar-0000001', origen_pieza_id: CLIENTE }
+    expect(armarAnimacion({ ...base, movimientos: [true] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [''] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: ['28a'] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [null] }, movimientoExiste).ok).toBe(false)
+    const a = armarAnimacion({ ...base, movimientos: ['28', 0] }, movimientoExiste)
+    expect(a.ok && a.pedido.movimientos).toEqual([28, 0])
+  })
+  it('un modelo cuyo archivo no está en una dirección pública no se anima ni se envía (CC7 #935)', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const fila = d.base.t.estudio_piezas.find((p) => p.id === modelo.id)!
+    Object.assign(fila, { archivo_url: 'http://127.0.0.1/estudio/modelo.glb' })
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+    expect(!r.ok && r.error).toBe('modelo_no_animable')
+    expect(!r.ok && r.detalle).toMatch(/no es público/)
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(0)
+  })
+  it('un movimiento que llega sin archivo no cuenta: el aviso lo nombra como faltante (CC7 #935)', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'uno_sin_archivo' })
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0, 28] }))
+    if (!r.ok) throw new Error(r.error)
+    const g = await avanzar(d, r.valor.pieza.id)
+    expect(g.ok && g.valor.estado).toBe('lista')
+    expect(g.ok && g.valor.aviso).toMatch(/no devolvió: Idle/)
+    const fin = d.base.t.estudio_piezas.find((p) => p.id === r.valor.pieza.id)!
+    expect((fin.parametros as { archivos: Array<{ action_id: number }> }).archivos.map((x) => x.action_id)).toEqual([28])
   })
   it('la ruta exige la llave interna y el catálogo trae precio, comunes y biblioteca', () => {
     const ruta = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'estudio', 'animar', 'route.ts'), 'utf8')
