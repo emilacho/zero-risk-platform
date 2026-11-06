@@ -1055,5 +1055,73 @@ describe('la migración', () => {
   })
 })
 
+/**
+ * 06-nov · GO de Lenovo (Emilio 00:49 local, «sí a las dos»): con la pausa encendida y las preguntas en Tu oficina, si el dueño descarta TODAS las que faltan,
+ * la pausa se levanta y el plan sigue con sus supuestos. Nunca queda detenido. En el orden real: primero la pausa, después lo que hace el dueño, al final la vuelta del vigía.
+ * Nada aquí depende del cliente: el tema sale de la clave de la pregunta.
+ */
+describe('06-nov · Tu oficina: descartar, contestar o las dos (GO de Lenovo)', () => {
+  const pedirPausa = { encargo_id: 'enc-1', sobre: { corrida: 'plan-x', client_id: 'cli' }, material: { a: 1 }, workflow_id: 'wf', workflow_execution_id: 'ex' }
+  const enPausa = async () => {
+    const o: { modo: PuertosDePausa['modo']; descartados: string[] } = { modo: 'registra', descartados: [] }
+    const m = mundo(o)
+    await pausarOficina(m.P, pedirPausa)
+    const claves = preguntasQueFaltan(m.arts, m.e.semilla)
+    expect(claves.length).toBeGreaterThan(1)
+    expect(m.despertares).toEqual([])
+    return { m, o, claves }
+  }
+  const contestar = (m: ReturnType<typeof mundo>, clave: string) => responderEnLaOficina(m.P, { client_id: 'cli', tema: clave.replace(/_/g, ' '), respuesta: 'sí, ya lo tengo', quien: 'emilio' })
+  const respondidas = (m: ReturnType<typeof mundo>) => (m.e.semilla?.respuestas_del_dueno ?? []).map((x) => x.clave)
+  // lo que el plan usa si nadie contesta: queda en el registro de la pregunta, no se inventa una respuesta
+  const supuestoDe = (m: ReturnType<typeof mundo>, clave: string) => (m.arts.buzon_respuestas as { preguntas?: Array<{ clave?: string; supuesto_si_no_responde?: string }> } | undefined)?.preguntas?.find((q) => q.clave === clave)?.supuesto_si_no_responde
+
+  it('🔴 descarta todas: en la vuelta siguiente del vigía el plan sigue, una sola vez, con los supuestos de cada pregunta', async () => {
+    const { m, o, claves } = await enPausa()
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ esperando: true })
+    o.descartados = claves.map(temaDe)
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ soltada: true, despertado: true })
+    expect(m.despertares).toHaveLength(1)
+    expect(m.e.estado).toBe('en_curso')
+    expect(m.e.semilla?.pausa_atendida).toBe(true)
+    expect(respondidas(m)).toEqual([])
+    for (const k of claves) expect(supuestoDe(m, k)).toBe('Lo que supongo sin tu respuesta.')
+    // otra vuelta no lo despierta de nuevo
+    await atenderPausa(m.P, 'enc-1')
+    expect(m.despertares).toHaveLength(1)
+  })
+  it('🔴 contesta unas y descarta las otras: sigue, con sus respuestas y el supuesto en las descartadas', async () => {
+    const { m, o, claves } = await enPausa()
+    const [primera, ...resto] = claves
+    await contestar(m, primera)
+    expect(m.despertares).toEqual([])
+    o.descartados = resto.map(temaDe)
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ soltada: true })
+    expect(m.despertares).toHaveLength(1)
+    expect(respondidas(m)).toEqual([primera])
+    for (const k of resto) expect(supuestoDe(m, k)).toBe('Lo que supongo sin tu respuesta.')
+  })
+  it('🔴 en el otro orden (descarta primero y contesta la última): sigue al contestar, sin esperar al vigía', async () => {
+    const { m, o, claves } = await enPausa()
+    const ultima = claves[claves.length - 1]
+    o.descartados = claves.slice(0, -1).map(temaDe)
+    expect((await contestar(m, ultima)).cuerpo).toMatchObject({ aplicada: true, soltada: true })
+    expect(m.despertares).toHaveLength(1)
+    expect(respondidas(m)).toEqual([ultima])
+  })
+  it('🔴 descarta unas y la otra sigue sin respuesta: espera esa', async () => {
+    const { m, o, claves } = await enPausa()
+    o.descartados = claves.slice(1).map(temaDe)
+    expect((await atenderPausa(m.P, 'enc-1')).cuerpo).toMatchObject({ esperando: true, faltan: [claves[0]] })
+    expect(m.despertares).toEqual([])
+  })
+  it('🔴 contesta todas: sigue al contestar la última, una sola vez', async () => {
+    const { m, claves } = await enPausa()
+    for (const k of claves) await contestar(m, k)
+    expect(m.despertares).toHaveLength(1)
+    expect(respondidas(m).sort()).toEqual([...claves].sort())
+  })
+})
+
 // para que el tipo del buzón siga siendo la base de los puertos de la pausa
 export type _Base = PuertosDelBuzon
