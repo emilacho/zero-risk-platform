@@ -555,7 +555,7 @@ describe('pieza colgada en «creando»: vence solo si nadie la está haciendo', 
     const libro = d.base.t.costs.length
     const v = await avanzar(d, r.valor.pieza.id)
     expect(v.ok && v.valor.estado).toBe('fallida')
-    expect(v.ok && v.valor.error).toMatch(/^Venció: no llegó al proveedor en 180 min\. No se cobró nada más\.$/)
+    expect(v.ok && v.valor.error).toMatch(/^Venció: no llegó al proveedor en 180 min\. No se registró ningún cobro más\.$/)
     expect(v.ok && Number(v.valor.costo_usd)).toBe(0.0133)
     expect(d.base.t.costs.length).toBe(libro)
   })
@@ -586,6 +586,13 @@ describe('pieza colgada en «creando»: vence solo si nadie la está haciendo', 
       const v = await avanzar(d, r.valor.pieza.id)
       expect([estado, v.ok && v.valor.estado]).toEqual([estado, vence ? 'fallida' : 'creando'])
     }
+    // 404 del video todavía dentro del tope: no vence (menor 1 de CC7 en #944)
+    const d = deps(baseFalsa(), proveedores({ hfEstado: ['not_found'] }))
+    const r = await crear(d, pedido({ tipo: 'video', prompt: 'una ola rompiendo' }))
+    if (!r.ok) throw new Error('no creó')
+    envejecer(d, r.valor.pieza.id, 2 * HORA)
+    const v = await avanzar(d, r.valor.pieza.id)
+    expect(v.ok && v.valor.estado).toBe('creando')
   })
   it('una pieza ya lista nunca vence, aunque el proveedor ya la haya olvidado', async () => {
     const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED', 'NOT_FOUND', 'NOT_FOUND'] }))

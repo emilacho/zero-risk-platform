@@ -251,7 +251,7 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   // pasado el tope de vida, una pieza que nunca llegó al proveedor, o que el proveedor ya no reconoce, vence (con lo ya gastado).
   // Si el proveedor dice «en curso» se sigue preguntando: puede terminar y cobrar, y ese cobro no se pierde.
   const vencida = vencioLaPieza(pieza, d.ahora())
-  const vencer = async (motivo: string) => ({ ok: true as const, valor: (await fallar(d, id, `Venció: ${motivo} en ${TOPE_DE_VIDA_MIN[pieza.tipo]} min. No se cobró nada más.`, Number(pieza.costo_usd) || 0)) ?? (await leerPieza(d, id)) ?? pieza })
+  const vencer = async (motivo: string) => ({ ok: true as const, valor: (await fallar(d, id, `Venció: ${motivo} en ${TOPE_DE_VIDA_MIN[pieza.tipo]} min. No se registró ningún cobro más.`, Number(pieza.costo_usd) || 0)) ?? (await leerPieza(d, id)) ?? pieza })
   if (!reqId) return vencida ? vencer('no llegó al proveedor') : { ok: true, valor: pieza }
   const ahoraIso = () => new Date(d.ahora()).toISOString()
 
