@@ -102,6 +102,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^supabase\/reversas\/202610161600_cerebro_portero_pausas_REVERSA\.sql$/,
   // 16-oct · la puerta del dueño: su migración (la tabla de preguntas pendientes referencia `cerebro_fichas`) y su reversa
   /^supabase\/migrations\/202610161500_cerebro_dueno_preguntas\.sql$/,
+  // 06-nov · adenda #940: la migración que mueve las preguntas a la plataforma LEE la respuesta de la ficha del dueño; su chequeo la lee (solo lectura)
+  /^supabase\/migrations\/202611062000_preguntas_del_dueno_a_la_plataforma\.sql$/,
+  /^scripts\/ops\/preguntas-del-dueno-chequeo\.mjs$/,
   /^supabase\/reversas\/202610161500_cerebro_dueno_preguntas_REVERSA\.sql$/,
   // 29-oct · el aprendizaje del dueño: su migración (ensancha el alcance de la ficha y crea el índice, el catálogo y las medidas) y su reversa
   /^supabase\/migrations\/202610291600_cerebro_aprendizaje_del_dueno\.sql$/,

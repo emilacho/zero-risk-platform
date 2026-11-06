@@ -6,6 +6,11 @@ export type Estante = 'E1' | 'E2' | 'E3' | 'E4' | 'E5' | 'E6' | 'E7' | 'E8'
 export type Estado =
   | 'dicho_por_dueno' | 'visto_en_su_fuente' | 'medido' | 'de_tercero' | 'inferido'
   | 'borrador sin aprobar' | 'aprobado' | 'rechazado' | 'propiedad_incierta'
+  /** 06-nov · lo propuso una oficina y el dueño eligió usarlo SIN responder: nunca es «dicho_por_dueno» */
+  | 'supuesto_aceptado_por_dueno'
+
+/** 06-nov · la clase de la ficha que guarda un supuesto que el dueño asumió (la escribe la puerta del dueño, evento `asumir`) */
+export const CLASE_DEL_SUPUESTO_ACEPTADO = 'supuesto_aceptado_por_el_dueno'
 
 export type Origen = 'dueno' | 'su_fuente' | 'plataforma' | 'tercero' | 'producido'
 
