@@ -16,7 +16,7 @@ import { sniffImageFormat } from '@/lib/image-response'
 import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 import { conDescuento } from '@/lib/video/parametros'
 import { costoEstimadoUsd, enviar as enviarAHiggsfield, estado as estadoEnHiggsfield, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
-import { ANIMAR, AVISO_NO_HUMANOIDE, archivoDe3D, clipsDeAnimacion, cotizarAnimacion, cotizarSinRed, entradaDe3D, entradaDeAnimacion, miniaturaDe3D, modeloDe3D, noEsHumanoide, promptDeImagenPara3D, TAMANO_POR_FORMATO, UUID, type Cotizacion, type Pedido, type PedidoDeAnimacion } from './catalogo'
+import { ANIMAR, archivoDe3D, clipsDeAnimacion, cotizarAnimacion, cotizarSinRed, entradaDe3D, entradaDeAnimacion, miniaturaDe3D, modeloDe3D, motivoDeAnimacion, promptDeImagenPara3D, TAMANO_POR_FORMATO, UUID, type Cotizacion, type Pedido, type PedidoDeAnimacion } from './catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from './movimientos'
 import { enviarAFal, estadoEnFal, resultadoDeFal } from './fal'
 import { crearImagen } from './openai-imagen'
@@ -257,8 +257,8 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   if (!e.ok || e.e.estado === 'en_cola' || e.e.estado === 'en_curso') return { ok: true, valor: pieza }
   const yaGastado = Number(pieza.costo_usd) || 0
   const esAnimacion = pieza.modelo === ANIMAR.id
-  // un fallo anota 0; si fal dice que no es una figura humana, se explica en claro
-  const motivo = (t: string) => (esAnimacion && noEsHumanoide(t) ? `${AVISO_NO_HUMANOIDE} (${t})` : t)
+  // un fallo anota 0; el motivo de una animación se dice por su causa real (demasiado detalle, no es figura humana) o en simple si no se reconoce
+  const motivo = (t: string) => (esAnimacion ? motivoDeAnimacion(t) : t)
   if (e.e.estado === 'fallido') return { ok: true, valor: (await fallar(d, id, motivo(`fal · ${e.e.error}`), yaGastado)) ?? pieza }
   const res = await resultadoDeFal(d.fetch, d.llaves.fal, responseUrl)
   if (!res.ok) return { ok: true, valor: (await fallar(d, id, motivo(`fal ${res.status} · ${res.error}`), yaGastado)) ?? pieza }
@@ -346,7 +346,7 @@ export async function crearAnimacion(d: Deps, p: PedidoDeAnimacion): Promise<Res
   const env = await enviarAFal(d.fetch, d.llaves.fal, ANIMAR.endpoint, entradaDeAnimacion(o.valor.archivo_url!, p.movimientos))
   if (!env.ok) {
     const t = `fal ${env.status} · ${env.error}`
-    return { ok: true, valor: { pieza: (await fallar(d, pieza.id, noEsHumanoide(env.error) ? `${AVISO_NO_HUMANOIDE} (${t})` : t)) ?? pieza, ya_existia: false } }
+    return { ok: true, valor: { pieza: (await fallar(d, pieza.id, motivoDeAnimacion(t))) ?? pieza, ya_existia: false } }
   }
   const fin = await actualizar(d, pieza.id, { proveedor_request_id: env.envio.request_id, proveedor_status_url: env.envio.status_url, proveedor_response_url: env.envio.response_url }, true)
   return { ok: true, valor: { pieza: fin ?? pieza, ya_existia: false } }

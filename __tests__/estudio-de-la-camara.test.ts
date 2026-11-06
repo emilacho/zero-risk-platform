@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { archivoDe3D, armarAnimacion, noEsHumanoide, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
+import { archivoDe3D, armarAnimacion, AVISO_SIN_CAUSA, demasiadoDetalle, motivoDeAnimacion, noEsHumanoide, textoDelProveedor, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from '@/lib/estudio/movimientos'
 import { esDeLaCola } from '@/lib/estudio/fal'
 import { avanzar, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
@@ -78,7 +78,9 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}
 }
 
 interface Llamada { url: string; init?: RequestInit }
-function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' | 'uno_sin_archivo' } = {}) {
+const ERROR_DE_TRIANGULOS = "The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API (POST /openapi/v1/remesh) with a target_polycount of 300000 or less (150000 or less with topology quad) before rigging."
+
+function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' | 'uno_sin_archivo' | 'demasiado_detalle' | 'envio_demasiado_detalle' | 'envio_raro' } = {}) {
   const llamadas: Llamada[] = []
   const ANIM = 'https://queue.fal.run/fal-ai/meshy/requests/anim-1'
   let pedidosDeAnimacion: number[] = []
@@ -99,10 +101,13 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchi
     if (url === 'https://v3.fal.media/files/x/modelo.glb') return new Response(GLB, { status: 200 })
     // animar (fal-ai/meshy/rigging/multi-animation)
     if (url === 'https://queue.fal.run/fal-ai/meshy/rigging/multi-animation') {
+      if (op.animar === 'envio_demasiado_detalle') return json({ detail: [{ loc: ['body', 'model_url'], msg: ERROR_DE_TRIANGULOS, type: 'value_error' }] }, 422)
+      if (op.animar === 'envio_raro') return json({ detail: 'Auto rigging failed' }, 422)
       if (op.animar === 'envio_no_humanoide') return json({ detail: 'Rigging requires a humanoid character with clearly defined limbs' }, 422)
       pedidosDeAnimacion = (JSON.parse(String(init!.body)) as { animation_action_ids: number[] }).animation_action_ids
       return json({ request_id: 'anim-1', status_url: `${ANIM}/status`, response_url: ANIM })
     }
+    if (url === `${ANIM}/status` && op.animar === 'demasiado_detalle') return json({ status: 'COMPLETED', error: ERROR_DE_TRIANGULOS, error_type: 'runtime' })
     if (url === `${ANIM}/status`) return json(op.animar === 'no_humanoide' ? { status: 'COMPLETED', error: 'Model is not a humanoid, rigging failed', error_type: 'runtime' } : { status: 'COMPLETED' })
     if (url === ANIM) {
       const ids = op.animar === 'falta_uno' ? pedidosDeAnimacion.slice(1) : op.animar === 'sin_clips' ? [] : pedidosDeAnimacion
@@ -275,6 +280,8 @@ describe('3D', () => {
     expect(a.ok && a.valor.estado).toBe('fallida')
     expect(a.ok && Number(a.valor.costo_usd)).toBe(0.01327)
     expect(d.base.t.costs.map((c) => c.service)).toEqual(['estudio:openai'])
+    // un 3D que falla no habla de animar: su motivo es el del proveedor
+    expect(a.ok && a.valor.error).toBe('fal · runtime · mesh failed')
   })
   it('si fal termina sin archivo, la pieza y el libro dicen la misma cifra (CC7 · 933)', async () => {
     const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED', 'COMPLETED'], falSinArchivo: true }))
@@ -405,7 +412,8 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
       if (!r.ok) throw new Error(r.error)
       const fin = caso === 'no_humanoide' ? await avanzar(d, r.valor.pieza.id) : { ok: true as const, valor: r.valor.pieza }
       expect(fin.ok && fin.valor.estado).toBe('fallida')
-      expect(fin.ok && fin.valor.error).toMatch(/no parece una figura humana.*No se cobró/)
+      // los tres avisos de Animar dicen lo mismo del cobro (menor CC7 #947)
+      expect(fin.ok && fin.valor.error).toMatch(/^Este modelo no parece una figura humana con brazos y piernas definidos, así que no se puede animar\. No se registró ningún cobro\. \(/)
       expect(fin.ok && Number(fin.valor.costo_usd)).toBe(0)
       expect(librosDeFal(d)).toBe(antes)
     }
@@ -448,9 +456,50 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
     expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(1)
     expect(d.base.t.estudio_piezas.filter((x) => x.modelo === 'meshy-animar')).toHaveLength(1)
   })
+  it('demasiados triángulos (el error real de producción, 06-nov): se dice «demasiado detalle» con las cifras, no «no es figura humana», y no se cobra — al enviar o al terminar', async () => {
+    for (const caso of ['envio_demasiado_detalle', 'demasiado_detalle'] as const) {
+      const { d, modelo } = await modeloListo({ animar: caso })
+      const antes = librosDeFal(d)
+      const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+      if (!r.ok) throw new Error(r.error)
+      const fin = caso === 'demasiado_detalle' ? await avanzar(d, r.valor.pieza.id) : { ok: true as const, valor: r.valor.pieza }
+      expect(fin.ok && fin.valor.estado).toBe('fallida')
+      expect(fin.ok && fin.valor.error).toMatch(/^Este modelo tiene demasiado detalle para ponerle esqueleto \(1\.456\.114 triángulos; el proveedor acepta hasta 380\.000\), así que no se puede animar tal cual\. No se registró ningún cobro\./)
+      expect(fin.ok && fin.valor.error).not.toMatch(/figura humana/)
+      expect(fin.ok && Number(fin.valor.costo_usd)).toBe(0)
+      expect(librosDeFal(d)).toBe(antes)
+    }
+  })
+  it('un rechazo que no se reconoce se dice en simple, sin inventar causa, con el texto del proveedor', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'envio_raro' })
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+    if (!r.ok) throw new Error(r.error)
+    expect(r.valor.pieza.estado).toBe('fallida')
+    expect(r.valor.pieza.error).toBe(`${AVISO_SIN_CAUSA} (fal 422 · Auto rigging failed)`)
+  })
+  it('el texto del proveedor se muestra sin el JSON alrededor, aunque venga cortado como en producción', () => {
+    // así quedó guardado el 06-nov en la pieza cff64986 (cortado al final)
+    const cortado = 'fal 422 · {"detail":[{"loc":["body"],"msg":"The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API (POST /openapi/v1/remesh) with a target_polycount of 300000 or less (150000 or less with topology quad) befo'
+    expect(textoDelProveedor(cortado)).toBe('fal 422 · The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API (POST /openapi/v1/remesh) with a target_polycount of 300000 or less (150000 or less with topology quad) befo')
+    expect(motivoDeAnimacion(cortado)).toMatch(/^Este modelo tiene demasiado detalle para ponerle esqueleto \(1\.456\.114 triángulos; el proveedor acepta hasta 380\.000\).*\(fal 422 · The input model has/)
+    expect(textoDelProveedor('fal 422 · {"detail":"Auto rigging failed"}')).toBe('fal 422 · Auto rigging failed')
+    expect(textoDelProveedor('fal · timeout')).toBe('fal · timeout')
+    expect(textoDelProveedor('fal 500 · {"error":"x"}')).toBe('fal 500 · {"error":"x"}')
+  })
+  it('el motivo de un fallo al animar: cifras exactas, respaldo sin cifras, humano, y causa desconocida', () => {
+    expect(demasiadoDetalle(ERROR_DE_TRIANGULOS)).toEqual({ tiene: 1456114, tope: 380000 })
+    expect(demasiadoDetalle('timeout')).toBeNull()
+    expect(motivoDeAnimacion('exceeds the polycount')).toMatch(/^Este modelo tiene demasiado detalle para ponerle esqueleto, así que no se puede animar tal cual\. No se registró ningún cobro\. \(exceeds the polycount\)$/)
+    expect(motivoDeAnimacion('Model is not a humanoid')).toMatch(/^Este modelo no parece una figura humana/)
+    // si el texto nombra las dos cosas, manda el detalle: es lo que se puede arreglar
+    expect(motivoDeAnimacion('Rigging requires a humanoid; 500,000 triangles which exceeds the 380,000 triangle limit')).toMatch(/^Este modelo tiene demasiado detalle/)
+    expect(motivoDeAnimacion('timeout')).toBe(`${AVISO_SIN_CAUSA} (timeout)`)
+    expect(AVISO_SIN_CAUSA).toBe('No se pudo animar este modelo; el proveedor no dio una causa que reconozcamos. No se registró ningún cobro.')
+  })
   it('lo que dice «no es figura humana» se reconoce por palabra entera; un error cualquiera no', () => {
-    for (const t of ['Model is not a humanoid', 'Auto rigging failed', 'could not rig the mesh', 'no limbs detected', 'Skeleton generation failed', 'biped not found', 'pose estimation error']) expect(noEsHumanoide(t)).toBe(true)
-    for (const t of ['timeout', 'Internal Server Error', 'invalid origin header', 'purpose not allowed', 'trigger failed', 'exposed url']) expect(noEsHumanoide(t)).toBe(false)
+    for (const t of ['Model is not a humanoid', 'Rigging requires a humanoid character with clearly defined limbs', 'no limbs detected', 'biped not found']) expect(noEsHumanoide(t)).toBe(true)
+    // «rigging», «skeleton» o «pose» no prueban que no sea humano: el error de demasiados triángulos también dice «rigging» (06-nov)
+    for (const t of ['timeout', 'Internal Server Error', 'invalid origin header', 'purpose not allowed', 'trigger failed', 'exposed url', 'Auto rigging failed', 'could not rig the mesh', 'Skeleton generation failed', 'pose estimation error', ERROR_DE_TRIANGULOS]) expect(noEsHumanoide(t)).toBe(false)
   })
   it('un modelo 3D que todavía se está creando no se anima', async () => {
     const d = deps(baseFalsa(), proveedores({ falEstado: ['IN_PROGRESS'], animar: 'ok' }))
