@@ -548,12 +548,12 @@ describe('pieza colgada en «creando»: vence solo si nadie la está haciendo', 
     const fila = d.base.t.estudio_piezas.find((p) => p.id === r.valor.pieza.id)!
     // como si la función se hubiera cortado después de la imagen y antes de enviar a fal
     Object.assign(fila, { estado: 'creando', paso: 'imagen', proveedor_request_id: null, costo_usd: 0.0133, terminado_en: null, archivo_url: null })
-    envejecer(d, fila.id, 2 * HORA)
-    const antes = await avanzar(d, fila.id)
+    envejecer(d, r.valor.pieza.id, 2 * HORA)
+    const antes = await avanzar(d, r.valor.pieza.id)
     expect(antes.ok && antes.valor.estado).toBe('creando')
-    envejecer(d, fila.id, 4 * HORA)
+    envejecer(d, r.valor.pieza.id, 4 * HORA)
     const libro = d.base.t.costs.length
-    const v = await avanzar(d, fila.id)
+    const v = await avanzar(d, r.valor.pieza.id)
     expect(v.ok && v.valor.estado).toBe('fallida')
     expect(v.ok && v.valor.error).toMatch(/^Venció: no llegó al proveedor en 180 min\. No se cobró nada más\.$/)
     expect(v.ok && Number(v.valor.costo_usd)).toBe(0.0133)
