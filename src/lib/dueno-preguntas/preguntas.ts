@@ -116,7 +116,7 @@ async function unaPendiente(deps: Deps, client_id: string, id: string): Promise<
   if (r.error) return err(502, 'lectura_fallida', `${TABLA}: ${r.error.message}`)
   const f = lista(r.data)[0]
   if (!f) return err(404, 'pregunta_inexistente', 'esa pregunta no existe para este cliente')
-  if (txt(f.estado) !== 'pendiente') return err(409, 'ya_cerrada', `la pregunta ya está «${txt(f.estado)}»`)
+  if (txt(f.estado) !== 'pendiente') return { status: 409, body: { ...err(409, 'ya_cerrada', `la pregunta ya está «${txt(f.estado)}»`).body, guardada_en_cerebro: false, estado: txt(f.estado) } }
   return { ok: true, fila: f }
 }
 
@@ -162,7 +162,8 @@ export async function responder(deps: Deps, c: Fila): Promise<Respuesta> {
     if ('status' in r) return r
     cerradas += r.cambiadas
   }
-  if (filas.length && cerradas === 0) return err(409, 'ya_cerrada', 'la respuesta quedó en el cerebro, pero otro cerró la pregunta antes: no se marcó «respondida» aquí')
+  // `guardada_en_cerebro` es la señal fija para quien llama (el tablero no debe leer el texto del detalle): lo del dueño YA está en el cerebro, no se repite
+  if (filas.length && cerradas === 0) return { status: 409, body: { ...err(409, 'ya_cerrada', 'la respuesta quedó en el cerebro, pero otro cerró la pregunta antes: no se marcó «respondida» aquí').body, guardada_en_cerebro: true, ficha_ref: g.ficha_id } }
   return { status: 200, body: { ok: true, guardada: true, ficha_ref: g.ficha_id, preguntas_cerradas: cerradas } }
 }
 
@@ -186,7 +187,7 @@ export async function asumir(deps: Deps, c: Fila): Promise<Respuesta> {
   if (!g.ok) return err(502, 'cerebro_no_guardo', `el cerebro no guardó el supuesto (${g.status}: ${g.error}); la pregunta sigue pendiente`)
   const r = await cerrar(deps, String(f.id), { estado: 'asumida', decidido_por: quien, decidido_en: cuando, ficha_ref: g.ficha_id })
   if ('status' in r) return r
-  if (r.cambiadas === 0) return err(409, 'ya_cerrada', 'el supuesto quedó en el cerebro, pero otro cerró la pregunta antes: no se marcó «asumida» aquí')
+  if (r.cambiadas === 0) return { status: 409, body: { ...err(409, 'ya_cerrada', 'el supuesto quedó en el cerebro, pero otro cerró la pregunta antes: no se marcó «asumida» aquí').body, guardada_en_cerebro: true, ficha_ref: g.ficha_id } }
   return { status: 200, body: { ok: true, asumida: true, ficha_ref: g.ficha_id, supuesto } }
 }
 

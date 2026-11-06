@@ -33,6 +33,13 @@ describe('buzón · respuesta a una pregunta ya cerrada', () => {
       expect(k.llamadas[1]).not.toHaveProperty('pregunta_id')
     })
   }
+  it('409 con `guardada_en_cerebro: true` (otro cerró la fila después de guardar): es «ok» y NO se reintenta (no se duplica)', async () => {
+    const llamadas: unknown[] = []
+    const f = async (_u: string, init?: { body?: string }) => { llamadas.push(JSON.parse(init?.body ?? '{}')); return { status: 409, json: async () => ({ ok: false, error: 'ya_cerrada', guardada_en_cerebro: true, ficha_ref: 'f1' }) } as unknown as Response }
+    const c = cerebroDelDueno({ base: 'https://x.test', llave: 'k', workflow_id: 'wf', workflow_execution_id: 'e1', fetch: f as never })
+    expect(await c.registrarRespuesta(RESP as never)).toEqual({ ok: true })
+    expect(llamadas).toHaveLength(1)
+  })
   it('otro error (502) no se reintenta ni se lee como «ok»', async () => {
     const k = fetchFalso({ status: 502, error: 'cerebro_caido' })
     const c = cerebroDelDueno({ base: 'https://x.test', llave: 'k', workflow_id: 'wf', workflow_execution_id: 'e1', fetch: k.f as never })

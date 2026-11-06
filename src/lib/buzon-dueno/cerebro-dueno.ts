@@ -61,7 +61,10 @@ export function cerebroDelDueno(p: { base: string; llave: string; workflow_id: s
         body: JSON.stringify({ ...cuerpo, preguntado_por: OFICINA, workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id }),
       })
       const j = (await r.json().catch(() => ({}))) as Record<string, any>
-      return r.status >= 200 && r.status < 300 ? { ok: true, j } : { ok: false, error: `http_${r.status}${typeof j.error === 'string' ? `:${j.error}` : ''}` }
+      if (r.status >= 200 && r.status < 300) return { ok: true, j }
+      // otro cerró la fila DESPUÉS de que el cerebro guardó: lo del dueño ya está, no se repite
+      if (r.status === 409 && j.guardada_en_cerebro === true) return { ok: true, j: { ...j, ok: true, guardada: true } }
+      return { ok: false, error: `http_${r.status}${typeof j.error === 'string' ? `:${j.error}` : ''}` }
     } catch { return { ok: false, error: 'red' } }
   }
   return {

@@ -115,6 +115,14 @@ describe('responder', () => {
     const r = await rutaPreguntas({ db: baseFalsa([PEND], { carrera: true }).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'responder', client_id: C, ...WF, pregunta_id: PEND.id, respuesta: 'x', decidido_por: 'Emilio' })
     expect(r.status).toBe(409)
     expect(r.body.ok).toBe(false)
+    // señal fija para el tablero (#298): lo del dueño YA está en el cerebro, no se repite
+    expect(r.body).toMatchObject({ error: 'ya_cerrada', guardada_en_cerebro: true, ficha_ref: 'f1c4a000-0000-4000-8000-000000000001' })
+    const a = await rutaPreguntas({ db: baseFalsa([PEND], { carrera: true }).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'asumir', client_id: C, ...WF, pregunta_id: PEND.id, decidido_por: 'Emilio' })
+    expect(a).toMatchObject({ status: 409, body: { error: 'ya_cerrada', guardada_en_cerebro: true, ficha_ref: 'f1c4a000-0000-4000-8000-000000000001' } })
+  })
+  it('una pregunta ya cerrada ANTES de guardar dice `guardada_en_cerebro: false` y su estado (el tablero la manda como dato suelto)', async () => {
+    const r = await rutaPreguntas({ db: baseFalsa([{ ...PEND, estado: 'asumida' }]).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'responder', client_id: C, ...WF, pregunta_id: PEND.id, respuesta: 'x', decidido_por: 'Emilio' })
+    expect(r).toMatchObject({ status: 409, body: { ok: false, error: 'ya_cerrada', guardada_en_cerebro: false, estado: 'asumida' } })
   })
   it('sin `pregunta_id`, cierra las pendientes recientes del mismo tema; una ya cerrada → 409; de otro cliente → 404', async () => {
     const b = baseFalsa([PEND, { ...PEND, id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', tema: 'ventas temporada baja' }])
