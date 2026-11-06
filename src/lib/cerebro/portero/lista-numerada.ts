@@ -7,6 +7,7 @@
  */
 import { createHash } from 'node:crypto'
 import { loFijo } from '../conversacion'
+import { avisoNoVigente } from '../estado-en-plataforma'
 import { type DecisionDelDueno, type Ficha, type ListaCorta, NOMBRES_DE_FUENTE, type NombreDeFuente } from '../tipos'
 
 /** a qué fuente pertenece cada clase de línea (para que `ya_trae` pueda nombrar una fuente entera o una clase) */
@@ -55,7 +56,9 @@ export function lineaParaElModelo(n: number, f: Ficha): string {
   if (f.producto && f.producto.length) partes.push(`producto: ${f.producto.map(una).join(', ')}`)
   if (f.que_muestra) partes.push(`muestra: ${recorte(una(f.que_muestra), 100)}`)
   partes.push(f.estado, dia(f.fecha_fuente))
-  partes.push(f.vencido ? `VENCIDO desde ${dia(f.vigente_hasta)}` : f.vigente_hasta ? `vigente hasta ${dia(f.vigente_hasta)}` : 'sin plazo')
+  // lo que no está vigente lo dice aquí, con su motivo, en vez de un plazo de frescura
+  const noVigente = avisoNoVigente(f)
+  partes.push(noVigente ? recorte(una(noVigente), 200) : f.vencido ? `VENCIDO desde ${dia(f.vigente_hasta)}` : f.vigente_hasta ? `vigente hasta ${dia(f.vigente_hasta)}` : 'sin plazo')
   if (f.version !== undefined) partes.push(`v${f.version}${f.vigente ? ' vigente' : ''}`)
   if (f.versiones_anteriores && f.versiones_anteriores > 0) partes.push(`+${f.versiones_anteriores} versiones anteriores`)
   // la decisión del dueño viaja SIEMPRE junto a la cosa y a su versión

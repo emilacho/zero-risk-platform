@@ -4,11 +4,18 @@
  */
 import type { ColumnasDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import type { ModeloPuerto, PedidoAlModelo, RespuestaDeModelo } from './puertos'
+import { CABECERA_DEL_LATIDO } from '../../latido-hacia-quien-llama'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
 export const MAX_TAREA_RUN_SDK = TOPE_REAL_DEL_PEDIDO
 
 /** el `workflow_id` es el REAL del flujo de n8n que llama (lo manda el flujo en el cuerpo); un literal inventado no pasa la puerta de run-sdk y ensucia el libro */
+/** 05-nov · lo pasajero: un corte, una conexión caída o un 5xx. Un 4xx (freno, llave, validación) es una respuesta y no se repite */
+/** 05-nov · el corte por tope de gasto del corredor (su `mensajeDeCorte`): repetirlo con el mismo tope se paga y no lo arregla */
+export const esCortePorTope = (fallo: string | null | undefined): boolean => typeof fallo === 'string' && fallo.startsWith('error_max_budget_usd')
+
+export const esFallaPasajera = (error: string | null | undefined): boolean => typeof error === 'string' && /^(red:|run_sdk_5\d\d$)/.test(error)
+
 export const esWorkflowIdValido = (x: unknown): x is string => typeof x === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(x)
 
 /**
@@ -28,6 +35,7 @@ export interface PedidoRunSdk extends ColumnasDeLaLlamada {
   workflow_execution_id: string
   dry_run: boolean
   force_restart: boolean
+  step_name?: string
   /** tope de gasto de ESTE turno: el corredor corta solo (run-sdk lo acepta entre 0 y 50) */
   max_budget_usd?: number
 }
@@ -46,7 +54,8 @@ export function armarPedidoRunSdk(p: PedidoAlModelo, workflow_id: string, trabaj
     workflow_execution_id: `${p.encargo_id}:${p.paso}`,
     dry_run: p.dry_run,
     // una vuelta repetida del mismo turno NO debe devolver la respuesta vieja guardada (lección del flujo de prueba)
-    force_restart: true,
+    force_restart: p.reanudar !== true,
+    ...(p.clave_de_turno ? { step_name: p.clave_de_turno } : {}),
     ...(p.tope_usd > 0 && p.tope_usd <= 50 ? { max_budget_usd: p.tope_usd } : {}),
   }
 }
@@ -62,6 +71,12 @@ export interface AjustesDelModelo {
 }
 
 /** extrae el texto de la respuesta de run-sdk sin asumir su forma exacta */
+/** el fallo que declara el corredor: `{ success:false, error }` en un 5xx. Un 502 del camino (`agent-runner upstream failed`) no lo trae: ahí no se sabe si el empleado sigue */
+function falloDeclarado(j: unknown): string | null {
+  if (typeof j !== 'object' || j === null) return null
+  const o = j as Record<string, unknown>
+  return o.success === false && typeof o.error === 'string' ? o.error : null
+}
 function textoDe(j: unknown): string | null {
   if (typeof j !== 'object' || j === null) return null
   const o = j as Record<string, unknown>
@@ -84,11 +99,19 @@ export function modeloRunSdk(a: AjustesDelModelo): ModeloPuerto {
       try {
         const r = await a.fetch(`${a.base.replace(/\/+$/, '')}/api/agents/run-sdk`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-api-key': a.llave },
+          // 05-nov · sin latido, el `fetch` de Node corta a los 300 s sin cabeceras (medido: 306 s) y el turno pagado se pierde
+          headers: { 'content-type': 'application/json', 'x-api-key': a.llave, [CABECERA_DEL_LATIDO]: '1' },
           body: JSON.stringify(armarPedidoRunSdk(p, a.workflow_id, a.trabajo)),
         })
         const j: unknown = await r.json().catch(() => null)
-        if (!r.ok) return { ok: false, error: `run_sdk_${r.status}`, costo_usd: costoDe(j) }
+        // con latido, lo que tardó se compromete en 200 y su código verdadero viaja en el cuerpo; un 200 sin cuerpo es una conexión que murió a medias
+        const estado = typeof j === 'object' && j !== null ? (j as { estado_http?: unknown }).estado_http : undefined
+        const http = typeof estado === 'number' ? estado : r.status
+        if (http < 200 || http >= 300) {
+          const fallo = http >= 500 ? falloDeclarado(j) : null
+          return { ok: false, error: `run_sdk_${http}`, costo_usd: costoDe(j), ...(fallo !== null ? { fallo_del_empleado: fallo } : {}) }
+        }
+        if (j === null) return { ok: false, error: 'red:cuerpo_cortado', costo_usd: 0 }
         const t = textoDe(j)
         if (t === null) return { ok: false, error: 'respuesta_sin_texto', costo_usd: costoDe(j) }
         return { ok: true, salida: t, costo_usd: costoDe(j) }

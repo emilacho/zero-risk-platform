@@ -27,7 +27,8 @@ if (!f || f.step_status !== 'completed' || String(f.truncado) === 'true' || !Str
 let ack = null
 try { ack = $('Pedir el plan al redactor').last().json.ack_timestamp } catch (e) { ack = null }
 const desde = ack ? new Date(ack).getTime() : NaN
-const creado = new Date(f.created_at).getTime()
+// 06-nov · el punto de control se reescribe por upsert y conserva la creación de la primera vez: lo que dice si es de ESTE pedido es la actualización
+const creado = new Date(f.updated_at || f.created_at).getTime()
 if (!(desde > 0) || !(creado >= desde - 10000)) return [{ json: orig }]
 return [{ json: { body: { response: String(f.texto), recuperada_del_punto_de_control: true } } }]
 `
@@ -37,7 +38,7 @@ export function construirRecogerDelPuntoDeControl(f) {
     name: 'Vuelta · leer el punto de control', type: 'n8n-nodes-base.httpRequest', typeVersion: 4.2,
     parameters: {
       method: 'GET',
-      url: "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/workflow_checkpoints?workflow_execution_id=eq.{{ $execution.id }}&step_name=eq.{{ encodeURIComponent($('Redactor · elegir').last().json.redactor_elegido) }}&select=step_status,created_at,texto:output_ref->>response,truncado:output_ref->>response_truncated&order=created_at.desc&limit=1",
+      url: "={{ ($env.SUPABASE_URL || $env.NEXT_PUBLIC_SUPABASE_URL) }}/rest/v1/workflow_checkpoints?workflow_execution_id=eq.{{ $execution.id }}&step_name=eq.{{ encodeURIComponent($('Redactor · elegir').last().json.redactor_elegido) }}&select=step_status,created_at,updated_at,texto:output_ref->>response,truncado:output_ref->>response_truncated&order=updated_at.desc&limit=1",
       sendHeaders: true,
       headerParameters: { parameters: [{ name: 'apikey', value: '={{ $env.SUPABASE_SERVICE_ROLE_KEY }}' }, { name: 'Authorization', value: '=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}' }] },
       options: { timeout: 20000, response: { response: { fullResponse: true, neverError: true } } },

@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
+import { avisarPorIncidente, resolverIncidente } from '@/lib/portero-alimenta/alertas'
 import { interruptoresDelEntorno } from '@/lib/portero-alimenta/datos'
 import { puenteAlIndice } from '@/lib/portero-alimenta/entorno'
 import { rutaPuente } from '@/lib/portero-alimenta/rutas'
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     const b = (cuerpo && typeof cuerpo === 'object' ? cuerpo : {}) as Record<string, unknown>
     const db = getSupabaseAdmin() as unknown as Db
     const real = b.dry_run === false && typeof b.workflow_id === 'string' && typeof b.workflow_execution_id === 'string'
-    const r = await rutaPuente({ db, interruptores: interruptoresDelEntorno(), puente: real ? puenteAlIndice({ origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '', db }) : undefined }, cuerpo)
+    const r = await rutaPuente({ db, interruptores: interruptoresDelEntorno(), puente: real ? puenteAlIndice({ origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '', db }) : undefined, avisarIncidente: avisarPorIncidente({ db }), resolverIncidente: resolverIncidente({ db }) }, cuerpo)
     return NextResponse.json(r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'portero_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

@@ -99,9 +99,10 @@ describe('la elegibilidad', () => {
   })
   it('🔴 descubrimiento (persiste al cerebro en Vercel) y agentes fuera de la lista NO son elegibles aunque pidan la palanca', () => {
     expect(vueltaPorElCorredorElegible(pedido({ agent: 'onboarding-specialist', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
-    expect(vueltaPorElCorredorElegible(pedido({ agent: 'jefe-marketing', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
+    expect(vueltaPorElCorredorElegible(pedido({ agent: 'chief-financial-officer', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
     // ronda 69 · decisión explícita: + los dos agentes de diseño de la oficina (sin efectos propios de Vercel); el texto editorial y el descubrimiento siguen fuera
-    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller'])
+    // 06-nov · DALE (a) de Emilio: + el redactor del plan
+    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'jefe-marketing'])
     expect(vueltaPorElCorredorElegible(pedido({ agent: 'content-creator', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
   })
   it('el pedido interno lleva la entrega delegada, y un `_runner_delivery` de afuera se PISA', async () => {
@@ -124,6 +125,16 @@ describe('el recorrido completo (Vercel → corredor)', () => {
     expect(reenviar).not.toHaveBeenCalled() // ← UNA vuelta: la del corredor
     expect(terminal).not.toHaveBeenCalled() // ← el libro lo cierra el corredor
     expect(running).toHaveBeenCalledTimes(1)
+  })
+  it('🔴 06-nov · el redactor del plan (jefe-marketing, 1.534 s en la r4): con la palanca la vuelta la entrega el corredor, no la ruta de 800 s de Vercel', async () => {
+    registrar.mockResolvedValue({ dispatch_key: 'dispatch:X9F0zp6LQ2xGEYVS:jefe-marketing:220399', idempotent: false })
+    corredorResponde(ACUSE_202)
+    const r = await correrElPedido(pedido({ agent: 'jefe-marketing', workflow_id: 'X9F0zp6LQ2xGEYVS', workflow_execution_id: '220399', step_name: 'redactor', callback_mode: 'runner' }))
+    expect(r.status).toBe(202)
+    expect(alCorredor).toHaveLength(1)
+    expect(alCorredor[0].cuerpo).toMatchObject({ callback_mode: 'runner', callback_url: N8N, dispatch_key: 'dispatch:X9F0zp6LQ2xGEYVS:jefe-marketing:220399', agentName: 'jefe-marketing' })
+    expect(reenviar).not.toHaveBeenCalled()
+    expect(terminal).not.toHaveBeenCalled()
   })
   it('el gancho de la prueba (test_delay_ms) viaja al corredor', async () => {
     corredorResponde(ACUSE_202)

@@ -7,13 +7,14 @@
  *    es lo OBSERVADO por la mesa, nunca propio ni declarado por el dueño, y no verifica el manual (origen `tercero` + propiedad `ajena`).
  *  · Las citas se verifican: cada una debe ser una ficha de ESE cliente; una cita inexistente rechaza el informe entero.
  *  · Privacidad: correos, teléfonos y @usuarios de terceros se omiten del texto antes de guardar.
+ *  · Formato (05-nov): el texto se guarda TAL CUAL llega (saltos, listas, tablas, encabezados); solo `que_es` es la versión de una línea.
  *  · Un informe con corte MÁS VIEJO que el vigente no lo reemplaza: queda archivado con su fecha.
  *  · `dry_run` obligatorio; con false exige workflow_id + workflow_execution_id. Detrás de `PORTERO_INFORMES` (apagado por omisión).
  */
 import { createHash, randomUUID } from 'node:crypto'
 import { normalizar } from '../manual/texto'
 import type { Db } from './alimentar'
-import { sinDatosPersonales } from './dueno'
+import { sinDatosPersonales, unaLinea } from './dueno'
 import { validar, type Respuesta } from './rutas'
 import { CLASE_DEL_INFORME, ORIGEN_DEL_INFORME, PREFIJO_DE_ATRIBUTO_DEL_INFORME, tipoDeLaFicha } from './contexto-del-cliente'
 
@@ -122,7 +123,7 @@ export async function rutaInforme(deps: DepsDeInforme, cuerpo: unknown): Promise
   const wi = await deps.db.from('cerebro_ingresos').insert({ id: ing, client_id: n.client_id, origen: 'tercero', fuente_ref: `informe:${n.mesa}`.slice(0, 120), es_completa: false, huella: `${dia}:informe:${huella16(ref)}`, material: null, estado: 'fichado', workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id })
   if (wi.error) return err(502, 'registro_fallido', `cerebro_ingresos: ${wi.error.message}`)
   const fila = {
-    id: fichaId, client_id: n.client_id, ingreso_id: ing, ref, clase: CLASE_DEL_INFORME, titulo: `Informe · ${n.tipo} · corte ${n.fecha_de_corte.slice(0, 10)}`.slice(0, 160), que_es: limpia.texto.slice(0, 200), contenido: limpia.texto,
+    id: fichaId, client_id: n.client_id, ingreso_id: ing, ref, clase: CLASE_DEL_INFORME, titulo: `Informe · ${n.tipo} · corte ${n.fecha_de_corte.slice(0, 10)}`.slice(0, 160), que_es: unaLinea(limpia.texto).slice(0, 200), contenido: limpia.texto,
     origen: 'tercero', fecha_fuente: n.fecha_de_corte, reconfirmado_en: ahora.toISOString(), plazo: null, vigente_hasta: null, version_de: vigente && !llegoTarde ? String(vigente.id) : null, huella: huella16(limpia.texto),
     propiedad: 'ajena', porque: `síntesis de oficina (${n.mesa} · ${n.agente}): observado, no declarado por el dueño`, juzgado_por: 'regla', observado_en: ahora.toISOString(), atributo, sede: null,
     decision: vigente && !llegoTarde ? 'reemplaza' : 'suma',

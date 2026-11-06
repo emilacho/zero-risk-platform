@@ -4,7 +4,7 @@
  *
  * Generaliza `/api/planeacion/brazo/mercado` (F4): el sobre trae UN pedido por analista (`params.tipo` ∈ mercado · competencia ·
  * voz_del_publico · escucha_x · retencion) y cada uno contesta el contrato §4.2 (`brazo: 'analisis'`). Los informes vuelven al
- * plan en la respuesta (fuente propia del redactor, tope 6.000) y, en corrida real, se archivan en el cerebro por la puerta del
+ * plan en la respuesta (fuente propia del redactor) y, en corrida real, se archivan en el cerebro por la puerta del
  * portero (`POST /api/brain/alimentar/informe`, detrás de `PORTERO_INFORMES`): archivar o no NUNCA tumba el informe.
  *
  * Lo que esta puerta decide, y por qué:
@@ -26,7 +26,7 @@ import { almacenDeSupabase } from '@/lib/cadena/almacen-supabase'
 import { CLAVE_DE_METODOS, METODOS_POR_OMISION, metodoSegunConfig } from '@/lib/cadena/metodos'
 import { brazoAnalisis, type ArchivadoDelInforme } from '@/lib/planeacion/brazos'
 import {
-  ANALISTAS, armarMaterial, CLAVE_DE_LA_PALANCA, cuerpoDelInforme, esTipoDeAnalisis, HALLAZGOS_ESPERADOS, leerInforme, leerPalanca,
+  ANALISTAS, armarMaterial, CLAVE_DE_LA_PALANCA, crearCuentaDeLaMesa, cuerpoDelInforme, esTipoDeAnalisis, HALLAZGOS_ESPERADOS, leerInforme, leerPalanca,
   MESA, repartirTopes, rotuloDe, tareaDeAnalisis, TIPOS_DE_ANALISIS, TOPE_DE_LA_MESA_USD, type Analista, type FichaDelCliente, type FichaDelMaterial, type TipoDeAnalisis,
 } from '@/lib/planeacion/mesa-de-analisis'
 import {
@@ -37,6 +37,7 @@ import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { adjuntoDelCliente } from '@/lib/portero-alimenta/contexto-del-cliente'
 import { rutaConsultar } from '@/lib/portero-alimenta/consultar'
 import { idsCitadosEnElTexto } from '@/lib/portero-alimenta/contexto-del-cliente'
+import type { CuentaDeLaMesa } from '@/lib/planeacion/mesa-de-analisis'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -128,11 +129,13 @@ function archivador(a: { client_id: string; analista: Analista; fecha_de_corte: 
     })
     const j = (await r.json().catch(() => null)) as Record<string, unknown> | null
     if (!r.ok) return { ok: false, detalle: `el portero no archivó (${r.status}) · ${String(j?.error ?? '')} ${String(j?.detalle ?? '')}`.trim().slice(0, 300) }
+    // la puerta apagada contesta 200 sin guardar nada: eso no es «archivado»
+    if (j?.apagado === true) return { ok: false, detalle: `el portero no archivó: su puerta está apagada · ${String(j?.detalle ?? '')}`.trim().slice(0, 300) }
     return { ok: true, detalle: `archivado por el portero (${r.status})`, ficha_id: typeof j?.ficha_id === 'string' ? j.ficha_id : null }
   }
 }
 
-async function atender(p: PedidoPuerta, tope: number): Promise<RespuestaBrazo> {
+async function atender(p: PedidoPuerta, tope: number, cuenta: CuentaDeLaMesa): Promise<RespuestaBrazo> {
   const objetivo = p.objetivo as string
   const extra = extraDe(p)
   if (!p.client_id) return pedidoInvalido('analisis', FUENTE, p, 'falta client_id')
@@ -168,13 +171,27 @@ async function atender(p: PedidoPuerta, tope: number): Promise<RespuestaBrazo> {
     const modelo = modeloRunSdk({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY, fetch: globalThis.fetch, workflow_id: firma.workflow_id, trabajo: trabajoDeLaLlamada(p).columnas })
     const fuenteCompleta = `${fuente} · rubro «${ficha.ficha.rubro ?? 'sin dato'}» · plaza «${ficha.ficha.plaza ?? ficha.ficha.pais ?? 'sin dato'}» · material: ${material.fichas} ficha(s)${material.con_resumen_vivo ? ' + resumen vivo' : ''}${material.recortado ? ' (recortado)' : ''} · tope US$ ${tope.toFixed(2)}`
     const clientId = p.client_id
+    let topeDeLaLlamada = tope
 
     return await brazoAnalisis({
       objetivo, fuente: fuenteCompleta, ...extra,
       tipo, agente: analista.agente, rotulo: rotuloDe(tipo), dry_run: p.dry_run, esperados: HALLAZGOS_ESPERADOS,
-      pedir: () => conLimite(p.limite_ms, () => modelo.invocar({
-        agente: analista.agente, tarea, encargo_id: firma.workflow_execution_id, client_id: clientId, paso: PASO_DE_ANALISIS(tipo), tope_usd: tope, dry_run: p.dry_run as boolean,
-      })),
+      pedir: async (intento) => {
+        // 🔴 reparo de CC6: si los que entraron antes se colgaron, el que sigue no entra. Un límite de 0 o menos significaría «sin límite», y la plataforma mataría la puerta con todos adentro
+        if (!cuenta.hayTiempoParaLlamar()) return { ok: false, error: 'no quedó tiempo en la puerta para llamarlo', costo_usd: 0 }
+        const r = await conLimite(Math.min(p.limite_ms ?? Infinity, cuenta.tiempoRestanteMs()), () => modelo.invocar({
+          // el reintento lleva su propio rótulo: sus filas no se confunden con las del primero y se cuentan aparte
+          agente: analista.agente, tarea, encargo_id: firma.workflow_execution_id, client_id: clientId, paso: intento === 1 ? PASO_DE_ANALISIS(tipo) : `${PASO_DE_ANALISIS(tipo)}-reintento`, tope_usd: topeDeLaLlamada, dry_run: p.dry_run as boolean,
+        }))
+        cuenta.liquidar(topeDeLaLlamada, r.costo_usd)
+        return r
+      },
+      segundoIntento: () => {
+        const permiso = cuenta.pedirReintento(tope)
+        if (!permiso.ok) return permiso
+        topeDeLaLlamada = permiso.tope
+        return { ok: true }
+      },
       leer: (salida) => leerInforme(salida, analista, material.ids),
       archivar: archivador({ client_id: clientId, analista, fecha_de_corte, workflow_id: firma.workflow_id, workflow_execution_id: firma.workflow_execution_id }),
     })
@@ -190,9 +207,10 @@ export async function POST(req: Request) {
   if (!leido.ok) return sobreInvalido('analisis', FUENTE, leido.motivo)
   // el tope de la mesa se reparte ANTES de atender: el pedido que no cabe no se hace (sin carrera entre pedidos en vuelo)
   const topes = repartirTopes(leido.sobre.pedidos.map((l) => ({ tipo: l.ok && esTipoDeAnalisis(l.pedido.params?.tipo) ? l.pedido.params?.tipo as TipoDeAnalisis : null, ...(l.ok && typeof l.pedido.tope_usd === 'number' ? { tope_usd: l.pedido.tope_usd } : {}) })))
+  const cuenta = crearCuentaDeLaMesa(topes)
   const rs = await enParalelo(leido.sobre.pedidos, CUPO_EN_VUELO, async (l) => {
     const i = leido.sobre.pedidos.indexOf(l)
-    return l.ok ? atender(l.pedido, topes[i] ?? 0) : pedidoInvalido('analisis', FUENTE, l.pedido, l.motivo)
+    return l.ok ? atender(l.pedido, topes[i] ?? 0, cuenta) : pedidoInvalido('analisis', FUENTE, l.pedido, l.motivo)
   })
   return responderLista(rs)
 }

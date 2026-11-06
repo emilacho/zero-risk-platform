@@ -4,12 +4,13 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { estadoInicial } from '../src/lib/oficina/tipos'
+import { mensajeDeCorte } from '../services/agent-runner/src/lib/tope-por-corrida'
 import { almacenDeConversa, almacenDeMesa } from '../src/lib/finanzas/conversa/almacen-supabase'
 import { mesaEncendida } from '../src/lib/planeacion/mesa/interruptor'
 import { sumaDeTopes } from '../src/lib/planeacion/prevuelo'
 import type { AlmacenDeConversa, EncargoDeConversa } from '../src/lib/finanzas/conversa/puertos'
 import { actaParaElRedactor, validarActa, validarAporte } from '../src/lib/planeacion/mesa/acta'
-import { abrirMesa, avanzarMesa, devolverALaMesa, leerMesa, pedidoDelTurno, type PuertosDeMesa } from '../src/lib/planeacion/mesa/orquestador'
+import { claveDelTurno, INTENTOS_DEL_TURNO, abrirMesa, avanzarMesa, devolverALaMesa, leerMesa, pedidoDelTurno, type PuertosDeMesa } from '../src/lib/planeacion/mesa/orquestador'
 import { INSTRUCCION_POR_PASO, INTEGRANTES, PASO_CONSOLIDA, PLANTILLA_MESA, quienHablaEnLaMesa, TOPE_DE_LA_MESA_USD } from '../src/lib/planeacion/mesa/plantilla'
 
 const ACTA = { numero: { meta: 40, por_que: 'x' }, servicio: 's', audiencia: 'a', oferta: 'o', canales: [{ canal: 'whatsapp', peso: 0.9, razon: 'r' }, { canal: 'meta_ig', peso: 0.1, razon: 'r' }], camino: 'c', prueba: 'p', no_se_hace: [{ que: 'TikTok', por_que: 'no' }], no_se: [] }
@@ -373,5 +374,251 @@ describe('lo que la mesa le entrega a finanzas', () => {
     const m = mundo({ responder: (a, p) => (p !== PASO_CONSOLIDA && p !== 'mesa-estrategia-jefe-marketing' && a === INTEGRANTES.redes ? sin : undefined) })
     const r = await hastaElFin(m.P, (await abrir(m.P)).cuerpo.encargo_id as string)
     expect((r.cuerpo.acta as { costos_de_la_mesa: Record<string, unknown> }).costos_de_la_mesa).not.toHaveProperty('redes')
+  })
+})
+
+describe('un turno cortado no se pierde', () => {
+  const montar = async (fallas: Array<string | { error: string; fallo: string } | null>, paso = PASO_CONSOLIDA) => {
+    const m = mundo()
+    const original = m.P.modelo.invocar.bind(m.P.modelo)
+    const pedidos: Array<Record<string, unknown>> = []
+    let i = 0
+    m.P.modelo = { async invocar(p) {
+      if (p.paso !== paso) return original(p)
+      pedidos.push(p as never)
+      const f = fallas[i++]
+      if (f && typeof f === 'object') return { ok: false, error: f.error, fallo_del_empleado: f.fallo, costo_usd: 0 }
+      return f ? { ok: false, error: f, costo_usd: 0 } : original(p)
+    } }
+    const id = (await abrir(m.P)).cuerpo.encargo_id as string
+    return { ...m, id, pedidos, hastaPaso: async () => { for (let k = 0; k < 20; k++) { const e = await m.P.almacen.leerEncargo(id); const sig = e!.estado_del_motor.ultimo; const clave = PLANTILLA_MESA.pasos[sig + 1]?.clave; if (clave === paso) return; await avanzarMesa(m.P, id) } throw new Error('no llegó') } }
+  }
+  it('🔴 lo que midió CC6: un solo 502 en el acta ya no pierde la reunión', async () => {
+    const m = await montar(['run_sdk_502', null])
+    await m.hastaPaso()
+    const r = await avanzarMesa(m.P, m.id)
+    expect(r).toMatchObject({ status: 503, cuerpo: { error: 'turno_cortado', paso: PASO_CONSOLIDA, intento: 1 } })
+    expect(m.turnos.filter((t) => t.paso === PASO_CONSOLIDA)).toHaveLength(0)
+    expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'cerrado' })
+    expect(m.pedidos).toHaveLength(2)
+  })
+  it('al terminar, el turno no deja su marca', async () => {
+    const m = await montar(['run_sdk_502', null]); await m.hastaPaso()
+    await avanzarMesa(m.P, m.id)
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toHaveProperty('turno_en_curso')
+    await avanzarMesa(m.P, m.id)
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).not.toHaveProperty('turno_en_curso')
+  })
+  it('la marca de OTRO paso no vale: este turno arranca desde cero y con su cuenta en cero', async () => {
+    const m = await montar(['run_sdk_502', 'run_sdk_502', null]); await m.hastaPaso()
+    const e = (await m.P.almacen.leerEncargo(m.id))!
+    await m.P.almacen.guardar({ encargo_id: m.id, estado_del_motor: { ...e.estado_del_motor, turno_en_curso: { paso: 'otro_paso', intentos: 2 } } as never, gasto_usd: e.gasto_usd, estado: 'en_curso' })
+    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { intento: 1 } })
+    expect(m.pedidos[0]).toMatchObject({ reanudar: false })
+  })
+  it('lo cobrado en el último intento cuenta para el tope', async () => {
+    const m = mundo()
+    const original = m.P.modelo.invocar.bind(m.P.modelo)
+    m.P.modelo = { async invocar(p) { return p.paso === PASO_CONSOLIDA ? { ok: false, error: 'run_sdk_502', costo_usd: 0.2 } : original(p) } }
+    const id = (await abrir(m.P)).cuerpo.encargo_id as string
+    for (let k = 0; k < 20; k++) { const e = await m.P.almacen.leerEncargo(id); if (PLANTILLA_MESA.pasos[e!.estado_del_motor.ultimo + 1]?.clave === PASO_CONSOLIDA) break; await avanzarMesa(m.P, id) }
+    const antes = (await m.P.almacen.leerEncargo(id))!.gasto_usd
+    await avanzarMesa(m.P, id); await avanzarMesa(m.P, id)
+    expect((await m.P.almacen.leerEncargo(id))!.gasto_usd).toBeCloseTo(antes)
+    await avanzarMesa(m.P, id)
+    expect((await m.P.almacen.leerEncargo(id))!.gasto_usd).toBeCloseTo(antes + 0.2)
+  })
+  it('la red y el cuerpo cortado cuentan como pasajeros', async () => {
+    for (const f of ['red:fetch failed', 'red:cuerpo_cortado', 'run_sdk_500', 'run_sdk_504']) {
+      const m = await montar([f, null]); await m.hastaPaso()
+      expect((await avanzarMesa(m.P, m.id)).status).toBe(503)
+    }
+  })
+  it('un 4xx no es pasajero: no se repite, como hasta hoy', async () => {
+    for (const f of ['run_sdk_429', 'run_sdk_400', 'modelo_no_configurado', 'sin_workflow_id', 'respuesta_sin_texto']) {
+      const m = await montar([f, null]); await m.hastaPaso()
+      expect((await avanzarMesa(m.P, m.id))).toMatchObject({ status: 200, cuerpo: { degradado: true } })
+      expect(m.pedidos).toHaveLength(1)
+    }
+  })
+  it('el primer intento es fresco y el siguiente recoge; misma clave', async () => {
+    const m = await montar(['run_sdk_502', null]); await m.hastaPaso()
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, true])
+    expect(m.pedidos.map((p) => p.clave_de_turno)).toEqual([claveDelTurno(m.id, PASO_CONSOLIDA), claveDelTurno(m.id, PASO_CONSOLIDA)])
+  })
+  it('recogió mal formato: el reintento de formato es fresco, no vuelve a recoger lo mismo', async () => {
+    const m = mundo({ responder: (_a, p) => (p === PASO_CONSOLIDA ? (malo++ === 0 ? 'no es json' : ACTA) : undefined) })
+    let malo = 0
+    const vistos: Array<boolean | undefined> = []
+    const o = m.P.modelo.invocar.bind(m.P.modelo); let primera = true
+    m.P.modelo = { async invocar(p) { if (p.paso !== PASO_CONSOLIDA) return o(p); vistos.push(p.reanudar); if (primera) { primera = false; return { ok: false, error: 'run_sdk_502', costo_usd: 0 } } return o(p) } }
+    const id = (await abrir(m.P)).cuerpo.encargo_id as string
+    await hastaElFin(m.P, id)
+    expect(vistos).toEqual([false, true, false])
+  })
+  it('🔴 se acaba: tras ' + INTENTOS_DEL_TURNO + ' intentos el acta termina sin acuerdo, sin intentar más', async () => {
+    const m = await montar(['run_sdk_502', 'run_sdk_502', 'run_sdk_502', null]); await m.hastaPaso()
+    expect((await avanzarMesa(m.P, m.id)).status).toBe(503)
+    expect((await avanzarMesa(m.P, m.id)).status).toBe(503)
+    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 200, cuerpo: { degradado: true } })
+    expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'sin_acuerdo' })
+    expect(m.pedidos).toHaveLength(INTENTOS_DEL_TURNO)
+  })
+  it('un aporte que se agota se declara y la reunión sigue, como hasta hoy', async () => {
+    const paso = PLANTILLA_MESA.pasos.find((p) => p.clave.startsWith('mesa-estrategia-') && p.clave !== PASO_CONSOLIDA && p.clave !== 'mesa-estrategia-jefe-marketing')!.clave
+    const m = await montar(['red:x', 'red:x', 'red:x'], paso); await m.hastaPaso()
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
+    expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'cerrado' })
+  })
+  it('🔴 no se paga dos veces lo que sigue trabajando: en vuelo espera, sin llamar', async () => {
+    const m = await montar(['red:cuerpo_cortado', null]); await m.hastaPaso()
+    await avanzarMesa(m.P, m.id)
+    const preguntas: string[] = []
+    m.P.turnoEnVuelo = async (c) => { preguntas.push(c); return true }
+    expect(await avanzarMesa(m.P, m.id)).toEqual({ status: 409, cuerpo: { error: 'paso_en_vuelo' } })
+    expect(m.pedidos).toHaveLength(1)
+    expect(preguntas).toEqual([claveDelTurno(m.id, PASO_CONSOLIDA)])
+    // esperar no gasta intentos
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toMatchObject({ turno_en_curso: { intentos: 1 } })
+  })
+  it('si ya no sigue, o no se sabe, recoge', async () => {
+    for (const r of [async () => false, async () => null, async () => { throw new Error('caída') }]) {
+      const m = await montar(['red:x', null]); await m.hastaPaso()
+      await avanzarMesa(m.P, m.id)
+      m.P.turnoEnVuelo = r as never
+      expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
+      expect(m.pedidos[1].reanudar).toBe(true)
+    }
+  })
+  it('sin marca no se pregunta: el primer intento no espera a nadie', async () => {
+    const m = await montar([null]); await m.hastaPaso()
+    m.P.turnoEnVuelo = async () => { throw new Error('no debía preguntar') }
+    expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
+    expect(m.pedidos[0].reanudar).toBe(false)
+  })
+  it('la marca es de ese turno: terminado se borra y el siguiente es fresco', async () => {
+    const m = await montar(['run_sdk_502', null]); await m.hastaPaso()
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).not.toHaveProperty('turno_en_curso')
+  })
+  it('🔴 la función murió a medias: la marca ya estaba guardada antes de llamar', async () => {
+    const m = await montar([null]); await m.hastaPaso()
+    const o = m.P.modelo.invocar
+    m.P.modelo = { invocar: async () => { throw new Error('la función murió') } }
+    await expect(avanzarMesa(m.P, m.id)).rejects.toThrow()
+    m.P.modelo = { invocar: o }
+    await avanzarMesa(m.P, m.id)
+    expect(m.pedidos[0].reanudar).toBe(true)
+  })
+  it('una devolución vuelve a consolidar en fresco: no recoge el acta anterior', async () => {
+    const m = await montar([null, null]); await hastaElFin(m.P, m.id)
+    await devolverALaMesa(m.P, m.id, { motivo: 'no cuadra' })
+    await hastaElFin(m.P, m.id)
+    expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, false])
+  })
+  // CC6 y CC7, 05-nov: el corredor deja su punto de control «en curso» cuando el empleado falla; esa fila no significa que siga trabajando
+  const FALLA = { error: 'run_sdk_500', fallo: 'el proveedor del modelo devolvió un error' }
+  const SIEMPRE_EN_VUELO = async () => true
+  const pasoDeAporte = () => PLANTILLA_MESA.pasos.find((p) => p.clave.startsWith('mesa-estrategia-') && p.clave !== PASO_CONSOLIDA && p.clave !== 'mesa-estrategia-jefe-marketing')!.clave
+  it('🔴 el empleado que falló con la fila en curso no se espera: se repite enseguida, sin reinicio forzado', async () => {
+    const m = await montar([FALLA, null]); await m.hastaPaso()
+    m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
+    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { error: 'turno_cortado', intento: 1, detalle: 'run_sdk_500 · el proveedor del modelo devolvió un error' } })
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toMatchObject({ turno_en_curso: { paso: PASO_CONSOLIDA, intentos: 1, termino: true } })
+    expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
+    expect(m.pedidos).toHaveLength(2)
+    // CC7, 05-nov · sin reinicio: si la ruta reventó después de un éxito, se recoge; si falló, la fila sigue «en curso» y el corredor lo corre
+    expect(m.pedidos[1].reanudar).toBe(true)
+    expect(m.arts[m.id].acta).toBeTruthy()
+  })
+  it('🔴 un acta que falla siempre termina en tres intentos, sin acuerdo y sin esperar', async () => {
+    const m = await montar([FALLA, FALLA, FALLA]); await m.hastaPaso()
+    m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
+    expect(m.pedidos).toHaveLength(3)
+    expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'sin_acuerdo' })
+  })
+  it('🔴 un aporte que falla siempre se declara y la reunión entrega su acta', async () => {
+    const m = await montar([FALLA, FALLA, FALLA], pasoDeAporte()); await m.hastaPaso()
+    m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
+    m.P.turnoEnVuelo = undefined
+    // CC7, 05-nov · el último intento se declara: lo que no llegó se dice
+    const quien = pasoDeAporte().slice('mesa-estrategia-'.length)
+    expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ estado: 'cerrado', faltan: [quien] })
+  })
+  for (const [nombre, fallo] of [['no llega (502 del camino)', 'run_sdk_502'], ['se corta la red', 'red:x']] as const) {
+    it(`🔴 un aporte que ${nombre} tres veces también se declara`, async () => {
+      const m = await montar([fallo, fallo, fallo], pasoDeAporte()); await m.hastaPaso()
+      await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+      expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
+      const quien = pasoDeAporte().slice('mesa-estrategia-'.length)
+      expect(m.arts[m.id]['aporte_' + quien]).toMatchObject({ sin_aporte: true })
+      expect((await hastaElFin(m.P, m.id)).cuerpo).toMatchObject({ faltan: [quien] })
+    })
+  }
+  it('🔴 un planteo que falla siempre se declara como «sin planteo», no como vacío', async () => {
+    const m = await montar([FALLA, FALLA, FALLA], 'mesa-estrategia-jefe-marketing'); await m.hastaPaso()
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect((await avanzarMesa(m.P, m.id)).cuerpo).toMatchObject({ degradado: true })
+    expect(m.arts[m.id].planteo).toMatchObject({ sin_planteo: true })
+  })
+  it('🔴 un corte por tope no se repite: con el mismo tope se paga otra vez y termina igual', async () => {
+    const m = await montar([{ error: 'run_sdk_500', fallo: mensajeDeCorte(0.4, 0.41) }], pasoDeAporte()); await m.hastaPaso()
+    m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
+    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 200, cuerpo: { degradado: true } })
+    expect(m.pedidos).toHaveLength(1)
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).not.toHaveProperty('turno_en_curso')
+  })
+  it('un corte de conexión tras un fallo del empleado vuelve a preguntar si sigue en vuelo', async () => {
+    const m = await montar([FALLA, 'red:x', null]); await m.hastaPaso()
+    const preguntas: string[] = []
+    m.P.turnoEnVuelo = async (c) => { preguntas.push(c); return false }
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect(preguntas).toHaveLength(0)
+    await avanzarMesa(m.P, m.id)
+    expect(preguntas).toHaveLength(1)
+    expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, true, true])
+  })
+  it('un fallo y luego un corte: el tercer intento pregunta con la hora del fallo, que sobrevive al corte (CC6)', async () => {
+    const m = await montar([FALLA, 'red:x', null]); await m.hastaPaso()
+    const vistas: Array<string | undefined> = []
+    m.P.turnoEnVuelo = async (_c, _cl, desde) => { vistas.push(desde); return false }
+    await avanzarMesa(m.P, m.id)
+    const fallo_en = ((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor as unknown as { turno_en_curso: { fallo_en?: string } }).turno_en_curso.fallo_en
+    expect(typeof fallo_en).toBe('string')
+    await avanzarMesa(m.P, m.id)
+    expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toMatchObject({ turno_en_curso: { intentos: 2, fallo_en } })
+    expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
+    expect(vistas).toEqual([fallo_en])
+  })
+  it('sin fallo previo se pregunta sin hora: un corte solo sigue esperando lo que trabaja', async () => {
+    const m = await montar(['red:x', null]); await m.hastaPaso()
+    const vistas: Array<string | undefined> = []
+    m.P.turnoEnVuelo = async (_c, _cl, desde) => { vistas.push(desde); return false }
+    await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+    expect(vistas).toEqual([undefined])
+  })
+  it('🔴 la devolución con un corte antes de entrar no recoge el acta anterior: tiene su propia clave', async () => {
+    const m = await montar([null, 'run_sdk_502', null]); await hastaElFin(m.P, m.id)
+    await devolverALaMesa(m.P, m.id, { motivo: 'no cuadra' })
+    await avanzarMesa(m.P, m.id)
+    const preguntas: string[] = []
+    m.P.turnoEnVuelo = async (c) => { preguntas.push(c); return false }
+    await avanzarMesa(m.P, m.id)
+    expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, false, true])
+    const claves = m.pedidos.map((p) => p.clave_de_turno)
+    expect(claves[0]).toBe(claveDelTurno(m.id, PASO_CONSOLIDA))
+    expect(claves[1]).toBe(claveDelTurno(m.id, PASO_CONSOLIDA + ':devolucion-1'))
+    expect(claves[2]).toBe(claves[1])
+    expect(preguntas).toEqual([claves[1]])
+  })
+  it('la clave no se cruza entre encargos ni entre pasos', () => {
+    expect(claveDelTurno('a', 'x')).not.toBe(claveDelTurno('b', 'x'))
+    expect(claveDelTurno('a', 'x')).not.toBe(claveDelTurno('a', 'y'))
   })
 })

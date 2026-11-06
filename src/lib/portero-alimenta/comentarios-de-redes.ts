@@ -41,9 +41,10 @@ const fechaIso = (v: unknown): string | null => {
   return Number.isFinite(d.getTime()) ? d.toISOString() : null
 }
 
-/** sin datos personales: fuera @usuarios, correos y números largos; sin espacios de sobra */
+/** sin datos personales: fuera @usuarios, correos y números largos. El resto queda tal cual llegó, con sus saltos de línea (05-nov); un número no cruza de una línea a otra */
 export function limpiarComentario(t: string): string {
-  return t.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, ' ').replace(/@[\w.]+/g, ' ').replace(/\+?\d[\d\s().-]{6,}\d/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800)
+  // lo que se quita se lleva los espacios que lo rodean EN SU L\u00cdNEA (no queda \u00aba   o\u00bb); los saltos no se tocan
+  return t.replace(/[ \t]*[\w.+-]+@[\w-]+\.[\w.-]+[ \t]*/g, ' ').replace(/[ \t]*@[\w.]+[ \t]*/g, ' ').replace(/[ \t]*\+?\d[\d \t\u00a0().-]{6,}\d[ \t]*/g, ' ').trim().slice(0, 800)
 }
 
 export interface Comentario { red: RedDeComentarios | 'instagram'; cuenta: string; rol: Rol; post_ref: string; post_url: string | null; comentario_ref: string; texto: string; me_gusta: number | null; fecha: string | null }

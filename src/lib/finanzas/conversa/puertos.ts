@@ -44,6 +44,8 @@ export interface Semilla {
   manual_resumen?: string
   /** 04-nov · el manual de marca aprobado, entero: toda la oficina lee lo mismo que el redactor */
   manual_completo?: unknown
+  /** 05-nov · los informes de la mesa de análisis, vigentes y de esta corrida: análisis, no datos medidos del cliente */
+  informes_de_analisis?: unknown
   /** 04-nov · el dueño ya revisó la ronda de preguntas: lo que no contestó sigue abierto en la oficina, pero no vuelve a detener el plan */
   pausa_atendida?: boolean
   /** 04-nov · cuándo contestó por última vez desde Tu oficina: mientras siga contestando, el plan no arranca */
@@ -157,8 +159,12 @@ export interface AlmacenDeConversa {
   guardarBuzon?(c: { encargo_id: string; slack_canal?: string | null; slack_ts?: string | null; leido_hasta?: string | null; semilla?: Semilla; artefacto?: ArtefactoGuardado }): Promise<void>
 }
 
-export type RespuestaDeModelo = { ok: true; salida: unknown; costo_usd: number } | { ok: false; error: string; costo_usd: number }
+export type RespuestaDeModelo = { ok: true; salida: unknown; costo_usd: number } | { ok: false; error: string; costo_usd: number; /** 05-nov · el corredor contestó que el empleado terminó y falló: no hay nada en vuelo, aunque su punto de control siga «en curso» */ fallo_del_empleado?: string }
 export interface PedidoAlModelo {
+  /** 05-nov · la clave propia del turno en el corredor: con ella se puede recoger lo ya hecho. Sin ella, como siempre */
+  clave_de_turno?: string
+  /** 05-nov · este pedido repite un turno que se cortó: si el corredor ya lo terminó, devuelve ese resultado sin cobrar otra vez */
+  reanudar?: boolean
   agente: string
   tarea: string
   encargo_id: string

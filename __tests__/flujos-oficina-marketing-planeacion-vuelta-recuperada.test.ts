@@ -46,7 +46,7 @@ describe('el cableado', () => {
     expect(url).toContain('https://supa.test/rest/v1/workflow_checkpoints?')
     expect(url).toContain('workflow_execution_id=eq.ex-1')
     expect(url).toContain('step_name=eq.jefe-marketing')
-    expect(url).toContain('order=created_at.desc&limit=1')
+    expect(url).toContain('order=updated_at.desc&limit=1') // 06-nov · el punto de control se reescribe por upsert: lo más reciente es la actualización
     expect(url).toContain('texto:output_ref->>response')
   })
 })
