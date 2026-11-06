@@ -9,6 +9,8 @@
  *  · Precedencia máxima: el origen `dueno` va primero donde el cerebro ordena por origen, y el resumen vivo la muestra aparte; lo medido o supuesto no se mezcla con ella (cada ficha conserva su cita).
  *  · Privacidad: se guarda lo que dijo el dueño; correos, teléfonos y @usuarios de terceros se omiten.
  *  · DESCARTAR (04-nov · firma de Emilio): el evento `descartar` (pregunta_id o tema + motivo) archiva preguntas pendientes como «obsoleta» con fecha y motivo; nada se borra y NO crea ficha de respuesta.
+ *  · ASUMIR (06-nov · firma de Emilio): una pregunta puede traer el `supuesto` con que seguiría la oficina; el evento `asumir` (pregunta_id) la cierra como «asumida» y el supuesto
+ *    se lee como «supuesto aceptado por el dueño», NUNCA como dato del dueño (ver `supuestos-del-dueno.ts`).
  *  · `dry_run` obligatorio; con false exige workflow_id y workflow_execution_id. Detrás de `PORTERO_DUENO` (apagado por omisión). US$ 0: no llama a ningún modelo.
  */
 import { createHash, randomUUID } from 'node:crypto'
@@ -18,6 +20,7 @@ import { leerTodas } from './paginar'
 import { claveDeAlcance, datosDeSede, sedesDeFicha } from './sedes-fuentes'
 import { CAMPO_DEL_ESTADO, estadoDeApertura, esTemaDeEstadoDeSede, sedeQueNombra, textoDeEstado, type EstadoDeSede } from '../sedes/por-abrir'
 import { reconciliarYEnviar, validar, type DepsDeRutas, type Respuesta } from './rutas'
+import { asumirPregunta, supuestoDeLaEntrada, supuestoGuardado, supuestosElegidos, type SupuestoDeLaPregunta } from './supuestos-del-dueno'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -124,6 +127,8 @@ export interface EntradaDeDueno {
   acumula: boolean
   /** 01-nov · firma de Emilio: frases que este hecho niega; si un plan las usa, el código lo marca */
   frases_negadas: string[]
+  /** 06-nov · solo en una pregunta: el supuesto con que seguiría la oficina si el dueño no contesta (el dueño puede asumirlo) */
+  supuesto: SupuestoDeLaPregunta | null
 }
 function normalizar_(cuerpo: Record<string, unknown>): Respuesta | EntradaDeDueno {
   const evento = cuerpo.evento === 'pregunta' ? 'pregunta' : 'respuesta'
@@ -143,7 +148,10 @@ function normalizar_(cuerpo: Record<string, unknown>): Respuesta | EntradaDeDuen
   if (negadas !== undefined && !(Array.isArray(negadas) && negadas.length <= 20 && negadas.every((f) => typeof f === 'string' && f.trim().length >= 3 && f.length <= 200))) return err(400, 'entrada_invalida', '`frases_negadas` es una lista de hasta 20 frases de 3 a 200 caracteres')
   const cuando = txt(cuerpo.respondido_en)
   if (evento === 'respuesta' && (!cuando || Number.isNaN(Date.parse(cuando)))) return err(400, 'entrada_invalida', '`respondido_en` debe ser una fecha ISO')
+  const sup = evento === 'pregunta' ? supuestoDeLaEntrada(cuerpo.supuesto) : { ok: true as const, supuesto: null }
+  if (!sup.ok) return err(400, 'entrada_invalida', sup.detalle)
   return {
+    supuesto: sup.supuesto,
     frases_negadas: Array.isArray(negadas) ? (negadas as string[]).map((f) => f.trim()) : [], evento, client_id: String(cuerpo.client_id), sede_clave: txt(cuerpo.sede_clave) || null, pregunta, respuesta, tema, canal, mensaje_ref: txt(cuerpo.mensaje_ref) || null,
     respondido_en: cuando ? new Date(cuando).toISOString() : '', preguntado_por: { oficina, agente }, pregunta_id: txt(cuerpo.pregunta_id) || null, forzar: cuerpo.forzar === true, acumula: cuerpo.acumula === true && !esCanalDelManual(canal), // un dato del manual jamás se acumula: reemplaza al anterior del mismo campo
   }
@@ -233,6 +241,7 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
   const v = validar(cuerpo)
   if ('status' in v) return v
   if (v.cuerpo.evento === 'descartar') return descartarPreguntas(deps, v)
+  if (v.cuerpo.evento === 'asumir') return asumirPregunta(deps, v)
   const n = normalizar_(v.cuerpo)
   if ('status' in n) return n
   if (!deps.activo) return { status: 200, body: { apagado: true, detalle: 'PORTERO_DUENO está apagado: no se leyó ni se escribió nada', modelos_llamados: 0 } }
@@ -269,10 +278,10 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
     if (propia && !n.forzar) return { status: 200, body: { ok: true, registrada: false, repetida: true, pregunta_id: String(propia.id), nota: 'tu misma pregunta sigue pendiente' } }
     const pid = id()
     if (!v.dry_run) {
-      const w = await deps.db.from('cerebro_dueno_preguntas').insert({ id: pid, client_id: n.client_id, sede_clave: sedeClave, tema: n.tema, tema_norm: temaNormal(n.tema), pregunta: n.pregunta, canal: n.canal, preguntado_por_oficina: n.preguntado_por.oficina, preguntado_por_agente: n.preguntado_por.agente, estado: 'pendiente', workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id })
+      const w = await deps.db.from('cerebro_dueno_preguntas').insert({ id: pid, client_id: n.client_id, sede_clave: sedeClave, tema: n.tema, tema_norm: temaNormal(n.tema), pregunta: n.pregunta, canal: n.canal, preguntado_por_oficina: n.preguntado_por.oficina, preguntado_por_agente: n.preguntado_por.agente, estado: 'pendiente', workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id, ...(n.supuesto ? { supuesto: n.supuesto } : {}) })
       if (w.error) return err(502, 'registro_fallido', `cerebro_dueno_preguntas: ${w.error.message}`)
     }
-    return { status: 200, body: { ok: true, registrada: !v.dry_run, pregunta_id: pid, dry_run: v.dry_run, ...(v.dry_run ? { nota: 'dry_run: no se registró nada' } : {}) } }
+    return { status: 200, body: { ok: true, registrada: !v.dry_run, pregunta_id: pid, dry_run: v.dry_run, supuesto: n.supuesto, ...(v.dry_run ? { nota: 'dry_run: no se registró nada' } : {}) } }
   }
 
   // ── una RESPUESTA
@@ -332,7 +341,9 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
 }
 
 /** GET · ¿ya se respondió? (y qué hay pendiente). Sin `tema`: lo último que dijo el dueño. El agente decide si sigue vigente. */
-export async function rutaLeerDueno(deps: { db: Db; ahora?: Date }, params: { client_id: string; tema?: string | null; sede_clave?: string | null; canal?: string | null; limite?: number | string | null }): Promise<Respuesta> {
+export async function rutaLeerDueno(deps: { db: Db; ahora?: Date }, params: { client_id: string; tema?: string | null; sede_clave?: string | null; canal?: string | null; limite?: number | string | null
+  /** 06-nov · «1»/true: trae `supuestos_elegidos_por_el_dueno` (solo lo asumido), filtrado por `encargo` (workflow_execution_id de las preguntas) y/o `pregunta_ids` (separados por coma) */
+  asumidas?: boolean | string | null; encargo?: string | null; pregunta_ids?: string | null }): Promise<Respuesta> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.client_id)) return err(400, 'entrada_invalida', '`client_id` debe ser un uuid')
   const ahora = deps.ahora ?? new Date()
   const vig = await respuestasVigentes(deps.db, params.client_id)
@@ -351,6 +362,14 @@ export async function rutaLeerDueno(deps: { db: Db; ahora?: Date }, params: { cl
   const hace = new Date(ahora.getTime() - HORAS_DE_UNA_PREGUNTA_PENDIENTE * 3_600_000).toISOString()
   const pe = await deps.db.from('cerebro_dueno_preguntas').select('*').eq('client_id', params.client_id).eq('estado', 'pendiente').gte('creado_en', hace).limit(200)
   if (pe.error) return err(502, 'lectura_fallida', `cerebro_dueno_preguntas: ${pe.error.message}`)
-  const pend = lista(pe.data).filter((p) => !tema || esElMismoTema(txt(p.tema), tema)).map((p) => ({ pregunta_id: String(p.id), tema: txt(p.tema), oficina: txt(p.preguntado_por_oficina), agente: txt(p.preguntado_por_agente), canal: txt(p.canal), desde: txt(p.creado_en) }))
-  return { status: 200, body: { ok: true, client_id: params.client_id, tema: tema || null, respondida: tema ? halladas.length > 0 : null, respuestas: halladas.slice(0, limite).map((f) => descripcionDeRespuesta(f, ahora)), total: halladas.length, recortado: halladas.length > limite, ...(canal ? { canal: txt(params.canal) } : {}), pendientes: pend, modelos_llamados: 0 } }
+  const pend = lista(pe.data).filter((p) => !tema || esElMismoTema(txt(p.tema), tema)).map((p) => ({ pregunta_id: String(p.id), tema: txt(p.tema), oficina: txt(p.preguntado_por_oficina), agente: txt(p.preguntado_por_agente), canal: txt(p.canal), desde: txt(p.creado_en), supuesto: supuestoGuardado(p.supuesto) }))
+  let elegidos: Record<string, unknown> = {}
+  if (params.asumidas === true || ['1', 'true', 'si', 'sí'].includes(String(params.asumidas ?? '').trim().toLowerCase())) {
+    const ids = String(params.pregunta_ids ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+    if (ids.some((x) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x))) return err(400, 'entrada_invalida', '`pregunta_ids` son uuids separados por coma')
+    const s = await supuestosElegidos(deps.db, params.client_id, { encargo: txt(params.encargo) || null, pregunta_ids: ids })
+    if (!s.ok) return err(502, 'lectura_fallida', s.detalle)
+    elegidos = { supuestos_elegidos_por_el_dueno: s.supuestos, ...(txt(params.encargo) ? { encargo: txt(params.encargo) } : {}) }
+  }
+  return { status: 200, body: { ok: true, client_id: params.client_id, tema: tema || null, respondida: tema ? halladas.length > 0 : null, respuestas: halladas.slice(0, limite).map((f) => descripcionDeRespuesta(f, ahora)), total: halladas.length, recortado: halladas.length > limite, ...(canal ? { canal: txt(params.canal) } : {}), pendientes: pend, ...elegidos, modelos_llamados: 0 } }
 }

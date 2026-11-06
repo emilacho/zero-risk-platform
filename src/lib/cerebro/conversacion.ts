@@ -133,7 +133,7 @@ export function respuestaDeRespaldo(lista: ListaCorta, pedido: Pick<Pedido, 'ron
   }
 }
 
-const ESTADOS: readonly string[] = ['dicho_por_dueno', 'visto_en_su_fuente', 'medido', 'de_tercero', 'inferido', 'borrador sin aprobar', 'aprobado', 'rechazado', 'propiedad_incierta']
+const ESTADOS: readonly string[] = ['dicho_por_dueno', 'visto_en_su_fuente', 'medido', 'de_tercero', 'inferido', 'borrador sin aprobar', 'aprobado', 'rechazado', 'propiedad_incierta', 'supuesto_aceptado_por_dueno']
 const LECTURAS: readonly string[] = ['ok', 'sin_material', 'error_de_lectura']
 
 export function validarRespuesta(x: unknown): { ok: true } | { ok: false; errores: string[] } {

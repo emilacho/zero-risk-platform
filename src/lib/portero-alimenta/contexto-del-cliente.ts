@@ -7,6 +7,7 @@
  * Si la lectura falla NO se disfraza de «vacío»: el campo trae `estado: 'no_se_pudo_leer'` y el motivo.
  */
 import { CLASE_DEL_DUENO } from './dueno'
+import { CLASE_DEL_SUPUESTO_ACEPTADO, supuestoDeLaFicha, type SupuestoAceptado } from './supuestos-del-dueno'
 import { esloganDelCliente, REGLA_DEL_ESLOGAN } from '../manual/campos-del-manual'
 import type { Db } from './alimentar'
 
@@ -49,6 +50,8 @@ export interface HechoDelDueno { tema: string; respuesta: string; sede: string |
 
 export interface ContextoDelCliente {
   hechos_del_dueno?: HechoDelDueno[]
+  /** 06-nov · lo que el dueño ASUMIÓ (supuestos que propuso una oficina): aparte de sus hechos, nunca como dato del dueño */
+  supuestos_aceptados_por_el_dueno?: SupuestoAceptado[]
   /** 01-nov · el eslogan que el cliente ya usa, con su fuente y la regla de uso; ausente si no se conoce */
   eslogan?: { texto: string; fuente: string; regla: string }
   resumen_vivo: ResumenVivoAdjunto
@@ -93,14 +96,15 @@ function hechoDeLaFicha(f: Fila): HechoDelDueno | null {
 }
 
 async function contextoSinEslogan(db: Db, clientId: string, ahora: Date): Promise<ContextoDelCliente> {
-  const q = await db.from('cerebro_fichas').select('id, clase, atributo, titulo, contenido, que_es, observado_en, fecha_fuente, creado_en, vigente_hasta, retirada_en, descartada, sede, provenance_tag').eq('client_id', clientId).in('clase', [CLASE_DEL_RESUMEN_VIVO, CLASE_DEL_INFORME, CLASE_DEL_DUENO]).is('retirada_en', null).limit(500)
+  const q = await db.from('cerebro_fichas').select('id, clase, atributo, titulo, contenido, que_es, observado_en, fecha_fuente, creado_en, vigente_hasta, retirada_en, descartada, sede, provenance_tag').eq('client_id', clientId).in('clase', [CLASE_DEL_RESUMEN_VIVO, CLASE_DEL_INFORME, CLASE_DEL_DUENO, CLASE_DEL_SUPUESTO_ACEPTADO]).is('retirada_en', null).limit(500)
   if (q.error) {
     const detalle = `cerebro_fichas: ${String(q.error.message ?? q.error).slice(0, 160)}`
     return { resumen_vivo: { estado: 'no_se_pudo_leer', detalle }, informes: [], informes_estado: 'no_se_pudo_leer', informes_detalle: detalle }
   }
   const filas = lista(q.data).filter((f) => esVigente(f, ahora))
   const hechos = filas.filter((f) => txt(f.clase) === CLASE_DEL_DUENO).map(hechoDeLaFicha).filter((h): h is HechoDelDueno => !!h)
-  const conHechos = <T extends object>(c: T): T & { hechos_del_dueno?: HechoDelDueno[] } => (hechos.length ? { hechos_del_dueno: hechos, ...c } : c)
+  const supuestos = filas.filter((f) => txt(f.clase) === CLASE_DEL_SUPUESTO_ACEPTADO).map(supuestoDeLaFicha).filter((s): s is SupuestoAceptado => !!s)
+  const conHechos = <T extends object>(c: T): T & { hechos_del_dueno?: HechoDelDueno[]; supuestos_aceptados_por_el_dueno?: SupuestoAceptado[] } => ({ ...(hechos.length ? { hechos_del_dueno: hechos } : {}), ...(supuestos.length ? { supuestos_aceptados_por_el_dueno: supuestos } : {}), ...c })
 
   // ── el resumen vivo: el del cliente (el más nuevo si hubiera dos por una carrera) y los de cada sede
   const resumenes = filas.filter((f) => txt(f.clase) === CLASE_DEL_RESUMEN_VIVO).sort(masNueva)
