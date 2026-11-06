@@ -231,6 +231,15 @@ export async function crear(d: Deps, p: Pedido): Promise<Resultado<{ pieza: Piez
 }
 
 // ── avanzar (la pantalla pregunta) ────────────────────────────────────────
+/** cuánto puede vivir una pieza «creando» antes de vencer (muy por encima de lo normal: 5 min imagen, 20 video y 3D) */
+export const TOPE_DE_VIDA_MIN: Record<Pieza['tipo'], number> = { imagen: 60, video: 180, '3d': 180 }
+/** respuestas del proveedor que dicen «ese pedido no existe» */
+const PROVEEDOR_NO_LA_RECONOCE = new Set([404, 410])
+export const vencioLaPieza = (p: Pick<Pieza, 'tipo' | 'creado_en'>, ahoraMs: number) => {
+  const desde = Date.parse(p.creado_en)
+  return Number.isFinite(desde) && ahoraMs - desde > TOPE_DE_VIDA_MIN[p.tipo] * 60_000
+}
+
 export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   if (!UUID.test(id)) return falla(400, 'id_invalido')
   const r = await d.db.from(TABLA).select(`${COLUMNAS}, proveedor_request_id, proveedor_status_url, proveedor_response_url`).eq('id', id).limit(1)
@@ -238,14 +247,19 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   const fila = r.data?.[0] as (Pieza & { proveedor_request_id: string | null; proveedor_status_url: string | null; proveedor_response_url: string | null }) | undefined
   if (!fila) return falla(404, 'pieza_no_existe')
   const { proveedor_request_id: reqId, proveedor_status_url: statusUrl, proveedor_response_url: responseUrl, ...pieza } = fila
-  if (pieza.estado !== 'creando' || !reqId) return { ok: true, valor: pieza }
+  if (pieza.estado !== 'creando') return { ok: true, valor: pieza }
+  // pasado el tope de vida, una pieza que nunca llegó al proveedor, o que el proveedor ya no reconoce, vence (con lo ya gastado).
+  // Si el proveedor dice «en curso» se sigue preguntando: puede terminar y cobrar, y ese cobro no se pierde.
+  const vencida = vencioLaPieza(pieza, d.ahora())
+  const vencer = async (motivo: string) => ({ ok: true as const, valor: (await fallar(d, id, `Venció: ${motivo} en ${TOPE_DE_VIDA_MIN[pieza.tipo]} min. No se cobró nada más.`, Number(pieza.costo_usd) || 0)) ?? (await leerPieza(d, id)) ?? pieza })
+  if (!reqId) return vencida ? vencer('no llegó al proveedor') : { ok: true, valor: pieza }
   const ahoraIso = () => new Date(d.ahora()).toISOString()
 
   if (pieza.tipo === 'video') {
     if (!REQUEST_ID_VALIDO.test(reqId)) return falla(500, 'pedido_invalido')
     // la dirección de estado se arma aquí, nunca se guarda ni se acepta de afuera (la llave viajaría a donde diga)
     const e = await estadoEnHiggsfield(d.fetch, d.llaves.higgsfield, `https://api.higgsfield.ai/requests/${reqId}/status`)
-    if (!e.ok) return { ok: true, valor: pieza }
+    if (!e.ok) return vencida && PROVEEDOR_NO_LA_RECONOCE.has(e.status) ? vencer('el proveedor ya no reconoce el pedido') : { ok: true, valor: pieza }
     if (!ESTADOS_TERMINALES.has(e.estado.status)) return { ok: true, valor: pieza }
     if (e.estado.status !== 'completed') return { ok: true, valor: (await fallar(d, id, `${e.estado.status}${e.estado.error ? ` · ${e.estado.error}` : ''}`)) ?? (await leerPieza(d, id)) ?? pieza }
     return cerrar(d, pieza, { urlProveedor: e.estado.video_url, ruta: `estudio/${pieza.client_id}/${id}.mp4`, tipo: 'video/mp4', archivoTipo: 'video', miniatura: pieza.foto_partida_url, proveedor: 'higgsfield', usd: Number(pieza.costo_estimado_usd), base: 'estimate_formula', ahoraIso })
@@ -254,7 +268,8 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   // 3D
   if (!statusUrl || !responseUrl) return falla(500, 'pedido_sin_direcciones')
   const e = await estadoEnFal(d.fetch, d.llaves.fal, statusUrl)
-  if (!e.ok || e.e.estado === 'en_cola' || e.e.estado === 'en_curso') return { ok: true, valor: pieza }
+  if (!e.ok) return vencida && PROVEEDOR_NO_LA_RECONOCE.has(e.status) ? vencer('el proveedor ya no reconoce el pedido') : { ok: true, valor: pieza }
+  if (e.e.estado === 'en_cola' || e.e.estado === 'en_curso') return { ok: true, valor: pieza }
   const yaGastado = Number(pieza.costo_usd) || 0
   const esAnimacion = pieza.modelo === ANIMAR.id
   // un fallo anota 0; si fal dice que no es una figura humana, se explica en claro

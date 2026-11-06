@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { archivoDe3D, armarAnimacion, noEsHumanoide, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from '@/lib/estudio/movimientos'
 import { esDeLaCola } from '@/lib/estudio/fal'
-import { avanzar, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
+import { avanzar, TOPE_DE_VIDA_MIN, vencioLaPieza, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
 
 const CLIENTE = 'a0000000-0000-4000-8000-0000000000e1'
 const OTRO = 'b0000000-0000-4000-8000-0000000000e2'
@@ -92,6 +92,8 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchi
     if (url === 'https://queue.fal.run/tripo3d/h3.1/image-to-3d') return json({ request_id: 'fal-1', status_url: 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1/status', response_url: 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1' })
     if (url.endsWith('/requests/fal-1/status')) {
       const s = falEstados.shift() ?? 'COMPLETED'
+      if (s === 'NOT_FOUND') return json({ detail: 'Request not found' }, 404)
+      if (s === 'ERROR_500') return json({ detail: 'boom' }, 500)
       return json(s === 'COMPLETED' && op.falError ? { status: s, error: 'mesh failed', error_type: 'runtime' } : { status: s })
     }
     if (url === 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1' && op.falSinArchivo) return json({ seed: 7 })
@@ -111,7 +113,7 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchi
     if (url.startsWith('https://v3.fal.media/files/a/')) return new Response(GLB, { status: 200 })
     if (url.startsWith('https://api.higgsfield.ai/estimate/')) return json({ type: 'description', pricing_description: 'Each 1,000 video tokens costs $0.01 at 480p or 720p and $0.02 at 1080p.' })
     if (url.startsWith('https://api.higgsfield.ai/bytedance/')) return json({ request_id: 'hf-1', status: 'queued', status_url: 'https://api.higgsfield.ai/requests/hf-1/status' })
-    if (url === 'https://api.higgsfield.ai/requests/hf-1/status') { const s = hfEstados.shift() ?? 'completed'; return json({ status: s, ...(s === 'completed' ? { video: { url: 'https://cdn.higgsfield.ai/v/hf-1.mp4' } } : {}) }) }
+    if (url === 'https://api.higgsfield.ai/requests/hf-1/status') { const s = hfEstados.shift() ?? 'completed'; if (s === 'not_found') return json({ detail: 'not found' }, 404); return json({ status: s, ...(s === 'completed' ? { video: { url: 'https://cdn.higgsfield.ai/v/hf-1.mp4' } } : {}) }) }
     if (url === 'https://cdn.higgsfield.ai/v/hf-1.mp4') return new Response(Buffer.from('mp4'), { status: 200 })
     if (url.startsWith('https://almacen.test/')) return new Response(PNG, { status: 200 })
     throw new Error(`llamada no esperada: ${url}`)
@@ -520,5 +522,81 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
     expect(ruta).toContain('export const maxDuration = 800')
     const cat = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'estudio', 'catalogo', 'route.ts'), 'utf8')
     expect(cat).toContain('animar: { precio: ANIMAR.precio, maximo: ANIMAR.maximo, comunes: MOVIMIENTOS_COMUNES, biblioteca: BIBLIOTECA_DE_MOVIMIENTOS }')
+  })
+})
+
+describe('pieza colgada en «creando»: vence solo si nadie la está haciendo', () => {
+  const HORA = 60 * 60_000
+  const envejecer = (d: ReturnType<typeof deps>, id: string, ms: number) => {
+    const fila = d.base.t.estudio_piezas.find((p) => p.id === id)!
+    fila.creado_en = new Date(d.ahora() - ms).toISOString()
+    return fila
+  }
+  it('el tope de vida es muy holgado: 1 h la imagen, 3 h el video y el 3D', () => {
+    const t = Date.parse('2026-11-05T20:00:00Z')
+    expect(TOPE_DE_VIDA_MIN).toEqual({ imagen: 60, video: 180, '3d': 180 })
+    expect(vencioLaPieza({ tipo: '3d', creado_en: new Date(t - 179 * 60_000).toISOString() }, t)).toBe(false)
+    expect(vencioLaPieza({ tipo: '3d', creado_en: new Date(t - 181 * 60_000).toISOString() }, t)).toBe(true)
+    expect(vencioLaPieza({ tipo: 'imagen', creado_en: new Date(t - 61 * 60_000).toISOString() }, t)).toBe(true)
+    expect(vencioLaPieza({ tipo: 'video', creado_en: new Date(t - 179 * 60_000).toISOString() }, t)).toBe(false)
+    expect(vencioLaPieza({ tipo: 'video', creado_en: 'no es fecha' }, t)).toBe(false)
+  })
+  it('una pieza que nunca llegó al proveedor vence pasado el tope, con lo ya gastado; antes, no', async () => {
+    const d = deps()
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    const fila = d.base.t.estudio_piezas.find((p) => p.id === r.valor.pieza.id)!
+    // como si la función se hubiera cortado después de la imagen y antes de enviar a fal
+    Object.assign(fila, { estado: 'creando', paso: 'imagen', proveedor_request_id: null, costo_usd: 0.0133, terminado_en: null, archivo_url: null })
+    envejecer(d, fila.id, 2 * HORA)
+    const antes = await avanzar(d, fila.id)
+    expect(antes.ok && antes.valor.estado).toBe('creando')
+    envejecer(d, fila.id, 4 * HORA)
+    const libro = d.base.t.costs.length
+    const v = await avanzar(d, fila.id)
+    expect(v.ok && v.valor.estado).toBe('fallida')
+    expect(v.ok && v.valor.error).toMatch(/^Venció: no llegó al proveedor en 180 min\. No se cobró nada más\.$/)
+    expect(v.ok && Number(v.valor.costo_usd)).toBe(0.0133)
+    expect(d.base.t.costs.length).toBe(libro)
+  })
+  it('si el proveedor ya no reconoce el pedido (404), vence pasado el tope; si dice «en curso», se sigue preguntando', async () => {
+    for (const [estado, vence] of [['NOT_FOUND', true], ['IN_PROGRESS', false], ['ERROR_500', false]] as const) {
+      const d = deps(baseFalsa(), proveedores({ falEstado: [estado, estado, estado] }))
+      const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+      if (!r.ok) throw new Error('no creó')
+      envejecer(d, r.valor.pieza.id, 4 * HORA)
+      const v = await avanzar(d, r.valor.pieza.id)
+      expect([estado, v.ok && v.valor.estado]).toEqual([estado, vence ? 'fallida' : 'creando'])
+      if (vence) expect(v.ok && v.valor.error).toMatch(/^Venció: el proveedor ya no reconoce el pedido en 180 min/)
+    }
+    // 404 pero todavía dentro del tope: no vence (puede ser un tropiezo del proveedor)
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['NOT_FOUND'] }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    envejecer(d, r.valor.pieza.id, HORA)
+    const v = await avanzar(d, r.valor.pieza.id)
+    expect(v.ok && v.valor.estado).toBe('creando')
+  })
+  it('lo mismo en video: 404 pasado el tope vence; «en curso» no', async () => {
+    for (const [estado, vence] of [['not_found', true], ['in_progress', false]] as const) {
+      const d = deps(baseFalsa(), proveedores({ hfEstado: [estado, estado] }))
+      const r = await crear(d, pedido({ tipo: 'video', prompt: 'una ola rompiendo' }))
+      if (!r.ok) throw new Error('no creó')
+      envejecer(d, r.valor.pieza.id, 4 * HORA)
+      const v = await avanzar(d, r.valor.pieza.id)
+      expect([estado, v.ok && v.valor.estado]).toEqual([estado, vence ? 'fallida' : 'creando'])
+    }
+  })
+  it('una pieza ya lista nunca vence, aunque el proveedor ya la haya olvidado', async () => {
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED', 'NOT_FOUND', 'NOT_FOUND'] }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    const a = await avanzar(d, r.valor.pieza.id)
+    expect(a.ok && a.valor.estado).toBe('lista')
+    envejecer(d, r.valor.pieza.id, 30 * HORA)
+    const llamadas = d.p.llamadas.length
+    const b = await avanzar(d, r.valor.pieza.id)
+    expect(d.p.llamadas.length).toBe(llamadas) // ni siquiera se le pregunta al proveedor
+    expect(b.ok && b.valor.estado).toBe('lista')
   })
 })
