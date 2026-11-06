@@ -214,7 +214,7 @@ describe('riesgos', () => {
     expect(g(`alerta:pausa:${C1}:2026-10-30T00:00:00Z`)).toMatchObject({ gravedad: 2, categoria: 'incidente', client_id: C1, cliente: 'Uno' })
     expect(g('alerta:x:2026-10-31T00:00:00Z')?.gravedad).toBe(3); expect(g('alerta:y:2026-10-31T00:00:00Z')?.gravedad).toBe(1)
     expect(r.riesgos.filter((x) => x.titulo === 'cerrada')).toHaveLength(0)
-    expect(g('reconciliacion:dispatch:w:a:1')).toMatchObject({ gravedad: 3, cliente: 'Dos', titulo: 'terminó y no entregó' })
+    expect(g('reconciliacion:dispatch:w:a:1')).toMatchObject({ gravedad: 3, cliente: 'Dos', titulo: 'terminó y no entregó', detalle: 'Empleado: a (termino_y_no_entrego)' })
     expect(g('reconciliacion:r')).toBeUndefined()
     expect(g('despacho:dispatch:w:a:1')).toBeUndefined() // ya contado por su reconciliación
     expect(g('despacho:viejo')?.titulo).toContain('atascado'); expect(g('despacho:reciente')).toBeUndefined()

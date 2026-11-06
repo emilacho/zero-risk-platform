@@ -48,4 +48,15 @@ describe('los títulos de los avisos', () => {
     expect(queHacer).toHaveLength(4)
     for (const l of queHacer) { expect(l).not.toMatch(GRITO); expect(l).not.toMatch(/despacho|corredor|ejecución|agent_invocations/) }
   })
+  it('06-nov · menor de CC7: el encabezado es simple y cada línea abre con el título; la clave técnica va al final, entre paréntesis', async () => {
+    const avisos = Array.from({ length: 9 }, (_, i) => ({ dispatch_key: 'd' + i, clasificacion: 'nunca_arranco', que: CLASES.nunca_arranco.que, agente: 'a', ejecucion: String(i), edad_s: 600, invocacion: null, intentos: 0, ultimo_intento: null }))
+    const fn = new AsyncFunction('$input', '$', '$env', '$json', '$workflow', '$execution', codigoDeNodo('armar'))
+    const [{ json }] = await fn({ first: () => ({ json: { avisos } }) }, () => ({}), {}, {}, {}, {})
+    expect(json.titulo).toBe('Trabajos con problema: 9 nuevo(s)')
+    expect(json.titulo).not.toMatch(/despacho|huérfano/i)
+    const vinetas = json.texto.split('\n').filter((l: string) => l.startsWith('• '))
+    expect(vinetas).toHaveLength(8)
+    for (const l of vinetas) expect(l).toBe('• *' + CLASES.nunca_arranco.que + '* _(nunca_arranco)_')
+    expect(json.texto).toContain('… y 1 más (técnico · agent_dispatch_reconciliations)')
+  })
 })
