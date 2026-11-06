@@ -182,7 +182,10 @@ export function validarLimitesDeMirarAfuera(body: unknown): { ok: true; valor: {
 
 // ronda 69 · + los agentes de diseño de la oficina (`carousel-designer`, `design-visual-storyteller`): no persisten descubrimiento, no pasan por revisión editorial y no emiten brand_section/fidelity ⇒ nada que sólo corra en Vercel.
 // `content-creator` (el texto de la oficina) NO entra: está en la lista de revisión editorial; su vuelta se protege con la recuperación del resultado.
-export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller']
+// 06-nov · DALE (a) de Emilio · + `jefe-marketing`, el redactor del plan: tardó 1.534 s en la corrida r4 de Náufrago y por Vercel la vuelta muere a los 800 s (despacho «running»,
+// 0 intentos de vuelta). No persiste descubrimiento, no pasa por revisión editorial y no emite brand_section/fidelity ⇒ nada que sólo corra en Vercel.
+// Si el plan elige otro redactor (`cadena_config.planeacion.redactor`), ese agente se decide aparte.
+export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'jefe-marketing']
 
 export function resolveCallbackMode(body: RunSdkInput): string | null {
   const ctx = (body.context ?? {}) as Record<string, unknown>
