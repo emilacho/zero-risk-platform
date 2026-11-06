@@ -176,6 +176,22 @@ describe('asumir y descartar', () => {
     expect(r.body).toMatchObject({ ok: true, estado: 'obsoleta' })
     expect(b.filas[0]).toMatchObject({ estado: 'obsoleta', motivo: 'el dueño ya contestó esta pregunta' })
   })
+  it('🟡 de CC7: si el cerebro no guarda el supuesto → 502 y la fila SIGUE pendiente (nunca «asumida» sin ficha)', async () => {
+    const b = baseFalsa([PEND])
+    const r = await rutaPreguntas({ db: b.db, cerebro: cerebroFalso({ falla: true }).cerebro, ahora: AHORA }, { accion: 'asumir', client_id: C, ...WF, pregunta_id: PEND.id, decidido_por: 'Emilio' })
+    expect(r.status).toBe(502)
+    expect(b.filas[0].estado).toBe('pendiente')
+    expect(b.escrituras).toEqual([])
+  })
+  it('🟡 de CC7: descartar sin quién decide → 400 y la fila no cambia', async () => {
+    for (const extra of [{}, { decidido_por: '   ' }]) {
+      const b = baseFalsa([PEND])
+      const r = await rutaPreguntas({ db: b.db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'descartar', client_id: C, ...WF, pregunta_id: PEND.id, motivo: 'ya no aplica', ...extra })
+      expect(r.status).toBe(400)
+      expect(b.filas[0].estado).toBe('pendiente')
+      expect(b.escrituras).toEqual([])
+    }
+  })
   it('un error de la base al cerrar no se lee como «ok» (502)', async () => {
     const r = await rutaPreguntas({ db: baseFalsa([PEND], { errorEn: `${TABLA}:update` }).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'descartar', client_id: C, ...WF, pregunta_id: PEND.id, motivo: 'x', decidido_por: 'E' })
     expect(r.status).toBe(502)
