@@ -10,6 +10,7 @@ import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Co
 import { AL_EDITAR_LA_FIRMA, DESTRABA_CORTO_DE_LA_FIRMA, DESTRABA_DE_LA_FIRMA, PARA_QUE_CORTO_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, sePuedeEditar, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
 import { DESTRABA_CAMPANA_DETENIDA, DESTRABA_CORTO_CAMPANA_DETENIDA, PARA_QUE_CAMPANA_DETENIDA, PARA_QUE_CORTO_CAMPANA_DETENIDA, TITULO_CAMPANA_DETENIDA, leerCampanasDetenidas, type CampanaDetenida } from './decisiones-campanas'
+import { conFicha, type FichaDeDecision } from './decisiones-ficha'
 import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, MAX_INTENTOS_DE_DESPERTAR, DESTRABA_CORTO_DE_LA_PAUSA, PARA_QUE_CORTO_DE_LA_PAUSA, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, loDescartoElDueno, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
 
 export type TipoDecision = 'plan' | 'gran_idea' | 'pieza' | 'revision' | 'pregunta_al_dueno' | 'pregunta_de_finanzas' | 'firma_de_finanzas'
@@ -57,6 +58,9 @@ export interface Decision {
   al_editar?: string
   /** 09-nov · C · la campaña detenida: su motivo (interno), su espera y qué pasa al vencer */
   campana?: CampanaDetenida
+  /** 09-nov · T0 de la ficha única: la misma decisión en el contrato `FichaDeDecision` v1 (al lado de los campos de hoy, que siguen). null = llegó mal armada: lo dice `ficha_problemas` */
+  ficha?: FichaDeDecision | null
+  ficha_problemas?: string[]
 }
 
 const TOPE = 200
@@ -198,7 +202,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     if (c?.practica) { omitidas.clientes_de_practica++; continue }
     if (c?.de_baja) { omitidas.clientes_de_baja++; continue }
     if (d.tipo === 'plan' && d.client_id && esperanElManual.has(d.client_id)) { omitidas.esperan_el_manual++; continue }
-    decisiones.push({ ...d, titulo: tituloParaElDueno(d.titulo), titulo_interno: d.titulo, cliente: c?.nombre ?? null, vencida: !!d.vence && d.vence < hora })
+    decisiones.push(conFicha({ ...d, titulo: tituloParaElDueno(d.titulo), titulo_interno: d.titulo, cliente: c?.nombre ?? null, vencida: !!d.vence && d.vence < hora }))
   }
   decisiones.sort(ordenarPorUrgencia)
   // 04-nov · lo ya contestado y qué hizo el sistema. Tiene sus propias fuentes: si falla, `registro_completo` lo dice y la lista de pendientes no se entera
