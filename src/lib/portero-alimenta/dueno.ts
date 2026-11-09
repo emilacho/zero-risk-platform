@@ -234,9 +234,10 @@ export function supuestosQueRetira(supuestos: Fila[], n: { pregunta_id: string |
   })
 }
 async function supuestosVivos(db: Db, clientId: string): Promise<{ ok: true; filas: Fila[] } | { ok: false; detalle: string }> {
-  const q = await db.from('cerebro_fichas').select('id, sede, observado_en, provenance_tag').eq('client_id', clientId).eq('clase', CLASE_DEL_SUPUESTO_ACEPTADO).is('retirada_en', null).limit(500)
+  // todas, por páginas (CC6 menor 1): sin tope silencioso, una respuesta siempre encuentra su supuesto
+  const q = await leerTodas(() => db.from('cerebro_fichas').select('id, sede, observado_en, provenance_tag').eq('client_id', clientId).eq('clase', CLASE_DEL_SUPUESTO_ACEPTADO).is('retirada_en', null).order('id', { ascending: true }))
   if (q.error) return { ok: false, detalle: `cerebro_fichas: ${q.error.message}` }
-  return { ok: true, filas: lista(q.data) }
+  return { ok: true, filas: q.data }
 }
 async function retirarSupuestos(deps: DepsDeDueno, clientId: string, cuales: Fila[], fichaId: string, ahora: Date): Promise<string[]> {
   const errores: string[] = []

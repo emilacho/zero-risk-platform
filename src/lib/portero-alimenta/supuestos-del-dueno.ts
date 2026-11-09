@@ -105,6 +105,11 @@ export async function asumirSupuesto(deps: DepsDeAsumir, v: { dry_run: boolean; 
   if (ya.error) return err(502, 'lectura_fallida', `cerebro_fichas: ${ya.error.message}`)
   const previa = txt(lista(ya.data)[0]?.id)
   if (previa) return { status: 200, body: { ok: true, repetida: true, ficha_id: previa, pregunta_id: preguntaId, nota: 'este supuesto ya estaba guardado para esa pregunta: no se guardó nada nuevo' } }
+  // CC6 menor 2: si esa pregunta ya tiene respuesta del dueño, su palabra manda y no se asume (aunque una respuesta más nueva la haya reemplazado: sigue respondida · la plataforma lo frena antes; esto cubre la llamada directa)
+  const resp = await deps.db.from('cerebro_fichas').select('id').eq('client_id', clientId).eq('ref', `dueno:pregunta:${preguntaId}`).limit(1)
+  if (resp.error) return err(502, 'lectura_fallida', `cerebro_fichas: ${resp.error.message}`)
+  const respondida = txt(lista(resp.data)[0]?.id)
+  if (respondida) return { status: 409, body: { error: 'ya_respondida', detalle: 'esa pregunta ya tiene respuesta del dueño: su palabra manda y no se asume el supuesto. No se guardó nada', ficha_id: respondida, pregunta_id: preguntaId } }
 
   const alcance = claveDeAlcance(sede ? [sede] : null)
   const propuestoPor = { oficina, agente }

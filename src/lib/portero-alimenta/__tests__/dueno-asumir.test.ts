@@ -89,6 +89,20 @@ describe('asumir · la plataforma manda el supuesto que el dueño eligió', () =
     expect({ fichas: t.cerebro_fichas.length, ingresos: t.cerebro_ingresos.length }).toEqual(antes)
   })
 
+  it('CC6 · si esa pregunta ya tiene respuesta del dueño: 409 ya_respondida y no se guarda el supuesto', async () => {
+    const c = DIEZ_CLIENTES[0]
+    const { t, deps } = montar(c)
+    const r1 = await responder(deps, c)
+    const fichas = t.cerebro_fichas.length
+    const r = await asumir(deps, c)
+    expect(r.status).toBe(409)
+    expect(r.body).toMatchObject({ error: 'ya_respondida', ficha_id: r1.body.ficha_id, pregunta_id: P1 })
+    expect(t.cerebro_fichas.length).toBe(fichas)
+    expect(supuestosEn(t)).toHaveLength(0)
+    // otra pregunta sin respuesta se asume normal
+    expect((await asumir(deps, c, { pregunta_id: P2 })).status).toBe(200)
+  })
+
   it('sin supuesto: 422 claro y no se escribe nada; un supuesto mal formado es 400', async () => {
     const c = DIEZ_CLIENTES[0]
     for (const sin of [{ supuesto: null }, { supuesto: undefined }]) {
@@ -207,6 +221,50 @@ describe('respuesta del dueño a una pregunta de la plataforma', () => {
     Object.assign(s, { retirada_en: null, motivo_retirada: null, reemplazada_por: null }) // como si el retiro hubiera fallado
     const r = await responder(deps, c)
     expect(r.body).toMatchObject({ ok: true, repetida: true, supuestos_retirados: [s.id] })
+    expect(s.retirada_en).toBe(AHORA.toISOString())
+  })
+
+  it('CC6 · si retirar el supuesto falla, la respuesta NO sale 200: 502 con `errores`, y el reintento lo completa', async () => {
+    const c = DIEZ_CLIENTES[0]
+    const { t, deps } = montar(c)
+    await asumir(deps, c)
+    const [s] = supuestosEn(t)
+    // solo el retiro del supuesto falla; lo demás de la base funciona
+    const real = deps.db
+    const fallaElRetiro = { from: (tabla: string) => {
+      const q = real.from(tabla) as unknown as Record<string, unknown>
+      if (tabla !== 'cerebro_fichas') return q
+      return new Proxy(q, { get: (o, k) => {
+        if (k === 'update') return (cambio: Fila) => {
+          if (!String(cambio.motivo_retirada ?? '').startsWith('el dueño respondió')) return (o.update as (x: Fila) => unknown)(cambio)
+          const roto: Record<string, unknown> = { eq: () => roto, is: () => roto, then: (ok: (r: unknown) => unknown) => ok({ data: null, error: { message: 'falla simulada del retiro' } }) }
+          return roto
+        }
+        const x = o[k as string]
+        return typeof x === 'function' ? (x as (...a: unknown[]) => unknown).bind(o) : x
+      } })
+    } } as unknown as DepsDeDueno['db']
+    const r = await responder({ ...deps, db: fallaElRetiro }, c)
+    expect(r.status).toBe(502)
+    expect(r.body.ok).toBe(false)
+    expect((r.body.errores as string[]).join(' ')).toContain('retiro del supuesto')
+    expect(s.retirada_en).toBeNull() // sigue vivo: por eso no puede salir 200
+    // el reintento con la base sana completa el retiro
+    const otra = await responder(deps, c)
+    expect(otra.body).toMatchObject({ ok: true, repetida: true, supuestos_retirados: [s.id] })
+    expect(s.retirada_en).toBe(AHORA.toISOString())
+  })
+
+  it('CC6 · con más supuestos vivos que una página de la base (1.100 > 1.000), la respuesta igual retira el suyo (sin recorte silencioso)', async () => {
+    const c = DIEZ_CLIENTES[0]
+    const { t, deps } = montar(c, true, { topeDeFilas: 1000 })
+    for (let i = 0; i < 1100; i++) (t.cerebro_fichas as Fila[]).push({ id: `00000000-0000-0000-${String(i).padStart(4, '0')}-000000000000`, client_id: c.id, clase: CLASE_DEL_SUPUESTO_ACEPTADO, ref: `supuesto:otro-${i}`, sede: null, retirada_en: null, descartada: false, observado_en: ANTES, provenance_tag: { datos: { tema: `otro tema ${i}`, pregunta_id: `otra-${i}`, asumida_en: ANTES } } })
+    await asumir(deps, c)
+    const s = supuestosEn(t).find((f) => f.ref === refDelSupuesto(P1))!
+    expect(supuestosEn(t).map((f) => String(f.id)).sort().at(-1)).toBe(s.id) // ordenado por id queda al final, más allá de cualquier primera página
+    const r = await responder(deps, c)
+    expect(r.status).toBe(200)
+    expect(r.body.supuestos_retirados).toEqual([s.id])
     expect(s.retirada_en).toBe(AHORA.toISOString())
   })
 
