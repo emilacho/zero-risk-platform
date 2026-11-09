@@ -111,7 +111,7 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
     return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: true, alerta: r.alerta } }
   }
   if (campana.estado === 'abierta') await al.actualizarCampana(campana.id, { estado: 'estrategia' })
-  const tarea = tareaDeEstrategia({ ctx, formatosPermitidos: formatosPermitidos(formatos), version, diasDeCampana: medidaDeCampana(campana).dias, correccion: fichas ?? undefined })
+  const tarea = tareaDeEstrategia({ ctx, formatosPermitidos: formatosPermitidos(formatos), version, diasDeCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin, correccion: fichas ?? undefined })
   return {
     status: 200,
     cuerpo: {
@@ -139,7 +139,7 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
   }
   const version = ((await al.ultimaEstrategia(campana.id))?.version ?? 0) + 1
   const { estrategia: objetoAjustado, aviso: avisoDePilares } = normalizarPilares(objeto)
-  const hs = [...(avisoDePilares ? [avisoDePilares] : []), ...validarEstrategia(objetoAjustado, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias })]
+  const hs = [...(avisoDePilares ? [avisoDePilares] : []), ...validarEstrategia(objetoAjustado, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio })]
   await al.guardarValidaciones(campana.id, 'estrategia', version, null, esCorreccion ? 2 : 1, hs, campana.seco)
   const plan = planDeCorreccion(hs)
   if (plan.necesita && !esCorreccion) return { status: 200, cuerpo: { correccion: true, modo: 'tanda', fichas: plan.fichas } }
@@ -344,7 +344,7 @@ export async function validarSinEscribir(al: Almacen, cuerpo: Record<string, unk
   const { campana, ctx, formatos, lexico } = c.p
   if (cuerpo.tipo === 'estrategia') {
     const ajustada = normalizarPilares(cuerpo.estrategia)
-    const hs = [...(ajustada.aviso ? [ajustada.aviso] : []), ...validarEstrategia(ajustada.estrategia, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias })]
+    const hs = [...(ajustada.aviso ? [ajustada.aviso] : []), ...validarEstrategia(ajustada.estrategia, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio })]
     return { status: 200, cuerpo: { hallazgos: hs, bloquea: hs.some((h) => h.severidad === 'bloquea'), forma_valida: problemasDeEsquema(cuerpo.estrategia).length === 0 } }
   }
   if (cuerpo.tipo === 'calendario') {

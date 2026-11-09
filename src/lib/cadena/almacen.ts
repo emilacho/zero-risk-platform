@@ -17,7 +17,7 @@ export interface Campana {
   client_id: string
   plan_id: string
   fecha_inicio: string
-  fecha_inicio_origen: 'regla' | 'alta' | 'emilio'
+  fecha_inicio_origen: 'regla' | 'alta' | 'emilio' | 'plan'
   fecha_fin: string
   /** semanas por tanda de ESTA campaña; sin valor vale SEMANAS_DE_TANDA */
   semanas_de_tanda?: number | null

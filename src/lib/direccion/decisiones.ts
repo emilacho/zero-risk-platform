@@ -9,6 +9,7 @@ import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
 import { AL_EDITAR_LA_FIRMA, DESTRABA_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, sePuedeEditar, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
+import { DESTRABA_CAMPANA_DETENIDA, PARA_QUE_CAMPANA_DETENIDA, TITULO_CAMPANA_DETENIDA, leerCampanasDetenidas, type CampanaDetenida } from './decisiones-campanas'
 import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, MAX_INTENTOS_DE_DESPERTAR, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, loDescartoElDueno, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
 
 export type TipoDecision = 'plan' | 'gran_idea' | 'pieza' | 'revision' | 'pregunta_al_dueno' | 'pregunta_de_finanzas' | 'firma_de_finanzas'
@@ -49,6 +50,8 @@ export interface Decision {
   criticos?: string[]
   /** qué pasa si cambia una cifra. Solo viene si se puede editar */
   al_editar?: string
+  /** 09-nov · C · la campaña detenida: su motivo (interno), su espera y qué pasa al vencer */
+  campana?: CampanaDetenida
 }
 
 const TOPE = 200
@@ -172,6 +175,8 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     })
   }
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA })
+  // 09-nov · C · las campañas que la cadena dejó esperando a una persona. Vencen con su espera: arriba si la espera vence pronto
+  for (const { fila: c, campana } of await leerCampanasDetenidas(db, fuentes)) crudas.push({ id: String(c.id), tipo: 'plan', subtipo: 'campana_necesita_humano', fuente: 'cadena_campanas', client_id: texto(c.client_id), titulo: TITULO_CAMPANA_DETENIDA, desde: texto(c.desde) ?? texto(c.actualizada_en), vence: campana.espera?.vence_en ?? null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: 'avisar no gasta; reabrir tampoco, y lo que sigue gasta con sus topes', permite: [], detiene: true, para_que: PARA_QUE_CAMPANA_DETENIDA, destraba: DESTRABA_CAMPANA_DETENIDA, campana })
   for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, pregunta_de: FINANCIERA, ...loQueSeFirma(t) })
 
   const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas, esperan_el_manual: 0, planes_ya_superados: sueltas.length - noVolvieronVigentes.length }
