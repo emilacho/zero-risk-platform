@@ -122,6 +122,10 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
     expect(f.uso).toEqual({ largo: 'Para repartir los anuncios entre ciudades.' })
     expect(f).not.toHaveProperty('desbloquea')
   })
+  it('🔴 CC7 · la ficha dice de qué cuenta es: el client_id y el nombre del cliente', () => {
+    expect(fichaDe(dec({})).cuenta).toEqual({ client_id: C1, nombre: 'Uno' })
+    expect(fichaDe(dec({ client_id: 'otro', cliente: 'Otro' })).cuenta).toEqual({ client_id: 'otro', nombre: 'Otro' })
+  })
   it('🔴 cuenta y origen: de la agencia (sin cliente) va null; el origen es la tabla y la fila', () => {
     const f = fichaDe(dec({ client_id: null, cliente: null }))
     expect(f.cuenta).toBeNull(); expect(f.origen).toEqual({ fuente: 'dueno_preguntas', ref: 'd1' })
@@ -143,6 +147,12 @@ describe('T0 · una ficha que rompe el contrato se rechaza entera', () => {
   it('🔴 una pantalla fuera de la lista', () => expect(problemasDeLaFicha({ ...fichaDe(VARIANTES.pieza), donde_se_hace: { pantalla: 'cualquiera' as never } })).toContain('pantalla desconocida: cualquiera'))
   it('🔴 vence y «sin fecha límite» a la vez', () => expect(problemasDeLaFicha({ ...buena(), espera: { desde: null, vence: '2026-11-20T00:00:00Z', sin_limite: true } })).toContain('vence y a la vez «sin fecha límite»'))
   it('🔴 «detiene» sin decir qué', () => expect(problemasDeLaFicha({ ...buena(), detiene: { que: ' ' } })).toContain('«detiene» sin decir qué'))
+  it('🔴 CC7 · una versión desconocida', () => expect(problemasDeLaFicha({ ...buena(), version: 2 as never })).toContain('versión desconocida'))
+  it('🔴 CC7 · un departamento sin nombre', () => expect(problemasDeLaFicha({ ...buena(), departamento: { oficina: 'x', nombre: '  ' } })).toContain('sin departamento'))
+  it('🔴 CC7 · un «uso» o «desbloquea» de solo espacios', () => {
+    expect(problemasDeLaFicha({ ...buena(), uso: { largo: '   ' } })).toContain('«uso» sin texto')
+    expect(problemasDeLaFicha({ ...buena(), desbloquea: { largo: 'ok', corto: ' ' } })).toContain('«desbloquea» sin texto')
+  })
   it('🔴 sin «qué se decide»', () => expect(problemasDeLaFicha({ ...buena(), que_se_decide: '  ' })).toContain('sin «qué se decide»'))
   it('🔴 conFicha: si no vale, viaja null con sus problemas, y los campos de hoy siguen enteros', () => {
     const mala = dec({ titulo: '' })
@@ -168,6 +178,7 @@ describe('T0 · la lista entera trae su ficha, al lado de lo de hoy', () => {
       expect(d.ficha, `${d.id} ${JSON.stringify(d.ficha_problemas)}`).not.toBeNull()
       valida(d.ficha!)
       expect(d.ficha!.id).toBe(d.id); expect(d.ficha!.que_se_decide).toBe(d.titulo)
+      expect(d.ficha!.cuenta, d.id).toEqual({ client_id: C1, nombre: 'Uno' }) // CC7: de qué cliente es
       expect(d).toHaveProperty('tipo'); expect(d).toHaveProperty('decidir') // lo de hoy sigue
     }
     const p2 = r.decisiones.find((d) => d.id === 'p2')!
