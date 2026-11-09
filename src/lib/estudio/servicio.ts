@@ -272,7 +272,7 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   if (e.e.estado === 'en_cola' || e.e.estado === 'en_curso') return { ok: true, valor: pieza }
   const yaGastado = Number(pieza.costo_usd) || 0
   const esAnimacion = pieza.modelo === ANIMAR.id
-  // un fallo anota 0; el motivo de una animación se dice por su causa real (demasiado detalle, no es figura humana) o en simple si no se reconoce
+  // un fallo anota 0; el motivo de una animación se dice por su causa real (demasiadas caras, no es figura humana) o en simple si no se reconoce
   const motivo = (t: string) => (esAnimacion ? motivoDeAnimacion(t) : t)
   if (e.e.estado === 'fallido') return { ok: true, valor: (await fallar(d, id, motivo(`fal · ${e.e.error}`), yaGastado)) ?? pieza }
   const res = await resultadoDeFal(d.fetch, d.llaves.fal, responseUrl)

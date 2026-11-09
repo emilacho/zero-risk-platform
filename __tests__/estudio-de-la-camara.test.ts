@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { archivoDe3D, armarAnimacion, AVISO_SIN_CAUSA, demasiadoDetalle, motivoDeAnimacion, noEsHumanoide, textoDelProveedor, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
+import { archivoDe3D, armarAnimacion, AVISO_SIN_CAUSA, demasiadoDetalle, entradaDe3D, LIMITE_DE_CARAS_DEL_ESQUELETO, MODELOS_3D, TOPE_DE_CARAS_3D, motivoDeAnimacion, noEsHumanoide, textoDelProveedor, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from '@/lib/estudio/movimientos'
 import { esDeLaCola } from '@/lib/estudio/fal'
 import { avanzar, TOPE_DE_VIDA_MIN, vencioLaPieza, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
@@ -245,7 +245,7 @@ describe('3D', () => {
     expect(JSON.parse(String(img.init!.body)).prompt).toMatch(/Un solo objeto/)
     const envio = d.p.llamadas.find((l) => l.url === 'https://queue.fal.run/tripo3d/h3.1/image-to-3d')!
     expect((envio.init!.headers as Record<string, string>)['X-Fal-No-Retry']).toBe('1')
-    expect(JSON.parse(String(envio.init!.body))).toMatchObject({ image_url: p.foto_partida_url, texture_quality: 'standard' })
+    expect(JSON.parse(String(envio.init!.body))).toMatchObject({ image_url: p.foto_partida_url, texture_quality: 'standard', face_limit: 300000 })
     expect(d.base.t.costs.map((c) => c.service)).toEqual(['estudio:openai'])
     // la pantalla pregunta: primero sigue en curso
     const a1 = await avanzar(d, p.id)
@@ -458,7 +458,7 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
     expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(1)
     expect(d.base.t.estudio_piezas.filter((x) => x.modelo === 'meshy-animar')).toHaveLength(1)
   })
-  it('demasiados triángulos (el error real de producción, 06-nov): se dice «demasiado detalle» con las cifras, no «no es figura humana», y no se cobra — al enviar o al terminar', async () => {
+  it('demasiados triángulos (el error real de producción, 06-nov): se dice «demasiadas caras: créalo de nuevo» con las cifras, no «no es figura humana», y no se cobra — al enviar o al terminar', async () => {
     for (const caso of ['envio_demasiado_detalle', 'demasiado_detalle'] as const) {
       const { d, modelo } = await modeloListo({ animar: caso })
       const antes = librosDeFal(d)
@@ -466,7 +466,7 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
       if (!r.ok) throw new Error(r.error)
       const fin = caso === 'demasiado_detalle' ? await avanzar(d, r.valor.pieza.id) : { ok: true as const, valor: r.valor.pieza }
       expect(fin.ok && fin.valor.estado).toBe('fallida')
-      expect(fin.ok && fin.valor.error).toMatch(/^Este modelo tiene demasiado detalle para ponerle esqueleto \(1\.456\.114 triángulos; el proveedor acepta hasta 380\.000\), así que no se puede animar tal cual\. No se registró ningún cobro\./)
+      expect(fin.ok && fin.valor.error).toMatch(/^Este modelo tiene demasiadas caras para animarlo \(1\.456\.114 triángulos; el proveedor acepta hasta 380\.000\): créalo de nuevo\. Los modelos nuevos ya salen listos para animar\. No se registró ningún cobro\./)
       expect(fin.ok && fin.valor.error).not.toMatch(/figura humana/)
       expect(fin.ok && Number(fin.valor.costo_usd)).toBe(0)
       expect(librosDeFal(d)).toBe(antes)
@@ -483,7 +483,7 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
     // así quedó guardado el 06-nov en la pieza cff64986 (cortado al final)
     const cortado = 'fal 422 · {"detail":[{"loc":["body"],"msg":"The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API (POST /openapi/v1/remesh) with a target_polycount of 300000 or less (150000 or less with topology quad) befo'
     expect(textoDelProveedor(cortado)).toBe('fal 422 · The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API (POST /openapi/v1/remesh) with a target_polycount of 300000 or less (150000 or less with topology quad) befo')
-    expect(motivoDeAnimacion(cortado)).toMatch(/^Este modelo tiene demasiado detalle para ponerle esqueleto \(1\.456\.114 triángulos; el proveedor acepta hasta 380\.000\).*\(fal 422 · The input model has/)
+    expect(motivoDeAnimacion(cortado)).toMatch(/^Este modelo tiene demasiadas caras para animarlo \(1\.456\.114 triángulos; el proveedor acepta hasta 380\.000\): créalo de nuevo\..*\(fal 422 · The input model has/)
     expect(textoDelProveedor('fal 422 · {"detail":"Auto rigging failed"}')).toBe('fal 422 · Auto rigging failed')
     expect(textoDelProveedor('fal · timeout')).toBe('fal · timeout')
     expect(textoDelProveedor('fal 500 · {"error":"x"}')).toBe('fal 500 · {"error":"x"}')
@@ -491,10 +491,12 @@ describe('animar un modelo 3D (GO 06-nov)', () => {
   it('el motivo de un fallo al animar: cifras exactas, respaldo sin cifras, humano, y causa desconocida', () => {
     expect(demasiadoDetalle(ERROR_DE_TRIANGULOS)).toEqual({ tiene: 1456114, tope: 380000 })
     expect(demasiadoDetalle('timeout')).toBeNull()
-    expect(motivoDeAnimacion('exceeds the polycount')).toMatch(/^Este modelo tiene demasiado detalle para ponerle esqueleto, así que no se puede animar tal cual\. No se registró ningún cobro\. \(exceeds the polycount\)$/)
+    expect(motivoDeAnimacion('exceeds the polycount')).toBe('Este modelo tiene demasiadas caras para animarlo: créalo de nuevo. Los modelos nuevos ya salen listos para animar. No se registró ningún cobro. (exceeds the polycount)')
     expect(motivoDeAnimacion('Model is not a humanoid')).toMatch(/^Este modelo no parece una figura humana/)
-    // si el texto nombra las dos cosas, manda el detalle: es lo que se puede arreglar
-    expect(motivoDeAnimacion('Rigging requires a humanoid; 500,000 triangles which exceeds the 380,000 triangle limit')).toMatch(/^Este modelo tiene demasiado detalle/)
+    // si el texto nombra las dos cosas, mandan las caras: es lo que se puede arreglar
+    expect(motivoDeAnimacion('Rigging requires a humanoid; 500,000 triangles which exceeds the 380,000 triangle limit')).toMatch(/^Este modelo tiene demasiadas caras para animarlo/)
+    // la orden de Emilio: nunca «no humanoide» cuando la causa son las caras
+    expect(motivoDeAnimacion(ERROR_DE_TRIANGULOS)).not.toMatch(/humanoide|figura humana/)
     expect(motivoDeAnimacion('timeout')).toBe(`${AVISO_SIN_CAUSA} (timeout)`)
     expect(AVISO_SIN_CAUSA).toBe('No se pudo animar este modelo; el proveedor no dio una causa que reconozcamos. No se registró ningún cobro.')
   })
@@ -654,5 +656,30 @@ describe('pieza colgada en «creando»: vence solo si nadie la está haciendo', 
     const b = await avanzar(d, r.valor.pieza.id)
     expect(d.p.llamadas.length).toBe(llamadas) // ni siquiera se le pregunta al proveedor
     expect(b.ok && b.valor.estado).toBe('lista')
+  })
+})
+
+describe('GO 09-nov · todo modelo 3D nuevo sale listo para animar (tope de caras)', () => {
+  it('el tope queda bajo el límite del esqueleto', () => {
+    expect(TOPE_DE_CARAS_3D).toBe(300000)
+    expect(TOPE_DE_CARAS_3D).toBeLessThan(LIMITE_DE_CARAS_DEL_ESQUELETO)
+  })
+  it('cada modelo del catálogo manda el tope con el nombre de campo de su ficha, en las dos calidades', () => {
+    const esperado: Record<string, string> = { 'tripo-h3.1': 'face_limit', 'hunyuan-3d-v3.1-pro': 'face_count', 'meshy-6': 'target_polycount' }
+    expect(MODELOS_3D.map((m) => m.id).sort()).toEqual(Object.keys(esperado).sort())
+    for (const m of MODELOS_3D) for (const calidad of ['normal', 'alta'] as const) {
+      const e = entradaDe3D(m, calidad, 'https://x/foto.png')
+      expect(e[esperado[m.id]]).toBe(TOPE_DE_CARAS_3D)
+      expect(e[m.campoDeImagen]).toBe('https://x/foto.png')
+    }
+  })
+  it('las opciones de calidad no pisan el tope ni se pierden', () => {
+    const hunyuan = MODELOS_3D.find((m) => m.id === 'hunyuan-3d-v3.1-pro')!
+    expect(entradaDe3D(hunyuan, 'alta', 'u')).toEqual({ input_image_url: 'u', enable_pbr: true, face_count: 300000 })
+    const tripo = MODELOS_3D.find((m) => m.id === 'tripo-h3.1')!
+    expect(entradaDe3D(tripo, 'alta', 'u')).toEqual({ image_url: 'u', texture: true, texture_quality: 'detailed', face_limit: 300000 })
+    // aunque una calidad trajera su propio número de caras, manda el tope
+    const conCaras = { ...tripo, opciones: { normal: { face_limit: 1_000_000 }, alta: { face_limit: 1_000_000 } } }
+    expect(entradaDe3D(conCaras, 'normal', 'u').face_limit).toBe(TOPE_DE_CARAS_3D)
   })
 })
