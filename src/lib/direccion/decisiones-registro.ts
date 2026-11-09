@@ -7,6 +7,7 @@
  */
 import { MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, SILENCIO_TRAS_RESPONDER_MIN } from '../finanzas/conversa/pausa'
 import { temaDe } from '../finanzas/conversa/buzon'
+import { PLAN_DE_MARKETING } from '../nombres-del-sistema'
 import { esObjeto, leer, sinSecretos, texto, type Db, type Fila, type Fuente } from './comun'
 
 export type AccionDeDecision = 'aceptar' | 'editar' | 'responder' | 'asumir' | 'descartar'
@@ -33,16 +34,16 @@ export const TOPE_DEL_REGISTRO = 50
 const TOPE_DE_ARTEFACTOS = TOPE_DEL_REGISTRO * 4
 const TOPE_DE_CITA = 300
 
-export const PARA_QUE_DE_LA_PAUSA = 'La oficina financiera lo necesita para pasarle sus cuentas al redactor del plan de 90 días.'
-/** 09-nov · «Uso» y «Desbloquea» de la pausa en una o dos palabras, escritos por la oficina junto al largo (sea 1 o varias las que faltan) */
-export const PARA_QUE_CORTO_DE_LA_PAUSA = 'Cuentas del plan'
-export const DESTRABA_CORTO_DE_LA_PAUSA = 'El plan'
+export const PARA_QUE_DE_LA_PAUSA = `La oficina financiera lo necesita para pasarle sus cuentas al redactor del ${PLAN_DE_MARKETING}.`
+/** 09-nov · «Uso» y «Desbloquea» de la pausa en dos o tres palabras, escritos por la oficina junto al largo (sea 1 o varias las que faltan). 10-nov · el plan con su nombre oficial */
+export const PARA_QUE_CORTO_DE_LA_PAUSA = `Cuentas del ${PLAN_DE_MARKETING}`
+export const DESTRABA_CORTO_DE_LA_PAUSA = `Sigue el ${PLAN_DE_MARKETING}`
 export const TITULO_NO_VOLVIO = 'Contestaste, pero el plan no volvió a arrancar'
 /** solo con preguntas por contestar: sin ellas el plan puede estar en el margen o esperando otra cosa, y eso no se promete */
 export function destrabaDeLaPausa(faltan: number): string {
   return faltan === 1
-    ? 'El plan de 90 días sigue apenas contestes.'
-    : `El plan de 90 días sigue cuando contestes las ${faltan} preguntas, o unos ${SILENCIO_TRAS_RESPONDER_MIN} minutos después de tu última respuesta.`
+    ? `El ${PLAN_DE_MARKETING} sigue apenas contestes.`
+    : `El ${PLAN_DE_MARKETING} sigue cuando contestes las ${faltan} preguntas, o unos ${SILENCIO_TRAS_RESPONDER_MIN} minutos después de tu última respuesta.`
 }
 
 const OFICINAS: Record<string, string> = { financiera: 'La oficina financiera', finanzas: 'La oficina financiera', planeacion: 'La oficina de planeación', creativa: 'La oficina creativa', jefatura: 'La jefatura', marketing: 'El departamento de marketing', cerebro: 'El cerebro del cliente', portero: 'El cerebro del cliente', alta: 'La oficina de altas', onboarding: 'La oficina de altas' }

@@ -7,6 +7,8 @@ export const DEPARTAMENTOS = {
   marketing: { oficina: 'marketing', nombre: 'Departamento de Marketing', corto: 'Marketing' },
   finanzas: { oficina: 'finanzas', nombre: 'Departamento de Finanzas', corto: 'Finanzas' },
 } as const
+/** 10-nov · el plan se llama «Plan de Marketing» (regla de nombres de Emilio 09-nov; Lenovo en `RESPUESTA-LENOVO-a-CC4-CC1-CC6-310-aprobado-con-ajustes.md`). Nunca «plan de 90 días» en lo que lee Emilio */
+export const PLAN_DE_MARKETING = 'Plan de Marketing'
 export type ClaveDeDepartamento = keyof typeof DEPARTAMENTOS
 export type Departamento = (typeof DEPARTAMENTOS)[ClaveDeDepartamento]
 
