@@ -64,7 +64,7 @@ export interface FichaDeDecision {
  */
 const POR_FUENTE: Record<string, ClaveDeDepartamento> = {
   hitl_queue: 'marketing', plan_aprobaciones: 'marketing', cadena_campanas: 'marketing',
-  finanzas_tableros: 'finanzas', finanzas_preguntas: 'finanzas', esperas_del_dueno: 'finanzas',
+  // lo de finanzas (firma, pausa, «no volvió», canal viejo) ya lo resuelve el tipo, arriba: aquí no hace falta (CC7, sabotaje 4)
 }
 const SIN_DEPARTAMENTO_OFICIAL: Record<string, string> = { jefatura: 'Jefatura', cerebro: 'El cerebro del cliente', portero: 'El cerebro del cliente', alta: 'Altas', onboarding: 'Altas' }
 const clave = (o: string) => o.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/^oficina[\s_-]+(de[\s_-]+)?/, '').trim()

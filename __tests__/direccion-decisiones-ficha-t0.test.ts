@@ -133,6 +133,18 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
     expect(fichaDe(dec({ pregunta_de: { oficina: 'jefatura', agente: null } })).departamento).toEqual({ oficina: 'jefatura', nombre: 'Jefatura' })
     expect(fichaDe(dec({})).departamento).toEqual({ oficina: 'sin_oficina', nombre: 'Sin departamento' })
   })
+  it('🔴 CC7 · una pregunta de finanzas conserva qué empleado pregunta', () => {
+    expect(fichaDe(dec({ tipo: 'pregunta_de_finanzas', fuente: 'esperas_del_dueno', permite: [], pregunta_de: { oficina: 'financiera', agente: 'jefe-financiero' } })).departamento).toEqual({ ...DEPARTAMENTOS.finanzas, agente: 'jefe-financiero' })
+  })
+  it('🔴 CC7 · una oficina de nombre compuesto se ubica por su primera palabra', () => {
+    expect(fichaDe(dec({ pregunta_de: { oficina: 'planeacion-90', agente: null } })).departamento).toEqual({ ...DEPARTAMENTOS.marketing })
+    expect(fichaDe(dec({ pregunta_de: { oficina: 'Oficina de marketing digital', agente: null } })).departamento).toEqual({ ...DEPARTAMENTOS.marketing })
+  })
+  it('🔴 CC7 · las oficinas sin departamento oficial conservan su nombre de hoy, no uno armado', () => {
+    expect(fichaDe(dec({ pregunta_de: { oficina: 'cerebro', agente: null } })).departamento).toEqual({ oficina: 'cerebro', nombre: 'El cerebro del cliente' })
+    expect(fichaDe(dec({ pregunta_de: { oficina: 'alta', agente: null } })).departamento).toEqual({ oficina: 'alta', nombre: 'Altas' })
+    expect(fichaDe(dec({ pregunta_de: { oficina: 'onboarding-web', agente: null } })).departamento.nombre).toBe('Altas')
+  })
   it('🔴 sin corto se manda solo el largo; nunca un corto sin su largo', () => {
     const f = fichaDe(dec({ para_que: 'Para repartir los anuncios entre ciudades.', destraba_corto: 'Huérfano' }))
     expect(f.uso).toEqual({ largo: 'Para repartir los anuncios entre ciudades.' })
