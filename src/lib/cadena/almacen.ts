@@ -194,6 +194,8 @@ export interface Almacen {
   campanaViva(clientId: string, seco: boolean): Promise<Campana | null>
   insertarCampana(c: Omit<Campana, 'id'>): Promise<Campana>
   actualizarCampana(id: string, patch: Partial<Campana>): Promise<Campana>
+  /** escritura CONDICIONAL (09-nov · revalidar, caso 2 de CC7): solo si la campaña SIGUE en `estado`; si otro la movió antes, null y no escribe */
+  actualizarCampanaSi(id: string, estado: EstadoCampana, patch: Partial<Campana>): Promise<Campana | null>
   campanasEnEspera(): Promise<Campana[]>
   campanasActivas(): Promise<Campana[]>
   /** campañas que todavía arman su estrategia o su calendario (`abierta` · `estrategia` · `calendario`): si una llamada falló quedan ahí y nadie las mira sin el barrido del vigía */
@@ -209,6 +211,8 @@ export interface Almacen {
   briefsVencidos(ahora: string): Promise<BriefCreativoGuardado[]>
   insertarBriefCreativo(b: BriefCreativoGuardado): Promise<void>
   actualizarBriefCreativo(campanaId: string, version: number, patch: Partial<BriefCreativoGuardado>): Promise<void>
+  /** escritura CONDICIONAL (09-nov · revalidar): solo si la versión SIGUE en `estado`; true = escribió */
+  actualizarBriefCreativoSi(campanaId: string, version: number, estado: BriefCreativoGuardado['estado'], patch: Partial<BriefCreativoGuardado>): Promise<boolean>
   ultimoConcepto(campanaId: string): Promise<ConceptoGuardado | null>
   insertarConcepto(c: ConceptoGuardado): Promise<void>
   actualizarConcepto(campanaId: string, version: number, patch: Partial<ConceptoGuardado>): Promise<void>

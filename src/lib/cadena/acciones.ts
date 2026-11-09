@@ -15,7 +15,7 @@ import type { Manejador } from './puerta-http'
 export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'validar' | 'filas' | 'fechas' | 'esperas' | 'brief' | 'concepto' | 'hojas', Record<string, Manejador>> = {
   // 31-oct · nuevo orden (T3): las mesas de brief y de concepto y la hoja por código; solo con la palanca `nuevo_orden` encendida para el cliente
   // 09-nov · revalidar lo ya escrito (opción B firmada por Emilio): un brief devuelto EN FALSO por el verificador vuelve a pasar el verificador de hoy · US$ 0
-  brief: { abrir: briefAbrir, entregar: briefEntregar, revalidar: (al, c) => briefRevalidar(al, c) },
+  brief: { abrir: briefAbrir, entregar: briefEntregar, revalidar: briefRevalidar },
   concepto: { abrir: conceptoAbrir, entregar: conceptoEntregar, decidir: conceptoDecidir },
   hojas: { escribir: hojaEscribir },
   campanas: {

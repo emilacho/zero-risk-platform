@@ -110,6 +110,12 @@ export class AlmacenMemoria implements Almacen {
     Object.assign(c, patch)
     return structuredClone(c)
   }
+  async actualizarCampanaSi(id: string, estado: Campana['estado'], patch: Partial<Campana>) {
+    const c = this.campanas.find((x) => x.id === id)
+    if (!c || c.estado !== estado) return null
+    Object.assign(c, patch)
+    return structuredClone(c)
+  }
   async campanasEnEspera() { return structuredClone(this.campanas.filter((c) => c.estado === 'necesita_humano' || c.estado === 'pausada')) }
   async campanasEnArmado() { return structuredClone(this.campanas.filter((c) => c.estado === 'abierta' || c.estado === 'estrategia' || c.estado === 'calendario')) }
   async campanasActivas() { return structuredClone(this.campanas.filter((c) => c.estado === 'activa')) }
@@ -127,6 +133,12 @@ export class AlmacenMemoria implements Almacen {
     const b = this.briefsCreativos.find((x) => x.campana_id === campanaId && x.version === version)
     if (!b) throw new Error('no existe el brief creativo')
     Object.assign(b, patch)
+  }
+  async actualizarBriefCreativoSi(campanaId: string, version: number, estado: BriefCreativoGuardado['estado'], patch: Partial<BriefCreativoGuardado>) {
+    const b = this.briefsCreativos.find((x) => x.campana_id === campanaId && x.version === version)
+    if (!b || b.estado !== estado) return false
+    Object.assign(b, patch)
+    return true
   }
   async ultimoConcepto(campanaId: string) { return structuredClone(this.conceptos.filter((c) => c.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null) }
   async insertarConcepto(c: ConceptoGuardado) {

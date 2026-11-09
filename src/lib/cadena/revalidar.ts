@@ -28,7 +28,7 @@ const bloqueosDe = (leido: Record<string, unknown> | null): string[] => {
   return Array.isArray(b) ? b.map(String) : []
 }
 
-export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
+export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   const id = cadena(cuerpo.campana_id)
   if (!id) return err(400, 'E-CAMPOS', 'falta campana_id')
   const c = await al.campana(id)
@@ -46,6 +46,8 @@ export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown
   if (!MOTIVO_DE_BRIEF_DEVUELTO.test(c.estado_motivo ?? '')) return err(409, 'E-OTRO-MOTIVO', `la campaña no se detuvo por un brief devuelto por el verificador (${String(c.estado_motivo ?? 'sin motivo').slice(0, 120)}): revalidar el brief no la saca de ahí`)
   if (brief.estado !== 'devuelta') return err(409, 'E-NO-DEVUELTA', `la última versión del brief está ${brief.estado}: solo se revalida una devuelta`)
   if (brief.motivo === MOTIVO_CAMBIOS_DE_EMILIO) return err(409, 'E-CAMBIOS-DE-EMILIO', 'la devolvió Emilio con cambios: no es un falso rojo, no se toca')
+  // caso 1 de CC7: la mesa de la gran idea (la DIRECCIÓN) también deja el brief `devuelta` (recibirConcepto · `brief_devuelto`, motivo null); su juicio no se anula
+  if ((await al.conceptosDe(c.id)).some((k) => k.estado === 'brief_devuelto' && (k.brief_devuelto ?? '').trim() === (brief.devolucion_texto ?? '').trim())) return err(409, 'E-LA-DEVOLVIO-LA-DIRECCION', 'la devolvió la mesa de la gran idea: es un juicio de la dirección, no un falso rojo del verificador')
   if (!bloqueosDe(brief.leido).length) return err(409, 'E-NO-LA-DEVOLVIO-EL-VERIFICADOR', 'la versión no tiene bloqueos del verificador guardados (la devolvió una persona o una mesa): no se revalida')
   if (!brief.texto_md) return err(409, 'E-SIN-TEXTO', 'la versión devuelta no tiene texto guardado')
   const estr = await al.ultimaEstrategia(c.id)
@@ -57,18 +59,21 @@ export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown
   const leido = leerBriefCreativo(brief.texto_md, { planTexto: ctx.planTexto ?? '', prohibidas: ctx.forbiddenWords ?? [], duras: ctx.palabrasDuras, redes: (estr?.contenido.canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red) })
   const bloquea = hallazgosDelBrief(leido).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
   const antes = { bloqueos: bloqueosDe(brief.leido) }
+  // caso 4 de CC7: la campaña no guarda dónde estaba antes de `necesita_humano`; se usa la misma regla con que la cadena retoma sola (pasos.ts · retomar): tanda 1 → calendario
   const tanda = await tandaQueEspera(al, c.id)
   const vuelveA = tanda === 1 ? 'calendario' as const : 'activa' as const
   const vivas: EsperaFila[] = (await al.esperasVivas()).filter((e) => e.campana_id === c.id && e.objeto_tipo === 'necesita_humano')
+  // caso 3 de CC7: constancia de quién, cuándo y por qué se había devuelto (en el motivo de la campaña)
+  const constancia = `revalidado por ${String(cuerpo.workflow_id ?? '?')} · ejecución ${String(cuerpo.workflow_execution_id ?? '?')} · ${ahora}`
 
   if (bloquea.length) {
     const igual = bloquea.length === antes.bloqueos.length && bloquea.every((b, i) => b === antes.bloqueos[i])
-    const motivo = `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`.slice(0, 500)
+    const motivo = `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')} (${constancia})`.slice(0, 500)
     if (cuerpo.ensayo === true || igual) return { status: 200, cuerpo: { ...(cuerpo.ensayo === true ? { ensayo: true, escrituras: 0 } : {}), pasa: false, version: brief.version, bloqueos: bloquea, sin_cambios: igual, campana: { estado: c.estado } } }
     const previo: Partial<BriefCreativoGuardado> = { leido: brief.leido, devolucion_texto: brief.devolucion_texto }
     try {
-      await al.actualizarBriefCreativo(c.id, brief.version, { leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.map((b) => `- ${b}`).join('\n') })
-      await al.actualizarCampana(c.id, { estado_motivo: motivo })
+      if (!(await al.actualizarBriefCreativoSi(c.id, brief.version, 'devuelta', { leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.map((b) => `- ${b}`).join('\n') }))) return { status: 200, cuerpo: { ya_revalidada: true, version: brief.version } }
+      if (!(await al.actualizarCampanaSi(c.id, 'necesita_humano', { estado_motivo: motivo }))) throw new Error('la campaña cambió de estado mientras se revalidaba')
     } catch (e) {
       await al.actualizarBriefCreativo(c.id, brief.version, previo)
       await al.actualizarCampana(c.id, { estado_motivo: c.estado_motivo })
@@ -77,19 +82,24 @@ export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown
     return { status: 200, cuerpo: { pasa: false, version: brief.version, bloqueos: bloquea, campana: { estado: 'necesita_humano', estado_motivo: motivo } } }
   }
 
-  const motivoNuevo = `revalidado el brief v${brief.version} con el verificador de hoy: ya no bloquea (antes: ${antes.bloqueos.slice(0, 2).join(' · ')})`.slice(0, 500)
+  const motivoNuevo = `brief v${brief.version} revalidado con el verificador de hoy: ya no bloquea (${constancia}) · se había devuelto por: ${antes.bloqueos.slice(0, 2).join(' · ')}`.slice(0, 500)
   if (cuerpo.ensayo === true) {
     return { status: 200, cuerpo: { ensayo: true, escrituras: 0, pasa: true, version: brief.version, bloqueos_antes: antes.bloqueos, haria: { brief: 'validada', campana: vuelveA, esperas_que_se_resuelven: vivas.map((e) => ({ id: e.id, vence_en: e.vence_en })) } } }
   }
   const previoBrief: Partial<BriefCreativoGuardado> = { estado: brief.estado, leido: brief.leido, devolucion_texto: brief.devolucion_texto }
   const previoCampana = { estado: c.estado, estado_motivo: c.estado_motivo }
+  // caso 2 de CC7: escrituras CONDICIONALES · si otro pedido ganó la carrera, este no escribe (un solo cambio de campaña, un solo sobre)
+  if (!(await al.actualizarBriefCreativoSi(c.id, brief.version, 'devuelta', { estado: 'validada', leido: leido as unknown as Record<string, unknown>, devolucion_texto: null }))) {
+    return { status: 200, cuerpo: { ya_revalidada: true, version: brief.version } }
+  }
+  let campanaMovida = false
   try {
-    await al.actualizarBriefCreativo(c.id, brief.version, { estado: 'validada', leido: leido as unknown as Record<string, unknown>, devolucion_texto: null })
-    await al.actualizarCampana(c.id, { estado: vuelveA, estado_motivo: motivoNuevo })
+    if (!(await al.actualizarCampanaSi(c.id, 'necesita_humano', { estado: vuelveA, estado_motivo: motivoNuevo }))) throw new Error('la campaña cambió de estado mientras se revalidaba')
+    campanaMovida = true
     for (const e of vivas) await al.actualizarEspera(e.id, { estado: 'resuelta' })
   } catch (e) {
     await al.actualizarBriefCreativo(c.id, brief.version, previoBrief)
-    await al.actualizarCampana(c.id, previoCampana)
+    if (campanaMovida) await al.actualizarCampanaSi(c.id, vuelveA, previoCampana)
     for (const v of vivas) await al.actualizarEspera(v.id, { estado: 'viva' })
     throw e
   }
