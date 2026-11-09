@@ -51,6 +51,11 @@ describe('citaAparece · las marcas de formato no son parte de lo que se cita (f
     expect(citaAparece(PLAN, '_a_b')).toBe(false)
     expect(citaAparece(PLAN, null)).toBe(false)
   })
+  it('las tres marcas, no solo el asterisco (pedido de CC7): una cita que cruza una _cursiva_ y otra que cruza un `código` también aparecen', () => {
+    const texto = 'El anuncio va _orgánico, sin pauta_, y el pedido entra por `naufrago.ec/pedir` desde el lunes.'
+    expect(citaAparece(texto, 'El anuncio va orgánico, sin pauta, y el pedido')).toBe(true)
+    expect(citaAparece(texto, 'el pedido entra por naufrago.ec/pedir desde el lunes')).toBe(true)
+  })
   it('normalizar NO cambia (la usan otros 9 archivos): sigue dejando los asteriscos', () => {
     expect(normalizar('**Hola** _mundo_')).toBe('**hola** _mundo_')
   })
