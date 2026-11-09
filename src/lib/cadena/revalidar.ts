@@ -15,10 +15,13 @@
  *  · Idempotente (otra vez sobre una versión ya validada → `ya_revalidada`, sin escribir) y vuelve atrás si algo falla a medias. `ensayo: true` no escribe.
  *  · No aprueba nada que espere a Emilio: la gran idea sigue yendo a su tarjeta.
  */
-import type { Almacen, BriefCreativoGuardado, Campana, EsperaFila } from './almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, EsperaFila } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { hallazgosDelBrief, leerBriefCreativo } from './brief-creativo'
-import { MOTIVO_CAMBIOS_DE_EMILIO, siguienteDespuesDe, tandaQueEspera } from './mesas'
+import { abrirAprobacionDelConcepto, MOTIVO_CAMBIOS_DE_EMILIO, objetoDeEsperaDeConcepto, siguienteDespuesDe, tandaQueEspera, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
+import { resolverEsperas } from './nucleo'
+import { insumosDesdeEstrategia, leerConcepto } from './conceptos'
+import { textoParaLaCadena } from '../oficina/mesa/de-la-cadena'
 
 /** los dos motivos con los que la cadena detiene una campaña por un brief que el VERIFICADOR devolvió (mesas.ts: `recibirBrief` y `briefAbrir`) */
 export const MOTIVO_DE_BRIEF_DEVUELTO = /^el brief creativo (se devolvió por código|ya se devolvió)/
@@ -107,4 +110,97 @@ export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown
     throw e
   }
   return { status: 200, cuerpo: { pasa: true, version: brief.version, bloqueos_antes: antes.bloqueos, campana: { estado: vuelveA }, esperas_resueltas: vivas.map((e) => e.id), ...(await siguienteDespuesDe(al, c.id)) } }
+}
+
+// ───────────────────────────────────────────────────────── la gran idea (09-nov · ALTO de Lenovo 21:56Z · preparado, NO se corre sin el «dale» de Emilio)
+/**
+ * REVALIDAR LA GRAN IDEA YA PAGADA · una versión del concepto que quedó `sin_mesa` POR EL LECTOR (`sin_concepto: …`) porque la entrega llevaba solo la integración
+ * (sin las líneas de idea de los aportes) se rearma desde el LIBRO de su mesa con la entrega de hoy (`textoParaLaCadena` con las ideas de los aportes) y se vuelve a leer.
+ * Sin modelo, sin mesa nueva, sin versión nueva: US$ 0.
+ *  · Solo una versión `sin_mesa` cuyo motivo empieza con `sin_concepto:` (la dejó así el LECTOR) y que guarda su encargo. Una que venció por plazo o que la mesa cerró sin texto no se toca.
+ *  · Las versiones POSTERIORES deben estar todas `sin_mesa` (frenadas o vacías): si alguna está abierta, lista o devolvió el brief, no se revalida. Y ninguna versión puede estar
+ *    ya aprobada o esperando a Emilio.
+ *  · El brief vigente debe estar `validada` (la gran idea se hizo sobre él).
+ *  · La campaña: en `calendario`/`activa` (sigue como está) o en `necesita_humano` POR LA MESA DE CONCEPTO («no entregó concepto dos veces»): entonces vuelve a su estado de trabajo
+ *    (la misma regla que el brief: tanda 1 → `calendario`; si no → `activa`) y se resuelven sus esperas de `necesita_humano`.
+ *  · Si ahora se lee: la versión queda `lista` con aprobación `pendiente`, con su tarjeta «Gran idea» y su espera para Emilio (las MISMAS que abre una entrega). Revalidar NO aprueba
+ *    nada: la decisión sigue siendo de Emilio. `conceptoVigente` hace que la cadena espere esa decisión en vez de abrir otra mesa.
+ *  · Si sigue sin leerse: no escribe nada y devuelve los bloqueos de hoy.
+ *  · Idempotente (sobre una versión ya `lista` → `ya_revalidada`), condicional (si otro pedido la movió, no escribe) y vuelve atrás si algo falla a medias. `ensayo: true` no escribe.
+ */
+export const MOTIVO_DE_CONCEPTO_SIN_LEER = /^sin_concepto:/
+export const MOTIVO_DE_MESA_DE_CONCEPTO_AGOTADA = /^la mesa de concepto no entregó concepto dos veces/
+
+export async function conceptoRevalidar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const id = cadena(cuerpo.campana_id)
+  if (!id) return err(400, 'E-CAMPOS', 'falta campana_id')
+  if (!Number.isInteger(cuerpo.version) || (cuerpo.version as number) < 1) return err(400, 'E-CAMPOS', 'falta version (la versión del concepto que se revalida)')
+  const version = cuerpo.version as number
+  const c = await al.campana(id)
+  if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
+  const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
+  if (noAut) return noAut
+  const cerrada = await compuerta(al, c.client_id, c.seco)
+  if (cerrada) return cerrada
+  const todos = await al.conceptosDe(c.id)
+  const fila = todos.find((k) => k.version === version)
+  if (!fila) return err(404, 'E-SIN-CONCEPTO', `la campaña no tiene la versión ${version} del concepto`)
+  if (fila.estado === 'lista') return { status: 200, cuerpo: { ya_revalidada: true, version, aprobacion: fila.aprobacion, campana: { estado: c.estado } } }
+  if ((c as Campana & { archivada_en?: string | null }).archivada_en) return err(409, 'E-ARCHIVADA', 'la campaña está archivada: no se revalida')
+  if (fila.estado !== 'sin_mesa') return err(409, 'E-NO-SIN-MESA', `la versión ${version} está ${fila.estado}: solo se revalida una sin_mesa`)
+  if (!MOTIVO_DE_CONCEPTO_SIN_LEER.test(fila.motivo ?? '')) return err(409, 'E-NO-LA-DEJO-EL-LECTOR', `la versión ${version} no quedó sin_mesa por el lector (${String(fila.motivo ?? 'sin motivo').slice(0, 120)}): no se revalida`)
+  if (!fila.encargo_id) return err(409, 'E-SIN-ENCARGO', 'la versión no guarda el encargo de su mesa: no hay libro que releer')
+  const viva = todos.find((k) => k.version > version && k.estado !== 'sin_mesa')
+  if (viva) return err(409, 'E-HAY-UNA-VERSION-POSTERIOR', `la versión ${viva.version} está ${viva.estado}: se revalida solo si todas las posteriores quedaron sin_mesa`)
+  const decidida = todos.find((k) => k.aprobacion === 'aprobado' || (k.estado === 'lista' && k.aprobacion === 'pendiente'))
+  if (decidida) return err(409, 'E-YA-HAY-GRAN-IDEA', `la versión ${decidida.version} ya está ${decidida.aprobacion === 'aprobado' ? 'aprobada' : 'esperando a Emilio'}: no se revalida otra`)
+  const brief = await al.ultimoBriefCreativo(c.id)
+  if (brief?.estado !== 'validada') return err(409, 'E-SIN-BRIEF', `el brief vigente está ${brief?.estado ?? 'ausente'}: la gran idea solo se revalida sobre un brief validado`)
+  const sale = c.estado === 'necesita_humano'
+  if (sale ? !MOTIVO_DE_MESA_DE_CONCEPTO_AGOTADA.test(c.estado_motivo ?? '') : c.estado !== 'calendario' && c.estado !== 'activa') {
+    return err(409, 'E-NO-SE-REVALIDA', `una campaña ${c.estado} (${String(c.estado_motivo ?? '').slice(0, 120)}) no se revalida: solo calendario/activa o necesita_humano por la mesa de concepto`)
+  }
+
+  // el texto: el libro de SU mesa con la entrega de hoy · el MISMO lector y los MISMOS insumos que `recibirConcepto`
+  const libro = await al.libroDeLaMesa(fila.encargo_id)
+  const texto = textoParaLaCadena(libro, null, true)
+  if (!texto.trim()) return err(409, 'E-SIN-LIBRO', `el libro de la mesa (${fila.encargo_id}) está vacío`)
+  const estr = await al.ultimaEstrategia(c.id)
+  const ctx = await al.cargarContexto(c.client_id, c.plan_id)
+  const ins = { ...(estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], []) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos: [] }), duras: ctx?.palabrasDuras }
+  const leido = leerConcepto(texto, ins)
+  const resumen = { ideas_en_el_banco: leido.banco.length, descartadas: leido.ideas_descartadas.length, capitulos: leido.capitulos.length, bloqueos: leido.bloqueos }
+  if (leido.estado === 'sin_concepto') return { status: 200, cuerpo: { ...(cuerpo.ensayo === true ? { ensayo: true, escrituras: 0 } : {}), pasa: false, version, ...resumen, campana: { estado: c.estado } } }
+
+  const tanda = await tandaQueEspera(al, c.id)
+  const vuelveA = tanda === 1 ? 'calendario' as const : 'activa' as const
+  const vivas: EsperaFila[] = sale ? (await al.esperasVivas()).filter((e) => e.campana_id === c.id && e.objeto_tipo === 'necesita_humano') : []
+  const constancia = `revalidado por ${String(cuerpo.workflow_id ?? '?')} · ejecución ${String(cuerpo.workflow_execution_id ?? '?')} · ${ahora} · antes: ${String(fila.motivo).slice(0, 160)}`
+  if (cuerpo.ensayo === true) {
+    return { status: 200, cuerpo: { ensayo: true, escrituras: 0, pasa: true, version, ...resumen, haria: { concepto: 'lista · aprobación pendiente (tarjeta a Emilio)', campana: sale ? vuelveA : c.estado, esperas_que_se_resuelven: vivas.map((e) => ({ id: e.id, vence_en: e.vence_en })) } } }
+  }
+  const previoConcepto: Partial<ConceptoGuardado> = { estado: fila.estado, aprobacion: fila.aprobacion, texto_md: fila.texto_md, leido: fila.leido, motivo: fila.motivo }
+  if (!(await al.actualizarConceptoSi(c.id, version, 'sin_mesa', { estado: 'lista', aprobacion: 'pendiente', texto_md: texto, leido: leido as unknown as Record<string, unknown>, motivo: constancia.slice(0, 500) }))) {
+    return { status: 200, cuerpo: { ya_revalidada: true, version } }
+  }
+  let campanaMovida = false
+  let campana: Campana = c
+  try {
+    if (sale) {
+      const motivoNuevo = `gran idea v${version} revalidada con la entrega de hoy: espera a Emilio (${constancia})`.slice(0, 500)
+      if (!(await al.actualizarCampanaSi(c.id, 'necesita_humano', { estado: vuelveA, estado_motivo: motivoNuevo }))) throw new Error('la campaña cambió de estado mientras se revalidaba')
+      campanaMovida = true
+      campana = { ...c, estado: vuelveA, estado_motivo: motivoNuevo }
+      for (const e of vivas) await al.actualizarEspera(e.id, { estado: 'resuelta' })
+    }
+    await abrirAprobacionDelConcepto(al, campana, version, leido, fila.costo_usd ?? null, todos, ahora, ctx?.nombreDelNegocio ?? null)
+  } catch (e) {
+    await al.actualizarConcepto(c.id, version, previoConcepto)
+    // 🟡 de CC7: la espera de aprobación pudo abrirse antes de que fallara la tarjeta; sin tarjeta no hay nada que recordarle a Emilio
+    await resolverEsperas(al, c.id, TIPO_DE_ESPERA_DE_CONCEPTO, objetoDeEsperaDeConcepto(version), 'cancelada')
+    if (campanaMovida) await al.actualizarCampanaSi(c.id, vuelveA, { estado: c.estado, estado_motivo: c.estado_motivo })
+    for (const v of vivas) await al.actualizarEspera(v.id, { estado: 'viva' })
+    throw e
+  }
+  return { status: 200, cuerpo: { pasa: true, version, ...resumen, campana: { estado: campana.estado }, esperas_resueltas: vivas.map((e) => e.id) } }
 }

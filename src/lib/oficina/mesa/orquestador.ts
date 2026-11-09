@@ -8,7 +8,7 @@ import { datos } from '../ayudas'
 import { avanzar, cerrarPorTope, fallar, plantillaDe, type Respuesta, type ResultadoDeTurno } from '../orquestador'
 import { baseDeLaminas } from '../orquestador-laminas'
 import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
-import { devolucionDelBrief, entregarALaCadena, marcoDe, textoParaLaCadena } from './de-la-cadena'
+import { devolucionDelBrief, entregarALaCadena, marcoDe, textoDeLaMesaParaLaCadena } from './de-la-cadena'
 import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
 import type { Cambios, Encargo, Puertos } from '../puertos'
@@ -208,7 +208,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
 
     if (acc.accion === 'cierre_por_tope') {
       await guardarMesa(P, enc, { ...est, fase: 'cerrada' })
-      if (deCalendario) return entregarALaCadena(P, enc, { texto: textoParaLaCadena(libro, est.pieza_texto) || null, motivo: `la mesa llegó al techo absoluto (${techoDe(enc.tope_usd)}) con ${enc.estado_del_motor.gasto_usd.toFixed(3)} gastados`, estado: 'cerrado_por_tope' })
+      if (deCalendario) return entregarALaCadena(P, enc, { texto: textoDeLaMesaParaLaCadena(enc, libro, est.pieza_texto) || null, motivo: `la mesa llegó al techo absoluto (${techoDe(enc.tope_usd)}) con ${enc.estado_del_motor.gasto_usd.toFixed(3)} gastados`, estado: 'cerrado_por_tope' })
       return cerrarPorTope(P, enc, pl, 'techo_de_gasto', `la mesa llegó al techo absoluto (${techoDe(enc.tope_usd)}) con ${enc.estado_del_motor.gasto_usd.toFixed(3)} gastados`)
     }
 
@@ -238,7 +238,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     // calendario: no hay nada que traducir ni dibujar: el tablero integrado ES la entrega
     if (deCalendario) {
       const forzado = acc.accion === 'seguir_a_dibujar' ? acc.motivo : est.cierre_forzado
-      const texto = textoParaLaCadena(libro, est.pieza_texto)
+      const texto = textoDeLaMesaParaLaCadena(enc, libro, est.pieza_texto)
       await guardarMesa(P, enc, { ...est, fase: 'cerrada', pieza_texto: texto || est.pieza_texto })
       return entregarALaCadena(P, enc, { texto: texto || null, motivo: forzado ?? (texto ? null : 'la mesa no produjo nada'), estado: 'cerrado' })
     }
@@ -337,7 +337,7 @@ export async function entregarPorTopeDeLaMesa(P: Puertos, enc: Encargo, motivo: 
   if (!est) return null
   const libro = await P.mesa.libro(enc.id)
   // el calendario nunca va a la bandeja: lo que el equipo escribió va a la cadena (que ordena con eso o sin eso)
-  if (esDeLaCadena(est.tipo)) return entregarALaCadena(P, enc, { texto: textoParaLaCadena(libro, est.pieza_texto) || null, motivo: motivo, estado: 'cerrado_por_tope' })
+  if (esDeLaCadena(est.tipo)) return entregarALaCadena(P, enc, { texto: textoDeLaMesaParaLaCadena(enc, libro, est.pieza_texto) || null, motivo: motivo, estado: 'cerrado_por_tope' })
   const ult = [...libro].reverse().find((a) => a.tipo === 'integra')
   const crudo = libro.filter((a) => ['dirige', 'aporta', 'responde'].includes(a.tipo) && a.texto.trim()).map((a) => `[${a.de}] ${a.texto.trim()}`).join('\n\n')
   const texto = ult?.texto?.trim() || est.pieza_texto?.trim() || crudo

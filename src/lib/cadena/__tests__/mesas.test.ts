@@ -346,6 +346,6 @@ describe('el puerto en proceso y las entregas por HTTP', () => {
     await conceptoAbrir(al, wf(), AHORA)
     expect((await ACCIONES.concepto.entregar(al, wf({ version: 1, texto: CONCEPTO_BUENO }), AHORA)).cuerpo).toMatchObject({ ok: true, estado: 'lista' })
     expect((await ACCIONES.concepto.entregar(al, wf({ version: 1, texto: CONCEPTO_BUENO }), AHORA)).cuerpo).toMatchObject({ ya_cerrada: true })
-    expect(Object.keys(ACCIONES.concepto)).toEqual(['abrir', 'entregar', 'decidir'])
+    expect(Object.keys(ACCIONES.concepto)).toEqual(['abrir', 'entregar', 'decidir', 'revalidar'])
   })
 })

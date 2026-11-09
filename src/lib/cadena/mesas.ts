@@ -241,6 +241,9 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
   }
   if (ultimo?.estado === 'lista' && !nota && !conCambios) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, aprobacion: ultimo.aprobacion, concepto_id: idDeConcepto(campana.id, ultimo.version) } }
+  // 09-nov (revalidar la gran idea): una versión anterior revalidada que espera a Emilio manda sobre las `sin_mesa` posteriores · no se abre otra mesa
+  const vigente = conceptoVigente(todos)
+  if (!nota && vigente && vigente !== ultimo && vigente.estado === 'lista') return { status: 200, cuerpo: { ya_hecha: true, version: vigente.version, aprobacion: vigente.aprobacion, concepto_id: idDeConcepto(campana.id, vigente.version) } }
   if (!nota && cuentaDe(todos, (x) => x.estado === 'sin_mesa') >= MAX_VERSIONES_POR_REAPERTURA) {
     const r = await ponerNecesitaHumano(al, campana, 'la mesa de concepto no entregó concepto dos veces', ahora)
     return { status: 409, cuerpo: { error: 'concepto_agotado', necesita_humano: true, alerta: r.alerta } }
@@ -289,14 +292,23 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
   const ins = { ...(estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], []) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos: [] }), duras: ctx?.palabrasDuras }
   const leido = leerConcepto(p.texto as string, ins)
   if (leido.estado === 'sin_concepto') return sinMesa(`sin_concepto: ${leido.bloqueos.join(' · ')}`)
-  const hallazgos = hallazgosDelConcepto(leido)
   await al.actualizarConcepto(campana.id, p.version, { ...base, estado: 'lista', aprobacion: 'pendiente', texto_md: p.texto, leido: leido as unknown as Record<string, unknown> })
-  await abrirEsperaDe(al, campana, TIPO_DE_ESPERA_DE_CONCEPTO, objetoDeEsperaDeConcepto(p.version), 'esperando la aprobación de Emilio sobre la gran idea', ahora, { fechaInicio: campana.fecha_inicio, zona: campana.zona_horaria }, `concepto:${campana.id}:v${p.version}`)
+  await abrirAprobacionDelConcepto(al, campana, p.version, leido, p.costo_usd, todos, ahora, ctx?.nombreDelNegocio ?? null)
+  return { ok: true, estado: 'lista' }
+}
+
+/** un concepto que quedó `lista`: la espera de la aprobación de Emilio (no vence, se recuerda) y su tarjeta «Gran idea» · lo usan la entrega y la revalidación (09-nov) */
+export async function abrirAprobacionDelConcepto(al: Almacen, campana: Campana, version: number, leido: ConceptoLeido, costoUsd: number | null, todos: ConceptoGuardado[], ahora: string, nombreDelNegocio: string | null): Promise<string> {
+  const p = { version, costo_usd: costoUsd }
+  const hallazgos = hallazgosDelConcepto(leido)
+  const espera = await abrirEsperaDe(al, campana, TIPO_DE_ESPERA_DE_CONCEPTO, objetoDeEsperaDeConcepto(p.version), 'esperando la aprobación de Emilio sobre la gran idea', ahora, { fechaInicio: campana.fecha_inicio, zona: campana.zona_horaria }, `concepto:${campana.id}:v${p.version}`)
+  // 09-nov (🟡 de CC7 a #960): una vuelta atrás de `concepto/revalidar` CANCELA esta espera; si después se reintenta, la misma llave devuelve la cancelada: se revive
+  if (espera.estado !== 'viva') await al.actualizarEspera(espera.id, { estado: 'viva' })
   const vueltasUsadas = cuentaDe(todos, (x) => x.aprobacion === 'cambios')
   const resumen = resumenDelBanco(leido)
   const hitl_id = await al.abrirTarjetaDeConcepto({
     client_id: campana.client_id, campana_id: campana.id, version: p.version, seco: campana.seco,
-    titulo: `Gran idea · ${leido.gran_idea?.nombre ?? '(sin nombre)'} · campaña ${ctx?.nombreDelNegocio ?? campana.client_id}`,
+    titulo: `Gran idea · ${leido.gran_idea?.nombre ?? '(sin nombre)'} · campaña ${nombreDelNegocio ?? campana.client_id}`,
     vista_previa: `${leido.gran_idea?.frase ?? ''}\n${resumen.total} ideas en el banco · ${leido.capitulos.length} capítulo(s)${resumen.parcial.length ? ' · banco parcial' : ''}`,
     metadata: {
       origen: 'cadena', tipo: 'concepto', campana_id: campana.id, version: p.version, concepto_id: idDeConcepto(campana.id, p.version), brief_version: (await al.ultimoBriefCreativo(campana.id))?.version ?? null,
@@ -304,7 +316,7 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
     },
   })
   await al.actualizarConcepto(campana.id, p.version, { hitl_id })
-  return { ok: true, estado: 'lista' }
+  return hitl_id
 }
 
 export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
@@ -408,12 +420,21 @@ export interface ConceptoParaElCalendario {
   /** palanca encendida y sin gran idea aprobada: el calendario espera (qué falta) · null = puede seguir (sin palanca o con concepto) */
   espera: null | { falta: 'brief' | 'concepto' | 'entrega' | 'aprobacion'; version: number | null; estado: string | null; aprobacion: string | null }
 }
+/**
+ * 09-nov (revalidar la gran idea): la versión que cuenta para seguir. Es la última, SALVO que la última haya quedado `sin_mesa` y una anterior esté `lista` esperando a Emilio
+ * (la revalidación la recuperó): entonces cuenta esa, y la cadena espera la decisión en vez de abrir otra mesa. Una `lista` con cambios pedidos no cuenta (ya se decidió).
+ */
+export function conceptoVigente(todos: ConceptoGuardado[]): ConceptoGuardado | null {
+  const ultimo = todos[todos.length - 1] ?? null
+  if (ultimo?.estado !== 'sin_mesa') return ultimo
+  return [...todos].reverse().find((c) => c.estado === 'lista' && c.aprobacion === 'pendiente') ?? ultimo
+}
 export async function conceptoParaElCalendario(al: Almacen, campana: Pick<Campana, 'id' | 'client_id'>): Promise<ConceptoParaElCalendario> {
   if (!(await nuevoOrdenEncendido(al, campana.client_id))) return { concepto: null, version: null, espera: null }
   const todos = await al.conceptosDe(campana.id)
   const aprobado = [...todos].reverse().find((c) => c.aprobacion === 'aprobado' && c.leido)
   if (aprobado) return { concepto: aprobado.leido as unknown as ConceptoLeido, version: aprobado.version, espera: null }
-  const ultimo = todos[todos.length - 1] ?? null
+  const ultimo = conceptoVigente(todos)
   const brief = await al.ultimoBriefCreativo(campana.id)
   // con cambios pedidos por Emilio al concepto (o al brief, ya rehecho y validado) falta el concepto nuevo, no una decisión
   const falta = !brief || brief.estado !== 'validada' ? 'brief' : !ultimo || ultimo.estado === 'sin_mesa' || ultimo.estado === 'brief_devuelto' || ultimo.aprobacion === 'cambios' ? 'concepto' : ultimo.estado === 'abierta' ? 'entrega' : 'aprobacion'

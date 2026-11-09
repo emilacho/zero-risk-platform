@@ -523,3 +523,32 @@ describe('reservas de CC3 (U5 · U12)', () => {
     expect(r.ok && r.sobre.condiciones).toHaveLength(20)
   })
 })
+
+describe('09-nov · la entrega de la mesa de CONCEPTO lleva las líneas de idea de los aportes (falso rojo del encargo 577c6038)', () => {
+  const IDEA = (agente: string) => `## Mi banco\n- \`C1-I01 · instagram · foto · la idea de ${agente} · mensaje: el mensaje de ${agente} · gancho: el gancho de ${agente} · foto:ninguna\``
+  const limpia = (agente: string) => `- C1-I01 · instagram · foto · la idea de ${agente} · mensaje: el mensaje de ${agente} · gancho: el gancho de ${agente} · foto:ninguna`
+
+  it('al cerrar normal: la integración y, detrás, las líneas de idea de los aportes (limpias); los títulos de los aportes no entran', async () => {
+    const m = await montar('concepto')
+    await jugar(m, (t) => (t.tipo === 'aportar' ? { texto: IDEA(t.agente) } : undefined))
+    expect(m.hecho.conceptos).toHaveLength(1)
+    const texto = m.hecho.conceptos[0].texto ?? ''
+    expect(texto).toMatch(/^## Gran idea/)
+    expect(texto).toContain('## Banco de ideas · líneas de los aportes del equipo')
+    const aportes = m.MS.filas.filter((x) => x.encargo_id === m.id && x.tipo === 'aporta')
+    expect(aportes.length).toBeGreaterThan(0)
+    for (const a of aportes) expect(texto).toContain(limpia(a.de))
+    expect(texto).not.toContain('## Mi banco')
+  })
+  it('cerrada por tope con integración: también lleva las líneas de idea de los aportes', async () => {
+    const m = await montar('concepto')
+    const r = await jugar(m, (t) => (t.tipo === 'integrar' || t.tipo === 'devolver_citas' ? { texto: integracionCon(m.MS.filas.filter((x) => x.encargo_id === m.id), '## Gran idea\nLa isla · frase'), costo_usd: 0.6 } : t.tipo === 'aportar' ? { texto: IDEA(t.agente), costo_usd: 1.2 } : { texto: 'el problema en una frase', costo_usd: 1.2 }))
+    expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado' })
+    expect(m.hecho.conceptos[0].texto).toContain('## Banco de ideas · líneas de los aportes del equipo')
+  })
+  it('la mesa del BRIEF no cambia: entrega solo la integración', async () => {
+    const m = await montar('brief')
+    await jugar(m, (t) => (t.tipo === 'integrar' ? { texto: '## Insight\nlo que sea\n## Mensaje\nuno' } : undefined))
+    expect(m.hecho.briefs[0].texto).toBe('## Insight\nlo que sea\n## Mensaje\nuno')
+  })
+})

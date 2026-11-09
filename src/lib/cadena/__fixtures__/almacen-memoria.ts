@@ -150,6 +150,15 @@ export class AlmacenMemoria implements Almacen {
     if (!c) throw new Error('no existe el concepto')
     Object.assign(c, patch)
   }
+  async actualizarConceptoSi(campanaId: string, version: number, estado: ConceptoGuardado['estado'], patch: Partial<ConceptoGuardado>) {
+    const c = this.conceptos.find((x) => x.campana_id === campanaId && x.version === version)
+    if (!c || c.estado !== estado) return false
+    Object.assign(c, patch)
+    return true
+  }
+  /** el libro de las mesas de la oficina, por encargo (09-nov · revalidar la gran idea) */
+  libros: Record<string, Array<{ n: number; de: string; tipo: string; texto: string }>> = {}
+  async libroDeLaMesa(encargoId: string) { return structuredClone(this.libros[encargoId] ?? []) }
   async conceptosVencidos(ahora: string) { return structuredClone(this.conceptos.filter((c) => c.estado === 'abierta' && c.plazo_en && Date.parse(c.plazo_en) <= Date.parse(ahora))) }
   async filas(campanaId: string, version?: number) { return structuredClone(this.filasGuardadas.filter((f) => f.campana_id === campanaId && (version === undefined || f.calendario_version === version))) }
   async guardarFilas(campanaId: string, version: number, _ev: number, filas: Fila[]) {

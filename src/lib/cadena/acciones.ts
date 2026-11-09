@@ -9,14 +9,15 @@ import { relojDeLaCadena } from './reloj'
 import { calendarioPasar, estrategiaPasar } from './revision-jefatura'
 import { filasAutoproducir } from './autoproducir'
 import { briefAbrir, briefEntregar, conceptoAbrir, conceptoDecidir, conceptoEntregar, hojaEscribir } from './mesas'
-import { briefRevalidar } from './revalidar'
+import { briefRevalidar, conceptoRevalidar } from './revalidar'
 import type { Manejador } from './puerta-http'
 
 export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'validar' | 'filas' | 'fechas' | 'esperas' | 'brief' | 'concepto' | 'hojas', Record<string, Manejador>> = {
   // 31-oct · nuevo orden (T3): las mesas de brief y de concepto y la hoja por código; solo con la palanca `nuevo_orden` encendida para el cliente
   // 09-nov · revalidar lo ya escrito (opción B firmada por Emilio): un brief devuelto EN FALSO por el verificador vuelve a pasar el verificador de hoy · US$ 0
   brief: { abrir: briefAbrir, entregar: briefEntregar, revalidar: briefRevalidar },
-  concepto: { abrir: conceptoAbrir, entregar: conceptoEntregar, decidir: conceptoDecidir },
+  // 09-nov · revalidar la gran idea ya pagada (ALTO de Lenovo): una versión que el lector dejó sin_mesa se relee con la entrega de hoy desde el libro de su mesa · US$ 0
+  concepto: { abrir: conceptoAbrir, entregar: conceptoEntregar, decidir: conceptoDecidir, revalidar: conceptoRevalidar },
   hojas: { escribir: hojaEscribir },
   campanas: {
     abrir: abrirCampana,
