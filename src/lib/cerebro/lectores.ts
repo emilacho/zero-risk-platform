@@ -10,7 +10,7 @@ import type { Consulta, Fila, PeticionDeLectura } from './consulta'
 import { extraerCatalogo, type ItemCatalogo } from './datos-estructurados'
 import { type ClaseDePlazo, type Plazos, vigenciaDe } from './plazos'
 import { resumirTexto } from './resumen'
-import { type DecisionAtada, type DecisionDelDueno, type Estado, type EstadoDeFuente, type Ficha, type NombreDeFuente, type Origen, pesoDeTexto } from './tipos'
+import { CLASE_DEL_SUPUESTO_ACEPTADO, type DecisionAtada, type DecisionDelDueno, type Estado, type EstadoDeFuente, type Ficha, type NombreDeFuente, type Origen, pesoDeTexto } from './tipos'
 import { derivarVersiones } from './versiones'
 import { aprobacionesPorPlan, esDeUnaParte, estadoDeLaSalida, filaConDecisionReal, manualCerrado, manualRechazado, motivoDelManualRechazado, quienResolvio, vencimientosDeLaCola } from './estado-en-plataforma'
 import { avisoDeProvisionales } from '../manual/lectura'
@@ -587,7 +587,8 @@ export async function leerFichas(ctx: Contexto): Promise<Salida> {
     const salida: Ficha = {
       ref: `cerebro_fichas:${id}`, estante: 'E8', clase: texto(f.clase) ?? 'ficha', titulo: texto(f.titulo) ?? texto(f.clase) ?? 'Ficha',
       que_es: `${recorte(texto(f.que_es) ?? texto(f.titulo) ?? 'ficha del cerebro', 200)}${archivo}`,
-      origen: mapa.origen, estado: f.propiedad === 'incierta' ? 'propiedad_incierta' : mapa.estado, fecha_fuente: iso(f.fecha_fuente) ?? iso(f.creado_en),
+      // 06-nov · un supuesto que el dueño asumió se rotula como tal: ni «dicho por el dueño» ni «medido»
+      origen: mapa.origen, estado: texto(f.clase) === CLASE_DEL_SUPUESTO_ACEPTADO ? 'supuesto_aceptado_por_dueno' : f.propiedad === 'incierta' ? 'propiedad_incierta' : mapa.estado, fecha_fuente: iso(f.fecha_fuente) ?? iso(f.creado_en),
       vigente_hasta: vig.vigente_hasta, vencido: vig.vencido, peso_estimado: pesoDeTexto(contenido ?? `${texto(f.titulo) ?? ''} ${texto(f.que_es) ?? ''}${archivo}`),
       version: profundidad(id), vigente: !reemplazada && !retirada, reemplazada, versiones_anteriores: reemplazada ? 0 : profundidad(id) - 1,
     }

@@ -13,6 +13,7 @@ import { leerTodas } from './paginar'
 import { nivelDeFicha, ordenarPorEmbudo } from './embudo'
 import { adjuntoDelCliente } from './contexto-del-cliente'
 import type { Respuesta } from './rutas'
+import { ATRIBUCION_DEL_SUPUESTO, CLASE_DEL_SUPUESTO_ACEPTADO } from './supuestos-del-dueno'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -50,7 +51,10 @@ function procedenciaDe(f: Fila): Fila {
   const pt = objeto(f.provenance_tag)
   const d = objeto(pt.datos)
   const sel = (o: Fila, ks: string[]): Fila => Object.fromEntries(ks.filter((k) => o[k] !== undefined && o[k] !== null && o[k] !== '').map((k) => [k, o[k]]))
-  return { origen: txt(f.origen) || null, propiedad: txt(f.propiedad) || null, porque: txt(f.porque) || null, ...sel(pt, ['source', 'trust_level', 'confirmado_por', 'canal', 'ingress_route']), ...sel(d, ['canal', 'respondido_en', 'mensaje_ref', 'apify_function', 'url', 'fuente']) }
+  const base = { origen: txt(f.origen) || null, propiedad: txt(f.propiedad) || null, porque: txt(f.porque) || null, ...sel(pt, ['source', 'trust_level', 'confirmado_por', 'canal', 'ingress_route']), ...sel(d, ['canal', 'respondido_en', 'mensaje_ref', 'apify_function', 'url', 'fuente']) }
+  // 06-nov · un supuesto que el dueño asumió: se dice qué es (nunca «confirmado por el dueño»), quién lo propuso y cuándo lo aceptó
+  if (txt(f.clase) === CLASE_DEL_SUPUESTO_ACEPTADO) { const { confirmado_por: _c, ...resto } = base as Fila; void _c; return { ...resto, atribucion: ATRIBUCION_DEL_SUPUESTO, aceptado_por: 'dueno', ...sel(d, ['asumida_en', 'propuesto_por', 'pregunta_id']) } }
+  return base
 }
 
 export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsulta): Promise<Respuesta> {

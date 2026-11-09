@@ -1,6 +1,6 @@
 /**
  * LA PUERTA DEL DUEÑO (16-oct) · US$ 0 · base falsa · sin modelo. Con los diez clientes de prueba (cualquier rubro, país y canal) y la mecánica completa:
- * respuesta → ficha «confirmada por el dueño» · reemplazo por tema · sede · tarde/repetida · privacidad · preguntas pendientes que no se repiten · lectura · resumen vivo.
+ * respuesta → ficha «confirmada por el dueño» · reemplazo por tema · sede · tarde/repetida · privacidad · preguntar es de la plataforma (410) · lectura · resumen vivo.
  */
 import { describe, expect, it } from 'vitest'
 import { descripcionDeRespuesta, esExactamenteElMismoTema, esTemaParecido, palabrasDelTema, rutaDueno, rutaLeerDueno, sinDatosPersonales, temaNormal, type DepsDeDueno } from '../dueno'
@@ -165,55 +165,32 @@ describe('una respuesta nueva al mismo tema reemplaza; otro tema o otra sede, no
   })
 })
 
-describe('que nadie repita la pregunta', () => {
+describe('preguntas: viven en la plataforma (adenda 06-nov)', () => {
   const c = DIEZ_CLIENTES[3]
   const pregunta = (o: Record<string, unknown> = {}) => ({ client_id: c.id, dry_run: false, ...WF, evento: 'pregunta', tema: 'presupuesto de pauta', pregunta: '¿Cuánto quieres gastar en pauta?', canal: 'MD de Slack', preguntado_por: OF, ...o })
-  it('la primera oficina registra; otra oficina del mismo tema recibe «ya preguntada»; la misma oficina, «repetida»', async () => {
+  it('preguntar ya no es del cerebro (adenda 06-nov): 410 con la ruta de la plataforma, y la tabla vieja no se toca', async () => {
     const m = montar(c)
     const a = await rutaDueno(m.deps, pregunta())
-    expect(a.body).toMatchObject({ ok: true, registrada: true })
-    const b = await rutaDueno(m.deps, pregunta({ preguntado_por: OTRA, tema: 'Presupuesto de PAUTA' }))
-    expect(b.body).toMatchObject({ registrada: false, ya_preguntada: true, pendiente: { oficina: 'financiera', agente: 'chief-financial-officer' } })
-    expect((await rutaDueno(m.deps, pregunta())).body).toMatchObject({ registrada: false, repetida: true })
-    expect(m.t.cerebro_dueno_preguntas).toHaveLength(1)
-    // otro tema no se bloquea
-    expect((await rutaDueno(m.deps, pregunta({ preguntado_por: OTRA, tema: 'afluencia al mediodía' }))).body).toMatchObject({ registrada: true })
-    // `forzar` registra igual (el agente decidió que hay que volver a preguntar)
-    expect((await rutaDueno(m.deps, pregunta({ preguntado_por: OTRA, forzar: true }))).body).toMatchObject({ registrada: true })
-  })
-  it('una pregunta pendiente de hace más de 72 h ya no bloquea', async () => {
-    const m = montar(c, new Date(AHORA.getTime() - 80 * 3_600_000))
-    await rutaDueno(m.deps, pregunta())
-    const despues = montar(c, AHORA)
-    despues.t.cerebro_dueno_preguntas.push(...m.t.cerebro_dueno_preguntas)
-    expect((await rutaDueno(despues.deps, pregunta({ preguntado_por: OTRA }))).body).toMatchObject({ registrada: true })
-  })
-  it('`forzar` registra la pregunta aunque ya esté respondida (el agente decidió que ya no vale)', async () => {
-    const m = montar(c)
-    await rutaDueno(m.deps, respuesta(c))
-    expect((await rutaDueno(m.deps, pregunta({ forzar: true }))).body).toMatchObject({ registrada: true })
+    expect([a.status, a.body.error, a.body.usar]).toEqual([410, 'evento_retirado', '/api/dueno/preguntas'])
+    expect((await rutaDueno(m.deps, pregunta({ forzar: true }))).status).toBe(410)
+    expect(m.t.cerebro_dueno_preguntas).toHaveLength(0)
   })
   it('la pregunta guardada tampoco trae datos personales', async () => {
     const m = montar(c)
     await rutaDueno(m.deps, respuesta(c, { pregunta: 'Confirma con ana@proveedor.com cuánto gastas en pauta' }))
     expect(JSON.stringify(vivas(m.t))).not.toMatch(/ana@proveedor/)
   })
-  it('la respuesta cierra lo pendiente; después, quien pregunta recibe lo respondido (con fecha) en vez de registrar', async () => {
+  it('la respuesta ya no toca preguntas: una pendiente vieja queda como estaba (vive en la plataforma)', async () => {
     const m = montar(c)
-    await rutaDueno(m.deps, pregunta())
+    m.t.cerebro_dueno_preguntas.push({ id: 'p-vieja', client_id: c.id, tema: 'presupuesto de pauta', estado: 'pendiente', creado_en: AHORA.toISOString() })
     await rutaDueno(m.deps, respuesta(c))
-    expect(m.t.cerebro_dueno_preguntas[0]).toMatchObject({ estado: 'respondida' })
-    expect(m.t.cerebro_dueno_preguntas[0].ficha_id).toBe(vivas(m.t)[0].id)
-    const otra = await rutaDueno(m.deps, pregunta({ preguntado_por: OTRA }))
-    expect(otra.body).toMatchObject({ registrada: false, ya_respondida: true })
-    expect((otra.body.respuestas as Array<Record<string, unknown>>)[0]).toMatchObject({ respuesta: '200 por semana', canal: 'MD de Slack', confirmado_por_el_dueno: true })
-    expect(m.t.cerebro_dueno_preguntas).toHaveLength(1)
+    expect(m.t.cerebro_dueno_preguntas[0]).toMatchObject({ estado: 'pendiente' })
+    expect(m.base.lecturas).not.toContain('cerebro_dueno_preguntas')
   })
-  it('lectura: ¿ya se respondió? cuándo y por qué canal; qué sigue pendiente; sin tema, lo último que dijo', async () => {
+  it('lectura: ¿ya se respondió? cuándo y por qué canal; sin tema, lo último que dijo; las pendientes salen null (se leen en la plataforma)', async () => {
     const m = montar(c)
     await rutaDueno(m.deps, respuesta(c))
     await rutaDueno(m.deps, respuesta(c, { tema: 'afluencia al mediodía', respuesta: 'unos 20 clientes', mensaje_ref: 'slack:9' }))
-    await rutaDueno(m.deps, pregunta({ tema: 'herramientas que usa', pregunta: '¿Qué herramientas usas?' }))
     const l = await rutaLeerDueno({ db: m.base.db as never, ahora: new Date(AHORA.getTime() + 3 * 86_400_000) }, { client_id: c.id, tema: 'Presupuesto de pauta' })
     expect(l.body).toMatchObject({ ok: true, respondida: true, modelos_llamados: 0 })
     expect((l.body.respuestas as Array<Record<string, unknown>>)).toHaveLength(1)
@@ -222,7 +199,7 @@ describe('que nadie repita la pregunta', () => {
     const sin = await rutaLeerDueno({ db: m.base.db as never, ahora: AHORA }, { client_id: c.id })
     expect(sin.body.respondida).toBeNull()
     expect((sin.body.respuestas as unknown[]).length).toBe(2)
-    expect((sin.body.pendientes as Array<Record<string, unknown>>).map((p) => p.tema)).toEqual(['herramientas que usa'])
+    expect(sin.body).toMatchObject({ pendientes: null, pendientes_se_leen_en: 'GET /api/dueno/preguntas' })
     expect((await rutaLeerDueno({ db: m.base.db as never }, { client_id: 'no-uuid' })).status).toBe(400)
   })
   it('descripción: el agente recibe la fecha, no un veredicto de vigencia', () => {

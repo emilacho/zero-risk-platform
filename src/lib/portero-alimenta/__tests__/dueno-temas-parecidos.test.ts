@@ -1,6 +1,6 @@
 /**
  * TEMAS PARECIDOS (05-nov) · US$ 0 · base falsa · sin modelo.
- * «Mismo tema» = mismo `pregunta_id` o el mismo texto normalizado. Un tema parecido no frena una pregunta, no reemplaza una respuesta y no se archiva por tema: se muestra APARTE para que el agente razone.
+ * «Mismo tema» = el mismo texto normalizado. Un tema parecido no reemplaza una respuesta ni cuenta como respondido: se muestra APARTE para que el agente razone. Desde #940 las preguntas viven en la plataforma (aquí 410).
  */
 import { describe, expect, it } from 'vitest'
 import { esElMismoTema, esExactamenteElMismoTema, esTemaParecido, parecidaDeLaFicha, rutaDueno, rutaLeerDueno, temaNormal, type DepsDeDueno } from '../dueno'
@@ -51,15 +51,13 @@ describe('la tabla del aviso: parecido no es el mismo', () => {
 describe('para los diez clientes', () => {
   for (const c of DIEZ_CLIENTES) {
     describe(`${c.nombre} (${c.pais})`, () => {
-      it('una pregunta de tema parecido SE REGISTRA y trae aparte lo parecido', async () => {
+      const leer = (m: ReturnType<typeof montar>, q: Record<string, string>) => rutaLeerDueno({ db: m.base.db as never, ahora: AHORA }, { client_id: c.id, ...q })
+      it('un tema parecido no cuenta como respondido: la lectura lo trae aparte', async () => {
         const m = montar(c)
         await rutaDueno(m.deps, responder(c, 'ventas', 'unas 80 por semana'))
-        const r = await rutaDueno(m.deps, preguntar(c, 'ventas temporada baja'))
-        expect(r.body).toMatchObject({ ok: true, registrada: true })
-        expect(r.body.ya_respondida).toBeUndefined()
-        expect(r.body.respuestas).toBeUndefined()
-        expect(r.body.parecidas).toEqual([expect.objectContaining({ tema: 'ventas', respuesta: 'unas 80 por semana', fecha: '2026-10-15T14:00:00.000Z' })])
-        expect(m.t.cerebro_dueno_preguntas.map((p) => [p.tema, p.estado])).toEqual([['ventas temporada baja', 'pendiente']])
+        const l = await leer(m, { tema: 'ventas temporada baja' })
+        expect(l.body).toMatchObject({ ok: true, respondida: false, total: 0, respuestas: [] })
+        expect(l.body.parecidas).toEqual([expect.objectContaining({ tema: 'ventas', respuesta: 'unas 80 por semana', fecha: '2026-10-15T14:00:00.000Z' })])
       })
       it('una respuesta de tema parecido convive: no retira la otra ficha', async () => {
         const m = montar(c)
@@ -69,50 +67,35 @@ describe('para los diez clientes', () => {
         expect(vivas(m.t).map((f) => (f.provenance_tag as { datos: { tema: string } }).datos.tema).sort()).toEqual(['ticket', 'ticket real'])
         expect(vivas(m.t).every((f) => f.decision === 'suma')).toBe(true)
       })
-      it('la misma pregunta con otra escritura sigue frenándose, y aparte trae lo parecido', async () => {
+      it('el mismo tema con otra escritura sigue siendo el mismo; lo parecido va aparte', async () => {
         const m = montar(c)
         await rutaDueno(m.deps, responder(c, 'costo de envío', '3 dólares'))
         await rutaDueno(m.deps, responder(c, 'costo', '5 dólares'))
-        const r = await rutaDueno(m.deps, preguntar(c, 'COSTO  de envio'))
-        expect(r.body).toMatchObject({ registrada: false, ya_respondida: true })
-        expect((r.body.respuestas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['3 dólares'])
-        expect((r.body.parecidas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['5 dólares'])
-        expect(m.t.cerebro_dueno_preguntas).toHaveLength(0)
+        const l = await leer(m, { tema: 'COSTO  de envio' })
+        expect(l.body).toMatchObject({ respondida: true, total: 1 })
+        expect((l.body.respuestas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['3 dólares'])
+        expect((l.body.parecidas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['5 dólares'])
       })
-      it('otra oficina con un tema parecido pendiente: registra, ve la pendiente aparte, y responder una no cierra la otra', async () => {
+      it('`pregunta` y `descartar` ya no viven en el cerebro: 410 y no se toca nada', async () => {
         const m = montar(c)
-        await rutaDueno(m.deps, preguntar(c, 'ventas'))
-        const r = await rutaDueno(m.deps, preguntar(c, 'ventas temporada baja', { preguntado_por: OTRA }))
-        expect(r.body).toMatchObject({ registrada: true })
-        expect(r.body.ya_preguntada).toBeUndefined()
-        expect(r.body.pendientes_parecidas).toEqual([expect.objectContaining({ tema: 'ventas', oficina: 'financiera' })])
-        await rutaDueno(m.deps, responder(c, 'ventas', '80'))
-        expect(Object.fromEntries(m.t.cerebro_dueno_preguntas.map((p) => [p.tema, p.estado]))).toEqual({ ventas: 'respondida', 'ventas temporada baja': 'pendiente' })
+        fila(m.t, c, 'p1', 'ventas')
+        expect((await rutaDueno(m.deps, preguntar(c, 'ventas temporada baja'))).status).toBe(410)
+        expect((await rutaDueno(m.deps, { evento: 'descartar', client_id: c.id, tema: 'ventas', motivo: 'm', dry_run: false, ...WF })).status).toBe(410)
+        expect(m.t.cerebro_dueno_preguntas.map((p) => [p.id, p.estado])).toEqual([['p1', 'pendiente']])
       })
-      it('`descartar` por tema solo toca el mismo tema', async () => {
-        const m = montar(c)
-        fila(m.t, c, 'p1', 'ventas'); fila(m.t, c, 'p2', 'ventas temporada baja'); fila(m.t, c, 'p3', 'VENTAS')
-        const seco = await rutaDueno(m.deps, { evento: 'descartar', client_id: c.id, tema: 'ventas', motivo: 'm', dry_run: true, ...WF })
-        expect((seco.body.preguntas as Array<Record<string, unknown>>).map((p) => p.pregunta_id).sort()).toEqual(['p1', 'p3'])
-        expect((await rutaDueno(m.deps, { evento: 'descartar', client_id: c.id, tema: 'ventas', motivo: 'm', dry_run: false, ...WF })).body).toMatchObject({ descartadas: 2 })
-        expect(m.t.cerebro_dueno_preguntas.map((p) => [p.id, p.estado])).toEqual([['p1', 'obsoleta'], ['p2', 'pendiente'], ['p3', 'obsoleta']])
-      })
-      it('la lectura por tema: el mismo arriba; los parecidos aparte; solo un parecido no cuenta como respondida', async () => {
+      it('la lectura por tema: el mismo arriba; los parecidos aparte; las pendientes salen null (viven en la plataforma)', async () => {
         const m = montar(c)
         await rutaDueno(m.deps, responder(c, 'ventas', 'unas 80'))
         await rutaDueno(m.deps, responder(c, 'ventas temporada baja', 'unas 30'))
         fila(m.t, c, 'p1', 'ventas'); fila(m.t, c, 'p2', 'ventas de diciembre')
-        const db = m.base.db as never
-        const l = await rutaLeerDueno({ db, ahora: AHORA }, { client_id: c.id, tema: 'Ventas' })
-        expect(l.body).toMatchObject({ respondida: true, total: 1 })
+        const l = await leer(m, { tema: 'Ventas' })
+        expect(l.body).toMatchObject({ respondida: true, total: 1, pendientes: null, pendientes_parecidas: null })
         expect((l.body.respuestas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['unas 80'])
         expect((l.body.parecidas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['unas 30'])
-        expect((l.body.pendientes as Array<Record<string, unknown>>).map((x) => x.pregunta_id)).toEqual(['p1'])
-        expect((l.body.pendientes_parecidas as Array<Record<string, unknown>>).map((x) => x.pregunta_id)).toEqual(['p2'])
-        const solo = await rutaLeerDueno({ db, ahora: AHORA }, { client_id: c.id, tema: 'ventas de enero' })
+        const solo = await leer(m, { tema: 'ventas de enero' })
         expect(solo.body).toMatchObject({ respondida: false, total: 0, respuestas: [] })
         expect((solo.body.parecidas as unknown[]).length).toBe(1)
-        const sinTema = await rutaLeerDueno({ db, ahora: AHORA }, { client_id: c.id })
+        const sinTema = await leer(m, {})
         expect(sinTema.body.parecidas).toBeUndefined(); expect(sinTema.body.pendientes_parecidas).toBeUndefined()
         expect((sinTema.body.respuestas as unknown[]).length).toBe(2)
       })
@@ -120,144 +103,57 @@ describe('para los diez clientes', () => {
   }
 })
 
-/** la base con la SEGUNDA lectura de preguntas caída (la primera es la de pendientes; la segunda, la de la pregunta contestada por su id) */
-const conLecturaCaida = (m: ReturnType<typeof montar>) => {
-  let lecturas = 0
-  return { from: (t: string) => {
-    const q = m.base.db.from(t)
-    if (t !== 'cerebro_dueno_preguntas') return q
-    return new Proxy(q as object, { get: (o, k) => {
-      if (k !== 'select') return (o as Record<string | symbol, unknown>)[k]
-      return (...a: unknown[]) => {
-        lecturas++
-        const s = (q as unknown as { select: (...x: unknown[]) => unknown }).select(...a)
-        return lecturas === 1 ? s : { eq: () => ({ eq: () => ({ limit: async () => ({ data: null, error: { message: 'caída' } }) }) }) }
-      }
-    } })
-  } } as unknown as DepsDeDueno['db']
-}
-
-describe('el mismo `pregunta_id` cuenta como el mismo tema', () => {
+describe('con `pregunta_id` (la pregunta vive en la plataforma)', () => {
   const c = DIEZ_CLIENTES[0]
-  it('la respuesta reemplaza la ficha del tema de ESA pregunta aunque el texto del tema venga distinto, y la cierra', async () => {
+  it('la respuesta no lee ni toca las preguntas del cerebro', async () => {
+    const m = montar(c)
+    fila(m.t, c, UUID_PREGUNTA, 'horario de cocina')
+    const r = await rutaDueno(m.deps, responder(c, 'horario de cocina', 'hasta las 22', { pregunta_id: UUID_PREGUNTA }))
+    expect(r.body).toMatchObject({ ok: true, guardada: true })
+    expect(m.t.cerebro_dueno_preguntas[0]).toMatchObject({ estado: 'pendiente' })
+  })
+  it('un texto de tema parecido no reemplaza, con o sin `pregunta_id`', async () => {
+    for (const o of [{}, { pregunta_id: UUID_PREGUNTA }]) {
+      const m = montar(c)
+      await rutaDueno(m.deps, responder(c, 'horario de cocina', 'hasta las 22'))
+      const r = await rutaDueno(m.deps, responder(c, 'cocina', 'hasta las 23', { respondido_en: '2026-10-16T14:00:00Z', ...o }))
+      expect(r.body.reemplaza).toBeNull()
+      expect(vivas(m.t)).toHaveLength(2)
+    }
+  })
+  it('el mismo tema con otra escritura sí reemplaza', async () => {
     const m = montar(c)
     await rutaDueno(m.deps, responder(c, 'horario de cocina', 'hasta las 22'))
-    fila(m.t, c, UUID_PREGUNTA, 'horario de cocina')
-    const r = await rutaDueno(m.deps, responder(c, 'cocina', 'hasta las 23', { pregunta_id: UUID_PREGUNTA, respondido_en: '2026-10-16T14:00:00Z' }))
+    const r = await rutaDueno(m.deps, responder(c, 'Horario  de COCINA', 'hasta las 23', { pregunta_id: UUID_PREGUNTA, respondido_en: '2026-10-16T14:00:00Z' }))
     expect(r.body.reemplaza).toBeTruthy()
     expect(vivas(m.t)).toHaveLength(1)
     expect(String(vivas(m.t)[0].contenido)).toContain('hasta las 23')
-    expect(m.t.cerebro_dueno_preguntas[0]).toMatchObject({ estado: 'respondida', ficha_id: vivas(m.t)[0].id })
-  })
-  it('sin `pregunta_id`, ese mismo texto parecido no reemplaza', async () => {
-    const m = montar(c)
-    await rutaDueno(m.deps, responder(c, 'horario de cocina', 'hasta las 22'))
-    fila(m.t, c, UUID_PREGUNTA, 'horario de cocina')
-    const r = await rutaDueno(m.deps, responder(c, 'cocina', 'hasta las 23', { respondido_en: '2026-10-16T14:00:00Z' }))
-    expect(r.body.reemplaza).toBeNull()
-    expect(vivas(m.t)).toHaveLength(2)
-    expect(m.t.cerebro_dueno_preguntas[0]).toMatchObject({ estado: 'pendiente' })
-  })
-  it('una pregunta de más de 72 h también se cierra por su id; por tema no', async () => {
-    const m = montar(c)
-    const vieja = new Date(AHORA.getTime() - 200 * 3_600_000).toISOString()
-    fila(m.t, c, UUID_PREGUNTA, 'tema viejo', { creado_en: vieja })
-    await rutaDueno(m.deps, responder(c, 'tema viejo', 'sí'))
-    expect(m.t.cerebro_dueno_preguntas[0]).toMatchObject({ estado: 'pendiente' })
-    await rutaDueno(m.deps, responder(c, 'tema viejo', 'sí, de verdad', { pregunta_id: UUID_PREGUNTA }))
-    expect(m.t.cerebro_dueno_preguntas[0]).toMatchObject({ estado: 'respondida' })
-  })
-  it('con `pregunta_id` se cierra solo esa, aunque otra pendiente tenga el mismo tema', async () => {
-    const m = montar(c)
-    fila(m.t, c, UUID_PREGUNTA, 'ventas'); fila(m.t, c, 'p2', 'ventas')
-    await rutaDueno(m.deps, responder(c, 'ventas', '80', { pregunta_id: UUID_PREGUNTA }))
-    expect(m.t.cerebro_dueno_preguntas.map((p) => p.estado)).toEqual(['respondida', 'pendiente'])
-  })
-  it('una pregunta ya cerrada, de otro cliente o inexistente no se toca, y la respuesta se guarda', async () => {
-    const m = montar(c)
-    fila(m.t, c, UUID_PREGUNTA, 'ventas', { estado: 'obsoleta' })
-    fila(m.t, DIEZ_CLIENTES[1], 'bbbbbbbb-0000-4000-8000-000000000002', 'ventas')
-    for (const pregunta_id of [UUID_PREGUNTA, 'bbbbbbbb-0000-4000-8000-000000000002', 'cccccccc-0000-4000-8000-000000000003', 'no-es-uuid']) {
-      const r = await rutaDueno(m.deps, responder(c, 'ventas', `80 ${pregunta_id}`, { pregunta_id }))
-      expect(r.body).toMatchObject({ ok: true, guardada: true })
-    }
-    expect(m.t.cerebro_dueno_preguntas.map((p) => p.estado)).toEqual(['obsoleta', 'pendiente'])
-  })
-  it('si no se puede leer la pregunta contestada: error claro y nada guardado', async () => {
-    const m = montar(c)
-    const r = await rutaDueno({ ...m.deps, db: conLecturaCaida(m) }, responder(c, 'ventas', '80', { pregunta_id: UUID_PREGUNTA }))
-    expect(r.status).toBe(502)
-    expect(vivas(m.t)).toHaveLength(0)
-  })
-  it('un `pregunta_id` que no es uuid no se busca en la base (allá sería un error): la respuesta se guarda', async () => {
-    const m = montar(c)
-    const r = await rutaDueno({ ...m.deps, db: conLecturaCaida(m) }, responder(c, 'ventas', '80', { pregunta_id: 'no-es-uuid' }))
-    expect(r.body).toMatchObject({ ok: true, guardada: true })
-  })
-  it('una PREGUNTA que trae `pregunta_id` no toma el tema de esa fila: se juzga por su propio tema', async () => {
-    const m = montar(c)
-    await rutaDueno(m.deps, responder(c, 'horario de cocina', 'hasta las 22'))
-    fila(m.t, c, UUID_PREGUNTA, 'horario de cocina', { estado: 'respondida' })
-    const r = await rutaDueno(m.deps, preguntar(c, 'afluencia', { pregunta_id: UUID_PREGUNTA }))
-    expect(r.body).toMatchObject({ registrada: true })
-    // lo mismo si esa fila sigue pendiente (la hallada entre las pendientes tampoco presta su tema a una pregunta)
-    const m2 = montar(c)
-    await rutaDueno(m2.deps, responder(c, 'horario de cocina', 'hasta las 22'))
-    fila(m2.t, c, UUID_PREGUNTA, 'horario de cocina')
-    const r2 = await rutaDueno(m2.deps, preguntar(c, 'afluencia', { pregunta_id: UUID_PREGUNTA }))
-    expect(r2.body).toMatchObject({ registrada: true })
   })
 })
 
 describe('los límites de lo parecido', () => {
   const c = DIEZ_CLIENTES[1] // clínica de 3 sedes
-  it('lo parecido de otra sede no se ofrece; `forzar` registra y también lo trae', async () => {
+  const leer = (m: ReturnType<typeof montar>, q: Record<string, string>) => rutaLeerDueno({ db: m.base.db as never, ahora: AHORA }, { client_id: c.id, ...q })
+  it('lo parecido de otra sede no se ofrece', async () => {
     const m = montar(c)
     await rutaDueno(m.deps, responder(c, 'ventas', 'norte 80', { sede_clave: 'norte' }))
     await rutaDueno(m.deps, responder(c, 'ventas', 'centro 50', { sede_clave: 'centro' }))
-    const r = await rutaDueno(m.deps, preguntar(c, 'ventas temporada baja', { sede_clave: 'norte', forzar: true }))
-    expect(r.body).toMatchObject({ registrada: true })
-    expect((r.body.parecidas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['norte 80'])
-  })
-  it('la pendiente parecida de otra sede tampoco', async () => {
-    const m = montar(c)
-    fila(m.t, c, 'p1', 'ventas', { sede_clave: 'centro' })
-    const r = await rutaDueno(m.deps, preguntar(c, 'ventas temporada baja', { sede_clave: 'norte' }))
-    expect(r.body.pendientes_parecidas).toEqual([])
+    const l = await leer(m, { tema: 'ventas temporada baja', sede_clave: 'norte' })
+    expect((l.body.parecidas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['norte 80'])
   })
   it('varias parecidas: la más nueva primero; sin parecidas la lista va vacía', async () => {
     const m = montar(c)
     await rutaDueno(m.deps, responder(c, 'ventas de enero', 'vieja', { respondido_en: '2026-09-01T00:00:00Z' }))
     await rutaDueno(m.deps, responder(c, 'ventas de marzo', 'nueva', { respondido_en: '2026-10-01T00:00:00Z' }))
-    const r = await rutaDueno(m.deps, preguntar(c, 'ventas'))
-    expect((r.body.parecidas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['nueva', 'vieja'])
-    expect((await rutaDueno(m.deps, preguntar(c, 'horario de cocina'))).body).toMatchObject({ parecidas: [], pendientes_parecidas: [] })
-  })
-  it('«ya preguntada» y «repetida» también traen lo parecido', async () => {
-    const m = montar(c)
-    await rutaDueno(m.deps, responder(c, 'ventas de enero', '80'))
-    await rutaDueno(m.deps, preguntar(c, 'ventas'))
-    const otra = await rutaDueno(m.deps, preguntar(c, 'ventas', { preguntado_por: OTRA }))
-    expect(otra.body).toMatchObject({ ya_preguntada: true })
-    expect((otra.body.parecidas as unknown[]).length).toBe(1)
-    const misma = await rutaDueno(m.deps, preguntar(c, 'ventas'))
-    expect(misma.body).toMatchObject({ repetida: true })
-    expect((misma.body.parecidas as unknown[]).length).toBe(1)
+    expect(((await leer(m, { tema: 'ventas' })).body.parecidas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['nueva', 'vieja'])
+    expect((await leer(m, { tema: 'horario de cocina' })).body).toMatchObject({ parecidas: [], pendientes_parecidas: null })
   })
   it('la lectura con `canal`: los parecidos también respetan ese filtro', async () => {
     const m = montar(c)
     await rutaDueno(m.deps, responder(c, 'ventas de enero', 'por el tablero'))
     await rutaDueno(m.deps, responder(c, 'ventas de marzo', 'por Slack', { canal: 'MD de Slack' }))
-    const l = await rutaLeerDueno({ db: m.base.db as never, ahora: AHORA }, { client_id: c.id, tema: 'ventas', canal: 'MD de Slack' })
+    const l = await leer(m, { tema: 'ventas', canal: 'MD de Slack' })
     expect((l.body.parecidas as Array<Record<string, unknown>>).map((x) => x.respuesta)).toEqual(['por Slack'])
-  })
-  it('dry_run: dice lo parecido y no guarda la pregunta', async () => {
-    const m = montar(c)
-    await rutaDueno(m.deps, responder(c, 'ventas', '80'))
-    const r = await rutaDueno(m.deps, preguntar(c, 'ventas temporada baja', { dry_run: true }))
-    expect(r.body).toMatchObject({ registrada: false, dry_run: true })
-    expect((r.body.parecidas as unknown[]).length).toBe(1)
-    expect(m.t.cerebro_dueno_preguntas).toHaveLength(0)
   })
   it('un dato del manual no lo reemplaza una respuesta de tema parecido', async () => {
     const m = montar(c)
@@ -266,11 +162,10 @@ describe('los límites de lo parecido', () => {
     expect(r.body.reemplaza).toBeNull()
     expect(vivas(m.t)).toHaveLength(2)
   })
-  it('una respuesta y su pregunta del catálogo de finanzas (clave con guion bajo) son el mismo tema', async () => {
+  it('una respuesta con la clave del catálogo de finanzas (guion bajo) es el mismo tema que su texto', async () => {
     const m = montar(c)
-    await rutaDueno(m.deps, preguntar(c, 'frecuencia visita'))
     await rutaDueno(m.deps, responder(c, 'frecuencia_visita', 'una vez por semana'))
-    expect(m.t.cerebro_dueno_preguntas[0]).toMatchObject({ estado: 'respondida' })
+    expect((await leer(m, { tema: 'frecuencia visita' })).body).toMatchObject({ respondida: true, total: 1 })
   })
 })
 
