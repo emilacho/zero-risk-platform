@@ -18,6 +18,7 @@ import { metodoDeCalendario } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
+import { diaUnoDelPlan } from './fechas-en-texto'
 import type { Ajuste, Estrategia, Fila, FormatosPorRed, Hallazgo, TandaAgente } from './tipos'
 import { type LexicoAfirmaciones } from './afirmaciones'
 import { lexicoDelCliente } from './lexico-por-rubro'
@@ -111,7 +112,7 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
     return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: true, alerta: r.alerta } }
   }
   if (campana.estado === 'abierta') await al.actualizarCampana(campana.id, { estado: 'estrategia' })
-  const tarea = tareaDeEstrategia({ ctx, formatosPermitidos: formatosPermitidos(formatos), version, diasDeCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin, correccion: fichas ?? undefined })
+  const tarea = tareaDeEstrategia({ ctx, formatosPermitidos: formatosPermitidos(formatos), version, diasDeCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin, diaUnoDelPlan: diaUnoDelPlan(ctx.planTexto), correccion: fichas ?? undefined })
   return {
     status: 200,
     cuerpo: {

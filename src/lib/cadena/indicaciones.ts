@@ -33,14 +33,21 @@ const lineas = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n')
 
 export interface PedidoDeEstrategia { ctx: ContextoDelCliente; formatosPermitidos: Record<string, string[]>; version: number; diasDeCampana?: number; correccion?: Ficha[]
   /** 09-nov (GO Lenovo · B): el día 1 y el último día de la campaña (`YYYY-MM-DD`). Con ellos la tarea dice desde cuándo se cuentan los días; sin ellos, la tarea de siempre */
-  fechaInicio?: string | null; fechaFin?: string | null }
+  fechaInicio?: string | null; fechaFin?: string | null
+  /** 09-nov · F: el día 1 DEL PLAN (su ventana). Si difiere del de la campaña, las fechas del plan se cuentan desde él y se corren en bloque */
+  diaUnoDelPlan?: string | null }
 
 const NOMBRE_DEL_DIA = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
 /** B · la línea del día 1: fecha, día de la semana, duración y fecha de fin. Vacía si falta la fecha de inicio (la tarea queda byte a byte como antes) */
-export function lineaDelDiaUno(fechaInicio: string | null | undefined, fechaFin: string | null | undefined, dias: number): string {
+export function lineaDelDiaUno(fechaInicio: string | null | undefined, fechaFin: string | null | undefined, dias: number, diaUnoDelPlan?: string | null): string {
   if (!fechaInicio || !esFechaIso(fechaInicio)) return ''
   const fin = fechaFin && esFechaIso(fechaFin) ? fechaFin : null
-  return `El día 1 de la campaña es el ${NOMBRE_DEL_DIA[diaSemanaIso(fechaInicio)]} ${fechaInicio}; la campaña dura ${dias} días${fin ? ` y termina el ${NOMBRE_DEL_DIA[diaSemanaIso(fin)]} ${fin} (día ${dias})` : ''}. Todo «dia», «dia_desde» y «dia_hasta» se cuenta desde ese día 1: si el plan da una FECHA, conviértela a su día de campaña contando desde el día 1.`
+  const base = `El día 1 de la campaña es el ${NOMBRE_DEL_DIA[diaSemanaIso(fechaInicio)]} ${fechaInicio}; la campaña dura ${dias} días${fin ? ` y termina el ${NOMBRE_DEL_DIA[diaSemanaIso(fin)]} ${fin} (día ${dias})` : ''}.`
+  // F (09-nov · firma de Emilio): la campaña arrancó en otra fecha que la del plan → la cronología del plan se corre ENTERA, en bloque; los feriados reales no se mueven
+  if (diaUnoDelPlan && esFechaIso(diaUnoDelPlan) && diaUnoDelPlan !== fechaInicio) {
+    return `${base} El plan cuenta sus fechas desde SU día 1, el ${NOMBRE_DEL_DIA[diaSemanaIso(diaUnoDelPlan)]} ${diaUnoDelPlan}: si el plan da una FECHA, conviértela a día contando desde el ${diaUnoDelPlan} (así el día N del plan es el día N de la campaña y toda su cronología se corre en bloque, sin perder ningún tramo). Todo «dia», «dia_desde» y «dia_hasta» es ese día. Las fechas especiales reales (feriados, Navidad, fechas comerciales) no se corren: quedan en su fecha de calendario.`
+  }
+  return `${base} Todo «dia», «dia_desde» y «dia_hasta» se cuenta desde ese día 1: si el plan da una FECHA, conviértela a su día de campaña contando desde el día 1.`
 }
 
 export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
@@ -56,7 +63,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     lineas([
       'Toda `cita_plan` es una frase LITERAL del plan (copiada tal cual). Si el plan no lo dice, no es una regla del plan: no lo cites; si lo propones tú, ponlo como propuesta con su motivo.',
       `Los pilares suman 100. Las fases caen dentro de ${p.diasDeCampana ?? 90} días.`,
-      ...[lineaDelDiaUno(p.fechaInicio, p.fechaFin, p.diasDeCampana ?? 90)].filter(Boolean),
+      ...[lineaDelDiaUno(p.fechaInicio, p.fechaFin, p.diasDeCampana ?? 90, p.diaUnoDelPlan)].filter(Boolean),
       '`fechas_que_importan` es una lista de TIPOS de fechas que le importan a ESTE negocio (feriados locales, temporadas, eventos del sector, fechas comerciales… o ninguna). Lo normal es la lista VACÍA: no inventes tipos «por si acaso». Si declaras uno, di su origen (plan | estrategia | alta) y un motivo concreto.',
       '`patron_semanal`: los slots que se repiten cada semana (día, hora, red, formato, pilar, sede). Usa solo redes y formatos permitidos. `requiere_abierto` solo si la pieza depende de que un local esté abierto; si el negocio no tiene local, siempre false.',
       '`pendientes`: lo que falta saber, con qué pieza desbloquea y quién lo pide (`portero` = el cerebro del cliente, `sistema` = investigarlo con fuente). Nunca se le pregunta nada a nadie del negocio.',
