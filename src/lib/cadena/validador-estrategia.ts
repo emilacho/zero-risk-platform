@@ -4,6 +4,7 @@
  * S06 pares red-formato · S07 pendientes con salida · S08 fechas que importan sin cita ni motivo.
  */
 import { citaAparece, numerosEn } from './texto'
+import { hitoCuadraConFechas, MARGEN_DE_SEMANA_DIAS } from './fechas-en-texto'
 import type { Estrategia, FormatosPorRed, Hallazgo, Severidad } from './tipos'
 
 export interface InsumosEstrategia {
@@ -11,6 +12,8 @@ export interface InsumosEstrategia {
   formatos: FormatosPorRed
   /** duración de la campaña en días (90 por defecto; cada campaña trae la suya) */
   diasCampana?: number
+  /** día 1 de la campaña (`YYYY-MM-DD`, calendario del cliente) · con él, S04 convierte las fechas de las citas a día de campaña */
+  fechaInicio?: string | null
 }
 
 const REQUERIDAS = ['canales', 'excluidos', 'pilares', 'fases', 'hitos', 'dependencias', 'fechas_que_importan', 'patron_semanal', 'piezas_fijas', 'pendientes', 'alertas'] as const
@@ -103,6 +106,16 @@ export function validarEstrategia(x: unknown, ins: InsumosEstrategia): Hallazgo[
 
   // S04 · hitos de revisión: el día del hito sale de la cita del plan
   for (const x2 of e.hitos.filter((y) => y.tipo === 'revision')) {
+    // 09-nov (GO Lenovo · firma de Emilio): si la cita trae FECHAS de calendario («semana del 20 de noviembre de 2026»), se convierten a día de campaña
+    // con la fecha de inicio (día 1) y se compara eso; «semana del…» admite ±6 días. Sin fecha de inicio o sin fechas en la cita, el chequeo de siempre.
+    const conFechas = ins.fechaInicio ? hitoCuadraConFechas(x2.dia, x2.cita_plan ?? '', ins.fechaInicio) : null
+    if (conFechas) {
+      if (!conFechas.cuadra) {
+        const cuales = conFechas.dias.join(' / ')
+        out.push(h('S04', 'bloquea', `hito ${x2.clave}`, `el hito de revisión cae en el día ${x2.dia} pero la fecha que cita el plan es el día ${cuales} de la campaña${conFechas.semana ? ` (su semana: ±${MARGEN_DE_SEMANA_DIAS} días)` : ''}`, `días del plan desde el día 1 (${ins.fechaInicio})`, `usar el día ${cuales}`))
+      }
+      continue
+    }
     const nums = numerosEn(x2.cita_plan ?? '')
     if (nums.length && !nums.includes(x2.dia)) {
       out.push(h('S04', 'bloquea', `hito ${x2.clave}`, `el hito de revisión cae en el día ${x2.dia} pero la cita del plan dice ${nums.join(' / ')}`, 'días del plan', 'usar el día que fija el plan'))

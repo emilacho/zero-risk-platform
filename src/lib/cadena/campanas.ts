@@ -6,6 +6,7 @@ import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } fr
 import { arrancarAlActivar, type ResultadoDelArranque } from './arranque'
 import { DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, SEMANAS_DE_TANDA } from './constantes'
 import { fechaInicioPorRegla, sumarDias } from './fechas'
+import { ventanaDelPlan } from './fechas-en-texto'
 import { nuevoOrdenEncendido } from './mesas'
 import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 
@@ -70,10 +71,13 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   // fecha de inicio por regla: días hábiles solo si hay feriados nacionales VERIFICADOS (porque algún cliente los declaró); si no, corridos con aviso
   const nacionales = ctx.pais ? (await al.fechasEspeciales(ctx.pais, [], plan.fecha, sumarDias(plan.fecha, 30))).filter((f) => f.estado === 'verificada' && f.alcance === 'nacional') : []
   const ini = fechaInicioPorRegla(plan.fecha, nacionales.length ? new Set(nacionales.map((f) => f.fecha)) : null)
+  // 09-nov · D (firma de Emilio, regla de sistema): la campaña HEREDA la ventana que declara el plan aprobado (día 1 y duración). Sin ventana legible en el plan,
+  // o si quien abre pide su propia medida (`dias_de_campana`), la regla de siempre (primer lunes + la medida).
+  const ventana = ventanaDeLaCampana(ctx.planTexto, ini.fecha, dias as number, cuerpo.dias_de_campana !== undefined)
   let nueva: Campana
   try { nueva = await al.insertarCampana({
-    client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ini.fecha, fecha_inicio_origen: 'regla', fecha_fin: sumarDias(ini.fecha, (dias as number) - 1), ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
-    zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ini.aviso, ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
+    client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ventana.fecha_inicio, fecha_inicio_origen: ventana.origen, fecha_fin: ventana.fecha_fin, ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
+    zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ventana.origen === 'plan' ? null : ini.aviso,ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
     presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
   }) } catch (e) {
@@ -86,8 +90,18 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   }
   // la campaña reemplazada ya no existe para el vigía: sus esperas (la fecha de inicio, la bandeja, lo que investigaba…) se cancelan TODAS
   if (viva) await cancelarEsperasDeCampana(al, viva.id)
-  await abrirEsperaDe(al, nueva, 'fecha_inicio_propuesta', nueva.id, 'la fecha de inicio calculada por regla queda firme el día anterior', ahora, { fechaInicio: nueva.fecha_inicio })
-  return { status: 201, cuerpo: { campana: nueva, aviso_fecha_inicio: ini.aviso, reemplaza_a: reemplaza } }
+  // la fecha del PLAN ya la aprobó Emilio con el plan: no es una propuesta que tenga que quedar firme (solo la de la regla lo es)
+  if (ventana.origen === 'regla') await abrirEsperaDe(al, nueva, 'fecha_inicio_propuesta', nueva.id, 'la fecha de inicio calculada por regla queda firme el día anterior', ahora, { fechaInicio: nueva.fecha_inicio })
+  return { status: 201, cuerpo: { campana: nueva, aviso_fecha_inicio: ventana.origen === 'regla' ? ini.aviso : null, ventana_origen: ventana.origen, reemplaza_a: reemplaza } }
+}
+
+/**
+ * D · la ventana de una campaña: la del plan si la declara (y nadie pidió otra medida), si no la de la regla. Pura: la usan abrir y reabrir.
+ */
+export function ventanaDeLaCampana(planTexto: string, inicioPorRegla: string, diasPorRegla: number, medidaPedida: boolean): { fecha_inicio: string; fecha_fin: string; origen: 'plan' | 'regla'; dias: number } {
+  const delPlan = medidaPedida ? null : ventanaDelPlan(planTexto)
+  if (delPlan) return { fecha_inicio: delPlan.desde, fecha_fin: delPlan.hasta, origen: 'plan', dias: delPlan.dias }
+  return { fecha_inicio: inicioPorRegla, fecha_fin: sumarDias(inicioPorRegla, diasPorRegla - 1), origen: 'regla', dias: diasPorRegla }
 }
 
 export async function avanzarCampana(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
