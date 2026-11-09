@@ -43,9 +43,11 @@ export interface FichaDeDecision {
   decisivo?: CortoYLargo[]
   uso?: CortoYLargo
   desbloquea?: CortoYLargo
-  detiene?: boolean
+  /** 09-nov · v7 (CC4): qué trabajo está parado por esto, para el rótulo «DETIENE EL PLAN». Sin el campo: no detiene nada o no se sabe */
+  detiene?: { que: string }
   propuesta?: { cifras?: CifraDeLaFicha[]; supuesto?: string; al_cambiar?: string; al_editar?: { destino: Destino; vista_previa?: Destino } }
-  espera: { desde: string | null; vence?: string; al_vencer?: string }
+  /** sin `vence` ni `sin_limite` = no se sabe (guion rojo). «Sin fecha límite» solo con `sin_limite: true`, que la oficina declara (cuidado 1 de CC6) */
+  espera: { desde: string | null; vence?: string; sin_limite?: true; al_vencer?: string }
   /** SOLO INFORMATIVO: nunca decide si se pide confirmación ni el tope (son de la puerta). Un costo en 0 no autoriza nada */
   costo?: { usd?: number; nota: string }
   origen: { fuente: string; ref: string }
@@ -88,6 +90,17 @@ function pantallaDe(d: Pick<Decision, 'tipo' | 'decidir'>): Pantalla | null {
   return null
 }
 
+/**
+ * todo lo que hoy marca `detiene: true` detiene el plan (la compuerta, la pausa, sus preguntas, «no volvió» y la campaña: v7 «DETIENE EL PLAN»).
+ * Cuando una oficina detenga otra cosa, escribe su propio «qué» (T3)
+ */
+export const QUE_SE_DETIENE = 'el plan'
+/**
+ * las fuentes que declaran que no vencen: el tablero financiero no tiene plazo, se reemplaza solo con una versión nueva (v7: «Sin fecha límite»).
+ * Las demás sin `vence` quedan como «no se sabe»: la compuerta del plan la cierra un reloj y la bandeja trae su propio vencimiento
+ */
+const NO_VENCEN = new Set(['finanzas_tableros'])
+
 const largo = (l?: string | null, c?: string | null): CortoYLargo | undefined => (l ? { largo: l, ...(c ? { corto: c } : {}) } : undefined)
 
 /** las acciones de hoy, traducidas al vocabulario fijo. Solo lo que la plataforma ya declara en `permite`; nada nuevo */
@@ -129,9 +142,9 @@ export function fichaDe(d: Decision): FichaDeDecision {
     ...(d.criticos?.length ? { decisivo: d.criticos.map((c) => ({ largo: c })) } : {}),
     ...(largo(d.para_que, d.para_que_corto) ? { uso: largo(d.para_que, d.para_que_corto) } : {}),
     ...(largo(d.destraba, d.destraba_corto) ? { desbloquea: largo(d.destraba, d.destraba_corto) } : {}),
-    ...(typeof d.detiene === 'boolean' ? { detiene: d.detiene } : {}),
+    ...(d.detiene === true ? { detiene: { que: QUE_SE_DETIENE } } : {}),
     ...(Object.keys(propuesta).length ? { propuesta } : {}),
-    espera: { desde: d.desde, ...(d.vence ? { vence: d.vence } : {}), ...(al_vencer ? { al_vencer } : {}) },
+    espera: { desde: d.desde, ...(d.vence ? { vence: d.vence } : !d.vence && NO_VENCEN.has(d.fuente) ? { sin_limite: true as const } : {}), ...(al_vencer ? { al_vencer } : {}) },
     ...(d.costo_nota || d.costo_usd !== null ? { costo: { ...(d.costo_usd !== null ? { usd: d.costo_usd } : {}), nota: d.costo_nota ?? '' } } : {}),
     origen: { fuente: d.fuente, ref: d.id },
     acciones,
@@ -164,6 +177,8 @@ export function problemasDeLaFicha(f: FichaDeDecision): string[] {
   if (cifras.some((c) => c.editable) && !f.propuesta?.al_editar) p.push('una cifra editable sin a dónde va el cambio')
   for (const d of [f.propuesta?.al_editar?.destino, f.propuesta?.al_editar?.vista_previa]) if (d !== undefined && !(DESTINOS as readonly string[]).includes(d)) p.push(`puerta desconocida: ${String(d)}`)
   for (const [k, v] of [['uso', f.uso], ['desbloquea', f.desbloquea]] as const) if (v && (!esTexto(v.largo) || (v.corto !== undefined && !esTexto(v.corto)))) p.push(`«${k}» sin texto`)
+  if (f.espera?.sin_limite && f.espera.vence) p.push('vence y a la vez «sin fecha límite»')
+  if (f.detiene !== undefined && !esTexto(f.detiene?.que)) p.push('«detiene» sin decir qué')
   if (f.donde_se_hace && !(PANTALLAS as readonly string[]).includes(f.donde_se_hace.pantalla)) p.push(`pantalla desconocida: ${String(f.donde_se_hace.pantalla)}`)
   return p
 }

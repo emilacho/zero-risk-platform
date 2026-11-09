@@ -70,7 +70,8 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
     expect(f.propuesta?.cifras?.[0]).toMatchObject({ clave: 'meta_semanal', editable: true, nota: 'Dato' })
     expect(f.propuesta?.cifras?.[1]).not.toHaveProperty('editable'); expect(f.propuesta?.cifras?.[1]).not.toHaveProperty('nota')
     expect(f.decisivo).toEqual([{ largo: 'Instagram lleva 6 años inactivo' }])
-    expect(f).toMatchObject({ uso: { corto: 'Validar cifras', largo: 'largo' }, desbloquea: { corto: 'Solo constancia', largo: 'largo' }, detiene: false, departamento: { oficina: 'financiera', nombre: 'Financiero' } })
+    expect(f).toMatchObject({ uso: { corto: 'Validar cifras', largo: 'largo' }, desbloquea: { corto: 'Solo constancia', largo: 'largo' }, departamento: { oficina: 'financiera', nombre: 'Financiero' }, espera: { sin_limite: true } })
+    expect(f).not.toHaveProperty('detiene') // false: no detiene nada, no hay rótulo
   })
   it('🔴 una firma que hoy no deja editar no ofrece tocar la cifra: sin al_editar ni editable', () => {
     const f = fichaDe({ ...VARIANTES.firma_editable, permite: ['aceptar'], cifras: CIFRAS.map(({ editable: _e, ...c }) => c), al_editar: undefined })
@@ -105,7 +106,16 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
     for (const k of ['plan', 'campana', 'pieza', 'gran_idea', 'plan_con_pendientes', 'palabra_del_dueno', 'pausa', 'no_volvio', 'canal_viejo', 'lista_de_competidores', 'otra_revision']) expect(fichaDe(VARIANTES[k]).acciones, k).toEqual([])
   })
   it('🔴 la campaña: detiene, vence con su espera y dice qué pasa al vencer', () => {
-    expect(fichaDe(VARIANTES.campana)).toMatchObject({ detiene: true, espera: { vence: '2026-11-13T11:23:08Z', al_vencer: 'se pausa' }, costo: { nota: 'avisar no gasta' }, departamento: { nombre: 'Plan de 90 días' } })
+    expect(fichaDe(VARIANTES.campana)).toMatchObject({ detiene: { que: 'el plan' }, espera: { vence: '2026-11-13T11:23:08Z', al_vencer: 'se pausa' }, costo: { nota: 'avisar no gasta' }, departamento: { nombre: 'Plan de 90 días' } })
+  })
+  it('🔴 v7 · todo lo que detiene dice qué detiene («DETIENE EL PLAN»); lo que no detiene no lleva rótulo', () => {
+    for (const k of ['plan', 'pausa', 'no_volvio', 'campana']) expect(fichaDe(VARIANTES[k]).detiene, k).toEqual({ que: 'el plan' })
+    for (const k of ['firma_editable', 'pregunta_con_supuesto', 'pieza', 'canal_viejo']) expect(fichaDe(VARIANTES[k]), k).not.toHaveProperty('detiene')
+  })
+  it('🔴 v7 · «Sin fecha límite» solo donde la fuente lo declara (la firma); una pregunta sin plazo es «no se sabe», no «sin límite»', () => {
+    expect(fichaDe(VARIANTES.firma_editable).espera).toEqual({ desde: VARIANTES.firma_editable.desde, sin_limite: true })
+    for (const k of ['pregunta_con_supuesto', 'plan', 'pieza', 'pausa']) { expect(fichaDe(VARIANTES[k]).espera, k).not.toHaveProperty('sin_limite'); expect(fichaDe(VARIANTES[k]).espera, k).not.toHaveProperty('vence') }
+    expect(fichaDe(VARIANTES.campana).espera).not.toHaveProperty('sin_limite') // vence: el plazo manda
   })
   it('🔴 sin corto se manda solo el largo; nunca un corto sin su largo', () => {
     const f = fichaDe(dec({ para_que: 'Para repartir los anuncios entre ciudades.', destraba_corto: 'Huérfano' }))
@@ -131,6 +141,8 @@ describe('T0 · una ficha que rompe el contrato se rechaza entera', () => {
     expect(problemasDeLaFicha({ ...f, propuesta: { ...f.propuesta, al_editar: undefined } })).toContain('una cifra editable sin a dónde va el cambio')
   })
   it('🔴 una pantalla fuera de la lista', () => expect(problemasDeLaFicha({ ...fichaDe(VARIANTES.pieza), donde_se_hace: { pantalla: 'cualquiera' as never } })).toContain('pantalla desconocida: cualquiera'))
+  it('🔴 vence y «sin fecha límite» a la vez', () => expect(problemasDeLaFicha({ ...buena(), espera: { desde: null, vence: '2026-11-20T00:00:00Z', sin_limite: true } })).toContain('vence y a la vez «sin fecha límite»'))
+  it('🔴 «detiene» sin decir qué', () => expect(problemasDeLaFicha({ ...buena(), detiene: { que: ' ' } })).toContain('«detiene» sin decir qué'))
   it('🔴 sin «qué se decide»', () => expect(problemasDeLaFicha({ ...buena(), que_se_decide: '  ' })).toContain('sin «qué se decide»'))
   it('🔴 conFicha: si no vale, viaja null con sus problemas, y los campos de hoy siguen enteros', () => {
     const mala = dec({ titulo: '' })
