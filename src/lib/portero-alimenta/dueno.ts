@@ -50,13 +50,23 @@ const singular = (t: string): string => (t.length > 3 && t.endsWith('s') && !t.e
 export const palabrasDelTema = (tema: string): string[] => [...new Set(normalizar(tema).replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/).filter((t) => t && !CONECTORES.has(t)).map(singular))].sort()
 export const temaNormal = (tema: string): string => palabrasDelTema(tema).join('-').slice(0, 80)
 /** ¿dos temas son EL MISMO? Solo si coinciden normalizados (minúsculas, sin tildes, sin signos ni espacios de más). Lo único que frena una pregunta, reemplaza una respuesta o archiva por tema. */
-export function esElMismoTema(a: string, b: string): boolean {
+export function esExactamenteElMismoTema(a: string, b: string): boolean {
   const na = normalizar(a)
   return !!na && na === normalizar(b)
 }
+/**
+ * La regla de la PLATAFORMA (#939 · `dueno-preguntas/preguntas.ts`): dos temas son el mismo si comparten la mayoría de sus palabras significativas (≥ PARECIDO_MINIMO del más
+ * corto). Es la que usan las oficinas para no repetirle una pregunta al dueño. La puerta del cerebro NO la usa: allí manda `esExactamenteElMismoTema`.
+ */
+export function esElMismoTema(a: string, b: string): boolean {
+  const pa = palabrasDelTema(a), pb = palabrasDelTema(b)
+  if (!pa.length || !pb.length) return false
+  const comunes = pa.filter((p) => pb.includes(p)).length
+  return comunes / Math.min(pa.length, pb.length) >= PARECIDO_MINIMO
+}
 /** ¿dos temas distintos se parecen? (palabras significativas compartidas sobre las del más corto) Solo informa: se le muestra al agente para que razone si le sirve; no frena ni reemplaza nada. */
 export function esTemaParecido(a: string, b: string): boolean {
-  if (esElMismoTema(a, b)) return false
+  if (esExactamenteElMismoTema(a, b)) return false
   const pa = palabrasDelTema(a), pb = palabrasDelTema(b)
   if (!pa.length || !pb.length) return false
   const comunes = pa.filter((p) => pb.includes(p)).length
@@ -231,7 +241,7 @@ async function descartarPreguntas(deps: DepsDeDueno, v: { dry_run: boolean; cuer
   const ahora = deps.ahora ?? new Date()
   const pe = await deps.db.from('cerebro_dueno_preguntas').select('*').eq('client_id', clientId).eq('estado', 'pendiente').limit(500)
   if (pe.error) return err(502, 'lectura_fallida', `cerebro_dueno_preguntas: ${pe.error.message}`)
-  const hallas = lista(pe.data).filter((p) => (preguntaId ? String(p.id) === preguntaId : esElMismoTema(txt(p.tema), tema) && (!sede || (txt(p.sede_clave) || '') === sede)))
+  const hallas = lista(pe.data).filter((p) => (preguntaId ? String(p.id) === preguntaId : esExactamenteElMismoTema(txt(p.tema), tema) && (!sede || (txt(p.sede_clave) || '') === sede)))
   const resumen = hallas.map((p) => ({ pregunta_id: String(p.id), tema: txt(p.tema), creada: txt(p.creado_en), oficina: txt(p.preguntado_por_oficina) }))
   if (!hallas.length) return { status: 200, body: { ok: true, dry_run: v.dry_run, descartadas: 0, preguntas: [], nota: 'no hay preguntas pendientes que coincidan (las ya respondidas, vencidas u obsoletas no se tocan)' } }
   if (v.dry_run) return { status: 200, body: { ok: true, dry_run: true, descartadas: 0, descartaria: resumen.length, preguntas: resumen, nota: 'dry_run: no se escribió nada' } }
@@ -280,10 +290,10 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
     contestada = lista(q.data)[0] ?? null
   }
   const temaContestado = contestada ? txt(contestada.tema) : ''
-  const esDeEsteTema = (tema: string): boolean => esElMismoTema(tema, n.tema) || esElMismoTema(tema, temaContestado)
+  const esDeEsteTema = (tema: string): boolean => esExactamenteElMismoTema(tema, n.tema) || esExactamenteElMismoTema(tema, temaContestado)
   const delMismoTema = vig.filas.filter((f) => sedeDe(f) === alcance && (campoManual ? campoDelManual(temaDe(f)) === campoManual && esCanalDelManual(canalDe(f)) : esDeEsteTema(temaDe(f))))
   const deEstaSede = lista(pe.data).filter((p) => (txt(p.sede_clave) || '') === (sedeClave ?? ''))
-  const pendientes = deEstaSede.filter((p) => esElMismoTema(txt(p.tema), n.tema))
+  const pendientes = deEstaSede.filter((p) => esExactamenteElMismoTema(txt(p.tema), n.tema))
 
   // ── una PREGUNTA: antes de registrarla, ¿ya se respondió o ya la hizo otra oficina?
   if (n.evento === 'pregunta') {
@@ -372,7 +382,7 @@ export async function rutaLeerDueno(deps: { db: Db; ahora?: Date }, params: { cl
   const canal = normalizar(txt(params.canal))
   const canalDe = (f: Fila): string => { const pt = (f.provenance_tag && typeof f.provenance_tag === 'object' ? f.provenance_tag : {}) as Fila; const d = (pt.datos && typeof pt.datos === 'object' ? pt.datos : {}) as Fila; return normalizar(txt(d.canal)) }
   const delCanal = canal ? deLaSede.filter((f) => canalDe(f) === canal) : deLaSede
-  const halladas = (tema ? delCanal.filter((f) => esElMismoTema(temaDe(f), tema)) : delCanal).sort(orden)
+  const halladas = (tema ? delCanal.filter((f) => esExactamenteElMismoTema(temaDe(f), tema)) : delCanal).sort(orden)
   const parecidas = tema ? delCanal.filter((f) => esTemaParecido(temaDe(f), tema)).sort(orden).map(parecidaDeLaFicha) : []
   // `limite`: por omisión 20 (sin tema) o 5 (con tema); máximo 100. `total` dice cuántas hay, para saber si se recortó.
   const pedido = Number(params.limite)
@@ -380,7 +390,7 @@ export async function rutaLeerDueno(deps: { db: Db; ahora?: Date }, params: { cl
   const hace = new Date(ahora.getTime() - HORAS_DE_UNA_PREGUNTA_PENDIENTE * 3_600_000).toISOString()
   const pe = await deps.db.from('cerebro_dueno_preguntas').select('*').eq('client_id', params.client_id).eq('estado', 'pendiente').gte('creado_en', hace).limit(200)
   if (pe.error) return err(502, 'lectura_fallida', `cerebro_dueno_preguntas: ${pe.error.message}`)
-  const pend = lista(pe.data).filter((p) => !tema || esElMismoTema(txt(p.tema), tema)).map(descripcionDePendiente)
+  const pend = lista(pe.data).filter((p) => !tema || esExactamenteElMismoTema(txt(p.tema), tema)).map(descripcionDePendiente)
   const pendParecidas = tema ? lista(pe.data).filter((p) => esTemaParecido(txt(p.tema), tema)).map(descripcionDePendiente) : []
   return { status: 200, body: { ok: true, client_id: params.client_id, tema: tema || null, respondida: tema ? halladas.length > 0 : null, respuestas: halladas.slice(0, limite).map((f) => descripcionDeRespuesta(f, ahora)), total: halladas.length, recortado: halladas.length > limite, ...(canal ? { canal: txt(params.canal) } : {}), pendientes: pend, ...(tema ? { parecidas, pendientes_parecidas: pendParecidas } : {}), modelos_llamados: 0 } }
 }
