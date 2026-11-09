@@ -520,9 +520,14 @@ export async function recuperar(d: Deps, clientId: string, id: string): Promise<
   const o = await leerPieza(d, id)
   if (!o || o.client_id !== clientId) return falla(404, 'pieza_no_existe', 'ya no está: pasó su plazo en la papelera')
   if (!o.en_papelera_desde) return { ok: true, valor: o }
-  const r = await d.db.from(TABLA).update({ en_papelera_desde: null, actualizado_en: new Date(d.ahora()).toISOString() }).eq('id', id).eq('client_id', clientId).select(COLUMNAS)
+  // Pasados los 30 días la pieza es del vaciado: ya no se recupera. La condición va en la misma escritura, así una recuperación nunca se cruza con
+  // una pasada que ya está borrando sus archivos (o recupera antes del plazo, o el vaciado la borra; nunca una fila que vuelve sin archivos).
+  const limite = limiteDeLaPapelera(d)
+  const r = await d.db.from(TABLA).update({ en_papelera_desde: null, actualizado_en: new Date(d.ahora()).toISOString() }).eq('id', id).eq('client_id', clientId).gte('en_papelera_desde', limite).select(COLUMNAS)
   if (r.error) return falla(500, 'base_fallida', r.error.message)
-  return { ok: true, valor: (r.data?.[0] as Pieza | undefined) ?? o }
+  const p = r.data?.[0] as Pieza | undefined
+  if (!p) return falla(409, 'se_esta_borrando', 'ya pasó sus 30 días en la papelera y se está borrando')
+  return { ok: true, valor: p }
 }
 
 /** días que le quedan en la papelera (0 = se borra en la próxima pasada) */
@@ -557,14 +562,21 @@ export function archivosPropios(prefijoPublico: string, p: Pick<Pieza, 'id' | 'c
 
 export interface Vaciado { revisadas: number; borradas: string[]; archivos: number; conservados: number; fallas: Array<{ id: string; error: string }>; dry_run: boolean }
 
-/** ¿otra pieza (viva o en la papelera) muestra este archivo? Entonces no se borra */
+/** el corte de la papelera: lo que entró antes de esta fecha ya pasó sus 30 días */
+function limiteDeLaPapelera(d: Deps): string {
+  return new Date(d.ahora() - DIAS_EN_LA_PAPELERA * 86_400_000).toISOString()
+}
+
+/** ¿otra pieza (viva o en la papelera) muestra este archivo, también como referencia 2 a 6 de una imagen hecha con varias? Entonces no se borra */
 async function loUsaOtra(d: Deps, id: string, url: string): Promise<boolean> {
   for (const c of ['archivo_url', 'miniatura_url', 'foto_partida_url']) {
     const r = await d.db.from(TABLA).select('id').eq(c, url).neq('id', id).limit(1)
     if (r.error) throw new Error(r.error.message)
     if (r.data?.length) return true
   }
-  return false
+  const r = await d.db.from(TABLA).select('id').contains('parametros', { referencias: [{ url }] }).neq('id', id).limit(1)
+  if (r.error) throw new Error(r.error.message)
+  return Boolean(r.data?.length)
 }
 
 /**
@@ -573,7 +585,7 @@ async function loUsaOtra(d: Deps, id: string, url: string): Promise<boolean> {
  */
 export async function vaciarPapelera(d: Deps, o: { dry_run: boolean }): Promise<Resultado<Vaciado>> {
   if (!d.bucket) return falla(500, 'almacen_no_configurado', 'OFICINA_BUCKET no está en el entorno')
-  const limite = new Date(d.ahora() - DIAS_EN_LA_PAPELERA * 86_400_000).toISOString()
+  const limite = limiteDeLaPapelera(d)
   const r = await d.db.from(TABLA).select(`${COLUMNAS}, clave`).lt('en_papelera_desde', limite).order('en_papelera_desde', { ascending: true }).limit(TOPE_POR_PASADA)
   if (r.error) return falla(500, 'base_fallida', r.error.message)
   const vencidas = (r.data ?? []) as Array<Pieza & { clave: string }>
@@ -587,13 +599,18 @@ export async function vaciarPapelera(d: Deps, o: { dry_run: boolean }): Promise<
         else borrar.push(ruta)
       }
       if (o.dry_run) { res.borradas.push(p.id); res.archivos += borrar.length; continue }
+      // relectura justo antes de borrar archivos: si ya no está vencida en la papelera (o ya no existe), no se toca nada
+      const sigue = await d.db.from(TABLA).select('id').eq('id', p.id).lt('en_papelera_desde', limite).limit(1)
+      if (sigue.error) { res.fallas.push({ id: p.id, error: `base: ${sigue.error.message}` }); continue }
+      if (!sigue.data?.length) continue
       if (borrar.length) {
         const rm = await d.db.storage.from(d.bucket).remove(borrar)
         if (rm.error) { res.fallas.push({ id: p.id, error: `almacén: ${rm.error.message}` }); continue }
       }
       // solo si sigue en la papelera y vencida (alguien pudo recuperarla mientras tanto)
-      const del = await d.db.from(TABLA).delete().eq('id', p.id).lt('en_papelera_desde', limite)
+      const del = await d.db.from(TABLA).delete().eq('id', p.id).lt('en_papelera_desde', limite).select('id')
       if (del.error) { res.fallas.push({ id: p.id, error: `base: ${del.error.message}` }); continue }
+      if (!del.data?.length) { res.fallas.push({ id: p.id, error: 'salió de la papelera durante la pasada: la fila queda' }); continue }
       res.borradas.push(p.id); res.archivos += borrar.length
     } catch (e) {
       res.fallas.push({ id: p.id, error: e instanceof Error ? e.message : String(e) })
