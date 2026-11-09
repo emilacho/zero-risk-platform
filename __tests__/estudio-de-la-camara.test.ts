@@ -720,6 +720,25 @@ describe('GO 09-nov · rehacer un modelo 3D desde su misma imagen (queda ligado 
     expect(JSON.parse(String(envio.init!.body))).toMatchObject({ image_url: original.foto_partida_url, face_limit: 300000, texture_quality: 'detailed' })
     expect(JSON.stringify(d.base.t.estudio_piezas.find((x) => x.id === original.id))).toBe(antes)
   })
+  it('si la imagen de partida del original ya no baja: 502 y no se llama a fal (aunque la miniatura sí baje)', async () => {
+    const { d, original } = await modeloHecho()
+    const fila = d.base.t.estudio_piezas.find((x) => x.id === original.id)!
+    fila.foto_partida_url = 'https://almacen.test/caida/partida.png'
+    fila.miniatura_url = 'https://almacen.test/viva/miniatura.png'
+    const real = d.fetch
+    d.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === 'https://almacen.test/caida/partida.png') { d.p.llamadas.push({ url: String(input), init }); return new Response('no está', { status: 404 }) }
+      return real(input, init)
+    }) as typeof fetch
+    const falAntes = d.p.llamadas.filter((l) => l.url.includes('fal.run')).length
+    const piezasAntes = d.base.t.estudio_piezas.length
+    const r = await crear(d, pedido({ tipo: '3d', calidad: 'alta', rehacer_pieza_id: original.id, clave: 'rehacer-caida-01' }))
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.status).toBe(502)
+    expect(d.p.llamadas.some((l) => l.url === 'https://almacen.test/caida/partida.png')).toBe(true)
+    expect(d.p.llamadas.filter((l) => l.url.includes('fal.run')).length).toBe(falAntes)
+    expect(d.base.t.estudio_piezas.length).toBe(piezasAntes)
+  })
   it('no rehace desde una pieza que no es 3D, ni de otro cliente, ni inexistente: no gasta', async () => {
     const { d } = await modeloHecho()
     const primera = await crear(d, pedido({ tipo: 'imagen', prompt: 'una ola', clave: 'rehacer-img-00' }))
