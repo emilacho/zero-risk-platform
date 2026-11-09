@@ -79,13 +79,65 @@ export async function abrirMesaDeLaCadena(P: Puertos, s: SobreDeLaCadena, avanza
   return r(sal.status, { ...sal.cuerpo, encargo_id: c.encargo.id })
 }
 
-/** el tablero integrado de la mesa (lo último que escribió la dirección), o lo que el equipo alcanzó a escribir si no hubo integración */
-export function textoParaLaCadena(libro: Array<{ de: string; tipo: string; texto: string }>, piezaTexto: string | null | undefined): string {
+/** el título de la sección que la mesa de CONCEPTO agrega al tablero con las líneas de idea de los aportes de los miembros */
+export const TITULO_IDEAS_DE_LOS_APORTES = '## Banco de ideas · líneas de los aportes del equipo'
+/** una línea de idea del banco (`- C<x>-I<nn> · …`), aunque venga envuelta en `código` o en **negrita** como la escriben los miembros */
+const RE_LINEA_DE_IDEA_EN_APORTE = /^\s*(?:[-*•]|\d+[.)])\s+[`*]*C[A-Za-z0-9_]+-I\d{2,}[`*]*\s*·/
+/** la línea tal como la lee la cadena: viñeta «- », sin el envoltorio de código ni de negrita alrededor del id y al final */
+export function lineaDeIdeaLimpia(linea: string): string {
+  const m = /^\s*(?:[-*•]|\d+[.)])\s+[`*]*(C[A-Za-z0-9_]+-I\d{2,})[`*]*\s*·\s*(.*)$/.exec(linea)
+  if (!m) return linea.trim()
+  return `- ${m[1]} · ${m[2].replace(/[`*]+\s*$/, '').trim()}`
+}
+
+/**
+ * 09-nov (GO de Lenovo · falso rojo de una gran idea real, encargo 577c6038): en la mesa de CONCEPTO el banco de ideas lo escriben los MIEMBROS en sus aportes; la integración de la
+ * dirección solo cita los ids. Antes viajaba solo la integración y la cadena (`leerConcepto`, que lee el banco «de todo el texto: integración + aportes») no encontraba
+ * ninguna idea con mensaje y gancho → `sin_concepto`. Ahora, detrás de la integración, va una sección con las LÍNEAS DE IDEA de los aportes (solo esas líneas: el resto de
+ * los aportes no entra, para que sus títulos no se confundan con las secciones del concepto).
+ *  · Qué aportes: los de los miembros (no la dirección) tipo `aporta`/`responde`. Si la integración cita aportes (`A23`), van primero los citados, en el orden en que los
+ *    cita; después el resto, del más nuevo al más viejo. Cuando dos miembros usaron el mismo id, la cadena se queda con la PRIMERA línea y declara las otras
+ *    «id duplicado»: así manda la elección de la dirección.
+ *  · Sin integración, o en la mesa del brief, nada cambia.
+ */
+export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: string; texto: string }>, integracion: string): string[] {
+  const dir = [...libro].reverse().find((a) => a.tipo === 'integra')?.de ?? null
+  const aportes = libro.filter((a) => (a.tipo === 'aporta' || a.tipo === 'responde') && a.de !== dir && a.texto.trim())
+  const citados: number[] = []
+  for (const m of integracion.matchAll(/\bA(\d{1,4})\b/g)) { const n = Number(m[1]); if (!citados.includes(n)) citados.push(n) }
+  const orden = [
+    ...citados.map((n) => aportes.find((a) => a.n === n)).filter((a): a is (typeof aportes)[number] => !!a),
+    ...[...aportes].reverse().filter((a) => a.n === undefined || !citados.includes(a.n)),
+  ]
+  const vistas = new Set<string>()
+  const out: string[] = []
+  for (const a of orden) {
+    for (const l of a.texto.replace(/\r/g, '').split('\n')) {
+      if (!RE_LINEA_DE_IDEA_EN_APORTE.test(l)) continue
+      const limpia = lineaDeIdeaLimpia(l)
+      if (vistas.has(limpia)) continue
+      vistas.add(limpia)
+      out.push(limpia)
+    }
+  }
+  return out
+}
+
+/** el tablero integrado de la mesa (lo último que escribió la dirección), o lo que el equipo alcanzó a escribir si no hubo integración.
+ *  `conIdeasDeLosAportes` (solo la mesa de concepto): agrega detrás de la integración las líneas de idea de los aportes (ver `ideasDeLosAportes`). */
+export function textoParaLaCadena(libro: Array<{ n?: number; de: string; tipo: string; texto: string }>, piezaTexto: string | null | undefined, conIdeasDeLosAportes = false): string {
   const ult = [...libro].reverse().find((a) => a.tipo === 'integra' && a.texto.trim())
-  if (ult) return ult.texto.trim()
+  if (ult) {
+    const integracion = ult.texto.trim()
+    const ideas = conIdeasDeLosAportes ? ideasDeLosAportes(libro, integracion) : []
+    return ideas.length ? `${integracion}\n\n${TITULO_IDEAS_DE_LOS_APORTES}\n\n${ideas.join('\n')}` : integracion
+  }
   if (piezaTexto?.trim()) return piezaTexto.trim()
   return libro.filter((a) => ['dirige', 'aporta', 'responde'].includes(a.tipo) && a.texto.trim()).map((a) => `[${a.de}] ${a.texto.trim()}`).join('\n\n')
 }
+/** lo que la mesa le entrega a la cadena: la de concepto lleva las ideas de los aportes */
+export const textoDeLaMesaParaLaCadena = (enc: Pick<Encargo, 'familia'>, libro: Array<{ n?: number; de: string; tipo: string; texto: string }>, piezaTexto: string | null | undefined): string =>
+  textoParaLaCadena(libro, piezaTexto, enc.familia === FAMILIA_DE.concepto)
 
 /**
  * Lo que la dirección escribió en «## Devolución del brief» (solo en la mesa de concepto): si hay texto, el brief se devuelve UNA vez. Devuelve null si no hay sección o está vacía.

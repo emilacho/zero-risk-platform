@@ -216,6 +216,10 @@ export interface Almacen {
   ultimoConcepto(campanaId: string): Promise<ConceptoGuardado | null>
   insertarConcepto(c: ConceptoGuardado): Promise<void>
   actualizarConcepto(campanaId: string, version: number, patch: Partial<ConceptoGuardado>): Promise<void>
+  /** escritura CONDICIONAL (09-nov · revalidar la gran idea): solo si la versión SIGUE en `estado`; true = escribió */
+  actualizarConceptoSi(campanaId: string, version: number, estado: ConceptoGuardado['estado'], patch: Partial<ConceptoGuardado>): Promise<boolean>
+  /** 09-nov (revalidar la gran idea): el libro de la mesa de un encargo de la oficina (`oficina_mesa_aportes`, en orden), para rearmar lo que la mesa entregó · solo lectura */
+  libroDeLaMesa(encargoId: string): Promise<Array<{ n: number; de: string; tipo: string; texto: string }>>
   /** los conceptos abiertos cuyo plazo propio ya pasó (el vigía los cierra `sin_mesa`) */
   conceptosVencidos(ahora: string): Promise<ConceptoGuardado[]>
   /** 31-oct (T3): todas las versiones del concepto de una campaña, de la 1 en adelante (para contar vueltas de cambios y reaperturas) */

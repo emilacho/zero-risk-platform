@@ -1,0 +1,161 @@
+{
+"_origen": "cadena_estrategias · campaña 28de888e v1 validada · leído 2026-11-09 · solo fases, patron_semanal y canales",
+"fases": [
+{
+"clave": "desbloquear",
+"objetivo": "Pre-apertura y apertura de Guayaquil, setup de medición, WhatsApp Business, Fan Page y primera pauta.",
+"cita_plan": "Fase 1 · Desbloquear — Semanas 1-2 (Nov 6-19)",
+"dia_desde": 1,
+"dia_hasta": 14
+},
+{
+"clave": "cimientos",
+"objetivo": "Evaluar hipótesis A vs. B por pedidos entregados y ajustar creativo y segmentación.",
+"cita_plan": "Fase 2 · Cimientos — Semanas 3-4 (Nov 20-Dic 3)",
+"dia_desde": 15,
+"dia_hasta": 28
+},
+{
+"clave": "velocidad",
+"objetivo": "Temporada alta de diciembre: subir Olón, reactivación en Guayaquil, reseñas.",
+"cita_plan": "Fase 3 · Velocidad — Semanas 5-8 (Dic 4-31)",
+"dia_desde": 29,
+"dia_hasta": 56
+},
+{
+"clave": "acumular",
+"objetivo": "Enero en temporada alta en Olón, Guayaquil en ritmo, cierre y reporte.",
+"cita_plan": "Fase 4 · Acumular — Semanas 9-12 (Ene 1-28)",
+"dia_desde": 57,
+"dia_hasta": 84
+}
+],
+"patron_semanal": [
+{
+"red": "instagram",
+"hora": "10:00",
+"sede": "guayaquil",
+"slot": "lun_reel_gye",
+"pilar": "producto",
+"formato": "reel",
+"dia_semana": 1,
+"requiere_abierto": false
+},
+{
+"red": "instagram",
+"hora": "09:00",
+"sede": "guayaquil",
+"slot": "lun_historia_gye",
+"pilar": "conveniencia",
+"formato": "historia",
+"dia_semana": 1,
+"requiere_abierto": false
+},
+{
+"red": "instagram",
+"hora": "08:30",
+"sede": "olon",
+"slot": "jue_foto_olon",
+"pilar": "origen",
+"formato": "foto",
+"dia_semana": 4,
+"requiere_abierto": true
+},
+{
+"red": "instagram",
+"hora": "10:00",
+"sede": "guayaquil",
+"slot": "vie_historia_gye",
+"pilar": "conveniencia",
+"formato": "historia",
+"dia_semana": 5,
+"requiere_abierto": false
+},
+{
+"red": "instagram",
+"hora": "09:00",
+"sede": "olon",
+"slot": "sab_reel_olon",
+"pilar": "comunidad",
+"formato": "reel",
+"dia_semana": 6,
+"requiere_abierto": true
+},
+{
+"red": "whatsapp",
+"hora": "08:00",
+"sede": "olon",
+"slot": "sab_estado_olon",
+"pilar": "producto",
+"formato": "estado",
+"dia_semana": 6,
+"requiere_abierto": true
+},
+{
+"red": "instagram",
+"hora": "09:00",
+"sede": "olon",
+"slot": "dom_historia_olon",
+"pilar": "comunidad",
+"formato": "historia",
+"dia_semana": 7,
+"requiere_abierto": true
+}
+],
+"canales": [
+{
+"red": "instagram",
+"rol": "principal",
+"motivo": "El plan lo define como canal principal: contenido orgánico semanal + pauta Meta geolocalizada en Guayaquil y Olón.",
+"formatos": [
+"reel",
+"foto",
+"carrusel",
+"historia",
+"anuncio_imagen"
+],
+"frecuencia": {
+"feed_semana": 3,
+"anuncios_semana": 2,
+"historias_semana": 5
+}
+},
+{
+"red": "facebook",
+"rol": "replica",
+"motivo": "Fan Page solo como requisito técnico para pautar en Meta; no se gestiona como canal de contenido.",
+"formatos": [
+"anuncio_imagen"
+],
+"frecuencia": {
+"feed_semana": 0,
+"anuncios_semana": 2,
+"historias_semana": 0
+}
+},
+{
+"red": "whatsapp",
+"rol": "replica",
+"motivo": "WhatsApp Business como canal de pedido en Olón y seguimiento en Guayaquil; estados como apoyo de bajo esfuerzo (propuesta).",
+"formatos": [
+"estado"
+],
+"frecuencia": {
+"feed_semana": 0,
+"anuncios_semana": 0,
+"historias_semana": 2
+}
+},
+{
+"red": "tiktok",
+"rol": "no",
+"motivo": "Solo se reserva el nombre; se evalúa activar en semanas 9-12 si hay capacidad.",
+"formatos": [],
+"frecuencia": {
+"feed_semana": 0,
+"anuncios_semana": 0,
+"historias_semana": 0
+}
+}
+]
+}
