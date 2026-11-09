@@ -76,8 +76,11 @@ describe('preguntar', () => {
     expect(b.escrituras).toEqual([])
   })
   it('otra oficina ya lo preguntó en las últimas 72 h → «ya_preguntada»; la misma oficina → «repetida» con su id; más vieja que 72 h no cuenta', async () => {
-    const otra = await rutaPreguntas({ db: baseFalsa([{ ...PEND, oficina: 'marketing', agente: 'cmo' }]).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'preguntar', client_id: C, ...WF, preguntado_por: FIN, tema: 'costo fijo', pregunta: '¿?', canal: 'x' })
+    const otra = await rutaPreguntas({ db: baseFalsa([{ ...PEND, oficina: 'marketing', agente: 'cmo' }]).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'preguntar', client_id: C, ...WF, preguntado_por: FIN, tema: 'Costos fijos mensuales', pregunta: '¿?', canal: 'x' })
     expect(otra.body).toMatchObject({ registrada: false, ya_preguntada: true, pendiente: { pregunta_id: PEND.id, oficina: 'marketing' } })
+    // 09-nov · #921: un tema PARECIDO no es el mismo tema: no frena la pregunta
+    const parecida = await rutaPreguntas({ db: baseFalsa([{ ...PEND, oficina: 'marketing', agente: 'cmo' }]).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'preguntar', client_id: C, ...WF, preguntado_por: FIN, tema: 'costo fijo', pregunta: '¿?', canal: 'x' })
+    expect(parecida.body).toMatchObject({ registrada: true })
     const misma = await rutaPreguntas({ db: baseFalsa([PEND]).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'preguntar', client_id: C, ...WF, preguntado_por: FIN, tema: 'costos fijos mensuales', pregunta: '¿?', canal: 'x' })
     expect(misma.body).toMatchObject({ registrada: false, repetida: true, pregunta_id: PEND.id })
     const vieja = await rutaPreguntas({ db: baseFalsa([{ ...PEND, creado_en: '2026-11-03T11:00:00Z' }]).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'preguntar', client_id: C, ...WF, preguntado_por: FIN, tema: 'costos fijos mensuales', pregunta: '¿?', canal: 'x' })
@@ -126,9 +129,13 @@ describe('responder', () => {
   })
   it('sin `pregunta_id`, cierra las pendientes recientes del mismo tema; una ya cerrada → 409; de otro cliente → 404', async () => {
     const b = baseFalsa([PEND, { ...PEND, id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', tema: 'ventas temporada baja' }])
-    const r = await rutaPreguntas({ db: b.db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'responder', client_id: C, ...WF, tema: 'costo fijo', respuesta: 'x', decidido_por: 'Emilio' })
+    const r = await rutaPreguntas({ db: b.db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'responder', client_id: C, ...WF, tema: 'Costos fijos mensuales', respuesta: 'x', decidido_por: 'Emilio' })
     expect(r.body).toMatchObject({ ok: true, preguntas_cerradas: 1 })
     expect(b.filas.map((f) => f.estado)).toEqual(['respondida', 'pendiente'])
+    // 09-nov · #921: responder por un tema PARECIDO no cierra la pendiente de otro tema
+    const bp = baseFalsa([PEND])
+    await rutaPreguntas({ db: bp.db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'responder', client_id: C, ...WF, tema: 'costo fijo', respuesta: 'x', decidido_por: 'Emilio' })
+    expect(bp.filas.map((f) => f.estado)).toEqual(['pendiente'])
     expect((await rutaPreguntas({ db: baseFalsa([{ ...PEND, estado: 'respondida' }]).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'responder', client_id: C, ...WF, pregunta_id: PEND.id, respuesta: 'x', decidido_por: 'E' })).status).toBe(409)
     expect((await rutaPreguntas({ db: baseFalsa([{ ...PEND, client_id: OTRO }]).db, cerebro: cerebroFalso().cerebro, ahora: AHORA }, { accion: 'responder', client_id: C, ...WF, pregunta_id: PEND.id, respuesta: 'x', decidido_por: 'E' })).status).toBe(404)
   })
