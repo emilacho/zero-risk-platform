@@ -201,6 +201,11 @@ describe('respuesta del dueño a una pregunta de la plataforma', () => {
     expect(retirado('66666666-6666-4666-8666-666666666666')).toBeNull()
   })
 
+  it('#921 · solo el MISMO tema (otra escritura vale) retira el supuesto de otra pregunta; un tema parecido no', () => {
+    const s = (tema: string): Fila => ({ id: `s-${tema}`, sede: null, observado_en: ANTES, provenance_tag: { datos: { tema, pregunta_id: P2, asumida_en: ANTES } } })
+    const n = { pregunta_id: P1, tema: 'gastos fijos', respondido_en: DESPUES }
+    expect(supuestosQueRetira([s('Gastos  FIJOS'), s('gastos fijos mensuales'), s('fijos: gastos')], n, '').map((x) => x.id)).toEqual(['s-Gastos  FIJOS'])
+  })
   it('regla de sede: una respuesta de una sede no retira el supuesto de otra; una para todas las sedes sí', () => {
     const s = (sede: string | null, pregunta_id = P2): Fila => ({ id: `s-${sede}`, sede, observado_en: ANTES, provenance_tag: { datos: { tema: 'gastos fijos', pregunta_id, asumida_en: ANTES, ...(sede ? { sedes: [sede] } : {}) } } })
     const n = { pregunta_id: P1, tema: 'gastos fijos', respondido_en: DESPUES }

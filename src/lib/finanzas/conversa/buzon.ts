@@ -19,7 +19,8 @@ import { barrerTexto } from '../../../../scripts/ops/barrer-voseo.mjs'
 import type { CerebroDelDueno } from '../../buzon-dueno/cerebro-dueno'
 import type { SlackMd } from '../../buzon-dueno/slack-md'
 import type { Respuesta } from './orquestador'
-import type { AlmacenDeConversa, EncargoDeConversa, Semilla } from './puertos'
+import type { AlmacenDeConversa, EncargoDeConversa, ModeloPuerto, Semilla } from './puertos'
+import { revisarParecidas, type VeredictoDeParecida, type VeredictosDeParecidas } from './parecidas'
 import { NOMBRE_SIN_FICHA, pareceUnId } from './nombre'
 import { sha256 } from './util'
 
@@ -30,6 +31,8 @@ export interface PuertosDelBuzon {
   canal?: string
   /** la puerta del dueño en el cerebro */
   cerebro: CerebroDelDueno
+  /** el jefe de finanzas, para que razone si algo parecido ya está contestado. Sin él se pregunta como siempre */
+  modelo?: ModeloPuerto
   /** `finanzas_config.preguntas_slack` */
   modo: 'apagado' | 'borrador' | 'envia' | 'registra'
   ahora(): Date
@@ -62,7 +65,7 @@ export function esTextoDeRespuesta(texto: string): boolean {
   return palabras.length >= 2 || /\d/.test(t)
 }
 const tieneLetras = (s: string) => /[a-záéíóúñ]/i.test(s)
-type Preguntada = { clave: string; texto: string; pregunta_id: string | null }
+type Preguntada = { clave: string; texto: string; pregunta_id: string | null; por_que_se_pregunta_igual?: string }
 type SinCerebro = { clave: string; respuesta: string; ts: string }
 
 type PreguntaConImpacto = Pregunta & { impacto?: 'alto' | 'medio' | 'bajo'; frena_la_firma?: boolean }
@@ -241,6 +244,19 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, o
   if (env.cliente_24h >= TOPE_POR_CLIENTE_24H) return { status: 200, cuerpo: { enviado: false, motivo: 'tope: un mensaje por cliente cada 24 h' } }
   if (env.hoy >= TOPE_POR_DIA_TOTAL) return { status: 200, cuerpo: { enviado: false, motivo: 'tope: 3 mensajes por día entre todos los clientes' } }
 
+  // 05-nov (opción A de Emilio): antes de escribirle al dueño, el agente que pregunta mira lo parecido. Va fuera del candado: el agente tarda más que su vencimiento y no retiene el envío
+  const yaRegistradas = new Set(Array.isArray(arts.buzon_respuestas?.claves) ? (arts.buzon_respuestas.claves as unknown[]).map(String) : [])
+  const previos = (arts.buzon_parecidas?.veredictos ?? {}) as VeredictosDeParecidas
+  const numero = Number(arts.buzon_parecidas?.n ?? 0) + 1
+  const revisadas = await revisarParecidas({
+    cerebro: P.cerebro, modelo: P.modelo,
+    guardar: async (veredictos, costo_usd) => {
+      const reg = { n: numero, veredictos, costo_usd, en: P.ahora().toISOString() }
+      await P.almacen.guardarBuzon?.({ encargo_id, artefacto: { tipo: 'buzon_parecidas', version: numero, contenido: reg, sha256: sha256(reg) } })
+    },
+  }, e, hechas.filter((q) => !yaRegistradas.has(q.clave)).map((q) => ({ clave: q.clave, tema: temaDe(q.clave), texto: q.texto })), previos).catch((): VeredictosDeParecidas => previos)
+  const veredictoDe = (clave: string): VeredictoDeParecida | undefined => revisadas[clave]
+
   // ATÓMICO: una sola llamada a la vez por encargo (dos simultáneas mandaban dos MD); sin la columna del candado se sigue sin él
   const candado = P.almacen.tomarPaso ? await P.almacen.tomarPaso(e.id, P.ahora(), TTL_DEL_ENVIO_S) : null
   if (candado && candado.ok && !candado.tomado) return { status: 200, cuerpo: { enviado: false, motivo: 'otro_paso_en_curso' } }
@@ -267,13 +283,17 @@ export async function preguntarAlDueno(P: PuertosDelBuzon, encargo_id: string, o
         if (l.respuestas.length) { dadas.push({ clave: q.clave, valor: l.respuestas[0].respuesta, literal: l.respuestas[0].respuesta }); recogidas.push(q.clave) }
         continue
       }
+      const razonada = veredictoDe(q.clave)
+      if (razonada?.decision === 'ya_contestada' && razonada.respuesta) { dadas.push({ clave: q.clave, valor: razonada.respuesta, literal: razonada.respuesta }); continue }
+      // en una pausa se pregunta igual, por lo mismo de más abajo: la respuesta a la otra pregunta no le llega a este encargo
+      if (razonada?.decision === 'pendiente_cubre' && !opc.pausa) { esperando.push(q.clave); continue }
       const v = await P.cerebro.registrarPregunta({ client_id: e.client_id, tema: temaDe(q.clave), pregunta: q.texto }).catch(() => ({ ok: false as const, error: 'red' }))
       if (!v.ok) return { status: 200, cuerpo: { enviado: false, motivo: 'cerebro_caido', aviso: `el cerebro no respondió (${v.error}): no se le escribe al dueño y el encargo sigue con supuestos`, sigue_con_supuestos: true } }
       if (v.estado === 'ya_respondida') dadas.push({ clave: q.clave, valor: v.respuestas[0].respuesta, literal: v.respuestas[0].respuesta })
       // en una pausa se pregunta igual: la respuesta al mensaje viejo le llegaría a otro encargo y este esperaría para siempre
       else if (v.estado === 'ya_preguntada' && !opc.pausa) esperando.push(q.clave)
       // `repetida` = la registré yo en un intento que no llegó a enviarse (el encargo no tiene MD): se pregunta
-      else aPreguntar.push({ clave: q.clave, texto: q.texto, pregunta_id: v.estado === 'registrada' || v.estado === 'repetida' ? v.pregunta_id : null })
+      else aPreguntar.push({ clave: q.clave, texto: q.texto, pregunta_id: v.estado === 'registrada' || v.estado === 'repetida' ? v.pregunta_id : null, ...(razonada?.por_que ? { por_que_se_pregunta_igual: razonada.por_que } : {}) })
     }
     const semilla: Semilla = { ...(e.semilla ?? {}) }
     const fus = fusionar(Array.isArray(semilla.respuestas_del_dueno) ? semilla.respuestas_del_dueno : [], dadas)

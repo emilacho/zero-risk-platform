@@ -3,7 +3,7 @@
  * respuesta → ficha «confirmada por el dueño» · reemplazo por tema · sede · tarde/repetida · privacidad · preguntar es de la plataforma (410) · lectura · resumen vivo.
  */
 import { describe, expect, it } from 'vitest'
-import { descripcionDeRespuesta, esElMismoTema, palabrasDelTema, rutaDueno, rutaLeerDueno, sinDatosPersonales, temaNormal, type DepsDeDueno } from '../dueno'
+import { descripcionDeRespuesta, esExactamenteElMismoTema, esTemaParecido, palabrasDelTema, rutaDueno, rutaLeerDueno, sinDatosPersonales, temaNormal, type DepsDeDueno } from '../dueno'
 import { armarResumen, cargarEntradaDelResumen } from '../resumen-vivo'
 import { crearBaseFalsa } from './base-falsa'
 import { DIEZ_CLIENTES, type ClienteSintetico } from './diez-clientes.fixtures'
@@ -25,15 +25,21 @@ const respuesta = (c: ClienteSintetico, o: Record<string, unknown> = {}) => ({
 })
 const vivas = (t: T) => t.cerebro_fichas.filter((f) => f.clase === 'dato_del_dueno' && !f.retirada_en)
 
-describe('el tema es texto libre: «el mismo tema» se decide por palabras significativas', () => {
-  it('conectores, orden y plural no cambian el tema; otro tema no se confunde', () => {
+describe('el tema es texto libre: «el mismo tema» es el mismo texto normalizado; lo demás, a lo sumo parecido', () => {
+  it('mayúsculas, tildes, signos y espacios no cambian el tema; conectores, orden y plural lo vuelven parecido, no el mismo', () => {
     expect(palabrasDelTema('Presupuesto de pauta')).toEqual(['pauta', 'presupuesto'])
     expect(temaNormal('pauta, presupuesto')).toBe('pauta-presupuesto')
-    expect(esElMismoTema('presupuesto de pauta', 'Pauta: presupuesto')).toBe(true)
-    expect(esElMismoTema('costo por plato', 'costo del plato')).toBe(true)
-    expect(esElMismoTema('presupuesto de pauta', 'presupuesto de sueldos')).toBe(false)
-    expect(esElMismoTema('afluencia', 'herramientas')).toBe(false)
-    expect(esElMismoTema('', 'x')).toBe(false)
+    expect(esExactamenteElMismoTema('Presupuesto  de   PAUTA', 'presupuesto de pauta')).toBe(true)
+    expect(esExactamenteElMismoTema('afluencia al mediodía', 'afluencia al mediodia')).toBe(true)
+    expect(esExactamenteElMismoTema('frecuencia_visita', 'frecuencia visita')).toBe(true)
+    expect(esExactamenteElMismoTema('presupuesto de pauta', 'Pauta: presupuesto')).toBe(false)
+    expect(esTemaParecido('presupuesto de pauta', 'Pauta: presupuesto')).toBe(true)
+    expect(esExactamenteElMismoTema('costo por plato', 'costo del plato')).toBe(false)
+    expect(esTemaParecido('costo por plato', 'costo del plato')).toBe(true)
+    expect(esTemaParecido('presupuesto de pauta', 'presupuesto de pauta')).toBe(false)
+    expect(esExactamenteElMismoTema('presupuesto de pauta', 'presupuesto de sueldos')).toBe(false)
+    expect(esExactamenteElMismoTema('afluencia', 'herramientas')).toBe(false)
+    expect(esExactamenteElMismoTema('', 'x')).toBe(false)
   })
   it('privacidad: correos, teléfonos y @usuarios se omiten; las cifras del negocio no', () => {
     const r = sinDatosPersonales('Escríbele a juan.perez@mail.com o al +593 99 123 4567, su cuenta es @juanp. Gasto 200 por semana, costo 2,10')
@@ -102,10 +108,10 @@ describe('para los diez clientes: la respuesta queda «confirmada por el dueño�
 
 describe('una respuesta nueva al mismo tema reemplaza; otro tema o otra sede, no', () => {
   const c = DIEZ_CLIENTES[1] // clínica de 3 sedes
-  it('mismo tema (aunque cambie el orden o los conectores): la vieja queda archivada con su motivo; el historial se conserva', async () => {
+  it('mismo tema (aunque cambien mayúsculas, tildes o espacios): la vieja queda archivada con su motivo; el historial se conserva', async () => {
     const m = montar(c)
     await rutaDueno(m.deps, respuesta(c))
-    const r = await rutaDueno(m.deps, respuesta(c, { tema: 'Pauta: presupuesto', respuesta: '300 por semana', mensaje_ref: 'slack:2', respondido_en: '2026-10-16T09:00:00Z' }))
+    const r = await rutaDueno(m.deps, respuesta(c, { tema: 'PRESUPUESTO  de pauta', respuesta: '300 por semana', mensaje_ref: 'slack:2', respondido_en: '2026-10-16T09:00:00Z' }))
     expect(r.body).toMatchObject({ ok: true, guardada: true })
     expect(r.body.reemplaza).toBeTruthy()
     expect(vivas(m.t)).toHaveLength(1)
@@ -185,7 +191,7 @@ describe('preguntas: viven en la plataforma (adenda 06-nov)', () => {
     const m = montar(c)
     await rutaDueno(m.deps, respuesta(c))
     await rutaDueno(m.deps, respuesta(c, { tema: 'afluencia al mediodía', respuesta: 'unos 20 clientes', mensaje_ref: 'slack:9' }))
-    const l = await rutaLeerDueno({ db: m.base.db as never, ahora: new Date(AHORA.getTime() + 3 * 86_400_000) }, { client_id: c.id, tema: 'pauta presupuesto' })
+    const l = await rutaLeerDueno({ db: m.base.db as never, ahora: new Date(AHORA.getTime() + 3 * 86_400_000) }, { client_id: c.id, tema: 'Presupuesto de pauta' })
     expect(l.body).toMatchObject({ ok: true, respondida: true, modelos_llamados: 0 })
     expect((l.body.respuestas as Array<Record<string, unknown>>)).toHaveLength(1)
     expect((l.body.respuestas as Array<Record<string, unknown>>)[0]).toMatchObject({ respuesta: '200 por semana', canal: 'MD de Slack', hace_dias: 3, respondido_en: '2026-10-15T14:00:00.000Z' })

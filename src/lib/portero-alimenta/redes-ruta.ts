@@ -4,12 +4,14 @@
 import { cerrarPaso, pasosDelDia, reabrirPaso, reclamarPaso, siguientePaso, type Paso, type PasoAbandonado } from './pasos-diarios'
 import { correrPasoDeRedes, tendenciasEncendidas, type EntradaDePasoDeRedes } from './redes-del-cliente'
 import { clientesActivos } from './clientes'
+import { pausaDelRaspadoDelEntorno, raspadoEnPausa } from './modo'
+import { motivoDeLaPausa } from './pausa-del-raspado'
 
 type Db = EntradaDePasoDeRedes['db']
 export interface DepsDePaso { db: Db; ahora: Date; /** el aviso a #alertas cuando un paso queda abandonado (un incidente, un aviso) */ alAbandonar?: (p: PasoAbandonado) => Promise<unknown>; env?: Record<string, string | undefined>; fetch?: EntradaDePasoDeRedes['fetch']; llamarModelo?: (clientId: string, workflowId: string, ejecucionId: string) => EntradaDePasoDeRedes['llamarModelo']; registro?: (workflowId: string, ejecucionId: string) => EntradaDePasoDeRedes['registro'] }
 
 export type RespuestaDePaso =
-  | { ok: true; estado: 'apagado' | 'seco' | 'no_hay_pendientes' | 'no_se_reclamo'; paso?: Paso; client_id?: string; motivo?: string; pendientes?: number }
+  | { ok: true; estado: 'apagado' | 'seco' | 'no_hay_pendientes' | 'no_se_reclamo' | 'raspado_en_pausa'; paso?: Paso; client_id?: string; motivo?: string; pendientes?: number }
   | { ok: boolean; estado: 'hecha' | 'con_errores'; paso: Paso; client_id: string; intento: number; gasto_usd: number; errores: string[]; resumen: Record<string, unknown>; rastro_cerrado: boolean }
   | { ok: false; estado: 'error'; detalle: string }
 
@@ -30,6 +32,8 @@ export async function correrUnPaso(d: DepsDePaso, a: { clientId: string; paso: P
 /** el cron: un paso pendiente de hoy por llamada */
 export async function correrElSiguientePaso(d: DepsDePaso & { clientes?: string[] }, a: { workflowId: string; ejecucionId: string }): Promise<RespuestaDePaso> {
   if (!tendenciasEncendidas(d.env)) return { ok: true, estado: 'apagado', motivo: 'PORTERO_TENDENCIAS está apagado: no se hizo nada' }
+  const pausa = pausaDelRaspadoDelEntorno(d.env ?? process.env)
+  if (pausa.hasta && raspadoEnPausa(d.ahora, d.env ?? process.env)) return { ok: true, estado: 'raspado_en_pausa', motivo: `${motivoDeLaPausa(pausa.hasta)}: el reloj no corre pasos de redes (un paso pedido a mano corre igual)` }
   let clientes = d.clientes
   if (!clientes) {
     const act = await clientesActivos(d.db as never)

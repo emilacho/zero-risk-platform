@@ -4,9 +4,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { archivoDe3D, armarPedido, cotizarSinRed, type Pedido } from '@/lib/estudio/catalogo'
+import { archivoDe3D, armarAnimacion, AVISO_SIN_CAUSA, demasiadoDetalle, entradaDe3D, LIMITE_DE_CARAS_DEL_ESQUELETO, MODELOS_3D, TOPE_DE_CARAS_3D, motivoDeAnimacion, noEsHumanoide, textoDelProveedor, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
+import { BIBLIOTECA_DE_MOVIMIENTOS } from '@/lib/estudio/movimientos'
 import { esDeLaCola } from '@/lib/estudio/fal'
-import { avanzar, crear, listar, cotizar, type Deps } from '@/lib/estudio/servicio'
+import { avanzar, TOPE_DE_VIDA_MIN, vencioLaPieza, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
 
 const CLIENTE = 'a0000000-0000-4000-8000-0000000000e1'
 const OTRO = 'b0000000-0000-4000-8000-0000000000e2'
@@ -77,8 +78,12 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}
 }
 
 interface Llamada { url: string; init?: RequestInit }
-function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[] } = {}) {
+const ERROR_DE_TRIANGULOS = "The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API (POST /openapi/v1/remesh) with a target_polycount of 300000 or less (150000 or less with topology quad) before rigging."
+
+function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' | 'uno_sin_archivo' | 'demasiado_detalle' | 'envio_demasiado_detalle' | 'envio_raro' } = {}) {
   const llamadas: Llamada[] = []
+  const ANIM = 'https://queue.fal.run/fal-ai/meshy/requests/anim-1'
+  let pedidosDeAnimacion: number[] = []
   const falEstados = [...(op.falEstado ?? ['IN_PROGRESS', 'COMPLETED'])]
   const hfEstados = [...(op.hfEstado ?? ['in_progress', 'completed'])]
   const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } })
@@ -89,14 +94,31 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchi
     if (url === 'https://queue.fal.run/tripo3d/h3.1/image-to-3d') return json({ request_id: 'fal-1', status_url: 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1/status', response_url: 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1' })
     if (url.endsWith('/requests/fal-1/status')) {
       const s = falEstados.shift() ?? 'COMPLETED'
+      if (s === 'NOT_FOUND') return json({ detail: 'Request not found' }, 404)
+      if (s === 'ERROR_500') return json({ detail: 'boom' }, 500)
       return json(s === 'COMPLETED' && op.falError ? { status: s, error: 'mesh failed', error_type: 'runtime' } : { status: s })
     }
     if (url === 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1' && op.falSinArchivo) return json({ seed: 7 })
     if (url === 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1') return json({ rendered_image: { url: 'https://v3.fal.media/files/x/vista.webp' }, model_mesh: { url: 'https://v3.fal.media/files/x/modelo.glb', content_type: 'model/gltf-binary', file_name: 'modelo.glb' }, model_urls: { glb: { url: 'https://v3.fal.media/files/x/modelo.glb', file_name: 'modelo.glb' } } })
     if (url === 'https://v3.fal.media/files/x/modelo.glb') return new Response(GLB, { status: 200 })
+    // animar (fal-ai/meshy/rigging/multi-animation)
+    if (url === 'https://queue.fal.run/fal-ai/meshy/rigging/multi-animation') {
+      if (op.animar === 'envio_demasiado_detalle') return json({ detail: [{ loc: ['body', 'model_url'], msg: ERROR_DE_TRIANGULOS, type: 'value_error' }] }, 422)
+      if (op.animar === 'envio_raro') return json({ detail: 'Auto rigging failed' }, 422)
+      if (op.animar === 'envio_no_humanoide') return json({ detail: 'Rigging requires a humanoid character with clearly defined limbs' }, 422)
+      pedidosDeAnimacion = (JSON.parse(String(init!.body)) as { animation_action_ids: number[] }).animation_action_ids
+      return json({ request_id: 'anim-1', status_url: `${ANIM}/status`, response_url: ANIM })
+    }
+    if (url === `${ANIM}/status` && op.animar === 'demasiado_detalle') return json({ status: 'COMPLETED', error: ERROR_DE_TRIANGULOS, error_type: 'runtime' })
+    if (url === `${ANIM}/status`) return json(op.animar === 'no_humanoide' ? { status: 'COMPLETED', error: 'Model is not a humanoid, rigging failed', error_type: 'runtime' } : { status: 'COMPLETED' })
+    if (url === ANIM) {
+      const ids = op.animar === 'falta_uno' ? pedidosDeAnimacion.slice(1) : op.animar === 'sin_clips' ? [] : pedidosDeAnimacion
+      return json({ rig_task_id: 'r1', rigged_character_glb: { url: 'https://v3.fal.media/files/a/rig.glb' }, animations: ids.map((id, i) => (op.animar === 'uno_sin_archivo' && i === 0 ? { action_id: id } : { action_id: id, animation_glb: { url: `https://v3.fal.media/files/a/${id}.glb` }, animation_fbx: { url: `https://v3.fal.media/files/a/${id}.fbx` } })) })
+    }
+    if (url.startsWith('https://v3.fal.media/files/a/')) return new Response(GLB, { status: 200 })
     if (url.startsWith('https://api.higgsfield.ai/estimate/')) return json({ type: 'description', pricing_description: 'Each 1,000 video tokens costs $0.01 at 480p or 720p and $0.02 at 1080p.' })
     if (url.startsWith('https://api.higgsfield.ai/bytedance/')) return json({ request_id: 'hf-1', status: 'queued', status_url: 'https://api.higgsfield.ai/requests/hf-1/status' })
-    if (url === 'https://api.higgsfield.ai/requests/hf-1/status') { const s = hfEstados.shift() ?? 'completed'; return json({ status: s, ...(s === 'completed' ? { video: { url: 'https://cdn.higgsfield.ai/v/hf-1.mp4' } } : {}) }) }
+    if (url === 'https://api.higgsfield.ai/requests/hf-1/status') { const s = hfEstados.shift() ?? 'completed'; if (s === 'not_found') return json({ detail: 'not found' }, 404); return json({ status: s, ...(s === 'completed' ? { video: { url: 'https://cdn.higgsfield.ai/v/hf-1.mp4' } } : {}) }) }
     if (url === 'https://cdn.higgsfield.ai/v/hf-1.mp4') return new Response(Buffer.from('mp4'), { status: 200 })
     if (url.startsWith('https://almacen.test/')) return new Response(PNG, { status: 200 })
     throw new Error(`llamada no esperada: ${url}`)
@@ -223,7 +245,7 @@ describe('3D', () => {
     expect(JSON.parse(String(img.init!.body)).prompt).toMatch(/Un solo objeto/)
     const envio = d.p.llamadas.find((l) => l.url === 'https://queue.fal.run/tripo3d/h3.1/image-to-3d')!
     expect((envio.init!.headers as Record<string, string>)['X-Fal-No-Retry']).toBe('1')
-    expect(JSON.parse(String(envio.init!.body))).toMatchObject({ image_url: p.foto_partida_url, texture_quality: 'standard' })
+    expect(JSON.parse(String(envio.init!.body))).toMatchObject({ image_url: p.foto_partida_url, texture_quality: 'standard', face_limit: 300000 })
     expect(d.base.t.costs.map((c) => c.service)).toEqual(['estudio:openai'])
     // la pantalla pregunta: primero sigue en curso
     const a1 = await avanzar(d, p.id)
@@ -260,6 +282,8 @@ describe('3D', () => {
     expect(a.ok && a.valor.estado).toBe('fallida')
     expect(a.ok && Number(a.valor.costo_usd)).toBe(0.01327)
     expect(d.base.t.costs.map((c) => c.service)).toEqual(['estudio:openai'])
+    // un 3D que falla no habla de animar: su motivo es el del proveedor
+    expect(a.ok && a.valor.error).toBe('fal · runtime · mesh failed')
   })
   it('si fal termina sin archivo, la pieza y el libro dicen la misma cifra (CC7 · 933)', async () => {
     const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED', 'COMPLETED'], falSinArchivo: true }))
@@ -317,5 +341,345 @@ describe('galería', () => {
     await crear(d, { ...pedido({ tipo: 'imagen', prompt: 'otra' }), client_id: OTRO, clave: 'clic-otro-001' })
     const l = await listar(d, CLIENTE, null)
     expect(l.ok && l.valor.map((x) => x.client_id)).toEqual([CLIENTE])
+  })
+})
+
+describe('animar un modelo 3D (GO 06-nov)', () => {
+  // un modelo 3D listo del cliente, hecho por el camino normal
+  async function modeloListo(op: Parameters<typeof proveedores>[0] = {}) {
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED'], ...op }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    const a = await avanzar(d, r.valor.pieza.id)
+    if (!a.ok || a.valor.estado !== 'lista') throw new Error('el modelo no quedó listo')
+    return { d, modelo: a.valor }
+  }
+  const animacion = (e: Record<string, unknown>) => {
+    const a = armarAnimacion({ client_id: CLIENTE, clave: 'animar-0000001', ...e }, movimientoExiste)
+    if (!a.ok) throw new Error(a.errores.join('; '))
+    return a.pedido
+  }
+  const librosDeFal = (d: ReturnType<typeof deps>) => d.base.t.costs.filter((c) => c.service === 'estudio:fal').length
+
+  it('el costo es esqueleto 0,20 + 0,12 por movimiento, a la vista antes de crear', async () => {
+    expect(cotizarAnimacion(1).total_usd).toBe(0.32)
+    expect(cotizarAnimacion(3).total_usd).toBe(0.56)
+    const { d, modelo } = await modeloListo()
+    const c = await cotizarLaAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0, 28] }))
+    expect(c.ok && c.valor.total_usd).toBe(0.44)
+  })
+  it('el pedido exige cliente, clave, modelo y de 1 a 10 movimientos que existan en la biblioteca', () => {
+    expect(BIBLIOTECA_DE_MOVIMIENTOS).toHaveLength(656)
+    for (const m of MOVIMIENTOS_COMUNES) expect(movimientoExiste(m.id)).toBe(true)
+    expect(MOVIMIENTOS_COMUNES.map((m) => m.nombre)).toEqual(['Quieto', 'Caminar', 'Correr', 'Saludar', 'Bailar'])
+    const base = { client_id: CLIENTE, clave: 'animar-0000001', origen_pieza_id: CLIENTE }
+    expect(armarAnimacion({ ...base, movimientos: [] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [697] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [2] }, movimientoExiste).ok).toBe(movimientoExiste(2))
+    expect(armarAnimacion({ ...base, clave: 'x', movimientos: [0] }, movimientoExiste).ok).toBe(false)
+    const a = armarAnimacion({ ...base, movimientos: [28, 28, 0] }, movimientoExiste)
+    expect(a.ok && a.pedido.movimientos).toEqual([28, 0])
+  })
+  it('crea una pieza nueva ligada al modelo; al terminar guarda GLB y FBX de cada movimiento y anota lo cobrado una vez', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [30, 28] }))
+    if (!r.ok) throw new Error(r.error)
+    expect(r.valor.pieza.modelo).toBe('meshy-animar')
+    expect(r.valor.pieza.tipo).toBe('3d')
+    expect(r.valor.pieza.parametros.origen_pieza_id).toBe(modelo.id)
+    const envio = d.p.llamadas.find((l) => l.url === 'https://queue.fal.run/fal-ai/meshy/rigging/multi-animation')!
+    expect(JSON.parse(String(envio.init!.body))).toEqual({ model_url: modelo.archivo_url, height_meters: 1.7, animation_action_ids: [30, 28], enable_safety_checker: true })
+    expect((envio.init!.headers as Record<string, string>)['X-Fal-No-Retry']).toBe('1')
+    const [a, b] = await Promise.all([avanzar(d, r.valor.pieza.id), avanzar(d, r.valor.pieza.id)])
+    expect(a.ok && a.valor.estado).toBe('lista')
+    expect(b.ok && b.valor.estado).toBe('lista')
+    const fin = d.base.t.estudio_piezas.find((p) => p.id === r.valor.pieza.id)!
+    const archivos = (fin.parametros as { archivos: Array<{ action_id: number; nombre: string; glb: string; fbx: string }> }).archivos
+    expect(archivos.map((x) => [x.action_id, x.nombre])).toEqual([[30, 'Casual_Walk'], [28, 'Big_Wave_Hello']])
+    for (const x of archivos) { expect(x.glb).toMatch(/^https:\/\/almacen\.test\/oficina-creativos\/estudio\/.+\.glb$/); expect(x.fbx).toMatch(/\.fbx$/) }
+    expect(fin.archivo_url).toBe(archivos[0].glb)
+    expect(fin.archivo_tipo).toBe('glb')
+    expect(Number(fin.costo_usd)).toBe(0.44)
+    expect(librosDeFal(d)).toBe(2) // el modelo original + la animación, una sola vez
+    const fila = d.base.t.costs.filter((c) => c.service === 'estudio:fal').at(-1)!
+    expect(Number(fila.amount_usd_exact)).toBe(0.44)
+    expect(JSON.parse(String(fila.description))).toMatchObject({ pieza_id: r.valor.pieza.id, client_id: CLIENTE, parte: 'animación' })
+  })
+  it('si el modelo no es una figura humana, se dice claro y no se cobra (al enviar o al terminar)', async () => {
+    for (const caso of ['no_humanoide', 'envio_no_humanoide'] as const) {
+      const { d, modelo } = await modeloListo({ animar: caso })
+      const antes = librosDeFal(d)
+      const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+      if (!r.ok) throw new Error(r.error)
+      const fin = caso === 'no_humanoide' ? await avanzar(d, r.valor.pieza.id) : { ok: true as const, valor: r.valor.pieza }
+      expect(fin.ok && fin.valor.estado).toBe('fallida')
+      // los tres avisos de Animar dicen lo mismo del cobro (menor CC7 #947)
+      expect(fin.ok && fin.valor.error).toMatch(/^Este modelo no parece una figura humana con brazos y piernas definidos, así que no se puede animar\. No se registró ningún cobro\. \(/)
+      expect(fin.ok && Number(fin.valor.costo_usd)).toBe(0)
+      expect(librosDeFal(d)).toBe(antes)
+    }
+  })
+  it('fal termina sin ningún movimiento: la pieza y el libro dicen la misma cifra; si falta uno, se avisa', async () => {
+    const s = await modeloListo({ animar: 'sin_clips' })
+    const r = await crearAnimacion(s.d, animacion({ origen_pieza_id: s.modelo.id, movimientos: [0] }))
+    if (!r.ok) throw new Error(r.error)
+    const f = await avanzar(s.d, r.valor.pieza.id)
+    expect(f.ok && f.valor.estado).toBe('fallida')
+    expect(f.ok && Number(f.valor.costo_usd)).toBe(0.32)
+    expect(Number(s.d.base.t.costs.at(-1)!.amount_usd_exact)).toBe(0.32)
+    const u = await modeloListo({ animar: 'falta_uno' })
+    const r2 = await crearAnimacion(u.d, animacion({ origen_pieza_id: u.modelo.id, movimientos: [0, 28] }))
+    if (!r2.ok) throw new Error(r2.error)
+    const g = await avanzar(u.d, r2.valor.pieza.id)
+    expect(g.ok && g.valor.estado).toBe('lista')
+    expect(g.ok && g.valor.aviso).toMatch(/no devolvió: Idle/)
+  })
+  it('solo se anima un modelo 3D listo del mismo cliente, y nunca una animación', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const ajeno = await crearAnimacion(d, { ...animacion({ origen_pieza_id: modelo.id, movimientos: [0] }), client_id: OTRO })
+    expect(!ajeno.ok && ajeno.status).toBe(404)
+    const img = await crear(d, { ...pedido({ tipo: 'imagen', prompt: 'una ola' }), clave: 'clic-imagen-01' })
+    if (!img.ok) throw new Error('no creó')
+    const deImagen = await crearAnimacion(d, animacion({ origen_pieza_id: img.valor.pieza.id, movimientos: [0] }))
+    expect(!deImagen.ok && deImagen.error).toBe('modelo_no_animable')
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+    if (!r.ok) throw new Error(r.error)
+    await avanzar(d, r.valor.pieza.id)
+    const deAnimacion = await crearAnimacion(d, animacion({ origen_pieza_id: r.valor.pieza.id, movimientos: [0], clave: 'animar-0000002' }))
+    expect(!deAnimacion.ok && deAnimacion.detalle).toMatch(/ya es una animación/)
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(1)
+  })
+  it('el doble clic no cobra dos veces', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const p = animacion({ origen_pieza_id: modelo.id, movimientos: [0] })
+    const [a, b] = await Promise.all([crearAnimacion(d, p), crearAnimacion(d, p)])
+    expect(a.ok && b.ok).toBe(true)
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(1)
+    expect(d.base.t.estudio_piezas.filter((x) => x.modelo === 'meshy-animar')).toHaveLength(1)
+  })
+  it('demasiados triángulos (el error real de producción, 06-nov): se dice «demasiadas caras: créalo de nuevo» con las cifras, no «no es figura humana», y no se cobra — al enviar o al terminar', async () => {
+    for (const caso of ['envio_demasiado_detalle', 'demasiado_detalle'] as const) {
+      const { d, modelo } = await modeloListo({ animar: caso })
+      const antes = librosDeFal(d)
+      const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+      if (!r.ok) throw new Error(r.error)
+      const fin = caso === 'demasiado_detalle' ? await avanzar(d, r.valor.pieza.id) : { ok: true as const, valor: r.valor.pieza }
+      expect(fin.ok && fin.valor.estado).toBe('fallida')
+      expect(fin.ok && fin.valor.error).toMatch(/^Este modelo tiene demasiadas caras para animarlo \(1\.456\.114 triángulos; el proveedor acepta hasta 380\.000\): créalo de nuevo\. Los modelos nuevos ya salen listos para animar\. No se registró ningún cobro\./)
+      expect(fin.ok && fin.valor.error).not.toMatch(/figura humana/)
+      expect(fin.ok && Number(fin.valor.costo_usd)).toBe(0)
+      expect(librosDeFal(d)).toBe(antes)
+    }
+  })
+  it('un rechazo que no se reconoce se dice en simple, sin inventar causa, con el texto del proveedor', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'envio_raro' })
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+    if (!r.ok) throw new Error(r.error)
+    expect(r.valor.pieza.estado).toBe('fallida')
+    expect(r.valor.pieza.error).toBe(`${AVISO_SIN_CAUSA} (fal 422 · Auto rigging failed)`)
+  })
+  it('el texto del proveedor se muestra sin el JSON alrededor, aunque venga cortado como en producción', () => {
+    // así quedó guardado el 06-nov en la pieza cff64986 (cortado al final)
+    const cortado = 'fal 422 · {"detail":[{"loc":["body"],"msg":"The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API (POST /openapi/v1/remesh) with a target_polycount of 300000 or less (150000 or less with topology quad) befo'
+    expect(textoDelProveedor(cortado)).toBe('fal 422 · The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API (POST /openapi/v1/remesh) with a target_polycount of 300000 or less (150000 or less with topology quad) befo')
+    expect(motivoDeAnimacion(cortado)).toMatch(/^Este modelo tiene demasiadas caras para animarlo \(1\.456\.114 triángulos; el proveedor acepta hasta 380\.000\): créalo de nuevo\..*\(fal 422 · The input model has/)
+    expect(textoDelProveedor('fal 422 · {"detail":"Auto rigging failed"}')).toBe('fal 422 · Auto rigging failed')
+    expect(textoDelProveedor('fal · timeout')).toBe('fal · timeout')
+    expect(textoDelProveedor('fal 500 · {"error":"x"}')).toBe('fal 500 · {"error":"x"}')
+  })
+  it('el motivo de un fallo al animar: cifras exactas, respaldo sin cifras, humano, y causa desconocida', () => {
+    expect(demasiadoDetalle(ERROR_DE_TRIANGULOS)).toEqual({ tiene: 1456114, tope: 380000 })
+    expect(demasiadoDetalle('timeout')).toBeNull()
+    expect(motivoDeAnimacion('exceeds the polycount')).toBe('Este modelo tiene demasiadas caras para animarlo: créalo de nuevo. Los modelos nuevos ya salen listos para animar. No se registró ningún cobro. (exceeds the polycount)')
+    expect(motivoDeAnimacion('Model is not a humanoid')).toMatch(/^Este modelo no parece una figura humana/)
+    // si el texto nombra las dos cosas, mandan las caras: es lo que se puede arreglar
+    expect(motivoDeAnimacion('Rigging requires a humanoid; 500,000 triangles which exceeds the 380,000 triangle limit')).toMatch(/^Este modelo tiene demasiadas caras para animarlo/)
+    // la orden de Emilio: nunca «no humanoide» cuando la causa son las caras
+    expect(motivoDeAnimacion(ERROR_DE_TRIANGULOS)).not.toMatch(/humanoide|figura humana/)
+    expect(motivoDeAnimacion('timeout')).toBe(`${AVISO_SIN_CAUSA} (timeout)`)
+    expect(AVISO_SIN_CAUSA).toBe('No se pudo animar este modelo; el proveedor no dio una causa que reconozcamos. No se registró ningún cobro.')
+  })
+  it('lo que dice «no es figura humana» se reconoce por palabra entera; un error cualquiera no', () => {
+    for (const t of ['Model is not a humanoid', 'Rigging requires a humanoid character with clearly defined limbs', 'no limbs detected', 'biped not found']) expect(noEsHumanoide(t)).toBe(true)
+    // «rigging», «skeleton» o «pose» no prueban que no sea humano: el error de demasiados triángulos también dice «rigging» (06-nov)
+    for (const t of ['timeout', 'Internal Server Error', 'invalid origin header', 'purpose not allowed', 'trigger failed', 'exposed url', 'Auto rigging failed', 'could not rig the mesh', 'Skeleton generation failed', 'pose estimation error', ERROR_DE_TRIANGULOS]) expect(noEsHumanoide(t)).toBe(false)
+  })
+  it('un modelo 3D que todavía se está creando no se anima', async () => {
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['IN_PROGRESS'], animar: 'ok' }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    const fila = d.base.t.estudio_piezas.find((p) => p.id === r.valor.pieza.id)!
+    // aunque ya tuviera archivo, sigue «creando»: no se anima
+    Object.assign(fila, { archivo_url: 'https://almacen.test/oficina-creativos/estudio/x.glb', archivo_tipo: 'glb' })
+    const a = await crearAnimacion(d, animacion({ origen_pieza_id: r.valor.pieza.id, movimientos: [0] }))
+    expect(!a.ok && a.error).toBe('modelo_no_animable')
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(0)
+  })
+  it('repetir el mismo clic más tarde devuelve la misma pieza, sin otro envío', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const p = animacion({ origen_pieza_id: modelo.id, movimientos: [0] })
+    const a = await crearAnimacion(d, p)
+    const b = await crearAnimacion(d, p)
+    expect(a.ok && a.valor.ya_existia).toBe(false)
+    expect(b.ok && b.valor.ya_existia).toBe(true)
+    expect(b.ok && a.ok && b.valor.pieza.id).toBe(a.ok ? a.valor.pieza.id : null)
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(1)
+    // lo ya pedido se devuelve antes de mirar llaves o modelo: aunque falte la llave, no da error
+    const c = await crearAnimacion({ ...d, llaves: { ...d.llaves, fal: '' } }, p)
+    expect(c.ok && c.valor.ya_existia).toBe(true)
+  })
+  it('fal sin movimientos y dos preguntas a la vez: el libro se anota una sola vez', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'sin_clips' })
+    const antes = librosDeFal(d)
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+    if (!r.ok) throw new Error(r.error)
+    const [x, y] = await Promise.all([avanzar(d, r.valor.pieza.id), avanzar(d, r.valor.pieza.id)])
+    expect(x.ok && x.valor.estado).toBe('fallida')
+    expect(y.ok && y.valor.estado).toBe('fallida')
+    expect(librosDeFal(d)).toBe(antes + 1)
+  })
+  it('un movimiento tiene que ser un número de verdad: `true`, vacío o texto no cuentan (CC7 #935)', () => {
+    const base = { client_id: CLIENTE, clave: 'animar-0000001', origen_pieza_id: CLIENTE }
+    expect(armarAnimacion({ ...base, movimientos: [true] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [''] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: ['28a'] }, movimientoExiste).ok).toBe(false)
+    expect(armarAnimacion({ ...base, movimientos: [null] }, movimientoExiste).ok).toBe(false)
+    const a = armarAnimacion({ ...base, movimientos: ['28', 0] }, movimientoExiste)
+    expect(a.ok && a.pedido.movimientos).toEqual([28, 0])
+  })
+  it('un modelo cuyo archivo no está en una dirección pública no se anima ni se envía (CC7 #935)', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'ok' })
+    const fila = d.base.t.estudio_piezas.find((p) => p.id === modelo.id)!
+    Object.assign(fila, { archivo_url: 'http://127.0.0.1/estudio/modelo.glb' })
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0] }))
+    expect(!r.ok && r.error).toBe('modelo_no_animable')
+    expect(!r.ok && r.detalle).toMatch(/no es público/)
+    expect(d.p.llamadas.filter((l) => l.url.endsWith('/multi-animation'))).toHaveLength(0)
+  })
+  it('un movimiento que llega sin archivo no cuenta: el aviso lo nombra como faltante (CC7 #935)', async () => {
+    const { d, modelo } = await modeloListo({ animar: 'uno_sin_archivo' })
+    const r = await crearAnimacion(d, animacion({ origen_pieza_id: modelo.id, movimientos: [0, 28] }))
+    if (!r.ok) throw new Error(r.error)
+    const g = await avanzar(d, r.valor.pieza.id)
+    expect(g.ok && g.valor.estado).toBe('lista')
+    expect(g.ok && g.valor.aviso).toMatch(/no devolvió: Idle/)
+    const fin = d.base.t.estudio_piezas.find((p) => p.id === r.valor.pieza.id)!
+    expect((fin.parametros as { archivos: Array<{ action_id: number }> }).archivos.map((x) => x.action_id)).toEqual([28])
+  })
+  it('la ruta exige la llave interna y el catálogo trae precio, comunes y biblioteca', () => {
+    const ruta = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'estudio', 'animar', 'route.ts'), 'utf8')
+    expect(ruta).toContain('checkInternalKey(request)')
+    expect(ruta).toContain('export const maxDuration = 800')
+    const cat = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'estudio', 'catalogo', 'route.ts'), 'utf8')
+    expect(cat).toContain('animar: { precio: ANIMAR.precio, maximo: ANIMAR.maximo, comunes: MOVIMIENTOS_COMUNES, biblioteca: BIBLIOTECA_DE_MOVIMIENTOS }')
+  })
+})
+
+describe('pieza colgada en «creando»: vence solo si nadie la está haciendo', () => {
+  const HORA = 60 * 60_000
+  const envejecer = (d: ReturnType<typeof deps>, id: string, ms: number) => {
+    const fila = d.base.t.estudio_piezas.find((p) => p.id === id)!
+    fila.creado_en = new Date(d.ahora() - ms).toISOString()
+    return fila
+  }
+  it('el tope de vida es muy holgado: 1 h la imagen, 3 h el video y el 3D', () => {
+    const t = Date.parse('2026-11-05T20:00:00Z')
+    expect(TOPE_DE_VIDA_MIN).toEqual({ imagen: 60, video: 180, '3d': 180 })
+    expect(vencioLaPieza({ tipo: '3d', creado_en: new Date(t - 179 * 60_000).toISOString() }, t)).toBe(false)
+    expect(vencioLaPieza({ tipo: '3d', creado_en: new Date(t - 181 * 60_000).toISOString() }, t)).toBe(true)
+    expect(vencioLaPieza({ tipo: 'imagen', creado_en: new Date(t - 61 * 60_000).toISOString() }, t)).toBe(true)
+    expect(vencioLaPieza({ tipo: 'video', creado_en: new Date(t - 179 * 60_000).toISOString() }, t)).toBe(false)
+    expect(vencioLaPieza({ tipo: 'video', creado_en: 'no es fecha' }, t)).toBe(false)
+  })
+  it('una pieza que nunca llegó al proveedor vence pasado el tope, con lo ya gastado; antes, no', async () => {
+    const d = deps()
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    const fila = d.base.t.estudio_piezas.find((p) => p.id === r.valor.pieza.id)!
+    // como si la función se hubiera cortado después de la imagen y antes de enviar a fal
+    Object.assign(fila, { estado: 'creando', paso: 'imagen', proveedor_request_id: null, costo_usd: 0.0133, terminado_en: null, archivo_url: null })
+    envejecer(d, r.valor.pieza.id, 2 * HORA)
+    const antes = await avanzar(d, r.valor.pieza.id)
+    expect(antes.ok && antes.valor.estado).toBe('creando')
+    envejecer(d, r.valor.pieza.id, 4 * HORA)
+    const libro = d.base.t.costs.length
+    const v = await avanzar(d, r.valor.pieza.id)
+    expect(v.ok && v.valor.estado).toBe('fallida')
+    expect(v.ok && v.valor.error).toMatch(/^Venció: no llegó al proveedor en 180 min\. No se registró ningún cobro más\.$/)
+    expect(v.ok && Number(v.valor.costo_usd)).toBe(0.0133)
+    expect(d.base.t.costs.length).toBe(libro)
+  })
+  it('si el proveedor ya no reconoce el pedido (404), vence pasado el tope; si dice «en curso», se sigue preguntando', async () => {
+    for (const [estado, vence] of [['NOT_FOUND', true], ['IN_PROGRESS', false], ['ERROR_500', false]] as const) {
+      const d = deps(baseFalsa(), proveedores({ falEstado: [estado, estado, estado] }))
+      const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+      if (!r.ok) throw new Error('no creó')
+      envejecer(d, r.valor.pieza.id, 4 * HORA)
+      const v = await avanzar(d, r.valor.pieza.id)
+      expect([estado, v.ok && v.valor.estado]).toEqual([estado, vence ? 'fallida' : 'creando'])
+      if (vence) expect(v.ok && v.valor.error).toMatch(/^Venció: el proveedor ya no reconoce el pedido en 180 min/)
+    }
+    // 404 pero todavía dentro del tope: no vence (puede ser un tropiezo del proveedor)
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['NOT_FOUND'] }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    envejecer(d, r.valor.pieza.id, HORA)
+    const v = await avanzar(d, r.valor.pieza.id)
+    expect(v.ok && v.valor.estado).toBe('creando')
+  })
+  it('lo mismo en video: 404 pasado el tope vence; «en curso» no', async () => {
+    for (const [estado, vence] of [['not_found', true], ['in_progress', false]] as const) {
+      const d = deps(baseFalsa(), proveedores({ hfEstado: [estado, estado] }))
+      const r = await crear(d, pedido({ tipo: 'video', prompt: 'una ola rompiendo' }))
+      if (!r.ok) throw new Error('no creó')
+      envejecer(d, r.valor.pieza.id, 4 * HORA)
+      const v = await avanzar(d, r.valor.pieza.id)
+      expect([estado, v.ok && v.valor.estado]).toEqual([estado, vence ? 'fallida' : 'creando'])
+    }
+    // 404 del video todavía dentro del tope: no vence (menor 1 de CC7 en #944)
+    const d = deps(baseFalsa(), proveedores({ hfEstado: ['not_found'] }))
+    const r = await crear(d, pedido({ tipo: 'video', prompt: 'una ola rompiendo' }))
+    if (!r.ok) throw new Error('no creó')
+    envejecer(d, r.valor.pieza.id, 2 * HORA)
+    const v = await avanzar(d, r.valor.pieza.id)
+    expect(v.ok && v.valor.estado).toBe('creando')
+  })
+  it('una pieza ya lista nunca vence, aunque el proveedor ya la haya olvidado', async () => {
+    const d = deps(baseFalsa(), proveedores({ falEstado: ['COMPLETED', 'NOT_FOUND', 'NOT_FOUND'] }))
+    const r = await crear(d, pedido({ tipo: '3d', prompt: 'figura de un surfista' }))
+    if (!r.ok) throw new Error('no creó')
+    const a = await avanzar(d, r.valor.pieza.id)
+    expect(a.ok && a.valor.estado).toBe('lista')
+    envejecer(d, r.valor.pieza.id, 30 * HORA)
+    const llamadas = d.p.llamadas.length
+    const b = await avanzar(d, r.valor.pieza.id)
+    expect(d.p.llamadas.length).toBe(llamadas) // ni siquiera se le pregunta al proveedor
+    expect(b.ok && b.valor.estado).toBe('lista')
+  })
+})
+
+describe('GO 09-nov · todo modelo 3D nuevo sale listo para animar (tope de caras)', () => {
+  it('el tope queda bajo el límite del esqueleto', () => {
+    expect(TOPE_DE_CARAS_3D).toBe(300000)
+    expect(TOPE_DE_CARAS_3D).toBeLessThan(LIMITE_DE_CARAS_DEL_ESQUELETO)
+  })
+  it('cada modelo del catálogo manda el tope con el nombre de campo de su ficha, en las dos calidades', () => {
+    const esperado: Record<string, string> = { 'tripo-h3.1': 'face_limit', 'hunyuan-3d-v3.1-pro': 'face_count', 'meshy-6': 'target_polycount' }
+    expect(MODELOS_3D.map((m) => m.id).sort()).toEqual(Object.keys(esperado).sort())
+    for (const m of MODELOS_3D) for (const calidad of ['normal', 'alta'] as const) {
+      const e = entradaDe3D(m, calidad, 'https://x/foto.png')
+      expect(e[esperado[m.id]]).toBe(TOPE_DE_CARAS_3D)
+      expect(e[m.campoDeImagen]).toBe('https://x/foto.png')
+    }
+  })
+  it('las opciones de calidad no pisan el tope ni se pierden', () => {
+    const hunyuan = MODELOS_3D.find((m) => m.id === 'hunyuan-3d-v3.1-pro')!
+    expect(entradaDe3D(hunyuan, 'alta', 'u')).toEqual({ input_image_url: 'u', enable_pbr: true, face_count: 300000 })
+    const tripo = MODELOS_3D.find((m) => m.id === 'tripo-h3.1')!
+    expect(entradaDe3D(tripo, 'alta', 'u')).toEqual({ image_url: 'u', texture: true, texture_quality: 'detailed', face_limit: 300000 })
+    // aunque una calidad trajera su propio número de caras, manda el tope
+    const conCaras = { ...tripo, opciones: { normal: { face_limit: 1_000_000 }, alta: { face_limit: 1_000_000 } } }
+    expect(entradaDe3D(conCaras, 'normal', 'u').face_limit).toBe(TOPE_DE_CARAS_3D)
   })
 })

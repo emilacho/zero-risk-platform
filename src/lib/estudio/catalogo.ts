@@ -31,26 +31,37 @@ export interface ModeloDe3D {
   precio: Record<Calidad, number>
   /** la entrada extra por calidad */
   opciones: Record<Calidad, Record<string, unknown>>
+  /** el nombre del campo del tope de caras en su entrada (cada uno usa el suyo; leído de su ficha en fal, 09-nov) */
+  campoDeCaras: 'face_limit' | 'face_count' | 'target_polycount'
   nota: string
 }
+
+/** el esqueleto (Meshy, vía fal) rechaza modelos de más de 380 000 triángulos (medido 06-nov) */
+export const LIMITE_DE_CARAS_DEL_ESQUELETO = 380_000
+/** todo modelo 3D nuevo sale con este tope, así se puede animar desde que se crea (firma de Emilio 09-nov 15:42Z: calidad antes que precio) */
+export const TOPE_DE_CARAS_3D = 300_000
 
 export const MODELOS_3D: readonly ModeloDe3D[] = [
   {
     id: 'tripo-h3.1', nombre: 'Tripo H3.1', endpoint: 'tripo3d/h3.1/image-to-3d', campoDeImagen: 'image_url',
     precio: { normal: 0.3, alta: 0.4 },
     opciones: { normal: { texture: true, texture_quality: 'standard' }, alta: { texture: true, texture_quality: 'detailed' } },
+    campoDeCaras: 'face_limit',
     nota: 'rápido · buena textura',
   },
   {
     id: 'hunyuan-3d-v3.1-pro', nombre: 'Hunyuan 3D v3.1', endpoint: 'fal-ai/hunyuan-3d/v3.1/pro/image-to-3d', campoDeImagen: 'input_image_url',
     precio: { normal: 0.375, alta: 0.525 },
     opciones: { normal: { enable_pbr: false }, alta: { enable_pbr: true } },
+    // su valor por omisión es 500 000: pasaría del límite del esqueleto
+    campoDeCaras: 'face_count',
     nota: 'forma fiel · alta suma materiales realistas',
   },
   {
     id: 'meshy-6', nombre: 'Meshy 6', endpoint: 'fal-ai/meshy/v6/image-to-3d', campoDeImagen: 'image_url',
     precio: { normal: 0.8, alta: 0.8 },
     opciones: { normal: {}, alta: { enable_pbr: true } },
+    campoDeCaras: 'target_polycount',
     nota: 'el más detallado · tarda 5 a 10 min',
   },
 ]
@@ -169,7 +180,7 @@ export const promptDeImagenPara3D = (prompt: string) =>
 
 /** lo que se manda a fal para la conversión */
 export function entradaDe3D(m: ModeloDe3D, calidad: Calidad, imagenUrl: string): Record<string, unknown> {
-  return { [m.campoDeImagen]: imagenUrl, ...m.opciones[calidad] }
+  return { [m.campoDeImagen]: imagenUrl, ...m.opciones[calidad], [m.campoDeCaras]: TOPE_DE_CARAS_3D }
 }
 
 /** el archivo 3D de la respuesta de fal: cada modelo lo nombra distinto; se prefiere GLB */
@@ -193,3 +204,101 @@ export function miniaturaDe3D(salida: Record<string, unknown>): string | null {
   }
   return null
 }
+
+// ── animar un modelo 3D (GO de Lenovo 06-nov · firma de Emilio: sin boceto solo esta vez) ─────────────────
+/**
+ * fal.ai `fal-ai/meshy/rigging/multi-animation` (leída 06-nov): pone esqueleto al GLB y genera un clip por movimiento.
+ *  · entrada: `model_url` (GLB público), `height_meters` (1,7 por omisión), `animation_action_ids` (1 a 10, ids 0-696), `enable_safety_checker`.
+ *  · salida: `animations[] {action_id, animation_glb, animation_fbx}`, `rigged_character_glb/fbx`, `basic_animations` (caminar y correr).
+ *  · precio: US$ 0,20 por pedido + US$ 0,12 por movimiento. Solo figuras humanas con brazos y piernas definidos.
+ */
+export const ANIMAR = {
+  id: 'meshy-animar',
+  nombre: 'Meshy · animar',
+  endpoint: 'fal-ai/meshy/rigging/multi-animation',
+  precio: { base: 0.2, por_movimiento: 0.12 },
+  maximo: 10,
+  altura_m: 1.7,
+} as const
+/** los más comunes primero (ids de la biblioteca de Meshy) */
+export const MOVIMIENTOS_COMUNES: ReadonlyArray<{ id: number; nombre: string }> = [
+  { id: 0, nombre: 'Quieto' },
+  { id: 30, nombre: 'Caminar' },
+  { id: 14, nombre: 'Correr' },
+  { id: 28, nombre: 'Saludar' },
+  { id: 591, nombre: 'Bailar' },
+]
+
+export interface PedidoDeAnimacion { client_id: string; clave: string; origen_pieza_id: string; movimientos: number[] }
+
+export function armarAnimacion(e: Record<string, unknown>, existe: (id: number) => boolean): { ok: true; pedido: PedidoDeAnimacion } | { ok: false; errores: string[] } {
+  const errores: string[] = []
+  const client_id = texto(e.client_id)
+  if (!UUID.test(client_id)) errores.push('`client_id` es obligatorio: toda pieza pertenece a un cliente')
+  const clave = texto(e.clave)
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(clave)) errores.push('`clave` es obligatoria (8 a 80 letras, números, guion): sin ella un doble clic cobraría dos veces')
+  const origen_pieza_id = texto(e.origen_pieza_id)
+  if (!UUID.test(origen_pieza_id)) errores.push('`origen_pieza_id` es el modelo 3D que se anima')
+  const crudos = Array.isArray(e.movimientos) ? e.movimientos : []
+  // solo números o texto de dígitos: `true` no es el movimiento 1, ni `""` el 0
+  const movimientos = [...new Set(crudos.map((x) => (typeof x === 'number' ? x : typeof x === 'string' && /^\d+$/.test(x) ? Number(x) : NaN)))]
+  if (!movimientos.length) errores.push('elige al menos un movimiento')
+  else if (movimientos.length > ANIMAR.maximo) errores.push(`hasta ${ANIMAR.maximo} movimientos por vez`)
+  else if (movimientos.some((x) => !Number.isInteger(x) || !existe(x))) errores.push('hay un movimiento que no está en la biblioteca')
+  if (errores.length) return { ok: false, errores }
+  return { ok: true, pedido: { client_id, clave, origen_pieza_id, movimientos } }
+}
+
+export function cotizarAnimacion(n: number): Cotizacion {
+  const partes = [{ que: 'esqueleto', usd: ANIMAR.precio.base }, { que: `${n} movimiento${n === 1 ? '' : 's'}`, usd: +(ANIMAR.precio.por_movimiento * n).toFixed(4) }]
+  return { total_usd: +partes.reduce((s, x) => s + x.usd, 0).toFixed(4), partes }
+}
+
+/** lo que se manda a fal para animar */
+export const entradaDeAnimacion = (modeloUrl: string, movimientos: number[]) => ({ model_url: modeloUrl, height_meters: ANIMAR.altura_m, animation_action_ids: movimientos, enable_safety_checker: true })
+
+/** los clips de la respuesta, en el orden pedido (solo los que traen archivo) */
+export function clipsDeAnimacion(salida: Record<string, unknown>): Array<{ action_id: number; glb: string | null; fbx: string | null }> {
+  const url = (v: unknown) => (v && typeof v === 'object' && typeof (v as { url?: unknown }).url === 'string' ? (v as { url: string }).url : null)
+  const lista = Array.isArray(salida.animations) ? salida.animations : []
+  return lista
+    .map((c) => (c && typeof c === 'object' ? (c as Record<string, unknown>) : {}))
+    .map((c) => ({ action_id: Number(c.action_id), glb: url(c.animation_glb), fbx: url(c.animation_fbx) }))
+    .filter((c) => Number.isInteger(c.action_id) && (c.glb || c.fbx))
+}
+
+/** un fallo de fal que dice que el modelo no se puede montar en un esqueleto humano: se explica en claro */
+// solo palabras que dicen «no es humano»; «rigging», «skeleton» o «pose» aparecen también en fallos de otra causa
+// (06-nov: el error de demasiados triángulos dice «limit for rigging» y salía como «no es figura humana»)
+export const noEsHumanoide = (error: string) => /humanoid|\blimbs?\b|\bbiped\b/i.test(error)
+export const AVISO_NO_HUMANOIDE = 'Este modelo no parece una figura humana con brazos y piernas definidos, así que no se puede animar. No se registró ningún cobro.'
+
+/** fal rechaza el esqueleto porque el modelo tiene demasiados triángulos (medido 06-nov: 1.456.114 contra un tope de 380.000) */
+export function demasiadoDetalle(error: string): { tiene: number; tope: number } | null {
+  const m = /([\d,.]+)\s*triangles?\s+which exceeds the\s+([\d,.]+)\s*triangle limit/i.exec(error)
+  if (!m) return /triangle limit|polycount/i.test(error) ? { tiene: NaN, tope: NaN } : null
+  const n = (s: string) => Number(s.replace(/[,.]/g, ''))
+  return { tiene: n(m[1]), tope: n(m[2]) }
+}
+const miles = (x: number) => x.toLocaleString('es-EC')
+
+/** el motivo de un fallo al animar, en claro: primero «demasiadas caras» (su error también nombra el esqueleto), después «no es figura humana» */
+/** el texto del proveedor sin el JSON alrededor: «fal 422 · {"detail":"x"}» → «fal 422 · x» (el texto puede venir cortado) */
+export function textoDelProveedor(error: string): string {
+  const m = /"msg"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(error) ?? /"detail"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(error)
+  const inicio = error.indexOf('{')
+  return m && inicio >= 0 ? `${error.slice(0, inicio)}${m[1]}` : error
+}
+
+export function motivoDeAnimacion(crudo: string): string {
+  const error = textoDelProveedor(crudo)
+  const det = demasiadoDetalle(error)
+  if (det) {
+    const cifras = Number.isFinite(det.tiene) ? ` (${miles(det.tiene)} triángulos; el proveedor acepta hasta ${miles(det.tope)})` : ''
+    return `Este modelo tiene demasiadas caras para animarlo${cifras}: créalo de nuevo. Los modelos nuevos ya salen listos para animar. No se registró ningún cobro. (${error})`
+  }
+  if (noEsHumanoide(error)) return `${AVISO_NO_HUMANOIDE} (${error})`
+  // causa no reconocida: se dice en simple, sin inventarla, y se muestra el texto del proveedor
+  return `${AVISO_SIN_CAUSA} (${error})`
+}
+export const AVISO_SIN_CAUSA = 'No se pudo animar este modelo; el proveedor no dio una causa que reconozcamos. No se registró ningún cobro.'

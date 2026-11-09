@@ -17,16 +17,18 @@ var PARAMETROS = {
   GRACIA_ENTREGA_S: 180,
 }
 
+// 06-nov · pedido de Lenovo: el `que` es el TÍTULO que ve Emilio (escritorio de riesgos y #alertas). Va en lenguaje simple, sin mayúsculas
+// de grito ni jerga; la clave y la severidad no cambian. El reloj reescribe `que` en cada pasada, así que las filas abiertas se ponen al día solas.
 var CLASES = {
-  ok: { severidad: 'ok', que: 'despacho cerrado' },
-  en_curso: { severidad: 'ok', que: 'trabajando dentro de lo esperado' },
-  entregado_ledger_abierto: { severidad: 'info', que: 'la vuelta SÍ se entregó pero el registro del despacho quedó abierto' },
-  error_entregado: { severidad: 'info', que: 'falló y el error SÍ le llegó al que esperaba' },
-  error_callback_409: { severidad: 'info', que: 'falló; el que llamó no espera por callback (lo sondea): sus intentos dan 409' },
-  termino_y_no_entrego: { severidad: 'alta', que: 'TERMINÓ el trabajo y NADIE lo entregó · el resultado existe · el que esperaba no se enteró' },
-  nunca_arranco: { severidad: 'alta', que: 'se ACEPTÓ el trabajo y NUNCA arrancó' },
-  sin_senales_de_vida: { severidad: 'alta', que: 'lleva más de 1 h «corriendo» sin ninguna señal de vida · probablemente murió' },
-  error_sin_entrega: { severidad: 'alta', que: 'FALLÓ y el error NO le llegó al que esperaba (sin intentos de vuelta o todos fallaron) · su espera puede estar colgada' },
+  ok: { severidad: 'ok', que: 'El trabajo se cerró sin problema' },
+  en_curso: { severidad: 'ok', que: 'Sigue trabajando, dentro del tiempo normal' },
+  entregado_ledger_abierto: { severidad: 'info', que: 'El resultado llegó, pero el registro del trabajo quedó abierto' },
+  error_entregado: { severidad: 'info', que: 'El trabajo falló, y el aviso del error sí llegó a quien lo esperaba' },
+  error_callback_409: { severidad: 'info', que: 'El trabajo falló; quien lo pidió no espera aviso, pregunta por su cuenta' },
+  termino_y_no_entrego: { severidad: 'alta', que: 'Un empleado terminó su trabajo, pero el resultado no llegó a quien lo esperaba' },
+  nunca_arranco: { severidad: 'alta', que: 'Se aceptó un trabajo, pero nunca empezó' },
+  sin_senales_de_vida: { severidad: 'alta', que: 'Un trabajo lleva más de una hora sin dar señales; probablemente se cayó' },
+  error_sin_entrega: { severidad: 'alta', que: 'Un trabajo falló y el aviso no llegó a quien lo esperaba; ese proceso puede seguir esperando' },
 }
 
 function segundos(desde, hasta) {

@@ -31,7 +31,8 @@ export function crearBaseFalsa(tablas: Record<string, Fila[]>, opciones: { /** c
         escrituras.push({ tabla, op, fila: payload, filtros: filtros.map(([c, , v]) => [c, v]) })
         if (op === 'insert' && payload) (tablas[tabla] ??= []).push({ id: crypto.randomUUID(), creado_en: (opciones.reloj ?? (() => new Date().toISOString()))(), ...payload })
         // un UPDATE se APLICA a las filas que cumplen los filtros (antes solo se anotaba): así las pruebas ven el estado final
-        if (op === 'update' && payload) for (const f of filas()) Object.assign(f, payload)
+        // y devuelve las filas que cambió (como `update(...).select()` de la base real): así se puede contar si cambió alguna
+        if (op === 'update' && payload) { const hit = filas(); for (const f of hit) Object.assign(f, payload); return { data: hit.map((f) => ({ ...f })), error: null } }
         return { data: null, error: null }
       }
       const chain = (t: string) => (c: string, v: unknown) => { filtros.push([c, t, v]); return q }

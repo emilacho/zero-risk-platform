@@ -196,7 +196,7 @@ describe('«Armar el aviso» y «Marcar avisados» (Slack)', () => {
     expect(json.texto).toContain('termino_y_no_entrego')
     expect(json.texto).toContain('157555')
     expect(json.texto).toContain('US$ 1.98')
-    expect(json.texto).toMatch(/el resultado EXISTE/)
+    expect(json.texto).toMatch(/el resultado está guardado/)
     expect(json.claves).toEqual(['dispatch:WF:cba:1'])
   })
   const marcar = async (slack: unknown, statusCode = 204) => {

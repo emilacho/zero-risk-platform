@@ -61,8 +61,32 @@ export function corridasCadaDiasDelEntorno(env: Record<string, string | undefine
   return { cada, hasta: h, activo: true, aviso: null }
 }
 const DIA_MS = 86_400_000
-/** ¿este día (UTC) toca corrida completa? Con `CADA_DIAS` activo y antes de `HASTA`: uno de cada N, contando hacia atrás desde el último día antes de `HASTA` */
+
+/**
+ * LA PAUSA DEL RASPADO PROGRAMADO (09-nov · firma de Emilio: el crédito del mes de Apify se agotó). `PORTERO_RASPADO_PAUSADO_HASTA` = AAAA-MM-DD (vuelve a las 00:00 UTC de ese día)
+ * o una fecha ISO completa. Antes de esa hora el raspado PROGRAMADO (la corrida del horario y los pasos de redes del reloj) no le pide nada a Apify; desde esa hora vuelve SOLO, sin tocar nada.
+ *  · NO es una pausa por cliente (`cerebro_portero_pausas`): nadie queda «pausado». El alta, un cliente nuevo y los pedidos fuera del horario raspan igual.
+ *  · Mientras dure, la corrida del horario corre TODOS LOS DÍAS como mantenimiento (filtrar lo ya guardado, puente al índice, retiro de lo cerrado, vigilante, pulido): no cuesta Apify.
+ * Sin la variable: no hay pausa. Un valor roto: no hay pausa (y lo DICE). Dato: cambiarla no exige construir nada.
+ */
+export interface PausaDelRaspadoLeida { hasta: string | null; aviso: string | null }
+export function pausaDelRaspadoDelEntorno(env: Record<string, string | undefined> = process.env): PausaDelRaspadoLeida {
+  const t = String(env.PORTERO_RASPADO_PAUSADO_HASTA ?? '').trim()
+  if (t === '') return { hasta: null, aviso: null }
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(t) ? `${t}T00:00:00Z` : t
+  const ms = Date.parse(iso)
+  if (!/^\d{4}-\d{2}-\d{2}/.test(t) || !Number.isFinite(ms)) return { hasta: null, aviso: `PORTERO_RASPADO_PAUSADO_HASTA tiene un valor que no se entiende («${t.slice(0, 40)}»): el raspado NO está en pausa. Valor válido: AAAA-MM-DD` }
+  return { hasta: new Date(ms).toISOString(), aviso: null }
+}
+/** ¿a esta hora el raspado programado está en pausa? */
+export function raspadoEnPausa(ahora: Date, env: Record<string, string | undefined> = process.env): boolean {
+  const p = pausaDelRaspadoDelEntorno(env)
+  return p.hasta !== null && ahora.getTime() < Date.parse(p.hasta)
+}
+
+/** ¿este día (UTC) toca corrida completa? Con `CADA_DIAS` activo y antes de `HASTA`: uno de cada N, contando hacia atrás desde el último día antes de `HASTA`. En la pausa del raspado: todos los días (mantenimiento sin Apify) */
 export function diaConCorrida(dia: Date, env: Record<string, string | undefined> = process.env): boolean {
+  if (raspadoEnPausa(dia, env)) return true
   const c = corridasCadaDiasDelEntorno(env)
   if (!c.activo || c.hasta === null) return true
   const hasta = Date.parse(`${c.hasta}T00:00:00Z`)

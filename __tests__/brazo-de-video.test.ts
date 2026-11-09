@@ -113,7 +113,14 @@ vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => db }))
 const fetchMock = vi.fn()
 const respuesta = (status: number, cuerpo: unknown, h: Record<string, string> = {}) => ({ status, ok: status >= 200 && status < 300, headers: new Headers(h), text: async () => (typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo)), arrayBuffer: async () => Buffer.from(String(cuerpo)) })
 
+// Reloj fijo: el descuento del proveedor tiene fecha de fin (DESCUENTO_VIGENTE.hasta). Sin fijar la hora,
+// estas pruebas pasaban o fallaban según el día en que corría la revisión (09-nov rompió 6). Todas corren
+// el 01-nov, con el descuento vigente; la que prueba «pasada la fecha» mueve el reloj por su cuenta.
+const HOY_DE_LAS_PRUEBAS = new Date('2026-11-01T00:00:00Z')
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(HOY_DE_LAS_PRUEBAS)
   vi.clearAllMocks()
   selectRows.value = []
   process.env.INTERNAL_API_KEY = 'k'
@@ -121,7 +128,7 @@ beforeEach(() => {
   process.env.OFICINA_BUCKET = 'oficina-creativos'
   global.fetch = fetchMock as unknown as typeof fetch
 })
-afterEach(() => { delete process.env.HIGGSFIELD_API_KEY_V2; delete process.env.OFICINA_BUCKET })
+afterEach(() => { vi.useRealTimers(); delete process.env.HIGGSFIELD_API_KEY_V2; delete process.env.OFICINA_BUCKET })
 
 async function post(body: Record<string, unknown>, llave = 'k') {
   const { POST } = await import('@/app/api/video/generate/route')
