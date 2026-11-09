@@ -33,14 +33,16 @@ const almacenCon = (planTexto: string) => new AlmacenMemoria({
 })
 const conHitos = (hitos: Array<{ dia: number; cita: string }>) => ({ ...A.estrategia, hitos: hitos.map((h, i) => ({ clave: `revision_${i + 1}`, dia: h.dia, tipo: 'revision' as const, cita_plan: h.cita })) })
 const s04 = (hs: Hallazgo[]) => hs.filter((h) => h.chequeo === 'S04' && h.severidad === 'bloquea')
-const validar = (hitos: Array<{ dia: number; cita: string }>, fechaInicio: string | null, dias = 84) => validarEstrategia(conHitos(hitos), { planTexto: PLAN, formatos: FORMATOS, diasCampana: dias, fechaInicio })
+// 09-nov · F: con ventana en la cabecera, las fechas del plan se cuentan desde SU día 1. Las pruebas de A que miden la conversión desde el día 1 de la CAMPAÑA usan el plan SIN ventana (la regla de respaldo)
+const PLAN_SIN_VENTANA = `${A.planTexto}\n- ${CITA_1}\n- ${CITA_2}\n- ${CITA_3}\n`
+const validar = (hitos: Array<{ dia: number; cita: string }>, fechaInicio: string | null, dias = 84, planTexto = PLAN_SIN_VENTANA) => validarEstrategia(conHitos(hitos), { planTexto, formatos: FORMATOS, diasCampana: dias, fechaInicio })
 
 describe('A · S04 con fechas de calendario', () => {
   it('🔴 la cita real «semana del 20 de noviembre de 2026» PASA con el día 12 si la campaña empieza el 09-nov', () => {
     expect(s04(validar([{ dia: 12, cita: CITA_1 }], '2026-11-09', 90))).toEqual([])
   })
   it('🔴 y con la ventana del plan (día 1 = 06-nov) pasan las TRES citas reales con los días que dio la estrategia (15 · 36 · 64)', () => {
-    expect(s04(validar([{ dia: 15, cita: CITA_1 }, { dia: 36, cita: CITA_2 }, { dia: 64, cita: CITA_3 }], '2026-11-06'))).toEqual([])
+    expect(s04(validar([{ dia: 15, cita: CITA_1 }, { dia: 36, cita: CITA_2 }, { dia: 64, cita: CITA_3 }], '2026-11-06', 84, PLAN))).toEqual([])
   })
   it('🔴 una fecha FUERA de su semana bloquea, y la ficha dice el día de campaña correcto', () => {
     const hs = s04(validar([{ dia: 30, cita: CITA_1 }], '2026-11-09', 90))

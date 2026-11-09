@@ -4,8 +4,8 @@
 import type { Almacen, Campana, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
 import { arrancarAlActivar, type ResultadoDelArranque } from './arranque'
-import { DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, SEMANAS_DE_TANDA } from './constantes'
-import { fechaInicioPorRegla, sumarDias } from './fechas'
+import { DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, medidaDeCampana, SEMANAS_DE_TANDA } from './constantes'
+import { esFechaIso, fechaInicioPorRegla, sumarDias } from './fechas'
 import { ventanaDelPlan } from './fechas-en-texto'
 import { nuevoOrdenEncendido } from './mesas'
 import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
@@ -47,7 +47,15 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   const ya = await al.campanaPorPlan(clientId, plan.plan_id, s.seco)
   // 🔴 #464 C5a (CC#3): reenviar el sobre de un plan YA REEMPLAZADO no «tiene éxito»: lo dice, y no abre ni revive nada
   if (ya && ya.estado === 'reemplazada') return err(409, 'E-PLAN-REEMPLAZADO', 'este plan ya fue reemplazado por uno más nuevo: no se abre nada', { campana: ya })
-  if (ya) return { status: 200, cuerpo: { ya_abierta: true, campana: ya } }
+  if (ya) {
+    // 09-nov · E: una campaña que SIGUE ARMANDO y llega por un viaje NUEVO de la sala (la reapertura deja un sobre nuevo) contesta a ESE viaje: el cable de vuelta sale de `sala_ref`
+    const nuevoRef = typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : null
+    const armando = ya.estado === 'abierta' || ya.estado === 'estrategia' || ya.estado === 'calendario'
+    if (armando && nuevoRef && cadena(nuevoRef._journey_id) && nuevoRef._journey_id !== ya.sala_ref?._journey_id) {
+      return { status: 200, cuerpo: { ya_abierta: true, campana: await al.actualizarCampana(ya.id, { sala_ref: nuevoRef }) } }
+    }
+    return { status: 200, cuerpo: { ya_abierta: true, campana: ya } }
+  }
 
   // r74 · F4 · antes de armar el contexto, las sedes y su horario se llenan SOLAS con lo que el sistema ya guardó del cliente (con su fuente); si el negocio no tiene sede, no pasa nada y su calendario no se frena
   // 🔴 r75 (nota A.4-1 de CC#3): la recolección ESCRIBE en `client_sedes` y `client_sede_datos` → en SECO no se recolecta (un ensayo no cambia datos reales del cliente); se usa lo que ya haya guardado
@@ -102,6 +110,91 @@ export function ventanaDeLaCampana(planTexto: string, inicioPorRegla: string, di
   const delPlan = medidaPedida ? null : ventanaDelPlan(planTexto)
   if (delPlan) return { fecha_inicio: delPlan.desde, fecha_fin: delPlan.hasta, origen: 'plan', dias: delPlan.dias }
   return { fecha_inicio: inicioPorRegla, fecha_fin: sumarDias(inicioPorRegla, diasPorRegla - 1), origen: 'regla', dias: diasPorRegla }
+}
+
+/** el día de hoy en la zona de la campaña (`YYYY-MM-DD`): «el día en que se reabre» es el del cliente, no el de UTC */
+export function hoyEnZona(ahora: string, zona: string | null | undefined): string {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: zona || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ahora)) } catch { return ahora.slice(0, 10) }
+}
+
+/** E · desde dónde se puede reabrir: una campaña detenida (`necesita_humano`) o en pausa. Las demás, no. */
+export const ESTADOS_QUE_SE_REABREN: readonly EstadoCampana[] = ['necesita_humano', 'pausada']
+/** el sobre que deja la reapertura: el MISMO que deja planeación al terminar el plan (la sala lo despacha a la puerta en modo «abrir», que retoma la campaña que sigue armando) */
+export interface SobreDePlan {
+  source: 'planeacion/plan-listo'; intent: 'briefear'
+  payload: { client_id: string; plan_id: string; dry_run: boolean; desde_worker: 'cadena/reabrir'; campana_id: string }
+  idempotency_key: string; logical_period: string; tenant_id: string; client_id: string
+}
+export const llaveDeReapertura = (campanaId: string, fechaInicio: string): string => `${campanaId}:reabrir:${fechaInicio}`
+
+/**
+ * E (09-nov · firma de Emilio, regla de sistema) · REABRIR una campaña en el mismo lugar: la misma fila, el mismo plan.
+ *  · parte de `necesita_humano` o `pausada`;
+ *  · día 1 = el día en que se reabre (en la zona del cliente) o la `fecha_inicio` que se pida; origen `emilio`; dura lo que dura el plan (su ventana; sin ventana, lo que ya medía la campaña);
+ *  · cierra TODAS sus esperas vivas; queda `abierta` y deja UN sobre nuevo en la sala: la puerta retoma la estrategia (lo ya validado no se repite);
+ *  · idempotente (el mismo pedido otra vez contesta `ya_reabierta` y no escribe) y, si algo falla o el sobre no entra, vuelve atrás (campaña y esperas como estaban);
+ *  · `ensayo: true` dice qué haría sin escribir nada (el seco).
+ * No gasta: lo que sigue gasta con sus topes.
+ */
+export async function reabrirCampana(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const id = cadena(cuerpo.campana_id)
+  if (!id) return err(400, 'E-CAMPOS', 'falta campana_id')
+  const pedida = cuerpo.fecha_inicio
+  if (pedida !== undefined && !esFechaIso(pedida)) return err(400, 'E-FECHA-INICIO', 'fecha_inicio debe ser YYYY-MM-DD')
+  const c = await al.campana(id)
+  if (!c) return err(404, 'E-CAMPANA', 'la campaña no existe')
+  const noAut = await autorizarLlamada(al, cuerpo, c.client_id)
+  if (noAut) return noAut
+  const cerrada = await compuerta(al, c.client_id, c.seco)
+  if (cerrada) return cerrada
+  const fechaInicio = (pedida as string | undefined) ?? hoyEnZona(ahora, c.zona_horaria)
+  // idempotencia: ya reabierta con ESE día 1 y sigue armando → no se escribe nada otra vez
+  if (c.fecha_inicio_origen === 'emilio' && c.fecha_inicio === fechaInicio && (c.estado === 'abierta' || c.estado === 'estrategia' || c.estado === 'calendario')) {
+    return { status: 200, cuerpo: { ya_reabierta: true, campana: c } }
+  }
+  if (!ESTADOS_QUE_SE_REABREN.includes(c.estado)) return err(409, 'E-NO-SE-REABRE', `una campaña ${c.estado} no se reabre: solo ${ESTADOS_QUE_SE_REABREN.join(' o ')}`)
+  if ((c as Campana & { archivada_en?: string | null }).archivada_en) return err(409, 'E-ARCHIVADA', 'la campaña está archivada: no se reabre')
+  // 🔴 ADENDA de riesgos (punto 4): mover el día 1 de una campaña que YA armó algo dejaría sus filas, su brief o su gran idea con las fechas viejas. La reapertura
+  //    es para la campaña que se detuvo ANTES de tener nada propio: con algo ya hecho, se niega y no se toca nada (ni se duplica, ni se borra, ni se vuelve a publicar).
+  const yaTiene = [
+    ['validada', 'aprobada'].includes(String((await al.ultimaEstrategia(c.id))?.estado)) ? 'una estrategia validada' : null,
+    (await al.filas(c.id)).length ? 'filas de calendario' : null,
+    (await al.briefsDe(c.id)).length ? 'un brief creativo' : null,
+    (await al.conceptosDe(c.id)).length ? 'una gran idea' : null,
+  ].filter((x): x is string => !!x)
+  if (yaTiene.length) return err(409, 'E-YA-ARMADA', `la campaña ya tiene ${yaTiene.join(', ')}: reabrirla correría su día 1 debajo de lo hecho; no se reabre`)
+  const ctx = await al.cargarContexto(c.client_id, c.plan_id)
+  if (!ctx) return err(409, 'E-CONTEXTO', 'no se pudo leer el plan de la campaña')
+  const dias = ventanaDelPlan(ctx.planTexto)?.dias ?? medidaDeCampana(c).dias
+  if (!Number.isInteger(dias) || dias < 1 || dias > DIAS_MAXIMOS_DE_CAMPANA) return err(409, 'E-DIAS-DE-CAMPANA', `la duración del plan (${dias} días) no es una medida de campaña`)
+  const fechaFin = sumarDias(fechaInicio, dias - 1)
+  const vivas = (await al.esperasVivas()).filter((e) => e.campana_id === c.id)
+  const sobre: SobreDePlan = {
+    source: 'planeacion/plan-listo', intent: 'briefear',
+    payload: { client_id: c.client_id, plan_id: c.plan_id, dry_run: c.seco === true, desde_worker: 'cadena/reabrir', campana_id: c.id },
+    idempotency_key: llaveDeReapertura(c.id, fechaInicio), logical_period: `reabrir:${fechaInicio}`, tenant_id: c.client_id, client_id: c.client_id,
+  }
+  const motivo = `reabierta por Emilio: día 1 ${fechaInicio}, ${dias} días (hasta ${fechaFin}); antes ${c.estado}${c.estado_motivo ? ` · ${c.estado_motivo.slice(0, 200)}` : ''}`.slice(0, 500)
+  const haria = { fecha_inicio: fechaInicio, fecha_fin: fechaFin, dias, origen: 'emilio' as const, esperas_que_se_cierran: vivas.map((e) => ({ id: e.id, tipo: e.objeto_tipo, vence_en: e.vence_en })), sobre }
+  if (cuerpo.ensayo === true) return { status: 200, cuerpo: { ensayo: true, escrituras: 0, campana_antes: { estado: c.estado, fecha_inicio: c.fecha_inicio, fecha_fin: c.fecha_fin, origen: c.fecha_inicio_origen }, haria } }
+
+  const antes = { estado: c.estado, estado_motivo: c.estado_motivo, fecha_inicio: c.fecha_inicio, fecha_fin: c.fecha_fin, fecha_inicio_origen: c.fecha_inicio_origen }
+  const volverAtras = async () => {
+    await al.actualizarCampana(c.id, antes)
+    for (const e of vivas) await al.actualizarEspera(e.id, { estado: 'viva' })
+  }
+  let n: Campana
+  let r: Awaited<ReturnType<Almacen['emitirSobre']>>
+  try {
+    n = await al.actualizarCampana(c.id, { estado: 'abierta', estado_motivo: motivo, fecha_inicio: fechaInicio, fecha_fin: fechaFin, fecha_inicio_origen: 'emilio' })
+    for (const e of vivas) await al.actualizarEspera(e.id, { estado: 'cancelada' })
+    r = await al.emitirSobre(sobre)
+  } catch (e) { await volverAtras(); throw e }
+  if (r.resultado === 'rechazado') {
+    await volverAtras()
+    return err(502, 'E-SOBRE-RECHAZADO', `la sala no aceptó el sobre: se volvió atrás (${String(r.detalle ?? 'sin detalle').slice(0, 200)})`)
+  }
+  return { status: 200, cuerpo: { reabierta: true, campana: n, esperas_cerradas: vivas.map((e) => e.id), sobre: { resultado: r.resultado, event_id: r.event_id ?? null } } }
 }
 
 export async function avanzarCampana(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {

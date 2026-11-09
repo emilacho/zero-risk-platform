@@ -93,7 +93,8 @@ export interface Pedido {
   audio: boolean
   /** clave del clic: repetir la misma clave devuelve la misma pieza y no cobra dos veces */
   clave: string
-  foto: { tipo: 'subida'; b64: string } | { tipo: 'pieza'; pieza_id: string } | null
+  /** subida · una imagen de la galería · o «rehacer»: un 3D nuevo desde la MISMA imagen de partida de un 3D anterior (queda ligado a él) */
+  foto: { tipo: 'subida'; b64: string } | { tipo: 'pieza'; pieza_id: string } | { tipo: 'rehacer'; pieza_id: string } | null
 }
 
 const texto = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -110,7 +111,13 @@ export function armarPedido(e: Record<string, unknown>, modeloDeImagen: string):
   let foto: Pedido['foto'] = null
   const b64 = texto(e.foto_b64)
   const piezaFoto = texto(e.foto_pieza_id)
-  if (b64 && piezaFoto) errores.push('una sola imagen de partida: subida o de la galería')
+  const rehacer = texto(e.rehacer_pieza_id)
+  if ([b64, piezaFoto, rehacer].filter(Boolean).length > 1) errores.push('una sola imagen de partida: subida, de la galería o la de un modelo anterior')
+  else if (rehacer) {
+    if (tipo !== '3d') errores.push('`rehacer_pieza_id` solo vale para un modelo 3D')
+    else if (!UUID.test(rehacer)) errores.push('`rehacer_pieza_id` no es un id de pieza')
+    else foto = { tipo: 'rehacer', pieza_id: rehacer }
+  }
   else if (b64) {
     const limpio = b64.replace(/^data:[^,]+,/, '')
     if (!/^[A-Za-z0-9+/=\s]+$/.test(limpio)) errores.push('`foto_b64` no es base64')

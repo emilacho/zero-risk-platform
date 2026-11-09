@@ -108,7 +108,13 @@ export function cerebroDelDueno(p: { base: string; llave: string; workflow_id: s
         if (r.status < 200 || r.status >= 300) return { ok: false, error: `http_${r.status}` }
         if (j.ok !== true) return { ok: false, error: j.apagado === true ? 'puerta_apagada' : 'respuesta_no_entendida' }
         const parecidas = (Array.isArray(j.parecidas) ? (j.parecidas as Array<Record<string, unknown>>) : []).filter((x) => typeof x?.ficha_id === 'string' && typeof x?.respuesta === 'string' && String(x.respuesta).trim()).map((x) => ({ ficha_id: String(x.ficha_id), tema: String(x.tema ?? ''), respuesta: String(x.respuesta), fecha: String(x.fecha ?? '') }))
-        return { ok: true, respondida: j.respondida === true, parecidas, pendientes_parecidas: Array.isArray(j.pendientes_parecidas) ? (j.pendientes_parecidas as PendienteParecida[]) : [] }
+        // 09-nov (opción A): las preguntas parecidas SIN responder viven en la lista de la plataforma, no en el cerebro. Si la lista no responde, no se finge «ninguna»
+        const rp = await f(`${urlDeLaPlataforma}?client_id=${encodeURIComponent(q.client_id)}&tema=${encodeURIComponent(q.tema)}`, { method: 'GET', headers: { 'x-api-key': p.llave } })
+        const jp = (await rp.json().catch(() => ({}))) as Record<string, any>
+        if (rp.status < 200 || rp.status >= 300) return { ok: false, error: `plataforma_http_${rp.status}` }
+        if (jp.ok !== true) return { ok: false, error: 'plataforma_respuesta_no_entendida' }
+        // una lista sin el campo (versión anterior) = nada parecido pendiente, igual que la puerta del cerebro sin sus campos
+        return { ok: true, respondida: j.respondida === true, parecidas, pendientes_parecidas: Array.isArray(jp.pendientes_parecidas) ? (jp.pendientes_parecidas as PendienteParecida[]) : [] }
       } catch { return { ok: false, error: 'red' } }
     },
     async cerrarPendiente(q) {

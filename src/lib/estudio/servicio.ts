@@ -131,8 +131,16 @@ async function fallar(d: Deps, id: string, error: string, costoUsd = 0) {
 }
 
 /** la foto de partida: subida (se guarda en el almacén) o una imagen ya creada del mismo cliente */
-async function resolverFoto(d: Deps, p: Pedido): Promise<Resultado<{ url: string; bytes: Buffer; tipo: string } | null>> {
+async function resolverFoto(d: Deps, p: Pedido): Promise<Resultado<{ url: string; bytes: Buffer; tipo: string; rehecho_de?: string } | null>> {
   if (!p.foto) return { ok: true, valor: null }
+  if (p.foto.tipo === 'rehacer') {
+    // GO 09-nov: rehacer un modelo desde su misma imagen de partida; el original no se toca y el nuevo queda ligado a él
+    const o = await leerPieza(d, p.foto.pieza_id)
+    if (!o || o.client_id !== p.client_id || o.tipo !== '3d' || !o.foto_partida_url || !o.foto_partida_url.startsWith('https://')) return falla(400, 'foto_invalida', 'para rehacer, la pieza debe ser un modelo 3D de este mismo cliente con su imagen de partida')
+    const b = await bajar(d, o.foto_partida_url, TOPE_DEL_ARCHIVO_BYTES)
+    if (!b.ok) return b
+    return { ok: true, valor: { url: o.foto_partida_url, bytes: b.valor, tipo: sniffImageFormat(b.valor).contentType, rehecho_de: o.id } }
+  }
   if (p.foto.tipo === 'subida') {
     const bytes = Buffer.from(p.foto.b64, 'base64')
     const fmt = sniffImageFormat(bytes)
@@ -184,7 +192,7 @@ export async function crear(d: Deps, p: Pedido): Promise<Resultado<{ pieza: Piez
 
   const ins = await d.db.from(TABLA).insert({
     client_id: p.client_id, tipo: p.tipo, estado: 'creando', paso: p.tipo === '3d' && !foto.valor ? 'imagen' : p.tipo, prompt: p.prompt, modelo: p.modelo, clave: p.clave,
-    parametros: { formato: p.formato, calidad: p.calidad, segundos: p.segundos || null, resolucion: p.resolucion || null, audio: p.tipo === 'video' ? p.audio : null, cotizacion: cot.valor },
+    parametros: { formato: p.formato, calidad: p.calidad, segundos: p.segundos || null, resolucion: p.resolucion || null, audio: p.tipo === 'video' ? p.audio : null, cotizacion: cot.valor, ...(foto.valor?.rehecho_de ? { rehecho_de: foto.valor.rehecho_de } : {}) },
     foto_partida_url: foto.valor?.url ?? null, costo_estimado_usd: cot.valor.total_usd, costo_usd: 0,
   }).select(COLUMNAS)
   if (ins.error) {
