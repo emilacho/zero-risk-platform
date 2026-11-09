@@ -10,6 +10,11 @@ import { validarEstrategia, type Hallazgo } from '../index'
 import { fechasDeCalendarioEn, hitoCuadraConFechas, ventanaDelPlan, CABECERA_DEL_PLAN_CARACTERES } from '../fechas-en-texto'
 import { lineaDelDiaUno, tareaDeEstrategia } from '../indicaciones'
 import { abrirCampana, ventanaDeLaCampana } from '../campanas'
+import { estrategiaGuardar, estrategiaPreparar, validarSinEscribir } from '../pasos'
+import { medidaDeCampana } from '../constantes'
+import { fechaDeFila } from '../fechas'
+import { ponerNecesitaHumano } from '../nucleo'
+import type { Campana } from '../almacen'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, formatosDeLaMigracion } from '../__fixtures__/clientes'
 
@@ -83,7 +88,35 @@ describe('A · S04 con fechas de calendario', () => {
   })
 })
 
+describe('🔴 A por el camino real (corrección 1 de CC7): guardar y validar en seco le pasan la fecha de inicio al validador', () => {
+  const HITOS_REALES = [{ dia: 15, cita: CITA_1 }, { dia: 36, cita: CITA_2 }, { dia: 64, cita: CITA_3 }]
+  const wf = (x: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...x })
+  async function campanaDelPlan() {
+    const al = almacenCon(PLAN)
+    const r = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, '2026-11-06T11:21:00Z')
+    return { al, id: (r.cuerpo as { campana: { id: string; fecha_inicio: string } }).campana.id }
+  }
+  it('estrategiaGuardar: la campaña del plan (día 1 = 06-nov) con los 3 hitos reales queda validada, sin S04', async () => {
+    const { al, id } = await campanaDelPlan()
+    const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, '2026-11-06T11:21:20Z')
+    expect(p.status).toBe(200)
+    const g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: true, structured_output: conHitos(HITOS_REALES), cost_usd: 0.6 } }, '2026-11-06T11:22:27Z')
+    expect(g.cuerpo).toMatchObject({ ok: true, version: 1 })
+    expect(al.validaciones.flatMap((v) => v.hallazgos).filter((h) => h.chequeo === 'S04')).toEqual([])
+    expect(al.campanas.find((c) => c.id === id)?.estado).not.toBe('necesita_humano')
+  })
+  it('validar en seco (`/api/cadena/validar`): la misma estrategia no bloquea por S04', async () => {
+    const { al, id } = await campanaDelPlan()
+    const r = await validarSinEscribir(al, { ...wf(), campana_id: id, tipo: 'estrategia', estrategia: conHitos(HITOS_REALES) }, '2026-11-06T11:22:00Z')
+    expect(s04((r.cuerpo as { hallazgos: Hallazgo[] }).hallazgos)).toEqual([])
+  })
+})
+
 describe('A · leer fechas de un texto', () => {
+  it('nota 5 de CC7: si la cita trae una fecha y también «día N», manda la fecha (el «día N» no se mira)', () => {
+    expect(s04(validar([{ dia: 15, cita: 'Revisión del día 20: semana del 20 de noviembre de 2026' }], '2026-11-06'))).toEqual([])
+    expect(s04(validar([{ dia: 20, cita: 'Revisión del día 20: el 20 de noviembre de 2026' }], '2026-11-06'))).toHaveLength(1)
+  })
   it('lee «20 de noviembre de 2026», «20 nov 2026», «Nov 20» y «semana del …»', () => {
     expect(fechasDeCalendarioEn(CITA_1, '2026-11-06')).toEqual([{ fecha: '2026-11-20', semana: true, anioInferido: false }])
     expect(fechasDeCalendarioEn('el 20 nov 2026', '2026-11-06').map((f) => f.fecha)).toEqual(['2026-11-20'])
@@ -136,6 +169,29 @@ describe('D · la campaña hereda la ventana del plan', () => {
     expect([c.fecha_inicio, c.fecha_fin, c.fecha_inicio_origen]).toEqual(['2026-11-06', '2027-01-28', 'plan'])
     expect((r.cuerpo as { ventana_origen: string }).ventana_origen).toBe('plan')
     expect(al.esperas.filter((e) => e.campana_id === c.id && e.objeto_tipo === 'fecha_inicio_propuesta')).toEqual([])
+  })
+  it('🔴 corrección 2 de CC7: una ventana que empieza un viernes no pierde su última semana (06-nov → 28-ene = 13 semanas desde el lunes 02-nov)', () => {
+    const m = medidaDeCampana({ fecha_inicio: '2026-11-06', fecha_fin: '2027-01-28' })
+    expect([m.dias, m.totalSemanas, m.totalTandas]).toEqual([84, 13, 4])
+    expect(fechaDeFila('2026-11-06', 13, 4)).toBe('2027-01-28') // el último día cae en la semana 13
+    // con inicio en lunes, como hoy: lunes + 90 → 13 · lunes + 84 → 12
+    expect(medidaDeCampana({ fecha_inicio: '2026-11-09', fecha_fin: '2027-02-06' }).totalSemanas).toBe(13)
+    expect(medidaDeCampana({ fecha_inicio: '2026-11-09', fecha_fin: '2027-01-31' }).totalSemanas).toBe(12)
+    expect(medidaDeCampana({}).totalSemanas).toBe(13) // sin fechas: lo de siempre (90 días)
+  })
+  it('🔴 punto 4 (Lenovo · regla de sistema): la campaña reemplazada por un plan nuevo queda con 0 esperas vivas, aunque tuviera dos', async () => {
+    const al = new AlmacenMemoria({
+      contextos: { [A.clientId]: { ...contextoDe(A), planTexto: A.planTexto } }, planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-11-06' }, { plan_id: 'plan-2', fecha: '2026-11-07' }] },
+      config: { flujos: ['wf-cadena'] }, journeys: [{ journeyId: 'journey-1', clientId: A.clientId }],
+    })
+    const abrir = (plan: string, ahora: string) => abrirCampana(al, { workflow_id: 'wf-cadena', workflow_execution_id: '1', client_id: A.clientId, plan_id: plan, seco: true }, ahora)
+    const vieja = ((await abrir('plan-1', '2026-11-06T11:21:00Z')).cuerpo as { campana: Campana }).campana
+    await ponerNecesitaHumano(al, vieja, 'la estrategia sigue con 3 bloqueo(s)', '2026-11-06T11:23:00Z')
+    const vivasDe = (id: string) => al.esperas.filter((e) => e.campana_id === id && e.estado === 'viva').map((e) => e.objeto_tipo).sort()
+    expect(vivasDe(vieja.id)).toEqual(['fecha_inicio_propuesta', 'necesita_humano']) // las dos de Náufrago 28de888e
+    const r = await abrir('plan-2', '2026-11-09T15:00:00Z')
+    expect((r.cuerpo as { reemplaza_a: string }).reemplaza_a).toBe(vieja.id)
+    expect(vivasDe(vieja.id)).toEqual([])
   })
   it('abrir con un plan sin ventana: la regla de siempre y su espera', async () => {
     const al = almacenCon(A.planTexto)
