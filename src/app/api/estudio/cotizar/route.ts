@@ -20,8 +20,8 @@ export async function POST(request: Request) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'invalid_json' }, { status: 400 })
   const d = depsReales()
   // para cotizar no hace falta la foto entera: basta saber si la hay (el precio no depende de cuál)
-  const conFoto = body.con_foto === true || (typeof body.foto_b64 === 'string' && body.foto_b64.length > 0) || (typeof body.foto_pieza_id === 'string' && body.foto_pieza_id.length > 0)
-  const a = armarPedido({ ...body, foto_b64: undefined, foto_pieza_id: conFoto ? FOTO_CUALQUIERA : undefined, clave: 'cotizacion-sin-gasto' }, d.modeloDeImagen)
+  const conFoto = body.con_foto === true || (typeof body.foto_b64 === 'string' && body.foto_b64.length > 0) || (typeof body.foto_pieza_id === 'string' && body.foto_pieza_id.length > 0) || (typeof body.rehacer_pieza_id === 'string' && body.rehacer_pieza_id.length > 0)
+  const a = armarPedido({ ...body, foto_b64: undefined, rehacer_pieza_id: undefined, foto_pieza_id: conFoto ? FOTO_CUALQUIERA : undefined, clave: 'cotizacion-sin-gasto' }, d.modeloDeImagen)
   if (!a.ok) return NextResponse.json({ error: 'pedido_invalido', errores: a.errores }, { status: 400 })
   try {
     const r = await cotizar(d, a.pedido)
