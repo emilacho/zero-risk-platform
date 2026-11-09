@@ -1,5 +1,5 @@
 /**
- * POST /api/cadena/brief · abrir · entregar · 31-oct (nuevo orden · T3). Llave interna + workflow_id + workflow_execution_id.
+ * POST /api/cadena/brief · abrir · entregar · revalidar (09-nov) · 31-oct (nuevo orden · T3). Llave interna + workflow_id + workflow_execution_id.
  * `abrir` devuelve el SOBRE que el flujo le lleva a la oficina (`POST /api/oficina/encargos`, `origen: 'cadena'`); `entregar` es la misma recepción que el puerto en proceso.
  * Nadie la llama todavía: la palanca `nuevo_orden` está vacía y los flujos se publican en T9.
  */

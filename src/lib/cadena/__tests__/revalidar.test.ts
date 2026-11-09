@@ -1,0 +1,183 @@
+/**
+ * 09-nov · REVALIDAR LO YA ESCRITO (GO de Lenovo, opción B firmada por Emilio 19:11Z · regla de sistema) · CC2 · US$ 0, sin modelo, sin red.
+ * El caso real: Náufrago `28de888e`, brief v2 devuelto EN FALSO por el verificador de citas (las negritas del plan, arreglado en #956) · campaña en `necesita_humano`.
+ * Aquí el falso rojo se reproduce dejando la versión como la dejó el verificador viejo (estado `devuelta`, su bloqueo guardado en `leido`, el motivo con el que
+ * `recibirBrief` detiene la campaña) sobre un texto que el verificador de HOY lee limpio.
+ */
+import { describe, expect, it } from 'vitest'
+import { abrirCampana, estrategiaGuardar, estrategiaPreparar } from '../index'
+import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
+import { clienteA, contextoDe } from '../__fixtures__/clientes'
+import { briefAbrir, MOTIVO_CAMBIOS_DE_EMILIO, recibirBrief } from '../mesas'
+import { ponerNecesitaHumano } from '../nucleo'
+import { briefRevalidar } from '../revalidar'
+import { ACCIONES } from '../acciones'
+
+const A = clienteA()
+const AHORA = '2026-10-09T12:00:00Z'
+const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
+const almacen = () => new AlmacenMemoria({
+  contextos: { [A.clientId]: contextoDe(A) },
+  planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] },
+  config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta', estado_cadena: 'ensayo', clientes_ensayo: [A.clientId], nuevo_orden: { clientes: [A.clientId] } },
+  journeys: [{ journeyId: 'journey-1', clientId: A.clientId }],
+})
+const ok = (o: unknown, costo = 0.3) => ({ success: true, structured_output: o, cost_usd: costo })
+const CITA_BUENA = 'Fase 1: «Se publican 3 posts por semana en Instagram y 1 en Facebook».'
+const BRIEF = [
+  '## De qué parte del plan sale', CITA_BUENA,
+  '## Insight', 'La gente del barrio desayuna de pie porque cree que no hay dónde sentarse antes de las ocho.',
+  '## Mensaje', 'Hay mesa desde las siete.',
+  '## Objetivo', 'Que entren 30 desayunos nuevos por semana.', '- instagram: que miren el pan · «ven a desayunar»', '- facebook: que guarden el horario · «guarda el horario»',
+  '## Tono', 'Cercano y directo.',
+  '## Obligatorios', '- vocabulario: pan de masa madre; mesa larga', '- prohibido: barato; gratis', '- lo que no se dice: precios',
+  '## Faltantes', '- público: el manual no dice edades',
+  '## Contradicciones plan vs manual', '- ninguna',
+].join('\n')
+const MALO = BRIEF.replace(CITA_BUENA, 'Fase 1: «esta frase no está en ningún plan».')
+const BLOQUEO_VIEJO = 'la cita «Fase 1: «Se publican 3 posts por semana en Instagram y 1 en Facebook».» no se encuentra literal en el plan · no se puede verificar de qué parte sale'
+const entrega = (campana_id: string, version: number, texto: string) => ({ campana_id, version, encargo_id: `enc-${version}`, texto, costo_usd: 0.1, motivo: null })
+
+/** campaña con estrategia validada · brief v1 devuelto de verdad · v2 `texto` entregado; con `falsoRojo`, la v2 queda como la dejó el verificador viejo */
+async function detenidaPorElBrief(texto: string, o: { falsoRojo?: boolean } = {}) {
+  const al = almacen()
+  const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+  const id = (c.cuerpo.campana as { id: string }).id
+  const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+  expect((await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(A.estrategia) }, AHORA)).status).toBe(200)
+  await briefAbrir(al, wf({ campana_id: id }), AHORA)
+  expect(await recibirBrief(al, entrega(id, 1, MALO), AHORA)).toMatchObject({ estado: 'devuelta' })
+  await briefAbrir(al, wf({ campana_id: id }), AHORA)
+  const r = await recibirBrief(al, entrega(id, 2, texto), AHORA)
+  if (o.falsoRojo) {
+    expect(r).toMatchObject({ estado: 'validada' }) // el verificador de HOY la lee limpia
+    const b = al.briefsCreativos.find((x) => x.campana_id === id && x.version === 2)!
+    Object.assign(b, { estado: 'devuelta', leido: { ...b.leido, bloqueos: [BLOQUEO_VIEJO] }, devolucion_texto: `- ${BLOQUEO_VIEJO}` })
+    await ponerNecesitaHumano(al, al.campanas.find((x) => x.id === id)!, `el brief creativo se devolvió por código dos veces: ${BLOQUEO_VIEJO}`, AHORA)
+  }
+  expect(al.campanas.find((x) => x.id === id)!.estado).toBe('necesita_humano')
+  return { al, id }
+}
+const foto = (al: AlmacenMemoria) => JSON.stringify({ c: al.campanas, b: al.briefsCreativos, e: al.esperas, k: al.corridas })
+const nhVivas = (al: AlmacenMemoria, id: string) => al.esperas.filter((e) => e.campana_id === id && e.objeto_tipo === 'necesita_humano' && e.estado === 'viva')
+
+describe('revalidar lo ya escrito · un brief devuelto EN FALSO vuelve a pasar el verificador de hoy', () => {
+  it('🔴 el falso rojo PASA: la v2 queda validada (sin versión nueva, sin gasto), la campaña vuelve a calendario, su espera se resuelve y la respuesta trae el sobre hacia la gran idea', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    const corridasAntes = al.corridas.length
+    const r = await briefRevalidar(al, wf({ campana_id: id }))
+    expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
+    expect(r.cuerpo).toMatchObject({ pasa: true, version: 2, bloqueos_antes: [BLOQUEO_VIEJO], campana: { estado: 'calendario' }, siguiente: { sobre: { idempotency_key: `${id}:tanda-1:abrir-concepto-v1` } } })
+    expect(al.briefsCreativos.filter((b) => b.campana_id === id).map((b) => [b.version, b.estado])).toEqual([[1, 'devuelta'], [2, 'validada']])
+    const v2 = al.briefsCreativos.find((b) => b.version === 2)!
+    expect(v2.devolucion_texto).toBeNull()
+    expect((v2.leido as { bloqueos: string[] }).bloqueos).toEqual([])
+    expect(al.campanas[0].estado).toBe('calendario')
+    expect(al.campanas[0].estado_motivo).toMatch(/^revalidado el brief v2 con el verificador de hoy: ya no bloquea/)
+    expect(nhVivas(al, id)).toEqual([])
+    expect(al.corridas.length).toBe(corridasAntes) // US$ 0: ninguna corrida, ningún modelo
+  })
+  it('🔴 idempotente: otra vez contesta ya_revalidada y no escribe nada', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    await briefRevalidar(al, wf({ campana_id: id }))
+    const f = foto(al)
+    expect((await briefRevalidar(al, wf({ campana_id: id }))).cuerpo).toMatchObject({ ya_revalidada: true, version: 2 })
+    expect(foto(al)).toBe(f)
+  })
+  it('🔴 el ensayo dice qué haría y no escribe nada', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    const f = foto(al)
+    const r = await briefRevalidar(al, wf({ campana_id: id, ensayo: true }))
+    expect(r.cuerpo).toMatchObject({ ensayo: true, escrituras: 0, pasa: true, haria: { brief: 'validada', campana: 'calendario' } })
+    expect((r.cuerpo.haria as { esperas_que_se_resuelven: unknown[] }).esperas_que_se_resuelven).toHaveLength(1)
+    expect(foto(al)).toBe(f)
+  })
+  it('🔴 un rojo VERDADERO sigue rojo: no pasa, no escribe (mismos bloqueos) y la espera de Emilio sigue viva con su mismo plazo', async () => {
+    const { al, id } = await detenidaPorElBrief(MALO)
+    const f = foto(al)
+    const r = await briefRevalidar(al, wf({ campana_id: id }))
+    expect(r.cuerpo).toMatchObject({ pasa: false, version: 2, sin_cambios: true, campana: { estado: 'necesita_humano' } })
+    expect(foto(al)).toBe(f)
+  })
+  it('si el verificador de hoy encuentra OTROS bloqueos: la versión guarda los nuevos, la campaña sigue en necesita_humano con el motivo nuevo y la espera NO se rehace', async () => {
+    const { al, id } = await detenidaPorElBrief(MALO)
+    const b = al.briefsCreativos.find((x) => x.version === 2)!
+    Object.assign(b, { leido: { ...b.leido, bloqueos: ['un bloqueo que el verificador viejo veía'] } })
+    const espera = JSON.stringify(nhVivas(al, id))
+    const r = await briefRevalidar(al, wf({ campana_id: id }))
+    expect(r.cuerpo).toMatchObject({ pasa: false, campana: { estado: 'necesita_humano' } })
+    const v2 = al.briefsCreativos.find((x) => x.version === 2)!
+    expect(v2.estado).toBe('devuelta')
+    expect(v2.devolucion_texto).toMatch(/esta frase no está en ningún plan/)
+    expect(al.campanas[0].estado_motivo).toMatch(/^el brief creativo se devolvió por código dos veces: .*esta frase no está en ningún plan/)
+    expect(JSON.stringify(nhVivas(al, id))).toBe(espera)
+  })
+})
+
+describe('revalidar · lo que NO se toca (409, nada escrito)', () => {
+  const nada = async (al: AlmacenMemoria, id: string, codigo: string, extra: Record<string, unknown> = {}) => {
+    const f = foto(al)
+    const r = await briefRevalidar(al, wf({ campana_id: id, ...extra }))
+    expect(r.status, JSON.stringify(r.cuerpo)).toBe(409)
+    expect(r.cuerpo).toMatchObject({ error: codigo.toLowerCase().replace(/-/g, '_') })
+    expect(foto(al)).toBe(f)
+  }
+  it('🔴 la devolución de Emilio con cambios no es un falso rojo', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    al.briefsCreativos.find((x) => x.version === 2)!.motivo = MOTIVO_CAMBIOS_DE_EMILIO
+    await nada(al, id, 'E-CAMBIOS-DE-EMILIO')
+  })
+  it('🔴 una versión devuelta por una persona o por la mesa de la gran idea (sin bloqueos del verificador guardados) no se revalida', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    const b = al.briefsCreativos.find((x) => x.version === 2)!
+    Object.assign(b, { leido: { ...b.leido, bloqueos: [] }, devolucion_texto: 'la mesa de la gran idea lo devolvió' })
+    await nada(al, id, 'E-NO-LA-DEVOLVIO-EL-VERIFICADOR')
+  })
+  it('🔴 una campaña detenida por OTRA cosa no sale de necesita_humano por revalidar su brief', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    al.campanas[0].estado_motivo = 'la estrategia sigue con 3 bloqueo(s) tras la única corrección'
+    await nada(al, id, 'E-OTRO-MOTIVO')
+  })
+  it('🔴 una campaña que no está en necesita_humano no se revalida', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    al.campanas[0].estado = 'pausada'
+    await nada(al, id, 'E-NO-SE-REVALIDA')
+  })
+  it('sin llave/flujo autorizado no entra', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    const f = foto(al)
+    const r = await briefRevalidar(al, { campana_id: id, workflow_id: 'wf-intruso', workflow_execution_id: 'x' })
+    expect(r.status).toBeGreaterThanOrEqual(400)
+    expect(foto(al)).toBe(f)
+  })
+})
+
+describe('revalidar · vuelve atrás si algo falla a medias', () => {
+  it('🔴 si falla al resolver la espera, la versión, la campaña y la espera quedan como estaban', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    const f = foto(al)
+    const original = al.actualizarEspera.bind(al)
+    let fallar = true
+    al.actualizarEspera = async (eid, patch) => { if (fallar && patch.estado === 'resuelta') { fallar = false; throw new Error('la base se cayó') } return original(eid, patch) }
+    await expect(briefRevalidar(al, wf({ campana_id: id }))).rejects.toThrow('la base se cayó')
+    expect(foto(al)).toBe(f)
+  })
+  it('🔴 con DOS esperas vivas y la falla en la segunda: la primera, ya resuelta, vuelve a viva', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    await ponerNecesitaHumano(al, al.campanas[0], `el brief creativo ya se devolvió 2 veces`, AHORA)
+    al.campanas[0].estado_motivo = `el brief creativo se devolvió por código dos veces: ${BLOQUEO_VIEJO}`
+    expect(nhVivas(al, id)).toHaveLength(2)
+    const f = foto(al)
+    const original = al.actualizarEspera.bind(al)
+    let resueltas = 0
+    al.actualizarEspera = async (eid, patch) => { if (patch.estado === 'resuelta' && ++resueltas === 2) throw new Error('la base se cayó'); return original(eid, patch) }
+    await expect(briefRevalidar(al, wf({ campana_id: id }))).rejects.toThrow('la base se cayó')
+    expect(foto(al)).toBe(f)
+  })
+})
+
+describe('revalidar · cableado', () => {
+  it('la acción vive en la tabla de la ruta del brief', () => {
+    expect(Object.keys(ACCIONES.brief)).toEqual(['abrir', 'entregar', 'revalidar'])
+  })
+})
