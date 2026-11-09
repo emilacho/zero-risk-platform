@@ -1,0 +1,23 @@
+/** EL ESTUDIO · `POST /api/estudio/recuperar` `{ client_id, id }` · saca una pieza de la papelera y la devuelve a la galería tal cual. No gasta. */
+import { NextResponse } from 'next/server'
+import { checkInternalKey } from '@/lib/internal-auth'
+import { depsReales } from '@/lib/estudio/deps'
+import { recuperar } from '@/lib/estudio/servicio'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+export async function POST(request: Request) {
+  const auth = checkInternalKey(request)
+  if (!auth.ok) return NextResponse.json({ error: 'unauthorized', detail: auth.reason }, { status: 401 })
+  let body: Record<string, unknown>
+  try { body = (await request.json()) as Record<string, unknown> } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'invalid_json' }, { status: 400 })
+  try {
+    const r = await recuperar(depsReales(), String(body.client_id ?? ''), String(body.id ?? ''))
+    if (!r.ok) return NextResponse.json({ error: r.error, detalle: r.detalle }, { status: r.status })
+    return NextResponse.json({ ok: true, pieza: r.valor })
+  } catch (e) {
+    return NextResponse.json({ error: 'cambio_fallido', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
+  }
+}

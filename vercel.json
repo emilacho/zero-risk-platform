@@ -3,6 +3,10 @@
   "installCommand": "rm -rf node_modules && pnpm install --frozen-lockfile",
   "crons": [
     {
+      "path": "/api/estudio/papelera/vaciar",
+      "schedule": "40 3 * * *"
+    },
+    {
       "path": "/api/cost-monitor/cron",
       "schedule": "0 * * * *"
     },

@@ -95,6 +95,79 @@ export interface Pedido {
   clave: string
   /** subida · una imagen de la galería · o «rehacer»: un 3D nuevo desde la MISMA imagen de partida de un 3D anterior (queda ligado a él) */
   foto: { tipo: 'subida'; b64: string } | { tipo: 'pieza'; pieza_id: string } | { tipo: 'rehacer'; pieza_id: string } | null
+  /** GO 09-nov 22:45Z · imagen con 2 a 6 referencias, en el orden de sus números (fijos: quitar una no renumera las otras). Vacío = como siempre */
+  fotos: Referencia[]
+}
+
+/** una referencia de una imagen con varias: su número (el que ve el dueño) y de dónde sale */
+export interface Referencia { numero: number; foto: { tipo: 'subida'; b64: string } | { tipo: 'pieza'; pieza_id: string } }
+
+/**
+ * Imagen con varias referencias (GO de Lenovo 09-nov 22:45Z, boceto aprobado por Emilio): con 2 o más imágenes el sistema pasa solo a
+ * fal.ai `fal-ai/nano-banana-pro/edit` (leída 09-nov): `prompt` + `image_urls` (lista) + `aspect_ratio` + `resolution` 1K/2K/4K + `num_images` 1-4.
+ * Precio publicado: US$ 0,15 por imagen; «4K outputs will be charged at double the standard rate». Su página dice hasta 14 referencias:
+ * el tope queda en 6 hasta que la primera prueba pagada lo confirme. Se pide SIEMPRE 2K (mismo precio que 1K), nunca 4K.
+ */
+export const VARIAS = {
+  id: 'nano-banana-pro',
+  nombre: 'Nano Banana Pro',
+  endpoint: 'fal-ai/nano-banana-pro/edit',
+  resolucion: '2K',
+  precio_usd: 0.15,
+  minimo: 2,
+  maximo: 6,
+} as const
+/** el precio de una imagen con varias referencias según la resolución pedida (4K cobra el doble) */
+export const precioDeVarias = (resolucion: string) => +(VARIAS.precio_usd * (resolucion === '4K' ? 2 : 1)).toFixed(4)
+/** las referencias juntas viajan en el JSON (Vercel corta los cuerpos de más de ~4,5 MB): el tablero las achica antes */
+export const TOPE_DE_LAS_REFERENCIAS_BYTES = 3 * 1024 * 1024
+
+/**
+ * El modelo solo ve las imágenes en orden (la 1.ª, la 2.ª…). Si el dueño quitó alguna, los números que ve tienen huecos (2, 3, 5):
+ * se le dice al modelo qué número es cada una, para que «la imagen 3» del texto sea la que el dueño ve con el 3.
+ */
+export function textoConReferencias(prompt: string, numeros: number[]): string {
+  if (numeros.every((n, i) => n === i + 1)) return prompt
+  const orden = numeros.map((n, i) => `la ${i + 1}.ª imagen adjunta es la «imagen ${n}»`).join(', ')
+  return `${prompt}\n\nReferencias, en el orden en que van adjuntas: ${orden}.`
+}
+
+/** lo que se manda a fal para una imagen con varias referencias */
+export const entradaDeVarias = (prompt: string, numeros: number[], urls: string[], formato: string) =>
+  ({ prompt: textoConReferencias(prompt, numeros), image_urls: urls, num_images: 1, aspect_ratio: formato, resolution: VARIAS.resolucion, output_format: 'png' })
+
+/** la imagen de la respuesta de fal (`images[0].url`) */
+export function imagenDeVarias(salida: Record<string, unknown>): string | null {
+  const l = Array.isArray(salida.images) ? salida.images : []
+  const u = l[0] && typeof l[0] === 'object' ? (l[0] as { url?: unknown }).url : null
+  return typeof u === 'string' ? u : null
+}
+
+const B64 = /^[A-Za-z0-9+/=\s]+$/
+const bytesDeB64 = (b64: string) => Math.floor((b64.replace(/\s/g, '').length * 3) / 4)
+
+/** las referencias del pedido: 2 a 6, números enteros del 1 al 6 sin repetir, en el orden de sus números */
+function armarReferencias(crudas: unknown, errores: string[]): Referencia[] {
+  if (crudas === undefined || crudas === null) return []
+  if (!Array.isArray(crudas)) { errores.push('`fotos` es una lista'); return [] }
+  if (crudas.length < VARIAS.minimo || crudas.length > VARIAS.maximo) { errores.push(`\`fotos\` lleva de ${VARIAS.minimo} a ${VARIAS.maximo} imágenes (con una sola se usa \`foto_b64\` o \`foto_pieza_id\`)`); return [] }
+  const salida: Referencia[] = []
+  let bytes = 0
+  for (const x of crudas) {
+    const r = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
+    const numero = Number(r.numero)
+    if (!Number.isInteger(numero) || numero < 1 || numero > VARIAS.maximo) { errores.push(`cada referencia lleva su \`numero\` del 1 al ${VARIAS.maximo}`); return [] }
+    if (salida.some((y) => y.numero === numero)) { errores.push(`la referencia ${numero} está repetida`); return [] }
+    const b64 = texto(r.b64).replace(/^data:[^,]+,/, '')
+    const pieza = texto(r.pieza_id)
+    if ((b64 ? 1 : 0) + (pieza ? 1 : 0) !== 1) { errores.push(`la referencia ${numero} lleva \`b64\` o \`pieza_id\`, una de las dos`); return [] }
+    if (pieza && !UUID.test(pieza)) { errores.push(`la referencia ${numero} no es un id de pieza`); return [] }
+    if (b64 && !B64.test(b64)) { errores.push(`la referencia ${numero} no es base64`); return [] }
+    bytes += b64 ? bytesDeB64(b64) : 0
+    salida.push({ numero, foto: b64 ? { tipo: 'subida', b64: b64.replace(/\s/g, '') } : { tipo: 'pieza', pieza_id: pieza } })
+  }
+  if (bytes > TOPE_DE_LAS_REFERENCIAS_BYTES) { errores.push('las referencias juntas pasan de 3 MB'); return [] }
+  return salida.sort((a, b) => a.numero - b.numero)
 }
 
 const texto = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -112,6 +185,9 @@ export function armarPedido(e: Record<string, unknown>, modeloDeImagen: string):
   const b64 = texto(e.foto_b64)
   const piezaFoto = texto(e.foto_pieza_id)
   const rehacer = texto(e.rehacer_pieza_id)
+  const fotos = armarReferencias(e.fotos, errores)
+  if (fotos.length && tipo !== 'imagen') errores.push('varias referencias solo valen para una imagen')
+  if (fotos.length && [b64, piezaFoto, rehacer].some(Boolean)) errores.push('con varias referencias no se manda además una imagen de partida suelta')
   if ([b64, piezaFoto, rehacer].filter(Boolean).length > 1) errores.push('una sola imagen de partida: subida, de la galería o la de un modelo anterior')
   else if (rehacer) {
     if (tipo !== '3d') errores.push('`rehacer_pieza_id` solo vale para un modelo 3D')
@@ -128,7 +204,7 @@ export function armarPedido(e: Record<string, unknown>, modeloDeImagen: string):
     else foto = { tipo: 'pieza', pieza_id: piezaFoto }
   }
   // en 3D con foto el texto sobra (se convierte la foto); en lo demás, el texto es lo que se crea
-  const textoOpcional = tipo === '3d' && foto !== null
+  const textoOpcional = tipo === '3d' && foto !== null && !fotos.length
   if (!textoOpcional && (prompt.length < 3 || prompt.length > TOPE_DEL_TEXTO)) errores.push(`el texto va de 3 a ${TOPE_DEL_TEXTO} caracteres`)
   if (textoOpcional && prompt.length > TOPE_DEL_TEXTO) errores.push(`el texto va hasta ${TOPE_DEL_TEXTO} caracteres`)
   const calidad: Calidad = e.calidad === 'alta' ? 'alta' : 'normal'
@@ -136,7 +212,7 @@ export function armarPedido(e: Record<string, unknown>, modeloDeImagen: string):
 
   let modelo = '', formato = '1:1', segundos = 0, resolucion = '', audio = false
   if (tipo === 'imagen') {
-    modelo = modeloDeImagen
+    modelo = fotos.length ? VARIAS.id : modeloDeImagen
     formato = texto(e.formato) || '1:1'
     if (!(formato in TAMANO_POR_FORMATO)) errores.push('`formato` de imagen es 1:1, 9:16 o 16:9')
   } else if (tipo === '3d') {
@@ -155,7 +231,7 @@ export function armarPedido(e: Record<string, unknown>, modeloDeImagen: string):
     audio = e.audio !== false
   }
   if (errores.length) return { ok: false, errores }
-  return { ok: true, pedido: { client_id, tipo, prompt, modelo, formato, calidad, segundos, resolucion, audio, clave, foto } }
+  return { ok: true, pedido: { client_id, tipo, prompt, modelo, formato, calidad, segundos, resolucion, audio, clave, foto, fotos } }
 }
 
 /** costo de una imagen de OpenAI antes de crearla */
@@ -165,6 +241,10 @@ export interface Cotizacion { total_usd: number; partes: Array<{ que: string; us
 
 /** imagen y 3D se cotizan aquí; el video necesita la estimación del proveedor (ver `servicio.ts`) */
 export function cotizarSinRed(p: Pedido): Cotizacion | null {
+  if (p.tipo === 'imagen' && p.fotos.length) {
+    const usd = precioDeVarias(VARIAS.resolucion)
+    return { total_usd: usd, partes: [{ que: `imagen con ${p.fotos.length} referencias`, usd }] }
+  }
   if (p.tipo === 'imagen') {
     const usd = costoDeImagen(p.formato, p.foto !== null)
     return { total_usd: usd, partes: [{ que: 'imagen', usd }] }
