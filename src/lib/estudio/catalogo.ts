@@ -31,26 +31,37 @@ export interface ModeloDe3D {
   precio: Record<Calidad, number>
   /** la entrada extra por calidad */
   opciones: Record<Calidad, Record<string, unknown>>
+  /** el nombre del campo del tope de caras en su entrada (cada uno usa el suyo; leído de su ficha en fal, 09-nov) */
+  campoDeCaras: 'face_limit' | 'face_count' | 'target_polycount'
   nota: string
 }
+
+/** el esqueleto (Meshy, vía fal) rechaza modelos de más de 380 000 triángulos (medido 06-nov) */
+export const LIMITE_DE_CARAS_DEL_ESQUELETO = 380_000
+/** todo modelo 3D nuevo sale con este tope, así se puede animar desde que se crea (firma de Emilio 09-nov 15:42Z: calidad antes que precio) */
+export const TOPE_DE_CARAS_3D = 300_000
 
 export const MODELOS_3D: readonly ModeloDe3D[] = [
   {
     id: 'tripo-h3.1', nombre: 'Tripo H3.1', endpoint: 'tripo3d/h3.1/image-to-3d', campoDeImagen: 'image_url',
     precio: { normal: 0.3, alta: 0.4 },
     opciones: { normal: { texture: true, texture_quality: 'standard' }, alta: { texture: true, texture_quality: 'detailed' } },
+    campoDeCaras: 'face_limit',
     nota: 'rápido · buena textura',
   },
   {
     id: 'hunyuan-3d-v3.1-pro', nombre: 'Hunyuan 3D v3.1', endpoint: 'fal-ai/hunyuan-3d/v3.1/pro/image-to-3d', campoDeImagen: 'input_image_url',
     precio: { normal: 0.375, alta: 0.525 },
     opciones: { normal: { enable_pbr: false }, alta: { enable_pbr: true } },
+    // su valor por omisión es 500 000: pasaría del límite del esqueleto
+    campoDeCaras: 'face_count',
     nota: 'forma fiel · alta suma materiales realistas',
   },
   {
     id: 'meshy-6', nombre: 'Meshy 6', endpoint: 'fal-ai/meshy/v6/image-to-3d', campoDeImagen: 'image_url',
     precio: { normal: 0.8, alta: 0.8 },
     opciones: { normal: {}, alta: { enable_pbr: true } },
+    campoDeCaras: 'target_polycount',
     nota: 'el más detallado · tarda 5 a 10 min',
   },
 ]
@@ -169,7 +180,7 @@ export const promptDeImagenPara3D = (prompt: string) =>
 
 /** lo que se manda a fal para la conversión */
 export function entradaDe3D(m: ModeloDe3D, calidad: Calidad, imagenUrl: string): Record<string, unknown> {
-  return { [m.campoDeImagen]: imagenUrl, ...m.opciones[calidad] }
+  return { [m.campoDeImagen]: imagenUrl, ...m.opciones[calidad], [m.campoDeCaras]: TOPE_DE_CARAS_3D }
 }
 
 /** el archivo 3D de la respuesta de fal: cada modelo lo nombra distinto; se prefiere GLB */
@@ -271,7 +282,7 @@ export function demasiadoDetalle(error: string): { tiene: number; tope: number }
 }
 const miles = (x: number) => x.toLocaleString('es-EC')
 
-/** el motivo de un fallo al animar, en claro: primero «demasiado detalle» (su error también nombra el esqueleto), después «no es figura humana» */
+/** el motivo de un fallo al animar, en claro: primero «demasiadas caras» (su error también nombra el esqueleto), después «no es figura humana» */
 /** el texto del proveedor sin el JSON alrededor: «fal 422 · {"detail":"x"}» → «fal 422 · x» (el texto puede venir cortado) */
 export function textoDelProveedor(error: string): string {
   const m = /"msg"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(error) ?? /"detail"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(error)
@@ -284,7 +295,7 @@ export function motivoDeAnimacion(crudo: string): string {
   const det = demasiadoDetalle(error)
   if (det) {
     const cifras = Number.isFinite(det.tiene) ? ` (${miles(det.tiene)} triángulos; el proveedor acepta hasta ${miles(det.tope)})` : ''
-    return `Este modelo tiene demasiado detalle para ponerle esqueleto${cifras}, así que no se puede animar tal cual. No se registró ningún cobro. (${error})`
+    return `Este modelo tiene demasiadas caras para animarlo${cifras}: créalo de nuevo. Los modelos nuevos ya salen listos para animar. No se registró ningún cobro. (${error})`
   }
   if (noEsHumanoide(error)) return `${AVISO_NO_HUMANOIDE} (${error})`
   // causa no reconocida: se dice en simple, sin inventarla, y se muestra el texto del proveedor
