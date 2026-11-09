@@ -16,7 +16,8 @@ import { sniffImageFormat } from '@/lib/image-response'
 import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 import { conDescuento } from '@/lib/video/parametros'
 import { costoEstimadoUsd, enviar as enviarAHiggsfield, estado as estadoEnHiggsfield, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
-import { archivoDe3D, cotizarSinRed, entradaDe3D, miniaturaDe3D, modeloDe3D, promptDeImagenPara3D, TAMANO_POR_FORMATO, UUID, type Cotizacion, type Pedido } from './catalogo'
+import { ANIMAR, archivoDe3D, clipsDeAnimacion, cotizarAnimacion, cotizarSinRed, entradaDe3D, entradaDeAnimacion, miniaturaDe3D, modeloDe3D, motivoDeAnimacion, promptDeImagenPara3D, TAMANO_POR_FORMATO, UUID, type Cotizacion, type Pedido, type PedidoDeAnimacion } from './catalogo'
+import { BIBLIOTECA_DE_MOVIMIENTOS } from './movimientos'
 import { enviarAFal, estadoEnFal, resultadoDeFal } from './fal'
 import { crearImagen } from './openai-imagen'
 
@@ -230,6 +231,15 @@ export async function crear(d: Deps, p: Pedido): Promise<Resultado<{ pieza: Piez
 }
 
 // ── avanzar (la pantalla pregunta) ────────────────────────────────────────
+/** cuánto puede vivir una pieza «creando» antes de vencer (muy por encima de lo normal: 5 min imagen, 20 video y 3D) */
+export const TOPE_DE_VIDA_MIN: Record<Pieza['tipo'], number> = { imagen: 60, video: 180, '3d': 180 }
+/** respuestas del proveedor que dicen «ese pedido no existe» */
+const PROVEEDOR_NO_LA_RECONOCE = new Set([404, 410])
+export const vencioLaPieza = (p: Pick<Pieza, 'tipo' | 'creado_en'>, ahoraMs: number) => {
+  const desde = Date.parse(p.creado_en)
+  return Number.isFinite(desde) && ahoraMs - desde > TOPE_DE_VIDA_MIN[p.tipo] * 60_000
+}
+
 export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   if (!UUID.test(id)) return falla(400, 'id_invalido')
   const r = await d.db.from(TABLA).select(`${COLUMNAS}, proveedor_request_id, proveedor_status_url, proveedor_response_url`).eq('id', id).limit(1)
@@ -237,14 +247,19 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   const fila = r.data?.[0] as (Pieza & { proveedor_request_id: string | null; proveedor_status_url: string | null; proveedor_response_url: string | null }) | undefined
   if (!fila) return falla(404, 'pieza_no_existe')
   const { proveedor_request_id: reqId, proveedor_status_url: statusUrl, proveedor_response_url: responseUrl, ...pieza } = fila
-  if (pieza.estado !== 'creando' || !reqId) return { ok: true, valor: pieza }
+  if (pieza.estado !== 'creando') return { ok: true, valor: pieza }
+  // pasado el tope de vida, una pieza que nunca llegó al proveedor, o que el proveedor ya no reconoce, vence (con lo ya gastado).
+  // Si el proveedor dice «en curso» se sigue preguntando: puede terminar y cobrar, y ese cobro no se pierde.
+  const vencida = vencioLaPieza(pieza, d.ahora())
+  const vencer = async (motivo: string) => ({ ok: true as const, valor: (await fallar(d, id, `Venció: ${motivo} en ${TOPE_DE_VIDA_MIN[pieza.tipo]} min. No se registró ningún cobro más.`, Number(pieza.costo_usd) || 0)) ?? (await leerPieza(d, id)) ?? pieza })
+  if (!reqId) return vencida ? vencer('no llegó al proveedor') : { ok: true, valor: pieza }
   const ahoraIso = () => new Date(d.ahora()).toISOString()
 
   if (pieza.tipo === 'video') {
     if (!REQUEST_ID_VALIDO.test(reqId)) return falla(500, 'pedido_invalido')
     // la dirección de estado se arma aquí, nunca se guarda ni se acepta de afuera (la llave viajaría a donde diga)
     const e = await estadoEnHiggsfield(d.fetch, d.llaves.higgsfield, `https://api.higgsfield.ai/requests/${reqId}/status`)
-    if (!e.ok) return { ok: true, valor: pieza }
+    if (!e.ok) return vencida && PROVEEDOR_NO_LA_RECONOCE.has(e.status) ? vencer('el proveedor ya no reconoce el pedido') : { ok: true, valor: pieza }
     if (!ESTADOS_TERMINALES.has(e.estado.status)) return { ok: true, valor: pieza }
     if (e.estado.status !== 'completed') return { ok: true, valor: (await fallar(d, id, `${e.estado.status}${e.estado.error ? ` · ${e.estado.error}` : ''}`)) ?? (await leerPieza(d, id)) ?? pieza }
     return cerrar(d, pieza, { urlProveedor: e.estado.video_url, ruta: `estudio/${pieza.client_id}/${id}.mp4`, tipo: 'video/mp4', archivoTipo: 'video', miniatura: pieza.foto_partida_url, proveedor: 'higgsfield', usd: Number(pieza.costo_estimado_usd), base: 'estimate_formula', ahoraIso })
@@ -253,11 +268,16 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   // 3D
   if (!statusUrl || !responseUrl) return falla(500, 'pedido_sin_direcciones')
   const e = await estadoEnFal(d.fetch, d.llaves.fal, statusUrl)
-  if (!e.ok || e.e.estado === 'en_cola' || e.e.estado === 'en_curso') return { ok: true, valor: pieza }
+  if (!e.ok) return vencida && PROVEEDOR_NO_LA_RECONOCE.has(e.status) ? vencer('el proveedor ya no reconoce el pedido') : { ok: true, valor: pieza }
+  if (e.e.estado === 'en_cola' || e.e.estado === 'en_curso') return { ok: true, valor: pieza }
   const yaGastado = Number(pieza.costo_usd) || 0
-  if (e.e.estado === 'fallido') return { ok: true, valor: (await fallar(d, id, `fal · ${e.e.error}`, yaGastado)) ?? pieza }
+  const esAnimacion = pieza.modelo === ANIMAR.id
+  // un fallo anota 0; el motivo de una animación se dice por su causa real (demasiado detalle, no es figura humana) o en simple si no se reconoce
+  const motivo = (t: string) => (esAnimacion ? motivoDeAnimacion(t) : t)
+  if (e.e.estado === 'fallido') return { ok: true, valor: (await fallar(d, id, motivo(`fal · ${e.e.error}`), yaGastado)) ?? pieza }
   const res = await resultadoDeFal(d.fetch, d.llaves.fal, responseUrl)
-  if (!res.ok) return { ok: true, valor: (await fallar(d, id, `fal ${res.status} · ${res.error}`, yaGastado)) ?? pieza }
+  if (!res.ok) return { ok: true, valor: (await fallar(d, id, motivo(`fal ${res.status} · ${res.error}`), yaGastado)) ?? pieza }
+  if (esAnimacion) return cerrarAnimacion(d, pieza, res.salida, ahoraIso)
   const archivo = archivoDe3D(res.salida)
   const m = modeloDe3D(pieza.modelo)
   const calidad = (pieza.parametros?.calidad === 'alta' ? 'alta' : 'normal') as 'normal' | 'alta'
@@ -293,6 +313,100 @@ async function cerrar(d: Deps, pieza: Pieza, x: { urlProveedor: string | null; r
   // otra pregunta simultánea ya la cerró: no se anota dos veces
   if (!cerrada) return { ok: true, valor: (await leerPieza(d, pieza.id)) ?? pieza }
   const avisoLibro = await anotarCosto(d, { piezaId: pieza.id, clientId: pieza.client_id, proveedor: x.proveedor, modelo: pieza.modelo, parte: pieza.tipo, usd: x.usd, base: x.base })
+  if (avisoLibro) return { ok: true, valor: (await actualizar(d, pieza.id, { aviso: [cerrada.aviso, avisoLibro].filter(Boolean).join(' · ') })) ?? cerrada }
+  return { ok: true, valor: cerrada }
+}
+
+// ── animar ────────────────────────────────────────────────────────────────
+export const movimientoExiste = (id: number) => BIBLIOTECA_DE_MOVIMIENTOS.some((m) => m[0] === id)
+const nombreDelMovimiento = (id: number) => BIBLIOTECA_DE_MOVIMIENTOS.find((m) => m[0] === id)?.[1] ?? String(id)
+
+/** el modelo que se anima: un 3D GLB listo, del mismo cliente, que no sea ya una animación */
+async function modeloParaAnimar(d: Deps, p: PedidoDeAnimacion): Promise<Resultado<Pieza>> {
+  const o = await leerPieza(d, p.origen_pieza_id)
+  if (!o || o.client_id !== p.client_id) return falla(404, 'modelo_no_existe', 'el modelo a animar no existe para este cliente')
+  if (o.tipo !== '3d' || o.estado !== 'lista' || o.archivo_tipo !== 'glb' || !o.archivo_url) return falla(400, 'modelo_no_animable', 'solo se anima un modelo 3D listo, en GLB')
+  if (o.modelo === ANIMAR.id) return falla(400, 'modelo_no_animable', 'esta pieza ya es una animación: anima el modelo original')
+  const rechazo = destinoPublico(o.archivo_url)
+  if (rechazo) return falla(400, 'modelo_no_animable', `el archivo del modelo no es público: ${rechazo}`)
+  return { ok: true, valor: o }
+}
+
+export async function cotizarLaAnimacion(d: Deps, p: PedidoDeAnimacion): Promise<Resultado<Cotizacion>> {
+  const o = await modeloParaAnimar(d, p)
+  if (!o.ok) return o
+  return { ok: true, valor: cotizarAnimacion(p.movimientos.length) }
+}
+
+export async function crearAnimacion(d: Deps, p: PedidoDeAnimacion): Promise<Resultado<{ pieza: Pieza; ya_existia: boolean }>> {
+  const previa = await porClave(d, p.clave)
+  if (previa) return { ok: true, valor: { pieza: previa, ya_existia: true } }
+  if (!d.llaves.fal) return falla(500, 'llave_no_configurada', 'falta la llave de fal')
+  if (!d.bucket) return falla(500, 'almacen_no_configurado', 'OFICINA_BUCKET no está en el entorno')
+  const o = await modeloParaAnimar(d, p)
+  if (!o.ok) return o
+  const cot = cotizarAnimacion(p.movimientos.length)
+  const nombres = p.movimientos.map(nombreDelMovimiento)
+  const ins = await d.db.from(TABLA).insert({
+    client_id: p.client_id, tipo: '3d', estado: 'creando', paso: '3d', prompt: `${o.valor.prompt || 'modelo 3D'} · animado: ${nombres.join(', ')}`.slice(0, 4000), modelo: ANIMAR.id, clave: p.clave,
+    parametros: { origen_pieza_id: o.valor.id, movimientos: p.movimientos, altura_m: ANIMAR.altura_m, cotizacion: cot },
+    foto_partida_url: o.valor.miniatura_url ?? o.valor.foto_partida_url, costo_estimado_usd: cot.total_usd, costo_usd: 0,
+  }).select(COLUMNAS)
+  if (ins.error) {
+    const otra = await porClave(d, p.clave)
+    if (otra) return { ok: true, valor: { pieza: otra, ya_existia: true } }
+    return falla(500, 'base_fallida', ins.error.message)
+  }
+  const pieza = ins.data[0] as Pieza
+  const env = await enviarAFal(d.fetch, d.llaves.fal, ANIMAR.endpoint, entradaDeAnimacion(o.valor.archivo_url!, p.movimientos))
+  if (!env.ok) {
+    const t = `fal ${env.status} · ${env.error}`
+    return { ok: true, valor: { pieza: (await fallar(d, pieza.id, motivoDeAnimacion(t))) ?? pieza, ya_existia: false } }
+  }
+  const fin = await actualizar(d, pieza.id, { proveedor_request_id: env.envio.request_id, proveedor_status_url: env.envio.status_url, proveedor_response_url: env.envio.response_url }, true)
+  return { ok: true, valor: { pieza: fin ?? pieza, ya_existia: false } }
+}
+
+/** copia un archivo del proveedor al almacén; si no se puede, queda la dirección del proveedor con aviso */
+async function copiar(d: Deps, urlProveedor: string, ruta: string, tipo: string): Promise<{ url: string; aviso: string | null }> {
+  const b = await bajar(d, urlProveedor, TOPE_DEL_ARCHIVO_BYTES)
+  if (!b.ok) return { url: urlProveedor, aviso: `queda solo en el proveedor (vence en días): ${b.error}${b.detalle ? ` · ${b.detalle}` : ''}` }
+  const up = await subir(d, ruta, b.valor, tipo)
+  return up.ok ? { url: up.valor, aviso: null } : { url: urlProveedor, aviso: `queda solo en el proveedor (vence en días): ${up.detalle ?? up.error}` }
+}
+
+/** la animación terminó: guarda cada clip (GLB y FBX), cierra la pieza una sola vez y anota lo cobrado */
+async function cerrarAnimacion(d: Deps, pieza: Pieza, salida: Record<string, unknown>, ahoraIso: () => string): Promise<Resultado<Pieza>> {
+  const precio = Number(pieza.costo_estimado_usd)
+  const clips = clipsDeAnimacion(salida)
+  if (!clips.length) {
+    // fal terminó (y cobra) sin clips: misma regla que el 3D sin archivo
+    const f = await fallar(d, pieza.id, 'fal terminó sin ningún movimiento', precio)
+    if (!f) return { ok: true, valor: (await leerPieza(d, pieza.id)) ?? pieza }
+    const avisoLibro = await anotarCosto(d, { piezaId: pieza.id, clientId: pieza.client_id, proveedor: 'fal', modelo: pieza.modelo, parte: 'animación', usd: precio, base: 'lista_publicada' })
+    return { ok: true, valor: avisoLibro ? ((await actualizar(d, pieza.id, { aviso: [f.aviso, avisoLibro].filter(Boolean).join(' · ') })) ?? f) : f }
+  }
+  const avisos: string[] = []
+  const archivos: Array<{ action_id: number; nombre: string; glb: string | null; fbx: string | null }> = []
+  for (const c of clips) {
+    const base = `estudio/${pieza.client_id}/${pieza.id}-${c.action_id}`
+    const glb = c.glb ? await copiar(d, c.glb, `${base}.glb`, 'model/gltf-binary') : null
+    const fbx = c.fbx ? await copiar(d, c.fbx, `${base}.fbx`, 'application/octet-stream') : null
+    for (const a of [glb?.aviso, fbx?.aviso]) if (a) avisos.push(a)
+    archivos.push({ action_id: c.action_id, nombre: nombreDelMovimiento(c.action_id), glb: glb?.url ?? null, fbx: fbx?.url ?? null })
+  }
+  const pedidos = Array.isArray(pieza.parametros?.movimientos) ? (pieza.parametros.movimientos as number[]) : []
+  const faltan = pedidos.filter((m) => !clips.some((c) => c.action_id === m))
+  if (faltan.length) avisos.push(`el proveedor no devolvió: ${faltan.map(nombreDelMovimiento).join(', ')}`)
+  const principal = archivos.find((a) => a.glb) ?? archivos[0]
+  const cerrada = await actualizar(d, pieza.id, {
+    estado: 'lista', paso: null, costo_usd: +(precio + (Number(pieza.costo_usd) || 0)).toFixed(6),
+    archivo_url: principal.glb ?? principal.fbx, archivo_tipo: principal.glb ? 'glb' : 'fbx', miniatura_url: pieza.foto_partida_url,
+    parametros: { ...pieza.parametros, archivos }, aviso: [pieza.aviso, ...new Set(avisos)].filter(Boolean).join(' · ') || null, terminado_en: ahoraIso(),
+  }, true)
+  // otra pregunta simultánea ya la cerró: no se anota dos veces
+  if (!cerrada) return { ok: true, valor: (await leerPieza(d, pieza.id)) ?? pieza }
+  const avisoLibro = await anotarCosto(d, { piezaId: pieza.id, clientId: pieza.client_id, proveedor: 'fal', modelo: pieza.modelo, parte: 'animación', usd: precio, base: 'lista_publicada' })
   if (avisoLibro) return { ok: true, valor: (await actualizar(d, pieza.id, { aviso: [cerrada.aviso, avisoLibro].filter(Boolean).join(' · ') })) ?? cerrada }
   return { ok: true, valor: cerrada }
 }

@@ -170,7 +170,7 @@ export async function atenderPausa(P: PuertosDePausa, encargo_id: string, opc: {
 }
 
 /**
- * `POST /api/finanzas/responder` · `{ client_id, tema, respuesta, quien }`: Emilio contesta en Tu oficina. `tema` es el de la pregunta en `cerebro_dueno_preguntas` (el `subtipo` de la decisión).
+ * `POST /api/finanzas/responder` · `{ client_id, tema, respuesta, quien }`: Emilio contesta en Tu oficina. `tema` es el de la pregunta en `dueno_preguntas` (la lista de la plataforma desde el 06-nov) (el `subtipo` de la decisión).
  * Si no hay pausa, o la pregunta no es de ella, no toca nada y lo dice: quien llama la guarda por su camino de siempre. Si contestó todo, el plan sigue en el acto.
  */
 export async function responderEnLaOficina(P: PuertosDePausa, c: Record<string, unknown>): Promise<Respuesta> {
@@ -192,7 +192,7 @@ export async function responderEnLaOficina(P: PuertosDePausa, c: Record<string, 
   // si el cerebro falla, la respuesta ya sirve para este plan: se dice, y la decisión seguiría viva en la bandeja
   const registro = (arts.buzon_respuestas as { preguntas?: Array<{ clave?: string; texto?: string; pregunta_id?: string | null }> } | undefined)?.preguntas?.find((x) => x.clave === clave)
   const texto = prepararPreguntas(arts, e.semilla, { pausa: true }).aprobadas.find((q) => q.clave === clave)?.texto ?? (tema as string)
-  const guardada = await P.cerebro.registrarRespuesta({ client_id: e.client_id, tema: temaDe(clave), pregunta: registro?.texto ?? texto, respuesta: respuesta as string, mensaje_ref: `tu-oficina:${quien}:${hora}`, respondido_en: hora, pregunta_id: registro?.pregunta_id ?? null }).catch(() => ({ ok: false as const, error: 'red' }))
+  const guardada = await P.cerebro.registrarRespuesta({ client_id: e.client_id, tema: temaDe(clave), pregunta: registro?.texto ?? texto, respuesta: respuesta as string, mensaje_ref: `tu-oficina:${quien}:${hora}`, respondido_en: hora, pregunta_id: registro?.pregunta_id ?? null, decidido_por: quien ?? undefined }).catch(() => ({ ok: false as const, error: 'red' }))
   const cerrada = guardada.ok ? await cerrarLoContestado(P, e.client_id, registro?.pregunta_id) : false
   const a = await atenderPausa(P, e.id, { sinRecoger: true })
   return { status: 200, cuerpo: { en_pausa: true, es_de_la_pausa: true, aplicada: true, clave, en_el_cerebro: guardada.ok, tema_cerrado: cerrada, ...(guardada.ok ? {} : { aviso: 'el cerebro no recibió la respuesta: el plan sí la usa' }), faltan: Array.isArray(a.cuerpo.faltan) ? a.cuerpo.faltan : [], ...(a.cuerpo.soltada ? { soltada: true } : {}) } }

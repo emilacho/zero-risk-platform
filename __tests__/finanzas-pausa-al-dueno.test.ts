@@ -22,6 +22,7 @@ import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { rutaDueno, rutaLeerDueno } from '../src/lib/portero-alimenta/dueno'
 import { cerebroDelDueno } from '../src/lib/buzon-dueno/cerebro-dueno'
 import { armarPedidoRunSdk } from '../src/lib/finanzas/conversa/modelo-run-sdk'
+import { rutaPendientes, rutaPreguntas, type PuertoDelCerebro } from '../src/lib/dueno-preguntas/preguntas'
 import { crearBaseFalsa } from '../src/lib/portero-alimenta/__tests__/base-falsa'
 import { DIEZ_CLIENTES } from '../src/lib/portero-alimenta/__tests__/diez-clientes.fixtures'
 import { tablasDe } from '../src/lib/portero-alimenta/__tests__/diez-clientes.tablas'
@@ -400,20 +401,36 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
   const armar = (o: { preguntas?: unknown[]; semilla?: Semilla; caido?: () => boolean } = {}) => {
     const c = DIEZ_CLIENTES[0]
     let hora = new Date('2026-11-05T12:00:00Z').getTime()
-    const t: Record<string, Array<Record<string, unknown>>> = { ...(tablasDe(c) as unknown as Record<string, Array<Record<string, unknown>>>), cerebro_dueno_preguntas: [] }
+    const t: Record<string, Array<Record<string, unknown>>> = { ...(tablasDe(c) as unknown as Record<string, Array<Record<string, unknown>>>), cerebro_dueno_preguntas: [], dueno_preguntas: [] }
     const base = crearBaseFalsa(t as never, { reloj: () => new Date(hora).toISOString() })
     let n = 0
     const deps = () => ({ db: base.db, interruptores: ON, ahora: new Date(hora), activo: true, nuevoId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` }) as never
+    // 06-nov · las preguntas viven en la PLATAFORMA (`dueno_preguntas`); al cerebro va solo la respuesta, por su puerta real
+    const alCerebro: PuertoDelCerebro = {
+      async respuestas(q) {
+        const r = await rutaLeerDueno({ db: base.db, ahora: new Date(hora) } as never, { client_id: q.client_id, tema: q.tema, sede_clave: q.sede_clave })
+        return r.status === 200 && r.body.ok === true ? { ok: true, respuestas: r.body.respuestas as Array<Record<string, unknown>> } : { ok: false, error: `http_${r.status}` }
+      },
+      async guardar(_evento, cuerpo) {
+        const r = await rutaDueno(deps(), { ...cuerpo, evento: 'respuesta', dry_run: false, preguntado_por: { oficina: cuerpo.oficina || 'financiera', agente: cuerpo.agente || 'chief-financial-officer' } })
+        return r.status === 200 ? { ok: true, ficha_id: typeof r.body.ficha_id === 'string' ? r.body.ficha_id : null } : { ok: false, status: r.status, error: String(r.body.error) }
+      },
+    }
     const fetchF = async (u: string, i: RequestInit) => {
       if (o.caido?.()) return { status: 500, json: async () => ({ error: 'caída' }) }
       const q = new URL(u).searchParams
+      if (new URL(u).pathname === '/api/dueno/preguntas') {
+        const dp = { db: base.db, cerebro: alCerebro, ahora: new Date(hora), nuevoId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` }
+        const rp = i.method === 'GET' ? await rutaPendientes(dp, { client_id: q.get('client_id') ?? '', tema: q.get('tema') }) : await rutaPreguntas(dp, JSON.parse(String(i.body)))
+        return { status: rp.status, json: async () => rp.body }
+      }
       const r = i.method === 'GET' ? await rutaLeerDueno({ db: base.db, ahora: new Date(hora) } as never, { client_id: q.get('client_id') ?? '', tema: q.get('tema') }) : await rutaDueno(deps(), JSON.parse(String(i.body)))
       return { status: r.status, json: async () => r.body }
     }
     const m = mundo({ modo: 'registra', semilla: o.semilla, arts: acuerdo((o.preguntas ?? [preg('whatsapp'), preg('pixel')]) as typeof CINCO) })
     m.e.client_id = c.id
     const P = { ...m.P, ahora: () => new Date(hora), cerebro: cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'wf', workflow_execution_id: 'ex', canal_etiqueta: 'dashboard · Tu oficina', fetch: fetchF as never }) } as PuertosDePausa
-    const filas = () => t.cerebro_dueno_preguntas
+    const filas = () => t.dueno_preguntas
     const pendientes = () => filas().filter((p) => p.estado === 'pendiente').length
     const pedir = { encargo_id: 'enc-1', sobre: { corrida: 'plan-x', client_id: c.id }, material: { a: 1 }, workflow_id: 'wf', workflow_execution_id: 'ex' }
     return { c, t, m, P, filas, pendientes, pedir, deps, horas: (h: number) => { hora += h * 3_600_000 }, minutos: (x: number) => { hora += x * 60_000 }, hora: () => new Date(hora).toISOString() }
@@ -634,7 +651,7 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     const a = armar()
     await pausarOficina(a.P, a.pedir)
     expect(a.filas()).toHaveLength(2)
-    const d = await rutaDueno(a.deps(), { evento: 'descartar', client_id: a.c.id, pregunta_id: a.filas()[0].id, motivo: 'la descartó', dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+    const d = await rutaPreguntas({ db: (a.deps() as { db: never }).db, cerebro: null as never }, { accion: 'descartar', decidido_por: 'Emilio', client_id: a.c.id, pregunta_id: a.filas()[0].id, motivo: 'la descartó', workflow_id: 't', workflow_execution_id: 'e' })
     expect(d.status).toBe(200)
     for (let i = 0; i < 3; i++) { a.minutos(10); await atenderPausa(a.P, 'enc-1') }
     expect(a.filas()).toHaveLength(2)
@@ -758,8 +775,8 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
   })
   describe('al contestar se cierra solo lo de este encargo (05-nov · hallazgo de CC7)', () => {
     const deOtraOficina = (a: ReturnType<typeof armar>) => {
-      const ajenas = [['00000000-0000-4000-9000-000000000001', 'whatsapp', 'olon'], ['00000000-0000-4000-9000-000000000002', 'whatsapp de la tienda de olon', null], ['00000000-0000-4000-9000-000000000003', 'horario de la tienda', null]].map(([id, tema, sede_clave]) => ({ id, client_id: a.c.id, tema, sede_clave, pregunta: `¿${tema}?`, estado: 'pendiente', creado_en: a.hora(), preguntado_por_oficina: 'creativa' }))
-      a.t.cerebro_dueno_preguntas.push(...ajenas)
+      const ajenas = [['00000000-0000-4000-9000-000000000001', 'whatsapp', 'olon'], ['00000000-0000-4000-9000-000000000002', 'whatsapp de la tienda de olon', null], ['00000000-0000-4000-9000-000000000003', 'horario de la tienda', null]].map(([id, tema, sede_clave]) => ({ id, client_id: a.c.id, tema, sede_clave, pregunta: `¿${tema}?`, estado: 'pendiente', creado_en: a.hora(), oficina: 'creativa' }))
+      a.t.dueno_preguntas.push(...ajenas)
       return () => a.filas().filter((p) => String(p.id).startsWith('00000000-0000-4000-9000')).map((p) => p.estado)
     }
     it('🔴 contestar en Tu oficina deja viva la pregunta de otra sede u otra oficina', async () => {
@@ -777,7 +794,8 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       const ajenas = deOtraOficina(a)
       await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })
       expect(ajenas()).toEqual(['pendiente', 'pendiente', 'pendiente'])
-      expect(a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)).toMatchObject({ estado: 'respondida', ficha_id: expect.any(String) })
+      // 06-nov · la lista de la plataforma cierra por id SIN límite de edad: contestada es «respondida» (antes la puerta del cerebro solo veía 72 h y el cierre la dejaba «obsoleta»)
+      expect(a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)).toMatchObject({ estado: 'respondida', respuesta: 'sí, ya lo tengo', decidido_por: 'emilio' })
     })
     it('🔴 una respuesta recogida del cerebro cierra la propia y no toca las ajenas', async () => {
       const a = armar()
@@ -825,7 +843,7 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     })
     it('🔴 una pregunta de otra oficina no guarda id: su fila no se cierra desde aquí', async () => {
       const a = armar({ preguntas: [preg('whatsapp')] })
-      a.t.cerebro_dueno_preguntas.push({ id: '00000000-0000-4000-9000-000000000009', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿whatsapp?', estado: 'pendiente', creado_en: a.hora(), preguntado_por_oficina: 'creativa', canal: 'otra' })
+      a.t.dueno_preguntas.push({ id: '00000000-0000-4000-9000-000000000009', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿whatsapp?', estado: 'pendiente', creado_en: a.hora(), oficina: 'creativa', canal: 'otra' })
       await pausarOficina(a.P, a.pedir)
       const registro = a.m.arts.buzon_respuestas as { preguntas: Array<{ pregunta_id: string | null }> }
       expect(registro.preguntas[0].pregunta_id).toBeNull()
@@ -862,7 +880,8 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       const cuerpos: Array<Record<string, unknown>> = []
       const f = (async (_u: string, i: RequestInit) => { cuerpos.push(JSON.parse(String(i.body))); return { status: 200, json: async () => ({ ok: true }) } }) as never
       await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
-      expect(cuerpos[0]).toMatchObject({ evento: 'descartar', client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
+      // 06-nov · va a la lista de la plataforma y la cierra el SISTEMA («obsoleta»), no el dueño
+      expect(cuerpos[0]).toMatchObject({ accion: 'descartar', por_el_sistema: true, client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
       expect(cuerpos[0].tema).toBeUndefined()
     })
     it('🔴 la lectura lleva la llave', async () => {
@@ -892,7 +911,8 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     const f = (async () => ({ status: 200, json: async () => ({ apagado: true }) })) as never
     const c = cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f })
     expect(await c.leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'puerta_apagada' })
-    expect(await c.cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })).toEqual({ ok: false, error: 'puerta_apagada' })
+    // el cierre ya no va al cerebro: una respuesta sin `ok` de la plataforma es «no cerró», nunca «cerrada»
+    expect(await c.cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })).toEqual({ ok: false, error: 'no_cerrada' })
     expect(await cerebroDelDueno({ base: '', llave: '', workflow_id: '', workflow_execution_id: '', fetch: f }).leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'cerebro_no_configurado' })
   })
 })

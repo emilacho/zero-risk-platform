@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { construirGoDobleChequeo } from '../scripts/ops/oficina-marketing/plan-go-doble-chequeo.mjs'
 import { construirVueltaMiraLaActualizacion, construirTurnoMiraLaActualizacion } from '../scripts/ops/oficina-marketing/vuelta-mira-la-actualizacion.mjs'
 import { CODIGO_COMPLETAR_VUELTA } from '../scripts/ops/oficina-marketing/recoger-del-punto-de-control.mjs'
-import { CODIGO_COMPLETAR_VUELTA_DEL_TURNO } from '../scripts/ops/oficina-marketing/jefatura-turno-recoger.mjs'
+import { CODIGO_COMPLETAR_VUELTA_DEL_TURNO, construirTurnoQueRecoge } from '../scripts/ops/oficina-marketing/jefatura-turno-recoger.mjs'
 
 type Nodo = { name: string; parameters: Record<string, any> }
 type Flujo = { nodes: Nodo[]; connections: Record<string, any> }
@@ -101,5 +101,17 @@ describe('jefatura · la vuelta del turno (mismo mecanismo)', () => {
   })
   it('el constructor original del turno ya sale corregido', () => {
     expect(turno(FILA_R4, CODIGO_COMPLETAR_VUELTA_DEL_TURNO)).toMatchObject({ body: { recuperada_del_punto_de_control: true } })
+  })
+  it('06-nov · menor 1 de CC7: el constructor del turno, reconstruido desde su base, PIDE la actualización y ordena por ella (si dejara de pedirla, el corte caería en silencio a la creación)', () => {
+    const f = leer('vivo/o8qaF7bI0PKv2XGZ.json')
+    construirTurnoQueRecoge(f)
+    const url = nodo(f, '② Vuelta · leer el punto de control').parameters.url as string
+    expect(url).toContain('select=step_status,created_at,updated_at,')
+    expect(url).toContain('order=updated_at.desc&limit=1')
+    expect(codigoTurno(f)).toBe(CODIGO_COMPLETAR_VUELTA_DEL_TURNO)
+    // lo que la lectura trae es lo que el corte usa: sin `updated_at` en la fila, la r4 se habría descartado
+    const { updated_at: _u, ...sinAct } = FILA_R4
+    expect(turno(sinAct, codigoTurno(f))).toEqual(SIN_CABLE)
+    expect(turno(FILA_R4, codigoTurno(f))).toMatchObject({ body: { recuperada_del_punto_de_control: true } })
   })
 })

@@ -69,9 +69,10 @@ export function esTemaParecido(a: string, b: string): boolean {
  *  · sí lo es: con prefijo +NN, con una palabra de contacto cerca (llama, WhatsApp, cel, teléfono…), el móvil de Ecuador/Uruguay (09 + 8 dígitos), o
  *    9–10 dígitos con separadores y un primer dígito de móvil/fijo (EC, CO, MX, PE, CL, ES, AR, UY).
  */
-const PALABRA_DE_CONTACTO = /(llam|whats?app|wasap|wsp|cel\b|celu|tel[eé]f|\btel\b|\bfono|m[oó]vil|contact|n[uú]mero|escr[ií]b|comunic)[^\d]{0,30}$/i
+const PALABRA_DE_CONTACTO = /(ll[aá]m|whats?app|wasap|wsp|cel\b|celu|tel[eé]f|\btel\b|\bfono|m[oó]vil|contact|n[uú]mero|escr[ií]b|comunic)[^\d]{0,30}$/i
 const MONEDA_ANTES = /(\$|€|£|us\$|s\/\.?|\busd|\beur|\bmxn|\bcop|\bclp|\bars|\bpen|\buyu|precio|costo|valor|cuesta|vale|total)\s*:?\s*$/i
-const MONEDA_DESPUES = /^\s*(usd|d[oó]lares|soles|pesos|mxn|cop|eur|euros|clp|ars|pen|uyu|%|\$|unidades|u\b|und|kg|gr|ml|cm|mm|años|a[ñn]os|seguidores|likes|personas|clientes)/i
+/** 05-nov · la unidad es una PALABRA entera: «Gracias» en la línea siguiente no es «gr» (gramos), «Kilo» no es «kg» */
+const MONEDA_DESPUES = /^\s*(?:(?:usd|d[oó]lares|soles|pesos|mxn|cop|eur|euros|clp|ars|pen|uyu|unidades|u|und|kg|gr|ml|cm|mm|años|a[ñn]os|seguidores|likes|personas|clientes)(?![a-záéíóúüñ0-9])|%|\$)/i
 export function esTelefono(candidato: string, antes: string, despues: string): boolean {
   const digitos = candidato.replace(/\D/g, '')
   if (digitos.length < 7 || digitos.length > 15) return false

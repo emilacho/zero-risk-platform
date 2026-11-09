@@ -295,7 +295,7 @@ describe.each(DIEZ_CLIENTES.map((c) => [c.nombre, c.id] as const))('cualquier sa
   })
   it('sin certeza del estado no se retira nada, y se dice', async () => {
     const db = { from: (t: string) => { const q: Record<string, unknown> = { select: () => q, eq: () => q, then: (ok: (v: unknown) => void) => ok(t === 'plan_aprobaciones' ? { data: null, error: { message: 'boom' } } : { data: [fila(C, 'x', 'rejected', 1)], error: null }) }; return q } }
-    expect(await retirarFichasDeLoCerrado(db as never, C, { dryRun: false })).toEqual({ retiradas: [], errores: [expect.stringContaining('boom')] })
+    expect(await retirarFichasDeLoCerrado(db as never, C, { dryRun: false })).toEqual({ retiradas: [], errores: [expect.stringContaining('boom')], lectura_fallida: true })
   })
 })
 
