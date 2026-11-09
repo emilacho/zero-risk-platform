@@ -4,6 +4,7 @@
  * Llave interna (`x-api-key`). Nace APAGADO: nadie la llama todavía.
  */
 import { NextResponse } from 'next/server'
+import { decidirPausaDelDescubrir, frenarPorLaPausa } from '@/lib/portero-alimenta/pausa-del-raspado'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
@@ -26,9 +27,12 @@ export async function POST(request: Request) {
   try { cuerpo = await request.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
   try {
     const b = (cuerpo && typeof cuerpo === 'object' ? cuerpo : {}) as Record<string, unknown>
-    const conModelo = b.dry_run === false && typeof b.workflow_id === 'string' && typeof b.workflow_execution_id === 'string' && typeof b.client_id === 'string'
+    // la pausa del raspado programado (09-nov · Emilio): en la corrida del horario, un cliente completo no le pide nada a Apify (ni se le pregunta al modelo qué buscar)
+    const db = getSupabaseAdmin() as unknown as Db
+    const pausa = typeof b.client_id === 'string' ? await decidirPausaDelDescubrir({ db, ahora: new Date(), clientId: b.client_id, fase: b.fase }) : null
+    const conModelo = !pausa?.frena && b.dry_run === false && typeof b.workflow_id === 'string' && typeof b.workflow_execution_id === 'string' && typeof b.client_id === 'string'
     const deps = {
-      db: getSupabaseAdmin() as unknown as Db,
+      db,
       interruptores: interruptoresDelEntorno(),
       brazos: brazosDelEntorno(),
       modo: modoDelEntorno().modo,
@@ -39,9 +43,11 @@ export async function POST(request: Request) {
     const r = b.fase === 'articulos' ? await rutaArticulos(deps, cuerpo) : b.fase === 'tanda2' ? await rutaTanda2(deps, cuerpo) : b.fase === 'clientes' ? await rutaClientes(deps, cuerpo) : await rutaDescubrir(deps, cuerpo)
     // el plan de Apify (28-oct): si el mes ya está en el tope (~90 % del crédito) no se pide nada a Apify y se avisa UNA vez por ciclo; las fases «clientes» no piden nada
     if (b.fase === 'clientes' || !(r.status === 200)) return NextResponse.json(r.body, { status: r.status })
+    if (pausa?.frena) return NextResponse.json(frenarPorLaPausa(r.body, pausa), { status: r.status })
     const frena = eldineroFrena(deps.modo)
     const plan = await revisarPlanApify({ dry_run: b.dry_run !== false, frena, avisar: avisarAAlertas({ db: getSupabaseAdmin() as unknown as Db }) })
-    const salida = plan.leido ? (frena ? frenarCuerpoPorPlan(r.body, plan.decision) : { ...r.body, plan_apify: { ...plan.decision, frena: false } }) : { ...r.body, plan_apify: { leido: false, detalle: plan.detalle } }
+    const salida0 = plan.leido ? (frena ? frenarCuerpoPorPlan(r.body, plan.decision) : { ...r.body, plan_apify: { ...plan.decision, frena: false } }) : { ...r.body, plan_apify: { leido: false, detalle: plan.detalle } }
+    const salida = pausa ? frenarPorLaPausa(salida0, pausa) : salida0
     return NextResponse.json(salida, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'portero_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })

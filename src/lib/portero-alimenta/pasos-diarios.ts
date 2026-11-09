@@ -4,7 +4,7 @@
  * y su propio renglón en `cerebro_pasos_diarios`. El renglón dice «en curso» al empezar y «hecha» SOLO cuando el paso terminó de verdad. Una llamada cortada deja el renglón
  * «en curso»: pasado el plazo se retoma (nunca dos a la vez) y tras 3 intentos queda «abandonada» (no hay reintento infinito).
  */
-import { diaConCorrida } from './modo'
+import { diaConCorrida, raspadoEnPausa } from './modo'
 import { FUENTES_NUEVAS, fuentesNuevasEncendidas } from './fuentes-nuevas'
 
 export type Db = { from(tabla: string): any }
@@ -26,6 +26,8 @@ export const PASOS_DEL_DIA_DE_UN_CLIENTE: readonly Paso[] = PASOS_DE_REDES
 
 /** los pasos que toca hoy: los de redes siempre; las fuentes nuevas una vez por corrida (días sin corrida no gastan) y solo si están encendidas */
 export function pasosDelDia(dia: Date, env: Record<string, string | undefined> = process.env): readonly Paso[] {
+  // la pausa del raspado programado (09-nov): el reloj no corre ningún paso (todos piden Apify o trabajan sobre lo que Apify trae); un paso pedido a mano corre igual
+  if (raspadoEnPausa(dia, env)) return []
   return diaConCorrida(dia, env) && fuentesNuevasEncendidas(env) ? PASOS : PASOS_DE_REDES
 }
 
