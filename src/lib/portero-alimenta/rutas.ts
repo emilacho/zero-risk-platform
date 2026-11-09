@@ -7,6 +7,7 @@
 import { PRESUPUESTO_DE_RUTA_MS, PRESUPUESTO_DEL_PUENTE_EN_ALIMENTAR_MS, PRESUPUESTO_DEL_PUENTE_PROPIO_MS } from './tandas'
 import { alimentarCliente, contextoDelCliente, type Db, type ResultadoDeAlimentar } from './alimentar'
 import { coincidePorPalabra } from '../texto/coincidencia'
+import { retirarFichasDeLoCerrado, type RetiroDeLoCerrado } from './retiro-de-lo-cerrado'
 import { fichaPropiaDeMapas } from './mapas-propia'
 import { articulosParaLeer, descubrir, publicacionesConComentarios, MAX_RESENAS_POR_CORRIDA, type AccionDelPortero, type PlanDelPortero } from './plan'
 import { armarMensajeDePropuestas, INSTRUCCION_DE_PROPUESTAS, validarBusquedas, type ResultadoDePropuestas } from './propuestas'
@@ -106,6 +107,9 @@ export interface DepsDeRutas {
   ahora?: Date
   /** los nuevos brazos (15-oct): todos APAGADOS si falta; las rutas los leen del entorno */
   brazos?: BrazosActivos
+  /** avisa una alarma por incidente y la cierra al resolverse; en pruebas es un registro */
+  avisarIncidente?: (texto: string, clave: string) => Promise<unknown>
+  resolverIncidente?: (clave: string, nota: string) => Promise<unknown>
   /** el modo (28-oct): fija el tope del raspado diario por cliente (3,00 en construcción · 1,00 en campaña); ausente = el de siempre (TOPE_DEL_PORTERO_USD) */
   modo?: ModoDelPortero
 }
@@ -356,13 +360,39 @@ export async function reconciliarYEnviar(deps: DepsDeRutas, clientId: string, dr
   return { puente: { ...puente, quedan }, errores }
 }
 
+/** un solo incidente aunque el puente falle en cada cliente */
+export const CLAVE_DEL_RETIRO = 'puente:estado-en-plataforma'
+/** 05-nov · no poder ESCRIBIR las fichas de un cliente es SU incidente: la corrida sana de otro cliente no lo cierra */
+export const claveDelRetiroDe = (clientId: string): string => `${CLAVE_DEL_RETIRO}:${clientId}`
+
+/**
+ * 05-nov · el retiro de las fichas de lo cerrado y su alarma. Corre en CADA corrida de cada cliente (desde /alimentar, que el flujo llama siempre)
+ * y también en /puente; antes solo corría si el puente tenía pendientes. Idempotente: lo ya retirado no se vuelve a tocar.
+ * Una alarma por incidente: leer la base falla para todos (clave común); escribir falla para un cliente (su clave). En seco no avisa ni cierra.
+ */
+export async function retirarLoCerradoYAvisar(deps: Pick<DepsDeRutas, 'db' | 'ahora' | 'avisarIncidente' | 'resolverIncidente'>, clientId: string, dryRun: boolean): Promise<RetiroDeLoCerrado> {
+  const cierre = await retirarFichasDeLoCerrado(deps.db, clientId, { dryRun, ahora: deps.ahora })
+  if (dryRun) return cierre
+  if (cierre.lectura_fallida) {
+    await deps.avisarIncidente?.(`🔴 El puente del cerebro no pudo revisar el estado en la plataforma: las fichas de lo rechazado o cerrado no se están retirando. ${cierre.errores[0]}`, CLAVE_DEL_RETIRO)
+    return cierre
+  }
+  await deps.resolverIncidente?.(CLAVE_DEL_RETIRO, 'el puente vuelve a leer el estado en la plataforma')
+  if (cierre.errores.length) await deps.avisarIncidente?.(`🔴 El cerebro no pudo retirar fichas de lo cerrado del cliente ${clientId}: siguen vivas. ${cierre.errores[0]}`, claveDelRetiroDe(clientId))
+  else await deps.resolverIncidente?.(claveDelRetiroDe(clientId), 'las fichas de lo cerrado de este cliente ya se retiran')
+  return cierre
+}
+
 // ───────────────────────── /puente · solo la reconciliación (el flujo la repite hasta terminar)
 export async function rutaPuente(deps: DepsDeRutas, cuerpo: unknown): Promise<Respuesta> {
   const v = validar(cuerpo); if (esRespuesta(v)) return v
   if (!deps.interruptores.alimentar || !deps.interruptores.puente_al_indice) return { status: 200, body: { apagado: true, detalle: 'el puente al índice está apagado: no se leyó ni se escribió nada', modelos_llamados: 0 } }
+  // antes de reconciliar: lo que la plataforma cerró deja de ser ficha viva, y la reconciliación lo saca del índice
+  const cierre = await retirarLoCerradoYAvisar(deps, v.client_id, v.dry_run)
   const x = await reconciliarYEnviar(deps, v.client_id, v.dry_run)
-  const mal = x.errores.length > 0 || x.puente.lectura_fallida === true
-  return { status: mal ? 502 : 200, body: { ok: !mal, dry_run: v.dry_run, puente: x.puente, errores: x.errores, modelos_llamados: 0 } }
+  const errores = [...cierre.errores, ...x.errores]
+  const mal = errores.length > 0 || x.puente.lectura_fallida === true
+  return { status: mal ? 502 : 200, body: { ok: !mal, dry_run: v.dry_run, puente: x.puente, retiradas_de_lo_cerrado: cierre.retiradas, errores, modelos_llamados: 0 } }
 }
 
 // ───────────────────────── /clientes · a quién atiende el portero hoy (solo lectura)
@@ -390,6 +420,8 @@ export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise
     gasto_de_hoy_usd: g.gasto.total_usd, workflow_id: v.workflow_id || undefined, workflow_execution_id: v.workflow_execution_id || undefined,
   })
   const status = r.estado === 'cliente_inexistente' ? 404 : r.estado === 'lectura_fallida' ? 502 : 200
+  // 05-nov · el retiro de lo cerrado corre en CADA corrida, haya o no pendientes en el puente; su falla va por su alarma (no apaga al portero)
+  const cierre = r.estado === 'cliente_inexistente' ? null : await retirarLoCerradoYAvisar(deps, v.client_id, v.dry_run)
   // H1 · el puente se RECONCILIA en cada pasada (idempotente, con tope por pasada): ver `reconciliarYEnviar`
   let puente: Record<string, unknown> | null = null
   if (deps.interruptores.puente_al_indice && r.ok) {
@@ -401,5 +433,5 @@ export async function rutaAlimentar(deps: DepsDeRutas, cuerpo: unknown): Promise
   }
   // una falla del puente se DICE en el estado (no queda «hecha» con errores escondidos)
   if (r.errores.length && r.estado === 'hecha') { r.estado = 'con_errores'; r.ok = false }
-  return { status, body: { ...r, puente, gasto_de_hoy: g.gasto, modelos_llamados: r.juez.llamadas } }
+  return { status, body: { ...r, puente, ...(cierre ? { retiro_de_lo_cerrado: { retiradas: cierre.retiradas.length, errores: cierre.errores } } : {}), gasto_de_hoy: g.gasto, modelos_llamados: r.juez.llamadas } }
 }

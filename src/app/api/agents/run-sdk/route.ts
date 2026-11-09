@@ -40,7 +40,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
 import { normalizeFidelityToolInput } from '@/lib/jefatura/fidelity-grader'
-import { checkRunSdkSpendCap } from '@/lib/run-sdk-spend-gate'
+import { checkRunSdkSpendCap, cifrasDelCorte } from '@/lib/run-sdk-spend-gate'
 import { buscarFilaDelEmpleado, recuperarRespuestaPagada as recuperarRespuestaPagadaImpl } from '@/lib/respuesta-pagada'
 import { recuperarVueltaPerdida, PRESUPUESTO_DE_LA_FUNCION_MS, MARGEN_PARA_ENTREGAR_MS, topeDeRecuperacionInterna } from '@/lib/vuelta-perdida'
 import {
@@ -182,7 +182,10 @@ export function validarLimitesDeMirarAfuera(body: unknown): { ok: true; valor: {
 
 // ronda 69 · + los agentes de diseño de la oficina (`carousel-designer`, `design-visual-storyteller`): no persisten descubrimiento, no pasan por revisión editorial y no emiten brand_section/fidelity ⇒ nada que sólo corra en Vercel.
 // `content-creator` (el texto de la oficina) NO entra: está en la lista de revisión editorial; su vuelta se protege con la recuperación del resultado.
-export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller']
+// 06-nov · DALE (a) de Emilio · + `jefe-marketing`, el redactor del plan: tardó 1.534 s en la corrida r4 de Náufrago y por Vercel la vuelta muere a los 800 s (despacho «running»,
+// 0 intentos de vuelta). No persiste descubrimiento, no pasa por revisión editorial y no emite brand_section/fidelity ⇒ nada que sólo corra en Vercel.
+// Si el plan elige otro redactor (`cadena_config.planeacion.redactor`), ese agente se decide aparte.
+export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'jefe-marketing']
 
 export function resolveCallbackMode(body: RunSdkInput): string | null {
   const ctx = (body.context ?? {}) as Record<string, unknown>
@@ -1004,26 +1007,28 @@ async function atender(request: Request) {
         // VARA POR CORRIDA · el identificador ya está resuelto arriba (L574) y el
         // enforcement de L604 garantiza que no sea nulo acá.
         runId: wfAttr.workflow_execution_id,
+        // VARA POR PLAN · 05-nov · el mismo rótulo que queda en la fila
+        trabajo: trabajoDeLaLlamada(body, (nombre) => request.headers.get(nombre)).columnas,
       })
       if (gate.blocked) {
+        const corte = cifrasDelCorte(gate)
         console.warn(
-          `[run-sdk] §150 CAP BLOCK · client=${String(clientId).slice(0, 8)} · ` +
-            `spent=$${(gate.spent_usd ?? 0).toFixed(2)} >= cap=$${(gate.cap_usd ?? 0).toFixed(2)}`,
+          `[run-sdk] §150 CAP BLOCK · client=${String(clientId).slice(0, 8)} · ${corte.reason ?? ''} · ` +
+            `spent=$${corte.spent_usd.toFixed(2)} >= cap=$${corte.cap_usd.toFixed(2)}`,
         )
         capture('agent_run_cap_blocked', String(clientId || 'system'), {
           agent_slug: agentName,
-          spent_usd: gate.spent_usd,
-          cap_usd: gate.cap_usd,
+          spent_usd: corte.spent_usd,
+          cap_usd: corte.cap_usd,
         })
         return NextResponse.json(
           {
             error: 'cost_cap_exceeded',
             code: 'E-CAP-150',
-            cap_usd: gate.cap_usd,
-            spent_usd: gate.spent_usd,
-            detail:
-              `§150 spend cap · client cumulative $${(gate.spent_usd ?? 0).toFixed(2)} ` +
-              `>= cap $${(gate.cap_usd ?? 0).toFixed(2)} (24h window) · invocation blocked`,
+            reason: corte.reason,
+            cap_usd: corte.cap_usd,
+            spent_usd: corte.spent_usd,
+            detail: corte.detail,
           },
           { status: 429 },
         )

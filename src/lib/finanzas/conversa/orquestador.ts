@@ -106,7 +106,10 @@ export function pedidoDelAgente(paso: Paso, contexto: Record<string, unknown>): 
   const ronda2 = paso.ronda === 2 ? '\nEs la RONDA 2 (la última): contesta SOLO lo que el jefe te alude en `acuerdo.hallazgos`.' : ''
   const ctx = JSON.stringify(contexto)
   const tarea = `${REGLAS_COMUNES.join('\n')}\n\n${instruccion}${ronda2}\n\nCONTEXTO (JSON):\n${ctx}`
-  return tarea.length > MAX_TAREA ? tarea.slice(0, MAX_TAREA) : tarea
+  if (tarea.length <= MAX_TAREA) return tarea
+  // 05-nov · nunca en silencio: el corte cae al final del contexto, y quien lee sabe que le falta algo
+  const aviso = '\n\n[ESTE PEDIDO LLEGA RECORTADO PARA CABER: falta el final del contexto. No afirmes nada sobre lo que no ves y decláralo.]'
+  return tarea.slice(0, MAX_TAREA - aviso.length) + aviso
 }
 
 // ───────────────────────────────────────────────────────── funciones de código
@@ -126,7 +129,7 @@ function abrirFinanciera(e: EncargoDeConversa): ResultadoDePaso {
       ...(s.meta_fijada_por_el_dueno ? { meta_fijada_por_el_dueno: s.meta_fijada_por_el_dueno } : {}),
       ...(s.acta ? { acta: s.acta } : {}),
       ...(s.ventas_del_negocio ? { ventas_del_negocio: s.ventas_del_negocio } : {}),
-      ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, ...(s.manual_completo !== undefined && s.manual_completo !== null ? { manual_completo: s.manual_completo } : {}), brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
+      ficha_resumen: s.ficha_resumen ?? null, manual_resumen: s.manual_resumen ?? null, ...(s.manual_completo !== undefined && s.manual_completo !== null ? { manual_completo: s.manual_completo } : {}), ...(Array.isArray(s.informes_de_analisis) && s.informes_de_analisis.length ? { informes_de_analisis: s.informes_de_analisis } : {}), brazos_resumen: s.brazos_resumen ?? null, derivado: s.derivado ?? null,
       datos, linea_base_por_semana: typeof s.linea_base_por_semana === 'number' && s.linea_base_por_semana > 0 ? s.linea_base_por_semana : null, referencias: s.referencias ?? [], evento_alterno: s.evento_alterno ?? {}, pisos: s.pisos ?? {},
       corrida_es_de_ensayo: s.corrida_es_de_ensayo === true, planteo_inicial: planteoInicial, notas_del_dueno: [], datos_del_dueno: [],
     },
@@ -383,7 +386,8 @@ export function preguntasQueFaltan(arts: Arts, semilla: Semilla | undefined): st
 /** pausa UNA vez: tras el cierre de la ronda 1, con críticos abiertos y preguntas sin contestar. Lo que el dueño no contestó o el jefe deje abierto queda en la oficina y no vuelve a pausar (Emilio, 15:37Z). En seco no se le pregunta a nadie */
 export function debePausar(e: EncargoDeConversa, arts: Arts): boolean {
   const a = arts.acuerdo as { criticos?: unknown } | undefined
-  return !e.dry_run && e.semilla?.pausa_atendida !== true && !arts.acuerdo_2 && !arts.cierre && Number(a?.criticos) > 0 && preguntasQueFaltan(arts, e.semilla).length > 0
+  // 05-nov (D4 del GO): la segunda pasada no pausa: el plan sigue y la pregunta queda viva en la oficina financiera. La pausa es solo la de la primera
+  return !e.dry_run && e.semilla?.segunda_pasada !== true && e.semilla?.pausa_atendida !== true && !arts.acuerdo_2 && !arts.cierre && Number(a?.criticos) > 0 && preguntasQueFaltan(arts, e.semilla).length > 0
 }
 
 async function ejecutarUnPaso(P: PuertosDeConversa, e0: EncargoDeConversa, redactor?: string, pausaEncendida = false): Promise<Respuesta> {

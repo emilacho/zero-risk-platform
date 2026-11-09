@@ -3,6 +3,7 @@
  */
 import { modeloPorCorridaValido } from '@/lib/modelo-por-corrida'
 import type { Almacen } from './almacen'
+import { diasEntre, esFechaIso, lunesDe } from './fechas'
 
 export type Paso = 'estrategia' | 'calendario' | 'fechas' | 'brief'
 export const PASOS: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'brief']
@@ -36,7 +37,10 @@ export function medidaDeCampana(c?: { fecha_inicio?: string | null; fecha_fin?: 
   const leidos = Math.round((hasta - desde) / 86400000) + 1
   const dias = Number.isInteger(leidos) && leidos > 0 ? leidos : DIAS_DE_CAMPANA
   const semanasPorTanda = Number.isInteger(c?.semanas_de_tanda) && (c?.semanas_de_tanda as number) > 0 ? (c?.semanas_de_tanda as number) : SEMANAS_DE_TANDA
-  const totalSemanas = Math.ceil(dias / 7)
+  // 09-nov · corrección 2 de CC7 a #949: las semanas se cuentan como `fechaDeFila`, desde el LUNES de la semana del día 1 hasta el último día.
+  // Con inicio en lunes da lo mismo que ceil(dias/7). Con la ventana de un plan que empieza otro día (viernes → jueves, 84 días) son 13, no 12: la última semana no se pierde.
+  const conFechas = Number.isInteger(leidos) && leidos > 0 && esFechaIso(c?.fecha_inicio) && esFechaIso(c?.fecha_fin)
+  const totalSemanas = conFechas ? Math.floor(diasEntre(lunesDe(c!.fecha_inicio as string), c!.fecha_fin as string) / 7) + 1 : Math.ceil(dias / 7)
   return { dias, semanasPorTanda, totalSemanas, totalTandas: Math.ceil(totalSemanas / semanasPorTanda) }
 }
 /** semanas con fecha desde el día 1 (el panorama): se arma por código, sin modelo */

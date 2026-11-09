@@ -7,16 +7,21 @@ import { estadoInicial } from '../src/lib/oficina/tipos'
 import { prepararPreguntas, preguntarAlDueno, type PuertosDelBuzon } from '../src/lib/finanzas/conversa/buzon'
 import { armarMensaje } from '../src/lib/finanzas/preguntas'
 import { avanzar, abrirConversacion, cerrarPorPlazo, debePausar, preguntasQueFaltan, topeEfectivoDelEncargo, TOPE_MAXIMO_POR_ENCARGO_USD, type Respuesta } from '../src/lib/finanzas/conversa/orquestador'
+import { temaDe } from '../src/lib/finanzas/conversa/buzon'
 import { atenderPausa, MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, MAX_MATERIAL, pausarOficina, responderEnLaOficina, type EsperaDeFinanzas, type PuertosDePausa } from '../src/lib/finanzas/conversa/pausa'
 import { elDuenoRecibePreguntas } from '../src/lib/finanzas/preguntas'
 import { despertarPorElFlujo, esperasDeFinanzas } from '../src/lib/finanzas/conversa/esperas-supabase'
 import { despertarDelEntorno, puertosDePausa } from '../src/lib/finanzas/conversa/puertos-de-pausa'
 import type { AlmacenDeConversa, EncargoDeConversa, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import { prevuelo } from '../src/lib/planeacion/prevuelo'
+// 05-nov · el pedido de finanzas declara su recorte
+import { pedidoDelAgente } from '../src/lib/finanzas/conversa/orquestador'
+import { TOPE_REAL_DEL_PEDIDO } from '../src/lib/limites-de-tamano'
 import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import { rutaDueno, rutaLeerDueno } from '../src/lib/portero-alimenta/dueno'
 import { cerebroDelDueno } from '../src/lib/buzon-dueno/cerebro-dueno'
+import { rutaPendientes, rutaPreguntas, type PuertoDelCerebro } from '../src/lib/dueno-preguntas/preguntas'
 import { crearBaseFalsa } from '../src/lib/portero-alimenta/__tests__/base-falsa'
 import { DIEZ_CLIENTES } from '../src/lib/portero-alimenta/__tests__/diez-clientes.fixtures'
 import { tablasDe } from '../src/lib/portero-alimenta/__tests__/diez-clientes.tablas'
@@ -26,7 +31,7 @@ const preg = (clave: string, o: Record<string, unknown> = {}) => ({ clave, texto
 const CINCO = [preg('comision'), preg('turistas'), preg('temporada'), preg('whatsapp', { frena_la_firma: true }), preg('pixel', { frena_la_firma: true })]
 const acuerdo = (preguntas: unknown[] = CINCO, criticos = 3) => ({ acuerdo: { criticos, requiere_ronda_2: criticos > 0, preguntas_a_emilio: preguntas, hallazgos: [] } })
 
-function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; modo?: PuertosDePausa['modo']; despierta?: boolean; corrida?: { estado: string | null; otra_activa: boolean } | 'caida'; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
+function mundo(o: { descartados?: string[] | 'caida'; desdes?: string[]; semilla?: Semilla; estado?: EncargoDeConversa['estado']; arts?: Record<string, Record<string, unknown>>; espera?: Partial<EsperaDeFinanzas> | null; slackTs?: string | null; mensajes?: Array<{ ts: string; texto: string }>; registrar?: Record<string, unknown>; modo?: PuertosDePausa['modo']; despierta?: boolean; corrida?: { estado: string | null; otra_activa: boolean } | 'caida'; pausaEncendida?: boolean; cerebroCaido?: boolean; hora?: string } = {}) {
   const e: EncargoDeConversa = { id: 'enc-1', client_id: 'cli', estado: o.estado ?? 'esperando_al_dueno', estado_del_motor: estadoInicial(), gasto_usd: 1.2, slack_canal: o.slackTs ? 'C123456789' : null, slack_ts: o.slackTs ?? null, leido_hasta: o.slackTs ?? null, tablero_id: null, dry_run: false, semilla: { corrida: 'cor-1', ...(o.semilla ?? {}) } }
   const arts: Record<string, Record<string, unknown>> = { ...acuerdo(), ...(o.arts ?? {}) }
   const guardados: Array<Record<string, unknown>> = [], avisos: string[] = [], enviados: string[] = [], despertares: Array<Record<string, unknown>> = [], enHilo: string[] = [], corridasPausadas: string[] = []
@@ -34,7 +39,7 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
   const alCerebro: Array<Record<string, unknown>> = []
   const mensajes = [...(o.mensajes ?? [])]
   let materialGuardado: unknown = null
-  let espera: EsperaDeFinanzas | null = o.espera === null || o.espera === undefined ? null : { id: 'esp-1', client_id: 'cli', encargo_id: 'enc-1', corrida: 'plan-x', estado: 'esperando', sobre: { corrida: 'plan-x', client_id: 'cli' }, despertado: null, intentos_de_despertar: 0, despertado_en: null, ...o.espera }
+  let espera: EsperaDeFinanzas | null = o.espera === null || o.espera === undefined ? null : { id: 'esp-1', client_id: 'cli', encargo_id: 'enc-1', corrida: 'plan-x', estado: 'esperando', sobre: { corrida: 'plan-x', client_id: 'cli' }, despertado: null, intentos_de_despertar: 0, despertado_en: null, creado_en: '2026-11-05T09:00:00.000Z', ...o.espera }
   const almacen: AlmacenDeConversa = {
     async crearEncargo() { return { ok: true, encargo: e, nuevo: false } },
     async leerEncargo() { return structuredClone(e) },
@@ -63,13 +68,14 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
       async leer(x: { desde_ts: string | null }) { return { ok: true as const, mensajes: [...mensajes], leido_hasta: x.desde_ts } },
     } as never,
     esperas: {
-      async guardar(f) { if (espera) return { ok: true, id: espera.id, nueva: false }; espera = { id: 'esp-1', despertado_en: null, client_id: f.client_id, encargo_id: f.encargo_id, corrida: String(f.sobre.corrida), estado: 'esperando', sobre: f.sobre, despertado: null, intentos_de_despertar: 0 }; materialGuardado = f.material; return { ok: true, id: 'esp-1', nueva: true } },
+      async guardar(f) { if (espera) return { ok: true, id: espera.id, nueva: false }; espera = { id: 'esp-1', despertado_en: null, creado_en: '2026-11-05T09:00:00.000Z', client_id: f.client_id, encargo_id: f.encargo_id, corrida: String(f.sobre.corrida), estado: 'esperando', sobre: f.sobre, despertado: null, intentos_de_despertar: 0 }; materialGuardado = f.material; return { ok: true, id: 'esp-1', nueva: true } },
       async delEncargo() { return espera && { ...espera } },
       async vivaDelCliente(c) { return espera && espera.estado === 'esperando' && espera.client_id === c ? { ...espera } : null },
       async soltar() { if (!espera || espera.estado !== 'esperando') return false; espera.estado = 'soltada'; return true },
       async marcarDespertar(_i, d, n) { if (espera) { espera.despertado = d; espera.intentos_de_despertar = n; espera.despertado_en = P.ahora().toISOString() } },
       async estadoDeLaCorrida() { if (o.corrida === 'caida') throw new Error('caída'); return o.corrida ?? { estado: 'corriendo', otra_activa: false } },
       async pausarCorrida(id) { corridasPausadas.push(id) },
+      async temasDescartados(_c, _t, desde) { o.desdes?.push(desde); if (o.descartados === 'caida') throw new Error('caída'); return o.descartados ?? [] },
     },
     despertar: async (c) => { despertares.push(c); return o.despierta === false ? { ok: false, error: 'el plan contestó 502' } : { ok: true } },
   }
@@ -81,6 +87,26 @@ function mundo(o: { semilla?: Semilla; estado?: EncargoDeConversa['estado']; art
   }
   return { e, arts, P, C, guardados, avisos, enviados, despertares, enHilo, corridasPausadas, alCerebro, mensajes, modelo: () => llamadasModelo, espera: () => espera, material: () => materialGuardado }
 }
+
+describe('el pedido a un empleado de finanzas', () => {
+  const PASO = { clave: 'fpa' } as never
+  it('🔴 si no cabe, llega declarado y sin pasarse del tope', () => {
+    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO + 10) })
+    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
+    expect(t.endsWith('decláralo.]')).toBe(true)
+    expect(t).toContain('LLEGA RECORTADO')
+  })
+  it('si cabe, sin aviso', () => {
+    const t = pedidoDelAgente(PASO, { datos: 'x' })
+    expect(t).not.toContain('LLEGA RECORTADO')
+  })
+  it('el borde: lo que cabe justo entra entero', () => {
+    const vacio = pedidoDelAgente(PASO, { datos: '' })
+    const t = pedidoDelAgente(PASO, { datos: 'x'.repeat(TOPE_REAL_DEL_PEDIDO - vacio.length) })
+    expect(t).toHaveLength(TOPE_REAL_DEL_PEDIDO)
+    expect(t).not.toContain('LLEGA RECORTADO')
+  })
+})
 
 describe('cuándo pausa', () => {
   const enc = (semilla: Semilla = {}, dry_run = false) => ({ dry_run, semilla }) as unknown as EncargoDeConversa
@@ -173,6 +199,45 @@ describe('pausar', () => {
     const m = mundo({ registrar: { ok: true, estado: 'ya_preguntada' } })
     expect((await pausarOficina(m.P, pedir())).cuerpo.enviado).toBe(true)
     expect(m.enviados).toHaveLength(1)
+  })
+  describe('05-nov · el dueño descarta preguntas (GO de Lenovo)', () => {
+    const conDescartes = async (descartados: string[] | 'caida') => {
+      const m = mundo({ descartados })
+      await pausarOficina(m.P, pedir())
+      return m
+    }
+    const todas = (m: ReturnType<typeof mundo>): string[] => preguntasQueFaltan(m.arts as never, m.e.semilla)
+    it('🔴 descartó todas: el plan sigue solo', async () => {
+      const previa = mundo()
+      await pausarOficina(previa.P, pedir())
+      const temas = todas(previa).map(temaDe)
+      expect(temas.length).toBeGreaterThan(0)
+      const m = await conDescartes(temas)
+      expect(m.despertares).toHaveLength(1)
+    })
+    it('🔴 descartó parte y la otra sigue sin respuesta: espera', async () => {
+      const previa = mundo()
+      await pausarOficina(previa.P, pedir())
+      const temas = todas(previa).map(temaDe)
+      const m = await conDescartes(temas.length > 1 ? temas.slice(1) : [])
+      expect(m.despertares).toEqual([])
+    })
+    it('🔴 sin leer los descartes, espera: no suelta el plan a ciegas', async () => {
+      const m = await conDescartes('caida')
+      expect(m.despertares).toEqual([])
+      expect(m.e.estado).toBe('esperando_al_dueno')
+    })
+    it('🔴 solo pregunta por lo descartado desde que se abrió esta espera', async () => {
+      const desdes: string[] = []
+      const m = mundo({ descartados: [], desdes })
+      await pausarOficina(m.P, pedir())
+      expect(desdes.length).toBeGreaterThan(0)
+      expect(new Set(desdes)).toEqual(new Set(['2026-11-05T09:00:00.000Z']))
+    })
+    it('🔴 un tema descartado de otra cosa no cuenta', async () => {
+      const m = await conDescartes(['otro_tema_cualquiera'])
+      expect(m.despertares).toEqual([])
+    })
   })
   it('🔴 si no pudo salir avisa UNA vez y sigue en pausa', async () => {
     const m = mundo({ registrar: { ok: false, error: 'http_500' } })
@@ -335,20 +400,36 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
   const armar = (o: { preguntas?: unknown[]; semilla?: Semilla; caido?: () => boolean } = {}) => {
     const c = DIEZ_CLIENTES[0]
     let hora = new Date('2026-11-05T12:00:00Z').getTime()
-    const t: Record<string, Array<Record<string, unknown>>> = { ...(tablasDe(c) as unknown as Record<string, Array<Record<string, unknown>>>), cerebro_dueno_preguntas: [] }
+    const t: Record<string, Array<Record<string, unknown>>> = { ...(tablasDe(c) as unknown as Record<string, Array<Record<string, unknown>>>), cerebro_dueno_preguntas: [], dueno_preguntas: [] }
     const base = crearBaseFalsa(t as never, { reloj: () => new Date(hora).toISOString() })
     let n = 0
     const deps = () => ({ db: base.db, interruptores: ON, ahora: new Date(hora), activo: true, nuevoId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` }) as never
+    // 06-nov · las preguntas viven en la PLATAFORMA (`dueno_preguntas`); al cerebro va solo la respuesta, por su puerta real
+    const alCerebro: PuertoDelCerebro = {
+      async respuestas(q) {
+        const r = await rutaLeerDueno({ db: base.db, ahora: new Date(hora) } as never, { client_id: q.client_id, tema: q.tema, sede_clave: q.sede_clave })
+        return r.status === 200 && r.body.ok === true ? { ok: true, respuestas: r.body.respuestas as Array<Record<string, unknown>> } : { ok: false, error: `http_${r.status}` }
+      },
+      async guardar(_evento, cuerpo) {
+        const r = await rutaDueno(deps(), { ...cuerpo, evento: 'respuesta', dry_run: false, preguntado_por: { oficina: cuerpo.oficina || 'financiera', agente: cuerpo.agente || 'chief-financial-officer' } })
+        return r.status === 200 ? { ok: true, ficha_id: typeof r.body.ficha_id === 'string' ? r.body.ficha_id : null } : { ok: false, status: r.status, error: String(r.body.error) }
+      },
+    }
     const fetchF = async (u: string, i: RequestInit) => {
       if (o.caido?.()) return { status: 500, json: async () => ({ error: 'caída' }) }
       const q = new URL(u).searchParams
+      if (new URL(u).pathname === '/api/dueno/preguntas') {
+        const dp = { db: base.db, cerebro: alCerebro, ahora: new Date(hora), nuevoId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` }
+        const rp = i.method === 'GET' ? await rutaPendientes(dp, { client_id: q.get('client_id') ?? '', tema: q.get('tema') }) : await rutaPreguntas(dp, JSON.parse(String(i.body)))
+        return { status: rp.status, json: async () => rp.body }
+      }
       const r = i.method === 'GET' ? await rutaLeerDueno({ db: base.db, ahora: new Date(hora) } as never, { client_id: q.get('client_id') ?? '', tema: q.get('tema') }) : await rutaDueno(deps(), JSON.parse(String(i.body)))
       return { status: r.status, json: async () => r.body }
     }
     const m = mundo({ modo: 'registra', semilla: o.semilla, arts: acuerdo((o.preguntas ?? [preg('whatsapp'), preg('pixel')]) as typeof CINCO) })
     m.e.client_id = c.id
     const P = { ...m.P, ahora: () => new Date(hora), cerebro: cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'wf', workflow_execution_id: 'ex', canal_etiqueta: 'dashboard · Tu oficina', fetch: fetchF as never }) } as PuertosDePausa
-    const filas = () => t.cerebro_dueno_preguntas
+    const filas = () => t.dueno_preguntas
     const pendientes = () => filas().filter((p) => p.estado === 'pendiente').length
     const pedir = { encargo_id: 'enc-1', sobre: { corrida: 'plan-x', client_id: c.id }, material: { a: 1 }, workflow_id: 'wf', workflow_execution_id: 'ex' }
     return { c, t, m, P, filas, pendientes, pedir, deps, horas: (h: number) => { hora += h * 3_600_000 }, minutos: (x: number) => { hora += x * 60_000 }, hora: () => new Date(hora).toISOString() }
@@ -359,7 +440,7 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     const a = armar()
     await pausarOficina(a.P, a.pedir)
     expect(a.filas()).toHaveLength(2)
-    const d = await rutaDueno(a.deps(), { evento: 'descartar', client_id: a.c.id, pregunta_id: a.filas()[0].id, motivo: 'la descartó', dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+    const d = await rutaPreguntas({ db: (a.deps() as { db: never }).db, cerebro: null as never }, { accion: 'descartar', decidido_por: 'Emilio', client_id: a.c.id, pregunta_id: a.filas()[0].id, motivo: 'la descartó', workflow_id: 't', workflow_execution_id: 'e' })
     expect(d.status).toBe(200)
     for (let i = 0; i < 3; i++) { a.minutos(10); await atenderPausa(a.P, 'enc-1') }
     expect(a.filas()).toHaveLength(2)
@@ -483,8 +564,8 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
   })
   describe('al contestar se cierra solo lo de este encargo (05-nov · hallazgo de CC7)', () => {
     const deOtraOficina = (a: ReturnType<typeof armar>) => {
-      const ajenas = [['00000000-0000-4000-9000-000000000001', 'whatsapp', 'olon'], ['00000000-0000-4000-9000-000000000002', 'whatsapp de la tienda de olon', null], ['00000000-0000-4000-9000-000000000003', 'horario de la tienda', null]].map(([id, tema, sede_clave]) => ({ id, client_id: a.c.id, tema, sede_clave, pregunta: `¿${tema}?`, estado: 'pendiente', creado_en: a.hora(), preguntado_por_oficina: 'creativa' }))
-      a.t.cerebro_dueno_preguntas.push(...ajenas)
+      const ajenas = [['00000000-0000-4000-9000-000000000001', 'whatsapp', 'olon'], ['00000000-0000-4000-9000-000000000002', 'whatsapp de la tienda de olon', null], ['00000000-0000-4000-9000-000000000003', 'horario de la tienda', null]].map(([id, tema, sede_clave]) => ({ id, client_id: a.c.id, tema, sede_clave, pregunta: `¿${tema}?`, estado: 'pendiente', creado_en: a.hora(), oficina: 'creativa' }))
+      a.t.dueno_preguntas.push(...ajenas)
       return () => a.filas().filter((p) => String(p.id).startsWith('00000000-0000-4000-9000')).map((p) => p.estado)
     }
     it('🔴 contestar en Tu oficina deja viva la pregunta de otra sede u otra oficina', async () => {
@@ -502,7 +583,8 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       const ajenas = deOtraOficina(a)
       await responderEnLaOficina(a.P, { client_id: a.c.id, tema: 'whatsapp', respuesta: 'sí, ya lo tengo', quien: 'emilio' })
       expect(ajenas()).toEqual(['pendiente', 'pendiente', 'pendiente'])
-      expect(a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)).toMatchObject({ estado: 'respondida', ficha_id: expect.any(String) })
+      // 06-nov · la lista de la plataforma cierra por id SIN límite de edad: contestada es «respondida» (antes la puerta del cerebro solo veía 72 h y el cierre la dejaba «obsoleta»)
+      expect(a.filas().find((p) => p.tema === 'whatsapp' && !p.sede_clave)).toMatchObject({ estado: 'respondida', respuesta: 'sí, ya lo tengo', decidido_por: 'emilio' })
     })
     it('🔴 una respuesta recogida del cerebro cierra la propia y no toca las ajenas', async () => {
       const a = armar()
@@ -550,7 +632,7 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     })
     it('🔴 una pregunta de otra oficina no guarda id: su fila no se cierra desde aquí', async () => {
       const a = armar({ preguntas: [preg('whatsapp')] })
-      a.t.cerebro_dueno_preguntas.push({ id: '00000000-0000-4000-9000-000000000009', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿whatsapp?', estado: 'pendiente', creado_en: a.hora(), preguntado_por_oficina: 'creativa', canal: 'otra' })
+      a.t.dueno_preguntas.push({ id: '00000000-0000-4000-9000-000000000009', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿whatsapp?', estado: 'pendiente', creado_en: a.hora(), oficina: 'creativa', canal: 'otra' })
       await pausarOficina(a.P, a.pedir)
       const registro = a.m.arts.buzon_respuestas as { preguntas: Array<{ pregunta_id: string | null }> }
       expect(registro.preguntas[0].pregunta_id).toBeNull()
@@ -587,7 +669,8 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       const cuerpos: Array<Record<string, unknown>> = []
       const f = (async (_u: string, i: RequestInit) => { cuerpos.push(JSON.parse(String(i.body))); return { status: 200, json: async () => ({ ok: true }) } }) as never
       await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
-      expect(cuerpos[0]).toMatchObject({ evento: 'descartar', client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
+      // 06-nov · va a la lista de la plataforma y la cierra el SISTEMA («obsoleta»), no el dueño
+      expect(cuerpos[0]).toMatchObject({ accion: 'descartar', por_el_sistema: true, client_id: 'c', pregunta_id: 'p1', motivo: 'm' })
       expect(cuerpos[0].tema).toBeUndefined()
     })
     it('🔴 la lectura lleva la llave', async () => {
@@ -617,7 +700,8 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     const f = (async () => ({ status: 200, json: async () => ({ apagado: true }) })) as never
     const c = cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f })
     expect(await c.leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'puerta_apagada' })
-    expect(await c.cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })).toEqual({ ok: false, error: 'puerta_apagada' })
+    // el cierre ya no va al cerebro: una respuesta sin `ok` de la plataforma es «no cerró», nunca «cerrada»
+    expect(await c.cerrarPendiente!({ client_id: 'c', pregunta_id: 'p1', motivo: 'm' })).toEqual({ ok: false, error: 'no_cerrada' })
     expect(await cerebroDelDueno({ base: '', llave: '', workflow_id: '', workflow_execution_id: '', fetch: f }).leerRespuestas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'cerebro_no_configurado' })
   })
 })
@@ -676,7 +760,7 @@ describe('recibido no es arrancó (05-nov · hallazgo de CC2)', () => {
     const db = new DbFalsa()
     db.semilla('plan_corridas', [{ id: '1', client_id: 'c', corrida: 'p', estado: 'en_pausa' }, { id: '2', client_id: 'otro', corrida: 'p', estado: 'hecha' }, { id: '3', client_id: 'otro', corrida: 'q', estado: 'corriendo' }])
     const E = esperasDeFinanzas(db as never)
-    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null }
+    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null, creado_en: '2026-11-05T09:00:00.000Z' }
     expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: false })
     db.tablas['plan_corridas'].push({ id: '4', client_id: 'c', corrida: 'r', estado: 'esperando' })
     expect(await E.estadoDeLaCorrida(esp)).toEqual({ estado: 'en_pausa', otra_activa: true })
@@ -689,7 +773,7 @@ describe('recibido no es arrancó (05-nov · hallazgo de CC2)', () => {
     expect(MARGEN_PARA_ARRANCAR_MIN).toBe(5)
   })
   it('🔴 una caída al leer la corrida LANZA, en cualquiera de las dos lecturas: nunca se lee como «no hay corrida»', async () => {
-    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null }
+    const esp = { id: 'e', client_id: 'c', encargo_id: 'x', corrida: 'p', estado: 'soltada' as const, sobre: {}, despertado: true, intentos_de_despertar: 1, despertado_en: null, creado_en: '2026-11-05T09:00:00.000Z' }
     const conFallo = (cual: number) => {
       let n = 0
       const api = { select: () => api, eq: () => api, in: () => api, limit: async () => (++n === cual ? { data: null, error: { message: 'caída' } } : { data: [{ estado: 'en_pausa' }], error: null }) }
@@ -839,6 +923,21 @@ describe('tope y manual', () => {
     expect(r.cuerpo.paso).toBe('abrir')
     const g = m.guardados[0] as { artefacto: { contenido: { manual_completo: unknown } } }
     expect(g.artefacto.contenido.manual_completo).toEqual({ voz: 'cercana' })
+  })
+  it('🔴 y también los informes de la mesa de análisis: los lee toda la oficina', async () => {
+    const informes = [{ de: 'hecho en esta corrida', tipo: 'competencia', informe: 'texto', es_dato_del_cliente: false }]
+    const m = mundo({ estado: 'en_curso', pausaEncendida: false, semilla: { informes_de_analisis: informes }, arts: { acuerdo: {} } })
+    delete (m.arts as Record<string, unknown>).acuerdo
+    await avanzar(m.C, 'enc-1')
+    expect((m.guardados[0] as { artefacto: { contenido: { informes_de_analisis: unknown } } }).artefacto.contenido.informes_de_analisis).toEqual(informes)
+  })
+  it('sin informes el expediente queda igual que hoy', async () => {
+    for (const semilla of [{}, { informes_de_analisis: [] }, { informes_de_analisis: 'x' }]) {
+      const m = mundo({ estado: 'en_curso', pausaEncendida: false, semilla, arts: { acuerdo: {} } })
+      delete (m.arts as Record<string, unknown>).acuerdo
+      await avanzar(m.C, 'enc-1')
+      expect((m.guardados[0] as { artefacto: { contenido: object } }).artefacto.contenido).not.toHaveProperty('informes_de_analisis')
+    }
   })
 })
 

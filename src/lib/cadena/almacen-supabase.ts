@@ -2,6 +2,7 @@
  * ALMACÉN DE LA CADENA sobre Supabase · el ÚNICO archivo, con las rutas, que nombra las tablas `cadena_*` (lo vigila una prueba).
  * La migración NO está aplicada: hasta entonces nada llega aquí. `client_id` es TEXTO en todas las tablas de la cadena.
  */
+import { planesVigentes, type PlanDelCliente } from '../direccion/decisiones-reemplazadas'
 import { palabrasDuras } from '../manual/palabras-con-intencion'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { almacenDeSupabase as almacenDeRecados } from '@/lib/sala-recados/almacen-supabase'
@@ -61,10 +62,19 @@ async function fichaDelCliente(db: ReturnType<typeof getSupabaseAdmin>, clientId
 const COLUMNAS_DEL_BRIEF = 'campana_id, version, estado, texto_md, leido, devolucion_texto, motivo, costo_usd, encargo_id, seco, plazo_en'
 
 /** La sala del director (solo lectura): este archivo es el único que nombra las tablas de la cadena (guarda de generalidad). */
+/** sin plan indicado, la cadena toma el vigente del cliente: nunca uno rechazado ni uno ya reemplazado */
+export function planParaLaCadena(planes: PlanDelCliente[], clientId: string): { plan_id: string; fecha: string } | null {
+  const v = planesVigentes(planes).get(clientId)
+  return v ? { plan_id: v.id, fecha: v.creado_en.slice(0, 10) } : null
+}
+
 export const consultasDeDireccion = (db: { from(tabla: string): any }) => ({
   campanasDetenidas: (tope: number) => db.from('cadena_campanas').select('id, client_id, estado, estado_motivo, actualizada_en, seco').in('estado', ['pausada', 'necesita_humano']).limit(tope),
   estadoDeLaCadena: () => db.from('cadena_config').select('valor').eq('clave', 'estado_cadena').limit(1),
   campanaDelPlan: (planId: string) => db.from('cadena_campanas').select('id, estado, estado_motivo').eq('plan_id', planId).eq('seco', false).limit(1),
+  // 09-nov · C (GO Lenovo · CC#2) · Decisiones: las campañas reales que esperan a una persona y la espera que las sostiene
+  campanasQueEsperanAUnaPersona: (tope: number) => db.from('cadena_campanas').select('id, client_id, estado, estado_motivo, actualizada_en').eq('estado', 'necesita_humano').eq('seco', false).is('archivada_en', null).limit(tope),
+  esperasDeUnaPersona: (campanaIds: string[], tope: number) => db.from('cadena_esperas').select('campana_id, vence_en, accion_al_vencer, desde').in('campana_id', campanaIds).eq('objeto_tipo', 'necesita_humano').eq('estado', 'viva').eq('seco', false).limit(tope),
 })
 
 export function almacenDeSupabase(): Almacen {
@@ -92,10 +102,13 @@ export function almacenDeSupabase(): Almacen {
     },
 
     async resolverPlan(clientId, planId) {
-      let q = db.from('client_historical_outputs').select('id, created_at').eq('client_id', clientId).eq('output_type', 'campaign_plan_90d').order('created_at', { ascending: false }).limit(1)
-      if (planId) q = db.from('client_historical_outputs').select('id, created_at').eq('client_id', clientId).eq('output_type', 'campaign_plan_90d').eq('id', planId).limit(1)
-      const f = (await lista<{ id: string; created_at: string }>(q))[0]
-      return f ? { plan_id: f.id, fecha: f.created_at.slice(0, 10) } : null
+      if (planId) {
+        const f = (await lista<{ id: string; created_at: string }>(db.from('client_historical_outputs').select('id, created_at').eq('client_id', clientId).eq('output_type', 'campaign_plan_90d').eq('id', planId).limit(1)))[0]
+        return f ? { plan_id: f.id, fecha: f.created_at.slice(0, 10) } : null
+      }
+      // 05-nov · sin plan indicado, el vigente: no uno rechazado ni uno ya reemplazado. La misma regla que usa la bandeja
+      const planes = await lista<PlanDelCliente & { id: string; created_at: string }>(db.from('client_historical_outputs').select('id, client_id, status, provenance_tag, created_at').eq('client_id', clientId).eq('output_type', 'campaign_plan_90d').order('created_at', { ascending: false }).limit(100))
+      return planParaLaCadena(planes, clientId)
     },
     async journeyExiste(journeyId, clientId) {
       return (await lista<{ stream_id: string }>(db.from('sala_event_log').select('stream_id').eq('stream_id', journeyId).eq('client_id', clientId).limit(1))).length > 0

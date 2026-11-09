@@ -1,17 +1,18 @@
 /** La espera de la oficina financiera sobre `esperas_del_dueno` (tipo `finanzas`) y `plan_corridas`. Sin lógica: solo traduce el puerto de `pausa.ts` a consultas. */
 import type { Db } from '../almacen-supabase'
 import type { DespertarAlPlan, EsperaDeFinanzas, PuertoDeEsperas } from './pausa'
+import { temasDescartadosPorElDueno } from '../../direccion/decisiones'
 
 type Fila = Record<string, unknown>
 const TABLA = 'esperas_del_dueno'
-const COLS = 'id,client_id,clave,estado,sobre,despertado,despertar_intentos,actualizado_en'
+const COLS = 'id,client_id,clave,estado,sobre,despertado,despertar_intentos,actualizado_en,creado_en'
 const claveDe = (encargo_id: string) => `finanzas:${encargo_id}`
 
 function aEspera(f: Fila): EsperaDeFinanzas {
   const sobre = (f.sobre && typeof f.sobre === 'object' ? f.sobre : {}) as Record<string, unknown>
   return {
     id: String(f.id), client_id: String(f.client_id), encargo_id: String(f.clave).replace(/^finanzas:/, ''), corrida: typeof sobre.corrida === 'string' ? sobre.corrida : null,
-    estado: f.estado as EsperaDeFinanzas['estado'], sobre, despertado: typeof f.despertado === 'boolean' ? f.despertado : null, intentos_de_despertar: Number(f.despertar_intentos ?? 0), despertado_en: typeof f.actualizado_en === 'string' ? f.actualizado_en : null,
+    estado: f.estado as EsperaDeFinanzas['estado'], sobre, despertado: typeof f.despertado === 'boolean' ? f.despertado : null, intentos_de_despertar: Number(f.despertar_intentos ?? 0), despertado_en: typeof f.actualizado_en === 'string' ? f.actualizado_en : null, creado_en: String(f.creado_en ?? ''),
   }
 }
 
@@ -56,6 +57,7 @@ export function esperasDeFinanzas(db: Db): PuertoDeEsperas {
       if (a.error) throw new Error(`no pude leer las corridas activas: ${a.error.message}`)
       return { estado: typeof estado === 'string' ? estado : null, otra_activa: ((a.data as Fila[] | null) ?? []).length > 0 }
     },
+    temasDescartados: (client_id, temas, desde) => temasDescartadosPorElDueno(db, client_id, temas, desde),
     async pausarCorrida(corrida_id) {
       const r = await db.from('plan_corridas').update({ estado: 'en_pausa', motivo: 'la oficina financiera espera la respuesta del dueño', actualizado_en: new Date().toISOString() }).eq('id', corrida_id).eq('estado', 'corriendo')
       if (r.error) throw new Error(`no pude pausar la corrida: ${r.error.message}`)

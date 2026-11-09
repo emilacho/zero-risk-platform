@@ -69,9 +69,10 @@ export function esTemaParecido(a: string, b: string): boolean {
  *  · sí lo es: con prefijo +NN, con una palabra de contacto cerca (llama, WhatsApp, cel, teléfono…), el móvil de Ecuador/Uruguay (09 + 8 dígitos), o
  *    9–10 dígitos con separadores y un primer dígito de móvil/fijo (EC, CO, MX, PE, CL, ES, AR, UY).
  */
-const PALABRA_DE_CONTACTO = /(llam|whats?app|wasap|wsp|cel\b|celu|tel[eé]f|\btel\b|\bfono|m[oó]vil|contact|n[uú]mero|escr[ií]b|comunic)[^\d]{0,30}$/i
+const PALABRA_DE_CONTACTO = /(ll[aá]m|whats?app|wasap|wsp|cel\b|celu|tel[eé]f|\btel\b|\bfono|m[oó]vil|contact|n[uú]mero|escr[ií]b|comunic)[^\d]{0,30}$/i
 const MONEDA_ANTES = /(\$|€|£|us\$|s\/\.?|\busd|\beur|\bmxn|\bcop|\bclp|\bars|\bpen|\buyu|precio|costo|valor|cuesta|vale|total)\s*:?\s*$/i
-const MONEDA_DESPUES = /^\s*(usd|d[oó]lares|soles|pesos|mxn|cop|eur|euros|clp|ars|pen|uyu|%|\$|unidades|u\b|und|kg|gr|ml|cm|mm|años|a[ñn]os|seguidores|likes|personas|clientes)/i
+/** 05-nov · la unidad es una PALABRA entera: «Gracias» en la línea siguiente no es «gr» (gramos), «Kilo» no es «kg» */
+const MONEDA_DESPUES = /^\s*(?:(?:usd|d[oó]lares|soles|pesos|mxn|cop|eur|euros|clp|ars|pen|uyu|unidades|u|und|kg|gr|ml|cm|mm|años|a[ñn]os|seguidores|likes|personas|clientes)(?![a-záéíóúüñ0-9])|%|\$)/i
 export function esTelefono(candidato: string, antes: string, despues: string): boolean {
   const digitos = candidato.replace(/\D/g, '')
   if (digitos.length < 7 || digitos.length > 15) return false
@@ -92,18 +93,23 @@ export function esTelefono(candidato: string, antes: string, despues: string): b
   return false
 }
 
-/** quita lo que identifica a terceros: correos, teléfonos y @usuarios (el dueño habla de su negocio, no entrega datos ajenos) */
+/** una sola línea, para lo que se DERIVA (`que_es`, citas cortas, listas): nunca para el texto guardado (encargo 05-nov «informes con formato») */
+export const unaLinea = (t: string): string => t.replace(/\s+/g, ' ').trim()
+
+/** quita lo que identifica a terceros: correos, teléfonos y @usuarios (el dueño habla de su negocio, no entrega datos ajenos).
+ *  El resto queda TAL CUAL llegó: saltos de línea, listas, tablas y encabezados (05-nov: antes se aplanaba todo a una línea).
+ *  Un teléfono no cruza de una línea a otra: dos renglones con cifras no son un número. */
 export function sinDatosPersonales(t: string): { texto: string; redactado: boolean } {
   let redactado = false
   t = t.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, () => { redactado = true; return '[correo omitido]' })
   t = t.replace(/(?<![\w@])@[\w.]{2,}/g, () => { redactado = true; return '[usuario omitido]' })
-  t = t.replace(/(?<![\w$€.,/])(?:\+|\(?00)?\(?\d[\d\s().-]{5,}\d/g, (m, ...resto) => {
+  t = t.replace(/(?<![\w$€.,/])(?:\+|\(?00)?\(?\d[\d \t\u00a0().-]{5,}\d/g, (m, ...resto) => {
     const pos = resto[resto.length - 2] as number
     if (!esTelefono(m, t.slice(0, pos), t.slice(pos + m.length))) return m
     redactado = true
     return '[teléfono omitido]'
   })
-  return { texto: t.replace(/\s+/g, ' ').trim(), redactado }
+  return { texto: t.trim(), redactado }
 }
 
 export interface PreguntadoPor { oficina: string; agente: string }
@@ -319,7 +325,7 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
   const cuando = n.respondido_en
   const contenido = campoManual ? `Dato del manual escrito por el dueño (campo «${campoManual}», ${cuando.slice(0, 10)}). ${preguntaLimpia}: «${limpia.texto}»` : `Confirmado por el dueño (${n.canal}, ${cuando.slice(0, 10)}). Pregunta: «${preguntaLimpia}». Respuesta del dueño: «${limpia.texto}»`
   const fila = {
-    id: fichaId, client_id: n.client_id, ingreso_id: ing, ref, clase: CLASE_DEL_DUENO, titulo: `${campoManual ? 'Manual' : 'Dueño'} · ${n.tema}${sedeClave ? ` · sede ${sedeClave}` : ''}`.slice(0, 160), que_es: limpia.texto.slice(0, 200), contenido, origen: 'dueno',
+    id: fichaId, client_id: n.client_id, ingreso_id: ing, ref, clase: CLASE_DEL_DUENO, titulo: `${campoManual ? 'Manual' : 'Dueño'} · ${n.tema}${sedeClave ? ` · sede ${sedeClave}` : ''}`.slice(0, 160), que_es: unaLinea(limpia.texto).slice(0, 200), contenido, origen: 'dueno',
     fecha_fuente: cuando, reconfirmado_en: cuando, plazo: null, vigente_hasta: null, version_de: vieja && !llegoTarde ? String(vieja.id) : null, huella: huella16(contenido),
     propiedad: 'propia', porque: `respuesta del dueño por ${n.canal}`, juzgado_por: 'regla', observado_en: cuando, atributo: campoManual ? `${PREFIJO_DE_ATRIBUTO}${PREFIJO_DEL_MANUAL}:${campoManual}` : `${PREFIJO_DE_ATRIBUTO}${temaNormal(n.tema)}`, sede: alcance || null,
     decision: vieja && !llegoTarde ? 'reemplaza' : 'suma', razon_de_decision: vieja && !llegoTarde ? campoManual ? `el dato nuevo del manual (campo ${campoManual}) reemplaza al anterior` : 'una respuesta nueva del dueño al mismo tema reemplaza a la anterior' : n.acumula ? 'nota que se suma (acumula): no reemplaza a otras del mismo tema' : llegoTarde ? 'llegó más tarde que otra más nueva: queda archivada' : 'primera respuesta del dueño a este tema',
@@ -338,7 +344,7 @@ export async function rutaDueno(deps: DepsDeDueno, cuerpo: unknown): Promise<Res
   }
   // el estado de la sede, también como dato de la sede (fila nueva; las anteriores no se borran): origen dueño, con su cita
   if (estadoDeSede) {
-    const cita = `cerebro_fichas:${fichaId} · ${n.canal} · ${cuando.slice(0, 10)} · «${limpia.texto.slice(0, 200)}»`
+    const cita = `cerebro_fichas:${fichaId} · ${n.canal} · ${cuando.slice(0, 10)} · «${unaLinea(limpia.texto).slice(0, 200)}»`
     const ws = await deps.db.from('client_sede_datos').insert({ client_id: n.client_id, sede_id: estadoDeSede.sede.id, campo: CAMPO_DEL_ESTADO, valor_texto: textoDeEstado(estadoDeSede.estado), valor_norm: { estado: estadoDeSede.estado }, fuente: 'dueno', fuente_ref: cita.slice(0, 500), alcance: 'sede', observado_en: cuando })
     if (ws.error) errores.push(`estado de la sede: ${ws.error.message}`)
   }

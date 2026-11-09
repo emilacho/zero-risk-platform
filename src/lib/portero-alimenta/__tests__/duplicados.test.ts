@@ -1,7 +1,7 @@
 /** PR de duplicados (14-oct): la misma línea en varias páginas es UNA unidad; el índice no repite; el puente va por pasadas de ≤ 40; lo viejo sin lector está retirado. US$ 0. */
 import { describe, expect, it } from 'vitest'
 import { MAX_TROZOS_A_ESCRIBIR_POR_PASADA, MAX_TROZOS_A_SACAR_POR_PASADA, reconciliarPuente, sinRepetidas, type FichaParaPuente } from '../puente'
-import { rutaClientes, rutaPuente } from '../rutas'
+import { claveDelRetiroDe, rutaClientes, rutaPuente } from '../rutas'
 import { unidadesDeRaspados } from '../unidades'
 import { crearBaseFalsa } from './base-falsa'
 import { POST as correrPOST } from '../../../app/api/brain/diario/correr/route'
@@ -63,6 +63,40 @@ describe('el puente va por pasadas (sin 504)', () => {
   const tablas = (n: number) => ({
     cerebro_fichas: Array.from({ length: n }, (_, i) => ({ id: `F${String(i).padStart(3, '0')}`, client_id: C, ref: `portero:sitio:${i}`, clase: 'texto', titulo: 't', contenido: `texto ${i}`, propiedad: 'propia', origen: 'su_fuente', descartada: false, retirada_en: null, huella: `h${i}`, observado_en: '2026-10-15T10:00:00Z' })),
     client_brain_chunks: [] as Array<Record<string, unknown>>,
+  })
+  it('el puente retira primero lo que la plataforma cerró; en seco solo lo dice', async () => {
+    const f = { id: 'R1', client_id: C, ref: 'client_historical_outputs:P', clase: 'texto', titulo: 't', contenido: 'x', retirada_en: null }
+    const t = () => ({ cerebro_fichas: [{ ...f }], client_brain_chunks: [] as Array<Record<string, unknown>>, client_historical_outputs: [{ id: 'P', client_id: C, status: 'rejected', provenance_tag: {} }], hitl_queue: [], plan_aprobaciones: [] })
+    const seco = crearBaseFalsa(t() as never)
+    const s = await rutaPuente({ db: seco.db, interruptores: ON }, { client_id: C, dry_run: true })
+    expect(s.body.retiradas_de_lo_cerrado).toMatchObject([{ ficha_id: 'R1' }])
+    expect(seco.escrituras).toEqual([])
+    const real = crearBaseFalsa(t() as never)
+    const r = await rutaPuente({ db: real.db, interruptores: ON, puente: async () => ({ escritos: 0, sacados: 0, errores: [] }) }, { client_id: C, dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' })
+    expect(r.body.retiradas_de_lo_cerrado).toMatchObject([{ ficha_id: 'R1' }])
+    expect(real.escrituras.filter((e) => e.tabla === 'cerebro_fichas' && e.op === 'update')).toHaveLength(1)
+  })
+  it('si el retiro no pudo leer el estado, el puente lo dice y responde 502', async () => {
+    const base = crearBaseFalsa({ cerebro_fichas: [], client_brain_chunks: [], client_historical_outputs: [], hitl_queue: [], plan_aprobaciones: [] } as never, { fallaEn: 'plan_aprobaciones' })
+    const r = await rutaPuente({ db: base.db, interruptores: ON }, { client_id: C, dry_run: true })
+    expect(r.status).toBe(502)
+    expect(String((r.body.errores as string[])[0])).toContain('estado en la plataforma')
+  })
+  it('sin poder leer el estado: una alarma con clave fija, en seco ninguna; al recuperarse, se cierra', async () => {
+    const alarmas: Array<[string, string]> = [], cierres: string[] = []
+    const avisos = { avisarIncidente: async (t: string, c: string) => { alarmas.push([t, c]) }, resolverIncidente: async (c: string) => { cierres.push(c) } }
+    const caida = crearBaseFalsa({ cerebro_fichas: [], client_brain_chunks: [], client_historical_outputs: [], hitl_queue: [], plan_aprobaciones: [] } as never, { fallaEn: 'plan_aprobaciones' })
+    await rutaPuente({ db: caida.db, interruptores: ON, ...avisos }, { client_id: C, dry_run: true })
+    expect([alarmas, cierres]).toEqual([[], []])
+    await rutaPuente({ db: caida.db, interruptores: ON, puente: async () => ({ escritos: 0, sacados: 0, errores: [] }), ...avisos }, { client_id: C, dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' })
+    expect(alarmas).toHaveLength(1)
+    expect(alarmas[0][1]).toBe('puente:estado-en-plataforma')
+    expect(alarmas[0][0]).toContain('no se están retirando')
+    expect(cierres).toEqual([])
+    const sana = crearBaseFalsa({ cerebro_fichas: [], client_brain_chunks: [], client_historical_outputs: [], hitl_queue: [], plan_aprobaciones: [] } as never)
+    await rutaPuente({ db: sana.db, interruptores: ON, puente: async () => ({ escritos: 0, sacados: 0, errores: [] }), ...avisos }, { client_id: C, dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' })
+    expect(alarmas).toHaveLength(1)
+    expect(cierres).toEqual(['puente:estado-en-plataforma', claveDelRetiroDe(C)]) // 05-nov · se cierra la común y la del cliente
   })
   it('203 pendientes se envían de 40 en 40: 6 pasadas, cada una dice cuánto QUEDA, y la última deja 0', async () => {
     const t = tablas(203)

@@ -413,6 +413,28 @@ export interface InformeDeAnalisisLeido {
 }
 export interface ArchivadoDelInforme { readonly ok: boolean; readonly detalle: string; readonly ficha_id?: string | null }
 
+interface IntentoQueSirvio { fallo: null; salida: string; leido: InformeDeAnalisisLeido; costo_usd: number }
+type IntentoDeAnalisis = IntentoQueSirvio | { fallo: string; costo_usd: number }
+
+/** un intento del analista: o trae algo legible (hallazgos, o «sin dato» declarado), o dice por qué falló. Un corte de tiempo también es una falla, no una caída de la puerta */
+async function intentoDeAnalisis(args: { pedir: (intento: 1 | 2) => Promise<RespuestaDelAgenteDeMercado>; leer: (salida: string) => InformeDeAnalisisLeido }, intento: 1 | 2): Promise<IntentoDeAnalisis> {
+  let r: RespuestaDelAgenteDeMercado
+  try { r = await args.pedir(intento) } catch (e) { return { fallo: `el analista no contestó · ${e instanceof Error ? e.message : String(e)}`, costo_usd: 0 } }
+  if (!r.ok) return { fallo: `el analista no contestó · ${r.error ?? 'sin detalle'}`, costo_usd: r.costo_usd }
+  const salida = String(r.salida ?? '').trim()
+  if (!salida) return { fallo: 'el analista devolvió vacío · no hay informe', costo_usd: r.costo_usd }
+  const leido = args.leer(salida)
+  if (leido.hallazgos === 0 && !leido.declara_sin_dato) {
+    return {
+      fallo: leido.lineas_sin_sosten
+        ? `el informe trae ${leido.lineas_sin_sosten} línea(s) de lista pero ninguna sostenida (sin cita del material ni fuente y fecha): no son hallazgos, son estimaciones · no se usa`
+        : 'el informe no trae hallazgos legibles (ninguna línea de lista) · no se usa',
+      costo_usd: r.costo_usd,
+    }
+  }
+  return { fallo: null, salida, leido, costo_usd: r.costo_usd }
+}
+
 /**
  * Canon canonical · UN analista de la mesa de análisis · mismo trato que `mercado`:
  * en ensayo NO se llama (US$ 0, `sin_respuesta` declarado); el informe se LEE sin
@@ -431,7 +453,9 @@ export async function brazoAnalisis(args: {
   rotulo: string
   dry_run: boolean
   esperados: { min: number; max: number }
-  pedir: () => Promise<RespuestaDelAgenteDeMercado>
+  pedir: (intento: 1 | 2) => Promise<RespuestaDelAgenteDeMercado>
+  /** si el primer intento falló: ¿hay tiempo y cupo para otro? Sin esto, no se reintenta */
+  segundoIntento?: () => { ok: true } | { ok: false; motivo: string }
   leer: (salida: string) => InformeDeAnalisisLeido
   archivar?: (informe: InformeDeAnalisisLeido) => Promise<ArchivadoDelInforme>
 }): Promise<RespuestaBrazo> {
@@ -448,19 +472,20 @@ export async function brazoAnalisis(args: {
           motivo: `NO SE MIRÓ DE VERDAD · fue un ensayo (dry-run) · el analista «${args.tipo}» (${args.agente}) no genera en seco y lo que devolviera NO sería informe · no se llamó, no se gastó ni se archivó`,
         }
       }
-      const r = await args.pedir()
-      if (!r.ok) return { hay: false as const, noSeMiro: true, motivo: `el analista no contestó · ${r.error ?? 'sin detalle'} · costo US$ ${r.costo_usd.toFixed(2)}` }
-      const salida = String(r.salida ?? '').trim()
-      if (!salida) return { hay: false as const, noSeMiro: true, motivo: 'el analista devolvió vacío · no hay informe' }
-      const leido = args.leer(salida)
+      // 05-nov (decisión de Lenovo) · el analista que falla se reintenta UNA vez; «sin dato» no es falla y no se reintenta. Si vuelve a fallar, se dice que no hubo informe: el plan lo declara, no lo inventa.
+      const primero = await intentoDeAnalisis(args, 1)
+      let vale = primero
+      let costo = primero.costo_usd
+      if (primero.fallo !== null) {
+        const permiso = args.segundoIntento ? args.segundoIntento() : { ok: false as const, motivo: 'no hay segundo intento en esta puerta' }
+        if (!permiso.ok) return { hay: false as const, noSeMiro: true, motivo: `no hubo informe: el analista no entregó y no se pudo reintentar · ${permiso.motivo} · ${primero.fallo}` }
+        vale = await intentoDeAnalisis(args, 2)
+        costo += vale.costo_usd
+        if (vale.fallo !== null) return { hay: false as const, noSeMiro: true, motivo: `no hubo informe: el analista falló en los 2 intentos · 1.º: ${primero.fallo} · 2.º: ${vale.fallo}` }
+      }
+      const { salida, leido } = vale as IntentoQueSirvio
       if (leido.hallazgos === 0) {
         if (leido.declara_sin_dato) return { hay: false as const, motivo: (args.tipo === 'escucha_x' ? 'sin material de X todavía: el cerebro aún no trae publicaciones de X · no es una falla · ' : `fui, miré y no hay: el analista «${args.tipo}» declaró «sin dato» y no estimó · `) + salida.slice(0, 200) }
-        return {
-          hay: false as const, noSeMiro: true,
-          motivo: leido.lineas_sin_sosten
-            ? `el informe trae ${leido.lineas_sin_sosten} línea(s) de lista pero ninguna sostenida (sin cita del material ni fuente y fecha): no son hallazgos, son estimaciones · no se usa`
-            : 'el informe no trae hallazgos legibles (ninguna línea de lista) · no se usa',
-        }
       }
       const fuera = leido.hallazgos < args.esperados.min || leido.hallazgos > args.esperados.max
       const avisos = [
@@ -482,7 +507,7 @@ export async function brazoAnalisis(args: {
           es_dato_del_cliente: false,
           citas: [...leido.citas],
           hallazgos: leido.hallazgos,
-          costo_usd: r.costo_usd,
+          costo_usd: costo,
           archivado,
           ...(avisos.length ? { aviso: avisos.join(' · ') } : {}),
         },
