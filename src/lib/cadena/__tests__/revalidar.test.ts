@@ -251,6 +251,46 @@ describe('revalidar · los 5 casos de CC7 (RESPUESTA 19:57Z)', () => {
   })
 })
 
+describe('revalidar · las pruebas de CC7 (CERTIFICACIÓN 20:09Z · raw/evidencia/2026-11-09-revalidar/cc7-casos-propios.test.ts)', () => {
+  async function base() {
+    const al = almacen()
+    const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+    const id = (c.cuerpo.campana as { id: string }).id
+    const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(A.estrategia) }, AHORA)
+    await briefAbrir(al, wf({ campana_id: id }), AHORA)
+    expect(await recibirBrief(al, entrega(id, 1, MALO), AHORA)).toMatchObject({ estado: 'devuelta' })
+    await briefAbrir(al, wf({ campana_id: id }), AHORA)
+    expect(await recibirBrief(al, entrega(id, 2, BRIEF), AHORA)).toMatchObject({ estado: 'validada' })
+    return { al, id }
+  }
+  it('camino REAL: la dirección devuelve la v2 → necesita_humano → revalidar se niega y no escribe', async () => {
+    const { al, id } = await base()
+    expect((await conceptoAbrir(al, wf({ campana_id: id }), AHORA)).status).toBe(200)
+    await recibirConcepto(al, { campana_id: id, version: 1, encargo_id: 'e', texto: '## Devolución del brief\n- el insight no se sostiene', costo_usd: 0.1, motivo: null, brief_devuelto: '- el insight no se sostiene' }, AHORA)
+    expect(al.campanas[0].estado).toBe('necesita_humano')
+    const f = JSON.stringify([al.campanas, al.briefsCreativos, al.esperas])
+    // aunque el motivo dijera lo del brief (camino briefAbrir), las guardas la frenan
+    for (const motivo of [al.campanas[0].estado_motivo, 'el brief creativo ya se devolvió 2 veces']) {
+      al.campanas[0].estado_motivo = motivo
+      const r = await briefRevalidar(al, wf({ campana_id: id }), AHORA)
+      expect(r.status).toBe(409)
+    }
+    al.campanas[0].estado_motivo = JSON.parse(f)[0][0].estado_motivo
+    expect(JSON.stringify([al.campanas, al.briefsCreativos, al.esperas])).toBe(f)
+  })
+  it('tanda > 1: vuelve a activa, no a calendario', async () => {
+    const { al, id } = await base()
+    const b = al.briefsCreativos.find((x) => x.version === 2)!
+    Object.assign(b, { estado: 'devuelta', leido: { ...b.leido, bloqueos: ['viejo'] } })
+    await ponerNecesitaHumano(al, al.campanas[0], 'el brief creativo se devolvió por código dos veces: viejo', AHORA)
+    ;(al as unknown as { filas: () => Promise<unknown[]> }).filas = async () => [{ estado: 'lista', tanda: 1 }]
+    const r = await briefRevalidar(al, wf({ campana_id: id }), AHORA)
+    expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
+    expect(al.campanas[0].estado).toBe('activa')
+  })
+})
+
 describe('revalidar · cableado', () => {
   it('la acción vive en la tabla de la ruta del brief', () => {
     expect(Object.keys(ACCIONES.brief)).toEqual(['abrir', 'entregar', 'revalidar'])
