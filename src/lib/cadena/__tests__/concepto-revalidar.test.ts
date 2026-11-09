@@ -262,6 +262,13 @@ describe('concepto/revalidar · la gran idea ya pagada se relee desde el libro d
     await expect(conceptoRevalidar(al, wf({ version: 1 }), AHORA)).rejects.toThrow('la bandeja no responde')
     expect(JSON.stringify({ c: al.campanas, k: al.conceptos })).toBe(antes)
     expect(nhVivas(al)).toHaveLength(1)
+    // 🟡 de CC7: ninguna espera de aprobación viva para una tarjeta que no existe
+    expect(al.esperas.filter((e) => e.campana_id === CAMP && e.objeto_tipo === TIPO_DE_ESPERA_DE_CONCEPTO && e.estado === 'viva')).toEqual([])
+    // y si se reintenta con la bandeja de vuelta, la espera (misma llave) revive y la tarjeta se abre
+    al.abrirTarjetaDeConcepto = AlmacenMemoria.prototype.abrirTarjetaDeConcepto.bind(al)
+    expect((await conceptoRevalidar(al, wf({ version: 1 }), AHORA)).cuerpo).toMatchObject({ pasa: true })
+    expect(al.esperas.filter((e) => e.campana_id === CAMP && e.objeto_tipo === TIPO_DE_ESPERA_DE_CONCEPTO).map((e) => e.estado)).toEqual(['viva'])
+    expect(al.tarjetas).toHaveLength(1)
   })
   it('🔴 la ruta: `concepto/revalidar` está en la tabla de acciones', () => {
     expect(ACCIONES.concepto.revalidar).toBe(conceptoRevalidar)
@@ -285,5 +292,24 @@ describe('conceptoVigente · una versión lista esperando a Emilio manda sobre l
     const al = await comoNaufrago({ v2: false })
     Object.assign(al.conceptos[0], { estado: 'lista', aprobacion: 'cambios', apunta_a: 'concepto' })
     expect((await conceptoParaElCalendario(al, al.campanas[0])).espera).toMatchObject({ falta: 'concepto', version: 1 })
+  })
+})
+
+// casos propios de CC7 (raw/evidencia/2026-11-09-concepto-con-aportes/cc7/cc7-casos-propios.test.snippet.ts) · copiados tal cual
+describe('CC7 · casos propios', () => {
+  it('CC7-1 · si la tarjeta falla, no queda viva la espera de aprobación del concepto', async () => {
+    const al = await comoNaufrago()
+    al.abrirTarjetaDeConcepto = async () => { throw new Error('la bandeja no responde') }
+    await expect(conceptoRevalidar(al, wf({ version: 1 }), AHORA)).rejects.toThrow()
+    const vivasDeConcepto = al.esperas.filter((e) => e.campana_id === CAMP && e.objeto_tipo !== 'necesita_humano' && e.estado === 'viva')
+    expect(vivasDeConcepto.map((e) => e.objeto_tipo + ':' + e.motivo)).toEqual([])
+  })
+  it('CC7-2 · el caso de HOY en producción: v2 lista y pendiente → revalidar v1 se niega sin escribir', async () => {
+    const al = await comoNaufrago()
+    al.conceptos.push({ ...structuredClone(al.conceptos[0]), version: 2, estado: 'lista', aprobacion: 'pendiente', motivo: null } as never)
+    const antes = JSON.stringify(al.conceptos)
+    const r = await conceptoRevalidar(al, wf({ version: 1 }), AHORA)
+    expect(r.status).toBe(409)
+    expect(JSON.stringify(al.conceptos)).toBe(antes)
   })
 })

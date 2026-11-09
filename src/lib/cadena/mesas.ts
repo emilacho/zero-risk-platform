@@ -301,7 +301,9 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
 export async function abrirAprobacionDelConcepto(al: Almacen, campana: Campana, version: number, leido: ConceptoLeido, costoUsd: number | null, todos: ConceptoGuardado[], ahora: string, nombreDelNegocio: string | null): Promise<string> {
   const p = { version, costo_usd: costoUsd }
   const hallazgos = hallazgosDelConcepto(leido)
-  await abrirEsperaDe(al, campana, TIPO_DE_ESPERA_DE_CONCEPTO, objetoDeEsperaDeConcepto(p.version), 'esperando la aprobación de Emilio sobre la gran idea', ahora, { fechaInicio: campana.fecha_inicio, zona: campana.zona_horaria }, `concepto:${campana.id}:v${p.version}`)
+  const espera = await abrirEsperaDe(al, campana, TIPO_DE_ESPERA_DE_CONCEPTO, objetoDeEsperaDeConcepto(p.version), 'esperando la aprobación de Emilio sobre la gran idea', ahora, { fechaInicio: campana.fecha_inicio, zona: campana.zona_horaria }, `concepto:${campana.id}:v${p.version}`)
+  // 09-nov (🟡 de CC7 a #960): una vuelta atrás de `concepto/revalidar` CANCELA esta espera; si después se reintenta, la misma llave devuelve la cancelada: se revive
+  if (espera.estado !== 'viva') await al.actualizarEspera(espera.id, { estado: 'viva' })
   const vueltasUsadas = cuentaDe(todos, (x) => x.aprobacion === 'cambios')
   const resumen = resumenDelBanco(leido)
   const hitl_id = await al.abrirTarjetaDeConcepto({

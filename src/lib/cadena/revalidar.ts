@@ -18,7 +18,8 @@
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, EsperaFila } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { hallazgosDelBrief, leerBriefCreativo } from './brief-creativo'
-import { abrirAprobacionDelConcepto, MOTIVO_CAMBIOS_DE_EMILIO, siguienteDespuesDe, tandaQueEspera } from './mesas'
+import { abrirAprobacionDelConcepto, MOTIVO_CAMBIOS_DE_EMILIO, objetoDeEsperaDeConcepto, siguienteDespuesDe, tandaQueEspera, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
+import { resolverEsperas } from './nucleo'
 import { insumosDesdeEstrategia, leerConcepto } from './conceptos'
 import { textoParaLaCadena } from '../oficina/mesa/de-la-cadena'
 
@@ -195,6 +196,8 @@ export async function conceptoRevalidar(al: Almacen, cuerpo: Record<string, unkn
     await abrirAprobacionDelConcepto(al, campana, version, leido, fila.costo_usd ?? null, todos, ahora, ctx?.nombreDelNegocio ?? null)
   } catch (e) {
     await al.actualizarConcepto(c.id, version, previoConcepto)
+    // 🟡 de CC7: la espera de aprobación pudo abrirse antes de que fallara la tarjeta; sin tarjeta no hay nada que recordarle a Emilio
+    await resolverEsperas(al, c.id, TIPO_DE_ESPERA_DE_CONCEPTO, objetoDeEsperaDeConcepto(version), 'cancelada')
     if (campanaMovida) await al.actualizarCampanaSi(c.id, vuelveA, { estado: c.estado, estado_motivo: c.estado_motivo })
     for (const v of vivas) await al.actualizarEspera(v.id, { estado: 'viva' })
     throw e
