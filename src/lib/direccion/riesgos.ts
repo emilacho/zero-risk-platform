@@ -177,7 +177,7 @@ export async function leerRiesgos(c: Contexto) {
     riesgos.push({ id: `alerta:${String(a.clave)}:${String(a.abierto_en)}`, gravedad: gravedadDelTitulo(titulo), categoria: 'incidente', titulo: sinSecretos(titulo, 300) ?? 'Alerta abierta', detalle: sinSecretos(a.ultimo_detalle), client_id: String(a.clave).match(UUID_EN_TEXTO)?.[0] ?? null, desde: texto(a.ultima_en) ?? texto(a.abierto_en), fuente: 'cerebro_alertas' })
   }
   const yaContados = new Set(reconciliaciones.map((r) => String(r.dispatch_key)))
-  for (const r of reconciliaciones) riesgos.push({ id: `reconciliacion:${String(r.dispatch_key)}`, gravedad: gravedadDeSeveridad(r.severidad), categoria: 'falla', titulo: sinSecretos(r.que, 300) ?? `Despacho con problema: ${String(r.clasificacion)}`, detalle: `empleado ${String(r.agente ?? 'sin dato')} · ${String(r.clasificacion)}`, client_id: texto(r.cliente), desde: texto(r.primera_vez), fuente: 'agent_dispatch_reconciliations' })
+  for (const r of reconciliaciones) riesgos.push({ id: `reconciliacion:${String(r.dispatch_key)}`, gravedad: gravedadDeSeveridad(r.severidad), categoria: 'falla', titulo: sinSecretos(r.que, 300) ?? 'Un trabajo de un empleado tuvo un problema', detalle: `Empleado: ${String(r.agente ?? 'sin dato')} (${String(r.clasificacion)})`, client_id: texto(r.cliente), desde: texto(r.primera_vez), fuente: 'agent_dispatch_reconciliations' })
   for (const d of despachos) {
     if (yaContados.has(String(d.dispatch_key))) continue
     const cuando = Date.parse(String(d.created_at))

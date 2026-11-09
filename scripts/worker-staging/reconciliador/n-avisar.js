@@ -9,7 +9,7 @@ const QUE_HACER = {
 }
 const lineas = a.avisos.slice(0, 8).map((x) => {
   const inv = x.invocacion ? ' · invocación `' + String(x.invocacion.id || '?').slice(0, 8) + '` (' + Math.round((x.invocacion.duracion_ms || 0) / 1000) + ' s · US$ ' + x.invocacion.costo_usd + ')' : ''
-  return '• *' + x.clasificacion + '* — ' + x.que + '\n   agente `' + x.agente + '` · ejecución <' + base + '/workflow/_/executions/' + x.ejecucion + '|' + x.ejecucion + '> · edad ' + Math.round(x.edad_s / 60) + ' min · intentos de vuelta ' + x.intentos + (x.ultimo_intento ? ' (' + x.ultimo_intento + ')' : '') + inv + '\n   → ' + (QUE_HACER[x.clasificacion] || 'revisar')
+  return '• *' + x.que + '* _(' + x.clasificacion + ')_\n   agente `' + x.agente + '` · ejecución <' + base + '/workflow/_/executions/' + x.ejecucion + '|' + x.ejecucion + '> · edad ' + Math.round(x.edad_s / 60) + ' min · intentos de vuelta ' + x.intentos + (x.ultimo_intento ? ' (' + x.ultimo_intento + ')' : '') + inv + '\n   → ' + (QUE_HACER[x.clasificacion] || 'revisar')
 })
-const extra = a.avisos.length > 8 ? '\n… y ' + (a.avisos.length - 8) + ' más (ver agent_dispatch_reconciliations)' : ''
-return [{ json: { ...a, titulo: 'Despachos huérfanos: ' + a.avisos.length + ' nuevo(s)', texto: lineas.join('\n') + extra, claves: a.avisos.map((x) => x.dispatch_key) } }]
+const extra = a.avisos.length > 8 ? '\n… y ' + (a.avisos.length - 8) + ' más (técnico · agent_dispatch_reconciliations)' : ''
+return [{ json: { ...a, titulo: 'Trabajos con problema: ' + a.avisos.length + ' nuevo(s)', texto: lineas.join('\n') + extra, claves: a.avisos.map((x) => x.dispatch_key) } }]

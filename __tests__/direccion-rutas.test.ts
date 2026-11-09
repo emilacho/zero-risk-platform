@@ -194,7 +194,7 @@ describe('riesgos', () => {
   it('junta incidentes, fallas, pausas e interruptores con su gravedad; lo más grave arriba', async () => {
     const db = base()
       .semilla('cerebro_alertas', [{ clave: `pausa:${C1}`, titulo: '🟠 Pausado', ultimo_detalle: 'detalle', abierto_en: '2026-10-30T00:00:00Z' }, { clave: 'x', titulo: '🔴 Grave', abierto_en: '2026-10-31T00:00:00Z' }, { clave: 'y', titulo: '🟡 Leve', abierto_en: '2026-10-31T00:00:00Z' }, { clave: 'z', titulo: 'cerrada', abierto_en: '2026-10-31T00:00:00Z', cerrado_en: '2026-10-31T01:00:00Z' }])
-      .semilla('agent_dispatch_reconciliations', [{ dispatch_key: 'dispatch:w:a:1', agente: 'a', cliente: C2, clasificacion: 'termino_y_no_entrego', severidad: 'alta', que: 'terminó y no entregó', primera_vez: '2026-10-29T00:00:00Z' }, { dispatch_key: 'r', clasificacion: 'c', severidad: 'info', resuelta_el: '2026-10-29T00:00:00Z' }])
+      .semilla('agent_dispatch_reconciliations', [{ dispatch_key: 'dispatch:w:a:1', agente: 'a', cliente: C2, clasificacion: 'termino_y_no_entrego', severidad: 'alta', que: 'terminó y no entregó', primera_vez: '2026-10-29T00:00:00Z' }, { dispatch_key: 'r', clasificacion: 'c', severidad: 'info', resuelta_el: '2026-10-29T00:00:00Z' }, { dispatch_key: 'sin-titulo', agente: 'b', clasificacion: 'nunca_arranco', severidad: 'alta', que: '   ', primera_vez: '2026-10-29T00:00:00Z' }])
       .semilla('agent_dispatches', [
         { dispatch_key: 'dispatch:w:a:1', agent_name: 'a', status: 'running', created_at: '2026-10-01T00:00:00Z' },
         { dispatch_key: 'viejo', agent_name: 'v', status: 'running', created_at: '2026-10-01T00:00:00Z', client_id: C1 },
@@ -214,8 +214,10 @@ describe('riesgos', () => {
     expect(g(`alerta:pausa:${C1}:2026-10-30T00:00:00Z`)).toMatchObject({ gravedad: 2, categoria: 'incidente', client_id: C1, cliente: 'Uno' })
     expect(g('alerta:x:2026-10-31T00:00:00Z')?.gravedad).toBe(3); expect(g('alerta:y:2026-10-31T00:00:00Z')?.gravedad).toBe(1)
     expect(r.riesgos.filter((x) => x.titulo === 'cerrada')).toHaveLength(0)
-    expect(g('reconciliacion:dispatch:w:a:1')).toMatchObject({ gravedad: 3, cliente: 'Dos', titulo: 'terminó y no entregó' })
+    expect(g('reconciliacion:dispatch:w:a:1')).toMatchObject({ gravedad: 3, cliente: 'Dos', titulo: 'terminó y no entregó', detalle: 'Empleado: a (termino_y_no_entrego)' })
     expect(g('reconciliacion:r')).toBeUndefined()
+    // 06-nov · menor de CC7 en #941: sin título en la fila, el respaldo también va en lenguaje simple (nunca «Despacho con problema: clave»)
+    expect(g('reconciliacion:sin-titulo')).toMatchObject({ titulo: 'Un trabajo de un empleado tuvo un problema', detalle: 'Empleado: b (nunca_arranco)' })
     expect(g('despacho:dispatch:w:a:1')).toBeUndefined() // ya contado por su reconciliación
     expect(g('despacho:viejo')?.titulo).toContain('atascado'); expect(g('despacho:reciente')).toBeUndefined()
     expect(g('despacho:err')?.titulo).toContain('error'); expect(g('despacho:errviejo')).toBeUndefined(); expect(g('despacho:ok')).toBeUndefined()
