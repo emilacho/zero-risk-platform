@@ -3,7 +3,7 @@
  * «Mismo tema» = mismo `pregunta_id` o el mismo texto normalizado. Un tema parecido no frena una pregunta, no reemplaza una respuesta y no se archiva por tema: se muestra APARTE para que el agente razone.
  */
 import { describe, expect, it } from 'vitest'
-import { esElMismoTema, esTemaParecido, parecidaDeLaFicha, rutaDueno, rutaLeerDueno, temaNormal, type DepsDeDueno } from '../dueno'
+import { esElMismoTema, esExactamenteElMismoTema, esTemaParecido, parecidaDeLaFicha, rutaDueno, rutaLeerDueno, temaNormal, type DepsDeDueno } from '../dueno'
 import { crearBaseFalsa } from './base-falsa'
 import { DIEZ_CLIENTES, type ClienteSintetico } from './diez-clientes.fixtures'
 import { tablasDe, type T } from './diez-clientes.tablas'
@@ -30,17 +30,17 @@ describe('la tabla del aviso: parecido no es el mismo', () => {
   const PARECIDOS = [['ventas', 'ventas temporada baja'], ['costo', 'costo de envio'], ['ticket', 'ticket real'], ['clientes', 'clientes turistas vs locales'], ['comision pedidosya', 'comision pedidosya temporada baja'], ['presupuesto semanal pauta', 'presupuesto de pauta']]
   for (const [a, b] of PARECIDOS) {
     it(`«${a}» y «${b}»: parecidos, no el mismo (en los dos sentidos)`, () => {
-      expect(esElMismoTema(a, b)).toBe(false); expect(esElMismoTema(b, a)).toBe(false)
+      expect(esExactamenteElMismoTema(a, b)).toBe(false); expect(esExactamenteElMismoTema(b, a)).toBe(false)
       expect(esTemaParecido(a, b)).toBe(true); expect(esTemaParecido(b, a)).toBe(true)
     })
   }
   for (const [a, b] of [['presupuesto de pauta', 'presupuesto de sueldos'], ['ventas temporada baja', 'ventas temporada alta']]) {
-    it(`«${a}» y «${b}»: ni el mismo ni parecidos`, () => { expect(esElMismoTema(a, b)).toBe(false); expect(esTemaParecido(a, b)).toBe(false) })
+    it(`«${a}» y «${b}»: ni el mismo ni parecidos`, () => { expect(esExactamenteElMismoTema(a, b)).toBe(false); expect(esTemaParecido(a, b)).toBe(false) })
   }
   it('el mismo tema normalizado no se ofrece como parecido; un tema vacío no es nada', () => {
-    expect(esElMismoTema('Ventas  Temporada BAJA', 'ventas temporada baja')).toBe(true)
+    expect(esExactamenteElMismoTema('Ventas  Temporada BAJA', 'ventas temporada baja')).toBe(true)
     expect(esTemaParecido('Ventas  Temporada BAJA', 'ventas temporada baja')).toBe(false)
-    expect(esElMismoTema('', '')).toBe(false); expect(esElMismoTema('···', '---')).toBe(false); expect(esTemaParecido('', 'x')).toBe(false)
+    expect(esExactamenteElMismoTema('', '')).toBe(false); expect(esExactamenteElMismoTema('···', '---')).toBe(false); expect(esTemaParecido('', 'x')).toBe(false)
   })
   it('la forma de una parecida: tema, respuesta y fecha; sin fecha propia usa la de la ficha', () => {
     expect(parecidaDeLaFicha({ id: 'f', observado_en: '2026-01-01', provenance_tag: { datos: { tema: 't', respuesta: 'r', respondido_en: '2026-02-02' } } })).toEqual({ ficha_id: 'f', tema: 't', respuesta: 'r', fecha: '2026-02-02' })
@@ -271,5 +271,14 @@ describe('los límites de lo parecido', () => {
     await rutaDueno(m.deps, preguntar(c, 'frecuencia visita'))
     await rutaDueno(m.deps, responder(c, 'frecuencia_visita', 'una vez por semana'))
     expect(m.t.cerebro_dueno_preguntas[0]).toMatchObject({ estado: 'respondida' })
+  })
+})
+
+describe('la regla de la plataforma (#939) no cambia con la puerta del cerebro', () => {
+  it('esElMismoTema sigue siendo «palabras en común»; la puerta usa la exacta', () => {
+    expect(esElMismoTema('presupuesto de pauta', 'Pauta: presupuesto')).toBe(true)
+    expect(esExactamenteElMismoTema('presupuesto de pauta', 'Pauta: presupuesto')).toBe(false)
+    expect(esElMismoTema('presupuesto de pauta', 'presupuesto de sueldos')).toBe(false)
+    expect(esElMismoTema('', 'x')).toBe(false)
   })
 })

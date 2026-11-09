@@ -3,7 +3,7 @@
  * respuesta → ficha «confirmada por el dueño» · reemplazo por tema · sede · tarde/repetida · privacidad · preguntas pendientes que no se repiten · lectura · resumen vivo.
  */
 import { describe, expect, it } from 'vitest'
-import { descripcionDeRespuesta, esElMismoTema, esTemaParecido, palabrasDelTema, rutaDueno, rutaLeerDueno, sinDatosPersonales, temaNormal, type DepsDeDueno } from '../dueno'
+import { descripcionDeRespuesta, esExactamenteElMismoTema, esTemaParecido, palabrasDelTema, rutaDueno, rutaLeerDueno, sinDatosPersonales, temaNormal, type DepsDeDueno } from '../dueno'
 import { armarResumen, cargarEntradaDelResumen } from '../resumen-vivo'
 import { crearBaseFalsa } from './base-falsa'
 import { DIEZ_CLIENTES, type ClienteSintetico } from './diez-clientes.fixtures'
@@ -29,17 +29,17 @@ describe('el tema es texto libre: «el mismo tema» es el mismo texto normalizad
   it('mayúsculas, tildes, signos y espacios no cambian el tema; conectores, orden y plural lo vuelven parecido, no el mismo', () => {
     expect(palabrasDelTema('Presupuesto de pauta')).toEqual(['pauta', 'presupuesto'])
     expect(temaNormal('pauta, presupuesto')).toBe('pauta-presupuesto')
-    expect(esElMismoTema('Presupuesto  de   PAUTA', 'presupuesto de pauta')).toBe(true)
-    expect(esElMismoTema('afluencia al mediodía', 'afluencia al mediodia')).toBe(true)
-    expect(esElMismoTema('frecuencia_visita', 'frecuencia visita')).toBe(true)
-    expect(esElMismoTema('presupuesto de pauta', 'Pauta: presupuesto')).toBe(false)
+    expect(esExactamenteElMismoTema('Presupuesto  de   PAUTA', 'presupuesto de pauta')).toBe(true)
+    expect(esExactamenteElMismoTema('afluencia al mediodía', 'afluencia al mediodia')).toBe(true)
+    expect(esExactamenteElMismoTema('frecuencia_visita', 'frecuencia visita')).toBe(true)
+    expect(esExactamenteElMismoTema('presupuesto de pauta', 'Pauta: presupuesto')).toBe(false)
     expect(esTemaParecido('presupuesto de pauta', 'Pauta: presupuesto')).toBe(true)
-    expect(esElMismoTema('costo por plato', 'costo del plato')).toBe(false)
+    expect(esExactamenteElMismoTema('costo por plato', 'costo del plato')).toBe(false)
     expect(esTemaParecido('costo por plato', 'costo del plato')).toBe(true)
     expect(esTemaParecido('presupuesto de pauta', 'presupuesto de pauta')).toBe(false)
-    expect(esElMismoTema('presupuesto de pauta', 'presupuesto de sueldos')).toBe(false)
-    expect(esElMismoTema('afluencia', 'herramientas')).toBe(false)
-    expect(esElMismoTema('', 'x')).toBe(false)
+    expect(esExactamenteElMismoTema('presupuesto de pauta', 'presupuesto de sueldos')).toBe(false)
+    expect(esExactamenteElMismoTema('afluencia', 'herramientas')).toBe(false)
+    expect(esExactamenteElMismoTema('', 'x')).toBe(false)
   })
   it('privacidad: correos, teléfonos y @usuarios se omiten; las cifras del negocio no', () => {
     const r = sinDatosPersonales('Escríbele a juan.perez@mail.com o al +593 99 123 4567, su cuenta es @juanp. Gasto 200 por semana, costo 2,10')
