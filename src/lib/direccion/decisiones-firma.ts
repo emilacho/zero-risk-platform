@@ -17,6 +17,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** hoy nada espera la firma: el código deja `sin_firma` y el plan sigue (`finanzas/firma.ts`) */
 export const DESTRABA_DE_LA_FIRMA = 'El plan no espera esta firma: queda constancia de que diste por buenas estas cifras.'
+/** 09-nov · «Uso» y «Desbloquea» al frente de la tarjeta, en una o dos palabras: los escribe la oficina junto a su texto largo, nunca un corte automático */
+export const PARA_QUE_CORTO_DE_LA_FIRMA = 'Validar cifras'
+export const DESTRABA_CORTO_DE_LA_FIRMA = 'Solo constancia'
 
 /** el código también deja sin firma por falta de acuerdo o por no verificar al jefe. Los críticos se nombran solo si constan en el cierre */
 export function paraQueDeLaFirma(criticos: number | null | undefined): string {

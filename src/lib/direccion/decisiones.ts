@@ -7,10 +7,10 @@ import { planEsperaAlManual } from '../manual/manual-primero'
 import { TOPE_REESCRITURA_USD } from '../oficina/tablero/plan'
 import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
-import { AL_EDITAR_LA_FIRMA, DESTRABA_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, sePuedeEditar, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
+import { AL_EDITAR_LA_FIRMA, DESTRABA_CORTO_DE_LA_FIRMA, DESTRABA_DE_LA_FIRMA, PARA_QUE_CORTO_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, sePuedeEditar, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
-import { DESTRABA_CAMPANA_DETENIDA, PARA_QUE_CAMPANA_DETENIDA, TITULO_CAMPANA_DETENIDA, leerCampanasDetenidas, type CampanaDetenida } from './decisiones-campanas'
-import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, MAX_INTENTOS_DE_DESPERTAR, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, loDescartoElDueno, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
+import { DESTRABA_CAMPANA_DETENIDA, DESTRABA_CORTO_CAMPANA_DETENIDA, PARA_QUE_CAMPANA_DETENIDA, PARA_QUE_CORTO_CAMPANA_DETENIDA, TITULO_CAMPANA_DETENIDA, leerCampanasDetenidas, type CampanaDetenida } from './decisiones-campanas'
+import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, MAX_INTENTOS_DE_DESPERTAR, DESTRABA_CORTO_DE_LA_PAUSA, PARA_QUE_CORTO_DE_LA_PAUSA, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, loDescartoElDueno, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
 
 export type TipoDecision = 'plan' | 'gran_idea' | 'pieza' | 'revision' | 'pregunta_al_dueno' | 'pregunta_de_finanzas' | 'firma_de_finanzas'
 export interface Decision {
@@ -42,6 +42,9 @@ export interface Decision {
   supuesto?: string
   para_que?: string
   destraba?: string
+  /** 09-nov · los mismos en una o dos palabras, para el frente de la tarjeta. Solo vienen junto a su largo, y los escribe la oficina que crea la decisión (nunca un corte). Sin ellos, el tablero muestra la primera frase */
+  para_que_corto?: string
+  destraba_corto?: string
   /** true = un trabajo está parado por esto. false = consta que no. Sin el campo: no se pudo saber */
   detiene?: boolean
   /** el dueño ya contestó y el plan no volvió a arrancar: por eso esta decisión volvió a la lista */
@@ -131,11 +134,11 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     return qs ? qs.some((q) => q.id === String(p.id) || temaNormal(q.tema) === temaNormal(p.tema)) : null
   }
   const faltanDe = (client: unknown) => preguntas.filter((p) => String(p.client_id) === String(client) && esDeLaPausa(p) === true).length
-  const destrabaDe = (client: unknown) => { const n = faltanDe(client); return n > 0 ? { destraba: destrabaDeLaPausa(n) } : {} }
+  const destrabaDe = (client: unknown) => { const n = faltanDe(client); return n > 0 ? { destraba: destrabaDeLaPausa(n), destraba_corto: DESTRABA_CORTO_DE_LA_PAUSA } : {} }
   const FINANCIERA = { oficina: 'financiera', agente: null }
   const loQueSeFirma = (t: Fila) => {
     const f = firmas.get(String(t.id)), editar = sePuedeEditar(t), cifras = cifrasDelBloque(t.bloque, f?.unidad ?? null, editar)
-    return { permite: (editar ? ['aceptar', 'editar'] : ['aceptar']) as AccionDeDecision[], ...(editar ? { al_editar: AL_EDITAR_LA_FIRMA } : {}), para_que: paraQueDeLaFirma(f?.abiertos), destraba: DESTRABA_DE_LA_FIRMA, detiene: false, ...(cifras.length ? { cifras } : {}), ...(f?.criticos.length ? { criticos: f.criticos } : {}) }
+    return { permite: (editar ? ['aceptar', 'editar'] : ['aceptar']) as AccionDeDecision[], ...(editar ? { al_editar: AL_EDITAR_LA_FIRMA } : {}), para_que: paraQueDeLaFirma(f?.abiertos), para_que_corto: PARA_QUE_CORTO_DE_LA_FIRMA, destraba: DESTRABA_DE_LA_FIRMA, destraba_corto: DESTRABA_CORTO_DE_LA_FIRMA, detiene: false, ...(cifras.length ? { cifras } : {}), ...(f?.criticos.length ? { criticos: f.criticos } : {}) }
   }
   // 05-nov · corrección de Lenovo: qué se firma. Si esto no se lee, un texto que vale en todos los casos: no afecta a `completo`
   const firmas = tableros.length ? await leerLoQueSeFirma(db, tableros) : new Map<string, LoQueSeFirma>()
@@ -152,7 +155,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     // 05-nov · corrección de Lenovo: un plan que ya superó otro no pide firma. Sin plan vigente conocido se muestra
     const vigente = vigentes?.get(String(c.client_id))
     if (vigente && vigente.id !== String(c.plan_id)) { reemplazadas++; continue }
-    crudas.push({ id: String(c.plan_id), tipo: 'plan', subtipo: 'compuerta', fuente: 'plan_aprobaciones', client_id: texto(c.client_id), titulo: `Plan de 90 días, versión ${Number(c.version) || 1}: espera tu decisión`, desde: texto(c.creado_en), vence: null, prioridad: null, decidir: { ruta: '/nuevo', accion: 'plan-aprobar' }, costo_usd: null, costo_nota: COSTO_PLAN, destraba: 'Al aprobar arrancan el PDF y el brief.', detiene: true })
+    crudas.push({ id: String(c.plan_id), tipo: 'plan', subtipo: 'compuerta', fuente: 'plan_aprobaciones', client_id: texto(c.client_id), titulo: `Plan de 90 días, versión ${Number(c.version) || 1}: espera tu decisión`, desde: texto(c.creado_en), vence: null, prioridad: null, decidir: { ruta: '/nuevo', accion: 'plan-aprobar' }, costo_usd: null, costo_nota: COSTO_PLAN, destraba: 'Al aprobar arrancan el PDF y el brief.', destraba_corto: 'PDF y brief', detiene: true })
   }
   let ensayos = 0
   for (const h of bandeja) {
@@ -165,7 +168,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     const m = TIPOS_HITL[subtipo] ?? { tipo: 'revision' as const, ruta: null, accion: null }
     crudas.push({ id: String(h.id), tipo: m.tipo, subtipo, fuente: 'hitl_queue', client_id: texto(h.client_id), titulo: sinSecretos(h.title ?? h.output_preview, 300) ?? `Revisión pendiente (${subtipo})`, desde: texto(h.created_at), vence: texto(h.expires_at), prioridad: texto(h.priority), decidir: { ruta: m.ruta ?? RUTA_POR_DOCUMENTO[String(h.documento)] ?? null, accion: m.accion }, costo_usd: null, costo_nota: m.tipo === 'plan' ? 'aprobar no gasta por sí mismo' : null })
   }
-  for (const p of enPausa) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_en_pausa', fuente: 'esperas_del_dueno', client_id: texto(p.client_id), titulo: 'El plan está en pausa: la oficina financiera espera tus respuestas, que están en esta lista', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, para_que: PARA_QUE_DE_LA_PAUSA, ...destrabaDe(p.client_id), detiene: true })
+  for (const p of enPausa) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_en_pausa', fuente: 'esperas_del_dueno', client_id: texto(p.client_id), titulo: 'El plan está en pausa: la oficina financiera espera tus respuestas, que están en esta lista', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, para_que: PARA_QUE_DE_LA_PAUSA, para_que_corto: PARA_QUE_CORTO_DE_LA_PAUSA, ...destrabaDe(p.client_id), detiene: true })
   for (const e of noVolvieronVigentes) crudas.push({ id: String(e.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_no_volvio', fuente: 'esperas_del_dueno', client_id: texto(e.client_id), titulo: TITULO_NO_VOLVIO, desde: texto(e.soltada_en) ?? texto(e.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, detiene: true, volvio: { motivo: motivoDeNoVolver(e) } })
   for (const p of preguntas) {
     const oficina = texto(p.oficina), dePausa = esDeLaPausa(p), supuesto = texto(p.supuesto)
@@ -176,12 +179,12 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
       ...(supuesto ? { supuesto } : {}),
       ...(oficina ? { pregunta_de: { oficina, agente: texto(p.agente) } } : {}),
       ...(dePausa === null ? {} : { detiene: dePausa }),
-      ...(dePausa ? { para_que: PARA_QUE_DE_LA_PAUSA, ...destrabaDe(p.client_id) } : {}),
+      ...(dePausa ? { para_que: PARA_QUE_DE_LA_PAUSA, para_que_corto: PARA_QUE_CORTO_DE_LA_PAUSA, ...destrabaDe(p.client_id) } : {}),
     })
   }
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA })
   // 09-nov · C · las campañas que la cadena dejó esperando a una persona. Vencen con su espera: arriba si la espera vence pronto
-  for (const { fila: c, campana } of await leerCampanasDetenidas(db, fuentes)) crudas.push({ id: String(c.id), tipo: 'plan', subtipo: 'campana_necesita_humano', fuente: 'cadena_campanas', client_id: texto(c.client_id), titulo: TITULO_CAMPANA_DETENIDA, desde: texto(c.desde) ?? texto(c.actualizada_en), vence: campana.espera?.vence_en ?? null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: 'avisar no gasta; reabrir tampoco, y lo que sigue gasta con sus topes', permite: [], detiene: true, para_que: PARA_QUE_CAMPANA_DETENIDA, destraba: DESTRABA_CAMPANA_DETENIDA, campana })
+  for (const { fila: c, campana } of await leerCampanasDetenidas(db, fuentes)) crudas.push({ id: String(c.id), tipo: 'plan', subtipo: 'campana_necesita_humano', fuente: 'cadena_campanas', client_id: texto(c.client_id), titulo: TITULO_CAMPANA_DETENIDA, desde: texto(c.desde) ?? texto(c.actualizada_en), vence: campana.espera?.vence_en ?? null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: 'avisar no gasta; reabrir tampoco, y lo que sigue gasta con sus topes', permite: [], detiene: true, para_que: PARA_QUE_CAMPANA_DETENIDA, para_que_corto: PARA_QUE_CORTO_CAMPANA_DETENIDA, destraba: DESTRABA_CAMPANA_DETENIDA, destraba_corto: DESTRABA_CORTO_CAMPANA_DETENIDA, campana })
   for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, pregunta_de: FINANCIERA, ...loQueSeFirma(t) })
 
   const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas, esperan_el_manual: 0, planes_ya_superados: sueltas.length - noVolvieronVigentes.length }

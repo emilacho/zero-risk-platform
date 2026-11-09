@@ -12,6 +12,9 @@ const TOPE = 50
 
 export const TITULO_CAMPANA_DETENIDA = 'La campaña está detenida: necesita que alguien la destrabe'
 export const PARA_QUE_CAMPANA_DETENIDA = 'La cadena no puede seguir sola con esta campaña. Hasta que se destrabe no se escribe el brief, no sesiona la gran idea y no sale ninguna publicación.'
+/** 09-nov · los mismos, en una o dos palabras (al frente de la tarjeta). Escritos aquí junto al largo, nunca recortados */
+export const PARA_QUE_CORTO_CAMPANA_DETENIDA = 'Seguir la campaña'
+export const DESTRABA_CORTO_CAMPANA_DETENIDA = 'Rearmar la campaña'
 export const DESTRABA_CAMPANA_DETENIDA = 'Reabrirla la vuelve a armar desde la estrategia. Reabrir no gasta; lo que sigue gasta con sus topes de siempre.'
 export const AL_VENCER: Record<string, string> = { pausada: 'si nadie la destraba antes, la campaña queda en pausa sola' }
 
