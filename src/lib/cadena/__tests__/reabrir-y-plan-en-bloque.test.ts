@@ -220,6 +220,21 @@ describe('E · reabrir la campaña en el mismo lugar', () => {
   it('la ruta conoce la acción', () => {
     expect(ACCIONES.campanas.reabrir).toBe(reabrirCampana)
   })
+  it('🔴 M14 (CC7): reabrir una campaña de PRÁCTICA deja el sobre en seco (dry_run true): nunca lanza corridas reales que gastan', async () => {
+    const al = almacen()
+    const r = await abrirCampana(al, { ...wf(), client_id: A.clientId, plan_id: 'plan-1', seco: true, dias_de_campana: 90, sala_ref: { _journey_id: 'journey-1' } }, '2026-11-06T11:21:00Z')
+    const c = (r.cuerpo as { campana: import('../almacen').Campana }).campana
+    expect(c.seco).toBe(true)
+    await ponerNecesitaHumano(al, c, 'prueba', '2026-11-06T11:23:08Z')
+    const re = await reabrirCampana(al, { ...wf(), campana_id: c.id }, '2026-11-09T15:00:00Z')
+    expect(re.status).toBe(200)
+    expect(al.sobresEmitidos).toHaveLength(1)
+    expect((al.sobresEmitidos[0] as { payload: { dry_run: unknown } }).payload.dry_run).toBe(true)
+    // y la real, en real (la misma regla al revés)
+    const real = await campanaDetenida()
+    await reabrirCampana(real.al, { ...wf(), campana_id: real.id }, '2026-11-09T15:00:00Z')
+    expect((real.al.sobresEmitidos[0] as { payload: { dry_run: unknown } }).payload.dry_run).toBe(false)
+  })
   it('hoyEnZona: el día del cliente, no el de UTC', () => {
     expect(hoyEnZona('2026-11-10T03:00:00Z', 'America/Guayaquil')).toBe('2026-11-09')
     expect(hoyEnZona('2026-11-10T03:00:00Z', 'UTC')).toBe('2026-11-10')
