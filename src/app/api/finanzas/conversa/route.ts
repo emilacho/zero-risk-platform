@@ -86,6 +86,7 @@ export async function POST(request: Request) {
         canal: canalDelBuzon,
         slack: slackMdPuerto({ token: process.env.SLACK_BOT_TOKEN ?? '', dueno_id: P.emilio_id, ...(canalDelBuzon ? { canal: canalDelBuzon } : {}) }),
         cerebro: cerebroDelDueno({ base: baseDelCerebro(process.env), llave: process.env.INTERNAL_API_KEY ?? '', workflow_id: c.workflow_id, workflow_execution_id: c.workflow_execution_id, ...(cfg.preguntas_slack === 'registra' ? { canal_etiqueta: ETIQUETA_DE_TU_OFICINA } : canalDelBuzon ? { canal_etiqueta: 'canal privado de Slack «buzon-de-preguntas»' } : {}) }),
+        modelo: P.modelo,
         modo: cfg.preguntas_slack,
         ahora: P.ahora,
         // el nombre de la ficha para el mensaje al dueño (sin esto salía el id del cliente)

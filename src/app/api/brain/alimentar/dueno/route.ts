@@ -1,8 +1,8 @@
 /**
  * POST /api/brain/alimentar/dueno · una oficina registra lo que respondió el dueño (`evento: 'respuesta'`, por omisión), una pregunta que le hizo (`evento: 'pregunta'`) o descarta preguntas pendientes como obsoletas (`evento: 'descartar'`, 04-nov).
  *   Respuesta → ficha «confirmada por el dueño» (origen dueno, cita literal, canal, fecha); una respuesta nueva al mismo tema REEMPLAZA a la anterior (la vieja queda archivada).
- *   Pregunta  → antes de registrarla dice si ya se respondió o si otra oficina ya la hizo y espera.
- * GET  /api/brain/alimentar/dueno?client_id=&tema=&sede_clave=&canal=&limite= (canal exacto; limite 1-100, por omisión 20 o 5 con tema; `total` y `recortado` en la respuesta) · ¿ya se respondió? cuándo, por qué canal, y qué preguntas siguen pendientes. El agente decide si la respuesta sigue vigente.
+ *   Pregunta  → antes de registrarla dice si ya se respondió o si otra oficina ya la hizo y espera (solo el MISMO tema, normalizado). Un tema PARECIDO no frena: se registra y la respuesta trae aparte `parecidas` y `pendientes_parecidas`.
+ * GET  /api/brain/alimentar/dueno?client_id=&tema=&sede_clave=&canal=&limite= (con `tema`: `respuestas` y `pendientes` del mismo tema; aparte `parecidas` y `pendientes_parecidas`; canal exacto; limite 1-100, por omisión 20 o 5 con tema; `total` y `recortado` en la respuesta) · ¿ya se respondió? cuándo, por qué canal, y qué preguntas siguen pendientes. El agente decide si la respuesta sigue vigente.
  * Llave interna (`INTERNAL_API_KEY`), nunca `SALA_DISPATCH_KEY`. `dry_run` obligatorio; con false exige workflow_id + workflow_execution_id. Detrás de `PORTERO_DUENO` (apagado por omisión). US$ 0, sin modelo.
  */
 import { NextResponse } from 'next/server'
