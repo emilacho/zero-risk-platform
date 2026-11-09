@@ -4,7 +4,7 @@
  * S06 pares red-formato · S07 pendientes con salida · S08 fechas que importan sin cita ni motivo.
  */
 import { citaAparece, numerosEn } from './texto'
-import { hitoCuadraConFechas, MARGEN_DE_SEMANA_DIAS } from './fechas-en-texto'
+import { diaUnoDelPlan, hitoCuadraConFechas, MARGEN_DE_SEMANA_DIAS } from './fechas-en-texto'
 import type { Estrategia, FormatosPorRed, Hallazgo, Severidad } from './tipos'
 
 export interface InsumosEstrategia {
@@ -105,14 +105,17 @@ export function validarEstrategia(x: unknown, ins: InsumosEstrategia): Hallazgo[
   for (const x2 of e.excluidos) if (!x2.cita_plan) out.push(h('S03', 'bloquea', `excluido ${x2.red}`, 'una red excluida sin cita del plan', 'plan', 'citar la frase del plan que la excluye'))
 
   // S04 · hitos de revisión: el día del hito sale de la cita del plan
+  // 09-nov · F (firma de Emilio, regla de sistema): las FECHAS del plan se cuentan desde el día 1 DEL PLAN, no desde el de la campaña. Si la campaña arranca tarde,
+  // el día N del plan sigue siendo el día N de la campaña (todo se corre en bloque). Sin ventana en el plan, la referencia es el día 1 de la campaña (lo de siempre).
+  const diaUno = diaUnoDelPlan(ins.planTexto) ?? ins.fechaInicio ?? null
   for (const x2 of e.hitos.filter((y) => y.tipo === 'revision')) {
     // 09-nov (GO Lenovo · firma de Emilio): si la cita trae FECHAS de calendario («semana del 20 de noviembre de 2026»), se convierten a día de campaña
     // con la fecha de inicio (día 1) y se compara eso; «semana del…» admite ±6 días. Sin fecha de inicio o sin fechas en la cita, el chequeo de siempre.
-    const conFechas = ins.fechaInicio ? hitoCuadraConFechas(x2.dia, x2.cita_plan ?? '', ins.fechaInicio) : null
+    const conFechas = diaUno ? hitoCuadraConFechas(x2.dia, x2.cita_plan ?? '', diaUno) : null
     if (conFechas) {
       if (!conFechas.cuadra) {
         const cuales = conFechas.dias.join(' / ')
-        out.push(h('S04', 'bloquea', `hito ${x2.clave}`, `el hito de revisión cae en el día ${x2.dia} pero la fecha que cita el plan es el día ${cuales} de la campaña${conFechas.semana ? ` (su semana: ±${MARGEN_DE_SEMANA_DIAS} días)` : ''}`, `días del plan desde el día 1 (${ins.fechaInicio})`, `usar el día ${cuales}`))
+        out.push(h('S04', 'bloquea', `hito ${x2.clave}`, `el hito de revisión cae en el día ${x2.dia} pero la fecha que cita el plan es el día ${cuales} de la campaña${conFechas.semana ? ` (su semana: ±${MARGEN_DE_SEMANA_DIAS} días)` : ''}`, `días del plan desde su día 1 (${diaUno})`, `usar el día ${cuales}`))
       }
       continue
     }

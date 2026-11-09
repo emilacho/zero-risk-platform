@@ -109,3 +109,12 @@ export function ventanaDelPlan(planTexto: string): VentanaDelPlan | null {
   if (dias < DIAS_MINIMOS || dias > DIAS_MAXIMOS) return null
   return { desde, hasta, dias }
 }
+
+/**
+ * F (09-nov · firma de Emilio, regla de sistema) · el día 1 DEL PLAN: el primer día de la ventana que declara su cabecera. Las fechas que el plan escribe
+ * («semana del 20 de noviembre») se cuentan desde aquí, así el día N del plan es el día N de la campaña aunque la campaña arranque tarde (todo se corre en bloque).
+ * Sin ventana legible, `null` (la referencia queda en el día 1 de la campaña). Las fechas especiales REALES (feriados, Navidad) no pasan por aquí: van en su fecha de calendario.
+ */
+export function diaUnoDelPlan(planTexto: string): string | null {
+  return ventanaDelPlan(planTexto)?.desde ?? null
+}
