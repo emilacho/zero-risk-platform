@@ -71,12 +71,15 @@ export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown
     const motivo = `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')} (${constancia})`.slice(0, 500)
     if (cuerpo.ensayo === true || igual) return { status: 200, cuerpo: { ...(cuerpo.ensayo === true ? { ensayo: true, escrituras: 0 } : {}), pasa: false, version: brief.version, bloqueos: bloquea, sin_cambios: igual, campana: { estado: c.estado } } }
     const previo: Partial<BriefCreativoGuardado> = { leido: brief.leido, devolucion_texto: brief.devolucion_texto }
+    if (!(await al.actualizarBriefCreativoSi(c.id, brief.version, 'devuelta', { leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.map((b) => `- ${b}`).join('\n') }))) return { status: 200, cuerpo: { ya_revalidada: true, version: brief.version } }
+    // 🟡 de CC7 (20:17Z): la vuelta atrás solo toca la campaña si ESTE pedido le escribió el motivo; si otro la movió, ni el motivo viejo se le pega
+    let motivoEscrito = false
     try {
-      if (!(await al.actualizarBriefCreativoSi(c.id, brief.version, 'devuelta', { leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.map((b) => `- ${b}`).join('\n') }))) return { status: 200, cuerpo: { ya_revalidada: true, version: brief.version } }
       if (!(await al.actualizarCampanaSi(c.id, 'necesita_humano', { estado_motivo: motivo }))) throw new Error('la campaña cambió de estado mientras se revalidaba')
+      motivoEscrito = true
     } catch (e) {
       await al.actualizarBriefCreativo(c.id, brief.version, previo)
-      await al.actualizarCampana(c.id, { estado_motivo: c.estado_motivo })
+      if (motivoEscrito) await al.actualizarCampanaSi(c.id, 'necesita_humano', { estado_motivo: c.estado_motivo })
       throw e
     }
     return { status: 200, cuerpo: { pasa: false, version: brief.version, bloqueos: bloquea, campana: { estado: 'necesita_humano', estado_motivo: motivo } } }

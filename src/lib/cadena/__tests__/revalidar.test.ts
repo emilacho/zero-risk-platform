@@ -291,6 +291,34 @@ describe('revalidar · las pruebas de CC7 (CERTIFICACIÓN 20:09Z · raw/evidenci
   })
 })
 
+describe('revalidar · la campaña movida por OTRO a mitad (🟡 de CC7 20:17Z)', () => {
+  /** el brief gana su condición, pero justo entonces otro mueve la campaña (vence la espera → pausada) */
+  const moverAMitad = (al: AlmacenMemoria, a: 'pausada' | 'cerrada') => {
+    const original = al.actualizarBriefCreativoSi.bind(al)
+    al.actualizarBriefCreativoSi = async (...x) => { const r = await original(...x); al.campanas[0].estado = a; al.campanas[0].estado_motivo = `otro la dejó ${a}`; return r }
+  }
+  it('🔴 rama que PASA: la campaña pausada NO revive (no va a calendario), la versión vuelve a devuelta, la espera sigue viva y hay error', async () => {
+    const { al, id } = await detenidaPorElBrief(BRIEF, { falsoRojo: true })
+    const brief = JSON.stringify(al.briefsCreativos)
+    const esperas = JSON.stringify(nhVivas(al, id))
+    moverAMitad(al, 'pausada')
+    await expect(briefRevalidar(al, wf({ campana_id: id }), AHORA)).rejects.toThrow('la campaña cambió de estado mientras se revalidaba')
+    expect(al.campanas[0]).toMatchObject({ estado: 'pausada', estado_motivo: 'otro la dejó pausada' })
+    expect(JSON.stringify(al.briefsCreativos)).toBe(brief)
+    expect(JSON.stringify(nhVivas(al, id))).toBe(esperas)
+  })
+  it('🔴 rama que NO pasa: a la campaña cerrada por otro no se le pega ni el motivo nuevo ni el viejo de necesita_humano', async () => {
+    const { al, id } = await detenidaPorElBrief(MALO)
+    const b = al.briefsCreativos.find((x) => x.version === 2)!
+    Object.assign(b, { leido: { ...b.leido, bloqueos: ['un bloqueo que el verificador viejo veía'] } })
+    const brief = JSON.stringify(al.briefsCreativos)
+    moverAMitad(al, 'cerrada')
+    await expect(briefRevalidar(al, wf({ campana_id: id }), AHORA)).rejects.toThrow('la campaña cambió de estado mientras se revalidaba')
+    expect(al.campanas[0]).toMatchObject({ estado: 'cerrada', estado_motivo: 'otro la dejó cerrada' })
+    expect(JSON.stringify(al.briefsCreativos)).toBe(brief)
+  })
+})
+
 describe('revalidar · cableado', () => {
   it('la acción vive en la tabla de la ruta del brief', () => {
     expect(Object.keys(ACCIONES.brief)).toEqual(['abrir', 'entregar', 'revalidar'])
