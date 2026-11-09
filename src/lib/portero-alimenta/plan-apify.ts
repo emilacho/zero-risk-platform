@@ -55,7 +55,15 @@ export const lineaDePlanApify = (d: DecisionDelPlan, uso: UsoDelPlan, sigue = fa
 export const claveDeAvisoDelPlan = (uso: UsoDelPlan): string => `plan-apify:${(uso.ciclo_desde ?? 'sin-ciclo').slice(0, 10)}`
 
 type Fila = Record<string, unknown>
-const vacia = (p: unknown, por_que: string): unknown => {
+/** vacía lo que un cuerpo de `descubrir` le pediría a Apify (plan del día, acciones de la 2.ª tanda y de los artículos, plan del diario por cliente) y lo anota en `omitidas` con su porqué */
+export function vaciarPedidosAApify(body: Fila, por_que: string): Fila {
+  const out: Fila = { ...body }
+  if ('plan' in body) out.plan = vacia(body.plan, por_que)
+  if (Array.isArray(body.acciones)) { out.omitidas = [...(Array.isArray(body.omitidas) ? body.omitidas : []), ...(body.acciones as Fila[]).map((a) => ({ fuente: String(a.fuente ?? a.funcion ?? 'accion'), por_que }))]; out.acciones = [] }
+  if (Array.isArray(body.clientes)) out.clientes = (body.clientes as Fila[]).map((c) => (c && typeof c === 'object' && 'plan' in c ? { ...c, plan: vacia(c.plan, por_que) } : c))
+  return out
+}
+function vacia(p: unknown, por_que: string): unknown {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return p
   const q = p as Fila
   const hechas = Array.isArray(q.hacer) ? (q.hacer as Fila[]) : []
@@ -69,12 +77,7 @@ const vacia = (p: unknown, por_que: string): unknown => {
 export function frenarCuerpoPorPlan(body: Fila, decision: DecisionDelPlan): Fila {
   const meta = { plan_apify: { permitido: decision.permitido, pct_usado: decision.pct_usado, pct_max: decision.pct_max, tope_usd: decision.tope_usd, restante_usd: decision.restante_usd, motivo: decision.motivo } }
   if (decision.permitido) return { ...body, ...meta }
-  const por_que = String(decision.motivo)
-  const out: Fila = { ...body, ...meta }
-  if ('plan' in body) out.plan = vacia(body.plan, por_que)
-  if (Array.isArray(body.acciones)) { out.omitidas = [...(Array.isArray(body.omitidas) ? body.omitidas : []), ...(body.acciones as Fila[]).map((a) => ({ fuente: String(a.fuente ?? a.funcion ?? 'accion'), por_que }))]; out.acciones = [] }
-  if (Array.isArray(body.clientes)) out.clientes = (body.clientes as Fila[]).map((c) => (c && typeof c === 'object' && 'plan' in c ? { ...c, plan: vacia(c.plan, por_que) } : c))
-  return out
+  return { ...vaciarPedidosAApify(body, String(decision.motivo)), ...meta }
 }
 
 export interface DepsDelPlan {
