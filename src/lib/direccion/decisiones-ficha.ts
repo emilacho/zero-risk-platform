@@ -7,6 +7,7 @@
  * Una ficha que no pasa `problemasDeLaFicha` no viaja: viene `ficha: null` con sus problemas. Se rechaza entera, nunca se recorta.
  */
 import type { Decision } from './decisiones'
+import { DEPARTAMENTOS, DEPARTAMENTO_DE_LA_OFICINA, type ClaveDeDepartamento } from '../nombres-del-sistema'
 
 /** el vocabulario fijo: 5 verbos, siempre los mismos */
 export const VERBOS = ['aprobar', 'pedir_cambios', 'responder', 'asumir', 'descartar'] as const
@@ -38,7 +39,8 @@ export interface FichaDeDecision {
   version: 1
   id: string
   cuenta: { client_id: string; nombre: string | null } | null
-  departamento: { oficina: string; nombre: string; agente?: string }
+  /** nombre oficial completo; `corto` cuando el completo no cabe (de `nombres-del-sistema`) */
+  departamento: { oficina: string; nombre: string; corto?: string; agente?: string }
   que_se_decide: string
   decisivo?: CortoYLargo[]
   uso?: CortoYLargo
@@ -56,29 +58,30 @@ export interface FichaDeDecision {
 }
 
 /**
- * el departamento, con los MISMOS nombres que el tablero muestra hoy (`departamentoDe` del tablero), para que T1 dibuje igual.
- * Los nombres definitivos los decide Emilio (pendiente vía Lenovo); cuando responda, se cambian aquí, en un solo lugar.
+ * 10-nov · el departamento con su nombre OFICIAL (Emilio 09-nov 23:29Z), leído de la constante única `nombres-del-sistema`: nunca escrito aquí.
+ * Lo de la bandeja, el plan y la campaña es del Departamento de Marketing; la firma y las preguntas de finanzas, del de Finanzas.
+ * Una oficina que todavía no tiene departamento oficial (jefatura, cerebro, altas) muestra su propio nombre hasta que Emilio lo nombre.
  */
-const NOMBRE_DE_OFICINA: Record<string, string> = {
-  financiera: 'Financiero', finanzas: 'Financiero', planeacion: 'Planeación', creativa: 'Creativa', jefatura: 'Jefatura',
-  marketing: 'Dpto. Marketing', cerebro: 'El cerebro del cliente', portero: 'El cerebro del cliente', alta: 'Altas', onboarding: 'Altas',
+const POR_FUENTE: Record<string, ClaveDeDepartamento> = {
+  hitl_queue: 'marketing', plan_aprobaciones: 'marketing', cadena_campanas: 'marketing',
+  finanzas_tableros: 'finanzas', finanzas_preguntas: 'finanzas', esperas_del_dueno: 'finanzas',
 }
-const POR_FUENTE: Record<string, { oficina: string; nombre: string }> = {
-  hitl_queue: { oficina: 'revision', nombre: 'Revisión' },
-  plan_aprobaciones: { oficina: 'planeacion', nombre: 'Planeación' },
-  cadena_campanas: { oficina: 'planeacion', nombre: 'Plan de 90 días' },
-  dueno_preguntas: { oficina: 'oficinas', nombre: 'Pregunta para ti' },
-}
+const SIN_DEPARTAMENTO_OFICIAL: Record<string, string> = { jefatura: 'Jefatura', cerebro: 'El cerebro del cliente', portero: 'El cerebro del cliente', alta: 'Altas', onboarding: 'Altas' }
 const clave = (o: string) => o.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/^oficina[\s_-]+(de[\s_-]+)?/, '').trim()
 const mayuscula = (t: string) => t.charAt(0).toLocaleUpperCase('es') + t.slice(1)
+const oficial = (k: ClaveDeDepartamento) => ({ oficina: DEPARTAMENTOS[k].oficina, nombre: DEPARTAMENTOS[k].nombre, corto: DEPARTAMENTOS[k].corto })
 export function departamentoDeLaFicha(d: Pick<Decision, 'tipo' | 'fuente' | 'pregunta_de'>): FichaDeDecision['departamento'] {
-  if (d.tipo === 'firma_de_finanzas' || d.tipo === 'pregunta_de_finanzas') return { oficina: 'financiera', nombre: 'Financiero', ...(d.pregunta_de?.agente ? { agente: d.pregunta_de.agente } : {}) }
+  const agente = d.pregunta_de?.agente ? { agente: d.pregunta_de.agente } : {}
+  if (d.tipo === 'firma_de_finanzas' || d.tipo === 'pregunta_de_finanzas') return { ...oficial('finanzas'), ...agente }
   if (d.pregunta_de) {
-    const k = clave(d.pregunta_de.oficina)
-    const nombre = NOMBRE_DE_OFICINA[k] ?? NOMBRE_DE_OFICINA[k.split(/[\s_-]+/)[0] ?? ''] ?? mayuscula(d.pregunta_de.oficina.replace(/[-_]+/g, ' '))
-    return { oficina: k || d.pregunta_de.oficina, nombre, ...(d.pregunta_de.agente ? { agente: d.pregunta_de.agente } : {}) }
+    const k = clave(d.pregunta_de.oficina), primera = k.split(/[\s_-]+/)[0] ?? ''
+    const dep = DEPARTAMENTO_DE_LA_OFICINA[k] ?? DEPARTAMENTO_DE_LA_OFICINA[primera]
+    if (dep) return { ...oficial(dep), ...agente }
+    return { oficina: k || d.pregunta_de.oficina, nombre: SIN_DEPARTAMENTO_OFICIAL[k] ?? SIN_DEPARTAMENTO_OFICIAL[primera] ?? mayuscula(d.pregunta_de.oficina.replace(/[-_]+/g, ' ')), ...agente }
   }
-  return POR_FUENTE[d.fuente] ?? { oficina: d.fuente, nombre: mayuscula(d.tipo.replace(/_/g, ' ')) }
+  const dep = POR_FUENTE[d.fuente]
+  // una pregunta sin oficina conocida: no se le inventa departamento
+  return dep ? oficial(dep) : { oficina: 'sin_oficina', nombre: 'Sin departamento' }
 }
 
 /** la pantalla dueña de lo que hoy se decide en otro panel (la ruta de hoy, traducida a la lista cerrada) */

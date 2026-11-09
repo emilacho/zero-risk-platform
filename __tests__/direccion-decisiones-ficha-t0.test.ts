@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import type { Contexto } from '../src/lib/direccion/comun'
 import { leerDecisiones, type Decision } from '../src/lib/direccion/decisiones'
+import { DEPARTAMENTOS } from '../src/lib/nombres-del-sistema'
 import { DESTINOS, MAX_ACCIONES, PANTALLAS, VERBOS, conFicha, fichaDe, problemasDeLaFicha, type FichaDeDecision } from '../src/lib/direccion/decisiones-ficha'
 
 const AHORA = new Date('2026-11-04T20:00:00Z')
@@ -70,7 +71,7 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
     expect(f.propuesta?.cifras?.[0]).toMatchObject({ clave: 'meta_semanal', editable: true, nota: 'Dato' })
     expect(f.propuesta?.cifras?.[1]).not.toHaveProperty('editable'); expect(f.propuesta?.cifras?.[1]).not.toHaveProperty('nota')
     expect(f.decisivo).toEqual([{ largo: 'Instagram lleva 6 años inactivo' }])
-    expect(f).toMatchObject({ uso: { corto: 'Validar cifras', largo: 'largo' }, desbloquea: { corto: 'Solo constancia', largo: 'largo' }, departamento: { oficina: 'financiera', nombre: 'Financiero' }, espera: { sin_limite: true } })
+    expect(f).toMatchObject({ uso: { corto: 'Validar cifras', largo: 'largo' }, desbloquea: { corto: 'Solo constancia', largo: 'largo' }, departamento: { oficina: 'finanzas', nombre: 'Departamento de Finanzas', corto: 'Finanzas' }, espera: { sin_limite: true } })
     expect(f).not.toHaveProperty('detiene') // false: no detiene nada, no hay rótulo
   })
   it('🔴 una firma que hoy no deja editar no ofrece tocar la cifra: sin al_editar ni editable', () => {
@@ -93,7 +94,7 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
       { verbo: 'responder', principal: true, pide: { que: 'texto', obligatorio: true }, destino: 'dueno-preguntas' },
     ])
     expect(f.propuesta).toEqual({ supuesto: 'Arrancas en 4 semanas' })
-    expect(f.departamento).toEqual({ oficina: 'financiera', nombre: 'Financiero', agente: 'jefe-financiero' })
+    expect(f.departamento).toEqual({ oficina: 'finanzas', nombre: 'Departamento de Finanzas', corto: 'Finanzas', agente: 'jefe-financiero' })
   })
   it('🔴 sin supuesto no hay Asumir, aunque la lista de hoy lo dijera', () => {
     const f = fichaDe({ ...VARIANTES.pregunta_con_supuesto, supuesto: undefined })
@@ -106,7 +107,7 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
     for (const k of ['plan', 'campana', 'pieza', 'gran_idea', 'plan_con_pendientes', 'palabra_del_dueno', 'pausa', 'no_volvio', 'canal_viejo', 'lista_de_competidores', 'otra_revision']) expect(fichaDe(VARIANTES[k]).acciones, k).toEqual([])
   })
   it('🔴 la campaña: detiene, vence con su espera y dice qué pasa al vencer', () => {
-    expect(fichaDe(VARIANTES.campana)).toMatchObject({ detiene: { que: 'el plan' }, espera: { vence: '2026-11-13T11:23:08Z', al_vencer: 'se pausa' }, costo: { nota: 'avisar no gasta' }, departamento: { nombre: 'Plan de 90 días' } })
+    expect(fichaDe(VARIANTES.campana)).toMatchObject({ detiene: { que: 'el plan' }, espera: { vence: '2026-11-13T11:23:08Z', al_vencer: 'se pausa' }, costo: { nota: 'avisar no gasta' }, departamento: { oficina: 'marketing', nombre: 'Departamento de Marketing', corto: 'Marketing' } })
   })
   it('🔴 v7 · todo lo que detiene dice qué detiene («DETIENE EL PLAN»); lo que no detiene no lleva rótulo', () => {
     for (const k of ['plan', 'pausa', 'no_volvio', 'campana']) expect(fichaDe(VARIANTES[k]).detiene, k).toEqual({ que: 'el plan' })
@@ -116,6 +117,21 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
     expect(fichaDe(VARIANTES.firma_editable).espera).toEqual({ desde: VARIANTES.firma_editable.desde, sin_limite: true })
     for (const k of ['pregunta_con_supuesto', 'plan', 'pieza', 'pausa']) { expect(fichaDe(VARIANTES[k]).espera, k).not.toHaveProperty('sin_limite'); expect(fichaDe(VARIANTES[k]).espera, k).not.toHaveProperty('vence') }
     expect(fichaDe(VARIANTES.campana).espera).not.toHaveProperty('sin_limite') // vence: el plazo manda
+  })
+  it('🔴 10-nov · los departamentos llevan su nombre oficial, de la constante única: nunca «Financiero» ni «Plan de 90 días»', () => {
+    const esperado: Record<string, string> = { firma_editable: 'finanzas', plan: 'marketing', pregunta_con_supuesto: 'finanzas', pausa: 'finanzas', no_volvio: 'finanzas', canal_viejo: 'finanzas', campana: 'marketing', pieza: 'marketing', gran_idea: 'marketing', plan_con_pendientes: 'marketing', palabra_del_dueno: 'marketing', lista_de_competidores: 'marketing', otra_revision: 'marketing' }
+    for (const [k, d] of Object.entries(VARIANTES)) {
+      const dep = fichaDe(d).departamento
+      expect(dep, k).toMatchObject({ ...DEPARTAMENTOS[esperado[k] as keyof typeof DEPARTAMENTOS] })
+      expect(dep.nombre, k).not.toMatch(/Financiero|Plan de 90 días|Dpto./)
+    }
+    expect(DEPARTAMENTOS).toEqual({ marketing: { oficina: 'marketing', nombre: 'Departamento de Marketing', corto: 'Marketing' }, finanzas: { oficina: 'finanzas', nombre: 'Departamento de Finanzas', corto: 'Finanzas' } })
+  })
+  it('🔴 10-nov · una pregunta de la oficina de planeación o la creativa es del Departamento de Marketing; una de la jefatura conserva su nombre (sin departamento oficial)', () => {
+    expect(fichaDe(dec({ pregunta_de: { oficina: 'Oficina de planeación', agente: null } })).departamento).toEqual({ ...DEPARTAMENTOS.marketing })
+    expect(fichaDe(dec({ pregunta_de: { oficina: 'creativa', agente: 'director' } })).departamento).toEqual({ ...DEPARTAMENTOS.marketing, agente: 'director' })
+    expect(fichaDe(dec({ pregunta_de: { oficina: 'jefatura', agente: null } })).departamento).toEqual({ oficina: 'jefatura', nombre: 'Jefatura' })
+    expect(fichaDe(dec({})).departamento).toEqual({ oficina: 'sin_oficina', nombre: 'Sin departamento' })
   })
   it('🔴 sin corto se manda solo el largo; nunca un corto sin su largo', () => {
     const f = fichaDe(dec({ para_que: 'Para repartir los anuncios entre ciudades.', destraba_corto: 'Huérfano' }))
