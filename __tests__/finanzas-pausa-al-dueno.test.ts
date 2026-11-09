@@ -647,6 +647,10 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       const f = (async (u: string) => new URL(u).pathname === '/api/dueno/preguntas' ? { status: 500, json: async () => ({ error: 'caída' }) } : { status: 200, json: async () => ({ ok: true, respondida: false, respuestas: [], parecidas: [] }) }) as never
       expect(await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).leerParecidas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'plataforma_http_500' })
     })
+    it('🔴 09-nov · N6 de CC7: un 200 que no es la lista (página de error, redirección) tampoco se lee como «nada parecido»', async () => {
+      const f = (async (u: string) => new URL(u).pathname === '/api/dueno/preguntas' ? { status: 200, json: async () => ({ html: '<p>error</p>' }) } : { status: 200, json: async () => ({ ok: true, respondida: false, respuestas: [], parecidas: [] }) }) as never
+      expect(await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).leerParecidas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'plataforma_respuesta_no_entendida' })
+    })
     it('🔴 ficha inventada con respuesta inventada: el texto no entra como dicho por el dueño', async () => {
       const a = await conPresupuesto()
       agente(a, () => ({ veredictos: [{ clave: 'presupuesto_semanal_pauta', decision: 'ya_contestada', ficha_id: 'inventada', respuesta: '9000 por semana', por_que: 'x' }] }))
