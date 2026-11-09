@@ -9,6 +9,7 @@ import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
 import { AL_EDITAR_LA_FIRMA, DESTRABA_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, sePuedeEditar, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
+import { DESTRABA_CAMPANA_DETENIDA, PARA_QUE_CAMPANA_DETENIDA, TITULO_CAMPANA_DETENIDA, leerCampanasDetenidas, type CampanaDetenida } from './decisiones-campanas'
 import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, MAX_INTENTOS_DE_DESPERTAR, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, loDescartoElDueno, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
 
 export type TipoDecision = 'plan' | 'gran_idea' | 'pieza' | 'revision' | 'pregunta_al_dueno' | 'pregunta_de_finanzas' | 'firma_de_finanzas'
@@ -37,6 +38,8 @@ export interface Decision {
   /** lo que el tablero puede ofrecer aquí. [] = esta tarjeta solo avisa. Sin el campo: se decide en su panel */
   permite?: AccionDeDecision[]
   pregunta_de?: { oficina: string; agente: string | null }
+  /** 06-nov · el supuesto que propuso la oficina: con él, el dueño puede «asumir» */
+  supuesto?: string
   para_que?: string
   destraba?: string
   /** true = un trabajo está parado por esto. false = consta que no. Sin el campo: no se pudo saber */
@@ -49,6 +52,8 @@ export interface Decision {
   criticos?: string[]
   /** qué pasa si cambia una cifra. Solo viene si se puede editar */
   al_editar?: string
+  /** 09-nov · C · la campaña detenida: su motivo (interno), su espera y qué pasa al vencer */
+  campana?: CampanaDetenida
 }
 
 const TOPE = 200
@@ -108,7 +113,8 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   const [compuertas, bandeja, preguntas, deFinanzas, tableros, enPausa, noVolvieron] = await Promise.all([
     leer(fuentes, 'plan_aprobaciones', db.from('plan_aprobaciones').select('id, client_id, plan_id, version, creado_en').eq('estado', 'pendiente').limit(TOPE), TOPE),
     leer(fuentes, 'hitl_queue', db.from('hitl_queue').select('id, client_id, output_id, type, documento, title, output_preview, priority, payload, metadata, created_at, expires_at').eq('status', 'pending').limit(TOPE), TOPE),
-    leer(fuentes, 'cerebro_dueno_preguntas', db.from('cerebro_dueno_preguntas').select('id, client_id, tema, pregunta, creado_en, preguntado_por_oficina, preguntado_por_agente').eq('estado', 'pendiente').limit(TOPE), TOPE),
+    // 06-nov · las preguntas al dueño viven en la plataforma (salieron del cerebro · firma de Emilio vía Lenovo)
+    leer(fuentes, 'dueno_preguntas', db.from('dueno_preguntas').select('id, client_id, tema, pregunta, supuesto, creado_en, oficina, agente').eq('estado', 'pendiente').limit(TOPE), TOPE),
     leer(fuentes, 'finanzas_preguntas', db.from('finanzas_preguntas').select('id, client_id, clave, texto, creado_en').eq('estado', 'enviada').limit(TOPE), TOPE),
     leer(fuentes, 'finanzas_tableros', db.from('finanzas_tableros').select('id, client_id, version, creado_en, workflow_execution_id, entrada, bloque').eq('estado', 'sin_firma').eq('vigente', true).eq('dry_run', false).limit(TOPE), TOPE),
     // 04-nov · sin pedir el `sobre`: lleva el material del plan y pesa cientos de KB
@@ -162,16 +168,20 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   for (const p of enPausa) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_en_pausa', fuente: 'esperas_del_dueno', client_id: texto(p.client_id), titulo: 'El plan está en pausa: la oficina financiera espera tus respuestas, que están en esta lista', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, para_que: PARA_QUE_DE_LA_PAUSA, ...destrabaDe(p.client_id), detiene: true })
   for (const e of noVolvieronVigentes) crudas.push({ id: String(e.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_no_volvio', fuente: 'esperas_del_dueno', client_id: texto(e.client_id), titulo: TITULO_NO_VOLVIO, desde: texto(e.soltada_en) ?? texto(e.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, detiene: true, volvio: { motivo: motivoDeNoVolver(e) } })
   for (const p of preguntas) {
-    const oficina = texto(p.preguntado_por_oficina), dePausa = esDeLaPausa(p)
+    const oficina = texto(p.oficina), dePausa = esDeLaPausa(p), supuesto = texto(p.supuesto)
     crudas.push({
-      id: String(p.id), tipo: 'pregunta_al_dueno', subtipo: String(p.tema ?? 'pregunta'), fuente: 'cerebro_dueno_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta al dueño'), desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null,
-      permite: ['responder', 'descartar'],
-      ...(oficina ? { pregunta_de: { oficina, agente: texto(p.preguntado_por_agente) } } : {}),
+      id: String(p.id), tipo: 'pregunta_al_dueno', subtipo: String(p.tema ?? 'pregunta'), fuente: 'dueno_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta al dueño'), desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null,
+      // «asumir» solo si la oficina propuso un supuesto: el dueño acepta ese, nunca uno inventado
+      permite: supuesto ? ['responder', 'asumir', 'descartar'] : ['responder', 'descartar'],
+      ...(supuesto ? { supuesto } : {}),
+      ...(oficina ? { pregunta_de: { oficina, agente: texto(p.agente) } } : {}),
       ...(dePausa === null ? {} : { detiene: dePausa }),
       ...(dePausa ? { para_que: PARA_QUE_DE_LA_PAUSA, ...destrabaDe(p.client_id) } : {}),
     })
   }
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA })
+  // 09-nov · C · las campañas que la cadena dejó esperando a una persona. Vencen con su espera: arriba si la espera vence pronto
+  for (const { fila: c, campana } of await leerCampanasDetenidas(db, fuentes)) crudas.push({ id: String(c.id), tipo: 'plan', subtipo: 'campana_necesita_humano', fuente: 'cadena_campanas', client_id: texto(c.client_id), titulo: TITULO_CAMPANA_DETENIDA, desde: texto(c.desde) ?? texto(c.actualizada_en), vence: campana.espera?.vence_en ?? null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: 'avisar no gasta; reabrir tampoco, y lo que sigue gasta con sus topes', permite: [], detiene: true, para_que: PARA_QUE_CAMPANA_DETENIDA, destraba: DESTRABA_CAMPANA_DETENIDA, campana })
   for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, pregunta_de: FINANCIERA, ...loQueSeFirma(t) })
 
   const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas, esperan_el_manual: 0, planes_ya_superados: sueltas.length - noVolvieronVigentes.length }
@@ -191,10 +201,10 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   // 04-nov · lo ya contestado y qué hizo el sistema. Tiene sus propias fuentes: si falla, `registro_completo` lo dice y la lista de pendientes no se entera
   const fuentesDePreguntas: Fuente[] = []
   const desde = new Date(Date.parse(hora) - DIAS_DEL_REGISTRO * 86_400_000).toISOString()
-  const COLS_RESUELTA = 'id, client_id, tema, pregunta, preguntado_por_oficina, creado_en, respondida_en, obsoleta_en, motivo_descarte, ficha_id'
+  const COLS_RESUELTA = 'id, client_id, tema, pregunta, oficina, estado, creado_en, decidido_en, motivo, ficha_ref'
   const [respondidas, descartadas] = await Promise.all([
-    leer(fuentesDePreguntas, 'cerebro_dueno_preguntas', db.from('cerebro_dueno_preguntas').select(COLS_RESUELTA).eq('estado', 'respondida').gte('respondida_en', desde).order('respondida_en', { ascending: false }).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
-    leer(fuentesDePreguntas, 'cerebro_dueno_preguntas', db.from('cerebro_dueno_preguntas').select(COLS_RESUELTA).eq('estado', 'obsoleta').gte('obsoleta_en', desde).order('obsoleta_en', { ascending: false }).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
+    leer(fuentesDePreguntas, 'dueno_preguntas', db.from('dueno_preguntas').select(COLS_RESUELTA).in('estado', ['respondida', 'asumida']).gte('decidido_en', desde).order('decidido_en', { ascending: false }).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
+    leer(fuentesDePreguntas, 'dueno_preguntas', db.from('dueno_preguntas').select(COLS_RESUELTA).in('estado', ['descartada', 'obsoleta']).gte('decidido_en', desde).order('decidido_en', { ascending: false }).limit(TOPE_DEL_REGISTRO), TOPE_DEL_REGISTRO),
   ])
   const registro: LecturaDelRegistro = await leerContestadas(db, hora, clientes, { respondidas, descartadas, fuentes: fuentesDePreguntas }).catch(() => ({ contestadas: [], fuentes: fuentesDePreguntas, completo: false }))
   const contestadas = registro.contestadas.map((c) => ({ ...c, titulo: tituloParaElDueno(c.titulo) }))
@@ -208,7 +218,8 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
 export async function temasDescartadosPorElDueno(db: { from(tabla: string): any }, client_id: string, temas: string[], desde: string): Promise<string[]> {
   if (!temas.length) return []
   if (!Number.isFinite(Date.parse(desde))) throw new Error('no sé desde cuándo espera el plan: no se puede decir qué descartó el dueño')
-  const r = await db.from('cerebro_dueno_preguntas').select('tema,motivo_descarte').eq('client_id', client_id).eq('estado', 'obsoleta').in('tema', temas).gte('obsoleta_en', desde)
+  const r = await db.from('dueno_preguntas').select('tema,estado,motivo').eq('client_id', client_id).in('estado', ['descartada', 'obsoleta']).in('tema', temas).gte('decidido_en', desde)
   if (r.error) throw new Error(`no pude leer las preguntas descartadas: ${r.error.message}`)
-  return ((r.data as Array<{ tema: unknown; motivo_descarte: unknown }> | null) ?? []).filter((x) => loDescartoElDueno(x.motivo_descarte)).map((x) => String(x.tema))
+  // «descartada» la cerró el dueño; «obsoleta» solo cuenta si el motivo es suyo (las migradas del cerebro)
+  return ((r.data as Array<{ tema: unknown; estado: unknown; motivo: unknown }> | null) ?? []).filter((x) => x.estado === 'descartada' || loDescartoElDueno(x.motivo)).map((x) => String(x.tema))
 }

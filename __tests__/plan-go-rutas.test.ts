@@ -151,19 +151,22 @@ describe('el almacén de corridas', () => {
 describe('lo que el dueño descartó, con el lector real', () => {
   const ABRIO = '2026-11-05T10:00:00.000Z', DESPUES = '2026-11-05T10:30:00.000Z'
   const DE_EMILIO = 'Emilio la descartó en Tu oficina'
-  const fila = (tema: string, o: Fila = {}) => ({ client_id: 'c', tema, estado: 'obsoleta', obsoleta_en: DESPUES, motivo_descarte: DE_EMILIO, ...o })
+  const fila = (tema: string, o: Fila = {}) => ({ client_id: 'c', tema, estado: 'obsoleta', decidido_en: DESPUES, motivo: DE_EMILIO, ...o })
   const leer = (filas: Fila[], temas: string[]) => temasDescartadosPorElDueno(tabla(filas), 'c', temas, ABRIO)
 
   it('🔴 la de esta espera, descartada por Emilio, cuenta', async () => { expect(await leer([fila('a')], ['a'])).toEqual(['a']) })
-  it('🔴 con la fecha justa de abrir, también', async () => { expect(await leer([fila('a', { obsoleta_en: ABRIO })], ['a'])).toEqual(['a']) })
+  it('🔴 con la fecha justa de abrir, también', async () => { expect(await leer([fila('a', { decidido_en: ABRIO })], ['a'])).toEqual(['a']) })
   it('🔴 lo archivado antes de abrir la espera no cuenta: es el caso real del 04-nov', async () => {
-    expect(await leer([fila('comision_pedidosya', { obsoleta_en: '2026-11-04T19:00:00.000Z' })], ['comision_pedidosya'])).toEqual([])
+    expect(await leer([fila('comision_pedidosya', { decidido_en: '2026-11-04T19:00:00.000Z' })], ['comision_pedidosya'])).toEqual([])
   })
   it('🔴 lo que archivó el sistema no es del dueño, aunque nombre a Emilio', async () => {
-    expect(await leer([fila('a', { motivo_descarte: 'las preguntas dejaron Slack y se contestan en Tu oficina (firma de Emilio, 04-nov)' }), fila('b', { motivo_descarte: 'el dueño ya contestó esta pregunta' })], ['a', 'b'])).toEqual([])
+    expect(await leer([fila('a', { motivo: 'las preguntas dejaron Slack y se contestan en Tu oficina (firma de Emilio, 04-nov)' }), fila('b', { motivo: 'el dueño ya contestó esta pregunta' })], ['a', 'b'])).toEqual([])
   })
   it('🔴 otra estado, otro cliente u otro tema no cuentan', async () => {
     expect(await leer([fila('a', { estado: 'pendiente' }), fila('b', { client_id: 'otro' }), fila('z')], ['a', 'b'])).toEqual([])
+  })
+  it('🔴 06-nov · «descartada» (la lista de la plataforma) es del dueño aunque el motivo no nombre a Emilio', async () => {
+    expect(await leer([fila('a', { estado: 'descartada', motivo: 'ya no aplica' }), fila('b', { estado: 'descartada', decidido_en: '2026-11-04T19:00:00.000Z' })], ['a', 'b'])).toEqual(['a'])
   })
   it('🔴 una lectura fallida lanza: no es «no descartó nada»', async () => {
     await expect(temasDescartadosPorElDueno(tabla([], { error: 'caída' }), 'c', ['a'], ABRIO)).rejects.toThrow(/caída/)
@@ -175,7 +178,7 @@ describe('lo que el dueño descartó, con el lector real', () => {
     const espera = { id: 'e', client_id: 'c', tipo: 'finanzas', clave: 'finanzas:enc', estado: 'esperando', sobre: {}, despertar_intentos: 0, actualizado_en: ABRIO, creado_en: ABRIO }
     const f = await esperasDeFinanzas(tabla([espera])).delEncargo('enc')
     expect(f?.creado_en).toBe(ABRIO)
-    const P = esperasDeFinanzas(tabla([fila('a'), fila('b', { obsoleta_en: VIEJA })]))
+    const P = esperasDeFinanzas(tabla([fila('a'), fila('b', { decidido_en: VIEJA })]))
     expect(await P.temasDescartados?.('c', ['a', 'b'], ABRIO)).toEqual(['a'])
   })
   it('🔴 la regla es una sola: la misma del registro de Tu oficina', () => {

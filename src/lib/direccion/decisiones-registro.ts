@@ -1,7 +1,7 @@
 /**
  * LO QUE TU OFICINA ENSEÑA DE CADA DECISIÓN (04-nov · pedido de CC5, encargo de Lenovo a CC3). SOLO LECTURA: nada se guarda aparte.
  * El registro NO es una tabla nueva: se deduce de las filas que el sistema ya escribe y nunca borra. Así no puede contradecirlas ni quedarse sin escribir.
- * Enlaza: pregunta (`cerebro_dueno_preguntas`) → pausa (`buzon_respuestas` del encargo, en `finanzas_artefactos`) → espera (`esperas_del_dueno`) → corrida (`plan_corridas`).
+ * Enlaza: pregunta (`dueno_preguntas`, en la plataforma desde el 06-nov) → pausa (`buzon_respuestas` del encargo, en `finanzas_artefactos`) → espera (`esperas_del_dueno`) → corrida (`plan_corridas`).
  * Lo que no se sabe no se inventa: sin enlace, el registro termina en lo último que sí consta.
  * Las preguntas las lee `decisiones.ts`; aquí no se nombra ninguna tabla del cerebro. Las fichas no se leen: el texto de la respuesta queda en el cerebro (dominio de Cerebro).
  */
@@ -9,8 +9,8 @@ import { MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, SILENCIO_TRAS_RESP
 import { temaDe } from '../finanzas/conversa/buzon'
 import { esObjeto, leer, sinSecretos, texto, type Db, type Fila, type Fuente } from './comun'
 
-export type AccionDeDecision = 'aceptar' | 'editar' | 'responder' | 'descartar'
-export type EstadoDelPaso = 'pregunto' | 'respondiste' | 'firmaste' | 'descartaste' | 'guardado' | 'espera' | 'retomado' | 'terminado' | 'fallo'
+export type AccionDeDecision = 'aceptar' | 'editar' | 'responder' | 'asumir' | 'descartar'
+export type EstadoDelPaso = 'pregunto' | 'respondiste' | 'asumiste' | 'firmaste' | 'descartaste' | 'guardado' | 'espera' | 'retomado' | 'terminado' | 'fallo'
 export interface PasoDelRegistro { cuando: string | null; quien: 'oficina' | 'tu' | 'sistema'; estado: EstadoDelPaso; texto: string; cita?: string }
 export type ResultadoDeContestada = 'guardada' | 'descartada' | 'firmada' | 'espera' | 'retomada' | 'terminada' | 'fallo'
 export interface Contestada {
@@ -170,22 +170,22 @@ export async function leerContestadas(db: Db, hora: string, clientes: Map<string
   const contestadas: Contestada[] = []
   const vivo = (c: unknown) => { const x = clientes.get(String(c)); return !x?.practica && !x?.de_baja }
   const nombre = (c: unknown) => clientes.get(String(c))?.nombre ?? null
-  const pregunto = (p: Fila): PasoDelRegistro => ({ cuando: texto(p.creado_en), quien: 'oficina', estado: 'pregunto', texto: `${nombreDeOficina(texto(p.preguntado_por_oficina))} preguntó` })
+  const pregunto = (p: Fila): PasoDelRegistro => ({ cuando: texto(p.creado_en), quien: 'oficina', estado: 'pregunto', texto: `${nombreDeOficina(texto(p.oficina))} preguntó` })
   for (const p of respondidas) {
     if (!vivo(p.client_id)) continue
-    const cuando = texto(p.respondida_en), ficha = texto(p.ficha_id)
-    const espera = esperaDeLaRespuesta(p.respondida_en, esperasPorPregunta.get(String(p.id)) ?? [], esperasPorTema.get(claveDeTema(p.client_id, p.tema)) ?? [])
+    const cuando = texto(p.decidido_en), ficha = texto(p.ficha_ref), asumida = p.estado === 'asumida'
+    const espera = esperaDeLaRespuesta(p.decidido_en, esperasPorPregunta.get(String(p.id)) ?? [], esperasPorTema.get(claveDeTema(p.client_id, p.tema)) ?? [])
     const plan = pasosDelPlan(espera, espera ? corridaDe(espera) : null, Date.parse(hora))
     contestadas.push({
-      id: String(p.id), tipo: 'pregunta_al_dueno', fuente: 'cerebro_dueno_preguntas', client_id: texto(p.client_id), cliente: nombre(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta'), resuelta_en: cuando, resultado: plan.resultado ?? 'guardada', motivo: plan.motivo,
-      registro: [pregunto(p), { cuando, quien: 'tu', estado: 'respondiste', texto: 'Respondiste' }, ...(ficha ? [{ cuando, quien: 'sistema' as const, estado: 'guardado' as const, texto: 'Quedó guardada en el cerebro del cliente' }] : []), ...plan.pasos],
+      id: String(p.id), tipo: 'pregunta_al_dueno', fuente: 'dueno_preguntas', client_id: texto(p.client_id), cliente: nombre(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta'), resuelta_en: cuando, resultado: plan.resultado ?? 'guardada', motivo: plan.motivo,
+      registro: [pregunto(p), { cuando, quien: 'tu', estado: asumida ? 'asumiste' : 'respondiste', texto: asumida ? 'Aceptaste el supuesto de la oficina' : 'Respondiste' }, ...(ficha ? [{ cuando, quien: 'sistema' as const, estado: 'guardado' as const, texto: 'Quedó guardada en el cerebro del cliente' }] : []), ...plan.pasos],
     })
   }
   for (const p of descartadas) {
     if (!vivo(p.client_id)) continue
-    const cuando = texto(p.obsoleta_en), motivo = sinSecretos(p.motivo_descarte, TOPE_DE_CITA), tuya = loDescartoElDueno(motivo)
+    const cuando = texto(p.decidido_en), motivo = sinSecretos(p.motivo, TOPE_DE_CITA), tuya = p.estado === 'descartada' || loDescartoElDueno(motivo)
     contestadas.push({
-      id: String(p.id), tipo: 'pregunta_al_dueno', fuente: 'cerebro_dueno_preguntas', client_id: texto(p.client_id), cliente: nombre(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta'), resuelta_en: cuando, resultado: 'descartada', motivo: null,
+      id: String(p.id), tipo: 'pregunta_al_dueno', fuente: 'dueno_preguntas', client_id: texto(p.client_id), cliente: nombre(p.client_id), titulo: sinSecretos(p.pregunta, 300) ?? String(p.tema ?? 'Pregunta'), resuelta_en: cuando, resultado: 'descartada', motivo: null,
       registro: [pregunto(p), { cuando, quien: tuya ? 'tu' : 'sistema', estado: 'descartaste', texto: tuya ? 'La descartaste' : 'Se archivó', ...(motivo ? { cita: motivo } : {}) }],
     })
   }
