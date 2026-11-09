@@ -16,7 +16,7 @@ import { sniffImageFormat } from '@/lib/image-response'
 import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 import { conDescuento } from '@/lib/video/parametros'
 import { costoEstimadoUsd, enviar as enviarAHiggsfield, estado as estadoEnHiggsfield, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
-import { ANIMAR, archivoDe3D, clipsDeAnimacion, cotizarAnimacion, cotizarSinRed, entradaDe3D, entradaDeAnimacion, miniaturaDe3D, modeloDe3D, motivoDeAnimacion, promptDeImagenPara3D, TAMANO_POR_FORMATO, UUID, type Cotizacion, type Pedido, type PedidoDeAnimacion } from './catalogo'
+import { ANIMAR, entradaDeVarias, imagenDeVarias, precioDeVarias, VARIAS, archivoDe3D, clipsDeAnimacion, cotizarAnimacion, cotizarSinRed, entradaDe3D, entradaDeAnimacion, miniaturaDe3D, modeloDe3D, motivoDeAnimacion, promptDeImagenPara3D, TAMANO_POR_FORMATO, UUID, type Cotizacion, type Pedido, type PedidoDeAnimacion, type Referencia } from './catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from './movimientos'
 import { enviarAFal, estadoEnFal, resultadoDeFal } from './fal'
 import { crearImagen } from './openai-imagen'
@@ -34,12 +34,14 @@ export interface Deps {
 export const TABLA = 'estudio_piezas'
 /** el almacén de la oficina admite 20 MB por archivo */
 export const TOPE_DEL_ARCHIVO_BYTES = 20 * 1024 * 1024
-const COLUMNAS = 'id, client_id, tipo, estado, paso, prompt, modelo, parametros, foto_partida_url, costo_estimado_usd, costo_usd, archivo_url, archivo_tipo, miniatura_url, aviso, error, creado_en, terminado_en'
+const COLUMNAS = 'id, client_id, tipo, estado, paso, prompt, modelo, parametros, foto_partida_url, costo_estimado_usd, costo_usd, archivo_url, archivo_tipo, miniatura_url, aviso, error, creado_en, terminado_en, en_papelera_desde'
 
 export interface Pieza {
   id: string; client_id: string; tipo: string; estado: 'creando' | 'lista' | 'fallida'; paso: string | null; prompt: string; modelo: string
   parametros: Record<string, unknown>; foto_partida_url: string | null; costo_estimado_usd: number; costo_usd: number
   archivo_url: string | null; archivo_tipo: string | null; miniatura_url: string | null; aviso: string | null; error: string | null; creado_en: string; terminado_en: string | null
+  /** en la papelera desde (null = en la galería) */
+  en_papelera_desde: string | null
 }
 
 export type Resultado<T> = { ok: true; valor: T } | { ok: false; status: number; error: string; detalle?: string }
@@ -152,7 +154,7 @@ async function resolverFoto(d: Deps, p: Pedido): Promise<Resultado<{ url: string
     return { ok: true, valor: { url: up.valor, bytes, tipo: fmt.contentType } }
   }
   const origen = await leerPieza(d, p.foto.pieza_id)
-  if (!origen || origen.client_id !== p.client_id || origen.tipo !== 'imagen' || origen.estado !== 'lista' || !origen.archivo_url) return falla(400, 'foto_invalida', 'la imagen de partida debe ser una imagen lista de este mismo cliente')
+  if (!origen || origen.client_id !== p.client_id || origen.tipo !== 'imagen' || origen.estado !== 'lista' || !origen.archivo_url || origen.en_papelera_desde) return falla(400, 'foto_invalida', 'la imagen de partida debe ser una imagen lista de este mismo cliente')
   const b = await bajar(d, origen.archivo_url, TOPE_DEL_ARCHIVO_BYTES)
   if (!b.ok) return b
   return { ok: true, valor: { url: origen.archivo_url, bytes: b.valor, tipo: sniffImageFormat(b.valor).contentType } }
@@ -180,13 +182,14 @@ export async function crear(d: Deps, p: Pedido): Promise<Resultado<{ pieza: Piez
   const cli = await d.db.from('clients').select('id').eq('id', p.client_id).limit(1)
   if (cli.error) return falla(500, 'base_fallida', cli.error.message)
   if (!cli.data?.length) return falla(404, 'cliente_no_existe')
-  const prov = PROVEEDOR[p.tipo]
-  if (!d.llaves[prov === 'openai' ? 'openai' : prov]) return falla(500, 'llave_no_configurada', `falta la llave de ${prov}`)
+  const prov = p.fotos.length ? 'fal' : PROVEEDOR[p.tipo]
+  if (!d.llaves[prov]) return falla(500, 'llave_no_configurada', `falta la llave de ${prov}`)
   if (p.tipo === '3d' && !p.foto && !d.llaves.openai) return falla(500, 'llave_no_configurada', 'falta la llave de OpenAI para la imagen previa')
   if (!d.bucket) return falla(500, 'almacen_no_configurado', 'OFICINA_BUCKET no está en el entorno')
 
   const cot = await cotizar(d, p)
   if (!cot.ok) return cot
+  if (p.fotos.length) return crearConReferencias(d, p, cot.valor)
   const foto = await resolverFoto(d, p)
   if (!foto.ok) return foto
 
@@ -238,6 +241,49 @@ export async function crear(d: Deps, p: Pedido): Promise<Resultado<{ pieza: Piez
   return { ok: true, valor: { pieza: fin ?? pieza, ya_existia: false } }
 }
 
+// ── imagen con varias referencias (GO 09-nov 22:45Z) ─────────────────────
+/** cada referencia a una dirección pública nuestra: la subida se guarda en el almacén; la de la galería debe ser una imagen lista del mismo cliente (fuera de la papelera) */
+async function resolverReferencias(d: Deps, p: Pedido): Promise<Resultado<Array<{ numero: number; url: string }>>> {
+  const salida: Array<{ numero: number; url: string }> = []
+  for (const r of p.fotos as Referencia[]) {
+    if (r.foto.tipo === 'subida') {
+      const bytes = Buffer.from(r.foto.b64, 'base64')
+      const esImagen = bytes.length > 12 && (bytes[0] === 0x89 || (bytes[0] === 0xff && bytes[1] === 0xd8) || bytes.subarray(8, 12).toString('ascii') === 'WEBP')
+      if (!esImagen) return falla(400, 'foto_invalida', `la imagen ${r.numero} debe ser png, jpg o webp`)
+      const fmt = sniffImageFormat(bytes)
+      const up = await subir(d, `estudio/${p.client_id}/partidas/${p.clave}-${r.numero}.${fmt.ext}`, bytes, fmt.contentType)
+      if (!up.ok) return up
+      salida.push({ numero: r.numero, url: up.valor })
+    } else {
+      const o = await leerPieza(d, r.foto.pieza_id)
+      if (!o || o.client_id !== p.client_id || o.tipo !== 'imagen' || o.estado !== 'lista' || !o.archivo_url || o.en_papelera_desde) return falla(400, 'foto_invalida', `la imagen ${r.numero} debe ser una imagen lista de este mismo cliente`)
+      salida.push({ numero: r.numero, url: o.archivo_url })
+    }
+  }
+  return { ok: true, valor: salida }
+}
+
+/** se encarga a fal (la pantalla pregunta como con el 3D); el costo se anota al cerrar, cuando fal entregó */
+async function crearConReferencias(d: Deps, p: Pedido, cot: Cotizacion): Promise<Resultado<{ pieza: Pieza; ya_existia: boolean }>> {
+  const refs = await resolverReferencias(d, p)
+  if (!refs.ok) return refs
+  const ins = await d.db.from(TABLA).insert({
+    client_id: p.client_id, tipo: 'imagen', estado: 'creando', paso: 'imagen', prompt: p.prompt, modelo: VARIAS.id, clave: p.clave,
+    parametros: { formato: p.formato, resolucion: VARIAS.resolucion, referencias: refs.valor, cotizacion: cot },
+    foto_partida_url: refs.valor[0].url, costo_estimado_usd: cot.total_usd, costo_usd: 0,
+  }).select(COLUMNAS)
+  if (ins.error) {
+    const otra = await porClave(d, p.clave)
+    if (otra) return { ok: true, valor: { pieza: otra, ya_existia: true } }
+    return falla(500, 'base_fallida', ins.error.message)
+  }
+  const pieza = ins.data[0] as Pieza
+  const env = await enviarAFal(d.fetch, d.llaves.fal, VARIAS.endpoint, entradaDeVarias(p.prompt, refs.valor.map((r) => r.numero), refs.valor.map((r) => r.url), p.formato))
+  if (!env.ok) return { ok: true, valor: { pieza: (await fallar(d, pieza.id, `fal ${env.status} · ${env.error}`)) ?? pieza, ya_existia: false } }
+  const fin = await actualizar(d, pieza.id, { proveedor_request_id: env.envio.request_id, proveedor_status_url: env.envio.status_url, proveedor_response_url: env.envio.response_url }, true)
+  return { ok: true, valor: { pieza: fin ?? pieza, ya_existia: false } }
+}
+
 // ── avanzar (la pantalla pregunta) ────────────────────────────────────────
 /** cuánto puede vivir una pieza «creando» antes de vencer (muy por encima de lo normal: 5 min imagen, 20 video y 3D) */
 export const TOPE_DE_VIDA_MIN: Record<Pieza['tipo'], number> = { imagen: 60, video: 180, '3d': 180 }
@@ -286,6 +332,18 @@ export async function avanzar(d: Deps, id: string): Promise<Resultado<Pieza>> {
   const res = await resultadoDeFal(d.fetch, d.llaves.fal, responseUrl)
   if (!res.ok) return { ok: true, valor: (await fallar(d, id, motivo(`fal ${res.status} · ${res.error}`), yaGastado)) ?? pieza }
   if (esAnimacion) return cerrarAnimacion(d, pieza, res.salida, ahoraIso)
+  if (pieza.modelo === VARIAS.id) {
+    const precio = precioDeVarias(String(pieza.parametros?.resolucion ?? VARIAS.resolucion))
+    const url = imagenDeVarias(res.salida)
+    if (!url) {
+      // fal terminó (y cobra) sin imagen: misma regla que el 3D sin archivo
+      const f = await fallar(d, id, 'fal terminó sin imagen', yaGastado + precio)
+      if (!f) return { ok: true, valor: (await leerPieza(d, id)) ?? pieza }
+      const avisoLibro = await anotarCosto(d, { piezaId: id, clientId: pieza.client_id, proveedor: 'fal', modelo: pieza.modelo, parte: 'imagen', usd: precio, base: 'lista_publicada' })
+      return { ok: true, valor: avisoLibro ? ((await actualizar(d, id, { aviso: [f.aviso, avisoLibro].filter(Boolean).join(' · ') })) ?? f) : f }
+    }
+    return cerrar(d, pieza, { urlProveedor: url, ruta: `estudio/${pieza.client_id}/${id}.png`, tipo: 'image/png', archivoTipo: 'image', miniatura: null, proveedor: 'fal', usd: precio, base: 'lista_publicada', previo: yaGastado, ahoraIso })
+  }
   const archivo = archivoDe3D(res.salida)
   const m = modeloDe3D(pieza.modelo)
   const calidad = (pieza.parametros?.calidad === 'alta' ? 'alta' : 'normal') as 'normal' | 'alta'
@@ -317,7 +375,7 @@ async function cerrar(d: Deps, pieza: Pieza, x: { urlProveedor: string | null; r
   }
   // la miniatura de fal también vence: si es suya y no la podemos guardar, se usa la imagen de partida
   const total = +((x.previo ?? 0) + x.usd).toFixed(6)
-  const cerrada = await actualizar(d, pieza.id, { estado: 'lista', paso: null, costo_usd: total, archivo_url: url, archivo_tipo: x.archivoTipo, miniatura_url: x.miniatura && x.miniatura.startsWith('https://') && !/fal\.media/.test(x.miniatura) ? x.miniatura : pieza.foto_partida_url, aviso: [pieza.aviso, aviso].filter(Boolean).join(' · ') || null, terminado_en: x.ahoraIso() }, true)
+  const cerrada = await actualizar(d, pieza.id, { estado: 'lista', paso: null, costo_usd: total, archivo_url: url, archivo_tipo: x.archivoTipo, miniatura_url: x.archivoTipo === 'image' && url ? url : x.miniatura && x.miniatura.startsWith('https://') && !/fal\.media/.test(x.miniatura) ? x.miniatura : pieza.foto_partida_url, aviso: [pieza.aviso, aviso].filter(Boolean).join(' · ') || null, terminado_en: x.ahoraIso() }, true)
   // otra pregunta simultánea ya la cerró: no se anota dos veces
   if (!cerrada) return { ok: true, valor: (await leerPieza(d, pieza.id)) ?? pieza }
   const avisoLibro = await anotarCosto(d, { piezaId: pieza.id, clientId: pieza.client_id, proveedor: x.proveedor, modelo: pieza.modelo, parte: pieza.tipo, usd: x.usd, base: x.base })
@@ -332,7 +390,7 @@ const nombreDelMovimiento = (id: number) => BIBLIOTECA_DE_MOVIMIENTOS.find((m) =
 /** el modelo que se anima: un 3D GLB listo, del mismo cliente, que no sea ya una animación */
 async function modeloParaAnimar(d: Deps, p: PedidoDeAnimacion): Promise<Resultado<Pieza>> {
   const o = await leerPieza(d, p.origen_pieza_id)
-  if (!o || o.client_id !== p.client_id) return falla(404, 'modelo_no_existe', 'el modelo a animar no existe para este cliente')
+  if (!o || o.client_id !== p.client_id || o.en_papelera_desde) return falla(404, 'modelo_no_existe', 'el modelo a animar no existe para este cliente')
   if (o.tipo !== '3d' || o.estado !== 'lista' || o.archivo_tipo !== 'glb' || !o.archivo_url) return falla(400, 'modelo_no_animable', 'solo se anima un modelo 3D listo, en GLB')
   if (o.modelo === ANIMAR.id) return falla(400, 'modelo_no_animable', 'esta pieza ya es una animación: anima el modelo original')
   const rechazo = destinoPublico(o.archivo_url)
@@ -422,9 +480,124 @@ async function cerrarAnimacion(d: Deps, pieza: Pieza, salida: Record<string, unk
 // ── listar ────────────────────────────────────────────────────────────────
 export async function listar(d: Deps, clientId: string, tipo: string | null, limite = 60): Promise<Resultado<Pieza[]>> {
   if (!UUID.test(clientId)) return falla(400, 'client_id_invalido')
-  let q = d.db.from(TABLA).select(COLUMNAS).eq('client_id', clientId)
+  let q = d.db.from(TABLA).select(COLUMNAS).eq('client_id', clientId).is('en_papelera_desde', null)
   if (tipo) q = q.eq('tipo', tipo)
   const r = await q.order('creado_en', { ascending: false }).limit(Math.min(Math.max(limite, 1), 200))
   if (r.error) return falla(500, 'base_fallida', r.error.message)
   return { ok: true, valor: (r.data ?? []) as Pieza[] }
+}
+
+// ── papelera (decisión B de Emilio · GO 09-nov 22:45Z) ────────────────────
+/** cuánto vive una pieza en la papelera antes de borrarse sola */
+export const DIAS_EN_LA_PAPELERA = 30
+/** cuántas piezas vencidas borra una pasada del cron (lo que sobre queda para la siguiente) */
+export const TOPE_POR_PASADA = 50
+
+/** lo que está en la papelera de un cliente, lo más reciente primero */
+export async function listarPapelera(d: Deps, clientId: string): Promise<Resultado<Pieza[]>> {
+  if (!UUID.test(clientId)) return falla(400, 'client_id_invalido')
+  const r = await d.db.from(TABLA).select(COLUMNAS).eq('client_id', clientId).not('en_papelera_desde', 'is', null).order('en_papelera_desde', { ascending: false }).limit(200)
+  if (r.error) return falla(500, 'base_fallida', r.error.message)
+  return { ok: true, valor: (r.data ?? []) as Pieza[] }
+}
+
+/** la ✕: la pieza sale de la galería y entra a la papelera. Una pieza que se está creando no (su cobro se anota al cerrar, y en la papelera nadie la pregunta) */
+export async function moverAPapelera(d: Deps, clientId: string, id: string): Promise<Resultado<Pieza>> {
+  if (!UUID.test(clientId) || !UUID.test(id)) return falla(400, 'id_invalido')
+  const o = await leerPieza(d, id)
+  if (!o || o.client_id !== clientId) return falla(404, 'pieza_no_existe')
+  if (o.en_papelera_desde) return { ok: true, valor: o }
+  if (o.estado === 'creando') return falla(409, 'pieza_creandose', 'espera a que termine de crearse')
+  const ahora = new Date(d.ahora()).toISOString()
+  const r = await d.db.from(TABLA).update({ en_papelera_desde: ahora, actualizado_en: ahora }).eq('id', id).eq('client_id', clientId).is('en_papelera_desde', null).select(COLUMNAS)
+  if (r.error) return falla(500, 'base_fallida', r.error.message)
+  return { ok: true, valor: (r.data?.[0] as Pieza | undefined) ?? (await leerPieza(d, id)) ?? o }
+}
+
+/** recuperar: vuelve a la galería tal cual estaba */
+export async function recuperar(d: Deps, clientId: string, id: string): Promise<Resultado<Pieza>> {
+  if (!UUID.test(clientId) || !UUID.test(id)) return falla(400, 'id_invalido')
+  const o = await leerPieza(d, id)
+  if (!o || o.client_id !== clientId) return falla(404, 'pieza_no_existe', 'ya no está: pasó su plazo en la papelera')
+  if (!o.en_papelera_desde) return { ok: true, valor: o }
+  const r = await d.db.from(TABLA).update({ en_papelera_desde: null, actualizado_en: new Date(d.ahora()).toISOString() }).eq('id', id).eq('client_id', clientId).select(COLUMNAS)
+  if (r.error) return falla(500, 'base_fallida', r.error.message)
+  return { ok: true, valor: (r.data?.[0] as Pieza | undefined) ?? o }
+}
+
+/** días que le quedan en la papelera (0 = se borra en la próxima pasada) */
+export function diasQueQuedan(desde: string, ahoraMs: number): number {
+  const t = Date.parse(desde)
+  if (!Number.isFinite(t)) return DIAS_EN_LA_PAPELERA
+  return Math.max(0, Math.ceil((t + DIAS_EN_LA_PAPELERA * 86_400_000 - ahoraMs) / 86_400_000))
+}
+
+/**
+ * Los archivos PROPIOS de una pieza en el almacén: los que llevan su id o su clave en el nombre, dentro de la carpeta de su cliente.
+ * La imagen de la galería que se usó de partida es de OTRA pieza: no se toca (sigue la suerte de su propia pieza).
+ */
+export function archivosPropios(prefijoPublico: string, p: Pick<Pieza, 'id' | 'client_id' | 'archivo_url' | 'miniatura_url' | 'foto_partida_url' | 'parametros'> & { clave: string }): string[] {
+  const carpeta = `estudio/${p.client_id}/`
+  const urls: unknown[] = [p.archivo_url, p.miniatura_url, p.foto_partida_url]
+  for (const k of ['archivos', 'referencias']) {
+    const l = p.parametros?.[k]
+    if (Array.isArray(l)) for (const x of l) if (x && typeof x === 'object') { const o = x as Record<string, unknown>; urls.push(o.glb, o.fbx, o.url) }
+  }
+  const rutas = new Set<string>()
+  for (const u of urls) {
+    if (typeof u !== 'string' || !u.startsWith(prefijoPublico)) continue
+    let ruta: string
+    try { ruta = decodeURIComponent(u.slice(prefijoPublico.length).split('?')[0]) } catch { continue }
+    if (!ruta.startsWith(carpeta) || ruta.includes('..')) continue
+    const nombre = ruta.slice(carpeta.length)
+    if (nombre.startsWith(p.id) || nombre.startsWith(`partidas/${p.clave}.`) || nombre.startsWith(`partidas/${p.clave}-`)) rutas.add(ruta)
+  }
+  return [...rutas]
+}
+
+export interface Vaciado { revisadas: number; borradas: string[]; archivos: number; conservados: number; fallas: Array<{ id: string; error: string }>; dry_run: boolean }
+
+/** ¿otra pieza (viva o en la papelera) muestra este archivo? Entonces no se borra */
+async function loUsaOtra(d: Deps, id: string, url: string): Promise<boolean> {
+  for (const c of ['archivo_url', 'miniatura_url', 'foto_partida_url']) {
+    const r = await d.db.from(TABLA).select('id').eq(c, url).neq('id', id).limit(1)
+    if (r.error) throw new Error(r.error.message)
+    if (r.data?.length) return true
+  }
+  return false
+}
+
+/**
+ * El cron diario: borra lo que pasó 30 días en la papelera, fila y archivos propios. Primero los archivos; si el almacén falla, la fila queda para
+ * la próxima pasada (nunca una fila borrada con sus archivos huérfanos). El libro de costos no se toca.
+ */
+export async function vaciarPapelera(d: Deps, o: { dry_run: boolean }): Promise<Resultado<Vaciado>> {
+  if (!d.bucket) return falla(500, 'almacen_no_configurado', 'OFICINA_BUCKET no está en el entorno')
+  const limite = new Date(d.ahora() - DIAS_EN_LA_PAPELERA * 86_400_000).toISOString()
+  const r = await d.db.from(TABLA).select(`${COLUMNAS}, clave`).lt('en_papelera_desde', limite).order('en_papelera_desde', { ascending: true }).limit(TOPE_POR_PASADA)
+  if (r.error) return falla(500, 'base_fallida', r.error.message)
+  const vencidas = (r.data ?? []) as Array<Pieza & { clave: string }>
+  const prefijo = d.db.storage.from(d.bucket).getPublicUrl('').data.publicUrl.replace(/\/?$/, '/')
+  const res: Vaciado = { revisadas: vencidas.length, borradas: [], archivos: 0, conservados: 0, fallas: [], dry_run: o.dry_run }
+  for (const p of vencidas) {
+    try {
+      const borrar: string[] = []
+      for (const ruta of archivosPropios(prefijo, p)) {
+        if (await loUsaOtra(d, p.id, `${prefijo}${ruta}`)) res.conservados++
+        else borrar.push(ruta)
+      }
+      if (o.dry_run) { res.borradas.push(p.id); res.archivos += borrar.length; continue }
+      if (borrar.length) {
+        const rm = await d.db.storage.from(d.bucket).remove(borrar)
+        if (rm.error) { res.fallas.push({ id: p.id, error: `almacén: ${rm.error.message}` }); continue }
+      }
+      // solo si sigue en la papelera y vencida (alguien pudo recuperarla mientras tanto)
+      const del = await d.db.from(TABLA).delete().eq('id', p.id).lt('en_papelera_desde', limite)
+      if (del.error) { res.fallas.push({ id: p.id, error: `base: ${del.error.message}` }); continue }
+      res.borradas.push(p.id); res.archivos += borrar.length
+    } catch (e) {
+      res.fallas.push({ id: p.id, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  return { ok: true, valor: res }
 }

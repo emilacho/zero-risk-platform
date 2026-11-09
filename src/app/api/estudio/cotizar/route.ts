@@ -21,7 +21,10 @@ export async function POST(request: Request) {
   const d = depsReales()
   // para cotizar no hace falta la foto entera: basta saber si la hay (el precio no depende de cuál)
   const conFoto = body.con_foto === true || (typeof body.foto_b64 === 'string' && body.foto_b64.length > 0) || (typeof body.foto_pieza_id === 'string' && body.foto_pieza_id.length > 0) || (typeof body.rehacer_pieza_id === 'string' && body.rehacer_pieza_id.length > 0)
-  const a = armarPedido({ ...body, foto_b64: undefined, rehacer_pieza_id: undefined, foto_pieza_id: conFoto ? FOTO_CUALQUIERA : undefined, clave: 'cotizacion-sin-gasto' }, d.modeloDeImagen)
+  // varias referencias (GO 09-nov): basta saber cuántas; el precio no depende de cuáles
+  const nFotos = Array.isArray(body.fotos) ? body.fotos.length : Number(body.n_fotos) || 0
+  const fotos = nFotos >= 2 ? Array.from({ length: Math.min(nFotos, 99) }, (_, i) => ({ numero: i + 1, pieza_id: FOTO_CUALQUIERA })) : undefined
+  const a = armarPedido({ ...body, fotos, n_fotos: undefined, foto_b64: undefined, rehacer_pieza_id: undefined, foto_pieza_id: conFoto && !fotos ? FOTO_CUALQUIERA : undefined, clave: 'cotizacion-sin-gasto' }, d.modeloDeImagen)
   if (!a.ok) return NextResponse.json({ error: 'pedido_invalido', errores: a.errores }, { status: 400 })
   try {
     const r = await cotizar(d, a.pedido)

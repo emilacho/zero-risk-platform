@@ -4,10 +4,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { archivoDe3D, armarAnimacion, AVISO_SIN_CAUSA, demasiadoDetalle, entradaDe3D, LIMITE_DE_CARAS_DEL_ESQUELETO, MODELOS_3D, TOPE_DE_CARAS_3D, motivoDeAnimacion, noEsHumanoide, textoDelProveedor, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
+import { textoConReferencias, VARIAS, archivoDe3D, armarAnimacion, AVISO_SIN_CAUSA, demasiadoDetalle, entradaDe3D, LIMITE_DE_CARAS_DEL_ESQUELETO, MODELOS_3D, TOPE_DE_CARAS_3D, motivoDeAnimacion, noEsHumanoide, textoDelProveedor, armarPedido, cotizarAnimacion, cotizarSinRed, MOVIMIENTOS_COMUNES, type Pedido } from '@/lib/estudio/catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from '@/lib/estudio/movimientos'
 import { esDeLaCola } from '@/lib/estudio/fal'
-import { avanzar, TOPE_DE_VIDA_MIN, vencioLaPieza, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
+import { archivosPropios, diasQueQuedan, listarPapelera, moverAPapelera, recuperar, vaciarPapelera, avanzar, TOPE_DE_VIDA_MIN, vencioLaPieza, cotizarLaAnimacion, crear, crearAnimacion, listar, cotizar, movimientoExiste, type Deps } from '@/lib/estudio/servicio'
 
 const CLIENTE = 'a0000000-0000-4000-8000-0000000000e1'
 const OTRO = 'b0000000-0000-4000-8000-0000000000e2'
@@ -18,6 +18,9 @@ const GLB = Buffer.from('glTF____modelo-de-prueba')
 const migracion = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '202611052100_estudio_piezas.sql'), 'utf8')
 const cuerpoTabla = migracion.slice(migracion.indexOf('create table'), migracion.indexOf(');', migracion.indexOf('create table')))
 const COLUMNAS_PIEZAS = new Set([...cuerpoTabla.matchAll(/^\s{2}([a-z_]+)\s/gm)].map((m) => m[1]))
+// y las que agregan las migraciones posteriores (09-nov · la papelera)
+const papelera = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '202611092300_estudio_papelera.sql'), 'utf8')
+for (const m of papelera.matchAll(/add column if not exists ([a-z_]+)/g)) COLUMNAS_PIEZAS.add(m[1])
 const COLUMNAS: Record<string, Set<string>> = {
   estudio_piezas: COLUMNAS_PIEZAS,
   costs: new Set(['id', 'category', 'service', 'amount_usd', 'campaign_id', 'description', 'date', 'created_at', 'amount_usd_exact']),
@@ -25,17 +28,18 @@ const COLUMNAS: Record<string, Set<string>> = {
 }
 
 type Fila = Record<string, unknown>
-function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}) {
+function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean; quitarFalla?: boolean } = {}) {
   const t: Record<string, Fila[]> = { estudio_piezas: [], costs: [], clients: clientes.map((id) => ({ id })) }
   const subidas: Array<{ ruta: string; bytes: number; tipo: string }> = []
+  const quitados: string[] = []
   let n = 0
   const validar = (tabla: string, cols: string[]) => { for (const c of cols) if (!COLUMNAS[tabla]?.has(c)) throw new Error(`columna inexistente ${tabla}.${c}`) }
   const colsDe = (tabla: string, s: string) => { const cs = s.split(',').map((x) => x.trim()).filter(Boolean); validar(tabla, cs); return cs }
   const proy = (f: Fila, cs: string[]) => Object.fromEntries(cs.map((c) => [c, f[c] ?? null]))
   const db = {
     from(tabla: string) {
-      const filtros: Array<[string, unknown]> = []
-      let modo: 'select' | 'update' | 'insert' = 'select'
+      const filtros: Array<(f: Fila) => boolean> = []
+      let modo: 'select' | 'update' | 'insert' | 'delete' = 'select'
       let cols: string[] = []
       let cambios: Fila = {}
       let nuevas: Fila[] = []
@@ -43,7 +47,12 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}
       let error: { message: string } | null = null
       const q = {
         select(s: string) { cols = colsDe(tabla, s); return q },
-        eq(c: string, v: unknown) { validar(tabla, [c]); filtros.push([c, v]); return q },
+        eq(c: string, v: unknown) { validar(tabla, [c]); filtros.push((f) => f[c] === v); return q },
+        neq(c: string, v: unknown) { validar(tabla, [c]); filtros.push((f) => f[c] !== v); return q },
+        is(c: string, v: null) { validar(tabla, [c]); filtros.push((f) => (f[c] ?? null) === v); return q },
+        not(c: string, op: string, v: null) { validar(tabla, [c]); if (op !== 'is') throw new Error(`not ${op} sin simular`); filtros.push((f) => (f[c] ?? null) !== v); return q },
+        lt(c: string, v: string) { validar(tabla, [c]); filtros.push((f) => typeof f[c] === 'string' && (f[c] as string) < v); return q },
+        delete() { modo = 'delete'; return q },
         order(c: string) { validar(tabla, [c]); return q },
         limit(k: number) { lim = k; return q },
         insert(row: Fila) {
@@ -54,11 +63,12 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}
         },
         update(row: Fila) { modo = 'update'; validar(tabla, Object.keys(row)); cambios = row; return q },
         then(ok: (r: unknown) => unknown, ko?: (e: unknown) => unknown) {
-          const coincide = (f: Fila) => filtros.every(([c, v]) => f[c] === v)
+          const coincide = (f: Fila) => filtros.every((x) => x(f))
           let data: Fila[] = []
           if (error) return Promise.resolve({ data: null, error }).then(ok, ko)
           if (modo === 'insert') data = nuevas
           else if (modo === 'update') { data = t[tabla].filter(coincide); data.forEach((f) => Object.assign(f, cambios)) }
+          else if (modo === 'delete') { data = t[tabla].filter(coincide); t[tabla] = t[tabla].filter((f) => !coincide(f)) }
           else data = t[tabla].filter(coincide).slice(0, lim)
           return Promise.resolve({ data: cols.length ? data.map((f) => proy(f, cols)) : data, error: null }).then(ok, ko)
         },
@@ -70,17 +80,18 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean } = {}
         return {
           upload: async (ruta: string, bytes: Buffer, o: { contentType: string }) => { if (op.subirFalla) return { error: { message: 'almacén lleno' } }; subidas.push({ ruta, bytes: bytes.length, tipo: o.contentType }); return { error: null } },
           getPublicUrl: (ruta: string) => ({ data: { publicUrl: `https://almacen.test/${b}/${ruta}` } }),
+          remove: async (rutas: string[]) => { if (op.quitarFalla) return { error: { message: 'almacén caído' } }; quitados.push(...rutas); return { error: null } },
         }
       },
     },
   }
-  return { db, t, subidas }
+  return { db, t, subidas, quitados }
 }
 
 interface Llamada { url: string; init?: RequestInit }
 const ERROR_DE_TRIANGULOS = "The input model has 1,456,114 triangles which exceeds the 380,000 triangle limit for rigging (a quad face counts as two triangles). Please use the Remesh API (POST /openapi/v1/remesh) with a target_polycount of 300000 or less (150000 or less with topology quad) before rigging."
 
-function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' | 'uno_sin_archivo' | 'demasiado_detalle' | 'envio_demasiado_detalle' | 'envio_raro' } = {}) {
+function proveedores(op: { varias?: 'ok' | 'sin_imagen' | 'envio_falla'; falEstado?: string[]; falError?: boolean; falSinArchivo?: boolean; hfEstado?: string[]; animar?: 'ok' | 'no_humanoide' | 'envio_no_humanoide' | 'sin_clips' | 'falta_uno' | 'uno_sin_archivo' | 'demasiado_detalle' | 'envio_demasiado_detalle' | 'envio_raro' } = {}) {
   const llamadas: Llamada[] = []
   const ANIM = 'https://queue.fal.run/fal-ai/meshy/requests/anim-1'
   let pedidosDeAnimacion: number[] = []
@@ -90,6 +101,11 @@ function proveedores(op: { falEstado?: string[]; falError?: boolean; falSinArchi
   const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     llamadas.push({ url, init })
+    // imagen con varias referencias (fal-ai/nano-banana-pro/edit)
+    if (url === 'https://queue.fal.run/fal-ai/nano-banana-pro/edit') return op.varias === 'envio_falla' ? json({ detail: 'bad input' }, 422) : json({ request_id: 'nb-1', status_url: 'https://queue.fal.run/fal-ai/nano-banana-pro/requests/nb-1/status', response_url: 'https://queue.fal.run/fal-ai/nano-banana-pro/requests/nb-1' })
+    if (url === 'https://queue.fal.run/fal-ai/nano-banana-pro/requests/nb-1/status') return json({ status: 'COMPLETED' })
+    if (url === 'https://queue.fal.run/fal-ai/nano-banana-pro/requests/nb-1') return json(op.varias === 'sin_imagen' ? { images: [], description: '' } : { images: [{ url: 'https://v3b.fal.media/files/nb/salida.png', content_type: 'image/png' }], description: 'listo' })
+    if (url === 'https://v3b.fal.media/files/nb/salida.png') return new Response(PNG, { status: 200 })
     if (url.startsWith('https://api.openai.com/v1/images/')) return json({ data: [{ b64_json: PNG.toString('base64') }], usage: { input_tokens: 20, output_tokens: 439, input_tokens_details: { text_tokens: 20, image_tokens: 0 } } })
     if (url === 'https://queue.fal.run/tripo3d/h3.1/image-to-3d') return json({ request_id: 'fal-1', status_url: 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1/status', response_url: 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1' })
     if (url.endsWith('/requests/fal-1/status')) {
@@ -756,5 +772,169 @@ describe('GO 09-nov · rehacer un modelo 3D desde su misma imagen (queda ligado 
       if (!r.ok) expect(r.status).toBe(400)
       expect(d.p.llamadas.filter((l) => l.url.includes('fal.run')).length).toBe(llamadasAntes)
     }
+  })
+})
+
+describe('GO 09-nov 22:45Z · imagen con varias referencias (Nano Banana Pro)', () => {
+  const ref = (numero: number) => ({ numero, b64: PNG.toString('base64') })
+  it('2 a 6 referencias, números fijos del 1 al 6 sin repetir; el pedido sale en el orden de los números', () => {
+    const p = pedido({ tipo: 'imagen', prompt: 'el personaje de la 3 en la playa de la 1', fotos: [ref(3), ref(1)] })
+    expect(p.modelo).toBe(VARIAS.id)
+    expect(p.fotos.map((r) => r.numero)).toEqual([1, 3])
+    const mal = (fotos: unknown, tipo = 'imagen') => armarPedido({ client_id: CLIENTE, clave: 'clic-0000001', tipo, prompt: 'una ola', fotos }, 'm')
+    expect(mal([ref(1)]).ok).toBe(false)
+    expect(mal([1, 2, 3, 4, 5, 6, 7].map((n) => ref(Math.min(n, 6)))).ok).toBe(false)
+    expect(mal([ref(1), ref(1)]).ok).toBe(false)
+    expect(mal([ref(1), ref(7)]).ok).toBe(false)
+    expect(mal([ref(1), { numero: 2 }]).ok).toBe(false)
+    expect(mal([ref(1), ref(2)], 'video').ok).toBe(false)
+    expect(armarPedido({ client_id: CLIENTE, clave: 'clic-0000001', tipo: 'imagen', prompt: 'ola', fotos: [ref(1), ref(2)], foto_b64: PNG.toString('base64') }, 'm').ok).toBe(false)
+  })
+  it('las referencias juntas no pasan de 3 MB', () => {
+    const grande = { numero: 1, b64: Buffer.alloc(2 * 1024 * 1024, 7).toString('base64') }
+    const a = armarPedido({ client_id: CLIENTE, clave: 'clic-0000001', tipo: 'imagen', prompt: 'ola', fotos: [grande, { ...grande, numero: 2 }] }, 'm')
+    expect(a.ok).toBe(false)
+  })
+  it('cotiza US$ 0,15 con cualquier cantidad (se pide 2K, mismo precio que 1K; 4K costaría el doble)', () => {
+    expect(cotizarSinRed(pedido({ tipo: 'imagen', prompt: 'ola', fotos: [ref(1), ref(2), ref(5)] }))).toEqual({ total_usd: 0.15, partes: [{ que: 'imagen con 3 referencias', usd: 0.15 }] })
+    expect(VARIAS.resolucion).toBe('2K')
+  })
+  it('con huecos en los números el modelo sabe qué número es cada imagen; sin huecos el texto va tal cual', () => {
+    expect(textoConReferencias('una ola', [1, 2, 3])).toBe('una ola')
+    expect(textoConReferencias('la imagen 3 en la 2', [2, 3])).toBe('la imagen 3 en la 2\n\nReferencias, en el orden en que van adjuntas: la 1.ª imagen adjunta es la «imagen 2», la 2.ª imagen adjunta es la «imagen 3».')
+  })
+  it('crea: sube cada referencia, encarga a fal en orden, y al cerrar guarda la imagen y anota US$ 0,15 una vez', async () => {
+    const d = deps()
+    d.base.t.estudio_piezas.push({ id: 'c0000000-0000-4000-8000-0000000000a1', client_id: CLIENTE, tipo: 'imagen', estado: 'lista', archivo_url: 'https://almacen.test/oficina-creativos/estudio/x/galeria.png', clave: 'k-galeria-1', en_papelera_desde: null })
+    const r = await crear(d, pedido({ tipo: 'imagen', prompt: 'la imagen 4 en la playa de la 2', formato: '9:16', fotos: [ref(4), { numero: 2, pieza_id: 'c0000000-0000-4000-8000-0000000000a1' }] }))
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.valor.pieza.estado).toBe('creando')
+    expect(r.valor.pieza.modelo).toBe('nano-banana-pro')
+    const envio = d.p.llamadas.find((l) => l.url === 'https://queue.fal.run/fal-ai/nano-banana-pro/edit')!
+    const cuerpo = JSON.parse(String(envio.init!.body))
+    expect(cuerpo.image_urls).toEqual(['https://almacen.test/oficina-creativos/estudio/x/galeria.png', `https://almacen.test/oficina-creativos/estudio/${CLIENTE}/partidas/clic-0000001-4.png`])
+    expect(cuerpo).toMatchObject({ aspect_ratio: '9:16', resolution: '2K', num_images: 1 })
+    expect(cuerpo.prompt).toMatch(/la 1\.ª imagen adjunta es la «imagen 2», la 2\.ª imagen adjunta es la «imagen 4»/)
+    expect(d.base.t.costs).toHaveLength(0)
+    const a = await avanzar(d, r.valor.pieza.id)
+    expect(a.ok && a.valor.estado).toBe('lista')
+    if (!a.ok) return
+    expect(a.valor.archivo_url).toBe(`https://almacen.test/oficina-creativos/estudio/${CLIENTE}/${r.valor.pieza.id}.png`)
+    expect(a.valor.miniatura_url).toBe(a.valor.archivo_url)
+    expect(d.base.t.costs).toHaveLength(1)
+    expect(d.base.t.costs[0]).toMatchObject({ service: 'estudio:fal', amount_usd_exact: 0.15 })
+    // otra pregunta ya no anota
+    await avanzar(d, r.valor.pieza.id)
+    expect(d.base.t.costs).toHaveLength(1)
+  })
+  it('una imagen de la galería de otro cliente, o en la papelera, no sirve de referencia', async () => {
+    const d = deps()
+    d.base.t.estudio_piezas.push({ id: 'c0000000-0000-4000-8000-0000000000a2', client_id: OTRO, tipo: 'imagen', estado: 'lista', archivo_url: 'https://almacen.test/x.png', clave: 'k-otro-1', en_papelera_desde: null })
+    d.base.t.estudio_piezas.push({ id: 'c0000000-0000-4000-8000-0000000000a3', client_id: CLIENTE, tipo: 'imagen', estado: 'lista', archivo_url: 'https://almacen.test/y.png', clave: 'k-tacho-1', en_papelera_desde: '2026-11-04T00:00:00Z' })
+    for (const id of ['c0000000-0000-4000-8000-0000000000a2', 'c0000000-0000-4000-8000-0000000000a3']) {
+      const r = await crear(d, pedido({ tipo: 'imagen', prompt: 'mezcla', clave: `clic-${id.slice(-6)}`, fotos: [ref(1), { numero: 2, pieza_id: id }] }))
+      expect(r.ok).toBe(false)
+    }
+    expect(d.p.llamadas.some((l) => l.url.includes('nano-banana'))).toBe(false)
+  })
+  it('fal termina sin imagen: la pieza falla con su precio y el libro anota esa misma cifra', async () => {
+    const d = deps(baseFalsa(), proveedores({ varias: 'sin_imagen' }))
+    const r = await crear(d, pedido({ tipo: 'imagen', prompt: 'mezcla', fotos: [ref(1), ref(2)] }))
+    if (!r.ok) throw new Error('no creó')
+    const a = await avanzar(d, r.valor.pieza.id)
+    expect(a.ok && a.valor.estado).toBe('fallida')
+    expect(a.ok && Number(a.valor.costo_usd)).toBe(0.15)
+    expect(d.base.t.costs).toHaveLength(1)
+  })
+  it('fal rechaza el envío: falla sin cobro', async () => {
+    const d = deps(baseFalsa(), proveedores({ varias: 'envio_falla' }))
+    const r = await crear(d, pedido({ tipo: 'imagen', prompt: 'mezcla', fotos: [ref(1), ref(2)] }))
+    expect(r.ok && r.valor.pieza.estado).toBe('fallida')
+    expect(r.ok && Number(r.valor.pieza.costo_usd)).toBe(0)
+    expect(d.base.t.costs).toHaveLength(0)
+  })
+  it('sin la llave de fal no se crea (ni se sube nada)', async () => {
+    const d = { ...deps(), llaves: { openai: 'sk', higgsfield: 'h', fal: '' } }
+    const r = await crear(d, pedido({ tipo: 'imagen', prompt: 'mezcla', fotos: [ref(1), ref(2)] }))
+    expect(!r.ok && r.error).toBe('llave_no_configurada')
+  })
+})
+
+describe('GO 09-nov 22:45Z · la ✕ de la galería y la papelera (30 días, nunca borrado inmediato)', () => {
+  const ID = 'd0000000-0000-4000-8000-0000000000b1'
+  const A = 'https://almacen.test/oficina-creativos/'
+  function conPieza(extra: Fila = {}, b = baseFalsa()) {
+    b.t.estudio_piezas.push({ id: ID, client_id: CLIENTE, tipo: '3d', estado: 'lista', prompt: 'taza', modelo: 'tripo-h3.1', clave: 'clic-tacho-01', parametros: {}, archivo_url: `${A}estudio/${CLIENTE}/${ID}.glb`, miniatura_url: `${A}estudio/${CLIENTE}/${ID}-partida.png`, foto_partida_url: `${A}estudio/${CLIENTE}/${ID}-partida.png`, creado_en: '2026-10-01T00:00:00Z', en_papelera_desde: null, ...extra })
+    return deps(b)
+  }
+  it('la ✕ saca la pieza de la galería y la pone en la papelera; recuperar la devuelve', async () => {
+    const d = conPieza()
+    const m = await moverAPapelera(d, CLIENTE, ID)
+    expect(m.ok && m.valor.en_papelera_desde).toBe('2026-11-05T20:00:00.000Z')
+    expect((await listar(d, CLIENTE, null)).ok && (await listar(d, CLIENTE, null) as { valor: unknown[] }).valor).toHaveLength(0)
+    const p = await listarPapelera(d, CLIENTE)
+    expect(p.ok && p.valor.map((x) => x.id)).toEqual([ID])
+    // nada se borró: ni la fila ni los archivos
+    expect(d.base.quitados).toHaveLength(0)
+    const r = await recuperar(d, CLIENTE, ID)
+    expect(r.ok && r.valor.en_papelera_desde).toBeNull()
+    const l = await listar(d, CLIENTE, null)
+    expect(l.ok && l.valor.map((x) => x.id)).toEqual([ID])
+  })
+  it('otro cliente no la mueve ni la recupera; una pieza creándose no entra a la papelera', async () => {
+    const d = conPieza()
+    expect((await moverAPapelera(d, OTRO, ID)).ok).toBe(false)
+    const c = conPieza({ estado: 'creando' })
+    const m = await moverAPapelera(c, CLIENTE, ID)
+    expect(!m.ok && m.status).toBe(409)
+    expect(c.base.t.estudio_piezas[0].en_papelera_desde).toBeNull()
+  })
+  it('una pieza en la papelera no se anima', async () => {
+    const d = conPieza({ en_papelera_desde: '2026-11-05T00:00:00Z' })
+    const r = await crearAnimacion(d, { client_id: CLIENTE, clave: 'clic-anim-001', origen_pieza_id: ID, movimientos: [30] })
+    expect(r.ok).toBe(false)
+  })
+  it('los días que le quedan', () => {
+    const ahora = Date.parse('2026-11-10T12:00:00Z')
+    expect(diasQueQuedan('2026-11-10T11:00:00Z', ahora)).toBe(30)
+    expect(diasQueQuedan('2026-10-12T12:00:00Z', ahora)).toBe(1)
+    expect(diasQueQuedan('2026-10-01T00:00:00Z', ahora)).toBe(0)
+  })
+  it('archivos propios: los de su id o su clave en su carpeta; nunca los de otra pieza ni fuera de la carpeta del cliente', () => {
+    const rutas = archivosPropios(A, {
+      id: ID, client_id: CLIENTE, clave: 'clic-tacho-01',
+      archivo_url: `${A}estudio/${CLIENTE}/${ID}.glb`, miniatura_url: 'https://v3.fal.media/x.webp', foto_partida_url: `${A}estudio/${CLIENTE}/otra-pieza.png`,
+      parametros: { archivos: [{ glb: `${A}estudio/${CLIENTE}/${ID}-30.glb`, fbx: `${A}estudio/${CLIENTE}/${ID}-30.fbx` }], referencias: [{ url: `${A}estudio/${CLIENTE}/partidas/clic-tacho-01-2.png` }, { url: `${A}estudio/${OTRO}/${ID}.png` }, { url: `${A}estudio/${CLIENTE}/${ID}/../../${OTRO}/robada.png` }] },
+    })
+    expect(rutas.sort()).toEqual([`estudio/${CLIENTE}/${ID}-30.fbx`, `estudio/${CLIENTE}/${ID}-30.glb`, `estudio/${CLIENTE}/${ID}.glb`, `estudio/${CLIENTE}/partidas/clic-tacho-01-2.png`].sort())
+  })
+  it('el cron borra solo lo que pasó 30 días (fila y archivos propios) y deja el libro de costos intacto', async () => {
+    const d = conPieza({ en_papelera_desde: '2026-10-05T19:00:00Z' })
+    d.base.t.estudio_piezas.push({ id: 'd0000000-0000-4000-8000-0000000000b2', client_id: CLIENTE, tipo: 'imagen', estado: 'lista', clave: 'clic-reciente', parametros: {}, archivo_url: `${A}estudio/${CLIENTE}/d0000000-0000-4000-8000-0000000000b2.png`, en_papelera_desde: '2026-10-07T00:00:00Z' })
+    d.base.t.costs.push({ id: 1, service: 'estudio:fal', description: JSON.stringify({ pieza_id: ID }) })
+    const seco = await vaciarPapelera(d, { dry_run: true })
+    expect(seco.ok && seco.valor).toMatchObject({ revisadas: 1, borradas: [ID], archivos: 2, dry_run: true })
+    expect(d.base.t.estudio_piezas).toHaveLength(2)
+    expect(d.base.quitados).toHaveLength(0)
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(r.ok && r.valor.borradas).toEqual([ID])
+    expect(d.base.quitados.sort()).toEqual([`estudio/${CLIENTE}/${ID}-partida.png`, `estudio/${CLIENTE}/${ID}.glb`])
+    expect(d.base.t.estudio_piezas.map((x) => x.id)).toEqual(['d0000000-0000-4000-8000-0000000000b2'])
+    expect(d.base.t.costs).toHaveLength(1)
+  })
+  it('un archivo que otra pieza muestra no se borra (p. ej. la imagen de partida de una animación)', async () => {
+    const d = conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' })
+    d.base.t.estudio_piezas.push({ id: 'd0000000-0000-4000-8000-0000000000b3', client_id: CLIENTE, tipo: '3d', estado: 'lista', clave: 'clic-anim-1', modelo: 'meshy-animar', parametros: {}, foto_partida_url: `${A}estudio/${CLIENTE}/${ID}-partida.png`, en_papelera_desde: null })
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(r.ok && r.valor).toMatchObject({ borradas: [ID], conservados: 1 })
+    expect(d.base.quitados).toEqual([`estudio/${CLIENTE}/${ID}.glb`])
+  })
+  it('si el almacén falla, la fila queda para la próxima pasada (nunca archivos huérfanos)', async () => {
+    const d = conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' }, baseFalsa([CLIENTE, OTRO], { quitarFalla: true }))
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(r.ok && r.valor.borradas).toEqual([])
+    expect(r.ok && r.valor.fallas[0].error).toMatch(/almacén/)
+    expect(d.base.t.estudio_piezas).toHaveLength(1)
   })
 })

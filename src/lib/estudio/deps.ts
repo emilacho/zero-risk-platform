@@ -20,5 +20,5 @@ export function depsReales(): Deps {
 
 /** qué proveedores están listos (sin decir nada de las llaves) */
 export function proveedoresListos(d: Deps) {
-  return { imagen: !!d.llaves.openai, video: !!d.llaves.higgsfield, '3d': !!d.llaves.fal && !!d.llaves.openai, animar: !!d.llaves.fal, almacen: !!d.bucket }
+  return { varias: !!d.llaves.fal, imagen: !!d.llaves.openai, video: !!d.llaves.higgsfield, '3d': !!d.llaves.fal && !!d.llaves.openai, animar: !!d.llaves.fal, almacen: !!d.bucket }
 }

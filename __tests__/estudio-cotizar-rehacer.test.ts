@@ -31,3 +31,16 @@ describe('POST /api/estudio/cotizar · rehacer', () => {
     expect(j.total_usd).toBeGreaterThan(0.4)
   })
 })
+
+describe('POST /api/estudio/cotizar · varias imágenes (GO 09-nov 22:45Z)', () => {
+  it('con 2 o más imágenes cotiza el modelo de varias referencias (US$ 0,15), sin mandar las imágenes', async () => {
+    const { status, j } = await cotizar({ client_id: CLIENTE, tipo: 'imagen', prompt: 'mezcla', n_fotos: 3, con_foto: true })
+    expect(status).toBe(200)
+    expect(j).toMatchObject({ total_usd: 0.15, partes: [{ que: 'imagen con 3 referencias', usd: 0.15 }] })
+  })
+  it('con una sola sigue el precio de siempre; con 7 no cotiza', async () => {
+    const una = await cotizar({ client_id: CLIENTE, tipo: 'imagen', prompt: 'mezcla', n_fotos: 1, con_foto: true })
+    expect(una.j.total_usd).toBeLessThan(0.1)
+    expect((await cotizar({ client_id: CLIENTE, tipo: 'imagen', prompt: 'mezcla', n_fotos: 7 })).status).toBe(400)
+  })
+})
