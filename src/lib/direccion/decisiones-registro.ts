@@ -34,6 +34,9 @@ const TOPE_DE_ARTEFACTOS = TOPE_DEL_REGISTRO * 4
 const TOPE_DE_CITA = 300
 
 export const PARA_QUE_DE_LA_PAUSA = 'La oficina financiera lo necesita para pasarle sus cuentas al redactor del plan de 90 días.'
+/** 09-nov · «Uso» y «Desbloquea» de la pausa en una o dos palabras, escritos por la oficina junto al largo (sea 1 o varias las que faltan) */
+export const PARA_QUE_CORTO_DE_LA_PAUSA = 'Cuentas del plan'
+export const DESTRABA_CORTO_DE_LA_PAUSA = 'El plan'
 export const TITULO_NO_VOLVIO = 'Contestaste, pero el plan no volvió a arrancar'
 /** solo con preguntas por contestar: sin ellas el plan puede estar en el margen o esperando otra cosa, y eso no se promete */
 export function destrabaDeLaPausa(faltan: number): string {
