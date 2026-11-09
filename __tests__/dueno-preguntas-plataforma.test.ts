@@ -207,6 +207,13 @@ describe('asumir y descartar', () => {
 })
 
 describe('pendientes (GET)', () => {
+  it('09-nov · opción A: con `tema` devuelve también las pendientes PARECIDAS (no la idéntica, no de otro cliente, no viejas ni cerradas); sin `tema` no trae el campo', async () => {
+    const b = baseFalsa([PEND, { ...PEND, id: 'p', tema: 'costos fijos', oficina: 'marketing' }, { ...PEND, id: 'n', tema: 'ventas temporada baja' }, { ...PEND, id: 'o', tema: 'costos fijos', client_id: OTRO }, { ...PEND, id: 'v', tema: 'costos fijos', creado_en: '2026-11-01T00:00:00Z' }, { ...PEND, id: 'r', tema: 'costos fijos', estado: 'respondida' }])
+    const r = await rutaPendientes({ db: b.db, ahora: AHORA }, { client_id: C, tema: 'costos fijos mensuales' })
+    expect((r.body.pendientes_parecidas as Fila[]).map((p) => p.pregunta_id)).toEqual(['p'])
+    expect((r.body.pendientes_parecidas as Fila[])[0]).toMatchObject({ tema: 'costos fijos', oficina: 'marketing', pregunta: PEND.pregunta })
+    expect((await rutaPendientes({ db: b.db, ahora: AHORA }, { client_id: C })).body).not.toHaveProperty('pendientes_parecidas')
+  })
   it('lista las pendientes de las últimas 72 h del cliente, con su supuesto; un error de la base no es «ninguna»', async () => {
     const b = baseFalsa([PEND, { ...PEND, id: 'v', creado_en: '2026-11-01T00:00:00Z' }, { ...PEND, id: 'o', client_id: OTRO }, { ...PEND, id: 'r', estado: 'respondida' }])
     const r = await rutaPendientes({ db: b.db, ahora: AHORA }, { client_id: C })

@@ -416,11 +416,12 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
         return r.status === 200 ? { ok: true, ficha_id: typeof r.body.ficha_id === 'string' ? r.body.ficha_id : null } : { ok: false, status: r.status, error: String(r.body.error) }
       },
     }
+    const deLaPlataforma = () => ({ db: base.db, cerebro: alCerebro, ahora: new Date(hora), nuevoId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` })
     const fetchF = async (u: string, i: RequestInit) => {
       if (o.caido?.()) return { status: 500, json: async () => ({ error: 'caída' }) }
       const q = new URL(u).searchParams
       if (new URL(u).pathname === '/api/dueno/preguntas') {
-        const dp = { db: base.db, cerebro: alCerebro, ahora: new Date(hora), nuevoId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}` }
+        const dp = deLaPlataforma()
         const rp = i.method === 'GET' ? await rutaPendientes(dp, { client_id: q.get('client_id') ?? '', tema: q.get('tema') }) : await rutaPreguntas(dp, JSON.parse(String(i.body)))
         return { status: rp.status, json: async () => rp.body }
       }
@@ -433,7 +434,9 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     const filas = () => t.dueno_preguntas
     const pendientes = () => filas().filter((p) => p.estado === 'pendiente').length
     const pedir = { encargo_id: 'enc-1', sobre: { corrida: 'plan-x', client_id: c.id }, material: { a: 1 }, workflow_id: 'wf', workflow_execution_id: 'ex' }
-    return { c, t, m, P, filas, pendientes, pedir, deps, horas: (h: number) => { hora += h * 3_600_000 }, minutos: (x: number) => { hora += x * 60_000 }, hora: () => new Date(hora).toISOString() }
+    // 09-nov (opción A): otra oficina le pregunta al dueño por la lista de la plataforma, donde viven las preguntas desde #939
+    const preguntaDeOtraOficina = (tema: string, pregunta: string) => rutaPreguntas(deLaPlataforma(), { accion: 'preguntar', client_id: c.id, workflow_id: 't', workflow_execution_id: 'e', preguntado_por: { oficina: 'creativa', agente: 'content-creator' }, tema, pregunta, canal: 'chat' })
+    return { c, t, m, P, filas, pendientes, pedir, deps, preguntaDeOtraOficina, horas: (h: number) => { hora += h * 3_600_000 }, minutos: (x: number) => { hora += x * 60_000 }, hora: () => new Date(hora).toISOString() }
   }
   const contestarPorLaPuerta = (a: ReturnType<typeof armar>, tema: string) => rutaDueno(a.deps(), { evento: 'respuesta', client_id: a.c.id, tema, pregunta: `¿${tema}?`, respuesta: 'sí, por el chat', canal: 'chat de Tu oficina', mensaje_ref: 'chat:1', respondido_en: a.hora(), preguntado_por: { oficina: 'tu-oficina', agente: 'dueno' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
 
@@ -531,7 +534,7 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     })
     it('🔴 lo ya decidido no se paga dos veces, aunque la pregunta aún no se haya registrado', async () => {
       const a = armar({ preguntas: [preg('whatsapp_business', { frena_la_firma: true })] })
-      await rutaDueno(a.deps(), { evento: 'pregunta', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿Tienes WhatsApp?', canal: 'chat', preguntado_por: { oficina: 'creativa', agente: 'content-creator' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+      expect((await a.preguntaDeOtraOficina('whatsapp', '¿Tienes WhatsApp?')).body).toMatchObject({ registrada: true })
       const pedidos = agente(a, () => ({ veredictos: [{ clave: 'whatsapp_business', decision: 'pendiente_cubre', ficha_id: null, por_que: 'la creativa ya lo preguntó' }] }))
       await preguntarAlDueno(a.P, 'enc-1')
       const r = await preguntarAlDueno(a.P, 'enc-1')
@@ -584,16 +587,18 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
     })
     it('🔴 otra pregunta parecida sin responder: en la pausa se pregunta igual, porque esa respuesta no le llegaría a este encargo', async () => {
       const a = armar({ preguntas: [preg('whatsapp_business', { frena_la_firma: true })] })
-      await rutaDueno(a.deps(), { evento: 'pregunta', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿Tienes WhatsApp?', canal: 'chat', preguntado_por: { oficina: 'creativa', agente: 'content-creator' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+      expect((await a.preguntaDeOtraOficina('whatsapp', '¿Tienes WhatsApp?')).body).toMatchObject({ registrada: true })
       const pedidos = agente(a, () => ({ veredictos: [{ clave: 'whatsapp_business', decision: 'pendiente_cubre', ficha_id: null, por_que: 'la creativa ya lo preguntó' }] }))
       await pausarOficina(a.P, a.pedir)
       expect(pedidos[0].tarea).toContain('creativa')
-      expect(a.filas().map((p) => p.tema)).toContain('whatsapp business')
+      // se le pregunta al dueño igual (va en lo registrado para él); la lista no duplica la fila: la de la creativa ya es «la misma» para la plataforma
+      expect((a.m.arts.buzon_respuestas as { preguntas: Array<{ clave: string }> }).preguntas.map((p) => p.clave)).toContain('whatsapp_business')
+      expect(a.filas().map((p) => p.tema)).toEqual(['whatsapp'])
       expect(a.m.espera()?.estado).toBe('esperando')
     })
     it('🔴 fuera de una pausa, si otra pregunta ya lo cubre, no se le repite al dueño', async () => {
       const a = armar({ preguntas: [preg('whatsapp_business', { frena_la_firma: true })] })
-      await rutaDueno(a.deps(), { evento: 'pregunta', client_id: a.c.id, tema: 'whatsapp', pregunta: '¿Tienes WhatsApp?', canal: 'chat', preguntado_por: { oficina: 'creativa', agente: 'content-creator' }, dry_run: false, workflow_id: 't', workflow_execution_id: 'e' })
+      expect((await a.preguntaDeOtraOficina('whatsapp', '¿Tienes WhatsApp?')).body).toMatchObject({ registrada: true })
       agente(a, () => ({ veredictos: [{ clave: 'whatsapp_business', decision: 'pendiente_cubre', ficha_id: null, por_que: 'la creativa ya lo preguntó' }] }))
       const r = await preguntarAlDueno(a.P, 'enc-1')
       expect(r.cuerpo).toMatchObject({ enviado: false, motivo: 'otra_oficina_espera', esperando: ['whatsapp_business'] })
@@ -633,6 +638,14 @@ describe('sin Slack, con la puerta real del cerebro (hallazgos de CC7 en #918)',
       expect(pedidos[0].i.method).toBe('GET')
       const q = new URL(pedidos[0].u).searchParams
       expect([q.get('client_id'), q.get('tema')]).toEqual(['c 1', 'tema con espacios'])
+      // 09-nov · opción A: la segunda lectura va a la lista de la plataforma, con la misma llave
+      expect(new URL(pedidos[1].u).pathname).toBe('/api/dueno/preguntas')
+      expect((pedidos[1].i.headers as Record<string, string>)['x-api-key']).toBe('la-llave')
+      expect([new URL(pedidos[1].u).searchParams.get('client_id'), new URL(pedidos[1].u).searchParams.get('tema')]).toEqual(['c 1', 'tema con espacios'])
+    })
+    it('🔴 09-nov · opción A: si la lista de la plataforma no responde, no se lee como «nada parecido pendiente»', async () => {
+      const f = (async (u: string) => new URL(u).pathname === '/api/dueno/preguntas' ? { status: 500, json: async () => ({ error: 'caída' }) } : { status: 200, json: async () => ({ ok: true, respondida: false, respuestas: [], parecidas: [] }) }) as never
+      expect(await cerebroDelDueno({ base: 'https://x', llave: 'k', workflow_id: 'w', workflow_execution_id: 'e', fetch: f }).leerParecidas!({ client_id: 'c', tema: 't' })).toEqual({ ok: false, error: 'plataforma_http_500' })
     })
     it('🔴 ficha inventada con respuesta inventada: el texto no entra como dicho por el dueño', async () => {
       const a = await conPresupuesto()

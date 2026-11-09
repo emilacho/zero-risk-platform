@@ -12,7 +12,7 @@
  * La plataforma NUNCA nombra tablas del cerebro: habla con él por HTTP (`PuertoDelCerebro`). US$ 0: no llama a ningún modelo.
  */
 import { randomUUID } from 'node:crypto'
-import { esElMismoTema, palabrasDelTema, temaNormal } from '../portero-alimenta/dueno'
+import { esElMismoTema, esTemaParecido, palabrasDelTema, temaNormal } from '../portero-alimenta/dueno'
 
 export const TABLA = 'dueno_preguntas'
 /** una pregunta pendiente deja de bloquear a otra oficina pasadas estas horas (el dueño puede no haber contestado) */
@@ -228,5 +228,8 @@ export async function rutaPendientes(deps: Pick<Deps, 'db' | 'ahora'>, params: {
   const tema = txt(params.tema)
   const pendientes = pe.filas.filter((p) => !tema || esElMismoTema(txt(p.tema), tema))
     .map((p) => ({ pregunta_id: String(p.id), tema: txt(p.tema), pregunta: txt(p.pregunta), supuesto: txt(p.supuesto) || null, oficina: txt(p.oficina), agente: txt(p.agente), canal: txt(p.canal), desde: txt(p.creado_en) }))
-  return { status: 200, body: { ok: true, client_id: params.client_id, tema: tema || null, pendientes } }
+  // 09-nov (opción A, Lenovo): con `tema`, también las pendientes de un tema PARECIDO (solo informan: el agente que pregunta razona si alguna ya cubre la suya). Antes las daba el cerebro; desde #940 viven solo aquí
+  const pendientes_parecidas = tema ? pe.filas.filter((p) => esTemaParecido(txt(p.tema), tema))
+    .map((p) => ({ pregunta_id: String(p.id), tema: txt(p.tema), pregunta: txt(p.pregunta), oficina: txt(p.oficina), agente: txt(p.agente), canal: txt(p.canal), desde: txt(p.creado_en) })) : undefined
+  return { status: 200, body: { ok: true, client_id: params.client_id, tema: tema || null, pendientes, ...(pendientes_parecidas ? { pendientes_parecidas } : {}) } }
 }
