@@ -6,7 +6,10 @@
  * ninguna palabra prohibida fuera de la lista «prohibido» · el público no es «todos» (si lo nombra) · secciones obligatorias presentes. Lo que falla deja el brief `devuelta`
  * (la cadena pide UNA vez más; si sigue, `necesita_humano`). Nada aquí sabe de un cliente ni habla con un modelo.
  */
-import { citaAparece, normalizar } from './texto'
+import { citaAparece, normalizar, textoDelDocumento } from './texto'
+
+// el lector común vive en ./texto (GO Lenovo 10-nov 18:48Z); se reexporta para quien ya lo importa desde aquí
+export { textoDelDocumento }
 import type { Canal, Hallazgo } from './tipos'
 import type { ContextoDelCliente } from './almacen'
 import { CONTRATO_BRIEF_CREATIVO, claveDeTexto, contienePalabraEntera, seccionesDe, tieneCifraInventada } from './conceptos'
@@ -123,25 +126,19 @@ function citaLiteralEn(documento: string, cita: string): boolean {
 }
 
 /**
- * EL TEXTO CONTRA EL QUE SE COMPRUEBA UNA CITA (10-nov · GO Lenovo 18:01Z tras la prueba de segundo cliente #1003).
- * Hay clientes cuyo plan o manual está guardado como JSON: ahí las comillas van como `\"` y los saltos de párrafo como `\n` escritos,
- * así que una cita bien copiada con comillas dentro, o que cruza dos párrafos, no aparecía. Si el documento ES JSON, se compara contra
- * TODOS sus valores como texto, uno por línea (sin elegir ni juzgar ninguno). Si no lo es, se usa tal cual.
+ * LO QUE ESTÁ ENTRE COMILLAS en la cita de «De qué parte del plan sale» (10-nov 18:48Z · GO Lenovo · límite que declaró CC4 en #1005).
+ * Antes, una sola regla aceptaba cualquier comilla de apertura con cualquiera de cierre: en «… el llamado "Cotiza hoy" …» la cita se cortaba en la primera
+ * comilla recta y un final alterado pasaba. Ahora cada comilla se cierra con SU pareja: primero «…», después “…” y por último "…" en lo que queda fuera
+ * de las anteriores (las rectas de DENTRO de una «…» son parte de la cita). Si no hay ninguna pareja, se usa la regla de siempre.
  */
-export function textoDelDocumento(documento: string): string {
-  const t = String(documento ?? '').trim()
-  if (!/^[[{]/.test(t)) return String(documento ?? '')
-  let dato: unknown
-  try { dato = JSON.parse(t) } catch { return String(documento ?? '') }
-  const valores: string[] = []
-  const recorrer = (v: unknown): void => {
-    if (typeof v === 'string') valores.push(v)
-    else if (typeof v === 'number' || typeof v === 'boolean') valores.push(String(v))
-    else if (Array.isArray(v)) v.forEach(recorrer)
-    else if (v && typeof v === 'object') Object.values(v).forEach(recorrer)
+export function citasEntreComillas(cita: string): string[] {
+  const out: string[] = []
+  let resto = cita
+  for (const re of [/«([^»]{4,})»/g, /“([^”]{4,})”/g, /"([^"]{4,})"/g]) {
+    for (const m of resto.matchAll(re)) out.push(m[1])
+    resto = resto.replace(re, ' ')
   }
-  recorrer(dato)
-  return valores.join('\n')
+  return out.length ? out : [...cita.matchAll(/[«"“]([^»"”]{4,})[»"”]/g)].map((m) => m[1])
 }
 
 export interface CitaQueNoAparece { cita: string; seccion: string; fuente: 'plan' | 'manual' }
@@ -213,7 +210,7 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   // la cita del plan es LITERAL
   const cita = t('De qué parte del plan sale')
   if (cita) {
-    const entreComillas = [...cita.matchAll(/[«"“]([^»"”]{4,})[»"”]/g)].map((m) => m[1])
+    const entreComillas = citasEntreComillas(cita)
     const candidatas = entreComillas.length ? entreComillas : [cita]
     const literal = candidatas.some((c) => normalizar(c).length >= MIN_CARACTERES_DE_CITA && citaAparece(textoDelDocumento(ins.planTexto), c))
     if (normalizar(cita).length < MIN_CARACTERES_DE_CITA) bloqueos.push(`la cita al plan es demasiado corta para verificarse: «${cita.slice(0, 60)}»`)
