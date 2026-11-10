@@ -13,7 +13,8 @@ import { DEPARTAMENTOS, DEPARTAMENTO_DE_LA_OFICINA, type ClaveDeDepartamento } f
 export const VERBOS = ['aprobar', 'pedir_cambios', 'responder', 'asumir', 'descartar'] as const
 export type Verbo = (typeof VERBOS)[number]
 /** las pantallas dueñas de lo que no cabe en la ficha (ADENDA 2 de Emilio). El texto del enlace lo pone el tablero, no la oficina */
-export const PANTALLAS = ['plan', 'piezas', 'gran_idea', 'manual'] as const
+/** 10-nov · `tu_oficina`: lo que hoy solo se contesta en «Tu oficina» (la pregunta de la Oficina Financiera · Lenovo por Emilio 01:35Z) */
+export const PANTALLAS = ['plan', 'piezas', 'gran_idea', 'manual', 'tu_oficina'] as const
 export type Pantalla = (typeof PANTALLAS)[number]
 /**
  * los NOMBRES de las puertas (nunca una dirección). La lista que manda vive en el servidor del tablero, con su validación y con si gasta (regla 4):
@@ -89,8 +90,10 @@ export function departamentoDeLaFicha(d: Pick<Decision, 'tipo' | 'fuente' | 'pre
 /** 10-nov · la pantalla de cada documento. «Otras revisiones» de Piezas ESCONDE manual y plan (tienen panel propio: tablero `lib/piezas-datos.ts` · lo vio CC7) */
 const PANTALLA_DEL_DOCUMENTO: Record<string, Pantalla> = { manual: 'manual', plan: 'plan', pieza: 'piezas' }
 
-function pantallaDe(d: Pick<Decision, 'tipo' | 'decidir' | 'documento'>): Pantalla | null {
+function pantallaDe(d: Pick<Decision, 'tipo' | 'decidir' | 'documento' | 'fuente'>): Pantalla | null {
   if (d.tipo === 'gran_idea') return 'gran_idea'
+  // 10-nov · regla de Emilio (04-nov): la pregunta de la Oficina Financiera se contesta en el dashboard; la Oficina Financiera todavía no deja contestarla, así que va a «Tu oficina»
+  if (d.fuente === 'finanzas_preguntas') return 'tu_oficina'
   if (d.tipo === 'pieza') return 'piezas'
   if (d.tipo === 'plan') return 'plan'
   // 10-nov · tramo de la ficha: una revisión va al panel de su documento; sin documento ni ruta, a «Otras revisiones» de Piezas (lista de competidores y demás)
