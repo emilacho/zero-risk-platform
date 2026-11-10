@@ -140,8 +140,11 @@ describe('el título que lee el dueño', () => {
   it.each([
     ['Aprobación · Kit BRF-0002 · instagram · 2 láminas · versión 1 · Cliente', 'Kit · instagram · 2 láminas · Cliente'],
     ['⚠️ REVISIÓN INCOMPLETA · Aprobación · Carrusel BRF-0001 · instagram · 7 láminas · versión 2 · Cliente', 'Revisión incompleta · Carrusel · instagram · 7 láminas · Cliente'],
-    ['Plan de 90 días de Cliente con pendientes: P3 · lleva nombres internos · P4 · presupuesto incompleto', 'Plan de 90 días de Cliente con pendientes: lleva nombres internos · presupuesto incompleto'],
-    ['Plan de 90 días, versión 2: espera tu decisión', 'Plan de 90 días: espera tu decisión'],
+    ['Plan de 90 días de Cliente con pendientes: P3 · lleva nombres internos · P4 · presupuesto incompleto', 'Plan de Marketing de Cliente con pendientes: lleva nombres internos · presupuesto incompleto'],
+    ['Plan de 90 días, versión 2: espera tu decisión', 'Plan de Marketing: espera tu decisión'],
+    ['Plan de Marketing, versión 3: espera tu decisión', 'Plan de Marketing: espera tu decisión'],
+    ['Revisa el plan de 90 dias antes de aprobar', 'Revisa el Plan de Marketing antes de aprobar'],
+    ['Un plan de 90 díasx no es el plan', 'Un plan de 90 díasx no es el plan'],
     ['Tablero financiero, versión 1: espera tu firma', 'Tablero financiero: espera tu firma'],
     ['Kit del plan v2 listo', 'Kit del plan listo'],
   ])('%s', (crudo, esperado) => { expect(tituloParaElDueno(crudo)).toBe(esperado) })
