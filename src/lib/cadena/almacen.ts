@@ -12,6 +12,7 @@ import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autop
 import type { SobreDeLote } from './arranque'
 import type { SobreDePlan } from './campanas'
 import type { SobreDeTanda } from './mesas'
+import type { PerfilParaLectores } from '../perfil-del-publico/lectores'
 
 export type EstadoCampana = 'abierta' | 'estrategia' | 'calendario' | 'activa' | 'pausada' | 'necesita_humano' | 'cerrada' | 'reemplazada'
 
@@ -220,6 +221,11 @@ export interface Almacen {
   cargarContexto(clientId: string, planId: string): Promise<ContextoDelCliente | null>
   /** 10-nov (GO v3 · punto 2): los ids de las fotos PROPIAS del cliente (las mismas que la oficina puede usar) · opcional: sin él, la lista va vacía */
   fotosPropias?(clientId: string): Promise<string[]>
+  /**
+   * 10-nov · perfil del público T2: el perfil del público VIGENTE del cliente, leído por la puerta del portero (la cadena no nombra tablas del cerebro).
+   * OPCIONAL: un almacén sin él = sin perfil (los marcos quedan como hoy). Un fallo es `no_se_pudo_leer`, nunca «no hay».
+   */
+  perfilDelPublico?(clientId: string, mesa: 'brief' | 'gran_idea'): Promise<PerfilParaLectores>
   /** el plan existe, es de este cliente y es del tipo plan de 90 días; sin `planId` devuelve el último del cliente */
   resolverPlan(clientId: string, planId: string | null): Promise<{ plan_id: string; fecha: string } | null>
   /** el viaje de la sala existe para este cliente (condición de `workflow_id` válido) */
