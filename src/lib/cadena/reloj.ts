@@ -10,7 +10,8 @@ import { escalonQueToca, invarianteDeReloj, type Violacion } from './esperas'
 import { abrirEsperaDe, resolverEsperas } from './nucleo'
 import { pasarSinRevision } from './revision-jefatura'
 import { retomarPorCantidades } from './pasos'
-import { avisoDePrimeraSemana, cerrarMesasVencidas, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
+import { avisoDePrimeraSemana, cerrarMesasVencidas, seguirSinRevisionDeRegistro, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
+import { leerObjetoDeRegistro } from './registro-en-jefatura'
 import type { Fila } from './tipos'
 
 /** `repetible`: un aviso de ESTADO (no de evento): mientras diga lo mismo, sale una sola vez; si cambia, o desaparece y vuelve, sale de nuevo (31-oct, «vigía sin ruido») */
@@ -148,8 +149,8 @@ async function alVencer(al: Almacen, e: EsperaFila, ahora: string, lineas: Linea
       return `campaña ${e.campana_id} pausada`
     }
     case 'pasar_sin_revision': {
-      // J7: la revisión de la jefatura no cerró a tiempo: la cadena SIGUE (nunca queda de rehén) y se avisa
-      const que = await pasarSinRevision(al, e, ahora)
+      // J7: la revisión de la jefatura no cerró a tiempo: la cadena SIGUE (nunca queda de rehén) y se avisa · tramo 2 del registro: el brief o la gran idea se cierran con las pistas como aviso
+      const que = leerObjetoDeRegistro(e.objeto_id) ? await seguirSinRevisionDeRegistro(al, e, ahora) : await pasarSinRevision(al, e, ahora)
       lineas.push({ campana_id: e.campana_id, texto: `la revisión de la jefatura no cerró a tiempo (${e.objeto_id}): la cadena siguió sin ella · ${que}` })
       return que
     }

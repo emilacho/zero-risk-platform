@@ -8,6 +8,7 @@ import { DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, medidaDeCampana, SEMANAS_DE_T
 import { esFechaIso, fechaInicioPorRegla, sumarDias } from './fechas'
 import { ventanaDelPlan } from './fechas-en-texto'
 import { nuevoOrdenEncendido } from './mesas'
+import { topeDeLaCampana } from './tope-de-campana'
 import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 
 // r75 · 'cadena_apagada': con la cadena apagada la puerta ya NO reenvía al brief viejo (un solo camino de briefs): deja el plan guardado, anota que no se generan briefs y cierra el viaje con este resultado
@@ -82,11 +83,14 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   // 09-nov · D (firma de Emilio, regla de sistema): la campaña HEREDA la ventana que declara el plan aprobado (día 1 y duración). Sin ventana legible en el plan,
   // o si quien abre pide su propia medida (`dias_de_campana`), la regla de siempre (primer lunes + la medida).
   const ventana = ventanaDeLaCampana(ctx.planTexto, ini.fecha, dias as number, cuerpo.dias_de_campana !== undefined)
+  // 10-nov · el tope de gasto nace del valor por omisión de la cadena; sin él, la campaña nace SIN tope y no produce piezas reales hasta que una persona lo decida
+  const topeInicial = topeDeLaCampana(await al.leerConfig('tope_gasto_campana_por_omision'))
   let nueva: Campana
   try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ventana.fecha_inicio, fecha_inicio_origen: ventana.origen, fecha_fin: ventana.fecha_fin, ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
     zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ventana.origen === 'plan' ? null : ini.aviso,ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
     presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
+    ...(topeInicial !== null ? { tope_gasto_usd: topeInicial } : {}),
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
   }) } catch (e) {
     const duplicado = (e as { code?: string })?.code === '23505' || /23505|duplicate key|un_plan/i.test(String((e as Error)?.message ?? ''))

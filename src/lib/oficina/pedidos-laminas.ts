@@ -3,7 +3,7 @@
  * Agnóstico: ninguna frase nombra a un cliente. El formato de la respuesta lo hace cumplir `salida.ts`; aquí solo se explica el contrato en palabras.
  */
 import { BRIEF_GUIA_NO_REGLA, type ElementoDelKit } from './brief'
-import { AVISO_DEL_CEREBRO, describirReglas, FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO, resumenDelEncargo, type ContextoDePedido } from './pedidos'
+import { AVISO_DEL_CEREBRO, describirReglas, FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO, resumenDelEncargo, seccionDelPerfil, type ContextoDePedido } from './pedidos'
 import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
 import { ROLES_DE_LAMINA, LIMITES_DE_LAMINA } from './salida'
 import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
@@ -78,7 +78,7 @@ const describirElementos = (els: ElementoDelKit[]) => els.map((e) => `- ${e.ref}
 export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?: { fichas?: Ficha[]; errorDeFormato?: string }): { task: string; images: string[]; esquema: string } {
   const F = c.fuentes
   const kit = c.familia === 'kit'
-  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}`
+  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}${seccionDelPerfil(F)}`
   const datosVerificados = `## Datos verificados del cliente (solo estos; no inventes otros)\nTeléfonos: ${F.propios.telefonos.join(', ') || '(no se pudieron leer)'}\nUsuarios: ${F.propios.handles.join(', ') || '(no se pudieron leer)'}\nPrecios de la carta: ${F.fuentes.precios.join(', ') || '(no hay carta guardada)'}`
   const refs = kit ? `Elementos del kit (cada uno es una lámina fija 9:16):\n${describirElementos(c.elementos)}` : `Roles de lámina posibles (el ref de una imagen es un rol): ${ROLES_DE_LAMINA.join(', ')}`
   const pieza = describirPieza(c)

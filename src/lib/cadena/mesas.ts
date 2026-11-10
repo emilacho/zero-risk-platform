@@ -15,7 +15,7 @@
  * Reaperturas: brief devuelto o concepto `sin_mesa` reabren UNA vez (versión 2); a la segunda, `necesita_humano`.
  * Todo esto solo existe con la palanca `cadena_config.nuevo_orden` encendida para el cliente; apagada, la cadena de hoy no tiene estas mesas (409).
  */
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente } from './almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, EsperaFila } from './almacen'
 import { autorizarLlamada, cadena, err, WORKFLOW_DEL_TABLERO, type Respuesta } from './autorizar'
 import type { ResultadoDeEmision } from './autoproducir'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto } from './cambios-pedidos'
@@ -27,8 +27,11 @@ import { medidaDeCampana } from './constantes'
 import { metodoDe } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 import { reglaDeIdioma, reglaDeRegistro } from './registro'
+import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, leerArtifactIdDeRegistro, leerObjetoDeRegistro, objetoDeRegistro, pistasDeRegistro, registroFijado, seRevisaElRegistro, textoDeLaVuelta, type DocDeRegistro } from './registro-en-jefatura'
+import { TIPO_DE_ESPERA as TIPO_DE_ESPERA_DE_JEFATURA } from './revision-jefatura'
 import type { Estrategia, FormatosPorRed } from './tipos'
 import { contextoDeLaMesa } from '../sedes/por-abrir'
+import { bloqueDelPerfil, type PerfilParaLectores } from '../perfil-del-publico/lectores'
 
 export const CAP_DE_VUELTAS_DE_CAMBIOS = 2
 /** versión 1 + UNA reapertura (brief devuelto · concepto sin_mesa); a la siguiente, necesita_humano */
@@ -107,7 +110,8 @@ const canalesEnTexto = (e: Estrategia): string => e.canales.map((c) => `- ${c.re
 
 const reglaDeLengua = (ctx: ContextoDelCliente): string => [reglaDeRegistro(ctx.registro), reglaDeIdioma(ctx.idioma)].filter(Boolean).join(' ')
 
-export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null }): string {
+export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null }): string {
+  const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
     '# Qué te pido',
     `Escribe el brief creativo de ESTA campaña (versión ${a.version}) a partir del plan, la estrategia y el manual del cliente. ${reglaDeLengua(a.ctx)}`,
@@ -129,6 +133,8 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     '# ESTRATEGIA · fases',
     fasesEnTexto(a.estrategia),
     ...(a.informeDeMercado ? ['', '# INFORME DE MERCADO (PROPUESTA · no es dato del cliente · contexto, no mandato)', a.informeDeMercado] : []),
+    // 10-nov · perfil del público T2: lo OBSERVADO en voces públicas (contexto, no mandato) · sin perfil no se agrega nada (el marco queda como hoy)
+    ...(perfil ? ['', perfil] : []),
     '',
     ...(a.ctx.eslogan ? [`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
     `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
@@ -152,8 +158,9 @@ export function fechasDelConcepto(estrategia: Pick<Estrategia, 'fases'>, inicio:
   return [`# HOY · ${hoy} (la campaña empezó el ${inicio})`, 'Ninguna idea es para un día que ya pasó. Lo que anuncia algo que ya ocurrió (una apertura, un lanzamiento, un «llega hoy» de una fecha pasada) se cuenta como hecho, no como promesa.', ...lineas].join('\n')
 }
 
-export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null; anterior?: string | null }): string {
+export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null }): string {
   const fechas = fechasDelConcepto(a.estrategia, a.inicio, a.hoy)
+  const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
     '# Qué te pido',
     `La gran idea de ESTA campaña (versión ${a.version}): UNA frase paraguas, por qué funciona, cómo se ve, cómo suena; un CAPÍTULO por fase de la estrategia, y el BANCO DE IDEAS por capítulo y por red. ${reglaDeLengua(a.ctx)}`,
@@ -174,6 +181,8 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     '',
     '# BRIEF CREATIVO DE LA CAMPAÑA (validado)',
     a.briefTexto,
+    // 10-nov · perfil del público T2: el mismo bloque que el brief · sin perfil no se agrega nada
+    ...(perfil ? ['', perfil] : []),
     '',
     '# ESTRATEGIA · fases (un capítulo por fase)',
     fasesEnTexto(a.estrategia),
@@ -188,6 +197,12 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
 }
 
 // ───────────────────────────────────────────────────────── lo común
+/** 10-nov · perfil del público T2: el perfil para una mesa · sin lector = sin perfil (como hoy) · un fallo se DICE (`no_se_pudo_leer`), nunca «no hay» */
+export async function perfilParaLaMesa(al: Pick<Almacen, 'perfilDelPublico'>, clientId: string, mesa: 'brief' | 'gran_idea'): Promise<PerfilParaLectores> {
+  if (!al.perfilDelPublico) return { estado: 'sin_perfil' }
+  try { return await al.perfilDelPublico(clientId, mesa) } catch (e) { return { estado: 'no_se_pudo_leer', detalle: e instanceof Error ? e.message : String(e) } }
+}
+
 interface Cargado { campana: Campana; ctx: ContextoDelCliente; estrategia: Estrategia }
 async function cargar(al: Almacen, cuerpo: Record<string, unknown>, autorizar: boolean): Promise<{ ok: true; c: Cargado } | { ok: false; r: Respuesta }> {
   const id = cadena(cuerpo.campana_id)
@@ -245,7 +260,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   await al.insertarBriefCreativo(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null }),
+    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null, perfil: await perfilParaLaMesa(al, campana.client_id, 'brief') }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }
@@ -258,6 +273,8 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   const ultimo = await al.ultimoBriefCreativo(campana.id)
   if (!ultimo || ultimo.version !== p.version) return { ok: false, error: `la cadena no tiene abierta la versión ${p.version} del brief (última: ${ultimo?.version ?? 'ninguna'})` }
   if (ultimo.estado !== 'borrador') return { ok: true, ya_cerrada: true, estado: ultimo.estado }
+  // tramo 2 del revisor de registro: una entrega repetida mientras la jefatura revisa no reabre ni descarta nada (solo un brief retenido tiene texto en `borrador`)
+  if (ultimo.texto_md && (await esperaDeRegistroViva(al, campana.id, 'brief', p.version))) return { ok: true, estado: EN_REVISION_DE_REGISTRO }
   const base = { costo_usd: p.costo_usd, encargo_id: p.encargo_id, motivo: p.motivo }
   if (!texto(p.texto)) {
     await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado: 'descartada', motivo: p.motivo ?? 'la mesa no entregó texto' })
@@ -266,8 +283,23 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   }
   const estr = await al.ultimaEstrategia(campana.id)
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
+  // tramo 2 del revisor de registro: con la jefatura reteniendo `registro`, el registro se lee como AVISO y, si nada más bloquea, la jefatura lo revisa antes de validar
+  if (await seRevisaElRegistro(al, campana, ctx)) {
+    const leidoA = leerBriefCreativo(p.texto as string, { ...insumosDelBrief(ctx, estr?.contenido.canales), registroSoloAviso: true })
+    if (!bloqueosDelBrief(leidoA).length) {
+      await al.actualizarBriefCreativo(campana.id, p.version, { ...base, texto_md: p.texto, leido: leidoA as unknown as Record<string, unknown> })
+      const { r, vence_en } = await abrirRegistro(al, { doc: 'brief', campana, version: p.version, texto: p.texto as string, registro: registroFijado(ctx)!, origenes: origenesDelCliente(ctx) }, ahora)
+      if (r.estado === 'esperando') {
+        // la mesa no se da por vencida mientras la jefatura revisa: su plazo pasa a ser el de la espera (más la holgura)
+        await al.actualizarBriefCreativo(campana.id, p.version, { plazo_en: masMinutos(vence_en, HOLGURA_DE_MESA_MIN) })
+        return { ok: true, estado: EN_REVISION_DE_REGISTRO }
+      }
+      if (r.estado === 'cerrada') return aplicarVueltaDeRegistro(al, r.salida, ahora)
+      return cerrarBriefDeRegistro(al, campana, p.version, p.texto as string, leidoA, avisoDePistas(pistasDeRegistro(registroFijado(ctx)!, p.texto as string), `la jefatura no abrió la revisión: ${r.motivo}`), ahora)
+    }
+  }
   const leido = leerBriefCreativo(p.texto as string, insumosDelBrief(ctx, estr?.contenido.canales))
-  const bloquea = hallazgosDelBrief(leido).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
+  const bloquea = bloqueosDelBrief(leido)
   const estado = bloquea.length ? 'devuelta' : 'validada'
   await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado, texto_md: p.texto, leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
   if (estado === 'devuelta' && p.version >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
@@ -304,7 +336,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version) }), condiciones: condicionesDe(estrategia, await al.formatos()),
+      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
   }
@@ -325,7 +357,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version) }), condiciones: condicionesDe(estrategia, await al.formatos()),
+    marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
 }
@@ -341,7 +373,9 @@ export async function insumosDelConcepto(al: Almacen, campana: Pick<Campana, 'id
   const fotos = al.fotosPropias ? await al.fotosPropias(campana.client_id) : []
   const brief = await al.ultimoBriefCreativo(campana.id)
   const base = estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], fotos) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos }
-  return { ...base, duras: ctx?.palabrasDuras, registro: ctx?.registro, ...(brief?.estado === 'validada' && brief.texto_md ? { fuente: brief.texto_md } : {}) }
+  // 10-nov · perfil del público T2: el texto del perfil vigente para el aviso «frase del público sin fuente» (null = sin perfil o no se pudo leer) · sin lector, el aviso no corre
+  const perfil = al.perfilDelPublico ? await perfilParaLaMesa(al, campana.client_id, 'gran_idea') : null
+  return { ...base, duras: ctx?.palabrasDuras, registro: ctx?.registro, ...(brief?.estado === 'validada' && brief.texto_md ? { fuente: brief.texto_md } : {}), ...(perfil ? { perfil_del_publico: perfil.estado === 'vigente' ? perfil.texto : null, perfil_del_publico_estado: perfil.estado } : {}) }
 }
 
 export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: string): Promise<EntregaALaCadena> {
@@ -351,6 +385,8 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
   const fila = todos.find((x) => x.version === p.version)
   if (!fila) return { ok: false, error: `la cadena no tiene la versión ${p.version} del concepto` }
   if (fila.estado !== 'abierta') return { ok: true, ya_cerrada: true, estado: fila.estado }
+  // tramo 2 del revisor de registro: una entrega repetida mientras la jefatura revisa no reabre nada (solo una gran idea retenida tiene texto estando `abierta`)
+  if (fila.texto_md && (await esperaDeRegistroViva(al, campana.id, 'concepto', p.version))) return { ok: true, estado: EN_REVISION_DE_REGISTRO }
   const base = { costo_usd: p.costo_usd, encargo_id: p.encargo_id, motivo: p.motivo }
   const devolucion = texto(p.brief_devuelto)
   if (devolucion) {
@@ -362,18 +398,154 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
     }
     return { ok: true, estado: 'brief_devuelto', ...(await siguienteDespuesDe(al, campana.id)) }
   }
-  const sinMesa = async (motivo: string): Promise<EntregaALaCadena> => {
-    await al.actualizarConcepto(campana.id, p.version, { ...base, estado: 'sin_mesa', motivo, texto_md: p.texto })
-    if (cuentaDe(todos, (x) => x.estado === 'sin_mesa') + 1 >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `la mesa de concepto no entregó concepto dos veces (${motivo.slice(0, 160)})`, ahora)
-    return { ok: true, estado: 'sin_mesa', ...(await siguienteDespuesDe(al, campana.id)) }
-  }
+  const sinMesa = (motivo: string): Promise<EntregaALaCadena> => conceptoSinMesa(al, campana, p.version, todos, { ...base, motivo, texto_md: p.texto }, ahora)
   if (!texto(p.texto)) return sinMesa(p.motivo ?? 'la mesa no entregó texto')
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
+  // tramo 2 del revisor de registro: como en el brief, el registro de «Cómo suena» se lee como AVISO y la jefatura lo revisa antes de abrir la aprobación de Emilio
+  if (await seRevisaElRegistro(al, campana, ctx)) {
+    const ins = await insumosDelConcepto(al, campana)
+    const leidoA = leerConcepto(p.texto as string, { ...ins, registroSoloAviso: true })
+    if (leidoA.estado !== 'sin_concepto') {
+      await al.actualizarConcepto(campana.id, p.version, { ...base, texto_md: p.texto, leido: leidoA as unknown as Record<string, unknown> })
+      const origenes = [...origenesDelCliente(ctx), ...(ins.fuente ? [{ titulo: 'el brief creativo', texto: ins.fuente }] : [])]
+      const { r, vence_en } = await abrirRegistro(al, { doc: 'concepto', campana, version: p.version, texto: p.texto as string, registro: registroFijado(ctx)!, origenes }, ahora)
+      if (r.estado === 'esperando') {
+        await al.actualizarConcepto(campana.id, p.version, { plazo_en: masMinutos(vence_en, HOLGURA_DE_MESA_MIN) })
+        return { ok: true, estado: EN_REVISION_DE_REGISTRO }
+      }
+      if (r.estado === 'cerrada') return aplicarVueltaDeRegistro(al, r.salida, ahora)
+      return cerrarConceptoDeRegistro(al, campana, p.version, p.texto as string, leidoA, avisoDePistas(pistasDeRegistro(registroFijado(ctx)!, p.texto as string), `la jefatura no abrió la revisión: ${r.motivo}`), ahora)
+    }
+  }
   const leido = leerConcepto(p.texto as string, await insumosDelConcepto(al, campana))
   if (leido.estado === 'sin_concepto') return sinMesa(`sin_concepto: ${leido.bloqueos.join(' · ')}`)
   await al.actualizarConcepto(campana.id, p.version, { ...base, estado: 'lista', aprobacion: 'pendiente', texto_md: p.texto, leido: leido as unknown as Record<string, unknown> })
   await abrirAprobacionDelConcepto(al, campana, p.version, leido, p.costo_usd, todos, ahora, ctx?.nombreDelNegocio ?? null)
   return { ok: true, estado: 'lista' }
+}
+
+/** la gran idea que no trae concepto: `sin_mesa` (y, a la segunda, `necesita_humano`) · la usan la entrega y el cierre de la revisión de registro */
+async function conceptoSinMesa(al: Almacen, campana: Campana, version: number, todos: ConceptoGuardado[], patch: Partial<ConceptoGuardado> & { motivo: string }, ahora: string): Promise<EntregaALaCadena> {
+  await al.actualizarConcepto(campana.id, version, { ...patch, estado: 'sin_mesa' })
+  if (cuentaDe(todos, (x) => x.estado === 'sin_mesa') + 1 >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `la mesa de concepto no entregó concepto dos veces (${patch.motivo.slice(0, 160)})`, ahora)
+  return { ok: true, estado: 'sin_mesa', ...(await siguienteDespuesDe(al, campana.id)) }
+}
+
+// ───────────────────────────────────────────────────────── tramo 2 del revisor de registro (10-nov · GO de Lenovo 17:33Z) · ver `registro-en-jefatura.ts`
+export const EN_REVISION_DE_REGISTRO = 'en_revision_de_registro'
+const bloqueosDelBrief = (l: BriefCreativoLeido): string[] => hallazgosDelBrief(l).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
+/** los documentos del cliente de los que el texto puede citar: el revisor comprueba sus citas contra ellos */
+const origenesDelCliente = (ctx: ContextoDelCliente | null): Array<{ titulo: string; texto: string }> => [{ titulo: 'el plan', texto: ctx?.planTexto ?? '' }, { titulo: 'el manual', texto: ctx?.manualTexto ?? '' }]
+const conAvisos = <L extends { avisos: string[] }>(l: L, extra: string[]): L => ({ ...l, avisos: [...l.avisos, ...extra.filter((x) => !l.avisos.includes(x))] })
+
+async function cerrarBriefDeRegistro(al: Almacen, campana: Campana, version: number, textoFinal: string, leido: BriefCreativoLeido, avisos: string[], ahora: string): Promise<EntregaALaCadena> {
+  const l = conAvisos(leido, avisos)
+  const bloquea = bloqueosDelBrief(l)
+  const estado = bloquea.length ? 'devuelta' : 'validada'
+  await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('brief', version))
+  await al.actualizarBriefCreativo(campana.id, version, { estado, texto_md: textoFinal, leido: l as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
+  if (estado === 'devuelta' && version >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
+  return { ok: true, estado, ...(await siguienteDespuesDe(al, campana.id)) }
+}
+
+async function cerrarConceptoDeRegistro(al: Almacen, campana: Campana, version: number, textoFinal: string, leido: ConceptoLeido, avisos: string[], ahora: string): Promise<EntregaALaCadena> {
+  const todos = await al.conceptosDe(campana.id)
+  await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('concepto', version))
+  if (leido.estado === 'sin_concepto') return conceptoSinMesa(al, campana, version, todos, { motivo: `sin_concepto: ${leido.bloqueos.join(' · ')}`, texto_md: textoFinal }, ahora)
+  const l = conAvisos(leido, avisos)
+  await al.actualizarConcepto(campana.id, version, { estado: 'lista', aprobacion: 'pendiente', texto_md: textoFinal, leido: l as unknown as Record<string, unknown> })
+  const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
+  await abrirAprobacionDelConcepto(al, campana, version, l, todos.find((x) => x.version === version)?.costo_usd ?? null, todos, ahora, ctx?.nombreDelNegocio ?? null)
+  return { ok: true, estado: 'lista' }
+}
+
+/** lee el documento con TODOS sus chequeos y el registro como aviso (lo que corre sobre el original y otra vez sobre la versión corregida) */
+async function releerParaRegistro(al: Almacen, campana: Campana, doc: DocDeRegistro, t: string): Promise<{ brief?: BriefCreativoLeido; concepto?: ConceptoLeido; bloqueos: string[]; ctx: ContextoDelCliente | null }> {
+  const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
+  if (doc === 'brief') {
+    const estr = await al.ultimaEstrategia(campana.id)
+    const brief = leerBriefCreativo(t, { ...insumosDelBrief(ctx, estr?.contenido.canales), registroSoloAviso: true })
+    return { brief, bloqueos: bloqueosDelBrief(brief), ctx }
+  }
+  const concepto = leerConcepto(t, { ...(await insumosDelConcepto(al, campana)), registroSoloAviso: true })
+  return { concepto, bloqueos: concepto.bloqueos, ctx }
+}
+
+/** el documento retenido que sigue esperando su revisión (brief en `borrador` · gran idea `abierta`, con su texto guardado); null si ya cerró por otra vía */
+async function documentoRetenido(al: Almacen, campanaId: string, doc: DocDeRegistro, version: number): Promise<string | null> {
+  if (doc === 'brief') {
+    const b = (await al.briefsDe(campanaId)).find((x) => x.version === version)
+    return b && b.estado === 'borrador' && b.texto_md ? b.texto_md : null
+  }
+  const c = (await al.conceptosDe(campanaId)).find((x) => x.version === version)
+  return c && c.estado === 'abierta' && c.texto_md ? c.texto_md : null
+}
+
+async function cerrarDocumento(al: Almacen, campana: Campana, doc: DocDeRegistro, version: number, t: string, leido: Awaited<ReturnType<typeof releerParaRegistro>>, avisos: string[], ahora: string): Promise<EntregaALaCadena> {
+  return doc === 'brief' ? cerrarBriefDeRegistro(al, campana, version, t, leido.brief!, avisos, ahora) : cerrarConceptoDeRegistro(al, campana, version, t, leido.concepto!, avisos, ahora)
+}
+
+/**
+ * LA VUELTA de la revisión de registro (la entrega la ruta `api/jefatura/cadena-vuelta`, o la apertura si la jefatura cerró en la misma llamada). IDEMPOTENTE: sin espera viva no hace nada.
+ *   · el texto corregido (solo si la jefatura produjo una versión) se vuelve a leer con TODOS los chequeos: si alguno se rompe, se queda la versión anterior con aviso (línea 2 de CC7);
+ *   · el chequeo de citas (#984) es uno de ellos: una corrección que toca una cita deja de ser literal y se rechaza (línea 1 de CC7);
+ *   · los avisos de la revisión (citas en otro registro) y las formas de otro registro que el detector aún ve quedan como avisos del documento: nunca bloquean.
+ */
+export async function aplicarVueltaDeRegistro(al: Almacen, salida: Record<string, unknown>, ahora: string): Promise<EntregaALaCadena> {
+  const id = leerArtifactIdDeRegistro(String(salida.artifact_id ?? ''))
+  if (!id) return { ok: false, error: '`salida.artifact_id` no es de una revisión de registro de la cadena (registro:<brief|concepto>:<campaña>:v<n>)' }
+  const campana = await al.campana(id.campana_id)
+  if (!campana) return { ok: false, error: 'campaña inexistente' }
+  if (!(await esperaDeRegistroViva(al, campana.id, id.doc, id.version))) return { ok: true, ya_cerrada: true }
+  const original = await documentoRetenido(al, campana.id, id.doc, id.version)
+  if (original === null) { await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro(id.doc, id.version)); return { ok: true, ya_cerrada: true } }
+  const avisos = avisosDeLaSalida(salida)
+  const v = textoDeLaVuelta(salida, original)
+  let final = v.texto
+  let leido = await releerParaRegistro(al, campana, id.doc, final)
+  if (v.corregido && leido.bloqueos.length) {
+    avisos.push(`la corrección de registro rompía otros chequeos (${leido.bloqueos.slice(0, 3).join(' · ')}): se queda la versión anterior`)
+    final = original
+    leido = await releerParaRegistro(al, campana, id.doc, final)
+  }
+  const reg = registroFijado(leido.ctx)
+  const pendientes = reg ? pistasDeRegistro(reg, final) : []
+  if (pendientes.length) avisos.push(`el detector aún ve formas de otro registro (revísalas): ${pendientes.slice(0, 8).join(' · ')}`)
+  return cerrarDocumento(al, campana, id.doc, id.version, final, leido, avisos, ahora)
+}
+
+/**
+ * La ruta `api/jefatura/cadena-vuelta`: valida la entrega `{ marcas, salida }` de la jefatura, aplica la vuelta y, como nadie más reenvía el sobre de la cadena (la entrega viene del flujo
+ * de la jefatura, no de la puerta), lo deja ella misma en la sala con la clave del medio día (`tramoDeReemision`: la sala deduplica con el vigía). Un fallo al dejarlo no tumba la vuelta.
+ */
+export async function recibirVueltaDeRegistro(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const s = cuerpo.salida
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return err(400, 'E-CAMPOS', '`salida` debe ser la salida de la revisión')
+  const salida = s as Record<string, unknown>
+  if (salida.artifact_type !== 'registro') return err(400, 'E-CAMPOS', '`salida.artifact_type` debe ser «registro»: esta ruta solo vuelve a la cadena')
+  const id = leerArtifactIdDeRegistro(String(salida.artifact_id ?? ''))
+  if (!id) return err(400, 'E-CAMPOS', '`salida.artifact_id` debe ser registro:<brief|concepto>:<campaña>:v<n>')
+  if (typeof salida.resultado !== 'string') return err(400, 'E-CAMPOS', '`salida.resultado` es obligatorio')
+  const re = await aplicarVueltaDeRegistro(al, salida, ahora)
+  if (!re.ok) return err(409, 'E-VUELTA', re.error ?? 'la vuelta no se pudo aplicar')
+  // el sobre con la clave del medio día (la MISMA que armaría el vigía): la sala deduplica y no hay trabajo doble
+  const tramo = tramoDeReemision(ahora)
+  const empuje = re.siguiente ? await empujarDesdeElTablero(al, tramo, await siguienteDespuesDe(al, id.campana_id, tramo)) : {}
+  return { status: 200, cuerpo: { ...re, revision: { id: salida.revision_id ?? null, resultado: salida.resultado }, ...empuje } }
+}
+
+/** el reloj: la espera de una revisión de registro venció sin vuelta → el documento se cierra con su texto y las pistas como aviso (la cadena nunca queda de rehén) */
+export async function seguirSinRevisionDeRegistro(al: Almacen, e: EsperaFila, ahora: string): Promise<string> {
+  const o = leerObjetoDeRegistro(e.objeto_id)
+  if (!o) return `${e.objeto_id}: objeto no reconocido`
+  const campana = await al.campana(e.campana_id)
+  if (!campana) return `campaña ${e.campana_id} inexistente`
+  const t = await documentoRetenido(al, campana.id, o.doc, o.version)
+  if (t === null) return `${e.objeto_id}: ya había cerrado`
+  const leido = await releerParaRegistro(al, campana, o.doc, t)
+  const reg = registroFijado(leido.ctx)
+  await cerrarDocumento(al, campana, o.doc, o.version, t, leido, avisoDePistas(reg ? pistasDeRegistro(reg, t) : [], 'la revisión de la jefatura no cerró a tiempo'), ahora)
+  return `${e.objeto_id}: siguió sin revisión de registro (venció la espera de la jefatura)`
 }
 
 /** un concepto que quedó `lista`: la espera de la aprobación de Emilio (no vence, se recuerda) y su tarjeta «Gran idea» · lo usan la entrega y la revalidación (09-nov) */

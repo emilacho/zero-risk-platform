@@ -2,7 +2,7 @@
  * Almacén EN MEMORIA de la cadena · para las pruebas de los manejadores (sin base, sin red, US$ 0).
  * Imita las garantías de la base que importan: únicos, idempotencia de corridas/esperas, una campaña viva por cliente.
  */
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno } from '../almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
 import type { LlaveDeFecha } from '../indicaciones'
 import { claveDeFecha, ordenarLlaves } from '../fechas-del-cliente'
 import type { PlazoCfg } from '../esperas'
@@ -15,6 +15,7 @@ import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from '../auto
 import type { SobreDeLote } from '../arranque'
 import type { SobreDePlan } from '../campanas'
 import type { SobreDeTanda } from '../mesas'
+import type { AvisoDelTope, LecturaDeGasto } from '../tope-de-campana'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -99,8 +100,15 @@ export class AlmacenMemoria implements Almacen {
   async leerConfig(k: string) { return this.config.get(k) }
   async escribirConfig(k: string, v: unknown) { this.config.set(k, v) }
   /** J7 · lo que la jefatura decidiría; por omisión NO retiene (= la cadena de siempre). La prueba lo fija. */
-  retencion: ((tipo: 'estrategia' | 'calendario', clientId: string) => Promise<{ retener: boolean; motivo: string }>) | null = null
-  async retencionDeJefatura(tipo: 'estrategia' | 'calendario', clientId: string) { return this.retencion ? this.retencion(tipo, clientId) : { retener: false, motivo: 'jefatura_apagada' } }
+  retencion: ((tipo: 'estrategia' | 'calendario' | 'registro', clientId: string) => Promise<{ retener: boolean; motivo: string }>) | null = null
+  async retencionDeJefatura(tipo: 'estrategia' | 'calendario' | 'registro', clientId: string) { return this.retencion ? this.retencion(tipo, clientId) : { retener: false, motivo: 'jefatura_apagada' } }
+  /** tramo 2 del revisor de registro · la apertura de la revisión; sin ella (null) el almacén no tiene el puerto (= la cadena de siempre). La prueba la fija y ve los sobres. */
+  registro: ((entrada: EntradaDeRegistro) => Promise<ResultadoDeAbrirRegistro>) | null = null
+  sobresDeRegistro: EntradaDeRegistro[] = []
+  get abrirRevisionDeRegistro(): ((entrada: EntradaDeRegistro) => Promise<ResultadoDeAbrirRegistro>) | undefined {
+    const f = this.registro
+    return f ? async (entrada) => { this.sobresDeRegistro.push(structuredClone(entrada)); return f(entrada) } : undefined
+  }
   async plazos() { return plazosDeLaMigracion() }
   async formatos(): Promise<FormatosPorRed> { return formatosDeLaMigracion() }
   async cargarContexto(clientId: string) { return this.semilla.contextos?.[clientId] ?? null }
@@ -288,6 +296,29 @@ export class AlmacenMemoria implements Almacen {
   async recolectarSedes(clientId: string) { this.recolectadas.push(clientId); return { ok: true, sedes: this.sedesDeLaFicha } }
   sedesDeLaFicha = 0
   async frenoDeGasto(_clientId: string) { this.consultasDelFreno++; return this.semilla.frenoBloqueado ? { bloqueado: true, motivo: 'over_cap' } : { bloqueado: false, motivo: 'under_cap' } }
+  /** 10-nov · TOPE POR CAMPAÑA · lo que la base devolvería además de las corridas, conceptos y briefs guardados aquí (encargos, partes, topes de familia) */
+  lecturaDeGasto: Partial<LecturaDeGasto> = {}
+  /** para probar una lectura de gasto que falla */
+  falloDeLecturaDeGasto: string | null = null
+  lecturasDeGasto = 0
+  async leerGastoDeCampana(campanaId: string, _parteActual: string): Promise<LecturaDeGasto> {
+    this.lecturasDeGasto++
+    if (this.falloDeLecturaDeGasto) throw new Error(this.falloDeLecturaDeGasto)
+    return {
+      corridas: this.corridas.filter((c) => c.campana_id === campanaId).map((c) => ({ costo_usd: c.costo_usd, estado: c.estado, paso: c.paso })),
+      conceptos: this.conceptos.filter((x) => x.campana_id === campanaId).map((x) => ({ costo_usd: x.costo_usd ?? null, encargo_id: x.encargo_id ?? null })),
+      briefs: this.briefsCreativos.filter((x) => x.campana_id === campanaId).map((x) => ({ costo_usd: x.costo_usd ?? null, encargo_id: (x as { encargo_id?: string | null }).encargo_id ?? null })),
+      encargos: [], partes: [], soltados: [], topes_de_familia: { post_img: 2.5, carrusel_ig_v1: 2.5, kit_historias: 2.5, carrusel_mesa: 5 },
+      ...this.lecturaDeGasto,
+    }
+  }
+  /** lo que llegó al buzón (C1): con la MISMA clave, el segundo es «repetida» (no sale a Slack) */
+  avisosAlBuzon: Array<AvisoDelTope & { origen: string; workflow_id: string | null; workflow_execution_id: string | null; accion: string }> = []
+  async avisarAlBuzon(a: AvisoDelTope & { origen: string; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; accion: string }> {
+    const accion = this.avisosAlBuzon.some((x) => x.clave === a.clave) ? 'repetida' : 'abrio'
+    this.avisosAlBuzon.push({ ...a, accion })
+    return { ok: true, accion }
+  }
   sobresEmitidos: unknown[] = []
   async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision> {
     this.sobresEmitidos.push(sobre)

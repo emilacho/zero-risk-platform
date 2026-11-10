@@ -9,6 +9,13 @@ import type { FuentesCompletas } from './puertos'
 import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
 import type { ReglasDeImagen } from './reglas-de-imagen'
 import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
+import { bloqueDelPerfil } from '../perfil-del-publico/lectores'
+
+/** 10-nov · perfil del público T2: el bloque del perfil para la base de la tarea; '' sin perfil (la tarea queda igual que antes) */
+export const seccionDelPerfil = (F: Pick<FuentesCompletas, 'perfil_del_publico'>): string => {
+  const b = F.perfil_del_publico ? bloqueDelPerfil(F.perfil_del_publico) : ''
+  return b ? `\n${b}\n` : ''
+}
 
 export const AVISO_DEL_CEREBRO = 'Este cliente tiene un cerebro (almacén de conocimiento) que se actualiza a diario; lo esencial va abajo. Si necesitas algo que no está, dilo en el campo `necesito` de tu respuesta (máximo 3) y la sala se lo pide; lo que no se consiga se declara, no se inventa.'
 
@@ -49,7 +56,7 @@ export function describirReglas(r: ReglasDeImagen): string {
 /** la tarea de un paso de agente; las imágenes (URL) que se le muestran van aparte */
 export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fichas?: Ficha[]; errorDeFormato?: string }): { task: string; images: string[]; esquema: string } {
   const F = c.fuentes
-  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}`
+  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}${seccionDelPerfil(F)}`
   const datosVerificados = `## Datos verificados del cliente (solo estos; no inventes otros)\nTeléfonos: ${F.propios.telefonos.join(', ') || '(no se pudieron leer)'}\nUsuarios: ${F.propios.handles.join(', ') || '(no se pudieron leer)'}\nPrecios de la carta: ${F.fuentes.precios.join(', ') || '(no hay carta guardada)'}`
   let task = '', esquema = '', images: string[] = []
   const finalizar = (t: string) => ({ task: extra?.errorDeFormato ? `${t}\n\n## Corrección de formato\n${extra.errorDeFormato}` : t, images, esquema })

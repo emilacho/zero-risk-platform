@@ -12,6 +12,8 @@ import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autop
 import type { SobreDeLote } from './arranque'
 import type { SobreDePlan } from './campanas'
 import type { SobreDeTanda } from './mesas'
+import type { AvisoDelTope, LecturaDeGasto } from './tope-de-campana'
+import type { PerfilParaLectores } from '../perfil-del-publico/lectores'
 
 export type EstadoCampana = 'abierta' | 'estrategia' | 'calendario' | 'activa' | 'pausada' | 'necesita_humano' | 'cerrada' | 'reemplazada'
 
@@ -33,6 +35,8 @@ export interface Campana {
   ventana_parte_dias: number
   sustituir_video_por: 'ninguna' | 'carrusel' | 'foto'
   autoproducir: boolean
+  /** 10-nov · TOPE DE GASTO de la campaña en US$ (`tope-de-campana.ts`) · sin valor = no sale ninguna pieza real. Lo decide una persona; nace con `tope_gasto_campana_por_omision` */
+  tope_gasto_usd?: number | null
   sala_ref: Record<string, unknown>
   reemplaza_a: string | null
   seco: boolean
@@ -127,6 +131,29 @@ export interface Corrida {
   seco: boolean
 }
 
+/** 10-nov · tramo 2 del revisor de registro · el sobre que la cadena manda a la jefatura (la forma de su contrato; la cadena no importa `jefatura/`) */
+export interface EntradaDeRegistro {
+  artifact_type: 'registro'
+  artifact_id: string
+  client_id: string
+  journey_id: null
+  payload: {
+    texto: string
+    dry_run: boolean
+    version: number
+    documento: string
+    registro: { trato: 'tu' | 'vos' | 'usted'; fuente?: string }
+    pistas_de_registro: string[]
+    documentos_de_origen: Array<{ titulo: string; texto: string }>
+    productores?: Array<{ donde: string; agente: string }>
+  }
+}
+/** lo que contestó la jefatura al abrir: `esperando` (vuelve por la ruta de vuelta) · `cerrada` (ya cerró: trae su salida) · `no_abre` · `error` */
+export type ResultadoDeAbrirRegistro =
+  | { estado: 'esperando'; revision_id: string }
+  | { estado: 'cerrada'; salida: Record<string, unknown> }
+  | { estado: 'no_abre' | 'error'; motivo: string }
+
 export interface EsperaFila {
   id: number
   campana_id: string
@@ -182,7 +209,12 @@ export interface Almacen {
    * J7 · ¿la jefatura abriría una revisión de este tipo para este cliente? (el punto de espera «antes de pasar»). OPCIONAL: un almacén sin ella, o que falla, NO retiene (= hoy).
    * La implementa el almacén real leyendo la config y la política de la jefatura; la lógica de decidir es pura (`revision-jefatura.ts`).
    */
-  retencionDeJefatura?(tipo: 'estrategia' | 'calendario', clientId: string): Promise<{ retener: boolean; motivo: string }>
+  retencionDeJefatura?(tipo: 'estrategia' | 'calendario' | 'registro', clientId: string): Promise<{ retener: boolean; motivo: string }>
+  /**
+   * 10-nov · tramo 2 del revisor de registro · abre UNA revisión de registro en la jefatura (la misma función que su ruta, sin pasar por la red) con `devolver_a` = la vuelta de la cadena.
+   * OPCIONAL: sin ella, el registro no se revisa y el documento sigue con las pistas como aviso. Nunca lanza: un fallo vuelve como `error`.
+   */
+  abrirRevisionDeRegistro?(entrada: EntradaDeRegistro): Promise<ResultadoDeAbrirRegistro>
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>
   escribirConfig(clave: string, valor: unknown): Promise<void>
@@ -192,6 +224,11 @@ export interface Almacen {
   cargarContexto(clientId: string, planId: string): Promise<ContextoDelCliente | null>
   /** 10-nov (GO v3 · punto 2): los ids de las fotos PROPIAS del cliente (las mismas que la oficina puede usar) · opcional: sin él, la lista va vacía */
   fotosPropias?(clientId: string): Promise<string[]>
+  /**
+   * 10-nov · perfil del público T2: el perfil del público VIGENTE del cliente, leído por la puerta del portero (la cadena no nombra tablas del cerebro).
+   * OPCIONAL: un almacén sin él = sin perfil (los marcos quedan como hoy). Un fallo es `no_se_pudo_leer`, nunca «no hay».
+   */
+  perfilDelPublico?(clientId: string, mesa: 'brief' | 'gran_idea'): Promise<PerfilParaLectores>
   /** el plan existe, es de este cliente y es del tipo plan de 90 días; sin `planId` devuelve el último del cliente */
   resolverPlan(clientId: string, planId: string | null): Promise<{ plan_id: string; fecha: string } | null>
   /** el viaje de la sala existe para este cliente (condición de `workflow_id` válido) */
@@ -304,6 +341,13 @@ export interface Almacen {
   limpiarPartesSecos(ahora: string): Promise<number>
   /** el freno de gasto §150 (y el tope por cliente de #487) sobre este cliente: `bloqueado` = ya al techo de las 24 h */
   frenoDeGasto(clientId: string): Promise<{ bloqueado: boolean; motivo?: string }>
+  /**
+   * 10-nov · TOPE POR CAMPAÑA (`tope-de-campana.ts`) · todo lo que el freno necesita leer de ESTA campaña (planeación, concepto, brief, encargos reales de la campaña
+   * y de sus partes reales —incluido `parteActual`—, los partes reales y los topes de las familias activas). Si CUALQUIER lectura falla, LANZA (un error no es «cero gastado»).
+   */
+  leerGastoDeCampana(campanaId: string, parteActual: string): Promise<LecturaDeGasto>
+  /** 10-nov · el buzón de avisos (C1): abre el incidente o le suma una repetición con la MISMA clave · nunca lanza */
+  avisarAlBuzon(a: AvisoDelTope & { origen: string; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; accion: string } | { ok: false; error: string }>
   /** r74 · F4 · llena las sedes y su horario con lo que el sistema YA guardó del cliente (sitio · Instagram · Mapas), con su fuente · US$ 0 · un fallo se declara, no frena */
   recolectarSedes(clientId: string): Promise<{ ok: boolean; sedes: number; error?: string }>
   /** deja UN sobre en la sala (intake) · idempotente por su llave: el repetido vuelve `duplicado` · nunca despacha */

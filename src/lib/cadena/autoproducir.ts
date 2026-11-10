@@ -8,11 +8,16 @@
  *   2. la compuerta de la cadena (`compuerta`): lo real exige la cadena `encendida`, o `ensayo` con el cliente en `clientes_ensayo`; `dry_run: true` corre en cualquier estado (así se ensaya con todo apagado);
  *   3. la puerta de la oficina (su propia configuración): con la oficina `apagada` el sobre sigue por la pieza simple, intacto.
  * Respeta el freno de gasto §150 y el tope por cliente (#487): con el cliente ya al techo de las 24 h NO sale ningún sobre (lo real; el ensayo no gasta).
+ * 10-nov · y el TOPE POR CAMPAÑA (`tope-de-campana.ts`): lo real solo suelta las piezas que caben entre lo gastado, lo comprometido y el tope que guarda la campaña;
+ * sin tope o con el gasto ilegible no sale ninguna, y el buzón recibe UN aviso por campaña (y por monto de tope).
  * IDEMPOTENTE: la llave del sobre es `<parte_id>:<brief_id>:producir` · un brief = un sobre aunque la llamada se repita (la sala responde `duplicate`).
  * Este módulo NUNCA llama a un modelo ni despacha: solo deja sobres en la sala (que es quien despacha, ADR-018).
  */
 import type { Almacen } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
+import { avisoDeGastoIlegible, avisoDelTope, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
+import { hoyEnZona } from './campanas'
+import { familiaDeFila } from './familia'
 
 export const FUENTE_DEL_SOBRE = 'brief/parte-listo'
 export const INTENCION_DEL_SOBRE = 'producir'
@@ -124,8 +129,41 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
   const corr = cadena(cuerpo._sala_correlation_id)
   // r79 · D5 · la fecha y la hora de cada pieza salen de SU fila del calendario (la última versión de la campaña); si la fila no se halla, el sobre va sin fecha y la ficha del brief decide
   const cuando = new Map<string, { fecha: string; hora: string | null }>()
-  try { for (const f of await al.filas(c.id, Math.max(1, await al.ultimaVersionDeCalendario(c.id)))) if (f.fecha) cuando.set(f.id, { fecha: f.fecha, hora: f.hora ?? null }) } catch { /* sin filas legibles: los sobres salen sin fecha */ }
-  const { sobres, omitidos } = sobresDeProducir(parte, { dry_run: s.seco, correlation_id: corr, desde_worker: cadena(cuerpo.workflow_id) ?? undefined, cuando })
+  let filasDelCalendario: Awaited<ReturnType<Almacen['filas']>> | null = null
+  try { filasDelCalendario = await al.filas(c.id, Math.max(1, await al.ultimaVersionDeCalendario(c.id))); for (const f of filasDelCalendario) if (f.fecha) cuando.set(f.id, { fecha: f.fecha, hora: f.hora ?? null }) } catch { /* sin filas legibles: los sobres salen sin fecha (y lo real no suelta nada: el tope necesita el calendario) */ }
+  const { sobres: todos, omitidos } = sobresDeProducir(parte, { dry_run: s.seco, correlation_id: corr, desde_worker: cadena(cuerpo.workflow_id) ?? undefined, cuando })
+  // 10-nov · TOPE POR CAMPAÑA · solo lo real gasta: el ensayo no lo consulta
+  let sobres = todos
+  let tope: { decision: DecisionDelTope['tipo'] | 'gasto_ilegible'; tope?: number; gastado?: number; comprometido?: number; estimado?: number; retenidas: string[]; aviso?: unknown } | null = null
+  if (!s.seco) {
+    const firma = { origen: 'cadena/autoproducir · tope de campaña', workflow_id: cadena(cuerpo.workflow_id) ?? null, workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? null }
+    const avisar = (a: AvisoDelTope) => al.avisarAlBuzon({ ...a, ...firma })
+    let d: DecisionDelTope
+    try {
+      const l = await al.leerGastoDeCampana(c.id, parte.id)
+      // lo más cercano primero también ENTRE partes: sin el calendario no se sabe qué va antes, y eso es gasto ilegible (no «nada antes»)
+      if (!filasDelCalendario) throw new Error('no se pudo leer el calendario de la campaña')
+      const formatos = await al.formatos()
+      const porVenir = filasPorVenir(filasDelCalendario.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora ?? null, estado: f.estado, familia: familiaDeFila(f, formatos) })), hoyEnZona(new Date().toISOString(), c.zona_horaria), l.partes, todos.map((x) => x.payload.fila_id))
+      const conEncargo = new Set(l.encargos.filter((e) => e.parte_id === parte.id && e.brief_id).map((e) => e.brief_id as string))
+      const candidatas = todos.map((x) => ({ brief_id: x.payload.brief_id, familia: x.payload.familia ?? null, fecha: x.payload.fecha ?? null, hora: x.payload.hora ?? null, ya_tiene_encargo: conEncargo.has(x.payload.brief_id) }))
+      // lo retenido (o nunca salido) de OTROS partes guarda lugar por fecha, como las filas por venir; lo que la sala ya recibió va en lo comprometido
+      const medido = medirGastoDeCampana(l, parte.id)
+      d = decidirTope(c.tope_gasto_usd, medido, candidatas, l.topes_de_familia, [...porVenir, ...esperandoPorVenir(medido.esperando, cuando)])
+    } catch (e) {
+      // un error no es «cero gastado»: no sale nada y se avisa (UNA vez por campaña)
+      const aviso = await avisar(avisoDeGastoIlegible(c, e instanceof Error ? e.message : String(e)))
+      return { status: 200, cuerpo: { accion: 'autoproducir', emite: false, motivo: 'gasto_de_campana_ilegible', emitidos: 0, duplicados: 0, rechazados: 0, omitidos, sobres: [], tope: { decision: 'gasto_ilegible', retenidas: todos.map((x) => x.payload.brief_id), aviso } } }
+    }
+    if (d.tipo === 'sin_tope') {
+      const aviso = await avisar(avisoDelTope(c, d))
+      return { status: 200, cuerpo: { accion: 'autoproducir', emite: false, motivo: 'campana_sin_tope', emitidos: 0, duplicados: 0, rechazados: 0, omitidos, sobres: [], tope: { decision: 'sin_tope', retenidas: d.retenidas, aviso } } }
+    }
+    const sueltan = new Set(d.sueltan)
+    sobres = todos.filter((x) => sueltan.has(x.payload.brief_id))
+    tope = { decision: d.tipo, tope: d.tope, gastado: d.gastado, comprometido: d.comprometido, estimado: d.estimado, retenidas: d.tipo === 'corta' ? d.retenidas : [] }
+    if (d.tipo === 'corta') tope.aviso = await avisar(avisoDelTope(c, d))
+  }
   let emitidos = 0, duplicados = 0, rechazados = 0
   const detalle: Array<{ brief_id: string; familia: string | null; resultado: ResultadoDeEmision['resultado']; motivo?: string }> = []
   for (const sobre of sobres) {
@@ -133,5 +171,5 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
     if (r.resultado === 'aceptado') emitidos++; else if (r.resultado === 'duplicado') duplicados++; else rechazados++
     detalle.push({ brief_id: sobre.payload.brief_id, familia: sobre.payload.familia ?? null, resultado: r.resultado, ...(r.detalle ? { motivo: r.detalle } : {}) })
   }
-  return { status: 200, cuerpo: { accion: 'autoproducir', emite: true, dry_run: s.seco, parte_id: parte.id, emitidos, duplicados, rechazados, omitidos, sobres: detalle, sin_familia: sobres.filter((x) => !x.payload.familia).length } }
+  return { status: 200, cuerpo: { accion: 'autoproducir', emite: true, dry_run: s.seco, parte_id: parte.id, emitidos, duplicados, rechazados, omitidos, sobres: detalle, sin_familia: sobres.filter((x) => !x.payload.familia).length, ...(tope ? { tope } : {}) } }
 }

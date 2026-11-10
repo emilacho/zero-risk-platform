@@ -16,7 +16,12 @@ import type { SobreDePlan } from './campanas'
 import type { SobreDeTanda } from './mesas'
 import { almacenDeSupabase as almacenDeJefatura } from '@/lib/jefatura/revision/almacen-supabase'
 import { decidirRetencion } from './revision-jefatura'
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
+import { abrirRevision, armarSalida } from '../jefatura/revision/orquestador'
+import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDeLaJefatura } from '../jefatura/revision/adaptadores'
+import { resolverCierre } from '../jefatura/revision/cierre'
+import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA } from '../jefatura/revision/contrato'
+import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, ResultadoDeAbrirRegistro } from './almacen'
 import { horarioDeNorm } from './horario'
 import { registroDelCliente } from './registro'
 import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
@@ -24,6 +29,8 @@ import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos
 import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
 import { enviosDesdeElRegistro, llavesDelRegistro } from './lote-muerto'
+import { encargosRealesDe, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
+import { OPERACION_DE_PRODUCIR } from './tope-de-campana'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
@@ -34,6 +41,7 @@ import { ordenarLlaves } from './fechas-del-cliente'
 import { preguntar } from '@/lib/dueno-preguntas/preguntas'
 import { cerebroPorHttp } from '@/lib/dueno-preguntas/cerebro-http'
 import { baseDeRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
+import { perfilPorHttp } from '@/lib/perfil-del-publico/por-http'
 import { aperturaDeLasSedes, estadoDeLasSedes } from '../sedes/por-abrir'
 import { esloganDelCliente, reglaDelEslogan } from '../manual/campos-del-manual'
 
@@ -87,6 +95,41 @@ export const consultasDeDireccion = (db: { from(tabla: string): any }) => ({
   esperasDeUnaPersona: (campanaIds: string[], tope: number) => db.from('cadena_esperas').select('campana_id, vence_en, accion_al_vencer, desde').in('campana_id', campanaIds).eq('objeto_tipo', 'necesita_humano').eq('estado', 'viva').eq('seco', false).limit(tope),
 })
 
+/**
+ * 10-nov · tramo 2 del revisor de registro · el puerto REAL `abrirRevisionDeRegistro` del almacén de la cadena: el MISMO patrón que la oficina (`oficina/adaptadores.ts` · `jefatura(sobre)`).
+ * Abre UNA revisión en la jefatura (la misma función que su ruta, sin pasar por la red) con `devolver_a` = la vuelta de la cadena (`api/jefatura/cadena-vuelta`: J4 solo entrega
+ * bajo `/api/jefatura/` o al `/webhook/` de n8n). Si la revisión necesita turnos de agente, despierta el flujo `jefatura · turno`; si ese aviso no llega, la re-arma el vigía de la jefatura.
+ * Nunca lanza: cualquier fallo vuelve como `error` y la cadena sigue con las pistas como aviso.
+ */
+export const RUTA_DE_VUELTA_DE_LA_CADENA = 'api/jefatura/cadena-vuelta'
+
+export interface EntornoDelRegistro { dispatchKey?: string; n8nWebhookBase?: string }
+
+export async function abrirRevisionDeRegistroReal(db: unknown, entrada: EntradaDeRegistro, env: EntornoDelRegistro = { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, f: typeof fetch = fetch): Promise<ResultadoDeAbrirRegistro> {
+  try {
+    const PJ = crearPuertosDeLaJefatura(db as never, entornoDeLaJefatura(), f)
+    const cuerpo = { ...entrada, payload: { ...entrada.payload, devolver_a: { tipo: 'webhook', destino: `${VERCEL_DE_LA_PLATAFORMA}${RUTA_DE_VUELTA_DE_LA_CADENA}` } } }
+    const r = await abrirRevision(PJ, cuerpo)
+    if (r.status === 409) return { estado: 'no_abre', motivo: String(r.cuerpo.motivo ?? r.cuerpo.error ?? 'la jefatura no abre') }
+    if (r.status !== 200) return { estado: 'error', motivo: `la jefatura contestó ${r.status}: ${JSON.stringify(r.cuerpo).slice(0, 200)}` }
+    if (r.cuerpo.accion === 'cerrado' && r.cuerpo.salida) return { estado: 'cerrada', salida: r.cuerpo.salida as Record<string, unknown> }
+    const id = String(r.cuerpo.revision_id ?? '')
+    if (r.cuerpo.accion === 'ya_existia') {
+      // la cadena volvió a entregar: si la revisión ya cerró, su salida; si sigue abierta, se espera la misma
+      const rev = await PJ.almacen.leerRevision(id)
+      if (rev && (ESTADOS_TERMINALES as readonly string[]).includes(rev.estado)) return { estado: 'cerrada', salida: armarSalida(rev, resolverCierre(rev.estado_del_motor, { tope: rev.estado === 'cerrada_por_tope', fallida: rev.estado === 'fallida' })) as unknown as Record<string, unknown> }
+      return { estado: 'esperando', revision_id: id }
+    }
+    if (r.cuerpo.accion === 'esperar' && r.cuerpo.turno && env.dispatchKey) {
+      const base = ((env.n8nWebhookBase ?? '').trim() || N8N_POR_OMISION).replace(/\/+$/, '')
+      // un aviso que no llega no tumba nada: la revisión queda abierta y la re-arma el vigía de la jefatura
+      try { await f(`${base}/zero-risk/jefatura-turno`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': env.dispatchKey }, body: JSON.stringify({ revision_id: id, turno: r.cuerpo.turno }) }) } catch { /* el vigía de la jefatura */ }
+    }
+    if (r.cuerpo.accion === 'esperar' && id) return { estado: 'esperando', revision_id: id }
+    return { estado: 'error', motivo: `respuesta de la jefatura que no se entiende: ${JSON.stringify(r.cuerpo).slice(0, 200)}` }
+  } catch (e) { return { estado: 'error', motivo: e instanceof Error ? e.message : String(e) } }
+}
+
 export function almacenDeSupabase(): Almacen {
   const db = getSupabaseAdmin()
   const uno = async <T>(q: PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T | null> => { const { data, error } = await q; if (error) fallo(error); return (data as T | null) ?? null }
@@ -102,6 +145,8 @@ export function almacenDeSupabase(): Almacen {
         return decidirRetencion({ config, politica: pol.ok ? { activa: pol.activa } : null, tipo, client_id: clientId })
       } catch { return { retener: false, motivo: 'jefatura_ilegible' } }
     },
+    // 10-nov · tramo 2 del revisor de registro: abre la revisión con la vuelta a `api/jefatura/cadena-vuelta` (nunca lanza)
+    abrirRevisionDeRegistro: (entrada) => abrirRevisionDeRegistroReal(db, entrada),
     async leerConfig(k) { return (await uno<{ valor: unknown }>(db.from('cadena_config').select('valor').eq('clave', k).maybeSingle()))?.valor },
     async escribirConfig(k, v) { const { error } = await db.from('cadena_config').upsert({ clave: k, valor: v, actualizado_en: new Date().toISOString() }); if (error) fallo(error) },
     async plazos() { return lista<PlazoCfg>(db.from('cadena_plazos').select('*').limit(100)) },
@@ -128,6 +173,8 @@ export function almacenDeSupabase(): Almacen {
 
     // 10-nov (GO v3 · punto 2): las fotos PROPIAS con la MISMA regla que la oficina (la lectura vive en la oficina)
     async fotosPropias(clientId) { return idsDeFotosPropias(db, clientId) },
+    // 10-nov · perfil del público T2: por la PUERTA del portero (`/api/brain/consultar`), con la llave interna; nunca lanza
+    async perfilDelPublico(clientId, mesa) { return perfilPorHttp({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '' })(clientId, mesa) },
     async cargarContexto(clientId, planId): Promise<ContextoDelCliente | null> {
       const plan = await uno<{ content_text: string | null; content: string | null; created_at: string }>(db.from('client_historical_outputs').select('content_text, content, created_at').eq('id', planId).eq('client_id', clientId).maybeSingle())
       if (!plan) return null
@@ -377,6 +424,42 @@ export function almacenDeSupabase(): Almacen {
       // medición previa al reparto de piezas, no una corrida de empleado: sin identificador de ejecución y sin el aviso falso `run_scoped_unidentified` (mide y bloquea igual)
       const r = await checkRunSdkSpendCap(db, clientId, { agentSlug: 'cadena/medicion-previa', medicionPrevia: true })
       return { bloqueado: r.blocked === true, motivo: r.reason }
+    },
+    // 10-nov · TOPE POR CAMPAÑA · la misma fuente con que se midió el gasto de la campaña (planeación + concepto + brief) más los encargos de la oficina de la campaña y sus partes reales
+    async leerGastoDeCampana(campanaId, parteActual) {
+      const [corridas, conceptos, briefs, partesFilas, topes_de_familia] = await Promise.all([
+        lista<{ costo_usd: number | null; estado: Corrida['estado']; paso: Corrida['paso'] }>(db.from('cadena_corridas').select('costo_usd, estado, paso').eq('campana_id', campanaId)),
+        lista<{ costo_usd: number | null; encargo_id: string | null }>(db.from('cadena_conceptos').select('costo_usd, encargo_id').eq('campana_id', campanaId)),
+        lista<{ costo_usd: number | null; encargo_id: string | null }>(db.from('cadena_brief_creativo').select('costo_usd, encargo_id').eq('campana_id', campanaId)),
+        lista<{ id: string; provenance_tag: unknown }>(db.from('client_historical_outputs').select('id, provenance_tag').eq('output_type', 'campaign_brief_pack').eq('provenance_tag->>campana_id', campanaId).limit(500)),
+        topesDeFamiliasActivas(db as unknown as DbDeGasto),
+      ])
+      const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
+      const tag = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
+      // un parte de ensayo (`seco` / `prueba_seco`) no gasta: no cuenta
+      const partes = partesFilas.filter((f) => tag(f.provenance_tag).seco !== true && tag(f.provenance_tag).prueba_seco !== true).map((f) => ({
+        id: String(f.id),
+        briefs: (Array.isArray(tag(f.provenance_tag).familias_por_brief) ? (tag(f.provenance_tag).familias_por_brief as Array<Record<string, unknown>>) : []).map((b) => ({ brief_id: texto(b?.brief_id), familia: texto(b?.familia), fila_id: texto(b?.fila_id) })),
+      }))
+      const ids = [...new Set([campanaId, parteActual, ...partes.map((x) => x.id)])]
+      // los encargos reales y los topes de familia los lee la OFICINA (solo ella nombra sus tablas)
+      const encargos = await encargosRealesDe(db as unknown as DbDeGasto, ids)
+      // los sobres de producir que la sala YA recibió de esos partes (los reales): distinguen «ya en camino» (compromete) de «retenido» (guarda lugar por fecha)
+      const salaFilas = partes.length ? await lista<{ logical_period: string; payload: unknown }>(db.from('sala_event_log').select('logical_period, payload').eq('operation_type', OPERACION_DE_PRODUCIR).in('logical_period', partes.map((x) => `parte:${x.id}`)).limit(5000)) : []
+      const soltados = salaFilas.flatMap((f) => {
+        const e = tag(tag(f.payload).envelope_payload)
+        const brief = texto(e.brief_id)
+        return brief && e.dry_run !== true && typeof f.logical_period === 'string' ? [{ parte_id: f.logical_period.replace(/^parte:/, ''), brief_id: brief }] : []
+      })
+      return { corridas, conceptos, briefs, encargos, partes, topes_de_familia, soltados }
+    },
+    async avisarAlBuzon(a) {
+      try {
+        // carga perezosa: el buzón solo se importa cuando hay algo que avisar
+        const [{ avisar }, { dependenciasReales }] = await Promise.all([import('@/lib/avisos/nucleo'), import('@/lib/avisos/adaptadores')])
+        const r = await avisar(dependenciasReales(db as unknown as Parameters<typeof dependenciasReales>[0]), { ...a, origen_tipo: 'plataforma' })
+        return { ok: true, accion: `${r.accion} · slack ${r.slack}` }
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'error' } }
     },
     async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision> {
       if (!isIntakeEnabled()) return { resultado: 'rechazado', detalle: 'intake_apagado · SALA_INTAKE_ENABLED' }

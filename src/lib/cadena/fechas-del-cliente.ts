@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import type { Almacen, Campana, ContextoDelCliente } from './almacen'
 import { esFechaIso } from './fechas'
 import type { LlaveDeFecha } from './indicaciones'
-import { citaAparece, normalizar } from './texto'
+import { citaEnDocumento, normalizar } from './texto'
 import type { ClaseDeFecha, Estrategia, FechaQueImporta } from './tipos'
 
 export const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -65,7 +65,7 @@ export function temporadaRespaldada(f: Pick<FechaQueImporta, 'desde' | 'hasta' |
   if (!desde && !hasta && !f.cita_plan?.trim()) return { ok: false, motivo: 'el plan no dice cuándo es' }
   if (!esFechaIso(desde) || !esFechaIso(hasta)) return { ok: false, motivo: '`desde` y `hasta` no son fechas válidas' }
   if (desde > hasta) return { ok: false, motivo: '`desde` es posterior a `hasta`' }
-  if (!citaAparece(planTexto, f.cita_plan)) return { ok: false, motivo: 'la cita no aparece literal en el plan' }
+  if (!citaEnDocumento(planTexto, f.cita_plan)) return { ok: false, motivo: 'la cita no aparece literal en el plan' }
   const c = normalizar(f.cita_plan ?? '')
   const [, m1, d1] = desde.split('-').map(Number) as [number, number, number]
   const [, m2, d2] = hasta.split('-').map(Number) as [number, number, number]
