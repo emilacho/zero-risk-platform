@@ -9,8 +9,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import { leerBriefCreativo, seccionesObligatoriasQueFaltan } from '../brief-creativo'
-import { briefAnteriorParaElMarco, TITULO_DE_LO_QUE_CAMBIO } from '../cambios-pedidos'
-import { marcoDelBrief } from '../mesas'
+import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto, TITULO_DE_LO_QUE_CAMBIO } from '../cambios-pedidos'
+import { marcoDelBrief, marcoDelConcepto } from '../mesas'
 
 const fx = (n: string) => readFileSync(join(__dirname, '..', '__fixtures__', n), 'utf8')
 const V2 = fx('brief-naufrago-v2-real.md')
@@ -66,5 +66,21 @@ describe('el bloque del brief anterior pide agregar lo que falta', () => {
     const aviso = b.slice(b.indexOf('# LO QUE LE FALTA'))
     expect(aviso).toContain('«## Público»')
     expect(aviso).not.toMatch(/Náufrago|encebollado|costa|playa|desayun/i)
+  })
+})
+
+describe('genérico (GO de Lenovo 10-nov): en cualquier documento con «Pedir cambios», el formato de HOY manda sobre el de la versión anterior', () => {
+  for (const doc of ['el brief', 'la gran idea'] as const) {
+    it(`🔴 la orden para ${doc} dice que lo que falta del formato vigente se agrega desde el Plan de Marketing y que «conservar tal cual» no vale para eso`, () => {
+      const o = ordenDeAnalisisDeImpacto(doc)
+      expect(o).toContain('El formato que vale es el de HOY')
+      expect(o).toContain('Plan de Marketing')
+      expect(o).toContain('«Conservar tal cual» nunca vale para lo que el formato de hoy exige')
+    })
+  }
+  it('🔴 llega al marco de la gran idea con nota (y no sin nota)', () => {
+    const base = { ctx: contextoDe(clienteA()), estrategia: clienteA().estrategia, briefTexto: COMPLETO, version: 4 }
+    expect(marcoDelConcepto({ ...base, nota: 'costa → playa' })).toContain('El formato que vale es el de HOY')
+    expect(marcoDelConcepto({ ...base, nota: null })).not.toContain('El formato que vale es el de HOY')
   })
 })

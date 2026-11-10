@@ -28,6 +28,7 @@ export function ordenDeAnalisisDeImpacto(documento: 'el brief' | 'la gran idea')
     '3. Conserva tal cual lo que el cambio no afecta. Si el cambio pide rehacer todo, rehazlo todo.',
     `4. ${documento === 'el brief' ? 'El brief nuevo' : 'La gran idea nueva'} ABRE con «## ${TITULO_DE_LO_QUE_CAMBIO}»: en 2 a 5 viñetas cortas, qué pidió el cliente y qué secciones tocaste por ese pedido (y por qué). Sin códigos internos, sin números de versión. Después, las secciones de siempre, en su formato.`,
     '5. El título del documento no lleva códigos internos ni números de versión.',
+    `6. El formato que vale es el de HOY (el de este marco), no el de la versión anterior: si a la anterior le falta una sección obligatoria o no cumple una regla del formato vigente, agrégala o corrígela con lo que dice el Plan de Marketing, aunque el cambio pedido no la toque. «Conservar tal cual» nunca vale para lo que el formato de hoy exige.`,
   ].join('\n')
 }
 
