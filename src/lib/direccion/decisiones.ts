@@ -65,6 +65,8 @@ export interface Decision {
   ficha_problemas?: string[]
   /** 10-nov · la versión del documento que se decide (Lenovo por Emilio: va a la derecha de la fecha, no en el título). Sin versión conocida no viene */
   version_del_documento?: number
+  /** 10-nov · de qué documento es una revisión de la bandeja (`hitl_queue.documento`: manual · plan · pieza · …). Dice en qué pantalla se decide. Sin dato no viene */
+  documento?: string
   /** 10-nov · la decisión como alerta: Nueva o Revisada (la marca «✓ Revisar» de Emilio, en `alertas_vistas`). `estado: null` = no se pudo leer */
   alerta?: AlertaDeDecision
 }
@@ -182,7 +184,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     // el mismo plan no se pide dos veces: `plan-aprobar` resuelve también su nota de la bandeja
     if (subtipo === 'plan_con_pendientes' && plan && planesConCompuerta.has(plan)) continue
     const m = TIPOS_HITL[subtipo] ?? { tipo: 'revision' as const, ruta: null, accion: null }
-    crudas.push({ id: String(h.id), tipo: m.tipo, subtipo, fuente: 'hitl_queue', client_id: texto(h.client_id), titulo: sinSecretos(h.title ?? h.output_preview, 300) ?? `Revisión pendiente (${subtipo})`, desde: texto(h.created_at), vence: texto(h.expires_at), prioridad: texto(h.priority), decidir: { ruta: m.ruta ?? RUTA_POR_DOCUMENTO[String(h.documento)] ?? null, accion: m.accion }, costo_usd: null, costo_nota: m.tipo === 'plan' ? 'aprobar no gasta por sí mismo' : null })
+    crudas.push({ id: String(h.id), tipo: m.tipo, subtipo, fuente: 'hitl_queue', client_id: texto(h.client_id), ...(texto(h.documento) ? { documento: texto(h.documento) as string } : {}), titulo: sinSecretos(h.title ?? h.output_preview, 300) ?? `Revisión pendiente (${subtipo})`, desde: texto(h.created_at), vence: texto(h.expires_at), prioridad: texto(h.priority), decidir: { ruta: m.ruta ?? RUTA_POR_DOCUMENTO[String(h.documento)] ?? null, accion: m.accion }, costo_usd: null, costo_nota: m.tipo === 'plan' ? 'aprobar no gasta por sí mismo' : null })
   }
   for (const p of enPausa) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_en_pausa', fuente: 'esperas_del_dueno', client_id: texto(p.client_id), titulo: 'El plan está en pausa: la oficina financiera espera tus respuestas, que están en esta lista', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, para_que: PARA_QUE_DE_LA_PAUSA, para_que_corto: PARA_QUE_CORTO_DE_LA_PAUSA, ...destrabaDe(p.client_id), detiene: true })
   for (const e of noVolvieronVigentes) crudas.push({ id: String(e.id), tipo: 'pregunta_de_finanzas', subtipo: 'plan_no_volvio', fuente: 'esperas_del_dueno', client_id: texto(e.client_id), titulo: TITULO_NO_VOLVIO, desde: texto(e.soltada_en) ?? texto(e.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA, detiene: true, volvio: { motivo: motivoDeNoVolver(e) } })

@@ -86,11 +86,17 @@ export function departamentoDeLaFicha(d: Pick<Decision, 'tipo' | 'fuente' | 'pre
 }
 
 /** la pantalla dueña de lo que hoy se decide en otro panel (la ruta de hoy, traducida a la lista cerrada) */
-function pantallaDe(d: Pick<Decision, 'tipo' | 'decidir'>): Pantalla | null {
+/** 10-nov · la pantalla de cada documento. «Otras revisiones» de Piezas ESCONDE manual y plan (tienen panel propio: tablero `lib/piezas-datos.ts` · lo vio CC7) */
+const PANTALLA_DEL_DOCUMENTO: Record<string, Pantalla> = { manual: 'manual', plan: 'plan', pieza: 'piezas' }
+
+function pantallaDe(d: Pick<Decision, 'tipo' | 'decidir' | 'documento'>): Pantalla | null {
   if (d.tipo === 'gran_idea') return 'gran_idea'
   if (d.tipo === 'pieza') return 'piezas'
   if (d.tipo === 'plan') return 'plan'
+  // 10-nov · tramo de la ficha: una revisión va al panel de su documento; sin documento ni ruta, a «Otras revisiones» de Piezas (lista de competidores y demás)
+  if (d.tipo === 'revision' && d.documento) return PANTALLA_DEL_DOCUMENTO[d.documento] ?? (d.decidir.ruta === '/piezas' || !d.decidir.ruta ? 'piezas' : null)
   if (d.decidir.ruta === '/piezas') return 'piezas'
+  if (d.tipo === 'revision' && !d.decidir.ruta) return 'piezas'
   return null
 }
 
