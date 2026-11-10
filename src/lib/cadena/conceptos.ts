@@ -90,6 +90,8 @@ export interface InsumosDelConcepto {
   fotos: string[]
   /** 10-nov (GO v3 · punto 5): el registro del cliente (tú · vos · usted); las formas de OTRO registro se marcan · sin dato no se marca nada */
   registro?: RegistroDelCliente
+  /** 10-nov (tramo 2 del revisor de registro): la jefatura revisa el registro de ESTE documento ⇒ «Cómo suena» en otro registro es PISTA (aviso), nunca bloqueo · ausente = como siempre */
+  registroSoloAviso?: boolean
   /** 10-nov (GO v3 · punto 7): el texto del que la mesa debe sacar sus datos (el brief validado). Un dato con valor de una idea que no está aquí se marca «sin fuente» · sin texto no se mira */
   fuente?: string
 }
@@ -395,7 +397,7 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
     const enSuena = formasDeOtroRegistro(ins.registro, textoDe(porTitulo('Cómo suena')))
     const enTodo = formasDeOtroRegistro(ins.registro, md)
     // 10-nov (RESPUESTA de Lenovo por Emilio · decisión 1): «Cómo suena» BLOQUEA (es la regla que heredan todas las piezas); el resto del texto avisa. El tope de vueltas de siempre manda: dos sin_mesa → humano
-    if (enSuena.length) bloqueos.push(`«Cómo suena» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enSuena.join(', ')} · todas las piezas siguen esta regla`)
+    if (enSuena.length) (ins.registroSoloAviso ? avisos : bloqueos).push(`«Cómo suena» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enSuena.join(', ')} · todas las piezas siguen esta regla`)
     if (enTodo.length) avisos.push(`el concepto usa ${enTodo.length} forma(s) que no son ${nombreDelRegistro(ins.registro)}: ${enTodo.slice(0, 12).join(', ')}`)
   }
 

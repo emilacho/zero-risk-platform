@@ -2,7 +2,7 @@
  * Almacén EN MEMORIA de la cadena · para las pruebas de los manejadores (sin base, sin red, US$ 0).
  * Imita las garantías de la base que importan: únicos, idempotencia de corridas/esperas, una campaña viva por cliente.
  */
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno } from '../almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
 import type { LlaveDeFecha } from '../indicaciones'
 import { claveDeFecha, ordenarLlaves } from '../fechas-del-cliente'
 import type { PlazoCfg } from '../esperas'
@@ -99,8 +99,15 @@ export class AlmacenMemoria implements Almacen {
   async leerConfig(k: string) { return this.config.get(k) }
   async escribirConfig(k: string, v: unknown) { this.config.set(k, v) }
   /** J7 · lo que la jefatura decidiría; por omisión NO retiene (= la cadena de siempre). La prueba lo fija. */
-  retencion: ((tipo: 'estrategia' | 'calendario', clientId: string) => Promise<{ retener: boolean; motivo: string }>) | null = null
-  async retencionDeJefatura(tipo: 'estrategia' | 'calendario', clientId: string) { return this.retencion ? this.retencion(tipo, clientId) : { retener: false, motivo: 'jefatura_apagada' } }
+  retencion: ((tipo: 'estrategia' | 'calendario' | 'registro', clientId: string) => Promise<{ retener: boolean; motivo: string }>) | null = null
+  async retencionDeJefatura(tipo: 'estrategia' | 'calendario' | 'registro', clientId: string) { return this.retencion ? this.retencion(tipo, clientId) : { retener: false, motivo: 'jefatura_apagada' } }
+  /** tramo 2 del revisor de registro · la apertura de la revisión; sin ella (null) el almacén no tiene el puerto (= la cadena de siempre). La prueba la fija y ve los sobres. */
+  registro: ((entrada: EntradaDeRegistro) => Promise<ResultadoDeAbrirRegistro>) | null = null
+  sobresDeRegistro: EntradaDeRegistro[] = []
+  get abrirRevisionDeRegistro(): ((entrada: EntradaDeRegistro) => Promise<ResultadoDeAbrirRegistro>) | undefined {
+    const f = this.registro
+    return f ? async (entrada) => { this.sobresDeRegistro.push(structuredClone(entrada)); return f(entrada) } : undefined
+  }
   async plazos() { return plazosDeLaMigracion() }
   async formatos(): Promise<FormatosPorRed> { return formatosDeLaMigracion() }
   async cargarContexto(clientId: string) { return this.semilla.contextos?.[clientId] ?? null }

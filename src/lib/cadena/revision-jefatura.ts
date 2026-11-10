@@ -32,7 +32,7 @@ export interface Retencion { retener: boolean; motivo: string }
  * ¿La jefatura abriría una revisión de este tipo para este cliente? Es la MISMA lógica de `abrirRevision` (apagada · tipo no activo · fuera del ensayo) más «la política del tipo está activa».
  * Si no abriría, NO se retiene: una retención sin revisión posible sería una campaña esperando a nadie.
  */
-export function decidirRetencion(p: { config: ConfigParaRetener | null; /** null = el tipo no tiene política legible (inexistente o inválida) */ politica: { activa: boolean } | null; tipo: TipoRetenible; client_id: string }): Retencion {
+export function decidirRetencion(p: { config: ConfigParaRetener | null; /** null = el tipo no tiene política legible (inexistente o inválida) */ politica: { activa: boolean } | null; tipo: TipoRetenible | 'registro'; client_id: string }): Retencion {
   const c = p.config
   if (!c) return { retener: false, motivo: 'jefatura_ilegible' }
   if (c.estado === 'apagada') return { retener: false, motivo: 'jefatura_apagada' }
@@ -45,7 +45,7 @@ export function decidirRetencion(p: { config: ConfigParaRetener | null; /** null
 }
 
 /** lo que `guardar` consulta; un almacén sin esta capacidad (o que falla) NO retiene: la cadena sigue como hoy */
-export async function retencionDe(al: Almacen, tipo: TipoRetenible, clientId: string): Promise<Retencion> {
+export async function retencionDe(al: Almacen, tipo: TipoRetenible | 'registro', clientId: string): Promise<Retencion> {
   if (typeof al.retencionDeJefatura !== 'function') return { retener: false, motivo: 'sin_capacidad' }
   try { return await al.retencionDeJefatura(tipo, clientId) } catch { return { retener: false, motivo: 'jefatura_ilegible' } }
 }

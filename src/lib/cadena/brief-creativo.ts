@@ -49,6 +49,8 @@ export interface InsumosDelBrief {
   redes?: string[]
   /** 10-nov (GO v3 · punto 5): el registro del cliente; las formas de OTRO registro se marcan, como en las piezas · sin dato no se marca nada */
   registro?: RegistroDelCliente
+  /** 10-nov (tramo 2 del revisor de registro): la jefatura revisa el registro de ESTE documento ⇒ las formas de otro registro son PISTAS (aviso), nunca bloqueo · ausente = como siempre */
+  registroSoloAviso?: boolean
 }
 
 // 10-nov (ADENDA de Emilio · 2): el brief COPIA del plan el público, el objetivo con su número y cómo sabremos que funcionó (la mesa de la gran idea solo lee el brief)
@@ -266,7 +268,7 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
     const enTono = formasDeOtroRegistro(ins.registro, t('Tono'))
     const enTodo = formasDeOtroRegistro(ins.registro, md)
     // 10-nov (RESPUESTA de Lenovo por Emilio · decisión 1): «Tono» BLOQUEA (la heredan la gran idea y las piezas); el resto avisa. Se devuelve UNA vez; la segunda va a humano
-    if (enTono.length) bloqueos.push(`«Tono» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enTono.join(', ')} · la gran idea y las piezas heredan esta regla`)
+    if (enTono.length) (ins.registroSoloAviso ? avisos : bloqueos).push(`«Tono» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enTono.join(', ')} · la gran idea y las piezas heredan esta regla`)
     if (enTodo.length) avisos.push(`el brief usa ${enTodo.length} forma(s) que no son ${nombreDelRegistro(ins.registro)}: ${enTodo.slice(0, 12).join(', ')}`)
   }
 
