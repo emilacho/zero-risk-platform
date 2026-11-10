@@ -81,10 +81,20 @@ describe('el portero NO empuja: las oficinas buscan (firma 14-oct)', () => {
     ...fs.readdirSync(path.resolve(__dirname, '..')).filter((f) => f.endsWith('.ts')).map((f) => path.resolve(__dirname, '..', f)),
     path.join(raiz, 'app/api/brain/alimentar/descubrir/route.ts'), path.join(raiz, 'app/api/brain/alimentar/procesar/route.ts'),
   ]
+  // La expresión vive aparte para poder probarla: si un día se rompe (p. ej. un retroceso en vez de \b), la prueba de control falla.
+  const LLAMA_A_OFICINAS = /\/api\/(jefatura|oficina|sala)\b|lib\/(jefatura|oficina|sala)|from '[^']*\/(jefatura|oficina|sala)[/']/
+  it('control: la expresión ve las llamadas y los imports a las oficinas, y no confunde nombres parecidos', () => {
+    for (const si of ["fetch('/api/jefatura/turno')", "url: '/api/oficina'", '`${base}/api/sala?x=1`', "import { a } from '@/lib/jefatura/votar'", "import b from '../../oficina/turno'", "from '../sala'", "require('../lib/jefatura/x')", "require('../lib/oficina/x')", "require('../lib/sala/x')"]) {
+      expect(si).toMatch(LLAMA_A_OFICINAS)
+    }
+    for (const no of ['/api/salario', '/api/oficinas-viejas', '/api/jefaturas', "from './portero'"]) {
+      expect(no).not.toMatch(LLAMA_A_OFICINAS)
+    }
+  })
   it('ningún archivo del portero que alimenta llama a la jefatura, a la oficina ni a la sala, ni importa su código', () => {
     for (const f of archivos) {
       const t = fs.readFileSync(f, 'utf8').split(String.fromCharCode(10)).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join(String.fromCharCode(10))
-      expect(t, f).not.toMatch(/\/api\/(jefatura|oficina|sala)|lib\/(jefatura|oficina|sala)|from '[^']*\/(jefatura|oficina|sala)[/']/)
+      expect(t, f).not.toMatch(LLAMA_A_OFICINAS)
     }
   })
   it('el flujo no tiene ningún nodo que avise o despierte a las oficinas', () => {
