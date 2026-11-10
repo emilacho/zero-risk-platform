@@ -572,6 +572,19 @@ async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, _paso: P
 // ───────────────────────── recibir el resultado de un agente / del portero
 export interface ResultadoDeTurno { texto?: string; error?: string; costo_usd?: number; workflow_execution_id?: string | null; tokens_in?: number | null; tokens_out?: number | null }
 
+/**
+ * 10-nov · LA COPIA TAMBIÉN SE PAGA (costo de la mesa · GO de Lenovo 13:28Z). Una respuesta repetida de un turno ya registrado viene de OTRA ejecución (el vigía lo re-entregó porque nadie lo acusó):
+ * esa llamada al modelo se pagó. Antes se descartaba y el tope solo veía lo anotado (la gran idea v4 anotó 6,15 y gastó 10,39). Se anota una vez por ejecución y se suma al gasto del encargo.
+ * Sin ejecución no se puede saber si ya se anotó: no se suma (se evita contar dos veces). Nunca frena el avance.
+ */
+export async function anotarCostoDeLaCopia(P: Puertos, encargoId: string, res: ResultadoDeTurno): Promise<'anotado' | 'ya_estaba' | 'sin_costo' | 'sin_ejecucion' | 'sin_capacidad'> {
+  const costo = Math.max(0, Number(res.costo_usd ?? 0))
+  if (!(costo > 0)) return 'sin_costo'
+  if (!res.workflow_execution_id) return 'sin_ejecucion'
+  if (typeof P.almacen.anotarGastoDeCopia !== 'function') return 'sin_capacidad'
+  return P.almacen.anotarGastoDeCopia({ encargo_id: encargoId, gasto: { concepto: 'modelo', ref_tabla: 'agent_invocations', ref_id: String(res.workflow_execution_id), cost_usd: costo, base: 'usage' } })
+}
+
 /** EL ACUSE (28-oct): el flujo `oficina · turno` avisa que TOMÓ el turno. Una sola vez por turno: un segundo despertar (el vigía, un reintento) recibe `ya_tomado` y el flujo se detiene SIN llamar al agente ni al portero (nada se paga dos veces) */
 export async function acusarTurno(P: Puertos, encargoId: string, n: number, ejecucion: string): Promise<Respuesta> {
   const x = await P.almacen.acusarTurno(encargoId, n, ejecucion)
@@ -586,7 +599,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   const pl = await plantillaDe(P, enc)
   const abierto = await P.almacen.turnoAbierto(enc.id)
   if (!abierto || abierto.n !== n) {
-    if (n < turnoDe(enc.estado_del_motor)) return avanzar(P, enc.id) // respuesta repetida: ya registrada, no se cuenta dos veces
+    if (n < turnoDe(enc.estado_del_motor)) { await anotarCostoDeLaCopia(P, enc.id, res); return avanzar(P, enc.id) } // respuesta repetida: el turno ya está registrado (no se cuenta dos veces), pero la COPIA sí se pagó
     return r(409, { error: 'turno_no_esperado', esperado: abierto?.n ?? null, recibido: n })
   }
   if (abierto.paso.startsWith('mesa:')) return (await import('./mesa/orquestador')).recibirResultadoMesa(P, encargoId, n, res)

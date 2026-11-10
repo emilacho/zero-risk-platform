@@ -316,7 +316,9 @@ describe('O02 · el cupo de 3 pedidos de material al portero tiene tope', () => 
 })
 
 describe('O04 · una respuesta repetida o fuera de orden no duplica nada', () => {
-  it('la misma respuesta dos veces: la segunda no vuelve a anotar el aporte ni a sumar el gasto; una de un turno que no existe = 409', async () => {
+  // 10-nov · costo de la mesa (GO de Lenovo 13:28Z): la respuesta repetida sigue SIN duplicar el aporte, pero si viene de OTRA ejecución (una copia del turno), esa llamada se pagó y su costo SE SUMA.
+  // Antes esta prueba exigía que no sumara: eso dejaba ciego al tope (la gran idea v4 anotó 6,15 y gastó 10,39). La MISMA ejecución reenviada sigue sin sumar
+  it('la misma respuesta dos veces: la segunda no vuelve a anotar el aporte; su costo se suma solo si es OTRA ejecución; una de un turno que no existe = 409', async () => {
     const { M, MS, a, id } = await montar()
     const t = a.cuerpo.turno as { n: number }
     const primera = await recibirResultado(M.P, id, t.n, { texto: 'Idea rectora: el plato del día', costo_usd: 0.3, workflow_execution_id: 'ex-1' })
@@ -324,14 +326,18 @@ describe('O04 · una respuesta repetida o fuera de orden no duplica nada', () =>
     const gastoDespues = M.encargos.get(id)!.gasto_usd
     const dirigeAntes = MS.filas.filter((f) => f.tipo === 'dirige').length
     expect(dirigeAntes).toBe(1)
+    const mismaEjecucion = await recibirResultado(M.P, id, t.n, { texto: 'Idea rectora: el plato del día', costo_usd: 0.3, workflow_execution_id: 'ex-1' })
+    expect(mismaEjecucion.status).toBe(200)
+    expect(M.encargos.get(id)!.gasto_usd).toBe(gastoDespues)
     const repetida = await recibirResultado(M.P, id, t.n, { texto: 'Otra idea distinta', costo_usd: 0.3, workflow_execution_id: 'ex-1b' })
     expect(repetida.status).toBe(200)
     expect(MS.filas.filter((f) => f.tipo === 'dirige')).toHaveLength(1)
     expect(MS.filas.find((f) => f.tipo === 'dirige')!.texto).toBe('Idea rectora: el plato del día')
-    expect(M.encargos.get(id)!.gasto_usd).toBe(gastoDespues)
+    const conLaCopia = +(gastoDespues + 0.3).toFixed(6)
+    expect(M.encargos.get(id)!.gasto_usd).toBe(conLaCopia)
     const futura = await recibirResultado(M.P, id, 99, { texto: 'de un turno que no existe', costo_usd: 0.3 })
     expect(futura).toMatchObject({ status: 409, cuerpo: { error: 'turno_no_esperado' } })
-    expect(M.encargos.get(id)!.gasto_usd).toBe(gastoDespues)
+    expect(M.encargos.get(id)!.gasto_usd).toBe(conLaCopia)
   })
   it('lo mismo llamando directo a la mesa (la compuerta propia del paso, sin pasar por la de la oficina): repetida = 200 sin duplicar; inexistente = 409', async () => {
     const { M, MS, a, id } = await montar()

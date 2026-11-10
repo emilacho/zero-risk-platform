@@ -81,6 +81,13 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
     if (veces >= MAX_REENTREGAS_SIN_ACUSE) continue // se deja a la regla de los 12 min (muerto → un reintento → fallido)
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: { ...enc.estado_del_motor, vueltas: { ...enc.estado_del_motor.vueltas, [k]: veces + 1 } }, gasto_usd: enc.gasto_usd })
     reentregar.push(enc.id)
+    // 10-nov · arreglo 4 del costo de la mesa: un turno que nadie tomó ya no se re-entrega EN SILENCIO (el acuse con la llave vacía dio 401 del 28-oct al 10-nov y nadie lo supo).
+    // UNA alarma por encargo (la primera re-entrega de ese encargo); las siguientes no vuelven a sonar. Nunca frena al vigía
+    if (!Object.keys(enc.estado_del_motor.vueltas).some((x) => x.startsWith('lanzado:'))) {
+      try {
+        await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ La oficina volvió a entregar el turno ${String(t.n)} («${String(t.paso)}») del encargo ${enc.brief_id}: ningún flujo lo tomó en ${MINUTOS_PARA_REANUDAR_LO_LANZADO} min. Si se repite, el acuse del flujo «oficina · turno» no está llegando (revisa que responda 200 y no 401). Lo que una copia gaste ya se anota en el gasto del encargo.`, dry_run: enc.dry_run })
+      } catch { /* la alarma nunca frena al vigía */ }
+    }
   }
   // ② EL BRAZO DE VIDEO (parte 2 · 31-oct): los turnos `brazo` no son pasos muertos a los 12 min; el vigía SONDEA el estado del video en cada vuelta (≈ 5–8 min por video; plazo 45 min) y registra el paso cuando termina
   const vb = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,inicio').eq('estado', 'corriendo').eq('tipo', 'brazo')) as { data: Fila[] | null; error: { message: string } | null }
