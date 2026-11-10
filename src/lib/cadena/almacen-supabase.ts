@@ -22,6 +22,7 @@ import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
 import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos-de-emilio/registrar'
 import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
+import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
@@ -117,6 +118,8 @@ export function almacenDeSupabase(): Almacen {
     // el estado del brazo lo lee el almacén de la sala (el ÚNICO que nombra esas tablas: lo vigila una prueba permanente)
     async estadoDelBrazo(destino) { return (await almacenDeRecados().leerDestino(destino))?.estado_del_brazo ?? null },
 
+    // 10-nov (GO v3 · punto 2): las fotos PROPIAS con la MISMA regla que la oficina (la lectura vive en la oficina)
+    async fotosPropias(clientId) { return idsDeFotosPropias(db, clientId) },
     async cargarContexto(clientId, planId): Promise<ContextoDelCliente | null> {
       const plan = await uno<{ content_text: string | null; content: string | null; created_at: string }>(db.from('client_historical_outputs').select('content_text, content, created_at').eq('id', planId).eq('client_id', clientId).maybeSingle())
       if (!plan) return null

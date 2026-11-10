@@ -9,6 +9,7 @@
  * `banco[idea_ref].mensaje` como MENSAJE de la pieza; la tarjeta de Emilio muestra el resumen (`resumenDelBanco`).
  */
 import { normalizar } from './texto'
+import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from './registro'
 import type { Fase, Hallazgo, Slot } from './tipos'
 
 export const CONTRATO_CONCEPTO = 'concepto.v1'
@@ -85,8 +86,12 @@ export interface InsumosDelConcepto {
   prohibidas: string[]
   /** las declaradas, con su cita: 02-nov, firma de Emilio: tampoco bloquean, se avisan con su propio texto */
   duras?: string[]
-  /** ids de las fotos propias que existen (toda `foto:<id>` debe estar aquí) */
+  /** ids de las fotos propias que existen (toda `foto:<id>` debe estar aquí; se acepta el prefijo de ≥ 8 caracteres si es de UNA sola foto) */
   fotos: string[]
+  /** 10-nov (GO v3 · punto 5): el registro del cliente (tú · vos · usted); las formas de OTRO registro se marcan · sin dato no se marca nada */
+  registro?: RegistroDelCliente
+  /** 10-nov (GO v3 · punto 7): el texto del que la mesa debe sacar sus datos (el brief validado). Un dato con valor de una idea que no está aquí se marca «sin fuente» · sin texto no se mira */
+  fuente?: string
 }
 
 // ───────────────────────────────────────────────────────── texto
@@ -100,6 +105,41 @@ export function contienePalabraEntera(texto: string, palabra: string): boolean {
   const p = claveDeTexto(palabra)
   if (!p) return false
   return new RegExp(`(^|[^\\p{L}\\p{N}])${esc(p)}(?=$|[^\\p{L}\\p{N}])`, 'u').test(claveDeTexto(texto))
+}
+/**
+ * 10-nov (GO v3 · punto 4): ¿la palabra aparece FUERA de una frase que la prohíbe? «Sin «premium», «gourmet» ni superlativos» no es usarla.
+ * Una aparición cuenta como prohibición si, en la misma frase y antes de ella, hay «sin», «nunca», «jamás», «ni», «no uses/usar/decir…», «evita/evitar…» o «prohibid…».
+ */
+const PROHIBE = /(?:^|[^\p{L}])(?:sin|nunca|jamas|ni|no (?:use|uses|usar|usa|usamos|decir|digas|diga|dice|poner|pongas|escribir|escribas)|evit\p{L}*|prohib\p{L}*)(?=$|[^\p{L}])/u
+export function apareceFueraDeProhibicion(texto: string, palabra: string): boolean {
+  const p = claveDeTexto(palabra)
+  if (!p) return false
+  for (const frase of texto.split(/[.!?\n]+/)) {
+    const f = claveDeTexto(frase)
+    const re = new RegExp(`(^|[^\\p{L}\\p{N}])${esc(p)}(?=$|[^\\p{L}\\p{N}])`, 'gu')
+    // solo cuenta lo que está cerca (las 8 palabras anteriores): «Sin «premium», «gourmet», «artesanal»» sí; «encebollado sin espera … premium» no
+    for (const m of f.matchAll(re)) if (!PROHIBE.test(f.slice(0, m.index! + m[1].length).trim().split(' ').slice(-8).join(' '))) return true
+  }
+  return false
+}
+/** 10-nov (GO v3 · punto 2): ¿existe la foto? id completo, o un prefijo de ≥ 8 caracteres que sea de UNA sola foto propia (la mesa cita `foto:4f09cef2`) */
+export function fotoExiste(id: string, fotos: string[]): boolean {
+  const i = id.toLowerCase()
+  if (fotos.some((f) => f.toLowerCase() === i)) return true
+  return i.length >= 8 && fotos.filter((f) => f.toLowerCase().startsWith(i)).length === 1
+}
+/** 10-nov (GO v3 · punto 7): los datos con valor de un texto (cifras con decimales, precios, horas, porcentajes, días de atención) */
+export function datosConValor(t: string): string[] {
+  const out: string[] = []
+  const re = /(?:\$|US\$|USD)\s?\d+(?:[.,]\d+)?|\b\d{1,2}:\d{2}\b|\b\d+(?:[.,]\d+)?\s?%|\b\d+[.,]\d+\b|\bde lunes a (?:viernes|sabado|sábado|domingo)s?\b|\btodos los dias\b|\btodos los días\b|\b24\s?(?:horas|h|\/7)\b/giu
+  // una duración de montaje («texto retardado 1,5 s», «0–3 s») no es un dato del negocio
+  for (const m of t.matchAll(re)) if (!/^\s?(?:s|seg|segundos?)(?!\p{L})/iu.test(t.slice(m.index! + m[0].length)) && !out.includes(m[0])) out.push(m[0])
+  return out
+}
+/** ¿el dato está en la fuente? cifras con coma o punto valen igual («4,9» = «4.9») */
+export function datoEnLaFuente(dato: string, fuente: string): boolean {
+  const n = (x: string) => normalizar(x).replace(/(\d)[.,](\d)/g, '$1.$2').replace(/\s+/g, ' ')
+  return n(fuente).includes(n(dato))
 }
 /** una cifra inventada con decimales «,77» / «.77» (el molde del redactor cuando no tiene el dato) */
 export const tieneCifraInventada = (t: string): boolean => /\d[.,]77\b/.test(t)
@@ -196,7 +236,8 @@ function leerSerie(linea: string): SerieDelCapitulo | null {
   }
   return { id: m[1].toUpperCase(), nombre: libres[0] ?? '', que_cuenta: libres.slice(1).join(' · '), redes }
 }
-const ETIQUETAS = /(Qué cuenta|Objetivo de la fase(?:\s*\(cita\))?|Objetivo|Cómo se ve(?: en este capítulo)?|Series)\s*:/giu
+// 10-nov (GO v3 · punto 3): la etiqueta puede venir en negrita («**Qué cuenta:**») y con paréntesis («Objetivo de la fase (cita del plan):»); la negrita no entra al campo
+const ETIQUETAS = /(?:\*\*|__)?(Qué cuenta|Objetivo de la fase(?:\s*\([^)\n]*\))?|Objetivo|Cómo se ve(?: en este capítulo)?|Series)\s*:\s*(?:\*\*|__)?/giu
 function leerCapitulo(s: Seccion): Omit<CapituloDelConcepto, 'fase'> {
   const cab = /^cap[ií]tulo\s+(\S+)\s*(?:·|-|—)?\s*(.*)$/iu.exec(s.titulo)
   const clave = (cab?.[1] ?? '').replace(/[·:]+$/, '')
@@ -314,12 +355,20 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
   // texto: cifras inventadas, prohibidas, datos con valor en las ideas, fotos
   if (tieneCifraInventada(md)) avisos.push('hay una cifra «,77» (dato inventado)')
   const duras = new Set((ins.duras ?? []).map((x) => x.trim().toLowerCase()))
-  for (const p of ins.duras ?? []) if (contienePalabraEntera(md, p)) avisos.push(`usa «${p}», declarada por una norma o para este cliente: revisa si corresponde`)
-  for (const p of ins.prohibidas) if (!duras.has(p.trim().toLowerCase()) && contienePalabraEntera(md, p)) avisos.push(`usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`)
+  for (const p of ins.duras ?? []) if (apareceFueraDeProhibicion(md, p)) avisos.push(`usa «${p}», declarada por una norma o para este cliente: revisa si corresponde`)
+  for (const p of ins.prohibidas) if (!duras.has(p.trim().toLowerCase()) && apareceFueraDeProhibicion(md, p)) avisos.push(`usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`)
   for (const i of banco) if (tieneDatoConValor(`${i.idea} ${i.mensaje} ${i.gancho}`)) avisos.push(`la idea ${i.id} trae un dato con valor (precio, hora, cifra): el estratega lo pone con su referencia`)
+  // 10-nov (GO v3 · punto 7): un dato con valor que no está en el brief no tiene fuente (la mesa lo sacó de otro lado o lo inventó)
+  if (ins.fuente) for (const i of banco) for (const d of datosConValor(`${i.idea} ${i.mensaje} ${i.gancho}`)) if (!datoEnLaFuente(d, ins.fuente)) avisos.push(`la idea ${i.id} trae «${d}», que no está en el brief: dato sin fuente`)
   const fotos_citadas = fotosCitadas(md)
-  const fotosQueExisten = new Set(ins.fotos.map(String))
-  for (const f of fotos_citadas) if (!fotosQueExisten.has(f)) avisos.push(`la foto «${f}» no existe entre las fotos propias`)
+  for (const f of fotos_citadas) if (!fotoExiste(f, ins.fotos.map(String))) avisos.push(`la foto «${f}» no existe entre las fotos propias`)
+  // 10-nov (GO v3 · punto 5): el registro del cliente, como en las piezas; «Cómo suena» se nombra aparte porque todas las piezas la siguen
+  if (ins.registro) {
+    const enSuena = formasDeOtroRegistro(ins.registro, textoDe(porTitulo('Cómo suena')))
+    const enTodo = formasDeOtroRegistro(ins.registro, md)
+    if (enSuena.length) avisos.push(`«Cómo suena» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enSuena.join(', ')} · todas las piezas siguen esta regla`)
+    if (enTodo.length) avisos.push(`el concepto usa ${enTodo.length} forma(s) que no son ${nombreDelRegistro(ins.registro)}: ${enTodo.slice(0, 12).join(', ')}`)
+  }
 
   const dev = porTitulo('Devolución del brief')
   const devolucion = dev ? textoDe(dev) : ''
