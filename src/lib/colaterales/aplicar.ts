@@ -26,9 +26,11 @@ export interface EscritorDeDocumento {
   escribirSiSigue(ref: string, base: string, texto: string, motivo: string): Promise<string | null>
 }
 export type Escritores = Partial<Record<Documento, EscritorDeDocumento>>
+/** un escritor la lanza cuando el texto nuevo no se puede guardar tal cual (p. ej. cambia la estructura): el retoque queda pendiente, la corrida sigue */
+export class EscrituraRechazada extends Error {}
 type Almacen = ReturnType<typeof almacenDeColaterales>
 
-export type MotivoDePendiente = 'fila_inactiva' | 'sin_escritor' | 'documento_no_existe' | 'documento_abierto' | 'version_cambiada' | 'pedazo_no_encontrado'
+export type MotivoDePendiente = 'fila_inactiva' | 'sin_escritor' | 'documento_no_existe' | 'documento_abierto' | 'version_cambiada' | 'pedazo_no_encontrado' | 'escritura_rechazada'
 
 interface FilaDeRetoque {
   id: string; estado: string; documento: Documento; documento_ref: string; version_base: string; version_resultante: string | null
@@ -82,7 +84,13 @@ export async function aplicarAprobados(d: { almacen: Almacen; escritores: Escrit
     await aPendiente(hecho.sin_aplicar.map((x) => porRetoque.get(x.pedazo.id)!), 'pedazo_no_encontrado')
     if (!hecho.aplicados.length) continue
     const aplicadas = hecho.aplicados.map((x) => porRetoque.get(x.pedazo.id)!)
-    const nueva = await esc.escribirSiSigue(documento_ref, version_base, hecho.texto, `colaterales · edición ${edicion_id} · ${aplicadas.map((t) => t.pedazo.id).join(', ')}`)
+    let nueva: string | null
+    try {
+      nueva = await esc.escribirSiSigue(documento_ref, version_base, hecho.texto, `colaterales · edición ${edicion_id} · ${aplicadas.map((t) => t.pedazo.id).join(', ')}`)
+    } catch (e) {
+      if (e instanceof EscrituraRechazada) { await aPendiente(aplicadas, 'escritura_rechazada'); continue }
+      throw e
+    }
     if (nueva === null) { await aPendiente(aplicadas, 'version_cambiada'); continue }
     for (const t of aplicadas) {
       if (await d.almacen.pasarRetoque(t.id, 'aprobado', 'aplicado', { version_resultante: nueva })) r.aplicados.push({ id: t.id, documento, version: nueva })
