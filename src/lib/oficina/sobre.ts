@@ -17,9 +17,6 @@ const RE_FAMILIA = /^[a-z][a-z0-9_]{0,39}$/
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/
 const RE_HORA = /^\d{2}:\d{2}(:\d{2})?$/
 
-/** el máximo por encargo que permite la base (`oficina_encargos_tope_valido`) · 10-nov: de 10 a 20 («subela a 20», dale de Emilio) */
-export const TOPE_MAXIMO_POR_ENCARGO_USD = 20
-
 export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorados: string[] } | { ok: false; codigo: 'dry_run_ausente' | 'entrada_invalida'; errores: string[] } {
   if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) return { ok: false, codigo: 'entrada_invalida', errores: ['el cuerpo debe ser un objeto'] }
   const b = cuerpo as Record<string, unknown>
@@ -27,7 +24,7 @@ export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorad
   const errores: string[] = []
   if (typeof b.parte_id !== 'string' || !RE_UUID.test(b.parte_id)) errores.push('`parte_id` debe ser un uuid')
   if (typeof b.brief_id !== 'string' || !RE_BRIEF.test(b.brief_id)) errores.push('`brief_id` inválido')
-  if (b.tope_usd !== undefined && !(typeof b.tope_usd === 'number' && b.tope_usd > 0 && b.tope_usd <= TOPE_MAXIMO_POR_ENCARGO_USD)) errores.push(`\`tope_usd\` debe ser un número mayor que 0 y no más de ${TOPE_MAXIMO_POR_ENCARGO_USD}`)
+  if (b.tope_usd !== undefined && !(typeof b.tope_usd === 'number' && b.tope_usd > 0 && b.tope_usd <= 10)) errores.push('`tope_usd` debe ser un número mayor que 0 y no más de 10')
   if (b.familia !== undefined && !(typeof b.familia === 'string' && RE_FAMILIA.test(b.familia))) errores.push('`familia` inválida')
   if (b.reabrir_causa_corregida !== undefined && !(typeof b.reabrir_causa_corregida === 'string' && b.reabrir_causa_corregida.trim().length >= 10 && b.reabrir_causa_corregida.trim().length <= 300)) errores.push('`reabrir_causa_corregida` debe ser una frase de 10 a 300 caracteres')
   if (b.cambios_del_dueno !== undefined) errores.push(...erroresDeCambios(b.cambios_del_dueno))

@@ -12,7 +12,6 @@ import type { Campana, EstrategiaGuardada } from '../almacen'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto, sinCodigosInternos, TITULO_DE_LO_QUE_CAMBIO } from '../cambios-pedidos'
 import { ideasDelTexto, leerConcepto } from '../conceptos'
 import { briefAbrir, briefDevueltoConNota, conceptoAbrir, conceptoDecidir, marcoDelBrief, marcoDelConcepto, MOTIVO_CAMBIOS_DE_EMILIO, recibirBrief, recibirConcepto } from '../mesas'
-import { validarSobre, TOPE_MAXIMO_POR_ENCARGO_USD } from '../../oficina/sobre'
 
 const A = clienteA()
 const CAMP = 'camp-1'
@@ -210,28 +209,5 @@ describe('códigos internos fuera de lo que lee el dueño', () => {
     expect(sinCodigosInternos('## Brief creativo de campaña · Náufrago · brf-28de888eb3f2 · v2 (revisión)')).toBe('## Brief creativo de campaña · Náufrago (revisión)')
     expect(sinCodigosInternos('ver brf-28de888eb3f2-v2 y con-28de888eb3f2-v3')).toBe('ver y')
     expect(sinCodigosInternos('- C1-I01 · instagram · foto · x · foto:9f71b0e9')).toBe('- C1-I01 · instagram · foto · x · foto:9f71b0e9')
-  })
-})
-
-describe('tope por encargo: hasta US$ 20 («subela a 20», dale de Emilio)', () => {
-  const base = { dry_run: true, parte_id: '6563e705-84a6-42ac-aa4a-6e383d4a28b1', brief_id: 'con-28de888eb3f2-v4' }
-  it('🔴 el pedido a la oficina acepta 20 y rechaza más de 20 o 0', () => {
-    expect(TOPE_MAXIMO_POR_ENCARGO_USD).toBe(20)
-    expect(validarSobre({ ...base, tope_usd: 20 }).ok).toBe(true)
-    for (const t of [20.01, 0, -1]) {
-      const r = validarSobre({ ...base, tope_usd: t })
-      expect(r.ok).toBe(false)
-      if (!r.ok) expect(r.errores.join(' ')).toContain('no más de 20')
-    }
-  })
-  it('🔴 la migración ensancha las DOS reglas de la base a 20, sin tocar topes vigentes', () => {
-    const sql = readFileSync(join(__dirname, '../../../../supabase/migrations/202611101000_oficina_tope_hasta_20.sql'), 'utf8')
-    expect(sql).toMatch(/oficina_tipos_tope_valido CHECK \(tope_encargo_usd > 0 AND tope_encargo_usd <= 20\)/)
-    expect(sql).toMatch(/oficina_encargos_tope_valido CHECK \(tope_usd > 0 AND tope_usd <= 20\)/)
-    expect(sql).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bTRUNCATE\b|DROP TABLE/i)
-  })
-  it('el tope editable desde el tablero sigue en 10 (por seguridad · no cambia)', async () => {
-    const { TOPE_MAXIMO_EDITABLE_USD } = await import('../../oficina/tablero/acciones')
-    expect(TOPE_MAXIMO_EDITABLE_USD).toBe(10)
   })
 })
