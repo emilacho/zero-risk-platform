@@ -31,6 +31,7 @@ import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, l
 import { TIPO_DE_ESPERA as TIPO_DE_ESPERA_DE_JEFATURA } from './revision-jefatura'
 import type { Estrategia, FormatosPorRed } from './tipos'
 import { contextoDeLaMesa } from '../sedes/por-abrir'
+import { bloqueDelPerfil, type PerfilParaLectores } from '../perfil-del-publico/lectores'
 
 export const CAP_DE_VUELTAS_DE_CAMBIOS = 2
 /** versión 1 + UNA reapertura (brief devuelto · concepto sin_mesa); a la siguiente, necesita_humano */
@@ -109,7 +110,8 @@ const canalesEnTexto = (e: Estrategia): string => e.canales.map((c) => `- ${c.re
 
 const reglaDeLengua = (ctx: ContextoDelCliente): string => [reglaDeRegistro(ctx.registro), reglaDeIdioma(ctx.idioma)].filter(Boolean).join(' ')
 
-export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null }): string {
+export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null }): string {
+  const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
     '# Qué te pido',
     `Escribe el brief creativo de ESTA campaña (versión ${a.version}) a partir del plan, la estrategia y el manual del cliente. ${reglaDeLengua(a.ctx)}`,
@@ -131,6 +133,8 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     '# ESTRATEGIA · fases',
     fasesEnTexto(a.estrategia),
     ...(a.informeDeMercado ? ['', '# INFORME DE MERCADO (PROPUESTA · no es dato del cliente · contexto, no mandato)', a.informeDeMercado] : []),
+    // 10-nov · perfil del público T2: lo OBSERVADO en voces públicas (contexto, no mandato) · sin perfil no se agrega nada (el marco queda como hoy)
+    ...(perfil ? ['', perfil] : []),
     '',
     ...(a.ctx.eslogan ? [`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
     `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
@@ -154,8 +158,9 @@ export function fechasDelConcepto(estrategia: Pick<Estrategia, 'fases'>, inicio:
   return [`# HOY · ${hoy} (la campaña empezó el ${inicio})`, 'Ninguna idea es para un día que ya pasó. Lo que anuncia algo que ya ocurrió (una apertura, un lanzamiento, un «llega hoy» de una fecha pasada) se cuenta como hecho, no como promesa.', ...lineas].join('\n')
 }
 
-export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null; anterior?: string | null }): string {
+export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null }): string {
   const fechas = fechasDelConcepto(a.estrategia, a.inicio, a.hoy)
+  const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
     '# Qué te pido',
     `La gran idea de ESTA campaña (versión ${a.version}): UNA frase paraguas, por qué funciona, cómo se ve, cómo suena; un CAPÍTULO por fase de la estrategia, y el BANCO DE IDEAS por capítulo y por red. ${reglaDeLengua(a.ctx)}`,
@@ -176,6 +181,8 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     '',
     '# BRIEF CREATIVO DE LA CAMPAÑA (validado)',
     a.briefTexto,
+    // 10-nov · perfil del público T2: el mismo bloque que el brief · sin perfil no se agrega nada
+    ...(perfil ? ['', perfil] : []),
     '',
     '# ESTRATEGIA · fases (un capítulo por fase)',
     fasesEnTexto(a.estrategia),
@@ -190,6 +197,12 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
 }
 
 // ───────────────────────────────────────────────────────── lo común
+/** 10-nov · perfil del público T2: el perfil para una mesa · sin lector = sin perfil (como hoy) · un fallo se DICE (`no_se_pudo_leer`), nunca «no hay» */
+export async function perfilParaLaMesa(al: Pick<Almacen, 'perfilDelPublico'>, clientId: string, mesa: 'brief' | 'gran_idea'): Promise<PerfilParaLectores> {
+  if (!al.perfilDelPublico) return { estado: 'sin_perfil' }
+  try { return await al.perfilDelPublico(clientId, mesa) } catch (e) { return { estado: 'no_se_pudo_leer', detalle: e instanceof Error ? e.message : String(e) } }
+}
+
 interface Cargado { campana: Campana; ctx: ContextoDelCliente; estrategia: Estrategia }
 async function cargar(al: Almacen, cuerpo: Record<string, unknown>, autorizar: boolean): Promise<{ ok: true; c: Cargado } | { ok: false; r: Respuesta }> {
   const id = cadena(cuerpo.campana_id)
@@ -247,7 +260,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   await al.insertarBriefCreativo(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null }),
+    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null, perfil: await perfilParaLaMesa(al, campana.client_id, 'brief') }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }
@@ -323,7 +336,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version) }), condiciones: condicionesDe(estrategia, await al.formatos()),
+      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
   }
@@ -344,7 +357,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version) }), condiciones: condicionesDe(estrategia, await al.formatos()),
+    marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
 }
@@ -360,7 +373,9 @@ export async function insumosDelConcepto(al: Almacen, campana: Pick<Campana, 'id
   const fotos = al.fotosPropias ? await al.fotosPropias(campana.client_id) : []
   const brief = await al.ultimoBriefCreativo(campana.id)
   const base = estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], fotos) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos }
-  return { ...base, duras: ctx?.palabrasDuras, registro: ctx?.registro, ...(brief?.estado === 'validada' && brief.texto_md ? { fuente: brief.texto_md } : {}) }
+  // 10-nov · perfil del público T2: el texto del perfil vigente para el aviso «frase del público sin fuente» (null = sin perfil o no se pudo leer) · sin lector, el aviso no corre
+  const perfil = al.perfilDelPublico ? await perfilParaLaMesa(al, campana.client_id, 'gran_idea') : null
+  return { ...base, duras: ctx?.palabrasDuras, registro: ctx?.registro, ...(brief?.estado === 'validada' && brief.texto_md ? { fuente: brief.texto_md } : {}), ...(perfil ? { perfil_del_publico: perfil.estado === 'vigente' ? perfil.texto : null, perfil_del_publico_estado: perfil.estado } : {}) }
 }
 
 export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: string): Promise<EntregaALaCadena> {
