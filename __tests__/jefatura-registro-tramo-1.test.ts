@@ -32,7 +32,7 @@ const mundo = () => {
 }
 const sobreDe = (c: typeof B2B, o: { dry_run?: boolean; id?: string } = {}) => sobre('registro' as never, { id: o.id ?? 'doc-1', texto: c.texto, dry_run: o.dry_run ?? false, payload: { registro: c.registro, seccion_de_voz: c.seccion_de_voz, documento: 'el brief' } })
 const fichas = (xs: Array<{ que: string; propuesta?: string; es_cita?: boolean; cita_de?: string }>) => JSON.stringify({ fichas: xs.map((x) => ({ que: x.que, donde: 'texto', contra_que: 'otro registro', gravedad: 'bloquea', propuesta: x.propuesta ?? `${x.que} (corregida)`, ...(x.es_cita !== undefined ? { es_cita: x.es_cita } : {}), ...(x.cita_de ? { cita_de: x.cita_de } : {}) })) })
-const F = (que: string, o: { es_cita?: boolean; cita_de?: string } = {}) => ({ que, donde: 'texto', contra_que: '', gravedad: 'bloquea' as const, propuesta: '', ...o })
+const F = (que: string, o: { es_cita?: boolean; cita_de?: string; cita_texto?: string } = {}) => ({ que, donde: 'texto', contra_que: '', gravedad: 'bloquea' as const, propuesta: '', ...o })
 
 describe('🔴 la fila de la política se lee', () => {
   it('la fila de la migración es válida y nace apagada', () => {
@@ -83,6 +83,53 @@ describe('🔴 lo citado no se corrige', () => {
     if (r.ok) expect(r.texto).toBe('Y si querés, te la llevamos.\n> El dueño dijo: «si quieres, pasá a verla»\n')
     // solo dentro de la cita → no hay nada que reemplazar
     expect(aplicarReemplazos(BICI.texto, [{ id: 'f1', antes: 'si quieres', despues: 'si querés' }], new Map([['f1', 'si quieres']])).ok).toBe(false)
+  })
+})
+
+describe('🔴 caso mixto (CC7): la MISMA frase en una cita y en una línea de pieza', () => {
+  const RESENA = 'Acá pedís y te llega caliente'
+  const MIXTO = `## Lo que dicen\nUna reseña del dueño: «${RESENA}».\n\n## Piezas\nPieza 2: «hoy pedís, mañana comes».\n`
+  const ORIGEN = [{ titulo: 'Reseñas', texto: `${RESENA}. Cinco estrellas.` }]
+  const DE_CITA = F('pedís', { es_cita: true, cita_de: 'Reseñas', cita_texto: RESENA })
+  const DE_PIEZA = F('pedís')
+  for (const [nombre, orden] of [['la cita primero', [DE_CITA, DE_PIEZA]], ['la pieza primero', [DE_PIEZA, DE_CITA]]] as const) {
+    it(`🔴 ${nombre}: la pieza es corregible, la cita es aviso y su fragmento queda como tramo intocable`, () => {
+      const c = clasificarFichas(MIXTO, [...orden], ORIGEN)
+      expect(c.corregibles.map((f) => f.que)).toEqual(['pedís'])
+      expect(c.en_citas).toEqual(['pedís'])
+      expect(c.citas_del_revisor).toEqual([RESENA])
+      const r = aplicarReemplazos(MIXTO, [{ id: 'f1', antes: 'pedís', despues: 'pides' }], new Map([['f1', 'pedís']]), c.citas_del_revisor)
+      expect(r.ok).toBe(true)
+      if (r.ok) expect(r.texto).toBe(MIXTO.replace('hoy pedís', 'hoy pides'))
+    })
+  }
+  it('la cita del revisor que no está literal en el texto, o cuyo fragmento no contiene la frase, no protege nada', () => {
+    expect(clasificarFichas(MIXTO, [F('pedís', { es_cita: true, cita_de: 'Reseñas', cita_texto: 'Acá pedís y llega' })], ORIGEN).citas_del_revisor).toEqual([])
+    expect(clasificarFichas(MIXTO, [F('pedís', { es_cita: true, cita_de: 'Reseñas', cita_texto: 'te llega caliente' })], ORIGEN).citas_del_revisor).toEqual([])
+    // está en el origen pero NO en el texto: no es cita y la frase se corrige
+    const soloEnOrigen = clasificarFichas(MIXTO, [F('pedís', { es_cita: true, cita_de: 'Reseñas', cita_texto: `${RESENA}. Cinco estrellas` })], ORIGEN)
+    expect(soloEnOrigen.citas_del_revisor).toEqual([])
+    expect(soloEnOrigen.corregibles.map((f) => f.que)).toEqual(['pedís'])
+  })
+  it('si la frase está SOLO dentro de la cita del revisor, la ficha sin «es_cita» tampoco la corrige (aviso, no ficha)', () => {
+    const soloCita = `## Lo que dicen\nUna reseña del dueño: «${RESENA}».\n`
+    const c = clasificarFichas(soloCita, [DE_PIEZA, DE_CITA], ORIGEN)
+    expect(c.corregibles).toEqual([])
+    expect(c.en_citas).toEqual(['pedís'])
+  })
+  it('🔴 la corrida entera, en los dos órdenes: la reseña queda igual, la pieza se corrige y sale el aviso', async () => {
+    for (const orden of [[DE_CITA, DE_PIEZA], [DE_PIEZA, DE_CITA]]) {
+      const { P } = mundo()
+      const cuerpo = sobre('registro' as never, { id: `doc-mixto-${orden[0].es_cita ? 'c' : 'p'}`, texto: MIXTO, dry_run: false, payload: { registro: { trato: 'tu' }, documentos_de_origen: ORIGEN } })
+      const d = await correr(P, cuerpo, ({ paso, pedido }) => {
+        if (paso === 'revision_registro') return { texto: JSON.stringify({ fichas: orden.map((f) => ({ ...f, contra_que: 'voseo', propuesta: 'pides' })) }) }
+        const id = String(pedido.task ?? '').match(/\[([^\]]+)\] en/)![1]
+        return { texto: JSON.stringify({ respuestas: [{ id, estado: 'tomada', razon: 'voseo' }], reemplazos: [{ id, antes: 'pedís', despues: 'pides' }] }) }
+      })
+      const s = d.final.cuerpo.salida as { artefacto_final: { texto: string }; avisos?: string[] }
+      expect(s.artefacto_final.texto).toBe(MIXTO.replace('hoy pedís', 'hoy pides'))
+      expect(s.avisos?.some((a) => a.includes('«pedís» está dentro de una cita'))).toBe(true)
+    }
   })
 })
 

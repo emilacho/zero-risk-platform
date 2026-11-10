@@ -328,7 +328,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e:
     const texto = String(datos(e, 'revision')?.texto ?? '')
     const c = clasificarFichas(texto, v.fichas as FichaDeRegistro[], rev.entrada.documentos_de_origen ?? [])
     const fs = c.corregibles.map((f, i) => fichaNueva(`registro-${e.pasos_ejecutados}-${i}`, 'jefe', normalizarDonde(f.donde, duenosDe(rev.productores)).donde, 'bloquea', f.que, f.contra_que, f.propuesta))
-    return { res: { costo_usd: 0, artefacto: { fichas: fs.length, avisos_de_registro: c.en_citas.map(avisoDeCita), ...(c.no_literales.length ? { frases_no_literales: c.no_literales } : {}) }, fichas: fs } }
+    return { res: { costo_usd: 0, artefacto: { fichas: fs.length, avisos_de_registro: c.en_citas.map(avisoDeCita), citas_del_revisor: c.citas_del_revisor, ...(c.no_literales.length ? { frases_no_literales: c.no_literales } : {}) }, fichas: fs } }
   }
   if (paso.clave === 'revision_fondo' || paso.clave === 'revision_lengua') {
     const duenosDeLaRevision = duenosDe(rev.productores)
@@ -368,7 +368,9 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e:
     const faltan = [...tomadas.keys()].filter((id) => !reemplazos.some((x) => x.id === id))
     if (faltan.length) return { reintentar: `Tomaste ${faltan.map((x) => `«${x}»`).join(', ')} pero no diste su reemplazo: da un reemplazo {"id","antes","despues"} por cada ficha tomada.` }
     if (reemplazos.length) {
-      const ap = aplicarReemplazos(String(rd.texto ?? ''), reemplazos, tomadas)
+      // las citas que el revisor señaló y el código comprobó son tramos intocables también aquí (caso mixto de CC7: la misma frase en una cita y en una línea de pieza)
+      const citas = (datos(e, 'fichas_jefe')?.citas_del_revisor as string[] | undefined) ?? []
+      const ap = aplicarReemplazos(String(rd.texto ?? ''), reemplazos, tomadas, citas)
       if (!ap.ok) return { reintentar: `${ap.error}. Corrige tus reemplazos.` }
       artefacto = conVersion({}, ap.texto, paso.clave)
     }
