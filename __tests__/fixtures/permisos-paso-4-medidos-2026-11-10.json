@@ -1,0 +1,7196 @@
+[
+ {
+  "tabla": "active_journeys",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "active_journeys",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "active_journeys",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "active_journeys",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "active_journeys",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "active_journeys",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "active_journeys",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "active_journeys",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "activities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "activities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "activities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "activities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "activities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "activities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "activities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "activities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "ad_creative_refreshes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "ad_creative_refreshes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "ad_creative_refreshes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "ad_creative_refreshes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "ad_creative_refreshes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "ad_creative_refreshes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "ad_creative_refreshes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "ad_creative_refreshes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "ad_performance_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "ad_performance_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "ad_performance_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "ad_performance_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "ad_performance_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "ad_performance_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "ad_performance_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "ad_performance_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_3d_generations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_3d_generations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_3d_generations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_3d_generations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_3d_generations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_3d_generations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_3d_generations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_3d_generations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_callback_attempts",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_callback_attempts",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_callback_attempts",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_callback_attempts",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_callback_attempts",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_callback_attempts",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_callback_attempts",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_callback_attempts",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_dispatch_reconciliations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_dispatch_reconciliations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_dispatch_reconciliations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_dispatch_reconciliations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_dispatch_reconciliations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_dispatch_reconciliations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_dispatch_reconciliations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_dispatch_reconciliations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_dispatches",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_dispatches",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_dispatches",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_dispatches",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_dispatches",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_dispatches",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_dispatches",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_dispatches",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_health_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_health_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_health_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_health_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_health_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_health_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_health_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_health_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_image_generations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_image_generations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_image_generations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_image_generations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_image_generations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_image_generations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_image_generations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_image_generations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_improvement_proposals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_improvement_proposals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_improvement_proposals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_improvement_proposals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_improvement_proposals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_improvement_proposals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_improvement_proposals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_improvement_proposals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_insights",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_insights",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_insights",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_insights",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_insights",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_insights",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_insights",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_insights",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_invocation_textos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_invocation_textos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_invocation_textos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_invocation_textos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_invocation_textos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_invocation_textos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_invocation_textos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_invocation_textos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_invocations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_invocations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_invocations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_invocations",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_invocations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_invocations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_invocations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_invocations",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_outcomes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_outcomes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_outcomes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_outcomes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_outcomes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_outcomes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_outcomes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_outcomes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_routing_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_routing_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_routing_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_routing_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_routing_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_routing_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_routing_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_routing_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_skill_assignments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_skill_assignments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_skill_assignments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_skill_assignments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_skill_assignments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_skill_assignments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_skill_assignments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_skill_assignments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_skills",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_skills",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_skills",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_skills",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_skills",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_skills",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_skills",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_skills",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_tools",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_tools",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_tools",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_tools",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agent_tools",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agent_tools",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agent_tools",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agent_tools",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agents_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agents_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agents_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agents_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "agents_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "agents_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "agents_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "agents_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "analytics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "analytics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "analytics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "analytics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "analytics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "analytics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "analytics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "apify_raw",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "apify_raw",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "apify_raw",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "apify_raw",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "apify_raw",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "apify_raw",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "apify_raw",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "apify_raw",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "app_roles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "app_roles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "app_roles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "app_roles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "app_roles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "app_roles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "app_roles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "app_roles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "attribution_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "attribution_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "attribution_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "attribution_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "attribution_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "attribution_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "attribution_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "attribution_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "auth_clients",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "auth_clients",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "auth_clients",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "auth_clients",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "auth_clients",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "auth_clients",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "auth_clients",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "auth_clients",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "autorevisiones_del_productor",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "autorevisiones_del_productor",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "autorevisiones_del_productor",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "autorevisiones_del_productor",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "autorevisiones_del_productor",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "autorevisiones_del_productor",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "autorevisiones_del_productor",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "autorevisiones_del_productor",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "backlink_opportunities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "backlink_opportunities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "backlink_opportunities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "backlink_opportunities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "backlink_opportunities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "backlink_opportunities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "backlink_opportunities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "backlink_opportunities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "calendar_bookings",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "calendar_bookings",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "calendar_bookings",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "calendar_bookings",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "calendar_bookings",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "calendar_bookings",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "calendar_bookings",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "calendar_bookings",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "camino_iii_reviews",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "camino_iii_reviews",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "camino_iii_reviews",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "camino_iii_reviews",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "camino_iii_reviews",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "camino_iii_reviews",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "camino_iii_reviews",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "camino_iii_reviews",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "camino_iii_votes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "camino_iii_votes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "camino_iii_votes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "camino_iii_votes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "camino_iii_votes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "camino_iii_votes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "camino_iii_votes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "camino_iii_votes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "campaign_pipeline_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "campaign_pipeline_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "campaign_pipeline_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "campaign_pipeline_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "campaign_pipeline_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "campaign_pipeline_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "campaign_pipeline_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "campaign_pipeline_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "campaign_results",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "campaign_results",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "campaign_results",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "campaign_results",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "campaign_results",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "campaign_results",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "campaign_results",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "campaign_results",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "campaigns",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "campaigns",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "campaigns",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "campaigns",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "campaigns",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "campaigns",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "campaigns",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "campaigns",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cannibalization_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cannibalization_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cannibalization_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cannibalization_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cannibalization_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cannibalization_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cannibalization_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cannibalization_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cascade_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cascade_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cascade_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cascade_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cascade_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cascade_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cascade_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cascade_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cascade_stages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cascade_stages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cascade_stages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cascade_stages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cascade_stages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cascade_stages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cascade_stages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cascade_stages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "churn_predictions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "churn_predictions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "churn_predictions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "churn_predictions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "churn_predictions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "churn_predictions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "churn_predictions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "churn_predictions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_brand_books",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_brand_books",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_brand_books",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_brand_books",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_brand_books",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_brand_books",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_brand_books",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_brand_books",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_champions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_champions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_champions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_champions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_champions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_champions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_champions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_champions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_competitive_landscape",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_competitive_landscape",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_competitive_landscape",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_competitive_landscape",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_competitive_landscape",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_competitive_landscape",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_competitive_landscape",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_competitive_landscape",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_expansion_signals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_expansion_signals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_expansion_signals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_expansion_signals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_expansion_signals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_expansion_signals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_expansion_signals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_expansion_signals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_historical_outputs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_historical_outputs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_historical_outputs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_historical_outputs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_historical_outputs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_historical_outputs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_historical_outputs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_historical_outputs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_icp_documents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_icp_documents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_icp_documents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_icp_documents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_icp_documents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_icp_documents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_icp_documents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_icp_documents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_journey_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_journey_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_journey_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_journey_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_journey_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_journey_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_journey_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_journey_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_reports",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_reports",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_reports",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_reports",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_reports",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_reports",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_reports",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_sede_datos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_sede_datos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_sede_datos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_sede_datos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_sede_datos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_sede_datos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_sede_datos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_sede_datos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_sedes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_sedes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_sedes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_sedes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_sedes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_sedes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_sedes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_sedes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_social_images",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_social_images",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_social_images",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_social_images",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_social_images",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_social_images",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_social_images",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_social_images",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_tasks",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_tasks",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_tasks",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_tasks",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_tasks",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_tasks",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_tasks",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_tasks",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_videos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_videos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_videos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_videos",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_videos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_videos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_videos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_videos",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_web_pages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_web_pages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_web_pages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_web_pages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "client_web_pages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "client_web_pages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "client_web_pages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "client_web_pages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "clients",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "clients",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "clients",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "clients",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "clients",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "clients",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "clients",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "clients",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "community_health",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "community_health",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "community_health",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "community_health",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "community_health",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "community_health",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "community_health",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "community_health",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "community_health_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "community_health_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "community_health_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "community_health_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "community_health_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "community_health_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "community_health_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "community_health_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "companies",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "companies",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "companies",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "companies",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "companies",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "companies",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "companies",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "companies",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "competitor_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "competitor_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "competitor_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "competitor_snapshots",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "competitor_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "competitor_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "competitor_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "competitor_snapshots",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "contact_relationships",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "contact_relationships",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "contact_relationships",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "contact_relationships",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "contact_relationships",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "contact_relationships",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "contact_relationships",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "contact_relationships",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "contact_submissions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "contact_submissions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "contact_submissions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "contact_submissions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "contact_submissions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "contact_submissions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "contact_submissions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "contact_submissions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "contact_tags",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "contact_tags",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "contact_tags",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "contact_tags",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "contact_tags",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "contact_tags",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "contact_tags",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "contact_tags",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "contacts",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "contacts",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "contacts",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "contacts",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "contacts",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "contacts",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "contacts",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "contacts",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "content",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "content",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "content_fetch_cache",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content_fetch_cache",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content_fetch_cache",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content_fetch_cache",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "content_fetch_cache",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content_fetch_cache",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content_fetch_cache",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content_fetch_cache",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "content_packages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content_packages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content_packages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content_packages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content_packages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content_packages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content_packages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "content_refresh_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content_refresh_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content_refresh_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content_refresh_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "content_refresh_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content_refresh_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content_refresh_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content_refresh_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "content_repurposing_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content_repurposing_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content_repurposing_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content_repurposing_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "content_repurposing_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "content_repurposing_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "content_repurposing_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "content_repurposing_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cost_alerts_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cost_alerts_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cost_alerts_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cost_alerts_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cost_alerts_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cost_alerts_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cost_alerts_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cost_alerts_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cost_monitor_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cost_monitor_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cost_monitor_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cost_monitor_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cost_monitor_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cost_monitor_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cost_monitor_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cost_monitor_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "costs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "costs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "costs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "costs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "costs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "costs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "costs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "costs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cowork_messages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cowork_messages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cowork_messages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cowork_messages",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cowork_messages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cowork_messages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cowork_messages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cowork_messages",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "creative_performance_insights",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "creative_performance_insights",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "creative_performance_insights",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "creative_performance_insights",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "creative_performance_insights",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "creative_performance_insights",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "creative_performance_insights",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "creative_performance_insights",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "crm_notes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "crm_notes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "crm_notes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "crm_notes",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "crm_notes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "crm_notes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "crm_notes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "crm_notes",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cro_experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cro_experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cro_experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cro_experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "cro_experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "cro_experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "cro_experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "cro_experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "deals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "deals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "deals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "deals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "deals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "deals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "deals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "deals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "departments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "departments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "departments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "departments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "departments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "departments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "departments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "departments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "editorial_decisions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "editorial_decisions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "editorial_decisions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "editorial_decisions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "editorial_decisions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "editorial_decisions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "editorial_decisions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "editorial_decisions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "email_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "email_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "email_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "email_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "email_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "email_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "email_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "email_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "email_sequences",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "email_sequences",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "email_sequences",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "email_sequences",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "email_sequences",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "email_sequences",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "email_sequences",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "email_sequences",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "error_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "error_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "error_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "error_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "error_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "error_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "error_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "error_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "eventos_de_emilio",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "eventos_de_emilio",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "eventos_de_emilio",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "eventos_de_emilio",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "eventos_de_emilio",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "eventos_de_emilio",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "eventos_de_emilio",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "eventos_de_emilio",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "expansion_opportunities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "expansion_opportunities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "expansion_opportunities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "expansion_opportunities",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "expansion_opportunities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "expansion_opportunities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "expansion_opportunities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "expansion_opportunities",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "form_submissions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "form_submissions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "form_submissions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "form_submissions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "form_submissions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "form_submissions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "form_submissions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "form_submissions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "forms",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "forms",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "forms",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "forms",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "forms",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "forms",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "forms",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "forms",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_approval_decisions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_approval_decisions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_approval_decisions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_approval_decisions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_approval_decisions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_approval_decisions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_approval_decisions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_approval_decisions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_approvals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_approvals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_approvals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_approvals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_approvals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_approvals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_approvals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_approvals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_cycle_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_cycle_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_cycle_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_cycle_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_cycle_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_cycle_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_cycle_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_cycle_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_pending_approvals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_pending_approvals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_pending_approvals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_pending_approvals",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_pending_approvals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_pending_approvals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_pending_approvals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_pending_approvals",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "hitl_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "hitl_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "hitl_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "hitl_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "identity_improvement_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "identity_improvement_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "identity_improvement_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "identity_improvement_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "identity_improvement_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "identity_improvement_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "identity_improvement_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "identity_improvement_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "incrementality_tests",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "incrementality_tests",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "incrementality_tests",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "incrementality_tests",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "incrementality_tests",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "incrementality_tests",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "incrementality_tests",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "incrementality_tests",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "indexation_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "indexation_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "indexation_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "indexation_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "indexation_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "indexation_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "indexation_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "indexation_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "influencer_approved_list",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "influencer_approved_list",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "influencer_approved_list",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "influencer_approved_list",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "influencer_approved_list",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "influencer_approved_list",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "influencer_approved_list",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "influencer_approved_list",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "influencer_rejections",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "influencer_rejections",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "influencer_rejections",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "influencer_rejections",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "influencer_rejections",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "influencer_rejections",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "influencer_rejections",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "influencer_rejections",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "ingress_quarantine",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "ingress_quarantine",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "ingress_quarantine",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "ingress_quarantine",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "ingress_quarantine",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "ingress_quarantine",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "ingress_quarantine",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "ingress_quarantine",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "ingress_sources",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "ingress_sources",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "ingress_sources",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "ingress_sources",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "ingress_sources",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "ingress_sources",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "ingress_sources",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "ingress_sources",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "jefatura_grading_policies",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "jefatura_grading_policies",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "jefatura_grading_policies",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "jefatura_grading_policies",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "jefatura_grading_policies",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "jefatura_grading_policies",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "jefatura_grading_policies",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "jefatura_grading_policies",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "journey_executions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "journey_executions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "journey_executions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "journey_executions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "journey_executions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "journey_executions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "journey_executions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "journey_executions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "landing_experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "landing_experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "landing_experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "landing_experiments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "landing_experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "landing_experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "landing_experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "landing_experiments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "landings",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "landings",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "landings",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "landings",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "landings",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "landings",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "landings",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "landings",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "leads",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "leads",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "leads",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "leads",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "leads",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "leads",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "leads",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "leads",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "managed_agents_registry",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "managed_agents_registry",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "managed_agents_registry",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "managed_agents_registry",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "managed_agents_registry",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "managed_agents_registry",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "managed_agents_registry",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "manual_overrides",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "manual_overrides",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "manual_overrides",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "manual_overrides",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "manual_overrides",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "manual_overrides",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "manual_overrides",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "manual_overrides",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mc_checkpoints",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mc_checkpoints",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mc_checkpoints",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mc_checkpoints",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mc_checkpoints",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mc_checkpoints",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mc_checkpoints",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mc_checkpoints",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mc_inbox_hitl_cycles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mc_inbox_hitl_cycles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mc_inbox_hitl_cycles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mc_inbox_hitl_cycles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mc_inbox_hitl_cycles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mc_inbox_hitl_cycles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mc_inbox_hitl_cycles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mc_inbox_hitl_cycles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mc_inbox_meta_learning_cycles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mc_inbox_meta_learning_cycles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mc_inbox_meta_learning_cycles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mc_inbox_meta_learning_cycles",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mc_inbox_meta_learning_cycles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mc_inbox_meta_learning_cycles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mc_inbox_meta_learning_cycles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mc_inbox_meta_learning_cycles",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mc_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mc_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mc_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mc_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mc_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mc_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mc_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mc_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "message_match_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "message_match_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "message_match_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "message_match_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "message_match_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "message_match_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "message_match_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "message_match_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "meta_ads_campaigns",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "meta_ads_campaigns",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "meta_ads_campaigns",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "meta_ads_campaigns",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "meta_ads_campaigns",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "meta_ads_campaigns",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "meta_ads_campaigns",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "meta_ads_campaigns",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "meta_agent_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "meta_agent_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "meta_agent_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "meta_agent_runs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "meta_agent_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "meta_agent_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "meta_agent_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "meta_agent_runs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_cuenta_mediciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_cuenta_mediciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_cuenta_mediciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_cuenta_mediciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_cuenta_mediciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_cuenta_mediciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_cuenta_mediciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_cuenta_mediciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_cuentas",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_cuentas",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_cuentas",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_cuentas",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_cuentas",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_cuentas",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_cuentas",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_cuentas",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_publicacion_mediciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_publicacion_mediciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_publicacion_mediciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_publicacion_mediciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_publicacion_mediciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_publicacion_mediciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_publicacion_mediciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_publicacion_mediciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_publicacion_ultima",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_publicacion_ultima",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_publicacion_ultima",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_publicacion_ultima",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_publicacion_ultima",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_publicacion_ultima",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_publicacion_ultima",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_publicacion_ultima",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_publicaciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_publicaciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_publicaciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_publicaciones",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "metricas_publicaciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "metricas_publicaciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "metricas_publicaciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "metricas_publicaciones",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mission_control_inbox",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mission_control_inbox",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mission_control_inbox",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mission_control_inbox",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mission_control_inbox",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mission_control_inbox",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mission_control_inbox",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mission_control_inbox",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mission_control_projects",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mission_control_projects",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mission_control_projects",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mission_control_projects",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mission_control_projects",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mission_control_projects",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mission_control_projects",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mission_control_projects",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mission_control_tasks",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mission_control_tasks",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mission_control_tasks",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mission_control_tasks",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "mission_control_tasks",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "mission_control_tasks",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "mission_control_tasks",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "mission_control_tasks",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "monitor_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "monitor_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "monitor_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "monitor_state",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "monitor_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "monitor_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "monitor_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "monitor_state",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "notas_del_dueno",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "notas_del_dueno",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "notas_del_dueno",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "notas_del_dueno",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "notas_del_dueno",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "notas_del_dueno",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "notas_del_dueno",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "notas_del_dueno",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "notas_del_dueno_envios",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "notas_del_dueno_envios",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "notas_del_dueno_envios",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "notas_del_dueno_envios",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "notas_del_dueno_envios",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "notas_del_dueno_envios",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "notas_del_dueno_envios",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "notas_del_dueno_envios",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "notas_del_dueno_registro",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "notas_del_dueno_registro",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "notas_del_dueno_registro",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "notas_del_dueno_registro",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "notas_del_dueno_registro",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "notas_del_dueno_registro",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "notas_del_dueno_registro",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "notas_del_dueno_registro",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "nps_dispatch_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "nps_dispatch_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "nps_dispatch_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "nps_dispatch_log",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "nps_dispatch_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "nps_dispatch_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "nps_dispatch_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "nps_dispatch_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "onboarding_discovery_logs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "onboarding_discovery_logs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "onboarding_discovery_logs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "onboarding_discovery_logs",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "onboarding_discovery_logs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "onboarding_discovery_logs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "onboarding_discovery_logs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "onboarding_discovery_logs",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "onboarding_sessions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "onboarding_sessions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "onboarding_sessions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "onboarding_sessions",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "onboarding_sessions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "onboarding_sessions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "onboarding_sessions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "onboarding_sessions",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "performance_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "performance_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "performance_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "performance_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "performance_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "performance_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "performance_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "performance_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "phase_gate_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "phase_gate_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "phase_gate_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "phase_gate_audits",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "phase_gate_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "phase_gate_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "phase_gate_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "phase_gate_audits",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "pipeline_results",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "pipeline_results",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "pipeline_results",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "pipeline_results",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "pipeline_results",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "pipeline_results",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "pipeline_results",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "pipeline_results",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "pipelines",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "pipelines",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "pipelines",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "pipelines",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "pipelines",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "pipelines",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "pipelines",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "pipelines",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "rank_tracking_daily",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "rank_tracking_daily",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "rank_tracking_daily",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "rank_tracking_daily",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "rank_tracking_daily",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "rank_tracking_daily",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "rank_tracking_daily",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "review_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "review_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "review_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "review_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "review_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "review_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "review_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "review_responses_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "review_responses_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "review_responses_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "review_responses_queue",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "review_responses_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "review_responses_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "review_responses_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "review_responses_queue",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "rfm_segments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "rfm_segments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "rfm_segments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "rfm_segments",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "rfm_segments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "rfm_segments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "rfm_segments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "rfm_segments",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "routing_rules",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "routing_rules",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "routing_rules",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "routing_rules",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "routing_rules",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "routing_rules",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "routing_rules",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "routing_rules",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "rsa_headline_library",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "rsa_headline_library",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "rsa_headline_library",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "rsa_headline_library",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "rsa_headline_library",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "rsa_headline_library",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "rsa_headline_library",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "rsa_headline_library",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "sala_event_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "sala_event_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "sala_event_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "sala_event_log",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "sala_router_tick_lock",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "sala_router_tick_lock",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "sala_router_tick_lock",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "sala_router_tick_lock",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "sala_router_tick_lock",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "sala_router_tick_lock",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "sala_router_tick_lock",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "sala_router_tick_lock",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "seo_deliverables",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "seo_deliverables",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "seo_deliverables",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "seo_deliverables",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "seo_deliverables",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "seo_deliverables",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "seo_deliverables",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "seo_engagements",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "seo_engagements",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "seo_engagements",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "seo_engagements",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "seo_engagements",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "seo_engagements",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "seo_engagements",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "sms_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "sms_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "sms_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "sms_events",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "sms_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "sms_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "sms_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "sms_events",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "social_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "social_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "social_metrics",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "social_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "social_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "social_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "social_metrics",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "social_schedules",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "social_schedules",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "social_schedules",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "social_schedules",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "social_schedules",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "social_schedules",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "social_schedules",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "subject_line_tests",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "subject_line_tests",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "subject_line_tests",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "subject_line_tests",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "subject_line_tests",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "subject_line_tests",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "subject_line_tests",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "subject_line_tests",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "tags",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "tags",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "tags",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "tags",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "tags",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "tags",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "tags",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "tags",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "topical_authority_maps",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "topical_authority_maps",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "topical_authority_maps",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "topical_authority_maps",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "topical_authority_maps",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "topical_authority_maps",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "topical_authority_maps",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "topical_authority_maps",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "uptime_incidents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "uptime_incidents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "uptime_incidents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "uptime_incidents",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "uptime_incidents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "uptime_incidents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "uptime_incidents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "uptime_incidents",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "v_active_pipelines",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "v_active_pipelines",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "v_active_pipelines",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "v_active_pipelines",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "v_active_pipelines",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "v_active_pipelines",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "v_active_pipelines",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "v_active_pipelines",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "v_agent_scorecards",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "v_agent_scorecards",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "v_agent_scorecards",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "v_agent_scorecards",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "v_agent_scorecards",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "v_agent_scorecards",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "v_agent_scorecards",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "v_agent_scorecards",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "v_hitl_inbox",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "v_hitl_inbox",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "v_hitl_inbox",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "v_hitl_inbox",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "v_hitl_inbox",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "v_hitl_inbox",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "v_hitl_inbox",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "v_hitl_inbox",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "v_pending_improvements",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "v_pending_improvements",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "v_pending_improvements",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "v_pending_improvements",
+  "tipo": "v",
+  "rol": "anon",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "v_pending_improvements",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "v_pending_improvements",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "v_pending_improvements",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "v_pending_improvements",
+  "tipo": "v",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "websites",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "websites",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "websites",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "websites",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "websites",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "websites",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "websites",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ },
+ {
+  "tabla": "workflow_checkpoints",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "workflow_checkpoints",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "workflow_checkpoints",
+  "tipo": "r",
+  "rol": "anon",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "workflow_checkpoints",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "MAINTAIN"
+ },
+ {
+  "tabla": "workflow_checkpoints",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "REFERENCES"
+ },
+ {
+  "tabla": "workflow_checkpoints",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRIGGER"
+ },
+ {
+  "tabla": "workflow_checkpoints",
+  "tipo": "r",
+  "rol": "authenticated",
+  "permiso": "TRUNCATE"
+ }
+]
