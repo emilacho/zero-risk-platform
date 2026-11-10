@@ -122,6 +122,11 @@ export function apareceFueraDeProhibicion(texto: string, palabra: string): boole
   }
   return false
 }
+/** 10-nov (aviso de CC1 en #969): quita negrita y cursiva de markdown (`**x**`, `__x__`, `*x*`, `_x_`); no toca un asterisco suelto ni un guion bajo dentro de una palabra */
+export function sinMarcasDeFormato(t: string): string {
+  return t.replace(/(\*\*|__)(.+?)\1/g, '$2').replace(/(^|[^\p{L}\p{N}*_])([*_])([^*_\n]+?)\2(?![\p{L}\p{N}*_])/gu, '$1$3').trim()
+}
+
 /** 10-nov (GO v3 · punto 2): ¿existe la foto? id completo, o un prefijo de ≥ 8 caracteres que sea de UNA sola foto propia (la mesa cita `foto:4f09cef2`) */
 export function fotoExiste(id: string, fotos: string[]): boolean {
   const i = id.toLowerCase()
@@ -269,7 +274,8 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
   if (gi) {
     const t = textoDe(gi).split('\n')[0] ?? ''
     const [nombre, ...frase] = t.split(/\s·\s/)
-    if (nombre?.trim()) gran_idea = { nombre: nombre.trim(), frase: frase.join(' · ').trim() }
+    // 10-nov (aviso de CC1 en #969): el título que ve Emilio no lleva las marcas de formato de la mesa («**El oro…**», «*Salió…*»)
+    if (nombre?.trim()) gran_idea = { nombre: sinMarcasDeFormato(nombre), frase: sinMarcasDeFormato(frase.join(' · ')) }
   }
   if (!gran_idea) bloqueos.push('sin «## Gran idea» (nombre · frase paraguas)')
   else if (!gran_idea.frase) avisos.push('la gran idea no trae frase paraguas (solo nombre)')

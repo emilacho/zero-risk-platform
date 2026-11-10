@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { apareceFueraDeProhibicion, datosConValor, datoEnLaFuente, fotoExiste, insumosDesdeEstrategia, leerConcepto, type InsumosDelConcepto } from '../conceptos'
+import { apareceFueraDeProhibicion, datosConValor, datoEnLaFuente, fotoExiste, insumosDesdeEstrategia, leerConcepto, sinMarcasDeFormato, type InsumosDelConcepto } from '../conceptos'
 import { leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO } from '../brief-creativo'
 import { fechasDelConcepto, insumosDelConcepto, marcoDelConcepto } from '../mesas'
 import type { Almacen } from '../almacen'
@@ -200,6 +200,18 @@ describe('ADENDA 2 · el brief copia del plan el público, el objetivo con su n�
   })
 })
 
+describe('el título que ve Emilio no lleva marcas de formato (aviso de CC1 en #969)', () => {
+  it('🔴 caso real v2: «**El oro que nunca buscaste**» llega limpio, y la frase sin la cursiva', () => {
+    const l = leerConcepto(V2, ins())
+    expect(l.gran_idea?.nombre).toBe('El oro que nunca buscaste')
+    expect(l.gran_idea?.frase).toBe('Salió buscando oro. Encontró el encebollado. Ahora llega a tu barrio.')
+  })
+  it('las cuatro marcas salen; un asterisco suelto o un guion bajo dentro de una palabra se quedan', () => {
+    expect(sinMarcasDeFormato('**a** __b__ *c* _d_')).toBe('a b c d')
+    expect(sinMarcasDeFormato('2 * 3 y foto_ok')).toBe('2 * 3 y foto_ok')
+    expect(sinMarcasDeFormato('  sin marcas  ')).toBe('sin marcas')
+  })
+})
 describe('caso real completo · la v2 releída con todo', () => {
   it('🔴 de 20 avisos a 6 y 1 bloqueo: banco parcial, 2 datos con valor, 2 sin fuente, el voseo total (aviso) y «Cómo suena» (bloquea)', () => {
     const l = leerConcepto(V2, ins({ registro: 'tu', fuente: BRIEF_V2 }))
