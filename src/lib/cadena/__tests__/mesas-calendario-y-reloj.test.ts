@@ -234,7 +234,7 @@ describe('con qué sobre vuelve a entrar la puerta (respuesta a CC2 · 31-oct)',
     expect(d.cuerpo).toMatchObject({ decision: 'aprobar', siguiente: { sobre: { idempotency_key: clave(id, 'concepto-v1'), payload: { tanda: 1 } } } })
     expect(await sig()).toMatchObject({ tanda: 1, etapa: 'concepto-v1' })
   })
-  it('cambios de Emilio: al concepto ⇒ sobre abrir-concepto-v2 y la mesa reabre sin nota en el sobre (la recupera de la decisión) · al brief ⇒ el brief queda devuelto por Emilio, sobre abrir-brief-v2, reabre con su nota sin contar como fallo, y el concepto nuevo va sobre el brief nuevo sin esa nota', async () => {
+  it('cambios de Emilio: al concepto ⇒ sobre abrir-concepto-v2 y la mesa reabre sin nota en el sobre (la recupera de la decisión) · al brief ⇒ el brief queda devuelto por Emilio, sobre abrir-brief-v2, reabre con su nota sin contar como fallo, y el concepto nuevo va sobre el brief nuevo CON esa nota y el resumen de la v2 (10-nov · FASE 2, opción A)', async () => {
     const al = almacen(true)
     const id = await conEstrategia(al)
     const preparar = async () => (await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).cuerpo
@@ -266,7 +266,9 @@ describe('con qué sobre vuelve a entrar la puerta (respuesta a CC2 · 31-oct)',
     expect(String((await calendarioSiguiente(al, { ...VIG, campana_id: id }, AHORA)).cuerpo.etapa)).toMatch(/^abrir-concepto-v3:2026-10-09pm$/)
     const a3 = await conceptoAbrir(al, wf({ campana_id: id }), AHORA)
     expect(a3.cuerpo.version).toBe(3)
-    expect((a3.cuerpo.sobre as { marco_texto: string }).marco_texto).not.toContain('# CAMBIOS PEDIDOS')
+    // 10-nov (FASE 2 · opción A, Lenovo por Emilio): antes iba sin nota y la mesa cambiaba de idea; ahora lleva la nota y el resumen de la versión anterior
+    expect((a3.cuerpo.sobre as { marco_texto: string }).marco_texto).toContain('# CAMBIOS PEDIDOS POR EL CLIENTE (sobre la versión anterior)\nel mensaje no es ese')
+    expect((a3.cuerpo.sobre as { marco_texto: string }).marco_texto).toContain('# LA VERSIÓN ANTERIOR (v2)')
     expect(al.campanas[0].estado).not.toBe('necesita_humano')
   })
   it('la mesa que falla también devuelve con qué volver: brief devuelto por código (v1) ⇒ abrir-brief-v2 · concepto sin_mesa (v1) ⇒ abrir-concepto-v2 · a la segunda (necesita_humano) ya no hay sobre', async () => {

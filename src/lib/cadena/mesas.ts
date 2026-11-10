@@ -19,7 +19,7 @@ import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, Context
 import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { hallazgosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
-import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
+import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
 import { sumarDias } from './fechas'
 import { medidaDeCampana } from './constantes'
 import { metodoDe } from './metodos'
@@ -123,7 +123,7 @@ export function fechasDelConcepto(estrategia: Pick<Estrategia, 'fases'>, inicio:
   return [`# HOY · ${hoy} (la campaña empezó el ${inicio})`, 'Ninguna idea es para un día que ya pasó. Lo que anuncia algo que ya ocurrió (una apertura, un lanzamiento, un «llega hoy» de una fecha pasada) se cuenta como hecho, no como promesa.', ...lineas].join('\n')
 }
 
-export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null }): string {
+export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null; anterior?: string | null }): string {
   const fechas = fechasDelConcepto(a.estrategia, a.inicio, a.hoy)
   return [
     '# Qué te pido',
@@ -137,6 +137,8 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     'Sin cifras con decimales inventadas, sin datos con valor (precios, horarios: los pone el estratega con su referencia), sin claims propios que no se puedan probar. ## Caminos descartados · ## Citas.',
     'Si la dirección decide que el brief no sirve, escribe «## Devolución del brief» con los puntos de los 6 criterios que fallan (UNA sola vez por campaña) y la mesa cierra.',
     ...(a.nota ? ['', '# CAMBIOS PEDIDOS POR EL CLIENTE (sobre la versión anterior)', a.nota] : []),
+    // 10-nov (FASE 2 · opción A): el RESUMEN de la versión sobre la que el cliente pidió cambios (nunca el texto entero)
+    ...(a.anterior ? ['', a.anterior] : []),
     ...(fechas ? ['', fechas] : []),
     '',
     '# BRIEF CREATIVO DE LA CAMPAÑA (validado)',
@@ -240,6 +242,17 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
 // ───────────────────────────────────────────────────────── CONCEPTO
 const cuentaDe = (cs: ConceptoGuardado[], f: (c: ConceptoGuardado) => boolean): number => cs.filter(f).length
 
+/**
+ * 10-nov (FASE 2 · opción A, 2.ª condición de CC7): el resumen de la versión INMEDIATAMENTE anterior a `version`, SOLO si el cliente pidió cambios sobre ella
+ * (`lista` + `cambios`, por cualquiera de los dos caminos). Nunca en una vuelta normal ni después de un «sin mesa».
+ */
+export function anteriorConCambios(todos: ConceptoGuardado[], version: number): string | null {
+  const previas = todos.filter((k) => k.version < version).sort((a, b) => a.version - b.version)
+  const ant = previas[previas.length - 1]
+  if (!ant || ant.estado !== 'lista' || ant.aprobacion !== 'cambios' || !ant.texto_md) return null
+  return resumenDeLaVersionAnterior(ant.texto_md, ant.version)
+}
+
 export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   const c = await cargar(al, cuerpo, true)
   if (!c.ok) return c.r
@@ -248,14 +261,15 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   if (!brief || brief.estado !== 'validada') return err(409, 'E-SIN-BRIEF', `no hay un brief creativo validado (último: ${brief?.estado ?? 'ninguno'})`)
   const todos = await al.conceptosDe(campana.id)
   const ultimo = todos[todos.length - 1] ?? null
-  // Emilio pidió cambios: la vuelta siguiente se abre aunque la puerta vuelva a entrar sin la nota (se recupera de la decisión; si apuntó al brief, el concepto nuevo va sobre el brief nuevo, sin nota)
+  // Emilio pidió cambios: la vuelta siguiente se abre aunque la puerta vuelva a entrar sin la nota (se recupera de la decisión)
+  // 10-nov (FASE 2 · opción A, Lenovo por Emilio): en los DOS caminos (brief o gran idea) la gran idea siguiente recibe la nota y el resumen de la versión anterior
   const conCambios = ultimo?.estado === 'lista' && ultimo.aprobacion === 'cambios'
-  const nota = texto(cuerpo.nota) ?? (conCambios && ultimo.apunta_a === 'concepto' ? texto(ultimo.nota_de_emilio) : null)
+  const nota = texto(cuerpo.nota) ?? (conCambios ? texto(ultimo.nota_de_emilio) : null)
   if (ultimo?.estado === 'abierta') {
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10) }), condiciones: condicionesDe(estrategia, await al.formatos()),
+      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version) }), condiciones: condicionesDe(estrategia, await al.formatos()),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
   }
@@ -276,7 +290,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10) }), condiciones: condicionesDe(estrategia, await al.formatos()),
+    marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version) }), condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
 }

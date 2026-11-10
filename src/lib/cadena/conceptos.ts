@@ -209,6 +209,28 @@ export function leerIdea(linea: string): IdeaDelBanco | null {
     foto: foto && !/^ninguna$/i.test(foto) ? foto : null, linea: linea.trim(),
   }
 }
+/**
+ * 10-nov (Lenovo por Emilio · FASE 2, opción A con las 2 condiciones de CC7): el RESUMEN de la versión anterior que va a la mesa cuando el cliente pidió cambios
+ * («quédense con la idea»). Nunca el texto entero (decenas de miles de caracteres, leídos por cada miembro en cada ronda): la gran idea, por qué funciona, cómo se ve,
+ * cómo suena (cada una acotada) y SOLO id · red · idea de cada línea del banco, para COMPLETARLO en vez de repetirlo.
+ */
+export const LARGO_MAXIMO_POR_SECCION_DEL_RESUMEN = 1200
+export function resumenDeLaVersionAnterior(md: string, version: number): string {
+  const secciones = seccionesDe(md)
+  const de = (t: (typeof TITULOS)[number]) => sinMarcasDeFormato(textoDe(secciones.find((s) => titularDe(s).titulo === t))).slice(0, LARGO_MAXIMO_POR_SECCION_DEL_RESUMEN)
+  const vistos = new Set<string>()
+  const banco = ideasDelTexto(md).filter((i) => !vistos.has(i.id) && vistos.add(i.id)).map((i) => `- ${i.id} · ${i.red} · ${sinMarcasDeFormato(i.idea).slice(0, 120)}`)
+  return [
+    `# LA VERSIÓN ANTERIOR (v${version}), sobre la que el cliente pidió cambios: CONSERVA su gran idea y corrige SOLO lo pedido`,
+    `## Gran idea\n${de('Gran idea').split('\n')[0] ?? ''}`,
+    `## Por qué funciona\n${de('Por qué funciona')}`,
+    `## Cómo se ve\n${de('Cómo se ve')}`,
+    `## Cómo suena\n${de('Cómo suena')}`,
+    `## El banco que ya existe (${banco.length} ideas): COMPLÉTALO; no repitas estas, suma las que faltan (puedes corregir una si lo pedido lo exige, con el mismo id)`,
+    ...banco,
+  ].join('\n')
+}
+
 /** las ideas de TODO el texto (integración + aportes de los miembros): la línea `- C<x>-I<nn> · …` se reconoce en cualquier sección */
 export function ideasDelTexto(md: string): IdeaDelBanco[] {
   return md.replace(/\r/g, '').split('\n').map(leerIdea).filter((x): x is IdeaDelBanco => x !== null)
