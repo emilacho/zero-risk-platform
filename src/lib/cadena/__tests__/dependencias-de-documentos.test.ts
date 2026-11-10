@@ -12,10 +12,19 @@ describe('qué lee cada documento (sacado del código que lo arma)', () => {
       plan: ['manual'],
       estrategia: ['plan', 'manual'],
       brief: ['plan', 'manual', 'estrategia'],
-      gran_idea: ['brief', 'estrategia', 'manual', 'plan'],
+      gran_idea: ['brief', 'estrategia', 'manual'],
       calendario: ['gran_idea', 'estrategia', 'manual', 'plan'],
       pieza: ['calendario', 'gran_idea', 'brief', 'manual', 'plan'],
     })
+  })
+
+  it('GO Lenovo 10-nov 18:01Z (opción A): un cambio del plan marca al brief y, desde él, a la gran idea; no a la gran idea directo', () => {
+    expect(loLeenDirecto('plan')).toContain('brief')
+    expect(loLeenDirecto('plan')).not.toContain('gran_idea')
+    expect(LEE.gran_idea).toContain('brief')
+    expect(afectados('plan')).toEqual(expect.arrayContaining(['brief', 'gran_idea']))
+    expect(afectados('brief')).toContain('gran_idea')
+    expect(puedeProponer('plan', 'gran_idea')).toBe(true)
   })
 
   it('nadie lee algo que viene después en la cadena (sin ciclos) ni se lee a sí mismo', () => {
