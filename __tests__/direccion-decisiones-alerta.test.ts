@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import type { Contexto } from '../src/lib/direccion/comun'
 import { leerDecisiones } from '../src/lib/direccion/decisiones'
-import { alertaDe, claveDeAlerta } from '../src/lib/direccion/decisiones-alerta'
+import { alertaDe, claveDeAlerta, contadoresDeAlertas } from '../src/lib/direccion/decisiones-alerta'
 
 const AHORA = new Date('2026-11-10T01:00:00Z')
 const C1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -57,6 +57,24 @@ describe('la decisión como alerta: Nueva o Revisada', () => {
     const revisadas = r.decisiones.filter((d) => d.alerta?.estado === 'revisada').map((d) => d.id).sort()
     expect(revisadas).toEqual(['p140', 'p3'])
     expect(r.decisiones.every((d) => d.alerta?.clave === claveDeAlerta(d))).toBe(true)
+  })
+  it('🔴 contadores ya contados: Nuevas y Revisadas de las pendientes, Resueltas del registro de 7 días (solo preguntas)', async () => {
+    const resuelta = (id: string, estado: string) => ({ ...pregunta(9), id, tema: `r ${id}`, tema_norm: `r${id}`, estado, decidido_en: hace(3) })
+    const db = base().semilla('finanzas_tableros', [TABLERO]).semilla('dueno_preguntas', [pregunta(1), pregunta(2), resuelta('r1', 'respondida'), resuelta('r2', 'descartada')])
+      .semilla('alertas_vistas', [vista('decision:dueno_preguntas:p1', hace(1))])
+    const r = await leerDecisiones(ctx(db))
+    expect(r.contestadas).toHaveLength(2)
+    expect(r.contadores).toEqual({ nuevas: 2, revisadas: 1, resueltas: 2, resueltas_ventana_dias: 7, resueltas_cuenta: 'preguntas' })
+  })
+  it('🔴 sin libreta legible Nuevas y Revisadas salen null (nunca 0); Resueltas sigue', async () => {
+    const db = base().semilla('finanzas_tableros', [TABLERO])
+    db.fallar.alertas_vistas = 'se cayó'
+    expect((await leerDecisiones(ctx(db))).contadores).toMatchObject({ nuevas: null, revisadas: null, resueltas: 0 })
+  })
+  it('🔴 con el registro incompleto Resueltas sale null, no un número a medias', () => {
+    const ds = [{ alerta: { clave: 'a', estado: 'nueva' as const } }, { alerta: { clave: 'b', estado: 'revisada' as const } }]
+    expect(contadoresDeAlertas(ds, true, 5, false)).toMatchObject({ nuevas: 1, revisadas: 1, resueltas: null })
+    expect(contadoresDeAlertas(ds, true, 5, true).resueltas).toBe(5)
   })
   it('🔴 abrirla no cuenta: leer la lista no escribe nada (cualquier escritura revienta aquí)', async () => {
     await expect(leerDecisiones(ctx(base().semilla('finanzas_tableros', [TABLERO])))).resolves.toMatchObject({ ok: true })

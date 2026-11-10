@@ -8,6 +8,7 @@
  * - Si la libreta no se puede leer, el estado no se inventa: `estado: null`.
  */
 import { leer, type Db, type Fuente } from './comun'
+import { DIAS_DEL_REGISTRO } from './decisiones-registro'
 
 export type EstadoDeAlerta = 'nueva' | 'revisada'
 export interface AlertaDeDecision { clave: string; estado: EstadoDeAlerta | null; revisada_en?: string }
@@ -38,4 +39,16 @@ export function alertaDe(d: { fuente: string; id: string; desde: string | null }
   if (!vista) return { clave, estado: 'nueva' }
   const volvio = !!d.desde && Date.parse(d.desde) > Date.parse(vista)
   return volvio ? { clave, estado: 'nueva' } : { clave, estado: 'revisada', revisada_en: vista }
+}
+
+/**
+ * 10-nov · los tres contadores del boceto, ya contados (pedido de CC4): Nuevas · Revisadas · Resueltas.
+ * - Nuevas y Revisadas: las decisiones pendientes según su marca. Sin libreta legible: null (el tablero pone «sin dato»), nunca 0.
+ * - Resueltas: lo decidido en los últimos `DIAS_DEL_REGISTRO` días según el registro. Hoy el registro cuenta SOLO las preguntas
+ *   contestadas o descartadas (`resueltas_cuenta`); con el registro incompleto o recortado: null.
+ */
+export interface ContadoresDeAlertas { nuevas: number | null; revisadas: number | null; resueltas: number | null; resueltas_ventana_dias: number; resueltas_cuenta: 'preguntas' }
+export function contadoresDeAlertas(decisiones: { alerta?: AlertaDeDecision }[], marcasLegibles: boolean, resueltas: number, registroCompleto: boolean): ContadoresDeAlertas {
+  const cuenta = (e: EstadoDeAlerta) => (marcasLegibles ? decisiones.filter((d) => d.alerta?.estado === e).length : null)
+  return { nuevas: cuenta('nueva'), revisadas: cuenta('revisada'), resueltas: registroCompleto ? resueltas : null, resueltas_ventana_dias: DIAS_DEL_REGISTRO, resueltas_cuenta: 'preguntas' }
 }
