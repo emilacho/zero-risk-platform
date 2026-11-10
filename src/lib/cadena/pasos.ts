@@ -3,14 +3,15 @@
  * `preparar` arma el cuerpo COMPLETO del `run-sdk` (tarea, esquema, tope, razonamiento, modelo, cabecera): el flujo n8n no duplica nada.
  * `guardar` valida con el código, hace UNA corrección si hace falta, y deja todo escrito con su reloj.
  */
-import type { Almacen, Campana, ContextoDelCliente, Corrida } from './almacen'
+import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, medidaDeCampana, SEMANAS_DE_PANORAMA, TOTAL_DE_TANDAS, topeDelPaso, type MedidaDeCampana, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
 import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V2, ESQUEMA_ESTRATEGIA } from './esquemas'
-import { conceptoParaElCalendario, etapaDeReentrada, nuevoOrdenEncendido, tramoDeReemision } from './mesas'
+import { conceptoParaElCalendario, empujarDesdeElTablero, EN_REVISION_DE_REGISTRO, etapaDeReentrada, nuevoOrdenEncendido, origenesDelCliente, recibirVueltaDeRegistro, siguienteDespuesDe, tramoDeReemision } from './mesas'
+import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, filasConTema, leerArtifactIdDeRegistro, leerObjetoDeRegistro, objetoDeRegistro, pistasDeRegistro, registroFijado, seRevisaElRegistro, temasDeLaVuelta, textoDelCalendario, textoDeLaVuelta, type RegistroFijado } from './registro-en-jefatura'
 import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
 import { hoyEnZona } from './campanas'
 import { fueraDePlazoDeProduccion } from './lotes'
@@ -26,7 +27,7 @@ import { type LexicoAfirmaciones } from './afirmaciones'
 import { lexicoDelCliente } from './lexico-por-rubro'
 import { problemasDeEsquema, normalizarPilares, validarEstrategia } from './validador-estrategia'
 import { validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
-import { fechasPedidasDe, retencionDe, retenerParaRevision } from './revision-jefatura'
+import { fechasPedidasDe, retencionDe, retenerParaRevision, TIPO_DE_ESPERA as TIPO_DE_ESPERA_DE_JEFATURA } from './revision-jefatura'
 import { guardarTemporadas, llaveCrudaDe } from './fechas-del-cliente'
 
 export const semanasDeTanda = (tanda: number, m: MedidaDeCampana = medidaDeCampana()): number[] => {
@@ -189,11 +190,13 @@ function omitidosImplicitos(e: Estrategia, semanas: number[], filas: Fila[]): Aj
   return out
 }
 
-function insumosDe(c: Campana, ctx: ContextoDelCliente, e: Estrategia, formatos: FormatosPorRed, tanda: number, semanas: number[], filas: Fila[], previas: Fila[], ajustes: Ajuste[], fechas: FechaEspecialVerificada[], ahora: string, lexico?: LexicoAfirmaciones): InsumosCalendario {
+function insumosDe(c: Campana, ctx: ContextoDelCliente, e: Estrategia, formatos: FormatosPorRed, tanda: number, semanas: number[], filas: Fila[], previas: Fila[], ajustes: Ajuste[], fechas: FechaEspecialVerificada[], ahora: string, lexico?: LexicoAfirmaciones, registroSoloAviso = false): InsumosCalendario {
   return {
     campana: { fecha_inicio: c.fecha_inicio, fecha_fin: c.fecha_fin, tanda, semanas }, estrategia: e, planTexto: ctx.planTexto, formatos, sedes: ctx.sedes,
     referencias: ctx.referencias, clientId: ctx.clientId, ahora: ahora.slice(0, 10), filas, filasPrevias: previas, ajustes, fechasEspeciales: fechas,
     forbiddenWords: ctx.forbiddenWords, palabrasDuras: ctx.palabrasDuras, conocidos: [ctx.nombreDelNegocio], lexico, registro: ctx.registro,
+    // tramo 3 del revisor de registro: el campo SOLO existe con la revisión encendida (apagado = los mismos insumos de siempre)
+    ...(registroSoloAviso ? { registroSoloAviso: true } : {}),
   }
 }
 
@@ -207,6 +210,8 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   if (campana.estado !== 'calendario' && campana.estado !== 'activa') return err(409, 'E-ESTADO', `la campaña está ${campana.estado}: el calendario solo se prepara con la estrategia validada`)
   const estr = await al.ultimaEstrategia(campana.id)
   if (!estr || estr.estado !== 'validada') return err(409, 'E-SIN-ESTRATEGIA', 'no hay una estrategia validada')
+  // tramo 3 del revisor de registro: mientras la jefatura revisa el registro de esta tanda, el calendario NO se vuelve a pedir (ni corrección reconstruida ni gasto): la vuelta la cierra
+  if (await esperaDeRegistroViva(al, campana.id, 'calendario', tanda)) return { status: 200, cuerpo: { accion: 'esperar_revision_de_registro', tanda, objeto_id: objetoDeRegistro('calendario', tanda) } }
   const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
   const todas = await al.filas(campana.id, version)
   const delaTanda = todas.filter((f) => f.tanda === tanda && f.estado !== 'esquema')
@@ -287,7 +292,9 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   const mesa = await conceptoParaElCalendario(al, campana)
   let filas = resolverDependencias(fusionarTanda(base, objeto, estr, campana, tanda, formatos, mesa.concepto ? { banco: mesa.concepto.banco, fases: estr.fases } : null).filas, previas).filas
   const ajustes = esCorreccion ? [...(objeto.ajustes_al_patron ?? []), ...omitidosImplicitos(estr, semanas, filas)] : objeto.ajustes_al_patron ?? []
-  let hs: Hallazgo[] = sinFaltantesSiCorrige(esCorreccion, validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, fechas, ahora, lexico)))
+  // tramo 3 del revisor de registro: con la jefatura reteniendo `registro`, V15 AVISA las formas de otro registro y la tanda, si nada más bloquea, espera al revisor antes de cerrarse
+  const revisaRegistro = await seRevisaElRegistro(al, campana, ctx)
+  let hs: Hallazgo[] = sinFaltantesSiCorrige(esCorreccion, validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, fechas, ahora, lexico, revisaRegistro)))
   await al.guardarValidaciones(campana.id, 'calendario', version, tanda, esCorreccion ? 2 : 1, hs, campana.seco)
   const plan = planDeCorreccion(hs)
 
@@ -306,7 +313,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
     // dato sin fuente: la FILA sale (nunca se le pregunta a nadie del cliente) y se vuelve a validar con el slot anotado como omitido
     salen.push(...res.filasQueSalen)
     filas = filas.map((f) => (salen.includes(f.id) ? { ...f, estado: 'descartada_sin_fuente' as const } : f))
-    hs = bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, [...ajustes, ...res.ajustes], fechas, ahora, lexico)))
+    hs = bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, [...ajustes, ...res.ajustes], fechas, ahora, lexico, revisaRegistro)))
     await al.guardarValidaciones(campana.id, 'calendario', version, tanda, 2, hs, campana.seco)
     if (hs.some((h) => h.severidad === 'bloquea')) {
       await al.guardarFilas(campana.id, version, 1, filas, campana.seco)
@@ -314,6 +321,7 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
       return { status: 200, cuerpo: { necesita_humano: true, fichas: hs.filter((h) => h.severidad === 'bloquea').map((h) => h.ficha), alerta: r.alerta } }
     }
   }
+  if (revisaRegistro) return retenerTandaParaRegistro(al, ctx, { campana, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora })
   return cerrarTanda(al, { campana, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora })
 }
 
@@ -448,4 +456,173 @@ export async function retomarPorCantidades(al: Almacen, campana: Campana, ahora:
   const n = await al.actualizarCampana(campana.id, { estado: tanda === 1 ? 'calendario' : 'activa', estado_motivo: 'retomada sola: solo faltaban cantidades (viajan como aviso al brief)' })
   await cerrarTanda(al, { campana: n, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora })
   return { retomada: true, motivo: `tanda ${tanda} retomada` }
+}
+
+// ───────────────────────────────────────────────────────── tramo 3 del revisor de registro · EL CALENDARIO (10-nov · GO de Lenovo 22:20Z) · ver `registro-en-jefatura.ts`
+/**
+ * Con la jefatura reteniendo `registro` para el cliente y su registro fijado, la tanda YA validada (V15 de registro como aviso; todo lo demás bloquea igual que siempre) no se cierra:
+ * sus filas quedan como están (`propuesta` · `espera_video` · `descartada_sin_fuente`), se abre la espera `revision_jefatura` (objeto `registro:calendario:t<n>`) y UNA revisión de registro
+ * con el calendario como documento (una línea por fila, con su cabecera fija). La vuelta corrige POR FILA: el tema de cada fila sale del texto corregido entre su cabecera y la siguiente.
+ *   · una fila cuyo tema corregido rompe un chequeo que antes no rompía se queda con su tema anterior, con aviso (línea 2 de CC7, por fila);
+ *   · si aun así la tanda corregida rompe algo que la original no rompía (una fila que afecta a otra, un chequeo de la tanda), se quedan TODOS los temas de antes, con aviso;
+ *   · un texto que no se puede leer fila por fila (una cabecera tocada, repetida o fuera de orden) deja todos los temas de antes: nunca se adivina a qué fila va un pedazo;
+ *   · no abre · error · vence: la tanda se cierra con sus temas y las pistas como aviso (nunca de rehén).
+ * Apagado (sin retener, sin puerto o sin registro fijado) = byte a byte con hoy: V15 bloquea y la tanda se cierra en el mismo paso.
+ */
+type CierreDeTanda = Parameters<typeof cerrarTanda>[1]
+/** los estados de una tanda guardada que todavía no se cerró (cerrarTanda los lleva a validada · en_investigacion · perdio_su_fecha) */
+const ESTADOS_SIN_CERRAR: ReadonlySet<Fila['estado']> = new Set(['propuesta', 'espera_video', 'descartada_sin_fuente'])
+
+const avisoDeFila = (filaId: string, que: string): Hallazgo => ({
+  chequeo: 'V15', severidad: 'aviso', fila_id: filaId, alcance: 'fila',
+  ficha: { que, donde: `fila ${filaId}`, contra_que: 'registro del cliente (fijado por su manual o su país)', gravedad: 'aviso', propuesta: 'revisar el registro de este tema' },
+})
+/** el aviso por fila cuando la revisión no corrió: solo en las filas donde el detector ve formas de otro registro */
+const avisosSinRevision = (filas: Fila[], reg: RegistroFijado, motivo: string): Hallazgo[] =>
+  filasConTema(filas).flatMap((f) => avisoDePistas(pistasDeRegistro(reg, f.tema ?? ''), motivo).map((a) => avisoDeFila(f.id, a)))
+
+async function retenerTandaParaRegistro(al: Almacen, ctx: ContextoDelCliente, p: CierreDeTanda): Promise<Respuesta> {
+  const { campana, version, tanda, filas, ahora } = p
+  const texto = textoDelCalendario(filas.filter((f) => f.tanda === tanda))
+  if (!texto) return cerrarTanda(al, p)
+  const reg = registroFijado(ctx)!
+  await al.guardarFilas(campana.id, version, 1, filas, campana.seco) // quedan sin cerrar: la vuelta (o el reloj) las cierra
+  const { r } = await abrirRegistro(al, { doc: 'calendario', campana, version: tanda, texto, registro: reg, origenes: origenesDelCliente(ctx) }, ahora)
+  if (r.estado === 'esperando') return { status: 200, cuerpo: { ok: true, tanda, estado: EN_REVISION_DE_REGISTRO, objeto_id: objetoDeRegistro('calendario', tanda), revision_id: r.revision_id } }
+  if (r.estado === 'cerrada') return aplicarVueltaDelCalendario(al, r.salida, ahora)
+  // no abre · error: se cierra con lo que ya está validado en memoria y las pistas como aviso
+  await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('calendario', tanda))
+  return cerrarTanda(al, { ...p, hs: [...p.hs, ...avisosSinRevision(filas, reg, `la jefatura no abrió la revisión: ${r.motivo}`)] })
+}
+
+/** las filas de la tanda que siguen esperando su revisión (ninguna cerrada); null si la tanda ya cerró por otra vía o no existe */
+async function tandaRetenida(al: Almacen, campana: Campana, tanda: number): Promise<Fila[] | null> {
+  const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
+  const filas = (await al.filas(campana.id, version)).filter((f) => f.tanda === tanda && f.estado !== 'esquema')
+  return filas.length && filas.every((f) => ESTADOS_SIN_CERRAR.has(f.estado)) ? filas : null
+}
+
+interface VueltaDelCalendario { temas: Map<string, string> | null; avisosDeLaRevision: string[]; motivoSinRevision: string | null }
+
+/**
+ * Cierra la tanda retenida: aplica los temas corregidos que no rompen nada, vuelve a validar con TODOS los chequeos (registro como aviso), resuelve la espera y cierra por `cerrarTanda`.
+ * Los insumos se rearman como en `retomarPorCantidades` (lo único que no se guarda son los ajustes: se reconstruyen de lo omitido y de lo que salió). La comparación es SIEMPRE de la
+ * tanda corregida contra la original con los MISMOS insumos: lo que solo cambia es el tema.
+ */
+async function cerrarTandaDeRegistro(al: Almacen, campana: Campana, tanda: number, v: VueltaDelCalendario, ahora: string): Promise<Respuesta> {
+  const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
+  const estr = (await al.ultimaEstrategia(campana.id))?.contenido
+  if (!ctx || !estr) return err(409, 'E-CONTEXTO', 'falta el contexto o la estrategia de la campaña')
+  const formatos = await al.formatos()
+  const lexico = lexicoDelCliente(ctx.industria, await al.leerConfig('lexico_afirmaciones'))
+  const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
+  const todas = await al.filas(campana.id, version)
+  const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
+  const previas = todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema')
+  const originales = todas.filter((f) => f.tanda === tanda && f.estado !== 'esquema')
+  const salen = originales.filter((f) => f.estado === 'descartada_sin_fuente').map((f) => f.id)
+  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, originales), ...salen.map((id) => ({ semana: semanaDeId(id), slot: slotDe(id), accion: 'omitir' as const, motivo: 'la fila salió: dato sin fuente tras la corrección' }))]
+  const fechas = await fechasDeclaradas(al, ctx, estr, campana)
+  const validar = (fs: Fila[]) => bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, fs, previas, ajustes, fechas, ahora, lexico, true)))
+  /** los chequeos que BLOQUEAN, por fila (o `tanda` si son del conjunto) */
+  const bloqueosPor = (hs: Hallazgo[]): Map<string, Set<string>> => {
+    const m = new Map<string, Set<string>>()
+    for (const x of hs) if (x.severidad === 'bloquea') { const k = x.fila_id ?? 'tanda'; m.set(k, new Set([...(m.get(k) ?? []), x.chequeo])) }
+    return m
+  }
+  const nuevos = (antes: Map<string, Set<string>>, despues: Map<string, Set<string>>, k: string): string[] => [...(despues.get(k) ?? [])].filter((c) => !antes.get(k)?.has(c))
+
+  const hsOriginal = validar(originales)
+  const antes = bloqueosPor(hsOriginal)
+  const reg = registroFijado(ctx)
+  const extra: Hallazgo[] = []
+  const corregidas: string[] = []
+  const revertidas: string[] = []
+  let filas = originales
+  let hs = hsOriginal
+  if (v.temas) {
+    const propuesta = originales.map((f) => (v.temas!.has(f.id) && v.temas!.get(f.id) !== f.tema ? { ...f, tema: v.temas!.get(f.id)! } : f))
+    const conTodas = bloqueosPor(validar(propuesta))
+    filas = propuesta.map((f, k) => {
+      const o = originales[k]
+      if (f === o) return f
+      const rompe = nuevos(antes, conTodas, f.id)
+      if (!rompe.length) { corregidas.push(f.id); return f }
+      revertidas.push(f.id)
+      extra.push(avisoDeFila(f.id, `la corrección de registro de esta fila rompía otros chequeos (${rompe.join(' · ')}): se queda el tema anterior`))
+      return o
+    })
+    if (corregidas.length) {
+      hs = validar(filas)
+      const despues = bloqueosPor(hs)
+      const rompeAlgo = [...despues.keys()].some((k) => nuevos(antes, despues, k).length > 0)
+      if (rompeAlgo) {
+        // una fila que afecta a otra o al conjunto: se quedan TODOS los temas de antes (la versión anterior entera, como en el brief)
+        for (const id of corregidas) extra.push(avisoDeFila(id, 'la corrección de registro rompía otros chequeos de la tanda: se queda el tema anterior'))
+        revertidas.push(...corregidas.splice(0))
+        filas = originales
+        hs = hsOriginal
+      }
+    }
+  }
+  if (v.motivoSinRevision && reg) extra.push(...avisosSinRevision(filas, reg, v.motivoSinRevision))
+  // los avisos de la revisión (citas en otro registro): a la fila cuyo tema trae la frase citada; los que no se ubican, en la respuesta
+  const sinFila: string[] = []
+  for (const a of v.avisosDeLaRevision) {
+    const frase = /«([^»]+)»/.exec(a)?.[1]
+    const donde = frase ? filasConTema(filas).filter((f) => (f.tema ?? '').includes(frase)) : []
+    if (donde.length) for (const f of donde) extra.push(avisoDeFila(f.id, a))
+    else sinFila.push(a)
+  }
+  const hsFinal = [...hs, ...extra]
+  await al.guardarValidaciones(campana.id, 'calendario', version, tanda, 2, hsFinal, campana.seco)
+  await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('calendario', tanda))
+  const r = await cerrarTanda(al, { campana: (await al.campana(campana.id)) ?? campana, formatos, estr, version, tanda, semanas, filas, hs: hsFinal, salen, ahora })
+  return { status: r.status, cuerpo: { ...r.cuerpo, registro: { corregidas, revertidas, ...(sinFila.length ? { avisos: sinFila } : {}) } } }
+}
+
+/** LA VUELTA de la revisión de registro del calendario. IDEMPOTENTE: sin espera viva, o con la tanda ya cerrada, no toca nada */
+export async function aplicarVueltaDelCalendario(al: Almacen, salida: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const id = leerArtifactIdDeRegistro(String(salida.artifact_id ?? ''))
+  if (!id || id.doc !== 'calendario') return err(400, 'E-CAMPOS', '`salida.artifact_id` debe ser registro:calendario:<campaña>:t<n>')
+  const campana = await al.campana(id.campana_id)
+  if (!campana) return err(404, 'E-CAMPANA', 'campaña inexistente')
+  if (!(await esperaDeRegistroViva(al, campana.id, 'calendario', id.version))) return { status: 200, cuerpo: { ok: true, ya_cerrada: true } }
+  const retenidas = await tandaRetenida(al, campana, id.version)
+  if (!retenidas) { await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('calendario', id.version)); return { status: 200, cuerpo: { ok: true, ya_cerrada: true } } }
+  const v = textoDeLaVuelta(salida, textoDelCalendario(retenidas))
+  const temas = v.corregido ? temasDeLaVuelta(v.texto, retenidas) : null
+  return cerrarTandaDeRegistro(al, campana, id.version, {
+    temas, avisosDeLaRevision: avisosDeLaSalida(salida),
+    motivoSinRevision: v.corregido && !temas ? 'la versión corregida no se pudo leer fila por fila: se quedan los temas de antes' : null,
+  }, ahora)
+}
+
+/**
+ * La ruta `api/jefatura/cadena-vuelta` para los TRES documentos: el calendario vuelve aquí; el brief y la gran idea, por `recibirVueltaDeRegistro` (mesas.ts) sin cambios.
+ * Como en el brief, nadie más reenvía el sobre de la cadena: lo deja la ruta en la sala con la clave del medio día (la sala deduplica con el vigía).
+ */
+export async function recibirVueltaDeLaCadena(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const s = cuerpo.salida
+  const id = s && typeof s === 'object' && !Array.isArray(s) ? leerArtifactIdDeRegistro(String((s as Record<string, unknown>).artifact_id ?? '')) : null
+  if (id?.doc !== 'calendario') return recibirVueltaDeRegistro(al, cuerpo, ahora)
+  const salida = s as Record<string, unknown>
+  if (salida.artifact_type !== 'registro') return err(400, 'E-CAMPOS', '`salida.artifact_type` debe ser «registro»: esta ruta solo vuelve a la cadena')
+  if (typeof salida.resultado !== 'string') return err(400, 'E-CAMPOS', '`salida.resultado` es obligatorio')
+  const re = await aplicarVueltaDelCalendario(al, salida, ahora)
+  if (re.status !== 200) return re
+  const tramo = tramoDeReemision(ahora)
+  const empuje = re.cuerpo.ya_cerrada ? {} : await empujarDesdeElTablero(al, tramo, await siguienteDespuesDe(al, id.campana_id, tramo))
+  return { status: 200, cuerpo: { ...re.cuerpo, revision: { id: salida.revision_id ?? null, resultado: salida.resultado }, ...empuje } }
+}
+
+/** el reloj: la espera de la revisión del calendario venció sin vuelta → la tanda se cierra con sus temas y las pistas como aviso (la cadena nunca queda de rehén) */
+export async function seguirSinRevisionDelCalendario(al: Almacen, e: EsperaFila, ahora: string): Promise<string> {
+  const o = leerObjetoDeRegistro(e.objeto_id)
+  if (!o || o.doc !== 'calendario') return `${e.objeto_id}: objeto no reconocido`
+  const campana = await al.campana(e.campana_id)
+  if (!campana) return `campaña ${e.campana_id} inexistente`
+  if (!(await tandaRetenida(al, campana, o.version))) { await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, e.objeto_id); return `${e.objeto_id}: ya había cerrado` }
+  const r = await cerrarTandaDeRegistro(al, campana, o.version, { temas: null, avisosDeLaRevision: [], motivoSinRevision: 'la revisión venció sin vuelta' }, ahora)
+  return r.status === 200 ? `${e.objeto_id}: la tanda ${o.version} se cerró sin revisión (las pistas quedan como aviso)` : `${e.objeto_id}: no se pudo cerrar (${String(r.cuerpo.error ?? r.status)})`
 }

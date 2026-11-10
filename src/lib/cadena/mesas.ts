@@ -436,7 +436,7 @@ async function conceptoSinMesa(al: Almacen, campana: Campana, version: number, t
 export const EN_REVISION_DE_REGISTRO = 'en_revision_de_registro'
 const bloqueosDelBrief = (l: BriefCreativoLeido): string[] => hallazgosDelBrief(l).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
 /** los documentos del cliente de los que el texto puede citar: el revisor comprueba sus citas contra ellos */
-const origenesDelCliente = (ctx: ContextoDelCliente | null): Array<{ titulo: string; texto: string }> => [{ titulo: 'el plan', texto: ctx?.planTexto ?? '' }, { titulo: 'el manual', texto: ctx?.manualTexto ?? '' }]
+export const origenesDelCliente = (ctx: ContextoDelCliente | null): Array<{ titulo: string; texto: string }> => [{ titulo: 'el plan', texto: ctx?.planTexto ?? '' }, { titulo: 'el manual', texto: ctx?.manualTexto ?? '' }]
 const conAvisos = <L extends { avisos: string[] }>(l: L, extra: string[]): L => ({ ...l, avisos: [...l.avisos, ...extra.filter((x) => !l.avisos.includes(x))] })
 
 async function cerrarBriefDeRegistro(al: Almacen, campana: Campana, version: number, textoFinal: string, leido: BriefCreativoLeido, avisos: string[], ahora: string): Promise<EntregaALaCadena> {
@@ -494,7 +494,7 @@ async function cerrarDocumento(al: Almacen, campana: Campana, doc: DocDeRegistro
  */
 export async function aplicarVueltaDeRegistro(al: Almacen, salida: Record<string, unknown>, ahora: string): Promise<EntregaALaCadena> {
   const id = leerArtifactIdDeRegistro(String(salida.artifact_id ?? ''))
-  if (!id) return { ok: false, error: '`salida.artifact_id` no es de una revisión de registro de la cadena (registro:<brief|concepto>:<campaña>:v<n>)' }
+  if (!id || id.doc === 'calendario') return { ok: false, error: '`salida.artifact_id` no es de una revisión de registro del brief o de la gran idea (registro:<brief|concepto>:<campaña>:v<n>); la del calendario vuelve por `vuelta-de-registro.ts`' }
   const campana = await al.campana(id.campana_id)
   if (!campana) return { ok: false, error: 'campaña inexistente' }
   if (!(await esperaDeRegistroViva(al, campana.id, id.doc, id.version))) return { ok: true, ya_cerrada: true }
@@ -525,7 +525,7 @@ export async function recibirVueltaDeRegistro(al: Almacen, cuerpo: Record<string
   const salida = s as Record<string, unknown>
   if (salida.artifact_type !== 'registro') return err(400, 'E-CAMPOS', '`salida.artifact_type` debe ser «registro»: esta ruta solo vuelve a la cadena')
   const id = leerArtifactIdDeRegistro(String(salida.artifact_id ?? ''))
-  if (!id) return err(400, 'E-CAMPOS', '`salida.artifact_id` debe ser registro:<brief|concepto>:<campaña>:v<n>')
+  if (!id || id.doc === 'calendario') return err(400, 'E-CAMPOS', '`salida.artifact_id` debe ser registro:<brief|concepto>:<campaña>:v<n>')
   if (typeof salida.resultado !== 'string') return err(400, 'E-CAMPOS', '`salida.resultado` es obligatorio')
   const re = await aplicarVueltaDeRegistro(al, salida, ahora)
   if (!re.ok) return err(409, 'E-VUELTA', re.error ?? 'la vuelta no se pudo aplicar')
@@ -538,7 +538,7 @@ export async function recibirVueltaDeRegistro(al: Almacen, cuerpo: Record<string
 /** el reloj: la espera de una revisión de registro venció sin vuelta → el documento se cierra con su texto y las pistas como aviso (la cadena nunca queda de rehén) */
 export async function seguirSinRevisionDeRegistro(al: Almacen, e: EsperaFila, ahora: string): Promise<string> {
   const o = leerObjetoDeRegistro(e.objeto_id)
-  if (!o) return `${e.objeto_id}: objeto no reconocido`
+  if (!o || o.doc === 'calendario') return `${e.objeto_id}: objeto no reconocido`
   const campana = await al.campana(e.campana_id)
   if (!campana) return `campaña ${e.campana_id} inexistente`
   const t = await documentoRetenido(al, campana.id, o.doc, o.version)

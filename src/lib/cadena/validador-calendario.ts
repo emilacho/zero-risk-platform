@@ -50,6 +50,8 @@ export interface InsumosCalendario {
   palabrasDuras?: string[]
   /** r75 · H2 · el registro del cliente (tuteo · voseo · usted); sin dato no se bloquea ningún registro */
   registro?: RegistroDelCliente
+  /** tramo 3 del revisor de registro (10-nov): con la jefatura reteniendo `registro`, las formas de otro registro AVISAN (son pistas para el revisor); sin el campo, bloquean como siempre */
+  registroSoloAviso?: boolean
   /** nombres propios que NO son un origen de producto (sedes, nombre del negocio) */
   conocidos?: string[]
   /** léxico de afirmaciones leído de cadena_config.lexico_afirmaciones (dato, no código); sin él, la base del idioma */
@@ -189,7 +191,7 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     for (const p of prohibidas) if (coincide(p)) out.push(h('V15', 'aviso', f, `el tema usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`, 'palabras que el manual evita', 'si es un claim propio, sostenerlo con evidencia o reformularlo'))
     // r75 · H2 · se bloquean las formas de OTRO registro SOLO si el registro del cliente está fijado (su manual o su país); sin dato no se impone ninguno
     const otro = formasDeOtroRegistro(ins.registro, f.tema ?? '')
-    if (otro.length) out.push(h('V15', 'bloquea', f, `el tema usa formas de otro registro («${otro[0]}») y el del cliente es ${nombreDelRegistro(ins.registro)}`, `${nombreDelRegistro(ins.registro)} (registro del cliente, fijado por su manual o su país)`, `reescribir en ${nombreDelRegistro(ins.registro)}`))
+    if (otro.length) out.push(h('V15', ins.registroSoloAviso ? 'aviso' : 'bloquea', f, `el tema usa formas de otro registro («${otro[0]}») y el del cliente es ${nombreDelRegistro(ins.registro)}`, `${nombreDelRegistro(ins.registro)} (registro del cliente, fijado por su manual o su país)`, `reescribir en ${nombreDelRegistro(ins.registro)}`))
 
     // ─── V16 · nunca reseñas ni testimonios con nombre sin procedencia
     if (/\b(?:resena|testimonio|opinion de|dice (?:que )?[a-z]+ )\b/.test(nTema) || /[“"][^”"]{12,}[”"]/.test(f.tema ?? '')) {
