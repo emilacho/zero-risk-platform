@@ -10,7 +10,7 @@ import { mesaEncendida } from '../src/lib/planeacion/mesa/interruptor'
 import { sumaDeTopes } from '../src/lib/planeacion/prevuelo'
 import type { AlmacenDeConversa, EncargoDeConversa } from '../src/lib/finanzas/conversa/puertos'
 import { actaParaElRedactor, validarActa, validarAporte } from '../src/lib/planeacion/mesa/acta'
-import { claveDelTurno, INTENTOS_DEL_TURNO, abrirMesa, avanzarMesa, devolverALaMesa, leerMesa, pedidoDelTurno, type PuertosDeMesa } from '../src/lib/planeacion/mesa/orquestador'
+import { claveDelTurno, ESPERAS_DEL_TURNO_MS, INTENTOS_DEL_TURNO, abrirMesa, avanzarMesa, devolverALaMesa, leerMesa, pedidoDelTurno, type PuertosDeMesa } from '../src/lib/planeacion/mesa/orquestador'
 import { INSTRUCCION_POR_PASO, INTEGRANTES, PASO_CONSOLIDA, PLANTILLA_MESA, quienHablaEnLaMesa, TOPE_DE_LA_MESA_USD } from '../src/lib/planeacion/mesa/plantilla'
 
 const ACTA = { numero: { meta: 40, por_que: 'x' }, servicio: 's', audiencia: 'a', oferta: 'o', canales: [{ canal: 'whatsapp', peso: 0.9, razon: 'r' }, { canal: 'meta_ig', peso: 0.1, razon: 'r' }], camino: 'c', prueba: 'p', no_se_hace: [{ que: 'TikTok', por_que: 'no' }], no_se: [] }
@@ -519,13 +519,14 @@ describe('un turno cortado no se pierde', () => {
     expect(m.pedidos.map((p) => p.reanudar)).toEqual([false, false])
   })
   // CC6 y CC7, 05-nov: el corredor deja su punto de control «en curso» cuando el empleado falla; esa fila no significa que siga trabajando
-  const FALLA = { error: 'run_sdk_500', fallo: 'el proveedor del modelo devolvió un error' }
+  // #927 · un fallo declarado se repite solo si es PASAJERO: aquí, el proveedor saturado tal como lo escribe el corredor
+  const FALLA = { error: 'run_sdk_500', fallo: 'el empleado FALLÓ · API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}} · gastado ≈ US$ 0.0000 · lo escrito hasta ahí es PARCIAL y no se da por respuesta' }
   const SIEMPRE_EN_VUELO = async () => true
   const pasoDeAporte = () => PLANTILLA_MESA.pasos.find((p) => p.clave.startsWith('mesa-estrategia-') && p.clave !== PASO_CONSOLIDA && p.clave !== 'mesa-estrategia-jefe-marketing')!.clave
-  it('🔴 el empleado que falló con la fila en curso no se espera: se repite enseguida, sin reinicio forzado', async () => {
+  it('🔴 el empleado que falló con la fila en curso no se espera en vuelo: se repite (tras su espera), sin reinicio forzado', async () => {
     const m = await montar([FALLA, null]); await m.hastaPaso()
     m.P.turnoEnVuelo = SIEMPRE_EN_VUELO
-    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { error: 'turno_cortado', intento: 1, detalle: 'run_sdk_500 · el proveedor del modelo devolvió un error' } })
+    expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { error: 'turno_cortado', intento: 1, detalle: `run_sdk_500 · ${FALLA.fallo}`, falla: 'pasajera' } })
     expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).toMatchObject({ turno_en_curso: { paso: PASO_CONSOLIDA, intentos: 1, termino: true } })
     expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
     expect(m.pedidos).toHaveLength(2)
@@ -621,4 +622,99 @@ describe('un turno cortado no se pierde', () => {
     expect(claveDelTurno('a', 'x')).not.toBe(claveDelTurno('b', 'x'))
     expect(claveDelTurno('a', 'x')).not.toBe(claveDelTurno('a', 'y'))
   })
+})
+
+// #927 · decisión de Lenovo 10-nov 16:08Z: permanente no se repite y se declara al momento; pasajero hasta 3 con espera creciente (guardarraíl 2).
+// Los textos son los que el corredor y run-sdk escribieron de verdad en el libro de llamadas (lectura de producción 10-nov, ids recortados).
+const REALES_PERMANENTES = {
+  'saldo agotado': { error: 'run_sdk_500', fallo: 'el modelo respondió 400: {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."},"request_id":"req_x"}' },
+  'llave mala (proveedor)': { error: 'run_sdk_500', fallo: 'el modelo respondió 401: {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_x"}' },
+  'llave mala (corredor)': { error: 'run_sdk_500', fallo: 'el empleado FALLÓ · Invalid API key · Fix external API key · gastado ≈ US$ 0.0000 · lo escrito hasta ahí es PARCIAL y no se da por respuesta' },
+  'modelo no soportado': { error: 'run_sdk_500', fallo: "el empleado FALLÓ · API Error: 400 Claude Code 2.1 does not support this model; version 2.2 or newer is required. Run 'claude update' · gastado ≈ US$ 0.0000 · lo escrito hasta ahí es PARCIAL y no se da por respuesta" },
+  'sin clase reconocida': { error: 'run_sdk_500', fallo: 'el proveedor del modelo devolvió un error' },
+} as const
+const PASAJERAS = {
+  'proveedor saturado (529)': { error: 'run_sdk_500', fallo: 'el empleado FALLÓ · API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}} · gastado ≈ US$ 0.0000' },
+  'límite de ritmo (429)': { error: 'run_sdk_500', fallo: 'el modelo respondió 429: {"type":"error","error":{"type":"rate_limit_error","message":"Number of request tokens has exceeded your per-minute rate limit"}}' },
+  'error del proveedor (500)': { error: 'run_sdk_500', fallo: 'el modelo respondió 500: {"type":"error","error":{"type":"api_error","message":"Internal server error"}}' },
+} as const
+
+describe('#927 · la falla se separa por clase', () => {
+  type Falla = { error: string; fallo?: string } | null
+  const montarEn = async (client_id: string, fallas: Falla[], paso = PASO_CONSOLIDA) => {
+    const m = mundo()
+    const original = m.P.modelo.invocar.bind(m.P.modelo)
+    const pedidos: Array<Record<string, unknown>> = []
+    const esperas: number[] = []
+    let reloj = new Date('2026-11-04T18:00:00Z').getTime()
+    m.P.ahora = () => new Date(reloj)
+    m.P.esperar = async (ms) => { esperas.push(ms); reloj += ms }
+    let i = 0
+    m.P.modelo = { async invocar(p) {
+      if (p.paso !== paso) return original(p)
+      pedidos.push(p as never)
+      const f = fallas[i++]
+      return f ? { ok: false, error: f.error, ...(f.fallo !== undefined ? { fallo_del_empleado: f.fallo } : {}), costo_usd: 0 } : original(p)
+    } }
+    const id = (await abrir(m.P, { client_id })).cuerpo.encargo_id as string
+    for (let k = 0; k < 20; k++) { const e = await m.P.almacen.leerEncargo(id); if (PLANTILLA_MESA.pasos[e!.estado_del_motor.ultimo + 1]?.clave === paso) break; await avanzarMesa(m.P, id) }
+    return { ...m, id, pedidos, esperas, adelantar: (ms: number) => { reloj += ms } }
+  }
+  // dos clientes de rubros distintos: la clase de la falla no depende del cliente
+  for (const cliente of ['cliente-restaurante', 'cliente-clinica']) {
+    for (const [nombre, f] of Object.entries(REALES_PERMANENTES)) {
+      it(`${cliente} · 🔴 ${nombre}: es PERMANENTE · no se repite, no se espera y se declara en la primera falla`, async () => {
+        const m = await montarEn(cliente, [f, null])
+        const r = await avanzarMesa(m.P, m.id)
+        expect(r).toMatchObject({ status: 200, cuerpo: { degradado: true, falla: 'permanente' } })
+        expect(m.pedidos).toHaveLength(1)
+        expect(m.esperas).toEqual([])
+        expect((await m.P.almacen.leerEncargo(m.id))!.estado_del_motor).not.toHaveProperty('turno_en_curso')
+        expect(m.arts[m.id].acta).toMatchObject({ sin_acta: true })
+      })
+    }
+    for (const [nombre, f] of Object.entries(PASAJERAS)) {
+      it(`${cliente} · ${nombre}: es PASAJERA · vuelve a pedirse, con la espera de su primera falla`, async () => {
+        const m = await montarEn(cliente, [f, null])
+        expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { error: 'turno_cortado', falla: 'pasajera', intento: 1, repetir_en_s: ESPERAS_DEL_TURNO_MS[0] / 1000 } })
+        expect((await avanzarMesa(m.P, m.id)).status).toBe(200)
+        expect(m.pedidos).toHaveLength(2)
+        expect(m.esperas).toEqual([ESPERAS_DEL_TURNO_MS[0]])
+      })
+    }
+    it(`${cliente} · 🔴 la espera CRECE: 10 s tras la primera falla, 30 s tras la segunda; la tercera se declara sin esperar más`, async () => {
+      const f = PASAJERAS['proveedor saturado (529)']
+      const m = await montarEn(cliente, [f, f, f])
+      await avanzarMesa(m.P, m.id); await avanzarMesa(m.P, m.id)
+      expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 200, cuerpo: { degradado: true, falla: 'pasajera' } })
+      expect(m.esperas).toEqual([10_000, 30_000])
+      expect(m.pedidos).toHaveLength(INTENTOS_DEL_TURNO)
+    })
+    it(`${cliente} · la espera se cuenta desde la falla: si quien vuelve a pedir ya esperó, no se espera dos veces`, async () => {
+      const m = await montarEn(cliente, [PASAJERAS['límite de ritmo (429)'], null])
+      await avanzarMesa(m.P, m.id)
+      m.adelantar(4_000)
+      await avanzarMesa(m.P, m.id)
+      expect(m.esperas).toEqual([6_000])
+      const m2 = await montarEn(cliente, [PASAJERAS['límite de ritmo (429)'], null])
+      await avanzarMesa(m2.P, m2.id)
+      m2.adelantar(60_000)
+      await avanzarMesa(m2.P, m2.id)
+      expect(m2.esperas).toEqual([])
+    })
+    it(`${cliente} · un corte sin fallo declarado (la red, un 502 del camino) sigue siendo pasajero y también espera`, async () => {
+      for (const f of [{ error: 'red:fetch failed' }, { error: 'run_sdk_502' }]) {
+        const m = await montarEn(cliente, [f, null])
+        expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 503, cuerpo: { falla: 'pasajera' } })
+        await avanzarMesa(m.P, m.id)
+        expect(m.esperas).toEqual([ESPERAS_DEL_TURNO_MS[0]])
+      }
+    })
+    it(`${cliente} · 🔴 con el tope ya agotado no se repite ni se espera: se declara como «tope»`, async () => {
+      const m = await montarEn(cliente, [{ error: 'run_sdk_500', fallo: mensajeDeCorte(0.4, 0.41) }, null])
+      expect(await avanzarMesa(m.P, m.id)).toMatchObject({ status: 200, cuerpo: { degradado: true, falla: 'tope' } })
+      expect(m.pedidos).toHaveLength(1)
+      expect(m.esperas).toEqual([])
+    })
+  }
 })

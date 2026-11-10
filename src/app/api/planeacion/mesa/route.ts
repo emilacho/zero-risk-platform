@@ -42,6 +42,8 @@ async function atender(request: Request) {
     encendida: () => mesaEncendida(db),
     ahora: () => new Date(),
     turnoEnVuelo: async (clave, client_id, desde) => (typeof c.workflow_id === 'string' ? turnoEnVueloEnElCorredor(db, { workflow_id: c.workflow_id, client_id, clave, desde }, new Date()) : null),
+    // #927 · la espera creciente antes de repetir un turno pasajero (a lo más 30 s: cabe de sobra en los 800 s de la ruta)
+    esperar: (ms) => new Promise((ok) => setTimeout(ok, ms)),
   }
   try {
     if (c.accion === 'vivas') {
