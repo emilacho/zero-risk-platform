@@ -2,12 +2,10 @@
  * MOTOR DE COLATERALES · tramo 2a · la RED DE PALABRAS (CC1 · certifica CC7 · CRITERIOS v2 §2 + adendas 1-4).
  *
  * De la frase ENTERA del «antes» salen los pedazos de aguas abajo que el agente DEBE revisar uno por uno.
- * Cada pedazo lleva su documento, su SECCIÓN (título markdown o ruta de la llave JSON) y su OCURRENCIA:
- * un mismo texto puede repetirse en un documento («el encebollado que conoces de la costa» está 2 veces en la gran idea),
- * y el retoque se aplica DENTRO de su pedazo, nunca reemplazando en todo el documento (hallazgo del ensayo 3).
- *
- * Medido en el ensayo 3 (10-nov · corrida real · PASA 4/4): el pedido bajó de ≈ 66.790 fichas (documentos enteros) a 4.707 (solo pedazos).
- * Función pura, sin red ni base.
+ * Cada pedazo lleva su documento, su SECCIÓN (título markdown o ruta de la llave JSON) y su POSICIÓN exacta en el documento
+ * (`inicio`, desfase en caracteres): un mismo texto puede repetirse, también dentro de frases más largas, y el retoque se aplica
+ * EN ESA POSICIÓN, nunca buscando el texto en todo el documento (falla hallada por CC7 en d3b0e4a).
+ * Agnóstico: ninguna palabra, lista ni regla de un cliente. Función pura, sin red ni base.
  */
 import { afectados, type Documento } from '../cadena/dependencias-de-documentos'
 
@@ -18,8 +16,8 @@ export interface Pedazo {
   /** título markdown vigente o ruta de la llave JSON (`fases[1].objetivo`) */
   seccion: string
   texto: string
-  /** markdown: n-ésima vez (0, 1…) que este MISMO texto aparece en el documento · JSON: siempre 0 (la ruta ya es única) */
-  ocurrencia: number
+  /** markdown: desfase (en caracteres) donde empieza el pedazo en el documento · JSON: -1 (manda la ruta) */
+  inicio: number
   /** JSON: la ruta de la llave (para escribir por ruta, no por texto) · markdown: null */
   ruta: string | null
 }
@@ -33,12 +31,16 @@ export interface Edicion {
 
 export const normalizar = (t: string): string => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
-const VACIAS = new Set('que la el los las de del a al y o en un una no sea es por para con se su sus lo como mas muy desde este esta ese esa son hay'.split(' '))
-/** palabras de ≥ 4 letras y números con decimales («3,50»), sin vacías, sin repetir */
-export const claves = (t: string): string[] => [...new Set(normalizar(t).match(/\d+[.,:]\d+|[a-zñ]{4,}/g) ?? [])].filter((w) => !VACIAS.has(w))
+/** palabras vacías del español (dato por IDIOMA, no por cliente) */
+const VACIAS_ES = new Set('que la el los las de del a al y o en un una no sea es por para con se su sus lo como mas muy desde este esta ese esa son hay'.split(' '))
+/** palabras de ≥ 4 letras y números con decimales, sin vacías, sin repetir */
+export const claves = (t: string): string[] => [...new Set(normalizar(t).match(/\d+[.,:]\d+|[a-zñ]{4,}/g) ?? [])].filter((w) => !VACIAS_ES.has(w))
 
 /** una palabra clave es «rara» si aparece en ≤ 40 pedazos; si ninguna lo es, las 2 menos frecuentes */
 export const TOPE_DE_FRECUENCIA = 40
+/** una línea más larga que esto se parte en trozos por « · » */
+const LINEA_LARGA = 400
+const SEPARADOR = ' · '
 
 function json(texto: string): unknown {
   const t = texto.trim()
@@ -50,14 +52,14 @@ function json(texto: string): unknown {
   }
 }
 
-/** los pedazos de UN documento, con su sección y su ocurrencia (sin id todavía) */
+/** los pedazos de UN documento, con su sección y su posición (sin id todavía) */
 export function pedazosDe(documento: Documento, texto: string): Omit<Pedazo, 'id'>[] {
   const out: Omit<Pedazo, 'id'>[] = []
   const j = json(texto)
   if (j !== null) {
     const recorrer = (v: unknown, ruta: string): void => {
       if (typeof v === 'string') {
-        if (v.trim().length > 8) out.push({ documento, seccion: ruta, texto: v, ocurrencia: 0, ruta })
+        if (v.trim().length > 8) out.push({ documento, seccion: ruta, texto: v, inicio: -1, ruta })
       } else if (Array.isArray(v)) v.forEach((x, i) => recorrer(x, `${ruta}[${i}]`))
       else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) recorrer(x, ruta ? `${ruta}.${k}` : k)
     }
@@ -65,19 +67,29 @@ export function pedazosDe(documento: Documento, texto: string): Omit<Pedazo, 'id
     return out
   }
   let seccion = '(inicio)'
-  const vistas = new Map<string, number>()
-  for (const linea of texto.split(/\n+/)) {
+  let desde = 0
+  for (const linea of texto.split('\n')) {
+    const inicioDeLinea = desde
+    desde += linea.length + 1
     const s = linea.trim()
+    if (!s) continue
     if (/^#{1,6}\s/.test(s)) {
       seccion = s.replace(/^#+\s*/, '')
       continue
     }
-    for (const p of s.length > 400 ? s.split(' · ') : [s]) {
-      const t = p.trim()
-      if (t.length <= 8) continue
-      const n = vistas.get(t) ?? 0
-      vistas.set(t, n + 1)
-      out.push({ documento, seccion, texto: t, ocurrencia: n, ruta: null })
+    // trozos con su desfase dentro de la línea (sin espacios de los bordes)
+    const trozos: { t: string; en: number }[] = []
+    if (linea.length > LINEA_LARGA) {
+      let en = 0
+      for (const parte of linea.split(SEPARADOR)) {
+        trozos.push({ t: parte, en })
+        en += parte.length + SEPARADOR.length
+      }
+    } else trozos.push({ t: linea, en: 0 })
+    for (const { t, en } of trozos) {
+      const recortado = t.trim()
+      if (recortado.length <= 8) continue
+      out.push({ documento, seccion, texto: recortado, inicio: inicioDeLinea + en + t.indexOf(recortado), ruta: null })
     }
   }
   return out

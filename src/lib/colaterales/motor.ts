@@ -1,15 +1,16 @@
 /**
- * MOTOR DE COLATERALES · tramo 2a · lo que decide el CÓDIGO alrededor del agente (CC1 · certifica CC7 · CRITERIOS v2 + adendas 1-4 + PLAN tramo 2 adenda 1).
+ * MOTOR DE COLATERALES · tramo 2a · lo EXACTO que verifica el código alrededor del agente (CC1 · certifica CC7 · CRITERIOS v2 + adendas 1-4 + PLAN tramo 2).
  *
- *   1 · `yaCoincide`     R1 · si el «después» ya está literal en el pedazo (y el «antes» no), se resuelve sin agente y NUNCA crea pendiente.
+ * Regla de Emilio (13:13Z): juzgar = agente; verificar lo exacto = código. Aquí NO se juzga nada (ni gravedad, ni registro, ni estilo):
+ *   1 · `yaCoincide`      R1 · si el «después» ya está literal en el pedazo (y el «antes» no), se resuelve sin agente y NUNCA crea pendiente.
  *   2 · `verificarSalida` la salida del agente: ids 100 %, razón también en lo descartado (nota 3 CC7), «antes» literal DENTRO de su pedazo,
- *                         solo aguas abajo, «no aparece» comprobado con búsqueda, registro del «después» (línea 1 CC7: un voseo no se aplica).
- *   3 · `aplicarEnPedazo` el retoque se escribe dentro de SU pedazo (por ocurrencia o por ruta JSON), nunca reemplazando en todo el documento.
- *   4 · `puedeLanzarMotor` R2 · todos los dependientes con fila de la jefatura ACTIVA, leído EN ESE INSTANTE (al guardar y otra vez al aplicar · línea 3 CC7).
- * Puro: sin red ni base. Nadie lo llama todavía (2a).
+ *                         solo aguas abajo, «no aparece» comprobado con búsqueda. El REGISTRO del «después» lo juzga la jefatura contra el
+ *                         manual de ESE cliente (CORRECCIÓN Lenovo 13:16Z), no una lista del código.
+ *   3 · `aplicarEnPedazo` el retoque se escribe en la POSICIÓN exacta de su pedazo (o en su ruta JSON); si ahí ya no está el texto, no se pisa.
+ *   4 · `puedeLanzarMotor` R2 · todos los dependientes con fila de la jefatura ACTIVA, leído EN ESE INSTANTE (al guardar y otra vez al aplicar).
+ * Agnóstico y puro: sin red ni base, sin ninguna palabra de un cliente. Nadie lo llama todavía (2a).
  */
 import { afectados, puedeProponer, type Documento } from '../cadena/dependencias-de-documentos'
-import { voseoEn } from '../finanzas/preguntas'
 import { normalizar, type Edicion, type Pedazo } from './red'
 
 // ── 1 · «ya coincide» (R1) ─────────────────────────────────────────────────────────────────────────────
@@ -24,25 +25,12 @@ export function separarYaCoincide(candidatos: Pedazo[], e: Edicion): { ya_coinci
 }
 
 // ── 2 · verificar la salida del agente ─────────────────────────────────────────────────────────────────
-/**
- * Falsos positivos del detector de la casa medidos contra los textos REALES de Náufrago (10-nov · línea 2 CC6): sustantivos agudos en -á.
- * El plan y el brief v4 dan 0; el manual v5 daba «maracuyá». Cuando CC2 publique su detector corregido, esta lista se revisa contra él.
- */
-export const NO_SON_VOSEO: ReadonlySet<string> = new Set(['maracuyá', 'bacará', 'sofá', 'papá', 'mamá', 'alá', 'maná', 'panamá', 'bogotá', 'canadá'])
-
 export interface SalidaDelAgente {
   revisados: { id: string; afecta: boolean; razon: string }[]
   colaterales: { id: string; documento: string; antes: string; despues: string; porque: string }[]
   no_aparece: { documento: string; termino: string }[]
 }
-export type MotivoDeRechazo =
-  | 'id_desconocido'
-  | 'documento_distinto_al_pedazo'
-  | 'aguas_arriba'
-  | 'antes_no_literal_en_su_pedazo'
-  | 'antes_igual_a_despues'
-  | 'registro'
-  | 'no_marcado_como_afecta'
+export type MotivoDeRechazo = 'id_desconocido' | 'documento_distinto_al_pedazo' | 'aguas_arriba' | 'antes_no_literal_en_su_pedazo' | 'antes_igual_a_despues' | 'no_marcado_como_afecta'
 export interface Retoque {
   pedazo: Pedazo
   antes: string
@@ -57,25 +45,14 @@ export interface Verificacion {
   /** «no aparece» que SÍ aparece (se comprobó con búsqueda) · si hay alguno, la salida NO se acepta entera */
   no_aparece_falsos: { documento: string; termino: string }[]
   aceptados: Retoque[]
-  rechazados: { id: string; motivo: MotivoDeRechazo; detalle?: string }[]
+  rechazados: { id: string; motivo: MotivoDeRechazo }[]
   /** razón por pedazo descartado, para el historial */
   descartados: { pedazo: Pedazo; razon: string }[]
   /** true solo si no falta nada, no hay «no aparece» falso y todo descartado trae razón */
   completa: boolean
 }
 
-export interface OpcionesDeVerificacion {
-  /** registro del cliente: con 'tu' (o sin dato) un «después» con voseo NO se aplica · con 'vos' no se mira */
-  registro?: 'tu' | 'vos' | 'usted'
-}
-
-export function verificarSalida(
-  e: Edicion,
-  candidatos: Pedazo[],
-  textos: Partial<Record<Documento, string>>,
-  s: SalidaDelAgente,
-  o: OpcionesDeVerificacion = {},
-): Verificacion {
+export function verificarSalida(e: Edicion, candidatos: Pedazo[], textos: Partial<Record<Documento, string>>, s: SalidaDelAgente): Verificacion {
   const porId = new Map(candidatos.map((p) => [p.id, p]))
   const revisados = new Map(s.revisados.map((r) => [r.id, r]))
   const faltan = candidatos.filter((p) => !revisados.has(p.id)).map((p) => p.id)
@@ -91,31 +68,16 @@ export function verificarSalida(
     if (!revisados.get(c.id)?.afecta) { rechazados.push({ id: c.id, motivo: 'no_marcado_como_afecta' }); continue }
     if (!c.antes || !p.texto.includes(c.antes)) { rechazados.push({ id: c.id, motivo: 'antes_no_literal_en_su_pedazo' }); continue }
     if (c.antes === c.despues) { rechazados.push({ id: c.id, motivo: 'antes_igual_a_despues' }); continue }
-    if (o.registro !== 'vos') {
-      // solo cuenta el voseo que el retoque AGREGA (si el pedazo ya lo traía, no lo inventa este retoque)
-      const ya = new Set(voseoEn(p.texto))
-      const nuevo = voseoEn(c.despues).filter((w) => !ya.has(w) && !NO_SON_VOSEO.has(w))
-      if (nuevo.length) { rechazados.push({ id: c.id, motivo: 'registro', detalle: nuevo.join(', ') }); continue }
-    }
     aceptados.push({ pedazo: p, antes: c.antes, despues: c.despues, porque: c.porque })
   }
   const descartados = candidatos.filter((p) => revisados.has(p.id) && !revisados.get(p.id)!.afecta).map((p) => ({ pedazo: p, razon: revisados.get(p.id)!.razon }))
   return { faltan, sin_razon, no_aparece_falsos, aceptados, rechazados, descartados, completa: !faltan.length && !sin_razon.length && !no_aparece_falsos.length }
 }
 
-// ── 3 · aplicar dentro del pedazo ──────────────────────────────────────────────────────────────────────
+// ── 3 · aplicar en la posición del pedazo ──────────────────────────────────────────────────────────────
 export class PedazoNoEncontrado extends Error {}
 
-function nEsima(texto: string, buscado: string, n: number): number {
-  let i = -1
-  for (let k = 0; k <= n; k++) {
-    i = texto.indexOf(buscado, i + 1)
-    if (i < 0) return -1
-  }
-  return i
-}
-
-function porRuta(obj: unknown, ruta: string): { padre: Record<string, unknown> | unknown[]; llave: string | number } | null {
+function porRuta(obj: unknown, ruta: string): { padre: Record<string | number, unknown>; llave: string | number } | null {
   const partes = ruta.match(/[^.[\]]+/g) ?? []
   let actual: unknown = obj
   for (let i = 0; i < partes.length - 1; i++) {
@@ -125,42 +87,40 @@ function porRuta(obj: unknown, ruta: string): { padre: Record<string, unknown> |
   }
   const ult = partes.at(-1)
   if (ult === undefined) return null
-  return { padre: actual as Record<string, unknown>, llave: /^\d+$/.test(ult) ? Number(ult) : ult }
+  return { padre: actual as Record<string | number, unknown>, llave: /^\d+$/.test(ult) ? Number(ult) : ult }
 }
 
 /**
- * Escribe UN retoque dentro de su pedazo y devuelve el documento nuevo. Si el pedazo ya no está igual (alguien lo tocó), lanza `PedazoNoEncontrado`:
- * el llamador lo deja `pendiente` (nunca se pisa lo tocado después).
- * Markdown: busca la n-ésima aparición del texto del pedazo y reemplaza el «antes» SOLO dentro de esa porción.
- * JSON: va por la ruta de la llave y reemplaza dentro de ese valor.
+ * Escribe UN retoque en su pedazo y devuelve el documento nuevo.
+ * Markdown: comprueba que en `inicio` esté EXACTAMENTE el texto del pedazo y reemplaza el «antes» solo dentro de esa porción.
+ * JSON: va por la ruta de la llave y comprueba que el valor sea el texto del pedazo.
+ * Si el pedazo ya no está igual (alguien lo tocó), lanza `PedazoNoEncontrado`: el llamador lo deja `pendiente` (nunca se pisa lo tocado después).
  */
 export function aplicarEnPedazo(textoDelDocumento: string, r: Retoque): string {
   const p = r.pedazo
   if (p.ruta !== null) {
     const doc = JSON.parse(textoDelDocumento)
     const lugar = porRuta(doc, p.ruta)
-    const valor = lugar ? (lugar.padre as Record<string | number, unknown>)[lugar.llave] : undefined
+    const valor = lugar ? lugar.padre[lugar.llave] : undefined
     if (!lugar || typeof valor !== 'string' || valor !== p.texto || !valor.includes(r.antes)) throw new PedazoNoEncontrado(p.ruta)
-    ;(lugar.padre as Record<string | number, unknown>)[lugar.llave] = valor.replace(r.antes, r.despues)
+    lugar.padre[lugar.llave] = valor.replace(r.antes, r.despues)
     return JSON.stringify(doc)
   }
-  const i = nEsima(textoDelDocumento, p.texto, p.ocurrencia)
-  if (i < 0) throw new PedazoNoEncontrado(`${p.id} ocurrencia ${p.ocurrencia}`)
-  const trozo = textoDelDocumento.slice(i, i + p.texto.length)
-  if (!trozo.includes(r.antes)) throw new PedazoNoEncontrado(p.id)
-  return textoDelDocumento.slice(0, i) + trozo.replace(r.antes, r.despues) + textoDelDocumento.slice(i + p.texto.length)
+  const trozo = p.inicio >= 0 ? textoDelDocumento.slice(p.inicio, p.inicio + p.texto.length) : ''
+  if (trozo !== p.texto || !trozo.includes(r.antes)) throw new PedazoNoEncontrado(`${p.id} en ${p.inicio}`)
+  return textoDelDocumento.slice(0, p.inicio) + trozo.replace(r.antes, r.despues) + textoDelDocumento.slice(p.inicio + p.texto.length)
 }
 
 /**
  * Aplica varios retoques del MISMO documento (una versión nueva por documento y por edición · §3).
- * Se aplican de atrás hacia adelante por posición para que un retoque no corra las ocurrencias de otro; los que no encuentran su pedazo vuelven en `sin_aplicar`.
+ * Se aplican de atrás hacia adelante por posición, para que un retoque no corra el desfase de otro; los que no encuentran su pedazo vuelven en `sin_aplicar`.
+ * Dos retoques sobre el MISMO pedazo: el segundo ya no lo encuentra igual y queda sin aplicar (no se mezclan en silencio).
  */
 export function aplicarEnDocumento(texto: string, retoques: Retoque[]): { texto: string; aplicados: Retoque[]; sin_aplicar: Retoque[] } {
   const aplicados: Retoque[] = []
   const sin_aplicar: Retoque[] = []
-  const pos = (r: Retoque) => (r.pedazo.ruta !== null ? 0 : nEsima(texto, r.pedazo.texto, r.pedazo.ocurrencia))
   let actual = texto
-  for (const r of [...retoques].sort((a, b) => pos(b) - pos(a))) {
+  for (const r of [...retoques].sort((a, b) => b.pedazo.inicio - a.pedazo.inicio)) {
     try {
       actual = aplicarEnPedazo(actual, r)
       aplicados.push(r)

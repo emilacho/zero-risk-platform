@@ -1,209 +1,197 @@
 /**
- * Motor de colaterales · tramo 2a (CC1 · certifica CC7). Reglas: CRITERIOS v2 + adendas 1-4 (🟢 conjunto CC6+CC7) + PLAN tramo 2 + su adenda 1.
- * Fixture: extractos LITERALES de registros reales de Náufrago del 10-nov (gran idea v3, brief v2, brief v4, estrategia v1), los mismos del ensayo 3.
+ * Motor de colaterales · tramo 2a (CC1 · certifica CC7). Reglas: CRITERIOS v2 + adendas 1-4 + PLAN tramo 2 + su adenda 1,
+ * corregidos por la regla de Emilio (13:13Z: juzgar = agente, verificar lo exacto = código) y la CORRECCIÓN de Lenovo (13:16Z: agnóstico, sin listas, ≥ 2 clientes).
+ * Fixtures: registros REALES de DOS clientes de rubros distintos, leídos el 10-nov:
+ *   · A · restaurante (extractos literales de su gran idea, brief y estrategia)
+ *   · B · B2B industrial (su plan y su estrategia, enteros, en JSON)
+ * Los nombres y palabras de los clientes viven SOLO en los fixtures; el código no los conoce (prueba «agnóstico» al final).
  */
+import fs from 'node:fs'
+import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import fx from './__fixtures__/naufrago-2026-11-10-extractos.json'
+import A from './__fixtures__/naufrago-2026-11-10-extractos.json'
+import B from './__fixtures__/b2b-industrial-2026-11-10.json'
 import { red, pedazosDe, claves, type Edicion, type Pedazo } from '../red'
-import { gravedad, palabrasQueCambian, FORMA_VIGENTE } from '../gravedad'
+import { gravedadVerificada, INSTRUCCION_DE_GRAVEDAD } from '../gravedad'
 import { yaCoincide, separarYaCoincide, verificarSalida, aplicarEnPedazo, aplicarEnDocumento, puedeLanzarMotor, puedeAplicarEn, notaSinColaterales, type SalidaDelAgente } from '../motor'
 
-const E2: Edicion = { documento: 'brief', seccion: 'Insight', antes: 'sabe que el bueno viene de la costa', despues: 'sabe que el bueno viene de la playa' }
-const R1: Edicion = { documento: 'plan', seccion: '3 · La audiencia', antes: '¿será tan bueno como en la costa?', despues: '¿será tan bueno como en la playa?' }
-const E3: Edicion = { documento: 'plan', seccion: 'Oferta Guayaquil', antes: 'Pago en efectivo al motorizado', despues: 'Pago en efectivo o por transferencia al motorizado' }
+// ── las ediciones de prueba: una por cliente, sacadas de frases que sus documentos de abajo sí repiten ──
+const A_INSIGHT: Edicion = { documento: 'brief', seccion: 'Insight', antes: 'sabe que el bueno viene de la costa', despues: 'sabe que el bueno viene de la playa' }
+const A_OBJECION: Edicion = { documento: 'plan', seccion: '3 · La audiencia', antes: '¿será tan bueno como en la costa?', despues: '¿será tan bueno como en la playa?' }
+const CONDICION_B = 'activar cuando exista perfil LinkedIn de empresa creado y validado'
+const B_CONDICION: Edicion = { documento: 'plan', seccion: 'canales', antes: CONDICION_B, despues: 'activar cuando exista perfil LinkedIn de empresa creado, validado y con su primera publicación' }
+const fila = (id: string, afecta: boolean, razon = afecta ? '' : 'no habla de lo editado') => ({ id, afecta, razon })
 
-describe('red de palabras · solo aguas abajo, con sección y ocurrencia', () => {
-  it('E2 (brief → gran idea): las dos DEBE del extracto salen como candidatas, con su sección', () => {
-    const { candidatos } = red(E2, { gran_idea: fx.gran_idea_v3, plan: 'sabe que el bueno viene de la costa', manual: 'sabe que el bueno viene de la costa' })
-    const cita = candidatos.find((p) => p.texto.includes('sabe que el bueno viene de la costa'))
-    expect(cita?.seccion).toBe('Por qué funciona')
-    expect(candidatos.some((p) => p.texto.includes('el encebollado que conoces de la costa') && p.seccion.startsWith('Capítulo desbloquear'))).toBe(true)
+describe('red de palabras · solo aguas abajo, con sección y posición · dos clientes', () => {
+  it('A (brief → gran idea): la cita del insight y el mensaje del capítulo salen como candidatos, con su sección', () => {
+    const { candidatos } = red(A_INSIGHT, { gran_idea: A.gran_idea_v3 })
+    expect(candidatos.find((p) => p.texto.includes(A_INSIGHT.antes))?.seccion).toBe('Por qué funciona')
+    expect(candidatos.some((p) => p.seccion.startsWith('Capítulo desbloquear'))).toBe(true)
   })
-  it('nunca aguas arriba: una edición del brief no trae pedazos del plan ni del manual', () => {
-    const { candidatos } = red(E2, { gran_idea: fx.gran_idea_v3, plan: 'sabe que el bueno viene de la costa', manual: 'sabe que el bueno viene de la costa' })
-    expect(candidatos.every((p) => p.documento === 'gran_idea')).toBe(true)
+  it('B (plan JSON → estrategia JSON): las dos citas literales de la condición salen, por su ruta', () => {
+    const { candidatos } = red(B_CONDICION, { estrategia: B.estrategia })
+    const rutas = candidatos.filter((p) => p.texto === CONDICION_B).map((p) => p.ruta)
+    expect(rutas).toEqual(['excluidos[0].cita_plan', 'dependencias[0].cita_plan'])
   })
-  it('R1 (plan): el brief v4 entra con su sección «Público»', () => {
-    const { candidatos } = red(R1, { brief: fx.brief_v4 })
-    expect(candidatos.find((p) => p.texto.includes('¿será tan bueno como en la playa?'))?.seccion).toBe('Público')
+  it('nunca aguas arriba: una edición del brief no trae pedazos del plan ni del manual; una del plan no trae del manual', () => {
+    expect(red(A_INSIGHT, { gran_idea: A.gran_idea_v3, plan: A_INSIGHT.antes, manual: A_INSIGHT.antes }).candidatos.every((p) => p.documento === 'gran_idea')).toBe(true)
+    expect(red(B_CONDICION, { estrategia: B.estrategia, manual: CONDICION_B }).candidatos.every((p) => p.documento === 'estrategia')).toBe(true)
   })
-  it('un texto repetido en el mismo documento lleva ocurrencia 0 y 1', () => {
-    const linea = 'mensaje: el encebollado que conoces de la costa ya no pide que viajes'
-    const ps = pedazosDe('gran_idea', `## A\n${linea}\n## B\n${linea}`)
-    expect(ps.map((p) => [p.seccion, p.ocurrencia])).toEqual([['A', 0], ['B', 1]])
-  })
-  it('un documento JSON da pedazos por ruta de llave (la estrategia real)', () => {
-    const ps = pedazosDe('estrategia', fx.estrategia_v1)
-    const p = ps.find((x) => x.texto.includes('pago en efectivo al recibir'))
-    expect(p?.ruta).toMatch(/^piezas_fijas\[\d+\]\.tema$/)
-    expect(p?.seccion).toBe(p?.ruta)
+  it('cada pedazo markdown guarda su posición exacta: en `inicio` está su texto', () => {
+    for (const t of [A.gran_idea_v3, A.brief_v2, A.brief_v4]) for (const p of pedazosDe('brief', t)) expect(t.slice(p.inicio, p.inicio + p.texto.length)).toBe(p.texto)
   })
   it('un documento sin texto (abierto, vacío) no aporta candidatos', () => {
-    expect(red(R1, { gran_idea: '', brief: '' }).candidatos).toEqual([])
+    expect(red(A_OBJECION, { gran_idea: '', brief: '' }).candidatos).toEqual([])
   })
   it('las claves salen de la frase ENTERA del «antes», con números', () => {
-    expect(claves('encebollado desde $3,50')).toEqual(['encebollado', '3,50'])
+    expect(claves('desde $3,50 la unidad')).toEqual(['desde', '3,50', 'unidad'].filter((w) => w !== 'desde'))
   })
 })
 
-describe('gravedad · la decide el código', () => {
-  it('forma «campo»: público, oferta e idea son 🔴 enteros; un dato no', () => {
-    expect(gravedad('publico', R1.antes, R1.despues, 'campo')).toBe('rojo')
-    expect(gravedad('dato', 'encebollado desde $3,50', 'encebollado desde $3,75', 'campo')).toBe('normal')
+describe('gravedad · la juzga el agente; el código solo verifica lo exacto (falla cerrado)', () => {
+  const ok = { de_fondo: false, razon: `cambia «${A_OBJECION.antes}» por «${A_OBJECION.despues}» sin cambiar a quién se le habla` }
+  it('un veredicto completo del agente se respeta, en los dos sentidos', () => {
+    expect(gravedadVerificada(ok, A_OBJECION.antes, A_OBJECION.despues).gravedad).toBe('normal')
+    expect(gravedadVerificada({ ...ok, de_fondo: true }, A_OBJECION.antes, A_OBJECION.despues).gravedad).toBe('fondo')
   })
-  it('forma «dato clave»: el caso real (costa → playa en una objeción de «La audiencia») es 🟡', () => {
-    expect(gravedad('publico', R1.antes, R1.despues, 'dato_clave')).toBe('normal')
+  it('sabotaje: sin veredicto, sin razón o con una razón que no cita el antes y el después → de fondo', () => {
+    expect(gravedadVerificada(null, A_OBJECION.antes, A_OBJECION.despues).gravedad).toBe('fondo')
+    expect(gravedadVerificada({ de_fondo: false, razon: '  ' }, A_OBJECION.antes, A_OBJECION.despues)).toEqual({ gravedad: 'fondo', motivo: 'sin_razon' })
+    expect(gravedadVerificada({ de_fondo: false, razon: 'es un cambio menor' }, A_OBJECION.antes, A_OBJECION.despues).gravedad).toBe('fondo')
   })
-  it('sabotaje CC7: un cambio de ZONA dentro de «La audiencia» da 🔴', () => {
-    expect(gravedad('publico', 'Residentes de la zona norte de Guayaquil', 'Residentes de la zona sur de Guayaquil', 'dato_clave')).toBe('rojo')
+  it('la misma regla vale para el otro cliente', () => {
+    const r = { de_fondo: false, razon: `«${B_CONDICION.antes}» → «${B_CONDICION.despues}»` }
+    expect(gravedadVerificada(r, B_CONDICION.antes, B_CONDICION.despues).gravedad).toBe('normal')
   })
-  it('público: un barrio del cliente, un segmento o la edad dan 🔴', () => {
-    expect(gravedad('publico', 'vive en Alborada', 'vive en Samanes', 'dato_clave', { lugares: ['Alborada', 'Samanes'] })).toBe('rojo')
-    expect(gravedad('publico', 'pensado para oficinistas', 'pensado para estudiantes', 'dato_clave')).toBe('rojo')
-    expect(gravedad('publico', 'de 25 a 40 años', 'de 30 a 45 años', 'dato_clave')).toBe('rojo')
-  })
-  it('oferta: cambiar el precio principal o el producto es 🔴; agregar una forma de pago no', () => {
-    expect(gravedad('oferta', 'encebollado junior $3,50', 'encebollado junior $3,75', 'dato_clave')).toBe('rojo')
-    expect(gravedad('oferta', 'el plato estrella es el encebollado', 'el plato estrella es el ceviche', 'dato_clave', { productos: ['encebollado', 'ceviche'] })).toBe('rojo')
-    expect(gravedad('oferta', E3.antes, E3.despues, 'dato_clave')).toBe('normal')
-  })
-  it('idea: cualquier cambio de la idea central es 🔴', () => {
-    expect(gravedad('idea', 'El oro que nunca buscaste', 'El oro que siempre buscaste', 'dato_clave')).toBe('rojo')
-  })
-  it('rige «por dato clave» (Lenovo 13:12Z)', () => {
-    expect(FORMA_VIGENTE).toBe('dato_clave')
-  })
-  it('un dato repetido nunca escala, en ninguna forma', () => {
-    for (const f of ['campo', 'dato_clave'] as const) expect(gravedad('dato', 'jueves a lunes', 'miércoles a lunes', f)).toBe('normal')
-  })
-  it('las palabras que cambian son las que entran y salen', () => {
-    expect(palabrasQueCambian('la zona norte', 'la zona sur').sort()).toEqual(['norte', 'sur'])
+  it('la instrucción es UNA para todos: habla de público, oferta e idea, sin ningún dato de un cliente', () => {
+    expect(INSTRUCCION_DE_GRAVEDAD).toMatch(/a quién le hablamos/)
+    expect(INSTRUCCION_DE_GRAVEDAD).toMatch(/qué ofrecemos/)
+    expect(INSTRUCCION_DE_GRAVEDAD).toMatch(/idea central/)
   })
 })
 
 describe('R1 · «ya coincide» lo resuelve el código y nunca llama al agente', () => {
-  const { candidatos } = red(R1, { brief: fx.brief_v4 })
-  it('el pedazo del brief v4 con «playa» ya coincide', () => {
-    const p = candidatos.find((x) => x.texto.includes('¿será tan bueno como en la playa?'))!
-    expect(yaCoincide(p, R1)).toBe(true)
+  it('A: el brief v4 que ya dice el «después» ya coincide', () => {
+    const p = red(A_OBJECION, { brief: A.brief_v4 }).candidatos.find((x) => x.texto.includes(A_OBJECION.despues))!
+    expect(yaCoincide(p, A_OBJECION)).toBe(true)
   })
-  it('si TODOS los candidatos ya coinciden, no queda nada para el agente (0 llamadas)', () => {
-    const solo = candidatos.filter((p) => yaCoincide(p, R1))
-    expect(separarYaCoincide(solo, R1).al_agente).toEqual([])
+  it('B: si la estrategia ya cita la condición nueva, ya coincide; si todos coinciden, 0 llamadas', () => {
+    const est = B.estrategia.split(CONDICION_B).join(B_CONDICION.despues)
+    const { candidatos } = red({ ...B_CONDICION, antes: 'perfil LinkedIn de empresa' }, { estrategia: est })
+    const conDespues = candidatos.filter((p) => p.texto.includes(B_CONDICION.despues))
+    expect(conDespues.length).toBe(2)
+    expect(separarYaCoincide(conDespues, B_CONDICION).al_agente).toEqual([])
   })
   it('sabotaje: un pedazo que todavía dice el «antes» NO ya coincide (aunque también diga el después)', () => {
-    expect(yaCoincide({ texto: `${R1.antes} y ${R1.despues}` }, R1)).toBe(false)
+    expect(yaCoincide({ texto: `${A_OBJECION.antes} y ${A_OBJECION.despues}` }, A_OBJECION)).toBe(false)
   })
 })
 
-describe('verificar la salida del agente', () => {
-  const textos = { gran_idea: fx.gran_idea_v3 }
-  const { candidatos } = red(E2, textos)
-  const cita = candidatos.find((p) => p.texto.includes('sabe que el bueno viene de la costa'))!
-  const todosRevisados = (afecta: string[] = []): SalidaDelAgente['revisados'] => candidatos.map((p) => ({ id: p.id, afecta: afecta.includes(p.id), razon: afecta.includes(p.id) ? '' : 'no habla del insight' }))
-  const ok: SalidaDelAgente = { revisados: todosRevisados([cita.id]), colaterales: [{ id: cita.id, documento: 'gran_idea', antes: 'viene de la costa', despues: 'viene de la playa', porque: 'cita del insight' }], no_aparece: [] }
+describe('verificar la salida del agente · solo lo exacto', () => {
+  const textos = { gran_idea: A.gran_idea_v3 }
+  const { candidatos } = red(A_INSIGHT, textos)
+  const cita = candidatos.find((p) => p.texto.includes(A_INSIGHT.antes))!
+  const todos = (afectan: string[] = []) => candidatos.map((p) => fila(p.id, afectan.includes(p.id)))
+  const ok: SalidaDelAgente = { revisados: todos([cita.id]), colaterales: [{ id: cita.id, documento: 'gran_idea', antes: 'viene de la costa', despues: 'viene de la playa', porque: 'cita del insight' }], no_aparece: [] }
 
-  it('una salida buena se acepta completa', () => {
-    const v = verificarSalida(E2, candidatos, textos, ok, { registro: 'tu' })
+  it('una salida buena se acepta completa, con razón por cada descartado', () => {
+    const v = verificarSalida(A_INSIGHT, candidatos, textos, ok)
     expect(v.completa).toBe(true)
     expect(v.aceptados).toHaveLength(1)
     expect(v.descartados).toHaveLength(candidatos.length - 1)
   })
+  it('B: una salida buena del otro cliente también (JSON, por ruta)', () => {
+    const t = { estrategia: B.estrategia }
+    const c = red(B_CONDICION, t).candidatos
+    const ids = c.filter((p) => p.texto === CONDICION_B).map((p) => p.id)
+    const s: SalidaDelAgente = { revisados: c.map((p) => fila(p.id, ids.includes(p.id))), colaterales: ids.map((id) => ({ id, documento: 'estrategia', antes: CONDICION_B, despues: B_CONDICION.despues, porque: 'cita literal del plan' })), no_aparece: [] }
+    const v = verificarSalida(B_CONDICION, c, t, s)
+    expect([v.completa, v.aceptados.length]).toEqual([true, 2])
+  })
   it('sabotaje: falta un id → no se acepta entera', () => {
-    const v = verificarSalida(E2, candidatos, textos, { ...ok, revisados: ok.revisados.slice(1) })
-    expect(v.completa).toBe(false)
-    expect(v.faltan).toHaveLength(1)
+    const v = verificarSalida(A_INSIGHT, candidatos, textos, { ...ok, revisados: ok.revisados.slice(1) })
+    expect([v.completa, v.faltan.length]).toEqual([false, 1])
   })
-  it('sabotaje (nota 3 CC7): un pedazo descartado sin razón → no se acepta entera', () => {
-    const v = verificarSalida(E2, candidatos, textos, { ...ok, revisados: ok.revisados.map((r, i) => (i === 1 && !r.afecta ? { ...r, razon: ' ' } : r)) })
-    expect(v.completa).toBe(false)
-    expect(v.sin_razon).toHaveLength(1)
+  it('sabotaje (nota 3 CC7): un descartado sin razón → no se acepta entera', () => {
+    const v = verificarSalida(A_INSIGHT, candidatos, textos, { ...ok, revisados: ok.revisados.map((r) => (!r.afecta && r.id === candidatos.find((p) => p.id !== cita.id)!.id ? { ...r, razon: ' ' } : r)) })
+    expect([v.completa, v.sin_razon.length]).toEqual([false, 1])
   })
-  it('sabotaje: un «no aparece» que sí aparece → no se acepta entera', () => {
-    const v = verificarSalida(E2, candidatos, textos, { ...ok, no_aparece: [{ documento: 'gran_idea', termino: 'encebollado' }] })
-    expect(v.completa).toBe(false)
-  })
-  it('un «no aparece» verdadero se acepta', () => {
-    expect(verificarSalida(E2, candidatos, textos, { ...ok, no_aparece: [{ documento: 'gran_idea', termino: 'transferencia' }] }).completa).toBe(true)
+  it('sabotaje: un «no aparece» que sí aparece → no se acepta entera; uno verdadero sí', () => {
+    expect(verificarSalida(A_INSIGHT, candidatos, textos, { ...ok, no_aparece: [{ documento: 'gran_idea', termino: 'leyenda' }] }).completa).toBe(false)
+    expect(verificarSalida(A_INSIGHT, candidatos, textos, { ...ok, no_aparece: [{ documento: 'gran_idea', termino: 'transferencia' }] }).completa).toBe(true)
   })
   it('sabotaje: un «antes» que está en el documento pero NO en su pedazo se rechaza', () => {
-    const otro = candidatos.find((p) => p.id !== cita.id)!
-    const s: SalidaDelAgente = { ...ok, revisados: todosRevisados([otro.id]), colaterales: [{ id: otro.id, documento: 'gran_idea', antes: 'viene de la costa', despues: 'viene de la playa', porque: 'x' }] }
-    expect(verificarSalida(E2, candidatos, textos, s).rechazados[0]?.motivo).toBe('antes_no_literal_en_su_pedazo')
+    const otro = candidatos.find((p) => p.id !== cita.id && !p.texto.includes('viene de la costa'))!
+    const s: SalidaDelAgente = { ...ok, revisados: todos([otro.id]), colaterales: [{ id: otro.id, documento: 'gran_idea', antes: 'viene de la costa', despues: 'viene de la playa', porque: 'x' }] }
+    expect(verificarSalida(A_INSIGHT, candidatos, textos, s).rechazados[0]?.motivo).toBe('antes_no_literal_en_su_pedazo')
   })
-  it('sabotaje (línea 1 CC7): un «después» con «pagás» no se aplica con cliente de tuteo', () => {
-    const s: SalidaDelAgente = { ...ok, colaterales: [{ ...ok.colaterales[0], despues: 'viene de la playa y pagás al recibir' }] }
-    const v = verificarSalida(E2, candidatos, textos, s, { registro: 'tu' })
-    expect(v.aceptados).toHaveLength(0)
-    expect(v.rechazados[0]).toMatchObject({ motivo: 'registro', detalle: 'pagás' })
+  it('sabotaje: retoque en un pedazo marcado «no afecta», id ajeno, documento cambiado o antes = después se rechazan', () => {
+    const m = (s: Partial<SalidaDelAgente>) => verificarSalida(A_INSIGHT, candidatos, textos, { ...ok, ...s }).rechazados[0]?.motivo
+    expect(m({ revisados: todos([]) })).toBe('no_marcado_como_afecta')
+    expect(m({ colaterales: [{ ...ok.colaterales[0], id: 'C999' }] })).toBe('id_desconocido')
+    expect(m({ colaterales: [{ ...ok.colaterales[0], documento: 'plan' }] })).toBe('documento_distinto_al_pedazo')
+    expect(m({ colaterales: [{ ...ok.colaterales[0], despues: 'viene de la costa' }] })).toBe('antes_igual_a_despues')
   })
-  it('sin dato de registro también se mira (el tuteo es lo de la casa)', () => {
-    const s: SalidaDelAgente = { ...ok, colaterales: [{ ...ok.colaterales[0], despues: 'viene de la playa, desayunás tranquilo' }] }
-    expect(verificarSalida(E2, candidatos, textos, s).rechazados[0]?.motivo).toBe('registro')
+  it('sabotaje: aguas arriba se rechaza aunque el agente lo pida', () => {
+    const p: Pedazo = { id: 'C1', documento: 'manual', seccion: 'x', texto: CONDICION_B, inicio: 0, ruta: null }
+    const s: SalidaDelAgente = { revisados: [fila('C1', true)], colaterales: [{ id: 'C1', documento: 'manual', antes: CONDICION_B, despues: B_CONDICION.despues, porque: 'x' }], no_aparece: [] }
+    expect(verificarSalida(B_CONDICION, [p], { manual: CONDICION_B }, s).rechazados[0]?.motivo).toBe('aguas_arriba')
   })
-  it('con un cliente de voseo, el voseo no se rechaza', () => {
-    const s: SalidaDelAgente = { ...ok, colaterales: [{ ...ok.colaterales[0], despues: 'viene de la playa y pagás al recibir' }] }
-    expect(verificarSalida(E2, candidatos, textos, s, { registro: 'vos' }).aceptados).toHaveLength(1)
-  })
-  it('línea 2 CC6: «está», «más», «después», «país», «atrás» y «maracuyá» NO frenan un retoque', () => {
-    const s: SalidaDelAgente = { ...ok, colaterales: [{ ...ok.colaterales[0], despues: 'viene de la playa, está más cerca después del país, atrás, con maracuyá' }] }
-    expect(verificarSalida(E2, candidatos, textos, s, { registro: 'tu' }).aceptados).toHaveLength(1)
-  })
-  it('línea 2 CC6: el plan y el brief v4 reales de Náufrago (tuteo) dan 0 frenos por registro, pedazo por pedazo', () => {
-    for (const [doc, texto] of [['plan', fx.plan_4996c6c2], ['brief', fx.brief_v4_completo]] as const) {
-      const ps = pedazosDe(doc, texto).map((p, i) => ({ ...p, id: `C${i + 1}` }))
-      // cada pedazo real como «después» de un retoque sobre un pedazo neutro: si el detector lo frena, es un falso positivo
-      const neutro: Pedazo = { id: 'N1', documento: 'gran_idea', seccion: 'x', texto: 'texto base neutro', ocurrencia: 0, ruta: null }
-      const frenos = ps.filter((p) => verificarSalida(E2, [neutro], {}, { revisados: [{ id: 'N1', afecta: true, razon: '' }], colaterales: [{ id: 'N1', documento: 'gran_idea', antes: 'texto base neutro', despues: p.texto, porque: 'x' }], no_aparece: [] }, { registro: 'tu' }).rechazados.length)
-      expect(frenos.map((p) => p.texto.slice(0, 60)), doc).toEqual([])
-    }
-  })
-  it('sabotaje: un retoque en un pedazo marcado «no afecta» se rechaza', () => {
-    const s: SalidaDelAgente = { ...ok, revisados: todosRevisados([]) }
-    expect(verificarSalida(E2, candidatos, textos, s).rechazados[0]?.motivo).toBe('no_marcado_como_afecta')
-  })
-  it('sabotaje: un id que no es candidato, o el documento cambiado, se rechaza', () => {
-    expect(verificarSalida(E2, candidatos, textos, { ...ok, colaterales: [{ ...ok.colaterales[0], id: 'C999' }] }).rechazados[0]?.motivo).toBe('id_desconocido')
-    expect(verificarSalida(E2, candidatos, textos, { ...ok, colaterales: [{ ...ok.colaterales[0], documento: 'plan' }] }).rechazados[0]?.motivo).toBe('documento_distinto_al_pedazo')
-  })
-  it('sabotaje: aguas arriba se rechaza aunque el agente lo pida (edición del brief sobre un pedazo del plan)', () => {
-    const p: Pedazo = { id: 'C1', documento: 'plan', seccion: 'x', texto: 'el bueno viene de la costa', ocurrencia: 0, ruta: null }
-    const s: SalidaDelAgente = { revisados: [{ id: 'C1', afecta: true, razon: '' }], colaterales: [{ id: 'C1', documento: 'plan', antes: 'la costa', despues: 'la playa', porque: 'x' }], no_aparece: [] }
-    expect(verificarSalida(E2, [p], { plan: p.texto }, s).rechazados[0]?.motivo).toBe('aguas_arriba')
-  })
-  it('sabotaje: «antes» igual al «después» se rechaza (retocar lo que ya coincide)', () => {
-    expect(verificarSalida(E2, candidatos, textos, { ...ok, colaterales: [{ ...ok.colaterales[0], despues: 'viene de la costa' }] }).rechazados[0]?.motivo).toBe('antes_igual_a_despues')
+  it('el código NO juzga el registro: un «después» en cualquier registro pasa la verificación exacta (lo juzga la jefatura contra el manual del cliente)', () => {
+    const s: SalidaDelAgente = { ...ok, colaterales: [{ ...ok.colaterales[0], despues: 'viene de la playa, vení y pagás' }] }
+    expect(verificarSalida(A_INSIGHT, candidatos, textos, s).aceptados).toHaveLength(1)
   })
 })
 
-describe('aplicar · dentro de su pedazo, nunca en todo el documento', () => {
-  const linea = 'mensaje: el encebollado que conoces de la costa ya no pide que viajes'
-  const doc = `## A\n${linea}\n## B\n${linea}\n## C\nla costa ecuatoriana`
-  const ps = pedazosDe('gran_idea', doc).map((p, i) => ({ ...p, id: `C${i + 1}` }))
-  const r = (p: Pedazo) => ({ pedazo: p, antes: 'de la costa', despues: 'de la playa', porque: 'x' })
-  it('retocar la SEGUNDA aparición deja intacta la primera', () => {
-    const nuevo = aplicarEnPedazo(doc, r(ps[1]))
-    expect(nuevo).toBe(`## A\n${linea}\n## B\n${linea.replace('de la costa', 'de la playa')}\n## C\nla costa ecuatoriana`)
+describe('aplicar · en la POSICIÓN de su pedazo, nunca buscando en todo el documento', () => {
+  const r = (p: Pedazo, antes: string, despues: string) => ({ pedazo: p, antes, despues, porque: 'x' })
+  it('falla CC7 (d3b0e4a): el texto del pedazo aparece ANTES dentro de una frase más larga → se retoca SOLO el pedazo', () => {
+    const mensaje = A.brief_v2.split('\n').find((l) => l.includes('pagas en efectivo al recibir'))!
+    const doc = `## Mensaje\n\n${mensaje}\n\n## Paso 3\n\npagas en efectivo al recibir`
+    const p = { ...pedazosDe('brief', doc).find((x) => x.seccion === 'Paso 3')!, id: 'C1' }
+    const nuevo = aplicarEnPedazo(doc, r(p, 'pagas en efectivo al recibir', 'pagas en efectivo o por transferencia al recibir'))
+    expect(nuevo).toBe(`## Mensaje\n\n${mensaje}\n\n## Paso 3\n\npagas en efectivo o por transferencia al recibir`)
   })
-  it('sabotaje: nunca un reemplazo global («la costa ecuatoriana» no se toca)', () => {
-    const { texto } = aplicarEnDocumento(doc, [r(ps[0]), r(ps[1])])
-    expect(texto).toContain('la costa ecuatoriana')
-    expect(texto.split('de la playa').length - 1).toBe(2)
+  it('lo mismo con los trozos de una línea larga partida por « · »', () => {
+    const larga = `${'x'.repeat(390)} · repetido aquí adentro · y otra vez · repetido aquí adentro`
+    const doc = `## S\n${larga}`
+    const ps = pedazosDe('gran_idea', doc).map((p, i) => ({ ...p, id: `C${i + 1}` }))
+    const segundo = ps.filter((p) => p.texto === 'repetido aquí adentro')[1]
+    const nuevo = aplicarEnPedazo(doc, r(segundo, 'aquí', 'allá'))
+    expect(nuevo).toBe(`## S\n${'x'.repeat(390)} · repetido aquí adentro · y otra vez · repetido allá adentro`)
   })
-  it('si el pedazo ya no está igual (alguien lo tocó), queda sin aplicar — no se pisa', () => {
-    const tocado = doc.replace(linea, 'mensaje: otro texto')
-    const { sin_aplicar, aplicados } = aplicarEnDocumento(tocado, [r(ps[1])])
-    expect(aplicados).toHaveLength(0)
-    expect(sin_aplicar).toHaveLength(1)
+  it('sabotaje: nunca un reemplazo global — dos pedazos iguales, se retocan los dos y nada más', () => {
+    const linea = pedazosDe('gran_idea', A.gran_idea_v3).find((p) => p.texto.includes('que conoces de la costa'))!.texto
+    const doc = `## A\n${linea}\n## B\n${linea}\n## C\nla costa queda igual`
+    const ps = pedazosDe('gran_idea', doc).filter((p) => p.texto === linea.trim()).map((p, i) => ({ ...p, id: `C${i + 1}` }))
+    // el «después» es MÁS LARGO: si se aplicara de adelante hacia atrás, el primero correría la posición del segundo
+    const { texto, aplicados } = aplicarEnDocumento(doc, ps.map((p) => r(p, 'de la costa', 'de la playa del norte')))
+    expect(aplicados).toHaveLength(2)
+    expect(texto.split('de la playa del norte').length - 1).toBe(2)
+    expect(texto.endsWith('la costa queda igual')).toBe(true)
   })
-  it('JSON: escribe por la ruta de la llave (la estrategia real)', () => {
-    const p = pedazosDe('estrategia', fx.estrategia_v1).map((x, i) => ({ ...x, id: `C${i + 1}` })).find((x) => x.texto.includes('pago en efectivo al recibir'))!
-    const nuevo = JSON.parse(aplicarEnPedazo(fx.estrategia_v1, { pedazo: p, antes: 'pago en efectivo al recibir', despues: 'pago en efectivo o por transferencia al recibir', porque: 'x' }))
-    const viejo = JSON.parse(fx.estrategia_v1)
-    const i = Number(p.ruta!.match(/\[(\d+)\]/)![1])
-    expect(nuevo.piezas_fijas[i].tema).toContain('o por transferencia')
-    nuevo.piezas_fijas[i].tema = viejo.piezas_fijas[i].tema
+  it('si en la posición ya no está el pedazo (alguien lo tocó), queda sin aplicar — no se pisa', () => {
+    const doc = '## A\nuna frase de prueba con su antes'
+    const p = { ...pedazosDe('plan', doc)[0], id: 'C1' }
+    // en la misma posición sigue estando «su antes», pero el pedazo ya NO es el mismo texto: no se pisa
+    const tocado = `## A\n${'su antes y otra frase distinta'.padEnd(p.texto.length, '.')}`
+    expect(tocado.slice(p.inicio, p.inicio + p.texto.length)).toContain('su antes')
+    const { aplicados, sin_aplicar } = aplicarEnDocumento(tocado, [r(p, 'su antes', 'su después')])
+    expect([aplicados.length, sin_aplicar.length]).toEqual([0, 1])
+  })
+  it('B · JSON: escribe por la ruta y no toca nada más del documento', () => {
+    const p = { ...pedazosDe('estrategia', B.estrategia).find((x) => x.ruta === 'dependencias[0].cita_plan')!, id: 'C1' }
+    const nuevo = JSON.parse(aplicarEnPedazo(B.estrategia, r(p, CONDICION_B, B_CONDICION.despues)))
+    const viejo = JSON.parse(B.estrategia)
+    expect(nuevo.dependencias[0].cita_plan).toBe(B_CONDICION.despues)
+    expect(nuevo.excluidos[0].cita_plan).toBe(CONDICION_B)
+    nuevo.dependencias[0].cita_plan = viejo.dependencias[0].cita_plan
     expect(nuevo).toEqual(viejo)
+  })
+  it('B · JSON: si el valor de la ruta cambió, queda sin aplicar', () => {
+    const p = { ...pedazosDe('estrategia', B.estrategia).find((x) => x.ruta === 'dependencias[0].cita_plan')!, id: 'C1' }
+    const tocada = JSON.stringify({ ...JSON.parse(B.estrategia), dependencias: [{ cita_plan: `${CONDICION_B} (cambiada por otra edición)` }] })
+    expect(aplicarEnDocumento(tocada, [r(p, CONDICION_B, 'x')]).sin_aplicar).toHaveLength(1)
   })
 })
 
@@ -213,20 +201,28 @@ describe('R2 · encendido calculado en el instante (al guardar y al aplicar)', (
     expect(puedeLanzarMotor('plan', HOY)).toEqual({ ok: false, faltan: ['estrategia', 'brief', 'gran_idea', 'calendario'] })
   })
   it('con las filas de hoy, el calendario y la pieza sí', () => {
-    expect(puedeLanzarMotor('calendario', HOY).ok).toBe(true)
-    expect(puedeLanzarMotor('pieza', HOY).ok).toBe(true)
+    expect([puedeLanzarMotor('calendario', HOY).ok, puedeLanzarMotor('pieza', HOY).ok]).toEqual([true, true])
   })
   it('sabotaje CC6 (orden corregido): pantalla del calendario abierta, se apaga la fila de la pieza, se guarda → no se lanza', () => {
-    const alAbrir = puedeLanzarMotor('calendario', HOY).ok
-    const alGuardar = puedeLanzarMotor('calendario', new Set(['plan'])).ok
-    expect([alAbrir, alGuardar]).toEqual([true, false])
+    expect([puedeLanzarMotor('calendario', HOY).ok, puedeLanzarMotor('calendario', new Set(['plan'])).ok]).toEqual([true, false])
   })
-  it('línea 3 CC7: al aplicar se vuelve a mirar la fila del destino', () => {
-    expect(puedeAplicarEn('pieza', HOY)).toBe(true)
-    expect(puedeAplicarEn('pieza', new Set(['plan']))).toBe(false)
-    expect(puedeAplicarEn('brief', HOY)).toBe(false) // H1: fila inactiva → pendiente
+  it('línea 3 CC7 + H1: al aplicar se vuelve a mirar la fila del destino', () => {
+    expect([puedeAplicarEn('pieza', HOY), puedeAplicarEn('pieza', new Set(['plan'])), puedeAplicarEn('brief', HOY)]).toEqual([true, false, false])
   })
   it('la nota del historial dice qué fila falta (adenda 4)', () => {
     expect(notaSinColaterales(['gran_idea'])).toBe('no se revisaron colaterales: falta la fila activa de gran_idea')
+  })
+})
+
+describe('agnóstico (CORRECCIÓN Lenovo 13:16Z)', () => {
+  it('ningún archivo del motor nombra a un cliente, una ciudad, un rubro ni un dato de sus documentos', () => {
+    const DIR = 'src/lib/colaterales'
+    const archivos = fs.readdirSync(DIR).filter((f) => f.endsWith('.ts')).map((f) => path.join(DIR, f))
+    expect(archivos.length).toBe(3)
+    const PROHIBIDAS = ['naufrago', 'náufrago', 'olon', 'olón', 'guayaquil', 'ecuador', 'ceviche', 'encebollado', 'costa', 'playa', 'restaurante', 'motorizado', 'extintor', 'bomberos', 'linkedin', 'seguridad industrial', 'zero risk']
+    for (const f of archivos) {
+      const t = fs.readFileSync(f, 'utf8').toLowerCase()
+      for (const p of PROHIBIDAS) expect(t.includes(p), `${f} nombra «${p}»`).toBe(false)
+    }
   })
 })
