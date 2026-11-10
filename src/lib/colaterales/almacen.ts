@@ -1,5 +1,5 @@
 /**
- * COLATERALES · tramo 2b · el ALMACÉN del historial (tablas de 202611101600, aún SIN aplicar en producción).
+ * COLATERALES · tramo 2b · el ALMACÉN del historial (tablas de 202611101700, aún SIN aplicar en producción).
  * Recibe el cliente de base por parámetro (así se prueba con una base falsa). Nadie lo llama todavía (lo usa 2c/2d).
  *   · una edición = un trabajo (línea 4 de CC7): `crearEdicion` choca por `llave` (23505) y devuelve la existente; `tomarEdicion` pasa
  *     recibida → en_curso con un update CONDICIONAL: si otro ya la tomó, devuelve false («ya en curso»), nunca corre dos veces;

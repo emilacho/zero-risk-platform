@@ -1,5 +1,5 @@
 /**
- * Colaterales · tramo 2b (CC1 · certifican CC7/CC6) · el historial: migración 202611101600 + su almacén.
+ * Colaterales · tramo 2b (CC1 · certifican CC7/CC6) · el historial: migración 202611101700 + su almacén.
  * La base falsa RECHAZA columnas que la migración no crea (lección: una base falsa que no valida columnas deja pasar nombres inventados).
  * Pedazos de DOS clientes de rubros distintos (restaurante en markdown, B2B industrial en JSON), salidos de sus registros reales.
  */
@@ -13,8 +13,8 @@ import { DOCUMENTOS } from '../../cadena/dependencias-de-documentos'
 import { almacenDeColaterales, PasoNoPermitido, PASOS_DE_EDICION, PASOS_DE_RETOQUE, type NuevaEdicion, type NuevoRetoque } from '../almacen'
 
 const RAIZ = process.cwd()
-const MIG = 'supabase/migrations/202611101600_colaterales_ediciones_y_retoques.sql'
-const REV = 'supabase/reversas/202611101600_colaterales_ediciones_y_retoques_REVERSA.sql'
+const MIG = 'supabase/migrations/202611101700_colaterales_ediciones_y_retoques.sql'
+const REV = 'supabase/reversas/202611101700_colaterales_ediciones_y_retoques_REVERSA.sql'
 const crudo = (p: string) => fs.readFileSync(path.join(RAIZ, p), 'utf8').replace(/\r/g, '')
 const sinComentarios = (s: string) => s.replace(/--.*$/gm, '')
 const sql = sinComentarios(crudo(MIG))
@@ -203,7 +203,7 @@ describe('almacén · retoques con su posición o su ruta · dos clientes', () =
   })
 })
 
-describe('migración 202611101600 · permisos cerrados y reversa', () => {
+describe('migración 202611101700 · permisos cerrados y reversa', () => {
   const sentencias = (s: string) => s.split(';').map((x) => x.replace(/\s+/g, ' ').trim()).filter(Boolean)
 
   it('crea SOLO las dos tablas propias, con seguridad por fila, dentro de una transacción', () => {
@@ -250,7 +250,7 @@ describe('migración 202611101600 · permisos cerrados y reversa', () => {
   })
 
   it('la reversa vive FUERA de migrations, se niega con historial y quita las dos tablas (hija primero)', () => {
-    expect(fs.existsSync(path.join(RAIZ, 'supabase/migrations/202611101600_colaterales_ediciones_y_retoques_REVERSA.sql'))).toBe(false)
+    expect(fs.existsSync(path.join(RAIZ, 'supabase/migrations/202611101700_colaterales_ediciones_y_retoques_REVERSA.sql'))).toBe(false)
     const r = sinComentarios(crudo(REV))
     expect(r).toMatch(/exists \(select 1 from public\.colaterales_ediciones\) then\s+raise exception/)
     expect(r).toMatch(/exists \(select 1 from public\.colaterales_retoques\) then\s+raise exception/)

@@ -1,4 +1,4 @@
--- REVERSA de 202611101600_colaterales_ediciones_y_retoques · se niega si alguna de las dos tablas ya guardó historial (no se borra sin decisión aparte).
+-- REVERSA de 202611101700_colaterales_ediciones_y_retoques · se niega si alguna de las dos tablas ya guardó historial (no se borra sin decisión aparte).
 begin;
 do $$
 begin
