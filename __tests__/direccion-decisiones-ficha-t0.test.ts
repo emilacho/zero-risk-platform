@@ -103,7 +103,7 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
   })
   it('🔴 lo que hoy se decide en otro panel queda sin verbos y con su pantalla', () => {
     const pantallas = Object.fromEntries(Object.entries(VARIANTES).map(([k, d]) => [k, fichaDe(d).donde_se_hace?.pantalla ?? null]))
-    expect(pantallas).toEqual({ firma_editable: null, plan: 'plan', pregunta_con_supuesto: null, pausa: null, no_volvio: null, canal_viejo: null, campana: 'plan', pieza: 'piezas', gran_idea: 'gran_idea', plan_con_pendientes: 'plan', palabra_del_dueno: 'plan', lista_de_competidores: null, otra_revision: null })
+    expect(pantallas).toEqual({ firma_editable: null, plan: 'plan', pregunta_con_supuesto: null, pausa: null, no_volvio: null, canal_viejo: null, campana: 'plan', pieza: 'piezas', gran_idea: 'gran_idea', plan_con_pendientes: 'plan', palabra_del_dueno: 'plan', lista_de_competidores: 'piezas', otra_revision: 'piezas' })
     for (const k of ['plan', 'campana', 'pieza', 'gran_idea', 'plan_con_pendientes', 'palabra_del_dueno', 'pausa', 'no_volvio', 'canal_viejo', 'lista_de_competidores', 'otra_revision']) expect(fichaDe(VARIANTES[k]).acciones, k).toEqual([])
   })
   it('🔴 la campaña: detiene, vence con su espera y dice qué pasa al vencer', () => {
@@ -212,5 +212,16 @@ describe('T0 · la lista entera trae su ficha, al lado de lo de hoy', () => {
     const p2 = r.decisiones.find((d) => d.id === 'p2')!
     expect(p2.ficha!.acciones.map((a) => a.verbo)).toEqual(['descartar', 'asumir', 'responder'])
     expect(r.decisiones.find((d) => d.id === 'h1')!.ficha!.donde_se_hace).toEqual({ pantalla: 'piezas' })
+  })
+})
+
+describe('10-nov · tramo: las revisiones dicen dónde se hacen', () => {
+  it('🔴 toda revisión que no es pieza lleva «Ir a Piezas» (allí están «Otras revisiones»), sin verbos en la ficha', () => {
+    for (const subtipo of ['confirm_competitor_list', 'editor_escalation', 'tipo_que_aun_no_existe']) for (const ruta of [null, '/nuevo']) {
+      const f = fichaDe(dec({ tipo: 'revision', subtipo, fuente: 'hitl_queue', decidir: { ruta, accion: ruta ? null : 'revision-resolver' } }))
+      expect(f.donde_se_hace?.pantalla, `${subtipo} ${ruta}`).toBe('piezas')
+      expect(f.acciones).toEqual([])
+      expect(problemasDeLaFicha(f)).toEqual([])
+    }
   })
 })

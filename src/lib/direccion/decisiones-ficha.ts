@@ -91,6 +91,8 @@ function pantallaDe(d: Pick<Decision, 'tipo' | 'decidir'>): Pantalla | null {
   if (d.tipo === 'pieza') return 'piezas'
   if (d.tipo === 'plan') return 'plan'
   if (d.decidir.ruta === '/piezas') return 'piezas'
+  // 10-nov · tramo de la ficha: toda revisión que no es pieza (lista de competidores, revisión del editor, plan con pendientes, otras) se decide en «Otras revisiones» de Piezas
+  if (d.tipo === 'revision') return 'piezas'
   return null
 }
 
