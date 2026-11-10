@@ -59,7 +59,7 @@ export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown
   if (!ctx) return err(409, 'E-CONTEXTO', 'no se pudo leer el plan de la campaña')
 
   // el MISMO verificador y los MISMOS insumos que `recibirBrief`
-  const leido = leerBriefCreativo(brief.texto_md, { planTexto: ctx.planTexto ?? '', prohibidas: ctx.forbiddenWords ?? [], duras: ctx.palabrasDuras, redes: (estr?.contenido.canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red), registro: ctx.registro })
+  const leido = leerBriefCreativo(brief.texto_md, { planTexto: ctx.planTexto ?? '', manualTexto: ctx.manualTexto, prohibidas: ctx.forbiddenWords ?? [], duras: ctx.palabrasDuras, redes: (estr?.contenido.canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red), registro: ctx.registro })
   const bloquea = hallazgosDelBrief(leido).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
   const antes = { bloqueos: bloqueosDe(brief.leido) }
   // caso 4 de CC7: la campaña no guarda dónde estaba antes de `necesita_humano`; se usa la misma regla con que la cadena retoma sola (pasos.ts · retomar): tanda 1 → calendario
