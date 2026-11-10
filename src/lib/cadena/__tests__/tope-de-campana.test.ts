@@ -292,6 +292,51 @@ describe('los DOS órdenes (CC7 🟡 · CC6 🔴): la semana 46 recibe primero l
     expect(26.28 + costo(s46, P46) + costo(s47, P47)).toBeLessThanOrEqual(40)
     expect(s46).toEqual(TRES)
   })
+  describe('pedido de CC7 sobre aa7ff83 · los ids de brief se REPITEN entre partes (el paquete real numera BRF-0001… desde 1 en cada parte)', () => {
+    const conIdsReales = (id: string, fs: typeof W46) => ({ id, briefs: fs.map((f, i) => ({ brief_id: `BRF-${String(i + 1).padStart(4, '0')}`, familia: f.familia, fila_id: f.id })) })
+    const R46 = conIdsReales('p46', W46), R47 = conIdsReales('p47', W47)
+    const TRES_R = TRES.map((b) => R46.briefs[P46.briefs.findIndex((x) => x.brief_id === b)].brief_id)
+    it('los dos partes tienen BRF-0001, BRF-0002… (el choque que pasa con datos reales)', () => {
+      expect(R46.briefs[0].brief_id).toBe('BRF-0001'); expect(R47.briefs[0].brief_id).toBe('BRF-0001')
+    })
+    it('46 → 47 y 47 → 46 con ids repetidos: la 46 recibe lo mismo (sus 3 más cercanas) y la 47 nada', () => {
+      for (const orden of [[R46, R47], [R47, R46]]) {
+        const e = escena()
+        const sale: Record<string, string[]> = {}
+        for (const p of orden) sale[p.id] = e.pasar(p)
+        expect(sale.p46).toEqual(TRES_R)
+        expect(sale.p47).toEqual([])
+      }
+    })
+    it('sabotaje · «ya en la sala» por el brief SIN el parte: el BRF-0001 retenido de la 47 contaría como soltado porque el de la 46 sí salió · la 46, al volver a decidir, NO pierde dinero', () => {
+      const e = escena()
+      e.pasar(R46); e.pasar(R47)
+      const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: e.partes, soltados: e.soltados, topes_de_familia: TOPES }
+      const m = medirGastoDeCampana(l, 'p46')
+      expect(m.comprometido).toBe(0) // lo de la 47 está retenido: no compromete
+      expect(m.esperando.filter((b) => b.parte_id === 'p47').map((b) => b.brief_id)).toEqual(R47.briefs.map((b) => b.brief_id))
+      const d = e.decidir(R46)
+      expect(d.tipo === 'sin_tope' ? [] : d.sueltan).toEqual(TRES_R)
+    })
+  })
+
+  it('pedido de CC7 sobre aa7ff83 · lo que espera de otro parte guarda lugar con el tope de SU familia (una barata: 2,50), no con el más caro (5,00)', () => {
+    // construido sobre el calendario real: la 1.ª fila de la 46 la espera OTRO parte (retenida) con familia kit_historias; la pieza que se quiere soltar va después
+    const [antes, despues] = [...W46].sort((a, b) => `${a.fecha} ${a.hora ?? '99:99'}`.localeCompare(`${b.fecha} ${b.hora ?? '99:99'}`))
+    expect(antes.fecha <= despues.fecha).toBe(true)
+    const otro = { id: 'p-otro', briefs: [{ brief_id: 'BRF-0001', familia: 'kit_historias', fila_id: antes.id }] }
+    const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: [otro, { id: 'p-hoy', briefs: [] }], soltados: [], topes_de_familia: TOPES }
+    const m = medirGastoDeCampana(l, 'p-hoy')
+    expect(m.esperando).toEqual([{ parte_id: 'p-otro', brief_id: 'BRF-0001', familia: 'kit_historias', fila_id: antes.id }])
+    const pv = esperandoPorVenir(m.esperando, cuando)
+    expect(pv.map((f) => f.familia)).toEqual(['kit_historias'])
+    const cand: Candidata[] = [{ brief_id: 'BRF-0001', familia: 'kit_historias', fecha: despues.fecha, hora: despues.hora, ya_tiene_encargo: false }]
+    // queda 2,50 + 2,50: cabe si lo que espera reserva 2,50 (su familia); con el tope más caro (5,00) ya no cabría
+    const d = decidirTope(26.28 + 2.5 + 2.5, m, cand, TOPES, pv)
+    expect(d.tipo).toBe('cabe')
+    expect(decidirTope(26.28 + 2.5 + 2.49, m, cand, TOPES, pv).tipo).toBe('corta') // el borde: un centavo menos y no cabe
+  })
+
   it('con un tope CONSTRUIDO de US$ 60: 47 → 46 da el mismo reparto que 46 → 47 (la 46 entera antes que la 47)', () => {
     const corrida = (orden: Array<typeof P46>) => {
       const partes: Array<typeof P46> = [], soltados: Array<{ parte_id: string; brief_id: string }> = []
