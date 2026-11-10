@@ -15,7 +15,8 @@ import type { Documento } from '../cadena/dependencias-de-documentos'
 import { aplicarEnDocumento, puedeAplicarEn, type Retoque } from './motor'
 import type { almacenDeColaterales } from './almacen'
 
-export interface Vigente { texto: string; version: string }
+/** `abierto`: el documento está abierto o en revisión (CRITERIOS §3: no se toca, queda para la próxima versión) */
+export interface Vigente { texto: string; version: string; abierto?: boolean }
 export interface EscritorDeDocumento {
   /** la versión vigente del documento (null si no existe) */
   leerVigente(ref: string): Promise<Vigente | null>
@@ -27,7 +28,7 @@ export interface EscritorDeDocumento {
 export type Escritores = Partial<Record<Documento, EscritorDeDocumento>>
 type Almacen = ReturnType<typeof almacenDeColaterales>
 
-export type MotivoDePendiente = 'fila_inactiva' | 'sin_escritor' | 'documento_no_existe' | 'version_cambiada' | 'pedazo_no_encontrado'
+export type MotivoDePendiente = 'fila_inactiva' | 'sin_escritor' | 'documento_no_existe' | 'documento_abierto' | 'version_cambiada' | 'pedazo_no_encontrado'
 
 interface FilaDeRetoque {
   id: string; estado: string; documento: Documento; documento_ref: string; version_base: string; version_resultante: string | null
@@ -74,6 +75,7 @@ export async function aplicarAprobados(d: { almacen: Almacen; escritores: Escrit
     if (!esc) { await aPendiente(grupo, 'sin_escritor'); continue }
     const vig = await esc.leerVigente(documento_ref)
     if (!vig) { await aPendiente(grupo, 'documento_no_existe'); continue }
+    if (vig.abierto) { await aPendiente(grupo, 'documento_abierto'); continue }
     if (vig.version !== version_base) { await aPendiente(grupo, 'version_cambiada'); continue }
     const porRetoque = new Map(grupo.map((t) => [t.pedazo.id, t]))
     const hecho = aplicarEnDocumento(vig.texto, grupo.map((t) => ({ pedazo: t.pedazo, antes: t.antes, despues: t.despues, porque: t.porque })))

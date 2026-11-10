@@ -14,12 +14,12 @@ import type { Documento } from '../../cadena/dependencias-de-documentos'
 import { baseFalsa } from './base-falsa'
 
 /** escritor en memoria: versiones por ref; escribir solo si la vigente sigue siendo la base */
-function escritorFalso(inicial: Record<string, string>, o: { adelantarse?: boolean } = {}) {
+function escritorFalso(inicial: Record<string, string>, o: { adelantarse?: boolean; abierto?: boolean } = {}) {
   const versiones = new Map(Object.entries(inicial).map(([ref, texto]) => [ref, [{ version: '1', texto, motivo: 'original' }]]))
   const escrituras: { ref: string; base: string; motivo: string }[] = []
   const lecturasDeVersion: string[] = []
   const esc: EscritorDeDocumento = {
-    async leerVigente(ref) { const v = versiones.get(ref); return v ? { texto: v.at(-1)!.texto, version: v.at(-1)!.version } : null },
+    async leerVigente(ref) { const v = versiones.get(ref); return v ? { texto: v.at(-1)!.texto, version: v.at(-1)!.version, abierto: o.abierto === true } : null },
     async leerVersion(ref, version) { lecturasDeVersion.push(version); return versiones.get(ref)?.find((x) => x.version === version)?.texto ?? null },
     async escribirSiSigue(ref, base, texto, motivo) {
       const v = versiones.get(ref)
@@ -142,6 +142,14 @@ describe('aplicar · dos clientes · versión nueva, en el pedazo exacto', () =>
     expect(r.pendientes.map((x) => x.motivo)).toEqual(['pedazo_no_encontrado', 'pedazo_no_encontrado'])
     expect(w.escrituras).toEqual([])
     expect(w.versiones.get('gi-a')).toHaveLength(1)
+  })
+
+  it('CRITERIOS §3: un documento abierto o en revisión no se toca; queda pendiente para la próxima versión', async () => {
+    const { almacen, edicion_id } = await preparar(EDIC_B, 'plan', 'plan-b', [B_COND], EDIC_B.antes, EDIC_B.despues)
+    const w = escritorFalso({ 'plan-b': B.plan }, { abierto: true })
+    const r = await aplicarAprobados({ almacen, escritores: { plan: w.esc }, leerFilasActivas: async () => TODAS }, edicion_id)
+    expect(r.pendientes.map((x) => x.motivo)).toEqual(['documento_abierto'])
+    expect(w.escrituras).toEqual([])
   })
 
   it('sin escritor para el destino, o documento inexistente: pendiente con su motivo', async () => {
