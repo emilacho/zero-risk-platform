@@ -12,7 +12,7 @@ import { manualUtilizable } from '../manual-utilizable'
 type Fila = Record<string, unknown>
 const FIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'manual-utilizable', 'filas-reales.json'), 'utf8')) as Record<string, Fila>
 const { pasa_la_vara: VARA, validado_por_el_dueno: DUENO, ni_aprobado_ni_validado: NADA } = FIX
-const DIR = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'ops', 'oficina-marketing')
+const DIR = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'ops', 'oficina-marketing', 'traba-1')
 const flujo = (carpeta: 'vivo' | 'nuevo', id: string) => JSON.parse(fs.readFileSync(path.join(DIR, carpeta, `${id}.json`), 'utf8')) as { id: string; nodes: { name: string; parameters: { jsCode?: string; url?: string } }[] }
 const codigoDe = (f: ReturnType<typeof flujo>, nombre: string) => String(f.nodes.find((n) => n.name === nombre)?.parameters.jsCode ?? '')
 

@@ -4,13 +4,25 @@
  * (`salio_al_tope`, validado por el dueño) mató los lotes de las semanas 46/47 con BRIEF_MANUAL_NO_APROBADO, mientras la planeación (regla del 04-nov) lo aceptaba.
  * Arreglo: UNA sola regla, `src/lib/manual/manual-utilizable-logica.js`, pegada ENTERA en las 4 guardas (planeación incluida, que tenía su propia copia).
  * La prueba `manual-utilizable-guardas.test.ts` exige que el bloque pegado sea idéntico al archivo y ejecuta cada guarda con filas reales.
- *   node scripts/ops/oficina-marketing/manual-utilizable-en-las-guardas.mjs   · lee vivo/<id>.json, escribe nuevo/<id>.json (SIN red)
+ *   node scripts/ops/oficina-marketing/manual-utilizable-en-las-guardas.mjs   · lee traba-1/vivo/<id>.json, escribe traba-1/nuevo/<id>.json (SIN red)
+ * CARPETA PROPIA (pedido de CC6 y CC7, 10-nov): los `vivo/` y `nuevo/` compartidos los usan de base otras pruebas y la `nuevo/` de main NO es lo vivo; esta entrega no los toca.
+ * `traba-1/vivo/` = respaldo de lo vivo en n8n (10-nov ~18:15Z) · `traba-1/nuevo/` = ese respaldo + SOLO este cambio.
  */
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { cambiarCodigo, escribirNuevo, leerVivo, nodo } from './lib.mjs'
+import path from 'node:path'
+import { AQUI, cambiarCodigo, nodo } from './lib.mjs'
 
 const ORIGEN = fileURLToPath(new URL('../../../src/lib/manual/manual-utilizable-logica.js', import.meta.url))
+export const CARPETA = path.join(AQUI, 'traba-1')
+export const leerRespaldo = (id) => JSON.parse(fs.readFileSync(path.join(CARPETA, 'vivo', `${id}.json`), 'utf8'))
+function escribirCandidato(f) {
+  const archivo = path.join(CARPETA, 'nuevo', `${f.id}.json`)
+  fs.mkdirSync(path.dirname(archivo), { recursive: true })
+  fs.writeFileSync(archivo, JSON.stringify(f, null, 2) + '\n')
+  return archivo
+}
+
 const INICIO = '// ═══ MANUAL UTILIZABLE'
 const FIN = '// ═══ fin manual utilizable ═══'
 
@@ -73,7 +85,7 @@ export function construirManualUtilizable(f) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   for (const id of Object.keys(GUARDAS)) {
-    const f = construirManualUtilizable(leerVivo(id))
-    console.log('escrito', escribirNuevo(f))
+    const f = construirManualUtilizable(leerRespaldo(id))
+    console.log('escrito', escribirCandidato(f))
   }
 }
