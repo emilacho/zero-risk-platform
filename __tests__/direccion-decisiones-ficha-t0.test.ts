@@ -103,7 +103,7 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
   })
   it('🔴 lo que hoy se decide en otro panel queda sin verbos y con su pantalla', () => {
     const pantallas = Object.fromEntries(Object.entries(VARIANTES).map(([k, d]) => [k, fichaDe(d).donde_se_hace?.pantalla ?? null]))
-    expect(pantallas).toEqual({ firma_editable: null, plan: 'plan', pregunta_con_supuesto: null, pausa: null, no_volvio: null, canal_viejo: null, campana: 'plan', pieza: 'piezas', gran_idea: 'gran_idea', plan_con_pendientes: 'plan', palabra_del_dueno: 'plan', lista_de_competidores: 'piezas', otra_revision: null })
+    expect(pantallas).toEqual({ firma_editable: null, plan: 'plan', pregunta_con_supuesto: null, pausa: null, no_volvio: null, canal_viejo: 'tu_oficina', campana: 'plan', pieza: 'piezas', gran_idea: 'gran_idea', plan_con_pendientes: 'plan', palabra_del_dueno: 'plan', lista_de_competidores: 'piezas', otra_revision: null })
     for (const k of ['plan', 'campana', 'pieza', 'gran_idea', 'plan_con_pendientes', 'palabra_del_dueno', 'pausa', 'no_volvio', 'canal_viejo', 'lista_de_competidores', 'otra_revision']) expect(fichaDe(VARIANTES[k]).acciones, k).toEqual([])
   })
   it('🔴 la campaña: detiene, vence con su espera y dice qué pasa al vencer', () => {
@@ -241,5 +241,16 @@ describe('10-nov · tramo: cada revisión dice dónde se hace (el panel de su do
     for (const [s2, doc, ruta] of [['editor_escalation', 'manual', '/nuevo'], ['confirm_competitor_list', undefined, null], ['tipo_raro', undefined, '/nuevo']] as const) {
       const f = rev(s2, doc, ruta); expect(f.acciones).toEqual([]); expect(problemasDeLaFicha(f)).toEqual([])
     }
+  })
+})
+
+describe('10-nov · la pregunta de la Oficina Financiera dice dónde se contesta', () => {
+  it('🔴 la del canal de la Oficina Financiera lleva «Ir a Tu oficina», sin verbos, y es válida', () => {
+    const f = fichaDe(VARIANTES.canal_viejo)
+    expect(f.donde_se_hace?.pantalla).toBe('tu_oficina'); expect(f.acciones).toEqual([]); expect(problemasDeLaFicha(f)).toEqual([])
+    expect(PANTALLAS).toContain('tu_oficina')
+  })
+  it('🔴 la pausa y «no volvió» (otras fuentes de finanzas) siguen solo avisando: sus preguntas están en la misma lista', () => {
+    for (const k of ['pausa', 'no_volvio']) expect(fichaDe(VARIANTES[k]).donde_se_hace, k).toBeUndefined()
   })
 })
