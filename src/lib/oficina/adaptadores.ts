@@ -29,6 +29,8 @@ import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA, type SalidaDeRevision } from 
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
 import { enviarPiezaASlack, leerNotasParaElProductor, piezaParaSlackDeLaBandeja, registrarAutorevision } from '../notas-del-dueno/adaptadores'
 import { carpetaParaRevisar } from '../jefatura/revision/carpeta-para-revisar'
+import { adjuntoDelCliente } from '../portero-alimenta/contexto-del-cliente'
+import { perfilDelAdjunto, type PerfilParaLectores } from '../perfil-del-publico/lectores'
 
 export const SIN_RECEPCION_DE_LA_CADENA = 'la cadena aún no conecta la recepción del brief y del concepto (T3)'
 
@@ -179,6 +181,11 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
           slug: typeof cliente.slug === 'string' && cliente.slug ? cliente.slug : null,
           marca: marcaDelCliente(manual, cliente, handles),
         }
+        // 10-nov · perfil del público T2: el mismo adjunto que lee la jefatura (uno vigente por tipo). Si no se pudo leer, viaja DICHO: nunca como «no hay»
+        let perfil: PerfilParaLectores
+        try { perfil = perfilDelAdjunto(await adjuntoDelCliente(db, clientId, ahora())) } catch (e) { perfil = { estado: 'no_se_pudo_leer', detalle: e instanceof Error ? e.message : String(e) } }
+        out.perfil_del_publico = perfil
+        out.fuentes.perfil_del_publico_texto = perfil.estado === 'vigente' ? perfil.texto : null
         return out
       } catch (e) { return { error: e instanceof Error ? e.message : String(e) } }
     },
