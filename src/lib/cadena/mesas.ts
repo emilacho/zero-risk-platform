@@ -26,7 +26,7 @@ import { metodoDe } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
 import { reglaDeIdioma, reglaDeRegistro } from './registro'
 import type { Estrategia, FormatosPorRed } from './tipos'
-import { contextoDeEstado } from '../sedes/por-abrir'
+import { contextoDeLaMesa } from '../sedes/por-abrir'
 
 export const CAP_DE_VUELTAS_DE_CAMBIOS = 2
 /** versión 1 + UNA reapertura (brief devuelto · concepto sin_mesa); a la siguiente, necesita_humano */
@@ -92,7 +92,8 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     ...(a.devolucion ? ['', '# DEVOLUCIÓN (la versión anterior se devolvió por esto; corrígelo, no lo discutas)', a.devolucion] : []),
     ...(a.nota ? ['', '# CAMBIOS PEDIDOS POR EL CLIENTE', a.nota] : []),
     // 01-nov: el brief no lista las sedes; solo se añade la que tenga un estado que decir (sin ninguna, el pedido queda idéntico a hoy)
-    ...(a.ctx.sedes.some((s) => contextoDeEstado(s.estado)) ? ['', '# SEDES', ...a.ctx.sedes.filter((s) => contextoDeEstado(s.estado)).map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''} · ${contextoDeEstado(s.estado)}`)] : []),
+    // 10-nov (Lenovo por Emilio): la sede ABIERTA también se dice, con su fecha (contextoDeLaMesa)
+    ...(a.ctx.sedes.some((s) => contextoDeLaMesa(s.estado, s.abierta_desde)) ? ['', '# SEDES', ...a.ctx.sedes.filter((s) => contextoDeLaMesa(s.estado, s.abierta_desde)).map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''} · ${contextoDeLaMesa(s.estado, s.abierta_desde)}`)] : []),
     '',
     '# ESTRATEGIA · canales',
     canalesEnTexto(a.estrategia),
@@ -147,7 +148,7 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     canalesEnTexto(a.estrategia),
     a.estrategia.patron_semanal.map((s) => `- ${s.slot}: ${s.red} · ${s.formato} · día ${s.dia_semana} ${s.hora}`).join('\n') || '(sin patrón)',
     '',
-    `# SEDES\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
+    `# SEDES\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}${contextoDeLaMesa(s.estado, s.abierta_desde) ? ` · ${contextoDeLaMesa(s.estado, s.abierta_desde)}` : ''}`).join('\n') : '(sin sedes)'}`,
     ...(a.ctx.eslogan ? [`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
     `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
   ].join('\n')

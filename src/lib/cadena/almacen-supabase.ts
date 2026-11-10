@@ -26,7 +26,7 @@ import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
-import { estadoDeLasSedes } from '../sedes/por-abrir'
+import { aperturaDeLasSedes, estadoDeLasSedes } from '../sedes/por-abrir'
 import { esloganDelCliente, reglaDelEslogan } from '../manual/campos-del-manual'
 
 /** las tablas de la cadena que usa el archivo de una campaña (`oficina/archivo-de-campana.ts`): solo este archivo las nombra */
@@ -145,11 +145,14 @@ export function almacenDeSupabase(): Almacen {
         vistos.add(k)
         refs.push({ id: `sede:${d.id}`, client_id: clientId, origen: 'sede_datos', fuente: d.fuente, sede: d.sede_id ? claveDe.get(d.sede_id) ?? null : null, texto: `${d.campo}: ${d.valor_texto}`, observado_en: d.observado_en })
       }
-      const estados = estadoDeLasSedes({ config: cli?.config, datosDeSede: datos.map((d) => ({ clave: (d.sede_id && claveDe.get(d.sede_id)) || '', campo: d.campo, valor_texto: d.valor_texto, observado_en: d.observado_en })).filter((d) => d.clave) })
+      const entradaDeEstado = { config: cli?.config, datosDeSede: datos.map((d) => ({ clave: (d.sede_id && claveDe.get(d.sede_id)) || '', campo: d.campo, valor_texto: d.valor_texto, observado_en: d.observado_en })).filter((d) => d.clave) }
+      const estados = estadoDeLasSedes(entradaDeEstado)
+      const aperturas = aperturaDeLasSedes(entradaDeEstado) // 10-nov: desde cuándo está abierta (va al marco de la mesa)
       const sedes: SedeInfo[] = sedesDb.map((s) => {
         const estado = estados.get(s.clave)
         const horarios = datos.filter((d) => d.sede_id === s.id && d.campo === 'horario' && horarioDeNorm(d.valor_norm)).sort((a, b) => (FUENTE_FUERTE[b.fuente] ?? 0) - (FUENTE_FUERTE[a.fuente] ?? 0) || b.observado_en.localeCompare(a.observado_en))
-        return { clave: s.clave, nombre: s.ciudad, telefono: null, horario: horarios[0] ? horarioDeNorm(horarios[0].valor_norm) : null, ...(estado ? { estado } : {}) }
+        const desde = aperturas.get(s.clave)
+        return { clave: s.clave, nombre: s.ciudad, telefono: null, horario: horarios[0] ? horarioDeNorm(horarios[0].valor_norm) : null, ...(estado ? { estado } : {}), ...(desde ? { abierta_desde: desde } : {}) }
       })
       for (const t of await lista<{ id: string; chunk_text: string; provenance_tag: { trust_level?: string } | null }>(db.from('client_brain_chunks').select('id, chunk_text, provenance_tag').eq('client_id', clientId).limit(200))) {
         const nivel = t.provenance_tag?.trust_level

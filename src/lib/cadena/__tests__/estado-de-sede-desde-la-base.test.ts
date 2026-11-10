@@ -33,6 +33,12 @@ describe('el contexto del cliente', () => {
   it('🔴 nada se deduce de otro campo: «solo domicilio» no es un estado', async () => {
     expect(await sedes(base([dato('d1', 's2', 'tipo_de_atencion', 'solo domicilio (sin local)', '2026-10-15T00:00:00Z')]))).toEqual({ norte: undefined, sur: undefined })
   })
+  it('🔴 10-nov: la sede abierta lleva desde cuándo (la observación «abierta» más nueva); la que no está abierta, no', async () => {
+    mocks.db = base([dato('d1', 's1', 'estado_de_la_sede', 'por abrir', '2026-10-15T00:00:00Z'), dato('d2', 's1', 'estado_de_la_sede', 'abierta', '2026-11-09T05:00:00Z'), dato('d3', 's2', 'estado_de_la_sede', 'por abrir', '2026-11-02T00:00:00Z')])
+    const { almacenDeSupabase } = await import('../almacen-supabase')
+    const ctx = await almacenDeSupabase().cargarContexto(C, P)
+    expect(Object.fromEntries((ctx?.sedes ?? []).map((s) => [s.clave, [s.estado, s.abierta_desde]]))).toEqual({ norte: ['abierta', '2026-11-09'], sur: ['por_abrir', undefined] })
+  })
   it('la ficha del cliente también lo dice, y manda', async () => {
     expect(await sedes(base([dato('d1', 's2', 'estado_de_la_sede', 'abierta', '2026-11-01T00:00:00Z')], { apify: { sedes_estado: { sur: 'por_abrir' } } }))).toEqual({ norte: undefined, sur: 'por_abrir' })
   })

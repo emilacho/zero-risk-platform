@@ -104,7 +104,7 @@ export type FormatosPorRed = Record<string, FormatoPermitido[]>
 
 /** Horario de una sede: por día de la semana ISO, tramos [abre, cierra] en HH:MM. Un día sin tramos = cerrado. */
 export type HorarioSede = Partial<Record<number, { abre: string; cierra: string }[]>>
-export interface SedeInfo { clave: string; nombre?: string; telefono?: string | null; horario: HorarioSede | null; /** estado de la sede, si se sabe: es CONTEXTO para quien planea, nunca excluye piezas */ estado?: EstadoDeSede }
+export interface SedeInfo { clave: string; nombre?: string; telefono?: string | null; horario: HorarioSede | null; /** estado de la sede, si se sabe: es CONTEXTO para quien planea, nunca excluye piezas */ estado?: EstadoDeSede; /** 10-nov: si está abierta, desde cuándo (AAAA-MM-DD), según el dato de la sede */ abierta_desde?: string }
 
 export type ConfianzaTrozo = 'system_trusted' | 'tenant_trusted' | 'untrusted' | 'unknown'
 export type FuenteSede = 'sitio' | 'instagram' | 'mapas'
