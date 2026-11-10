@@ -37,6 +37,22 @@ describe('el plan se llama «Plan de Marketing» y su versión va aparte', () =>
     const d = (await leerDecisiones(ctx(base().semilla('hitl_queue', [h])))).decisiones.find((x) => x.id === 'h1')
     expect(d?.titulo).toBe('Plan de Marketing: revisa estos avisos antes de aprobar')
   })
+  it('🔴 10-nov · el tablero se llama «Tablero Financiero»: título sin versión, versión aparte, y así también en lo ya firmado', async () => {
+    const pend = { id: 't1', client_id: C1, version: 4, estado: 'sin_firma', vigente: true, dry_run: false, creado_en: hace(5) }
+    const firmado = { id: 't0', client_id: C1, version: 3, estado: 'firmado', vigente: false, dry_run: false, creado_en: hace(30), firmado_en: hace(20), firma_con_cambios: null }
+    const r = await leerDecisiones(ctx(base().semilla('finanzas_tableros', [pend, firmado])))
+    const d = r.decisiones.find((x) => x.id === 't1')!
+    expect(d.titulo).toBe('Tablero Financiero: espera tu firma')
+    expect(d.titulo_interno).toBe('Tablero Financiero, versión 4: espera tu firma')
+    expect(d.version_del_documento).toBe(4)
+    expect(d.ficha?.espera.version_del_documento).toBe(4)
+    expect(r.contestadas.find((c) => c.id === 't0')?.titulo).toBe('Tablero Financiero')
+  })
+  it('🔴 un tablero sin versión legible no inventa «versión 1»', async () => {
+    const d = (await leerDecisiones(ctx(base().semilla('finanzas_tableros', [{ id: 't1', client_id: C1, version: null, estado: 'sin_firma', vigente: true, dry_run: false, creado_en: hace(5) }])))).decisiones[0]
+    expect(d.titulo_interno).toBe('Tablero Financiero: espera tu firma')
+    expect(d).not.toHaveProperty('version_del_documento')
+  })
   it('🔴 la ficha rechaza una versión que no es un entero positivo', () => {
     const f = (v: unknown) => ({ espera: { desde: hace(1), version_del_documento: v } }) as unknown as FichaDeDecision
     for (const v of [0, -1, 1.5, '2']) expect(problemasDeLaFicha(f(v)), String(v)).toContain('versión del documento que no es un número entero positivo')

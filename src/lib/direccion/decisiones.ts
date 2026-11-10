@@ -6,7 +6,7 @@
 import { planEsperaAlManual } from '../manual/manual-primero'
 import { TOPE_REESCRITURA_USD } from '../oficina/tablero/plan'
 import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
-import { PLAN_DE_MARKETING } from '../nombres-del-sistema'
+import { PLAN_DE_MARKETING, TABLERO_FINANCIERO } from '../nombres-del-sistema'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
 import { AL_EDITAR_LA_FIRMA, DESTRABA_CORTO_DE_LA_FIRMA, DESTRABA_DE_LA_FIRMA, PARA_QUE_CORTO_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, sePuedeEditar, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
@@ -101,6 +101,7 @@ export function tituloParaElDueno(crudo: string): string {
   const limpio = enTuteo
     // 10-nov · Lenovo por Emilio: el plan se llama «Plan de Marketing» en todo lo que lee el dueño, venga de la oficina que venga
     .replace(/\bplan de 90 d[ií]as\b/giu, PLAN_DE_MARKETING)
+    .replace(/\btablero financiero\b/giu, TABLERO_FINANCIERO)
     .replace(/⚠️\s*REVISIÓN INCOMPLETA\s*·\s*/u, 'Revisión incompleta · ')
     .replace(/(^|·\s*)Aprobación\s*·\s*/u, '$1')
     .replace(/\bBRF-\d+\b/g, '')
@@ -200,7 +201,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA })
   // 09-nov · C · las campañas que la cadena dejó esperando a una persona. Vencen con su espera: arriba si la espera vence pronto
   for (const { fila: c, campana } of await leerCampanasDetenidas(db, fuentes)) crudas.push({ id: String(c.id), tipo: 'plan', subtipo: 'campana_necesita_humano', fuente: 'cadena_campanas', client_id: texto(c.client_id), titulo: TITULO_CAMPANA_DETENIDA, desde: texto(c.desde) ?? texto(c.actualizada_en), vence: campana.espera?.vence_en ?? null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: 'avisar no gasta; reabrir tampoco, y lo que sigue gasta con sus topes', permite: [], detiene: true, para_que: PARA_QUE_CAMPANA_DETENIDA, para_que_corto: PARA_QUE_CORTO_CAMPANA_DETENIDA, destraba: DESTRABA_CAMPANA_DETENIDA, destraba_corto: DESTRABA_CORTO_CAMPANA_DETENIDA, campana })
-  for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}: espera tu firma`, desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, pregunta_de: FINANCIERA, ...loQueSeFirma(t) })
+  for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `${TABLERO_FINANCIERO}${versionDe(t.version) ? `, versión ${versionDe(t.version)}` : ''}: espera tu firma`, ...(versionDe(t.version) ? { version_del_documento: versionDe(t.version) } : {}), desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, pregunta_de: FINANCIERA, ...loQueSeFirma(t) })
 
   const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas, esperan_el_manual: 0, planes_ya_superados: sueltas.length - noVolvieronVigentes.length }
   // 3-nov · firma de Emilio: un plan no pide firma antes de su manual. Si el manual no se puede leer, se muestra: mejor una firma de más que una escondida; la puerta del plan igual la frena

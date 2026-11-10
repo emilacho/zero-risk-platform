@@ -9,6 +9,8 @@ export const DEPARTAMENTOS = {
 } as const
 /** 10-nov · el plan se llama «Plan de Marketing» (regla de nombres de Emilio 09-nov; Lenovo en `RESPUESTA-LENOVO-a-CC4-CC1-CC6-310-aprobado-con-ajustes.md`). Nunca «plan de 90 días» en lo que lee Emilio */
 export const PLAN_DE_MARKETING = 'Plan de Marketing'
+/** 10-nov · el tablero que firma Emilio se llama «Tablero Financiero», con mayúscula (Lenovo por Emilio, `SENAL-LENOVO-a-CC6-CC3-CC5-CC1-barrido-0055.md`; boceto v7 aprobado) */
+export const TABLERO_FINANCIERO = 'Tablero Financiero'
 export type ClaveDeDepartamento = keyof typeof DEPARTAMENTOS
 export type Departamento = (typeof DEPARTAMENTOS)[ClaveDeDepartamento]
 
