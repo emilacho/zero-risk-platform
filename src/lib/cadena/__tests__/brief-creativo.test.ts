@@ -116,7 +116,8 @@ describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
     expect(b.estado).toBe('validada')
   })
   it('una prohibida citada en «contradicciones» no cuenta (ahí se dice que NO se usa)', () => {
-    const b = leerBriefCreativo(con({ '- ninguna': '- el plan dice «promo de apertura» · el manual prohíbe promo · se dice «apertura»' }), INS)
+    // 10-nov · desde que TODA cita al plan se comprueba, la frase citada tiene que estar en el plan de la prueba
+    const b = leerBriefCreativo(con({ '- ninguna': '- el plan dice «promo de apertura» · el manual prohíbe promo · se dice «apertura»' }), { ...INS, planTexto: `${INS.planTexto}\nLa semana uno lleva promo de apertura.` })
     expect(b.bloqueos).toEqual([])
   })
   it('una prohibida del manual que el brief no lista se declara (aviso, no devolución)', () => {

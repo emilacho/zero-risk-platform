@@ -347,3 +347,22 @@ describe('las entradas del brief pasan el registro del cliente', () => {
     expect(avisoDeTono(al.briefsCreativos.find((x) => x.campana_id === id && x.version === 2)!)).toHaveLength(1)
   })
 })
+
+describe('10-nov · TODAS las citas son literales, también por el camino real (recibir y revalidar leen el MANUAL)', () => {
+  const conManual = (frase: string) => BRIEF.replace('## Contradicciones plan vs manual\n- ninguna', `## Contradicciones plan vs manual\n- trato · manual dice «${frase}» · qué se hizo: se sigue el manual`)
+  it('una cita del manual copiada tal cual pasa al recibir el brief y al revalidarlo', async () => {
+    const texto = conManual('Café de la casa. Servimos desayunos')
+    expect(texto).not.toBe(BRIEF)
+    const { al, id } = await detenidaPorElBrief(texto, { falsoRojo: true })
+    const r = await briefRevalidar(al, wf({ campana_id: id }), AHORA)
+    expect(r.cuerpo).toMatchObject({ pasa: true, version: 2 })
+  })
+  it('una cita del manual ALTERADA devuelve el brief al recibirlo y sigue roja al revalidarlo', async () => {
+    const { al, id } = await detenidaPorElBrief(conManual('Café de la casa. Servimos almuerzos'))
+    const v2 = al.briefsCreativos.find((b) => b.campana_id === id && b.version === 2)!
+    expect(v2.estado).toBe('devuelta')
+    expect((v2.leido as { bloqueos: string[] }).bloqueos.join('\n')).toContain('no está literal en el manual')
+    const r = await briefRevalidar(al, wf({ campana_id: id }), AHORA)
+    expect(r.cuerpo).toMatchObject({ pasa: false, version: 2, campana: { estado: 'necesita_humano' } })
+  })
+})

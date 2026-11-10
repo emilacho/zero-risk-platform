@@ -38,6 +38,8 @@ export interface BriefCreativoLeido {
 export interface InsumosDelBrief {
   /** el plan vigente (para comprobar que la cita es literal) */
   planTexto: string
+  /** 10-nov (GO de Lenovo · todas las citas): el manual vigente · una cita atribuida al manual se comprueba contra él (sin manual, no se comprueba) */
+  manualTexto?: string
   /** palabras prohibidas del manual */
   prohibidas: string[]
   /** las declaradas, con su cita: 02-nov, firma de Emilio: tampoco bloquean, se avisan con su propio texto */
@@ -103,6 +105,58 @@ export function seccionesObligatoriasQueFaltan(md: string): string[] {
   return OBLIGATORIAS.filter((k) => !t(k))
 }
 
+/** ¿la cita está literal en el documento? Una elisión («…», «...», «[…]», «(…)») parte la cita: cada tramo tiene que estar */
+function citaLiteralEn(documento: string, cita: string): boolean {
+  const tramos = cita.split(/\s*(?:\[\s*(?:…|\.\.\.)\s*\]|\(\s*(?:…|\.\.\.)\s*\)|…|\.\.\.)\s*/).filter((x) => normalizar(x).length >= 4)
+  return tramos.length > 0 && tramos.every((x) => citaAparece(documento, x))
+}
+
+export interface CitaQueNoAparece { cita: string; seccion: string; fuente: 'plan' | 'manual' }
+
+/**
+ * TODAS LAS CITAS DEL BRIEF SON LITERALES (10-nov · GO de Lenovo tras el brief v4 de Náufrago, que puso «playa» DENTRO de una cita del plan que dice «costa»).
+ * Se comprueban, en cualquier sección menos «De qué parte del plan sale» (tiene su propio chequeo):
+ * · un bloque citado `> «…»`: tiene que estar en el plan o en el manual;
+ * · una cita atribuida en la línea («el plan dice: «…»», «manual dice «…»»…): tiene que estar en ESE documento (la del manual, solo si hay manual).
+ * Lo entre «» sin atribución (palabras, llamados) no es una cita a un documento y no se comprueba. Las citas cortas (< 12 caracteres) tampoco.
+ */
+export function citasQueNoAparecen(md: string, fuentes: { plan: string; manual?: string }): CitaQueNoAparece[] {
+  const out: CitaQueNoAparece[] = []
+  const enAlguno = (c: string) => citaLiteralEn(fuentes.plan, c) || (!!fuentes.manual && citaLiteralEn(fuentes.manual, c))
+  for (const s of seccionesDe(md)) {
+    const k = tituloConocido(s)
+    if (k === 'De qué parte del plan sale') continue
+    const seccion = k ?? s.titulo.trim()
+    // bloques `>` (líneas seguidas = un bloque)
+    const bloques: string[] = []
+    let cur: string[] = []
+    for (const l of s.cuerpo.split('\n')) {
+      const m = /^\s*>\s?(.*)$/.exec(l)
+      if (m) cur.push(m[1].trim())
+      else if (cur.length) { bloques.push(cur.join(' ')); cur = [] }
+    }
+    if (cur.length) bloques.push(cur.join(' '))
+    for (const b of bloques) {
+      const entera = /^\s*«([\s\S]*)»\s*$/.exec(b)
+      const partes = entera ? [entera[1]] : [...b.matchAll(/«([^»]+)»/g)].map((m) => m[1])
+      for (const c of partes.length ? partes : [b]) {
+        if (normalizar(c).length < MIN_CARACTERES_DE_CITA) continue
+        if (!enAlguno(c)) out.push({ cita: c, seccion, fuente: 'plan' })
+      }
+    }
+    // citas atribuidas en la línea
+    for (const m of `${s.titulo}\n${s.cuerpo}`.matchAll(/\b(plan|manual)\s+(?:dice|declara|indica|señala|afirma|pide|establece)(?:\s+que)?\s*:?\s*«([^»]+)»/giu)) {
+      const fuente = m[1].toLowerCase() === 'manual' ? 'manual' : 'plan'
+      const c = m[2]
+      if (normalizar(c).length < MIN_CARACTERES_DE_CITA) continue
+      if (fuente === 'manual' && !fuentes.manual) continue
+      if (!citaLiteralEn(fuente === 'manual' ? fuentes.manual! : fuentes.plan, c)) out.push({ cita: c, seccion, fuente })
+    }
+  }
+  const vistas = new Set<string>()
+  return out.filter((x) => { const k = `${x.fuente}|${normalizar(x.cita)}`; if (vistas.has(k)) return false; vistas.add(k); return true })
+}
+
 export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreativoLeido {
   const secciones = seccionesDe(md)
   const t = textosPorSeccion(md)
@@ -130,6 +184,10 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
     const literal = candidatas.some((c) => normalizar(c).length >= MIN_CARACTERES_DE_CITA && citaAparece(ins.planTexto, c))
     if (normalizar(cita).length < MIN_CARACTERES_DE_CITA) bloqueos.push(`la cita al plan es demasiado corta para verificarse: «${cita.slice(0, 60)}»`)
     else if (!literal) bloqueos.push(`la cita «${cita.slice(0, 80)}» no se encuentra literal en el plan · no se puede verificar de qué parte sale`)
+  }
+  // 10-nov (GO de Lenovo): TODAS las citas son literales · una cita nunca se corrige
+  for (const x of citasQueNoAparecen(md, { plan: ins.planTexto, manual: ins.manualTexto })) {
+    bloqueos.push(`la cita «${x.cita.slice(0, 80)}» (en «## ${x.seccion}») no está literal en el ${x.fuente === 'manual' ? 'manual' : 'plan'} · una cita nunca se corrige: cópiala tal cual y, si el cambio pedido la contradice, explícalo fuera de la cita`)
   }
 
   // objetivo por red: «- ig: objetivo · llamado»
@@ -207,4 +265,5 @@ export const REFERENCIA_DEL_BRIEF_CREATIVO = [
   '## Obligatorios · «- vocabulario: …» · «- prohibido: …» · «- lo que no se dice: …», porque son los límites que la pieza no puede cruzar.',
   '## Faltantes · «- <campo>: <qué falta>» (declarado, no rellenado) · ## Contradicciones plan vs manual · «- qué · plan dice · manual dice · qué se hizo» · ## Citas · «A1 usé: …».',
   'Sin cifras con decimales inventadas; sin datos con valor (precios, horarios) que no estén en el material con su referencia.',
+  'Toda cita (un bloque `> «…»` o «el plan dice: «…»» / «el manual dice: «…»») va LITERAL, copiada de su documento: una cita nunca se corrige; si algo la contradice, se explica fuera de ella.',
 ].join('\n')
