@@ -116,6 +116,14 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
       for (const g of c.gastos ?? []) { if (g.ref_tabla && g.ref_id && m.gastos.some((x) => x.ref_tabla === g.ref_tabla && x.ref_id === g.ref_id)) continue; m.gastos.push(g) }
       for (const u of c.usos_de_fotos ?? []) m.usos.push(u)
     },
+    anotarGastoDeCopia: async ({ encargo_id, gasto }) => {
+      if (gasto.ref_tabla && gasto.ref_id && m.gastos.some((x) => x.ref_tabla === gasto.ref_tabla && x.ref_id === gasto.ref_id)) return 'ya_estaba'
+      m.gastos.push(gasto)
+      const e = m.encargos.get(encargo_id)!
+      const total = +(e.estado_del_motor.gasto_usd + gasto.cost_usd).toFixed(6)
+      e.estado_del_motor = { ...e.estado_del_motor, gasto_usd: total }; e.gasto_usd = total
+      return 'anotado'
+    },
   }
   m.P = {
     almacen, ahora: () => new Date('2026-10-10T12:00:00Z'),

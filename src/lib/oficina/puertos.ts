@@ -98,6 +98,11 @@ export interface Almacen {
   /** EL ACUSE del flujo (28-oct · traspaso perdido): el flujo que recibe un turno lo TOMA una sola vez (atómico: solo si sigue `corriendo` y sin dueño). Dos despertares del mismo turno no pagan dos veces */
   acusarTurno(encargoId: string, n: number, ejecucion: string): Promise<'tomado' | 'ya_tomado' | 'no_abierto'>
   guardar(c: Cambios): Promise<void>
+  /**
+   * 10-nov · LA COPIA DE UN TURNO TAMBIÉN SE PAGA: una respuesta repetida (otro flujo corrió el mismo turno: el vigía lo re-entregó) trae su propia llamada al modelo. Se anota en `oficina_gastos`
+   * (una vez por ejecución: la misma ejecución reenviada no suma dos veces) y se suma al gasto del encargo, para que el tope vea lo gastado de verdad. `ya_estaba` = esa ejecución ya estaba anotada.
+   */
+  anotarGastoDeCopia?(c: { encargo_id: string; gasto: NonNullable<Cambios['gastos']>[number] }): Promise<'anotado' | 'ya_estaba'>
 }
 
 export type ResultadoImagen = { ok: true; url: string; generation_id: string; costo_usd: number } | { ok: false; error: string }

@@ -139,5 +139,23 @@ export function almacenDeSupabase(db: Db): Almacen {
         if (r.error && r.error.code !== DUPLICADO) throw new Error(`guardar el uso de la foto: ${r.error.message}`)
       }
     },
+    async anotarGastoDeCopia({ encargo_id, gasto }) {
+      // 1 · la fila del gasto: el índice único (ref_tabla, ref_id) hace que la MISMA ejecución reenviada no se sume dos veces
+      const g = await db.from('oficina_gastos').insert({ encargo_id, turno_id: null, concepto: gasto.concepto, ref_tabla: gasto.ref_tabla, ref_id: gasto.ref_id, cost_usd: gasto.cost_usd, base: gasto.base })
+      if (g.error?.code === DUPLICADO) return 'ya_estaba' as const
+      if (g.error) throw new Error(`anotar el gasto de la copia: ${g.error.message}`)
+      // 2 · la suma del encargo, CONDICIONAL al gasto que se leyó (si otro la cambió entre medio, se relee y se reintenta; hasta 3 veces)
+      for (let i = 0; i < 3; i++) {
+        const d = ok(await db.from('oficina_encargos').select('gasto_usd,estado_del_motor').eq('id', encargo_id).limit(1), 'leer el gasto del encargo') as Fila[] | null
+        const f = d?.[0]
+        if (!f) throw new Error(`anotar el gasto de la copia: encargo ${encargo_id} inexistente`)
+        const motor = (f.estado_del_motor ?? {}) as Record<string, unknown>
+        const total = +(Number(motor.gasto_usd ?? f.gasto_usd ?? 0) + gasto.cost_usd).toFixed(6)
+        const u = await db.from('oficina_encargos').update({ gasto_usd: total, estado_del_motor: { ...motor, gasto_usd: total } }).eq('id', encargo_id).eq('gasto_usd', f.gasto_usd as number).select('id')
+        if (u.error) throw new Error(`sumar el gasto de la copia: ${u.error.message}`)
+        if (((u.data as Fila[] | null) ?? []).length > 0) return 'anotado' as const
+      }
+      throw new Error('sumar el gasto de la copia: el encargo cambió tres veces seguidas mientras se sumaba (la fila del gasto ya quedó anotada)')
+    },
   }
 }

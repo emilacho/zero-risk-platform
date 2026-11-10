@@ -19,6 +19,8 @@ const VERCEL = 'https://zero-risk-platform.vercel.app'
 const N8N_HOOKS = "={{ ($env.N8N_WEBHOOK_BASE || 'https://n8n-production-72be.up.railway.app/webhook').replace(/\\/+$/, '') }}"
 const JSON_H = { name: 'Content-Type', value: 'application/json' }
 const LLAVE = { name: 'x-sala-dispatch-key', value: '={{ $json.llave }}' }
+// 10-nov · el ACUSE y REGISTRAR leen la llave del entorno: su entrada no trae «llave» (con $json.llave el acuse salía sin llave y daba 401 desde el 28-oct; así está en el flujo vivo)
+const LLAVE_ENV = { name: 'x-sala-dispatch-key', value: '={{ $env.SALA_DISPATCH_KEY }}' }
 
 const code = (nombre, archivo, pos) => ({ parameters: { jsCode: leer(archivo) }, name: nombre, type: 'n8n-nodes-base.code', typeVersion: 2, position: pos })
 /** la llave de los webhooks del portero NO se escribe en el flujo: se usa la CREDENCIAL de n8n que el propio webhook del portero valida (se carga desde Doppler al rotar) */
@@ -101,7 +103,7 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
     { parameters: { httpMethod: 'POST', path, responseMode: 'onReceived', options: {} }, name: N.web, type: 'n8n-nodes-base.webhook', typeVersion: 2, position: x(0), webhookId },
     code(N.entrada, 'turno-n0-entrada.js', x(1)),
     // 28-oct · TRASPASO: el flujo acusa el turno (atómico en la sala); un segundo despertar del mismo turno se detiene aquí y no paga
-    http(N.acuse, `${VERCEL}/api/oficina/turnos`, x(1, -150), { headers: [LLAVE], body: '={{ JSON.stringify({ accion: "acuse", encargo_id: $json.encargo_id, n: $json.turno.n, workflow_execution_id: String($execution.id) }) }}', timeout: 800000 }),
+    http(N.acuse, `${VERCEL}/api/oficina/turnos`, x(1, -150), { headers: [LLAVE_ENV], body: '={{ JSON.stringify({ accion: "acuse", encargo_id: $json.encargo_id, n: $json.turno.n, workflow_execution_id: String($execution.id) }) }}', timeout: 800000 }),
     code(N.tomo, 'turno-n0b-tomar.js', x(1, 150)),
     cond(N.esPortero, "={{ $json.turno.tipo }}", esIgual, x(2), 'portero'),
     // ── portero (una pregunta al cerebro: no escribe en ninguna tabla)
@@ -120,7 +122,7 @@ export function construirTurno({ path = 'zero-risk/oficina-turno', nombre = 'Zer
     { parameters: { resume: 'webhook', httpMethod: 'POST', limitWaitTime: true, resumeAmount: 1800, resumeUnit: 'seconds', options: {} }, name: N.espera, type: 'n8n-nodes-base.wait', typeVersion: 1.1, position: x(8, 250), webhookId: webhookId + '-espera' },
     code(N.vuelta, 'turno-n3-vuelta.js', x(9, 250)),
     // ── registrar y seguir
-    http(N.registrar, `${VERCEL}/api/oficina/turnos`, x(10, 0), { headers: [LLAVE], body: '={{ JSON.stringify($json.resultado_body) }}', timeout: 800000 }),
+    http(N.registrar, `${VERCEL}/api/oficina/turnos`, x(10, 0), { headers: [LLAVE_ENV], body: '={{ JSON.stringify($json.resultado_body) }}', timeout: 800000 }),
     code(N.sigue, 'turno-n4-sigue.js', x(11, 0)),
     cond(N.ifEsperar, '={{ $json.ruta }}', esIgual, x(12, 0), 'esperar'),
     SIGUIENTE(N.siguiente, x(13, -100)),
