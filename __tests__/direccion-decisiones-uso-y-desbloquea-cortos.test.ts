@@ -6,9 +6,10 @@ import { describe, expect, it } from 'vitest'
 import { DbFalsa } from '../src/lib/oficina/__tests__/dbfalsa'
 import type { Contexto } from '../src/lib/direccion/comun'
 import { leerDecisiones } from '../src/lib/direccion/decisiones'
-import { DESTRABA_CORTO_DE_LA_PAUSA, PARA_QUE_CORTO_DE_LA_PAUSA } from '../src/lib/direccion/decisiones-registro'
+import { DESTRABA_CORTO_DE_LA_PAUSA, PARA_QUE_CORTO_DE_LA_PAUSA, PARA_QUE_DE_LA_PAUSA, destrabaDeLaPausa } from '../src/lib/direccion/decisiones-registro'
 import { DESTRABA_CORTO_DE_LA_FIRMA, PARA_QUE_CORTO_DE_LA_FIRMA } from '../src/lib/direccion/decisiones-firma'
 import { DESTRABA_CORTO_CAMPANA_DETENIDA, PARA_QUE_CORTO_CAMPANA_DETENIDA } from '../src/lib/direccion/decisiones-campanas'
+import { DEPARTAMENTOS, PLAN_DE_MARKETING } from '../src/lib/nombres-del-sistema'
 
 const AHORA = new Date('2026-11-04T20:00:00Z')
 const C1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -30,8 +31,9 @@ const CAMP = { id: '28de888e', client_id: C1, estado: 'necesita_humano', estado_
 const ESPERA_C = { campana_id: '28de888e', objeto_tipo: 'necesita_humano', estado: 'viva', seco: false, vence_en: '2026-11-13T11:23:08Z', accion_al_vencer: 'pausada', desde: hace(1) }
 
 const CORTOS = { PARA_QUE_CORTO_DE_LA_FIRMA, DESTRABA_CORTO_DE_LA_FIRMA, PARA_QUE_CORTO_DE_LA_PAUSA, DESTRABA_CORTO_DE_LA_PAUSA, PARA_QUE_CORTO_CAMPANA_DETENIDA, DESTRABA_CORTO_CAMPANA_DETENIDA }
-/** una o dos palabras (hasta 3 con un artículo: «Cuentas del plan»), cortas para el frente, sin puntos suspensivos ni punto final */
-const esCorto = (t: string) => { const w = t.trim().split(/\s+/); return w.length >= 1 && w.length <= 3 && t.length <= 24 && !/[.…:;]$/.test(t) && t === t.trim() }
+/** 10-nov · dos o tres palabras (Emilio · #310); un nombre propio oficial cuenta como UNA («Sigue el Plan de Marketing»). Sin puntos suspensivos ni punto final */
+const NOMBRES_PROPIOS = [PLAN_DE_MARKETING, ...Object.values(DEPARTAMENTOS).map((d) => d.nombre)]
+const esCorto = (t: string) => { const w = NOMBRES_PROPIOS.reduce((x, n) => x.split(n).join('NOMBRE'), t.trim()).split(/\s+/); return w.length >= 1 && w.length <= 3 && t.length <= 32 && !/[.…:;]$/.test(t) && t === t.trim() }
 
 describe('los cortos que escribe cada oficina', () => {
   it('🔴 cada uno es de una o dos palabras, sin cortes ni puntos', () => {
@@ -47,9 +49,9 @@ describe('los cortos que escribe cada oficina', () => {
     const d = r.decisiones.find((x) => x.id === 'plan-1')!
     expect(d.destraba_corto).toBe('PDF y brief'); expect(d).not.toHaveProperty('para_que_corto')
   })
-  it('🔴 la pregunta de la pausa y la tarjeta de la pausa: «Cuentas del plan» y «El plan»', async () => {
+  it('🔴 la pregunta de la pausa y la tarjeta de la pausa: «Cuentas del Plan de Marketing» y «Sigue el Plan de Marketing»', async () => {
     const r = await leerDecisiones(ctx(base().semilla('esperas_del_dueno', [espera()]).semilla('dueno_preguntas', [pregunta()]).semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }])])))
-    for (const d of r.decisiones) expect(d, d.id).toMatchObject({ para_que_corto: 'Cuentas del plan', destraba_corto: 'El plan' })
+    for (const d of r.decisiones) expect(d, d.id).toMatchObject({ para_que_corto: 'Cuentas del Plan de Marketing', destraba_corto: 'Sigue el Plan de Marketing' })
     expect(r.decisiones).toHaveLength(2)
   })
   it('🔴 una pregunta sin pausa no trae cortos (no hay largo que acompañar)', async () => {
@@ -59,13 +61,22 @@ describe('los cortos que escribe cada oficina', () => {
   it('🔴 sin preguntas por contestar la pausa no promete qué se destraba: tampoco su corto', async () => {
     const r = await leerDecisiones(ctx(base().semilla('esperas_del_dueno', [espera()]).semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }])])))
     const t = r.decisiones.find((x) => x.subtipo === 'plan_en_pausa')!
-    expect(t).not.toHaveProperty('destraba'); expect(t).not.toHaveProperty('destraba_corto'); expect(t.para_que_corto).toBe('Cuentas del plan')
+    expect(t).not.toHaveProperty('destraba'); expect(t).not.toHaveProperty('destraba_corto'); expect(t.para_que_corto).toBe('Cuentas del Plan de Marketing')
   })
   it('🔴 la campaña detenida: «Seguir la campaña» y «Rearmar la campaña»', async () => {
     const r = await leerDecisiones(ctx(base().semilla('cadena_campanas', [CAMP]).semilla('cadena_esperas', [ESPERA_C])))
     const d = r.decisiones.find((x) => x.subtipo === 'campana_necesita_humano')
     expect(d).toBeDefined()
     expect(d).toMatchObject({ para_que_corto: 'Seguir la campaña', destraba_corto: 'Rearmar la campaña' })
+  })
+  it('🔴 10-nov · el plan se nombra «Plan de Marketing», nunca «plan de 90 días», en lo que dice la pausa', () => {
+    for (const n of [1, 3]) { expect(destrabaDeLaPausa(n)).toContain('Plan de Marketing'); expect(destrabaDeLaPausa(n)).not.toMatch(/90 d/i) }
+    expect(PARA_QUE_DE_LA_PAUSA).toContain('Plan de Marketing'); expect(PARA_QUE_DE_LA_PAUSA).not.toMatch(/90 d/i)
+    expect(PLAN_DE_MARKETING).toBe('Plan de Marketing')
+  })
+  it('🔴 un corto de muchas palabras sueltas no pasa; el nombre propio cuenta como una', () => {
+    expect(esCorto('Sigue el Plan de Marketing')).toBe(true)
+    expect(esCorto('Sigue el plan de la campaña')).toBe(false)
   })
   it('🔴 en toda la lista: hay corto si y solo si hay largo', async () => {
     const db = base().semilla('esperas_del_dueno', [espera()]).semilla('dueno_preguntas', [pregunta(), pregunta({ id: 'p9', tema: 'color del logo', tema_norm: 'color' })]).semilla('finanzas_artefactos', [buzon([{ clave: 'cupo_diario', pregunta_id: 'p1' }])])
