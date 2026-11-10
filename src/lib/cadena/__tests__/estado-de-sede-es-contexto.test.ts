@@ -42,8 +42,15 @@ describe('los pedidos de quien planea', () => {
     ['brief', (c) => marcoDelBrief({ ctx: c, estrategia: A.estrategia, version: 1, devolucion: null, nota: null })],
     ['concepto', (c) => marcoDelConcepto({ ctx: c, estrategia: A.estrategia, briefTexto: 'brief', version: 1, devolucion: null, nota: null } as never)],
   ]
-  it.each(pedidos)('%s: sin estado queda idéntico; abierta también', (_n, armar) => {
+  // 10-nov (Lenovo por Emilio · «marco con sede abierta»): en las MESAS (brief y gran idea) la sede abierta ahora SÍ se dice; en estrategia y calendario sigue igual
+  it.each(pedidos.filter(([n]) => n === 'estrategia' || n === 'calendario'))('%s: sin estado queda idéntico; abierta también', (_n, armar) => {
     expect(armar(conEstado('abierta'))).toBe(armar(ctx))
+  })
+  it.each(pedidos.filter(([n]) => n === 'brief' || n === 'concepto'))('%s: abierta se dice una vez, junto a su sede (la prueba de la fecha está en marco-sede-abierta)', (_n, armar) => {
+    const t = armar(conEstado('abierta'))
+    expect(t).not.toBe(armar(ctx))
+    expect(t.split('\n').find((l) => l.includes('ABIERTA: la pre-apertura ya pasó'))).toContain(clave)
+    expect(t.split('ABIERTA').length).toBe(2)
   })
   it.each(pedidos)('%s: por abrir y cerrada llegan como contexto, junto a su sede y una sola vez', (_n, armar) => {
     for (const e of ['por_abrir', 'cerrada'] as const) {

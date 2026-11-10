@@ -116,3 +116,28 @@ export function contextoDeEstado(e: EstadoDeSede | null | undefined): string | n
   if (e === 'cerrada') return 'CERRADA: es contexto, no una prohibición. El plan decide qué se comunica. Solo no afirmes que está abierta ni des horarios de local; requiere_abierto en false'
   return null
 }
+
+/**
+ * 10-nov (RESPUESTA de Lenovo por Emilio · «marco con sede abierta»): desde cuándo está ABIERTA cada sede que hoy sale abierta.
+ * La fecha es la observación más nueva que dice «abierta» en los datos de la sede (la que manda); si lo abierto viene solo de la ficha del cliente (`config`), no hay fecha.
+ */
+export function aperturaDeLasSedes(e: EntradaDeEstadoDeSedes): Map<string, string> {
+  const estados = estadoDeLasSedes(e)
+  const out = new Map<string, string>()
+  for (const r of e.datosDeSede ?? []) {
+    if (estados.get(r.clave) !== 'abierta') continue
+    if (!CAMPOS_DE_ESTADO.has(normalizar(txt(r.campo)).replace(/_/g, ' ')) || estadoDeValor(r.valor_texto) !== 'abierta') continue
+    const en = String(r.observado_en ?? '').slice(0, 10)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(en) && en > (out.get(r.clave) ?? '')) out.set(r.clave, en)
+  }
+  return out
+}
+
+/**
+ * Lo que la MESA de la cadena (brief y gran idea) debe saber del estado de una sede. «Por abrir» y «cerrada» dicen lo de siempre (`contextoDeEstado`);
+ * «abierta» ahora también se dice, con su fecha, porque una sede que ya abrió no lleva piezas de pre-apertura (la mesa lo proponía leyendo un plan escrito antes de la apertura).
+ */
+export function contextoDeLaMesa(e: EstadoDeSede | null | undefined, abiertaDesde?: string | null): string | null {
+  if (e === 'abierta') return `ABIERTA${abiertaDesde ? ` desde ${abiertaDesde}` : ''}: la pre-apertura ya pasó. No propongas expectativa ni preinauguración; la apertura se cuenta como hecho, no como promesa`
+  return contextoDeEstado(e)
+}
