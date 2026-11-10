@@ -120,6 +120,28 @@ function citaLiteralEn(documento: string, cita: string): boolean {
   return tramos.length > 0 && tramos.every((x) => citaAparece(documento, x))
 }
 
+/**
+ * EL TEXTO CONTRA EL QUE SE COMPRUEBA UNA CITA (10-nov · GO Lenovo 18:01Z tras la prueba de segundo cliente #1003).
+ * Hay clientes cuyo plan o manual está guardado como JSON: ahí las comillas van como `\"` y los saltos de párrafo como `\n` escritos,
+ * así que una cita bien copiada con comillas dentro, o que cruza dos párrafos, no aparecía. Si el documento ES JSON, se compara contra
+ * TODOS sus valores como texto, uno por línea (sin elegir ni juzgar ninguno). Si no lo es, se usa tal cual.
+ */
+export function textoDelDocumento(documento: string): string {
+  const t = String(documento ?? '').trim()
+  if (!/^[[{]/.test(t)) return String(documento ?? '')
+  let dato: unknown
+  try { dato = JSON.parse(t) } catch { return String(documento ?? '') }
+  const valores: string[] = []
+  const recorrer = (v: unknown): void => {
+    if (typeof v === 'string') valores.push(v)
+    else if (typeof v === 'number' || typeof v === 'boolean') valores.push(String(v))
+    else if (Array.isArray(v)) v.forEach(recorrer)
+    else if (v && typeof v === 'object') Object.values(v).forEach(recorrer)
+  }
+  recorrer(dato)
+  return valores.join('\n')
+}
+
 export interface CitaQueNoAparece { cita: string; seccion: string; fuente: 'plan' | 'manual' }
 
 /**
@@ -131,6 +153,7 @@ export interface CitaQueNoAparece { cita: string; seccion: string; fuente: 'plan
  */
 export function citasQueNoAparecen(md: string, fuentes: { plan: string; manual?: string }): CitaQueNoAparece[] {
   const out: CitaQueNoAparece[] = []
+  fuentes = { plan: textoDelDocumento(fuentes.plan), manual: fuentes.manual == null ? undefined : textoDelDocumento(fuentes.manual) }
   const enAlguno = (c: string) => citaLiteralEn(fuentes.plan, c) || (!!fuentes.manual && citaLiteralEn(fuentes.manual, c))
   for (const s of seccionesDe(md)) {
     const k = tituloConocido(s)
@@ -190,7 +213,7 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   if (cita) {
     const entreComillas = [...cita.matchAll(/[«"“]([^»"”]{4,})[»"”]/g)].map((m) => m[1])
     const candidatas = entreComillas.length ? entreComillas : [cita]
-    const literal = candidatas.some((c) => normalizar(c).length >= MIN_CARACTERES_DE_CITA && citaAparece(ins.planTexto, c))
+    const literal = candidatas.some((c) => normalizar(c).length >= MIN_CARACTERES_DE_CITA && citaAparece(textoDelDocumento(ins.planTexto), c))
     if (normalizar(cita).length < MIN_CARACTERES_DE_CITA) bloqueos.push(`la cita al plan es demasiado corta para verificarse: «${cita.slice(0, 60)}»`)
     else if (!literal) bloqueos.push(`la cita «${cita.slice(0, 80)}» no se encuentra literal en el plan · no se puede verificar de qué parte sale`)
   }

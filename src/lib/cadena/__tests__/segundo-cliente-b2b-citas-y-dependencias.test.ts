@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { citasQueNoAparecen, leerBriefCreativo } from '../brief-creativo'
+import { citasQueNoAparecen, leerBriefCreativo, textoDelDocumento } from '../brief-creativo'
 import { afectados, LEE } from '../dependencias-de-documentos'
 import { marcoDelBrief, marcoDelConcepto } from '../mesas'
 import { clienteA, clienteB, contextoDe } from '../__fixtures__/clientes'
@@ -61,22 +61,48 @@ describe('#984 con un segundo cliente (B2B, plan y manual guardados como JSON)',
     expect(r.every((x) => x.seccion === 'Público')).toBe(true)
   })
 
-  // HALLAZGO (reportado, sin cambiar código): con documentos guardados como JSON, dos citas BIEN copiadas salen como alteradas.
-  // Con Náufrago no aparece porque su plan y su manual son prosa. Cuando se arregle, estas dos pasan a verde y `it.fails` avisa.
+  // El hallazgo de #1003 (GO Lenovo 18:01Z, arreglado): con documentos guardados como JSON, dos citas BIEN copiadas salían como alteradas.
   const COMILLAS_DENTRO = 'El manual dice: «cierran con una CTA única ("Contáctanos para más información")»'
   const DOS_PARRAFOS = '> «Segmento 1 — Fábricas y empresas medianas con área de Seguridad Industrial activa\n> Perfil: empresas medianas con departamento o responsable de seguridad industrial dedicado.»'
-  it.fails('hallazgo 1 · una cita con comillas dentro: el JSON las guarda como \\" y la cita no se reconoce', () => {
+  it('una cita con comillas dentro: el JSON las guarda como \\" y ahora se reconoce', () => {
     expect(citasQueNoAparecen(brief([COMILLAS_DENTRO]), FUENTES)).toEqual([])
   })
-  it.fails('hallazgo 2 · un bloque `>` que cruza dos párrafos: el JSON guarda el salto como \\n literal y la cita no se reconoce', () => {
+  it('un bloque `>` que cruza dos párrafos: el JSON guarda el salto como \\n escrito y ahora se reconoce', () => {
     expect(citasQueNoAparecen(brief([DOS_PARRAFOS]), FUENTES)).toEqual([])
   })
-  it('control de la causa: las MISMAS dos citas pasan con el mismo manual leído como texto, y una alterada sigue marcándose', () => {
-    const prosaFuentes = { plan: PLAN, manual: MANUAL_EN_PROSA }
-    expect(citasQueNoAparecen(brief([COMILLAS_DENTRO, DOS_PARRAFOS]), prosaFuentes)).toEqual([])
-    expect(citasQueNoAparecen(brief(['El manual dice: «Criterio decisor principal: precio justo.»']), prosaFuentes)).toHaveLength(1)
-    // y con el JSON tal cual, las dos salen marcadas (lo que hoy haría el lector con este cliente)
-    expect(citasQueNoAparecen(brief([COMILLAS_DENTRO, DOS_PARRAFOS]), FUENTES)).toHaveLength(2)
+  it('el JSON se lee igual que el mismo manual en texto: las dos pasan, y una alterada o inventada se sigue marcando', () => {
+    for (const manual of [MANUAL, MANUAL_EN_PROSA]) {
+      const f = { plan: PLAN, manual }
+      expect(citasQueNoAparecen(brief([COMILLAS_DENTRO, DOS_PARRAFOS]), f)).toEqual([])
+      expect(citasQueNoAparecen(brief(['El manual dice: «Criterio decisor principal: precio justo.»']), f)).toHaveLength(1)
+      expect(citasQueNoAparecen(brief(['El manual dice: «Entregamos en todo el país en menos de 24 horas.»']), f)).toHaveLength(1)
+      expect(citasQueNoAparecen(brief(['> «Somos los únicos con laboratorio propio de recarga.»']), f)).toHaveLength(1)
+    }
+  })
+  it('las claves del JSON no cuentan como texto citable: solo sus valores', () => {
+    expect(citasQueNoAparecen(brief(['El manual dice: «brand_book_draft positioning icp_summary»']), FUENTES)).toHaveLength(1)
+  })
+  it('la cita de «De qué parte del plan sale» también se compara contra los valores del plan en JSON', () => {
+    // el plan real de este cliente no tiene párrafos dentro de sus valores: aquí, uno en JSON (como lo guarda la base) que sí los tiene
+    const planJson = JSON.stringify({ secuencia: 'Primero se reactiva el feed con constancia.\n\nDespués se encienden los anuncios de búsqueda.', canales: [{ canal: 'busqueda_local', peso: 0.45 }] })
+    const sinPlan = (md: string) => leerBriefCreativo(md, { planTexto: planJson, manualTexto: MANUAL, prohibidas: [] }).bloqueos.filter((b) => b.includes('no se encuentra literal en el plan'))
+    const md = brief(Object.values(BIEN).filter((x) => !x.startsWith('El plan dice'))).replace('> «activar cuando exista perfil LinkedIn de empresa creado y validado»', '> «Primero se reactiva el feed con constancia. Después se encienden los anuncios de búsqueda.»')
+    expect(sinPlan(md)).toEqual([])
+    expect(sinPlan(md.replace('anuncios de búsqueda.»', 'anuncios de video.»'))).toHaveLength(1)
+    // y la misma cita en el cuerpo del brief («el plan dice»), contra el plan en JSON
+    const enCuerpo = brief(['El plan dice: «Primero se reactiva el feed con constancia. Después se encienden los anuncios de búsqueda.»'])
+    expect(citasQueNoAparecen(enCuerpo, { plan: planJson, manual: MANUAL })).toEqual([])
+    expect(citasQueNoAparecen(enCuerpo.replace('de búsqueda.»', 'de video.»'), { plan: planJson, manual: MANUAL })).toHaveLength(1)
+  })
+})
+
+describe('cómo se lee un documento para comprobar citas', () => {
+  it('un texto que no es JSON queda tal cual (Náufrago y cualquier plan en prosa)', () => {
+    for (const t of ['Plan de 90 días. «costa»', '', '{ esto no es JSON', '[nota] al margen']) expect(textoDelDocumento(t)).toBe(t)
+  })
+  it('un JSON se lee como TODOS sus valores (textos, números, sí/no), uno por línea, en cualquier profundidad', () => {
+    expect(textoDelDocumento('{"a":"uno \\"dos\\"","b":{"c":["tres\\n\\ncuatro",5,true]},"d":null}')).toBe('uno "dos"\ntres\n\ncuatro\n5\ntrue')
+    expect(textoDelDocumento(' ["x", {"y": "z"}] ')).toBe('x\nz')
   })
 })
 
