@@ -17,6 +17,7 @@
  */
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente } from './almacen'
 import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
+import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto } from './cambios-pedidos'
 import { hallazgosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
 import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
@@ -50,6 +51,10 @@ export interface SobreDeTanda {
 export type EntregaALaCadena = { ok: true; estado?: string; ya_cerrada?: boolean; /** el sobre con el que la puerta vuelve a entrar (si el próximo paso no es de una persona) */ siguiente?: { sobre: SobreDeTanda } } | { ok: false; error?: string }
 /** `motivo` de un brief que Emilio mandó a rehacer desde la tarjeta de la gran idea (no cuenta como reapertura por fallo) */
 export const MOTIVO_CAMBIOS_DE_EMILIO = 'cambios_de_emilio'
+/** ¿el brief quedó devuelto CON nota del dueño? solo entonces su texto entra en el marco del brief nuevo (10-nov · decisión C) */
+export function briefDevueltoConNota(b: Pick<BriefCreativoGuardado, 'estado' | 'motivo' | 'devolucion_texto' | 'texto_md'> | null | undefined): boolean {
+  return !!b && b.estado === 'devuelta' && b.motivo === MOTIVO_CAMBIOS_DE_EMILIO && !!b.devolucion_texto?.trim() && !!b.texto_md?.trim()
+}
 export interface EntregaDeBrief { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }
 export interface EntregaDeConcepto extends EntregaDeBrief { brief_devuelto?: string | null }
 
@@ -81,7 +86,7 @@ const canalesEnTexto = (e: Estrategia): string => e.canales.map((c) => `- ${c.re
 
 const reglaDeLengua = (ctx: ContextoDelCliente): string => [reglaDeRegistro(ctx.registro), reglaDeIdioma(ctx.idioma)].filter(Boolean).join(' ')
 
-export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null }): string {
+export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null }): string {
   return [
     '# Qué te pido',
     `Escribe el brief creativo de ESTA campaña (versión ${a.version}) a partir del plan, la estrategia y el manual del cliente. ${reglaDeLengua(a.ctx)}`,
@@ -91,6 +96,9 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     ...(a.metodo ? ['', '# GUÍA PARA LA DIRECCIÓN DEL BRIEF (campaign-brief-agent · no es formato)', a.metodo] : []),
     ...(a.devolucion ? ['', '# DEVOLUCIÓN (la versión anterior se devolvió por esto; corrígelo, no lo discutas)', a.devolucion] : []),
     ...(a.nota ? ['', '# CAMBIOS PEDIDOS POR EL CLIENTE', a.nota] : []),
+    // 10-nov (decisión C de Emilio): con cambios del dueño, la mesa analiza el impacto en TODO el brief y recibe el brief anterior (ver cambios-pedidos.ts)
+    ...(a.nota ? ['', ordenDeAnalisisDeImpacto('el brief')] : []),
+    ...(a.nota && a.anterior ? ['', a.anterior] : []),
     // 01-nov: el brief no lista las sedes; solo se añade la que tenga un estado que decir (sin ninguna, el pedido queda idéntico a hoy)
     // 10-nov (Lenovo por Emilio): la sede ABIERTA también se dice, con su fecha (contextoDeLaMesa)
     ...(a.ctx.sedes.some((s) => contextoDeLaMesa(s.estado, s.abierta_desde)) ? ['', '# SEDES', ...a.ctx.sedes.filter((s) => contextoDeLaMesa(s.estado, s.abierta_desde)).map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''} · ${contextoDeLaMesa(s.estado, s.abierta_desde)}`)] : []),
@@ -139,6 +147,8 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     ...(a.nota ? ['', '# CAMBIOS PEDIDOS POR EL CLIENTE (sobre la versión anterior)', a.nota] : []),
     // 10-nov (FASE 2 · opción A): el RESUMEN de la versión sobre la que el cliente pidió cambios (nunca el texto entero)
     ...(a.anterior ? ['', a.anterior] : []),
+    // 10-nov (decisión C de Emilio): con cambios del dueño, la mesa analiza el impacto en TODA la gran idea antes de escribir (ver cambios-pedidos.ts)
+    ...(a.nota ? ['', ordenDeAnalisisDeImpacto('la gran idea')] : []),
     ...(fechas ? ['', fechas] : []),
     '',
     '# BRIEF CREATIVO DE LA CAMPAÑA (validado)',
@@ -192,6 +202,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
         ctx, estrategia, version: ultimo.version,
         devolucion: previo?.estado === 'devuelta' && previo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? previo.devolucion_texto : null,
         nota: previo?.estado === 'devuelta' && previo.motivo === MOTIVO_CAMBIOS_DE_EMILIO ? texto(previo.devolucion_texto) : null,
+        anterior: briefDevueltoConNota(previo) ? briefAnteriorParaElMarco(previo!) : null,
         metodo: await metodoDe(al, 'brief'),
       }),
       condiciones: condicionesDe(estrategia, await al.formatos()),
@@ -210,7 +221,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   await al.insertarBriefCreativo(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief') }),
+    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: briefDevueltoConNota(ultimo) ? briefAnteriorParaElMarco(ultimo!) : null }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }
