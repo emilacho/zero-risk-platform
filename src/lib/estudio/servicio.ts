@@ -32,8 +32,8 @@ export interface Deps {
 }
 
 export const TABLA = 'estudio_piezas'
-/** el almacén de la oficina admite 20 MB por archivo */
-export const TOPE_DEL_ARCHIVO_BYTES = 20 * 1024 * 1024
+/** el almacén de la oficina admite 50 MB por archivo (GO-LENOVO 10-nov 14:55Z · antes 20 MB; 50 MB es también el tope del proyecto) */
+export const TOPE_DEL_ARCHIVO_BYTES = 50 * 1024 * 1024
 const COLUMNAS = 'id, client_id, tipo, estado, paso, prompt, modelo, parametros, foto_partida_url, costo_estimado_usd, costo_usd, archivo_url, archivo_tipo, miniatura_url, aviso, error, creado_en, terminado_en, en_papelera_desde'
 
 export interface Pieza {
@@ -558,6 +558,102 @@ export function archivosPropios(prefijoPublico: string, p: Pick<Pieza, 'id' | 'c
     if (nombre.startsWith(p.id) || nombre.startsWith(`partidas/${p.clave}.`) || nombre.startsWith(`partidas/${p.clave}-`)) rutas.add(ruta)
   }
   return [...rutas]
+}
+
+// ── rescate de archivos que quedaron en el proveedor (GO-LENOVO 10-nov 14:55Z) ──
+const QUEDA = 'queda solo en el proveedor (vence en días): '
+/** los errores de `bajar` que llevan detalle: en el aviso van como «<error> · <detalle>» */
+const CON_DETALLE = ['archivo_muy_grande', 'descarga_fallida', 'descarga_rechazada']
+
+/** el aviso sin los «queda solo en el proveedor…» (y su detalle); el resto de los avisos se conserva tal cual */
+export function sinAvisosDeCopia(aviso: string | null): string | null {
+  if (!aviso) return null
+  const partes = aviso.split(' · ')
+  const quedan: string[] = []
+  for (let i = 0; i < partes.length; i++) {
+    if (!partes[i].startsWith(QUEDA)) { quedan.push(partes[i]); continue }
+    if (CON_DETALLE.includes(partes[i].slice(QUEDA.length)) && i + 1 < partes.length && !partes[i + 1].startsWith(QUEDA)) i++
+  }
+  return quedan.join(' · ') || null
+}
+
+/** dónde va el archivo principal según su tipo (las mismas rutas que usa `cerrar`) */
+function destinoPrincipal(p: Pieza): { ruta: string; tipo: string } | null {
+  const c = `estudio/${p.client_id}/${p.id}`
+  switch (p.archivo_tipo) {
+    case 'glb': return { ruta: `${c}.glb`, tipo: 'model/gltf-binary' }
+    case 'fbx': return { ruta: `${c}.fbx`, tipo: 'application/octet-stream' }
+    case 'obj': return { ruta: `${c}.obj`, tipo: 'model/obj' }
+    case 'video': return { ruta: `${c}.mp4`, tipo: 'video/mp4' }
+    case 'image': return { ruta: `${c}.png`, tipo: 'image/png' }
+    default: return null
+  }
+}
+
+export interface Rescate { revisadas: number; copiadas: string[]; archivos: number; siguen: Array<{ id: string; aviso: string }>; fallas: Array<{ id: string; error: string }>; dry_run: boolean }
+
+/**
+ * Lo que quedó solo en el proveedor (archivo más grande que el tope de ese día, almacén caído…) se vuelve a copiar mientras el proveedor lo tenga.
+ * Corre con el cron diario de la papelera. Cada archivo copiado reemplaza su dirección; el aviso «queda solo en el proveedor» se quita solo
+ * cuando ya no queda ningún archivo afuera. No gasta: el proveedor ya cobró. La fila se escribe solo si nadie la cambió mientras tanto.
+ */
+export async function rescatarArchivos(d: Deps, o: { dry_run: boolean }): Promise<Resultado<Rescate>> {
+  if (!d.bucket) return falla(500, 'almacen_no_configurado', 'OFICINA_BUCKET no está en el entorno')
+  const r = await d.db.from(TABLA).select(COLUMNAS).eq('estado', 'lista').like('aviso', `%${QUEDA.slice(0, 26)}%`).order('creado_en', { ascending: true }).limit(TOPE_POR_PASADA)
+  if (r.error) return falla(500, 'base_fallida', r.error.message)
+  const piezas = (r.data ?? []) as Pieza[]
+  const prefijo = d.db.storage.from(d.bucket).getPublicUrl('').data.publicUrl.replace(/\/?$/, '/')
+  const afuera = (u: unknown): u is string => typeof u === 'string' && u.startsWith('https://') && !u.startsWith(prefijo)
+  const res: Rescate = { revisadas: piezas.length, copiadas: [], archivos: 0, siguen: [], fallas: [], dry_run: o.dry_run }
+  for (const p of piezas) {
+    try {
+      const clips = Array.isArray(p.parametros?.archivos) ? (p.parametros.archivos as Array<Record<string, unknown>>) : null
+      const tareas: Array<{ url: string; ruta: string; tipo: string }> = []
+      for (const c of clips ?? []) {
+        const base = `estudio/${p.client_id}/${p.id}-${c.action_id}`
+        if (afuera(c.glb)) tareas.push({ url: c.glb, ruta: `${base}.glb`, tipo: 'model/gltf-binary' })
+        if (afuera(c.fbx)) tareas.push({ url: c.fbx, ruta: `${base}.fbx`, tipo: 'application/octet-stream' })
+      }
+      // en una animación el archivo principal es uno de sus clips: se copia una sola vez
+      if (afuera(p.archivo_url) && !tareas.some((t) => t.url === p.archivo_url)) {
+        const dest = destinoPrincipal(p)
+        if (!dest) { res.siguen.push({ id: p.id, aviso: `tipo de archivo sin ruta conocida: ${p.archivo_tipo}` }); continue }
+        tareas.push({ url: p.archivo_url, ...dest })
+      }
+      // nada que bajar (dirección que no es https pública…): no se toca, ni siquiera el aviso
+      if (!tareas.length) { res.siguen.push({ id: p.id, aviso: 'ningún archivo del proveedor que se pueda bajar' }); continue }
+      if (o.dry_run) { res.copiadas.push(p.id); res.archivos += tareas.length; continue }
+      const hechas = new Map<string, string>()
+      const avisos: string[] = []
+      for (const t of tareas) {
+        const c = await copiar(d, t.url, t.ruta, t.tipo)
+        if (c.aviso) avisos.push(c.aviso)
+        else hechas.set(t.url, c.url)
+      }
+      // nada se pudo copiar (el proveedor ya no lo tiene, sigue siendo muy grande…): la fila queda igual
+      if (!hechas.size) { res.siguen.push({ id: p.id, aviso: [...new Set(avisos)].join(' · ') }); continue }
+      const cambia = (u: unknown) => (typeof u === 'string' && hechas.get(u)) || u
+      const cambios: Record<string, unknown> = {
+        archivo_url: cambia(p.archivo_url),
+        miniatura_url: cambia(p.miniatura_url),
+        aviso: [sinAvisosDeCopia(p.aviso), ...new Set(avisos)].filter(Boolean).join(' · ') || null,
+        actualizado_en: new Date(d.ahora()).toISOString(),
+      }
+      if (clips) cambios.parametros = { ...p.parametros, archivos: clips.map((c) => ({ ...c, glb: cambia(c.glb) ?? null, fbx: cambia(c.fbx) ?? null })) }
+      // solo si nadie la cambió mientras se copiaba (mismo aviso, misma dirección)
+      let q = d.db.from(TABLA).update(cambios).eq('id', p.id).eq('aviso', p.aviso as string)
+      q = p.archivo_url === null ? q.is('archivo_url', null) : q.eq('archivo_url', p.archivo_url)
+      const u = await q.select('id')
+      if (u.error) { res.fallas.push({ id: p.id, error: `base: ${u.error.message}` }); continue }
+      if (!u.data?.length) { res.fallas.push({ id: p.id, error: 'la pieza cambió durante la copia: queda para la próxima pasada' }); continue }
+      res.archivos += hechas.size
+      if (avisos.length) res.siguen.push({ id: p.id, aviso: [...new Set(avisos)].join(' · ') })
+      else res.copiadas.push(p.id)
+    } catch (e) {
+      res.fallas.push({ id: p.id, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  return { ok: true, valor: res }
 }
 
 export interface Vaciado { revisadas: number; borradas: string[]; archivos: number; conservados: number; fallas: Array<{ id: string; error: string }>; dry_run: boolean }
