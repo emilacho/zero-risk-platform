@@ -145,7 +145,10 @@ describe('el título que lee el dueño', () => {
     ['Plan de Marketing, versión 3: espera tu decisión', 'Plan de Marketing: espera tu decisión'],
     ['Revisa el plan de 90 dias antes de aprobar', 'Revisa el Plan de Marketing antes de aprobar'],
     ['Un plan de 90 díasx no es el plan', 'Un plan de 90 díasx no es el plan'],
-    ['Tablero financiero, versión 1: espera tu firma', 'Tablero financiero: espera tu firma'],
+    ['Tablero financiero, versión 1: espera tu firma', 'Tablero Financiero: espera tu firma'],
+    ['Tablero Financiero, versión 4: espera tu firma', 'Tablero Financiero: espera tu firma'],
+    ['El TABLERO FINANCIERO de Uno y el tablero financiero de Dos', 'El Tablero Financiero de Uno y el Tablero Financiero de Dos'],
+    ['Plan de 90 días y plan de 90 dias', 'Plan de Marketing y Plan de Marketing'],
     ['Kit del plan v2 listo', 'Kit del plan listo'],
   ])('%s', (crudo, esperado) => { expect(tituloParaElDueno(crudo)).toBe(esperado) })
   it('🔴 corrige el voseo con pronombre pegado', () => {

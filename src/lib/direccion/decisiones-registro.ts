@@ -7,7 +7,7 @@
  */
 import { MARGEN_PARA_ARRANCAR_MIN, MAX_INTENTOS_DE_DESPERTAR, SILENCIO_TRAS_RESPONDER_MIN } from '../finanzas/conversa/pausa'
 import { temaDe } from '../finanzas/conversa/buzon'
-import { PLAN_DE_MARKETING } from '../nombres-del-sistema'
+import { PLAN_DE_MARKETING, TABLERO_FINANCIERO } from '../nombres-del-sistema'
 import { esObjeto, leer, sinSecretos, texto, type Db, type Fila, type Fuente } from './comun'
 
 export type AccionDeDecision = 'aceptar' | 'editar' | 'responder' | 'asumir' | 'descartar'
@@ -197,7 +197,7 @@ export async function leerContestadas(db: Db, hora: string, clientes: Map<string
     if (!vivo(t.client_id)) continue
     const cuando = texto(t.firmado_en)
     contestadas.push({
-      id: String(t.id), tipo: 'firma_de_finanzas', fuente: 'finanzas_tableros', client_id: texto(t.client_id), cliente: nombre(t.client_id), titulo: `Tablero financiero, versión ${Number(t.version) || 1}`, resuelta_en: cuando, resultado: 'firmada', motivo: null,
+      id: String(t.id), tipo: 'firma_de_finanzas', fuente: 'finanzas_tableros', client_id: texto(t.client_id), cliente: nombre(t.client_id), titulo: `${TABLERO_FINANCIERO}, versión ${Number(t.version) || 1}`, resuelta_en: cuando, resultado: 'firmada', motivo: null,
       registro: [{ cuando: texto(t.creado_en), quien: 'oficina', estado: 'pregunto', texto: 'La oficina financiera pidió tu firma' }, { cuando, quien: 'tu', estado: 'firmaste', ...textoDeLaFirma(t.firma_con_cambios) }],
     })
   }
