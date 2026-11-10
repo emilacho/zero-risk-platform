@@ -6,6 +6,7 @@
 import { planEsperaAlManual } from '../manual/manual-primero'
 import { TOPE_REESCRITURA_USD } from '../oficina/tablero/plan'
 import { barrerTexto } from '../../../scripts/ops/barrer-voseo.mjs'
+import { PLAN_DE_MARKETING } from '../nombres-del-sistema'
 import { esObjeto, estaCompleto, leer, leerClientes, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
 import { AL_EDITAR_LA_FIRMA, DESTRABA_CORTO_DE_LA_FIRMA, DESTRABA_DE_LA_FIRMA, PARA_QUE_CORTO_DE_LA_FIRMA, cifrasDelBloque, leerLoQueSeFirma, paraQueDeLaFirma, sePuedeEditar, type CifraDeFirma, type LoQueSeFirma } from './decisiones-firma'
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
@@ -62,6 +63,8 @@ export interface Decision {
   /** 09-nov · T0 de la ficha única: la misma decisión en el contrato `FichaDeDecision` v1 (al lado de los campos de hoy, que siguen). null = llegó mal armada: lo dice `ficha_problemas` */
   ficha?: FichaDeDecision | null
   ficha_problemas?: string[]
+  /** 10-nov · la versión del documento que se decide (Lenovo por Emilio: va a la derecha de la fecha, no en el título). Sin versión conocida no viene */
+  version_del_documento?: number
   /** 10-nov · la decisión como alerta: Nueva o Revisada (la marca «✓ Revisar» de Emilio, en `alertas_vistas`). `estado: null` = no se pudo leer */
   alerta?: AlertaDeDecision
 }
@@ -90,9 +93,14 @@ const esEnsayo = (f: Fila): boolean => (esObjeto(f.payload) && f.payload.dry_run
  * 01-nov · firma de Emilio: el título que llega al dueño va en lenguaje claro y en tuteo. Quita códigos (P3, BRF-0001, versión 2, v2) y rótulos internos; el dato los conserva en `titulo_interno`.
  * El tuteo se corrige al leer porque hay preguntas guardadas de antes del arreglo en origen.
  */
+/** 10-nov · la versión de un documento solo si es un entero positivo; si no, no se inventa */
+const versionDe = (v: unknown): number | undefined => (Number.isInteger(Number(v)) && Number(v) > 0 && v !== null && v !== '' ? Number(v) : undefined)
+
 export function tituloParaElDueno(crudo: string): string {
   const enTuteo = String((barrerTexto(crudo, { conPronombre: true }) as { texto?: unknown }).texto ?? crudo)
   const limpio = enTuteo
+    // 10-nov · Lenovo por Emilio: el plan se llama «Plan de Marketing» en todo lo que lee el dueño, venga de la oficina que venga
+    .replace(/\bplan de 90 d[ií]as\b/giu, PLAN_DE_MARKETING)
     .replace(/⚠️\s*REVISIÓN INCOMPLETA\s*·\s*/u, 'Revisión incompleta · ')
     .replace(/(^|·\s*)Aprobación\s*·\s*/u, '$1')
     .replace(/\bBRF-\d+\b/g, '')
@@ -162,7 +170,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
     // 05-nov · corrección de Lenovo: un plan que ya superó otro no pide firma. Sin plan vigente conocido se muestra
     const vigente = vigentes?.get(String(c.client_id))
     if (vigente && vigente.id !== String(c.plan_id)) { reemplazadas++; continue }
-    crudas.push({ id: String(c.plan_id), tipo: 'plan', subtipo: 'compuerta', fuente: 'plan_aprobaciones', client_id: texto(c.client_id), titulo: `Plan de 90 días, versión ${Number(c.version) || 1}: espera tu decisión`, desde: texto(c.creado_en), vence: null, prioridad: null, decidir: { ruta: '/nuevo', accion: 'plan-aprobar' }, costo_usd: null, costo_nota: COSTO_PLAN, destraba: 'Al aprobar arrancan el PDF y el brief.', destraba_corto: 'PDF y brief', detiene: true })
+    crudas.push({ id: String(c.plan_id), tipo: 'plan', subtipo: 'compuerta', fuente: 'plan_aprobaciones', client_id: texto(c.client_id), titulo: `${PLAN_DE_MARKETING}${versionDe(c.version) ? `, versión ${versionDe(c.version)}` : ''}: espera tu decisión`, ...(versionDe(c.version) ? { version_del_documento: versionDe(c.version) } : {}), desde: texto(c.creado_en), vence: null, prioridad: null, decidir: { ruta: '/nuevo', accion: 'plan-aprobar' }, costo_usd: null, costo_nota: COSTO_PLAN, destraba: 'Al aprobar arrancan el PDF y el brief.', destraba_corto: 'PDF y brief', detiene: true })
   }
   let ensayos = 0
   for (const h of bandeja) {

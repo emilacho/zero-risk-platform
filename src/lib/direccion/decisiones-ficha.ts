@@ -49,7 +49,8 @@ export interface FichaDeDecision {
   detiene?: { que: string }
   propuesta?: { cifras?: CifraDeLaFicha[]; supuesto?: string; al_cambiar?: string; al_editar?: { destino: Destino; vista_previa?: Destino } }
   /** sin `vence` ni `sin_limite` = no se sabe (guion rojo). «Sin fecha límite» solo con `sin_limite: true`, que la oficina declara (cuidado 1 de CC6) */
-  espera: { desde: string | null; vence?: string; sin_limite?: true; al_vencer?: string }
+  /** `version_del_documento` (10-nov): la versión de lo que se decide, para mostrar a la derecha de la fecha; nunca en el título */
+  espera: { desde: string | null; vence?: string; sin_limite?: true; al_vencer?: string; version_del_documento?: number }
   /** SOLO INFORMATIVO: nunca decide si se pide confirmación ni el tope (son de la puerta). Un costo en 0 no autoriza nada */
   costo?: { usd?: number; nota: string }
   origen: { fuente: string; ref: string }
@@ -147,7 +148,7 @@ export function fichaDe(d: Decision): FichaDeDecision {
     ...(largo(d.destraba, d.destraba_corto) ? { desbloquea: largo(d.destraba, d.destraba_corto) } : {}),
     ...(d.detiene === true ? { detiene: { que: QUE_SE_DETIENE } } : {}),
     ...(Object.keys(propuesta).length ? { propuesta } : {}),
-    espera: { desde: d.desde, ...(d.vence ? { vence: d.vence } : !d.vence && NO_VENCEN.has(d.fuente) ? { sin_limite: true as const } : {}), ...(al_vencer ? { al_vencer } : {}) },
+    espera: { desde: d.desde, ...(d.vence ? { vence: d.vence } : !d.vence && NO_VENCEN.has(d.fuente) ? { sin_limite: true as const } : {}), ...(al_vencer ? { al_vencer } : {}), ...(d.version_del_documento ? { version_del_documento: d.version_del_documento } : {}) },
     ...(d.costo_nota || d.costo_usd !== null ? { costo: { ...(d.costo_usd !== null ? { usd: d.costo_usd } : {}), nota: d.costo_nota ?? '' } } : {}),
     origen: { fuente: d.fuente, ref: d.id },
     acciones,
@@ -181,6 +182,7 @@ export function problemasDeLaFicha(f: FichaDeDecision): string[] {
   for (const d of [f.propuesta?.al_editar?.destino, f.propuesta?.al_editar?.vista_previa]) if (d !== undefined && !(DESTINOS as readonly string[]).includes(d)) p.push(`puerta desconocida: ${String(d)}`)
   for (const [k, v] of [['uso', f.uso], ['desbloquea', f.desbloquea]] as const) if (v && (!esTexto(v.largo) || (v.corto !== undefined && !esTexto(v.corto)))) p.push(`«${k}» sin texto`)
   if (f.espera?.sin_limite && f.espera.vence) p.push('vence y a la vez «sin fecha límite»')
+  if (f.espera?.version_del_documento !== undefined && !(Number.isInteger(f.espera.version_del_documento) && f.espera.version_del_documento > 0)) p.push('versión del documento que no es un número entero positivo')
   if (f.detiene !== undefined && !esTexto(f.detiene?.que)) p.push('«detiene» sin decir qué')
   if (f.donde_se_hace && !(PANTALLAS as readonly string[]).includes(f.donde_se_hace.pantalla)) p.push(`pantalla desconocida: ${String(f.donde_se_hace.pantalla)}`)
   return p
