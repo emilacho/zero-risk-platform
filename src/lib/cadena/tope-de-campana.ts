@@ -8,7 +8,10 @@
  *   · concepto y brief creativo: `cadena_conceptos.costo_usd` y `cadena_brief_creativo.costo_usd`;
  *   · encargos de la oficina de la campaña (los reales con `parte_id` = la campaña o uno de sus partes; los lee `src/lib/oficina/gasto-de-encargos.ts`): su `gasto_usd`. Un encargo que YA está contado
  *     en un concepto o brief (por `encargo_id`) no se suma dos veces. Uno que sigue abierto (`abierto` · `en_paso`) cuenta lo mayor entre lo gastado y su tope.
- * Lo comprometido: cada brief de un parte REAL de la campaña que todavía no tiene encargo real cuenta el tope de su familia (ya salió o puede salir; cota pesimista).
+ * Lo comprometido (corrección pedida por CC7 🟡 y CC6 🔴 sobre e05a646): de los OTROS partes reales de la campaña, cada brief sin encargo real que la sala YA RECIBIÓ
+ * (su sobre de producir existe: el freno lo soltó, o lo soltó la cadena antes del freno) cuenta el tope de su familia, sin importar su fecha (ya está en camino).
+ * Un brief sin encargo que la sala NO recibió (lo retuvo el freno, o nunca salió) NO compromete dinero: guarda lugar POR FECHA, igual que una fila por venir
+ * (solo si va antes que la pieza que se quiere soltar). Así una semana posterior retenida no le quita el dinero a la más cercana, llegue en el orden que llegue.
  * Lo que se va a soltar: cada sobre de este parte cuenta el tope de su familia (el tope por encargo de la plantilla activa de la oficina); sin familia o con una familia desconocida, el
  * mayor de los topes activos (cota pesimista).
  *
@@ -39,7 +42,14 @@ export interface LecturaDeGasto {
   partes: Array<{ id: string; briefs: Array<{ brief_id: string | null; familia: string | null; fila_id?: string | null }> }>
   /** tope por encargo de cada familia ACTIVA de la oficina */
   topes_de_familia: Record<string, number>
+  /** los sobres de producir REALES que la sala ya recibió de esos partes (parte · brief) */
+  soltados: Array<{ parte_id: string; brief_id: string }>
 }
+
+/** la operación con que la sala guarda la ENTRADA de un sobre de producir (`brief/parte-listo` · `producir` → viaje PIEZAS; comprobada contra filas reales del 21-oct) */
+export const OPERACION_DE_PRODUCIR = 'PIEZAS.intake.brief/parte-listo.producir'
+/** un brief de otro parte que la sala todavía no recibió: guarda lugar por fecha (su fila del calendario) */
+export interface BriefEsperando { parte_id: string; brief_id: string; familia: string | null; fila_id: string | null }
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0)
 const r2 = (n: number): number => Math.round(n * 100) / 100
@@ -53,7 +63,7 @@ export function topeDeLaPieza(topes: Record<string, number>, familia: string | n
 }
 
 /** lo gastado y lo comprometido de la campaña · `parteActual` queda fuera de lo comprometido (sus briefs son lo que se va a soltar) · puro */
-export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { gastado: number; comprometido: number } {
+export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { gastado: number; comprometido: number; esperando: BriefEsperando[] } {
   const yaContados = new Set([...l.conceptos, ...l.briefs].filter((x) => x.encargo_id && typeof x.costo_usd === 'number').map((x) => x.encargo_id as string))
   let gastado = l.corridas.reduce((s, c) => s + costoEfectivo(c), 0)
   gastado += l.conceptos.reduce((s, x) => s + num(x.costo_usd), 0) + l.briefs.reduce((s, x) => s + num(x.costo_usd), 0)
@@ -62,6 +72,8 @@ export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { g
     gastado += (ESTADOS_ABIERTOS as readonly string[]).includes(e.estado) ? Math.max(num(e.gasto_usd), num(e.tope_usd)) : num(e.gasto_usd)
   }
   const conEncargo = new Set(l.encargos.filter((e) => e.brief_id).map((e) => `${e.parte_id}|${e.brief_id}`))
+  const enLaSala = new Set(l.soltados.map((x) => `${x.parte_id}|${x.brief_id}`))
+  const esperando: BriefEsperando[] = []
   let comprometido = 0
   for (const p of l.partes) {
     if (p.id === parteActual) continue
@@ -70,10 +82,12 @@ export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { g
       const id = typeof b.brief_id === 'string' ? b.brief_id.trim() : ''
       if (!id || vistos.has(id)) continue
       vistos.add(id)
-      if (!conEncargo.has(`${p.id}|${id}`)) comprometido += topeDeLaPieza(l.topes_de_familia, b.familia)
+      if (conEncargo.has(`${p.id}|${id}`)) continue
+      if (enLaSala.has(`${p.id}|${id}`)) comprometido += topeDeLaPieza(l.topes_de_familia, b.familia)
+      else esperando.push({ parte_id: p.id, brief_id: id, familia: b.familia, fila_id: b.fila_id ?? null })
     }
   }
-  return { gastado, comprometido }
+  return { gastado, comprometido, esperando }
 }
 
 export interface Candidata { brief_id: string; familia: string | null; fecha: string | null; hora: string | null; ya_tiene_encargo: boolean }
@@ -83,6 +97,10 @@ export interface FilaPorVenir { fila_id: string; fecha: string; hora: string | n
 export function filasPorVenir(filas: Array<{ id: string; fecha: string; hora: string | null; estado: string; familia: string | null }>, hoy: string, partes: LecturaDeGasto['partes'], deEsteParte: Array<string | null | undefined>): FilaPorVenir[] {
   const cubiertas = new Set<string>([...partes.flatMap((p) => p.briefs.map((b) => b.fila_id ?? '')), ...deEsteParte.map((x) => x ?? '')].filter(Boolean))
   return filas.filter((f) => (f.estado === 'validada' || f.estado === 'lista_para_brief') && f.fecha >= hoy && !cubiertas.has(f.id)).map((f) => ({ fila_id: f.id, fecha: f.fecha, hora: f.hora, familia: f.familia }))
+}
+/** los briefs esperando de otros partes, con la fecha y hora de su fila del calendario · sin fila conocida van al final (no le guardan lugar a nadie con fecha) · pura */
+export function esperandoPorVenir(esperando: BriefEsperando[], cuando: ReadonlyMap<string, { fecha: string; hora: string | null }>): FilaPorVenir[] {
+  return esperando.map((b) => { const f = b.fila_id ? cuando.get(b.fila_id) : undefined; return { fila_id: `${b.parte_id}|${b.brief_id}`, fecha: f?.fecha ?? '9999-99-99', hora: f?.hora ?? null, familia: b.familia } })
 }
 const llaveDeOrden = (fecha: string | null, hora: string | null): string => (fecha ? `${fecha} ${hora ?? '99:99'}` : '9999-99-99')
 export type DecisionDelTope =

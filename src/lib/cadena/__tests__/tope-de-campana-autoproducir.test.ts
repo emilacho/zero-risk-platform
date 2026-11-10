@@ -49,6 +49,24 @@ describe('autoproducir con el freno · avisa UNA vez por el buzón (condición 4
     await llamar(al, c.id)
     expect(al.avisosAlBuzon.map((a) => [a.clave, a.accion])).toEqual([[claveDelTope(c.id, 32), 'abrio'], [claveDelTope(c.id, 33), 'abrio'], [claveDelTope(c.id, 33), 'repetida']])
   })
+  it('un brief RETENIDO de otro parte que va ANTES en el calendario guarda su lugar; si va DESPUÉS, no (construido · la llamada real)', async () => {
+    const fila = (id: string, fecha: string, hora: string) => ({ id, fecha, hora, estado: 'validada', red: 'instagram', formato: 'foto', campana_id: '', calendario_version: 1 }) as any
+    const armar = async (fechaDelOtro: string) => {
+      const { al, c } = await montar(32, [{ brief_id: 'B1', fila_id: 'f1', familia: 'carrusel_mesa' }])
+      al.filasGuardadas.push(...[fila('f1', '2026-11-12', '09:00'), fila('f0', fechaDelOtro, '09:00')].map((f) => ({ ...f, campana_id: c.id })))
+      // otro parte real con su brief sin encargo y SIN sobre en la sala (retenido): f0
+      al.lecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], partes: [{ id: 'p-otro', briefs: [{ brief_id: 'X', familia: 'carrusel_mesa', fila_id: 'f0' }] }], soltados: [] }
+      return { al, c }
+    }
+    const antes = await armar('2026-11-11') // 26,28 + 5 (lugar de X) + 5 (B1) = 36,28 > 32 → B1 espera
+    expect((await llamar(antes.al, antes.c.id)).cuerpo).toMatchObject({ emitidos: 0, tope: { decision: 'corta', retenidas: ['B1'] } })
+    const despues = await armar('2026-11-20') // X va después: no le guarda lugar a B1 → 31,28 ≤ 32 → sale
+    expect((await llamar(despues.al, despues.c.id)).cuerpo).toMatchObject({ emitidos: 1, tope: { decision: 'cabe' } })
+    // y si X YA llegó a la sala, compromete sin importar su fecha
+    const enCamino = await armar('2026-11-20')
+    enCamino.al.lecturaDeGasto.soltados = [{ parte_id: 'p-otro', brief_id: 'X' }]
+    expect((await llamar(enCamino.al, enCamino.c.id)).cuerpo).toMatchObject({ emitidos: 0, tope: { decision: 'corta', comprometido: 5 } })
+  })
   it('sin tope: no sale nada y se pregunta una vez', async () => {
     const { al, c } = await montar(null)
     expect((await llamar(al, c.id)).cuerpo).toMatchObject({ emite: false, motivo: 'campana_sin_tope', emitidos: 0 })

@@ -1167,7 +1167,8 @@
      "formato": "historia",
      "semana": 12
     }
-   ]
+   ],
+   "sala_producir": []
   },
   "31dc6aaf-2e9c-426e-81c5-1645c500283e": {
    "campana": {
@@ -2381,6 +2382,134 @@
      "formato": "carrusel",
      "semana": 12
     }
+   ],
+   "sala_producir": [
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T10:02:42.768419+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0001",
+       "dry_run": false,
+       "fila_id": "s1-d1-lun_ig"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T10:02:44.135685+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0002",
+       "dry_run": false,
+       "fila_id": "s1-d1-fb_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T10:02:45.450307+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0004",
+       "dry_run": false,
+       "fila_id": "s1-d1-hist_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T16:20:22.060706+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0001",
+       "dry_run": false,
+       "fila_id": "s1-d1-lun_ig"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T16:20:24.016984+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0002",
+       "dry_run": false,
+       "fila_id": "s1-d1-fb_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T16:20:25.940822+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0004",
+       "dry_run": false,
+       "fila_id": "s1-d1-hist_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T20:20:22.238146+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0001",
+       "dry_run": false,
+       "fila_id": "s1-d1-lun_ig"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T20:20:24.474739+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0002",
+       "dry_run": false,
+       "fila_id": "s1-d1-fb_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T20:20:26.278525+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0004",
+       "dry_run": false,
+       "fila_id": "s1-d1-hist_lun"
+      }
+     }
+    }
    ]
   }
  },
@@ -2579,5 +2708,6 @@
    "max_por_dia": 2,
    "familia": "video_mesa"
   }
- ]
+ ],
+ "sala_producir_tomado_en": "2026-11-10T20:50:38.371Z"
 }

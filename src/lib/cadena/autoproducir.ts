@@ -15,7 +15,7 @@
  */
 import type { Almacen } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
-import { avisoDeGastoIlegible, avisoDelTope, decidirTope, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
+import { avisoDeGastoIlegible, avisoDelTope, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
 import { hoyEnZona } from './campanas'
 import { familiaDeFila } from './familia'
 
@@ -147,7 +147,9 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
       const porVenir = filasPorVenir(filasDelCalendario.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora ?? null, estado: f.estado, familia: familiaDeFila(f, formatos) })), hoyEnZona(new Date().toISOString(), c.zona_horaria), l.partes, todos.map((x) => x.payload.fila_id))
       const conEncargo = new Set(l.encargos.filter((e) => e.parte_id === parte.id && e.brief_id).map((e) => e.brief_id as string))
       const candidatas = todos.map((x) => ({ brief_id: x.payload.brief_id, familia: x.payload.familia ?? null, fecha: x.payload.fecha ?? null, hora: x.payload.hora ?? null, ya_tiene_encargo: conEncargo.has(x.payload.brief_id) }))
-      d = decidirTope(c.tope_gasto_usd, medirGastoDeCampana(l, parte.id), candidatas, l.topes_de_familia, porVenir)
+      // lo retenido (o nunca salido) de OTROS partes guarda lugar por fecha, como las filas por venir; lo que la sala ya recibió va en lo comprometido
+      const medido = medirGastoDeCampana(l, parte.id)
+      d = decidirTope(c.tope_gasto_usd, medido, candidatas, l.topes_de_familia, [...porVenir, ...esperandoPorVenir(medido.esperando, cuando)])
     } catch (e) {
       // un error no es «cero gastado»: no sale nada y se avisa (UNA vez por campaña)
       const aviso = await avisar(avisoDeGastoIlegible(c, e instanceof Error ? e.message : String(e)))

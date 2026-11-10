@@ -45,7 +45,8 @@ vi.mock('@/lib/sala-ingress', () => ({ isIntakeEnabled: () => true, orchestrateI
 vi.mock('@/lib/sala-router-consumer/inmediato-supabase', () => ({ programarDespachoInmediato: () => 'programado' }))
 
 import { almacenDeSupabase } from '../almacen-supabase'
-import { decidirTope, filasPorVenir, medirGastoDeCampana, topeDeLaPieza, type Candidata, type LecturaDeGasto } from '../tope-de-campana'
+import { decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, OPERACION_DE_PRODUCIR, topeDeLaPieza, type Candidata, type LecturaDeGasto } from '../tope-de-campana'
+import { FUENTE_DEL_SOBRE, INTENCION_DEL_SOBRE } from '../autoproducir'
 import { familiaDeFila } from '../familia'
 import type { FormatosPorRed } from '../tipos'
 import { TABLAS_DE_GASTO } from '@/lib/oficina/gasto-de-encargos'
@@ -54,13 +55,14 @@ const ENC = TABLAS_DE_GASTO.encargos, PLANT = TABLAS_DE_GASTO.plantillas
 
 /** las tablas tal como están en la base (foto del 10-nov) · `extra` agrega filas CONSTRUIDAS para los sabotajes */
 function sembrar(extra: Record<string, Fila[]> = {}) {
-  tablas = { cadena_corridas: [], cadena_conceptos: [], cadena_brief_creativo: [], client_historical_outputs: [], [ENC]: [], [PLANT]: F.tipos_de_grupo.map((t: Fila) => ({ ...t })) }
+  tablas = { cadena_corridas: [], cadena_conceptos: [], cadena_brief_creativo: [], client_historical_outputs: [], sala_event_log: [], [ENC]: [], [PLANT]: F.tipos_de_grupo.map((t: Fila) => ({ ...t })) }
   for (const [id, c] of Object.entries<any>(F.campanas)) {
     tablas.cadena_corridas.push(...c.corridas.map((x: Fila) => ({ ...x, campana_id: id })))
     tablas.cadena_conceptos.push(...c.conceptos.map((x: Fila) => ({ ...x, campana_id: id })))
     tablas.cadena_brief_creativo.push(...c.briefs.map((x: Fila) => ({ ...x, campana_id: id })))
     tablas.client_historical_outputs.push(...c.partes.map((p: Fila) => ({ ...p, output_type: 'campaign_brief_pack' })))
     tablas[ENC].push(...c.encargos.map((e: Fila) => ({ ...e })))
+    tablas.sala_event_log.push(...(c.sala_producir ?? []).map((x: Fila) => ({ ...x })))
   }
   for (const [t, filas] of Object.entries(extra)) (tablas[t] ??= []).push(...filas)
 }
@@ -104,11 +106,24 @@ describe('lo gastado · la MISMA fuente que los US$ 26,28 (condición 1 de CC7) 
     expect(l.partes.map((p) => p.id)).toEqual([])
     expect(medirGastoDeCampana(l, 'parte-nuevo').comprometido).toBe(0)
   })
-  it('sabotaje · un parte REAL anterior con un brief sin encargo (construido) compromete el tope de su familia; uno que ya tiene encargo, no', async () => {
-    sembrar({ client_historical_outputs: [{ id: 'parte-viejo', output_type: 'campaign_brief_pack', provenance_tag: { campana_id: NAU, familias_por_brief: [{ brief_id: 'V1', familia: 'carrusel_mesa' }, { brief_id: 'V2', familia: 'kit_historias' }] } }], [ENC]: [{ id: 'e-v2', parte_id: 'parte-viejo', brief_id: 'V2', estado: 'cerrado', tope_usd: 2.5, gasto_usd: 0.4, dry_run: false }] })
+  it('sabotaje · otro parte REAL (construido): un brief sin encargo que la sala YA recibió compromete el tope de su familia; uno RETENIDO no compromete (guarda lugar por fecha); uno con encargo cuenta lo gastado', async () => {
+    const tag = { campana_id: NAU, familias_por_brief: [{ brief_id: 'V1', familia: 'carrusel_mesa', fila_id: 'f-v1' }, { brief_id: 'V2', familia: 'kit_historias' }, { brief_id: 'V3', familia: 'post_img', fila_id: 'f-v3' }] }
+    const sobre = (brief: string, dry_run = false) => ({ client_id: 'x', logical_period: 'parte:parte-viejo', operation_type: 'PIEZAS.intake.brief/parte-listo.producir', created_at: '2026-11-10T20:00:00Z', payload: { envelope_payload: { parte_id: 'parte-viejo', brief_id: brief, dry_run } } })
+    sembrar({ client_historical_outputs: [{ id: 'parte-viejo', output_type: 'campaign_brief_pack', provenance_tag: tag }], [ENC]: [{ id: 'e-v2', parte_id: 'parte-viejo', brief_id: 'V2', estado: 'cerrado', tope_usd: 2.5, gasto_usd: 0.4, dry_run: false }],
+      sala_event_log: [sobre('V1'), sobre('V3', true), { ...sobre('V3'), operation_type: 'PIEZAS.router.dispatch.brief/parte-listo.producir' }] })
     const m = medirGastoDeCampana(await leer(NAU, 'parte-nuevo'), 'parte-nuevo')
-    expect(m.comprometido).toBe(5) // V1 · carrusel_mesa
+    expect(m.comprometido).toBe(5) // V1 · carrusel_mesa, ya en la sala
     expect(m.gastado).toBeCloseTo(26.28 + 0.4, 2) // V2 ya gastó lo suyo
+    // V3: su único sobre real es de OTRA operación y el de entrada es de ensayo → no está en camino: espera, guarda lugar por fecha
+    expect(m.esperando).toEqual([{ parte_id: 'parte-viejo', brief_id: 'V3', familia: 'post_img', fila_id: 'f-v3' }])
+  })
+  it('la sala de Seguridad Industrial (real): sus 3 briefs llegaron a la sala; la consulta pide SOLO la entrada de producir de SUS partes', async () => {
+    const l = await leer(SEG, 'x')
+    expect(new Set(l.soltados.map((x) => x.brief_id))).toEqual(new Set(['BRF-0001', 'BRF-0002', 'BRF-0004']))
+    const q = consultas.find((c) => c.tabla === 'sala_event_log')!
+    expect(q.filtros).toEqual([['eq', 'operation_type', OPERACION_DE_PRODUCIR], ['in', 'logical_period', ['parte:2a93029a-d4e5-439e-87a8-4b67afdfec33']]])
+    expect(OPERACION_DE_PRODUCIR).toBe(`PIEZAS.intake.${FUENTE_DEL_SOBRE}.${INTENCION_DEL_SOBRE}`)
+    expect(F.campanas[SEG].sala_producir.every((x: Fila) => x.operation_type === OPERACION_DE_PRODUCIR)).toBe(true)
   })
   it('sabotaje · un encargo ABIERTO (construido) cuenta lo mayor entre lo gastado y su tope · uno cerrado por tope, lo gastado real', async () => {
     sembrar({ client_historical_outputs: [{ id: 'p2', output_type: 'campaign_brief_pack', provenance_tag: { campana_id: SEG, familias_por_brief: [{ brief_id: 'A', familia: 'post_img' }, { brief_id: 'B', familia: 'post_img' }] } }],
@@ -120,10 +135,10 @@ describe('lo gastado · la MISMA fuente que los US$ 26,28 (condición 1 de CC7) 
     const l = await leer(NAU, 'p-actual')
     expect(l.partes.map((p) => p.id)).toEqual(['p-actual'])
     expect(medirGastoDeCampana(l, 'p-actual').comprometido).toBe(0)
-    expect(medirGastoDeCampana(l, 'otro').comprometido).toBe(5)
+    expect(medirGastoDeCampana(l, 'otro')).toMatchObject({ comprometido: 0, esperando: [{ parte_id: 'p-actual', brief_id: 'A1' }] }) // visto desde otro parte: no llegó a la sala → espera
   })
   it('sabotaje · una corrida caída sin costo cuenta su tope (la cota pesimista de siempre)', () => {
-    const l: LecturaDeGasto = { corridas: [{ costo_usd: 0, estado: 'fallida', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: [], topes_de_familia: { post_img: 2.5 } }
+    const l: LecturaDeGasto = { corridas: [{ costo_usd: 0, estado: 'fallida', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: [], soltados: [], topes_de_familia: { post_img: 2.5 } }
     expect(medirGastoDeCampana(l, 'x').gastado).toBeGreaterThan(0)
   })
   it('sin familia (o una desconocida) cuenta el MAYOR tope de las familias ACTIVAS: 5, no el 10 de video_mesa que está apagada', async () => {
@@ -136,8 +151,8 @@ describe('lo gastado · la MISMA fuente que los US$ 26,28 (condición 1 de CC7) 
 })
 
 describe('el gasto ilegible DETIENE (condición 2 de CC7): cualquier lectura que falla lanza, no es «cero gastado»', () => {
-  for (const t of ['cadena_corridas', 'cadena_conceptos', 'cadena_brief_creativo', 'client_historical_outputs', ENC, PLANT]) {
-    it(`falla ${t} → lanza`, async () => { fallarTabla = t; await expect(leer(NAU, 'x')).rejects.toThrow() })
+  for (const t of ['cadena_corridas', 'cadena_conceptos', 'cadena_brief_creativo', 'client_historical_outputs', ENC, PLANT, 'sala_event_log']) {
+    it(`falla ${t} → lanza`, async () => { fallarTabla = t; await expect(leer(SEG, 'x')).rejects.toThrow() })
   }
 })
 
@@ -205,6 +220,87 @@ describe('lo gastado + lo que se va a soltar (condición 3 de CC7) · lo más ce
     const cand: Candidata[] = [{ brief_id: 'a', familia: 'kit_historias', fecha: '2026-11-12', hora: null, ya_tiene_encargo: false }]
     expect(decidirTope(28.78, medido, cand, { kit_historias: 2.5 }).tipo).toBe('cabe')
     expect(decidirTope(28.77, medido, cand, { kit_historias: 2.5 }).tipo).toBe('corta')
+  })
+})
+
+describe('los DOS órdenes (CC7 🟡 · CC6 🔴): la semana 46 recibe primero lo que cabe, llegue antes o después que la 47 · calendario real de Náufrago', () => {
+  const TOPES = { post_img: 2.5, carrusel_ig_v1: 2.5, carrusel_mesa: 5, kit_historias: 2.5, brief_mesa: 1.6, concepto_mesa: 5 }
+  const filas = filasDe(NAU)
+  const cuando = new Map(filas.map((f) => [f.id, { fecha: f.fecha, hora: f.hora }]))
+  const W46 = enSemana(NAU, HOY, '2026-11-15'), W47 = enSemana(NAU, '2026-11-16', '2026-11-22')
+  const parteDe = (id: string, fs: typeof W46) => ({ id, briefs: fs.map((f, i) => ({ brief_id: `${id}-B${i + 1}`, familia: f.familia, fila_id: f.id })) })
+  const P46 = parteDe('p46', W46), P47 = parteDe('p47', W47)
+  /** la cadena, construida en memoria: los partes guardados y lo que la sala ya recibió; `pasar` hace lo que hace autoproducir con el freno */
+  function escena(viejo = false) {
+    const partes: Array<typeof P46> = [], soltados: Array<{ parte_id: string; brief_id: string }> = []
+    const decidir = (p: typeof P46) => {
+      const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes, soltados, topes_de_familia: TOPES }
+      const m = medirGastoDeCampana(l, p.id)
+      // `viejo` = la regla de e05a646: todo brief de otro parte sin encargo comprometía, sin importar su fecha (el sabotaje)
+      const medido = viejo ? { ...m, comprometido: m.comprometido + m.esperando.reduce((x, b) => x + topeDeLaPieza(TOPES, b.familia), 0), esperando: [] } : m
+      const porVenir = [...filasPorVenir(filas, HOY, partes, p.briefs.map((b) => b.fila_id)), ...esperandoPorVenir(medido.esperando, cuando)]
+      const cand: Candidata[] = p.briefs.map((b) => ({ brief_id: b.brief_id, familia: b.familia, fecha: cuando.get(b.fila_id)!.fecha, hora: cuando.get(b.fila_id)!.hora, ya_tiene_encargo: false }))
+      return decidirTope(40, medido, cand, TOPES, porVenir)
+    }
+    const pasar = (p: typeof P46) => {
+      if (!partes.includes(p)) partes.push(p)
+      const d = decidir(p)
+      const sueltan = d.tipo === 'sin_tope' ? [] : d.sueltan
+      for (const b of sueltan) if (!soltados.some((x) => x.parte_id === p.id && x.brief_id === b)) soltados.push({ parte_id: p.id, brief_id: b })
+      return sueltan
+    }
+    return { pasar, decidir, partes, soltados }
+  }
+  /** las 3 primeras de la 46 en el orden del calendario (fecha y hora) */
+  const TRES = [...P46.briefs].sort((a, b) => `${cuando.get(a.fila_id)!.fecha} ${cuando.get(a.fila_id)!.hora ?? '99:99'}`.localeCompare(`${cuando.get(b.fila_id)!.fecha} ${cuando.get(b.fila_id)!.hora ?? '99:99'}`)).slice(0, 3).map((b) => b.brief_id)
+  const costo = (ids: string[], p: typeof P46) => ids.reduce((x, id) => x + topeDeLaPieza(TOPES, p.briefs.find((b) => b.brief_id === id)!.familia), 0)
+  it('46 → 47: salen las 3 más cercanas de la 46 (US$ 10) y la 47 no se lleva nada', () => {
+    expect(costo(TRES, P46)).toBe(10)
+    const e = escena()
+    expect(e.pasar(P46)).toEqual(TRES)
+    expect(e.pasar(P47)).toEqual([])
+  })
+  it('47 → 46: la 47 llega primero y queda retenida; la 46 después recibe LO MISMO que en el otro orden', () => {
+    const e = escena()
+    const de47 = e.pasar(P47)
+    expect(de47).toEqual([]) // las filas de la 46 (aún sin parte) tienen su lugar guardado
+    expect(e.pasar(P46)).toEqual(TRES)
+    expect(26.28 + costo(e.soltados.filter((x) => x.parte_id === 'p46').map((x) => x.brief_id), P46) + costo(de47, P47)).toBeLessThanOrEqual(40)
+  })
+  it('sabotaje · con la regla de e05a646 (lo retenido de la 47 compromete) la 46 se queda sin nada si la 47 llega primero', () => {
+    const e = escena(true)
+    e.pasar(P47)
+    expect(e.pasar(P46)).toEqual([])
+  })
+  it('46 primero y lo retenido de la 46 SÍ frena a la 47 (va antes en el calendario)', () => {
+    const e = escena()
+    e.pasar(P46)
+    const d = e.decidir(P47)
+    expect(d.tipo === 'corta' ? d.sueltan : ['no cortó']).toEqual([])
+  })
+  it('dos partes que deciden A LA VEZ (ninguno ve lo que soltó el otro) no pasan juntos del tope', () => {
+    const e = escena()
+    e.partes.push(P46, P47)
+    const a = e.decidir(P46), b = e.decidir(P47)
+    const s46 = a.tipo === 'sin_tope' ? [] : a.sueltan, s47 = b.tipo === 'sin_tope' ? [] : b.sueltan
+    expect(26.28 + costo(s46, P46) + costo(s47, P47)).toBeLessThanOrEqual(40)
+    expect(s46).toEqual(TRES)
+  })
+  it('con un tope CONSTRUIDO de US$ 60: 47 → 46 da el mismo reparto que 46 → 47 (la 46 entera antes que la 47)', () => {
+    const corrida = (orden: Array<typeof P46>) => {
+      const partes: Array<typeof P46> = [], soltados: Array<{ parte_id: string; brief_id: string }> = []
+      for (const p of orden) {
+        if (!partes.includes(p)) partes.push(p)
+        const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes, soltados, topes_de_familia: TOPES }
+        const m = medirGastoDeCampana(l, p.id)
+        const cand: Candidata[] = p.briefs.map((b) => ({ brief_id: b.brief_id, familia: b.familia, fecha: cuando.get(b.fila_id)!.fecha, hora: cuando.get(b.fila_id)!.hora, ya_tiene_encargo: false }))
+        const d = decidirTope(60, m, cand, TOPES, [...filasPorVenir(filas, HOY, partes, p.briefs.map((b) => b.fila_id)), ...esperandoPorVenir(m.esperando, cuando)])
+        for (const x of d.tipo === 'sin_tope' ? [] : d.sueltan) soltados.push({ parte_id: p.id, brief_id: x })
+      }
+      return soltados.filter((x) => x.parte_id === 'p46').map((x) => x.brief_id).sort()
+    }
+    expect(corrida([P47, P46])).toEqual(corrida([P46, P47]))
+    expect(corrida([P46, P47]).length).toBeGreaterThan(3)
   })
 })
 

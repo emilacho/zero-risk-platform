@@ -29,6 +29,7 @@ import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos
 import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
 import { encargosRealesDe, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
+import { OPERACION_DE_PRODUCIR } from './tope-de-campana'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
@@ -420,7 +421,14 @@ export function almacenDeSupabase(): Almacen {
       const ids = [...new Set([campanaId, parteActual, ...partes.map((x) => x.id)])]
       // los encargos reales y los topes de familia los lee la OFICINA (solo ella nombra sus tablas)
       const encargos = await encargosRealesDe(db as unknown as DbDeGasto, ids)
-      return { corridas, conceptos, briefs, encargos, partes, topes_de_familia }
+      // los sobres de producir que la sala YA recibió de esos partes (los reales): distinguen «ya en camino» (compromete) de «retenido» (guarda lugar por fecha)
+      const salaFilas = partes.length ? await lista<{ logical_period: string; payload: unknown }>(db.from('sala_event_log').select('logical_period, payload').eq('operation_type', OPERACION_DE_PRODUCIR).in('logical_period', partes.map((x) => `parte:${x.id}`)).limit(5000)) : []
+      const soltados = salaFilas.flatMap((f) => {
+        const e = tag(tag(f.payload).envelope_payload)
+        const brief = texto(e.brief_id)
+        return brief && e.dry_run !== true && typeof f.logical_period === 'string' ? [{ parte_id: f.logical_period.replace(/^parte:/, ''), brief_id: brief }] : []
+      })
+      return { corridas, conceptos, briefs, encargos, partes, topes_de_familia, soltados }
     },
     async avisarAlBuzon(a) {
       try {
