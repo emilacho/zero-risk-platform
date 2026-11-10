@@ -13,6 +13,7 @@ import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import type { SobreDeRevisionDePieza } from './paso-jefatura'
 import type { NotaVista } from '../notas-del-dueno/autorevision'
 import type { NotaLeida, PuertoMesa } from './mesa/tipos'
+import type { PerfilParaLectores } from '../perfil-del-publico/lectores'
 
 /** lo que el cliente tiene (manual, fotos, datos propios), leído UNA vez al abrir y guardado en el encargo */
 export interface FuentesCompletas {
@@ -33,6 +34,8 @@ export interface FuentesCompletas {
   marca?: MarcaParaRender | null
   /** slug del cliente (carpeta del bucket del brazo) */
   slug?: string | null
+  /** 10-nov · perfil del público T2: el informe vigente del cliente (contexto, no mandato); ausente = no se pidió (fixtures viejos) */
+  perfil_del_publico?: PerfilParaLectores
 }
 
 export interface MarcaParaRender {
