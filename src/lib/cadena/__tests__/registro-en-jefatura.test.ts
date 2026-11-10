@@ -199,6 +199,27 @@ describe.each(CASOS)('$nombre', (k) => {
       expect(r.cuerpo).toMatchObject({ ok: true, ya_cerrada: true })
       expect(brief(al, k)).toEqual(antes)
     })
+    it('🔴 pedido de CC7 · la espera ya NO está viva (terminó por otro camino) y el documento sigue retenido: la vuelta contesta `ya_cerrada` y no toca el brief ni la gran idea', async () => {
+      const al = almacen(k)
+      await briefEnRevision(al, k)
+      esperaDe(al, k, objetoDeRegistro('brief', 1))!.estado = 'cancelada'
+      const antesB = structuredClone(brief(al, k))
+      expect(antesB.estado).toBe('borrador')
+      expect((await recibirVueltaDeRegistro(al, { marcas: {}, salida: salidaDe(k, 'brief', 1, briefDe(k, k.tonoBien)) }, AHORA)).cuerpo).toMatchObject({ ok: true, ya_cerrada: true })
+      expect(brief(al, k)).toEqual(antesB)
+      expect(al.sobresDeRegistro).toHaveLength(1)
+      // la gran idea `abierta` es justo el estado normal mientras espera: una vuelta tardía no la cierra ni la reescribe
+      const al2 = almacen(k)
+      await conBriefValidado(al2, k)
+      await conceptoAbrir(al2, wf(k), AHORA)
+      await recibirConcepto(al2, entrega(k, 1, conceptoDe(k.suenaMal)), AHORA)
+      esperaDe(al2, k, objetoDeRegistro('concepto', 1))!.estado = 'resuelta'
+      const antesC = structuredClone(concepto(al2, k))
+      expect(antesC.estado).toBe('abierta')
+      expect((await recibirVueltaDeRegistro(al2, { marcas: {}, salida: salidaDe(k, 'concepto', 1, conceptoDe(k.suenaBien)) }, AHORA)).cuerpo).toMatchObject({ ok: true, ya_cerrada: true })
+      expect(concepto(al2, k)).toEqual(antesC)
+      expect(al2.tarjetas).toEqual([])
+    })
     it('🔴 sin versión (cierre sin cambios): se valida el original y lo que el detector aún ve queda como aviso, nunca bloquea', async () => {
       const al = almacen(k)
       await briefEnRevision(al, k)
