@@ -11,12 +11,12 @@ import { diaSemanaIso, sumarDias } from '../fechas'
 import { filasPasadas, huellaDeReubicacion, leerDecisiones, marcoDeReubicacion, verificarDecisiones, type ContextoDeReubicacion } from '../reubicacion'
 import type { Fila, FormatosPorRed } from '../tipos'
 
-interface Caso { nombre: string; c: ClienteFixture; hoy: string; cerrado: string; abierto: string; formato: string; red: string; hora: string }
+interface Caso { nombre: string; c: ClienteFixture; semanaAbierto: number; hoy: string; cerrado: string; abierto: string; formato: string; red: string; hora: string }
 const CASOS: Caso[] = [
   // A: hoy jueves 12-nov; el martes 17-nov está cerrado; el jueves 19-nov abre
-  { nombre: 'A · cafetería', c: clienteA(), hoy: '2026-11-12', cerrado: '2026-11-17', abierto: '2026-11-19', formato: 'reel', red: 'instagram', hora: '09:00' },
+  { nombre: 'A · cafetería', c: clienteA(), semanaAbierto: 6, hoy: '2026-11-12', cerrado: '2026-11-17', abierto: '2026-11-19', formato: 'reel', red: 'instagram', hora: '09:00' },
   // B: hoy martes 17-nov; el domingo 22-nov está cerrado; el lunes 23-nov abre
-  { nombre: 'B · clínica veterinaria', c: clienteB(), hoy: '2026-11-17', cerrado: '2026-11-22', abierto: '2026-11-23', formato: 'carrusel', red: 'facebook', hora: '10:00' },
+  { nombre: 'B · clínica veterinaria', c: clienteB(), semanaAbierto: 3, hoy: '2026-11-17', cerrado: '2026-11-22', abierto: '2026-11-23', formato: 'carrusel', red: 'facebook', hora: '10:00' },
 ]
 const FORMATOS = (k: Caso): FormatosPorRed => ({ [k.red]: [{ formato: k.formato, produccion: 'opera', lead_dias: 3, max_por_dia: 1 }] })
 
@@ -64,7 +64,14 @@ describe.each(CASOS)('$nombre', (k) => {
       expect(cambios).toHaveLength(1)
       expect(cambios[0]).toMatchObject({ tipo: 'reubicar', fecha: k.abierto, dia_semana: diaSemanaIso(k.abierto) })
       expect(cambios[0].aviso).toBe(`reubicación: reubicada del ${ayer} al ${k.abierto} · apertura`)
-      expect((cambios[0] as { semana: number }).semana).toBeGreaterThan(0)
+      // la semana cuenta desde el lunes de la semana en que empieza la campaña (A: 12-oct → el 19-nov es la semana 6 · B: 09-nov → el 23-nov es la semana 3)
+      expect((cambios[0] as { semana: number }).semana).toBe(k.semanaAbierto)
+    })
+    it('🔴 la hora de la pieza tiene que caer en el horario de la sede el día nuevo', () => {
+      const filas = [fila(k, 'pasada', ayer, { hora: '22:30' })]
+      const c = verificarDecisiones(filasPasadas(filas, k.hoy), [{ fila_id: 'pasada', accion: 'reubicar', fecha: k.abierto, razon: 'x' }], ctx(k, filas)).cambios[0]
+      expect(c.tipo).toBe('descartar')
+      expect((c as { rechazo: string }).rechazo).toMatch(/fuera del horario/)
     })
     it('🔴 una fecha en día CERRADO de la sede se rechaza (la pieza exige local abierto) y la fila se descarta con la razón del código', () => {
       const filas = base()

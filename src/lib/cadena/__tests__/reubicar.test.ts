@@ -103,6 +103,13 @@ describe.each(CASOS)('$nombre', (k) => {
       await reloj(al, masMin(k.ahora, 30))
       expect(al.sobresDeReubicacion).toHaveLength(1)
     })
+    it('🔴 una sola decisión viva por campaña: si otra fila queda atrás mientras la mesa decide, no se abre una segunda mesa en paralelo', async () => {
+      const al = almacen(k)
+      await reloj(al, k.ahora)
+      al.filasGuardadas.push(fila(k, 'pasada-d', sumarDias(k.hoy, -3)))
+      await reloj(al, masMin(k.ahora, 10))
+      expect(al.sobresDeReubicacion).toHaveLength(1)
+    })
     it('sin filas pasadas no abre nada', async () => {
       const al = almacen(k)
       al.filasGuardadas = al.filasGuardadas.filter((f) => !f.id.startsWith('pasada'))
@@ -210,6 +217,13 @@ describe.each(CASOS)('$nombre', (k) => {
       await recibirReubicacion(al, entrega(k, 1, decision(k)), k.ahora)
       expect(filaDe(al, 'pasada-a')).toMatchObject({ estado: 'en_oficina', fecha: sumarDias(k.hoy, -2), avisos: [] })
       expect(filaDe(al, 'pasada-c').estado).toBe('perdio_su_fecha')
+    })
+    it('🔴 una fila que quedó atrás DESPUÉS de abrir la decisión no se toca con esta vuelta (es de la decisión siguiente)', async () => {
+      const al = almacen(k)
+      await reloj(al, k.ahora)
+      al.filasGuardadas.push(fila(k, 'pasada-d', sumarDias(k.hoy, -3)))
+      await recibirReubicacion(al, entrega(k, 1, decision(k)), k.ahora)
+      expect(filaDe(al, 'pasada-d')).toMatchObject({ estado: 'validada', avisos: [] })
     })
     it('si el calendario cambió de versión mientras decidía, la decisión queda obsoleta y no toca nada', async () => {
       const al = almacen(k)
