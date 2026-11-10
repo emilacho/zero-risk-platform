@@ -339,6 +339,25 @@ describe('privacidad: texto y enlace, nunca quién lo dijo', () => {
 })
 
 // ─────────────────────────────────────────── muestra mínima (calidad sobre precio)
+describe('nadie vacía ni reescribe la tabla de voces', () => {
+  const leer = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8').replace(/--.*$/gm, '')
+  it('la corrección quita a anon y authenticated todo, y al servidor todo menos leer e insertar', () => {
+    const sql = leer('supabase/migrations/202611101400_perfil_publico_voces_sin_vaciar.sql')
+    expect(sql).toMatch(/revoke all on public\.perfil_publico_voces from anon, authenticated;/)
+    const quita = /revoke ([a-z, ]+) on public\.perfil_publico_voces from service_role;/.exec(sql)
+    expect(new Set(quita![1].split(',').map((x) => x.trim()))).toEqual(new Set(['truncate', 'trigger', 'references', 'update', 'delete']))
+    expect(sql).toMatch(/grant select, insert on public\.perfil_publico_voces to service_role;/)
+    expect(sql).not.toMatch(/(insert into|update public|delete from|truncate public|drop)/i)
+    expect(sql.indexOf('begin;')).toBeLessThan(sql.indexOf('revoke'))
+    expect(sql.indexOf('commit;')).toBeGreaterThan(sql.lastIndexOf('grant'))
+  })
+  it('la reversa vive fuera de migrations y no toca filas', () => {
+    const r = leer('supabase/reversas/202611101400_perfil_publico_voces_sin_vaciar_REVERSA.sql')
+    expect(r).not.toMatch(/(delete|truncate public|drop|update public)/i)
+    expect(fs.existsSync(path.join(process.cwd(), 'supabase/migrations/202611101400_perfil_publico_voces_sin_vaciar_REVERSA.sql'))).toBe(false)
+  })
+})
+
 describe('muestra mínima: sin ella no se redacta', () => {
   it('59 voces útiles no alcanzan; 60 de dos fuentes con ≥ 15 cada una sí', () => {
     expect(suficiencia([...voces(CAFE, 'a_fuente', 44), ...voces(CAFE, 'b_fuente', 15, 100)]).alcanza).toBe(false)
