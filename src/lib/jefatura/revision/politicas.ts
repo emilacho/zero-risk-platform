@@ -7,7 +7,7 @@
 import type { Condicion, Paso, Plantilla } from '../../revision-comun'
 import { TIPOS_DE_REVISION, type Productor, type TipoDeRevision } from './contrato'
 import { CLAVE_DE_VERIFICACION, ESQUEMA_DE_VERIFICACION, VERIFICADOR_DE_ORDENES } from './orden-del-dueno'
-import { CLAVE_DE_REVISION_DE_REGISTRO, ESQUEMA_DE_REEMPLAZOS } from './registro'
+import { CLAVE_DE_REVISION_DE_REGISTRO, ESQUEMA_DE_FICHAS_DE_REGISTRO, ESQUEMA_DE_REEMPLAZOS } from './registro'
 
 export type Reentrega = 'ninguna' | 'parcial' | 'completa' | 'version_nueva'
 export type DestinoDeCierre = 'bandeja' | 'siguiente_paso'
@@ -161,7 +161,7 @@ export function plantillaDePolitica(p: PoliticaDeRevision, productores: Producto
   // 10-nov · REGISTRO (A′): alcance angosto. El revisor de la política lee el registro → el creador responde con reemplazos exactos (solo si hay frase corregible) → cierre. Sin fondo y sin GPT
   if (p.artifact_type === 'registro') {
     const pasosR: Paso[] = [
-      { clave: CLAVE_DE_REVISION_DE_REGISTRO, tipo: 'agente', quien: p.revisor_fondo ?? 'editor_en_jefe', condicion: { tipo: 'siempre' }, ronda: 1, entrada: ['revision'], salida_artefacto: 'fichas_jefe', tope_usd: topeDelPaso(p, 'revision_fondo'), salida: { esquema: 'fichas.v1', reintento_formato: 1 } },
+      { clave: CLAVE_DE_REVISION_DE_REGISTRO, tipo: 'agente', quien: p.revisor_fondo ?? 'editor_en_jefe', condicion: { tipo: 'siempre' }, ronda: 1, entrada: ['revision'], salida_artefacto: 'fichas_jefe', tope_usd: topeDelPaso(p, 'revision_fondo'), salida: { esquema: ESQUEMA_DE_FICHAS_DE_REGISTRO, reintento_formato: 1 } },
       ...(conRe ? duenos.map((d): Paso => ({ clave: CLAVE_DE_CORRECCION(d.agente), tipo: 'agente', quien: d.agente, condicion: { tipo: 'si_fichas_abiertas', origen: 'jefe', gravedad: 'bloquea', ...sinWildcard(d) }, ronda: 1, entrada: ['fichas_jefe', 'revision'], salida_artefacto: 'revision', tope_usd: topeDelPaso(p, 'correccion'), salida: { esquema: ESQUEMA_DE_REEMPLAZOS, reintento_formato: 1 } })) : []),
       { clave: 'cierre', tipo: 'codigo', quien: 'jefatura', funcion: 'cierre', condicion: { tipo: 'siempre' }, entrada: ['revision'], salida_artefacto: 'cierre', tope_usd: 0 },
     ]

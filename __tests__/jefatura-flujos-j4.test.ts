@@ -119,7 +119,7 @@ describe('② Armar el pedido · moldes del modelo simulado', () => {
   const NUEVOS = ['resolucion_objeto.v1', 'resolucion_parcial.v1', 'resolucion_plan.v1']
   // la opinión libre de GPT va dentro de la ruta; la auto-revisión del productor (segundo cerebro) es SOLO de la oficina: la jefatura nunca la recibe (ni ve las notas del dueño), así que su flujo no lleva molde
   // 10-nov · registro (tramo 1): los reemplazos del creador necesitan la frase de cada ficha; el molde lo entrega SIEMPRE la ruta (simulacion.ts). El respaldo del flujo vivo no se toca en el tramo 1
-  const SIN_MOLDE_EN_LA_JEFATURA = ['opinion_libre.v1', 'autorevision.v1', 'reemplazos.v1']
+  const SIN_MOLDE_EN_LA_JEFATURA = ['opinion_libre.v1', 'autorevision.v1', 'reemplazos.v1', 'fichas_de_registro.v1']
   const codigoArmar = fs.readFileSync(path.join(DIR, 'turno-n1-armar.js'), 'utf8')
 
   it('todo esquema de la oficina (menos la opinión libre de GPT, que va dentro de la ruta) tiene molde válido contra SU contrato de formato', () => {

@@ -57,9 +57,10 @@ export function moldeDelPaso(c: ContextoDeMolde): { texto: string | null; error?
     }))
     return { texto: JSON.stringify({ filas }) }
   }
-  if (c.esquema !== 'fichas.v1' && sim.productor === 'muerto') return { texto: null, error: 'el turno murió (simulado): sin vuelta' }
-  if (c.esquema !== 'fichas.v1' && (sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && !c.reintento))) return { texto: 'esto no cumple el formato (simulado)' }
-  if (c.esquema === 'fichas.v1') {
+  const esDeFichas = c.esquema === 'fichas.v1' || c.esquema === 'fichas_de_registro.v1'
+  if (!esDeFichas && sim.productor === 'muerto') return { texto: null, error: 'el turno murió (simulado): sin vuelta' }
+  if (!esDeFichas && (sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && !c.reintento))) return { texto: 'esto no cumple el formato (simulado)' }
+  if (esDeFichas) {
     const f = sim.fichas ?? 'ninguna'
     if (f === 'ninguna') return { texto: '{"fichas":[]}' }
     if (c.paso === 'revision_registro') {

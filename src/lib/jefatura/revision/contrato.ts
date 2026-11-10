@@ -87,6 +87,8 @@ export interface PayloadDeRevision {
   documento?: string
   /** registro: lo que marcó el detector barato; el revisor lo recibe como PISTA, nunca decide */
   pistas_de_registro?: string[]
+  /** registro: los documentos de los que el texto puede citar (título + texto); con ellos el código comprueba, literal, una cita que señala el revisor. Sin ellos, nada es cita salvo las marcas exactas */
+  documentos_de_origen?: Array<{ titulo: string; texto: string }>
 }
 
 export interface EntradaDeRevision {

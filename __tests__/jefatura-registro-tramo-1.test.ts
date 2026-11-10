@@ -31,7 +31,8 @@ const mundo = () => {
   return puertosDePrueba({ almacen: mem })
 }
 const sobreDe = (c: typeof B2B, o: { dry_run?: boolean; id?: string } = {}) => sobre('registro' as never, { id: o.id ?? 'doc-1', texto: c.texto, dry_run: o.dry_run ?? false, payload: { registro: c.registro, seccion_de_voz: c.seccion_de_voz, documento: 'el brief' } })
-const fichas = (xs: Array<{ que: string; propuesta?: string }>) => JSON.stringify({ fichas: xs.map((x) => ({ que: x.que, donde: 'texto', contra_que: 'otro registro', gravedad: 'bloquea', propuesta: x.propuesta ?? `${x.que} (corregida)` })) })
+const fichas = (xs: Array<{ que: string; propuesta?: string; es_cita?: boolean; cita_de?: string }>) => JSON.stringify({ fichas: xs.map((x) => ({ que: x.que, donde: 'texto', contra_que: 'otro registro', gravedad: 'bloquea', propuesta: x.propuesta ?? `${x.que} (corregida)`, ...(x.es_cita !== undefined ? { es_cita: x.es_cita } : {}), ...(x.cita_de ? { cita_de: x.cita_de } : {}) })) })
+const F = (que: string, o: { es_cita?: boolean; cita_de?: string } = {}) => ({ que, donde: 'texto', contra_que: '', gravedad: 'bloquea' as const, propuesta: '', ...o })
 
 describe('🔴 la fila de la política se lee', () => {
   it('la fila de la migración es válida y nace apagada', () => {
@@ -59,12 +60,12 @@ describe('🔴 sin registro no se abre (no hay uno por omisión)', () => {
 })
 
 describe('🔴 lo citado no se corrige', () => {
-  it('bloque `>`, cita atribuida y sección «Citas» son tramos citados', () => {
+  it('solo las marcas EXACTAS son tramos citados (bloque `>` y sección «Citas»); unas comillas después de «dice» NO: eso lo juzga el revisor', () => {
     const t = 'a\n> pasá nomás\nEl dueño dice: «vení el lunes»\n# Citas\nte esperamos\n# Otra\nfuera'
     const tr = tramosCitados(t)
     const en = (f: string) => tr.some(([a, b]) => t.indexOf(f) >= a && t.indexOf(f) + f.length <= b)
-    for (const f of ['pasá nomás', 'vení el lunes', 'te esperamos']) expect(en(f)).toBe(true)
-    expect(en('fuera')).toBe(false)
+    for (const f of ['pasá nomás', 'te esperamos']) expect(en(f)).toBe(true)
+    for (const f of ['fuera', 'vení el lunes']) expect(en(f)).toBe(false)
   })
   it('palabra entera: «pedís» no aparece dentro de «despedís»', () => {
     expect(ocurrencias('nos despedís y pedís', 'pedís').fuera).toHaveLength(1)
@@ -96,6 +97,65 @@ describe('🔴 los reemplazos solo cambian lo señalado', () => {
     expect(aplicarReemplazos(B2B.texto, [{ id: 'f1', antes: 'te envío', despues: 'le envío' }], tomadas).ok).toBe(false)
     expect(aplicarReemplazos(B2B.texto, [{ id: 'f9', antes: 'te enviamos', despues: 'le enviamos' }], tomadas).ok).toBe(false)
     expect(aplicarReemplazos(B2B.texto, [{ id: 'f1', antes: 'te enviamos', despues: 'te enviamos' }], tomadas).ok).toBe(false)
+  })
+  it('🔴 un «despues» vacío o solo espacios se rechaza (no borra la frase)', () => {
+    for (const despues of ['', '   ']) expect(aplicarReemplazos('Hola pedís hoy', [{ id: 'f1', antes: 'pedís', despues }], new Map([['f1', 'pedís']])).ok).toBe(false)
+  })
+})
+
+describe('🔴 las líneas de una pieza entre comillas se corrigen; la cita la juzga el revisor y el código la comprueba', () => {
+  // CC7 · 10-nov: el caso que rompía la lista de verbos (cliente que tutea)
+  const PIEZA = '## Banco\nPieza 3 · el texto dice «Pedís tu desayuno frente al mar».\nEl titular pide «Desayunás sin apuro».\n'
+  it('🔴 «el texto dice «Pedís…»» y «el titular pide «Desayunás…»» salen CORREGIBLES (sin marca del revisor)', () => {
+    const c = clasificarFichas(PIEZA, [F('Pedís tu desayuno'), F('Desayunás sin apuro')])
+    expect(c.corregibles.map((f) => f.que)).toEqual(['Pedís tu desayuno', 'Desayunás sin apuro'])
+    expect(c.en_citas).toEqual([])
+  })
+  it('el revisor dice «es cita», pero el sobre no trae documentos de origen → se corrige', () => {
+    expect(clasificarFichas(PIEZA, [F('Pedís tu desayuno', { es_cita: true, cita_de: 'Lo que dijo el dueño' })]).corregibles).toHaveLength(1)
+  })
+  it('el revisor dice «es cita» y la frase está LITERAL en ese documento de origen → aviso, no se corrige', () => {
+    const origen = [{ titulo: 'Lo que dijo el dueño', texto: 'Aquí pedís tu desayuno y te quedas.' }, { titulo: 'Reseñas', texto: 'Desayunás sin apuro, dice una reseña' }]
+    const c = clasificarFichas(PIEZA, [F('Pedís tu desayuno', { es_cita: true, cita_de: 'Lo que dijo el dueño' }), F('Desayunás sin apuro', { es_cita: true, cita_de: 'Reseñas' })], origen)
+    // «Pedís» con mayúscula no está literal en el origen («pedís»): se corrige; «Desayunás sin apuro» sí está en «Reseñas»: aviso
+    expect(c.corregibles.map((f) => f.que)).toEqual(['Pedís tu desayuno'])
+    expect(c.en_citas).toEqual(['Desayunás sin apuro'])
+  })
+  it('«cita_de» que nombra otro documento, o uno que no existe → se corrige; sin «cita_de» vale cualquiera del sobre; tildes y mayúsculas del título no cuentan', () => {
+    const origen = [{ titulo: 'Reseñas', texto: 'Desayunás sin apuro' }, { titulo: 'Manual', texto: 'nada' }]
+    expect(clasificarFichas(PIEZA, [F('Desayunás sin apuro', { es_cita: true, cita_de: 'Manual' })], origen).corregibles).toHaveLength(1)
+    expect(clasificarFichas(PIEZA, [F('Desayunás sin apuro', { es_cita: true, cita_de: 'Otro' })], origen).corregibles).toHaveLength(1)
+    expect(clasificarFichas(PIEZA, [F('Desayunás sin apuro', { es_cita: true })], origen).en_citas).toHaveLength(1)
+    expect(clasificarFichas(PIEZA, [F('Desayunás sin apuro', { es_cita: true, cita_de: 'RESENAS' })], origen).en_citas).toHaveLength(1)
+  })
+  it('sin «es_cita: true» no hay aviso aunque la frase esté en un documento de origen', () => {
+    expect(clasificarFichas(PIEZA, [F('Desayunás sin apuro')], [{ titulo: 'Reseñas', texto: 'Desayunás sin apuro' }]).corregibles).toHaveLength(1)
+  })
+  it('una cita real en `>` sigue siendo aviso', () => {
+    expect(clasificarFichas(BICI.texto, [F('si quieres, pasá a verla')]).en_citas).toEqual(['si quieres, pasá a verla'])
+  })
+  it('el pedido al revisor dice que las líneas de las piezas no son citas y lista los documentos de origen', () => {
+    const t = tareaDeRevisionDeRegistro({ payload: { registro: B2B.registro, documentos_de_origen: [{ titulo: 'Reseñas', texto: 'x' }] } as never, texto: PIEZA })
+    expect(t.esquema).toBe('fichas_de_registro.v1')
+    expect(t.task).toMatch(/NO son citas: se corrigen/)
+    expect(t.task).toContain('- Reseñas')
+  })
+  it('documentos de origen mal formados → error de entrada', () => {
+    expect(erroresDeLaEntradaDeRegistro({ registro: { trato: 'tu' }, documentos_de_origen: [{ titulo: 'x' }] })).toHaveLength(1)
+    expect(erroresDeLaEntradaDeRegistro({ registro: { trato: 'tu' }, documentos_de_origen: [{ titulo: 'x', texto: 'y' }] })).toEqual([])
+  })
+  it('🔴 la corrida entera: la línea de la pieza se corrige y la cita comprobada del dueño queda como aviso', async () => {
+    const { P } = mundo()
+    const tu = { texto: PIEZA, registro: { trato: 'tu', fuente: 'manual · voz' }, seccion_de_voz: 'Cercana, de tú.' }
+    const cuerpo = sobre('registro' as never, { id: 'doc-pieza', texto: tu.texto, dry_run: false, payload: { registro: tu.registro, seccion_de_voz: tu.seccion_de_voz, documentos_de_origen: [{ titulo: 'Reseñas', texto: 'Desayunás sin apuro' }] } })
+    const d = await correr(P, cuerpo, ({ paso, pedido }) => {
+      if (paso === 'revision_registro') return { texto: fichas([{ que: 'Pedís tu desayuno', propuesta: 'Pide tu desayuno' }, { que: 'Desayunás sin apuro', es_cita: true, cita_de: 'Reseñas' }]) }
+      const id = String(pedido.task ?? '').match(/\[([^\]]+)\] en/)![1]
+      return { texto: JSON.stringify({ respuestas: [{ id, estado: 'tomada', razon: 'voseo' }], reemplazos: [{ id, antes: 'Pedís tu desayuno', despues: 'Pide tu desayuno' }] }) }
+    })
+    const s = d.final.cuerpo.salida as { artefacto_final: { texto: string }; avisos?: string[] }
+    expect(s.artefacto_final.texto).toBe(PIEZA.replace('Pedís tu desayuno', 'Pide tu desayuno'))
+    expect(s.avisos?.some((a) => a.includes('Desayunás sin apuro'))).toBe(true)
   })
 })
 

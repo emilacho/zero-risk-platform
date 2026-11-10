@@ -2,8 +2,9 @@
  * LA REVISIÓN DEL REGISTRO (10-nov · corrección de Emilio 13:13Z «nada de reglas ni listas para JUZGAR» · GO de Lenovo 13:42Z «A′» · 🟢 de CC7 al plan por tramos). Puro.
  * Quién habla con quién (tú, vos o usted) lo JUZGA un agente que lee el documento entero con el registro del manual del cliente. El CÓDIGO solo verifica lo exacto:
  *  · cada frase señalada está LITERAL en el documento (si no, no es una ficha: se anota y se descarta);
- *  · una frase dentro de una CITA (bloque `>`, cita atribuida «… dice «…»», la sección «Citas») no se corrige nunca: la cita es literal por regla (#984). Va como aviso:
- *    «el documento de origen usa otro registro»;
+ *  · una frase dentro de una CITA no se corrige nunca: la cita es literal por regla (#984). Va como aviso «el documento de origen usa otro registro». Qué es una cita lo dicen
+ *    solo marcas EXACTAS (bloque `>`, sección «Citas») o el REVISOR (`es_cita` + `cita_de`), y el código comprueba que la frase esté literal en ese documento de origen
+ *    (si el sobre no lo trae, la ficha se corrige). Nada de listas de verbos: si unas comillas son la línea de una pieza o una cita de otro documento lo juzga el agente (CC7 · 10-nov);
  *  · la corrección son REEMPLAZOS exactos (antes → después) que aplica el código fuera de las citas: así nada fuera de las frases señaladas puede cambiar.
  * Agnóstico: el registro llega en el sobre (lo resuelve quien abre la revisión desde el manual o el país del cliente). Sin registro no se abre (nada de «tuteo por omisión»).
  */
@@ -14,20 +15,16 @@ export type Trato = (typeof TRATOS)[number]
 export const NOMBRE_DEL_TRATO: Record<Trato, string> = { tu: 'tuteo (tú)', vos: 'voseo (vos)', usted: 'usted' }
 export const CLAVE_DE_REVISION_DE_REGISTRO = 'revision_registro'
 export const ESQUEMA_DE_REEMPLAZOS = 'reemplazos.v1'
+export const ESQUEMA_DE_FICHAS_DE_REGISTRO = 'fichas_de_registro.v1'
 
 export interface RegistroDelSobre { trato: Trato; fuente?: string; evidencia?: string }
 
 // ───────────────────────── lo citado (no se corrige)
-/** los tramos [inicio, fin) del texto que son citas literales: bloques `>`, citas atribuidas («el plan dice «…»») y el cuerpo de una sección «Citas» */
+/** los tramos [inicio, fin) del texto marcados como cita por el PROPIO documento (marcas exactas): bloques `>` y el cuerpo de una sección «Citas». Las comillas sueltas no cuentan: eso lo juzga el revisor */
 export function tramosCitados(texto: string): Array<[number, number]> {
   const t: Array<[number, number]> = []
   // bloques `>`: la línea entera
   for (const m of texto.matchAll(/^[ \t]*>.*$/gm)) t.push([m.index!, m.index! + m[0].length])
-  // citas atribuidas: «…» precedida (en la misma línea, hasta 60 caracteres) por un verbo de decir
-  for (const m of texto.matchAll(/\b(?:dice|dicen|declara|indica|señala|afirma|pide|establece|escribe|escribió|cita|textual(?:mente)?)\b[^\n«]{0,60}«([^»\n]+)»/giu)) {
-    const ini = m.index! + m[0].lastIndexOf('«')
-    t.push([ini, ini + m[1].length + 2])
-  }
   // la sección «Citas» (encabezado markdown que se llama así): todo su cuerpo, hasta el siguiente encabezado del mismo nivel o mayor
   for (const m of texto.matchAll(/^(#{1,6})[ \t]+Citas\b[^\n]*$/gim)) {
     const nivel = m[1].length
@@ -61,14 +58,18 @@ export function ocurrencias(texto: string, frase: string): { fuera: number[]; en
 }
 
 // ───────────────────────── lo que señaló el revisor
-export interface FichaDeRegistro { que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string }
+export interface FichaDeRegistro { que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string; /** el revisor juzga que la frase reproduce otro documento */ es_cita?: boolean; /** el título de ese documento */ cita_de?: string }
+/** un documento del que el texto puede citar (lo trae el sobre); sirve para comprobar, literal, una cita que señala el revisor */
+export interface DocumentoDeOrigen { titulo: string; texto: string }
 export interface Clasificacion { corregibles: FichaDeRegistro[]; en_citas: string[]; no_literales: string[] }
 
 /**
  * Las fichas del revisor, comprobadas contra el texto (código, exacto): `que` es la FRASE LITERAL. Lo que no está tal cual en el documento no es una ficha (el revisor parafraseó o inventó).
- * Lo que solo aparece dentro de citas no se corrige: queda como aviso. Toda ficha corregible bloquea (el creador la resuelve una vez; el cierre nunca bloquea la cadena).
+ * Lo que solo aparece dentro de citas marcadas (`>`, «Citas») no se corrige: queda como aviso. Si el REVISOR dice que es cita (`es_cita`), el código lo comprueba: la frase tiene que estar
+ * literal en el documento de origen que nombra (o en alguno, si no nombra) entre los que trae el sobre; si se comprueba, es aviso; si no (o el sobre no trae documentos), se corrige.
+ * Toda ficha corregible bloquea (el creador la resuelve una vez; el cierre nunca bloquea la cadena).
  */
-export function clasificarFichas(texto: string, fichas: FichaDeRegistro[]): Clasificacion {
+export function clasificarFichas(texto: string, fichas: FichaDeRegistro[], origenes: DocumentoDeOrigen[] = []): Clasificacion {
   const c: Clasificacion = { corregibles: [], en_citas: [], no_literales: [] }
   const vistas = new Set<string>()
   for (const f of fichas) {
@@ -76,11 +77,20 @@ export function clasificarFichas(texto: string, fichas: FichaDeRegistro[]): Clas
     if (!frase || vistas.has(frase)) continue
     vistas.add(frase)
     const o = ocurrencias(texto, frase)
-    if (o.fuera.length) c.corregibles.push({ ...f, que: frase, gravedad: 'bloquea' })
+    if (o.fuera.length && citaComprobada(f, frase, origenes)) c.en_citas.push(frase)
+    else if (o.fuera.length) c.corregibles.push({ ...f, que: frase, gravedad: 'bloquea' })
     else if (o.en_citas.length) c.en_citas.push(frase)
     else c.no_literales.push(frase)
   }
   return c
+}
+
+const normalTitulo = (t: string): string => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()
+/** ¿la cita que señala el revisor está LITERAL en su documento de origen? Sin documentos en el sobre no se puede comprobar: no es cita */
+export function citaComprobada(f: Pick<FichaDeRegistro, 'es_cita' | 'cita_de'>, frase: string, origenes: DocumentoDeOrigen[]): boolean {
+  if (f.es_cita !== true || !origenes.length) return false
+  const de = f.cita_de?.trim() ? origenes.filter((d) => normalTitulo(d.titulo) === normalTitulo(f.cita_de!)) : origenes
+  return de.some((d) => { const o = ocurrencias(d.texto, frase); return o.fuera.length + o.en_citas.length > 0 })
 }
 
 export const avisoDeCita = (frase: string): string => `«${frase}» está dentro de una cita: el documento de origen usa otro registro (la cita no se corrige)`
@@ -99,6 +109,7 @@ export function aplicarReemplazos(texto: string, reemplazos: Reemplazo[], frases
     const frase = frasesTomadas.get(r.id)
     if (frase === undefined) return { ok: false, error: `el reemplazo «${r.id}» no es de una ficha que tomaste` }
     if (r.antes.trim() !== frase) return { ok: false, error: `en el reemplazo «${r.id}», «antes» tiene que ser EXACTAMENTE la frase de la ficha: «${frase}»` }
+    if (!r.despues.trim()) return { ok: false, error: `en el reemplazo «${r.id}», «despues» está vacío: un reemplazo no borra la frase; da la frase en el registro del cliente` }
     if (r.despues.trim() === frase) return { ok: false, error: `en el reemplazo «${r.id}», «despues» es igual a «antes»: si no la cambias, responde «no_tomada»` }
     const o = ocurrencias(t, frase)
     if (!o.fuera.length) return { ok: false, error: `la frase «${frase}» ya no está fuera de las citas` }
@@ -121,8 +132,9 @@ export function tareaDeRevisionDeRegistro(a: { payload: PayloadDeRevision; texto
   const doc = a.payload.documento?.trim() || 'el documento'
   const linea = `Revisas SOLO el registro de ${doc}: cómo se le habla al público (tú, vos o usted), según el manual del cliente. Lee el documento ENTERO, también los bancos de ideas y las líneas de piezas. Juzga por el sentido: un futuro («pedirás»), un pretérito («compré»), un sustantivo o un nombre no son otro registro. No revises nada más: ni contenido, ni estilo, ni ortografía.`
   const pistas = a.payload.pistas_de_registro?.length ? `## Pistas de un detector barato (pueden estar equivocadas o incompletas: tú decides)\n${a.payload.pistas_de_registro.map((x) => `- ${x}`).join('\n')}` : ''
-  const formato = `Formato: devuelve solo el JSON {"fichas":[{"que":"…","donde":"…","contra_que":"…","gravedad":"bloquea","propuesta":"…"}]}. En "que" va la FRASE copiada LITERAL del documento (exacta, corta: solo las palabras que hay que cambiar y lo mínimo alrededor para que se entienda), en "donde" la sección, en "contra_que" qué registro usa y por qué no es el del cliente, y en "propuesta" esa misma frase en el registro del cliente. Si una frase está dentro de una cita a otro documento, igual señálala: el sistema decide qué hacer con las citas. Si todo cumple: {"fichas":[]}.`
-  return { task: [linea, bloqueDeVoz(a.payload), `## Lo que revisas (${doc})\n${a.texto.trim()}`, pistas, formato].filter(Boolean).join('\n\n'), indicacion: linea, esquema: 'fichas.v1' }
+  const formato = `Formato: devuelve solo el JSON {"fichas":[{"que":"…","donde":"…","contra_que":"…","gravedad":"bloquea","propuesta":"…"}]}. En "que" va la FRASE copiada LITERAL del documento (exacta, corta: solo las palabras que hay que cambiar y lo mínimo alrededor para que se entienda), en "donde" la sección, en "contra_que" qué registro usa y por qué no es el del cliente, y en "propuesta" esa misma frase en el registro del cliente. Las líneas que la agencia escribe para las piezas (titulares, textos, ganchos), aunque vayan entre comillas, NO son citas: se corrigen. Solo si la frase reproduce LITERAL otro documento (lo que escribió el dueño, una reseña, el manual) agrega "es_cita":true y "cita_de":"<título de ese documento>"; esa no se corrige, se avisa. Si todo cumple: {"fichas":[]}.`
+  const origenes = a.payload.documentos_de_origen?.length ? `## Documentos de los que se puede citar (para "cita_de")\n${a.payload.documentos_de_origen.map((d) => `- ${d.titulo}`).join('\n')}` : ''
+  return { task: [linea, bloqueDeVoz(a.payload), `## Lo que revisas (${doc})\n${a.texto.trim()}`, origenes, pistas, formato].filter(Boolean).join('\n\n'), indicacion: linea, esquema: ESQUEMA_DE_FICHAS_DE_REGISTRO }
 }
 
 /** el creador: recibe SUS fichas y responde ítem por ítem; si toma una, entrega el reemplazo exacto (el sistema lo aplica, él no reescribe el documento) */
@@ -145,6 +157,7 @@ export function erroresDeLaEntradaDeRegistro(p: Record<string, unknown>): string
   }
   if (p.seccion_de_voz !== undefined && typeof p.seccion_de_voz !== 'string') e.push('`payload.seccion_de_voz` debe ser texto')
   if (p.documento !== undefined && typeof p.documento !== 'string') e.push('`payload.documento` debe ser texto')
+  if (p.documentos_de_origen !== undefined && !(Array.isArray(p.documentos_de_origen) && p.documentos_de_origen.every((d) => !!d && typeof d === 'object' && typeof (d as Record<string, unknown>).titulo === 'string' && typeof (d as Record<string, unknown>).texto === 'string'))) e.push('`payload.documentos_de_origen` debe ser una lista de {titulo, texto}')
   if (p.pistas_de_registro !== undefined && !(Array.isArray(p.pistas_de_registro) && p.pistas_de_registro.every((x) => typeof x === 'string'))) e.push('`payload.pistas_de_registro` debe ser una lista de textos')
   return e
 }

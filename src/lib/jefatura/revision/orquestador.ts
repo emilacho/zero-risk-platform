@@ -326,7 +326,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e:
   // 10-nov · registro: el agente juzgó; el código verifica lo exacto. Solo es ficha la frase LITERAL fuera de citas; lo que está en citas es aviso; lo no literal se descarta y se anota
   if (paso.clave === CLAVE_DE_REVISION_DE_REGISTRO) {
     const texto = String(datos(e, 'revision')?.texto ?? '')
-    const c = clasificarFichas(texto, v.fichas as FichaDeRegistro[])
+    const c = clasificarFichas(texto, v.fichas as FichaDeRegistro[], rev.entrada.documentos_de_origen ?? [])
     const fs = c.corregibles.map((f, i) => fichaNueva(`registro-${e.pasos_ejecutados}-${i}`, 'jefe', normalizarDonde(f.donde, duenosDe(rev.productores)).donde, 'bloquea', f.que, f.contra_que, f.propuesta))
     return { res: { costo_usd: 0, artefacto: { fichas: fs.length, avisos_de_registro: c.en_citas.map(avisoDeCita), ...(c.no_literales.length ? { frases_no_literales: c.no_literales } : {}) }, fichas: fs } }
   }
