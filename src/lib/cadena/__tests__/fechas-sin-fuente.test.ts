@@ -339,7 +339,9 @@ describe('puntos de CC7 al diseño (20:00Z)', () => {
     for (const plan of ['plan-a', 'plan-a2']) {
       const a = await campanaDe(al, A.clientId, false, plan)
       const p = await estrategiaPreparar(al, { ...wf, campana_id: a }, AHORA)
-      const { llave, ambito } = agenteQueSigueLaRegla((p.cuerpo.run_sdk as { task: string }).task)
+      const tarea = (p.cuerpo.run_sdk as { task: string }).task
+      expect(tarea).toContain('usa la PRIMERA que aparece (la lista va de la usada más recientemente a la menos)')
+      const { llave, ambito } = agenteQueSigueLaRegla(tarea)
       const g = await estrategiaGuardar(al, { ...wf, campana_id: a, corrida_id: p.cuerpo.corrida_id, resultado: { success: true, structured_output: conFechas(A.estrategia, [fecha({ tipo: 'temporada alta en la playa', llave, ambito, llave_nueva: false })]), cost_usd: 0.3 } }, AHORA)
       for (const f of g.cuerpo.fechas_pedidas as { pais: string; tipo: string; ambito: string; anio: number }[]) await fechasCobertura(al, { ...wf, campana_id: a, ...f })
       elegidas.push(llave)
