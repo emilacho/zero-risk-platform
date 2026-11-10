@@ -55,6 +55,26 @@ export const MOTIVO_CAMBIOS_DE_EMILIO = 'cambios_de_emilio'
 export function briefDevueltoConNota(b: Pick<BriefCreativoGuardado, 'estado' | 'motivo' | 'devolucion_texto' | 'texto_md'> | null | undefined): boolean {
   return !!b && b.estado === 'devuelta' && b.motivo === MOTIVO_CAMBIOS_DE_EMILIO && !!b.devolucion_texto?.trim() && !!b.texto_md?.trim()
 }
+
+type BriefDeLaSecuencia = Pick<BriefCreativoGuardado, 'version' | 'estado' | 'motivo' | 'devolucion_texto' | 'texto_md'>
+/**
+ * EL PEDIDO DE CAMBIOS QUE SIGUE VIVO para la versión `version` del brief (la que se abre o se rescata) · puro.
+ *  · la nota: la del pedido, o la del brief anterior si Emilio lo mandó a rehacer, o (10-nov · CC7 opción a) la del anterior a ESE si el anterior lo devolvió
+ *    el CÓDIGO: el pedido de Emilio no se cumplió todavía, así que sigue vivo UNA vez más (tras dos devoluciones de código seguidas ya no hay nota y rige el tope);
+ *  · la base: con nota, el ÚLTIMO texto escrito (el brief devuelto, por Emilio o por el código), para que la mesa conserve lo que ya estaba bien y vea lo que le falta.
+ * Caso real (Náufrago, 10-nov): v2 «cambios de Emilio» (costa → playa) → v3 devuelto por el código (faltaban 2 secciones) → el v4 lleva la nota y el v3 como base.
+ */
+export function pedidoDeCambiosVigente(briefs: BriefDeLaSecuencia[], version: number, notaDelPedido: string | null): { nota: string | null; base: BriefDeLaSecuencia | null; heredada: boolean } {
+  const previo = briefs.find((b) => b.version === version - 1) ?? null
+  const anteDelPrevio = briefs.find((b) => b.version === version - 2) ?? null
+  const deEmilio = (b: BriefDeLaSecuencia | null) => !!b && b.estado === 'devuelta' && b.motivo === MOTIVO_CAMBIOS_DE_EMILIO
+  const notaDelPrevio = deEmilio(previo) ? texto(previo!.devolucion_texto) : null
+  const delCodigo = !!previo && previo.estado === 'devuelta' && previo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO
+  const heredada = !notaDelPedido && !notaDelPrevio && delCodigo && deEmilio(anteDelPrevio) ? texto(anteDelPrevio!.devolucion_texto) : null
+  const nota = notaDelPedido ?? notaDelPrevio ?? heredada
+  const base = nota && previo?.estado === 'devuelta' && texto(previo.texto_md) ? previo : null
+  return { nota, base, heredada: !!heredada }
+}
 export interface EntregaDeBrief { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }
 export interface EntregaDeConcepto extends EntregaDeBrief { brief_devuelto?: string | null }
 
@@ -190,27 +210,30 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   if (!c.ok) return c.r
   const { campana, ctx, estrategia } = c.c
   const ultimo = await al.ultimoBriefCreativo(campana.id)
-  // la nota de Emilio llega con el sobre o, si la puerta vuelve a entrar sin ella, se recupera del brief que él mandó a rehacer
-  const nota = texto(cuerpo.nota) ?? (ultimo?.estado === 'devuelta' && ultimo.motivo === MOTIVO_CAMBIOS_DE_EMILIO ? texto(ultimo.devolucion_texto) : null)
+  const briefs = ultimo ? await al.briefsDe(campana.id) : []
   if (ultimo?.estado === 'borrador') {
     // hueco 1 de CC3: una mesa abierta cuyo sobre no llegó a la oficina se rescata devolviendo el MISMO sobre otra vez (la oficina es idempotente: `ya_existia`);
     // el marco se rearma con lo persistido (la devolución o la nota de la versión anterior); lo que solo viajaba en el sobre original (informe de mercado) no se recupera
-    const previo = (await al.briefsDe(campana.id)).find((b) => b.version === ultimo.version - 1) ?? null
+    const previo = briefs.find((b) => b.version === ultimo.version - 1) ?? null
+    const pedido = pedidoDeCambiosVigente(briefs, ultimo.version, null)
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
       marco_texto: marcoDelBrief({
         ctx, estrategia, version: ultimo.version,
         devolucion: previo?.estado === 'devuelta' && previo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? previo.devolucion_texto : null,
-        nota: previo?.estado === 'devuelta' && previo.motivo === MOTIVO_CAMBIOS_DE_EMILIO ? texto(previo.devolucion_texto) : null,
-        anterior: briefDevueltoConNota(previo) ? briefAnteriorParaElMarco(previo!) : null,
+        nota: pedido.nota,
+        anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null,
         metodo: await metodoDe(al, 'brief'),
       }),
       condiciones: condicionesDe(estrategia, await al.formatos()),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version), plazo_mesa_min: PLAZO_DE_MESA_MIN.brief, sobre } }
   }
-  if (ultimo?.estado === 'validada' && !nota) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version) } }
   const version = (ultimo?.version ?? 0) + 1
+  // la nota de Emilio llega con el sobre o, si la puerta vuelve a entrar sin ella, se recupera del brief que él mandó a rehacer (o, si al que siguió lo devolvió el código, del anterior a ese)
+  const pedido = pedidoDeCambiosVigente(briefs, version, texto(cuerpo.nota))
+  const nota = pedido.nota
+  if (ultimo?.estado === 'validada' && !nota) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version) } }
   // reapertura por devolución o fallo: UNA vez; con nota de Emilio (cambios) no cuenta como reapertura
   if (ultimo && (ultimo.estado === 'devuelta' || ultimo.estado === 'descartada') && !nota && ultimo.version >= MAX_VERSIONES_POR_REAPERTURA) {
     const r = await ponerNecesitaHumano(al, campana, `el brief creativo ya se ${ultimo.estado === 'devuelta' ? 'devolvió' : 'descartó'} ${ultimo.version} veces`, ahora)
@@ -221,7 +244,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   await al.insertarBriefCreativo(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: briefDevueltoConNota(ultimo) ? briefAnteriorParaElMarco(ultimo!) : null }),
+    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }
