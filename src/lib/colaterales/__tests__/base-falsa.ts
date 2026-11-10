@@ -1,5 +1,5 @@
 /**
- * Base falsa de las tablas propias de los colaterales · RECHAZA columnas que su migración no crea (compartida por las pruebas del 2b y 2c).
+ * Base falsa de las tablas propias de los colaterales · RECHAZA columnas que su migración no crea y updates a columnas sin `grant update` (compartida por las pruebas del 2b y 2c).
  * Las columnas se leen de la migración REAL de cada tabla, así un nombre inventado no pasa. (La cadena se prueba por su propio almacén en memoria.)
  */
 import fs from 'node:fs'
@@ -14,9 +14,19 @@ function columnasDe(sql: string, tabla: string): Set<string> {
   if (!m) throw new Error(`la migración no crea ${tabla}`)
   return new Set(m[1].split('\n').map((l) => l.trim()).filter((l) => l && !/^(constraint|primary key)\b/i.test(l)).map((l) => l.split(/\s+/)[0]))
 }
-const COLUMNAS: Record<string, Set<string>> = {
+export const COLUMNAS: Record<string, Set<string>> = {
   colaterales_ediciones: columnasDe(MIG_COLATERALES, 'colaterales_ediciones'),
   colaterales_retoques: columnasDe(MIG_COLATERALES, 'colaterales_retoques'),
+}
+/** columnas que el servidor puede ACTUALIZAR, leídas del `grant update (…)` de la migración (nota CC7/CC6 · Lenovo 15:32Z) */
+function actualizablesDe(sql: string, tabla: string): Set<string> {
+  const m = new RegExp(`grant update \\(([^)]*)\\) on public\\.${tabla} to service_role;`).exec(sql)
+  if (!m) throw new Error(`la migración no da update por columna en ${tabla}`)
+  return new Set(m[1].split(',').map((x) => x.trim()))
+}
+export const ACTUALIZABLES: Record<string, Set<string>> = {
+  colaterales_ediciones: actualizablesDe(MIG_COLATERALES, 'colaterales_ediciones'),
+  colaterales_retoques: actualizablesDe(MIG_COLATERALES, 'colaterales_retoques'),
 }
 const UNICAS: Record<string, string[][]> = { colaterales_ediciones: [['llave']], colaterales_retoques: [['edicion_id', 'pedazo_id']] }
 const POR_OMISION: Record<string, Record<string, unknown>> = { colaterales_retoques: { rehechos: 0 } }
@@ -50,6 +60,8 @@ export function baseFalsa(o: { fallarLectura?: boolean; fallarInsert?: string; d
       if (q.op === 'update') {
         const e = revisar(q.fila as Record<string, unknown>)
         if (e) return { data: null, error: e }
+        // como la base real: actualizar una columna sin `grant update` es «permission denied»
+        for (const k of Object.keys(q.fila as Record<string, unknown>)) if (!ACTUALIZABLES[tabla].has(k)) return { data: null, error: { message: `permission denied for table ${tabla}`, code: '42501' } }
         sel.forEach((f) => Object.assign(f, structuredClone(q.fila)))
       }
       let r = sel.map((f) => structuredClone(f))
