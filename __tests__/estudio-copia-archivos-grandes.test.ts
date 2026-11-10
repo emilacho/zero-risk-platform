@@ -98,8 +98,8 @@ function animacionDeEmilio(cliente = CLIENTE, extra: Fila = {}): Fila {
 describe('el tope de copia sube a 50 MB (código y almacén)', () => {
   it('el código copia hasta 50 MB y la migración pone el almacén en lo mismo, solo si estaba en 20 MB; la reversa vuelve a 20 MB', () => {
     expect(TOPE_DEL_ARCHIVO_BYTES).toBe(52428800)
-    const mig = readFileSync(join(raiz, 'supabase', 'migrations', '202611101700_estudio_almacen_50_mb.sql'), 'utf8')
-    const rev = readFileSync(join(raiz, 'supabase', 'reversas', '202611101700_estudio_almacen_50_mb_REVERSA.sql'), 'utf8')
+    const mig = readFileSync(join(raiz, 'supabase', 'migrations', '202611101800_estudio_almacen_50_mb.sql'), 'utf8')
+    const rev = readFileSync(join(raiz, 'supabase', 'reversas', '202611101800_estudio_almacen_50_mb_REVERSA.sql'), 'utf8')
     const sql = (s: string) => s.split('\n').filter((l) => !l.startsWith('--')).join('\n').replace(/\s+/g, ' ').trim()
     expect(sql(mig)).toBe(`begin; update storage.buckets set file_size_limit = ${TOPE_DEL_ARCHIVO_BYTES} where id = 'oficina-creativos' and file_size_limit = 20971520; commit;`)
     expect(sql(rev)).toBe(`begin; update storage.buckets set file_size_limit = 20971520 where id = 'oficina-creativos' and file_size_limit = ${TOPE_DEL_ARCHIVO_BYTES}; commit;`)
@@ -195,6 +195,14 @@ describe('el rescate diario de lo que quedó en el proveedor', () => {
     const r = await rescatarArchivos(deps(b, proveedor({ [GLB_FAL]: 24 * MB })), { dry_run: false })
     expect(r.ok && r.valor.fallas).toEqual([{ id: ANIM, error: 'la pieza cambió durante la copia: queda para la próxima pasada' }])
     expect(b.t[0].archivo_url).toBe(GLB_FAL)
+    expect(b.escrituras).toHaveLength(0)
+  })
+  it('si la dirección cambió durante la copia (mismo aviso), tampoco la pisa', async () => {
+    const otra = `${A}estudio/${CLIENTE}/${ANIM}-28-puesta-por-otro.glb`
+    const b = baseFalsa({ antesDeEscribir: (t) => { t[0].archivo_url = otra } }); b.t.push(animacionDeEmilio())
+    const r = await rescatarArchivos(deps(b, proveedor({ [GLB_FAL]: 24 * MB })), { dry_run: false })
+    expect(r.ok && r.valor.fallas).toEqual([{ id: ANIM, error: 'la pieza cambió durante la copia: queda para la próxima pasada' }])
+    expect([b.t[0].archivo_url, b.t[0].aviso]).toEqual([otra, `${QUEDA}archivo_muy_grande · 23.8 MB`])
     expect(b.escrituras).toHaveLength(0)
   })
   it('en seco solo cuenta: no baja, no sube, no escribe', async () => {
