@@ -254,6 +254,12 @@ describe('los DOS órdenes (CC7 🟡 · CC6 🔴): la semana 46 recibe primero l
   /** las 3 primeras de la 46 en el orden del calendario (fecha y hora) */
   const TRES = [...P46.briefs].sort((a, b) => `${cuando.get(a.fila_id)!.fecha} ${cuando.get(a.fila_id)!.hora ?? '99:99'}`.localeCompare(`${cuando.get(b.fila_id)!.fecha} ${cuando.get(b.fila_id)!.hora ?? '99:99'}`)).slice(0, 3).map((b) => b.brief_id)
   const costo = (ids: string[], p: typeof P46) => ids.reduce((x, id) => x + topeDeLaPieza(TOPES, p.briefs.find((b) => b.brief_id === id)!.familia), 0)
+  it('un retenido de otro parte cuya fila no aparece en el calendario va AL FINAL: no le guarda lugar a una pieza con fecha (construido)', () => {
+    const pv = esperandoPorVenir([{ parte_id: 'p-x', brief_id: 'X', familia: 'carrusel_mesa', fila_id: 'no-existe' }, { parte_id: 'p-x', brief_id: 'Y', familia: 'carrusel_mesa', fila_id: null }], cuando)
+    expect(pv.map((f) => f.fecha)).toEqual(['9999-99-99', '9999-99-99'])
+    const cand: Candidata[] = [{ brief_id: 'A', familia: 'kit_historias', fecha: '2026-11-12', hora: '09:00', ya_tiene_encargo: false }]
+    expect(decidirTope(26.28 + 2.5, { gastado: 26.28, comprometido: 0 }, cand, TOPES, pv).tipo).toBe('cabe')
+  })
   it('46 → 47: salen las 3 más cercanas de la 46 (US$ 10) y la 47 no se lleva nada', () => {
     expect(costo(TRES, P46)).toBe(10)
     const e = escena()
