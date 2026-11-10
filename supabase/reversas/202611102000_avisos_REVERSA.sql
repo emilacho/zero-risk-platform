@@ -1,4 +1,4 @@
--- REVERSA de 202611101900_avisos · se niega si la tabla ya guardó avisos (el historial no se borra sin decisión aparte).
+-- REVERSA de 202611102000_avisos · se niega si la tabla ya guardó avisos (el historial no se borra sin decisión aparte).
 begin;
 do $$
 begin

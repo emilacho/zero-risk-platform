@@ -209,14 +209,14 @@ describe('adaptadores', () => {
   })
 })
 
-describe('migración 202611101900 · permisos cerrados y reversa', () => {
+describe('migración 202611102000 · permisos cerrados y reversa', () => {
   const crudo = (p: string) => fs.readFileSync(path.join(process.cwd(), p), 'utf8').replace(/\r/g, '').replace(/--.*$/gm, '')
-  const sql = crudo('supabase/migrations/202611101900_avisos.sql')
+  const sql = crudo('supabase/migrations/202611102000_avisos.sql')
   const sentencias = sql.split(';').map((x) => x.replace(/\s+/g, ' ').trim()).filter(Boolean)
   it('una tabla, seguridad por fila, una regla solo para el servidor, todo en una transacción', () => {
     expect([...sql.matchAll(/create table if not exists public\.(\w+)/g)].map((m) => m[1])).toEqual(['avisos'])
     expect(sql).toMatch(/alter table public\.avisos enable row level security;/)
-    expect([...sql.matchAll(/create policy (\w+) on public\.avisos for all to (\w+)/g)].map((m) => m[2])).toEqual(['service_role'])
+    expect([...sql.matchAll(/create policy (\w+) on public\.avisos for all to ([^;]+?) using/g)].map((m) => m[2].trim())).toEqual(['service_role'])
     expect(sql.indexOf('begin;')).toBeLessThan(sql.indexOf('create table'))
     expect(sql.lastIndexOf('commit;')).toBeGreaterThan(sql.lastIndexOf('grant execute'))
     expect(sql).not.toMatch(/\b(alter|drop|truncate|delete from|insert into|update)\s+(table\s+)?public\.(?!avisos\b)/i)
@@ -250,12 +250,12 @@ describe('migración 202611101900 · permisos cerrados y reversa', () => {
     expect(sql).toMatch(/check \(origen_tipo <> 'n8n' or \(workflow_id is not null and workflow_execution_id is not null\)\)/)
   })
   it('la reversa vive fuera de migrations, es una transacción, se niega con historial y no vacía', () => {
-    expect(fs.existsSync(path.join(process.cwd(), 'supabase/migrations/202611101900_avisos_REVERSA.sql'))).toBe(false)
-    const r = crudo('supabase/reversas/202611101900_avisos_REVERSA.sql')
+    expect(fs.existsSync(path.join(process.cwd(), 'supabase/migrations/202611102000_avisos_REVERSA.sql'))).toBe(false)
+    const r = crudo('supabase/reversas/202611102000_avisos_REVERSA.sql')
     expect(r.trim().startsWith('begin;')).toBe(true)
     expect(r).toMatch(/exists \(select 1 from public\.avisos\) then\s+raise exception/)
     expect(r.indexOf('raise exception')).toBeLessThan(r.indexOf('drop table'))
-    expect(r).not.toMatch(/truncate|delete from/i)
+    expect(r).not.toMatch(/truncate|delete from|cascade/i)
     expect(r).toMatch(/commit;/)
   })
 })
