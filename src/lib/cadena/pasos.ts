@@ -27,6 +27,7 @@ import { lexicoDelCliente } from './lexico-por-rubro'
 import { problemasDeEsquema, normalizarPilares, validarEstrategia } from './validador-estrategia'
 import { validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
 import { fechasPedidasDe, retencionDe, retenerParaRevision } from './revision-jefatura'
+import { guardarTemporadas, llaveCrudaDe } from './fechas-del-cliente'
 
 export const semanasDeTanda = (tanda: number, m: MedidaDeCampana = medidaDeCampana()): number[] => {
   const ini = (tanda - 1) * m.semanasPorTanda + 1
@@ -114,13 +115,14 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
     return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: true, alerta: r.alerta } }
   }
   if (campana.estado === 'abierta') await al.actualizarCampana(campana.id, { estado: 'estrategia' })
-  const tarea = tareaDeEstrategia({ ctx, formatosPermitidos: formatosPermitidos(formatos), version, diasDeCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin, diaUnoDelPlan: diaUnoDelPlan(ctx.planTexto), correccion: fichas ?? undefined })
+  const llavesDeFechas = ctx.pais ? await al.llavesDeFechas(ctx.pais, campana.client_id) : []
+  const tarea = tareaDeEstrategia({ ctx, formatosPermitidos: formatosPermitidos(formatos), version, diasDeCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin, diaUnoDelPlan: diaUnoDelPlan(ctx.planTexto), correccion: fichas ?? undefined, llavesDeFechas })
   return {
     status: 200,
     cuerpo: {
       corrida_id: prep.corrida.id, version, intento: prep.corrida.intento, plazo_en: prep.corrida.plazo_en,
       headers: { [CABECERA_SALTAR_EDITOR]: '1' },
-      run_sdk: cuerpoDeRunSdk('estrategia', modelo, tarea, esquema.valor, campana.client_id, { contrato: 'estrategia.v1' }),
+      run_sdk: cuerpoDeRunSdk('estrategia', modelo, tarea, esquema.valor, campana.client_id, { contrato: 'estrategia.v2' }),
     },
   }
 }
@@ -142,7 +144,9 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
   }
   const version = ((await al.ultimaEstrategia(campana.id))?.version ?? 0) + 1
   const { estrategia: objetoAjustado, aviso: avisoDePilares } = normalizarPilares(objeto)
-  const hs = [...(avisoDePilares ? [avisoDePilares] : []), ...validarEstrategia(objetoAjustado, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio })]
+  // D · la misma lista de llaves que vio el agente (se relee: lo que se guardó entre preparar y guardar también vale)
+  const llavesDeFechas = ctx.pais ? await al.llavesDeFechas(ctx.pais, campana.client_id) : []
+  const hs = [...(avisoDePilares ? [avisoDePilares] : []), ...validarEstrategia(objetoAjustado, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, llavesDeFechas })]
   await al.guardarValidaciones(campana.id, 'estrategia', version, null, esCorreccion ? 2 : 1, hs, campana.seco)
   const plan = planDeCorreccion(hs)
   if (plan.necesita && !esCorreccion) return { status: 200, cuerpo: { correccion: true, modo: 'tanda', fichas: plan.fichas } }
@@ -152,24 +156,28 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
     return { status: 200, cuerpo: { necesita_humano: true, fichas: plan.fichas, alerta: r.alerta } }
   }
   await al.insertarEstrategia({ campana_id: campana.id, version, estado: 'validada', contenido: objetoAjustado as Estrategia, agente: AGENTE_POR_PASO.estrategia, modelo: corrida.modelo, costo_usd: leerResultado(cuerpo.resultado).cost_usd ?? null, workflow_execution_id: corrida.workflow_execution_id, seco: campana.seco })
+  // C · las temporadas del negocio: con cita se guardan para ESTE cliente; sin cita, pendientes y pregunta al dueño (nunca una fecha inventada)
+  const temporadas = await guardarTemporadas(al, campana, ctx, objetoAjustado as Estrategia, { workflow_id: cadena(cuerpo.workflow_id), workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? corrida.workflow_execution_id })
+  const conTemporadas = temporadas.guardadas.length || temporadas.pendientes.length || temporadas.avisos.length ? { temporadas } : {}
   // J7 · el punto de espera «antes de pasar»: si la jefatura abriría una revisión de la estrategia, se guarda todo igual pero la campaña NO pasa a `calendario` hasta que la revisión cierre
   // (o venza la espera). Con la jefatura apagada `retener` es false y esto es BYTE A BYTE lo de siempre.
   const retencion = await retencionDe(al, 'estrategia', campana.client_id)
   if (retencion.retener) {
     const espera = await retenerParaRevision(al, campana, 'estrategia', version, ahora)
-    return { status: 200, cuerpo: { ok: true, version, retenida_para_revision: { tipo: 'estrategia', version, objeto_id: espera.objeto_id, vence_en: espera.vence_en }, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que) } }
+    return { status: 200, cuerpo: { ok: true, version, retenida_para_revision: { tipo: 'estrategia', version, objeto_id: espera.objeto_id, vence_en: espera.vence_en }, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que), ...conTemporadas } }
   }
   await al.actualizarCampana(campana.id, { estado: 'calendario' })
   // los tipos de fechas que ESTE cliente declaró (puede ser ninguno: lo normal) y los años de la campaña: el flujo investiga solo eso
   const fechasPedidas = fechasPedidasDe(campana, ctx.pais, objeto as Estrategia)
-  return { status: 200, cuerpo: { ok: true, version, fechas_pedidas: fechasPedidas, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que) } }
+  return { status: 200, cuerpo: { ok: true, version, fechas_pedidas: fechasPedidas, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que), ...conTemporadas } }
 }
 
 // ─────────────────────────────────────────────────────────────── CALENDARIO
 async function fechasDeclaradas(al: Almacen, ctx: ContextoDelCliente, e: Estrategia, c: Campana): Promise<FechaEspecialVerificada[]> {
-  const tipos = [...new Set(e.fechas_que_importan.map((f) => f.tipo))]
+  // la llave estable (10-nov · D): la que guardó el código, no la grafía de turno; las temporadas son SOLO de este cliente (C)
+  const tipos = [...new Set(e.fechas_que_importan.map(llaveCrudaDe))]
   if (!tipos.length || !ctx.pais) return [] // la lista vacía no investiga ni bloquea nada
-  return al.fechasEspeciales(ctx.pais, tipos, c.fecha_inicio, c.fecha_fin)
+  return al.fechasEspeciales(ctx.pais, tipos, c.fecha_inicio, c.fecha_fin, c.client_id)
 }
 
 /** Slots del patrón que faltan en las filas de la tanda: en una corrección se leen como «omitidos» (no hay otra forma de saber qué omitió el primer intento). */
@@ -352,7 +360,8 @@ export async function validarSinEscribir(al: Almacen, cuerpo: Record<string, unk
   const { campana, ctx, formatos, lexico } = c.p
   if (cuerpo.tipo === 'estrategia') {
     const ajustada = normalizarPilares(cuerpo.estrategia)
-    const hs = [...(ajustada.aviso ? [ajustada.aviso] : []), ...validarEstrategia(ajustada.estrategia, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio })]
+    const llavesDeFechas = ctx.pais ? await al.llavesDeFechas(ctx.pais, campana.client_id) : []
+    const hs = [...(ajustada.aviso ? [ajustada.aviso] : []), ...validarEstrategia(ajustada.estrategia, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, llavesDeFechas })]
     return { status: 200, cuerpo: { hallazgos: hs, bloquea: hs.some((h) => h.severidad === 'bloquea'), forma_valida: problemasDeEsquema(cuerpo.estrategia).length === 0 } }
   }
   if (cuerpo.tipo === 'calendario') {

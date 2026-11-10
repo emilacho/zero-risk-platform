@@ -470,12 +470,14 @@ describe('filas: lotes por fecha y marcas', () => {
 
 describe('fechas especiales · solo con tipos declarados, con la cita comprobada por código', () => {
   const base = (al: AlmacenMemoria) => ({ ...wf(), campana_id: al.campanas[0].id, pais: 'Pais Uno', tipo: 'feriados locales', ambito: 'Ciudad Uno', anio: 2026 })
-  it('sin lista de dominios para ese tipo y país: sin_fuente, sin investigar nada (la campaña sigue)', async () => {
+  it('sin lista de dominios para ese tipo y país: sin configurar (10-nov · B), sin investigar nada ni contar intento (la campaña sigue)', async () => {
     const al = almacen()
     await abrir(al)
     const r = await fechasCobertura(al, base(al))
-    expect(r.cuerpo.estado).toBe('sin_fuente')
-    expect(r.cuerpo.motivo).toMatch(/sin_dominios/)
+    expect(r.cuerpo.estado).toBe('sin_fuente') // lo único que el proceso de fechas entiende para terminar
+    expect(r.cuerpo.cobertura).toBe('sin_configurar')
+    expect(r.cuerpo.motivo).toMatch(/sin_configurar/)
+    expect(al.coberturas.map((c) => [c.estado, c.intentos])).toEqual([['sin_configurar', 0]])
   })
   it('con dominios: investigar (intento 1, 2, 3) y a la tercera sin fuente; no se repite el gasto una vez verificada', async () => {
     const al = almacen({ config: { flujos: ['wf-cadena'], dominios_fechas: { 'feriados_locales|pais_uno': ['https://fuente.example'] } } })

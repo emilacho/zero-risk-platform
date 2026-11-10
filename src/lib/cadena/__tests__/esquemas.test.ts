@@ -57,7 +57,7 @@ describe('lo que el esquema impide por formato (no solo por indicación)', () =>
     for (const k of v2) expect(k).not.toMatch(/fecha|total|pct|porcentaje/i)
     expect(Object.keys(ESQUEMA_CALENDARIO_TANDA_V2.properties)).toEqual(['piezas', 'ajustes_al_patron'])
     // 31-oct (FIRMA de Emilio · gancho de video): `gancho_video.v1` nace con su tarea en `metodos.ts` (T8 lo cablea)
-    expect(Object.keys(ESQUEMAS)).toEqual(['estrategia.v1', 'calendario_tanda.v1', 'calendario_tanda.v2', 'fechas_especiales.v1', 'gancho_video.v1'])
+    expect(Object.keys(ESQUEMAS)).toEqual(['estrategia.v1', 'estrategia.v2', 'calendario_tanda.v1', 'calendario_tanda.v2', 'fechas_especiales.v1', 'gancho_video.v1'])
   })
 })
 
@@ -65,12 +65,15 @@ describe('un objeto real cumple su esquema y uno roto no', () => {
   it('la estrategia buena de los dos clientes sintéticos cumple el esquema; con un campo extra o un enum roto, no', () => {
     const v = ajv.compile(ESQUEMA_ESTRATEGIA)
     // el tipo permite `cita_plan` ausente; el esquema lo exige (el texto vacío significa «ninguna»): el modelo siempre lo escribe
-    const completa = (e: ReturnType<typeof clienteA>['estrategia']) => ({ ...e, fechas_que_importan: e.fechas_que_importan.map((f) => ({ cita_plan: '', ...f })) })
+    // v2 (10-nov): cada fecha trae su clase, su llave y su tramo; el fixture viejo no los tiene y se completan como los escribiría el modelo
+    const completa = (e: ReturnType<typeof clienteA>['estrategia']) => ({ ...e, fechas_que_importan: e.fechas_que_importan.map((f) => ({ cita_plan: '', clase: 'feriado_publico', llave: f.tipo.replace(/ /g, '_'), llave_nueva: true, desde: '', hasta: '', ...f })) })
     for (const c of [clienteA(), clienteB()]) expect(v(completa(c.estrategia)) || JSON.stringify(v.errors)).toBe(true)
     const a = clienteA().estrategia
     expect(v({ ...a, extra: 1 })).toBe(false)
     expect(v({ ...a, canales: [{ ...a.canales[0], rol: 'jefe' }] })).toBe(false)
-    expect(v({ ...a, fechas_que_importan: [{ tipo: 'x', ambito: 'y', origen: 'dueno', cita_plan: '', motivo: 'm' }] })).toBe(false)
+    expect(v({ ...a, fechas_que_importan: [{ tipo: 'x', ambito: 'y', origen: 'dueno', cita_plan: '', motivo: 'm', clase: 'feriado_publico', llave: 'x', llave_nueva: true, desde: '', hasta: '' }] })).toBe(false)
+    // la clase solo puede ser una de las dos: una «fecha comercial» inventada no pasa
+    expect(v({ ...a, fechas_que_importan: [{ tipo: 'x', ambito: 'y', origen: 'plan', cita_plan: '', motivo: 'm', clase: 'fecha_comercial', llave: 'x', llave_nueva: true, desde: '', hasta: '' }] })).toBe(false)
   })
   it('la tanda buena cumple el esquema (rellenando lo que el fixture omite); una pieza con fecha ISO o un total, no', () => {
     const v = ajv.compile(ESQUEMA_CALENDARIO_TANDA)

@@ -13,7 +13,7 @@ import { describe, it, expect } from 'vitest'
 import Ajv from 'ajv'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ESQUEMA_ESTRATEGIA, ESQUEMAS } from '@/lib/cadena/esquemas'
+import { ESQUEMA_ESTRATEGIA_V1, ESQUEMAS } from '@/lib/cadena/esquemas'
 import { tareaDeEstrategia } from '@/lib/cadena/indicaciones'
 import { problemasDeEsquema, validarEstrategia } from '@/lib/cadena/validador-estrategia'
 import { insumosDesdeEstrategia, semanasDeFase } from '@/lib/cadena/conceptos'
@@ -63,9 +63,10 @@ describe('contrato estrategia.v1 · el pedido con el plan real', () => {
 
 describe('contrato estrategia.v1 · la respuesta real del estratega (30-oct)', () => {
   it('cumple el JSON Schema `estrategia.v1` tal cual (sin campos extra, enums válidos) y `problemasDeEsquema` no le ve nada', () => {
-    expect(ESQUEMAS['estrategia.v1']).toBe(ESQUEMA_ESTRATEGIA)
+    // 10-nov: la respuesta real se produjo contra `estrategia.v1`; el registro la sigue guardando tal cual (la v2 suma la clase y la llave de cada fecha)
+    expect(ESQUEMAS['estrategia.v1']).toBe(ESQUEMA_ESTRATEGIA_V1)
     const ajv = new Ajv({ strict: true, allErrors: true })
-    const v = ajv.compile(ESQUEMA_ESTRATEGIA)
+    const v = ajv.compile(ESQUEMA_ESTRATEGIA_V1)
     expect(v(ESTRATEGIA_REAL) || JSON.stringify(v.errors)).toBe(true)
     expect(problemasDeEsquema(ESTRATEGIA_REAL)).toEqual([])
   })

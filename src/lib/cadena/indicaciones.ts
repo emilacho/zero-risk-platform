@@ -5,7 +5,7 @@
  */
 import type { ContextoDelCliente } from './almacen'
 import type { ConceptoLeido } from './conceptos'
-import type { Estrategia, Ficha, Fila, Hallazgo } from './tipos'
+import type { ClaseDeFecha, Estrategia, Ficha, Fila, Hallazgo } from './tipos'
 import { reglaDeIdioma, reglaDeRegistro, type RegistroDelCliente } from './registro'
 import type { FechaEspecialVerificada } from './validador-calendario'
 import { contextoDeEstado } from '../sedes/por-abrir'
@@ -35,7 +35,17 @@ export interface PedidoDeEstrategia { ctx: ContextoDelCliente; formatosPermitido
   /** 09-nov (GO Lenovo · B): el día 1 y el último día de la campaña (`YYYY-MM-DD`). Con ellos la tarea dice desde cuándo se cuentan los días; sin ellos, la tarea de siempre */
   fechaInicio?: string | null; fechaFin?: string | null
   /** 09-nov · F: el día 1 DEL PLAN (su ventana). Si difiere del de la campaña, las fechas del plan se cuentan desde él y se corren en bloque */
-  diaUnoDelPlan?: string | null }
+  diaUnoDelPlan?: string | null
+  /** 10-nov (fechas sin fuente · D): las llaves de fechas que YA existen para el país del cliente (y sus temporadas). El agente reusa la misma si es la misma fecha */
+  llavesDeFechas?: LlaveDeFecha[] }
+
+/** una llave de fecha ya guardada: la llave estable, su ámbito y, si se sabe, su clase */
+export interface LlaveDeFecha { llave: string; ambito: string; clase?: ClaseDeFecha | null }
+
+export function lineaDeLlavesDeFechas(llaves: LlaveDeFecha[] | undefined): string {
+  const l = llaves ?? []
+  return `# LLAVES DE FECHAS QUE YA EXISTEN (para este país y este negocio · la usada más recientemente primero)\n${l.length ? l.map((x) => `- ${x.llave} · ámbito ${x.ambito}${x.clase ? ` · ${x.clase}` : ''}`).join('\n') : '(ninguna todavía)'}`
+}
 
 const NOMBRE_DEL_DIA = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
 /** B · la línea del día 1: fecha, día de la semana, duración y fecha de fin. Vacía si falta la fecha de inicio (la tarea queda byte a byte como antes) */
@@ -65,6 +75,9 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
       `Los pilares suman 100. Las fases caen dentro de ${p.diasDeCampana ?? 90} días.`,
       ...[lineaDelDiaUno(p.fechaInicio, p.fechaFin, p.diasDeCampana ?? 90, p.diaUnoDelPlan)].filter(Boolean),
       '`fechas_que_importan` es una lista de TIPOS de fechas que le importan a ESTE negocio (feriados locales, temporadas, eventos del sector, fechas comerciales… o ninguna). Lo normal es la lista VACÍA: no inventes tipos «por si acaso». Si declaras uno, di su origen (plan | estrategia | alta) y un motivo concreto.',
+      'Cada fecha que declares lleva su `clase`, y la decides tú razonando sobre lo que ES la fecha (no por las palabras de su nombre): `feriado_publico` si es una fecha del país o de un lugar, igual para todos los negocios de ahí (Navidad, Año Nuevo, un feriado nacional o local); `temporada_del_negocio` si es un tramo propio de ESTE negocio (su temporada alta, su cosecha, el tramo del año en que más vende).',
+      '`llave`: la llave estable de esa fecha, en minúsculas y con guiones bajos. Mira la lista LLAVES DE FECHAS QUE YA EXISTEN: si tu fecha es la MISMA que una de la lista (aunque tú la escribirías distinto), usa esa llave y ese ámbito tal cual y pon `llave_nueva` en false. Si en la lista hay dos o más que son la misma fecha escrita de formas distintas, usa la PRIMERA que aparece (la lista va de la usada más recientemente a la menos). Solo si ninguna es la misma, crea una nueva y pon `llave_nueva` en true.',
+      'En una `temporada_del_negocio`, `desde` y `hasta` (`YYYY-MM-DD`) son el tramo que dice el PLAN, y `cita_plan` es la frase literal del plan que lo dice. Si el plan no dice cuándo es, deja `desde`, `hasta` y `cita_plan` vacíos: queda pendiente y el sistema consigue la fecha por su vía. Nunca pongas una fecha que el plan no dice. En un `feriado_publico`, `desde` y `hasta` van vacíos: su fecha la verifica el sistema con las fuentes oficiales.',
       '`patron_semanal`: los slots que se repiten cada semana (día, hora, red, formato, pilar, sede). Usa solo redes y formatos permitidos. `requiere_abierto` solo si la pieza depende de que un local esté abierto; si el negocio no tiene local, siempre false.',
       '`pendientes`: lo que falta saber, con qué pieza desbloquea y quién lo pide (`portero` = el cerebro del cliente, `sistema` = investigarlo con fuente). Nunca se le pregunta nada a nadie del negocio.',
     ]),
@@ -72,6 +85,8 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     `# Formatos permitidos por red\n${Object.entries(p.formatosPermitidos).map(([r, f]) => `- ${r}: ${f.join(', ')}`).join('\n')}`,
     '',
     `# SEDES del negocio\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` (${s.nombre})` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(el negocio no tiene sedes registradas)'}`,
+    '',
+    lineaDeLlavesDeFechas(p.llavesDeFechas),
     '',
     `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
     '',
@@ -125,7 +140,7 @@ function seccionesDelConcepto(p: PedidoDeCalendario): string[] {
     out.push(`# BANCO DE IDEAS DEL CAPÍTULO ${f.clave}`)
     out.push(ideas.length ? ideas.map((i) => `- ${i.id} · ${i.red} · ${i.formato} · ${i.idea} · mensaje: ${i.mensaje} · gancho: ${i.gancho}${i.serie ? ` · serie: ${i.serie}` : ''}${i.foto ? ` · foto:${i.foto}` : ''}`).join('\n') : '(banco vacío para este capítulo: dilo en `pendientes`)')
   }
-  out.push('', '# FECHAS ESPECIALES (verificadas por el código)', p.fechasEspeciales?.length ? p.fechasEspeciales.map((x) => `- ${x.fecha} · ${x.nombre} (${x.tipo})`).join('\n') : '(ninguna declarada para esta campaña)')
+  out.push('', '# FECHAS ESPECIALES (verificadas por el código)', p.fechasEspeciales?.length ? p.fechasEspeciales.map((x) => `- ${x.hasta && x.hasta !== x.fecha ? `${x.fecha} → ${x.hasta}` : x.fecha} · ${x.nombre} (${x.tipo})${x.origen === 'cliente' ? ' · temporada del negocio (la dio el cliente)' : ''}`).join('\n') : '(ninguna declarada para esta campaña)')
   return out
 }
 
