@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { abrirCampana, calendarioGuardar, calendarioPreparar, estrategiaGuardar, estrategiaPreparar, filasLotes } from '../index'
+import { cerrarTanda } from '../pasos'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, clienteB, contextoDe, formatosDeLaMigracion, tandaBuena, type ClienteFixture } from '../__fixtures__/clientes'
 import { sumarDias } from '../fechas'
@@ -91,6 +92,32 @@ describe('la tanda guardada no programa antes de hoy + el plazo (dos clientes)',
       for (const f of salen) expect(enLotes.has(f.id)).toBe(false)
     })
   }
+
+  it('una fila de VIDEO que espera al brazo y no alcanza también sale (y no abre su espera de video); la que alcanza sigue esperando', async () => {
+    const cli = clienteA()
+    const { al, campana } = await tandaUno(cli, ABRE)
+    const c = (await al.campana(campana.id))!
+    const estr = (await al.ultimaEstrategia(campana.id))!.contenido
+    const ahora = `${sumarDias(c.fecha_inicio, 2)}T12:00:00Z`
+    const hoy = ahora.slice(0, 10)
+    const [red, lista] = Object.entries(formatos).find(([, l]) => l.some((x) => x.produccion === 'espera_brazo' && !x.familia))!
+    const video = lista.find((x) => x.produccion === 'espera_brazo' && !x.familia)!
+    const base = (id: string, fecha: string): Fila => ({
+      id, tanda: 9, semana: 1, dia_semana: 1, fecha, hora: '10:00', red, formato: video.formato, pilar: null, tema: 'video', sede: null, requiere_abierto: false,
+      depende_de: [], datos: [], pendientes: [], pieza_fija: null, origen: 'agente', estado: 'espera_video', avisos: [],
+    })
+    const tarde = base('v-no-alcanza', sumarDias(hoy, video.lead_dias - 1))
+    const aTiempo = base('v-alcanza', sumarDias(hoy, video.lead_dias))
+    const r = await cerrarTanda(al, { campana: c, formatos, estr, version: 1, tanda: 9, semanas: [1], filas: [tarde, aTiempo], hs: [], salen: [], ahora })
+    expect(r.status).toBe(200)
+    const guardadas = new Map((await al.filas(campana.id, 1)).map((f) => [f.id, f]))
+    expect(guardadas.get('v-no-alcanza')).toMatchObject({ estado: 'perdio_su_fecha' })
+    expect(guardadas.get('v-no-alcanza')!.avisos.some((a) => a.startsWith(PREFIJO_FUERA_DE_PLAZO))).toBe(true)
+    expect(guardadas.get('v-alcanza')).toMatchObject({ estado: 'espera_video' })
+    const esperasDeVideo = al.esperas.filter((e) => e.objeto_tipo === 'espera_video').map((e) => e.objeto_id)
+    expect(esperasDeVideo).toContain('v-alcanza')
+    expect(esperasDeVideo).not.toContain('v-no-alcanza')
+  })
 
   it('«hoy» es el del cliente, no el de UTC: 03:00Z del día D es todavía el día D-1 en Guayaquil', async () => {
     const cli = clienteA()
