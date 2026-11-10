@@ -35,6 +35,8 @@ export interface ContextoDeMolde {
   /** el verificador de órdenes: las frases y las versiones que compara */
   ordenes?: string[]
   versiones?: Array<{ etiqueta: string; texto: string }>
+  /** registro: la frase literal de cada ficha (id → frase), para el molde de reemplazos */
+  frases?: Record<string, string>
   /** `true` si este turno repite un paso por formato roto */
   reintento: boolean
 }
@@ -55,11 +57,17 @@ export function moldeDelPaso(c: ContextoDeMolde): { texto: string | null; error?
     }))
     return { texto: JSON.stringify({ filas }) }
   }
-  if (c.esquema !== 'fichas.v1' && sim.productor === 'muerto') return { texto: null, error: 'el turno murió (simulado): sin vuelta' }
-  if (c.esquema !== 'fichas.v1' && (sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && !c.reintento))) return { texto: 'esto no cumple el formato (simulado)' }
-  if (c.esquema === 'fichas.v1') {
+  const esDeFichas = c.esquema === 'fichas.v1' || c.esquema === 'fichas_de_registro.v1'
+  if (!esDeFichas && sim.productor === 'muerto') return { texto: null, error: 'el turno murió (simulado): sin vuelta' }
+  if (!esDeFichas && (sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && !c.reintento))) return { texto: 'esto no cumple el formato (simulado)' }
+  if (esDeFichas) {
     const f = sim.fichas ?? 'ninguna'
     if (f === 'ninguna') return { texto: '{"fichas":[]}' }
+    if (c.paso === 'revision_registro') {
+      // registro: la ficha cita una frase LITERAL del texto (si no, el código la descarta)
+      const frase = c.texto.match(/\p{L}{3,}/u)?.[0] ?? ''
+      return { texto: JSON.stringify({ fichas: frase ? [{ que: frase, donde: c.donde, contra_que: 'la sección de voz del manual (simulado)', gravedad: 'bloquea', propuesta: `(simulado) decirlo en el trato del cliente` }] : [] }) }
+    }
     return { texto: JSON.stringify({ fichas: [{ que: `(simulado) hallazgo de fondo en ${c.donde}`, donde: c.donde, contra_que: 'el manual vigente (simulado)', gravedad: f === 'bloquea' ? 'bloquea' : 'sugerencia', propuesta: '(simulado) ajustar esa parte' }] }) }
   }
   const toma = sim.toma ?? 'todo'
@@ -75,6 +83,7 @@ export function moldeDelPaso(c: ContextoDeMolde): { texto: string | null; error?
       return { texto: `${t}\n${bloque(respuestas)}` }
     }
     case 'resolucion.v1': return { texto: JSON.stringify({ respuestas, ...(tomoAlgo ? { pieza: { pie_de_foto: '(simulado) pie de foto corregido', hashtags: ['#simulado'] } } : {}) }) }
+    case 'reemplazos.v1': return { texto: JSON.stringify({ respuestas, reemplazos: tomoAlgo ? respuestas.filter((x) => x.estado === 'tomada').map((x) => ({ id: x.id, antes: c.frases?.[x.id] ?? '', despues: `${c.frases?.[x.id] ?? ''}-simulado` })) : [] }) }
     case 'resolucion_solo.v1': return { texto: JSON.stringify({ respuestas }) }
     case 'resolucion_objeto.v1': return { texto: JSON.stringify({ respuestas, ...(tomoAlgo ? { objeto: { ...(c.objeto ?? {}), simulado: true } } : {}) }) }
     case 'resolucion_parcial.v1': return { texto: JSON.stringify({ respuestas, ...(tomoAlgo ? { filas: [{ fila_id: String(c.filas?.[0]?.fila_id ?? 'f1'), tema: '(simulado) fila corregida' }] } : {}) }) }

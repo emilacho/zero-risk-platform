@@ -22,6 +22,7 @@ import { atiende, casarId, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpin
 import { ESTADOS_TERMINALES, type CambiosDeRevision, type PasoRegistrado, type Puertos, type Revision } from './puertos'
 import { moldeDelPaso, simulacionDelRevisor } from './simulacion'
 import { CLAVE_DE_VERIFICACION, evaluarOrdenes, partirOrdenes, tareaDeVerificacionDeOrdenes, type FilaDeVerificacion } from './orden-del-dueno'
+import { aplicarReemplazos, avisoDeCita, CLAVE_DE_REVISION_DE_REGISTRO, clasificarFichas, ESQUEMA_DE_REEMPLAZOS, tareaDeCorreccionDeRegistro, tareaDeRevisionDeRegistro, type FichaDeRegistro, type Reemplazo } from './registro'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -132,7 +133,7 @@ async function aplicar(P: Puertos, rev: Revision, pl: Plantilla, indice: number,
   return { ...rev, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso' }
 }
 
-const ROL_DE: (clave: string) => string = (c) => (c === 'revision_fondo' ? 'fondo' : c === 'revision_lengua' ? 'lengua' : c === 'segunda_mirada' ? 'ciego' : c === CLAVE_DE_VERIFICACION ? 'verificador' : c.startsWith('correccion:') ? 'productor_corrige' : 'productor_decide')
+const ROL_DE: (clave: string) => string = (c) => (c === CLAVE_DE_REVISION_DE_REGISTRO ? 'registro' : c === 'revision_fondo' ? 'fondo' : c === 'revision_lengua' ? 'lengua' : c === 'segunda_mirada' ? 'ciego' : c === CLAVE_DE_VERIFICACION ? 'verificador' : c.startsWith('correccion:') ? 'productor_corrige' : 'productor_decide')
 /** la traza M1 de un paso: namespace `metadata.jefatura` (diseño §6) */
 function trazaM1(rev: Revision, paso: Paso, extra: Datos = {}): Record<string, unknown> {
   return { jefatura: { role: ROL_DE(paso.clave), review_id: rev.id, artifact_type: rev.artifact_type, artifact_id: rev.artifact_id, cycle: 0, nominal_agent: paso.quien, contra_que_ref: rev.policy.contra_que.map((d) => d.clave), policy_snapshot: { artifact_type: rev.policy.artifact_type, reentrega: rev.policy.reentrega, tope_revision_usd: rev.policy.tope_revision_usd }, ...extra } }
@@ -158,7 +159,13 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
   let ids: string[] = []
   let donde = 'general'
   const duenos = duenosDe(rev.productores)
-  if (paso.clave === 'revision_fondo') {
+  if (paso.clave === CLAVE_DE_REVISION_DE_REGISTRO) {
+    t = tareaDeRevisionDeRegistro({ payload: p, texto })
+  } else if (tipo === 'registro' && esCorreccion(paso)) {
+    const mias = fichasPropias(rev, e, paso, duenoDe(rev, paso))
+    ids = mias.map((f) => f.id)
+    t = tareaDeCorreccionDeRegistro({ payload: p, texto, fichas: mias.map((f) => ({ id: f.id, que: f.que, propuesta: f.propuesta, contra_que: f.contra_que, donde: f.donde })) })
+  } else if (paso.clave === 'revision_fondo') {
     t = tareaDeRevisionDeFondo({ politica: rev.policy, payload: p, tipo, texto, duenos })
     donde = p.simulacion?.donde ?? duenos.flatMap((d) => (d.comodin ? [] : d.dondes))[0] ?? 'general'
   } else if (paso.clave === 'revision_lengua') {
@@ -181,7 +188,8 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
   const pedido = armarPedidoDeAgente({ agente: paso.quien, task, esquema: t.esquema, imagenes: p.imagenes, indicacion: t.indicacion, paso: paso.clave, revision_id: rev.id, dispatch_key, max_budget_usd: paso.tope_usd, dry_run: rev.dry_run, client_id: rev.client_id, simulacion: p.simulacion, reintento_formato: errorDeFormato !== undefined, trabajo: rev.artifact_type === 'pieza' ? { trabajo_tipo: 'pieza', trabajo_id: rev.artifact_id } : trabajoDeLaLlamada(p).columnas })
   const malos = auditarPedidoDeAgente(pedido)
   if (malos.length) throw new Error(`pedido inválido (regla dura del editor): ${malos.join(' · ')}`)
-  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined, ...(paso.clave === CLAVE_DE_VERIFICACION ? { ordenes: p.ordenes_del_dueno, versiones: h } : {}) }) : undefined
+  const frases = tipo === 'registro' ? Object.fromEntries(e.fichas.filter((f) => ids.includes(f.id)).map((f) => [f.id, f.que ?? ''])) : undefined
+  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, ...(frases ? { frases } : {}), objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined, ...(paso.clave === CLAVE_DE_VERIFICACION ? { ordenes: p.ordenes_del_dueno, versiones: h } : {}) }) : undefined
   return { agente: paso.quien, pedido: { ...pedido, ...(molde ? { molde } : {}) } as Record<string, unknown>, ...(molde ? { molde } : {}) }
 }
 
@@ -315,6 +323,13 @@ interface Procesado { res?: ResultadoDePaso; fallido?: string; reintentar?: stri
 
 function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e: Estado): Procesado {
   if (paso.clave === CLAVE_DE_VERIFICACION) return { res: { costo_usd: 0, artefacto: { filas: v.filas } } }
+  // 10-nov · registro: el agente juzgó; el código verifica lo exacto. Solo es ficha la frase LITERAL fuera de citas; lo que está en citas es aviso; lo no literal se descarta y se anota
+  if (paso.clave === CLAVE_DE_REVISION_DE_REGISTRO) {
+    const texto = String(datos(e, 'revision')?.texto ?? '')
+    const c = clasificarFichas(texto, v.fichas as FichaDeRegistro[], rev.entrada.documentos_de_origen ?? [])
+    const fs = c.corregibles.map((f, i) => fichaNueva(`registro-${e.pasos_ejecutados}-${i}`, 'jefe', normalizarDonde(f.donde, duenosDe(rev.productores)).donde, 'bloquea', f.que, f.contra_que, f.propuesta))
+    return { res: { costo_usd: 0, artefacto: { fichas: fs.length, avisos_de_registro: c.en_citas.map(avisoDeCita), citas_del_revisor: c.citas_del_revisor, ...(c.no_literales.length ? { frases_no_literales: c.no_literales } : {}) }, fichas: fs } }
+  }
   if (paso.clave === 'revision_fondo' || paso.clave === 'revision_lengua') {
     const duenosDeLaRevision = duenosDe(rev.productores)
     const dondeNormalizados: string[] = [], dondeAmbiguos: string[] = []
@@ -346,7 +361,20 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e:
   const extraFichas: Ficha[] = []
   let artefacto: Datos | undefined
   const esquema = paso.salida?.esquema ?? ''
-  if (esquema === 'plan_texto_y_resolucion.v1') {
+  if (esquema === ESQUEMA_DE_REEMPLAZOS) {
+    // registro: el creador da reemplazos exactos de SUS frases tomadas; el código los aplica fuera de las citas (nada más del texto puede cambiar)
+    const reemplazos = (Array.isArray(v.reemplazos) ? v.reemplazos : []) as Reemplazo[]
+    const tomadas = new Map(validas.filter((x) => x.estado === 'tomada').map((x) => [x.id, String(mias.find((f) => f.id === x.id)?.que ?? '')]))
+    const faltan = [...tomadas.keys()].filter((id) => !reemplazos.some((x) => x.id === id))
+    if (faltan.length) return { reintentar: `Tomaste ${faltan.map((x) => `«${x}»`).join(', ')} pero no diste su reemplazo: da un reemplazo {"id","antes","despues"} por cada ficha tomada.` }
+    if (reemplazos.length) {
+      // las citas que el revisor señaló y el código comprobó son tramos intocables también aquí (caso mixto de CC7: la misma frase en una cita y en una línea de pieza)
+      const citas = (datos(e, 'fichas_jefe')?.citas_del_revisor as string[] | undefined) ?? []
+      const ap = aplicarReemplazos(String(rd.texto ?? ''), reemplazos, tomadas, citas)
+      if (!ap.ok) return { reintentar: `${ap.error}. Corrige tus reemplazos.` }
+      artefacto = conVersion({}, ap.texto, paso.clave)
+    }
+  } else if (esquema === 'plan_texto_y_resolucion.v1') {
     const t = typeof v.texto_plan === 'string' ? v.texto_plan : null
     if (esDecision(paso)) {
       if (tomoAlgo && t === null) return { reintentar: 'Dijiste que tomaste algo de la opinión pero no entregaste la versión final del plan: entrega el plan completo y, al final, el bloque de resolución.' }
@@ -414,7 +442,7 @@ export function armarSalida(rev: Revision, c: Cierre): SalidaDeRevision {
     respuestas: c.respuestas,
     opinion_externa: typeof ext?.opinion === 'string' && ext.opinion ? { texto: ext.opinion, modelo: typeof ext.modelo === 'string' ? ext.modelo : null } : null,
     imagen_por_rehacer: e.fichas.some((f) => f.id === 'imagen-por-rehacer'),
-    ...(e.avisos?.length ? { avisos: e.avisos } : {}),
+    ...(() => { const av = [...(e.avisos ?? []), ...(((datos(e, 'fichas_jefe')?.avisos_de_registro as string[] | undefined) ?? []))]; return av.length ? { avisos: av } : {} })(),
     desacuerdos: c.desacuerdos, costo_usd: e.gasto_usd, pasos: e.pasos_ejecutados, trace_id: `jefatura:${rev.id}`, devolver_a: rev.devolver_a, simulado: rev.dry_run,
   }
 }

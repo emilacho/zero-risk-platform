@@ -5,6 +5,7 @@
  * `simulacion` solo existe con `dry_run = true`.
  */
 import type { ContextoDelRevisor, HuecosDeLaPregunta } from '../../revision-comun'
+import { erroresDeLaEntradaDeRegistro } from './registro'
 
 /** a dónde puede entregar un webhook de la jefatura: SOLO nuestro n8n o nuestro Vercel (la misma lista que aplican los flujos de J4 al entregar) */
 export const VERCEL_DE_LA_PLATAFORMA = 'https://zero-risk-platform.vercel.app/'
@@ -14,7 +15,7 @@ export function destinoDeWebhookPermitido(url: string, env: Record<string, strin
   return typeof url === 'string' && (url.startsWith(base) || url.startsWith(VERCEL_DE_LA_PLATAFORMA))
 }
 
-export const TIPOS_DE_REVISION = ['plan', 'estrategia', 'calendario', 'brief', 'pieza', 'manual'] as const
+export const TIPOS_DE_REVISION = ['plan', 'estrategia', 'calendario', 'brief', 'pieza', 'manual', 'registro'] as const
 export type TipoDeRevision = (typeof TIPOS_DE_REVISION)[number]
 
 export const RESULTADOS = ['limpia', 'con_desacuerdo', 'sin_segunda_mirada', 'incompleta_por_tope', 'fallida'] as const
@@ -78,6 +79,16 @@ export interface PayloadDeRevision {
   trabajo_tipo?: string
   trabajo_id?: string
   llamada_padre?: string
+  /** 10-nov · registro: el registro del cliente YA RESUELTO por quien abre (de su manual o de su país); sin él, la revisión de registro no abre */
+  registro?: { trato: 'tu' | 'vos' | 'usted'; fuente?: string; evidencia?: string }
+  /** registro: la sección de voz del manual del cliente, tal cual (no el manual entero) */
+  seccion_de_voz?: string
+  /** registro: qué documento es («el brief creativo», «la gran idea», «el calendario»), para el pedido */
+  documento?: string
+  /** registro: lo que marcó el detector barato; el revisor lo recibe como PISTA, nunca decide */
+  pistas_de_registro?: string[]
+  /** registro: los documentos de los que el texto puede citar (título + texto); con ellos el código comprueba, literal, una cita que señala el revisor. Sin ellos, nada es cita salvo las marcas exactas */
+  documentos_de_origen?: Array<{ titulo: string; texto: string }>
 }
 
 export interface EntradaDeRevision {
@@ -156,6 +167,7 @@ export function validarEntrada(cuerpo: unknown): ResultadoDeValidar {
     if (p.dry_run !== true) errores.push('`payload.simulacion` solo se admite con dry_run = true')
     else if (!esObjeto(p.simulacion)) errores.push('`payload.simulacion` debe ser un objeto')
   }
+  if (cuerpo.artifact_type === 'registro') errores.push(...erroresDeLaEntradaDeRegistro(p))
   if (cuerpo.dry_run !== undefined) ignorados.push('dry_run en la raíz (solo vale `payload.dry_run`)')
   if (p.client_id !== undefined) ignorados.push('payload.client_id (el cliente lo pone el flujo en la raíz)')
   if (errores.length) return { ok: false, codigo: 'entrada_invalida', errores }
