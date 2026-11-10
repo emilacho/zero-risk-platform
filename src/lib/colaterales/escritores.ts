@@ -25,6 +25,8 @@ export function forma(v: unknown): unknown {
 export const mismaForma = (a: unknown, b: unknown): boolean => JSON.stringify(forma(a)) === JSON.stringify(forma(b))
 
 export class FormaCambiada extends EscrituraRechazada {}
+/** el texto retocado ya no es JSON (p. ej. un retoque por posición que metió comillas): se rechaza, nunca tumba la corrida (nota CC7 #990) */
+export class TextoNoEsJson extends EscrituraRechazada {}
 
 /** ESTRATEGIA · por el almacén de la cadena (el único lugar que nombra sus tablas) · ref = campana_id · texto = JSON de `contenido` */
 export function escritorDeEstrategia(al: Pick<Almacen, 'ultimaEstrategia' | 'estrategiaEnVersion' | 'insertarEstrategiaSiLibre'>): EscritorDeDocumento {
@@ -41,7 +43,8 @@ export function escritorDeEstrategia(al: Pick<Almacen, 'ultimaEstrategia' | 'est
     async escribirSiSigue(ref, base, texto) {
       const f = await al.ultimaEstrategia(ref)
       if (!f || String(f.version) !== base) return null
-      const contenido = JSON.parse(texto) as EstrategiaGuardada['contenido']
+      let contenido: EstrategiaGuardada['contenido']
+      try { contenido = JSON.parse(texto) as EstrategiaGuardada['contenido'] } catch { throw new TextoNoEsJson(`la estrategia ${ref} v${base}: el retoque deja un texto que no es JSON`) }
       if (!mismaForma(contenido, f.contenido)) throw new FormaCambiada(`la estrategia ${ref} v${base}: el retoque cambia la estructura`)
       const nueva = f.version + 1
       const libre = await al.insertarEstrategiaSiLibre({ campana_id: ref, version: nueva, estado: f.estado, contenido, agente: AUTOR_DE_COLATERALES, modelo: null, costo_usd: 0, workflow_execution_id: null, seco: f.seco === true })

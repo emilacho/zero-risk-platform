@@ -9,7 +9,7 @@ import B from './__fixtures__/b2b-industrial-2026-11-10.json'
 import { pedazosDe, type Pedazo } from '../red'
 import { almacenDeColaterales } from '../almacen'
 import { aplicarAprobados, deshacerEdicion } from '../aplicar'
-import { escritorDeEstrategia, FormaCambiada, mismaForma, AUTOR_DE_COLATERALES } from '../escritores'
+import { escritorDeEstrategia, FormaCambiada, TextoNoEsJson, mismaForma, AUTOR_DE_COLATERALES } from '../escritores'
 import { baseFalsa } from './base-falsa'
 import { AlmacenMemoria } from '../../cadena/__fixtures__/almacen-memoria'
 import type { EstrategiaGuardada } from '../../cadena/almacen'
@@ -85,6 +85,36 @@ describe('escritor de la estrategia · dos clientes', () => {
     await expect(escritorDeEstrategia(cadena).escribirSiSigue('c', '1', JSON.stringify(fasesComoObjeto), 'm')).rejects.toBeInstanceOf(FormaCambiada)
     expect(cadena.estrategias).toHaveLength(1)
   })
+
+  it('nota CC7 #990: un texto que ya no es JSON se rechaza (TextoNoEsJson), no lanza SyntaxError, y no se escribe', async () => {
+    const cadena = cadenaCon(fila('c', 1, CASOS[0].contenido))
+    const roto = JSON.stringify(CASOS[0].contenido).replace(CASOS[0].antes, 'WhatsApp "Business"')
+    const e = await escritorDeEstrategia(cadena).escribirSiSigue('c', '1', roto, 'm').catch((x: unknown) => x)
+    expect(e).toBeInstanceOf(TextoNoEsJson)
+    expect(e).not.toBeInstanceOf(SyntaxError)
+    expect(cadena.estrategias).toHaveLength(1)
+  })
+
+  for (const caso of CASOS) {
+    it(`${caso.cliente}: un retoque POR POSICIÓN sobre la estrategia que mete comillas queda pendiente «escritura_rechazada» y la corrida sigue (nota CC7 #990)`, async () => {
+      const { db, tablas } = baseFalsa()
+      const cadena = cadenaCon(fila(caso.campana, 1, caso.contenido))
+      const almacen = almacenDeColaterales(db)
+      const texto = JSON.stringify(caso.contenido)
+      const inicio = texto.indexOf(caso.antes)
+      expect(inicio, caso.cliente).toBeGreaterThan(-1)
+      // fila CONSTRUIDA a propósito: por el camino normal la estrategia se corta por ruta; esto simula una fila de retoque mal guardada
+      const pedazo: Pedazo = { id: 'C1', documento: 'estrategia', seccion: 's', texto: caso.antes, inicio, ruta: null }
+      const { edicion } = await almacen.crearEdicion({ client_id: caso.campana, documento: 'plan', documento_ref: 'plan', version_base: '1', seccion: 's', antes: caso.antes, despues: caso.despues, llave: `${caso.campana}:pos` })
+      await almacen.guardarRetoques(edicion.id, [{ pedazo, documento_ref: caso.campana, version_base: '1', afecta: true, razon: 'repite lo editado', antes: caso.antes, despues: `${caso.antes} "con comillas"`, porque: 'repite lo editado', estado: 'propuesto' }])
+      for (const f of tablas.colaterales_retoques) await almacen.pasarRetoque(String(f.id), 'propuesto', 'aprobado')
+      const r = await aplicarAprobados({ almacen, escritores: { estrategia: escritorDeEstrategia(cadena) }, leerFilasActivas: async () => TODAS }, edicion.id)
+      expect(r.pendientes.map((x) => x.motivo)).toEqual(['escritura_rechazada'])
+      expect(r.aplicados).toEqual([])
+      expect(cadena.estrategias).toHaveLength(1)
+      expect(tablas.colaterales_retoques[0].estado).toBe('pendiente')
+    })
+  }
 
   it('aplicar: si el escritor rechaza la escritura, el retoque queda pendiente «escritura_rechazada» y la corrida sigue', async () => {
     const { cadena, almacen, edicion_id } = await preparar(CASOS[0])
