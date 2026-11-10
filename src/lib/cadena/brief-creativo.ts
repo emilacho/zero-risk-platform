@@ -9,6 +9,7 @@
 import { citaAparece, normalizar } from './texto'
 import type { Hallazgo } from './tipos'
 import { CONTRATO_BRIEF_CREATIVO, claveDeTexto, contienePalabraEntera, seccionesDe, tieneCifraInventada } from './conceptos'
+import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from './registro'
 
 export { CONTRATO_BRIEF_CREATIVO }
 
@@ -19,6 +20,9 @@ export interface BriefCreativoLeido {
   insight: string
   mensaje: string
   objetivo: string
+  /** 10-nov (ADENDA de Emilio · 2): copiados del plan */
+  publico: string
+  como_sabremos: string
   por_red: ObjetivoPorRed[]
   tono: string
   obligatorios: { vocabulario: string[]; prohibido: string[]; no_se_dice: string[] }
@@ -40,10 +44,13 @@ export interface InsumosDelBrief {
   duras?: string[]
   /** redes principal/réplica de la estrategia: cada una necesita objetivo y llamado (falta ⇒ se declara) */
   redes?: string[]
+  /** 10-nov (GO v3 · punto 5): el registro del cliente; las formas de OTRO registro se marcan, como en las piezas · sin dato no se marca nada */
+  registro?: RegistroDelCliente
 }
 
-export const SECCIONES_DEL_BRIEF = ['De qué parte del plan sale', 'Insight', 'Mensaje', 'Objetivo', 'Tono', 'Obligatorios', 'Faltantes', 'Contradicciones plan vs manual', 'Citas'] as const
-const OBLIGATORIAS = ['De qué parte del plan sale', 'Insight', 'Mensaje', 'Objetivo', 'Tono', 'Obligatorios'] as const
+// 10-nov (ADENDA de Emilio · 2): el brief COPIA del plan el público, el objetivo con su número y cómo sabremos que funcionó (la mesa de la gran idea solo lee el brief)
+export const SECCIONES_DEL_BRIEF = ['De qué parte del plan sale', 'Insight', 'Mensaje', 'Público', 'Objetivo', 'Cómo sabremos que funcionó', 'Tono', 'Obligatorios', 'Faltantes', 'Contradicciones plan vs manual', 'Citas'] as const
+const OBLIGATORIAS = ['De qué parte del plan sale', 'Insight', 'Mensaje', 'Público', 'Objetivo', 'Cómo sabremos que funcionó', 'Tono', 'Obligatorios'] as const
 export const MAX_CARACTERES_DEL_MENSAJE = 260
 export const MIN_CARACTERES_DE_CITA = 12
 const CLICHES_DE_PUBLICO = ['todos', 'todo el mundo', 'toda la poblacion', 'publico general', 'cualquier persona', 'cualquiera', 'toda la gente', 'la gente']
@@ -123,6 +130,10 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
     else if (!o.llamado) avisos.push(`la red ${r} no tiene llamado («- ${r}: objetivo · llamado»)`)
   }
 
+  // 10-nov (ADENDA de Emilio · 2): el objetivo de la campaña lleva su número (el del plan); si el plan no lo tiene, se declara en «Faltantes», nunca se inventa
+  const faltaObjetivo = lineasConClave(t('Faltantes')).some((l) => /^objetivo/.test(claveDeTexto(l.clave)))
+  if (objetivo && !/\d/.test(objetivo) && !faltaObjetivo) bloqueos.push('el objetivo de la campaña no trae su número del plan (cópialo del plan, o decláralo en «Faltantes» si el plan no lo tiene)')
+
   // obligatorios: vocabulario · prohibido · lo que no se dice
   const ob = lineasConClave(t('Obligatorios'))
   const de = (re: RegExp) => ob.filter((l) => re.test(claveDeTexto(l.clave))).flatMap((l) => lista(l.valor))
@@ -145,10 +156,18 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   for (const p of ins.duras ?? []) if (contienePalabraEntera(loQuePide, p)) avisos.push(`usa «${p}», declarada por una norma o para este cliente: revisa si corresponde`)
   for (const p of ins.prohibidas) if (!duras.has(claveDeTexto(p)) && contienePalabraEntera(loQuePide, p)) avisos.push(`usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`)
   for (const p of ins.prohibidas) if (!obligatorios.prohibido.some((x) => claveDeTexto(x) === claveDeTexto(p))) avisos.push(`la prohibida del manual «${p}» no está en la lista «prohibido» del brief`)
+  // 10-nov (GO v3 · punto 5): el registro del cliente, como en las piezas; «Tono» se nombra aparte porque es la regla que heredan la gran idea y las piezas
+  if (ins.registro) {
+    const enTono = formasDeOtroRegistro(ins.registro, t('Tono'))
+    const enTodo = formasDeOtroRegistro(ins.registro, md)
+    // 10-nov (RESPUESTA de Lenovo por Emilio · decisión 1): «Tono» BLOQUEA (la heredan la gran idea y las piezas); el resto avisa. Se devuelve UNA vez; la segunda va a humano
+    if (enTono.length) bloqueos.push(`«Tono» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enTono.join(', ')} · la gran idea y las piezas heredan esta regla`)
+    if (enTodo.length) avisos.push(`el brief usa ${enTodo.length} forma(s) que no son ${nombreDelRegistro(ins.registro)}: ${enTodo.slice(0, 12).join(', ')}`)
+  }
 
   return {
     contrato: CONTRATO_BRIEF_CREATIVO,
-    de_que_parte_del_plan: cita, insight: t('Insight'), mensaje, objetivo, por_red, tono: t('Tono'), obligatorios, faltantes, contradicciones, citas: t('Citas'),
+    de_que_parte_del_plan: cita, insight: t('Insight'), mensaje, objetivo, publico: t('Público'), como_sabremos: t('Cómo sabremos que funcionó'), por_red, tono: t('Tono'), obligatorios, faltantes, contradicciones, citas: t('Citas'),
     avisos, bloqueos, estado: bloqueos.length ? 'devuelta' : 'validada',
   }
 }
@@ -166,7 +185,9 @@ export const REFERENCIA_DEL_BRIEF_CREATIVO = [
   '## De qué parte del plan sale · una cita LITERAL del plan (entre «»), porque la pieza debe poder rastrearse al plan.',
   '## Insight · una verdad del público en 1–2 frases, porque sin insight no hay idea, solo decoración.',
   '## Mensaje · UNO, máximo 2 frases, porque dos mensajes = ninguno.',
-  '## Objetivo · el de la campaña, medible, y por red una línea «- ig: objetivo · llamado», porque cada red pide una acción distinta.',
+  '## Público · cópialo del PLAN (quién es, dónde está, qué duda tiene), porque la mesa de la gran idea solo lee este brief.',
+  '## Objetivo · el de la campaña CON SU NÚMERO tal como lo da el plan, y por red una línea «- ig: objetivo · llamado», porque cada red pide una acción distinta. Si el plan no trae número, decláralo en «Faltantes».',
+  '## Cómo sabremos que funcionó · cópialo del PLAN (los indicadores y la regla de revisión), porque sin medida no se puede decidir si seguir, ajustar o parar.',
   '## Tono · voz y trato que fija el manual, en 2 líneas (responde en el idioma y con el trato del manual del cliente), porque la voz es del cliente, no tuya.',
   '## Obligatorios · «- vocabulario: …» · «- prohibido: …» · «- lo que no se dice: …», porque son los límites que la pieza no puede cruzar.',
   '## Faltantes · «- <campo>: <qué falta>» (declarado, no rellenado) · ## Contradicciones plan vs manual · «- qué · plan dice · manual dice · qué se hizo» · ## Citas · «A1 usé: …».',

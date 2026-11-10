@@ -19,7 +19,7 @@ const BRIEF = [
   'La gente del barrio desayuna de pie porque cree que no hay dónde sentarse antes de las ocho.',
   '## Mensaje',
   'Hay mesa desde las siete.',
-  '## Objetivo',
+  '## Público', 'Vecinos del barrio que desayunan fuera entre semana (del plan).', '## Cómo sabremos que funcionó', 'Pedidos por semana contra la meta del plan, revisados cada lunes.', '## Objetivo',
   'Que entren 30 desayunos nuevos por semana en la fase 1.',
   '- ig: que miren el pan recién salido · «ven a desayunar»',
   '- fb: que guarden el horario · «guarda el horario»',

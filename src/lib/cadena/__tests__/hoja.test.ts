@@ -13,7 +13,7 @@ const BRIEF = leerBriefCreativo([
   '## De qué parte del plan sale', 'Fase 1: «que el barrio sepa que la cocina abre temprano».',
   '## Insight', 'La gente desayuna de pie.',
   '## Mensaje', 'Hay mesa desde las siete.',
-  '## Objetivo', '30 desayunos nuevos por semana.', '- ig: que miren el pan · «ven a desayunar»', '- whatsapp: que respondan · «responde este estado»',
+  '## Público', 'Vecinos del barrio que desayunan fuera entre semana (del plan).', '## Cómo sabremos que funcionó', 'Pedidos por semana contra la meta del plan, revisados cada lunes.', '## Objetivo', '30 desayunos nuevos por semana.', '- ig: que miren el pan · «ven a desayunar»', '- whatsapp: que respondan · «responde este estado»',
   '## Tono', 'Cercano y directo.',
   '## Obligatorios', '- vocabulario: pan de masa madre; mesa larga', '- prohibido: delicioso', '- lo que no se dice: precios',
   '## Faltantes', '- público: sin edades en el manual',

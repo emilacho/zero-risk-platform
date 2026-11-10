@@ -184,6 +184,8 @@ export interface Almacen {
   formatos(): Promise<FormatosPorRed>
   // contexto del cliente (lecturas)
   cargarContexto(clientId: string, planId: string): Promise<ContextoDelCliente | null>
+  /** 10-nov (GO v3 · punto 2): los ids de las fotos PROPIAS del cliente (las mismas que la oficina puede usar) · opcional: sin él, la lista va vacía */
+  fotosPropias?(clientId: string): Promise<string[]>
   /** el plan existe, es de este cliente y es del tipo plan de 90 días; sin `planId` devuelve el último del cliente */
   resolverPlan(clientId: string, planId: string | null): Promise<{ plan_id: string; fecha: string } | null>
   /** el viaje de la sala existe para este cliente (condición de `workflow_id` válido) */

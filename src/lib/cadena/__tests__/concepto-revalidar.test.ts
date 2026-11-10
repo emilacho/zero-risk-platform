@@ -44,7 +44,7 @@ const BRIEF_BUENO = [
   '## De qué parte del plan sale', 'Fase 1: «Se publican 3 posts por semana en Instagram y 1 en Facebook».',
   '## Insight', 'La gente del barrio desayuna de pie porque cree que no hay dónde sentarse antes de las ocho.',
   '## Mensaje', 'Hay mesa desde las siete.',
-  '## Objetivo', 'Que entren 30 desayunos nuevos por semana.', '- instagram: que miren el pan recién salido · «ven a desayunar»', '- facebook: que guarden el horario · «guarda el horario»',
+  '## Público', 'Vecinos del barrio que desayunan fuera entre semana (del plan).', '## Cómo sabremos que funcionó', 'Pedidos por semana contra la meta del plan, revisados cada lunes.', '## Objetivo', 'Que entren 30 desayunos nuevos por semana.', '- instagram: que miren el pan recién salido · «ven a desayunar»', '- facebook: que guarden el horario · «guarda el horario»',
   '## Tono', 'Cercano y directo, sin exclamaciones.',
   '## Obligatorios', '- vocabulario: pan de masa madre; mesa larga', '- prohibido: barato; gratis', '- lo que no se dice: precios',
   '## Faltantes', '- público: el manual no dice edades',
@@ -311,5 +311,81 @@ describe('CC7 · casos propios', () => {
     const r = await conceptoRevalidar(al, wf({ version: 1 }), AHORA)
     expect(r.status).toBe(409)
     expect(JSON.stringify(al.conceptos)).toBe(antes)
+  })
+})
+
+/**
+ * 10-nov · 🟡 de CC7 a #968 (pedido 1): las DOS entradas reales leen con los insumos del almacén. Si `recibirConcepto` o `conceptoRevalidar` vuelven a
+ * pasar la lista vacía de antes, una foto propia citada por su prefijo sale «no existe» en la lectura guardada (el defecto de los 10 falsos de la v2).
+ */
+describe('las entradas de la gran idea leen las fotos propias del almacén (no una lista vacía)', () => {
+  const FOTO = '4c41cd56-414e-4597-a202-e8c34fd06f69'
+  const conFoto = (l: Linea[]) => l.map((x) => (x.n === 5 ? { ...x, texto: x.texto.replace('foto:ninguna', 'foto:4c41cd56') } : x))
+  const conFotos = (al: AlmacenMemoria) => Object.assign(al, { fotosPropias: async () => [FOTO] })
+  const avisosGuardados = (al: AlmacenMemoria, v: number) => ((al.conceptos.find((k) => k.version === v)!.leido as { avisos: string[] }).avisos)
+
+  it('🔴 recibirConcepto: la foto citada por prefijo existe y la lectura guardada no trae «no existe»', async () => {
+    const al = conFotos(almacen())
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(1, BRIEF_BUENO, { costo_usd: 0.1 }), AHORA)).toMatchObject({ estado: 'validada' })
+    await conceptoAbrir(al, wf(), AHORA)
+    const texto = textoParaLaCadena(conFoto(LIBRO), null, true)
+    expect(texto).toContain('foto:4c41cd56')
+    expect(await recibirConcepto(al, entrega(1, texto), AHORA)).toMatchObject({ ok: true, estado: 'lista' })
+    expect(avisosGuardados(al, 1).filter((a) => a.includes('no existe'))).toEqual([])
+  })
+  it('🔴 conceptoRevalidar: la relectura desde el libro tampoco trae «no existe»', async () => {
+    const al = conFotos(await comoNaufrago({ libro: conFoto(LIBRO) }))
+    const r = await conceptoRevalidar(al, wf({ version: 1 }), AHORA)
+    expect(r.cuerpo).toMatchObject({ pasa: true, version: 1 })
+    expect(al.conceptos[0].texto_md).toContain('foto:4c41cd56')
+    expect(avisosGuardados(al, 1).filter((a) => a.includes('no existe'))).toEqual([])
+  })
+  it('control: sin fotos en el almacén, la misma cita SÍ sale «no existe» (la prueba ve la diferencia)', async () => {
+    const al = Object.assign(almacen(), { fotosPropias: async () => [] as string[] })
+    await briefAbrir(al, wf(), AHORA)
+    await recibirBrief(al, entrega(1, BRIEF_BUENO, { costo_usd: 0.1 }), AHORA)
+    await conceptoAbrir(al, wf(), AHORA)
+    await recibirConcepto(al, entrega(1, textoParaLaCadena(conFoto(LIBRO), null, true)), AHORA)
+    expect(avisosGuardados(al, 1)).toContain('la foto «4c41cd56» no existe entre las fotos propias')
+  })
+})
+
+
+/**
+ * 10-nov · RESPUESTA de Lenovo por Emilio (decisión 1) con la condición de CC7: el voseo en «Tono» (brief) y en «Cómo suena» (gran idea) BLOQUEA,
+ * pero respeta el tope de vueltas de siempre: se devuelve UNA vez; la segunda va a humano. Nunca un ciclo que gasta.
+ */
+describe('el voseo en «Tono» y «Cómo suena» bloquea, con el tope de vueltas de siempre', () => {
+  const VOSEA = (t: string) => t.replace('## Cómo suena  Voz cercana, frases cortas.', '## Cómo suena  Voz cercana: entrá y pedí.')
+  const libroQueVosea = LIBRO.map((x) => (x.tipo === 'integra' ? { ...x, texto: VOSEA(x.texto) } : x))
+
+  it('🔴 gran idea: la primera queda sin_mesa por «Cómo suena»; la segunda igual → necesita_humano y no se abre una tercera mesa', async () => {
+    expect(VOSEA(INTEGRACION)).toContain('entrá y pedí')
+    const al = almacen()
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(1, BRIEF_BUENO, { costo_usd: 0.1 }), AHORA)).toMatchObject({ estado: 'validada' })
+    await conceptoAbrir(al, wf(), AHORA)
+    expect(await recibirConcepto(al, entrega(1, textoParaLaCadena(libroQueVosea, null, true)), AHORA)).toMatchObject({ ok: true, estado: 'sin_mesa' })
+    expect(al.conceptos[0].motivo).toMatch(/^sin_concepto: «Cómo suena» usa formas que no son/)
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
+    expect((await conceptoAbrir(al, wf(), AHORA)).cuerpo.version).toBe(2)
+    expect(await recibirConcepto(al, entrega(2, textoParaLaCadena(libroQueVosea, null, true)), AHORA)).toMatchObject({ ok: true, estado: 'sin_mesa' })
+    expect(al.campanas[0].estado).toBe('necesita_humano')
+    const r = await conceptoAbrir(al, wf(), AHORA)
+    expect(r.status).toBe(409)
+    expect(al.conceptos).toHaveLength(2)
+  })
+  it('🔴 brief: «Tono» con voseo se devuelve; la segunda versión igual → necesita_humano', async () => {
+    const BRIEF_VOSEA = BRIEF_BUENO.replace('Cercano y directo, sin exclamaciones.', 'Cercano y directo: entrá y pedí.')
+    expect(BRIEF_VOSEA).toContain('entrá y pedí')
+    const al = almacen()
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(1, BRIEF_VOSEA, { costo_usd: 0.1 }), AHORA)).toMatchObject({ estado: 'devuelta' })
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
+    expect(al.briefsCreativos[0].devolucion_texto).toMatch(/«Tono» usa formas que no son/)
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(2, BRIEF_VOSEA, { costo_usd: 0.1 }), AHORA)).toMatchObject({ estado: 'devuelta' })
+    expect(al.campanas[0].estado).toBe('necesita_humano')
   })
 })

@@ -19,7 +19,8 @@ import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, Context
 import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { hallazgosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
-import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, type ConceptoLeido } from './conceptos'
+import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
+import { sumarDias } from './fechas'
 import { medidaDeCampana } from './constantes'
 import { metodoDe } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
@@ -106,7 +107,23 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
   ].join('\n')
 }
 
-export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null }): string {
+/**
+ * 10-nov (GO v3 · punto 6): la mesa de la gran idea recibe la FECHA DE HOY y la fecha real de cada fase; lo que ya pasó no se propone (sirve para cualquier cliente).
+ * Sin `hoy` o sin `inicio` no se agrega nada (el marco queda igual que antes).
+ */
+export function fechasDelConcepto(estrategia: Pick<Estrategia, 'fases'>, inicio: string | null | undefined, hoy: string | null | undefined): string | null {
+  if (!inicio || !hoy) return null
+  const lineas = estrategia.fases.map((f) => {
+    const desde = sumarDias(inicio, f.dia_desde - 1)
+    const hasta = sumarDias(inicio, f.dia_hasta - 1)
+    const cuando = hasta < hoy ? 'YA PASÓ: no propongas piezas para estas fechas' : desde <= hoy ? `EN CURSO: solo piezas desde hoy (${hoy}); lo de días ya pasados no se propone` : 'por venir'
+    return `- ${f.clave}: del ${desde} al ${hasta} · ${cuando}`
+  })
+  return [`# HOY · ${hoy} (la campaña empezó el ${inicio})`, 'Ninguna idea es para un día que ya pasó. Lo que anuncia algo que ya ocurrió (una apertura, un lanzamiento, un «llega hoy» de una fecha pasada) se cuenta como hecho, no como promesa.', ...lineas].join('\n')
+}
+
+export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null }): string {
+  const fechas = fechasDelConcepto(a.estrategia, a.inicio, a.hoy)
   return [
     '# Qué te pido',
     `La gran idea de ESTA campaña (versión ${a.version}): UNA frase paraguas, por qué funciona, cómo se ve, cómo suena; un CAPÍTULO por fase de la estrategia, y el BANCO DE IDEAS por capítulo y por red. ${reglaDeLengua(a.ctx)}`,
@@ -119,6 +136,7 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     'Sin cifras con decimales inventadas, sin datos con valor (precios, horarios: los pone el estratega con su referencia), sin claims propios que no se puedan probar. ## Caminos descartados · ## Citas.',
     'Si la dirección decide que el brief no sirve, escribe «## Devolución del brief» con los puntos de los 6 criterios que fallan (UNA sola vez por campaña) y la mesa cierra.',
     ...(a.nota ? ['', '# CAMBIOS PEDIDOS POR EL CLIENTE (sobre la versión anterior)', a.nota] : []),
+    ...(fechas ? ['', fechas] : []),
     '',
     '# BRIEF CREATIVO DE LA CAMPAÑA (validado)',
     a.briefTexto,
@@ -210,7 +228,7 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   }
   const estr = await al.ultimaEstrategia(campana.id)
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
-  const leido = leerBriefCreativo(p.texto as string, { planTexto: ctx?.planTexto ?? '', prohibidas: ctx?.forbiddenWords ?? [], duras: ctx?.palabrasDuras, redes: (estr?.contenido.canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red) })
+  const leido = leerBriefCreativo(p.texto as string, { planTexto: ctx?.planTexto ?? '', prohibidas: ctx?.forbiddenWords ?? [], duras: ctx?.palabrasDuras, redes: (estr?.contenido.canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red), registro: ctx?.registro })
   const bloquea = hallazgosDelBrief(leido).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
   const estado = bloquea.length ? 'devuelta' : 'validada'
   await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado, texto_md: p.texto, leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
@@ -236,7 +254,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio) }), condiciones: condicionesDe(estrategia, await al.formatos()),
+      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10) }), condiciones: condicionesDe(estrategia, await al.formatos()),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
   }
@@ -257,12 +275,25 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota }), condiciones: condicionesDe(estrategia, await al.formatos()),
+    marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10) }), condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
 }
 
 /** la entrega de la mesa de concepto (puerto `P.cadena.entregarConcepto`) */
+/**
+ * 10-nov (GO v3 · puntos 2, 5 y 7): los insumos con que se LEE una gran idea, en UN solo lugar (entrega y revalidación):
+ * las fotos propias que existen (antes iba una lista vacía: toda foto citada salía «no existe»), el registro del cliente y el brief validado como fuente de los datos.
+ */
+export async function insumosDelConcepto(al: Almacen, campana: Pick<Campana, 'id' | 'client_id' | 'plan_id'>): Promise<InsumosDelConcepto> {
+  const estr = await al.ultimaEstrategia(campana.id)
+  const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
+  const fotos = al.fotosPropias ? await al.fotosPropias(campana.client_id) : []
+  const brief = await al.ultimoBriefCreativo(campana.id)
+  const base = estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], fotos) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos }
+  return { ...base, duras: ctx?.palabrasDuras, registro: ctx?.registro, ...(brief?.estado === 'validada' && brief.texto_md ? { fuente: brief.texto_md } : {}) }
+}
+
 export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: string): Promise<EntregaALaCadena> {
   const campana = await al.campana(p.campana_id)
   if (!campana) return { ok: false, error: 'campaña inexistente' }
@@ -287,10 +318,8 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
     return { ok: true, estado: 'sin_mesa', ...(await siguienteDespuesDe(al, campana.id)) }
   }
   if (!texto(p.texto)) return sinMesa(p.motivo ?? 'la mesa no entregó texto')
-  const estr = await al.ultimaEstrategia(campana.id)
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
-  const ins = { ...(estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], []) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos: [] }), duras: ctx?.palabrasDuras }
-  const leido = leerConcepto(p.texto as string, ins)
+  const leido = leerConcepto(p.texto as string, await insumosDelConcepto(al, campana))
   if (leido.estado === 'sin_concepto') return sinMesa(`sin_concepto: ${leido.bloqueos.join(' · ')}`)
   await al.actualizarConcepto(campana.id, p.version, { ...base, estado: 'lista', aprobacion: 'pendiente', texto_md: p.texto, leido: leido as unknown as Record<string, unknown> })
   await abrirAprobacionDelConcepto(al, campana, p.version, leido, p.costo_usd, todos, ahora, ctx?.nombreDelNegocio ?? null)

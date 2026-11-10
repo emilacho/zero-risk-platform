@@ -34,7 +34,7 @@ function almacen() {
 const BRIEF = [
   '## De qué parte del plan sale', 'Fase 1: «Se publican 3 posts por semana en Instagram y 1 en Facebook».',
   '## Insight', 'La gente del barrio desayuna de pie.', '## Mensaje', 'Hay mesa desde las siete.',
-  '## Objetivo', 'Que entren 30 desayunos nuevos por semana.', '- instagram: que miren el pan · «ven a desayunar»', '- facebook: que guarden el horario · «guarda el horario»',
+  '## Público', 'Vecinos del barrio que desayunan fuera entre semana (del plan).', '## Cómo sabremos que funcionó', 'Pedidos por semana contra la meta del plan, revisados cada lunes.', '## Objetivo', 'Que entren 30 desayunos nuevos por semana.', '- instagram: que miren el pan · «ven a desayunar»', '- facebook: que guarden el horario · «guarda el horario»',
   '## Tono', 'Cercano.', '## Obligatorios', '- vocabulario: pan de masa madre', '- prohibido: barato; gratis', '- lo que no se dice: precios',
   '## Faltantes', '- público: el manual no dice edades', '## Contradicciones plan vs manual', '- ninguna',
 ].join('\n')

@@ -18,7 +18,7 @@
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, EsperaFila } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { hallazgosDelBrief, leerBriefCreativo } from './brief-creativo'
-import { abrirAprobacionDelConcepto, MOTIVO_CAMBIOS_DE_EMILIO, objetoDeEsperaDeConcepto, siguienteDespuesDe, tandaQueEspera, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
+import { abrirAprobacionDelConcepto, insumosDelConcepto, MOTIVO_CAMBIOS_DE_EMILIO, objetoDeEsperaDeConcepto, siguienteDespuesDe, tandaQueEspera, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
 import { resolverEsperas } from './nucleo'
 import { insumosDesdeEstrategia, leerConcepto } from './conceptos'
 import { textoParaLaCadena } from '../oficina/mesa/de-la-cadena'
@@ -59,7 +59,7 @@ export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown
   if (!ctx) return err(409, 'E-CONTEXTO', 'no se pudo leer el plan de la campaña')
 
   // el MISMO verificador y los MISMOS insumos que `recibirBrief`
-  const leido = leerBriefCreativo(brief.texto_md, { planTexto: ctx.planTexto ?? '', prohibidas: ctx.forbiddenWords ?? [], duras: ctx.palabrasDuras, redes: (estr?.contenido.canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red) })
+  const leido = leerBriefCreativo(brief.texto_md, { planTexto: ctx.planTexto ?? '', prohibidas: ctx.forbiddenWords ?? [], duras: ctx.palabrasDuras, redes: (estr?.contenido.canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red), registro: ctx.registro })
   const bloquea = hallazgosDelBrief(leido).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
   const antes = { bloqueos: bloqueosDe(brief.leido) }
   // caso 4 de CC7: la campaña no guarda dónde estaba antes de `necesita_humano`; se usa la misma regla con que la cadena retoma sola (pasos.ts · retomar): tanda 1 → calendario
@@ -165,10 +165,8 @@ export async function conceptoRevalidar(al: Almacen, cuerpo: Record<string, unkn
   const libro = await al.libroDeLaMesa(fila.encargo_id)
   const texto = textoParaLaCadena(libro, null, true)
   if (!texto.trim()) return err(409, 'E-SIN-LIBRO', `el libro de la mesa (${fila.encargo_id}) está vacío`)
-  const estr = await al.ultimaEstrategia(c.id)
   const ctx = await al.cargarContexto(c.client_id, c.plan_id)
-  const ins = { ...(estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], []) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos: [] }), duras: ctx?.palabrasDuras }
-  const leido = leerConcepto(texto, ins)
+  const leido = leerConcepto(texto, await insumosDelConcepto(al, c))
   const resumen = { ideas_en_el_banco: leido.banco.length, descartadas: leido.ideas_descartadas.length, capitulos: leido.capitulos.length, bloqueos: leido.bloqueos }
   if (leido.estado === 'sin_concepto') return { status: 200, cuerpo: { ...(cuerpo.ensayo === true ? { ensayo: true, escrituras: 0 } : {}), pasa: false, version, ...resumen, campana: { estado: c.estado } } }
 
