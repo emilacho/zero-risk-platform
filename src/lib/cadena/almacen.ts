@@ -12,6 +12,7 @@ import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autop
 import type { SobreDeLote } from './arranque'
 import type { SobreDePlan } from './campanas'
 import type { SobreDeTanda } from './mesas'
+import type { AvisoDelTope, LecturaDeGasto } from './tope-de-campana'
 
 export type EstadoCampana = 'abierta' | 'estrategia' | 'calendario' | 'activa' | 'pausada' | 'necesita_humano' | 'cerrada' | 'reemplazada'
 
@@ -33,6 +34,8 @@ export interface Campana {
   ventana_parte_dias: number
   sustituir_video_por: 'ninguna' | 'carrusel' | 'foto'
   autoproducir: boolean
+  /** 10-nov · TOPE DE GASTO de la campaña en US$ (`tope-de-campana.ts`) · sin valor = no sale ninguna pieza real. Lo decide una persona; nace con `tope_gasto_campana_por_omision` */
+  tope_gasto_usd?: number | null
   sala_ref: Record<string, unknown>
   reemplaza_a: string | null
   seco: boolean
@@ -324,6 +327,13 @@ export interface Almacen {
   limpiarPartesSecos(ahora: string): Promise<number>
   /** el freno de gasto §150 (y el tope por cliente de #487) sobre este cliente: `bloqueado` = ya al techo de las 24 h */
   frenoDeGasto(clientId: string): Promise<{ bloqueado: boolean; motivo?: string }>
+  /**
+   * 10-nov · TOPE POR CAMPAÑA (`tope-de-campana.ts`) · todo lo que el freno necesita leer de ESTA campaña (planeación, concepto, brief, encargos reales de la campaña
+   * y de sus partes reales —incluido `parteActual`—, los partes reales y los topes de las familias activas). Si CUALQUIER lectura falla, LANZA (un error no es «cero gastado»).
+   */
+  leerGastoDeCampana(campanaId: string, parteActual: string): Promise<LecturaDeGasto>
+  /** 10-nov · el buzón de avisos (C1): abre el incidente o le suma una repetición con la MISMA clave · nunca lanza */
+  avisarAlBuzon(a: AvisoDelTope & { origen: string; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; accion: string } | { ok: false; error: string }>
   /** r74 · F4 · llena las sedes y su horario con lo que el sistema YA guardó del cliente (sitio · Instagram · Mapas), con su fuente · US$ 0 · un fallo se declara, no frena */
   recolectarSedes(clientId: string): Promise<{ ok: boolean; sedes: number; error?: string }>
   /** deja UN sobre en la sala (intake) · idempotente por su llave: el repetido vuelve `duplicado` · nunca despacha */

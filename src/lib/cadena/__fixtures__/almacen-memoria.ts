@@ -15,6 +15,7 @@ import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from '../auto
 import type { SobreDeLote } from '../arranque'
 import type { SobreDePlan } from '../campanas'
 import type { SobreDeTanda } from '../mesas'
+import type { AvisoDelTope, LecturaDeGasto } from '../tope-de-campana'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -295,6 +296,29 @@ export class AlmacenMemoria implements Almacen {
   async recolectarSedes(clientId: string) { this.recolectadas.push(clientId); return { ok: true, sedes: this.sedesDeLaFicha } }
   sedesDeLaFicha = 0
   async frenoDeGasto(_clientId: string) { this.consultasDelFreno++; return this.semilla.frenoBloqueado ? { bloqueado: true, motivo: 'over_cap' } : { bloqueado: false, motivo: 'under_cap' } }
+  /** 10-nov · TOPE POR CAMPAÑA · lo que la base devolvería además de las corridas, conceptos y briefs guardados aquí (encargos, partes, topes de familia) */
+  lecturaDeGasto: Partial<LecturaDeGasto> = {}
+  /** para probar una lectura de gasto que falla */
+  falloDeLecturaDeGasto: string | null = null
+  lecturasDeGasto = 0
+  async leerGastoDeCampana(campanaId: string, _parteActual: string): Promise<LecturaDeGasto> {
+    this.lecturasDeGasto++
+    if (this.falloDeLecturaDeGasto) throw new Error(this.falloDeLecturaDeGasto)
+    return {
+      corridas: this.corridas.filter((c) => c.campana_id === campanaId).map((c) => ({ costo_usd: c.costo_usd, estado: c.estado, paso: c.paso })),
+      conceptos: this.conceptos.filter((x) => x.campana_id === campanaId).map((x) => ({ costo_usd: x.costo_usd ?? null, encargo_id: x.encargo_id ?? null })),
+      briefs: this.briefsCreativos.filter((x) => x.campana_id === campanaId).map((x) => ({ costo_usd: x.costo_usd ?? null, encargo_id: (x as { encargo_id?: string | null }).encargo_id ?? null })),
+      encargos: [], partes: [], topes_de_familia: { post_img: 2.5, carrusel_ig_v1: 2.5, kit_historias: 2.5, carrusel_mesa: 5 },
+      ...this.lecturaDeGasto,
+    }
+  }
+  /** lo que llegó al buzón (C1): con la MISMA clave, el segundo es «repetida» (no sale a Slack) */
+  avisosAlBuzon: Array<AvisoDelTope & { origen: string; workflow_id: string | null; workflow_execution_id: string | null; accion: string }> = []
+  async avisarAlBuzon(a: AvisoDelTope & { origen: string; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; accion: string }> {
+    const accion = this.avisosAlBuzon.some((x) => x.clave === a.clave) ? 'repetida' : 'abrio'
+    this.avisosAlBuzon.push({ ...a, accion })
+    return { ok: true, accion }
+  }
   sobresEmitidos: unknown[] = []
   async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision> {
     this.sobresEmitidos.push(sobre)

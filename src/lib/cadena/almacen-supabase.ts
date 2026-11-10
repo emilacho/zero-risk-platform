@@ -28,6 +28,7 @@ import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
 import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos-de-emilio/registrar'
 import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
+import { encargosRealesDe, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
@@ -399,6 +400,35 @@ export function almacenDeSupabase(): Almacen {
       // medición previa al reparto de piezas, no una corrida de empleado: sin identificador de ejecución y sin el aviso falso `run_scoped_unidentified` (mide y bloquea igual)
       const r = await checkRunSdkSpendCap(db, clientId, { agentSlug: 'cadena/medicion-previa', medicionPrevia: true })
       return { bloqueado: r.blocked === true, motivo: r.reason }
+    },
+    // 10-nov · TOPE POR CAMPAÑA · la misma fuente con que se midió el gasto de la campaña (planeación + concepto + brief) más los encargos de la oficina de la campaña y sus partes reales
+    async leerGastoDeCampana(campanaId, parteActual) {
+      const [corridas, conceptos, briefs, partesFilas, topes_de_familia] = await Promise.all([
+        lista<{ costo_usd: number | null; estado: Corrida['estado']; paso: Corrida['paso'] }>(db.from('cadena_corridas').select('costo_usd, estado, paso').eq('campana_id', campanaId)),
+        lista<{ costo_usd: number | null; encargo_id: string | null }>(db.from('cadena_conceptos').select('costo_usd, encargo_id').eq('campana_id', campanaId)),
+        lista<{ costo_usd: number | null; encargo_id: string | null }>(db.from('cadena_brief_creativo').select('costo_usd, encargo_id').eq('campana_id', campanaId)),
+        lista<{ id: string; provenance_tag: unknown }>(db.from('client_historical_outputs').select('id, provenance_tag').eq('output_type', 'campaign_brief_pack').eq('provenance_tag->>campana_id', campanaId).limit(500)),
+        topesDeFamiliasActivas(db as unknown as DbDeGasto),
+      ])
+      const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
+      const tag = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
+      // un parte de ensayo (`seco` / `prueba_seco`) no gasta: no cuenta
+      const partes = partesFilas.filter((f) => tag(f.provenance_tag).seco !== true && tag(f.provenance_tag).prueba_seco !== true).map((f) => ({
+        id: String(f.id),
+        briefs: (Array.isArray(tag(f.provenance_tag).familias_por_brief) ? (tag(f.provenance_tag).familias_por_brief as Array<Record<string, unknown>>) : []).map((b) => ({ brief_id: texto(b?.brief_id), familia: texto(b?.familia), fila_id: texto(b?.fila_id) })),
+      }))
+      const ids = [...new Set([campanaId, parteActual, ...partes.map((x) => x.id)])]
+      // los encargos reales y los topes de familia los lee la OFICINA (solo ella nombra sus tablas)
+      const encargos = await encargosRealesDe(db as unknown as DbDeGasto, ids)
+      return { corridas, conceptos, briefs, encargos, partes, topes_de_familia }
+    },
+    async avisarAlBuzon(a) {
+      try {
+        // carga perezosa: el buzón solo se importa cuando hay algo que avisar
+        const [{ avisar }, { dependenciasReales }] = await Promise.all([import('@/lib/avisos/nucleo'), import('@/lib/avisos/adaptadores')])
+        const r = await avisar(dependenciasReales(db as unknown as Parameters<typeof dependenciasReales>[0]), { ...a, origen_tipo: 'plataforma' })
+        return { ok: true, accion: `${r.accion} · slack ${r.slack}` }
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'error' } }
     },
     async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision> {
       if (!isIntakeEnabled()) return { resultado: 'rechazado', detalle: 'intake_apagado · SALA_INTAKE_ENABLED' }
