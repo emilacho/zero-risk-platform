@@ -7,7 +7,8 @@
  * (la cadena pide UNA vez más; si sigue, `necesita_humano`). Nada aquí sabe de un cliente ni habla con un modelo.
  */
 import { citaAparece, normalizar } from './texto'
-import type { Hallazgo } from './tipos'
+import type { Canal, Hallazgo } from './tipos'
+import type { ContextoDelCliente } from './almacen'
 import { CONTRATO_BRIEF_CREATIVO, claveDeTexto, contienePalabraEntera, seccionesDe, tieneCifraInventada } from './conceptos'
 import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from './registro'
 
@@ -82,6 +83,14 @@ const lista = (v: string): string[] => v.split(/[;·]|,(?![^(]*\))/).map((x) => 
 /** el número de frases de un mensaje (un brief = UN mensaje: máximo 2 frases, 260 caracteres) */
 export const frasesDe = (s: string): number => s.split(/[.!?¡¿]+/).map((x) => x.trim()).filter(Boolean).length
 /** ¿el público dice «todos»? (si lo nombra) */
+/**
+ * Los insumos del verificador del brief, armados UNA sola vez para todos los que lo leen (la mesa al recibirlo, la revalidación y los colaterales):
+ * el plan y el manual vigentes, las prohibidas y duras del manual, las redes que la estrategia usa y el registro del cliente. Sin contexto, no se compara nada.
+ */
+export function insumosDelBrief(ctx: Pick<ContextoDelCliente, 'planTexto' | 'manualTexto' | 'forbiddenWords' | 'palabrasDuras' | 'registro'> | null | undefined, canales: Pick<Canal, 'red' | 'rol'>[] | null | undefined): InsumosDelBrief {
+  return { planTexto: ctx?.planTexto ?? '', manualTexto: ctx?.manualTexto, prohibidas: ctx?.forbiddenWords ?? [], duras: ctx?.palabrasDuras, redes: (canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red), registro: ctx?.registro }
+}
+
 export function publicoEsTodos(publico: string): boolean {
   const p = normalizar(publico).replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim()
   if (!p) return false

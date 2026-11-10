@@ -205,6 +205,10 @@ export interface Almacen {
   // estrategias
   ultimaEstrategia(campanaId: string): Promise<EstrategiaGuardada | null>
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>
+  /** colaterales (tramo 2c) · una versión CONCRETA de la estrategia (deshacer vuelve a su base) */
+  estrategiaEnVersion(campanaId: string, version: number): Promise<EstrategiaGuardada | null>
+  /** colaterales (tramo 2c) · inserta una versión nueva; false si esa (campaña, versión) ya existe (otra se adelantó) · cualquier otro error se lanza */
+  insertarEstrategiaSiLibre(e: EstrategiaGuardada): Promise<boolean>
   // 31-oct (nuevo orden · T1) · brief creativo y concepto: UNA fila por (campaña, versión); la primera entrega que cierra gana (único en la base)
   ultimoBriefCreativo(campanaId: string): Promise<BriefCreativoGuardado | null>
   /** 31-oct (T3 · hueco 1 de CC3): todas las versiones del brief de una campaña, de la 1 en adelante */

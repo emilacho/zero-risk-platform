@@ -1,13 +1,12 @@
 /**
- * Base falsa de las tablas que tocan los colaterales · RECHAZA columnas que su migración no crea (compartida por las pruebas del 2b y 2c).
- * Las columnas se leen de la migración REAL de cada tabla (la propia del 2b y la de la cadena), así un nombre inventado no pasa.
+ * Base falsa de las tablas propias de los colaterales · RECHAZA columnas que su migración no crea (compartida por las pruebas del 2b y 2c).
+ * Las columnas se leen de la migración REAL de cada tabla, así un nombre inventado no pasa. (La cadena se prueba por su propio almacén en memoria.)
  */
 import fs from 'node:fs'
 import path from 'node:path'
 
 const crudo = (p: string) => fs.readFileSync(path.join(process.cwd(), p), 'utf8').split(String.fromCharCode(13)).join('').replace(/--.*$/gm, '')
 const MIG_COLATERALES = crudo('supabase/migrations/202611101600_colaterales_ediciones_y_retoques.sql')
-const MIG_CADENA = crudo('supabase/migrations/202610090200_cadena_tablas.sql')
 
 /** columnas de una tabla, leídas de su migración (sin importar mayúsculas) */
 function columnasDe(sql: string, tabla: string): Set<string> {
@@ -18,9 +17,8 @@ function columnasDe(sql: string, tabla: string): Set<string> {
 const COLUMNAS: Record<string, Set<string>> = {
   colaterales_ediciones: columnasDe(MIG_COLATERALES, 'colaterales_ediciones'),
   colaterales_retoques: columnasDe(MIG_COLATERALES, 'colaterales_retoques'),
-  cadena_estrategias: columnasDe(MIG_CADENA, 'cadena_estrategias'),
 }
-const UNICAS: Record<string, string[][]> = { colaterales_ediciones: [['llave']], colaterales_retoques: [['edicion_id', 'pedazo_id']], cadena_estrategias: [['campana_id', 'version']] }
+const UNICAS: Record<string, string[][]> = { colaterales_ediciones: [['llave']], colaterales_retoques: [['edicion_id', 'pedazo_id']] }
 const POR_OMISION: Record<string, Record<string, unknown>> = { colaterales_retoques: { rehechos: 0 } }
 
 export function baseFalsa(o: { fallarLectura?: boolean; fallarInsert?: string; devolverMenos?: boolean; inicial?: Record<string, Record<string, unknown>[]> } = {}) {

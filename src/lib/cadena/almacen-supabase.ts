@@ -184,6 +184,8 @@ export function almacenDeSupabase(): Almacen {
 
     async ultimaEstrategia(campanaId) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
     async insertarEstrategia(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (error) fallo(error) },
+    async estrategiaEnVersion(campanaId, version) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).eq('version', version).limit(1)))[0] ?? null },
+    async insertarEstrategiaSiLibre(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (!error) return true; if ((error as { code?: string }).code === '23505') return false; return fallo(error) },
 
     // 31-oct (nuevo orden · T1) · brief creativo y concepto: el UNIQUE (campana_id, version) de la base decide la carrera («la primera entrega que cierra gana»)
     async briefsDe(campanaId) { return lista<BriefCreativoGuardado>(db.from('cadena_brief_creativo').select(COLUMNAS_DEL_BRIEF).eq('campana_id', campanaId).order('version', { ascending: true }).limit(50)) },
