@@ -140,6 +140,16 @@ server.registerTool(
         motivo: j.motivo || (j.errors || []).join(' · ') || 'la llamada fue rechazada',
       })
     }
+    // 10-nov · la puerta del Servicio contestó «sin crédito de Apify este mes»: no se llamó a Apify (US$ 0) y el empleado lo DECLARA tal cual en su aporte
+    if (j.skipped === true && j.skip_reason === 'sin_credito_apify') {
+      return respuesta({
+        se_pudo: false,
+        sin_credito: true,
+        declara: 'datos sin actualizar: crédito de Apify agotado' + (j.sin_credito && j.sin_credito.hasta ? ' hasta el ' + j.sin_credito.hasta : ''),
+        motivo: j.motivo || 'crédito de Apify agotado este mes',
+        nota: 'No reintentes este mes. Usa lo que ya sabes o lo guardado y escribe en tu aporte, literal, la línea de `declara`.',
+      })
+    }
     if (j.skipped === true) {
       return respuesta({
         se_pudo: false,
