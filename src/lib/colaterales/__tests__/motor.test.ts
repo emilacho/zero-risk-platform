@@ -59,6 +59,13 @@ describe('gravedad · la juzga el agente; el código solo verifica lo exacto (fa
     expect(gravedadVerificada({ de_fondo: false, razon: '  ' }, A_OBJECION.antes, A_OBJECION.despues)).toEqual({ gravedad: 'fondo', motivo: 'sin_razon' })
     expect(gravedadVerificada({ de_fondo: false, razon: 'es un cambio menor' }, A_OBJECION.antes, A_OBJECION.despues).gravedad).toBe('fondo')
   })
+  it('certificación CC7 (526d1c3): citar SOLO el antes, o SOLO el después, no basta → de fondo · dos clientes', () => {
+    for (const e of [A_OBJECION, B_CONDICION]) {
+      expect(e.despues.includes(e.antes) || e.antes.includes(e.despues)).toBe(false) // el caso tiene sentido: ninguno contiene al otro
+      expect(gravedadVerificada({ de_fondo: false, razon: `cambia «${e.antes}» por otra cosa` }, e.antes, e.despues)).toEqual({ gravedad: 'fondo', motivo: 'razon_no_cita_antes_y_despues' })
+      expect(gravedadVerificada({ de_fondo: false, razon: `ahora dice «${e.despues}»` }, e.antes, e.despues)).toEqual({ gravedad: 'fondo', motivo: 'razon_no_cita_antes_y_despues' })
+    }
+  })
   it('la misma regla vale para el otro cliente', () => {
     const r = { de_fondo: false, razon: `«${B_CONDICION.antes}» → «${B_CONDICION.despues}»` }
     expect(gravedadVerificada(r, B_CONDICION.antes, B_CONDICION.despues).gravedad).toBe('normal')
