@@ -140,6 +140,14 @@ describe('punto 6 · la mesa de la gran idea recibe la fecha de hoy y no propone
     expect(t).toContain('- cimientos: del 2026-11-23 al 2026-12-06 · EN CURSO: solo piezas desde hoy (2026-11-25)')
     expect(t).toContain('- velocidad: del 2026-12-07 al 2027-01-03 · por venir')
   })
+  it('🔴 el borde de HOY (🟡 de CC7): la fase que termina hoy sigue EN CURSO; la que empieza hoy ya está EN CURSO', () => {
+    const terminaHoy = fechasDelConcepto(ESTRATEGIA, '2026-11-09', '2026-11-22')!
+    expect(terminaHoy).toContain('- desbloquear: del 2026-11-09 al 2026-11-22 · EN CURSO: solo piezas desde hoy (2026-11-22)')
+    expect(terminaHoy).toContain('- cimientos: del 2026-11-23 al 2026-12-06 · por venir')
+    const empiezaHoy = fechasDelConcepto(ESTRATEGIA, '2026-11-09', '2026-11-23')!
+    expect(empiezaHoy).toContain('- desbloquear: del 2026-11-09 al 2026-11-22 · YA PASÓ')
+    expect(empiezaHoy).toContain('- cimientos: del 2026-11-23 al 2026-12-06 · EN CURSO: solo piezas desde hoy (2026-11-23)')
+  })
   it('🔴 el marco de la mesa lo lleva; sin hoy o sin inicio el marco queda igual que antes', () => {
     const ctx = contextoDe(clienteA())
     const base = { ctx, estrategia: ESTRATEGIA, briefTexto: 'b', version: 3, nota: null }

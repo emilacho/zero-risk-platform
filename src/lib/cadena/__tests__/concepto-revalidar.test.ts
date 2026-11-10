@@ -313,3 +313,40 @@ describe('CC7 · casos propios', () => {
     expect(JSON.stringify(al.conceptos)).toBe(antes)
   })
 })
+
+/**
+ * 10-nov · 🟡 de CC7 a #968 (pedido 1): las DOS entradas reales leen con los insumos del almacén. Si `recibirConcepto` o `conceptoRevalidar` vuelven a
+ * pasar la lista vacía de antes, una foto propia citada por su prefijo sale «no existe» en la lectura guardada (el defecto de los 10 falsos de la v2).
+ */
+describe('las entradas de la gran idea leen las fotos propias del almacén (no una lista vacía)', () => {
+  const FOTO = '4c41cd56-414e-4597-a202-e8c34fd06f69'
+  const conFoto = (l: Linea[]) => l.map((x) => (x.n === 5 ? { ...x, texto: x.texto.replace('foto:ninguna', 'foto:4c41cd56') } : x))
+  const conFotos = (al: AlmacenMemoria) => Object.assign(al, { fotosPropias: async () => [FOTO] })
+  const avisosGuardados = (al: AlmacenMemoria, v: number) => ((al.conceptos.find((k) => k.version === v)!.leido as { avisos: string[] }).avisos)
+
+  it('🔴 recibirConcepto: la foto citada por prefijo existe y la lectura guardada no trae «no existe»', async () => {
+    const al = conFotos(almacen())
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(1, BRIEF_BUENO, { costo_usd: 0.1 }), AHORA)).toMatchObject({ estado: 'validada' })
+    await conceptoAbrir(al, wf(), AHORA)
+    const texto = textoParaLaCadena(conFoto(LIBRO), null, true)
+    expect(texto).toContain('foto:4c41cd56')
+    expect(await recibirConcepto(al, entrega(1, texto), AHORA)).toMatchObject({ ok: true, estado: 'lista' })
+    expect(avisosGuardados(al, 1).filter((a) => a.includes('no existe'))).toEqual([])
+  })
+  it('🔴 conceptoRevalidar: la relectura desde el libro tampoco trae «no existe»', async () => {
+    const al = conFotos(await comoNaufrago({ libro: conFoto(LIBRO) }))
+    const r = await conceptoRevalidar(al, wf({ version: 1 }), AHORA)
+    expect(r.cuerpo).toMatchObject({ pasa: true, version: 1 })
+    expect(al.conceptos[0].texto_md).toContain('foto:4c41cd56')
+    expect(avisosGuardados(al, 1).filter((a) => a.includes('no existe'))).toEqual([])
+  })
+  it('control: sin fotos en el almacén, la misma cita SÍ sale «no existe» (la prueba ve la diferencia)', async () => {
+    const al = Object.assign(almacen(), { fotosPropias: async () => [] as string[] })
+    await briefAbrir(al, wf(), AHORA)
+    await recibirBrief(al, entrega(1, BRIEF_BUENO, { costo_usd: 0.1 }), AHORA)
+    await conceptoAbrir(al, wf(), AHORA)
+    await recibirConcepto(al, entrega(1, textoParaLaCadena(conFoto(LIBRO), null, true)), AHORA)
+    expect(avisosGuardados(al, 1)).toContain('la foto «4c41cd56» no existe entre las fotos propias')
+  })
+})

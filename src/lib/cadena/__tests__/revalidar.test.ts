@@ -324,3 +324,25 @@ describe('revalidar · cableado', () => {
     expect(Object.keys(ACCIONES.brief)).toEqual(['abrir', 'entregar', 'revalidar'])
   })
 })
+
+/**
+ * 10-nov · 🟡 de CC7 a #968 (pedido 2): las DOS entradas del brief pasan el registro del cliente al verificador. Un brief con voseo en «Tono» («pedí»)
+ * deja el aviso de «Tono» en la lectura GUARDADA, al recibirlo y al revalidarlo.
+ */
+describe('las entradas del brief pasan el registro del cliente', () => {
+  const VOSEO = BRIEF.replace('## Tono\nCercano y directo.', '## Tono\nCercano y directo: pedí lo que quieras.')
+  const avisoDeTono = (b: { leido?: unknown }) => ((b.leido as { avisos: string[] }).avisos).filter((a) => a.startsWith('«Tono» usa formas'))
+  it('🔴 recibirBrief: el aviso de «Tono» queda guardado', async () => {
+    expect(VOSEO).toContain('pedí lo que quieras')
+    const { al, id } = await detenidaPorElBrief(VOSEO, { falsoRojo: true })
+    // la lectura que dejó recibirBrief (antes de que el falso rojo le pusiera su bloqueo)
+    expect(avisoDeTono(al.briefsCreativos.find((b) => b.campana_id === id && b.version === 2)!)).toHaveLength(1)
+  })
+  it('🔴 briefRevalidar: la relectura guarda el aviso de «Tono» (aunque la lectura vieja no lo tuviera)', async () => {
+    const { al, id } = await detenidaPorElBrief(VOSEO, { falsoRojo: true })
+    const b = al.briefsCreativos.find((x) => x.campana_id === id && x.version === 2)!
+    Object.assign(b, { leido: { ...(b.leido as object), avisos: [] } })
+    expect((await briefRevalidar(al, wf({ campana_id: id }), AHORA)).cuerpo).toMatchObject({ pasa: true, version: 2 })
+    expect(avisoDeTono(al.briefsCreativos.find((x) => x.campana_id === id && x.version === 2)!)).toHaveLength(1)
+  })
+})
