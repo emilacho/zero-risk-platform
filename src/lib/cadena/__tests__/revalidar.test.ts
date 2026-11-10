@@ -330,10 +330,11 @@ describe('revalidar · cableado', () => {
  * deja el aviso de «Tono» en la lectura GUARDADA, al recibirlo y al revalidarlo.
  */
 describe('las entradas del brief pasan el registro del cliente', () => {
-  const VOSEO = BRIEF.replace('## Tono\nCercano y directo.', '## Tono\nCercano y directo: pedí lo que quieras.')
-  const avisoDeTono = (b: { leido?: unknown }) => ((b.leido as { avisos: string[] }).avisos).filter((a) => a.startsWith('«Tono» usa formas'))
+  const VOSEO = BRIEF.replace('## Insight\n', '## Insight\nPedí lo que quieras: ')
+  // decisión 1 de Lenovo: el voseo en «Tono» ahora bloquea (lo prueban los lectores); aquí se mira el aviso del TOTAL, que también sale del registro
+  const avisoDeTono = (b: { leido?: unknown }) => ((b.leido as { avisos: string[] }).avisos).filter((a) => a.startsWith('el brief usa'))
   it('🔴 recibirBrief: el aviso de «Tono» queda guardado', async () => {
-    expect(VOSEO).toContain('pedí lo que quieras')
+    expect(VOSEO).toContain('Pedí lo que quieras')
     const { al, id } = await detenidaPorElBrief(VOSEO, { falsoRojo: true })
     // la lectura que dejó recibirBrief (antes de que el falso rojo le pusiera su bloqueo)
     expect(avisoDeTono(al.briefsCreativos.find((b) => b.campana_id === id && b.version === 2)!)).toHaveLength(1)

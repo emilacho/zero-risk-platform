@@ -350,3 +350,42 @@ describe('las entradas de la gran idea leen las fotos propias del almacén (no u
     expect(avisosGuardados(al, 1)).toContain('la foto «4c41cd56» no existe entre las fotos propias')
   })
 })
+
+
+/**
+ * 10-nov · RESPUESTA de Lenovo por Emilio (decisión 1) con la condición de CC7: el voseo en «Tono» (brief) y en «Cómo suena» (gran idea) BLOQUEA,
+ * pero respeta el tope de vueltas de siempre: se devuelve UNA vez; la segunda va a humano. Nunca un ciclo que gasta.
+ */
+describe('el voseo en «Tono» y «Cómo suena» bloquea, con el tope de vueltas de siempre', () => {
+  const VOSEA = (t: string) => t.replace('## Cómo suena  Voz cercana, frases cortas.', '## Cómo suena  Voz cercana: entrá y pedí.')
+  const libroQueVosea = LIBRO.map((x) => (x.tipo === 'integra' ? { ...x, texto: VOSEA(x.texto) } : x))
+
+  it('🔴 gran idea: la primera queda sin_mesa por «Cómo suena»; la segunda igual → necesita_humano y no se abre una tercera mesa', async () => {
+    expect(VOSEA(INTEGRACION)).toContain('entrá y pedí')
+    const al = almacen()
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(1, BRIEF_BUENO, { costo_usd: 0.1 }), AHORA)).toMatchObject({ estado: 'validada' })
+    await conceptoAbrir(al, wf(), AHORA)
+    expect(await recibirConcepto(al, entrega(1, textoParaLaCadena(libroQueVosea, null, true)), AHORA)).toMatchObject({ ok: true, estado: 'sin_mesa' })
+    expect(al.conceptos[0].motivo).toMatch(/^sin_concepto: «Cómo suena» usa formas que no son/)
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
+    expect((await conceptoAbrir(al, wf(), AHORA)).cuerpo.version).toBe(2)
+    expect(await recibirConcepto(al, entrega(2, textoParaLaCadena(libroQueVosea, null, true)), AHORA)).toMatchObject({ ok: true, estado: 'sin_mesa' })
+    expect(al.campanas[0].estado).toBe('necesita_humano')
+    const r = await conceptoAbrir(al, wf(), AHORA)
+    expect(r.status).toBe(409)
+    expect(al.conceptos).toHaveLength(2)
+  })
+  it('🔴 brief: «Tono» con voseo se devuelve; la segunda versión igual → necesita_humano', async () => {
+    const BRIEF_VOSEA = BRIEF_BUENO.replace('Cercano y directo, sin exclamaciones.', 'Cercano y directo: entrá y pedí.')
+    expect(BRIEF_VOSEA).toContain('entrá y pedí')
+    const al = almacen()
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(1, BRIEF_VOSEA, { costo_usd: 0.1 }), AHORA)).toMatchObject({ estado: 'devuelta' })
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
+    expect(al.briefsCreativos[0].devolucion_texto).toMatch(/«Tono» usa formas que no son/)
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(2, BRIEF_VOSEA, { costo_usd: 0.1 }), AHORA)).toMatchObject({ estado: 'devuelta' })
+    expect(al.campanas[0].estado).toBe('necesita_humano')
+  })
+})

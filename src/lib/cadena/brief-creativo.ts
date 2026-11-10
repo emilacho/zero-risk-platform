@@ -160,7 +160,8 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   if (ins.registro) {
     const enTono = formasDeOtroRegistro(ins.registro, t('Tono'))
     const enTodo = formasDeOtroRegistro(ins.registro, md)
-    if (enTono.length) avisos.push(`«Tono» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enTono.join(', ')} · la gran idea y las piezas heredan esta regla`)
+    // 10-nov (RESPUESTA de Lenovo por Emilio · decisión 1): «Tono» BLOQUEA (la heredan la gran idea y las piezas); el resto avisa. Se devuelve UNA vez; la segunda va a humano
+    if (enTono.length) bloqueos.push(`«Tono» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enTono.join(', ')} · la gran idea y las piezas heredan esta regla`)
     if (enTodo.length) avisos.push(`el brief usa ${enTodo.length} forma(s) que no son ${nombreDelRegistro(ins.registro)}: ${enTodo.slice(0, 12).join(', ')}`)
   }
 

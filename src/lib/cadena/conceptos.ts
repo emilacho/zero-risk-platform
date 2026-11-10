@@ -366,7 +366,8 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
   if (ins.registro) {
     const enSuena = formasDeOtroRegistro(ins.registro, textoDe(porTitulo('Cómo suena')))
     const enTodo = formasDeOtroRegistro(ins.registro, md)
-    if (enSuena.length) avisos.push(`«Cómo suena» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enSuena.join(', ')} · todas las piezas siguen esta regla`)
+    // 10-nov (RESPUESTA de Lenovo por Emilio · decisión 1): «Cómo suena» BLOQUEA (es la regla que heredan todas las piezas); el resto del texto avisa. El tope de vueltas de siempre manda: dos sin_mesa → humano
+    if (enSuena.length) bloqueos.push(`«Cómo suena» usa formas que no son ${nombreDelRegistro(ins.registro)}: ${enSuena.join(', ')} · todas las piezas siguen esta regla`)
     if (enTodo.length) avisos.push(`el concepto usa ${enTodo.length} forma(s) que no son ${nombreDelRegistro(ins.registro)}: ${enTodo.slice(0, 12).join(', ')}`)
   }
 

@@ -84,9 +84,11 @@ describe('punto 2 · las fotos citadas por su prefijo existen', () => {
 })
 
 describe('punto 5 · el registro del cliente en los chequeos de la gran idea y del brief', () => {
-  it('🔴 caso real v2 (cliente en tuteo): «Cómo suena» se marca aparte y el total trae las formas de voseo', () => {
+  it('🔴 caso real v2 (cliente en tuteo): «Cómo suena» con voseo BLOQUEA (decisión 1 de Lenovo) y el total trae las formas como aviso', () => {
     const l = leerConcepto(V2, ins({ registro: 'tu' }))
-    const suena = l.avisos.find((a) => a.startsWith('«Cómo suena»'))
+    expect(l.estado).toBe('sin_concepto')
+    expect(l.avisos.some((a) => a.startsWith('«Cómo suena»'))).toBe(false)
+    const suena = l.bloqueos.find((a) => a.startsWith('«Cómo suena»'))
     expect(suena).toMatch(/entrá/)
     expect(suena).toMatch(/recibilo/)
     const todo = l.avisos.find((a) => a.startsWith('el concepto usa'))
@@ -99,14 +101,23 @@ describe('punto 5 · el registro del cliente en los chequeos de la gran idea y d
   })
   it('🔴 cliente en voseo: lo que se marca es el tuteo (agnóstico)', () => {
     const l = leerConcepto('## Gran idea\n- x · y\n## Cómo suena\nPide ya, tú sabes', ins({ registro: 'vos' }))
-    expect(l.avisos.some((a) => a.startsWith('«Cómo suena»') && /no son voseo/.test(a))).toBe(true)
+    expect(l.bloqueos.some((a) => a.startsWith('«Cómo suena»') && /no son voseo/.test(a))).toBe(true)
+  })
+  it('🔴 «Cómo suena» en el registro del cliente no bloquea; el voseo fuera de «Cómo suena» solo avisa', () => {
+    const limpio = leerConcepto('## Gran idea\n- x · y\n## Cómo suena\nPide ya, tú sabes\n## Por qué funciona\nentrá y mirá', ins({ registro: 'tu' }))
+    expect(limpio.bloqueos.filter((a) => a.startsWith('«Cómo suena»'))).toEqual([])
+    expect(limpio.avisos.some((a) => a.startsWith('el concepto usa'))).toBe(true)
   })
   it('🔴 el brief: «Tono» se marca aparte y el total trae las formas', () => {
     const md = BRIEF_V2
     const b = leerBriefCreativo(md, { planTexto: md, prohibidas: [], registro: 'tu' })
     expect(b.avisos.some((a) => a.startsWith('el brief usa') && /pagás|entrá|pedí/.test(a))).toBe(true)
     const conTono = leerBriefCreativo('## Tono\nCercano, entrá y pedí.', { planTexto: '', prohibidas: [], registro: 'tu' })
-    expect(conTono.avisos.some((a) => a.startsWith('«Tono»'))).toBe(true)
+    expect(conTono.bloqueos.some((a) => a.startsWith('«Tono»'))).toBe(true) // decisión 1 de Lenovo: «Tono» bloquea
+    expect(conTono.avisos.some((a) => a.startsWith('«Tono»'))).toBe(false)
+    const tonoLimpio = leerBriefCreativo('## Tono\nCercano y directo.\n## Insight\nentrá y mirá', { planTexto: '', prohibidas: [], registro: 'tu' })
+    expect(tonoLimpio.bloqueos.some((a) => a.startsWith('«Tono»'))).toBe(false)
+    expect(tonoLimpio.avisos.some((a) => a.startsWith('el brief usa'))).toBe(true)
     expect(leerBriefCreativo(md, { planTexto: md, prohibidas: [] }).avisos.filter((a) => /tuteo/.test(a))).toEqual([])
   })
 })
@@ -190,12 +201,13 @@ describe('ADENDA 2 · el brief copia del plan el público, el objetivo con su n�
 })
 
 describe('caso real completo · la v2 releída con todo', () => {
-  it('🔴 de 20 avisos a 7, los que de verdad faltan: banco parcial, 2 datos con valor, 2 sin fuente y 2 de voseo', () => {
+  it('🔴 de 20 avisos a 6 y 1 bloqueo: banco parcial, 2 datos con valor, 2 sin fuente, el voseo total (aviso) y «Cómo suena» (bloquea)', () => {
     const l = leerConcepto(V2, ins({ registro: 'tu', fuente: BRIEF_V2 }))
-    expect(l.bloqueos).toEqual([])
+    expect(l.bloqueos).toHaveLength(1)
+    expect(l.bloqueos[0]).toMatch(/^«Cómo suena» usa formas que no son/)
     expect(l.avisos.some((a) => a.startsWith('banco parcial: faltan 64 ideas'))).toBe(true)
     expect(l.avisos.filter((a) => /no cita el objetivo|no existe entre las fotos|premium|gourmet|artesanal/.test(a))).toEqual([])
-    expect(l.avisos).toHaveLength(7)
+    expect(l.avisos).toHaveLength(6)
   })
 })
 
