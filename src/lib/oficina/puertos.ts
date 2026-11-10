@@ -145,6 +145,8 @@ export type EntregaALaCadena = { ok: true; estado?: string; ya_cerrada?: boolean
 export interface PuertoDeLaCadena {
   entregarBrief(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
   entregarConcepto(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null; brief_devuelto?: string | null }): Promise<EntregaALaCadena>
+  /** 10-nov · la mesa de reubicación (filas que quedaron atrás sin producir) entrega la decisión del agente; la cadena la VERIFICA por código antes de aplicarla. Opcional: sin él, la entrega no llega y lo dice */
+  entregarReubicacion?(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
 }
 
 /** lo que el brazo de video contesta al enviar: en dry_run el puerto NO sale a la red y devuelve `simulado` */

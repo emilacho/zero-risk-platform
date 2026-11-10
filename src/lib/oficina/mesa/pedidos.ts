@@ -40,6 +40,8 @@ export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: n
   brief: { manual: 120000, marco: 40000, plan: 120000 },
   concepto: { manual: 120000, marco: 60000, plan: 0 },
   video: { manual: 7000, marco: 5000, plan: 3000 },
+  // la reubicación decide fechas: el marco (las filas, plazos y horarios) completo; el manual y el plan solo como contexto
+  reubicacion: { manual: 20000, marco: 60000, plan: 20000 },
 }
 
 /** el tablero: lo más reciente completo, lo antiguo en resumen (el líder mantiene el hilo; los demás no releen todo) */
@@ -217,6 +219,7 @@ const HERRAMIENTAS = [
 ].join('\n')
 
 export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string }): string {
+  if (o.c.tipo === 'reubicacion') return tareaDeReubicacion(o)
   const { tipo, agente, est, libro, c } = o
   // la mesa de concepto tiene dos rondas: la 1 elige UNA gran idea entre caminos; la 2 la desarrolla en capítulos, series e ideas (la integración final lleva la convención)
   const ronda = libro.filter((a) => a.tipo === 'integra').length + 1
@@ -294,6 +297,43 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     ].join('\n'),
   }
   return cab + seccionDeIndicacion(o.tarjeta, agente) + (o.metodo ? o.metodo + '\n\n' : '') + tu[tipo]
+}
+
+/**
+ * 10-nov · la mesa de REUBICACIÓN (GO de Lenovo 18:14Z · camino A): no hay pieza, ni fotos, ni equipo, ni portero. La dirige jefe-marketing: decide, fila por fila, qué hacer con lo que
+ * quedó atrás. Juzgar es suyo; las fechas, plazos y días abiertos los verifica el código de la cadena después (lo que no cumpla se descarta con la razón del código).
+ */
+function tareaDeReubicacion(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; libro: Aporte[]; c: ContextoDeTurno }): string {
+  const { c, agente, libro } = o
+  const final = o.tipo !== 'dirigir'
+  return [
+    `# Mesa de reubicación · ${c.cliente_nombre} · ${c.brief_id}`,
+    `Eres **${agente}**${o.tarjeta ? ` — ${o.tarjeta.especialidad}` : ''}. Algunas filas del calendario de la campaña ya pasaron su fecha y nunca se produjeron. Decides qué hacer con cada una.`,
+    '',
+    '## Reglas',
+    `1. **Gasto.** Esta decisión tiene un tope de US$ ${c.tope_usd.toFixed(2)} (ya se gastó US$ ${c.gasto_usd.toFixed(2)}).`,
+    '2. **Por cada fila pasada, una decisión con su razón:** reubicarla en una fecha nueva, fusionarla con una fila que viene, o descartarla. Piensa en lo que la fila cuenta, en su lugar dentro de la campaña y en lo que ya viene; no hay respuesta por defecto.',
+    '3. **El código verifica después** que la fecha nueva caiga dentro de la campaña, a partir de hoy más el plazo de producción de su formato, en un día abierto si la pieza exige local, sin pasar el máximo por día y sin romper dependencias. Lo que no cumpla se descarta. Una fila que viene nunca se toca.',
+    '4. **No inventes datos del cliente.** Decides con lo que está abajo.',
+    '',
+    o.tarjeta ? seccionDeIndicacion(o.tarjeta, agente) : '',
+    '## El marco (las filas, plazos, máximos y horarios)',
+    recorta(c.brief_texto, DIETA.reubicacion.marco, 'el marco'),
+    '',
+    '## Contexto · manual de marca',
+    recorta(c.manual_texto || '(sin manual)', DIETA.reubicacion.manual, 'el manual de marca'),
+    '',
+    '## Contexto · plan de trabajo',
+    c.plan_texto ? recorta(c.plan_texto, DIETA.reubicacion.plan, 'el plan') : '(sin plan)',
+    '',
+    '## Tablero (lo que ya escribiste)',
+    tableroEnTexto(libro),
+    '',
+    final ? '## Tu turno · entrega la decisión final' : '## Tu turno · decide',
+    final
+      ? 'Escribe la decisión FINAL: una línea por fila pasada, con la forma exacta de «Cómo responder» del marco. Solo cuentan esas líneas; lo demás es tu nota.'
+      : 'Razona fila por fila y escribe tu decisión con la forma exacta de «Cómo responder» del marco. En el turno siguiente la entregas como final.',
+  ].join('\n')
 }
 
 /** T6: la indicación propia del agente (dato del directorio) · va ANTES de su turno y nunca toca su identidad · sin indicación no añade nada */

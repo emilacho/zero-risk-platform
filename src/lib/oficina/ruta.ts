@@ -18,10 +18,12 @@ export function checkLlaveDeLaSala(request: Request): { ok: true } | { ok: false
   return { ok: true }
 }
 
-export function entornoDe(request: Request): Entorno {
+export function entornoDe(request: Request): Entorno { return entornoConBase(new URL(request.url).origin) }
+/** 10-nov · el entorno de la oficina con una base explícita: lo usa quien abre una mesa SIN un pedido HTTP (la cadena, desde su reloj) */
+export function entornoConBase(baseUrl: string): Entorno {
   const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : undefined)
   return {
-    baseUrl: new URL(request.url).origin, internalKey: process.env.INTERNAL_API_KEY ?? '',
+    baseUrl, internalKey: process.env.INTERNAL_API_KEY ?? '',
     openaiKey: process.env.OPENAI_API_KEY, revisorModelo: process.env.OFICINA_REVISOR_MODEL,
     revisorPrecioEntrada: num(process.env.OFICINA_REVISOR_PRECIO_ENTRADA_USD_M), revisorPrecioSalida: num(process.env.OFICINA_REVISOR_PRECIO_SALIDA_USD_M),
     bucket: process.env.OFICINA_BUCKET, dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE, porteroWebhookKey: process.env.PORTERO_WEBHOOK_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN, notasDelDueno: process.env.NOTAS_DEL_DUENO === '1', aprendizajeDelDueno: process.env.APRENDIZAJE_DEL_DUENO !== '0', slackCanalHilo: process.env.OFICINA_SLACK_CANAL, slackCanalAlertas: process.env.OFICINA_SLACK_ALERTAS,

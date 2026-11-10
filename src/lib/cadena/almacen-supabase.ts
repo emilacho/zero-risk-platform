@@ -14,6 +14,7 @@ import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autop
 import type { SobreDeLote } from './arranque'
 import type { SobreDePlan } from './campanas'
 import type { SobreDeTanda } from './mesas'
+import type { ResultadoDeAbrirMesa, SobreDeReubicacion } from './reubicar'
 import { almacenDeSupabase as almacenDeJefatura } from '@/lib/jefatura/revision/almacen-supabase'
 import { decidirRetencion } from './revision-jefatura'
 import { abrirRevision, armarSalida } from '../jefatura/revision/orquestador'
@@ -130,6 +131,28 @@ export async function abrirRevisionDeRegistroReal(db: unknown, entrada: EntradaD
   } catch (e) { return { estado: 'error', motivo: e instanceof Error ? e.message : String(e) } }
 }
 
+/**
+ * 10-nov · filas que quedaron atrás · abre la mesa de reubicación de la oficina EN PROCESO (la misma función que `api/oficina/encargos` con `origen: cadena`) y despierta su primer turno.
+ * La oficina se importa en el acto (la oficina ya importa este archivo: así no hay ciclo al cargar). Nunca lanza.
+ */
+export async function abrirMesaDeReubicacionReal(sobre: SobreDeReubicacion, f: typeof fetch = fetch): Promise<ResultadoDeAbrirMesa> {
+  try {
+    const [{ entornoConBase }, { crearPuertos }, { abrirMesaDeLaCadena, validarSobreDeLaCadena }, { avanzar }, { despertarAlFlujoDeLaOficina }] = await Promise.all([
+      import('@/lib/oficina/ruta'), import('@/lib/oficina/adaptadores'), import('@/lib/oficina/mesa/de-la-cadena'), import('@/lib/oficina/orquestador'), import('@/lib/oficina/despertar'),
+    ])
+    const v = validarSobreDeLaCadena(sobre)
+    if (!v.ok) return { estado: 'error', motivo: `sobre inválido: ${v.errores.join('; ')}` }
+    const P = crearPuertos(getSupabaseAdmin() as never, entornoConBase(VERCEL_DE_LA_PLATAFORMA))
+    const r = await abrirMesaDeLaCadena(P, v.sobre, avanzar)
+    const id = typeof r.cuerpo.encargo_id === 'string' ? r.cuerpo.encargo_id : ''
+    if (r.status === 409 || r.status === 404) return { estado: 'no_abre', motivo: String(r.cuerpo.error ?? 'la oficina no abre la mesa') }
+    if (r.status !== 200 || !id) return { estado: 'error', motivo: `la oficina contestó ${r.status}: ${JSON.stringify(r.cuerpo).slice(0, 200)}` }
+    // un despertar que no llega no tumba nada: el vigía de la oficina re-arma el turno
+    if (r.cuerpo.accion === 'esperar' && r.cuerpo.turno) { try { await despertarAlFlujoDeLaOficina(f, { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, id, r.cuerpo.turno) } catch { /* lo re-arma el vigía */ } }
+    return { estado: 'abierta', encargo_id: id }
+  } catch (e) { return { estado: 'error', motivo: e instanceof Error ? e.message : String(e) } }
+}
+
 export function almacenDeSupabase(): Almacen {
   const db = getSupabaseAdmin()
   const uno = async <T>(q: PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T | null> => { const { data, error } = await q; if (error) fallo(error); return (data as T | null) ?? null }
@@ -147,6 +170,8 @@ export function almacenDeSupabase(): Almacen {
     },
     // 10-nov · tramo 2 del revisor de registro: abre la revisión con la vuelta a `api/jefatura/cadena-vuelta` (nunca lanza)
     abrirRevisionDeRegistro: (entrada) => abrirRevisionDeRegistroReal(db, entrada),
+    // 10-nov · filas que quedaron atrás: abre la mesa de reubicación de la oficina (nunca lanza)
+    abrirMesaDeReubicacion: (sobre) => abrirMesaDeReubicacionReal(sobre),
     async leerConfig(k) { return (await uno<{ valor: unknown }>(db.from('cadena_config').select('valor').eq('clave', k).maybeSingle()))?.valor },
     async escribirConfig(k, v) { const { error } = await db.from('cadena_config').upsert({ clave: k, valor: v, actualizado_en: new Date().toISOString() }); if (error) fallo(error) },
     async plazos() { return lista<PlazoCfg>(db.from('cadena_plazos').select('*').limit(100)) },
@@ -287,6 +312,14 @@ export function almacenDeSupabase(): Almacen {
         fase: f.fase ?? null, idea_ref: f.idea_ref ?? null,
       })), { onConflict: 'campana_id,calendario_version,id' })
       if (error) fallo(error)
+    },
+    async reubicarFila(campanaId, version, filaId, patch, aviso) {
+      const SIN_PRODUCIR = ['validada', 'lista_para_brief']
+      const f = await uno<{ avisos: string[] | null }>(db.from('cadena_calendario_filas').select('avisos').eq('campana_id', campanaId).eq('calendario_version', version).eq('id', filaId).in('estado', SIN_PRODUCIR).maybeSingle())
+      if (!f) return false
+      // condicional: solo si sigue sin producir (otra vía que la tomó entre la lectura y la escritura gana)
+      const r = await lista<{ id: string }>(db.from('cadena_calendario_filas').update({ ...patch, avisos: [...(f.avisos ?? []), aviso] }).eq('campana_id', campanaId).eq('calendario_version', version).eq('id', filaId).in('estado', SIN_PRODUCIR).select('id'))
+      return r.length > 0
     },
     async cambiarEstadoDeFilas(campanaId, version, ids, estado) { const { error } = await db.from('cadena_calendario_filas').update({ estado }).eq('campana_id', campanaId).eq('calendario_version', version).in('id', ids); if (error) fallo(error) },
     // 10-nov · LOTE MUERTO · los envíos de ESTA llave según la sala: las llaves exactas de su entrada (original + reintentos), no cliente + semana
