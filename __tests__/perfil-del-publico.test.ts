@@ -143,6 +143,17 @@ describe('2 · ninguna frase sin fuente de ESTE cliente', () => {
     expect(f.texto).not.toContain('Intro libre')
     expect(f.secciones_sin_dato).toHaveLength(5)
   })
+  it('la frase cuenta por palabras completas: «bacán» no está dentro de «bacanísimo»', () => {
+    const v = [{ id: delCafe[0].id, texto: 'el sitio está bacanísimo de verdad' }]
+    expect(filtrarPerfil(`## Cómo habla\n- «bacán» [voz:${v[0].id}]`, v, 'x').lineas_validas).toBe(0)
+    expect(filtrarPerfil(`## Cómo habla\n- «bacanísimo» [voz:${v[0].id}]`, v, 'x').lineas_validas).toBe(1)
+  })
+  it('una cita de menos de 4 letras no prueba nada («que» está en cualquier voz)', () => {
+    const f = filtrar(`- «que» [voz:${delCafe[0].id}]`)
+    expect(f.lineas_validas).toBe(0)
+    expect(f.descartadas[0].por_que).toMatch(/demasiado corta/)
+    expect(filtrar(`- «mejor» [voz:${delCafe[0].id}]`).lineas_validas).toBe(1)
+  })
   it('solo entran líneas de lista: la prosa dentro de una sección no entra aunque cite bien', () => {
     expect(filtrar(`El público dice «de lujo» [voz:${delCafe[0].id}] a cada rato`).lineas_validas).toBe(0)
   })
@@ -236,6 +247,14 @@ describe('4 · un perfil por cliente y sin voces duplicadas', () => {
     expect(a.huella).toBe(b.huella)
     expect(vocesDe('resenas_google_maps', [{ text: 'El café, DE LUJO!!' }, { text: 'el café   de lujo' }])).toHaveLength(1)
   })
+  it('sin una cita a una ficha del cerebro NO se llama a la puerta de informes, y se dice por qué', async () => {
+    const guardadas = [...voces(CAFE, 'resenas_google_maps', 45), ...voces(CAFE, 'instagram_post_comments_scraper', 15, 100)]
+    const { d } = doble({ guardadas, salida: () => `## Cómo habla\n- «currar» [voz:${guardadas[1].id}]` })
+    const r = await correrPerfil(d, ENTRADA)
+    expect(r.publicos[0]).toMatchObject({ estado: 'redactado', lineas_validas: 1 })
+    expect(d.archivar).not.toHaveBeenCalled()
+    expect(r.archivado).toEqual({ ok: false, detalle: expect.stringMatching(/no cita ninguna ficha del cerebro/) })
+  })
   it('una corrida archiva UN solo informe, del tipo perfil_del_publico, con todos los públicos adentro', async () => {
     const guardadas = [...voces(CAFE, 'resenas_google_maps', 40), ...voces(CAFE, 'cerebro:comentarios', 30, 100)]
     const otro = { ...PUBLICO_CAFE, id: 'p-cafe-2', audience_segment: 'Estudiantes que estudian en cafeterías', segment_priority: 2 }
@@ -250,7 +269,7 @@ describe('4 · un perfil por cliente y sin voces duplicadas', () => {
   it('la puerta de informes retira el anterior del mismo tipo (no lo borra): el perfil usa esa puerta y no otra', () => {
     const informes = fs.readFileSync(path.join(process.cwd(), 'src/lib/portero-alimenta/informes.ts'), 'utf8')
     expect(informes).toMatch(/UNA sola vigente por cliente y tipo/)
-    const ruta = fs.readFileSync(path.join(process.cwd(), 'src/app/api/perfil-del-publico/route.ts'), 'utf8')
+    const ruta = ['src/app/api/perfil-del-publico/route.ts', 'src/lib/perfil-del-publico/dependencias.ts'].map((a) => fs.readFileSync(path.join(process.cwd(), a), 'utf8')).join('\n')
     expect(ruta).toMatch(/\/api\/brain\/alimentar\/informe/)
     // ninguna otra escritura al cerebro: ni fichas, ni trozos, ni la biblioteca de voces que se re-embebe sola
     expect(ruta).not.toMatch(new RegExp(['cerebro' + '_fichas', 'client_brain_chunks', 'client_voc_library', '\\.delete\\('].join('|')))
@@ -370,12 +389,23 @@ describe('agnóstico: cafetería en Madrid y proveedor industrial B2B en Monterr
     const r = await correrPerfil(d, { ...ENTRADA, client_id: VALVULAS, dry_run: true })
     expect(r.publicos[0]).toMatchObject({ tipo: 'profesional', fuentes_faltantes: ['linkedin'] })
   })
+  it('las voces de las fuentes de un público no sirven a otro: TikTok no cuenta para el público profesional', async () => {
+    const guardadas = [...voces(VALVULAS, 'resenas_google_maps', 45), ...voces(VALVULAS, 'videos_tiktok', 30, 100)]
+    const sinObjetivos = vi.fn(async () => ({ lugares: [], publicaciones: [], busquedas: [], cuentas: [], videos: [] }))
+    const b2b = doble({ guardadas, publicos: [PUBLICO_B2B], leerObjetivos: sinObjetivos })
+    const r = await correrPerfil(b2b.d, { ...ENTRADA, client_id: VALVULAS })
+    expect(r.publicos[0]).toMatchObject({ tipo: 'profesional', estado: 'muestra_insuficiente', voces_usadas: 45 })
+    expect(b2b.d.redactar).not.toHaveBeenCalled()
+    // las mismas voces sí le sirven a un público de consumo (TikTok es fuente suya)
+    const cafe = doble({ guardadas, leerObjetivos: sinObjetivos })
+    expect((await correrPerfil(cafe.d, ENTRADA)).publicos[0].estado).toBe('redactado')
+  })
   it('la tarea toma lugar, rubro y trato del cliente; nada fijo de un cliente en el código', () => {
     const t = tareaDelPerfil({ publico: publicosDe([PUBLICO_B2B]).publicos[0], rubro: 'válvulas industriales', plaza: 'Monterrey', pais: 'México', voces: voces(VALVULAS, 'youtube_comments_scraper', 1), idioma: null, trato: 'usted' })
     expect(t).toContain('Monterrey, México')
     expect(t).toContain('válvulas industriales')
     expect(t).toContain('Trato: usted')
-    for (const archivo of ['src/lib/perfil-del-publico/perfil.ts', 'src/lib/perfil-del-publico/corrida.ts', 'src/app/api/perfil-del-publico/route.ts']) {
+    for (const archivo of ['src/lib/perfil-del-publico/perfil.ts', 'src/lib/perfil-del-publico/corrida.ts', 'src/lib/perfil-del-publico/dependencias.ts', 'src/app/api/perfil-del-publico/route.ts']) {
       expect(fs.readFileSync(path.join(process.cwd(), archivo), 'utf8'), archivo).not.toMatch(/guayac|ecuador|n[aá]ufrago|olon|p[eé]rez/i)
     }
   })

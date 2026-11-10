@@ -298,6 +298,8 @@ const RE_COMILLAS = /«([^»]{2,400})»|“([^”]{2,400})”|"([^"]{2,400})"/g
 const RE_ENCABEZADO = /^\s*#{1,4}\s+(.+?)\s*$/
 const seccionDe = (titulo: string): (typeof SECCIONES)[number] | null => SECCIONES.find((s) => normalizar(titulo).trim() === normalizar(s).trim()) ?? null
 
+/** una cita de una o dos letras («que», «ya») está dentro de cualquier voz: no prueba nada */
+export const LARGO_MINIMO_DE_UNA_FRASE = 4
 export interface Descartada { readonly linea: string; readonly por_que: string }
 export interface PerfilFiltrado {
   readonly texto: string
@@ -330,7 +332,10 @@ export function filtrarPerfil(salida: string, voces: ReadonlyArray<Pick<VozConId
     if (ajena) { descartadas.push({ linea: corta, por_que: `cita una voz que no es de este cliente o no se le entregó (${ajena.slice(0, 8)})` }); continue }
     const frases = [...linea.replace(RE_REF, '').matchAll(RE_COMILLAS)].map((m) => normalizar(m[1] ?? m[2] ?? m[3]).trim()).filter(Boolean)
     if (seccion === 'Cómo habla' && !frases.length) { descartadas.push({ linea: corta, por_que: 'en «Cómo habla» la línea no trae la frase textual entre comillas' }); continue }
-    const inventada = frases.find((f) => !refs.some((r) => (porId.get(r) ?? '').includes(f)))
+    const breve = frases.find((f) => f.replace(/\s/g, '').length < LARGO_MINIMO_DE_UNA_FRASE)
+    if (breve !== undefined) { descartadas.push({ linea: corta, por_que: `la frase «${breve}» es demasiado corta para atribuirla (mínimo ${LARGO_MINIMO_DE_UNA_FRASE} letras)` }); continue }
+    // palabras completas: «bacán» no está dentro de «bacanísimo»
+    const inventada = frases.find((f) => !refs.some((r) => ` ${(porId.get(r) ?? '').trim()} `.includes(` ${f} `)))
     if (inventada !== undefined) { descartadas.push({ linea: corta, por_que: `la frase «${inventada.slice(0, 60)}» no está textual en la voz que cita` }); continue }
     refs.forEach((r) => citas.add(r))
     validas[seccion].push(sinDatosPersonales(linea).texto)
