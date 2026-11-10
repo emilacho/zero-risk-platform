@@ -75,6 +75,7 @@ describe('genérico (GO de Lenovo 10-nov): en cualquier documento con «Pedir ca
       const o = ordenDeAnalisisDeImpacto(doc)
       expect(o).toContain('El formato que vale es el de HOY')
       expect(o).toContain('Plan de Marketing')
+      expect(o).toContain('le falta una sección obligatoria o no cumple una regla del formato vigente')
       expect(o).toContain('«Conservar tal cual» nunca vale para lo que el formato de hoy exige')
     })
   }
