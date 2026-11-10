@@ -12,6 +12,8 @@ import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V2, ESQUEMA_ESTRATEGIA } from './esquemas'
 import { conceptoParaElCalendario, etapaDeReentrada, nuevoOrdenEncendido, tramoDeReemision } from './mesas'
 import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
+import { hoyEnZona } from './campanas'
+import { fueraDePlazoDeProduccion } from './lotes'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
 import { metodoDeCalendario } from './metodos'
@@ -312,8 +314,13 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
   const { campana, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora } = p
   // estado final de cada fila: validada | en_investigacion (dato pendiente o sin horario, con su reloj) | espera_video (con su reloj) | descartada_sin_fuente
   const enInvestigacion = new Set(hs.filter((h) => h.severidad === 'aviso' && (h.chequeo === 'V14' || h.chequeo === 'V06') && h.fila_id).map((h) => h.fila_id as string))
+  // GO de Lenovo 10-nov 14:59Z: lo que cae antes de hoy (zona del cliente) + el plazo de producción de su formato no se programa; queda `perdio_su_fecha` con la razón escrita
+  const hoy = hoyEnZona(ahora, campana.zona_horaria)
   const finales: Fila[] = filas.map((f) => {
-    if (f.estado === 'descartada_sin_fuente' || f.estado === 'espera_video') return f
+    if (f.estado === 'descartada_sin_fuente') return f
+    const fuera = fueraDePlazoDeProduccion(f, hoy, formatos)
+    if (fuera) return { ...f, estado: 'perdio_su_fecha', avisos: [...f.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), fuera] }
+    if (f.estado === 'espera_video') return f
     return { ...f, estado: enInvestigacion.has(f.id) ? 'en_investigacion' : 'validada', avisos: [...f.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), ...hs.filter((h) => h.fila_id === f.id && h.severidad === 'aviso').map((h) => h.ficha.que)] }
   })
   const todas12 = tanda === 1 ? expandirPatron(estr, campana, Array.from({ length: SEMANAS_DE_PANORAMA }, (_, i) => i + 1).filter((s) => !semanas.includes(s)), 0, formatos).map((f) => ({ ...f, tanda: Math.ceil(f.semana / medidaDeCampana(campana).semanasPorTanda) })) : []
@@ -335,7 +342,7 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
     } else arranque = (await activarYArrancar(al, campana, ahora)).arranque // 20-oct · parte 3: la campaña pasa a `activa` AQUÍ en el camino real; el arranque por evento tiene que salir de aquí también
   }
   const cuenta = (e: Fila['estado']) => finales.filter((f) => f.estado === e).length
-  return { status: 200, cuerpo: { ok: true, tanda, filas: finales.length, validadas: cuenta('validada'), en_investigacion: cuenta('en_investigacion'), espera_video: cuenta('espera_video'), salieron_sin_fuente: salen, panorama_semanas: todas12.length ? SEMANAS_DE_PANORAMA : 0, avisos: hs.filter((h) => h.severidad === 'aviso').length, ...(retenida ? { retenida_para_revision: retenida } : {}), ...(arranque ? { arranque } : {}) } }
+  return { status: 200, cuerpo: { ok: true, tanda, filas: finales.length, validadas: cuenta('validada'), en_investigacion: cuenta('en_investigacion'), espera_video: cuenta('espera_video'), salieron_sin_fuente: salen, fuera_de_plazo: cuenta('perdio_su_fecha'), panorama_semanas: todas12.length ? SEMANAS_DE_PANORAMA : 0, avisos: hs.filter((h) => h.severidad === 'aviso').length, ...(retenida ? { retenida_para_revision: retenida } : {}), ...(arranque ? { arranque } : {}) } }
 }
 
 // ─────────────────────────────────────────────────────────────── VALIDAR (sin escribir nada)
