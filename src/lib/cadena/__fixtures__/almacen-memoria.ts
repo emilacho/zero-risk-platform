@@ -12,6 +12,7 @@ import { InMemoryEventLogStorage } from '../../sala-event-log'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from '../autoproducir'
 import type { SobreDeLote } from '../arranque'
 import type { SobreDePlan } from '../campanas'
+import type { SobreDeTanda } from '../mesas'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -252,7 +253,7 @@ export class AlmacenMemoria implements Almacen {
   sedesDeLaFicha = 0
   async frenoDeGasto(_clientId: string) { this.consultasDelFreno++; return this.semilla.frenoBloqueado ? { bloqueado: true, motivo: 'over_cap' } : { bloqueado: false, motivo: 'under_cap' } }
   sobresEmitidos: unknown[] = []
-  async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan): Promise<ResultadoDeEmision> {
+  async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision> {
     this.sobresEmitidos.push(sobre)
     if (this.semilla.intakeApagado) return { resultado: 'rechazado', detalle: 'intake_apagado' }
     const r = await orchestrateIngress({ envelope: sobre as unknown as IngressEnvelope, auth_request: { source: sobre.source, internal_key: process.env.INTERNAL_API_KEY, raw_body: JSON.stringify(sobre) }, tables: this.salaTablas, storage: this.sala })

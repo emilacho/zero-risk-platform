@@ -13,6 +13,7 @@ import { programarDespachoInmediato } from '@/lib/sala-router-consumer/inmediato
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
 import type { SobreDeLote } from './arranque'
 import type { SobreDePlan } from './campanas'
+import type { SobreDeTanda } from './mesas'
 import { almacenDeSupabase as almacenDeJefatura } from '@/lib/jefatura/revision/almacen-supabase'
 import { decidirRetencion } from './revision-jefatura'
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
@@ -318,7 +319,7 @@ export function almacenDeSupabase(): Almacen {
       const r = await checkRunSdkSpendCap(db, clientId, { agentSlug: 'cadena/medicion-previa', medicionPrevia: true })
       return { bloqueado: r.blocked === true, motivo: r.reason }
     },
-    async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan): Promise<ResultadoDeEmision> {
+    async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision> {
       if (!isIntakeEnabled()) return { resultado: 'rechazado', detalle: 'intake_apagado · SALA_INTAKE_ENABLED' }
       const llave = process.env.INTERNAL_API_KEY
       if (!llave) return { resultado: 'rechazado', detalle: 'sin_llave_interna' }
