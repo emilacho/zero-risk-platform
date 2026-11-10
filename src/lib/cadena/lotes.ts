@@ -3,8 +3,24 @@
  */
 import { createHash } from 'node:crypto'
 import type { Almacen, Campana } from './almacen'
-import { restarDias, semanaIso } from './fechas'
-import type { Fila } from './tipos'
+import { restarDias, semanaIso, sumarDias } from './fechas'
+import type { Fila, FormatosPorRed } from './tipos'
+
+/** los días que el formato necesita para producirse (`lead_dias` de `cadena_formatos_por_red`); sin dato, 3 · lo comparten los lotes y el recorte de la tanda */
+export const leadDeFormato = (formatos: FormatosPorRed, f: Pick<Fila, 'red' | 'formato'>): number => (formatos[f.red] ?? []).find((x) => x.formato === f.formato)?.lead_dias ?? 3
+
+export const PREFIJO_FUERA_DE_PLAZO = 'fuera de plazo de producción: '
+export const esNotaDeFueraDePlazo = (a: string): boolean => a.startsWith(PREFIJO_FUERA_DE_PLAZO)
+/**
+ * GO de Lenovo (10-nov · 14:59Z): el calendario no programa nada antes de HOY (en la zona del cliente) más el plazo de producción del formato.
+ * Regla exacta de fechas: devuelve la razón escrita si la fila cae antes del primer día que alcanza a producirse; null si llega.
+ */
+export function fueraDePlazoDeProduccion(f: Pick<Fila, 'fecha' | 'red' | 'formato'>, hoy: string, formatos: FormatosPorRed): string | null {
+  const lead = leadDeFormato(formatos, f)
+  const primerDia = sumarDias(hoy, lead)
+  if (f.fecha >= primerDia) return null
+  return `${PREFIJO_FUERA_DE_PLAZO}la fecha ${f.fecha} cae antes del ${primerDia} (hoy ${hoy} en la zona del cliente + ${lead} días que necesita ${f.formato}): no se programa`
+}
 
 export interface LoteVencido { lote: string; fila_ids: string[]; idempotency_key: string }
 export const huellaDeLote = (filaIds: string[]): string => createHash('sha256').update([...filaIds].sort().join(',')).digest('hex').slice(0, 8)
@@ -17,7 +33,7 @@ export async function lotesVencidos(al: Almacen, c: Campana, hoy: string): Promi
   const conHuella = (await al.leerConfig('arranque_por_evento')) === true
   const vencen = (await al.filas(c.id, version)).filter((f) => {
     if (f.estado !== 'validada' && f.estado !== 'lista_para_brief') return false
-    const lead = (formatos[f.red] ?? []).find((x) => x.formato === f.formato)?.lead_dias ?? 3
+    const lead = leadDeFormato(formatos, f)
     return restarDias(f.fecha, lead + holgura) <= hoy && f.fecha >= hoy
   })
   const porSemana = new Map<string, Fila[]>()
