@@ -1,0 +1,2713 @@
+{
+ "tomado_en": "2026-11-10T19:47:10.305Z",
+ "fuente": "base de producción · lectura GET · CC1 10-nov",
+ "campanas": {
+  "28de888e-b3f2-4aca-86b3-2c7f7bf6685a": {
+   "campana": {
+    "id": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a",
+    "client_id": "0a2ffbd4-957c-4315-a37f-b9e4fbbbb312",
+    "estado": "activa",
+    "autoproducir": true,
+    "seco": false,
+    "zona_horaria": "America/Guayaquil"
+   },
+   "calendario_version": 1,
+   "corridas": [
+    {
+     "costo_usd": 0.724,
+     "estado": "ok",
+     "paso": "estrategia"
+    },
+    {
+     "costo_usd": 0.6025,
+     "estado": "ok",
+     "paso": "estrategia"
+    },
+    {
+     "costo_usd": 0.703,
+     "estado": "ok",
+     "paso": "estrategia"
+    },
+    {
+     "costo_usd": 0.6878,
+     "estado": "ok",
+     "paso": "calendario"
+    },
+    {
+     "costo_usd": 0.6923,
+     "estado": "ok",
+     "paso": "calendario"
+    }
+   ],
+   "conceptos": [
+    {
+     "costo_usd": 4.5775,
+     "encargo_id": "577c6038-f343-4d88-a629-348b4d4a25af"
+    },
+    {
+     "costo_usd": 4.2654,
+     "encargo_id": "fc2360b6-bf58-407b-9006-3340c840ce5e"
+    },
+    {
+     "costo_usd": 5.3038,
+     "encargo_id": "6563e705-84a6-42ac-aa4a-6e383d4a28b1"
+    },
+    {
+     "costo_usd": 6.1515,
+     "encargo_id": "d0794d06-d10f-4326-b14d-e24d092d708e"
+    }
+   ],
+   "briefs": [
+    {
+     "costo_usd": 0.7952,
+     "encargo_id": "ee269e7d-55f4-43df-80b9-7ceeb0d3d6d0"
+    },
+    {
+     "costo_usd": 0.7305,
+     "encargo_id": "7cb061b8-a0cf-4489-afc9-09bc779a9a57"
+    },
+    {
+     "costo_usd": 0.5141,
+     "encargo_id": "8aa4483e-6906-4d52-95e2-956aa0855888"
+    },
+    {
+     "costo_usd": 0.5324,
+     "encargo_id": "b5b2fab9-d7de-4f70-b076-3be4337a653e"
+    }
+   ],
+   "partes": [],
+   "encargos": [
+    {
+     "id": "b5b2fab9-d7de-4f70-b076-3be4337a653e",
+     "parte_id": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a",
+     "brief_id": "brf-28de888eb3f2-v4",
+     "familia": "brief_mesa",
+     "estado": "cerrado",
+     "tope_usd": 1.6,
+     "gasto_usd": 0.532374,
+     "dry_run": false
+    },
+    {
+     "id": "fc2360b6-bf58-407b-9006-3340c840ce5e",
+     "parte_id": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a",
+     "brief_id": "con-28de888eb3f2-v2",
+     "familia": "concepto_mesa",
+     "estado": "cerrado_por_tope",
+     "tope_usd": 3.3,
+     "gasto_usd": 4.265393,
+     "dry_run": false
+    },
+    {
+     "id": "6563e705-84a6-42ac-aa4a-6e383d4a28b1",
+     "parte_id": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a",
+     "brief_id": "con-28de888eb3f2-v3",
+     "familia": "concepto_mesa",
+     "estado": "cerrado",
+     "tope_usd": 10,
+     "gasto_usd": 5.303773,
+     "dry_run": false
+    },
+    {
+     "id": "d0794d06-d10f-4326-b14d-e24d092d708e",
+     "parte_id": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a",
+     "brief_id": "con-28de888eb3f2-v4",
+     "familia": "concepto_mesa",
+     "estado": "cerrado",
+     "tope_usd": 20,
+     "gasto_usd": 6.151451,
+     "dry_run": false
+    },
+    {
+     "id": "8aa4483e-6906-4d52-95e2-956aa0855888",
+     "parte_id": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a",
+     "brief_id": "brf-28de888eb3f2-v3",
+     "familia": "brief_mesa",
+     "estado": "cerrado",
+     "tope_usd": 1.6,
+     "gasto_usd": 0.514141,
+     "dry_run": false
+    },
+    {
+     "id": "577c6038-f343-4d88-a629-348b4d4a25af",
+     "parte_id": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a",
+     "brief_id": "con-28de888eb3f2-v1",
+     "familia": "concepto_mesa",
+     "estado": "cerrado",
+     "tope_usd": 5,
+     "gasto_usd": 4.577545,
+     "dry_run": false
+    },
+    {
+     "id": "ee269e7d-55f4-43df-80b9-7ceeb0d3d6d0",
+     "parte_id": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a",
+     "brief_id": "brf-28de888eb3f2-v1",
+     "familia": "brief_mesa",
+     "estado": "cerrado",
+     "tope_usd": 1.6,
+     "gasto_usd": 0.795175,
+     "dry_run": false
+    },
+    {
+     "id": "7cb061b8-a0cf-4489-afc9-09bc779a9a57",
+     "parte_id": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a",
+     "brief_id": "brf-28de888eb3f2-v2",
+     "familia": "brief_mesa",
+     "estado": "cerrado",
+     "tope_usd": 1.6,
+     "gasto_usd": 0.730452,
+     "dry_run": false
+    }
+   ],
+   "filas": [
+    {
+     "id": "s1-d1-lun_historia_gye",
+     "fecha": "2026-11-09",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s1-d1-lun_reel_gye",
+     "fecha": "2026-11-09",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 1
+    },
+    {
+     "id": "s1-d4-jue_anuncio_gye",
+     "fecha": "2026-11-12",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "anuncio_imagen",
+     "semana": 1
+    },
+    {
+     "id": "s1-d4-jue_anuncio_fb",
+     "fecha": "2026-11-12",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "anuncio_imagen",
+     "semana": 1
+    },
+    {
+     "id": "s1-d4-jue_foto_olon",
+     "fecha": "2026-11-12",
+     "hora": "08:30",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 1
+    },
+    {
+     "id": "s1-d4-jue_historia_gye",
+     "fecha": "2026-11-12",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s1-d5-vie_historia_gye",
+     "fecha": "2026-11-13",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s1-d6-sab_anuncio_fb",
+     "fecha": "2026-11-14",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "anuncio_imagen",
+     "semana": 1
+    },
+    {
+     "id": "s1-d6-sab_anuncio_gye",
+     "fecha": "2026-11-14",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "anuncio_imagen",
+     "semana": 1
+    },
+    {
+     "id": "s1-d6-sab_historia_gye",
+     "fecha": "2026-11-14",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s1-d6-sab_reel_olon",
+     "fecha": "2026-11-14",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 1
+    },
+    {
+     "id": "s1-d6-sab_estado_olon",
+     "fecha": "2026-11-14",
+     "hora": "08:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 1
+    },
+    {
+     "id": "s1-d7-dom_estado_olon",
+     "fecha": "2026-11-15",
+     "hora": "08:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 1
+    },
+    {
+     "id": "s1-d7-dom_historia_olon",
+     "fecha": "2026-11-15",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s2-d1-lun_reel_gye",
+     "fecha": "2026-11-16",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 2
+    },
+    {
+     "id": "s2-d1-lun_historia_gye",
+     "fecha": "2026-11-16",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s2-d4-jue_anuncio_gye",
+     "fecha": "2026-11-19",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "anuncio_imagen",
+     "semana": 2
+    },
+    {
+     "id": "s2-d4-jue_historia_gye",
+     "fecha": "2026-11-19",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s2-d4-jue_foto_olon",
+     "fecha": "2026-11-19",
+     "hora": "08:30",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 2
+    },
+    {
+     "id": "s2-d4-jue_anuncio_fb",
+     "fecha": "2026-11-19",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "anuncio_imagen",
+     "semana": 2
+    },
+    {
+     "id": "s2-d5-vie_historia_gye",
+     "fecha": "2026-11-20",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s2-d6-sab_historia_gye",
+     "fecha": "2026-11-21",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s2-d6-sab_estado_olon",
+     "fecha": "2026-11-21",
+     "hora": "08:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 2
+    },
+    {
+     "id": "s2-d6-sab_reel_olon",
+     "fecha": "2026-11-21",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 2
+    },
+    {
+     "id": "s2-d6-sab_anuncio_gye",
+     "fecha": "2026-11-21",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "anuncio_imagen",
+     "semana": 2
+    },
+    {
+     "id": "s2-d6-sab_anuncio_fb",
+     "fecha": "2026-11-21",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "anuncio_imagen",
+     "semana": 2
+    },
+    {
+     "id": "s2-d7-dom_estado_olon",
+     "fecha": "2026-11-22",
+     "hora": "08:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 2
+    },
+    {
+     "id": "s2-d7-dom_historia_olon",
+     "fecha": "2026-11-22",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s3-d1-lun_historia_gye",
+     "fecha": "2026-11-23",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d1-lun_reel_gye",
+     "fecha": "2026-11-23",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 3
+    },
+    {
+     "id": "s3-d4-jue_anuncio_gye",
+     "fecha": "2026-11-26",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "anuncio_imagen",
+     "semana": 3
+    },
+    {
+     "id": "s3-d4-jue_anuncio_fb",
+     "fecha": "2026-11-26",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "anuncio_imagen",
+     "semana": 3
+    },
+    {
+     "id": "s3-d4-jue_foto_olon",
+     "fecha": "2026-11-26",
+     "hora": "08:30",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 3
+    },
+    {
+     "id": "s3-d4-jue_historia_gye",
+     "fecha": "2026-11-26",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d5-vie_historia_gye",
+     "fecha": "2026-11-27",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d6-sab_historia_gye",
+     "fecha": "2026-11-28",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d6-sab_anuncio_fb",
+     "fecha": "2026-11-28",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "anuncio_imagen",
+     "semana": 3
+    },
+    {
+     "id": "s3-d6-sab_estado_olon",
+     "fecha": "2026-11-28",
+     "hora": "08:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 3
+    },
+    {
+     "id": "s3-d6-sab_reel_olon",
+     "fecha": "2026-11-28",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 3
+    },
+    {
+     "id": "s3-d6-sab_anuncio_gye",
+     "fecha": "2026-11-28",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "anuncio_imagen",
+     "semana": 3
+    },
+    {
+     "id": "s3-d7-dom_historia_olon",
+     "fecha": "2026-11-29",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d7-dom_estado_olon",
+     "fecha": "2026-11-29",
+     "hora": "08:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 3
+    },
+    {
+     "id": "s4-d1-lun_historia_gye",
+     "fecha": "2026-11-30",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d1-lun_reel_gye",
+     "fecha": "2026-11-30",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 4
+    },
+    {
+     "id": "s4-d4-jue_historia_gye",
+     "fecha": "2026-12-03",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d4-jue_anuncio_fb",
+     "fecha": "2026-12-03",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "anuncio_imagen",
+     "semana": 4
+    },
+    {
+     "id": "s4-d4-jue_foto_olon",
+     "fecha": "2026-12-03",
+     "hora": "08:30",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 4
+    },
+    {
+     "id": "s4-d4-jue_anuncio_gye",
+     "fecha": "2026-12-03",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "anuncio_imagen",
+     "semana": 4
+    },
+    {
+     "id": "s4-d5-vie_historia_gye",
+     "fecha": "2026-12-04",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d6-sab_anuncio_gye",
+     "fecha": "2026-12-05",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "anuncio_imagen",
+     "semana": 4
+    },
+    {
+     "id": "s4-d6-sab_estado_olon",
+     "fecha": "2026-12-05",
+     "hora": "08:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 4
+    },
+    {
+     "id": "s4-d6-sab_reel_olon",
+     "fecha": "2026-12-05",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 4
+    },
+    {
+     "id": "s4-d6-sab_historia_gye",
+     "fecha": "2026-12-05",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d6-sab_anuncio_fb",
+     "fecha": "2026-12-05",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "anuncio_imagen",
+     "semana": 4
+    },
+    {
+     "id": "s4-d7-dom_historia_olon",
+     "fecha": "2026-12-06",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d7-dom_estado_olon",
+     "fecha": "2026-12-06",
+     "hora": "08:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 4
+    },
+    {
+     "id": "s5-d1-lun_historia_gye",
+     "fecha": "2026-12-07",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 5
+    },
+    {
+     "id": "s5-d1-lun_reel_gye",
+     "fecha": "2026-12-07",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 5
+    },
+    {
+     "id": "s5-d4-jue_foto_olon",
+     "fecha": "2026-12-10",
+     "hora": "08:30",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 5
+    },
+    {
+     "id": "s5-d5-vie_historia_gye",
+     "fecha": "2026-12-11",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 5
+    },
+    {
+     "id": "s5-d6-sab_reel_olon",
+     "fecha": "2026-12-12",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 5
+    },
+    {
+     "id": "s5-d6-sab_estado_olon",
+     "fecha": "2026-12-12",
+     "hora": "08:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 5
+    },
+    {
+     "id": "s5-d7-dom_historia_olon",
+     "fecha": "2026-12-13",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 5
+    },
+    {
+     "id": "s6-d1-lun_reel_gye",
+     "fecha": "2026-12-14",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 6
+    },
+    {
+     "id": "s6-d1-lun_historia_gye",
+     "fecha": "2026-12-14",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 6
+    },
+    {
+     "id": "s6-d4-jue_foto_olon",
+     "fecha": "2026-12-17",
+     "hora": "08:30",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 6
+    },
+    {
+     "id": "s6-d5-vie_historia_gye",
+     "fecha": "2026-12-18",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 6
+    },
+    {
+     "id": "s6-d6-sab_estado_olon",
+     "fecha": "2026-12-19",
+     "hora": "08:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 6
+    },
+    {
+     "id": "s6-d6-sab_reel_olon",
+     "fecha": "2026-12-19",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 6
+    },
+    {
+     "id": "s6-d7-dom_historia_olon",
+     "fecha": "2026-12-20",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 6
+    },
+    {
+     "id": "s7-d1-lun_reel_gye",
+     "fecha": "2026-12-21",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 7
+    },
+    {
+     "id": "s7-d1-lun_historia_gye",
+     "fecha": "2026-12-21",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 7
+    },
+    {
+     "id": "s7-d4-jue_foto_olon",
+     "fecha": "2026-12-24",
+     "hora": "08:30",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 7
+    },
+    {
+     "id": "s7-d5-vie_historia_gye",
+     "fecha": "2026-12-25",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 7
+    },
+    {
+     "id": "s7-d6-sab_estado_olon",
+     "fecha": "2026-12-26",
+     "hora": "08:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 7
+    },
+    {
+     "id": "s7-d6-sab_reel_olon",
+     "fecha": "2026-12-26",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 7
+    },
+    {
+     "id": "s7-d7-dom_historia_olon",
+     "fecha": "2026-12-27",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 7
+    },
+    {
+     "id": "s8-d1-lun_reel_gye",
+     "fecha": "2026-12-28",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 8
+    },
+    {
+     "id": "s8-d1-lun_historia_gye",
+     "fecha": "2026-12-28",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 8
+    },
+    {
+     "id": "s8-d4-jue_foto_olon",
+     "fecha": "2026-12-31",
+     "hora": "08:30",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 8
+    },
+    {
+     "id": "s8-d5-vie_historia_gye",
+     "fecha": "2027-01-01",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 8
+    },
+    {
+     "id": "s8-d6-sab_estado_olon",
+     "fecha": "2027-01-02",
+     "hora": "08:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 8
+    },
+    {
+     "id": "s8-d6-sab_reel_olon",
+     "fecha": "2027-01-02",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 8
+    },
+    {
+     "id": "s8-d7-dom_historia_olon",
+     "fecha": "2027-01-03",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 8
+    },
+    {
+     "id": "s9-d1-lun_reel_gye",
+     "fecha": "2027-01-04",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 9
+    },
+    {
+     "id": "s9-d1-lun_historia_gye",
+     "fecha": "2027-01-04",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 9
+    },
+    {
+     "id": "s9-d4-jue_foto_olon",
+     "fecha": "2027-01-07",
+     "hora": "08:30",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 9
+    },
+    {
+     "id": "s9-d5-vie_historia_gye",
+     "fecha": "2027-01-08",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 9
+    },
+    {
+     "id": "s9-d6-sab_reel_olon",
+     "fecha": "2027-01-09",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 9
+    },
+    {
+     "id": "s9-d6-sab_estado_olon",
+     "fecha": "2027-01-09",
+     "hora": "08:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 9
+    },
+    {
+     "id": "s9-d7-dom_historia_olon",
+     "fecha": "2027-01-10",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 9
+    },
+    {
+     "id": "s10-d1-lun_reel_gye",
+     "fecha": "2027-01-11",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 10
+    },
+    {
+     "id": "s10-d1-lun_historia_gye",
+     "fecha": "2027-01-11",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 10
+    },
+    {
+     "id": "s10-d4-jue_foto_olon",
+     "fecha": "2027-01-14",
+     "hora": "08:30",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 10
+    },
+    {
+     "id": "s10-d5-vie_historia_gye",
+     "fecha": "2027-01-15",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 10
+    },
+    {
+     "id": "s10-d6-sab_reel_olon",
+     "fecha": "2027-01-16",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 10
+    },
+    {
+     "id": "s10-d6-sab_estado_olon",
+     "fecha": "2027-01-16",
+     "hora": "08:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 10
+    },
+    {
+     "id": "s10-d7-dom_historia_olon",
+     "fecha": "2027-01-17",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 10
+    },
+    {
+     "id": "s11-d1-lun_reel_gye",
+     "fecha": "2027-01-18",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 11
+    },
+    {
+     "id": "s11-d1-lun_historia_gye",
+     "fecha": "2027-01-18",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 11
+    },
+    {
+     "id": "s11-d4-jue_foto_olon",
+     "fecha": "2027-01-21",
+     "hora": "08:30",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 11
+    },
+    {
+     "id": "s11-d5-vie_historia_gye",
+     "fecha": "2027-01-22",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 11
+    },
+    {
+     "id": "s11-d6-sab_reel_olon",
+     "fecha": "2027-01-23",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 11
+    },
+    {
+     "id": "s11-d6-sab_estado_olon",
+     "fecha": "2027-01-23",
+     "hora": "08:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 11
+    },
+    {
+     "id": "s11-d7-dom_historia_olon",
+     "fecha": "2027-01-24",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 11
+    },
+    {
+     "id": "s12-d1-lun_reel_gye",
+     "fecha": "2027-01-25",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 12
+    },
+    {
+     "id": "s12-d1-lun_historia_gye",
+     "fecha": "2027-01-25",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 12
+    },
+    {
+     "id": "s12-d4-jue_foto_olon",
+     "fecha": "2027-01-28",
+     "hora": "08:30",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 12
+    },
+    {
+     "id": "s12-d5-vie_historia_gye",
+     "fecha": "2027-01-29",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 12
+    },
+    {
+     "id": "s12-d6-sab_reel_olon",
+     "fecha": "2027-01-30",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "reel",
+     "semana": 12
+    },
+    {
+     "id": "s12-d6-sab_estado_olon",
+     "fecha": "2027-01-30",
+     "hora": "08:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 12
+    },
+    {
+     "id": "s12-d7-dom_historia_olon",
+     "fecha": "2027-01-31",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 12
+    }
+   ],
+   "sala_producir": []
+  },
+  "31dc6aaf-2e9c-426e-81c5-1645c500283e": {
+   "campana": {
+    "id": "31dc6aaf-2e9c-426e-81c5-1645c500283e",
+    "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+    "estado": "pausada",
+    "autoproducir": true,
+    "seco": false,
+    "zona_horaria": "America/Guayaquil"
+   },
+   "calendario_version": 1,
+   "corridas": [
+    {
+     "costo_usd": 0.2095,
+     "estado": "ok",
+     "paso": "estrategia"
+    },
+    {
+     "costo_usd": 0.259,
+     "estado": "ok",
+     "paso": "calendario"
+    },
+    {
+     "costo_usd": 0.2524,
+     "estado": "ok",
+     "paso": "calendario"
+    }
+   ],
+   "conceptos": [],
+   "briefs": [],
+   "partes": [
+    {
+     "id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "provenance_tag": {
+      "campana_id": "31dc6aaf-2e9c-426e-81c5-1645c500283e",
+      "seco": null,
+      "prueba_seco": null,
+      "lote_key": "31dc6aaf-2e9c-426e-81c5-1645c500283e:2026-W44:1",
+      "familias_por_brief": [
+       {
+        "brief_id": "BRF-0001",
+        "fila_id": "s1-d1-lun_ig",
+        "familia": "carrusel_ig_v1"
+       },
+       {
+        "brief_id": "BRF-0002",
+        "fila_id": "s1-d1-fb_lun",
+        "familia": "carrusel_ig_v1"
+       },
+       {
+        "brief_id": "BRF-0004",
+        "fila_id": "s1-d1-hist_lun",
+        "familia": "kit_historias"
+       }
+      ]
+     }
+    }
+   ],
+   "encargos": [
+    {
+     "id": "ebeab584-f63f-4049-9679-04c1512c9d51",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-SECO-PORTERO",
+     "familia": "post_img",
+     "estado": "fallido",
+     "tope_usd": 2.5,
+     "gasto_usd": 0,
+     "dry_run": true
+    },
+    {
+     "id": "f4d359e9-ac47-4cee-8932-9be9a2d4713c",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0002",
+     "familia": "post_img",
+     "estado": "fallido",
+     "tope_usd": 0.5,
+     "gasto_usd": 0,
+     "dry_run": true
+    },
+    {
+     "id": "4286902d-4629-4f6a-ad4a-2998708d3090",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0001",
+     "familia": "carrusel_ig_v1",
+     "estado": "fallido",
+     "tope_usd": 1.5,
+     "gasto_usd": 0,
+     "dry_run": false
+    },
+    {
+     "id": "a9e2fd5c-5275-4068-902b-ca9622edb3f1",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0003",
+     "familia": "post_img",
+     "estado": "fallido",
+     "tope_usd": 2.5,
+     "gasto_usd": 0,
+     "dry_run": true
+    },
+    {
+     "id": "d58cc0c8-3303-44a9-87f1-ff54271c1815",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0001",
+     "familia": "carrusel_ig_v1",
+     "estado": "cerrado",
+     "tope_usd": 2.5,
+     "gasto_usd": 1.840811,
+     "dry_run": false
+    },
+    {
+     "id": "4b86d4bb-e918-4167-9d17-14fcc4343b8f",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0002",
+     "familia": "carrusel_ig_v1",
+     "estado": "fallido",
+     "tope_usd": 1.5,
+     "gasto_usd": 0,
+     "dry_run": false
+    },
+    {
+     "id": "73b6cd0a-8a9e-4ac6-b00f-b50f50b10a81",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0004",
+     "familia": "kit_historias",
+     "estado": "fallido",
+     "tope_usd": 1.5,
+     "gasto_usd": 0,
+     "dry_run": false
+    },
+    {
+     "id": "d79f92da-2b7c-489c-b2ce-e7daa6fd4d52",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0002",
+     "familia": "carrusel_mesa",
+     "estado": "cerrado",
+     "tope_usd": 5,
+     "gasto_usd": 0,
+     "dry_run": true
+    },
+    {
+     "id": "15ddb1a1-1224-45de-bae5-3879d1823c07",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0002",
+     "familia": "carrusel_mesa",
+     "estado": "fallido",
+     "tope_usd": 5,
+     "gasto_usd": 0,
+     "dry_run": true
+    },
+    {
+     "id": "c3060ac3-be28-45b4-8197-97423806ff53",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0002",
+     "familia": "carrusel_ig_v1",
+     "estado": "fallido",
+     "tope_usd": 1.5,
+     "gasto_usd": 0.243864,
+     "dry_run": false
+    },
+    {
+     "id": "8adbfb3d-c0c4-4fe8-a25c-4168b2089bc9",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0002",
+     "familia": "carrusel_mesa",
+     "estado": "cerrado",
+     "tope_usd": 5,
+     "gasto_usd": 1.690998,
+     "dry_run": false
+    },
+    {
+     "id": "fcaabccf-14ec-47ea-b50f-ccd032cf57a3",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0004",
+     "familia": "kit_historias",
+     "estado": "fallido",
+     "tope_usd": 2.5,
+     "gasto_usd": 0.308337,
+     "dry_run": false
+    },
+    {
+     "id": "401da42d-5ab9-40c9-8f8c-8b886a9f028f",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0001",
+     "familia": "carrusel_ig_v1",
+     "estado": "fallido",
+     "tope_usd": 1.5,
+     "gasto_usd": 0.257562,
+     "dry_run": false
+    },
+    {
+     "id": "190af7fc-5083-4da5-8743-01fdb57b0f46",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0004",
+     "familia": "kit_historias",
+     "estado": "fallido",
+     "tope_usd": 1.5,
+     "gasto_usd": 0.430033,
+     "dry_run": false
+    },
+    {
+     "id": "47f6ee42-fce9-46cd-8f65-3fa667d98715",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0002",
+     "familia": "carrusel_ig_v1",
+     "estado": "cerrado",
+     "tope_usd": 2.5,
+     "gasto_usd": 1.73134,
+     "dry_run": false
+    },
+    {
+     "id": "c6f3322e-943a-4e6c-9da2-106b640cae75",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0002",
+     "familia": "carrusel_mesa",
+     "estado": "cerrado",
+     "tope_usd": 3,
+     "gasto_usd": 0.984574,
+     "dry_run": false
+    },
+    {
+     "id": "48776d13-fb07-47c1-ac0e-c1c39456c7a7",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0002",
+     "familia": "carrusel_mesa",
+     "estado": "aprobada",
+     "tope_usd": 5,
+     "gasto_usd": 2.051572,
+     "dry_run": false
+    },
+    {
+     "id": "fc4c0537-4fb1-44b0-bd80-6c8f8c258e14",
+     "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "brief_id": "BRF-0001",
+     "familia": "carrusel_mesa",
+     "estado": "cerrado",
+     "tope_usd": 5,
+     "gasto_usd": 0,
+     "dry_run": true
+    }
+   ],
+   "filas": [
+    {
+     "id": "s1-d1-wa_lun",
+     "fecha": "2026-10-26",
+     "hora": "16:00",
+     "estado": "perdio_su_fecha",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 1
+    },
+    {
+     "id": "s1-d1-lun_ig",
+     "fecha": "2026-10-26",
+     "hora": "09:00",
+     "estado": "perdio_su_fecha",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 1
+    },
+    {
+     "id": "s1-d1-fb_lun",
+     "fecha": "2026-10-26",
+     "hora": "10:00",
+     "estado": "perdio_su_fecha",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 1
+    },
+    {
+     "id": "s1-d1-lun_fb",
+     "fecha": "2026-10-26",
+     "hora": "10:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 1
+    },
+    {
+     "id": "s1-d1-hist_lun",
+     "fecha": "2026-10-26",
+     "hora": "15:00",
+     "estado": "perdio_su_fecha",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s1-d2-mar_hist",
+     "fecha": "2026-10-27",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s1-d3-mie_fb",
+     "fecha": "2026-10-28",
+     "hora": "13:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "foto",
+     "semana": 1
+    },
+    {
+     "id": "s1-d3-wa_mie",
+     "fecha": "2026-10-28",
+     "hora": "16:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 1
+    },
+    {
+     "id": "s1-d3-hist_mie",
+     "fecha": "2026-10-28",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s1-d3-fb_mie",
+     "fecha": "2026-10-28",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "foto",
+     "semana": 1
+    },
+    {
+     "id": "s1-d3-mie_ig",
+     "fecha": "2026-10-28",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 1
+    },
+    {
+     "id": "s1-d4-hist_jue",
+     "fecha": "2026-10-29",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s1-d4-jue_wa",
+     "fecha": "2026-10-29",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 1
+    },
+    {
+     "id": "s1-d5-fb_vie",
+     "fecha": "2026-10-30",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 1
+    },
+    {
+     "id": "s1-d5-vie_fb",
+     "fecha": "2026-10-30",
+     "hora": "11:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 1
+    },
+    {
+     "id": "s1-d5-vie_ig",
+     "fecha": "2026-10-30",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 1
+    },
+    {
+     "id": "s1-d5-hist_vie",
+     "fecha": "2026-10-30",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 1
+    },
+    {
+     "id": "s2-d1-lun_ig",
+     "fecha": "2026-11-02",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 2
+    },
+    {
+     "id": "s2-d1-lun_fb",
+     "fecha": "2026-11-02",
+     "hora": "10:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 2
+    },
+    {
+     "id": "s2-d1-hist_lun",
+     "fecha": "2026-11-02",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s2-d1-wa_lun",
+     "fecha": "2026-11-02",
+     "hora": "16:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 2
+    },
+    {
+     "id": "s2-d1-fb_lun",
+     "fecha": "2026-11-02",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 2
+    },
+    {
+     "id": "s2-d2-mar_hist",
+     "fecha": "2026-11-03",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s2-d3-fb_mie",
+     "fecha": "2026-11-04",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "foto",
+     "semana": 2
+    },
+    {
+     "id": "s2-d3-mie_fb",
+     "fecha": "2026-11-04",
+     "hora": "13:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "foto",
+     "semana": 2
+    },
+    {
+     "id": "s2-d3-wa_mie",
+     "fecha": "2026-11-04",
+     "hora": "16:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 2
+    },
+    {
+     "id": "s2-d3-mie_ig",
+     "fecha": "2026-11-04",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 2
+    },
+    {
+     "id": "s2-d3-hist_mie",
+     "fecha": "2026-11-04",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s2-d4-jue_wa",
+     "fecha": "2026-11-05",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 2
+    },
+    {
+     "id": "s2-d4-hist_jue",
+     "fecha": "2026-11-05",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s2-d5-vie_ig",
+     "fecha": "2026-11-06",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 2
+    },
+    {
+     "id": "s2-d5-vie_fb",
+     "fecha": "2026-11-06",
+     "hora": "11:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 2
+    },
+    {
+     "id": "s2-d5-fb_vie",
+     "fecha": "2026-11-06",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 2
+    },
+    {
+     "id": "s2-d5-hist_vie",
+     "fecha": "2026-11-06",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 2
+    },
+    {
+     "id": "s3-d1-lun_fb",
+     "fecha": "2026-11-09",
+     "hora": "10:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 3
+    },
+    {
+     "id": "s3-d1-lun_ig",
+     "fecha": "2026-11-09",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 3
+    },
+    {
+     "id": "s3-d1-fb_lun",
+     "fecha": "2026-11-09",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 3
+    },
+    {
+     "id": "s3-d1-hist_lun",
+     "fecha": "2026-11-09",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d1-wa_lun",
+     "fecha": "2026-11-09",
+     "hora": "16:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 3
+    },
+    {
+     "id": "s3-d2-mar_hist",
+     "fecha": "2026-11-10",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d3-hist_mie",
+     "fecha": "2026-11-11",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d3-mie_ig",
+     "fecha": "2026-11-11",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 3
+    },
+    {
+     "id": "s3-d3-wa_mie",
+     "fecha": "2026-11-11",
+     "hora": "16:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 3
+    },
+    {
+     "id": "s3-d3-mie_fb",
+     "fecha": "2026-11-11",
+     "hora": "13:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "foto",
+     "semana": 3
+    },
+    {
+     "id": "s3-d3-fb_mie",
+     "fecha": "2026-11-11",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "foto",
+     "semana": 3
+    },
+    {
+     "id": "s3-d4-hist_jue",
+     "fecha": "2026-11-12",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d4-jue_wa",
+     "fecha": "2026-11-12",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 3
+    },
+    {
+     "id": "s3-d5-hist_vie",
+     "fecha": "2026-11-13",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 3
+    },
+    {
+     "id": "s3-d5-vie_fb",
+     "fecha": "2026-11-13",
+     "hora": "11:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 3
+    },
+    {
+     "id": "s3-d5-vie_ig",
+     "fecha": "2026-11-13",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 3
+    },
+    {
+     "id": "s3-d5-fb_vie",
+     "fecha": "2026-11-13",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 3
+    },
+    {
+     "id": "s4-d1-hist_lun",
+     "fecha": "2026-11-16",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d1-wa_lun",
+     "fecha": "2026-11-16",
+     "hora": "16:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 4
+    },
+    {
+     "id": "s4-d1-lun_fb",
+     "fecha": "2026-11-16",
+     "hora": "10:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 4
+    },
+    {
+     "id": "s4-d1-lun_ig",
+     "fecha": "2026-11-16",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 4
+    },
+    {
+     "id": "s4-d1-fb_lun",
+     "fecha": "2026-11-16",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 4
+    },
+    {
+     "id": "s4-d2-mar_hist",
+     "fecha": "2026-11-17",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d3-wa_mie",
+     "fecha": "2026-11-18",
+     "hora": "16:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 4
+    },
+    {
+     "id": "s4-d3-mie_fb",
+     "fecha": "2026-11-18",
+     "hora": "13:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "foto",
+     "semana": 4
+    },
+    {
+     "id": "s4-d3-fb_mie",
+     "fecha": "2026-11-18",
+     "hora": "13:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "foto",
+     "semana": 4
+    },
+    {
+     "id": "s4-d3-hist_mie",
+     "fecha": "2026-11-18",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d3-mie_ig",
+     "fecha": "2026-11-18",
+     "hora": "12:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 4
+    },
+    {
+     "id": "s4-d4-hist_jue",
+     "fecha": "2026-11-19",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d4-jue_wa",
+     "fecha": "2026-11-19",
+     "hora": "09:00",
+     "estado": "validada",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 4
+    },
+    {
+     "id": "s4-d5-hist_vie",
+     "fecha": "2026-11-20",
+     "hora": "15:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 4
+    },
+    {
+     "id": "s4-d5-vie_fb",
+     "fecha": "2026-11-20",
+     "hora": "11:00",
+     "estado": "propuesta",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 4
+    },
+    {
+     "id": "s4-d5-vie_ig",
+     "fecha": "2026-11-20",
+     "hora": "10:00",
+     "estado": "validada",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 4
+    },
+    {
+     "id": "s4-d5-fb_vie",
+     "fecha": "2026-11-20",
+     "hora": "11:00",
+     "estado": "validada",
+     "red": "facebook",
+     "formato": "carrusel",
+     "semana": 4
+    },
+    {
+     "id": "s5-d1-lun_ig",
+     "fecha": "2026-11-23",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 5
+    },
+    {
+     "id": "s5-d2-mar_hist",
+     "fecha": "2026-11-24",
+     "hora": "11:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 5
+    },
+    {
+     "id": "s5-d3-mie_ig",
+     "fecha": "2026-11-25",
+     "hora": "12:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 5
+    },
+    {
+     "id": "s5-d4-jue_wa",
+     "fecha": "2026-11-26",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 5
+    },
+    {
+     "id": "s5-d5-vie_ig",
+     "fecha": "2026-11-27",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 5
+    },
+    {
+     "id": "s6-d1-lun_ig",
+     "fecha": "2026-11-30",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 6
+    },
+    {
+     "id": "s6-d2-mar_hist",
+     "fecha": "2026-12-01",
+     "hora": "11:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 6
+    },
+    {
+     "id": "s6-d3-mie_ig",
+     "fecha": "2026-12-02",
+     "hora": "12:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 6
+    },
+    {
+     "id": "s6-d4-jue_wa",
+     "fecha": "2026-12-03",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 6
+    },
+    {
+     "id": "s6-d5-vie_ig",
+     "fecha": "2026-12-04",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 6
+    },
+    {
+     "id": "s7-d1-lun_ig",
+     "fecha": "2026-12-07",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 7
+    },
+    {
+     "id": "s7-d2-mar_hist",
+     "fecha": "2026-12-08",
+     "hora": "11:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 7
+    },
+    {
+     "id": "s7-d3-mie_ig",
+     "fecha": "2026-12-09",
+     "hora": "12:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 7
+    },
+    {
+     "id": "s7-d4-jue_wa",
+     "fecha": "2026-12-10",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 7
+    },
+    {
+     "id": "s7-d5-vie_ig",
+     "fecha": "2026-12-11",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 7
+    },
+    {
+     "id": "s8-d1-lun_ig",
+     "fecha": "2026-12-14",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 8
+    },
+    {
+     "id": "s8-d2-mar_hist",
+     "fecha": "2026-12-15",
+     "hora": "11:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 8
+    },
+    {
+     "id": "s8-d3-mie_ig",
+     "fecha": "2026-12-16",
+     "hora": "12:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 8
+    },
+    {
+     "id": "s8-d4-jue_wa",
+     "fecha": "2026-12-17",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 8
+    },
+    {
+     "id": "s8-d5-vie_ig",
+     "fecha": "2026-12-18",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 8
+    },
+    {
+     "id": "s9-d1-lun_ig",
+     "fecha": "2026-12-21",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 9
+    },
+    {
+     "id": "s9-d2-mar_hist",
+     "fecha": "2026-12-22",
+     "hora": "11:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 9
+    },
+    {
+     "id": "s9-d3-mie_ig",
+     "fecha": "2026-12-23",
+     "hora": "12:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 9
+    },
+    {
+     "id": "s9-d4-jue_wa",
+     "fecha": "2026-12-24",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 9
+    },
+    {
+     "id": "s9-d5-vie_ig",
+     "fecha": "2026-12-25",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 9
+    },
+    {
+     "id": "s10-d1-lun_ig",
+     "fecha": "2026-12-28",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 10
+    },
+    {
+     "id": "s10-d2-mar_hist",
+     "fecha": "2026-12-29",
+     "hora": "11:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 10
+    },
+    {
+     "id": "s10-d3-mie_ig",
+     "fecha": "2026-12-30",
+     "hora": "12:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 10
+    },
+    {
+     "id": "s10-d4-jue_wa",
+     "fecha": "2026-12-31",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 10
+    },
+    {
+     "id": "s10-d5-vie_ig",
+     "fecha": "2027-01-01",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 10
+    },
+    {
+     "id": "s11-d1-lun_ig",
+     "fecha": "2027-01-04",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 11
+    },
+    {
+     "id": "s11-d2-mar_hist",
+     "fecha": "2027-01-05",
+     "hora": "11:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 11
+    },
+    {
+     "id": "s11-d3-mie_ig",
+     "fecha": "2027-01-06",
+     "hora": "12:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 11
+    },
+    {
+     "id": "s11-d4-jue_wa",
+     "fecha": "2027-01-07",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 11
+    },
+    {
+     "id": "s11-d5-vie_ig",
+     "fecha": "2027-01-08",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 11
+    },
+    {
+     "id": "s12-d1-lun_ig",
+     "fecha": "2027-01-11",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 12
+    },
+    {
+     "id": "s12-d2-mar_hist",
+     "fecha": "2027-01-12",
+     "hora": "11:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "historia",
+     "semana": 12
+    },
+    {
+     "id": "s12-d3-mie_ig",
+     "fecha": "2027-01-13",
+     "hora": "12:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "foto",
+     "semana": 12
+    },
+    {
+     "id": "s12-d4-jue_wa",
+     "fecha": "2027-01-14",
+     "hora": "09:00",
+     "estado": "esquema",
+     "red": "whatsapp",
+     "formato": "estado",
+     "semana": 12
+    },
+    {
+     "id": "s12-d5-vie_ig",
+     "fecha": "2027-01-15",
+     "hora": "10:00",
+     "estado": "esquema",
+     "red": "instagram",
+     "formato": "carrusel",
+     "semana": 12
+    }
+   ],
+   "sala_producir": [
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T10:02:42.768419+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0001",
+       "dry_run": false,
+       "fila_id": "s1-d1-lun_ig"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T10:02:44.135685+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0002",
+       "dry_run": false,
+       "fila_id": "s1-d1-fb_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T10:02:45.450307+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0004",
+       "dry_run": false,
+       "fila_id": "s1-d1-hist_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T16:20:22.060706+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0001",
+       "dry_run": false,
+       "fila_id": "s1-d1-lun_ig"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T16:20:24.016984+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0002",
+       "dry_run": false,
+       "fila_id": "s1-d1-fb_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T16:20:25.940822+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0004",
+       "dry_run": false,
+       "fila_id": "s1-d1-hist_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T20:20:22.238146+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0001",
+       "dry_run": false,
+       "fila_id": "s1-d1-lun_ig"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T20:20:24.474739+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0002",
+       "dry_run": false,
+       "fila_id": "s1-d1-fb_lun"
+      }
+     }
+    },
+    {
+     "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5",
+     "logical_period": "parte:2a93029a-d4e5-439e-87a8-4b67afdfec33",
+     "operation_type": "PIEZAS.intake.brief/parte-listo.producir",
+     "created_at": "2026-10-21T20:20:26.278525+00:00",
+     "payload": {
+      "envelope_payload": {
+       "parte_id": "2a93029a-d4e5-439e-87a8-4b67afdfec33",
+       "brief_id": "BRF-0004",
+       "dry_run": false,
+       "fila_id": "s1-d1-hist_lun"
+      }
+     }
+    }
+   ]
+  }
+ },
+ "tipos_de_grupo": [
+  {
+   "familia": "brief_mesa",
+   "tope_encargo_usd": 1.6,
+   "activo": true
+  },
+  {
+   "familia": "carrusel_ig_v1",
+   "tope_encargo_usd": 2.5,
+   "activo": true
+  },
+  {
+   "familia": "carrusel_mesa",
+   "tope_encargo_usd": 5,
+   "activo": true
+  },
+  {
+   "familia": "concepto_mesa",
+   "tope_encargo_usd": 5,
+   "activo": true
+  },
+  {
+   "familia": "kit_historias",
+   "tope_encargo_usd": 2.5,
+   "activo": true
+  },
+  {
+   "familia": "kit_mesa",
+   "tope_encargo_usd": 5,
+   "activo": false
+  },
+  {
+   "familia": "post_img",
+   "tope_encargo_usd": 2.5,
+   "activo": true
+  },
+  {
+   "familia": "video_mesa",
+   "tope_encargo_usd": 10,
+   "activo": false
+  }
+ ],
+ "formatos_por_red": [
+  {
+   "red": "instagram",
+   "formato": "anuncio_imagen",
+   "lead_dias": 9,
+   "produccion": "opera",
+   "max_por_dia": 3,
+   "familia": null
+  },
+  {
+   "red": "instagram",
+   "formato": "anuncio_carrusel",
+   "lead_dias": 9,
+   "produccion": "opera",
+   "max_por_dia": 2,
+   "familia": null
+  },
+  {
+   "red": "facebook",
+   "formato": "anuncio_imagen",
+   "lead_dias": 9,
+   "produccion": "opera",
+   "max_por_dia": 3,
+   "familia": null
+  },
+  {
+   "red": "facebook",
+   "formato": "anuncio_carrusel",
+   "lead_dias": 9,
+   "produccion": "opera",
+   "max_por_dia": 2,
+   "familia": null
+  },
+  {
+   "red": "linkedin",
+   "formato": "texto",
+   "lead_dias": 4,
+   "produccion": "opera",
+   "max_por_dia": 2,
+   "familia": null
+  },
+  {
+   "red": "youtube",
+   "formato": "video",
+   "lead_dias": 9,
+   "produccion": "espera_brazo",
+   "max_por_dia": 1,
+   "familia": null
+  },
+  {
+   "red": "instagram",
+   "formato": "foto",
+   "lead_dias": 5,
+   "produccion": "opera",
+   "max_por_dia": 3,
+   "familia": "post_img"
+  },
+  {
+   "red": "facebook",
+   "formato": "foto",
+   "lead_dias": 5,
+   "produccion": "opera",
+   "max_por_dia": 3,
+   "familia": "post_img"
+  },
+  {
+   "red": "linkedin",
+   "formato": "foto",
+   "lead_dias": 5,
+   "produccion": "opera",
+   "max_por_dia": 2,
+   "familia": "post_img"
+  },
+  {
+   "red": "instagram",
+   "formato": "carrusel",
+   "lead_dias": 6,
+   "produccion": "opera",
+   "max_por_dia": 2,
+   "familia": "carrusel_ig_v1"
+  },
+  {
+   "red": "facebook",
+   "formato": "carrusel",
+   "lead_dias": 6,
+   "produccion": "opera",
+   "max_por_dia": 2,
+   "familia": "carrusel_ig_v1"
+  },
+  {
+   "red": "linkedin",
+   "formato": "carrusel",
+   "lead_dias": 6,
+   "produccion": "opera",
+   "max_por_dia": 2,
+   "familia": "carrusel_ig_v1"
+  },
+  {
+   "red": "instagram",
+   "formato": "historia",
+   "lead_dias": 4,
+   "produccion": "opera",
+   "max_por_dia": 10,
+   "familia": "kit_historias"
+  },
+  {
+   "red": "facebook",
+   "formato": "historia",
+   "lead_dias": 4,
+   "produccion": "opera",
+   "max_por_dia": 10,
+   "familia": "kit_historias"
+  },
+  {
+   "red": "whatsapp",
+   "formato": "estado",
+   "lead_dias": 4,
+   "produccion": "opera",
+   "max_por_dia": 5,
+   "familia": "kit_historias"
+  },
+  {
+   "red": "instagram",
+   "formato": "reel",
+   "lead_dias": 7,
+   "produccion": "espera_brazo",
+   "max_por_dia": 2,
+   "familia": "video_mesa"
+  },
+  {
+   "red": "facebook",
+   "formato": "reel",
+   "lead_dias": 7,
+   "produccion": "espera_brazo",
+   "max_por_dia": 2,
+   "familia": "video_mesa"
+  },
+  {
+   "red": "tiktok",
+   "formato": "video",
+   "lead_dias": 7,
+   "produccion": "espera_brazo",
+   "max_por_dia": 3,
+   "familia": "video_mesa"
+  },
+  {
+   "red": "youtube",
+   "formato": "short",
+   "lead_dias": 7,
+   "produccion": "espera_brazo",
+   "max_por_dia": 2,
+   "familia": "video_mesa"
+  }
+ ],
+ "sala_producir_tomado_en": "2026-11-10T20:50:38.371Z"
+}

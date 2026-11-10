@@ -114,9 +114,9 @@ describe('nace APAGADO · los tres candados', () => {
     const fuera = await montar({ config: { estado_cadena: 'ensayo', clientes_ensayo: [OTRO] } })
     const r2 = await llamar(fuera.al, fuera.c, { dry_run: false })
     expect(r2.status).toBe(409); expect(r2.cuerpo.code).toBe('E-CADENA-NO-ADMITIDO'); expect(fuera.al.sala.size).toBe(0)
-    const dentro = await montar({ config: { estado_cadena: 'ensayo', clientes_ensayo: [CLIENTE] } })
+    const dentro = await montar({ campana: { tope_gasto_usd: 40 }, config: { estado_cadena: 'ensayo', clientes_ensayo: [CLIENTE] } })
     expect((await llamar(dentro.al, dentro.c, { dry_run: false })).cuerpo).toMatchObject({ emitidos: 3, dry_run: false })
-    const enc = await montar({ config: { estado_cadena: 'encendida' } })
+    const enc = await montar({ campana: { tope_gasto_usd: 40 }, config: { estado_cadena: 'encendida' } })
     expect((await llamar(enc.al, enc.c, { dry_run: false })).cuerpo).toMatchObject({ emitidos: 3 })
   })
   it('candado 3 · la oficina: los sobres van a la PUERTA de la oficina y este módulo no toca ninguna tabla ni nombre de la oficina', () => {
