@@ -68,13 +68,13 @@ export async function filasLotes(al: Almacen, cuerpo: Record<string, unknown>, a
   if (c.seco === true || !al.enviosDeLote) return { status: 200, cuerpo: { lotes, version } }
   const salen: LoteVencido[] = [], muertos: Array<Record<string, unknown>> = []
   for (const l of lotes) {
-    const e = await al.enviosDeLote(c.client_id, l.lote)
+    const e = await al.enviosDeLote(c.client_id, l.lote, l.idempotency_key)
     const d = decidirLote(l, e, ahora)
     if (d.tipo === 'sano') { salen.push({ ...l, idempotency_key: d.llave }); continue }
-    if (d.tipo === 'agotado') { muertos.push({ lote: l.lote, accion: 'agotado', envios: d.envios }); continue }
-    salen.push({ ...l, idempotency_key: d.llave })
+    // agotado: no sale más; el buzón con la MISMA clave suma una repetición (o abre el incidente si nunca se abrió)
+    if (d.tipo === 'reintentar') salen.push({ ...l, idempotency_key: d.llave })
     const aviso = al.avisarLoteMuerto ? await al.avisarLoteMuerto({ ...avisoDeLote(c, l, d, e), workflow_id: cadena(cuerpo.workflow_id) ?? null, workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? null }) : { ok: false as const, error: 'el almacén no avisa' }
-    muertos.push({ lote: l.lote, accion: 'reintento', intento: d.intento, aviso })
+    muertos.push(d.tipo === 'reintentar' ? { lote: l.lote, accion: 'reintento', intento: d.intento, aviso } : { lote: l.lote, accion: 'agotado', envios: d.envios, aviso })
   }
   return { status: 200, cuerpo: muertos.length ? { lotes: salen, version, lotes_muertos: muertos } : { lotes: salen, version } }
 }

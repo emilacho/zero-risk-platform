@@ -1,0 +1,21 @@
+{
+  "_de_donde": "Filas REALES de sala_event_log (evento de entrada del lote, journey BRIEF) de Náufrago, leídas el 2026-11-10 ~19:10Z por CC1 en solo lectura. llave_del_sobre se recalculó como la arma lotes.ts (campaña:semana:versión:huella) desde las fila_ids reales del sobre.",
+  "filas": [
+    {
+      "client_id": "0a2ffbd4-957c-4315-a37f-b9e4fbbbb312",
+      "lote": "2026-W46",
+      "llave_del_sobre": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a:2026-W46:1:077fbaac",
+      "operation_type": "BRIEF.intake.cadena/vigia.briefear",
+      "idempotency_key": "d41a00366c8d398cc74003df57b507f878ea3d2ee62edb1a35749e42220b5dc1",
+      "created_at": "2026-11-10T14:33:31.096513+00:00"
+    },
+    {
+      "client_id": "0a2ffbd4-957c-4315-a37f-b9e4fbbbb312",
+      "lote": "2026-W47",
+      "llave_del_sobre": "28de888e-b3f2-4aca-86b3-2c7f7bf6685a:2026-W47:1:afa0bade",
+      "operation_type": "BRIEF.intake.cadena/vigia.briefear",
+      "idempotency_key": "d2ff676b3d9854a0a964a7807912bea6da85c6c33787fbab277bb8e0a56fe449",
+      "created_at": "2026-11-10T14:33:32.176553+00:00"
+    }
+  ]
+}

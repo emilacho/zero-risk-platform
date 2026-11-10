@@ -23,6 +23,7 @@ import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
 import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos-de-emilio/registrar'
 import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
+import { enviosDesdeElRegistro, llavesDelRegistro } from './lote-muerto'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
@@ -241,11 +242,11 @@ export function almacenDeSupabase(): Almacen {
       if (error) fallo(error)
     },
     async cambiarEstadoDeFilas(campanaId, version, ids, estado) { const { error } = await db.from('cadena_calendario_filas').update({ estado }).eq('campana_id', campanaId).eq('calendario_version', version).in('id', ids); if (error) fallo(error) },
-    // 10-nov · LOTE MUERTO · los envíos del lote según la sala (el registro de eventos es la verdad de «se mandó»), contados por viaje (`correlation_id`)
-    async enviosDeLote(clientId, lote) {
-      const filas = await lista<{ correlation_id: string | null; created_at: string }>(db.from('sala_event_log').select('correlation_id, created_at').eq('client_id', clientId).eq('logical_period', lote).eq('journey_type', 'BRIEF').order('created_at', { ascending: false }).limit(500))
-      const viajes = new Set(filas.map((f) => f.correlation_id ?? `sin:${f.created_at}`))
-      return { envios: viajes.size, ultimo_en: filas[0]?.created_at ?? null }
+    // 10-nov · LOTE MUERTO · los envíos de ESTA llave según la sala: las llaves exactas de su entrada (original + reintentos), no cliente + semana
+    async enviosDeLote(clientId, lote, llave) {
+      const llaves = llavesDelRegistro(clientId, lote, llave)
+      const filas = await lista<{ idempotency_key: string; created_at: string }>(db.from('sala_event_log').select('idempotency_key, created_at').eq('client_id', clientId).in('idempotency_key', llaves))
+      return enviosDesdeElRegistro(llaves, filas)
     },
     async avisarLoteMuerto(a) {
       try {

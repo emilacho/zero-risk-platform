@@ -248,10 +248,10 @@ export interface Almacen {
   ultimaVersionDeCalendario(campanaId: string): Promise<number>
   /**
    * 10-nov · LOTE MUERTO (`lote-muerto.ts`) · OPCIONALES: sin ellos el reloj manda los lotes como siempre.
-   * `enviosDeLote` = cuántos envíos distintos (por `correlation_id`) del viaje BRIEF tiene la sala para este cliente y este período, y cuándo fue el último. Si falla, LANZA (un error no es «cero envíos»).
+   * `enviosDeLote` = cuántos envíos lleva ESTA llave de lote (ella y sus reintentos, por la llave exacta del registro de la sala) y cuándo fue el último. Si falla, LANZA (un error no es «cero envíos»).
    * `avisarLoteMuerto` = abre (o suma una repetición a) el incidente del buzón C1; nunca lanza: devuelve la acción o el error.
    */
-  enviosDeLote?(clientId: string, lote: string): Promise<{ envios: number; ultimo_en: string | null }>
+  enviosDeLote?(clientId: string, lote: string, llave: string): Promise<{ envios: number; ultimo_en: string | null }>
   avisarLoteMuerto?(a: { clave: string; client_id: string; titulo: string; detalle: string; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; accion: string } | { ok: false; error: string }>
   // validaciones
   guardarValidaciones(campanaId: string, objeto: ObjetoDeValidacion, version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[], seco: boolean): Promise<void>
