@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const crudo = (p: string) => fs.readFileSync(path.join(process.cwd(), p), 'utf8').split(String.fromCharCode(13)).join('').replace(/--.*$/gm, '')
-const MIG_COLATERALES = crudo('supabase/migrations/202611101600_colaterales_ediciones_y_retoques.sql')
+const MIG_COLATERALES = crudo('supabase/migrations/202611101700_colaterales_ediciones_y_retoques.sql')
 
 /** columnas de una tabla, leídas de su migración (sin importar mayúsculas) */
 function columnasDe(sql: string, tabla: string): Set<string> {
