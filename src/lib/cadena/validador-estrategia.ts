@@ -4,7 +4,7 @@
  * S06 pares red-formato · S07 pendientes con salida · S08 fechas que importan sin cita ni motivo ·
  * S10 la llave de cada fecha existe o es nueva a sabiendas · S11 la temporada del negocio con cita que respalda su tramo (sin ella, pendiente: nunca bloquea).
  */
-import { citaAparece, numerosEn } from './texto'
+import { citaEnDocumento, numerosEn } from './texto'
 import { diaUnoDelPlan, hitoCuadraConFechas, MARGEN_DE_SEMANA_DIAS } from './fechas-en-texto'
 import type { Estrategia, FormatosPorRed, Hallazgo, Severidad } from './tipos'
 import { CLASES_DE_FECHA } from './tipos'
@@ -102,7 +102,7 @@ export function validarEstrategia(x: unknown, ins: InsumosEstrategia): Hallazgo[
     ...e.fechas_que_importan.filter((x2) => x2.origen === 'plan' && claseDe(x2) !== 'temporada_del_negocio').map((x2) => ({ donde: `fecha que importa ${x2.tipo}`, cita: x2.cita_plan })),
   ]
   for (const c of citas) {
-    if (!citaAparece(ins.planTexto, c.cita)) {
+    if (!citaEnDocumento(ins.planTexto, c.cita)) { // lector común (texto o JSON) · GO Lenovo 10-nov 18:48Z
       out.push(h('S02', 'bloquea', c.donde, `la cita «${String(c.cita ?? '').slice(0, 80)}» no aparece literal en el plan`, 'texto del plan', 'citar una frase que exista en el plan o quitar la regla; no inventar reglas del plan'))
     }
   }
