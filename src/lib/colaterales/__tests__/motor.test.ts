@@ -225,7 +225,7 @@ describe('agnóstico (CORRECCIÓN Lenovo 13:16Z)', () => {
   it('ningún archivo del motor nombra a un cliente, una ciudad, un rubro ni un dato de sus documentos', () => {
     const DIR = 'src/lib/colaterales'
     const archivos = fs.readdirSync(DIR).filter((f) => f.endsWith('.ts')).map((f) => path.join(DIR, f))
-    expect(archivos.map((a) => path.basename(a)).sort()).toEqual(['almacen.ts', 'gravedad.ts', 'motor.ts', 'red.ts'])
+    expect(archivos.map((a) => path.basename(a)).sort()).toEqual(['almacen.ts', 'aplicar.ts', 'escritores.ts', 'gravedad.ts', 'motor.ts', 'red.ts'])
     const PROHIBIDAS = ['naufrago', 'náufrago', 'olon', 'olón', 'guayaquil', 'ecuador', 'ceviche', 'encebollado', 'costa', 'playa', 'restaurante', 'motorizado', 'extintor', 'bomberos', 'linkedin', 'seguridad industrial', 'zero risk']
     for (const f of archivos) {
       const t = fs.readFileSync(f, 'utf8').toLowerCase()

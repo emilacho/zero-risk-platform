@@ -122,6 +122,8 @@ export class AlmacenMemoria implements Almacen {
   async campanasActivas() { return structuredClone(this.campanas.filter((c) => c.estado === 'activa')) }
   async ultimaEstrategia(campanaId: string) { return this.estrategias.filter((e) => e.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarEstrategia(e: EstrategiaGuardada) { this.estrategias.push(e) }
+  async estrategiaEnVersion(campanaId: string, version: number) { return this.estrategias.find((e) => e.campana_id === campanaId && e.version === version) ?? null }
+  async insertarEstrategiaSiLibre(e: EstrategiaGuardada) { if (this.estrategias.some((x) => x.campana_id === e.campana_id && x.version === e.version)) return false; this.estrategias.push(e); return true }
   // 31-oct (nuevo orden · T1) · imita el UNIQUE (campana_id, version) de la base
   async ultimoBriefCreativo(campanaId: string) { return structuredClone(this.briefsCreativos.filter((b) => b.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null) }
   async briefsDe(campanaId: string) { return structuredClone(this.briefsCreativos.filter((b) => b.campana_id === campanaId).sort((a, b) => a.version - b.version)) }
