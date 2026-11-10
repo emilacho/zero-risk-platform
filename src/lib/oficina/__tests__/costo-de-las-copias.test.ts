@@ -170,7 +170,7 @@ describe('① ③ la llave del acuse es la de «Registrar» (flujo vivo y constr
   const llaveDe = (nodos: Nodo[], nombre: string) => nodos.find((x) => x.name === nombre)?.parameters.headerParameters?.parameters?.find((h) => h.name === 'x-sala-dispatch-key')?.value
   const ENV = '={{ $env.SALA_DISPATCH_KEY }}'
   it('🔴 la copia del flujo vivo: «⓪ Acuse del turno» manda la MISMA llave que «③ Registrar el resultado», y es la del entorno', () => {
-    const w = JSON.parse(readFileSync(path.join(__dirname, '../../../../scripts/ops/oficina-marketing/vivo/bTbWL9lUvQCfStAz.json'), 'utf8')) as { nodes: Nodo[] }
+    const w = JSON.parse(readFileSync(path.join(__dirname, '../../../../scripts/ops/oficina-marketing/aplicado/bTbWL9lUvQCfStAz-llave-del-acuse-2026-11-10.json'), 'utf8')) as { nodes: Nodo[] }
     expect(llaveDe(w.nodes, '⓪ Acuse del turno')).toBe(llaveDe(w.nodes, '③ Registrar el resultado'))
     expect(llaveDe(w.nodes, '⓪ Acuse del turno')).toBe(ENV)
   })
