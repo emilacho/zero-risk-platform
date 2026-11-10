@@ -93,6 +93,18 @@ describe('el resumen de la versión anterior (1.ª condición: nunca el texto en
     expect(r).not.toContain('**')
     expect(r.length).toBeLessThan(V2.length / 2)
   })
+  it('🔴 CC7 · las dos órdenes de la opción A: conservar la gran idea corrigiendo SOLO lo pedido, y COMPLETAR el banco sin repetir', () => {
+    expect(r).toContain('CONSERVA su gran idea y corrige SOLO lo pedido')
+    expect(r).toContain('COMPLÉTALO; no repitas estas, suma las que faltan')
+  })
+  it('🔴 CC7 · de la gran idea va solo la primera línea; los asteriscos de una idea del banco se limpian', () => {
+    const md = '## Gran idea\n**La idea** · su frase\nUn párrafo que explica la idea y no debe viajar.\n## Banco de ideas\n- C1-I01 · instagram · foto · una **idea** con marca · mensaje: m · gancho: g · protagonista: p · serie: ninguna · foto:ninguna'
+    const s = resumenDeLaVersionAnterior(md, 1)
+    expect(s).toContain('## Gran idea\nLa idea · su frase\n')
+    expect(s).not.toContain('Un párrafo que explica')
+    expect(s).toContain('- C1-I01 · instagram · ')
+    expect(s.split('\n').find((l) => l.startsWith('- C1-I01'))).not.toContain('*')
+  })
   it('🔴 cada sección va acotada y cada idea a 120 caracteres', () => {
     const largo = `## Gran idea\nUna idea\n## Por qué funciona\n${'x'.repeat(5000)}\n## Banco de ideas\n- C1-I01 · instagram · foto · ${'y'.repeat(400)} · mensaje: m · gancho: g · protagonista: p · serie: ninguna · foto:ninguna`
     const s = resumenDeLaVersionAnterior(largo, 1)
