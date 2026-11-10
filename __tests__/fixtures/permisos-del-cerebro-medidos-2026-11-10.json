@@ -1,0 +1,678 @@
+{
+ "medido": "2026-11-10T18:35:54.989Z",
+ "tablas": [
+  "apify_raw",
+  "brain_embed_costs",
+  "cerebro_alertas",
+  "cerebro_aprendizaje_catalogo",
+  "cerebro_aprendizaje_indice",
+  "cerebro_aprendizaje_medidas",
+  "cerebro_avisos",
+  "cerebro_comentarios_competencia",
+  "cerebro_consultas",
+  "cerebro_credenciales",
+  "cerebro_diario_corridas",
+  "cerebro_dueno_preguntas",
+  "cerebro_fichas",
+  "cerebro_ingresos",
+  "cerebro_oportunidades",
+  "cerebro_pasos_diarios",
+  "cerebro_pedidos",
+  "cerebro_portero_corridas",
+  "cerebro_portero_pausas",
+  "cerebro_tendencias",
+  "cerebro_unidades_vistas",
+  "cerebro_vigilancia",
+  "client_brain_chunks",
+  "client_brain_snapshots",
+  "client_sede_datos",
+  "client_social_images",
+  "client_videos",
+  "client_voc_library",
+  "client_web_pages",
+  "ingress_quarantine"
+ ],
+ "permisos_que_se_quitan": [
+  {
+   "tabla": "apify_raw",
+   "rol": "anon",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "apify_raw",
+   "rol": "anon",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "apify_raw",
+   "rol": "anon",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "apify_raw",
+   "rol": "authenticated",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "apify_raw",
+   "rol": "authenticated",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "apify_raw",
+   "rol": "authenticated",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "cerebro_alertas",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_alertas",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_alertas",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_alertas",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_alertas",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_alertas",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_alertas",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_alertas",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_comentarios_competencia",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_comentarios_competencia",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_comentarios_competencia",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_comentarios_competencia",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_comentarios_competencia",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_comentarios_competencia",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_comentarios_competencia",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_comentarios_competencia",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_consultas",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_consultas",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_consultas",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_consultas",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_consultas",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_consultas",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_consultas",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_consultas",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_dueno_preguntas",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_dueno_preguntas",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_dueno_preguntas",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_dueno_preguntas",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_dueno_preguntas",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_dueno_preguntas",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_dueno_preguntas",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_dueno_preguntas",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_pedidos",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_pedidos",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_pedidos",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_pedidos",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_pedidos",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_pedidos",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_pedidos",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_pedidos",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_portero_pausas",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_portero_pausas",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_portero_pausas",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_portero_pausas",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_portero_pausas",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_portero_pausas",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_portero_pausas",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_portero_pausas",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_tendencias",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_tendencias",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_tendencias",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_tendencias",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "cerebro_tendencias",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "cerebro_tendencias",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "cerebro_tendencias",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "cerebro_tendencias",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "anon",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "anon",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "anon",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "authenticated",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "authenticated",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "rol": "authenticated",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "anon",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "anon",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "anon",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "authenticated",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "authenticated",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "rol": "authenticated",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "anon",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "anon",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "anon",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "anon",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "anon",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "anon",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "anon",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "authenticated",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "authenticated",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "authenticated",
+   "permiso": "MAINTAIN"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "authenticated",
+   "permiso": "REFERENCES"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "authenticated",
+   "permiso": "TRIGGER"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "authenticated",
+   "permiso": "TRUNCATE"
+  },
+  {
+   "tabla": "client_voc_library",
+   "rol": "authenticated",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "client_web_pages",
+   "rol": "anon",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "client_web_pages",
+   "rol": "anon",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "client_web_pages",
+   "rol": "anon",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "client_web_pages",
+   "rol": "authenticated",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "client_web_pages",
+   "rol": "authenticated",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "client_web_pages",
+   "rol": "authenticated",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "ingress_quarantine",
+   "rol": "anon",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "ingress_quarantine",
+   "rol": "anon",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "ingress_quarantine",
+   "rol": "anon",
+   "permiso": "UPDATE"
+  },
+  {
+   "tabla": "ingress_quarantine",
+   "rol": "authenticated",
+   "permiso": "DELETE"
+  },
+  {
+   "tabla": "ingress_quarantine",
+   "rol": "authenticated",
+   "permiso": "INSERT"
+  },
+  {
+   "tabla": "ingress_quarantine",
+   "rol": "authenticated",
+   "permiso": "UPDATE"
+  }
+ ],
+ "reglas_que_cambian": [
+  {
+   "tabla": "apify_raw",
+   "regla": "apify_raw_auth_full",
+   "permissive": "PERMISSIVE",
+   "roles": "{authenticated}",
+   "cmd": "ALL",
+   "qual": "is_admin()",
+   "with_check": "is_admin()"
+  },
+  {
+   "tabla": "client_brain_chunks",
+   "regla": "chunks_admin_full",
+   "permissive": "PERMISSIVE",
+   "roles": "{authenticated}",
+   "cmd": "ALL",
+   "qual": "(EXISTS ( SELECT 1\n   FROM app_roles\n  WHERE ((app_roles.user_id = auth.uid()) AND (app_roles.role = 'admin'::text))))",
+   "with_check": "(EXISTS ( SELECT 1\n   FROM app_roles\n  WHERE ((app_roles.user_id = auth.uid()) AND (app_roles.role = 'admin'::text))))"
+  },
+  {
+   "tabla": "client_brain_snapshots",
+   "regla": "authenticated_read",
+   "permissive": "PERMISSIVE",
+   "roles": "{authenticated}",
+   "cmd": "SELECT",
+   "qual": "true",
+   "with_check": null
+  },
+  {
+   "tabla": "client_voc_library",
+   "regla": "auth_full_client_voc_library",
+   "permissive": "PERMISSIVE",
+   "roles": "{authenticated}",
+   "cmd": "ALL",
+   "qual": "true",
+   "with_check": "true"
+  },
+  {
+   "tabla": "client_web_pages",
+   "regla": "web_pages_auth_full",
+   "permissive": "PERMISSIVE",
+   "roles": "{authenticated}",
+   "cmd": "ALL",
+   "qual": "is_admin()",
+   "with_check": "is_admin()"
+  }
+ ],
+ "funciones": [
+  {
+   "proname": "brain_reembed_source_row",
+   "secdef": true,
+   "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+   "cfg": ""
+  },
+  {
+   "proname": "prepare_voc_content",
+   "secdef": false,
+   "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+   "cfg": ""
+  }
+ ]
+}
