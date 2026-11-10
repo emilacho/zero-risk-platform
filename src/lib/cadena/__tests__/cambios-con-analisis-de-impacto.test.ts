@@ -265,6 +265,8 @@ describe('10-nov · CC7 (a): el pedido de Emilio sigue vivo UNA vez si el brief 
     expect(pedidoDeCambiosVigente([v(1, 'devuelta', MOTIVO_CAMBIOS_DE_EMILIO)], 2, null)).toMatchObject({ nota: NOTA, heredada: false })
     // si la versión que siguió al pedido salió VALIDADA, el pedido ya se cumplió: no se hereda (abrir otra vez sin nota = «ya hecha»)
     expect(pedidoDeCambiosVigente([v(1, 'devuelta', MOTIVO_CAMBIOS_DE_EMILIO), v(2, 'validada', null)], 3, null)).toEqual({ nota: null, base: null, heredada: false })
+    // una versión DESCARTADA (la mesa no entregó texto) no hereda: sin texto no hay base y el v4 saldría sin ella (CC7 · 🟡 de #982)
+    expect(pedidoDeCambiosVigente([v(1, 'devuelta', MOTIVO_CAMBIOS_DE_EMILIO), { version: 2, estado: 'descartada' as const, motivo: null, devolucion_texto: null, texto_md: null }], 3, null)).toEqual({ nota: null, base: null, heredada: false })
     // la herencia salta UNA versión, no dos
     expect(pedidoDeCambiosVigente([v(1, 'devuelta', MOTIVO_CAMBIOS_DE_EMILIO), v(2, 'devuelta', null), v(3, 'devuelta', null)], 4, null)).toMatchObject({ nota: null, base: null })
   })
@@ -276,4 +278,14 @@ it('🔴 en el camino real: si la versión tras los cambios sale VALIDADA, abrir
   await briefAbrir(al, wf(), AHORA)
   expect(await recibirBrief(al, entrega(2, QUE_CAMBIO + BRIEF), AHORA)).toMatchObject({ estado: 'validada' })
   expect((await briefAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ ya_hecha: true, version: 2 })
+})
+
+it('🔴 en el camino real: tras «Pedir cambios», si la mesa del brief no entrega (DESCARTADA), abrir otra vez no hereda la nota: brief agotado', async () => {
+  const al = await conConceptoListo()
+  await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'brief', nota: NOTA }), AHORA)
+  expect((await briefAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ version: 2 })
+  await al.actualizarBriefCreativo(CAMP, 2, { estado: 'descartada' })
+  const r = await briefAbrir(al, wf(), AHORA)
+  expect(r.status).toBe(409)
+  expect(r.cuerpo).toMatchObject({ error: 'brief_agotado', necesita_humano: true })
 })
