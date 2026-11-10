@@ -116,6 +116,14 @@ describe.each(CASOS)('$nombre · la mesa de punta a punta', (k) => {
     expect(material.map((x) => x.texto)).toEqual(['(la mesa de reubicación no pide material al cerebro: decide con el marco de la cadena)'])
     expect(r.cuerpo.accion).toBe('esperar')
   })
+  it('🔴 sin jefe-marketing activo la mesa FALLA visible y la cadena lo sabe (entrega sin texto, con el motivo del fallo); nunca la deja esperando', async () => {
+    const m = await montar(k, { directorio: DIRECTORIO.map((t) => (t.agente === 'jefe-marketing' ? { ...t, activo: false } : t)) })
+    expect(m.a.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'fallido' })
+    expect(m.hecho.reubicaciones).toHaveLength(1)
+    expect(m.hecho.reubicaciones[0]).toMatchObject({ campana_id: CAMPANA, version: 1, texto: null })
+    expect(String(m.hecho.reubicaciones[0].motivo)).toMatch(/^fallo: .*dirección/)
+    expect(m.hecho.briefs + m.hecho.conceptos).toBe(0)
+  })
   it('la plantilla apagada no abre; sin el puerto de reubicación la mesa cierra igual y avisa a alertas', async () => {
     expect((await montar(k, { plantillaActiva: false })).a).toMatchObject({ status: 409, cuerpo: { error: 'plantilla_inactiva' } })
     const m = await montar(k, { sinPuerto: true })
