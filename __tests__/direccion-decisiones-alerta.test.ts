@@ -69,13 +69,19 @@ describe('la decisión como alerta: Nueva o Revisada', () => {
     expect(revisadas).toEqual(['p140', 'p3'])
     expect(r.decisiones.every((d) => d.alerta?.clave === claveDeAlerta(d))).toBe(true)
   })
-  it('🔴 contadores ya contados: Nuevas y Revisadas de las pendientes, Resueltas del registro de 7 días (solo preguntas)', async () => {
+  it('🔴 contadores ya contados: Nuevas y Revisadas de las pendientes, Resueltas del registro de 7 días (preguntas y firmas)', async () => {
     const resuelta = (id: string, estado: string) => ({ ...pregunta(9), id, tema: `r ${id}`, tema_norm: `r${id}`, estado, decidido_en: hace(3) })
     const db = base().semilla('finanzas_tableros', [TABLERO]).semilla('dueno_preguntas', [pregunta(1), pregunta(2), resuelta('r1', 'respondida'), resuelta('r2', 'descartada')])
       .semilla('alertas_vistas', [vista('decision:dueno_preguntas:p1', hace(1))])
     const r = await leerDecisiones(ctx(db))
     expect(r.contestadas).toHaveLength(2)
-    expect(r.contadores).toEqual({ nuevas: 2, revisadas: 1, resueltas: 2, resueltas_ventana_dias: 7, resueltas_cuenta: 'preguntas' })
+    expect(r.contadores).toEqual({ nuevas: 2, revisadas: 1, resueltas: 2, resueltas_ventana_dias: 7, resueltas_cuenta: 'preguntas_y_firmas' })
+  })
+  it('🔴 Resueltas cuenta también la firma del tablero financiero (lo que dice `resueltas_cuenta`)', async () => {
+    const firmado = { id: 't0', client_id: C1, version: 1, estado: 'firmado', vigente: false, dry_run: false, creado_en: hace(30), firmado_en: hace(20), firma_con_cambios: null }
+    const r = await leerDecisiones(ctx(base().semilla('finanzas_tableros', [TABLERO, firmado])))
+    expect(r.contestadas.map((c) => c.tipo)).toEqual(['firma_de_finanzas'])
+    expect(r.contadores).toMatchObject({ resueltas: 1, resueltas_cuenta: 'preguntas_y_firmas' })
   })
   it('🔴 sin libreta legible Nuevas y Revisadas salen null (nunca 0); Resueltas sigue', async () => {
     const db = base().semilla('finanzas_tableros', [TABLERO])
