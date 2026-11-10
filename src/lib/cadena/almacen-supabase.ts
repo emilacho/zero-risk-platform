@@ -40,6 +40,7 @@ import { ordenarLlaves } from './fechas-del-cliente'
 import { preguntar } from '@/lib/dueno-preguntas/preguntas'
 import { cerebroPorHttp } from '@/lib/dueno-preguntas/cerebro-http'
 import { baseDeRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
+import { perfilPorHttp } from '@/lib/perfil-del-publico/por-http'
 import { aperturaDeLasSedes, estadoDeLasSedes } from '../sedes/por-abrir'
 import { esloganDelCliente, reglaDelEslogan } from '../manual/campos-del-manual'
 
@@ -171,6 +172,8 @@ export function almacenDeSupabase(): Almacen {
 
     // 10-nov (GO v3 · punto 2): las fotos PROPIAS con la MISMA regla que la oficina (la lectura vive en la oficina)
     async fotosPropias(clientId) { return idsDeFotosPropias(db, clientId) },
+    // 10-nov · perfil del público T2: por la PUERTA del portero (`/api/brain/consultar`), con la llave interna; nunca lanza
+    async perfilDelPublico(clientId, mesa) { return perfilPorHttp({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '' })(clientId, mesa) },
     async cargarContexto(clientId, planId): Promise<ContextoDelCliente | null> {
       const plan = await uno<{ content_text: string | null; content: string | null; created_at: string }>(db.from('client_historical_outputs').select('content_text, content, created_at').eq('id', planId).eq('client_id', clientId).maybeSingle())
       if (!plan) return null

@@ -6,6 +6,7 @@
 import { contienePalabra, datosDeContacto, esTelefonoDeLaLista, normalizar } from './texto'
 import type { Ficha } from './tipos'
 import { importesEnTexto, numeroDeImporte } from '@/lib/moneda/por-pais'
+import { frasesDelPublicoSinFuente } from '../perfil-del-publico/lectores'
 
 export type Registro = 'tuteo' | 'voseo' | 'formal' | 'sin_dato'
 /** lo que el código sabe del cliente (de su manual, su ficha, su carta guardada y sus sedes) */
@@ -25,6 +26,10 @@ export interface FuentesDelCliente {
   /** false = no se pudieron leer los teléfonos / usuarios del cliente: lo que no esté en la lista es «no verificado» (sugerencia), nunca «falso» (bloquea) */
   telefonos_verificables?: boolean
   handles_verificables?: boolean
+  /** 10-nov · perfil del público T2: el texto del perfil vigente (null = no hay perfil); ausente = el chequeo de frases del público no corre */
+  perfil_del_publico_texto?: string | null
+  /** cuál de los tres estados, para que el motivo diga «no se pudo leer» y no «no hay» */
+  perfil_del_publico_estado?: 'vigente' | 'sin_perfil' | 'no_se_pudo_leer'
 }
 export interface PiezaDePost { pie_de_foto: string; hashtags: string[]; llamado?: string; nota_para_quien_publica?: string }
 export interface ContextoDeChequeo {
@@ -111,5 +116,10 @@ export function chequeosDePost(c: ContextoDeChequeo): Ficha[] {
 
   // 6 · imagen generada declarada
   if (c.imagen?.generada && !c.imagen.declarada_en_bandeja) f.push(ficha('imagen', 'bloquea', 'la imagen es generada y la bandeja no lo declara', 'honestidad de la imagen', 'marcar la pieza como imagen generada', n++))
+
+  // 7 · 10-nov · perfil del público T2: una frase entre comillas que el texto le atribuye al público tiene que estar textual en su perfil (aviso, nunca bloqueo)
+  if (c.fuentes.perfil_del_publico_texto !== undefined) {
+    for (const x of frasesDelPublicoSinFuente(`${texto}\n${c.pieza.llamado ?? ''}`, c.fuentes.perfil_del_publico_texto, c.fuentes.perfil_del_publico_estado === 'no_se_pudo_leer' ? 'no_se_pudo_leer' : 'sin_perfil')) f.push(ficha('texto', 'sugerencia', `frase del público sin fuente: «${x.frase}» (${x.motivo})`, 'perfil del público vigente del cliente', 'quitar la atribución al público o usar una frase del perfil tal cual', n++))
+  }
   return f
 }
