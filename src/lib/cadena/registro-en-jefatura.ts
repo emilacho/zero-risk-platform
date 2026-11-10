@@ -53,6 +53,8 @@ export const textoDelCalendario = (filas: Fila[]): string => filasConTema(filas)
  * empezar una línea. Si una sola falla, la vuelta entera no se puede leer (null) y el calendario se queda con sus temas: nunca se adivina a qué fila va un pedazo de texto.
  */
 export function temasDeLaVuelta(texto: string, filas: Fila[]): Map<string, string> | null {
+  // 🟡 de CC7: los saltos de Windows se normalizan antes de buscar cabeceras, y cada tema sale sin espacios ni saltos en los extremos (un salto final no es una corrección)
+  texto = texto.replace(/\r\n?/g, '\n')
   const fs = filasConTema(filas)
   const pos: number[] = []
   for (const f of fs) {
@@ -68,7 +70,7 @@ export function temasDeLaVuelta(texto: string, filas: Fila[]): Map<string, strin
   fs.forEach((f, k) => {
     const desde = pos[k] + cabeceraDeFila(f).length
     const hasta = k + 1 < fs.length ? pos[k + 1] - 1 : texto.length
-    out.set(f.id, texto.slice(desde, hasta))
+    out.set(f.id, texto.slice(desde, hasta).trim())
   })
   return out
 }

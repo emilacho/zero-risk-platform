@@ -103,6 +103,13 @@ describe('el calendario como documento (código puro)', () => {
     const m = temasDeLaVuelta(textoDelCalendario(filas).replace('dos', 'DOS'), filas)!
     expect([...m.entries()]).toEqual([['s1-a', 'uno'], ['s1-b', 'DOS\ncon salto'], ['s1-e', 'tres']])
   })
+  it('🔴 los restos de los extremos no viajan con el tema: salto final, saltos de Windows y espacios (🟡 de CC7)', () => {
+    const t = textoDelCalendario(filas)
+    const esperado = [['s1-a', 'uno'], ['s1-b', 'dos\ncon salto'], ['s1-e', 'tres']]
+    expect([...temasDeLaVuelta(`${t}\n`, filas)!.entries()]).toEqual(esperado)
+    expect([...temasDeLaVuelta(t.replace(/\n/g, '\r\n'), filas)!.entries()]).toEqual(esperado)
+    expect([...temasDeLaVuelta(t.replace('uno', 'uno  ').replace('tres', 'tres \t'), filas)!.entries()]).toEqual(esperado)
+  })
   it('🔴 una cabecera tocada, repetida, fuera de orden o a mitad de línea: no se lee nada (nunca se adivina)', () => {
     const t = textoDelCalendario(filas)
     const cab = cabeceraDeFila(filas[1])
@@ -254,6 +261,49 @@ describe.each(CASOS)('$nombre', (k) => {
       const r = await aplicarVueltaDelCalendario(x.al, { ...salidaDe(x.campanaId, texto), versiones: [] }, AHORA)
       expect(r.cuerpo.registro).toEqual({ corregidas: [], revertidas: [] })
       for (const m of k.malos) expect((await x.fila(m.tema)).estado).toBe('validada')
+    })
+    it('🔴 una vuelta sin cambios pero con restos (salto final, `\\r\\n`, espacios) no corrige nada: los temas quedan byte a byte (🟡 de CC7)', async () => {
+      const x = await hastaGuardar(k)
+      const antes = await x.filas()
+      const original = x.al.sobresDeRegistro[0].payload.texto
+      const conRestos = `${original.split('\n').map((l) => `${l}  `).join('\r\n')}\n`
+      const r = await aplicarVueltaDelCalendario(x.al, salidaDe(x.campanaId, conRestos), AHORA)
+      expect(r.cuerpo.registro).toEqual({ corregidas: [], revertidas: [] })
+      for (const f of await x.filas()) expect(f.tema).toBe(antes.find((y) => y.id === f.id)!.tema)
+    })
+    it('🔴 un tema guardado con espacios al final que vuelve igual no cuenta como corrección (queda byte a byte)', async () => {
+      const t = tandaDe(k)
+      const conEspacio = `${k.cumple}  `
+      t.piezas.find((p) => p.tema === k.cumple)!.tema = conEspacio
+      const x = await hastaGuardar(k, {}, t)
+      const guardado = (await x.filas()).find((f) => f.tema?.startsWith(k.cumple))!
+      const r = await aplicarVueltaDelCalendario(x.al, salidaDe(x.campanaId, `${x.al.sobresDeRegistro[0].payload.texto}\n`), AHORA)
+      expect(r.cuerpo.registro).toEqual({ corregidas: [], revertidas: [] })
+      expect((await x.filas()).find((f) => f.id === guardado.id)!.tema).toBe(guardado.tema)
+    })
+    it('🔴 una corrección real que vuelve con saltos de Windows y salto final se guarda limpia', async () => {
+      const x = await hastaGuardar(k)
+      const texto = `${corregir(x.al.sobresDeRegistro[0].payload.texto, k.malos.map((m) => [m.antes, m.despues])).replace(/\n/g, '\r\n')}\r\n`
+      const r = await aplicarVueltaDelCalendario(x.al, salidaDe(x.campanaId, texto), AHORA)
+      expect((r.cuerpo.registro as { corregidas: string[] }).corregidas).toHaveLength(2)
+      for (const m of k.malos) {
+        const limpio = m.tema.split(m.antes).join(m.despues)
+        expect((await x.filas()).some((f) => f.tema === limpio)).toBe(true)
+      }
+      for (const f of await x.filas()) expect(f.tema ?? '').not.toMatch(/[\r\n]|\s$/)
+    })
+    it('🔴 un tema que vuelve vacío o en más de una línea: esa fila se queda con su tema anterior, con aviso', async () => {
+      const x = await hastaGuardar(k)
+      const [m1, m2] = k.malos
+      const f1 = await x.fila(m1.tema), f2 = await x.fila(m2.tema)
+      const texto = corregir(x.al.sobresDeRegistro[0].payload.texto, [[m1.tema, m1.tema.split(m1.antes).join(`${m1.despues}\nhoy`)], [m2.tema, '']])
+      const r = await aplicarVueltaDelCalendario(x.al, salidaDe(x.campanaId, texto), AHORA)
+      expect(r.cuerpo.registro).toEqual({ corregidas: [], revertidas: [f1.id, f2.id] })
+      const g1 = (await x.filas()).find((f) => f.id === f1.id)!, g2 = (await x.filas()).find((f) => f.id === f2.id)!
+      expect(g1.tema).toBe(m1.tema)
+      expect(g2.tema).toBe(m2.tema)
+      expect(g1.avisos).toContain('la corrección de registro dejó el tema en más de una línea: se queda el tema anterior')
+      expect(g2.avisos).toContain('la corrección de registro dejó el tema vacío: se queda el tema anterior')
     })
     it('🔴 el aviso de una cita en otro registro va a la fila que la trae', async () => {
       const x = await hastaGuardar(k)

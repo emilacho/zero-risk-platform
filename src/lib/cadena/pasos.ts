@@ -541,11 +541,18 @@ async function cerrarTandaDeRegistro(al: Almacen, campana: Campana, tanda: numbe
   let filas = originales
   let hs = hsOriginal
   if (v.temas) {
-    const propuesta = originales.map((f) => (v.temas!.has(f.id) && v.temas!.get(f.id) !== f.tema ? { ...f, tema: v.temas!.get(f.id)! } : f))
+    // un tema que vuelve igual (salvo los extremos) no es una corrección: se queda el de antes, byte a byte
+    const propuesta = originales.map((f) => (v.temas!.has(f.id) && v.temas!.get(f.id) !== (f.tema ?? '').trim() ? { ...f, tema: v.temas!.get(f.id)! } : f))
     const conTodas = bloqueosPor(validar(propuesta))
     filas = propuesta.map((f, k) => {
       const o = originales[k]
       if (f === o) return f
+      // 🟡 de CC7: un tema es UNA línea y nunca vacío; si no, la fila se queda con su tema anterior, con aviso
+      if (!f.tema || f.tema.includes('\n')) {
+        revertidas.push(f.id)
+        extra.push(avisoDeFila(f.id, `la corrección de registro dejó el tema ${f.tema ? 'en más de una línea' : 'vacío'}: se queda el tema anterior`))
+        return o
+      }
       const rompe = nuevos(antes, conTodas, f.id)
       if (!rompe.length) { corregidas.push(f.id); return f }
       revertidas.push(f.id)
