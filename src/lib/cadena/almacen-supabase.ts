@@ -28,6 +28,7 @@ import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
 import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos-de-emilio/registrar'
 import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
+import { enviosDesdeElRegistro, llavesDelRegistro } from './lote-muerto'
 import { encargosRealesDe, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
 import { OPERACION_DE_PRODUCIR } from './tope-de-campana'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
@@ -288,6 +289,25 @@ export function almacenDeSupabase(): Almacen {
       if (error) fallo(error)
     },
     async cambiarEstadoDeFilas(campanaId, version, ids, estado) { const { error } = await db.from('cadena_calendario_filas').update({ estado }).eq('campana_id', campanaId).eq('calendario_version', version).in('id', ids); if (error) fallo(error) },
+    // 10-nov · LOTE MUERTO · los envíos de ESTA llave según la sala: las llaves exactas de su entrada (original + reintentos), no cliente + semana
+    // ADENDA 3 de CC7: con las filas de cada sobre (`payload.envelope_payload.fila_ids`), para no contar envíos cuyas filas ya salieron
+    async enviosDeLote(clientId, lote, llave, filasDeHoy) {
+      const llaves = llavesDelRegistro(clientId, lote, llave)
+      const filas = await lista<{ idempotency_key: string; created_at: string; payload: unknown }>(db.from('sala_event_log').select('idempotency_key, created_at, payload').eq('client_id', clientId).in('idempotency_key', llaves))
+      return enviosDesdeElRegistro(llaves, filas.map((f) => {
+        const sobre = (f.payload as { envelope_payload?: { fila_ids?: unknown } } | null)?.envelope_payload
+        const ids = sobre && typeof sobre === 'object' ? sobre.fila_ids : undefined
+        return { idempotency_key: f.idempotency_key, created_at: f.created_at, fila_ids: Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : null }
+      }), filasDeHoy)
+    },
+    async avisarLoteMuerto(a) {
+      try {
+        // carga perezosa: el buzón solo se importa cuando hay un lote muerto (el almacén no engorda para el resto de las llamadas)
+        const [{ avisar }, { dependenciasReales }] = await Promise.all([import('@/lib/avisos/nucleo'), import('@/lib/avisos/adaptadores')])
+        const r = await avisar(dependenciasReales(db as unknown as Parameters<typeof dependenciasReales>[0]), { ...a, tipo: 'alarma', origen: 'cadena/reloj · lote sin parte', origen_tipo: 'plataforma' })
+        return { ok: true, accion: `${r.accion} · slack ${r.slack}` }
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'error' } }
+    },
     async ultimaVersionDeCalendario(campanaId) { return (await lista<{ calendario_version: number }>(db.from('cadena_calendario_filas').select('calendario_version').eq('campana_id', campanaId).order('calendario_version', { ascending: false }).limit(1)))[0]?.calendario_version ?? 0 },
 
     async guardarValidaciones(campanaId, objeto, version, tanda, intento, hallazgos: Hallazgo[], seco) {
