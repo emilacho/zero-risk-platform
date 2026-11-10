@@ -26,6 +26,14 @@ export function filasPasadas(filas: readonly Fila[], hoy: string): Fila[] {
   return filas.filter((f) => ESTADOS_SIN_PRODUCIR.includes(f.estado) && esFechaIso(f.fecha) && f.fecha < hoy)
 }
 
+/** 10-nov · 🟡 CC7 punto 2 · una fila que YA fue reubicada una vez (su aviso lo dice) no se vuelve a reubicar: si otra vez quedó atrás, el código la descarta sin agente */
+export const MARCA_DE_REUBICADA = `${PREFIJO_REUBICACION}reubicada del `
+export const yaReubicada = (f: Fila): boolean => (f.avisos ?? []).some((a) => typeof a === 'string' && a.startsWith(MARCA_DE_REUBICADA))
+export const descarteDeSegundaVez = (f: Fila): { fila_id: string; aviso: string } => ({
+  fila_id: f.id,
+  aviso: `${PREFIJO_REUBICACION}perdió su fecha (${f.fecha}) · ya se había reubicado una vez y volvió a quedar atrás: se descarta sin otra decisión`,
+})
+
 /** la huella de una decisión: la campaña, la versión del calendario y las filas pasadas (ordenadas). La misma tanda de filas = la misma decisión. */
 export const huellaDeReubicacion = (campanaId: string, version: number, filaIds: readonly string[]): string =>
   `${campanaId}:v${version}:${createHash('sha256').update([...filaIds].sort().join(',')).digest('hex').slice(0, 12)}`

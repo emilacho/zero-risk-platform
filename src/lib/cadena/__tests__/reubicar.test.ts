@@ -11,7 +11,7 @@ import type { Campana } from '../almacen'
 import { diaSemanaIso, sumarDias } from '../fechas'
 import { puertoDeLaCadena } from '../mesas'
 import { relojDeLaCadena } from '../reloj'
-import { CLAVE_DE_LA_LIBRETA, INTERRUPTOR_DE_REUBICACION, PLAZO_DE_LA_DECISION_MIN, recibirReubicacion, type Libreta, type SobreDeReubicacion } from '../reubicar'
+import { avisosDeReubicacion, CLAVE_DE_LA_LIBRETA, INTERRUPTOR_DE_REUBICACION, PLAZO_DE_LA_DECISION_MIN, recibirReubicacion, type Libreta, type SobreDeReubicacion } from '../reubicar'
 import type { Fila } from '../tipos'
 
 interface Caso { nombre: string; c: ClienteFixture; ahora: string; hoy: string; abierto: string; cerrado: string; red: string; formato: string; hora: string }
@@ -24,7 +24,7 @@ const UUID_CLIENTE = (k: Caso) => `11111111-1111-4111-8111-${k.nombre.startsWith
 const masMin = (iso: string, m: number) => new Date(Date.parse(iso) + m * 60_000).toISOString()
 const VIGIA = { workflow_id: 'wf-vigia', workflow_execution_id: 'v1' }
 
-function fila(k: Caso, id: string, fecha: string, extra: Partial<Fila & { calendario_version: number }> = {}): Fila & { campana_id: string; calendario_version: number } {
+function fila(k: Caso, id: string, fecha: string, extra: Partial<Fila & { campana_id: string; calendario_version: number }> = {}): Fila & { campana_id: string; calendario_version: number } {
   return { id, tanda: 1, semana: 1, dia_semana: diaSemanaIso(fecha), fecha, hora: k.hora, red: k.red, formato: k.formato, pilar: 'p', tema: 't', sede: k.c.sedes[0].clave, requiere_abierto: true, depende_de: [], datos: [], pendientes: [], pieza_fija: null, origen: 'agente', estado: 'validada', avisos: [], campana_id: CAMP(k), calendario_version: 1, ...extra }
 }
 interface Op { encendida?: boolean; mesa?: 'abre' | 'no_abre' | null }
@@ -36,7 +36,7 @@ function almacen(k: Caso, o: Op = {}) {
   })
   const campana: Campana = {
     id: CAMP(k), client_id: id, plan_id: 'plan-1', fecha_inicio: k.c.campana.fecha_inicio, fecha_inicio_origen: 'regla', fecha_fin: k.c.campana.fecha_fin, zona_horaria: 'UTC', pais: 'pais-de-practica', sedes: k.c.sedes.map((s) => s.clave),
-    estado: 'activa', estado_motivo: null, presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: false, sala_ref: {}, reemplaza_a: null, seco: true,
+    estado: 'activa', estado_motivo: null, presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: false, sala_ref: {}, reemplaza_a: null, seco: false,
   }
   al.campanas.push(campana)
   const ayer = sumarDias(k.hoy, -1), antier = sumarDias(k.hoy, -2), lejos = sumarDias(k.abierto, 14)
@@ -90,7 +90,7 @@ describe.each(CASOS)('$nombre', (k) => {
       expect(r.status).toBe(200)
       expect(al.sobresDeReubicacion).toHaveLength(1)
       const s: SobreDeReubicacion = al.sobresDeReubicacion[0]
-      expect(s).toMatchObject({ tipo_de_mesa: 'reubicacion', campana_id: CAMP(k), client_id: UUID_CLIENTE(k), version: 1, dry_run: true, condiciones: [] })
+      expect(s).toMatchObject({ tipo_de_mesa: 'reubicacion', campana_id: CAMP(k), client_id: UUID_CLIENTE(k), version: 1, dry_run: false, condiciones: [] })
       const pasadas = s.marco_texto.split('## Las filas que vienen')[0]
       for (const id of ['pasada-a', 'pasada-b', 'pasada-c']) expect(pasadas).toContain(`- ${id} ·`)
       expect(pasadas).not.toContain('- futura ·')
@@ -109,6 +109,51 @@ describe.each(CASOS)('$nombre', (k) => {
       al.filasGuardadas.push(fila(k, 'pasada-d', sumarDias(k.hoy, -3)))
       await reloj(al, masMin(k.ahora, 10))
       expect(al.sobresDeReubicacion).toHaveLength(1)
+    })
+    it('🔴 🟡CC7·3 · una campaña en seco del MISMO cliente no entra: sus filas pasadas no se tocan, no abre mesa ni escribe libreta; la real sí', async () => {
+      const al = almacen(k)
+      const real = al.campanas[0]
+      const SECO = `${CAMP(k).slice(0, -4)}5ec0`
+      al.campanas.push({ ...real, id: SECO, plan_id: 'plan-seco', seco: true })
+      al.filasGuardadas.push(fila(k, 'seco-pasada', ayer, { campana_id: SECO }), fila(k, 'seco-segunda', ayer, { campana_id: SECO, avisos: [`reubicación: reubicada del ${sumarDias(k.hoy, -9)} al ${ayer} · x`] }))
+      const antes = structuredClone(al.filasGuardadas.filter((f) => f.campana_id === SECO))
+      await reloj(al, k.ahora)
+      await reloj(al, masMin(k.ahora, PLAZO_DE_LA_DECISION_MIN + 1))
+      expect(al.sobresDeReubicacion.map((s) => s.campana_id)).toEqual([CAMP(k), CAMP(k)])
+      expect(libreta(al)[SECO]).toBeUndefined()
+      expect(al.filasGuardadas.filter((f) => f.campana_id === SECO)).toEqual(antes)
+    })
+    it('🔴 🟡CC7·2 · una fila ya reubicada una vez que vuelve a quedar atrás se descarta por código, sin agente: la segunda vez NO abre la mesa', async () => {
+      const al = almacen(k)
+      al.filasGuardadas = al.filasGuardadas.filter((f) => !f.id.startsWith('pasada'))
+      const aviso0 = `reubicación: reubicada del ${sumarDias(k.hoy, -9)} al ${ayer} · era la que abría la semana`
+      al.filasGuardadas.push(fila(k, 'otra-vez', ayer, { avisos: [aviso0] }))
+      const r = await reloj(al, k.ahora)
+      expect(al.sobresDeReubicacion).toEqual([])
+      expect(filaDe(al, 'otra-vez')).toMatchObject({ estado: 'perdio_su_fecha', fecha: ayer })
+      expect(filaDe(al, 'otra-vez').avisos).toEqual([aviso0, `reubicación: perdió su fecha (${ayer}) · ya se había reubicado una vez y volvió a quedar atrás: se descarta sin otra decisión`])
+      const lineas = (r.cuerpo.alertas as Array<{ lineas: string[] }>).flatMap((a) => a.lineas).filter((l) => l.startsWith('reubicación:'))
+      expect(lineas).toEqual(['reubicación: 1 fila(s) ya reubicada(s) una vez volvieron a quedar atrás y se descartaron sin otra decisión.'])
+      // y no vuelve a avisar: ya no es una fila sin producir
+      const r2 = await reloj(al, masMin(k.ahora, 1))
+      expect((r2.cuerpo.alertas as Array<{ lineas: string[] }>).flatMap((a) => a.lineas).filter((l) => l.startsWith('reubicación:'))).toEqual([])
+      expect(al.config.has(CLAVE_DE_LA_LIBRETA)).toBe(false)
+    })
+    it('🔴 🟡CC7·2 · mezclada con filas nuevas: la de segunda vez se descarta y la mesa abre SOLO con las otras', async () => {
+      const al = almacen(k)
+      al.filasGuardadas.push(fila(k, 'otra-vez', ayer, { avisos: [`reubicación: reubicada del ${sumarDias(k.hoy, -9)} al ${ayer} · r`] }))
+      await reloj(al, k.ahora)
+      expect(al.sobresDeReubicacion).toHaveLength(1)
+      expect(al.sobresDeReubicacion[0].marco_texto).not.toContain('- otra-vez ·')
+      expect(decisionUnica(al, k)[0].fila_ids).toEqual(['pasada-a', 'pasada-b', 'pasada-c'])
+      expect(filaDe(al, 'otra-vez').estado).toBe('perdio_su_fecha')
+    })
+    it('una fila fusionada o descartada (aviso de reubicación que NO es «reubicada del») no cuenta como ya reubicada', async () => {
+      const al = almacen(k)
+      filaDe(al, 'pasada-a').avisos = [`reubicación: absorbe a otra (era del ${sumarDias(k.hoy, -9)}) · r`]
+      await reloj(al, k.ahora)
+      expect(decisionUnica(al, k)[0].fila_ids).toContain('pasada-a')
+      expect(filaDe(al, 'pasada-a').estado).toBe('validada')
     })
     it('sin filas pasadas no abre nada', async () => {
       const al = almacen(k)
@@ -189,6 +234,33 @@ describe.each(CASOS)('$nombre', (k) => {
       expect(await lineas(masMin(k.ahora, 1))).toEqual(['reubicación de 3 fila(s) que quedaron atrás: 1 reubicada(s), 1 fusionada(s), 1 descartada(s) · 1 decisión(es) sobre filas que no eran pasadas, ignorada(s)'])
       expect(await lineas(masMin(k.ahora, 2))).toEqual([])
       expect(al.sobresDeReubicacion).toHaveLength(1)
+    })
+    it('🔴 🟡CC7·4 · en ensayo (la cadena no envía) el resumen se registra y NO se marca avisado: vuelve a salir hasta que de verdad se manda', async () => {
+      const al = almacen(k)
+      await reloj(al, k.ahora)
+      await recibirReubicacion(al, entrega(k, 1, decision(k)), k.ahora)
+      al.config.set('estado_cadena', 'ensayo')
+      const lineas = async (t: string) => ((await reloj(al, t)).cuerpo.alertas as Array<{ lineas: string[] }>).flatMap((a) => a.lineas).filter((l) => l.startsWith('reubicación de'))
+      expect(await lineas(masMin(k.ahora, 1))).toHaveLength(1)
+      expect(await lineas(masMin(k.ahora, 2))).toHaveLength(1)
+      expect(decisionUnica(al, k)[0].avisado).toBe(false)
+      expect(await avisosDeReubicacion(al, false)).toHaveLength(1)
+      expect(decisionUnica(al, k)[0].avisado).toBe(false)
+      al.config.set('estado_cadena', 'encendida')
+      expect(await lineas(masMin(k.ahora, 3))).toHaveLength(1)
+      expect(decisionUnica(al, k)[0].avisado).toBe(true)
+      expect(await lineas(masMin(k.ahora, 4))).toEqual([])
+    })
+    it('🔴 🟡CC7·4 · fusionar con una fila destino que quedó atrás DESPUÉS de abrir la decisión: no se fusiona, la que se iba se descarta con la razón', async () => {
+      const al = almacen(k)
+      await reloj(al, k.ahora)
+      const fut = filaDe(al, 'futura')
+      fut.fecha = ayer
+      fut.dia_semana = diaSemanaIso(ayer)
+      await recibirReubicacion(al, entrega(k, 1, decision(k)), k.ahora)
+      expect(filaDe(al, 'pasada-b')).toMatchObject({ estado: 'perdio_su_fecha' })
+      expect(filaDe(al, 'pasada-b').avisos[0]).toBe(`reubicación: perdió su fecha (${ayer}) · la propuesta no cumple: la fila destino futura no es futura (${ayer})`)
+      expect(filaDe(al, 'futura')).toMatchObject({ estado: 'validada', avisos: [] })
     })
     it('🔴 idempotente: la misma vuelta otra vez (o una vuelta vieja) no aplica nada', async () => {
       const al = almacen(k)

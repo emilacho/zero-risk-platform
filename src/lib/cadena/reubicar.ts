@@ -10,7 +10,7 @@
  */
 import type { Almacen, Campana } from './almacen'
 import { hoyEnZona } from './campanas'
-import { filasPasadas, huellaDeReubicacion, leerDecisiones, marcoDeReubicacion, MAX_INTENTOS_DE_REUBICACION, verificarDecisiones, type Cambio, type ContextoDeReubicacion } from './reubicacion'
+import { descarteDeSegundaVez, filasPasadas, huellaDeReubicacion, yaReubicada, leerDecisiones, marcoDeReubicacion, MAX_INTENTOS_DE_REUBICACION, verificarDecisiones, type Cambio, type ContextoDeReubicacion } from './reubicacion'
 
 export const INTERRUPTOR_DE_REUBICACION = 'reubicar_filas_pasadas'
 export const CLAVE_DE_LA_LIBRETA = 'reubicacion_libreta'
@@ -67,9 +67,25 @@ export async function abrirReubicaciones(al: Almacen, ahora: string): Promise<{ 
   const libreta = await leerLibreta(al)
   let cambio = false
   for (const c of await al.campanasActivas()) {
+    // 🟡 CC7 punto 3 · como #1010: una campaña de ensayo nunca marca sus filas (a propósito), así que todas «quedarían atrás» cada día. No entra.
+    if (c.seco === true) continue
     try {
       const { x, version, cliente } = await contextoDe(al, c, ahora)
-      const pasadas = filasPasadas(x.filas, x.hoy)
+      const todas = filasPasadas(x.filas, x.hoy)
+      // 🟡 CC7 punto 2 · regla exacta: la que ya fue reubicada una vez y volvió a quedar atrás se descarta por código, sin agente (no hay reubicación sin fin)
+      const segundas = todas.filter(yaReubicada)
+      if (segundas.length) {
+        let hechas = 0
+        for (const f of segundas) {
+          const k = descarteDeSegundaVez(f)
+          if (await al.reubicarFila(c.id, version, k.fila_id, { estado: 'perdio_su_fecha' }, k.aviso)) hechas++
+        }
+        if (hechas) {
+          lineas.push({ campana_id: c.id, texto: `reubicación: ${hechas} fila(s) ya reubicada(s) una vez volvieron a quedar atrás y se descartaron sin otra decisión.` })
+          aplicado.push(`reubicación: ${hechas} fila(s) descartada(s) por segunda vez en ${c.id}`)
+        }
+      }
+      const pasadas = todas.filter((f) => !yaReubicada(f))
       if (!pasadas.length) continue
       const huella = huellaDeReubicacion(c.id, version, pasadas.map((f) => f.id))
       const lc: LibretaDeCampana = libreta[c.id] ?? { ultima_version: 0, decisiones: {} }
