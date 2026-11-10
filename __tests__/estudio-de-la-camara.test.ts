@@ -28,7 +28,7 @@ const COLUMNAS: Record<string, Set<string>> = {
 }
 
 type Fila = Record<string, unknown>
-function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean; quitarFalla?: boolean } = {}) {
+function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean; quitarFalla?: boolean; alQuitar?: () => Promise<void> } = {}) {
   const t: Record<string, Fila[]> = { estudio_piezas: [], costs: [], clients: clientes.map((id) => ({ id })) }
   const subidas: Array<{ ruta: string; bytes: number; tipo: string }> = []
   const quitados: string[] = []
@@ -52,6 +52,13 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean; quita
         is(c: string, v: null) { validar(tabla, [c]); filtros.push((f) => (f[c] ?? null) === v); return q },
         not(c: string, op: string, v: null) { validar(tabla, [c]); if (op !== 'is') throw new Error(`not ${op} sin simular`); filtros.push((f) => (f[c] ?? null) !== v); return q },
         lt(c: string, v: string) { validar(tabla, [c]); filtros.push((f) => typeof f[c] === 'string' && (f[c] as string) < v); return q },
+        gte(c: string, v: string) { validar(tabla, [c]); filtros.push((f) => typeof f[c] === 'string' && (f[c] as string) >= v); return q },
+        // jsonb @> solo para la forma que usa el vaciado: { referencias: [{ url }] }
+        contains(c: string, v: { referencias: Array<{ url: string }> }) {
+          validar(tabla, [c])
+          filtros.push((f) => { const l = (f[c] as { referencias?: Array<{ url?: string }> } | null)?.referencias; return Array.isArray(l) && v.referencias.every((w) => l.some((x) => x?.url === w.url)) })
+          return q
+        },
         delete() { modo = 'delete'; return q },
         order(c: string) { validar(tabla, [c]); return q },
         limit(k: number) { lim = k; return q },
@@ -80,7 +87,7 @@ function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean; quita
         return {
           upload: async (ruta: string, bytes: Buffer, o: { contentType: string }) => { if (op.subirFalla) return { error: { message: 'almacén lleno' } }; subidas.push({ ruta, bytes: bytes.length, tipo: o.contentType }); return { error: null } },
           getPublicUrl: (ruta: string) => ({ data: { publicUrl: `https://almacen.test/${b}/${ruta}` } }),
-          remove: async (rutas: string[]) => { if (op.quitarFalla) return { error: { message: 'almacén caído' } }; quitados.push(...rutas); return { error: null } },
+          remove: async (rutas: string[]) => { await op.alQuitar?.(); if (op.quitarFalla) return { error: { message: 'almacén caído' } }; quitados.push(...rutas); return { error: null } },
         }
       },
     },
@@ -930,6 +937,58 @@ describe('GO 09-nov 22:45Z · la ✕ de la galería y la papelera (30 días, nun
     const r = await vaciarPapelera(d, { dry_run: false })
     expect(r.ok && r.valor).toMatchObject({ borradas: [ID], conservados: 1 })
     expect(d.base.quitados).toEqual([`estudio/${CLIENTE}/${ID}.glb`])
+  })
+  it('menor 2 CC6 · un archivo que otra pieza usa como referencia 2 a 6 no se borra', async () => {
+    const d = conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' })
+    d.base.t.estudio_piezas.push({ id: 'd0000000-0000-4000-8000-0000000000b4', client_id: CLIENTE, tipo: 'imagen', estado: 'lista', clave: 'clic-varias-1', modelo: 'nano-banana-pro', parametros: { referencias: [{ numero: 1, url: `${A}estudio/${CLIENTE}/otra.png` }, { numero: 2, url: `${A}estudio/${CLIENTE}/${ID}.glb` }] }, en_papelera_desde: null })
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(r.ok && r.valor).toMatchObject({ borradas: [ID], conservados: 1 })
+    expect(d.base.quitados).toEqual([`estudio/${CLIENTE}/${ID}-partida.png`])
+  })
+  it('menor 1 CC6 · pasados los 30 días ya no se recupera: la pieza es del vaciado', async () => {
+    const d = conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' })
+    const r = await recuperar(d, CLIENTE, ID)
+    expect(!r.ok && r.status).toBe(409)
+    expect(!r.ok && r.error).toBe('se_esta_borrando')
+    expect(d.base.t.estudio_piezas[0].en_papelera_desde).toBe('2026-10-01T00:00:00Z')
+    // un día antes del plazo sí se recupera
+    const v = conPieza({ en_papelera_desde: '2026-10-07T20:00:00Z' })
+    const ok = await recuperar(v, CLIENTE, ID)
+    expect(ok.ok && ok.valor.en_papelera_desde).toBeNull()
+  })
+  it('menor 1 CC6 · recuperada a mitad de la pasada: o vuelve con sus archivos o no vuelve; nunca una fila sin archivos', async () => {
+    let d: ReturnType<typeof conPieza>
+    let intento: Awaited<ReturnType<typeof recuperar>> | null = null
+    d = conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' }, baseFalsa([CLIENTE, OTRO], { alQuitar: async () => { intento = await recuperar(d, CLIENTE, ID) } }))
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(intento && !(intento as { ok: boolean }).ok).toBe(true)
+    expect(r.ok && r.valor.borradas).toEqual([ID])
+    expect(d.base.t.estudio_piezas).toHaveLength(0)
+  })
+  it('menor 1 CC6 · si la pieza dejó de estar vencida antes de borrar archivos, no se toca nada (ni archivos ni fila)', async () => {
+    const d = conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' })
+    const leer = d.db.from.bind(d.db)
+    let lecturas = 0
+    // la 1.ª lectura (las vencidas) ve la pieza vencida; antes de la relectura algo la saca de la papelera
+    d.db.from = ((tabla: string) => { if (tabla === 'estudio_piezas' && ++lecturas === 2) d.base.t.estudio_piezas[0].en_papelera_desde = null; return leer(tabla) }) as typeof d.db.from
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(r.ok && r.valor.borradas).toEqual([])
+    expect(d.base.quitados).toHaveLength(0)
+    expect(d.base.t.estudio_piezas).toHaveLength(1)
+  })
+  it('una imagen hecha con varias se borra con sus propias subidas (su lista de referencias no la protege de sí misma)', async () => {
+    const d = conPieza({ tipo: 'imagen', modelo: 'nano-banana-pro', archivo_url: `${A}estudio/${CLIENTE}/${ID}.png`, miniatura_url: `${A}estudio/${CLIENTE}/${ID}.png`, foto_partida_url: null, en_papelera_desde: '2026-10-01T00:00:00Z',
+      parametros: { referencias: [{ numero: 1, url: `${A}estudio/${CLIENTE}/partidas/clic-tacho-01-1.png` }, { numero: 2, url: `${A}estudio/${CLIENTE}/partidas/clic-tacho-01-2.png` }] } })
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(r.ok && r.valor).toMatchObject({ borradas: [ID], conservados: 0 })
+    expect(d.base.quitados.sort()).toEqual([`estudio/${CLIENTE}/${ID}.png`, `estudio/${CLIENTE}/partidas/clic-tacho-01-1.png`, `estudio/${CLIENTE}/partidas/clic-tacho-01-2.png`].sort())
+  })
+  it('última barrera: si algo la saca de la papelera mientras se borran los archivos, la fila no se borra', async () => {
+    let d: ReturnType<typeof conPieza>
+    d = conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' }, baseFalsa([CLIENTE, OTRO], { alQuitar: async () => { d.base.t.estudio_piezas[0].en_papelera_desde = null } }))
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(r.ok && r.valor.borradas).toEqual([])
+    expect(d.base.t.estudio_piezas).toHaveLength(1)
   })
   it('si el almacén falla, la fila queda para la próxima pasada (nunca archivos huérfanos)', async () => {
     const d = conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' }, baseFalsa([CLIENTE, OTRO], { quitarFalla: true }))
