@@ -113,6 +113,10 @@ describe('qué es una cita y contra qué se comprueba (genérico)', () => {
   it('un bloque `>` de varias líneas se lee ENTERO: con las dos líneas alteradas sale UNA cita, la del bloque completo', () => {
     const r = citasQueNoAparecen(con(['> «Etiquetan siempre,', '> comparten la playa entera»']), FUENTES)
     expect(r).toEqual([{ cita: 'Etiquetan siempre, comparten la playa entera', seccion: 'Público', fuente: 'plan' }])
+    // 🟡 CC7 (4906fe6): el bloque SEGUIDO de texto en la misma sección (lo común en los briefs reales, p. ej. «Zona: Alborada…» en el v4) también se lee entero
+    const seguido = citasQueNoAparecen(con(['> «Etiquetan siempre,', '> comparten la playa entera»', 'Zona: Alborada, Kennedy.']), FUENTES)
+    expect(seguido).toEqual([{ cita: 'Etiquetan siempre, comparten la playa entera', seccion: 'Público', fuente: 'plan' }])
+    expect(citasQueNoAparecen(con(['> «Busca encebollado o ceviche de calidad sin salir de casa', '> o de la oficina.»', 'Zona: Alborada, Kennedy.']), FUENTES)).toEqual([])
     // la cita real de Náufrago partida en dos líneas `>` es literal
     expect(citasQueNoAparecen(con(['> «Busca encebollado o ceviche de calidad sin salir de casa', '> o de la oficina.»']), FUENTES)).toEqual([])
   })
