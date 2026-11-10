@@ -990,6 +990,59 @@ describe('GO 09-nov 22:45Z · la ✕ de la galería y la papelera (30 días, nun
     expect(r.ok && r.valor.borradas).toEqual([])
     expect(d.base.t.estudio_piezas).toHaveLength(1)
   })
+  // CC6 sobre #962 · los 3 sabotajes que vivían: un error de la base que se callaba, y el borde exacto de los 30 días
+  type Q = { select: (s: string) => Q; lt: (c: string, v: string) => Q; contains: (c: string, v: unknown) => Q; then: (ok: (r: unknown) => unknown, ko?: (e: unknown) => unknown) => Promise<unknown> }
+  const caida = (q: Q) => { q.then = (ok, ko) => Promise.resolve({ data: null, error: { message: 'base caída' } }).then(ok, ko); return q }
+  function conBaseQueFalla(d: ReturnType<typeof conPieza>, en: 'relectura' | 'lo_usa_otra') {
+    const leer = d.db.from.bind(d.db)
+    d.db.from = ((tabla: string) => {
+      const q = leer(tabla) as unknown as Q
+      if (tabla !== 'estudio_piezas') return q
+      if (en === 'lo_usa_otra') { const c = q.contains.bind(q); q.contains = (col, v) => caida(c(col, v)) }
+      else {
+        // la relectura es la única lectura `select('id')` seguida de `lt`; el borrado pone el `select` después del `lt`
+        const s = q.select.bind(q), l = q.lt.bind(q)
+        let soloId = false
+        q.select = (x) => { soloId = x === 'id'; return s(x) }
+        q.lt = (col, v) => (soloId ? caida(l(col, v)) : l(col, v))
+      }
+      return q
+    }) as unknown as typeof d.db.from
+    return d
+  }
+  it('menor CC6 · si la relectura falla, no se toca nada y la falla queda anotada', async () => {
+    const d = conBaseQueFalla(conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' }), 'relectura')
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(r.ok && r.valor.borradas).toEqual([])
+    expect(r.ok && r.valor.fallas).toEqual([{ id: ID, error: 'base: base caída' }])
+    expect(d.base.quitados).toHaveLength(0)
+    expect(d.base.t.estudio_piezas).toHaveLength(1)
+  })
+  it('menor CC6 · si no se puede saber si otra pieza usa un archivo, se frena: no se borra ningún archivo ni la fila', async () => {
+    const d = conBaseQueFalla(conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' }), 'lo_usa_otra')
+    const r = await vaciarPapelera(d, { dry_run: false })
+    expect(r.ok && r.valor.borradas).toEqual([])
+    expect(r.ok && r.valor.fallas).toEqual([{ id: ID, error: 'base caída' }])
+    expect(d.base.quitados).toHaveLength(0)
+    expect(d.base.t.estudio_piezas).toHaveLength(1)
+    // y el ensayo en seco tampoco la cuenta como borrable
+    const seco = await vaciarPapelera(conBaseQueFalla(conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' }), 'lo_usa_otra'), { dry_run: true })
+    expect(seco.ok && seco.valor.borradas).toEqual([])
+  })
+  it('menor CC6 · el borde exacto de los 30 días (hoy 05-nov 20:00Z → el corte es 06-oct 20:00Z)', async () => {
+    // un segundo antes del corte: ya es del vaciado y no se recupera
+    const vieja = conPieza({ en_papelera_desde: '2026-10-06T19:59:59.000Z' })
+    const s1 = await vaciarPapelera(vieja, { dry_run: true })
+    expect(s1.ok && s1.valor.borradas).toEqual([ID])
+    const r1 = await recuperar(vieja, CLIENTE, ID)
+    expect(!r1.ok && r1.status).toBe(409)
+    // justo en el corte: todavía no se borra y sí se recupera
+    const justa = conPieza({ en_papelera_desde: '2026-10-06T20:00:00.000Z' })
+    const v = await vaciarPapelera(justa, { dry_run: true })
+    expect(v.ok && v.valor.borradas).toEqual([])
+    const r2 = await recuperar(justa, CLIENTE, ID)
+    expect(r2.ok && r2.valor.en_papelera_desde).toBeNull()
+  })
   it('si el almacén falla, la fila queda para la próxima pasada (nunca archivos huérfanos)', async () => {
     const d = conPieza({ en_papelera_desde: '2026-10-01T00:00:00Z' }, baseFalsa([CLIENTE, OTRO], { quitarFalla: true }))
     const r = await vaciarPapelera(d, { dry_run: false })
