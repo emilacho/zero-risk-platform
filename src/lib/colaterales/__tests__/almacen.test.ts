@@ -258,6 +258,29 @@ describe('migración 202611101600 · permisos cerrados y reversa', () => {
     expect(r.indexOf('raise exception')).toBeLessThan(r.indexOf('drop table'))
   })
 
+  it('certificación CC6 p7: TODA regla de acceso de las dos tablas es `to service_role`; ninguna a anon, authenticated ni public', () => {
+    const reglas = [...sql.matchAll(/create policy\s+(\w+)\s+on\s+public\.(\w+)([^;]*?)(?:;|\bend if)/gi)].map((m) => ({ nombre: m[1], tabla: m[2], resto: m[3].replace(/\s+/g, ' ') }))
+    expect(reglas.map((r) => r.tabla).sort()).toEqual(['colaterales_ediciones', 'colaterales_retoques'])
+    for (const r of reglas) {
+      expect(r.resto, r.nombre).toMatch(/\bto service_role\b/i)
+      expect(r.resto, r.nombre).not.toMatch(/\bto\b[^;]*\b(anon|authenticated|public)\b/i)
+    }
+    // ninguna otra forma de crear o cambiar reglas en la migración
+    expect((sql.match(/create policy/gi) ?? []).length).toBe(2)
+    expect(sql).not.toMatch(/alter policy/i)
+  })
+
+  it('certificación CC6 r3/r2: la reversa es UNA transacción (begin; al inicio, commit; al final) y no vacía tablas', () => {
+    const r = sinComentarios(crudo(REV)).trim()
+    const sentencias = r.split(/\n/).map((l) => l.trim()).filter(Boolean)
+    expect(sentencias[0]).toBe('begin;')
+    const fin = sentencias.indexOf('commit;')
+    expect(fin).toBeGreaterThan(0)
+    expect(sentencias.slice(fin + 1)).toEqual(["notify pgrst, 'reload schema';"])
+    expect(r).not.toMatch(/\btruncate\b/i)
+    expect(r).not.toMatch(/\bdelete\s+from\b/i)
+  })
+
   it('sin retrocesos colados en las expresiones (lección #985) y sin palabras de un cliente en lo nuevo', () => {
     for (const a of [MIG, REV, 'src/lib/colaterales/almacen.ts', 'src/lib/colaterales/__tests__/almacen.test.ts']) expect(crudo(a).includes('\u0008'), a).toBe(false)
     for (const a of [MIG, REV, 'src/lib/colaterales/almacen.ts']) expect(crudo(a), a).not.toMatch(/guayac|ecuador|n[aá]ufrago|olon|p[eé]rez|seguridad industrial|linkedin|costa|playa/i)
