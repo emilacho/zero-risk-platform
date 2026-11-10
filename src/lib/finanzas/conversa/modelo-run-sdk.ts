@@ -16,6 +16,29 @@ export const esCortePorTope = (fallo: string | null | undefined): boolean => typ
 
 export const esFallaPasajera = (error: string | null | undefined): boolean => typeof error === 'string' && /^(red:|run_sdk_5\d\d$)/.test(error)
 
+/**
+ * #927 · decisión de Lenovo 10-nov 16:08Z (receta de CC1): la falla se separa por CLASE, con señales EXACTAS del proveedor (verificar exacto = código).
+ *  · `tope`: el corte por tope de gasto · no se repite (con el mismo tope se paga y termina igual).
+ *  · `permanente`: llave mala, saldo agotado, pedido inválido, modelo no soportado, esquema roto… · repetirla no puede salir distinto: se declara al momento.
+ *  · `pasajera`: proveedor saturado o caído (`overloaded_error`, `rate_limit_error`, `api_error`, o su 429/5xx) · se repite con espera creciente.
+ *  · SIN clase reconocida ⇒ permanente: mejor un aviso de más que tres cobros a ciegas.
+ * Sin fallo declarado (un corte, la red, un 5xx del camino) no se sabe si el empleado sigue: es pasajera, como hasta hoy, y la mesa recoge lo que haya terminado.
+ */
+export type ClaseDeFalla = 'tope' | 'permanente' | 'pasajera'
+/** los tipos de error del proveedor que nombran algo que no cambia al repetir (prioridad sobre cualquier código que aparezca en el mismo texto) */
+const TIPO_PERMANENTE = /"type"\s*:\s*"(invalid_request_error|authentication_error|permission_error|not_found_error|request_too_large|billing_error)"/
+const TIPO_PASAJERO = /"type"\s*:\s*"(overloaded_error|rate_limit_error|api_error|timeout_error)"/
+/** el código del PROVEEDOR tal como lo escriben el corredor («API Error: 529 …») y run-sdk («el modelo respondió 529: …») */
+const CODIGO_PASAJERO = /(?:API Error: |el modelo respondió )(?:429|5\d\d)(?!\d)/
+
+export function claseDeFalla(error: string | null | undefined, fallo_del_empleado?: string | null): ClaseDeFalla {
+  if (esCortePorTope(fallo_del_empleado)) return 'tope'
+  if (typeof fallo_del_empleado !== 'string') return esFallaPasajera(error) ? 'pasajera' : 'permanente'
+  if (TIPO_PERMANENTE.test(fallo_del_empleado)) return 'permanente'
+  if (TIPO_PASAJERO.test(fallo_del_empleado) || CODIGO_PASAJERO.test(fallo_del_empleado)) return 'pasajera'
+  return 'permanente'
+}
+
 export const esWorkflowIdValido = (x: unknown): x is string => typeof x === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(x)
 
 /**
