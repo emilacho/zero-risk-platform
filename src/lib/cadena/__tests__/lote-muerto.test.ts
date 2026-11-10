@@ -12,6 +12,7 @@ import { buildIdempotencyKey } from '@/lib/sala-event-log/idempotency'
 import { filasLotes } from '../datos'
 import {
   claveDelAviso, decidirLote, enviosDesdeElRegistro, HORAS_PARA_DARLO_POR_MUERTO, llaveDeEnvio, llavesDelRegistro, MAX_REINTENTOS_DE_LOTE, OPERACION_DE_ENTRADA,
+  baseDelLote,
 } from '../lote-muerto'
 import type { Almacen, Campana } from '../almacen'
 import type { Fila } from '../tipos'
@@ -106,12 +107,20 @@ describe('la regla exacta', () => {
   it('sin envío previo → sano, con la llave de siempre', () => expect(decidirLote(K, { envios: 0, ultimo_en: null }, '2026-11-10T20:00:00Z')).toEqual({ tipo: 'sano', llave: K.idempotency_key }))
   it('envío más nuevo que el plazo → sano, con la llave de su último envío', () => {
     expect(decidirLote(K, { envios: 1, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, HORAS_PARA_DARLO_POR_MUERTO - 0.01))).toEqual({ tipo: 'sano', llave: K.idempotency_key })
-    expect(decidirLote(K, { envios: 2, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, 1))).toEqual({ tipo: 'sano', llave: `${K.idempotency_key}:r1` })
+    expect(decidirLote(K, { envios: 2, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, 1))).toEqual({ tipo: 'sano', llave: 'camp:2026-W46:1:r1' })
   })
-  it('justo en el plazo → reintento 1 con llave nueva y determinista', () => expect(decidirLote(K, { envios: 1, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, HORAS_PARA_DARLO_POR_MUERTO))).toEqual({ tipo: 'reintentar', intento: 1, llave: `${K.idempotency_key}:r1` }))
+  it('justo en el plazo → reintento 1 con llave nueva y determinista', () => expect(decidirLote(K, { envios: 1, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, HORAS_PARA_DARLO_POR_MUERTO))).toEqual({ tipo: 'reintentar', intento: 1, llave: 'camp:2026-W46:1:r1' }))
   it(`tras ${MAX_REINTENTOS_DE_LOTE} reintentos → agotado`, () => expect(decidirLote(K, { envios: MAX_REINTENTOS_DE_LOTE + 1, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, 5))).toEqual({ tipo: 'agotado', envios: MAX_REINTENTOS_DE_LOTE + 1 }))
   it('fecha ilegible → no adivina (se comporta como hoy)', () => expect(decidirLote(K, { envios: 1, ultimo_en: 'ayer' }, '2026-11-10T20:00:00Z').tipo).toBe('sano'))
-  it('las llaves de envío', () => { expect(llaveDeEnvio('x', 0)).toBe('x'); expect(llaveDeEnvio('x', 2)).toBe('x:r2') })
+  it('las llaves de envío: el original con su huella; los reintentos por la BASE del lote (sin la huella del día)', () => {
+    expect(llaveDeEnvio('x', 0)).toBe('x'); expect(llaveDeEnvio('x', 2)).toBe('x:r2')
+    expect(llaveDeEnvio('camp:2026-W46:1:abcd1234', 0)).toBe('camp:2026-W46:1:abcd1234')
+    expect(llaveDeEnvio('camp:2026-W46:1:abcd1234', 2)).toBe('camp:2026-W46:1:r2')
+    expect(llaveDeEnvio('camp:2026-W46:1:ffff0000', 2)).toBe('camp:2026-W46:1:r2') // otra huella, el MISMO reintento
+    expect(llaveDeEnvio('camp:2026-W46:1', 1)).toBe('camp:2026-W46:1:r1') // sin huella (arranque por evento apagado)
+    expect(claveDelAviso('camp:2026-W46:1:abcd1234')).toBe(claveDelAviso('camp:2026-W46:1:ffff0000'))
+    expect(claveDelAviso('camp:2026-W46:1:abcd1234')).not.toBe(claveDelAviso('camp:2026-W46:2:abcd1234'))
+  })
 })
 
 describe.each([['Náufrago (restaurante · caso real)', NAUFRAGO], ['Seguridad industrial (B2B · campaña construida)', SEGURIDAD]])('%s', (_n, C) => {
@@ -123,9 +132,9 @@ describe.each([['Náufrago (restaurante · caso real)', NAUFRAGO], ['Seguridad i
     for (const h of [0.5, 1, 1.5]) expect((await e.pasada(C, horas(ENVIO_REAL, h))).lotes[0].idempotency_key).toBe(base)
     expect(e.avisos).toEqual([])
     const r1 = await e.pasada(C, horas(ENVIO_REAL, 2))
-    expect(r1.lotes[0].idempotency_key).toBe(`${base}:r1`)
+    expect(r1.lotes[0].idempotency_key).toBe(`${baseDelLote(base)}:r1`)
     expect(r1.r.cuerpo.lotes_muertos).toEqual([expect.objectContaining({ lote: '2026-W46', accion: 'reintento', intento: 1 })])
-    expect((await e.pasada(C, horas(ENVIO_REAL, 2.5))).lotes[0].idempotency_key).toBe(`${base}:r1`)
+    expect((await e.pasada(C, horas(ENVIO_REAL, 2.5))).lotes[0].idempotency_key).toBe(`${baseDelLote(base)}:r1`)
     await e.pasada(C, horas(ENVIO_REAL, 4)); await e.pasada(C, horas(ENVIO_REAL, 6))
     expect(e.viajes(C)).toBe(4)
     const fin = await e.pasada(C, horas(ENVIO_REAL, 8))
@@ -135,6 +144,26 @@ describe.each([['Náufrago (restaurante · caso real)', NAUFRAGO], ['Seguridad i
     // un solo incidente por lote: abrió una vez (el único mensaje a Slack); los reintentos y el agotado solo suman repeticiones
     expect(e.avisos[0]).toEqual({ clave: claveDelAviso(base), accion: 'abrio' })
     expect(e.avisos.slice(1).every((a) => a.accion === 'repetida' && a.clave === claveDelAviso(base))).toBe(true)
+  })
+
+  it('sabotaje (ADENDA 2 de CC7) · el MISMO lote muerto con otra huella al día siguiente no suma intentos nuevos ni abre otro mensaje', async () => {
+    const e = escena()
+    const orig = (await e.pasada(C, ENVIO_REAL)).lotes[0].idempotency_key
+    await e.pasada(C, horas(ENVIO_REAL, 2)) // r1
+    expect(e.viajes(C)).toBe(2)
+    // al día siguiente entra otra fila en la ventana: la huella del lote cambia sola
+    e.filas.push({ id: `${C.campana.slice(0, 4)}-14-nueva`, campana_id: C.campana, fecha: '2026-11-14', red: 'instagram', formato: 'foto', estado: 'validada' } as unknown as Fila)
+    const otroDia = await e.pasada(C, horas(ENVIO_REAL, 3))
+    const llaveNueva = otroDia.lotes[0].idempotency_key
+    expect(otroDia.lotes[0].fila_ids).toContain(`${C.campana.slice(0, 4)}-14-nueva`) // la huella SÍ cambió (entró una fila)
+    expect(llaveNueva).toBe(`${baseDelLote(orig)}:r1`) // sigue en su r1 (sano: menos del plazo desde el r1), no un original nuevo
+    expect(e.viajes(C)).toBe(2)
+    await e.pasada(C, horas(ENVIO_REAL, 4)); await e.pasada(C, horas(ENVIO_REAL, 6))
+    expect(e.viajes(C)).toBe(4) // original + r1 + r2 + r3: el tope es por lote, no por día
+    expect((await e.pasada(C, horas(ENVIO_REAL, 8))).lotes.find((l) => l.lote === '2026-W46')).toBeUndefined()
+    expect(e.viajes(C)).toBe(4)
+    expect(e.avisos.filter((a) => a.accion === 'abrio')).toEqual([{ clave: claveDelAviso(orig), accion: 'abrio' }])
+    expect(new Set(e.avisos.map((a) => a.clave))).toEqual(new Set([claveDelAviso(orig)]))
   })
 
   it('sabotaje · un lote SANO (su parte salió: filas marcadas) no se reintenta ni avisa', async () => {

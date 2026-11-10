@@ -8,9 +8,12 @@
  *     otras campañas (pausadas, cerradas, en seco) ni otras versiones del calendario del mismo cliente: cada una tiene su llave (corrección pedida por CC7 y CC6, 10-nov);
  *   · «muerto» = el lote SIGUE vencido y sin marcar (si salió su parte, las filas ya no son `validada`/`lista_para_brief` y el lote no vuelve aquí)
  *     y el último envío tiene `HORAS_PARA_DARLO_POR_MUERTO` horas o más;
- *   · entonces se reenvía con una llave NUEVA y determinista (`<llave>:r<n>`), a lo sumo `MAX_REINTENTOS_DE_LOTE` veces, y se avisa por el buzón (C1) con una
- *     clave fija por LLAVE de lote (campaña · semana · versión · huella): el primer aviso abre el incidente en #alertas y los siguientes solo suman repeticiones (UN mensaje por lote;
- *     una versión nueva del calendario es otro lote y abre su propio aviso);
+ *   · entonces se reenvía con una llave NUEVA y determinista, a lo sumo `MAX_REINTENTOS_DE_LOTE` veces, y se avisa por el buzón (C1);
+ *   · 10-nov · ADENDA 2 de CC7 + ADENDA 1 de CC6: la huella del lote cambia SOLA con los días (sale de las filas que vencen ese día). Por eso los reintentos y la clave del aviso
+ *     van por la BASE del lote, sin la huella: campaña · semana · versión (`<campaña>:<semana>:<versión>:r<n>`). Así el tope de 3 y el aviso son por lote, no por día:
+ *     el mismo lote muerto con otra huella al día siguiente sigue su cuenta (r1, r2, r3) y suma repeticiones al MISMO incidente. Una versión nueva del calendario es otro lote
+ *     (otra base) y abre su propio aviso. El envío ORIGINAL sí lleva la huella del día (es el sobre de siempre): si la huella cambia ANTES del primer reintento, ese día sale un
+ *     original nuevo (a lo sumo uno por cambio de huella, y solo hasta que exista el primer reintento);
  *   · agotado el tope, el lote deja de mandarse (sin reintento indefinido) y se vuelve a pasar por el buzón con la MISMA clave: si el incidente ya estaba abierto solo suma una
  *     repetición (sin mensaje); si nunca se abrió (un aviso anterior falló), lo abre: un lote que no sale nunca no queda en silencio (pedido de CC6);
  *   · un lote sano (sin envío previo, o con envío más nuevo que el plazo) sale con la llave de su último envío: la sala contesta «duplicado» y no pasa nada (= hoy);
@@ -30,10 +33,12 @@ export type DecisionDeLote =
   | { tipo: 'reintentar'; intento: number; llave: string }
   | { tipo: 'agotado'; envios: number }
 
-/** la llave del envío n (0 = el original, 1..3 = reintentos) */
-export const llaveDeEnvio = (llave: string, n: number): string => (n <= 0 ? llave : `${llave}:r${n}`)
-/** la clave del incidente en el buzón: una por LLAVE de lote (campaña · semana · versión · huella) */
-export const claveDelAviso = (llave: string): string => `cadena:lote-sin-parte:${llave}`
+/** la BASE del lote: campaña · semana · versión, sin la huella del día (`<campaña>:<semana>:<versión>[:<huella>]` → `<campaña>:<semana>:<versión>`) */
+export const baseDelLote = (llave: string): string => llave.split(':').slice(0, 3).join(':')
+/** la llave del envío n (0 = el original, con la huella del día; 1..3 = reintentos, por la BASE del lote: no dependen del día) */
+export const llaveDeEnvio = (llave: string, n: number): string => (n <= 0 ? llave : `${baseDelLote(llave)}:r${n}`)
+/** la clave del incidente en el buzón: una por lote (campaña · semana · versión), sin la huella */
+export const claveDelAviso = (llave: string): string => `cadena:lote-sin-parte:${baseDelLote(llave)}`
 
 /** el viaje al que la sala manda los lotes (regla de ruteo `cadena/vigia` + `briefear` → BRIEF) y la operación de su evento de ENTRADA */
 export const VIAJE_DEL_LOTE = 'BRIEF'
