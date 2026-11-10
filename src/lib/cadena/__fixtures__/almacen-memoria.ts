@@ -2,6 +2,7 @@
  * Almacén EN MEMORIA de la cadena · para las pruebas de los manejadores (sin base, sin red, US$ 0).
  * Imita las garantías de la base que importan: únicos, idempotencia de corridas/esperas, una campaña viva por cliente.
  */
+import type { ResultadoDeAbrirMesa, SobreDeReubicacion } from '../reubicar'
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
 import type { LlaveDeFecha } from '../indicaciones'
 import { claveDeFecha, ordenarLlaves } from '../fechas-del-cliente'
@@ -109,6 +110,13 @@ export class AlmacenMemoria implements Almacen {
     const f = this.registro
     return f ? async (entrada) => { this.sobresDeRegistro.push(structuredClone(entrada)); return f(entrada) } : undefined
   }
+  /** 10-nov · filas que quedaron atrás · la apertura de la mesa de reubicación; sin ella (null) el almacén no tiene el puerto. La prueba la fija y ve los sobres. */
+  mesaDeReubicacion: ((sobre: SobreDeReubicacion) => Promise<ResultadoDeAbrirMesa>) | null = null
+  sobresDeReubicacion: SobreDeReubicacion[] = []
+  get abrirMesaDeReubicacion(): ((sobre: SobreDeReubicacion) => Promise<ResultadoDeAbrirMesa>) | undefined {
+    const f = this.mesaDeReubicacion
+    return f ? async (sobre) => { this.sobresDeReubicacion.push(structuredClone(sobre)); return f(sobre) } : undefined
+  }
   async plazos() { return plazosDeLaMigracion() }
   async formatos(): Promise<FormatosPorRed> { return formatosDeLaMigracion() }
   async cargarContexto(clientId: string) { return this.semilla.contextos?.[clientId] ?? null }
@@ -195,6 +203,12 @@ export class AlmacenMemoria implements Almacen {
       if (i >= 0) this.filasGuardadas[i] = nueva
       else this.filasGuardadas.push(nueva)
     }
+  }
+  async reubicarFila(campanaId: string, version: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string) {
+    const f = this.filasGuardadas.find((x) => x.campana_id === campanaId && x.calendario_version === version && x.id === filaId)
+    if (!f || (f.estado !== 'validada' && f.estado !== 'lista_para_brief')) return false
+    Object.assign(f, patch, { avisos: [...f.avisos, aviso] })
+    return true
   }
   async cambiarEstadoDeFilas(campanaId: string, version: number, ids: string[], estado: Fila['estado']) {
     for (const f of this.filasGuardadas) if (f.campana_id === campanaId && f.calendario_version === version && ids.includes(f.id)) f.estado = estado

@@ -6,15 +6,16 @@
 
 /** las familias de la mesa: nombre de la familia → tipo de pieza. Conviven con las v1 (`carrusel_ig_v1`, `kit_historias`); un encargo termina con la que lo abrió. */
 /** 31-oct · nuevo orden de la cadena: `brief_mesa` (el brief creativo de la campaña) y `concepto_mesa` (la gran idea, capítulos y banco) son mesas de la CADENA: sin imágenes, sin traductor, sin jefatura propia; la entrega va a la cadena, no a la bandeja */
+/** 10-nov · `reubicacion_mesa` (GO de Lenovo 18:14Z · camino A): las filas del calendario que quedaron atrás sin producir; la dirige jefe-marketing, sin miembros ni portero; entrega a la cadena */
 /** T8 · 31-oct · `video_mesa` (parte 2 del brazo de video, sobre la hoja): la mesa escribe el GUION y el brazo lo filma */
-export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', brief_mesa: 'brief', concepto_mesa: 'concepto', video_mesa: 'video' } as const
+export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', brief_mesa: 'brief', concepto_mesa: 'concepto', video_mesa: 'video', reubicacion_mesa: 'reubicacion' } as const
 export type FamiliaMesa = keyof typeof FAMILIAS_MESA
 export type TipoDePieza = (typeof FAMILIAS_MESA)[FamiliaMesa]
 export const esFamiliaMesa = (f: string): f is FamiliaMesa => Object.prototype.hasOwnProperty.call(FAMILIAS_MESA, f)
 /** la plantilla v1 cuyas funciones de código (abrir, armar, dibujar, empaquetar) reutiliza la mesa (el video no tiene v1: sus funciones son propias, `orquestador-video.ts`) */
-export const FAMILIA_V1_DE: Record<Exclude<TipoDePieza, 'brief' | 'concepto'>, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias', video: 'video_mesa' }
+export const FAMILIA_V1_DE: Record<Exclude<TipoDePieza, 'brief' | 'concepto' | 'reubicacion'>, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias', video: 'video_mesa' }
 /** las mesas que entrega la CADENA (no hay pieza: ni imágenes, ni traductor, ni jefatura propia, ni bandeja) */
-export const TIPOS_DE_LA_CADENA = ['brief', 'concepto'] as const
+export const TIPOS_DE_LA_CADENA = ['brief', 'concepto', 'reubicacion'] as const
 export const esDeLaCadena = (tipo: string): tipo is (typeof TIPOS_DE_LA_CADENA)[number] => (TIPOS_DE_LA_CADENA as readonly string[]).includes(tipo)
 
 /** las cotas del bucle (guardarraíles de bucle coherente): nada de la mesa es indefinido */

@@ -12,6 +12,7 @@ import { pasarSinRevision } from './revision-jefatura'
 import { retomarPorCantidades } from './pasos'
 import { avisoDePrimeraSemana, cerrarMesasVencidas, seguirSinRevisionDeRegistro, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
 import { leerObjetoDeRegistro } from './registro-en-jefatura'
+import { abrirReubicaciones, avisosDeReubicacion } from './reubicar'
 import type { Fila } from './tipos'
 
 /** `repetible`: un aviso de ESTADO (no de evento): mientras diga lo mismo, sale una sola vez; si cambia, o desaparece y vuelve, sale de nuevo (31-oct, «vigía sin ruido») */
@@ -99,6 +100,16 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
         aplicado.push(`${ids.length} fila(s) de video liberadas en ${c.id}`)
       }
     }
+  }
+
+  // 3b · 10-nov · las filas que quedaron atrás sin producir (interruptor `reubicar_filas_pasadas`, apagado = nada): se abre UNA decisión por campaña y se avisa UNA vez lo decidido.
+  //      Nunca en una pasada en seco (abrir la mesa gasta) y nunca frena el latido.
+  if (!seco) {
+    try {
+      const ab = await abrirReubicaciones(al, ahora)
+      aplicado.push(...ab.aplicado)
+      lineas.push(...ab.lineas, ...(await avisosDeReubicacion(al, enviar)))
+    } catch (e) { lineas.push({ campana_id: 'sistema', texto: `reubicación: no se pudo revisar (${String((e as Error)?.message ?? e).slice(0, 160)})` }) }
   }
 
   // 4 · el invariante V21 (con el latido ANTERIOR: así se ve que el vigía estuvo parado) y el latido nuevo

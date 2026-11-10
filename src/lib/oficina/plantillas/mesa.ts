@@ -70,3 +70,16 @@ export const CONCEPTO_MESA: Plantilla = {
   limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, max_rondas: 2, rondas_minimas: 2, mesa: true, plazo_mesa_min: 90 },
   indicaciones: {},
 }
+
+/**
+ * 10-nov · `reubicacion_mesa` (GO de Lenovo 18:14Z · camino A aceptado 18:24Z): las filas del calendario que quedaron atrás sin producir. Un solo paso `mesa`, la dirige jefe-marketing,
+ * sin miembros ni portero. Tope al máximo razonable (regla de Emilio: límites al máximo): US$ 3,00 por decisión; el gasto real queda en el libro de costos. Plazo de la mesa 30 min.
+ * Nace INACTIVA (la migración la siembra con activo=false): encenderla es otro GO.
+ */
+export const TOPE_DE_LA_MESA_DE_REUBICACION_USD = 3
+export const REUBICACION_MESA: Plantilla = {
+  tipo: 'reubicacion_mesa', familia: 'reubicacion_mesa',
+  pasos: [{ ...PASO_DE_LA_MESA }],
+  limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_REUBICACION_USD, max_rondas: 1, mesa: true, plazo_mesa_min: 30 },
+  indicaciones: {},
+}
