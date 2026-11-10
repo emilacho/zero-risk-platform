@@ -105,9 +105,9 @@ export function seccionesObligatoriasQueFaltan(md: string): string[] {
   return OBLIGATORIAS.filter((k) => !t(k))
 }
 
-/** ¿la cita está literal en el documento? Una elisión («…», «...», «[…]») parte la cita: cada tramo tiene que estar */
+/** ¿la cita está literal en el documento? Una elisión («…», «...», «[…]», «(…)») parte la cita: cada tramo tiene que estar */
 function citaLiteralEn(documento: string, cita: string): boolean {
-  const tramos = cita.split(/\s*(?:\[\s*(?:…|\.\.\.)\s*\]|…|\.\.\.)\s*/).filter((x) => normalizar(x).length >= 4)
+  const tramos = cita.split(/\s*(?:\[\s*(?:…|\.\.\.)\s*\]|\(\s*(?:…|\.\.\.)\s*\)|…|\.\.\.)\s*/).filter((x) => normalizar(x).length >= 4)
   return tramos.length > 0 && tramos.every((x) => citaAparece(documento, x))
 }
 

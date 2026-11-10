@@ -99,6 +99,23 @@ describe('qué es una cita y contra qué se comprueba (genérico)', () => {
     expect(citasQueNoAparecen(con(['> «Busca encebollado o ceviche de calidad [...] Su objeción más probable»']), FUENTES)).toEqual([])
     expect(citasQueNoAparecen(con(['> «Busca encebollado o ceviche de calidad … Su objeción menos probable»']), FUENTES)).toHaveLength(1)
   })
+  it('«(…)» y «(...)» también son elisión: la línea REAL del brief v1 de Náufrago («Encebollado Náufrago (…) producto estrella») no es falso rojo (🟡 CC7)', () => {
+    const LINEA_V1 = '- **tiempo de entrega** · plan dice: «ese número no se repite en anuncios ni en contenido hasta que los pedidos piloto lo confirmen» · manual dice: «Encebollado Náufrago (…) producto estrella» — no hay contradicción de fondo, pero el manual no prohíbe mencionar tiempos · qué se hizo: se omite el tiempo de entrega hasta confirmar con pilotos, siguiendo el plan'
+    const delManual = (linea: string) => citasQueNoAparecen(con(['Perfil A.'], ['## Contradicciones plan vs manual', linea]), FUENTES).filter((x) => x.fuente === 'manual')
+    expect(delManual(LINEA_V1)).toEqual([])
+    expect(delManual(LINEA_V1.replace('(…)', '(...)'))).toEqual([])
+    expect(delManual(LINEA_V1.replace('(…)', '( … )'))).toEqual([])
+    // la elisión no tapa un cambio: un tramo alterado sigue rojo
+    expect(delManual(LINEA_V1.replace('(…) producto estrella', '(…) producto barato'))).toHaveLength(1)
+    // y un paréntesis que NO es elisión no parte la cita
+    expect(delManual(LINEA_V1.replace('(…)', '(con chifle)'))).toHaveLength(1)
+  })
+  it('un bloque `>` de varias líneas se lee ENTERO: con las dos líneas alteradas sale UNA cita, la del bloque completo', () => {
+    const r = citasQueNoAparecen(con(['> «Etiquetan siempre,', '> comparten la playa entera»']), FUENTES)
+    expect(r).toEqual([{ cita: 'Etiquetan siempre, comparten la playa entera', seccion: 'Público', fuente: 'plan' }])
+    // la cita real de Náufrago partida en dos líneas `>` es literal
+    expect(citasQueNoAparecen(con(['> «Busca encebollado o ceviche de calidad sin salir de casa', '> o de la oficina.»']), FUENTES)).toEqual([])
+  })
   it('una cita corta (menos de 12 caracteres) no se comprueba', () => {
     expect(citasQueNoAparecen(con(['> «la playa»']), FUENTES)).toEqual([])
   })
