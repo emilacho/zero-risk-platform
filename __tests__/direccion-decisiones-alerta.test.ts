@@ -50,6 +50,17 @@ describe('la decisión como alerta: Nueva o Revisada', () => {
     expect(r.fuentes_de_alertas.map((f) => f.estado)).toEqual(['error'])
     expect(r.total).toBe(1); expect(r.completo).toBe(true)
   })
+  it('🔴 si leer la libreta LANZA (no devuelve error), tampoco se inventa: todo null y alertas_completo false (pedido de CC7)', async () => {
+    const db = base().semilla('finanzas_tableros', [TABLERO]).semilla('dueno_preguntas', [pregunta(1)])
+    const from = db.from.bind(db)
+    db.from = ((t: string) => { if (t === 'alertas_vistas') throw new Error('se cortó la conexión'); return from(t) }) as typeof db.from
+    const r = await leerDecisiones(ctx(db))
+    expect(r.decisiones).toHaveLength(2)
+    for (const d of r.decisiones) expect(d.alerta, d.id).toEqual({ clave: claveDeAlerta(d), estado: null })
+    expect(r.alertas_completo).toBe(false)
+    expect(r.contadores).toMatchObject({ nuevas: null, revisadas: null })
+    expect(r.completo).toBe(true)
+  })
   it('🔴 con muchas decisiones lee por lotes y no pierde la marca del lote de atrás', async () => {
     const ps = Array.from({ length: 150 }, (_, i) => pregunta(i))
     const r = await leerDecisiones(ctx(base().semilla('dueno_preguntas', ps).semilla('alertas_vistas', [vista('decision:dueno_preguntas:p140', hace(1)), vista('decision:dueno_preguntas:p3', hace(1))])))
