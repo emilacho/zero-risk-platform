@@ -127,6 +127,29 @@ export interface Corrida {
   seco: boolean
 }
 
+/** 10-nov · tramo 2 del revisor de registro · el sobre que la cadena manda a la jefatura (la forma de su contrato; la cadena no importa `jefatura/`) */
+export interface EntradaDeRegistro {
+  artifact_type: 'registro'
+  artifact_id: string
+  client_id: string
+  journey_id: null
+  payload: {
+    texto: string
+    dry_run: boolean
+    version: number
+    documento: string
+    registro: { trato: 'tu' | 'vos' | 'usted'; fuente?: string }
+    pistas_de_registro: string[]
+    documentos_de_origen: Array<{ titulo: string; texto: string }>
+    productores?: Array<{ donde: string; agente: string }>
+  }
+}
+/** lo que contestó la jefatura al abrir: `esperando` (vuelve por la ruta de vuelta) · `cerrada` (ya cerró: trae su salida) · `no_abre` · `error` */
+export type ResultadoDeAbrirRegistro =
+  | { estado: 'esperando'; revision_id: string }
+  | { estado: 'cerrada'; salida: Record<string, unknown> }
+  | { estado: 'no_abre' | 'error'; motivo: string }
+
 export interface EsperaFila {
   id: number
   campana_id: string
@@ -182,7 +205,12 @@ export interface Almacen {
    * J7 · ¿la jefatura abriría una revisión de este tipo para este cliente? (el punto de espera «antes de pasar»). OPCIONAL: un almacén sin ella, o que falla, NO retiene (= hoy).
    * La implementa el almacén real leyendo la config y la política de la jefatura; la lógica de decidir es pura (`revision-jefatura.ts`).
    */
-  retencionDeJefatura?(tipo: 'estrategia' | 'calendario', clientId: string): Promise<{ retener: boolean; motivo: string }>
+  retencionDeJefatura?(tipo: 'estrategia' | 'calendario' | 'registro', clientId: string): Promise<{ retener: boolean; motivo: string }>
+  /**
+   * 10-nov · tramo 2 del revisor de registro · abre UNA revisión de registro en la jefatura (la misma función que su ruta, sin pasar por la red) con `devolver_a` = la vuelta de la cadena.
+   * OPCIONAL: sin ella, el registro no se revisa y el documento sigue con las pistas como aviso. Nunca lanza: un fallo vuelve como `error`.
+   */
+  abrirRevisionDeRegistro?(entrada: EntradaDeRegistro): Promise<ResultadoDeAbrirRegistro>
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>
   escribirConfig(clave: string, valor: unknown): Promise<void>

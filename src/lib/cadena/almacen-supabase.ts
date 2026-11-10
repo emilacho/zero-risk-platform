@@ -16,7 +16,12 @@ import type { SobreDePlan } from './campanas'
 import type { SobreDeTanda } from './mesas'
 import { almacenDeSupabase as almacenDeJefatura } from '@/lib/jefatura/revision/almacen-supabase'
 import { decidirRetencion } from './revision-jefatura'
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura } from './almacen'
+import { abrirRevision, armarSalida } from '../jefatura/revision/orquestador'
+import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDeLaJefatura } from '../jefatura/revision/adaptadores'
+import { resolverCierre } from '../jefatura/revision/cierre'
+import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA } from '../jefatura/revision/contrato'
+import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, ResultadoDeAbrirRegistro } from './almacen'
 import { horarioDeNorm } from './horario'
 import { registroDelCliente } from './registro'
 import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
@@ -86,6 +91,41 @@ export const consultasDeDireccion = (db: { from(tabla: string): any }) => ({
   esperasDeUnaPersona: (campanaIds: string[], tope: number) => db.from('cadena_esperas').select('campana_id, vence_en, accion_al_vencer, desde').in('campana_id', campanaIds).eq('objeto_tipo', 'necesita_humano').eq('estado', 'viva').eq('seco', false).limit(tope),
 })
 
+/**
+ * 10-nov · tramo 2 del revisor de registro · el puerto REAL `abrirRevisionDeRegistro` del almacén de la cadena: el MISMO patrón que la oficina (`oficina/adaptadores.ts` · `jefatura(sobre)`).
+ * Abre UNA revisión en la jefatura (la misma función que su ruta, sin pasar por la red) con `devolver_a` = la vuelta de la cadena (`api/jefatura/cadena-vuelta`: J4 solo entrega
+ * bajo `/api/jefatura/` o al `/webhook/` de n8n). Si la revisión necesita turnos de agente, despierta el flujo `jefatura · turno`; si ese aviso no llega, la re-arma el vigía de la jefatura.
+ * Nunca lanza: cualquier fallo vuelve como `error` y la cadena sigue con las pistas como aviso.
+ */
+export const RUTA_DE_VUELTA_DE_LA_CADENA = 'api/jefatura/cadena-vuelta'
+
+export interface EntornoDelRegistro { dispatchKey?: string; n8nWebhookBase?: string }
+
+export async function abrirRevisionDeRegistroReal(db: unknown, entrada: EntradaDeRegistro, env: EntornoDelRegistro = { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, f: typeof fetch = fetch): Promise<ResultadoDeAbrirRegistro> {
+  try {
+    const PJ = crearPuertosDeLaJefatura(db as never, entornoDeLaJefatura(), f)
+    const cuerpo = { ...entrada, payload: { ...entrada.payload, devolver_a: { tipo: 'webhook', destino: `${VERCEL_DE_LA_PLATAFORMA}${RUTA_DE_VUELTA_DE_LA_CADENA}` } } }
+    const r = await abrirRevision(PJ, cuerpo)
+    if (r.status === 409) return { estado: 'no_abre', motivo: String(r.cuerpo.motivo ?? r.cuerpo.error ?? 'la jefatura no abre') }
+    if (r.status !== 200) return { estado: 'error', motivo: `la jefatura contestó ${r.status}: ${JSON.stringify(r.cuerpo).slice(0, 200)}` }
+    if (r.cuerpo.accion === 'cerrado' && r.cuerpo.salida) return { estado: 'cerrada', salida: r.cuerpo.salida as Record<string, unknown> }
+    const id = String(r.cuerpo.revision_id ?? '')
+    if (r.cuerpo.accion === 'ya_existia') {
+      // la cadena volvió a entregar: si la revisión ya cerró, su salida; si sigue abierta, se espera la misma
+      const rev = await PJ.almacen.leerRevision(id)
+      if (rev && (ESTADOS_TERMINALES as readonly string[]).includes(rev.estado)) return { estado: 'cerrada', salida: armarSalida(rev, resolverCierre(rev.estado_del_motor, { tope: rev.estado === 'cerrada_por_tope', fallida: rev.estado === 'fallida' })) as unknown as Record<string, unknown> }
+      return { estado: 'esperando', revision_id: id }
+    }
+    if (r.cuerpo.accion === 'esperar' && r.cuerpo.turno && env.dispatchKey) {
+      const base = ((env.n8nWebhookBase ?? '').trim() || N8N_POR_OMISION).replace(/\/+$/, '')
+      // un aviso que no llega no tumba nada: la revisión queda abierta y la re-arma el vigía de la jefatura
+      try { await f(`${base}/zero-risk/jefatura-turno`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sala-dispatch-key': env.dispatchKey }, body: JSON.stringify({ revision_id: id, turno: r.cuerpo.turno }) }) } catch { /* el vigía de la jefatura */ }
+    }
+    if (r.cuerpo.accion === 'esperar' && id) return { estado: 'esperando', revision_id: id }
+    return { estado: 'error', motivo: `respuesta de la jefatura que no se entiende: ${JSON.stringify(r.cuerpo).slice(0, 200)}` }
+  } catch (e) { return { estado: 'error', motivo: e instanceof Error ? e.message : String(e) } }
+}
+
 export function almacenDeSupabase(): Almacen {
   const db = getSupabaseAdmin()
   const uno = async <T>(q: PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T | null> => { const { data, error } = await q; if (error) fallo(error); return (data as T | null) ?? null }
@@ -101,6 +141,8 @@ export function almacenDeSupabase(): Almacen {
         return decidirRetencion({ config, politica: pol.ok ? { activa: pol.activa } : null, tipo, client_id: clientId })
       } catch { return { retener: false, motivo: 'jefatura_ilegible' } }
     },
+    // 10-nov · tramo 2 del revisor de registro: abre la revisión con la vuelta a `api/jefatura/cadena-vuelta` (nunca lanza)
+    abrirRevisionDeRegistro: (entrada) => abrirRevisionDeRegistroReal(db, entrada),
     async leerConfig(k) { return (await uno<{ valor: unknown }>(db.from('cadena_config').select('valor').eq('clave', k).maybeSingle()))?.valor },
     async escribirConfig(k, v) { const { error } = await db.from('cadena_config').upsert({ clave: k, valor: v, actualizado_en: new Date().toISOString() }); if (error) fallo(error) },
     async plazos() { return lista<PlazoCfg>(db.from('cadena_plazos').select('*').limit(100)) },

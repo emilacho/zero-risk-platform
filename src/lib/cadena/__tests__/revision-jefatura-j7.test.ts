@@ -23,7 +23,7 @@ function almacen(retiene: boolean | { estrategia?: boolean; calendario?: boolean
     journeys: [],
   })
   al.retencion = async (tipo) => {
-    const r = typeof retiene === 'boolean' ? retiene : retiene[tipo] === true
+    const r = typeof retiene === 'boolean' ? retiene : (retiene as Record<string, boolean | undefined>)[tipo] === true
     return { retener: r, motivo: r ? 'jefatura_activa' : 'jefatura_apagada' }
   }
   return al
