@@ -1,0 +1,27 @@
+{
+  "_de_donde": "Filas REALES de client_brand_books leídas el 2026-11-10 ~19:40Z (CC1, solo lectura). Recortadas a las columnas que mira la guarda; se quitaron los correos de provenance_tag. Ningún dato construido.",
+  "pasa_la_vara": {
+    "_cliente": "Zero Risk Seguridad Industrial · seguridad industrial B2B · v5 vigente",
+    "id": "00c04575-20d1-4563-a61b-43c181e3dc80", "client_id": "df7e47cc-bec4-4fa2-bc24-ff97ba5213a5", "version": 5,
+    "gate_outcome": "paso_la_vara", "human_validated": false,
+    "provenance_tag": { "type": "evidence", "source": "legacy_pre_adr012", "trust_level": "unknown", "relleno_de_columnas": { "en": "2026-10-30T14:15:57.642Z", "desde_version": 4 } },
+    "created_at": "2026-10-30T14:16:03.976252+00:00", "tagline": null,
+    "forbidden_words": ["líder del mercado", "garantizado", "el número uno"], "required_terminology": ["extintores", "recarga", "señalética"]
+  },
+  "validado_por_el_dueno": {
+    "_cliente": "Náufrago · restaurante de mariscos · v5 vigente (la que trabó los lotes 46/47)",
+    "id": "a3e36226-f973-40b8-8d1f-5449b421bf97", "client_id": "0a2ffbd4-957c-4315-a37f-b9e4fbbbb312", "version": 5,
+    "gate_outcome": "salio_al_tope", "human_validated": true,
+    "provenance_tag": { "type": "evidence", "source": "legacy_pre_adr012", "trust_level": "unknown", "validado_en": "2026-11-04T12:07:39.110Z", "validado_por": "dueno", "manual_cambio_id": "7d9913a3-007f-4685-bcdd-a2321793a39c" },
+    "created_at": "2026-11-04T12:07:41.194685+00:00", "tagline": "Cuando tengas esa hambre.... Náufrago te espera!",
+    "forbidden_words": ["premium", "gourmet", "artesanal"], "required_terminology": ["encebollado", "ceviche", "Náufrago"]
+  },
+  "ni_aprobado_ni_validado": {
+    "_cliente": "Náufrago · v4 (la versión de antes de la firma del dueño)",
+    "id": "d43f9c15-7f57-487b-b976-5106b80ee2c3", "client_id": "0a2ffbd4-957c-4315-a37f-b9e4fbbbb312", "version": 4,
+    "gate_outcome": "salio_al_tope", "human_validated": false,
+    "provenance_tag": { "type": "evidence", "source": "legacy_pre_adr012", "trust_level": "unknown", "manual_cambio_id": "7d9913a3-007f-4685-bcdd-a2321793a39c" },
+    "created_at": "2026-11-04T11:55:36.559052+00:00", "tagline": "Cuando tengas esa hambre.... Náufrago te espera!",
+    "forbidden_words": ["premium"], "required_terminology": ["Náufrago"]
+  }
+}
