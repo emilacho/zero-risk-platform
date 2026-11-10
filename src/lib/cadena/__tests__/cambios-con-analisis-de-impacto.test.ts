@@ -11,7 +11,7 @@ import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import type { Campana, EstrategiaGuardada } from '../almacen'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto, sinCodigosInternos, TITULO_DE_LO_QUE_CAMBIO } from '../cambios-pedidos'
 import { ideasDelTexto, leerConcepto } from '../conceptos'
-import { briefAbrir, briefDevueltoConNota, conceptoAbrir, conceptoDecidir, marcoDelBrief, marcoDelConcepto, MOTIVO_CAMBIOS_DE_EMILIO, recibirBrief, recibirConcepto } from '../mesas'
+import { briefAbrir, briefDevueltoConNota, conceptoAbrir, conceptoDecidir, marcoDelBrief, marcoDelConcepto, MOTIVO_CAMBIOS_DE_EMILIO, pedidoDeCambiosVigente, recibirBrief, recibirConcepto } from '../mesas'
 
 const A = clienteA()
 const CAMP = 'camp-1'
@@ -210,4 +210,82 @@ describe('códigos internos fuera de lo que lee el dueño', () => {
     expect(sinCodigosInternos('ver brf-28de888eb3f2-v2 y con-28de888eb3f2-v3')).toBe('ver y')
     expect(sinCodigosInternos('- C1-I01 · instagram · foto · x · foto:9f71b0e9')).toBe('- C1-I01 · instagram · foto · x · foto:9f71b0e9')
   })
+})
+
+describe('10-nov · CC7 (a): el pedido de Emilio sigue vivo UNA vez si el brief que siguió lo devolvió el CÓDIGO (caso real Náufrago v2 → v3 → v4)', () => {
+  // el brief de la vuelta de cambios, sin las 2 secciones que el formato de hoy exige (como el v3 real)
+  const SIN_DOS = (QUE_CAMBIO + BRIEF).replace(/## Público\n.*\n/, '').replace(/## Cómo sabremos que funcionó\n.*\n/, '')
+  async function devueltoPorElCodigoTrasCambios() {
+    const al = await conConceptoListo()
+    expect((await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'brief', nota: NOTA }), AHORA)).status).toBe(200)
+    expect((await briefAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ version: 2 })
+    expect(await recibirBrief(al, entrega(2, SIN_DOS), AHORA)).toMatchObject({ estado: 'devuelta' })
+    return al
+  }
+  it('🔴 abrir sin nota en el pedido: sale la versión siguiente con la nota de Emilio, el brief devuelto como base y lo que le falta', async () => {
+    const al = await devueltoPorElCodigoTrasCambios()
+    const r = await briefAbrir(al, wf(), AHORA)
+    expect(r.status).toBe(200)
+    expect(r.cuerpo).toMatchObject({ version: 3 })
+    const m = marco(r)
+    expect(m).toContain(NOTA)
+    expect(m).toContain('# CÓMO SE APLICAN LOS CAMBIOS')
+    expect(m).toContain('# EL BRIEF ANTERIOR (versión 2)')
+    expect(m).toContain('# LO QUE LE FALTA AL BRIEF ANTERIOR')
+    expect(m).toContain('«## Público», «## Cómo sabremos que funcionó»')
+    expect(m).toContain('# DEVOLUCIÓN')
+  })
+  it('🔴 con la nota en el pedido (el reintento por la puerta), la base es igual el último texto escrito', async () => {
+    const al = await devueltoPorElCodigoTrasCambios()
+    const m = marco(await briefAbrir(al, wf({ nota: NOTA }), AHORA))
+    expect(m).toContain('# EL BRIEF ANTERIOR (versión 2)')
+    expect(m).toContain('# LO QUE LE FALTA AL BRIEF ANTERIOR')
+  })
+  it('🔴 el rescate del sobre (brief en borrador) conserva la nota heredada y la base', async () => {
+    const al = await devueltoPorElCodigoTrasCambios()
+    await briefAbrir(al, wf(), AHORA)
+    const r = await briefAbrir(al, wf(), AHORA)
+    expect(r.cuerpo).toMatchObject({ ya_abierta: true, version: 3 })
+    expect(marco(r)).toContain(NOTA)
+    expect(marco(r)).toContain('# EL BRIEF ANTERIOR (versión 2)')
+  })
+  it('🔴 UNA vez: si el código devuelve también esa versión, ya no hay nota y la campaña va a revisión humana', async () => {
+    const al = await devueltoPorElCodigoTrasCambios()
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(3, SIN_DOS), AHORA)).toMatchObject({ estado: 'devuelta' })
+    const r = await briefAbrir(al, wf(), AHORA)
+    expect(r.status).toBe(409)
+    expect(r.cuerpo).toMatchObject({ error: 'brief_agotado', necesita_humano: true })
+  })
+  it('sin cambios de Emilio no cambia nada: un brief devuelto por el código no hereda nota ni base', () => {
+    const v = (version: number, estado: 'devuelta' | 'validada', motivo: string | null) => ({ version, estado, motivo, devolucion_texto: motivo ? NOTA : 'falta el público', texto_md: BRIEF })
+    expect(pedidoDeCambiosVigente([v(1, 'devuelta', null)], 2, null)).toEqual({ nota: null, base: null, heredada: false })
+    expect(pedidoDeCambiosVigente([v(1, 'devuelta', null), v(2, 'devuelta', null)], 3, null)).toEqual({ nota: null, base: null, heredada: false })
+    // la nota del anterior inmediato manda, sin heredar
+    expect(pedidoDeCambiosVigente([v(1, 'devuelta', MOTIVO_CAMBIOS_DE_EMILIO)], 2, null)).toMatchObject({ nota: NOTA, heredada: false })
+    // si la versión que siguió al pedido salió VALIDADA, el pedido ya se cumplió: no se hereda (abrir otra vez sin nota = «ya hecha»)
+    expect(pedidoDeCambiosVigente([v(1, 'devuelta', MOTIVO_CAMBIOS_DE_EMILIO), v(2, 'validada', null)], 3, null)).toEqual({ nota: null, base: null, heredada: false })
+    // una versión DESCARTADA (la mesa no entregó texto) no hereda: sin texto no hay base y el v4 saldría sin ella (CC7 · 🟡 de #982)
+    expect(pedidoDeCambiosVigente([v(1, 'devuelta', MOTIVO_CAMBIOS_DE_EMILIO), { version: 2, estado: 'descartada' as const, motivo: null, devolucion_texto: null, texto_md: null }], 3, null)).toEqual({ nota: null, base: null, heredada: false })
+    // la herencia salta UNA versión, no dos
+    expect(pedidoDeCambiosVigente([v(1, 'devuelta', MOTIVO_CAMBIOS_DE_EMILIO), v(2, 'devuelta', null), v(3, 'devuelta', null)], 4, null)).toMatchObject({ nota: null, base: null })
+  })
+})
+
+it('🔴 en el camino real: si la versión tras los cambios sale VALIDADA, abrir otra vez sin nota no rehace el brief', async () => {
+  const al = await conConceptoListo()
+  await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'brief', nota: NOTA }), AHORA)
+  await briefAbrir(al, wf(), AHORA)
+  expect(await recibirBrief(al, entrega(2, QUE_CAMBIO + BRIEF), AHORA)).toMatchObject({ estado: 'validada' })
+  expect((await briefAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ ya_hecha: true, version: 2 })
+})
+
+it('🔴 en el camino real: tras «Pedir cambios», si la mesa del brief no entrega (DESCARTADA), abrir otra vez no hereda la nota: brief agotado', async () => {
+  const al = await conConceptoListo()
+  await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'brief', nota: NOTA }), AHORA)
+  expect((await briefAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ version: 2 })
+  await al.actualizarBriefCreativo(CAMP, 2, { estado: 'descartada' })
+  const r = await briefAbrir(al, wf(), AHORA)
+  expect(r.status).toBe(409)
+  expect(r.cuerpo).toMatchObject({ error: 'brief_agotado', necesita_humano: true })
 })

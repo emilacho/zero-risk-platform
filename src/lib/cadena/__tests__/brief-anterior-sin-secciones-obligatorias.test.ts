@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import { leerBriefCreativo, seccionesObligatoriasQueFaltan } from '../brief-creativo'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto, TITULO_DE_LO_QUE_CAMBIO } from '../cambios-pedidos'
-import { marcoDelBrief, marcoDelConcepto } from '../mesas'
+import { marcoDelBrief, marcoDelConcepto, MOTIVO_CAMBIOS_DE_EMILIO, pedidoDeCambiosVigente } from '../mesas'
 
 const fx = (n: string) => readFileSync(join(__dirname, '..', '__fixtures__', n), 'utf8')
 const V2 = fx('brief-naufrago-v2-real.md')
@@ -83,5 +83,21 @@ describe('genérico (GO de Lenovo 10-nov): en cualquier documento con «Pedir ca
     const base = { ctx: contextoDe(clienteA()), estrategia: clienteA().estrategia, briefTexto: COMPLETO, version: 4 }
     expect(marcoDelConcepto({ ...base, nota: 'costa → playa' })).toContain('El formato que vale es el de HOY')
     expect(marcoDelConcepto({ ...base, nota: null })).not.toContain('El formato que vale es el de HOY')
+  })
+})
+
+describe('10-nov · el reintento real: v2 «cambios de Emilio» → v3 devuelto por el código → el v4 hereda la nota y toma el v3 como base', () => {
+  const NOTA_REAL = 'costa → playa'
+  const SECUENCIA = [
+    { version: 2, estado: 'devuelta' as const, motivo: MOTIVO_CAMBIOS_DE_EMILIO as string | null, devolucion_texto: NOTA_REAL as string | null, texto_md: V2 as string | null },
+    { version: 3, estado: 'devuelta' as const, motivo: null, devolucion_texto: 'falta la sección «## Público» · falta la sección «## Cómo sabremos que funcionó»', texto_md: V3 },
+  ]
+  it('🔴 con los textos reales: nota heredada del v2, base = el v3 (que ya dice «playa») y el aviso de lo que le falta', () => {
+    const p = pedidoDeCambiosVigente(SECUENCIA, 4, null)
+    expect(p).toMatchObject({ nota: NOTA_REAL, heredada: true })
+    expect(p.base?.version).toBe(3)
+    const b = briefAnteriorParaElMarco(p.base!)
+    expect(b).toContain('# EL BRIEF ANTERIOR (versión 3)')
+    expect(b).toContain('«## Público», «## Cómo sabremos que funcionó»')
   })
 })
