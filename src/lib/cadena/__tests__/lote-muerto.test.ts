@@ -143,6 +143,11 @@ describe('la regla exacta', () => {
       expect(e).toEqual({ envios: 1, reintentos: 0, ultimo: 0, libre: 4, ultimo_en: horas(AYER, 20) })
       expect(decidirLote(K, e, horas(AYER, 22))).toEqual({ tipo: 'reintentar', intento: 1, llave: 'camp:2026-W46:1:r4' })
     })
+    it(`borde (nota de CC7) · el ÚLTIMO número (r${LLAVES_DE_REINTENTO}) todavía se usa; uno más ya no`, () => {
+      const hasta = (n: number) => enviosDesdeElRegistro(ll, [...ll.slice(1, n + 1).map((k) => ({ idempotency_key: k, created_at: AYER, fila_ids: ['a'] })), { idempotency_key: ll[0], created_at: horas(AYER, 20), fila_ids: ['c'] }], ['c'])
+      expect(decidirLote(K, hasta(LLAVES_DE_REINTENTO - 1), horas(AYER, 22))).toEqual({ tipo: 'reintentar', intento: 1, llave: `camp:2026-W46:1:r${LLAVES_DE_REINTENTO}` })
+      expect(decidirLote(K, hasta(LLAVES_DE_REINTENTO), horas(AYER, 22))).toEqual({ tipo: 'agotado', envios: 1 })
+    })
     it(`sin números libres en la base (r1..r${LLAVES_DE_REINTENTO} gastados) → agotado, no inventa otra llave`, () => {
       const viejos = ll.slice(1).map((k) => ({ idempotency_key: k, created_at: AYER, fila_ids: ['a'] }))
       const e = enviosDesdeElRegistro(ll, [...viejos, { idempotency_key: ll[0], created_at: horas(AYER, 20), fila_ids: ['c'] }], ['c'])
