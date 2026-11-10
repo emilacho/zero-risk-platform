@@ -4,7 +4,7 @@
  */
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno } from '../almacen'
 import type { LlaveDeFecha } from '../indicaciones'
-import { claveDeFecha } from '../fechas-del-cliente'
+import { claveDeFecha, ordenarLlaves } from '../fechas-del-cliente'
 import type { PlazoCfg } from '../esperas'
 import type { Fila, FormatosPorRed, Hallazgo } from '../tipos'
 import type { FechaEspecialVerificada } from '../validador-calendario'
@@ -65,8 +65,12 @@ export class AlmacenMemoria implements Almacen {
   esperas: EsperaFila[] = []
   coberturas: FechaCobertura[] = []
   fechas: (FechaEspecialVerificada & { pais: string; client_id?: string | null })[] = []
-  /** 10-nov · B: las marcas de «ya se avisó» por país y tipo (en la base, llave única) */
-  alarmasDeFecha = new Set<string>()
+  /** 10-nov · B: las marcas de «ya se avisó» por país y tipo (en la base, una sola ABIERTA por país y tipo) */
+  marcasDeAlarma: { pais: string; tipo: string; cerrada: boolean }[] = []
+  /** las abiertas, como `pais|tipo` */
+  get alarmasDeFecha(): Set<string> { return new Set(this.marcasDeAlarma.filter((m) => !m.cerrada).map((m) => `${m.pais}|${m.tipo}`)) }
+  /** el reloj de la base para `investigado_en` (sube en cada guardado: así se ordenan las llaves por uso) */
+  private relojDeCobertura = 0
   /** lo que se mandó a #alertas */
   alarmasEnviadas: string[] = []
   /** 10-nov · C: lo que se le preguntó al dueño (con «repetida» si la misma pregunta sigue pendiente) */
@@ -233,21 +237,22 @@ export class AlmacenMemoria implements Almacen {
   async coberturaDe(pais: string, tipo: string, ambito: string, anio: number) { return this.coberturas.find((c) => c.pais === pais && c.tipo === tipo && c.ambito_clave === ambito && c.anio === anio) ?? null }
   async guardarCobertura(c: FechaCobertura) {
     const i = this.coberturas.findIndex((x) => x.pais === c.pais && x.tipo === c.tipo && x.ambito_clave === c.ambito_clave && x.anio === c.anio)
-    if (i >= 0) this.coberturas[i] = c
-    else this.coberturas.push(c)
+    const conHora = { ...c, investigado_en: new Date(Date.UTC(2026, 0, 1) + ++this.relojDeCobertura * 1000).toISOString() } // como la base: cada guardado sella la hora
+    if (i >= 0) this.coberturas[i] = conHora
+    else this.coberturas.push(conHora)
   }
   async fechasEspeciales(_pais: string, tipos: string[], _desde?: string, _hasta?: string, clientId?: string) {
     return this.fechas.filter((f) => (!tipos.length || tipos.includes(f.tipo)) && (!f.client_id || f.client_id === clientId)).map(({ client_id: _c, ...f }) => f)
   }
   async llavesDeFechas(paisCrudo: string, clientId: string): Promise<LlaveDeFecha[]> {
     const pais = claveDeFecha(paisCrudo) // como la base: el país se guarda normalizado
-    const out = new Map<string, LlaveDeFecha>()
-    for (const c of this.coberturas.filter((x) => x.pais === pais)) out.set(`${c.tipo}|${c.ambito_clave}`, { llave: c.tipo, ambito: c.ambito_clave })
-    for (const f of this.fechas.filter((x) => x.pais === pais && (!x.client_id || x.client_id === clientId))) out.set(`${f.tipo}|${f.ambito}`, { llave: f.tipo, ambito: f.ambito, clase: f.origen === 'cliente' ? 'temporada_del_negocio' : 'feriado_publico' })
-    return [...out.values()]
+    return ordenarLlaves([
+      ...this.coberturas.filter((x) => x.pais === pais).map((c) => ({ llave: c.tipo, ambito: c.ambito_clave, cuando: c.investigado_en ?? null })),
+      ...this.fechas.filter((x) => x.pais === pais && (!x.client_id || x.client_id === clientId)).map((f) => ({ llave: f.tipo, ambito: f.ambito, clase: f.origen === 'cliente' ? 'temporada_del_negocio' as const : 'feriado_publico' as const, cuando: null })),
+    ])
   }
-  async marcarAlarmaDeFecha(pais: string, tipo: string) { const k = `${pais}|${tipo}`; if (this.alarmasDeFecha.has(k)) return false; this.alarmasDeFecha.add(k); return true }
-  async olvidarAlarmaDeFecha(pais: string, tipo: string) { this.alarmasDeFecha.delete(`${pais}|${tipo}`) }
+  async marcarAlarmaDeFecha(pais: string, tipo: string) { if (this.marcasDeAlarma.some((m) => !m.cerrada && m.pais === pais && m.tipo === tipo)) return false; this.marcasDeAlarma.push({ pais, tipo, cerrada: false }); return true }
+  async cerrarAlarmaDeFecha(pais: string, tipo: string) { for (const m of this.marcasDeAlarma) if (!m.cerrada && m.pais === pais && m.tipo === tipo) m.cerrada = true }
   async avisarAlarma(texto: string) { this.alarmasEnviadas.push(texto) }
   async preguntarAlDueno(p: PreguntaAlDueno) {
     const ya = this.preguntasAlDueno.some((x) => x.client_id === p.client_id && x.tema === p.tema)

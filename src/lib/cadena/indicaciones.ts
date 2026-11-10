@@ -44,7 +44,7 @@ export interface LlaveDeFecha { llave: string; ambito: string; clase?: ClaseDeFe
 
 export function lineaDeLlavesDeFechas(llaves: LlaveDeFecha[] | undefined): string {
   const l = llaves ?? []
-  return `# LLAVES DE FECHAS QUE YA EXISTEN (para este país y este negocio)\n${l.length ? l.map((x) => `- ${x.llave} · ámbito ${x.ambito}${x.clase ? ` · ${x.clase}` : ''}`).join('\n') : '(ninguna todavía)'}`
+  return `# LLAVES DE FECHAS QUE YA EXISTEN (para este país y este negocio · la usada más recientemente primero)\n${l.length ? l.map((x) => `- ${x.llave} · ámbito ${x.ambito}${x.clase ? ` · ${x.clase}` : ''}`).join('\n') : '(ninguna todavía)'}`
 }
 
 const NOMBRE_DEL_DIA = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
@@ -76,7 +76,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
       ...[lineaDelDiaUno(p.fechaInicio, p.fechaFin, p.diasDeCampana ?? 90, p.diaUnoDelPlan)].filter(Boolean),
       '`fechas_que_importan` es una lista de TIPOS de fechas que le importan a ESTE negocio (feriados locales, temporadas, eventos del sector, fechas comerciales… o ninguna). Lo normal es la lista VACÍA: no inventes tipos «por si acaso». Si declaras uno, di su origen (plan | estrategia | alta) y un motivo concreto.',
       'Cada fecha que declares lleva su `clase`, y la decides tú razonando sobre lo que ES la fecha (no por las palabras de su nombre): `feriado_publico` si es una fecha del país o de un lugar, igual para todos los negocios de ahí (Navidad, Año Nuevo, un feriado nacional o local); `temporada_del_negocio` si es un tramo propio de ESTE negocio (su temporada alta, su cosecha, el tramo del año en que más vende).',
-      '`llave`: la llave estable de esa fecha, en minúsculas y con guiones bajos. Mira la lista LLAVES DE FECHAS QUE YA EXISTEN: si tu fecha es la MISMA que una de la lista (aunque tú la escribirías distinto), usa esa llave y ese ámbito tal cual y pon `llave_nueva` en false. Solo si ninguna es la misma, crea una nueva y pon `llave_nueva` en true.',
+      '`llave`: la llave estable de esa fecha, en minúsculas y con guiones bajos. Mira la lista LLAVES DE FECHAS QUE YA EXISTEN: si tu fecha es la MISMA que una de la lista (aunque tú la escribirías distinto), usa esa llave y ese ámbito tal cual y pon `llave_nueva` en false. Si en la lista hay dos o más que son la misma fecha escrita de formas distintas, usa la PRIMERA que aparece (la lista va de la usada más recientemente a la menos). Solo si ninguna es la misma, crea una nueva y pon `llave_nueva` en true.',
       'En una `temporada_del_negocio`, `desde` y `hasta` (`YYYY-MM-DD`) son el tramo que dice el PLAN, y `cita_plan` es la frase literal del plan que lo dice. Si el plan no dice cuándo es, deja `desde`, `hasta` y `cita_plan` vacíos: queda pendiente y el sistema consigue la fecha por su vía. Nunca pongas una fecha que el plan no dice. En un `feriado_publico`, `desde` y `hasta` van vacíos: su fecha la verifica el sistema con las fuentes oficiales.',
       '`patron_semanal`: los slots que se repiten cada semana (día, hora, red, formato, pilar, sede). Usa solo redes y formatos permitidos. `requiere_abierto` solo si la pieza depende de que un local esté abierto; si el negocio no tiene local, siempre false.',
       '`pendientes`: lo que falta saber, con qué pieza desbloquea y quién lo pide (`portero` = el cerebro del cliente, `sistema` = investigarlo con fuente). Nunca se le pregunta nada a nadie del negocio.',

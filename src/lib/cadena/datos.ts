@@ -141,7 +141,7 @@ export async function fechasCobertura(al: Almacen, cuerpo: Record<string, unknow
     // el proceso de fechas solo entiende `sin_fuente` para terminar: la respuesta lo mantiene y dice la verdad en `cobertura` (no hay que republicar el proceso)
     return { status: 200, cuerpo: { estado: 'sin_fuente', cobertura: 'sin_configurar', alarma, motivo: `sin_configurar: no hay fuentes oficiales cargadas para «${k.tipo}» en «${k.pais}» (cadena_config.dominios_fechas · «${k.tipo}|${k.pais}» o «*|${k.pais}»); no cuenta como intento y se vuelve a mirar cada vez` } }
   }
-  if (sinConfigurar) { try { await al.olvidarAlarmaDeFecha(k.pais, k.tipo) } catch { /* la marca vieja solo calla una alarma repetida: no frena la investigación */ } }
+  if (sinConfigurar) { try { await al.cerrarAlarmaDeFecha(k.pais, k.tipo) } catch { /* la marca vieja solo calla una alarma repetida: no frena la investigación */ } }
   const intentos = (sinConfigurar ? 0 : cob?.intentos ?? 0) + 1
   await al.guardarCobertura({ ...k, estado: 'en_curso', intentos })
   return { status: 200, cuerpo: { estado: 'investigar', intento: intentos, dominios } }

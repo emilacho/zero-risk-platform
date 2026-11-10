@@ -29,6 +29,7 @@ import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
 import type { LlaveDeFecha } from './indicaciones'
 import { avisarAAlertas } from '@/lib/buzon-dueno/alertas'
+import { ordenarLlaves } from './fechas-del-cliente'
 import { preguntar } from '@/lib/dueno-preguntas/preguntas'
 import { cerebroPorHttp } from '@/lib/dueno-preguntas/cerebro-http'
 import { baseDeRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
@@ -292,21 +293,22 @@ export function almacenDeSupabase(): Almacen {
     },
     async llavesDeFechas(pais, clientId) {
       const p = clave(pais)
-      const cob = await lista<{ tipo: string; ambito_clave: string }>(db.from('cadena_fechas_cobertura').select('tipo, ambito_clave').eq('pais', p).limit(2000))
-      const fe = await lista<{ tipo: string; ambito: string; client_id: string | null; origen: string | null }>(db.from('cadena_fechas_especiales').select('tipo, ambito, client_id, origen').eq('pais', p).or(`client_id.is.null,client_id.eq.${clientId}`).limit(2000))
-      const out = new Map<string, LlaveDeFecha>()
-      for (const c of cob) out.set(`${c.tipo}|${c.ambito_clave}`, { llave: c.tipo, ambito: c.ambito_clave })
-      for (const f of fe) out.set(`${f.tipo}|${f.ambito}`, { llave: f.tipo, ambito: f.ambito, clase: f.origen === 'cliente' ? 'temporada_del_negocio' : 'feriado_publico' })
-      return [...out.values()].sort((a, b) => `${a.llave}|${a.ambito}`.localeCompare(`${b.llave}|${b.ambito}`))
+      const cob = await lista<{ tipo: string; ambito_clave: string; investigado_en: string | null }>(db.from('cadena_fechas_cobertura').select('tipo, ambito_clave, investigado_en').eq('pais', p).limit(2000))
+      const fe = await lista<{ tipo: string; ambito: string; client_id: string | null; origen: string | null; verificado_en: string | null }>(db.from('cadena_fechas_especiales').select('tipo, ambito, client_id, origen, verificado_en').eq('pais', p).or(`client_id.is.null,client_id.eq.${clientId}`).limit(2000))
+      return ordenarLlaves([
+        ...cob.map((c) => ({ llave: c.tipo, ambito: c.ambito_clave, cuando: c.investigado_en })),
+        ...fe.map((f) => ({ llave: f.tipo, ambito: f.ambito, clase: f.origen === 'cliente' ? 'temporada_del_negocio' as const : 'feriado_publico' as const, cuando: f.verificado_en })),
+      ])
     },
     async marcarAlarmaDeFecha(pais, tipo) {
+      // una sola ABIERTA por país y tipo (índice único parcial): la segunda corrida choca y no avisa
       const { error } = await db.from('cadena_fechas_alarmas').insert({ pais, tipo })
       if (!error) return true
       if ((error as { code?: string }).code === '23505') return false // otra corrida ya la marcó: ya se avisó
       fallo(error)
       return false
     },
-    async olvidarAlarmaDeFecha(pais, tipo) { const { error } = await db.from('cadena_fechas_alarmas').delete().eq('pais', pais).eq('tipo', tipo); if (error) fallo(error) },
+    async cerrarAlarmaDeFecha(pais, tipo) { const { error } = await db.from('cadena_fechas_alarmas').update({ cerrada_en: new Date().toISOString() }).eq('pais', pais).eq('tipo', tipo).is('cerrada_en', null); if (error) fallo(error) },
     async avisarAlarma(texto) { await avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '' })(texto) },
     async preguntarAlDueno(p) {
       try {

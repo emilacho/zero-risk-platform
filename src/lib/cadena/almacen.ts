@@ -172,7 +172,7 @@ export interface ContextoDelCliente {
 }
 
 /** `sin_configurar` (10-nov · B): no hay fuentes oficiales cargadas para ese país y tipo. No es final ni cuenta intento: se vuelve a mirar la configuración cada vez */
-export interface FechaCobertura { pais: string; tipo: string; ambito_clave: string; anio: number; estado: 'verificada' | 'sin_fuente' | 'en_curso' | 'sin_configurar'; intentos: number }
+export interface FechaCobertura { pais: string; tipo: string; ambito_clave: string; anio: number; estado: 'verificada' | 'sin_fuente' | 'en_curso' | 'sin_configurar'; intentos: number; /** lo pone la base al guardar: ordena las llaves por uso */ investigado_en?: string | null }
 
 /** C · una pregunta al dueño por la ruta de preguntas (`dueno_preguntas`): `ok` también cuando ya estaba preguntada o respondida (no se repite) */
 export interface PreguntaAlDueno { client_id: string; tema: string; pregunta: string; canal: string; oficina: string; agente: string; workflow_id: string; workflow_execution_id: string }
@@ -271,12 +271,15 @@ export interface Almacen {
   guardarCobertura(c: FechaCobertura): Promise<void>
   /** las públicas (sin cliente) y, si se pasa `clientId`, también las temporadas de ESE cliente; una temporada entra si su tramo toca [desde, hasta] */
   fechasEspeciales(pais: string, tipos: string[], desde: string, hasta: string, clientId?: string): Promise<FechaEspecialVerificada[]>
-  /** D · las llaves de fechas que ya existen para el país (coberturas y fechas públicas) y las temporadas del cliente: se le dan al agente para que no invente otra grafía */
+  /**
+   * D · las llaves de fechas que ya existen para el país (coberturas y fechas públicas) y las temporadas del cliente: se le dan al agente para que no invente otra grafía.
+   * En orden: la usada más recientemente primero (punto 2 de CC7: si dos grafías son la misma fecha, manda la primera, y la que se usa queda primera la vez siguiente).
+   */
   llavesDeFechas(pais: string, clientId: string): Promise<LlaveDeFecha[]>
   /** B · una sola alarma por país y tipo: `true` solo para quien inserta la marca (llave única en la base); el resto, `false` */
   marcarAlarmaDeFecha(pais: string, tipo: string): Promise<boolean>
-  /** B · las fuentes aparecieron: se borra la marca, y si la configuración se vuelve a vaciar, sale otra alarma */
-  olvidarAlarmaDeFecha(pais: string, tipo: string): Promise<void>
+  /** B · las fuentes aparecieron: la marca abierta se CIERRA con su fecha (queda el historial, no se borra); si la configuración se vuelve a vaciar, sale otra alarma */
+  cerrarAlarmaDeFecha(pais: string, tipo: string): Promise<void>
   /** la vía de alertas de hoy (#alertas). Nunca lanza */
   avisarAlarma(texto: string): Promise<void>
   /** C · le pregunta al dueño por la ruta de preguntas; nunca lanza */

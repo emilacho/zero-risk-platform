@@ -31,6 +31,22 @@ export function dominiosDe(config: unknown, tipo: string, pais: string): string[
   return propia.length ? propia : lista(c[`*|${pais}`])
 }
 
+/**
+ * D · punto 2 de CC7: una sola entrada por (llave, ámbito), la usada más recientemente PRIMERO (lo que no tiene fecha, al final, y entre iguales por orden alfabético).
+ * La clase de una fecha guardada gana a la de una cobertura sin clase. Puro: el mismo insumo da la misma lista.
+ */
+export function ordenarLlaves(filas: { llave: string; ambito: string; clase?: ClaseDeFecha | null; cuando?: string | null }[]): LlaveDeFecha[] {
+  const por = new Map<string, { llave: string; ambito: string; clase: ClaseDeFecha | null; cuando: string }>()
+  for (const f of filas) {
+    const k = `${f.llave}|${f.ambito}`, ya = por.get(k)
+    const cuando = f.cuando ?? ''
+    por.set(k, { llave: f.llave, ambito: f.ambito, clase: f.clase ?? ya?.clase ?? null, cuando: ya && ya.cuando > cuando ? ya.cuando : cuando })
+  }
+  return [...por.values()]
+    .sort((a, b) => (a.cuando === b.cuando ? `${a.llave}|${a.ambito}`.localeCompare(`${b.llave}|${b.ambito}`) : a.cuando < b.cuando ? 1 : -1))
+    .map((x) => ({ llave: x.llave, ambito: x.ambito, ...(x.clase ? { clase: x.clase } : {}) }))
+}
+
 /** D · ¿la llave que devolvió el agente existe para ese país (con ese ámbito), o el agente dijo que es nueva? */
 export function llaveConocida(f: Pick<FechaQueImporta, 'llave' | 'tipo' | 'ambito' | 'llave_nueva'>, llaves: LlaveDeFecha[]): { ok: boolean; existe: boolean } {
   const k = llaveDe(f), a = claveDeFecha(f.ambito)
