@@ -17,7 +17,8 @@ import { esFechaIso, restarDias, semanaIso } from './fechas'
 import { citaAparece, normalizar } from './texto'
 import { claveDeFecha, dominiosDe, MESES } from './fechas-del-cliente'
 import { familiaDeFila } from './familia'
-import { lotesVencidos } from './lotes'
+import { lotesVencidos, type LoteVencido } from './lotes'
+import { avisoDeLote, decidirLote } from './lote-muerto'
 import type { Fila } from './tipos'
 
 
@@ -63,7 +64,19 @@ export async function filasLotes(al: Almacen, cuerpo: Record<string, unknown>, a
   if (c.estado !== 'activa') return { status: 200, cuerpo: { lotes: [], motivo: `la campaña está ${c.estado}` } }
   const hoy = (cadena(cuerpo.hoy) ?? ahora).slice(0, 10)
   const { lotes, version } = await lotesVencidos(al, c, hoy)
-  return { status: 200, cuerpo: { lotes, version } }
+  // 10-nov · LOTE MUERTO (`lote-muerto.ts`): solo el reloj, solo campañas reales y solo si el almacén sabe contar los envíos; si no, igual que siempre
+  if (c.seco === true || !al.enviosDeLote) return { status: 200, cuerpo: { lotes, version } }
+  const salen: LoteVencido[] = [], muertos: Array<Record<string, unknown>> = []
+  for (const l of lotes) {
+    const e = await al.enviosDeLote(c.client_id, l.lote)
+    const d = decidirLote(l, e, ahora)
+    if (d.tipo === 'sano') { salen.push({ ...l, idempotency_key: d.llave }); continue }
+    if (d.tipo === 'agotado') { muertos.push({ lote: l.lote, accion: 'agotado', envios: d.envios }); continue }
+    salen.push({ ...l, idempotency_key: d.llave })
+    const aviso = al.avisarLoteMuerto ? await al.avisarLoteMuerto({ ...avisoDeLote(c, l, d, e), workflow_id: cadena(cuerpo.workflow_id) ?? null, workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? null }) : { ok: false as const, error: 'el almacén no avisa' }
+    muertos.push({ lote: l.lote, accion: 'reintento', intento: d.intento, aviso })
+  }
+  return { status: 200, cuerpo: muertos.length ? { lotes: salen, version, lotes_muertos: muertos } : { lotes: salen, version } }
 }
 
 export async function filasMarcar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string = new Date().toISOString()): Promise<Respuesta> {

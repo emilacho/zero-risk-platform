@@ -241,6 +241,20 @@ export function almacenDeSupabase(): Almacen {
       if (error) fallo(error)
     },
     async cambiarEstadoDeFilas(campanaId, version, ids, estado) { const { error } = await db.from('cadena_calendario_filas').update({ estado }).eq('campana_id', campanaId).eq('calendario_version', version).in('id', ids); if (error) fallo(error) },
+    // 10-nov · LOTE MUERTO · los envíos del lote según la sala (el registro de eventos es la verdad de «se mandó»), contados por viaje (`correlation_id`)
+    async enviosDeLote(clientId, lote) {
+      const filas = await lista<{ correlation_id: string | null; created_at: string }>(db.from('sala_event_log').select('correlation_id, created_at').eq('client_id', clientId).eq('logical_period', lote).eq('journey_type', 'BRIEF').order('created_at', { ascending: false }).limit(500))
+      const viajes = new Set(filas.map((f) => f.correlation_id ?? `sin:${f.created_at}`))
+      return { envios: viajes.size, ultimo_en: filas[0]?.created_at ?? null }
+    },
+    async avisarLoteMuerto(a) {
+      try {
+        // carga perezosa: el buzón solo se importa cuando hay un lote muerto (el almacén no engorda para el resto de las llamadas)
+        const [{ avisar }, { dependenciasReales }] = await Promise.all([import('@/lib/avisos/nucleo'), import('@/lib/avisos/adaptadores')])
+        const r = await avisar(dependenciasReales(db as unknown as Parameters<typeof dependenciasReales>[0]), { ...a, tipo: 'alarma', origen: 'cadena/reloj · lote sin parte', origen_tipo: 'plataforma' })
+        return { ok: true, accion: `${r.accion} · slack ${r.slack}` }
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'error' } }
+    },
     async ultimaVersionDeCalendario(campanaId) { return (await lista<{ calendario_version: number }>(db.from('cadena_calendario_filas').select('calendario_version').eq('campana_id', campanaId).order('calendario_version', { ascending: false }).limit(1)))[0]?.calendario_version ?? 0 },
 
     async guardarValidaciones(campanaId, objeto, version, tanda, intento, hallazgos: Hallazgo[], seco) {
