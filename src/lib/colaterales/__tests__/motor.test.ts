@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import fx from './__fixtures__/naufrago-2026-11-10-extractos.json'
 import { red, pedazosDe, claves, type Edicion, type Pedazo } from '../red'
-import { gravedad, palabrasQueCambian } from '../gravedad'
+import { gravedad, palabrasQueCambian, FORMA_VIGENTE } from '../gravedad'
 import { yaCoincide, separarYaCoincide, verificarSalida, aplicarEnPedazo, aplicarEnDocumento, puedeLanzarMotor, puedeAplicarEn, notaSinColaterales, type SalidaDelAgente } from '../motor'
 
 const E2: Edicion = { documento: 'brief', seccion: 'Insight', antes: 'sabe que el bueno viene de la costa', despues: 'sabe que el bueno viene de la playa' }
@@ -69,6 +69,9 @@ describe('gravedad · la decide el código', () => {
   })
   it('idea: cualquier cambio de la idea central es 🔴', () => {
     expect(gravedad('idea', 'El oro que nunca buscaste', 'El oro que siempre buscaste', 'dato_clave')).toBe('rojo')
+  })
+  it('rige «por dato clave» (Lenovo 13:12Z)', () => {
+    expect(FORMA_VIGENTE).toBe('dato_clave')
   })
   it('un dato repetido nunca escala, en ninguna forma', () => {
     for (const f of ['campo', 'dato_clave'] as const) expect(gravedad('dato', 'jueves a lunes', 'miércoles a lunes', f)).toBe('normal')
@@ -141,6 +144,19 @@ describe('verificar la salida del agente', () => {
   it('con un cliente de voseo, el voseo no se rechaza', () => {
     const s: SalidaDelAgente = { ...ok, colaterales: [{ ...ok.colaterales[0], despues: 'viene de la playa y pagás al recibir' }] }
     expect(verificarSalida(E2, candidatos, textos, s, { registro: 'vos' }).aceptados).toHaveLength(1)
+  })
+  it('línea 2 CC6: «está», «más», «después», «país», «atrás» y «maracuyá» NO frenan un retoque', () => {
+    const s: SalidaDelAgente = { ...ok, colaterales: [{ ...ok.colaterales[0], despues: 'viene de la playa, está más cerca después del país, atrás, con maracuyá' }] }
+    expect(verificarSalida(E2, candidatos, textos, s, { registro: 'tu' }).aceptados).toHaveLength(1)
+  })
+  it('línea 2 CC6: el plan y el brief v4 reales de Náufrago (tuteo) dan 0 frenos por registro, pedazo por pedazo', () => {
+    for (const [doc, texto] of [['plan', fx.plan_4996c6c2], ['brief', fx.brief_v4_completo]] as const) {
+      const ps = pedazosDe(doc, texto).map((p, i) => ({ ...p, id: `C${i + 1}` }))
+      // cada pedazo real como «después» de un retoque sobre un pedazo neutro: si el detector lo frena, es un falso positivo
+      const neutro: Pedazo = { id: 'N1', documento: 'gran_idea', seccion: 'x', texto: 'texto base neutro', ocurrencia: 0, ruta: null }
+      const frenos = ps.filter((p) => verificarSalida(E2, [neutro], {}, { revisados: [{ id: 'N1', afecta: true, razon: '' }], colaterales: [{ id: 'N1', documento: 'gran_idea', antes: 'texto base neutro', despues: p.texto, porque: 'x' }], no_aparece: [] }, { registro: 'tu' }).rechazados.length)
+      expect(frenos.map((p) => p.texto.slice(0, 60)), doc).toEqual([])
+    }
   })
   it('sabotaje: un retoque en un pedazo marcado «no afecta» se rechaza', () => {
     const s: SalidaDelAgente = { ...ok, revisados: todosRevisados([]) }

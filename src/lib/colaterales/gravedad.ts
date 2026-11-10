@@ -15,6 +15,8 @@ import { normalizar } from './red'
 export type Campo = 'publico' | 'oferta' | 'idea' | 'dato' | 'texto'
 export type FormaDeGravedad = 'campo' | 'dato_clave'
 export type Gravedad = 'rojo' | 'normal'
+/** la forma que rige (Lenovo 13:12Z · recomendación CC7): «por dato clave del campo», comparando el antes y el después */
+export const FORMA_VIGENTE: FormaDeGravedad = 'dato_clave'
 
 export const CAMPOS_DE_FONDO: ReadonlySet<Campo> = new Set(['publico', 'oferta', 'idea'])
 

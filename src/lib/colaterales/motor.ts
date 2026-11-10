@@ -24,6 +24,12 @@ export function separarYaCoincide(candidatos: Pedazo[], e: Edicion): { ya_coinci
 }
 
 // ── 2 · verificar la salida del agente ─────────────────────────────────────────────────────────────────
+/**
+ * Falsos positivos del detector de la casa medidos contra los textos REALES de Náufrago (10-nov · línea 2 CC6): sustantivos agudos en -á.
+ * El plan y el brief v4 dan 0; el manual v5 daba «maracuyá». Cuando CC2 publique su detector corregido, esta lista se revisa contra él.
+ */
+export const NO_SON_VOSEO: ReadonlySet<string> = new Set(['maracuyá', 'bacará', 'sofá', 'papá', 'mamá', 'alá', 'maná', 'panamá', 'bogotá', 'canadá'])
+
 export interface SalidaDelAgente {
   revisados: { id: string; afecta: boolean; razon: string }[]
   colaterales: { id: string; documento: string; antes: string; despues: string; porque: string }[]
@@ -88,7 +94,7 @@ export function verificarSalida(
     if (o.registro !== 'vos') {
       // solo cuenta el voseo que el retoque AGREGA (si el pedazo ya lo traía, no lo inventa este retoque)
       const ya = new Set(voseoEn(p.texto))
-      const nuevo = voseoEn(c.despues).filter((w) => !ya.has(w))
+      const nuevo = voseoEn(c.despues).filter((w) => !ya.has(w) && !NO_SON_VOSEO.has(w))
       if (nuevo.length) { rechazados.push({ id: c.id, motivo: 'registro', detalle: nuevo.join(', ') }); continue }
     }
     aceptados.push({ pedazo: p, antes: c.antes, despues: c.despues, porque: c.porque })
