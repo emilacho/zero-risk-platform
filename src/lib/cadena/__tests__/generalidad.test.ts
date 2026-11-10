@@ -42,8 +42,15 @@ describe('agnóstica: ni un cliente, ni una ciudad, ni un rubro en el código de
 
 describe('cero contacto con el cliente: ningún destino ni valor apunta al dueño', () => {
   it('el código no pide nada al dueño: ni «dueno» ni «dueño» como valor, columna o destino', () => {
-    const malos = CODIGO.filter((c) => /due[nñ]o|owner/i.test(c.src)).map((c) => c.f.split(/[\\/]/).pop())
+    // 10-nov (GO Lenovo · fechas sin fuente · C): UNA sola puerta permitida, la de las preguntas (`dueno_preguntas`), que deja la pregunta en Decisiones de Emilio
+    // y NO contacta al cliente. Se quita solo esa puerta (su nombre y sus importaciones); cualquier otra mención sigue prohibida.
+    const PUERTA = /preguntarAlDueno|PreguntaAlDueno|'@\/lib\/dueno-preguntas\/(?:preguntas|cerebro-http)'|'@\/lib\/buzon-dueno\/alertas'/g
+    const malos = CODIGO.filter((c) => /due[nñ]o|owner/i.test(c.src.replace(PUERTA, ''))).map((c) => c.f.split(/[\\/]/).pop())
     expect(malos).toEqual([])
+  })
+  it('la única puerta hacia el dueño es la de las preguntas, y solo la usan las temporadas y el almacén', () => {
+    const usan = CODIGO.filter((c) => /preguntarAlDueno/.test(c.src)).map((c) => c.f.split(/[\\/]/).pop()).sort()
+    expect(usan).toEqual(['almacen-supabase.ts', 'almacen.ts', 'fechas-del-cliente.ts'])
   })
   it('no hay recados, ni contacto, ni WhatsApp al cliente', () => {
     const malos = CODIGO.filter((c) => /sala[_]recados|recado|contactar al cliente/i.test(c.src.replace(/sala[_]destinos[_]de[_]recado|almacenDeRecados|sala-recados\/almacen-supabase|leerDestino/g, ''))).map((c) => c.f.split(/[\\/]/).pop())

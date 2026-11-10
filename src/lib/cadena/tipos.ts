@@ -18,7 +18,19 @@ export interface Pilar { clave: string; nombre: string; pct: number }
 export interface Fase { clave: string; dia_desde: number; dia_hasta: number; objetivo: string; cita_plan: string }
 export interface Hito { clave: string; dia: number; tipo: 'revision' | 'lanzamiento' | 'corte'; cita_plan: string }
 export interface Dependencia { antes: string; despues: string; regla: string; cita_plan: string }
-export interface FechaQueImporta { tipo: string; ambito: string; origen: OrigenFecha; cita_plan?: string; motivo: string }
+/**
+ * 10-nov (GO Lenovo · fechas sin fuente · D): la CLASE la decide el agente razonando, no una lista de palabras.
+ * `feriado_publico` = fecha del país o de un lugar (Navidad, un feriado local): se verifica con las fuentes oficiales del país.
+ * `temporada_del_negocio` = un tramo propio de ESTE negocio (temporada alta, cosecha, vacaciones del colegio que le importan): su fuente es el cliente (cita del plan).
+ */
+export type ClaseDeFecha = 'feriado_publico' | 'temporada_del_negocio'
+export const CLASES_DE_FECHA: readonly ClaseDeFecha[] = ['feriado_publico', 'temporada_del_negocio']
+/**
+ * `clase`, `llave`, `llave_nueva`, `desde` y `hasta` llegaron el 10-nov: una estrategia guardada antes no los trae y se lee como siempre (tipo = llave, sin clase).
+ * `llave` = la llave ESTABLE que el código guarda (la que ya existe para ese país, si es la misma fecha). `llave_nueva` = el agente dice que no hay ninguna igual.
+ * `desde`/`hasta` (`YYYY-MM-DD`) solo en una temporada: el tramo que dice la cita del plan; vacíos si el plan no lo dice.
+ */
+export interface FechaQueImporta { tipo: string; ambito: string; origen: OrigenFecha; cita_plan?: string; motivo: string; clase?: ClaseDeFecha; llave?: string; llave_nueva?: boolean; desde?: string; hasta?: string }
 export interface Slot {
   slot: string; dia_semana: number; hora: string; red: string; formato: string; pilar: string
   requiere_abierto: boolean; sede: string

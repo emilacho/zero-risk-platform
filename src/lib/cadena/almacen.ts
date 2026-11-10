@@ -7,6 +7,7 @@
 import type { FormatosPorRed, Estrategia, Ficha, Fila, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
+import type { LlaveDeFecha } from './indicaciones'
 import type { ParteGuardada, ResultadoDeEmision, SobreDeProducir } from './autoproducir'
 import type { SobreDeLote } from './arranque'
 import type { SobreDePlan } from './campanas'
@@ -170,7 +171,11 @@ export interface ContextoDelCliente {
   fechaDelPlan: string
 }
 
-export interface FechaCobertura { pais: string; tipo: string; ambito_clave: string; anio: number; estado: 'verificada' | 'sin_fuente' | 'en_curso'; intentos: number }
+/** `sin_configurar` (10-nov · B): no hay fuentes oficiales cargadas para ese país y tipo. No es final ni cuenta intento: se vuelve a mirar la configuración cada vez */
+export interface FechaCobertura { pais: string; tipo: string; ambito_clave: string; anio: number; estado: 'verificada' | 'sin_fuente' | 'en_curso' | 'sin_configurar'; intentos: number }
+
+/** C · una pregunta al dueño por la ruta de preguntas (`dueno_preguntas`): `ok` también cuando ya estaba preguntada o respondida (no se repite) */
+export interface PreguntaAlDueno { client_id: string; tema: string; pregunta: string; canal: string; oficina: string; agente: string; workflow_id: string; workflow_execution_id: string }
 
 export interface Almacen {
   /**
@@ -264,7 +269,18 @@ export interface Almacen {
   // fechas especiales
   coberturaDe(pais: string, tipo: string, ambitoClave: string, anio: number): Promise<FechaCobertura | null>
   guardarCobertura(c: FechaCobertura): Promise<void>
-  fechasEspeciales(pais: string, tipos: string[], desde: string, hasta: string): Promise<FechaEspecialVerificada[]>
+  /** las públicas (sin cliente) y, si se pasa `clientId`, también las temporadas de ESE cliente; una temporada entra si su tramo toca [desde, hasta] */
+  fechasEspeciales(pais: string, tipos: string[], desde: string, hasta: string, clientId?: string): Promise<FechaEspecialVerificada[]>
+  /** D · las llaves de fechas que ya existen para el país (coberturas y fechas públicas) y las temporadas del cliente: se le dan al agente para que no invente otra grafía */
+  llavesDeFechas(pais: string, clientId: string): Promise<LlaveDeFecha[]>
+  /** B · una sola alarma por país y tipo: `true` solo para quien inserta la marca (llave única en la base); el resto, `false` */
+  marcarAlarmaDeFecha(pais: string, tipo: string): Promise<boolean>
+  /** B · las fuentes aparecieron: se borra la marca, y si la configuración se vuelve a vaciar, sale otra alarma */
+  olvidarAlarmaDeFecha(pais: string, tipo: string): Promise<void>
+  /** la vía de alertas de hoy (#alertas). Nunca lanza */
+  avisarAlarma(texto: string): Promise<void>
+  /** C · le pregunta al dueño por la ruta de preguntas; nunca lanza */
+  preguntarAlDueno(p: PreguntaAlDueno): Promise<{ ok: boolean; detalle: string }>
   // autoproducir (r65) · el parte guardado, el freno de gasto y el buzón de la sala
   /** el parte de trabajo guardado (`campaign_brief_pack`) con la familia por brief que dejó la copia por filas; `null` si no existe o no es un parte */
   parteDe(parteId: string): Promise<ParteGuardada | null>
@@ -281,5 +297,6 @@ export interface Almacen {
   recolectarSedes(clientId: string): Promise<{ ok: boolean; sedes: number; error?: string }>
   /** deja UN sobre en la sala (intake) · idempotente por su llave: el repetido vuelve `duplicado` · nunca despacha */
   emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision>
-  guardarFechaEspecial(f: { pais: string; tipo: string; ambito: string; anio: number; fecha: string; nombre: string; alcance: string; fuente_url: string; cita_literal: string; pagina_hash: string; doble_fuente: boolean; estado: 'verificada' | 'pendiente' }): Promise<void>
+  /** `client_id` + `hasta` + `origen: 'cliente'` = una temporada de ese cliente (10-nov · C); sin ellos, una fecha pública verificada en una fuente oficial */
+  guardarFechaEspecial(f: { pais: string; tipo: string; ambito: string; anio: number; fecha: string; nombre: string; alcance: string; fuente_url: string; cita_literal: string; pagina_hash: string; doble_fuente: boolean; estado: 'verificada' | 'pendiente'; client_id?: string | null; hasta?: string | null; origen?: 'fuente_oficial' | 'cliente' }): Promise<void>
 }

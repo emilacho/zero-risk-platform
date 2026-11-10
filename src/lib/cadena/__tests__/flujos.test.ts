@@ -189,7 +189,7 @@ const entrada = (cuerpo: Record<string, unknown>, llave = 'k-sala'): Item[] => [
 const correr = (m: Mundo, cuerpo: Record<string, unknown>, llave?: string) => m.sim.ejecutar(IDS.puerta, entrada(cuerpo, llave))
 const simulacros = (c: ClienteFixture, extra: Record<string, unknown> = {}) => ({ estrategia: [c.estrategia], calendario: [tandaBuena(c)], ...extra })
 const agenteQueDevuelve = (objetos: Record<string, any>): ((b: any) => RespuestaHttp) => (b) => {
-  const k = b.extra?.contrato === 'estrategia.v1' ? 'estrategia' : b.extra?.contrato === 'calendario_tanda.v1' ? 'calendario' : 'fechas'
+  const k = /^estrategia\.v[12]$/.test(String(b.extra?.contrato)) ? 'estrategia' : b.extra?.contrato === 'calendario_tanda.v1' ? 'calendario' : 'fechas'
   const o = objetos[k]
   return { statusCode: 200, body: { success: true, structured_output: Array.isArray(o) ? o.shift() : o, cost_usd: 0.31 } }
 }
@@ -368,7 +368,8 @@ describe('COMPORTAMIENTO · las fechas especiales las declara el cliente', () =>
     const m = mundo()
     const r = await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente) }))
     expect(r[0].json.resultado).toBe('cadena_abierta')
-    expect(m.al.coberturas.map((c) => [c.anio, c.estado]).sort()).toEqual([[2026, 'sin_fuente'], [2027, 'sin_fuente']])
+    // 10-nov · B: sin fuentes cargadas la cobertura queda «sin configurar» y el proceso de fechas termina igual (no se republica)
+    expect(m.al.coberturas.map((c) => [c.anio, c.estado]).sort()).toEqual([[2026, 'sin_configurar'], [2027, 'sin_configurar']])
     expect(m.al.campanas[0].estado).toBe('activa')
   })
   it('🔴 un cliente que NO declara ningún tipo: el sub-flujo de fechas NO corre (lista vacía = nada se investiga, nada se bloquea)', async () => {

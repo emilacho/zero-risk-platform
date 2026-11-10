@@ -15,11 +15,11 @@ import { cuerpoDeRunSdk } from './pasos'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { esFechaIso, restarDias, semanaIso } from './fechas'
 import { citaAparece, normalizar } from './texto'
+import { claveDeFecha, dominiosDe, MESES } from './fechas-del-cliente'
 import { familiaDeFila } from './familia'
 import { lotesVencidos } from './lotes'
 import type { Fila } from './tipos'
 
-const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
 const MARCAS_LEGALES: Partial<Record<Fila['estado'], Fila['estado'][]>> = {
   validada: ['lista_para_brief', 'briefeada', 'cancelada'],
@@ -101,7 +101,20 @@ export async function filasMarcar(al: Almacen, cuerpo: Record<string, unknown>, 
 }
 
 // ─────────────────────────────────────────────────────────────── FECHAS ESPECIALES (solo si el cliente declaró tipos)
-const clave = (x: string) => normalizar(x).replace(/\s+/g, '_')
+const clave = claveDeFecha
+
+/**
+ * B · no hay fuentes oficiales cargadas para ese país y tipo: UNA alarma por país y tipo (la marca tiene llave única en la base: solo avisa quien la inserta).
+ * En seco, o con la cadena en ensayo sin «enviar», no se marca ni se manda (la regla del reloj): así un ensayo no le quita la alarma a la corrida real.
+ */
+async function alarmaSinConfigurar(al: Almacen, c: { seco: boolean }, pais: string, tipo: string): Promise<'enviada' | 'ya_avisada' | 'no_enviada_en_ensayo'> {
+  const estado = await al.leerConfig('estado_cadena')
+  const enviar = !c.seco && (estado === 'encendida' || (estado === 'ensayo' && (await al.leerConfig('alertas_en_ensayo')) === 'enviar'))
+  if (!enviar) return 'no_enviada_en_ensayo'
+  if (!(await al.marcarAlarmaDeFecha(pais, tipo))) return 'ya_avisada'
+  await al.avisarAlarma(`Fechas especiales sin fuentes: el país «${pais}» no tiene fuentes oficiales cargadas para «${tipo}» (ni propias ni las del país). Las filas que dependen de esa fecha quedan sin fuente; la campaña sigue. Se arregla cargando las direcciones oficiales en la configuración (dominios_fechas · «*|${pais}»).`)
+  return 'enviada'
+}
 
 export async function fechasCobertura(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
   const pais = cadena(cuerpo.pais), tipo = cadena(cuerpo.tipo), ambito = cadena(cuerpo.ambito), anio = Number(cuerpo.anio)
@@ -114,16 +127,22 @@ export async function fechasCobertura(al: Almacen, cuerpo: Record<string, unknow
   const k = { pais: clave(pais), tipo: clave(tipo), ambito_clave: clave(ambito), anio }
   const cob = await al.coberturaDe(k.pais, k.tipo, k.ambito_clave, k.anio)
   if (cob?.estado === 'verificada') return { status: 200, cuerpo: { estado: 'ya_verificada' } }
-  if (cob?.estado === 'sin_fuente' || (cob && cob.intentos >= 3)) {
+  // B · «sin fuente con 0 intentos» es una fila de antes del 10-nov que nació de «sin dominios»: nunca se investigó, así que se lee como sin configurar (la fila no se reescribe)
+  const sinConfigurar = cob?.estado === 'sin_configurar' || (cob?.estado === 'sin_fuente' && cob.intentos === 0)
+  if (!sinConfigurar && (cob?.estado === 'sin_fuente' || (cob && cob.intentos >= 3))) {
     if (cob.estado !== 'sin_fuente') await al.guardarCobertura({ ...cob, estado: 'sin_fuente' })
-    return { status: 200, cuerpo: { estado: 'sin_fuente', motivo: 'tras 3 intentos o sin dominios: solo las filas que dependen de esta fecha quedan sin fuente; la campaña sigue' } }
+    return { status: 200, cuerpo: { estado: 'sin_fuente', motivo: 'tras 3 intentos: solo las filas que dependen de esta fecha quedan sin fuente; la campaña sigue' } }
   }
-  const dominios = ((await al.leerConfig('dominios_fechas')) as Record<string, string[]> | null)?.[`${k.tipo}|${k.pais}`] ?? []
+  // A · las fuentes oficiales del país: primero las propias del tipo, después las del país para todo tipo
+  const dominios = dominiosDe(await al.leerConfig('dominios_fechas'), k.tipo, k.pais)
   if (!dominios.length) {
-    await al.guardarCobertura({ ...k, estado: 'sin_fuente', intentos: cob?.intentos ?? 0 })
-    return { status: 200, cuerpo: { estado: 'sin_fuente', motivo: 'sin_dominios: no hay una lista de dominios permitidos para este tipo y país (cadena_config.dominios_fechas)' } }
+    if (!cob) await al.guardarCobertura({ ...k, estado: 'sin_configurar', intentos: 0 })
+    const alarma = await alarmaSinConfigurar(al, c, k.pais, k.tipo)
+    // el proceso de fechas solo entiende `sin_fuente` para terminar: la respuesta lo mantiene y dice la verdad en `cobertura` (no hay que republicar el proceso)
+    return { status: 200, cuerpo: { estado: 'sin_fuente', cobertura: 'sin_configurar', alarma, motivo: `sin_configurar: no hay fuentes oficiales cargadas para «${k.tipo}» en «${k.pais}» (cadena_config.dominios_fechas · «${k.tipo}|${k.pais}» o «*|${k.pais}»); no cuenta como intento y se vuelve a mirar cada vez` } }
   }
-  const intentos = (cob?.intentos ?? 0) + 1
+  if (sinConfigurar) { try { await al.olvidarAlarmaDeFecha(k.pais, k.tipo) } catch { /* la marca vieja solo calla una alarma repetida: no frena la investigación */ } }
+  const intentos = (sinConfigurar ? 0 : cob?.intentos ?? 0) + 1
   await al.guardarCobertura({ ...k, estado: 'en_curso', intentos })
   return { status: 200, cuerpo: { estado: 'investigar', intento: intentos, dominios } }
 }

@@ -14,6 +14,7 @@
  * 🔴 Lo que SÍ la frena es lo que ya la frenaba: un bloqueo del código (`necesita_humano`) nunca llega aquí (no se guarda ni se retiene).
  * 🔴 Agnóstico: ninguna rama por tipo de cliente, rubro ni país.
  */
+import { claseDe, llaveCrudaDe } from './fechas-del-cliente'
 import type { Almacen, Campana, EsperaFila } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
@@ -61,7 +62,8 @@ export interface FechaPedida { pais: string | null; tipo: string; ambito: string
 /** los tipos de fechas que ESTE cliente declaró y los años de la campaña: el flujo investiga solo eso (la misma cuenta que hacía `estrategiaGuardar`) */
 export function fechasPedidasDe(campana: Pick<Campana, 'fecha_inicio' | 'fecha_fin'>, pais: string | null, e: Estrategia): FechaPedida[] {
   const anios = [...new Set([campana.fecha_inicio.slice(0, 4), campana.fecha_fin.slice(0, 4)].map(Number))]
-  return pais ? e.fechas_que_importan.flatMap((f) => anios.map((anio) => ({ pais, tipo: f.tipo, ambito: f.ambito, anio }))) : []
+  // 10-nov · C + D: solo las fechas públicas se investigan en fuentes oficiales (una temporada del negocio la da el cliente), y con la llave estable que guardó el código
+  return pais ? e.fechas_que_importan.filter((f) => claseDe(f) === 'feriado_publico').flatMap((f) => anios.map((anio) => ({ pais, tipo: llaveCrudaDe(f), ambito: f.ambito, anio }))) : []
 }
 
 export interface ResultadoDePasar { arranque?: ResultadoDelArranque; ya_pasada?: boolean; ok?: boolean; pasada_sin_revision?: boolean; estado_de_la_campana: string; fechas_pedidas?: FechaPedida[]; aviso?: string }

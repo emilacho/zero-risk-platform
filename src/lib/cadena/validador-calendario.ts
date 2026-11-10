@@ -5,6 +5,7 @@
  *
  * Alcance de la corrección (§10.4): `fila` (se parchea sola) o `tanda` (frecuencia y reparto son del conjunto).
  */
+import { claseDe } from './fechas-del-cliente'
 import { mensajeV08 } from './cantidad'
 import { hallarAfirmaciones, hallarFechasEnTema, type LexicoAfirmaciones } from './afirmaciones'
 import { esperaAlBrazoSinSala } from './expandir-patron'
@@ -24,6 +25,9 @@ export interface FechaEspecialVerificada {
   /** `local` si vale solo para un ámbito (ciudad/región); `nacional` para todo el país */
   alcance: 'nacional' | 'local'
   estado: 'verificada' | 'pendiente'
+  /** 10-nov · C: una temporada del cliente es un tramo (`fecha` → `hasta`) y su origen es el cliente; una fecha pública no trae ninguno de los dos */
+  hasta?: string | null
+  origen?: 'fuente_oficial' | 'cliente'
 }
 
 export interface InsumosCalendario {
@@ -364,10 +368,13 @@ function chequeoPilares(ins: InsumosCalendario): Hallazgo[] {
   return out
 }
 
-/** V07b · candidatas: SOLO si el cliente declaró fechas tipo «feriados» Y tiene filas que exigen local abierto. Un cliente sin horario NUNCA lo dispara. */
+/**
+ * V07b · candidatas: SOLO si el cliente declaró una fecha pública (clase `feriado_publico`, la decide el agente; una estrategia de antes del 10-nov sin clase se lee como pública)
+ * Y tiene filas que exigen local abierto. Un cliente sin horario NUNCA lo dispara. Las temporadas del cliente no son feriados: no cuentan aquí.
+ */
 export function chequearCandidatas(ins: InsumosCalendario): Hallazgo[] {
-  const declara = ins.estrategia.fechas_que_importan.some((x) => /feriad/i.test(x.tipo))
-  const fe = (ins.fechasEspeciales ?? []).filter((x) => x.estado === 'verificada')
+  const declara = ins.estrategia.fechas_que_importan.some((x) => claseDe(x) === 'feriado_publico')
+  const fe = (ins.fechasEspeciales ?? []).filter((x) => x.estado === 'verificada' && x.origen !== 'cliente')
   if (!declara || fe.length === 0) return []
   const out: Hallazgo[] = []
   for (const f of ins.filas.filter((x) => activa(x) && materializada(x) && x.requiere_abierto)) {

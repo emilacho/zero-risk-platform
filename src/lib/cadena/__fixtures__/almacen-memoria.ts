@@ -2,7 +2,9 @@
  * Almacén EN MEMORIA de la cadena · para las pruebas de los manejadores (sin base, sin red, US$ 0).
  * Imita las garantías de la base que importan: únicos, idempotencia de corridas/esperas, una campaña viva por cliente.
  */
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar } from '../almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno } from '../almacen'
+import type { LlaveDeFecha } from '../indicaciones'
+import { claveDeFecha } from '../fechas-del-cliente'
 import type { PlazoCfg } from '../esperas'
 import type { Fila, FormatosPorRed, Hallazgo } from '../tipos'
 import type { FechaEspecialVerificada } from '../validador-calendario'
@@ -62,7 +64,13 @@ export class AlmacenMemoria implements Almacen {
   corridas: Corrida[] = []
   esperas: EsperaFila[] = []
   coberturas: FechaCobertura[] = []
-  fechas: (FechaEspecialVerificada & { pais: string })[] = []
+  fechas: (FechaEspecialVerificada & { pais: string; client_id?: string | null })[] = []
+  /** 10-nov · B: las marcas de «ya se avisó» por país y tipo (en la base, llave única) */
+  alarmasDeFecha = new Set<string>()
+  /** lo que se mandó a #alertas */
+  alarmasEnviadas: string[] = []
+  /** 10-nov · C: lo que se le preguntó al dueño (con «repetida» si la misma pregunta sigue pendiente) */
+  preguntasAlDueno: PreguntaAlDueno[] = []
   private seq = { campana: 0, corrida: 0, espera: 0 }
   /** la SALA de verdad (el orquestador de intake y su libro) con las filas de producción: la fuente `brief/parte-listo` y la regla `producir` → PIEZAS (puerta de la oficina) */
   sala = new InMemoryEventLogStorage()
@@ -228,7 +236,24 @@ export class AlmacenMemoria implements Almacen {
     if (i >= 0) this.coberturas[i] = c
     else this.coberturas.push(c)
   }
-  async fechasEspeciales(_pais: string, tipos: string[]) { return this.fechas.filter((f) => !tipos.length || tipos.includes(f.tipo)) }
+  async fechasEspeciales(_pais: string, tipos: string[], _desde?: string, _hasta?: string, clientId?: string) {
+    return this.fechas.filter((f) => (!tipos.length || tipos.includes(f.tipo)) && (!f.client_id || f.client_id === clientId)).map(({ client_id: _c, ...f }) => f)
+  }
+  async llavesDeFechas(paisCrudo: string, clientId: string): Promise<LlaveDeFecha[]> {
+    const pais = claveDeFecha(paisCrudo) // como la base: el país se guarda normalizado
+    const out = new Map<string, LlaveDeFecha>()
+    for (const c of this.coberturas.filter((x) => x.pais === pais)) out.set(`${c.tipo}|${c.ambito_clave}`, { llave: c.tipo, ambito: c.ambito_clave })
+    for (const f of this.fechas.filter((x) => x.pais === pais && (!x.client_id || x.client_id === clientId))) out.set(`${f.tipo}|${f.ambito}`, { llave: f.tipo, ambito: f.ambito, clase: f.origen === 'cliente' ? 'temporada_del_negocio' : 'feriado_publico' })
+    return [...out.values()]
+  }
+  async marcarAlarmaDeFecha(pais: string, tipo: string) { const k = `${pais}|${tipo}`; if (this.alarmasDeFecha.has(k)) return false; this.alarmasDeFecha.add(k); return true }
+  async olvidarAlarmaDeFecha(pais: string, tipo: string) { this.alarmasDeFecha.delete(`${pais}|${tipo}`) }
+  async avisarAlarma(texto: string) { this.alarmasEnviadas.push(texto) }
+  async preguntarAlDueno(p: PreguntaAlDueno) {
+    const ya = this.preguntasAlDueno.some((x) => x.client_id === p.client_id && x.tema === p.tema)
+    if (!ya) this.preguntasAlDueno.push(p)
+    return { ok: true, detalle: ya ? 'tu misma pregunta sigue pendiente' : 'preguntada' }
+  }
   async parteDe(parteId: string): Promise<ParteGuardada | null> {
     const seco = this.partesSecos.find((p) => p.id === parteId)
     if (seco) { const t = seco.fila.provenance_tag; return { id: seco.id, client_id: seco.client_id, valido: t.valido === true, briefs: ((t.familias_por_brief as Array<Record<string, string | null>>) ?? []).map((b) => ({ brief_id: b.brief_id ?? null, fila_id: b.fila_id ?? null, familia: b.familia ?? null })) } }
@@ -263,7 +288,11 @@ export class AlmacenMemoria implements Almacen {
     if (r.kind === 'duplicate') return { resultado: 'duplicado', event_id: r.event_id }
     return { resultado: 'rechazado', detalle: `${r.code} · ${r.detail}` }
   }
-  async guardarFechaEspecial(f: { pais: string; tipo: string; ambito: string; anio: number; fecha: string; nombre: string; alcance: string; estado: 'verificada' | 'pendiente' }) {
-    this.fechas.push({ id: `fe-${this.fechas.length + 1}`, fecha: f.fecha, nombre: f.nombre, tipo: f.tipo, ambito: f.ambito, alcance: f.alcance === 'nacional' ? 'nacional' : 'local', estado: f.estado, pais: f.pais })
+  /** la llave única de la base: (país, tipo, ámbito, fecha, cliente) · el repetido se reemplaza (upsert) */
+  async guardarFechaEspecial(f: { pais: string; tipo: string; ambito: string; anio: number; fecha: string; nombre: string; alcance: string; estado: 'verificada' | 'pendiente'; client_id?: string | null; hasta?: string | null; origen?: 'fuente_oficial' | 'cliente' }) {
+    const fila = { fecha: f.fecha, nombre: f.nombre, tipo: f.tipo, ambito: f.ambito, alcance: f.alcance === 'nacional' ? 'nacional' as const : 'local' as const, estado: f.estado, pais: f.pais, client_id: f.client_id ?? null, ...(f.hasta ? { hasta: f.hasta } : {}), ...(f.origen === 'cliente' ? { origen: 'cliente' as const } : {}) }
+    const i = this.fechas.findIndex((x) => x.pais === f.pais && x.tipo === f.tipo && x.ambito === f.ambito && x.fecha === f.fecha && (x.client_id ?? null) === (f.client_id ?? null))
+    if (i >= 0) this.fechas[i] = { ...fila, id: this.fechas[i]!.id }
+    else this.fechas.push({ ...fila, id: `fe-${this.fechas.length + 1}` })
   }
 }

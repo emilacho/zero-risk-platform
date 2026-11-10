@@ -27,6 +27,11 @@ import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
+import type { LlaveDeFecha } from './indicaciones'
+import { avisarAAlertas } from '@/lib/buzon-dueno/alertas'
+import { preguntar } from '@/lib/dueno-preguntas/preguntas'
+import { cerebroPorHttp } from '@/lib/dueno-preguntas/cerebro-http'
+import { baseDeRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
 import { aperturaDeLasSedes, estadoDeLasSedes } from '../sedes/por-abrir'
 import { esloganDelCliente, reglaDelEslogan } from '../manual/campos-del-manual'
 
@@ -276,10 +281,40 @@ export function almacenDeSupabase(): Almacen {
 
     async coberturaDe(pais, tipo, ambito, anio) { return uno<FechaCobertura>(db.from('cadena_fechas_cobertura').select('*').eq('pais', pais).eq('tipo', tipo).eq('ambito_clave', ambito).eq('anio', anio).maybeSingle()) },
     async guardarCobertura(c) { const { error } = await db.from('cadena_fechas_cobertura').upsert({ ...c, investigado_en: new Date().toISOString() }); if (error) fallo(error) },
-    async fechasEspeciales(pais, tipos, desde, hasta) {
-      let q = db.from('cadena_fechas_especiales').select('id, fecha, nombre, tipo, ambito, alcance, estado').eq('pais', clave(pais)).gte('fecha', desde).lte('fecha', hasta).limit(2000)
+    async fechasEspeciales(pais, tipos, desde, hasta, clientId) {
+      // 10-nov · C: las públicas (sin cliente) y las temporadas de ESTE cliente; una temporada entra si su tramo toca la ventana (empieza antes y termina dentro)
+      let q = db.from('cadena_fechas_especiales').select('id, fecha, hasta, nombre, tipo, ambito, alcance, estado, client_id, origen').eq('pais', clave(pais)).lte('fecha', hasta)
+        .or(`hasta.gte.${desde},and(hasta.is.null,fecha.gte.${desde})`).limit(2000)
+      q = clientId ? q.or(`client_id.is.null,client_id.eq.${clientId}`) : q.is('client_id', null)
       if (tipos.length) q = q.in('tipo', tipos.map(clave))
-      return (await lista<{ id: number; fecha: string; nombre: string; tipo: string; ambito: string; alcance: string | null; estado: 'verificada' | 'pendiente' }>(q)).map((f): FechaEspecialVerificada => ({ id: String(f.id), fecha: f.fecha, nombre: f.nombre, tipo: f.tipo, ambito: f.ambito, alcance: f.alcance === 'nacional' ? 'nacional' : 'local', estado: f.estado }))
+      return (await lista<{ id: number; fecha: string; hasta: string | null; nombre: string; tipo: string; ambito: string; alcance: string | null; estado: 'verificada' | 'pendiente'; client_id: string | null; origen: string | null }>(q))
+        .map((f): FechaEspecialVerificada => ({ id: String(f.id), fecha: f.fecha, nombre: f.nombre, tipo: f.tipo, ambito: f.ambito, alcance: f.alcance === 'nacional' ? 'nacional' : 'local', estado: f.estado, ...(f.hasta ? { hasta: f.hasta } : {}), ...(f.origen === 'cliente' ? { origen: 'cliente' as const } : {}) }))
+    },
+    async llavesDeFechas(pais, clientId) {
+      const p = clave(pais)
+      const cob = await lista<{ tipo: string; ambito_clave: string }>(db.from('cadena_fechas_cobertura').select('tipo, ambito_clave').eq('pais', p).limit(2000))
+      const fe = await lista<{ tipo: string; ambito: string; client_id: string | null; origen: string | null }>(db.from('cadena_fechas_especiales').select('tipo, ambito, client_id, origen').eq('pais', p).or(`client_id.is.null,client_id.eq.${clientId}`).limit(2000))
+      const out = new Map<string, LlaveDeFecha>()
+      for (const c of cob) out.set(`${c.tipo}|${c.ambito_clave}`, { llave: c.tipo, ambito: c.ambito_clave })
+      for (const f of fe) out.set(`${f.tipo}|${f.ambito}`, { llave: f.tipo, ambito: f.ambito, clase: f.origen === 'cliente' ? 'temporada_del_negocio' : 'feriado_publico' })
+      return [...out.values()].sort((a, b) => `${a.llave}|${a.ambito}`.localeCompare(`${b.llave}|${b.ambito}`))
+    },
+    async marcarAlarmaDeFecha(pais, tipo) {
+      const { error } = await db.from('cadena_fechas_alarmas').insert({ pais, tipo })
+      if (!error) return true
+      if ((error as { code?: string }).code === '23505') return false // otra corrida ya la marcó: ya se avisó
+      fallo(error)
+      return false
+    },
+    async olvidarAlarmaDeFecha(pais, tipo) { const { error } = await db.from('cadena_fechas_alarmas').delete().eq('pais', pais).eq('tipo', tipo); if (error) fallo(error) },
+    async avisarAlarma(texto) { await avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '' })(texto) },
+    async preguntarAlDueno(p) {
+      try {
+        const r = await preguntar({ db, cerebro: cerebroPorHttp({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '' }) }, { ...p })
+        const b = r.body as Record<string, unknown>
+        if (r.status !== 200) return { ok: false, detalle: `${r.status} ${String(b.error ?? '')} ${String(b.detalle ?? '')}`.trim().slice(0, 200) }
+        return { ok: true, detalle: b.registrada ? `preguntada (${String(b.pregunta_id)})` : b.ya_respondida ? 'ya estaba respondida' : b.ya_preguntada ? 'ya preguntada por otra oficina' : 'tu misma pregunta sigue pendiente' }
+      } catch (x) { return { ok: false, detalle: String((x as Error).message).slice(0, 200) } }
     },
     // ── autoproducir (r65) · el parte guardado, el freno de gasto y el buzón de la sala
     async parteDe(parteId): Promise<ParteGuardada | null> {
@@ -339,7 +374,8 @@ export function almacenDeSupabase(): Almacen {
       if (r.kind === 'duplicate') return { resultado: 'duplicado', event_id: r.event_id }
       return { resultado: 'rechazado', detalle: `${r.code} · ${r.detail}` }
     },
-    async guardarFechaEspecial(f) { const { error } = await db.from('cadena_fechas_especiales').upsert({ ...f, verificado_en: f.estado === 'verificada' ? new Date().toISOString() : null, verificado_por: f.estado === 'verificada' ? 'codigo' : null }, { onConflict: 'pais,tipo,ambito,fecha' }); if (error) fallo(error) },
+    // 10-nov · C: la llave única incluye al cliente (`client_key` = '' para una fecha pública): la temporada de un cliente nunca pisa una fecha pública ni la de otro
+    async guardarFechaEspecial(f) { const { error } = await db.from('cadena_fechas_especiales').upsert({ ...f, client_id: f.client_id ?? null, hasta: f.hasta ?? null, origen: f.origen ?? 'fuente_oficial', verificado_en: f.estado === 'verificada' ? new Date().toISOString() : null, verificado_por: f.estado === 'verificada' ? 'codigo' : null }, { onConflict: 'pais,tipo,ambito,fecha,client_key' }); if (error) fallo(error) },
   }
   return almacen
 }

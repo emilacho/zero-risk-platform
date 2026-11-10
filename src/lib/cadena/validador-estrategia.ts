@@ -1,11 +1,15 @@
 /**
  * Validador de la ESTRATEGIA · código puro, sin modelo (diseño v2 §5 del v1 + cambios del v2).
  * S01 esquema · S02 citas literales · S03 canales vs excluidos · S04 revisiones vs plan · S05 frecuencia del plan ·
- * S06 pares red-formato · S07 pendientes con salida · S08 fechas que importan sin cita ni motivo.
+ * S06 pares red-formato · S07 pendientes con salida · S08 fechas que importan sin cita ni motivo ·
+ * S10 la llave de cada fecha existe o es nueva a sabiendas · S11 la temporada del negocio con cita que respalda su tramo (sin ella, pendiente: nunca bloquea).
  */
 import { citaAparece, numerosEn } from './texto'
 import { diaUnoDelPlan, hitoCuadraConFechas, MARGEN_DE_SEMANA_DIAS } from './fechas-en-texto'
 import type { Estrategia, FormatosPorRed, Hallazgo, Severidad } from './tipos'
+import { CLASES_DE_FECHA } from './tipos'
+import type { LlaveDeFecha } from './indicaciones'
+import { claseDe, llaveConocida, llaveDe, temporadaRespaldada } from './fechas-del-cliente'
 
 export interface InsumosEstrategia {
   planTexto: string
@@ -14,6 +18,8 @@ export interface InsumosEstrategia {
   diasCampana?: number
   /** día 1 de la campaña (`YYYY-MM-DD`, calendario del cliente) · con él, S04 convierte las fechas de las citas a día de campaña */
   fechaInicio?: string | null
+  /** 10-nov · D: las llaves de fechas que ya existen (las mismas que vio el agente). Sin la lista, una llave solo pasa si el agente dijo que es nueva */
+  llavesDeFechas?: LlaveDeFecha[]
 }
 
 const REQUERIDAS = ['canales', 'excluidos', 'pilares', 'fases', 'hitos', 'dependencias', 'fechas_que_importan', 'patron_semanal', 'piezas_fijas', 'pendientes', 'alertas'] as const
@@ -40,7 +46,10 @@ export function problemasDeEsquema(x: unknown): string[] {
   e.pilares.forEach((q, i) => { if (!q?.clave || !Number.isInteger(q?.pct) || q.pct < 0) p.push(`pilares[${i}]`) })
   e.fases.forEach((f, i) => { if (!f?.clave || !Number.isInteger(f?.dia_desde) || !Number.isInteger(f?.dia_hasta)) p.push(`fases[${i}]`) })
   e.hitos.forEach((x2, i) => { if (!x2?.clave || !Number.isInteger(x2?.dia) || !['revision', 'lanzamiento', 'corte'].includes(x2?.tipo)) p.push(`hitos[${i}]`) })
-  e.fechas_que_importan.forEach((f, i) => { if (!f?.tipo || !f?.ambito || !ORIGENES.includes(f?.origen)) p.push(`fechas_que_importan[${i}] (origen ∈ plan|estrategia|alta)`) })
+  e.fechas_que_importan.forEach((f, i) => {
+    if (!f?.tipo || !f?.ambito || !ORIGENES.includes(f?.origen)) p.push(`fechas_que_importan[${i}] (origen ∈ plan|estrategia|alta)`)
+    if (f && f.clase !== undefined && !CLASES_DE_FECHA.includes(f.clase)) p.push(`fechas_que_importan[${i}].clase «${String(f.clase)}» (feriado_publico|temporada_del_negocio)`)
+  })
   e.patron_semanal.forEach((s, i) => {
     if (!s?.slot || !s?.red || !s?.formato || !s?.pilar) p.push(`patron_semanal[${i}]`)
     if (!Number.isInteger(s?.dia_semana) || s.dia_semana < 1 || s.dia_semana > 7) p.push(`patron_semanal[${i}].dia_semana`)
@@ -70,7 +79,7 @@ export function validarEstrategia(x: unknown, ins: InsumosEstrategia): Hallazgo[
   const out: Hallazgo[] = []
   const malos = problemasDeEsquema(x)
   if (malos.length) {
-    out.push(h('S01', 'bloquea', 'estrategia', `esquema inválido: ${malos.slice(0, 6).join('; ')}`, 'contrato estrategia.v1', 'devolver el objeto completo con todas las listas'))
+    out.push(h('S01', 'bloquea', 'estrategia', `esquema inválido: ${malos.slice(0, 6).join('; ')}`, 'contrato estrategia.v2', 'devolver el objeto completo con todas las listas'))
     return out
   }
   const e = x as Estrategia
@@ -89,7 +98,8 @@ export function validarEstrategia(x: unknown, ins: InsumosEstrategia): Hallazgo[
     ...e.fases.map((x2) => ({ donde: `fase ${x2.clave}`, cita: x2.cita_plan })),
     ...e.hitos.map((x2) => ({ donde: `hito ${x2.clave}`, cita: x2.cita_plan })),
     ...e.dependencias.map((x2) => ({ donde: `dependencia ${x2.antes}→${x2.despues}`, cita: x2.cita_plan })),
-    ...e.fechas_que_importan.filter((x2) => x2.origen === 'plan').map((x2) => ({ donde: `fecha que importa ${x2.tipo}`, cita: x2.cita_plan })),
+    // una temporada del negocio sin cita no bloquea: queda pendiente y se le pregunta al dueño (S11)
+    ...e.fechas_que_importan.filter((x2) => x2.origen === 'plan' && claseDe(x2) !== 'temporada_del_negocio').map((x2) => ({ donde: `fecha que importa ${x2.tipo}`, cita: x2.cita_plan })),
   ]
   for (const c of citas) {
     if (!citaAparece(ins.planTexto, c.cita)) {
@@ -148,6 +158,23 @@ export function validarEstrategia(x: unknown, ins: InsumosEstrategia): Hallazgo[
     if (f.origen === 'estrategia' && sinMotivo && !f.cita_plan) {
       out.push(h('S08', 'aviso', `fecha que importa ${f.tipo}`, 'un tipo de fecha declarado por la estrategia sin cita del plan ni motivo concreto', 'regla: no se inventan tipos «por si acaso»', 'dar el motivo o quitarlo'))
     }
+  }
+
+  // S10 · D: la llave estable. Solo en una estrategia del contrato nuevo (con `clase`): una guardada antes se lee como siempre
+  const llaves = ins.llavesDeFechas ?? []
+  for (const f of e.fechas_que_importan) {
+    if (f.clase === undefined) continue
+    if (!f.llave?.trim()) { out.push(h('S10', 'bloquea', `fecha que importa ${f.tipo}`, 'la fecha no trae su llave', 'llave estable de la fecha', 'devolver la llave (la de la lista si es la misma fecha)')); continue }
+    if (!llaveConocida(f, llaves).ok) {
+      out.push(h('S10', 'bloquea', `fecha que importa ${f.tipo}`, `la llave «${llaveDe(f)}» con ámbito «${f.ambito}» no está en la lista de llaves que ya existen y no viene marcada como nueva`, `llaves existentes: ${llaves.map((x) => `${x.llave}|${x.ambito}`).join(', ').slice(0, 200) || 'ninguna'}`, 'usar la llave y el ámbito de la lista si es la misma fecha, o marcar `llave_nueva` en true si no hay ninguna igual'))
+    }
+  }
+
+  // S11 · C: la temporada del negocio con un tramo que la cita del plan respalda. Sin eso, NO bloquea: queda pendiente, el calendario no la usa y se le pregunta al dueño
+  for (const f of e.fechas_que_importan) {
+    if (claseDe(f) !== 'temporada_del_negocio') continue
+    const r = temporadaRespaldada(f, ins.planTexto)
+    if (!r.ok) out.push(h('S11', 'aviso', `temporada ${f.tipo}`, `la temporada queda pendiente: ${r.motivo}`, 'la fecha de una temporada la da el cliente (cita del plan)', 'se pregunta en Decisiones; el calendario no la usa hasta tener la fecha'))
   }
   return out
 }
