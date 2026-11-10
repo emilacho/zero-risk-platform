@@ -294,7 +294,7 @@ export class AlmacenMemoria implements Almacen {
     return { resultado: 'rechazado', detalle: `${r.code} · ${r.detail}` }
   }
   /** la llave única de la base: (país, tipo, ámbito, fecha, cliente) · el repetido se reemplaza (upsert) */
-  async guardarFechaEspecial(f: { pais: string; tipo: string; ambito: string; anio: number; fecha: string; nombre: string; alcance: string; estado: 'verificada' | 'pendiente'; client_id?: string | null; hasta?: string | null; origen?: 'fuente_oficial' | 'cliente' }) {
+  async guardarFechaEspecial(f: Parameters<Almacen['guardarFechaEspecial']>[0]) {
     const fila = { fecha: f.fecha, nombre: f.nombre, tipo: f.tipo, ambito: f.ambito, alcance: f.alcance === 'nacional' ? 'nacional' as const : 'local' as const, estado: f.estado, pais: f.pais, client_id: f.client_id ?? null, ...(f.hasta ? { hasta: f.hasta } : {}), ...(f.origen === 'cliente' ? { origen: 'cliente' as const } : {}) }
     const i = this.fechas.findIndex((x) => x.pais === f.pais && x.tipo === f.tipo && x.ambito === f.ambito && x.fecha === f.fecha && (x.client_id ?? null) === (f.client_id ?? null))
     if (i >= 0) this.fechas[i] = { ...fila, id: this.fechas[i]!.id }
