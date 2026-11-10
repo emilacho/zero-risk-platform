@@ -375,7 +375,7 @@ export async function insumosDelConcepto(al: Almacen, campana: Pick<Campana, 'id
   const base = estr ? insumosDesdeEstrategia(estr.contenido, ctx?.forbiddenWords ?? [], fotos) : { fases: [], redes: [], prohibidas: ctx?.forbiddenWords ?? [], fotos }
   // 10-nov · perfil del público T2: el texto del perfil vigente para el aviso «frase del público sin fuente» (null = sin perfil o no se pudo leer) · sin lector, el aviso no corre
   const perfil = al.perfilDelPublico ? await perfilParaLaMesa(al, campana.client_id, 'gran_idea') : null
-  return { ...base, duras: ctx?.palabrasDuras, registro: ctx?.registro, ...(brief?.estado === 'validada' && brief.texto_md ? { fuente: brief.texto_md } : {}), ...(perfil ? { perfil_del_publico: perfil.estado === 'vigente' ? perfil.texto : null } : {}) }
+  return { ...base, duras: ctx?.palabrasDuras, registro: ctx?.registro, ...(brief?.estado === 'validada' && brief.texto_md ? { fuente: brief.texto_md } : {}), ...(perfil ? { perfil_del_publico: perfil.estado === 'vigente' ? perfil.texto : null, perfil_del_publico_estado: perfil.estado } : {}) }
 }
 
 export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: string): Promise<EntregaALaCadena> {

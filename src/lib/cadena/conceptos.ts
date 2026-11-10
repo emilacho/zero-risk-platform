@@ -97,6 +97,8 @@ export interface InsumosDelConcepto {
   fuente?: string
   /** 10-nov · perfil del público T2: el texto del perfil vigente (null = no hay o no se pudo leer). Una frase que la gran idea ATRIBUYE al público y no está textual aquí se avisa · ausente = no se mira */
   perfil_del_publico?: string | null
+  /** cuál de los tres estados, para que el motivo diga «no se pudo leer» y no «no hay» */
+  perfil_del_publico_estado?: 'vigente' | 'sin_perfil' | 'no_se_pudo_leer'
 }
 
 // ───────────────────────────────────────────────────────── texto
@@ -394,7 +396,7 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
   // 10-nov (GO v3 · punto 7): un dato con valor que no está en el brief no tiene fuente (la mesa lo sacó de otro lado o lo inventó)
   if (ins.fuente) for (const i of banco) for (const d of datosConValor(`${i.idea} ${i.mensaje} ${i.gancho}`)) if (!datoEnLaFuente(d, ins.fuente)) avisos.push(`la idea ${i.id} trae «${d}», que no está en el brief: dato sin fuente`)
   // 10-nov · perfil del público T2: frase del público sin fuente (AVISO, nunca bloqueo)
-  if (ins.perfil_del_publico !== undefined) for (const x of frasesDelPublicoSinFuente(md, ins.perfil_del_publico)) avisos.push(`frase del público sin fuente: «${x.frase}» (${x.motivo})`)
+  if (ins.perfil_del_publico !== undefined) for (const x of frasesDelPublicoSinFuente(md, ins.perfil_del_publico, ins.perfil_del_publico_estado === 'no_se_pudo_leer' ? 'no_se_pudo_leer' : 'sin_perfil')) avisos.push(`frase del público sin fuente: «${x.frase}» (${x.motivo})`)
   const fotos_citadas = fotosCitadas(md)
   for (const f of fotos_citadas) if (!fotoExiste(f, ins.fotos.map(String))) avisos.push(`la foto «${f}» no existe entre las fotos propias`)
   // 10-nov (GO v3 · punto 5): el registro del cliente, como en las piezas; «Cómo suena» se nombra aparte porque todas las piezas la siguen
