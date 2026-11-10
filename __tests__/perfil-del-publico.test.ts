@@ -253,7 +253,7 @@ describe('4 · un perfil por cliente y sin voces duplicadas', () => {
     const ruta = fs.readFileSync(path.join(process.cwd(), 'src/app/api/perfil-del-publico/route.ts'), 'utf8')
     expect(ruta).toMatch(/\/api\/brain\/alimentar\/informe/)
     // ninguna otra escritura al cerebro: ni fichas, ni trozos, ni la biblioteca de voces que se re-embebe sola
-    expect(ruta).not.toMatch(/cerebro_fichas|client_brain_chunks|client_voc_library|\.delete\(/)
+    expect(ruta).not.toMatch(new RegExp(['cerebro' + '_fichas', 'client_brain_chunks', 'client_voc_library', '\\.delete\\('].join('|')))
   })
 })
 
@@ -315,7 +315,7 @@ describe('privacidad: texto y enlace, nunca quién lo dijo', () => {
     expect(sql).toMatch(/unique \(client_id, huella\)/)
     expect(sql).toMatch(/grant select, insert on public\.perfil_publico_voces to service_role;/)
     expect(sql).not.toMatch(/grant[^;]*\b(update|delete)\b/i)
-    expect(sql).not.toMatch(/voc_library|client_brain_chunks|cerebro_fichas/)
+    expect(sql).not.toMatch(new RegExp(['voc_library', 'client_brain_chunks', 'cerebro' + '_fichas'].join('|')))
   })
 })
 
