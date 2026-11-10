@@ -1,0 +1,534 @@
+[
+ {
+  "tablename": "ad_creative_refreshes",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "ad_performance_snapshots",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "agent_health_metrics",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "agent_improvement_proposals",
+  "policyname": "auth_full_agent_improvement_proposals",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "agent_insights",
+  "policyname": "auth_full_agent_insights",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "agent_outcomes",
+  "policyname": "auth_full_agent_outcomes",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "agent_outcomes",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "agent_routing_log",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "agent_skill_assignments",
+  "policyname": "authenticated_read_agent_skill_assignments",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "agent_skills",
+  "policyname": "authenticated_read_agent_skills",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "agent_tools",
+  "policyname": "authenticated_read_agent_tools",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "agents",
+  "policyname": "authenticated_read_agents",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "agents_log",
+  "policyname": "Authenticated users can insert agents_log",
+  "cmd": "INSERT",
+  "qual": null,
+  "with_check": "true"
+ },
+ {
+  "tablename": "agents_log",
+  "policyname": "Authenticated users can read agents_log",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "apify_raw",
+  "policyname": "apify_raw_auth_full",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "attribution_audits",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "backlink_opportunities",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "campaign_pipeline_state",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "campaign_results",
+  "policyname": "auth_full_campaign_results",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "campaigns",
+  "policyname": "Authenticated users can delete campaigns",
+  "cmd": "DELETE",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "campaigns",
+  "policyname": "Authenticated users can insert campaigns",
+  "cmd": "INSERT",
+  "qual": null,
+  "with_check": "true"
+ },
+ {
+  "tablename": "campaigns",
+  "policyname": "Authenticated users can read campaigns",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "campaigns",
+  "policyname": "Authenticated users can update campaigns",
+  "cmd": "UPDATE",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "cannibalization_audits",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "churn_predictions",
+  "policyname": "auth_full_churn_predictions",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "client_brand_books",
+  "policyname": "auth_full_client_brand_books",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "client_competitive_landscape",
+  "policyname": "auth_full_client_competitive_landscape",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "client_historical_outputs",
+  "policyname": "auth_full_client_historical_outputs",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "client_icp_documents",
+  "policyname": "auth_full_client_icp_documents",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "client_web_pages",
+  "policyname": "web_pages_auth_full",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "clients",
+  "policyname": "auth_full_clients",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "community_health",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "community_health_snapshots",
+  "policyname": "auth_full_community_health_snapshots",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "content",
+  "policyname": "Authenticated users can delete content",
+  "cmd": "DELETE",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "content",
+  "policyname": "Authenticated users can insert content",
+  "cmd": "INSERT",
+  "qual": null,
+  "with_check": "true"
+ },
+ {
+  "tablename": "content",
+  "policyname": "Authenticated users can read content",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "content",
+  "policyname": "Authenticated users can update content",
+  "cmd": "UPDATE",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "content_fetch_cache",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "content_refresh_queue",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "content_repurposing_queue",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "costs",
+  "policyname": "Authenticated users can insert costs",
+  "cmd": "INSERT",
+  "qual": null,
+  "with_check": "true"
+ },
+ {
+  "tablename": "costs",
+  "policyname": "Authenticated users can read costs",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "creative_performance_insights",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "cro_experiments",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "departments",
+  "policyname": "authenticated_read_departments",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "email_sequences",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "error_events",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "expansion_opportunities",
+  "policyname": "auth_full_expansion_opportunities",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "hitl_cycle_metrics",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "hitl_pending_approvals",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "hitl_queue",
+  "policyname": "auth_full_hitl_queue",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "identity_improvement_queue",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "incrementality_tests",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "indexation_log",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "influencer_approved_list",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "influencer_rejections",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "jefatura_grading_policies",
+  "policyname": "jefatura_policies_authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "landing_experiments",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "leads",
+  "policyname": "Authenticated users can delete leads",
+  "cmd": "DELETE",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "leads",
+  "policyname": "Authenticated users can insert leads",
+  "cmd": "INSERT",
+  "qual": null,
+  "with_check": "true"
+ },
+ {
+  "tablename": "leads",
+  "policyname": "Authenticated users can read leads",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "leads",
+  "policyname": "Authenticated users can update leads",
+  "cmd": "UPDATE",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "message_match_audits",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "meta_agent_runs",
+  "policyname": "auth_full_meta_agent_runs",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "nps_dispatch_log",
+  "policyname": "auth_full_nps_dispatch_log",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "onboarding_discovery_logs",
+  "policyname": "auth_full_onboarding_discovery_logs",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "onboarding_sessions",
+  "policyname": "auth_full_onboarding_sessions",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "performance_metrics",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "phase_gate_audits",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "pipeline_results",
+  "policyname": "pipeline_results_authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "review_responses_queue",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "rfm_segments",
+  "policyname": "auth_full_rfm_segments",
+  "cmd": "ALL",
+  "qual": "true",
+  "with_check": "true"
+ },
+ {
+  "tablename": "rsa_headline_library",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "subject_line_tests",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "topical_authority_maps",
+  "policyname": "read_all_authenticated",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ },
+ {
+  "tablename": "uptime_incidents",
+  "policyname": "authenticated_read",
+  "cmd": "SELECT",
+  "qual": "true",
+  "with_check": null
+ }
+]
