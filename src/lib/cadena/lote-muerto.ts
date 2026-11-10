@@ -14,6 +14,11 @@
  *     el mismo lote muerto con otra huella al día siguiente sigue su cuenta (r1, r2, r3) y suma repeticiones al MISMO incidente. Una versión nueva del calendario es otro lote
  *     (otra base) y abre su propio aviso. El envío ORIGINAL sí lleva la huella del día (es el sobre de siempre): si la huella cambia ANTES del primer reintento, ese día sale un
  *     original nuevo (a lo sumo uno por cambio de huella, y solo hasta que exista el primer reintento);
+ *   · 10-nov · ADENDA 3 de CC7: contar por la base mezclaba «el mismo lote sigue muerto» con «llegaron filas NUEVAS a una semana que ya salió bien». Regla exacta: un envío
+ *     CUENTA para el lote de hoy solo si alguna de SUS filas (`payload.envelope_payload.fila_ids` del sobre que guardó la sala) sigue en el lote de hoy, es decir, sigue sin parte.
+ *     Si todas las filas de un envío ya salieron, ese envío es de OTRO lote: no suma intentos ni hace avisar. Si ningún envío cuenta, lo de hoy sale como ORIGINAL (su huella es
+ *     nueva porque sus filas son otras). Un envío sin filas legibles SÍ cuenta (cota prudente: es la regla anterior). Los reintentos se numeran después del MAYOR número ya usado
+ *     en la base (cuente o no), para no chocar con una llave vieja que la sala contestaría «duplicado»; por eso hay `LLAVES_DE_REINTENTO` números por base;
  *   · agotado el tope, el lote deja de mandarse (sin reintento indefinido) y se vuelve a pasar por el buzón con la MISMA clave: si el incidente ya estaba abierto solo suma una
  *     repetición (sin mensaje); si nunca se abrió (un aviso anterior falló), lo abre: un lote que no sale nunca no queda en silencio (pedido de CC6);
  *   · un lote sano (sin envío previo, o con envío más nuevo que el plazo) sale con la llave de su último envío: la sala contesta «duplicado» y no pasa nada (= hoy);
@@ -26,8 +31,16 @@ import type { LoteVencido } from './lotes'
 
 export const HORAS_PARA_DARLO_POR_MUERTO = 2
 export const MAX_REINTENTOS_DE_LOTE = 3
+/** cuántos números de reintento (r1..rN) tiene cada base de lote: varios lotes de la misma semana (filas nuevas que mueren otro día) comparten la numeración */
+export const LLAVES_DE_REINTENTO = 3 * MAX_REINTENTOS_DE_LOTE
 
-export interface EnviosDeLote { envios: number; ultimo_en: string | null }
+/**
+ * Lo que la sala sabe de los envíos de ESTE lote: `envios` = los que cuentan (alguna de sus filas sigue en el lote de hoy), `reintentos` = cuántos de esos fueron reintentos,
+ * `ultimo` = el número del último que cuenta (0 = el original) y `ultimo_en` su hora, `libre` = el primer número de reintento sin usar en la base (cuente o no).
+ */
+export interface EnviosDeLote { envios: number; reintentos: number; ultimo: number; libre: number; ultimo_en: string | null }
+/** una fila del registro de la sala: la entrada de un envío, con las filas de su sobre (null = ilegibles) */
+export interface EntradaDelRegistro { idempotency_key: string; created_at: string; fila_ids?: readonly string[] | null }
 export type DecisionDeLote =
   | { tipo: 'sano'; llave: string }
   | { tipo: 'reintentar'; intento: number; llave: string }
@@ -43,31 +56,43 @@ export const claveDelAviso = (llave: string): string => `cadena:lote-sin-parte:$
 /** el viaje al que la sala manda los lotes (regla de ruteo `cadena/vigia` + `briefear` → BRIEF) y la operación de su evento de ENTRADA */
 export const VIAJE_DEL_LOTE = 'BRIEF'
 export const OPERACION_DE_ENTRADA = `${VIAJE_DEL_LOTE}.intake.${FUENTE_DEL_LOTE}.${INTENCION_DEL_LOTE}`
-/** las llaves con que la sala guarda la entrada del envío n (posición n = envío n: 0 el original, 1..MAX los reintentos) */
+/** las llaves con que la sala guarda la entrada del envío n (posición n = envío n: 0 el original, 1..LLAVES_DE_REINTENTO los reintentos) */
 export function llavesDelRegistro(clientId: string, lote: string, llave: string): string[] {
-  return Array.from({ length: MAX_REINTENTOS_DE_LOTE + 1 }, (_, n) => buildIdempotencyKey({ operation_type: OPERACION_DE_ENTRADA, client_id: clientId, logical_period: lote, input_hash: llaveDeEnvio(llave, n) }))
+  return Array.from({ length: LLAVES_DE_REINTENTO + 1 }, (_, n) => buildIdempotencyKey({ operation_type: OPERACION_DE_ENTRADA, client_id: clientId, logical_period: lote, input_hash: llaveDeEnvio(llave, n) }))
 }
-/** de las filas del registro encontradas con esas llaves: cuántos envíos lleva (el último índice + 1) y cuándo fue el último */
-export function enviosDesdeElRegistro(llaves: string[], filas: Array<{ idempotency_key: string; created_at: string }>): EnviosDeLote {
-  let n = -1
+/**
+ * De las filas del registro encontradas con esas llaves y las filas del lote de HOY: qué envíos cuentan (ADENDA 3 de CC7) · pura.
+ * Dentro de los que cuentan, el número más alto es el último (los números se reparten en orden: el original, luego r1, r2…).
+ */
+export function enviosDesdeElRegistro(llaves: string[], filas: readonly EntradaDelRegistro[], filasDeHoy: readonly string[]): EnviosDeLote {
+  const hoy = new Set(filasDeHoy)
+  let envios = 0, reintentos = 0, ultimo = -1, libre = 1
   let en: string | null = null
   for (const f of filas) {
     const i = llaves.indexOf(f.idempotency_key)
-    if (i > n) { n = i; en = f.created_at }
+    if (i < 0) continue
+    if (i + 1 > libre) libre = i + 1
+    // todas sus filas ya salieron: es un envío de OTRO lote (no cuenta) · sin filas legibles, cuenta
+    if (Array.isArray(f.fila_ids) && !f.fila_ids.some((x) => hoy.has(x))) continue
+    envios++
+    if (i > 0) reintentos++
+    if (i > ultimo) { ultimo = i; en = f.created_at }
   }
-  return { envios: n + 1, ultimo_en: en }
+  return { envios, reintentos, ultimo: Math.max(ultimo, 0), libre, ultimo_en: en }
 }
 
 export function decidirLote(l: Pick<LoteVencido, 'idempotency_key'>, e: EnviosDeLote, ahora: string): DecisionDeLote {
   const envios = Number.isFinite(e.envios) && e.envios > 0 ? Math.floor(e.envios) : 0
+  // ningún envío cuenta (nunca se mandó, o todo lo mandado ya salió): sale como original, con su huella de hoy
   if (envios === 0 || !e.ultimo_en) return { tipo: 'sano', llave: l.idempotency_key }
   const ultimo = Date.parse(e.ultimo_en), hora = Date.parse(ahora)
   // fecha ilegible ⇒ no se adivina: se comporta como hoy
-  if (!Number.isFinite(ultimo) || !Number.isFinite(hora)) return { tipo: 'sano', llave: llaveDeEnvio(l.idempotency_key, envios - 1) }
-  if (hora - ultimo < HORAS_PARA_DARLO_POR_MUERTO * 3600_000) return { tipo: 'sano', llave: llaveDeEnvio(l.idempotency_key, envios - 1) }
-  const hechos = envios - 1
-  if (hechos >= MAX_REINTENTOS_DE_LOTE) return { tipo: 'agotado', envios }
-  return { tipo: 'reintentar', intento: hechos + 1, llave: llaveDeEnvio(l.idempotency_key, hechos + 1) }
+  if (!Number.isFinite(ultimo) || !Number.isFinite(hora)) return { tipo: 'sano', llave: llaveDeEnvio(l.idempotency_key, e.ultimo) }
+  if (hora - ultimo < HORAS_PARA_DARLO_POR_MUERTO * 3600_000) return { tipo: 'sano', llave: llaveDeEnvio(l.idempotency_key, e.ultimo) }
+  if (e.reintentos >= MAX_REINTENTOS_DE_LOTE) return { tipo: 'agotado', envios }
+  // sin números libres en la base (varios lotes de la misma semana ya los gastaron): no se adivina otra llave, queda para una persona
+  if (e.libre > LLAVES_DE_REINTENTO) return { tipo: 'agotado', envios }
+  return { tipo: 'reintentar', intento: e.reintentos + 1, llave: llaveDeEnvio(l.idempotency_key, e.libre) }
 }
 
 export interface AvisoDeLote { clave: string; client_id: string; titulo: string; detalle: string }

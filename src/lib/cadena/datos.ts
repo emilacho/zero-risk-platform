@@ -68,7 +68,7 @@ export async function filasLotes(al: Almacen, cuerpo: Record<string, unknown>, a
   if (c.seco === true || !al.enviosDeLote) return { status: 200, cuerpo: { lotes, version } }
   const salen: LoteVencido[] = [], muertos: Array<Record<string, unknown>> = []
   for (const l of lotes) {
-    const e = await al.enviosDeLote(c.client_id, l.lote, l.idempotency_key)
+    const e = await al.enviosDeLote(c.client_id, l.lote, l.idempotency_key, l.fila_ids)
     const d = decidirLote(l, e, ahora)
     if (d.tipo === 'sano') { salen.push({ ...l, idempotency_key: d.llave }); continue }
     // agotado: no sale más; el buzón con la MISMA clave suma una repetición (o abre el incidente si nunca se abrió)

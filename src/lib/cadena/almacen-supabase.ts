@@ -243,10 +243,15 @@ export function almacenDeSupabase(): Almacen {
     },
     async cambiarEstadoDeFilas(campanaId, version, ids, estado) { const { error } = await db.from('cadena_calendario_filas').update({ estado }).eq('campana_id', campanaId).eq('calendario_version', version).in('id', ids); if (error) fallo(error) },
     // 10-nov · LOTE MUERTO · los envíos de ESTA llave según la sala: las llaves exactas de su entrada (original + reintentos), no cliente + semana
-    async enviosDeLote(clientId, lote, llave) {
+    // ADENDA 3 de CC7: con las filas de cada sobre (`payload.envelope_payload.fila_ids`), para no contar envíos cuyas filas ya salieron
+    async enviosDeLote(clientId, lote, llave, filasDeHoy) {
       const llaves = llavesDelRegistro(clientId, lote, llave)
-      const filas = await lista<{ idempotency_key: string; created_at: string }>(db.from('sala_event_log').select('idempotency_key, created_at').eq('client_id', clientId).in('idempotency_key', llaves))
-      return enviosDesdeElRegistro(llaves, filas)
+      const filas = await lista<{ idempotency_key: string; created_at: string; payload: unknown }>(db.from('sala_event_log').select('idempotency_key, created_at, payload').eq('client_id', clientId).in('idempotency_key', llaves))
+      return enviosDesdeElRegistro(llaves, filas.map((f) => {
+        const sobre = (f.payload as { envelope_payload?: { fila_ids?: unknown } } | null)?.envelope_payload
+        const ids = sobre && typeof sobre === 'object' ? sobre.fila_ids : undefined
+        return { idempotency_key: f.idempotency_key, created_at: f.created_at, fila_ids: Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : null }
+      }), filasDeHoy)
     },
     async avisarLoteMuerto(a) {
       try {

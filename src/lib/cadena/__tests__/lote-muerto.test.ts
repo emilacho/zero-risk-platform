@@ -4,6 +4,7 @@
  * Segundo cliente: Zero Risk Seguridad Industrial (otro rubro); su campaña y sus filas son CONSTRUIDAS (no tiene campaña real).
  * La sala de la prueba guarda la entrada con la MISMA llave que la de verdad (`buildIdempotencyKey` sobre la llave del sobre): una llave vista = «duplicado», una nueva = un viaje.
  * Corrección 10-nov (CC7 + CC6): el conteo es por LLAVE de lote (campaña · semana · versión · huella), no por cliente + semana.
+ * ADENDA 3 de CC7: un envío cuenta solo si alguna de sus filas sigue en el lote de hoy (filas nuevas de una semana que ya salió bien = lote nuevo).
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -12,7 +13,7 @@ import { buildIdempotencyKey } from '@/lib/sala-event-log/idempotency'
 import { filasLotes } from '../datos'
 import {
   claveDelAviso, decidirLote, enviosDesdeElRegistro, HORAS_PARA_DARLO_POR_MUERTO, llaveDeEnvio, llavesDelRegistro, MAX_REINTENTOS_DE_LOTE, OPERACION_DE_ENTRADA,
-  baseDelLote,
+  baseDelLote, LLAVES_DE_REINTENTO, type EnviosDeLote,
 } from '../lote-muerto'
 import type { Almacen, Campana } from '../almacen'
 import type { Fila } from '../tipos'
@@ -26,11 +27,13 @@ const ENVIO_REAL = '2026-11-10T14:33:31.096Z'
 const HOY = '2026-11-10'
 const wf = { workflow_id: 'wf-vigia', workflow_execution_id: 'ex-1' }
 const horas = (base: string, h: number) => new Date(Date.parse(base) + h * 3600_000).toISOString()
-const REGISTRO_REAL = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '__fixtures__', 'registro-sala-lotes-reales.json'), 'utf8')) as { filas: Array<{ client_id: string; lote: string; llave_del_sobre: string; operation_type: string; idempotency_key: string; created_at: string }> }
+/** n envíos seguidos del mismo lote (el original y n-1 reintentos), todos con filas que siguen en el lote de hoy */
+const seguidos = (n: number, en: string | null): EnviosDeLote => ({ envios: n, reintentos: Math.max(0, n - 1), ultimo: Math.max(0, n - 1), libre: Math.max(1, n), ultimo_en: en })
+const REGISTRO_REAL = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '__fixtures__', 'registro-sala-lotes-reales.json'), 'utf8')) as { filas: Array<{ client_id: string; lote: string; llave_del_sobre: string; operation_type: string; idempotency_key: string; created_at: string; fila_ids: string[] }> }
 
 function escena(opciones: { sinPuertos?: boolean; enviosFallan?: boolean; avisoFalla?: number } = {}) {
   /** el registro de la sala: la entrada de cada viaje con la llave que deriva la sala */
-  const registro: Array<{ client_id: string; idempotency_key: string; created_at: string }> = []
+  const registro: Array<{ client_id: string; idempotency_key: string; created_at: string; fila_ids: string[] }> = []
   const avisos: Array<{ clave: string; accion: string }> = []
   const buzon = new Set<string>()
   let fallosDeAviso = opciones.avisoFalla ?? 0
@@ -53,10 +56,10 @@ function escena(opciones: { sinPuertos?: boolean; enviosFallan?: boolean; avisoF
     filas: async (campanaId: string) => filas.filter((f) => (f as unknown as { campana_id: string }).campana_id === campanaId),
     ...(opciones.sinPuertos ? {} : {
       // la MISMA cuenta que el almacén real: llaves exactas + `enviosDesdeElRegistro`
-      enviosDeLote: async (clientId: string, lote: string, llave: string) => {
+      enviosDeLote: async (clientId: string, lote: string, llave: string, filasDeHoy: readonly string[]) => {
         if (opciones.enviosFallan) throw new Error('sala_event_log caída')
         const llaves = llavesDelRegistro(clientId, lote, llave)
-        return enviosDesdeElRegistro(llaves, registro.filter((r) => r.client_id === clientId && llaves.includes(r.idempotency_key)))
+        return enviosDesdeElRegistro(llaves, registro.filter((r) => r.client_id === clientId && llaves.includes(r.idempotency_key)), filasDeHoy)
       },
       avisarLoteMuerto: async (a: { clave: string }) => {
         if (fallosDeAviso > 0) { fallosDeAviso--; return { ok: false as const, error: 'buzón caído' } }
@@ -67,10 +70,10 @@ function escena(opciones: { sinPuertos?: boolean; enviosFallan?: boolean; avisoF
     }),
   } as unknown as Almacen
   /** lo que hace el vigía con la respuesta: manda cada sobre; la sala deduplica por su llave derivada */
-  const mandar = (c: C, lotes: Array<{ lote: string; idempotency_key: string }>, en: string) => {
+  const mandar = (c: C, lotes: Array<{ lote: string; idempotency_key: string; fila_ids: string[] }>, en: string) => {
     for (const l of lotes) {
       const k = buildIdempotencyKey({ operation_type: OPERACION_DE_ENTRADA, client_id: c.client, logical_period: l.lote, input_hash: l.idempotency_key })
-      if (!registro.some((r) => r.idempotency_key === k)) registro.push({ client_id: c.client, idempotency_key: k, created_at: en })
+      if (!registro.some((r) => r.idempotency_key === k)) registro.push({ client_id: c.client, idempotency_key: k, created_at: en, fila_ids: [...l.fila_ids] })
     }
   }
   const pasada = async (c: C, ahora: string) => {
@@ -88,30 +91,65 @@ describe('la llave del registro (contra las filas REALES de la sala)', () => {
     expect(f.operation_type).toBe(OPERACION_DE_ENTRADA)
     const llaves = llavesDelRegistro(f.client_id, f.lote, f.llave_del_sobre)
     expect(llaves[0]).toBe(f.idempotency_key)
-    expect(enviosDesdeElRegistro(llaves, [f])).toEqual({ envios: 1, ultimo_en: f.created_at })
+    expect(enviosDesdeElRegistro(llaves, [f], f.fila_ids)).toEqual({ envios: 1, reintentos: 0, ultimo: 0, libre: 1, ultimo_en: f.created_at })
   })
   it('la entrada de un lote no cuenta para otro lote, otra versión ni otra campaña del mismo cliente', () => {
     const [w46, w47] = REGISTRO_REAL.filas
-    expect(enviosDesdeElRegistro(llavesDelRegistro(w47.client_id, w47.lote, w47.llave_del_sobre), [w46]).envios).toBe(0)
-    expect(enviosDesdeElRegistro(llavesDelRegistro(w46.client_id, w46.lote, w46.llave_del_sobre.replace(':2026-W46:1:', ':2026-W46:2:')), [w46]).envios).toBe(0)
-    expect(enviosDesdeElRegistro(llavesDelRegistro(w46.client_id, w46.lote, w46.llave_del_sobre.replace(NAUFRAGO.campana, NAUFRAGO_PAUSADA.campana)), [w46]).envios).toBe(0)
+    expect(enviosDesdeElRegistro(llavesDelRegistro(w47.client_id, w47.lote, w47.llave_del_sobre), [w46], w46.fila_ids).envios).toBe(0)
+    expect(enviosDesdeElRegistro(llavesDelRegistro(w46.client_id, w46.lote, w46.llave_del_sobre.replace(':2026-W46:1:', ':2026-W46:2:')), [w46], w46.fila_ids).envios).toBe(0)
+    expect(enviosDesdeElRegistro(llavesDelRegistro(w46.client_id, w46.lote, w46.llave_del_sobre.replace(NAUFRAGO.campana, NAUFRAGO_PAUSADA.campana)), [w46], w46.fila_ids).envios).toBe(0)
   })
   it('cuenta por el ÚLTIMO reintento encontrado, aunque las filas lleguen desordenadas', () => {
     const ll = llavesDelRegistro(NAUFRAGO.client, '2026-W46', 'k')
-    expect(enviosDesdeElRegistro(ll, [{ idempotency_key: ll[2], created_at: 'b' }, { idempotency_key: ll[0], created_at: 'a' }, { idempotency_key: 'otra', created_at: 'z' }])).toEqual({ envios: 3, ultimo_en: 'b' })
+    expect(enviosDesdeElRegistro(ll, [{ idempotency_key: ll[2], created_at: 'b' }, { idempotency_key: ll[0], created_at: 'a' }, { idempotency_key: 'otra', created_at: 'z' }], [])).toEqual({ envios: 2, reintentos: 1, ultimo: 2, libre: 3, ultimo_en: 'b' })
   })
 })
 
 describe('la regla exacta', () => {
   const K = { idempotency_key: 'camp:2026-W46:1:abcd1234' }
-  it('sin envío previo → sano, con la llave de siempre', () => expect(decidirLote(K, { envios: 0, ultimo_en: null }, '2026-11-10T20:00:00Z')).toEqual({ tipo: 'sano', llave: K.idempotency_key }))
+  it('sin envío previo → sano, con la llave de siempre', () => expect(decidirLote(K, seguidos(0, null), '2026-11-10T20:00:00Z')).toEqual({ tipo: 'sano', llave: K.idempotency_key }))
   it('envío más nuevo que el plazo → sano, con la llave de su último envío', () => {
-    expect(decidirLote(K, { envios: 1, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, HORAS_PARA_DARLO_POR_MUERTO - 0.01))).toEqual({ tipo: 'sano', llave: K.idempotency_key })
-    expect(decidirLote(K, { envios: 2, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, 1))).toEqual({ tipo: 'sano', llave: 'camp:2026-W46:1:r1' })
+    expect(decidirLote(K, seguidos(1, ENVIO_REAL), horas(ENVIO_REAL, HORAS_PARA_DARLO_POR_MUERTO - 0.01))).toEqual({ tipo: 'sano', llave: K.idempotency_key })
+    expect(decidirLote(K, seguidos(2, ENVIO_REAL), horas(ENVIO_REAL, 1))).toEqual({ tipo: 'sano', llave: 'camp:2026-W46:1:r1' })
   })
-  it('justo en el plazo → reintento 1 con llave nueva y determinista', () => expect(decidirLote(K, { envios: 1, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, HORAS_PARA_DARLO_POR_MUERTO))).toEqual({ tipo: 'reintentar', intento: 1, llave: 'camp:2026-W46:1:r1' }))
-  it(`tras ${MAX_REINTENTOS_DE_LOTE} reintentos → agotado`, () => expect(decidirLote(K, { envios: MAX_REINTENTOS_DE_LOTE + 1, ultimo_en: ENVIO_REAL }, horas(ENVIO_REAL, 5))).toEqual({ tipo: 'agotado', envios: MAX_REINTENTOS_DE_LOTE + 1 }))
-  it('fecha ilegible → no adivina (se comporta como hoy)', () => expect(decidirLote(K, { envios: 1, ultimo_en: 'ayer' }, '2026-11-10T20:00:00Z').tipo).toBe('sano'))
+  it('justo en el plazo → reintento 1 con llave nueva y determinista', () => expect(decidirLote(K, seguidos(1, ENVIO_REAL), horas(ENVIO_REAL, HORAS_PARA_DARLO_POR_MUERTO))).toEqual({ tipo: 'reintentar', intento: 1, llave: 'camp:2026-W46:1:r1' }))
+  it(`tras ${MAX_REINTENTOS_DE_LOTE} reintentos → agotado`, () => expect(decidirLote(K, seguidos(MAX_REINTENTOS_DE_LOTE + 1, ENVIO_REAL), horas(ENVIO_REAL, 5))).toEqual({ tipo: 'agotado', envios: MAX_REINTENTOS_DE_LOTE + 1 }))
+  it('fecha ilegible → no adivina (se comporta como hoy)', () => expect(decidirLote(K, seguidos(1, 'ayer'), '2026-11-10T20:00:00Z').tipo).toBe('sano'))
+  describe('ADENDA 3 de CC7 · solo cuentan los envíos con alguna fila que siga en el lote de hoy', () => {
+    const ll = llavesDelRegistro(NAUFRAGO.client, '2026-W46', K.idempotency_key)
+    const AYER = '2026-11-10T16:33:31.096Z'
+    it('el r1 de ayer salió entero y hoy hay filas nuevas: no cuenta → sale como ORIGINAL, sin intento ni aviso', () => {
+      const e = enviosDesdeElRegistro(ll, [{ idempotency_key: ll[1], created_at: AYER, fila_ids: ['a', 'b'] }], ['c', 'd'])
+      expect(e).toEqual({ envios: 0, reintentos: 0, ultimo: 0, libre: 2, ultimo_en: null })
+      expect(decidirLote(K, e, horas(AYER, 20))).toEqual({ tipo: 'sano', llave: K.idempotency_key })
+    })
+    it('sabotaje · una fila del r1 de ayer sigue sin parte: cuenta → reintento 2 (r2)', () => {
+      const e = enviosDesdeElRegistro(ll, [{ idempotency_key: ll[1], created_at: AYER, fila_ids: ['a', 'b'] }], ['b', 'c'])
+      expect(e).toEqual({ envios: 1, reintentos: 1, ultimo: 1, libre: 2, ultimo_en: AYER })
+      expect(decidirLote(K, e, horas(AYER, 20))).toEqual({ tipo: 'reintentar', intento: 2, llave: 'camp:2026-W46:1:r2' })
+    })
+    it('un envío sin filas legibles SÍ cuenta (cota prudente = la regla anterior)', () => {
+      expect(enviosDesdeElRegistro(ll, [{ idempotency_key: ll[1], created_at: AYER, fila_ids: null }], ['c']).envios).toBe(1)
+      expect(enviosDesdeElRegistro(ll, [{ idempotency_key: ll[1], created_at: AYER }], ['c']).envios).toBe(1)
+    })
+    it('el lote NUEVO también muere: su reintento 1 usa el número libre (r2), no el r1 viejo que la sala contestaría «duplicado»', () => {
+      const e = enviosDesdeElRegistro(ll, [{ idempotency_key: ll[1], created_at: AYER, fila_ids: ['a'] }, { idempotency_key: ll[0], created_at: horas(AYER, 20), fila_ids: ['c'] }], ['c'])
+      expect(e).toEqual({ envios: 1, reintentos: 0, ultimo: 0, libre: 2, ultimo_en: horas(AYER, 20) })
+      expect(decidirLote(K, e, horas(AYER, 22))).toEqual({ tipo: 'reintentar', intento: 1, llave: 'camp:2026-W46:1:r2' })
+    })
+    it('tres lotes anteriores de la semana ya usaron r1..r3 y salieron: el lote de hoy que muere todavía se reintenta, con r4 (intento 1)', () => {
+      const viejos = ll.slice(1, 4).map((k) => ({ idempotency_key: k, created_at: AYER, fila_ids: ['a'] }))
+      const e = enviosDesdeElRegistro(ll, [...viejos, { idempotency_key: ll[0], created_at: horas(AYER, 20), fila_ids: ['c'] }], ['c'])
+      expect(e).toEqual({ envios: 1, reintentos: 0, ultimo: 0, libre: 4, ultimo_en: horas(AYER, 20) })
+      expect(decidirLote(K, e, horas(AYER, 22))).toEqual({ tipo: 'reintentar', intento: 1, llave: 'camp:2026-W46:1:r4' })
+    })
+    it(`sin números libres en la base (r1..r${LLAVES_DE_REINTENTO} gastados) → agotado, no inventa otra llave`, () => {
+      const viejos = ll.slice(1).map((k) => ({ idempotency_key: k, created_at: AYER, fila_ids: ['a'] }))
+      const e = enviosDesdeElRegistro(ll, [...viejos, { idempotency_key: ll[0], created_at: horas(AYER, 20), fila_ids: ['c'] }], ['c'])
+      expect(e.libre).toBe(LLAVES_DE_REINTENTO + 1)
+      expect(decidirLote(K, e, horas(AYER, 22))).toEqual({ tipo: 'agotado', envios: 1 })
+    })
+  })
   it('las llaves de envío: el original con su huella; los reintentos por la BASE del lote (sin la huella del día)', () => {
     expect(llaveDeEnvio('x', 0)).toBe('x'); expect(llaveDeEnvio('x', 2)).toBe('x:r2')
     expect(llaveDeEnvio('camp:2026-W46:1:abcd1234', 0)).toBe('camp:2026-W46:1:abcd1234')
@@ -164,6 +202,45 @@ describe.each([['Náufrago (restaurante · caso real)', NAUFRAGO], ['Seguridad i
     expect(e.viajes(C)).toBe(4)
     expect(e.avisos.filter((a) => a.accion === 'abrio')).toEqual([{ clave: claveDelAviso(orig), accion: 'abrio' }])
     expect(new Set(e.avisos.map((a) => a.clave))).toEqual(new Set([claveDelAviso(orig)]))
+  })
+
+  it('ADENDA 3 de CC7 · filas NUEVAS a una semana que ya salió bien salen como original: no cuentan intentos ni avisan (y si mueren, su reintento usa el número libre)', async () => {
+    const e = escena()
+    const orig = (await e.pasada(C, ENVIO_REAL)).lotes[0].idempotency_key
+    await e.pasada(C, horas(ENVIO_REAL, 2)) // el original murió: r1
+    expect(e.viajes(C)).toBe(2)
+    for (const f of e.filas) (f as unknown as { estado: string }).estado = 'en_brief' // el r1 salió: su parte marcó las filas
+    const nuevas = [`${C.campana.slice(0, 4)}-14-n1`, `${C.campana.slice(0, 4)}-14-n2`]
+    for (const id of nuevas) e.filas.push({ id, campana_id: C.campana, fecha: '2026-11-14', red: 'instagram', formato: 'foto', estado: 'validada' } as unknown as Fila)
+    const avisosAntes = e.avisos.length
+    const hoy = await e.pasada(C, horas(ENVIO_REAL, 20))
+    expect(hoy.lotes).toHaveLength(1)
+    expect([...hoy.lotes[0].fila_ids].sort()).toEqual([...nuevas].sort())
+    const llave = hoy.lotes[0].idempotency_key
+    expect(baseDelLote(llave)).toBe(baseDelLote(orig))
+    expect(llave).not.toBe(orig) // otra huella: sus filas son otras
+    expect(llave.split(':')[3]).not.toMatch(/^r/) // un ORIGINAL, no un reintento
+    expect(hoy.r.cuerpo).not.toHaveProperty('lotes_muertos')
+    expect(e.viajes(C)).toBe(3)
+    expect(e.avisos).toHaveLength(avisosAntes)
+    expect((await e.pasada(C, horas(ENVIO_REAL, 21))).lotes[0].idempotency_key).toBe(llave) // sano: la sala contesta «duplicado»
+    expect(e.viajes(C)).toBe(3)
+    // si el lote nuevo también muere: reintento 1, con el número libre (r2), y el aviso va al MISMO incidente del lote (límite declarado)
+    const muere = await e.pasada(C, horas(ENVIO_REAL, 22))
+    expect(muere.lotes[0].idempotency_key).toBe(`${baseDelLote(orig)}:r2`)
+    expect(muere.r.cuerpo.lotes_muertos).toEqual([expect.objectContaining({ lote: '2026-W46', accion: 'reintento', intento: 1 })])
+    expect(e.viajes(C)).toBe(4)
+    expect(new Set(e.avisos.map((a) => a.clave))).toEqual(new Set([claveDelAviso(orig)]))
+  })
+
+  it('sabotaje (ADENDA 3 de CC7) · el MISMO lote con sus filas de ayer todavía sin parte sigue contando (r2), aunque entren filas nuevas', async () => {
+    const e = escena()
+    const orig = (await e.pasada(C, ENVIO_REAL)).lotes[0].idempotency_key
+    await e.pasada(C, horas(ENVIO_REAL, 2)) // r1
+    e.filas.push({ id: `${C.campana.slice(0, 4)}-14-n1`, campana_id: C.campana, fecha: '2026-11-14', red: 'instagram', formato: 'foto', estado: 'validada' } as unknown as Fila)
+    const r = await e.pasada(C, horas(ENVIO_REAL, 20))
+    expect(r.lotes[0].idempotency_key).toBe(`${baseDelLote(orig)}:r2`)
+    expect(r.r.cuerpo.lotes_muertos).toEqual([expect.objectContaining({ accion: 'reintento', intento: 2 })])
   })
 
   it('sabotaje · un lote SANO (su parte salió: filas marcadas) no se reintenta ni avisa', async () => {
