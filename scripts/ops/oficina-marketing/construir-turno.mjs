@@ -8,7 +8,12 @@
  *     La sala contesta 200 siempre: `ok:false` DETIENE (con el código), `kind:'duplicate'` es éxito.
  * Sin `siguiente_sobre` (todo lo de hoy) los nodos nuevos no hacen nada.
  */
-import { agregarNodo, cambiarCodigo, codigo, conectar, escribirNuevo, http, leerVivo, si } from './lib.mjs'
+import fs from 'node:fs'
+import path from 'node:path'
+import { agregarNodo, AQUI, cambiarCodigo, codigo, conectar, escribirNuevo, http, si } from './lib.mjs'
+
+// 10-nov · el T5 se construyó sobre el flujo de ENTONCES; esa foto vive en `historico/` (la copia `vivo/` es el flujo de hoy, con la llave del acuse · #988)
+const leerVivo = (id) => JSON.parse(fs.readFileSync(path.join(AQUI, 'historico', `${id}-antes-del-t5.json`), 'utf8'))
 
 const ID = 'bTbWL9lUvQCfStAz'
 const URL_SALA = '={{ $env.SALA_INTAKE_URL || "https://zero-risk-platform.vercel.app/api/sala/intake" }}'

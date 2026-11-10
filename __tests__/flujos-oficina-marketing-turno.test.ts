@@ -21,7 +21,19 @@ import type { Tarjeta } from '../src/lib/oficina/mesa/tipos'
 import { recorrer, type Http } from './_emulador-n8n'
 
 const RAIZ = path.join(__dirname, '..', 'scripts', 'ops', 'oficina-marketing')
-const leer = (carpeta: 'vivo' | 'nuevo') => JSON.parse(fs.readFileSync(path.join(RAIZ, carpeta, 'bTbWL9lUvQCfStAz.json'), 'utf8'))
+// 10-nov · «vivo» aquí es el flujo de ANTES del T5 (la referencia histórica de esta prueba): vive en `historico/`. La copia `vivo/` es el flujo de hoy (con la llave del acuse, #988)
+const leer = (carpeta: 'vivo' | 'nuevo') => JSON.parse(fs.readFileSync(carpeta === 'vivo' ? path.join(RAIZ, 'historico', 'bTbWL9lUvQCfStAz-antes-del-t5.json') : path.join(RAIZ, carpeta, 'bTbWL9lUvQCfStAz.json'), 'utf8'))
+
+describe('la copia vivo/ es el flujo de hoy', () => {
+  it('es igual a la copia aplicada con la llave del acuse (nodos y conexiones) y el acuse usa la llave del servidor', () => {
+    const hoy = JSON.parse(fs.readFileSync(path.join(RAIZ, 'vivo', 'bTbWL9lUvQCfStAz.json'), 'utf8'))
+    const aplicado = JSON.parse(fs.readFileSync(path.join(RAIZ, 'aplicado', 'bTbWL9lUvQCfStAz-llave-del-acuse-2026-11-10.json'), 'utf8'))
+    expect(JSON.stringify({ n: hoy.nodes, c: hoy.connections })).toBe(JSON.stringify({ n: aplicado.nodes, c: aplicado.connections }))
+    const acuse = hoy.nodes.find((n: any) => n.name === '⓪ Acuse del turno')
+    expect(JSON.stringify(acuse.parameters.headerParameters)).toContain('={{ $env.SALA_DISPATCH_KEY }}')
+    expect(JSON.stringify(hoy)).not.toMatch(/[0-9a-f]{64}|eyJ[A-Za-z0-9_-]{10,}|sk-[A-Za-z0-9]{10,}|xox[abp]-|"shared"/)
+  })
+})
 const CLIENTE = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
 const CAMPANA = '8168f32b-47d9-466a-9350-3dff31700a58'
 const AHORA = '2026-10-09T12:00:00Z'
