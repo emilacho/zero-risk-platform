@@ -7,13 +7,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { avisar, cerrar, errorLimpio, validarEntrada, EntradaInvalida, ErrorAlGuardar, type AlmacenDeAvisos, type Dependencias, type EntradaDeAviso, type Guardado, type PublicarEnSlack, type EstadoSlack } from '../nucleo'
+import { avisar, cerrar, errorLimpio, validarEntrada, EntradaInvalida, ErrorAlGuardar, type AlmacenDeAvisos, type Dependencias, type EntradaDeAviso, type Guardado, type PublicarEnSlack, type EstadoSlack, type Tipo } from '../nucleo'
 import { almacenDeAvisos, canalesDesde, slackEncendido, slackPorBot } from '../adaptadores'
 
 const RESTAURANTE = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
 const B2B = 'df7e47cc-bec4-4fa2-bc24-ff97ba5213a5'
 
-interface FilaFalsa { id: string; clave: string; detalle: string; repeticiones: number; ultima_en: number; cerrado_en: number | null; nota: string | null; slack_ts: string | null; slack_estado: EstadoSlack; slack_error: string | null; client_id: string | null }
+interface FilaFalsa { id: string; clave: string; tipo: Tipo; detalle: string; repeticiones: number; ultima_en: number; cerrado_en: number | null; nota: string | null; slack_ts: string | null; slack_estado: EstadoSlack; slack_error: string | null; client_id: string | null }
 function almacenFalso(o: { fallarGuardar?: boolean; fallarAnotar?: boolean } = {}) {
   const filas: FilaFalsa[] = []
   let n = 0, ahora = 1_000_000_000_000
@@ -28,7 +28,7 @@ function almacenFalso(o: { fallarGuardar?: boolean; fallarAnotar?: boolean } = {
         ab.repeticiones++; ab.detalle = e.detalle; ab.ultima_en = ahora
         return { aviso_id: ab.id, accion: antes === e.detalle ? 'repetida' : 'cambio', slack_ts: ab.slack_ts, slack_estado: ab.slack_estado }
       }
-      const f: FilaFalsa = { id: `a${++n}`, clave: e.clave, detalle: e.detalle, repeticiones: 0, ultima_en: ahora, cerrado_en: null, nota: null, slack_ts: null, slack_estado: 'pendiente', slack_error: null, client_id: e.client_id ?? null }
+      const f: FilaFalsa = { id: `a${++n}`, clave: e.clave, tipo: e.tipo, detalle: e.detalle, repeticiones: 0, ultima_en: ahora, cerrado_en: null, nota: null, slack_ts: null, slack_estado: 'pendiente', slack_error: null, client_id: e.client_id ?? null }
       filas.push(f)
       return { aviso_id: f.id, accion: vencida ? 'reabrio' : 'abrio', slack_ts: null, slack_estado: 'pendiente' }
     },
@@ -36,7 +36,7 @@ function almacenFalso(o: { fallarGuardar?: boolean; fallarAnotar?: boolean } = {
       const f = filas.find((x) => x.clave === clave && x.cerrado_en === null)
       if (!f) return null
       f.cerrado_en = ahora; f.nota = nota
-      return { aviso_id: f.id, slack_ts: f.slack_ts }
+      return { aviso_id: f.id, slack_ts: f.slack_ts, tipo: f.tipo }
     },
     async anotarSlack(id, estado, ts, error) {
       if (o.fallarAnotar) throw new Error('timeout')
@@ -152,6 +152,10 @@ describe('avisar · guarda primero, Slack después', () => {
     expect(await cerrar(d, 'prueba:x', 'ya volvió')).toEqual({ cerrado: true, slack: 'entregado' })
     expect(llamadas[1]).toMatchObject({ hilo: 'ts-1' })
     expect(await cerrar(d, 'prueba:x', 'otra')).toEqual({ cerrado: false, slack: 'sin_hilo' })
+    // una PIEZA se cierra en el canal de piezas, aunque quien cierra no diga el tipo (nota CC7)
+    await avisar(d, aviso('prueba:pieza', 'd', { tipo: 'pieza', client_id: RESTAURANTE }))
+    await cerrar(d, 'prueba:pieza', 'aprobada')
+    expect(llamadas.at(-1)).toMatchObject({ canal: 'C-OFICINA', hilo: 'ts-3' })
   })
 })
 
@@ -234,6 +238,8 @@ describe('migración 202611101900 · permisos cerrados y reversa', () => {
       expect(sql).toMatch(new RegExp(`revoke execute on function public\\.${fn}\\([^)]*\\) from public, anon, authenticated;`))
     }
     expect(sql).not.toMatch(/security definer/i)
+    // cerrar devuelve el tipo de la FILA: el cierre va al canal de la fila (nota CC7)
+    expect(sql).toMatch(/avisos_cerrar\(p_clave text, p_nota text\)\s+returns table \(aviso_id uuid, slack_ts text, tipo text\)[\s\S]*?returning a\.id, a\.slack_ts, a\.tipo;/)
   })
   it('un incidente por fila: una sola ABIERTA por clave, y repetir = on conflict sobre ese índice', () => {
     expect(sql).toMatch(/create unique index if not exists avisos_una_abierta_por_clave on public\.avisos \(clave\) where cerrado_en is null;/)

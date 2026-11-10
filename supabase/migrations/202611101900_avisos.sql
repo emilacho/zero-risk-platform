@@ -75,13 +75,13 @@ begin
     r.slack_ts, r.slack_estado;
 end $$;
 
--- cerrar el incidente abierto de una clave (si no hay, no hace nada) · devuelve la fila cerrada
+-- cerrar el incidente abierto de una clave (si no hay, no hace nada) · devuelve la fila cerrada con SU tipo (el cierre va al canal de la fila, no al que diga quien llama)
 create or replace function public.avisos_cerrar(p_clave text, p_nota text)
-returns table (aviso_id uuid, slack_ts text)
+returns table (aviso_id uuid, slack_ts text, tipo text)
 language plpgsql security invoker set search_path = public, pg_temp as $$
 begin
   return query update public.avisos a set cerrado_en = now(), nota_cierre = left(coalesce(nullif(btrim(p_nota), ''), 'cerrado'), 300)
-    where a.clave = p_clave and a.cerrado_en is null returning a.id, a.slack_ts;
+    where a.clave = p_clave and a.cerrado_en is null returning a.id, a.slack_ts, a.tipo;
 end $$;
 
 revoke execute on function public.avisos_avisar(text, text, text, text, uuid, text, text, text, text) from public, anon, authenticated;

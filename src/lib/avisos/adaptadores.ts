@@ -26,7 +26,7 @@ export function almacenDeAvisos(db: Db): AlmacenDeAvisos {
       const { data, error } = await db.rpc('avisos_cerrar', { p_clave: clave, p_nota: nota })
       if (error) throw new Error(`cerrar el aviso: ${String(error.message ?? error).slice(0, 200)}`)
       const f = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined
-      return f && typeof f.aviso_id === 'string' ? { aviso_id: f.aviso_id, slack_ts: (f.slack_ts as string | null) ?? null } : null
+      return f && typeof f.aviso_id === 'string' ? { aviso_id: f.aviso_id, slack_ts: (f.slack_ts as string | null) ?? null, tipo: f.tipo as Tipo } : null
     },
     async anotarSlack(aviso_id, estado, ts, error) {
       const r = await db.from('avisos').update({ slack_estado: estado, slack_ts: ts, slack_error: error }).eq('id', aviso_id)

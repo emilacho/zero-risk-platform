@@ -30,7 +30,7 @@ export interface Guardado { aviso_id: string; accion: Accion; slack_ts: string |
 /** puerto del almacén (el ÚNICO lugar que nombra la tabla es su adaptador) */
 export interface AlmacenDeAvisos {
   avisar(e: EntradaDeAviso): Promise<Guardado>
-  cerrar(clave: string, nota: string): Promise<{ aviso_id: string; slack_ts: string | null } | null>
+  cerrar(clave: string, nota: string): Promise<{ aviso_id: string; slack_ts: string | null; tipo: Tipo } | null>
   anotarSlack(aviso_id: string, estado: EstadoSlack, ts: string | null, error: string | null): Promise<void>
 }
 /** puerto de Slack: publicar en un canal (o en un hilo) · devuelve el ts o el error, nunca lanza */
@@ -101,15 +101,15 @@ export async function avisar(d: Dependencias, entrada: unknown): Promise<Resulta
   return { ...g, slack: 'fallo', slack_anotado: await anotar('fallo', g.slack_ts, err), slack_detalle: err }
 }
 
-/** cerrar el incidente abierto de una clave · el cierre va como respuesta en su hilo (si lo hay y Slack está encendido) */
-export async function cerrar(d: Dependencias, clave: string, nota: string, tipo: Tipo = 'alarma'): Promise<{ cerrado: boolean; slack: EstadoSlack | 'sin_hilo' }> {
+/** cerrar el incidente abierto de una clave · el cierre va como respuesta en su hilo, en el canal del TIPO DE LA FILA (si hay hilo y Slack está encendido) */
+export async function cerrar(d: Dependencias, clave: string, nota: string): Promise<{ cerrado: boolean; slack: EstadoSlack | 'sin_hilo' }> {
   const c = texto(clave)
   if (c.length < 3 || c.length > 160) throw new EntradaInvalida('la clave del incidente debe tener entre 3 y 160 caracteres')
-  let f: { aviso_id: string; slack_ts: string | null } | null
+  let f: { aviso_id: string; slack_ts: string | null; tipo: Tipo } | null
   try { f = await d.almacen.cerrar(c, texto(nota).slice(0, 300) || 'cerrado') } catch (x) { throw new ErrorAlGuardar(x instanceof Error ? x.message : String(x)) }
   if (!f) return { cerrado: false, slack: 'sin_hilo' }
   if (!d.slackEncendido) return { cerrado: true, slack: 'apagado' }
-  const canal = d.canales[tipo]
+  const canal = d.canales[f.tipo]
   if (!f.slack_ts || !canal) return { cerrado: true, slack: 'sin_hilo' }
   const r = await d.slack(canal, `✅ Resuelto${texto(nota) ? ` · ${texto(nota).slice(0, 300)}` : ''}`, f.slack_ts)
   return { cerrado: true, slack: r.ok ? 'entregado' : 'fallo' }
