@@ -103,7 +103,7 @@ describe('T0 · cada decisión de hoy da una ficha válida', () => {
   })
   it('🔴 lo que hoy se decide en otro panel queda sin verbos y con su pantalla', () => {
     const pantallas = Object.fromEntries(Object.entries(VARIANTES).map(([k, d]) => [k, fichaDe(d).donde_se_hace?.pantalla ?? null]))
-    expect(pantallas).toEqual({ firma_editable: null, plan: 'plan', pregunta_con_supuesto: null, pausa: null, no_volvio: null, canal_viejo: null, campana: 'plan', pieza: 'piezas', gran_idea: 'gran_idea', plan_con_pendientes: 'plan', palabra_del_dueno: 'plan', lista_de_competidores: 'piezas', otra_revision: 'piezas' })
+    expect(pantallas).toEqual({ firma_editable: null, plan: 'plan', pregunta_con_supuesto: null, pausa: null, no_volvio: null, canal_viejo: null, campana: 'plan', pieza: 'piezas', gran_idea: 'gran_idea', plan_con_pendientes: 'plan', palabra_del_dueno: 'plan', lista_de_competidores: 'piezas', otra_revision: null })
     for (const k of ['plan', 'campana', 'pieza', 'gran_idea', 'plan_con_pendientes', 'palabra_del_dueno', 'pausa', 'no_volvio', 'canal_viejo', 'lista_de_competidores', 'otra_revision']) expect(fichaDe(VARIANTES[k]).acciones, k).toEqual([])
   })
   it('🔴 la campaña: detiene, vence con su espera y dice qué pasa al vencer', () => {
@@ -215,13 +215,31 @@ describe('T0 · la lista entera trae su ficha, al lado de lo de hoy', () => {
   })
 })
 
-describe('10-nov · tramo: las revisiones dicen dónde se hacen', () => {
-  it('🔴 toda revisión que no es pieza lleva «Ir a Piezas» (allí están «Otras revisiones»), sin verbos en la ficha', () => {
-    for (const subtipo of ['confirm_competitor_list', 'editor_escalation', 'tipo_que_aun_no_existe']) for (const ruta of [null, '/nuevo']) {
-      const f = fichaDe(dec({ tipo: 'revision', subtipo, fuente: 'hitl_queue', decidir: { ruta, accion: ruta ? null : 'revision-resolver' } }))
-      expect(f.donde_se_hace?.pantalla, `${subtipo} ${ruta}`).toBe('piezas')
-      expect(f.acciones).toEqual([])
-      expect(problemasDeLaFicha(f)).toEqual([])
+describe('10-nov · tramo: cada revisión dice dónde se hace (el panel de su documento)', () => {
+  const rev = (subtipo: string, documento: string | undefined, ruta: string | null) => fichaDe(dec({ tipo: 'revision', subtipo, fuente: 'hitl_queue', ...(documento ? { documento } : {}), decidir: { ruta, accion: 'revision-resolver' } }))
+  it('🔴 la revisión del editor sobre el manual va al Manual, no a Piezas (Piezas la esconde · CC7)', () => {
+    expect(rev('editor_escalation', 'manual', '/nuevo').donde_se_hace?.pantalla).toBe('manual')
+    expect(rev('editor_escalation', 'plan', '/nuevo').donde_se_hace?.pantalla).toBe('plan')
+  })
+  it('🔴 sobre una pieza, o sin documento ni ruta (lista de competidores), va a Piezas', () => {
+    expect(rev('editor_escalation', 'pieza', '/piezas').donde_se_hace?.pantalla).toBe('piezas')
+    expect(rev('confirm_competitor_list', 'competidores', null).donde_se_hace?.pantalla).toBe('piezas')
+    expect(rev('confirm_competitor_list', undefined, null).donde_se_hace?.pantalla).toBe('piezas')
+  })
+  it('🔴 con una ruta que no es Piezas y sin documento conocido, no se inventa enlace', () => {
+    expect(rev('tipo_raro', undefined, '/nuevo').donde_se_hace).toBeUndefined()
+    expect(rev('tipo_raro', 'otra_cosa', '/nuevo').donde_se_hace).toBeUndefined()
+  })
+  it('🔴 la plataforma pasa el documento de la bandeja a la decisión', async () => {
+    const db = new DbFalsa().semilla('clients', [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'Uno', industry: 'restaurante', status: 'active' }])
+      .semilla('hitl_queue', [{ id: 'h1', client_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', type: 'editor_escalation', documento: 'manual', status: 'pending', title: 'Revisa el manual', created_at: '2026-11-09T10:00:00Z', metadata: {} }])
+    const d = (await leerDecisiones({ db, ahora: () => new Date('2026-11-10T01:00:00Z'), env: {} } as Contexto)).decisiones[0]
+    expect(d.documento).toBe('manual')
+    expect(d.ficha?.donde_se_hace?.pantalla).toBe('manual')
+  })
+  it('🔴 ninguna revisión lleva botones en la ficha y todas son válidas', () => {
+    for (const [s2, doc, ruta] of [['editor_escalation', 'manual', '/nuevo'], ['confirm_competitor_list', undefined, null], ['tipo_raro', undefined, '/nuevo']] as const) {
+      const f = rev(s2, doc, ruta); expect(f.acciones).toEqual([]); expect(problemasDeLaFicha(f)).toEqual([])
     }
   })
 })
