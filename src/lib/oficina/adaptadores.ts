@@ -186,6 +186,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         try { perfil = perfilDelAdjunto(await adjuntoDelCliente(db, clientId, ahora())) } catch (e) { perfil = { estado: 'no_se_pudo_leer', detalle: e instanceof Error ? e.message : String(e) } }
         out.perfil_del_publico = perfil
         out.fuentes.perfil_del_publico_texto = perfil.estado === 'vigente' ? perfil.texto : null
+        out.fuentes.perfil_del_publico_estado = perfil.estado
         return out
       } catch (e) { return { error: e instanceof Error ? e.message : String(e) } }
     },
