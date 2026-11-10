@@ -5,6 +5,8 @@
  *   · Seguridad Industrial (industria) · campaña 31dc6aaf · SIN tope en la base · piezas reales ya producidas (encargos de la oficina).
  * La lectura de la base se ejerce con el ADAPTADOR REAL (`almacenDeSupabase().leerGastoDeCampana`) sobre una base falsa que aplica los filtros y guarda las consultas
  * (lo que pidieron CC7 y CC6 en #1010: que la lectura real tenga su prueba). Lo CONSTRUIDO (no sale de la base) lleva la marca «construido».
+ * Pedido de CC7 y CC6 sobre df8619a: la base falsa devuelve SOLO las columnas que pide cada `select` (como la de verdad). Si una lectura deja de pedir una columna
+ * (por ejemplo el `payload` de la sala), el dato llega vacío y alguna prueba falla.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../__fixtures__/gasto-de-campanas-reales.json'
@@ -24,14 +26,17 @@ function consulta(tabla: string) {
   const reg = { tabla, filtros }
   consultas.push(reg)
   let tope = Infinity
+  let columnas: string[] | null = null
   const q: any = {
-    select: () => q, order: () => q,
+    select: (c: string) => { columnas = c === '*' ? null : c.split(',').map((x) => x.trim()); return q },
+    order: () => q,
     eq: (c: string, v: unknown) => { filtros.push(['eq', c, v]); return q },
     in: (c: string, v: unknown[]) => { filtros.push(['in', c, v]); return q },
     limit: (n: number) => { tope = n; return q },
     then: (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => {
       if (fallarTabla === tabla) return Promise.resolve({ data: null, error: { message: `falló ${tabla}` } }).then(ok, ko)
       const filas = (tablas[tabla] ?? []).filter((r) => filtros.every(([op, c, v]) => op === 'eq' ? valor(r, c) === v : (v as unknown[]).includes(valor(r, c)))).slice(0, tope)
+        .map((r) => (columnas ? Object.fromEntries(columnas.map((c) => [c, r[c]])) : r))
       return Promise.resolve({ data: filas, error: null }).then(ok, ko)
     },
   }
@@ -99,6 +104,15 @@ describe('lo gastado · la MISMA fuente que los US$ 26,28 (condición 1 de CC7) 
     expect(consultas.find((c) => c.tabla === PLANT)!.filtros).toContainEqual(['eq', 'activo', true])
     for (const t of ['cadena_corridas', 'cadena_conceptos', 'cadena_brief_creativo']) expect(consultas.find((c) => c.tabla === t)!.filtros).toContainEqual(['eq', 'campana_id', SEG])
     expect(consultas.find((c) => c.tabla === 'client_historical_outputs')!.filtros).toEqual(expect.arrayContaining([['eq', 'output_type', 'campaign_brief_pack'], ['eq', 'provenance_tag->>campana_id', SEG]]))
+  })
+  it('pedido de CC7/CC6 sobre df8619a · cada columna leída cuenta (construido sobre Seguridad Industrial): una corrida caída sin costo suma el tope de su paso; un concepto y un brief sin encargo suman su costo', async () => {
+    sembrar({
+      cadena_corridas: [{ campana_id: SEG, costo_usd: 0, estado: 'fallida', paso: 'calendario' }],
+      cadena_conceptos: [{ campana_id: SEG, costo_usd: 0.4, encargo_id: null }],
+      cadena_brief_creativo: [{ campana_id: SEG, costo_usd: 0.3, encargo_id: null }],
+    })
+    const m = medirGastoDeCampana(await leer(SEG, 'parte-nuevo'), 'parte-nuevo')
+    expect(m.gastado).toBeCloseTo(10.26 + 1 + 0.4 + 0.3, 2)
   })
   it('sabotaje · un parte de ENSAYO de la campaña (construido) no compromete dinero ni trae sus encargos', async () => {
     sembrar({ client_historical_outputs: [{ id: 'parte-seco', output_type: 'campaign_brief_pack', provenance_tag: { campana_id: NAU, seco: true, prueba_seco: true, familias_por_brief: [{ brief_id: 'S1', familia: 'carrusel_mesa' }] } }] })
