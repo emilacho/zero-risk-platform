@@ -280,8 +280,8 @@ export interface Almacen {
   marcarAlarmaDeFecha(pais: string, tipo: string): Promise<boolean>
   /** B · las fuentes aparecieron: la marca abierta se CIERRA con su fecha (queda el historial, no se borra); si la configuración se vuelve a vaciar, sale otra alarma */
   cerrarAlarmaDeFecha(pais: string, tipo: string): Promise<void>
-  /** la vía de alertas de hoy (#alertas). Nunca lanza */
-  avisarAlarma(texto: string): Promise<void>
+  /** la vía de alertas de hoy (#alertas). Nunca lanza; `ok` solo si Slack confirmó la entrega (🟡 CC7: un aviso que no salió no se da por avisado) */
+  avisarAlarma(texto: string): Promise<{ ok: boolean; detalle: string }>
   /** C · le pregunta al dueño por la ruta de preguntas; nunca lanza */
   preguntarAlDueno(p: PreguntaAlDueno): Promise<{ ok: boolean; detalle: string }>
   // autoproducir (r65) · el parte guardado, el freno de gasto y el buzón de la sala

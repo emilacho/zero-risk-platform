@@ -106,14 +106,17 @@ const clave = claveDeFecha
 /**
  * B · no hay fuentes oficiales cargadas para ese país y tipo: UNA alarma por país y tipo (la marca tiene llave única en la base: solo avisa quien la inserta).
  * En seco, o con la cadena en ensayo sin «enviar», no se marca ni se manda (la regla del reloj): así un ensayo no le quita la alarma a la corrida real.
+ * 🟡 CC7: si el envío NO salió (sin llave, red o Slack sin `ok`), la marca se cierra en el acto: la corrida siguiente vuelve a intentar (si no, quedaría «ya avisada» sin aviso).
  */
-async function alarmaSinConfigurar(al: Almacen, c: { seco: boolean }, pais: string, tipo: string): Promise<'enviada' | 'ya_avisada' | 'no_enviada_en_ensayo'> {
+async function alarmaSinConfigurar(al: Almacen, c: { seco: boolean }, pais: string, tipo: string): Promise<'enviada' | 'ya_avisada' | 'no_enviada_en_ensayo' | 'no_enviada'> {
   const estado = await al.leerConfig('estado_cadena')
   const enviar = !c.seco && (estado === 'encendida' || (estado === 'ensayo' && (await al.leerConfig('alertas_en_ensayo')) === 'enviar'))
   if (!enviar) return 'no_enviada_en_ensayo'
   if (!(await al.marcarAlarmaDeFecha(pais, tipo))) return 'ya_avisada'
-  await al.avisarAlarma(`Fechas especiales sin fuentes: el país «${pais}» no tiene fuentes oficiales cargadas para «${tipo}» (ni propias ni las del país). Las filas que dependen de esa fecha quedan sin fuente; la campaña sigue. Se arregla cargando las direcciones oficiales en la configuración (dominios_fechas · «*|${pais}»).`)
-  return 'enviada'
+  const r = await al.avisarAlarma(`Fechas especiales sin fuentes: el país «${pais}» no tiene fuentes oficiales cargadas para «${tipo}» (ni propias ni las del país). Las filas que dependen de esa fecha quedan sin fuente; la campaña sigue. Se arregla cargando las direcciones oficiales en la configuración (dominios_fechas · «*|${pais}»).`)
+  if (r.ok) return 'enviada'
+  try { await al.cerrarAlarmaDeFecha(pais, tipo) } catch { /* si ni eso se puede, la base está caída y la corrida falla por otro lado */ }
+  return 'no_enviada'
 }
 
 export async function fechasCobertura(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {

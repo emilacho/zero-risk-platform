@@ -73,6 +73,10 @@ export class AlmacenMemoria implements Almacen {
   private relojDeCobertura = 0
   /** lo que se mandó a #alertas */
   alarmasEnviadas: string[] = []
+  /** para probar un envío que falla (sin llave, red o Slack sin `ok`) */
+  falloDeAviso: string | null = null
+  /** cuántas veces se intentó mandar (salga o no) */
+  intentosDeAviso = 0
   /** 10-nov · C: lo que se le preguntó al dueño (con «repetida» si la misma pregunta sigue pendiente) */
   preguntasAlDueno: PreguntaAlDueno[] = []
   private seq = { campana: 0, corrida: 0, espera: 0 }
@@ -253,7 +257,7 @@ export class AlmacenMemoria implements Almacen {
   }
   async marcarAlarmaDeFecha(pais: string, tipo: string) { if (this.marcasDeAlarma.some((m) => !m.cerrada && m.pais === pais && m.tipo === tipo)) return false; this.marcasDeAlarma.push({ pais, tipo, cerrada: false }); return true }
   async cerrarAlarmaDeFecha(pais: string, tipo: string) { for (const m of this.marcasDeAlarma) if (!m.cerrada && m.pais === pais && m.tipo === tipo) m.cerrada = true }
-  async avisarAlarma(texto: string) { this.alarmasEnviadas.push(texto) }
+  async avisarAlarma(texto: string) { this.intentosDeAviso++; if (this.falloDeAviso) return { ok: false, detalle: this.falloDeAviso }; this.alarmasEnviadas.push(texto); return { ok: true, detalle: 'entregado' } }
   async preguntarAlDueno(p: PreguntaAlDueno) {
     const ya = this.preguntasAlDueno.some((x) => x.client_id === p.client_id && x.tema === p.tema)
     if (!ya) this.preguntasAlDueno.push(p)

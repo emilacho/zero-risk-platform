@@ -28,7 +28,7 @@ import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia,
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
 import type { LlaveDeFecha } from './indicaciones'
-import { avisarAAlertas } from '@/lib/buzon-dueno/alertas'
+import { avisarAAlertas } from '@/lib/portero-alimenta/avisos'
 import { ordenarLlaves } from './fechas-del-cliente'
 import { preguntar } from '@/lib/dueno-preguntas/preguntas'
 import { cerebroPorHttp } from '@/lib/dueno-preguntas/cerebro-http'
@@ -309,7 +309,7 @@ export function almacenDeSupabase(): Almacen {
       return false
     },
     async cerrarAlarmaDeFecha(pais, tipo) { const { error } = await db.from('cadena_fechas_alarmas').update({ cerrada_en: new Date().toISOString() }).eq('pais', pais).eq('tipo', tipo).is('cerrada_en', null); if (error) fallo(error) },
-    async avisarAlarma(texto) { await avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '' })(texto) },
+    async avisarAlarma(texto) { return avisarAAlertas({ token: process.env.SLACK_BOT_TOKEN ?? '' })(texto) },
     async preguntarAlDueno(p) {
       try {
         const r = await preguntar({ db, cerebro: cerebroPorHttp({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '' }) }, { ...p })

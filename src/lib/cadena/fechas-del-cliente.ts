@@ -69,7 +69,8 @@ export function temporadaRespaldada(f: Pick<FechaQueImporta, 'desde' | 'hasta' |
   const c = normalizar(f.cita_plan ?? '')
   const [, m1, d1] = desde.split('-').map(Number) as [number, number, number]
   const [, m2, d2] = hasta.split('-').map(Number) as [number, number, number]
-  if (!c.includes(MESES[m1 - 1]!) || !c.includes(MESES[m2 - 1]!)) return { ok: false, motivo: 'la cita no nombra los meses del tramo' }
+  const nombra = (m: number) => new RegExp(`\\b${MESES[m - 1]}\\b`).test(c)
+  if (!nombra(m1) || !nombra(m2)) return { ok: false, motivo: 'la cita no nombra los meses del tramo' }
   const dice = (d: number) => new RegExp(`\\b0?${d}\\b`).test(c)
   if (d1 !== 1 && !dice(d1)) return { ok: false, motivo: `la cita no dice el día ${d1} en que empieza` }
   if (!ultimoDelMes(hasta) && !dice(d2)) return { ok: false, motivo: `la cita no dice el día ${d2} en que termina` }

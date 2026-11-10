@@ -155,6 +155,27 @@ describe('B · sin fuentes cargadas: sin configurar, sin intento y UNA alarma po
     expect((await fechasCobertura(al, pedir(a, 'Ecuador', 'Año Nuevo', 'nacional'))).cuerpo.estado).toBe('ya_verificada')
     expect(al.alarmasEnviadas).toHaveLength(0)
   })
+  it('🔴 🟡 CC7: si el envío falla, la marca NO queda abierta y la corrida siguiente vuelve a intentar; cuando sale, recién ahí queda «ya avisada»', async () => {
+    const al = mundo()
+    const a = await campanaDe(al, A.clientId)
+    al.falloDeAviso = 'Slack respondió 200 invalid_auth'
+    expect((await fechasCobertura(al, pedir(a, 'Ecuador', 'Navidad', 'nacional'))).cuerpo.alarma).toBe('no_enviada')
+    expect(al.alarmasDeFecha.size).toBe(0) // la marca se cerró: no calla la próxima
+    expect((await fechasCobertura(al, pedir(a, 'Ecuador', 'Navidad', 'nacional', 2027))).cuerpo.alarma).toBe('no_enviada')
+    expect(al.intentosDeAviso).toBe(2) // la segunda corrida SÍ volvió a intentar
+    al.falloDeAviso = null
+    expect((await fechasCobertura(al, pedir(a, 'Ecuador', 'Navidad', 'nacional'))).cuerpo.alarma).toBe('enviada')
+    expect((await fechasCobertura(al, pedir(a, 'Ecuador', 'Navidad', 'nacional'))).cuerpo.alarma).toBe('ya_avisada')
+    expect(al.alarmasEnviadas).toHaveLength(1)
+    expect(al.intentosDeAviso).toBe(3)
+    expect(al.marcasDeAlarma.filter((m) => m.cerrada)).toHaveLength(2) // las dos fallidas quedan en el historial, cerradas
+  })
+  it('🟡 CC7 en la base: el almacén usa el envío que confirma `ok` de Slack y devuelve su resultado (no el que se lo traga)', async () => {
+    const alm = await leerRepo('../almacen-supabase.ts')
+    expect(alm).toContain("import { avisarAAlertas } from '@/lib/portero-alimenta/avisos'")
+    expect(alm).toContain('async avisarAlarma(texto) { return avisarAAlertas(')
+    expect(alm).not.toContain("'@/lib/buzon-dueno/alertas'")
+  })
 })
 
 // ─────────────────────────────────────────────────────────────── C
@@ -170,6 +191,9 @@ describe('C · la temporada del negocio la da el cliente (cita del plan); sin ci
     expect(temporadaRespaldada({ desde: '2027-04-30', hasta: '2026-12-01', cita_plan: 'La temporada alta va de diciembre a abril' }, plan).ok).toBe(false)
     expect(temporadaRespaldada({ desde: '', hasta: '', cita_plan: '' }, plan)).toMatchObject({ ok: false, motivo: 'el plan no dice cuándo es' })
     expect(temporadaRespaldada({ desde: '2026-12-01', hasta: '', cita_plan: 'La temporada alta va de diciembre a abril' }, plan).ok).toBe(false)
+    // nota de CC7: el mes es palabra entera («mayo» no está dentro de «mayoría»)
+    const planMayoria = 'La mayoría de clientes llega de diciembre a abril.'
+    expect(temporadaRespaldada({ desde: '2026-12-01', hasta: '2027-05-31', cita_plan: 'La mayoría de clientes llega de diciembre a abril' }, planMayoria)).toMatchObject({ ok: false, motivo: expect.stringMatching(/meses/) })
   })
   it('🔴 con cita: se guarda SOLO para ese cliente (la clínica de Colombia), no se investiga en fuentes públicas y el otro cliente no la ve', async () => {
     const al = mundo()
