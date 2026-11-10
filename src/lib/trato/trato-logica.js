@@ -95,6 +95,9 @@ function resolverTrato(manual, ficha) {
 var VERBOS = ('pedir mandar escribir enviar llamar contar avisar venir hacer comprar probar reservar consultar mirar seguir sumar unir descubrir elegir disfrutar compartir ordenar encargar contactar visitar ' +
   'decir tener querer poder saber vivir sentir pasar dejar traer llevar buscar conocer escuchar preguntar responder recibir pagar cambiar usar armar crear ahorrar aprovechar animar inscribir registrar ' +
   'suscribir invitar acompañar agendar cotizar solicitar averiguar entrar ingresar escoger pensar imaginar atreverse quedar poner salir').split(' ')
+// 10-nov (RESPUESTA de Lenovo por Emilio · decisión 3): verbos que SOLO suman formas de voseo («necesitás», «continuás», «ajustás», «parás», «etiquetá», «descargá», «configurá»).
+// No generan tuteo ni usted porque ahí chocan con sustantivos comunes («las descargas», «el ajuste», «para»); así ningún texto que hoy pasa empieza a marcarse por otro trato.
+var VERBOS_SOLO_VOSEO = 'necesitar continuar ajustar parar etiquetar descargar configurar'.split(' ')
 var CLITICOS = ['', 'lo', 'la', 'los', 'las', 'le', 'les', 'me', 'nos', 'te', 'se']
 
 function radical(inf) { return inf.replace(/se$/, '').slice(0, -2) }
@@ -103,7 +106,7 @@ var ACENTO = { a: 'á', e: 'é', i: 'í' }
 
 function formasVoseo() {
   var s = {}
-  VERBOS.forEach(function (inf) {
+  VERBOS.concat(VERBOS_SOLO_VOSEO).forEach(function (inf) {
     var r = radical(inf), v = vocalTematica(inf)
     s[r + ACENTO[v]] = true // pedí · mandá · escribí
     CLITICOS.slice(1).forEach(function (c) { s[r + v + c] = true }) // pedilo · mandalo · escribinos
