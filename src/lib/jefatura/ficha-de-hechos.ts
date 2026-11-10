@@ -9,7 +9,12 @@
  *   cerebro. Las del cerebro llegan por PARÁMETRO: este módulo NO lee el cerebro (solo el portero toca esas tablas; la puerta de lectura
  *   la construye el dueño del cerebro). Sin ellas la ficha queda `incompleta` y una cifra no encontrada da a lo más un AVISO (CC7 18:05Z).
  * · Todo lo que trae la ficha es DATO NO CONFIABLE: se cita, nunca se obedece (`hechosComoDatos`).
+ * · Que un hecho traiga el MISMO número NO lo hace respaldo (CC7 🟡 1, 18:50Z: «22 años» no lo sostiene un horario «22:00»). El código
+ *   solo entrega CANDIDATOS; si el hecho habla de LA MISMA afirmación lo juzga el agente, y sin esa confirmación rige el tope normal.
+ * · La vigencia de un dato de sede sale del plazo de su clase (`plazos.json`, un archivo de configuración: no lee tablas del cerebro),
+ *   contado desde su lectura más nueva; sin fecha, no sostiene (CC7 🟡 2).
  */
+import { PLAZOS_EN_DIAS, vigenciaDe, type ClaseDePlazo } from '../cerebro/plazos'
 
 /** quién lo afirmó (el vocabulario del cerebro, `src/lib/cerebro/tipos.ts`): lo fija el ORIGEN, nunca una frase */
 export type NivelDelHecho = 'dicho_por_dueno' | 'visto_en_su_fuente' | 'medido' | 'de_tercero' | 'inferido' | 'supuesto_aceptado_por_dueno'
@@ -42,7 +47,25 @@ export interface FichaDeHechos {
 }
 
 /** una fila de `client_sede_datos` tal como la lee la cadena (sin retiradas) */
-export interface DatoDeSede { id: string; client_id: string; sede_id: string | null; campo: string; valor_texto: string; fuente: string; observado_en: string | null; retirada_en?: string | null }
+export interface DatoDeSede { id: string; client_id: string; sede_id: string | null; campo: string; valor_texto: string; fuente: string; observado_en: string | null; reconfirmado_en?: string | null; retirada_en?: string | null }
+
+/** la clase de plazo de un dato de sede · la MISMA regla con que el lector del cerebro fecha estos datos (`cerebro/lectores.ts`) */
+export function plazoDeDatoDeSede(campo: string, fuente: string): ClaseDePlazo {
+  return campo === 'horario' ? 'precio_oferta_horario' : fuente === 'mapas' ? 'ficha_mapas_propia' : 'catalogo_y_direccion'
+}
+
+const masNueva = (a: string | null | undefined, b: string | null | undefined): string | null => {
+  const ta = a ? new Date(a).getTime() : NaN, tb = b ? new Date(b).getTime() : NaN
+  if (Number.isNaN(ta)) return Number.isNaN(tb) ? null : b!
+  return Number.isNaN(tb) || ta >= tb ? a! : b!
+}
+
+/** vigente = tiene fecha y no pasó el plazo de su clase desde su lectura más nueva. Sin fecha NO sostiene: no se sabe si sigue siendo cierto. */
+export function datoDeSedeVigente(d: Pick<DatoDeSede, 'campo' | 'fuente' | 'observado_en' | 'reconfirmado_en'>, ahora: Date): boolean {
+  const fecha = masNueva(d.observado_en, d.reconfirmado_en)
+  if (!fecha) return false
+  return !vigenciaDe(fecha, PLAZOS_EN_DIAS[plazoDeDatoDeSede(d.campo, d.fuente)], ahora).vencido
+}
 
 /** el nivel de un dato de sede por su FUENTE: lo que dice el dueño es suyo; sitio, Instagram y Mapas son su propia fuente observada */
 export function nivelDeDatoDeSede(fuente: string): NivelDelHecho {
@@ -55,10 +78,10 @@ export function nivelDeDatoDeSede(fuente: string): NivelDelHecho {
  * Arma la ficha de UN cliente. Lo de otro cliente se descarta aunque llegue (defensa: la lectura ya filtra, aquí se vuelve a filtrar).
  * `fichasDelCerebro` = null ⇒ la puerta de lectura no existe o no respondió: la ficha queda `incompleta`.
  */
-export function fichaDeHechos(p: { clientId: string; datosDeSede: DatoDeSede[]; fichasDelCerebro: HechoDeLaFicha[] | null }): FichaDeHechos {
+export function fichaDeHechos(p: { clientId: string; datosDeSede: DatoDeSede[]; fichasDelCerebro: HechoDeLaFicha[] | null; ahora: Date }): FichaDeHechos {
   const deSede: HechoDeLaFicha[] = p.datosDeSede
     .filter((d) => d.client_id === p.clientId && !d.retirada_en)
-    .map((d) => ({ ref: `sede:${d.id}`, client_id: d.client_id, atributo: d.campo, valor: d.valor_texto, nivel: nivelDeDatoDeSede(d.fuente), alcance: 'cliente', vigente: true, fuente: d.fuente, fecha: d.observado_en, origen: 'sede', sede: d.sede_id }))
+    .map((d) => ({ ref: `sede:${d.id}`, client_id: d.client_id, atributo: d.campo, valor: d.valor_texto, nivel: nivelDeDatoDeSede(d.fuente), alcance: 'cliente', vigente: datoDeSedeVigente(d, p.ahora), fuente: d.fuente, fecha: masNueva(d.observado_en, d.reconfirmado_en), origen: 'sede', sede: d.sede_id }))
   const delCerebro = (p.fichasDelCerebro ?? []).filter((h) => h.client_id === p.clientId)
   const faltan = p.fichasDelCerebro === null ? ['fichas del cerebro (la puerta de lectura no está)'] : []
   return { client_id: p.clientId, hechos: [...deSede, ...delCerebro], incompleta: faltan.length > 0, faltan }
@@ -80,13 +103,13 @@ export interface Cifra {
  * Lo que NO se normaliza (se declara · CC6 2): números escritos en letras («cuatro»), fracciones («3/4»), rangos («10-12» son dos cifras),
  * notación científica, y la ambigüedad «1.200»/«1,200» se lee SIEMPRE como miles (grupo exacto de 3 dígitos tras el separador).
  */
-export const LO_QUE_NO_SE_NORMALIZA = ['números en letras', 'fracciones', 'rangos (cuentan como dos cifras)', 'notación científica', 'miles y decimales juntos («1.200,50»): no se reconoce', 'espacios como separador de miles («1 200» son dos cifras)', '«1.200» y «1,200» se leen como miles, nunca como 1,2'] as const
+export const LO_QUE_NO_SE_NORMALIZA = ['números en letras', 'fracciones', 'rangos (cuentan como dos cifras)', 'notación científica', 'miles y decimales juntos («1.200,50»): no se reconoce', 'espacios como separador de miles («1 200» son dos cifras)', '«1.200» y «1,200» se leen como miles, nunca como 1,2', '«por ciento» SÍ se normaliza como %; «porcentaje», «pct» y similares no'] as const
 
 // un número entero o decimal, con miles opcionales · nunca detrás de una letra, un dígito o un separador (así «C1-I08» no da cifras y «4,9» no se halla dentro de «14,9»)
 // · nunca seguido de otro dígito ni de una parte decimal (así «1.200,50» no se lee como 1200) · SÍ puede ir pegado a su unidad («4,9km», «200g»)
 const MILES = /^\d{1,3}(?:[.,]\d{3})+$/
 const SEPARADOR_DE_MILES = /[.,]/g
-const NUMERO = /(?<![\p{L}\p{N}.,])(\d{1,3}(?:[.,]\d{3})+(?![\d])|\d+(?:[.,]\d+)?)(?![\p{N}]|[.,]\d)(\s?%)?/gu
+const NUMERO = /(?<![\p{L}\p{N}.,])(\d{1,3}(?:[.,]\d{3})+(?![\d])|\d+(?:[.,]\d+)?)(?![\p{N}]|[.,]\d)(\s?%|\s+por\s+ciento(?!\p{L}))?/giu
 
 export function cifrasDe(texto: string): Cifra[] {
   const out: Cifra[] = []
@@ -103,11 +126,14 @@ const mismaCifra = (a: Pick<Cifra, 'valor' | 'porcentaje'>, b: Pick<Cifra, 'valo
 
 // ───────────────────────────────────────────────────────── respaldo y severidad
 
-export type EstadoDelRespaldo = 'sostenida' | 'sin_ficha'
+/** `candidata`: hay un hecho que podría sostenerla (mismo número, nivel suficiente) pero nadie confirmó que hable de LO MISMO */
+export type EstadoDelRespaldo = 'sostenida' | 'candidata' | 'sin_ficha'
 export interface Respaldo {
   cifra: Cifra
   estado: EstadoDelRespaldo
-  /** los hechos que la sostienen (nivel suficiente, vigentes, del cliente, alcance cliente) */
+  /** los que traen el mismo número y PODRÍAN sostenerla (nivel suficiente, vigentes, del cliente, alcance cliente): el agente juzga si es la misma afirmación */
+  candidatos: HechoDeLaFicha[]
+  /** los candidatos que el agente CONFIRMÓ como respaldo de esta misma afirmación: solo estos sostienen */
   sostienen: HechoDeLaFicha[]
   /** los que la mencionan pero NO la sostienen (tercero, inferido, otro alcance, vencidos) · para que el juicio lo vea */
   la_mencionan: HechoDeLaFicha[]
@@ -119,23 +145,31 @@ export function sostiene(h: HechoDeLaFicha, clientId: string): boolean {
   return h.client_id === clientId && h.vigente && h.alcance === 'cliente' && NIVELES_QUE_SOSTIENEN.has(h.nivel)
 }
 
-export function respaldoDe(cifra: Cifra, ficha: FichaDeHechos): Respaldo {
+/**
+ * `confirmados` = las refs que el agente juzgó respaldo de ESTA cifra en ESTA afirmación. Solo cuentan si son candidatos: una ref que el
+ * agente nombre y no esté entre ellos (de tercero, de otro cliente, inventada) no sostiene nada.
+ */
+export function respaldoDe(cifra: Cifra, ficha: FichaDeHechos, confirmados: ReadonlySet<string> = new Set()): Respaldo {
   const conLaCifra = ficha.hechos.filter((h) => cifrasDe(h.valor).some((c) => mismaCifra(c, cifra)))
-  const sostienen = conLaCifra.filter((h) => sostiene(h, ficha.client_id))
+  const candidatos = conLaCifra.filter((h) => sostiene(h, ficha.client_id))
+  const sostienen = candidatos.filter((h) => confirmados.has(h.ref))
   const la_mencionan = conLaCifra.filter((h) => !sostiene(h, ficha.client_id))
-  const estado: EstadoDelRespaldo = sostienen.length ? 'sostenida' : 'sin_ficha'
+  const estado: EstadoDelRespaldo = sostienen.length ? 'sostenida' : candidatos.length ? 'candidata' : 'sin_ficha'
   const severidad_maxima = estado === 'sostenida' ? 'nada' : ficha.incompleta ? 'aviso' : 'devolver'
-  return { cifra, estado, sostienen, la_mencionan, severidad_maxima }
+  return { cifra, estado, candidatos, sostienen, la_mencionan, severidad_maxima }
 }
 
-/** todas las cifras de un texto con su respaldo (lo que el código le entrega al juicio del agente) */
-export function respaldosDelTexto(texto: string, ficha: FichaDeHechos): Respaldo[] {
-  return cifrasDe(texto).map((c) => respaldoDe(c, ficha))
+/** lo que el agente confirma: para la cifra que empieza en `inicio` del texto, qué refs la respaldan en esa misma afirmación */
+export interface Confirmacion { inicio: number; refs: string[] }
+
+/** todas las cifras de un texto con su respaldo · sin confirmaciones, ninguna queda sostenida (las coincidencias quedan como candidatas) */
+export function respaldosDelTexto(texto: string, ficha: FichaDeHechos, confirmaciones: Confirmacion[] = []): Respaldo[] {
+  return cifrasDe(texto).map((c) => respaldoDe(c, ficha, new Set(confirmaciones.filter((k) => k.inicio === c.inicio).flatMap((k) => k.refs))))
 }
 
 /**
  * La decisión que devuelve el agente (juzga si la cifra sin respaldo es importante) pasada por el TOPE del código:
- * una cifra sostenida nunca se devuelve; con la ficha incompleta, lo más es un aviso.
+ * una cifra sostenida (candidato CONFIRMADO) nunca se devuelve; una candidata sin confirmar tiene el tope normal; con la ficha incompleta, lo más es un aviso.
  */
 export function topeDeLaDecision(juicio: 'pasa' | 'aviso' | 'devolver', r: Pick<Respaldo, 'severidad_maxima'>): 'pasa' | 'aviso' | 'devolver' {
   const orden = { pasa: 0, aviso: 1, devolver: 2 } as const
