@@ -107,6 +107,7 @@ function proveedores(op: { varias?: 'ok' | 'sin_imagen' | 'envio_falla'; falEsta
     if (url === 'https://queue.fal.run/fal-ai/nano-banana-pro/requests/nb-1') return json(op.varias === 'sin_imagen' ? { images: [], description: '' } : { images: [{ url: 'https://v3b.fal.media/files/nb/salida.png', content_type: 'image/png' }], description: 'listo' })
     if (url === 'https://v3b.fal.media/files/nb/salida.png') return new Response(PNG, { status: 200 })
     if (url.startsWith('https://api.openai.com/v1/images/')) return json({ data: [{ b64_json: PNG.toString('base64') }], usage: { input_tokens: 20, output_tokens: 439, input_tokens_details: { text_tokens: 20, image_tokens: 0 } } })
+    if (url === 'https://queue.fal.run/fal-ai/meshy/v6/image-to-3d') return json({ request_id: 'my-1', status_url: 'https://queue.fal.run/fal-ai/meshy/requests/my-1/status', response_url: 'https://queue.fal.run/fal-ai/meshy/requests/my-1' })
     if (url === 'https://queue.fal.run/tripo3d/h3.1/image-to-3d') return json({ request_id: 'fal-1', status_url: 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1/status', response_url: 'https://queue.fal.run/tripo3d/h3.1/requests/fal-1' })
     if (url.endsWith('/requests/fal-1/status')) {
       const s = falEstados.shift() ?? 'COMPLETED'
@@ -936,5 +937,45 @@ describe('GO 09-nov 22:45Z · la ✕ de la galería y la papelera (30 días, nun
     expect(r.ok && r.valor.borradas).toEqual([])
     expect(r.ok && r.valor.fallas[0].error).toMatch(/almacén/)
     expect(d.base.t.estudio_piezas).toHaveLength(1)
+  })
+})
+
+describe('GO 10-nov · la pregunta «Pose» del 3D (Meshy 6)', () => {
+  const FOTO = PNG.toString('base64')
+  const enviado = (d: ReturnType<typeof deps>) => JSON.parse(String(d.p.llamadas.find((l) => l.url === 'https://queue.fal.run/fal-ai/meshy/v6/image-to-3d')!.init!.body)) as Record<string, unknown>
+  it('«lista para animar» manda pose_mode a-pose a Meshy 6 y lo guarda en la pieza', async () => {
+    const d = deps()
+    const r = await crear(d, pedido({ tipo: '3d', modelo: 'meshy-6', pose: 'animar', foto_b64: FOTO }))
+    expect(r.ok).toBe(true)
+    expect(enviado(d).pose_mode).toBe('a-pose')
+    expect(d.base.t.estudio_piezas[0].parametros).toMatchObject({ pose: 'animar' })
+  })
+  it('«como en la imagen» (o sin decir) no manda pose_mode: como siempre', async () => {
+    for (const e of [{ pose: 'imagen' }, {}]) {
+      const d = deps()
+      const r = await crear(d, pedido({ tipo: '3d', modelo: 'meshy-6', foto_b64: FOTO, ...e }))
+      expect(r.ok).toBe(true)
+      expect(enviado(d)).not.toHaveProperty('pose_mode')
+      expect(d.base.t.estudio_piezas[0].parametros).toMatchObject({ pose: 'imagen' })
+    }
+  })
+  it('las dos poses cuestan lo mismo', () => {
+    const animar = cotizarSinRed(pedido({ tipo: '3d', modelo: 'meshy-6', pose: 'animar', foto_b64: FOTO }))
+    const imagen = cotizarSinRed(pedido({ tipo: '3d', modelo: 'meshy-6', pose: 'imagen', foto_b64: FOTO }))
+    expect(animar?.total_usd).toBe(0.8)
+    expect(imagen?.total_usd).toBe(0.8)
+  })
+  it('«lista para animar» solo vale con Meshy 6 en 3D; un valor raro se rechaza', () => {
+    for (const e of [{ tipo: '3d', modelo: 'tripo-h3.1', pose: 'animar', foto_b64: FOTO }, { tipo: 'imagen', prompt: 'una ola', pose: 'animar' }, { tipo: '3d', modelo: 'meshy-6', pose: 'sentado', foto_b64: FOTO }]) {
+      const a = armarPedido({ client_id: CLIENTE, clave: 'clic-0000001', ...e }, 'm')
+      expect(a.ok).toBe(false)
+    }
+  })
+  it('la entrada a fal: pose_mode solo con Meshy 6 y «animar»', () => {
+    const meshy = MODELOS_3D.find((m) => m.id === 'meshy-6')!
+    const tripo = MODELOS_3D.find((m) => m.id === 'tripo-h3.1')!
+    expect(entradaDe3D(meshy, 'normal', 'u', 'animar')).toEqual({ image_url: 'u', target_polycount: 300000, pose_mode: 'a-pose' })
+    expect(entradaDe3D(meshy, 'normal', 'u', 'imagen')).toEqual({ image_url: 'u', target_polycount: 300000 })
+    expect(entradaDe3D(tripo, 'normal', 'u', 'animar')).not.toHaveProperty('pose_mode')
   })
 })

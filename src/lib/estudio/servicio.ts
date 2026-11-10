@@ -195,7 +195,7 @@ export async function crear(d: Deps, p: Pedido): Promise<Resultado<{ pieza: Piez
 
   const ins = await d.db.from(TABLA).insert({
     client_id: p.client_id, tipo: p.tipo, estado: 'creando', paso: p.tipo === '3d' && !foto.valor ? 'imagen' : p.tipo, prompt: p.prompt, modelo: p.modelo, clave: p.clave,
-    parametros: { formato: p.formato, calidad: p.calidad, segundos: p.segundos || null, resolucion: p.resolucion || null, audio: p.tipo === 'video' ? p.audio : null, cotizacion: cot.valor, ...(foto.valor?.rehecho_de ? { rehecho_de: foto.valor.rehecho_de } : {}) },
+    parametros: { formato: p.formato, calidad: p.calidad, segundos: p.segundos || null, resolucion: p.resolucion || null, audio: p.tipo === 'video' ? p.audio : null, ...(p.tipo === '3d' ? { pose: p.pose ?? 'imagen' } : {}), cotizacion: cot.valor, ...(foto.valor?.rehecho_de ? { rehecho_de: foto.valor.rehecho_de } : {}) },
     foto_partida_url: foto.valor?.url ?? null, costo_estimado_usd: cot.valor.total_usd, costo_usd: 0,
   }).select(COLUMNAS)
   if (ins.error) {
@@ -235,7 +235,7 @@ export async function crear(d: Deps, p: Pedido): Promise<Resultado<{ pieza: Piez
     aviso = r.valor.aviso
     await actualizar(d, pieza.id, { foto_partida_url: urlDeImagen, costo_usd: gastado, aviso }, true)
   }
-  const env = await enviarAFal(d.fetch, d.llaves.fal, m.endpoint, entradaDe3D(m, p.calidad, urlDeImagen))
+  const env = await enviarAFal(d.fetch, d.llaves.fal, m.endpoint, entradaDe3D(m, p.calidad, urlDeImagen, p.pose))
   if (!env.ok) return { ok: true, valor: { pieza: (await fallar(d, pieza.id, `fal ${env.status} · ${env.error}`, gastado)) ?? pieza, ya_existia: false } }
   const fin = await actualizar(d, pieza.id, { paso: '3d', proveedor_request_id: env.envio.request_id, proveedor_status_url: env.envio.status_url, proveedor_response_url: env.envio.response_url }, true)
   return { ok: true, valor: { pieza: fin ?? pieza, ya_existia: false } }

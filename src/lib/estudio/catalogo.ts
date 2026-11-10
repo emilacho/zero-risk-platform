@@ -67,6 +67,14 @@ export const MODELOS_3D: readonly ModeloDe3D[] = [
 ]
 export const modeloDe3D = (id: string) => MODELOS_3D.find((m) => m.id === id) ?? null
 
+/**
+ * GO de Lenovo 10-nov (firma de Emilio) · la pregunta «Pose» del 3D: «como en la imagen» respeta la pose de la imagen 2D (mano apoyada,
+ * sentado…); «lista para animar» pide a Meshy 6 el modelo parado en pose A, que es el que se anima limpio (compuerta T1). Mismo precio.
+ * Solo Meshy 6 sabe hacerlo: con otro modelo «animar» se rechaza en vez de mandarse sin efecto.
+ */
+export type Pose = 'imagen' | 'animar'
+export const MODELO_CON_POSE = 'meshy-6'
+
 export const MODELOS_DE_VIDEO = [
   { id: 'bytedance/seedance-2.5', nombre: 'Seedance 2.5' },
   { id: 'bytedance/seedance-2.0', nombre: 'Seedance 2.0' },
@@ -97,6 +105,8 @@ export interface Pedido {
   foto: { tipo: 'subida'; b64: string } | { tipo: 'pieza'; pieza_id: string } | { tipo: 'rehacer'; pieza_id: string } | null
   /** GO 09-nov 22:45Z · imagen con 2 a 6 referencias, en el orden de sus números (fijos: quitar una no renumera las otras). Vacío = como siempre */
   fotos: Referencia[]
+  /** solo 3D con Meshy 6 · ausente = «como en la imagen» (como siempre) */
+  pose?: Pose
 }
 
 /** una referencia de una imagen con varias: su número (el que ve el dueño) y de dónde sale */
@@ -230,8 +240,11 @@ export function armarPedido(e: Record<string, unknown>, modeloDeImagen: string):
     if (e.audio !== undefined && typeof e.audio !== 'boolean') errores.push('`audio` es verdadero o falso')
     audio = e.audio !== false
   }
+  const pose: Pose = e.pose === 'animar' ? 'animar' : 'imagen'
+  if (e.pose !== undefined && e.pose !== 'imagen' && e.pose !== 'animar') errores.push('`pose` es imagen o animar')
+  else if (pose === 'animar' && (tipo !== '3d' || modelo !== MODELO_CON_POSE)) errores.push('«lista para animar» solo vale para un modelo 3D de Meshy 6')
   if (errores.length) return { ok: false, errores }
-  return { ok: true, pedido: { client_id, tipo, prompt, modelo, formato, calidad, segundos, resolucion, audio, clave, foto, fotos } }
+  return { ok: true, pedido: { client_id, tipo, prompt, modelo, formato, calidad, segundos, resolucion, audio, clave, foto, fotos, pose } }
 }
 
 /** costo de una imagen de OpenAI antes de crearla */
@@ -266,8 +279,8 @@ export const promptDeImagenPara3D = (prompt: string) =>
   `${prompt}\n\nUn solo objeto, entero y centrado, vista de producto de tres cuartos, sobre fondo liso claro, sin otros objetos, sin texto, sin sombras duras.`
 
 /** lo que se manda a fal para la conversión */
-export function entradaDe3D(m: ModeloDe3D, calidad: Calidad, imagenUrl: string): Record<string, unknown> {
-  return { [m.campoDeImagen]: imagenUrl, ...m.opciones[calidad], [m.campoDeCaras]: TOPE_DE_CARAS_3D }
+export function entradaDe3D(m: ModeloDe3D, calidad: Calidad, imagenUrl: string, pose: Pose = 'imagen'): Record<string, unknown> {
+  return { [m.campoDeImagen]: imagenUrl, ...m.opciones[calidad], [m.campoDeCaras]: TOPE_DE_CARAS_3D, ...(pose === 'animar' && m.id === MODELO_CON_POSE ? { pose_mode: 'a-pose' } : {}) }
 }
 
 /** el archivo 3D de la respuesta de fal: cada modelo lo nombra distinto; se prefiere GLB */
