@@ -43,6 +43,13 @@ export const FILAS_DE_POLITICA: Record<string, Record<string, unknown>> = {
     indicacion_fondo: 'No repartes trabajo ni asignas tareas a otros. Revisas una sola vez. Entregas fichas con qué, dónde, contra qué, gravedad y propuesta. No reescribes la pieza: señalas y propones. La imagen también es parte de la pieza: revísala contra el manual y el brief.',
     chequeos_previos: ['chequeos', 'chequeos_2'], tope_revision_usd: 1.5, tope_paso_usd: TOPES(0.2, 0.2, 0.5, 0.2), destino_cierre: 'bandeja', reentrega: 'parcial', is_active: false,
   },
+  // 10-nov · registro (A′): la fila de 202611101530, tal cual
+  registro: {
+    artifact_type: 'registro', artifact_class: 'revision', judgment_enabled: false, revisor_fondo: 'editor_en_jefe', revisor_ciego: false,
+    contra_que: { documentos: [DOC('manual', 'Sección de voz del manual', 'fija el registro del cliente')] }, productores: [{ donde: '*', agente: 'content-creator' }], esquema_correccion: 'reemplazos.v1',
+    huecos_pregunta: { que_es: 'el registro de un documento', uso: 'que el documento le hable al público como dice el manual del cliente' }, indicacion_fondo: 'Revisas solo el registro.', chequeos_previos: [],
+    tope_revision_usd: 0.8, tope_paso_usd: { revision_fondo: 0.3, correccion: 0.3 }, destino_cierre: 'siguiente_paso', reentrega: 'completa', is_active: false,
+  },
   manual: { artifact_type: 'manual', artifact_class: 'revision', judgment_enabled: false, revisor_fondo: null, revisor_ciego: false, reentrega: 'ninguna', productores: [], is_active: false },
 }
 
