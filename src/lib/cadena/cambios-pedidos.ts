@@ -8,6 +8,8 @@
  *  - para el brief, el texto de la versión anterior (el brief es corto; la gran idea recibe su resumen, que ya existe).
  * Los lectores de la cadena ignoran «## Qué cambió y por qué» (no es una sección del contrato), así que no cambia lo que se valida ni lo que lee la etapa siguiente.
  */
+import { seccionesObligatoriasQueFaltan } from './brief-creativo'
+
 export const TITULO_DE_LO_QUE_CAMBIO = 'Qué cambió y por qué'
 
 /** los identificadores internos de la oficina (`brf-<12 hex>-v<n>`, `con-<12 hex>-v<n>`) no son para el dueño ni para el documento nuevo */
@@ -26,10 +28,27 @@ export function ordenDeAnalisisDeImpacto(documento: 'el brief' | 'la gran idea')
     '3. Conserva tal cual lo que el cambio no afecta. Si el cambio pide rehacer todo, rehazlo todo.',
     `4. ${documento === 'el brief' ? 'El brief nuevo' : 'La gran idea nueva'} ABRE con «## ${TITULO_DE_LO_QUE_CAMBIO}»: en 2 a 5 viñetas cortas, qué pidió el cliente y qué secciones tocaste por ese pedido (y por qué). Sin códigos internos, sin números de versión. Después, las secciones de siempre, en su formato.`,
     '5. El título del documento no lleva códigos internos ni números de versión.',
+    `6. El formato que vale es el de HOY (el de este marco), no el de la versión anterior: si a la anterior le falta una sección obligatoria o no cumple una regla del formato vigente, agrégala o corrígela con lo que dice el Plan de Marketing, aunque el cambio pedido no la toque. «Conservar tal cual» nunca vale para lo que el formato de hoy exige.`,
   ].join('\n')
 }
 
-/** el bloque con el brief anterior, sin sus códigos internos */
+/**
+ * el bloque con el brief anterior, sin sus códigos internos.
+ * 10-nov · si el anterior no cumple el formato de HOY (le faltan secciones obligatorias, p. ej. porque se validó antes de que lo fueran), el bloque
+ * lo dice y ordena agregarlas desde el PLAN aunque el cambio no las toque: «conservar tal cual» no vale para lo que falta (brief v3 de Náufrago, devuelto por eso).
+ */
 export function briefAnteriorParaElMarco(b: { version: number; texto_md: string | null }): string {
-  return [`# EL BRIEF ANTERIOR (versión ${b.version}), sobre el que el cliente pidió cambios`, sinCodigosInternos(b.texto_md ?? '').trim()].join('\n')
+  const texto = sinCodigosInternos(b.texto_md ?? '').trim()
+  const faltan = seccionesObligatoriasQueFaltan(texto)
+  return [
+    `# EL BRIEF ANTERIOR (versión ${b.version}), sobre el que el cliente pidió cambios`,
+    texto,
+    ...(faltan.length ? [
+      '',
+      '# LO QUE LE FALTA AL BRIEF ANTERIOR (agrégalo aunque el cambio no lo toque)',
+      `El formato de hoy exige secciones que el brief anterior no tiene: ${faltan.map((k) => `«## ${k}»`).join(', ')}.`,
+      'Escríbelas con lo que dice el PLAN (y lo que no sepas va a «Faltantes», nunca se rellena). «Conservar tal cual» no vale para una sección que falta: sin ellas el brief se devuelve.',
+      `Nómbralas en «## ${TITULO_DE_LO_QUE_CAMBIO}» como secciones agregadas por el formato, no por el pedido del cliente.`,
+    ] : []),
+  ].join('\n')
 }

@@ -86,11 +86,26 @@ export function publicoEsTodos(publico: string): boolean {
   return CLICHES_DE_PUBLICO.some((c) => p === c || p.startsWith(c + ' ') || (p.length < 40 && p.includes(c)))
 }
 
+/** el texto de cada sección conocida del brief (la primera con ese título), con el mismo criterio que el lector */
+function textosPorSeccion(md: string): (k: (typeof SECCIONES_DEL_BRIEF)[number]) => string {
+  const por = new Map<string, Sec>()
+  for (const s of seccionesDe(md)) { const k = tituloConocido(s); if (k && !por.has(k)) por.set(k, s) }
+  return (k) => textoDe(por.get(k), k)
+}
+
+/**
+ * LAS SECCIONES OBLIGATORIAS QUE LE FALTAN A UN BRIEF, con el MISMO criterio que el lector (ausente o vacía).
+ * 10-nov · el brief v3 de Náufrago se devolvió porque el anterior (validado antes de #968) no tenía «Público» ni «Cómo sabremos que funcionó»
+ * y la mesa lo conservó «tal cual»: el marco de un pedido de cambios lo usa para nombrar lo que hay que agregar.
+ */
+export function seccionesObligatoriasQueFaltan(md: string): string[] {
+  const t = textosPorSeccion(md)
+  return OBLIGATORIAS.filter((k) => !t(k))
+}
+
 export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreativoLeido {
   const secciones = seccionesDe(md)
-  const por = new Map<string, Sec>()
-  for (const s of secciones) { const k = tituloConocido(s); if (k && !por.has(k)) por.set(k, s) }
-  const t = (k: (typeof SECCIONES_DEL_BRIEF)[number]) => textoDe(por.get(k), k)
+  const t = textosPorSeccion(md)
   const avisos: string[] = []
   const bloqueos: string[] = []
 
