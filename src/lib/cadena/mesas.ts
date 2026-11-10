@@ -16,7 +16,8 @@
  * Todo esto solo existe con la palanca `cadena_config.nuevo_orden` encendida para el cliente; apagada, la cadena de hoy no tiene estas mesas (409).
  */
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente } from './almacen'
-import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
+import { autorizarLlamada, cadena, err, WORKFLOW_DEL_TABLERO, type Respuesta } from './autorizar'
+import type { ResultadoDeEmision } from './autoproducir'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto } from './cambios-pedidos'
 import { hallazgosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
@@ -416,13 +417,16 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
   if (fila.aprobacion === 'cambios') return err(409, 'E-YA-DECIDIDO', `la versión ${version} del concepto ya se mandó a cambios (${fila.apunta_a ?? 'concepto'}); la decisión va sobre la versión siguiente`)
   const autor = texto(cuerpo.autor) ?? 'emilio'
   const nota = texto(cuerpo.nota)
+  // falla 1 (GO de Lenovo 10-nov 14:37Z): desde el tablero, la plataforma manda ella misma el sobre a la sala con la clave del vigía de este medio día
+  const tramoDelTablero = cuerpo.workflow_id === WORKFLOW_DEL_TABLERO ? tramoDeReemision(ahora) : undefined
   if (decision === 'aprobar') {
     if (fila.aprobacion === 'aprobado') return { status: 200, cuerpo: { ya_decidido: true, decision: 'aprobar', version } }
     await al.actualizarConcepto(campana.id, version, { aprobacion: 'aprobado', decidido_en: ahora, nota_de_emilio: nota ?? fila.nota_de_emilio, apunta_a: null })
     await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_CONCEPTO, objetoDeEsperaDeConcepto(version))
     if (fila.hitl_id) await al.cerrarTarjetaDeConcepto(fila.hitl_id, { status: 'approved', decision: { accion: 'aprobar', nota, version } })
     if (fila.hitl_id) await al.registrarDecisionDeEmilio({ hitl_id: fila.hitl_id, accion: 'aprobar', comentario: nota, autor, ahora })
-    return { status: 200, cuerpo: { decision: 'aprobar', version, concepto_id: idDeConcepto(campana.id, version), ...(await siguienteDespuesDe(al, campana.id)) } }
+    const re = await siguienteDespuesDe(al, campana.id, tramoDelTablero)
+    return { status: 200, cuerpo: { decision: 'aprobar', version, concepto_id: idDeConcepto(campana.id, version), ...re, ...(await empujarDesdeElTablero(al, tramoDelTablero, re)) } }
   }
   const apuntaA = cuerpo.apunta_a === 'brief' ? 'brief' : cuerpo.apunta_a === 'concepto' ? 'concepto' : null
   if (!apuntaA) return err(400, 'E-APUNTA-A', 'cambios necesita apunta_a: «concepto» (otra ronda de la mesa) o «brief» (brief nuevo y concepto sobre él)')
@@ -443,8 +447,8 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
   // la versión siguiente es la ÚLTIMA + 1 (no `version + 1`): cambios sobre una versión que no es la última no pueden chocar con una ya existente (reserva 3 de CC3)
   const ultimaVersion = todos.reduce((m, x) => Math.max(m, x.version), 0)
   const siguiente = apuntaA === 'brief' ? { mesa: 'brief' as const, version: (brief?.version ?? 0) + 1 } : { mesa: 'concepto' as const, version: ultimaVersion + 1 }
-  const re = await siguienteDespuesDe(al, campana.id)
-  return { status: 200, cuerpo: { decision: 'cambios', version, apunta_a: apuntaA, siguiente: { ...siguiente, ...re.siguiente }, vueltas_restantes: CAP_DE_VUELTAS_DE_CAMBIOS - vueltas - 1, nota } }
+  const re = await siguienteDespuesDe(al, campana.id, tramoDelTablero)
+  return { status: 200, cuerpo: { decision: 'cambios', version, apunta_a: apuntaA, siguiente: { ...siguiente, ...re.siguiente }, vueltas_restantes: CAP_DE_VUELTAS_DE_CAMBIOS - vueltas - 1, nota, ...(await empujarDesdeElTablero(al, tramoDelTablero, re)) } }
 }
 
 // ───────────────────────────────────────────────────────── con qué sobre vuelve a entrar la puerta (respuesta a CC2 · 31-oct)
@@ -481,13 +485,23 @@ export async function etapaDeReentrada(al: Almacen, campana: Pick<Campana, 'id' 
  */
 export const tramoDeReemision = (ahora: string): string => `${ahora.slice(0, 10)}${new Date(ahora).getUTCHours() < 12 ? 'am' : 'pm'}`
 /** `{ siguiente: { sobre } }` para pegar a una respuesta, o `{}` si no hay con qué volver a entrar */
-export async function siguienteDespuesDe(al: Almacen, campanaId: string): Promise<{ siguiente?: { sobre: SobreDeTanda } }> {
+export async function siguienteDespuesDe(al: Almacen, campanaId: string, tramo?: string): Promise<{ siguiente?: { sobre: SobreDeTanda } }> {
   const c = await al.campana(campanaId)
   if (!c || (c.estado !== 'calendario' && c.estado !== 'activa')) return {}
   const tanda = await tandaQueEspera(al, c.id)
   if (tanda > medidaDeCampana(c).totalTandas) return {}
   const etapa = await etapaDeReentrada(al, c)
-  return etapa ? { siguiente: { sobre: sobreDeTanda(c, tanda, etapa) } } : {}
+  return etapa ? { siguiente: { sobre: sobreDeTanda(c, tanda, tramo ? `${etapa}:${tramo}` : etapa) } } : {}
+}
+/**
+ * Falla 1 (GO de Lenovo 10-nov 14:37Z): una decisión desde el TABLERO no tiene flujo que reenvíe el sobre (el dashboard lo dejaba caer y la campaña esperaba al vigía).
+ * La plataforma lo deja ella misma en la sala. La clave lleva el tramo de medio día (`tramoDeReemision`), la MISMA que armaría el vigía en su pasada: la sala deduplica y no hay trabajo doble.
+ * Un fallo NO tumba la decisión (ya está guardada): se declara en `empuje` y queda el vigía de respaldo. Sin tramo (no viene del tablero) no se manda nada: el flujo reenvía como siempre.
+ */
+export async function empujarDesdeElTablero(al: Almacen, tramo: string | undefined, re: { siguiente?: { sobre: SobreDeTanda } }): Promise<{ empuje?: ResultadoDeEmision | { resultado: 'nada_que_mandar' } }> {
+  if (!tramo) return {}
+  if (!re.siguiente) return { empuje: { resultado: 'nada_que_mandar' } }
+  try { return { empuje: await al.emitirSobre(re.siguiente.sobre) } } catch (e) { return { empuje: { resultado: 'rechazado', detalle: `no se pudo dejar el sobre en la sala: ${e instanceof Error ? e.message.slice(0, 160) : 'error'}` } } }
 }
 
 // ───────────────────────────────────────────────────────── lo que el CALENDARIO y el RELOJ necesitan de las mesas
