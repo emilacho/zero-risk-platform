@@ -5,7 +5,8 @@
  *   · plan        ← manual                                   (`manual/pedir-plan.ts` · el pedido del plan viaja con el id del manual)
  *   · estrategia  ← plan, manual                             (`pasos.ts` `cargar` → `cargarContexto(client_id, plan_id)`: plan + manual + datos de sede)
  *   · brief       ← plan, manual, estrategia                 (`mesas.ts` `marcoDelBrief({ ctx, estrategia })` · además cita el plan literal)
- *   · gran_idea   ← brief, estrategia, manual, plan          (`mesas.ts` `marcoDelConcepto({ ctx, estrategia, briefTexto })`)
+ *   · gran_idea   ← brief, estrategia, manual · plan (vía brief) (`mesas.ts` `marcoDelConcepto({ ctx, estrategia, briefTexto })`: el pedido NO lleva el plan;
+ *                                                              un cambio del plan le llega en cadena plan → brief → gran idea · GO Lenovo 10-nov 18:01Z, opción A)
  *   · calendario  ← gran_idea, estrategia, manual, plan      (`pasos.ts` `calendarioPreparar` · `conceptoParaElCalendario` + estrategia validada + ctx)
  *   · pieza       ← calendario, gran_idea, brief, manual, plan (`hoja.ts` `InsumosDeLaHoja`: plan_id, manual_id + versión, brief, concepto, filas)
  *
@@ -28,7 +29,7 @@ export const LEE: Readonly<Record<Documento, readonly Documento[]>> = {
   plan: ['manual'],
   estrategia: ['plan', 'manual'],
   brief: ['plan', 'manual', 'estrategia'],
-  gran_idea: ['brief', 'estrategia', 'manual', 'plan'],
+  gran_idea: ['brief', 'estrategia', 'manual'], // el plan, vía brief (no directo)
   calendario: ['gran_idea', 'estrategia', 'manual', 'plan'],
   pieza: ['calendario', 'gran_idea', 'brief', 'manual', 'plan'],
 }
