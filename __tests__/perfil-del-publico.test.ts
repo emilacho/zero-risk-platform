@@ -340,21 +340,34 @@ describe('privacidad: texto y enlace, nunca quién lo dijo', () => {
 
 // ─────────────────────────────────────────── muestra mínima (calidad sobre precio)
 describe('nadie vacía ni reescribe la tabla de voces', () => {
-  const leer = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8').replace(/--.*$/gm, '')
+  const leer = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8').replace(/\r/g, '').replace(/--.*$/gm, '')
+  const sentencias = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean)
+  const TOCA_FILAS = /\b(insert\s+into|update\s+public|delete\s+from|truncate\s+(table\s+)?public|drop)\b/i
   it('la corrección quita a anon y authenticated todo, y al servidor todo menos leer e insertar', () => {
     const sql = leer('supabase/migrations/202611101400_perfil_publico_voces_sin_vaciar.sql')
     expect(sql).toMatch(/revoke all on public\.perfil_publico_voces from anon, authenticated;/)
     const quita = /revoke ([a-z, ]+) on public\.perfil_publico_voces from service_role;/.exec(sql)
     expect(new Set(quita![1].split(',').map((x) => x.trim()))).toEqual(new Set(['truncate', 'trigger', 'references', 'update', 'delete']))
-    expect(sql).toMatch(/grant select, insert on public\.perfil_publico_voces to service_role;/)
-    expect(sql).not.toMatch(/(insert into|update public|delete from|truncate public|drop)/i)
-    expect(sql.indexOf('begin;')).toBeLessThan(sql.indexOf('revoke'))
-    expect(sql.indexOf('commit;')).toBeGreaterThan(sql.lastIndexOf('grant'))
+    // lo ÚNICO que se concede: leer e insertar al servidor (ningún grant a anon, authenticated ni a nadie más)
+    expect(sentencias(sql).filter((l) => /^grant\b/i.test(l))).toEqual(['grant select, insert on public.perfil_publico_voces to service_role;'])
+    expect(sql).not.toMatch(TOCA_FILAS)
+    const ini = sql.indexOf('begin;'), fin = sql.indexOf('commit;')
+    expect(ini).toBeGreaterThanOrEqual(0)
+    expect(fin).toBeGreaterThan(ini)
+    for (const m of sql.matchAll(/\b(grant|revoke)\b/gi)) {
+      expect(m.index!).toBeGreaterThan(ini)
+      expect(m.index!).toBeLessThan(fin)
+    }
   })
-  it('la reversa vive fuera de migrations y no toca filas', () => {
+  it('la reversa vuelve EXACTO al estado medido (los 3 privilegios a los 3 roles), no toca filas y vive fuera de migrations', () => {
     const r = leer('supabase/reversas/202611101400_perfil_publico_voces_sin_vaciar_REVERSA.sql')
-    expect(r).not.toMatch(/(delete|truncate public|drop|update public)/i)
+    expect(sentencias(r)).toEqual(['begin;', 'grant truncate, trigger, references on public.perfil_publico_voces to anon, authenticated, service_role;', 'commit;'])
+    expect(r).not.toMatch(TOCA_FILAS)
     expect(fs.existsSync(path.join(process.cwd(), 'supabase/migrations/202611101400_perfil_publico_voces_sin_vaciar_REVERSA.sql'))).toBe(false)
+  })
+  it('la expresión «toca filas» de verdad ve lo que debe (control: si se rompe, todo lo anterior es ciego)', () => {
+    for (const t of ['delete from public.perfil_publico_voces;', 'truncate public.perfil_publico_voces;', 'truncate table public.x;', 'drop table public.x;', 'update public.x set a = 1;', 'insert into public.x values (1);']) expect(t, t).toMatch(TOCA_FILAS)
+    for (const t of ['grant truncate, trigger, references on public.perfil_publico_voces to anon;', 'revoke all on public.perfil_publico_voces from anon;']) expect(t, t).not.toMatch(TOCA_FILAS)
   })
 })
 
