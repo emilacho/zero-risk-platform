@@ -3,13 +3,13 @@
 -- Retoque: un pedazo de aguas abajo, con su documento, su versión base y su POSICIÓN (inicio o ruta JSON): se aplica ahí o queda pendiente, nunca se busca en todo el documento.
 -- Un retoque frenado por la jefatura se rehace UNA vez (`rehechos` ≤ 1, línea 1 de CC6); si vuelve a fallar queda `rechazado` y el documento sigue como estaba.
 -- El costo NO se escribe a mano: se calcula de los recibos de agent_invocations de la corrida (`workflow_execution_id`, línea 5 de CC7).
--- Permisos (lección #985 + línea 3 de CC6): primero se quita TODO a public, anon y authenticated; el servidor recibe solo leer, insertar y actualizar.
--- Nada se borra: ni el servidor tiene delete ni truncate. Agnóstico: ningún dato de un cliente.
+-- Permisos (lección #985 + línea 3 de CC6 + notas CC7/CC6 pedidas por Lenovo 15:32Z): primero se quita TODO a public, anon y authenticated; el servidor recibe leer, insertar y actualizar SOLO las columnas de estado.
+-- Nada se borra: ni el servidor tiene delete ni truncate, y el historial no cae en cascada (on delete restrict: un cliente o una edición con historial no se borra). Agnóstico: ningún dato de un cliente.
 begin;
 
 create table if not exists public.colaterales_ediciones (
   id uuid primary key default gen_random_uuid(),
-  client_id uuid not null references public.clients(id) on delete cascade,
+  client_id uuid not null references public.clients(id) on delete restrict,
   documento text not null check (documento in ('manual', 'plan', 'estrategia', 'brief', 'gran_idea', 'calendario', 'pieza')),
   documento_ref text not null check (char_length(documento_ref) between 1 and 200),
   version_base text not null check (char_length(version_base) between 1 and 100),
@@ -32,7 +32,7 @@ create index if not exists colaterales_ediciones_cliente on public.colaterales_e
 
 create table if not exists public.colaterales_retoques (
   id uuid primary key default gen_random_uuid(),
-  edicion_id uuid not null references public.colaterales_ediciones(id) on delete cascade,
+  edicion_id uuid not null references public.colaterales_ediciones(id) on delete restrict,
   documento text not null check (documento in ('manual', 'plan', 'estrategia', 'brief', 'gran_idea', 'calendario', 'pieza')),
   documento_ref text not null check (char_length(documento_ref) between 1 and 200),
   version_base text not null check (char_length(version_base) between 1 and 100),
@@ -65,8 +65,11 @@ alter table public.colaterales_ediciones enable row level security;
 alter table public.colaterales_retoques enable row level security;
 revoke all on public.colaterales_ediciones from public, anon, authenticated, service_role;
 revoke all on public.colaterales_retoques from public, anon, authenticated, service_role;
-grant select, insert, update on public.colaterales_ediciones to service_role;
-grant select, insert, update on public.colaterales_retoques to service_role;
+grant select, insert on public.colaterales_ediciones to service_role;
+grant select, insert on public.colaterales_retoques to service_role;
+-- update SOLO de las columnas que el almacén cambia al pasar de estado; lo que identifica la edición o el pedazo no se reescribe
+grant update (estado, version_nueva, gravedad, gravedad_motivo, nota, workflow_execution_id, updated_at) on public.colaterales_ediciones to service_role;
+grant update (estado, despues, porque, motivo, rehechos, version_resultante, revision_id, updated_at) on public.colaterales_retoques to service_role;
 do $$
 begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'colaterales_ediciones' and policyname = 'colaterales_ediciones_service') then

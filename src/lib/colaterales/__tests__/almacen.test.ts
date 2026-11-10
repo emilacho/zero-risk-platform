@@ -26,6 +26,13 @@ function columnasDe(tabla: string): Set<string> {
   return new Set(m[1].split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('constraint')).map((l) => l.split(/\s+/)[0]))
 }
 const COLUMNAS: Record<string, Set<string>> = { colaterales_ediciones: columnasDe('colaterales_ediciones'), colaterales_retoques: columnasDe('colaterales_retoques') }
+/** columnas que el servidor puede ACTUALIZAR, leídas del `grant update (…)` de la propia migración (nota CC7/CC6 · Lenovo 15:32Z) */
+function actualizablesDe(tabla: string): Set<string> {
+  const m = new RegExp(`grant update \\(([^)]*)\\) on public\\.${tabla} to service_role;`).exec(sql)
+  if (!m) throw new Error(`la migración no da update por columna en ${tabla}`)
+  return new Set(m[1].split(',').map((x) => x.trim()))
+}
+const ACTUALIZABLES: Record<string, Set<string>> = { colaterales_ediciones: actualizablesDe('colaterales_ediciones'), colaterales_retoques: actualizablesDe('colaterales_retoques') }
 const UNICAS: Record<string, string[][]> = { colaterales_ediciones: [['llave']], colaterales_retoques: [['edicion_id', 'pedazo_id']] }
 
 function baseFalsa(o: { fallarLectura?: boolean; fallarInsert?: string; devolverMenos?: boolean } = {}) {
@@ -57,6 +64,8 @@ function baseFalsa(o: { fallarLectura?: boolean; fallarInsert?: string; devolver
       if (q.op === 'update') {
         const e = revisar(q.fila as Record<string, unknown>)
         if (e) return { data: null, error: e }
+        // como la base real: actualizar una columna sin `grant update` es «permission denied»
+        for (const k of Object.keys(q.fila as Record<string, unknown>)) if (!ACTUALIZABLES[tabla].has(k)) return { data: null, error: { message: `permission denied for table ${tabla}`, code: '42501' } }
         sel.forEach((f) => Object.assign(f, structuredClone(q.fila)))
       }
       let r = sel.map((f) => structuredClone(f))
@@ -215,19 +224,33 @@ describe('migración 202611101700 · permisos cerrados y reversa', () => {
     expect(sql).not.toMatch(/\b(alter|drop|truncate|delete from|insert into|update)\s+(table\s+)?public\.(?!colaterales_)/i)
   })
 
-  it('línea 3 de CC6: primero revoke all a public, anon y authenticated; luego el servidor recibe SOLO select, insert, update', () => {
+  it('línea 3 de CC6: primero revoke all a public, anon y authenticated; luego el servidor recibe SOLO select, insert y update de las columnas de estado', () => {
     for (const t of ['colaterales_ediciones', 'colaterales_retoques']) {
       const quita = sql.indexOf(`revoke all on public.${t} from public, anon, authenticated, service_role;`)
-      const da = sql.indexOf(`grant select, insert, update on public.${t} to service_role;`)
+      const da = sql.indexOf(`grant select, insert on public.${t} to service_role;`)
+      const actualiza = sql.search(new RegExp(`grant update \\([^)]*\\) on public\\.${t} to service_role;`))
       expect(quita, t).toBeGreaterThan(-1)
       expect(da, t).toBeGreaterThan(quita)
+      expect(actualiza, t).toBeGreaterThan(quita)
     }
     expect(sentencias(sql).filter((l) => /^grant\b/i.test(l))).toEqual([
-      'grant select, insert, update on public.colaterales_ediciones to service_role',
-      'grant select, insert, update on public.colaterales_retoques to service_role',
+      'grant select, insert on public.colaterales_ediciones to service_role',
+      'grant select, insert on public.colaterales_retoques to service_role',
+      'grant update (estado, version_nueva, gravedad, gravedad_motivo, nota, workflow_execution_id, updated_at) on public.colaterales_ediciones to service_role',
+      'grant update (estado, despues, porque, motivo, rehechos, version_resultante, revision_id, updated_at) on public.colaterales_retoques to service_role',
     ])
+    // lo que identifica la edición o el pedazo, y lo que pidió el dueño, NO se puede actualizar
+    for (const k of ['id', 'client_id', 'documento', 'documento_ref', 'version_base', 'seccion', 'antes', 'despues', 'llave', 'created_at']) expect(ACTUALIZABLES.colaterales_ediciones.has(k), k).toBe(false)
+    for (const k of ['id', 'edicion_id', 'documento', 'documento_ref', 'version_base', 'pedazo_id', 'pedazo_inicio', 'pedazo_ruta', 'pedazo_texto', 'seccion', 'afecta', 'razon', 'antes', 'created_at']) expect(ACTUALIZABLES.colaterales_retoques.has(k), k).toBe(false)
+    for (const t of ['colaterales_ediciones', 'colaterales_retoques']) for (const k of ACTUALIZABLES[t]) expect(COLUMNAS[t].has(k), `${t}.${k}`).toBe(true)
     expect(sql).not.toMatch(/grant[^;]*\b(delete|truncate|trigger|references|all)\b/i)
     expect(sql).not.toMatch(/grant[^;]*\bto\s+[^;]*\b(anon|authenticated|public)\b/i)
+  })
+
+  it('el historial no cae en cascada: las dos llaves foráneas son on delete restrict (nota CC7/CC6 · Lenovo 15:32Z)', () => {
+    expect(sql).toMatch(/client_id uuid not null references public\.clients\(id\) on delete restrict,/)
+    expect(sql).toMatch(/edicion_id uuid not null references public\.colaterales_ediciones\(id\) on delete restrict,/)
+    expect(sql).not.toMatch(/on delete (cascade|set null|set default)/i)
   })
 
   it('la base guarda lo que el código promete: llave única, un pedazo por edición, rehechos ≤ 1, posición o ruta, cambio real', () => {
