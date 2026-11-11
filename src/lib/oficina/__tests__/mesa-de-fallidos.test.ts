@@ -147,6 +147,21 @@ describe('el sobre, la plantilla y la migración', () => {
     // solo cambia la tarjeta si está exactamente como la dejó la reubicación
     expect(sql).toMatch(/WHERE agente = 'jefe-marketing' AND rol = 'direccion' AND pertinente_en = ARRAY\['reubicacion:dirige'\];/)
   })
+  it('🔴 CC6 (certificación 6cfe0eb) · las guardas de la migración, fijadas: se detiene si falta la plantilla o la dirección, nunca pisa una plantilla existente y la especialidad nombra los fallidos', () => {
+    const sql = MIGRACION.split(/\r?\n/).filter((l) => !l.trim().startsWith('--')).join('\n')
+    expect(sql).toContain("SELECT count(*) INTO p FROM public.oficina_tipos_de_grupo WHERE tipo = 'fallidos_mesa' AND clase = 'interna';")
+    expect(sql).toContain("SELECT count(*) INTO d FROM public.oficina_directorio WHERE agente = 'jefe-marketing' AND rol = 'direccion' AND pertinente_en = ARRAY['reubicacion:dirige', 'fallidos:dirige'];")
+    expect(sql).toContain('IF p <> 1 THEN RAISE EXCEPTION')
+    expect(sql).toContain('IF d <> 1 THEN RAISE EXCEPTION')
+    expect(sql).toMatch(/\) ON CONFLICT \(tipo\) DO NOTHING;/)
+    expect(sql).not.toMatch(/DO UPDATE/i)
+    const especialidad = /SET especialidad = '([^']+)'/.exec(sql)![1]!
+    expect(especialidad).toContain('fallaron después de gastar')
+    expect(especialidad).toContain('filas del calendario que pasaron sin producirse')
+  })
+  it('🔴 CC6 · la reversa se niega con la condición exacta (cualquier encargo de la familia, sin aflojar)', () => {
+    expect(REVERSA).toContain("IF EXISTS (SELECT 1 FROM public.oficina_encargos WHERE familia = 'fallidos_mesa') THEN\n    RAISE EXCEPTION".replace(/\n/g, REVERSA.includes('\r\n') ? '\r\n' : '\n'))
+  })
   it('la reversa se niega si ya hay encargos de la mesa y deja la tarjeta como la dejó la reubicación', () => {
     expect(REVERSA).toMatch(/RAISE EXCEPTION/)
     expect(REVERSA).toMatch(/familia = 'fallidos_mesa'/)
