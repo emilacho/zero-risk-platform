@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { FormatosPorRed } from '@/lib/cadena/tipos'
 import { abrirEncargo, avanzar } from '../orquestador'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
 import { KIT_HISTORIAS } from '../plantillas/kit-historias'
@@ -89,8 +90,9 @@ const BASE_K = {
 }
 const guionKit = (o: Partial<Record<keyof typeof BASE_K, Guion[string]>> = {}): Guion => ({ ...BASE_K, ...o } as Guion)
 
-async function abierto(plantilla: Plantilla, brief: string, brief_id: string, o: { dry_run?: boolean; fuentes?: Parameters<typeof crearMemoria>[0] extends infer X ? (X extends { fuentes?: infer F } ? F : never) : never } = {}) {
+async function abierto(plantilla: Plantilla, brief: string, brief_id: string, o: { dry_run?: boolean; fuentes?: Parameters<typeof crearMemoria>[0] extends infer X ? (X extends { fuentes?: infer F } ? F : never) : never; formatos?: FormatosPorRed } = {}) {
   const M = crearMemoria({ parte: parteCon(brief), plantilla, ...(o.fuentes ? { fuentes: o.fuentes } : {}) })
+  if (o.formatos) { const t = o.formatos; M.P.formatosDeLaCadena = async () => t }
   const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id, dry_run: o.dry_run ?? true, familia: plantilla.familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   return { M, a, id: String(a.cuerpo.encargo_id) }
 }
@@ -234,8 +236,8 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' }); expect(M.llamadas.render).toBe(2)
   })
   it('un brief que no es un carrusel cierra el encargo FALLIDO y visible; un cliente sin identidad visual NO abre encargo (pre-vuelo en la puerta)', async () => {
-    const a = await abierto(CARRUSEL_IG_V1, BRIEF_KIT, 'BRF-0200')
-    expect(a.a.cuerpo).toMatchObject({ estado: 'fallido' }); expect(String(a.a.cuerpo.motivo)).toMatch(/no es un carrusel/)
+    const a = await abierto(CARRUSEL_IG_V1, BRIEF_KIT, 'BRF-0200', { formatos: { instagram: [{ formato: 'kit_historias', produccion: 'opera', lead_dias: 2, max_por_dia: 1, familia: 'kit_historias' }] } })
+    expect(a.a.cuerpo).toMatchObject({ estado: 'fallido' }); expect(String(a.a.cuerpo.motivo)).toMatch(/manda a la familia kit_historias; esta sala es carrusel_ig_v1/)
     const b = await abiertoC({ fuentes: { marca: null } })
     expect(b.a.status).toBe(409); expect(b.a.cuerpo).toMatchObject({ error: 'sin_identidad_visual', familia: 'carrusel_ig_v1', pendiente: 'reproceso_visual' }); expect(String(b.a.cuerpo.detalle)).toMatch(/identidad visual/)
     expect(b.M.encargos.size).toBe(0)

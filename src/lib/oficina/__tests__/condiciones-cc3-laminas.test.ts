@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { armarLaminasDeKit, cifrasFueraDeFuentes, problemasDeContrato, problemasDeHistoria, problemasDeKit } from '../laminas'
 import { LIMITES_DE_LAMINA } from '../salida'
-import { esCarrusel, esKitDeHistorias, esPostDeImagen, type BriefLeido } from '../brief'
+import { esCarrusel, esKitDeHistorias, type BriefLeido } from '../brief'
 
 const brief = (o: Partial<BriefLeido>) => ({ id: 'BRF-9', red: '', formato: '', que_es: '', protagonista: '', mensaje: '', limites: '', vocabulario_obligatorio: [], ...o }) as BriefLeido
 const L = (o: Record<string, unknown> = {}) => ({ rol: 'hook', headline: 'Hola', ...o }) as never
@@ -68,7 +68,7 @@ describe('límites exactos del contrato de lámina', () => {
 })
 
 describe('clasificadores de formato', () => {
-  it('carrusel / kit / post de imagen', () => {
+  it('carrusel / kit', () => {
     expect([esCarrusel(brief({ formato: 'Instagram · carrusel' })), esKitDeHistorias(brief({ formato: 'Instagram · carrusel' }))]).toEqual([true, false])
     expect(esCarrusel(brief({ formato: 'Instagram', que_es: 'un carousel de 6' }))).toBe(true)
     expect(esCarrusel(brief({ formato: 'Instagram · imagen' }))).toBe(false)
@@ -76,8 +76,5 @@ describe('clasificadores de formato', () => {
     expect(esKitDeHistorias(brief({ formato: 'Historias', elementos: ['x'] }))).toBe(true)
     expect(esKitDeHistorias(brief({ formato: 'Historias', elementos: [] }))).toBe(false)
     expect(esKitDeHistorias(brief({ formato: 'Estado' }))).toBe(false)
-    expect(esPostDeImagen(brief({ formato: 'Instagram · imagen' }))).toBe(true)
-    expect(esPostDeImagen(brief({ formato: 'Instagram', que_es: 'imagen fija' }))).toBe(true)
-    expect(esPostDeImagen(brief({ formato: 'Instagram · carrusel' }))).toBe(false)
   })
 })

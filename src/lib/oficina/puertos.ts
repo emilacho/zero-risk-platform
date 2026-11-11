@@ -14,6 +14,7 @@ import type { SobreDeRevisionDePieza } from './paso-jefatura'
 import type { NotaVista } from '../notas-del-dueno/autorevision'
 import type { NotaLeida, PuertoMesa } from './mesa/tipos'
 import type { PerfilParaLectores } from '../perfil-del-publico/lectores'
+import type { FormatosPorRed } from '../cadena/tipos'
 
 /** lo que el cliente tiene (manual, fotos, datos propios), leído UNA vez al abrir y guardado en el encargo */
 export interface FuentesCompletas {
@@ -188,6 +189,8 @@ export interface Puertos {
     consultar(p: { client_id: string; agente: string; destinatario: string | null; formato: string; tarea: string; dry_run: boolean }): Promise<{ ok: true; notas: NotaLeida[]; aviso?: string } | { ok: false; error: string }>
     registrar(r: { client_id: string; encargo_id: string; agente: string; paso: string; notas_vistas: string[]; choco: boolean; cambios: unknown[]; costo_usd: number; clave_unica: string }): Promise<void>
   }
+  /** LA TABLA DE FORMATOS DE LA CADENA (`cadena_formatos_por_red`, leída por el almacén de la cadena) · opcional: la usa `briefEsDelEncargo` como red; sin ella manda la familia del encargo */
+  formatosDeLaCadena?(): Promise<FormatosPorRed>
   ahora(): Date
   fuentes(clientId: string): Promise<FuentesCompletas | { error: string }>
   parte(parteId: string, clientId: string): Promise<{ texto: string } | null>

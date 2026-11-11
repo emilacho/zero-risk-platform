@@ -9,6 +9,7 @@
 import crypto from 'node:crypto'
 import { datos, fichaNueva } from './ayudas'
 import { fechaLimiteDelBrief, parsearBrief, planDeOrigen, type BriefLeido } from './brief'
+import { briefEsDelEncargo } from './familia-del-brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import type { ContextoDelRevisor } from './ciego'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega } from './entrega'
@@ -22,7 +23,7 @@ import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 import { RELACION_POR_FORMATO } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
-import { armarPedidoDeLaOficina, esVideo, formatoDeEntrega, formatoDeVideo, type PedidoDeVideoDeLaOficina } from './video/pedido'
+import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, type PedidoDeVideoDeLaOficina } from './video/pedido'
 
 export type FamiliaDeVideo = 'video'
 export const familiaDeVideo = (pl: Pick<Plantilla, 'familia'>): FamiliaDeVideo | null => (pl.familia === 'video_mesa' ? 'video' : null)
@@ -84,7 +85,9 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const planId = planDeOrigen(parte.texto)
   const plan = planId ? await P.plan(planId, enc.client_id) : null
   if (plan) fu.plan_texto = plan
-  if (!esVideo(brief)) return { res: { costo_usd: 0 }, fallido: `el brief ${enc.brief_id} no es de video (${brief.formato}): esta sala hace reels, shorts y videos cortos` }
+  // GO 11-nov «la mesa confía en la familia»: la familia ya la decidió la cadena; no se re-adivina por el texto del brief (red: la tabla de formatos de la cadena)
+  const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P))
+  if (!sala.ok) return { res: { costo_usd: 0 }, fallido: sala.motivo }
   const formato_video = formatoDeVideo(brief)
   const proporcion = RELACION_POR_FORMATO[formato_video] ?? String(pl.limites.formato_por_omision ?? '9:16')
   const plataforma = `${brief.red.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() || 'red'}-${formato_video}`

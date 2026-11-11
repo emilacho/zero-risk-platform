@@ -7,7 +7,8 @@
 import { candidatasDelEncargo, medirFotos } from './material-fotos'
 import { limitesDeMaterial } from './material'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
-import { elementosDelKit, esCarrusel, planDeOrigen, esKitDeHistorias, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
+import { elementosDelKit, planDeOrigen, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
+import { briefEsDelEncargo } from './familia-del-brief'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, leerMedidas, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega, type FilaDeFormato } from './entrega'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import {
@@ -133,11 +134,11 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const planId = planDeOrigen(parte.texto)
   const plan = planId ? await P.plan(planId, enc.client_id) : null
   if (plan) fu.plan_texto = plan
+  // GO 11-nov «la mesa confía en la familia»: la familia ya la decidió la cadena; no se re-adivina por el texto del brief (red: la tabla de formatos de la cadena)
+  const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P))
+  if (!sala.ok) return { res: { costo_usd: 0 }, fallido: sala.motivo }
   let elementos: ElementoDelKit[] = []
-  if (fam === 'carrusel') {
-    if (!esCarrusel(brief)) return { res: { costo_usd: 0 }, fallido: `el brief ${enc.brief_id} no es un carrusel (${brief.formato}): esta sala arma carruseles` }
-  } else {
-    if (!esKitDeHistorias(brief)) return { res: { costo_usd: 0 }, fallido: `el brief ${enc.brief_id} no es un kit de historias y estados (${brief.formato})` }
+  if (fam === 'kit') {
     const k = elementosDelKit(brief)
     if (k.ilegibles.length) return { res: { costo_usd: 0 }, fallido: `el kit trae ${k.ilegibles.length} elemento(s) que no se entienden (se piden como «AAAA-MM-DD HH:MM | historia o estado | tema | pilar | datos»): ${k.ilegibles.slice(0, 2).join(' // ')}` }
     if (!k.elementos.length) return { res: { costo_usd: 0 }, fallido: 'el kit no trae ningún elemento' }
