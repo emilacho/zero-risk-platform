@@ -15,7 +15,7 @@ import { almacenDeSupabase, type Db } from './almacen-supabase'
 import type { FotoEtiquetada } from './fotos'
 import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt } from '../revisor-gpt'
 import { llamarRevisorGptConLibro } from '../revisor-gpt-libro'
-import type { EnvioDeVideo, EstadoDelBrazo, FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
+import type { CotizacionDeVideo, EnvioDeVideo, EstadoDelBrazo, FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
 import { mp4Simulado } from './orquestador-video'
 import { identidadVisualDelCliente } from './identidad-visual'
 import { separarFotos } from './material'
@@ -295,8 +295,19 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
           const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: false }
           const r = await f(`${env.baseUrl}/api/video/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(60000) })
           const j = (await r.json().catch(() => ({}))) as Fila
-          if (!r.ok || typeof j.request_id !== 'string') return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`), http: r.status }
+          if (!r.ok || typeof j.request_id !== 'string') return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`), http: r.status, ...(typeof j.descripcion_del_proveedor === 'string' ? { descripcion: j.descripcion_del_proveedor } : {}) }
           return { ok: true, request_id: j.request_id, status: String(j.status ?? 'queued'), costo_estimado_usd: Number(j.costo_estimado_usd ?? 0), costo_lista_usd: Number(j.costo_lista_usd ?? 0) || undefined, descuento_pct: Number(j.descuento_pct ?? 0) || undefined, simulado: false }
+        } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+      },
+      /** 11-nov · «cotizar primero»: el mismo `POST /api/video/generate` en `dry_run` (estima GRATIS con el proveedor y compara con el tope; no envía ni anota el libro) */
+      async cotizar(p): Promise<CotizacionDeVideo> {
+        try {
+          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: true }
+          const r = await f(`${env.baseUrl}/api/video/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(60000) })
+          const j = (await r.json().catch(() => ({}))) as Fila
+          const costo = Number(j.costo_estimado_usd)
+          if (!r.ok || j.dry_run !== true || !Number.isFinite(costo)) return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`), http: r.status, ...(typeof j.descripcion_del_proveedor === 'string' ? { descripcion: j.descripcion_del_proveedor } : {}) }
+          return { ok: true, costo_estimado_usd: costo, ...(Number.isFinite(Number(j.costo_lista_usd)) ? { costo_lista_usd: Number(j.costo_lista_usd) } : {}), ...(typeof j.ruta === 'string' ? { ruta: j.ruta } : {}) }
         } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
       },
       async estado(requestId): Promise<EstadoDelBrazo> {

@@ -63,9 +63,11 @@ export async function POST(request: Request) {
 
   // 3 · estimación (gratis) y tope
   const est = await estimar(fetch, k, ruta, cuerpo)
-  if (est.error && est.usd === undefined) return json(502, { error: 'no_se_pudo_estimar', detail: est.error, upstream_status: est.status, correlation_id: est.correlacion, ...base })
+  // 11-nov · la descripción de precios que devolvió el proveedor viaja en la respuesta (y la oficina la guarda en el fallo): sin ella no se puede ver por qué no se pudo cotizar
+  const descripcion = est.descripcion ? { descripcion_del_proveedor: est.descripcion.slice(0, 1500) } : {}
+  if (est.error && est.usd === undefined) return json(502, { error: 'no_se_pudo_estimar', detail: est.error, upstream_status: est.status, correlation_id: est.correlacion, ...descripcion, ...base })
   const costoLista = est.usd !== undefined ? est.usd : costoEstimadoUsd(est.tarifas!, { resolucion: pedido.resolucion, relacion: pedido.relacion, segundos: pedido.segundos })
-  if (costoLista === null) return json(502, { error: 'no_se_pudo_estimar', detail: 'fórmula sin tarifa para esta resolución', ...base })
+  if (costoLista === null) return json(502, { error: 'no_se_pudo_estimar', detail: 'fórmula sin tarifa para esta resolución', ...descripcion, ...base })
   // el descuento vigente del proveedor (medido en la corrida real del 31-oct): lo que se compara con el tope y se reserva es lo que de verdad se cobra
   const desc = conDescuento(costoLista, pedido.modelo, Date.now())
   const costo = desc.usd
