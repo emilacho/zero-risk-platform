@@ -155,7 +155,7 @@ export const CLAVE_DE_CORRECCION = (agente: string) => `correccion:${agente}`
 export const CLAVE_DE_DECISION = (agente: string) => `decision:${agente}`
 
 /** la plantilla de UNA revisión: pasos como dato para el motor común */
-export function plantillaDePolitica(p: PoliticaDeRevision, productores: Productor[], tope_usd: number, o: { verificar_ordenes?: boolean } = {}): Plantilla {
+export function plantillaDePolitica(p: PoliticaDeRevision, productores: Productor[], tope_usd: number, o: { verificar_ordenes?: boolean; ficha_de_hechos?: boolean } = {}): Plantilla {
   const duenos = duenosDe(productores)
   const sinWildcard = (d: Dueno): { donde?: string[] } => (d.comodin ? {} : { donde: d.dondes })
   const conRe = p.reentrega !== 'ninguna'
@@ -179,7 +179,7 @@ export function plantillaDePolitica(p: PoliticaDeRevision, productores: Producto
   const pasos: Paso[] = [
     {
       clave: 'revision_fondo', tipo: 'agente', quien: p.revisor_fondo ?? 'jefe-marketing', condicion: { tipo: 'siempre' }, ronda: 1, entrada: ['revision'], salida_artefacto: 'fichas_jefe',
-      tope_usd: topeDelPaso(p, 'revision_fondo'), salida: { esquema: 'fichas.v1', reintento_formato: 1 },
+      tope_usd: topeDelPaso(p, 'revision_fondo'), salida: { esquema: o.ficha_de_hechos ? 'fichas_con_cifras.v1' : 'fichas.v1', reintento_formato: 1 },
     },
   ]
   if (tieneRevisionDeLengua(p)) {

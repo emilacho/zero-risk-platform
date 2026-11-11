@@ -40,6 +40,8 @@ export interface ContextoDeMolde {
   versiones?: Array<{ etiqueta: string; texto: string }>
   /** registro: la frase literal de cada ficha (id → frase), para el molde de reemplazos */
   frases?: Record<string, string>
+  /** 11-nov · ficha de hechos: las cifras listadas al jefe con sus candidatos (para el molde de `fichas_con_cifras.v1`) */
+  cifras?: Array<{ id: string; candidatos: string[] }>
   /** `true` si este turno repite un paso por formato roto */
   reintento: boolean
 }
@@ -62,7 +64,15 @@ export function moldeDelPaso(c: ContextoDeMolde): { texto: string | null; error?
   }
   // 11-nov · colateral: todos aprueban, salvo lo que pida la simulación (`veredictos`)
   if (c.esquema === ESQUEMA_DE_VEREDICTOS) return sim.productor === 'formato_roto_siempre' ? { texto: 'esto no es el JSON pedido' } : { texto: moldeDeVeredictos(c.ids_de_retoques ?? [], { veredictos: (sim as { veredictos?: string }).veredictos }) }
-  const esDeFichas = c.esquema === 'fichas.v1' || c.esquema === 'fichas_de_registro.v1'
+  const esDeFichas = c.esquema === 'fichas.v1' || c.esquema === 'fichas_de_registro.v1' || c.esquema === 'fichas_con_cifras.v1'
+  // 11-nov · ficha de hechos: la ficha simulada del jefe sobre la PRIMERA cifra listada (sin cifras, ninguna)
+  if (c.esquema === 'fichas_con_cifras.v1' && sim.cifras) {
+    const c1 = c.cifras?.[0]
+    if (!c1) return { texto: '{"fichas":[]}' }
+    const base = { que: `(simulado) la cifra ${c1.id} no tiene respaldo en la ficha`, donde: c.donde, contra_que: 'la ficha de hechos del cliente (simulado)', propuesta: '(simulado) quitar la cifra o declarar su fuente' }
+    const f = sim.cifras === 'menor' ? { ...base, gravedad: 'sugerencia', cifra: c1.id } : sim.cifras === 'confirma' ? { ...base, gravedad: 'bloquea', cifra: c1.id, respaldo: c1.candidatos } : sim.cifras === 'id_desconocido' ? { ...base, gravedad: 'bloquea', cifra: 'c999' } : { ...base, gravedad: 'bloquea', cifra: c1.id }
+    return { texto: JSON.stringify({ fichas: [f] }) }
+  }
   if (!esDeFichas && sim.productor === 'muerto') return { texto: null, error: 'el turno murió (simulado): sin vuelta' }
   if (!esDeFichas && (sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && !c.reintento))) return { texto: 'esto no cumple el formato (simulado)' }
   if (esDeFichas) {

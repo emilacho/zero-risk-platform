@@ -7,6 +7,7 @@ import type { PaginasDelSitio } from './carpeta-para-revisar'
 import type { Estado, Ficha, ResultadoDelRevisor } from '../../revision-comun'
 import type { DevolverA, Marcas, PayloadDeRevision, Productor, Resultado, TipoDeRevision } from './contrato'
 import type { PoliticaDeRevision } from './politicas'
+import type { FichaEnLaRevision } from '../ficha-de-hechos'
 
 export interface ConfigDeJefatura { estado: 'apagada' | 'ensayo' | 'encendida'; tipos_activos: string[]; clientes_ensayo: string[] }
 /** sin config legible, apagada (falla CERRADO) */
@@ -95,6 +96,8 @@ export interface Puertos {
   paginasDelSitio?(client_id: string): Promise<PaginasDelSitio>
   /** lo que el dueño declaró, con las frases que niega; nunca lanza */
   hechosDelDueno?(client_id: string): Promise<Array<{ tema: string; frases_negadas: string[] }>>
+  /** 11-nov · la ficha de hechos del cliente (datos de sede + lo que dijo el dueño, por la lectura del portero); SOLO lee y nunca lanza */
+  fichaDeHechos?(client_id: string): Promise<FichaEnLaRevision>
   /** la versión real del plan y lo que pidió el dueño en este ciclo, leídos del plan de partida; nunca lanza */
   cicloDelPlan?(artifact_id: string): Promise<CicloDelPlan>
   /** deja a la vista del dueño, en su lista de decisiones, lo que al verificador le parece que no se cumple de su orden. Una sola por plan; no frena nada y nunca lanza */

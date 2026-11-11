@@ -14,6 +14,7 @@ import type { PayloadDeRevision, Simulacion, TipoDeRevision } from './contrato'
 import { limitesDelFormato, MARCA_DE_FIN_DE_RESOLUCION, MARCA_DE_INICIO_DE_RESOLUCION } from './formatos'
 import type { Dueno, PoliticaDeRevision } from './politicas'
 import { bloqueDeOrdenesDelDueno } from './orden-del-dueno'
+import { bloqueDeCifrasParaElJefe, cifrasParaElJefe, type FichaDeHechos } from '../ficha-de-hechos'
 
 /** el mismo valor que `CABECERA_SALTAR_EDITOR` de la cadena (una prueba lo vigila) */
 export const CABECERA_SALTAR_EDITOR = 'x-skip-editor-middleware'
@@ -113,6 +114,10 @@ const bloqueDeContexto = (docs: ContextoDelRevisor[]): string => {
 }
 
 const FORMATO_DE_FICHAS = 'Devuelve solo el JSON {"fichas":[{"que":"…","donde":"…","contra_que":"…","gravedad":"bloquea|sugerencia","propuesta":"…"}]}. Si no hay nada que señalar, {"fichas":[]}.'
+const FORMATO_DE_FICHAS_CON_CIFRAS = 'Devuelve solo el JSON {"fichas":[{"que":"…","donde":"…","contra_que":"…","gravedad":"bloquea|sugerencia","propuesta":"…","cifra":"c1 (solo si la ficha es por una cifra de la lista)","respaldo":["ref de un hecho (opcional)"]}]}. Si no hay nada que señalar, {"fichas":[]}.'
+
+/** la ficha de hechos de la revisión, si el tipo revisa cifras y se pudo leer */
+export const fichaDeLaRevision = (p: PayloadDeRevision): FichaDeHechos | null => (p.ficha_de_hechos && 'ficha' in p.ficha_de_hechos ? p.ficha_de_hechos.ficha : null)
 
 /** 01-nov · ADENDA de Emilio: lo que el manual evita es contexto de marca. La ficha sale por veracidad, nunca por coincidencia literal */
 export const REGLA_DE_LAS_PALABRAS_DEL_MANUAL = 'Las palabras que el manual evita son contexto de marca, no una prohibición: razona la intención. Solo amerita ficha un claim propio que no se pueda comprobar. Una reseña de un cliente, citada y atribuida, no lo es, y coincidir con la lista no basta. Lo que el manual declara por una norma o por el dueño, con su cita, se anota como sugerencia con su cita y no frena.'
@@ -131,8 +136,11 @@ export function tareaDeRevisionDeFondo(a: { politica: PoliticaDeRevision; payloa
   const linea = (a.politica.indicacion_fondo ?? `Estás revisando ${tituloDeLoRevisado(a.tipo)} contra {documentos}.`).replace('{documentos}', documentosDeLaLinea(a.politica))
   const dondes = a.duenos.flatMap((d) => (d.comodin ? [] : d.dondes))
   const donde = dondes.length ? `En «donde» pon SOLO una de estas palabras, tal cual: ${unir(dondes.map((d) => `«${d}»`))}. El detalle (qué línea, qué etiqueta) va en «que», nunca en «donde». Ejemplo válido: {"que":"las etiquetas son 2 y el manual pide 3","donde":"${dondes[0]}","contra_que":"…","gravedad":"bloquea","propuesta":"…"}.` : 'En «donde» pon la sección o el pasaje al que se refiere.'
-  const partes = [linea, `## Lo que revisas (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, bloqueDeContexto(a.payload.contexto ?? []), REGLA_DE_LAS_PALABRAS_DEL_MANUAL, bloqueDeLoMarcado(a.tipo, a.payload.chequeos_previos?.marcas), `${FORMATO_DE_FICHAS} ${donde}`, limitesDelFormato('fichas.v1')]
-  return { task: partes.filter(Boolean).join('\n\n'), indicacion: linea, esquema: 'fichas.v1' }
+  const ficha = fichaDeLaRevision(a.payload)
+  const esquema = ficha ? 'fichas_con_cifras.v1' : 'fichas.v1'
+  const cifras = ficha ? bloqueDeCifrasParaElJefe(ficha, cifrasParaElJefe(a.texto, ficha)) : ''
+  const partes = [linea, `## Lo que revisas (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, bloqueDeContexto(a.payload.contexto ?? []), REGLA_DE_LAS_PALABRAS_DEL_MANUAL, bloqueDeLoMarcado(a.tipo, a.payload.chequeos_previos?.marcas), cifras, `${ficha ? FORMATO_DE_FICHAS_CON_CIFRAS : FORMATO_DE_FICHAS} ${donde}`, limitesDelFormato(esquema)]
+  return { task: partes.filter(Boolean).join('\n\n'), indicacion: linea, esquema }
 }
 
 /** `spell-check-corrector`: SOLO errores de lengua (ortografía, gramática y puntuación del idioma del texto); no cambia contenido, estilo ni voz; respeta el idioma y el trato del manual. Toda ficha que marque bloquea. */

@@ -78,13 +78,27 @@ export function nivelDeDatoDeSede(fuente: string): NivelDelHecho {
  * Arma la ficha de UN cliente. Lo de otro cliente se descarta aunque llegue (defensa: la lectura ya filtra, aquí se vuelve a filtrar).
  * `fichasDelCerebro` = null ⇒ la puerta de lectura no existe o no respondió: la ficha queda `incompleta`.
  */
-export function fichaDeHechos(p: { clientId: string; datosDeSede: DatoDeSede[]; fichasDelCerebro: HechoDeLaFicha[] | null; ahora: Date }): FichaDeHechos {
+export function fichaDeHechos(p: { clientId: string; datosDeSede: DatoDeSede[]; fichasDelCerebro: HechoDeLaFicha[] | null; ahora: Date; faltan?: string[] }): FichaDeHechos {
   const deSede: HechoDeLaFicha[] = p.datosDeSede
     .filter((d) => d.client_id === p.clientId && !d.retirada_en)
     .map((d) => ({ ref: `sede:${d.id}`, client_id: d.client_id, atributo: d.campo, valor: d.valor_texto, nivel: nivelDeDatoDeSede(d.fuente), alcance: 'cliente', vigente: datoDeSedeVigente(d, p.ahora), fuente: d.fuente, fecha: masNueva(d.observado_en, d.reconfirmado_en), origen: 'sede', sede: d.sede_id }))
   const delCerebro = (p.fichasDelCerebro ?? []).filter((h) => h.client_id === p.clientId)
-  const faltan = p.fichasDelCerebro === null ? ['fichas del cerebro (la puerta de lectura no está)'] : []
+  // 1b · lo que falta lo DECLARA quien lee (hoy llegan solo los hechos del dueño: falta lo observado). Sin declarar, la regla del 1a: null = falta todo el cerebro
+  const faltan = [...(p.fichasDelCerebro === null ? ['fichas del cerebro (la puerta de lectura no está)'] : []), ...(p.faltan ?? [])]
   return { client_id: p.clientId, hechos: [...deSede, ...delCerebro], incompleta: faltan.length > 0, faltan }
+}
+
+/** lo que el dueño declaró, tal como lo entrega la lectura del portero (`hechos_del_dueno`: ya solo vigentes, sin retirar, del cliente) */
+export interface HechoDelDuenoLeido { tema: string; respuesta: string; sede: string | null }
+/** mientras no exista la puerta completa, la ficha trae del cerebro SOLO lo que dijo el dueño: falta lo observado (ADENDA 1 de la pregunta a Lenovo, 11-nov) */
+export const FALTA_LO_OBSERVADO = 'lo observado del cerebro (la puerta de lectura trae hoy solo lo que dijo el dueño)'
+export function hechoDelDuenoComoHecho(h: HechoDelDuenoLeido, clientId: string): HechoDeLaFicha {
+  return { ref: `dueno:${h.tema}${h.sede ? `@${h.sede}` : ''}`, client_id: clientId, atributo: h.tema, valor: h.respuesta, nivel: 'dicho_por_dueno', alcance: 'cliente', vigente: true, fuente: 'dueno', fecha: null, origen: 'cerebro', sede: h.sede }
+}
+/** lo que el dueño ACEPTÓ sin responder (un supuesto que propuso una oficina): la lectura del portero lo entrega aparte y aquí entra con su nivel, que NO sostiene (CC7 1) */
+export interface SupuestoLeido { tema: string; texto: string; sede: string | null; ficha_id?: string | null }
+export function supuestoComoHecho(s: SupuestoLeido, clientId: string): HechoDeLaFicha {
+  return { ref: `supuesto:${s.ficha_id || s.tema}`, client_id: clientId, atributo: s.tema, valor: s.texto, nivel: 'supuesto_aceptado_por_dueno', alcance: 'cliente', vigente: true, fuente: 'dueno', fecha: null, origen: 'cerebro', sede: s.sede }
 }
 
 // ───────────────────────────────────────────────────────── cifras normalizadas
@@ -189,4 +203,130 @@ export function hechosComoDatos(ficha: FichaDeHechos): string {
     ...(ficha.incompleta ? [`(ficha incompleta: faltan ${ficha.faltan.join(', ')}; lo no encontrado puede tener respaldo donde no se miró)`] : []),
     '</hechos_de_la_ficha>',
   ].join('\n')
+}
+
+// ───────────────────────────────────────────────────────── tramo 1b · la jefatura revisa las cifras contra la ficha
+
+/** el nombre del chequeo en `jefatura_grading_policies.chequeos_previos`: con él, el tipo revisa cifras (es DATO; encenderlo es un GO aparte) */
+export const CHEQUEO_FICHA_DE_HECHOS = 'ficha_de_hechos'
+/** más que esto no se lista (un plan trae cientos de números): lo no listado se declara y el jefe igual ve la ficha */
+export const MAXIMO_DE_CIFRAS_LISTADAS = 60
+/** lo más que viaja de la ficha al jefe (medido 11-nov: la ficha real de Náufrago da ≈ 13.500 caracteres, ≈ 3.900 tokens). Lo que no cabe se DECLARA, nunca se calla */
+export const MAXIMO_DE_CARACTERES_DE_LA_FICHA = 20_000
+
+/** lo que viaja en la revisión (lo pone la jefatura al abrir; nunca el llamador) */
+export type FichaEnLaRevision = { ficha: FichaDeHechos } | { no_se_pudo_leer: string }
+
+export interface CifraParaElJefe { id: string; respaldo: Respaldo }
+/** la huella del texto EXACTO sobre el que se numeraron las cifras: viaja en la traza del paso y se compara al recibir la respuesta (CC7 3) */
+export function huellaDelTexto(texto: string): string {
+  let h = 2166136261
+  for (let i = 0; i < texto.length; i++) { h ^= texto.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0 }
+  return `${texto.length}:${h.toString(16)}`
+}
+/** las cifras de lo revisado, numeradas `c1…cN` en orden de aparición (el jefe las cita por id; nunca por posición) */
+export function cifrasParaElJefe(texto: string, ficha: FichaDeHechos): CifraParaElJefe[] {
+  return respaldosDelTexto(texto, ficha).map((respaldo, i) => ({ id: `c${i + 1}`, respaldo }))
+}
+
+/**
+ * La parte de la ficha que viaja al jefe, con el tope de tamaño: primero los hechos que tocan alguna cifra listada (candidatos o menciones),
+ * después el resto, hasta `MAXIMO_DE_CARACTERES_DE_LA_FICHA`. Si no cabe todo, lo dice (`recortada`).
+ */
+export function fichaParaElJefe(ficha: FichaDeHechos, cifras: CifraParaElJefe[]): { ficha: FichaDeHechos; mostrados: number; total: number; recortada: boolean } {
+  const tocan = new Set(cifras.slice(0, MAXIMO_DE_CIFRAS_LISTADAS).flatMap((c) => [...c.respaldo.candidatos, ...c.respaldo.la_mencionan].map((h) => h.ref)))
+  const orden = [...ficha.hechos.filter((h) => tocan.has(h.ref)), ...ficha.hechos.filter((h) => !tocan.has(h.ref))]
+  const van: HechoDeLaFicha[] = []
+  let largo = 0
+  for (const h of orden) {
+    const l = h.valor.length + h.atributo.length + h.ref.length + 120
+    if (van.length && largo + l > MAXIMO_DE_CARACTERES_DE_LA_FICHA) break
+    van.push(h); largo += l
+  }
+  return { ficha: { ...ficha, hechos: van }, mostrados: van.length, total: ficha.hechos.length, recortada: van.length < ficha.hechos.length }
+}
+
+/** una sola vez: la gravedad del jefe → el juicio que entiende el tope del 1a (CC7, aclaración 2) */
+export const juicioDeLaGravedad = (g: 'bloquea' | 'sugerencia'): 'devolver' | 'aviso' => (g === 'bloquea' ? 'devolver' : 'aviso')
+
+/** el bloque que se suma al pedido del jefe de fondo · la ficha y la lista de cifras van como DATOS delimitados (CC7 4); lo que juzga, él */
+export function bloqueDeCifrasParaElJefe(ficha: FichaDeHechos, cifras: CifraParaElJefe[]): string {
+  const listadas = cifras.slice(0, MAXIMO_DE_CIFRAS_LISTADAS)
+  const vista = fichaParaElJefe(ficha, cifras)
+  const linea = (c: CifraParaElJefe) => {
+    const cand = c.respaldo.candidatos.map((h) => h.ref)
+    const menc = c.respaldo.la_mencionan.map((h) => h.ref)
+    const t = `- ${c.id} · «${c.respaldo.cifra.crudo.trim()}»${cand.length ? ` · podrían respaldarla: ${cand.join(', ')}` : ' · ningún hecho de la ficha trae esa cifra'}${menc.length ? ` · la mencionan sin poder sostenerla (de tercero, de otro alcance, supuestos o vencidos): ${menc.join(', ')}` : ''}`
+    return t.replace(/</g, '\\u003c')
+  }
+  return [
+    '## Las cifras de lo que revisas y la ficha de hechos del cliente',
+    hechosComoDatos(vista.ficha),
+    ...(vista.recortada ? [`(ficha recortada: van ${vista.mostrados} de ${vista.total} hechos; primero los que tocan alguna cifra)`] : []),
+    listadas.length ? ['<cifras_de_lo_revisado tipo="datos-no-confiables">', ...listadas.map(linea), '</cifras_de_lo_revisado>'].join('\n') : 'Lo que revisas no trae cifras.',
+    ...(cifras.length > listadas.length ? [`(hay ${cifras.length - listadas.length} cifras más que no se listan: si alguna te parece importante y sin respaldo, ponle su ficha sin "cifra")`] : []),
+    'Para cada cifra listada, decide tú:',
+    '- si un hecho de los que «podrían respaldarla» habla de LA MISMA afirmación, está respaldada: no le pongas ficha;',
+    '- si es importante (cambiarla cambia lo que se promete o se afirma al público) y nada la respalda, ponle una ficha con "gravedad":"bloquea" y "cifra":"<su id>";',
+    '- si es un dato menor, ponle una ficha con "gravedad":"sugerencia" y "cifra":"<su id>".',
+    'Una ficha con "cifra" es SOLO sobre el respaldo de esa cifra. Si el problema es otro (una promesa mal dicha aunque la cifra sea correcta, el tono, el trato), va sin "cifra".',
+    'Si en una ficha tuya con "cifra" nombras en "respaldo" los hechos que la sostienen, usa solo sus ref de la lista. Lo que contradiga un hecho de la ficha aunque no tenga número lleva su ficha normal, sin "cifra".',
+  ].join('\n')
+}
+
+/** una ficha del jefe tal como llega (`fichas_con_cifras.v1`) */
+export interface FichaDelJefeConCifra { que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string; cifra?: string; respaldo?: string[] }
+export interface CifrasTopadas<F> {
+  fichas: F[]
+  /** la ficha del jefe bajó de «bloquea» a «sugerencia» por el tope (ficha incompleta) */
+  topadas: Array<{ cifra: string; crudo: string; motivo: string }>
+  /** la cifra quedó sostenida por un candidato que el jefe confirmó: la ficha se quita */
+  descartadas: Array<{ cifra: string; crudo: string; refs: string[] }>
+  /** `cifra` con un id que no está en la lista: la ficha queda como la escribió el jefe */
+  desconocidas: string[]
+  /** fichas «bloquea» SIN `cifra` que citan una cifra de la lista: se saltan el tope. Solo se cuentan (CC7 5), para verlo en el seco */
+  bloquea_sin_cifra_que_citan_una_listada: number
+}
+
+/**
+ * VERIFICAR EXACTO (código) sobre lo que JUZGÓ el jefe: cada ficha que cita una cifra pasa por el tope del 1a. Las refs de `respaldo` solo
+ * cuentan si son candidatos de ESA cifra (`respaldoDe`). Una ficha sin `cifra` no se toca.
+ */
+export function toparFichasDelJefe<F extends FichaDelJefeConCifra>(fichas: F[], ficha: FichaDeHechos, cifras: CifraParaElJefe[]): CifrasTopadas<F> {
+  const porId = new Map(cifras.map((c) => [c.id, c]))
+  const out: CifrasTopadas<F> = { fichas: [], topadas: [], descartadas: [], desconocidas: [], bloquea_sin_cifra_que_citan_una_listada: 0 }
+  const listadas = cifras.slice(0, MAXIMO_DE_CIFRAS_LISTADAS).map((c) => c.respaldo.cifra)
+  for (const f of fichas) {
+    if (f.cifra === undefined) {
+      if (f.gravedad === 'bloquea' && cifrasDe(`${f.que} ${f.propuesta}`).some((x) => listadas.some((l) => mismaCifra(x, l)))) out.bloquea_sin_cifra_que_citan_una_listada++
+      out.fichas.push(f)
+      continue
+    }
+    const c = porId.get(f.cifra)
+    if (!c) { out.desconocidas.push(f.cifra); out.fichas.push(f); continue }
+    const r = respaldoDe(c.respaldo.cifra, ficha, new Set(f.respaldo ?? []))
+    const decision = topeDeLaDecision(juicioDeLaGravedad(f.gravedad), r)
+    const crudo = c.respaldo.cifra.crudo.trim()
+    if (decision === 'pasa') { out.descartadas.push({ cifra: f.cifra, crudo, refs: r.sostienen.map((h) => h.ref) }); continue }
+    if (decision === 'aviso' && f.gravedad === 'bloquea') {
+      out.topadas.push({ cifra: f.cifra, crudo, motivo: ficha.incompleta ? `la ficha está incompleta (faltan ${ficha.faltan.join(', ')}): una cifra sin respaldo da a lo más un aviso` : 'tope del código' })
+      out.fichas.push({ ...f, gravedad: 'sugerencia' })
+      continue
+    }
+    out.fichas.push(f)
+  }
+  return out
+}
+
+/** la traza del paso (M1): qué se miró y qué hizo el código */
+export function trazaDeLaFicha(ficha: FichaDeHechos, cifras: CifraParaElJefe[], t?: Omit<CifrasTopadas<unknown>, 'fichas'>, o: { numeracion_de_otro_texto?: boolean } = {}): Record<string, unknown> {
+  const vista = fichaParaElJefe(ficha, cifras)
+  return {
+    incompleta: ficha.incompleta, faltan: ficha.faltan, hechos: ficha.hechos.length,
+    ...(vista.recortada ? { ficha_recortada: { mostrados: vista.mostrados, total: vista.total } } : {}),
+    ...(o.numeracion_de_otro_texto ? { numeracion_de_otro_texto: true, nota: 'el texto cambió entre el pedido y la respuesta: no se aplicó el tope; las fichas quedan como las escribió el jefe' } : {}),
+    cifras: cifras.map((c) => ({ id: c.id, crudo: c.respaldo.cifra.crudo.trim(), estado: c.respaldo.estado, candidatos: c.respaldo.candidatos.map((h) => h.ref) })),
+    ...(cifras.length > MAXIMO_DE_CIFRAS_LISTADAS ? { sin_listar: cifras.length - MAXIMO_DE_CIFRAS_LISTADAS } : {}),
+    ...(t ? { topadas: t.topadas, descartadas: t.descartadas, desconocidas: t.desconocidas, bloquea_sin_cifra_que_citan_una_listada: t.bloquea_sin_cifra_que_citan_una_listada } : {}),
+  }
 }

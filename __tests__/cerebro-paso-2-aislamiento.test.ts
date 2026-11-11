@@ -43,6 +43,8 @@ export const PUEDEN_NOMBRARLAS = [
   /^__tests__\/hechos-del-dueno\.test\.ts$/,
   // 01-nov · ESLOGAN REAL: su prueba siembra una tabla vacía en una base falsa para ejercer la carpeta; no toca la real
   /^__tests__\/manual-eslogan-del-cliente\.test\.ts$/,
+  // 11-nov · FICHA DE HECHOS 1b: su prueba siembra fichas del dueño en una base falsa para ejercer la lectura de la jefatura (por `adjuntoDelCliente`); no toca la real
+  /^__tests__\/jefatura-ficha-de-hechos-1b\.test\.ts$/,
   /^supabase\/migrations\/202610060100_cerebro_paso_2_tablas_y_columnas\.sql$/,
   /^supabase\/reversas\/202610060100_cerebro_paso_2_REVERSA\.sql$/,
   /^supabase\/migrations\/202610070100_cerebro_fotos_texto_visible_y_etiqueta_confianza\.sql$/,
