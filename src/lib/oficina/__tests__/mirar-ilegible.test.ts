@@ -90,6 +90,29 @@ describe('la sala de la foto · «mirar» con la respuesta mal armada', () => {
     expect(e.artefactos['imagen_final'].datos).toMatchObject({ origen: 'real', foto_id: foto.id })
     expect(e.fichas.some((f) => f.id.startsWith('mirar-sin-lectura-') && f.gravedad === 'bloquea')).toBe(true)
   })
+  it('🔴 re-imagen de la FOTO ilegible las dos veces, recorrida por el orquestador: NO cae, se queda la imagen anterior, solo ficha de sugerencia y sin observación nueva (CC7 · huecos 1 y 2)', async () => {
+    const M = crearMemoria()
+    M.revisorTexto = () => ({ ok: true, texto: 'La imagen se ve fría y plana.', costo_usd: 0.1, modelo: 'sim' })
+    const id = String((await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: false, familia: 'post_img' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })).cuerpo.encargo_id)
+    const toma = (_n: number, t: string) => ({ texto: JSON.stringify({ respuestas: [...t.matchAll(/\[(ext-[^\]]+)\]/g)].map((x) => ({ id: x[1], estado: 'tomada', razon: 'sí, está plana' })) }) })
+    const nada = () => ({ texto: '{"respuestas": []}' })
+    let reVeces = 0
+    const g: Guion = {
+      ...generada((_n, t) => ({ texto: observacion(indicesDe(t)) })),
+      corrige: nada, decide: nada, decide_imagen: toma, reimagen_prompts: () => ({ texto: BUENOS_PROMPTS }),
+      reimagen_mirar: () => { reVeces++; return { texto: '{esto no es json' } },
+    }
+    const { pasos, ultima } = await correr(M, id, g)
+    expect(pasos).toContain('reimagen_prompts') // la re-imagen sí se pidió: la prueba no pasa en vacío
+    expect(reVeces).toBe(2) // su reintento, y nada más
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect((e.artefactos['imagen_final'].datos as { url: string }).url).toMatch(/img\.test\/[12]\./) // la primera, intacta
+    expect(e.artefactos['observacion_imagen'].datos.sin_lectura).toBeUndefined() // la observación buena de la primera mirada no se pisa
+    expect(e.fichas.some((f) => f.id.startsWith('reimagen-sin-lectura-') && f.gravedad === 'sugerencia')).toBe(true)
+    expect(e.fichas.some((f) => f.id.startsWith('mirar-sin-lectura-'))).toBe(false)
+    expect(e.fichas.some((f) => f.donde === 'imagen' && f.gravedad === 'bloquea' && f.estado === 'abierta')).toBe(false) // ya tenía una imagen buena
+  })
   it('🔴 una mirada SANA sigue juzgando como siempre (la imagen que no cumple no pasa): el respaldo solo entra cuando no se pudo leer', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
