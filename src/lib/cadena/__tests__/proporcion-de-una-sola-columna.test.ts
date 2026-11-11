@@ -41,7 +41,7 @@ describe('regla #17 · la proporción es un dato de la tabla de formatos', () =>
     expect(ov).toMatch(/armarPedidoDeLaOficina\(\{[^}]*relacion: b\.proporcion/)
     // la cotización previa usa la MISMA proporción (el costo depende del cuadro)
     expect(ov).toMatch(/await cotizarPrimero\(P, enc, pl, brief, fu\.fotos, proporcion\)/)
-    expect(ov).toMatch(/pedidosParaCotizar\(\{[^}]*\brelacion,/)
+    expect(ov).toMatch(/pedidosParaCotizar\(\{ brief, fotos, clave: [^\n]*\brelacion, /)
     for (const relacion of ['1:1', '9:16']) {
       const r = pedidosParaCotizar({ brief: { formato: 'reel', red: 'instagram' }, fotos: [], clave: 'enc:brief', relacion })
       expect(r.ok && r.pedidos.map((p) => p.pedido.relacion)).toEqual([relacion])
