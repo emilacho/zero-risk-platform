@@ -26,6 +26,14 @@
  *     dinero a la semana más cercana.
  * Lo retenido NO se reintenta solo: queda en el parte. Al subir el tope, la siguiente llamada del mismo parte suelta lo que falte (la llave de cada sobre es la misma).
  * Aviso: una pieza en el borde puede gastar algo más que su tope (la oficina cierra «por tope» al pasarlo); el freno corta con los topes, no con ese exceso.
+ *
+ * 11-nov · OPCIÓN (b) de Lenovo 19:07 · el freno RESERVA el costo ESPERADO de cada pieza, no el tope máximo de su familia (el tope sigue siendo el techo de cada encargo):
+ *   · lo esperado de una familia lo calcula la oficina (`reservasDesdeLaHistoria`): el promedio del gasto real de sus últimos encargos terminados (de cualquier cliente);
+ *     sin historia suficiente, el dato `limites.reserva_por_pieza_usd` de su plantilla; sin ninguno de los dos, NO hay reserva y se cuenta el tope, como antes (del lado seguro);
+ *   · la reserva nunca pasa del tope de la familia (`costoEsperadoDeLaPieza`);
+ *   · se usa en los 4 lugares donde antes iba el tope: lo que se va a soltar, lo comprometido (en la sala sin encargo), el lugar guardado por fecha y un encargo ABIERTO
+ *     (cuenta lo mayor entre lo gastado y lo esperado, sin pasar de su propio tope);
+ *   · consecuencia aceptada: con la reserva, una campaña puede terminar gastando algo más que su tope si sus piezas salen más caras que el promedio (cada una sigue frenada por su tope).
  */
 import { costoEfectivo } from './nucleo'
 import type { Corrida } from './almacen'
@@ -40,11 +48,13 @@ export interface LecturaDeGasto {
   conceptos: Array<{ costo_usd: number | null; encargo_id: string | null }>
   briefs: Array<{ costo_usd: number | null; encargo_id: string | null }>
   /** encargos REALES (`dry_run=false`) con `parte_id` = la campaña o uno de sus partes reales */
-  encargos: Array<{ id: string; parte_id: string; brief_id: string | null; estado: string; tope_usd: number | null; gasto_usd: number | null }>
+  encargos: Array<{ id: string; parte_id: string; brief_id: string | null; estado: string; tope_usd: number | null; gasto_usd: number | null; familia?: string | null }>
   /** los partes REALES de la campaña (no los de ensayo) con sus briefs */
   partes: Array<{ id: string; briefs: Array<{ brief_id: string | null; familia: string | null; fila_id?: string | null }> }>
   /** tope por encargo de cada familia ACTIVA de la oficina */
   topes_de_familia: Record<string, number>
+  /** 11-nov (opción b) · lo ESPERADO por pieza de cada familia activa que tiene historia o dato; una familia ausente cuenta su tope (como antes) */
+  reservas_de_familia?: Record<string, number>
   /** los sobres de producir REALES que la sala ya recibió de esos partes (parte · brief) */
   soltados: Array<{ parte_id: string; brief_id: string }>
   /** 11-nov · las revisiones REALES de registro de la campaña (la jefatura las cobra aparte: el revisor y la corrección del productor) */
@@ -67,6 +77,13 @@ export function topeDeLaPieza(topes: Record<string, number>, familia: string | n
   return typeof t === 'number' && Number.isFinite(t) && t > 0 ? t : Math.max(...validos)
 }
 
+/** 11-nov (opción b) · lo que se le reserva a UNA pieza: lo esperado de su familia (si hay), sin pasar de su tope · sin reserva, el tope (`topeDeLaPieza`, del lado seguro) · sin topes legibles, LANZA */
+export function costoEsperadoDeLaPieza(topes: Record<string, number>, reservas: Record<string, number> | undefined, familia: string | null | undefined): number {
+  const tope = topeDeLaPieza(topes, familia)
+  const r = familia && reservas ? reservas[familia] : undefined
+  return typeof r === 'number' && Number.isFinite(r) && r > 0 ? Math.min(r, tope) : tope
+}
+
 /** lo gastado y lo comprometido de la campaña · `parteActual` queda fuera de lo comprometido (sus briefs son lo que se va a soltar) · puro */
 export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { gastado: number; comprometido: number; esperando: BriefEsperando[] } {
   const yaContados = new Set([...l.conceptos, ...l.briefs].filter((x) => x.encargo_id && typeof x.costo_usd === 'number').map((x) => x.encargo_id as string))
@@ -74,7 +91,7 @@ export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { g
   gastado += l.conceptos.reduce((s, x) => s + num(x.costo_usd), 0) + l.briefs.reduce((s, x) => s + num(x.costo_usd), 0)
   for (const e of l.encargos) {
     if (yaContados.has(e.id)) continue
-    gastado += (ESTADOS_ABIERTOS as readonly string[]).includes(e.estado) ? Math.max(num(e.gasto_usd), num(e.tope_usd)) : num(e.gasto_usd)
+    gastado += (ESTADOS_ABIERTOS as readonly string[]).includes(e.estado) ? Math.max(num(e.gasto_usd), esperadoDelAbierto(l, e)) : num(e.gasto_usd)
   }
   // la revisión de registro de un documento de la campaña: una cerrada cuenta su gasto; una que sigue abierta, lo mayor entre lo gastado y su tope (igual que un encargo)
   for (const r of l.revisiones) gastado += (ESTADOS_DE_REVISION_ABIERTOS as readonly string[]).includes(r.estado) ? Math.max(num(r.gasto_usd), num(r.tope_usd)) : num(r.gasto_usd)
@@ -90,11 +107,18 @@ export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { g
       if (!id || vistos.has(id)) continue
       vistos.add(id)
       if (conEncargo.has(`${p.id}|${id}`)) continue
-      if (enLaSala.has(`${p.id}|${id}`)) comprometido += topeDeLaPieza(l.topes_de_familia, b.familia)
+      if (enLaSala.has(`${p.id}|${id}`)) comprometido += costoEsperadoDeLaPieza(l.topes_de_familia, l.reservas_de_familia, b.familia)
       else esperando.push({ parte_id: p.id, brief_id: id, familia: b.familia, fila_id: b.fila_id ?? null })
     }
   }
   return { gastado, comprometido, esperando }
+}
+
+/** un encargo ABIERTO: lo esperado de su familia, sin pasar de SU tope · sin familia o sin reserva, su tope (como antes) */
+function esperadoDelAbierto(l: LecturaDeGasto, e: LecturaDeGasto['encargos'][number]): number {
+  const r = e.familia && l.reservas_de_familia ? l.reservas_de_familia[e.familia] : undefined
+  if (typeof r !== 'number' || !Number.isFinite(r) || r <= 0) return num(e.tope_usd)
+  return num(e.tope_usd) > 0 ? Math.min(r, num(e.tope_usd)) : r
 }
 
 /** `no_se_produce` (11-nov): la puerta de la oficina dejará esta pieza SIN SALA (no se produce ni va por la pasarela) · sale como hoy, pero no cuesta ni corta a las demás */
@@ -123,14 +147,14 @@ export function topeDeLaCampana(v: unknown): number | null {
 }
 
 /** decide qué piezas de este parte salen · en el orden del calendario · se corta en la primera que no cabe · puro */
-export function decidirTope(topeCampana: unknown, medido: { gastado: number; comprometido: number }, candidatas: Candidata[], topes: Record<string, number>, porVenir: FilaPorVenir[] = []): DecisionDelTope {
+export function decidirTope(topeCampana: unknown, medido: { gastado: number; comprometido: number }, candidatas: Candidata[], topes: Record<string, number>, porVenir: FilaPorVenir[] = [], reservas?: Record<string, number>): DecisionDelTope {
   const tope = topeDeLaCampana(topeCampana)
   if (tope === null) return { tipo: 'sin_tope', retenidas: candidatas.map((c) => c.brief_id) }
   const orden = candidatas.map((c, i) => ({ c, i })).sort((a, b) => {
     const fa = llaveDeOrden(a.c.fecha, a.c.hora), fb = llaveDeOrden(b.c.fecha, b.c.hora)
     return fa < fb ? -1 : fa > fb ? 1 : a.i - b.i
   }).map((x) => x.c)
-  const anteriores = porVenir.map((f) => ({ k: llaveDeOrden(f.fecha, f.hora), costo: topeDeLaPieza(topes, f.familia) }))
+  const anteriores = porVenir.map((f) => ({ k: llaveDeOrden(f.fecha, f.hora), costo: costoEsperadoDeLaPieza(topes, reservas, f.familia) }))
   /** el lugar guardado para las filas por venir que van ANTES de esta pieza */
   const reservaAntes = (c: Candidata): number => { const k = llaveDeOrden(c.fecha, c.hora); return anteriores.filter((a) => a.k < k).reduce((x, a) => x + a.costo, 0) }
   let suma = medido.gastado + medido.comprometido
@@ -141,7 +165,7 @@ export function decidirTope(topeCampana: unknown, medido: { gastado: number; com
     if (c.ya_tiene_encargo) { sueltan.push(c.brief_id); continue }
     // una pieza que no se va a producir (sin sala) no gasta: sale como hoy (la oficina la deja esperando) y no le quita lugar a nadie
     if (c.no_se_produce) { sueltan.push(c.brief_id); continue }
-    const costo = topeDeLaPieza(topes, c.familia)
+    const costo = costoEsperadoDeLaPieza(topes, reservas, c.familia)
     if (!cortado && suma + reservaAntes(c) + costo <= tope + 1e-9) { suma += costo; sueltan.push(c.brief_id) } else { cortado = true; retenidas.push(c.brief_id) }
   }
   const base = { tope, gastado: r2(medido.gastado), comprometido: r2(medido.comprometido), estimado: r2(suma - medido.gastado - medido.comprometido), sueltan }
@@ -165,7 +189,7 @@ export function avisoDelTope(c: { id: string; client_id: string }, d: Exclude<De
   return {
     clave: claveDelTope(c.id, d.tope), tipo: 'pregunta', client_id: c.client_id,
     titulo: `La campaña ${camp} llegó a su tope de gasto (${usd(d.tope)}): ${d.retenidas.length} piezas esperan`,
-    detalle: `Gastado ${usd(d.gastado)} · comprometido ${usd(d.comprometido)} · salieron ${d.sueltan.length} piezas (${usd(d.estimado)} como máximo). Las ${d.retenidas.length} que no caben quedan retenidas, en el orden del calendario, y no se reintentan solas. Si se sube el tope de la campaña, la siguiente pasada suelta las que quepan. Este aviso no se repite mientras el tope siga igual.`,
+    detalle: `Gastado ${usd(d.gastado)} · comprometido ${usd(d.comprometido)} · salieron ${d.sueltan.length} piezas (${usd(d.estimado)} según lo que suelen costar; cada una con el tope de su familia como techo). Las ${d.retenidas.length} que no caben quedan retenidas, en el orden del calendario, y no se reintentan solas. Si se sube el tope de la campaña, la siguiente pasada suelta las que quepan. Este aviso no se repite mientras el tope siga igual.`,
   }
 }
 export function avisoDeGastoIlegible(c: { id: string; client_id: string }, error: string): AvisoDelTope {

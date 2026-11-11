@@ -20,6 +20,8 @@ const F = fixture as any
 let tablas: Record<string, Fila[]> = {}
 const consultas: Array<{ tabla: string; filtros: Array<[string, string, unknown]> }> = []
 let fallarTabla: string | null = null
+/** 11-nov · falla SOLO la lectura de la historia (la tabla de encargos filtrada por `estado`): las demás lecturas contestan */
+let fallarHistoria = false
 const valor = (r: Fila, col: string): unknown => { const m = col.match(/^(\w+)->>(\w+)$/); if (!m) return r[col]; const v = r[m[1]]?.[m[2]]; return v === undefined || v === null ? null : String(v) }
 /** `like` de la base: `%` = cualquier cosa; lo demás literal */
 const comoLike = (patron: string): RegExp => new RegExp(`^${patron.split('%').map((x) => [...x].map((ch) => (/[\w:-]/.test(ch) ? ch : `\\${ch}`)).join('')).join('.*')}$`)
@@ -28,17 +30,20 @@ function consulta(tabla: string) {
   const reg = { tabla, filtros }
   consultas.push(reg)
   let tope = Infinity
+  /** 11-nov · el orden que pide la consulta (como la base: sin él, el orden de siembra) */
+  let orden: { c: string; asc: boolean } | null = null
   let columnas: string[] | null = null
   const q: any = {
     select: (c: string) => { columnas = c === '*' ? null : c.split(',').map((x) => x.trim()); return q },
-    order: () => q,
+    order: (c: string, o?: { ascending?: boolean }) => { orden = { c, asc: o?.ascending !== false }; (reg as { orden?: unknown }).orden = orden; return q },
     eq: (c: string, v: unknown) => { filtros.push(['eq', c, v]); return q },
     in: (c: string, v: unknown[]) => { filtros.push(['in', c, v]); return q },
     like: (c: string, v: string) => { filtros.push(['like', c, v]); return q },
     limit: (n: number) => { tope = n; return q },
     then: (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => {
-      if (fallarTabla === tabla) return Promise.resolve({ data: null, error: { message: `falló ${tabla}` } }).then(ok, ko)
-      const filas = (tablas[tabla] ?? []).filter((r) => filtros.every(([op, c, v]) => op === 'eq' ? valor(r, c) === v : op === 'like' ? comoLike(String(v)).test(String(valor(r, c) ?? '')) : (v as unknown[]).includes(valor(r, c)))).slice(0, tope)
+      if (fallarTabla === tabla || (fallarHistoria && tabla === ENC && filtros.some(([, c]) => c === 'estado'))) return Promise.resolve({ data: null, error: { message: `falló ${tabla}` } }).then(ok, ko)
+      const ordenar = (xs: Fila[]): Fila[] => (orden ? [...xs].sort((x, y) => { const o = orden!; const vx = String(x[o.c] ?? ''), vy = String(y[o.c] ?? ''); return (vx < vy ? -1 : vx > vy ? 1 : 0) * (o.asc ? 1 : -1) }) : xs)
+      const filas = ordenar((tablas[tabla] ?? []).filter((r) => filtros.every(([op, c, v]) => op === 'eq' ? valor(r, c) === v : op === 'like' ? comoLike(String(v)).test(String(valor(r, c) ?? '')) : (v as unknown[]).includes(valor(r, c))))).slice(0, tope)
         .map((r) => (columnas ? Object.fromEntries(columnas.map((c) => [c, r[c]])) : r))
       return Promise.resolve({ data: filas, error: null }).then(ok, ko)
     },
@@ -53,11 +58,11 @@ vi.mock('@/lib/sala-ingress', () => ({ isIntakeEnabled: () => true, orchestrateI
 vi.mock('@/lib/sala-router-consumer/inmediato-supabase', () => ({ programarDespachoInmediato: () => 'programado' }))
 
 import { almacenDeSupabase } from '../almacen-supabase'
-import { decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, OPERACION_DE_PRODUCIR, topeDeLaPieza, type Candidata, type LecturaDeGasto } from '../tope-de-campana'
+import { avisoDelTope, costoEsperadoDeLaPieza, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, OPERACION_DE_PRODUCIR, topeDeLaPieza, type Candidata, type LecturaDeGasto } from '../tope-de-campana'
 import { FUENTE_DEL_SOBRE, INTENCION_DEL_SOBRE } from '../autoproducir'
 import { familiaDeFila } from '../familia'
 import type { FormatosPorRed } from '../tipos'
-import { TABLAS_DE_GASTO } from '@/lib/oficina/gasto-de-encargos'
+import { ESTADOS_TERMINADOS, HISTORIA_POR_FAMILIA, MIN_HISTORIA, reservasDesdeLaHistoria, TABLAS_DE_GASTO } from '@/lib/oficina/gasto-de-encargos'
 
 const ENC = TABLAS_DE_GASTO.encargos, PLANT = TABLAS_DE_GASTO.plantillas
 
@@ -69,7 +74,8 @@ function sembrar(extra: Record<string, Fila[]> = {}) {
     tablas.cadena_conceptos.push(...c.conceptos.map((x: Fila) => ({ ...x, campana_id: id })))
     tablas.cadena_brief_creativo.push(...c.briefs.map((x: Fila) => ({ ...x, campana_id: id })))
     tablas.client_historical_outputs.push(...c.partes.map((p: Fila) => ({ ...p, output_type: 'campaign_brief_pack' })))
-    tablas[ENC].push(...c.encargos.map((e: Fila) => ({ ...e })))
+    // `prueba` no admite vacíos en la base (por omisión false): la foto no la trae, así que se siembra como la base la tiene
+    tablas[ENC].push(...c.encargos.map((e: Fila) => ({ prueba: false, ...e })))
     tablas.sala_event_log.push(...(c.sala_producir ?? []).map((x: Fila) => ({ ...x })))
   }
   for (const [t, filas] of Object.entries(extra)) (tablas[t] ??= []).push(...filas)
@@ -81,7 +87,7 @@ const enSemana = (c: string, desde: string, hasta: string) => filasDe(c).filter(
 const candidatasDe = (filas: ReturnType<typeof filasDe>): Candidata[] => filas.map((f, i) => ({ brief_id: `B${String(i + 1).padStart(2, '0')}`, familia: f.familia, fecha: f.fecha, hora: f.hora, ya_tiene_encargo: false }))
 const HOY = '2026-11-10'
 
-beforeEach(() => { sembrar(); consultas.length = 0; fallarTabla = null })
+beforeEach(() => { sembrar(); consultas.length = 0; fallarTabla = null; fallarHistoria = false })
 
 describe('lo gastado · la MISMA fuente que los US$ 26,28 (condición 1 de CC7) · adaptador real sobre las filas reales', () => {
   it('Náufrago (restaurante): planeación 3,41 + concepto 20,30 + brief 2,57 = 26,28 · los encargos de mesa ya están dentro de concepto y brief: no se cuentan dos veces', async () => {
@@ -100,7 +106,7 @@ describe('lo gastado · la MISMA fuente que los US$ 26,28 (condición 1 de CC7) 
   })
   it('la consulta de encargos pide SOLO lo real y SOLO la campaña, sus partes reales y el parte actual', async () => {
     await leer(SEG, 'parte-actual')
-    const q = consultas.find((c) => c.tabla === ENC)!
+    const q = consultas.find((c) => c.tabla === ENC && c.filtros.some(([, col]) => col === 'parte_id'))!
     expect(q.filtros).toContainEqual(['eq', 'dry_run', false])
     const ids = q.filtros.find(([op, c]) => op === 'in' && c === 'parte_id')![2] as string[]
     expect([...ids].sort()).toEqual([SEG, 'parte-actual', '2a93029a-d4e5-439e-87a8-4b67afdfec33'].sort())
@@ -129,7 +135,8 @@ describe('lo gastado · la MISMA fuente que los US$ 26,28 (condición 1 de CC7) 
     sembrar({ client_historical_outputs: [{ id: 'parte-viejo', output_type: 'campaign_brief_pack', provenance_tag: tag }], [ENC]: [{ id: 'e-v2', parte_id: 'parte-viejo', brief_id: 'V2', estado: 'cerrado', tope_usd: 2.5, gasto_usd: 0.4, dry_run: false }],
       sala_event_log: [sobre('V1'), sobre('V3', true), { ...sobre('V3'), operation_type: 'PIEZAS.router.dispatch.brief/parte-listo.producir' }] })
     const m = medirGastoDeCampana(await leer(NAU, 'parte-nuevo'), 'parte-nuevo')
-    expect(m.comprometido).toBe(5) // V1 · carrusel_mesa, ya en la sala
+    // V1 · carrusel_mesa, ya en la sala: compromete lo ESPERADO de su familia (opción b), el promedio real de la foto (1,69 · 0,98 · 2,05), no su tope de 5
+    expect(m.comprometido).toBeCloseTo((1.690998 + 0.984574 + 2.051572) / 3, 4)
     expect(m.gastado).toBeCloseTo(26.28 + 0.4, 2) // V2 ya gastó lo suyo
     // V3: su único sobre real es de OTRA operación y el de entrada es de ensayo → no está en camino: espera, guarda lugar por fecha
     expect(m.esperando).toEqual([{ parte_id: 'parte-viejo', brief_id: 'V3', familia: 'post_img', fila_id: 'f-v3' }])
@@ -423,5 +430,129 @@ describe('las revisiones de REGISTRO de la campaña cuentan en el freno (adaptad
   it('🔴 un id de campaña raro no arma una consulta comodín: falla', async () => {
     await expect(leer('%', 'p')).rejects.toThrow(/no es legible/)
     expect(consultas.some((c) => c.tabla === 'jefatura_revisiones')).toBe(false)
+  })
+})
+
+// ───────────────────────── 11-nov · OPCIÓN (b) de Lenovo 19:07 · el freno reserva lo ESPERADO por pieza, no el tope máximo (el tope sigue siendo el techo del encargo)
+describe('opción (b) · lo esperado por pieza sale de la historia real de cada familia (cualquier cliente) · adaptador real sobre la foto de dos rubros', () => {
+  it('🔴 con la foto real: carrusel_mesa = promedio de sus 3 encargos REALES terminados (Seguridad Industrial); brief_mesa = sus 4 (Náufrago); concepto_mesa no pasa su tope; con menos de 3, sin reserva', async () => {
+    const l = await leer(NAU, 'parte-nuevo')
+    expect(l.reservas_de_familia!.carrusel_mesa).toBeCloseTo((1.690998 + 0.984574 + 2.051572) / 3, 4) // fuera: los de ensayo (dry_run) y los fallidos
+    expect(l.reservas_de_familia!.brief_mesa).toBeCloseTo((0.532374 + 0.514141 + 0.795175 + 0.730452) / 4, 4)
+    expect(l.reservas_de_familia!.concepto_mesa).toBe(5) // promedio 5,34 (sin el cerrado por tope) > tope 5 → el tope
+    expect(l.reservas_de_familia!.carrusel_ig_v1).toBeUndefined() // 2 terminados < MIN_HISTORIA
+    expect(l.reservas_de_familia!.kit_historias).toBeUndefined() // solo fallidos
+    expect(l.reservas_de_familia!.video_mesa).toBeUndefined() // plantilla apagada en la foto
+    expect(MIN_HISTORIA).toBe(3)
+  })
+  it('🔴 un encargo ABIERTO leído por el adaptador real trae su familia: cuenta lo esperado de esa familia (1,58), no su tope (5) · construido sobre Náufrago', async () => {
+    sembrar({ [ENC]: [{ id: 'e-abierto', parte_id: NAU, brief_id: null, estado: 'en_paso', tope_usd: 5, gasto_usd: 0.2, familia: 'carrusel_mesa', dry_run: false }] })
+    const l = await leer(NAU, 'parte-nuevo')
+    expect(l.encargos.find((e) => e.id === 'e-abierto')!.familia).toBe('carrusel_mesa')
+    expect(medirGastoDeCampana(l, 'parte-nuevo').gastado).toBeCloseTo(26.28 + (1.690998 + 0.984574 + 2.051572) / 3, 4)
+  })
+  it('🔴 (CC7 R5) lo esperado sigue los precios de HOY: la historia se pide del más reciente al más viejo y se promedian los últimos 20 (construido: 20 recientes a 2,00 y 5 viejos a 0,50)', async () => {
+    const enc = (i: number, gasto: number, dia: string) => ({ id: `h-${i}`, parte_id: 'otra-campana', brief_id: null, estado: 'cerrado', tope_usd: 2.5, gasto_usd: gasto, familia: 'post_img', dry_run: false, prueba: false, creado_en: `2026-${dia}T10:00:00Z` })
+    // los viejos se siembran DESPUÉS, para que el orden de siembra no ayude
+    sembrar({ [ENC]: [...Array.from({ length: 20 }, (_, i) => enc(i, 2, `11-${String(10 - Math.floor(i / 3)).padStart(2, '0')}`)), ...Array.from({ length: 5 }, (_, i) => enc(100 + i, 0.5, '09-01'))] })
+    const l = await leer(SEG, 'x')
+    expect(l.reservas_de_familia!.post_img).toBeCloseTo(2, 6)
+    expect((consultas.find((c) => c.tabla === ENC && c.filtros.some(([, col]) => col === 'estado')) as { orden?: unknown }).orden).toEqual({ c: 'creado_en', asc: false })
+  })
+  it('🔴 (CC7 R13) una familia APAGADA no da reserva aunque tenga historia (video_mesa está apagada en la foto · construido: 3 videos terminados)', async () => {
+    sembrar({ [ENC]: [1, 2, 3].map((i) => ({ id: `v-${i}`, parte_id: 'otra', brief_id: null, estado: 'cerrado', tope_usd: 10, gasto_usd: 5, familia: 'video_mesa', dry_run: false, prueba: false })) })
+    const l = await leer(SEG, 'x')
+    expect(l.reservas_de_familia!.video_mesa).toBeUndefined()
+    for (const q of consultas.filter((c) => c.tabla === PLANT)) expect(q.filtros).toContainEqual(['eq', 'activo', true])
+  })
+  it('🔴 (CC7 · CC6) un encargo de PRUEBA con gasto real no entra en lo esperado de nadie (construido: 3 de prueba a 4,90 en carrusel_mesa)', async () => {
+    sembrar({ [ENC]: [1, 2, 3].map((i) => ({ id: `p-${i}`, parte_id: 'otra', brief_id: null, estado: 'cerrado', tope_usd: 5, gasto_usd: 4.9, familia: 'carrusel_mesa', dry_run: false, prueba: true })) })
+    const l = await leer(SEG, 'x')
+    expect(l.reservas_de_familia!.carrusel_mesa).toBeCloseTo((1.690998 + 0.984574 + 2.051572) / 3, 4)
+    expect(consultas.find((c) => c.tabla === ENC && c.filtros.some(([, col]) => col === 'estado'))!.filtros).toContainEqual(['eq', 'prueba', false])
+  })
+  it('🔴 la consulta de la historia pide SOLO lo real, SOLO lo terminado (cerrado · aprobada) y de cualquier cliente (sin filtro de campaña ni de cliente)', async () => {
+    await leer(SEG, 'x')
+    const h = consultas.find((c) => c.tabla === ENC && c.filtros.some(([, col]) => col === 'estado'))!
+    expect(h.filtros).toContainEqual(['eq', 'dry_run', false])
+    expect(h.filtros).toContainEqual(['in', 'estado', ['cerrado', 'aprobada']])
+    expect(h.filtros.some(([, col]) => col === 'parte_id' || col === 'client_id' || col === 'campana_id')).toBe(false)
+    expect([...ESTADOS_TERMINADOS]).toEqual(['cerrado', 'aprobada'])
+  })
+  it('🔴 si la historia no se puede leer, es gasto ilegible: LANZA (no es «sin reserva»)', async () => {
+    await expect(leer(NAU, 'p')).resolves.toBeTruthy() // control: sin falla, se lee
+    fallarHistoria = true
+    await expect(leer(NAU, 'p')).rejects.toThrow(/oficina no contestó/)
+  })
+})
+
+describe('opción (b) · la cuenta pura de lo esperado', () => {
+  const P = (familia: string, tope: number, limites: unknown = {}) => ({ familia, tope_encargo_usd: tope, limites })
+  it('🔴 sin historia suficiente usa el dato `reserva_por_pieza_usd` de la plantilla; sin dato, la familia no aparece (cuenta su tope)', () => {
+    expect(reservasDesdeLaHistoria([P('video_mesa', 35, { reserva_por_pieza_usd: 12 })], [{ familia: 'video_mesa', gasto_usd: 5.7 }, { familia: 'video_mesa', gasto_usd: 5.1 }])).toEqual({ video_mesa: 12 })
+    expect(reservasDesdeLaHistoria([P('video_mesa', 35)], [{ familia: 'video_mesa', gasto_usd: 5.7 }])).toEqual({})
+    expect(reservasDesdeLaHistoria([P('video_mesa', 35, { reserva_por_pieza_usd: 'x' })], [])).toEqual({})
+  })
+  it('🔴 con historia, el promedio de los ÚLTIMOS `HISTORIA_POR_FAMILIA` con gasto (el orden llega del más reciente); los de gasto 0 y los de otra familia no cuentan; el dato no pisa la historia', () => {
+    const recientes = Array.from({ length: HISTORIA_POR_FAMILIA }, () => ({ familia: 'post_img', gasto_usd: 1 }))
+    const viejos = Array.from({ length: 10 }, () => ({ familia: 'post_img', gasto_usd: 2.4 }))
+    expect(reservasDesdeLaHistoria([P('post_img', 2.5, { reserva_por_pieza_usd: 2 })], [{ familia: 'post_img', gasto_usd: 0 }, { familia: 'otra', gasto_usd: 9 }, ...recientes, ...viejos])).toEqual({ post_img: 1 })
+    expect(reservasDesdeLaHistoria([P('post_img', 2.5)], [{ familia: 'post_img', gasto_usd: 1 }, { familia: 'post_img', gasto_usd: 2 }, { familia: 'post_img', gasto_usd: '1.5' }])).toEqual({ post_img: 1.5 })
+    // (CC7 R3) la ventana es POR FAMILIA: 25 de otra familia delante no le quitan su historia a la que se mueve poco
+    expect(reservasDesdeLaHistoria([P('post_img', 2.5)], [...Array.from({ length: 25 }, () => ({ familia: 'carrusel_mesa', gasto_usd: 1.6 })), ...[0.9, 1.1, 1].map((g) => ({ familia: 'post_img', gasto_usd: g }))])).toEqual({ post_img: 1 })
+  })
+  it('🔴 nunca pasa del tope de la familia (ni por historia ni por dato); una plantilla sin tope válido no da reserva', () => {
+    expect(reservasDesdeLaHistoria([P('a', 2.5, { reserva_por_pieza_usd: 9 })], [])).toEqual({ a: 2.5 })
+    expect(reservasDesdeLaHistoria([P('a', 2.5)], [3, 4, 5].map((g) => ({ familia: 'a', gasto_usd: g })))).toEqual({ a: 2.5 })
+    expect(reservasDesdeLaHistoria([P('a', 0, { reserva_por_pieza_usd: 1 }), { familia: null, tope_encargo_usd: 3, limites: {} }], [])).toEqual({})
+  })
+  it('🔴 lo que se le reserva a una pieza: su esperado si hay (sin pasar del tope); sin reserva, su tope; sin familia, el mayor tope (del lado seguro)', () => {
+    const topes = { video_mesa: 35, post_img: 2.5 }
+    expect(costoEsperadoDeLaPieza(topes, { video_mesa: 12 }, 'video_mesa')).toBe(12)
+    expect(costoEsperadoDeLaPieza(topes, { video_mesa: 50 }, 'video_mesa')).toBe(35)
+    expect(costoEsperadoDeLaPieza(topes, { video_mesa: 12 }, 'post_img')).toBe(2.5)
+    expect(costoEsperadoDeLaPieza(topes, undefined, 'video_mesa')).toBe(35)
+    expect(costoEsperadoDeLaPieza(topes, { video_mesa: 12 }, null)).toBe(35)
+    expect(costoEsperadoDeLaPieza(topes, { video_mesa: 0 }, 'video_mesa')).toBe(35)
+  })
+})
+
+describe('opción (b) · el caso de CC7: video a US$ 35 por encargo y la campaña en US$ 100 (construido sobre el calendario de Náufrago: 3 reels seguidos)', () => {
+  const topes = { video_mesa: 35, post_img: 2.5 }
+  const reel = (brief_id: string, fecha: string): Candidata => ({ brief_id, familia: 'video_mesa', fecha, hora: '09:00', ya_tiene_encargo: false })
+  const antes = [{ fila_id: 'r14', fecha: '2026-11-14', hora: '09:00', familia: 'video_mesa' }, { fila_id: 'r16', fecha: '2026-11-16', hora: '09:00', familia: 'video_mesa' }]
+  it('🔴 con el TOPE (como antes) el reel del 21-nov no sale: 3 × 35 = 105 > 100 · con lo ESPERADO (12) sale', () => {
+    expect(decidirTope(100, { gastado: 0, comprometido: 0 }, [reel('R21', '2026-11-21')], topes, antes)).toMatchObject({ tipo: 'corta', retenidas: ['R21'] })
+    expect(decidirTope(100, { gastado: 0, comprometido: 0 }, [reel('R21', '2026-11-21')], topes, antes, { video_mesa: 12 })).toMatchObject({ tipo: 'cabe', sueltan: ['R21'], estimado: 12 })
+  })
+  it('🔴 el borde con lo esperado: cabe EXACTO; un centavo más, no (y sigue cortando, sin saltar piezas)', () => {
+    const r = { video_mesa: 12 }
+    expect(decidirTope(100, { gastado: 64, comprometido: 0 }, [reel('R21', '2026-11-21')], topes, antes, r).tipo).toBe('cabe') // 64 + 24 + 12 = 100
+    expect(decidirTope(100, { gastado: 64.01, comprometido: 0 }, [reel('R21', '2026-11-21'), { brief_id: 'P', familia: 'post_img', fecha: '2026-11-22', hora: '09:00', ya_tiene_encargo: false }], topes, antes, r)).toMatchObject({ tipo: 'corta', retenidas: ['R21', 'P'] })
+  })
+  it('🔴 un encargo de video ABIERTO cuenta lo mayor entre lo gastado y lo esperado, sin pasar de SU tope · sin familia (filas viejas), su tope como antes', () => {
+    const base: LecturaDeGasto = { corridas: [], conceptos: [], briefs: [], partes: [], soltados: [], revisiones: [], topes_de_familia: topes, reservas_de_familia: { video_mesa: 12 }, encargos: [] }
+    const abierto = (gasto: number, tope: number, familia: string | null = 'video_mesa') => ({ ...base, encargos: [{ id: 'e', parte_id: 'p', brief_id: 'b', estado: 'en_paso', tope_usd: tope, gasto_usd: gasto, familia }] })
+    expect(medirGastoDeCampana(abierto(0.43, 35), 'otro').gastado).toBe(12)
+    expect(medirGastoDeCampana(abierto(20, 35), 'otro').gastado).toBe(20)
+    expect(medirGastoDeCampana(abierto(0.43, 10), 'otro').gastado).toBe(10) // su tope (10) es menor que lo esperado (12)
+    expect(medirGastoDeCampana(abierto(0.43, 35, null), 'otro').gastado).toBe(35)
+    expect(medirGastoDeCampana({ ...abierto(0.43, 35), reservas_de_familia: undefined }, 'otro').gastado).toBe(35)
+    expect(medirGastoDeCampana({ ...abierto(0.43, 0), }, 'otro').gastado).toBe(12) // sin tope legible, lo esperado
+    // uno CERRADO cuenta solo lo gastado (sin cambios)
+    expect(medirGastoDeCampana({ ...base, encargos: [{ id: 'e', parte_id: 'p', brief_id: 'b', estado: 'cerrado', tope_usd: 35, gasto_usd: 5.1, familia: 'video_mesa' }] }, 'otro').gastado).toBe(5.1)
+  })
+  it('🔴 lo comprometido (en la sala sin encargo) y el lugar guardado por fecha también usan lo esperado', () => {
+    const l: LecturaDeGasto = { corridas: [], conceptos: [], briefs: [], encargos: [], revisiones: [], topes_de_familia: topes, reservas_de_familia: { video_mesa: 12 },
+      partes: [{ id: 'p1', briefs: [{ brief_id: 'V', familia: 'video_mesa', fila_id: null }] }], soltados: [{ parte_id: 'p1', brief_id: 'V' }] }
+    expect(medirGastoDeCampana(l, 'p-actual').comprometido).toBe(12)
+    expect(decidirTope(100, { gastado: 75, comprometido: 0 }, [reel('R21', '2026-11-21')], topes, antes.slice(0, 1), { video_mesa: 12 })).toMatchObject({ tipo: 'cabe' }) // 75 + 12 + 12 = 99
+    expect(decidirTope(100, { gastado: 77, comprometido: 0 }, [reel('R21', '2026-11-21')], topes, antes.slice(0, 1), { video_mesa: 12 })).toMatchObject({ tipo: 'corta' }) // 77 + 12 + 12 = 101
+  })
+  it('el aviso ya no dice «como máximo»: dice que es lo que suelen costar y que el tope de cada familia es el techo', () => {
+    const d = decidirTope(10, { gastado: 0, comprometido: 0 }, [reel('R21', '2026-11-21')], topes, [], { video_mesa: 12 })
+    const a = avisoDelTope({ id: NAU, client_id: 'c' }, d as Exclude<typeof d, { tipo: 'cabe' }>)
+    expect(a.detalle).toContain('según lo que suelen costar; cada una con el tope de su familia como techo')
+    expect(a.detalle).not.toContain('como máximo')
   })
 })

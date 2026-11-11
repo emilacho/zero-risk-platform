@@ -28,6 +28,12 @@ describe('autoproducir con el freno · avisa UNA vez por el buzón (condición 4
     expect(r.cuerpo).toMatchObject({ emite: true, emitidos: 2, tope: { decision: 'cabe', tope: 40, gastado: 26.28, estimado: 7.5, retenidas: [] } })
     expect(al.avisosAlBuzon).toHaveLength(0)
   })
+  it('🔴 (opción b) la llamada real usa lo ESPERADO de la lectura: con el carrusel esperado en 1,50, en tope 32 salen los dos (26,28 + 1,50 + 2,50 = 30,28)', async () => {
+    const { al, c } = await montar(32)
+    al.lecturaDeGasto = { ...al.lecturaDeGasto, reservas_de_familia: { carrusel_mesa: 1.5 } }
+    expect((await llamar(al, c.id)).cuerpo).toMatchObject({ emite: true, emitidos: 2, tope: { decision: 'cabe', estimado: 4 } })
+    expect(al.avisosAlBuzon).toHaveLength(0)
+  })
   it('tope 32: sale solo el primero · el buzón recibe UNA pregunta; repetir la llamada no abre otra (misma clave → «repetida»)', async () => {
     const { al, c } = await montar(32)
     expect((await llamar(al, c.id)).cuerpo).toMatchObject({ emitidos: 1, tope: { decision: 'corta', retenidas: ['B2'] } })

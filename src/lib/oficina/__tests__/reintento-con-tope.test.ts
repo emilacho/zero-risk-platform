@@ -139,6 +139,10 @@ describe('consultora B2B de práctica · dos partes en la MISMA pasada: la segun
     expect(r.plan.map((l) => l.accion).sort()).toEqual(['reintentar', 'tope'])
     expect(cad.emitidos).toHaveLength(1)
   })
+  it('🔴 (opción b) con lo ESPERADO de la familia en 0,90: tope US$ 2 y salen las dos; la segunda cuenta la primera, ya en camino, por lo esperado (0,90 + 0,90 ≤ 2), no por su tope (1,50)', async () => {
+    conTope(2, { reservas_de_familia: { carrusel_ig_v1: 0.9 } })
+    expect((await pasada(db())).plan.map((l) => l.accion)).toEqual(['reintentar', 'reintentar']); expect(cad.emitidos).toHaveLength(2)
+  })
   it('tope US$ 3: salen las dos', async () => {
     conTope(3)
     expect((await pasada(db())).plan.map((l) => l.accion)).toEqual(['reintentar', 'reintentar']); expect(cad.emitidos).toHaveLength(2)
