@@ -21,11 +21,13 @@ import { FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PO
 import { FUNCION_DEL_TABLERO } from './pedidos-laminas'
 import type { Cambios, Encargo, EstadoDelBrazo, FuentesCompletas, Puertos } from './puertos'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
-import { RELACIONES_PERMITIDAS, RELACION_POR_FORMATO } from '../video/parametros'
+import { DURACION_MIN_PLANO_S, RELACIONES_PERMITIDAS, RELACION_POR_FORMATO } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
 import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
+import { pedidosPorPlano, type PedidoDePlano } from './video/planos'
+import { cotizarYEnviar, encuadrarFotos, leerPlanos, unirClips, type PlanoEnviado } from './video/motor-planos'
 
 export type FamiliaDeVideo = 'video'
 export const familiaDeVideo = (pl: Pick<Plantilla, 'clase'>): FamiliaDeVideo | null => (claseDe(pl) === 'video' ? 'video' : null)
@@ -61,8 +63,13 @@ export interface VideoDelEncargo {
   terminado_en: string | null
   aviso?: string | null
   error?: string | null
+  /** 11-nov · camino B · los clips de cada plano que se unieron (en orden) */
+  planos?: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }>
 }
-interface EnvioGuardado { request_id: string; status: string; costo_estimado_usd: number; costo_lista_usd?: number; descuento_pct?: number; enviado_en: string; n: number }
+interface EnvioGuardado { request_id: string; status: string; costo_estimado_usd: number; costo_lista_usd?: number; descuento_pct?: number; enviado_en: string; n: number; /** 11-nov · camino B · un envío por plano */ planos?: PlanoEnviado[] }
+
+/** 11-nov · camino B (GO Lenovo 16:43) · se enciende por la plantilla (`limites.video.plano_por_plano: true`); apagado => camino A (una toma), como hoy */
+export const planoPorPlanoEncendido = (pl: Plantilla): boolean => ((pl.limites.video ?? {}) as { plano_por_plano?: unknown }).plano_por_plano === true
 
 type SalidaCodigoV = { res: ResultadoDePaso; gastos?: Cambios['gastos']; fallido?: string }
 
@@ -126,6 +133,14 @@ async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: Br
     }
     rutas.push({ ruta, costo_estimado_usd: c.costo_estimado_usd, costo_lista_usd: c.costo_lista_usd ?? null })
   }
+  // 11-nov · camino B encendido: también se cotiza UN plano con foto (imagen a video, 4 s) · es la ruta que usarán los planos con foto propia
+  const conFoto = ps.pedidos.find((x) => x.ruta === 'foto')?.pedido
+  if (planoPorPlanoEncendido(pl) && conFoto) {
+    const ped = { ...conFoto, segundos: DURACION_MIN_PLANO_S, clave: `${conFoto.clave.replace(/:foto$/, '')}:plano_foto`, plano: true as const }
+    const c = await P.video.cotizar({ pedido: ped, client_id: enc.client_id, encargo_id: enc.id, tope_usd: topeDeLaCotizacion(pl), workflow_id: `oficina:${enc.familia}`, workflow_execution_id: `${enc.id}:cotizar` })
+    if (!c.ok) return { ok: false, motivo: `el brazo de video no pudo cotizar (un plano con foto propia) antes de abrir la mesa: ${c.error}${c.descripcion ? ` · lo que dijo el proveedor sobre sus precios: «${c.descripcion.replace(/\s+/g, ' ').slice(0, 800)}»` : ''} (${sinGastar})` }
+    rutas.push({ ruta: 'plano_foto', costo_estimado_usd: c.costo_estimado_usd, costo_lista_usd: c.costo_lista_usd ?? null })
+  }
   return { ok: true, rutas }
 }
 
@@ -145,7 +160,14 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
   if (vuelve) return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeFotosALaMesa(a.pedido.fotos_no_halladas, a.ambiguas, b.F.fotos) } } }
   if (a.pedido.fotos_no_halladas.length) fichas.push(fichaNueva(`video-fotos-no-halladas-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', `el guion nombra fotos que no están entre las propias del cliente y no viajan al modelo: ${a.pedido.fotos_no_halladas.join(', ')}`, 'fotos propias del cliente', 'mirar el video: esos planos salen sin referencia'))
   if (a.pedido.prompt_recortado) fichas.push(fichaNueva(`video-prompt-recortado-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', 'el guion era más largo de lo que el modelo admite y se recortó', 'límite del pedido al modelo', 'mirar que el video cubra todos los planos'))
-  return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: false }, ...(fichas.length ? { fichas } : {}) } }
+  // 11-nov · camino B: con 2 o más planos y el interruptor encendido, además del pedido de una toma (lo que ven la jefatura y la hoja) va un pedido POR PLANO
+  let planos: PedidoDePlano[] | undefined
+  if (planoPorPlanoEncendido(pl) && g.planos.length >= 2) {
+    const pp = pedidosPorPlano({ guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
+    if (!pp.ok) return { res: { costo_usd: 0 }, fallido: `los pedidos por plano no son válidos: ${pp.errores.join(' · ')}` }
+    planos = pp.pedidos
+  }
+  return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: false, ...(planos ? { planos } : {}) }, ...(fichas.length ? { fichas } : {}) } }
 }
 
 /** ¿al paso del pedido le queda su vuelta a la mesa? (dato de la plantilla: `vuelve_a` del paso `pedido_de_video`; sin él, nunca vuelve) */
@@ -298,6 +320,8 @@ export async function enviarVideo(P: Puertos, enc: Encargo, pl: Plantilla, paso:
   const lim = (pl.limites.video ?? {}) as { tope_por_video_usd?: number }
   const tope = Math.max(0, Math.min(paso.tope_usd, lim.tope_por_video_usd ?? paso.tope_usd, +(pl.limites.tope_encargo_usd - e.gasto_usd).toFixed(4)))
   const n = turnoDe(e)
+  const planos = pv?.planos as PedidoDePlano[] | undefined
+  if (Array.isArray(planos) && planos.length) return enviarPlanos(P, enc, paso, e, planos, tope, n)
   const envio = await P.video.enviar({ pedido: ped, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, tope_usd: tope, workflow_id: `oficina:${enc.familia}`, workflow_execution_id: `${enc.id}:${n}` })
   if (!envio.ok) return { fallido: `el brazo de video no aceptó el pedido: ${envio.error}${envio.descripcion ? ` · lo que dijo el proveedor sobre sus precios: «${envio.descripcion.replace(/\s+/g, ' ').slice(0, 800)}»` : ''}` }
   const ahora = P.ahora().toISOString()
@@ -315,9 +339,38 @@ export async function enviarVideo(P: Puertos, enc: Encargo, pl: Plantilla, paso:
   return { esperar: { accion: 'esperar_brazo', turno: { n, paso: paso.clave, tipo: 'brazo', dispatch_key, request_id: envio.request_id }, video: { costo_estimado_usd: envio.costo_estimado_usd, costo_lista_usd: envio.costo_lista_usd ?? null, descuento_pct: envio.descuento_pct ?? 0, plazo_min: MINUTOS_PARA_ESPERAR_AL_BRAZO } } }
 }
 
+/** 11-nov · camino B · encuadra, cotiza la suma, envía cada plano y deja el turno `brazo` esperando a TODOS (en seco: todo simulado, sin red) */
+async function enviarPlanos(P: Puertos, enc: Encargo, paso: Paso, e: Estado, planos: PedidoDePlano[], tope: number, n: number): Promise<{ fallido?: string; esperar?: Record<string, unknown>; res?: ResultadoDePaso }> {
+  const ahora = P.ahora()
+  const en = await encuadrarFotos(P, enc, planos, ahora.getTime())
+  if (!en.ok) return { fallido: en.motivo }
+  const env = await cotizarYEnviar(P, enc, en.planos, tope, n)
+  if (!env.ok) return { fallido: env.motivo }
+  const iso = ahora.toISOString()
+  if (env.simulado) {
+    const v: VideoDelEncargo = { request_id: env.enviados[0].request_id, status: 'simulado', simulado: true, video_url: `${PREFIJO_DRY}video-unido.mp4`, url_proveedor: null, copia: 'simulada', costo_usd: 0, costo_estimado_usd: 0, expires_at: null, enviado_en: iso, terminado_en: iso, planos: env.enviados.map((x) => ({ n: x.n, request_id: x.request_id, costo_usd: 0, video_url: `${PREFIJO_DRY}plano-${x.n}.mp4` })) }
+    return { res: { costo_usd: 0, artefacto: v as unknown as Record<string, unknown> } }
+  }
+  const e2 = conEnvio(e, { request_id: env.enviados[0].request_id, status: 'queued', costo_estimado_usd: env.costo_estimado_usd, enviado_en: iso, n, planos: env.enviados })
+  const dispatch_key = `${enc.id}:${n}`
+  await P.almacen.guardar({
+    encargo_id: enc.id, estado_del_motor: e2, gasto_usd: e2.gasto_usd, estado: 'en_paso',
+    turno: { n, paso: paso.clave, tipo: 'brazo', agente: null, estado: 'corriendo', dispatch_key, cost_usd: 0 },
+    artefacto: { tipo: 'pedido_video', version: e2.artefactos['pedido_video'].version, contenido: e2.artefactos['pedido_video'].datos, sha256: sha(e2.artefactos['pedido_video'].datos), autor: 'sala' },
+  })
+  return { esperar: { accion: 'esperar_brazo', turno: { n, paso: paso.clave, tipo: 'brazo', dispatch_key, request_id: env.enviados[0].request_id }, video: { costo_estimado_usd: env.costo_estimado_usd, planos: env.enviados.length, plazo_min: MINUTOS_PARA_ESPERAR_AL_BRAZO } } }
+}
+
+/** lo que el video gasta en el libro de la oficina · camino B: un gasto por clip (cada uno tiene su fila en el libro central); camino A: uno solo. Puro */
+export function gastosDelVideo(res: Extract<ResultadoDelBrazo, { ok: true }>, request_id: string): NonNullable<Cambios['gastos']> {
+  if (res.planos) return res.planos.filter((p) => p.costo_usd > 0).map((p) => ({ concepto: 'video' as const, ref_tabla: 'agent_invocations', ref_id: sessionIdDeVideo(p.request_id), cost_usd: p.costo_usd, base: 'usage' as const }))
+  const costo = Math.max(0, Number(res.costo_usd) || 0)
+  return costo > 0 ? [{ concepto: 'video', ref_tabla: 'agent_invocations', ref_id: request_id ? sessionIdDeVideo(request_id) : null, cost_usd: costo, base: 'usage' }] : []
+}
+
 /** lo que el brazo entregó (o no): lo trae el vigía tras sondear, o una prueba */
 export type ResultadoDelBrazo =
-  | { ok: true; status: 'completed'; video_url: string; url_proveedor: string | null; costo_usd: number; expires_at: string | null; copia: 'bucket' | 'solo_proveedor'; aviso: string | null }
+  | { ok: true; status: 'completed'; video_url: string; url_proveedor: string | null; costo_usd: number; expires_at: string | null; copia: 'bucket' | 'solo_proveedor'; aviso: string | null; /** camino B · los clips unidos (cada uno es un gasto en el libro) */ planos?: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }> }
   | { ok: false; status: string; error: string }
 
 /** el brazo terminó: se registra el paso `video` (artefacto + gasto en el libro de la oficina) y el encargo sigue; si falló, cierra FALLIDO visible. IDEMPOTENTE: una entrega repetida solo avanza */
@@ -342,9 +395,9 @@ export async function recibirVideo(P: Puertos, encargoId: string, n: number, res
     return fallar(P, enc, `el brazo de video no entregó (${res.status}): ${res.error}`)
   }
   const costo = Math.max(0, Number(res.costo_usd) || 0)
-  const v: VideoDelEncargo = { request_id, status: 'completed', simulado: false, video_url: res.video_url, url_proveedor: res.url_proveedor, copia: res.copia, costo_usd: costo, costo_estimado_usd: envio?.costo_estimado_usd ?? 0, expires_at: res.expires_at, enviado_en: envio?.enviado_en ?? ahora, terminado_en: ahora, aviso: res.aviso }
+  const v: VideoDelEncargo = { request_id, status: 'completed', simulado: false, video_url: res.video_url, url_proveedor: res.url_proveedor, copia: res.copia, costo_usd: costo, costo_estimado_usd: envio?.costo_estimado_usd ?? 0, expires_at: res.expires_at, enviado_en: envio?.enviado_en ?? ahora, terminado_en: ahora, aviso: res.aviso, ...(res.planos ? { planos: res.planos } : {}) }
   const nuevo = registrarPaso(e, pl, sig.indice, { costo_usd: costo, artefacto: v as unknown as Record<string, unknown>, ...(sig.vuelta ? { vuelta: sig.vuelta } : {}) })
-  const gastos: NonNullable<Cambios['gastos']> = costo > 0 ? [{ concepto: 'video', ref_tabla: 'agent_invocations', ref_id: request_id ? sessionIdDeVideo(request_id) : null, cost_usd: costo, base: 'usage' }] : []
+  const gastos = gastosDelVideo(res, request_id)
   await P.almacen.guardar({
     encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', fichas: nuevo.fichas,
     turno: { ...turnoBase, estado: 'hecho', cost_usd: costo },
@@ -375,6 +428,7 @@ export async function sondearVideos(P: Puertos, turnos: Array<{ encargo_id: stri
     let res: ResultadoDelBrazo | null
     if (!envio?.request_id) res = { ok: false, status: 'sin_request_id', error: 'el turno del brazo no tiene pedido registrado' }
     else if (!P.video) res = { ok: false, status: 'sin_puerto', error: 'el puerto del brazo de video no está configurado' }
+    else if (envio.planos?.length) res = await sondearPlanos(P, enc, envio.planos, t.inicio, ahora)
     else res = leerEstadoDelBrazo(await P.video.estado(envio.request_id), t.inicio, ahora)
     if (!res) continue
     const out = await recibirVideo(P, enc.id, t.n, res)
@@ -383,6 +437,22 @@ export async function sondearVideos(P: Puertos, turnos: Array<{ encargo_id: stri
     cierres.push({ encargo_id: enc.id, resultado_para_la_sala: txt(out.cuerpo.resultado_para_la_sala) || 'fallido', sala_ref: enc.sala_ref, client_id: enc.client_id, brief_id: enc.brief_id })
   }
   return { reanudar, fallidos, cierres }
+}
+
+/** 11-nov · camino B · lee el estado de cada plano; cuando volvieron TODOS, los une (Railway) y devuelve el video unido; null = todavía no */
+export async function sondearPlanos(P: Puertos, enc: Encargo, enviados: PlanoEnviado[], inicio: string, ahora: Date): Promise<ResultadoDelBrazo | null> {
+  const estados: EstadoDelBrazo[] = []
+  for (const p of enviados) estados.push(await P.video!.estado(p.request_id))
+  const vencido = new Date(inicio).getTime() < ahora.getTime() - MINUTOS_PARA_ESPERAR_AL_BRAZO * 60_000
+  const l = leerPlanos(enviados, estados, vencido, MINUTOS_PARA_ESPERAR_AL_BRAZO)
+  if (!l.listo) return null
+  if (!l.ok) return { ok: false, status: l.status, error: l.error }
+  const ped = datos(enc.estado_del_motor, 'pedido_video')?.pedido as PedidoDeVideoDeLaOficina | undefined
+  const u = await unirClips(P, enc, l.clips, ped?.relacion ?? '9:16', ped?.resolucion ?? '720p', ahora.getTime())
+  if (!u.ok) return { ok: false, status: 'no_se_unio', error: u.error }
+  const costo = +l.clips.reduce((s, c) => s + c.costo_usd, 0).toFixed(4)
+  const vence = l.clips.map((c) => c.expires_at).filter((x): x is string => !!x).sort()[0] ?? null
+  return { ok: true, status: 'completed', video_url: u.video_url, url_proveedor: null, costo_usd: costo, expires_at: vence, copia: 'bucket', aviso: null, planos: l.clips.map((c) => ({ n: c.n, request_id: c.request_id, costo_usd: c.costo_usd, video_url: c.video_url })) }
 }
 
 // ───────────────────────── la jefatura y el cierre

@@ -126,8 +126,8 @@ function brazo(cotizar: Cotizador | null, registro: { cotizados: Array<Record<st
 }
 
 describe.each(CLIENTES)('%s · la sala de video cotiza ANTES de la mesa', (_n, C) => {
-  async function abrir(cotizar: Cotizador | null, dry_run = false) {
-    const M = crearMemoria({ parte: parteDe(C), plantilla: VIDEO_MESA, fuentes: { fotos: C.fotos } })
+  async function abrir(cotizar: Cotizador | null, dry_run = false, plantilla: typeof VIDEO_MESA = VIDEO_MESA) {
+    const M = crearMemoria({ parte: parteDe(C), plantilla, fuentes: { fotos: C.fotos } })
     const MS = crearMesaEnMemoria()
     M.P.mesa = MS
     const reg = { cotizados: [] as Array<Record<string, unknown>>, enviados: 0 }
@@ -170,6 +170,16 @@ describe.each(CLIENTES)('%s · la sala de video cotiza ANTES de la mesa', (_n, C
     const cot = (enc.estado_del_motor.artefactos['encargo'].datos as { cotizacion: Array<{ ruta: string; costo_estimado_usd: number }> }).cotizacion
     expect(cot.map((x) => x.ruta)).toEqual(rutasEsperadas)
     expect(reg.enviados).toBe(0) // cotizar nunca envía
+  })
+  it('🔴 camino B encendido: si el cliente tiene fotos, también se cotiza UN plano con foto (imagen a video, 4 s); sin fotos, no', async () => {
+    const B = { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, video: { ...(VIDEO_MESA.limites.video as object), plano_por_plano: true } } }
+    const { enc, reg } = await abrir(async () => ({ ok: true, costo_estimado_usd: 1.06 }), false, B)
+    const cot = (enc.estado_del_motor.artefactos['encargo'].datos as { cotizacion: Array<{ ruta: string }> }).cotizacion
+    expect(cot.map((x) => x.ruta)).toEqual(C.fotos.length ? ['texto', 'foto', 'plano_foto'] : ['texto'])
+    const plano = reg.cotizados.find((x) => (x.pedido as { plano?: boolean }).plano === true)?.pedido as { segundos: number; fotos: string[] } | undefined
+    if (C.fotos.length) expect(plano && [plano.segundos, plano.fotos.length]).toEqual([4, 1])
+    else expect(plano).toBeUndefined()
+    expect(reg.enviados).toBe(0)
   })
   it('🔴 en seco no se cotiza (no sale a la red, como el envío)', async () => {
     const { a, reg } = await abrir(async () => ({ ok: false, error: 'no debería llamarse' }), true)

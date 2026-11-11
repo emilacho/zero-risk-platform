@@ -23,7 +23,10 @@ RUN apt-get update \
         python3-venv \
         ca-certificates \
         curl \
-    && rm -rf /var/lib/apt/lists/*
+        ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && ffmpeg -hide_banner -version | head -1
+# ffmpeg (paquete oficial de Debian · 11-nov OK Lenovo 16:58): el unidor de video plano por plano (`src/lib/video-unir.ts`)
 
 # Astral `uv` for fast Python tool installs (used by meta-ads-mcp).
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
