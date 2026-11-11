@@ -20,39 +20,73 @@ export function cabeceras(llave: string, extra: Record<string, string> = {}): Re
   return { Authorization: `Key ${llave}`, 'Content-Type': 'application/json', ...extra }
 }
 
-/** tarifas leídas de la descripción de la estimación: US$ por 1.000 tokens de video, por resolución, con y sin video de entrada */
-export interface Tarifas { por_mil_tokens: Record<string, number>; con_video_entrada: Record<string, number>; texto: string }
+/**
+ * tarifas leídas de la descripción de la estimación, por resolución, con y sin video de entrada. `unidad` dice cómo se cobran:
+ *  · `mil_tokens` (lo que publicaba el proveedor el 31-oct): US$ por 1.000 tokens de video (tokens = alto × ancho × segundos × 24 / 1024);
+ *  · `segundo` (lo que publica desde el 11-nov, leído con la llave real): US$ por segundo de video generado; la duración del video de entrada NO se cobra.
+ */
+export interface Tarifas { unidad: 'mil_tokens' | 'segundo'; por_mil_tokens: Record<string, number>; con_video_entrada: Record<string, number>; texto: string }
 
-const num = (s: string) => Number(s.replace(/[$,]/g, ''))
+const RESOLUCION = /\b(480p|720p|1080p|4k)\b/gi
+const PRECIO = /\$\s?(\d[\d,]*(?:\.\d+)?)/g
+/** lo que puede separar resoluciones de un mismo grupo («480p/720p/1080p», «480p or 720p») */
+const ENTRE_RESOLUCIONES = /^\s*(?:\/|,|or|and|y|o)?\s*$/i
+/** un precio va DESPUÉS de su resolución («480p: $0.1177», «4K $0.008») si entre ellos solo hay signos */
+const RESOLUCION_Y_PRECIO = /^[\s:=–—-]*$/
+/** o va ANTES («$0.0214 at 480p») si entre ellos solo hay un «at»/«@» */
+const PRECIO_Y_RESOLUCION = /^\s*(?:at|@|en|a)?\s*$/i
+
+interface Pieza { tipo: 'res'; valores: string[]; desde: number; hasta: number }
+interface Precio { tipo: 'usd'; valor: number; desde: number; hasta: number }
+
+/** los pares resolución → precio de un trozo de texto, en el orden en que aparecen (sin frases fijas: solo resoluciones, precios en US$ y lo que los separa) */
+function paresDe(t: string): Array<{ res: string; usd: number }> {
+  const res: Pieza[] = []
+  for (const m of t.matchAll(RESOLUCION)) {
+    const v = m[1].toLowerCase(), desde = m.index ?? 0, hasta = desde + m[0].length
+    const ult = res[res.length - 1]
+    if (ult && ENTRE_RESOLUCIONES.test(t.slice(ult.hasta, desde))) { ult.valores.push(v); ult.hasta = hasta } else res.push({ tipo: 'res', valores: [v], desde, hasta })
+  }
+  const precios: Precio[] = [...t.matchAll(PRECIO)].map((m) => ({ tipo: 'usd', valor: Number(m[1].replace(/,/g, '')), desde: m.index ?? 0, hasta: (m.index ?? 0) + m[0].length }))
+  const pares: Array<{ res: string; usd: number; en: number }> = []
+  for (const p of precios) {
+    if (!(p.valor > 0) || !Number.isFinite(p.valor)) continue
+    const antes = [...res].reverse().find((r) => r.hasta <= p.desde)
+    const despues = res.find((r) => r.desde >= p.hasta)
+    const grupo = antes && RESOLUCION_Y_PRECIO.test(t.slice(antes.hasta, p.desde)) ? antes : despues && PRECIO_Y_RESOLUCION.test(t.slice(p.hasta, despues.desde)) ? despues : null
+    if (grupo) for (const v of grupo.valores) pares.push({ res: v, usd: p.valor, en: p.desde })
+  }
+  return pares.sort((a, b) => a.en - b.en).map(({ res: r, usd }) => ({ res: r, usd }))
+}
 
 /**
- * Lee las tarifas del texto que devuelve `/estimate` (dos formatos vistos el 31-oct: el de Seedance 2.5 «Each 1,000 video tokens costs $A at 480p or 720p and $B at 1080p»
- * y el de Seedance 2.0 «Per 1,000 video tokens: without video input — 480p/720p/1080p $A, 4K $B; with video input — … $C, 4K $D»). Devuelve null si no entiende el texto.
+ * Lee las tarifas del texto libre que devuelve `/estimate`. NO busca frases fijas (11-nov · el proveedor cambió el texto y el brazo dejó de cotizar; regla de Emilio: nada de listas):
+ *  · parte el texto en oraciones y en cada una toma los pares resolución → precio en US$;
+ *  · la unidad sale de la oración: si nombra «tokens», es por 1.000 tokens; si no, vale la del texto entero (por segundo si el texto habla de segundos);
+ *    si hay tarifas por tokens se usan esas (son la fórmula exacta; las «por segundo» de ese mismo texto eran aproximadas para un solo cuadro);
+ *  · el PRIMER precio de cada resolución es sin video de entrada; un SEGUNDO precio de la misma resolución es con video de entrada.
+ * Devuelve null si no halla ningún precio con su resolución (fallo cerrado: el brazo no envía nada a ciegas).
  */
 export function leerTarifas(descripcion: string): Tarifas | null {
-  const t = descripcion.replace(/\s+/g, ' ')
-  const m25 = t.match(/Each 1,000 video tokens costs \$([\d.]+) at 480p or 720p and \$([\d.]+) at 1080p/)
-  if (m25) {
-    const base = { '480p': num(m25[1]), '720p': num(m25[1]), '1080p': num(m25[2]) }
-    const mv = t.match(/multiplied by 0\.6: \$([\d.]+) per 1,000 tokens at 480p or 720p and \$([\d.]+) at 1080p/)
-    const conVideo = mv ? { '480p': num(mv[1]), '720p': num(mv[1]), '1080p': num(mv[2]) } : Object.fromEntries(Object.entries(base).map(([k, v]) => [k, Math.round(v * 0.6 * 1e6) / 1e6]))
-    return { por_mil_tokens: base, con_video_entrada: conVideo, texto: descripcion }
+  const oraciones = String(descripcion ?? '').split(/(?<=\.)\s+|\n+/)
+  const dePorSegundo = /\bsecond/i.test(descripcion)
+  const porTokens: Array<{ res: string; usd: number }> = [], porSegundo: Array<{ res: string; usd: number }> = []
+  for (const o of oraciones) {
+    const pares = paresDe(o)
+    if (!pares.length) continue
+    if (/\btokens?\b/i.test(o)) porTokens.push(...pares)
+    else if (dePorSegundo) porSegundo.push(...pares)
   }
-  const m20 = t.match(/without video input — 480p\/720p\/1080p \$([\d.]+), 4K \$([\d.]+); with video input — 480p\/720p\/1080p \$([\d.]+), 4K \$([\d.]+)/)
-  if (m20) {
-    return {
-      por_mil_tokens: { '480p': num(m20[1]), '720p': num(m20[1]), '1080p': num(m20[1]), '4k': num(m20[2]) },
-      con_video_entrada: { '480p': num(m20[3]), '720p': num(m20[3]), '1080p': num(m20[3]), '4k': num(m20[4]) },
-      texto: descripcion,
-    }
+  const unidad: Tarifas['unidad'] | null = porTokens.length ? 'mil_tokens' : porSegundo.length ? 'segundo' : null
+  if (!unidad) return null
+  const base: Record<string, number> = {}, conVideo: Record<string, number> = {}
+  for (const p of unidad === 'mil_tokens' ? porTokens : porSegundo) {
+    if (base[p.res] === undefined) base[p.res] = p.usd
+    else if (conVideo[p.res] === undefined) conVideo[p.res] = p.usd
   }
-  // tercer formato visto el 31-oct (2.0 text-to-video, sin entrada de video posible): «Per 1,000 video tokens: 480p/720p/1080p $0.014, 4K $0.008.»
-  const m20t = t.match(/Per 1,000 video tokens: 480p\/720p\/1080p \$([\d.]+), 4K \$([\d.]+)\./)
-  if (m20t) {
-    const base = num(m20t[1]), k4 = num(m20t[2])
-    return { por_mil_tokens: { '480p': base, '720p': base, '1080p': base, '4k': k4 }, con_video_entrada: { '480p': base * 0.6, '720p': base * 0.6, '1080p': base * 0.6, '4k': k4 * 0.6 }, texto: descripcion }
-  }
-  return null
+  // sin precio con video de entrada: por tokens, la regla publicada (×0,6); por segundo, la misma tarifa (la oficina nunca manda video de entrada)
+  for (const [k, v] of Object.entries(base)) if (conVideo[k] === undefined) conVideo[k] = unidad === 'mil_tokens' ? Math.round(v * 0.6 * 1e6) / 1e6 : v
+  return { unidad, por_mil_tokens: base, con_video_entrada: conVideo, texto: descripcion }
 }
 
 /** alto × ancho de salida por resolución y relación de cuadro (el lado corto es la resolución; el largo sale de la relación, redondeado a par) */
@@ -75,6 +109,8 @@ export function costoEstimadoUsd(t: Tarifas, p: { resolucion: string; relacion: 
   const conVideo = (p.segundosDeEntrada ?? 0) > 0
   const tarifa = (conVideo ? t.con_video_entrada : t.por_mil_tokens)[p.resolucion.toLowerCase()]
   if (!d || typeof tarifa !== 'number') return null
+  // 11-nov · por segundo: tarifa × segundos generados (el video de entrada no se cobra, según el texto del proveedor)
+  if (t.unidad === 'segundo') return Math.round(tarifa * p.segundos * 10000) / 10000
   const tokens = tokensDeVideo(d.ancho, d.alto, p.segundos + (p.segundosDeEntrada ?? 0))
   return Math.round((tokens / 1000) * tarifa * 10000) / 10000
 }

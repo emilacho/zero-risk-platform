@@ -23,7 +23,7 @@ import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 import { RELACION_POR_FORMATO } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
-import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, type PedidoDeVideoDeLaOficina } from './video/pedido'
+import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 
 export type FamiliaDeVideo = 'video'
 export const familiaDeVideo = (pl: Pick<Plantilla, 'familia'>): FamiliaDeVideo | null => (pl.familia === 'video_mesa' ? 'video' : null)
@@ -91,7 +91,36 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const formato_video = formatoDeVideo(brief)
   const proporcion = RELACION_POR_FORMATO[formato_video] ?? String(pl.limites.formato_por_omision ?? '9:16')
   const plataforma = `${brief.red.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() || 'red'}-${formato_video}`
-  return { res: { costo_usd: 0, artefacto: { brief, proporcion, F: fu, familia: 'video', plataforma, elementos: [], formato_video } } }
+  // 11-nov · GO Lenovo 02:52Z · COTIZAR PRIMERO (real): antes de llamar a la mesa, el brazo estima GRATIS cada ruta que el guion puede usar. Si no puede cotizar, el encargo
+  //   falla AQUÍ, en el primer paso y a US$ 0 (queda recuperable: `reapertura.ts`), en vez de enterarse al final con la mesa ya pagada. En seco no sale a la red (como el envío).
+  const cotizacion = enc.dry_run ? null : await cotizarPrimero(P, enc, pl, brief, fu.fotos)
+  if (cotizacion && !cotizacion.ok) return { res: { costo_usd: 0 }, fallido: cotizacion.motivo }
+  return { res: { costo_usd: 0, artefacto: { brief, proporcion, F: fu, familia: 'video', plataforma, elementos: [], formato_video, ...(cotizacion ? { cotizacion: cotizacion.rutas } : {}) } } }
+}
+
+/** cuánto se le deja gastar al video al cotizar: el tope por video de la plantilla, sin pasar el del encargo (el brazo además lo recorta al aprobado) */
+const topeDeLaCotizacion = (pl: Plantilla): number => {
+  const lim = (pl.limites.video ?? {}) as { tope_por_video_usd?: number }
+  return Math.max(0, Math.min(lim.tope_por_video_usd ?? pl.limites.tope_encargo_usd, pl.limites.tope_encargo_usd))
+}
+
+/** la cotización gratis de cada ruta posible · el texto que devolvió el proveedor, si lo hubo, queda en el motivo del fallo (para poder verlo) */
+async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: BriefLeido, fotos: FuentesCompletas['fotos']): Promise<{ ok: true; rutas: Array<{ ruta: string; costo_estimado_usd: number; costo_lista_usd: number | null }> } | { ok: false; motivo: string }> {
+  const sinGastar = 'no se gastó nada; el encargo queda recuperable'
+  if (!P.video?.cotizar) return { ok: false, motivo: `no se puede cotizar el video antes de abrir la mesa: el brazo de video no está conectado (${sinGastar})` }
+  const lim = (pl.limites.video ?? {}) as { resolucion?: string }
+  const ps = pedidosParaCotizar({ brief, fotos, clave: `${enc.id}:${enc.brief_id}`, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
+  if (!ps.ok) return { ok: false, motivo: `no se pudo armar el pedido de cotización: ${ps.errores.join(' · ')} (${sinGastar})` }
+  const rutas: Array<{ ruta: string; costo_estimado_usd: number; costo_lista_usd: number | null }> = []
+  for (const { ruta, pedido: ped } of ps.pedidos) {
+    const c = await P.video.cotizar({ pedido: ped, client_id: enc.client_id, encargo_id: enc.id, tope_usd: topeDeLaCotizacion(pl), workflow_id: `oficina:${enc.familia}`, workflow_execution_id: `${enc.id}:cotizar` })
+    if (!c.ok) {
+      const desc = c.descripcion ? ` · lo que dijo el proveedor sobre sus precios: «${c.descripcion.replace(/\s+/g, ' ').slice(0, 800)}»` : ''
+      return { ok: false, motivo: `el brazo de video no pudo cotizar (${ruta === 'foto' ? 'con foto propia' : 'solo texto'}) antes de abrir la mesa: ${c.error}${desc} (${sinGastar})` }
+    }
+    rutas.push({ ruta, costo_estimado_usd: c.costo_estimado_usd, costo_lista_usd: c.costo_lista_usd ?? null })
+  }
+  return { ok: true, rutas }
 }
 
 /** el guion de la mesa → el pedido al brazo (sin red): la clave idempotente es `<encargo>:<brief>:v<versión del guion>` */
@@ -239,7 +268,7 @@ export async function enviarVideo(P: Puertos, enc: Encargo, pl: Plantilla, paso:
   const tope = Math.max(0, Math.min(paso.tope_usd, lim.tope_por_video_usd ?? paso.tope_usd, +(pl.limites.tope_encargo_usd - e.gasto_usd).toFixed(4)))
   const n = turnoDe(e)
   const envio = await P.video.enviar({ pedido: ped, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, tope_usd: tope, workflow_id: `oficina:${enc.familia}`, workflow_execution_id: `${enc.id}:${n}` })
-  if (!envio.ok) return { fallido: `el brazo de video no aceptó el pedido: ${envio.error}` }
+  if (!envio.ok) return { fallido: `el brazo de video no aceptó el pedido: ${envio.error}${envio.descripcion ? ` · lo que dijo el proveedor sobre sus precios: «${envio.descripcion.replace(/\s+/g, ' ').slice(0, 800)}»` : ''}` }
   const ahora = P.ahora().toISOString()
   if (envio.simulado) {
     const v: VideoDelEncargo = { request_id: envio.request_id, status: 'simulado', simulado: true, video_url: `${PREFIJO_DRY}video-${encodeURIComponent(ped.clave)}.mp4`, url_proveedor: null, copia: 'simulada', costo_usd: 0, costo_estimado_usd: envio.costo_estimado_usd, expires_at: null, enviado_en: ahora, terminado_en: ahora }

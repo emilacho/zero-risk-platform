@@ -153,7 +153,7 @@ export interface PuertoDeLaCadena {
 /** lo que el brazo de video contesta al enviar: en dry_run el puerto NO sale a la red y devuelve `simulado` */
 export type EnvioDeVideo =
   | { ok: true; request_id: string; status: string; costo_estimado_usd: number; costo_lista_usd?: number; descuento_pct?: number; simulado: boolean }
-  | { ok: false; error: string; http?: number }
+  | { ok: false; error: string; http?: number; descripcion?: string }
 /** lo que el brazo contesta al preguntar por un pedido (`GET /api/video/generate?request_id=`) */
 export type EstadoDelBrazo =
   | { ok: true; simulado: true }
@@ -162,8 +162,14 @@ export type EstadoDelBrazo =
   | { ok: true; simulado?: false; terminal: true; status: string; error: string | null }
   | { ok: false; error: string }
 /** EL BRAZO DE VIDEO (parte 2 · 31-oct): enviar un pedido y leer su estado. Opcional: sin él la familia `video_mesa` falla visible al llegar al paso `video` */
+/** 11-nov · la cotización GRATIS del brazo (estima y compara con el tope; no envía nada al proveedor). Si falla, trae la descripción de precios que devolvió el proveedor */
+export type CotizacionDeVideo =
+  | { ok: true; costo_estimado_usd: number; costo_lista_usd?: number; ruta?: string }
+  | { ok: false; error: string; descripcion?: string; http?: number }
 export interface PuertoDeVideo {
   enviar(p: { pedido: import('./video/pedido').PedidoDeVideoDeLaOficina; client_id: string; encargo_id: string; dry_run: boolean; tope_usd: number; workflow_id: string; workflow_execution_id: string }): Promise<EnvioDeVideo>
+  /** 11-nov · GO Lenovo 02:52Z · «cotizar primero»: la sala de video lo llama al ABRIR (antes de la mesa). Sin este método, un encargo real de video no abre (no se puede cotizar) */
+  cotizar?(p: { pedido: import('./video/pedido').PedidoDeVideoDeLaOficina; client_id: string; encargo_id: string; tope_usd: number; workflow_id: string; workflow_execution_id: string }): Promise<CotizacionDeVideo>
   estado(request_id: string): Promise<EstadoDelBrazo>
 }
 

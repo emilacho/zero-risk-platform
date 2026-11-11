@@ -138,9 +138,16 @@ export function reglaDelGanchoPara(agente: string): string {
   return `No propongas un gancho: el gancho del video es de ${VOZ_DEL_GANCHO} (una sola voz) y lo integra ${QUIEN_INTEGRA_EL_GANCHO}. Aporta solo lo que tu especialidad suma al resto del video.`
 }
 
+/**
+ * 11-nov · GO Lenovo 02:52Z (punto 3) · el guion guardado del reel de la W46 empezaba con una frase de trabajo del agente («Voy a leer los aportes completos del tablero… Tengo todo lo que necesito…»).
+ * Se corrige en la INSTRUCCIÓN (no con un filtro por código: regla de Emilio). La jefatura lo verá igual en su revisión.
+ */
+export const FRASE_SIN_NOTAS_DE_TRABAJO = 'Tu respuesta ES el guion y nada más: empieza directamente en «## Plano 1». No escribas antes ni después lo que vas a hacer, lo que leíste o que ya tienes lo necesario: todo lo que escribas viaja con el guion.'
+
 /** T8 · 31-oct · el GUION del video corto (la mesa lo escribe; el brazo lo filma tal cual) */
 const CONVENCION_DEL_GUION = [
   'Escribe el GUION COMPLETO del video con esta convención ligera (no es un formulario: es para que el brazo de video lo filme tal cual):',
+  FRASE_SIN_NOTAS_DE_TRABAJO,
   '```',
   '## Plano 1 · 0–3 s',
   'Se ve: … (qué muestra la cámara: producto, lugar, acción; sin rostros reconocibles de personas reales)',
