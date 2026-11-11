@@ -26,7 +26,7 @@ export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorad
   if (typeof b.brief_id !== 'string' || !RE_BRIEF.test(b.brief_id)) errores.push('`brief_id` inválido')
   if (b.tope_usd !== undefined && !(typeof b.tope_usd === 'number' && b.tope_usd > 0 && b.tope_usd <= 10)) errores.push('`tope_usd` debe ser un número mayor que 0 y no más de 10')
   if (b.familia !== undefined && !(typeof b.familia === 'string' && RE_FAMILIA.test(b.familia))) errores.push('`familia` inválida')
-  if (b.reabrir_causa_corregida !== undefined && !(typeof b.reabrir_causa_corregida === 'string' && b.reabrir_causa_corregida.trim().length >= 10 && b.reabrir_causa_corregida.trim().length <= 300)) errores.push('`reabrir_causa_corregida` debe ser una frase de 10 a 300 caracteres')
+  if (b.reabrir_causa_corregida !== undefined && !(typeof b.reabrir_causa_corregida === 'string' && b.reabrir_causa_corregida.trim().length >= 1 && b.reabrir_causa_corregida.trim().length <= 300)) errores.push('`reabrir_causa_corregida` debe tener texto (hasta 300 caracteres)')
   if (b.cambios_del_dueno !== undefined) errores.push(...erroresDeCambios(b.cambios_del_dueno))
   if (b.fila_id !== undefined && !(typeof b.fila_id === 'string' && RE_BRIEF.test(b.fila_id))) errores.push('`fila_id` inválido')
   if (b.fecha !== undefined && !(typeof b.fecha === 'string' && RE_FECHA.test(b.fecha) && esFechaReal(b.fecha))) errores.push('`fecha` debe ser una fecha real aaaa-mm-dd')

@@ -15,8 +15,8 @@ export const esFallidoRecuperable = (e: RastroDeEncargo): boolean => e.estado ==
 /** ¿el encargo `fallido` cuenta como «ya llegó» para que el reintento NO vuelva a pedir el brief? Solo si no se puede reabrir (gastó, o ya se agotaron las versiones). */
 export const bloqueaElReintento = (e: RastroDeEncargo): boolean => !(esFallidoRecuperable(e) && e.version_encargo < MAX_VERSIONES_POR_BRIEF)
 
-/** la causa corregida que declara quien reabre: una frase de verdad (10–300 caracteres), no un «sí» */
-export const causaValida = (c: unknown): c is string => typeof c === 'string' && c.trim().length >= 10 && c.trim().length <= 300
+/** la causa corregida que declara quien reabre: que haya texto (hasta 300 caracteres) · GO Lenovo 11-nov: un número fijo de letras no deja escribir «más luz» */
+export const causaValida = (c: unknown): c is string => typeof c === 'string' && c.trim().length >= 1 && c.trim().length <= 300
 
 /**
  * lo que hace `crearEncargo` cuando ya hay encargos del brief: `ultimo` es el de mayor versión.
