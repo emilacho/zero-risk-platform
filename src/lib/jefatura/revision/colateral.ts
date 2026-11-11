@@ -13,6 +13,8 @@ export const CLAVE_DE_REVISION_COLATERAL = 'revision_colateral'
 export const ESQUEMA_DE_VEREDICTOS = 'veredictos_colateral.v1'
 /** los documentos de destino que este tipo juzga · el manual (cimiento) NO está: votar o juzgar el cimiento sería circular */
 export const DESTINOS_DEL_COLATERAL = ['plan', 'estrategia', 'brief', 'gran_idea', 'calendario', 'pieza'] as const
+/** TODOS los documentos de clase cimiento (manual + las filas `cimiento` de `jefatura_grading_policies`): ninguno se juzga aquí · una prueba lo ata a las migraciones */
+export const DOCUMENTOS_DE_CIMIENTO = ['manual', 'brand_book', 'icp', 'competitive'] as const
 export const MAXIMO_DE_RETOQUES = 40
 
 export interface EdicionDelDueno { documento: string; seccion: string; antes: string; despues: string }
@@ -42,7 +44,7 @@ export function erroresDeLaEntradaColateral(p: Record<string, unknown>): string[
     if (!esObjeto(r) || !texto(r.id) || typeof r.seccion !== 'string' || !texto(r.antes) || !texto(r.despues) || typeof r.porque !== 'string' || typeof r.documento !== 'string') { e.push(`retoque ${i}: debe ser { id, documento, seccion, antes, despues, porque }`); return }
     if (vistos.has(r.id)) e.push(`retoque ${i}: el id «${r.id}» está repetido`)
     vistos.add(r.id)
-    if (r.documento === 'manual') e.push(`retoque «${r.id}»: el manual es cimiento: un retoque sobre él no lo juzga un jefe (va a una persona)`)
+    if ((DOCUMENTOS_DE_CIMIENTO as readonly string[]).includes(r.documento)) e.push(`retoque «${r.id}»: «${r.documento}» es cimiento: un retoque sobre él no lo juzga un jefe (va a una persona)`)
     else if (!(DESTINOS_DEL_COLATERAL as readonly string[]).includes(r.documento)) e.push(`retoque «${r.id}»: documento «${r.documento}» no es un destino de la revisión colateral`)
     if (r.antes === r.despues) e.push(`retoque «${r.id}»: el antes y el después son iguales`)
   })

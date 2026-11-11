@@ -4,12 +4,12 @@
  * Dos clientes de rubros distintos, con extractos REALES: Náufrago (restaurante · brief → gran idea) y Seguridad Industrial (B2B · plan → estrategia).
  */
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { almacenEnMemoria, correr, FILAS_DE_POLITICA, puertosDePrueba, sobre } from './_helpers/jefatura-revision'
 import { abrirRevision } from '../src/lib/jefatura/revision/orquestador'
 import { politicaDeFila, plantillaDePolitica } from '../src/lib/jefatura/revision/politicas'
-import { erroresDeLaEntradaColateral, textoDeLosRetoques, verificarVeredictos, type EdicionDelDueno, type RetoqueParaJuzgar } from '../src/lib/jefatura/revision/colateral'
+import { DESTINOS_DEL_COLATERAL, DOCUMENTOS_DE_CIMIENTO, erroresDeLaEntradaColateral, textoDeLosRetoques, verificarVeredictos, type EdicionDelDueno, type RetoqueParaJuzgar } from '../src/lib/jefatura/revision/colateral'
 import A from '../src/lib/colaterales/__tests__/__fixtures__/naufrago-2026-11-10-extractos.json'
 import B from '../src/lib/colaterales/__tests__/__fixtures__/b2b-industrial-2026-11-10.json'
 
@@ -61,7 +61,23 @@ describe('🔴 la entrada (línea 1 de CC7: el cimiento no se juzga)', () => {
     const { P } = mundo()
     const r = await abrirRevision(P, sobreDe(ED_A, [{ ...RET_A[0], documento: 'manual' }]))
     expect(r.status).toBe(400)
-    expect(JSON.stringify(r.cuerpo)).toMatch(/manual es cimiento/)
+    expect(JSON.stringify(r.cuerpo)).toMatch(/«manual» es cimiento/)
+  })
+  // CC6 · 🟡 de #1024: TODO cimiento (no solo el manual) queda fuera · la lista sale de las migraciones, no de memoria
+  const DIR = join(process.cwd(), 'supabase/migrations')
+  const CIMIENTOS_EN_LA_BASE = [...new Set(readdirSync(DIR).filter((f) => f.endsWith('.sql')).flatMap((f) => [...readFileSync(join(DIR, f), 'utf8').matchAll(new RegExp("[(][ ]*'([a-z_]+)',[ ]*'cimiento'", 'g'))].map((m) => m[1])))]
+  it('🔴 toda fila `cimiento` de las migraciones (y el manual) está en la lista de cimientos, y NINGUNA es destino de la revisión', () => {
+    expect(CIMIENTOS_EN_LA_BASE).toEqual(expect.arrayContaining(['brand_book', 'icp', 'competitive']))
+    for (const d of [...CIMIENTOS_EN_LA_BASE, 'manual']) {
+      expect(DOCUMENTOS_DE_CIMIENTO as readonly string[]).toContain(d)
+      expect(DESTINOS_DEL_COLATERAL as readonly string[]).not.toContain(d)
+    }
+  })
+  it.each([...DOCUMENTOS_DE_CIMIENTO])('🔴 un retoque sobre el cimiento «%s» → 400', async (d) => {
+    const { P } = mundo()
+    const r = await abrirRevision(P, sobreDe(ED_A, [{ ...RET_A[0], documento: d }]))
+    expect(r.status).toBe(400)
+    expect(JSON.stringify(r.cuerpo)).toContain(`«${d}» es cimiento`)
   })
   it.each([
     ['sin edición del dueño', { retoques: RET_A }],
