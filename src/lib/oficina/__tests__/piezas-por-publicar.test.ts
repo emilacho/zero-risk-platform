@@ -155,9 +155,9 @@ describe('línea 2 de CC6 · la campaña sale del PARTE', () => {
     const t = { ...dosCampanas, oficina_encargos: [enc({ id: 'pY', hitl_queue_id: 'hA', parte_id: 'parte-c' })], client_historical_outputs: [{ id: 'parte-c', provenance_tag: {} }] }
     expect((await piezasPorPublicar(base(t), { client_id: SEG, campana_id: CAMP_B }, AHORA)).frenan.map((x) => x.encargo_id)).toEqual(['pY'])
   })
-  it('el encargo cuyo parte ES la campaña cuenta como de ella', async () => {
+  it('pregunta de CC6: un parte con el id de la campaña no es un parte real (solo las mesas lo usan, y no cuentan) · se trata como no ubicado: frena', async () => {
     const t = { ...dosCampanas, oficina_encargos: [enc({ id: 'pZ', hitl_queue_id: 'hA', parte_id: CAMP_A })], client_historical_outputs: [] }
-    expect((await piezasPorPublicar(base(t), { client_id: SEG, campana_id: CAMP_A }, AHORA)).frenan.map((x) => x.encargo_id)).toEqual(['pZ'])
+    expect((await piezasPorPublicar(base(t), { client_id: SEG, campana_id: CAMP_A }, AHORA)).frenan).toEqual([{ encargo_id: 'pZ', brief_id: 'BRF-X', motivo: 'espera_al_dueno', parte_sin_campana: true }])
   })
 })
 

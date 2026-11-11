@@ -83,7 +83,6 @@ export async function piezasPorPublicar(db: Db, p: { client_id: string; campana_
     const filas = partes.length ? ((ok(await db.from('client_historical_outputs').select('id, provenance_tag').in('id', partes), 'leer los partes') as { id: string; provenance_tag: unknown }[] | null) ?? []) : []
     const campanaDe = new Map(filas.map((f) => [String(f.id), objeto(f.provenance_tag).campana_id]))
     deEstaCampana = (e) => {
-      if (e.parte_id && e.parte_id === p.campana_id) return { cuenta: true, sin_campana: false }
       const c = e.parte_id ? campanaDe.get(e.parte_id) : undefined
       if (typeof c !== 'string' || c === '') return { cuenta: true, sin_campana: true } // no se ubica: cuenta como de ESTA (frena)
       return { cuenta: c === p.campana_id, sin_campana: false }
