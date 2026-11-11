@@ -67,6 +67,9 @@ describe('🔴 la puerta', () => {
     expect(db.tablas['plan_cambios']).toHaveLength(1)
     expect(db.tablas['plan_cambios'][0]).toMatchObject({ texto: BIEN.texto, despertado: null, creado_en: AHORA.toISOString() })
   })
+  it('GO 11-nov · basta que haya texto: un pedido de 2 letras («ok») o «más rojo» pasa la puerta y se guarda', async () => {
+    for (const texto of ['ok', 'más rojo']) expect((await llamar(base(), { ...BIEN, texto })).status).toBe(200)
+  })
   it('🔴 un pedido ya terminado no impide otro', async () => {
     const db = base({ pedidos: [{ id: 'p1', client_id: C, documento: 'manual', estado: 'aplicado' }, { id: 'p2', client_id: C, documento: 'manual', estado: 'fallido' }] })
     expect((await llamar(db, BIEN)).status).toBe(200)
@@ -74,7 +77,7 @@ describe('🔴 la puerta', () => {
   it('🔴 entradas malas y gasto sin confirmar no escriben', async () => {
     const db = base()
     expect((await llamar(db, { ...BIEN, client_id: 'x' })).status).toBe(400)
-    expect((await llamar(db, { ...BIEN, texto: 'no' })).status).toBe(400)
+    expect((await llamar(db, { ...BIEN, texto: '   ' })).status).toBe(400) // GO 11-nov: basta que haya texto; vacío no
     expect((await llamar(db, { ...BIEN, seccion: 'x'.repeat(81) })).status).toBe(400)
     expect((await llamar(db, { ...BIEN, campos: ['inventado'] })).status).toBe(400)
     expect((await llamar(db, { ...BIEN, campos: 'mision' })).status).toBe(400)

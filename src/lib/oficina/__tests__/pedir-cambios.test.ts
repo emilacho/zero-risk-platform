@@ -121,7 +121,8 @@ describe('el sobre y la tarea', () => {
   it('el sobre acepta cambios válidos y los conserva; rechaza los mal formados', () => {
     const v = validarSobre({ ...base, cambios_del_dueno: cambios })
     expect(v.ok && v.sobre.cambios_del_dueno).toEqual(cambios)
-    for (const mal of [{ ...cambios, ronda: 6 }, { ...cambios, ronda: 0 }, { ...cambios, comentario: 'no' }, { ...cambios, laminas: [0] }, { ...cambios, laminas: ['1'] }, 'texto', { ...cambios, pedido_por: '' }]) expect(validarSobre({ ...base, cambios_del_dueno: mal }).ok).toBe(false)
+    expect(validarSobre({ ...base, cambios_del_dueno: { ...cambios, comentario: 'ok' } }).ok).toBe(true) // GO 11-nov: basta que haya texto
+    for (const mal of [{ ...cambios, ronda: 6 }, { ...cambios, ronda: 0 }, { ...cambios, comentario: '   ' }, { ...cambios, laminas: [0] }, { ...cambios, laminas: ['1'] }, 'texto', { ...cambios, pedido_por: '' }]) expect(validarSobre({ ...base, cambios_del_dueno: mal }).ok).toBe(false)
   })
   it('sin cambios del dueño la tarea no cambia ni una letra; con ellos suma la sección', () => {
     expect(seccionDeCambiosDelDueno(null)).toBe('')

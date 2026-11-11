@@ -98,9 +98,9 @@ async function planDecidible(db: Db, planId: string, toca: Salida['toca']): Prom
 // ───────────────────────── plan-cambios (GASTA: el redactor reescribe y la jefatura revisa)
 export const planCambios: Manejador = async ({ db, ahora }, { cuerpo, reviewer }) => {
   if (typeof cuerpo.plan_id !== 'string' || !UUID.test(cuerpo.plan_id)) return rechazo(400, 'entrada_invalida', '`plan_id` debe ser un uuid')
-  const texto = textoEntre(cuerpo.texto, 5, TOPE_DEL_TEXTO_DEL_DUENO)
+  const texto = textoEntre(cuerpo.texto, 1, TOPE_DEL_TEXTO_DEL_DUENO)
   const toca = { output_id: cuerpo.plan_id, comentario: texto }
-  if (!texto) return rechazo(400, 'entrada_invalida', `\`texto\` (qué debe cambiar) debe tener de 5 a ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`, toca)
+  if (!texto) return rechazo(400, 'entrada_invalida', `\`texto\` (qué debe cambiar) debe tener texto (hasta ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres)`, toca)
   const g = confirmarGasto(cuerpo, TOPE_REESCRITURA_USD)
   if (!g.ok) return { ...g.salida, toca }
   const d = await planDecidible(db, cuerpo.plan_id, toca)
