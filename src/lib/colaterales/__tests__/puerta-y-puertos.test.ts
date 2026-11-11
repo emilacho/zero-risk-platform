@@ -17,7 +17,7 @@ const EDIC = { client_id: CLI, documento: 'brief', documento_ref: 'camp-1', vers
 
 function armar() {
   const { db, tablas } = baseFalsa()
-  const P: PuertosDelTurno = { almacen: almacenDeColaterales(db), filasActivas: vi.fn(async () => new Set<string>()), piezasPorPublicar: vi.fn(async () => ({ frenan: [], se_asumen_publicadas: [] })), documentos: vi.fn(async () => ({})), campanaDelCliente: vi.fn(async () => true), gastoDelDia: vi.fn(async () => ({ recibos: 0, en_vuelo: 0 })), topeDiario: vi.fn(async () => 5) }
+  const P: PuertosDelTurno = { almacen: almacenDeColaterales(db), filasActivas: vi.fn(async () => new Set<string>()), piezasPorPublicar: vi.fn(async () => ({ frenan: [], se_asumen_publicadas: [] })), documentos: vi.fn(async () => ({})), campanaDelCliente: vi.fn(async () => true), gastoDelDia: vi.fn(async () => ({ recibos: 0, en_vuelo: 0, revisiones: 0, revisiones_abiertas: 0 })), topeDiario: vi.fn(async () => 5), abrirRevisionColateral: vi.fn(async () => ({ estado: 'esperando' as const, revision_id: 'rev-1' })), aplicar: vi.fn(async () => ({ aplicados: [], pendientes: [], ya_cambiaron: [] })) }
   return { P, tablas }
 }
 const pedir = (P: PuertosDelTurno, c: Record<string, unknown>) => atenderColaterales(P, c, new Date('2026-11-11T12:00:00Z'))
@@ -102,7 +102,8 @@ function dbFalsa(tablas: Record<string, Record<string, unknown>[]>) {
           gte: (k: string, v: unknown) => { ped.filtros.push(`gte:${k}`); fs.push((f) => String(f[k]) >= String(v)); return api },
           in: (k: string, vs: unknown[]) => { ped.filtros.push(`in:${k}`); fs.push((f) => vs.includes(f[k])); return api },
           is: (k: string, v: unknown) => { ped.filtros.push(`is:${k}`); fs.push((f) => (f[k] ?? null) === v); return api },
-          then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve({ data: (tablas[tabla] ?? []).filter((f) => fs.every((fn) => fn(f))).map((f) => Object.fromEntries(cols.map((c) => [c, f[c]]))), error: null }).then(res, rej),
+          limit: () => api,
+          then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve({ data: (tablas[tabla] ?? []).filter((f) => fs.every((fn) => fn(f))).map((f) => (cols.includes('*') ? { ...f } : Object.fromEntries(cols.map((c) => [c, f[c]])))), error: null }).then(res, rej),
         }
         return api
       },
@@ -148,11 +149,29 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
     const g = await P.gastoDelDia(CLI, 'e7')
     expect(g.recibos).toBeCloseTo(0.35, 6)
     expect(g.en_vuelo).toBe(2)
-    expect(await P.gastoDelDia('sin-ediciones', 'x')).toEqual({ recibos: 0, en_vuelo: 0 })
+    expect(await P.gastoDelDia('sin-ediciones', 'x')).toEqual({ recibos: 0, en_vuelo: 0, revisiones: 0, revisiones_abiertas: 0 })
     // las lecturas piden SOLO lo que usan y filtran en la base
     expect(pedidos.filter((q) => q.tabla === 'colaterales_ediciones').map((q) => q.filtros)).toContainEqual(['eq:client_id', 'gte:updated_at'])
     expect(pedidos.filter((q) => q.tabla === 'colaterales_ediciones').map((q) => q.filtros)).toContainEqual(['eq:client_id', 'eq:estado'])
     expect(pedidos.find((q) => q.tabla === 'agent_invocations')).toMatchObject({ filtros: ['in:workflow_execution_id'] })
+  })
+  it('🔴 pieza B: el gasto del día suma las revisiones de la jefatura de ESAS ediciones (cerradas por su gasto; abiertas, contadas aparte); ni las de otro cliente ni las de la que pregunta', async () => {
+    const ed = (id: string, client_id: string, estado: string, workflow_execution_id: string | null) => ({ id, client_id, estado, created_at: '2026-11-11T07:00:00Z', updated_at: '2026-11-11T08:00:00Z', workflow_execution_id })
+    const { db, pedidos } = dbFalsa({
+      colaterales_ediciones: [ed('e1', CLI, 'lista', '1'), ed('e2', CLI, 'en_curso', '2'), ed('e3', CLI2, 'lista', '3'), ed('e7', CLI, 'en_curso', '7')],
+      colaterales_retoques: [
+        { edicion_id: 'e1', revision_id: 'r1' }, { edicion_id: 'e1', revision_id: 'r1' }, { edicion_id: 'e1', revision_id: null },
+        { edicion_id: 'e2', revision_id: 'r2' }, { edicion_id: 'e3', revision_id: 'r3' }, { edicion_id: 'e7', revision_id: 'r7' },
+      ],
+      jefatura_revisiones: [{ id: 'r1', estado: 'cerrada', gasto_usd: '0.21' }, { id: 'r2', estado: 'esperando_turno', gasto_usd: 0.05 }, { id: 'r3', estado: 'cerrada', gasto_usd: 9 }, { id: 'r7', estado: 'cerrada', gasto_usd: 9 }].map((f) => ({ ...f, client_id: CLI, artifact_type: 'colateral', artifact_id: 'x', policy_snapshot: { artifact_type: 'colateral' } })),
+      agent_invocations: [],
+    })
+    const g = await puertosDeSupabase(db, () => new Date('2026-11-11T12:00:00Z'), cadenaFalsa()).gastoDelDia(CLI, 'e7')
+    expect(g.revisiones).toBeCloseTo(0.21, 6)
+    expect(g.revisiones_abiertas).toBe(1)
+    expect(pedidos.find((q) => q.tabla === 'colaterales_retoques')).toMatchObject({ cols: ['edicion_id', 'revision_id'], filtros: ['in:edicion_id'] })
+    // por el almacén de la jefatura: una lectura por revisión, filtrada por id (nunca la de otro cliente ni la de la que pregunta)
+    expect(pedidos.filter((q) => q.tabla === 'jefatura_revisiones').map((q) => q.filtros)).toEqual([['eq:id'], ['eq:id']])
   })
   it('🔴 tope diario (RESPUESTA Lenovo 03:02Z): la fila del cliente manda; sin fila, la por omisión; sin ninguna o con un valor inválido, null', async () => {
     const filas = [{ client_id: null, tope_usd: '5.00' }, { client_id: CLI2, tope_usd: 12 }]
