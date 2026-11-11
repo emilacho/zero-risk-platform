@@ -31,7 +31,7 @@ vi.mock('@/lib/cadena/almacen-supabase', () => ({
     emitirSobre: async (s: SobreDeProducir) => { cad.emitidos.push(s); return { resultado: 'aceptado' } },
     // 11-nov · el tope de campaña (la misma decisión que la vía normal): aquí la campaña tiene un tope amplio y nada gastado · sus casos viven en `reintento-con-tope.test.ts`
     campana: async (id: string) => cad.campanas.find((c) => c.id === id) ?? null,
-    leerGastoDeCampana: async () => ({ corridas: [], conceptos: [], briefs: [], encargos: [], partes: [], topes_de_familia: { post_img: 1.5, carrusel_ig_v1: 1.5, kit_historias: 1.5 }, soltados: [] }),
+    leerGastoDeCampana: async () => ({ corridas: [], conceptos: [], briefs: [], encargos: [], partes: [], topes_de_familia: { post_img: 1.5, carrusel_ig_v1: 1.5, kit_historias: 1.5 }, soltados: [], revisiones: [] }),
     formatos: async () => ({}),
     avisarAlBuzon: async () => ({ ok: true, accion: 'nuevo' }),
   }),

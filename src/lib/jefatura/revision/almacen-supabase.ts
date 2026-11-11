@@ -32,6 +32,17 @@ export async function revisionesDeArtefactos(db: Db, tipo: string, ids: readonly
   return (d ?? []).map((f) => ({ id: String(f.id), estado: String(f.estado), gasto_usd: Number(f.gasto_usd) || 0 }))
 }
 
+/**
+ * 11-nov · condición 1 de CC7 para encender el registro · las revisiones de REGISTRO de una campaña (sus documentos: brief, concepto y calendario, todas las versiones), por su propio nombre
+ * (`registro:<doc>:<campaña>:<v|t><n>`), para que el freno por campaña cuente su gasto. Solo las reales (las de ensayo no gastan). Si la base falla, lanza (nunca «vacío»).
+ */
+export async function revisionesDeRegistroDeLaCampana(db: Db, campanaId: string): Promise<Array<{ id: string; estado: string; gasto_usd: number; tope_usd: number }>> {
+  if (!/^[0-9a-zA-Z-]+$/.test(campanaId)) throw new Error(`el id de la campaña no es legible: «${campanaId.slice(0, 40)}»`)
+  const d = ok(await db.from('jefatura_revisiones').select('id, estado, gasto_usd, tope_usd, dry_run, artifact_id').eq('artifact_type', 'registro').like('artifact_id', `registro:%:${campanaId}:%`).limit(1000), 'leer las revisiones de registro de la campaña') as Fila[] | null
+  return (d ?? []).filter((f) => f.dry_run !== true && String(f.artifact_id).split(':')[2] === campanaId)
+    .map((f) => ({ id: String(f.id), estado: String(f.estado), gasto_usd: Number(f.gasto_usd) || 0, tope_usd: Number(f.tope_usd) || 0 }))
+}
+
 function aRevision(f: Fila): Revision {
   const snap = f.policy_snapshot
   if (!snap || typeof snap !== 'object' || Object.keys(snap as object).length === 0) throw new Error(`la revisión ${String(f.id)} no trae su política (policy_snapshot vacío)`)

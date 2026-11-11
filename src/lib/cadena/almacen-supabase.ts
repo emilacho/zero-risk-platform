@@ -15,7 +15,7 @@ import type { SobreDeLote } from './arranque'
 import type { SobreDePlan } from './campanas'
 import type { SobreDeTanda } from './mesas'
 import type { ResultadoDeAbrirMesa, SobreDeReubicacion } from './reubicar'
-import { almacenDeSupabase as almacenDeJefatura } from '@/lib/jefatura/revision/almacen-supabase'
+import { almacenDeSupabase as almacenDeJefatura, revisionesDeRegistroDeLaCampana } from '@/lib/jefatura/revision/almacen-supabase'
 import { decidirRetencion } from './revision-jefatura'
 import { abrirRevision, armarSalida } from '../jefatura/revision/orquestador'
 import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDeLaJefatura } from '../jefatura/revision/adaptadores'
@@ -496,7 +496,9 @@ export function almacenDeSupabase(): Almacen {
         const brief = texto(e.brief_id)
         return brief && e.dry_run !== true && typeof f.logical_period === 'string' ? [{ parte_id: f.logical_period.replace(/^parte:/, ''), brief_id: brief }] : []
       })
-      return { corridas, conceptos, briefs, encargos, partes, topes_de_familia, soltados }
+      // 11-nov · las revisiones de registro de la campaña las lee la JEFATURA (solo ella nombra sus tablas); un fallo lanza (gasto ilegible = no se suelta nada)
+      const revisiones = await revisionesDeRegistroDeLaCampana(db as never, campanaId)
+      return { corridas, conceptos, briefs, encargos, partes, topes_de_familia, soltados, revisiones }
     },
     async avisarAlBuzon(a) {
       try {

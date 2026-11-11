@@ -8,6 +8,7 @@
  *   · concepto y brief creativo: `cadena_conceptos.costo_usd` y `cadena_brief_creativo.costo_usd`;
  *   · encargos de la oficina de la campaña (los reales con `parte_id` = la campaña o uno de sus partes; los lee `src/lib/oficina/gasto-de-encargos.ts`): su `gasto_usd`. Un encargo que YA está contado
  *     en un concepto o brief (por `encargo_id`) no se suma dos veces. Uno que sigue abierto (`abierto` · `en_paso`) cuenta lo mayor entre lo gastado y su tope.
+ *   · 11-nov · revisiones de REGISTRO de los documentos de la campaña (la jefatura cobra aparte al revisor y a la corrección del productor; las lee la jefatura): su `gasto_usd`, y una abierta lo mayor entre lo gastado y su tope.
  * Lo comprometido (corrección pedida por CC7 🟡 y CC6 🔴 sobre e05a646): de los OTROS partes reales de la campaña, cada brief sin encargo real que la sala YA RECIBIÓ
  * (su sobre de producir existe: el freno lo soltó, o lo soltó la cadena antes del freno) cuenta el tope de su familia, sin importar su fecha (ya está en camino).
  * Un brief sin encargo que la sala NO recibió (lo retuvo el freno, o nunca salió) NO compromete dinero: guarda lugar POR FECHA, igual que una fila por venir
@@ -31,6 +32,8 @@ import type { Corrida } from './almacen'
 
 /** los estados de un encargo que todavía puede gastar */
 export const ESTADOS_ABIERTOS = ['abierto', 'en_paso'] as const
+/** los estados de una revisión de la jefatura que todavía puede gastar (los demás son terminales) */
+export const ESTADOS_DE_REVISION_ABIERTOS = ['abierta', 'en_paso'] as const
 
 export interface LecturaDeGasto {
   corridas: Array<Pick<Corrida, 'costo_usd' | 'estado' | 'paso'>>
@@ -44,6 +47,8 @@ export interface LecturaDeGasto {
   topes_de_familia: Record<string, number>
   /** los sobres de producir REALES que la sala ya recibió de esos partes (parte · brief) */
   soltados: Array<{ parte_id: string; brief_id: string }>
+  /** 11-nov · las revisiones REALES de registro de la campaña (la jefatura las cobra aparte: el revisor y la corrección del productor) */
+  revisiones: Array<{ estado: string; gasto_usd: number | null; tope_usd: number | null }>
 }
 
 /** la operación con que la sala guarda la ENTRADA de un sobre de producir (`brief/parte-listo` · `producir` → viaje PIEZAS; comprobada contra filas reales del 21-oct) */
@@ -71,6 +76,8 @@ export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { g
     if (yaContados.has(e.id)) continue
     gastado += (ESTADOS_ABIERTOS as readonly string[]).includes(e.estado) ? Math.max(num(e.gasto_usd), num(e.tope_usd)) : num(e.gasto_usd)
   }
+  // la revisión de registro de un documento de la campaña: una cerrada cuenta su gasto; una que sigue abierta, lo mayor entre lo gastado y su tope (igual que un encargo)
+  for (const r of l.revisiones) gastado += (ESTADOS_DE_REVISION_ABIERTOS as readonly string[]).includes(r.estado) ? Math.max(num(r.gasto_usd), num(r.tope_usd)) : num(r.gasto_usd)
   const conEncargo = new Set(l.encargos.filter((e) => e.brief_id).map((e) => `${e.parte_id}|${e.brief_id}`))
   const enLaSala = new Set(l.soltados.map((x) => `${x.parte_id}|${x.brief_id}`))
   const esperando: BriefEsperando[] = []

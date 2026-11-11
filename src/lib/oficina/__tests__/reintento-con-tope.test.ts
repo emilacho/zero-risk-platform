@@ -40,7 +40,7 @@ vi.mock('@/lib/cadena/almacen-supabase', () => ({
 import { reintentoDeLaCadena } from '../reintento-adaptador'
 
 const TOPES = { post_img: 1.5, carrusel_ig_v1: 1.5 }
-const lectura = (o: Partial<LecturaDeGasto> = {}): LecturaDeGasto => ({ corridas: [], conceptos: [], briefs: [], encargos: [], partes: [], topes_de_familia: TOPES, soltados: [], ...o })
+const lectura = (o: Partial<LecturaDeGasto> = {}): LecturaDeGasto => ({ corridas: [], conceptos: [], briefs: [], encargos: [], partes: [], topes_de_familia: TOPES, soltados: [], revisiones: [], ...o })
 const parte = (id: string, client_id: string, campana: string, briefs: Array<{ brief_id: string; fila_id: string; familia: string }>, creado = T0) => ({
   id, client_id, output_type: 'campaign_brief_pack', created_at: new Date(creado).toISOString(), provenance_tag: { lote_key: `${campana}:2026-W46:1`, valido: true, familias_por_brief: briefs },
 })
