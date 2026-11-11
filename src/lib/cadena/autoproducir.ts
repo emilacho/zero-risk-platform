@@ -15,7 +15,7 @@
  */
 import type { Almacen, Campana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
-import { avisoDeGastoIlegible, avisoDelTope, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, topeDeLaPieza, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
+import { avisoDeGastoIlegible, avisoDelTope, costoEsperadoDeLaPieza, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
 import { hoyEnZona } from './campanas'
 import { familiaDeFila } from './familia'
 import { filaSinFamilia } from './sin-familia'
@@ -121,9 +121,9 @@ export async function decidirTopeDelParte(
   const conEncargoReal = new Set(l.encargos.filter((e) => e.brief_id).map((e) => k(e.parte_id, e.brief_id as string)))
   const sumar = (o.enCamino ?? []).filter((x) => x.parte_id !== parteId && (conEncargoReal.has(k(x.parte_id, x.brief_id)) || !enLaSala.has(k(x.parte_id, x.brief_id))))
   const yaSumadas = new Set(sumar.map((x) => k(x.parte_id, x.brief_id)))
-  const comprometido = medido.comprometido + sumar.reduce((a, x) => a + topeDeLaPieza(l.topes_de_familia, x.familia), 0)
+  const comprometido = medido.comprometido + sumar.reduce((a, x) => a + costoEsperadoDeLaPieza(l.topes_de_familia, l.reservas_de_familia, x.familia), 0)
   const esperando = medido.esperando.filter((b) => !sinSala(b.familia) && !yaSumadas.has(k(b.parte_id, b.brief_id)))
-  return decidirTope(c.tope_gasto_usd, { gastado: medido.gastado, comprometido }, candidatas, l.topes_de_familia, [...porVenir, ...esperandoPorVenir(esperando, cuando)])
+  return decidirTope(c.tope_gasto_usd, { gastado: medido.gastado, comprometido }, candidatas, l.topes_de_familia, [...porVenir, ...esperandoPorVenir(esperando, cuando)], l.reservas_de_familia)
 }
 
 export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {

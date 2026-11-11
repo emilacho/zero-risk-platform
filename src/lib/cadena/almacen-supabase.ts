@@ -30,7 +30,7 @@ import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos
 import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
 import { enviosDesdeElRegistro, llavesDelRegistro } from './lote-muerto'
-import { configDeLaPuerta, encargosRealesDe, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
+import { configDeLaPuerta, encargosRealesDe, reservasDeFamiliasActivas, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
 import { OPERACION_DE_PRODUCIR } from './tope-de-campana'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
@@ -472,12 +472,14 @@ export function almacenDeSupabase(): Almacen {
     // 11-nov · la MISMA lectura que la puerta de la oficina (vive en la oficina: solo ella nombra sus tablas), pero un fallo o una fila ausente LANZA
     async configDeLaOficina() { return configDeLaPuerta(db as unknown as DbDeGasto) },
     async leerGastoDeCampana(campanaId, parteActual) {
-      const [corridas, conceptos, briefs, partesFilas, topes_de_familia] = await Promise.all([
+      const [corridas, conceptos, briefs, partesFilas, topes_de_familia, reservas_de_familia] = await Promise.all([
         lista<{ costo_usd: number | null; estado: Corrida['estado']; paso: Corrida['paso'] }>(db.from('cadena_corridas').select('costo_usd, estado, paso').eq('campana_id', campanaId)),
         lista<{ costo_usd: number | null; encargo_id: string | null }>(db.from('cadena_conceptos').select('costo_usd, encargo_id').eq('campana_id', campanaId)),
         lista<{ costo_usd: number | null; encargo_id: string | null }>(db.from('cadena_brief_creativo').select('costo_usd, encargo_id').eq('campana_id', campanaId)),
         lista<{ id: string; provenance_tag: unknown }>(db.from('client_historical_outputs').select('id, provenance_tag').eq('output_type', 'campaign_brief_pack').eq('provenance_tag->>campana_id', campanaId).limit(500)),
         topesDeFamiliasActivas(db as unknown as DbDeGasto),
+        // 11-nov · opción b · lo esperado por pieza de cada familia (si falla, LANZA como lo demás: gasto ilegible)
+        reservasDeFamiliasActivas(db as unknown as DbDeGasto),
       ])
       const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
       const tag = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
@@ -498,7 +500,7 @@ export function almacenDeSupabase(): Almacen {
       })
       // 11-nov · las revisiones de registro de la campaña las lee la JEFATURA (solo ella nombra sus tablas); un fallo lanza (gasto ilegible = no se suelta nada)
       const revisiones = await revisionesDeRegistroDeLaCampana(db as never, campanaId)
-      return { corridas, conceptos, briefs, encargos, partes, topes_de_familia, soltados, revisiones }
+      return { corridas, conceptos, briefs, encargos, partes, topes_de_familia, reservas_de_familia, soltados, revisiones }
     },
     async avisarAlBuzon(a) {
       try {
