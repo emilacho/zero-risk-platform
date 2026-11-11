@@ -75,7 +75,7 @@ export function vidaDelPaso(p: PasoEnCurso, ahora: Date): Vida {
   const latiendo = late(p.despacho?.ok ? p.despacho.valor : null, ahora)
   if (edad < techo) return { estado: 'vivo', techo_min, latiendo }
   if (latiendo && edad < techo * TECHO_CON_LATIDO) return { estado: 'vivo', techo_min, latiendo }
-  return { estado: 'muerto', techo_min, motivo: latiendo ? `sigue latiendo pero pasó ${TECHO_CON_LATIDO} veces su techo (${techo_min} min)` : `sin vuelta ni latido en ${techo_min} min` }
+  return { estado: 'muerto', techo_min, motivo: latiendo ? `sigue latiendo pero pasó ${TECHO_CON_LATIDO} veces su techo (${techo_min} min)` : `sin vuelta en ${techo_min} min` }
 }
 
 /** cómo leer lo que la regla necesita: el despacho por su llave EXACTA y las corridas reales de un agente. Si la base falla, LANZA (quien llama lo vuelve `sin_dato`) */
