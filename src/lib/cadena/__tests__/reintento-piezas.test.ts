@@ -54,6 +54,8 @@ const puertos = (s: Estado): PuertosDeReintento => ({
   plantillaActiva: async (f) => s.plantillas[f] === true,
   cuando: async () => new Map([['s1-d1-lun_ig', { fecha: '2026-10-26', hora: '09:00' }]]),
   frenoDeGasto: async () => s.freno,
+  // el tope de la campaña (11-nov): aquí todo cabe · sus casos viven en `reintento-con-tope.test.ts`
+  topeDeCampana: async (_c, p) => ({ sueltan: new Set(p.briefs.map((b) => String(b.brief_id))), motivo: null }),
   previueloDeLaminas: async (cliente, familia) => { s.previuelos.push(`${cliente}:${familia}`); return s.previuelo },
   emitirSobre: async (x) => { s.emitidos.push(x); return { resultado: s.respuesta } },
   leerLibreta: async () => JSON.parse(JSON.stringify(s.libreta)) as Libreta,

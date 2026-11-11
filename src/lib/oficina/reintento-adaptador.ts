@@ -4,6 +4,8 @@
  * Las tablas `cadena_*` se leen SOLO por el almacén de la cadena (`almacenDeSupabase` de la cadena): aquí no se nombran.
  */
 import { almacenDeSupabase as almacenDeLaCadena } from '@/lib/cadena/almacen-supabase'
+import { decidirTopeDelParte, sobresDeProducir } from '@/lib/cadena/autoproducir'
+import { avisoDeGastoIlegible, avisoDelTope, type DecisionDelTope } from '@/lib/cadena/tope-de-campana'
 import { reintentarPiezas, CLAVE_INTERRUPTOR, CLAVE_LIBRETA, type Libreta, type ParteParaReintento, type PuertosDeReintento, type ResultadoDelReintento } from '@/lib/cadena/reintento-piezas'
 import type { Db } from './almacen-supabase'
 import { identidadVisualDelCliente, previueloDeLaminas, esFamiliaDeLaminas } from './identidad-visual'
@@ -50,6 +52,25 @@ export function puertosDeReintento(db: Db, env: { slackToken?: string; canalHilo
       return m
     },
     frenoDeGasto: (clientId) => cadena.frenoDeGasto(clientId),
+    // 11-nov · GO Lenovo 03:02Z · el tope de la campaña con LA MISMA función que la vía normal (`decidirTopeDelParte`), sobre TODOS los briefs del parte, y el MISMO aviso al buzón
+    async topeDeCampana(c, parte, o) {
+      const firma = { origen: 'cadena/reintento-de-piezas · tope de campaña', workflow_id: null, workflow_execution_id: null }
+      const campana = await cadena.campana(c.id)
+      if (!campana) throw new Error('la campaña no existe')
+      let filas: Awaited<ReturnType<typeof cadena.filas>> | null = null
+      const cuando = new Map<string, { fecha: string; hora: string | null }>()
+      try { filas = await cadena.filas(c.id, Math.max(1, await cadena.ultimaVersionDeCalendario(c.id))); for (const f of filas) if (f.fecha) cuando.set(f.id, { fecha: f.fecha, hora: f.hora ?? null }) } catch { filas = null }
+      const { sobres } = sobresDeProducir({ id: parte.id, client_id: c.client_id, valido: true, briefs: parte.briefs }, { dry_run: false, cuando })
+      let d: DecisionDelTope
+      try { d = await decidirTopeDelParte(cadena, campana, parte.id, sobres, filas, cuando, { cuestan: o.cuestan, enCamino: o.enCamino, ahora: ahora() }) } catch (e) {
+        if (o.avisar) await cadena.avisarAlBuzon({ ...avisoDeGastoIlegible(campana, e instanceof Error ? e.message : String(e)), ...firma }).catch(() => null)
+        throw e
+      }
+      if (o.avisar && d.tipo !== 'cabe') await cadena.avisarAlBuzon({ ...avisoDelTope(campana, d), ...firma }).catch(() => null)
+      const usd = (n: number) => `US$ ${n.toFixed(2)}`
+      const motivo = d.tipo === 'sin_tope' ? 'la campaña no tiene tope de gasto' : d.tipo === 'corta' ? `no cabe en el tope de la campaña (${usd(d.tope)} · gastado ${usd(d.gastado)} · comprometido ${usd(d.comprometido)})` : null
+      return { sueltan: new Set(d.tipo === 'sin_tope' ? [] : d.sueltan), motivo }
+    },
     async previueloDeLaminas(clientId, familia) {
       if (!esFamiliaDeLaminas(familia)) return { ok: true }
       // las mismas lecturas que el pre-vuelo de la puerta (`fuentes`): la ficha y el manual vigente; una lectura que falla NO bloquea (la puerta la vuelve a leer y decide)

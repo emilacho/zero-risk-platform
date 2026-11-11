@@ -29,11 +29,16 @@ vi.mock('@/lib/cadena/almacen-supabase', () => ({
     filas: async () => [{ id: 's1-d1-lun_ig', fecha: '2026-10-26', hora: '09:00' }],
     frenoDeGasto: async () => cad.freno,
     emitirSobre: async (s: SobreDeProducir) => { cad.emitidos.push(s); return { resultado: 'aceptado' } },
+    // 11-nov · el tope de campaña (la misma decisión que la vía normal): aquí la campaña tiene un tope amplio y nada gastado · sus casos viven en `reintento-con-tope.test.ts`
+    campana: async (id: string) => cad.campanas.find((c) => c.id === id) ?? null,
+    leerGastoDeCampana: async () => ({ corridas: [], conceptos: [], briefs: [], encargos: [], partes: [], topes_de_familia: { post_img: 1.5, carrusel_ig_v1: 1.5, kit_historias: 1.5 }, soltados: [] }),
+    formatos: async () => ({}),
+    avisarAlBuzon: async () => ({ ok: true, accion: 'nuevo' }),
   }),
 }))
 import { puertosDeReintento, reintentoDeLaCadena } from '../reintento-adaptador'
 
-const campana = (o: Record<string, unknown> = {}) => ({ id: CAMPANA, client_id: CLIENTE, estado: 'activa', autoproducir: true, seco: false, sala_ref: { _sala_correlation_id: 'ccc4204b-7b95-4418-8ae6-57d360c65714' }, ...o })
+const campana = (o: Record<string, unknown> = {}) => ({ id: CAMPANA, client_id: CLIENTE, estado: 'activa', autoproducir: true, seco: false, tope_gasto_usd: 40, zona_horaria: 'America/Guayaquil', sala_ref: { _sala_correlation_id: 'ccc4204b-7b95-4418-8ae6-57d360c65714' }, ...o })
 const parte = (id: string, lote: string, o: Record<string, unknown> = {}) => ({
   id, client_id: CLIENTE, output_type: 'campaign_brief_pack', created_at: new Date(T0).toISOString(),
   provenance_tag: { lote_key: lote, valido: true, familias_por_brief: [{ brief_id: 'BRF-0001', fila_id: 's1-d1-lun_ig', familia: 'carrusel_ig_v1' }, { brief_id: 'BRF-0004', fila_id: 's1-d1-hist_lun', familia: 'kit_historias' }], ...o },
