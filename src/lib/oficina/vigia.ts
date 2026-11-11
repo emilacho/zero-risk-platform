@@ -16,7 +16,25 @@ import { entregarPorTopeDeLaMesa, esTurnoDeLaMesa, recibirResultadoMesa } from '
 import { FAMILIAS_MESA, esDeLaCadena } from './mesa/tipos'
 import { entregarALaCadena } from './mesa/de-la-cadena'
 import { AGENTE_DEL_BRAZO, MINUTOS_PARA_ESPERAR_AL_BRAZO, sondearVideos } from './orquestador-video'
-import { lecturasDeVida, lectorDeVidaDeSupabase, techoMedidoMs, vidaDelPaso, type LectorDeVida } from '../plazo-de-vida'
+import { CORRIDAS_QUE_SE_MIRAN, lecturasDeVida, lectorDeVidaDeSupabase, techoMedidoMs, vidaDelPaso, type LectorDeVida } from '../plazo-de-vida'
+
+/**
+ * 11-nov · #21 · el lector de vida de la OFICINA: el de siempre, más el brazo de video, que no es un agente y se mide por sus turnos terminados
+ * (fin − inicio). Vive aquí porque solo la oficina nombra sus tablas. Si la base falla, LANZA (quien llama lo vuelve `sin_dato`).
+ */
+export function lectorDeVidaDeLaOficina(db: Db): LectorDeVida {
+  const base = lectorDeVidaDeSupabase(db)
+  return {
+    despacho: (k) => base.despacho(k),
+    async duraciones(a) {
+      if (a !== AGENTE_DEL_BRAZO) return base.duraciones(a)
+      const b = (await db.from('oficina_turnos').select('inicio, fin').eq('tipo', 'brazo').eq('estado', 'hecho').order('inicio', { ascending: false }).limit(CORRIDAS_QUE_SE_MIRAN)) as { data: Array<{ inicio: string | null; fin: string | null }> | null; error: { message: string } | null }
+      if (b.error) throw new Error(`leer los turnos del brazo: ${b.error.message}`)
+      const t = (x: string | null) => (x ? Date.parse(x) : NaN)
+      return (b.data ?? []).map((f) => t(f.fin) - t(f.inicio))
+    },
+  }
+}
 
 type Fila = Record<string, unknown>
 /** 11-nov · #21 · el PISO de la oficina: el plazo de cada paso sale de `plazo-de-vida.ts` (techo medido del agente + latido), nunca más corto que esto */
@@ -66,7 +84,7 @@ export async function vencerMesasPorPlazo(P: Puertos, db: Db, ahora: Date): Prom
   return { vencidas }
 }
 
-export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date, lector: LectorDeVida = lectorDeVidaDeSupabase(db)): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }>; sin_dato?: Array<{ encargo_id: string; paso: string; motivo: string }> }> {
+export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date, lector: LectorDeVida = lectorDeVidaDeLaOficina(db)): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }>; sin_dato?: Array<{ encargo_id: string; paso: string; motivo: string }> }> {
   const vida = lecturasDeVida(lector)
   const sin_dato: Array<{ encargo_id: string; paso: string; motivo: string }> = []
   const limite = new Date(ahora.getTime() - MINUTOS_PARA_DAR_POR_MUERTO * 60_000).toISOString()

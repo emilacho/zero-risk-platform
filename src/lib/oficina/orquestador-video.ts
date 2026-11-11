@@ -32,7 +32,7 @@ export const familiaDeVideo = (pl: Pick<Plantilla, 'familia'>): FamiliaDeVideo |
 const PREFIJO_DRY = 'https://dry.invalid/'
 /** cuánto espera la oficina a que el brazo entregue un video antes de darlo por perdido (el brazo tarda ≈ 5–8 min por video; el peor caso medido 31-oct fue ≈ 7 min) */
 export const MINUTOS_PARA_ESPERAR_AL_BRAZO = 45
-/** 11-nov · #21 · lo que se mide del brazo: sus turnos terminados (`plazo-de-vida.ts` lee `brazo:video` en `oficina_turnos`) */
+/** 11-nov · #21 · lo que se mide del brazo: sus turnos terminados (`lectorDeVidaDeLaOficina` en `vigia.ts` lee `brazo:video` en los turnos de la oficina) */
 export const AGENTE_DEL_BRAZO = 'brazo:video'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })

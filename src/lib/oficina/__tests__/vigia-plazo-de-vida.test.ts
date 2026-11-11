@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { crearPuertos } from '../adaptadores'
-import { revisarPasosMuertos } from '../vigia'
+import { lectorDeVidaDeLaOficina, revisarPasosMuertos } from '../vigia'
 import { POST_IMG } from '../plantillas/post-img'
 import { abrirEncargo } from '../orquestador'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
@@ -61,5 +61,26 @@ describe('el vigía de la oficina con el plazo medido', () => {
     const r = await revisarPasosMuertos(P, db, hora, lector)
     expect(r).toMatchObject({ reanudar: [], fallidos: [], sin_dato: [{ encargo_id: id, motivo: expect.stringContaining('base caída') }] })
     expect(turno.estado).toBe('corriendo')
+  })
+})
+
+describe('el lector de vida de la oficina (11-nov · #21)', () => {
+  it('🔴 el brazo de video se mide por SUS turnos terminados (fin − inicio); un agente, por sus corridas reales; base caída LANZA', async () => {
+    const db = new DbFalsa()
+      .semilla('oficina_turnos', [
+        { id: 't1', encargo_id: 'e-nau', n: 4, tipo: 'brazo', estado: 'hecho', inicio: '2026-11-10T10:00:00Z', fin: '2026-11-10T10:07:00Z' },
+        { id: 't2', encargo_id: 'e-b2b', n: 4, tipo: 'brazo', estado: 'hecho', inicio: '2026-11-10T11:00:00Z', fin: '2026-11-10T11:31:00Z' },
+        { id: 't3', encargo_id: 'e-b2b', n: 5, tipo: 'brazo', estado: 'corriendo', inicio: '2026-11-10T12:00:00Z', fin: null },
+        { id: 't4', encargo_id: 'e-nau', n: 2, tipo: 'agente', estado: 'hecho', inicio: '2026-11-10T09:00:00Z', fin: '2026-11-10T09:50:00Z' },
+      ])
+      .semilla('agent_invocations', [
+        { id: 'i1', agent_id: 'jefe-marketing', status: 'completed', cost_usd: 0.4, duration_ms: 25 * MIN, started_at: '2026-11-10T08:00:00Z' },
+        { id: 'i2', agent_id: 'jefe-marketing', status: 'completed', cost_usd: 0, duration_ms: 90 * MIN, started_at: '2026-11-10T08:10:00Z' },
+      ])
+    const l = lectorDeVidaDeLaOficina(db)
+    expect([...(await l.duraciones('brazo:video'))].sort((x, y) => x - y)).toEqual([7 * MIN, 31 * MIN])
+    expect(await l.duraciones('jefe-marketing')).toEqual([25 * MIN])
+    db.fallar['oficina_turnos'] = 'base caída'
+    await expect(l.duraciones('brazo:video')).rejects.toThrow(/base caída/)
   })
 })

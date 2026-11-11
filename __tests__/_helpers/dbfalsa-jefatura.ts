@@ -40,6 +40,8 @@ class Consulta {
   upsert(p: Fila | Fila[], o?: { onConflict?: string }) { this.op = 'upsert'; this.payload = p; this.conflicto = o?.onConflict ? o.onConflict.split(',') : null; return this }
   eq(c: string, v: unknown) { this.filtros.push((f) => f[c] === v); return this }
   lt(c: string, v: unknown) { this.filtros.push((f) => hay(f[c]) && String(f[c]) < String(v)); return this }
+  /** 11-nov · #21: el lector de vida pide corridas con costo y duración > 0 (números: se comparan como números) */
+  gt(c: string, v: unknown) { this.filtros.push((f) => hay(f[c]) && (typeof v === 'number' ? Number(f[c]) > v : String(f[c]) > String(v))); return this }
   order(c: string, o?: { ascending?: boolean }) { this.orden = { col: c, asc: o?.ascending !== false }; return this }
   limit(n: number) { this.tope = n; return this }
   single() { this.uno = 'single'; return this }

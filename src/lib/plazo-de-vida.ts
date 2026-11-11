@@ -113,12 +113,7 @@ export function lectorDeVidaDeSupabase(db: Db): LectorDeVida {
       return ((r.data ?? [])[0] as DespachoLeido | undefined) ?? null
     },
     async duraciones(a) {
-      // el brazo de video no es un agente: se mide por sus turnos terminados de la oficina (fin − inicio)
-      if (a === 'brazo:video') {
-        const b = await db.from('oficina_turnos').select('inicio, fin').eq('tipo', 'brazo').eq('estado', 'hecho').order('inicio', { ascending: false }).limit(CORRIDAS_QUE_SE_MIRAN)
-        if (b.error) throw new Error(`leer los turnos del brazo: ${b.error.message}`)
-        return ((b.data ?? []) as { inicio: string | null; fin: string | null }[]).map((f) => ms(f.fin) - ms(f.inicio))
-      }
+      // (el brazo de video no es un agente: lo mide la propia oficina por sus turnos · `lectorDeVidaDeLaOficina` en `oficina/vigia.ts`)
       const r = await db.from('agent_invocations').select('duration_ms').eq('agent_id', a).eq('status', 'completed').gt('cost_usd', 0).gt('duration_ms', 0).order('started_at', { ascending: false }).limit(CORRIDAS_QUE_SE_MIRAN)
       if (r.error) throw new Error(`leer las corridas de ${a}: ${r.error.message}`)
       return ((r.data ?? []) as { duration_ms: number | string }[]).map((f) => Number(f.duration_ms))
