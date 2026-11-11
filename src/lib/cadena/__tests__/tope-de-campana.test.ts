@@ -441,6 +441,12 @@ describe('opción (b) · lo esperado por pieza sale de la historia real de cada 
     expect(l.reservas_de_familia!.video_mesa).toBeUndefined() // plantilla apagada en la foto
     expect(MIN_HISTORIA).toBe(3)
   })
+  it('🔴 un encargo ABIERTO leído por el adaptador real trae su familia: cuenta lo esperado de esa familia (1,58), no su tope (5) · construido sobre Náufrago', async () => {
+    sembrar({ [ENC]: [{ id: 'e-abierto', parte_id: NAU, brief_id: null, estado: 'en_paso', tope_usd: 5, gasto_usd: 0.2, familia: 'carrusel_mesa', dry_run: false }] })
+    const l = await leer(NAU, 'parte-nuevo')
+    expect(l.encargos.find((e) => e.id === 'e-abierto')!.familia).toBe('carrusel_mesa')
+    expect(medirGastoDeCampana(l, 'parte-nuevo').gastado).toBeCloseTo(26.28 + (1.690998 + 0.984574 + 2.051572) / 3, 4)
+  })
   it('🔴 la consulta de la historia pide SOLO lo real, SOLO lo terminado (cerrado · aprobada) y de cualquier cliente (sin filtro de campaña ni de cliente)', async () => {
     await leer(SEG, 'x')
     const h = consultas.find((c) => c.tabla === ENC && c.filtros.some(([, col]) => col === 'estado'))!
