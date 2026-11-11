@@ -189,14 +189,18 @@ describe('(e) reabrir una pieza que ya gastó, con la causa corregida declarada'
   it('un encargo vivo o ya entregado no se reabre jamás, ni con causa', () => {
     for (const estado of ['abierto', 'en_paso', 'cerrado']) expect(decidirReapertura(rastro({ estado }), CAUSA)).toEqual({ accion: 'devolver' })
   })
-  it('la causa tiene que ser una frase de verdad (10–300 caracteres)', () => {
-    for (const c of ['', 'sí', 'arreglado', 'x'.repeat(301), 7, null, undefined]) expect(causaValida(c)).toBe(false)
-    expect(decidirReapertura(rastro(), 'arreglado')).toEqual({ accion: 'devolver' })
+  it('la causa basta que tenga texto (hasta 300 caracteres) · GO Lenovo 11-nov', () => {
+    for (const c of ['', '   ', 'x'.repeat(301), 7, null, undefined]) expect(causaValida(c)).toBe(false)
+    for (const c of ['sí', 'más luz', 'x'.repeat(300)]) expect(causaValida(c)).toBe(true)
+    expect(decidirReapertura(rastro(), '   ')).toEqual({ accion: 'devolver' })
+    expect(decidirReapertura(rastro(), 'más luz')).toMatchObject({ accion: 'reabrir', por_causa: 'más luz' })
     expect(causaValida(CAUSA)).toBe(true)
   })
   it('el sobre valida la causa y la limpia', () => {
     const base = { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: false }
-    expect(validarSobre({ ...base, reabrir_causa_corregida: 'x' })).toMatchObject({ ok: false, codigo: 'entrada_invalida' })
+    expect(validarSobre({ ...base, reabrir_causa_corregida: '   ' })).toMatchObject({ ok: false, codigo: 'entrada_invalida' })
+    expect(validarSobre({ ...base, reabrir_causa_corregida: 'x'.repeat(301) })).toMatchObject({ ok: false, codigo: 'entrada_invalida' })
+    expect(validarSobre({ ...base, reabrir_causa_corregida: 'más luz' })).toMatchObject({ ok: true })
     const ok = validarSobre({ ...base, reabrir_causa_corregida: `  ${CAUSA}  ` })
     expect(ok.ok && ok.sobre.reabrir_causa_corregida).toBe(CAUSA)
     const sin = validarSobre(base)

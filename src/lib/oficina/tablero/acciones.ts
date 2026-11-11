@@ -36,7 +36,8 @@ export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
   if (hermanos.error) return rechazo(500, 'oficina_error', hermanos.error.message, t)
   const mayor = ((hermanos.data as Fila[] | null) ?? []).filter((x) => x.dry_run !== true).reduce((m, x) => Math.max(m, Number(x.version_encargo)), 0)
   if (Number(enc.version_encargo) < mayor) return rechazo(409, 'hay_una_version_mas_nueva', 'esa pieza ya tiene una versión más nueva: rehaz la última', t)
-  const causa = comentario && comentario.length >= 10 ? comentario : 'Rehacer pedido por Emilio desde el dashboard tras corregir la causa del fallo'
+  // GO Lenovo 11-nov (nota CC6): basta que Emilio escriba algo («más luz»); antes, menos de 10 letras se descartaba en silencio
+  const causa = comentario ? comentario : 'Rehacer pedido por Emilio desde el dashboard tras corregir la causa del fallo'
   const sala = esObjeto(enc.sala_ref) ? enc.sala_ref : {}
   const cal = esObjeto(sala.fila) ? { fila_id: sala.fila.id, fecha: sala.fila.fecha, hora: sala.fila.hora } : {}
   const a = await abrirEncargo(puertos(), {
