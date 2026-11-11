@@ -533,6 +533,9 @@ const HOP_BY_HOP_OR_REWRITTEN_HEADERS = new Set([
  */
 export const ENCABEZADO_VENCE_EN = 'x-zr-vence-en-ms'
 
+/** 11-nov · #21 · los pedidos internos que arma esta ruta: solo ellos pueden pasarle al corredor la llave del latido (un `_latido` de afuera no vale). En memoria: no se puede falsificar desde un cuerpo */
+const PEDIDOS_INTERNOS = new WeakSet<Request>()
+
 export function buildInnerRequestWithoutCallback(
   outerRequest: Request,
   outerBody: RunSdkInput,
@@ -540,6 +543,8 @@ export function buildInnerRequestWithoutCallback(
   runnerDelivery?: { callback_url: string; dispatch_key: string },
   /** ronda 69 · hasta cuándo (epoch ms) puede esperar el trabajo interno el resultado de un empleado cuya conexión se cortó · sólo lo pone esta función */
   venceEnMs?: number,
+  /** 11-nov · #21 · la llave del despacho para que el corredor LATA a la base mientras trabaja (también en el camino de siempre) · sólo la pone esta función */
+  latidoDispatchKey?: string,
 ): Request {
   const ctx = (outerBody.context ?? {}) as Record<string, unknown>
   // SHALLOW-OMIT both snake + camel · top-level + context-level. Cero JSON
@@ -561,6 +566,8 @@ export function buildInnerRequestWithoutCallback(
     context: ctxMinusCallback,
     // siempre se pisa: un `_runner_delivery` que llegue de afuera NO vale, sólo el que arma esta función
     _runner_delivery: runnerDelivery ?? undefined,
+    // ídem el latido: sólo vale la llave que pone esta función
+    _latido: latidoDispatchKey ? { dispatch_key: latidoDispatchKey } : undefined,
   }
   // Forward the original headers verbatim · auth + workflow_id stay canonical.
   const innerHeaders = new Headers()
@@ -573,11 +580,13 @@ export function buildInnerRequestWithoutCallback(
   // sólo vale el plazo que arma esta función (uno que llegue de afuera se descarta)
   innerHeaders.delete(ENCABEZADO_VENCE_EN)
   if (typeof venceEnMs === 'number' && Number.isFinite(venceEnMs)) innerHeaders.set(ENCABEZADO_VENCE_EN, String(Math.floor(venceEnMs)))
-  return new Request(outerRequest.url, {
+  const interno = new Request(outerRequest.url, {
     method: 'POST',
     headers: innerHeaders,
     body: JSON.stringify(innerBody),
   })
+  PEDIDOS_INTERNOS.add(interno)
+  return interno
 }
 
 // 02-nov · corte de Náufrago: quien lo pide recibe un latido mientras el empleado trabaja. Quien no lo pide, lo de siempre. Ver `lib/latido-hacia-quien-llama.ts`
@@ -709,6 +718,7 @@ async function atender(request: Request) {
             body,
             elegibilidad.elegible ? { callback_url: callbackUrl, dispatch_key: dispatchKey } : undefined,
             empezoVueltaEnMs + PRESUPUESTO_DE_LA_FUNCION_MS - MARGEN_PARA_ENTREGAR_MS,
+            dispatchKey,
           )
           const innerResponse = await POST(innerRequest)
           innerBody = await innerResponse.json()
@@ -1124,8 +1134,12 @@ async function atender(request: Request) {
       rd && typeof rd.callback_url === 'string' && typeof rd.dispatch_key === 'string'
         ? { callback_url: rd.callback_url, dispatch_key: rd.dispatch_key }
         : null
+    // 11-nov · #21 · la llave del despacho para latir a la base (sólo la que puso `buildInnerRequestWithoutCallback`)
+    const lat = (body as unknown as { _latido?: { dispatch_key?: unknown } })._latido
+    const latidoDispatchKey = PEDIDOS_INTERNOS.has(request) && lat && typeof lat.dispatch_key === 'string' && lat.dispatch_key ? lat.dispatch_key : null
     const proxyBody = {
       agentName,
+      ...(latidoDispatchKey ? { latido_dispatch_key: latidoDispatchKey } : {}),
       task,
       resumeSessionId: body.resume_session_id || null,
       clientId,

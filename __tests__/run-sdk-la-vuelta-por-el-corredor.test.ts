@@ -116,6 +116,22 @@ describe('la elegibilidad', () => {
 })
 
 describe('el recorrido completo (Vercel → corredor)', () => {
+  it('🔴 11-nov · #21 · el camino de SIEMPRE (sin palanca) también le pasa al corredor la llave del despacho para latir a la base; uno de afuera no vale', async () => {
+    corredorResponde(RESPUESTA_LARGA_OK)
+    await correrElPedido(pedido({ _latido: { dispatch_key: 'de-afuera' }, latido_dispatch_key: 'de-afuera' }))
+    expect(alCorredor).toHaveLength(1)
+    expect(alCorredor[0].cuerpo.latido_dispatch_key).toBe('dispatch:WF1:campaign-brief-agent:900')
+    expect(alCorredor[0].cuerpo.callback_mode).toBeUndefined()
+    // un pedido directo (sin vuelta, sin despacho) no lleva llave del latido aunque la traiga de afuera
+    corredorResponde(RESPUESTA_LARGA_OK)
+    await correrElPedido({ agent: 'campaign-brief-agent', task: 't', workflow_id: 'WF1', workflow_execution_id: '901', _latido: { dispatch_key: 'de-afuera' } })
+    expect(alCorredor[0].cuerpo.latido_dispatch_key).toBeUndefined()
+  })
+  it('🔴 11-nov · #21 · con la palanca el corredor recibe la misma llave para latir', async () => {
+    corredorResponde(ACUSE_202)
+    await correrElPedido(pedido({ callback_mode: 'runner' }))
+    expect(alCorredor[0].cuerpo).toMatchObject({ dispatch_key: 'dispatch:WF1:campaign-brief-agent:900', latido_dispatch_key: 'dispatch:WF1:campaign-brief-agent:900' })
+  })
   it('🔴 ④ con la palanca: el corredor recibe la dirección + la clave; Vercel NO reenvía la vuelta ni cierra el libro', async () => {
     corredorResponde(ACUSE_202)
     const r = await correrElPedido(pedido({ callback_mode: 'runner' }))
