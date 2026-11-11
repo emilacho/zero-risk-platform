@@ -246,6 +246,24 @@ describe('rehacer-pieza', () => {
     const s3 = await llamar('rehacer-pieza', conPlantillas(new DbFalsa().semilla('oficina_encargos', [v3])), { encargo_id: v3.id, ...gasto }, M.P)
     expect(s3.status).toBe(409)
   })
+  it('🔴 GO Lenovo 11-nov 18:30 (decisión 2) · una pieza CORTADA POR TOPE que ya gastó se rehace como versión siguiente; una bien terminada («cerrado») no; con su 3.ª versión tampoco', async () => {
+    const M = crearMemoria({ plantilla: POST_IMG, fuentes: FUENTES })
+    const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: false, familia: 'post_img' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    const viejo = M.encargos.get(String(a.cuerpo.encargo_id))!
+    viejo.estado = 'cerrado_por_tope'; viejo.gasto_usd = 0.35; viejo.estado_del_motor = { ...viejo.estado_del_motor, pasos_ejecutados: 3 }
+    const db = conPlantillas(new DbFalsa().semilla('oficina_encargos', [{ ...viejo, tipo_de_grupo: viejo.tipo_de_grupo ?? 'post_img' }]))
+    const s = await llamar('rehacer-pieza', db, { encargo_id: viejo.id, comentario: 'el tope del video era el de la familia', confirmo_gasto: true, tope_usd: DEL_TABLERO }, M.P)
+    expect(s).toMatchObject({ status: 200, cuerpo: { ok: true } })
+    const nuevo = M.encargos.get(String(s.cuerpo.encargo_id))!
+    expect(nuevo.version_encargo).toBe(2)
+    expect(nuevo.sala_ref).toMatchObject({ reapertura: { causa_corregida: 'el tope del video era el de la familia' } })
+    // bien terminada: no se rehace (sigue siendo 409 no_fallo)
+    const cerrado = await llamar('rehacer-pieza', conPlantillas(new DbFalsa().semilla('oficina_encargos', [{ ...viejo, estado: 'cerrado', tipo_de_grupo: 'post_img' }])), { encargo_id: viejo.id, confirmo_gasto: true, tope_usd: DEL_TABLERO }, M.P)
+    expect(cerrado).toMatchObject({ status: 409, cuerpo: { error: 'no_fallo' } })
+    // con la 3.ª versión cortada por tope: no hay una cuarta
+    const v3 = { ...viejo, id: '55555555-0000-4000-8000-000000000033', version_encargo: 3, tipo_de_grupo: 'post_img' }
+    expect((await llamar('rehacer-pieza', conPlantillas(new DbFalsa().semilla('oficina_encargos', [v3])), { encargo_id: v3.id, confirmo_gasto: true, tope_usd: DEL_TABLERO }, M.P)).status).toBe(409)
+  })
   it('GO Lenovo 11-nov (nota CC6) · un comentario corto de Emilio («más luz») llega como causa; antes se cambiaba en silencio por uno genérico', async () => {
     const M = crearMemoria({ plantilla: POST_IMG, fuentes: FUENTES })
     const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: false, familia: 'post_img' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })

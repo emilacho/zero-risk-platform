@@ -28,7 +28,7 @@ async function topeDeLaFamilia(db: Parameters<Manejador>[0]['db'], familia: unkn
 }
 
 // ───────────────────────── rehacer-pieza (GASTA)
-/** Reabre un encargo que FALLÓ con la causa declarada. Respeta el tope de 3 versiones por brief: si ya se agotó, lo dice (la salida es «Pieza nueva»). */
+/** Reabre un encargo que FALLÓ (o se cortó por tope) con la causa declarada. Respeta el tope de 3 versiones por brief: si ya se agotó, lo dice (la salida es «Pieza nueva»). */
 export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
   if (typeof cuerpo.encargo_id !== 'string' || !UUID.test(cuerpo.encargo_id)) return rechazo(400, 'entrada_invalida', '`encargo_id` debe ser un uuid')
   const comentario = cuerpo.comentario === undefined || cuerpo.comentario === null || cuerpo.comentario === '' ? null : textoEntre(cuerpo.comentario, 1, 300)
@@ -48,7 +48,8 @@ export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
   // Así el botón de hoy (manda 5) sigue sirviendo para una foto de tope 2,5, y un video puede pedir hasta su 10.
   const tope = Math.min(g.tope, maximo.tope)
   if (enc.dry_run === true) return rechazo(409, 'es_un_ensayo', 'un ensayo no se rehace desde el tablero', t)
-  if (enc.estado !== 'fallido') return rechazo(409, 'no_fallo', `solo se rehace una pieza que falló (esta está «${String(enc.estado)}»)`, t)
+  // GO Lenovo 11-nov 18:30 (decisión 2) · también una pieza CORTADA POR TOPE (no está terminada); la regla de abajo (`decidirReapertura`) ya la acepta con causa declarada
+  if (enc.estado !== 'fallido' && enc.estado !== 'cerrado_por_tope') return rechazo(409, 'no_fallo', `solo se rehace una pieza que falló o que se cortó por tope (esta está «${String(enc.estado)}»)`, t)
   const hermanos = await db.from('oficina_encargos').select('id, version_encargo, dry_run').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).eq('tipo_de_grupo', enc.tipo_de_grupo)
   if (hermanos.error) return rechazo(500, 'oficina_error', hermanos.error.message, t)
   const mayor = ((hermanos.data as Fila[] | null) ?? []).filter((x) => x.dry_run !== true).reduce((m, x) => Math.max(m, Number(x.version_encargo)), 0)
