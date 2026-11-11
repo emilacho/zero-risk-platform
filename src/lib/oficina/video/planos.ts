@@ -7,7 +7,7 @@
 import { DURACION_MAX_PLANO_S, DURACION_MIN_PLANO_S, RESOLUCION_APROBADA, armarPedidoDePlano } from '../../video/parametros'
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
-import { formatoDeVideo } from './pedido'
+import { buscarFotoPropia, formatoDeVideo, fotosPropiasConDireccion } from './pedido'
 import type { Plano, TraduccionDeGuion } from './guion'
 
 export interface PedidoDePlano {
@@ -45,10 +45,10 @@ export function promptDelPlano(p: Plano, audio: string, max = 3600): string {
   return t.slice(0, max)
 }
 
-/** el buscador de fotos por omisión: el id exacto entre las propias con dirección https · el de las fotos por nombre corto (CC4) lo reemplaza */
-export function buscadorExacto(fotos: FotoEtiquetada[]): (id: string) => string | null {
-  const propias = new Map(fotos.filter((f) => (f.origen ?? 'propia') === 'propia' && f.url && /^https:\/\/\S+$/.test(f.url)).map((f) => [f.id, f.url as string]))
-  return (id) => propias.get(id) ?? null
+/** el buscador de fotos por omisión: el MISMO del pedido de una toma (#1047 · id exacto o nombre corto que empieza una sola foto propia; uno ambiguo no se adivina) */
+export function buscadorDeFotos(fotos: FotoEtiquetada[]): (id: string) => string | null {
+  const propias = fotosPropiasConDireccion(fotos)
+  return (id) => { const h = buscarFotoPropia(id, propias); return h && 'url' in h ? h.url : null }
 }
 
 export function pedidosPorPlano(o: {
@@ -58,12 +58,12 @@ export function pedidosPorPlano(o: {
   clave: string
   resolucion?: string
   relacion?: string
-  /** cómo se halla la dirección de una foto citada por el guion · por omisión, el id exacto */
+  /** cómo se halla la dirección de una foto citada por el guion · por omisión, el de #1047 (exacto o nombre corto único) */
   buscarFoto?: (id: string) => string | null
 }): { ok: true; pedidos: PedidoDePlano[] } | { ok: false; errores: string[] } {
   const planos = [...(o.guion.planos ?? [])].sort((a, b) => a.n - b.n || a.desde - b.desde)
   if (!planos.length) return { ok: false, errores: ['el guion no tiene planos'] }
-  const buscar = o.buscarFoto ?? buscadorExacto(o.fotos)
+  const buscar = o.buscarFoto ?? buscadorDeFotos(o.fotos)
   const formato = formatoDeVideo(o.brief)
   const errores: string[] = []
   const pedidos: PedidoDePlano[] = []

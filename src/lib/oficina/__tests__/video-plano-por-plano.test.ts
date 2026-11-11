@@ -60,7 +60,17 @@ describe('un pedido por plano (cliente con fotos)', () => {
     expect(r2.ok && r2.pedidos[0].fotos).toEqual([])
     expect(r2.ok && r2.pedidos[0].foto_no_hallada).toBe('competencia-1')
   })
-  it('acepta otro buscador de fotos (el de nombre corto)', () => {
+  it('🔴 por omisión halla la foto por su nombre corto (como el pedido de una toma, #1047)', () => {
+    const r2 = pedidosPorPlano({ guion: { planos: [{ n: 1, desde: 0, hasta: 5, se_ve: 'fachada', foto_id: '9f71b0e9' }, { n: 2, desde: 5, hasta: 9, se_ve: 'olla', foto_id: '6275C0BA' }], audio: '' }, brief, fotos: fotosConFotos, clave: 'k' })
+    expect(r2.ok && r2.pedidos.map((p) => p.fotos)).toEqual([[U('fachada')], [U('olla')]])
+  })
+  it('🔴 un nombre corto que empieza VARIAS fotos no se adivina: el plano sale desde su texto y lo declara', () => {
+    const dos: FotoEtiquetada[] = [{ id: 'abcd1111-x', url: U('uno'), origen: 'propia' }, { id: 'abcd2222-y', url: U('dos'), origen: 'propia' }]
+    const r2 = pedidosPorPlano({ guion: { planos: [{ n: 1, desde: 0, hasta: 5, se_ve: 'algo', foto_id: 'abcd' }], audio: '' }, brief, fotos: dos, clave: 'k' })
+    expect(r2.ok && r2.pedidos[0].fotos).toEqual([])
+    expect(r2.ok && r2.pedidos[0].foto_no_hallada).toBe('abcd')
+  })
+  it('acepta otro buscador de fotos', () => {
     const r2 = pedidosPorPlano({ guion: { planos: [{ n: 1, desde: 0, hasta: 5, se_ve: 'algo', foto_id: '9f71b0e9' }], audio: '' }, brief, fotos: fotosConFotos, clave: 'k', buscarFoto: (id) => (id === '9f71b0e9' ? U('fachada') : null) })
     expect(r2.ok && r2.pedidos[0].fotos).toEqual([U('fachada')])
   })
