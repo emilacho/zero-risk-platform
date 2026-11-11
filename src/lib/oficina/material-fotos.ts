@@ -22,7 +22,7 @@ export function candidatasDelEncargo(e: Estado, pl: Plantilla, ahora: Date, o: {
   const pedido = { protagonista: protas, prohibe_personas: prohibe, proporcion: b.proporcion, usos: b.F.usos, reuso_dias: Number(pl.limites.reuso_dias ?? 14), ahora, ...(o.permitirCercanas ? { permitir_cercanas: true } : {}) }
   let cf = candidatasFoto(b.F.fotos, { ...pedido, excluir_reusadas: true }, b.F.propios)
   let reusoPermitido = false
-  if (cf.candidatas.length === 0 && (o.relajarReuso ?? pl.familia !== 'post_img')) {
+  if (cf.candidatas.length === 0 && (o.relajarReuso ?? claseDe(pl) !== 'post_img')) {
     // «una foto sola que sirve no se bloquea»: si no hay otra, se permite repetir (con aviso)
     const laxa = candidatasFoto(b.F.fotos, { ...pedido, excluir_reusadas: false }, b.F.propios)
     if (laxa.candidatas.length) { cf = laxa; reusoPermitido = true }
