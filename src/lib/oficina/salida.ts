@@ -160,6 +160,33 @@ export function proyectarAlEsquema(esqId: string, v: unknown): Record<string, un
 /** la opinión del revisor externo es TEXTO LIBRE (sin campos, sin rúbrica): lo único que se exige es que haya texto */
 ESQUEMAS['opinion_libre.v1'] = { t: 'str', min: 1, max: 20000 }
 
+/**
+ * 11-nov · GO Lenovo 12:52 Zúrich · LECTURA TOLERANTE: el agente a veces deja una coma sobrante antes de cerrar una lista u objeto (`…}, ]`), que JSON no admite
+ * (la foto del 12-nov cayó dos veces por eso: `Unexpected token ']'`). Es un error de FORMA, no de contenido: se quita esa coma y nada más. Recorre carácter a carácter
+ * respetando las comillas (una coma DENTRO de un texto no se toca). Devuelve el texto arreglado y cuántas comas quitó (0 = no había nada que arreglar). Pura.
+ */
+export function quitarComasSobrantes(json: string): { json: string; quitadas: number } {
+  let sale = ''
+  let quitadas = 0
+  let enTexto = false
+  for (let i = 0; i < json.length; i++) {
+    const c = json[i]
+    if (enTexto) {
+      sale += c
+      if (c === '\\') { sale += json[i + 1] ?? ''; i++ } else if (c === '"') enTexto = false
+      continue
+    }
+    if (c === '"') { enTexto = true; sale += c; continue }
+    if (c === ',') {
+      let j = i + 1
+      while (j < json.length && /\s/.test(json[j])) j++
+      if (json[j] === ']' || json[j] === '}') { quitadas++; continue }
+    }
+    sale += c
+  }
+  return { json: sale, quitadas }
+}
+
 /** quita el envoltorio: cercas ``` (con o sin «json») y prosa fuera de las llaves */
 export function limpiarSalida(texto: string): { ok: true; json: string; envoltorio: boolean } | { ok: false; error: string } {
   if (typeof texto !== 'string' || !texto.trim()) return { ok: false, error: 'salida_vacia' }
@@ -308,9 +335,17 @@ export function procesarSalida(texto: string, esquemaId: string, intento: number
   const l = limpiarSalida(texto)
   if (!l.ok) return fallo([l.error])
   let crudo: unknown
-  try { crudo = JSON.parse(l.json) } catch (e) { return fallo([`json_invalido: ${e instanceof Error ? e.message : String(e)}`]) }
-  const descartados: string[] = []
   const normalizados: string[] = []
+  try { crudo = JSON.parse(l.json) } catch (e) {
+    // lectura tolerante: solo la coma sobrante antes de un cierre; si con eso tampoco se lee, el error ORIGINAL va al reintento (lo que el agente tiene que corregir)
+    const arreglado = quitarComasSobrantes(l.json)
+    try {
+      if (!arreglado.quitadas) throw e
+      crudo = JSON.parse(arreglado.json)
+      normalizados.push(`$: ${arreglado.quitadas} coma(s) sobrante(s) antes de un cierre, quitada(s) al leer`)
+    } catch { return fallo([`json_invalido: ${e instanceof Error ? e.message : String(e)}`]) }
+  }
+  const descartados: string[] = []
   const descartado = descartarIgnorados(esq, crudo, '$', descartados)
   const arreglado = o.limpiarForma ? limpiarForma(esq, descartado, '$', normalizados, typeof o.limpiarForma === 'object' ? o.limpiarForma : {}) : descartado
   const limpio = o.normalizar ? normalizarEnumerados(esq, arreglado, '$', normalizados) : arreglado

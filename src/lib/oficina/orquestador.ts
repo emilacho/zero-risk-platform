@@ -18,7 +18,7 @@ import { armarPedidoAlRevisor } from './ciego'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
 import { previueloDeLaminas } from './identidad-visual'
-import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
+import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
 import { contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, resumenDeCierreV } from './orquestador-video'
 import { confianzaDeLaFoto } from './fotos'
 import { candidatasDelEncargo, medirFotos } from './material-fotos'
@@ -344,6 +344,24 @@ function saltoPorFalta(paso: Paso, e: Estado): ResultadoDePaso | null {
   return null
 }
 
+/**
+ * 11-nov · GO Lenovo 12:52 Zúrich · «mirar» respondió (con su reintento) pero la respuesta no se pudo LEER: «no pude leer» nunca es «descartar» (la forma de #1014).
+ * La imagen que se le mostró sigue en la pieza tal cual (nadie dijo que no cumpla) y una ficha QUE BLOQUEA pide que una persona la mire: no pasa sola.
+ * Una re-imagen ilegible no pisa nada: se queda la imagen anterior.
+ */
+export function sinLecturaDeMirar(paso: Paso, e: Estado, errores: string[]): ResultadoDePaso {
+  const motivo = errores.slice(0, 2).join(' · ')
+  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'una persona decide si se rehace')] }
+  const items = imagenesAMirar(e)
+  return {
+    costo_usd: 0,
+    artefacto: { observaciones: [], preferencia: [], veredicto: { pasan: items.map((i) => i.indice), porImagen: [], regenerar: false }, sin_lectura: true },
+    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que la imagen cumple el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); la imagen sigue en la pieza sin juzgar`, 'formato de la observación', 'una persona mira la imagen antes de aprobar')],
+    reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' },
+  }
+}
+const ES_MIRAR = (clave: string): boolean => clave === 'mirar' || clave === 'reimagen_mirar'
+
 // ───────────────────────── funciones de código
 type SalidaCodigo = { res: ResultadoDePaso; gastos?: Cambios['gastos']; usos?: Cambios['usos_de_fotos']; imagen_generada?: boolean; fallido?: string }
 
@@ -652,6 +670,14 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
     return r(200, { accion: 'esperar', reintento_de_formato: true, turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente, dispatch_key: dk, pedido } })
   }
   if (!p.ok && p.accion === 'reintentar') return pedirReintento(p.mensaje_de_error, 'formato: reintento')
+  // 11-nov · «mirar» ilegible tras su reintento: la pieza sigue con la imagen SIN juzgar y una ficha que bloquea (una persona mira); nunca se cae el encargo por la forma de la respuesta
+  if (!p.ok && ES_MIRAR(paso.clave)) {
+    const sl = familiaDeLaminas(pl) ? sinLecturaDeMirarL(paso, e, p.errores) : sinLecturaDeMirar(paso, e, p.errores)
+    const { [`fmt:${paso.clave}`]: _fm, ...vueltasSinFmt } = e.vueltas
+    void _fm
+    await aplicarResultado(P, { ...enc, estado_del_motor: { ...e, vueltas: vueltasSinFmt } }, pl, sig.indice, { ...sl, costo_usd: costo }, { vuelta: sig.vuelta, turno: { ...turnoBase, estado: 'hecho', error: `formato ilegible tras ${intentos + 1} intento(s): ${p.errores.slice(0, 2).join(' · ')} · sigue sin juzgar la imagen` }, gastos: gastoModelo, n })
+    return avanzar(P, enc.id)
+  }
   if (!p.ok) {
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), fichas: [...e.fichas, fichaNueva(`formato-${paso.clave}`, 'chequeo', 'formato', 'bloquea', p.ficha.que ?? 'formato inválido')], turno: { ...turnoBase, n, estado: 'fallo', error: p.errores.join(' · ') }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
     return fallar(P, { ...enc, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, p.ficha.que ?? 'formato inválido')

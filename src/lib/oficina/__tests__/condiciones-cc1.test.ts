@@ -49,14 +49,17 @@ describe('C2 · el reintento de formato es de cada PASE de una vuelta, no del pa
     expect(pasos.filter((p) => p === 'mirar')).toHaveLength(4)
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
   })
+  // 11-nov (GO Lenovo 12:52): «mirar» ilegible ya NO cae (sigue sin juzgar, con ficha que bloquea · `mirar-ilegible.test.ts`); el tope de UN reintento por pase se prueba con otro agente
   it('sigue siendo un solo reintento por pase: dos fallos seguidos en el mismo pase cierran FALLIDO', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
+    let veces = 0
     const g: Guion = {
       paquete: () => ({ texto: 'material' }), direccion_visual: () => ({ texto: direccionGenerada() }), prompts: () => ({ texto: BUENOS_PROMPTS }),
-      mirar: () => ({ texto: '{esto no es json' }), texto: () => ({ texto: PIEZA }), revision_jefe: () => ({ texto: FICHAS_VACIAS }),
+      mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }), texto: () => { veces++; return { texto: '{esto no es json' } }, revision_jefe: () => ({ texto: FICHAS_VACIAS }),
     }
     const { ultima } = await correr(M, id, g)
+    expect(veces).toBe(2)
     expect(ultima.cuerpo).toMatchObject({ estado: 'fallido' })
   })
 })
