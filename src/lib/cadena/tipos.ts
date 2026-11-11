@@ -17,7 +17,8 @@ export interface Canal {
 export interface Pilar { clave: string; nombre: string; pct: number }
 export interface Fase { clave: string; dia_desde: number; dia_hasta: number; objetivo: string; cita_plan: string }
 export interface Hito { clave: string; dia: number; tipo: 'revision' | 'lanzamiento' | 'corte'; cita_plan: string }
-export interface Dependencia { antes: string; despues: string; regla: string; cita_plan: string }
+/** `cantidad` (11-nov · reglas rígidas #9): cuántas piezas de `antes` exige la regla, como número; una estrategia guardada antes no lo trae y se lee de `regla` */
+export interface Dependencia { antes: string; despues: string; regla: string; cita_plan: string; cantidad?: number }
 /**
  * 10-nov (GO Lenovo · fechas sin fuente · D): la CLASE la decide el agente razonando, no una lista de palabras.
  * `feriado_publico` = fecha del país o de un lugar (Navidad, un feriado local): se verifica con las fuentes oficiales del país.
@@ -45,6 +46,8 @@ export interface Estrategia {
   fases: Fase[]
   hitos: Hito[]
   dependencias: Dependencia[]
+  /** 11-nov (reglas rígidas #8): cuánto puede desviarse por semana y red la cantidad real de la frecuencia antes de bloquear; ausente = feed 0, historias 1, anuncios 1 */
+  tolerancia_frecuencia?: { feed: number; historias: number; anuncios: number }
   fechas_que_importan: FechaQueImporta[]
   patron_semanal: Slot[]
   piezas_fijas: PiezaFija[]

@@ -99,9 +99,13 @@ describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
     const b = leerBriefCreativo(con({ 'Fase 1: «que el barrio sepa que la cocina abre temprano y que el pan sale a las siete».': 'Fase 1.' }), INS)
     expect(b.bloqueos.join('\n')).toMatch(/demasiado corta/)
   })
-  it('una cifra «,77» ⇒ devuelta', () => {
-    const b = leerBriefCreativo(con({ 'Que entren 30 desayunos': 'Que entren 30,77 desayunos' }), INS)
-    expect(b.bloqueos.join('\n')).toMatch(/,77/)
+  // 11-nov (GO Lenovo · reglas rígidas #4): una cifra con decimales ya no devuelve el brief por su forma (un precio «US$ 4,77» es real); lo que cuenta es que la cita sea literal
+  it('una cifra con decimales (un precio) NO devuelve el brief por su forma', () => {
+    for (const cifra of ['30,77', 'US$ 4,77 cada uno, 30']) {
+      const b = leerBriefCreativo(con({ 'Que entren 30 desayunos': `Que entren ${cifra} desayunos` }), INS)
+      expect(b.bloqueos.join('\n')).not.toMatch(/,77|inventad/)
+      expect(b.bloqueos).toEqual([])
+    }
   })
   it('una palabra de la lista que el manual evita, usada fuera de «prohibido», es un AVISO, nunca un bloqueo (ADENDA de Emilio)', () => {
     expect(leerBriefCreativo(BRIEF, INS).bloqueos).toEqual([])
@@ -153,7 +157,7 @@ describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
 
 describe('brief_creativo.v1 · salidas', () => {
   it('hallazgosDelBrief · un hallazgo por bloqueo (bloquea) y por aviso, alcance tanda, objeto brief_creativo', () => {
-    const b = leerBriefCreativo(con({ 'Que entren 30 desayunos': 'Que entren 30,77 desayunos' }), { ...INS, prohibidas: ['delicioso', 'promo', 'barato'] })
+    const b = leerBriefCreativo(con({ 'que el barrio sepa que la cocina abre temprano y que el pan sale a las siete': 'que el barrio descubra una cocina que nunca cierra' }), { ...INS, prohibidas: ['delicioso', 'promo', 'barato'] })
     const h = hallazgosDelBrief(b)
     expect(h.map((x) => [x.chequeo, x.severidad, x.alcance, x.fila_id])).toEqual([['brief_creativo', 'bloquea', 'tanda', null], ['brief_creativo', 'aviso', 'tanda', null]])
     expect(h[0].ficha.contra_que).toBe('brief_creativo.v1')

@@ -14,7 +14,7 @@ import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from
 import { diaDeCampana, diaSemanaIso, fechaDeFila, minutos, sumarDias } from './fechas'
 import { alcanza, nivelEfectivo, resolverDato, type Candidato } from './fuentes'
 import { normalizar } from './texto'
-import type { Ajuste, Alcance, Clase, DatoDeterminado, Estrategia, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo, Severidad } from './tipos'
+import type { Ajuste, Alcance, Clase, DatoDeterminado, Dependencia, Estrategia, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo, Severidad } from './tipos'
 
 export interface FechaEspecialVerificada {
   id: string
@@ -86,7 +86,6 @@ export function claseDeFormato(formato: string): 'feed' | 'historias' | 'anuncio
 }
 
 const DIAS: Record<string, number> = { lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6, domingo: 7 }
-const PALABRAS_FECHA_ESPECIAL = /\b(feriado|festivo|puente|temporada (?:alta|baja)|vacaciones|black friday|cyber ?monday|navidad|ano nuevo|dia (?:de la madre|del padre|del nino|de la mujer|del trabajo|de san valentin|de los difuntos|de la independencia)|san valentin|carnaval|semana santa|halloween|fiestas (?:patrias|de))\b/
 
 const activa = (f: Fila) => f.estado !== 'cancelada' && f.estado !== 'descartada_sin_fuente'
 const materializada = (f: Fila) => f.estado !== 'esquema'
@@ -166,11 +165,14 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
       }
     }
 
-    // ─── V07 · regla general: ninguna fecha especial entra sin fuente (por FILA; la lista vacía no bloquea nada)
-    if (PALABRAS_FECHA_ESPECIAL.test(nTema)) {
+    // ─── V07 · regla general: ninguna fecha especial entra sin fuente (por FILA)
+    // 11-nov (GO Lenovo · reglas rígidas #5): QUIÉN cita una fecha especial lo dice el agente (un dato `fecha_especial` en la fila); el código solo verifica que esa fecha exista y esté
+    // verificada. Ya no hay lista de palabras: «vacaciones de verano» o «puente» (de una constructora) no sacan una fila que no cita ninguna fecha.
+    const declaradas = f.datos.filter((d) => d.dato === 'fecha_especial')
+    if (declaradas.length) {
       const verificadas = new Map((ins.fechasEspeciales ?? []).filter((x) => x.estado === 'verificada').map((x) => [x.id, x]))
-      const respaldo = f.datos.find((d) => d.dato === 'fecha_especial' && verificadas.has(d.ref.replace(/^fecha:/, '')))
-      if (!respaldo) out.push(h('V07', 'bloquea', f, 'el tema cita una fecha especial sin fuente verificada', 'ninguna fecha especial entra al calendario sin fuente', 'quitar la mención o respaldarla con una fecha verificada; si no hay fuente, la fila sale o se cambia'))
+      const respaldo = declaradas.find((d) => verificadas.has(d.ref.replace(/^fecha:/, '')))
+      if (!respaldo) out.push(h('V07', 'bloquea', f, `el tema cita una fecha especial sin fuente verificada (${declaradas.map((d) => d.ref || 'sin ref').join(', ')})`, 'ninguna fecha especial entra al calendario sin fuente', 'citar una fecha de la lista FECHAS ESPECIALES (su `fecha:<id>`) o quitar la mención; si no hay fuente, la fila sale o se cambia'))
       else {
         const fe = verificadas.get(respaldo.ref.replace(/^fecha:/, ''))!
         if (fe.fecha === f.fecha && f.requiere_abierto) out.push(h('V07', 'aviso', f, `la fila cae en «${fe.nombre}» (${fe.fecha}) y exige local abierto`, 'fecha especial verificada', 'mover la pieza a otro día o cambiarla por una que no requiera local abierto'))
@@ -189,13 +191,17 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     for (const p of duras) if (coincide(p)) out.push(h('V15', 'aviso', f, `el tema usa «${p}», declarada por una norma o para este cliente: revisa si corresponde`, 'palabras declaradas por una norma o para este cliente', 'revisar si corresponde'))
     const prohibidas = (ins.forbiddenWords ?? []).map(normalizar).filter((p) => p && !duras.has(p))
     for (const p of prohibidas) if (coincide(p)) out.push(h('V15', 'aviso', f, `el tema usa «${p}», que el manual evita: revisa si es un claim propio sin prueba`, 'palabras que el manual evita', 'si es un claim propio, sostenerlo con evidencia o reformularlo'))
-    // r75 · H2 · se bloquean las formas de OTRO registro SOLO si el registro del cliente está fijado (su manual o su país); sin dato no se impone ninguno
+    // r75 · H2 · las formas de OTRO registro se señalan SOLO si el registro del cliente está fijado (su manual o su país); sin dato no se impone ninguno
+    // 11-nov (GO Lenovo · reglas rígidas #23): la lista de verbos da falsos positivos («mande» en tercera persona): aquí SIEMPRE avisa; el que juzga y bloquea es el revisor de registro
     const otro = formasDeOtroRegistro(ins.registro, f.tema ?? '')
-    if (otro.length) out.push(h('V15', ins.registroSoloAviso ? 'aviso' : 'bloquea', f, `el tema usa formas de otro registro («${otro[0]}») y el del cliente es ${nombreDelRegistro(ins.registro)}`, `${nombreDelRegistro(ins.registro)} (registro del cliente, fijado por su manual o su país)`, `reescribir en ${nombreDelRegistro(ins.registro)}`))
+    if (otro.length) out.push(h('V15', 'aviso', f, `el tema usa formas de otro registro («${otro[0]}») y el del cliente es ${nombreDelRegistro(ins.registro)}`, `${nombreDelRegistro(ins.registro)} (registro del cliente, fijado por su manual o su país)`, `reescribir en ${nombreDelRegistro(ins.registro)}`))
 
     // ─── V16 · nunca reseñas ni testimonios con nombre sin procedencia
-    if (/\b(?:resena|testimonio|opinion de|dice (?:que )?[a-z]+ )\b/.test(nTema) || /[“"][^”"]{12,}[”"]/.test(f.tema ?? '')) {
-      const procede = f.datos.some((d) => d.dato === 'resena' && refPorId.get(d.ref) && ['F0', 'F1'].includes(nivelEfectivo(refPorId.get(d.ref)!).nivel))
+    // 11-nov (GO Lenovo · reglas rígidas #6): SI la cita es un testimonio lo dice el agente (un dato `resena` en la fila); el código verifica que su ficha exista y sea F0/F1.
+    // Ya no se adivina por comillas ni por palabras: un eslogan del manual entre comillas no es un testimonio.
+    const resenas = f.datos.filter((d) => d.dato === 'resena')
+    if (resenas.length) {
+      const procede = resenas.every((d) => refPorId.get(d.ref) && ['F0', 'F1'].includes(nivelEfectivo(refPorId.get(d.ref)!).nivel))
       if (!procede) out.push(h('V16', 'bloquea', f, 'el tema cita una reseña o testimonio sin ficha de procedencia', 'regla «no inventar reseñas»', 'quitar la cita; las frases con nombre y foto no se escriben'))
     }
 
@@ -243,8 +249,8 @@ export function validarCalendario(ins: InsumosCalendario): Hallazgo[] {
     if (!despues.length) continue
     const primera = despues.map((x) => x.fecha).sort()[0]
     const antes = todas.filter((x) => activa(x) && x.fecha < primera && (x.pieza_fija?.startsWith(d.antes) || x.formato === d.antes))
-    const exigidas = /(\d+)\s*(?:posts?|piezas?|publicaciones?)/i.exec(d.regla)
-    const n = exigidas ? Number(exigidas[1]) : 1
+    // 11-nov (GO Lenovo · reglas rígidas #9): la cantidad es un campo de la dependencia («tres posts» ya no se lee como 1)
+    const n = cantidadExigida(d)
     if (antes.length < n) out.push(h('V11', 'bloquea', null, `«${d.despues}» sale el ${primera} y antes solo hay ${antes.length} de «${d.antes}» (la regla pide ${n})`, d.cita_plan || d.regla, 'mover «' + d.despues + '» después de completar «' + d.antes + '»', `dependencia ${d.antes}→${d.despues}`))
   }
 
@@ -331,6 +337,20 @@ function chequeoDeDatos(f: Fila, ins: InsumosCalendario, refPorId: Map<string, R
 const ORDEN_CLASE: Record<Clase, number> = { bajo: 0, medio: 1, alto: 2 }
 const maxClase = (a: Clase, b: Clase): Clase => (ORDEN_CLASE[a] >= ORDEN_CLASE[b] ? a : b)
 
+/** la tolerancia de frecuencia por clase: la de la estrategia si la trae (entero ≥ 0); si no, la de antes del 11-nov (feed 0, historias 1, anuncios 1) */
+export const TOLERANCIA_POR_OMISION = { feed: 0, historias: 1, anuncios: 1 } as const
+export function toleranciaDe(e: Pick<Estrategia, 'tolerancia_frecuencia'>, clase: 'feed' | 'historias' | 'anuncios'): number {
+  const v = e.tolerancia_frecuencia?.[clase]
+  return Number.isInteger(v) && (v as number) >= 0 ? (v as number) : TOLERANCIA_POR_OMISION[clase]
+}
+
+/** cuántas piezas de «antes» exige una dependencia: el campo `cantidad` (entero ≥ 1); una estrategia de antes del 11-nov no lo trae y se lee del texto como siempre */
+export function cantidadExigida(d: Pick<Dependencia, 'regla' | 'cantidad'>): number {
+  if (Number.isInteger(d.cantidad) && (d.cantidad as number) >= 1) return d.cantidad as number
+  const exigidas = /(\d+)\s*(?:posts?|piezas?|publicaciones?)/i.exec(d.regla)
+  return exigidas ? Number(exigidas[1]) : 1
+}
+
 function chequeoFrecuencia(ins: InsumosCalendario): Hallazgo[] {
   const out: Hallazgo[] = []
   const { campana, estrategia } = ins
@@ -347,8 +367,9 @@ function chequeoFrecuencia(ins: InsumosCalendario): Hallazgo[] {
         const holgura = (ins.ajustes ?? []).filter((a) => a.semana === semana && slotRed.get(a.slot) === c.red && a.accion !== 'mover').length
         const dif = Math.abs(real - meta)
         if (dif <= holgura) continue
-        const tolerancia = clase === 'feed' ? 0 : 1
-        const sev: Severidad = !completa ? 'aviso' : dif > tolerancia && (clase === 'feed' || dif > 1) ? 'bloquea' : 'aviso'
+        // 11-nov (GO Lenovo · reglas rígidas #8): la tolerancia es un DATO de la estrategia (`tolerancia_frecuencia`); sin él, la de siempre (feed 0, historias y anuncios 1)
+        const tolerancia = toleranciaDe(estrategia, clase)
+        const sev: Severidad = !completa ? 'aviso' : dif > tolerancia ? 'bloquea' : 'aviso'
         if (dif > 0) out.push(h('V08', sev, null, mensajeV08(semana, c.red, clase, real, meta), 'frecuencia de la estrategia', 'ajustar la cantidad', `semana ${semana} · ${c.red}`))
       }
     }

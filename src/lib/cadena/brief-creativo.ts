@@ -2,7 +2,7 @@
  * EL BRIEF CREATIVO DE CAMPAÑA · contrato `brief_creativo.v1` (31-oct · diseño «nuevo orden de la cadena» v5 §3 · plan de construcción v2 T1).
  * UN brief por campaña, corto, escrito por `campaign-brief-agent` como mesa de un miembro (`brief_mesa`): insight · UN mensaje · objetivo (y por red) · tono · obligatorios · faltantes
  * declarados · contradicciones plan vs manual · citas. Reemplaza al `brief_fila.v1` (brief por publicación), que nadie usa.
- * `leerBriefCreativo()` lo lee por código y aplica los chequeos portados de `brief-chequeos.js` (el nodo ④ del parte): un solo mensaje · la cita del plan es literal · ninguna cifra `,77` ·
+ * `leerBriefCreativo()` lo lee por código y aplica los chequeos portados de `brief-chequeos.js` (el nodo ④ del parte): un solo mensaje · la cita del plan es literal ·
  * ninguna palabra prohibida fuera de la lista «prohibido» · el público no es «todos» (si lo nombra) · secciones obligatorias presentes. Lo que falla deja el brief `devuelta`
  * (la cadena pide UNA vez más; si sigue, `necesita_humano`). Nada aquí sabe de un cliente ni habla con un modelo.
  */
@@ -12,7 +12,7 @@ import { citaAparece, normalizar, textoDelDocumento } from './texto'
 export { textoDelDocumento }
 import type { Canal, Hallazgo } from './tipos'
 import type { ContextoDelCliente } from './almacen'
-import { CONTRATO_BRIEF_CREATIVO, claveDeTexto, contienePalabraEntera, seccionesDe, tieneCifraInventada } from './conceptos'
+import { CONTRATO_BRIEF_CREATIVO, claveDeTexto, contienePalabraEntera, seccionesDe } from './conceptos'
 import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from './registro'
 
 export { CONTRATO_BRIEF_CREATIVO }
@@ -252,8 +252,8 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   const lineaPublico = /^\s*-?\s*p[úu]blico\s*:\s*(.+)$/imu.exec(textoSinFaltantes)
   if (lineaPublico && publicoEsTodos(lineaPublico[1])) avisos.push(`el público dice «${lineaPublico[1].trim().slice(0, 60)}» · no es una audiencia declarada`)
 
-  // cifras ,77 y prohibidas fuera de la lista «prohibido» y de las contradicciones (ahí se citan para decir que NO se usan)
-  if (tieneCifraInventada(md)) bloqueos.push('hay una cifra «,77» (dato inventado: copió el ejemplo en vez de pensar)')
+  // prohibidas fuera de la lista «prohibido» y de las contradicciones (ahí se citan para decir que NO se usan)
+  // 11-nov (GO Lenovo · reglas rígidas #4): ya no hay parche «,77». Un precio real de US$ 4,77 es un dato; lo que verifica un dato es su fuente, no su terminación
   const loQuePide = secciones.filter((s) => tituloConocido(s) !== 'Contradicciones plan vs manual').map((s) => (tituloConocido(s) === 'Obligatorios' ? lineasConClave(textoDe(s, 'Obligatorios')).filter((l) => !/^prohibid|^lo que no se dice|^no se dice/.test(claveDeTexto(l.clave))).map((l) => l.valor).join('\n') : textoDe(s, tituloConocido(s) ?? s.titulo))).join('\n')
   // 01-nov · ADENDA de Emilio: una palabra de la lista es contexto de marca, no un bloqueo por coincidencia (una reseña citada y atribuida no es un superlativo propio)
   const duras = new Set((ins.duras ?? []).map(claveDeTexto))

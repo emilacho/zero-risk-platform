@@ -186,7 +186,7 @@ function bateria(nombre: string, mk: () => ClienteFixture) {
       expect(bloqueos(hs)).toEqual([])
     })
 
-    it('V15: una palabra que el manual evita es AVISO, nunca bloqueo (ADENDA de Emilio); el voseo sí bloquea', () => {
+    it('V15: una palabra que el manual evita es AVISO, nunca bloqueo (ADENDA de Emilio); otro registro también es aviso (11-nov · reglas rígidas #23: bloquea el revisor de registro)', () => {
       const conPalabra = val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: `Algo ${c.forbiddenWords[0]} hoy` }))
       expect(chequeos(conPalabra)).not.toContain('V15')
       expect(conPalabra.some((h) => h.chequeo === 'V15' && h.severidad === 'aviso')).toBe(true)
@@ -195,11 +195,17 @@ function bateria(nombre: string, mk: () => ClienteFixture) {
       expect(chequeos(declarada)).not.toContain('V15')
       expect(declarada.filter((h) => h.chequeo === 'V15').map((h) => h.severidad)).toEqual(['aviso'])
       expect(declarada.some((h) => h.chequeo === 'V15' && /declarada/.test(JSON.stringify(h)))).toBe(true)
-      expect(chequeos(val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: 'Vení a conocernos y decime qué pensás' })))).toContain('V15')
+      const vos = val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: 'Vení a conocernos y decime qué pensás' }))
+      expect(chequeos(vos)).not.toContain('V15')
+      expect(vos.filter((h) => h.chequeo === 'V15').map((h) => h.severidad)).toEqual(['aviso'])
     })
 
-    it('V16: una reseña con nombre sin ficha de procedencia', () => {
-      expect(chequeos(val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: 'La reseña de Marta: «el mejor lugar que conozco»' })))).toContain('V16')
+    // 11-nov (GO Lenovo · reglas rígidas #6): si es un testimonio lo declara el agente (dato `resena`); el código verifica la ficha. Las comillas solas no son testimonio.
+    it('V16: una reseña DECLARADA sin ficha de procedencia bloquea; un eslogan entre comillas sin declarar, no', () => {
+      const resena = { dato: 'resena', valor: 'el mejor lugar que conozco', clase: 'alto' as const, nivel: 'F0' as const, opcional: false, ref: 'no-existe' }
+      expect(chequeos(val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: 'La reseña de Marta: «el mejor lugar que conozco»', datos: [resena] })))).toContain('V16')
+      expect(chequeos(val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: 'Nuestro lema: "hecho a mano desde el primer día"' })))).not.toContain('V16')
+      expect(chequeos(val(conPieza(c, bueno, 1, c.anclas.lunes, { tema: 'La reseña de Marta: «el mejor lugar que conozco»' })))).not.toContain('V16')
     })
 
     it('V20: el agente no puede esconder un video como foto', () => {
@@ -250,7 +256,8 @@ describe('los 7 errores del calendario real, inyectados (cliente A): el sistema 
     expect(malo(t).some((h) => h.chequeo === 'V11' && h.severidad === 'bloquea')).toBe(false)
   })
   it('#4 feriado equivocado: citar una fecha especial sin fuente verificada bloquea (V07); con fuente y en día abierto, pasa', () => {
-    const t = conPieza(c, bueno, 2, 'a', { tema: 'Feliz feriado de la independencia' })
+    // 11-nov (reglas rígidas #5): la fila DECLARA la fecha que cita (dato `fecha_especial`); sin fecha verificada detrás, V07 bloquea
+    const t = conPieza(c, bueno, 2, 'a', { tema: 'Feliz feriado de la independencia', datos: [{ dato: 'fecha_especial', valor: 'Independencia', clase: 'bajo', ref: 'fecha:f1', nivel: 'F1', opcional: false }] })
     expect(chequeos(malo(t))).toContain('V07')
     const fe = [{ id: 'f1', fecha: '2026-11-03', nombre: 'Independencia', tipo: 'feriados locales', ambito: 'ciudad', alcance: 'local' as const, estado: 'verificada' as const }]
     const respaldada = conPieza(c, bueno, 2, 'a', { tema: 'Feliz feriado de la independencia', datos: [{ dato: 'fecha_especial', valor: 'Independencia', clase: 'bajo', ref: 'fecha:f1', nivel: 'F1', opcional: false }] })

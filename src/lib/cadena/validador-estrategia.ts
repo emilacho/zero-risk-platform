@@ -54,6 +54,10 @@ export function problemasDeEsquema(x: unknown): string[] {
     if (!s?.slot || !s?.red || !s?.formato || !s?.pilar) p.push(`patron_semanal[${i}]`)
     if (!Number.isInteger(s?.dia_semana) || s.dia_semana < 1 || s.dia_semana > 7) p.push(`patron_semanal[${i}].dia_semana`)
   })
+  // 11-nov (reglas rígidas #8 y #9): son opcionales (una estrategia guardada antes no los trae); si vienen, tienen que ser números válidos
+  e.dependencias.forEach((d, i) => { if (d && d.cantidad !== undefined && (!Number.isInteger(d.cantidad) || d.cantidad < 1)) p.push(`dependencias[${i}].cantidad (entero ≥ 1)`) })
+  const tol = (e as Estrategia).tolerancia_frecuencia
+  if (tol !== undefined) for (const k of ['feed', 'historias', 'anuncios'] as const) if (!Number.isInteger(tol?.[k]) || tol[k] < 0) p.push(`tolerancia_frecuencia.${k} (entero ≥ 0)`)
   e.pendientes.forEach((q, i) => { if (!q?.clave || !['portero', 'sistema'].includes(q?.pedir_a)) p.push(`pendientes[${i}].pedir_a (portero|sistema)`) })
   return p
 }
@@ -79,7 +83,7 @@ export function validarEstrategia(x: unknown, ins: InsumosEstrategia): Hallazgo[
   const out: Hallazgo[] = []
   const malos = problemasDeEsquema(x)
   if (malos.length) {
-    out.push(h('S01', 'bloquea', 'estrategia', `esquema inválido: ${malos.slice(0, 6).join('; ')}`, 'contrato estrategia.v2', 'devolver el objeto completo con todas las listas'))
+    out.push(h('S01', 'bloquea', 'estrategia', `esquema inválido: ${malos.slice(0, 6).join('; ')}`, 'contrato estrategia.v3', 'devolver el objeto completo con todas las listas'))
     return out
   }
   const e = x as Estrategia
