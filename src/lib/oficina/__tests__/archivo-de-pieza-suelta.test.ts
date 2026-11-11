@@ -96,6 +96,18 @@ describe('archivar una pieza suelta', () => {
   })
 })
 
+describe('el encargo de la pieza', () => {
+  it('🔴 B2B: un encargo que solo nombra la metadata de la pieza (su bandeja no la apunta) también se archiva y se desarchiva', async () => {
+    const x = base()
+    x.tablas.oficina_encargos = (x.tablas.oficina_encargos ?? []).map((e) => (e.id === EA ? { ...e, hitl_queue_id: null } : e))
+    const antes = JSON.stringify(x.tablas)
+    await archivarPieza(d(x), { hitl_id: HA, motivo: RAZON, dry_run: false }, AHORA)
+    expect(fila(x, 'oficina_encargos', EA)).toMatchObject({ archivo_motivo: RAZON })
+    await desarchivarPieza(d(x), { hitl_id: HA })
+    expect(JSON.stringify(x.tablas)).toBe(antes)
+  })
+})
+
 describe('desarchivar una pieza suelta', () => {
   it('🔴 deja la pieza y su encargo EXACTAMENTE como estaban (B2B y Náufrago)', async () => {
     for (const h of [HA, HN]) {
