@@ -21,6 +21,7 @@ import { enviarVideo } from '../orquestador-video'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
 import type { CotizacionDeVideo, PuertoDeVideo } from '../puertos'
 import { esFallidoRecuperable } from '../reapertura'
+import { causaDelFallo } from '../causa-del-fallo'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { PROMPT_DE_COTIZACION, pedidosParaCotizar } from '../video/pedido'
 import { DbFalsa } from './dbfalsa'
@@ -145,6 +146,8 @@ describe.each(CLIENTES)('%s · la sala de video cotiza ANTES de la mesa', (_n, C
     expect(String(a.cuerpo.motivo)).toContain('«New pricing: see the console.»')
     expect(enc).toMatchObject({ estado: 'fallido', gasto_usd: 0 })
     expect(enc.estado_del_motor.pasos_ejecutados).toBe(0)
+    // 11-nov · GO reel de Olón: la causa queda guardada en la fila, no solo en el aviso
+    expect(causaDelFallo(enc.estado_del_motor)).toMatchObject({ motivo: String(a.cuerpo.motivo), pasos_ejecutados: 0, gasto_usd: 0 })
     expect(esFallidoRecuperable({ estado: enc.estado, gasto_usd: enc.gasto_usd, version_encargo: enc.version_encargo, pasos_ejecutados: enc.estado_del_motor.pasos_ejecutados })).toBe(true)
     expect(reg.cotizados).toHaveLength(1) // se corta en la primera ruta que no cotiza
     expect(reg.enviados).toBe(0)

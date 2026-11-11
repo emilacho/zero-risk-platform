@@ -34,6 +34,7 @@ import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } fro
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { DESCARTAR_EYEBROW_LARGO, procesarSalida, proyectarAlEsquema } from './salida'
 import { agotaLasVersiones, MAX_VERSIONES_POR_BRIEF } from './reapertura'
+import { conCausaDelFallo } from './causa-del-fallo'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
 import { claseDe, tienePasarela } from './clase'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
@@ -859,7 +860,9 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
 
 // ───────────────────────── cierres
 export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<Respuesta> {
-  const e = enc.estado_del_motor
+  // 11-nov · GO Lenovo (reel de Olón) · la causa queda GUARDADA en el encargo, no solo en el aviso: un fallido nunca más queda a ciegas
+  const e = conCausaDelFallo(enc.estado_del_motor, motivo, P.ahora())
+  enc = { ...enc, estado_del_motor: e }
   // 31-oct · la mesa de brief o de concepto que falla se lo dice a la cadena (que sigue con lo que tenga o pide a un humano); jamás deja a la campaña esperando
   if (enc.familia === 'brief_mesa' || enc.familia === 'concepto_mesa' || enc.familia === 'reubicacion_mesa') {
     const { entregarALaCadena } = await import('./mesa/de-la-cadena')
