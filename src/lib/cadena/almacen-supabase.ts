@@ -30,7 +30,7 @@ import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos
 import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
 import { enviosDesdeElRegistro, llavesDelRegistro } from './lote-muerto'
-import { encargosRealesDe, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
+import { configDeLaPuerta, encargosRealesDe, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
 import { OPERACION_DE_PRODUCIR } from './tope-de-campana'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
@@ -460,6 +460,8 @@ export function almacenDeSupabase(): Almacen {
       return { bloqueado: r.blocked === true, motivo: r.reason }
     },
     // 10-nov · TOPE POR CAMPAÑA · la misma fuente con que se midió el gasto de la campaña (planeación + concepto + brief) más los encargos de la oficina de la campaña y sus partes reales
+    // 11-nov · la MISMA lectura que la puerta de la oficina (vive en la oficina: solo ella nombra sus tablas), pero un fallo o una fila ausente LANZA
+    async configDeLaOficina() { return configDeLaPuerta(db as unknown as DbDeGasto) },
     async leerGastoDeCampana(campanaId, parteActual) {
       const [corridas, conceptos, briefs, partesFilas, topes_de_familia] = await Promise.all([
         lista<{ costo_usd: number | null; estado: Corrida['estado']; paso: Corrida['paso'] }>(db.from('cadena_corridas').select('costo_usd, estado, paso').eq('campana_id', campanaId)),
