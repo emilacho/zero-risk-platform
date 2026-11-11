@@ -5,6 +5,8 @@
  * Son DATOS (se cambian aquí o por el pedido, dentro de lo permitido): el código solo impide salirse de lo aprobado y de lo que la API admite.
  */
 
+import { PROPORCION_POR_FORMATO } from '../cadena/proporciones'
+
 export const MODELO_APROBADO = 'bytedance/seedance-2.5'
 export const MODELOS_PERMITIDOS: ReadonlySet<string> = new Set(['bytedance/seedance-2.5', 'bytedance/seedance-2.0'])
 export const DURACION_MIN_S = 8
@@ -12,20 +14,51 @@ export const DURACION_MAX_S = 15
 /** adenda 4 (Emilio, 31-oct 12:30Z, opción B): la prueba va a 720p y queda como valor por omisión; 1080p sigue admitida para después, cuando se mida el descuento real */
 export const RESOLUCION_APROBADA = '720p'
 export const RESOLUCIONES_PERMITIDAS: ReadonlySet<string> = new Set(['480p', '720p', '1080p'])
+/** el tope por video POR OMISIÓN (lo aprobado por Emilio el 31-oct); el vigente sale de la configuración (`configDelBrazo`) */
 export const TOPE_POR_VIDEO_USD = 5
+
 /**
- * descuento VIGENTE del proveedor (medido en la corrida real del 31-oct: lista US$ 3,70 → cargo US$ 2,59 = 30 %, «Seedance 2.5 · 30% off» en la consola, 7 días).
- * Lo que se reserva en el libro y se compara con el tope es el costo CON descuento mientras rija; pasada la fecha, vuelve la lista. Es DATO: se cambia aquí cuando cambie la consola.
+ * 11-nov · GO Lenovo 03:55Z · regla #18 del barrido: el descuento y el tope del proveedor NO viven en el código (el descuento del 31-oct quedó escrito con su fecha y venció el 7-nov).
+ * Son CONFIGURACIÓN: `cadena_config` clave `brazo_de_video` = `{ tope_por_video_usd?, descuento?: { pct, hasta, modelos } }`. La pone quien decide (Lenovo/Emilio), no este código.
+ * Sin la clave, ilegible o con valores raros: el tope aprobado (US$ 5) y SIN descuento (del lado seguro: se reserva la lista, que es lo que más cuesta).
  */
-export const DESCUENTO_VIGENTE: Readonly<{ pct: number; hasta: string; modelos: readonly string[] }> = { pct: 0.3, hasta: '2026-11-07T13:19:13Z', modelos: ['bytedance/seedance-2.5', 'bytedance/seedance-2.0'] }
-export function conDescuento(costoListaUsd: number, modelo: string, ahoraMs: number): { usd: number; pct: number } {
-  const d = DESCUENTO_VIGENTE
-  const rige = d.pct > 0 && d.modelos.includes(modelo) && ahoraMs < Date.parse(d.hasta)
+export const CLAVE_DE_CONFIG_DEL_BRAZO = 'brazo_de_video'
+export interface DescuentoDelProveedor { pct: number; hasta: string; modelos: readonly string[] }
+export interface ConfigDelBrazo { tope_por_video_usd: number; descuento: DescuentoDelProveedor | null }
+export const CONFIG_DEL_BRAZO_POR_OMISION: ConfigDelBrazo = { tope_por_video_usd: TOPE_POR_VIDEO_USD, descuento: null }
+
+/** normaliza el valor guardado · cada parte inválida vuelve a su valor por omisión (nunca lanza) · pura */
+export function configDelBrazo(valor: unknown): ConfigDelBrazo {
+  const v = valor && typeof valor === 'object' && !Array.isArray(valor) ? (valor as Record<string, unknown>) : {}
+  const tope = typeof v.tope_por_video_usd === 'number' && Number.isFinite(v.tope_por_video_usd) && v.tope_por_video_usd > 0 ? v.tope_por_video_usd : TOPE_POR_VIDEO_USD
+  const d = v.descuento && typeof v.descuento === 'object' && !Array.isArray(v.descuento) ? (v.descuento as Record<string, unknown>) : null
+  const descuento = d && typeof d.pct === 'number' && d.pct > 0 && d.pct < 1 && typeof d.hasta === 'string' && Number.isFinite(Date.parse(d.hasta)) && Array.isArray(d.modelos)
+    ? { pct: d.pct, hasta: d.hasta, modelos: d.modelos.map(String) }
+    : null
+  return { tope_por_video_usd: tope, descuento }
+}
+
+/** lee la configuración del brazo con el lector de la cadena (`almacen.leerConfig`: el único que nombra sus tablas) · sin valor o cualquier error ⇒ la de por omisión (tope aprobado, sin descuento) */
+export async function leerConfigDelBrazo(leer: (clave: string) => PromiseLike<unknown>): Promise<ConfigDelBrazo> {
+  try {
+    const v = await leer(CLAVE_DE_CONFIG_DEL_BRAZO)
+    return v == null ? CONFIG_DEL_BRAZO_POR_OMISION : configDelBrazo(v)
+  } catch { return CONFIG_DEL_BRAZO_POR_OMISION }
+}
+
+/** el costo con el descuento de la configuración, si rige para ese modelo y esa hora; sin descuento, la lista */
+export function conDescuento(costoListaUsd: number, modelo: string, ahoraMs: number, descuento: DescuentoDelProveedor | null): { usd: number; pct: number } {
+  const d = descuento
+  const rige = !!d && d.pct > 0 && d.modelos.includes(modelo) && ahoraMs < Date.parse(d.hasta)
   if (!rige) return { usd: costoListaUsd, pct: 0 }
   return { usd: +(costoListaUsd * (1 - d.pct)).toFixed(4), pct: d.pct }
 }
-/** relación de cuadro por formato de red (la tabla `cadena_formatos_por_red` nombra el formato; el cuadro lo fija esto) */
-export const RELACION_POR_FORMATO: Readonly<Record<string, string>> = { reel: '9:16', short: '9:16', tiktok: '9:16', video: '16:9', historia: '9:16', estado: '9:16' }
+/**
+ * los formatos que acepta el brazo y su relación POR OMISIÓN · 11-nov regla #17: la relación real la manda quien pide (la oficina la lee del brief,
+ * que la tomó de `cadena_formatos_por_red.proporcion`); sin ella, la MISMA de por omisión que usa la hoja (`cadena/proporciones.ts`). Antes el brazo tenía la suya (video = 16:9).
+ */
+export const FORMATOS_DEL_BRAZO = ['reel', 'short', 'tiktok', 'video', 'historia', 'estado'] as const
+export const RELACION_POR_FORMATO: Readonly<Record<string, string>> = Object.fromEntries(FORMATOS_DEL_BRAZO.map((f) => [f, PROPORCION_POR_FORMATO[f] ?? '9:16']))
 export const RELACIONES_PERMITIDAS: ReadonlySet<string> = new Set(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'])
 export const MAX_FOTOS_DE_REFERENCIA = 9 // el mínimo común de 2.0 (9) y 2.5 (30): nunca se manda más que lo que admite cualquiera de los dos
 

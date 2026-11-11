@@ -8,7 +8,7 @@
  */
 import crypto from 'node:crypto'
 import { datos, fichaNueva } from './ayudas'
-import { fechaLimiteDelBrief, parsearBrief, planDeOrigen, type BriefLeido } from './brief'
+import { fechaLimiteDelBrief, parsearBrief, planDeOrigen, proporcionDelBrief, type BriefLeido } from './brief'
 import { briefEsDelEncargo } from './familia-del-brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import type { ContextoDelRevisor } from './ciego'
@@ -20,7 +20,7 @@ import { FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PO
 import { FUNCION_DEL_TABLERO } from './pedidos-laminas'
 import type { Cambios, Encargo, EstadoDelBrazo, FuentesCompletas, Puertos } from './puertos'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
-import { RELACION_POR_FORMATO } from '../video/parametros'
+import { RELACIONES_PERMITIDAS, RELACION_POR_FORMATO } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
@@ -39,7 +39,7 @@ const txt = (x: unknown): string => (typeof x === 'string' ? x : x == null ? '' 
 const arr = <T = string>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
 const turnoDe = (e: Estado) => e.pasos_ejecutados + 1
 
-export interface BaseV { brief: BriefLeido; proporcion: string; F: FuentesCompletas; familia: 'video'; plataforma: string; elementos: never[]; formato_video: string }
+export interface BaseV { brief: BriefLeido; proporcion: string; /** 11-nov · regla #17 · la proporción del brief no la admitía el generador: se usó la de por omisión (se avisa en la hoja de publicar) */ aviso_proporcion?: string; F: FuentesCompletas; familia: 'video'; plataforma: string; elementos: never[]; formato_video: string }
 const baseV = (e: Estado): BaseV => datos(e, 'encargo') as unknown as BaseV
 
 /** lo que la mesa deja en el artefacto `guion` */
@@ -89,13 +89,17 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P))
   if (!sala.ok) return { res: { costo_usd: 0 }, fallido: sala.motivo }
   const formato_video = formatoDeVideo(brief)
-  const proporcion = RELACION_POR_FORMATO[formato_video] ?? String(pl.limites.formato_por_omision ?? '9:16')
+  // 11-nov · regla #17: la proporción la escribió la hoja en LÍMITES (dato de la tabla de formatos); sin ella, o si el generador no la admite, la de por omisión del formato CON aviso
+  const porOmision = RELACION_POR_FORMATO[formato_video] ?? String(pl.limites.formato_por_omision ?? '9:16')
+  const leida = proporcionDelBrief(brief, porOmision)
+  const proporcion = RELACIONES_PERMITIDAS.has(leida) ? leida : porOmision
+  const aviso_proporcion = proporcion === leida ? undefined : `la proporción ${leida} del brief no la admite el generador de video; se usó ${porOmision}, la de por omisión del formato ${formato_video}`
   const plataforma = `${brief.red.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() || 'red'}-${formato_video}`
   // 11-nov · GO Lenovo 02:52Z · COTIZAR PRIMERO (real): antes de llamar a la mesa, el brazo estima GRATIS cada ruta que el guion puede usar. Si no puede cotizar, el encargo
   //   falla AQUÍ, en el primer paso y a US$ 0 (queda recuperable: `reapertura.ts`), en vez de enterarse al final con la mesa ya pagada. En seco no sale a la red (como el envío).
-  const cotizacion = enc.dry_run ? null : await cotizarPrimero(P, enc, pl, brief, fu.fotos)
+  const cotizacion = enc.dry_run ? null : await cotizarPrimero(P, enc, pl, brief, fu.fotos, proporcion)
   if (cotizacion && !cotizacion.ok) return { res: { costo_usd: 0 }, fallido: cotizacion.motivo }
-  return { res: { costo_usd: 0, artefacto: { brief, proporcion, F: fu, familia: 'video', plataforma, elementos: [], formato_video, ...(cotizacion ? { cotizacion: cotizacion.rutas } : {}) } } }
+  return { res: { costo_usd: 0, artefacto: { brief, proporcion, ...(aviso_proporcion ? { aviso_proporcion } : {}), F: fu, familia: 'video', plataforma, elementos: [], formato_video, ...(cotizacion ? { cotizacion: cotizacion.rutas } : {}) } } }
 }
 
 /** cuánto se le deja gastar al video al cotizar: el tope por video de la plantilla, sin pasar el del encargo (el brazo además lo recorta al aprobado) */
@@ -105,11 +109,11 @@ const topeDeLaCotizacion = (pl: Plantilla): number => {
 }
 
 /** la cotización gratis de cada ruta posible · el texto que devolvió el proveedor, si lo hubo, queda en el motivo del fallo (para poder verlo) */
-async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: BriefLeido, fotos: FuentesCompletas['fotos']): Promise<{ ok: true; rutas: Array<{ ruta: string; costo_estimado_usd: number; costo_lista_usd: number | null }> } | { ok: false; motivo: string }> {
+async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: BriefLeido, fotos: FuentesCompletas['fotos'], relacion: string): Promise<{ ok: true; rutas: Array<{ ruta: string; costo_estimado_usd: number; costo_lista_usd: number | null }> } | { ok: false; motivo: string }> {
   const sinGastar = 'no se gastó nada; el encargo queda recuperable'
   if (!P.video?.cotizar) return { ok: false, motivo: `no se puede cotizar el video antes de abrir la mesa: el brazo de video no está conectado (${sinGastar})` }
   const lim = (pl.limites.video ?? {}) as { resolucion?: string }
-  const ps = pedidosParaCotizar({ brief, fotos, clave: `${enc.id}:${enc.brief_id}`, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
+  const ps = pedidosParaCotizar({ brief, fotos, clave: `${enc.id}:${enc.brief_id}`, relacion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
   if (!ps.ok) return { ok: false, motivo: `no se pudo armar el pedido de cotización: ${ps.errores.join(' · ')} (${sinGastar})` }
   const rutas: Array<{ ruta: string; costo_estimado_usd: number; costo_lista_usd: number | null }> = []
   for (const { ruta, pedido: ped } of ps.pedidos) {
@@ -130,7 +134,7 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
   if (!g || !Array.isArray(g.planos) || !g.planos.length) return { res: { costo_usd: 0 }, fallido: 'no hay guion traducido que pedir (la mesa no dejó planos)' }
   const lim = (pl.limites.video ?? {}) as { resolucion?: string }
   const clave = `${enc.id}:${enc.brief_id}:v${e.artefactos['guion']?.version ?? 1}`
-  const a = armarPedidoDeLaOficina({ guion: g, brief: b.brief, fotos: b.F.fotos, clave, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
+  const a = armarPedidoDeLaOficina({ guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
   if (!a.ok) return { res: { costo_usd: 0 }, fallido: `el pedido al brazo de video no es válido: ${a.errores.join(' · ')}` }
   const fichas: Ficha[] = []
   if (a.pedido.fotos_no_halladas.length) fichas.push(fichaNueva(`video-fotos-no-halladas-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', `el guion nombra fotos que no están entre las propias del cliente y no viajan al modelo: ${a.pedido.fotos_no_halladas.join(', ')}`, 'fotos propias del cliente', 'mirar el video: esos planos salen sin referencia'))
@@ -202,6 +206,7 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
     `# Publicar a mano · ${b.brief.id}`,
     `Red: ${b.brief.red} · formato: ${b.brief.formato} (${b.formato_video}, ${b.proporcion}) · ${g?.segundos ?? pedidoEnviado?.segundos ?? '?'} s`,
     `Hora de publicación: ${cuando ? (cuando.de === 'fila' ? `${cuando.fecha}${cuando.hora ? ' ' + cuando.hora : ''}${b.F.zona ? ' (' + b.F.zona + ')' : ' (zona del cliente sin registrar)'}` : `(aprobar antes de ${cuando.fecha})`) : 'sin fecha: se decide al aprobar'}`,
+    b.aviso_proporcion ? `⚠️ ${b.aviso_proporcion}.` : '',
     '⚠️ El video es GENERADO por un modelo (Seedance), no una grabación real. Sin voces; música o ambiente generados.',
     v.copia === 'solo_proveedor' ? `⚠️ El video quedó solo en el proveedor${v.expires_at ? ` y vence ${v.expires_at}` : ''}: descargarlo al aprobar.` : '',
     v.simulado ? '(ensayo: el video es simulado)' : '',
