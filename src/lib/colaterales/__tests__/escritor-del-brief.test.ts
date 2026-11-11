@@ -225,3 +225,19 @@ describe('una sola marca y nace apagado (líneas de CC7)', () => {
     expect(usos.sort()).toEqual(['src/lib/colaterales/escritores.ts', 'src/lib/colaterales/puertos-supabase.ts'])
   })
 })
+
+describe('el registro va como AVISO en el retoque (la jefatura ya lo juzgó contra el manual en 2d)', () => {
+  it('con un cliente que trata de «usted», un brief en tuteo se retoca igual: el registro queda en avisos, no en bloqueos', async () => {
+    const c = { ...CASOS[1], brief: CASOS[1].brief.replace('Directo, en tuteo.', 'Directo: tú tienes la inspección encima y te la resolvemos.') }
+    expect(c.brief).not.toBe(CASOS[1].brief)
+    const cadena = cadenaCon(c)
+    const enUsted = { ...contexto(c), registro: 'usted' } as ContextoDelCliente
+    cadena.cargarContexto = async () => enUsted
+    // control: como bloqueo (la entrega sin revisión de registro), ese mismo texto se devolvería
+    const comoBloqueo = leerBriefCreativo(c.brief.split(c.antes).join(c.despues), insumosDelBrief(enUsted, c.estrategia.canales))
+    expect(bloqueosDelBrief(comoBloqueo).some((b) => b.includes('Tono'))).toBe(true)
+    const r = await aplicar(cadena, await preparar(c, cadena))
+    expect(r.pendientes).toEqual([])
+    expect(cadena.briefsCreativos[1].estado).toBe('validada')
+  })
+})
