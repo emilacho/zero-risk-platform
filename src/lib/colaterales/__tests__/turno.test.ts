@@ -284,6 +284,30 @@ describe('barrido · lo colgado más de 2 h pasa a fallida; nada se aplica', () 
   })
 })
 
+describe('barrido · lo que esperaba juicio de una edición cerrada va a una persona (pendiente), nunca se aplica solo', () => {
+  it('propuesto y aprobado → pendiente con motivo; descartado, ya_coincide, aplicado y los de otra edición no se tocan', async () => {
+    const ahora = new Date('2026-11-11T12:00:00Z')
+    const viejo = new Date(ahora.getTime() - PLAZO_DEL_BARRIDO_MS - 1000).toISOString()
+    const fila = (id: string, upd: string) => ({ id, client_id: CLI_A, documento: 'brief', documento_ref: CAMP_A, version_base: '1', seccion: 's', antes: 'a', despues: 'b', llave: `llave-${id}-000`, estado: 'en_curso', updated_at: upd })
+    const ret = (id: string, edicion_id: string, estado: string) => ({ id, edicion_id, documento: 'estrategia', documento_ref: CAMP_A, version_base: '1', pedazo_id: `p-${id}`, estado, rehechos: 0 })
+    const { db, tablas } = baseFalsa({ inicial: {
+      colaterales_ediciones: [fila('v', viejo), fila('r', ahora.toISOString())],
+      colaterales_retoques: [ret('1', 'v', 'propuesto'), ret('2', 'v', 'aprobado'), ret('3', 'v', 'descartado'), ret('4', 'v', 'ya_coincide'), ret('5', 'v', 'aplicado'), ret('6', 'r', 'propuesto')],
+    } })
+    expect((await barrer({ almacen: almacenDeColaterales(db) }, ahora)).cerradas).toEqual(['v'])
+    expect(tablas.colaterales_retoques.map((f) => [f.id, f.estado])).toEqual([['1', 'pendiente'], ['2', 'pendiente'], ['3', 'descartado'], ['4', 'ya_coincide'], ['5', 'aplicado'], ['6', 'propuesto']])
+    expect(tablas.colaterales_retoques.filter((f) => f.estado === 'pendiente').every((f) => typeof f.motivo === 'string' && (f.motivo as string).length > 0)).toBe(true)
+  })
+  it('si otra corrida ya cerró la edición, el barrido no toca sus retoques', async () => {
+    const { db, tablas } = baseFalsa({ inicial: { colaterales_retoques: [{ id: '1', edicion_id: 'v', documento: 'estrategia', documento_ref: CAMP_A, version_base: '1', pedazo_id: 'p', estado: 'propuesto', rehechos: 0 }] } })
+    const al = almacenDeColaterales(db)
+    vi.spyOn(al, 'edicionesEnCursoAntesDe').mockResolvedValue(['v'])
+    vi.spyOn(al, 'pasarEdicion').mockResolvedValue(false)
+    expect((await barrer({ almacen: al }, new Date('2026-11-11T12:00:00Z'))).cerradas).toEqual([])
+    expect(tablas.colaterales_retoques[0].estado).toBe('propuesto')
+  })
+})
+
 describe('el turno no lee el manual ni sus marcas (regla de CC1 · validacionDelManual es la única vía)', () => {
   it('turno.ts no nombra human_validated, gate_outcome ni client_brand_books', () => {
     const t = fs.readFileSync(path.join(process.cwd(), 'src/lib/colaterales/turno.ts'), 'utf8').split('\n').filter((l) => !l.trim().startsWith('*')).join('\n')

@@ -229,7 +229,10 @@ export async function barrer(P: Pick<PuertosDelTurno, 'almacen'>, ahora: Date): 
   const colgadas = await P.almacen.edicionesEnCursoAntesDe(limite)
   const cerradas: string[] = []
   for (const id of colgadas) {
-    if (await P.almacen.pasarEdicion(id, 'en_curso', 'fallida', { nota: 'el barrido la cerró: más de 2 h en curso sin terminar (nada se aplicó)' })) cerradas.push(id)
+    if (!(await P.almacen.pasarEdicion(id, 'en_curso', 'fallida', { nota: 'el barrido la cerró: más de 2 h en curso sin terminar (nada se aplicó)' }))) continue
+    // lo que esperaba juicio (o ya aprobado sin aplicar) va a una persona: `pendiente` nunca se aplica solo
+    for (const de of ['propuesto', 'aprobado'] as const) await P.almacen.pasarRetoquesDeEdicion(id, de, 'pendiente', 'la edición se cerró sin terminar: lo decide una persona')
+    cerradas.push(id)
   }
   return { cerradas }
 }

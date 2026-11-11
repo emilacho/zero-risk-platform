@@ -26,7 +26,8 @@ export const PASOS_DE_EDICION: Readonly<Record<EstadoDeEdicion, readonly EstadoD
 }
 export const PASOS_DE_RETOQUE: Readonly<Record<EstadoDeRetoque, readonly EstadoDeRetoque[]>> = {
   ya_coincide: [], descartado: [],
-  propuesto: ['aprobado', 'rechazado', 'propuesto'], // propuesto → propuesto = rehecho (una vez)
+  // propuesto → propuesto = rehecho (una vez) · 11-nov 2d (ADENDA 1, línea 2 de CC7): propuesto → pendiente = la revisión no volvió (barrido o vencida): a una persona, nunca se aplica solo
+  propuesto: ['aprobado', 'rechazado', 'propuesto', 'pendiente'],
   aprobado: ['aplicado', 'pendiente'],
   pendiente: ['aplicado', 'rechazado'],
   aplicado: ['deshecho'],
@@ -126,6 +127,13 @@ export function almacenDeColaterales(db: Db) {
     async frenadoPorJefatura(id: string, rehechos: number, motivo: string): Promise<'rehacer' | 'rechazado' | 'ya_cambio'> {
       if (rehechos >= 1) return (await almacen.pasarRetoque(id, 'propuesto', 'rechazado', { motivo })) ? 'rechazado' : 'ya_cambio'
       return 'rehacer'
+    },
+
+    /** pasa a `a` TODOS los retoques de la edición que siguen en `de` (condicional por fila) · devuelve cuántos cambió */
+    async pasarRetoquesDeEdicion(edicion_id: string, de: EstadoDeRetoque, a: EstadoDeRetoque, motivo: string): Promise<number> {
+      if (!PASOS_DE_RETOQUE[de].includes(a)) throw new PasoNoPermitido(`retoque ${de} → ${a}`)
+      const d = ok(await db.from('colaterales_retoques').update({ estado: a, motivo, updated_at: ahora() }).eq('edicion_id', edicion_id).eq('estado', de).select('id'), `pasar los retoques a ${a}`) as unknown[] | null
+      return d?.length ?? 0
     },
 
     /** una edición por id (null si no existe) */
