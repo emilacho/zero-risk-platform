@@ -19,5 +19,5 @@ describe('puerto · abrirRevisionColateral', () => {
     expect(await P.abrirRevisionColateral(entrada)).toEqual({ estado: 'esperando', revision_id: 'rev-9' })
     expect(abrirConVuelta).toHaveBeenCalledWith(db, entrada, RUTA_DE_VUELTA_DE_COLATERALES)
     expect(RUTA_DE_VUELTA_DE_COLATERALES).not.toBe(RUTA_DE_VUELTA_DE_LA_CADENA)
-  })
+  }, 30_000) // importa los puertos reales (pesado): con la suite entera en paralelo pasa de 5 s
 })

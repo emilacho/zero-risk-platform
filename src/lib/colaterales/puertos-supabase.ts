@@ -10,7 +10,9 @@
  *     están tomadas sin recibo todavía (en vuelo: el turno les cuenta la reserva);
  *   · tope diario: la fila del cliente en `colaterales_topes_diarios`; si no tiene, la fila por omisión (sin cliente); sin ninguna, null;
  *   · pieza B: el gasto del día suma las revisiones de la jefatura de esas ediciones (cerradas por su gasto, abiertas por cuenta aparte); la revisión se abre con
- *     vuelta a `api/jefatura/colaterales-vuelta`; aplicar = el motor 2c con los escritores que existen hoy (la estrategia).
+ *     vuelta a `api/jefatura/colaterales-vuelta`; aplicar = el motor 2c con los escritores que existen hoy (la estrategia);
+ *   · pieza D · el gasto de UNA edición: sus llamadas por su llave EXACTA en `agent_dispatches` (más la ejecución de la edición), cada una con sus recibos;
+ *     la que no tiene recibo se cuenta aparte · sus revisiones: cerradas por su gasto, abiertas aparte.
  * Agnóstico: ningún dato de un cliente.
  */
 import { getSupabaseAdmin } from '@/lib/supabase'
@@ -22,7 +24,8 @@ import type { Documento } from '../cadena/dependencias-de-documentos'
 import { piezasPorPublicar } from '../oficina/piezas-por-publicar'
 import { almacenDeColaterales, type Db, type Edicion } from './almacen'
 import { escritorDeEstrategia } from './escritores'
-import { DOCUMENTOS_DE_CAMPANA, type DocumentoLeido, type PuertosDelTurno } from './turno'
+import { DOCUMENTOS_DE_CAMPANA, llaveDeLaSecretaria, type DocumentoLeido, type PuertosDelTurno } from './turno'
+import { llaveDelRehacer } from './rehacer'
 import { RUTA_DE_VUELTA_DE_COLATERALES } from './vuelta'
 
 function ok<T>(r: { data: T; error: { message: string } | null }, que: string): T {
@@ -88,6 +91,33 @@ export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, 
       const revisiones = revs.filter(terminal).reduce((t, f) => t + (Number(f.gasto_usd) || 0), 0)
       const revisiones_abiertas = revs.filter((f) => !terminal(f)).length
       return { recibos, en_vuelo, revisiones, revisiones_abiertas }
+    },
+    async gastoDeLaEdicion(e) {
+      const llaves = { secretaria: llaveDeLaSecretaria(e.id), rehacer: llaveDelRehacer(e.id) }
+      type Despacho = { dispatch_key: string; workflow_execution_id: string | null }
+      const desp = (ok(await db.from('agent_dispatches').select('dispatch_key, workflow_execution_id').in('dispatch_key', [llaves.secretaria, llaves.rehacer]), 'leer las llamadas de la edición') as Despacho[] | null) ?? []
+      const ex = (x: unknown): string | null => (typeof x === 'string' && x !== '' ? x : null)
+      // la primera llamada se reconoce también por la ejecución de la edición (si el flujo no pasó la llave)
+      const llamadas = desp.filter((d) => d.dispatch_key === llaves.secretaria || d.dispatch_key === llaves.rehacer).map((d) => ({ tipo: d.dispatch_key === llaves.rehacer ? 'rehacer' : 'secretaria', ex: ex(d.workflow_execution_id) }))
+      if (!llamadas.some((l) => l.tipo === 'secretaria') && ex(e.workflow_execution_id)) llamadas.push({ tipo: 'secretaria', ex: ex(e.workflow_execution_id) })
+      const ejecuciones = [...new Set(llamadas.map((l) => l.ex).filter((x): x is string => x !== null))]
+      type Recibo = { workflow_execution_id: string; cost_usd: number | null }
+      const rec = ejecuciones.length ? ((ok(await db.from('agent_invocations').select('workflow_execution_id, cost_usd').in('workflow_execution_id', ejecuciones), 'leer los recibos de la edición') as Recibo[] | null) ?? []) : []
+      const porEjecucion = new Map<string, number>()
+      for (const r of rec) porEjecucion.set(r.workflow_execution_id, (porEjecucion.get(r.workflow_execution_id) ?? 0) + (Number(r.cost_usd) || 0))
+      let cobrado = 0, secretaria_sin_recibo = 0, rehacer_sin_recibo = 0
+      const contadas = new Set<string>()
+      for (const l of llamadas) {
+        if (l.ex && porEjecucion.has(l.ex)) { if (!contadas.has(l.ex)) { cobrado += porEjecucion.get(l.ex) as number; contadas.add(l.ex) } continue }
+        if (l.tipo === 'rehacer') rehacer_sin_recibo++; else secretaria_sin_recibo++
+      }
+      const ret = (ok(await db.from('colaterales_retoques').select('revision_id').eq('edicion_id', e.id), 'leer las revisiones de la edición') as { revision_id: string | null }[] | null) ?? []
+      const revIds = [...new Set(ret.map((f) => f.revision_id).filter((x): x is string => typeof x === 'string' && x !== ''))]
+      const jefatura = almacenDeJefatura(db as never)
+      const revs = (await Promise.all(revIds.map((id) => jefatura.leerRevision(id)))).filter((f): f is NonNullable<typeof f> => f !== null) as { estado: string; gasto_usd: number }[]
+      const terminal = (f: { estado: string }) => (ESTADOS_TERMINALES as readonly string[]).includes(f.estado)
+      cobrado += revs.filter(terminal).reduce((t, f) => t + (Number(f.gasto_usd) || 0), 0)
+      return { cobrado, secretaria_sin_recibo, rehacer_sin_recibo, revisiones_abiertas: revs.filter((f) => !terminal(f)).length }
     },
     async topeDiario(client_id) {
       type Tope = { tope_usd: number | string | null }

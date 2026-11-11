@@ -10,12 +10,13 @@
  *   · cuando no queda nada `propuesto`, se aplican los aprobados y la edición pasa a `lista` (condicional).
  *   · quién decide lo `pendiente` (regla de Emilio · Lenovo 02:15Z): el manual y el Plan de Marketing, Emilio; cualquier otro documento, `jefe-marketing`. Queda en el motivo.
  *     El paso en que `jefe-marketing` decide sus pendientes NO está aquí (pregunta abierta a Lenovo): quedan listados con su dueño.
- *   · un `rechaza` deja el retoque `rechazado` (el documento de abajo sigue como estaba). Rehacer una vez es la pieza D.
+ *   · pieza D (líneas 1-7 de CC6): un `rechaza` sobre un retoque sin rehacer lo deja «por rehacer» (sigue `propuesto`, con la razón del jefe); la edición espera
+ *     al rehacer (ver rehacer.ts). Un `rechaza` sobre un rehecho → `rechazado` (el documento de abajo sigue como estaba). En un cimiento no hay rehacer → `pendiente`.
  * Agnóstico: ningún dato de un cliente.
  */
-import { textoDeLosRetoques, verificarVeredictos } from '../jefatura/revision/colateral'
+import { DOCUMENTOS_DE_CIMIENTO, textoDeLosRetoques, verificarVeredictos } from '../jefatura/revision/colateral'
 import type { Edicion } from './almacen'
-import { AGENTE_SECRETARIA, FACTOR_DE_RESERVA, TOPE_DE_LA_LLAMADA_USD, TOPE_DE_LA_REVISION_USD, type PuertosDelTurno } from './turno'
+import { AGENTE_SECRETARIA, FACTOR_DE_RESERVA, TOPE_DE_LA_LLAMADA_USD, TOPE_DE_LA_REVISION_USD, TOPE_DEL_REHACER_USD, TOPE_POR_EDICION_USD, type PuertosDelTurno } from './turno'
 
 export const RUTA_DE_VUELTA_DE_COLATERALES = 'api/jefatura/colaterales-vuelta'
 /** los documentos cuyo pendiente decide Emilio (regla de Emilio · Lenovo 02:15Z); todo lo demás lo decide `jefe-marketing` */
@@ -35,12 +36,16 @@ export type ResultadoDeAbrirColateral =
   | { estado: 'cerrada'; salida: Record<string, unknown> }
   | { estado: 'no_abre' | 'error'; motivo: string }
 
-interface Fila { id: string; estado: string; documento: string; seccion: string; antes: string; despues: string; porque: string; revision_id: string | null }
+export interface Fila { id: string; estado: string; documento: string; seccion: string; antes: string; despues: string; porque: string; revision_id: string | null; rehechos: number; motivo: string | null; pedazo_id: string; pedazo_texto: string }
 const deFila = (f: Record<string, unknown>): Fila => ({
   id: String(f.id), estado: String(f.estado), documento: String(f.documento), seccion: String(f.seccion ?? ''), antes: String(f.antes ?? ''), despues: String(f.despues ?? ''),
   porque: String(f.porque ?? ''), revision_id: typeof f.revision_id === 'string' && f.revision_id !== '' ? f.revision_id : null,
+  rehechos: Number(f.rehechos) || 0, motivo: typeof f.motivo === 'string' && f.motivo !== '' ? f.motivo : null, pedazo_id: String(f.pedazo_id ?? ''), pedazo_texto: String(f.pedazo_texto ?? ''),
 })
-const retoques = async (P: PuertosDelTurno, edicion_id: string): Promise<Fila[]> => (await P.almacen.retoquesDe(edicion_id)).map(deFila)
+export const retoques = async (P: PuertosDelTurno, edicion_id: string): Promise<Fila[]> => (await P.almacen.retoquesDe(edicion_id)).map(deFila)
+/** pieza D · «por rehacer»: el jefe lo rechazó y todavía no se rehízo (sigue `propuesto`, con la razón en `motivo`) */
+export const porRehacer = (t: Pick<Fila, 'estado' | 'rehechos' | 'motivo'>): boolean => t.estado === 'propuesto' && t.rehechos === 0 && t.motivo !== null
+const esCimiento = (documento: string): boolean => (DOCUMENTOS_DE_CIMIENTO as readonly string[]).includes(documento)
 const mensaje = (x: unknown): string => (x instanceof Error ? x.message : String(x))
 
 /** la entrada de la revisión: la edición del dueño (ya decidida) y los retoques, cada uno con SU id de fila */
@@ -51,6 +56,18 @@ export function sobreDeLaRevision(e: Pick<Edicion, 'id' | 'client_id' | 'documen
     artifact_type: 'colateral', artifact_id: e.id, client_id: e.client_id, journey_id: null,
     payload: { texto: textoDeLosRetoques(edicion_del_dueno, lista), dry_run: false, version, edicion_del_dueno, retoques: lista, productores: [{ donde: '*', agente: AGENTE_SECRETARIA }] },
   }
+}
+
+/**
+ * 11-nov · pieza D (opción 1 de Lenovo 04:15Z) · ¿alcanza el tope de ESTA edición (US$ 0,50, decisión de Emilio) para `esto`? Lo cobrado de verdad + la reserva
+ * de lo que salió sin recibo todavía (cada llamada su tope × 1,3; cada revisión abierta su tope) + `esto` ≤ el tope. Sin poder leer → no alcanza (frena).
+ */
+export async function saldoDeLaEdicion(P: PuertosDelTurno, e: Edicion, esto: number, que: string): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  let g: Awaited<ReturnType<PuertosDelTurno['gastoDeLaEdicion']>>
+  try { g = await P.gastoDeLaEdicion(e) } catch (x) { return { ok: false, motivo: `no se pudo leer el gasto de la edición (${mensaje(x)})` } }
+  const reserva = g.secretaria_sin_recibo * TOPE_DE_LA_LLAMADA_USD * FACTOR_DE_RESERVA + g.rehacer_sin_recibo * TOPE_DEL_REHACER_USD * FACTOR_DE_RESERVA + g.revisiones_abiertas * TOPE_DE_LA_REVISION_USD
+  if (g.cobrado + reserva + esto > TOPE_POR_EDICION_USD) return { ok: false, motivo: `sin saldo en la edición para ${que}: cobrado ${g.cobrado.toFixed(3)} + reservado ${reserva.toFixed(3)} + ${esto.toFixed(3)} > ${TOPE_POR_EDICION_USD}` }
+  return { ok: true }
 }
 
 /** ¿alcanza el tope diario del cliente para UNA revisión más? (lo gastado hoy incluye a esta edición: su recibo ya está) */
@@ -65,19 +82,20 @@ export async function saldoParaLaRevision(P: PuertosDelTurno, e: Pick<Edicion, '
   return { ok: true }
 }
 
-async function aPendiente(P: PuertosDelTurno, rs: Fila[], razon: string): Promise<number> {
+export async function aPendiente(P: PuertosDelTurno, rs: Fila[], razon: string): Promise<number> {
   let n = 0
   for (const t of rs) if (await P.almacen.pasarRetoque(t.id, 'propuesto', 'pendiente', { motivo: motivoDePendiente(razon, t.documento) })) n++
   return n
 }
 
-export interface ResultadoDeVeredictos { aprobados: number; rechazados: number; pendientes: number }
+export interface ResultadoDeVeredictos { aprobados: number; rechazados: number; pendientes: number; por_rehacer: number }
 
 /** aplica a los retoques de ESA revisión lo que la jefatura juzgó · idempotente: solo toca retoques que siguen `propuesto` y atados a esa revisión */
 export async function aplicarVeredictos(P: PuertosDelTurno, edicion_id: string, salida: Record<string, unknown>): Promise<ResultadoDeVeredictos> {
-  const r: ResultadoDeVeredictos = { aprobados: 0, rechazados: 0, pendientes: 0 }
+  const r: ResultadoDeVeredictos = { aprobados: 0, rechazados: 0, pendientes: 0, por_rehacer: 0 }
   const revision_id = typeof salida.revision_id === 'string' ? salida.revision_id : ''
-  const pedidos = (await retoques(P, edicion_id)).filter((t) => t.estado === 'propuesto' && revision_id !== '' && t.revision_id === revision_id)
+  // lo ya marcado «por rehacer» por esta misma revisión no se vuelve a tocar (vuelta repetida)
+  const pedidos = (await retoques(P, edicion_id)).filter((t) => t.estado === 'propuesto' && revision_id !== '' && t.revision_id === revision_id && !porRehacer(t))
   if (!pedidos.length) return r
   if (salida.simulado !== false) { r.pendientes = await aPendiente(P, pedidos, 'la revisión fue simulada (en seco no se aplica nada)'); return r }
   if (salida.resultado !== 'limpia') { r.pendientes = await aPendiente(P, pedidos, `la revisión terminó «${String(salida.resultado)}»`); return r }
@@ -87,6 +105,10 @@ export async function aplicarVeredictos(P: PuertosDelTurno, edicion_id: string, 
     const x = porId.get(t.id)
     if (!x) { if (await P.almacen.pasarRetoque(t.id, 'propuesto', 'pendiente', { motivo: motivoDePendiente('la jefatura no dio un veredicto válido', t.documento) })) r.pendientes++; continue }
     if (x.veredicto === 'aprueba') { if (await P.almacen.pasarRetoque(t.id, 'propuesto', 'aprobado', { motivo: x.razon || 'aprobado por la jefatura' })) r.aprobados++; continue }
+    // línea 7 de CC6: en un cimiento no hay rehacer (va a una persona)
+    if (esCimiento(t.documento)) { if (await P.almacen.pasarRetoque(t.id, 'propuesto', 'pendiente', { motivo: motivoDePendiente(`la jefatura lo rechazó y en un cimiento no se rehace: ${x.razon}`, t.documento) })) r.pendientes++; continue }
+    // línea 1 de CC6: se rehace UNA vez; un rehecho que vuelve a caer queda `rechazado`
+    if (t.rehechos === 0) { if (await P.almacen.marcarParaRehacer(t.id, revision_id, x.razon)) r.por_rehacer++; continue }
     if (await P.almacen.pasarRetoque(t.id, 'propuesto', 'rechazado', { motivo: `rechazado por la jefatura: ${x.razon}` })) r.rechazados++
   }
   return r
@@ -120,9 +142,12 @@ export type ResultadoDeRevisar =
 export async function revisarLaEdicion(P: PuertosDelTurno, e: Edicion): Promise<ResultadoDeRevisar> {
   const rs = (await retoques(P, e.id)).filter((t) => t.estado === 'propuesto' && t.revision_id === null)
   if (!rs.length) return { estado: 'sin_revision', motivo: 'nada propuesto sin revisión', cierre: await cerrarSiNoQuedaNada(P, e.id) }
-  const saldo = await saldoParaLaRevision(P, e)
+  // pieza D (hallazgo en B · Lenovo 04:15Z): también el tope de ESTA edición, en la primera revisión y en la de los rehechos
+  const saldo = await saldoParaLaRevision(P, e).then(async (d) => (d.ok ? saldoDeLaEdicion(P, e, TOPE_DE_LA_REVISION_USD, 'la revisión') : d))
   if (!saldo.ok) { await aPendiente(P, rs, saldo.motivo); return { estado: 'sin_revision', motivo: saldo.motivo, cierre: await cerrarSiNoQuedaNada(P, e.id) } }
-  const r: ResultadoDeAbrirColateral = await P.abrirRevisionColateral(sobreDeLaRevision(e, rs, 1)).catch((x: unknown) => ({ estado: 'error' as const, motivo: mensaje(x) }))
+  // pieza D: la revisión de los rehechos es la versión 2 (la jefatura no la confunde con la primera)
+  const version = 1 + Math.max(...rs.map((t) => t.rehechos))
+  const r: ResultadoDeAbrirColateral = await P.abrirRevisionColateral(sobreDeLaRevision(e, rs, version)).catch((x: unknown) => ({ estado: 'error' as const, motivo: mensaje(x) }))
   if (r.estado === 'no_abre' || r.estado === 'error') {
     const motivo = `la jefatura no abrió la revisión (${r.motivo})`
     await aPendiente(P, rs, motivo)

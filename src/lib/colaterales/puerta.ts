@@ -2,11 +2,13 @@
  * COLATERALES 2d · la PUERTA de `/api/colaterales` (la ruta es delgada: llave interna + esto).
  * Toda acción exige la FIRMA del flujo (`workflow_id` + `workflow_execution_id`): sin ella, 403 (nadie llama directo).
  * Acciones: `recibir` (crea la edición con su llave; contesta al instante) · `turno` (`seco` OBLIGATORIO true/false: la ausencia nunca es «real»)
- * · `entregar` (la salida de la secretaria + el sello del turno) · `barrer` (cierra lo colgado). Nada se aplica aquí.
+ * · `entregar` (la salida de la secretaria + el sello del turno) · `barrer` (cierra lo colgado) · pieza D: `rehacer` (lo despierta la vuelta de la jefatura)
+ * y `entregar_rehecho` (la salida del rehacer + su sello). Nada se aplica aquí.
  */
 import { createHash } from 'node:crypto'
 import { esDocumento } from '../cadena/dependencias-de-documentos'
 import { barrer, entregar, turno, type PuertosDelTurno } from './turno'
+import { entregarRehecho, rehacer } from './rehacer'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
 const mal = (status: number, error: string, detalle: string): Respuesta => ({ status, cuerpo: { error, detalle } })
@@ -18,7 +20,7 @@ export function llaveDeEdicion(x: { client_id: string; documento: string; docume
   return 'ed-' + createHash('sha256').update(JSON.stringify([x.client_id, x.documento, x.documento_ref, x.version_base, x.version_nueva])).digest('hex').slice(0, 40)
 }
 
-export const ACCIONES = ['recibir', 'turno', 'entregar', 'barrer'] as const
+export const ACCIONES = ['recibir', 'turno', 'entregar', 'barrer', 'rehacer', 'entregar_rehecho'] as const
 
 export async function atenderColaterales(P: PuertosDelTurno, c: Record<string, unknown>, ahora: Date): Promise<Respuesta> {
   const accion = typeof c.accion === 'string' ? c.accion : ''
@@ -46,7 +48,9 @@ export async function atenderColaterales(P: PuertosDelTurno, c: Record<string, u
     if (typeof c.seco !== 'boolean') return mal(400, 'seco_obligatorio', '`seco` debe ser true o false (su ausencia nunca se toma como corrida real)')
     return { status: 200, cuerpo: { ...(await turno(P, { edicion_id, seco: c.seco, workflow_execution_id: ex })), seco: c.seco } }
   }
+  if (accion === 'rehacer') return { status: 200, cuerpo: { ...(await rehacer(P, { edicion_id })) } }
   const sello = texto(c.sello, 1, 100)
   if (!sello) return mal(400, 'entrada_invalida', '`sello` es el que devolvió el turno')
+  if (accion === 'entregar_rehecho') return { status: 200, cuerpo: { ...(await entregarRehecho(P, { edicion_id, sello, salida: c.salida })) } }
   return { status: 200, cuerpo: { ...(await entregar(P, { edicion_id, sello, salida: c.salida })) } }
 }

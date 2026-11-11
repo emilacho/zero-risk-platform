@@ -13,7 +13,8 @@ const INTERNA = 'llave-interna-de-prueba'
 const pedido = (cabeceras: Record<string, string>) =>
   new Request('https://x/api/jefatura/colaterales-vuelta', { method: 'POST', headers: { 'content-type': 'application/json', ...cabeceras }, body: JSON.stringify({ marcas: {}, salida: {} }) })
 
-describe('colaterales-vuelta · la llave', () => {
+// importa la ruta real (pesado): con la suite entera en paralelo la primera importación pasa de 5 s
+describe('colaterales-vuelta · la llave', { timeout: 30_000 }, () => {
   const antes = { sala: process.env.SALA_DISPATCH_KEY, interna: process.env.INTERNAL_API_KEY }
   beforeEach(() => { process.env.SALA_DISPATCH_KEY = SALA; process.env.INTERNAL_API_KEY = INTERNA; recibir.mockClear() })
   afterEach(() => { process.env.SALA_DISPATCH_KEY = antes.sala; process.env.INTERNAL_API_KEY = antes.interna })

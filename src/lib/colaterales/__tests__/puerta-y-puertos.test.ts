@@ -17,7 +17,7 @@ const EDIC = { client_id: CLI, documento: 'brief', documento_ref: 'camp-1', vers
 
 function armar() {
   const { db, tablas } = baseFalsa()
-  const P: PuertosDelTurno = { almacen: almacenDeColaterales(db), filasActivas: vi.fn(async () => new Set<string>()), piezasPorPublicar: vi.fn(async () => ({ frenan: [], se_asumen_publicadas: [] })), documentos: vi.fn(async () => ({})), campanaDelCliente: vi.fn(async () => true), gastoDelDia: vi.fn(async () => ({ recibos: 0, en_vuelo: 0, revisiones: 0, revisiones_abiertas: 0 })), topeDiario: vi.fn(async () => 5), abrirRevisionColateral: vi.fn(async () => ({ estado: 'esperando' as const, revision_id: 'rev-1' })), aplicar: vi.fn(async () => ({ aplicados: [], pendientes: [], ya_cambiaron: [] })) }
+  const P: PuertosDelTurno = { almacen: almacenDeColaterales(db), filasActivas: vi.fn(async () => new Set<string>()), piezasPorPublicar: vi.fn(async () => ({ frenan: [], se_asumen_publicadas: [] })), documentos: vi.fn(async () => ({})), campanaDelCliente: vi.fn(async () => true), gastoDelDia: vi.fn(async () => ({ recibos: 0, en_vuelo: 0, revisiones: 0, revisiones_abiertas: 0 })), topeDiario: vi.fn(async () => 5), gastoDeLaEdicion: vi.fn(async () => ({ cobrado: 0, secretaria_sin_recibo: 0, rehacer_sin_recibo: 0, revisiones_abiertas: 0 })), abrirRevisionColateral: vi.fn(async () => ({ estado: 'esperando' as const, revision_id: 'rev-1' })), aplicar: vi.fn(async () => ({ aplicados: [], pendientes: [], ya_cambiaron: [] })) }
   return { P, tablas }
 }
 const pedir = (P: PuertosDelTurno, c: Record<string, unknown>) => atenderColaterales(P, c, new Date('2026-11-11T12:00:00Z'))
@@ -154,6 +154,33 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
     expect(pedidos.filter((q) => q.tabla === 'colaterales_ediciones').map((q) => q.filtros)).toContainEqual(['eq:client_id', 'gte:updated_at'])
     expect(pedidos.filter((q) => q.tabla === 'colaterales_ediciones').map((q) => q.filtros)).toContainEqual(['eq:client_id', 'eq:estado'])
     expect(pedidos.find((q) => q.tabla === 'agent_invocations')).toMatchObject({ filtros: ['in:workflow_execution_id'] })
+  })
+  it('🔴 pieza D: el gasto de UNA edición lee sus llamadas por la llave EXACTA (una edición nunca suma las de otra), sus recibos y sus revisiones; lo sin recibo va aparte', async () => {
+    const E = 'e0000000-0000-4000-8000-0000000000e1'
+    const OTRA = 'e0000000-0000-4000-8000-0000000000e1x'
+    const { db, pedidos } = dbFalsa({
+      agent_dispatches: [
+        { dispatch_key: `colaterales:${E}:secretaria`, workflow_execution_id: '100' },
+        { dispatch_key: `colaterales:${E}:rehacer`, workflow_execution_id: '101' },
+        // otra edición cuyo id EMPIEZA igual, y una llave parecida: no cuentan
+        { dispatch_key: `colaterales:${OTRA}:secretaria`, workflow_execution_id: '900' },
+        { dispatch_key: `colaterales:${E}:secretaria:extra`, workflow_execution_id: '901' },
+      ],
+      agent_invocations: [{ workflow_execution_id: '100', cost_usd: '0.04' }, { workflow_execution_id: '100', cost_usd: 0.01 }, { workflow_execution_id: '900', cost_usd: 9 }, { workflow_execution_id: '901', cost_usd: 9 }],
+      colaterales_retoques: [{ edicion_id: E, revision_id: 'r1' }, { edicion_id: E, revision_id: 'r1' }, { edicion_id: E, revision_id: 'r2' }, { edicion_id: 'otra', revision_id: 'r9' }],
+      jefatura_revisiones: [{ id: 'r1', estado: 'cerrada', gasto_usd: '0.12' }, { id: 'r2', estado: 'esperando_turno', gasto_usd: 0.02 }, { id: 'r9', estado: 'cerrada', gasto_usd: 9 }].map((f) => ({ ...f, client_id: CLI, artifact_type: 'colateral', artifact_id: 'x', policy_snapshot: { artifact_type: 'colateral' } })),
+    })
+    const g = await puertosDeSupabase(db, () => new Date('2026-11-11T12:00:00Z'), cadenaFalsa()).gastoDeLaEdicion({ id: E, workflow_execution_id: '100' } as never)
+    expect(g.cobrado).toBeCloseTo(0.04 + 0.01 + 0.12, 6)
+    expect(g).toMatchObject({ secretaria_sin_recibo: 0, rehacer_sin_recibo: 1, revisiones_abiertas: 1 })
+    expect(pedidos.find((q) => q.tabla === 'agent_dispatches')).toMatchObject({ filtros: ['in:dispatch_key'] })
+  })
+  it('🔴 pieza D: si el flujo no pasó la llave, la primera llamada se reconoce por la ejecución de la edición; sin recibo cuenta aparte (nunca 0)', async () => {
+    const E = 'e0000000-0000-4000-8000-0000000000e2'
+    const sinRecibo = dbFalsa({ agent_dispatches: [], agent_invocations: [], colaterales_retoques: [], jefatura_revisiones: [] })
+    expect(await puertosDeSupabase(sinRecibo.db, undefined, cadenaFalsa()).gastoDeLaEdicion({ id: E, workflow_execution_id: '7' } as never)).toEqual({ cobrado: 0, secretaria_sin_recibo: 1, rehacer_sin_recibo: 0, revisiones_abiertas: 0 })
+    const conRecibo = dbFalsa({ agent_dispatches: [], agent_invocations: [{ workflow_execution_id: '7', cost_usd: 0.03 }], colaterales_retoques: [], jefatura_revisiones: [] })
+    expect(await puertosDeSupabase(conRecibo.db, undefined, cadenaFalsa()).gastoDeLaEdicion({ id: E, workflow_execution_id: '7' } as never)).toMatchObject({ cobrado: 0.03, secretaria_sin_recibo: 0 })
   })
   it('🔴 pieza B: el gasto del día suma las revisiones de la jefatura de ESAS ediciones (cerradas por su gasto; abiertas, contadas aparte); ni las de otro cliente ni las de la que pregunta', async () => {
     const ed = (id: string, client_id: string, estado: string, workflow_execution_id: string | null) => ({ id, client_id, estado, created_at: '2026-11-11T07:00:00Z', updated_at: '2026-11-11T08:00:00Z', workflow_execution_id })

@@ -11,7 +11,7 @@ import B from './__fixtures__/b2b-industrial-2026-11-10.json'
 import { baseFalsa } from './base-falsa'
 import { almacenDeColaterales, type NuevaEdicion, type NuevoRetoque } from '../almacen'
 import { aplicarAprobados, type EscritorDeDocumento } from '../aplicar'
-import { TOPE_DE_LA_REVISION_USD, type GastoDelDia, type PuertosDelTurno } from '../turno'
+import { TOPE_DE_LA_REVISION_USD, type GastoDelDia, type GastoDeLaEdicion, type PuertosDelTurno } from '../turno'
 import { cerrarSiNoQuedaNada, duenoDelPendiente, motivoDePendiente, recibirVueltaColateral, revisarLaEdicion, RUTA_DE_VUELTA_DE_COLATERALES, type EntradaDeRevisionColateral, type ResultadoDeAbrirColateral } from '../vuelta'
 import type { Documento } from '../../cadena/dependencias-de-documentos'
 
@@ -48,21 +48,22 @@ function escritorFalso(texto: string, version: string) {
   return { e, escritas }
 }
 
-function armar(o: { abrir?: ResultadoDeAbrirColateral | Error; tope?: number | null | Error; gasto?: Partial<GastoDelDia> | Error } = {}) {
+function armar(o: { abrir?: ResultadoDeAbrirColateral | Error; tope?: number | null | Error; gasto?: Partial<GastoDelDia> | Error; edicion?: Partial<GastoDeLaEdicion> | Error } = {}) {
   const { db, tablas } = baseFalsa()
   const almacen = almacenDeColaterales(db)
   const gi = escritorFalso(A.gran_idea_v3, '3')
   const est = escritorFalso(B.estrategia, '1')
   const abrir = vi.fn(async (_e: EntradaDeRevisionColateral): Promise<ResultadoDeAbrirColateral> => { if (o.abrir instanceof Error) throw o.abrir; return o.abrir ?? { estado: 'esperando', revision_id: 'rev-1' } })
   const gasto = vi.fn(async (_c: string, _s: string): Promise<GastoDelDia> => { if (o.gasto instanceof Error) throw o.gasto; return { recibos: 0, en_vuelo: 0, revisiones: 0, revisiones_abiertas: 0, ...(o.gasto ?? {}) } })
+  const gastoEd = vi.fn(async (_e: unknown): Promise<GastoDeLaEdicion> => { if (o.edicion instanceof Error) throw o.edicion; return { cobrado: 0, secretaria_sin_recibo: 0, rehacer_sin_recibo: 0, revisiones_abiertas: 0, ...(o.edicion ?? {}) } })
   const tope = vi.fn(async () => { if (o.tope instanceof Error) throw o.tope; return o.tope === undefined ? 5 : o.tope })
   const activas = new Set(['manual', 'plan', 'estrategia', 'brief', 'gran_idea', 'calendario', 'pieza'])
   const aplicar = vi.fn((id: string) => aplicarAprobados({ almacen, escritores: { gran_idea: gi.e, estrategia: est.e }, leerFilasActivas: async () => activas }, id))
   const P: PuertosDelTurno = {
     almacen, filasActivas: async () => activas, piezasPorPublicar: async () => ({ frenan: [], se_asumen_publicadas: [] }), documentos: async () => ({}),
-    campanaDelCliente: async () => true, gastoDelDia: gasto, topeDiario: tope, abrirRevisionColateral: abrir, aplicar,
+    campanaDelCliente: async () => true, gastoDelDia: gasto, topeDiario: tope, gastoDeLaEdicion: gastoEd, abrirRevisionColateral: abrir, aplicar,
   }
-  return { P, almacen, tablas, abrir, gasto, tope, aplicar, gi, est }
+  return { P, almacen, tablas, abrir, gasto, gastoEd, tope, aplicar, gi, est }
 }
 async function sembrar(k: ReturnType<typeof armar>, ed: NuevaEdicion, rs: NuevoRetoque[]) {
   const { edicion } = await k.almacen.crearEdicion(ed)
@@ -153,7 +154,7 @@ describe('abrir la revisión al entregar', () => {
 })
 
 describe('🔴 la vuelta (líneas de CC7 y CC6)', () => {
-  it('B2B: aprueba → se aplica en la estrategia; rechaza → `rechazado` con la razón (el documento sigue como estaba); la edición pasa a lista', async () => {
+  it('B2B: aprueba → se aplica en la estrategia; Náufrago: el primer rechaza queda «por rehacer» con la razón (pieza D: nada se aplica y la edición espera)', async () => {
     const k = armar()
     const { id, ids, edicion } = await sembrar(k, EDIC_B, [RET_B[0]])
     await revisarLaEdicion(k.P, edicion)
@@ -167,10 +168,11 @@ describe('🔴 la vuelta (líneas de CC7 y CC6)', () => {
     const k2 = armar()
     const x = await sembrar(k2, EDIC_A, RET_A)
     await revisarLaEdicion(k2.P, x.edicion)
-    await recibirVueltaColateral(k2.P, salida({ artifact_id: x.id, veredictos: ver([{ id: x.ids[0], veredicto: 'rechaza', razon: 'cambia un hecho' }]) }))
-    expect(est(k2, x.ids[0])).toMatchObject({ estado: 'rechazado', motivo: 'rechazado por la jefatura: cambia un hecho' })
+    const r2 = await recibirVueltaColateral(k2.P, salida({ artifact_id: x.id, veredictos: ver([{ id: x.ids[0], veredicto: 'rechaza', razon: 'cambia un hecho' }]) }))
+    expect(r2.cuerpo).toMatchObject({ rechazados: 0, por_rehacer: 1, cierre: { estado: 'esperando' } })
+    expect(est(k2, x.ids[0])).toMatchObject({ estado: 'propuesto', motivo: 'cambia un hecho', rehechos: 0, revision_id: 'rev-1' })
     expect(k2.gi.escritas).toEqual([])
-    expect(estEd(k2, x.id)).toBe('lista')
+    expect(estEd(k2, x.id)).toBe('en_curso')
   })
   it('🔴 línea 3 de CC7: un veredicto TARDÍO (la edición ya no está en curso) no aplica nada', async () => {
     const k = armar()
