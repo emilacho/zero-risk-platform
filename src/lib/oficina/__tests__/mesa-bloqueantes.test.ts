@@ -355,25 +355,26 @@ describe('O04 · una respuesta repetida o fuera de orden no duplica nada', () =>
 
 describe('E02 · las marcas ajenas en una imagen la bloquean (las propias del cliente no)', () => {
   const item = [{ indice: 0, ref: 'hook' }]
-  const lect = (marcas: string[]) => ({ 0: { texto_leido: [], marcas, personas: 0, leido: true } })
+  const lect = (marcas: string[]) => ({ 0: { texto_leido: [], marcas, personas: 0, leido: true, texto_ajeno: false, dato_sin_verificar: false } })
   it('una marca ajena rechaza la imagen con el motivo; ninguna aceptada', () => {
-    const o = observacionDeLaMesa({ items: item, lecturas: lect(['Coca-Cola']), permitido: ['hoy'], marcasPropias: ['Náufrago'] })
+    const o = observacionDeLaMesa({ items: item, lecturas: lect(['Coca-Cola']), marcasPropias: ['Náufrago'] })
     expect(o.rechazadas).toHaveLength(1)
     expect(o.rechazadas[0].motivo).toMatch(/marca ajena: Coca-Cola/)
     expect(o.aceptadas).toEqual({})
   })
   it('la marca del cliente (con otra mayúscula o sin tilde) no cuenta como ajena y la imagen se acepta', () => {
-    const o = observacionDeLaMesa({ items: item, lecturas: lect(['NAUFRAGO']), permitido: ['hoy'], marcasPropias: ['Náufrago'] })
+    const o = observacionDeLaMesa({ items: item, lecturas: lect(['NAUFRAGO']), marcasPropias: ['Náufrago'] })
     expect(o.rechazadas).toHaveLength(0)
     expect(o.aceptadas).toEqual({ hook: [0] })
   })
   it('propia + ajena en la misma imagen: se rechaza solo por la ajena; sin marcas, se acepta', () => {
-    const mixta = observacionDeLaMesa({ items: item, lecturas: lect(['Náufrago', 'Nike']), permitido: [], marcasPropias: ['Náufrago'] })
+    const mixta = observacionDeLaMesa({ items: item, lecturas: lect(['Náufrago', 'Nike']), marcasPropias: ['Náufrago'] })
     expect(mixta.rechazadas[0].motivo).toMatch(/marca ajena: Nike/); expect(mixta.rechazadas[0].motivo).not.toMatch(/Náufrago/)
-    expect(observacionDeLaMesa({ items: item, lecturas: lect([]), permitido: [], marcasPropias: ['Náufrago'] }).aceptadas).toEqual({ hook: [0] })
+    expect(observacionDeLaMesa({ items: item, lecturas: lect([]), marcasPropias: ['Náufrago'] }).aceptadas).toEqual({ hook: [0] })
   })
-  it('sin lectura del observador no se bloquea (se acepta con aviso): la falta de ojos no es una marca', () => {
-    const o = observacionDeLaMesa({ items: item, lecturas: { 0: { texto_leido: [], marcas: [], personas: 0, leido: false } }, permitido: [] })
-    expect(o.sin_lectura).toEqual([0]); expect(o.rechazadas).toHaveLength(0); expect(o.aceptadas).toEqual({ hook: [0] })
+  it('🔴 #14 · sin lectura del observador la imagen NO se acepta sola: queda rechazada «sin juicio» y una persona decide (línea de CC7)', () => {
+    const o = observacionDeLaMesa({ items: item, lecturas: { 0: { texto_leido: [], marcas: [], personas: 0, leido: false, texto_ajeno: null, dato_sin_verificar: null } } })
+    expect(o.sin_lectura).toEqual([0]); expect(o.aceptadas).toEqual({})
+    expect(o.rechazadas).toEqual([{ indice: 0, ref: 'hook', motivo: 'el observador no contestó' }])
   })
 })

@@ -90,7 +90,7 @@ export const ESQUEMAS: Record<string, Esq> = {
             indice: { t: 'num', min: 0, max: 20 },
             reglas: { t: 'arr', max: 40, de: { t: 'obj', req: ['id', 'presente'], props: { id: str(1, 60), presente: { t: 'enum', v: [true, false, 'no_se_ve'] }, evidencia: str(0, 400) } } },
             texto_en_imagen: { t: 'arr', de: str(0, 200), max: 30 }, marcas: { t: 'arr', de: str(0, 120), max: 20 },
-            personas: { t: 'num', min: 0, max: 50 }, producto: str(0, 200), elementos_visibles: { t: 'arr', de: str(0, 120), max: 40 },
+            personas: { t: 'num', min: 0, max: 50 }, producto: str(0, 200), elementos_visibles: { t: 'arr', de: str(0, 120), max: 40 }, dato_sin_verificar: { t: 'bool' },
           },
         },
       },

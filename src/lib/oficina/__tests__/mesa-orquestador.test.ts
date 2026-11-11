@@ -94,7 +94,7 @@ describe('LA MESA · carrusel · punta a punta con equipo simulado', () => {
 
   it('el observador (otro proveedor, fuera de la mesa) bloquea una imagen que muestra un texto que la pieza no pidió', async () => {
     const { M, a, id } = await montar({ dry_run: false })
-    M.P.revisor = async (p) => { M.llamadas.revisor++; M.llamadas.revisorPedidos.push(p.texto); return { ok: true, texto: 'TEXTO_VISIBLE: "CERTIFICADO ISO 9001"\nMARCAS: ninguna\nPERSONAS: 0', costo_usd: 0.02, modelo: 'obs' } }
+    M.P.revisor = async (p) => { M.llamadas.revisor++; M.llamadas.revisorPedidos.push(p.texto); return { ok: true, texto: 'TEXTO_VISIBLE: "CERTIFICADO ISO 9001"\nMARCAS: ninguna\nPERSONAS: 0\nTEXTO_AJENO: sí\nDATO_SIN_VERIFICAR: sí', costo_usd: 0.02, modelo: 'obs' } }
     const { ultima } = await jugar(M, id, a)
     expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id === 'observador-hook' && f.gravedad === 'bloquea')).toBe(true)
     expect(ultima.cuerpo.con_desacuerdo).toBe(true)

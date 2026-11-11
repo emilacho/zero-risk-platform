@@ -29,19 +29,22 @@ export async function observarImagenes(P: Puertos, enc: Encargo, _pl: Plantilla)
   const gastos: NonNullable<Cambios['gastos']> = []
   let costo = 0
   for (const it of items) {
-    const rr = await P.revisor({ texto: PEDIDO_DEL_OBSERVADOR(it.prompt ?? ''), imagenes_urls: [it.url], dry_run: enc.dry_run, client_id: enc.client_id, ref_id: enc.id, n: it.indice })
+    const rr = await P.revisor({ texto: PEDIDO_DEL_OBSERVADOR(it.prompt ?? '', permitido.join(' · ')), imagenes_urls: [it.url], dry_run: enc.dry_run, client_id: enc.client_id, ref_id: enc.id, n: it.indice })
     if (rr.ok) {
       lecturas[it.indice] = leerObservador(rr.texto)
       if (rr.costo_usd > 0) { costo += rr.costo_usd; gastos.push({ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: rr.costo_usd, base: 'usage' }) }
     } else if ((rr.costo_usd ?? 0) > 0) { costo += rr.costo_usd ?? 0; gastos.push({ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: rr.costo_usd ?? 0, base: 'usage' }) }
   }
-  const o = observacionDeLaMesa({ items, lecturas, permitido, marcasPropias: [b.F.marca?.brand_handle ?? '', b.F.cliente_nombre ?? ''] })
+  const o = observacionDeLaMesa({ items, lecturas, seco: enc.dry_run === true, marcasPropias: [b.F.marca?.brand_handle ?? '', b.F.cliente_nombre ?? ''] })
   const refsConAceptada = new Set(Object.keys(o.aceptadas))
   const fichas = [...new Set(o.rechazadas.map((x) => x.ref))].filter((ref) => !refsConAceptada.has(ref)).map((ref) => {
     const motivos = o.rechazadas.filter((x) => x.ref === ref).map((x) => x.motivo)
-    return fichaNueva(`observador-${ref}`, 'chequeo', 'imagen', 'bloquea', `la imagen de «${ref}» muestra algo que la pieza no pidió (${motivos[0]}): no se usa y una persona decide`, 'cotejo del observador de imagen', 'rehacer la imagen o quitarla')
+    const sinJuicio = o.rechazadas.filter((x) => x.ref === ref).every((x) => o.sin_lectura.includes(x.indice))
+    return sinJuicio
+      ? fichaNueva(`observador-${ref}`, 'chequeo', 'imagen', 'bloquea', `la imagen de «${ref}» no se pudo juzgar (${motivos[0]}): no se aprueba sola y una persona decide`, 'juicio del observador de imagen', 'mirarla y decidir, o rehacerla')
+      : fichaNueva(`observador-${ref}`, 'chequeo', 'imagen', 'bloquea', `la imagen de «${ref}» muestra algo que la pieza no pidió (${motivos[0]}): no se usa y una persona decide`, 'juicio del observador de imagen', 'rehacer la imagen o quitarla')
   })
-  const avisos = o.sin_lectura.length ? [fichaNueva('observador-sin-lectura', 'chequeo', 'imagen', 'sugerencia', `el observador no contestó para ${o.sin_lectura.length} imagen(es): se aceptan sin cotejo de texto visible`)] : []
+  const avisos = enc.dry_run === true && o.sin_lectura.length ? [fichaNueva('observador-sin-lectura', 'chequeo', 'imagen', 'sugerencia', `ensayo: el observador no mira en seco; ${o.sin_lectura.length} imagen(es) quedan sin juicio de texto ajeno ni de dato sin verificar (en real no pasarían solas)`)] : []
   return {
     res: {
       costo_usd: +costo.toFixed(6),

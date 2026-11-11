@@ -61,8 +61,12 @@ export interface ObservacionDeImagen {
   personas: number
   producto?: string
   elementos_visibles?: string[]
+  /** #13 · 11-nov · ¿la imagen muestra un dato que nadie verificó (precio, cifra, sello, certificación, etiqueta, norma, lectura de un instrumento)? lo juzga quien mira; el código solo lee el sí o no */
+  dato_sin_verificar?: boolean
 }
-export interface FallaDeImagen { codigo: 'obligatorio_ausente' | 'prohibido_presente' | 'regla_omitida' | 'dato_ajeno' | 'marca_ajena'; detalle: string }
+export interface FallaDeImagen { codigo: 'obligatorio_ausente' | 'prohibido_presente' | 'regla_omitida' | 'dato_ajeno' | 'marca_ajena' | 'dato_sin_verificar'; detalle: string }
+/** #13 · lo que se le exige a quien mira · `exigirDato`: la imagen se GENERÓ sin foto (no puede inventar datos), así que tiene que decir sí o no; sin respuesta, la imagen NO pasa (nunca aprobada por omisión) */
+export interface ExigenciasDeLaMirada { exigirDato?: boolean }
 
 /** dominio sin protocolo, sin www y sin ruta */
 const dominioDe = (u: string): string => normalizar(u).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[/?#].*$/, '')
@@ -83,7 +87,7 @@ export function datosAjenos(textos: string[], propios: Pick<PropiosDelCliente, '
 }
 
 /** ¿pasa UNA imagen observada? El código decide; la observación solo describe. Una regla que el curador omitió cuenta como falla (no se supone). */
-export function decideImagen(obs: ObservacionDeImagen, reglas: ReglasDeImagen, propios: PropiosDelCliente): { pasa: boolean; fallas: FallaDeImagen[] } {
+export function decideImagen(obs: ObservacionDeImagen, reglas: ReglasDeImagen, propios: PropiosDelCliente, exige: ExigenciasDeLaMirada = {}): { pasa: boolean; fallas: FallaDeImagen[] } {
   const fallas: FallaDeImagen[] = []
   const por = new Map(obs.reglas.map((r) => [r.id, r.presente] as const))
   for (const r of reglas.obligatorio) {
@@ -100,6 +104,10 @@ export function decideImagen(obs: ObservacionDeImagen, reglas: ReglasDeImagen, p
   for (const m of obs.marcas) {
     if (m.trim() && propios.marcas_ajenas.some((x) => x && normalizar(m).includes(normalizar(x)))) fallas.push({ codigo: 'marca_ajena', detalle: `marca ajena visible («${m}»)` })
   }
+  if (exige.exigirDato) {
+    if (obs.dato_sin_verificar === true) fallas.push({ codigo: 'dato_sin_verificar', detalle: 'quien mira la imagen dice que muestra un dato que nadie verificó (precio, cifra, sello, certificación, etiqueta o lectura)' })
+    else if (obs.dato_sin_verificar !== false) fallas.push({ codigo: 'regla_omitida', detalle: 'quien mira la imagen no dijo si muestra un dato que nadie verificó: no se aprueba por omisión' })
+  }
   return { pasa: fallas.length === 0, fallas }
 }
 
@@ -111,8 +119,8 @@ export interface Veredicto {
   regenerar: boolean
 }
 /** `puedeRegenerar` lo calcula la sala (modo generada y vueltas restantes); el motor corta en el máximo de la plantilla. */
-export function veredictoDeImagenes(observaciones: ObservacionDeImagen[], reglas: ReglasDeImagen, propios: PropiosDelCliente, puedeRegenerar: boolean): Veredicto {
-  const porImagen = observaciones.map((o) => ({ indice: o.indice, ...decideImagen(o, reglas, propios) }))
+export function veredictoDeImagenes(observaciones: ObservacionDeImagen[], reglas: ReglasDeImagen, propios: PropiosDelCliente, puedeRegenerar: boolean, exige: ExigenciasDeLaMirada = {}): Veredicto {
+  const porImagen = observaciones.map((o) => ({ indice: o.indice, ...decideImagen(o, reglas, propios, exige) }))
   const pasan = porImagen.filter((x) => x.pasa).map((x) => x.indice)
   return { pasan, porImagen, regenerar: pasan.length === 0 && puedeRegenerar }
 }
