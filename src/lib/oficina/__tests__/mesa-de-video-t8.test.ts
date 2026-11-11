@@ -182,7 +182,9 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
     f.pasos[2] = { ...f.pasos[2], vuelve_a: vuelta }
     // 11-nov · y el código de hoy suma los 2 pasos de la mirada (202611111730, ver `mirar-el-video.test.ts`); fuera de ellos es idéntica
     expect(f.pasos).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos.filter((p) => !PASOS_DE_LA_MIRADA.includes(p.clave)))))
-    expect(f.indicaciones).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.indicaciones)))
+    // 11-nov · la indicación de quien mira el video llega con 202611111730 (la siembra de 2012 no tenía ninguna)
+    expect(f.indicaciones).toEqual({})
+    expect(Object.keys(VIDEO_MESA.indicaciones)).toEqual(['video-editor'])
     expect(f.limites).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.limites)))
     expect(SQL).toMatch(/2, 10\.00, false\s*\) ON CONFLICT \(tipo\) DO NOTHING/)
     expect(VIDEO_MESA.pasos.map((p) => p.clave)).toEqual(['abrir', 'mesa', 'pedido', 'video', 'cuadros_video', 'mirar_video', 'chequeos', 'jefatura', 'chequeos_2', 'entrega', 'cierre'])

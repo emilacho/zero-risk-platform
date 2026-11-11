@@ -60,5 +60,10 @@ export const VIDEO_MESA: Plantilla = {
     { clave: 'entrega', tipo: 'codigo', quien: 'sala', funcion: 'empaquetar_entrega_video', condicion: siempre, entrada: ['copy_video', 'video', 'chequeos', 'guion'], salida_artefacto: 'entrega', tope_usd: 0 },
     { clave: 'cierre', tipo: 'codigo', quien: 'sala', funcion: 'cierre', condicion: siempre, entrada: ['entrega'], salida_artefacto: 'cierre', tope_usd: 0 },
   ],
-  indicaciones: {},
+  // 11-nov · la indicación de quien mira el video (va SOLO con su pedido: la mesa no lee las indicaciones del tipo de grupo); el texto de su identidad no cambia
+  indicaciones: {
+    [AGENTE_QUE_MIRA_EL_VIDEO]: [
+      { regla: 'Cuando miras el video terminado, juzgas tú si cuenta lo que pide el guion y la fila: describe lo que de verdad se ve en cada cuadro, sin suponer lo que no se ve, y di qué falta para que el video cuente la historia.', aplica: 'guia' },
+    ],
+  },
 }

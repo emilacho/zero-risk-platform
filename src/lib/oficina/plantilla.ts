@@ -117,10 +117,11 @@ export function validarPlantilla(p: Plantilla): string[] {
       e.push(...erroresDeCondicion(v.si, `${d} (vuelve_a.si)`, artefactos))
     }
   })
-  // una vuelta no contiene otra, ni cruza una ronda de crítica
+  // una vuelta no contiene otra, ni cruza una ronda de crítica · 11-nov: salvo dos vueltas al MISMO paso (p. ej. el pedido y la mirada del video vuelven a la mesa):
+  //   el motor solo mira la vuelta del último paso ejecutado y cada una cuenta la suya con su máximo, así que el total sigue acotado (y el margen exige su suma)
   for (let a = 0; a < rangos.length; a++) {
     for (let b = a + 1; b < rangos.length; b++) {
-      if (rangos[a].de <= rangos[b].a && rangos[b].de <= rangos[a].a) e.push(`las vueltas de «${rangos[a].clave}» y «${rangos[b].clave}» se solapan o se anidan`)
+      if (rangos[a].de <= rangos[b].a && rangos[b].de <= rangos[a].a && rangos[a].de !== rangos[b].de) e.push(`las vueltas de «${rangos[a].clave}» y «${rangos[b].clave}» se solapan o se anidan`)
     }
     for (let k = rangos[a].de; k <= rangos[a].a; k++) {
       if (p.pasos[k]?.ronda !== undefined) e.push(`la vuelta de «${rangos[a].clave}» cruza el paso de crítica «${p.pasos[k].clave}»`)

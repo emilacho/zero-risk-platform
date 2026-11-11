@@ -15,7 +15,7 @@ import { escribirHoja, type FilaDeHoja, type InsumosDeLaHoja } from '@/lib/caden
 import { leerBriefCreativo } from '@/lib/cadena/brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '@/lib/cadena/conceptos'
 import type { FormatosPorRed } from '@/lib/cadena/tipos'
-import { abrirEncargo } from '../orquestador'
+import { abrirEncargo, indicacionDe } from '../orquestador'
 import { recibirVideo } from '../orquestador-video'
 import { AGENTE_QUE_MIRA_EL_VIDEO, VIDEO_MESA } from '../plantillas/video-mesa'
 import type { PuertoDeVideo } from '../puertos'
@@ -24,6 +24,8 @@ import { sacarCuadros, duracionDeLaSalida } from '../video/cuadros'
 import type { Plano } from '../video/guion'
 import { instantesPorPlano, leerMirada, PASO_MIRAR_VIDEO, tareaDeLaMirada } from '../video/mirada'
 import { procesarSalida } from '../salida'
+import { validarPlantilla } from '../plantilla'
+import type { Plantilla } from '../tipos'
 import { CONTRATOS_EN_TEXTO } from '../pedidos'
 import { jugar, type Turno } from './mesa-arnes'
 import { FOTOS, PARTE, crearMemoria } from './memoria'
@@ -33,6 +35,7 @@ const RAIZ = path.resolve(__dirname, '../../../../supabase')
 const MIG = fs.readFileSync(path.join(RAIZ, 'migrations', '202611111730_oficina_un_agente_mira_el_video.sql'), 'utf8')
 const REV = fs.readFileSync(path.join(RAIZ, 'reversas', '202611111730_oficina_un_agente_mira_el_video_REVERSA.sql'), 'utf8')
 const pasosDe = (sql: string) => JSON.parse(/\$pasos\$([\s\S]*?)\$pasos\$/.exec(sql)![1])
+const indDe = (sql: string, d = 'ind') => JSON.parse(new RegExp(`\\$${d}\\$([\\s\\S]*?)\\$${d}\\$`).exec(sql)![1])
 const antesDe = (sql: string) => JSON.parse(/\$antes\$([\s\S]*?)\$antes\$/.exec(sql)![1])
 
 const PLANOS: Plano[] = [
@@ -278,6 +281,22 @@ describe('en ensayo el video no se mira (es simulado) y nada cambia', () => {
   })
 })
 
+describe('la plantilla: dos vueltas a la mesa y la indicación de quien mira', () => {
+  it('🔴 el pedido y la mirada vuelven los dos a la mesa (anidadas, mismo destino): válido; con OTRO destino sigue prohibido', () => {
+    const errores = validarPlantilla(VIDEO_MESA)
+    expect(errores.filter((x) => /vuelve_a|vueltas|mirar_video|video-editor/.test(x))).toEqual([])
+    const otroDestino: Plantilla = { ...VIDEO_MESA, pasos: VIDEO_MESA.pasos.map((p) => (p.clave === PASO_MIRAR_VIDEO ? { ...p, vuelve_a: { ...p.vuelve_a!, paso: 'abrir' } } : p)) }
+    expect(validarPlantilla(otroDestino)).toContain('las vueltas de «pedido» y «mirar_video» se solapan o se anidan')
+  })
+  it('🔴 la indicación de quien mira llega con SU pedido (no con la mesa) y dice que juzga él', () => {
+    expect(VIDEO_MESA.indicaciones[AGENTE_QUE_MIRA_EL_VIDEO]).toEqual([expect.objectContaining({ aplica: 'guia', regla: expect.stringContaining('juzgas tú') })])
+    expect(indicacionDe(VIDEO_MESA, AGENTE_QUE_MIRA_EL_VIDEO)).toContain('1. Cuando miras el video terminado, juzgas tú')
+    expect(indicacionDe(VIDEO_MESA, 'oficina-creativa')).toBe('')
+    const sinIndicacion: Plantilla = { ...VIDEO_MESA, indicaciones: {} }
+    expect(validarPlantilla(sinIndicacion)).toContain(`el agente «${AGENTE_QUE_MIRA_EL_VIDEO}» no tiene indicación`)
+  })
+})
+
 describe('la migración 202611111730', () => {
   it('🔴 siembra EXACTAMENTE los pasos del código (11: cuadros_video y mirar_video entre video y chequeos)', () => {
     expect(pasosDe(MIG)).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
@@ -293,14 +312,20 @@ describe('la migración 202611111730', () => {
     expect(antesDe(REV)).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
     expect(VIDEO_MESA.pasos.find((p) => p.clave === PASO_MIRAR_VIDEO)?.vuelve_a).toEqual({ paso: 'mesa', max: 1, si: { tipo: 'si_artefacto', artefacto: 'mirada_video', campo: 'vuelve_a_la_mesa', igual: true } })
     for (const sql of [MIG, REV]) expect(sql).toContain("IS DISTINCT FROM $antes$")
+    // las indicaciones: la migración pone la de quien mira (exige {} antes); la reversa vuelve a {} (exige la de la migración)
+    expect(indDe(MIG)).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.indicaciones)))
+    expect(indDe(MIG, 'ind_antes')).toEqual({})
+    expect(indDe(REV)).toEqual({})
+    expect(indDe(REV, 'ind_antes')).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.indicaciones)))
   })
-  it('🔴 las dos se niegan con encargos de video vivos y comprueban los pasos antes y después; solo tocan la columna pasos', () => {
+  it('🔴 las dos se niegan con encargos de video vivos y comprueban los pasos antes y después; solo tocan las columnas pasos e indicaciones', () => {
     for (const sql of [MIG, REV]) {
       expect(sql).toContain("WHERE familia = 'video_mesa' AND estado IN ('abierto', 'en_paso')) THEN")
       expect(sql.match(/IS DISTINCT FROM ARRAY\[/g)).toHaveLength(2)
       const sentencias = sql.split('\n').filter((l) => !l.startsWith('--')).join('\n')
       expect(sentencias).not.toMatch(/\b(DELETE|DROP|TRUNCATE|INSERT)\b/i)
       expect(sentencias.match(/UPDATE public\.oficina_tipos_de_grupo SET pasos = /g)).toHaveLength(1)
+      expect(sentencias.match(/UPDATE public\.oficina_tipos_de_grupo SET pasos = \$pasos\$[\s\S]*?\$pasos\$::jsonb, indicaciones = \$ind\$[\s\S]*?\$ind\$::jsonb WHERE familia = 'video_mesa';/g)).toHaveLength(1)
     }
   })
 })
