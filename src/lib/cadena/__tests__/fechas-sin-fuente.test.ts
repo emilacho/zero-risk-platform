@@ -7,7 +7,7 @@
  *  · D · la clase la decide el agente; el código guarda la llave estable (condición de CC7: probada con las dos grafías que ya están en la base).
  */
 import { describe, it, expect } from 'vitest'
-import { abrirCampana, estrategiaGuardar, estrategiaPreparar, fechasCobertura, type Estrategia } from '../index'
+import { abrirCampana, estrategiaGuardar, estrategiaPreparar, fechasCobertura, fechasPreparar, type Estrategia } from '../index'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, clienteB, contextoDe } from '../__fixtures__/clientes'
 import { dominiosDe, llaveConocida, temporadaRespaldada } from '../fechas-del-cliente'
@@ -449,5 +449,26 @@ describe('lo que los sabotajes dejaron vivo', () => {
     expect(v07(await validarSinEscribir(al, { ...wf, campana_id: b, tipo: 'calendario', tanda: 1, tanda_agente: t }, AHORA))).toHaveLength(1)
     t.piezas[0] = { ...t.piezas[0]!, datos: [] }
     expect(v07(await validarSinEscribir(al, { ...wf, campana_id: b, tipo: 'calendario', tanda: 1, tanda_agente: t }, AHORA))).toEqual([])
+  })
+})
+
+describe('11-nov · arreglo genérico de CC7 · «sin fuente» dice qué páginas se descartaron y por qué', () => {
+  it.each([['A · Ecuador', 'A'], ['B · Colombia', 'B']])('🔴 %s · sin páginas con texto: sin fuente, sin agente, y el motivo nombra cada descartada con su razón', async (_n, k) => {
+    const al = mundo()
+    const c = k === 'A' ? A : B
+    const id = await campanaDe(al, c.clientId, true)
+    const descartadas = [{ url: 'https://pdf.test/f.pdf', razon: 'no es texto (application/pdf)' }, { url: 'https://vacia.test/', razon: 'sin texto legible (0 caracteres)' }]
+    const r = await fechasPreparar(al, { ...wf, campana_id: id, seco: true, pais: k === 'A' ? 'Ecuador' : 'Colombia', tipo: 'feriados nacionales', ambito: 'pais', anio: 2026, paginas: [], paginas_descartadas: descartadas }, AHORA)
+    expect(r.status).toBe(200)
+    expect(r.cuerpo).toMatchObject({ estado: 'sin_fuente', descartadas: ['https://pdf.test/f.pdf: no es texto (application/pdf)', 'https://vacia.test/: sin texto legible (0 caracteres)'] })
+    expect(String(r.cuerpo.motivo)).toMatch(/^ninguna página descargada traía texto legible \(https:\/\/pdf\.test\/f\.pdf: no es texto \(application\/pdf\) · https:\/\/vacia\.test\/: sin texto legible \(0 caracteres\)\): no hay nada que extraer/)
+    expect(al.corridas).toHaveLength(0) // no se abrió ninguna corrida: nadie llama al agente
+  })
+  it('sin descartadas (ninguna página bajó) el motivo es el de siempre y no trae la lista', async () => {
+    const al = mundo()
+    const id = await campanaDe(al, A.clientId, true)
+    const r = await fechasPreparar(al, { ...wf, campana_id: id, seco: true, pais: 'Ecuador', tipo: 'feriados nacionales', ambito: 'pais', anio: 2026, paginas: [] }, AHORA)
+    expect(r.cuerpo.motivo).toBe('no se pudo descargar ninguna página: no hay nada que extraer (el tipo queda sin fuente; la campaña sigue)')
+    expect(r.cuerpo.descartadas).toBeUndefined()
   })
 })
