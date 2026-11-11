@@ -354,7 +354,7 @@ export interface Almacen {
    */
   leerGastoDeCampana(campanaId: string, parteActual: string): Promise<LecturaDeGasto>
   /**
-   * 11-nov (GO Lenovo 01:10Z) · la config con la que la PUERTA DE LA OFICINA decide si produce (`oficina_config`: estado · familias_activas · clientes_ensayo), la MISMA que lee la oficina.
+   * 11-nov (GO Lenovo 01:10Z) · la config con la que la PUERTA DE LA OFICINA decide si produce (estado · familias_activas · clientes_ensayo, `configDeLaPuerta` de la oficina), la MISMA que lee la oficina.
    * OPCIONAL. A diferencia de la oficina (que sin config se apaga), aquí un fallo LANZA: el freno, si no puede leerla, sigue guardando lugar como hoy (del lado seguro).
    */
   configDeLaOficina?(): Promise<import('@/lib/oficina/sobre').ConfigDeOficina>

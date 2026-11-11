@@ -48,6 +48,7 @@ import { almacenDeSupabase } from '../almacen-supabase'
 import { filasLotes } from '../datos'
 import { esNotaSinFamilia } from '../sin-familia'
 import { formatosDeLaMigracion } from '../__fixtures__/clientes'
+import { COLUMNAS_DE_CONFIG, TABLA_DE_CONFIG, TABLAS_DE_GASTO } from '@/lib/oficina/gasto-de-encargos'
 import type { Almacen, Campana } from '../almacen'
 import type { FormatosPorRed } from '../tipos'
 
@@ -62,8 +63,8 @@ const fila = (id: string, red: string, formato: string, fecha: string): Fila => 
 beforeEach(() => {
   avisados.length = 0; escrituras.length = 0; leidas.length = 0
   for (const k of Object.keys(errorEn)) delete errorEn[k]
-  tablas.oficina_config = [{ id: 1, estado: 'encendida', familias_activas: ['post_img', 'kit_historias'], clientes_ensayo: [], otra_columna: 'x' }]
-  tablas.oficina_tipos_de_grupo = [{ familia: 'video_mesa', activo: true }]
+  tablas[TABLA_DE_CONFIG] = [{ id: 1, estado: 'encendida', familias_activas: ['post_img', 'kit_historias'], clientes_ensayo: [], otra_columna: 'x' }]
+  tablas[TABLAS_DE_GASTO.plantillas] = [{ familia: 'video_mesa', activo: true }] // la OTRA fuente: dice video_mesa activa; no se lee
   tablas.cadena_calendario_filas = [fila('s1-d3-mie_foto', 'instagram', 'foto', '2026-11-11'), fila('s1-d4-jue_anuncio_gye', 'instagram', 'anuncio_imagen', '2026-11-12'), fila('s1-d4-jue_anuncio_fb', 'facebook', 'anuncio_imagen', '2026-11-12')]
 })
 
@@ -110,20 +111,21 @@ describe('adaptador · la nota se lee de la columna `avisos` (2)', () => {
 })
 
 describe('adaptador · la config de la oficina para el freno (GO Lenovo 01:10Z · CC7 · 1 y 2)', () => {
-  it('🔴 lee la MISMA fuente y las MISMAS columnas que la puerta de la oficina (oficina_config · estado, familias_activas, clientes_ensayo)', async () => {
+  it('🔴 lee la MISMA fuente y las MISMAS columnas que la puerta de la oficina (su tabla de config · estado, familias_activas, clientes_ensayo)', async () => {
     expect(await almacenDeSupabase().configDeLaOficina!()).toEqual({ estado: 'encendida', familias_activas: ['post_img', 'kit_historias'], clientes_ensayo: [] })
-    expect(leidas).toEqual([{ tabla: 'oficina_config', cols: 'estado,familias_activas,clientes_ensayo' }])
+    expect(leidas).toEqual([{ tabla: TABLA_DE_CONFIG, cols: 'estado,familias_activas,clientes_ensayo' }])
+    expect(COLUMNAS_DE_CONFIG).toBe('estado,familias_activas,clientes_ensayo')
   })
   it('🔴 un error de la base LANZA (no es «apagada» ni «lista vacía»): el freno sigue guardando lugar', async () => {
-    errorEn.oficina_config = 'la base no contesta'
+    errorEn[TABLA_DE_CONFIG] = 'la base no contesta'
     await expect(almacenDeSupabase().configDeLaOficina!()).rejects.toThrow(/no contesta/)
   })
   it('sin la fila de config, también LANZA', async () => {
-    tablas.oficina_config = []
-    await expect(almacenDeSupabase().configDeLaOficina!()).rejects.toThrow(/sin fila/)
+    tablas[TABLA_DE_CONFIG] = []
+    await expect(almacenDeSupabase().configDeLaOficina!()).rejects.toThrow(/no tiene fila/)
   })
   it('un estado desconocido se lee como apagada (igual que la oficina)', async () => {
-    tablas.oficina_config = [{ id: 1, estado: 'rara', familias_activas: null, clientes_ensayo: null }]
+    tablas[TABLA_DE_CONFIG] = [{ id: 1, estado: 'rara', familias_activas: null, clientes_ensayo: null }]
     expect(await almacenDeSupabase().configDeLaOficina!()).toEqual({ estado: 'apagada', familias_activas: [], clientes_ensayo: [] })
   })
 })

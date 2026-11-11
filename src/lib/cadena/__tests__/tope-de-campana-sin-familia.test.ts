@@ -65,7 +65,7 @@ describe.each(CLIENTES)('%s · el freno y las filas sin familia', (_n, C) => {
   it('una tabla sin ninguna familia no juzga: la fila sigue guardando lugar como hoy (con el tope más alto)', async () => {
     expect(await llamar(32, C.sin, formatosDeLaMigracion())).toMatchObject({ emitidos: 0, tope: { decision: 'corta', retenidas: ['B1'] } })
   })
-// ── la familia INACTIVA (GO Lenovo 01:10Z): la misma puerta y la misma config que la oficina (`oficina_config`)
+// ── la familia INACTIVA (GO Lenovo 01:10Z): la misma puerta y la misma config que la oficina (`configDeLaPuerta`)
   const REEL = { red: 'instagram', formato: 'reel' } // familia video_mesa: sin pieza simple detrás
   const encendida = (familias: string[]): ConfigDeOficina => ({ estado: 'encendida', familias_activas: familias, clientes_ensayo: [] })
   const HOY = ['post_img', 'carrusel_ig_v1', 'kit_historias', 'carrusel_mesa'] // las activas de hoy (lectura de CC7)
@@ -88,7 +88,7 @@ describe.each(CLIENTES)('%s · el freno y las filas sin familia', (_n, C) => {
     expect(await llamar(32, REEL, undefined, { estado: 'ensayo', familias_activas: [...HOY, 'video_mesa'], clientes_ensayo: [C.client] })).toMatchObject({ emitidos: 0, tope: { decision: 'corta' } })
   })
   it('🔴 (CC7 · 2) si la config de la oficina no se puede leer, el reel sigue guardando lugar como hoy (del lado seguro; el error NO es «inactiva»)', async () => {
-    expect(await llamar(32, REEL, undefined, new Error('oficina_config no contesta'))).toMatchObject({ emitidos: 0, tope: { decision: 'corta', retenidas: ['B1'] } })
+    expect(await llamar(32, REEL, undefined, new Error('la config de la oficina no contesta'))).toMatchObject({ emitidos: 0, tope: { decision: 'corta', retenidas: ['B1'] } })
     // sin el puerto (almacén viejo): igual que hoy
     expect(await llamar(32, REEL)).toMatchObject({ emitidos: 0, tope: { decision: 'corta', retenidas: ['B1'] } })
   })
