@@ -144,10 +144,21 @@ export async function bajar(url: string, f: typeof fetch = fetch): Promise<Buffe
   return bytes
 }
 
-/** ¿el clip trae sonido? (ffprobe) */
+/** el ejecutable de ffmpeg: el del sistema (el contenedor lo trae) salvo que `FFMPEG_BIN` diga otro */
+export const binarioDeFfmpeg = (env: NodeJS.ProcessEnv = process.env): string => (env.FFMPEG_BIN ?? '').trim() || 'ffmpeg'
+
+/** lo que ffmpeg dice de un archivo (sin ffprobe: basta el mismo ffmpeg) · ¿trae sonido?, medidas del video, duración */
+export function leerInforme(stderr: string): { audio: boolean; ancho: number | null; alto: number | null; segundos: number | null } {
+  const audio = /Stream #\d+:\d+[^\n]*: Audio:/.test(stderr)
+  const v = /Stream #\d+:\d+[^\n]*: Video:[^\n]*?\b(\d{2,5})x(\d{2,5})\b/.exec(stderr)
+  const d = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(stderr)
+  return { audio, ancho: v ? Number(v[1]) : null, alto: v ? Number(v[2]) : null, segundos: d ? Number(d[1]) * 3600 + Number(d[2]) * 60 + Number(d[3]) : null }
+}
+
+/** ¿el clip trae sonido? (`ffmpeg -i` sin salida termina con error, pero describe las pistas) */
 async function tieneAudio(ruta: string): Promise<boolean> {
-  const r = await ejecutar('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', ruta], 30)
-  return r.codigo === 0 && r.out.trim().length > 0
+  const r = await ejecutar(binarioDeFfmpeg(), ['-hide_banner', '-nostdin', '-i', ruta], 30)
+  return leerInforme(r.err).audio
 }
 
 async function enCarpeta<T>(trabajo: (dir: string) => Promise<T>): Promise<T> {
@@ -162,7 +173,7 @@ export async function unir(clips: ClipParaUnir[], ancho: number, alto: number, f
     const conAudio: boolean[] = []
     for (const e of entradas) conAudio.push(await tieneAudio(e))
     const salida = join(dir, 'unido.mp4')
-    const r = await ejecutar('ffmpeg', argumentosDeUnir(entradas, clips, conAudio, ancho, alto, salida))
+    const r = await ejecutar(binarioDeFfmpeg(), argumentosDeUnir(entradas, clips, conAudio, ancho, alto, salida))
     if (r.codigo !== 0) throw new Error(`ffmpeg no pudo unir (${r.codigo}): ${r.err.slice(-600)}`)
     return readFile(salida)
   }))
@@ -173,7 +184,7 @@ export async function encuadrar(url: string, ancho: number, alto: number, f: typ
     const entrada = join(dir, 'foto')
     await writeFile(entrada, await bajar(url, f))
     const salida = join(dir, 'encuadrada.jpg')
-    const r = await ejecutar('ffmpeg', argumentosDeEncuadrar(entrada, ancho, alto, salida), 60)
+    const r = await ejecutar(binarioDeFfmpeg(), argumentosDeEncuadrar(entrada, ancho, alto, salida), 60)
     if (r.codigo !== 0) throw new Error(`ffmpeg no pudo encuadrar (${r.codigo}): ${r.err.slice(-600)}`)
     return readFile(salida)
   }))

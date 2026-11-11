@@ -50,11 +50,6 @@ jobs:
         # are deprecated-ref / naming-zr-shorthand (D6 sweep scope · NOT blocking).
         run: node scripts/lint-canon.mjs
 
-      - name: Install ffmpeg
-        # CC3 · 11-nov · el unidor de video plano por plano (`services/agent-runner/src/lib/video-unir.ts`) corre ffmpeg del sistema en Railway (OK Lenovo 16:58).
-        # Con el MISMO paquete de Debian/Ubuntu aquí, la prueba de unión REAL corre en CI (EXIGIR_FFMPEG=1: si faltara ffmpeg, la prueba falla en vez de saltarse).
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg && ffmpeg -hide_banner -version | head -1
-
       - name: Test
         # Sprint 8C D8 · vitest 3.2.4 downgrade resolved the rolldown
         # `@rolldown/binding-linux-x64-gnu` blocker that previously skipped
