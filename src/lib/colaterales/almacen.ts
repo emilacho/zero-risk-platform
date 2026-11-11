@@ -129,6 +129,13 @@ export function almacenDeColaterales(db: Db) {
       return 'rehacer'
     },
 
+    /** 11-nov · pieza B · ata la revisión de la jefatura a los retoques que siguen `propuesto` y SIN revisión (una revisión nunca se pisa) · devuelve cuántos ató */
+    async atarRevision(ids: string[], revision_id: string): Promise<number> {
+      if (!ids.length) return 0
+      const d = ok(await db.from('colaterales_retoques').update({ revision_id, updated_at: ahora() }).in('id', ids).eq('estado', 'propuesto').is('revision_id', null).select('id'), 'atar la revisión') as unknown[] | null
+      return d?.length ?? 0
+    },
+
     /** pasa a `a` TODOS los retoques de la edición que siguen en `de` (condicional por fila) · devuelve cuántos cambió */
     async pasarRetoquesDeEdicion(edicion_id: string, de: EstadoDeRetoque, a: EstadoDeRetoque, motivo: string): Promise<number> {
       if (!PASOS_DE_RETOQUE[de].includes(a)) throw new PasoNoPermitido(`retoque ${de} → ${a}`)

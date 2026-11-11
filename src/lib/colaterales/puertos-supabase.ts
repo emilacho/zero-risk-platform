@@ -8,16 +8,22 @@
  *   · la campaña de un documento de campaña es del cliente: por el almacén de la cadena (único que nombra sus tablas);
  *   · gasto del día (UTC): recibos de HOY de las corridas de colaterales del cliente (por la fecha del recibo) + cuántas ediciones suyas
  *     están tomadas sin recibo todavía (en vuelo: el turno les cuenta la reserva);
- *   · tope diario: la fila del cliente en `colaterales_topes_diarios`; si no tiene, la fila por omisión (sin cliente); sin ninguna, null.
+ *   · tope diario: la fila del cliente en `colaterales_topes_diarios`; si no tiene, la fila por omisión (sin cliente); sin ninguna, null;
+ *   · pieza B: el gasto del día suma las revisiones de la jefatura de esas ediciones (cerradas por su gasto, abiertas por cuenta aparte); la revisión se abre con
+ *     vuelta a `api/jefatura/colaterales-vuelta`; aplicar = el motor 2c con los escritores que existen hoy (la estrategia).
  * Agnóstico: ningún dato de un cliente.
  */
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { almacenDeSupabase } from '../cadena/almacen-supabase'
+import { abrirRevisionConVuelta, almacenDeSupabase } from '../cadena/almacen-supabase'
+import { almacenDeSupabase as almacenDeJefatura } from '../jefatura/revision/almacen-supabase'
+import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
+import { aplicarAprobados } from './aplicar'
 import type { Documento } from '../cadena/dependencias-de-documentos'
 import { piezasPorPublicar } from '../oficina/piezas-por-publicar'
 import { almacenDeColaterales, type Db, type Edicion } from './almacen'
 import { escritorDeEstrategia } from './escritores'
 import { DOCUMENTOS_DE_CAMPANA, type DocumentoLeido, type PuertosDelTurno } from './turno'
+import { RUTA_DE_VUELTA_DE_COLATERALES } from './vuelta'
 
 function ok<T>(r: { data: T; error: { message: string } | null }, que: string): T {
   if (r.error) throw new Error(`${que}: ${r.error.message}`)
@@ -33,8 +39,9 @@ export async function campanaDeLaEdicion(e: Pick<Edicion, 'client_id' | 'documen
 type Cadena = Pick<ReturnType<typeof almacenDeSupabase>, 'campana' | 'campanaViva' | 'ultimaEstrategia' | 'estrategiaEnVersion' | 'insertarEstrategiaSiLibre'>
 export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, ahora: () => Date = () => new Date(), cadena: Cadena = almacenDeSupabase()): PuertosDelTurno {
   const estrategia = escritorDeEstrategia(cadena)
-  return {
-    almacen: almacenDeColaterales(db),
+  const almacen = almacenDeColaterales(db)
+  const P: PuertosDelTurno = {
+    almacen,
     async filasActivas() {
       const d = ok(await db.from('jefatura_grading_policies').select('artifact_type').eq('is_active', true), 'leer las filas de la jefatura') as { artifact_type: string }[] | null
       return new Set((d ?? []).map((f) => String(f.artifact_type)))
@@ -69,7 +76,18 @@ export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, 
       const desde = new Date(hoy).getTime()
       const recibos = rec.filter((f) => new Date(f.created_at).getTime() >= desde).reduce((t, f) => t + (Number(f.cost_usd) || 0), 0)
       const en_vuelo = ed.filter((f) => { const x = ejecucion(f); return f.estado === 'en_curso' && !(x && conRecibo.has(x)) }).length
-      return { recibos, en_vuelo }
+      // pieza B · las revisiones de la jefatura de esas ediciones: las cerradas por su gasto; las abiertas, contadas aparte (el turno les reserva su tope)
+      const ids = ed.map((f) => f.id)
+      const ret = ids.length ? ((ok(await db.from('colaterales_retoques').select('edicion_id, revision_id').in('edicion_id', ids), 'leer las revisiones de los retoques') as { revision_id: string | null }[] | null) ?? []) : []
+      const revIds = [...new Set(ret.map((f) => f.revision_id).filter((x): x is string => typeof x === 'string' && x !== ''))]
+      // la revisión se lee por el almacén de la JEFATURA (colaterales no nombra sus tablas, como la cadena) · si la base falla, lanza
+      const jefatura = almacenDeJefatura(db as never)
+      type Rev = { estado: string; gasto_usd: number }
+      const revs = (await Promise.all(revIds.map((id) => jefatura.leerRevision(id)))).filter((f): f is NonNullable<typeof f> => f !== null) as Rev[]
+      const terminal = (f: Rev) => (ESTADOS_TERMINALES as readonly string[]).includes(f.estado)
+      const revisiones = revs.filter(terminal).reduce((t, f) => t + (Number(f.gasto_usd) || 0), 0)
+      const revisiones_abiertas = revs.filter((f) => !terminal(f)).length
+      return { recibos, en_vuelo, revisiones, revisiones_abiertas }
     },
     async topeDiario(client_id) {
       type Tope = { tope_usd: number | string | null }
@@ -78,5 +96,8 @@ export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, 
       const n = fila && fila.tope_usd !== null ? Number(fila.tope_usd) : NaN
       return Number.isFinite(n) && n > 0 ? n : null
     },
+    abrirRevisionColateral: (entrada) => abrirRevisionConVuelta(db, entrada, RUTA_DE_VUELTA_DE_COLATERALES),
+    aplicar: (edicion_id) => aplicarAprobados({ almacen, escritores: { estrategia }, leerFilasActivas: () => P.filasActivas() }, edicion_id),
   }
+  return P
 }

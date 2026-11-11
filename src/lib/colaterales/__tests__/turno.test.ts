@@ -13,9 +13,10 @@ import { baseFalsa } from './base-falsa'
 import { almacenDeColaterales, type NuevaEdicion } from '../almacen'
 import { red } from '../red'
 import { INSTRUCCION_DE_GRAVEDAD } from '../gravedad'
-import { AGENTE_SECRETARIA, PLAZO_DEL_BARRIDO_MS, TOPE_DE_LA_LLAMADA_USD, FACTOR_DE_RESERVA, barrer, entregar, llaveDeLaSecretaria, selloDe, turno, type DocumentoLeido, type PuertosDelTurno } from '../turno'
+import { AGENTE_SECRETARIA, PLAZO_DEL_BARRIDO_MS, TOPE_DE_LA_LLAMADA_USD, TOPE_DE_LA_REVISION_USD, FACTOR_DE_RESERVA, barrer, entregar, llaveDeLaSecretaria, selloDe, turno, type DocumentoLeido, type PuertosDelTurno } from '../turno'
 import type { Documento } from '../../cadena/dependencias-de-documentos'
 import type { ResultadoDeLaGuarda } from '../../oficina/piezas-por-publicar'
+import type { EntradaDeRevisionColateral, ResultadoDeAbrirColateral } from '../vuelta'
 
 /** el tope diario de la prueba (en lo real es un dato del cliente: por omisión US$ 5) */
 const TOPE_DIARIO_DEL_CLIENTE_USD = 5
@@ -30,16 +31,18 @@ const EDIC_B: NuevaEdicion = { client_id: CLI_B, documento: 'plan', documento_re
 const DOCS_A: Partial<Record<Documento, DocumentoLeido>> = { gran_idea: { texto: A.gran_idea_v3, ref: CAMP_A, version: '3' } }
 const DOCS_B: Partial<Record<Documento, DocumentoLeido>> = { estrategia: { texto: B.estrategia, ref: 'camp-b', version: '1' } }
 
-function armar(o: { activas?: Set<string>; guarda?: ResultadoDeLaGuarda | Error; docs?: Partial<Record<Documento, DocumentoLeido>> | Error; gasto?: number; enVuelo?: number; propia?: boolean | Error; tope?: number | null | Error } = {}) {
+function armar(o: { activas?: Set<string>; guarda?: ResultadoDeLaGuarda | Error; docs?: Partial<Record<Documento, DocumentoLeido>> | Error; gasto?: number; enVuelo?: number; revisiones?: number; abiertas?: number; propia?: boolean | Error; tope?: number | null | Error } = {}) {
   const { db, tablas } = baseFalsa()
   const almacen = almacenDeColaterales(db)
   const guarda = vi.fn(async (_c: string, _camp: string | null) => { if (o.guarda instanceof Error) throw o.guarda; return o.guarda ?? { frenan: [], se_asumen_publicadas: [] } })
   const docs = vi.fn(async (e: { documento: string }) => { if (o.docs instanceof Error) throw o.docs; return o.docs ?? (e.documento === 'plan' ? DOCS_B : DOCS_A) })
-  const gasto = vi.fn(async (_c: string, _sin: string) => ({ recibos: o.gasto ?? 0, en_vuelo: o.enVuelo ?? 0 }))
+  const gasto = vi.fn(async (_c: string, _sin: string) => ({ recibos: o.gasto ?? 0, en_vuelo: o.enVuelo ?? 0, revisiones: o.revisiones ?? 0, revisiones_abiertas: o.abiertas ?? 0 }))
+  const abrir = vi.fn(async (_e: EntradaDeRevisionColateral): Promise<ResultadoDeAbrirColateral> => ({ estado: 'esperando', revision_id: 'rev-1' }))
+  const aplicar = vi.fn(async (_id: string) => ({ aplicados: [], pendientes: [], ya_cambiaron: [] }))
   const propia = vi.fn(async (_c: string, _camp: string) => { if (o.propia instanceof Error) throw o.propia; return o.propia ?? true })
   const tope = vi.fn(async (_c: string) => { if (o.tope instanceof Error) throw o.tope; return o.tope === undefined ? TOPE_DIARIO_DEL_CLIENTE_USD : o.tope })
-  const P: PuertosDelTurno = { almacen, filasActivas: async () => o.activas ?? TODAS, piezasPorPublicar: guarda, documentos: docs, campanaDelCliente: propia, gastoDelDia: gasto, topeDiario: tope }
-  return { P, almacen, tablas, guarda, docs, gasto, propia, tope }
+  const P: PuertosDelTurno = { almacen, filasActivas: async () => o.activas ?? TODAS, piezasPorPublicar: guarda, documentos: docs, campanaDelCliente: propia, gastoDelDia: gasto, topeDiario: tope, abrirRevisionColateral: abrir, aplicar }
+  return { P, almacen, tablas, guarda, docs, gasto, propia, tope, abrir, aplicar }
 }
 const crear = async (al: ReturnType<typeof almacenDeColaterales>, n: NuevaEdicion) => (await al.crearEdicion(n)).edicion.id
 const estado = (t: ReturnType<typeof baseFalsa>['tablas'], id: string) => t.colaterales_ediciones.find((f) => f.id === id)?.estado
@@ -178,6 +181,19 @@ describe('🔴 línea 3 de CC7 · toda salida temprana deja la edición en su es
     expect((await turno(b.P, { edicion_id: idS, seco: true, workflow_execution_id: '1' })).accion).toBe('sin_motor')
     expect(estado(b.tablas, idS)).toBe('recibida')
   })
+  it('🔴 pieza B: el tope diario cuenta las revisiones de hoy (por su gasto) y las abiertas (por su tope)', async () => {
+    const reserva = TOPE_DE_LA_LLAMADA_USD * FACTOR_DE_RESERVA
+    const libre = TOPE_DIARIO_DEL_CLIENTE_USD - reserva
+    const a = armar({ revisiones: libre - 0.001 })
+    expect((await turno(a.P, { edicion_id: await crear(a.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).accion).toBe('pedir')
+    const b = armar({ revisiones: libre + 0.001 })
+    expect(await turno(b.P, { edicion_id: await crear(b.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).toEqual({ accion: 'fallida', motivo: 'tope_diario' })
+    const n = Math.floor(libre / TOPE_DE_LA_REVISION_USD)
+    const c = armar({ abiertas: n })
+    expect((await turno(c.P, { edicion_id: await crear(c.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).accion).toBe('pedir')
+    const d = armar({ abiertas: n + 1 })
+    expect((await turno(d.P, { edicion_id: await crear(d.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).accion).toBe('fallida')
+  })
   it('🔴 el tope diario cuenta lo que está EN VUELO (línea de CC7): cada edición tomada sin recibo suma su reserva', async () => {
     const reserva = TOPE_DE_LA_LLAMADA_USD * FACTOR_DE_RESERVA
     const cabe = Math.floor((TOPE_DIARIO_DEL_CLIENTE_USD - reserva) / reserva) // cuántas en vuelo caben con esta
@@ -288,6 +304,16 @@ describe('entregar · gravedad primero, el mismo sello, la salida entera', () =>
     expect(desc.length).toBeGreaterThan(0)
     expect(desc.every((t) => String(t.razon).trim() && t.afecta === false)).toBe(true)
     expect(estado(tablas, id)).toBe('en_curso')
+  })
+  it('🔴 pieza B: entregar abre UNA revisión de la jefatura con los `propuesto` y los deja atados; lo descartado no va', async () => {
+    const { P, tablas, id, r, abrir } = await pedida()
+    const e = await entregar(P, { edicion_id: id, sello: r.sello, salida: salidaBuenaA(r.candidatos) })
+    expect(e.accion === 'propuestos' && e.revision).toMatchObject({ estado: 'esperando', revision_id: 'rev-1' })
+    expect(abrir).toHaveBeenCalledTimes(1)
+    const prop = tablas.colaterales_retoques.filter((t) => t.estado === 'propuesto')
+    expect((abrir.mock.calls[0][0].payload.retoques as Array<{ id: string }>).map((x) => x.id).sort()).toEqual(prop.map((t) => String(t.id)).sort())
+    expect(prop.every((t) => t.revision_id === 'rev-1')).toBe(true)
+    expect(tablas.colaterales_retoques.filter((t) => t.estado === 'descartado').every((t) => (t.revision_id ?? null) === null)).toBe(true)
   })
   it.each([
     ['de fondo según el agente', { de_fondo: true, razon: `cambia «${EDIC_A.antes}» por «${EDIC_A.despues}»` }],

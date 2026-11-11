@@ -107,9 +107,14 @@ export const RUTA_DE_VUELTA_DE_LA_CADENA = 'api/jefatura/cadena-vuelta'
 export interface EntornoDelRegistro { dispatchKey?: string; n8nWebhookBase?: string }
 
 export async function abrirRevisionDeRegistroReal(db: unknown, entrada: EntradaDeRegistro, env: EntornoDelRegistro = { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, f: typeof fetch = fetch): Promise<ResultadoDeAbrirRegistro> {
+  return abrirRevisionConVuelta(db, entrada, RUTA_DE_VUELTA_DE_LA_CADENA, env, f)
+}
+
+/** 11-nov · el mismo abridor con OTRA ruta de vuelta bajo `/api/jefatura/` (colaterales 2d pieza B: `api/jefatura/colaterales-vuelta`) · nunca lanza */
+export async function abrirRevisionConVuelta(db: unknown, entrada: { artifact_type: string; artifact_id: string; client_id: string; journey_id: null; payload: object }, ruta: string, env: EntornoDelRegistro = { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, f: typeof fetch = fetch): Promise<ResultadoDeAbrirRegistro> {
   try {
     const PJ = crearPuertosDeLaJefatura(db as never, entornoDeLaJefatura(), f)
-    const cuerpo = { ...entrada, payload: { ...entrada.payload, devolver_a: { tipo: 'webhook', destino: `${VERCEL_DE_LA_PLATAFORMA}${RUTA_DE_VUELTA_DE_LA_CADENA}` } } }
+    const cuerpo = { ...entrada, payload: { ...entrada.payload, devolver_a: { tipo: 'webhook', destino: `${VERCEL_DE_LA_PLATAFORMA}${ruta}` } } }
     const r = await abrirRevision(PJ, cuerpo)
     if (r.status === 409) return { estado: 'no_abre', motivo: String(r.cuerpo.motivo ?? r.cuerpo.error ?? 'la jefatura no abre') }
     if (r.status !== 200) return { estado: 'error', motivo: `la jefatura contestó ${r.status}: ${JSON.stringify(r.cuerpo).slice(0, 200)}` }

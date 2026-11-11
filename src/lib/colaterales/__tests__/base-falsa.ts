@@ -74,6 +74,8 @@ export function baseFalsa(o: { fallarLectura?: boolean; fallarInsert?: string; d
       update: (f: unknown) => { q.op = 'update'; q.fila = f; return api },
       eq: (k: string, v: unknown) => { q.filtros.push((f) => f[k] === v); return api },
       lt: (k: string, v: unknown) => { q.filtros.push((f) => f[k] != null && String(f[k]) < String(v)); return api },
+      in: (k: string, vs: unknown[]) => { q.filtros.push((f) => vs.includes(f[k])); return api },
+      is: (k: string, v: unknown) => { q.filtros.push((f) => (f[k] ?? null) === v); return api },
       order: (k: string, x?: { ascending?: boolean }) => { q.orden = [k, x?.ascending !== false]; return api },
       limit: (k: number) => { q.lim = k; return api },
       single: async () => { const r = ejecutar(); return { data: Array.isArray(r.data) ? r.data[0] : r.data, error: r.error } },

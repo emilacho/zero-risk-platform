@@ -14,6 +14,8 @@
  * El turno NO lee el manual del cliente (ni `human_validated` ni `gate_outcome`): el registro lo juzga la jefatura contra el manual.
  * Agnóstico: ninguna palabra, regla ni dato de un cliente.
  */
+import type { ResultadoDeAplicar } from './aplicar'
+import { revisarLaEdicion, type EntradaDeRevisionColateral, type ResultadoDeAbrirColateral, type ResultadoDeRevisar } from './vuelta'
 import { createHash } from 'node:crypto'
 import { afectados, type Documento } from '../cadena/dependencias-de-documentos'
 import { INSTRUCCION_DE_GRAVEDAD, gravedadVerificada, type VeredictoDeGravedad } from './gravedad'
@@ -31,6 +33,8 @@ export const TOPE_DE_LA_LLAMADA_USD = 0.35
 export const FACTOR_DE_RESERVA = 1.3
 /** tope de «Editar» por edición (CRITERIOS v2: hasta US$ 0,50) */
 export const TOPE_POR_EDICION_USD = 0.5
+/** 11-nov · pieza B · el tope de UNA revisión colateral de la jefatura (= `tope_revision_usd` de la fila `colateral` · una prueba lo ata a esa migración) */
+export const TOPE_DE_LA_REVISION_USD = 0.3
 // 11-nov · el tope DIARIO de colaterales por cliente NO vive en el código: es un dato (`colaterales_topes_diarios`, por omisión US$ 5 · RESPUESTA Lenovo 03:02Z) · ver `topeDiario`
 /** una edición `en_curso` más vieja que esto la cierra el barrido (ADENDA 1) */
 export const PLAZO_DEL_BARRIDO_MS = 2 * 60 * 60 * 1000
@@ -55,10 +59,17 @@ export interface PuertosDelTurno {
    * (por la fecha del recibo, no de la creación de la edición) · `en_vuelo` = ediciones del cliente tomadas (en_curso) SIN recibo todavía:
    * cada una cuenta su reserva (la vuelta de la secretaria es asíncrona: entre el pedido y su recibo hay una ventana). Lanza si no puede leer.
    */
-  gastoDelDia(client_id: string, sin_edicion: string): Promise<{ recibos: number; en_vuelo: number }>
+  gastoDelDia(client_id: string, sin_edicion: string): Promise<GastoDelDia>
   /** 11-nov · el tope diario de colaterales de ESTE cliente (su fila; si no tiene, la fila por omisión) · null = no hay tope definido (frena) · lanza si no puede leer */
   topeDiario(client_id: string): Promise<number | null>
+  /** 11-nov · pieza B · abre la revisión `colateral` de la jefatura con vuelta a colaterales (la MISMA función que su ruta, que valida la entrada) · nunca lanza */
+  abrirRevisionColateral(entrada: EntradaDeRevisionColateral): Promise<ResultadoDeAbrirColateral>
+  /** 11-nov · pieza B · aplica los retoques `aprobado` de la edición (motor 2c: fila activa, versión base, escritura condicional) */
+  aplicar(edicion_id: string): Promise<ResultadoDeAplicar>
 }
+
+/** el gasto de colaterales del cliente HOY · 11-nov pieza B: más lo de sus revisiones (las cerradas, por su gasto; las abiertas, por su tope) */
+export interface GastoDelDia { recibos: number; en_vuelo: number; revisiones: number; revisiones_abiertas: number }
 
 export type ResultadoDelTurno =
   | { accion: 'ya_corrida'; estado: string }
@@ -173,8 +184,8 @@ export async function turno(P: PuertosDelTurno, p: { edicion_id: string; seco: b
     }
     if (tope === null || !Number.isFinite(tope) || tope <= 0) { const nota = 'el cliente no tiene tope diario de colaterales definido (frena)'; await cerrar('sin_motor', nota); return { accion: 'sin_motor', nota } }
     const g = await P.gastoDelDia(e.client_id, e.id)
-    const hoy = g.recibos + g.en_vuelo * reserva
-    if (hoy + reserva > tope) { await cerrar('fallida', `tope diario del cliente: recibos ${g.recibos.toFixed(2)} + ${g.en_vuelo} en vuelo × ${reserva.toFixed(2)} + esta reserva ${reserva.toFixed(2)} > ${tope}`); return { accion: 'fallida', motivo: 'tope_diario' } }
+    const hoy = g.recibos + g.revisiones + g.en_vuelo * reserva + g.revisiones_abiertas * TOPE_DE_LA_REVISION_USD
+    if (hoy + reserva > tope) { await cerrar('fallida', `tope diario del cliente: recibos ${g.recibos.toFixed(2)} + revisiones ${g.revisiones.toFixed(2)} + ${g.revisiones_abiertas} abiertas × ${TOPE_DE_LA_REVISION_USD.toFixed(2)} + ${g.en_vuelo} en vuelo × ${reserva.toFixed(2)} + esta reserva ${reserva.toFixed(2)} > ${tope}`); return { accion: 'fallida', motivo: 'tope_diario' } }
     return {
       accion: 'pedir', agente: AGENTE_SECRETARIA, pedido: pedidoDeLaSecretaria(e, x.al_agente), tope_usd: TOPE_DE_LA_LLAMADA_USD,
       dispatch_key: llaveDeLaSecretaria(e.id), sello: selloDe(x.al_agente, x.leidos), candidatos: x.al_agente.map((pz) => pz.id), nota: unirNotas(notaDeSuposicion, notaSinLector),
@@ -193,7 +204,7 @@ export type ResultadoDeEntregar =
   | { accion: 'de_fondo'; motivo: string }
   | { accion: 'fallida'; motivo: string }
   | { accion: 'sin_colaterales'; descartados: number }
-  | { accion: 'propuestos'; propuestos: number; descartados: number; rechazados: { id: string; motivo: string }[]; documentos: Documento[] }
+  | { accion: 'propuestos'; propuestos: number; descartados: number; rechazados: { id: string; motivo: string }[]; documentos: Documento[]; revision: ResultadoDeRevisar }
 
 /** la salida del agente, leída sin confiar en su forma (cualquier cosa rara = null) */
 export function leerSalida(v: unknown): (SalidaDelAgente & { gravedad: VeredictoDeGravedad | null }) | null {
@@ -243,8 +254,9 @@ export async function entregar(P: PuertosDelTurno, p: { edicion_id: string; sell
     const ok = await P.almacen.pasarEdicion(e.id, 'en_curso', 'sin_colaterales', { gravedad: 'normal', gravedad_motivo: g.motivo, nota: unirNotas('la secretaria no encontró nada que retocar', v.rechazados.length ? `rechazados por el código: ${v.rechazados.map((r) => `${r.id} ${r.motivo}`).join(', ')}` : null) })
     return ok ? { accion: 'sin_colaterales', descartados: v.descartados.length } : { accion: 'ya_cerrada', estado: 'cambió' }
   }
-  // quedan `propuesto` y la edición sigue en_curso: la jefatura los juzga (parte 4) · si nunca vuelve, el barrido la cierra
-  return { accion: 'propuestos', propuestos: v.aceptados.length, descartados: v.descartados.length, rechazados: v.rechazados, documentos: [...new Set(v.aceptados.map((r) => r.pedazo.documento))] }
+  // quedan `propuesto` y la edición sigue en_curso: la jefatura los juzga (pieza B) · si nunca vuelve, el barrido la cierra
+  const revision = await revisarLaEdicion(P, e)
+  return { accion: 'propuestos', propuestos: v.aceptados.length, descartados: v.descartados.length, rechazados: v.rechazados, documentos: [...new Set(v.aceptados.map((r) => r.pedazo.documento))], revision }
 }
 
 // ── el barrido ─────────────────────────────────────────────────────────────────────────────────────────
