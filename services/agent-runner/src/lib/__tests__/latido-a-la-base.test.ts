@@ -83,6 +83,12 @@ describe('el latido mientras trabaja', () => {
       expect(x.latidos()).toBe(0)
     }
   })
+  it('🔴 sin llave de despacho no sale NINGÚN pedido a la base (ni uno sin filtro)', async () => {
+    const { db, pedidos } = baseFalsa([fila(NAU, 'running'), fila(B2B, 'running')])
+    for (const k of [null, undefined, '']) abrirLatidoALaBase(db, k, 60_000)
+    await vi.advanceTimersByTimeAsync(60_000 * 3 + 10)
+    expect(pedidos).toEqual([])
+  })
   it('🔴 un latido que falla no frena nada: se cuenta y se sigue', async () => {
     const l = abrirLatidoALaBase(baseFalsa([], { caida: true }).db, NAU, 60_000)
     await vi.advanceTimersByTimeAsync(60_000 * 2 + 10)
@@ -104,6 +110,10 @@ describe('el cierre (CC6 línea 3: no pisa un cierre ajeno sin decirlo)', () => 
     expect(await cerrarSinPisar(baseFalsa(filas).db, NAU, 'completed', T)).toBe('ya_cerrado_anotado')
     expect(filas[0].status).toBe('sin_cierre')
     expect(filas[0].metadata).toEqual({ cierre: { regla: 'ciclo-de-incidentes' }, termino_despues: { estado: 'completed', en: T().toISOString(), estado_que_tenia: 'sin_cierre' } })
+  })
+  it('🔴 si el cliente de la base revienta (lanza), el cierre devuelve error y no lanza', async () => {
+    const rota = { from: () => { throw new Error('sin conexión') } } as unknown as BaseDelLatido
+    await expect(cerrarSinPisar(rota, B2B, 'completed', T)).resolves.toBe('error')
   })
   it('🔴 sin fila → no_existe; base caída → error (nunca lanza)', async () => {
     expect(await cerrarSinPisar(baseFalsa([]).db, NAU, 'completed', T)).toBe('no_existe')
