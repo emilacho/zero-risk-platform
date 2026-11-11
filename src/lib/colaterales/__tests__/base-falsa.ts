@@ -51,7 +51,7 @@ export function baseFalsa(o: { fallarLectura?: boolean; fallarInsert?: string; d
           if (e) return { data: null, error: e }
           for (const u of UNICAS[tabla]) if ([...filas, ...nuevas].some((x) => x !== f && u.every((k) => x[k] === f[k]))) return { data: null, error: { message: 'duplicate key', code: '23505' } }
         }
-        const hechas = nuevas.map((f) => ({ id: `id-${++n}`, ...(POR_OMISION[tabla] ?? {}), ...structuredClone(f) }))
+        const hechas = nuevas.map((f) => ({ id: `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`, ...(POR_OMISION[tabla] ?? {}), ...structuredClone(f) }))
         filas.push(...hechas)
         return { data: hechas.slice(o.devolverMenos ? 1 : 0).map((f) => structuredClone(f)), error: null }
       }
