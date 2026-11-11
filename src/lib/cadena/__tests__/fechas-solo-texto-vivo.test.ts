@@ -57,9 +57,30 @@ describe('lo que se publica en el flujo vivo de fechas', () => {
     expect(j.paginas.map((p: any) => p.url)).toEqual(['https://c.test/'])
     expect(j.paginas_descartadas).toEqual([
       { url: 'https://a.test/', razon: expect.stringMatching(/^sin texto legible \(\d+ % de letras: parece un archivo binario\)$/) },
-      { url: 'https://b.test/', razon: expect.stringMatching(/^sin texto legible \(\d+ % de letras: parece un archivo binario\)$/) },
+      { url: 'https://b.test/', razon: 'sin texto legible (trae caracteres rotos: parece un archivo binario)' }, // tiene muchas letras: lo descarta el carácter roto
     ])
-    expect(Number(/\((\d+) %/.exec(j.paginas_descartadas[1].razon)![1])).toBeGreaterThan(60) // lo descarta el carácter roto, no la proporción
+  })
+  // 11-nov · pedidos de CC7 (🟡 chico sobre bfe8559)
+  const proporcion = (t: string) => { const v = t.replace(/\s/g, ''); return (v.match(/\p{L}/gu) || []).length / v.length }
+  const TABLA = '<table><tr><th>Fecha</th><th>Feriado</th></tr><tr><td>01/01/2026</td><td>Año Nuevo</td></tr><tr><td>16/02/2026</td><td>Carnaval</td></tr><tr><td>17/02/2026</td><td>Carnaval</td></tr><tr><td>03/04/2026</td><td>Viernes Santo</td></tr><tr><td>01/05/2026</td><td>Trabajo</td></tr><tr><td>24/05/2026</td><td>Pichincha</td></tr><tr><td>10/08/2026</td><td>Primer Grito</td></tr><tr><td>09/10/2026</td><td>Guayaquil</td></tr><tr><td>02/11/2026</td><td>Difuntos</td></tr><tr><td>03/11/2026</td><td>Cuenca</td></tr><tr><td>25/12/2026</td><td>Navidad</td></tr></table>'
+  it('🔴 una TABLA oficial de feriados declarada como texto pasa aunque tenga más números que letras (la fuente buena no se tira por la proporción)', () => {
+    expect(proporcion(TABLA.replace(/<[^>]+>/g, ' '))).toBeLessThan(0.6) // el caso difícil de verdad: con la regla vieja se descartaba
+    for (const tipo of ['text/html; charset=utf-8', 'text/plain', 'application/xhtml+xml']) {
+      const j = correrJuntar([{ statusCode: 200, headers: { 'content-type': tipo }, body: TABLA }], ['https://feriados.test/'])
+      expect(j.paginas_descartadas, tipo).toEqual([])
+      expect(j.paginas[0].texto).toContain('10/08/2026 Primer Grito')
+    }
+  })
+  it('🔴 sin tipo declarado, una página de texto con algunos números (≈ 70 % de letras) PASA: el umbral no está más alto que lo necesario', () => {
+    const t = 'Feriados de 2026 en el país: el 1 de enero, Año Nuevo; el 16 y 17 de febrero, Carnaval; el 3 de abril, Viernes Santo; el 24 de mayo, Pichincha.'
+    expect(proporcion(t)).toBeGreaterThan(0.6); expect(proporcion(t)).toBeLessThan(0.9)
+    const j = correrJuntar([{ statusCode: 200, body: t }], ['https://sin-tipo.test/'])
+    expect(j.paginas).toEqual([{ url: 'https://sin-tipo.test/', texto: t }]); expect(j.paginas_descartadas).toEqual([])
+  })
+  it.each([['text/html'], [null]])('🔴 una página CORTA (1 a 29 caracteres) se descarta aunque sea texto · tipo %s', (tipo) => {
+    const j = correrJuntar([{ statusCode: 200, ...(tipo ? { headers: { 'content-type': tipo } } : {}), body: '<nav>Inicio · Buscar</nav>' }, { statusCode: 200, body: 'Feriados del año: 10 de agosto.' }], ['https://corta.test/', 'https://justa.test/'])
+    expect(j.paginas_descartadas).toEqual([{ url: 'https://corta.test/', razon: 'sin texto legible (15 caracteres)' }])
+    expect(j.paginas.map((p: any) => p.url)).toEqual(['https://justa.test/']) // 31 caracteres: el mínimo de 30 deja pasar una frase corta con su fecha
   })
   it('🔴 lo publicado cambia EXACTAMENTE estos dos nodos (lista fija, no la del constructor): juntar y armar preparar', () => {
     const cambiados = ANTES.nodes.filter((n: any) => JSON.stringify(n) !== JSON.stringify(nodo(DESPUES, n.name))).map((n: any) => n.name)

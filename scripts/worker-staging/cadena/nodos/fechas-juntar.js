@@ -7,7 +7,7 @@ const respuestas = $input.all()
 const aTexto = (html) => String(html || '')
   .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')
   .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim()
-// umbrales FIJOS (no dependen del país ni del tipo de fecha): una frase corta con su fecha ya alcanza; la basura binaria no llega a la proporción de letras
+// umbrales FIJOS (no dependen del país ni del tipo de fecha): una frase corta con su fecha ya alcanza; la basura binaria SIN tipo no llega a la proporción de letras
 const MINIMO_DE_CARACTERES = 30
 const MINIMO_DE_LETRAS = 0.6
 const TIPOS_DE_TEXTO = /^(text\/html|text\/plain|application\/xhtml\+xml)\b/i
@@ -16,8 +16,12 @@ function razonParaDescartar(texto, tipo) {
   if (tipo && !TIPOS_DE_TEXTO.test(tipo)) return 'no es texto (' + tipo.split(';')[0].trim() + ')'
   if (texto.length < MINIMO_DE_CARACTERES) return 'sin texto legible (' + texto.length + ' caracteres)'
   const visibles = texto.replace(/\s/g, '')
+  if (/[\uFFFD\u0000-\u0008\u000E-\u001F]/.test(visibles)) return 'sin texto legible (trae caracteres rotos: parece un archivo binario)'
+  // la proporci\u00F3n de letras decide SOLO si la respuesta no dice qu\u00E9 es: una tabla oficial de feriados (\u00AB01/01/2026 A\u00F1o Nuevo\u2026\u00BB) declarada como texto
+  // tiene muchos n\u00FAmeros y es justo la fuente buena (CC7, 11-nov: medida en 59 % de letras); sin tipo, la proporci\u00F3n reconoce un archivo binario
+  if (tipo) return null
   const letras = (visibles.match(/\p{L}/gu) || []).length
-  if (/[\uFFFD\u0000-\u0008\u000E-\u001F]/.test(visibles) || letras / visibles.length < MINIMO_DE_LETRAS) return 'sin texto legible (' + Math.round((100 * letras) / visibles.length) + ' % de letras: parece un archivo binario)'
+  if (letras / visibles.length < MINIMO_DE_LETRAS) return 'sin texto legible (' + Math.round((100 * letras) / visibles.length) + ' % de letras: parece un archivo binario)'
   return null
 }
 const paginas = []
