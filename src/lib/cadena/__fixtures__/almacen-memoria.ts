@@ -330,7 +330,7 @@ export class AlmacenMemoria implements Almacen {
       corridas: this.corridas.filter((c) => c.campana_id === campanaId).map((c) => ({ costo_usd: c.costo_usd, estado: c.estado, paso: c.paso })),
       conceptos: this.conceptos.filter((x) => x.campana_id === campanaId).map((x) => ({ costo_usd: x.costo_usd ?? null, encargo_id: x.encargo_id ?? null })),
       briefs: this.briefsCreativos.filter((x) => x.campana_id === campanaId).map((x) => ({ costo_usd: x.costo_usd ?? null, encargo_id: (x as { encargo_id?: string | null }).encargo_id ?? null })),
-      encargos: [], partes: [], soltados: [], topes_de_familia: { post_img: 2.5, carrusel_ig_v1: 2.5, kit_historias: 2.5, carrusel_mesa: 5 },
+      encargos: [], partes: [], soltados: [], revisiones: [], topes_de_familia: { post_img: 2.5, carrusel_ig_v1: 2.5, kit_historias: 2.5, carrusel_mesa: 5 },
       ...this.lecturaDeGasto,
     }
   }

@@ -21,6 +21,8 @@ let tablas: Record<string, Fila[]> = {}
 const consultas: Array<{ tabla: string; filtros: Array<[string, string, unknown]> }> = []
 let fallarTabla: string | null = null
 const valor = (r: Fila, col: string): unknown => { const m = col.match(/^(\w+)->>(\w+)$/); if (!m) return r[col]; const v = r[m[1]]?.[m[2]]; return v === undefined || v === null ? null : String(v) }
+/** `like` de la base: `%` = cualquier cosa; lo demás literal */
+const comoLike = (patron: string): RegExp => new RegExp(`^${patron.split('%').map((x) => [...x].map((ch) => (/[\w:-]/.test(ch) ? ch : `\\${ch}`)).join('')).join('.*')}$`)
 function consulta(tabla: string) {
   const filtros: Array<[string, string, unknown]> = []
   const reg = { tabla, filtros }
@@ -32,10 +34,11 @@ function consulta(tabla: string) {
     order: () => q,
     eq: (c: string, v: unknown) => { filtros.push(['eq', c, v]); return q },
     in: (c: string, v: unknown[]) => { filtros.push(['in', c, v]); return q },
+    like: (c: string, v: string) => { filtros.push(['like', c, v]); return q },
     limit: (n: number) => { tope = n; return q },
     then: (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => {
       if (fallarTabla === tabla) return Promise.resolve({ data: null, error: { message: `falló ${tabla}` } }).then(ok, ko)
-      const filas = (tablas[tabla] ?? []).filter((r) => filtros.every(([op, c, v]) => op === 'eq' ? valor(r, c) === v : (v as unknown[]).includes(valor(r, c)))).slice(0, tope)
+      const filas = (tablas[tabla] ?? []).filter((r) => filtros.every(([op, c, v]) => op === 'eq' ? valor(r, c) === v : op === 'like' ? comoLike(String(v)).test(String(valor(r, c) ?? '')) : (v as unknown[]).includes(valor(r, c)))).slice(0, tope)
         .map((r) => (columnas ? Object.fromEntries(columnas.map((c) => [c, r[c]])) : r))
       return Promise.resolve({ data: filas, error: null }).then(ok, ko)
     },
@@ -152,7 +155,7 @@ describe('lo gastado · la MISMA fuente que los US$ 26,28 (condición 1 de CC7) 
     expect(medirGastoDeCampana(l, 'otro')).toMatchObject({ comprometido: 0, esperando: [{ parte_id: 'p-actual', brief_id: 'A1' }] }) // visto desde otro parte: no llegó a la sala → espera
   })
   it('sabotaje · una corrida caída sin costo cuenta su tope (la cota pesimista de siempre)', () => {
-    const l: LecturaDeGasto = { corridas: [{ costo_usd: 0, estado: 'fallida', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: [], soltados: [], topes_de_familia: { post_img: 2.5 } }
+    const l: LecturaDeGasto = { corridas: [{ costo_usd: 0, estado: 'fallida', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: [], soltados: [], topes_de_familia: { post_img: 2.5 }, revisiones: [] }
     expect(medirGastoDeCampana(l, 'x').gastado).toBeGreaterThan(0)
   })
   it('sin familia (o una desconocida) cuenta el MAYOR tope de las familias ACTIVAS: 5, no el 10 de video_mesa que está apagada', async () => {
@@ -248,7 +251,7 @@ describe('los DOS órdenes (CC7 🟡 · CC6 🔴): la semana 46 recibe primero l
   function escena(viejo = false) {
     const partes: Array<typeof P46> = [], soltados: Array<{ parte_id: string; brief_id: string }> = []
     const decidir = (p: typeof P46) => {
-      const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes, soltados, topes_de_familia: TOPES }
+      const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes, soltados, topes_de_familia: TOPES, revisiones: [] }
       const m = medirGastoDeCampana(l, p.id)
       // `viejo` = la regla de e05a646: todo brief de otro parte sin encargo comprometía, sin importar su fecha (el sabotaje)
       const medido = viejo ? { ...m, comprometido: m.comprometido + m.esperando.reduce((x, b) => x + topeDeLaPieza(TOPES, b.familia), 0), esperando: [] } : m
@@ -325,7 +328,7 @@ describe('los DOS órdenes (CC7 🟡 · CC6 🔴): la semana 46 recibe primero l
     it('sabotaje · «ya en la sala» por el brief SIN el parte: el BRF-0001 retenido de la 47 contaría como soltado porque el de la 46 sí salió · la 46, al volver a decidir, NO pierde dinero', () => {
       const e = escena()
       e.pasar(R46); e.pasar(R47)
-      const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: e.partes, soltados: e.soltados, topes_de_familia: TOPES }
+      const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: e.partes, soltados: e.soltados, topes_de_familia: TOPES, revisiones: [] }
       const m = medirGastoDeCampana(l, 'p46')
       expect(m.comprometido).toBe(0) // lo de la 47 está retenido: no compromete
       expect(m.esperando.filter((b) => b.parte_id === 'p47').map((b) => b.brief_id)).toEqual(R47.briefs.map((b) => b.brief_id))
@@ -339,7 +342,7 @@ describe('los DOS órdenes (CC7 🟡 · CC6 🔴): la semana 46 recibe primero l
     const [antes, despues] = [...W46].sort((a, b) => `${a.fecha} ${a.hora ?? '99:99'}`.localeCompare(`${b.fecha} ${b.hora ?? '99:99'}`))
     expect(antes.fecha <= despues.fecha).toBe(true)
     const otro = { id: 'p-otro', briefs: [{ brief_id: 'BRF-0001', familia: 'kit_historias', fila_id: antes.id }] }
-    const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: [otro, { id: 'p-hoy', briefs: [] }], soltados: [], topes_de_familia: TOPES }
+    const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes: [otro, { id: 'p-hoy', briefs: [] }], soltados: [], topes_de_familia: TOPES, revisiones: [] }
     const m = medirGastoDeCampana(l, 'p-hoy')
     expect(m.esperando).toEqual([{ parte_id: 'p-otro', brief_id: 'BRF-0001', familia: 'kit_historias', fila_id: antes.id }])
     const pv = esperandoPorVenir(m.esperando, cuando)
@@ -356,7 +359,7 @@ describe('los DOS órdenes (CC7 🟡 · CC6 🔴): la semana 46 recibe primero l
       const partes: Array<typeof P46> = [], soltados: Array<{ parte_id: string; brief_id: string }> = []
       for (const p of orden) {
         if (!partes.includes(p)) partes.push(p)
-        const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes, soltados, topes_de_familia: TOPES }
+        const l: LecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], conceptos: [], briefs: [], encargos: [], partes, soltados, topes_de_familia: TOPES, revisiones: [] }
         const m = medirGastoDeCampana(l, p.id)
         const cand: Candidata[] = p.briefs.map((b) => ({ brief_id: b.brief_id, familia: b.familia, fecha: cuando.get(b.fila_id)!.fecha, hora: cuando.get(b.fila_id)!.hora, ya_tiene_encargo: false }))
         const d = decidirTope(60, m, cand, TOPES, [...filasPorVenir(filas, HOY, partes, p.briefs.map((b) => b.fila_id)), ...esperandoPorVenir(m.esperando, cuando)])
@@ -380,5 +383,45 @@ describe('Seguridad Industrial (industria) · campaña SIN tope en la base', () 
     const cand = candidatasDe(enSemana(SEG, '2026-11-10', '2026-11-16'))
     const d = decidirTope(12, { gastado: 10.26, comprometido: 0 }, cand, { post_img: 2.5, carrusel_ig_v1: 2.5, kit_historias: 2.5, carrusel_mesa: 5 })
     expect(d).toMatchObject({ tipo: 'corta', sueltan: [] })
+  })
+})
+
+// ── 11-nov · condición 1 de CC7 para encender el registro: el gasto de las revisiones de registro de la campaña entra en el freno
+describe('las revisiones de REGISTRO de la campaña cuentan en el freno (adaptador real)', () => {
+  const BASE_SEG = 0.7209 + 9.539091
+  const rev = (artifact_id: string, o: Fila = {}) => ({ id: `r-${artifact_id}`, artifact_type: 'registro', artifact_id, estado: 'cerrada', gasto_usd: 0, tope_usd: 1.5, dry_run: false, ...o })
+  it('una cerrada cuenta su gasto; una abierta, lo mayor entre gasto y tope · no cuentan las de ensayo, las de otra campaña ni las que no son de registro', async () => {
+    sembrar({ jefatura_revisiones: [
+      rev(`registro:brief:${SEG}:v1`, { gasto_usd: 0.9 }),
+      rev(`registro:calendario:${SEG}:t2`, { estado: 'abierta', gasto_usd: 0.2, tope_usd: 1.5 }),
+      rev(`registro:concepto:${SEG}:v1`, { estado: 'en_paso', gasto_usd: 0.4, tope_usd: 1.5 }),
+      rev(`registro:brief:otra:${SEG}:v1`, { gasto_usd: 13 }),
+      rev(`registro:brief:${SEG}:v2`, { gasto_usd: 5, dry_run: true }),
+      rev(`registro:brief:${NAU}:v1`, { gasto_usd: 7 }),
+      rev(`registro:brief:${SEG}-otra:v1`, { gasto_usd: 11 }),
+      { ...rev(`registro:brief:${SEG}:v3`, { gasto_usd: 3 }), artifact_type: 'pieza' },
+    ] })
+    const l = await leer(SEG, 'parte-nuevo')
+    expect(l.revisiones).toHaveLength(3)
+    expect(medirGastoDeCampana(l, 'parte-nuevo').gastado).toBeCloseTo(BASE_SEG + 0.9 + 1.5 + 1.5, 4)
+    const q = consultas.find((c) => c.tabla === 'jefatura_revisiones')!
+    expect(q.filtros).toEqual(expect.arrayContaining([['eq', 'artifact_type', 'registro'], ['like', 'artifact_id', `registro:%:${SEG}:%`]]))
+  })
+  it('🔴 una revisión de registro que hace pasar del tope corta la pieza que sin ella cabía', async () => {
+    const cand: Candidata[] = [{ brief_id: 'B1', familia: 'post_img', fecha: '2026-11-12', hora: '10:00', ya_tiene_encargo: false }]
+    const topes = { post_img: 1.5 }
+    const sin = medirGastoDeCampana(await leer(SEG, 'p'), 'p')
+    expect(decidirTope(12, sin, cand, topes).tipo).toBe('cabe')
+    sembrar({ jefatura_revisiones: [rev(`registro:calendario:${SEG}:t1`, { gasto_usd: 0.6 })] })
+    const con = medirGastoDeCampana(await leer(SEG, 'p'), 'p')
+    expect(decidirTope(12, con, cand, topes)).toMatchObject({ tipo: 'corta', retenidas: ['B1'] })
+  })
+  it('🔴 si no se pueden leer las revisiones, la lectura del gasto falla (nunca «cero gastado»)', async () => {
+    fallarTabla = 'jefatura_revisiones'
+    await expect(leer(SEG, 'p')).rejects.toThrow()
+  })
+  it('🔴 un id de campaña raro no arma una consulta comodín: falla', async () => {
+    await expect(leer('%', 'p')).rejects.toThrow(/no es legible/)
+    expect(consultas.some((c) => c.tabla === 'jefatura_revisiones')).toBe(false)
   })
 })
