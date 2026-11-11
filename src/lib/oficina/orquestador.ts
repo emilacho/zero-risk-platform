@@ -225,6 +225,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       return fallar(P, enc, `error interno en «${paso.clave}»: ${err instanceof Error ? err.message : String(err)}`, 'error_interno')
     }
   }
+  // 11-nov · regla (b) · a propósito SIN marca de corte nuestro: un motor que da vueltas sin avanzar no debe repetirse libre; cuenta como intento (pedido de CC7 al certificar #1057)
   return fallar(P, enc, 'el orquestador dio más de 80 vueltas (no debería pasar)')
 }
 /** la re-imagen que ya existía, según la familia: la jefatura devuelve «imagen por rehacer» y la oficina decide si cabe */

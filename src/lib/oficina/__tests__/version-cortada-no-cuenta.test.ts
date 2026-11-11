@@ -14,7 +14,7 @@ import { revisarPasosMuertos } from '../vigia'
 import { POST_IMG } from '../plantillas/post-img'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import type { Encargo, NuevoEncargo } from '../puertos'
-import { estadoInicial, type Estado } from '../tipos'
+import { estadoInicial, type Estado, type Plantilla } from '../tipos'
 import { DbFalsa } from './dbfalsa'
 import { CLIENTE, PARTE, PARTE_REAL, crearMemoria } from './memoria'
 
@@ -257,6 +257,17 @@ describe('3 · los puntos de detección marcan en el momento', () => {
     const id = [...M.encargos.keys()][0]
     expect(a.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'fallido' })
     expect(corteDe(M, id)).toEqual({ origen: 'error_interno' })
+  })
+  it('🔴 el motor que da más de 80 vueltas cierra fallido SIN marca (cuenta como intento: no se repite libre)', async () => {
+    const pl = JSON.parse(JSON.stringify(POST_IMG)) as Plantilla
+    const abrirPaso = pl.pasos.find((p) => p.clave === 'abrir')!
+    pl.pasos = Array.from({ length: 85 }, (_, i) => ({ ...abrirPaso, clave: `abrir_${i}`, salida_artefacto: `encargo_${i}` }))
+    const M = crearMemoria({ plantilla: pl })
+    const a = await abrirEncargo(M.P, { cuerpo: sobre, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    const id = [...M.encargos.keys()][0]
+    expect(a.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'fallido' })
+    expect(causaDelFallo(M.encargos.get(id)!.estado_del_motor)?.motivo).toContain('80 vueltas')
+    expect(corteDe(M, id)).toBeNull()
   })
   it('🔴 el vigía: el turno que muere por SEGUNDA vez cierra marcado `vigia_sin_vuelta`', async () => {
     const MIN = 60_000

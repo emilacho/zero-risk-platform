@@ -14,6 +14,7 @@ type Nodo = { name: string; type: string; parameters: Record<string, any> }
 type Flujo = { id: string; nodes: Nodo[]; connections: Record<string, unknown> }
 const DIR = join(resolve(__dirname, '..', '..', '..', '..'), 'scripts', 'ops', 'oficina-marketing')
 const BASE = join(DIR, 'aplicado', 'bTbWL9lUvQCfStAz-llave-del-acuse-2026-11-10.json')
+const PUBLICADO = join(DIR, 'aplicado', 'bTbWL9lUvQCfStAz-corte-nuestro-2026-11-11.json')
 let construir: (f: Flujo) => number
 const base = (): Flujo => JSON.parse(readFileSync(BASE, 'utf8'))
 let NUEVO: Flujo
@@ -31,8 +32,8 @@ const comoLaRuta = (b: Record<string, unknown>): ResultadoDeTurno => ({ error: b
 
 beforeAll(async () => {
   construir = (await import(/* @vite-ignore */ pathToFileURL(join(DIR, 'corte-nuestro-turnos.mjs')).href)).construirCorteNuestroTurnos
-  NUEVO = base()
-  expect(construir(NUEVO)).toBe(2)
+  // lo que se EJERCE es el archivo que se publica (pedido de CC7 al certificar #1057); la prueba de abajo fija que es exactamente construir(base)
+  NUEVO = JSON.parse(readFileSync(PUBLICADO, 'utf8'))
 })
 
 describe('el cambio del flujo · mínimo, idempotente, compila', () => {
@@ -42,6 +43,12 @@ describe('el cambio del flujo · mínimo, idempotente, compila', () => {
     expect(cambiados.sort()).toEqual(['② Vuelta', '② ¿Aceptó el pedido?'].sort())
     expect(NUEVO.nodes.map((n) => n.name)).toEqual(b.nodes.map((n) => n.name))
     expect(JSON.stringify(NUEVO.connections)).toBe(JSON.stringify(b.connections))
+  })
+  it('🔴 el archivo que se PUBLICA es exactamente construir(base), campo por campo', () => {
+    const construido = base()
+    expect(construir(construido)).toBe(2)
+    expect(NUEVO).toEqual(construido)
+    expect(JSON.stringify(NUEVO)).toBe(JSON.stringify(construido))
   })
   it('🔴 aplicado dos veces no cambia nada más (devuelve 0)', () => {
     const otra = JSON.parse(JSON.stringify(NUEVO)) as Flujo
