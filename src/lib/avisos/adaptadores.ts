@@ -29,11 +29,11 @@ export function almacenDeAvisos(db: Db): AlmacenDeAvisos {
       return f && typeof f.aviso_id === 'string' ? { aviso_id: f.aviso_id, slack_ts: (f.slack_ts as string | null) ?? null, tipo: f.tipo as Tipo } : null
     },
     async contestada(clave) {
-      // la ÚLTIMA fila de la clave (abierta o cerrada): solo cuenta si está cerrada y su nota empieza con «Contestada»
-      const { data, error } = await db.from('avisos').select('id,cerrado_en,nota_cierre,slack_ts,slack_estado').eq('clave', clave).order('abierto_en', { ascending: false }).limit(1)
+      // la ÚLTIMA fila de la clave (abierta o cerrada): solo cuenta si es una PREGUNTA, está cerrada y su nota empieza con «Contestada»
+      const { data, error } = await db.from('avisos').select('id,tipo,cerrado_en,nota_cierre,slack_ts,slack_estado').eq('clave', clave).order('abierto_en', { ascending: false }).limit(1)
       if (error || !Array.isArray(data) || !data.length) return null
       const f = data[0] as Record<string, unknown>
-      return f.cerrado_en && esContestada(f.nota_cierre as string | null) && typeof f.id === 'string'
+      return f.tipo === 'pregunta' && f.cerrado_en && esContestada(f.nota_cierre as string | null) && typeof f.id === 'string'
         ? { aviso_id: f.id, slack_ts: (f.slack_ts as string | null) ?? null, slack_estado: (f.slack_estado as EstadoSlack) ?? 'pendiente' }
         : null
     },

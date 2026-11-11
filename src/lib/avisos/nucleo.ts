@@ -32,7 +32,7 @@ export interface Guardado { aviso_id: string; accion: Accion; slack_ts: string |
 export interface AlmacenDeAvisos {
   avisar(e: EntradaDeAviso): Promise<Guardado>
   cerrar(clave: string, nota: string): Promise<{ aviso_id: string; slack_ts: string | null; tipo: Tipo } | null>
-  /** la ÚLTIMA fila de la clave, si está cerrada como contestada (nota que empieza con «Contestada»); si no, o si la lectura falla, null (se avisa como siempre) */
+  /** la ÚLTIMA fila de la clave, si es una PREGUNTA cerrada como contestada (nota que empieza con «Contestada»); si no, o si la lectura falla, null (se avisa como siempre) · una alarma o una pieza nunca cuentan (🟡 CC7) */
   contestada(clave: string): Promise<{ aviso_id: string; slack_ts: string | null; slack_estado: EstadoSlack } | null>
   /** cierra las abiertas cuya clave empieza con `prefijo`, salvo `salvo` · devuelve las cerradas (con su tipo, para responder en su hilo) */
   cerrarFamilia(prefijo: string, salvo: string | null, nota: string): Promise<Array<{ aviso_id: string; slack_ts: string | null; tipo: Tipo }>>
@@ -90,7 +90,8 @@ export interface Resultado extends Guardado { slack: EstadoSlack; slack_anotado:
 export async function avisar(d: Dependencias, entrada: unknown): Promise<Resultado> {
   const e = validarEntrada(entrada)
   // una pregunta ya CONTESTADA no vuelve a salir con la misma clave (la de 40 se repitió 1065 veces): ni fila nueva ni Slack
-  const ya = await d.almacen.contestada(e.clave).catch(() => null)
+  // solo las PREGUNTAS se contestan: una alarma o una pieza siempre llegan (regla «menos ruido» · 🟡 CC7)
+  const ya = e.tipo === 'pregunta' ? await d.almacen.contestada(e.clave).catch(() => null) : null
   if (ya) return { aviso_id: ya.aviso_id, accion: 'contestada', slack_ts: ya.slack_ts, slack_estado: ya.slack_estado, slack: ya.slack_estado, slack_anotado: true }
   let g: Guardado
   try { g = await d.almacen.avisar(e) } catch (x) { throw new ErrorAlGuardar(x instanceof Error ? x.message : String(x)) }

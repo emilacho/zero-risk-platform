@@ -41,7 +41,7 @@ function almacenFalso(o: { fallarGuardar?: boolean; fallarAnotar?: boolean; fall
     async contestada(clave) {
       if (o.fallarContestada) throw new Error('lectura caída')
       const u = filas.filter((x) => x.clave === clave).at(-1)
-      return u && u.cerrado_en !== null && esContestada(u.nota) ? { aviso_id: u.id, slack_ts: u.slack_ts, slack_estado: u.slack_estado } : null
+      return u && u.tipo === 'pregunta' && u.cerrado_en !== null && esContestada(u.nota) ? { aviso_id: u.id, slack_ts: u.slack_ts, slack_estado: u.slack_estado } : null
     },
     async cerrarFamilia(prefijo, salvo, nota) {
       const fs = filas.filter((x) => x.clave.startsWith(prefijo) && x.clave !== salvo && x.cerrado_en === null)
@@ -237,6 +237,34 @@ describe('11-nov · una pregunta CONTESTADA no vuelve a salir (decisión Lenovo 
       expect((await avisar(d, pregunta(`tope:${rubro}:100`, 'd3', cliente))).accion).toBe('abrio')
     })
   }
+  for (const [tipo, cliente] of [['alarma', RESTAURANTE], ['pieza', B2B]] as const) {
+    it(`🟡 CC7 · una ${tipo} nunca se calla: cerrada con nota «Contestada…» o con contestada:true, vuelve a avisar (fila + Slack)`, async () => {
+      const { almacen, filas } = almacenFalso(); const { slack, llamadas } = slackFalso(); const d = deps(almacen, slack)
+      await avisar(d, aviso(`k:${tipo}:1`, 'd', { tipo, client_id: cliente }))
+      await cerrar(d, `k:${tipo}:1`, 'Contestada por Emilio en el hilo')
+      const antes = llamadas.length
+      expect((await avisar(d, aviso(`k:${tipo}:1`, 'd', { tipo, client_id: cliente }))).accion).toBe('abrio')
+      expect(filas).toHaveLength(2); expect(llamadas.length).toBe(antes + 1)
+      await cerrar(d, `k:${tipo}:1`, 'listo', { contestada: true })
+      expect((await avisar(d, aviso(`k:${tipo}:1`, 'd', { tipo, client_id: cliente }))).accion).toBe('abrio')
+      expect(filas).toHaveLength(3); expect(llamadas.length).toBe(antes + 3)
+    })
+  }
+  it('avisar ni siquiera consulta «contestada» para una alarma: aunque el almacén dijera que sí, la alarma sale', async () => {
+    const { almacen } = almacenFalso(); const { slack, llamadas } = slackFalso()
+    let consultas = 0
+    const siempre: AlmacenDeAvisos = { ...almacen, contestada: async () => { consultas++; return { aviso_id: 'vieja', slack_ts: 't', slack_estado: 'entregado' } } }
+    expect((await avisar(deps(siempre, slack), aviso('k:al2', 'd', { tipo: 'alarma', client_id: B2B }))).accion).toBe('abrio')
+    expect(consultas).toBe(0); expect(llamadas).toHaveLength(1)
+    expect((await avisar(deps(siempre, slack), aviso('k:pr2', 'd', { tipo: 'pregunta', client_id: B2B }))).accion).toBe('contestada')
+    expect(consultas).toBe(1)
+  })
+  it('el almacén tampoco cuenta una alarma «contestada» aunque se le pregunte directo (los dos caminos cerrados)', async () => {
+    const { almacen } = almacenFalso(); const { slack } = slackFalso(); const d = deps(almacen, slack)
+    await avisar(d, aviso('k:al', 'd', { tipo: 'alarma' }))
+    await cerrar(d, 'k:al', 'x', { contestada: true })
+    expect(await almacen.contestada('k:al')).toBeNull()
+  })
   it('un cierre SIN la marca (resuelto, vencido) sí deja que la pregunta vuelva', async () => {
     const { almacen, pasar } = almacenFalso(); const { slack } = slackFalso(); const d = deps(almacen, slack)
     await avisar(d, pregunta('tope:x:40', 'd', RESTAURANTE))
@@ -316,10 +344,10 @@ describe('11-nov · adaptador real: contestada y cierre por familia', () => {
     return { db: { from: (t: string) => { llamadas.push(['from', t]); return q }, rpc: async () => ({ data: null, error: null }) }, llamadas }
   }
   it('contestada: lee la ÚLTIMA fila de la clave y solo cuenta si está cerrada con la marca', async () => {
-    const si = dbFalsa({ data: [{ id: 'u', cerrado_en: '2026-11-11T17:47:11Z', nota_cierre: 'Contestada: subió el tope', slack_ts: 't1', slack_estado: 'entregado' }], error: null })
+    const si = dbFalsa({ data: [{ id: 'u', tipo: 'pregunta', cerrado_en: '2026-11-11T17:47:11Z', nota_cierre: 'Contestada: subió el tope', slack_ts: 't1', slack_estado: 'entregado' }], error: null })
     expect(await almacenDeAvisos(si.db).contestada('tope:a:40')).toEqual({ aviso_id: 'u', slack_ts: 't1', slack_estado: 'entregado' })
-    expect(si.llamadas).toEqual([['from', 'avisos'], ['select', 'id,cerrado_en,nota_cierre,slack_ts,slack_estado'], ['eq', 'clave', 'tope:a:40'], ['order', 'abierto_en', { ascending: false }], ['limit', 1]])
-    for (const fila of [{ id: 'u', cerrado_en: null, nota_cierre: null }, { id: 'u', cerrado_en: null, nota_cierre: 'Contestada' }, { id: 'u', cerrado_en: 'x', nota_cierre: 'sin_actividad_24h' }]) expect(await almacenDeAvisos(dbFalsa({ data: [fila], error: null }).db).contestada('k')).toBeNull()
+    expect(si.llamadas).toEqual([['from', 'avisos'], ['select', 'id,tipo,cerrado_en,nota_cierre,slack_ts,slack_estado'], ['eq', 'clave', 'tope:a:40'], ['order', 'abierto_en', { ascending: false }], ['limit', 1]])
+    for (const fila of [{ id: 'u', tipo: 'pregunta', cerrado_en: null, nota_cierre: null }, { id: 'u', tipo: 'pregunta', cerrado_en: null, nota_cierre: 'Contestada' }, { id: 'u', tipo: 'pregunta', cerrado_en: 'x', nota_cierre: 'sin_actividad_24h' }, { id: 'u', tipo: 'alarma', cerrado_en: 'x', nota_cierre: 'Contestada por Emilio en el hilo' }, { id: 'u', tipo: 'pieza', cerrado_en: 'x', nota_cierre: 'Contestada' }]) expect(await almacenDeAvisos(dbFalsa({ data: [fila], error: null }).db).contestada('k')).toBeNull()
     expect(await almacenDeAvisos(dbFalsa({ data: [], error: null }).db).contestada('k')).toBeNull()
     expect(await almacenDeAvisos(dbFalsa({ data: null, error: { message: 'caída' } }).db).contestada('k')).toBeNull()
   })
