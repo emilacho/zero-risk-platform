@@ -6,6 +6,8 @@
  *     (`parte:brief:producir:r<n>`), a lo sumo 3 veces, espaciadas (15 · 45 · 120 min), y tras el 3.º sin fruto avisa UNA vez en el hilo de #oficina-creativa (nunca por mensaje directo);
  *   · NACE APAGADO: solo corre con `cadena_config.reintento_piezas === true` (el booleano; cualquier otra cosa = apagado). Lo enciende el papel de orden de disparo, no este código;
  *   · NUNCA llama a un modelo ni despacha: solo deja sobres en la sala (como `autoproducir`), y la sala + la oficina deciden. Respeta el freno de gasto §150 (cliente al techo ⇒ no sale nada y NO se gasta un intento);
+ *   · 11-nov · GO Lenovo 03:02Z · y el TOPE POR CAMPAÑA con LA MISMA decisión que la vía normal (`decidirTopeDelParte` de `autoproducir.ts`): la pieza que se reintenta cuenta su tope aunque su encargo
+ *     fallido no haya gastado, lo soltado antes en la misma pasada también cuenta, y lo que no cabe (o una campaña sin tope, o un gasto ilegible) NO sale ni gasta un intento;
  *   · CAP explícito (canon de loops): `MAX_REINTENTOS` por brief, también cuando la sala rechaza el sobre (un rechazo consume el intento: nunca hay reintento indefinido); el aviso sale una sola vez;
  *   · IDEMPOTENTE: la libreta de intentos vive en `cadena_config.reintentos_piezas`; la llave de cada intento es determinista, así que repetir la pasada no duplica (la sala contesta «duplicado»);
  *   · «en seco» (`ejecutar: false`) calcula el plan completo SIN emitir, SIN anotar la libreta y SIN avisar: así se revisa a US$ 0 qué pasaría.
@@ -43,6 +45,9 @@ export interface PuertosDeReintento {
   /** fila_id → fecha y hora del calendario (la última versión de la campaña) */
   cuando(campanaId: string): Promise<ReadonlyMap<string, { fecha: string; hora: string | null }>>
   frenoDeGasto(clientId: string): Promise<{ bloqueado: boolean; motivo?: string }>
+  /** 11-nov · el tope de la campaña, con LA MISMA decisión que la vía normal (`decidirTopeDelParte`) · `cuestan`: los briefs de este parte que se reintentan · LANZA si el gasto es ilegible.
+   *  `enCamino`: lo soltado en esta pasada en OTROS partes de la campaña. Con `avisar` deja en el buzón el MISMO aviso que la vía normal (una vez por campaña y monto de tope). */
+  topeDeCampana(c: CampanaParaReintento, parte: ParteParaReintento, o: { cuestan: ReadonlySet<string>; enCamino: ReadonlyArray<{ parte_id: string; brief_id: string; familia: string | null }>; avisar: boolean }): Promise<{ sueltan: ReadonlySet<string>; motivo: string | null }>
   /** 21-oct · el MISMO pre-vuelo de la puerta de la oficina para las familias de láminas: si falta identidad visual o carpeta, el brief queda PENDIENTE DE DATOS (no sale sobre y no se gasta intento) hasta que el re-proceso visual llene el dato */
   previueloDeLaminas(clientId: string, familia: string): Promise<{ ok: true } | { ok: false; motivo: string }>
   emitirSobre(sobre: SobreDeProducir): Promise<ResultadoDeEmision>
@@ -52,7 +57,7 @@ export interface PuertosDeReintento {
   avisar(texto: string): Promise<void>
 }
 
-export type AccionDeReintento = 'llego' | 'sin_sala' | 'espera' | 'reintentar' | 'freno' | 'agotado' | 'ya_avisado' | 'pendiente_de_datos'
+export type AccionDeReintento = 'llego' | 'sin_sala' | 'espera' | 'reintentar' | 'freno' | 'tope' | 'agotado' | 'ya_avisado' | 'pendiente_de_datos'
 export interface LineaDelPlan { parte_id: string; brief_id: string; fila_id: string | null; familia: string | null; accion: AccionDeReintento; intentos: number; faltan_min?: number; detalle?: string }
 export interface ResultadoDelReintento {
   accion: 'apagado' | 'cadena_apagada' | 'vigilado' | 'en_seco'
@@ -85,6 +90,8 @@ export async function reintentarPiezas(P: PuertosDeReintento, o: { ejecutar: boo
   for (const c of await P.campanas()) {
     const freno = o.ejecutar ? await P.frenoDeGasto(c.client_id) : { bloqueado: false as const, motivo: undefined }
     let cuando: ReadonlyMap<string, { fecha: string; hora: string | null }> | null = null
+    /** lo que esta pasada ya soltó en esta campaña (todavía sin encargo vivo): del MISMO parte cuenta como candidata con su tope; de OTRO parte, como comprometido */
+    const soltadas: Array<{ parte_id: string; brief_id: string; familia: string | null }> = []
     for (const parte of await P.partes(c)) {
       if (!parte.valido || minutosEntre(parte.creado_en, ahora) > DIAS_MAXIMOS_DE_UN_PARTE * 1440) continue
       const conEncargo = await P.briefsConEncargo(parte.id)
@@ -118,7 +125,14 @@ export async function reintentarPiezas(P: PuertosDeReintento, o: { ejecutar: boo
         const pre = await P.previueloDeLaminas(c.client_id, dec.familia).catch((): { ok: true } => ({ ok: true }))
         if (!pre.ok) { res.plan.push({ ...base, accion: 'pendiente_de_datos', intentos: n, detalle: pre.motivo }); continue }
         if (freno.bloqueado) { res.plan.push({ ...base, accion: 'freno', intentos: n, detalle: freno.motivo }); continue }
+        // el tope de la campaña, LA MISMA decisión que la vía normal; lo que no cabe (o un gasto ilegible) no sale ni gasta un intento
+        try {
+          const cuestan = new Set([briefId, ...soltadas.filter((x) => x.parte_id === parte.id).map((x) => x.brief_id)])
+          const t = await P.topeDeCampana(c, parte, { cuestan, enCamino: soltadas.filter((x) => x.parte_id !== parte.id), avisar: o.ejecutar })
+          if (!t.sueltan.has(briefId)) { res.plan.push({ ...base, accion: 'tope', intentos: n, detalle: t.motivo ?? 'no cabe en el tope de la campaña' }); continue }
+        } catch (x) { res.plan.push({ ...base, accion: 'tope', intentos: n, detalle: `gasto de la campaña ilegible: ${x instanceof Error ? x.message : String(x)}` }); continue }
 
+        soltadas.push({ parte_id: parte.id, brief_id: briefId, familia: b.familia })
         res.plan.push({ ...base, accion: 'reintentar', intentos: n })
         if (!o.ejecutar) continue
         cuando ??= await P.cuando(c.id)

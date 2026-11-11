@@ -13,9 +13,9 @@
  * IDEMPOTENTE: la llave del sobre es `<parte_id>:<brief_id>:producir` · un brief = un sobre aunque la llamada se repita (la sala responde `duplicate`).
  * Este módulo NUNCA llama a un modelo ni despacha: solo deja sobres en la sala (que es quien despacha, ADR-018).
  */
-import type { Almacen } from './almacen'
+import type { Almacen, Campana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
-import { avisoDeGastoIlegible, avisoDelTope, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
+import { avisoDeGastoIlegible, avisoDelTope, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, topeDeLaPieza, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
 import { hoyEnZona } from './campanas'
 import { familiaDeFila } from './familia'
 import { filaSinFamilia } from './sin-familia'
@@ -83,6 +83,49 @@ export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; te
 export const quedaSinSala = (familia: string | null, config: ConfigDeOficina, clientId: string): boolean =>
   !!familia && decidirPuerta({ familia } as Sobre, config, TARGET_STEP_PRODUCIR, clientId).accion === 'sin_sala'
 
+/** la campaña tal como la necesita el tope */
+export type CampanaDelTope = Pick<Campana, 'id' | 'client_id' | 'tope_gasto_usd' | 'zona_horaria'>
+/**
+ * LA decisión del tope de campaña para las piezas de UN parte (10-nov · CC1; 11-nov · extraída para que el reintento de piezas use la MISMA, GO Lenovo 03:02Z).
+ * Lanza si el gasto o el calendario no se pueden leer (un error no es «cero gastado»: quien llama no suelta nada).
+ *   · `cuestan`: briefs que cuentan su tope AUNQUE ya tengan un encargo (el reintento: su encargo fallido no gastó y la pieza va a volver a gastar);
+ *   · `enCamino`: piezas de OTROS partes que el reintento ya soltó en esta misma pasada. Comprometen su tope salvo que ya estén contadas: una sin encargo cuyo sobre la sala ya
+ *     recibió ya está en lo comprometido; una con encargo (fallido, sin gasto) o cuyo sobre nunca llegó, no → se suma (y deja de guardar lugar por fecha).
+ */
+export async function decidirTopeDelParte(
+  al: Pick<Almacen, 'leerGastoDeCampana' | 'formatos' | 'configDeLaOficina'>, c: CampanaDelTope, parteId: string, todos: SobreDeProducir[],
+  filasDelCalendario: Awaited<ReturnType<Almacen['filas']>> | null, cuando: ReadonlyMap<string, { fecha: string; hora: string | null }>,
+  o: { cuestan?: ReadonlySet<string>; enCamino?: ReadonlyArray<{ parte_id: string; brief_id: string; familia: string | null }>; ahora?: Date } = {},
+): Promise<DecisionDelTope> {
+  const l = await al.leerGastoDeCampana(c.id, parteId)
+  // lo más cercano primero también ENTRE partes: sin el calendario no se sabe qué va antes, y eso es gasto ilegible (no «nada antes»)
+  if (!filasDelCalendario) throw new Error('no se pudo leer el calendario de la campaña')
+  const formatos = await al.formatos()
+  // 11-nov · GO Lenovo 01:10Z (ADENDA 3 de CC7 sobre #1019): el freno NO guarda lugar para lo que no se va a producir · genérico, cualquier cliente:
+  //   · una fila sin familia nunca sale del lote (`sin-familia.ts`);
+  //   · una fila cuya familia la puerta de la oficina deja SIN SALA (familia sin pieza simple, hoy `video_mesa`, que no abre): la misma función y la misma config que la oficina.
+  //     Una familia inactiva CON pieza simple sí se produce (por la pasarela): sigue guardando lugar. Si la config no se puede leer, se guarda lugar como hoy (del lado seguro).
+  let oficina: ConfigDeOficina | null = null
+  try { oficina = al.configDeLaOficina ? await al.configDeLaOficina() : null } catch { oficina = null }
+  const sinSala = (familia: string | null): boolean => !!oficina && quedaSinSala(familia, oficina, c.client_id)
+  const seProduce = (f: (typeof filasDelCalendario)[number]): boolean => !filaSinFamilia(f, formatos) && !sinSala(familiaDeFila(f, formatos))
+  const porVenir = filasPorVenir(filasDelCalendario.filter(seProduce).map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora ?? null, estado: f.estado, familia: familiaDeFila(f, formatos) })), hoyEnZona((o.ahora ?? new Date()).toISOString(), c.zona_horaria), l.partes, todos.map((x) => x.payload.fila_id))
+  const conEncargo = new Set(l.encargos.filter((e) => e.parte_id === parteId && e.brief_id).map((e) => e.brief_id as string))
+  const candidatas = todos.map((x) => ({ brief_id: x.payload.brief_id, familia: x.payload.familia ?? null, fecha: x.payload.fecha ?? null, hora: x.payload.hora ?? null, ya_tiene_encargo: conEncargo.has(x.payload.brief_id) && !o.cuestan?.has(x.payload.brief_id), no_se_produce: sinSala(x.payload.familia ?? null) }))
+  // lo retenido (o nunca salido) de OTROS partes guarda lugar por fecha, como las filas por venir; lo que la sala ya recibió va en lo comprometido
+  // 11-nov · GO Lenovo 01:59Z · la MISMA regla en las piezas de este parte (`no_se_produce`: salen como hoy, pero sin costo) y en las retenidas de otros partes (no guardan lugar).
+  //   Un brief SIN familia no entra aquí: la puerta lo manda a la pasarela (se produce) y sigue contando con la cota pesimista; las filas sin familia ya no llegan a un parte (#1019).
+  const medido = medirGastoDeCampana(l, parteId)
+  const k = (p: string, b: string): string => `${p}|${b}`
+  const enLaSala = new Set(l.soltados.map((x) => k(x.parte_id, x.brief_id)))
+  const conEncargoReal = new Set(l.encargos.filter((e) => e.brief_id).map((e) => k(e.parte_id, e.brief_id as string)))
+  const sumar = (o.enCamino ?? []).filter((x) => x.parte_id !== parteId && (conEncargoReal.has(k(x.parte_id, x.brief_id)) || !enLaSala.has(k(x.parte_id, x.brief_id))))
+  const yaSumadas = new Set(sumar.map((x) => k(x.parte_id, x.brief_id)))
+  const comprometido = medido.comprometido + sumar.reduce((a, x) => a + topeDeLaPieza(l.topes_de_familia, x.familia), 0)
+  const esperando = medido.esperando.filter((b) => !sinSala(b.familia) && !yaSumadas.has(k(b.parte_id, b.brief_id)))
+  return decidirTope(c.tope_gasto_usd, { gastado: medido.gastado, comprometido }, candidatas, l.topes_de_familia, [...porVenir, ...esperandoPorVenir(esperando, cuando)])
+}
+
 export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
   const campanaId = cadena(cuerpo.campana_id)
   // r74 · F7 · EN SECO el parte no se guarda: el flujo de la parte manda un `parte_seco` con lo que HABRÍA guardado (válido + briefs con su familia) y se ensaya autoproducir sin sembrar nada a mano.
@@ -146,26 +189,7 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
     const avisar = (a: AvisoDelTope) => al.avisarAlBuzon({ ...a, ...firma })
     let d: DecisionDelTope
     try {
-      const l = await al.leerGastoDeCampana(c.id, parte.id)
-      // lo más cercano primero también ENTRE partes: sin el calendario no se sabe qué va antes, y eso es gasto ilegible (no «nada antes»)
-      if (!filasDelCalendario) throw new Error('no se pudo leer el calendario de la campaña')
-      const formatos = await al.formatos()
-      // 11-nov · GO Lenovo 01:10Z (ADENDA 3 de CC7 sobre #1019): el freno NO guarda lugar para lo que no se va a producir · genérico, cualquier cliente:
-      //   · una fila sin familia nunca sale del lote (`sin-familia.ts`);
-      //   · una fila cuya familia la puerta de la oficina deja SIN SALA (familia sin pieza simple, hoy `video_mesa`, que no abre): la misma función y la misma config que la oficina.
-      //     Una familia inactiva CON pieza simple sí se produce (por la pasarela): sigue guardando lugar. Si la config no se puede leer, se guarda lugar como hoy (del lado seguro).
-      let oficina: ConfigDeOficina | null = null
-      try { oficina = al.configDeLaOficina ? await al.configDeLaOficina() : null } catch { oficina = null }
-      const sinSala = (familia: string | null): boolean => !!oficina && quedaSinSala(familia, oficina, c.client_id)
-      const seProduce = (f: (typeof filasDelCalendario)[number]): boolean => !filaSinFamilia(f, formatos) && !sinSala(familiaDeFila(f, formatos))
-      const porVenir = filasPorVenir(filasDelCalendario.filter(seProduce).map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora ?? null, estado: f.estado, familia: familiaDeFila(f, formatos) })), hoyEnZona(new Date().toISOString(), c.zona_horaria), l.partes, todos.map((x) => x.payload.fila_id))
-      const conEncargo = new Set(l.encargos.filter((e) => e.parte_id === parte.id && e.brief_id).map((e) => e.brief_id as string))
-      const candidatas = todos.map((x) => ({ brief_id: x.payload.brief_id, familia: x.payload.familia ?? null, fecha: x.payload.fecha ?? null, hora: x.payload.hora ?? null, ya_tiene_encargo: conEncargo.has(x.payload.brief_id), no_se_produce: sinSala(x.payload.familia ?? null) }))
-      // lo retenido (o nunca salido) de OTROS partes guarda lugar por fecha, como las filas por venir; lo que la sala ya recibió va en lo comprometido
-      // 11-nov · GO Lenovo 01:59Z · la MISMA regla en las piezas de este parte (`no_se_produce`: salen como hoy, pero sin costo) y en las retenidas de otros partes (no guardan lugar).
-      //   Un brief SIN familia no entra aquí: la puerta lo manda a la pasarela (se produce) y sigue contando con la cota pesimista; las filas sin familia ya no llegan a un parte (#1019).
-      const medido = medirGastoDeCampana(l, parte.id)
-      d = decidirTope(c.tope_gasto_usd, medido, candidatas, l.topes_de_familia, [...porVenir, ...esperandoPorVenir(medido.esperando.filter((b) => !sinSala(b.familia)), cuando)])
+      d = await decidirTopeDelParte(al, c, parte.id, todos, filasDelCalendario, cuando)
     } catch (e) {
       // un error no es «cero gastado»: no sale nada y se avisa (UNA vez por campaña)
       const aviso = await avisar(avisoDeGastoIlegible(c, e instanceof Error ? e.message : String(e)))
