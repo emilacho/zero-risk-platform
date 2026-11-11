@@ -16,7 +16,7 @@
  *     Límite conocido (diseño T0, adenda 1): solo atrapa frases entre comillas con una señal de atribución; un modismo suelto pasa.
  */
 import { normalizar } from '../manual/texto'
-import { LARGO_MINIMO_DE_UNA_FRASE, pareceUnaOrden, TIPO_DEL_INFORME } from './perfil'
+import { LARGO_MINIMO_DE_UNA_FRASE, pareceUnaOrden, TIPO_DEL_INFORME } from './perfil-puro'
 
 /** lo mínimo del adjunto del cliente (`contexto-del-cliente.ts`) que hace falta aquí: así esta regla no depende del portero */
 export interface AdjuntoConInformes {

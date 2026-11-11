@@ -6,7 +6,8 @@
  *   · Nunca lanza. Un fallo de red, de llave o de lectura es `no_se_pudo_leer` con su motivo: jamás se disfraza de «no hay perfil».
  *   · Quién consulta queda registrado por la puerta (`oficina=cadena`, `agente=<la mesa>`).
  */
-import { perfilDelAdjunto, type AdjuntoConInformes, type PerfilParaLectores } from './lectores'
+import { type PerfilParaLectores } from './lectores'
+import { perfilDeLaRespuesta } from './para-el-productor'
 
 type Fetch = typeof fetch
 export type LectorDelPerfil = (clientId: string, mesa: 'brief' | 'gran_idea') => Promise<PerfilParaLectores>
@@ -19,12 +20,9 @@ export function perfilPorHttp(p: { base: string; llave: string; fetch?: Fetch })
     try {
       const qs = `client_id=${encodeURIComponent(clientId)}&oficina=cadena&agente=${encodeURIComponent(mesa)}&clase=informe_de_analisis&limite=1`
       const r = await f(`${url}?${qs}`, { method: 'GET', headers: { 'x-api-key': p.llave } })
-      const j = (await r.json().catch(() => null)) as Record<string, unknown> | null
-      if (r.status < 200 || r.status >= 300) return { estado: 'no_se_pudo_leer', detalle: `la puerta del cerebro respondió ${r.status}` }
-      const adj = j && typeof j.contexto_del_cliente === 'object' && j.contexto_del_cliente !== null ? (j.contexto_del_cliente as AdjuntoConInformes) : null
-      // el adjunto del portero trae SIEMPRE la lista de informes (vacía si no hay): sin ella no se sabe si hay perfil
-      if (!adj || !Array.isArray(adj.informes)) return { estado: 'no_se_pudo_leer', detalle: 'la puerta del cerebro no devolvió el adjunto del cliente' }
-      return perfilDelAdjunto(adj)
+      const j = (await r.json().catch(() => null)) as unknown
+      // la MISMA regla que usa el productor (T2b): estado, adjunto con su lista de informes y el perfil vigente
+      return perfilDeLaRespuesta(r.status, j)
     } catch {
       return { estado: 'no_se_pudo_leer', detalle: 'sin red hacia la puerta del cerebro' }
     }
