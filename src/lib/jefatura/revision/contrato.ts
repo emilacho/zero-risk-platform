@@ -6,6 +6,7 @@
  */
 import type { ContextoDelRevisor, HuecosDeLaPregunta } from '../../revision-comun'
 import { erroresDeLaEntradaDeRegistro } from './registro'
+import type { FichaEnLaRevision } from '../ficha-de-hechos'
 import { erroresDeLaEntradaColateral, type EdicionDelDueno, type RetoqueParaJuzgar, type VeredictosVerificados } from './colateral'
 
 /** a dónde puede entregar un webhook de la jefatura: SOLO nuestro n8n o nuestro Vercel (la misma lista que aplican los flujos de J4 al entregar) */
@@ -44,6 +45,10 @@ export interface Simulacion {
   largo_a?: number
   /** la respuesta del verificador de órdenes: `no_cumple_ultima` niega solo la última versión; `no_cumple_todas`, todas */
   verificador?: 'cumple' | 'no_cumple_ultima' | 'no_cumple_todas' | 'formato_roto' | 'salvaguarda' | 'no_aplica_una'
+  /** 11-nov · ficha de hechos (1b): en SECO, revisa las cifras aunque la política del tipo no lo tenga encendido */
+  ficha_de_hechos?: boolean
+  /** la ficha simulada del jefe sobre la cifra c1: `importante` (bloquea), `menor` (sugerencia), `confirma` (bloquea + respaldo con sus candidatos), `id_desconocido` */
+  cifras?: 'importante' | 'menor' | 'confirma' | 'id_desconocido'
 }
 
 export interface PayloadDeRevision {
@@ -65,6 +70,8 @@ export interface PayloadDeRevision {
   simulacion?: Simulacion
   /** plan: el pedido que armó «Redactor (B4)» (datos reunidos, hechos del dueño, registro, referencia del producto), para pedir la versión nueva sin recolectar de nuevo */
   pedido_del_plan?: string
+  /** 11-nov · la ficha de hechos del cliente (1b). La pone la jefatura al abrir, si el tipo revisa cifras; nadie más (lo que traiga el llamador se quita) */
+  ficha_de_hechos?: FichaEnLaRevision
   /** plan: lo que escribió el dueño, frase por frase. Lo pone la jefatura al abrir, de `plan_cambios`; nadie más */
   ordenes_del_dueno?: string[]
   /** plan: había un pedido del dueño y no se pudo leer */
@@ -178,6 +185,8 @@ export function validarEntrada(cuerpo: unknown): ResultadoDeValidar {
   if (cuerpo.artifact_type === 'colateral') errores.push(...erroresDeLaEntradaColateral(p))
   if (cuerpo.dry_run !== undefined) ignorados.push('dry_run en la raíz (solo vale `payload.dry_run`)')
   if (p.client_id !== undefined) ignorados.push('payload.client_id (el cliente lo pone el flujo en la raíz)')
+  // la ficha de hechos la lee la jefatura: una que traiga el llamador se quita (si no, cualquiera podría «respaldar» sus propias cifras)
+  if (p.ficha_de_hechos !== undefined) { ignorados.push('payload.ficha_de_hechos (la pone la jefatura al abrir)'); delete p.ficha_de_hechos }
   if (errores.length) return { ok: false, codigo: 'entrada_invalida', errores }
   const entrada: EntradaDeRevision = {
     artifact_type: cuerpo.artifact_type as TipoDeRevision,

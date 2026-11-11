@@ -91,9 +91,9 @@ export function almacenDeSupabase(db: Db): Almacen {
       return d?.[0] ? aRevision(d[0]) : null
     },
     async pasoAbierto(revisionId): Promise<PasoRegistrado | null> {
-      const d = ok(await db.from('jefatura_pasos').select('n,paso,intento,tipo,agente,estado,dispatch_key,cost_usd,concepto,base').eq('revision_id', revisionId).eq('estado', 'corriendo').order('n', { ascending: false }).limit(1), 'leer el paso abierto') as Fila[] | null
+      const d = ok(await db.from('jefatura_pasos').select('n,paso,intento,tipo,agente,estado,dispatch_key,cost_usd,concepto,base,traza').eq('revision_id', revisionId).eq('estado', 'corriendo').order('n', { ascending: false }).limit(1), 'leer el paso abierto') as Fila[] | null
       const f = d?.[0]
-      return f ? { n: Number(f.n), paso: String(f.paso), intento: Number(f.intento ?? 1), tipo: f.tipo as PasoRegistrado['tipo'], agente: (f.agente as string | null) ?? null, estado: 'corriendo', dispatch_key: (f.dispatch_key as string | null) ?? null, concepto: (f.concepto as PasoRegistrado['concepto']) ?? 'modelo', base: (f.base as PasoRegistrado['base']) ?? 'usage', cost_usd: Number(f.cost_usd ?? 0) } : null
+      return f ? { n: Number(f.n), paso: String(f.paso), intento: Number(f.intento ?? 1), tipo: f.tipo as PasoRegistrado['tipo'], agente: (f.agente as string | null) ?? null, estado: 'corriendo', dispatch_key: (f.dispatch_key as string | null) ?? null, concepto: (f.concepto as PasoRegistrado['concepto']) ?? 'modelo', base: (f.base as PasoRegistrado['base']) ?? 'usage', cost_usd: Number(f.cost_usd ?? 0), ...(f.traza && typeof f.traza === 'object' ? { traza: f.traza as Record<string, unknown> } : {}) } : null
     },
     async pasosCorriendoAntesDe(iso) {
       const d = ok(await db.from('jefatura_pasos').select('revision_id,n,paso,inicio,agente,dispatch_key,workflow_execution_id').eq('estado', 'corriendo').lt('inicio', iso), 'leer los pasos vivos') as Fila[] | null

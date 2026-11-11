@@ -22,6 +22,8 @@ import { atiende, casarId, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpin
 import { lecturasDeVida, vidaDelPaso, type LectorDeVida } from '../../plazo-de-vida'
 import { ESTADOS_TERMINALES, type CambiosDeRevision, type PasoRegistrado, type Puertos, type Revision } from './puertos'
 import { moldeDelPaso, simulacionDelRevisor } from './simulacion'
+import { CHEQUEO_FICHA_DE_HECHOS, cifrasParaElJefe, huellaDelTexto, toparFichasDelJefe, trazaDeLaFicha } from '../ficha-de-hechos'
+import { fichaDeLaRevision } from './pedidos'
 import { CLAVE_DE_VERIFICACION, evaluarOrdenes, partirOrdenes, tareaDeVerificacionDeOrdenes, type FilaDeVerificacion } from './orden-del-dueno'
 import { CLAVE_DE_REVISION_COLATERAL, tareaDeRevisionColateral, verificarVeredictos, type VeredictosVerificados } from './colateral'
 import { aplicarReemplazos, avisoDeCita, CLAVE_DE_REVISION_DE_REGISTRO, clasificarFichas, ESQUEMA_DE_REEMPLAZOS, tareaDeCorreccionDeRegistro, tareaDeRevisionDeRegistro, type FichaDeRegistro, type Reemplazo } from './registro'
@@ -44,7 +46,9 @@ const esTerminal = (rev: Revision): boolean => (ESTADOS_TERMINALES as readonly s
 interface Historial { etiqueta: Etiqueta; paso: string; texto: string; largo: number }
 const historialDe = (e: Estado): Historial[] => ((datos(e, 'revision')?.historial as Historial[] | undefined) ?? [])
 
-function plantillaDe(rev: Revision): Plantilla { return plantillaDePolitica(rev.policy, rev.productores, rev.tope_usd, { verificar_ordenes: !!rev.entrada.ordenes_del_dueno?.length }) }
+function plantillaDe(rev: Revision): Plantilla { return plantillaDePolitica(rev.policy, rev.productores, rev.tope_usd, { verificar_ordenes: !!rev.entrada.ordenes_del_dueno?.length, ficha_de_hechos: !!fichaDeLaRevision(rev.entrada) }) }
+/** 11-nov · ficha de hechos (1b): el tipo revisa cifras si su política lo trae en `chequeos_previos` (DATO); en seco se puede forzar con la simulación */
+export const revisaCifras = (pol: { chequeos_previos: string[] }, p: Pick<PayloadDeRevision, 'dry_run' | 'simulacion'>): boolean => pol.chequeos_previos.includes(CHEQUEO_FICHA_DE_HECHOS) || (p.dry_run === true && p.simulacion?.ficha_de_hechos === true)
 function duenoDe(rev: Revision, paso: Paso): Dueno {
   const agente = paso.clave.includes(':') ? paso.clave.split(':').slice(1).join(':') : paso.quien
   const d = duenosDe(rev.productores).find((x) => x.agente === agente)
@@ -112,6 +116,8 @@ export async function abrirRevision(P: Puertos, cuerpo: unknown, o: { prueba?: b
     if (ordenes.length) p.ordenes_del_dueno = ordenes
     else if (ciclo.aviso) p.orden_ilegible = true
   }
+  // 11-nov · ficha de hechos (1b): la lee la jefatura (solo lectura); sin lector o si falla, se declara y la revisión sigue como hoy
+  if (revisaCifras(pol, p)) p.ficha_de_hechos = P.fichaDeHechos ? await P.fichaDeHechos(entrada.client_id) : { no_se_pudo_leer: 'la jefatura no tiene lector de la ficha de hechos' }
   const apertura = estadoDeApertura(entrada)
   const c = await P.almacen.crearRevision({
     client_id: entrada.client_id, artifact_type: entrada.artifact_type, artifact_id: entrada.artifact_id, version: p.version ?? 1, journey_id: entrada.journey_id, productores, entrada: p,
@@ -139,7 +145,9 @@ async function aplicar(P: Puertos, rev: Revision, pl: Plantilla, indice: number,
 const ROL_DE: (clave: string) => string = (c) => (c === CLAVE_DE_REVISION_COLATERAL ? 'colateral' : c === CLAVE_DE_REVISION_DE_REGISTRO ? 'registro' : c === 'revision_fondo' ? 'fondo' : c === 'revision_lengua' ? 'lengua' : c === 'segunda_mirada' ? 'ciego' : c === CLAVE_DE_VERIFICACION ? 'verificador' : c.startsWith('correccion:') ? 'productor_corrige' : 'productor_decide')
 /** la traza M1 de un paso: namespace `metadata.jefatura` (diseño §6) */
 function trazaM1(rev: Revision, paso: Paso, extra: Datos = {}): Record<string, unknown> {
-  return { jefatura: { role: ROL_DE(paso.clave), review_id: rev.id, artifact_type: rev.artifact_type, artifact_id: rev.artifact_id, cycle: 0, nominal_agent: paso.quien, contra_que_ref: rev.policy.contra_que.map((d) => d.clave), policy_snapshot: { artifact_type: rev.policy.artifact_type, reentrega: rev.policy.reentrega, tope_revision_usd: rev.policy.tope_revision_usd }, ...extra } }
+  // 11-nov · ficha de hechos (CC7 3): el paso de fondo guarda la huella del texto sobre el que numeró las cifras
+  const cifrasSobre = paso.clave === 'revision_fondo' && fichaDeLaRevision(rev.entrada) ? { cifras_sobre: huellaDelTexto(String(datos(rev.estado_del_motor, 'revision')?.texto ?? '')) } : {}
+  return { jefatura: { ...cifrasSobre, role: ROL_DE(paso.clave), review_id: rev.id, artifact_type: rev.artifact_type, artifact_id: rev.artifact_id, cycle: 0, nominal_agent: paso.quien, contra_que_ref: rev.policy.contra_que.map((d) => d.clave), policy_snapshot: { artifact_type: rev.policy.artifact_type, reentrega: rev.policy.reentrega, tope_revision_usd: rev.policy.tope_revision_usd }, ...extra } }
 }
 
 function fichasPropias(rev: Revision, e: Estado, paso: Paso, d: Dueno): Ficha[] {
@@ -194,7 +202,7 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
   const malos = auditarPedidoDeAgente(pedido)
   if (malos.length) throw new Error(`pedido inválido (regla dura del editor): ${malos.join(' · ')}`)
   const frases = tipo === 'registro' ? Object.fromEntries(e.fichas.filter((f) => ids.includes(f.id)).map((f) => [f.id, f.que ?? ''])) : undefined
-  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, ...(frases ? { frases } : {}), objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined, ...(paso.clave === CLAVE_DE_REVISION_COLATERAL ? { ids_de_retoques: (p.retoques ?? []).map((x) => x.id) } : {}), ...(paso.clave === CLAVE_DE_VERIFICACION ? { ordenes: p.ordenes_del_dueno, versiones: h } : {}) }) : undefined
+  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, ...(frases ? { frases } : {}), objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined, ...(paso.clave === CLAVE_DE_REVISION_COLATERAL ? { ids_de_retoques: (p.retoques ?? []).map((x) => x.id) } : {}), ...(paso.clave === CLAVE_DE_VERIFICACION ? { ordenes: p.ordenes_del_dueno, versiones: h } : {}), ...(paso.clave === 'revision_fondo' && fichaDeLaRevision(p) ? { cifras: cifrasParaElJefe(texto, fichaDeLaRevision(p)!).map((c) => ({ id: c.id, candidatos: c.respaldo.candidatos.map((x) => x.ref) })) } : {}) }) : undefined
   return { agente: paso.quien, pedido: { ...pedido, ...(molde ? { molde } : {}) } as Record<string, unknown>, ...(molde ? { molde } : {}) }
 }
 
@@ -304,7 +312,7 @@ export async function recibirResultado(P: Puertos, revisionId: string, n: number
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), paso: { ...base, n, estado: 'fallo', error: p.errores.join(' · ') } })
     return fallar(P, { ...rev, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, p.ficha.que ?? 'formato inválido')
   }
-  const proc = procesarValor(paso, p.valor, rev, e)
+  const proc = procesarValor(paso, p.valor, rev, e, { cifras_sobre: (abierto.traza?.jefatura as { cifras_sobre?: unknown } | undefined)?.cifras_sobre })
   if (proc.reintentar !== undefined) {
     if (intentos < (paso.salida?.reintento_formato ?? 0)) return pedirReintento(proc.reintentar, 'validación de la jefatura: reintento')
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), paso: { ...base, n, estado: 'fallo', error: proc.reintentar } })
@@ -326,7 +334,7 @@ export async function recibirResultado(P: Puertos, revisionId: string, n: number
 
 interface Procesado { res?: ResultadoDePaso; fallido?: string; reintentar?: string }
 
-function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e: Estado): Procesado {
+function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e: Estado, o: { cifras_sobre?: unknown } = {}): Procesado {
   if (paso.clave === CLAVE_DE_VERIFICACION) return { res: { costo_usd: 0, artefacto: { filas: v.filas } } }
   // 11-nov · colateral: el jefe juzgó; el código ata cada veredicto a un id pedido (nada se aprueba por omisión)
   if (paso.clave === CLAVE_DE_REVISION_COLATERAL) return { res: { costo_usd: 0, artefacto: { ...verificarVeredictos((rev.entrada.retoques ?? []).map((x) => x.id), v.veredictos) } } }
@@ -340,14 +348,29 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e:
   if (paso.clave === 'revision_fondo' || paso.clave === 'revision_lengua') {
     const duenosDeLaRevision = duenosDe(rev.productores)
     const dondeNormalizados: string[] = [], dondeAmbiguos: string[] = []
-    const fs = (v.fichas as Array<{ que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string }>).map((f, i) => {
+    let delJefe = v.fichas as Array<{ que: string; donde: string; contra_que: string; gravedad: 'bloquea' | 'sugerencia'; propuesta: string; cifra?: string; respaldo?: string[] }>
+    // 11-nov · ficha de hechos (1b): el jefe juzgó cada cifra; el código pone el tope (sostenida → se quita; ficha incompleta → a lo más sugerencia)
+    let traza: Record<string, unknown> | undefined
+    const ficha = paso.clave === 'revision_fondo' ? fichaDeLaRevision(rev.entrada) : null
+    if (ficha) {
+      const texto = String(datos(e, 'revision')?.texto ?? '')
+      const cifras = cifrasParaElJefe(texto, ficha)
+      // los ids cN se numeraron sobre el texto del pedido: si no es el mismo (o no se sabe), el código NO topa (las fichas quedan como hoy) y lo declara
+      if (o.cifras_sobre !== huellaDelTexto(texto)) traza = trazaDeLaFicha(ficha, cifras, undefined, { numeracion_de_otro_texto: true })
+      else {
+        const t = toparFichasDelJefe(delJefe, ficha, cifras)
+        delJefe = t.fichas
+        traza = trazaDeLaFicha(ficha, cifras, t)
+      }
+    } else if (paso.clave === 'revision_fondo' && rev.entrada.ficha_de_hechos && 'no_se_pudo_leer' in rev.entrada.ficha_de_hechos) traza = { no_se_pudo_leer: rev.entrada.ficha_de_hechos.no_se_pudo_leer }
+    const fs = delJefe.map((f, i) => {
       // J6 cuarto: el `donde` libre del jefe («texto — etiquetas») se lleva al `donde` del dueño; el texto original queda en la ficha; lo ambiguo se declara
       const n = normalizarDonde(f.donde, duenosDeLaRevision)
       if (n.original) dondeNormalizados.push(`${n.original} → ${n.donde}`)
       if (n.ambiguo) dondeAmbiguos.push(f.donde)
       return fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', n.donde, f.gravedad, n.original ? `[el jefe la situó en «${n.original}»] ${f.que}` : f.que, f.contra_que, f.propuesta)
     })
-    return { res: { costo_usd: 0, artefacto: { fichas: fs.length, ...(dondeNormalizados.length ? { donde_normalizados: dondeNormalizados } : {}), ...(dondeAmbiguos.length ? { donde_ambiguos: dondeAmbiguos } : {}) }, fichas: fs } }
+    return { res: { costo_usd: 0, artefacto: { fichas: fs.length, ...(dondeNormalizados.length ? { donde_normalizados: dondeNormalizados } : {}), ...(dondeAmbiguos.length ? { donde_ambiguos: dondeAmbiguos } : {}), ...(traza ? { ficha_de_hechos: traza } : {}) }, fichas: fs } }
   }
   const d = duenoDe(rev, paso)
   const mias = fichasPropias(rev, e, paso, d)

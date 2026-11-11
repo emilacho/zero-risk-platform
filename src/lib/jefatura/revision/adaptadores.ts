@@ -8,6 +8,7 @@
 import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGptConLibro } from '../../revision-comun'
 import { almacenDeSupabase, type Db } from './almacen-supabase'
 import { adjuntoDelCliente } from '../../portero-alimenta/contexto-del-cliente'
+import { FALTA_LO_OBSERVADO, fichaDeHechos, hechoDelDuenoComoHecho, supuestoComoHecho, type DatoDeSede, type FichaEnLaRevision } from '../ficha-de-hechos'
 import { paginasPropiasDelSitio } from './carpeta-para-revisar'
 import type { CicloDelPlan } from './plan'
 import type { Puertos } from './puertos'
@@ -61,12 +62,31 @@ export async function cicloDelPlanDeLaBase(db: Db, artifactId: string): Promise<
   }
 }
 
+/**
+ * 11-nov · la ficha de hechos (tramo 1b) · SOLO LEE: los datos de sede del cliente (como la cadena) y lo que dijo el dueño por la lectura del
+ * portero que la jefatura ya usa (no toca las tablas del cerebro). Falta lo observado del cerebro: la ficha queda «incompleta». Nunca lanza.
+ */
+export async function fichaDeHechosDeLaBase(db: Db, clientId: string, ahora: Date): Promise<FichaEnLaRevision> {
+  try {
+    const s = await db.from('client_sede_datos').select('id, client_id, sede_id, campo, valor_texto, fuente, observado_en, reconfirmado_en, retirada_en').eq('client_id', clientId).is('retirada_en', null).limit(500)
+    if (s.error) return { no_se_pudo_leer: `client_sede_datos: ${String((s.error as { message?: string }).message ?? s.error).slice(0, 160)}` }
+    const c = await adjuntoDelCliente(db as never, clientId, ahora)
+    const sinDueno = c.resumen_vivo.estado === 'no_se_pudo_leer'
+    // lo que el dueño RESPONDIÓ y lo que ACEPTÓ sin responder llegan separados del portero: cada uno con su nivel (el supuesto no sostiene · CC7 1)
+    const hechos = [...(c.hechos_del_dueno ?? []).map((h) => hechoDelDuenoComoHecho(h, clientId)), ...(c.supuestos_aceptados_por_el_dueno ?? []).map((s) => supuestoComoHecho({ tema: s.tema, texto: s.texto, sede: s.sede, ficha_id: s.ficha_id }, clientId))]
+    return { ficha: fichaDeHechos({ clientId, datosDeSede: ((s.data as DatoDeSede[] | null) ?? []), fichasDelCerebro: hechos, ahora, faltan: [FALTA_LO_OBSERVADO, ...(sinDueno ? ['lo que dijo el dueño (no se pudo leer)'] : [])] }) }
+  } catch (e) {
+    return { no_se_pudo_leer: `la ficha de hechos: ${String((e as Error)?.message ?? e).slice(0, 160)}` }
+  }
+}
+
 export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () => Date = () => new Date()): Puertos {
   return {
     almacen: almacenDeSupabase(db),
     ahora,
     paginasDelSitio: (clientId) => paginasPropiasDelSitio(db as never, clientId),
     hechosDelDueno: async (clientId) => { try { return (await adjuntoDelCliente(db as never, clientId)).hechos_del_dueno ?? [] } catch { return [] } },
+    fichaDeHechos: (clientId) => fichaDeHechosDeLaBase(db, clientId, ahora()),
     cicloDelPlan: (artifactId) => cicloDelPlanDeLaBase(db, artifactId),
     async anotarPalabraDelDueno(p) {
       try {
