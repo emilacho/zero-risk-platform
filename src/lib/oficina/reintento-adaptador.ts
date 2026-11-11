@@ -25,7 +25,7 @@ export function puertosDeReintento(db: Db, env: { slackToken?: string; canalHilo
     async cadenaEncendida() { return (await cadena.leerConfig('estado_cadena')) === 'encendida' },
     async campanas() {
       const activas = await cadena.campanasActivas()
-      return activas.filter((c) => c.autoproducir === true && c.seco !== true).map((c) => ({ id: c.id, client_id: c.client_id, sala_ref: c.sala_ref ?? null }))
+      return activas.filter((c) => c.autoproducir === true && c.seco !== true).map((c) => ({ id: c.id, client_id: c.client_id, sala_ref: c.sala_ref ?? null, zona_horaria: c.zona_horaria ?? null }))
     },
     async partes(c): Promise<ParteParaReintento[]> {
       const r = (await db.from('client_historical_outputs').select('id,created_at,provenance_tag').eq('client_id', c.client_id).eq('output_type', 'campaign_brief_pack').like('provenance_tag->>lote_key', `${c.id}:%`).order('created_at', { ascending: false }).limit(200)) as { data: Fila[] | null; error: { message: string } | null }

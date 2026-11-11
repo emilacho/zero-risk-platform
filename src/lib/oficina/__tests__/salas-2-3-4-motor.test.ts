@@ -299,9 +299,10 @@ describe('chequeos duros de las láminas', () => {
     expect(fs.filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/Caveat/)
     expect(fs.filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/f1/)
   })
-  it('un porcentaje inventado bloquea', () => {
+  it('un porcentaje que no está en las fuentes es un CANDIDATO: avisa y no bloquea (11-nov · fila #3 · decide la revisión de hechos)', () => {
     const c = base(); c.textos_de_laminas = ['Sube 80% tus ventas']; c.texto_del_autor = { texto: 'Sube 80% tus ventas', hashtags: [] }
-    expect(chequeosDeLaminas(c).some((x) => x.gravedad === 'bloquea' && /80%/.test(x.que ?? ''))).toBe(true)
+    const fs = chequeosDeLaminas(c).filter((x) => /80%/.test(x.que ?? ''))
+    expect(fs).toHaveLength(1); expect(fs[0].gravedad).toBe('sugerencia')
   })
   it('todas las fichas son del origen «chequeo» y tienen id único', () => {
     const c = base(); c.problemas_de_contrato = ['a', 'b']; c.imagenes_sin_lamina = ['x', 'y']

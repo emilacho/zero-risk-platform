@@ -148,6 +148,18 @@ describe('fuentes del cliente leídas de la base', () => {
     expect(fu.propios.marcas_ajenas).toContain('pez azul')
     expect(fu.manual_texto.length).toBeGreaterThan(50)
   })
+  it('11-nov · fila #10 · el registro lo resuelve el detector de la cadena con el manual ENTERO y la ficha (negaciones, estilo de escritura, trato explícito)', async () => {
+    const leer = async (manual: Record<string, unknown>, config?: Record<string, unknown>) => {
+      const db = sembrar(); Object.assign(db.tablas['client_brand_books'][0], manual)
+      if (config) Object.assign(db.tablas['clients'][0].config as Record<string, unknown>, config)
+      const fu = await crearPuertos(db, ENV, fetchFalso().f).fuentes(CLIENTE)
+      if ('error' in fu) throw new Error(fu.error)
+      return fu.fuentes.registro
+    }
+    expect(await leer({ voice_description: 'Cercana: voseo, nunca tuteo.' })).toBe('voseo')
+    expect(await leer({ voice_description: 'Voz directa', writing_style: 'Siempre vos: pedí, vení. Jamás tú.' })).toBe('voseo')
+    expect(await leer({ voice_description: 'Voz directa', writing_style: null, tone_guidelines: null }, { trato: 'vos' })).toBe('voseo')
+  })
   it('sin teléfonos ni usuarios leídos ⇒ «no verificables» (nunca se tratan como falsos)', async () => {
     const db = sembrar(); db.tablas['client_sede_datos'] = []
     const clientes = db.tablas['clients']; (clientes[0].config as Record<string, unknown>).apify = { competitor_list: [] }

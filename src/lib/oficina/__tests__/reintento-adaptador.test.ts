@@ -74,6 +74,8 @@ describe('las consultas leen lo correcto', () => {
   it('solo entrega campañas con autoproducir real y que no son de ensayo', async () => {
     cad.campanas = [campana(), campana({ id: 'b', autoproducir: false }), campana({ id: 'c', seco: true }), campana({ id: 'd', autoproducir: 'true' })]
     expect((await puertosDeReintento(mundo() as never, ENV).campanas()).map((c) => c.id)).toEqual([CAMPANA])
+    // 11-nov · la zona del cliente viaja: el reintento corta por la fecha de la fila en SU día
+    expect((await puertosDeReintento(mundo() as never, ENV).campanas())[0].zona_horaria).toBe('America/Guayaquil')
   })
   it('los partes son los de ESTA campaña: ni los de otra, ni los de ensayo, ni algo que no es un parte', async () => {
     const P = puertosDeReintento(mundo() as never, ENV)

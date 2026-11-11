@@ -115,7 +115,7 @@ function limpia(l: LaminaParaDibujar): LaminaParaDibujar {
 }
 
 // ── cifras que nadie le dio al autor ─────────────────────────────────────────────────
-/** porcentajes y cifras sueltas que NO aparecen en ninguna fuente (manual, plan, brief, material, datos verificados). Un porcentaje inventado bloquea; otra cifra avisa.
+/** porcentajes y cifras sueltas que NO aparecen en ninguna fuente (manual, plan, brief, material, datos verificados). Son CANDIDATOS: avisan (11-nov · antes un porcentaje bloqueaba) y decide la revisión de hechos.
  *  LÍMITE DECLARADO (CC#3 #469 H3): se valida por PRESENCIA, no por referencia. Un «30» pasa si «30» aparece en CUALQUIER fuente (un precio, una fecha), aunque la afirmación sea otra;
  *  detecta cifras fabricadas, no afirmaciones mal atribuidas. Ignora cifras de un dígito y las de 4 o más (años). Es una primera red: la atribución la revisan los jefes y el humano. */
 export function cifrasFueraDeFuentes(textos: string[], fuentes: string[]): Array<{ cifra: string; porcentaje: boolean }> {
@@ -183,7 +183,9 @@ export function chequeosDeLaminas(c: ContextoDeChequeoLaminas): Ficha[] {
   for (const p of c.problemas_de_kit) nueva('estructura', 'bloquea', p, 'kit de la semana', 'completar el kit')
   // 3 · cifras que nadie le dio al autor
   for (const x of cifrasFueraDeFuentes([...c.textos_de_laminas, c.texto_del_autor.texto, c.texto_del_autor.acompanamiento ?? ''], c.fuentes_de_cifras)) {
-    nueva('texto', x.porcentaje ? 'bloquea' : 'sugerencia', `la cifra «${x.cifra}» no está en ninguna fuente (manual, plan, brief o datos del cliente)`, 'no inventar cifras', 'quitar la cifra o citarla de una fuente')
+    // 11-nov · fila #3 del barrido de reglas rígidas (GO Lenovo 03:55Z): el código solo MARCA el candidato (un porcentaje también: «100 % artesanal» o «al 50 %» de una promo no son datos inventados);
+    // si es un dato sin respaldo lo decide la revisión de hechos de la jefatura, que lee estas fichas
+    nueva('texto', 'sugerencia', `la cifra «${x.cifra}» no está literal en ninguna fuente (manual, plan, brief o datos del cliente): revisar si es un dato que necesita respaldo o una expresión`, 'no inventar cifras', 'quitar la cifra o citarla de una fuente si es un dato')
   }
   // 4 · tipografías e imágenes
   for (const t of c.fonts_faltantes) nueva('laminas', 'sugerencia', `la tipografía del manual «${t}» no está disponible: se dibujó con otra`, 'manual de marca', 'cargar la tipografía')

@@ -84,9 +84,59 @@ describe('los candados: nace apagado y no inventa nada', () => {
     const s = base(); s.partes = [{ ...s.partes[0], valido: false }]
     expect((await pasada(s)).plan).toHaveLength(0); expect(s.emitidos).toHaveLength(0)
   })
-  it('un parte más viejo que 14 días ya no se reintenta', async () => {
+  it('un parte más viejo que 14 días: lo que no tiene fecha de fila conocida ya no se reintenta (vencida), y la fila con fecha pasada tampoco', async () => {
     const s = base(); s.ahora = min(15 * 1440)
-    expect((await pasada(s)).plan).toHaveLength(0)
+    const r = await pasada(s)
+    expect(acciones(r)).toEqual(['BRF-0001:vencida', 'BRF-0002:vencida', 'BRF-0004:vencida']); expect(s.emitidos).toHaveLength(0); expect(s.escrituras).toBe(0)
+    expect(r.plan[0].detalle).toBe('la fila era del 2026-10-26')
+  })
+})
+
+describe('11-nov · fila #1 · el corte es la fecha de LA FILA, no la edad del parte (dos clientes, dos rubros)', () => {
+  // un parte de 4 semanas creado el 21-oct; hoy es 20 días después (10-nov)
+  const HOY = min(20 * 1440)
+  const casos = [
+    { rubro: 'restaurante · Guayaquil', zona: 'America/Guayaquil', briefs: [{ brief_id: 'BRF-0010', fila_id: 's4-d2-mar_foto', familia: 'post_img' }, { brief_id: 'BRF-0011', fila_id: 's1-d2-mar_foto', familia: 'post_img' }] },
+    { rubro: 'consultora B2B · Bogotá', zona: 'America/Bogota', briefs: [{ brief_id: 'BRF-0010', fila_id: 's4-d3-mie_carrusel_linkedin', familia: 'carrusel_ig_v1' }, { brief_id: 'BRF-0011', fila_id: 's1-d3-mie_carrusel_linkedin', familia: 'carrusel_ig_v1' }] },
+  ]
+  for (const c of casos) {
+    const mundo = (fechas: Record<string, string>) => {
+      const s = base(); s.ahora = HOY
+      s.campanas = [{ ...s.campanas[0], zona_horaria: c.zona }]
+      s.partes = [{ ...s.partes[0], briefs: c.briefs }]
+      const P = puertos(s); P.cuando = async () => new Map(Object.entries(fechas).map(([k, f]) => [k, { fecha: f, hora: '09:00' }]))
+      return { s, P }
+    }
+    it(`${c.rubro}: con el parte de 20 días, la pieza de la semana 4 (fecha por venir) SÍ se reintenta; la de la semana 1 (ya pasó) no`, async () => {
+      const { s, P } = mundo({ [c.briefs[0].fila_id]: '2026-11-11', [c.briefs[1].fila_id]: '2026-10-22' })
+      const r = await reintentarPiezas(P, { ejecutar: true })
+      expect(acciones(r)).toEqual(['BRF-0010:reintentar', 'BRF-0011:vencida'])
+      expect(s.emitidos.map((x) => x.payload.brief_id)).toEqual(['BRF-0010'])
+    })
+    it(`${c.rubro}: una fila de HOY (en la zona del cliente) todavía se reintenta`, async () => {
+      const { P } = mundo({ [c.briefs[0].fila_id]: '2026-11-10', [c.briefs[1].fila_id]: '2026-11-09' })
+      expect(acciones(await reintentarPiezas(P, { ejecutar: false }))).toEqual(['BRF-0010:reintentar', 'BRF-0011:vencida'])
+    })
+    it(`${c.rubro}: un parte JOVEN con una fila ya pasada tampoco se reintenta (la fecha de la fila manda en los dos sentidos)`, async () => {
+      const { s, P } = mundo({ [c.briefs[0].fila_id]: '2026-10-20', [c.briefs[1].fila_id]: '2026-10-30' })
+      s.ahora = min(20)
+      expect(acciones(await reintentarPiezas(P, { ejecutar: false }))).toEqual(['BRF-0010:vencida', 'BRF-0011:reintentar'])
+    })
+  }
+  it('sin fecha conocida de la fila, vale el plazo de 14 días del parte (joven: sale · viejo: vencida)', async () => {
+    const s = base(); s.partes = [{ ...s.partes[0], briefs: [{ brief_id: 'BRF-0020', fila_id: 'sin-calendario', familia: 'post_img' }] }]
+    const P = puertos(s); P.cuando = async () => new Map()
+    expect(acciones(await reintentarPiezas(P, { ejecutar: false }))).toEqual(['BRF-0020:reintentar'])
+    s.ahora = min(15 * 1440)
+    expect(acciones(await reintentarPiezas(P, { ejecutar: false }))).toEqual(['BRF-0020:vencida'])
+  })
+  it('«hoy» es el del cliente: a las 03:00Z del 11-nov, en Guayaquil todavía es 10-nov y la fila del 10 se reintenta; en UTC ya venció', async () => {
+    const s = base(); s.ahora = new Date('2026-11-11T03:00:00Z'); s.partes = [{ ...s.partes[0], briefs: [{ brief_id: 'BRF-0030', fila_id: 'f10', familia: 'post_img' }] }]
+    const P = puertos(s); P.cuando = async () => new Map([['f10', { fecha: '2026-11-10', hora: null }]])
+    s.campanas = [{ ...s.campanas[0], zona_horaria: 'America/Guayaquil' }]
+    expect(acciones(await reintentarPiezas(P, { ejecutar: false }))).toEqual(['BRF-0030:reintentar'])
+    s.campanas = [{ ...s.campanas[0], zona_horaria: null }]
+    expect(acciones(await reintentarPiezas(P, { ejecutar: false }))).toEqual(['BRF-0030:vencida'])
   })
 })
 

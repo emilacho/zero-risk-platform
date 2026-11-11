@@ -14,18 +14,20 @@
  * Alcance: solo briefs con encargo AUSENTE. Un encargo que existe (cualquier estado) ya tiene dueño: el vigía de la oficina lo reanuda o lo cierra.
  */
 import { decidirPuerta, TARGET_STEP_PRODUCIR, type ConfigDeOficina } from '../oficina/sobre'
+import { hoyEnZona } from './campanas'
 import { llaveDeReintento, sobresDeProducir, type BriefDeParte, type ResultadoDeEmision, type SobreDeProducir } from './autoproducir'
 
 export const MAX_REINTENTOS = 3
 /** minutos de espera ANTES de la etapa n (n = intentos ya hechos): 0 → desde que se creó el parte · 1 y 2 → desde el intento anterior · 3 → plazo final antes de dar la pieza por perdida */
 export const ESPERAS_MIN: readonly number[] = [15, 45, 120, 60]
-/** un parte más viejo que esto ya no se reintenta (su fecha de publicación pasó) */
+/** 11-nov · fila #1 del barrido de reglas rígidas (GO Lenovo 03:55Z): una pieza se reintenta mientras la fecha de SU fila del calendario no haya pasado (en la zona del cliente).
+ *  Solo si la fila no tiene fecha conocida se usa este plazo desde que se creó el parte (antes valía para todo el parte: en un parte de 4 semanas, lo que fallaba después del día 14 no volvía nunca). */
 export const DIAS_MAXIMOS_DE_UN_PARTE = 14
 export const CLAVE_INTERRUPTOR = 'reintento_piezas'
 export const CLAVE_LIBRETA = 'reintentos_piezas'
 
 export interface ParteParaReintento { id: string; creado_en: string; valido: boolean; briefs: BriefDeParte[] }
-export interface CampanaParaReintento { id: string; client_id: string; sala_ref: Record<string, unknown> | null }
+export interface CampanaParaReintento { id: string; client_id: string; sala_ref: Record<string, unknown> | null; /** para saber qué día es «hoy» para el cliente · sin ella, UTC */ zona_horaria?: string | null }
 export interface AnotacionDeIntentos { n: number; ultimo_en: string; avisado?: true }
 export type Libreta = Record<string, AnotacionDeIntentos>
 
@@ -57,7 +59,7 @@ export interface PuertosDeReintento {
   avisar(texto: string): Promise<void>
 }
 
-export type AccionDeReintento = 'llego' | 'sin_sala' | 'espera' | 'reintentar' | 'freno' | 'tope' | 'agotado' | 'ya_avisado' | 'pendiente_de_datos'
+export type AccionDeReintento = 'llego' | 'sin_sala' | 'espera' | 'reintentar' | 'freno' | 'tope' | 'agotado' | 'ya_avisado' | 'pendiente_de_datos' | 'vencida'
 export interface LineaDelPlan { parte_id: string; brief_id: string; fila_id: string | null; familia: string | null; accion: AccionDeReintento; intentos: number; faltan_min?: number; detalle?: string }
 export interface ResultadoDelReintento {
   accion: 'apagado' | 'cadena_apagada' | 'vigilado' | 'en_seco'
@@ -90,15 +92,23 @@ export async function reintentarPiezas(P: PuertosDeReintento, o: { ejecutar: boo
   for (const c of await P.campanas()) {
     const freno = o.ejecutar ? await P.frenoDeGasto(c.client_id) : { bloqueado: false as const, motivo: undefined }
     let cuando: ReadonlyMap<string, { fecha: string; hora: string | null }> | null = null
+    const hoy = hoyEnZona(ahora.toISOString(), c.zona_horaria)
     /** lo que esta pasada ya soltó en esta campaña (todavía sin encargo vivo): del MISMO parte cuenta como candidata con su tope; de OTRO parte, como comprometido */
     const soltadas: Array<{ parte_id: string; brief_id: string; familia: string | null }> = []
     for (const parte of await P.partes(c)) {
-      if (!parte.valido || minutosEntre(parte.creado_en, ahora) > DIAS_MAXIMOS_DE_UN_PARTE * 1440) continue
+      if (!parte.valido) continue
+      const parteViejo = minutosEntre(parte.creado_en, ahora) > DIAS_MAXIMOS_DE_UN_PARTE * 1440
       const conEncargo = await P.briefsConEncargo(parte.id)
       for (const b of parte.briefs) {
         const briefId = b.brief_id?.trim()
         if (!briefId) continue
         const base = { parte_id: parte.id, brief_id: briefId, fila_id: b.fila_id, familia: b.familia }
+        // la fecha que manda es la de la fila del calendario; sin fecha conocida, el plazo del parte
+        if (parteViejo || b.fila_id) {
+          cuando ??= await P.cuando(c.id)
+          const fecha = b.fila_id ? cuando.get(b.fila_id)?.fecha ?? null : null
+          if (fecha ? fecha < hoy : parteViejo) { res.plan.push({ ...base, accion: 'vencida', intentos: libreta[clave(parte.id, briefId)]?.n ?? 0, ...(fecha ? { detalle: `la fila era del ${fecha}` } : {}) }); continue }
+        }
         if (conEncargo.has(briefId)) { res.plan.push({ ...base, accion: 'llego', intentos: libreta[clave(parte.id, briefId)]?.n ?? 0 }); continue }
         // ¿la oficina abriría este brief HOY? (la misma decisión de la puerta) y con la plantilla activa; si no, no es un fallo recuperable: es otra vía (pasarela)
         const dec = b.familia ? decidirPuerta({ parte_id: parte.id, brief_id: briefId, dry_run: false, familia: b.familia }, config, TARGET_STEP_PRODUCIR, c.client_id) : null
