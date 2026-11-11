@@ -169,31 +169,31 @@ describe('prompts-sin-invencion · la competencia es SOLO estilo, en palabras pr
 })
 
 // ───────────────────────── (e) reabrir una pieza que ya gastó
-const rastro = (o: Partial<{ estado: string; gasto_usd: number; version_encargo: number; pasos_ejecutados: number }> = {}) => ({ estado: 'fallido', gasto_usd: 1.2, version_encargo: 1, pasos_ejecutados: 5, ...o })
+const rastro = (o: Partial<{ estado: string; gasto_usd: number; version_encargo: number; pasos_ejecutados: number }> = {}) => ({ estado: 'fallido', gasto_usd: 1.2, version_encargo: 1, pasos_ejecutados: 5, cortada: false, ...o })
 const CAUSA = 'el generador de imágenes devolvía error por la llave caducada; ya se renovó'
 
 describe('(e) reabrir una pieza que ya gastó, con la causa corregida declarada', () => {
   it('SIN causa un fallido que ya gastó no se reabre (como hoy)', () => {
-    expect(decidirReapertura(rastro())).toEqual({ accion: 'devolver' })
-    expect(decidirReapertura(rastro(), undefined)).toEqual({ accion: 'devolver' })
+    expect(decidirReapertura(rastro(), [], [])).toEqual({ accion: 'devolver' })
+    expect(decidirReapertura(rastro(), [], undefined)).toEqual({ accion: 'devolver' })
   })
   it('CON causa válida se reabre como la versión siguiente y la causa viaja', () => {
-    expect(decidirReapertura(rastro(), CAUSA)).toEqual({ accion: 'reabrir', version: 2, por_causa: CAUSA })
-    expect(decidirReapertura(rastro({ estado: 'cerrado_por_tope' }), CAUSA)).toMatchObject({ accion: 'reabrir', version: 2 })
+    expect(decidirReapertura(rastro(), [], CAUSA)).toEqual({ accion: 'reabrir', version: 2, por_causa: CAUSA })
+    expect(decidirReapertura(rastro({ estado: 'cerrado_por_tope' }), [], CAUSA)).toMatchObject({ accion: 'reabrir', version: 2 })
   })
   it('el TOPE de versiones sigue intacto: la versión 3 no abre una cuarta ni con causa', () => {
     expect(MAX_VERSIONES_POR_BRIEF).toBe(3)
-    expect(decidirReapertura(rastro({ version_encargo: 2 }), CAUSA)).toMatchObject({ accion: 'reabrir', version: 3 })
-    expect(decidirReapertura(rastro({ version_encargo: 3 }), CAUSA)).toEqual({ accion: 'devolver' })
+    expect(decidirReapertura(rastro({ version_encargo: 2 }), [], CAUSA)).toMatchObject({ accion: 'reabrir', version: 3 })
+    expect(decidirReapertura(rastro({ version_encargo: 3 }), [], CAUSA)).toEqual({ accion: 'devolver' })
   })
   it('un encargo vivo o ya entregado no se reabre jamás, ni con causa', () => {
-    for (const estado of ['abierto', 'en_paso', 'cerrado']) expect(decidirReapertura(rastro({ estado }), CAUSA)).toEqual({ accion: 'devolver' })
+    for (const estado of ['abierto', 'en_paso', 'cerrado']) expect(decidirReapertura(rastro({ estado }), [], CAUSA)).toEqual({ accion: 'devolver' })
   })
   it('la causa basta que tenga texto (hasta 300 caracteres) · GO Lenovo 11-nov', () => {
     for (const c of ['', '   ', 'x'.repeat(301), 7, null, undefined]) expect(causaValida(c)).toBe(false)
     for (const c of ['sí', 'más luz', 'x'.repeat(300)]) expect(causaValida(c)).toBe(true)
-    expect(decidirReapertura(rastro(), '   ')).toEqual({ accion: 'devolver' })
-    expect(decidirReapertura(rastro(), 'más luz')).toMatchObject({ accion: 'reabrir', por_causa: 'más luz' })
+    expect(decidirReapertura(rastro(), [], '   ')).toEqual({ accion: 'devolver' })
+    expect(decidirReapertura(rastro(), [], 'más luz')).toMatchObject({ accion: 'reabrir', por_causa: 'más luz' })
     expect(causaValida(CAUSA)).toBe(true)
   })
   it('el sobre valida la causa y la limpia', () => {

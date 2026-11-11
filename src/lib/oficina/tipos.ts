@@ -108,7 +108,7 @@ export interface Estado {
   /** lo que se le avisa al dueño junto a lo revisado; no devuelve nada */
   avisos?: string[]
   /** 11-nov · la causa legible de un cierre `fallido` (la escribe `fallar`; ver `causa-del-fallo.ts`) */
-  fallo?: { motivo: string; en: string; pasos_ejecutados: number; gasto_usd: number }
+  fallo?: { motivo: string; en: string; pasos_ejecutados: number; gasto_usd: number; corte_nuestro?: { origen: import('./causa-del-fallo').OrigenDeCorteNuestro } }
 }
 
 export const estadoInicial = (): Estado => ({ ultimo: -1, pasos_ejecutados: 0, gasto_usd: 0, vueltas: {}, artefactos: {}, fichas: [] })

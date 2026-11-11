@@ -6,7 +6,7 @@ import type { FilaDeFormato } from './entrega'
 import type { Almacen, Cambios, Encargo, NuevoEncargo, TurnoRegistrado } from './puertos'
 import { CONFIG_APAGADA, type ConfigDeOficina } from './sobre'
 import { COLUMNAS_DE_CONFIG, configDesdeLaFila, TABLA_DE_CONFIG } from './gasto-de-encargos'
-import { decidirReapertura } from './reapertura'
+import { decidirReapertura, rastroDe, type RastroDeEncargo } from './reapertura'
 import { esIntentoFallidoDeCambios } from './cambios-del-dueno'
 import { estadoInicial, type Plantilla } from './tipos'
 
@@ -72,7 +72,8 @@ export function almacenDeSupabase(db: Db): Almacen {
         version = Number(mayor?.version_encargo ?? 1) + 1
         salaRef = { ...(n.sala_ref ?? {}), re_revision: n.re_revision }
       } else if (ultimo) {
-        const d = decidirReapertura({ estado: String(ultimo.estado), gasto_usd: Number(ultimo.gasto_usd ?? 0), version_encargo: Number(ultimo.version_encargo ?? 1), pasos_ejecutados: Number((ultimo.estado_del_motor as { pasos_ejecutados?: number } | null)?.pasos_ejecutados ?? 0) }, n.reabrir_causa)
+        // 11-nov · regla (b) · el tope cuenta INTENTOS sobre las versiones reales del brief (una cortada por causa nuestra no cuenta), con el único conteo de `reapertura.ts`
+        const d = decidirReapertura(rastroDe(ultimo), todos.filter((x) => x.dry_run !== true).map(rastroDe), n.reabrir_causa)
         if (d.accion === 'devolver') return { ok: true as const, encargo: aEncargo(ultimo), nuevo: false }
         version = n.dry_run ? d.version : Math.max(d.version, Number(mayor?.version_encargo ?? 1) + 1)
         if (d.por_causa) salaRef = { ...(n.sala_ref ?? {}), reapertura: { causa_corregida: d.por_causa, desde_version: Number(ultimo.version_encargo ?? 1), estado_anterior: String(ultimo.estado), gasto_anterior_usd: Number(ultimo.gasto_usd ?? 0) } }
@@ -86,6 +87,11 @@ export function almacenDeSupabase(db: Db): Almacen {
         if (f) return { ok: true as const, encargo: aEncargo(f), nuevo: false }
       }
       return { ok: false as const, error: r.error.message }
+    },
+    // 11-nov · regla (b) · las versiones REALES del mismo brief y grupo (para el aviso del tope y el del techo de cortadas al cerrar fallido)
+    async hermanosDe(enc): Promise<RastroDeEncargo[]> {
+      const d = ok(await db.from('oficina_encargos').select('estado,gasto_usd,version_encargo,estado_del_motor').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).eq('tipo_de_grupo', enc.tipo_de_grupo).eq('dry_run', false).order('version_encargo', { ascending: false }).limit(50), 'leer las versiones del brief') as Fila[] | null
+      return (d ?? []).map(rastroDe)
     },
     async leerEncargo(id) {
       const d = ok(await db.from('oficina_encargos').select('*').eq('id', id).limit(1), 'leer el encargo') as Fila[] | null

@@ -11,7 +11,7 @@ import type { Db } from './almacen-supabase'
 import { identidadVisualDelCliente, previueloDeLaminas } from './identidad-visual'
 import { claseDe, dibujaLaminas } from './clase'
 import { almacenDeSupabase as almacenDeLaOficina } from './almacen-supabase'
-import { bloqueaElReintento } from './reapertura'
+import { bloqueaElReintento, rastroDe, type RastroDeEncargo } from './reapertura'
 
 type Fila = Record<string, unknown>
 const CANAL_DEL_HILO = 'C0C7XUKNCLS'
@@ -40,10 +40,15 @@ export function puertosDeReintento(db: Db, env: { slackToken?: string; canalHilo
       })
     },
     async briefsConEncargo(parteId) {
-      const r = (await db.from('oficina_encargos').select('brief_id,estado,gasto_usd,version_encargo,estado_del_motor').eq('parte_id', parteId).eq('dry_run', false)) as { data: Fila[] | null; error: { message: string } | null }
+      const r = (await db.from('oficina_encargos').select('brief_id,tipo_de_grupo,estado,gasto_usd,version_encargo,estado_del_motor').eq('parte_id', parteId).eq('dry_run', false)) as { data: Fila[] | null; error: { message: string } | null }
       if (r.error) fallo('leer los encargos', r.error)
-      // un `fallido` recuperable (sin gasto, con versiones por usar) NO cuenta como «llegó»: la puerta lo reabre como la versión siguiente (`reapertura.ts`)
-      return new Set((r.data ?? []).filter((f) => bloqueaElReintento({ estado: String(f.estado), gasto_usd: Number(f.gasto_usd ?? 0), version_encargo: Number(f.version_encargo ?? 1), pasos_ejecutados: Number((f.estado_del_motor as { pasos_ejecutados?: number } | null)?.pasos_ejecutados ?? 0) })).map((f) => String(f.brief_id)))
+      // un `fallido` recuperable (sin gasto, con intentos por usar) NO cuenta como «llegó»: la puerta lo reabre como la versión siguiente (`reapertura.ts`)
+      // 11-nov · regla (b) · los intentos se cuentan sobre las versiones del MISMO brief y grupo (una cortada por causa nuestra no cuenta) · el mismo conteo que la puerta
+      const filas = r.data ?? []
+      const grupo = (f: Fila) => `${String(f.brief_id)}|${String(f.tipo_de_grupo)}`
+      const hermanos = new Map<string, RastroDeEncargo[]>()
+      for (const f of filas) hermanos.set(grupo(f), [...(hermanos.get(grupo(f)) ?? []), rastroDe(f)])
+      return new Set(filas.filter((f) => bloqueaElReintento(rastroDe(f), hermanos.get(grupo(f)) ?? [])).map((f) => String(f.brief_id)))
     },
     async configOficina() { return oficina.leerConfig() },
     async plantillaActiva(familia) { const p = await oficina.leerPlantilla(familia); return !!p && p.activo === true },

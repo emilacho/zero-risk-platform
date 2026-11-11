@@ -34,8 +34,8 @@ import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../n
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { DESCARTAR_EYEBROW_LARGO, procesarSalida, proyectarAlEsquema } from './salida'
-import { agotaLasVersiones, MAX_VERSIONES_POR_BRIEF } from './reapertura'
-import { conCausaDelFallo } from './causa-del-fallo'
+import { agotaLasVersiones, alcanzaElTechoDeCortadas, MAX_VERSIONES_CORTADAS, MAX_VERSIONES_POR_BRIEF, rastroDe, type RastroDeEncargo } from './reapertura'
+import { conCausaDelFallo, type OrigenDeCorteNuestro } from './causa-del-fallo'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
 import { claseDe, tienePasarela } from './clase'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
@@ -221,9 +221,11 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: e.gasto_usd, estado: 'en_paso', turno: { n, paso: paso.clave, tipo: paso.tipo, agente, estado: 'corriendo', dispatch_key, cost_usd: 0 } })
       return r(200, { accion: 'esperar', turno: { n, paso: paso.clave, tipo: paso.tipo, agente, dispatch_key, pedido } })
     } catch (err) {
-      return fallar(P, enc, `error interno en «${paso.clave}»: ${err instanceof Error ? err.message : String(err)}`)
+      // 11-nov · regla (b) · un error de NUESTRO código corta la versión por causa nuestra: no cuenta entre las 3
+      return fallar(P, enc, `error interno en «${paso.clave}»: ${err instanceof Error ? err.message : String(err)}`, 'error_interno')
     }
   }
+  // 11-nov · regla (b) · a propósito SIN marca de corte nuestro: un motor que da vueltas sin avanzar no debe repetirse libre; cuenta como intento (pedido de CC7 al certificar #1057)
   return fallar(P, enc, 'el orquestador dio más de 80 vueltas (no debería pasar)')
 }
 /** la re-imagen que ya existía, según la familia: la jefatura devuelve «imagen por rehacer» y la oficina decide si cabe */
@@ -600,7 +602,17 @@ async function ejecutarExterno(P: Puertos, enc: Encargo, pl: Plantilla, _paso: P
 }
 
 // ───────────────────────── recibir el resultado de un agente / del portero
-export interface ResultadoDeTurno { texto?: string; error?: string; costo_usd?: number; workflow_execution_id?: string | null; tokens_in?: number | null; tokens_out?: number | null }
+export interface ResultadoDeTurno {
+  texto?: string; error?: string; costo_usd?: number; workflow_execution_id?: string | null; tokens_in?: number | null; tokens_out?: number | null
+  /** 11-nov · regla (b) · el código que devolvió run-sdk cuando NO llegó al corredor o el corredor contestó roto (lo pasa el flujo «Oficina · un turno» como campo; nunca se lee del texto) */
+  upstream_status?: number | null
+  /** 11-nov · regla (b) · el pedido del turno ni siquiera llegó a run-sdk (el nodo HTTP del flujo falló) */
+  pedido_no_llego?: boolean
+}
+
+/** regla (b) · el corte nuestro de una vuelta con error: SOLO por los campos que pasa el flujo, jamás por el texto */
+export const corteNuestroDeLaVuelta = (res: ResultadoDeTurno): OrigenDeCorteNuestro | undefined =>
+  res.pedido_no_llego === true ? 'pedido_no_llego' : typeof res.upstream_status === 'number' && Number.isInteger(res.upstream_status) ? 'corredor_caido' : undefined
 
 /**
  * 10-nov · LA COPIA TAMBIÉN SE PAGA (costo de la mesa · GO de Lenovo 13:28Z). Una respuesta repetida de un turno ya registrado viene de OTRA ejecución (el vigía lo re-entregó porque nadie lo acusó):
@@ -657,7 +669,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   if (res.error || typeof res.texto !== 'string') {
     // el turno murió o devolvió error: se registra como fallo y el encargo cierra visible (el vigía reintenta UNA vez antes de llegar aquí)
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: e.gasto_usd + costo, turno: { ...turnoBase, n, estado: 'fallo', error: res.error ?? 'respuesta vacía' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
-    return fallar(P, { ...enc, gasto_usd: e.gasto_usd + costo }, `el paso «${paso.clave}» falló: ${res.error ?? 'respuesta vacía'}`)
+    return fallar(P, { ...enc, gasto_usd: e.gasto_usd + costo }, `el paso «${paso.clave}» falló: ${res.error ?? 'respuesta vacía'}`, corteNuestroDeLaVuelta(res))
   }
 
   if (paso.tipo === 'portero') {
@@ -863,9 +875,10 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
 }
 
 // ───────────────────────── cierres
-export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<Respuesta> {
+export async function fallar(P: Puertos, enc: Encargo, motivo: string, corte?: OrigenDeCorteNuestro): Promise<Respuesta> {
   // 11-nov · GO Lenovo (un reel que cerró fallido a ciegas) · la causa queda GUARDADA en el encargo, no solo en el aviso: un fallido nunca más queda a ciegas
-  const e = conCausaDelFallo(enc.estado_del_motor, motivo, P.ahora())
+  // 11-nov · regla (b) · `corte` = la marca de corte por causa nuestra que declara QUIEN DETECTÓ la caída (solo una de la lista cerrada marca)
+  const e = conCausaDelFallo(enc.estado_del_motor, motivo, P.ahora(), corte)
   enc = { ...enc, estado_del_motor: e }
   // 31-oct · la mesa de brief o de concepto que falla se lo dice a la cadena (que sigue con lo que tenga o pide a un humano); jamás deja a la campaña esperando
   if (enc.familia === 'brief_mesa' || enc.familia === 'concepto_mesa' || enc.familia === 'reubicacion_mesa' || enc.familia === 'fallidos_mesa') {
@@ -876,8 +889,14 @@ export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: 'fallido', con_desacuerdo: true })
   // una alarma por incidente: la v1 avisa a `alertas`; las versiones reabiertas (v2, v3…) repiten el mismo incidente y van al HILO (la versión nueva hereda el hilo de la anterior)
   await P.avisar({ canal: enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🛑 Encargo fallido · ${enc.brief_id}${enc.version_encargo >= 2 ? ` (intento ${enc.version_encargo})` : ''}: ${motivo}`, dry_run: enc.dry_run })
-  // 21-oct · el aviso ÚNICO del tope de versiones: este encargo es la última versión permitida del brief y cierra fallido (cada encargo cierra una sola vez): ya no se reabre solo
-  if (agotaLasVersiones(enc)) await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: `🧱 ${enc.brief_id}: ${MAX_VERSIONES_POR_BRIEF} intentos de la oficina y ninguno salió. No se reabre solo.`, dry_run: enc.dry_run })
+  // 21-oct · el aviso ÚNICO del tope de versiones: este encargo agota los intentos que cuentan y cierra fallido (cada encargo cierra una sola vez): ya no se reabre solo
+  // 11-nov · regla (b) · los intentos se cuentan sobre las versiones reales del brief (`intentosQueCuentan`): una cortada por causa nuestra no cuenta. Sin la lectura de hermanos, se cuenta como antes (por número)
+  const yo: RastroDeEncargo = rastroDe({ ...enc, estado: 'fallido', estado_del_motor: e })
+  let hermanos: RastroDeEncargo[] = []
+  try { hermanos = P.almacen.hermanosDe ? await P.almacen.hermanosDe(enc) : [] } catch { hermanos = [] }
+  if (agotaLasVersiones(yo, hermanos)) await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: `🧱 ${enc.brief_id}: ${MAX_VERSIONES_POR_BRIEF} intentos de la oficina y ninguno salió. No se reabre solo.`, dry_run: enc.dry_run })
+  // 11-nov · regla (b) · techo de Lenovo: la 3.ª versión cortada por causa nuestra dispara UNA alarma real (desde la siguiente, una cortada ya cuenta)
+  if (alcanzaElTechoDeCortadas(yo, hermanos)) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🧯 ${enc.brief_id}: ${MAX_VERSIONES_CORTADAS} versiones cortadas por causa nuestra (${e.fallo?.corte_nuestro?.origen ?? 'corte'}). La pieza queda fallida con su causa; desde ahora un nuevo corte cuenta como intento.`, dry_run: enc.dry_run })
   return r(200, { accion: 'cerrado', estado: 'fallido', motivo, resultado_para_la_sala: 'fallido', sala_ref: enc.sala_ref, simulado: enc.dry_run })
 }
 
