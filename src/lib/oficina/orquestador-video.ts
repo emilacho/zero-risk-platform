@@ -32,6 +32,8 @@ export const familiaDeVideo = (pl: Pick<Plantilla, 'familia'>): FamiliaDeVideo |
 const PREFIJO_DRY = 'https://dry.invalid/'
 /** cuánto espera la oficina a que el brazo entregue un video antes de darlo por perdido (el brazo tarda ≈ 5–8 min por video; el peor caso medido 31-oct fue ≈ 7 min) */
 export const MINUTOS_PARA_ESPERAR_AL_BRAZO = 45
+/** 11-nov · #21 · lo que se mide del brazo: sus turnos terminados (`plazo-de-vida.ts` lee `brazo:video` en `oficina_turnos`) */
+export const AGENTE_DEL_BRAZO = 'brazo:video'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const sha = (x: unknown) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex')
@@ -334,7 +336,8 @@ export function leerEstadoDelBrazo(st: EstadoDelBrazo, inicio: string, ahora: Da
 }
 
 /** EL VIGÍA sondea los turnos `brazo` abiertos (`oficina_turnos` corriendo): los que terminaron se registran y el encargo sigue; los que pasaron el plazo cierran fallidos */
-export async function sondearVideos(P: Puertos, turnos: Array<{ encargo_id: string; n: number; paso: string; inicio: string }>, ahora: Date): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> }> {
+/** 11-nov · #21 · `techoMin` = el plazo medido del brazo (nunca menos que los 45 min de hoy; `Infinity` = no se pudo medir: esta vuelta nada vence) */
+export async function sondearVideos(P: Puertos, turnos: Array<{ encargo_id: string; n: number; paso: string; inicio: string }>, ahora: Date, techoMin: number = MINUTOS_PARA_ESPERAR_AL_BRAZO): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> }> {
   const reanudar: string[] = [], fallidos: string[] = []
   const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = []
   for (const t of turnos) {
@@ -344,7 +347,7 @@ export async function sondearVideos(P: Puertos, turnos: Array<{ encargo_id: stri
     let res: ResultadoDelBrazo | null
     if (!envio?.request_id) res = { ok: false, status: 'sin_request_id', error: 'el turno del brazo no tiene pedido registrado' }
     else if (!P.video) res = { ok: false, status: 'sin_puerto', error: 'el puerto del brazo de video no está configurado' }
-    else res = leerEstadoDelBrazo(await P.video.estado(envio.request_id), t.inicio, ahora)
+    else res = leerEstadoDelBrazo(await P.video.estado(envio.request_id), t.inicio, ahora, Math.max(techoMin, MINUTOS_PARA_ESPERAR_AL_BRAZO))
     if (!res) continue
     const out = await recibirVideo(P, enc.id, t.n, res)
     if (res.ok) { reanudar.push(enc.id); continue }

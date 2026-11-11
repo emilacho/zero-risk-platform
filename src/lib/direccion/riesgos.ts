@@ -8,6 +8,7 @@ import { consultaEstadoDeLaOficina } from '../oficina/lectura-de-direccion'
 import { decidirPlanApify, leerUsoDelPlan, pctMaximoDelPlan } from '../portero-alimenta/plan-apify'
 import { resolveClientCapContext, resolveClientFamily, resolveRunSpendCapUsd, techoDelCliente, techoGenericoDeArranque } from '../run-sdk-spend-gate'
 import { esObjeto, estaCompleto, leer, leerClientes, numero, redondear, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
+import { vidaDelPaso, type DespachoLeido } from '../plazo-de-vida'
 import { TIPO_PLAN } from '../oficina/tablero/plan'
 
 /** los pedidos de cambios son de la misma tabla: el título dice de qué documento */
@@ -25,6 +26,7 @@ const DIA = 86_400_000
 const HORA = 3_600_000
 const TOPE = 200
 /** un despacho en `running` más viejo que esto no está trabajando: nadie vuelve después de ese plazo */
+/** 11-nov · #21 · el PISO de «atascado»: lo decide la regla única (`plazo-de-vida.ts`); `updated_at` ahora es el último latido */
 export const ATASCADO_MS = HORA
 export const TOPE_AVISO_PCT = 80
 export const SALDO_AVISO_PCT = 75
@@ -156,7 +158,7 @@ export async function leerRiesgos(c: Contexto) {
   const [alertas, reconciliaciones, despachos, invocaciones, errores, caidas, monitor, pausas, campanas, cfgOficina, cfgFinanzas, cfgJefatura, cfgCadena, cambios, compuertas, ultimosPedidos, ultimosPlanes] = await Promise.all([
     leer(fuentes, 'cerebro_alertas', db.from('cerebro_alertas').select('clave, titulo, ultimo_detalle, abierto_en, ultima_en').is('cerrado_en', null).limit(TOPE), TOPE),
     leer(fuentes, 'agent_dispatch_reconciliations', db.from('agent_dispatch_reconciliations').select('dispatch_key, agente, cliente, clasificacion, severidad, que, primera_vez').is('resuelta_el', null).limit(TOPE), TOPE),
-    leer(fuentes, 'agent_dispatches', db.from('agent_dispatches').select('dispatch_key, agent_name, client_id, status, created_at, updated_at').in('status', ['error', 'running']).limit(TOPE), TOPE),
+    leer(fuentes, 'agent_dispatches', db.from('agent_dispatches').select('dispatch_key, agent_name, client_id, status, created_at, running_at, updated_at').in('status', ['error', 'running']).limit(TOPE), TOPE),
     leer(fuentes, 'agent_invocations', db.from('agent_invocations').select('id, agent_name, client_id, status, error_message, started_at').neq('status', 'completed').gte('started_at', hace7d).limit(TOPE), TOPE),
     leer(fuentes, 'error_events', db.from('error_events').select('id, severity, title, source, created_at').gte('created_at', hace7d).limit(TOPE), TOPE),
     leer(fuentes, 'uptime_incidents', db.from('uptime_incidents').select('id, monitor_name, monitor_url, alert_details, created_at').gte('created_at', hace7d).limit(TOPE), TOPE),
@@ -182,7 +184,7 @@ export async function leerRiesgos(c: Contexto) {
     if (yaContados.has(String(d.dispatch_key))) continue
     const cuando = Date.parse(String(d.created_at))
     const esError = d.status === 'error'
-    if (esError ? cuando < now.getTime() - 7 * DIA : cuando > now.getTime() - ATASCADO_MS) continue
+    if (esError ? cuando < now.getTime() - 7 * DIA : vidaDelPaso({ inicio: texto(d.created_at), pisoMs: ATASCADO_MS, duraciones: null, despacho: { ok: true, valor: d as unknown as DespachoLeido } }, now).estado !== 'muerto') continue
     riesgos.push({ id: `despacho:${String(d.dispatch_key)}`, gravedad: 2, categoria: 'falla', titulo: esError ? `Trabajo de ${String(d.agent_name)} terminó en error` : `Trabajo de ${String(d.agent_name)} atascado: sigue «en curso» sin volver`, detalle: String(d.dispatch_key), client_id: texto(d.client_id), desde: texto(d.created_at), fuente: 'agent_dispatches' })
   }
   for (const i of invocaciones) riesgos.push({ id: `invocacion:${String(i.id)}`, gravedad: 2, categoria: 'falla', titulo: `Invocación de ${String(i.agent_name)}: ${String(i.status)}`, detalle: sinSecretos(i.error_message), client_id: texto(i.client_id), desde: texto(i.started_at), fuente: 'agent_invocations' })
