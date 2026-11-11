@@ -90,3 +90,30 @@ export async function cerrarSinPisar(db: BaseDelLatido, dispatchKey: string, est
     return 'error'
   }
 }
+
+// ───────── el CABLEADO (pedido de CC7 · 11-nov): lo que el corredor hace alrededor del empleado, en piezas que se prueban
+
+/** la llave del latido en el camino de siempre: solo `latido_dispatch_key` del cuerpo (Vercel la pone solo en sus pedidos internos) */
+export function llaveDelLatido(body: { latido_dispatch_key?: unknown } | null | undefined): string | null {
+  const k = body?.latido_dispatch_key
+  return typeof k === 'string' && k.length > 0 ? k : null
+}
+
+/** corre el trabajo latiendo a la base; el latido se DETIENE siempre al terminar, también si el trabajo lanza (si no, el reloj quedaría escribiendo para siempre) */
+export async function correrLatiendo<T>(db: BaseDelLatido | null, dispatchKey: string | null | undefined, intervaloMs: number, correr: () => Promise<T>, ahora?: () => Date): Promise<T> {
+  const l = abrirLatidoALaBase(db, dispatchKey, intervaloMs, ahora)
+  try {
+    return await correr()
+  } finally {
+    l.detener()
+  }
+}
+
+/** el cierre del despacho que usa el corredor: sin llave no hace nada; sin base no hace nada; si hay, cierra SIN PISAR un cierre ajeno */
+export function cierreDelDespacho(dispatchKey: string | null | undefined, base: () => BaseDelLatido | null, ahora?: () => Date): (estado: 'completed' | 'error') => Promise<void> {
+  return async (estado) => {
+    if (!dispatchKey) return
+    const db = base()
+    if (db) await cerrarSinPisar(db, dispatchKey, estado, ahora)
+  }
+}

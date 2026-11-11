@@ -22,7 +22,7 @@ import { getSupabaseAdmin } from './lib/supabase.js'
 import { checkSpendCap } from './lib/spend-gate.js'
 import { flushBraintrust } from './lib/braintrust.js'
 import { abrirLatido, intervaloDelLatido } from './lib/latido.js'
-import { abrirLatidoALaBase, cerrarSinPisar, intervaloDelLatidoALaBase, type BaseDelLatido } from './lib/latido-a-la-base.js'
+import { cerrarSinPisar, cierreDelDespacho, correrLatiendo, intervaloDelLatidoALaBase, llaveDelLatido, type BaseDelLatido } from './lib/latido-a-la-base.js'
 import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.js'
 import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
@@ -463,8 +463,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
       {
         ejecutar: async () => {
           // 11-nov · #21 · mientras el empleado trabaja, su despacho late a la base (la regla de vida de la plataforma lo lee)
-          const latidoBase = abrirLatidoALaBase(baseDelLatido(), dispatchKey, intervaloDelLatidoALaBase(process.env))
-          const r = await runAgentViaSDK(input).finally(() => latidoBase.detener())
+          const r = await correrLatiendo(baseDelLatido(), dispatchKey, intervaloDelLatidoALaBase(process.env), () => runAgentViaSDK(input))
           // 🔴 la CAUSA de un fallo queda escrita: en la corrida 158667 el corredor falló tras ~40 min y no quedó ni el motivo (sólo `run_success: false`)
           if (!r.success) {
             console.error('[agent-runner] ❌ el empleado FALLÓ', { agent: agentName, dispatch_key: dispatchKey, error: r.error, cost_usd: r.costUsd, duration_ms: r.durationMs })
@@ -482,12 +481,8 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
             void Promise.resolve(getSupabaseAdmin().from('agent_callback_attempts').insert({ workflow_id: workflowId, callback_url: direccion.url.toString(), ...i })).catch(() => undefined)
           } catch { /* el registro nunca frena la entrega */ }
         },
-        cerrarDespacho: async (estado) => {
-          if (!dispatchKey) return
-          // 11-nov · #21 · CC6 línea 3: el estado final solo si sigue abierto; si el limpiador ya lo cerró, se anota que terminó después (best-effort · el reconciliador lo ve)
-          const db = baseDelLatido()
-          if (db) await cerrarSinPisar(db, dispatchKey, estado)
-        },
+        // 11-nov · #21 · CC6 línea 3: el estado final solo si sigue abierto; si el limpiador ya lo cerró, se anota que terminó después (best-effort · el reconciliador lo ve)
+        cerrarDespacho: cierreDelDespacho(dispatchKey, baseDelLatido),
         avisarFallo: (mensaje, extra) => {
           console.error(`[agent-runner] 🔴 ${mensaje}`, extra)
           Sentry.captureMessage(mensaje, { level: 'error', extra: { ...extra, workflow_id: workflowId } })
@@ -544,8 +539,7 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     const esperaDePrueba = esperaForzadaMs(dryRun, body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms)
     if (esperaDePrueba > 0) await new Promise<void>((r) => setTimeout(r, esperaDePrueba))
     // 11-nov · #21 · el camino de siempre también late a la base si Vercel pasó la llave del despacho
-    const latidoBase = abrirLatidoALaBase(baseDelLatido(), pickString(body.latido_dispatch_key), intervaloDelLatidoALaBase(process.env))
-    const result = await runAgentViaSDK(input).finally(() => latidoBase.detener())
+    const result = await correrLatiendo(baseDelLatido(), llaveDelLatido(body), intervaloDelLatidoALaBase(process.env), () => runAgentViaSDK(input))
     // The SDK runner already builds a typed AgentRunResult with success+error.
     // 500 only when success is false AND no usable response was produced —
     // matches the Vercel route.ts contract from before the migration.
