@@ -173,3 +173,16 @@ export async function entregarALaCadena(P: Puertos, enc: Encargo, o: { texto: st
   if (!entrega.ok) await P.avisar({ canal: "alertas", encargo_id: enc.id, texto: `⚠️ La mesa de la cadena (${enc.brief_id}) cerró pero la cadena no recibió el tablero (${entrega.detalle}); la campaña seguirá con lo que tenga al vencer el plazo de la mesa.`, dry_run: enc.dry_run })
   return r(200, { accion: 'cerrado', estado: o.estado, con_desacuerdo: o.estado !== 'cerrado', motivo: o.motivo, brief_devuelto: o.brief_devuelto ? true : undefined, simulado: enc.dry_run, gasto_usd: enc.estado_del_motor.gasto_usd, resultado_para_la_sala: enc.familia, sala_ref: enc.sala_ref, entrega_a_la_cadena: entrega })
 }
+
+/**
+ * 11-nov (#1014 · relectura) · el texto que una mesa de la cadena dejó guardado en su encargo (`pieza_texto` del artefacto `mesa`), para releerlo SIN volver a llamar al agente.
+ * Vive aquí porque solo la oficina nombra sus tablas; la cadena lo importa en el acto. Sin texto o con cualquier error, null (nunca lanza).
+ */
+export async function textoGuardadoDeLaMesa(db: { from: (t: string) => any }, encargoId: string): Promise<string | null> {
+  try {
+    const { data, error } = await db.from('oficina_encargos').select('estado_del_motor').eq('id', encargoId).maybeSingle()
+    if (error || !data) return null
+    const t = (data as { estado_del_motor?: { artefactos?: { mesa?: { datos?: { pieza_texto?: unknown } } } } }).estado_del_motor?.artefactos?.mesa?.datos?.pieza_texto
+    return typeof t === 'string' && t.trim() ? t : null
+  } catch { return null }
+}

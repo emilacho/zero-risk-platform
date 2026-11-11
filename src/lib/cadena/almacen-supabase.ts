@@ -179,12 +179,7 @@ export function almacenDeSupabase(): Almacen {
     abrirMesaDeReubicacion: (sobre) => abrirMesaDeReubicacionReal(sobre),
     // 11-nov (#1014 · relectura): el texto que la mesa dejó en su encargo (`pieza_texto`), sin llamar al agente; nunca lanza
     async textoGuardadoDeLaMesa(encargoId) {
-      try {
-        const { data, error } = await db.from('oficina_encargos').select('estado_del_motor').eq('id', encargoId).maybeSingle()
-        if (error || !data) return null
-        const t = (data as { estado_del_motor?: { artefactos?: { mesa?: { datos?: { pieza_texto?: unknown } } } } }).estado_del_motor?.artefactos?.mesa?.datos?.pieza_texto
-        return typeof t === 'string' && t.trim() ? t : null
-      } catch { return null }
+      try { return await (await import('@/lib/oficina/mesa/de-la-cadena')).textoGuardadoDeLaMesa(db as never, encargoId) } catch { return null }
     },
     async leerConfig(k) { return (await uno<{ valor: unknown }>(db.from('cadena_config').select('valor').eq('clave', k).maybeSingle()))?.valor },
     async escribirConfig(k, v) { const { error } = await db.from('cadena_config').upsert({ clave: k, valor: v, actualizado_en: new Date().toISOString() }); if (error) fallo(error) },
