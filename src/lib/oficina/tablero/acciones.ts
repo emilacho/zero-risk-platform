@@ -16,6 +16,17 @@ import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Ma
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
+/** el tope por pieza de una familia, de su plantilla (`limites.tope_encargo_usd`, lo que lee la oficina al abrir el encargo) · sin plantilla o sin tope legible → no se rehace */
+async function topeDeLaFamilia(db: Parameters<Manejador>[0]['db'], familia: unknown): Promise<{ ok: true; tope: number } | { ok: false; status: number; error: string; detalle: string }> {
+  if (typeof familia !== 'string' || !familia) return { ok: false, status: 409, error: 'sin_familia', detalle: 'la pieza no tiene familia: no se sabe su tope' }
+  const p = await db.from('oficina_tipos_de_grupo').select('familia, limites').eq('familia', familia).limit(1)
+  if (p.error) return { ok: false, status: 500, error: 'oficina_error', detalle: p.error.message }
+  const f = ((p.data as Fila[] | null) ?? [])[0]
+  const tope = f && esObjeto(f.limites) ? num(f.limites.tope_encargo_usd) : null
+  if (tope === null || tope <= 0) return { ok: false, status: 409, error: 'sin_tope_de_familia', detalle: `la familia ${familia} no tiene un tope por pieza legible` }
+  return { ok: true, tope }
+}
+
 // ───────────────────────── rehacer-pieza (GASTA)
 /** Reabre un encargo que FALLÓ con la causa declarada. Respeta el tope de 3 versiones por brief: si ya se agotó, lo dice (la salida es «Pieza nueva»). */
 export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
@@ -23,13 +34,17 @@ export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
   const comentario = cuerpo.comentario === undefined || cuerpo.comentario === null || cuerpo.comentario === '' ? null : textoEntre(cuerpo.comentario, 1, 300)
   if (cuerpo.comentario && !comentario) return rechazo(400, 'entrada_invalida', '`comentario` debe tener hasta 300 caracteres')
   const toca = { encargo_id: cuerpo.encargo_id, comentario }
-  const g = confirmarGasto(cuerpo, 5)
+  // sin confirmar el gasto y sin tope no se lee nada; el MÁXIMO no es fijo (GO Lenovo 11-nov 17:50, opción A): es el tope por pieza de la familia de ESA pieza, el mismo con que la abre la oficina
+  const g = confirmarGasto(cuerpo, Number.POSITIVE_INFINITY)
   if (!g.ok) return { ...g.salida, toca }
   const r = await db.from('oficina_encargos').select('*').eq('id', cuerpo.encargo_id).limit(1)
   if (r.error) return rechazo(500, 'oficina_error', r.error.message, toca)
   const enc = ((r.data as Fila[] | null) ?? [])[0]
   if (!enc) return rechazo(404, 'encargo_inexistente', 'no existe ese encargo', toca)
   const t = { ...toca, client_id: String(enc.client_id) }
+  const maximo = await topeDeLaFamilia(db, enc.familia)
+  if (!maximo.ok) return rechazo(maximo.status, maximo.error, maximo.detalle, t)
+  if (g.tope > maximo.tope) return rechazo(400, 'tope_demasiado_alto', `el tope máximo para rehacer una pieza de ${String(enc.familia)} es US$ ${maximo.tope} (el de su familia)`, t)
   if (enc.dry_run === true) return rechazo(409, 'es_un_ensayo', 'un ensayo no se rehace desde el tablero', t)
   if (enc.estado !== 'fallido') return rechazo(409, 'no_fallo', `solo se rehace una pieza que falló (esta está «${String(enc.estado)}»)`, t)
   const hermanos = await db.from('oficina_encargos').select('id, version_encargo, dry_run').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).eq('tipo_de_grupo', enc.tipo_de_grupo)
