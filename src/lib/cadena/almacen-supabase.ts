@@ -460,6 +460,15 @@ export function almacenDeSupabase(): Almacen {
       return { bloqueado: r.blocked === true, motivo: r.reason }
     },
     // 10-nov · TOPE POR CAMPAÑA · la misma fuente con que se midió el gasto de la campaña (planeación + concepto + brief) más los encargos de la oficina de la campaña y sus partes reales
+    // 11-nov · la MISMA lectura que la puerta de la oficina (`oficina/almacen-supabase.ts` leerConfig: mismas columnas, misma normalización), pero un fallo o una fila ausente LANZA
+    async configDeLaOficina() {
+      const { data, error } = await db.from('oficina_config').select('estado,familias_activas,clientes_ensayo').eq('id', 1).maybeSingle()
+      if (error) fallo(error)
+      if (!data) throw new Error('oficina_config sin fila')
+      const d = data as { estado?: unknown; familias_activas?: unknown; clientes_ensayo?: unknown }
+      const estado = d.estado === 'ensayo' || d.estado === 'encendida' ? d.estado : 'apagada'
+      return { estado, familias_activas: Array.isArray(d.familias_activas) ? d.familias_activas.map(String) : [], clientes_ensayo: Array.isArray(d.clientes_ensayo) ? d.clientes_ensayo.map(String) : [] }
+    },
     async leerGastoDeCampana(campanaId, parteActual) {
       const [corridas, conceptos, briefs, partesFilas, topes_de_familia] = await Promise.all([
         lista<{ costo_usd: number | null; estado: Corrida['estado']; paso: Corrida['paso'] }>(db.from('cadena_corridas').select('costo_usd, estado, paso').eq('campana_id', campanaId)),

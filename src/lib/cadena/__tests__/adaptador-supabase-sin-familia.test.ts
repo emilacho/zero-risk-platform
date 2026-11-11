@@ -10,6 +10,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 type Fila = Record<string, unknown>
 const tablas: Record<string, Fila[]> = {}
 const escrituras: Array<{ tabla: string; patch: Fila }> = []
+const errorEn: Record<string, string> = {}
+const leidas: Array<{ tabla: string; cols: string | null }> = []
 function consulta(tabla: string) {
   let cols: string[] | null = null, patch: Fila | null = null, lim = Infinity
   const filtros: Array<(f: Fila) => boolean> = []
@@ -26,7 +28,7 @@ function consulta(tabla: string) {
     limit: (n: number) => { lim = n; return q },
     order: () => q,
     update: (p: Fila) => { patch = p; return q },
-    maybeSingle: async () => ({ data: correr()[0] ?? null, error: null }),
+    maybeSingle: async () => { leidas.push({ tabla, cols: cols === null ? '*' : cols.join(',') }); return errorEn[tabla] ? { data: null, error: { message: errorEn[tabla] } } : { data: correr()[0] ?? null, error: null } },
     then: (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => Promise.resolve({ data: correr(), error: null }).then(ok, ko),
   }
   return q
@@ -58,7 +60,10 @@ const formatosReales = (): FormatosPorRed => {
 const fila = (id: string, red: string, formato: string, fecha: string): Fila => ({ campana_id: CAMP, calendario_version: 1, id, fecha, hora: '12:00:00', red, formato, estado: 'validada', avisos: [], seco: false })
 
 beforeEach(() => {
-  avisados.length = 0; escrituras.length = 0
+  avisados.length = 0; escrituras.length = 0; leidas.length = 0
+  for (const k of Object.keys(errorEn)) delete errorEn[k]
+  tablas.oficina_config = [{ id: 1, estado: 'encendida', familias_activas: ['post_img', 'kit_historias'], clientes_ensayo: [], otra_columna: 'x' }]
+  tablas.oficina_tipos_de_grupo = [{ familia: 'video_mesa', activo: true }]
   tablas.cadena_calendario_filas = [fila('s1-d3-mie_foto', 'instagram', 'foto', '2026-11-11'), fila('s1-d4-jue_anuncio_gye', 'instagram', 'anuncio_imagen', '2026-11-12'), fila('s1-d4-jue_anuncio_fb', 'facebook', 'anuncio_imagen', '2026-11-12')]
 })
 
@@ -101,5 +106,24 @@ describe('adaptador · la nota se lee de la columna `avisos` (2)', () => {
     expect(escrituras).toHaveLength(2)
     expect(avisados).toHaveLength(1)
     for (const f of tablas.cadena_calendario_filas) expect((f.avisos as string[]).filter(esNotaSinFamilia).length).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('adaptador · la config de la oficina para el freno (GO Lenovo 01:10Z · CC7 · 1 y 2)', () => {
+  it('🔴 lee la MISMA fuente y las MISMAS columnas que la puerta de la oficina (oficina_config · estado, familias_activas, clientes_ensayo)', async () => {
+    expect(await almacenDeSupabase().configDeLaOficina!()).toEqual({ estado: 'encendida', familias_activas: ['post_img', 'kit_historias'], clientes_ensayo: [] })
+    expect(leidas).toEqual([{ tabla: 'oficina_config', cols: 'estado,familias_activas,clientes_ensayo' }])
+  })
+  it('🔴 un error de la base LANZA (no es «apagada» ni «lista vacía»): el freno sigue guardando lugar', async () => {
+    errorEn.oficina_config = 'la base no contesta'
+    await expect(almacenDeSupabase().configDeLaOficina!()).rejects.toThrow(/no contesta/)
+  })
+  it('sin la fila de config, también LANZA', async () => {
+    tablas.oficina_config = []
+    await expect(almacenDeSupabase().configDeLaOficina!()).rejects.toThrow(/sin fila/)
+  })
+  it('un estado desconocido se lee como apagada (igual que la oficina)', async () => {
+    tablas.oficina_config = [{ id: 1, estado: 'rara', familias_activas: null, clientes_ensayo: null }]
+    expect(await almacenDeSupabase().configDeLaOficina!()).toEqual({ estado: 'apagada', familias_activas: [], clientes_ensayo: [] })
   })
 })

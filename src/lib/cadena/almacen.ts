@@ -353,6 +353,11 @@ export interface Almacen {
    * y de sus partes reales —incluido `parteActual`—, los partes reales y los topes de las familias activas). Si CUALQUIER lectura falla, LANZA (un error no es «cero gastado»).
    */
   leerGastoDeCampana(campanaId: string, parteActual: string): Promise<LecturaDeGasto>
+  /**
+   * 11-nov (GO Lenovo 01:10Z) · la config con la que la PUERTA DE LA OFICINA decide si produce (`oficina_config`: estado · familias_activas · clientes_ensayo), la MISMA que lee la oficina.
+   * OPCIONAL. A diferencia de la oficina (que sin config se apaga), aquí un fallo LANZA: el freno, si no puede leerla, sigue guardando lugar como hoy (del lado seguro).
+   */
+  configDeLaOficina?(): Promise<import('@/lib/oficina/sobre').ConfigDeOficina>
   /** 10-nov · el buzón de avisos (C1): abre el incidente o le suma una repetición con la MISMA clave · nunca lanza */
   avisarAlBuzon(a: AvisoDelTope & { origen: string; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; accion: string } | { ok: false; error: string }>
   /** r74 · F4 · llena las sedes y su horario con lo que el sistema YA guardó del cliente (sitio · Instagram · Mapas), con su fuente · US$ 0 · un fallo se declara, no frena */
