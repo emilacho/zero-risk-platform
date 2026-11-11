@@ -7,6 +7,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { PROPORCION_POR_FORMATO, proporcionDeLaTabla } from '../proporciones'
 import { RELACION_POR_FORMATO } from '@/lib/video/parametros'
+import { pedidosParaCotizar } from '@/lib/oficina/video/pedido'
 import type { FormatosPorRed } from '../tipos'
 
 const RAIZ = path.join(__dirname, '..', '..', '..', '..', 'supabase')
@@ -38,6 +39,13 @@ describe('regla #17 · la proporción es un dato de la tabla de formatos', () =>
     expect(ov).toMatch(/const leida = proporcionDelBrief\(brief, porOmision\)/)
     expect(ov).toMatch(/const proporcion = RELACIONES_PERMITIDAS\.has\(leida\) \? leida : porOmision/)
     expect(ov).toMatch(/armarPedidoDeLaOficina\(\{[^}]*relacion: b\.proporcion/)
+    // la cotización previa usa la MISMA proporción (el costo depende del cuadro)
+    expect(ov).toMatch(/await cotizarPrimero\(P, enc, pl, brief, fu\.fotos, proporcion\)/)
+    expect(ov).toMatch(/pedidosParaCotizar\(\{[^}]*\brelacion,/)
+    for (const relacion of ['1:1', '9:16']) {
+      const r = pedidosParaCotizar({ brief: { formato: 'reel', red: 'instagram' }, fotos: [], clave: 'enc:brief', relacion })
+      expect(r.ok && r.pedidos.map((p) => p.pedido.relacion)).toEqual([relacion])
+    }
   })
   it('🔴 regla #18 · el brazo y el Estudio leen la clave por UNA sola función (`leerConfigDelBrazo`) y nadie más la nombra', () => {
     expect(leer('app/api/video/generate/route.ts')).toMatch(/const cfg = await leerConfigDelBrazo\(/)
