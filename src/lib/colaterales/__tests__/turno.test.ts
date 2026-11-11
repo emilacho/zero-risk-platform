@@ -28,13 +28,15 @@ const EDIC_B: NuevaEdicion = { client_id: CLI_B, documento: 'plan', documento_re
 const DOCS_A: Partial<Record<Documento, DocumentoLeido>> = { gran_idea: { texto: A.gran_idea_v3, ref: CAMP_A, version: '3' } }
 const DOCS_B: Partial<Record<Documento, DocumentoLeido>> = { estrategia: { texto: B.estrategia, ref: 'camp-b', version: '1' } }
 
-function armar(o: { activas?: Set<string>; guarda?: ResultadoDeLaGuarda | Error; docs?: Partial<Record<Documento, DocumentoLeido>> | Error; gasto?: number } = {}) {
+function armar(o: { activas?: Set<string>; guarda?: ResultadoDeLaGuarda | Error; docs?: Partial<Record<Documento, DocumentoLeido>> | Error; gasto?: number; enVuelo?: number; propia?: boolean | Error } = {}) {
   const { db, tablas } = baseFalsa()
   const almacen = almacenDeColaterales(db)
   const guarda = vi.fn(async (_c: string, _camp: string | null) => { if (o.guarda instanceof Error) throw o.guarda; return o.guarda ?? { frenan: [], se_asumen_publicadas: [] } })
   const docs = vi.fn(async (e: { documento: string }) => { if (o.docs instanceof Error) throw o.docs; return o.docs ?? (e.documento === 'plan' ? DOCS_B : DOCS_A) })
-  const P: PuertosDelTurno = { almacen, filasActivas: async () => o.activas ?? TODAS, piezasPorPublicar: guarda, documentos: docs, gastoDelDia: async () => o.gasto ?? 0 }
-  return { P, almacen, tablas, guarda, docs }
+  const gasto = vi.fn(async (_c: string, _sin: string) => ({ recibos: o.gasto ?? 0, en_vuelo: o.enVuelo ?? 0 }))
+  const propia = vi.fn(async (_c: string, _camp: string) => { if (o.propia instanceof Error) throw o.propia; return o.propia ?? true })
+  const P: PuertosDelTurno = { almacen, filasActivas: async () => o.activas ?? TODAS, piezasPorPublicar: guarda, documentos: docs, campanaDelCliente: propia, gastoDelDia: gasto }
+  return { P, almacen, tablas, guarda, docs, gasto, propia }
 }
 const crear = async (al: ReturnType<typeof almacenDeColaterales>, n: NuevaEdicion) => (await al.crearEdicion(n)).edicion.id
 const estado = (t: ReturnType<typeof baseFalsa>['tablas'], id: string) => t.colaterales_ediciones.find((f) => f.id === id)?.estado
@@ -148,6 +150,48 @@ describe('🔴 línea 3 de CC7 · toda salida temprana deja la edición en su es
     expect((await turno(a.P, { edicion_id: await crear(a.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).accion).toBe('pedir')
     const b = armar({ gasto: TOPE_DIARIO_DEL_CLIENTE_USD - reserva + 0.001 })
     expect((await turno(b.P, { edicion_id: await crear(b.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).accion).toBe('fallida')
+  })
+  it('🔴 el tope diario cuenta lo que está EN VUELO (línea de CC7): cada edición tomada sin recibo suma su reserva', async () => {
+    const reserva = TOPE_DE_LA_LLAMADA_USD * FACTOR_DE_RESERVA
+    const cabe = Math.floor((TOPE_DIARIO_DEL_CLIENTE_USD - reserva) / reserva) // cuántas en vuelo caben con esta
+    const a = armar({ enVuelo: cabe })
+    const idA = await crear(a.almacen, EDIC_A)
+    expect((await turno(a.P, { edicion_id: idA, seco: false, workflow_execution_id: '1' })).accion).toBe('pedir')
+    expect(a.gasto).toHaveBeenCalledWith(CLI_A, idA) // la edición que pregunta no se cuenta a sí misma
+    const b = armar({ enVuelo: cabe + 1 })
+    const idB = await crear(b.almacen, EDIC_A)
+    expect(await turno(b.P, { edicion_id: idB, seco: false, workflow_execution_id: '1' })).toEqual({ accion: 'fallida', motivo: 'tope_diario' })
+    expect(estado(b.tablas, idB)).toBe('fallida')
+    // recibos + en vuelo se suman
+    const c = armar({ gasto: reserva, enVuelo: cabe })
+    expect((await turno(c.P, { edicion_id: await crear(c.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).accion).toBe('fallida')
+  })
+  it('🔴 la campaña del documento editado debe ser DEL CLIENTE (línea de CC6): la de otro, o una que no existe, frena sin leer nada', async () => {
+    const { P, almacen, tablas, guarda, docs, propia } = armar({ propia: false })
+    const id = await crear(almacen, EDIC_A)
+    const r = await turno(P, { edicion_id: id, seco: false, workflow_execution_id: '1' })
+    expect(r.accion).toBe('sin_motor')
+    expect(r.accion === 'sin_motor' && r.nota).toContain(`la campaña ${CAMP_A} no existe o no es de este cliente`)
+    expect(propia).toHaveBeenCalledWith(CLI_A, CAMP_A)
+    expect(guarda).not.toHaveBeenCalled()
+    expect(docs).not.toHaveBeenCalled()
+    expect(estado(tablas, id)).toBe('sin_motor')
+  })
+  it('🔴 si no se puede comprobar de quién es la campaña, frena (sin_motor); en seco no escribe', async () => {
+    const a = armar({ propia: new Error('base caída') })
+    const id = await crear(a.almacen, EDIC_A)
+    const r = await turno(a.P, { edicion_id: id, seco: false, workflow_execution_id: '1' })
+    expect(r.accion === 'sin_motor' && r.nota).toContain('no se pudo comprobar de quién es la campaña')
+    expect(estado(a.tablas, id)).toBe('sin_motor')
+    const b = armar({ propia: false })
+    const idS = await crear(b.almacen, EDIC_A)
+    expect((await turno(b.P, { edicion_id: idS, seco: true, workflow_execution_id: '1' })).accion).toBe('sin_motor')
+    expect(estado(b.tablas, idS)).toBe('recibida')
+  })
+  it('una edición del cliente (plan, manual) no se compara contra una campaña: su campaña es la viva del cliente', async () => {
+    const { P, almacen, propia } = armar({ propia: false })
+    await turno(P, { edicion_id: await crear(almacen, EDIC_B), seco: false, workflow_execution_id: '1' })
+    expect(propia).not.toHaveBeenCalled()
   })
   it('una edición de un documento del que NO depende ninguna pieza no consulta la guarda (la pieza misma)', async () => {
     const { P, almacen, guarda } = armar({ docs: {} })

@@ -17,7 +17,7 @@ const EDIC = { client_id: CLI, documento: 'brief', documento_ref: 'camp-1', vers
 
 function armar() {
   const { db, tablas } = baseFalsa()
-  const P: PuertosDelTurno = { almacen: almacenDeColaterales(db), filasActivas: vi.fn(async () => new Set<string>()), piezasPorPublicar: vi.fn(async () => ({ frenan: [], se_asumen_publicadas: [] })), documentos: vi.fn(async () => ({})), gastoDelDia: vi.fn(async () => 0) }
+  const P: PuertosDelTurno = { almacen: almacenDeColaterales(db), filasActivas: vi.fn(async () => new Set<string>()), piezasPorPublicar: vi.fn(async () => ({ frenan: [], se_asumen_publicadas: [] })), documentos: vi.fn(async () => ({})), campanaDelCliente: vi.fn(async () => true), gastoDelDia: vi.fn(async () => ({ recibos: 0, en_vuelo: 0 })) }
   return { P, tablas }
 }
 const pedir = (P: PuertosDelTurno, c: Record<string, unknown>) => atenderColaterales(P, c, new Date('2026-11-11T12:00:00Z'))
@@ -108,7 +108,8 @@ function dbFalsa(tablas: Record<string, Record<string, unknown>[]>) {
     } as unknown as Db,
   }
 }
-const cadenaFalsa = (o: { viva?: string | null; estrategia?: { version: number; estado: string; contenido: unknown } | null } = {}) => ({
+const cadenaFalsa = (o: { viva?: string | null; estrategia?: { version: number; estado: string; contenido: unknown } | null; campanas?: Record<string, { client_id: string }>; caida?: boolean } = {}) => ({
+  campana: vi.fn(async (id: string) => { if (o.caida) throw new Error('cadena caída'); return o.campanas?.[id] ? { id, ...o.campanas[id] } : null }),
   campanaViva: vi.fn(async () => (o.viva ? { id: o.viva } : null)),
   ultimaEstrategia: vi.fn(async (c: string) => (o.estrategia ? { campana_id: c, seco: false, agente: null, modelo: null, costo_usd: 0, workflow_execution_id: null, ...o.estrategia } : null)),
   estrategiaEnVersion: vi.fn(async () => null),
@@ -121,19 +122,46 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
     expect([...(await puertosDeSupabase(db, undefined, cadenaFalsa()).filasActivas())].sort()).toEqual(['pieza', 'plan'])
     expect(pedidos[0]).toMatchObject({ cols: ['artifact_type'], filtros: ['eq:is_active'] })
   })
-  it('gasto del día: suma los recibos de las corridas de colaterales del cliente creadas HOY (ni de ayer ni de otro cliente)', async () => {
-    const { db } = dbFalsa({
+  it('🔴 gasto del día (línea de CC7): recibos por la FECHA DEL RECIBO + las ediciones tomadas sin recibo cuentan como en vuelo; ni otro cliente ni la edición que pregunta', async () => {
+    const ed = (id: string, client_id: string, estado: string, created_at: string, updated_at: string, workflow_execution_id: string | null) => ({ id, client_id, estado, created_at, updated_at, workflow_execution_id })
+    const { db, pedidos } = dbFalsa({
       colaterales_ediciones: [
-        { client_id: CLI, created_at: '2026-11-11T08:00:00Z', workflow_execution_id: '1' },
-        { client_id: CLI, created_at: '2026-11-10T23:00:00Z', workflow_execution_id: '2' },
-        { client_id: CLI2, created_at: '2026-11-11T09:00:00Z', workflow_execution_id: '3' },
-        { client_id: CLI, created_at: '2026-11-11T10:00:00Z', workflow_execution_id: null },
+        ed('e1', CLI, 'lista', '2026-11-11T07:00:00Z', '2026-11-11T08:00:00Z', '1'), // hoy, con dos recibos de hoy
+        ed('e2', CLI, 'en_curso', '2026-11-10T20:00:00Z', '2026-11-11T09:00:00Z', '2'), // CREADA AYER, tomada hoy, con recibo de hoy: cuenta, y no está en vuelo
+        ed('e3', CLI, 'lista', '2026-11-10T07:00:00Z', '2026-11-10T08:00:00Z', '3'), // de ayer, recibo de ayer: no cuenta
+        ed('e4', CLI2, 'lista', '2026-11-11T07:00:00Z', '2026-11-11T08:00:00Z', '4'), // otro cliente
+        ed('e5', CLI, 'en_curso', '2026-11-10T22:00:00Z', '2026-11-10T23:00:00Z', '5'), // tomada AYER, sigue sin recibo: en vuelo
+        ed('e6', CLI, 'en_curso', '2026-11-11T10:00:00Z', '2026-11-11T10:00:00Z', null), // tomada hoy sin corrida firmada: en vuelo
+        ed('e7', CLI, 'en_curso', '2026-11-11T11:00:00Z', '2026-11-11T11:00:00Z', '7'), // la que pregunta: no se cuenta a sí misma
+        ed('e8', CLI, 'sin_colaterales', '2026-11-11T06:00:00Z', '2026-11-11T06:01:00Z', '8'), // cerrada hoy sin llamar al agente: ni recibo ni en vuelo
+        ed('e9', CLI, 'lista', '2026-11-11T00:30:00Z', '2026-11-11T00:40:00Z', '9'), // tocada hoy, pero su recibo es de ayer 23:59: no cuenta
       ],
-      agent_invocations: [{ workflow_execution_id: '1', cost_usd: 0.21 }, { workflow_execution_id: '1', cost_usd: 0.04 }, { workflow_execution_id: '2', cost_usd: 5 }, { workflow_execution_id: '3', cost_usd: 7 }],
+      agent_invocations: [
+        { workflow_execution_id: '1', cost_usd: 0.21, created_at: '2026-11-11T07:30:00Z' }, { workflow_execution_id: '1', cost_usd: 0.04, created_at: '2026-11-11T07:31:00Z' },
+        { workflow_execution_id: '2', cost_usd: 0.1, created_at: '2026-11-11T09:10:00Z' }, { workflow_execution_id: '3', cost_usd: 5, created_at: '2026-11-10T07:30:00Z' },
+        { workflow_execution_id: '4', cost_usd: 7, created_at: '2026-11-11T07:30:00Z' }, { workflow_execution_id: '9', cost_usd: 0.3, created_at: '2026-11-10T23:59:00Z' },
+        { workflow_execution_id: '7', cost_usd: 9, created_at: '2026-11-11T11:01:00Z' },
+      ],
     })
     const P = puertosDeSupabase(db, () => new Date('2026-11-11T12:00:00Z'), cadenaFalsa())
-    expect(await P.gastoDelDia(CLI)).toBeCloseTo(0.25, 6)
-    expect(await P.gastoDelDia('sin-ediciones')).toBe(0)
+    const g = await P.gastoDelDia(CLI, 'e7')
+    expect(g.recibos).toBeCloseTo(0.35, 6)
+    expect(g.en_vuelo).toBe(2)
+    expect(await P.gastoDelDia('sin-ediciones', 'x')).toEqual({ recibos: 0, en_vuelo: 0 })
+    // las lecturas piden SOLO lo que usan y filtran en la base
+    expect(pedidos.filter((q) => q.tabla === 'colaterales_ediciones').map((q) => q.filtros)).toContainEqual(['eq:client_id', 'gte:updated_at'])
+    expect(pedidos.filter((q) => q.tabla === 'colaterales_ediciones').map((q) => q.filtros)).toContainEqual(['eq:client_id', 'eq:estado'])
+    expect(pedidos.find((q) => q.tabla === 'agent_invocations')).toMatchObject({ filtros: ['in:workflow_execution_id'] })
+  })
+  it('🔴 la campaña es del cliente (línea de CC6): la suya sí; la de otro cliente o una que no existe, no; si la cadena falla, lanza', async () => {
+    const { db } = dbFalsa({})
+    const campanas = { 'camp-a': { client_id: CLI }, 'camp-b': { client_id: CLI2 } }
+    const P = puertosDeSupabase(db, undefined, cadenaFalsa({ campanas }))
+    expect(await P.campanaDelCliente(CLI, 'camp-a')).toBe(true)
+    expect(await P.campanaDelCliente(CLI, 'camp-b')).toBe(false)
+    expect(await P.campanaDelCliente(CLI2, 'camp-b')).toBe(true)
+    expect(await P.campanaDelCliente(CLI, 'no-existe')).toBe(false)
+    await expect(puertosDeSupabase(db, undefined, cadenaFalsa({ caida: true })).campanaDelCliente(CLI, 'camp-a')).rejects.toThrow(/caída/)
   })
   it('documentos: la estrategia vigente de la campaña viva (edición del plan); una estrategia en borrador no se lee; sin campaña viva, nada', async () => {
     const e = { id: 'e', client_id: CLI, documento: 'plan' as const, documento_ref: 'plan-1', version_base: '1', seccion: 's', antes: 'a', despues: 'b', llave: 'l', estado: 'en_curso' as const, version_nueva: null, gravedad: null, nota: null }
@@ -148,7 +176,7 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
     const caida = { from: () => { const api: Record<string, unknown> = { select: () => api, eq: () => api, gte: () => api, in: () => api, then: (res: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'caída' } }).then(res) }; return api } } as unknown as Db
     const P = puertosDeSupabase(caida, () => new Date('2026-11-11T12:00:00Z'), cadenaFalsa())
     await expect(P.filasActivas()).rejects.toThrow(/caída/)
-    await expect(P.gastoDelDia(CLI)).rejects.toThrow(/caída/)
+    await expect(P.gastoDelDia(CLI, 'x')).rejects.toThrow(/caída/)
   })
   it('la campaña de la edición: la del documento si es de campaña; la viva si es del cliente', async () => {
     const viva = vi.fn(async () => ({ id: 'viva' }))

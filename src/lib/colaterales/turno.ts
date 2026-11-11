@@ -49,8 +49,14 @@ export interface PuertosDelTurno {
   piezasPorPublicar(client_id: string, campana_id: string | null): Promise<ResultadoDeLaGuarda>
   /** la versión vigente de cada documento de aguas abajo (los que no tienen lector no vienen) */
   documentos(e: Edicion, docs: Documento[]): Promise<Partial<Record<Documento, DocumentoLeido>>>
-  /** lo ya gastado HOY en colaterales por el cliente (recibos de agent_invocations de sus corridas) */
-  gastoDelDia(client_id: string): Promise<number>
+  /** 11-nov · línea de CC6 (1022 🟡): la campaña de un documento de campaña es DE ESTE cliente · lanza si no puede leer */
+  campanaDelCliente(client_id: string, campana_id: string): Promise<boolean>
+  /**
+   * El gasto de colaterales del cliente HOY (UTC), sin la edición que pregunta · línea de CC7 (1022 🟡): `recibos` = recibos con fecha de hoy
+   * (por la fecha del recibo, no de la creación de la edición) · `en_vuelo` = ediciones del cliente tomadas (en_curso) SIN recibo todavía:
+   * cada una cuenta su reserva (la vuelta de la secretaria es asíncrona: entre el pedido y su recibo hay una ventana). Lanza si no puede leer.
+   */
+  gastoDelDia(client_id: string, sin_edicion: string): Promise<{ recibos: number; en_vuelo: number }>
 }
 
 export type ResultadoDelTurno =
@@ -124,6 +130,15 @@ export async function turno(P: PuertosDelTurno, p: { edicion_id: string; seco: b
     // R2 · en este instante
     const r2 = puedeLanzarMotor(e.documento, await P.filasActivas())
     if (!r2.ok) { const nota = notaSinColaterales(r2.faltan); await cerrar('sin_motor', nota); return { accion: 'sin_motor', nota } }
+    // la campaña del documento editado es de ESTE cliente (si no, ni la guarda ni los lectores miran la de otro)
+    if (DOCUMENTOS_DE_CAMPANA.has(e.documento)) {
+      let propia: boolean
+      try { propia = await P.campanaDelCliente(e.client_id, e.documento_ref) } catch (x) {
+        const nota = `no se pudo comprobar de quién es la campaña (frena): ${x instanceof Error ? x.message : String(x)}`
+        await cerrar('sin_motor', nota); return { accion: 'sin_motor', nota }
+      }
+      if (!propia) { const nota = `la campaña ${e.documento_ref} no existe o no es de este cliente (frena)`; await cerrar('sin_motor', nota); return { accion: 'sin_motor', nota } }
+    }
     // guarda mínima · solo si alguna pieza depende del documento
     let notaDeSuposicion: string | null = null
     if (afectados(e.documento).includes('pieza')) {
@@ -149,8 +164,9 @@ export async function turno(P: PuertosDelTurno, p: { edicion_id: string; seco: b
     // topes · sin reintento: un tope cierra la edición
     const reserva = TOPE_DE_LA_LLAMADA_USD * FACTOR_DE_RESERVA
     if (reserva > TOPE_POR_EDICION_USD) { await cerrar('fallida', 'tope: la reserva supera el tope por edición'); return { accion: 'fallida', motivo: 'tope_por_edicion' } }
-    const hoy = await P.gastoDelDia(e.client_id)
-    if (hoy + reserva > TOPE_DIARIO_DEL_CLIENTE_USD) { await cerrar('fallida', `tope diario del cliente: gastado ${hoy.toFixed(2)} + reserva ${reserva.toFixed(2)} > ${TOPE_DIARIO_DEL_CLIENTE_USD}`); return { accion: 'fallida', motivo: 'tope_diario' } }
+    const g = await P.gastoDelDia(e.client_id, e.id)
+    const hoy = g.recibos + g.en_vuelo * reserva
+    if (hoy + reserva > TOPE_DIARIO_DEL_CLIENTE_USD) { await cerrar('fallida', `tope diario del cliente: recibos ${g.recibos.toFixed(2)} + ${g.en_vuelo} en vuelo × ${reserva.toFixed(2)} + esta reserva ${reserva.toFixed(2)} > ${TOPE_DIARIO_DEL_CLIENTE_USD}`); return { accion: 'fallida', motivo: 'tope_diario' } }
     return {
       accion: 'pedir', agente: AGENTE_SECRETARIA, pedido: pedidoDeLaSecretaria(e, x.al_agente), tope_usd: TOPE_DE_LA_LLAMADA_USD,
       dispatch_key: llaveDeLaSecretaria(e.id), sello: selloDe(x.al_agente, x.leidos), candidatos: x.al_agente.map((pz) => pz.id), nota: unirNotas(notaDeSuposicion, notaSinLector),
