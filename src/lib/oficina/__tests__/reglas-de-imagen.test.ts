@@ -67,6 +67,13 @@ describe('③ decideImagen: el curador describe, el CÓDIGO decide', () => {
     texto_en_imagen: [], marcas: [], personas: 0, ...o,
   })
   it('pasa cuando todo obligatorio está y ningún prohibido', () => { expect(decideImagen(obs(), reglas, propios).pasa).toBe(true) })
+  it('#13 · con el dato exigido: «sí» falla como dato_sin_verificar, sin respuesta como regla_omitida, «no» pasa; sin exigirlo no se mira', () => {
+    const cod = (d: boolean | undefined, exigirDato?: boolean) => decideImagen(obs(d === undefined ? {} : { dato_sin_verificar: d }), reglas, propios, { exigirDato }).fallas.map((f) => f.codigo)
+    expect(cod(true, true)).toEqual(['dato_sin_verificar'])
+    expect(cod(undefined, true)).toEqual(['regla_omitida'])
+    expect(cod(false, true)).toEqual([])
+    expect(cod(true)).toEqual([]); expect(cod(undefined, false)).toEqual([])
+  })
   it('un obligatorio ausente o "no se ve" FALLA', () => {
     expect(decideImagen(obs({ reglas: obs().reglas.map((r) => (r.id === 'o1' ? { ...r, presente: false as const } : r)) }), reglas, propios).fallas[0].codigo).toBe('obligatorio_ausente')
     expect(decideImagen(obs({ reglas: obs().reglas.map((r) => (r.id === 'o1' ? { ...r, presente: 'no_se_ve' as const } : r)) }), reglas, propios).pasa).toBe(false)

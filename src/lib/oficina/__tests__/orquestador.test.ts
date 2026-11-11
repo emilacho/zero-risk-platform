@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { abrirEncargo, avanzar, recibirResultado } from '../orquestador'
 import { TARGET_STEP_PRODUCIR, validarSobre } from '../sobre'
 import { codificarPng } from '../encaje'
+import { POST_IMG } from '../plantillas/post-img'
 import { BUENOS_PROMPTS, CLIENTE, PARTE, PARTE_OTRO_PRODUCTO, PARTE_REAL, PIEZA_OK, FICHAS_VACIAS, FORMATO_1X1, crearMemoria, correr, direccionGenerada, direccionReal, observacion, REGLAS_CEVICHE, type Guion, type Memoria } from './memoria'
 
 const sobre = (o: Record<string, unknown> = {}) => ({ parte_id: PARTE, brief_id: 'BRF-0003', dry_run: true, familia: 'post_img', ...o })
@@ -242,12 +243,13 @@ describe('rama FOTO REAL', () => {
     expect(pasos).toContain('prompts')
     expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id === 'vd-foto-invalida')).toBe(true)
   })
-  it('para el brief de ceviche las 16 fotos reales NO sirven y la sala lo dice con motivo', async () => {
+  it('para el brief de ceviche ninguna de las 16 fotos reales muestra el protagonista: la sala lo dice con motivo y las aptas entran solo como «cercanas» (#15)', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
     await correr(M, id, guionGenerada())
-    const cf = M.encargos.get(id)!.estado_del_motor.artefactos['candidatas_foto'].datos as { candidatas: unknown[]; descartadas: Array<{ id: string; motivos: string[] }>; protagonistas: string[] }
-    expect(cf.candidatas).toHaveLength(0); expect(cf.protagonistas).toEqual(['Ceviches'])
+    const cf = M.encargos.get(id)!.estado_del_motor.artefactos['candidatas_foto'].datos as { candidatas: Array<{ id: string; cercana?: boolean }>; cercanas: string[]; descartadas: Array<{ id: string; motivos: string[] }>; protagonistas: string[] }
+    expect(cf.candidatas.filter((c) => !c.cercana)).toHaveLength(0); expect(cf.protagonistas).toEqual(['Ceviches'])
+    expect(cf.cercanas).toEqual(cf.candidatas.map((c) => c.id))
     expect(cf.descartadas.find((d) => d.id === '7a75e500')!.motivos.join(' ')).toMatch(/teléfono 997664119/)
   })
 })
@@ -649,5 +651,34 @@ describe('regla de canon: nada se pregunta al cliente', () => {
   })
   it('las reglas de imagen de los fixtures son las del brief real y todas tienen su cita literal', () => {
     for (const r of [...REGLAS_CEVICHE.obligatorio, ...REGLAS_CEVICHE.prohibido]) expect(PARTE_REAL.toLowerCase()).toContain(r.cita.toLowerCase().replace(/[.]$/, ''))
+  })
+})
+
+// ── 11-nov · reglas rígidas #13 (GO Lenovo 18:50): con «generar cuando no hay foto» encendido, quien mira la imagen dice si muestra un dato sin verificar; el código solo lee su sí o no
+describe('reglas rígidas #13 · el dato sin verificar lo juzga quien mira (sala de la pieza simple)', () => {
+  const GENERA = { ...POST_IMG, limites: { ...POST_IMG.limites, generar_cuando_no_hay_foto: true } }
+  const conDato = (indices: number[], dato: boolean | undefined) => { const o = JSON.parse(observacion(indices)); for (const im of o.imagenes) if (dato !== undefined) im.dato_sin_verificar = dato; return JSON.stringify(o) }
+  it('quien mira dice «no»: la imagen pasa', async () => {
+    const M = crearMemoria({ plantilla: GENERA }); const id = await abierto(M)
+    const { ultima, pasos } = await correr(M, id, guionGenerada({ mirar: (_n, t) => ({ texto: conDato(indicesDe(t), false) }) }))
+    expect(pasos.filter((p) => p === 'mirar')).toHaveLength(1)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+  })
+  it('🔴 quien mira dice «sí»: la imagen falla, se regenera y a la 3.ª se descarta (la pieza sale sin imagen y lo dice)', async () => {
+    const M = crearMemoria({ plantilla: GENERA }); const id = await abierto(M)
+    const { ultima, pasos } = await correr(M, id, guionGenerada({ mirar: (_n, t) => ({ texto: conDato(indicesDe(t), true) }) }))
+    expect(pasos.filter((p) => p === 'mirar')).toHaveLength(3)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: true })
+  })
+  it('🔴 quien mira NO contesta la pregunta: no se aprueba por omisión (igual que un «sí»)', async () => {
+    const M = crearMemoria({ plantilla: GENERA }); const id = await abierto(M)
+    const { ultima, pasos } = await correr(M, id, guionGenerada({ mirar: (_n, t) => ({ texto: conDato(indicesDe(t), undefined) }) }))
+    expect(pasos.filter((p) => p === 'mirar')).toHaveLength(3)
+    expect(ultima.cuerpo).toMatchObject({ con_desacuerdo: true })
+  })
+  it('con el interruptor apagado no se le exige (la sala sigue como hoy)', async () => {
+    const M = crearMemoria(); const id = await abierto(M)
+    const { pasos } = await correr(M, id, guionGenerada({ mirar: (_n, t) => ({ texto: conDato(indicesDe(t), undefined) }) }))
+    expect(pasos.filter((p) => p === 'mirar')).toHaveLength(1)
   })
 })

@@ -4,8 +4,7 @@
  * FUNCIONES de código y el tratamiento de la salida de cada agente de esas plantillas. Diseño: docs/DISENO-2026-10-09-oficina-salas-2-3-4.md §2, §3, §4.
  * No publica en ninguna red: la entrega (sala 4) deja los archivos y la hoja de pasos para publicar A MANO.
  */
-import { candidatasDelEncargo, medirFotos } from './material-fotos'
-import { limitesDeMaterial } from './material'
+import { candidatasDelEncargo } from './material-fotos'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { elementosDelKit, planDeOrigen, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
@@ -173,10 +172,8 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
 }
 
 function asignarFotos(P: Puertos, pl: Plantilla, e: Estado): SalidaCodigoL {
-  // MATERIAL (apagado por omisión): con el interruptor encendido y menos fotos estrictas que el mínimo, entran las CERCANAS (propias, etiquetadas, aptas; rotuladas)
-  const lim = limitesDeMaterial(pl.limites)
-  let { cf, protas, prohibe, reusoPermitido } = candidatasDelEncargo(e, pl, P.ahora())
-  if (lim.activo && cf.candidatas.length < medirFotos(e, pl, P.ahora()).minimo) ({ cf, protas, prohibe, reusoPermitido } = candidatasDelEncargo(e, pl, P.ahora(), { permitirCercanas: true }))
+  // #15 (11-nov) · las CERCANAS (propias, etiquetadas, aptas, que no nombran el protagonista) entran siempre, rotuladas: el director visual decide
+  const { cf, protas, prohibe, reusoPermitido } = candidatasDelEncargo(e, pl, P.ahora())
   return { res: { costo_usd: 0, artefacto: { ...cf, protagonistas: protas, prohibe_personas: prohibe, reuso_permitido: reusoPermitido, reusadas: cf.candidatas.filter((c) => c.reusada).map((c) => c.id), cercanas: cf.candidatas.filter((c) => c.cercana).map((c) => c.id) } } }
 }
 

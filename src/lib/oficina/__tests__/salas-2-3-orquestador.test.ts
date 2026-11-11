@@ -699,3 +699,23 @@ describe('11-nov · «mirar» ilegible en el CARRUSEL recorrido por el orquestad
     expect(f[0].que).toMatch(/las imágenes siguen en la pieza sin juzgar/)
   })
 })
+
+// ── 11-nov · reglas rígidas #13 en la sala de láminas: con «generar cuando no hay foto» encendido, quien mira dice sí o no al dato sin verificar
+describe('reglas rígidas #13 · el dato sin verificar en el carrusel', () => {
+  const GENERA = { ...CARRUSEL_IG_V1, limites: { ...CARRUSEL_IG_V1.limites, generar_cuando_no_hay_foto: true } } as Plantilla
+  const conDato = (indices: number[], dato: boolean | undefined) => { const o = JSON.parse(observacion(indices)); for (const im of o.imagenes) if (dato !== undefined) im.dato_sin_verificar = dato; return JSON.stringify(o) }
+  const correrCon = async (dato: boolean | undefined) => {
+    const { M, id } = await abierto(GENERA, BRIEF_CARRUSEL, 'BRF-0100')
+    return { M, id, ...(await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada() }), mirar: (_n, t) => ({ texto: conDato(indicesDe(t), dato) }) }))) }
+  }
+  it('«no»: la imagen generada entra a su lámina', async () => {
+    const { M, id } = await correrCon(false)
+    expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && f.donde === 'imagen')).toBe(false)
+  })
+  it('🔴 «sí» o sin respuesta: la lámina queda sin esa imagen y bloquea (una persona decide)', async () => {
+    for (const dato of [true, undefined]) {
+      const { M, id } = await correrCon(dato)
+      expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && f.donde === 'imagen')).toBe(true)
+    }
+  })
+})

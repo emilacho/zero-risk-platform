@@ -13,13 +13,13 @@ import type { Estado, Plantilla } from './tipos'
 
 interface BaseDelEncargo { brief: BriefLeido; proporcion: string; F: FuentesCompletas; familia?: string; elementos?: ElementoDelKit[] }
 
-export function candidatasDelEncargo(e: Estado, pl: Plantilla, ahora: Date, o: { permitirCercanas?: boolean; relajarReuso?: boolean } = {}) {
+export function candidatasDelEncargo(e: Estado, pl: Plantilla, ahora: Date, o: { relajarReuso?: boolean } = {}) {
   const b = datos(e, 'encargo') as unknown as BaseDelEncargo
   const kit = b.familia === 'kit'
   const vocab = b.F.vocabulario_de_productos
   const protas = kit ? protagonistasDelBrief({ protagonista: (b.elementos ?? []).map((x) => `${x.tema}. ${x.datos.join(' ')}`).join('. ') }, vocab) : protagonistasDelBrief(b.brief, vocab)
   const prohibe = prohibePersonas(b.brief)
-  const pedido = { protagonista: protas, prohibe_personas: prohibe, proporcion: b.proporcion, usos: b.F.usos, reuso_dias: Number(pl.limites.reuso_dias ?? 14), ahora, ...(o.permitirCercanas ? { permitir_cercanas: true } : {}) }
+  const pedido = { protagonista: protas, prohibe_personas: prohibe, proporcion: b.proporcion, usos: b.F.usos, reuso_dias: Number(pl.limites.reuso_dias ?? 14), ahora }
   let cf = candidatasFoto(b.F.fotos, { ...pedido, excluir_reusadas: true }, b.F.propios)
   let reusoPermitido = false
   if (cf.candidatas.length === 0 && (o.relajarReuso ?? claseDe(pl) !== 'post_img')) {
@@ -30,13 +30,13 @@ export function candidatasDelEncargo(e: Estado, pl: Plantilla, ahora: Date, o: {
   return { cf, protas, prohibe, reusoPermitido }
 }
 
-/** ¿cuántas fotos propias aptas hay (estrictas: del protagonista) frente a las que hacen falta? */
+/** ¿cuántas fotos propias aptas hay (estrictas: del protagonista) frente a las que hacen falta? Las cercanas se cuentan aparte (#15: siempre son candidatas, rotuladas) */
 export function medirFotos(e: Estado, pl: Plantilla, ahora: Date): { aptas: number; minimo: number; protas: string[]; cercanas: number } {
   const b = datos(e, 'encargo') as unknown as BaseDelEncargo
   const lim = limitesDeMaterial(pl.limites)
   const c = claseDe(pl)
   const familia = c === 'carrusel' || c === 'kit' ? c : 'post_img'
-  const estricta = candidatasDelEncargo(e, pl, ahora)
-  const conCercanas = candidatasDelEncargo(e, pl, ahora, { permitirCercanas: true })
-  return { aptas: estricta.cf.candidatas.length, minimo: fotosMinimas(familia, (b.elementos ?? []).length, lim), protas: estricta.protas, cercanas: conCercanas.cf.candidatas.length - estricta.cf.candidatas.length }
+  const c0 = candidatasDelEncargo(e, pl, ahora)
+  const cercanas = c0.cf.candidatas.filter((x) => x.cercana).length
+  return { aptas: c0.cf.candidatas.length - cercanas, minimo: fotosMinimas(familia, (b.elementos ?? []).length, lim), protas: c0.protas, cercanas }
 }

@@ -10,19 +10,21 @@ const propios = { telefonos: ['0997744288'], handles: ['@naufrago.ec'], urls: ['
 
 describe('candidatasFoto con la batería REAL de las 16 etiquetas del cliente piloto (medidas el 09-oct)', () => {
   it('hay 16 etiquetas', () => { expect(fotos).toHaveLength(16) })
-  it('para un brief de CEVICHE no sirve ninguna: la única de ceviche trae teléfono y @ de otro negocio y la regla la descarta SOLA', () => {
+  it('para un brief de CEVICHE no sirve ninguna del protagonista: la única de ceviche trae teléfono y @ de otro negocio y la regla la descarta SOLA; las demás aptas entran como «cercanas» (#15)', () => {
     const r = candidatasFoto(fotos, { protagonista: 'ceviche', prohibe_personas: true, proporcion: '1:1' }, propios)
-    expect(r.candidatas).toHaveLength(0)
+    expect(r.candidatas.filter((c) => !c.cercana)).toHaveLength(0)
+    expect(r.candidatas.length).toBeGreaterThan(0)
+    for (const c of r.candidatas) expect(c.motivo_de_aceptacion).toMatch(/CERCANA: no muestra el protagonista del brief/)
     const ceviche = r.descartadas.find((d) => d.id === '7a75e500')!
     expect(ceviche.motivos.join(' | ')).toMatch(/teléfono 997664119/)
     expect(ceviche.motivos.join(' | ')).toMatch(/usuario @rukutuio/)
     expect(ceviche.motivos.join(' | ')).toMatch(/marca ajena «rukutu»/)
     expect(ceviche.motivos.join(' | ')).not.toMatch(/protagonista/) // sí muestra ceviche: el motivo es el texto ajeno
   })
-  it('cada foto descartada trae AL MENOS un motivo escrito', () => {
+  it('cada foto descartada trae AL MENOS un motivo escrito, y ninguna se descarta ya por la palabra del protagonista (#15)', () => {
     const r = candidatasFoto(fotos, { protagonista: 'ceviche', prohibe_personas: true, proporcion: '1:1' }, propios)
-    expect(r.descartadas).toHaveLength(16)
-    for (const d of r.descartadas) expect(d.motivos.length).toBeGreaterThan(0)
+    expect(r.descartadas.length + r.candidatas.length).toBe(16)
+    for (const d of r.descartadas) { expect(d.motivos.length).toBeGreaterThan(0); expect(d.motivos.join(' ')).not.toMatch(/protagonista/) }
   })
   it('para encebollado y sin personas hay candidatas, y ninguna es de las que tienen personas, logo o afiche', () => {
     const r = candidatasFoto(fotos, { protagonista: 'encebollado', prohibe_personas: true, proporcion: '1:1' }, propios)
@@ -38,7 +40,8 @@ describe('candidatasFoto con la batería REAL de las 16 etiquetas del cliente pi
   })
   it('confianza media ⇒ requiere_mirar (el curador la ve)', () => {
     const r = candidatasFoto(fotos, { protagonista: 'encebollado', prohibe_personas: true, proporcion: '1:1' }, propios)
-    expect(r.candidatas.every((c) => c.requiere_mirar)).toBe(true)
+    for (const c of r.candidatas) expect(c.requiere_mirar).toBe(fotos.find((f) => f.id === c.id)!.etiqueta_confianza !== 'alta')
+    expect(r.candidatas.filter((c) => !c.cercana).every((c) => c.requiere_mirar)).toBe(true)
   })
   it('el teléfono y el usuario PROPIOS no descartan', () => {
     const f: FotoEtiquetada[] = [{ id: 'x', estado: 'ok', producto_visto: ['Ceviches'], texto_visible: 'Pide al 0997744288 @naufrago.ec', con_personas: false, tipo_de_toma: 'producto', formato: 'cuadrado', etiqueta_confianza: 'alta' }]

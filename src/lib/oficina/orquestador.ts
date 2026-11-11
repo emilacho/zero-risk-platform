@@ -22,8 +22,7 @@ import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL,
 import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV } from './orquestador-video'
 import { PASO_MIRAR_VIDEO } from './video/mirada'
 import { confianzaDeLaFoto } from './fotos'
-import { candidatasDelEncargo, medirFotos } from './material-fotos'
-import { limitesDeMaterial } from './material'
+import { candidatasDelEncargo } from './material-fotos'
 import { reglasDeInvencion } from './prompts-sin-invencion'
 import { marcaDeOrigenActiva, origenesDeImagenes } from './marcas-de-origen'
 import { seccionDeCambiosDelDueno } from './cambios-del-dueno'
@@ -396,9 +395,8 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       return { res: { costo_usd: 0, artefacto: { brief, proporcion, F: fu } } }
     }
     case 'elegir_foto': {
-      const lim = limitesDeMaterial(pl.limites)
-      let { cf, protas, prohibe } = candidatasDelEncargo(e, pl, P.ahora())
-      if (lim.activo && cf.candidatas.length < medirFotos(e, pl, P.ahora()).minimo) ({ cf, protas, prohibe } = candidatasDelEncargo(e, pl, P.ahora(), { permitirCercanas: true }))
+      // #15 · las cercanas ya vienen siempre rotuladas en las candidatas: el director visual decide
+      const { cf, protas, prohibe } = candidatasDelEncargo(e, pl, P.ahora())
       return { res: { costo_usd: 0, artefacto: { ...cf, protagonistas: protas, prohibe_personas: prohibe, cercanas: cf.candidatas.filter((c) => c.cercana).map((c) => c.id) } } }
     }
     case 'chequear_prompts': {
