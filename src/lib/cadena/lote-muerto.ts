@@ -28,7 +28,10 @@
 import { buildIdempotencyKey } from '@/lib/sala-event-log/idempotency'
 import { FUENTE_DEL_LOTE, INTENCION_DEL_LOTE } from './arranque'
 import type { LoteVencido } from './lotes'
+import { vidaDelPaso } from '../plazo-de-vida'
 
+/** 11-nov · #21 · el PISO del lote. Lo decide la regla única (`plazo-de-vida.ts`). El lote no tiene agente (su parte lo escribe código, `hoja.ts`) ni despacho que lata, y no queda
+ *  registro de cuándo salió su parte: no hay qué medir todavía, así que su plazo es este piso. Cuando exista ese registro, se mide como los demás */
 export const HORAS_PARA_DARLO_POR_MUERTO = 2
 export const MAX_REINTENTOS_DE_LOTE = 3
 /** cuántos números de reintento (r1..rN) tiene cada base de lote: varios lotes de la misma semana (filas nuevas que mueren otro día) comparten la numeración */
@@ -88,7 +91,7 @@ export function decidirLote(l: Pick<LoteVencido, 'idempotency_key'>, e: EnviosDe
   const ultimo = Date.parse(e.ultimo_en), hora = Date.parse(ahora)
   // fecha ilegible ⇒ no se adivina: se comporta como hoy
   if (!Number.isFinite(ultimo) || !Number.isFinite(hora)) return { tipo: 'sano', llave: llaveDeEnvio(l.idempotency_key, e.ultimo) }
-  if (hora - ultimo < HORAS_PARA_DARLO_POR_MUERTO * 3600_000) return { tipo: 'sano', llave: llaveDeEnvio(l.idempotency_key, e.ultimo) }
+  if (vidaDelPaso({ inicio: e.ultimo_en, pisoMs: HORAS_PARA_DARLO_POR_MUERTO * 3600_000, duraciones: null, despacho: null }, new Date(hora)).estado !== 'muerto') return { tipo: 'sano', llave: llaveDeEnvio(l.idempotency_key, e.ultimo) }
   if (e.reintentos >= MAX_REINTENTOS_DE_LOTE) return { tipo: 'agotado', envios }
   // sin números libres en la base (varios lotes de la misma semana ya los gastaron): no se adivina otra llave, queda para una persona
   if (e.libre > LLAVES_DE_REINTENTO) return { tipo: 'agotado', envios }

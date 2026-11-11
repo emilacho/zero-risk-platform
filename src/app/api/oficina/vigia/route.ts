@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const purga = await purgarTextosViejos(db, ahora)
     // solo lo vigente pide firma: nunca lanza ni frena al vigía. Se apaga con DECISIONES_REEMPLAZADAS=apagado, sin publicar nada
     const reemplazadas = process.env.DECISIONES_REEMPLAZADAS === 'apagado' ? { cerradas: [], error: null } : await cerrarDecisionesReemplazadas(db, ahora)
-    return NextResponse.json({ accion: 'vigilado', decisiones_reemplazadas: reemplazadas.cerradas.length, ...(reemplazadas.error ? { decisiones_reemplazadas_error: reemplazadas.error } : {}), ...(purga.error ? { purga_de_textos_error: purga.error } : {}), vencidas: v.vencidas, mesas_vencidas_por_plazo: plazo.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres, ...(notas ? { notas_del_dueno: notas } : {}), reintento }, { status: 200 })
+    return NextResponse.json({ accion: 'vigilado', decisiones_reemplazadas: reemplazadas.cerradas.length, ...(reemplazadas.error ? { decisiones_reemplazadas_error: reemplazadas.error } : {}), ...(purga.error ? { purga_de_textos_error: purga.error } : {}), vencidas: v.vencidas, mesas_vencidas_por_plazo: plazo.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres, ...(m.sin_dato ? { pasos_sin_dato: m.sin_dato } : {}), ...(notas ? { notas_del_dueno: notas } : {}), reintento }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'oficina_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

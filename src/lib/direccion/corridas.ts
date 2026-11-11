@@ -3,11 +3,14 @@
  * (el sufijo es una rama). NO se agrupa por `workflow_id` solo: en los fire+forget esa columna puede traer un id de despacho. No lee prompts, entradas, salidas ni metadatos.
  */
 import { estaCompleto, leer, leerClientes, numero, redondear, sinSecretos, texto, type Contexto, type Fila, type Fuente } from './comun'
+import { vidaDelPaso, type DespachoLeido } from '../plazo-de-vida'
 
 export const COLUMNAS = 'id, agent_name, agent_id, model, workflow_id, workflow_execution_id, client_id, started_at, ended_at, duration_ms, cost_usd, tokens_input, tokens_output, tokens_cache_read, tokens_cache_creation, num_turns, status, error_message'
 /** PostgREST de Supabase no devuelve más de 1000 filas por consulta: llegar a esto se declara */
 const TOPE_FILAS = 1000
+/** 11-nov · #21 · el PISO del panel: «atascado» lo decide la regla única (`plazo-de-vida.ts`): un despacho que late no está atascado */
 export const ATASCADA_MS = 3_600_000
+const atascado = (d: Fila, ahora: number): boolean => vidaDelPaso({ inicio: texto(d.created_at), pisoMs: ATASCADA_MS, duraciones: null, despacho: { ok: true, valor: d as unknown as DespachoLeido } }, new Date(ahora)).estado === 'muerto'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const ID_DE_EJECUCION = /^[A-Za-z0-9_.-]{1,120}(:[A-Za-z0-9_.-]{1,120})?$|^(vercel-cron|dueno)(:[A-Za-z0-9_.-]{1,120}){1,5}$/
 export const BRAINTRUST_SIN_ENLACE = { enlace: null, motivo: 'ninguna fila guarda el identificador de la traza: la plataforma todavía no puede armar el enlace a Braintrust' }
@@ -28,7 +31,7 @@ function estadoDe(invocaciones: Fila[], despachos: Fila[], ahora: number): Estad
   // un despacho que quedó «running» pero cuyo empleado sí terminó (la vuelta se perdió) no es trabajo en curso: su falla la cuenta la reconciliación, en riesgos
   const terminados = new Set(invocaciones.map((i) => `${String(i.workflow_execution_id)}|${String(i.agent_name)}`))
   const vivos = despachos.filter((d) => (d.status === 'running' || d.status === 'accepted') && !terminados.has(`${String(d.workflow_execution_id)}|${String(d.agent_name)}`))
-  if (vivos.length) return vivos.every((d) => Date.parse(String(d.created_at)) < ahora - ATASCADA_MS) ? 'atascada' : 'en_curso'
+  if (vivos.length) return vivos.every((d) => atascado(d, ahora)) ? 'atascada' : 'en_curso'
   // el ciclo de vida lo cerró y su empleado nunca dejó fila: no se sabe cómo terminó, y se dice
   if (despachos.some((d) => d.status === 'sin_cierre' && !terminados.has(`${String(d.workflow_execution_id)}|${String(d.agent_name)}`))) return 'sin_cierre'
   return 'completa'
@@ -67,7 +70,7 @@ export async function leerCorridas({ db, ahora }: Contexto, o: OpcionesDeLista =
   const desde = new Date(now - dias * 86_400_000).toISOString()
   const clientes = await leerClientes(db, fuentes)
   let qi = db.from('agent_invocations').select(COLUMNAS).gte('started_at', desde)
-  let qd = db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, completed_at').gte('created_at', desde)
+  let qd = db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, updated_at, completed_at').gte('created_at', desde)
   if (o.client_id) { qi = qi.eq('client_id', o.client_id); qd = qd.eq('client_id', o.client_id) }
   if (o.workflow_id) { qi = qi.eq('workflow_id', o.workflow_id); qd = qd.eq('workflow_id', o.workflow_id) }
   const [inv, des] = await Promise.all([
@@ -94,8 +97,8 @@ export async function leerCorrida({ db, ahora }: Contexto, id: string): Promise<
   const [i1, i2, d1, d2] = await Promise.all([
     leer(fuentes, 'agent_invocations', db.from('agent_invocations').select(COLUMNAS).eq('workflow_execution_id', base).limit(TOPE_FILAS), TOPE_FILAS),
     leer(fuentes, 'agent_invocations:ramas', db.from('agent_invocations').select(COLUMNAS).like('workflow_execution_id', `${base}:%`).limit(TOPE_FILAS), TOPE_FILAS),
-    leer(fuentes, 'agent_dispatches', db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, completed_at, metadata').eq('workflow_execution_id', base).limit(TOPE_FILAS), TOPE_FILAS),
-    leer(fuentes, 'agent_dispatches:ramas', db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, completed_at, metadata').like('workflow_execution_id', `${base}:%`).limit(TOPE_FILAS), TOPE_FILAS),
+    leer(fuentes, 'agent_dispatches', db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, updated_at, completed_at, metadata').eq('workflow_execution_id', base).limit(TOPE_FILAS), TOPE_FILAS),
+    leer(fuentes, 'agent_dispatches:ramas', db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, updated_at, completed_at, metadata').like('workflow_execution_id', `${base}:%`).limit(TOPE_FILAS), TOPE_FILAS),
   ])
   // en LIKE el «_» es comodín: `a_b:%` también trae `axb:…`. Lo que no sea de esta ejecución se descarta aquí
   const deEsta = (f: Fila) => ejecucionBase(String(f.workflow_execution_id)) === base
@@ -122,7 +125,7 @@ export async function leerCorrida({ db, ahora }: Contexto, id: string): Promise<
   for (const d of des) {
     if (usados.has(String(d.dispatch_key))) continue
     const meta = d.metadata && typeof d.metadata === 'object' ? d.metadata as Fila : {}
-    const vivoViejo = d.status === 'running' && Date.parse(String(d.created_at)) < now - ATASCADA_MS
+    const vivoViejo = d.status === 'running' && atascado(d, now)
     poner(ramaDe(String(d.workflow_execution_id)), { origen: 'despacho', id: String(d.dispatch_key), agente: texto(d.agent_name), modelo: null, inicio: texto(d.running_at) ?? texto(d.created_at), fin: texto(d.completed_at), duracion_ms: null, costo_usd: 0, tokens: tokensDe({}), tokens_total: 0, turnos: null, estado: vivoViejo ? 'atascado' : String(d.status ?? 'sin_dato'), error: sinSecretos(meta.error ?? meta.error_message ?? meta.motivo), despacho: String(d.dispatch_key) })
   }
   const orden = (a: { inicio: string | null }, b: { inicio: string | null }) => String(a.inicio ?? '').localeCompare(String(b.inicio ?? ''))

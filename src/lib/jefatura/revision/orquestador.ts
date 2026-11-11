@@ -19,6 +19,7 @@ import { procesarSalidaDeRevision } from './formatos'
 import { armarPedidoCiego, armarPedidoDeAgente, auditarPedidoDeAgente, tareaDeCorreccion, tareaDeDecision, tareaDeRevisionDeFondo, tareaDeRevisionDeLengua, type FichaParaElDueno } from './pedidos'
 import { elegirVersion as elegirVersionPura, esProductoDeUnaRevision, etiquetaDeVersion, MAXIMO_DE_VERSIONES, planDeGuardado, resultadoTrasElegir, type EvaluacionDeVersion, type Etiqueta, type FilaExistente } from './plan'
 import { atiende, casarId, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpinion, duenosDe, normalizarDonde, plantillaDePolitica, topeDelPaso, type Dueno } from './politicas'
+import { lecturasDeVida, vidaDelPaso, type LectorDeVida } from '../../plazo-de-vida'
 import { ESTADOS_TERMINALES, type CambiosDeRevision, type PasoRegistrado, type Puertos, type Revision } from './puertos'
 import { moldeDelPaso, simulacionDelRevisor } from './simulacion'
 import { CLAVE_DE_VERIFICACION, evaluarOrdenes, partirOrdenes, tareaDeVerificacionDeOrdenes, type FilaDeVerificacion } from './orden-del-dueno'
@@ -32,6 +33,7 @@ const sha = (x: unknown) => crypto.createHash('sha256').update(JSON.stringify(x)
 export const MINUTOS_QUE_ESPERA_EL_TURNO = 31
 /** 01-nov · hallazgo de CC3: con 12 min el vigía volvía a llamar (y a cobrar) a un agente de más de ~13 min y cerraba la revisión como fallida antes de que el turno recogiera su respuesta. Debe ser MAYOR que la espera del turno; a cambio, un paso de verdad muerto tarda más en detectarse */
 export const MINUTOS_PARA_DAR_POR_MUERTO = 35
+/** 11-nov · #21 · los 35 min son el PISO: el plazo de cada paso sale de `plazo-de-vida.ts` (techo medido de su agente + latido de su despacho) */
 const MAX_VUELTAS_DEL_BUCLE = 40
 
 type Datos = Record<string, unknown>
@@ -545,19 +547,25 @@ export async function elegirVersionDelPlan(P: Puertos, revisionId: string, o: { 
 
 // ───────────────────────── el vigía
 export interface CierreDelVigia extends Entrega { revision_id: string; resultado: string; client_id: string; artifact_id: string }
-export async function vigiar(P: Puertos, ahora: Date): Promise<{ reanudar: string[]; fallidos: string[]; cierres: CierreDelVigia[] }> {
+export async function vigiar(P: Puertos, ahora: Date, lector?: LectorDeVida): Promise<{ reanudar: string[]; fallidos: string[]; cierres: CierreDelVigia[]; sin_dato?: Array<{ revision_id: string; paso: string; motivo: string }> }> {
   const limite = new Date(ahora.getTime() - MINUTOS_PARA_DAR_POR_MUERTO * 60_000).toISOString()
   const vivos = await P.almacen.pasosCorriendoAntesDe(limite)
   const reanudar: string[] = [], fallidos: string[] = []
   const cierres: CierreDelVigia[] = []
+  const sin_dato: Array<{ revision_id: string; paso: string; motivo: string }> = []
+  const vida = lector ? lecturasDeVida(lector) : null
   for (const t of vivos) {
     const rev = await P.almacen.leerRevision(t.revision_id)
     if (!rev || esTerminal(rev)) continue
+    // 11-nov · #21 · ¿sigue vivo? techo medido de su agente + latido (nunca más corto que los 35 min). Sin lector: el piso de hoy. Lo que no se puede leer no mata
+    const v = vidaDelPaso({ inicio: t.inicio ?? limite, pisoMs: MINUTOS_PARA_DAR_POR_MUERTO * 60_000, duraciones: vida ? await vida.duraciones(t.agente) : null, despacho: vida ? await vida.despacho(t.workflow_execution_id, t.agente) : null }, ahora)
+    if (v.estado === 'sin_dato') { sin_dato.push({ revision_id: rev.id, paso: t.paso, motivo: v.motivo }); continue }
+    if (v.estado === 'vivo') continue
     const clave = `muerto:${t.paso}`
     const veces = rev.estado_del_motor.vueltas[clave] ?? 0
-    await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: rev.estado_del_motor, gasto_usd: rev.gasto_usd, paso: { n: t.n, paso: t.paso, intento: (rev.estado_del_motor.vueltas[`fmt:${t.paso}`] ?? 0) + 1, tipo: 'agente', agente: null, estado: 'muerto', dispatch_key: null, concepto: 'modelo', base: 'usage', cost_usd: 0, error: `sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min` } })
+    await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: rev.estado_del_motor, gasto_usd: rev.gasto_usd, paso: { n: t.n, paso: t.paso, intento: (rev.estado_del_motor.vueltas[`fmt:${t.paso}`] ?? 0) + 1, tipo: 'agente', agente: null, estado: 'muerto', dispatch_key: null, concepto: 'modelo', base: 'usage', cost_usd: 0, error: v.motivo } })
     if (veces >= 1) {
-      const f = await fallar(P, rev, `el paso «${t.paso}» murió dos veces (sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min)`)
+      const f = await fallar(P, rev, `el paso «${t.paso}» murió dos veces (${v.motivo})`)
       fallidos.push(rev.id)
       cierres.push({ revision_id: rev.id, resultado: 'fallida', client_id: rev.client_id, artifact_id: rev.artifact_id, devolver: f.cuerpo.devolver as Entrega['devolver'], ...(f.cuerpo.sala_ref ? { sala_ref: f.cuerpo.sala_ref as Record<string, unknown> } : {}), resultado_para_la_sala: String(f.cuerpo.resultado_para_la_sala) })
       continue
@@ -566,7 +574,7 @@ export async function vigiar(P: Puertos, ahora: Date): Promise<{ reanudar: strin
     await P.almacen.guardar({ revision_id: rev.id, estado_del_motor: estado, gasto_usd: rev.gasto_usd })
     reanudar.push(rev.id)
   }
-  return { reanudar, fallidos, cierres }
+  return sin_dato.length ? { reanudar, fallidos, cierres, sin_dato } : { reanudar, fallidos, cierres }
 }
 
 export { desacuerdosDe }

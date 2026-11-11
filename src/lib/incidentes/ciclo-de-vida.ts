@@ -7,6 +7,7 @@
  * Cada actualización va condicionada al estado que se leyó: una vuelta tardía o una decisión simultánea no se pisan.
  */
 import { esObjeto, estaCompleto, leer, sinSecretos, texto, type Contexto, type Fila, type Fuente } from '../direccion/comun'
+import { vidaDelPaso, type DespachoLeido } from '../plazo-de-vida'
 
 const HORA = 3_600_000
 export const HORAS_DESPACHO_SIN_CIERRE = 24
@@ -23,8 +24,9 @@ const horas = (desde: unknown, ahora: Date): number => (ahora.getTime() - Date.p
 
 /** PURO · qué despacho cerrar y por qué */
 export function cierreDeDespacho(d: Fila, ahora: Date): string | null {
+  // 11-nov · #21 · la regla única: un despacho que sigue latiendo no se cierra aunque pase las 24 h (las 24 h son su piso, por `created_at` como hoy)
+  if (vidaDelPaso({ inicio: texto(d.created_at), pisoMs: HORAS_DESPACHO_SIN_CIERRE * HORA, duraciones: null, despacho: { ok: true, valor: d as unknown as DespachoLeido } }, ahora).estado !== 'muerto') return null
   const edad = horas(d.created_at, ahora)
-  if (!Number.isFinite(edad) || edad < HORAS_DESPACHO_SIN_CIERRE) return null
   return edad >= DIAS_DESPACHO_VENCIDO * 24 ? `vencido: lleva ${Math.floor(edad / 24)} días sin cierre registrado` : `sin cierre registrado tras ${Math.floor(edad)} h`
 }
 
@@ -53,7 +55,7 @@ export async function correrCicloDeIncidentes({ db, ahora }: Contexto, opciones:
   const fuentes: Fuente[] = []
   const corteDespacho = new Date(now.getTime() - HORAS_DESPACHO_SIN_CIERRE * HORA).toISOString()
   const [despachos, alertas, pausas, pedidos] = await Promise.all([
-    leer(fuentes, 'agent_dispatches', db.from('agent_dispatches').select('id, dispatch_key, status, created_at, metadata').in('status', EN_CURSO).lt('created_at', corteDespacho).limit(TOPE), TOPE),
+    leer(fuentes, 'agent_dispatches', db.from('agent_dispatches').select('id, dispatch_key, status, created_at, running_at, updated_at, metadata').in('status', EN_CURSO).lt('created_at', corteDespacho).limit(TOPE), TOPE),
     leer(fuentes, 'cerebro_alertas', db.from('cerebro_alertas').select('clave, ultimo_detalle, abierto_en, ultima_en').is('cerrado_en', null).limit(TOPE), TOPE),
     leer(fuentes, 'cerebro_portero_pausas', db.from('cerebro_portero_pausas').select('client_id').is('levantada_en', null).limit(TOPE), TOPE),
     leer(fuentes, 'plan_cambios', db.from('plan_cambios').select('id, estado, despertado, despertar_detalle, actualizado_en').in('estado', ['pendiente', 'en_reescritura']).limit(TOPE), TOPE),

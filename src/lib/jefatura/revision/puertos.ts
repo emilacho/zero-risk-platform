@@ -85,7 +85,7 @@ export interface Almacen {
   /** el paso que espera respuesta (estado corriendo), si hay uno */
   pasoAbierto(revisionId: string): Promise<PasoRegistrado | null>
   /** pasos en «corriendo» desde antes de `iso` (para el vigía) */
-  pasosCorriendoAntesDe(iso: string): Promise<Array<{ revision_id: string; n: number; paso: string }>>
+  pasosCorriendoAntesDe(iso: string): Promise<Array<{ revision_id: string; n: number; paso: string; inicio?: string | null; agente?: string | null; dispatch_key?: string | null; workflow_execution_id?: string | null }>>
   guardar(c: CambiosDeRevision): Promise<void>
 }
 

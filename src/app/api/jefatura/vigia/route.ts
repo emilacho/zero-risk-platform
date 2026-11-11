@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { vigiar } from '@/lib/jefatura/revision/orquestador'
 import { checkLlaveDeLaSala, esObjeto, puertosReales } from '@/lib/jefatura/revision/ruta'
+import { lectorDeVidaDeSupabase } from '@/lib/plazo-de-vida'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -18,12 +19,13 @@ export async function POST(request: Request) {
   if (!esObjeto(cuerpo)) return NextResponse.json({ error: 'entrada_invalida', errores: ['el cuerpo debe ser un objeto'] }, { status: 400 })
   if (cuerpo.dry_run !== undefined && typeof cuerpo.dry_run !== 'boolean') return NextResponse.json({ error: 'entrada_invalida', errores: ['`dry_run` debe ser verdadero o falso'] }, { status: 400 })
   try {
-    const { P } = puertosReales()
+    const { P, db } = puertosReales()
     const config = await P.almacen.leerConfig()
     if (config.estado === 'apagada') return NextResponse.json({ accion: 'apagada', detalle: 'la jefatura está apagada: el vigía no hace nada' }, { status: 200 })
     if (cuerpo.dry_run === true) return NextResponse.json({ accion: 'dry_run', detalle: 'no se escribió nada' }, { status: 200 })
-    const v = await vigiar(P, P.ahora())
-    return NextResponse.json({ accion: 'vigilado', reanudar: v.reanudar, fallidos: v.fallidos, cierres: v.cierres }, { status: 200 })
+    // 11-nov · #21 · el plazo de cada paso sale de su latido y del techo medido de su agente (nunca más corto que hoy)
+    const v = await vigiar(P, P.ahora(), lectorDeVidaDeSupabase(db))
+    return NextResponse.json({ accion: 'vigilado', reanudar: v.reanudar, fallidos: v.fallidos, cierres: v.cierres, ...(v.sin_dato ? { sin_dato: v.sin_dato } : {}) }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'jefatura_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

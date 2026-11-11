@@ -15,9 +15,29 @@ import { resolverMaterialVencido } from './material-orquestador'
 import { entregarPorTopeDeLaMesa, esTurnoDeLaMesa, recibirResultadoMesa } from './mesa/orquestador'
 import { FAMILIAS_MESA, esDeLaCadena } from './mesa/tipos'
 import { entregarALaCadena } from './mesa/de-la-cadena'
-import { sondearVideos } from './orquestador-video'
+import { AGENTE_DEL_BRAZO, MINUTOS_PARA_ESPERAR_AL_BRAZO, sondearVideos } from './orquestador-video'
+import { CORRIDAS_QUE_SE_MIRAN, lecturasDeVida, lectorDeVidaDeSupabase, techoMedidoMs, vidaDelPaso, type LectorDeVida } from '../plazo-de-vida'
+
+/**
+ * 11-nov · #21 · el lector de vida de la OFICINA: el de siempre, más el brazo de video, que no es un agente y se mide por sus turnos terminados
+ * (fin − inicio). Vive aquí porque solo la oficina nombra sus tablas. Si la base falla, LANZA (quien llama lo vuelve `sin_dato`).
+ */
+export function lectorDeVidaDeLaOficina(db: Db): LectorDeVida {
+  const base = lectorDeVidaDeSupabase(db)
+  return {
+    despacho: (e, a) => base.despacho(e, a),
+    async duraciones(a) {
+      if (a !== AGENTE_DEL_BRAZO) return base.duraciones(a)
+      const b = (await db.from('oficina_turnos').select('inicio, fin').eq('tipo', 'brazo').eq('estado', 'hecho').order('inicio', { ascending: false }).limit(CORRIDAS_QUE_SE_MIRAN)) as { data: Array<{ inicio: string | null; fin: string | null }> | null; error: { message: string } | null }
+      if (b.error) throw new Error(`leer los turnos del brazo: ${b.error.message}`)
+      const t = (x: string | null) => (x ? Date.parse(x) : NaN)
+      return (b.data ?? []).map((f) => t(f.fin) - t(f.inicio))
+    },
+  }
+}
 
 type Fila = Record<string, unknown>
+/** 11-nov · #21 · el PISO de la oficina: el plazo de cada paso sale de `plazo-de-vida.ts` (techo medido del agente + latido), nunca más corto que esto */
 export const MINUTOS_PARA_DAR_POR_MUERTO = 12
 /** 28-oct · un turno LANZADO que ningún flujo acusó en este tiempo se perdió en el traspaso: se vuelve a entregar (no se da por muerto) */
 export const MINUTOS_PARA_REANUDAR_LO_LANZADO = 3
@@ -64,7 +84,9 @@ export async function vencerMesasPorPlazo(P: Puertos, db: Db, ahora: Date): Prom
   return { vencidas }
 }
 
-export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> }> {
+export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date, lector: LectorDeVida = lectorDeVidaDeLaOficina(db)): Promise<{ reanudar: string[]; fallidos: string[]; cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }>; sin_dato?: Array<{ encargo_id: string; paso: string; motivo: string }> }> {
+  const vida = lecturasDeVida(lector)
+  const sin_dato: Array<{ encargo_id: string; paso: string; motivo: string }> = []
   const limite = new Date(ahora.getTime() - MINUTOS_PARA_DAR_POR_MUERTO * 60_000).toISOString()
   const limiteJefatura = new Date(ahora.getTime() - MINUTOS_PARA_ESPERAR_A_LA_JEFATURA * 60_000).toISOString()
   // ① LO LANZADO SIN ACUSE (traspaso perdido): a los 3 min se vuelve a entregar el mismo turno (el acuse atómico impide que dos flujos lo paguen)
@@ -92,8 +114,12 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
   // ② EL BRAZO DE VIDEO (parte 2 · 31-oct): los turnos `brazo` no son pasos muertos a los 12 min; el vigía SONDEA el estado del video en cada vuelta (≈ 5–8 min por video; plazo 45 min) y registra el paso cuando termina
   const vb = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,inicio').eq('estado', 'corriendo').eq('tipo', 'brazo')) as { data: Fila[] | null; error: { message: string } | null }
   if (vb.error) throw new Error(`vigía · leer los turnos del brazo: ${vb.error.message}`)
-  const videos = await sondearVideos(P, (vb.data ?? []).map((t) => ({ encargo_id: String(t.encargo_id), n: Number(t.n), paso: String(t.paso), inicio: String(t.inicio) })), ahora)
-  const r = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,inicio').eq('estado', 'corriendo').lt('inicio', limite)) as { data: Fila[] | null; error: { message: string } | null }
+  // 11-nov · #21 · el plazo del brazo sale de sus propios turnos terminados (nunca menos que los 45 min); si no se pueden leer, esta vuelta no vence ninguno (lo que no se lee no mata)
+  const delBrazo = vb.data?.length ? await vida.duraciones(AGENTE_DEL_BRAZO) : null
+  if (delBrazo && !delBrazo.ok) for (const t of vb.data ?? []) sin_dato.push({ encargo_id: String(t.encargo_id), paso: String(t.paso), motivo: `no se pudo leer el historial del brazo (${delBrazo.motivo})` })
+  const techoDelBrazo = !delBrazo ? MINUTOS_PARA_ESPERAR_AL_BRAZO : delBrazo.ok ? Math.ceil(techoMedidoMs(MINUTOS_PARA_ESPERAR_AL_BRAZO * 60_000, delBrazo.valor) / 60_000) : Infinity
+  const videos = await sondearVideos(P, (vb.data ?? []).map((t) => ({ encargo_id: String(t.encargo_id), n: Number(t.n), paso: String(t.paso), inicio: String(t.inicio) })), ahora, techoDelBrazo)
+  const r = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,agente,dispatch_key,workflow_execution_id,inicio').eq('estado', 'corriendo').lt('inicio', limite)) as { data: Fila[] | null; error: { message: string } | null }
   if (r.error) throw new Error(`vigía · leer los pasos vivos: ${r.error.message}`)
   const reanudar: string[] = [...reentregar, ...videos.reanudar], fallidos: string[] = [...videos.fallidos]
   const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = [...videos.cierres]
@@ -115,17 +141,22 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
       if (await resolverMaterialVencido(P, enc, pl, String(t.inicio), ahora) === 'cerrado') reanudar.push(enc.id)
       continue
     }
+    // 11-nov · #21 · ¿sigue vivo? el techo medido de SU agente y su latido (nunca más corto que los 12 min de hoy). Lo que no se puede leer no mata: se anota y sigue igual
+    const v = vidaDelPaso({ inicio: t.inicio as string | null, pisoMs: MINUTOS_PARA_DAR_POR_MUERTO * 60_000, duraciones: await vida.duraciones(t.agente as string | null), despacho: await vida.despacho(t.workflow_execution_id as string | null, t.agente as string | null) }, ahora)
+    if (v.estado === 'sin_dato') { sin_dato.push({ encargo_id: enc.id, paso: String(t.paso), motivo: v.motivo }); continue }
+    if (v.estado === 'vivo') continue
+    const sinVuelta = v.motivo
     if (esTurnoDeLaMesa(String(t.paso))) {
       // LA MESA (bloqueante 6 de CC#3): un turno de especialista que no volvió NO mata la pieza ni se reintenta en círculo: queda anotado en el libro como turno fallido (la mesa lo reintenta hasta 3 veces por agente y luego sigue sin él)
-      await recibirResultadoMesa(P, enc.id, Number(t.n), { error: `sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min`, costo_usd: 0 })
+      await recibirResultadoMesa(P, enc.id, Number(t.n), { error: sinVuelta, costo_usd: 0 })
       reanudar.push(enc.id)
       continue
     }
     const clave = `muerto:${String(t.paso)}`
     const veces = enc.estado_del_motor.vueltas[clave] ?? 0
-    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: enc.estado_del_motor, gasto_usd: enc.gasto_usd, turno: { n: Number(t.n), paso: String(t.paso), tipo: 'agente', agente: null, estado: 'muerto', dispatch_key: null, cost_usd: 0, error: `sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min` } })
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: enc.estado_del_motor, gasto_usd: enc.gasto_usd, turno: { n: Number(t.n), paso: String(t.paso), tipo: 'agente', agente: null, estado: 'muerto', dispatch_key: null, cost_usd: 0, error: sinVuelta } })
     if (veces >= 1) {
-      await fallar(P, enc, `el paso «${String(t.paso)}» murió dos veces (sin vuelta en ${MINUTOS_PARA_DAR_POR_MUERTO} min)`)
+      await fallar(P, enc, `el paso «${String(t.paso)}» murió dos veces (${sinVuelta})`)
       fallidos.push(enc.id)
       cierres.push({ encargo_id: enc.id, resultado_para_la_sala: 'fallido', sala_ref: enc.sala_ref, client_id: enc.client_id, brief_id: enc.brief_id })
       continue
@@ -134,5 +165,5 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date): Prom
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: estado, gasto_usd: enc.gasto_usd })
     reanudar.push(enc.id)
   }
-  return { reanudar, fallidos, cierres }
+  return sin_dato.length ? { reanudar, fallidos, cierres, sin_dato } : { reanudar, fallidos, cierres }
 }

@@ -96,8 +96,8 @@ export function almacenDeSupabase(db: Db): Almacen {
       return f ? { n: Number(f.n), paso: String(f.paso), intento: Number(f.intento ?? 1), tipo: f.tipo as PasoRegistrado['tipo'], agente: (f.agente as string | null) ?? null, estado: 'corriendo', dispatch_key: (f.dispatch_key as string | null) ?? null, concepto: (f.concepto as PasoRegistrado['concepto']) ?? 'modelo', base: (f.base as PasoRegistrado['base']) ?? 'usage', cost_usd: Number(f.cost_usd ?? 0) } : null
     },
     async pasosCorriendoAntesDe(iso) {
-      const d = ok(await db.from('jefatura_pasos').select('revision_id,n,paso').eq('estado', 'corriendo').lt('inicio', iso), 'leer los pasos vivos') as Fila[] | null
-      return (d ?? []).map((f) => ({ revision_id: String(f.revision_id), n: Number(f.n), paso: String(f.paso) }))
+      const d = ok(await db.from('jefatura_pasos').select('revision_id,n,paso,inicio,agente,dispatch_key,workflow_execution_id').eq('estado', 'corriendo').lt('inicio', iso), 'leer los pasos vivos') as Fila[] | null
+      return (d ?? []).map((f) => ({ revision_id: String(f.revision_id), n: Number(f.n), paso: String(f.paso), inicio: (f.inicio as string | null) ?? null, agente: (f.agente as string | null) ?? null, dispatch_key: (f.dispatch_key as string | null) ?? null, workflow_execution_id: (f.workflow_execution_id as string | null) ?? null }))
     },
     async guardar(c: CambiosDeRevision) {
       const patch: Fila = { estado_del_motor: c.estado_del_motor, gasto_usd: c.gasto_usd }
