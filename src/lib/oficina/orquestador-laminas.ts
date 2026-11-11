@@ -90,6 +90,26 @@ export function armarPedidoL(pl: Plantilla, paso: Paso, e: Estado, extra?: { fic
   return construirTareaLaminas(paso.clave, contextoL(pl, e), { fichas: extra?.fichas ?? fichasQueTocanL(e, paso), ...(extra?.errorDeFormato ? { errorDeFormato: extra.errorDeFormato } : {}) })
 }
 
+/**
+ * 11-nov · GO Lenovo 12:52 Zúrich · «mirar» respondió (con su reintento) pero la respuesta no se pudo LEER: «no pude leer» nunca es «descartar».
+ * Las imágenes que se le mostraron siguen en la pieza tal cual (nadie dijo que no cumplan), y una ficha QUE BLOQUEA pide que una persona las mire: no pasa sola.
+ * Una re-imagen ilegible no pisa nada: se queda la imagen anterior.
+ */
+export function sinLecturaDeMirarL(paso: Paso, e: Estado, errores: string[]): ResultadoDePaso {
+  const motivo = errores.slice(0, 2).join(' · ')
+  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'una persona decide si se rehace')] }
+  const mostradas = imagenesAMirarL(e)
+  const aceptadas: Record<string, number[]> = { ...((datos(e, 'observacion_imagen')?.aceptadas ?? {}) as Record<string, number[]>) }
+  for (const m of mostradas) aceptadas[m.ref] = [...new Set([...(aceptadas[m.ref] ?? []), m.indice])]
+  const refsSin = refsGeneradas(e).filter((r) => !(aceptadas[r]?.length))
+  return {
+    costo_usd: 0,
+    artefacto: { observaciones: [], aceptadas, preferencia: [], veredicto: { pasan: mostradas.map((m) => m.indice), porImagen: [], regenerar: false, refs_sin_imagen: refsSin }, sin_lectura: true },
+    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que las imágenes cumplen el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); las imágenes siguen en la pieza sin juzgar`, 'formato de la observación', 'una persona mira las imágenes antes de aprobar')],
+    reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' },
+  }
+}
+
 /** pasos de agente que se saltan sin llamar a nadie: mirar sin ninguna imagen que mirar */
 export function saltoL(paso: Paso, e: Estado): ResultadoDePaso | null {
   if (paso.clave === 'mirar' && imagenesAMirarL(e).length === 0) {
