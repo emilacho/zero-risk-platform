@@ -124,6 +124,17 @@ describe('leer_pdf · el texto del PDF oficial vuelve como una página más', ()
     expect((await fechasLeerPdf(al, { campana_id: id, pais: 'Ecuador', tipo: 'feriados', urls: [PDF_EC] }, deps({}))).status).toBe(400)
     expect((await fechasLeerPdf(al, pedir(id, 'Ecuador', []), deps({}))).status).toBe(400)
   })
+  it('🔴 la llave general del cliente: con la cadena apagada (o en ensayo sin estar en la lista), una campaña REAL no baja ningún PDF', async () => {
+    for (const [config, code] of [[{ estado_cadena: 'apagada' }, 'E-CADENA-APAGADA'], [{ estado_cadena: 'ensayo', clientes_ensayo: [B.clientId] }, 'E-CADENA-NO-ADMITIDO']] as const) {
+      // la campaña real se abrió con la cadena encendida; después se apagó (o pasó a ensayo)
+      const al = mundo(); const id = await campanaDe(al, A.clientId, false)
+      for (const [k, v] of Object.entries(config)) await al.escribirConfig(k, v)
+      const d = deps({ [PDF_EC]: pdf(PDF_FERIADOS_EC) })
+      const r = await fechasLeerPdf(al, pedir(id, 'Ecuador', [PDF_EC]), d)
+      expect(r.status, code).toBe(409); expect(r.cuerpo.code).toBe(code)
+      expect(d.pedidas).toEqual([])
+    }
+  })
   it('la acción está en la tabla de la ruta de fechas', () => { expect(typeof ACCIONES.fechas.leer_pdf).toBe('function') })
 })
 
@@ -154,6 +165,25 @@ describe('bajarPdf · tope, redirecciones y protocolo', () => {
     const f = (async () => { pidio = true; return resp(200, PDF_FERIADOS_EC) }) as unknown as typeof fetch
     expect(await bajarPdf('file:///etc/passwd', f)).toEqual({ ok: false, razon: 'protocolo no admitido (file:)' })
     expect(pidio).toBe(false)
+  })
+  /** un sitio que tarda `ms` en contestar y respeta la señal (como fetch); sin señal, a los 2 s contesta que nadie lo cortó */
+  const lento = (ms: number, contestar: (u: string) => Response) => (async (u: string, o?: RequestInit) => new Promise<Response>((ok, mal) => {
+    const s = o?.signal
+    if (!s) { setTimeout(() => mal(new Error('nadie lo cortó')), 2000); return }
+    if (s.aborted) return mal(s.reason)
+    const t = setTimeout(() => ok(contestar(u)), ms)
+    s.addEventListener('abort', () => { clearTimeout(t); mal(s.reason) })
+  })) as unknown as typeof fetch
+  it('🔴 una descarga colgada se corta en el plazo y se dice «tiempo agotado»', async () => {
+    const r = await bajarPdf('https://www.sri.gob.ec/f.pdf', lento(10_000, () => resp(200, PDF_FERIADOS_EC)), 1_000_000, 40)
+    expect(r).toEqual({ ok: false, razon: 'no se pudo bajar (tiempo agotado)' })
+  })
+  it('🔴 el plazo es UNO para todos los saltos: 3 redirecciones de 25 ms no caben en 50 ms (aunque cada una sola sí)', async () => {
+    let n = 0
+    const f = lento(25, () => (++n <= 3 ? resp(302, null, { location: `/r${n}.pdf` }) : resp(200, PDF_FERIADOS_EC)))
+    expect(await bajarPdf('https://www.sri.gob.ec/f.pdf', f, 1_000_000, 50)).toEqual({ ok: false, razon: 'no se pudo bajar (tiempo agotado)' })
+    n = 0
+    expect((await bajarPdf('https://www.sri.gob.ec/f.pdf', f, 1_000_000, 1_000)).ok).toBe(true)
   })
   it('🔴 más de 3 redirecciones se cortan', async () => {
     let n = 0

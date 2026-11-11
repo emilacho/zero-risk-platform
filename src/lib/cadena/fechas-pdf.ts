@@ -17,6 +17,7 @@ import type { LecturaDeArchivo } from '@/lib/cerebro/archivos/tipos'
 
 /** cuántos PDF se leen por llamada (uno por uno, de a UN proceso) */
 export const PDF_POR_LLAMADA = 3
+/** plazo TOTAL por PDF: cubre todos los saltos de redirección y la lectura del cuerpo (3 PDF × 20 s = 60 s, holgado bajo los 150 s del nodo «② Leer los PDF») */
 export const TIEMPO_DE_DESCARGA_MS = 20_000
 export const REDIRECCIONES_MAX = 3
 /** el texto que vuelve se corta igual que una página de HTML en «② Juntar» */
@@ -32,15 +33,17 @@ export interface DependenciasDePdf {
 /** la MISMA llave que usa la cobertura (`datos.ts`): «Feriados locales» → «feriados_locales» */
 const clave = claveDeFecha
 
-/** baja una dirección con tope de tiempo y de bytes, siguiendo redirecciones SOLO dentro del mismo sitio */
-export async function bajarPdf(url: string, f: typeof fetch = fetch, topeBytes = TOPES.pdf_bytes): Promise<ResultadoDeBajada> {
+/** baja una dirección con tope de tiempo (uno solo para todos los saltos) y de bytes, siguiendo redirecciones SOLO dentro del mismo sitio */
+export async function bajarPdf(url: string, f: typeof fetch = fetch, topeBytes = TOPES.pdf_bytes, tiempoMs = TIEMPO_DE_DESCARGA_MS): Promise<ResultadoDeBajada> {
   let actual: URL
   try { actual = new URL(url) } catch { return { ok: false, razon: 'la dirección no es válida' } }
   const sitio = actual.hostname
+  const plazo = AbortSignal.timeout(tiempoMs)
+  const porQue = (e: unknown) => `no se pudo bajar (${String((e as Error)?.name === 'TimeoutError' ? 'tiempo agotado' : (e as Error)?.message ?? e).slice(0, 120)})`
   for (let salto = 0; salto <= REDIRECCIONES_MAX; salto++) {
     if (actual.protocol !== 'https:' && actual.protocol !== 'http:') return { ok: false, razon: `protocolo no admitido (${actual.protocol})` }
     let r: Response
-    try { r = await f(actual.toString(), { redirect: 'manual', signal: AbortSignal.timeout(TIEMPO_DE_DESCARGA_MS) }) } catch (e) { return { ok: false, razon: `no se pudo bajar (${String((e as Error)?.name === 'TimeoutError' ? 'tiempo agotado' : (e as Error)?.message ?? e).slice(0, 120)})` } }
+    try { r = await f(actual.toString(), { redirect: 'manual', signal: plazo }) } catch (e) { return { ok: false, razon: porQue(e) } }
     if (r.status >= 300 && r.status < 400) {
       const destino = r.headers.get('location')
       if (!destino) return { ok: false, razon: `redirección ${r.status} sin destino` }
@@ -59,7 +62,9 @@ export async function bajarPdf(url: string, f: typeof fetch = fetch, topeBytes =
     const lector = r.body?.getReader()
     if (!lector) return { ok: false, razon: 'respuesta vacía' }
     for (;;) {
-      const { done, value } = await lector.read()
+      let parte: ReadableStreamReadResult<Uint8Array>
+      try { parte = await lector.read() } catch (e) { return { ok: false, razon: porQue(e) } }
+      const { done, value } = parte
       if (done) break
       total += value.byteLength
       if (total > topeBytes) { try { await lector.cancel() } catch { /* ya cerró */ } return { ok: false, razon: `pesa más de ${topeBytes} bytes (tope)` } }
