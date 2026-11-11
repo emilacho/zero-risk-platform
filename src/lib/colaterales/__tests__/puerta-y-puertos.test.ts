@@ -17,7 +17,7 @@ const EDIC = { client_id: CLI, documento: 'brief', documento_ref: 'camp-1', vers
 
 function armar() {
   const { db, tablas } = baseFalsa()
-  const P: PuertosDelTurno = { almacen: almacenDeColaterales(db), filasActivas: vi.fn(async () => new Set<string>()), piezasPorPublicar: vi.fn(async () => ({ frenan: [], se_asumen_publicadas: [] })), documentos: vi.fn(async () => ({})), campanaDelCliente: vi.fn(async () => true), gastoDelDia: vi.fn(async () => ({ recibos: 0, en_vuelo: 0 })) }
+  const P: PuertosDelTurno = { almacen: almacenDeColaterales(db), filasActivas: vi.fn(async () => new Set<string>()), piezasPorPublicar: vi.fn(async () => ({ frenan: [], se_asumen_publicadas: [] })), documentos: vi.fn(async () => ({})), campanaDelCliente: vi.fn(async () => true), gastoDelDia: vi.fn(async () => ({ recibos: 0, en_vuelo: 0 })), topeDiario: vi.fn(async () => 5) }
   return { P, tablas }
 }
 const pedir = (P: PuertosDelTurno, c: Record<string, unknown>) => atenderColaterales(P, c, new Date('2026-11-11T12:00:00Z'))
@@ -101,6 +101,7 @@ function dbFalsa(tablas: Record<string, Record<string, unknown>[]>) {
           eq: (k: string, v: unknown) => { ped.filtros.push(`eq:${k}`); fs.push((f) => f[k] === v); return api },
           gte: (k: string, v: unknown) => { ped.filtros.push(`gte:${k}`); fs.push((f) => String(f[k]) >= String(v)); return api },
           in: (k: string, vs: unknown[]) => { ped.filtros.push(`in:${k}`); fs.push((f) => vs.includes(f[k])); return api },
+          is: (k: string, v: unknown) => { ped.filtros.push(`is:${k}`); fs.push((f) => (f[k] ?? null) === v); return api },
           then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve({ data: (tablas[tabla] ?? []).filter((f) => fs.every((fn) => fn(f))).map((f) => Object.fromEntries(cols.map((c) => [c, f[c]]))), error: null }).then(res, rej),
         }
         return api
@@ -153,6 +154,18 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
     expect(pedidos.filter((q) => q.tabla === 'colaterales_ediciones').map((q) => q.filtros)).toContainEqual(['eq:client_id', 'eq:estado'])
     expect(pedidos.find((q) => q.tabla === 'agent_invocations')).toMatchObject({ filtros: ['in:workflow_execution_id'] })
   })
+  it('🔴 tope diario (RESPUESTA Lenovo 03:02Z): la fila del cliente manda; sin fila, la por omisión; sin ninguna o con un valor inválido, null', async () => {
+    const filas = [{ client_id: null, tope_usd: '5.00' }, { client_id: CLI2, tope_usd: 12 }]
+    const { db, pedidos } = dbFalsa({ colaterales_topes_diarios: filas })
+    const P = puertosDeSupabase(db, undefined, cadenaFalsa())
+    expect(await P.topeDiario(CLI2)).toBe(12)
+    expect(await P.topeDiario(CLI)).toBe(5)
+    expect(pedidos.filter((q) => q.tabla === 'colaterales_topes_diarios').map((q) => q.filtros)).toEqual([['eq:client_id'], ['eq:client_id'], ['is:client_id']])
+    expect(pedidos.every((q) => q.cols.join() === 'tope_usd')).toBe(true)
+    expect(await puertosDeSupabase(dbFalsa({}).db, undefined, cadenaFalsa()).topeDiario(CLI)).toBeNull()
+    expect(await puertosDeSupabase(dbFalsa({ colaterales_topes_diarios: [{ client_id: CLI, tope_usd: 0 }, { client_id: null, tope_usd: 5 }] }).db, undefined, cadenaFalsa()).topeDiario(CLI)).toBeNull()
+    expect(await puertosDeSupabase(dbFalsa({ colaterales_topes_diarios: [{ client_id: null, tope_usd: null }] }).db, undefined, cadenaFalsa()).topeDiario(CLI)).toBeNull()
+  })
   it('🔴 la campaña es del cliente (línea de CC6): la suya sí; la de otro cliente o una que no existe, no; si la cadena falla, lanza', async () => {
     const { db } = dbFalsa({})
     const campanas = { 'camp-a': { client_id: CLI }, 'camp-b': { client_id: CLI2 } }
@@ -173,10 +186,11 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
     expect(await puertosDeSupabase(db, undefined, cadenaFalsa({ viva: 'camp-viva', estrategia: { version: 4, estado: 'aprobada', contenido: {} } })).documentos(e, ['brief', 'pieza'])).toEqual({})
   })
   it('🔴 si la base falla, cada lectura LANZA (el turno frena · nunca «cero gasto» ni «ninguna fila activa»)', async () => {
-    const caida = { from: () => { const api: Record<string, unknown> = { select: () => api, eq: () => api, gte: () => api, in: () => api, then: (res: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'caída' } }).then(res) }; return api } } as unknown as Db
+    const caida = { from: () => { const api: Record<string, unknown> = { select: () => api, eq: () => api, gte: () => api, in: () => api, is: () => api, then: (res: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'caída' } }).then(res) }; return api } } as unknown as Db
     const P = puertosDeSupabase(caida, () => new Date('2026-11-11T12:00:00Z'), cadenaFalsa())
     await expect(P.filasActivas()).rejects.toThrow(/caída/)
     await expect(P.gastoDelDia(CLI, 'x')).rejects.toThrow(/caída/)
+    await expect(P.topeDiario(CLI)).rejects.toThrow(/caída/)
   })
   it('la campaña de la edición: la del documento si es de campaña; la viva si es del cliente', async () => {
     const viva = vi.fn(async () => ({ id: 'viva' }))
