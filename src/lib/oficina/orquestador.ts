@@ -22,8 +22,7 @@ import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL,
 import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV } from './orquestador-video'
 import { PASO_MIRAR_VIDEO } from './video/mirada'
 import { confianzaDeLaFoto } from './fotos'
-import { candidatasDelEncargo, medirFotos } from './material-fotos'
-import { limitesDeMaterial } from './material'
+import { candidatasDelEncargo } from './material-fotos'
 import { reglasDeInvencion } from './prompts-sin-invencion'
 import { marcaDeOrigenActiva, origenesDeImagenes } from './marcas-de-origen'
 import { seccionDeCambiosDelDueno } from './cambios-del-dueno'
@@ -396,9 +395,8 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       return { res: { costo_usd: 0, artefacto: { brief, proporcion, F: fu } } }
     }
     case 'elegir_foto': {
-      const lim = limitesDeMaterial(pl.limites)
-      let { cf, protas, prohibe } = candidatasDelEncargo(e, pl, P.ahora())
-      if (lim.activo && cf.candidatas.length < medirFotos(e, pl, P.ahora()).minimo) ({ cf, protas, prohibe } = candidatasDelEncargo(e, pl, P.ahora(), { permitirCercanas: true }))
+      // #15 · las cercanas ya vienen siempre rotuladas en las candidatas: el director visual decide
+      const { cf, protas, prohibe } = candidatasDelEncargo(e, pl, P.ahora())
       return { res: { costo_usd: 0, artefacto: { ...cf, protagonistas: protas, prohibe_personas: prohibe, cercanas: cf.candidatas.filter((c) => c.cercana).map((c) => c.id) } } }
     }
     case 'chequear_prompts': {
@@ -828,7 +826,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
       const filtradas = obs.filter((o) => validos.has(o.indice))
       const modo = ((datos(e, 'visual_direction')?.decision as { modo?: string } | undefined)?.modo) ?? 'ninguna'
       const puede = !esRe && modo === 'generada' && (e.vueltas['mirar'] ?? 0) < Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
-      const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, puede)
+      const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, puede, { exigirDato: reglasDeInvencion(pl.limites) !== null, esGenerada: () => modo === 'generada' })
       // re-imagen que no cumple el brief: NO se pisa la observación ni la imagen anterior (se queda la que estaba) y se dice
       if (esRe && ver.pasan.length === 0) return { res: { costo_usd: 0, fichas: [fichaNueva(`reimagen-no-cumplio-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'la imagen nueva (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
       const fichas: Ficha[] = []

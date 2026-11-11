@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { esMarcaPropia, observacionDeLaMesa, type LecturaDelObservador } from '../mesa/evidencia'
 
-const lectura = (marcas: string[], texto: string[] = []): LecturaDelObservador => ({ texto_leido: texto, marcas, personas: 0, leido: true })
+const lectura = (marcas: string[], texto: string[] = []): LecturaDelObservador => ({ texto_leido: texto, marcas, personas: 0, leido: true, texto_ajeno: false, dato_sin_verificar: false })
 const uno = [{ indice: 0, ref: 'hook' }]
 const CLIENTE = 'Zero Risk Seguridad Industrial'
 
@@ -33,18 +33,18 @@ describe('¿es la marca del propio cliente?', () => {
 
 describe('el cotejo de la mesa con el nombre del cliente', () => {
   it('la foto cuya única marca es «Zero Risk» se ACEPTA cuando el cliente es Zero Risk Seguridad Industrial', () => {
-    const o = observacionDeLaMesa({ items: uno, lecturas: { 0: lectura(['Zero Risk']) }, permitido: ['zero risk'], marcasPropias: ['@zerorisk', CLIENTE] })
+    const o = observacionDeLaMesa({ items: uno, lecturas: { 0: lectura(['Zero Risk']) }, marcasPropias: ['@zerorisk', CLIENTE] })
     expect(o.rechazadas).toEqual([])
     expect(o.aceptadas).toEqual({ hook: [0] })
   })
   it('sigue rechazando la marca AJENA aunque venga junto a la propia', () => {
-    const o = observacionDeLaMesa({ items: uno, lecturas: { 0: lectura(['Zero Risk', 'Nike']) }, permitido: ['zero risk'], marcasPropias: [CLIENTE] })
+    const o = observacionDeLaMesa({ items: uno, lecturas: { 0: lectura(['Zero Risk', 'Nike']) }, marcasPropias: [CLIENTE] })
     expect(o.rechazadas).toHaveLength(1)
     expect(o.rechazadas[0].motivo).toMatch(/marca ajena: Nike/)
     expect(o.rechazadas[0].motivo).not.toMatch(/Zero Risk/)
   })
   it('sin el nombre del cliente entre las propias, el caso real SÍ se rechazaba (la prueba del arreglo)', () => {
-    const o = observacionDeLaMesa({ items: uno, lecturas: { 0: lectura(['Zero Risk']) }, permitido: ['zero risk'], marcasPropias: ['@zerorisk'] })
+    const o = observacionDeLaMesa({ items: uno, lecturas: { 0: lectura(['Zero Risk']) }, marcasPropias: ['@zerorisk'] })
     expect(o.rechazadas[0]?.motivo).toMatch(/marca ajena: Zero Risk/)
   })
 })
@@ -63,7 +63,7 @@ describe('el paso del observador completo recibe el nombre del cliente (cableado
   }
   const correr = async (nombre: string) => {
     const { observarImagenes } = await import('../mesa/observar')
-    const P = { revisor: async () => ({ ok: true, texto: 'TEXTO_VISIBLE: ninguno\nMARCAS: Zero Risk\nPERSONAS: 0', costo_usd: 0.004 }) }
+    const P = { revisor: async () => ({ ok: true, texto: 'TEXTO_VISIBLE: ninguno\nMARCAS: Zero Risk\nPERSONAS: 0\nTEXTO_AJENO: no\nDATO_SIN_VERIFICAR: no', costo_usd: 0.004 }) }
     const enc = { id: 'e', client_id: 'c', dry_run: false, estado_del_motor: estadoConImagen(nombre) }
     return observarImagenes(P as never, enc as never, {} as never)
   }

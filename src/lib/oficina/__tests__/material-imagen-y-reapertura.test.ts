@@ -111,17 +111,21 @@ describe('prompts-sin-invencion · lo que una imagen generada no puede pedir (co
     ['un teléfono', 'Una mesa con un cartel: llama al 0997744288'],
     ['un usuario', 'Un plato y el usuario @naufrago.ec'],
     ['un enlace', 'Un plato junto a www.naufrago.ec'],
+  ])('sigue EXACTO y rechaza %s', (_n, p) => { expect(motivosDeInvencion(p, reglas()).length).toBeGreaterThan(0) })
+  const PALABRAS = [
     ['un logotipo', 'Un extintor con el logotipo de la marca bien grande'],
     ['un eslogan', 'Un extintor y un eslogan debajo'],
     ['texto legible', 'Un extintor con texto legible en el cuerpo'],
-  ])('rechaza %s', (_n, p) => { expect(motivosDeInvencion(p, reglas()).length).toBeGreaterThan(0) })
-  it.each([
-    ['un manómetro con su lectura', 'Un extintor rojo con el manómetro marcando 150 psi'],
+    ['un manómetro con su lectura', 'Un extintor rojo con el manómetro marcando la presión'],
     ['una etiqueta', 'Un extintor con una etiqueta de inspección en el cuerpo'],
     ['un sello de certificación', 'Un extintor con un sello de certificación visible'],
-    ['una norma', 'Un extintor que cumple la norma NFPA 10'],
     ['la fecha de vencimiento', 'Un extintor con la fecha de vencimiento en la etiqueta'],
-  ])('rubros regulados / de seguridad (extintores): rechaza %s', (_n, p) => { expect(motivosDeInvencion(p, reglas()).length).toBeGreaterThan(0) })
+  ]
+  it.each(PALABRAS)('#13 · por omisión ninguna palabra descarta %s: lo juzga quien mira la imagen', (_n, p) => { expect(motivosDeInvencion(p, reglas())).toEqual([]) })
+  it.each(PALABRAS)('#13 · una plantilla que pide su lista la sigue usando (%s)', (_n, p) => {
+    const conLista = reglasDeInvencion({ ...ON, terminos_no_inventados: ['logotipo', 'eslogan', 'texto legible', 'manometro', 'etiqueta', 'sello', 'fecha de vencimiento'] })!
+    expect(motivosDeInvencion(p, conLista).length).toBeGreaterThan(0)
+  })
   it('lo negado SÍ vale («sin logotipos ni texto», «sin etiquetas»)', () => {
     expect(motivosDeInvencion('Un extintor rojo sobre una pared blanca, luz natural. Sin logotipos, sin texto legible, sin etiquetas ni sellos.', reglas())).toEqual([])
   })
@@ -132,7 +136,7 @@ describe('prompts-sin-invencion · lo que una imagen generada no puede pedir (co
     const r = reglasDeInvencion({ ...ON, terminos_no_inventados: ['casco'] })!
     expect(motivosDeInvencion('Un obrero con casco', r).length).toBeGreaterThan(0)
     expect(motivosDeInvencion('Un extintor con manómetro', r)).toEqual([])
-    expect(TERMINOS_NO_INVENTADOS).toEqual(expect.arrayContaining(['manometro', 'sello', 'certificacion', 'norma', 'etiqueta']))
+    expect(TERMINOS_NO_INVENTADOS).toEqual([])
   })
 })
 
@@ -158,7 +162,8 @@ describe('prompts-sin-invencion · la competencia es SOLO estilo, en palabras pr
     expect(t).toMatch(/Referencias de estilo de otras cuentas \(SOLO palabras[^)]*\): \(ninguna\)/)
   })
   it('chequearPrompts con las reglas encendidas deja pasar solo los prompts limpios; apagadas = igual que hoy', () => {
-    const lista = ['Un extintor con el logotipo grande', 'Un extintor rojo, luz natural, sin texto']
+    // #13 · por omisión la palabra «logotipo» ya no descarta (lo juzga quien mira); el dinero sigue exacto
+    const lista = ['Un extintor con un cartel de 20% de descuento', 'Un extintor rojo, luz natural, sin texto']
     const propios = { marcas_ajenas: [] as string[] }
     const sin = { obligatorio: [], prohibido: [] }
     expect(chequearPrompts(lista, sin, propios).pasan).toEqual([0, 1])

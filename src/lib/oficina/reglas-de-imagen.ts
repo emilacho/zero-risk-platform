@@ -1,7 +1,9 @@
 /**
  * LOS 3 CONTROLES de «ninguna regla se confía al modelo» para las imágenes (Emilio, 09-oct; diseño sala 1 §16.4 y salas 2-3-4 §1.3). Todo PURO: el modelo propone y describe; el CÓDIGO decide.
  *  ① formato de la salida → salida.ts
- *  ② lo que el brief obliga o prohíbe: `chequearPrompts` corre sobre CADA prompt ANTES de generar la imagen (un prompt que no cubre un obligatorio, o nombra un prohibido, no se genera);
+ *  ② lo que el brief obliga o prohíbe: `chequearPrompts` corre sobre CADA prompt ANTES de generar la imagen (un prompt que nombra un prohibido, una marca ajena o parámetros del generador no se genera);
+ *     11-nov · #12 del barrido de reglas rígidas (GO Lenovo 18:50): que el prompt NO REPITA la palabra de un obligatorio, que escriba algo con forma de proporción («10:30») o «estilo de <Nombre>»
+ *     ya NO descartan: pasan como AVISO y lo juzga quien mira la imagen (el curador responde regla por regla en ③; una regla omitida sigue contando como falla).
  *  ③ la imagen contra el brief: el curador SOLO describe; `decideImagen` decide por código; si falla se regenera (≤ 2 veces, lo manda el motor); si sigue fallando se descarta esa versión.
  * Más: `citasExisten` (una regla extraída de un brief de texto debe traer una cita que EXISTA en el brief) y `datosAjenos` (teléfono, @ o enlace que no son del cliente).
  */
@@ -31,8 +33,9 @@ export function chequearPrompts(prompts: string[], reglas: ReglasDeImagen, propi
   const avisos = new Set<string>()
   prompts.forEach((p, i) => {
     const motivos: string[] = []
+    // #12 · la palabra no decide: un obligatorio que el prompt no repite es un aviso; si la imagen lo cumple lo dice quien la mira (③)
     for (const r of reglas.obligatorio) {
-      if (!clavesDe(r).some((c) => contienePalabra(p, c))) motivos.push(`no cubre el obligatorio «${r.id}» (${r.texto})`)
+      if (!clavesDe(r).some((c) => contienePalabra(p, c))) avisos.add(`el prompt ${i + 1} no repite el obligatorio «${r.id}» (${r.texto}): lo juzga quien mira la imagen`)
     }
     for (const r of reglas.prohibido) {
       const nombrado = clavesDe(r).some((c) => aparicionesDe(p, c).some((a) => !a.negada))
@@ -41,8 +44,8 @@ export function chequearPrompts(prompts: string[], reglas: ReglasDeImagen, propi
     }
     for (const m of propios.marcas_ajenas) if (m && contienePalabra(p, m)) motivos.push(`nombra una marca ajena («${m}»)`)
     if (RE_PARAMETRO.test(p)) motivos.push('trae parámetros del generador (--xx): el tamaño y los parámetros los fija la sala')
-    if (RE_ASPECTO.test(p)) motivos.push('escribe una relación de aspecto: el tamaño lo fija la sala')
-    if (RE_NOMBRA_AUTOR.test(p)) motivos.push('nombra un estilo «de» una persona real (fotógrafo, artista)')
+    if (RE_ASPECTO.test(p)) avisos.add(`el prompt ${i + 1} escribe algo con forma de proporción («${RE_ASPECTO.exec(p)?.[0] ?? ''}»): el tamaño lo fija la sala; si es una hora u otra cosa, no importa`)
+    if (RE_NOMBRA_AUTOR.test(p)) avisos.add(`el prompt ${i + 1} dice «${RE_NOMBRA_AUTOR.exec(p)?.[0] ?? ''}»: si nombra a una persona real (fotógrafo, artista), cámbialo por palabras propias; lo juzga quien mira la imagen`)
     if (invencion) motivos.push(...motivosDeInvencion(p, invencion))
     if (motivos.length) fallan.push({ indice: i, motivos }); else pasan.push(i)
   })
@@ -58,8 +61,13 @@ export interface ObservacionDeImagen {
   personas: number
   producto?: string
   elementos_visibles?: string[]
+  /** #13 · 11-nov · ¿la imagen muestra un dato que nadie verificó (precio, cifra, sello, certificación, etiqueta, norma, lectura de un instrumento)? lo juzga quien mira; el código solo lee el sí o no */
+  dato_sin_verificar?: boolean
 }
-export interface FallaDeImagen { codigo: 'obligatorio_ausente' | 'prohibido_presente' | 'regla_omitida' | 'dato_ajeno' | 'marca_ajena'; detalle: string }
+export interface FallaDeImagen { codigo: 'obligatorio_ausente' | 'prohibido_presente' | 'regla_omitida' | 'dato_ajeno' | 'marca_ajena' | 'dato_sin_verificar'; detalle: string }
+/** #13 · lo que se le exige a quien mira · `exigirDato`: la imagen se GENERÓ sin foto (no puede inventar datos), así que tiene que decir sí o no; sin respuesta, la imagen NO pasa (nunca aprobada por omisión) */
+/** `esGenerada` (🟡 CC7 §2): a una FOTO REAL del cliente NO se le exige: su sello, su etiqueta o su pizarra de precios son datos VERDADEROS del cliente, no inventados. Sin `esGenerada`, se exige a todas */
+export interface ExigenciasDeLaMirada { exigirDato?: boolean; esGenerada?: (indice: number) => boolean }
 
 /** dominio sin protocolo, sin www y sin ruta */
 const dominioDe = (u: string): string => normalizar(u).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[/?#].*$/, '')
@@ -80,7 +88,7 @@ export function datosAjenos(textos: string[], propios: Pick<PropiosDelCliente, '
 }
 
 /** ¿pasa UNA imagen observada? El código decide; la observación solo describe. Una regla que el curador omitió cuenta como falla (no se supone). */
-export function decideImagen(obs: ObservacionDeImagen, reglas: ReglasDeImagen, propios: PropiosDelCliente): { pasa: boolean; fallas: FallaDeImagen[] } {
+export function decideImagen(obs: ObservacionDeImagen, reglas: ReglasDeImagen, propios: PropiosDelCliente, exige: ExigenciasDeLaMirada = {}): { pasa: boolean; fallas: FallaDeImagen[] } {
   const fallas: FallaDeImagen[] = []
   const por = new Map(obs.reglas.map((r) => [r.id, r.presente] as const))
   for (const r of reglas.obligatorio) {
@@ -97,6 +105,10 @@ export function decideImagen(obs: ObservacionDeImagen, reglas: ReglasDeImagen, p
   for (const m of obs.marcas) {
     if (m.trim() && propios.marcas_ajenas.some((x) => x && normalizar(m).includes(normalizar(x)))) fallas.push({ codigo: 'marca_ajena', detalle: `marca ajena visible («${m}»)` })
   }
+  if (exige.exigirDato) {
+    if (obs.dato_sin_verificar === true) fallas.push({ codigo: 'dato_sin_verificar', detalle: 'quien mira la imagen dice que muestra un dato que nadie verificó (precio, cifra, sello, certificación, etiqueta o lectura)' })
+    else if (obs.dato_sin_verificar !== false) fallas.push({ codigo: 'regla_omitida', detalle: 'quien mira la imagen no dijo si muestra un dato que nadie verificó: no se aprueba por omisión' })
+  }
   return { pasa: fallas.length === 0, fallas }
 }
 
@@ -108,8 +120,8 @@ export interface Veredicto {
   regenerar: boolean
 }
 /** `puedeRegenerar` lo calcula la sala (modo generada y vueltas restantes); el motor corta en el máximo de la plantilla. */
-export function veredictoDeImagenes(observaciones: ObservacionDeImagen[], reglas: ReglasDeImagen, propios: PropiosDelCliente, puedeRegenerar: boolean): Veredicto {
-  const porImagen = observaciones.map((o) => ({ indice: o.indice, ...decideImagen(o, reglas, propios) }))
+export function veredictoDeImagenes(observaciones: ObservacionDeImagen[], reglas: ReglasDeImagen, propios: PropiosDelCliente, puedeRegenerar: boolean, exige: ExigenciasDeLaMirada = {}): Veredicto {
+  const porImagen = observaciones.map((o) => ({ indice: o.indice, ...decideImagen(o, reglas, propios, { exigirDato: exige.exigirDato === true && (exige.esGenerada ? exige.esGenerada(o.indice) : true) }) }))
   const pasan = porImagen.filter((x) => x.pasa).map((x) => x.indice)
   return { pasan, porImagen, regenerar: pasan.length === 0 && puedeRegenerar }
 }

@@ -33,8 +33,6 @@ export interface PedidoDeFoto {
   ahora?: Date
   /** si es true, una foto usada dentro de la ventana se descarta; si es false solo se marca */
   excluir_reusadas?: boolean
-  /** material CERCANO: una foto propia, etiquetada y apta en todo lo demás pero que NO muestra el protagonista del brief, entra rotulada `cercana` (el curador decide; la bandeja lo dice) */
-  permitir_cercanas?: boolean
 }
 export interface Candidata { id: string; motivo_de_aceptacion: string; requiere_mirar: boolean; reusada: boolean; cercana?: boolean }
 export interface Descartada { id: string; motivos: string[] }
@@ -58,10 +56,9 @@ export function candidatasFoto(fotos: FotoEtiquetada[], pedido: PedidoDeFoto, pr
     if (f.origen && f.origen !== 'propia') { descartadas.push({ id: f.id, motivos: [`es una foto de ${f.origen === 'competencia' ? 'la competencia' : 'referencia'}: solo sirve como referencia de estilo, no se publica`] }); continue }
     if (f.estado && f.estado !== 'ok') m.push(`estado «${f.estado}»`)
     if (!f.tipo_de_toma || !f.etiqueta_confianza) m.push('sin etiquetar')
-    if (protas.length && !(f.producto_visto ?? []).some((p) => protas.some((x) => contienePalabra(p, x) || contienePalabra(x, p)))) {
-      if (pedido.permitir_cercanas) cercana = true
-      else m.push(`el protagonista del brief («${protas.join(' / ')}») no está en lo que muestra la foto`)
-    }
+    // 11-nov · regla rígida #15 (GO Lenovo 18:50): que la palabra del protagonista no coincida NO descarta una foto propia; entra rotulada «cercana» y la elige quien mira
+    // (el director visual o el equipo de la mesa). Nada la elige sola: el código solo exige que la foto elegida sea una candidata (`orquestador.ts direccion_visual`, `orquestador-laminas.ts`).
+    if (protas.length && !(f.producto_visto ?? []).some((p) => protas.some((x) => contienePalabra(p, x) || contienePalabra(x, p)))) cercana = true
     if (f.texto_visible && f.texto_visible.trim()) {
       const aj = datosAjenos([f.texto_visible], propios)
       if (aj.length) m.push(`texto visible con ${aj.join(', ')} que no son del cliente`)

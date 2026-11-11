@@ -203,7 +203,7 @@ export const direccionReal = (foto_id: string) => j({ resumen: 'Foto real del pr
 export const BUENOS_PROMPTS = j({ prompts: [
   { prompt: 'Un plato de ceviche con el plato completo visible, luz natural lateral, mesa de madera clara. Sin personas, sin texto, sin logos.', idea_en_una_linea: 'Cenital con luz de ventana' },
   { prompt: 'Ceviche en un bowl, plato entero a nivel de mesa, fondo de cocina real desenfocado. Sin personas, sin texto, sin logo.', idea_en_una_linea: 'Nivel de mesa' },
-  { prompt: 'Un ceviche en un bowl.', idea_en_una_linea: 'No cubre lo obligatorio' },
+  { prompt: 'Un ceviche en un bowl, plato completo. --ar 4:5', idea_en_una_linea: 'Trae parámetros del generador' },
 ], tamaño: 'Feed de Instagram' })
 export const observacion = (indices: number[], opts: { falta?: string; ajeno?: string } = {}) => j({
   imagenes: indices.map((indice) => ({

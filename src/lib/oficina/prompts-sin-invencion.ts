@@ -3,14 +3,14 @@
  * El prompt NO puede pedir: precios, cifras, porcentajes, teléfonos, usuarios ni enlaces · logotipos, eslóganes ni texto legible · etiquetas, sellos, certificaciones, normas ni lecturas de instrumentos (un manómetro con un valor, un sello de
  * certificación en un extintor es un dato de seguridad inventado) · ni nada que la competencia tenga escrito o publicado (su texto visible, su enlace, su usuario). Cada término puede ir NEGADO («sin logotipos»), eso sí vale (`aparicionesDe`).
  * Apagado por omisión: se enciende con `limites.generar_cuando_no_hay_foto` (el mismo interruptor que genera cuando no hay foto). La lista de términos es DATO de plantilla (`terminos_no_inventados`).
+ * 11-nov · #13 del barrido de reglas rígidas (GO Lenovo 18:50): la lista por omisión queda VACÍA. Lo inventado (sellos, lecturas, precios) lo juzga quien mira la imagen (`dato_sin_verificar`).
+ * Siguen EXACTOS (son datos, no juicio): el dinero, el porcentaje, el contacto y lo copiado de la competencia. Una plantilla que pide su lista la sigue usando tal cual.
  */
 import { referenciasDeEstilo } from './material'
 import { aparicionesDe, datosDeContacto, normalizar } from './texto'
 
-export const TERMINOS_NO_INVENTADOS = [
-  'logo', 'logotipo', 'eslogan', 'slogan', 'lema', 'rotulo', 'letrero', 'texto legible', 'letras', 'tipografia visible', 'precio', 'oferta',
-  'etiqueta', 'sello', 'certificacion', 'certificado', 'norma', 'manometro', 'lectura', 'medidor', 'indicador de presion', 'fecha de vencimiento', 'codigo de barras', 'qr',
-]
+/** #13 · por omisión ninguna palabra descarta: lo juzga quien mira la imagen. Una plantilla puede pedir su lista (`limites.terminos_no_inventados`). */
+export const TERMINOS_NO_INVENTADOS: readonly string[] = []
 const RE_DINERO = /(?:\$|us\$|usd)\s?\d|\d\s?(?:usd|dolares)\b/i
 const RE_PORCENTAJE = /\d\s?%/
 
@@ -19,7 +19,7 @@ export interface ReglasDeInvencion { terminos: string[]; copiar: string[] }
 /** `null` = apagado (la sala se comporta como antes). `referencias` = las fotos de la competencia/referencia: de ellas sale lo que NO se puede copiar (su texto visible, su enlace, su usuario) */
 export function reglasDeInvencion(limites: Record<string, unknown> | undefined, referencias: Array<{ url?: string | null; texto_visible?: string | string[] | null; handle?: string | null }> = []): ReglasDeInvencion | null {
   if (limites?.generar_cuando_no_hay_foto !== true) return null
-  const propios = Array.isArray(limites.terminos_no_inventados) ? (limites.terminos_no_inventados as unknown[]).map(String).filter(Boolean) : TERMINOS_NO_INVENTADOS
+  const propios = Array.isArray(limites.terminos_no_inventados) ? (limites.terminos_no_inventados as unknown[]).map(String).filter(Boolean) : [...TERMINOS_NO_INVENTADOS]
   const copiar = new Set<string>()
   for (const r of referencias) {
     const t = Array.isArray(r.texto_visible) ? r.texto_visible : r.texto_visible ? [r.texto_visible] : []

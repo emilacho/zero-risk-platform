@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { abrirEncargo, avanzar, recibirResultado } from '../orquestador'
 import { TARGET_STEP_PRODUCIR, validarSobre } from '../sobre'
 import { codificarPng } from '../encaje'
+import { POST_IMG } from '../plantillas/post-img'
 import { BUENOS_PROMPTS, CLIENTE, PARTE, PARTE_OTRO_PRODUCTO, PARTE_REAL, PIEZA_OK, FICHAS_VACIAS, FORMATO_1X1, crearMemoria, correr, direccionGenerada, direccionReal, observacion, REGLAS_CEVICHE, type Guion, type Memoria } from './memoria'
 
 const sobre = (o: Record<string, unknown> = {}) => ({ parte_id: PARTE, brief_id: 'BRF-0003', dry_run: true, familia: 'post_img', ...o })
@@ -82,16 +83,16 @@ describe('rama FOTO GENERADA · punta a punta con modelo simulado (dry_run)', ()
     expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', con_desacuerdo: false, simulado: true, resultado_para_la_sala: 'encargo_en_bandeja' })
     expect(M.llamadas.imagenReal).toBe(0); expect(M.llamadas.revisorReal).toBe(0)
     expect(M.llamadas.salida).toBe(0); expect(M.llamadas.bandeja).toHaveLength(0); expect(M.llamadas.guardadoDeArchivos).toBe(0)
-    expect(M.llamadas.imagen).toBe(2) // el tercer prompt no cubría lo obligatorio y NO se generó
+    expect(M.llamadas.imagen).toBe(2) // el tercer prompt traía parámetros del generador y NO se generó
   })
-  it('el prompt que no cubre un obligatorio NO se genera (control ②) y el tamaño que escribió el agente se ignoró', async () => {
+  it('el prompt con parámetros del generador NO se genera (control ②) y el tamaño que escribió el agente se ignoró', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
     await correr(M, id, guionGenerada())
     const e = M.encargos.get(id)!.estado_del_motor
     const pv = e.artefactos['prompts_validos'].datos as { indices: number[]; fallan: Array<{ indice: number; motivos: string[] }> }
     expect(pv.indices).toEqual([0, 1])
-    expect(pv.fallan[0]).toMatchObject({ indice: 2 }); expect(pv.fallan[0].motivos.join(' ')).toMatch(/obligatorio/)
+    expect(pv.fallan[0]).toMatchObject({ indice: 2 }); expect(pv.fallan[0].motivos.join(' ')).toMatch(/parámetros/)
     expect(JSON.stringify(e.artefactos['prompts'].datos)).not.toMatch(/tamaño|Feed de Instagram/)
   })
   it('el gasto se suma por paso y las imágenes entran al libro UNA vez cada una', async () => {
@@ -189,7 +190,7 @@ describe('control ③ · mirar la imagen y regenerar ≤ 2 veces', () => {
   it('si ningún prompt pasa el brief, el ingeniero repite UNA vez; sigue sin pasar ⇒ no se gasta en imágenes y la pieza sale sin imagen, declarado', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
-    const malos = JSON.stringify({ prompts: [{ prompt: 'Un ceviche en un bowl de madera.', idea_en_una_linea: 'a' }, { prompt: 'Otro ceviche distinto, en cerámica.', idea_en_una_linea: 'b' }] })
+    const malos = JSON.stringify({ prompts: [{ prompt: 'Un ceviche en un bowl de madera. --v 6', idea_en_una_linea: 'a' }, { prompt: 'Otro ceviche distinto, en cerámica. --ar 4:5', idea_en_una_linea: 'b' }] })
     const { ultima, pasos } = await correr(M, id, guionGenerada({ prompts: malos }))
     expect(pasos.filter((p) => p === 'prompts')).toHaveLength(2)
     expect(pasos).not.toContain('mirar') // se salta solo: no hay imágenes
@@ -242,12 +243,13 @@ describe('rama FOTO REAL', () => {
     expect(pasos).toContain('prompts')
     expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id === 'vd-foto-invalida')).toBe(true)
   })
-  it('para el brief de ceviche las 16 fotos reales NO sirven y la sala lo dice con motivo', async () => {
+  it('para el brief de ceviche ninguna de las 16 fotos reales muestra el protagonista: la sala lo dice con motivo y las aptas entran solo como «cercanas» (#15)', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
     await correr(M, id, guionGenerada())
-    const cf = M.encargos.get(id)!.estado_del_motor.artefactos['candidatas_foto'].datos as { candidatas: unknown[]; descartadas: Array<{ id: string; motivos: string[] }>; protagonistas: string[] }
-    expect(cf.candidatas).toHaveLength(0); expect(cf.protagonistas).toEqual(['Ceviches'])
+    const cf = M.encargos.get(id)!.estado_del_motor.artefactos['candidatas_foto'].datos as { candidatas: Array<{ id: string; cercana?: boolean }>; cercanas: string[]; descartadas: Array<{ id: string; motivos: string[] }>; protagonistas: string[] }
+    expect(cf.candidatas.filter((c) => !c.cercana)).toHaveLength(0); expect(cf.protagonistas).toEqual(['Ceviches'])
+    expect(cf.cercanas).toEqual(cf.candidatas.map((c) => c.id))
     expect(cf.descartadas.find((d) => d.id === '7a75e500')!.motivos.join(' ')).toMatch(/teléfono 997664119/)
   })
 })
@@ -470,7 +472,7 @@ describe('rondas: jefe-marketing → el que escribe corrige → revisor ciego �
   it('«tomada» con margen pero NINGÚN prompt nuevo pasa el control ②: no se genera ni una imagen más, se queda la anterior y la bandeja dice «imagen por rehacer»', async () => {
     const M = crearMemoria(); conOpinion(M)
     const id = await abierto(M, sobre({ dry_run: false }))
-    const malos = JSON.stringify({ prompts: [{ prompt: 'Un ceviche en un bowl de madera.', idea_en_una_linea: 'a' }, { prompt: 'Otro ceviche distinto, en cerámica.', idea_en_una_linea: 'b' }] })
+    const malos = JSON.stringify({ prompts: [{ prompt: 'Un ceviche en un bowl de madera. --v 6', idea_en_una_linea: 'a' }, { prompt: 'Otro ceviche distinto, en cerámica. --ar 4:5', idea_en_una_linea: 'b' }] })
     let antes = -1
     const { pasos } = await correr(M, id, guionGenerada({ reimagen_prompts: () => ({ texto: malos }), decide_imagen: (_n, t) => { antes = M.llamadas.imagen; return { texto: JSON.stringify({ respuestas: idsDe(t, 'ext').map((fid) => ({ id: fid, estado: 'tomada', razon: 'sí' })) }) } } }))
     expect(pasos).toContain('reimagen_prompts'); expect(pasos).not.toContain('reimagen_mirar')
@@ -649,5 +651,47 @@ describe('regla de canon: nada se pregunta al cliente', () => {
   })
   it('las reglas de imagen de los fixtures son las del brief real y todas tienen su cita literal', () => {
     for (const r of [...REGLAS_CEVICHE.obligatorio, ...REGLAS_CEVICHE.prohibido]) expect(PARTE_REAL.toLowerCase()).toContain(r.cita.toLowerCase().replace(/[.]$/, ''))
+  })
+})
+
+// ── 11-nov · reglas rígidas #13 (GO Lenovo 18:50): con «generar cuando no hay foto» encendido, quien mira la imagen dice si muestra un dato sin verificar; el código solo lee su sí o no
+describe('reglas rígidas #13 · el dato sin verificar lo juzga quien mira (sala de la pieza simple)', () => {
+  const GENERA = { ...POST_IMG, limites: { ...POST_IMG.limites, generar_cuando_no_hay_foto: true } }
+  const conDato = (indices: number[], dato: boolean | undefined) => { const o = JSON.parse(observacion(indices)); for (const im of o.imagenes) if (dato !== undefined) im.dato_sin_verificar = dato; return JSON.stringify(o) }
+  it('quien mira dice «no»: la imagen pasa', async () => {
+    const M = crearMemoria({ plantilla: GENERA }); const id = await abierto(M)
+    const { ultima, pasos } = await correr(M, id, guionGenerada({ mirar: (_n, t) => ({ texto: conDato(indicesDe(t), false) }) }))
+    expect(pasos.filter((p) => p === 'mirar')).toHaveLength(1)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+  })
+  it('🔴 quien mira dice «sí»: la imagen falla, se regenera y a la 3.ª se descarta (la pieza sale sin imagen y lo dice)', async () => {
+    const M = crearMemoria({ plantilla: GENERA }); const id = await abierto(M)
+    const { ultima, pasos } = await correr(M, id, guionGenerada({ mirar: (_n, t) => ({ texto: conDato(indicesDe(t), true) }) }))
+    expect(pasos.filter((p) => p === 'mirar')).toHaveLength(3)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: true })
+  })
+  it('🔴 quien mira NO contesta la pregunta: no se aprueba por omisión (igual que un «sí»)', async () => {
+    const M = crearMemoria({ plantilla: GENERA }); const id = await abierto(M)
+    const { ultima, pasos } = await correr(M, id, guionGenerada({ mirar: (_n, t) => ({ texto: conDato(indicesDe(t), undefined) }) }))
+    expect(pasos.filter((p) => p === 'mirar')).toHaveLength(3)
+    expect(ultima.cuerpo).toMatchObject({ con_desacuerdo: true })
+  })
+  it('🟡 CC7 §2 · Náufrago · a una FOTO REAL del cliente (su pizarra de precios) no se le exige: con el dato omitido o en «sí», pasa y no genera nada', async () => {
+    for (const dato of [undefined, true]) {
+      const M = crearMemoria({ plantilla: GENERA, parte: PARTE_OTRO_PRODUCTO }); const id = await abierto(M)
+      const { ultima, pasos } = await correr(M, id, {
+        paquete: () => ({ texto: 'material' }), direccion_visual: () => ({ texto: direccionReal('ef0921ad') }),
+        mirar: () => ({ texto: JSON.stringify({ imagenes: [{ indice: 0, reglas: [], texto_en_imagen: ['ENCEBOLLADO $5.50'], marcas: [], personas: 0, ...(dato === undefined ? {} : { dato_sin_verificar: dato }) }], preferencia: [0] }) }),
+        texto: () => ({ texto: JSON.stringify({ pie_de_foto: 'Encebollado a $5.50. Pídelo por WhatsApp al 0997744288.', hashtags: ['#encebollado'] }) }),
+        revision_jefe: () => ({ texto: FICHAS_VACIAS }),
+      })
+      expect(pasos.filter((p) => p === 'mirar')).toHaveLength(1); expect(M.llamadas.imagen).toBe(0)
+      expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    }
+  })
+  it('con el interruptor apagado no se le exige (la sala sigue como hoy)', async () => {
+    const M = crearMemoria(); const id = await abierto(M)
+    const { pasos } = await correr(M, id, guionGenerada({ mirar: (_n, t) => ({ texto: conDato(indicesDe(t), undefined) }) }))
+    expect(pasos.filter((p) => p === 'mirar')).toHaveLength(1)
   })
 })

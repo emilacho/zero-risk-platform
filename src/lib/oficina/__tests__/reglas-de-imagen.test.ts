@@ -14,10 +14,14 @@ describe('② chequearPrompts: ANTES de gastar la imagen', () => {
     const r = chequearPrompts([bueno], reglas, propios)
     expect(r.pasan).toEqual([0]); expect(r.ninguno).toBe(false)
   })
-  it('NO pasa el que no cubre un obligatorio', () => {
+  it('#12 · el que no REPITE la palabra de un obligatorio pasa con un AVISO (lo juzga quien mira la imagen)', () => {
     const r = chequearPrompts(['Un ceviche en un bowl, luz cálida.'], reglas, propios)
-    expect(r.ninguno).toBe(true)
-    expect(r.fallan[0].motivos.join(' ')).toMatch(/obligatorio «o1»/)
+    expect(r.pasan).toEqual([0])
+    expect(r.avisos.join(' ')).toMatch(/no repite el obligatorio «o1».*lo juzga quien mira la imagen/)
+  })
+  it('#12 · pero en la imagen el obligatorio sigue exigido: si quien mira dice que falta, la imagen falla', () => {
+    const o: ObservacionDeImagen = { indice: 0, reglas: [{ id: 'o1', presente: false }, { id: 'o2', presente: true }, { id: 'p1', presente: false }, { id: 'p2', presente: false }, { id: 'p3', presente: false }], texto_en_imagen: [], marcas: [], personas: 0 }
+    expect(decideImagen(o, reglas, propios).fallas.map((f) => f.codigo)).toEqual(['obligatorio_ausente'])
   })
   it('NO pasa el que nombra un prohibido SIN negarlo ("con personas")', () => {
     const r = chequearPrompts(['Un ceviche, plato completo, con personas sonriendo al fondo.'], reglas, propios)
@@ -31,16 +35,25 @@ describe('② chequearPrompts: ANTES de gastar la imagen', () => {
     const r = chequearPrompts(['Ceviche plato completo como el de Rukutu, sin personas, sin texto, sin logos.'], reglas, propios)
     expect(r.fallan[0].motivos.join(' ')).toMatch(/marca ajena/)
   })
-  it('trae parámetros del generador o relación de aspecto', () => {
+  it('los parámetros del generador (--ar) siguen EXACTOS: descartan', () => {
     expect(chequearPrompts([bueno + ' --ar 4:5'], reglas, propios).fallan[0].motivos.join(' ')).toMatch(/parámetros/)
-    expect(chequearPrompts([bueno + ' formato 4:5'], reglas, propios).fallan[0].motivos.join(' ')).toMatch(/relación de aspecto/)
   })
-  it('nombra el estilo de una persona real', () => {
-    expect(chequearPrompts([bueno + ' Al estilo de Annie Leibovitz.'], reglas, propios).fallan[0].motivos.join(' ')).toMatch(/persona real/)
-    expect(chequearPrompts([bueno + ' in the style of Ansel Adams'], reglas, propios).fallan[0].motivos.join(' ')).toMatch(/persona real/)
+  it('#12 · algo con forma de proporción («10:30», «4:5») ya no descarta: es un aviso', () => {
+    for (const x of [' formato 4:5', ' a las 10:30 de la mañana']) {
+      const r = chequearPrompts([bueno + x], reglas, propios)
+      expect(r.pasan).toEqual([0])
+      expect(r.avisos.join(' ')).toMatch(/forma de proporción/)
+    }
+  })
+  it('#12 · «estilo de <Nombre>» ya no descarta: es un aviso (el estilo de Guayaquil no es una persona)', () => {
+    for (const x of [' Al estilo de Annie Leibovitz.', ' in the style of Ansel Adams', ' Con el estilo de Guayaquil antiguo.']) {
+      const r = chequearPrompts([bueno + x], reglas, propios)
+      expect(r.pasan).toEqual([0])
+      expect(r.avisos.join(' ')).toMatch(/persona real/)
+    }
   })
   it('separa por prompt: de tres, pasan los buenos', () => {
-    const r = chequearPrompts([bueno, 'Ceviche sin más.', bueno.replace('natural lateral', 'de ventana')], reglas, propios)
+    const r = chequearPrompts([bueno, 'Ceviche, plato completo, con personas al fondo.', bueno.replace('natural lateral', 'de ventana')], reglas, propios)
     expect(r.pasan).toEqual([0, 2]); expect(r.fallan.map((x) => x.indice)).toEqual([1])
   })
   it('un brief sin reglas deja pasar todo lo que no tenga marcas, parámetros ni autores', () => {
@@ -54,6 +67,23 @@ describe('③ decideImagen: el curador describe, el CÓDIGO decide', () => {
     texto_en_imagen: [], marcas: [], personas: 0, ...o,
   })
   it('pasa cuando todo obligatorio está y ningún prohibido', () => { expect(decideImagen(obs(), reglas, propios).pasa).toBe(true) })
+  it('#13 · con el dato exigido: «sí» falla como dato_sin_verificar, sin respuesta como regla_omitida, «no» pasa; sin exigirlo no se mira', () => {
+    const cod = (d: boolean | undefined, exigirDato?: boolean) => decideImagen(obs(d === undefined ? {} : { dato_sin_verificar: d }), reglas, propios, { exigirDato }).fallas.map((f) => f.codigo)
+    expect(cod(true, true)).toEqual(['dato_sin_verificar'])
+    expect(cod(undefined, true)).toEqual(['regla_omitida'])
+    expect(cod(false, true)).toEqual([])
+    expect(cod(true)).toEqual([]); expect(cod(undefined, false)).toEqual([])
+  })
+  it('🟡 CC7 §2 · Seguridad Industrial · veredicto: la foto real (su sello verdadero en el extintor) no se exige; la generada con «sí» u omitido falla', () => {
+    const real = obs({ indice: 1000, texto_en_imagen: ['INEN'], dato_sin_verificar: true })
+    const realOmitida = obs({ indice: 1001 })
+    const gen = obs({ indice: 0, dato_sin_verificar: true })
+    const genOmitida = obs({ indice: 1 })
+    const v = veredictoDeImagenes([real, realOmitida, gen, genOmitida], reglas, propios, false, { exigirDato: true, esGenerada: (i) => i < 1000 })
+    expect(v.porImagen.filter((x) => x.pasa).map((x) => x.indice)).toEqual([1000, 1001])
+    expect(v.porImagen.find((x) => x.indice === 0)!.fallas.map((f) => f.codigo)).toEqual(['dato_sin_verificar'])
+    expect(v.porImagen.find((x) => x.indice === 1)!.fallas.map((f) => f.codigo)).toEqual(['regla_omitida'])
+  })
   it('un obligatorio ausente o "no se ve" FALLA', () => {
     expect(decideImagen(obs({ reglas: obs().reglas.map((r) => (r.id === 'o1' ? { ...r, presente: false as const } : r)) }), reglas, propios).fallas[0].codigo).toBe('obligatorio_ausente')
     expect(decideImagen(obs({ reglas: obs().reglas.map((r) => (r.id === 'o1' ? { ...r, presente: 'no_se_ve' as const } : r)) }), reglas, propios).pasa).toBe(false)

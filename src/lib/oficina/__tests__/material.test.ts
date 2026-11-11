@@ -308,7 +308,7 @@ describe('④ sin gasto doble; «negado por tope» es sin dato, no un error', ()
 })
 
 describe('el material CERCANO es una respuesta válida (con su etiqueta)', () => {
-  it('una foto propia que no muestra el protagonista entra como candidata «cercana» solo con el material encendido', async () => {
+  it('una foto propia que no muestra el protagonista entra como candidata «cercana», con el material encendido o apagado (#15: la palabra ya no descarta)', async () => {
     const encendido = await escena({ fotos: [FOTO_CERCANA], responder: () => ({ ok: true, body: sinNada }) })
     await correr(encendido.M, encendido.id, guion())
     const c = arte(encendido.M, encendido.id, 'candidatas_foto')
@@ -316,7 +316,8 @@ describe('el material CERCANO es una respuesta válida (con su etiqueta)', () =>
     expect(c.candidatas[0].motivo_de_aceptacion).toMatch(/CERCANA/)
     const apagado = await escena({ fotos: [FOTO_CERCANA], limites: { material_activo: false } })
     await correr(apagado.M, apagado.id, guion())
-    expect(arte(apagado.M, apagado.id, 'candidatas_foto').candidatas).toHaveLength(0)
+    const ap = arte(apagado.M, apagado.id, 'candidatas_foto')
+    expect(ap.cercanas).toEqual(['cerca-1']); expect(ap.candidatas[0].motivo_de_aceptacion).toMatch(/CERCANA/)
   })
   it('lo que el portero devuelve de otro origen es «cercano» (válido) y nunca se vuelve candidata', () => {
     const r = leerRespuestaDelPortero({ huecos: [{ estado: 'no_resuelto', fotos: [{ foto_id: 'c-9', origen: 'competencia', que_muestra: 'ceviche de otra cuenta', url: 'https://x.test/c.jpg' }] }] }, 'foto')
@@ -353,8 +354,8 @@ describe('⑤ UNA sola implementación del filtro propio / competencia / referen
     expect(r.descartadas.map((x) => x.id).sort()).toEqual(['b', 'c'])
     expect(r.descartadas[0].motivos.join(' ')).toMatch(/solo sirve como referencia de estilo/)
   })
-  it('tampoco con `permitir_cercanas`', () => {
-    const r = candidatasFoto([buena('b', 'competencia')], { protagonista: ['Pizza'], prohibe_personas: false, proporcion: '1:1', permitir_cercanas: true }, propios)
+  it('tampoco como cercana (aunque no muestre el protagonista, #15)', () => {
+    const r = candidatasFoto([buena('b', 'competencia')], { protagonista: ['Pizza'], prohibe_personas: false, proporcion: '1:1' }, propios)
     expect(r.candidatas).toHaveLength(0)
   })
   it('al leer la base: owner_role propio → fotos del cliente; competidor/referencia/vacío → referencias (lo dudoso se trata como ajeno)', () => {
