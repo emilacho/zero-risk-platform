@@ -125,6 +125,8 @@ export const PUEDEN_NOMBRARLAS = [
   // fuentes nuevas (02-nov): la migración ADITIVA que amplía el CHECK de `alcance` (agrega «pais»); no toca filas
   /^supabase\/migrations\/202611021900_alcance_pais_en_fichas\.sql$/,
   /^supabase\/migrations\/202611031600_rechazo_del_indice_y_tipo_de_pausa\.sql$/,
+  // cierre de permisos del cerebro (10-nov · encargo firmado por Emilio): SOLO permisos (revoke a anon/authenticated); no toca filas ni columnas
+  /^supabase\/migrations\/202611102100_cerebro_permisos_1_sin_escritura_publica\.sql$/,
   /^__tests__\/cerebro-paso-2-(aislamiento|migracion)\.test\.ts$/,
   /^__tests__\/cerebro-fotos-2-columnas\.test\.ts$/,
   // oficina de creativos (sala 1) · LECTURA de las etiquetas de las fotos para descartar las que no sirven: los ÚNICOS que las nombran son el lector `fotos.ts` y el adaptador que las SELECCIONA (`adaptadores.ts`); no escriben nada

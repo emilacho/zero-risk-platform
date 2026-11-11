@@ -5,6 +5,7 @@
 import type { FilaDeFormato } from './entrega'
 import type { Almacen, Cambios, Encargo, NuevoEncargo, TurnoRegistrado } from './puertos'
 import { CONFIG_APAGADA, type ConfigDeOficina } from './sobre'
+import { COLUMNAS_DE_CONFIG, configDesdeLaFila, TABLA_DE_CONFIG } from './gasto-de-encargos'
 import { decidirReapertura } from './reapertura'
 import { esIntentoFallidoDeCambios } from './cambios-del-dueno'
 import { estadoInicial, type Plantilla } from './tipos'
@@ -29,11 +30,10 @@ const aEncargo = (f: Fila): Encargo => ({
 export function almacenDeSupabase(db: Db): Almacen {
   return {
     async leerConfig(): Promise<ConfigDeOficina> {
-      const r = await db.from('oficina_config').select('estado,familias_activas,clientes_ensayo').eq('id', 1).maybeSingle()
+      // 11-nov · tabla, columnas y normalización compartidas con el freno de la cadena (`gasto-de-encargos.ts`): la misma config para los dos
+      const r = await db.from(TABLA_DE_CONFIG).select(COLUMNAS_DE_CONFIG).eq('id', 1).maybeSingle()
       if (r.error || !r.data) return CONFIG_APAGADA // sin config legible, apagada
-      const d = r.data as Fila
-      const estado = d.estado === 'ensayo' || d.estado === 'encendida' ? d.estado : 'apagada'
-      return { estado, familias_activas: (d.familias_activas as string[]) ?? [], clientes_ensayo: (d.clientes_ensayo as string[]) ?? [] }
+      return configDesdeLaFila(r.data as Fila)
     },
     async leerPlantilla(familia) {
       const d = ok(await db.from('oficina_tipos_de_grupo').select('tipo,familia,pasos,indicaciones,limites,activo').eq('familia', familia).limit(1), 'leer la plantilla') as Fila[] | null

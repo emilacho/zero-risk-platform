@@ -13,10 +13,12 @@ import { baseFalsa } from './base-falsa'
 import { almacenDeColaterales, type NuevaEdicion } from '../almacen'
 import { red } from '../red'
 import { INSTRUCCION_DE_GRAVEDAD } from '../gravedad'
-import { AGENTE_SECRETARIA, PLAZO_DEL_BARRIDO_MS, TOPE_DIARIO_DEL_CLIENTE_USD, TOPE_DE_LA_LLAMADA_USD, FACTOR_DE_RESERVA, barrer, entregar, llaveDeLaSecretaria, selloDe, turno, type DocumentoLeido, type PuertosDelTurno } from '../turno'
+import { AGENTE_SECRETARIA, PLAZO_DEL_BARRIDO_MS, TOPE_DE_LA_LLAMADA_USD, FACTOR_DE_RESERVA, barrer, entregar, llaveDeLaSecretaria, selloDe, turno, type DocumentoLeido, type PuertosDelTurno } from '../turno'
 import type { Documento } from '../../cadena/dependencias-de-documentos'
 import type { ResultadoDeLaGuarda } from '../../oficina/piezas-por-publicar'
 
+/** el tope diario de la prueba (en lo real es un dato del cliente: por omisión US$ 5) */
+const TOPE_DIARIO_DEL_CLIENTE_USD = 5
 const TODAS = new Set(['manual', 'plan', 'estrategia', 'brief', 'gran_idea', 'calendario', 'pieza'])
 const CLI_A = 'a0000000-0000-4000-8000-00000000000a'
 const CLI_B = 'b0000000-0000-4000-8000-00000000000b'
@@ -28,15 +30,16 @@ const EDIC_B: NuevaEdicion = { client_id: CLI_B, documento: 'plan', documento_re
 const DOCS_A: Partial<Record<Documento, DocumentoLeido>> = { gran_idea: { texto: A.gran_idea_v3, ref: CAMP_A, version: '3' } }
 const DOCS_B: Partial<Record<Documento, DocumentoLeido>> = { estrategia: { texto: B.estrategia, ref: 'camp-b', version: '1' } }
 
-function armar(o: { activas?: Set<string>; guarda?: ResultadoDeLaGuarda | Error; docs?: Partial<Record<Documento, DocumentoLeido>> | Error; gasto?: number; enVuelo?: number; propia?: boolean | Error } = {}) {
+function armar(o: { activas?: Set<string>; guarda?: ResultadoDeLaGuarda | Error; docs?: Partial<Record<Documento, DocumentoLeido>> | Error; gasto?: number; enVuelo?: number; propia?: boolean | Error; tope?: number | null | Error } = {}) {
   const { db, tablas } = baseFalsa()
   const almacen = almacenDeColaterales(db)
   const guarda = vi.fn(async (_c: string, _camp: string | null) => { if (o.guarda instanceof Error) throw o.guarda; return o.guarda ?? { frenan: [], se_asumen_publicadas: [] } })
   const docs = vi.fn(async (e: { documento: string }) => { if (o.docs instanceof Error) throw o.docs; return o.docs ?? (e.documento === 'plan' ? DOCS_B : DOCS_A) })
   const gasto = vi.fn(async (_c: string, _sin: string) => ({ recibos: o.gasto ?? 0, en_vuelo: o.enVuelo ?? 0 }))
   const propia = vi.fn(async (_c: string, _camp: string) => { if (o.propia instanceof Error) throw o.propia; return o.propia ?? true })
-  const P: PuertosDelTurno = { almacen, filasActivas: async () => o.activas ?? TODAS, piezasPorPublicar: guarda, documentos: docs, campanaDelCliente: propia, gastoDelDia: gasto }
-  return { P, almacen, tablas, guarda, docs, gasto, propia }
+  const tope = vi.fn(async (_c: string) => { if (o.tope instanceof Error) throw o.tope; return o.tope === undefined ? TOPE_DIARIO_DEL_CLIENTE_USD : o.tope })
+  const P: PuertosDelTurno = { almacen, filasActivas: async () => o.activas ?? TODAS, piezasPorPublicar: guarda, documentos: docs, campanaDelCliente: propia, gastoDelDia: gasto, topeDiario: tope }
+  return { P, almacen, tablas, guarda, docs, gasto, propia, tope }
 }
 const crear = async (al: ReturnType<typeof almacenDeColaterales>, n: NuevaEdicion) => (await al.crearEdicion(n)).edicion.id
 const estado = (t: ReturnType<typeof baseFalsa>['tablas'], id: string) => t.colaterales_ediciones.find((f) => f.id === id)?.estado
@@ -150,6 +153,30 @@ describe('🔴 línea 3 de CC7 · toda salida temprana deja la edición en su es
     expect((await turno(a.P, { edicion_id: await crear(a.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).accion).toBe('pedir')
     const b = armar({ gasto: TOPE_DIARIO_DEL_CLIENTE_USD - reserva + 0.001 })
     expect((await turno(b.P, { edicion_id: await crear(b.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).accion).toBe('fallida')
+  })
+  it('🔴 el tope diario es el DATO del cliente (RESPUESTA Lenovo 03:02Z): uno más bajo corta antes, uno más alto deja pasar; se lee para ese cliente', async () => {
+    const reserva = TOPE_DE_LA_LLAMADA_USD * FACTOR_DE_RESERVA
+    const bajo = armar({ gasto: 1, tope: 1.2 })
+    expect(await turno(bajo.P, { edicion_id: await crear(bajo.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).toEqual({ accion: 'fallida', motivo: 'tope_diario' })
+    expect(bajo.tope).toHaveBeenCalledWith(CLI_A)
+    const alto = armar({ gasto: 9, tope: 9 + reserva + 0.01 })
+    expect((await turno(alto.P, { edicion_id: await crear(alto.almacen, EDIC_A), seco: false, workflow_execution_id: '1' })).accion).toBe('pedir')
+    const b = armar({ tope: 3 })
+    await turno(b.P, { edicion_id: await crear(b.almacen, EDIC_B), seco: false, workflow_execution_id: '1' })
+    expect(b.tope).toHaveBeenCalledWith(CLI_B)
+  })
+  it.each([['sin tope definido', null, 'no tiene tope diario'], ['tope cero', 0, 'no tiene tope diario'], ['tope que no es número', Number.NaN, 'no tiene tope diario'], ['no se puede leer', new Error('base caída'), 'no se pudo leer el tope diario']] as const)('🔴 %s → frena (sin_motor) sin gastar; en seco no escribe', async (_n, tope, nota) => {
+    const a = armar({ tope: tope as number | null | Error })
+    const id = await crear(a.almacen, EDIC_A)
+    const r = await turno(a.P, { edicion_id: id, seco: false, workflow_execution_id: '1' })
+    expect(r.accion).toBe('sin_motor')
+    expect(r.accion === 'sin_motor' && r.nota).toContain(nota)
+    expect(estado(a.tablas, id)).toBe('sin_motor')
+    expect(a.gasto).not.toHaveBeenCalled()
+    const b = armar({ tope: tope as number | null | Error })
+    const idS = await crear(b.almacen, EDIC_A)
+    expect((await turno(b.P, { edicion_id: idS, seco: true, workflow_execution_id: '1' })).accion).toBe('sin_motor')
+    expect(estado(b.tablas, idS)).toBe('recibida')
   })
   it('🔴 el tope diario cuenta lo que está EN VUELO (línea de CC7): cada edición tomada sin recibo suma su reserva', async () => {
     const reserva = TOPE_DE_LA_LLAMADA_USD * FACTOR_DE_RESERVA

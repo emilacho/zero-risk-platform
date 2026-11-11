@@ -35,6 +35,8 @@ export const ESQUEMAS_DE_REVISION: Record<string, Esq> = {
   'fichas_de_registro.v1': { t: 'obj', req: ['fichas'], props: { fichas: { t: 'arr', max: 40, de: { t: 'obj', req: ['que', 'donde', 'contra_que', 'gravedad', 'propuesta'], props: { que: str(1, 500), donde: str(1, 200), contra_que: str(1, 400), gravedad: { t: 'enum', v: ['bloquea', 'sugerencia'] }, propuesta: str(1, 600), es_cita: { t: 'bool' }, cita_de: str(0, 200), cita_texto: str(0, 1000) } } } } },
   /** 10-nov · registro: la corrección son REEMPLAZOS exactos (el código los aplica fuera de las citas); `antes`/`despues` no se recortan nunca */
   'reemplazos.v1': { t: 'obj', req: ['respuestas'], props: { respuestas, reemplazos: { t: 'arr', max: 40, de: { t: 'obj', req: ['id', 'antes', 'despues'], props: { id: str(1, 80), antes: str(1, 600), despues: str(1, 600) } } } } },
+  /** 11-nov · colateral: un veredicto por retoque; la razón puede venir vacía en el esquema y el CÓDIGO no cuenta un «rechaza» sin razón */
+  'veredictos_colateral.v1': { t: 'obj', req: ['veredictos'], props: { veredictos: { t: 'arr', max: 60, de: { t: 'obj', req: ['id', 'veredicto'], props: { id: str(1, 80), veredicto: { t: 'enum', v: ['aprueba', 'rechaza'] }, razon: str(0, 600) } } } } },
   /** solo el BLOQUE de resolución del plan (el texto va fuera): interno, nunca se le pide a un agente como esquema */
   'bloque_de_resolucion': { t: 'obj', req: ['respuestas'], props: { respuestas } },
 }

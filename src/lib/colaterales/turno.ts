@@ -31,8 +31,7 @@ export const TOPE_DE_LA_LLAMADA_USD = 0.35
 export const FACTOR_DE_RESERVA = 1.3
 /** tope de «Editar» por edición (CRITERIOS v2: hasta US$ 0,50) */
 export const TOPE_POR_EDICION_USD = 0.5
-/** tope diario de colaterales por cliente (decisión pendiente de Lenovo; mientras tanto, este) */
-export const TOPE_DIARIO_DEL_CLIENTE_USD = 2
+// 11-nov · el tope DIARIO de colaterales por cliente NO vive en el código: es un dato (`colaterales_topes_diarios`, por omisión US$ 5 · RESPUESTA Lenovo 03:02Z) · ver `topeDiario`
 /** una edición `en_curso` más vieja que esto la cierra el barrido (ADENDA 1) */
 export const PLAZO_DEL_BARRIDO_MS = 2 * 60 * 60 * 1000
 /** los documentos que viven en UNA campaña (su referencia es la campaña); manual y plan son del cliente */
@@ -57,6 +56,8 @@ export interface PuertosDelTurno {
    * cada una cuenta su reserva (la vuelta de la secretaria es asíncrona: entre el pedido y su recibo hay una ventana). Lanza si no puede leer.
    */
   gastoDelDia(client_id: string, sin_edicion: string): Promise<{ recibos: number; en_vuelo: number }>
+  /** 11-nov · el tope diario de colaterales de ESTE cliente (su fila; si no tiene, la fila por omisión) · null = no hay tope definido (frena) · lanza si no puede leer */
+  topeDiario(client_id: string): Promise<number | null>
 }
 
 export type ResultadoDelTurno =
@@ -164,9 +165,16 @@ export async function turno(P: PuertosDelTurno, p: { edicion_id: string; seco: b
     // topes · sin reintento: un tope cierra la edición
     const reserva = TOPE_DE_LA_LLAMADA_USD * FACTOR_DE_RESERVA
     if (reserva > TOPE_POR_EDICION_USD) { await cerrar('fallida', 'tope: la reserva supera el tope por edición'); return { accion: 'fallida', motivo: 'tope_por_edicion' } }
+    // el tope diario es un DATO del cliente: sin poder leerlo, o sin tope definido, no se gasta (frena)
+    let tope: number | null
+    try { tope = await P.topeDiario(e.client_id) } catch (x) {
+      const nota = `no se pudo leer el tope diario del cliente (frena): ${x instanceof Error ? x.message : String(x)}`
+      await cerrar('sin_motor', nota); return { accion: 'sin_motor', nota }
+    }
+    if (tope === null || !Number.isFinite(tope) || tope <= 0) { const nota = 'el cliente no tiene tope diario de colaterales definido (frena)'; await cerrar('sin_motor', nota); return { accion: 'sin_motor', nota } }
     const g = await P.gastoDelDia(e.client_id, e.id)
     const hoy = g.recibos + g.en_vuelo * reserva
-    if (hoy + reserva > TOPE_DIARIO_DEL_CLIENTE_USD) { await cerrar('fallida', `tope diario del cliente: recibos ${g.recibos.toFixed(2)} + ${g.en_vuelo} en vuelo × ${reserva.toFixed(2)} + esta reserva ${reserva.toFixed(2)} > ${TOPE_DIARIO_DEL_CLIENTE_USD}`); return { accion: 'fallida', motivo: 'tope_diario' } }
+    if (hoy + reserva > tope) { await cerrar('fallida', `tope diario del cliente: recibos ${g.recibos.toFixed(2)} + ${g.en_vuelo} en vuelo × ${reserva.toFixed(2)} + esta reserva ${reserva.toFixed(2)} > ${tope}`); return { accion: 'fallida', motivo: 'tope_diario' } }
     return {
       accion: 'pedir', agente: AGENTE_SECRETARIA, pedido: pedidoDeLaSecretaria(e, x.al_agente), tope_usd: TOPE_DE_LA_LLAMADA_USD,
       dispatch_key: llaveDeLaSecretaria(e.id), sello: selloDe(x.al_agente, x.leidos), candidatos: x.al_agente.map((pz) => pz.id), nota: unirNotas(notaDeSuposicion, notaSinLector),

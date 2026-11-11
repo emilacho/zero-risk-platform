@@ -7,7 +7,8 @@
  *     una campaña; si es del cliente (manual, plan), su campaña VIVA real; sin campaña viva, nada que leer;
  *   · la campaña de un documento de campaña es del cliente: por el almacén de la cadena (único que nombra sus tablas);
  *   · gasto del día (UTC): recibos de HOY de las corridas de colaterales del cliente (por la fecha del recibo) + cuántas ediciones suyas
- *     están tomadas sin recibo todavía (en vuelo: el turno les cuenta la reserva).
+ *     están tomadas sin recibo todavía (en vuelo: el turno les cuenta la reserva);
+ *   · tope diario: la fila del cliente en `colaterales_topes_diarios`; si no tiene, la fila por omisión (sin cliente); sin ninguna, null.
  * Agnóstico: ningún dato de un cliente.
  */
 import { getSupabaseAdmin } from '@/lib/supabase'
@@ -69,6 +70,13 @@ export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, 
       const recibos = rec.filter((f) => new Date(f.created_at).getTime() >= desde).reduce((t, f) => t + (Number(f.cost_usd) || 0), 0)
       const en_vuelo = ed.filter((f) => { const x = ejecucion(f); return f.estado === 'en_curso' && !(x && conRecibo.has(x)) }).length
       return { recibos, en_vuelo }
+    },
+    async topeDiario(client_id) {
+      type Tope = { tope_usd: number | string | null }
+      const propio = (ok(await db.from('colaterales_topes_diarios').select('tope_usd').eq('client_id', client_id), 'leer el tope diario del cliente') as Tope[] | null) ?? []
+      const fila = propio[0] ?? ((ok(await db.from('colaterales_topes_diarios').select('tope_usd').is('client_id', null), 'leer el tope diario por omisión') as Tope[] | null) ?? [])[0]
+      const n = fila && fila.tope_usd !== null ? Number(fila.tope_usd) : NaN
+      return Number.isFinite(n) && n > 0 ? n : null
     },
   }
 }

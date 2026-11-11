@@ -4,6 +4,7 @@
  * Un esquema sin molde → `null` + error visible (nunca «corriendo» en silencio).
  * GPT simulado NO VACÍO («(simulado) …») para que `decision` corra (la oficina devuelve vacío en seco y salta `decide`); marcado `simulado`.
  */
+import { ESQUEMA_DE_VEREDICTOS, moldeDeVeredictos } from './colateral'
 import type { ResultadoDelRevisor } from '../../revision-comun'
 import type { Simulacion } from './contrato'
 import { MARCA_DE_FIN_DE_RESOLUCION, MARCA_DE_INICIO_DE_RESOLUCION } from './formatos'
@@ -24,6 +25,8 @@ export interface ContextoDeMolde {
   sim: Simulacion | undefined
   /** ids de las fichas que le tocan al empleado en este paso */
   ids_de_fichas: string[]
+  /** colateral: los ids de los retoques que se juzgan (para el molde de veredictos) */
+  ids_de_retoques?: string[]
   /** `donde` por omisión para las fichas del jefe */
   donde: string
   /** el texto vigente del artefacto */
@@ -57,6 +60,8 @@ export function moldeDelPaso(c: ContextoDeMolde): { texto: string | null; error?
     }))
     return { texto: JSON.stringify({ filas }) }
   }
+  // 11-nov · colateral: todos aprueban, salvo lo que pida la simulación (`veredictos`)
+  if (c.esquema === ESQUEMA_DE_VEREDICTOS) return sim.productor === 'formato_roto_siempre' ? { texto: 'esto no es el JSON pedido' } : { texto: moldeDeVeredictos(c.ids_de_retoques ?? [], { veredictos: (sim as { veredictos?: string }).veredictos }) }
   const esDeFichas = c.esquema === 'fichas.v1' || c.esquema === 'fichas_de_registro.v1'
   if (!esDeFichas && sim.productor === 'muerto') return { texto: null, error: 'el turno murió (simulado): sin vuelta' }
   if (!esDeFichas && (sim.productor === 'formato_roto_siempre' || (sim.productor === 'formato_roto' && !c.reintento))) return { texto: 'esto no cumple el formato (simulado)' }

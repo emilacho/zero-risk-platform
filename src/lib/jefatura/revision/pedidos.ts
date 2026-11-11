@@ -99,7 +99,7 @@ export function auditarPedidoDeAgente(p: unknown): string[] {
 }
 
 // ───────────────────────── textos
-const TITULO_DE: Record<TipoDeRevision, string> = { plan: 'el plan de 90 días', estrategia: 'la estrategia', calendario: 'el calendario', brief: 'el parte de briefs', pieza: 'la pieza', manual: 'el manual', registro: 'el registro del documento' }
+const TITULO_DE: Record<TipoDeRevision, string> = { plan: 'el plan de 90 días', estrategia: 'la estrategia', calendario: 'el calendario', brief: 'el parte de briefs', pieza: 'la pieza', manual: 'el manual', registro: 'el registro del documento', colateral: 'los retoques colaterales' }
 export const tituloDeLoRevisado = (t: TipoDeRevision): string => TITULO_DE[t]
 
 const unir = (xs: string[]): string => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`)

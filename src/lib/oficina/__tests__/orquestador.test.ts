@@ -626,10 +626,11 @@ describe('el freno de US$ 10 (aquí 0,20) y los fallos de entrada', () => {
     const b = await abrir(N, sobre({ brief_id: 'BRF-0099' }))
     expect(b.cuerpo).toMatchObject({ estado: 'fallido' })
   })
-  it('un brief que no es de imagen (configuración) no entra a esta sala', async () => {
+  it('un brief que la tabla de formatos de la cadena no manda a esta sala (configuración) no entra', async () => {
     const M = crearMemoria()
+    M.P.formatosDeLaCadena = async () => ({ instagram: [{ formato: 'configuracion', produccion: 'opera', lead_dias: 1, max_por_dia: 1, familia: null }] })
     const r = await abrir(M, sobre({ brief_id: 'BRF-0001' }))
-    expect(r.cuerpo).toMatchObject({ estado: 'fallido' }); expect(String(r.cuerpo.motivo)).toMatch(/no es un post de imagen/)
+    expect(r.cuerpo).toMatchObject({ estado: 'fallido' }); expect(String(r.cuerpo.motivo)).toMatch(/no le da ninguna sala: esta sala \(post_img\) no lo produce/)
   })
   it('si no se pueden leer las fuentes del cliente, falla visible (no se sigue a ciegas)', async () => {
     const M = crearMemoria(); M.P.fuentes = async () => ({ error: 'base caída' })

@@ -6,7 +6,26 @@
  */
 export const TABLAS_DE_GASTO = { encargos: 'oficina_encargos', plantillas: 'oficina_tipos_de_grupo' } as const
 
+/**
+ * 11-nov (GO Lenovo 01:10Z) · la config con la que la PUERTA de la oficina decide si produce (`decidirPuerta`): la MISMA tabla, las MISMAS columnas y la MISMA normalización
+ * que `almacen-supabase.ts leerConfig` (que también usa esto). La diferencia es solo ante el error: la oficina se apaga; el freno de la cadena necesita saber que NO pudo leer
+ * (y seguir guardando lugar como hoy), así que `configDeLaPuerta` LANZA si la base falla o no hay fila.
+ */
+export const TABLA_DE_CONFIG = 'oficina_config'
+export const COLUMNAS_DE_CONFIG = 'estado,familias_activas,clientes_ensayo'
+export function configDesdeLaFila(d: Record<string, unknown>): ConfigDeOficina {
+  const estado = d.estado === 'ensayo' || d.estado === 'encendida' ? d.estado : 'apagada'
+  return { estado, familias_activas: Array.isArray(d.familias_activas) ? d.familias_activas.map(String) : [], clientes_ensayo: Array.isArray(d.clientes_ensayo) ? d.clientes_ensayo.map(String) : [] }
+}
+export async function configDeLaPuerta(db: DbDeGasto): Promise<ConfigDeOficina> {
+  const { data, error } = (await db.from(TABLA_DE_CONFIG).select(COLUMNAS_DE_CONFIG).eq('id', 1).maybeSingle()) as Respuesta
+  if (error) throw new Error(`la oficina no contestó: ${error.message ?? 'sin detalle'}`)
+  if (!data) throw new Error('la config de la oficina no tiene fila')
+  return configDesdeLaFila(data as Record<string, unknown>)
+}
+
 type Respuesta = { data: unknown; error: { message?: string } | null }
+import type { ConfigDeOficina } from './sobre'
 // la forma mínima del cliente de la base que se usa aquí (la de Supabase la cumple)
 export interface DbDeGasto { from(tabla: string): any }
 
