@@ -77,7 +77,7 @@ export function escritorDeBrief(al: AlmacenDelBrief): EscritorDeDocumento {
       const f = await al.ultimoBriefCreativo(ref)
       if (!f || f.estado === 'devuelta' || f.estado === 'descartada') return null
       if (f.estado === 'borrador') return { texto: f.texto_md ?? '', version: String(f.version), abierto: true }
-      if (!f.texto_md) return null
+      if (!f.texto_md?.trim()) return null // una `validada` sin texto no es vigente: no hay qué retocar (CC7)
       return { texto: f.texto_md, version: String(f.version) }
     },
     async leerVersion(ref, version) {

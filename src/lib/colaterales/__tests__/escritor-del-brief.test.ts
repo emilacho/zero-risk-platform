@@ -21,6 +21,8 @@ import type { BriefCreativoGuardado, Campana, ContextoDelCliente, EstrategiaGuar
 import { insumosDelBrief, leerBriefCreativo } from '../../cadena/brief-creativo'
 import { bloqueosDelBrief, MOTIVO_RETOQUE_DE_COLATERALES } from '../../cadena/mesas'
 import { idDeBrief } from '../../cadena/conceptos'
+import { puertosDeSupabase } from '../puertos-supabase'
+import type { Db } from '../almacen'
 
 const fx = (n: string) => readFileSync(join(__dirname, '..', '..', 'cadena', '__fixtures__', n), 'utf8')
 const TODAS: ReadonlySet<string> = new Set(['manual', 'plan', 'estrategia', 'brief', 'gran_idea', 'calendario', 'pieza'])
@@ -79,7 +81,7 @@ async function preparar(c: Caso, cadena: AlmacenMemoria, antes = c.antes, despue
   const { edicion } = await almacen.crearEdicion({ client_id: c.client, documento: 'plan', documento_ref: 'plan', version_base: '1', seccion: 's', antes, despues, llave: `${c.campana}:${antes}` })
   await almacen.guardarRetoques(edicion.id, ped.map((p) => ({ pedazo: p, documento_ref: c.campana, version_base: base, afecta: true, razon: 'repite lo editado', antes, despues, porque: 'repite lo editado', estado: 'propuesto' as const })))
   for (const f of tablas.colaterales_retoques) await almacen.pasarRetoque(String(f.id), 'propuesto', 'aprobado')
-  return { tablas, almacen, edicion_id: edicion.id, ped }
+  return { db, tablas, almacen, edicion_id: edicion.id, ped }
 }
 const aplicar = (cadena: AlmacenMemoria, p: Awaited<ReturnType<typeof preparar>>) => aplicarAprobados({ almacen: p.almacen, escritores: { brief: escritorDeBrief(cadena) }, leerFilasActivas: async () => TODAS }, p.edicion_id)
 
@@ -240,4 +242,61 @@ describe('el registro va como AVISO en el retoque (la jefatura ya lo juzgó cont
     expect(r.pendientes).toEqual([])
     expect(cadena.briefsCreativos[1].estado).toBe('validada')
   })
+})
+
+describe('la fila nueva, campo por campo (sabotajes 1-3 de CC7 y el de `seco` de CC6)', () => {
+  for (const c of CASOS) {
+    it(`${c.cliente}: sobre una base de ENSAYO con plazo, devolución, encargo y costo, la v2 hereda solo \`seco\`; lo demás es suyo`, async () => {
+      const v1: BriefCreativoGuardado = {
+        campana_id: c.campana, version: 1, estado: 'validada', texto_md: c.brief, leido: leerComoLaMesa(c, c.brief) as unknown as Record<string, unknown>,
+        devolucion_texto: 'una devolución vieja', motivo: null, costo_usd: 0.53, encargo_id: 'enc-1', plazo_en: '2026-11-11T10:00:00Z', seco: true,
+      }
+      const cadena = cadenaCon(c, { briefs: [v1] })
+      const r = await aplicar(cadena, await preparar(c, cadena))
+      expect(r.pendientes).toEqual([])
+      const texto = c.brief.split(c.antes).join(c.despues)
+      // la fila ENTERA: un `plazo_en` copiado haría que el vigía de mesas vencidas descartara un brief validado (CC7)
+      expect(cadena.briefsCreativos[1]).toEqual({
+        campana_id: c.campana, version: 2, estado: 'validada', texto_md: texto, leido: leerComoLaMesa(c, texto),
+        devolucion_texto: null, motivo: MOTIVO_RETOQUE_DE_COLATERALES, costo_usd: 0, encargo_id: null, plazo_en: null, seco: true,
+      })
+    })
+  }
+})
+
+describe('una `validada` sin texto no es vigente (sabotaje 4 de CC7)', () => {
+  const c = CASOS[0]
+  for (const vacio of [null, '  \n  ']) {
+    it(`texto ${JSON.stringify(vacio)}: no hay qué retocar → pendiente · documento_no_existe, sin escribir`, async () => {
+      const cadena = cadenaCon(c)
+      const p = await preparar(c, cadena)
+      cadena.briefsCreativos[0].texto_md = vacio
+      expect(await escritorDeBrief(cadena).leerVigente(c.campana)).toBeNull()
+      const r = await aplicar(cadena, p)
+      expect(r.aplicados).toEqual([])
+      expect(r.pendientes.length).toBeGreaterThan(0)
+      expect(r.pendientes.every((x) => x.motivo === 'documento_no_existe')).toBe(true)
+      expect(cadena.briefsCreativos).toHaveLength(1)
+    })
+  }
+})
+
+describe('los puertos REALES del turno 2d llevan el retoque del brief a su escritor (sabotaje 5 de CC7)', () => {
+  /** la base falsa del 2b no tiene la tabla de políticas: se le suma la lectura de las filas activas (lo único que los puertos leen de ella) */
+  const conPoliticas = (db: Db, activas: string[]): Db => ({
+    ...db,
+    from: (t: string) => (t === 'jefatura_grading_policies'
+      ? { select: () => ({ eq: async () => ({ data: activas.map((a) => ({ artifact_type: a })), error: null }) }) }
+      : db.from(t)),
+  }) as unknown as Db
+  for (const c of CASOS) {
+    it(`${c.cliente}: aplicar por \`puertosDeSupabase\` escribe la v2 del brief (sin el escritor quedaría pendiente · sin_escritor)`, async () => {
+      const cadena = cadenaCon(c)
+      const p = await preparar(c, cadena)
+      const r = await puertosDeSupabase(conPoliticas(p.db as unknown as Db, ['brief']), undefined, cadena).aplicar(p.edicion_id)
+      expect(r.pendientes).toEqual([])
+      expect(r.aplicados).toHaveLength(p.ped.length)
+      expect(cadena.briefsCreativos.map((b) => [b.version, b.estado, b.motivo])).toEqual([[1, 'validada', null], [2, 'validada', MOTIVO_RETOQUE_DE_COLATERALES]])
+    })
+  }
 })

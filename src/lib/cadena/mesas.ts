@@ -46,6 +46,14 @@ export const MAX_VERSIONES_POR_REAPERTURA = 2
 export const MOTIVO_RETOQUE_DE_COLATERALES = 'retoque_de_colaterales'
 export const esRetoqueDeColaterales = (b: Pick<BriefCreativoGuardado, 'motivo'>): boolean => b.motivo === MOTIVO_RETOQUE_DE_COLATERALES
 /**
+ * 11-nov · guarda 1 de CC7 · la marca del retoque la pone SOLO el escritor. Si una MESA manda ese motivo (por error o en el texto del agente), su fila
+ * dejaría de contar como reapertura (una de más, o un bucle). `recibirBrief` lo cambia por este texto, que nunca es la marca. Sin juicio: compara
+ * sin espacios ni mayúsculas.
+ */
+export const MOTIVO_RESERVADO_EN_LA_MESA = 'la mesa mandó el motivo reservado de los retoques; se guarda este en su lugar'
+export const motivoDeLaMesa = (m: string | null): string | null =>
+  m !== null && m.trim().toLowerCase() === MOTIVO_RETOQUE_DE_COLATERALES ? MOTIVO_RESERVADO_EN_LA_MESA : m
+/**
  * 11-nov · cuántas versiones del brief hizo una MESA hasta `version` (incluida) · puro. Cuenta FILAS, no lee el número: un retoque o un deshacer
  * suben `version` sin ser una reapertura (CC7). Reemplaza al viejo `version >= MAX_VERSIONES_POR_REAPERTURA` en los seis lugares que deciden el alto.
  */
@@ -295,10 +303,11 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   if (ultimo.estado !== 'borrador') return { ok: true, ya_cerrada: true, estado: ultimo.estado }
   // tramo 2 del revisor de registro: una entrega repetida mientras la jefatura revisa no reabre ni descarta nada (solo un brief retenido tiene texto en `borrador`)
   if (ultimo.texto_md && (await esperaDeRegistroViva(al, campana.id, 'brief', p.version))) return { ok: true, estado: EN_REVISION_DE_REGISTRO }
-  const base = { costo_usd: p.costo_usd, encargo_id: p.encargo_id, motivo: p.motivo }
+  const motivo = motivoDeLaMesa(p.motivo) // guarda 1 de CC7: la mesa nunca escribe la marca del retoque
+  const base = { costo_usd: p.costo_usd, encargo_id: p.encargo_id, motivo }
   if (!texto(p.texto)) {
-    await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado: 'descartada', motivo: p.motivo ?? 'la mesa no entregó texto' })
-    if (await agotoLaReapertura(al, campana.id, p.version)) await ponerNecesitaHumano(al, campana, `la mesa del brief no entregó dos veces (${p.motivo ?? 'sin motivo'})`, ahora)
+    await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado: 'descartada', motivo: motivo ?? 'la mesa no entregó texto' })
+    if (await agotoLaReapertura(al, campana.id, p.version)) await ponerNecesitaHumano(al, campana, `la mesa del brief no entregó dos veces (${motivo ?? 'sin motivo'})`, ahora)
     return { ok: true, estado: 'descartada', ...(await siguienteDespuesDe(al, campana.id)) }
   }
   const estr = await al.ultimaEstrategia(campana.id)

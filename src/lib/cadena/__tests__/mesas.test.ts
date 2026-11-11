@@ -10,7 +10,7 @@ import { ACCIONES } from '../acciones'
 import type { Campana, EstrategiaGuardada } from '../almacen'
 import { HORAS_DE_REARME } from '../esperas'
 import { escritorDeBrief } from '../../colaterales/escritores'
-import { briefAbrir, CAP_DE_VUELTAS_DE_CAMBIOS, cerrarMesasVencidas, conceptoAbrir, MOTIVO_RETOQUE_DE_COLATERALES, versionesDeMesaHasta, conceptoDecidir, condicionesDe, HOLGURA_DE_MESA_MIN, PLAZO_DE_MESA_MIN, puertoDeLaCadena, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
+import { briefAbrir, CAP_DE_VUELTAS_DE_CAMBIOS, cerrarMesasVencidas, conceptoAbrir, MOTIVO_RETOQUE_DE_COLATERALES, MOTIVO_RESERVADO_EN_LA_MESA, versionesDeMesaHasta, conceptoDecidir, condicionesDe, HOLGURA_DE_MESA_MIN, PLAZO_DE_MESA_MIN, puertoDeLaCadena, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
 
 const A = clienteA()
 const CAMP = 'camp-1'
@@ -424,5 +424,34 @@ describe('las reaperturas del brief no cuentan los retoques de colaterales', () 
       expect(al.campanas[0].estado, String(conRetoque)).toBe('calendario')
       expect((await briefAbrir(al, wf(), AHORA)).status, String(conRetoque)).toBe(200)
     }
+  })
+})
+
+describe('guarda 1 de CC7 · una mesa nunca escribe la marca del retoque', () => {
+  it('🔴 la mesa que manda el motivo reservado sin texto sigue contando: la segunda vez frena igual (sin la guarda, ninguna de las dos contaría)', async () => {
+    const al = almacen()
+    expect((await briefAbrir(al, wf(), AHORA)).status).toBe(200)
+    expect(await recibirBrief(al, entrega(1, null, { motivo: MOTIVO_RETOQUE_DE_COLATERALES }), AHORA)).toMatchObject({ ok: true, estado: 'descartada' })
+    expect(al.briefsCreativos[0].motivo).toBe(MOTIVO_RESERVADO_EN_LA_MESA)
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
+    const r = await briefAbrir(al, wf(), AHORA)
+    expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
+    expect(r.cuerpo.version).toBe(2)
+    expect(await recibirBrief(al, entrega(2, null, { motivo: '  Retoque_De_Colaterales ' }), AHORA)).toMatchObject({ ok: true, estado: 'descartada' })
+    expect(al.briefsCreativos.map((b) => b.motivo)).toEqual([MOTIVO_RESERVADO_EN_LA_MESA, MOTIVO_RESERVADO_EN_LA_MESA])
+    expect(al.campanas[0].estado).toBe('necesita_humano')
+    expect(al.campanas[0].estado_motivo).toMatch(/dos veces/)
+  })
+  it('🔴 con texto: la versión que valida la mesa tampoco guarda la marca', async () => {
+    const al = almacen()
+    expect((await briefAbrir(al, wf(), AHORA)).status).toBe(200)
+    expect(await recibirBrief(al, entrega(1, BRIEF_BUENO, { motivo: MOTIVO_RETOQUE_DE_COLATERALES }), AHORA)).toMatchObject({ ok: true, estado: 'validada' })
+    expect(al.briefsCreativos[0].motivo).toBe(MOTIVO_RESERVADO_EN_LA_MESA)
+  })
+  it('control: cualquier otro motivo de la mesa se guarda tal cual', async () => {
+    const al = almacen()
+    expect((await briefAbrir(al, wf(), AHORA)).status).toBe(200)
+    expect(await recibirBrief(al, entrega(1, null, { motivo: 'tope de la mesa' }), AHORA)).toMatchObject({ ok: true, estado: 'descartada' })
+    expect(al.briefsCreativos[0].motivo).toBe('tope de la mesa')
   })
 })
