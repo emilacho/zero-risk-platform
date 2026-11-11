@@ -22,7 +22,7 @@ import type { PuertoDeVideo } from '../puertos'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { sacarCuadros, duracionDeLaSalida } from '../video/cuadros'
 import type { Plano } from '../video/guion'
-import { instantesPorPlano, leerMirada, PASO_MIRAR_VIDEO, tareaDeLaMirada } from '../video/mirada'
+import { instantesPorPlano, leerMirada, MAX_CUADROS_DEL_VIDEO, PASO_MIRAR_VIDEO, tareaDeLaMirada } from '../video/mirada'
 import { procesarSalida } from '../salida'
 import { validarPlantilla } from '../plantilla'
 import type { Plantilla } from '../tipos'
@@ -50,6 +50,18 @@ describe('los cuadros: uno del medio de cada plano', () => {
   })
   it('🔴 un video más corto que el guion: el cuadro queda dentro del video', () => {
     expect(instantesPorPlano(PLANOS, 8).map((x) => x.segundo)).toEqual([1.5, 6, 7.9])
+  })
+  it('🔴 con más planos que el máximo: MAX cuadros repartidos parejo, primero y último incluidos; el pedido dice cuántos de cuántos', () => {
+    const muchos: Plano[] = Array.from({ length: 41 }, (_, i) => ({ n: i + 1, desde: i, hasta: i + 1, se_ve: `p${i + 1}` }))
+    const x = instantesPorPlano(muchos)
+    expect(x).toHaveLength(MAX_CUADROS_DEL_VIDEO)
+    expect(x[0].plano).toBe(1)
+    expect(x[x.length - 1].plano).toBe(41)
+    expect(new Set(x.map((c) => c.plano)).size).toBe(MAX_CUADROS_DEL_VIDEO)
+    expect(instantesPorPlano(PLANOS, null, 2).map((c) => c.plano)).toEqual([1, 3])
+    const t = tareaDeLaMirada({ cuadros: x.map((c) => ({ ...c, url: `https://c/${c.plano}.jpg` })), planos: muchos, segundos: 41, brief_texto: 'x', red: 'youtube', formato: 'short', contrato: '' })
+    expect(t.images).toHaveLength(MAX_CUADROS_DEL_VIDEO)
+    expect(t.task).toContain(`son ${MAX_CUADROS_DEL_VIDEO} de 41 planos`)
   })
   it('planos sin segundos válidos no dan cuadro', () => {
     expect(instantesPorPlano([{ n: 1, desde: 4, hasta: 4, se_ve: 'x' }, { n: 2, desde: Number.NaN, hasta: 3, se_ve: 'y' }, { n: 3, desde: 0, hasta: 2, se_ve: 'z' }])).toEqual([{ plano: 3, segundo: 1 }])

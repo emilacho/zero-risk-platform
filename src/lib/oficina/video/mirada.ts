@@ -13,8 +13,11 @@ export const PASO_CUADROS_VIDEO = 'cuadros_video'
 
 export interface CuadroDelVideo { plano: number; segundo: number; url: string }
 
-/** el instante del cuadro de cada plano: el medio del plano, dentro de lo que dura el video de verdad (si se midió) */
-export function instantesPorPlano(planos: Plano[], duracionReal?: number | null): Array<{ plano: number; segundo: number }> {
+/** cuántos cuadros como mucho (el agente que mira y la jefatura los reciben como imágenes: nunca una lista sin fin); con más planos se reparten parejo */
+export const MAX_CUADROS_DEL_VIDEO = 20
+
+/** el instante del cuadro de cada plano: el medio del plano, dentro de lo que dura el video de verdad (si se midió); con más de `max` planos, `max` repartidos parejo (primero y último incluidos) */
+export function instantesPorPlano(planos: Plano[], duracionReal?: number | null, max = MAX_CUADROS_DEL_VIDEO): Array<{ plano: number; segundo: number }> {
   const tope = duracionReal && duracionReal > 0 ? duracionReal : null
   const out: Array<{ plano: number; segundo: number }> = []
   for (const p of planos) {
@@ -25,7 +28,8 @@ export function instantesPorPlano(planos: Plano[], duracionReal?: number | null)
     if (tope !== null) s = Math.min(s, Math.max(0, tope - 0.1))
     out.push({ plano: p.n, segundo: Math.round(s * 100) / 100 })
   }
-  return out
+  if (out.length <= max || max < 2) return out.slice(0, Math.max(max, 1))
+  return Array.from({ length: max }, (_, i) => out[Math.round((i * (out.length - 1)) / (max - 1))])
 }
 
 export interface MiradaDelVideo {
@@ -59,7 +63,7 @@ export function tareaDeLaMirada(o: { cuadros: CuadroDelVideo[]; planos: Plano[];
     `## La pieza\nUn video de ${o.segundos} s para ${o.red} (${o.formato}), ya generado por el modelo de video. Lo que sigue es lo que se pidió y lo que salió.`,
     `## La fila del brief (lo que la pieza tiene que contar)\n${o.brief_texto.trim() || '(sin texto)'}`,
     `## Los planos del guion (lo que se pidió, en orden)\n${planos || '- (sin planos)'}`,
-    `## Los cuadros que te muestro (uno del medio de cada plano, en orden)\n${cuadros || '- (ninguno)'}`,
+    `## Los cuadros que te muestro (uno del medio de cada plano, en orden)${o.cuadros.length && o.cuadros.length < o.planos.length ? ` · son ${o.cuadros.length} de ${o.planos.length} planos (los demás no se muestran: no juzgues lo que no ves)` : ''}\n${cuadros || '- (ninguno)'}`,
     '## Tu trabajo\nMira los cuadros como lo haría el dueño de la pieza antes de publicarla. Decide TÚ si el video cuenta lo que pide el guion y la fila: si se ve lo que cada plano tenía que mostrar y si el orden se respeta. No hay una lista de cosas que buscar: lo importante lo decides tú leyendo el guion y la fila. Si algo importante falta o está cambiado, di qué y en qué plano, y escribe en `para_la_mesa` lo que el equipo creativo tendría que corregir para que el próximo video sí lo cuente. Si coincide, dilo y no inventes defectos.',
     ...(o.errorDeFormato ? [`## Corrige el formato\n${o.errorDeFormato}`] : []),
     `## Formato de tu respuesta\nSolo este JSON:\n${o.contrato}`,
