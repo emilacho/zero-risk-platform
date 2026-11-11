@@ -177,6 +177,10 @@ export function almacenDeSupabase(): Almacen {
     abrirRevisionDeRegistro: (entrada) => abrirRevisionDeRegistroReal(db, entrada),
     // 10-nov · filas que quedaron atrás: abre la mesa de reubicación de la oficina (nunca lanza)
     abrirMesaDeReubicacion: (sobre) => abrirMesaDeReubicacionReal(sobre),
+    // 11-nov (#1014 · relectura): el texto que la mesa dejó en su encargo (`pieza_texto`), sin llamar al agente; nunca lanza
+    async textoGuardadoDeLaMesa(encargoId) {
+      try { return await (await import('@/lib/oficina/mesa/de-la-cadena')).textoGuardadoDeLaMesa(db as never, encargoId) } catch (e) { return { ok: false as const, motivo: e instanceof Error ? e.message : String(e) } }
+    },
     async leerConfig(k) { return (await uno<{ valor: unknown }>(db.from('cadena_config').select('valor').eq('clave', k).maybeSingle()))?.valor },
     async escribirConfig(k, v) { const { error } = await db.from('cadena_config').upsert({ clave: k, valor: v, actualizado_en: new Date().toISOString() }); if (error) fallo(error) },
     async plazos() { return lista<PlazoCfg>(db.from('cadena_plazos').select('*').limit(100)) },
@@ -318,8 +322,8 @@ export function almacenDeSupabase(): Almacen {
       })), { onConflict: 'campana_id,calendario_version,id' })
       if (error) fallo(error)
     },
-    async reubicarFila(campanaId, version, filaId, patch, aviso) {
-      const SIN_PRODUCIR = ['validada', 'lista_para_brief']
+    async reubicarFila(campanaId, version, filaId, patch, aviso, desde) {
+      const SIN_PRODUCIR = [...(desde ?? ['validada', 'lista_para_brief'])]
       const f = await uno<{ avisos: string[] | null }>(db.from('cadena_calendario_filas').select('avisos').eq('campana_id', campanaId).eq('calendario_version', version).eq('id', filaId).in('estado', SIN_PRODUCIR).maybeSingle())
       if (!f) return false
       // condicional: solo si sigue sin producir (otra vía que la tomó entre la lectura y la escritura gana)

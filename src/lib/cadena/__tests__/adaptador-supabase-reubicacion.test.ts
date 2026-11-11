@@ -94,3 +94,22 @@ describe('adaptador · la mesa de reubicación recibe el sobre con SU dry_run (b
     expect(abiertos).toEqual([])
   })
 })
+
+describe('adaptador · 11-nov #1014 · relectura: el estado de partida y el texto guardado', () => {
+  it('🔴 con `desde` la condición de la LECTURA y de la ESCRITURA es ese estado (perdio_su_fecha), no «sin producir»', async () => {
+    expect(await almacenDeSupabase().reubicarFila('camp-1', 3, 'f1', { estado: 'validada', fecha: '2026-12-07' }, 'reubicación: r', ['perdio_su_fecha'])).toBe(true)
+    const [leer, escribir] = consultas.filter((c) => c.tabla === 'cadena_calendario_filas')
+    for (const c of [leer, escribir]) {
+      expect(c.llamadas.some(([m, col, v]) => m === 'in' && col === 'estado' && JSON.stringify(v) === JSON.stringify(['perdio_su_fecha']))).toBe(true)
+      expect(tieneLaCondicion(c)).toBe(false)
+    }
+  })
+  it('🔴 el texto guardado lo lee la OFICINA (la cadena no nombra sus tablas): pasa el texto y el id; sin texto, ok con null (nunca lanza)', async () => {
+    lectura = { estado_del_motor: { artefactos: { mesa: { datos: { pieza_texto: 'f1 · reubicar · 2026-12-07 · r' } } } } } as never
+    expect(await almacenDeSupabase().textoGuardadoDeLaMesa!('enc-9')).toEqual({ ok: true, texto: 'f1 · reubicar · 2026-12-07 · r' })
+    expect(consultas.length).toBeGreaterThan(0)
+    expect(filtros(consultas[consultas.length - 1])).toEqual(['id=enc-9'])
+    lectura = null
+    expect(await almacenDeSupabase().textoGuardadoDeLaMesa!('enc-9')).toEqual({ ok: true, texto: null })
+  })
+})
