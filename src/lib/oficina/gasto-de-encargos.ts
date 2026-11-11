@@ -70,6 +70,7 @@ export const MIN_HISTORIA = 3
  *   · con ≥ `MIN_HISTORIA` encargos reales terminados con gasto: el promedio de los últimos `HISTORIA_POR_FAMILIA` (`historia` viene del más reciente al más viejo);
  *   · si no, el dato `limites.reserva_por_pieza_usd` de su plantilla;
  *   · sin ninguno, la familia NO aparece (el freno cuenta su tope, del lado seguro).
+ * Fuera de la historia: los ensayos (`dry_run`) y los encargos de PRUEBA (`prueba`, CC7/CC6 sobre 2e852b67): uno de prueba con gasto real fijaría lo esperado de todos los clientes.
  * Nunca pasa del tope de la familia.
  */
 export function reservasDesdeLaHistoria(plantillas: Array<{ familia: unknown; tope_encargo_usd: unknown; limites: unknown }>, historia: Array<{ familia: unknown; gasto_usd: unknown }>): Record<string, number> {
@@ -89,7 +90,7 @@ export function reservasDesdeLaHistoria(plantillas: Array<{ familia: unknown; to
 export async function reservasDeFamiliasActivas(db: DbDeGasto): Promise<Record<string, number>> {
   const [plantillas, historia] = await Promise.all([
     filas<{ familia: unknown; tope_encargo_usd: unknown; limites: unknown }>(db.from(TABLAS_DE_GASTO.plantillas).select('familia, tope_encargo_usd, limites').eq('activo', true)),
-    filas<{ familia: unknown; gasto_usd: unknown }>(db.from(TABLAS_DE_GASTO.encargos).select('familia, gasto_usd').eq('dry_run', false).in('estado', [...ESTADOS_TERMINADOS]).order('creado_en', { ascending: false }).limit(2000)),
+    filas<{ familia: unknown; gasto_usd: unknown }>(db.from(TABLAS_DE_GASTO.encargos).select('familia, gasto_usd').eq('dry_run', false).eq('prueba', false).in('estado', [...ESTADOS_TERMINADOS]).order('creado_en', { ascending: false }).limit(2000)),
   ])
   return reservasDesdeLaHistoria(plantillas, historia)
 }
