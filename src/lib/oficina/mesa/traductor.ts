@@ -64,6 +64,13 @@ export function limpiarTexto(v: string, parrafos = false): string {
   return parrafos ? sin.split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim() : sin.replace(/\s*\n\s*/g, ' ').replace(/[ \t]+/g, ' ').trim()
 }
 
+/** 11-nov · fila #20 · «<nota del director>: <texto>» → «<texto>»; sin rótulo al principio, o sin texto después, devuelve lo mismo */
+export function sinRotuloDelDirector(v: string): string {
+  const m = /^\s*([^:–—\n]{1,60}?)\s*[:–—]\s*([\s\S]+)$/.exec(v)
+  if (!m || !NOTA_DEL_DIRECTOR.test(m[1]) || !m[2].trim()) return v
+  return m[2].trim()
+}
+
 /** ¿esto sigue siendo una nota del director aunque se haya limpiado? (no se dibuja) */
 export const esNotaDelDirector = (v: string): boolean => NOTA_DEL_DIRECTOR.test(v)
 
@@ -197,7 +204,7 @@ const AVISO_LARGO = { headline: 90, body: 220, cta: 32, eyebrow: 24 } as const
 /** un llamado que es una INSTRUCCIÓN para quien publica («Botón nativo de Facebook “Enviar mensaje”…») no es texto que se dibuje */
 const esInstruccionDeBoton = (v: string) => /^\s*(bot[oó]n|button)\b/i.test(v)
 
-export function traducirPieza(md: string, tipo: TipoDePieza, o: { refsDelKit?: string[]; tipoPorRef?: Record<string, 'historia' | 'estado'>; temaPorRef?: Record<string, string>; preguntasHechas?: number; maxPreguntas?: number } = {}): Traduccion {
+export function traducirPieza(md: string, tipo: TipoDePieza, o: { refsDelKit?: string[]; tipoPorRef?: Record<string, 'historia' | 'estado'>; temaPorRef?: Record<string, string>; preguntasHechas?: number; maxPreguntas?: number; /** 11-nov · fila #20 · el máximo de láminas del formato (dato de la plantilla); sin dato, 10 */ maxLaminas?: number } = {}): Traduccion {
   const maxP = o.maxPreguntas ?? 1
   const todas = secciones(md)
   const avisos: string[] = []
@@ -241,7 +248,13 @@ export function traducirPieza(md: string, tipo: TipoDePieza, o: { refsDelKit?: s
     if (!bloques.length) return falla('no encontré láminas (un encabezado por lámina)')
     const laminas: Lamina[] = []
     const sinTitulo: number[] = []
-    bloques.slice(0, 10).forEach((s, i) => {
+    // 11-nov · fila #20 del barrido de reglas rígidas (GO Lenovo 03:55Z): el máximo sale del dato del formato y, si el director dejó más, se AVISA y las que sobran quedan anotadas (antes se cortaba en 10 sin decir nada)
+    const maxLam = typeof o.maxLaminas === 'number' && Number.isInteger(o.maxLaminas) && o.maxLaminas > 0 ? o.maxLaminas : 10
+    if (bloques.length > maxLam) {
+      avisos.push(`el director dejó ${bloques.length} láminas y el formato admite ${maxLam}: se dibujan las primeras ${maxLam}; las otras ${bloques.length - maxLam} quedan anotadas como alternativa`)
+      for (const s of bloques.slice(maxLam)) alternativas.push(`lámina que no entró (${s.titulo.trim()}): ${limpiarTexto(s.lineas.join(' '))}`.slice(0, 600))
+    }
+    bloques.slice(0, maxLam).forEach((s, i) => {
       const leidos = campos(s.lineas, `lámina ${i + 1}`)
       const c = leidos.valores
       alternativas.push(...leidos.alternativas); avisos.push(...leidos.avisos)
@@ -250,7 +263,10 @@ export function traducirPieza(md: string, tipo: TipoDePieza, o: { refsDelKit?: s
       if (!headline && c.suelto) { const [primera, ...resto] = c.suelto.split('\n'); headline = primera; body = body || resto.join(' ').trim() }
       // P1 · solo texto final: sin markdown, sin límites entre paréntesis y sin notas del director
       const limpio = (campo: string, v: string, parrafos = false): string => {
-        const t = limpiarTexto(v, parrafos)
+        let t = limpiarTexto(v, parrafos)
+        // 11-nov · fila #20 · una nota del director usada como RÓTULO («Texto en imagen: Oferta de la semana») ya no vacía el campo: se quita el rótulo y queda el texto
+        const r = sinRotuloDelDirector(t)
+        if (r !== t) { avisos.push(`lámina ${i + 1}: el ${campo} traía el rótulo «${t.slice(0, t.length - r.length).replace(/[\s:–—-]+$/, '')}» del director; se dibujó solo el texto`); t = r }
         if (t && esNotaDelDirector(t)) { avisos.push(`lámina ${i + 1}: el ${campo} traía una nota del director y no se dibujó`); return '' }
         return t
       }
@@ -258,7 +274,7 @@ export function traducirPieza(md: string, tipo: TipoDePieza, o: { refsDelKit?: s
       const cta = esInstruccionDeBoton(c.cta ?? '') ? '' : limpio('llamado', c.cta ?? '')
       const eyebrow = limpio('sobre-título', c.eyebrow ?? '')
       if (!headline) { sinTitulo.push(i + 1); return }
-      const rol = rolDe(s.titulo, i, Math.min(bloques.length, 10), !!cta)
+      const rol = rolDe(s.titulo, i, Math.min(bloques.length, maxLam), !!cta)
       const l: Lamina = { orden: i + 1, rol, headline, ...(body ? { body } : {}), ...(cta ? { cta } : {}), ...(eyebrow ? { eyebrow } : {}) }
       laminas.push(l)
       imagenes.push(leerImagen(rol, c.imagen))
