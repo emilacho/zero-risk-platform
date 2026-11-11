@@ -148,7 +148,7 @@ function clienteUuid(): ClienteFixture {
   return c
 }
 
-function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: ClienteFixture; agente?: (b: any) => RespuestaHttp; paginas?: Record<string, string>; cableFalla?: boolean; config?: Record<string, unknown> } = {}): Mundo {
+function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: ClienteFixture; agente?: (b: any) => RespuestaHttp; paginas?: Record<string, string | null | { cuerpo: string; tipo: string }>; cableFalla?: boolean; config?: Record<string, unknown> } = {}): Mundo {
   const cliente = opts.cliente ?? clienteUuid()
   const al = new AlmacenMemoria({
     contextos: { [UUID]: contextoDe(cliente) }, planes: { [UUID]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, journeys: [{ journeyId: 'viaje-1', clientId: UUID }],
@@ -174,7 +174,7 @@ function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: Cli
     if (u.pathname === '/webhook/zero-risk/brief') { reg.pasarela.push(p); return { statusCode: 200, body: {} } }
     if (u.pathname === '/webhook/zero-risk/cadena-parte') { reg.parte.push(p); return { statusCode: 200, body: {} } }
     if (opts.paginas && opts.paginas[p.url] === null) return { statusCode: 404, body: 'no encontrada' }
-    if (opts.paginas && opts.paginas[p.url] !== undefined) return { statusCode: 200, body: opts.paginas[p.url] }
+    if (opts.paginas && opts.paginas[p.url] !== undefined) { const pg = opts.paginas[p.url]; return typeof pg === 'object' && pg !== null ? { statusCode: 200, headers: { 'content-type': pg.tipo }, body: pg.cuerpo } : { statusCode: 200, body: pg } }
     throw new Error('el simulador no conoce esta dirección: ' + p.url)
   }
   return { al, sim: new SimuladorN8n({ flujos: POR_ID, env: ENV, http }), reg, cliente }
@@ -553,6 +553,43 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
     } })
     const id = await abrirYa(m)
     await expect(sim.ejecutar(IDS.estrategia, [{ json: { campana_id: id, seco: true, simulacro: Array.from({ length: 10 }, () => m.cliente.estrategia) } }])).rejects.toThrow(/CADENA_DEMASIADAS_VUELTAS/)
+  })
+  // 11-nov · arreglo genérico de CC7: solo cuenta como página una respuesta de TEXTO con texto legible; lo demás se descarta con su razón y NO se llama al agente
+  // (antes un PDF bajado «como texto» contaba como página: se llamaba al agente y se gastaban 3 intentos sin poder citar nada). Con dos países: no depende de ninguno.
+  const PDF = '%PDF-1.7\n%âãÏÓ\n1 0 obj <</Filter/FlateDecode/Length 812>> stream\nx\u009cí\u0002\u0006\uFFFD\uFFFD\u0003\u0011~» endstream endobj xref 0 12 trailer <</Root 1 0 R>> startxref 1234 %%EOF'
+  it.each([['pais-de-practica'], ['otro-pais-de-practica']])('🔴 %s · un PDF, una imagen y una página vacía NO llaman al agente: sin fuente, con la razón de cada una', async (pais) => {
+    const urls = ['https://pdf.test/feriados.pdf', 'https://img.test/calendario.png', 'https://vacia.test/', 'https://pdf-sin-tipo.test/f']
+    const m = mundo({
+      config: { dominios_fechas: { [`feriados_locales|${pais}`]: urls } },
+      paginas: { [urls[0]]: { cuerpo: PDF, tipo: 'application/pdf' }, [urls[1]]: { cuerpo: '\u0089PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR', tipo: 'image/png' }, [urls[2]]: { cuerpo: '<html><head><script>x()</script></head><body> <div></div> </body></html>', tipo: 'text/html; charset=utf-8' }, [urls[3]]: PDF },
+      agente: () => { throw new Error('no debía llamar al agente') },
+    })
+    const id = await abrirYa(m)
+    const r = await sub(m, IDS.fechas, { campana_id: id, seco: true, pais, tipo: 'feriados locales', ambito: 'ciudad', anio: 2026 })
+    expect(r[0].json.resultado).toBe('sin_fuente')
+    expect(m.reg.agente).toHaveLength(0)
+    const prep = m.reg.cadena.find((p: any) => /\/api\/cadena\/fechas/.test(p.url) && p.cuerpo?.accion === 'preparar') as any
+    expect(prep.cuerpo.paginas).toEqual([])
+    expect(prep.cuerpo.paginas_descartadas).toEqual([
+      { url: urls[0], razon: 'no es texto (application/pdf)' },
+      { url: urls[1], razon: 'no es texto (image/png)' },
+      { url: urls[2], razon: 'sin texto legible (0 caracteres)' },
+      { url: urls[3], razon: 'sin texto legible (trae caracteres de control: parece un archivo binario)' },
+    ])
+    const cob = m.al.coberturas.find((c: any) => c.tipo === 'feriados_locales')
+    expect(cob).toMatchObject({ estado: 'sin_fuente' })
+  })
+  it('🔴 una página de TEXTO legible sí se le pasa al agente (aunque el servidor diga text/html con su juego de caracteres), y la descartada de al lado no', async () => {
+    const respuesta = { tipo: 'feriados locales', ambito: 'ciudad', anio: 2026, fechas: [{ fecha: '2026-11-03', nombre: 'Fiesta', alcance: 'local', fuente_url: 'https://fuente.test', cita_literal: 'El 3 de noviembre se celebra la fiesta' }], no_encontrado: [] }
+    const cl = clienteUuid()
+    const m = mundo({ cliente: cl, config: { dominios_fechas: { 'feriados_locales|pais-de-practica': ['https://pdf.test/f.pdf', 'https://fuente.test'] } }, paginas: { 'https://pdf.test/f.pdf': { cuerpo: PDF, tipo: 'application/pdf' }, 'https://fuente.test': { cuerpo: '<html><body><p>El 3 de noviembre se celebra la fiesta de la ciudad.</p></body></html>', tipo: 'text/html; charset=UTF-8' } }, agente: agenteQueDevuelve({ estrategia: cl.estrategia, calendario: tandaBuena(cl), fechas: respuesta }) })
+    const r = await correr(m, sobreAbrir())
+    expect(r[0].json.resultado).toBe('cadena_abierta')
+    const deFechas = m.reg.agente.filter((p) => (p.cuerpo as any).extra?.contrato === 'fechas_especiales.v1')
+    expect(deFechas.length).toBeGreaterThan(0)
+    expect((deFechas[0].cuerpo as any).task).toContain('El 3 de noviembre se celebra la fiesta de la ciudad.')
+    expect((deFechas[0].cuerpo as any).task).not.toContain('pdf.test')
+    expect(m.al.fechas.filter((f) => f.estado === 'verificada').map((f) => f.fecha)).toEqual(['2026-11-03'])
   })
   it('fechas: una página que NO bajó (404) no se le pasa al agente: el tipo queda sin fuente y la campaña sigue', async () => {
     const m = mundo({ config: { dominios_fechas: { 'feriados_locales|pais-de-practica': ['https://caida.test'] } }, paginas: { 'https://caida.test': null as never }, agente: () => { throw new Error('no debía llamar al agente') } })

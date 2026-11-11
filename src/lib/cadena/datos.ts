@@ -200,7 +200,10 @@ export async function fechasPreparar(al: Almacen, cuerpo: Record<string, unknown
   if (!paginas.length) {
     const cob = await al.coberturaDe(k.pais, k.tipo, k.ambito_clave, k.anio)
     await al.guardarCobertura({ ...k, estado: 'sin_fuente', intentos: cob?.intentos ?? 0 })
-    return { status: 200, cuerpo: { estado: 'sin_fuente', motivo: 'no se pudo descargar ninguna página: no hay nada que extraer (el tipo queda sin fuente; la campaña sigue)' } }
+    // 11-nov · las que se bajaron pero no traían texto (un PDF, una imagen, una página vacía) se dicen con su razón: así se ve qué fuente hay que cambiar
+    const descartadas = Array.isArray(cuerpo.paginas_descartadas) ? (cuerpo.paginas_descartadas as { url?: unknown; razon?: unknown }[]).filter((d) => typeof d?.url === 'string' && typeof d?.razon === 'string').slice(0, 10).map((d) => `${d.url}: ${d.razon}`) : []
+    const porque = descartadas.length ? `ninguna página descargada traía texto legible (${descartadas.join(' · ')})` : 'no se pudo descargar ninguna página'
+    return { status: 200, cuerpo: { estado: 'sin_fuente', motivo: `${porque}: no hay nada que extraer (el tipo queda sin fuente; la campaña sigue)`, ...(descartadas.length ? { descartadas } : {}) } }
   }
   const esquema = validarEsquemaDeSalida(ESQUEMA_FECHAS_ESPECIALES)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema de fechas no es válido')
