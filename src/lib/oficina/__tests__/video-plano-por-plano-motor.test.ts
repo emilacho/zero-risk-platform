@@ -3,7 +3,8 @@
  * contra el tope antes de enviar nada, un envío por plano, esperar a TODOS y unir. Un cliente con fotos (restaurante) y uno sin fotos (B2B).
  */
 import { describe, expect, it } from 'vitest'
-import { ejecutarCodigoV, enviarVideo, planoPorPlanoEncendido, recibirVideo, sondearPlanos } from '../orquestador-video'
+import { ejecutarCodigoV, enviarVideo, gastosDelVideo, planoPorPlanoEncendido, recibirVideo, sondearPlanos } from '../orquestador-video'
+import { sessionIdDeVideo } from '../../video/libro'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
 import { cotizarYEnviar, encuadrarFotos, leerPlanos, unirClips, type PlanoEnviado } from '../video/motor-planos'
 import { pedidosPorPlano, type PedidoDePlano } from '../video/planos'
@@ -196,4 +197,13 @@ describe('esperar a TODOS y unir', () => {
     expect(reg.uniones).toHaveLength(0)
   })
   it('recibirVideo existe y acepta los planos (tipo)', () => { expect(typeof recibirVideo).toBe('function') })
+  it('🔴 el libro anota UN gasto por clip (cada uno con su fila del libro central); un clip a US$ 0 no se anota', () => {
+    const base = { ok: true as const, status: 'completed' as const, video_url: 'u', url_proveedor: null, costo_usd: 2.12, expires_at: null, copia: 'bucket' as const, aviso: null }
+    const g = gastosDelVideo({ ...base, planos: [{ n: 1, request_id: 'req-1', costo_usd: 1.06, video_url: 'a' }, { n: 2, request_id: 'req-2', costo_usd: 1.06, video_url: 'b' }, { n: 3, request_id: 'req-3', costo_usd: 0, video_url: 'c' }] }, 'req-1')
+    expect(g.map((x) => [x.ref_id, x.cost_usd, x.concepto])).toEqual([[sessionIdDeVideo('req-1'), 1.06, 'video'], [sessionIdDeVideo('req-2'), 1.06, 'video']])
+  })
+  it('camino A: un solo gasto con el pedido de una toma', () => {
+    const g = gastosDelVideo({ ok: true, status: 'completed', video_url: 'u', url_proveedor: null, costo_usd: 3.18, expires_at: null, copia: 'bucket', aviso: null }, 'req-9')
+    expect(g).toEqual([{ concepto: 'video', ref_tabla: 'agent_invocations', ref_id: sessionIdDeVideo('req-9'), cost_usd: 3.18, base: 'usage' }])
+  })
 })

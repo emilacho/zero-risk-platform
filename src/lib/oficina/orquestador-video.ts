@@ -361,6 +361,13 @@ async function enviarPlanos(P: Puertos, enc: Encargo, paso: Paso, e: Estado, pla
   return { esperar: { accion: 'esperar_brazo', turno: { n, paso: paso.clave, tipo: 'brazo', dispatch_key, request_id: env.enviados[0].request_id }, video: { costo_estimado_usd: env.costo_estimado_usd, planos: env.enviados.length, plazo_min: MINUTOS_PARA_ESPERAR_AL_BRAZO } } }
 }
 
+/** lo que el video gasta en el libro de la oficina · camino B: un gasto por clip (cada uno tiene su fila en el libro central); camino A: uno solo. Puro */
+export function gastosDelVideo(res: Extract<ResultadoDelBrazo, { ok: true }>, request_id: string): NonNullable<Cambios['gastos']> {
+  if (res.planos) return res.planos.filter((p) => p.costo_usd > 0).map((p) => ({ concepto: 'video' as const, ref_tabla: 'agent_invocations', ref_id: sessionIdDeVideo(p.request_id), cost_usd: p.costo_usd, base: 'usage' as const }))
+  const costo = Math.max(0, Number(res.costo_usd) || 0)
+  return costo > 0 ? [{ concepto: 'video', ref_tabla: 'agent_invocations', ref_id: request_id ? sessionIdDeVideo(request_id) : null, cost_usd: costo, base: 'usage' }] : []
+}
+
 /** lo que el brazo entregó (o no): lo trae el vigía tras sondear, o una prueba */
 export type ResultadoDelBrazo =
   | { ok: true; status: 'completed'; video_url: string; url_proveedor: string | null; costo_usd: number; expires_at: string | null; copia: 'bucket' | 'solo_proveedor'; aviso: string | null; /** camino B · los clips unidos (cada uno es un gasto en el libro) */ planos?: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }> }
@@ -390,10 +397,7 @@ export async function recibirVideo(P: Puertos, encargoId: string, n: number, res
   const costo = Math.max(0, Number(res.costo_usd) || 0)
   const v: VideoDelEncargo = { request_id, status: 'completed', simulado: false, video_url: res.video_url, url_proveedor: res.url_proveedor, copia: res.copia, costo_usd: costo, costo_estimado_usd: envio?.costo_estimado_usd ?? 0, expires_at: res.expires_at, enviado_en: envio?.enviado_en ?? ahora, terminado_en: ahora, aviso: res.aviso, ...(res.planos ? { planos: res.planos } : {}) }
   const nuevo = registrarPaso(e, pl, sig.indice, { costo_usd: costo, artefacto: v as unknown as Record<string, unknown>, ...(sig.vuelta ? { vuelta: sig.vuelta } : {}) })
-  // camino B: un gasto por clip (cada uno tiene su fila en el libro central); camino A: uno solo
-  const gastos: NonNullable<Cambios['gastos']> = res.planos
-    ? res.planos.filter((p) => p.costo_usd > 0).map((p) => ({ concepto: 'video' as const, ref_tabla: 'agent_invocations', ref_id: sessionIdDeVideo(p.request_id), cost_usd: p.costo_usd, base: 'usage' as const }))
-    : costo > 0 ? [{ concepto: 'video', ref_tabla: 'agent_invocations', ref_id: request_id ? sessionIdDeVideo(request_id) : null, cost_usd: costo, base: 'usage' }] : []
+  const gastos = gastosDelVideo(res, request_id)
   await P.almacen.guardar({
     encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', fichas: nuevo.fichas,
     turno: { ...turnoBase, estado: 'hecho', cost_usd: costo },
