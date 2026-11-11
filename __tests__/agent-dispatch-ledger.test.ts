@@ -32,6 +32,22 @@ function makeFakeSupabase() {
       updateThrows = true
     },
     from(_table: string) {
+      const consulta = (patch: Record<string, unknown> | null) => {
+        const fs: Array<(r: Record<string, unknown>) => boolean> = []
+        const q: Record<string, unknown> = {
+          eq(col: string, val: unknown) { fs.push((r) => r[col] === val); return q },
+          in(col: string, vals: unknown[]) { fs.push((r) => vals.includes(r[col])); return q },
+          select() { return q },
+          limit() { return q },
+          then(res: (v: unknown) => unknown, rej: (e: unknown) => unknown) {
+            if (patch && updateThrows) return Promise.reject(new Error('update boom')).then(res, rej)
+            const tocadas = rows.filter((r) => fs.every((f) => f(r)))
+            if (patch) for (const r of tocadas) Object.assign(r, patch)
+            return Promise.resolve({ data: tocadas.map((r) => ({ ...r })), error: null }).then(res, rej)
+          },
+        }
+        return q
+      }
       return {
         insert(row: Record<string, unknown>) {
           if (failNextInsert) {
@@ -49,15 +65,9 @@ function makeFakeSupabase() {
           rows.push({ ...row })
           return Promise.resolve({ error: null })
         },
-        update(patch: Record<string, unknown>) {
-          return {
-            eq(col: string, val: unknown) {
-              if (updateThrows) return Promise.reject(new Error('update boom'))
-              for (const r of rows) if (r[col] === val) Object.assign(r, patch)
-              return Promise.resolve({ error: null })
-            },
-          }
-        },
+        // 11-nov · #21 · filtros encadenados (eq · in · select · limit) para el cierre que no pisa un cierre ajeno
+        update(patch: Record<string, unknown>) { return consulta(patch) },
+        select() { return consulta(null) },
       }
     },
   }
@@ -162,6 +172,25 @@ describe('C4 NEGATIVO · waitUntil muerto post-202 → la fila accepted queda VI
     await markDispatchTerminal(asSb(sb), dispatch_key, 'completed')
     expect(sb._rows[0].status).toBe('completed')
     expect(sb._rows[0].completed_at).toBeTruthy()
+  })
+})
+
+describe('11-nov · #21 · el cierre no pisa un cierre ajeno (CC6 línea 3)', () => {
+  it('🔴 si el limpiador ya lo cerró (sin_cierre), su estado se queda y se anota que el trabajo terminó después (Náufrago y B2B)', async () => {
+    for (const [wf, agente] of [['oficina-naufrago', 'jefe-marketing'], ['jefatura-b2b', 'campaign-brief-agent']]) {
+      const sb = makeFakeSupabase()
+      const { dispatch_key } = await recordDispatchIntent(asSb(sb), { workflow_id: wf, agent_name: agente, workflow_execution_id: 'e' })
+      Object.assign(sb._rows[0], { status: 'sin_cierre', metadata: { cierre: { regla: 'ciclo-de-incidentes' } } })
+      await markDispatchTerminal(asSb(sb), dispatch_key, 'completed')
+      expect(sb._rows[0].status).toBe('sin_cierre')
+      expect(sb._rows[0].metadata).toMatchObject({ cierre: { regla: 'ciclo-de-incidentes' }, termino_despues: { estado: 'completed', estado_que_tenia: 'sin_cierre' } })
+    }
+  })
+  it('🔴 abierto (accepted o running) → su estado final, como siempre', async () => {
+    const sb = makeFakeSupabase()
+    const { dispatch_key } = await recordDispatchIntent(asSb(sb), { workflow_id: 'wf', agent_name: 'a', workflow_execution_id: 'e' })
+    await markDispatchTerminal(asSb(sb), dispatch_key, 'error')
+    expect(sb._rows[0].status).toBe('error')
   })
 })
 

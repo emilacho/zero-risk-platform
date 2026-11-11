@@ -22,6 +22,7 @@ import { getSupabaseAdmin } from './lib/supabase.js'
 import { checkSpendCap } from './lib/spend-gate.js'
 import { flushBraintrust } from './lib/braintrust.js'
 import { abrirLatido, intervaloDelLatido } from './lib/latido.js'
+import { cerrarSinPisar, cierreDelDespacho, correrLatiendo, intervaloDelLatidoALaBase, llaveDelLatido, type BaseDelLatido } from './lib/latido-a-la-base.js'
 import { validarImagenes, leerModoImagenes } from './lib/imagenes-en-el-pedido.js'
 import { validarDireccionDeVuelta, esperaForzadaMs, emitirEventoPostHog } from './lib/entrega-de-la-vuelta.js'
 import { correrYEntregar } from './lib/correr-y-entregar.js'
@@ -164,6 +165,8 @@ interface RunSdkBody {
   callback_url?: unknown
   dispatchKey?: unknown
   dispatch_key?: unknown
+  /** 11-nov · #21 · la llave del despacho para latir a la base en el camino de siempre (sin `callback_mode`) */
+  latido_dispatch_key?: unknown
   testDelayMs?: unknown
   /** TOPE DURO por corrida (US$) · opt-in · ver lib/tope-por-corrida.ts */
   maxBudgetUsd?: unknown
@@ -187,6 +190,11 @@ function isStringOrNullable(v: unknown): v is string | null | undefined {
 }
 
 /** Pick first string-valued candidate from a list (canon-aware aliasing). */
+/** 11-nov · #21 · la base para latir; sin credenciales, null (no late y nada se frena) */
+function baseDelLatido(): BaseDelLatido | null {
+  try { return getSupabaseAdmin() as unknown as BaseDelLatido } catch { return null }
+}
+
 function pickString(...candidates: unknown[]): string | undefined {
   for (const c of candidates) {
     if (typeof c === 'string' && c.length > 0) return c
@@ -441,7 +449,8 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
           workflow_id: workflowId, callback_url: String(urlPedida ?? '').slice(0, 300),
           attempt_number: 1, status: 'blocked_host', http_status_code: null, error_message: direccion.motivo, attempted_at: ahora,
         })).catch(() => undefined)
-        if (dispatchKey) void Promise.resolve(sb.from('agent_dispatches').update({ status: 'error', completed_at: ahora, updated_at: ahora }).eq('dispatch_key', dispatchKey)).catch(() => undefined)
+        // 11-nov · #21 · CC6 línea 3: solo si sigue abierto; un cierre ajeno no se pisa (se anota)
+        if (dispatchKey) void cerrarSinPisar(sb as unknown as BaseDelLatido, dispatchKey, 'error')
       }
       res.status(400).json({ success: false, error: 'callback_url_not_allowed', code: 'E-CALLBACK-HOST', detail: direccion.motivo })
       return
@@ -453,7 +462,8 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
       { url: direccion.url, agentName, dispatchKey, clientId: clientId ?? null, dryRun, esperaForzada: body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms },
       {
         ejecutar: async () => {
-          const r = await runAgentViaSDK(input)
+          // 11-nov · #21 · mientras el empleado trabaja, su despacho late a la base (la regla de vida de la plataforma lo lee)
+          const r = await correrLatiendo(baseDelLatido(), dispatchKey, intervaloDelLatidoALaBase(process.env), () => runAgentViaSDK(input))
           // 🔴 la CAUSA de un fallo queda escrita: en la corrida 158667 el corredor falló tras ~40 min y no quedó ni el motivo (sólo `run_success: false`)
           if (!r.success) {
             console.error('[agent-runner] ❌ el empleado FALLÓ', { agent: agentName, dispatch_key: dispatchKey, error: r.error, cost_usd: r.costUsd, duration_ms: r.durationMs })
@@ -471,11 +481,8 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
             void Promise.resolve(getSupabaseAdmin().from('agent_callback_attempts').insert({ workflow_id: workflowId, callback_url: direccion.url.toString(), ...i })).catch(() => undefined)
           } catch { /* el registro nunca frena la entrega */ }
         },
-        cerrarDespacho: async (estado) => {
-          if (!dispatchKey) return
-          const ahora = new Date().toISOString()
-          try { await getSupabaseAdmin().from('agent_dispatches').update({ status: estado, completed_at: ahora, updated_at: ahora }).eq('dispatch_key', dispatchKey) } catch { /* best-effort · el reconciliador lo ve */ }
-        },
+        // 11-nov · #21 · CC6 línea 3: el estado final solo si sigue abierto; si el limpiador ya lo cerró, se anota que terminó después (best-effort · el reconciliador lo ve)
+        cerrarDespacho: cierreDelDespacho(dispatchKey, baseDelLatido),
         avisarFallo: (mensaje, extra) => {
           console.error(`[agent-runner] 🔴 ${mensaje}`, extra)
           Sentry.captureMessage(mensaje, { level: 'error', extra: { ...extra, workflow_id: workflowId } })
@@ -531,7 +538,8 @@ app.post('/run-sdk', async (req: Request, res: Response) => {
     // Gancho de la prueba del rojo (ARQ 2026-09-30) · SÓLO dry_run · topado en 25 min · sin dry_run vale 0 (nunca retrasa una corrida real).
     const esperaDePrueba = esperaForzadaMs(dryRun, body.testDelayMs ?? body.test_delay_ms ?? ctxObj.test_delay_ms)
     if (esperaDePrueba > 0) await new Promise<void>((r) => setTimeout(r, esperaDePrueba))
-    const result = await runAgentViaSDK(input)
+    // 11-nov · #21 · el camino de siempre también late a la base si Vercel pasó la llave del despacho
+    const result = await correrLatiendo(baseDelLatido(), llaveDelLatido(body), intervaloDelLatidoALaBase(process.env), () => runAgentViaSDK(input))
     // The SDK runner already builds a typed AgentRunResult with success+error.
     // 500 only when success is false AND no usable response was produced —
     // matches the Vercel route.ts contract from before the migration.

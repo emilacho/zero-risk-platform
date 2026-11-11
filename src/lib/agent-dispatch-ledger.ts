@@ -127,10 +127,20 @@ export async function markDispatchTerminal(
 ): Promise<void> {
   const nowIso = new Date().toISOString()
   try {
-    await supabase
+    // 11-nov · #21 · CC6 línea 3: el estado final solo si el despacho sigue abierto. Si otro ya lo cerró (el limpiador de incidentes),
+    // no se borra su huella: se anota en `metadata.termino_despues` que el trabajo terminó después (condicional al estado leído)
+    const r = await supabase
       .from(DISPATCHES_TABLE)
       .update({ status, completed_at: nowIso, updated_at: nowIso })
       .eq('dispatch_key', dispatch_key)
+      .in('status', ['accepted', 'running'])
+      .select('dispatch_key')
+    if (r.error || (Array.isArray(r.data) && r.data.length > 0)) return
+    const l = await supabase.from(DISPATCHES_TABLE).select('status, metadata').eq('dispatch_key', dispatch_key).limit(1)
+    const fila = (Array.isArray(l.data) ? l.data[0] : null) as { status: string; metadata: unknown } | null | undefined
+    if (l.error || !fila) return
+    const meta = fila.metadata && typeof fila.metadata === 'object' && !Array.isArray(fila.metadata) ? (fila.metadata as Record<string, unknown>) : {}
+    await supabase.from(DISPATCHES_TABLE).update({ metadata: { ...meta, termino_despues: { estado: status, en: nowIso, estado_que_tenia: fila.status } } }).eq('dispatch_key', dispatch_key).eq('status', fila.status)
   } catch {
     /* best-effort */
   }
