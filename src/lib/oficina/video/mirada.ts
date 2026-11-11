@@ -68,6 +68,16 @@ export function tareaDeLaMirada(o: { cuadros: CuadroDelVideo[]; planos: Plano[];
 }
 
 /** lo que la jefatura lee como contexto: lo que vio el agente, legible */
+/** lo que la mesa recibe cuando el video vuelve (la dirección lo lee como devolución): qué faltó por plano y lo que el agente pide. Puro */
+export function avisoDeLaMiradaALaMesa(m: MiradaDelVideo): string {
+  return [
+    'Un agente miró el video terminado (un cuadro del medio de cada plano) y NO cuenta lo que pide el guion. Rehagan el guion para que el video se filme con esto resuelto:',
+    ...m.faltantes.map((f) => `- ${f.plano !== null ? `plano ${f.plano}: ` : ''}${f.que_falta}`),
+    ...(m.orden_respetado === false ? ['- el orden de los planos no se respeta'] : []),
+    ...(m.para_la_mesa ? [`Lo que pide el agente: ${m.para_la_mesa}`] : []),
+  ].join('\n').slice(0, 3000)
+}
+
 export function miradaLegible(m: MiradaDelVideo): string {
   return [
     `Veredicto del agente que miró el video: ${m.coincide ? 'coincide con el guion y la fila' : 'NO coincide'}${m.orden_respetado === false ? ' · el orden de los planos no se respeta' : ''}.`,

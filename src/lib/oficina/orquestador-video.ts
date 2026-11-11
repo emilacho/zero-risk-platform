@@ -26,7 +26,7 @@ import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
 import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
-import { leerMirada, miradaLegible, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo } from './video/mirada'
+import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo } from './video/mirada'
 import { CONTRATOS_EN_TEXTO } from './pedidos'
 
 /** para la jefatura: qué es el contexto «lo que vio el agente» */
@@ -323,8 +323,17 @@ export function procesarValorV(paso: Paso, v: Record<string, unknown>, e: Estado
   if (paso.clave !== PASO_MIRAR_VIDEO) return null
   const m = leerMirada(v)
   const detalle = m.faltantes.map((f) => `${f.plano !== null ? `plano ${f.plano}: ` : ''}${f.que_falta}`).join(' · ') || m.para_la_mesa || 'sin detalle'
+  // 11-nov · ADENDA Emilio 16:43 «no se trata de yo mandarlo a corregir»: si no coincide y al paso le queda su vuelta (`vuelve_a` de la plantilla), el video vuelve SOLO
+  //   a la mesa con lo que faltó (mecanismo de #1047); sin vuelta, la ficha que bloquea. Nunca un lazo: la vuelta se cuenta al cerrar la mesa y a la segunda sigue de largo
+  if (!m.coincide && quedaVueltaDelPaso(paso, e)) return { res: { costo_usd: 0, artefacto: { ...m, vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeLaMiradaALaMesa(m) } as unknown as Record<string, unknown>, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
   const fichas: Ficha[] = m.coincide ? [] : [fichaNueva(`video-no-coincide-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `el agente que miró el video dice que no cuenta lo que pide el guion: ${detalle}`.slice(0, 900), 'los cuadros del video contra el guion y la fila', m.para_la_mesa || 'rehacer el video con lo que faltó')]
-  return { res: { costo_usd: 0, artefacto: m as unknown as Record<string, unknown>, fichas, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+  return { res: { costo_usd: 0, artefacto: { ...m, vuelve_a_la_mesa: false } as unknown as Record<string, unknown>, fichas, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+}
+
+/** ¿a este paso le queda vuelta? (su `vuelve_a.max` contra las vueltas ya contadas; sin `vuelve_a`, nunca) */
+export function quedaVueltaDelPaso(paso: Paso, e: Estado): boolean {
+  const max = Number(paso.vuelve_a?.max ?? 0)
+  return max > 0 && (e.vueltas?.[paso.clave] ?? 0) < max
 }
 
 /** el agente contestó (con su reintento) pero no se pudo LEER: el video sigue SIN juzgar y una ficha que bloquea pide que una persona lo mire */

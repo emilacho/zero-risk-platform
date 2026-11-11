@@ -30,9 +30,10 @@ import { FOTOS, PARTE, crearMemoria } from './memoria'
 import { crearMesaEnMemoria } from './mesa-memoria'
 
 const RAIZ = path.resolve(__dirname, '../../../../supabase')
-const MIG = fs.readFileSync(path.join(RAIZ, 'migrations', '202611111700_oficina_un_agente_mira_el_video.sql'), 'utf8')
-const REV = fs.readFileSync(path.join(RAIZ, 'reversas', '202611111700_oficina_un_agente_mira_el_video_REVERSA.sql'), 'utf8')
+const MIG = fs.readFileSync(path.join(RAIZ, 'migrations', '202611111730_oficina_un_agente_mira_el_video.sql'), 'utf8')
+const REV = fs.readFileSync(path.join(RAIZ, 'reversas', '202611111730_oficina_un_agente_mira_el_video_REVERSA.sql'), 'utf8')
 const pasosDe = (sql: string) => JSON.parse(/\$pasos\$([\s\S]*?)\$pasos\$/.exec(sql)![1])
+const antesDe = (sql: string) => JSON.parse(/\$antes\$([\s\S]*?)\$antes\$/.exec(sql)![1])
 
 const PLANOS: Plano[] = [
   { n: 1, desde: 0, hasta: 3, se_ve: 'la fachada del local' },
@@ -124,11 +125,14 @@ const GUION = (citas: string) => [
 const MIRADA_BIEN = JSON.stringify({ coincide: true, orden_respetado: true, faltantes: [], por_plano: [{ plano: 1, se_ve: 'la fachada con el letrero' }, { plano: 2, se_ve: 'manos trabajando' }], para_la_mesa: '' })
 const MIRADA_MAL = JSON.stringify({ coincide: false, orden_respetado: true, faltantes: [{ plano: 1, que_falta: 'no se ve la fachada: sale una calle vacía' }], por_plano: [{ plano: 1, se_ve: 'una calle vacía' }, { plano: 2, se_ve: 'manos trabajando' }], para_la_mesa: 'el plano 1 tiene que mostrar la fachada con el letrero' })
 
-async function recorrer(C: Cliente, o: { mirada: (vez: number) => string; sinSacador?: boolean }) {
+/** recorre el encargo ENTERO: mesa → brazo → cuadros → mirada (y, si el video vuelve, otra vez mesa → brazo → mirada) hasta la jefatura. `mirada(k)` = la k-ésima respuesta del agente (desde 0) */
+async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacador?: boolean }) {
   const M = crearMemoria({ parte: parteDe(C), plantilla: VIDEO_MESA, fuentes: { fotos: C.fotos } })
-  M.P.mesa = crearMesaEnMemoria()
+  const MS = crearMesaEnMemoria()
+  M.P.mesa = MS
+  const enviados: string[] = []
   const brazo: PuertoDeVideo = {
-    enviar: async () => ({ ok: true, request_id: 'req-1', status: 'queued', costo_estimado_usd: 2.12, simulado: false }),
+    enviar: async (p) => { enviados.push(p.workflow_execution_id); return { ok: true, request_id: `req-${enviados.length}`, status: 'queued', costo_estimado_usd: 2.12, simulado: false } },
     estado: async () => ({ ok: true, simulado: true }),
     cotizar: async () => ({ ok: true, costo_estimado_usd: 2.12, costo_lista_usd: 2.12 }),
   }
@@ -143,24 +147,35 @@ async function recorrer(C: Cliente, o: { mirada: (vez: number) => string; sinSac
   const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: C.fila, dry_run: false, familia: 'video_mesa' }, client_id: C.client, target_step_id: TARGET_STEP_PRODUCIR })
   const id = String(a.cuerpo.encargo_id)
   let aportes = 0
-  const mesa = await jugar(M, id, a, (t: Turno) => {
+  const miradas: Turno[] = []
+  const turnos: Turno[] = []
+  const responder = (t: Turno) => {
+    if (t.paso === PASO_MIRAR_VIDEO) { miradas.push(t); return { texto: o.mirada(miradas.length - 1), costo_usd: 0.12 } }
     if (t.tipo === 'aportar') { aportes++; return { texto: `Aporte de ${t.agente}.` } }
+    if (t.tipo === 'responder') return { texto: 'Entendido: rehago el guion para que el video muestre lo que faltó.' }
     if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: GUION(Array.from({ length: aportes }, (_, i) => `A${i + 2} usé: lo tomé tal cual`).join('\n')) }
     if (t.tipo === 'dirigir') return { texto: 'Idea rectora: el oficio a mano.' }
     return undefined
-  })
-  expect(mesa.ultima.cuerpo.accion).toBe('esperar_brazo')
-  const nBrazo = Number((mesa.ultima.cuerpo.turno as { n: number }).n)
-  const tras = await recibirVideo(M.P, id, nBrazo, { ok: true, status: 'completed', video_url: 'https://bucket.test/video-final.mp4', url_proveedor: null, costo_usd: 2.12, expires_at: null, copia: 'bucket', aviso: null })
-  const miradas: Turno[] = []
-  const fin = await jugar(M, id, tras, (t: Turno, vez: number) => { if (t.paso === PASO_MIRAR_VIDEO) { miradas.push(t); return { texto: o.mirada(vez), costo_usd: 0.12 } } return undefined })
-  return { M, id, enc: M.encargos.get(id)!, fin: fin.ultima, miradas, sobres, sacados, descargados }
+  }
+  let r = await jugar(M, id, a, responder)
+  turnos.push(...r.turnos)
+  for (let vez = 1; vez <= 3 && r.ultima.cuerpo.accion === 'esperar_brazo'; vez++) {
+    const nBrazo = Number((r.ultima.cuerpo.turno as { n: number }).n)
+    const tras = await recibirVideo(M.P, id, nBrazo, { ok: true, status: 'completed', video_url: `https://bucket.test/video-final-${vez}.mp4`, url_proveedor: null, costo_usd: 2.12, expires_at: null, copia: 'bucket', aviso: null })
+    r = await jugar(M, id, tras, responder)
+    turnos.push(...r.turnos)
+  }
+  const avisos = MS.filas.filter((x) => x.encargo_id === id && x.tipo === 'devuelve' && x.de === 'oficina-creativa')
+  return { M, id, enc: M.encargos.get(id)!, fin: r.ultima, miradas, sobres, sacados, descargados, enviados, avisos, turnos }
 }
 
 describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefatura', (_n, C) => {
   it('🔴 coincide: cuadros del medio de cada plano → el agente mira → la jefatura recibe los cuadros y lo que vio', async () => {
     const r = await recorrer(C, { mirada: () => MIRADA_BIEN })
-    expect(r.descargados).toContain('https://bucket.test/video-final.mp4')
+    expect(r.descargados).toContain('https://bucket.test/video-final-1.mp4')
+    expect(r.enviados).toHaveLength(1)
+    expect(r.avisos).toHaveLength(0)
+    expect(r.enc.estado_del_motor.vueltas[PASO_MIRAR_VIDEO] ?? 0).toBe(0)
     expect(r.sacados).toHaveLength(1)
     expect(r.sacados[0].planos.map((p) => [p.n, p.desde, p.hasta])).toEqual([[1, 0, 4], [2, 4, 12]])
     const cuadros = r.enc.estado_del_motor.artefactos['cuadros_video'].datos as { cuadros: Array<{ plano: number; segundo: number; url: string }>; hay_cuadros: boolean }
@@ -185,8 +200,37 @@ describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefa
     // el gasto del agente entra al libro de la oficina
     expect(r.M.gastos.some((g) => g.concepto === 'modelo' && Math.abs(g.cost_usd - 0.12) < 1e-9)).toBe(true)
   })
-  it('🔴 NO coincide: queda una ficha QUE BLOQUEA con lo que faltó (una persona decide antes de aprobar) y la jefatura también lo ve', async () => {
+  it('🔴 NO coincide ⇒ el video vuelve SOLO a la mesa UNA vez con lo que faltó; la dirección rehace el guion, se filma otro video y la segunda mirada coincide: limpio a la jefatura', async () => {
+    const r = await recorrer(C, { mirada: (k) => (k === 0 ? MIRADA_MAL : MIRADA_BIEN) })
+    expect(r.avisos).toHaveLength(1)
+    expect(r.avisos[0].texto).toContain('NO cuenta lo que pide el guion')
+    expect(r.avisos[0].texto).toContain('- plano 1: no se ve la fachada: sale una calle vacía')
+    expect(r.avisos[0].texto).toContain('Lo que pide el agente: el plano 1 tiene que mostrar la fachada con el letrero')
+    // la dirección contesta el aviso y vuelve a integrar: guion v2 → otra clave de pedido → OTRO video
+    const iAviso = r.turnos.findIndex((t) => t.tipo === 'responder')
+    expect(iAviso).toBeGreaterThan(0)
+    expect(r.turnos[iAviso].task).toContain('no se ve la fachada')
+    expect(r.enc.estado_del_motor.artefactos['guion'].version).toBe(2)
+    expect(r.enviados).toHaveLength(2)
+    expect(r.enviados[0]).not.toBe(r.enviados[1])
+    expect(r.miradas).toHaveLength(2)
+    expect(r.sacados).toHaveLength(2)
+    expect(r.descargados).toContain('https://bucket.test/video-final-2.mp4')
+    expect(r.enc.estado_del_motor.vueltas[PASO_MIRAR_VIDEO]).toBe(1)
+    // a la jefatura llega UNA vez, ya con el video bueno, y sin ficha de la mirada
+    expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
+    expect(r.sobres).toHaveLength(1)
+    expect(r.sobres[0].contexto.find((x) => x.titulo === 'Lo que vio el agente que miró el video')?.texto).toContain('coincide con el guion y la fila')
+    expect(r.enc.estado_del_motor.fichas.filter((f) => f.donde === 'mirada' && f.estado === 'abierta')).toHaveLength(0)
+  })
+  it('🔴 NO coincide tampoco a la segunda ⇒ no vuelve otra vez (sin lazo): sigue a la jefatura con una ficha QUE BLOQUEA con lo que faltó', async () => {
     const r = await recorrer(C, { mirada: () => MIRADA_MAL })
+    expect(r.avisos).toHaveLength(1)
+    expect(r.enviados).toHaveLength(2)
+    expect(r.miradas).toHaveLength(2)
+    expect(r.enc.estado_del_motor.vueltas[PASO_MIRAR_VIDEO]).toBe(1)
+    expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
+    expect(r.sobres).toHaveLength(1)
     const f = r.enc.estado_del_motor.fichas.find((x) => x.donde === 'mirada' && x.estado === 'abierta')
     expect(f).toMatchObject({ gravedad: 'bloquea', origen: 'chequeo' })
     expect(f!.que).toContain('plano 1: no se ve la fachada: sale una calle vacía')
@@ -234,13 +278,21 @@ describe('en ensayo el video no se mira (es simulado) y nada cambia', () => {
   })
 })
 
-describe('la migración 202611111700', () => {
+describe('la migración 202611111730', () => {
   it('🔴 siembra EXACTAMENTE los pasos del código (11: cuadros_video y mirar_video entre video y chequeos)', () => {
     expect(pasosDe(MIG)).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
     expect(VIDEO_MESA.pasos.find((p) => p.clave === PASO_MIRAR_VIDEO)).toMatchObject({ tipo: 'agente', quien: AGENTE_QUE_MIRA_EL_VIDEO, salida: { esquema: 'mirada_video.v1', reintento_formato: 1 } })
   })
   it('🔴 la reversa devuelve los 9 pasos de antes (los mismos del código menos los 2 de la mirada)', () => {
     expect(pasosDe(REV)).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos.filter((p) => p.clave !== 'cuadros_video' && p.clave !== PASO_MIRAR_VIDEO))))
+  })
+  it('🔴 no pisan: cada una exige el dato ENTERO de antes (la migración, el que deja 202611111700 de CC4 con la vuelta del pedido; la reversa, el de esta)', () => {
+    const sinMirada = JSON.parse(JSON.stringify(VIDEO_MESA.pasos.filter((p) => p.clave !== 'cuadros_video' && p.clave !== PASO_MIRAR_VIDEO)))
+    expect(antesDe(MIG)).toEqual(sinMirada)
+    expect(antesDe(MIG)[2]).toMatchObject({ clave: 'pedido', vuelve_a: { paso: 'mesa', max: 1 } })
+    expect(antesDe(REV)).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
+    expect(VIDEO_MESA.pasos.find((p) => p.clave === PASO_MIRAR_VIDEO)?.vuelve_a).toEqual({ paso: 'mesa', max: 1, si: { tipo: 'si_artefacto', artefacto: 'mirada_video', campo: 'vuelve_a_la_mesa', igual: true } })
+    for (const sql of [MIG, REV]) expect(sql).toContain("IS DISTINCT FROM $antes$")
   })
   it('🔴 las dos se niegan con encargos de video vivos y comprueban los pasos antes y después; solo tocan la columna pasos', () => {
     for (const sql of [MIG, REV]) {
