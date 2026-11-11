@@ -14,7 +14,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { costForImage } from '@/lib/image-pricing'
 import { sniffImageFormat } from '@/lib/image-response'
 import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
-import { conDescuento } from '@/lib/video/parametros'
+import { CONFIG_DEL_BRAZO_POR_OMISION, conDescuento, leerConfigDelBrazo } from '@/lib/video/parametros'
 import { costoEstimadoUsd, enviar as enviarAHiggsfield, estado as estadoEnHiggsfield, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
 import { ANIMAR, entradaDeVarias, imagenDeVarias, precioDeVarias, VARIAS, archivoDe3D, clipsDeAnimacion, cotizarAnimacion, cotizarSinRed, entradaDe3D, entradaDeAnimacion, miniaturaDe3D, modeloDe3D, motivoDeAnimacion, promptDeImagenPara3D, TAMANO_POR_FORMATO, UUID, type Cotizacion, type Pedido, type PedidoDeAnimacion, type Referencia } from './catalogo'
 import { BIBLIOTECA_DE_MOVIMIENTOS } from './movimientos'
@@ -29,6 +29,8 @@ export interface Deps {
   bucket: string | null
   modeloDeImagen: string
   ahora: () => number
+  /** 11-nov · regla #18 · lector de la configuración de la cadena (tope y descuento del proveedor de video); sin él, la de por omisión (sin descuento) */
+  leerConfig?: (clave: string) => Promise<unknown>
 }
 
 export const TABLA = 'estudio_piezas'
@@ -65,7 +67,8 @@ export async function cotizar(d: Deps, p: Pedido): Promise<Resultado<Cotizacion>
   const est = await estimar(d.fetch, d.llaves.higgsfield, rutaDeVideo(p, conFoto), cuerpoDeVideo(p, conFoto ? 'https://example.com/partida.png' : null))
   const lista = est.usd !== undefined ? est.usd : est.tarifas ? costoEstimadoUsd(est.tarifas, { resolucion: p.resolucion, relacion: p.formato, segundos: p.segundos }) : null
   if (lista === null) return falla(502, 'no_se_pudo_cotizar', est.error ?? 'el proveedor no dio precio')
-  const usd = conDescuento(lista, p.modelo, d.ahora()).usd
+  // 11-nov · regla #18: el descuento del proveedor es configuración (sin ella, la lista)
+  const usd = conDescuento(lista, p.modelo, d.ahora(), (d.leerConfig ? await leerConfigDelBrazo(d.leerConfig) : CONFIG_DEL_BRAZO_POR_OMISION).descuento).usd
   return { ok: true, valor: { total_usd: usd, partes: [{ que: `video · ${p.segundos} s · ${p.resolucion}`, usd }] } }
 }
 

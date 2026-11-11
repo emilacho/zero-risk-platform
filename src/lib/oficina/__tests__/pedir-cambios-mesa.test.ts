@@ -24,7 +24,7 @@ function mundo(opc: { rondas?: number[]; estadoReal?: string } = {}): DbFalsa {
     .semilla('client_social_images', [])
     .semilla('client_historical_outputs', [{ id: PARTE, client_id: CLIENTE, output_type: 'campaign_brief_pack', content: parteCon(BRIEF_CARRUSEL) }])
     .semilla('oficina_config', [{ id: 1, estado: 'encendida', familias_activas: ['carrusel_mesa'], clientes_ensayo: [] }])
-    .semilla('oficina_tipos_de_grupo', [{ tipo: 'carrusel_mesa', familia: 'carrusel_mesa', pasos: CARRUSEL_MESA.pasos, indicaciones: CARRUSEL_MESA.indicaciones, limites: CARRUSEL_MESA.limites, activo: true }])
+    .semilla('oficina_tipos_de_grupo', [{ tipo: 'carrusel_mesa', familia: 'carrusel_mesa', clase: 'carrusel', pasos: CARRUSEL_MESA.pasos, indicaciones: CARRUSEL_MESA.indicaciones, limites: CARRUSEL_MESA.limites, activo: true }])
     .semilla('oficina_directorio', DIRECTORIO as never)
     .semilla('oficina_mesa_aportes', [])
     .semilla('hitl_queue', [{ id: HITL, type: 'content_piece_review', status: 'pending', client_id: CLIENTE, metadata: {} }])

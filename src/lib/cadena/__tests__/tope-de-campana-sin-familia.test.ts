@@ -37,7 +37,7 @@ describe.each(CLIENTES)('%s · el freno y las filas sin familia', (_n, C) => {
   async function montar(tope: number, f0: { red: string; formato: string } | null, formatos: FormatosPorRed = formatosReales(), oficina?: ConfigDeOficina | Error) {
     const al = new AlmacenMemoria({ partes: [{ id: PARTE, client_id: C.client, valido: true, briefs: [{ brief_id: 'B1', fila_id: 'f1', familia: 'post_img' }] }], config: { flujos: ['wf-copia-por-filas'], estado_cadena: 'encendida' } })
     al.formatos = async () => formatos
-    if (oficina) (al as unknown as { configDeLaOficina: () => Promise<ConfigDeOficina> }).configDeLaOficina = async () => { if (oficina instanceof Error) throw oficina; return oficina }
+    if (oficina) (al as unknown as { configDeLaOficina: () => Promise<ConfigDeOficina> }).configDeLaOficina = async () => { if (oficina instanceof Error) throw oficina; return { sin_pasarela: ['video_mesa'], ...oficina } /* fila #19 · dato: la plantilla video_mesa es de clase video */ }
     const c = await al.insertarCampana({ client_id: C.client, plan_id: 'plan-1', fecha_inicio: '2099-11-09', fecha_inicio_origen: 'regla', fecha_fin: '2099-12-20', zona_horaria: 'America/Guayaquil', pais: 'EC', sedes: [], estado: 'activa', estado_motivo: null,
       presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: true, sala_ref: {}, reemplaza_a: null, seco: false, tope_gasto_usd: tope })
     al.lecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }] } // construido: lo gastado de Náufrago
@@ -119,7 +119,7 @@ describe.each(CLIENTES)('%s · el freno no cuenta lo que no se produce · parte 
     const briefs = [{ brief_id: 'B1', fila_id: 'f1', familia: 'post_img' }, ...(R.donde === 'este' ? [{ brief_id: 'R1', fila_id: 'fr', familia: R.familia }] : [])]
     const al = new AlmacenMemoria({ partes: [{ id: PARTE, client_id: C.client, valido: true, briefs: briefs as any }], config: { flujos: ['wf-copia-por-filas'], estado_cadena: 'encendida' } })
     al.formatos = async () => formatosReales()
-    if (oficina) (al as unknown as { configDeLaOficina: () => Promise<ConfigDeOficina> }).configDeLaOficina = async () => { if (oficina instanceof Error) throw oficina; return oficina }
+    if (oficina) (al as unknown as { configDeLaOficina: () => Promise<ConfigDeOficina> }).configDeLaOficina = async () => { if (oficina instanceof Error) throw oficina; return { sin_pasarela: ['video_mesa'], ...oficina } /* fila #19 · dato: la plantilla video_mesa es de clase video */ }
     const c = await al.insertarCampana({ client_id: C.client, plan_id: 'plan-1', fecha_inicio: '2099-11-09', fecha_inicio_origen: 'regla', fecha_fin: '2099-12-20', zona_horaria: 'America/Guayaquil', pais: 'EC', sedes: [], estado: 'activa', estado_motivo: null,
       presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: true, sala_ref: {}, reemplaza_a: null, seco: false, tope_gasto_usd: tope })
     al.lecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }], ...(R.donde === 'otro' ? { partes: [{ id: 'P-OTRO', briefs: [{ brief_id: 'R9', familia: R.familia, fila_id: 'fr' }] }] } : {}) }

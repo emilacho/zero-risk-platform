@@ -211,6 +211,16 @@ describe('rehacer-pieza', () => {
     const s3 = await llamar('rehacer-pieza', new DbFalsa().semilla('oficina_encargos', [v3]), { encargo_id: v3.id, ...gasto }, M.P)
     expect(s3.status).toBe(409)
   })
+  it('GO Lenovo 11-nov (nota CC6) · un comentario corto de Emilio («más luz») llega como causa; antes se cambiaba en silencio por uno genérico', async () => {
+    const M = crearMemoria({ plantilla: POST_IMG, fuentes: FUENTES })
+    const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: false, familia: 'post_img' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    const viejo = M.encargos.get(String(a.cuerpo.encargo_id))!
+    viejo.estado = 'fallido'; viejo.gasto_usd = 1.1; viejo.estado_del_motor = { ...viejo.estado_del_motor, pasos_ejecutados: 6 }
+    const db = new DbFalsa().semilla('oficina_encargos', [{ ...viejo, tipo_de_grupo: viejo.tipo_de_grupo ?? 'post_img' }])
+    const s = await llamar('rehacer-pieza', db, { encargo_id: viejo.id, comentario: 'más luz', ...gasto }, M.P)
+    expect(s.status).toBe(200)
+    expect(M.encargos.get(String(s.cuerpo.encargo_id))!.sala_ref).toMatchObject({ reapertura: { causa_corregida: 'más luz' } })
+  })
 })
 
 describe('POST /api/tablero/{accion}', () => {

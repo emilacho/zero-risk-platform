@@ -2,7 +2,7 @@
  * DEL GUION AL PEDIDO DEL BRAZO · puro. Lo que el brazo (`POST /api/video/generate`) acepta: `prompt`, `formato` (reel · short · tiktok · video), `segundos`, `resolucion`,
  * `fotos` (direcciones https de fotos PROPIAS del cliente, ≤ 9) y `clave` (idempotencia: `<encargo>:<brief>:v<versión del guion>`). Nada aquí llama a la red.
  */
-import { DURACION_MIN_S, MAX_FOTOS_DE_REFERENCIA, RELACION_POR_FORMATO, RESOLUCION_APROBADA, armarPedido } from '../../video/parametros'
+import { DURACION_MIN_S, FORMATOS_DEL_BRAZO, MAX_FOTOS_DE_REFERENCIA, RESOLUCION_APROBADA, armarPedido } from '../../video/parametros'
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
 import { promptDelGuion, type TraduccionDeGuion } from './guion'
@@ -10,8 +10,8 @@ import { promptDelGuion, type TraduccionDeGuion } from './guion'
 /** ¿este brief es de video? (reel · short · video · tiktok); un carrusel, un kit o una imagen no lo son aunque nombren «video» de paso */
 export const esVideo = (b: Pick<BriefLeido, 'formato' | 'que_es'>): boolean => /\b(reel|short|video|tiktok)\b/i.test(b.formato) && !/carrusel|carousel|kit|imagen fija/i.test(b.formato)
 
-/** el formato que entiende el brazo (`RELACION_POR_FORMATO`): reel · short · tiktok · video */
-export function formatoDeVideo(b: Pick<BriefLeido, 'formato' | 'red'>): keyof typeof RELACION_POR_FORMATO {
+/** el formato que entiende el brazo (`FORMATOS_DEL_BRAZO`): reel · short · tiktok · video */
+export function formatoDeVideo(b: Pick<BriefLeido, 'formato' | 'red'>): (typeof FORMATOS_DEL_BRAZO)[number] {
   const f = b.formato.toLowerCase()
   if (/reel/.test(f)) return 'reel'
   if (/short/.test(f)) return 'short'
@@ -37,14 +37,14 @@ export interface PedidoDeVideoDeLaOficina {
   prompt_recortado: boolean
 }
 
-export function armarPedidoDeLaOficina(o: { guion: TraduccionDeGuion; brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string }): { ok: true; pedido: PedidoDeVideoDeLaOficina } | { ok: false; errores: string[] } {
+export function armarPedidoDeLaOficina(o: { guion: TraduccionDeGuion; brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string; /** 11-nov · regla #17: la proporción que trae el brief (dato de la tabla de formatos); sin ella, la de por omisión */ relacion?: string }): { ok: true; pedido: PedidoDeVideoDeLaOficina } | { ok: false; errores: string[] } {
   const formato = formatoDeVideo(o.brief)
   const propias = new Map(o.fotos.filter((f) => (f.origen ?? 'propia') === 'propia' && f.url && /^https:\/\/\S+$/.test(f.url)).map((f) => [f.id, f.url as string]))
   const urls: string[] = []
   const noHalladas: string[] = []
   for (const id of o.guion.fotos_ids) { const u = propias.get(id); if (u) { if (!urls.includes(u)) urls.push(u) } else noHalladas.push(id) }
   const { prompt, recortado } = promptDelGuion(o.guion)
-  const entrada = { prompt, formato, segundos: o.guion.segundos, resolucion: o.resolucion ?? RESOLUCION_APROBADA, audio: true, fotos: urls.slice(0, MAX_FOTOS_DE_REFERENCIA) }
+  const entrada = { prompt, formato, segundos: o.guion.segundos, resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: urls.slice(0, MAX_FOTOS_DE_REFERENCIA) }
   const v = armarPedido(entrada)
   if (!v.ok) return { ok: false, errores: v.errores }
   return { ok: true, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: noHalladas, clave: o.clave, prompt_recortado: recortado } }
@@ -58,13 +58,13 @@ export const PROMPT_DE_COTIZACION = 'Cotización previa de la sala de video: con
  * solo texto siempre; y con foto propia si el cliente tiene alguna (el guion las nombra en «Foto:» y el pedido va por la ruta de referencia).
  * La duración es la MÍNIMA aprobada: si ni el video más corto cabe en el tope, ninguno cabrá; uno más largo lo vuelve a medir el brazo al enviar. Puro.
  */
-export function pedidosParaCotizar(o: { brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string }): { ok: true; pedidos: Array<{ ruta: 'texto' | 'foto'; pedido: PedidoDeVideoDeLaOficina }> } | { ok: false; errores: string[] } {
+export function pedidosParaCotizar(o: { brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string; /** regla #17: la misma proporción que llevará el pedido (cambia el costo) */ relacion?: string }): { ok: true; pedidos: Array<{ ruta: 'texto' | 'foto'; pedido: PedidoDeVideoDeLaOficina }> } | { ok: false; errores: string[] } {
   const formato = formatoDeVideo(o.brief)
   const foto = o.fotos.find((f) => (f.origen ?? 'propia') === 'propia' && f.url && /^https:\/\/\S+$/.test(f.url))?.url
   const rutas: Array<{ ruta: 'texto' | 'foto'; fotos: string[] }> = [{ ruta: 'texto', fotos: [] }, ...(foto ? [{ ruta: 'foto' as const, fotos: [foto] }] : [])]
   const pedidos: Array<{ ruta: 'texto' | 'foto'; pedido: PedidoDeVideoDeLaOficina }> = []
   for (const r of rutas) {
-    const v = armarPedido({ prompt: PROMPT_DE_COTIZACION, formato, segundos: DURACION_MIN_S, resolucion: o.resolucion ?? RESOLUCION_APROBADA, audio: true, fotos: r.fotos })
+    const v = armarPedido({ prompt: PROMPT_DE_COTIZACION, formato, segundos: DURACION_MIN_S, resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: r.fotos })
     if (!v.ok) return { ok: false, errores: v.errores }
     pedidos.push({ ruta: r.ruta, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: [], clave: `${o.clave}:cotizar:${r.ruta}`, prompt_recortado: false } })
   }

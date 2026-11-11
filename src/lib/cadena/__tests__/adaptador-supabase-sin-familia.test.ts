@@ -29,7 +29,7 @@ function consulta(tabla: string) {
     order: () => q,
     update: (p: Fila) => { patch = p; return q },
     maybeSingle: async () => { leidas.push({ tabla, cols: cols === null ? '*' : cols.join(',') }); return errorEn[tabla] ? { data: null, error: { message: errorEn[tabla] } } : { data: correr()[0] ?? null, error: null } },
-    then: (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => Promise.resolve({ data: correr(), error: null }).then(ok, ko),
+    then: (ok: (v: unknown) => unknown, ko?: (e: unknown) => unknown) => Promise.resolve(errorEn[tabla] ? { data: null, error: { message: errorEn[tabla] } } : { data: correr(), error: null }).then(ok, ko),
   }
   return q
 }
@@ -112,7 +112,7 @@ describe('adaptador · la nota se lee de la columna `avisos` (2)', () => {
 
 describe('adaptador · la config de la oficina para el freno (GO Lenovo 01:10Z · CC7 · 1 y 2)', () => {
   it('🔴 lee la MISMA fuente y las MISMAS columnas que la puerta de la oficina (su tabla de config · estado, familias_activas, clientes_ensayo)', async () => {
-    expect(await almacenDeSupabase().configDeLaOficina!()).toEqual({ estado: 'encendida', familias_activas: ['post_img', 'kit_historias'], clientes_ensayo: [] })
+    expect(await almacenDeSupabase().configDeLaOficina!()).toEqual({ estado: 'encendida', familias_activas: ['post_img', 'kit_historias'], clientes_ensayo: [], sin_pasarela: [] })
     expect(leidas).toEqual([{ tabla: TABLA_DE_CONFIG, cols: 'estado,familias_activas,clientes_ensayo' }])
     expect(COLUMNAS_DE_CONFIG).toBe('estado,familias_activas,clientes_ensayo')
   })
@@ -124,8 +124,19 @@ describe('adaptador · la config de la oficina para el freno (GO Lenovo 01:10Z �
     tablas[TABLA_DE_CONFIG] = []
     await expect(almacenDeSupabase().configDeLaOficina!()).rejects.toThrow(/no tiene fila/)
   })
+  it('fila #19 · las familias sin pieza simple salen de la CLASE de su plantilla (dato), no del nombre', async () => {
+    tablas[TABLAS_DE_GASTO.plantillas] = [{ familia: 'video_mesa', clase: 'video' }, { familia: 'reel_nuevo', clase: 'video' }, { familia: 'carrusel_mesa', clase: 'carrusel' }, { familia: 'sin_clase' }]
+    expect((await almacenDeSupabase().configDeLaOficina!()).sin_pasarela).toEqual(['video_mesa', 'reel_nuevo'])
+    // un video_mesa que su plantilla declara de otra clase NO se trata como video: manda el dato
+    tablas[TABLAS_DE_GASTO.plantillas] = [{ familia: 'video_mesa', clase: 'post_img' }]
+    expect((await almacenDeSupabase().configDeLaOficina!()).sin_pasarela).toEqual([])
+  })
+  it('fila #19 · si las plantillas no se pueden leer, LANZA (el freno sigue guardando lugar), no es «ninguna sin pasarela»', async () => {
+    errorEn[TABLAS_DE_GASTO.plantillas] = 'la base no contesta'
+    await expect(almacenDeSupabase().configDeLaOficina!()).rejects.toThrow(/no contesta/)
+  })
   it('un estado desconocido se lee como apagada (igual que la oficina)', async () => {
     tablas[TABLA_DE_CONFIG] = [{ id: 1, estado: 'rara', familias_activas: null, clientes_ensayo: null }]
-    expect(await almacenDeSupabase().configDeLaOficina!()).toEqual({ estado: 'apagada', familias_activas: [], clientes_ensayo: [] })
+    expect(await almacenDeSupabase().configDeLaOficina!()).toEqual({ estado: 'apagada', familias_activas: [], clientes_ensayo: [], sin_pasarela: [] })
   })
 })

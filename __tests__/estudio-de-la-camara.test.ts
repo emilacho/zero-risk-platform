@@ -29,7 +29,7 @@ const COLUMNAS: Record<string, Set<string>> = {
 
 type Fila = Record<string, unknown>
 function baseFalsa(clientes = [CLIENTE, OTRO], op: { subirFalla?: boolean; quitarFalla?: boolean; alQuitar?: () => Promise<void> } = {}) {
-  const t: Record<string, Fila[]> = { estudio_piezas: [], costs: [], clients: clientes.map((id) => ({ id })) }
+  const t: Record<string, Fila[]> = { estudio_piezas: [], costs: [], clients: clientes.map((id) => ({ id })), cadena_config: [] }
   const subidas: Array<{ ruta: string; bytes: number; tipo: string }> = []
   const quitados: string[] = []
   let n = 0
@@ -151,7 +151,7 @@ function proveedores(op: { varias?: 'ok' | 'sin_imagen' | 'envio_falla'; falEsta
 }
 
 function deps(base = baseFalsa(), p = proveedores()): Deps & { base: typeof base; p: typeof p } {
-  return { db: base.db as never, fetch: p.f, llaves: { openai: 'sk-prueba', higgsfield: 'id:secreto', fal: 'fal-prueba' }, bucket: 'oficina-creativos', modeloDeImagen: 'gpt-image-2.5-flare', ahora: () => Date.parse('2026-11-05T20:00:00Z'), base, p }
+  return { db: base.db as never, fetch: p.f, llaves: { openai: 'sk-prueba', higgsfield: 'id:secreto', fal: 'fal-prueba' }, bucket: 'oficina-creativos', modeloDeImagen: 'gpt-image-2.5-flare', ahora: () => Date.parse('2026-11-05T20:00:00Z'), leerConfig: async (k: string) => base.t.cadena_config.find((f) => f.clave === k)?.valor, base, p }
 }
 
 const pedido = (e: Record<string, unknown>): Pedido => {
@@ -344,8 +344,8 @@ describe('video', () => {
     const p = pedido({ tipo: 'video', prompt: 'ola en la orilla', segundos: 5, resolucion: '720p', formato: '9:16' })
     const c = await cotizar(d, p)
     expect(c.ok).toBe(true)
-    // 720×1280×5×24/1024 = 108.000 tokens × 0,01 por mil = 1,08 (menos el descuento vigente del proveedor)
-    if (c.ok) expect(c.valor.total_usd).toBeCloseTo(0.756, 3)
+    // 720×1280×5×24/1024 = 108.000 tokens × 0,01 por mil = 1,08 · sin descuento configurado se cotiza la lista (regla #18)
+    if (c.ok) expect(c.valor.total_usd).toBeCloseTo(1.08, 3)
     const r = await crear(d, p)
     if (!r.ok) throw new Error('no creó')
     const env = d.p.llamadas.find((l) => l.url === 'https://api.higgsfield.ai/bytedance/seedance-2.5/text-to-video')!
@@ -355,6 +355,16 @@ describe('video', () => {
     expect(fin.ok && fin.valor.estado).toBe('lista')
     expect(fin.ok && fin.valor.archivo_url).toMatch(/\.mp4$/)
     expect(d.base.t.costs.map((x) => x.service)).toEqual(['estudio:higgsfield'])
+  })
+  it('🔴 regla #18 · el descuento sale de la configuración y rige solo hasta su fecha', async () => {
+    const d = deps()
+    d.base.t.cadena_config.push({ clave: 'brazo_de_video', valor: { descuento: { pct: 0.3, hasta: '2026-11-07T13:19:13Z', modelos: ['bytedance/seedance-2.5'] } } })
+    const p = pedido({ tipo: 'video', prompt: 'ola en la orilla', segundos: 5, resolucion: '720p', formato: '9:16' })
+    const c = await cotizar(d, p)
+    if (c.ok) expect(c.valor.total_usd).toBeCloseTo(0.756, 3); else throw new Error('no cotizó')
+    const tarde = { ...d, ahora: () => Date.parse('2026-11-08T00:00:00Z') }
+    const c2 = await cotizar(tarde, p)
+    if (c2.ok) expect(c2.valor.total_usd).toBeCloseTo(1.08, 3); else throw new Error('no cotizó')
   })
 })
 

@@ -88,9 +88,9 @@ export async function pedirCambiosAlManual({ db, ahora, editarDirecto }: DepsDel
   const libre = typeof cuerpo.texto === 'string' ? cuerpo.texto.trim() : ''
   const soloDirectos = hayDirectos && !observaciones.length && !libre
   const armado = [...observaciones.map((o) => `Campo «${o.etiqueta}»: ${o.texto}`), ...(libre ? [libre] : [])].join('\n\n')
-  const texto = soloDirectos ? null : textoEntre(armado, 5, TOPE_DEL_TEXTO_DEL_DUENO)
+  const texto = soloDirectos ? null : textoEntre(armado, 1, TOPE_DEL_TEXTO_DEL_DUENO)
   const toca = { client_id, comentario: texto }
-  if (!soloDirectos && !texto) return rechazo(400, 'entrada_invalida', `\`texto\` (qué debe cambiar) debe tener de 5 a ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres, contando las observaciones`, toca)
+  if (!soloDirectos && !texto) return rechazo(400, 'entrada_invalida', `\`texto\` (qué debe cambiar) debe tener texto (hasta ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres, contando las observaciones)`, toca)
   const seccion = cuerpo.seccion === undefined || cuerpo.seccion === null || cuerpo.seccion === '' ? null : textoEntre(cuerpo.seccion, 1, 80)
   if (cuerpo.seccion && !seccion) return rechazo(400, 'entrada_invalida', '`seccion` debe tener hasta 80 caracteres', toca)
   const pedidos = cuerpo.campos === undefined || cuerpo.campos === null || esObjeto(cuerpo.campos) ? [] : cuerpo.campos

@@ -34,6 +34,7 @@ const regla = (r: string, aplica: string): ReglaDeIndicacion => ({ regla: r, apl
 export const KIT_HISTORIAS: Plantilla = {
   tipo: 'kit_historias',
   familia: 'kit_historias',
+  clase: 'kit',
   limites: {
     // 29 pasos definidos; vueltas: prompts (1) + imagen (2) ⇒ margen 3 + 3
     margen: 6,

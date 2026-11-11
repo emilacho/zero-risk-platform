@@ -14,6 +14,54 @@ import type { ClaseDeFecha, Estrategia, FechaQueImporta } from './tipos'
 
 export const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
+/**
+ * 11-nov (GO Lenovo · reglas rígidas #7): los nombres de cada mes en TODOS los idiomas que conoce el motor de fechas (Intl), sin lista escrita a mano.
+ * Así una cita en inglés («December 25»), portugués o francés respalda la fecha igual que una en español. Un nombre que en dos idiomas es de meses distintos
+ * («listopad» = noviembre en checo y octubre en croata) se descarta: con él no se puede saber de qué mes habla. Normalizado como `normalizar` (minúsculas, sin tildes).
+ */
+let NOMBRES_DEL_MES: Set<string>[] | null = null
+function nombresDelMes(): Set<string>[] {
+  if (NOMBRES_DEL_MES) return NOMBRES_DEL_MES
+  const meses = new Map<string, Set<number>>()
+  const anotar = (nombre: string | undefined, m: number) => {
+    const t = normalizar(nombre ?? '').replace(/\./g, '').trim()
+    if (t.length < 3 || /\d/.test(t)) return
+    if (!meses.has(t)) meses.set(t, new Set())
+    meses.get(t)!.add(m)
+  }
+  for (let a = 97; a < 123; a++) for (let b = 97; b < 123; b++) {
+    const loc = String.fromCharCode(a, b)
+    let ok = false
+    try { ok = Intl.DateTimeFormat.supportedLocalesOf([loc]).length > 0 } catch { ok = false }
+    if (!ok) continue
+    for (let m = 0; m < 12; m++) {
+      const d = new Date(Date.UTC(2026, m, 15))
+      // el nombre suelto («diciembre», «grudzień») y el que va con el día («grudnia»): según el idioma son distintos
+      for (const o of [{ month: 'long' }, { month: 'long', day: 'numeric' }] as const) anotar(new Intl.DateTimeFormat(loc, { ...o, timeZone: 'UTC' }).formatToParts(d).find((x) => x.type === 'month')?.value, m)
+    }
+  }
+  for (const [m, n] of MESES.entries()) anotar(n, m) // el español siempre, aunque el motor no traiga sus datos
+  NOMBRES_DEL_MES = Array.from({ length: 12 }, () => new Set<string>())
+  for (const [t, ms] of meses) if (ms.size === 1) NOMBRES_DEL_MES[[...ms][0]!]!.add(t)
+  return NOMBRES_DEL_MES
+}
+
+/** ¿el texto (ya normalizado) nombra el mes `m` (1–12) en algún idioma? Palabra entera: «mayor» no nombra «mayo» */
+export function nombraElMes(textoNormalizado: string, m: number): boolean {
+  const nombres = nombresDelMes()[m - 1]
+  if (!nombres) return false
+  const letra = /[\p{L}\p{M}]/u
+  for (const n of nombres) {
+    let i = textoNormalizado.indexOf(n)
+    while (i >= 0) {
+      const antes = textoNormalizado[i - 1], despues = textoNormalizado[i + n.length]
+      if ((!antes || !letra.test(antes)) && (!despues || !letra.test(despues))) return true
+      i = textoNormalizado.indexOf(n, i + 1)
+    }
+  }
+  return false
+}
+
 /** la llave que se guarda: minúsculas, sin tildes, espacios → `_` (la misma de siempre) */
 export const claveDeFecha = (x: string): string => normalizar(x).replace(/\s+/g, '_')
 
@@ -69,7 +117,7 @@ export function temporadaRespaldada(f: Pick<FechaQueImporta, 'desde' | 'hasta' |
   const c = normalizar(f.cita_plan ?? '')
   const [, m1, d1] = desde.split('-').map(Number) as [number, number, number]
   const [, m2, d2] = hasta.split('-').map(Number) as [number, number, number]
-  const nombra = (m: number) => new RegExp(`\\b${MESES[m - 1]}\\b`).test(c)
+  const nombra = (m: number) => nombraElMes(c, m)
   if (!nombra(m1) || !nombra(m2)) return { ok: false, motivo: 'la cita no nombra los meses del tramo' }
   const dice = (d: number) => new RegExp(`\\b0?${d}\\b`).test(c)
   if (d1 !== 1 && !dice(d1)) return { ok: false, motivo: `la cita no dice el día ${d1} en que empieza` }

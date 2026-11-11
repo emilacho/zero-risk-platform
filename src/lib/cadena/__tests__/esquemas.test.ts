@@ -57,7 +57,7 @@ describe('lo que el esquema impide por formato (no solo por indicación)', () =>
     for (const k of v2) expect(k).not.toMatch(/fecha|total|pct|porcentaje/i)
     expect(Object.keys(ESQUEMA_CALENDARIO_TANDA_V2.properties)).toEqual(['piezas', 'ajustes_al_patron'])
     // 31-oct (FIRMA de Emilio · gancho de video): `gancho_video.v1` nace con su tarea en `metodos.ts` (T8 lo cablea)
-    expect(Object.keys(ESQUEMAS)).toEqual(['estrategia.v1', 'estrategia.v2', 'calendario_tanda.v1', 'calendario_tanda.v2', 'fechas_especiales.v1', 'gancho_video.v1'])
+    expect(Object.keys(ESQUEMAS)).toEqual(['estrategia.v1', 'estrategia.v2', 'estrategia.v3', 'calendario_tanda.v1', 'calendario_tanda.v2', 'fechas_especiales.v1', 'gancho_video.v1'])
   })
 })
 
@@ -66,7 +66,7 @@ describe('un objeto real cumple su esquema y uno roto no', () => {
     const v = ajv.compile(ESQUEMA_ESTRATEGIA)
     // el tipo permite `cita_plan` ausente; el esquema lo exige (el texto vacío significa «ninguna»): el modelo siempre lo escribe
     // v2 (10-nov): cada fecha trae su clase, su llave y su tramo; el fixture viejo no los tiene y se completan como los escribiría el modelo
-    const completa = (e: ReturnType<typeof clienteA>['estrategia']) => ({ ...e, fechas_que_importan: e.fechas_que_importan.map((f) => ({ cita_plan: '', clase: 'feriado_publico', llave: f.tipo.replace(/ /g, '_'), llave_nueva: true, desde: '', hasta: '', ...f })) })
+    const completa = (e: ReturnType<typeof clienteA>['estrategia']) => ({ ...e, fechas_que_importan: e.fechas_que_importan.map((f) => ({ cita_plan: '', clase: 'feriado_publico', llave: f.tipo.replace(/ /g, '_'), llave_nueva: true, desde: '', hasta: '', ...f })), dependencias: e.dependencias.map((d) => ({ cantidad: 1, ...d })), tolerancia_frecuencia: { feed: 0, historias: 1, anuncios: 1 } })
     for (const c of [clienteA(), clienteB()]) expect(v(completa(c.estrategia)) || JSON.stringify(v.errors)).toBe(true)
     const a = clienteA().estrategia
     expect(v({ ...a, extra: 1 })).toBe(false)

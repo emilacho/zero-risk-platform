@@ -26,6 +26,7 @@ const cambioObservacion: Condicion = { tipo: 'si_cambio', artefacto: 'observacio
 export const POST_IMG: Plantilla = {
   tipo: 'post_img',
   familia: 'post_img',
+  clase: 'post_img',
   limites: {
     // 19 pasos definidos; vueltas: prompts (1) + imagen (2) ⇒ margen 3 + 3
     margen: 6,

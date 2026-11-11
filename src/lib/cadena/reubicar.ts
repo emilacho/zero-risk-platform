@@ -10,7 +10,7 @@
  */
 import type { Almacen, Campana } from './almacen'
 import { hoyEnZona } from './campanas'
-import { descarteDeSegundaVez, filasPasadas, huellaDeReubicacion, yaReubicada, leerDecisiones, marcoDeReubicacion, MAX_INTENTOS_DE_REUBICACION, verificarDecisiones, type Cambio, type ContextoDeReubicacion } from './reubicacion'
+import { descarteDeSegundaVez, filasPasadas, huellaDeReubicacion, yaReubicada, leerDecisiones, marcoDeReubicacion, MAX_INTENTOS_DE_REUBICACION, PREFIJO_REUBICACION, verificarDecisiones, type Cambio, type ContextoDeReubicacion } from './reubicacion'
 
 export const INTERRUPTOR_DE_REUBICACION = 'reubicar_filas_pasadas'
 export const CLAVE_DE_LA_LIBRETA = 'reubicacion_libreta'
@@ -32,6 +32,8 @@ export interface Decision {
   /** el resumen que el reloj avisa UNA vez */
   resumen: string | null
   avisado: boolean
+  /** 11-nov (#1014 · 3A): la respuesta guardada ya se releyó con el lector de hoy (una sola vez por decisión) */
+  releida?: boolean
 }
 export interface LibretaDeCampana { ultima_version: number; decisiones: Record<string, Decision> }
 export type Libreta = Record<string, LibretaDeCampana>
@@ -66,6 +68,12 @@ export async function abrirReubicaciones(al: Almacen, ahora: string): Promise<{ 
   if (!(await encendida(al))) return { aplicado, lineas }
   const libreta = await leerLibreta(al)
   let cambio = false
+  // 11-nov (GO Lenovo 04:15Z · #1014 · 3A): primero, las filas que se descartaron SOLO porque el lector no leyó la respuesta se releen con el lector de hoy (sin llamar al agente)
+  for (const c of await al.campanasActivas()) {
+    if (c.seco === true || !libreta[c.id]) continue
+    try { if (await releerDescartadasPorLectura(al, c, libreta[c.id]!, ahora, aplicado)) cambio = true }
+    catch (e) { lineas.push({ campana_id: c.id, texto: `reubicación: no se pudo releer una decisión guardada (${String((e as Error)?.message ?? e).slice(0, 160)})` }) }
+  }
   for (const c of await al.campanasActivas()) {
     // 🟡 CC7 punto 3 · como #1010: una campaña de ensayo nunca marca sus filas (a propósito), así que todas «quedarían atrás» cada día. No entra.
     if (c.seco === true) continue
@@ -153,7 +161,17 @@ export async function recibirReubicacion(al: Almacen, p: EntregaDeReubicacion, a
   if (version !== d.calendario_version) { await guardar({ estado: 'obsoleta', motivo: `el calendario cambió de versión (${d.calendario_version} → ${version}) mientras la mesa decidía` }); return { ok: true, estado: 'obsoleta' } }
   // solo las filas de ESTA decisión que siguen pasadas y sin producir
   const pasadas = filasPasadas(x.filas, x.hoy).filter((f) => d.fila_ids.includes(f.id))
-  const { cambios, ignoradas } = verificarDecisiones(pasadas, leerDecisiones(p.texto), x)
+  const leidas = leerDecisiones(p.texto)
+  // 11-nov (GO Lenovo 04:15Z · #1014 · 2): «no pude leer» NUNCA equivale a «el agente dijo descartar». El agente respondió y no se leyó ninguna decisión ⇒ fallida, sin tocar filas.
+  // 🟡 CC7 punto 4 · cuentan solo las líneas sobre filas de ESTA decisión: si el agente nombró otras (o con otro id), tampoco se leyó nada y es la misma fallida.
+  if (!leidas.some((y) => d.fila_ids.includes(y.fila_id))) {
+    const motivo = leidas.length
+      ? `el agente respondió pero ninguna de sus ${leidas.length} decisión(es) nombra una fila de esta reubicación (no se tocó ninguna fila)`
+      : 'el agente respondió pero no se pudo leer ninguna decisión en su respuesta (no se tocó ninguna fila)'
+    await guardar({ estado: 'fallida', motivo, resumen: `reubicación: ${motivo}; la mesa se vuelve a intentar sola hasta el tope.`, avisado: false })
+    return { ok: true, estado: 'fallida' }
+  }
+  const { cambios, ignoradas } = verificarDecisiones(pasadas, leidas, x)
   const hechos = await aplicarCambios(al, c.id, version, cambios)
   const n = (t: Cambio['tipo']) => hechos.filter((h) => h.tipo === t).length
   const rechazadas = hechos.filter((h) => h.tipo === 'descartar' && h.rechazo).length
@@ -176,6 +194,52 @@ async function aplicarCambios(al: Almacen, campanaId: string, version: number, c
     if (ok) hechos.push(k)
   }
   return hechos
+}
+
+/** el aviso exacto que deja una fila descartada porque el lector no encontró su decisión */
+const avisoDeNoDecidida = (fecha: string) => `${PREFIJO_REUBICACION}perdió su fecha (${fecha}) · la propuesta no cumple: el agente no decidió esta fila`
+
+/**
+ * 11-nov (GO Lenovo 04:15Z · #1014 · 3A) · RELECTURA genérica: una decisión `aplicada` cuyas filas quedaron en `perdio_su_fecha` SOLO porque «el agente no decidió esta fila»
+ * se relee UNA vez con el lector de hoy, sobre la respuesta que la mesa ya dejó guardada (sin llamar al agente, US$ 0). Lo que se lea pasa por las MISMAS verificaciones de siempre
+ * (fecha dentro de la campaña, plazo de producción contado desde HOY, día abierto, máximo por día, dependencias). Escritura condicional: la fila tiene que seguir en `perdio_su_fecha`.
+ * Una reubicada vuelve a `validada` con su fecha nueva y queda marcada como reubicada (si vuelve a quedar atrás, se descarta sin otra decisión). Devuelve si cambió la libreta.
+ */
+async function releerDescartadasPorLectura(al: Almacen, c: Campana, lc: LibretaDeCampana, ahora: string, aplicado: string[]): Promise<boolean> {
+  let cambio = false
+  for (const d of Object.values(lc.decisiones)) {
+    if (d.estado !== 'aplicada' || d.releida || !d.encargo_id) continue
+    const { x, version } = await contextoDe(al, c, ahora)
+    const perdidas = version === d.calendario_version
+      ? x.filas.filter((f) => d.fila_ids.includes(f.id) && f.estado === 'perdio_su_fecha' && (f.avisos ?? []).includes(avisoDeNoDecidida(f.fecha)))
+      : []
+    if (perdidas.length && !al.textoGuardadoDeLaMesa) continue // este entorno no puede leer el texto guardado: queda para otro reloj, sin marcarla
+    const guardado = perdidas.length ? await al.textoGuardadoDeLaMesa!(d.encargo_id) : { ok: true as const, texto: null }
+    // 🟡 CC7 punto 4 · un error al leer NO marca: la relectura vuelve a probar en la pasada siguiente. Solo «no hay texto» (o nada que releer) la da por hecha.
+    if (!guardado.ok) { aplicado.push(`reubicación: no se pudo leer la respuesta guardada en ${c.id} (${guardado.motivo.slice(0, 120)}); se reintenta en la próxima pasada`); continue }
+    const leidas = leerDecisiones(guardado.texto).filter((y) => perdidas.some((f) => f.id === y.fila_id))
+    lc.decisiones[d.huella] = { ...d, releida: true }
+    cambio = true
+    if (!leidas.length) continue
+    const { cambios } = verificarDecisiones(perdidas, leidas, x)
+    const DESDE = ['perdio_su_fecha'] as const
+    const hechos: Cambio[] = []
+    for (const k of cambios) {
+      let ok = false
+      if (k.tipo === 'reubicar') ok = await al.reubicarFila(c.id, version, k.fila_id, { fecha: k.fecha, semana: k.semana, dia_semana: k.dia_semana, estado: 'validada' }, `${k.aviso} (relectura de la respuesta guardada)`, DESDE)
+      else if (k.tipo === 'fusionar') {
+        ok = await al.reubicarFila(c.id, version, k.fila_id, { estado: 'cancelada' }, `${k.aviso} (relectura de la respuesta guardada)`, DESDE)
+        if (ok) await al.reubicarFila(c.id, version, k.destino, {}, k.aviso_destino)
+      } else if (!/el agente no decidió esta fila/.test(k.aviso)) ok = await al.reubicarFila(c.id, version, k.fila_id, {}, `${k.aviso} (relectura de la respuesta guardada)`, DESDE)
+      if (ok) hechos.push(k)
+    }
+    const n = (t: Cambio['tipo']) => hechos.filter((h) => h.tipo === t).length
+    const rechazadas = hechos.filter((h) => h.tipo === 'descartar' && h.rechazo).length
+    const resumen = `reubicación (relectura de la respuesta que el agente ya había dado): ${n('reubicar')} reubicada(s), ${n('fusionar')} fusionada(s), ${n('descartar')} descartada(s)${rechazadas ? ` (${rechazadas} porque la fecha propuesta ya no cumple)` : ''}`
+    lc.decisiones[d.huella] = { ...lc.decisiones[d.huella]!, resumen: [d.resumen, resumen].filter(Boolean).join(' · '), avisado: false }
+    aplicado.push(`reubicación releída en ${c.id}: ${hechos.length} cambio(s)`)
+  }
+  return cambio
 }
 
 /** el resumen de cada decisión aplicada, UNA vez (el reloj lo manda por la línea de la campaña). `marcar` = el reloj de verdad envía */

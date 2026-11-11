@@ -75,7 +75,9 @@ describe('palanca apagada = la cadena de hoy', () => {
     expect(p.cuerpo.concepto_version).toBeUndefined()
     const rs = p.cuerpo.run_sdk as { task: string; metadata?: Record<string, unknown> } & Record<string, unknown>
     expect(JSON.stringify(rs)).toContain('calendario_tanda.v1')
-    expect(rs.task).not.toMatch(/GRAN IDEA|CAPÍTULO|BANCO DE IDEAS|FECHAS ESPECIALES|Idioma de todo/)
+    expect(rs.task).not.toMatch(/GRAN IDEA|CAPÍTULO|BANCO DE IDEAS|Idioma de todo/)
+    // 11-nov (reglas rígidas #5): la lista de fechas verificadas va SIEMPRE (el agente declara `fecha:<id>` y el código la verifica), también con la palanca apagada
+    expect(rs.task).toContain('# FECHAS ESPECIALES (verificadas por el código)\n(ninguna declarada para esta campaña)')
     expect(JSON.stringify(p.cuerpo)).not.toContain('idea_de_mesa')
     const g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p.cuerpo.corrida_id, resultado: ok({ ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((x) => ({ ...x, idea_de_mesa: 'C1-I01' })) }) }, AHORA)
     expect(g.status).toBe(200)

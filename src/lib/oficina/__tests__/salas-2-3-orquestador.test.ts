@@ -680,3 +680,22 @@ describe('SALA 2 · forma de la salida y paleta de la marca (21-oct · cierre de
   })
 })
 
+
+describe('11-nov · «mirar» ilegible en el CARRUSEL recorrido por el orquestador (CC7 · hueco 3: el reparto láminas/foto)', () => {
+  it('ilegible las dos veces: NO cae, cada imagen mostrada queda aceptada por su lámina, la lámina lleva imagen y la ficha (en plural, de láminas) bloquea hasta el cierre', async () => {
+    const { M, id } = await abiertoC({ dry_run: false })
+    let veces = 0
+    const { pasos, ultima } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada() }), mirar: () => { veces++; return { texto: '{esto no es json' } } }))
+    expect(veces).toBe(2)
+    expect(pasos.filter((p) => p === 'mirar')).toHaveLength(2)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
+    const obs = arte(M, id, 'observacion_imagen')
+    expect(obs).toMatchObject({ sin_lectura: true, aceptadas: { hook: [0, 1] }, veredicto: { regenerar: false, refs_sin_imagen: [] } })
+    expect(arte(M, id, 'imagenes_elegidas').por_ref.hook).toBeTruthy()
+    expect(M.llamadas.renderPedidos[0].slides[0].background_image_url).toMatch(/img\.test/)
+    const f = fichas(M, id).filter((x) => x.id.startsWith('mirar-sin-lectura-'))
+    expect(f).toHaveLength(1)
+    expect(f[0]).toMatchObject({ gravedad: 'bloquea', donde: 'imagen', estado: 'abierta' })
+    expect(f[0].que).toMatch(/las imágenes siguen en la pieza sin juzgar/)
+  })
+})

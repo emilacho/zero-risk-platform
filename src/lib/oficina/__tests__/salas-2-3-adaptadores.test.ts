@@ -28,7 +28,7 @@ function sembrar(o: { colores?: unknown; slug?: string | null } = {}): DbFalsa {
   db.semilla('client_web_pages', [])
   db.semilla('client_historical_outputs', [{ id: PARTE, client_id: CLIENTE, output_type: 'campaign_brief_pack', content: PARTE_TXT }])
   db.semilla('oficina_config', [{ id: 1, estado: 'encendida', familias_activas: ['carrusel_ig_v1', 'kit_historias'], clientes_ensayo: [] }])
-  db.semilla('oficina_tipos_de_grupo', [CARRUSEL_IG_V1, KIT_HISTORIAS].map((p) => ({ tipo: p.tipo, familia: p.familia, pasos: p.pasos, indicaciones: p.indicaciones, limites: p.limites, activo: true })))
+  db.semilla('oficina_tipos_de_grupo', [CARRUSEL_IG_V1, KIT_HISTORIAS].map((p) => ({ tipo: p.tipo, familia: p.familia, clase: p.clase, pasos: p.pasos, indicaciones: p.indicaciones, limites: p.limites, activo: true })))
   db.semilla('oficina_entrega_formatos', [{ red: 'instagram', formato: 'carrusel', ancho: 1080, alto: 1350, ratio: '4:5', tipos_archivo: ['png', 'jpeg'], peso_max_mb: 8, n_min: 2, n_max: 10, texto_max: 2200, hashtags_max: 30, pasos_publicacion: ['Descargar', 'Pegar', 'Programar'], verificado: false }])
   return db
 }

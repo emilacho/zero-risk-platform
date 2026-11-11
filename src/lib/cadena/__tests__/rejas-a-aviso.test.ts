@@ -38,7 +38,9 @@ describe('V07 feriado', () => {
     expect(de(hs, 'V07', 'bloquea')).toEqual([])
   })
   it('🔴 la pareja: el feriado sin fuente sigue bloqueando', () => {
-    expect(de(validarTodo({ ...base, fechasEspeciales: [], filas: conFeriado({}) }), 'V07', 'bloquea', /sin fuente/)).toHaveLength(1)
+    // 11-nov (reglas rígidas #5): la fila declara la fecha que cita; sin esa fecha verificada, bloquea
+    const declarada = { datos: [{ dato: 'fecha_especial', valor: 'Feriado', ref: 'fecha:f1' } as (typeof primera)['datos'][number]] }
+    expect(de(validarTodo({ ...base, fechasEspeciales: [], filas: conFeriado(declarada) }), 'V07', 'bloquea', /sin fuente/)).toHaveLength(1)
   })
 })
 

@@ -24,7 +24,7 @@ import { abrirEncargo } from '../orquestador'
 import { productoresDeLaPieza, familiaDePieza } from '../paso-jefatura'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
 import type { PuertoDeVideo } from '../puertos'
-import { CONFIG_APAGADA, FAMILIAS_SIN_PASARELA, TARGET_STEP_PRODUCIR, decidirPuerta } from '../sobre'
+import { CONFIG_APAGADA, TARGET_STEP_PRODUCIR, decidirPuerta } from '../sobre'
 import { CLIENTE, FOTOS, PARTE, crearMemoria } from './memoria'
 import { jugar, type Turno } from './mesa-arnes'
 import { crearMesaEnMemoria } from './mesa-memoria'
@@ -198,12 +198,11 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
 
 describe('la puerta: el video no tiene pasarela', () => {
   const sobre = { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'video_mesa' }
-  it('video_mesa es la única familia sin pasarela; apagada, no activa o cliente fuera del ensayo ⇒ sin_sala (no pasarela); activa ⇒ abre', () => {
-    expect(FAMILIAS_SIN_PASARELA).toEqual(['video_mesa'])
-    expect(decidirPuerta(sobre, CONFIG_APAGADA, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'oficina_apagada' })
-    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['carrusel_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'familia_no_activa' })
-    expect(decidirPuerta(sobre, { estado: 'ensayo', familias_activas: ['video_mesa'], clientes_ensayo: ['otro'] }, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'cliente_fuera_del_ensayo' })
-    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['video_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'abrir', familia: 'video_mesa' })
+  it('la clase video (dato de la plantilla) no tiene pasarela; apagada, no activa o cliente fuera del ensayo ⇒ sin_sala (no pasarela); activa ⇒ abre', () => {
+    expect(decidirPuerta(sobre, CONFIG_APAGADA, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'oficina_apagada' })
+    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['carrusel_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'familia_no_activa' })
+    expect(decidirPuerta(sobre, { estado: 'ensayo', familias_activas: ['video_mesa'], clientes_ensayo: ['otro'] }, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'cliente_fuera_del_ensayo' })
+    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['video_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'abrir', familia: 'video_mesa' })
     // las de siempre no cambian
     expect(decidirPuerta({ ...sobre, familia: 'carrusel_mesa' }, CONFIG_APAGADA, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'pasarela', motivo: 'oficina_apagada' })
   })
@@ -321,6 +320,35 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
     expect(M.llamadas.salida).toBe(0); expect(M.llamadas.bandeja).toHaveLength(0); expect(M.llamadas.guardadoDeArchivos).toBe(0)
     expect(M.llamadas.imagen).toBe(0); expect(M.llamadas.render).toBe(0)
   })
+  // 11-nov · GO Lenovo 03:55Z · regla #17: la proporción es UN dato (`cadena_formatos_por_red.proporcion`) que viaja tabla → hoja → brief → oficina → pedido al brazo
+  it.each([
+    // [caso, cliente, dato en la tabla, lo que recibe el brazo, aviso esperado: 'hoja' (dato ilegible) · 'sala' (el generador no lo admite) · null]
+    ['restaurante · cuadrado', 'Cliente de práctica', '1:1', '1:1', null],
+    ['B2B de seguridad industrial · vertical', 'Cliente B2B de práctica', '9:16', '9:16', null],
+    ['B2B de seguridad industrial · 4:3', 'Cliente B2B de práctica', '4:3', '4:3', null],
+    ['dato ilegible en la tabla ⇒ la de por omisión, con aviso en la hoja', 'Cliente de práctica', 'cuadrado', '9:16', 'hoja'],
+    ['dato que el generador no admite (4:5) ⇒ la de por omisión, con aviso de la sala (nunca a escondidas)', 'Cliente B2B de práctica', '4:5', '9:16', 'sala'],
+  ] as const)('🔴 regla #17 · %s: el brazo recibe la proporción de la tabla de formatos', async (_n, cliente, dato, esperada, aviso) => {
+    const hoja = escribirHoja({ ...INSUMOS, client_name: cliente, formatos: { instagram: [{ ...FORMATOS.instagram[0], proporcion: dato }] } })
+    expect(hoja.texto_md).toContain(aviso === 'hoja' ? 'proporción 9:16 (por omisión del formato reel)' : `proporción ${dato} (dato de la tabla de formatos para instagram · reel)`)
+    expect(hoja.avisos.some((x) => /proporción «cuadrado» de instagram · reel en cadena_formatos_por_red no se puede leer · se usa 9:16/.test(x))).toBe(aviso === 'hoja')
+    const M = crearMemoria({ parte: hoja.texto_md, plantilla: VIDEO_MESA })
+    M.P.mesa = crearMesaEnMemoria(TRAS_2012)
+    const enviados: Array<Record<string, unknown>> = []
+    M.P.video = brazoSimulado(enviados)
+    const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'video_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    let aportes = 0
+    await jugar(M, String(a.cuerpo.encargo_id), a, (t: Turno) => {
+      if (t.tipo === 'dirigir') return { texto: 'Idea rectora: el pan sale del horno y la mesa larga espera.' }
+      if (t.tipo === 'aportar') { aportes++; return { texto: t.agente === VOZ_DEL_GANCHO ? 'Gancho único: el vapor del pan llenando el cuadro.' : `Aporte de ${t.agente}, sin proponer gancho.` } }
+      if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: GUION(Array.from({ length: aportes }, (_, i) => `A${i + 2} usé: lo tomé tal cual para el guion`).join('\n')) }
+      return undefined
+    })
+    expect(enviados).toHaveLength(1)
+    expect((enviados[0].pedido as Record<string, unknown>).relacion).toBe(esperada)
+    const motor = JSON.stringify(M.encargos.get(String(a.cuerpo.encargo_id))!.estado_del_motor)
+    expect(motor.includes('la proporción 4:5 del brief no la admite el generador de video; se usó 9:16')).toBe(aviso === 'sala')
+  })
   it('un brief que NO es de video no abre esta sala (falla visible al abrir, sin gastar)', async () => {
     const hoja = escribirHoja({ ...INSUMOS, filas: [{ ...FILA, id: 'F1-S1-ig-c1', formato: 'carrusel' }], formatos: { instagram: [{ formato: 'carrusel', produccion: 'opera', lead_dias: 4, max_por_dia: 2, familia: 'carrusel_mesa' }] } })
     const M = crearMemoria({ parte: hoja.texto_md, plantilla: VIDEO_MESA })
@@ -331,5 +359,21 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
     expect(a.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'fallido' })
     expect(String(a.cuerpo.motivo)).toMatch(/manda a la familia carrusel_mesa; esta sala es video_mesa/)
     expect(M.encargos.get(String(a.cuerpo.encargo_id))!.gasto_usd).toBe(0)
+  })
+  it('fila #19 (CC7) · una sala NUEVA de clase video produce el reel que la tabla manda a video_mesa (misma clase); el que manda a carrusel_mesa, no', async () => {
+    const abrirCon = async (familiaDeLaTabla: string) => {
+      const formatos = { instagram: [{ formato: 'reel', produccion: 'opera', lead_dias: 2, max_por_dia: 1, familia: familiaDeLaTabla }] }
+      const hoja = escribirHoja({ ...INSUMOS, formatos } as never)
+      const M = crearMemoria({ parte: hoja.texto_md, plantilla: { ...VIDEO_MESA, familia: 'reel_nuevo', tipo: 'reel_nuevo', clase: 'video' } })
+      M.P.mesa = crearMesaEnMemoria(TRAS_2012)
+      M.P.formatosDeLaCadena = async () => formatos as never
+      return abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'reel_nuevo' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    }
+    const si = await abrirCon('video_mesa')
+    // la revisión de sala la deja pasar (después la mesa reconoce su tipo por nombre · FAMILIAS_MESA, fuera de la fila #19)
+    expect(String(si.cuerpo.motivo ?? '')).not.toMatch(/manda a la familia/)
+    const no = await abrirCon('carrusel_mesa')
+    expect(no.cuerpo).toMatchObject({ estado: 'fallido' })
+    expect(String(no.cuerpo.motivo)).toMatch(/manda a la familia carrusel_mesa; esta sala es reel_nuevo/)
   })
 })

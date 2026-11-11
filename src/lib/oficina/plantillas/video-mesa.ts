@@ -20,6 +20,7 @@ const cambioCopy: Condicion = { tipo: 'si_cambio', artefacto: 'copy_video' }
 export const VIDEO_MESA: Plantilla = {
   tipo: 'video_mesa',
   familia: 'video_mesa',
+  clase: 'video',
   limites: {
     // 9 pasos definidos; el margen cubre los turnos de la mesa (≤ 24) y el turno del brazo
     margen: 50,

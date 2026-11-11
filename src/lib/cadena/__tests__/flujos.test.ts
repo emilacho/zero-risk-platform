@@ -189,7 +189,7 @@ const entrada = (cuerpo: Record<string, unknown>, llave = 'k-sala'): Item[] => [
 const correr = (m: Mundo, cuerpo: Record<string, unknown>, llave?: string) => m.sim.ejecutar(IDS.puerta, entrada(cuerpo, llave))
 const simulacros = (c: ClienteFixture, extra: Record<string, unknown> = {}) => ({ estrategia: [c.estrategia], calendario: [tandaBuena(c)], ...extra })
 const agenteQueDevuelve = (objetos: Record<string, any>): ((b: any) => RespuestaHttp) => (b) => {
-  const k = /^estrategia\.v[12]$/.test(String(b.extra?.contrato)) ? 'estrategia' : b.extra?.contrato === 'calendario_tanda.v1' ? 'calendario' : 'fechas'
+  const k = /^estrategia\.v[123]$/.test(String(b.extra?.contrato)) ? 'estrategia' : b.extra?.contrato === 'calendario_tanda.v1' ? 'calendario' : 'fechas'
   const o = objetos[k]
   return { statusCode: 200, body: { success: true, structured_output: Array.isArray(o) ? o.shift() : o, cost_usd: 0.31 } }
 }

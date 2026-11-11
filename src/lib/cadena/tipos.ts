@@ -17,7 +17,8 @@ export interface Canal {
 export interface Pilar { clave: string; nombre: string; pct: number }
 export interface Fase { clave: string; dia_desde: number; dia_hasta: number; objetivo: string; cita_plan: string }
 export interface Hito { clave: string; dia: number; tipo: 'revision' | 'lanzamiento' | 'corte'; cita_plan: string }
-export interface Dependencia { antes: string; despues: string; regla: string; cita_plan: string }
+/** `cantidad` (11-nov · reglas rígidas #9): cuántas piezas de `antes` exige la regla, como número; una estrategia guardada antes no lo trae y se lee de `regla` */
+export interface Dependencia { antes: string; despues: string; regla: string; cita_plan: string; cantidad?: number }
 /**
  * 10-nov (GO Lenovo · fechas sin fuente · D): la CLASE la decide el agente razonando, no una lista de palabras.
  * `feriado_publico` = fecha del país o de un lugar (Navidad, un feriado local): se verifica con las fuentes oficiales del país.
@@ -45,6 +46,8 @@ export interface Estrategia {
   fases: Fase[]
   hitos: Hito[]
   dependencias: Dependencia[]
+  /** 11-nov (reglas rígidas #8): cuánto puede desviarse por semana y red la cantidad real de la frecuencia antes de bloquear; ausente = feed 0, historias 1, anuncios 1 */
+  tolerancia_frecuencia?: { feed: number; historias: number; anuncios: number }
   fechas_que_importan: FechaQueImporta[]
   patron_semanal: Slot[]
   piezas_fijas: PiezaFija[]
@@ -111,7 +114,7 @@ export interface Ficha { que: string; donde: string; contra_que: string; graveda
 export interface Hallazgo { chequeo: string; severidad: Severidad; fila_id: string | null; alcance: Alcance; ficha: Ficha }
 
 /** Red → formatos permitidos (de `cadena_formatos_por_red`). */
-export interface FormatoPermitido { formato: string; produccion: 'opera' | 'espera_brazo'; lead_dias: number; max_por_dia: number | null; /** r63 · familia de la oficina que produce este formato (dato de `cadena_formatos_por_red.familia`); ausente/null = sin sala. T8 (31-oct): un formato `espera_brazo` CON familia (`video_mesa`) ya no espera: es una pieza más (lote → hoja → mesa de video) */ familia?: string | null }
+export interface FormatoPermitido { formato: string; produccion: 'opera' | 'espera_brazo'; lead_dias: number; max_por_dia: number | null; /** r63 · familia de la oficina que produce este formato (dato de `cadena_formatos_por_red.familia`); ausente/null = sin sala. T8 (31-oct): un formato `espera_brazo` CON familia (`video_mesa`) ya no espera: es una pieza más (lote → hoja → mesa de video) */ familia?: string | null; /** 11-nov · regla #17 · proporción del cuadro de este (red, formato) (`cadena_formatos_por_red.proporcion`); ausente/null = la de por omisión del formato */ proporcion?: string | null }
 export type FormatosPorRed = Record<string, FormatoPermitido[]>
 
 /** Horario de una sede: por día de la semana ISO, tramos [abre, cierra] en HH:MM. Un día sin tramos = cerrado. */

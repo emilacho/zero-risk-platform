@@ -41,7 +41,7 @@ function armar(o: { activas?: Set<string>; guarda?: ResultadoDeLaGuarda | Error;
   const aplicar = vi.fn(async (_id: string) => ({ aplicados: [], pendientes: [], ya_cambiaron: [] }))
   const propia = vi.fn(async (_c: string, _camp: string) => { if (o.propia instanceof Error) throw o.propia; return o.propia ?? true })
   const tope = vi.fn(async (_c: string) => { if (o.tope instanceof Error) throw o.tope; return o.tope === undefined ? TOPE_DIARIO_DEL_CLIENTE_USD : o.tope })
-  const P: PuertosDelTurno = { almacen, filasActivas: async () => o.activas ?? TODAS, piezasPorPublicar: guarda, documentos: docs, campanaDelCliente: propia, gastoDelDia: gasto, topeDiario: tope, abrirRevisionColateral: abrir, aplicar }
+  const P: PuertosDelTurno = { almacen, filasActivas: async () => o.activas ?? TODAS, piezasPorPublicar: guarda, documentos: docs, campanaDelCliente: propia, gastoDelDia: gasto, topeDiario: tope, gastoDeLaEdicion: async () => ({ cobrado: 0, secretaria_sin_recibo: 0, rehacer_sin_recibo: 0, revisiones_abiertas: 0 }), abrirRevisionColateral: abrir, aplicar }
   return { P, almacen, tablas, guarda, docs, gasto, propia, tope, abrir, aplicar }
 }
 const crear = async (al: ReturnType<typeof almacenDeColaterales>, n: NuevaEdicion) => (await al.crearEdicion(n)).edicion.id

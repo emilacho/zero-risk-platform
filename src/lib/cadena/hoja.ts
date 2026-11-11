@@ -8,18 +8,18 @@
  * Puro: sin red, sin base, sin modelo, sin cliente. Lo que falta se DECLARA en la hoja («sin idea del banco»), nunca se inventa.
  */
 import type { DatoDeterminado, Fila, FormatosPorRed } from './tipos'
+import { PROPORCION_POR_FORMATO, proporcionDe, proporcionDeLaTabla } from './proporciones'
 import type { BriefCreativoLeido } from './brief-creativo'
 import { ideaDelBanco, type ConceptoLeido, type IdeaDelBanco } from './conceptos'
 
 export const FAMILIA_DEL_KIT = 'kit_historias'
 /** el id de un brief del parte (mismo criterio que `autoproducir.ts` RE_BRIEF) */
 export const RE_ID_DE_BRIEF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/
-/** proporción por omisión según el formato (se declara en LÍMITES como «por omisión del formato») */
-export const PROPORCION_POR_FORMATO: Readonly<Record<string, string>> = { imagen: '4:5', carrusel: '4:5', historia: '9:16', estado: '9:16', reel: '9:16', video: '9:16', short: '9:16', tiktok: '9:16', kit: '9:16' }
+// 11-nov · regla #17: la proporción sale de `cadena_formatos_por_red.proporcion`; la lista por formato es el ÚNICO respaldo y vive en `proporciones.ts` (la usa también el brazo de video)
+export { PROPORCION_POR_FORMATO, proporcionDe }
 /** T8 · los formatos que filma el brazo de video (lo mismo que lee `esVideo` en la oficina: reel · short · video · tiktok); la hoja lo declara en LÍMITES para que la mesa sepa que escribe un guion */
 export const esFormatoDeVideo = (formato: string): boolean => /\b(reel|short|video|tiktok)\b/i.test(formato)
 export const NOTA_DE_VIDEO_EN_LIMITES = 'video corto de 8 a 15 s que filma el brazo de video a partir del guion de la mesa (sin voces ni narración; sin rostros reconocibles de personas reales)'
-const PROPORCION_POR_OMISION = '1:1'
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
 export type FilaDeHoja = Pick<Fila, 'id' | 'fecha' | 'hora' | 'red' | 'formato' | 'pilar' | 'tema' | 'datos'> & {
@@ -80,10 +80,6 @@ export function familiaDe(formatos: FormatosPorRed, red: string, formato: string
   const f = (formatos[red] ?? formatos[red.toLowerCase()] ?? []).find((x) => x.formato.toLowerCase() === formato.toLowerCase())
   return f?.familia ?? null
 }
-export function proporcionDe(formato: string, proporciones: Readonly<Record<string, string>> = PROPORCION_POR_FORMATO): { proporcion: string; por_omision: boolean } {
-  const p = proporciones[formato.toLowerCase()]
-  return p ? { proporcion: p, por_omision: true } : { proporcion: PROPORCION_POR_OMISION, por_omision: true }
-}
 const datosEnTexto = (datos: ReadonlyArray<DatoDeterminado>): string => datos.map((d) => `${limpio(d.dato)}: ${limpio(d.valor).replace(/;/g, ',')}${d.ref ? ` (${limpio(d.ref)})` : ''}`).join('; ')
 
 // ───────────────────────────────────────────────────────── el kit (port de kit-de-historias.js)
@@ -119,7 +115,8 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
   const c = ins.concepto
   const cap = c.capitulos.find((x) => (f.fase && x.clave === f.fase) || (idea && x.clave === idea.capitulo)) ?? null
   const porRed = b.por_red.find((x) => x.red === cab.red.toLowerCase()) ?? null
-  const { proporcion } = proporcionDe(cab.formato, ins.proporciones)
+  const { proporcion, por_omision, ilegible } = proporcionDeLaTabla(ins.formatos, cab.red, cab.formato, ins.proporciones)
+  if (ilegible) avisos.push(`${cab.id}: la proporción «${ilegible}» de ${cab.red.toLowerCase()} · ${cab.formato} en cadena_formatos_por_red no se puede leer · se usa ${proporcion}, la de por omisión del formato`)
   const esKit = cab.formato === 'kit'
   const cuando = `aprobar antes de publicar · publica el ${fechaEnLetras(f.fecha)}${f.hora ? ` a las ${limpio(f.hora).slice(0, 5)}` : ''}`
   const L: string[] = [
@@ -136,7 +133,7 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     campo('MENSAJE (uno)', mensajeDe(idea, f, avisos, cab.id)),
     // FIRMA 01-nov «hoja sin reja»: el gancho de la hoja es SUGERIDO; el final lo escribe la mesa de piezas (video: el coach con el método scripter)
     campo('GANCHO SUGERIDO', idea?.gancho ?? ''),
-    campo('LÍMITES', `proporción ${proporcion} (por omisión del formato ${cab.formato})${esFormatoDeVideo(cab.formato) ? ` · ${NOTA_DE_VIDEO_EN_LIMITES}` : ''} · ${b.obligatorios.no_se_dice.length ? `no se dice: ${b.obligatorios.no_se_dice.join(', ')}` : 'sin «no se dice» en el brief'}${idea?.foto ? ` · foto citada: ${idea.foto}` : ''}`),
+    campo('LÍMITES', `proporción ${proporcion} (${por_omision ? `por omisión del formato ${cab.formato}` : `dato de la tabla de formatos para ${cab.red.toLowerCase()} · ${cab.formato}`})${esFormatoDeVideo(cab.formato) ? ` · ${NOTA_DE_VIDEO_EN_LIMITES}` : ''} · ${b.obligatorios.no_se_dice.length ? `no se dice: ${b.obligatorios.no_se_dice.join(', ')}` : 'sin «no se dice» en el brief'}${idea?.foto ? ` · foto citada: ${idea.foto}` : ''}`),
     ...listaDe('VOCABULARIO DE LA MARCA', b.obligatorios.vocabulario),
     ...listaDe('PROHIBIDO', b.obligatorios.prohibido),
     campo('SINTAXIS', b.tono),

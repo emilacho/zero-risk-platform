@@ -33,7 +33,7 @@ function deLaMesa(v1: Plantilla, tipo: 'carrusel_mesa' | 'kit_mesa'): Plantilla 
   const elegir = pasos.find((p) => p.clave === 'elegir_version')!
   elegir.entrada = ['imagenes', 'observacion_imagen', 'visual_direction']
   return {
-    tipo, familia: tipo, pasos,
+    tipo, familia: tipo, clase: v1.clase, pasos,
     limites: {
       ...v1.limites,
       tope_encargo_usd: TOPE_DE_LA_MESA_USD,
@@ -59,13 +59,13 @@ export const TOPE_DE_LA_MESA_DE_BRIEF_USD = 1.6
 export const TOPE_DE_LA_MESA_DE_CONCEPTO_USD = 5
 const PASO_DE_LA_MESA: Plantilla['pasos'][number] = { clave: 'mesa', tipo: 'codigo', quien: 'sala', funcion: 'mesa', condicion: { tipo: 'siempre' }, entrada: [], salida_artefacto: 'mesa', tope_usd: 0 }
 export const BRIEF_MESA: Plantilla = {
-  tipo: 'brief_mesa', familia: 'brief_mesa',
+  tipo: 'brief_mesa', familia: 'brief_mesa', clase: 'interna',
   pasos: [{ ...PASO_DE_LA_MESA }],
   limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_BRIEF_USD, max_rondas: 1, mesa: true, plazo_mesa_min: 30 },
   indicaciones: {},
 }
 export const CONCEPTO_MESA: Plantilla = {
-  tipo: 'concepto_mesa', familia: 'concepto_mesa',
+  tipo: 'concepto_mesa', familia: 'concepto_mesa', clase: 'interna',
   pasos: [{ ...PASO_DE_LA_MESA }],
   limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, max_rondas: 2, rondas_minimas: 2, mesa: true, plazo_mesa_min: 90 },
   indicaciones: {},
@@ -78,7 +78,7 @@ export const CONCEPTO_MESA: Plantilla = {
  */
 export const TOPE_DE_LA_MESA_DE_REUBICACION_USD = 3
 export const REUBICACION_MESA: Plantilla = {
-  tipo: 'reubicacion_mesa', familia: 'reubicacion_mesa',
+  tipo: 'reubicacion_mesa', familia: 'reubicacion_mesa', clase: 'interna',
   pasos: [{ ...PASO_DE_LA_MESA }],
   limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_REUBICACION_USD, max_rondas: 1, mesa: true, plazo_mesa_min: 30 },
   indicaciones: {},

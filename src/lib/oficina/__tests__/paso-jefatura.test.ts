@@ -99,13 +99,13 @@ describe('lo que el paso manda a la jefatura', () => {
     expect(productoresDeLaPieza('carrusel').map((p) => p.donde)).toContain('laminas')
     expect(productoresDeLaPieza('carrusel').find((p) => p.donde === 'laminas')!.agente).toBe('carousel-designer')
     expect(productoresDeLaPieza('kit').find((p) => p.donde === 'estructura')!.agente).toBe('design-visual-storyteller')
-    expect(sobreDeLaRevision(enc, { familia: 'carrusel_ig_v1' }, e, material).payload.productores).toEqual(productoresDeLaPieza('carrusel'))
-    expect(sobreDeLaRevision(enc, { familia: 'kit_historias' }, e, material).payload.productores).toEqual(productoresDeLaPieza('kit'))
+    expect(sobreDeLaRevision(enc, { familia: 'carrusel_ig_v1', clase: 'carrusel' }, e, material).payload.productores).toEqual(productoresDeLaPieza('carrusel'))
+    expect(sobreDeLaRevision(enc, { familia: 'kit_historias', clase: 'kit' }, e, material).payload.productores).toEqual(productoresDeLaPieza('kit'))
   })
   it('traducir una salida: lo que no se tomó es desacuerdo (jefe · bloquea), la opinión externa es OPINIÓN y la pieza corregida es versión nueva', () => {
     const salida = { revision_id: 'r1', resultado: 'con_desacuerdo', marcas: { con_desacuerdo: true, sin_segunda_mirada: false }, desacuerdos: ['texto: falta el precio (no tomada: no lo sé)'], respuestas: [{ ficha_id: 'x', origen: 'externa', donde: 'texto', estado: 'no_tomada', razon: 'no aplica' }],
       artefacto_final: { pieza: { pie_de_foto: 'Nuevo pie' } }, opinion_externa: { texto: 'me gustó', modelo: 'm' }, imagen_por_rehacer: false, costo_usd: 0.3, simulado: false, versiones: [], pasos: 3, trace_id: 't', devolver_a: null, artifact_type: 'pieza', artifact_id: enc.id } as unknown as SalidaDeRevision
-    const r = aplicarSalidaDeJefatura({ familia: 'post_img' }, { ...e, artefactos: { ...e.artefactos, pieza_post: { version: 1, version_consumida: 1, datos: { pie_de_foto: 'viejo', hashtags: ['#a'] } } } }, salida, { reImagen: () => ({}) })
+    const r = aplicarSalidaDeJefatura({ familia: 'post_img', clase: 'post_img' }, { ...e, artefactos: { ...e.artefactos, pieza_post: { version: 1, version_consumida: 1, datos: { pie_de_foto: 'viejo', hashtags: ['#a'] } } } }, salida, { reImagen: () => ({}) })
     expect(r.fichas!.filter((f) => f.origen === 'jefe')).toMatchObject([{ gravedad: 'bloquea', estado: 'no_tomada', donde: 'texto' }])
     expect(r.fichas!.filter((f) => f.origen === 'externa')).toMatchObject([{ gravedad: 'sugerencia', estado: 'no_tomada', razon: 'no aplica', que: 'me gustó' }])
     expect(r.otros_artefactos!['pieza_post']).toEqual({ pie_de_foto: 'Nuevo pie', hashtags: ['#a'] })

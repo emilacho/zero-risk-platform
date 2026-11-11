@@ -10,7 +10,7 @@ import crypto from 'node:crypto'
 import { CABECERA_SALTAR_EDITOR } from '../cadena/constantes'
 import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, type BriefLeido } from './brief'
-import { briefEsDelEncargo } from './familia-del-brief'
+import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
@@ -18,7 +18,7 @@ import { armarPedidoAlRevisor } from './ciego'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
 import { previueloDeLaminas } from './identidad-visual'
-import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL } from './orquestador-laminas'
+import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
 import { contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, resumenDeCierreV } from './orquestador-video'
 import { confianzaDeLaFoto } from './fotos'
 import { candidatasDelEncargo, medirFotos } from './material-fotos'
@@ -34,7 +34,8 @@ import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } fro
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { DESCARTAR_EYEBROW_LARGO, procesarSalida, proyectarAlEsquema } from './salida'
 import { agotaLasVersiones, MAX_VERSIONES_POR_BRIEF } from './reapertura'
-import { decidirPuerta, FAMILIAS_SIN_PASARELA, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
+import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
+import { claseDe, tienePasarela } from './clase'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
@@ -78,14 +79,18 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   const v = validarSobre(entrada.cuerpo)
   if (!v.ok) return r(400, { error: v.codigo, errores: v.errores })
   const config = await P.almacen.leerConfig()
-  const dec = decidirPuerta(v.sobre, entrada.permitir_apagada ? { ...config, estado: 'encendida', familias_activas: [v.sobre.familia ?? ''] } : config, entrada.target_step_id, entrada.client_id)
+  // fila #19 · la plantilla se lee ANTES de la puerta: si la familia tiene pieza simple lo dice la clase de su plantilla (dato), no su nombre
+  const pl = entrada.target_step_id === TARGET_STEP_PRODUCIR && v.sobre.familia ? await P.almacen.leerPlantilla(v.sobre.familia) : null
+  const clase = claseDe(pl?.plantilla)
+  const dec = decidirPuerta(v.sobre, entrada.permitir_apagada ? { ...config, estado: 'encendida', familias_activas: [v.sobre.familia ?? ''] } : config, entrada.target_step_id, entrada.client_id, !tienePasarela(clase))
   if (dec.accion === 'rechazar') return r(400, { error: 'origen_no_aceptado', detalle: `solo se acepta ${TARGET_STEP_PRODUCIR}` })
   if (dec.accion === 'pasarela') return r(409, { error: 'oficina_no_abre', motivo: dec.motivo, detalle: 'la oficina no abre este encargo; el sobre sigue por la pieza simple (pasarela)' })
   // T8 · el video no tiene pieza simple: el sobre espera a que la mesa de video esté activa (el flujo NO debe mandarlo por la pasarela)
   if (dec.accion === 'sin_sala') return r(409, { error: 'sin_sala', familia: dec.familia, motivo: dec.motivo, sin_pasarela: true, detalle: `la familia ${dec.familia} no tiene pieza simple: el sobre espera a que la oficina la abra; no sigue por la pasarela` })
-  const pl = await P.almacen.leerPlantilla(dec.familia)
   if (!pl) return r(404, { error: 'plantilla_desconocida', familia: dec.familia })
-  if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia, ...(FAMILIAS_SIN_PASARELA.includes(dec.familia) ? { sin_pasarela: true } : {}) })
+  // fila #19 · una plantilla que no declara su clase no abre encargos: no se adivina por el nombre (antes caía como «post»)
+  if (!clase) return r(409, { error: 'plantilla_sin_clase', familia: dec.familia, detalle: `la plantilla ${dec.familia} no declara su clase (post_img · carrusel · kit · video · interna) en oficina_tipos_de_grupo.clase: la oficina no la abre hasta que la declare` })
+  if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia, ...(!tienePasarela(clase) ? { sin_pasarela: true } : {}) })
   // 28-oct · CHEQUEO GRATIS de la puerta del portero: si el portero no contesta (llave rota tras una rotación, flujo apagado), el encargo NO se crea ni gasta; una sola alarma por incidente
   if (P.chequearPortero && pl.plantilla.pasos.some((x) => x.tipo === 'portero')) {
     const ch = await P.chequearPortero()
@@ -344,6 +349,24 @@ function saltoPorFalta(paso: Paso, e: Estado): ResultadoDePaso | null {
   return null
 }
 
+/**
+ * 11-nov · GO Lenovo 12:52 Zúrich · «mirar» respondió (con su reintento) pero la respuesta no se pudo LEER: «no pude leer» nunca es «descartar» (la forma de #1014).
+ * La imagen que se le mostró sigue en la pieza tal cual (nadie dijo que no cumpla) y una ficha QUE BLOQUEA pide que una persona la mire: no pasa sola.
+ * Una re-imagen ilegible no pisa nada: se queda la imagen anterior.
+ */
+export function sinLecturaDeMirar(paso: Paso, e: Estado, errores: string[]): ResultadoDePaso {
+  const motivo = errores.slice(0, 2).join(' · ')
+  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'una persona decide si se rehace')] }
+  const items = imagenesAMirar(e)
+  return {
+    costo_usd: 0,
+    artefacto: { observaciones: [], preferencia: [], veredicto: { pasan: items.map((i) => i.indice), porImagen: [], regenerar: false }, sin_lectura: true },
+    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que la imagen cumple el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); la imagen sigue en la pieza sin juzgar`, 'formato de la observación', 'una persona mira la imagen antes de aprobar')],
+    reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' },
+  }
+}
+const ES_MIRAR = (clave: string): boolean => clave === 'mirar' || clave === 'reimagen_mirar'
+
 // ───────────────────────── funciones de código
 type SalidaCodigo = { res: ResultadoDePaso; gastos?: Cambios['gastos']; usos?: Cambios['usos_de_fotos']; imagen_generada?: boolean; fallido?: string }
 
@@ -360,7 +383,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       const planId = planDeOrigen(parte.texto)
       const plan = planId ? await P.plan(planId, enc.client_id) : null
       if (plan) fu.plan_texto = plan
-      const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P))
+      const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P), claseDeLaFamilia(P))
       if (!sala.ok) return { res: { costo_usd: 0 }, fallido: sala.motivo }
       const proporcion = proporcionDelBrief(brief, String(pl.limites.formato_por_omision ?? '1:1'))
       return { res: { costo_usd: 0, artefacto: { brief, proporcion, F: fu } } }
@@ -652,6 +675,14 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
     return r(200, { accion: 'esperar', reintento_de_formato: true, turno: { n: n2, paso: paso.clave, tipo: paso.tipo, agente, dispatch_key: dk, pedido } })
   }
   if (!p.ok && p.accion === 'reintentar') return pedirReintento(p.mensaje_de_error, 'formato: reintento')
+  // 11-nov · «mirar» ilegible tras su reintento: la pieza sigue con la imagen SIN juzgar y una ficha que bloquea (una persona mira); nunca se cae el encargo por la forma de la respuesta
+  if (!p.ok && ES_MIRAR(paso.clave)) {
+    const sl = familiaDeLaminas(pl) ? sinLecturaDeMirarL(paso, e, p.errores) : sinLecturaDeMirar(paso, e, p.errores)
+    const { [`fmt:${paso.clave}`]: _fm, ...vueltasSinFmt } = e.vueltas
+    void _fm
+    await aplicarResultado(P, { ...enc, estado_del_motor: { ...e, vueltas: vueltasSinFmt } }, pl, sig.indice, { ...sl, costo_usd: costo }, { vuelta: sig.vuelta, turno: { ...turnoBase, estado: 'hecho', error: `formato ilegible tras ${intentos + 1} intento(s): ${p.errores.slice(0, 2).join(' · ')} · sigue sin juzgar la imagen` }, gastos: gastoModelo, n })
+    return avanzar(P, enc.id)
+  }
   if (!p.ok) {
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), fichas: [...e.fichas, fichaNueva(`formato-${paso.clave}`, 'chequeo', 'formato', 'bloquea', p.ficha.que ?? 'formato inválido')], turno: { ...turnoBase, n, estado: 'fallo', error: p.errores.join(' · ') }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
     return fallar(P, { ...enc, gasto_usd: +(e.gasto_usd + costo).toFixed(6) }, p.ficha.que ?? 'formato inválido')

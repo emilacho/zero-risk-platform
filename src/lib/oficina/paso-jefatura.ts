@@ -9,6 +9,7 @@
  */
 import type { PayloadDeRevision, Productor, SalidaDeRevision } from '../jefatura/revision/contrato'
 import { datos, fichaNueva } from './ayudas'
+import { claseDe } from './clase'
 import type { ContextoDelRevisor } from './ciego'
 import type { Encargo } from './puertos'
 import type { ResultadoDePaso } from './motor'
@@ -19,7 +20,8 @@ export const CLAVE_DEL_PASO_JEFATURA = 'jefatura'
 export const ARTEFACTO_DE_LA_JEFATURA = 'respuesta_imagen'
 export type FamiliaDePieza = 'post_img' | 'carrusel' | 'kit' | 'video'
 
-export const familiaDePieza = (pl: Pick<Plantilla, 'familia'>): FamiliaDePieza => (pl.familia === 'carrusel_ig_v1' || pl.familia === 'carrusel_mesa' ? 'carrusel' : pl.familia === 'kit_historias' || pl.familia === 'kit_mesa' ? 'kit' : pl.familia === 'video_mesa' ? 'video' : 'post_img')
+/** fila #19 · la clase la declara la plantilla (nunca el nombre de la familia); una plantilla sin clase no llega aquí: la puerta no la abre */
+export const familiaDePieza = (pl: Pick<Plantilla, 'clase'>): FamiliaDePieza => { const c = claseDe(pl); return c === 'carrusel' || c === 'kit' || c === 'video' ? c : 'post_img' }
 
 /**
  * Quién corrige cada parte de la pieza (reparo 2 de CC#3: la fila `pieza` de la política solo declara texto e imagen; el carrusel y el kit llevan además a quien dibuja o estructura).
@@ -49,7 +51,7 @@ export interface SobreDeRevisionDePieza {
 /** las marcas de los chequeos duros que siguen abiertas: viajan como DATO (regla 10), no entran en el pedido de nadie */
 const marcasHeredadas = (e: Estado): string[] => e.fichas.filter((f) => f.origen === 'chequeo' && f.estado === 'abierta').map((f) => `${f.donde}: ${f.que ?? ''}`.trim())
 
-export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'familia' | 'tope_usd' | 'dry_run' | 'sala_ref'>, pl: Pick<Plantilla, 'familia'>, e: Estado, m: MaterialDeLaRevision): SobreDeRevisionDePieza {
+export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'familia' | 'tope_usd' | 'dry_run' | 'sala_ref'>, pl: Pick<Plantilla, 'familia' | 'clase'>, e: Estado, m: MaterialDeLaRevision): SobreDeRevisionDePieza {
   const familia = familiaDePieza(pl)
   const heredadas = marcasHeredadas(e)
   const journey = enc.sala_ref && typeof enc.sala_ref._journey_id === 'string' && enc.sala_ref._journey_id ? enc.sala_ref._journey_id : null
@@ -114,7 +116,7 @@ export interface OpcionesDeAplicacion {
   reImagen: (tomada: { razon: string } | null) => Record<string, unknown>
 }
 
-export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia'>, e: Estado, salida: SalidaDeRevision, o: OpcionesDeAplicacion): ResultadoDePaso {
+export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>, e: Estado, salida: SalidaDeRevision, o: OpcionesDeAplicacion): ResultadoDePaso {
   const familia = familiaDePieza(pl)
   const incompleta = salida.resultado === 'fallida' || salida.resultado === 'incompleta_por_tope'
   const respuestas = Array.isArray(salida.respuestas) ? salida.respuestas : []

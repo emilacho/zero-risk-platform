@@ -117,6 +117,14 @@ export class AlmacenMemoria implements Almacen {
     const f = this.mesaDeReubicacion
     return f ? async (sobre) => { this.sobresDeReubicacion.push(structuredClone(sobre)); return f(sobre) } : undefined
   }
+  /** 11-nov (#1014 · relectura) · el texto guardado de cada encargo de la mesa; la prueba lo fija */
+  textosDeLaMesa: Record<string, string> = {}
+  /** encargos cuya lectura falla (la base no responde) */
+  textosQueFallan = new Set<string>()
+  async textoGuardadoDeLaMesa(encargoId: string): Promise<{ ok: true; texto: string | null } | { ok: false; motivo: string }> {
+    if (this.textosQueFallan.has(encargoId)) return { ok: false, motivo: 'la base no respondió' }
+    return { ok: true, texto: this.textosDeLaMesa[encargoId] ?? null }
+  }
   async plazos() { return plazosDeLaMigracion() }
   async formatos(): Promise<FormatosPorRed> { return formatosDeLaMigracion() }
   async cargarContexto(clientId: string) { return this.semilla.contextos?.[clientId] ?? null }
@@ -204,9 +212,9 @@ export class AlmacenMemoria implements Almacen {
       else this.filasGuardadas.push(nueva)
     }
   }
-  async reubicarFila(campanaId: string, version: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string) {
+  async reubicarFila(campanaId: string, version: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string, desde?: readonly Fila['estado'][]) {
     const f = this.filasGuardadas.find((x) => x.campana_id === campanaId && x.calendario_version === version && x.id === filaId)
-    if (!f || (f.estado !== 'validada' && f.estado !== 'lista_para_brief')) return false
+    if (!f || !(desde ?? ['validada', 'lista_para_brief']).includes(f.estado)) return false
     Object.assign(f, patch, { avisos: [...f.avisos, aviso] })
     return true
   }

@@ -3,6 +3,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { POST_IMG } from '../plantillas/post-img'
+import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
+import { KIT_HISTORIAS } from '../plantillas/kit-historias'
+import { BRIEF_MESA, CARRUSEL_MESA, CONCEPTO_MESA, KIT_MESA, REUBICACION_MESA } from '../plantillas/mesa'
+import { VIDEO_MESA } from '../plantillas/video-mesa'
+const CLASE_DEL_CODIGO: Record<string, string | undefined> = Object.fromEntries([POST_IMG, CARRUSEL_IG_V1, KIT_HISTORIAS, CARRUSEL_MESA, KIT_MESA, BRIEF_MESA, CONCEPTO_MESA, REUBICACION_MESA, VIDEO_MESA].map((p) => [p.familia, p.clase]))
 import { avanzar, recibirResultado, type Respuesta } from '../orquestador'
 import type { Almacen, Cambios, Encargo, FuentesCompletas, PedidoDeRender, Puertos, TurnoRegistrado , ResultadoRevisor } from '../puertos'
 import type { FotoEtiquetada } from '../fotos'
@@ -74,7 +79,9 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
   }
   const almacen: Almacen = {
     leerConfig: async () => m.config,
-    leerPlantilla: async () => m.plantilla,
+    // fila #19 · la memoria sigue devolviendo SU plantilla para cualquier familia (como siempre), pero con la CLASE verdadera de esa familia si es una de las del código:
+    // así la clase de otra familia no sale igual a la propia (lo que tapaba la red de «¿este brief es de esta sala?»)
+    leerPlantilla: async (familia) => (!m.plantilla || m.plantilla.plantilla.familia === familia || !(familia in CLASE_DEL_CODIGO) ? m.plantilla : { ...m.plantilla, plantilla: { ...m.plantilla.plantilla, clase: CLASE_DEL_CODIGO[familia] } }),
     leerFormato: async (red, formato) => FORMATOS.find((x) => x.red === red && x.formato === formato) ?? null,
     crearEncargo: async (n) => {
       const previos = [...m.encargos.values()].filter((x) => x.parte_id === n.parte_id && x.brief_id === n.brief_id && x.tipo_de_grupo === n.tipo_de_grupo).sort((a, b) => b.version_encargo - a.version_encargo)

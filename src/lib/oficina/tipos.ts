@@ -69,6 +69,8 @@ export interface Limites {
 export interface Plantilla {
   tipo: string
   familia: string
+  /** fila #19 · la clase de la pieza (post_img | carrusel | kit | video | interna) la declara la plantilla; ver `clase.ts` */
+  clase?: string
   pasos: Paso[]
   limites: Limites
   /** agente → reglas con su aplicador (código | jefe | gpt | guia) */

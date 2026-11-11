@@ -19,7 +19,7 @@ function sembrar(): DbFalsa {
   db.semilla('client_web_pages', [{ client_id: CLIENTE, competitor_id: null, owner_role: 'referencia', content_text: 'Carta de un homónimo {"@type":"MenuItem","name":"Pizza","offers":{"price":"99.00","priceCurrency":"USD"}}' }, { client_id: CLIENTE, competitor_id: null, owner_role: 'propio', content_text: 'Carta {"@type":"MenuItem","name":"Ceviche","offers":{"price":"7.00","priceCurrency":"USD"}} {"@type":"MenuItem","name":"Encebollado","offers":{"price":"5.50","priceCurrency":"USD"}}' }, { client_id: CLIENTE, competitor_id: 'otro', content_text: '{"@type":"MenuItem","name":"Ajeno","offers":{"price":"99.00"}}' }])
   db.semilla('client_historical_outputs', [{ id: PARTE, client_id: CLIENTE, output_type: 'campaign_brief_pack', content: PARTE_REAL }])
   db.semilla('oficina_config', [{ id: 1, estado: 'encendida', familias_activas: ['post_img'], clientes_ensayo: [] }])
-  db.semilla('oficina_tipos_de_grupo', [{ tipo: 'post_img', familia: 'post_img', pasos: POST_IMG.pasos, indicaciones: POST_IMG.indicaciones, limites: POST_IMG.limites, activo: true }])
+  db.semilla('oficina_tipos_de_grupo', [{ tipo: 'post_img', familia: 'post_img', clase: 'post_img', pasos: POST_IMG.pasos, indicaciones: POST_IMG.indicaciones, limites: POST_IMG.limites, activo: true }])
   db.semilla('oficina_entrega_formatos', [{ red: 'instagram', formato: 'foto_1x1', ancho: 1080, alto: 1080, ratio: '1:1', tipos_archivo: ['png', 'jpeg'], peso_max_mb: 8, n_min: 1, n_max: 1, texto_max: 2200, hashtags_max: 30, pasos_publicacion: ['Descargar', 'Pegar'], verificado: false }])
   return db
 }

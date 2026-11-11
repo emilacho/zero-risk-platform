@@ -220,6 +220,8 @@ export interface Almacen {
    * OPCIONAL: sin ella, la cadena no abre la mesa y lo avisa una vez. Nunca lanza: un fallo vuelve como `error`.
    */
   abrirMesaDeReubicacion?(sobre: import('./reubicar').SobreDeReubicacion): Promise<import('./reubicar').ResultadoDeAbrirMesa>
+  /** 11-nov (#1014 · relectura · OPCIONAL): el texto que dejó guardado la mesa de un encargo ya cerrado (sin llamar al agente); null si no hay. Nunca lanza. */
+  textoGuardadoDeLaMesa?(encargoId: string): Promise<{ ok: true; texto: string | null } | { ok: false; motivo: string }>
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>
   escribirConfig(clave: string, valor: unknown): Promise<void>
@@ -288,7 +290,8 @@ export interface Almacen {
   guardarFilas(campanaId: string, calendarioVersion: number, estrategiaVersion: number, filas: Fila[], seco: boolean): Promise<void>
   cambiarEstadoDeFilas(campanaId: string, calendarioVersion: number, ids: string[], estado: Fila['estado']): Promise<void>
   /** 10-nov · escritura CONDICIONAL de una fila que quedó atrás: solo si sigue sin producir (`validada` o `lista_para_brief`); suma `aviso` a sus avisos. Devuelve si se aplicó. */
-  reubicarFila(campanaId: string, calendarioVersion: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string): Promise<boolean>
+  /** 11-nov (#1014 · relectura): `desde` cambia los estados en que la fila tiene que estar para que se aplique (por omisión, sin producir) */
+  reubicarFila(campanaId: string, calendarioVersion: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string, desde?: readonly Fila['estado'][]): Promise<boolean>
   ultimaVersionDeCalendario(campanaId: string): Promise<number>
   /**
    * 10-nov · LOTE MUERTO (`lote-muerto.ts`) · OPCIONALES: sin ellos el reloj manda los lotes como siempre.

@@ -90,6 +90,11 @@ describe('los candados: nace apagado y no inventa nada', () => {
     expect(acciones(r)).toEqual(['BRF-0001:vencida', 'BRF-0002:vencida', 'BRF-0004:vencida']); expect(s.emitidos).toHaveLength(0); expect(s.escrituras).toBe(0)
     expect(r.plan[0].detalle).toBe('la fila era del 2026-10-26')
   })
+  it('lo vencido informa los intentos que YA se hicieron (los de la libreta), sin sumar uno (pedido de CC7 en #1029)', async () => {
+    const s = base(); s.ahora = min(15 * 1440); s.libreta = { [`${PARTE}:BRF-0002`]: { n: 2, ultimo_en: min(60).toISOString() } }
+    const r = await pasada(s)
+    expect(r.plan.map((l) => `${l.brief_id}:${l.accion}:${l.intentos}`)).toEqual(['BRF-0001:vencida:0', 'BRF-0002:vencida:2', 'BRF-0004:vencida:0'])
+  })
 })
 
 describe('11-nov · fila #1 · el corte es la fecha de LA FILA, no la edad del parte (dos clientes, dos rubros)', () => {

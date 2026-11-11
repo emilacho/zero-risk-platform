@@ -261,7 +261,8 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   }
   const textoPieza = quitarLineasDeNotas(ult.texto)
   const b = baseDeLaminas(enc.estado_del_motor)
-  const opcionesDelTraductor = { preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR }
+  const maxLaminas = Number(pl.limites?.laminas_max)
+  const opcionesDelTraductor = { preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, ...(Number.isInteger(maxLaminas) && maxLaminas > 0 ? { maxLaminas } : {}) }
   // el VIDEO (parte 2 · 31-oct): la pieza es un GUION; el traductor de láminas no aplica (sin imágenes que generar: el brazo filma)
   const tr: Traduccion | TraduccionDeGuion = est.tipo === 'video'
     ? traducirGuion(textoPieza, opcionesDelTraductor)

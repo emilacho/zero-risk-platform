@@ -75,9 +75,15 @@ describe('briefEsDeLaFamilia · la regla, sin sala', () => {
     expect(briefEsDeLaFamilia(b('LINKEDIN', 'foto'), 'post_img', TABLA)).toEqual({ ok: true })
     expect(briefEsDeLaFamilia(b('TikTok', 'video'), 'video_mesa', TABLA)).toEqual({ ok: true })
   })
-  it('las variantes de la mesa son la misma pieza (carrusel_mesa ≡ carrusel_ig_v1)', () => {
-    expect(briefEsDeLaFamilia(b('Instagram', 'carrusel'), 'carrusel_mesa', TABLA)).toEqual({ ok: true })
-    expect(briefEsDeLaFamilia(b('Instagram', 'historia'), 'kit_mesa', TABLA)).toEqual({ ok: true })
+  it('las variantes de la mesa son la misma pieza cuando SUS PLANTILLAS declaran la misma clase (fila #19 · dato, no nombre)', () => {
+    const CLASES = { carrusel_mesa: 'carrusel', carrusel_ig_v1: 'carrusel', kit_mesa: 'kit', kit_historias: 'kit' } as const
+    expect(briefEsDeLaFamilia(b('Instagram', 'carrusel'), 'carrusel_mesa', TABLA, CLASES)).toEqual({ ok: true })
+    expect(briefEsDeLaFamilia(b('Instagram', 'historia'), 'kit_mesa', TABLA, CLASES)).toEqual({ ok: true })
+    // sin clase legible de alguna de las dos, otra familia es otra sala
+    expect(briefEsDeLaFamilia(b('Instagram', 'carrusel'), 'carrusel_mesa', TABLA).ok).toBe(false)
+    expect(briefEsDeLaFamilia(b('Instagram', 'carrusel'), 'carrusel_mesa', TABLA, { carrusel_mesa: 'carrusel', carrusel_ig_v1: null }).ok).toBe(false)
+    // dos familias de NOMBRE parecido pero clase distinta en sus plantillas NO son la misma pieza
+    expect(briefEsDeLaFamilia(b('Instagram', 'carrusel'), 'carrusel_mesa', TABLA, { carrusel_mesa: 'kit', carrusel_ig_v1: 'carrusel' }).ok).toBe(false)
   })
   it('otra clase de pieza frena: carrusel en video, reel en carrusel, foto en kit', () => {
     expect(briefEsDeLaFamilia(b('Instagram', 'carrusel'), 'video_mesa', TABLA).ok).toBe(false)

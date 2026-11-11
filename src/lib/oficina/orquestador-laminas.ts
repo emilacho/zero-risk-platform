@@ -8,7 +8,8 @@ import { candidatasDelEncargo, medirFotos } from './material-fotos'
 import { limitesDeMaterial } from './material'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { elementosDelKit, planDeOrigen, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
-import { briefEsDelEncargo } from './familia-del-brief'
+import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
+import { claseDe, dibujaLaminas } from './clase'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, leerMedidas, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega, type FilaDeFormato } from './entrega'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import {
@@ -24,8 +25,8 @@ import { ROLES_DE_LAMINA } from './salida'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 
 export type FamiliaDeLaminas = 'carrusel' | 'kit'
-/** la plantilla es de varias láminas si es una de estas dos (el resto de las familias las atiende el orquestador de la sala 1) */
-export const familiaDeLaminas = (pl: Pick<Plantilla, 'familia'>): FamiliaDeLaminas | null => (pl.familia === 'carrusel_ig_v1' || pl.familia === 'carrusel_mesa' ? 'carrusel' : pl.familia === 'kit_historias' || pl.familia === 'kit_mesa' ? 'kit' : null)
+/** la plantilla es de varias láminas si su clase (dato de la plantilla · fila #19) dibuja láminas (el resto de las familias las atiende el orquestador de la sala 1) */
+export const familiaDeLaminas = (pl: Pick<Plantilla, 'clase'>): FamiliaDeLaminas | null => { const c = claseDe(pl); return dibujaLaminas(c) ? c : null }
 
 export interface BaseL { brief: BriefLeido; proporcion: string; F: FuentesCompletas; familia: FamiliaDeLaminas; plataforma: string; elementos: ElementoDelKit[] }
 const baseL = (e: Estado): BaseL => datos(e, 'encargo') as unknown as BaseL
@@ -90,6 +91,26 @@ export function armarPedidoL(pl: Plantilla, paso: Paso, e: Estado, extra?: { fic
   return construirTareaLaminas(paso.clave, contextoL(pl, e), { fichas: extra?.fichas ?? fichasQueTocanL(e, paso), ...(extra?.errorDeFormato ? { errorDeFormato: extra.errorDeFormato } : {}) })
 }
 
+/**
+ * 11-nov · GO Lenovo 12:52 Zúrich · «mirar» respondió (con su reintento) pero la respuesta no se pudo LEER: «no pude leer» nunca es «descartar».
+ * Las imágenes que se le mostraron siguen en la pieza tal cual (nadie dijo que no cumplan), y una ficha QUE BLOQUEA pide que una persona las mire: no pasa sola.
+ * Una re-imagen ilegible no pisa nada: se queda la imagen anterior.
+ */
+export function sinLecturaDeMirarL(paso: Paso, e: Estado, errores: string[]): ResultadoDePaso {
+  const motivo = errores.slice(0, 2).join(' · ')
+  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'una persona decide si se rehace')] }
+  const mostradas = imagenesAMirarL(e)
+  const aceptadas: Record<string, number[]> = { ...((datos(e, 'observacion_imagen')?.aceptadas ?? {}) as Record<string, number[]>) }
+  for (const m of mostradas) aceptadas[m.ref] = [...new Set([...(aceptadas[m.ref] ?? []), m.indice])]
+  const refsSin = refsGeneradas(e).filter((r) => !(aceptadas[r]?.length))
+  return {
+    costo_usd: 0,
+    artefacto: { observaciones: [], aceptadas, preferencia: [], veredicto: { pasan: mostradas.map((m) => m.indice), porImagen: [], regenerar: false, refs_sin_imagen: refsSin }, sin_lectura: true },
+    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que las imágenes cumplen el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); las imágenes siguen en la pieza sin juzgar`, 'formato de la observación', 'una persona mira las imágenes antes de aprobar')],
+    reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' },
+  }
+}
+
 /** pasos de agente que se saltan sin llamar a nadie: mirar sin ninguna imagen que mirar */
 export function saltoL(paso: Paso, e: Estado): ResultadoDePaso | null {
   if (paso.clave === 'mirar' && imagenesAMirarL(e).length === 0) {
@@ -135,7 +156,7 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const plan = planId ? await P.plan(planId, enc.client_id) : null
   if (plan) fu.plan_texto = plan
   // GO 11-nov «la mesa confía en la familia»: la familia ya la decidió la cadena; no se re-adivina por el texto del brief (red: la tabla de formatos de la cadena)
-  const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P))
+  const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P), claseDeLaFamilia(P))
   if (!sala.ok) return { res: { costo_usd: 0 }, fallido: sala.motivo }
   let elementos: ElementoDelKit[] = []
   if (fam === 'kit') {
