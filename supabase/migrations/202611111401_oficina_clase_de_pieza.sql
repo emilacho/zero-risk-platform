@@ -5,7 +5,7 @@
 -- Una plantilla nueva sin clase NO se puede guardar (not null + check): no cae en silencio como «post».
 -- Solo agrega una columna a una tabla que ya existe: los permisos de la tabla (lectura del servidor) la cubren; no se abre nada a public, anon ni authenticated.
 -- ORDEN: esta migración se aplica ANTES de publicar el código (el código lee la columna `clase`).
--- Reversa (solo si se revierte el código primero): alter table public.oficina_tipos_de_grupo drop constraint if exists oficina_tipos_de_grupo_clase_valida; alter table public.oficina_tipos_de_grupo drop column if exists clase;
+-- Reversa (solo si se revierte el código primero): supabase/reversas/202611111401_oficina_clase_de_pieza_REVERSA.sql
 -- Agnóstico: ningún dato de un cliente.
 begin;
 
