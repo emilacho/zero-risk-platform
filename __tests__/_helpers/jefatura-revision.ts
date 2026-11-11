@@ -50,6 +50,13 @@ export const FILAS_DE_POLITICA: Record<string, Record<string, unknown>> = {
     huecos_pregunta: { que_es: 'el registro de un documento', uso: 'que el documento le hable al público como dice el manual del cliente' }, indicacion_fondo: 'Revisas solo el registro.', chequeos_previos: [],
     tope_revision_usd: 0.8, tope_paso_usd: { revision_fondo: 0.3, correccion: 0.3 }, destino_cierre: 'siguiente_paso', reentrega: 'completa', is_active: false,
   },
+  // 11-nov · colateral (2d parte 4): la fila de 202611111200, tal cual
+  colateral: {
+    artifact_type: 'colateral', artifact_class: 'revision', judgment_enabled: false, revisor_fondo: 'editor_en_jefe', revisor_ciego: false,
+    contra_que: { documentos: [DOC('edicion_del_dueno', 'La edición del dueño', 'lo que el dueño ya decidió: cada retoque debe serle fiel')] }, productores: [{ donde: '*', agente: 'content-creator' }], esquema_correccion: null,
+    huecos_pregunta: { que_es: 'los retoques colaterales de una edición del dueño', uso: 'que los documentos que dependen de la edición queden alineados sin cambiar su voz ni sus hechos' }, indicacion_fondo: 'Juzgas cada retoque: fiel a la edición del dueño, sin cambiar voz ni hechos.', chequeos_previos: [],
+    tope_revision_usd: 0.3, tope_paso_usd: { revision_fondo: 0.25 }, destino_cierre: 'siguiente_paso', reentrega: 'ninguna', is_active: false,
+  },
   manual: { artifact_type: 'manual', artifact_class: 'revision', judgment_enabled: false, revisor_fondo: null, revisor_ciego: false, reentrega: 'ninguna', productores: [], is_active: false },
 }
 

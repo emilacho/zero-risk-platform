@@ -22,6 +22,7 @@ import { atiende, casarId, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpin
 import { ESTADOS_TERMINALES, type CambiosDeRevision, type PasoRegistrado, type Puertos, type Revision } from './puertos'
 import { moldeDelPaso, simulacionDelRevisor } from './simulacion'
 import { CLAVE_DE_VERIFICACION, evaluarOrdenes, partirOrdenes, tareaDeVerificacionDeOrdenes, type FilaDeVerificacion } from './orden-del-dueno'
+import { CLAVE_DE_REVISION_COLATERAL, tareaDeRevisionColateral, verificarVeredictos, type VeredictosVerificados } from './colateral'
 import { aplicarReemplazos, avisoDeCita, CLAVE_DE_REVISION_DE_REGISTRO, clasificarFichas, ESQUEMA_DE_REEMPLAZOS, tareaDeCorreccionDeRegistro, tareaDeRevisionDeRegistro, type FichaDeRegistro, type Reemplazo } from './registro'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
@@ -133,7 +134,7 @@ async function aplicar(P: Puertos, rev: Revision, pl: Plantilla, indice: number,
   return { ...rev, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso' }
 }
 
-const ROL_DE: (clave: string) => string = (c) => (c === CLAVE_DE_REVISION_DE_REGISTRO ? 'registro' : c === 'revision_fondo' ? 'fondo' : c === 'revision_lengua' ? 'lengua' : c === 'segunda_mirada' ? 'ciego' : c === CLAVE_DE_VERIFICACION ? 'verificador' : c.startsWith('correccion:') ? 'productor_corrige' : 'productor_decide')
+const ROL_DE: (clave: string) => string = (c) => (c === CLAVE_DE_REVISION_COLATERAL ? 'colateral' : c === CLAVE_DE_REVISION_DE_REGISTRO ? 'registro' : c === 'revision_fondo' ? 'fondo' : c === 'revision_lengua' ? 'lengua' : c === 'segunda_mirada' ? 'ciego' : c === CLAVE_DE_VERIFICACION ? 'verificador' : c.startsWith('correccion:') ? 'productor_corrige' : 'productor_decide')
 /** la traza M1 de un paso: namespace `metadata.jefatura` (diseño §6) */
 function trazaM1(rev: Revision, paso: Paso, extra: Datos = {}): Record<string, unknown> {
   return { jefatura: { role: ROL_DE(paso.clave), review_id: rev.id, artifact_type: rev.artifact_type, artifact_id: rev.artifact_id, cycle: 0, nominal_agent: paso.quien, contra_que_ref: rev.policy.contra_que.map((d) => d.clave), policy_snapshot: { artifact_type: rev.policy.artifact_type, reentrega: rev.policy.reentrega, tope_revision_usd: rev.policy.tope_revision_usd }, ...extra } }
@@ -159,7 +160,9 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
   let ids: string[] = []
   let donde = 'general'
   const duenos = duenosDe(rev.productores)
-  if (paso.clave === CLAVE_DE_REVISION_DE_REGISTRO) {
+  if (paso.clave === CLAVE_DE_REVISION_COLATERAL) {
+    t = tareaDeRevisionColateral({ payload: p })
+  } else if (paso.clave === CLAVE_DE_REVISION_DE_REGISTRO) {
     t = tareaDeRevisionDeRegistro({ payload: p, texto })
   } else if (tipo === 'registro' && esCorreccion(paso)) {
     const mias = fichasPropias(rev, e, paso, duenoDe(rev, paso))
@@ -189,7 +192,7 @@ function armarPedido(rev: Revision, pl: Plantilla, paso: Paso, e: Estado, n: num
   const malos = auditarPedidoDeAgente(pedido)
   if (malos.length) throw new Error(`pedido inválido (regla dura del editor): ${malos.join(' · ')}`)
   const frases = tipo === 'registro' ? Object.fromEntries(e.fichas.filter((f) => ids.includes(f.id)).map((f) => [f.id, f.que ?? ''])) : undefined
-  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, ...(frases ? { frases } : {}), objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined, ...(paso.clave === CLAVE_DE_VERIFICACION ? { ordenes: p.ordenes_del_dueno, versiones: h } : {}) }) : undefined
+  const molde = rev.dry_run ? moldeDelPaso({ paso: paso.clave, esquema: t.esquema, sim: p.simulacion, ids_de_fichas: ids, donde, texto, ...(frases ? { frases } : {}), objeto: rd.objeto as Datos | undefined, filas: rd.filas as Array<Record<string, unknown>> | undefined, esDecision: esDecision(paso), reintento: errorDeFormato !== undefined, ...(paso.clave === CLAVE_DE_REVISION_COLATERAL ? { ids_de_retoques: (p.retoques ?? []).map((x) => x.id) } : {}), ...(paso.clave === CLAVE_DE_VERIFICACION ? { ordenes: p.ordenes_del_dueno, versiones: h } : {}) }) : undefined
   return { agente: paso.quien, pedido: { ...pedido, ...(molde ? { molde } : {}) } as Record<string, unknown>, ...(molde ? { molde } : {}) }
 }
 
@@ -323,6 +326,8 @@ interface Procesado { res?: ResultadoDePaso; fallido?: string; reintentar?: stri
 
 function procesarValor(paso: Paso, v: Record<string, unknown>, rev: Revision, e: Estado): Procesado {
   if (paso.clave === CLAVE_DE_VERIFICACION) return { res: { costo_usd: 0, artefacto: { filas: v.filas } } }
+  // 11-nov · colateral: el jefe juzgó; el código ata cada veredicto a un id pedido (nada se aprueba por omisión)
+  if (paso.clave === CLAVE_DE_REVISION_COLATERAL) return { res: { costo_usd: 0, artefacto: { ...verificarVeredictos((rev.entrada.retoques ?? []).map((x) => x.id), v.veredictos) } } }
   // 10-nov · registro: el agente juzgó; el código verifica lo exacto. Solo es ficha la frase LITERAL fuera de citas; lo que está en citas es aviso; lo no literal se descarta y se anota
   if (paso.clave === CLAVE_DE_REVISION_DE_REGISTRO) {
     const texto = String(datos(e, 'revision')?.texto ?? '')
@@ -429,6 +434,14 @@ export function entregaDe(rev: Revision, salida: SalidaDeRevision): Entrega {
   }
 }
 
+/** colateral: los veredictos verificados del paso del jefe · sin paso (falló, venció o cerró por tope) = TODOS sin veredicto (nunca se aprueba por omisión) */
+function veredictosDe(e: Estado, rev: Revision): VeredictosVerificados {
+  const v = datos(e, 'veredictos') as Partial<VeredictosVerificados> | null
+  const pedidos = (rev.entrada.retoques ?? []).map((x) => x.id)
+  if (!v || !Array.isArray(v.veredictos)) return { veredictos: [], sin_veredicto: pedidos, inventados: [] }
+  return { veredictos: v.veredictos, sin_veredicto: Array.isArray(v.sin_veredicto) ? v.sin_veredicto : [], inventados: Array.isArray(v.inventados) ? v.inventados : [] }
+}
+
 export function armarSalida(rev: Revision, c: Cierre): SalidaDeRevision {
   const e = rev.estado_del_motor
   const { historial: _historial, ...rd } = (datos(e, 'revision') ?? {}) as Datos
@@ -443,6 +456,7 @@ export function armarSalida(rev: Revision, c: Cierre): SalidaDeRevision {
     opinion_externa: typeof ext?.opinion === 'string' && ext.opinion ? { texto: ext.opinion, modelo: typeof ext.modelo === 'string' ? ext.modelo : null } : null,
     imagen_por_rehacer: e.fichas.some((f) => f.id === 'imagen-por-rehacer'),
     ...(() => { const av = [...(e.avisos ?? []), ...(((datos(e, 'fichas_jefe')?.avisos_de_registro as string[] | undefined) ?? []))]; return av.length ? { avisos: av } : {} })(),
+    ...(rev.artifact_type === 'colateral' ? { veredictos: veredictosDe(e, rev) } : {}),
     desacuerdos: c.desacuerdos, costo_usd: e.gasto_usd, pasos: e.pasos_ejecutados, trace_id: `jefatura:${rev.id}`, devolver_a: rev.devolver_a, simulado: rev.dry_run,
   }
 }
