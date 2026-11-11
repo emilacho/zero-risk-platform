@@ -37,17 +37,39 @@ export interface PedidoDeVideoDeLaOficina {
   prompt_recortado: boolean
 }
 
-export function armarPedidoDeLaOficina(o: { guion: TraduccionDeGuion; brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string; /** 11-nov · regla #17: la proporción que trae el brief (dato de la tabla de formatos); sin ella, la de por omisión */ relacion?: string }): { ok: true; pedido: PedidoDeVideoDeLaOficina } | { ok: false; errores: string[] } {
+/**
+ * 11-nov · GO Lenovo 16:34 (decisión de Emilio) · el guion nombra las fotos por su NOMBRE CORTO (los primeros caracteres del id): una foto se encuentra si su id es igual
+ * o si es la ÚNICA propia cuyo id empieza con esos caracteres. Si empiezan así varias, es ambigua: no se adivina. Corrige un dato; no es una verificación nueva. Puro.
+ */
+export function buscarFotoPropia(id: string, propias: ReadonlyArray<{ id: string; url: string }>): { url: string } | { ambigua: number } | null {
+  const k = id.trim().toLowerCase()
+  if (!k) return null
+  const exacta = propias.find((f) => f.id.toLowerCase() === k)
+  if (exacta) return { url: exacta.url }
+  const empiezan = propias.filter((f) => f.id.toLowerCase().startsWith(k))
+  if (empiezan.length === 1) return { url: empiezan[0].url }
+  return empiezan.length > 1 ? { ambigua: empiezan.length } : null
+}
+
+/** las fotos PROPIAS con dirección https: las únicas que pueden viajar al modelo */
+export const fotosPropiasConDireccion = (fotos: FotoEtiquetada[]): Array<FotoEtiquetada & { url: string }> =>
+  fotos.filter((f) => (f.origen ?? 'propia') === 'propia' && !!f.url && /^https:\/\/\S+$/.test(f.url)) as Array<FotoEtiquetada & { url: string }>
+
+export function armarPedidoDeLaOficina(o: { guion: TraduccionDeGuion; brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string; /** 11-nov · regla #17: la proporción que trae el brief (dato de la tabla de formatos); sin ella, la de por omisión */ relacion?: string }): { ok: true; pedido: PedidoDeVideoDeLaOficina; /** los nombres cortos del guion que coinciden con VARIAS fotos propias (también están en `fotos_no_halladas`) */ ambiguas: string[] } | { ok: false; errores: string[] } {
   const formato = formatoDeVideo(o.brief)
-  const propias = new Map(o.fotos.filter((f) => (f.origen ?? 'propia') === 'propia' && f.url && /^https:\/\/\S+$/.test(f.url)).map((f) => [f.id, f.url as string]))
+  const propias = fotosPropiasConDireccion(o.fotos)
   const urls: string[] = []
   const noHalladas: string[] = []
-  for (const id of o.guion.fotos_ids) { const u = propias.get(id); if (u) { if (!urls.includes(u)) urls.push(u) } else noHalladas.push(id) }
+  const ambiguas: string[] = []
+  for (const id of o.guion.fotos_ids) {
+    const h = buscarFotoPropia(id, propias)
+    if (h && 'url' in h) { if (!urls.includes(h.url)) urls.push(h.url) } else { noHalladas.push(id); if (h) ambiguas.push(id) }
+  }
   const { prompt, recortado } = promptDelGuion(o.guion)
   const entrada = { prompt, formato, segundos: o.guion.segundos, resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: urls.slice(0, MAX_FOTOS_DE_REFERENCIA) }
   const v = armarPedido(entrada)
   if (!v.ok) return { ok: false, errores: v.errores }
-  return { ok: true, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: noHalladas, clave: o.clave, prompt_recortado: recortado } }
+  return { ok: true, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: noHalladas, clave: o.clave, prompt_recortado: recortado }, ambiguas }
 }
 
 /** 11-nov · el texto de los pedidos de COTIZACIÓN: nunca se filma (la cotización usa `dry_run` del brazo, que solo estima) */
