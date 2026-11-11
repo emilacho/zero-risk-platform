@@ -133,11 +133,13 @@ describe.each(CASOS)('$nombre', (k) => {
   it('el marco lleva las filas pasadas, las que vienen, los plazos, los horarios y la forma de responder', () => {
     const filas = [fila(k, 'pasada', ayer), fila(k, 'futura', k.abierto)]
     const m = marcoDeReubicacion(filasPasadas(filas, k.hoy), ctx(k, filas), 'Cliente de práctica')
-    expect(m).toContain(`- pasada · ${ayer}`)
-    expect(m).toContain(`- futura · ${k.abierto}`)
+    // 11-nov (opción A): cada fila lleva su hora, para que la mesa no pise a otra pieza al reubicar
+    expect(m).toContain(`- pasada · ${ayer} ${k.hora}`)
+    expect(m).toContain(`- futura · ${k.abierto} ${k.hora}`)
     expect(m).toContain('plazo de producción: 3 días')
     expect(m).toContain('máximo 1 por día')
     expect(m).toContain(k.c.sedes[0].clave)
-    expect(m).toContain('<fila_id> · reubicar · AAAA-MM-DD · razón')
+    expect(m).toContain('<fila_id> · reubicar · AAAA-MM-DD · HH:MM · razón')
+    expect(m).toMatch(/propón también la HORA/)
   })
 })

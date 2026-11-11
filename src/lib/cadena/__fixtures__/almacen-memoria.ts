@@ -212,7 +212,7 @@ export class AlmacenMemoria implements Almacen {
       else this.filasGuardadas.push(nueva)
     }
   }
-  async reubicarFila(campanaId: string, version: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string, desde?: readonly Fila['estado'][]) {
+  async reubicarFila(campanaId: string, version: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'hora' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string, desde?: readonly Fila['estado'][]) {
     const f = this.filasGuardadas.find((x) => x.campana_id === campanaId && x.calendario_version === version && x.id === filaId)
     if (!f || !(desde ?? ['validada', 'lista_para_brief']).includes(f.estado)) return false
     Object.assign(f, patch, { avisos: [...f.avisos, aviso] })

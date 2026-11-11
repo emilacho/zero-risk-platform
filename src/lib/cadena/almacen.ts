@@ -291,7 +291,7 @@ export interface Almacen {
   cambiarEstadoDeFilas(campanaId: string, calendarioVersion: number, ids: string[], estado: Fila['estado']): Promise<void>
   /** 10-nov · escritura CONDICIONAL de una fila que quedó atrás: solo si sigue sin producir (`validada` o `lista_para_brief`); suma `aviso` a sus avisos. Devuelve si se aplicó. */
   /** 11-nov (#1014 · relectura): `desde` cambia los estados en que la fila tiene que estar para que se aplique (por omisión, sin producir) */
-  reubicarFila(campanaId: string, calendarioVersion: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string, desde?: readonly Fila['estado'][]): Promise<boolean>
+  reubicarFila(campanaId: string, calendarioVersion: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'hora' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string, desde?: readonly Fila['estado'][]): Promise<boolean>
   ultimaVersionDeCalendario(campanaId: string): Promise<number>
   /**
    * 10-nov · LOTE MUERTO (`lote-muerto.ts`) · OPCIONALES: sin ellos el reloj manda los lotes como siempre.
