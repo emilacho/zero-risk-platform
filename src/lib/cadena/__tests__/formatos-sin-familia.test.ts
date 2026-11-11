@@ -53,6 +53,11 @@ describe('qué fila es «sin familia» (contra la tabla real)', () => {
     for (const xs of Object.values(enBlanco)) for (const x of xs) x.familia = ''
     expect(filaSinFamilia({ red: 'instagram', formato: 'anuncio_imagen' }, enBlanco)).toBe(false)
   })
+  it('🔴 (CC7 · 3) la clave del aviso lleva la versión del calendario: una versión nueva abre su propio incidente', () => {
+    expect(claveDelAvisoSinFamilia('camp-1', 1)).not.toBe(claveDelAvisoSinFamilia('camp-1', 2))
+    expect(claveDelAvisoSinFamilia('camp-1', 2)).toBe('cadena:formato-sin-familia:camp-1:2')
+    expect(claveDelAvisoSinFamilia('camp-1', 1)).not.toBe(claveDelAvisoSinFamilia('camp-2', 1))
+  })
   it('la nota es reconocible (para no repetirla) y dice la red y el formato', () => {
     const n = notaSinFamilia({ red: 'facebook', formato: 'anuncio_imagen' })
     expect(esNotaSinFamilia(n)).toBe(true)
