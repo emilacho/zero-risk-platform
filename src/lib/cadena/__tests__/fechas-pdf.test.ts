@@ -178,6 +178,31 @@ describe('bajarPdf · tope, redirecciones y protocolo', () => {
     const r = await bajarPdf('https://www.sri.gob.ec/f.pdf', lento(10_000, () => resp(200, PDF_FERIADOS_EC)), 1_000_000, 40)
     expect(r).toEqual({ ok: false, razon: 'no se pudo bajar (tiempo agotado)' })
   })
+  /** (CC7) la cabecera llega enseguida y el CUERPO se cuelga: entrega el comienzo y no termina hasta que la señal lo corta, como fetch */
+  const cuerpoColgado = (async (_u: string, o?: RequestInit) => {
+    const s = o?.signal
+    const cuerpo = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode('%PDF-1.7\n'))
+        if (!s) return
+        if (s.aborted) c.error(s.reason); else s.addEventListener('abort', () => c.error(s.reason))
+      },
+    })
+    return new Response(cuerpo, { status: 200, headers: { 'content-type': 'application/pdf' } })
+  }) as unknown as typeof fetch
+  it('🔴 (CC7) un cuerpo que se cuelga a mitad se corta en el plazo y se dice «tiempo agotado» (no revienta)', async () => {
+    expect(await bajarPdf('https://www.sri.gob.ec/f.pdf', cuerpoColgado, 1_000_000, 40)).toEqual({ ok: false, razon: 'no se pudo bajar (tiempo agotado)' })
+  })
+  it('🔴 (CC7) en la misma llamada, el PDF de cuerpo colgado sale descartado y el otro SIGUE leído', async () => {
+    const al = mundo(); const id = await campanaDe(al, A.clientId)
+    const f = (async (u: string, o?: RequestInit) => (u === PDF_EC ? cuerpoColgado(u, o) : resp(200, PDF_FERIADOS_EC, { 'content-type': 'application/pdf' }))) as unknown as typeof fetch
+    const OTRO = 'https://www.turismo.gob.ec/feriados'
+    const d: DependenciasDePdf = { bajar: (u) => bajarPdf(u, f, 1_000_000, 40), leer: (b, n) => leerPdf(b, n) }
+    const r = await fechasLeerPdf(al, pedir(id, 'Ecuador', [PDF_EC, OTRO]), d)
+    expect(r.status).toBe(200)
+    expect(r.cuerpo.descartadas).toEqual([{ url: PDF_EC, razon: 'no se pudo bajar (tiempo agotado)' }])
+    expect((r.cuerpo.paginas as Array<{ url: string }>).map((p) => p.url)).toEqual([OTRO])
+  })
   it('🔴 el plazo es UNO para todos los saltos: 3 redirecciones de 25 ms no caben en 50 ms (aunque cada una sola sí)', async () => {
     let n = 0
     const f = lento(25, () => (++n <= 3 ? resp(302, null, { location: `/r${n}.pdf` }) : resp(200, PDF_FERIADOS_EC)))
