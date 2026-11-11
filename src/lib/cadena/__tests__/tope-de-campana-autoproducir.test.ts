@@ -3,7 +3,7 @@
  * Lo gastado se siembra CONSTRUIDO (los US$ 26,28 de Náufrago en una corrida); la lectura real de la base se prueba en `tope-de-campana.test.ts`.
  */
 import { beforeEach, describe, expect, it } from 'vitest'
-import { avisoDelTope, claveDelTope } from '../tope-de-campana'
+import { avisoDelTope, claveDelTope, prefijoDelTope } from '../tope-de-campana'
 import { filasAutoproducir } from '../autoproducir'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 
@@ -54,6 +54,34 @@ describe('autoproducir con el freno · avisa UNA vez por el buzón (condición 4
     await llamar(al, c.id)
     await llamar(al, c.id)
     expect(al.avisosAlBuzon.map((a) => [a.clave, a.accion])).toEqual([[claveDelTope(c.id, 32), 'abrio'], [claveDelTope(c.id, 33), 'abrio'], [claveDelTope(c.id, 33), 'repetida']])
+    // 11-nov · cada pasada cierra las de OTROS montos (la de 32 cuando el tope ya es 33) ANTES de avisar: queda UNA abierta por campaña
+    expect(al.cierresDelBuzon.map((x) => x.salvo)).toEqual([claveDelTope(c.id, 32), claveDelTope(c.id, 33), claveDelTope(c.id, 33)])
+    expect(al.cierresDelBuzon.every((x) => x.prefijo === prefijoDelTope(c.id) && claveDelTope(c.id, 32).startsWith(x.prefijo))).toBe(true)
+    expect(al.cierresDelBuzon[1].nota).toMatch(/ahora es US\$ 33\.00/)
+  })
+  it('11-nov · todo cabe: se cierran TODAS las preguntas del tope de la campaña (resueltas, no contestadas); en seco, nada', async () => {
+    const { al, c } = await montar(40)
+    await llamar(al, c.id)
+    expect(al.cierresDelBuzon).toEqual([{ prefijo: prefijoDelTope(c.id), salvo: null, nota: expect.stringMatching(/cabe en su tope \(US\$ 40\.00\)/) }])
+    expect(al.cierresDelBuzon[0].nota).not.toMatch(/^contestada/i)
+    const seco = await montar(40)
+    await llamar(seco.al, seco.c.id, true)
+    expect(seco.al.cierresDelBuzon).toEqual([])
+  })
+  it('11-nov · sin tope: queda solo la pregunta «sin tope»; un gasto ilegible no cierra nada (no hay decisión)', async () => {
+    const { al, c } = await montar(null)
+    await llamar(al, c.id)
+    expect(al.cierresDelBuzon.map((x) => x.salvo)).toEqual([claveDelTope(c.id, null)])
+    const ilegible = await montar(40)
+    ilegible.al.falloDeLecturaDeGasto = 'la base no contesta'
+    await llamar(ilegible.al, ilegible.c.id)
+    expect(ilegible.al.cierresDelBuzon).toEqual([])
+  })
+  it('11-nov · el prefijo de una campaña no abarca la clave de otra', () => {
+    const a = '28de888e-b3f2-4aca-86b3-2c7f7bf6685a', b = '28de888e-b3f2-4aca-86b3-2c7f7bf6685b'
+    expect(claveDelTope(b, 40).startsWith(prefijoDelTope(a))).toBe(false)
+    expect(claveDelTope(a, 40).startsWith(prefijoDelTope(a))).toBe(true)
+    expect(prefijoDelTope(a)).not.toMatch(/[%_*\\]/)
   })
   it('un brief RETENIDO de otro parte que va ANTES en el calendario guarda su lugar; si va DESPUÉS, no (construido · la llamada real)', async () => {
     const fila = (id: string, fecha: string, hora: string) => ({ id, fecha, hora, estado: 'validada', red: 'instagram', formato: 'foto', campana_id: '', calendario_version: 1 }) as any

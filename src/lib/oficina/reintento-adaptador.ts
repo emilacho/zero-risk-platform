@@ -5,7 +5,7 @@
  */
 import { almacenDeSupabase as almacenDeLaCadena } from '@/lib/cadena/almacen-supabase'
 import { decidirTopeDelParte, sobresDeProducir } from '@/lib/cadena/autoproducir'
-import { avisoDeGastoIlegible, avisoDelTope, type DecisionDelTope } from '@/lib/cadena/tope-de-campana'
+import { avisoDeGastoIlegible, avisoDelTope, cierreDelTope, type DecisionDelTope } from '@/lib/cadena/tope-de-campana'
 import { reintentarPiezas, CLAVE_INTERRUPTOR, CLAVE_LIBRETA, type Libreta, type ParteParaReintento, type PuertosDeReintento, type ResultadoDelReintento } from '@/lib/cadena/reintento-piezas'
 import type { Db } from './almacen-supabase'
 import { identidadVisualDelCliente, previueloDeLaminas } from './identidad-visual'
@@ -67,6 +67,7 @@ export function puertosDeReintento(db: Db, env: { slackToken?: string; canalHilo
         if (o.avisar) await cadena.avisarAlBuzon({ ...avisoDeGastoIlegible(campana, e instanceof Error ? e.message : String(e)), ...firma }).catch(() => null)
         throw e
       }
+      if (o.avisar) { const cierre = cierreDelTope(campana, d); await cadena.cerrarEnElBuzon(cierre.prefijo, cierre.salvo, cierre.nota).catch(() => null) }
       if (o.avisar && d.tipo !== 'cabe') await cadena.avisarAlBuzon({ ...avisoDelTope(campana, d), ...firma }).catch(() => null)
       const usd = (n: number) => `US$ ${n.toFixed(2)}`
       const motivo = d.tipo === 'sin_tope' ? 'la campaña no tiene tope de gasto' : d.tipo === 'corta' ? `no cabe en el tope de la campaña (${usd(d.tope)} · gastado ${usd(d.gastado)} · comprometido ${usd(d.comprometido)})` : null

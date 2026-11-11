@@ -15,7 +15,7 @@
  */
 import type { Almacen, Campana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
-import { avisoDeGastoIlegible, avisoDelTope, costoEsperadoDeLaPieza, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
+import { avisoDeGastoIlegible, avisoDelTope, cierreDelTope, costoEsperadoDeLaPieza, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
 import { hoyEnZona } from './campanas'
 import { familiaDeFila } from './familia'
 import { filaSinFamilia } from './sin-familia'
@@ -195,6 +195,9 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
       const aviso = await avisar(avisoDeGastoIlegible(c, e instanceof Error ? e.message : String(e)))
       return { status: 200, cuerpo: { accion: 'autoproducir', emite: false, motivo: 'gasto_de_campana_ilegible', emitidos: 0, duplicados: 0, rechazados: 0, omitidos, sobres: [], tope: { decision: 'gasto_ilegible', retenidas: todos.map((x) => x.payload.brief_id), aviso } } }
     }
+    // 11-nov · lo que dejó de aplicar se cierra ANTES de avisar (UNA pregunta abierta por campaña): otros montos del tope y, si todo cabe, también la del actual
+    const cierre = cierreDelTope(c, d)
+    await al.cerrarEnElBuzon(cierre.prefijo, cierre.salvo, cierre.nota)
     if (d.tipo === 'sin_tope') {
       const aviso = await avisar(avisoDelTope(c, d))
       return { status: 200, cuerpo: { accion: 'autoproducir', emite: false, motivo: 'campana_sin_tope', emitidos: 0, duplicados: 0, rechazados: 0, omitidos, sobres: [], tope: { decision: 'sin_tope', retenidas: d.retenidas, aviso } } }

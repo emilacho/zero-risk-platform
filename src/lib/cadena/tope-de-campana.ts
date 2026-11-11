@@ -173,7 +173,18 @@ export function decidirTope(topeCampana: unknown, medido: { gastado: number; com
 }
 
 /** la clave del incidente en el buzón · una por campaña y MONTO de tope (subir el tope abre una pregunta nueva la próxima vez que se llegue) */
-export const claveDelTope = (campanaId: string, tope: number | null): string => `cadena:tope-de-campana:${campanaId}:${tope === null ? 'sin-tope' : String(tope)}`
+export const prefijoDelTope = (campanaId: string): string => `cadena:tope-de-campana:${campanaId}:`
+export const claveDelTope = (campanaId: string, tope: number | null): string => `${prefijoDelTope(campanaId)}${tope === null ? 'sin-tope' : String(tope)}`
+/**
+ * 11-nov · CC2 (decisión Lenovo 18:50) · lo que se CIERRA en el buzón con cada decisión: las preguntas del tope de OTROS montos de la campaña
+ * (el tope cambió: esa pregunta ya no aplica) y, si todo cabe, también la del monto actual. Se cierran como «resueltas», no «contestadas»:
+ * si la campaña vuelve a ese monto y no cabe, se pregunta de nuevo.
+ */
+export function cierreDelTope(c: { id: string }, d: DecisionDelTope): { prefijo: string; salvo: string | null; nota: string } {
+  if (d.tipo === 'cabe') return { prefijo: prefijoDelTope(c.id), salvo: null, nota: `todo lo de la campaña cabe en su tope (US$ ${d.tope.toFixed(2)})` }
+  if (d.tipo === 'sin_tope') return { prefijo: prefijoDelTope(c.id), salvo: claveDelTope(c.id, null), nota: 'la campaña quedó sin tope de gasto: esta pregunta ya no aplica' }
+  return { prefijo: prefijoDelTope(c.id), salvo: claveDelTope(c.id, d.tope), nota: `el tope de la campaña ahora es US$ ${d.tope.toFixed(2)}: esta pregunta ya no aplica` }
+}
 export const claveDelGastoIlegible = (campanaId: string): string => `cadena:gasto-de-campana-ilegible:${campanaId}`
 
 export interface AvisoDelTope { clave: string; tipo: 'pregunta' | 'alarma'; client_id: string; titulo: string; detalle: string }

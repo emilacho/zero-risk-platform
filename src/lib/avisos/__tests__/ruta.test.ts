@@ -1,10 +1,10 @@
 /** La puerta POST /api/avisos: llave interna, 400 claros, 500 si no guarda (y entonces 0 llamadas a Slack), 200 aunque Slack caiga. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const estado = vi.hoisted(() => ({ rpcError: null as null | { message: string }, rpcs: [] as string[] }))
+const estado = vi.hoisted(() => ({ rpcError: null as null | { message: string }, rpcs: [] as string[], args: [] as Array<Record<string, unknown>> }))
 vi.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: () => ({
-    rpc: async (fn: string) => { estado.rpcs.push(fn); return estado.rpcError ? { data: null, error: estado.rpcError } : { data: [{ aviso_id: 'u1', accion: 'abrio', slack_ts: null, slack_estado: 'pendiente' }], error: null } },
+    rpc: async (fn: string, args: Record<string, unknown>) => { estado.rpcs.push(fn); estado.args.push(args); return estado.rpcError ? { data: null, error: estado.rpcError } : { data: [{ aviso_id: 'u1', accion: 'abrio', slack_ts: null, slack_estado: 'pendiente' }], error: null } },
     from: () => ({ update: () => ({ eq: async () => ({ error: null }) }) }),
   }),
 }))
@@ -16,7 +16,7 @@ const base = { accion: 'avisar', clave: 'prueba:ruta', tipo: 'alarma', origen: '
 let llamadasSlack = 0
 
 beforeEach(() => {
-  estado.rpcError = null; estado.rpcs = []; llamadasSlack = 0
+  estado.rpcError = null; estado.rpcs = []; estado.args = []; llamadasSlack = 0
   vi.stubEnv('INTERNAL_API_KEY', LLAVE); vi.stubEnv('SLACK_BOT_TOKEN', 'tok'); vi.stubEnv('AVISOS_A_SLACK', '')
   vi.stubGlobal('fetch', async () => { llamadasSlack++; return new Response(JSON.stringify({ ok: false, error: 'service_unavailable' }), { status: 503 }) })
 })
@@ -55,5 +55,11 @@ describe('POST /api/avisos', () => {
     vi.stubEnv('AVISOS_A_SLACK', 'apagado')
     expect(await (await POST(pedir(base))).json()).toMatchObject({ ok: true, slack: 'apagado' })
     expect(llamadasSlack).toBe(0)
+  })
+  it('11-nov · cerrar con contestada:true guarda la nota con la marca; sin ella, la nota tal cual', async () => {
+    expect((await POST(pedir({ accion: 'cerrar', clave: 'prueba:ruta', nota: 'el dueño subió el tope', contestada: true }))).status).toBe(200)
+    expect(estado.args.at(-1)).toEqual({ p_clave: 'prueba:ruta', p_nota: 'Contestada: el dueño subió el tope' })
+    await POST(pedir({ accion: 'cerrar', clave: 'prueba:ruta', nota: 'todo cabe', contestada: 'sí' }))
+    expect(estado.args.at(-1)).toEqual({ p_clave: 'prueba:ruta', p_nota: 'todo cabe' })
   })
 })

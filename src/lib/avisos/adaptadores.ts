@@ -2,7 +2,7 @@
  * AVISOS · adaptadores reales. Este archivo es el ÚNICO que nombra la tabla `avisos` y sus funciones (regla del proyecto).
  * Se usa con la llave del SERVIDOR: con la sesión de un usuario la tabla no se puede leer ni escribir, y es lo correcto (CC6 §2.5).
  */
-import type { AlmacenDeAvisos, Dependencias, EstadoSlack, Guardado, PublicarEnSlack, Tipo } from './nucleo'
+import { esContestada, type AlmacenDeAvisos, type Dependencias, type EstadoSlack, type Guardado, type PublicarEnSlack, type Tipo } from './nucleo'
 
 export type Db = { from(tabla: string): any; rpc(fn: string, args: Record<string, unknown>): any }
 type Traer = (u: string, i?: RequestInit) => Promise<Response>
@@ -27,6 +27,23 @@ export function almacenDeAvisos(db: Db): AlmacenDeAvisos {
       if (error) throw new Error(`cerrar el aviso: ${String(error.message ?? error).slice(0, 200)}`)
       const f = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined
       return f && typeof f.aviso_id === 'string' ? { aviso_id: f.aviso_id, slack_ts: (f.slack_ts as string | null) ?? null, tipo: f.tipo as Tipo } : null
+    },
+    async contestada(clave) {
+      // la ÚLTIMA fila de la clave (abierta o cerrada): solo cuenta si está cerrada y su nota empieza con «Contestada»
+      const { data, error } = await db.from('avisos').select('id,cerrado_en,nota_cierre,slack_ts,slack_estado').eq('clave', clave).order('abierto_en', { ascending: false }).limit(1)
+      if (error || !Array.isArray(data) || !data.length) return null
+      const f = data[0] as Record<string, unknown>
+      return f.cerrado_en && esContestada(f.nota_cierre as string | null) && typeof f.id === 'string'
+        ? { aviso_id: f.id, slack_ts: (f.slack_ts as string | null) ?? null, slack_estado: (f.slack_estado as EstadoSlack) ?? 'pendiente' }
+        : null
+    },
+    async cerrarFamilia(prefijo, salvo, nota) {
+      // update condicional: solo las ABIERTAS de esa familia (las columnas que el servidor puede actualizar: cerrado_en y nota_cierre)
+      let q = db.from('avisos').update({ cerrado_en: new Date().toISOString(), nota_cierre: nota }).like('clave', `${prefijo}%`).is('cerrado_en', null)
+      if (salvo) q = q.neq('clave', salvo)
+      const { data, error } = await q.select('id,slack_ts,tipo')
+      if (error) throw new Error(`cerrar la familia: ${String(error.message ?? error).slice(0, 200)}`)
+      return (Array.isArray(data) ? data : []).filter((f: Record<string, unknown>) => typeof f.id === 'string').map((f: Record<string, unknown>) => ({ aviso_id: f.id as string, slack_ts: (f.slack_ts as string | null) ?? null, tipo: f.tipo as Tipo }))
     },
     async anotarSlack(aviso_id, estado, ts, error) {
       const r = await db.from('avisos').update({ slack_estado: estado, slack_ts: ts, slack_error: error }).eq('id', aviso_id)

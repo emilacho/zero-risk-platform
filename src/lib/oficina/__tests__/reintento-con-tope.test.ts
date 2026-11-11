@@ -19,6 +19,7 @@ const cad = vi.hoisted(() => ({
   campanas: [] as Array<Record<string, unknown>>,
   emitidos: [] as SobreDeProducir[],
   buzon: [] as Array<Record<string, unknown>>,
+  cierres: [] as Array<{ prefijo: string; salvo: string | null; nota: string }>,
   gasto: null as null | (() => unknown),
   filas: [] as Array<Record<string, unknown>> | 'falla',
 }))
@@ -35,6 +36,7 @@ vi.mock('@/lib/cadena/almacen-supabase', () => ({
     leerGastoDeCampana: async () => cad.gasto!(),
     formatos: async () => ({}),
     avisarAlBuzon: async (a: Record<string, unknown>) => { cad.buzon.push(a); return { ok: true, accion: 'nuevo' } },
+    cerrarEnElBuzon: async (prefijo: string, salvo: string | null, nota: string) => { cad.cierres.push({ prefijo, salvo, nota }); return { ok: true, cerradas: 0 } },
   }),
 }))
 import { reintentoDeLaCadena } from '../reintento-adaptador'
@@ -57,7 +59,7 @@ const mundo = (clientId: string, partes: Array<Record<string, unknown>>, encargo
 const pasada = (db: DbFalsa, ejecutar = true) => reintentoDeLaCadena(db as never, { slackToken: 'xoxb-falso' }, { ejecutar }, reloj) as Promise<{ accion: string; emitidos: number; plan: Array<{ brief_id: string; accion: string; detalle?: string }> }>
 const acciones = (r: Awaited<ReturnType<typeof pasada>>) => r.plan.map((l) => `${l.brief_id}:${l.accion}`)
 
-beforeEach(() => { cad.config = { estado_cadena: 'encendida', reintento_piezas: true }; cad.emitidos = []; cad.buzon = []; cad.gasto = null; cad.filas = [] })
+beforeEach(() => { cad.config = { estado_cadena: 'encendida', reintento_piezas: true }; cad.emitidos = []; cad.buzon = []; cad.cierres = []; cad.gasto = null; cad.filas = [] })
 
 describe('restaurante · la foto con su encargo fallido sin gasto cuenta SU tope', () => {
   const CLIENTE = 'df7e47cc-bec4-4fa2-bc24-ff97ba5213a5'
@@ -77,6 +79,8 @@ describe('restaurante · la foto con su encargo fallido sin gasto cuenta SU tope
     expect(acciones(r)).toEqual([`${FOTO.brief_id}:reintentar`])
     expect(cad.emitidos.map((s) => s.idempotency_key)).toEqual([`${PARTE}:${FOTO.brief_id}:producir:r1`])
     expect(cad.buzon).toEqual([])
+    // 11-nov · todo cabe: se cierran las preguntas del tope de la campaña, de cualquier monto (resueltas, no contestadas)
+    expect(cad.cierres).toEqual([{ prefijo: `cadena:tope-de-campana:${CAMPANA}:`, salvo: null, nota: expect.stringMatching(/cabe en su tope \(US\$ 40\.00\)/) }])
   })
   it('no cabe (30 + 1,50 > 31): no sale, NO gasta un intento y avisa al buzón con el MISMO aviso que la vía normal', async () => {
     conTope(31)
@@ -87,6 +91,8 @@ describe('restaurante · la foto con su encargo fallido sin gasto cuenta SU tope
     expect(cad.config.reintentos_piezas).toBeUndefined()
     expect(cad.buzon).toHaveLength(1)
     expect(cad.buzon[0]).toMatchObject({ clave: `cadena:tope-de-campana:${CAMPANA}:31`, tipo: 'pregunta', client_id: CLIENTE, origen: 'cadena/reintento-de-piezas · tope de campaña' })
+    // 11-nov · las de OTROS montos se cierran; la del monto actual queda (salvo)
+    expect(cad.cierres).toEqual([{ prefijo: `cadena:tope-de-campana:${CAMPANA}:`, salvo: `cadena:tope-de-campana:${CAMPANA}:31`, nota: expect.stringMatching(/ahora es US\$ 31\.00/) }])
   })
   it('justo en el borde (30 + 1,50 = 31,50): sale (la misma regla «≤» de la vía normal)', async () => {
     conTope(31.5)
@@ -106,6 +112,7 @@ describe('restaurante · la foto con su encargo fallido sin gasto cuenta SU tope
     expect(acciones(r)).toEqual([`${FOTO.brief_id}:tope`]); expect(r.plan[0].detalle).toMatch(/ilegible: base caída/)
     expect(cad.emitidos).toEqual([]); expect(cad.config.reintentos_piezas).toBeUndefined()
     expect(cad.buzon[0]).toMatchObject({ clave: `cadena:gasto-de-campana-ilegible:${CAMPANA}`, tipo: 'alarma' })
+    expect(cad.cierres).toEqual([]) // sin decisión no se cierra nada
   })
   it('certificación CC7 · calendario ilegible: con el puerto real, la lectura del calendario falla → la pieza queda en «tope» (no se toma como calendario vacío)', async () => {
     conTope(40); cad.filas = 'falla'
@@ -117,7 +124,7 @@ describe('restaurante · la foto con su encargo fallido sin gasto cuenta SU tope
     conTope(31)
     const r = await pasada(db(), false)
     expect(r.accion).toBe('en_seco'); expect(acciones(r)).toEqual([`${FOTO.brief_id}:tope`])
-    expect(cad.buzon).toEqual([]); expect(cad.emitidos).toEqual([])
+    expect(cad.buzon).toEqual([]); expect(cad.emitidos).toEqual([]); expect(cad.cierres).toEqual([])
   })
 })
 

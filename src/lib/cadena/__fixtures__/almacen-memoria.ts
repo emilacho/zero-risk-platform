@@ -341,6 +341,12 @@ export class AlmacenMemoria implements Almacen {
     this.avisosAlBuzon.push({ ...a, accion })
     return { ok: true, accion }
   }
+  /** 11-nov · lo que el buzón cerró por familia (prefijo · salvo · nota) */
+  cierresDelBuzon: Array<{ prefijo: string; salvo: string | null; nota: string }> = []
+  async cerrarEnElBuzon(prefijo: string, salvo: string | null, nota: string): Promise<{ ok: true; cerradas: number }> {
+    this.cierresDelBuzon.push({ prefijo, salvo, nota })
+    return { ok: true, cerradas: 0 }
+  }
   sobresEmitidos: unknown[] = []
   async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision> {
     this.sobresEmitidos.push(sobre)

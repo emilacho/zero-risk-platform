@@ -363,6 +363,8 @@ export interface Almacen {
   configDeLaOficina?(): Promise<import('@/lib/oficina/sobre').ConfigDeOficina>
   /** 10-nov · el buzón de avisos (C1): abre el incidente o le suma una repetición con la MISMA clave · nunca lanza */
   avisarAlBuzon(a: AvisoDelTope & { origen: string; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; accion: string } | { ok: false; error: string }>
+  /** 11-nov · cierra en el buzón las abiertas de una familia de claves (salvo la vigente): lo que dejó de aplicar · nunca lanza */
+  cerrarEnElBuzon(prefijo: string, salvo: string | null, nota: string): Promise<{ ok: true; cerradas: number } | { ok: false; error: string }>
   /** r74 · F4 · llena las sedes y su horario con lo que el sistema YA guardó del cliente (sitio · Instagram · Mapas), con su fuente · US$ 0 · un fallo se declara, no frena */
   recolectarSedes(clientId: string): Promise<{ ok: boolean; sedes: number; error?: string }>
   /** deja UN sobre en la sala (intake) · idempotente por su llave: el repetido vuelve `duplicado` · nunca despacha */
