@@ -182,6 +182,59 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
     const conRecibo = dbFalsa({ agent_dispatches: [], agent_invocations: [{ workflow_execution_id: '7', cost_usd: 0.03 }], colaterales_retoques: [], jefatura_revisiones: [] })
     expect(await puertosDeSupabase(conRecibo.db, undefined, cadenaFalsa()).gastoDeLaEdicion({ id: E, workflow_execution_id: '7' } as never)).toMatchObject({ cobrado: 0.03, secretaria_sin_recibo: 0 })
   })
+  it('🔴 hueco 1 de CC6: la PRIMERA revisión sigue contando cuando todos sus retoques se rehicieron (se lee también por la edición misma · Náufrago y B2B)', async () => {
+    for (const [E, CL] of [['e0000000-0000-4000-8000-0000000000a1', CLI], ['e0000000-0000-4000-8000-0000000000b1', CLI2]] as const) {
+      const rev = (id: string, estado: string, gasto_usd: number, artifact_id: string, version: number) => ({ id, client_id: CL, estado, gasto_usd, artifact_type: 'colateral', artifact_id, version, policy_snapshot: { artifact_type: 'colateral' } })
+      const { db } = dbFalsa({
+        colaterales_ediciones: [{ id: E, client_id: CL, estado: 'en_curso', updated_at: '2026-11-11T08:00:00Z', workflow_execution_id: '50' }],
+        // los dos retoques se rehicieron: soltaron la revisión 1 y aún no tienen la 2
+        colaterales_retoques: [{ edicion_id: E, revision_id: null }, { edicion_id: E, revision_id: null }],
+        jefatura_revisiones: [rev('v1', 'cerrada', 0.3, E, 1), rev('v2', 'esperando_turno', 0, E, 2), rev('otra', 'cerrada', 9, 'otra-edicion', 1), { ...rev('pieza', 'cerrada', 9, E, 1), artifact_type: 'pieza' }],
+        agent_dispatches: [], agent_invocations: [{ workflow_execution_id: '50', cost_usd: 0.04, created_at: '2026-11-11T08:00:00Z' }],
+      })
+      const P = puertosDeSupabase(db, () => new Date('2026-11-11T12:00:00Z'), cadenaFalsa())
+      const g = await P.gastoDeLaEdicion({ id: E, workflow_execution_id: '50' } as never)
+      expect(g.cobrado).toBeCloseTo(0.04 + 0.3, 6)
+      expect(g.revisiones_abiertas).toBe(1)
+      const d = await P.gastoDelDia(CL, null)
+      expect(d.revisiones).toBeCloseTo(0.3, 6)
+      expect(d.revisiones_abiertas).toBe(1)
+    }
+  })
+  it('🔴 hueco 1 de CC6: una revisión que nombran los retoques Y la edición cuenta UNA sola vez', async () => {
+    const E = 'e0000000-0000-4000-8000-0000000000a2'
+    const { db } = dbFalsa({
+      colaterales_retoques: [{ edicion_id: E, revision_id: 'v1' }],
+      jefatura_revisiones: [{ id: 'v1', client_id: CLI, estado: 'cerrada', gasto_usd: 0.2, artifact_type: 'colateral', artifact_id: E, policy_snapshot: { artifact_type: 'colateral' } }],
+      agent_dispatches: [], agent_invocations: [],
+    })
+    expect((await puertosDeSupabase(db, undefined, cadenaFalsa()).gastoDeLaEdicion({ id: E, workflow_execution_id: null } as never)).cobrado).toBeCloseTo(0.2, 6)
+  })
+  it('🔴 hueco 2 de CC6: el gasto del día suma el recibo del REHACER (otra ejecución, por su llave exacta); sin recibo cuenta en vuelo; la llave de otra edición no entra (B2B y Náufrago)', async () => {
+    for (const CL of [CLI2, CLI]) {
+      const E = 'e0000000-0000-4000-8000-0000000000c1', F = 'e0000000-0000-4000-8000-0000000000c2'
+      const base = (rehacerEx: string) => dbFalsa({
+        colaterales_ediciones: [{ id: E, client_id: CL, estado: 'lista', updated_at: '2026-11-11T08:00:00Z', workflow_execution_id: '60' }, { id: F, client_id: CL, estado: 'lista', updated_at: '2026-11-11T08:00:00Z', workflow_execution_id: '70' }],
+        colaterales_retoques: [], jefatura_revisiones: [],
+        agent_dispatches: [
+          { dispatch_key: `colaterales:${E}:secretaria`, workflow_execution_id: '60' },
+          { dispatch_key: `colaterales:${E}:rehacer`, workflow_execution_id: rehacerEx },
+          { dispatch_key: `colaterales:${E}x:rehacer`, workflow_execution_id: '99' },
+        ],
+        agent_invocations: [
+          { workflow_execution_id: '60', cost_usd: 0.1, created_at: '2026-11-11T08:00:00Z' }, { workflow_execution_id: '70', cost_usd: 0.05, created_at: '2026-11-11T08:00:00Z' },
+          { workflow_execution_id: '61', cost_usd: 0.12, created_at: '2026-11-11T09:00:00Z' }, { workflow_execution_id: '99', cost_usd: 9, created_at: '2026-11-11T09:00:00Z' },
+        ],
+      })
+      const ahora = () => new Date('2026-11-11T12:00:00Z')
+      const con = await puertosDeSupabase(base('61').db, ahora, cadenaFalsa()).gastoDelDia(CL, null)
+      expect(con.recibos).toBeCloseTo(0.1 + 0.05 + 0.12, 6)
+      expect(con.en_vuelo).toBe(0)
+      const sin = await puertosDeSupabase(base('62').db, ahora, cadenaFalsa()).gastoDelDia(CL, null)
+      expect(sin.recibos).toBeCloseTo(0.1 + 0.05, 6)
+      expect(sin.en_vuelo).toBe(1)
+    }
+  })
   it('🔴 pieza B: el gasto del día suma las revisiones de la jefatura de ESAS ediciones (cerradas por su gasto; abiertas, contadas aparte); ni las de otro cliente ni las de la que pregunta', async () => {
     const ed = (id: string, client_id: string, estado: string, workflow_execution_id: string | null) => ({ id, client_id, estado, created_at: '2026-11-11T07:00:00Z', updated_at: '2026-11-11T08:00:00Z', workflow_execution_id })
     const { db, pedidos } = dbFalsa({
@@ -197,8 +250,8 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
     expect(g.revisiones).toBeCloseTo(0.21, 6)
     expect(g.revisiones_abiertas).toBe(1)
     expect(pedidos.find((q) => q.tabla === 'colaterales_retoques')).toMatchObject({ cols: ['edicion_id', 'revision_id'], filtros: ['in:edicion_id'] })
-    // por el almacén de la jefatura: una lectura por revisión, filtrada por id (nunca la de otro cliente ni la de la que pregunta)
-    expect(pedidos.filter((q) => q.tabla === 'jefatura_revisiones').map((q) => q.filtros)).toEqual([['eq:id'], ['eq:id']])
+    // por el almacén de la jefatura: las de esas ediciones por su propio nombre (hueco 1 de CC6) y una lectura por revisión de sus retoques, filtrada por id (nunca la de otro cliente ni la de la que pregunta)
+    expect(pedidos.filter((q) => q.tabla === 'jefatura_revisiones').map((q) => q.filtros)).toEqual([['eq:artifact_type', 'in:artifact_id'], ['eq:id'], ['eq:id']])
   })
   it('🔴 tope diario (RESPUESTA Lenovo 03:02Z): la fila del cliente manda; sin fila, la por omisión; sin ninguna o con un valor inválido, null', async () => {
     const filas = [{ client_id: null, tope_usd: '5.00' }, { client_id: CLI2, tope_usd: 12 }]

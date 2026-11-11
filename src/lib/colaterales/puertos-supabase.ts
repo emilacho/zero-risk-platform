@@ -17,7 +17,7 @@
  */
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { abrirRevisionConVuelta, almacenDeSupabase } from '../cadena/almacen-supabase'
-import { almacenDeSupabase as almacenDeJefatura } from '../jefatura/revision/almacen-supabase'
+import { almacenDeSupabase as almacenDeJefatura, revisionesDeArtefactos } from '../jefatura/revision/almacen-supabase'
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
 import { aplicarAprobados } from './aplicar'
 import type { Documento } from '../cadena/dependencias-de-documentos'
@@ -43,6 +43,19 @@ type Cadena = Pick<ReturnType<typeof almacenDeSupabase>, 'campana' | 'campanaViv
 export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, ahora: () => Date = () => new Date(), cadena: Cadena = almacenDeSupabase()): PuertosDelTurno {
   const estrategia = escritorDeEstrategia(cadena)
   const almacen = almacenDeColaterales(db)
+  // 11-nov · hueco 1 de CC6 · las revisiones de unas ediciones: las que nombran sus retoques Y las que se nombran por la edición misma (`colateral` + id de la edición, todas las versiones).
+  // Un retoque rehecho suelta su revisión: sin la segunda lectura, el gasto de la primera revisión desaparecía de las cuentas. Si la base falla, lanza
+  async function revisionesDeLasEdiciones(ids: string[]): Promise<Array<{ id: string; estado: string; gasto_usd: number }>> {
+    if (!ids.length) return []
+    const ret = (ok(await db.from('colaterales_retoques').select('edicion_id, revision_id').in('edicion_id', ids), 'leer las revisiones de los retoques') as { revision_id: string | null }[] | null) ?? []
+    const propias = await revisionesDeArtefactos(db as never, 'colateral', ids)
+    const vistas = new Set(propias.map((f) => f.id))
+    const sueltas = [...new Set(ret.map((f) => f.revision_id).filter((x): x is string => typeof x === 'string' && x !== '' && !vistas.has(x)))]
+    // la revisión se lee por el almacén de la JEFATURA (colaterales no nombra sus tablas, como la cadena)
+    const jefatura = almacenDeJefatura(db as never)
+    const otras = (await Promise.all(sueltas.map((id) => jefatura.leerRevision(id)))).filter((f): f is NonNullable<typeof f> => f !== null).map((f) => ({ id: f.id, estado: f.estado, gasto_usd: Number(f.gasto_usd) || 0 }))
+    return [...propias, ...otras]
+  }
   const P: PuertosDelTurno = {
     almacen,
     async filasActivas() {
@@ -72,21 +85,25 @@ export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, 
       const tomadas = (ok(await db.from('colaterales_ediciones').select('id, estado, workflow_execution_id').eq('client_id', client_id).eq('estado', 'en_curso'), 'leer las ediciones en curso') as Fila[] | null) ?? []
       const ed = [...new Map([...tocadas, ...tomadas].filter((f) => f.id !== sin_edicion).map((f) => [f.id, f])).values()]
       const ejecucion = (f: Fila): string | null => (typeof f.workflow_execution_id === 'string' && f.workflow_execution_id !== '' ? f.workflow_execution_id : null)
-      const ejecuciones = [...new Set(ed.map(ejecucion).filter((x): x is string => x !== null))]
+      // 11-nov · hueco 2 de CC6 · también las llamadas de esas ediciones por la llave EXACTA (secretaria y rehacer): el rehacer corre en otra ejecución que la de la edición
+      const llavesDe = new Map(ed.map((f) => [f.id, { secretaria: llaveDeLaSecretaria(f.id), rehacer: llaveDelRehacer(f.id) }]))
+      const todas = [...llavesDe.values()].flatMap((k) => [k.secretaria, k.rehacer])
+      type Despacho = { dispatch_key: string; workflow_execution_id: string | null }
+      const desp = todas.length ? ((ok(await db.from('agent_dispatches').select('dispatch_key, workflow_execution_id').in('dispatch_key', todas), 'leer las llamadas de las ediciones') as Despacho[] | null) ?? []) : []
+      const deLlave = new Map(desp.filter((d) => todas.includes(d.dispatch_key)).map((d) => [d.dispatch_key, typeof d.workflow_execution_id === 'string' && d.workflow_execution_id !== '' ? d.workflow_execution_id : null]))
+      const ejecuciones = [...new Set([...ed.map(ejecucion), ...deLlave.values()].filter((x): x is string => x !== null))]
       type Recibo = { workflow_execution_id: string; cost_usd: number | null; created_at: string }
       const rec = ejecuciones.length ? ((ok(await db.from('agent_invocations').select('workflow_execution_id, cost_usd, created_at').in('workflow_execution_id', ejecuciones), 'leer los recibos') as Recibo[] | null) ?? []) : []
       const conRecibo = new Set(rec.map((f) => f.workflow_execution_id))
       const desde = new Date(hoy).getTime()
       const recibos = rec.filter((f) => new Date(f.created_at).getTime() >= desde).reduce((t, f) => t + (Number(f.cost_usd) || 0), 0)
-      const en_vuelo = ed.filter((f) => { const x = ejecucion(f); return f.estado === 'en_curso' && !(x && conRecibo.has(x)) }).length
+      const tiene = (x: string | null | undefined): boolean => !!x && conRecibo.has(x)
+      // en vuelo: la primera llamada de una edición tomada sin recibo (por su ejecución o la de su llave) + cada rehacer despachado sin recibo (a la reserva mayor: cota prudente)
+      const en_vuelo = ed.filter((f) => f.estado === 'en_curso' && !tiene(ejecucion(f)) && !tiene(deLlave.get(llavesDe.get(f.id)!.secretaria))).length
+        + ed.filter((f) => { const k = llavesDe.get(f.id)!.rehacer; return deLlave.has(k) && !tiene(deLlave.get(k)) }).length
       // pieza B · las revisiones de la jefatura de esas ediciones: las cerradas por su gasto; las abiertas, contadas aparte (el turno les reserva su tope)
-      const ids = ed.map((f) => f.id)
-      const ret = ids.length ? ((ok(await db.from('colaterales_retoques').select('edicion_id, revision_id').in('edicion_id', ids), 'leer las revisiones de los retoques') as { revision_id: string | null }[] | null) ?? []) : []
-      const revIds = [...new Set(ret.map((f) => f.revision_id).filter((x): x is string => typeof x === 'string' && x !== ''))]
-      // la revisión se lee por el almacén de la JEFATURA (colaterales no nombra sus tablas, como la cadena) · si la base falla, lanza
-      const jefatura = almacenDeJefatura(db as never)
       type Rev = { estado: string; gasto_usd: number }
-      const revs = (await Promise.all(revIds.map((id) => jefatura.leerRevision(id)))).filter((f): f is NonNullable<typeof f> => f !== null) as Rev[]
+      const revs: Rev[] = await revisionesDeLasEdiciones(ed.map((f) => f.id))
       const terminal = (f: Rev) => (ESTADOS_TERMINALES as readonly string[]).includes(f.estado)
       const revisiones = revs.filter(terminal).reduce((t, f) => t + (Number(f.gasto_usd) || 0), 0)
       const revisiones_abiertas = revs.filter((f) => !terminal(f)).length
@@ -111,10 +128,7 @@ export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, 
         if (l.ex && porEjecucion.has(l.ex)) { if (!contadas.has(l.ex)) { cobrado += porEjecucion.get(l.ex) as number; contadas.add(l.ex) } continue }
         if (l.tipo === 'rehacer') rehacer_sin_recibo++; else secretaria_sin_recibo++
       }
-      const ret = (ok(await db.from('colaterales_retoques').select('revision_id').eq('edicion_id', e.id), 'leer las revisiones de la edición') as { revision_id: string | null }[] | null) ?? []
-      const revIds = [...new Set(ret.map((f) => f.revision_id).filter((x): x is string => typeof x === 'string' && x !== ''))]
-      const jefatura = almacenDeJefatura(db as never)
-      const revs = (await Promise.all(revIds.map((id) => jefatura.leerRevision(id)))).filter((f): f is NonNullable<typeof f> => f !== null) as { estado: string; gasto_usd: number }[]
+      const revs = await revisionesDeLasEdiciones([e.id])
       const terminal = (f: { estado: string }) => (ESTADOS_TERMINALES as readonly string[]).includes(f.estado)
       cobrado += revs.filter(terminal).reduce((t, f) => t + (Number(f.gasto_usd) || 0), 0)
       return { cobrado, secretaria_sin_recibo, rehacer_sin_recibo, revisiones_abiertas: revs.filter((f) => !terminal(f)).length }
