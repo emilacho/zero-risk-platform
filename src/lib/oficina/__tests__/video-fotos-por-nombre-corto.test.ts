@@ -70,8 +70,8 @@ describe('el aviso con que el pedido vuelve a la mesa', () => {
     expect(t).toContain('la foto «zzzz9999» no existe entre las fotos propias del cliente')
     expect(t).toContain('el nombre «abc» coincide con varias fotos')
     expect(t).toContain('Fotos propias disponibles:')
-    expect(t).toContain(`- ${corto(F0.id)} · `)
-    expect(t).toContain(String(F0.que_muestra).replace(/\s+/g, ' ').trim().slice(0, 40))
+    expect(t).toContain(`- ${F0.id} · `)
+    expect(t).toContain(`- ${F1.id} · `)
     expect(t).toContain('Integra el guion completo otra vez')
   })
   it('🔴 sin fotos: dice que el cliente no tiene fotos propias y que el video sale desde el texto (no frena)', () => {
@@ -190,7 +190,7 @@ describe('restaurante (reel de Instagram, con fotos propias) · de punta a punta
     expect(avisos).toHaveLength(1)
     expect(avisos[0]).toMatchObject({ para: DIRECCION })
     expect(avisos[0].texto).toContain('la foto «zzzz9999» no existe entre las fotos propias del cliente')
-    expect(avisos[0].texto).toContain(`- ${corto(F0.id)} · `)
+    expect(avisos[0].texto).toContain(`- ${F0.id} · `)
     // la dirección contesta el aviso y vuelve a integrar; el brazo recibe UN solo pedido, con el guion nuevo
     const iAviso = turnos.findIndex((t) => t.tipo === 'responder' && t.agente === DIRECCION)
     expect(iAviso).toBeGreaterThan(0)

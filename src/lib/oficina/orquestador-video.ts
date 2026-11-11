@@ -24,6 +24,7 @@ import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 import { RELACIONES_PERMITIDAS, RELACION_POR_FORMATO } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
+import { LISTA_DE_FOTOS } from './mesa/pedidos'
 import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 
 export type FamiliaDeVideo = 'video'
@@ -154,10 +155,7 @@ export function quedaVueltaALaMesa(pl: Plantilla, e: Estado): boolean {
   return !!paso && max > 0 && (e.vueltas[paso.clave] ?? 0) < max
 }
 
-/** cuántas fotos disponibles se le listan a la mesa en el aviso (el resto se resume) */
-export const MAX_FOTOS_EN_EL_AVISO = 30
-
-/** el aviso con que el pedido vuelve a la mesa: qué fotos no existen (o son ambiguas) y cuáles sí hay, con su nombre corto y lo que muestran. Puro. */
+/** el aviso con que el pedido vuelve a la mesa: qué fotos no existen (o son ambiguas) y cuáles sí hay, con la MISMA lista de fotos que la mesa ya ve (`LISTA_DE_FOTOS`). Puro. */
 export function avisoDeFotosALaMesa(noHalladas: string[], ambiguas: string[], fotos: FuentesCompletas['fotos']): string {
   const amb = new Set(ambiguas)
   const faltan = noHalladas.filter((x) => !amb.has(x))
@@ -167,9 +165,7 @@ export function avisoDeFotosALaMesa(noHalladas: string[], ambiguas: string[], fo
   const propias = fotosPropiasConDireccion(fotos)
   const cab = `Aviso de la oficina antes de pedir el video: ${partes.join('; ')}. Esas fotos no le llegarían al generador de video.`
   if (!propias.length) return `${cab}\nEl cliente no tiene fotos propias: rehaz el guion sin «Foto:» en los planos (el video sale desde el texto). Integra el guion completo otra vez.`
-  const lista = propias.slice(0, MAX_FOTOS_EN_EL_AVISO).map((f) => `- ${f.id.slice(0, 8)} · ${(f.que_muestra ?? '').replace(/\s+/g, ' ').trim().slice(0, 160) || '(sin descripción)'}`)
-  const resto = propias.length > MAX_FOTOS_EN_EL_AVISO ? `\n(y ${propias.length - MAX_FOTOS_EN_EL_AVISO} fotos más)` : ''
-  return `${cab}\nRehaz el guion con las fotos que sí hay (en «Foto:» va el nombre corto) o deja esos planos sin foto. Integra el guion completo otra vez.\nFotos propias disponibles:\n${lista.join('\n')}${resto}`
+  return `${cab}\nRehaz el guion con las fotos que sí hay (en «Foto:» va su nombre) o deja esos planos sin foto. Integra el guion completo otra vez.\nFotos propias disponibles:\n${LISTA_DE_FOTOS(propias)}`
 }
 
 function chequeos(e: Estado, pl: Plantilla): SalidaCodigoV {
