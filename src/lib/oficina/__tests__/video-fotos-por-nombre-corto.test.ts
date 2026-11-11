@@ -66,7 +66,10 @@ describe('el pedido al brazo con nombres cortos', () => {
 
 describe('el aviso con que el pedido vuelve a la mesa', () => {
   it('🔴 con fotos: dice cuáles no existen, cuáles son ambiguas y lista las propias por nombre corto con lo que muestran', () => {
-    const t = avisoDeFotosALaMesa(['zzzz9999', 'abc'], ['abc'], FOTOS_UUID)
+    // CC7 · una foto que NO es propia (de la competencia) nunca aparece como «propia disponible»
+    const ajena = { ...F1, id: 'ajena000-0000-4000-8000-000000000077', url: 'https://fotos.test/ajena.jpg', origen: 'competencia' as const }
+    const t = avisoDeFotosALaMesa(['zzzz9999', 'abc'], ['abc'], [...FOTOS_UUID, ajena])
+    expect(t).not.toContain(ajena.id)
     expect(t).toContain('la foto «zzzz9999» no existe entre las fotos propias del cliente')
     expect(t).toContain('el nombre «abc» coincide con varias fotos')
     expect(t).toContain('Fotos propias disponibles:')
@@ -210,6 +213,15 @@ describe('restaurante (reel de Instagram, con fotos propias) · de punta a punta
     expect(fotosDelPedido(enviados)).toEqual([])
     expect(enc.estado_del_motor.vueltas['pedido']).toBe(1)
     expect(enc.estado_del_motor.fichas.some((f) => f.id.startsWith('video-fotos-no-halladas') && /zzzz9999/.test(String(f.que)))).toBe(true)
+  })
+  it('🔴 (CC7) un nombre corto que coincide con DOS fotos propias ⇒ el aviso que llega a la dirección dice «coincide con varias»; rehecho con el nombre entero, viaja esa', async () => {
+    const gemela = { ...F1, id: `${corto(F0.id)}-aaaa-4aaa-8aaa-000000000099`, url: 'https://fotos.test/gemela.jpg' }
+    const { ultima, enviados, avisos } = await jugarVideo({ ...RESTAURANTE, fotos: [...FOTOS_UUID, gemela] }, [GUION(corto(F0.id), 'ninguna'), GUION(F0.id, 'ninguna')])
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0].texto).toContain(`el nombre «${corto(F0.id)}» coincide con varias fotos`)
+    expect(avisos[0].texto).not.toContain(`«${corto(F0.id)}» no existe`)
+    expect(fotosDelPedido(enviados)).toEqual([F0.url])
   })
 })
 

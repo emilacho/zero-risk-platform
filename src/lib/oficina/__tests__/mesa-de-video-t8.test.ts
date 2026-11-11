@@ -172,7 +172,11 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
   it('el dato sembrado es EXACTAMENTE el que produce el código, INACTIVA y con tope 10', () => {
     const f = filaDe('video_mesa')
     // 202611111700 · la vuelta del pedido a la mesa se agrega DESPUÉS, al paso del índice 2
-    const vuelta = JSON.parse(/\$vuelta\$([\s\S]*?)\$vuelta\$/.exec(fs.readFileSync(path.join(RAIZ, 'migrations', '202611111700_oficina_video_vuelve_a_la_mesa.sql'), 'utf8'))![1])
+    const MIG_1700 = fs.readFileSync(path.join(RAIZ, 'migrations', '202611111700_oficina_video_vuelve_a_la_mesa.sql'), 'utf8')
+    const vuelta = JSON.parse(/\$vuelta\$([\s\S]*?)\$vuelta\$/.exec(MIG_1700)![1])
+    // CC6 · la migración escribe la vuelta EXACTAMENTE en el paso del índice 2 (el que esta prueba injerta), y lo exige con la guarda
+    expect(MIG_1700).toContain("jsonb_set(pasos, '{2,vuelve_a}', $vuelta$")
+    expect(MIG_1700).toContain("pasos->2->>'clave' = 'pedido'")
     expect(f.pasos[2].clave).toBe('pedido')
     f.pasos[2] = { ...f.pasos[2], vuelve_a: vuelta }
     expect(f.pasos).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
