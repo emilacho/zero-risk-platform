@@ -112,7 +112,7 @@ export function almacenDeColaterales(db: Db) {
     },
 
     /** cambia un retoque SOLO si sigue en `de` · propuesto → propuesto es el rehecho y solo se permite con rehechos = 0 */
-    async pasarRetoque(id: string, de: EstadoDeRetoque, a: EstadoDeRetoque, campos: { despues?: string; porque?: string; motivo?: string; version_resultante?: string; revision_id?: string } = {}): Promise<boolean> {
+    async pasarRetoque(id: string, de: EstadoDeRetoque, a: EstadoDeRetoque, campos: { despues?: string; porque?: string; motivo?: string | null; version_resultante?: string; revision_id?: string | null } = {}): Promise<boolean> {
       if (!PASOS_DE_RETOQUE[de].includes(a)) throw new PasoNoPermitido(`retoque ${de} → ${a}`)
       let q = db.from('colaterales_retoques').update({ ...campos, estado: a, ...(de === 'propuesto' && a === 'propuesto' ? { rehechos: 1 } : {}), updated_at: ahora() }).eq('id', id).eq('estado', de)
       if (de === 'propuesto' && a === 'propuesto') q = q.eq('rehechos', 0)
@@ -134,6 +134,15 @@ export function almacenDeColaterales(db: Db) {
       if (!ids.length) return 0
       const d = ok(await db.from('colaterales_retoques').update({ revision_id, updated_at: ahora() }).in('id', ids).eq('estado', 'propuesto').is('revision_id', null).select('id'), 'atar la revisión') as unknown[] | null
       return d?.length ?? 0
+    },
+
+    /**
+     * 11-nov · pieza D · un `rechaza` de la jefatura sobre un retoque que todavía no se rehízo: sigue `propuesto`, con la razón del jefe en `motivo` y atado a
+     * la revisión que lo rechazó (así su vuelta repetida no lo toca dos veces). «Por rehacer» = propuesto + rehechos 0 + motivo. Condicional: solo si sigue así.
+     */
+    async marcarParaRehacer(id: string, revision_id: string, razon: string): Promise<boolean> {
+      const d = ok(await db.from('colaterales_retoques').update({ motivo: razon, updated_at: ahora() }).eq('id', id).eq('estado', 'propuesto').eq('rehechos', 0).eq('revision_id', revision_id).select('id'), 'marcar para rehacer') as unknown[] | null
+      return (d?.length ?? 0) === 1
     },
 
     /** pasa a `a` TODOS los retoques de la edición que siguen en `de` (condicional por fila) · devuelve cuántos cambió */

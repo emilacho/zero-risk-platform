@@ -22,6 +22,16 @@ const marcasDe = (v: unknown): Marcas => {
   return { con_desacuerdo: o.con_desacuerdo === true, sin_segunda_mirada: o.sin_segunda_mirada === true, ...(o.ficha_sin_dueno === true ? { ficha_sin_dueno: true } : {}) }
 }
 
+/**
+ * 11-nov · hueco 1 de CC6 en la pieza D · las revisiones de unos artefactos por SU PROPIO nombre (tipo + ids · todas las versiones), sin pasar por quien las pidió.
+ * Así una revisión cuyo pedido ya la soltó (el retoque rehecho) sigue contando su gasto. Si la base falla, lanza (nunca «vacío»).
+ */
+export async function revisionesDeArtefactos(db: Db, tipo: string, ids: readonly string[]): Promise<Array<{ id: string; estado: string; gasto_usd: number }>> {
+  if (!ids.length) return []
+  const d = ok(await db.from('jefatura_revisiones').select('id, estado, gasto_usd').eq('artifact_type', tipo).in('artifact_id', [...ids]), 'leer las revisiones de los artefactos') as Fila[] | null
+  return (d ?? []).map((f) => ({ id: String(f.id), estado: String(f.estado), gasto_usd: Number(f.gasto_usd) || 0 }))
+}
+
 function aRevision(f: Fila): Revision {
   const snap = f.policy_snapshot
   if (!snap || typeof snap !== 'object' || Object.keys(snap as object).length === 0) throw new Error(`la revisión ${String(f.id)} no trae su política (policy_snapshot vacío)`)

@@ -35,6 +35,8 @@ export const FACTOR_DE_RESERVA = 1.3
 export const TOPE_POR_EDICION_USD = 0.5
 /** 11-nov · pieza B · el tope de UNA revisión colateral de la jefatura (= `tope_revision_usd` de la fila `colateral` · una prueba lo ata a esa migración) */
 export const TOPE_DE_LA_REVISION_USD = 0.3
+/** 11-nov · pieza D · tope de la llamada de REHACER (solo los pedazos rechazados · RESPUESTA Lenovo 04:15Z, opción 1) · su reserva también es × 1,3 */
+export const TOPE_DEL_REHACER_USD = 0.15
 // 11-nov · el tope DIARIO de colaterales por cliente NO vive en el código: es un dato (`colaterales_topes_diarios`, por omisión US$ 5 · RESPUESTA Lenovo 03:02Z) · ver `topeDiario`
 /** una edición `en_curso` más vieja que esto la cierra el barrido (ADENDA 1) */
 export const PLAZO_DEL_BARRIDO_MS = 2 * 60 * 60 * 1000
@@ -64,12 +66,20 @@ export interface PuertosDelTurno {
   topeDiario(client_id: string): Promise<number | null>
   /** 11-nov · pieza B · abre la revisión `colateral` de la jefatura con vuelta a colaterales (la MISMA función que su ruta, que valida la entrada) · nunca lanza */
   abrirRevisionColateral(entrada: EntradaDeRevisionColateral): Promise<ResultadoDeAbrirColateral>
+  /**
+   * 11-nov · pieza D (opción 1 de Lenovo 04:15Z · líneas de CC6 05:05Z) · el gasto de ESTA edición, de cualquier día: `cobrado` = recibos reales de sus
+   * llamadas (secretaria y rehacer, por su llave EXACTA) + el gasto de sus revisiones cerradas · lo que todavía no tiene recibo se cuenta aparte (se le
+   * reserva su tope: nunca vale 0). Lanza si no puede leer.
+   */
+  gastoDeLaEdicion(e: Edicion): Promise<GastoDeLaEdicion>
   /** 11-nov · pieza B · aplica los retoques `aprobado` de la edición (motor 2c: fila activa, versión base, escritura condicional) */
   aplicar(edicion_id: string): Promise<ResultadoDeAplicar>
 }
 
 /** el gasto de colaterales del cliente HOY · 11-nov pieza B: más lo de sus revisiones (las cerradas, por su gasto; las abiertas, por su tope) */
 export interface GastoDelDia { recibos: number; en_vuelo: number; revisiones: number; revisiones_abiertas: number }
+/** el gasto de UNA edición · pieza D */
+export interface GastoDeLaEdicion { cobrado: number; secretaria_sin_recibo: number; rehacer_sin_recibo: number; revisiones_abiertas: number }
 
 export type ResultadoDelTurno =
   | { accion: 'ya_corrida'; estado: string }
