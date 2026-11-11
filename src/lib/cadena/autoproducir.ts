@@ -18,6 +18,7 @@ import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } fr
 import { avisoDeGastoIlegible, avisoDelTope, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
 import { hoyEnZona } from './campanas'
 import { familiaDeFila } from './familia'
+import { filaSinFamilia } from './sin-familia'
 
 export const FUENTE_DEL_SOBRE = 'brief/parte-listo'
 export const INTENCION_DEL_SOBRE = 'producir'
@@ -144,7 +145,8 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
       // lo más cercano primero también ENTRE partes: sin el calendario no se sabe qué va antes, y eso es gasto ilegible (no «nada antes»)
       if (!filasDelCalendario) throw new Error('no se pudo leer el calendario de la campaña')
       const formatos = await al.formatos()
-      const porVenir = filasPorVenir(filasDelCalendario.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora ?? null, estado: f.estado, familia: familiaDeFila(f, formatos) })), hoyEnZona(new Date().toISOString(), c.zona_horaria), l.partes, todos.map((x) => x.payload.fila_id))
+      // 11-nov · ADENDA 3 de CC7 sobre #1019: una fila sin familia nunca sale del lote (`sin-familia.ts`) → no se le guarda lugar en el freno (si no, retiene piezas reales por piezas que no existen)
+      const porVenir = filasPorVenir(filasDelCalendario.filter((f) => !filaSinFamilia(f, formatos)).map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora ?? null, estado: f.estado, familia: familiaDeFila(f, formatos) })), hoyEnZona(new Date().toISOString(), c.zona_horaria), l.partes, todos.map((x) => x.payload.fila_id))
       const conEncargo = new Set(l.encargos.filter((e) => e.parte_id === parte.id && e.brief_id).map((e) => e.brief_id as string))
       const candidatas = todos.map((x) => ({ brief_id: x.payload.brief_id, familia: x.payload.familia ?? null, fecha: x.payload.fecha ?? null, hora: x.payload.hora ?? null, ya_tiene_encargo: conEncargo.has(x.payload.brief_id) }))
       // lo retenido (o nunca salido) de OTROS partes guarda lugar por fecha, como las filas por venir; lo que la sala ya recibió va en lo comprometido
