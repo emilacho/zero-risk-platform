@@ -47,7 +47,7 @@ const conImagenGenerada = (ref = 'hook', reglas = REGLAS) => j({ resumen: 'Luz n
 const promptsDe = (refs: string[]) => j({ imagenes: refs.map((ref) => ({ ref, prompts: [
   { prompt: 'Un plato servido sobre una mesa de madera clara, luz natural lateral. El plato aparece completo. Sin personas, sin texto', idea_en_una_linea: 'cenital' },
   { prompt: 'A nivel de mesa, fondo de cocina desenfocado. El plato aparece completo. Sin personas ni logos', idea_en_una_linea: 'nivel de mesa' },
-  { prompt: 'Una mesa de madera vacía junto a una ventana luminosa.', idea_en_una_linea: 'no cubre lo obligatorio' }] })), tamaño: '1080x1350' })
+  { prompt: 'Una mesa de madera vacía junto a una ventana luminosa. --ar 4:5', idea_en_una_linea: 'trae parámetros del generador' }] })), tamaño: '1080x1350' })
 const observacion = (indices: number[], o: { falta?: boolean } = {}) => j({
   imagenes: indices.map((indice) => ({ indice, reglas: [{ id: 'o1', presente: !o.falta, evidencia: 'v' }, { id: 'p1', presente: false, evidencia: 'no hay' }, { id: 'brief-o1', presente: !o.falta, evidencia: 'v' }, { id: 'brief-p1', presente: false, evidencia: 'no hay' }], texto_en_imagen: [], marcas: [], personas: 0, producto: 'plato' })),
   preferencia: indices,
@@ -253,11 +253,11 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
 })
 
 describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
-  it('imagen generada para «hook»: prompts por imagen → solo los que cubren lo obligatorio se generan → mira → la elegida entra a la lámina de ese rol (y solo a esa)', async () => {
+  it('imagen generada para «hook»: prompts por imagen → solo los que pasan el control ② se generan → mira → la elegida entra a la lámina de ese rol (y solo a esa)', async () => {
     const { M, id } = await abiertoC({ dry_run: false })
     const { pasos, ultima } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada() }) }))
     expect(pasos).toEqual(['paquete', 'direccion_visual', 'prompts', 'mirar', 'texto', 'laminas', 'revision_jefe'])
-    expect(M.llamadas.imagen).toBe(2) // el tercer prompt no cubría lo obligatorio: no se generó
+    expect(M.llamadas.imagen).toBe(2) // el tercer prompt traía parámetros del generador: no se generó
     expect(M.gastos.filter((g) => g.concepto === 'imagen')).toHaveLength(2)
     const fondos = M.llamadas.renderPedidos[0].slides.map((s) => s.background_image_url)
     expect(fondos[0]).toMatch(/img\.test/); expect(fondos.slice(1).every((x) => x === null)).toBe(true)
@@ -265,9 +265,9 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     expect(M.encargos.get(id)!.imagen_generada).toBe(true)
     expect(M.llamadas.bandeja[0].metadata).toMatchObject({ imagen_generada: true })
   })
-  it('control ②: un prompt que nombra lo prohibido o no cubre lo obligatorio NO se genera; si ninguno pasa, el ingeniero repite UNA vez y luego esa lámina sale sin imagen, declarado', async () => {
+  it('control ②: un prompt que nombra lo prohibido o trae parámetros del generador NO se genera (#12: no repetir la palabra de un obligatorio ya no descarta); si ninguno pasa, el ingeniero repite UNA vez y luego esa lámina sale sin imagen, declarado', async () => {
     const { M, id } = await abiertoC()
-    const malos = j({ imagenes: [{ ref: 'hook', prompts: [{ prompt: 'Una mesa vacía con luz de ventana por la mañana', idea_en_una_linea: 'a' }, { prompt: 'Un paisaje de playa al amanecer con olas suaves', idea_en_una_linea: 'b' }] }] })
+    const malos = j({ imagenes: [{ ref: 'hook', prompts: [{ prompt: 'Una mesa vacía con luz de ventana por la mañana, con personas --v 6', idea_en_una_linea: 'a' }, { prompt: 'Un paisaje de playa al amanecer con olas suaves --ar 4:5', idea_en_una_linea: 'b' }] }] })
     const { pasos } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada() }), prompts: () => ({ texto: malos }) }))
     expect(pasos.filter((p) => p === 'prompts')).toHaveLength(2)
     expect(M.llamadas.imagen).toBe(0)
@@ -611,7 +611,7 @@ describe('relevo 46 · la opinión «tomada» del curador dispara UNA re-imagen 
   })
   it('carrusel: ningún prompt nuevo pasa el control ②: no se genera nada, no se vuelve a dibujar, se queda la imagen anterior y la bandeja dice «imagen por rehacer»', async () => {
     const { M, id } = await abiertoC({ dry_run: false }); conOpinion(M)
-    const malos = j({ imagenes: [{ ref: 'hook', prompts: [{ prompt: 'Una mesa de madera vacía junto a una ventana luminosa.', idea_en_una_linea: 'a' }, { prompt: 'Una ventana luminosa con cortinas claras.', idea_en_una_linea: 'b' }] }] })
+    const malos = j({ imagenes: [{ ref: 'hook', prompts: [{ prompt: 'Una mesa de madera vacía junto a una ventana luminosa. --v 6', idea_en_una_linea: 'a' }, { prompt: 'Una ventana luminosa con cortinas claras, con personas.', idea_en_una_linea: 'b' }] }] })
     let antes = -1
     const { pasos } = await correr(M, id, guionCarrusel({ direccion_visual: dirGenerada, reimagen_prompts: () => ({ texto: malos }), decide_imagen: (n, t) => { antes = M.llamadas.imagen; return toma(['hook'])(n, t) } }))
     expect(pasos).toContain('reimagen_prompts'); expect(pasos).not.toContain('reimagen_mirar')
