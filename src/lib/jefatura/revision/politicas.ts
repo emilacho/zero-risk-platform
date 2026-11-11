@@ -8,6 +8,7 @@ import type { Condicion, Paso, Plantilla } from '../../revision-comun'
 import { TIPOS_DE_REVISION, type Productor, type TipoDeRevision } from './contrato'
 import { CLAVE_DE_VERIFICACION, ESQUEMA_DE_VERIFICACION, VERIFICADOR_DE_ORDENES } from './orden-del-dueno'
 import { CLAVE_DE_REVISION_DE_REGISTRO, ESQUEMA_DE_FICHAS_DE_REGISTRO, ESQUEMA_DE_REEMPLAZOS } from './registro'
+import { CLAVE_DE_REVISION_COLATERAL, ESQUEMA_DE_VEREDICTOS } from './colateral'
 
 export type Reentrega = 'ninguna' | 'parcial' | 'completa' | 'version_nueva'
 export type DestinoDeCierre = 'bandeja' | 'siguiente_paso'
@@ -166,6 +167,14 @@ export function plantillaDePolitica(p: PoliticaDeRevision, productores: Producto
       { clave: 'cierre', tipo: 'codigo', quien: 'jefatura', funcion: 'cierre', condicion: { tipo: 'siempre' }, entrada: ['revision'], salida_artefacto: 'cierre', tope_usd: 0 },
     ]
     return { tipo: p.artifact_type, familia: p.artifact_type, pasos: pasosR, indicaciones: {}, limites: { margen: 6, tope_encargo_usd: Math.min(tope_usd, p.tope_revision_usd, TOPE_MAXIMO_DE_REVISION_USD), max_rondas: 1 } }
+  }
+  // 11-nov · COLATERAL: un jefe juzga cada retoque (veredicto por id) → cierre. Sin corrección, sin GPT, sin voto: la jefatura no reescribe
+  if (p.artifact_type === 'colateral') {
+    const pasosC: Paso[] = [
+      { clave: CLAVE_DE_REVISION_COLATERAL, tipo: 'agente', quien: p.revisor_fondo ?? 'editor_en_jefe', condicion: { tipo: 'siempre' }, ronda: 1, entrada: ['revision'], salida_artefacto: 'veredictos', tope_usd: topeDelPaso(p, 'revision_fondo'), salida: { esquema: ESQUEMA_DE_VEREDICTOS, reintento_formato: 1 } },
+      { clave: 'cierre', tipo: 'codigo', quien: 'jefatura', funcion: 'cierre', condicion: { tipo: 'siempre' }, entrada: ['revision'], salida_artefacto: 'cierre', tope_usd: 0 },
+    ]
+    return { tipo: p.artifact_type, familia: p.artifact_type, pasos: pasosC, indicaciones: {}, limites: { margen: 6, tope_encargo_usd: Math.min(tope_usd, p.tope_revision_usd, TOPE_MAXIMO_DE_REVISION_USD), max_rondas: 1 } }
   }
   const pasos: Paso[] = [
     {
