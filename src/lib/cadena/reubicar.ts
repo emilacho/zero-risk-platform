@@ -185,7 +185,7 @@ async function aplicarCambios(al: Almacen, campanaId: string, version: number, c
   const hechos: Cambio[] = []
   for (const k of cambios) {
     let ok = false
-    if (k.tipo === 'reubicar') ok = await al.reubicarFila(campanaId, version, k.fila_id, { fecha: k.fecha, semana: k.semana, dia_semana: k.dia_semana }, k.aviso)
+    if (k.tipo === 'reubicar') ok = await al.reubicarFila(campanaId, version, k.fila_id, { fecha: k.fecha, hora: k.hora, semana: k.semana, dia_semana: k.dia_semana }, k.aviso)
     else if (k.tipo === 'descartar') ok = await al.reubicarFila(campanaId, version, k.fila_id, { estado: 'perdio_su_fecha' }, k.aviso)
     else {
       ok = await al.reubicarFila(campanaId, version, k.fila_id, { estado: 'cancelada' }, k.aviso)
@@ -226,7 +226,7 @@ async function releerDescartadasPorLectura(al: Almacen, c: Campana, lc: LibretaD
     const hechos: Cambio[] = []
     for (const k of cambios) {
       let ok = false
-      if (k.tipo === 'reubicar') ok = await al.reubicarFila(c.id, version, k.fila_id, { fecha: k.fecha, semana: k.semana, dia_semana: k.dia_semana, estado: 'validada' }, `${k.aviso} (relectura de la respuesta guardada)`, DESDE)
+      if (k.tipo === 'reubicar') ok = await al.reubicarFila(c.id, version, k.fila_id, { fecha: k.fecha, hora: k.hora, semana: k.semana, dia_semana: k.dia_semana, estado: 'validada' }, `${k.aviso} (relectura de la respuesta guardada)`, DESDE)
       else if (k.tipo === 'fusionar') {
         ok = await al.reubicarFila(c.id, version, k.fila_id, { estado: 'cancelada' }, `${k.aviso} (relectura de la respuesta guardada)`, DESDE)
         if (ok) await al.reubicarFila(c.id, version, k.destino, {}, k.aviso_destino)

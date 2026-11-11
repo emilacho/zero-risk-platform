@@ -39,7 +39,7 @@ export const huellaDeReubicacion = (campanaId: string, version: number, filaIds:
   `${campanaId}:v${version}:${createHash('sha256').update([...filaIds].sort().join(',')).digest('hex').slice(0, 12)}`
 
 export type Decision =
-  | { fila_id: string; accion: 'reubicar'; fecha: string; razon: string }
+  | { fila_id: string; accion: 'reubicar'; fecha: string; razon: string; /** 11-nov (GO Lenovo 15:26 · opción A de Emilio): la hora que propone la mesa; sin ella, la fila conserva la suya */ hora?: string }
   | { fila_id: string; accion: 'fusionar'; destino: string; razon: string }
   | { fila_id: string; accion: 'descartar'; razon: string }
 
@@ -49,6 +49,9 @@ export type Decision =
  * 11-nov (GO Lenovo 04:15Z · #1014): la viñeta del principio es OPCIONAL (guion, asterisco, punto, número o nada) y el id, la acción y la fecha pueden venir entre `comillas`
  * o en **negrita**. La primera decisión real llegó sin guion y el lector exigía «- »: leyó cero decisiones. Lo que define la línea es la forma «fila · acción · …», con un id de una sola palabra.
  */
+/** lo que tiene forma de hora (`9:00`, `09:30`, `25:99`): la forma la lee el lector; si es una hora de verdad lo verifica `razonContraLaFecha` */
+const ESPECIE_DE_HORA = /^\d{1,2}:\d{2}$/
+
 export function leerDecisiones(texto: string | null | undefined): Decision[] {
   const out: Decision[] = []
   const vistas = new Set<string>()
@@ -62,7 +65,11 @@ export function leerDecisiones(texto: string | null | undefined): Decision[] {
     const accion = limpio(partes[1]).toLowerCase()
     if (!fila_id || /\s/.test(fila_id) || vistas.has(fila_id)) continue
     let d: Decision | null = null
-    if (accion === 'reubicar' && partes.length >= 4) d = { fila_id, accion, fecha: limpio(partes[2]), razon: partes.slice(3).join(' · ') }
+    if (accion === 'reubicar' && partes.length >= 4) {
+      // 11-nov (opción A): `fila · reubicar · fecha · HH:MM · razón` — la hora es la cuarta parte SI tiene forma de hora; si no, la línea es la de siempre
+      const hora = ESPECIE_DE_HORA.test(limpio(partes[3])) ? limpio(partes[3]) : null
+      d = hora ? { fila_id, accion, fecha: limpio(partes[2]), hora, razon: partes.slice(4).join(' · ') } : { fila_id, accion, fecha: limpio(partes[2]), razon: partes.slice(3).join(' · ') }
+    }
     else if (accion === 'fusionar' && partes.length >= 4) d = { fila_id, accion, destino: limpio(partes[2]), razon: partes.slice(3).join(' · ') }
     else if (accion === 'descartar') d = { fila_id, accion, razon: partes.slice(2).join(' · ') }
     if (!d) continue
@@ -83,7 +90,7 @@ export interface ContextoDeReubicacion {
 
 /** lo que se aplica a cada fila pasada: el cambio exacto y la nota que queda en sus avisos */
 export type Cambio =
-  | { fila_id: string; tipo: 'reubicar'; fecha: string; semana: number; dia_semana: number; aviso: string }
+  | { fila_id: string; tipo: 'reubicar'; fecha: string; semana: number; dia_semana: number; aviso: string; /** la hora final (la propuesta o, sin ella, la de la fila) */ hora: string | null }
   | { fila_id: string; tipo: 'fusionar'; destino: string; aviso: string; aviso_destino: string }
   | { fila_id: string; tipo: 'descartar'; aviso: string; rechazo: string | null }
 
@@ -91,8 +98,9 @@ const semanaDe = (fechaInicio: string, fecha: string): number => Math.floor(dias
 const activa = (f: Fila) => !ESTADOS_FUERA.includes(f.estado)
 
 /** por qué una fecha nueva NO vale para esta fila; null si vale. `ocupacion` cuenta lo ya puesto en cada día por red y formato (incluye lo reubicado antes en esta misma decisión). */
-function razonContraLaFecha(f: Fila, fecha: string, x: ContextoDeReubicacion, ocupacion: Map<string, number>, fechaFinal: Map<string, string>): string | null {
+function razonContraLaFecha(f: Fila, fecha: string, horaFinal: string | null, x: ContextoDeReubicacion, ocupacion: Map<string, number>, fechaFinal: Map<string, string>): string | null {
   if (!esFechaIso(fecha)) return `«${fecha}» no es una fecha AAAA-MM-DD`
+  if (horaFinal != null && horaFinal !== f.hora && minutos(horaFinal) == null) return `«${horaFinal}» no es una hora HH:MM`
   if (fecha < x.campana.fecha_inicio || fecha > x.campana.fecha_fin) return `el ${fecha} cae fuera de la campaña (${x.campana.fecha_inicio} a ${x.campana.fecha_fin})`
   const lead = leadDeFormato(x.formatos, f)
   const primerDia = sumarDias(x.hoy, lead)
@@ -102,8 +110,8 @@ function razonContraLaFecha(f: Fila, fecha: string, x: ContextoDeReubicacion, oc
     if (sede?.horario) {
       const tramos = sede.horario[diaSemanaIso(fecha)] ?? []
       if (tramos.length === 0) return `la pieza exige local abierto y la sede ${sede.clave} está cerrada ese día de la semana (${fecha})`
-      const hora = minutos(f.hora)
-      if (hora != null && !tramos.some((t) => { const a = minutos(t.abre), c = minutos(t.cierra); return a != null && c != null && hora >= a && hora <= c })) return `la hora ${f.hora} cae fuera del horario de la sede ${sede.clave} el ${fecha}`
+      const hora = minutos(horaFinal)
+      if (hora != null && !tramos.some((t) => { const a = minutos(t.abre), c = minutos(t.cierra); return a != null && c != null && hora >= a && hora <= c })) return `la hora ${horaFinal} cae fuera del horario de la sede ${sede.clave} el ${fecha}`
     }
   }
   const max = (x.formatos[f.red] ?? []).find((y) => y.formato === f.formato)?.max_por_dia
@@ -144,12 +152,14 @@ export function verificarDecisiones(pasadas: readonly Fila[], decisiones: readon
     if (!d.razon.trim()) { cambios.push(descartar(f, `la decisión «${d.accion}» no trae su razón`, '')); continue }
     if (d.accion === 'descartar') { cambios.push(descartar(f, null, d.razon)); continue }
     if (d.accion === 'reubicar') {
-      const no = razonContraLaFecha(f, d.fecha, x, ocupacion, fechaFinal)
+      const hora = d.hora ?? f.hora
+      const no = razonContraLaFecha(f, d.fecha, hora, x, ocupacion, fechaFinal)
       if (no) { cambios.push(descartar(f, no, '')); continue }
       const clave = `${d.fecha}|${f.red}|${f.formato}`
       ocupacion.set(clave, (ocupacion.get(clave) ?? 0) + 1)
       fechaFinal.set(f.id, d.fecha)
-      cambios.push({ fila_id: f.id, tipo: 'reubicar', fecha: d.fecha, semana: semanaDe(x.campana.fecha_inicio, d.fecha), dia_semana: diaSemanaIso(d.fecha), aviso: `${PREFIJO_REUBICACION}reubicada del ${f.fecha} al ${d.fecha} · ${d.razon}` })
+      const cambioDeHora = d.hora != null && d.hora !== f.hora ? ` a las ${d.hora} (antes ${f.hora ?? 'sin hora'})` : ''
+      cambios.push({ fila_id: f.id, tipo: 'reubicar', fecha: d.fecha, hora, semana: semanaDe(x.campana.fecha_inicio, d.fecha), dia_semana: diaSemanaIso(d.fecha), aviso: `${PREFIJO_REUBICACION}reubicada del ${f.fecha} al ${d.fecha}${cambioDeHora} · ${d.razon}` })
       continue
     }
     const destino = x.filas.find((y) => y.id === d.destino)
@@ -166,7 +176,7 @@ export function verificarDecisiones(pasadas: readonly Fila[], decisiones: readon
 
 /** el marco que lee el agente: lo pasado, lo que viene, los plazos, los horarios y la forma exacta de la respuesta */
 export function marcoDeReubicacion(pasadas: readonly Fila[], x: ContextoDeReubicacion, clienteNombre: string): string {
-  const linea = (f: Fila) => `- ${f.id} · ${f.fecha} · ${f.red} · ${f.formato} · pilar: ${f.pilar ?? '—'} · tema: ${f.tema ?? '—'} · idea: ${f.idea_ref ?? '—'} · sede: ${f.sede ?? '—'}${f.requiere_abierto ? ' · exige local abierto' : ''}${f.depende_de.length ? ` · depende de: ${f.depende_de.join(', ')}` : ''} · plazo de producción: ${leadDeFormato(x.formatos, f)} días`
+  const linea = (f: Fila) => `- ${f.id} · ${f.fecha}${f.hora ? ` ${f.hora}` : ''} · ${f.red} · ${f.formato} · pilar: ${f.pilar ?? '—'} · tema: ${f.tema ?? '—'} · idea: ${f.idea_ref ?? '—'} · sede: ${f.sede ?? '—'}${f.requiere_abierto ? ' · exige local abierto' : ''}${f.depende_de.length ? ` · depende de: ${f.depende_de.join(', ')}` : ''} · plazo de producción: ${leadDeFormato(x.formatos, f)} días`
   const futuras = x.filas.filter((f) => activa(f) && f.fecha >= x.hoy && !pasadas.some((p) => p.id === f.id)).sort((a, b) => a.fecha.localeCompare(b.fecha))
   const maximos = Object.entries(x.formatos).flatMap(([red, fs]) => fs.filter((y) => typeof y.max_por_dia === 'number').map((y) => `- ${red} · ${y.formato}: máximo ${y.max_por_dia} por día`))
   const horarios = x.sedes.map((s) => `- ${s.clave}: ${s.horario ? Object.entries(s.horario).map(([d, t]) => `día ${d} ${(t ?? []).map((y) => `${y.abre}–${y.cierra}`).join(', ') || 'cerrado'}`).join(' · ') : 'sin horario conocido'}`)
@@ -179,9 +189,10 @@ export function marcoDeReubicacion(pasadas: readonly Fila[], x: ContextoDeReubic
     '', '## Horarios de las sedes (día 1 = lunes)', ...(horarios.length ? horarios : ['- (el negocio no tiene sedes)']),
     '', '## Cómo responder',
     'Por cada fila pasada, UNA línea con una de estas formas (la razón es obligatoria):',
-    '- <fila_id> · reubicar · AAAA-MM-DD · razón',
+    '- <fila_id> · reubicar · AAAA-MM-DD · HH:MM · razón',
     '- <fila_id> · fusionar · <fila_id destino de las que vienen> · razón',
     '- <fila_id> · descartar · razón',
     'Una fecha nueva tiene que caer dentro de la campaña, a partir de hoy más el plazo de producción de su formato, en un día abierto si exige local, sin pasar el máximo por día y sin romper dependencias. El código lo verifica: lo que no cumpla se descarta.',
+    'Al reubicar, propón también la HORA. Mira las horas de las filas que vienen y el orden de la historia de la campaña: la pieza reubicada es parte de esa historia y no debe pisar a otra pieza (misma red, mismo día, misma hora). Si exige local abierto, la hora tiene que caer dentro del horario de su sede.',
   ].join('\n')
 }

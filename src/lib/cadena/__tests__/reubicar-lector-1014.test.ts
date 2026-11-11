@@ -240,6 +240,27 @@ pasada-b · reubicar · ${k.cerrado} · y`)
     })
   })
 
+  // 11-nov · GO Lenovo 15:26 (opción A de Emilio): la hora que propone la mesa se ESCRIBE en la fila, por las dos vías
+  describe('(opción A) la hora propuesta queda en la fila', () => {
+    it('🔴 al recibir la decisión: fecha Y hora nuevas en la fila', async () => {
+      const al = almacen(k)
+      await reloj(al, k.ahora)
+      expect(await recibirReubicacion(al, entrega(k, 1, `pasada-a · reubicar · ${k.abierto} · 12:15 · no pisa a la otra pieza
+pasada-b · descartar · y
+pasada-c · descartar · z`), k.ahora)).toMatchObject({ estado: 'aplicada' })
+      expect(filaDe(al, 'pasada-a')).toMatchObject({ estado: 'validada', fecha: k.abierto, hora: '12:15' })
+      expect(filaDe(al, 'pasada-a').avisos.at(-1)).toContain(`a las 12:15 (antes ${k.hora})`)
+    })
+    it('🔴 en la relectura de la respuesta guardada: también la hora', async () => {
+      const al = almacen(k)
+      await reloj(al, k.ahora)
+      await recibirReubicacion(al, entrega(k, 1, 'pasada-c · descartar · ya no vuelve'), k.ahora)
+      al.textosDeLaMesa['enc-1'] = `pasada-a · reubicar · ${k.abierto} · 12:15 · no pisa a la otra pieza`
+      await reloj(al, k.ahora)
+      expect(filaDe(al, 'pasada-a')).toMatchObject({ estado: 'validada', fecha: k.abierto, hora: '12:15' })
+    })
+  })
+
   // 🟡 CC7 punto 4 · el mismo hueco de anoche con otra cara: líneas legibles que no son de ESTAS filas
   describe('(2b) leídas = solo las de las filas de esta decisión', () => {
     it('🔴 el agente decide sobre filas con otro id: es fallida, con su aviso, y NINGUNA fila se toca', async () => {
