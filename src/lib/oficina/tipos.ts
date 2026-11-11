@@ -107,6 +107,8 @@ export interface Estado {
   fichas: Ficha[]
   /** lo que se le avisa al dueño junto a lo revisado; no devuelve nada */
   avisos?: string[]
+  /** 11-nov · la causa legible de un cierre `fallido` (la escribe `fallar`; ver `causa-del-fallo.ts`) */
+  fallo?: { motivo: string; en: string; pasos_ejecutados: number; gasto_usd: number }
 }
 
 export const estadoInicial = (): Estado => ({ ultimo: -1, pasos_ejecutados: 0, gasto_usd: 0, vueltas: {}, artefactos: {}, fichas: [] })
