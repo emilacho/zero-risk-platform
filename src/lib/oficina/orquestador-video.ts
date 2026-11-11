@@ -24,7 +24,7 @@ import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 import { RELACIONES_PERMITIDAS, RELACION_POR_FORMATO } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
-import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
+import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 
 export type FamiliaDeVideo = 'video'
 export const familiaDeVideo = (pl: Pick<Plantilla, 'clase'>): FamiliaDeVideo | null => (claseDe(pl) === 'video' ? 'video' : null)
@@ -138,9 +138,38 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
   const a = armarPedidoDeLaOficina({ guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
   if (!a.ok) return { res: { costo_usd: 0 }, fallido: `el pedido al brazo de video no es válido: ${a.errores.join(' · ')}` }
   const fichas: Ficha[] = []
+  // 11-nov · GO Lenovo 16:34 · si el guion nombra fotos que no existen (o un nombre corto que coincide con varias), el pedido VUELVE UNA SOLA VEZ a la mesa con el aviso de cuáles;
+  //   la mesa rehace el guion con lo que hay y sigue. Sin freno: si ya no quedan vueltas (o la plantilla no tiene la vuelta), sigue como antes, con la ficha.
+  const vuelve = a.pedido.fotos_no_halladas.length > 0 && quedaVueltaALaMesa(pl, e)
+  if (vuelve) return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeFotosALaMesa(a.pedido.fotos_no_halladas, a.ambiguas, b.F.fotos) } } }
   if (a.pedido.fotos_no_halladas.length) fichas.push(fichaNueva(`video-fotos-no-halladas-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', `el guion nombra fotos que no están entre las propias del cliente y no viajan al modelo: ${a.pedido.fotos_no_halladas.join(', ')}`, 'fotos propias del cliente', 'mirar el video: esos planos salen sin referencia'))
   if (a.pedido.prompt_recortado) fichas.push(fichaNueva(`video-prompt-recortado-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', 'el guion era más largo de lo que el modelo admite y se recortó', 'límite del pedido al modelo', 'mirar que el video cubra todos los planos'))
-  return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [] }, ...(fichas.length ? { fichas } : {}) } }
+  return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: false }, ...(fichas.length ? { fichas } : {}) } }
+}
+
+/** ¿al paso del pedido le queda su vuelta a la mesa? (dato de la plantilla: `vuelve_a` del paso `pedido_de_video`; sin él, nunca vuelve) */
+export function quedaVueltaALaMesa(pl: Plantilla, e: Estado): boolean {
+  const paso = pl.pasos.find((p) => p.funcion === 'pedido_de_video')
+  const max = Number(paso?.vuelve_a?.max ?? 0)
+  return !!paso && max > 0 && (e.vueltas[paso.clave] ?? 0) < max
+}
+
+/** cuántas fotos disponibles se le listan a la mesa en el aviso (el resto se resume) */
+export const MAX_FOTOS_EN_EL_AVISO = 30
+
+/** el aviso con que el pedido vuelve a la mesa: qué fotos no existen (o son ambiguas) y cuáles sí hay, con su nombre corto y lo que muestran. Puro. */
+export function avisoDeFotosALaMesa(noHalladas: string[], ambiguas: string[], fotos: FuentesCompletas['fotos']): string {
+  const amb = new Set(ambiguas)
+  const faltan = noHalladas.filter((x) => !amb.has(x))
+  const partes: string[] = []
+  if (faltan.length) partes.push(`${faltan.length === 1 ? 'la foto' : 'las fotos'} ${faltan.map((x) => `«${x}»`).join(', ')} no ${faltan.length === 1 ? 'existe' : 'existen'} entre las fotos propias del cliente`)
+  if (ambiguas.length) partes.push(`${ambiguas.length === 1 ? 'el nombre' : 'los nombres'} ${ambiguas.map((x) => `«${x}»`).join(', ')} ${ambiguas.length === 1 ? 'coincide' : 'coinciden'} con varias fotos (escribe más caracteres del nombre)`)
+  const propias = fotosPropiasConDireccion(fotos)
+  const cab = `Aviso de la oficina antes de pedir el video: ${partes.join('; ')}. Esas fotos no le llegarían al generador de video.`
+  if (!propias.length) return `${cab}\nEl cliente no tiene fotos propias: rehaz el guion sin «Foto:» en los planos (el video sale desde el texto). Integra el guion completo otra vez.`
+  const lista = propias.slice(0, MAX_FOTOS_EN_EL_AVISO).map((f) => `- ${f.id.slice(0, 8)} · ${(f.que_muestra ?? '').replace(/\s+/g, ' ').trim().slice(0, 160) || '(sin descripción)'}`)
+  const resto = propias.length > MAX_FOTOS_EN_EL_AVISO ? `\n(y ${propias.length - MAX_FOTOS_EN_EL_AVISO} fotos más)` : ''
+  return `${cab}\nRehaz el guion con las fotos que sí hay (en «Foto:» va el nombre corto) o deja esos planos sin foto. Integra el guion completo otra vez.\nFotos propias disponibles:\n${lista.join('\n')}${resto}`
 }
 
 function chequeos(e: Estado, pl: Plantilla): SalidaCodigoV {

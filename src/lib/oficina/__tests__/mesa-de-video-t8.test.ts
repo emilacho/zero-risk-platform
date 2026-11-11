@@ -171,6 +171,10 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
   }
   it('el dato sembrado es EXACTAMENTE el que produce el código, INACTIVA y con tope 10', () => {
     const f = filaDe('video_mesa')
+    // 202611111700 · la vuelta del pedido a la mesa se agrega DESPUÉS, al paso del índice 2
+    const vuelta = JSON.parse(/\$vuelta\$([\s\S]*?)\$vuelta\$/.exec(fs.readFileSync(path.join(RAIZ, 'migrations', '202611111700_oficina_video_vuelve_a_la_mesa.sql'), 'utf8'))![1])
+    expect(f.pasos[2].clave).toBe('pedido')
+    f.pasos[2] = { ...f.pasos[2], vuelve_a: vuelta }
     expect(f.pasos).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
     expect(f.indicaciones).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.indicaciones)))
     expect(f.limites).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.limites)))

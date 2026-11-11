@@ -142,8 +142,8 @@ export async function reentregaDelTurno(P: Puertos, enc: Encargo, abierto: { n: 
 const aporteNuevo = (enc: Encargo, de: string, para: string | null, tipo: TipoDeAporte, texto: string, o: { responde_a?: string | null; profundidad?: number; costo_usd?: number; workflow_execution_id?: string | null; refs?: string[] } = {}) =>
   ({ encargo_id: enc.id, de, para, tipo, texto, refs: o.refs ?? [], responde_a: o.responde_a ?? null, profundidad: o.profundidad ?? 0, costo_usd: o.costo_usd ?? 0, workflow_execution_id: o.workflow_execution_id ?? null })
 
-/** el paso `mesa` del motor: se llama cada vez que el encargo está parado en él */
-export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indice: number): Promise<Respuesta> {
+/** el paso `mesa` del motor: se llama cada vez que el encargo está parado en él. `vueltaDe`: la clave del paso que devolvió el encargo a la mesa (lo dice `siguientePaso`) */
+export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indice: number, vueltaDe?: string): Promise<Respuesta> {
   if (!P.mesa) return fallar(P, enc0, 'la mesa no tiene su puerto (libro y directorio) configurado')
   let enc = enc0
   for (let vuelta = 0; vuelta < 60; vuelta++) {
@@ -190,6 +190,19 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
         }
       }
       enc = await guardarMesa(P, enc, est)
+    }
+    // 11-nov · GO Lenovo 16:34 · la mesa volvió por un paso con `vuelve_a` (el pedido del video halló fotos que no existen): el aviso de ese paso entra UNA vez al libro
+    //   como devolución a la dirección, que contesta e integra; la mesa traduce otra vez y el encargo sigue. Al cerrar, la vuelta se cuenta (no se repite).
+    if (vueltaDe) {
+      const pv = pl.pasos.find((p) => p.clave === vueltaDe)
+      const art = pv?.salida_artefacto ? enc.estado_del_motor.artefactos[pv.salida_artefacto] : undefined
+      const aviso = typeof art?.datos?.aviso_a_la_mesa === 'string' ? art.datos.aviso_a_la_mesa.trim() : ''
+      const marca = `${vueltaDe}:v${art?.version ?? 0}`
+      if (aviso && est.marcas.aviso_de_vuelta !== marca) {
+        await P.mesa.aportar(aporteNuevo(enc, 'oficina-creativa', est.direccion, 'devuelve', aviso))
+        est = { ...est, marcas: { ...est.marcas, aviso_de_vuelta: marca } }
+        enc = await guardarMesa(P, enc, est)
+      }
     }
     const libro = await P.mesa.libro(enc.id)
     // la mesa de concepto: si la dirección devuelve el brief en su primer turno (sección «## Devolución del brief»), la mesa cierra SIN gastar más turnos y la cadena abre el brief versión 2
@@ -244,7 +257,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       return entregarALaCadena(P, enc, { texto: texto || null, motivo: forzado ?? (texto ? null : 'la mesa no produjo nada'), estado: 'cerrado' })
     }
     // traducir (o «cierra con lo que hay» → dibujar)
-    const cierre = await cerrarLaMesa(P, enc, pl, indice, est, libro, acc.accion === 'seguir_a_dibujar' ? acc.motivo : null)
+    const cierre = await cerrarLaMesa(P, enc, pl, indice, est, libro, acc.accion === 'seguir_a_dibujar' ? acc.motivo : null, vueltaDe)
     if (cierre === 'repetir') { enc = (await P.almacen.leerEncargo(enc.id)) ?? enc; continue }
     return cierre
   }
@@ -252,7 +265,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
 }
 
 /** la pieza del equipo → los artefactos de la cola mecánica. Devuelve 'repetir' si se hizo una pregunta (la dirección contesta y la mesa sigue) */
-async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, est: EstadoMesa, libro: Aporte[], forzado: string | null): Promise<Respuesta | 'repetir'> {
+async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, est: EstadoMesa, libro: Aporte[], forzado: string | null, vuelta?: string): Promise<Respuesta | 'repetir'> {
   const ult = [...libro].reverse().find((a) => a.tipo === 'integra')
   if (!ult) {
     // sin integración (la dirección no alcanzó a integrar: tope o turnos muertos): lo que el equipo SÍ escribió llega a la bandeja como texto; solo un tablero vacío es un fallo
@@ -299,7 +312,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   // bloqueante 1 de CC#3: el libro y las citas llegan a la jefatura (contexto de la revisión) para que juzgue si cada aporte fue real
   const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, hayGeneradas, est.condiciones ?? [])
   const nuevaMesa: EstadoMesa = { ...est, fase: 'traducida', pieza_texto: textoPieza, turno_abierto: null, tablero_para_la_jefatura: tableroParaLaJefatura(libro.map((x) => ({ ...x, texto: quitarLineasDeNotas(x.texto) })), textoPieza, pertinentes) }
-  const res = { costo_usd: 0, artefacto: nuevaMesa as unknown as Record<string, unknown>, otros_artefactos: otros }
+  const res = { costo_usd: 0, artefacto: nuevaMesa as unknown as Record<string, unknown>, otros_artefactos: otros, ...(vuelta ? { vuelta } : {}) }
   const e0 = conMesa(enc.estado_del_motor, nuevaMesa)
   const nuevo = registrarPaso(e0, pl, indice, res)
   const paso = pl.pasos[indice]

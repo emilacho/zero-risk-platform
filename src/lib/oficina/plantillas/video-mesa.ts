@@ -39,7 +39,9 @@ export const VIDEO_MESA: Plantilla = {
   pasos: [
     { clave: 'abrir', tipo: 'codigo', quien: 'sala', funcion: 'abrir_video', condicion: siempre, entrada: [], salida_artefacto: 'encargo', tope_usd: 0 },
     { clave: 'mesa', tipo: 'codigo', quien: 'sala', funcion: 'mesa', condicion: siempre, entrada: ['encargo'], salida_artefacto: 'mesa', tope_usd: 0 },
-    { clave: 'pedido', tipo: 'codigo', quien: 'sala', funcion: 'pedido_de_video', condicion: siempre, entrada: ['guion', 'copy_video'], salida_artefacto: 'pedido_video', tope_usd: 0 },
+    // 11-nov · GO Lenovo 16:34 · si el guion nombra fotos que no existen, el pedido vuelve UNA vez a la mesa con el aviso (202611111700); a la segunda sigue de largo
+    { clave: 'pedido', tipo: 'codigo', quien: 'sala', funcion: 'pedido_de_video', condicion: siempre, entrada: ['guion', 'copy_video'], salida_artefacto: 'pedido_video', tope_usd: 0,
+      vuelve_a: { paso: 'mesa', max: 1, si: { tipo: 'si_artefacto', artefacto: 'pedido_video', campo: 'vuelve_a_la_mesa', igual: true } } },
     { clave: 'video', tipo: 'codigo', quien: 'sala', funcion: 'video', condicion: siempre, entrada: ['pedido_video'], salida_artefacto: 'video', tope_usd: TOPE_DEL_PASO_VIDEO_USD },
     { clave: 'chequeos', tipo: 'codigo', quien: 'sala', funcion: 'chequeos_video', condicion: siempre, entrada: ['video', 'copy_video', 'pedido_video'], salida_artefacto: 'chequeos', tope_usd: 0 },
     { clave: 'jefatura', tipo: 'jefatura', quien: 'jefatura', condicion: siempre, entrada: ['guion', 'copy_video', 'video', 'chequeos'], salida_artefacto: 'respuesta_imagen', tope_usd: 0 },
