@@ -110,12 +110,17 @@ function dbFalsa(tablas: Record<string, Record<string, unknown>[]>) {
     } as unknown as Db,
   }
 }
-const cadenaFalsa = (o: { viva?: string | null; estrategia?: { version: number; estado: string; contenido: unknown } | null; campanas?: Record<string, { client_id: string }>; caida?: boolean } = {}) => ({
+const cadenaFalsa = (o: { viva?: string | null; estrategia?: { version: number; estado: string; contenido: unknown } | null; brief?: { version: number; estado: string; texto_md: string | null } | null; campanas?: Record<string, { client_id: string }>; caida?: boolean } = {}) => ({
   campana: vi.fn(async (id: string) => { if (o.caida) throw new Error('cadena caída'); return o.campanas?.[id] ? { id, ...o.campanas[id] } : null }),
   campanaViva: vi.fn(async () => (o.viva ? { id: o.viva } : null)),
   ultimaEstrategia: vi.fn(async (c: string) => (o.estrategia ? { campana_id: c, seco: false, agente: null, modelo: null, costo_usd: 0, workflow_execution_id: null, ...o.estrategia } : null)),
   estrategiaEnVersion: vi.fn(async () => null),
   insertarEstrategiaSiLibre: vi.fn(async () => true),
+  // 11-nov · el brief ya tiene lector y escritor (escritores por tramo)
+  ultimoBriefCreativo: vi.fn(async (c: string) => (o.brief ? { campana_id: c, leido: null, devolucion_texto: null, motivo: null, costo_usd: 0, encargo_id: null, plazo_en: null, seco: false, ...o.brief } : null)),
+  briefsDe: vi.fn(async () => []),
+  insertarBriefCreativoSiLibre: vi.fn(async () => true),
+  cargarContexto: vi.fn(async () => null),
 }) as never
 
 describe('puertos reales · filas activas, gasto del día y documentos', () => {
@@ -284,14 +289,20 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
     expect(await P.campanaDelCliente(CLI, 'no-existe')).toBe(false)
     await expect(puertosDeSupabase(db, undefined, cadenaFalsa({ caida: true })).campanaDelCliente(CLI, 'camp-a')).rejects.toThrow(/caída/)
   })
-  it('documentos: la estrategia vigente de la campaña viva (edición del plan); una estrategia en borrador no se lee; sin campaña viva, nada', async () => {
+  it('documentos: la estrategia (y, desde el 11-nov, el brief) vigentes de la campaña viva (edición del plan); en borrador no se leen; sin campaña viva, nada', async () => {
     const e = { id: 'e', client_id: CLI, documento: 'plan' as const, documento_ref: 'plan-1', version_base: '1', seccion: 's', antes: 'a', despues: 'b', llave: 'l', estado: 'en_curso' as const, version_nueva: null, gravedad: null, nota: null }
     const { db } = dbFalsa({})
     const viva = await puertosDeSupabase(db, undefined, cadenaFalsa({ viva: 'camp-viva', estrategia: { version: 4, estado: 'aprobada', contenido: { x: 'y' } } })).documentos(e, ['estrategia', 'brief'])
     expect(viva).toEqual({ estrategia: { texto: JSON.stringify({ x: 'y' }), ref: 'camp-viva', version: '4' } })
     expect(await puertosDeSupabase(db, undefined, cadenaFalsa({ viva: 'camp-viva', estrategia: { version: 4, estado: 'borrador', contenido: {} } })).documentos(e, ['estrategia'])).toEqual({})
     expect(await puertosDeSupabase(db, undefined, cadenaFalsa({ viva: null, estrategia: { version: 1, estado: 'aprobada', contenido: {} } })).documentos(e, ['estrategia'])).toEqual({})
+    // sin brief en la campaña (y la pieza todavía sin lector): nada
     expect(await puertosDeSupabase(db, undefined, cadenaFalsa({ viva: 'camp-viva', estrategia: { version: 4, estado: 'aprobada', contenido: {} } })).documentos(e, ['brief', 'pieza'])).toEqual({})
+    const conBrief = (estado: string) => cadenaFalsa({ viva: 'camp-viva', brief: { version: 3, estado, texto_md: '## Mensaje · hola' } })
+    expect(await puertosDeSupabase(db, undefined, conBrief('validada')).documentos(e, ['brief', 'pieza'])).toEqual({ brief: { texto: '## Mensaje · hola', ref: 'camp-viva', version: '3' } })
+    for (const estado of ['borrador', 'devuelta', 'descartada']) expect(await puertosDeSupabase(db, undefined, conBrief(estado)).documentos(e, ['brief']), estado).toEqual({})
+    // el brief no se lee si no se pide
+    expect(await puertosDeSupabase(db, undefined, conBrief('validada')).documentos(e, ['estrategia'])).toEqual({})
   })
   it('🔴 si la base falla, cada lectura LANZA (el turno frena · nunca «cero gasto» ni «ninguna fila activa»)', async () => {
     const caida = { from: () => { const api: Record<string, unknown> = { select: () => api, eq: () => api, gte: () => api, in: () => api, is: () => api, then: (res: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'caída' } }).then(res) }; return api } } as unknown as Db
