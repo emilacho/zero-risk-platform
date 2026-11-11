@@ -141,9 +141,10 @@ const MIRADA_BIEN = JSON.stringify({ coincide: true, orden_respetado: true, falt
 const MIRADA_MAL = JSON.stringify({ coincide: false, orden_respetado: true, faltantes: [{ plano: 1, que_falta: 'no se ve la fachada: sale una calle vacía' }], por_plano: [{ plano: 1, se_ve: 'una calle vacía' }, { plano: 2, se_ve: 'manos trabajando' }], para_la_mesa: 'el plano 1 tiene que mostrar la fachada con el letrero' })
 
 /** recorre el encargo ENTERO: mesa → brazo → cuadros → mirada (y, si el video vuelve, otra vez mesa → brazo → mirada) hasta la jefatura. `mirada(k)` = la k-ésima respuesta del agente (desde 0) */
-async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacador?: boolean; costoVideo?: number; costoIntegrar?: number }) {
+async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacador?: boolean; costoVideo?: number; costoIntegrar?: number; tope?: number }) {
   const costoVideo = o.costoVideo ?? 2.12
-  const M = crearMemoria({ parte: parteDe(C), plantilla: VIDEO_MESA, fuentes: { fotos: C.fotos } })
+  const plantilla = o.tope ? { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, tope_encargo_usd: o.tope } } : VIDEO_MESA
+  const M = crearMemoria({ parte: parteDe(C), plantilla, fuentes: { fotos: C.fotos } })
   const MS = crearMesaEnMemoria()
   M.P.mesa = MS
   const enviados: string[] = []
@@ -252,6 +253,15 @@ describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefa
     expect(f!.que).toContain('plano 1: no se ve la fachada: sale una calle vacía')
     expect(f!.propuesta).toBe('el plano 1 tiene que mostrar la fachada con el letrero')
     expect(r.sobres[0].contexto.find((x) => x.titulo === 'Lo que vio el agente que miró el video')?.texto).toContain('NO coincide')
+  })
+  it('🔴 con tope de sobra el freno es el CONTADOR: no coincide nunca ⇒ vuelve UNA sola vez (2 videos, 2 miradas), luego la ficha', async () => {
+    const r = await recorrer(C, { mirada: () => MIRADA_MAL, tope: 100 })
+    expect(r.avisos).toHaveLength(1)
+    expect(r.enviados).toHaveLength(2)
+    expect(r.miradas).toHaveLength(2)
+    expect(r.enc.estado_del_motor.vueltas[PASO_MIRAR_VIDEO]).toBe(1)
+    expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
+    expect(r.enc.estado_del_motor.fichas.find((x) => x.donde === 'mirada' && x.estado === 'abierta')!.que).not.toContain('no se rehízo solo')
   })
   it('🔴 (sonda CC7) NO coincide pero NO cabe filmar otro video en el tope: no vuelve (nunca se cierra por tope antes de la jefatura): sigue con la ficha que lo dice', async () => {
     const r = await recorrer(C, { mirada: () => MIRADA_MAL, costoVideo: 4.5, costoIntegrar: 0.4 })
