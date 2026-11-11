@@ -84,3 +84,21 @@ describe('el lector de vida de la oficina (11-nov · #21)', () => {
     await expect(l.duraciones('brazo:video')).rejects.toThrow(/base caída/)
   })
 })
+
+describe('el vigía de la oficina, tal como lo llama su ruta (sin lector a mano)', () => {
+  it('🔴 mide el brazo por sus turnos: si sus videos tardan 60 min, uno de 50 min sin terminar sigue esperando (con los 45 de hoy se daría por vencido)', async () => {
+    const hora = new Date('2026-11-11T14:00:00Z')
+    const hechos = Array.from({ length: CORRIDAS_MINIMAS }, (_, i) => ({ id: `h${i}`, encargo_id: i % 2 ? 'e-nau' : 'e-b2b', n: 4, paso: 'video', tipo: 'brazo', estado: 'hecho', inicio: '2026-11-10T10:00:00Z', fin: '2026-11-10T11:00:00Z' }))
+    const db = new DbFalsa().semilla('oficina_turnos', [...hechos, { id: 'vivo', encargo_id: 'e-b2b', n: 5, paso: 'video', tipo: 'brazo', estado: 'corriendo', workflow_execution_id: 'ex-1', inicio: new Date(hora.getTime() - 50 * MIN).toISOString() }])
+    let recibidos = 0
+    const enc = { id: 'e-b2b', estado: 'esperando', client_id: CLIENTE, brief_id: 'BRF-9', sala_ref: null, gasto_usd: 0, estado_del_motor: { vueltas: {}, artefactos: { pedido_video: { datos: { envio: { request_id: 'r1' } } } } } }
+    const P = {
+      almacen: { leerEncargo: async () => enc, registrarPaso: async () => { recibidos++ }, guardar: async () => { recibidos++ } },
+      video: { estado: async () => ({ ok: true, terminal: false, status: 'IN_PROGRESS' }) },
+      avisar: async () => undefined,
+    } as never
+    const r = await revisarPasosMuertos(P, db, hora)
+    expect([r.reanudar, r.fallidos, recibidos]).toEqual([[], [], 0])
+    expect(db.tablas['oficina_turnos'].find((t) => t.id === 'vivo')?.estado).toBe('corriendo')
+  })
+})
