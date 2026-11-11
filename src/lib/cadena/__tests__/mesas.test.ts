@@ -9,7 +9,8 @@ import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import { ACCIONES } from '../acciones'
 import type { Campana, EstrategiaGuardada } from '../almacen'
 import { HORAS_DE_REARME } from '../esperas'
-import { briefAbrir, CAP_DE_VUELTAS_DE_CAMBIOS, conceptoAbrir, conceptoDecidir, condicionesDe, HOLGURA_DE_MESA_MIN, PLAZO_DE_MESA_MIN, puertoDeLaCadena, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
+import { escritorDeBrief } from '../../colaterales/escritores'
+import { briefAbrir, CAP_DE_VUELTAS_DE_CAMBIOS, cerrarMesasVencidas, conceptoAbrir, MOTIVO_RETOQUE_DE_COLATERALES, versionesDeMesaHasta, conceptoDecidir, condicionesDe, HOLGURA_DE_MESA_MIN, PLAZO_DE_MESA_MIN, puertoDeLaCadena, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
 
 const A = clienteA()
 const CAMP = 'camp-1'
@@ -347,5 +348,81 @@ describe('el puerto en proceso y las entregas por HTTP', () => {
     expect((await ACCIONES.concepto.entregar(al, wf({ version: 1, texto: CONCEPTO_BUENO }), AHORA)).cuerpo).toMatchObject({ ok: true, estado: 'lista' })
     expect((await ACCIONES.concepto.entregar(al, wf({ version: 1, texto: CONCEPTO_BUENO }), AHORA)).cuerpo).toMatchObject({ ya_cerrada: true })
     expect(Object.keys(ACCIONES.concepto)).toEqual(['abrir', 'entregar', 'decidir', 'revalidar'])
+  })
+})
+
+// ───────────────────────── 11-nov · colaterales · el contador de reaperturas cuenta las versiones que hizo una MESA (diseño 🟢 CC7 + CC6)
+describe('las reaperturas del brief no cuentan los retoques de colaterales', () => {
+  const retoque = (v: number) => ({ version: v, motivo: MOTIVO_RETOQUE_DE_COLATERALES })
+  it('puro · cuenta FILAS hasta la versión: un retoque o un deshacer suben el número sin ser reapertura', () => {
+    const vs = [{ version: 1, motivo: null }, retoque(2), retoque(3), { version: 4, motivo: null }]
+    expect([1, 2, 3, 4].map((v) => versionesDeMesaHasta(vs, v))).toEqual([1, 1, 1, 2])
+    expect(versionesDeMesaHasta([{ version: 1, motivo: 'cambios_de_emilio' }, { version: 2, motivo: 'tope de la mesa' }], 2)).toBe(2)
+  })
+
+  /** v1 validada por la mesa → retoque (v2) → deshacer del retoque (v3): dos versiones que NO hizo una mesa */
+  async function conRetoqueYDeshacer(al: AlmacenMemoria) {
+    await conBriefValidado(al)
+    const esc = escritorDeBrief(al)
+    expect(await esc.escribirSiSigue(CAMP, '1', BRIEF_BUENO.replace('Hay mesa desde las siete.', 'Hay mesa larga desde las siete.'), 'retoque')).toBe('2')
+    expect(await esc.escribirSiSigue(CAMP, '2', BRIEF_BUENO, 'deshacer')).toBe('3')
+    expect(al.briefsCreativos.map((b) => [b.version, b.estado, b.motivo])).toEqual([[1, 'validada', null], [2, 'validada', MOTIVO_RETOQUE_DE_COLATERALES], [3, 'validada', MOTIVO_RETOQUE_DE_COLATERALES]])
+  }
+  /** la dirección (mesa de la gran idea) devuelve el brief vigente: es una devolución REAL */
+  async function laDireccionDevuelve(al: AlmacenMemoria) {
+    expect((await conceptoAbrir(al, wf(), AHORA)).status).toBe(200)
+    expect(await recibirConcepto(al, entrega(1, '## Devolución del brief\n- el insight no se sostiene', { brief_devuelto: '- el insight no se sostiene' }), AHORA)).toMatchObject({ ok: true, estado: 'brief_devuelto' })
+  }
+
+  it('el caso de CC7 · v1 → retoque v2 → deshacer v3 → la dirección devuelve la v3: NO frena (antes: 3 ≥ 2 = necesita_humano) · la reapertura abre la v4 · su devolución SÍ frena', async () => {
+    const al = almacen()
+    await conRetoqueYDeshacer(al)
+    await laDireccionDevuelve(al) // sitio «la dirección devolvió el brief»
+    expect(al.briefsCreativos[2].estado).toBe('devuelta')
+    expect(al.campanas[0].estado).toBe('calendario')
+    const r = await briefAbrir(al, wf(), AHORA) // sitio briefAbrir: no es brief_agotado
+    expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
+    expect(r.cuerpo.version).toBe(4)
+    expect(await recibirBrief(al, entrega(4, BRIEF_MALO), AHORA)).toMatchObject({ ok: true, estado: 'devuelta' }) // sitio «devuelta por código»
+    expect(al.campanas[0].estado).toBe('necesita_humano')
+    expect(al.campanas[0].estado_motivo).toMatch(/dos veces/)
+    expect((await briefAbrir(al, wf(), AHORA)).cuerpo.error).toBe('brief_agotado')
+  })
+  it('control sin retoques: v1 devuelta por la dirección no frena; la v2 devuelta frena (la regla de siempre, intacta)', async () => {
+    const al = almacen()
+    await conBriefValidado(al)
+    await laDireccionDevuelve(al)
+    expect(al.campanas[0].estado).toBe('calendario')
+    expect((await briefAbrir(al, wf(), AHORA)).cuerpo.version).toBe(2)
+    expect(await recibirBrief(al, entrega(2, BRIEF_MALO), AHORA)).toMatchObject({ ok: true, estado: 'devuelta' })
+    expect(al.campanas[0].estado).toBe('necesita_humano')
+  })
+  it('sitio «la mesa no entregó» · con retoques en medio, la segunda versión de mesa sin texto frena (y la primera nunca)', async () => {
+    const al = almacen()
+    await conRetoqueYDeshacer(al)
+    await laDireccionDevuelve(al)
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(4, null, { motivo: 'tope de la mesa' }), AHORA)).toMatchObject({ ok: true, estado: 'descartada' })
+    expect(al.campanas[0].estado).toBe('necesita_humano')
+  })
+  it('sitio «el reloj» (cerrarMesasVencidas) · con retoques en medio, la segunda versión de mesa vencida frena', async () => {
+    const al = almacen()
+    await conRetoqueYDeshacer(al)
+    await laDireccionDevuelve(al)
+    await briefAbrir(al, wf(), AHORA)
+    const lejos = '2026-10-11T12:00:00Z'
+    const out = await cerrarMesasVencidas(al, lejos)
+    expect(out.find((x) => x.campana_id === CAMP)?.texto).toMatch(/ya son dos: necesita_humano/)
+    expect(al.campanas[0].estado).toBe('necesita_humano')
+  })
+  it('una devolución de la dirección sobre un RETOQUE de la primera versión de mesa no la agota; sobre la v1 sin retoque, tampoco (mismo trato)', async () => {
+    for (const conRetoque of [true, false]) {
+      const al = almacen()
+      if (conRetoque) await conRetoqueYDeshacer(al)
+      else await conBriefValidado(al)
+      await laDireccionDevuelve(al)
+      expect(al.campanas[0].estado, String(conRetoque)).toBe('calendario')
+      expect((await briefAbrir(al, wf(), AHORA)).status, String(conRetoque)).toBe(200)
+    }
   })
 })

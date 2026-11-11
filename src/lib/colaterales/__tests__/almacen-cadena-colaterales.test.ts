@@ -62,3 +62,32 @@ describe('almacén real de la cadena · métodos de colaterales', () => {
     expect(await almacenDeSupabase().estrategiaEnVersion('c', 9)).toBeNull()
   })
 })
+
+// 11-nov · escritor del brief · `insertarBriefCreativoSiLibre` en el adaptador REAL (línea 3 de CC7: solo el 23505 de ESA restricción es «otra se adelantó»)
+const COLUMNAS_DEL_BRIEF = (() => {
+  const leer = (n: string) => fs.readFileSync(path.join(process.cwd(), 'supabase/migrations', n), 'utf8').split(String.fromCharCode(13)).join('')
+  const m = /CREATE TABLE IF NOT EXISTS public\.cadena_brief_creativo \(([\s\S]*?)\n\);/i.exec(leer('202610312001_cadena_brief_creativo_y_conceptos.sql'))!
+  const cols = new Set(m[1].split('\n').map((l) => l.trim()).filter((l) => l && !/^constraint/i.test(l)).map((l) => l.split(/\s+/)[0]))
+  for (const x of leer('202610312003_cadena_brief_creativo_plazo.sql').matchAll(/ADD COLUMN IF NOT EXISTS (\w+)/g)) cols.add(x[1])
+  return cols
+})()
+const BRIEF_NUEVO = { campana_id: 'c', version: 5, estado: 'validada' as const, texto_md: '## Mensaje\nx', leido: {}, devolucion_texto: null, motivo: 'retoque_de_colaterales', costo_usd: 0, encargo_id: null, plazo_en: null, seco: false }
+describe('almacén real de la cadena · insertarBriefCreativoSiLibre', () => {
+  it('true si guarda, en `cadena_brief_creativo`, y escribe SOLO columnas que las migraciones crean', async () => {
+    expect(await almacenDeSupabase().insertarBriefCreativoSiLibre(BRIEF_NUEVO)).toBe(true)
+    expect(escrituras.map((e) => e.tabla)).toEqual(['cadena_brief_creativo'])
+    for (const k of Object.keys(escrituras[0].fila)) expect(COLUMNAS_DEL_BRIEF.has(k), k).toBe(true)
+  })
+  it('false SOLO con el 23505 del único (campaña, versión)', async () => {
+    errorAlInsertar = { message: 'duplicate key value violates unique constraint "cadena_brief_creativo_version"', code: '23505' }
+    expect(await almacenDeSupabase().insertarBriefCreativoSiLibre(BRIEF_NUEVO)).toBe(false)
+  })
+  it('🔴 un 23505 de OTRA restricción, o cualquier otro error, se LANZA (nunca se lee como «otra se adelantó»)', async () => {
+    errorAlInsertar = { message: 'duplicate key value violates unique constraint "cadena_brief_creativo_pkey"', code: '23505' }
+    await expect(almacenDeSupabase().insertarBriefCreativoSiLibre(BRIEF_NUEVO)).rejects.toThrow(/pkey/)
+    errorAlInsertar = { message: 'new row violates check constraint "cadena_brief_creativo_estado_valido"', code: '23514' }
+    await expect(almacenDeSupabase().insertarBriefCreativoSiLibre(BRIEF_NUEVO)).rejects.toThrow(/estado_valido/)
+    errorAlInsertar = { message: 'connection reset', code: '08006' }
+    await expect(almacenDeSupabase().insertarBriefCreativoSiLibre(BRIEF_NUEVO)).rejects.toThrow(/connection reset/)
+  })
+})

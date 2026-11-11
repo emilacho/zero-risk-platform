@@ -2,7 +2,7 @@
  * COLATERALES 2d · los PUERTOS REALES del turno (Supabase). Cada lectura lanza si la base falla (el turno frena: falla cerrado).
  *   · filas activas de la jefatura: `jefatura_grading_policies.is_active`, leídas en el instante;
  *   · guarda de piezas: la de la oficina (#1020), única que nombra sus tablas;
- *   · documentos de aguas abajo: SOLO los que tienen lector hoy (la estrategia, por el almacén de la cadena). Los demás vienen vacíos y la
+ *   · documentos de aguas abajo: SOLO los que tienen lector hoy (la estrategia y, desde el 11-nov, el brief, por el almacén de la cadena). Los demás vienen vacíos y la
  *     nota de la edición los declara «sin lector» (se suman con los escritores por tramo). La campaña: la del documento editado si es de
  *     una campaña; si es del cliente (manual, plan), su campaña VIVA real; sin campaña viva, nada que leer;
  *   · la campaña de un documento de campaña es del cliente: por el almacén de la cadena (único que nombra sus tablas);
@@ -10,7 +10,7 @@
  *     están tomadas sin recibo todavía (en vuelo: el turno les cuenta la reserva);
  *   · tope diario: la fila del cliente en `colaterales_topes_diarios`; si no tiene, la fila por omisión (sin cliente); sin ninguna, null;
  *   · pieza B: el gasto del día suma las revisiones de la jefatura de esas ediciones (cerradas por su gasto, abiertas por cuenta aparte); la revisión se abre con
- *     vuelta a `api/jefatura/colaterales-vuelta`; aplicar = el motor 2c con los escritores que existen hoy (la estrategia);
+ *     vuelta a `api/jefatura/colaterales-vuelta`; aplicar = el motor 2c con los escritores que existen hoy (la estrategia y el brief);
  *   · pieza D · el gasto de UNA edición: sus llamadas por su llave EXACTA en `agent_dispatches` (más la ejecución de la edición), cada una con sus recibos;
  *     la que no tiene recibo se cuenta aparte · sus revisiones: cerradas por su gasto, abiertas aparte.
  * Agnóstico: ningún dato de un cliente.
@@ -23,7 +23,7 @@ import { aplicarAprobados } from './aplicar'
 import type { Documento } from '../cadena/dependencias-de-documentos'
 import { piezasPorPublicar } from '../oficina/piezas-por-publicar'
 import { almacenDeColaterales, type Db, type Edicion } from './almacen'
-import { escritorDeEstrategia } from './escritores'
+import { escritorDeBrief, escritorDeEstrategia } from './escritores'
 import { DOCUMENTOS_DE_CAMPANA, llaveDeLaSecretaria, type DocumentoLeido, type PuertosDelTurno } from './turno'
 import { llaveDelRehacer } from './rehacer'
 import { RUTA_DE_VUELTA_DE_COLATERALES } from './vuelta'
@@ -39,9 +39,10 @@ export async function campanaDeLaEdicion(e: Pick<Edicion, 'client_id' | 'documen
   return (await viva(e.client_id))?.id ?? null
 }
 
-type Cadena = Pick<ReturnType<typeof almacenDeSupabase>, 'campana' | 'campanaViva' | 'ultimaEstrategia' | 'estrategiaEnVersion' | 'insertarEstrategiaSiLibre'>
+type Cadena = Pick<ReturnType<typeof almacenDeSupabase>, 'campana' | 'campanaViva' | 'ultimaEstrategia' | 'estrategiaEnVersion' | 'insertarEstrategiaSiLibre' | 'ultimoBriefCreativo' | 'briefsDe' | 'insertarBriefCreativoSiLibre' | 'cargarContexto'>
 export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, ahora: () => Date = () => new Date(), cadena: Cadena = almacenDeSupabase()): PuertosDelTurno {
   const estrategia = escritorDeEstrategia(cadena)
+  const brief = escritorDeBrief(cadena)
   const almacen = almacenDeColaterales(db)
   // 11-nov · hueco 1 de CC6 · las revisiones de unas ediciones: las que nombran sus retoques Y las que se nombran por la edición misma (`colateral` + id de la edición, todas las versiones).
   // Un retoque rehecho suelta su revisión: sin la segunda lectura, el gasto de la primera revisión desaparecía de las cuentas. Si la base falla, lanza
@@ -65,12 +66,16 @@ export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, 
     piezasPorPublicar: (client_id, campana_id) => piezasPorPublicar(db, { client_id, campana_id }, ahora()),
     async documentos(e, docs) {
       const r: Partial<Record<Documento, DocumentoLeido>> = {}
-      if (!docs.includes('estrategia')) return r
+      const conLector = { estrategia, brief } as const
+      const pedidos = (Object.keys(conLector) as (keyof typeof conLector)[]).filter((d) => docs.includes(d))
+      if (!pedidos.length) return r
       const campana = await campanaDeLaEdicion(e, (c) => cadena.campanaViva(c, false))
       if (!campana) return r
-      const v = await estrategia.leerVigente(campana)
-      // abierta (borrador): no se toca, queda para la próxima versión (CRITERIOS §3) · no se lee
-      if (v && !v.abierto) r.estrategia = { texto: v.texto, ref: campana, version: v.version }
+      for (const d of pedidos) {
+        const v = await conLector[d].leerVigente(campana)
+        // abierta (borrador): no se toca, queda para la próxima versión (CRITERIOS §3) · no se lee
+        if (v && !v.abierto) r[d] = { texto: v.texto, ref: campana, version: v.version }
+      }
       return r
     },
     async campanaDelCliente(client_id, campana_id) {
@@ -141,7 +146,7 @@ export function puertosDeSupabase(db: Db = getSupabaseAdmin() as unknown as Db, 
       return Number.isFinite(n) && n > 0 ? n : null
     },
     abrirRevisionColateral: (entrada) => abrirRevisionConVuelta(db, entrada, RUTA_DE_VUELTA_DE_COLATERALES),
-    aplicar: (edicion_id) => aplicarAprobados({ almacen, escritores: { estrategia }, leerFilasActivas: () => P.filasActivas() }, edicion_id),
+    aplicar: (edicion_id) => aplicarAprobados({ almacen, escritores: { estrategia, brief }, leerFilasActivas: () => P.filasActivas() }, edicion_id),
   }
   return P
 }

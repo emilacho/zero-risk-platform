@@ -198,6 +198,11 @@ export class AlmacenMemoria implements Almacen {
     if (this.briefsCreativos.some((x) => x.campana_id === b.campana_id && x.version === b.version)) throw Object.assign(new Error('duplicate key value violates unique constraint "cadena_brief_creativo_version"'), { code: '23505' })
     this.briefsCreativos.push(structuredClone(b))
   }
+  async insertarBriefCreativoSiLibre(b: BriefCreativoGuardado) {
+    if (this.briefsCreativos.some((x) => x.campana_id === b.campana_id && x.version === b.version)) return false
+    this.briefsCreativos.push(structuredClone(b))
+    return true
+  }
   async actualizarBriefCreativo(campanaId: string, version: number, patch: Partial<BriefCreativoGuardado>) {
     const b = this.briefsCreativos.find((x) => x.campana_id === campanaId && x.version === version)
     if (!b) throw new Error('no existe el brief creativo')

@@ -277,6 +277,8 @@ export interface Almacen {
   /** los briefs abiertos (`borrador`) cuyo plazo propio ya pasó (el vigía los deja `descartada`) */
   briefsVencidos(ahora: string): Promise<BriefCreativoGuardado[]>
   insertarBriefCreativo(b: BriefCreativoGuardado): Promise<void>
+  /** colaterales (escritor del brief, 11-nov) · inserta una versión nueva; false SOLO si esa (campaña, versión) ya existe (otra se adelantó) · cualquier otro error se lanza */
+  insertarBriefCreativoSiLibre(b: BriefCreativoGuardado): Promise<boolean>
   actualizarBriefCreativo(campanaId: string, version: number, patch: Partial<BriefCreativoGuardado>): Promise<void>
   /** escritura CONDICIONAL (09-nov · revalidar): solo si la versión SIGUE en `estado`; true = escribió */
   actualizarBriefCreativoSi(campanaId: string, version: number, estado: BriefCreativoGuardado['estado'], patch: Partial<BriefCreativoGuardado>): Promise<boolean>
