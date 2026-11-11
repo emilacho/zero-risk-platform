@@ -52,9 +52,9 @@ const mundo = () => new DbFalsa()
   ])
   .semilla('oficina_config', [{ id: 1, estado: 'encendida', familias_activas: ['post_img', 'carrusel_ig_v1', 'kit_historias'], clientes_ensayo: [] }])
   .semilla('oficina_tipos_de_grupo', [
-    { tipo: 'post_img', familia: 'post_img', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: true },
-    { tipo: 'carrusel_ig_v1', familia: 'carrusel_ig_v1', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: true },
-    { tipo: 'kit_historias', familia: 'kit_historias', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: false },
+    { tipo: 'post_img', familia: 'post_img', clase: 'post_img', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: true },
+    { tipo: 'carrusel_ig_v1', familia: 'carrusel_ig_v1', clase: 'carrusel', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: true },
+    { tipo: 'kit_historias', familia: 'kit_historias', clase: 'kit', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: false },
   ])
   .semilla('oficina_encargos', [])
 const ENV = { slackToken: 'xoxb-falso' }

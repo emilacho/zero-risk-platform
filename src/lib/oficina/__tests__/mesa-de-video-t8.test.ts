@@ -24,7 +24,7 @@ import { abrirEncargo } from '../orquestador'
 import { productoresDeLaPieza, familiaDePieza } from '../paso-jefatura'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
 import type { PuertoDeVideo } from '../puertos'
-import { CONFIG_APAGADA, FAMILIAS_SIN_PASARELA, TARGET_STEP_PRODUCIR, decidirPuerta } from '../sobre'
+import { CONFIG_APAGADA, TARGET_STEP_PRODUCIR, decidirPuerta } from '../sobre'
 import { CLIENTE, FOTOS, PARTE, crearMemoria } from './memoria'
 import { jugar, type Turno } from './mesa-arnes'
 import { crearMesaEnMemoria } from './mesa-memoria'
@@ -198,12 +198,11 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
 
 describe('la puerta: el video no tiene pasarela', () => {
   const sobre = { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'video_mesa' }
-  it('video_mesa es la única familia sin pasarela; apagada, no activa o cliente fuera del ensayo ⇒ sin_sala (no pasarela); activa ⇒ abre', () => {
-    expect(FAMILIAS_SIN_PASARELA).toEqual(['video_mesa'])
-    expect(decidirPuerta(sobre, CONFIG_APAGADA, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'oficina_apagada' })
-    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['carrusel_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'familia_no_activa' })
-    expect(decidirPuerta(sobre, { estado: 'ensayo', familias_activas: ['video_mesa'], clientes_ensayo: ['otro'] }, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'cliente_fuera_del_ensayo' })
-    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['video_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'abrir', familia: 'video_mesa' })
+  it('la clase video (dato de la plantilla) no tiene pasarela; apagada, no activa o cliente fuera del ensayo ⇒ sin_sala (no pasarela); activa ⇒ abre', () => {
+    expect(decidirPuerta(sobre, CONFIG_APAGADA, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'oficina_apagada' })
+    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['carrusel_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'familia_no_activa' })
+    expect(decidirPuerta(sobre, { estado: 'ensayo', familias_activas: ['video_mesa'], clientes_ensayo: ['otro'] }, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'cliente_fuera_del_ensayo' })
+    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['video_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'abrir', familia: 'video_mesa' })
     // las de siempre no cambian
     expect(decidirPuerta({ ...sobre, familia: 'carrusel_mesa' }, CONFIG_APAGADA, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'pasarela', motivo: 'oficina_apagada' })
   })

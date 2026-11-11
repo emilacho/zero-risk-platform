@@ -23,7 +23,7 @@ function mundo(opc: { estado?: string; dry_run?: boolean; hitl?: string; familia
     .semilla('client_social_images', [])
     .semilla('client_historical_outputs', [{ id: PARTE, client_id: CLIENTE, output_type: 'campaign_brief_pack', content: PARTE_REAL }])
     .semilla('oficina_config', [{ id: 1, estado: 'encendida', familias_activas: opc.familiaActiva === false ? [] : ['post_img'], clientes_ensayo: [] }])
-    .semilla('oficina_tipos_de_grupo', [{ tipo: 'post_img', familia: 'post_img', pasos: POST_IMG.pasos, indicaciones: POST_IMG.indicaciones, limites: POST_IMG.limites, activo: true }])
+    .semilla('oficina_tipos_de_grupo', [{ tipo: 'post_img', familia: 'post_img', clase: 'post_img', pasos: POST_IMG.pasos, indicaciones: POST_IMG.indicaciones, limites: POST_IMG.limites, activo: true }])
     .semilla('hitl_queue', [{ id: HITL, type: 'content_piece_review', status: opc.hitl ?? 'pending', client_id: CLIENTE, metadata: {} }])
     .semilla('oficina_encargos', [
       { id: ENC, client_id: CLIENTE, parte_id: PARTE, brief_id: 'BRF-0003', tipo_de_grupo: 'post_img', familia: 'post_img', version_encargo: opc.version ?? 3, estado: opc.estado ?? 'cerrado', gasto_usd: 1.8, tope_usd: 2.5, dry_run: opc.dry_run ?? false, hitl_queue_id: HITL, estado_del_motor: {}, sala_ref: { _journey_id: 'j1', fila: { id: 'f1', fecha: '2026-10-26', hora: '09:00' } } },

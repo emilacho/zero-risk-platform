@@ -21,11 +21,15 @@ export async function configDeLaPuerta(db: DbDeGasto): Promise<ConfigDeOficina> 
   const { data, error } = (await db.from(TABLA_DE_CONFIG).select(COLUMNAS_DE_CONFIG).eq('id', 1).maybeSingle()) as Respuesta
   if (error) throw new Error(`la oficina no contestó: ${error.message ?? 'sin detalle'}`)
   if (!data) throw new Error('la config de la oficina no tiene fila')
-  return configDesdeLaFila(data as Record<string, unknown>)
+  // fila #19 · qué familias no tienen pieza simple lo dice la CLASE de su plantilla (dato), no una lista de nombres; si no se puede leer, LANZA como la config
+  const pls = await filas<{ familia: unknown; clase: unknown }>(db.from(TABLAS_DE_GASTO.plantillas).select('familia, clase'))
+  const sin_pasarela = pls.filter((p) => typeof p.familia === 'string' && !tienePasarela(esClaseDePieza(p.clase) ? p.clase : null)).map((p) => String(p.familia))
+  return { ...configDesdeLaFila(data as Record<string, unknown>), sin_pasarela }
 }
 
 type Respuesta = { data: unknown; error: { message?: string } | null }
 import type { ConfigDeOficina } from './sobre'
+import { esClaseDePieza, tienePasarela } from './clase'
 // la forma mínima del cliente de la base que se usa aquí (la de Supabase la cumple)
 export interface DbDeGasto { from(tabla: string): any }
 

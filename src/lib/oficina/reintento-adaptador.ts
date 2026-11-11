@@ -8,7 +8,8 @@ import { decidirTopeDelParte, sobresDeProducir } from '@/lib/cadena/autoproducir
 import { avisoDeGastoIlegible, avisoDelTope, type DecisionDelTope } from '@/lib/cadena/tope-de-campana'
 import { reintentarPiezas, CLAVE_INTERRUPTOR, CLAVE_LIBRETA, type Libreta, type ParteParaReintento, type PuertosDeReintento, type ResultadoDelReintento } from '@/lib/cadena/reintento-piezas'
 import type { Db } from './almacen-supabase'
-import { identidadVisualDelCliente, previueloDeLaminas, esFamiliaDeLaminas } from './identidad-visual'
+import { identidadVisualDelCliente, previueloDeLaminas } from './identidad-visual'
+import { claseDe, dibujaLaminas } from './clase'
 import { almacenDeSupabase as almacenDeLaOficina } from './almacen-supabase'
 import { bloqueaElReintento } from './reapertura'
 
@@ -72,7 +73,9 @@ export function puertosDeReintento(db: Db, env: { slackToken?: string; canalHilo
       return { sueltan: new Set(d.tipo === 'sin_tope' ? [] : d.sueltan), motivo }
     },
     async previueloDeLaminas(clientId, familia) {
-      if (!esFamiliaDeLaminas(familia)) return { ok: true }
+      // fila #19 · si dibuja láminas lo dice la clase de su plantilla (dato), no el nombre; una plantilla ilegible no bloquea (la puerta la vuelve a leer y decide)
+      const pl = await oficina.leerPlantilla(familia).catch(() => null)
+      if (!dibujaLaminas(claseDe(pl?.plantilla))) return { ok: true }
       // las mismas lecturas que el pre-vuelo de la puerta (`fuentes`): la ficha y el manual vigente; una lectura que falla NO bloquea (la puerta la vuelve a leer y decide)
       const cl = (await db.from('clients').select('id,slug,logo_url,brand_colors,brand_fonts,config').eq('id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
       const mb = (await db.from('client_brand_books').select('*').eq('client_id', clientId).order('version', { ascending: false }).limit(1)) as { data: Fila[] | null; error: { message: string } | null }

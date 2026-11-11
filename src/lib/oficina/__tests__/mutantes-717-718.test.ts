@@ -26,7 +26,7 @@ function semilla(): DbFalsa {
     .semilla('client_social_images', [])
     .semilla('client_historical_outputs', [{ id: PARTE, client_id: CLIENTE, output_type: 'campaign_brief_pack', content: PARTE_REAL }])
     .semilla('oficina_config', [{ id: 1, estado: 'encendida', familias_activas: ['post_img'], clientes_ensayo: [] }])
-    .semilla('oficina_tipos_de_grupo', [{ tipo: 'post_img', familia: 'post_img', pasos: POST_IMG.pasos, indicaciones: POST_IMG.indicaciones, limites: POST_IMG.limites, activo: true }])
+    .semilla('oficina_tipos_de_grupo', [{ tipo: 'post_img', familia: 'post_img', clase: 'post_img', pasos: POST_IMG.pasos, indicaciones: POST_IMG.indicaciones, limites: POST_IMG.limites, activo: true }])
 }
 
 describe('el vigía y lo recién reentregado (M08, M10)', () => {

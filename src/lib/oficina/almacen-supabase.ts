@@ -36,10 +36,10 @@ export function almacenDeSupabase(db: Db): Almacen {
       return configDesdeLaFila(r.data as Fila)
     },
     async leerPlantilla(familia) {
-      const d = ok(await db.from('oficina_tipos_de_grupo').select('tipo,familia,pasos,indicaciones,limites,activo').eq('familia', familia).limit(1), 'leer la plantilla') as Fila[] | null
+      const d = ok(await db.from('oficina_tipos_de_grupo').select('tipo,familia,clase,pasos,indicaciones,limites,activo').eq('familia', familia).limit(1), 'leer la plantilla') as Fila[] | null
       const f = d?.[0]
       if (!f) return null
-      const plantilla: Plantilla = { tipo: String(f.tipo), familia: String(f.familia), pasos: f.pasos as Plantilla['pasos'], indicaciones: (f.indicaciones ?? {}) as Plantilla['indicaciones'], limites: f.limites as Plantilla['limites'] }
+      const plantilla: Plantilla = { tipo: String(f.tipo), familia: String(f.familia), ...(typeof f.clase === 'string' ? { clase: f.clase } : {}), pasos: f.pasos as Plantilla['pasos'], indicaciones: (f.indicaciones ?? {}) as Plantilla['indicaciones'], limites: f.limites as Plantilla['limites'] }
       return { plantilla, activo: f.activo === true }
     },
     async leerFormato(red, formato): Promise<FilaDeFormato | null> {

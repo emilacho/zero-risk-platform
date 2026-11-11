@@ -81,7 +81,7 @@ export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; te
  */
 /** 11-nov · ¿la puerta de la oficina dejará esta familia SIN SALA para este cliente? (= no se produce y no espera pasarela) · la MISMA función que la oficina (`decidirPuerta`) · pura */
 export const quedaSinSala = (familia: string | null, config: ConfigDeOficina, clientId: string): boolean =>
-  !!familia && decidirPuerta({ familia } as Sobre, config, TARGET_STEP_PRODUCIR, clientId).accion === 'sin_sala'
+  !!familia && decidirPuerta({ familia } as Sobre, config, TARGET_STEP_PRODUCIR, clientId, (config.sin_pasarela ?? []).includes(familia)).accion === 'sin_sala'
 
 /** la campaña tal como la necesita el tope */
 export type CampanaDelTope = Pick<Campana, 'id' | 'client_id' | 'tope_gasto_usd' | 'zona_horaria'>
