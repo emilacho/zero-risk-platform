@@ -115,7 +115,7 @@ describe('almacén · revisiones, pasos y fichas', () => {
     await a.guardar({ revision_id: id, estado_del_motor: estadoInicial(), gasto_usd: 0, paso: { ...base, n: 2, paso: 'b', estado: 'hecho' } })
     ;(db.tablas.jefatura_pasos[1] as Json).inicio = '2026-10-13T08:00:00.000Z'
     // 11-nov · #21: el vigía necesita el agente (su techo medido), el inicio y la llave del despacho (su latido)
-    expect(await a.pasosCorriendoAntesDe('2026-10-13T11:00:00.000Z')).toEqual([{ revision_id: id, n: 1, paso: 'a', inicio: '2026-10-13T10:00:00.000Z', agente: 'jefe-marketing', dispatch_key: 'jefatura:rev:1' }])
+    expect(await a.pasosCorriendoAntesDe('2026-10-13T11:00:00.000Z')).toEqual([{ revision_id: id, n: 1, paso: 'a', inicio: '2026-10-13T10:00:00.000Z', agente: 'jefe-marketing', dispatch_key: 'jefatura:rev:1', workflow_execution_id: null }])
     expect(await a.pasosCorriendoAntesDe('2026-10-13T09:00:00.000Z')).toEqual([])
   })
   it('un error de la base al guardar o leer se LANZA', async () => {

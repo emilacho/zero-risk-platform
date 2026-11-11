@@ -52,7 +52,8 @@ describe('el vigía de la oficina con el plazo medido', () => {
   })
   it('🔴 un despacho que sigue latiendo vive aunque pase su techo', async () => {
     const { db, P, hora, turno } = await conPasoDe('agente-nuevo', 20)
-    const lector: LectorDeVida = { despacho: async () => ({ status: 'running', created_at: turno.inicio as string, running_at: turno.inicio as string, updated_at: new Date(hora.getTime() - 30_000).toISOString() }), duraciones: async () => [] }
+    const pedidos: string[][] = []
+    const lector: LectorDeVida = { despacho: async (e, a) => { pedidos.push([e, a]); return e === 'ex-acuse' && a === 'agente-nuevo' ? { status: 'running', created_at: turno.inicio as string, running_at: turno.inicio as string, updated_at: new Date(hora.getTime() - 30_000).toISOString() } : null }, duraciones: async () => [] }
     expect(await revisarPasosMuertos(P, db, hora, lector)).toEqual({ reanudar: [], fallidos: [], cierres: [] })
   })
   it('🔴 lo que no se puede leer no mata: el paso queda como está y se anota', async () => {
@@ -100,5 +101,36 @@ describe('el vigía de la oficina, tal como lo llama su ruta (sin lector a mano)
     const r = await revisarPasosMuertos(P, db, hora)
     expect([r.reanudar, r.fallidos, recibidos]).toEqual([[], [], 0])
     expect(db.tablas['oficina_turnos'].find((t) => t.id === 'vivo')?.estado).toBe('corriendo')
+  })
+})
+
+describe('el latido llega a la oficina por ejecución + agente, con las llaves REALES (CC6 21A)', () => {
+  it('🔴 por la ruta (sin lector a mano): el turno guarda `oficina:<encargo>:<n>` y el libro `dispatch:<flujo>:<agente>:<ejecución>`; casan por ejecución + agente y el que late vive', async () => {
+    const { db, P, hora, turno } = await conPasoDe('agente-nuevo', 20)
+    expect(String(turno.dispatch_key)).toMatch(/^oficina:.+:1$/)
+    db.semilla('agent_dispatches', [{ id: 'd1', dispatch_key: 'dispatch:wf-oficina:agente-nuevo:ex-acuse', workflow_execution_id: 'ex-acuse', agent_name: 'agente-nuevo', status: 'running', created_at: turno.inicio, running_at: turno.inicio, updated_at: new Date(hora.getTime() - 30_000).toISOString() }])
+    expect(await revisarPasosMuertos(P, db, hora)).toEqual({ reanudar: [], fallidos: [], cierres: [] })
+    expect(turno.estado).toBe('corriendo')
+    // el mismo latido pero de OTRO agente de la misma ejecución no lo salva
+    db.tablas['agent_dispatches'][0].agent_name = 'otro-agente'
+    expect((await revisarPasosMuertos(P, db, hora)).reanudar).toHaveLength(1)
+  })
+})
+
+describe('el brazo cuando su historial no se lee (sabotaje vivo de CC6)', () => {
+  it('🔴 esta vuelta NO vence ningún video (aunque pase los 45 min) y se anota sin_dato', async () => {
+    const hora = new Date('2026-11-11T14:00:00Z')
+    const db = new DbFalsa().semilla('oficina_turnos', [{ id: 'vivo', encargo_id: 'e-nau', n: 5, paso: 'video', tipo: 'brazo', estado: 'corriendo', workflow_execution_id: 'ex-2', inicio: new Date(hora.getTime() - 50 * MIN).toISOString() }])
+    let recibidos = 0
+    const enc = { id: 'e-nau', estado: 'esperando', client_id: CLIENTE, brief_id: 'BRF-7', sala_ref: null, gasto_usd: 0, estado_del_motor: { vueltas: {}, artefactos: { pedido_video: { datos: { envio: { request_id: 'r2' } } } } } }
+    const P = {
+      almacen: { leerEncargo: async () => enc, registrarPaso: async () => { recibidos++ }, guardar: async () => { recibidos++ } },
+      video: { estado: async () => ({ ok: true, terminal: false, status: 'IN_PROGRESS' }) },
+      avisar: async () => undefined,
+    } as never
+    const lector: LectorDeVida = { despacho: async () => null, duraciones: async () => { throw new Error('base caída') } }
+    const r = await revisarPasosMuertos(P, db, hora, lector)
+    expect([r.reanudar, r.fallidos, recibidos]).toEqual([[], [], 0])
+    expect(r.sin_dato).toEqual([{ encargo_id: 'e-nau', paso: 'video', motivo: expect.stringContaining('base caída') }])
   })
 })

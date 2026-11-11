@@ -78,20 +78,24 @@ export function vidaDelPaso(p: PasoEnCurso, ahora: Date): Vida {
   return { estado: 'muerto', techo_min, motivo: latiendo ? `sigue latiendo pero pasó ${TECHO_CON_LATIDO} veces su techo (${techo_min} min)` : `sin vuelta en ${techo_min} min` }
 }
 
-/** cómo leer lo que la regla necesita: el despacho por su llave EXACTA y las corridas reales de un agente. Si la base falla, LANZA (quien llama lo vuelve `sin_dato`) */
+/**
+ * cómo leer lo que la regla necesita: el despacho de un trabajo y las corridas reales de un agente. Si la base falla, LANZA (quien llama lo vuelve `sin_dato`).
+ * 🔴 El despacho se busca por EJECUCIÓN + AGENTE, no por la llave del turno: la oficina y la jefatura guardan su propia llave (`<encargo>:<n>`, `<revisión>:<n>`)
+ * y el libro de despachos otra (`dispatch:<flujo>:<agente>:<ejecución>`): casaban 0/202 y 0/73 (CC6, 11-nov). Por ejecución + agente casan 157/172 y 65/73.
+ */
 export interface LectorDeVida {
-  despacho(dispatch_key: string): Promise<DespachoLeido | null>
+  despacho(workflow_execution_id: string, agente: string): Promise<DespachoLeido | null>
   duraciones(agente: string): Promise<readonly number[]>
 }
 
 const mensaje = (e: unknown) => (e instanceof Error ? e.message : String(e))
 /** envuelve un lector: cada agente se lee una sola vez por vuelta, y un error queda como lectura fallida (nunca como «vacío») */
-export function lecturasDeVida(l: LectorDeVida): { despacho(k: string | null | undefined): Promise<Lectura<DespachoLeido | null> | null>; duraciones(a: string | null | undefined): Promise<Lectura<readonly number[]> | null> } {
+export function lecturasDeVida(l: LectorDeVida): { despacho(ejecucion: string | null | undefined, agente: string | null | undefined): Promise<Lectura<DespachoLeido | null> | null>; duraciones(a: string | null | undefined): Promise<Lectura<readonly number[]> | null> } {
   const cache = new Map<string, Promise<Lectura<readonly number[]>>>()
   return {
-    async despacho(k) {
-      if (!k) return null
-      try { return { ok: true, valor: await l.despacho(k) } } catch (e) { return { ok: false, motivo: mensaje(e) } }
+    async despacho(ejecucion, agente) {
+      if (!ejecucion || !agente) return null
+      try { return { ok: true, valor: await l.despacho(ejecucion, agente) } } catch (e) { return { ok: false, motivo: mensaje(e) } }
     },
     async duraciones(a) {
       if (!a) return null
@@ -104,13 +108,19 @@ export function lecturasDeVida(l: LectorDeVida): { despacho(k: string | null | u
 /** cuántas corridas reales se miran por agente (las más recientes) */
 export const CORRIDAS_QUE_SE_MIRAN = 50
 type Db = { from(tabla: string): any }
-/** el lector sobre la base: corridas REALES (completadas, con costo y duración: un ensayo cuesta 0) por `agent_id`; el despacho por la llave exacta */
+/** de los despachos de una misma ejecución y agente (un reintento deja 2: 8 de 378 el 11-nov), el que sigue `running`; si ninguno, el más nuevo */
+export function elegirDespacho(filas: readonly DespachoLeido[]): DespachoLeido | null {
+  const nuevos = [...filas].sort((a, b) => (ms(b.created_at) || 0) - (ms(a.created_at) || 0))
+  return nuevos.find((d) => d.status === 'running') ?? nuevos[0] ?? null
+}
+
+/** el lector sobre la base: corridas REALES (completadas, con costo y duración: un ensayo cuesta 0) por `agent_id`; el despacho por ejecución + agente */
 export function lectorDeVidaDeSupabase(db: Db): LectorDeVida {
   return {
-    async despacho(k) {
-      const r = await db.from('agent_dispatches').select('status, created_at, running_at, updated_at').eq('dispatch_key', k).limit(1)
+    async despacho(ejecucion, agente) {
+      const r = await db.from('agent_dispatches').select('status, created_at, running_at, updated_at').eq('workflow_execution_id', ejecucion).eq('agent_name', agente).order('created_at', { ascending: false }).limit(5)
       if (r.error) throw new Error(`leer el despacho: ${r.error.message}`)
-      return ((r.data ?? [])[0] as DespachoLeido | undefined) ?? null
+      return elegirDespacho((r.data ?? []) as DespachoLeido[])
     },
     async duraciones(a) {
       // (el brazo de video no es un agente: lo mide la propia oficina por sus turnos · `lectorDeVidaDeLaOficina` en `oficina/vigia.ts`)

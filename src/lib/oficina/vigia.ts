@@ -25,7 +25,7 @@ import { CORRIDAS_QUE_SE_MIRAN, lecturasDeVida, lectorDeVidaDeSupabase, techoMed
 export function lectorDeVidaDeLaOficina(db: Db): LectorDeVida {
   const base = lectorDeVidaDeSupabase(db)
   return {
-    despacho: (k) => base.despacho(k),
+    despacho: (e, a) => base.despacho(e, a),
     async duraciones(a) {
       if (a !== AGENTE_DEL_BRAZO) return base.duraciones(a)
       const b = (await db.from('oficina_turnos').select('inicio, fin').eq('tipo', 'brazo').eq('estado', 'hecho').order('inicio', { ascending: false }).limit(CORRIDAS_QUE_SE_MIRAN)) as { data: Array<{ inicio: string | null; fin: string | null }> | null; error: { message: string } | null }
@@ -119,7 +119,7 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date, lecto
   if (delBrazo && !delBrazo.ok) for (const t of vb.data ?? []) sin_dato.push({ encargo_id: String(t.encargo_id), paso: String(t.paso), motivo: `no se pudo leer el historial del brazo (${delBrazo.motivo})` })
   const techoDelBrazo = !delBrazo ? MINUTOS_PARA_ESPERAR_AL_BRAZO : delBrazo.ok ? Math.ceil(techoMedidoMs(MINUTOS_PARA_ESPERAR_AL_BRAZO * 60_000, delBrazo.valor) / 60_000) : Infinity
   const videos = await sondearVideos(P, (vb.data ?? []).map((t) => ({ encargo_id: String(t.encargo_id), n: Number(t.n), paso: String(t.paso), inicio: String(t.inicio) })), ahora, techoDelBrazo)
-  const r = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,agente,dispatch_key,inicio').eq('estado', 'corriendo').lt('inicio', limite)) as { data: Fila[] | null; error: { message: string } | null }
+  const r = (await db.from('oficina_turnos').select('encargo_id,n,paso,tipo,agente,dispatch_key,workflow_execution_id,inicio').eq('estado', 'corriendo').lt('inicio', limite)) as { data: Fila[] | null; error: { message: string } | null }
   if (r.error) throw new Error(`vigía · leer los pasos vivos: ${r.error.message}`)
   const reanudar: string[] = [...reentregar, ...videos.reanudar], fallidos: string[] = [...videos.fallidos]
   const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = [...videos.cierres]
@@ -142,7 +142,7 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date, lecto
       continue
     }
     // 11-nov · #21 · ¿sigue vivo? el techo medido de SU agente y su latido (nunca más corto que los 12 min de hoy). Lo que no se puede leer no mata: se anota y sigue igual
-    const v = vidaDelPaso({ inicio: t.inicio as string | null, pisoMs: MINUTOS_PARA_DAR_POR_MUERTO * 60_000, duraciones: await vida.duraciones(t.agente as string | null), despacho: await vida.despacho(t.dispatch_key as string | null) }, ahora)
+    const v = vidaDelPaso({ inicio: t.inicio as string | null, pisoMs: MINUTOS_PARA_DAR_POR_MUERTO * 60_000, duraciones: await vida.duraciones(t.agente as string | null), despacho: await vida.despacho(t.workflow_execution_id as string | null, t.agente as string | null) }, ahora)
     if (v.estado === 'sin_dato') { sin_dato.push({ encargo_id: enc.id, paso: String(t.paso), motivo: v.motivo }); continue }
     if (v.estado === 'vivo') continue
     const sinVuelta = v.motivo

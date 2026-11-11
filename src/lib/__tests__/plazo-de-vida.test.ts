@@ -10,7 +10,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {
   CORRIDAS_MINIMAS, LATIDO_DEL_CORREDOR_MS, LATIDOS_PERDIDOS, MARGEN_DEL_TECHO, TECHO_CON_LATIDO,
-  late, lecturasDeVida, lectorDeVidaDeSupabase, techoMedidoMs, vidaDelPaso, type DespachoLeido,
+  elegirDespacho, late, lecturasDeVida, lectorDeVidaDeSupabase, techoMedidoMs, vidaDelPaso, type DespachoLeido,
 } from '../plazo-de-vida'
 import { MINUTOS_PARA_DAR_POR_MUERTO as OFICINA } from '../oficina/vigia'
 import { MINUTOS_PARA_DAR_POR_MUERTO as JEFATURA, vigiar } from '../jefatura/revision/orquestador'
@@ -102,14 +102,15 @@ describe('las lecturas', () => {
   it('🔴 un error de la base queda como lectura fallida, nunca como «vacío»; cada agente se lee una vez por vuelta', async () => {
     let veces = 0
     const v = lecturasDeVida({ despacho: async () => { throw new Error('caída') }, duraciones: async () => { veces++; return [1] } })
-    expect(await v.despacho('k')).toEqual({ ok: false, motivo: 'caída' })
-    expect(await v.despacho(null)).toBeNull()
+    expect(await v.despacho('157555', 'jefe-marketing')).toEqual({ ok: false, motivo: 'caída' })
+    expect(await v.despacho(null, 'jefe-marketing')).toBeNull()
+    expect(await v.despacho('157555', null)).toBeNull()
     await v.duraciones('jefe-marketing'); await v.duraciones('jefe-marketing')
     expect(veces).toBe(1)
     const f = lecturasDeVida({ despacho: async () => null, duraciones: async () => { throw new Error('caída') } })
     expect(await f.duraciones('x')).toEqual({ ok: false, motivo: 'caída' })
   })
-  it('🔴 en la base: corridas REALES (completadas, con costo y duración) del agente; el despacho por la llave EXACTA; un error lanza', async () => {
+  it('🔴 en la base: corridas REALES (completadas, con costo y duración) del agente; el despacho por EJECUCIÓN + AGENTE; un error lanza', async () => {
     const pedidos: Array<{ t: string; f: string[] }> = []
     const db = {
       from(t: string) {
@@ -125,11 +126,19 @@ describe('las lecturas', () => {
     const l = lectorDeVidaDeSupabase(db)
     expect(await l.duraciones('jefe-marketing')).toEqual([60000])
     expect(pedidos[0]).toEqual({ t: 'agent_invocations', f: ['eq:agent_id=jefe-marketing', 'eq:status=completed', 'gt:cost_usd=0', 'gt:duration_ms=0'] })
-    expect(await l.despacho('colaterales:e1:secretaria')).toBeNull()
-    expect(pedidos[1]).toEqual({ t: 'agent_dispatches', f: ['eq:dispatch_key=colaterales:e1:secretaria'] })
+    expect(await l.despacho('157555', 'jefe-marketing')).toBeNull()
+    expect(pedidos[1]).toEqual({ t: 'agent_dispatches', f: ['eq:workflow_execution_id=157555', 'eq:agent_name=jefe-marketing'] })
     const caida = { from: () => { const a: Record<string, unknown> = { select: () => a, eq: () => a, gt: () => a, order: () => a, limit: () => a, then: (res: (x: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'caída' } }).then(res) }; return a } }
     await expect(lectorDeVidaDeSupabase(caida).duraciones('x')).rejects.toThrow(/caída/)
-    await expect(lectorDeVidaDeSupabase(caida).despacho('k')).rejects.toThrow(/caída/)
+    await expect(lectorDeVidaDeSupabase(caida).despacho('157555', 'jefe-marketing')).rejects.toThrow(/caída/)
+  })
+  it('🔴 con un reintento hay 2 despachos de la misma ejecución y agente: vale el que sigue running; si ninguno, el más nuevo', () => {
+    const viejoVivo = { status: 'running', created_at: hace(30), running_at: hace(30), updated_at: hace(1) }
+    const nuevoListo = { status: 'completed', created_at: hace(10), running_at: hace(10), updated_at: hace(5) }
+    const nuevoError = { status: 'error', created_at: hace(5), running_at: hace(5), updated_at: hace(4) }
+    expect(elegirDespacho([nuevoListo, viejoVivo])).toBe(viejoVivo)
+    expect(elegirDespacho([nuevoListo, nuevoError])).toBe(nuevoError)
+    expect(elegirDespacho([])).toBeNull()
   })
 })
 
@@ -166,7 +175,7 @@ describe('cada lugar con la regla (Náufrago y B2B)', () => {
   it('🔴 jefatura: un paso de B2B de 40 min cuyo agente tarda hasta 32 min sigue vivo (techo 48); sin lector, el piso de 35 como hoy', async () => {
     const guardados: unknown[] = []
     const rev = { id: 'r1', estado: 'corriendo', client_id: 'b2b', artifact_id: 'a', estado_del_motor: { vueltas: {} }, gasto_usd: 0 }
-    const P = { almacen: { pasosCorriendoAntesDe: async () => [{ revision_id: 'r1', n: 2, paso: 'calificacion:editor', inicio: hace(40), agente: 'campaign-brief-agent', dispatch_key: 'k1' }], leerRevision: async () => rev, guardar: async (c: unknown) => { guardados.push(c) } } } as never
+    const P = { almacen: { pasosCorriendoAntesDe: async () => [{ revision_id: 'r1', n: 2, paso: 'calificacion:editor', inicio: hace(40), agente: 'campaign-brief-agent', dispatch_key: 'r1:2', workflow_execution_id: '158901' }], leerRevision: async () => rev, guardar: async (c: unknown) => { guardados.push(c) } } } as never
     const lector = { despacho: async () => callado(40), duraciones: async () => B2B_BRIEF }
     expect(await vigiar(P, AHORA, lector)).toEqual({ reanudar: [], fallidos: [], cierres: [] })
     expect(guardados).toEqual([])
@@ -175,5 +184,21 @@ describe('cada lugar con la regla (Náufrago y B2B)', () => {
     guardados.length = 0
     expect(await vigiar(P, AHORA, caido)).toMatchObject({ reanudar: [], fallidos: [], sin_dato: [{ revision_id: 'r1', motivo: expect.stringContaining('caída') }] })
     expect(guardados).toEqual([])
+  })
+})
+
+describe('el latido llega a la jefatura por ejecución + agente (CC6 21A)', () => {
+  it('🔴 un paso de 80 min (pasó su techo de 48) que late en el libro sigue vivo; con la llave de SU turno no se encontraría nada', async () => {
+    const guardados: unknown[] = []
+    const rev = { id: 'r1', estado: 'corriendo', client_id: 'b2b', artifact_id: 'a', estado_del_motor: { vueltas: {} }, gasto_usd: 0 }
+    const P = { almacen: { pasosCorriendoAntesDe: async () => [{ revision_id: 'r1', n: 2, paso: 'calificacion:editor', inicio: hace(80), agente: 'campaign-brief-agent', dispatch_key: 'r1:2', workflow_execution_id: '158901' }], leerRevision: async () => rev, guardar: async (c: unknown) => { guardados.push(c) } } } as never
+    // el libro, con la forma REAL de su llave: el lector falso FILTRA por lo que recibe
+    const libro = [{ dispatch_key: 'dispatch:wf-jefatura:campaign-brief-agent:158901', workflow_execution_id: '158901', agent_name: 'campaign-brief-agent', status: 'running', created_at: hace(80), running_at: hace(80), updated_at: hace(1) }]
+    const pedidos: string[][] = []
+    const lector = { despacho: async (e: string, a: string) => { pedidos.push([e, a]); return elegirDespacho(libro.filter((d) => d.workflow_execution_id === e && d.agent_name === a)) }, duraciones: async () => B2B_BRIEF }
+    expect(await vigiar(P, AHORA, lector)).toEqual({ reanudar: [], fallidos: [], cierres: [] })
+    expect(pedidos).toEqual([['158901', 'campaign-brief-agent']])
+    libro[0].updated_at = hace(10) // dejó de latir hace 10 min (más de 3 latidos)
+    expect((await vigiar(P, AHORA, lector)).reanudar).toEqual(['r1'])
   })
 })

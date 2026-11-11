@@ -558,7 +558,7 @@ export async function vigiar(P: Puertos, ahora: Date, lector?: LectorDeVida): Pr
     const rev = await P.almacen.leerRevision(t.revision_id)
     if (!rev || esTerminal(rev)) continue
     // 11-nov · #21 · ¿sigue vivo? techo medido de su agente + latido (nunca más corto que los 35 min). Sin lector: el piso de hoy. Lo que no se puede leer no mata
-    const v = vidaDelPaso({ inicio: t.inicio ?? limite, pisoMs: MINUTOS_PARA_DAR_POR_MUERTO * 60_000, duraciones: vida ? await vida.duraciones(t.agente) : null, despacho: vida ? await vida.despacho(t.dispatch_key) : null }, ahora)
+    const v = vidaDelPaso({ inicio: t.inicio ?? limite, pisoMs: MINUTOS_PARA_DAR_POR_MUERTO * 60_000, duraciones: vida ? await vida.duraciones(t.agente) : null, despacho: vida ? await vida.despacho(t.workflow_execution_id, t.agente) : null }, ahora)
     if (v.estado === 'sin_dato') { sin_dato.push({ revision_id: rev.id, paso: t.paso, motivo: v.motivo }); continue }
     if (v.estado === 'vivo') continue
     const clave = `muerto:${t.paso}`
