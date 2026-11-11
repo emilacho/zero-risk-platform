@@ -21,6 +21,7 @@ import type { ResultadoDeEmision } from './autoproducir'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto } from './cambios-pedidos'
 import { hallazgosDelBrief, insumosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
+import { filaSinFamilia, notaSinFamilia } from './sin-familia'
 import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
 import { sumarDias } from './fechas'
 import { medidaDeCampana } from './constantes'
@@ -765,17 +766,22 @@ export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>,
   const ids = Array.isArray(cuerpo.fila_ids) ? new Set(cuerpo.fila_ids.map(String)) : null
   const semana = Number.isInteger(cuerpo.semana) ? (cuerpo.semana as number) : null
   if (!ids && semana === null) return err(400, 'E-CAMPOS', 'la hoja se escribe por fila_ids (lista) o por semana (entero)')
-  const filas = todas.filter((f) => (ids ? ids.has(f.id) : f.semana === semana))
-  if (!filas.length) return err(409, 'E-SIN-FILAS', 'ninguna fila del calendario coincide (o todas están en un estado que no va a la hoja)')
+  const pedidas = todas.filter((f) => (ids ? ids.has(f.id) : f.semana === semana))
+  if (!pedidas.length) return err(409, 'E-SIN-FILAS', 'ninguna fila del calendario coincide (o todas están en un estado que no va a la hoja)')
+  // 11-nov · FORMATOS SIN FAMILIA (`sin-familia.ts`): una fila cuyo formato no produce ninguna oficina sale de la hoja (y así de la parte); el resto sigue. Si no queda ninguna, no se escribe nada
+  const formatos = await al.formatos()
+  const excluidas = pedidas.filter((f) => filaSinFamilia(f, formatos)).map((f) => ({ fila_id: f.id, motivo: notaSinFamilia(f) }))
+  const filas = pedidas.filter((f) => !filaSinFamilia(f, formatos))
+  if (!filas.length) return err(409, 'E-SIN-FAMILIA', `ninguna fila del lote tiene un formato con familia: ${excluidas.map((x) => x.fila_id).join(', ')} · no se escribe la hoja ni se gasta`)
   const manual = ctx.referencias.find((r) => r.origen === 'manual')
   const hoja = escribirHoja({
     client_name: ctx.nombreDelNegocio, plan_id: campana.plan_id, manual_id: manual?.id.replace(/^manual:/, '') ?? 'sin-manual', manual_version: cadena(cuerpo.manual_version) ?? 'vigente',
     hoy: ahora.slice(0, 10), lote_key: cadena(cuerpo.lote_key) ?? (ids ? `${campana.id.slice(0, 8)}:v${version}:ids` : `${campana.id.slice(0, 8)}:v${version}:s${semana}`),
     brief: brief.leido as unknown as BriefCreativoLeido, brief_id: idDeBrief(campana.id, brief.version), concepto: mesa.concepto, concepto_id: idDeConcepto(campana.id, mesa.version ?? 1),
     filas: filas.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora, red: f.red, formato: f.formato, pilar: f.pilar, tema: f.tema, datos: f.datos, fase: f.fase ?? null, idea_ref: f.idea_ref ?? null })),
-    formatos: await al.formatos(), seco: campana.seco,
+    formatos, seco: campana.seco,
   })
-  return { status: 200, cuerpo: { hoja: hoja.texto_md, briefs: hoja.briefs, provenance: hoja.provenance, avisos: hoja.avisos, filas: filas.map((f) => f.id), brief_version: brief.version, concepto_version: mesa.version } }
+  return { status: 200, cuerpo: { hoja: hoja.texto_md, briefs: hoja.briefs, provenance: hoja.provenance, avisos: hoja.avisos, filas: filas.map((f) => f.id), ...(excluidas.length ? { excluidas } : {}), brief_version: brief.version, concepto_version: mesa.version } }
 }
 
 // ───────────────────────────────────────────────────────── las entregas por HTTP (el flujo de la oficina también puede entregar por aquí) y el puerto en proceso

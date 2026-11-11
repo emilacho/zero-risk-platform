@@ -19,6 +19,7 @@ import { claveDeFecha, dominiosDe, MESES } from './fechas-del-cliente'
 import { familiaDeFila } from './familia'
 import { lotesVencidos, type LoteVencido } from './lotes'
 import { avisoDeLote, decidirLote } from './lote-muerto'
+import { avisoSinFamilia, esNotaSinFamilia, notaSinFamilia } from './sin-familia'
 import type { Fila } from './tipos'
 
 
@@ -63,9 +64,12 @@ export async function filasLotes(al: Almacen, cuerpo: Record<string, unknown>, a
   if (noAut) return noAut
   if (c.estado !== 'activa') return { status: 200, cuerpo: { lotes: [], motivo: `la campaña está ${c.estado}` } }
   const hoy = (cadena(cuerpo.hoy) ?? ahora).slice(0, 10)
-  const { lotes, version } = await lotesVencidos(al, c, hoy)
+  const { lotes, version, sin_familia } = await lotesVencidos(al, c, hoy)
+  // 11-nov · FORMATOS SIN FAMILIA (`sin-familia.ts`): esas filas ya no están en ningún lote; en campañas reales se les escribe la razón (una vez) y se avisa UNA vez por el buzón
+  const sinFamilia = c.seco === true || !sin_familia.length ? undefined : await anotarSinFamilia(al, c, version, sin_familia, cuerpo)
+  const extra = sinFamilia ? { sin_familia: sinFamilia } : {}
   // 10-nov · LOTE MUERTO (`lote-muerto.ts`): solo el reloj, solo campañas reales y solo si el almacén sabe contar los envíos; si no, igual que siempre
-  if (c.seco === true || !al.enviosDeLote) return { status: 200, cuerpo: { lotes, version } }
+  if (c.seco === true || !al.enviosDeLote) return { status: 200, cuerpo: { lotes, version, ...extra } }
   const salen: LoteVencido[] = [], muertos: Array<Record<string, unknown>> = []
   for (const l of lotes) {
     const e = await al.enviosDeLote(c.client_id, l.lote, l.idempotency_key, l.fila_ids)
@@ -76,7 +80,22 @@ export async function filasLotes(al: Almacen, cuerpo: Record<string, unknown>, a
     const aviso = al.avisarLoteMuerto ? await al.avisarLoteMuerto({ ...avisoDeLote(c, l, d, e), workflow_id: cadena(cuerpo.workflow_id) ?? null, workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? null }) : { ok: false as const, error: 'el almacén no avisa' }
     muertos.push(d.tipo === 'reintentar' ? { lote: l.lote, accion: 'reintento', intento: d.intento, aviso } : { lote: l.lote, accion: 'agotado', envios: d.envios, aviso })
   }
-  return { status: 200, cuerpo: muertos.length ? { lotes: salen, version, lotes_muertos: muertos } : { lotes: salen, version } }
+  return { status: 200, cuerpo: muertos.length ? { lotes: salen, version, lotes_muertos: muertos, ...extra } : { lotes: salen, version, ...extra } }
+}
+
+/** escribe la razón en cada fila sin familia que todavía no la tiene (escritura condicional: solo si sigue sin producir) y, si alguna se anotó ahora, avisa UNA vez por el buzón */
+async function anotarSinFamilia(al: Almacen, c: { id: string; client_id: string }, version: number, filas: Fila[], cuerpo: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const nuevas: Fila[] = []
+  for (const f of filas) {
+    if ((f.avisos ?? []).some(esNotaSinFamilia)) continue
+    if (await al.reubicarFila(c.id, version, f.id, {}, notaSinFamilia(f))) nuevas.push(f)
+  }
+  const fila_ids = filas.map((f) => f.id)
+  if (!nuevas.length) return { fila_ids, anotadas: 0 }
+  const aviso = al.avisarLoteMuerto
+    ? await al.avisarLoteMuerto({ ...avisoSinFamilia(c, version, nuevas), origen: 'cadena/reloj · formato sin familia', workflow_id: cadena(cuerpo.workflow_id) ?? null, workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? null })
+    : { ok: false as const, error: 'el almacén no avisa' }
+  return { fila_ids, anotadas: nuevas.length, aviso }
 }
 
 export async function filasMarcar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string = new Date().toISOString()): Promise<Respuesta> {
