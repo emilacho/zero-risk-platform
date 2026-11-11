@@ -9,7 +9,8 @@ import { filasAutoproducir } from '../autoproducir'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { formatosDeLaMigracion } from '../__fixtures__/clientes'
 import type { FormatosPorRed } from '../tipos'
-import type { ConfigDeOficina } from '@/lib/oficina/sobre'
+import { decidirPuerta, TARGET_STEP_PRODUCIR, type ConfigDeOficina, type Sobre } from '@/lib/oficina/sobre'
+import { configDesdeLaFila } from '@/lib/oficina/gasto-de-encargos'
 
 beforeEach(() => { process.env.INTERNAL_API_KEY = 'k-interna' })
 
@@ -91,5 +92,20 @@ describe.each(CLIENTES)('%s · el freno y las filas sin familia', (_n, C) => {
     expect(await llamar(32, REEL, undefined, new Error('la config de la oficina no contesta'))).toMatchObject({ emitidos: 0, tope: { decision: 'corta', retenidas: ['B1'] } })
     // sin el puerto (almacén viejo): igual que hoy
     expect(await llamar(32, REEL)).toMatchObject({ emitidos: 0, tope: { decision: 'corta', retenidas: ['B1'] } })
+  })
+})
+
+// ── 🟡 de CC7 sobre #1021 (ADENDA 1): la normalización COMPARTIDA (la usan la puerta de la oficina y el freno) no puede leer «ensayo» como «encendida»
+describe('la config compartida de la puerta · el estado de ensayo', () => {
+  const CLIENTE = 'df7e47cc-bec4-4fa2-bc24-ff97ba5213a5'
+  const puerta = (estado: string, clientes: string[]) => decidirPuerta({ familia: 'post_img' } as Sobre, configDesdeLaFila({ estado, familias_activas: ['post_img'], clientes_ensayo: clientes }), TARGET_STEP_PRODUCIR, CLIENTE).accion
+  it('🔴 «ensayo» se lee como ensayo (ni encendida ni apagada)', () => {
+    expect(configDesdeLaFila({ estado: 'ensayo', familias_activas: ['post_img'], clientes_ensayo: [CLIENTE] })).toEqual({ estado: 'ensayo', familias_activas: ['post_img'], clientes_ensayo: [CLIENTE] })
+    expect(configDesdeLaFila({ estado: 'encendida', familias_activas: [], clientes_ensayo: [] }).estado).toBe('encendida')
+  })
+  it('🔴 en ensayo la puerta NO abre para un cliente fuera de clientes_ensayo; sí para uno dentro; encendida abre para todos', () => {
+    expect(puerta('ensayo', ['otro-cliente'])).toBe('pasarela')
+    expect(puerta('ensayo', [CLIENTE])).toBe('abrir')
+    expect(puerta('encendida', [])).toBe('abrir')
   })
 })
