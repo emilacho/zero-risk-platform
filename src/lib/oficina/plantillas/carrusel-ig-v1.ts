@@ -34,6 +34,7 @@ const regla = (r: string, aplica: string): ReglaDeIndicacion => ({ regla: r, apl
 export const CARRUSEL_IG_V1: Plantilla = {
   tipo: 'carrusel_ig_v1',
   familia: 'carrusel_ig_v1',
+  clase: 'carrusel',
   limites: {
     // 30 pasos definidos; vueltas: prompts (1) + imagen (2) ⇒ margen 3 + 3
     margen: 6,

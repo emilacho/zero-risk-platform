@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { bloqueVisualDelManual, esFamiliaDeLaminas, identidadVisualDelCliente, previueloDeLaminas } from '../identidad-visual'
+import { bloqueVisualDelManual, identidadVisualDelCliente, previueloDeLaminas } from '../identidad-visual'
 import { marcaDelCliente } from '../adaptadores'
 import { nombreDeTipografiaObservada } from '../../../../scripts/worker-staging/ssLtwYPt7zxuvnM2/piso-visual-logica.js'
 import { familiaDeLaminas } from '../orquestador-laminas'
@@ -208,8 +208,8 @@ describe('⑦ el pre-vuelo: qué se frena y qué no', () => {
     const d = previueloDeLaminas({ marca: null })!.detalle
     expect(d).toMatch(/pendiente/); expect(d).not.toMatch(/pregunt|dueño/i)
   })
-  it('la lista de familias de láminas del pre-vuelo es la misma del orquestador de láminas', () => {
-    for (const f of ['carrusel_ig_v1', 'kit_historias', 'post_img', 'otra', '']) expect(esFamiliaDeLaminas(f)).toBe(familiaDeLaminas({ familia: f }) !== null)
+  it('fila #19 · dibuja láminas la plantilla cuya CLASE dibuja láminas (dato), sin importar el nombre de la familia', () => {
+    for (const [clase, sale] of [['carrusel', 'carrusel'], ['kit', 'kit'], ['post_img', null], ['video', null], ['otra', null], [undefined, null]] as const) expect(familiaDeLaminas({ clase })).toBe(sale)
   })
   const abrir = (M: ReturnType<typeof crearMemoria>, brief: string, familia: string) => abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: brief, dry_run: true, familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   it('post_img NO se frena aunque el cliente no tenga marca ni slug (no dibuja láminas)', async () => {

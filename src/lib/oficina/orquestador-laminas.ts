@@ -8,7 +8,8 @@ import { candidatasDelEncargo, medirFotos } from './material-fotos'
 import { limitesDeMaterial } from './material'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { elementosDelKit, planDeOrigen, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
-import { briefEsDelEncargo } from './familia-del-brief'
+import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
+import { claseDe, dibujaLaminas } from './clase'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, leerMedidas, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega, type FilaDeFormato } from './entrega'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import {
@@ -24,8 +25,8 @@ import { ROLES_DE_LAMINA } from './salida'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 
 export type FamiliaDeLaminas = 'carrusel' | 'kit'
-/** la plantilla es de varias láminas si es una de estas dos (el resto de las familias las atiende el orquestador de la sala 1) */
-export const familiaDeLaminas = (pl: Pick<Plantilla, 'familia'>): FamiliaDeLaminas | null => (pl.familia === 'carrusel_ig_v1' || pl.familia === 'carrusel_mesa' ? 'carrusel' : pl.familia === 'kit_historias' || pl.familia === 'kit_mesa' ? 'kit' : null)
+/** la plantilla es de varias láminas si su clase (dato de la plantilla · fila #19) dibuja láminas (el resto de las familias las atiende el orquestador de la sala 1) */
+export const familiaDeLaminas = (pl: Pick<Plantilla, 'clase'>): FamiliaDeLaminas | null => { const c = claseDe(pl); return dibujaLaminas(c) ? c : null }
 
 export interface BaseL { brief: BriefLeido; proporcion: string; F: FuentesCompletas; familia: FamiliaDeLaminas; plataforma: string; elementos: ElementoDelKit[] }
 const baseL = (e: Estado): BaseL => datos(e, 'encargo') as unknown as BaseL
@@ -155,7 +156,7 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const plan = planId ? await P.plan(planId, enc.client_id) : null
   if (plan) fu.plan_texto = plan
   // GO 11-nov «la mesa confía en la familia»: la familia ya la decidió la cadena; no se re-adivina por el texto del brief (red: la tabla de formatos de la cadena)
-  const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P))
+  const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P), claseDeLaFamilia(P))
   if (!sala.ok) return { res: { costo_usd: 0 }, fallido: sala.motivo }
   let elementos: ElementoDelKit[] = []
   if (fam === 'kit') {

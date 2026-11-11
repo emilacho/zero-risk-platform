@@ -24,7 +24,7 @@ import { abrirEncargo } from '../orquestador'
 import { productoresDeLaPieza, familiaDePieza } from '../paso-jefatura'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
 import type { PuertoDeVideo } from '../puertos'
-import { CONFIG_APAGADA, FAMILIAS_SIN_PASARELA, TARGET_STEP_PRODUCIR, decidirPuerta } from '../sobre'
+import { CONFIG_APAGADA, TARGET_STEP_PRODUCIR, decidirPuerta } from '../sobre'
 import { CLIENTE, FOTOS, PARTE, crearMemoria } from './memoria'
 import { jugar, type Turno } from './mesa-arnes'
 import { crearMesaEnMemoria } from './mesa-memoria'
@@ -198,12 +198,11 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
 
 describe('la puerta: el video no tiene pasarela', () => {
   const sobre = { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'video_mesa' }
-  it('video_mesa es la única familia sin pasarela; apagada, no activa o cliente fuera del ensayo ⇒ sin_sala (no pasarela); activa ⇒ abre', () => {
-    expect(FAMILIAS_SIN_PASARELA).toEqual(['video_mesa'])
-    expect(decidirPuerta(sobre, CONFIG_APAGADA, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'oficina_apagada' })
-    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['carrusel_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'familia_no_activa' })
-    expect(decidirPuerta(sobre, { estado: 'ensayo', familias_activas: ['video_mesa'], clientes_ensayo: ['otro'] }, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'cliente_fuera_del_ensayo' })
-    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['video_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'abrir', familia: 'video_mesa' })
+  it('la clase video (dato de la plantilla) no tiene pasarela; apagada, no activa o cliente fuera del ensayo ⇒ sin_sala (no pasarela); activa ⇒ abre', () => {
+    expect(decidirPuerta(sobre, CONFIG_APAGADA, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'oficina_apagada' })
+    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['carrusel_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'familia_no_activa' })
+    expect(decidirPuerta(sobre, { estado: 'ensayo', familias_activas: ['video_mesa'], clientes_ensayo: ['otro'] }, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'sin_sala', familia: 'video_mesa', motivo: 'cliente_fuera_del_ensayo' })
+    expect(decidirPuerta(sobre, { estado: 'encendida', familias_activas: ['video_mesa'], clientes_ensayo: [] }, TARGET_STEP_PRODUCIR, 'c1', true)).toEqual({ accion: 'abrir', familia: 'video_mesa' })
     // las de siempre no cambian
     expect(decidirPuerta({ ...sobre, familia: 'carrusel_mesa' }, CONFIG_APAGADA, TARGET_STEP_PRODUCIR, 'c1')).toEqual({ accion: 'pasarela', motivo: 'oficina_apagada' })
   })
@@ -360,5 +359,21 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
     expect(a.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'fallido' })
     expect(String(a.cuerpo.motivo)).toMatch(/manda a la familia carrusel_mesa; esta sala es video_mesa/)
     expect(M.encargos.get(String(a.cuerpo.encargo_id))!.gasto_usd).toBe(0)
+  })
+  it('fila #19 (CC7) · una sala NUEVA de clase video produce el reel que la tabla manda a video_mesa (misma clase); el que manda a carrusel_mesa, no', async () => {
+    const abrirCon = async (familiaDeLaTabla: string) => {
+      const formatos = { instagram: [{ formato: 'reel', produccion: 'opera', lead_dias: 2, max_por_dia: 1, familia: familiaDeLaTabla }] }
+      const hoja = escribirHoja({ ...INSUMOS, formatos } as never)
+      const M = crearMemoria({ parte: hoja.texto_md, plantilla: { ...VIDEO_MESA, familia: 'reel_nuevo', tipo: 'reel_nuevo', clase: 'video' } })
+      M.P.mesa = crearMesaEnMemoria(TRAS_2012)
+      M.P.formatosDeLaCadena = async () => formatos as never
+      return abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'reel_nuevo' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    }
+    const si = await abrirCon('video_mesa')
+    // la revisión de sala la deja pasar (después la mesa reconoce su tipo por nombre · FAMILIAS_MESA, fuera de la fila #19)
+    expect(String(si.cuerpo.motivo ?? '')).not.toMatch(/manda a la familia/)
+    const no = await abrirCon('carrusel_mesa')
+    expect(no.cuerpo).toMatchObject({ estado: 'fallido' })
+    expect(String(no.cuerpo.motivo)).toMatch(/manda a la familia carrusel_mesa; esta sala es reel_nuevo/)
   })
 })

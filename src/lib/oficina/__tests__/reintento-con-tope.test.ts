@@ -48,8 +48,8 @@ const mundo = (clientId: string, partes: Array<Record<string, unknown>>, encargo
   .semilla('client_historical_outputs', partes)
   .semilla('oficina_config', [{ id: 1, estado: 'encendida', familias_activas: ['post_img', 'carrusel_ig_v1'], clientes_ensayo: [] }])
   .semilla('oficina_tipos_de_grupo', [
-    { tipo: 'post_img', familia: 'post_img', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: true },
-    { tipo: 'carrusel_ig_v1', familia: 'carrusel_ig_v1', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: true },
+    { tipo: 'post_img', familia: 'post_img', clase: 'post_img', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: true },
+    { tipo: 'carrusel_ig_v1', familia: 'carrusel_ig_v1', clase: 'carrusel', pasos: [], indicaciones: {}, limites: { tope_encargo_usd: 1.5 }, activo: true },
   ])
   .semilla('clients', [{ id: clientId, slug: 'cliente', config: {} }])
   .semilla('client_brand_books', [{ client_id: clientId, version: 1, primary_colors: ['#112233'] }])

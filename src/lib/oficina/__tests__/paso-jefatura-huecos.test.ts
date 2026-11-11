@@ -24,18 +24,18 @@ describe('hueco 1 · una revisión INCOMPLETA no dispara la re-imagen', () => {
   for (const resultado of ['fallida', 'incompleta_por_tope']) {
     it(`${resultado} con «imagen por rehacer» y la opinión tomada: NO se llama a la re-imagen ni se marca re_imagen`, () => {
       let llamadas = 0
-      const r = aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), salida(resultado, { imagen_por_rehacer: true, respuestas: [tomadaImagen] }), { reImagen: () => { llamadas++; return { re_imagen: true } } })
+      const r = aplicarSalidaDeJefatura({ familia: 'post_img', clase: 'post_img' }, estado(), salida(resultado, { imagen_por_rehacer: true, respuestas: [tomadaImagen] }), { reImagen: () => { llamadas++; return { re_imagen: true } } })
       expect(llamadas).toBe(0); expect(r.artefacto).toMatchObject({ re_imagen: false, por_rehacer_humano: false })
     })
   }
   it('y una revisión que SÍ cerró bien con la opinión de imagen tomada, sí la dispara (con la razón de quien dirige la imagen)', () => {
     let razon = ''
-    const r = aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), salida('con_desacuerdo', { imagen_por_rehacer: true, respuestas: [tomadaImagen] }), { reImagen: (t) => { razon = t?.razon ?? ''; return { re_imagen: true } } })
+    const r = aplicarSalidaDeJefatura({ familia: 'post_img', clase: 'post_img' }, estado(), salida('con_desacuerdo', { imagen_por_rehacer: true, respuestas: [tomadaImagen] }), { reImagen: (t) => { razon = t?.razon ?? ''; return { re_imagen: true } } })
     expect(razon).toBe('la foto no se ve cálida'); expect(r.artefacto).toMatchObject({ re_imagen: true })
   })
   it('sin «imagen por rehacer» no se llama aunque haya una opinión de imagen tomada', () => {
     let llamadas = 0
-    aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), salida('limpia', { imagen_por_rehacer: false, respuestas: [tomadaImagen] }), { reImagen: () => { llamadas++; return {} } })
+    aplicarSalidaDeJefatura({ familia: 'post_img', clase: 'post_img' }, estado(), salida('limpia', { imagen_por_rehacer: false, respuestas: [tomadaImagen] }), { reImagen: () => { llamadas++; return {} } })
     expect(llamadas).toBe(0)
   })
 })
@@ -43,19 +43,19 @@ describe('hueco 1 · una revisión INCOMPLETA no dispara la re-imagen', () => {
 describe('hueco 2 · la pieza corregida NO se aplica si la revisión falló', () => {
   const conPieza = (resultado: string) => salida(resultado, { artefacto_final: { pieza: { pie_de_foto: 'Nuevo pie', hashtags: ['#nuevo'] } } })
   it('fallida: no entra ninguna pieza nueva (ni en el post ni en el carrusel)', () => {
-    expect(aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), conPieza('fallida'), { reImagen: () => ({}) }).otros_artefactos?.['pieza_post']).toBeUndefined()
-    expect(aplicarSalidaDeJefatura({ familia: 'carrusel_ig_v1' }, estado(), conPieza('fallida'), { reImagen: () => ({}) }).otros_artefactos?.['copy_carrusel']).toBeUndefined()
+    expect(aplicarSalidaDeJefatura({ familia: 'post_img', clase: 'post_img' }, estado(), conPieza('fallida'), { reImagen: () => ({}) }).otros_artefactos?.['pieza_post']).toBeUndefined()
+    expect(aplicarSalidaDeJefatura({ familia: 'carrusel_ig_v1', clase: 'carrusel' }, estado(), conPieza('fallida'), { reImagen: () => ({}) }).otros_artefactos?.['copy_carrusel']).toBeUndefined()
   })
   for (const resultado of ['limpia', 'con_desacuerdo', 'sin_segunda_mirada', 'incompleta_por_tope']) {
     it(`${resultado}: la pieza corregida SÍ entra, mezclada con la anterior (lo que no cambió se conserva)`, () => {
-      const r = aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), conPieza(resultado), { reImagen: () => ({}) })
+      const r = aplicarSalidaDeJefatura({ familia: 'post_img', clase: 'post_img' }, estado(), conPieza(resultado), { reImagen: () => ({}) })
       expect(r.otros_artefactos?.['pieza_post']).toEqual({ pie_de_foto: 'Nuevo pie', hashtags: ['#nuevo'], llamado: 'viejo llamado' })
     })
   }
 })
 
 describe('hueco 3 · el rótulo del desacuerdo («donde: qué») se parte solo cuando es un rótulo corto', () => {
-  const fichasDe = (...d: string[]) => aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), salida('con_desacuerdo', { desacuerdos: d }), { reImagen: () => ({}) }).fichas!.filter((f) => f.origen === 'jefe').map((f) => [f.donde, f.que])
+  const fichasDe = (...d: string[]) => aplicarSalidaDeJefatura({ familia: 'post_img', clase: 'post_img' }, estado(), salida('con_desacuerdo', { desacuerdos: d }), { reImagen: () => ({}) }).fichas!.filter((f) => f.origen === 'jefe').map((f) => [f.donde, f.que])
   it('«imagen: no se ve el producto» → donde imagen; «texto: falta el precio» → donde texto', () => {
     expect(fichasDe('imagen: no se ve el producto', 'texto: falta el precio')).toEqual([['imagen', 'no se ve el producto'], ['texto', 'falta el precio']])
   })
@@ -74,15 +74,15 @@ describe('hueco 3 · el rótulo del desacuerdo («donde: qué») se parte solo c
 
 describe('hueco 4 · el carrusel conserva pie de foto, hashtags y llamado de la pieza corregida', () => {
   it('trae los tres campos y descarta lo que no es de la copia', () => {
-    const r = aplicarSalidaDeJefatura({ familia: 'carrusel_ig_v1' }, estado({ copy_carrusel: { version: 1, version_consumida: 1, datos: { pie_de_foto: 'viejo', hashtags: ['#a'], llamado: 'viejo', laminas: ['x'] } } }), salida('limpia', { artefacto_final: { pieza: { pie_de_foto: 'Nuevo pie', hashtags: ['#n1', '#n2'], llamado: 'Escríbenos', titulo_interno: 'no entra' } } }), { reImagen: () => ({}) })
+    const r = aplicarSalidaDeJefatura({ familia: 'carrusel_ig_v1', clase: 'carrusel' }, estado({ copy_carrusel: { version: 1, version_consumida: 1, datos: { pie_de_foto: 'viejo', hashtags: ['#a'], llamado: 'viejo', laminas: ['x'] } } }), salida('limpia', { artefacto_final: { pieza: { pie_de_foto: 'Nuevo pie', hashtags: ['#n1', '#n2'], llamado: 'Escríbenos', titulo_interno: 'no entra' } } }), { reImagen: () => ({}) })
     expect(r.otros_artefactos?.['copy_carrusel']).toEqual({ pie_de_foto: 'Nuevo pie', hashtags: ['#n1', '#n2'], llamado: 'Escríbenos', laminas: ['x'] })
   })
   it('si la pieza trae solo los hashtags, cambian solo los hashtags', () => {
-    const r = aplicarSalidaDeJefatura({ familia: 'carrusel_ig_v1' }, estado({ copy_carrusel: { version: 1, version_consumida: 1, datos: { pie_de_foto: 'viejo', hashtags: ['#a'], llamado: 'viejo' } } }), salida('limpia', { artefacto_final: { pieza: { hashtags: ['#solo'] } } }), { reImagen: () => ({}) })
+    const r = aplicarSalidaDeJefatura({ familia: 'carrusel_ig_v1', clase: 'carrusel' }, estado({ copy_carrusel: { version: 1, version_consumida: 1, datos: { pie_de_foto: 'viejo', hashtags: ['#a'], llamado: 'viejo' } } }), salida('limpia', { artefacto_final: { pieza: { hashtags: ['#solo'] } } }), { reImagen: () => ({}) })
     expect(r.otros_artefactos?.['copy_carrusel']).toEqual({ pie_de_foto: 'viejo', hashtags: ['#solo'], llamado: 'viejo' })
   })
   it('una pieza sin ninguno de los tres campos no toca la copia', () => {
-    const r = aplicarSalidaDeJefatura({ familia: 'carrusel_ig_v1' }, estado(), salida('limpia', { artefacto_final: { pieza: { otra_cosa: 1 } } }), { reImagen: () => ({}) })
+    const r = aplicarSalidaDeJefatura({ familia: 'carrusel_ig_v1', clase: 'carrusel' }, estado(), salida('limpia', { artefacto_final: { pieza: { otra_cosa: 1 } } }), { reImagen: () => ({}) })
     expect(r.otros_artefactos?.['copy_carrusel']).toBeUndefined()
   })
 })
@@ -171,14 +171,14 @@ describe('reparo menor 3 (CC#3) · el costo de la jefatura es un número finito 
   })
   for (const [n, v] of malos) {
     it(`aplicarSalidaDeJefatura con costo ${n}: el costo del paso queda en 0 (finito), y solo lo que vino mal lo declara`, () => {
-      const r: Json = aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), salida('limpia', { costo_usd: v as never }), { reImagen: () => ({ re_imagen: false }) })
+      const r: Json = aplicarSalidaDeJefatura({ familia: 'post_img', clase: 'post_img' }, estado(), salida('limpia', { costo_usd: v as never }), { reImagen: () => ({ re_imagen: false }) })
       expect(r.costo_usd).toBe(0); expect(Number.isFinite(r.costo_usd)).toBe(true); expect(r.artefacto.jefatura.costo_usd).toBe(0)
       const dicho = r.artefacto.jefatura.costo_invalido === true
       expect(dicho).toBe(n !== 'nulo' && n !== 'ausente')
     })
   }
   it('con un costo bueno no cambia nada: el paso lleva 0.2 y no hay marca de costo inválido', () => {
-    const r: Json = aplicarSalidaDeJefatura({ familia: 'post_img' }, estado(), salida('limpia', { costo_usd: 0.2 }), { reImagen: () => ({ re_imagen: false }) })
+    const r: Json = aplicarSalidaDeJefatura({ familia: 'post_img', clase: 'post_img' }, estado(), salida('limpia', { costo_usd: 0.2 }), { reImagen: () => ({ re_imagen: false }) })
     expect(r.costo_usd).toBe(0.2); expect(r.artefacto.jefatura.costo_usd).toBe(0.2); expect(r.artefacto.jefatura.costo_invalido).toBeUndefined()
   })
   for (const [n, v] of malos.slice(0, 4)) {

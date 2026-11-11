@@ -39,7 +39,11 @@ export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorad
   }
 }
 
-export interface ConfigDeOficina { estado: 'apagada' | 'ensayo' | 'encendida'; familias_activas: string[]; clientes_ensayo: string[] }
+export interface ConfigDeOficina {
+  estado: 'apagada' | 'ensayo' | 'encendida'; familias_activas: string[]; clientes_ensayo: string[]
+  /** fila #19 · las familias cuya plantilla es de una clase SIN pieza simple (dato: `oficina_tipos_de_grupo.clase` · `clase.ts`); solo lo carga quien no lee la plantilla (el freno de la cadena) */
+  sin_pasarela?: string[]
+}
 /** semilla: apagada, sin familias */
 export const CONFIG_APAGADA: ConfigDeOficina = { estado: 'apagada', familias_activas: [], clientes_ensayo: [] }
 
@@ -50,15 +54,15 @@ export type DecisionDePuerta =
   /** T8 · una familia SIN pieza simple detrás (el video): si la oficina no la abre, el sobre NO sigue por la pasarela; espera (409 visible), nunca se convierte en una imagen */
   | { accion: 'sin_sala'; familia: string; motivo: 'oficina_apagada' | 'familia_no_activa' | 'cliente_fuera_del_ensayo' }
 
-/** las familias que no tienen pasarela: un reel no se puede hacer como publicación con imagen */
-export const FAMILIAS_SIN_PASARELA: readonly string[] = ['video_mesa']
-
-/** `targetStepId` y `clientId` los pone la SALA (nunca vienen del payload) */
-export function decidirPuerta(sobre: Sobre, config: ConfigDeOficina, targetStepId: string, clientId: string): DecisionDePuerta {
+/**
+ * `targetStepId` y `clientId` los pone la SALA (nunca vienen del payload).
+ * Fila #19 · `sinPasarela` sale de la CLASE de la plantilla de la familia (dato · `clase.ts`): antes era una lista de nombres (`video_mesa`).
+ */
+export function decidirPuerta(sobre: Sobre, config: ConfigDeOficina, targetStepId: string, clientId: string, sinPasarela = false): DecisionDePuerta {
   if (targetStepId !== TARGET_STEP_PRODUCIR) return { accion: 'rechazar', motivo: 'origen_no_aceptado' }
   if (!sobre.familia) return { accion: 'pasarela', motivo: 'sin_familia' }
   const noAbre = (motivo: 'oficina_apagada' | 'familia_no_activa' | 'cliente_fuera_del_ensayo'): DecisionDePuerta =>
-    FAMILIAS_SIN_PASARELA.includes(sobre.familia as string) ? { accion: 'sin_sala', familia: sobre.familia as string, motivo } : { accion: 'pasarela', motivo }
+    sinPasarela ? { accion: 'sin_sala', familia: sobre.familia as string, motivo } : { accion: 'pasarela', motivo }
   if (config.estado === 'apagada') return noAbre('oficina_apagada')
   if (!config.familias_activas.includes(sobre.familia)) return noAbre('familia_no_activa')
   if (config.estado === 'ensayo' && !config.clientes_ensayo.includes(clientId)) return noAbre('cliente_fuera_del_ensayo')

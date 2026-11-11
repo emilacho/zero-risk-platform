@@ -9,7 +9,8 @@
 import crypto from 'node:crypto'
 import { datos, fichaNueva } from './ayudas'
 import { fechaLimiteDelBrief, parsearBrief, planDeOrigen, proporcionDelBrief, type BriefLeido } from './brief'
-import { briefEsDelEncargo } from './familia-del-brief'
+import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
+import { claseDe } from './clase'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import type { ContextoDelRevisor } from './ciego'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega } from './entrega'
@@ -26,7 +27,7 @@ import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 
 export type FamiliaDeVideo = 'video'
-export const familiaDeVideo = (pl: Pick<Plantilla, 'familia'>): FamiliaDeVideo | null => (pl.familia === 'video_mesa' ? 'video' : null)
+export const familiaDeVideo = (pl: Pick<Plantilla, 'clase'>): FamiliaDeVideo | null => (claseDe(pl) === 'video' ? 'video' : null)
 
 /** el mismo marcador de lo simulado que usa `adaptadores.ts` (`PREFIJO_DRY`): `descargar` lo reconoce y no sale a la red */
 const PREFIJO_DRY = 'https://dry.invalid/'
@@ -86,7 +87,7 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const plan = planId ? await P.plan(planId, enc.client_id) : null
   if (plan) fu.plan_texto = plan
   // GO 11-nov «la mesa confía en la familia»: la familia ya la decidió la cadena; no se re-adivina por el texto del brief (red: la tabla de formatos de la cadena)
-  const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P))
+  const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P), claseDeLaFamilia(P))
   if (!sala.ok) return { res: { costo_usd: 0 }, fallido: sala.motivo }
   const formato_video = formatoDeVideo(brief)
   // 11-nov · regla #17: la proporción la escribió la hoja en LÍMITES (dato de la tabla de formatos); sin ella, o si el generador no la admite, la de por omisión del formato CON aviso
