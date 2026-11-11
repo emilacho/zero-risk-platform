@@ -701,7 +701,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, turno: { ...turnoBase, n, estado: 'hecho', error: 'necesito: espera al portero' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
     return pedirLoQueElAgenteNecesita(P, { ...enc, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd }, pl, paso.clave, nec.necesidades)
   }
-  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(paso, p.valor, enc, e, pl, intentos) : (familiaDeVideo(pl) ? procesarValorV(paso, p.valor, e) : null) ?? procesarValor(paso, p.valor, enc, e, pl)
+  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(paso, p.valor, enc, e, pl, intentos) : (familiaDeVideo(pl) ? procesarValorV(paso, p.valor, e, pl) : null) ?? procesarValor(paso, p.valor, enc, e, pl)
   if (proc.reintentar !== undefined) return pedirReintento(proc.reintentar, 'validación de la sala: reintento')
   if (proc.fallido || !proc.res) {
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), turno: { ...turnoBase, n, estado: 'fallo', error: proc.fallido ?? 'sin resultado' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })

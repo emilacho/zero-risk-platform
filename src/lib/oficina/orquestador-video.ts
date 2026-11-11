@@ -25,6 +25,7 @@ import { RELACIONES_PERMITIDAS, RELACION_POR_FORMATO } from '../video/parametros
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
+import { COTAS } from './mesa/tipos'
 import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo } from './video/mirada'
 import { CONTRATOS_EN_TEXTO } from './pedidos'
@@ -319,15 +320,38 @@ export function armarPedidoV(paso: Paso, e: Estado, errorDeFormato?: string): { 
 }
 
 /** lo que el agente vio → el artefacto; si NO coincide queda una ficha que bloquea con lo que faltó (la vuelta a la mesa, si la plantilla la tiene, lee `coincide`) */
-export function procesarValorV(paso: Paso, v: Record<string, unknown>, e: Estado): { res: ResultadoDePaso } | null {
+export function procesarValorV(paso: Paso, v: Record<string, unknown>, e: Estado, pl: Plantilla): { res: ResultadoDePaso } | null {
   if (paso.clave !== PASO_MIRAR_VIDEO) return null
   const m = leerMirada(v)
   const detalle = m.faltantes.map((f) => `${f.plano !== null ? `plano ${f.plano}: ` : ''}${f.que_falta}`).join(' · ') || m.para_la_mesa || 'sin detalle'
   // 11-nov · ADENDA Emilio 16:43 «no se trata de yo mandarlo a corregir»: si no coincide y al paso le queda su vuelta (`vuelve_a` de la plantilla), el video vuelve SOLO
   //   a la mesa con lo que faltó (mecanismo de #1047); sin vuelta, la ficha que bloquea. Nunca un lazo: la vuelta se cuenta al cerrar la mesa y a la segunda sigue de largo
-  if (!m.coincide && quedaVueltaDelPaso(paso, e)) return { res: { costo_usd: 0, artefacto: { ...m, vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeLaMiradaALaMesa(m) } as unknown as Record<string, unknown>, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
-  const fichas: Ficha[] = m.coincide ? [] : [fichaNueva(`video-no-coincide-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `el agente que miró el video dice que no cuenta lo que pide el guion: ${detalle}`.slice(0, 900), 'los cuadros del video contra el guion y la fila', m.para_la_mesa || 'rehacer el video con lo que faltó')]
+  // 11-nov · CC7 🟡: volver SOLO si además CABE lo que cuesta volver (filmar otro video, mirarlo…); si no, el encargo se cerraría por tope ANTES de la jefatura y el video
+  //   ya pagado se perdería: peor que no mirar. Sin espacio sigue a la jefatura con la ficha que bloquea, que dice que no se rehízo por tope
+  const queda = !m.coincide && quedaVueltaDelPaso(paso, e)
+  const costo = queda ? costoDeVolver(pl, paso) : 0
+  const cabe = queda && cabeLaVuelta(pl, e, costo)
+  if (cabe) return { res: { costo_usd: 0, artefacto: { ...m, vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeLaMiradaALaMesa(m) } as unknown as Record<string, unknown>, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+  const sinTope = queda ? ` · no se rehízo solo: volver a la mesa y filmar otro video (reserva US$ ${costo.toFixed(2)}) pasa el tope del encargo (US$ ${pl.limites.tope_encargo_usd}; van US$ ${e.gasto_usd.toFixed(2)})` : ''
+  const fichas: Ficha[] = m.coincide ? [] : [fichaNueva(`video-no-coincide-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `el agente que miró el video dice que no cuenta lo que pide el guion: ${detalle}`.slice(0, 700) + sinTope, 'los cuadros del video contra el guion y la fila', m.para_la_mesa || 'rehacer el video con lo que faltó')]
   return { res: { costo_usd: 0, artefacto: { ...m, vuelve_a_la_mesa: false } as unknown as Record<string, unknown>, fichas, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+}
+
+/** lo que se reserva para VOLVER desde `paso` a su destino: los topes de los pasos que se repiten (destino → paso, inclusive) y, si el destino es la mesa, un turno de la mesa (la mesa se limita sola con su reserva, pero puede integrar una vez). Puro */
+export function costoDeVolver(pl: Plantilla, paso: Paso): number {
+  const de = pl.pasos.findIndex((x) => x.clave === paso.vuelve_a?.paso)
+  const a = pl.pasos.findIndex((x) => x.clave === paso.clave)
+  if (de < 0 || a < de) return Number.POSITIVE_INFINITY
+  const topes = pl.pasos.slice(de, a + 1).reduce((s, x) => s + (Number(x.tope_usd) || 0), 0)
+  return +(topes + (pl.pasos[de].funcion === 'mesa' ? COTAS.RESERVA_POR_TURNO_USD : 0)).toFixed(6)
+}
+
+/** ¿cabe la vuelta en el tope del encargo (y en la holgura de la prueba, si la hay)? lo mismo que mira el motor antes de cada paso, por adelantado. Puro */
+export function cabeLaVuelta(pl: Plantilla, e: Estado, costo: number): boolean {
+  if (e.gasto_usd + costo > pl.limites.tope_encargo_usd + 1e-9) return false
+  const pr = pl.limites.prueba
+  if (pr && costo > pr.limite_usd - pr.base_usd - Math.max(0, e.gasto_usd - pr.encargo_base_usd) + 1e-9) return false
+  return true
 }
 
 /** ¿a este paso le queda vuelta? (su `vuelve_a.max` contra las vueltas ya contadas; sin `vuelve_a`, nunca) */
