@@ -37,6 +37,15 @@ describe('fila #20 · el máximo de láminas sale del formato y nunca se recorta
       expect(seis.ok && seis.laminas).toHaveLength(6); expect(seis.avisos.join('\n')).toMatch(/dejó 12 láminas y el formato admite 6/)
     })
   }
+  it('CC7 · el rol de cada lámina se cuenta sobre lo que SE DIBUJA: máximo 5 y el director deja 7 → la lámina 5 es el cierre (y con 10 fijo no lo sería)', () => {
+    const sinRol = (n: number) => `${Array.from({ length: n }, (_, i) => `## Lámina ${i + 1}\nTítulo: Paso ${i + 1} del cierre contable\nTexto: Sin sorpresas.\nImagen: ninguna`).join('\n')}\n## Pie\nPie de la pieza.\n## Etiquetas\n#uno`
+    const t = traducirPieza(sinRol(7), 'carrusel', { maxLaminas: 5 })
+    if (!t.ok) throw new Error(String(t.motivo ?? t.pregunta))
+    expect(t.laminas).toHaveLength(5)
+    expect(t.laminas?.[0].rol).toBe('hook')
+    expect(t.laminas?.[4].rol).toBe('cierre')
+    expect(t.laminas?.slice(1, 4).map((l) => l.rol)).not.toContain('cierre')
+  })
   it('un máximo inválido (0, negativo, decimal) cae al de siempre (10)', () => {
     for (const m of [0, -3, 2.5]) { const t = traducirPieza(carrusel(CLIENTES[0].laminas(11)), 'carrusel', { maxLaminas: m }); expect(t.ok && t.laminas).toHaveLength(10) }
   })
