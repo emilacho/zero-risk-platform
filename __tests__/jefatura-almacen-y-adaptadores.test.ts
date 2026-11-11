@@ -109,12 +109,13 @@ describe('almacén · revisiones, pasos y fichas', () => {
     const r = await a.crearRevision(nueva())
     const id = r.ok ? r.revision.id : ''
     const base = { revision_id: id, intento: 1, tipo: 'agente' as const, agente: 'x', dispatch_key: null, concepto: 'modelo' as const, base: 'usage' as const, cost_usd: 0 }
-    await a.guardar({ revision_id: id, estado_del_motor: estadoInicial(), gasto_usd: 0, paso: { ...base, n: 1, paso: 'a', estado: 'corriendo' } })
+    await a.guardar({ revision_id: id, estado_del_motor: estadoInicial(), gasto_usd: 0, paso: { ...base, n: 1, paso: 'a', estado: 'corriendo', agente: 'jefe-marketing', dispatch_key: 'jefatura:rev:1' } })
     ;(db.tablas.jefatura_pasos[0] as Json).inicio = '2026-10-13T10:00:00.000Z'
     // un paso ya HECHO, más viejo todavía: el vigía NO lo mira
     await a.guardar({ revision_id: id, estado_del_motor: estadoInicial(), gasto_usd: 0, paso: { ...base, n: 2, paso: 'b', estado: 'hecho' } })
     ;(db.tablas.jefatura_pasos[1] as Json).inicio = '2026-10-13T08:00:00.000Z'
-    expect(await a.pasosCorriendoAntesDe('2026-10-13T11:00:00.000Z')).toEqual([{ revision_id: id, n: 1, paso: 'a' }])
+    // 11-nov · #21: el vigía necesita el agente (su techo medido), el inicio y la llave del despacho (su latido)
+    expect(await a.pasosCorriendoAntesDe('2026-10-13T11:00:00.000Z')).toEqual([{ revision_id: id, n: 1, paso: 'a', inicio: '2026-10-13T10:00:00.000Z', agente: 'jefe-marketing', dispatch_key: 'jefatura:rev:1' }])
     expect(await a.pasosCorriendoAntesDe('2026-10-13T09:00:00.000Z')).toEqual([])
   })
   it('un error de la base al guardar o leer se LANZA', async () => {

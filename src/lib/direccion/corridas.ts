@@ -98,7 +98,7 @@ export async function leerCorrida({ db, ahora }: Contexto, id: string): Promise<
     leer(fuentes, 'agent_invocations', db.from('agent_invocations').select(COLUMNAS).eq('workflow_execution_id', base).limit(TOPE_FILAS), TOPE_FILAS),
     leer(fuentes, 'agent_invocations:ramas', db.from('agent_invocations').select(COLUMNAS).like('workflow_execution_id', `${base}:%`).limit(TOPE_FILAS), TOPE_FILAS),
     leer(fuentes, 'agent_dispatches', db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, updated_at, completed_at, metadata').eq('workflow_execution_id', base).limit(TOPE_FILAS), TOPE_FILAS),
-    leer(fuentes, 'agent_dispatches:ramas', db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, completed_at, metadata').like('workflow_execution_id', `${base}:%`).limit(TOPE_FILAS), TOPE_FILAS),
+    leer(fuentes, 'agent_dispatches:ramas', db.from('agent_dispatches').select('dispatch_key, workflow_id, workflow_execution_id, agent_name, client_id, status, created_at, running_at, updated_at, completed_at, metadata').like('workflow_execution_id', `${base}:%`).limit(TOPE_FILAS), TOPE_FILAS),
   ])
   // en LIKE el «_» es comodín: `a_b:%` también trae `axb:…`. Lo que no sea de esta ejecución se descarta aquí
   const deEsta = (f: Fila) => ejecucionBase(String(f.workflow_execution_id)) === base
