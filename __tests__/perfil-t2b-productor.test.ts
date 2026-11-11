@@ -106,6 +106,12 @@ describe('② con perfil: el bloque entra UNA vez, después del trato, como DATO
     expect(url).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
     expect(url).toMatch(/oficina=productor&agente=campaign-brief-agent/) // queda registrado quién consulta
   })
+  it('🔴 la consulta pide la clase del informe (sin `que`, `atributo` ni `clase` la puerta da 400 y el perfil quedaría «no disponible» para siempre) y un solo informe', () => {
+    const url: string = nodoDe(DESPUES, T.NODO_PERFIL).parameters.url
+    const qs = new URLSearchParams(url.slice(url.indexOf('?') + 1).replace(/\{\{[^}]*\}\}/g, 'EXPR'))
+    expect([...qs.keys()].sort()).toEqual(['agente', 'clase', 'client_id', 'limite', 'oficina'])
+    expect([qs.get('client_id'), qs.get('oficina'), qs.get('agente'), qs.get('clase'), qs.get('limite')]).toEqual(['EXPR', 'productor', 'campaign-brief-agent', 'informe_de_analisis', '1'])
+  })
 })
 
 describe('③ un fallo al leer es «no disponible», nunca «no hay», y la pieza no cae', () => {
