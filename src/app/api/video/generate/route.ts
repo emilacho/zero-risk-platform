@@ -18,7 +18,7 @@ import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { VARIABLE_DE_LA_LLAVE, costoEstimadoUsd, enviar, estado, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
 import { almacenDeSupabase } from '@/lib/cadena/almacen-supabase'
-import { armarPedido, conDescuento, cuerpoParaHiggsfield, leerConfigDelBrazo, rutaDelModelo } from '@/lib/video/parametros'
+import { armarPedido, armarPedidoDePlano, conDescuento, cuerpoParaHiggsfield, leerConfigDelBrazo, rutaDelModelo } from '@/lib/video/parametros'
 import { cerrarEnElLibro, cierreDeFila, registrarEnvioEnElLibro, sessionIdDeVideo } from '@/lib/video/libro'
 import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 
@@ -40,7 +40,9 @@ export async function POST(request: Request) {
   try { body = (await request.json()) as Record<string, unknown> } catch { return json(400, { error: 'invalid_json' }) }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json(400, { error: 'invalid_json' })
 
-  const armado = armarPedido(body)
+  // 11-nov · camino B (GO Lenovo 16:43): `plano: true` = UN plano de un video de varios (4–30 s, como mucho su foto, por imagen a video); sin él, el video de una sola toma de siempre
+  const plano = body.plano === true
+  const armado = plano ? armarPedidoDePlano(body) : armarPedido(body)
   if (!armado.ok) return json(400, { error: 'pedido_invalido', errores: armado.errores })
   const pedido = armado.pedido
   const dryRun = body.dry_run === true
@@ -57,9 +59,9 @@ export async function POST(request: Request) {
   // 11-nov · regla #18: el tope por video y el descuento del proveedor salen de la configuración (`cadena_config.brazo_de_video`); sin ella, el tope aprobado y sin descuento
   const cfg = await leerConfigDelBrazo((clave) => almacenDeSupabase().leerConfig(clave))
   const tope = typeof body.tope_usd === 'number' && body.tope_usd > 0 ? Math.min(body.tope_usd, cfg.tope_por_video_usd) : cfg.tope_por_video_usd
-  const ruta = rutaDelModelo(pedido)
-  const cuerpo = cuerpoParaHiggsfield(pedido)
-  const base = { ruta, modelo: pedido.modelo, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, audio: pedido.audio, fotos: pedido.fotos.length, tope_usd: tope, clave: claveIdempotente }
+  const ruta = rutaDelModelo({ ...pedido, plano })
+  const cuerpo = cuerpoParaHiggsfield({ ...pedido, plano })
+  const base = { ruta, plano, modelo: pedido.modelo, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, audio: pedido.audio, fotos: pedido.fotos.length, tope_usd: tope, clave: claveIdempotente }
 
   const k = llave()
   if (!k) return json(500, { error: 'llave_no_configurada', detail: `${VARIABLE_DE_LA_LLAVE} no está en el entorno` })
