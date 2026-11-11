@@ -12,6 +12,7 @@ import { POST_IMG } from '../plantillas/post-img'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import type { Estado, Plantilla } from '../tipos'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
+import etiquetas from './fixtures/etiquetas-16-fotos.json'
 
 const con = (base: Plantilla, familia: string, clase: string): Plantilla => ({ ...(JSON.parse(JSON.stringify(base)) as Plantilla), familia, tipo: familia, clase })
 const BRIEF = (id: string, formato: string) => `### ${id} · Instagram · ${formato}\n- QUÉ ES: una pieza de prueba\n- PROTAGONISTA: el plato del día\n- OBJETIVO: que escriban por WhatsApp\n`
@@ -45,9 +46,9 @@ describe('1 · la sala reconoce las variantes por la clase de sus plantillas, po
 
 const estado = (familia: 'kit' | 'post_img', elementos: number, fotos: unknown[] = [], usos: Record<string, string> = {}): Estado => ({
   artefactos: { encargo: { version: 1, version_consumida: 0, datos: {
-    brief: { protagonista: 'el plato del día', visual: '', negativos: [], visual_prohibido: [] }, proporcion: '9:16', familia,
-    F: { fotos, usos, propios: { telefonos: [], handles: [], urls: [], marcas_ajenas: [] }, vocabulario_de_productos: [] },
-    elementos: Array.from({ length: elementos }, (_, i) => ({ ref: `e${i}`, tema: 'el plato del día', datos: [] })),
+    brief: { protagonista: 'Encebollados', visual: '', negativos: [], visual_prohibido: [] }, proporcion: '9:16', familia,
+    F: { fotos, usos, propios: { telefonos: [], handles: [], urls: [], marcas_ajenas: [] }, vocabulario_de_productos: ['Encebollados'] },
+    elementos: Array.from({ length: elementos }, (_, i) => ({ ref: `e${i}`, tema: 'Encebollados', datos: [] })),
   } } },
 } as unknown as Estado)
 
@@ -58,8 +59,9 @@ describe('2 · las fotos del material siguen a la clase', () => {
     expect(medirFotos(estado('kit', 6), con(KIT_HISTORIAS, 'kit_nuevo', 'post_img'), AHORA).minimo).toBe(1)
   })
   it('repetir una foto usada hace 3 días: el kit la permite (con aviso); un post nuevo de clase post_img, no', () => {
-    const foto = { id: 'f1', origen: 'propia', estado: 'ok', tipo_de_toma: 'plato', etiqueta_confianza: 'alta', producto_visto: ['plato del día'], formato: 'vertical' }
-    const usos = { f1: '2026-11-08T12:00:00Z' }
+    // una foto REAL del portero (el fichero de las 16 etiquetas de Náufrago): una de encebollado, propia
+    const foto = { ...(etiquetas as Array<{ id: string }>).find((f) => f.id.startsWith('780fc5e1'))!, origen: 'propia' }
+    const usos = { [foto.id]: '2026-11-08T12:00:00Z' }
     expect(candidatasDelEncargo(estado('kit', 2, [foto], usos), con(KIT_HISTORIAS, 'kit_nuevo', 'kit'), AHORA).reusoPermitido).toBe(true)
     expect(candidatasDelEncargo(estado('post_img', 0, [foto], usos), con(POST_IMG, 'post_nuevo', 'post_img'), AHORA).reusoPermitido).toBe(false)
   })
