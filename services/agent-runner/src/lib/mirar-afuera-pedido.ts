@@ -30,4 +30,5 @@ export function ecoDeLimites(valor: LimitesDeMirarAfuera | null | undefined): { 
 }
 
 /** Lo que el corredor DICE que sabe hacer (GET /health) · permite a un flujo comprobar, ANTES de gastar, que este corredor trae el cambio */
-export const CAPACIDADES_DEL_CORREDOR = { mirar_afuera_limites: 1 } as const
+/** 11-nov · `video_unir`: el unidor de video plano por plano (`/video/encuadrar` · `/video/unir`, ffmpeg del contenedor) */
+export const CAPACIDADES_DEL_CORREDOR = { mirar_afuera_limites: 1, video_unir: 1 } as const

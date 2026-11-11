@@ -91,7 +91,7 @@ export function argumentosDeUnir(entradas: string[], clips: ClipParaUnir[], conA
     if (conAudio[i]) fuenteDeAudio.push(`[${i}:a]`)
     else { args.push('-f', 'lavfi', '-t', String(largo), '-i', 'anullsrc=r=48000:cl=stereo'); fuenteDeAudio.push(`[${extra++}:a]`) }
     f.push(`[${i}:v]trim=duration=${clips[i].segundos},setpts=PTS-STARTPTS,scale=${ancho}:${alto}:force_original_aspect_ratio=increase,crop=${ancho}:${alto},setsar=1,fps=${FPS},format=yuv420p[v${i}]`)
-    f.push(`${fuenteDeAudio[i]}aformat=sample_rates=48000:channel_layouts=stereo,atrim=duration=${largo},asetpts=PTS-STARTPTS,apad=whole_dur=${largo}[a${i}]`)
+    f.push(`${fuenteDeAudio[i]}aformat=sample_rates=48000:channel_layouts=stereo,atrim=duration=${largo},asetpts=PTS-STARTPTS,apad,atrim=duration=${largo},asetpts=PTS-STARTPTS[a${i}]`)
   }
   f.push(`${Array.from({ length: n }, (_, i) => `[v${i}]`).join('')}concat=n=${n}:v=1:a=0[v]`)
   let actual = '[a0]'

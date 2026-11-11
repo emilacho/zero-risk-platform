@@ -99,7 +99,7 @@ app.get('/health', (_req, res) => {
     status: 'ok',
     uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
     // lo que este corredor sabe hacer · un flujo lo comprueba ANTES de gastar (PR #418)
-    capacidades: { ...CAPACIDADES_DEL_CORREDOR, video_unir: 1 },
+    capacidades: CAPACIDADES_DEL_CORREDOR,
   })
 })
 
