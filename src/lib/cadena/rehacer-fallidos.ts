@@ -60,7 +60,7 @@ export interface EncargoDeLaCampana {
   fila: unknown
   creado_en: string
 }
-/** un arreglo publicado en producción (la fuente: la lista de publicaciones de la plataforma) */
+/** un arreglo publicado (la fuente: las entregas fusionadas a main del repositorio de la plataforma · decisión Lenovo 11-nov 17:15) */
 export interface ArregloPublicado { id: string; publicado_en: string; mensaje: string }
 export type LecturaDeArreglos = { ok: true; arreglos: ArregloPublicado[] } | { ok: false; motivo: string }
 

@@ -67,7 +67,7 @@ function montar(k: Caso, encargos: EncargoDeLaCampana[], o: Op = {}) {
     { id: 'dpl_arreglo', publicado_en: masMin(k.ahora, -300), mensaje: k.arreglo },
     { id: 'dpl_otro', publicado_en: masMin(k.ahora, -200), mensaje: k.otro },
   ]
-  al.fuenteDeArreglos = async (desde) => (o.fuente === 'falla' ? { ok: false, motivo: 'la lista de publicaciones contestó 503' } : { ok: true, arreglos: arreglos.filter((a) => a.publicado_en > desde) })
+  al.fuenteDeArreglos = async (desde) => (o.fuente === 'falla' ? { ok: false, motivo: 'la lista de entregas contestó 503' } : { ok: true, arreglos: arreglos.filter((a) => a.publicado_en > desde) })
   let n = 0
   al.mesaDeFallidos = async () => (o.mesa === 'no_abre' ? { estado: 'no_abre', motivo: 'plantilla_inactiva' } : { estado: 'abierta', encargo_id: `mesa-${++n}` })
   let r = 0
@@ -183,7 +183,7 @@ describe.each(CASOS)('$nombre', (k) => {
       const r = await abrirRevisionesDeFallidos(al, k.ahora)
       expect(al.sobresDeFallidos).toEqual([])
       expect(libreta(al).fallidos['enc-a']).toBeUndefined()
-      expect(r.lineas.map((l) => l.texto)).toContain('fallidos: no se pudo leer la lista de arreglos publicados (la lista de publicaciones contestó 503); se reintenta en la próxima pasada.')
+      expect(r.lineas.map((l) => l.texto)).toContain('fallidos: no se pudo leer la lista de arreglos publicados (la lista de entregas contestó 503); se reintenta en la próxima pasada.')
       al.fuenteDeArreglos = async (desde) => ({ ok: true, arreglos: [{ id: 'dpl_arreglo', publicado_en: masMin(k.ahora, -300), mensaje: k.arreglo }].filter((a) => a.publicado_en > desde) })
       await abrirRevisionesDeFallidos(al, masMin(k.ahora, 30))
       expect(al.sobresDeFallidos).toHaveLength(1)

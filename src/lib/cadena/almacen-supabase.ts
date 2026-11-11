@@ -188,47 +188,54 @@ export async function reabrirFallidoReal(p: { encargo_id: string; causa: string 
   } catch (e) { return { ok: false, motivo: e instanceof Error ? e.message : String(e) } }
 }
 
-/** el proyecto de la plataforma en Vercel (la fuente de los arreglos publicados) · se puede cambiar por entorno */
-export const PROYECTO_DE_LA_PLATAFORMA = 'prj_UNusLHZNj5vOVrvCEHcRL8EUms2i'
-/** la credencial de SOLO LECTURA de publicaciones (Doppler → entorno de producción) · sin ella, la fuente no se lee y lo dice */
-export const CREDENCIAL_DE_PUBLICACIONES = 'VERCEL_TOKEN_LECTURA_PUBLICACIONES'
+/** el repositorio de la plataforma en GitHub (la fuente de los arreglos: sus entregas fusionadas a main) · se puede cambiar por entorno */
+export const REPOSITORIO_DE_LA_PLATAFORMA = 'emilacho/zero-risk-platform'
 /**
- * 11-nov · fallidos que se rehacen solos · LA FUENTE: las publicaciones de PRODUCCIÓN de la plataforma listas (READY) después de `desde`, con el texto del cambio (el mensaje de la entrega).
- * Los cambios del servicio de Railway y de los flujos que pasan por una entrega del repositorio salen aquí; lo cambiado en vivo sin entrega no (límite declarado: por eso «dejar» no es definitivo).
- * Pagina hasta 5 páginas de 100. Nunca lanza.
+ * la credencial FINA de SOLO LECTURA del repositorio (contenido y entregas, nada más) · decisión Lenovo 11-nov 17:15: la llave de Vercel NO va al entorno (publica, borra y lee
+ * credenciales). La crea Emilio; vive en Doppler → solo en el servidor. Sin ella, la fuente no se lee y lo dice. Nunca sale en un registro ni en una respuesta.
+ */
+export const CREDENCIAL_DE_ENTREGAS = 'GITHUB_TOKEN_LECTURA_ENTREGAS'
+/** cuánto del texto de una entrega (título + descripción) llega a la mesa */
+export const MAX_TEXTO_DE_LA_ENTREGA = 1500
+/**
+ * 11-nov · fallidos que se rehacen solos · LA FUENTE: las entregas (PR) FUSIONADAS a `main` después de `desde`, con su título y su descripción (decisión Lenovo 17:15).
+ * Los cambios de la plataforma, del servicio de Railway y de los flujos que pasan por una entrega salen aquí; lo cambiado en vivo sin entrega no (límite declarado: «dejar» es provisional).
+ * Lee las entregas cerradas por fecha de actualización, de la más nueva hacia atrás; se detiene cuando la página ya es anterior a `desde` o a las 5 páginas de 100. Nunca lanza.
+ * El error nunca incluye la credencial (solo el código de la respuesta).
  */
 export async function arreglosPublicadosReal(desde: string, f: typeof fetch = fetch, env: Record<string, string | undefined> = process.env): Promise<import('./rehacer-fallidos').LecturaDeArreglos> {
-  const token = (env[CREDENCIAL_DE_PUBLICACIONES] ?? '').trim()
-  if (!token) return { ok: false, motivo: `falta la credencial ${CREDENCIAL_DE_PUBLICACIONES} en el entorno` }
-  const proyecto = (env.VERCEL_PROYECTO_DE_LA_PLATAFORMA ?? '').trim() || PROYECTO_DE_LA_PLATAFORMA
+  const token = (env[CREDENCIAL_DE_ENTREGAS] ?? '').trim()
+  if (!token) return { ok: false, motivo: `falta la credencial ${CREDENCIAL_DE_ENTREGAS} en el entorno` }
+  const repo = (env.GITHUB_REPOSITORIO_DE_LA_PLATAFORMA ?? '').trim() || REPOSITORIO_DE_LA_PLATAFORMA
   const desdeMs = Date.parse(desde)
   if (!Number.isFinite(desdeMs)) return { ok: false, motivo: `fecha «desde» ilegible: ${desde}` }
   const out: import('./rehacer-fallidos').ArregloPublicado[] = []
-  let until: number | null = null
   try {
-    for (let pagina = 0; pagina < 5; pagina++) {
-      const q = new URLSearchParams({ projectId: proyecto, target: 'production', limit: '100', since: String(desdeMs) })
-      if (until !== null) q.set('until', String(until))
-      const r = await f(`https://api.vercel.com/v6/deployments?${q.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
-      if (!r.ok) return { ok: false, motivo: `la lista de publicaciones contestó ${r.status}` }
-      const j = (await r.json()) as { deployments?: Array<Record<string, unknown>>; pagination?: { next?: number | null } }
-      if (!Array.isArray(j.deployments)) return { ok: false, motivo: 'la lista de publicaciones no trae `deployments`' }
-      for (const d of j.deployments) {
-        const estado = String(d.state ?? d.readyState ?? '')
-        const creado = Number(d.created ?? d.createdAt)
-        const meta = d.meta && typeof d.meta === 'object' ? (d.meta as Record<string, unknown>) : {}
-        const mensaje = typeof meta.githubCommitMessage === 'string' ? meta.githubCommitMessage.trim() : ''
-        if (estado !== 'READY' || !Number.isFinite(creado) || creado <= desdeMs || !mensaje || typeof d.uid !== 'string') continue
-        out.push({ id: d.uid, publicado_en: new Date(creado).toISOString(), mensaje })
+    for (let pagina = 1; pagina <= 5; pagina++) {
+      const q = new URLSearchParams({ state: 'closed', base: 'main', sort: 'updated', direction: 'desc', per_page: '100', page: String(pagina) })
+      const r = await f(`https://api.github.com/repos/${repo}/pulls?${q.toString()}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } })
+      if (!r.ok) return { ok: false, motivo: `la lista de entregas contestó ${r.status}` }
+      const j = (await r.json()) as unknown
+      if (!Array.isArray(j)) return { ok: false, motivo: 'la lista de entregas no es una lista' }
+      let algunaReciente = false
+      for (const d of j as Array<Record<string, unknown>>) {
+        const actualizado = Date.parse(String(d.updated_at ?? ''))
+        if (Number.isFinite(actualizado) && actualizado > desdeMs) algunaReciente = true
+        const fusionado = Date.parse(String(d.merged_at ?? ''))
+        const numero = Number(d.number)
+        const titulo = typeof d.title === 'string' ? d.title.trim() : ''
+        // solo lo FUSIONADO (una entrega cerrada sin fusionar no arregla nada), posterior a «desde» y con título
+        if (!Number.isFinite(fusionado) || fusionado <= desdeMs || !Number.isInteger(numero) || !titulo) continue
+        const cuerpo = typeof d.body === 'string' ? d.body.trim() : ''
+        out.push({ id: `#${numero}`, publicado_en: new Date(fusionado).toISOString(), mensaje: (cuerpo ? `${titulo}\n\n${cuerpo}` : titulo).slice(0, MAX_TEXTO_DE_LA_ENTREGA) })
       }
-      const next = j.pagination?.next
-      if (typeof next !== 'number' || next <= desdeMs) break
-      until = next
+      // ordenadas por actualización: una entrega fusionada después de «desde» se actualizó después de «desde»; si ninguna de la página lo hizo, no hay más atrás
+      if (!algunaReciente || j.length < 100) break
     }
   } catch (e) { return { ok: false, motivo: e instanceof Error ? e.message : String(e) } }
-  // un mismo cambio puede publicarse dos veces (re-publicación): vale la primera
+  // la misma entrega puede salir en dos páginas si se actualizó mientras se leía: vale una
   const vistos = new Set<string>()
-  const unicos = out.sort((a, b) => (a.publicado_en < b.publicado_en ? -1 : 1)).filter((a) => { const k = a.mensaje; if (vistos.has(k)) return false; vistos.add(k); return true })
+  const unicos = out.sort((a, b) => (a.publicado_en < b.publicado_en ? -1 : 1)).filter((a) => { if (vistos.has(a.id)) return false; vistos.add(a.id); return true })
   return { ok: true, arreglos: unicos }
 }
 
