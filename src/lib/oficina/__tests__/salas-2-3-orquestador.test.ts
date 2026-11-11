@@ -712,6 +712,17 @@ describe('reglas rígidas #13 · el dato sin verificar en el carrusel', () => {
     const { M, id } = await correrCon(false)
     expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && f.donde === 'imagen')).toBe(false)
   })
+  it('🟡 CC7 §2 · una FOTO REAL de confianza media (mirada) con el dato omitido o en «sí» entra a su lámina: es dato del cliente, no inventado', async () => {
+    for (const dato of [undefined, true]) {
+      const { M, id } = await abierto(GENERA, BRIEF_CARRUSEL, 'BRF-0100', { dry_run: false })
+      await correr(M, id, guionCarrusel({
+        direccion_visual: (_n, t) => ({ texto: j({ resumen: 'foto real', imagenes: [{ ref: 'hook', modo: 'real', foto_id: /^- (\S+): muestra/m.exec(t)![1], motivo: 'sirve' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } }) }),
+        mirar: (_n, t) => ({ texto: conDato(indicesDe(t), dato) }),
+      }))
+      expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && f.donde === 'imagen')).toBe(false)
+      expect(M.llamadas.renderPedidos[0].slides[0].background_image_url).toMatch(/fotos\.test/)
+    }
+  })
   it('🔴 «sí» o sin respuesta: la lámina queda sin esa imagen y bloquea (una persona decide)', async () => {
     for (const dato of [true, undefined]) {
       const { M, id } = await correrCon(dato)

@@ -74,6 +74,16 @@ describe('③ decideImagen: el curador describe, el CÓDIGO decide', () => {
     expect(cod(false, true)).toEqual([])
     expect(cod(true)).toEqual([]); expect(cod(undefined, false)).toEqual([])
   })
+  it('🟡 CC7 §2 · Seguridad Industrial · veredicto: la foto real (su sello verdadero en el extintor) no se exige; la generada con «sí» u omitido falla', () => {
+    const real = obs({ indice: 1000, texto_en_imagen: ['INEN'], dato_sin_verificar: true })
+    const realOmitida = obs({ indice: 1001 })
+    const gen = obs({ indice: 0, dato_sin_verificar: true })
+    const genOmitida = obs({ indice: 1 })
+    const v = veredictoDeImagenes([real, realOmitida, gen, genOmitida], reglas, propios, false, { exigirDato: true, esGenerada: (i) => i < 1000 })
+    expect(v.porImagen.filter((x) => x.pasa).map((x) => x.indice)).toEqual([1000, 1001])
+    expect(v.porImagen.find((x) => x.indice === 0)!.fallas.map((f) => f.codigo)).toEqual(['dato_sin_verificar'])
+    expect(v.porImagen.find((x) => x.indice === 1)!.fallas.map((f) => f.codigo)).toEqual(['regla_omitida'])
+  })
   it('un obligatorio ausente o "no se ve" FALLA', () => {
     expect(decideImagen(obs({ reglas: obs().reglas.map((r) => (r.id === 'o1' ? { ...r, presente: false as const } : r)) }), reglas, propios).fallas[0].codigo).toBe('obligatorio_ausente')
     expect(decideImagen(obs({ reglas: obs().reglas.map((r) => (r.id === 'o1' ? { ...r, presente: 'no_se_ve' as const } : r)) }), reglas, propios).pasa).toBe(false)

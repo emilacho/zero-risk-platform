@@ -534,7 +534,7 @@ function mirar(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, e
   const mostradas = imagenesAMirarL(e)
   const validos = new Set(mostradas.map((i) => i.indice))
   const filtradas = arr<ObservacionDeImagen>(v.imagenes).filter((o) => validos.has(o.indice))
-  const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, false, { exigirDato: reglasDeInvencion(pl.limites) !== null })
+  const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, false, { exigirDato: reglasDeInvencion(pl.limites) !== null, esGenerada: (i) => i < BASE_INDICE_REAL })
   const aceptadas: Record<string, number[]> = { ...((datos(e, 'observacion_imagen')?.aceptadas ?? {}) as Record<string, number[]>) }
   if (esRe) {
     // re-imagen: para cada imagen rehecha, si alguna nueva cumple REEMPLAZA a la anterior; si ninguna cumple se queda la anterior (y se dice). Lo que no se rehizo no se toca.

@@ -66,7 +66,8 @@ export interface ObservacionDeImagen {
 }
 export interface FallaDeImagen { codigo: 'obligatorio_ausente' | 'prohibido_presente' | 'regla_omitida' | 'dato_ajeno' | 'marca_ajena' | 'dato_sin_verificar'; detalle: string }
 /** #13 · lo que se le exige a quien mira · `exigirDato`: la imagen se GENERÓ sin foto (no puede inventar datos), así que tiene que decir sí o no; sin respuesta, la imagen NO pasa (nunca aprobada por omisión) */
-export interface ExigenciasDeLaMirada { exigirDato?: boolean }
+/** `esGenerada` (🟡 CC7 §2): a una FOTO REAL del cliente NO se le exige: su sello, su etiqueta o su pizarra de precios son datos VERDADEROS del cliente, no inventados. Sin `esGenerada`, se exige a todas */
+export interface ExigenciasDeLaMirada { exigirDato?: boolean; esGenerada?: (indice: number) => boolean }
 
 /** dominio sin protocolo, sin www y sin ruta */
 const dominioDe = (u: string): string => normalizar(u).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[/?#].*$/, '')
@@ -120,7 +121,7 @@ export interface Veredicto {
 }
 /** `puedeRegenerar` lo calcula la sala (modo generada y vueltas restantes); el motor corta en el máximo de la plantilla. */
 export function veredictoDeImagenes(observaciones: ObservacionDeImagen[], reglas: ReglasDeImagen, propios: PropiosDelCliente, puedeRegenerar: boolean, exige: ExigenciasDeLaMirada = {}): Veredicto {
-  const porImagen = observaciones.map((o) => ({ indice: o.indice, ...decideImagen(o, reglas, propios, exige) }))
+  const porImagen = observaciones.map((o) => ({ indice: o.indice, ...decideImagen(o, reglas, propios, { exigirDato: exige.exigirDato === true && (exige.esGenerada ? exige.esGenerada(o.indice) : true) }) }))
   const pasan = porImagen.filter((x) => x.pasa).map((x) => x.indice)
   return { pasan, porImagen, regenerar: pasan.length === 0 && puedeRegenerar }
 }

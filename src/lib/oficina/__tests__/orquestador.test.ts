@@ -676,6 +676,19 @@ describe('reglas rígidas #13 · el dato sin verificar lo juzga quien mira (sala
     expect(pasos.filter((p) => p === 'mirar')).toHaveLength(3)
     expect(ultima.cuerpo).toMatchObject({ con_desacuerdo: true })
   })
+  it('🟡 CC7 §2 · Náufrago · a una FOTO REAL del cliente (su pizarra de precios) no se le exige: con el dato omitido o en «sí», pasa y no genera nada', async () => {
+    for (const dato of [undefined, true]) {
+      const M = crearMemoria({ plantilla: GENERA, parte: PARTE_OTRO_PRODUCTO }); const id = await abierto(M)
+      const { ultima, pasos } = await correr(M, id, {
+        paquete: () => ({ texto: 'material' }), direccion_visual: () => ({ texto: direccionReal('ef0921ad') }),
+        mirar: () => ({ texto: JSON.stringify({ imagenes: [{ indice: 0, reglas: [], texto_en_imagen: ['ENCEBOLLADO $5.50'], marcas: [], personas: 0, ...(dato === undefined ? {} : { dato_sin_verificar: dato }) }], preferencia: [0] }) }),
+        texto: () => ({ texto: JSON.stringify({ pie_de_foto: 'Encebollado a $5.50. Pídelo por WhatsApp al 0997744288.', hashtags: ['#encebollado'] }) }),
+        revision_jefe: () => ({ texto: FICHAS_VACIAS }),
+      })
+      expect(pasos.filter((p) => p === 'mirar')).toHaveLength(1); expect(M.llamadas.imagen).toBe(0)
+      expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    }
+  })
   it('con el interruptor apagado no se le exige (la sala sigue como hoy)', async () => {
     const M = crearMemoria(); const id = await abierto(M)
     const { pasos } = await correr(M, id, guionGenerada({ mirar: (_n, t) => ({ texto: conDato(indicesDe(t), undefined) }) }))

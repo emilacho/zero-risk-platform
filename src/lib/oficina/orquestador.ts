@@ -826,7 +826,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
       const filtradas = obs.filter((o) => validos.has(o.indice))
       const modo = ((datos(e, 'visual_direction')?.decision as { modo?: string } | undefined)?.modo) ?? 'ninguna'
       const puede = !esRe && modo === 'generada' && (e.vueltas['mirar'] ?? 0) < Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
-      const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, puede, { exigirDato: reglasDeInvencion(pl.limites) !== null })
+      const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, puede, { exigirDato: reglasDeInvencion(pl.limites) !== null, esGenerada: () => modo === 'generada' })
       // re-imagen que no cumple el brief: NO se pisa la observación ni la imagen anterior (se queda la que estaba) y se dice
       if (esRe && ver.pasan.length === 0) return { res: { costo_usd: 0, fichas: [fichaNueva(`reimagen-no-cumplio-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'la imagen nueva (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
       const fichas: Ficha[] = []
