@@ -20,7 +20,8 @@ export type EstadoDeRetoque = 'ya_coincide' | 'descartado' | 'propuesto' | 'apro
 /** a dónde puede ir cada estado (lo que no está aquí, no se escribe) */
 export const PASOS_DE_EDICION: Readonly<Record<EstadoDeEdicion, readonly EstadoDeEdicion[]>> = {
   recibida: ['en_curso', 'sin_motor'],
-  en_curso: ['lista', 'sin_colaterales', 'de_fondo', 'fallida'],
+  // 11-nov · 2d · línea 3 de CC7: el turno toma primero y toda salida (R2, guarda, error al leer) cierra desde en_curso
+  en_curso: ['lista', 'sin_colaterales', 'de_fondo', 'fallida', 'sin_motor'],
   lista: [], sin_colaterales: [], sin_motor: [], de_fondo: [], fallida: [],
 }
 export const PASOS_DE_RETOQUE: Readonly<Record<EstadoDeRetoque, readonly EstadoDeRetoque[]>> = {
@@ -125,6 +126,18 @@ export function almacenDeColaterales(db: Db) {
     async frenadoPorJefatura(id: string, rehechos: number, motivo: string): Promise<'rehacer' | 'rechazado' | 'ya_cambio'> {
       if (rehechos >= 1) return (await almacen.pasarRetoque(id, 'propuesto', 'rechazado', { motivo })) ? 'rechazado' : 'ya_cambio'
       return 'rehacer'
+    },
+
+    /** una edición por id (null si no existe) */
+    async edicion(id: string): Promise<Edicion | null> {
+      const f = ok(await db.from('colaterales_ediciones').select('*').eq('id', id).maybeSingle(), 'leer la edición') as Record<string, unknown> | null
+      return f ? aEdicion(f) : null
+    },
+
+    /** ids de las ediciones `en_curso` actualizadas antes de `limite` (las que el barrido cierra) */
+    async edicionesEnCursoAntesDe(limite: string): Promise<string[]> {
+      const d = ok(await db.from('colaterales_ediciones').select('id').eq('estado', 'en_curso').lt('updated_at', limite), 'leer las ediciones colgadas') as { id: string }[] | null
+      return (d ?? []).map((f) => String(f.id))
     },
 
     async retoquesDe(edicion_id: string): Promise<Record<string, unknown>[]> {
