@@ -16,6 +16,12 @@ export const TOPE_DEL_PASO_VIDEO_USD = 5
 
 const siempre: Condicion = { tipo: 'siempre' }
 const cambioCopy: Condicion = { tipo: 'si_cambio', artefacto: 'copy_video' }
+/** 11-nov · el agente mira el video solo si salieron cuadros (sin cuadros queda una ficha que bloquea: una persona lo mira) */
+const hayCuadros: Condicion = { tipo: 'si_artefacto', artefacto: 'cuadros_video', campo: 'hay_cuadros', igual: true }
+/** quién mira el video terminado (DATO: se cambia aquí y en la migración, no en el código) */
+export const AGENTE_QUE_MIRA_EL_VIDEO = 'video-editor'
+/** lo que se le deja gastar al agente que mira (regla premium de Emilio 11-nov: material premium mientras se construye) */
+export const TOPE_DE_LA_MIRADA_USD = 0.5
 
 export const VIDEO_MESA: Plantilla = {
   tipo: 'video_mesa',
@@ -43,6 +49,9 @@ export const VIDEO_MESA: Plantilla = {
     { clave: 'pedido', tipo: 'codigo', quien: 'sala', funcion: 'pedido_de_video', condicion: siempre, entrada: ['guion', 'copy_video'], salida_artefacto: 'pedido_video', tope_usd: 0,
       vuelve_a: { paso: 'mesa', max: 1, si: { tipo: 'si_artefacto', artefacto: 'pedido_video', campo: 'vuelve_a_la_mesa', igual: true } } },
     { clave: 'video', tipo: 'codigo', quien: 'sala', funcion: 'video', condicion: siempre, entrada: ['pedido_video'], salida_artefacto: 'video', tope_usd: TOPE_DEL_PASO_VIDEO_USD },
+    // 11-nov · GO Lenovo 16:43 · un agente con visión mira el video terminado (un cuadro por plano) contra el guion y la fila; juzga él (ver `video/mirada.ts`)
+    { clave: 'cuadros_video', tipo: 'codigo', quien: 'sala', funcion: 'cuadros_video', condicion: siempre, entrada: ['video', 'guion'], salida_artefacto: 'cuadros_video', tope_usd: 0 },
+    { clave: 'mirar_video', tipo: 'agente', quien: AGENTE_QUE_MIRA_EL_VIDEO, condicion: hayCuadros, entrada: ['cuadros_video', 'guion'], salida_artefacto: 'mirada_video', tope_usd: TOPE_DE_LA_MIRADA_USD, salida: { esquema: 'mirada_video.v1', reintento_formato: 1 } },
     { clave: 'chequeos', tipo: 'codigo', quien: 'sala', funcion: 'chequeos_video', condicion: siempre, entrada: ['video', 'copy_video', 'pedido_video'], salida_artefacto: 'chequeos', tope_usd: 0 },
     { clave: 'jefatura', tipo: 'jefatura', quien: 'jefatura', condicion: siempre, entrada: ['guion', 'copy_video', 'video', 'chequeos'], salida_artefacto: 'respuesta_imagen', tope_usd: 0 },
     { clave: 'chequeos_2', tipo: 'codigo', quien: 'sala', funcion: 'chequeos_video', condicion: cambioCopy, entrada: ['video', 'copy_video', 'pedido_video'], salida_artefacto: 'chequeos', tope_usd: 0 },

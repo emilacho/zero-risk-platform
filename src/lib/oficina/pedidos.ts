@@ -28,6 +28,7 @@ export const CONTRATOS_EN_TEXTO: Record<string, string> = {
   'observacion_imagen.v1': '{"imagenes": [{"indice": 0, "reglas": [{"id": "o1", "presente": true, "evidencia": "…"}], "texto_en_imagen": ["…"], "marcas": ["…"], "personas": 0, "producto": "…", "elementos_visibles": ["…"]}], "preferencia": [0]}  (presente = true | false | "no_se_ve"; describes, no apruebas)',
   'pieza_post.v1': '{"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…", "necesito": []}',
   'fichas.v1': '{"fichas": [{"que": "…", "donde": "texto|hashtags|imagen", "contra_que": "…", "gravedad": "bloquea|sugerencia", "propuesta": "…"}]}',
+  'mirada_video.v1': '{"coincide": true, "orden_respetado": true, "faltantes": [{"plano": 2, "que_falta": "…"}], "por_plano": [{"plano": 1, "se_ve": "…"}], "para_la_mesa": "…"}  (decides tú si coincide; faltantes vacío si coincide; para_la_mesa = lo que el equipo tiene que corregir)',
   'resolucion_solo.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}]}',
   'resolucion.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "pieza": {"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…"}}  (pieza solo si cambias algo)',
 }

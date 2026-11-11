@@ -12,7 +12,7 @@ export const FUNCIONES_REGISTRADAS = [
   // el segundo cerebro del productor: lee las notas del dueño del cliente (sin modelo, solo lectura)
   'leer_notas',
   // el brazo de video desde la oficina (parte 2 · 31-oct): la mesa escribe el guion; esto lo pide, lo filma, lo chequea y lo entrega
-  'abrir_video', 'pedido_de_video', 'video', 'chequeos_video', 'empaquetar_entrega_video',
+  'abrir_video', 'pedido_de_video', 'video', 'cuadros_video', 'chequeos_video', 'empaquetar_entrega_video',
 ] as const
 /** funciones de código que SÍ gastan (un proveedor de imágenes o de video, no un modelo de texto): su tope puede ser mayor que 0 */
 export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video'] as const
@@ -22,7 +22,7 @@ export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'de
 export const ESQUEMAS_REGISTRADOS = [
   'visual_direction.v1', 'prompts.v1', 'observacion_imagen.v1', 'pieza_post.v1', 'fichas.v1', 'resolucion.v1',
   'direccion_imagenes.v1', 'prompts_por_ref.v1', 'observacion_imagenes.v1', 'opinion_libre.v1', 'copy_base.v1', 'laminas.v1', 'estructura.v1', 'copy_kit.v1',
-  'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1', 'resolucion_solo.v1', 'autorevision.v1',
+  'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1', 'resolucion_solo.v1', 'autorevision.v1', 'mirada_video.v1',
 ] as const
 /** quién puede hacer cumplir una regla de indicación */
 export const APLICADORES_DE_CODIGO = [

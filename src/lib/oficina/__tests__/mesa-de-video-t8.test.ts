@@ -161,6 +161,7 @@ describe('UNA voz de gancho por video (auditoría 5)', () => {
   })
 })
 
+const PASOS_DE_LA_MIRADA = ['cuadros_video', 'mirar_video']
 describe('la plantilla video_mesa y el gasto `video` como dato', () => {
   const filaDe = (tipo: string) => {
     const i = SQL.indexOf(`'${tipo}', '${tipo}'`)
@@ -179,11 +180,12 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
     expect(MIG_1700).toContain("pasos->2->>'clave' = 'pedido'")
     expect(f.pasos[2].clave).toBe('pedido')
     f.pasos[2] = { ...f.pasos[2], vuelve_a: vuelta }
-    expect(f.pasos).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
+    // 11-nov · y el código de hoy suma los 2 pasos de la mirada (202611111730, ver `mirar-el-video.test.ts`); fuera de ellos es idéntica
+    expect(f.pasos).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos.filter((p) => !PASOS_DE_LA_MIRADA.includes(p.clave)))))
     expect(f.indicaciones).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.indicaciones)))
     expect(f.limites).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.limites)))
     expect(SQL).toMatch(/2, 10\.00, false\s*\) ON CONFLICT \(tipo\) DO NOTHING/)
-    expect(VIDEO_MESA.pasos.map((p) => p.clave)).toEqual(['abrir', 'mesa', 'pedido', 'video', 'chequeos', 'jefatura', 'chequeos_2', 'entrega', 'cierre'])
+    expect(VIDEO_MESA.pasos.map((p) => p.clave)).toEqual(['abrir', 'mesa', 'pedido', 'video', 'cuadros_video', 'mirar_video', 'chequeos', 'jefatura', 'chequeos_2', 'entrega', 'cierre'])
   })
   it('el CHECK de oficina_gastos admite `video` (lo que cobra el brazo entra al libro) y la reversa lo devuelve', () => {
     expect(SQL).toMatch(/ADD CONSTRAINT oficina_gastos_concepto_valido CHECK \(concepto IN \('modelo', 'revisor_externo', 'imagen', 'portero', 'video'\)\)/)

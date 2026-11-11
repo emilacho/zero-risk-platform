@@ -26,6 +26,11 @@ import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
 import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
+import { leerMirada, miradaLegible, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo } from './video/mirada'
+import { CONTRATOS_EN_TEXTO } from './pedidos'
+
+/** para la jefatura: qué es el contexto «lo que vio el agente» */
+export const FUNCION_DE_LA_MIRADA = 'lo que un agente con visión vio en los cuadros del video terminado (uno por plano), comparado con el guion y la fila; la imagen manda si no coinciden'
 
 export type FamiliaDeVideo = 'video'
 export const familiaDeVideo = (pl: Pick<Plantilla, 'clase'>): FamiliaDeVideo | null => (claseDe(pl) === 'video' ? 'video' : null)
@@ -72,6 +77,7 @@ export async function ejecutarCodigoV(P: Puertos, enc: Encargo, pl: Plantilla, p
     case 'abrir_video': return abrir(P, enc, pl)
     case 'pedido_de_video': return pedido(enc, pl, enc.estado_del_motor)
     case 'chequeos_video': return chequeos(enc.estado_del_motor, pl)
+    case 'cuadros_video': return cuadrosDelVideo(P, enc)
     case 'empaquetar_entrega_video': return empaquetar(P, enc)
     default: return { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
   }
@@ -277,6 +283,60 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
   }
 }
 
+// ───────────────────────── un agente mira el video antes de la bandeja (GO Lenovo 11-nov 16:43 · ver `video/mirada.ts`)
+/** UN cuadro del medio de cada plano del guion, guardado en la carpeta del encargo. Sin cuadros (sin ffmpeg, mp4 ilegible…) no hay mirada: ficha QUE BLOQUEA, nunca pasa callado. En ensayo no corre */
+async function cuadrosDelVideo(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
+  const e = enc.estado_del_motor
+  const v = datos(e, 'video') as unknown as VideoDelEncargo | undefined
+  const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
+  const sin = (causa: string): SalidaCodigoV => ({ res: { costo_usd: 0, artefacto: { cuadros: [], hay_cuadros: false, causa }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' }, fichas: [fichaNueva(`video-sin-mirar-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `nadie miró el video antes de la bandeja: ${causa}`, 'el video contra el guion y la fila', 'una persona mira el video antes de aprobar')] } })
+  if (enc.dry_run || v?.simulado) return { res: { costo_usd: 0, artefacto: { cuadros: [], hay_cuadros: false, simulado: true } } }
+  if (!v?.video_url) return sin('el brazo no entregó un video')
+  if (!g || !Array.isArray(g.planos) || !g.planos.length) return sin('el guion no trae planos')
+  if (!P.sacarCuadros) return sin('el sacador de cuadros no está conectado en este entorno')
+  const bytes = await P.descargar(v.video_url)
+  if (!bytes) return sin('no se pudo descargar el video')
+  const c = await P.sacarCuadros(bytes, g.planos)
+  if (!c.cuadros.length) return sin(c.causa ?? 'no salió ningún cuadro')
+  const gu = await P.guardarArchivos(`oficina/${enc.client_id}/${enc.id}/cuadros-${e.pasos_ejecutados}`, c.cuadros.map((x) => ({ nombre: `plano-${x.plano}.jpg`, bytes: x.bytes, tipo: 'image/jpeg' })))
+  if (!gu.ok) return sin(`no se pudieron guardar los cuadros: ${gu.error}`)
+  const cuadros: CuadroDelVideo[] = c.cuadros.map((x) => ({ plano: x.plano, segundo: x.segundo, url: gu.urls[`plano-${x.plano}.jpg`] })).filter((x) => !!x.url)
+  if (!cuadros.length) return sin('el almacén no devolvió la dirección de ningún cuadro')
+  const faltan = g.planos.filter((p) => !cuadros.some((x) => x.plano === p.n)).map((p) => p.n)
+  // cada pasada reemplaza las fichas de la mirada anterior (la de una vuelta a la mesa no arrastra la ficha vieja)
+  return { res: { costo_usd: 0, artefacto: { cuadros, hay_cuadros: true, duracion_s: c.duracion_s, ...(faltan.length ? { planos_sin_cuadro: faltan } : {}) }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+}
+
+/** el pedido del agente que mira (solo el paso `mirar_video`; null = no es un paso de video con pedido propio) */
+export function armarPedidoV(paso: Paso, e: Estado, errorDeFormato?: string): { task: string; images: string[]; esquema: string } | null {
+  if (paso.clave !== PASO_MIRAR_VIDEO) return null
+  const b = baseV(e)
+  const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
+  const cuadros = arr<CuadroDelVideo>(datos(e, 'cuadros_video')?.cuadros)
+  const esquema = paso.salida?.esquema ?? 'mirada_video.v1'
+  const t = tareaDeLaMirada({ cuadros, planos: g?.planos ?? [], segundos: g?.segundos ?? 0, brief_texto: b.brief.texto, red: b.brief.red, formato: b.brief.formato, contrato: CONTRATOS_EN_TEXTO[esquema] ?? '', ...(errorDeFormato ? { errorDeFormato } : {}) })
+  return { ...t, esquema }
+}
+
+/** lo que el agente vio → el artefacto; si NO coincide queda una ficha que bloquea con lo que faltó (la vuelta a la mesa, si la plantilla la tiene, lee `coincide`) */
+export function procesarValorV(paso: Paso, v: Record<string, unknown>, e: Estado): { res: ResultadoDePaso } | null {
+  if (paso.clave !== PASO_MIRAR_VIDEO) return null
+  const m = leerMirada(v)
+  const detalle = m.faltantes.map((f) => `${f.plano !== null ? `plano ${f.plano}: ` : ''}${f.que_falta}`).join(' · ') || m.para_la_mesa || 'sin detalle'
+  const fichas: Ficha[] = m.coincide ? [] : [fichaNueva(`video-no-coincide-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `el agente que miró el video dice que no cuenta lo que pide el guion: ${detalle}`.slice(0, 900), 'los cuadros del video contra el guion y la fila', m.para_la_mesa || 'rehacer el video con lo que faltó')]
+  return { res: { costo_usd: 0, artefacto: m as unknown as Record<string, unknown>, fichas, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+}
+
+/** el agente contestó (con su reintento) pero no se pudo LEER: el video sigue SIN juzgar y una ficha que bloquea pide que una persona lo mire */
+export function sinLecturaDeMirarV(e: Estado, errores: string[]): ResultadoDePaso {
+  return {
+    costo_usd: 0,
+    artefacto: { coincide: true, sin_lectura: true, faltantes: [], por_plano: [], para_la_mesa: '', orden_respetado: null },
+    reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' },
+    fichas: [fichaNueva(`video-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `nadie pudo confirmar que el video cuenta lo que pide el guion: la respuesta del agente que lo miró no se pudo leer (${errores.slice(0, 2).join(' · ')})`, 'formato de la mirada', 'una persona mira el video antes de aprobar')],
+  }
+}
+
 // ───────────────────────── el paso `video`: enviar al brazo y esperar
 const conEnvio = (e: Estado, envio: EnvioGuardado): Estado => {
   const antes = e.artefactos['pedido_video']
@@ -410,7 +470,10 @@ export function contextoDeRevisorV(pl: Plantilla, e: Estado): { pieza: string; i
     '## El video',
     v?.video_url ? `${v.video_url}${v.simulado ? ' (simulado)' : ''}${v.copia === 'solo_proveedor' ? ' (solo en el proveedor)' : ''} · costo US$ ${v.costo_usd.toFixed(4)}` : '(el brazo no entregó video)',
   ].join('\n')
-  const imagenes = ped?.fotos ?? []
+  const cuadros = arr<CuadroDelVideo>(datos(e, 'cuadros_video')?.cuadros).map((c) => c.url).filter(Boolean)
+  // 11-nov · la jefatura ve también lo que salió (los cuadros de cada plano), no solo las fotos de referencia
+  const imagenes = [...(ped?.fotos ?? []), ...cuadros]
+  const mirada = datos(e, 'mirada_video') as unknown as (MiradaDelVideo & { sin_lectura?: boolean }) | undefined
   const m = materialDe(e)
   const hechos = m?.resultado?.hechos ?? []
   const tablero = txt(datos(e, 'mesa')?.tablero_para_la_jefatura)
@@ -420,6 +483,7 @@ export function contextoDeRevisorV(pl: Plantilla, e: Estado): { pieza: string; i
     { titulo: 'Brief', funcion: FUNCION_DEL_BRIEF, texto: b.brief.texto },
     ...(hechos.length ? [{ titulo: 'Material del portero', funcion: FUNCION_DEL_PORTERO, texto: hechos.map((h) => `- ${h.texto}${h.fuente ? ` (fuente: ${h.fuente})` : ''}`).join('\n') }] : []),
     ...(tablero ? [{ titulo: 'Tablero de la mesa', funcion: FUNCION_DEL_TABLERO, texto: tablero }] : []),
+    ...(mirada && !mirada.sin_lectura ? [{ titulo: 'Lo que vio el agente que miró el video', funcion: FUNCION_DE_LA_MIRADA, texto: miradaLegible(mirada) }] : []),
   ]
   return { pieza, imagenes, contexto }
 }
