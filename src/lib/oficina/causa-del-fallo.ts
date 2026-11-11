@@ -1,6 +1,6 @@
 /**
  * LA CAUSA DEL FALLO · GO Lenovo 11-nov (decisión de Emilio 15:24) · punto 3: todo encargo que cierra `fallido` guarda su causa legible en `estado_del_motor.fallo`.
- * Hallazgo (reel de Olón, encargo 6d3e9086): `fallar` cerraba el encargo y mandaba el motivo SOLO al aviso de Slack; la fila quedaba `fallido` con los turnos en `error` nulo,
+ * Hallazgo (un reel del 11-nov, encargo 6d3e9086): `fallar` cerraba el encargo y mandaba el motivo SOLO al aviso de Slack; la fila quedaba `fallido` con los turnos en `error` nulo,
  * y nadie podía saber por qué sin buscar la alarma. Pura: la usan `fallar` (las dos ramas: la de la pieza y la de las mesas de la cadena) y quien lea un fallido.
  *  · el motivo nunca queda vacío: si no llega texto, se guarda que no se declaró (así un fallo sin causa también se ve);
  *  · se limpian los caracteres de control y se recorta a `MAX_MOTIVO` (el texto del proveedor puede ser largo);

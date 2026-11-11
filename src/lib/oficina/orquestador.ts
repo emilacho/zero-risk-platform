@@ -860,7 +860,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
 
 // ───────────────────────── cierres
 export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<Respuesta> {
-  // 11-nov · GO Lenovo (reel de Olón) · la causa queda GUARDADA en el encargo, no solo en el aviso: un fallido nunca más queda a ciegas
+  // 11-nov · GO Lenovo (un reel que cerró fallido a ciegas) · la causa queda GUARDADA en el encargo, no solo en el aviso: un fallido nunca más queda a ciegas
   const e = conCausaDelFallo(enc.estado_del_motor, motivo, P.ahora())
   enc = { ...enc, estado_del_motor: e }
   // 31-oct · la mesa de brief o de concepto que falla se lo dice a la cadena (que sigue con lo que tenga o pide a un humano); jamás deja a la campaña esperando

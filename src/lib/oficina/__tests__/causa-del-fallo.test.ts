@@ -59,6 +59,7 @@ describe('la causa del fallo · pura', () => {
     expect(causaDelFallo(null)).toBeNull()
     expect(causaDelFallo({ fallo: { motivo: '' } })).toBeNull()
     expect(causaDelFallo({ fallo: 'texto suelto' })).toBeNull()
+    expect(causaDelFallo({ fallo: { motivo: 42 } })).toBeNull()
     expect(causaDelFallo({ fallo: { motivo: 'algo', pasos_ejecutados: '3' } })).toEqual({ motivo: 'algo', en: '', pasos_ejecutados: 3, gasto_usd: 0 })
   })
 })
