@@ -8,6 +8,7 @@ import { calendarioGuardar, calendarioPreparar, calendarioSiguiente, estrategiaG
 import { relojDeLaCadena } from './reloj'
 import { calendarioPasar, estrategiaPasar } from './revision-jefatura'
 import { filasAutoproducir } from './autoproducir'
+import { fechasLeerPdf } from './fechas-pdf'
 import { briefAbrir, briefEntregar, conceptoAbrir, conceptoDecidir, conceptoEntregar, hojaEscribir } from './mesas'
 import { briefRevalidar, conceptoRevalidar } from './revalidar'
 import type { Manejador } from './puerta-http'
@@ -33,6 +34,7 @@ export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'valida
   calendario: { preparar: calendarioPreparar, guardar: calendarioGuardar, siguiente: calendarioSiguiente, pasar: (al, c) => calendarioPasar(al, c) },
   validar: { validar: validarSinEscribir },
   filas: { listar: (al, c) => filasListar(al, c), lotes: filasLotes, marcar: filasMarcar, autoproducir: (al, c) => filasAutoproducir(al, c) },
-  fechas: { cobertura: (al, c) => fechasCobertura(al, c), preparar: fechasPreparar, guardar: (al, c) => fechasGuardar(al, c) },
+  // 11-nov · leer_pdf (GO Lenovo 19:30 · opción b): el texto de los PDF oficiales que «② Juntar» descartó, solo de las fuentes cargadas
+  fechas: { cobertura: (al, c) => fechasCobertura(al, c), preparar: fechasPreparar, guardar: (al, c) => fechasGuardar(al, c), leer_pdf: (al, c) => fechasLeerPdf(al, c) },
   esperas: { reloj: relojDeLaCadena },
 }
