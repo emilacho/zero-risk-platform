@@ -30,7 +30,8 @@ export async function POST(request: Request) {
   const errores: string[] = []
   if (typeof cuerpo.hitl_id !== 'string' || !UUID.test(cuerpo.hitl_id)) errores.push('`hitl_id` debe ser un uuid')
   const comentario = typeof cuerpo.comentario === 'string' ? cuerpo.comentario.trim() : ''
-  if (comentario.length < 5 || comentario.length > TOPE_DEL_TEXTO_DEL_DUENO) errores.push(`\`comentario\` debe tener de 5 a ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`)
+  // GO Lenovo 11-nov 05:03Z · basta que haya texto (antes: mínimo 5 letras; «ok» o «más rojo» no pasaban)
+  if (!comentario || comentario.length > TOPE_DEL_TEXTO_DEL_DUENO) errores.push(`\`comentario\` debe tener texto (hasta ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres)`)
   const laminas = cuerpo.laminas === undefined ? [] : cuerpo.laminas
   if (!Array.isArray(laminas) || laminas.length > 20 || !laminas.every((n) => Number.isInteger(n) && n >= 1 && n <= 20)) errores.push('`laminas` debe ser una lista de números de lámina (1 a 20)')
   const reviewer = cuerpo.reviewer === undefined ? 'emilio' : cuerpo.reviewer

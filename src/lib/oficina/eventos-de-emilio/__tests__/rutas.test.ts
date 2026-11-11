@@ -81,9 +81,15 @@ describe('POST /api/oficina/cambios · pedir cambios con láminas marcadas', () 
     expect(eventos()[0]).toMatchObject({ canal: 'dashboard', accion: 'pedir_cambios', decision: 'cambios_pedidos', comentario, laminas: [2, 4], especialidades: ['texto', 'imagen'], autor: 'emilio' })
     expect(eventos()[0].resultado).toMatchObject({ http: 409, error: 'encargo_no_cerrado' })
   })
+  it('GO 11-nov · basta que haya texto: «ok» no es un pedido mal formado (no da 400)', async () => {
+    mocks.db = mundo('content_piece_review', 'abierto')
+    const r = await cambios({ hitl_id: HITL, comentario: 'ok', laminas: [2], reviewer: 'emilio', especialidades: ['texto'], despertar: false })
+    expect(r.status).toBe(409) // llega a la pieza (aquí el encargo no está cerrado), no se rechaza por corto
+    expect(eventos()[0]).toMatchObject({ comentario: 'ok' })
+  })
   it('un pedido mal formado (400) no deja evento: no llegó a ser un pedido', async () => {
     mocks.db = mundo()
-    expect((await cambios({ hitl_id: HITL, comentario: 'x' })).status).toBe(400)
+    expect((await cambios({ hitl_id: HITL, comentario: '  ' })).status).toBe(400)
     expect(eventos()).toHaveLength(0)
   })
 })
