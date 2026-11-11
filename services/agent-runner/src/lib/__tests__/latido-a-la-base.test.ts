@@ -151,7 +151,7 @@ describe('el cableado del corredor (pedido de CC7)', () => {
   })
   it('🔴 la llave del camino de siempre sale SOLO de latido_dispatch_key', () => {
     expect(llaveDelLatido({ latido_dispatch_key: NAU })).toBe(NAU)
-    for (const b of [{}, { latido_dispatch_key: '' }, { latido_dispatch_key: 7 }, null, undefined]) expect(llaveDelLatido(b as never)).toBeNull()
+    for (const b of [{}, { latido_dispatch_key: '' }, { latido_dispatch_key: 7 }, { dispatch_key: NAU }, { _latido: { dispatch_key: B2B } }, null, undefined]) expect(llaveDelLatido(b as never)).toBeNull()
   })
   it('🔴 el cierre del corredor NO pisa un cierre ajeno; sin llave o sin base no toca nada', async () => {
     const filas: Fila[] = [{ ...fila(B2B, 'sin_cierre'), metadata: { cierre: { regla: 'ciclo-de-incidentes' } } }, fila(NAU, 'running')]
