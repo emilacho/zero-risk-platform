@@ -31,6 +31,7 @@ import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
+import { leerUnaSolaVez } from '@/lib/una-sola-vez'
 import { crudoDeLaLlamada, metadataDelTrabajo, trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { requiresEditorReview, getEditorConfig, PRIMARY_REVIEWER, SECOND_REVIEWER } from '@/lib/editor-routing'
 import { runDualReviewMiddleware } from '@/lib/editor-middleware'
@@ -546,6 +547,8 @@ export function buildInnerRequestWithoutCallback(
   const {
     callback_url: _cb1,
     callbackUrl: _cb2,
+    // 11-nov · `una_sola_vez` ya la aplicó el pedido de afuera (el de adentro no lleva vuelta y la rechazaría)
+    una_sola_vez: _unaSolaVez,
     ...bodyMinusCallback
   } = outerBody as unknown as Record<string, unknown>
   const {
@@ -606,6 +609,12 @@ async function atender(request: Request) {
   if (!v.ok) return v.response
   const body = v.data
 
+  // 11-nov · colaterales 2d · línea 4 de CC7 · `una_sola_vez` (opción que pide el llamador; sin ella, todo byte a byte como hoy):
+  // con la MISMA llave de despacho, un segundo pedido NO vuelve a correr al agente (un reintento por corte de red no paga dos veces).
+  // Solo existe en el camino con vuelta (es el único que registra la llave ANTES de correr) y exige la llave explícita.
+  const unaSolaVez = leerUnaSolaVez(body as unknown as Record<string, unknown>, ((u) => Boolean(u && validateCallbackUrl(u)))(resolveCallbackUrl(body)))
+  if (unaSolaVez.error) return NextResponse.json({ error: 'una_sola_vez_invalida', code: 'E-INPUT-INVALID', detail: unaSolaVez.error }, { status: 400 })
+
   // ─── Track O async fast-ack branch (SPEC 2026-06-09) ──────────────────
   // When `callback_url` is present + valid · return 202 + ack body IMMEDIATELY
   // and execute the full agent workflow in background via `waitUntil`. The
@@ -643,6 +652,7 @@ async function atender(request: Request) {
     // INSERT de `agent_invocations` sigue viviendo en el trabajo (waitUntil) e
     // intacto (completed-only). dispatch_key idempotente anclado en workflow_id.
     let dispatchKey: string
+    let despachoRepetido = false
     const trabajoDelDespacho = trabajoDeLaLlamada(body, (nombre) => request.headers.get(nombre))
     try {
       const rec = await recordDispatchIntent(getSupabaseAdmin(), {
@@ -655,6 +665,7 @@ async function atender(request: Request) {
         trabajo: trabajoDelDespacho.columnas,
       })
       dispatchKey = rec.dispatch_key
+      despachoRepetido = rec.idempotent
     } catch (e) {
       // La intención NO quedó durable → NO devolvemos 202 (5xx explícito).
       Sentry.captureMessage('dispatch_intent_record_failed', {
@@ -675,6 +686,10 @@ async function atender(request: Request) {
         },
         { status: 503 },
       )
+    }
+    // `una_sola_vez` · la llave ya estaba: el agente ya se despachó una vez · no se corre otra vez (su vuelta llega por el primer despacho)
+    if (unaSolaVez.activa && despachoRepetido) {
+      return NextResponse.json({ accepted: false, ya_despachado: true, dispatch_key: dispatchKey }, { status: 200 })
     }
 
     waitUntil(
