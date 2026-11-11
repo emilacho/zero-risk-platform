@@ -31,6 +31,7 @@ import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
 import { enviarPiezaASlack, leerNotasParaElProductor, piezaParaSlackDeLaBandeja, registrarAutorevision } from '../notas-del-dueno/adaptadores'
 import { carpetaParaRevisar } from '../jefatura/revision/carpeta-para-revisar'
 import { adjuntoDelCliente } from '../portero-alimenta/contexto-del-cliente'
+import { sacarCuadros } from './video/cuadros'
 import { perfilDelAdjunto, type PerfilParaLectores } from '../perfil-del-publico/lectores'
 
 export const SIN_RECEPCION_DE_LA_CADENA = 'la cadena aún no conecta la recepción del brief y del concepto (T3)'
@@ -338,6 +339,8 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         return r.ok ? Buffer.from(await r.arrayBuffer()) : null
       } catch { return null }
     },
+    // 11-nov · los cuadros del video terminado (ffmpeg del servidor; el mismo que saca las capturas de los videos del cerebro)
+    sacarCuadros: (bytes, planos) => sacarCuadros({ bytes, planos }),
     async guardarArchivos(ruta, archivos) {
       // frontera: el bucket `client-websites` es de la WEB del cliente (dueño: CC#4). La oficina escribe SOLO en el suyo; sin `OFICINA_BUCKET` no escribe (falla visible)
       const bucket = (env.bucket ?? '').trim()

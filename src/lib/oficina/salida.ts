@@ -131,6 +131,17 @@ ESQUEMAS['observacion_imagenes.v1'] = conMaxImagenes(ESQUEMAS['observacion_image
  * EL SEGUNDO CEREBRO DEL PRODUCTOR · la auto-revisión del agente contra las notas del dueño. `corregida` es la entrega COMPLETA con el formato del paso revisado (se valida aparte con el esquema de ese paso);
  * aquí solo se fija el sobre: si chocó, qué nota, en qué campo, qué chocó y qué cambió.
  */
+// 11-nov · un agente mira el video terminado (ver `video/mirada.ts`): JUZGA él; el código solo lee `coincide`
+ESQUEMAS['mirada_video.v1'] = {
+  t: 'obj', req: ['coincide', 'faltantes', 'por_plano'],
+  props: {
+    coincide: { t: 'bool' },
+    orden_respetado: { t: 'bool' },
+    faltantes: { t: 'arr', max: 20, de: { t: 'obj', req: ['que_falta'], props: { plano: { t: 'num', min: 0, max: 60 }, que_falta: str(1, 600) } } },
+    por_plano: { t: 'arr', max: 40, de: { t: 'obj', req: ['plano', 'se_ve'], props: { plano: { t: 'num', min: 0, max: 60 }, se_ve: str(1, 600) } } },
+    para_la_mesa: str(0, 2000),
+  },
+}
 ESQUEMAS['autorevision.v1'] = {
   t: 'obj', req: ['choca'],
   props: {

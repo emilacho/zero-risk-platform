@@ -25,7 +25,13 @@ import { RELACIONES_PERMITIDAS, RELACION_POR_FORMATO } from '../video/parametros
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
+import { COTAS } from './mesa/tipos'
 import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
+import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo } from './video/mirada'
+import { CONTRATOS_EN_TEXTO } from './pedidos'
+
+/** para la jefatura: qué es el contexto «lo que vio el agente» */
+export const FUNCION_DE_LA_MIRADA = 'lo que un agente con visión vio en los cuadros del video terminado (uno por plano), comparado con el guion y la fila; la imagen manda si no coinciden'
 
 export type FamiliaDeVideo = 'video'
 export const familiaDeVideo = (pl: Pick<Plantilla, 'clase'>): FamiliaDeVideo | null => (claseDe(pl) === 'video' ? 'video' : null)
@@ -74,6 +80,7 @@ export async function ejecutarCodigoV(P: Puertos, enc: Encargo, pl: Plantilla, p
     case 'abrir_video': return abrir(P, enc, pl)
     case 'pedido_de_video': return pedido(enc, pl, enc.estado_del_motor)
     case 'chequeos_video': return chequeos(enc.estado_del_motor, pl)
+    case 'cuadros_video': return cuadrosDelVideo(P, enc)
     case 'empaquetar_entrega_video': return empaquetar(P, enc)
     default: return { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
   }
@@ -145,16 +152,19 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
   //   la mesa rehace el guion con lo que hay y sigue. Sin freno: si ya no quedan vueltas (o la plantilla no tiene la vuelta), sigue como antes, con la ficha.
   const vuelve = a.pedido.fotos_no_halladas.length > 0 && quedaVueltaALaMesa(pl, e)
   if (vuelve) return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeFotosALaMesa(a.pedido.fotos_no_halladas, a.ambiguas, b.F.fotos) } } }
-  if (a.pedido.fotos_no_halladas.length) fichas.push(fichaNueva(`video-fotos-no-halladas-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', `el guion nombra fotos que no están entre las propias del cliente y no viajan al modelo: ${a.pedido.fotos_no_halladas.join(', ')}`, 'fotos propias del cliente', 'mirar el video: esos planos salen sin referencia'))
+  // 11-nov · GO Lenovo 18:50 · si le quedaba la vuelta pero no cabe en el tope, la ficha lo dice (no se calla por qué no volvió)
+  const pasoPedido = pl.pasos.find((p) => p.funcion === 'pedido_de_video')
+  const sinTope = a.pedido.fotos_no_halladas.length > 0 && !!pasoPedido && quedaVueltaDelPaso(pasoPedido, e) ? ' · no volvió a la mesa: rehacer el guion no cabe en el tope del encargo' : ''
+  if (a.pedido.fotos_no_halladas.length) fichas.push(fichaNueva(`video-fotos-no-halladas-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', `el guion nombra fotos que no están entre las propias del cliente y no viajan al modelo: ${a.pedido.fotos_no_halladas.join(', ')}${sinTope}`, 'fotos propias del cliente', 'mirar el video: esos planos salen sin referencia'))
   if (a.pedido.prompt_recortado) fichas.push(fichaNueva(`video-prompt-recortado-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', 'el guion era más largo de lo que el modelo admite y se recortó', 'límite del pedido al modelo', 'mirar que el video cubra todos los planos'))
   return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: false }, ...(fichas.length ? { fichas } : {}) } }
 }
 
-/** ¿al paso del pedido le queda su vuelta a la mesa? (dato de la plantilla: `vuelve_a` del paso `pedido_de_video`; sin él, nunca vuelve) */
+/** ¿al paso del pedido le queda su vuelta a la mesa Y CABE en el tope? (dato de la plantilla: `vuelve_a` del paso `pedido_de_video`; sin él, nunca vuelve).
+ *  11-nov · GO Lenovo 18:50: la misma cuenta que la mirada del video (`quedaVueltaDelPaso` + `cabeLaVuelta(costoDeVolver)`), para que ninguna vuelta cierre el encargo por tope. */
 export function quedaVueltaALaMesa(pl: Plantilla, e: Estado): boolean {
   const paso = pl.pasos.find((p) => p.funcion === 'pedido_de_video')
-  const max = Number(paso?.vuelve_a?.max ?? 0)
-  return !!paso && max > 0 && (e.vueltas[paso.clave] ?? 0) < max
+  return !!paso && quedaVueltaDelPaso(paso, e) && cabeLaVuelta(pl, e, costoDeVolver(pl, paso))
 }
 
 /** el aviso con que el pedido vuelve a la mesa: qué fotos no existen (o son ambiguas) y cuáles sí hay, con la MISMA lista de fotos que la mesa ya ve (`LISTA_DE_FOTOS`). Puro. */
@@ -276,6 +286,92 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
       fichas: fichas.map((f, i) => ({ ...f, id: `${prefijo}-${i}` })),
       reemplazar_fichas: { origen: 'chequeo', donde: 'entrega' },
     },
+  }
+}
+
+// ───────────────────────── un agente mira el video antes de la bandeja (GO Lenovo 11-nov 16:43 · ver `video/mirada.ts`)
+/** UN cuadro del medio de cada plano del guion, guardado en la carpeta del encargo. Sin cuadros (sin ffmpeg, mp4 ilegible…) no hay mirada: ficha QUE BLOQUEA, nunca pasa callado. En ensayo no corre */
+async function cuadrosDelVideo(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
+  const e = enc.estado_del_motor
+  const v = datos(e, 'video') as unknown as VideoDelEncargo | undefined
+  const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
+  const sin = (causa: string): SalidaCodigoV => ({ res: { costo_usd: 0, artefacto: { cuadros: [], hay_cuadros: false, causa }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' }, fichas: [fichaNueva(`video-sin-mirar-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `nadie miró el video antes de la bandeja: ${causa}`, 'el video contra el guion y la fila', 'una persona mira el video antes de aprobar')] } })
+  if (enc.dry_run || v?.simulado) return { res: { costo_usd: 0, artefacto: { cuadros: [], hay_cuadros: false, simulado: true } } }
+  if (!v?.video_url) return sin('el brazo no entregó un video')
+  if (!g || !Array.isArray(g.planos) || !g.planos.length) return sin('el guion no trae planos')
+  if (!P.sacarCuadros) return sin('el sacador de cuadros no está conectado en este entorno')
+  const bytes = await P.descargar(v.video_url)
+  if (!bytes) return sin('no se pudo descargar el video')
+  const c = await P.sacarCuadros(bytes, g.planos)
+  if (!c.cuadros.length) return sin(c.causa ?? 'no salió ningún cuadro')
+  const gu = await P.guardarArchivos(`oficina/${enc.client_id}/${enc.id}/cuadros-${e.pasos_ejecutados}`, c.cuadros.map((x) => ({ nombre: `plano-${x.plano}.jpg`, bytes: x.bytes, tipo: 'image/jpeg' })))
+  if (!gu.ok) return sin(`no se pudieron guardar los cuadros: ${gu.error}`)
+  const cuadros: CuadroDelVideo[] = c.cuadros.map((x) => ({ plano: x.plano, segundo: x.segundo, url: gu.urls[`plano-${x.plano}.jpg`] })).filter((x) => !!x.url)
+  if (!cuadros.length) return sin('el almacén no devolvió la dirección de ningún cuadro')
+  const faltan = g.planos.filter((p) => !cuadros.some((x) => x.plano === p.n)).map((p) => p.n)
+  // cada pasada reemplaza las fichas de la mirada anterior (la de una vuelta a la mesa no arrastra la ficha vieja)
+  return { res: { costo_usd: 0, artefacto: { cuadros, hay_cuadros: true, duracion_s: c.duracion_s, ...(faltan.length ? { planos_sin_cuadro: faltan } : {}) }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+}
+
+/** el pedido del agente que mira (solo el paso `mirar_video`; null = no es un paso de video con pedido propio) */
+export function armarPedidoV(paso: Paso, e: Estado, errorDeFormato?: string): { task: string; images: string[]; esquema: string } | null {
+  if (paso.clave !== PASO_MIRAR_VIDEO) return null
+  const b = baseV(e)
+  const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
+  const cuadros = arr<CuadroDelVideo>(datos(e, 'cuadros_video')?.cuadros)
+  const esquema = paso.salida?.esquema ?? 'mirada_video.v1'
+  const t = tareaDeLaMirada({ cuadros, planos: g?.planos ?? [], segundos: g?.segundos ?? 0, brief_texto: b.brief.texto, red: b.brief.red, formato: b.brief.formato, contrato: CONTRATOS_EN_TEXTO[esquema] ?? '', ...(errorDeFormato ? { errorDeFormato } : {}) })
+  return { ...t, esquema }
+}
+
+/** lo que el agente vio → el artefacto; si NO coincide queda una ficha que bloquea con lo que faltó (la vuelta a la mesa, si la plantilla la tiene, lee `coincide`) */
+export function procesarValorV(paso: Paso, v: Record<string, unknown>, e: Estado, pl: Plantilla): { res: ResultadoDePaso } | null {
+  if (paso.clave !== PASO_MIRAR_VIDEO) return null
+  const m = leerMirada(v)
+  const detalle = m.faltantes.map((f) => `${f.plano !== null ? `plano ${f.plano}: ` : ''}${f.que_falta}`).join(' · ') || m.para_la_mesa || 'sin detalle'
+  // 11-nov · ADENDA Emilio 16:43 «no se trata de yo mandarlo a corregir»: si no coincide y al paso le queda su vuelta (`vuelve_a` de la plantilla), el video vuelve SOLO
+  //   a la mesa con lo que faltó (mecanismo de #1047); sin vuelta, la ficha que bloquea. Nunca un lazo: la vuelta se cuenta al cerrar la mesa y a la segunda sigue de largo
+  // 11-nov · CC7 🟡: volver SOLO si además CABE lo que cuesta volver (filmar otro video, mirarlo…); si no, el encargo se cerraría por tope ANTES de la jefatura y el video
+  //   ya pagado se perdería: peor que no mirar. Sin espacio sigue a la jefatura con la ficha que bloquea, que dice que no se rehízo por tope
+  const queda = !m.coincide && quedaVueltaDelPaso(paso, e)
+  const costo = queda ? costoDeVolver(pl, paso) : 0
+  const cabe = queda && cabeLaVuelta(pl, e, costo)
+  if (cabe) return { res: { costo_usd: 0, artefacto: { ...m, vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeLaMiradaALaMesa(m) } as unknown as Record<string, unknown>, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+  const sinTope = queda ? ` · no se rehízo solo: volver a la mesa y filmar otro video (reserva US$ ${costo.toFixed(2)}) pasa el tope del encargo (US$ ${pl.limites.tope_encargo_usd}; van US$ ${e.gasto_usd.toFixed(2)})` : ''
+  const fichas: Ficha[] = m.coincide ? [] : [fichaNueva(`video-no-coincide-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `el agente que miró el video dice que no cuenta lo que pide el guion: ${detalle}`.slice(0, 700) + sinTope, 'los cuadros del video contra el guion y la fila', m.para_la_mesa || 'rehacer el video con lo que faltó')]
+  return { res: { costo_usd: 0, artefacto: { ...m, vuelve_a_la_mesa: false } as unknown as Record<string, unknown>, fichas, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+}
+
+/** lo que se reserva para VOLVER desde `paso` a su destino: los topes de los pasos que se repiten (destino → paso, inclusive) y, si el destino es la mesa, un turno de la mesa (la mesa se limita sola con su reserva, pero puede integrar una vez). Puro */
+export function costoDeVolver(pl: Plantilla, paso: Paso): number {
+  const de = pl.pasos.findIndex((x) => x.clave === paso.vuelve_a?.paso)
+  const a = pl.pasos.findIndex((x) => x.clave === paso.clave)
+  if (de < 0 || a < de) return Number.POSITIVE_INFINITY
+  const topes = pl.pasos.slice(de, a + 1).reduce((s, x) => s + (Number(x.tope_usd) || 0), 0)
+  return +(topes + (pl.pasos[de].funcion === 'mesa' ? COTAS.RESERVA_POR_TURNO_USD : 0)).toFixed(6)
+}
+
+/** ¿cabe la vuelta en el tope del encargo (y en la holgura de la prueba, si la hay)? lo mismo que mira el motor antes de cada paso, por adelantado. Puro */
+export function cabeLaVuelta(pl: Plantilla, e: Estado, costo: number): boolean {
+  if (e.gasto_usd + costo > pl.limites.tope_encargo_usd + 1e-9) return false
+  const pr = pl.limites.prueba
+  if (pr && costo > pr.limite_usd - pr.base_usd - Math.max(0, e.gasto_usd - pr.encargo_base_usd) + 1e-9) return false
+  return true
+}
+
+/** ¿a este paso le queda vuelta? (su `vuelve_a.max` contra las vueltas ya contadas; sin `vuelve_a`, nunca) */
+export function quedaVueltaDelPaso(paso: Paso, e: Estado): boolean {
+  const max = Number(paso.vuelve_a?.max ?? 0)
+  return max > 0 && (e.vueltas?.[paso.clave] ?? 0) < max
+}
+
+/** el agente contestó (con su reintento) pero no se pudo LEER: el video sigue SIN juzgar y una ficha que bloquea pide que una persona lo mire */
+export function sinLecturaDeMirarV(e: Estado, errores: string[]): ResultadoDePaso {
+  return {
+    costo_usd: 0,
+    artefacto: { coincide: true, sin_lectura: true, faltantes: [], por_plano: [], para_la_mesa: '', orden_respetado: null },
+    reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' },
+    fichas: [fichaNueva(`video-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `nadie pudo confirmar que el video cuenta lo que pide el guion: la respuesta del agente que lo miró no se pudo leer (${errores.slice(0, 2).join(' · ')})`, 'formato de la mirada', 'una persona mira el video antes de aprobar')],
   }
 }
 
@@ -413,7 +509,10 @@ export function contextoDeRevisorV(pl: Plantilla, e: Estado): { pieza: string; i
     '## El video',
     v?.video_url ? `${v.video_url}${v.simulado ? ' (simulado)' : ''}${v.copia === 'solo_proveedor' ? ' (solo en el proveedor)' : ''} · costo US$ ${v.costo_usd.toFixed(4)}` : '(el brazo no entregó video)',
   ].join('\n')
-  const imagenes = ped?.fotos ?? []
+  const cuadros = arr<CuadroDelVideo>(datos(e, 'cuadros_video')?.cuadros).map((c) => c.url).filter(Boolean)
+  // 11-nov · la jefatura ve también lo que salió (los cuadros de cada plano), no solo las fotos de referencia
+  const imagenes = [...(ped?.fotos ?? []), ...cuadros]
+  const mirada = datos(e, 'mirada_video') as unknown as (MiradaDelVideo & { sin_lectura?: boolean }) | undefined
   const m = materialDe(e)
   const hechos = m?.resultado?.hechos ?? []
   const tablero = txt(datos(e, 'mesa')?.tablero_para_la_jefatura)
@@ -423,6 +522,7 @@ export function contextoDeRevisorV(pl: Plantilla, e: Estado): { pieza: string; i
     { titulo: 'Brief', funcion: FUNCION_DEL_BRIEF, texto: b.brief.texto },
     ...(hechos.length ? [{ titulo: 'Material del portero', funcion: FUNCION_DEL_PORTERO, texto: hechos.map((h) => `- ${h.texto}${h.fuente ? ` (fuente: ${h.fuente})` : ''}`).join('\n') }] : []),
     ...(tablero ? [{ titulo: 'Tablero de la mesa', funcion: FUNCION_DEL_TABLERO, texto: tablero }] : []),
+    ...(mirada && !mirada.sin_lectura ? [{ titulo: 'Lo que vio el agente que miró el video', funcion: FUNCION_DE_LA_MIRADA, texto: miradaLegible(mirada) }] : []),
   ]
   return { pieza, imagenes, contexto }
 }

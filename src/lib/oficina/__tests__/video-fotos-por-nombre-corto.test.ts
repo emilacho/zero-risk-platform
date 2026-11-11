@@ -153,8 +153,8 @@ function brazoSimulado(registro: Array<Record<string, unknown>>): PuertoDeVideo 
 }
 
 /** juega la pieza: la dirección integra `guiones[k]` en su k-ésima integración (el último se repite) */
-async function jugarVideo(C: Cliente, guiones: string[]) {
-  const M = crearMemoria({ parte: parteDe(C), plantilla: VIDEO_MESA, fuentes: { fotos: C.fotos } })
+async function jugarVideo(C: Cliente, guiones: string[], plantilla: Plantilla = VIDEO_MESA) {
+  const M = crearMemoria({ parte: parteDe(C), plantilla, fuentes: { fotos: C.fotos } })
   const MS = crearMesaEnMemoria(DIRECTORIO_VIDEO)
   M.P.mesa = MS
   const enviados: Array<Record<string, unknown>> = []
@@ -213,6 +213,20 @@ describe('restaurante (reel de Instagram, con fotos propias) · de punta a punta
     expect(fotosDelPedido(enviados)).toEqual([])
     expect(enc.estado_del_motor.vueltas['pedido']).toBe(1)
     expect(enc.estado_del_motor.fichas.some((f) => f.id.startsWith('video-fotos-no-halladas') && /zzzz9999/.test(String(f.que)))).toBe(true)
+    // ya usó su vuelta: la ficha NO dice que fue por el tope
+    expect(enc.estado_del_motor.fichas.some((f) => /no volvió a la mesa/.test(String(f.que)))).toBe(false)
+  })
+  it('🔴 (GO Lenovo 18:50 · unificado) le queda la vuelta pero volver NO cabe en la holgura: no vuelve, sigue con la ficha que dice por qué', async () => {
+    // holgura de la prueba US$ 0,50 < lo que cuesta volver (un turno de la mesa, US$ 0,60); el paso del video en seco no reserva (tope 0), así el encargo llega al final
+    const estrecha: Plantilla = { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, prueba: { limite_usd: 2.5, base_usd: 2, encargo_base_usd: 0 } }, pasos: VIDEO_MESA.pasos.map((p) => (p.clave === 'video' ? { ...p, tope_usd: 0 } : p)) }
+    const { ultima, enviados, avisos, enc } = await jugarVideo(RESTAURANTE, [GUION('zzzz9999', corto(F1.id))], estrecha)
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
+    expect(avisos).toHaveLength(0)
+    expect(enviados).toHaveLength(1)
+    expect(enc.estado_del_motor.vueltas['pedido'] ?? 0).toBe(0)
+    const f = enc.estado_del_motor.fichas.find((x) => x.id.startsWith('video-fotos-no-halladas'))
+    expect(f?.que).toContain('zzzz9999')
+    expect(f?.que).toContain('no volvió a la mesa: rehacer el guion no cabe en el tope del encargo')
   })
   it('🔴 (CC7) un nombre corto que coincide con DOS fotos propias ⇒ el aviso que llega a la dirección dice «coincide con varias»; rehecho con el nombre entero, viaja esa', async () => {
     const gemela = { ...F1, id: `${corto(F0.id)}-aaaa-4aaa-8aaa-000000000099`, url: 'https://fotos.test/gemela.jpg' }

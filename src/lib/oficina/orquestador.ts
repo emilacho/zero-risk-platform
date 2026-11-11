@@ -19,7 +19,8 @@ import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
-import { contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, resumenDeCierreV } from './orquestador-video'
+import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV } from './orquestador-video'
+import { PASO_MIRAR_VIDEO } from './video/mirada'
 import { confianzaDeLaFoto } from './fotos'
 import { candidatasDelEncargo, medirFotos } from './material-fotos'
 import { limitesDeMaterial } from './material'
@@ -276,6 +277,9 @@ function armarPedido(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDe
     const tm = tm0 ? { ...tm0, task: tm0.task + seccionDeCambiosDelDueno(enc.sala_ref) } : tm0
     return { agente: paso.quien, pedido: pedidoDe(enc, pl, paso, paso.quien, tm, e) }
   }
+  // 11-nov · la sala de video: el agente que mira el video tiene su pedido propio (los cuadros y el guion)
+  const tv = familiaDeVideo(pl) && paso.tipo === 'agente' ? armarPedidoV(paso, e, errorDeFormato) : null
+  if (tv) return { agente: paso.quien, pedido: pedidoDe(enc, pl, paso, paso.quien, tv, e) }
   const agente = paso.quien === 'dueno_del_donde' ? AGENTE_DEL_TEXTO : paso.quien
   const fichasPropias = paso.clave === 'corrige' || paso.clave === 'decide' || paso.clave === 'decide_imagen' ? fichasQueTocan(e, paso) : []
   const t = paso.tipo === 'agente' ? construirTarea(paso.clave, { ...contexto2(e)!, sinFoto: pl.limites.generar_cuando_no_hay_foto === true }, { fichas: fichasPropias, ...(errorDeFormato ? { errorDeFormato } : {}) }) : null
@@ -366,7 +370,7 @@ export function sinLecturaDeMirar(paso: Paso, e: Estado, errores: string[]): Res
     reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' },
   }
 }
-const ES_MIRAR = (clave: string): boolean => clave === 'mirar' || clave === 'reimagen_mirar'
+const ES_MIRAR = (clave: string): boolean => clave === 'mirar' || clave === 'reimagen_mirar' || clave === PASO_MIRAR_VIDEO
 
 // ───────────────────────── funciones de código
 type SalidaCodigo = { res: ResultadoDePaso; gastos?: Cambios['gastos']; usos?: Cambios['usos_de_fotos']; imagen_generada?: boolean; fallido?: string }
@@ -678,7 +682,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   if (!p.ok && p.accion === 'reintentar') return pedirReintento(p.mensaje_de_error, 'formato: reintento')
   // 11-nov · «mirar» ilegible tras su reintento: la pieza sigue con la imagen SIN juzgar y una ficha que bloquea (una persona mira); nunca se cae el encargo por la forma de la respuesta
   if (!p.ok && ES_MIRAR(paso.clave)) {
-    const sl = familiaDeLaminas(pl) ? sinLecturaDeMirarL(paso, e, p.errores) : sinLecturaDeMirar(paso, e, p.errores)
+    const sl = familiaDeLaminas(pl) ? sinLecturaDeMirarL(paso, e, p.errores) : paso.clave === PASO_MIRAR_VIDEO ? sinLecturaDeMirarV(e, p.errores) : sinLecturaDeMirar(paso, e, p.errores)
     const { [`fmt:${paso.clave}`]: _fm, ...vueltasSinFmt } = e.vueltas
     void _fm
     await aplicarResultado(P, { ...enc, estado_del_motor: { ...e, vueltas: vueltasSinFmt } }, pl, sig.indice, { ...sl, costo_usd: costo }, { vuelta: sig.vuelta, turno: { ...turnoBase, estado: 'hecho', error: `formato ilegible tras ${intentos + 1} intento(s): ${p.errores.slice(0, 2).join(' · ')} · sigue sin juzgar la imagen` }, gastos: gastoModelo, n })
@@ -697,7 +701,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, turno: { ...turnoBase, n, estado: 'hecho', error: 'necesito: espera al portero' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
     return pedirLoQueElAgenteNecesita(P, { ...enc, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd }, pl, paso.clave, nec.necesidades)
   }
-  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(paso, p.valor, enc, e, pl, intentos) : procesarValor(paso, p.valor, enc, e, pl)
+  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(paso, p.valor, enc, e, pl, intentos) : (familiaDeVideo(pl) ? procesarValorV(paso, p.valor, e, pl) : null) ?? procesarValor(paso, p.valor, enc, e, pl)
   if (proc.reintentar !== undefined) return pedirReintento(proc.reintentar, 'validación de la sala: reintento')
   if (proc.fallido || !proc.res) {
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), turno: { ...turnoBase, n, estado: 'fallo', error: proc.fallido ?? 'sin resultado' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })

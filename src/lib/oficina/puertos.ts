@@ -9,6 +9,7 @@ import type { CambiosDelDueno } from './cambios-del-dueno'
 import type { ConfigDeOficina } from './sobre'
 import type { Estado, Ficha, Plantilla } from './tipos'
 import type { FilaDeFormato } from './entrega'
+import type { Plano } from './video/guion'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import type { SobreDeRevisionDePieza } from './paso-jefatura'
 import type { NotaVista } from '../notas-del-dueno/autorevision'
@@ -213,6 +214,8 @@ export interface Puertos {
   /** el brazo que dibuja láminas (PNG); en dry_run NO llama al brazo ni escribe en el bucket */
   renderLaminas(p: PedidoDeRender): Promise<ResultadoRender>
   descargar(url: string): Promise<Buffer | null>
+  /** 11-nov · un cuadro del medio de cada plano de un video (ffmpeg); opcional: sin él, el video no se mira y queda una ficha que bloquea */
+  sacarCuadros?(bytes: Buffer, planos: Plano[]): Promise<{ duracion_s: number | null; cuadros: Array<{ plano: number; segundo: number; bytes: Buffer }>; causa?: string }>
   guardarArchivos(ruta: string, archivos: Array<{ nombre: string; bytes: Buffer; tipo: string }>): Promise<{ ok: true; urls: Record<string, string> } | { ok: false; error: string }>
   /** salida `draft` en client_historical_outputs; NO se llama en dry_run */
   salida(p: { client_id: string; titulo: string; contenido: Record<string, unknown>; metadata: Record<string, unknown> }): Promise<{ ok: true; output_id: string } | { ok: false; error: string }>

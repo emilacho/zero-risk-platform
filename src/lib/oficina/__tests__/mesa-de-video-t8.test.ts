@@ -22,7 +22,7 @@ import { QUIEN_INTEGRA_EL_GANCHO, REGLA_DEL_GANCHO, VOZ_DEL_GANCHO, armarTarea, 
 import type { EstadoMesa, Tarjeta } from '../mesa/tipos'
 import { abrirEncargo } from '../orquestador'
 import { productoresDeLaPieza, familiaDePieza } from '../paso-jefatura'
-import { VIDEO_MESA } from '../plantillas/video-mesa'
+import { AGENTE_QUE_MIRA_EL_VIDEO, VIDEO_MESA } from '../plantillas/video-mesa'
 import type { PuertoDeVideo } from '../puertos'
 import { CONFIG_APAGADA, TARGET_STEP_PRODUCIR, decidirPuerta } from '../sobre'
 import { CLIENTE, FOTOS, PARTE, crearMemoria } from './memoria'
@@ -95,6 +95,15 @@ describe('el equipo de la mesa de video es dato del directorio (2008 + 2012)', (
     // antes de 2012 el video no tenía ni guion ni pie: la migración es necesaria
     expect(especialistasPertinentes(TRAS_2008, 'video', false, [SI_INSTAGRAM]).sort()).toEqual(['design-visual-storyteller', 'marketing_video_optimization_specialist'])
   })
+  it('🔴 (GO Lenovo 18:50) quien mira el video es un ojo INDEPENDIENTE: no se sienta en la mesa de video (ni dirige), no integra el gancho y no corrige el guion en la jefatura; sí está en el directorio', () => {
+    const mesa = especialistasPertinentes(TRAS_2012, 'video', true, [SI_INSTAGRAM, SI_TIKTOK_O_REELS])
+    expect(mesa.length).toBeGreaterThan(0)
+    expect(mesa).not.toContain(AGENTE_QUE_MIRA_EL_VIDEO)
+    expect(TRAS_2012.filter((x) => x.rol !== 'miembro').map((x) => x.agente)).not.toContain(AGENTE_QUE_MIRA_EL_VIDEO)
+    expect(AGENTE_QUE_MIRA_EL_VIDEO).not.toBe(QUIEN_INTEGRA_EL_GANCHO)
+    expect(productoresDeLaPieza('video').map((x) => x.agente)).not.toContain(AGENTE_QUE_MIRA_EL_VIDEO)
+    expect(TRAS_2012.some((x) => x.agente === AGENTE_QUE_MIRA_EL_VIDEO && x.activo)).toBe(true)
+  })
   it('la migración hace esos UPDATE aditivos (array_append con guarda), mueve la retención a video_largo, siembra al coach (ON CONFLICT DO NOTHING) y corrige la indicación de video-editor; nada destructivo', () => {
     expect(SQL).toMatch(/array_append\(pertinente_en, 'video:dirige'\)[\s\S]*WHERE agente = 'creative-director-mesa' AND NOT \('video:dirige' = ANY\(pertinente_en\)\)/)
     expect(SQL).toMatch(/array_append\(pertinente_en, 'video'\)[\s\S]*WHERE agente IN \('video-editor', 'content-creator'\) AND NOT \('video' = ANY\(pertinente_en\)\)/)
@@ -161,6 +170,7 @@ describe('UNA voz de gancho por video (auditoría 5)', () => {
   })
 })
 
+const PASOS_DE_LA_MIRADA = ['cuadros_video', 'mirar_video']
 describe('la plantilla video_mesa y el gasto `video` como dato', () => {
   const filaDe = (tipo: string) => {
     const i = SQL.indexOf(`'${tipo}', '${tipo}'`)
@@ -179,11 +189,14 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
     expect(MIG_1700).toContain("pasos->2->>'clave' = 'pedido'")
     expect(f.pasos[2].clave).toBe('pedido')
     f.pasos[2] = { ...f.pasos[2], vuelve_a: vuelta }
-    expect(f.pasos).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
-    expect(f.indicaciones).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.indicaciones)))
+    // 11-nov · y el código de hoy suma los 2 pasos de la mirada (202611111730, ver `mirar-el-video.test.ts`); fuera de ellos es idéntica
+    expect(f.pasos).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos.filter((p) => !PASOS_DE_LA_MIRADA.includes(p.clave)))))
+    // 11-nov · la indicación de quien mira el video llega con 202611111730 (la siembra de 2012 no tenía ninguna)
+    expect(f.indicaciones).toEqual({})
+    expect(Object.keys(VIDEO_MESA.indicaciones)).toEqual([AGENTE_QUE_MIRA_EL_VIDEO])
     expect(f.limites).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.limites)))
     expect(SQL).toMatch(/2, 10\.00, false\s*\) ON CONFLICT \(tipo\) DO NOTHING/)
-    expect(VIDEO_MESA.pasos.map((p) => p.clave)).toEqual(['abrir', 'mesa', 'pedido', 'video', 'chequeos', 'jefatura', 'chequeos_2', 'entrega', 'cierre'])
+    expect(VIDEO_MESA.pasos.map((p) => p.clave)).toEqual(['abrir', 'mesa', 'pedido', 'video', 'cuadros_video', 'mirar_video', 'chequeos', 'jefatura', 'chequeos_2', 'entrega', 'cierre'])
   })
   it('el CHECK de oficina_gastos admite `video` (lo que cobra el brazo entra al libro) y la reversa lo devuelve', () => {
     expect(SQL).toMatch(/ADD CONSTRAINT oficina_gastos_concepto_valido CHECK \(concepto IN \('modelo', 'revisor_externo', 'imagen', 'portero', 'video'\)\)/)
