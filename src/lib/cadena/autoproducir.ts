@@ -156,13 +156,16 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
       //     Una familia inactiva CON pieza simple sí se produce (por la pasarela): sigue guardando lugar. Si la config no se puede leer, se guarda lugar como hoy (del lado seguro).
       let oficina: ConfigDeOficina | null = null
       try { oficina = al.configDeLaOficina ? await al.configDeLaOficina() : null } catch { oficina = null }
-      const seProduce = (f: (typeof filasDelCalendario)[number]): boolean => !filaSinFamilia(f, formatos) && !(oficina && quedaSinSala(familiaDeFila(f, formatos), oficina, c.client_id))
+      const sinSala = (familia: string | null): boolean => !!oficina && quedaSinSala(familia, oficina, c.client_id)
+      const seProduce = (f: (typeof filasDelCalendario)[number]): boolean => !filaSinFamilia(f, formatos) && !sinSala(familiaDeFila(f, formatos))
       const porVenir = filasPorVenir(filasDelCalendario.filter(seProduce).map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora ?? null, estado: f.estado, familia: familiaDeFila(f, formatos) })), hoyEnZona(new Date().toISOString(), c.zona_horaria), l.partes, todos.map((x) => x.payload.fila_id))
       const conEncargo = new Set(l.encargos.filter((e) => e.parte_id === parte.id && e.brief_id).map((e) => e.brief_id as string))
-      const candidatas = todos.map((x) => ({ brief_id: x.payload.brief_id, familia: x.payload.familia ?? null, fecha: x.payload.fecha ?? null, hora: x.payload.hora ?? null, ya_tiene_encargo: conEncargo.has(x.payload.brief_id) }))
+      const candidatas = todos.map((x) => ({ brief_id: x.payload.brief_id, familia: x.payload.familia ?? null, fecha: x.payload.fecha ?? null, hora: x.payload.hora ?? null, ya_tiene_encargo: conEncargo.has(x.payload.brief_id), no_se_produce: sinSala(x.payload.familia ?? null) }))
       // lo retenido (o nunca salido) de OTROS partes guarda lugar por fecha, como las filas por venir; lo que la sala ya recibió va en lo comprometido
+      // 11-nov · GO Lenovo 01:59Z · la MISMA regla en las piezas de este parte (`no_se_produce`: salen como hoy, pero sin costo) y en las retenidas de otros partes (no guardan lugar).
+      //   Un brief SIN familia no entra aquí: la puerta lo manda a la pasarela (se produce) y sigue contando con la cota pesimista; las filas sin familia ya no llegan a un parte (#1019).
       const medido = medirGastoDeCampana(l, parte.id)
-      d = decidirTope(c.tope_gasto_usd, medido, candidatas, l.topes_de_familia, [...porVenir, ...esperandoPorVenir(medido.esperando, cuando)])
+      d = decidirTope(c.tope_gasto_usd, medido, candidatas, l.topes_de_familia, [...porVenir, ...esperandoPorVenir(medido.esperando.filter((b) => !sinSala(b.familia)), cuando)])
     } catch (e) {
       // un error no es «cero gastado»: no sale nada y se avisa (UNA vez por campaña)
       const aviso = await avisar(avisoDeGastoIlegible(c, e instanceof Error ? e.message : String(e)))

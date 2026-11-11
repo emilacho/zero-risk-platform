@@ -90,7 +90,8 @@ export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { g
   return { gastado, comprometido, esperando }
 }
 
-export interface Candidata { brief_id: string; familia: string | null; fecha: string | null; hora: string | null; ya_tiene_encargo: boolean }
+/** `no_se_produce` (11-nov): la puerta de la oficina dejará esta pieza SIN SALA (no se produce ni va por la pasarela) · sale como hoy, pero no cuesta ni corta a las demás */
+export interface Candidata { brief_id: string; familia: string | null; fecha: string | null; hora: string | null; ya_tiene_encargo: boolean; no_se_produce?: boolean }
 /** una fila del calendario (desde hoy) que todavía no tiene parte: se le guarda lugar si va ANTES que la pieza que se quiere soltar */
 export interface FilaPorVenir { fila_id: string; fecha: string; hora: string | null; familia: string | null }
 /** las filas por venir: las de la última versión, desde hoy, que siguen esperando (`validada` · `lista_para_brief`) y no están en ningún parte real ni en este · pura */
@@ -131,6 +132,8 @@ export function decidirTope(topeCampana: unknown, medido: { gastado: number; com
   for (const c of orden) {
     // una pieza que ya tiene su encargo real ya está contada en lo gastado: el sobre repetido no suma (la sala lo contesta «duplicado»)
     if (c.ya_tiene_encargo) { sueltan.push(c.brief_id); continue }
+    // una pieza que no se va a producir (sin sala) no gasta: sale como hoy (la oficina la deja esperando) y no le quita lugar a nadie
+    if (c.no_se_produce) { sueltan.push(c.brief_id); continue }
     const costo = topeDeLaPieza(topes, c.familia)
     if (!cortado && suma + reservaAntes(c) + costo <= tope + 1e-9) { suma += costo; sueltan.push(c.brief_id) } else { cortado = true; retenidas.push(c.brief_id) }
   }
