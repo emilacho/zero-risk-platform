@@ -183,7 +183,7 @@
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "parameters": {
-    "jsCode": "// ② JUNTAR LAS PÁGINAS · el CÓDIGO descargó las páginas (nodo HTTP); aquí solo se limpian a texto. El agente NUNCA navega: lee lo que el código bajó.\nconst filas = $('① ¿Qué dijo?').all()\nconst respuestas = $input.all()\nconst aTexto = (html) => String(html || '')\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\").replace(/\\s+/g, ' ').trim()\nconst paginas = []\nrespuestas.forEach((r, i) => {\n  const j = r.json || {}\n  const url = filas[i] && filas[i].json ? filas[i].json.dominio : null\n  const cuerpo = typeof j.body === 'string' ? j.body : ''\n  if (url && Number(j.statusCode) >= 200 && Number(j.statusCode) < 300 && cuerpo) paginas.push({ url, texto: aTexto(cuerpo).slice(0, 60000) })\n})\nconst s = filas[0].json\nreturn [{ json: { ...s, paginas } }]\n"
+    "jsCode": "// ② JUNTAR LAS PÁGINAS · el CÓDIGO descargó las páginas (nodo HTTP); aquí solo se limpian a texto. El agente NUNCA navega: lee lo que el código bajó.\n// 🔴 11-nov · CC3 · arreglo genérico de CC7 (RESPUESTA 10-nov «fuentes oficiales de Ecuador»): SOLO cuenta como página una respuesta de TEXTO que, ya limpia,\n// tenga texto legible. Un PDF, una imagen o una página vacía se DESCARTAN con su razón: si no queda ninguna, `preparar` responde «sin fuente» SIN llamar al agente\n// (antes, un PDF bajado «como texto» contaba como página, se llamaba al agente, ninguna cita aparecía literal y se gastaban 3 intentos para nada). Vale para cualquier país.\nconst filas = $('① ¿Qué dijo?').all()\nconst respuestas = $input.all()\nconst aTexto = (html) => String(html || '')\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\").replace(/\\s+/g, ' ').trim()\n// umbrales FIJOS (no dependen del país ni del tipo de fecha): una frase corta con su fecha ya alcanza; la basura binaria SIN tipo no llega a la proporción de letras\nconst MINIMO_DE_CARACTERES = 30\nconst MINIMO_DE_LETRAS = 0.6\nconst MAXIMO_DE_ROTOS = 0.05\nconst TIPOS_DE_TEXTO = /^(text\\/html|text\\/plain|application\\/xhtml\\+xml)\\b/i\nconst tipoDe = (h) => { if (!h || typeof h !== 'object') return ''; const k = Object.keys(h).find((x) => x.toLowerCase() === 'content-type'); return k ? String(h[k] || '').trim() : '' }\nfunction razonParaDescartar(texto, tipo) {\n  if (tipo && !TIPOS_DE_TEXTO.test(tipo)) return 'no es texto (' + tipo.split(';')[0].trim() + ')'\n  if (texto.length < MINIMO_DE_CARACTERES) return 'sin texto legible (' + texto.length + ' caracteres)'\n  const visibles = texto.replace(/\\s/g, '')\n  if (/[\\u0000-\\u0008\\u000E-\\u001F]/.test(visibles)) return 'sin texto legible (trae caracteres de control: parece un archivo binario)'\n  // el car\\u00E1cter roto (U+FFFD) descarta solo si son MUCHOS: una p\\u00E1gina oficial en latin-1 le\\u00EDda como UTF-8 trae uno en cada \\u00F1 o tilde y sus fechas se leen igual\n  // (CC7, 11-nov); un binario mal declarado como texto sale lleno de ellos. Vale con y sin tipo declarado.\n  const rotos = (visibles.match(/\\uFFFD/g) || []).length\n  if (rotos / visibles.length > MAXIMO_DE_ROTOS) return 'sin texto legible (' + Math.round((100 * rotos) / visibles.length) + ' % de caracteres rotos: parece un archivo binario)'\n  // la proporci\\u00F3n de letras decide SOLO si la respuesta no dice qu\\u00E9 es: una tabla oficial de feriados (\\u00AB01/01/2026 A\\u00F1o Nuevo\\u2026\\u00BB) declarada como texto\n  // tiene muchos n\\u00FAmeros y es justo la fuente buena (CC7, 11-nov: medida en 59 % de letras); sin tipo, la proporci\\u00F3n reconoce un archivo binario\n  if (tipo) return null\n  const letras = (visibles.match(/\\p{L}/gu) || []).length\n  if (letras / visibles.length < MINIMO_DE_LETRAS) return 'sin texto legible (' + Math.round((100 * letras) / visibles.length) + ' % de letras: parece un archivo binario)'\n  return null\n}\nconst paginas = []\nconst descartadas = []\n// 11-nov · opción b de Lenovo (19:30): un PDF descartado aquí se manda a leer por CÓDIGO (`leer_pdf`, solo de las fuentes cargadas); su texto vuelve como página\nconst pdfs_por_leer = []\nconst esPdf = (cuerpo, tipo) => /^application\\/pdf\b/i.test(tipo) || /^\\s*%PDF-/.test(cuerpo)\nrespuestas.forEach((r, i) => {\n  const j = r.json || {}\n  const url = filas[i] && filas[i].json ? filas[i].json.dominio : null\n  const cuerpo = typeof j.body === 'string' ? j.body : ''\n  if (!url || !(Number(j.statusCode) >= 200 && Number(j.statusCode) < 300) || !cuerpo) return\n  const texto = aTexto(cuerpo)\n  const razon = razonParaDescartar(texto, tipoDe(j.headers))\n  if (razon) { descartadas.push({ url, razon }); if (esPdf(cuerpo, tipoDe(j.headers))) pdfs_por_leer.push(url) }\n  else paginas.push({ url, texto: texto.slice(0, 60000) })\n})\nconst s = filas[0].json\nreturn [{ json: { ...s, paginas, paginas_descartadas: descartadas, pdfs_por_leer } }]\n"
    },
    "position": [
     1960,
@@ -192,11 +192,90 @@
    "id": "2be8eb02-afec-7ebb-0aad-fddc6063b782"
   },
   {
+   "name": "② ¿Hay PDF?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ Array.isArray($json.pdfs_por_leer) && $json.pdfs_por_leer.length > 0 }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   },
+   "position": [
+    1960,
+    400
+   ],
+   "id": "1429b9c9-3aca-b6d2-3754-2e31061109dd"
+  },
+  {
+   "name": "② Leer los PDF",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "parameters": {
+    "method": "POST",
+    "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/fechas' }}",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ accion: 'leer_pdf', campana_id: $json.campana_id, pais: $json.pais, tipo: $json.tipo, urls: $json.pdfs_por_leer, workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id }) }}",
+    "options": {
+     "timeout": 150000,
+     "response": {
+      "response": {
+       "fullResponse": true,
+       "neverError": true
+      }
+     }
+    }
+   },
+   "position": [
+    1960,
+    600
+   ],
+   "id": "b0e718ca-275b-a654-ecd5-54c1e7820c97"
+  },
+  {
+   "name": "② Sumar los PDF",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "parameters": {
+    "jsCode": "// ② SUMAR LOS PDF · 11-nov · opción b de Lenovo (19:30): lo que `leer_pdf` sacó de cada PDF oficial entra como una página MÁS (con el mismo chequeo de texto legible de «② Juntar»);\n// lo que no se pudo leer queda descartado con su razón NUEVA (escaneado, protegido, fuera de la lista…). Si la lectura misma falló, todo sigue como estaba y se dice.\nconst s = $('② Juntar las páginas').first().json\nconst r = $input.first().json || {}\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nconst leidas = Number(r.statusCode) === 200 && Array.isArray(b.paginas) ? b.paginas.filter((p) => p && typeof p.url === 'string' && typeof p.texto === 'string' && p.texto.trim().length >= 30) : []\nconst nuevas = Number(r.statusCode) === 200 && Array.isArray(b.descartadas) ? b.descartadas.filter((d) => d && typeof d.url === 'string' && typeof d.razon === 'string') : []\nconst tocadas = new Set([...leidas.map((p) => p.url), ...nuevas.map((d) => d.url)])\nconst fallo = Number(r.statusCode) === 200 ? [] : (s.pdfs_por_leer || []).map((url) => ({ url, razon: 'no es texto (application/pdf) y la lectura del PDF falló (' + String(b.code || b.error || r.statusCode || 'sin respuesta') + ')' }))\nconst descartadas = [...(s.paginas_descartadas || []).filter((d) => !tocadas.has(d.url) && !fallo.some((f) => f.url === d.url)), ...nuevas, ...fallo]\nreturn [{ json: { ...s, paginas: [...(s.paginas || []), ...leidas.map((p) => ({ url: p.url, texto: p.texto.slice(0, 60000) }))], paginas_descartadas: descartadas } }]\n"
+   },
+   "position": [
+    1960,
+    800
+   ],
+   "id": "3c57f640-8232-dc2f-22d9-974ee91fd804"
+  },
+  {
    "name": "③ Armar preparar",
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "parameters": {
-    "jsCode": "// ③ ARMAR `preparar` de las fechas · las páginas ya descargadas viajan en el pedido; la ruta arma el cuerpo completo del agente\nconst s = $input.first().json\nconst pedido = { accion: 'preparar', campana_id: s.campana_id, seco: s.seco, pais: s.pais, tipo: s.tipo, ambito: s.ambito, anio: s.anio, paginas: s.paginas || [], workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nreturn [{ json: { ...s, pedido } }]\n"
+    "jsCode": "// ③ ARMAR `preparar` de las fechas · las páginas ya descargadas viajan en el pedido; la ruta arma el cuerpo completo del agente\n// 11-nov · también viajan las descartadas (con su razón): si no quedó ninguna página, «sin fuente» dice POR QUÉ\nconst s = $input.first().json\nconst pedido = { accion: 'preparar', campana_id: s.campana_id, seco: s.seco, pais: s.pais, tipo: s.tipo, ambito: s.ambito, anio: s.anio, paginas: s.paginas || [], paginas_descartadas: s.paginas_descartadas || [], workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nreturn [{ json: { ...s, pedido } }]\n"
    },
    "position": [
     2240,
@@ -344,6 +423,7 @@
    "name": "④ Agente (run-sdk)",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
    "parameters": {
     "method": "POST",
     "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/agents/run-sdk' }}",
@@ -384,7 +464,7 @@
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "parameters": {
-    "jsCode": "// ⑤ ARMAR `guardar` · el resultado del agente tal cual + las páginas: el CÓDIGO comprueba cada cita contra el texto descargado\nconst entrada = $input.first().json || {}\nconst simulado = !!(entrada.agente && entrada.paso)\nconst s = simulado ? entrada : $('④ Armar la llamada').last().json\nconst resp = simulado ? entrada.agente : entrada\nconst b = resp.body && typeof resp.body === 'object' ? resp.body : {}\nconst ok = Number(resp.statusCode) === 200 && b.success === true\nconst resultado = ok\n  ? { success: true, structured_output: b.structured_output, cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null }\n  : { success: false, error: String(b.error || b.detail || ('HTTP ' + resp.statusCode)).slice(0, 400), cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null }\nconst paginas = $('③ Armar preparar').last().json.paginas || []\nconst guardar = { accion: 'guardar', campana_id: s.campana_id, seco: s.seco, corrida_id: s.corrida_id, pais: s.pais, tipo: s.tipo, ambito: s.ambito, anio: s.anio, paginas, resultado, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nreturn [{ json: { ...s, guardar } }]\n"
+    "jsCode": "// ⑤ ARMAR `guardar` · el resultado del agente tal cual + las páginas: el CÓDIGO comprueba cada cita contra el texto descargado\nconst entrada = $input.first().json || {}\nconst simulado = !!(entrada.agente && entrada.paso)\nconst s = simulado ? entrada : $('④ Armar la llamada').last().json\nconst resp = simulado ? entrada.agente : entrada\nconst b = resp.body && typeof resp.body === 'object' ? resp.body : {}\n// un corte de la llamada (red, 290 s) llega como `{ error: { message } }` sin statusCode: se cuenta como llamada FALLIDA con sus palabras\nconst corte = resp.error && typeof resp.error === 'object' ? String(resp.error.message || resp.error.name || 'la llamada se cortó') : (typeof resp.error === 'string' ? resp.error : null)\nconst ok = Number(resp.statusCode) === 200 && b.success === true\nconst resultado = ok\n  ? { success: true, structured_output: b.structured_output, cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null }\n  : { success: false, error: String(b.error || b.detail || (corte ? 'LLAMADA_CORTADA · ' + corte : 'HTTP ' + resp.statusCode)).slice(0, 400), cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null }\nconst paginas = $('③ Armar preparar').last().json.paginas || []\nconst guardar = { accion: 'guardar', campana_id: s.campana_id, seco: s.seco, corrida_id: s.corrida_id, pais: s.pais, tipo: s.tipo, ambito: s.ambito, anio: s.anio, paginas, resultado, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nreturn [{ json: { ...s, guardar } }]\n"
    },
    "position": [
     4200,
@@ -545,6 +625,46 @@
    ]
   },
   "② Juntar las páginas": {
+   "main": [
+    [
+     {
+      "node": "② ¿Hay PDF?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② ¿Hay PDF?": {
+   "main": [
+    [
+     {
+      "node": "② Leer los PDF",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "③ Armar preparar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Leer los PDF": {
+   "main": [
+    [
+     {
+      "node": "② Sumar los PDF",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Sumar los PDF": {
    "main": [
     [
      {

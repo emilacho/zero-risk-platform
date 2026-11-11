@@ -31,6 +31,9 @@ function razonParaDescartar(texto, tipo) {
 }
 const paginas = []
 const descartadas = []
+// 11-nov · opción b de Lenovo (19:30): un PDF descartado aquí se manda a leer por CÓDIGO (`leer_pdf`, solo de las fuentes cargadas); su texto vuelve como página
+const pdfs_por_leer = []
+const esPdf = (cuerpo, tipo) => /^application\/pdf/i.test(tipo) || /^\s*%PDF-/.test(cuerpo)
 respuestas.forEach((r, i) => {
   const j = r.json || {}
   const url = filas[i] && filas[i].json ? filas[i].json.dominio : null
@@ -38,8 +41,8 @@ respuestas.forEach((r, i) => {
   if (!url || !(Number(j.statusCode) >= 200 && Number(j.statusCode) < 300) || !cuerpo) return
   const texto = aTexto(cuerpo)
   const razon = razonParaDescartar(texto, tipoDe(j.headers))
-  if (razon) descartadas.push({ url, razon })
+  if (razon) { descartadas.push({ url, razon }); if (esPdf(cuerpo, tipoDe(j.headers))) pdfs_por_leer.push(url) }
   else paginas.push({ url, texto: texto.slice(0, 60000) })
 })
 const s = filas[0].json
-return [{ json: { ...s, paginas, paginas_descartadas: descartadas } }]
+return [{ json: { ...s, paginas, paginas_descartadas: descartadas, pdfs_por_leer } }]

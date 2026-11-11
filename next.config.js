@@ -23,6 +23,8 @@ const nextConfig = {
     // Si aun así faltara, el lector FALLA CERRADO (`aislamiento_no_disponible`): el PDF no se lee y queda como archivo con ficha.
     outputFileTracingIncludes: {
       '/api/brain/portero/**': ['./src/lib/cerebro/archivos/trabajador-pdf.cjs', './node_modules/unpdf/**/*'],
+      // 11-nov · fechas especiales: el texto de los PDF oficiales de feriados se lee con el MISMO lector aislado
+      '/api/cadena/fechas': ['./src/lib/cerebro/archivos/trabajador-pdf.cjs', './node_modules/unpdf/**/*'],
     },
   },
 };

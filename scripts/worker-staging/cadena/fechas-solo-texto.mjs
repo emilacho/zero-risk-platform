@@ -13,7 +13,8 @@ const AQUI = dirname(fileURLToPath(import.meta.url))
 export const ID = 'KNkgFo1hulmNY05s'
 export const ANTES = join(AQUI, 'fechas-ANTES-solo-texto-2026-11-11.json')
 export const ARREGLADO = join(AQUI, 'fechas-ARREGLADO-solo-texto-2026-11-11.json')
-export const CAMBIOS = { '② Juntar las páginas': 'fechas-juntar.js', '③ Armar preparar': 'fechas-armar-preparar.js' }
+// 11-nov 19:xxZ · el nodo «② Juntar» siguió cambiando (opción b, `fechas-leer-pdf.mjs`): este registro queda CONGELADO con el código que se publicó a las 14:35Z
+export const CAMBIOS = { '② Juntar las páginas': 'historico/fechas-juntar-solo-texto-2026-11-11.js', '③ Armar preparar': 'fechas-armar-preparar.js' }
 
 export function arreglar(f) {
   if (f.id !== ID) throw new Error(`este arreglo es solo para ${ID}`)

@@ -5,7 +5,7 @@
  * Parte 2 · COMPORTAMIENTO: un simulador de n8n ejecuta los flujos CONTRA LOS MANEJADORES REALES de las rutas (almacén en memoria) con un agente simulado: pasarela, llave, ciclo completo, idempotencia, correcciones, fechas, vigía, cable.
  * NO es n8n: la prueba en vivo (E2/E3) corre en el ensayo por la sala real, con la cadena apagada y todo en seco.
  */
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -13,6 +13,7 @@ import { ACCIONES } from '../acciones'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { SimuladorN8n, type FlujoN8n, type Item, type PeticionHttp, type RespuestaHttp } from '../__fixtures__/simulador-n8n'
 import { clienteA, contextoDe, piezaBuena, tandaBuena, type ClienteFixture } from '../__fixtures__/clientes'
+import { crearPdf, textoPagina } from '@/lib/cerebro/archivos/__tests__/muestras'
 
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
 const AHORA = '2026-10-09T12:00:00Z'
@@ -148,7 +149,7 @@ function clienteUuid(): ClienteFixture {
   return c
 }
 
-function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: ClienteFixture; agente?: (b: any) => RespuestaHttp; paginas?: Record<string, string | null | { cuerpo: string; tipo: string }>; cableFalla?: boolean; config?: Record<string, unknown> } = {}): Mundo {
+function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: ClienteFixture; agente?: (b: any) => RespuestaHttp; paginas?: Record<string, string | null | { cuerpo: string | Buffer; tipo: string }>; cableFalla?: boolean; config?: Record<string, unknown> } = {}): Mundo {
   const cliente = opts.cliente ?? clienteUuid()
   const al = new AlmacenMemoria({
     contextos: { [UUID]: contextoDe(cliente) }, planes: { [UUID]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, journeys: [{ journeyId: 'viaje-1', clientId: UUID }],
@@ -174,11 +175,21 @@ function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: Cli
     if (u.pathname === '/webhook/zero-risk/brief') { reg.pasarela.push(p); return { statusCode: 200, body: {} } }
     if (u.pathname === '/webhook/zero-risk/cadena-parte') { reg.parte.push(p); return { statusCode: 200, body: {} } }
     if (opts.paginas && opts.paginas[p.url] === null) return { statusCode: 404, body: 'no encontrada' }
-    if (opts.paginas && opts.paginas[p.url] !== undefined) { const pg = opts.paginas[p.url]; return typeof pg === 'object' && pg !== null ? { statusCode: 200, headers: { 'content-type': pg.tipo }, body: pg.cuerpo } : { statusCode: 200, body: pg } }
+    if (opts.paginas && opts.paginas[p.url] !== undefined) { const pg = opts.paginas[p.url]; return typeof pg === 'object' && pg !== null ? { statusCode: 200, headers: { 'content-type': pg.tipo }, body: Buffer.isBuffer(pg.cuerpo) ? pg.cuerpo.toString('latin1') : pg.cuerpo } : { statusCode: 200, body: pg } } // n8n baja «como texto»
     throw new Error('el simulador no conoce esta dirección: ' + p.url)
   }
+  // 11-nov · `leer_pdf` baja el PDF desde el SERVIDOR (no desde n8n): el mismo mapa de páginas lo sirve; una dirección desconocida falla como en el simulador
+  vi.stubGlobal('fetch', async (url: string) => {
+    const pg = opts.paginas?.[url]
+    if (pg === undefined) throw new Error('el simulador no conoce esta dirección: ' + url)
+    if (pg === null) return new Response('no encontrada', { status: 404 })
+    const cuerpo = typeof pg === 'object' ? pg.cuerpo : pg
+    return new Response(new Uint8Array(Buffer.isBuffer(cuerpo) ? cuerpo : Buffer.from(cuerpo, 'latin1')), { status: 200, headers: typeof pg === 'object' ? { 'content-type': pg.tipo } : {} })
+  })
   return { al, sim: new SimuladorN8n({ flujos: POR_ID, env: ENV, http }), reg, cliente }
 }
+
+afterEach(() => { vi.unstubAllGlobals() })
 
 const sobreAbrir = (extra: Record<string, unknown> = {}) => ({
   client_id: UUID, tenant_id: UUID, plan_id: 'plan-1', dry_run: true, desde_worker: 'X9F0zp6LQ2xGEYVS', _sala_correlation_id: 'corr-1', _journey_id: 'viaje-1',
@@ -571,11 +582,13 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
     const prep = m.reg.cadena.find((p: any) => /\/api\/cadena\/fechas/.test(p.url) && p.cuerpo?.accion === 'preparar') as any
     expect(prep.cuerpo.paginas).toEqual([])
     expect(prep.cuerpo.paginas_descartadas).toEqual([
-      { url: urls[0], razon: 'no es texto (application/pdf)' },
       { url: urls[1], razon: 'no es texto (image/png)' },
       { url: urls[2], razon: 'sin texto legible (0 caracteres)' },
-      { url: urls[3], razon: 'sin texto legible (trae caracteres de control: parece un archivo binario)' },
+      // 11-nov · opción b: los dos PDF (con tipo y sin tipo) se mandan a leer por código; estos están rotos, así que siguen descartados con la razón del lector
+      { url: urls[0], razon: expect.stringMatching(/^el PDF no se pudo leer \(ilegible/) },
+      { url: urls[3], razon: expect.stringMatching(/^el PDF no se pudo leer \(ilegible/) },
     ])
+    expect((m.reg.cadena.find((p: any) => p.cuerpo?.accion === 'leer_pdf') as any)?.cuerpo.urls).toEqual([urls[0], urls[3]])
     const cob = m.al.coberturas.find((c: any) => c.tipo === 'feriados_locales')
     expect(cob).toMatchObject({ estado: 'sin_fuente' })
   })
@@ -590,6 +603,21 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
     expect((deFechas[0].cuerpo as any).task).toContain('El 3 de noviembre se celebra la fiesta de la ciudad.')
     expect((deFechas[0].cuerpo as any).task).not.toContain('pdf.test')
     expect(m.al.fechas.filter((f) => f.estado === 'verificada').map((f) => f.fecha)).toEqual(['2026-11-03'])
+  })
+  it.each([['pais-de-practica'], ['otro-pais-de-practica']])('🔴 %s · opción b · el texto de un PDF oficial REAL llega al agente y la fecha se verifica contra ese texto (la cita sale del PDF)', async (pais) => {
+    const url = 'https://gob.test/feriados-2026.pdf'
+    const bytes = crearPdf([textoPagina('Feriados locales 2026', 'El 3 de noviembre se celebra la fiesta de la ciudad.')])
+    const respuesta = { tipo: 'feriados locales', ambito: 'ciudad', anio: 2026, fechas: [{ fecha: '2026-11-03', nombre: 'Fiesta', alcance: 'local', fuente_url: url, cita_literal: 'El 3 de noviembre se celebra la fiesta' }], no_encontrado: [] }
+    const cl = clienteUuid()
+    const m = mundo({ cliente: cl, config: { dominios_fechas: { [`feriados_locales|${pais}`]: [url] } }, paginas: { [url]: { cuerpo: bytes, tipo: 'application/pdf' } }, agente: agenteQueDevuelve({ estrategia: cl.estrategia, calendario: tandaBuena(cl), fechas: respuesta }) })
+    const id = await abrirYa(m)
+    const r = await sub(m, IDS.fechas, { campana_id: id, seco: false, pais, tipo: 'feriados locales', ambito: 'ciudad', anio: 2026 })
+    expect(r[0].json.resultado).not.toBe('sin_fuente')
+    const deFechas = m.reg.agente.filter((p) => (p.cuerpo as any).extra?.contrato === 'fechas_especiales.v1')
+    expect(deFechas).toHaveLength(1)
+    expect((deFechas[0].cuerpo as any).task).toContain('El 3 de noviembre se celebra la fiesta de la ciudad.')
+    expect(m.al.fechas.filter((f) => f.estado === 'verificada').map((f) => f.fecha)).toEqual(['2026-11-03'])
+    expect((m.reg.cadena.find((p: any) => p.cuerpo?.accion === 'guardar') as any).cuerpo.paginas.map((p: any) => p.url)).toEqual([url])
   })
   it('fechas: una página que NO bajó (404) no se le pasa al agente: el tipo queda sin fuente y la campaña sigue', async () => {
     const m = mundo({ config: { dominios_fechas: { 'feriados_locales|pais-de-practica': ['https://caida.test'] } }, paginas: { 'https://caida.test': null as never }, agente: () => { throw new Error('no debía llamar al agente') } })
