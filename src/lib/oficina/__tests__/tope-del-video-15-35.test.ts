@@ -104,6 +104,23 @@ describe('la migración 202611111930', () => {
       expect(s.lastIndexOf('RAISE EXCEPTION')).toBeGreaterThan(s.lastIndexOf('UPDATE public.'))
     }
   })
+  it('🔴 (CC6) la comprobación FINAL es ENTERA: cada condición con su valor, unidas por OR, y termina levantando excepción', () => {
+    const finalDe = (sql: string) => { const s = sentencias(sql); return s.slice(s.lastIndexOf('DO $$')).trim() }
+    const esperado = (nombre: string, video: number, encargo: number, brazo: number) => [
+      'DO $$',
+      'BEGIN',
+      `  IF (SELECT (p->>'tope_usd')::numeric FROM public.oficina_tipos_de_grupo t, jsonb_array_elements(t.pasos) AS p WHERE t.familia = 'video_mesa' AND p->>'clave' = 'video') IS DISTINCT FROM ${video}::numeric`,
+      `     OR (SELECT tope_encargo_usd FROM public.oficina_tipos_de_grupo WHERE familia = 'video_mesa') IS DISTINCT FROM ${encargo}::numeric`,
+      `     OR (SELECT (valor->>'tope_por_video_usd')::numeric FROM public.cadena_config WHERE clave = 'brazo_de_video') IS DISTINCT FROM ${brazo}::numeric THEN`,
+      `    RAISE EXCEPTION '${nombre}: video_mesa no quedó con los topes esperados';`,
+      '  END IF;',
+      'END $$;',
+      '',
+      'COMMIT;',
+    ].join('\n')
+    expect(finalDe(MIG).replace(/\r\n/g, '\n')).toBe(esperado('202611111930', TOPE_DEL_PASO_VIDEO_USD, TOPE_DE_VIDEO_MESA_USD, TOPE_DEL_PASO_VIDEO_USD))
+    expect(finalDe(REV).replace(/\r\n/g, '\n')).toBe(esperado('202611111930 REVERSA', 5, 10, 10))
+  })
   it('🔴 el ORDEN: la migración abre las reglas ANTES de escribir 35; la reversa vuelve el dato ANTES de cerrar las reglas a 20', () => {
     const m = sentencias(MIG), r = sentencias(REV)
     expect(m.indexOf('ADD CONSTRAINT oficina_tipos_tope_valido')).toBeLessThan(m.indexOf('UPDATE public.oficina_tipos_de_grupo'))
