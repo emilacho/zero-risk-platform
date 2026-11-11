@@ -44,23 +44,26 @@ export type Decision =
   | { fila_id: string; accion: 'descartar'; razon: string }
 
 /**
- * Lee la propuesta del agente: una línea por fila, `- <fila_id> · reubicar · AAAA-MM-DD · razón`, `- <fila_id> · fusionar · <fila destino> · razón` o `- <fila_id> · descartar · razón`.
+ * Lee la propuesta del agente: una línea por fila, `<fila_id> · reubicar · AAAA-MM-DD · razón`, `<fila_id> · fusionar · <fila destino> · razón` o `<fila_id> · descartar · razón`.
  * Lectura de FORMATO, no juicio: lo que no tiene esa forma no es una decisión. Si una fila aparece dos veces, vale la primera.
+ * 11-nov (GO Lenovo 04:15Z · #1014): la viñeta del principio es OPCIONAL (guion, asterisco, punto, número o nada) y el id, la acción y la fecha pueden venir entre `comillas`
+ * o en **negrita**. La primera decisión real llegó sin guion y el lector exigía «- »: leyó cero decisiones. Lo que define la línea es la forma «fila · acción · …», con un id de una sola palabra.
  */
 export function leerDecisiones(texto: string | null | undefined): Decision[] {
   const out: Decision[] = []
   const vistas = new Set<string>()
+  const limpio = (x: string) => x.replace(/^[`*_]+|[`*_]+$/g, '').trim()
   for (const linea of String(texto ?? '').split(/\r?\n/)) {
-    const m = /^\s*[-*]\s+(.+)$/.exec(linea)
+    const m = /^\s*(?:[-*•+]|\d{1,3}[.)])?\s*(.+)$/.exec(linea)
     if (!m) continue
     const partes = m[1].split(/\s+·\s+/).map((x) => x.trim())
     if (partes.length < 3) continue
-    const [fila_id, accion0] = partes
-    const accion = accion0.toLowerCase()
-    if (!fila_id || vistas.has(fila_id)) continue
+    const fila_id = limpio(partes[0])
+    const accion = limpio(partes[1]).toLowerCase()
+    if (!fila_id || /\s/.test(fila_id) || vistas.has(fila_id)) continue
     let d: Decision | null = null
-    if (accion === 'reubicar' && partes.length >= 4) d = { fila_id, accion, fecha: partes[2], razon: partes.slice(3).join(' · ') }
-    else if (accion === 'fusionar' && partes.length >= 4) d = { fila_id, accion, destino: partes[2], razon: partes.slice(3).join(' · ') }
+    if (accion === 'reubicar' && partes.length >= 4) d = { fila_id, accion, fecha: limpio(partes[2]), razon: partes.slice(3).join(' · ') }
+    else if (accion === 'fusionar' && partes.length >= 4) d = { fila_id, accion, destino: limpio(partes[2]), razon: partes.slice(3).join(' · ') }
     else if (accion === 'descartar') d = { fila_id, accion, razon: partes.slice(2).join(' · ') }
     if (!d) continue
     vistas.add(fila_id)
