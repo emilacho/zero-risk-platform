@@ -24,7 +24,8 @@ import { COSTO_MAXIMO_POR_FUNCION } from '../portero-alimenta/gasto'
 import type { RespuestaDeCredito } from '../apify/credito'
 
 export const OFICINA = 'perfil_del_publico'
-export const TIPO_DEL_INFORME = 'perfil_del_publico'
+export { TIPO_DEL_INFORME } from './perfil-puro'
+import { TIPO_DEL_INFORME } from './perfil-puro'
 /** el redactor: el analista de «voz del público» de la mesa, extendido aquí para «cómo habla» (RESPUESTA de Lenovo 11:00Z, opción a) */
 export const AGENTE = 'feedback-synthesizer'
 export const CLAVE_DE_LA_PALANCA = 'perfil_del_publico'
@@ -200,21 +201,7 @@ export const etiquetaDeVoz = (v: Voz, ruta: string, workflow_execution_id: strin
   ...(workflow_execution_id ? { workflow_execution_id } : {}),
 })
 
-/**
- * RED PROPIA contra instrucciones dentro del texto raspado. El filtro existente NO ve «ignora todas las instrucciones…» ni el inglés «ignore all
- * previous instructions» (medido 07-oct) y no se toca aquí: esta red se suma, no lo reemplaza.
- */
-const PATRONES_DE_ORDEN: ReadonlyArray<RegExp> = [
-  /\b(ignora|olvida|descarta|omite)\b[^.!?\n]{0,40}\b(instrucciones|reglas|indicaciones|lo anterior|tu (mensaje|prompt))\b/,
-  /\b(ignore|disregard|forget)\b[^.!?\n]{0,40}\b(instructions|rules|above|previous|prior)\b/,
-  /\b(system prompt|mensaje del sistema|prompt del sistema)\b/,
-  /\b(eres ahora|ahora eres|you are now|act as|actua como)\b/,
-  /<<<|>>>|\[voz:/,
-]
-export const pareceUnaOrden = (texto: string): boolean => {
-  const t = texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-  return PATRONES_DE_ORDEN.some((r) => r.test(t))
-}
+export { pareceUnaOrden } from './perfil-puro'
 
 // ─────────────────────────────────────────────────────────── la muestra
 export const esUtil = (v: Pick<Voz, 'texto'>): boolean => normalizar(v.texto).split(/\s+/).filter(Boolean).length >= MUESTRA_MINIMA.palabras_por_voz
@@ -298,8 +285,8 @@ const RE_COMILLAS = /«([^»]{2,400})»|“([^”]{2,400})”|"([^"]{2,400})"/g
 const RE_ENCABEZADO = /^\s*#{1,4}\s+(.+?)\s*$/
 const seccionDe = (titulo: string): (typeof SECCIONES)[number] | null => SECCIONES.find((s) => normalizar(titulo).trim() === normalizar(s).trim()) ?? null
 
-/** una cita de una o dos letras («que», «ya») está dentro de cualquier voz: no prueba nada */
-export const LARGO_MINIMO_DE_UNA_FRASE = 4
+export { LARGO_MINIMO_DE_UNA_FRASE } from './perfil-puro'
+import { LARGO_MINIMO_DE_UNA_FRASE } from './perfil-puro'
 export interface Descartada { readonly linea: string; readonly por_que: string }
 export interface PerfilFiltrado {
   readonly texto: string
