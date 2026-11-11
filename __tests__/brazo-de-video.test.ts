@@ -180,6 +180,15 @@ describe('POST /api/video/generate', () => {
     const j = await (await post({ ...PEDIDO, resolucion: '480p' })).json()
     expect(j).toMatchObject({ error: 'no_se_pudo_estimar', descripcion_del_proveedor: 'new pricing, see console' })
   })
+  it('11-nov · (CC7) se leen tarifas pero no la de la resolución pedida: el 502 «sin tarifa» también trae la descripción del proveedor', async () => {
+    fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: 'Rates in USD per video second: 1080p: $0.6518.' }))
+    const r = await post({ ...PEDIDO, resolucion: '720p' })
+    const j = await r.json()
+    expect(r.status).toBe(502)
+    expect(j).toMatchObject({ error: 'no_se_pudo_estimar', detail: 'fórmula sin tarifa para esta resolución', descripcion_del_proveedor: 'Rates in USD per video second: 1080p: $0.6518.' })
+    expect(llamadas()).toHaveLength(1) // solo la estimación gratis
+    expect(insert).not.toHaveBeenCalled()
+  })
   it('11-nov · el texto REAL de hoy (por segundo): 720p · 8 s = US$ 2,1176 de lista', async () => {
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: 'Standard self-serve rates in USD per video second: 480p: $0.1177; 720p: $0.2647; 1080p: $0.6518. Total price = selected rate × output duration in seconds.' }))
     const j = await (await post({ ...PEDIDO, dry_run: true })).json()
