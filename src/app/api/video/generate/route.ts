@@ -17,7 +17,8 @@ import { sanitizeString } from '@/lib/validation'
 import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { VARIABLE_DE_LA_LLAVE, costoEstimadoUsd, enviar, estado, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
-import { TOPE_POR_VIDEO_USD, armarPedido, conDescuento, cuerpoParaHiggsfield, rutaDelModelo } from '@/lib/video/parametros'
+import { almacenDeSupabase } from '@/lib/cadena/almacen-supabase'
+import { armarPedido, conDescuento, cuerpoParaHiggsfield, leerConfigDelBrazo, rutaDelModelo } from '@/lib/video/parametros'
 import { cerrarEnElLibro, cierreDeFila, registrarEnvioEnElLibro, sessionIdDeVideo } from '@/lib/video/libro'
 import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 
@@ -53,7 +54,9 @@ export async function POST(request: Request) {
   if (!workflowId || !workflowExecutionId) return json(400, { error: 'falta_contexto_de_flujo', detail: 'workflow_id y workflow_execution_id son obligatorios: el brazo solo corre dentro de un flujo' })
   const claveIdempotente = sanitizeString(body.clave as string | undefined, 200)
   if (!claveIdempotente) return json(400, { error: 'falta_clave', detail: 'clave (Idempotency-Key) es obligatoria: sin ella un reintento cobraría dos veces' })
-  const tope = typeof body.tope_usd === 'number' && body.tope_usd > 0 ? Math.min(body.tope_usd, TOPE_POR_VIDEO_USD) : TOPE_POR_VIDEO_USD
+  // 11-nov · regla #18: el tope por video y el descuento del proveedor salen de la configuración (`cadena_config.brazo_de_video`); sin ella, el tope aprobado y sin descuento
+  const cfg = await leerConfigDelBrazo((clave) => almacenDeSupabase().leerConfig(clave))
+  const tope = typeof body.tope_usd === 'number' && body.tope_usd > 0 ? Math.min(body.tope_usd, cfg.tope_por_video_usd) : cfg.tope_por_video_usd
   const ruta = rutaDelModelo(pedido)
   const cuerpo = cuerpoParaHiggsfield(pedido)
   const base = { ruta, modelo: pedido.modelo, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, audio: pedido.audio, fotos: pedido.fotos.length, tope_usd: tope, clave: claveIdempotente }
@@ -69,7 +72,7 @@ export async function POST(request: Request) {
   const costoLista = est.usd !== undefined ? est.usd : costoEstimadoUsd(est.tarifas!, { resolucion: pedido.resolucion, relacion: pedido.relacion, segundos: pedido.segundos })
   if (costoLista === null) return json(502, { error: 'no_se_pudo_estimar', detail: 'fórmula sin tarifa para esta resolución', ...descripcion, ...base })
   // el descuento vigente del proveedor (medido en la corrida real del 31-oct): lo que se compara con el tope y se reserva es lo que de verdad se cobra
-  const desc = conDescuento(costoLista, pedido.modelo, Date.now())
+  const desc = conDescuento(costoLista, pedido.modelo, Date.now(), cfg.descuento)
   const costo = desc.usd
   const costos = { costo_estimado_usd: costo, costo_lista_usd: costoLista, descuento_pct: desc.pct }
   if (costo > tope) return json(409, { error: 'tope_por_video', detail: `el video costaría US$ ${costo.toFixed(4)} (lista US$ ${costoLista.toFixed(4)}) y el tope es US$ ${tope}`, ...costos, ...base })
