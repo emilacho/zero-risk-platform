@@ -37,7 +37,7 @@ export const SIN_RECEPCION_DE_LA_CADENA = 'la cadena aún no conecta la recepci�
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { /** T3 de CC1: la recepción de la cadena para el brief y el concepto (mientras no exista, la entrega dice «no recibida») */ puertoDeLaCadena?: import('./puertos').PuertoDeLaCadena; /** la mesa lee las notas del dueño (encendida por omisión; `APRENDIZAJE_DEL_DUENO=0` la apaga): cada agente consulta al cerebro al abrirse su turno */ aprendizajeDelDueno?: boolean;/** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string; }
+export interface Entorno { /** T3 de CC1: la recepción de la cadena para el brief y el concepto (mientras no exista, la entrega dice «no recibida») */ puertoDeLaCadena?: import('./puertos').PuertoDeLaCadena; /** la mesa lee las notas del dueño (encendida por omisión; `APRENDIZAJE_DEL_DUENO=0` la apaga): cada agente consulta al cerebro al abrirse su turno */ aprendizajeDelDueno?: boolean;/** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; /** 11-nov · camino B · el servicio de Railway que encuadra fotos y une clips (`RAILWAY_AGENT_RUNNER_URL`); sin él, el video plano por plano falla visible sin gastar */ runnerUrl?: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string; }
 
 /** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
 export { ESPERAS_DEL_REVISOR_MS }
@@ -298,7 +298,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       async enviar(p): Promise<EnvioDeVideo> {
         if (p.dry_run) return { ok: true, request_id: `dry-${p.pedido.clave}`, status: 'simulado', costo_estimado_usd: 0, simulado: true }
         try {
-          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: false }
+          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, ...((p.pedido as { plano?: boolean }).plano === true ? { plano: true } : {}), tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: false }
           const r = await f(`${env.baseUrl}/api/video/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(60000) })
           const j = (await r.json().catch(() => ({}))) as Fila
           if (!r.ok || typeof j.request_id !== 'string') return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`), http: r.status, ...(typeof j.descripcion_del_proveedor === 'string' ? { descripcion: j.descripcion_del_proveedor } : {}) }
@@ -308,12 +308,35 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       /** 11-nov · «cotizar primero»: el mismo `POST /api/video/generate` en `dry_run` (estima GRATIS con el proveedor y compara con el tope; no envía ni anota el libro) */
       async cotizar(p): Promise<CotizacionDeVideo> {
         try {
-          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: true }
+          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, ...((p.pedido as { plano?: boolean }).plano === true ? { plano: true } : {}), tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: true }
           const r = await f(`${env.baseUrl}/api/video/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(60000) })
           const j = (await r.json().catch(() => ({}))) as Fila
           const costo = Number(j.costo_estimado_usd)
           if (!r.ok || j.dry_run !== true || !Number.isFinite(costo)) return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`), http: r.status, ...(typeof j.descripcion_del_proveedor === 'string' ? { descripcion: j.descripcion_del_proveedor } : {}) }
           return { ok: true, costo_estimado_usd: costo, ...(Number.isFinite(Number(j.costo_lista_usd)) ? { costo_lista_usd: Number(j.costo_lista_usd) } : {}), ...(typeof j.ruta === 'string' ? { ruta: j.ruta } : {}) }
+        } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+      },
+      /** 11-nov · camino B · el unidor de Railway (`POST /video/encuadrar`): la foto propia recortada al centro a la proporción de la red, como jpg */
+      async encuadrar(p) {
+        const base = (env.runnerUrl ?? '').trim().replace(/\/+$/, '')
+        if (!base) return { ok: false, error: 'RAILWAY_AGENT_RUNNER_URL no configurado: no se pueden encuadrar las fotos de los planos' }
+        try {
+          const r = await f(`${base}/video/encuadrar`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-internal-auth': env.internalKey }, body: JSON.stringify({ url: p.url, relacion: p.relacion, corto: 1080 }), signal: AbortSignal.timeout(120000) })
+          if (!r.ok || !(r.headers.get('content-type') ?? '').startsWith('image/')) { const j = (await r.json().catch(() => ({}))) as Fila; return { ok: false, error: String(j.detail ?? (Array.isArray(j.errores) ? (j.errores as unknown[]).join(' · ') : j.error) ?? `HTTP ${r.status}`) } }
+          const bytes = Buffer.from(await r.arrayBuffer())
+          return bytes.length ? { ok: true, bytes } : { ok: false, error: 'el unidor devolvió una foto vacía' }
+        } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+      },
+      /** 11-nov · camino B · el unidor de Railway (`POST /video/unir`): los clips en orden, cortados a su plano, con el sonido fundido · devuelve el mp4 */
+      async unir(p) {
+        const base = (env.runnerUrl ?? '').trim().replace(/\/+$/, '')
+        if (!base) return { ok: false, error: 'RAILWAY_AGENT_RUNNER_URL no configurado: no se pueden unir los clips' }
+        const corto = { '480p': 480, '720p': 720, '1080p': 1080 }[p.resolucion.toLowerCase()] ?? 720
+        try {
+          const r = await f(`${base}/video/unir`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-internal-auth': env.internalKey }, body: JSON.stringify({ clips: p.clips, relacion: p.relacion, corto }), signal: AbortSignal.timeout(600000) })
+          if (!r.ok || (r.headers.get('content-type') ?? '') !== 'video/mp4') { const j = (await r.json().catch(() => ({}))) as Fila; return { ok: false, error: String(j.detail ?? (Array.isArray(j.errores) ? (j.errores as unknown[]).join(' · ') : j.error) ?? `HTTP ${r.status}`) } }
+          const bytes = Buffer.from(await r.arrayBuffer())
+          return bytes.length ? { ok: true, bytes } : { ok: false, error: 'el unidor devolvió un video vacío' }
         } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
       },
       async estado(requestId): Promise<EstadoDelBrazo> {

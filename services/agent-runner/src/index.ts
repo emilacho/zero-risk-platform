@@ -29,6 +29,7 @@ import { resolverTopeUsd, resolverRazonamiento } from './lib/tope-por-corrida.js
 import { resolverModelo } from './lib/modelo-por-corrida.js'
 import { resolverEsquema } from './lib/salida-estructurada.js'
 import { limitesDelPedido, ecoDeLimites, CAPACIDADES_DEL_CORREDOR } from './lib/mirar-afuera-pedido.js'
+import { anfitrionDelAlmacen, direccionPermitida, encuadrar, medidas, unir, validarUnir } from './lib/video-unir.js'
 
 // SDK 0.3.x (relevo 26) · desde la 0.3.142 los servidores MCP se conectan EN SEGUNDO PLANO: la sesión arranca antes de que estén listos y la primera vuelta podría quedarse sin las herramientas del cerebro.
 // Con `0` el SDK espera como antes (registro de cambios del SDK, 0.3.142). Solo si nadie lo fijó ya.
@@ -87,6 +88,8 @@ app.get('/', (_req, res) => {
     endpoints: {
       'POST /run-sdk': 'Execute one agent via @anthropic-ai/claude-agent-sdk',
       'GET /health': 'Healthcheck for Railway',
+      'POST /video/encuadrar': 'Encuadrar una foto propia a la proporción de la red (ffmpeg)',
+      'POST /video/unir': 'Unir los clips de un video plano por plano (ffmpeg)',
     },
   })
 })
@@ -96,8 +99,38 @@ app.get('/health', (_req, res) => {
     status: 'ok',
     uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
     // lo que este corredor sabe hacer · un flujo lo comprueba ANTES de gastar (PR #418)
-    capacidades: CAPACIDADES_DEL_CORREDOR,
+    capacidades: { ...CAPACIDADES_DEL_CORREDOR, video_unir: 1 },
   })
+})
+
+// ── El unidor de video (11-nov · camino B · OK Lenovo 16:58) ───────────
+// POST /video/encuadrar { url, relacion, corto? } → image/jpeg · la foto propia recortada al centro a la proporción de la red
+// POST /video/unir { clips: [{ url, segundos }], relacion, corto? } → video/mp4 · los clips en orden, cada uno cortado a su plano, con el sonido fundido entre planos
+// Solo bajan de nuestro almacén; uno a la vez; sin base ni gasto.
+app.post('/video/encuadrar', async (req: Request, res: Response) => {
+  if (!isAuthed(req)) { res.status(401).json({ error: 'unauthorized' }); return }
+  const b = (req.body ?? {}) as Record<string, unknown>
+  const mal = direccionPermitida(b.url, anfitrionDelAlmacen())
+  const med = medidas(typeof b.relacion === 'string' ? b.relacion : '', typeof b.corto === 'number' ? b.corto : 1080)
+  if (mal || !med) { res.status(400).json({ error: 'pedido_invalido', errores: [mal, med ? null : '`relacion` es «a:b» y `corto` un entero de 240 a 2160'].filter(Boolean) }); return }
+  try {
+    const bytes = await encuadrar(String(b.url), med.ancho, med.alto)
+    res.status(200).set({ 'Content-Type': 'image/jpeg', 'X-Ancho': String(med.ancho), 'X-Alto': String(med.alto) }).send(bytes)
+  } catch (e) {
+    res.status(502).json({ error: 'no_se_pudo_encuadrar', detail: (e instanceof Error ? e.message : String(e)).slice(0, 800) })
+  }
+})
+
+app.post('/video/unir', async (req: Request, res: Response) => {
+  if (!isAuthed(req)) { res.status(401).json({ error: 'unauthorized' }); return }
+  const v = validarUnir((req.body ?? {}) as Record<string, unknown>, anfitrionDelAlmacen())
+  if (!v.ok) { res.status(400).json({ error: 'pedido_invalido', errores: v.errores }); return }
+  try {
+    const bytes = await unir(v.clips, v.ancho, v.alto)
+    res.status(200).set({ 'Content-Type': 'video/mp4', 'X-Ancho': String(v.ancho), 'X-Alto': String(v.alto), 'X-Segundos': String(v.clips.reduce((s, c) => s + c.segundos, 0)) }).send(bytes)
+  } catch (e) {
+    res.status(502).json({ error: 'no_se_pudo_unir', detail: (e instanceof Error ? e.message : String(e)).slice(0, 800) })
+  }
 })
 
 // Sprint 8D Fase 1 · body accepts both camelCase (Vercel proxy convention ·
