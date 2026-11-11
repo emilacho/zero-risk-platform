@@ -196,10 +196,19 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
       const g = await P.gastoDeLaEdicion({ id: E, workflow_execution_id: '50' } as never)
       expect(g.cobrado).toBeCloseTo(0.04 + 0.3, 6)
       expect(g.revisiones_abiertas).toBe(1)
-      const d = await P.gastoDelDia(CL, null)
+      const d = await P.gastoDelDia(CL, 'ninguna')
       expect(d.revisiones).toBeCloseTo(0.3, 6)
       expect(d.revisiones_abiertas).toBe(1)
     }
+  })
+  it('🔴 hueco 1 de CC6: si la base falla al leer las revisiones de la edición, el gasto NO se lee como 0: lanza (la edición y el día)', async () => {
+    const E = 'e0000000-0000-4000-8000-0000000000a3'
+    const { db: base } = dbFalsa({ colaterales_ediciones: [{ id: E, client_id: CLI, estado: 'en_curso', updated_at: '2026-11-11T08:00:00Z', workflow_execution_id: null }], colaterales_retoques: [], agent_dispatches: [], agent_invocations: [] })
+    const caida: Record<string, unknown> = { select: () => caida, eq: () => caida, in: () => caida, limit: () => caida, then: (res: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'base caída' } }).then(res) }
+    const db = { from: (t: string) => (t === 'jefatura_revisiones' ? caida : (base as unknown as { from(t: string): unknown }).from(t)) } as unknown as Db
+    const P = puertosDeSupabase(db, () => new Date('2026-11-11T12:00:00Z'), cadenaFalsa())
+    await expect(P.gastoDeLaEdicion({ id: E, workflow_execution_id: null } as never)).rejects.toThrow(/base caída/)
+    await expect(P.gastoDelDia(CLI, 'ninguna')).rejects.toThrow(/base caída/)
   })
   it('🔴 hueco 1 de CC6: una revisión que nombran los retoques Y la edición cuenta UNA sola vez', async () => {
     const E = 'e0000000-0000-4000-8000-0000000000a2'
@@ -227,10 +236,10 @@ describe('puertos reales · filas activas, gasto del día y documentos', () => {
         ],
       })
       const ahora = () => new Date('2026-11-11T12:00:00Z')
-      const con = await puertosDeSupabase(base('61').db, ahora, cadenaFalsa()).gastoDelDia(CL, null)
+      const con = await puertosDeSupabase(base('61').db, ahora, cadenaFalsa()).gastoDelDia(CL, 'ninguna')
       expect(con.recibos).toBeCloseTo(0.1 + 0.05 + 0.12, 6)
       expect(con.en_vuelo).toBe(0)
-      const sin = await puertosDeSupabase(base('62').db, ahora, cadenaFalsa()).gastoDelDia(CL, null)
+      const sin = await puertosDeSupabase(base('62').db, ahora, cadenaFalsa()).gastoDelDia(CL, 'ninguna')
       expect(sin.recibos).toBeCloseTo(0.1 + 0.05, 6)
       expect(sin.en_vuelo).toBe(1)
     }
