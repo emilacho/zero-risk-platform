@@ -7,12 +7,16 @@
  * La retención (`marketing_video_optimization_specialist`) NO está aquí: aporta en la familia propia del video largo de YouTube (`video_largo`, sala pendiente · FIRMA 01-nov punto 4).
  * Lo que sigue a la mesa es cola mecánica: guion → pedido al brazo → el video (Seedance, ≤ US$ 5, con descuento vigente) → chequeos → jefatura → entrega (mp4 + guion + pie) → cierre.
  * Tope de la pieza US$ 10 (no 5 como la mesa de láminas): el video solo cuesta ≈ 2,6–4,9 y la jefatura reserva 1,5; a la mesa le quedan ≈ 3.
+ * 11-nov · GO Lenovo 18:56 + 19:44 Zúrich (regla premium: la SEGUNDA filmación tiene que caber): video US$ 15 · encargo US$ 35 (mesa + video + mirada + segundo video, con margen)
+ * · lo esperado por pieza para el freno de la campaña US$ 12 (`reserva_por_pieza_usd`, mientras no haya historia). Migración 202611111930 (dato; se baja después).
  */
 import type { Condicion, Plantilla } from '../tipos'
 
-export const TOPE_DE_VIDEO_MESA_USD = 10
+export const TOPE_DE_VIDEO_MESA_USD = 35
 /** lo que el brazo puede cobrar por UN video (el mismo tope del brazo): el paso `video` lo reserva antes de enviar */
-export const TOPE_DEL_PASO_VIDEO_USD = 5
+export const TOPE_DEL_PASO_VIDEO_USD = 15
+/** lo ESPERADO por video para el freno de la campaña mientras la familia no tenga historia (`gasto-de-encargos.ts` · `reservasDesdeLaHistoria`) */
+export const RESERVA_POR_VIDEO_USD = 12
 
 const siempre: Condicion = { tipo: 'siempre' }
 const cambioCopy: Condicion = { tipo: 'si_cambio', artefacto: 'copy_video' }
@@ -43,6 +47,7 @@ export const VIDEO_MESA: Plantilla = {
     formato_por_omision: '9:16',
     mesa: true,
     video: { resolucion: '720p', segundos_min: 8, segundos_max: 15, tope_por_video_usd: TOPE_DEL_PASO_VIDEO_USD },
+    reserva_por_pieza_usd: RESERVA_POR_VIDEO_USD,
   },
   pasos: [
     { clave: 'abrir', tipo: 'codigo', quien: 'sala', funcion: 'abrir_video', condicion: siempre, entrada: [], salida_artefacto: 'encargo', tope_usd: 0 },

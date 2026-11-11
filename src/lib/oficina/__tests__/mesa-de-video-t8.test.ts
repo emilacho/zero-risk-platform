@@ -171,6 +171,9 @@ describe('UNA voz de gancho por video (auditoría 5)', () => {
 })
 
 const PASOS_DE_LA_MIRADA = ['cuadros_video', 'mirar_video']
+/** 202611111930 (CC3 · GO Lenovo 18:56 + 19:44) subió DESPUÉS el video a 15, el encargo a 35 y puso lo esperado por video en 12: lo sembrado en 2012 es lo de antes */
+const pasosAntesDelTope = (pasos: unknown) => (JSON.parse(JSON.stringify(pasos)) as Array<Record<string, unknown>>).map((p) => (p.clave === 'video' ? { ...p, tope_usd: 5 } : p))
+const limitesAntesDelTope = (lim: unknown) => { const l = JSON.parse(JSON.stringify(lim)); delete l.reserva_por_pieza_usd; return { ...l, tope_encargo_usd: 10, video: { ...l.video, tope_por_video_usd: 5 } } }
 describe('la plantilla video_mesa y el gasto `video` como dato', () => {
   const filaDe = (tipo: string) => {
     const i = SQL.indexOf(`'${tipo}', '${tipo}'`)
@@ -190,11 +193,11 @@ describe('la plantilla video_mesa y el gasto `video` como dato', () => {
     expect(f.pasos[2].clave).toBe('pedido')
     f.pasos[2] = { ...f.pasos[2], vuelve_a: vuelta }
     // 11-nov · y el código de hoy suma los 2 pasos de la mirada (202611111730, ver `mirar-el-video.test.ts`); fuera de ellos es idéntica
-    expect(f.pasos).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos.filter((p) => !PASOS_DE_LA_MIRADA.includes(p.clave)))))
+    expect(f.pasos).toEqual(pasosAntesDelTope(VIDEO_MESA.pasos.filter((p) => !PASOS_DE_LA_MIRADA.includes(p.clave))))
     // 11-nov · la indicación de quien mira el video llega con 202611111730 (la siembra de 2012 no tenía ninguna)
     expect(f.indicaciones).toEqual({})
     expect(Object.keys(VIDEO_MESA.indicaciones)).toEqual([AGENTE_QUE_MIRA_EL_VIDEO])
-    expect(f.limites).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.limites)))
+    expect(f.limites).toEqual(limitesAntesDelTope(VIDEO_MESA.limites))
     expect(SQL).toMatch(/2, 10\.00, false\s*\) ON CONFLICT \(tipo\) DO NOTHING/)
     expect(VIDEO_MESA.pasos.map((p) => p.clave)).toEqual(['abrir', 'mesa', 'pedido', 'video', 'cuadros_video', 'mirar_video', 'chequeos', 'jefatura', 'chequeos_2', 'entrega', 'cierre'])
   })
