@@ -35,7 +35,11 @@ const SEDE_N: DatoDeSede[] = [
 const DUENO_N: HechoDelDuenoLeido[] = [
   { tema: 'afluencia al mediodía de fin de semana', respuesta: 'unos 20 clientes al mediodía de fin de semana', sede: 'olon' },
   { tema: 'presupuesto de pauta', respuesta: '200 por semana (moneda de la ficha del cliente)', sede: null },
-  { tema: 'apertura de la sede', respuesta: 'Guayaquil abrió el 09-nov', sede: 'guayaquil' },
+  // las DOS filas reales de Guayaquil que la ficha trae juntas (69b1c01e del 16-oct · 5edd9bea del 06-nov), tal cual (🟡 CC6 1060)
+  { tema: 'apertura de la sede', respuesta: 'Guayaquil sin abrir', sede: 'guayaquil' },
+  { tema: 'fecha apertura guayaquil', respuesta: 'LA PROXIMA SEMANA', sede: null },
+  // 9f51be94 · un hecho cercano al «80 % vuelve» con OTRA cifra: el código no lo hace candidato (1 ≠ 80 %); el jefe lo ve en la ficha
+  { tema: 'frecuencia visita', respuesta: 'el vuelve al menos 1 ves a la semana', sede: null },
 ]
 // ── clínica de práctica (otro rubro): los mismos casos con sus espejos
 const CLINICA = 'c11c0000-0000-4000-8000-000000000002'
@@ -47,8 +51,8 @@ const DUENO_C: HechoDelDuenoLeido[] = [
 ]
 
 const CLIENTES = [
-  { nombre: 'Náufrago (registros reales)', id: NAUFRAGO, sede: SEDE_N, dueno: DUENO_N, sostenida: 'Más de 20 clientes nos visitan al mediodía del fin de semana en Olón.', ref: 'dueno:afluencia al mediodía de fin de semana@olon', falsoCandidato: 'Encebollado con 200 g de albacora.', sinFicha: 'El 80 % de nuestros clientes vuelve cada semana.', menor: 'Te esperamos hasta las 3 de la tarde.', apertura: 'Muy pronto abrimos en Guayaquil.' },
-  { nombre: 'clínica de práctica', id: CLINICA, sede: SEDE_C, dueno: DUENO_C, sostenida: 'Cada sábado atendemos a 35 pacientes.', ref: 'dueno:pacientes por sábado', falsoCandidato: 'Consulta de 4 horas sin turno.', sinFicha: '20 años de experiencia nos respaldan.', menor: 'Abrimos a las 9 de la mañana.', apertura: 'Muy pronto abrimos la sede norte.' },
+  { nombre: 'Náufrago (registros reales)', id: NAUFRAGO, sede: SEDE_N, dueno: DUENO_N, sostenida: 'Unos 20 clientes nos visitan al mediodía del fin de semana en Olón.', ref: 'dueno:afluencia al mediodía de fin de semana@olon', falsoCandidato: 'Encebollado con 200 g de albacora.', sinFicha: 'El 80 % de nuestros clientes vuelve cada semana.', menor: 'Te esperamos hasta las 3 de la tarde.', apertura: 'Ya abrimos en Guayaquil.', hechoDeApertura: 'Guayaquil sin abrir' },
+  { nombre: 'clínica de práctica', id: CLINICA, sede: SEDE_C, dueno: DUENO_C, sostenida: 'Cada sábado atendemos a 35 pacientes.', ref: 'dueno:pacientes por sábado', falsoCandidato: 'Consulta de 4 horas sin turno.', sinFicha: '20 años de experiencia nos respaldan.', menor: 'Abrimos a las 9 de la mañana.', apertura: 'Muy pronto abrimos la sede norte.', hechoDeApertura: 'la sede norte abrió el 02-nov' },
 ] as const
 type Cliente = (typeof CLIENTES)[number]
 
@@ -157,7 +161,7 @@ describe('criterios · juzga el jefe, el código pone el tope', () => {
     })
     it(`${c.nombre} · C1 contradice un hecho sin número: el jefe ve el hecho del dueño y su ficha sin «cifra» no se toca`, async () => {
       const r = await revisar(c, c.apertura, [ficha({ que: 'la pieza dice que no abrió y el dueño dijo que abrió' })])
-      expect(r.task).toContain(c.dueno[2].respuesta)
+      expect(r.task).toContain(c.hechoDeApertura)
       expect(r.delJefe.map((f) => f.gravedad)).toEqual(['bloquea'])
     })
     it(`${c.nombre} · el jefe sin juicio: «siempre pasa» (ninguna ficha) no inventa fichas; «siempre bloquea» sigue topado`, async () => {
