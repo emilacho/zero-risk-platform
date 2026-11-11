@@ -35,6 +35,8 @@ const RAIZ = path.resolve(__dirname, '../../../../supabase')
 const MIG = fs.readFileSync(path.join(RAIZ, 'migrations', '202611111730_oficina_un_agente_mira_el_video.sql'), 'utf8')
 const REV = fs.readFileSync(path.join(RAIZ, 'reversas', '202611111730_oficina_un_agente_mira_el_video_REVERSA.sql'), 'utf8')
 const pasosDe = (sql: string) => JSON.parse(/\$pasos\$([\s\S]*?)\$pasos\$/.exec(sql)![1])
+/** los pasos del código como los dejó 202611111730: 202611111930 (CC3) subió DESPUÉS el tope del paso video de 5 a 15 (ver `tope-del-video-15-35.test.ts`) */
+const pasos1730 = (pasos: unknown) => (JSON.parse(JSON.stringify(pasos)) as Array<Record<string, unknown>>).map((p) => (p.clave === 'video' ? { ...p, tope_usd: 5 } : p))
 const indDe = (sql: string, d = 'ind') => JSON.parse(new RegExp(`\\$${d}\\$([\\s\\S]*?)\\$${d}\\$`).exec(sql)![1])
 const antesDe = (sql: string) => JSON.parse(/\$antes\$([\s\S]*?)\$antes\$/.exec(sql)![1])
 
@@ -264,7 +266,8 @@ describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefa
     expect(r.enc.estado_del_motor.fichas.find((x) => x.donde === 'mirada' && x.estado === 'abierta')!.que).not.toContain('no se rehízo solo')
   })
   it('🔴 (sonda CC7) NO coincide pero NO cabe filmar otro video en el tope: no vuelve (nunca se cierra por tope antes de la jefatura): sigue con la ficha que lo dice', async () => {
-    const r = await recorrer(C, { mirada: () => MIRADA_MAL, costoVideo: 4.5, costoIntegrar: 0.4 })
+    // con el tope de hoy (35) la vuelta cabe; un encargo de tope 20 deja filmar el primero (15) pero no otro (reserva 16,10)
+    const r = await recorrer(C, { mirada: () => MIRADA_MAL, costoVideo: 4.5, costoIntegrar: 0.4, tope: 20 })
     expect(r.enc.estado).not.toBe('cerrado_por_tope')
     expect(r.avisos).toHaveLength(0)
     expect(r.enviados).toHaveLength(1)
@@ -274,7 +277,7 @@ describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefa
     const f = r.enc.estado_del_motor.fichas.find((x) => x.donde === 'mirada' && x.estado === 'abierta')
     expect(f).toMatchObject({ gravedad: 'bloquea' })
     expect(f!.que).toContain('plano 1: no se ve la fachada: sale una calle vacía')
-    expect(f!.que).toContain('no se rehízo solo: volver a la mesa y filmar otro video (reserva US$ 6.10) pasa el tope del encargo (US$ 10')
+    expect(f!.que).toContain('no se rehízo solo: volver a la mesa y filmar otro video (reserva US$ 16.10) pasa el tope del encargo (US$ 20')
     expect((r.enc.estado_del_motor.artefactos['mirada_video'].datos as { vuelve_a_la_mesa: boolean }).vuelve_a_la_mesa).toBe(false)
   })
   it('🔴 sin quien saque los cuadros: el agente NO se llama y queda una ficha que bloquea («nadie miró el video»)', async () => {
@@ -323,21 +326,21 @@ describe('lo que cuesta volver a la mesa y si cabe', () => {
   const pedido = VIDEO_MESA.pasos.find((p) => p.clave === 'pedido')!
   const e = (gasto: number) => ({ gasto_usd: gasto }) as unknown as Parameters<typeof cabeLaVuelta>[1]
   it('🔴 la reserva son los topes de los pasos que se repiten (pedido, video, cuadros, mirada) más un turno de la mesa', () => {
-    expect(costoDeVolver(VIDEO_MESA, mirar)).toBeCloseTo(0 + 5 + 0 + 0.5 + 0.6, 6)
+    expect(costoDeVolver(VIDEO_MESA, mirar)).toBeCloseTo(0 + 15 + 0 + 0.5 + 0.6, 6)
     expect(costoDeVolver(VIDEO_MESA, pedido)).toBeCloseTo(0.6, 6)
     expect(costoDeVolver(VIDEO_MESA, { ...mirar, vuelve_a: { ...mirar.vuelve_a!, paso: 'no-existe' } })).toBe(Number.POSITIVE_INFINITY)
   })
   it('🔴 cabe justo en el tope; un centavo más, no; y respeta la holgura de la prueba', () => {
-    expect(cabeLaVuelta(VIDEO_MESA, e(3.9), 6.1)).toBe(true)
-    expect(cabeLaVuelta(VIDEO_MESA, e(3.91), 6.1)).toBe(false)
+    expect(cabeLaVuelta(VIDEO_MESA, e(28.9), 6.1)).toBe(true)
+    expect(cabeLaVuelta(VIDEO_MESA, e(28.91), 6.1)).toBe(false)
     const conPrueba = { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, prueba: { limite_usd: 20, base_usd: 15, encargo_base_usd: 0 } } }
     expect(cabeLaVuelta(conPrueba, e(1), 6.1)).toBe(false)
     expect(cabeLaVuelta(conPrueba, e(1), 3)).toBe(true)
   })
   it('🔴 (GO Lenovo 18:50 · unificado) la vuelta del PEDIDO usa la misma cuenta: le queda la vuelta Y cabe volver (US$ 0,60) en el tope y en la holgura de la prueba', () => {
     const ev = (gasto: number, vueltas: Record<string, number> = {}) => ({ gasto_usd: gasto, vueltas }) as unknown as Parameters<typeof quedaVueltaALaMesa>[1]
-    expect(quedaVueltaALaMesa(VIDEO_MESA, ev(9.4))).toBe(true)
-    expect(quedaVueltaALaMesa(VIDEO_MESA, ev(9.41))).toBe(false)
+    expect(quedaVueltaALaMesa(VIDEO_MESA, ev(34.4))).toBe(true)
+    expect(quedaVueltaALaMesa(VIDEO_MESA, ev(34.41))).toBe(false)
     expect(quedaVueltaALaMesa(VIDEO_MESA, ev(0, { pedido: 1 }))).toBe(false)
     const conPrueba: Plantilla = { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, prueba: { limite_usd: 2.5, base_usd: 2, encargo_base_usd: 0 } } }
     expect(quedaVueltaALaMesa(conPrueba, ev(0))).toBe(false)
@@ -363,17 +366,17 @@ describe('la plantilla: dos vueltas a la mesa y la indicación de quien mira', (
 
 describe('la migración 202611111730', () => {
   it('🔴 siembra EXACTAMENTE los pasos del código (11: cuadros_video y mirar_video entre video y chequeos)', () => {
-    expect(pasosDe(MIG)).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
+    expect(pasosDe(MIG)).toEqual(pasos1730(VIDEO_MESA.pasos))
     expect(VIDEO_MESA.pasos.find((p) => p.clave === PASO_MIRAR_VIDEO)).toMatchObject({ tipo: 'agente', quien: AGENTE_QUE_MIRA_EL_VIDEO, salida: { esquema: 'mirada_video.v1', reintento_formato: 1 } })
   })
   it('🔴 la reversa devuelve los 9 pasos de antes (los mismos del código menos los 2 de la mirada)', () => {
-    expect(pasosDe(REV)).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos.filter((p) => p.clave !== 'cuadros_video' && p.clave !== PASO_MIRAR_VIDEO))))
+    expect(pasosDe(REV)).toEqual(pasos1730(VIDEO_MESA.pasos.filter((p) => p.clave !== 'cuadros_video' && p.clave !== PASO_MIRAR_VIDEO)))
   })
   it('🔴 no pisan: cada una exige el dato ENTERO de antes (la migración, el que deja 202611111700 de CC4 con la vuelta del pedido; la reversa, el de esta)', () => {
-    const sinMirada = JSON.parse(JSON.stringify(VIDEO_MESA.pasos.filter((p) => p.clave !== 'cuadros_video' && p.clave !== PASO_MIRAR_VIDEO)))
+    const sinMirada = pasos1730(VIDEO_MESA.pasos.filter((p) => p.clave !== 'cuadros_video' && p.clave !== PASO_MIRAR_VIDEO))
     expect(antesDe(MIG)).toEqual(sinMirada)
     expect(antesDe(MIG)[2]).toMatchObject({ clave: 'pedido', vuelve_a: { paso: 'mesa', max: 1 } })
-    expect(antesDe(REV)).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.pasos)))
+    expect(antesDe(REV)).toEqual(pasos1730(VIDEO_MESA.pasos))
     expect(VIDEO_MESA.pasos.find((p) => p.clave === PASO_MIRAR_VIDEO)?.vuelve_a).toEqual({ paso: 'mesa', max: 1, si: { tipo: 'si_artefacto', artefacto: 'mirada_video', campo: 'vuelve_a_la_mesa', igual: true } })
     for (const sql of [MIG, REV]) expect(sql).toContain("IS DISTINCT FROM $antes$")
     // las indicaciones: la migración pone la de quien mira (exige {} antes); la reversa vuelve a {} (exige la de la migración)

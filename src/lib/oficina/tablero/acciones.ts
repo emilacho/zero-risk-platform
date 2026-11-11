@@ -45,7 +45,7 @@ export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
   const maximo = await topeDeLaFamilia(db, enc.familia)
   if (!maximo.ok) return rechazo(maximo.status, maximo.error, maximo.detalle, t)
   // 🔴 CC7 (certificación f01e76c) · lo pedido por encima del tope de la familia NO se rechaza: se RECORTA hacia abajo (gasta menos de lo que Emilio confirmó, nunca más) y se devuelve el efectivo.
-  // Así el botón de hoy (manda 5) sigue sirviendo para una foto de tope 2,5, y un video puede pedir hasta su 10.
+  // Así el botón de hoy (manda 5) sigue sirviendo para una foto de tope 2,5, y un video puede pedir hasta su 35 (202611111930).
   const tope = Math.min(g.tope, maximo.tope)
   if (enc.dry_run === true) return rechazo(409, 'es_un_ensayo', 'un ensayo no se rehace desde el tablero', t)
   // GO Lenovo 11-nov 18:30 (decisión 2) · también una pieza CORTADA POR TOPE (no está terminada); la regla de abajo (`decidirReapertura`) ya la acepta con causa declarada
