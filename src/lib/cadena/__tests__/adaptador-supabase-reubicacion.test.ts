@@ -104,12 +104,12 @@ describe('adaptador · 11-nov #1014 · relectura: el estado de partida y el text
       expect(tieneLaCondicion(c)).toBe(false)
     }
   })
-  it('🔴 el texto guardado lo lee la OFICINA (la cadena no nombra sus tablas): pasa el texto y el id; sin texto, null (nunca lanza)', async () => {
+  it('🔴 el texto guardado lo lee la OFICINA (la cadena no nombra sus tablas): pasa el texto y el id; sin texto, ok con null (nunca lanza)', async () => {
     lectura = { estado_del_motor: { artefactos: { mesa: { datos: { pieza_texto: 'f1 · reubicar · 2026-12-07 · r' } } } } } as never
-    expect(await almacenDeSupabase().textoGuardadoDeLaMesa!('enc-9')).toBe('f1 · reubicar · 2026-12-07 · r')
+    expect(await almacenDeSupabase().textoGuardadoDeLaMesa!('enc-9')).toEqual({ ok: true, texto: 'f1 · reubicar · 2026-12-07 · r' })
     expect(consultas.length).toBeGreaterThan(0)
     expect(filtros(consultas[consultas.length - 1])).toEqual(['id=enc-9'])
     lectura = null
-    expect(await almacenDeSupabase().textoGuardadoDeLaMesa!('enc-9')).toBeNull()
+    expect(await almacenDeSupabase().textoGuardadoDeLaMesa!('enc-9')).toEqual({ ok: true, texto: null })
   })
 })

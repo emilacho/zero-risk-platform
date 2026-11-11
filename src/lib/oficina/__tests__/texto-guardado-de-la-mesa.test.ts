@@ -14,7 +14,7 @@ const conTexto = (t: unknown) => ({ data: { estado_del_motor: { artefactos: { me
 describe('textoGuardadoDeLaMesa', () => {
   it('🔴 sale de `estado_del_motor.artefactos.mesa.datos.pieza_texto` del encargo pedido por su id', async () => {
     const b = base(conTexto('f1 · reubicar · 2026-12-07 · r'))
-    expect(await textoGuardadoDeLaMesa(b.db, 'enc-9')).toBe('f1 · reubicar · 2026-12-07 · r')
+    expect(await textoGuardadoDeLaMesa(b.db, 'enc-9')).toEqual({ ok: true, texto: 'f1 · reubicar · 2026-12-07 · r' })
     expect(b.vistas).toContainEqual(['from', 'oficina_encargos'])
     expect(b.vistas).toContainEqual(['select', 'estado_del_motor'])
     expect(b.vistas).toContainEqual(['eq', 'id', 'enc-9'])
@@ -24,11 +24,14 @@ describe('textoGuardadoDeLaMesa', () => {
     ['sin artefacto', { data: { estado_del_motor: {} }, error: null }],
     ['texto en blanco', conTexto('   ')],
     ['texto que no es texto', conTexto(42)],
-    ['error de la base', { data: conTexto('f1 · reubicar').data, error: { message: 'x' } }],
-  ])('🔴 %s ⇒ null', async (_n, r) => {
-    expect(await textoGuardadoDeLaMesa(base(r).db, 'enc-9')).toBeNull()
+  ])('🔴 %s ⇒ no hay texto (ok, null)', async (_n, r) => {
+    expect(await textoGuardadoDeLaMesa(base(r).db, 'enc-9')).toEqual({ ok: true, texto: null })
   })
-  it('🔴 si la base lanza, null (nunca lanza)', async () => {
-    expect(await textoGuardadoDeLaMesa(base('lanza').db, 'enc-9')).toBeNull()
+  // 🟡 CC7 punto 4 · un error de la base NO es «no hay texto»: la relectura tiene que poder volver a probar
+  it('🔴 error de la base ⇒ ok: false con su motivo (aunque traiga datos)', async () => {
+    expect(await textoGuardadoDeLaMesa(base({ data: conTexto('f1 · reubicar').data, error: { message: 'tiempo agotado' } }).db, 'enc-9')).toEqual({ ok: false, motivo: 'tiempo agotado' })
+  })
+  it('🔴 si la base lanza, ok: false (nunca lanza)', async () => {
+    expect(await textoGuardadoDeLaMesa(base('lanza').db, 'enc-9')).toEqual({ ok: false, motivo: 'caída' })
   })
 })

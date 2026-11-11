@@ -221,7 +221,7 @@ export interface Almacen {
    */
   abrirMesaDeReubicacion?(sobre: import('./reubicar').SobreDeReubicacion): Promise<import('./reubicar').ResultadoDeAbrirMesa>
   /** 11-nov (#1014 · relectura · OPCIONAL): el texto que dejó guardado la mesa de un encargo ya cerrado (sin llamar al agente); null si no hay. Nunca lanza. */
-  textoGuardadoDeLaMesa?(encargoId: string): Promise<string | null>
+  textoGuardadoDeLaMesa?(encargoId: string): Promise<{ ok: true; texto: string | null } | { ok: false; motivo: string }>
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>
   escribirConfig(clave: string, valor: unknown): Promise<void>

@@ -191,5 +191,82 @@ describe.each(CASOS)('$nombre', (k) => {
       await reloj(al, k.ahora)
       expect(filaDe(al, 'pasada-a')).toMatchObject({ estado: 'cancelada', fecha: antier })
     })
+    // 🟡 CC7 punto 2 · la fila que la relectura NO logra reubicar sigue en «perdió su fecha» con el aviso exacto: sin la marca se releería cada 30 min
+    it('🔴 dos pasadas seguidas con una fecha que ya no cumple: UNA relectura, UN aviso por fila y UN resumen', async () => {
+      const al = await comoAnoche(`pasada-a · reubicar · ${k.cerrado} · x
+pasada-b · reubicar · ${k.cerrado} · y`)
+      const r1 = await reloj(al, k.ahora)
+      expect(JSON.stringify(r1.cuerpo).match(/relectura de la respuesta que el agente ya había dado/g) ?? []).toHaveLength(1)
+      expect(filaDe(al, 'pasada-a').estado).toBe('perdio_su_fecha')
+      const avisos = structuredClone(filaDe(al, 'pasada-a').avisos)
+      expect(avisos.filter((a) => /relectura/.test(a))).toHaveLength(1)
+      const r2 = await reloj(al, k.ahora)
+      expect(filaDe(al, 'pasada-a').avisos).toEqual(avisos)
+      expect(JSON.stringify(r2.cuerpo)).not.toMatch(/relectura/)
+      expect(decisionUnica(al, k)[0]!.resumen!.match(/relectura de la respuesta/g)).toHaveLength(1)
+      expect(await avisosDeReubicacion(al, true)).toEqual([])
+    })
+    // 🟡 CC7 punto 3 · como el resto de la reubicación (punto 3 de #1010): una campaña de ensayo no entra
+    it('🔴 una campaña de ensayo no se relee', async () => {
+      const al = await comoAnoche(sinGuion(k))
+      al.campanas.find((c) => c.id === CAMP(k))!.seco = true
+      const filas = structuredClone(al.filasGuardadas)
+      await reloj(al, k.ahora)
+      expect(al.filasGuardadas).toEqual(filas)
+      expect(decisionUnica(al, k)[0]!.releida).toBeUndefined()
+    })
+    it('🔴 un entorno que no puede leer el texto guardado no marca ni manda avisos a la campaña', async () => {
+      const al = await comoAnoche(sinGuion(k))
+      ;(al as { textoGuardadoDeLaMesa?: unknown }).textoGuardadoDeLaMesa = undefined
+      const filas = structuredClone(al.filasGuardadas)
+      const r = await reloj(al, k.ahora)
+      expect(al.filasGuardadas).toEqual(filas)
+      expect(decisionUnica(al, k)[0]!.releida).toBeUndefined()
+      expect(JSON.stringify(r.cuerpo)).not.toMatch(/no se pudo releer/)
+    })
+    // 🟡 CC7 punto 4 · un error pasajero al leer el texto guardado no da la relectura por hecha
+    it('🔴 si la lectura del texto guardado falla, NO se marca y la pasada siguiente lo vuelve a intentar', async () => {
+      const al = await comoAnoche(sinGuion(k))
+      al.textosQueFallan.add('enc-1')
+      const filas = structuredClone(al.filasGuardadas)
+      await reloj(al, k.ahora)
+      expect(al.filasGuardadas).toEqual(filas)
+      expect(decisionUnica(al, k)[0]!.releida).toBeUndefined()
+      al.textosQueFallan.delete('enc-1')
+      await reloj(al, k.ahora)
+      expect(filaDe(al, 'pasada-a')).toMatchObject({ estado: 'validada', fecha: k.abierto })
+      expect(decisionUnica(al, k)[0]).toMatchObject({ releida: true })
+      expect(al.sobresDeReubicacion).toHaveLength(1)
+    })
+  })
+
+  // 🟡 CC7 punto 4 · el mismo hueco de anoche con otra cara: líneas legibles que no son de ESTAS filas
+  describe('(2b) leídas = solo las de las filas de esta decisión', () => {
+    it('🔴 el agente decide sobre filas con otro id: es fallida, con su aviso, y NINGUNA fila se toca', async () => {
+      const al = almacen(k)
+      await reloj(al, k.ahora)
+      const antes = structuredClone(al.filasGuardadas)
+      expect(await recibirReubicacion(al, entrega(k, 1, `fila-a · reubicar · ${k.abierto} · x
+fila-c · descartar · y`), k.ahora)).toMatchObject({ ok: true, estado: 'fallida' })
+      expect(al.filasGuardadas).toEqual(antes)
+      const [d] = decisionUnica(al, k)
+      expect(d).toMatchObject({ estado: 'fallida', avisado: false })
+      expect(d!.motivo).toMatch(/ninguna de sus 2 decisión\(es\) nombra una fila de esta reubicación/)
+    })
+    it('🔴 decidir sobre una fila que no es pasada (la futura) tampoco cuenta como leída', async () => {
+      const al = almacen(k)
+      await reloj(al, k.ahora)
+      const antes = structuredClone(al.filasGuardadas)
+      expect(await recibirReubicacion(al, entrega(k, 1, 'futura · descartar · y'), k.ahora)).toMatchObject({ estado: 'fallida' })
+      expect(al.filasGuardadas).toEqual(antes)
+    })
+    it('🔴 sabotaje: con UNA línea de estas filas entre otras ajenas, se aplica (y la ajena se ignora)', async () => {
+      const al = almacen(k)
+      await reloj(al, k.ahora)
+      expect(await recibirReubicacion(al, entrega(k, 1, `otra · descartar · z
+pasada-a · reubicar · ${k.abierto} · x`), k.ahora)).toMatchObject({ estado: 'aplicada' })
+      expect(filaDe(al, 'pasada-a')).toMatchObject({ estado: 'validada', fecha: k.abierto })
+      expect(decisionUnica(al, k)[0]!.resumen).toMatch(/1 decisión\(es\) sobre filas que no eran pasadas, ignorada/)
+    })
   })
 })

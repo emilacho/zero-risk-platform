@@ -119,7 +119,12 @@ export class AlmacenMemoria implements Almacen {
   }
   /** 11-nov (#1014 · relectura) · el texto guardado de cada encargo de la mesa; la prueba lo fija */
   textosDeLaMesa: Record<string, string> = {}
-  async textoGuardadoDeLaMesa(encargoId: string) { return this.textosDeLaMesa[encargoId] ?? null }
+  /** encargos cuya lectura falla (la base no responde) */
+  textosQueFallan = new Set<string>()
+  async textoGuardadoDeLaMesa(encargoId: string): Promise<{ ok: true; texto: string | null } | { ok: false; motivo: string }> {
+    if (this.textosQueFallan.has(encargoId)) return { ok: false, motivo: 'la base no respondió' }
+    return { ok: true, texto: this.textosDeLaMesa[encargoId] ?? null }
+  }
   async plazos() { return plazosDeLaMigracion() }
   async formatos(): Promise<FormatosPorRed> { return formatosDeLaMigracion() }
   async cargarContexto(clientId: string) { return this.semilla.contextos?.[clientId] ?? null }

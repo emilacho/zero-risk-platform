@@ -163,8 +163,11 @@ export async function recibirReubicacion(al: Almacen, p: EntregaDeReubicacion, a
   const pasadas = filasPasadas(x.filas, x.hoy).filter((f) => d.fila_ids.includes(f.id))
   const leidas = leerDecisiones(p.texto)
   // 11-nov (GO Lenovo 04:15Z · #1014 · 2): «no pude leer» NUNCA equivale a «el agente dijo descartar». El agente respondió y no se leyó ninguna decisión ⇒ fallida, sin tocar filas.
-  if (!leidas.length) {
-    const motivo = 'el agente respondió pero no se pudo leer ninguna decisión en su respuesta (no se tocó ninguna fila)'
+  // 🟡 CC7 punto 4 · cuentan solo las líneas sobre filas de ESTA decisión: si el agente nombró otras (o con otro id), tampoco se leyó nada y es la misma fallida.
+  if (!leidas.some((y) => d.fila_ids.includes(y.fila_id))) {
+    const motivo = leidas.length
+      ? `el agente respondió pero ninguna de sus ${leidas.length} decisión(es) nombra una fila de esta reubicación (no se tocó ninguna fila)`
+      : 'el agente respondió pero no se pudo leer ninguna decisión en su respuesta (no se tocó ninguna fila)'
     await guardar({ estado: 'fallida', motivo, resumen: `reubicación: ${motivo}; la mesa se vuelve a intentar sola hasta el tope.`, avisado: false })
     return { ok: true, estado: 'fallida' }
   }
@@ -210,9 +213,11 @@ async function releerDescartadasPorLectura(al: Almacen, c: Campana, lc: LibretaD
     const perdidas = version === d.calendario_version
       ? x.filas.filter((f) => d.fila_ids.includes(f.id) && f.estado === 'perdio_su_fecha' && (f.avisos ?? []).includes(avisoDeNoDecidida(f.fecha)))
       : []
-    const texto = perdidas.length && al.textoGuardadoDeLaMesa ? await al.textoGuardadoDeLaMesa(d.encargo_id) : null
-    const leidas = leerDecisiones(texto).filter((y) => perdidas.some((f) => f.id === y.fila_id))
-    if (perdidas.length && !texto && !al.textoGuardadoDeLaMesa) continue // este entorno no puede leer el texto guardado: queda para otro reloj, sin marcarla
+    if (perdidas.length && !al.textoGuardadoDeLaMesa) continue // este entorno no puede leer el texto guardado: queda para otro reloj, sin marcarla
+    const guardado = perdidas.length ? await al.textoGuardadoDeLaMesa!(d.encargo_id) : { ok: true as const, texto: null }
+    // 🟡 CC7 punto 4 · un error al leer NO marca: la relectura vuelve a probar en la pasada siguiente. Solo «no hay texto» (o nada que releer) la da por hecha.
+    if (!guardado.ok) { aplicado.push(`reubicación: no se pudo leer la respuesta guardada en ${c.id} (${guardado.motivo.slice(0, 120)}); se reintenta en la próxima pasada`); continue }
+    const leidas = leerDecisiones(guardado.texto).filter((y) => perdidas.some((f) => f.id === y.fila_id))
     lc.decisiones[d.huella] = { ...d, releida: true }
     cambio = true
     if (!leidas.length) continue
