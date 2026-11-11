@@ -373,6 +373,27 @@ describe('la migración 202611111730', () => {
     expect(indDe(REV)).toEqual({})
     expect(indDe(REV, 'ind_antes')).toEqual(JSON.parse(JSON.stringify(VIDEO_MESA.indicaciones)))
   })
+  it('🔴 (CC6) cada guarda es COMPLETA: su condición exacta termina en THEN y levanta excepción (nada entre la condición y el THEN)', () => {
+    const VIEJAS = "ARRAY['abrir','mesa','pedido','video','chequeos','jefatura','chequeos_2','entrega','cierre']"
+    const NUEVAS = "ARRAY['abrir','mesa','pedido','video','cuadros_video','mirar_video','chequeos','jefatura','chequeos_2','entrega','cierre']"
+    const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const guarda = (cond: string) => new RegExp(`${esc(cond)} THEN\\s+RAISE EXCEPTION '`, 'g')
+    for (const [sql, de, a] of [[MIG, VIEJAS, NUEVAS], [REV, NUEVAS, VIEJAS]] as const) {
+      expect(sql.match(guarda("IF EXISTS (SELECT 1 FROM public.oficina_encargos WHERE familia = 'video_mesa' AND estado IN ('abierto', 'en_paso'))"))).toHaveLength(1)
+      expect(sql.match(guarda(`IS DISTINCT FROM ${de}`))).toHaveLength(1)
+      expect(sql.match(guarda(`IS DISTINCT FROM ${a}`))).toHaveLength(1)
+      expect(sql.match(/\$antes\$::jsonb THEN\s+RAISE EXCEPTION '/g)).toHaveLength(1)
+      expect(sql.match(/\$ind_antes\$::jsonb THEN\s+RAISE EXCEPTION '/g)).toHaveLength(1)
+      // y no hay otro IF: toda condición del archivo es una de estas 5
+      expect(sql.match(/^\s*IF /gm)).toHaveLength(5)
+      // la primera guarda de claves va ANTES del UPDATE y la segunda DESPUÉS
+      const u = sql.indexOf('UPDATE public.oficina_tipos_de_grupo')
+      expect(sql.indexOf(`IS DISTINCT FROM ${de} THEN`)).toBeLessThan(u)
+      expect(sql.indexOf(`IS DISTINCT FROM ${a} THEN`)).toBeGreaterThan(u)
+      expect(sql.indexOf('$antes$::jsonb THEN')).toBeLessThan(u)
+      expect(sql.indexOf('$ind_antes$::jsonb THEN')).toBeLessThan(u)
+    }
+  })
   it('🔴 las dos se niegan con encargos de video vivos y comprueban los pasos antes y después; solo tocan las columnas pasos e indicaciones', () => {
     for (const sql of [MIG, REV]) {
       expect(sql).toContain("WHERE familia = 'video_mesa' AND estado IN ('abierto', 'en_paso')) THEN")
