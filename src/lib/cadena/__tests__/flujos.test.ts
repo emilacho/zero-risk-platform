@@ -574,7 +574,7 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
       { url: urls[0], razon: 'no es texto (application/pdf)' },
       { url: urls[1], razon: 'no es texto (image/png)' },
       { url: urls[2], razon: 'sin texto legible (0 caracteres)' },
-      { url: urls[3], razon: 'sin texto legible (trae caracteres rotos: parece un archivo binario)' },
+      { url: urls[3], razon: 'sin texto legible (trae caracteres de control: parece un archivo binario)' },
     ])
     const cob = m.al.coberturas.find((c: any) => c.tipo === 'feriados_locales')
     expect(cob).toMatchObject({ estado: 'sin_fuente' })

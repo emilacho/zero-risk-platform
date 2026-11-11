@@ -47,18 +47,43 @@ describe('lo que se publica en el flujo vivo de fechas', () => {
     expect(j.paginas).toEqual([{ url: urls[3], texto: 'El 10 de agosto es el Primer Grito de Independencia.' }])
     expect(j.paginas_descartadas.map((d: any) => d.razon)).toEqual(['no es texto (application/pdf)', 'no es texto (image/png)', 'sin texto legible (0 caracteres)'])
   })
-  it('🔴 sin tipo declarado, lo que no es texto se reconoce por su contenido: pocas letras (un PDF sin comprimir) o caracteres de reemplazo (bytes rotos)', () => {
-    const roto = String.fromCharCode(0xfffd)
+  const roto = String.fromCharCode(0xfffd)
+  it('🔴 sin tipo declarado, lo que no es texto se reconoce por su contenido: pocas letras (un PDF sin comprimir) o caracteres de control', () => {
     const j = correrJuntar([
       { statusCode: 200, body: '%PDF-1.7 1 0 obj << /Length 812 >> stream 0 0 0 1 2 3 4 5 6 7 8 9 10 11 12 endstream 0000000017 00000 n 0000000123 00000 n %%EOF' },
-      { statusCode: 200, body: `Calendario oficial de feriados nacionales ${roto}${roto} del año dos mil veintiséis` },
+      { statusCode: 200, body: `Calendario oficial de feriados nacionales ${String.fromCharCode(2)}${String.fromCharCode(17)} del año dos mil veintiséis` },
       { statusCode: 200, body: '<p>El 2 de noviembre es el Día de los Difuntos en todo el país.</p>' },
     ], ['https://a.test/', 'https://b.test/', 'https://c.test/'])
     expect(j.paginas.map((p: any) => p.url)).toEqual(['https://c.test/'])
     expect(j.paginas_descartadas).toEqual([
       { url: 'https://a.test/', razon: expect.stringMatching(/^sin texto legible \(\d+ % de letras: parece un archivo binario\)$/) },
-      { url: 'https://b.test/', razon: 'sin texto legible (trae caracteres rotos: parece un archivo binario)' }, // tiene muchas letras: lo descarta el carácter roto
+      { url: 'https://b.test/', razon: 'sin texto legible (trae caracteres de control: parece un archivo binario)' }, // tiene muchas letras: lo descartan los de control
     ])
+  })
+  // 11-nov · ADENDA 1 de CC7 (🟡 chico sobre 0862529): el carácter roto descarta solo si son muchos
+  const LATIN1 = `<p>Feriados nacionales de 2026: el 1 de enero, A${roto}o Nuevo; el 1 de mayo, D${roto}a del Trabajo; el 10 de agosto, Primer Grito de Independencia; el 2 de noviembre, D${roto}a de los Difuntos; el 3 de noviembre, Independencia de Cuenca.</p>`
+  it.each([['text/html; charset=ISO-8859-1'], [null]])('🔴 una página oficial en latin-1 leída como UTF-8 (un carácter roto en cada ñ o tilde) PASA y llega con sus fechas · tipo %s', (tipo) => {
+    const j = correrJuntar([{ statusCode: 200, ...(tipo ? { headers: { 'content-type': tipo } } : {}), body: LATIN1 }], ['https://latin1.test/'])
+    expect(j.paginas_descartadas).toEqual([])
+    expect(j.paginas[0].texto).toContain('el 10 de agosto, Primer Grito de Independencia')
+  })
+  it.each([['text/html'], ['text/plain'], [null]])('🔴 un binario mal declarado como texto (lleno de caracteres rotos, sin caracteres de control) se descarta · tipo %s', (tipo) => {
+    const binario = Array.from({ length: 40 }, (_, i) => `obj${i} ${roto}${roto}x${roto}Q`).join(' ')
+    const j = correrJuntar([{ statusCode: 200, ...(tipo ? { headers: { 'content-type': tipo } } : {}), body: binario }], ['https://binario.test/'])
+    expect(j.paginas).toEqual([])
+    expect(j.paginas_descartadas).toEqual([{ url: 'https://binario.test/', razon: expect.stringMatching(/^sin texto legible \(\d+ % de caracteres rotos: parece un archivo binario\)$/) }])
+  })
+  it('🔴 el límite de rotos es el 5 %: justo por debajo pasa, justo por encima se descarta (con tipo de texto)', () => {
+    const base = 'Feriadosnacionalesdelaño' // 24 visibles por bloque
+    const conRotos = (n: number) => base.repeat(4) + roto.repeat(n) // 96 + n visibles
+    const pct = (n: number) => n / (96 + n)
+    expect(pct(5)).toBeLessThan(0.05); expect(pct(6)).toBeGreaterThan(0.05)
+    const j = correrJuntar([5, 6].map((n) => ({ statusCode: 200, headers: { 'content-type': 'text/plain' }, body: conRotos(n) })), ['https://cinco.test/', 'https://seis.test/'])
+    expect(j.paginas.map((p: any) => p.url)).toEqual(['https://cinco.test/'])
+    expect(j.paginas_descartadas.map((d: any) => d.url)).toEqual(['https://seis.test/'])
+    // exactamente el 5 % (95 letras + 5 rotos) todavía pasa: descarta lo que SUPERA el límite
+    const justo = correrJuntar([{ statusCode: 200, headers: { 'content-type': 'text/plain' }, body: base.repeat(4).slice(0, 95) + roto.repeat(5) }], ['https://justo.test/'])
+    expect(justo.paginas_descartadas).toEqual([])
   })
   // 11-nov · pedidos de CC7 (🟡 chico sobre bfe8559)
   const proporcion = (t: string) => { const v = t.replace(/\s/g, ''); return (v.match(/\p{L}/gu) || []).length / v.length }
