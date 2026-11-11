@@ -106,8 +106,7 @@ export function elementosDelKit(b: Pick<BriefLeido, 'elementos'>): { elementos: 
   return { elementos, ilegibles }
 }
 
-/** ¿es un post de imagen fija? (el brief dice «Instagram · imagen» / «imagen fija») */
-export const esPostDeImagen = (b: BriefLeido): boolean => /imagen/i.test(b.formato) || /imagen fija/i.test(b.que_es)
+// GO 11-nov «la mesa confía en la familia»: `esPostDeImagen` (/imagen/ en el texto) se quitó; la sala confía en la familia que decidió la cadena (`familia-del-brief.ts`)
 
 /** proporción pedida en LÍMITES: «4:5» si lo menciona antes que «1:1» y ambos son opciones, la primera que aparezca; por omisión 1:1 */
 export function proporcionDelBrief(b: Pick<BriefLeido, 'limites'>, porOmision = '1:1'): string {

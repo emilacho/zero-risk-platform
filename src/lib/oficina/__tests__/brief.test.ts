@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { esPostDeImagen, fechaLimiteDelBrief, parsearBrief, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, seccionDelBrief } from '../brief'
+import { fechaLimiteDelBrief, parsearBrief, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, seccionDelBrief } from '../brief'
 import { PARTE_REAL } from './memoria'
 
 describe('leer un brief de la parte (texto real del cliente piloto, extracto)', () => {
@@ -27,10 +27,6 @@ describe('leer un brief de la parte (texto real del cliente piloto, extracto)', 
   })
   it('lo que el brief no trae queda vacío (nada se inventa)', () => {
     expect(b.visual_obligatorio).toEqual([]); expect(b.visual_prohibido).toEqual([])
-  })
-  it('un brief de configuración no es un post de imagen; el de imagen sí', () => {
-    expect(esPostDeImagen(parsearBrief(PARTE_REAL, 'BRF-0001')!)).toBe(false)
-    expect(esPostDeImagen(b)).toBe(true)
   })
   it('proporción: la primera que menciona LÍMITES; por omisión 1:1', () => {
     expect(proporcionDelBrief(b)).toBe('1:1')

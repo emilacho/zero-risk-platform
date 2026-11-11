@@ -9,7 +9,8 @@
 import crypto from 'node:crypto'
 import { CABECERA_SALTAR_EDITOR } from '../cadena/constantes'
 import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } from './ayudas'
-import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, esPostDeImagen, type BriefLeido } from './brief'
+import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, type BriefLeido } from './brief'
+import { briefEsDelEncargo } from './familia-del-brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
@@ -359,7 +360,8 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       const planId = planDeOrigen(parte.texto)
       const plan = planId ? await P.plan(planId, enc.client_id) : null
       if (plan) fu.plan_texto = plan
-      if (!esPostDeImagen(brief)) return { res: { costo_usd: 0 }, fallido: `el brief ${enc.brief_id} no es un post de imagen (${brief.formato}): esta sala hace post con foto` }
+      const sala = await briefEsDelEncargo(brief, enc.familia, P.formatosDeLaCadena?.bind(P))
+      if (!sala.ok) return { res: { costo_usd: 0 }, fallido: sala.motivo }
       const proporcion = proporcionDelBrief(brief, String(pl.limites.formato_por_omision ?? '1:1'))
       return { res: { costo_usd: 0, artefacto: { brief, proporcion, F: fu } } }
     }
