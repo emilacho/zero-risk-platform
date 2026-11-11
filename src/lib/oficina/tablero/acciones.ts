@@ -44,7 +44,9 @@ export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
   const t = { ...toca, client_id: String(enc.client_id) }
   const maximo = await topeDeLaFamilia(db, enc.familia)
   if (!maximo.ok) return rechazo(maximo.status, maximo.error, maximo.detalle, t)
-  if (g.tope > maximo.tope) return rechazo(400, 'tope_demasiado_alto', `el tope máximo para rehacer una pieza de ${String(enc.familia)} es US$ ${maximo.tope} (el de su familia)`, t)
+  // 🔴 CC7 (certificación f01e76c) · lo pedido por encima del tope de la familia NO se rechaza: se RECORTA hacia abajo (gasta menos de lo que Emilio confirmó, nunca más) y se devuelve el efectivo.
+  // Así el botón de hoy (manda 5) sigue sirviendo para una foto de tope 2,5, y un video puede pedir hasta su 10.
+  const tope = Math.min(g.tope, maximo.tope)
   if (enc.dry_run === true) return rechazo(409, 'es_un_ensayo', 'un ensayo no se rehace desde el tablero', t)
   if (enc.estado !== 'fallido') return rechazo(409, 'no_fallo', `solo se rehace una pieza que falló (esta está «${String(enc.estado)}»)`, t)
   const hermanos = await db.from('oficina_encargos').select('id, version_encargo, dry_run').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).eq('tipo_de_grupo', enc.tipo_de_grupo)
@@ -56,13 +58,13 @@ export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
   const sala = esObjeto(enc.sala_ref) ? enc.sala_ref : {}
   const cal = esObjeto(sala.fila) ? { fila_id: sala.fila.id, fecha: sala.fila.fecha, hora: sala.fila.hora } : {}
   const a = await abrirEncargo(puertos(), {
-    cuerpo: { parte_id: enc.parte_id, brief_id: enc.brief_id, dry_run: false, familia: enc.familia, tope_usd: g.tope, reabrir_causa_corregida: causa, ...Object.fromEntries(Object.entries(cal).filter(([, v]) => typeof v === 'string')) },
+    cuerpo: { parte_id: enc.parte_id, brief_id: enc.brief_id, dry_run: false, familia: enc.familia, tope_usd: tope, reabrir_causa_corregida: causa, ...Object.fromEntries(Object.entries(cal).filter(([, v]) => typeof v === 'string')) },
     client_id: String(enc.client_id), target_step_id: TARGET_STEP_PRODUCIR, sala_ref: { _journey_id: sala._journey_id ?? null, _sala_correlation_id: sala._sala_correlation_id ?? null },
   })
   if (a.status !== 200 || a.cuerpo.accion === 'cerrado') return { status: a.status, cuerpo: { ok: false, error: 'no_se_pudo_rehacer', detalle: a.cuerpo }, toca: t }
   if (a.cuerpo.accion === 'ya_existia') return { status: 409, cuerpo: { ok: false, error: 'no_se_reabre', detalle: 'el sistema no reabre esta pieza (ya se agotaron sus 3 intentos o gastó sin causa nueva): usa «Pedir pieza nueva»' }, toca: t }
   const turno = esObjeto(a.cuerpo.turno) ? a.cuerpo.turno : null
-  return { status: 200, cuerpo: { ok: true, ...a.cuerpo, tope_usd: g.tope }, toca: { ...t, encargo_id: String(a.cuerpo.encargo_id ?? cuerpo.encargo_id) }, ...(a.cuerpo.accion === 'esperar' && turno ? { despertar: { encargo_id: String(a.cuerpo.encargo_id), turno } } : {}) }
+  return { status: 200, cuerpo: { ok: true, ...a.cuerpo, tope_usd: tope, tope_de_la_familia_usd: maximo.tope, ...(tope < g.tope ? { tope_pedido_usd: g.tope } : {}) }, toca: { ...t, encargo_id: String(a.cuerpo.encargo_id ?? cuerpo.encargo_id) }, ...(a.cuerpo.accion === 'esperar' && turno ? { despertar: { encargo_id: String(a.cuerpo.encargo_id), turno } } : {}) }
 }
 
 // ───────────────────────── cliente

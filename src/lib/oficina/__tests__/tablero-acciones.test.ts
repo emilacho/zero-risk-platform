@@ -177,7 +177,10 @@ describe('rehacer-pieza', () => {
   const gasto = { confirmo_gasto: true, tope_usd: 3 }
   const fila = (extra: Record<string, unknown> = {}) => ({ id: ENC, client_id: CLIENTE, parte_id: PARTE, brief_id: 'BRF-0003', tipo_de_grupo: 'post_img', familia: 'post_img', version_encargo: 1, estado: 'fallido', dry_run: false, sala_ref: null, ...extra })
   /** las plantillas como las lee la oficina (por familia, con `limites`): DOS familias con topes DISTINTOS (el dato, no el código, decide el máximo) */
-  const PLANTILLAS = [{ tipo: 'post_img', familia: 'post_img', limites: { ...POST_IMG.limites, tope_encargo_usd: 4 } }, { tipo: 'video_mesa', familia: 'video_mesa', limites: { ...VIDEO_MESA.limites } }]
+  /** las plantillas con los topes VIVOS (SELECT de CC7 11-nov 17:2xZ: post_img 2,5 · video_mesa 10), como las lee la oficina (por familia, con `limites`) */
+  const PLANTILLAS = [{ tipo: 'post_img', familia: 'post_img', limites: { ...POST_IMG.limites, tope_encargo_usd: 2.5 } }, { tipo: 'video_mesa', familia: 'video_mesa', limites: { ...VIDEO_MESA.limites } }]
+  /** lo que manda HOY el botón del tablero (`zero-risk-dashboard` lib/tablero-acciones.ts: TOPE_POR_PIEZA_USD = 5) */
+  const DEL_TABLERO = 5
   const conPlantillas = (db: DbFalsa) => db.semilla('oficina_tipos_de_grupo', PLANTILLAS.map((x) => ({ ...x, limites: { ...x.limites } })))
   it('sin confirmar el gasto o sin tope no hace nada (ni lee la base)', async () => {
     const db = conPlantillas(new DbFalsa().semilla('oficina_encargos', [fila()]))
@@ -186,25 +189,25 @@ describe('rehacer-pieza', () => {
     expect((await llamar('rehacer-pieza', db, { encargo_id: ENC, confirmo_gasto: true, tope_usd: 0 })).status).toBe(400)
     expect((await llamar('rehacer-pieza', db, { encargo_id: 'x', ...gasto })).status).toBe(400)
   })
-  it('🔴 GO Lenovo 11-nov (opción A) · el máximo para rehacer es el tope de la FAMILIA de la pieza, no US$ 5 fijo: foto hasta 4, video hasta 10', async () => {
-    const foto = (tope: number) => llamar('rehacer-pieza', conPlantillas(new DbFalsa().semilla('oficina_encargos', [fila()])), { encargo_id: ENC, confirmo_gasto: true, tope_usd: tope }, crearMemoria({ plantilla: POST_IMG, fuentes: FUENTES }).P)
-    const s = await foto(4.01)
-    expect(s.status).toBe(400)
-    expect(s.cuerpo).toMatchObject({ error: 'tope_demasiado_alto' })
-    expect(String(s.cuerpo.detalle)).toContain('US$ 4')
+  it('🔴 CC7 · con los topes vivos y el cuerpo que manda el tablero (5): una FOTO se sigue rehaciendo, recortada a su 2,5, y la respuesta dice el tope efectivo y el de la familia', async () => {
+    const M = crearMemoria({ plantilla: POST_IMG, fuentes: FUENTES })
+    const antes = new Set(M.encargos.keys())
+    const s = await llamar('rehacer-pieza', conPlantillas(new DbFalsa().semilla('oficina_encargos', [fila()])), { encargo_id: ENC, confirmo_gasto: true, tope_usd: DEL_TABLERO }, M.P)
+    expect(s).toMatchObject({ status: 200, cuerpo: { ok: true, tope_usd: 2.5, tope_de_la_familia_usd: 2.5, tope_pedido_usd: 5 } })
+    expect([...M.encargos.values()].filter((x) => !antes.has(x.id)).map((x) => x.tope_usd)).toEqual([2.5])
+  })
+  it('🔴 GO Lenovo 11-nov (opción A) · un VIDEO puede pedir hasta el tope de SU familia (10): con 10 nace con 10; por encima se recorta a 10; nunca sube de lo pedido', async () => {
     const MV = crearMemoria({ plantilla: VIDEO_MESA, fuentes: FUENTES })
-    const video = (tope: number) => llamar('rehacer-pieza', conPlantillas(new DbFalsa().semilla('oficina_encargos', [fila({ tipo_de_grupo: 'video_mesa', familia: 'video_mesa' })])), { encargo_id: ENC, confirmo_gasto: true, tope_usd: tope }, MV.P)
-    expect((await video(10.01)).cuerpo).toMatchObject({ error: 'tope_demasiado_alto' })
-    // el reel de Olón del 11-nov: un video con el tope de su familia ya no se rechaza (antes, más de 5 → 400)
-    // (en memoria no hay brazo de video: la pieza se abre con ese tope y luego cae al cotizar, que es otra cosa)
-    for (const tope of [10, 6]) {
+    const video = async (tope: number) => {
       const antes = new Set(MV.encargos.keys())
-      const v = await video(tope)
-      expect(v.cuerpo).not.toMatchObject({ error: 'tope_demasiado_alto' })
-      const nuevos = [...MV.encargos.values()].filter((x) => !antes.has(x.id))
-      expect(nuevos.map((x) => [x.familia, x.tope_usd])).toEqual([['video_mesa', tope]])
+      const s = await llamar('rehacer-pieza', conPlantillas(new DbFalsa().semilla('oficina_encargos', [fila({ tipo_de_grupo: 'video_mesa', familia: 'video_mesa' })])), { encargo_id: ENC, confirmo_gasto: true, tope_usd: tope }, MV.P)
+      // (en memoria no hay brazo de video: la pieza se abre con ese tope y luego cae al cotizar, que es otra cosa)
+      return { s, topes: [...MV.encargos.values()].filter((x) => !antes.has(x.id)).map((x) => [x.familia, x.tope_usd]) }
     }
-    expect(await foto(4)).toMatchObject({ status: 200, cuerpo: { ok: true, tope_usd: 4 } })
+    expect((await video(10)).topes).toEqual([['video_mesa', 10]])
+    expect((await video(12)).topes).toEqual([['video_mesa', 10]])
+    // ⚠️ lo que manda HOY el botón (5) da un video de 5: por eso el tablero tiene que mostrar y mandar el tope de la familia (otra entrega; ver papel de CC2)
+    expect((await video(DEL_TABLERO)).topes).toEqual([['video_mesa', 5]])
   })
   it('sin plantilla de su familia, sin tope legible o sin familia → 409 y no reabre', async () => {
     const sola = new DbFalsa().semilla('oficina_encargos', [fila()])
