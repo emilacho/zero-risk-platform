@@ -4,6 +4,7 @@
 import { createHash } from 'node:crypto'
 import type { Almacen, Campana } from './almacen'
 import { restarDias, semanaIso, sumarDias } from './fechas'
+import { filaSinFamilia } from './sin-familia'
 import type { Fila, FormatosPorRed } from './tipos'
 
 /** los días que el formato necesita para producirse (`lead_dias` de `cadena_formatos_por_red`); sin dato, 3 · lo comparten los lotes y el recorte de la tanda */
@@ -25,8 +26,11 @@ export function fueraDePlazoDeProduccion(f: Pick<Fila, 'fecha' | 'red' | 'format
 export interface LoteVencido { lote: string; fila_ids: string[]; idempotency_key: string }
 export const huellaDeLote = (filaIds: string[]): string => createHash('sha256').update([...filaIds].sort().join(',')).digest('hex').slice(0, 8)
 
-/** los lotes vencidos de una campaña ACTIVA a la fecha `hoy` (AAAA-MM-DD) · lo usan el reloj (`filasLotes`) y el arranque por evento: el MISMO cálculo */
-export async function lotesVencidos(al: Almacen, c: Campana, hoy: string): Promise<{ lotes: LoteVencido[]; version: number }> {
+/**
+ * los lotes vencidos de una campaña ACTIVA a la fecha `hoy` (AAAA-MM-DD) · lo usan el reloj (`filasLotes`) y el arranque por evento: el MISMO cálculo
+ * 11-nov (GO Lenovo · formatos sin familia): las filas vencidas cuyo formato no tiene familia NO entran a ningún lote; vuelven aparte en `sin_familia` (`sin-familia.ts`)
+ */
+export async function lotesVencidos(al: Almacen, c: Campana, hoy: string): Promise<{ lotes: LoteVencido[]; version: number; sin_familia: Fila[] }> {
   const formatos = await al.formatos()
   const holgura = typeof (await al.leerConfig('holgura_dias')) === 'number' ? ((await al.leerConfig('holgura_dias')) as number) : 3
   const version = Math.max(1, await al.ultimaVersionDeCalendario(c.id))
@@ -36,11 +40,13 @@ export async function lotesVencidos(al: Almacen, c: Campana, hoy: string): Promi
     const lead = leadDeFormato(formatos, f)
     return restarDias(f.fecha, lead + holgura) <= hoy && f.fecha >= hoy
   })
+  const sin_familia = vencen.filter((f) => filaSinFamilia(f, formatos))
+  const fuera = new Set(sin_familia.map((f) => f.id))
   const porSemana = new Map<string, Fila[]>()
-  for (const f of vencen) porSemana.set(semanaIso(f.fecha), [...(porSemana.get(semanaIso(f.fecha)) ?? []), f])
+  for (const f of vencen) if (!fuera.has(f.id)) porSemana.set(semanaIso(f.fecha), [...(porSemana.get(semanaIso(f.fecha)) ?? []), f])
   const lotes = [...porSemana.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([lote, fs]) => {
     const fila_ids = fs.map((f) => f.id)
     return { lote, fila_ids, idempotency_key: conHuella ? `${c.id}:${lote}:${version}:${huellaDeLote(fila_ids)}` : `${c.id}:${lote}:${version}` }
   })
-  return { lotes, version }
+  return { lotes, version, sin_familia }
 }

@@ -337,7 +337,8 @@ export function almacenDeSupabase(): Almacen {
       try {
         // carga perezosa: el buzón solo se importa cuando hay un lote muerto (el almacén no engorda para el resto de las llamadas)
         const [{ avisar }, { dependenciasReales }] = await Promise.all([import('@/lib/avisos/nucleo'), import('@/lib/avisos/adaptadores')])
-        const r = await avisar(dependenciasReales(db as unknown as Parameters<typeof dependenciasReales>[0]), { ...a, tipo: 'alarma', origen: 'cadena/reloj · lote sin parte', origen_tipo: 'plataforma' })
+        const { origen, ...resto } = a
+        const r = await avisar(dependenciasReales(db as unknown as Parameters<typeof dependenciasReales>[0]), { ...resto, tipo: 'alarma', origen: origen ?? 'cadena/reloj · lote sin parte', origen_tipo: 'plataforma' })
         return { ok: true, accion: `${r.accion} · slack ${r.slack}` }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'error' } }
     },

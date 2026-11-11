@@ -297,7 +297,7 @@ export interface Almacen {
    * `avisarLoteMuerto` = abre (o suma una repetición a) el incidente del buzón C1; nunca lanza: devuelve la acción o el error.
    */
   enviosDeLote?(clientId: string, lote: string, llave: string, filasDeHoy: readonly string[]): Promise<import('./lote-muerto').EnviosDeLote>
-  avisarLoteMuerto?(a: { clave: string; client_id: string; titulo: string; detalle: string; workflow_id: string | null; workflow_execution_id: string | null }): Promise<{ ok: true; accion: string } | { ok: false; error: string }>
+  avisarLoteMuerto?(a: { clave: string; client_id: string; titulo: string; detalle: string; workflow_id: string | null; workflow_execution_id: string | null; /** 11-nov · de dónde sale el aviso (sin él: «lote sin parte») */ origen?: string }): Promise<{ ok: true; accion: string } | { ok: false; error: string }>
   // validaciones
   guardarValidaciones(campanaId: string, objeto: ObjetoDeValidacion, version: number, tanda: number | null, intento: 1 | 2, hallazgos: Hallazgo[], seco: boolean): Promise<void>
   /** r74 · los hallazgos que BLOQUEAN del último intento guardado de una tanda del calendario (para pedir la corrección si la llamada de corrección murió) */
