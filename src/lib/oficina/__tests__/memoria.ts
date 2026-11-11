@@ -14,7 +14,7 @@ import type { FotoEtiquetada } from '../fotos'
 import type { FilaDeFormato } from '../entrega'
 import type { ConfigDeOficina } from '../sobre'
 import type { Plantilla } from '../tipos'
-import { decidirReapertura } from '../reapertura'
+import { decidirReapertura, rastroDe } from '../reapertura'
 
 export const CLIENTE = 'cliente-de-prueba'
 export const PARTE = '426af72d-12c0-471c-9fda-2a2978db5175'
@@ -91,7 +91,7 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
         version = (previos[0]?.version_encargo ?? 0) + 1
         salaRef = { ...(n.sala_ref ?? {}), re_revision: n.re_revision }
       } else if (previos[0]) {
-        const d = decidirReapertura({ estado: previos[0].estado, gasto_usd: previos[0].gasto_usd, version_encargo: previos[0].version_encargo, pasos_ejecutados: previos[0].estado_del_motor.pasos_ejecutados }, n.reabrir_causa)
+        const d = decidirReapertura(rastroDe(previos[0]), previos.filter((x) => x.dry_run !== true).map(rastroDe), n.reabrir_causa)
         if (d.accion === 'devolver') return { ok: true, encargo: previos[0], nuevo: false }
         version = d.version
         if (d.por_causa) salaRef = { ...(n.sala_ref ?? {}), reapertura: { causa_corregida: d.por_causa, desde_version: previos[0].version_encargo } }
@@ -102,6 +102,8 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
       return { ok: true, encargo: e, nuevo: true }
     },
     leerEncargo: async (id) => { const e = m.encargos.get(id); return e ? JSON.parse(JSON.stringify(e)) : null },
+    // 11-nov · regla (b) · las versiones reales del mismo brief y grupo (como el almacén real)
+    hermanosDe: async (enc) => [...m.encargos.values()].filter((x) => x.parte_id === enc.parte_id && x.brief_id === enc.brief_id && x.tipo_de_grupo === enc.tipo_de_grupo && x.dry_run !== true).map(rastroDe),
     turnoAbierto: async (id) => [...(m.turnos.get(id)?.values() ?? [])].find((t) => t.estado === 'corriendo') ?? null,
     acusarTurno: async (id, n, ejecucion) => {
       const t = m.turnos.get(id)?.get(n)

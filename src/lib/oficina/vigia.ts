@@ -156,7 +156,8 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date, lecto
     const veces = enc.estado_del_motor.vueltas[clave] ?? 0
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: enc.estado_del_motor, gasto_usd: enc.gasto_usd, turno: { n: Number(t.n), paso: String(t.paso), tipo: 'agente', agente: null, estado: 'muerto', dispatch_key: null, cost_usd: 0, error: sinVuelta } })
     if (veces >= 1) {
-      await fallar(P, enc, `el paso «${String(t.paso)}» murió dos veces (${sinVuelta})`)
+      // 11-nov · regla (b) · el turno que murió dos veces sin vuelta es un corte por causa nuestra (lo detecta el vigía): no cuenta entre las 3
+      await fallar(P, enc, `el paso «${String(t.paso)}» murió dos veces (${sinVuelta})`, 'vigia_sin_vuelta')
       fallidos.push(enc.id)
       cierres.push({ encargo_id: enc.id, resultado_para_la_sala: 'fallido', sala_ref: enc.sala_ref, client_id: enc.client_id, brief_id: enc.brief_id })
       continue

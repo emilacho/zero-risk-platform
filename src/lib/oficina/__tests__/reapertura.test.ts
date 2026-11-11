@@ -14,33 +14,33 @@ import { CLIENTE, PARTE, crearMemoria } from './memoria'
 
 const nuevo = (brief_id = 'BRF-0001', extra: Partial<NuevoEncargo> = {}): NuevoEncargo => ({ client_id: CLIENTE, parte_id: PARTE, brief_id, tipo_de_grupo: 'carrusel_ig_v1', familia: 'carrusel_ig_v1', tope_usd: 1.5, dry_run: false, prueba: false, sala_ref: null, estado_del_motor: estadoInicial(), ...extra })
 const fila = (brief_id: string, o: Record<string, unknown> = {}) => ({ id: `e-${brief_id}-${o.version_encargo ?? 1}`, client_id: CLIENTE, parte_id: PARTE, brief_id, tipo_de_grupo: 'carrusel_ig_v1', familia: 'carrusel_ig_v1', version_encargo: 1, estado: 'fallido', gasto_usd: 0, tope_usd: 1.5, dry_run: false, estado_del_motor: estadoInicial(), ...o })
-const rastro = (estado: string, gasto_usd = 0, version_encargo = 1, pasos_ejecutados = 0) => ({ estado, gasto_usd, version_encargo, pasos_ejecutados })
+const rastro = (estado: string, gasto_usd = 0, version_encargo = 1, pasos_ejecutados = 0) => ({ estado, gasto_usd, version_encargo, pasos_ejecutados, cortada: false })
 
 describe('la decisión (pura)', () => {
   it('solo un fallido SIN gasto y del PRIMER paso es recuperable (un freno de gasto corta una llamada de un paso posterior: no se reabre solo)', () => {
     expect(esFallidoRecuperable(rastro('fallido'))).toBe(true)
     expect(esFallidoRecuperable(rastro('fallido', 0.01))).toBe(false)
     expect(esFallidoRecuperable(rastro('fallido', 0, 1, 1))).toBe(false)
-    expect(decidirReapertura(rastro('fallido', 0, 1, 2))).toEqual({ accion: 'devolver' })
+    expect(decidirReapertura(rastro('fallido', 0, 1, 2), [])).toEqual({ accion: 'devolver' })
     for (const e of ['abierto', 'en_paso', 'cerrado', 'cerrado_por_tope']) expect(esFallidoRecuperable(rastro(e))).toBe(false)
   })
   it('reabre con la versión siguiente; en la última permitida, no', () => {
-    expect(decidirReapertura(rastro('fallido', 0, 1))).toEqual({ accion: 'reabrir', version: 2 })
-    expect(decidirReapertura(rastro('fallido', 0, 2))).toEqual({ accion: 'reabrir', version: 3 })
-    expect(decidirReapertura(rastro('fallido', 0, MAX_VERSIONES_POR_BRIEF))).toEqual({ accion: 'devolver' })
+    expect(decidirReapertura(rastro('fallido', 0, 1), [])).toEqual({ accion: 'reabrir', version: 2 })
+    expect(decidirReapertura(rastro('fallido', 0, 2), [])).toEqual({ accion: 'reabrir', version: 3 })
+    expect(decidirReapertura(rastro('fallido', 0, MAX_VERSIONES_POR_BRIEF), [])).toEqual({ accion: 'devolver' })
   })
   it('lo que gastó, lo cerrado por tope, lo vivo y lo terminado bien se devuelve, no se reabre', () => {
-    for (const e of [rastro('fallido', 0.2), rastro('cerrado_por_tope'), rastro('abierto'), rastro('en_paso'), rastro('cerrado')]) expect(decidirReapertura(e)).toEqual({ accion: 'devolver' })
+    for (const e of [rastro('fallido', 0.2), rastro('cerrado_por_tope'), rastro('abierto'), rastro('en_paso'), rastro('cerrado')]) expect(decidirReapertura(e, [])).toEqual({ accion: 'devolver' })
   })
   it('el reintento solo da por «llegado» lo que no se puede reabrir', () => {
-    expect(bloqueaElReintento(rastro('fallido'))).toBe(false)
-    expect(bloqueaElReintento(rastro('fallido', 0, MAX_VERSIONES_POR_BRIEF))).toBe(true)
-    expect(bloqueaElReintento(rastro('fallido', 0.2))).toBe(true)
-    for (const e of ['abierto', 'en_paso', 'cerrado', 'cerrado_por_tope']) expect(bloqueaElReintento(rastro(e))).toBe(true)
+    expect(bloqueaElReintento(rastro('fallido'), [])).toBe(false)
+    expect(bloqueaElReintento(rastro('fallido', 0, MAX_VERSIONES_POR_BRIEF), [])).toBe(true)
+    expect(bloqueaElReintento(rastro('fallido', 0.2), [])).toBe(true)
+    for (const e of ['abierto', 'en_paso', 'cerrado', 'cerrado_por_tope']) expect(bloqueaElReintento(rastro(e), [])).toBe(true)
   })
   it('el aviso único es de la última versión', () => {
-    expect(agotaLasVersiones({ version_encargo: 2 })).toBe(false)
-    expect(agotaLasVersiones({ version_encargo: 3 })).toBe(true)
+    expect(agotaLasVersiones(rastro('fallido', 0, 2), [])).toBe(false)
+    expect(agotaLasVersiones(rastro('fallido', 0, 3), [])).toBe(true)
   })
 })
 

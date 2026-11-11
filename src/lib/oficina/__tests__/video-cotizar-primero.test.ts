@@ -148,7 +148,7 @@ describe.each(CLIENTES)('%s · la sala de video cotiza ANTES de la mesa', (_n, C
     expect(enc.estado_del_motor.pasos_ejecutados).toBe(0)
     // 11-nov · GO reel de Olón: la causa queda guardada en la fila, no solo en el aviso
     expect(causaDelFallo(enc.estado_del_motor)).toMatchObject({ motivo: String(a.cuerpo.motivo), pasos_ejecutados: 0, gasto_usd: 0 })
-    expect(esFallidoRecuperable({ estado: enc.estado, gasto_usd: enc.gasto_usd, version_encargo: enc.version_encargo, pasos_ejecutados: enc.estado_del_motor.pasos_ejecutados })).toBe(true)
+    expect(esFallidoRecuperable({ estado: enc.estado, gasto_usd: enc.gasto_usd, version_encargo: enc.version_encargo, pasos_ejecutados: enc.estado_del_motor.pasos_ejecutados, cortada: false })).toBe(true)
     expect(reg.cotizados).toHaveLength(1) // se corta en la primera ruta que no cotiza
     expect(reg.enviados).toBe(0)
     expect(M.gastos).toHaveLength(0)

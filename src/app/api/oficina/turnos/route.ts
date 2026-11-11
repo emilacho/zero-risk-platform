@@ -2,7 +2,7 @@
  * POST /api/oficina/turnos · el motor de la oficina, un paso por llamada. SALA 1 · PR 4 · NADIE la llama todavía.
  *  { accion: 'acuse', encargo_id, n, workflow_execution_id } → el flujo TOMA el turno (una sola vez; `ya_tomado` = otro flujo ya lo tiene: este se detiene)
  *  { accion: 'siguiente', encargo_id }  → ejecuta los pasos de código/revisor en línea y devuelve el PEDIDO del siguiente empleado (o el cierre);
- *  { accion: 'resultado', encargo_id, n, texto | error, costo_usd?, workflow_execution_id?, tokens_in?, tokens_out? } → aplica el contrato de formato y los validadores, registra y sigue.
+ *  { accion: 'resultado', encargo_id, n, texto | error, costo_usd?, workflow_execution_id?, tokens_in?, tokens_out?, upstream_status?, pedido_no_llego? } → aplica el contrato de formato y los validadores, registra y sigue.
  * Llave: `x-sala-dispatch-key` (sin `SALA_DISPATCH_KEY`, 503). El `dry_run` lo trae el encargo desde que se abrió (no se puede cambiar aquí).
  */
 import { NextResponse } from 'next/server'
@@ -34,6 +34,9 @@ export async function POST(request: Request) {
     if (cuerpo.texto !== undefined && typeof cuerpo.texto !== 'string') errores.push('`texto` debe ser texto')
     if (cuerpo.error !== undefined && typeof cuerpo.error !== 'string') errores.push('`error` debe ser texto')
     if (cuerpo.texto === undefined && cuerpo.error === undefined) errores.push('hace falta `texto` o `error`')
+    // 11-nov · regla (b) · los campos del corte nuestro que pasa el flujo «Oficina · un turno» (nunca se deducen del texto)
+    if (cuerpo.upstream_status !== undefined && cuerpo.upstream_status !== null && !Number.isInteger(cuerpo.upstream_status)) errores.push('`upstream_status` debe ser un entero')
+    if (cuerpo.pedido_no_llego !== undefined && typeof cuerpo.pedido_no_llego !== 'boolean') errores.push('`pedido_no_llego` debe ser true o false')
   }
   if (errores.length) return NextResponse.json({ error: 'entrada_invalida', errores }, { status: 400 })
   try {
@@ -47,6 +50,7 @@ export async function POST(request: Request) {
           ...(typeof cuerpo.texto === 'string' ? { texto: cuerpo.texto } : {}), ...(typeof cuerpo.error === 'string' ? { error: cuerpo.error } : {}),
           costo_usd: numero(cuerpo.costo_usd), workflow_execution_id: typeof cuerpo.workflow_execution_id === 'string' ? cuerpo.workflow_execution_id : null,
           tokens_in: numero(cuerpo.tokens_in) ?? null, tokens_out: numero(cuerpo.tokens_out) ?? null,
+          ...(Number.isInteger(cuerpo.upstream_status) ? { upstream_status: cuerpo.upstream_status as number } : {}), ...(cuerpo.pedido_no_llego === true ? { pedido_no_llego: true } : {}),
         })
     return NextResponse.json(r.cuerpo, { status: r.status })
   } catch (e) {

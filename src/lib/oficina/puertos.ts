@@ -108,6 +108,8 @@ export interface Almacen {
    * (una vez por ejecución: la misma ejecución reenviada no suma dos veces) y se suma al gasto del encargo, para que el tope vea lo gastado de verdad. `ya_estaba` = esa ejecución ya estaba anotada.
    */
   anotarGastoDeCopia?(c: { encargo_id: string; gasto: NonNullable<Cambios['gastos']>[number] }): Promise<'anotado' | 'ya_estaba'>
+  /** 11-nov · regla (b) · las versiones REALES del mismo brief y grupo, para contar los intentos al cerrar fallido (`reapertura.ts · intentosQueCuentan`) */
+  hermanosDe?(enc: Encargo): Promise<import('./reapertura').RastroDeEncargo[]>
 }
 
 export type ResultadoImagen = { ok: true; url: string; generation_id: string; costo_usd: number } | { ok: false; error: string }

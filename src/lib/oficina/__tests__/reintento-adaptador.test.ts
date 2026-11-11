@@ -5,6 +5,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DbFalsa } from './dbfalsa'
+import { conCausaDelFallo } from '../causa-del-fallo'
+import { estadoInicial } from '../tipos'
 import type { SobreDeProducir } from '@/lib/cadena/autoproducir'
 
 const CLIENTE = 'df7e47cc-bec4-4fa2-bc24-ff97ba5213a5'
@@ -210,5 +212,20 @@ describe('reabrir fallidos recuperables (21-oct): lo que cuenta como «llegó»'
   })
   it('los 3 fallidos reales de la tercera prueba (gasto 0, v1) ya no bloquean al reintento', async () => {
     expect(await lee([enc('BRF-0001'), enc('BRF-0002'), enc('BRF-0004')])).toEqual([])
+  })
+})
+
+// 11-nov · regla (b) · el reintento cuenta los intentos con el MISMO conteo que la puerta (`intentosQueCuentan`), sobre las versiones del mismo brief y grupo
+describe('regla (b) · una versión cortada por causa nuestra no cuenta para el reintento', () => {
+  const AHORA_B = new Date('2026-11-11T19:44:00Z')
+  const motor = (origen?: string) => ({ ...conCausaDelFallo(estadoInicial(), origen ? 'el agente FALLÓ · agent-runner upstream failed' : 'no se pudieron leer las fuentes: timeout', AHORA_B, origen) })
+  const enc = (brief_id: string, version_encargo: number, origen?: string, o: Record<string, unknown> = {}) => ({ id: `e-${brief_id}-${version_encargo}`, parte_id: PARTE, brief_id, tipo_de_grupo: 'post_img', version_encargo, estado: 'fallido', gasto_usd: 0, dry_run: false, estado_del_motor: motor(origen), ...o })
+  const lee = async (filas: Array<Record<string, unknown>>) => [...(await puertosDeReintento(new DbFalsa().semilla('oficina_encargos', filas) as never, ENV).briefsConEncargo(PARTE))].sort()
+  it('🔴 v1 y v2 cortadas + v3 recuperable: el brief NO cuenta como «llegó» (la puerta lo reabre); sin marcas, sí (como hoy)', async () => {
+    expect(await lee([enc('BRF-0001', 1, 'pedido_no_llego'), enc('BRF-0001', 2, 'corredor_caido'), enc('BRF-0001', 3)])).toEqual([])
+    expect(await lee([enc('BRF-0001', 1), enc('BRF-0001', 2), enc('BRF-0001', 3)])).toEqual(['BRF-0001'])
+  })
+  it('🔴 las cortadas de OTRO grupo del mismo brief no le dan intentos', async () => {
+    expect(await lee([enc('BRF-0001', 1, 'corredor_caido', { tipo_de_grupo: 'kit_historias' }), enc('BRF-0001', 2, 'corredor_caido', { tipo_de_grupo: 'kit_historias' }), enc('BRF-0001', 3)])).toEqual(['BRF-0001'])
   })
 })
