@@ -123,7 +123,7 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
     cuerpo: {
       corrida_id: prep.corrida.id, version, intento: prep.corrida.intento, plazo_en: prep.corrida.plazo_en,
       headers: { [CABECERA_SALTAR_EDITOR]: '1' },
-      run_sdk: cuerpoDeRunSdk('estrategia', modelo, tarea, esquema.valor, campana.client_id, { contrato: 'estrategia.v2' }),
+      run_sdk: cuerpoDeRunSdk('estrategia', modelo, tarea, esquema.valor, campana.client_id, { contrato: 'estrategia.v3' }),
     },
   }
 }
@@ -244,7 +244,8 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
     ctx, estrategia: estr.contenido, tanda, semanas, filasPrevias: todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema'),
     correccion: correccion ? { fichas: correccion.fichas ?? [], filas: filasMalas, modo: correccion.modo === 'filas' ? 'filas' : 'tanda' } : undefined,
     concepto: mesa.concepto ? { leido: mesa.concepto, version: mesa.version ?? 0 } : undefined,
-    fechasEspeciales: mesa.concepto ? await fechasDeclaradas(al, ctx, estr.contenido, campana) : undefined,
+    // 11-nov (reglas rígidas #5): las fechas verificadas van SIEMPRE (con o sin gran idea): el agente declara la que cita (`fecha:<id>`) y V07 verifica esa
+    fechasEspeciales: await fechasDeclaradas(al, ctx, estr.contenido, campana),
     // 31-oct (FIRMA de Emilio): el método de colocación como capa local, solo con la gran idea; `cadena_config.metodos.calendario` lo apaga o lo reemplaza
     metodo: mesa.concepto ? await metodoDeCalendario(al) : undefined,
   })

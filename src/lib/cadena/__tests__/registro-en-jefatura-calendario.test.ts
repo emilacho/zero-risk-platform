@@ -136,11 +136,13 @@ describe('el calendario como documento (código puro)', () => {
 
 describe.each(CASOS)('$nombre', (k) => {
   describe('apagado = byte a byte con hoy', () => {
-    it('🔴 sin retener `registro`: V15 bloquea los temas en otro registro y pide la corrección de esas filas; ningún sobre ni espera', async () => {
+    // 11-nov (GO Lenovo · reglas rígidas #23): la lista de verbos ya no bloquea (da falsos positivos); quien juzga y bloquea es el revisor. Sin revisor, V15 queda como AVISO en la fila.
+    it('🔴 sin retener `registro`: V15 AVISA en los temas en otro registro y la tanda se cierra (no pide corrección); ningún sobre ni espera', async () => {
       const x = await hastaGuardar(k, { retiene: false })
       const malas = await Promise.all(k.malos.map((m) => x.fila(m.tema)))
-      expect(x.g.cuerpo).toMatchObject({ correccion: true })
-      for (const f of malas) expect(x.g.cuerpo.fila_ids).toContain(f.id)
+      expect(x.g.cuerpo).toMatchObject({ ok: true })
+      expect(x.g.cuerpo.correccion).toBeUndefined()
+      for (const f of malas) expect(f.avisos.some((a) => /otro registro/.test(a))).toBe(true)
       expect(x.al.sobresDeRegistro).toEqual([])
       expect(x.al.esperas.filter((e) => e.objeto_tipo === TIPO_DE_ESPERA)).toEqual([])
     })
@@ -218,20 +220,23 @@ describe.each(CASOS)('$nombre', (k) => {
       // nadie más reenvía el sobre de la cadena: la ruta lo intenta (con estos clientes, sin la palanca del nuevo orden, no hay sobre que mandar: lo pide el vigía)
       expect((r.cuerpo.empuje as { resultado?: string } | undefined)?.resultado).toBe('nada_que_mandar')
     })
-    it('🔴 la fila cuya corrección rompe otro chequeo se queda con su tema anterior, con aviso; la otra sí se corrige', async () => {
+    // 11-nov (GO Lenovo · reglas rígidas #6): V16 ya no se adivina por palabras del tema; lo dispara el dato `resena` que declara el agente.
+    // Una corrección de registro solo cambia TEXTO (no puede declarar datos), así que la palabra «testimonio» ya no rompe nada: las dos filas se corrigen.
+    // (Antes esta prueba esperaba la reversión por V16; la red de «rompe otro chequeo» sigue en el código para cualquier chequeo que bloquee.)
+    it('🔴 una corrección que solo nombra «testimonio» ya no rompe V16 (sin dato `resena` declarado): las dos filas se corrigen', async () => {
       const x = await hastaGuardar(k)
       const [m1, m2] = k.malos
-      // la segunda «corrección» mete un testimonio sin procedencia (V16 bloquea): esa fila no puede quedar así
-      const texto = corregir(x.al.sobresDeRegistro[0].payload.texto, [[m1.antes, m1.despues], [m2.tema, `${m2.tema.split(m2.antes).join(m2.despues)} · testimonio de una clienta`]])
+      const nuevo2 = `${m2.tema.split(m2.antes).join(m2.despues)} · testimonio de una clienta`
+      const texto = corregir(x.al.sobresDeRegistro[0].payload.texto, [[m1.antes, m1.despues], [m2.tema, nuevo2]])
       const f2 = await x.fila(m2.tema)
       const r = await aplicarVueltaDelCalendario(x.al, salidaDe(x.campanaId, texto), AHORA)
       expect(r.status).toBe(200)
-      expect(r.cuerpo.registro).toEqual({ corregidas: [(await x.fila(m1.tema.split(m1.antes).join(m1.despues))).id], revertidas: [f2.id] })
+      const reg = r.cuerpo.registro as { corregidas: string[]; revertidas: string[] }
+      expect(reg.revertidas).toEqual([])
+      expect([...reg.corregidas].sort()).toEqual([(await x.fila(m1.tema.split(m1.antes).join(m1.despues))).id, f2.id].sort())
       const g2 = (await x.filas()).find((f) => f.id === f2.id)!
-      expect(g2.tema).toBe(m2.tema)
-      expect(g2.avisos.some((a) => a.includes('rompía otros chequeos (V16)'))).toBe(true)
-      // y la pista sigue a la vista (el registro no se corrigió en esa fila)
-      expect(g2.avisos.some((a) => /otro registro/.test(a))).toBe(true)
+      expect(g2.tema).toBe(nuevo2)
+      expect(g2.avisos.some((a) => a.includes('rompía otros chequeos'))).toBe(false)
     })
     it('🔴 una vuelta que no se lee fila por fila deja TODOS los temas de antes, con el aviso en las filas con pistas', async () => {
       const x = await hastaGuardar(k)

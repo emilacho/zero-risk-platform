@@ -17,7 +17,7 @@ const lista = (items: unknown) => ({ type: 'array', items })
  * (la llave estable que el código guarda) y `desde`/`hasta` (el tramo de una temporada del negocio, con su cita). `estrategia.v1` queda en el registro tal cual era:
  * es contra lo que se produjeron las estrategias guardadas antes del 10-nov.
  */
-const estrategiaCon = (fechasQueImportan: unknown) => objeto({
+const estrategiaCon = (fechasQueImportan: unknown, v3 = false) => objeto({
   canales: lista(objeto({
     red: texto, rol: { enum: ['principal', 'replica', 'no'] }, motivo: texto,
     frecuencia: objeto({ feed_semana: entero, historias_semana: entero, anuncios_semana: entero }),
@@ -27,18 +27,25 @@ const estrategiaCon = (fechasQueImportan: unknown) => objeto({
   pilares: lista(objeto({ clave: texto, nombre: texto, pct: entero })),
   fases: lista(objeto({ clave: texto, dia_desde: entero, dia_hasta: entero, objetivo: texto, cita_plan: texto })),
   hitos: lista(objeto({ clave: texto, dia: entero, tipo: { enum: ['revision', 'lanzamiento', 'corte'] }, cita_plan: texto })),
-  dependencias: lista(objeto({ antes: texto, despues: texto, regla: texto, cita_plan: texto })),
+  dependencias: lista(objeto({ antes: texto, despues: texto, regla: texto, cita_plan: texto, ...(v3 ? { cantidad: entero } : {}) })),
   fechas_que_importan: fechasQueImportan,
   patron_semanal: lista(objeto({ slot: texto, dia_semana: entero, hora: texto, red: texto, formato: texto, pilar: texto, requiere_abierto: bool, sede: texto })),
   piezas_fijas: lista(objeto({ clave: texto, semana: entero, slot: texto, tema: texto, refs: listaDeTexto })),
   pendientes: lista(objeto({ clave: texto, que_falta: texto, desbloquea: listaDeTexto, pedir_a: { enum: ['portero', 'sistema'] } })),
   alertas: lista(objeto({ texto, ref: texto })),
+  ...(v3 ? { tolerancia_frecuencia: objeto({ feed: entero, historias: entero, anuncios: entero }) } : {}),
 })
 export const ESQUEMA_ESTRATEGIA_V1 = estrategiaCon(lista(objeto({ tipo: texto, ambito: texto, origen: { enum: ['plan', 'estrategia', 'alta'] }, cita_plan: texto, motivo: texto })))
-export const ESQUEMA_ESTRATEGIA = estrategiaCon(lista(objeto({
+const FECHAS_V2 = lista(objeto({
   tipo: texto, ambito: texto, origen: { enum: ['plan', 'estrategia', 'alta'] }, cita_plan: texto, motivo: texto,
   clase: { enum: ['feriado_publico', 'temporada_del_negocio'] }, llave: texto, llave_nueva: bool, desde: texto, hasta: texto,
-})))
+}))
+export const ESQUEMA_ESTRATEGIA_V2 = estrategiaCon(FECHAS_V2)
+/**
+ * `estrategia.v3` (11-nov · GO Lenovo · reglas rígidas #8 y #9): cada dependencia trae su `cantidad` (cuántas piezas de `antes`, como número) y la estrategia trae su
+ * `tolerancia_frecuencia` (cuánto puede desviarse la frecuencia real por semana y red antes de bloquear). v2 queda en el registro tal cual era.
+ */
+export const ESQUEMA_ESTRATEGIA = estrategiaCon(FECHAS_V2, true)
 
 /** SIN campo de fecha ni de total: el modelo NO puede escribirlos (el formato lo impide, no solo la indicación). */
 export const ESQUEMA_CALENDARIO_TANDA = objeto({
@@ -92,7 +99,8 @@ export const ESQUEMA_GANCHO_DE_VIDEO = objeto({
 
 export const ESQUEMAS = {
   'estrategia.v1': ESQUEMA_ESTRATEGIA_V1,
-  'estrategia.v2': ESQUEMA_ESTRATEGIA,
+  'estrategia.v2': ESQUEMA_ESTRATEGIA_V2,
+  'estrategia.v3': ESQUEMA_ESTRATEGIA,
   'calendario_tanda.v1': ESQUEMA_CALENDARIO_TANDA,
   'calendario_tanda.v2': ESQUEMA_CALENDARIO_TANDA_V2,
   'fechas_especiales.v1': ESQUEMA_FECHAS_ESPECIALES,

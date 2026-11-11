@@ -74,6 +74,8 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
       'Toda `cita_plan` es una frase LITERAL del plan (copiada tal cual). Si el plan no lo dice, no es una regla del plan: no lo cites; si lo propones tú, ponlo como propuesta con su motivo.',
       `Los pilares suman 100. Las fases caen dentro de ${p.diasDeCampana ?? 90} días.`,
       ...[lineaDelDiaUno(p.fechaInicio, p.fechaFin, p.diasDeCampana ?? 90, p.diaUnoDelPlan)].filter(Boolean),
+      'Cada dependencia lleva `cantidad`: cuántas piezas de `antes` pide la regla antes de la primera de `despues`, como NÚMERO (si el plan dice «tres posts», pon 3; si no dice cuántas, 1).',
+      '`tolerancia_frecuencia` dice cuántas piezas por semana y red puede desviarse el calendario de la frecuencia antes de que el sistema lo frene (`feed`, `historias`, `anuncios`; 0 = exacta). Si el plan no dice nada, usa feed 0, historias 1, anuncios 1; si el plan pide más rigor o da más holgura, sigue al plan.',
       '`fechas_que_importan` es una lista de TIPOS de fechas que le importan a ESTE negocio (feriados locales, temporadas, eventos del sector, fechas comerciales… o ninguna). Lo normal es la lista VACÍA: no inventes tipos «por si acaso». Si declaras uno, di su origen (plan | estrategia | alta) y un motivo concreto.',
       'Cada fecha que declares lleva su `clase`, y la decides tú razonando sobre lo que ES la fecha (no por las palabras de su nombre): `feriado_publico` si es una fecha del país o de un lugar, igual para todos los negocios de ahí (Navidad, Año Nuevo, un feriado nacional o local); `temporada_del_negocio` si es un tramo propio de ESTE negocio (su temporada alta, su cosecha, el tramo del año en que más vende).',
       '`llave`: la llave estable de esa fecha, en minúsculas y con guiones bajos. Mira la lista LLAVES DE FECHAS QUE YA EXISTEN: si tu fecha es la MISMA que una de la lista (aunque tú la escribirías distinto), usa esa llave y ese ámbito tal cual y pon `llave_nueva` en false. Si en la lista hay dos o más que son la misma fecha escrita de formas distintas, usa la PRIMERA que aparece (la lista va de la usada más recientemente a la menos). Solo si ninguna es la misma, crea una nueva y pon `llave_nueva` en true.',
@@ -108,7 +110,7 @@ export interface PedidoDeCalendario {
   correccion?: { fichas: Ficha[]; filas: Fila[]; modo: 'filas' | 'tanda' }
   /** 31-oct (nuevo orden · T3): la GRAN IDEA aprobada; con ella la tarea trae # GRAN IDEA, un # CAPÍTULO por fase de la tanda con su banco, # FECHAS ESPECIALES, y la salida es `calendario_tanda.v2` (`idea_de_mesa`). Ausente = la tarea de hoy, byte a byte. */
   concepto?: { leido: ConceptoLeido; version: number }
-  /** solo con `concepto`: las fechas que el cliente declaró y el código verificó (ninguna = se dice) */
+  /** las fechas que el cliente declaró y el código verificó (ninguna = se dice) · 11-nov: van SIEMPRE, con o sin `concepto` */
   fechasEspeciales?: FechaEspecialVerificada[]
   /** 31-oct (FIRMA de Emilio · capa local): el MÉTODO de colocación (`metodos.ts`, `social-calendar-builder` sin sus dependencias) · solo se pega con `concepto`; `null`/ausente = sin método (la tarea de hoy) */
   metodo?: string | null
@@ -140,8 +142,12 @@ function seccionesDelConcepto(p: PedidoDeCalendario): string[] {
     out.push(`# BANCO DE IDEAS DEL CAPÍTULO ${f.clave}`)
     out.push(ideas.length ? ideas.map((i) => `- ${i.id} · ${i.red} · ${i.formato} · ${i.idea} · mensaje: ${i.mensaje} · gancho: ${i.gancho}${i.serie ? ` · serie: ${i.serie}` : ''}${i.foto ? ` · foto:${i.foto}` : ''}`).join('\n') : '(banco vacío para este capítulo: dilo en `pendientes`)')
   }
-  out.push('', '# FECHAS ESPECIALES (verificadas por el código)', p.fechasEspeciales?.length ? p.fechasEspeciales.map((x) => `- ${x.hasta && x.hasta !== x.fecha ? `${x.fecha} → ${x.hasta}` : x.fecha} · ${x.nombre} (${x.tipo})${x.origen === 'cliente' ? ' · temporada del negocio (la dio el cliente)' : ''}`).join('\n') : '(ninguna declarada para esta campaña)')
   return out
+}
+
+/** 11-nov (reglas rígidas #5): la lista de fechas verificadas va SIEMPRE (con o sin gran idea): el agente cita su `fecha:<id>` y el código verifica esa fecha */
+function seccionDeFechas(p: PedidoDeCalendario): string {
+  return ['# FECHAS ESPECIALES (verificadas por el código)', p.fechasEspeciales?.length ? p.fechasEspeciales.map((x) => `- fecha:${x.id} · ${x.hasta && x.hasta !== x.fecha ? `${x.fecha} → ${x.hasta}` : x.fecha} · ${x.nombre} (${x.tipo})${x.origen === 'cliente' ? ' · temporada del negocio (la dio el cliente)' : ''}`).join('\n') : '(ninguna declarada para esta campaña)'].join('\n')
 }
 
 export function tareaDeCalendario(p: PedidoDeCalendario): string {
@@ -162,6 +168,8 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
       'Si una pieza depende de otra (el plan lo pide), pon el id de la antecesora en `depende_de` (formato `s<semana>-d<día>-<slot>`); nunca dependas de una pieza de video.',
       'La antecesora debe salir ANTES: otra fecha anterior, o el mismo día a una hora anterior. Una réplica en otra red el mismo día sale una hora después de la original (pon esa hora); el código ordena las que queden iguales y lo anota.',
       'Cada dato concreto del tema va en `datos` con `dato`, `valor` tal como aparece en la referencia, `clase` (alto = precio, horario, dirección, medida, reseña, cifras; medio = ingredientes/descripciones; bajo = ambiente), `ref`, `nivel` y `opcional`.',
+      'Si el tema cita una fecha especial (un feriado, una temporada, una celebración), agrega en `datos` un dato `fecha_especial` cuya `ref` es el `fecha:<id>` de esa fecha en la lista FECHAS ESPECIALES. Si la fecha no está en la lista, no la cites.',
+      'Si el tema cita una reseña, un testimonio o la opinión de una persona, agrega en `datos` un dato `resena` con la `ref` de su ficha. Si no hay ficha, no lo cites. Un eslogan o una frase del manual entre comillas no es una reseña.',
       'Si no tienes referencia para un dato, cambia el tema por uno que no lo necesite, o escríbelo en `pendientes`. Un tema sin datos concretos es mejor que un dato inventado.',
       'Si omites un slot de una semana, dilo en `ajustes_al_patron` con su motivo.',
     ]),
@@ -169,6 +177,8 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     `# ESTRATEGIA (vigente)\n${JSON.stringify({ canales: e.canales, pilares: e.pilares, fases: e.fases, hitos: e.hitos, dependencias: e.dependencias, patron_semanal: e.patron_semanal, piezas_fijas: e.piezas_fijas, alertas: e.alertas })}`,
     '',
     `# SEDES y horarios\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}: ${s.horario ? JSON.stringify(s.horario) : '(sin horario conocido)'}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
+    '',
+    seccionDeFechas(p),
     '',
     `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
     p.filasPrevias.length ? `\n# Piezas de tandas anteriores (para no repetir temas)\n${p.filasPrevias.slice(-24).map((f) => `- ${f.id}: ${f.tema ?? ''}`).join('\n')}` : '',

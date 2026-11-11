@@ -15,7 +15,7 @@ import { cuerpoDeRunSdk } from './pasos'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { esFechaIso, restarDias, semanaIso } from './fechas'
 import { citaAparece, normalizar } from './texto'
-import { claveDeFecha, dominiosDe, MESES } from './fechas-del-cliente'
+import { claveDeFecha, dominiosDe, nombraElMes } from './fechas-del-cliente'
 import { familiaDeFila } from './familia'
 import { lotesVencidos, type LoteVencido } from './lotes'
 import { avisoDeLote, decidirLote } from './lote-muerto'
@@ -229,7 +229,8 @@ export function citaRespaldaLaFecha(f: FechaExtraida, texto: string): boolean {
   if (!esFechaIso(f.fecha) || !citaAparece(texto, f.cita_literal)) return false
   const [, mm, dd] = f.fecha.split('-').map(Number) as [number, number, number]
   const c = normalizar(f.cita_literal)
-  return new RegExp(`\\b0?${dd}\\b`).test(c) && c.includes(MESES[mm - 1]!)
+  // 11-nov (GO Lenovo · reglas rígidas #7): el mes en el idioma de la página, no solo en español
+  return new RegExp(`\\b0?${dd}\\b`).test(c) && nombraElMes(c, mm)
 }
 
 export async function fechasGuardar(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {

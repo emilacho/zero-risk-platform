@@ -435,11 +435,19 @@ describe('lo que los sabotajes dejaron vivo', () => {
     const { validarSinEscribir } = await import('../index')
     const t = tandaBuena(B)
     t.piezas[0] = { ...t.piezas[0]!, tema: 'Llega la temporada alta de consultas', datos: [{ dato: 'fecha_especial', valor: 'temporada alta de consultas', clase: 'alto', ref: `fecha:${id}`, nivel: 'F0', opcional: false }] }
+    // 11-nov (reglas rígidas #5): sin gran idea (palanca apagada) la tarea del calendario TAMBIÉN lista la fecha verificada con su `fecha:<id>` (si no, el agente no podría declararla)
+    const { calendarioPreparar } = await import('../index')
+    const pc = await calendarioPreparar(al, { ...wf, campana_id: b, tanda: 1 }, AHORA)
+    expect(pc.status).toBe(200)
+    expect((pc.cuerpo.run_sdk as { task: string }).task).toContain(`- fecha:${id} · 2026-12-01 → 2027-01-15 · `)
     const v07 = (r: { cuerpo: Record<string, unknown> }) => (r.cuerpo.hallazgos as { chequeo: string; severidad: string }[]).filter((h) => h.chequeo === 'V07' && h.severidad === 'bloquea')
     const r = await validarSinEscribir(al, { ...wf, campana_id: b, tipo: 'calendario', tanda: 1, tanda_agente: t }, AHORA)
     expect(r.status).toBe(200)
     expect(v07(r)).toEqual([])
-    t.piezas[0] = { ...t.piezas[0]!, datos: [] }
+    // 11-nov (reglas rígidas #5): «sin respaldo» = la fila declara una fecha que no está verificada; sin declarar, el código ya no adivina por palabras
+    t.piezas[0] = { ...t.piezas[0]!, datos: [{ dato: 'fecha_especial', valor: 'temporada alta de consultas', clase: 'alto', ref: 'fecha:no-existe', nivel: 'F0', opcional: false }] }
     expect(v07(await validarSinEscribir(al, { ...wf, campana_id: b, tipo: 'calendario', tanda: 1, tanda_agente: t }, AHORA))).toHaveLength(1)
+    t.piezas[0] = { ...t.piezas[0]!, datos: [] }
+    expect(v07(await validarSinEscribir(al, { ...wf, campana_id: b, tipo: 'calendario', tanda: 1, tanda_agente: t }, AHORA))).toEqual([])
   })
 })
