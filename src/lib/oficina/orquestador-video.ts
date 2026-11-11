@@ -150,16 +150,19 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
   //   la mesa rehace el guion con lo que hay y sigue. Sin freno: si ya no quedan vueltas (o la plantilla no tiene la vuelta), sigue como antes, con la ficha.
   const vuelve = a.pedido.fotos_no_halladas.length > 0 && quedaVueltaALaMesa(pl, e)
   if (vuelve) return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeFotosALaMesa(a.pedido.fotos_no_halladas, a.ambiguas, b.F.fotos) } } }
-  if (a.pedido.fotos_no_halladas.length) fichas.push(fichaNueva(`video-fotos-no-halladas-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', `el guion nombra fotos que no están entre las propias del cliente y no viajan al modelo: ${a.pedido.fotos_no_halladas.join(', ')}`, 'fotos propias del cliente', 'mirar el video: esos planos salen sin referencia'))
+  // 11-nov · GO Lenovo 18:50 · si le quedaba la vuelta pero no cabe en el tope, la ficha lo dice (no se calla por qué no volvió)
+  const pasoPedido = pl.pasos.find((p) => p.funcion === 'pedido_de_video')
+  const sinTope = a.pedido.fotos_no_halladas.length > 0 && !!pasoPedido && quedaVueltaDelPaso(pasoPedido, e) ? ' · no volvió a la mesa: rehacer el guion no cabe en el tope del encargo' : ''
+  if (a.pedido.fotos_no_halladas.length) fichas.push(fichaNueva(`video-fotos-no-halladas-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', `el guion nombra fotos que no están entre las propias del cliente y no viajan al modelo: ${a.pedido.fotos_no_halladas.join(', ')}${sinTope}`, 'fotos propias del cliente', 'mirar el video: esos planos salen sin referencia'))
   if (a.pedido.prompt_recortado) fichas.push(fichaNueva(`video-prompt-recortado-${e.pasos_ejecutados}`, 'chequeo', 'video', 'sugerencia', 'el guion era más largo de lo que el modelo admite y se recortó', 'límite del pedido al modelo', 'mirar que el video cubra todos los planos'))
   return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: false }, ...(fichas.length ? { fichas } : {}) } }
 }
 
-/** ¿al paso del pedido le queda su vuelta a la mesa? (dato de la plantilla: `vuelve_a` del paso `pedido_de_video`; sin él, nunca vuelve) */
+/** ¿al paso del pedido le queda su vuelta a la mesa Y CABE en el tope? (dato de la plantilla: `vuelve_a` del paso `pedido_de_video`; sin él, nunca vuelve).
+ *  11-nov · GO Lenovo 18:50: la misma cuenta que la mirada del video (`quedaVueltaDelPaso` + `cabeLaVuelta(costoDeVolver)`), para que ninguna vuelta cierre el encargo por tope. */
 export function quedaVueltaALaMesa(pl: Plantilla, e: Estado): boolean {
   const paso = pl.pasos.find((p) => p.funcion === 'pedido_de_video')
-  const max = Number(paso?.vuelve_a?.max ?? 0)
-  return !!paso && max > 0 && (e.vueltas[paso.clave] ?? 0) < max
+  return !!paso && quedaVueltaDelPaso(paso, e) && cabeLaVuelta(pl, e, costoDeVolver(pl, paso))
 }
 
 /** el aviso con que el pedido vuelve a la mesa: qué fotos no existen (o son ambiguas) y cuáles sí hay, con la MISMA lista de fotos que la mesa ya ve (`LISTA_DE_FOTOS`). Puro. */

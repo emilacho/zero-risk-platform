@@ -16,7 +16,7 @@ import { leerBriefCreativo } from '@/lib/cadena/brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '@/lib/cadena/conceptos'
 import type { FormatosPorRed } from '@/lib/cadena/tipos'
 import { abrirEncargo, indicacionDe } from '../orquestador'
-import { cabeLaVuelta, costoDeVolver, recibirVideo } from '../orquestador-video'
+import { cabeLaVuelta, costoDeVolver, quedaVueltaALaMesa, recibirVideo } from '../orquestador-video'
 import { AGENTE_QUE_MIRA_EL_VIDEO, VIDEO_MESA } from '../plantillas/video-mesa'
 import type { PuertoDeVideo } from '../puertos'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
@@ -333,6 +333,15 @@ describe('lo que cuesta volver a la mesa y si cabe', () => {
     const conPrueba = { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, prueba: { limite_usd: 20, base_usd: 15, encargo_base_usd: 0 } } }
     expect(cabeLaVuelta(conPrueba, e(1), 6.1)).toBe(false)
     expect(cabeLaVuelta(conPrueba, e(1), 3)).toBe(true)
+  })
+  it('🔴 (GO Lenovo 18:50 · unificado) la vuelta del PEDIDO usa la misma cuenta: le queda la vuelta Y cabe volver (US$ 0,60) en el tope y en la holgura de la prueba', () => {
+    const ev = (gasto: number, vueltas: Record<string, number> = {}) => ({ gasto_usd: gasto, vueltas }) as unknown as Parameters<typeof quedaVueltaALaMesa>[1]
+    expect(quedaVueltaALaMesa(VIDEO_MESA, ev(9.4))).toBe(true)
+    expect(quedaVueltaALaMesa(VIDEO_MESA, ev(9.41))).toBe(false)
+    expect(quedaVueltaALaMesa(VIDEO_MESA, ev(0, { pedido: 1 }))).toBe(false)
+    const conPrueba: Plantilla = { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, prueba: { limite_usd: 2.5, base_usd: 2, encargo_base_usd: 0 } } }
+    expect(quedaVueltaALaMesa(conPrueba, ev(0))).toBe(false)
+    expect(quedaVueltaALaMesa({ ...conPrueba, limites: { ...conPrueba.limites, prueba: { limite_usd: 2.6, base_usd: 2, encargo_base_usd: 0 } } }, ev(0))).toBe(true)
   })
 })
 

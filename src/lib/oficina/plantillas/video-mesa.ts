@@ -18,8 +18,10 @@ const siempre: Condicion = { tipo: 'siempre' }
 const cambioCopy: Condicion = { tipo: 'si_cambio', artefacto: 'copy_video' }
 /** 11-nov · el agente mira el video solo si salieron cuadros (sin cuadros queda una ficha que bloquea: una persona lo mira) */
 const hayCuadros: Condicion = { tipo: 'si_artefacto', artefacto: 'cuadros_video', campo: 'hay_cuadros', igual: true }
-/** quién mira el video terminado (DATO: se cambia aquí y en la migración, no en el código) */
-export const AGENTE_QUE_MIRA_EL_VIDEO = 'video-editor'
+/** quién mira el video terminado (DATO: se cambia aquí y en la migración, no en el código).
+ *  11-nov · GO Lenovo 18:50: un ojo INDEPENDIENTE, que no participó en el guion (regla premium). `marketing_video_optimization_specialist` es del directorio
+ *  (especialista en retención del video corto, con visión) y solo es pertinente en `video_largo`: no se sienta en esta mesa ni corrige el guion en la jefatura. */
+export const AGENTE_QUE_MIRA_EL_VIDEO = 'marketing_video_optimization_specialist'
 /** lo que se le deja gastar al agente que mira (regla premium de Emilio 11-nov: material premium mientras se construye) */
 export const TOPE_DE_LA_MIRADA_USD = 0.5
 
