@@ -68,6 +68,13 @@ describe.each(CASOS)('%s', (_n, cliente) => {
       const una = conPieza(bueno, 1, c.anclas.lunes, { tema: 'Lo que dicen de nosotros', datos: [dato('resena', 'ficha-resena'), dato('resena', 'inventada')] })
       expect(de(val(una, { referencias: refs }), 'V16', 'bloquea')).toHaveLength(1)
     })
+    // 🟡 CC7 #1034 · el límite F0/F1: una ficha del dueño SIN firma, o vencida, es F2 y no sostiene una reseña
+    it('🔴 una reseña con ficha sin firma o vencida (F2) bloquea; con el manual (F1) pasa', () => {
+      const conRef = (r: Referencia) => val(conPieza(bueno, 1, c.anclas.lunes, { tema: 'Lo que dicen de nosotros', datos: [dato('resena', r.id)] }), { referencias: [...c.referencias, r] })
+      expect(de(conRef({ ...ficha, id: 'sin-firma', firmada: false }), 'V16', 'bloquea')).toHaveLength(1)
+      expect(de(conRef({ ...ficha, id: 'vencida', vigente: false }), 'V16', 'bloquea')).toHaveLength(1)
+      expect(de(conRef({ ...ficha, id: 'del-manual', origen: 'manual' }), 'V16', 'bloquea')).toEqual([])
+    })
   })
 
   describe('#23 · V15: otro registro es AVISO (el que juzga y bloquea es el revisor de registro)', () => {
