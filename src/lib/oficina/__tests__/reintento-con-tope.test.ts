@@ -20,6 +20,7 @@ const cad = vi.hoisted(() => ({
   emitidos: [] as SobreDeProducir[],
   buzon: [] as Array<Record<string, unknown>>,
   gasto: null as null | (() => unknown),
+  filas: [] as Array<Record<string, unknown>> | 'falla',
 }))
 vi.mock('@/lib/cadena/almacen-supabase', () => ({
   almacenDeSupabase: () => ({
@@ -28,7 +29,7 @@ vi.mock('@/lib/cadena/almacen-supabase', () => ({
     campanasActivas: async () => cad.campanas,
     campana: async (id: string) => cad.campanas.find((c) => c.id === id) ?? null,
     ultimaVersionDeCalendario: async () => 1,
-    filas: async () => [],
+    filas: async () => { if (cad.filas === 'falla') throw new Error('calendario caído'); return cad.filas },
     frenoDeGasto: async () => ({ bloqueado: false }),
     emitirSobre: async (s: SobreDeProducir) => { cad.emitidos.push(s); return { resultado: 'aceptado' } },
     leerGastoDeCampana: async () => cad.gasto!(),
@@ -40,8 +41,8 @@ import { reintentoDeLaCadena } from '../reintento-adaptador'
 
 const TOPES = { post_img: 1.5, carrusel_ig_v1: 1.5 }
 const lectura = (o: Partial<LecturaDeGasto> = {}): LecturaDeGasto => ({ corridas: [], conceptos: [], briefs: [], encargos: [], partes: [], topes_de_familia: TOPES, soltados: [], ...o })
-const parte = (id: string, client_id: string, campana: string, briefs: Array<{ brief_id: string; fila_id: string; familia: string }>) => ({
-  id, client_id, output_type: 'campaign_brief_pack', created_at: new Date(T0).toISOString(), provenance_tag: { lote_key: `${campana}:2026-W46:1`, valido: true, familias_por_brief: briefs },
+const parte = (id: string, client_id: string, campana: string, briefs: Array<{ brief_id: string; fila_id: string; familia: string }>, creado = T0) => ({
+  id, client_id, output_type: 'campaign_brief_pack', created_at: new Date(creado).toISOString(), provenance_tag: { lote_key: `${campana}:2026-W46:1`, valido: true, familias_por_brief: briefs },
 })
 const mundo = (clientId: string, partes: Array<Record<string, unknown>>, encargos: Array<Record<string, unknown>> = []) => new DbFalsa()
   .semilla('client_historical_outputs', partes)
@@ -56,7 +57,7 @@ const mundo = (clientId: string, partes: Array<Record<string, unknown>>, encargo
 const pasada = (db: DbFalsa, ejecutar = true) => reintentoDeLaCadena(db as never, { slackToken: 'xoxb-falso' }, { ejecutar }, reloj) as Promise<{ accion: string; emitidos: number; plan: Array<{ brief_id: string; accion: string; detalle?: string }> }>
 const acciones = (r: Awaited<ReturnType<typeof pasada>>) => r.plan.map((l) => `${l.brief_id}:${l.accion}`)
 
-beforeEach(() => { cad.config = { estado_cadena: 'encendida', reintento_piezas: true }; cad.emitidos = []; cad.buzon = []; cad.gasto = null })
+beforeEach(() => { cad.config = { estado_cadena: 'encendida', reintento_piezas: true }; cad.emitidos = []; cad.buzon = []; cad.gasto = null; cad.filas = [] })
 
 describe('restaurante · la foto con su encargo fallido sin gasto cuenta SU tope', () => {
   const CLIENTE = 'df7e47cc-bec4-4fa2-bc24-ff97ba5213a5'
@@ -106,6 +107,12 @@ describe('restaurante · la foto con su encargo fallido sin gasto cuenta SU tope
     expect(cad.emitidos).toEqual([]); expect(cad.config.reintentos_piezas).toBeUndefined()
     expect(cad.buzon[0]).toMatchObject({ clave: `cadena:gasto-de-campana-ilegible:${CAMPANA}`, tipo: 'alarma' })
   })
+  it('certificación CC7 · calendario ilegible: con el puerto real, la lectura del calendario falla → la pieza queda en «tope» (no se toma como calendario vacío)', async () => {
+    conTope(40); cad.filas = 'falla'
+    const r = await pasada(db())
+    expect(acciones(r)).toEqual([`${FOTO.brief_id}:tope`]); expect(r.plan[0].detalle).toMatch(/ilegible: no se pudo leer el calendario/)
+    expect(cad.emitidos).toEqual([]); expect(cad.config.reintentos_piezas).toBeUndefined()
+  })
   it('en seco: el plan dice «tope» y no se avisa ni se emite nada', async () => {
     conTope(31)
     const r = await pasada(db(), false)
@@ -139,5 +146,36 @@ describe('consultora B2B de práctica · dos partes en la MISMA pasada: la segun
   it('si la sala YA recibió el sobre de la primera, ya está en lo comprometido y no se cuenta dos veces (tope US$ 3 · salen las dos)', async () => {
     conTope(3, { soltados: [{ parte_id: P1, brief_id: B1.brief_id }, { parte_id: P2, brief_id: B2.brief_id }] })
     expect((await pasada(db())).plan.map((l) => l.accion)).toEqual(['reintentar', 'reintentar'])
+  })
+})
+
+describe('certificación CC7 · lo soltado en la pasada en OTRO parte, en sus dos formas', () => {
+  const CLIENTE = 'cccccccc-0000-4000-8000-00000000c11e'
+  const CAMPANA = 'cccccccc-0000-4000-8000-000000000001'
+  const P1 = 'cccccccc-0000-4000-8000-0000000000p1', P2 = 'cccccccc-0000-4000-8000-0000000000p2'
+  const A = { brief_id: 'BRF-0001', fila_id: 's1-d4-jue_foto', familia: 'post_img' }
+  const B = { brief_id: 'BRF-0002', fila_id: 's2-d6-sab_foto', familia: 'post_img' }
+  const conTope = (tope: number, l: Partial<LecturaDeGasto>) => {
+    cad.campanas = [{ id: CAMPANA, client_id: CLIENTE, estado: 'activa', autoproducir: true, seco: false, tope_gasto_usd: tope, zona_horaria: 'America/Guayaquil', sala_ref: {} }]
+    cad.gasto = () => lectura({ partes: [{ id: P1, briefs: [A] }, { id: P2, briefs: [B] }], ...l })
+  }
+  it('dos partes, cada uno con una pieza FALLIDA a US$ 0 cuyo sobre la sala ya recibió, y un tope que alcanza para una (US$ 2) → sale una sola', async () => {
+    const fallido = (parte_id: string, brief_id: string) => ({ id: `e-${brief_id}`, parte_id, brief_id, version_encargo: 1, estado: 'fallido', gasto_usd: 0, tope_usd: 1.5, dry_run: false, estado_del_motor: { pasos_ejecutados: 0 } })
+    conTope(2, {
+      encargos: [{ id: 'e-BRF-0001', parte_id: P1, brief_id: A.brief_id, estado: 'fallido', tope_usd: 1.5, gasto_usd: 0 }, { id: 'e-BRF-0002', parte_id: P2, brief_id: B.brief_id, estado: 'fallido', tope_usd: 1.5, gasto_usd: 0 }],
+      soltados: [{ parte_id: P1, brief_id: A.brief_id }, { parte_id: P2, brief_id: B.brief_id }],
+    })
+    const r = await pasada(mundo(CLIENTE, [parte(P1, CLIENTE, CAMPANA, [A]), parte(P2, CLIENTE, CAMPANA, [B])], [fallido(P1, A.brief_id), fallido(P2, B.brief_id)]))
+    expect(r.plan.map((l) => l.accion).sort()).toEqual(['reintentar', 'tope'])
+    expect(cad.emitidos).toHaveLength(1)
+  })
+  it('una pieza retenida de otro parte (sin encargo, la sala nunca la recibió) que la pasada suelta no se cuenta dos veces: con tope justo (US$ 3) la siguiente también cabe', async () => {
+    // A (jueves 12) es anterior a B (sábado 14): mientras A esté retenida, guarda lugar ANTES de B. Cuando la pasada la suelta, cuenta como comprometida y deja de guardar lugar.
+    cad.filas = [{ id: A.fila_id, fecha: '2026-11-12', hora: '12:00', estado: 'briefeada' }, { id: B.fila_id, fecha: '2026-11-14', hora: '12:00', estado: 'briefeada' }]
+    conTope(3, {})
+    // el parte de A es el más nuevo: la pasada lo ve primero (los partes se leen del más nuevo al más viejo)
+    const r = await pasada(mundo(CLIENTE, [parte(P1, CLIENTE, CAMPANA, [A], T0 + 60_000), parte(P2, CLIENTE, CAMPANA, [B])]))
+    expect(acciones(r)).toEqual([`${A.brief_id}:reintentar`, `${B.brief_id}:reintentar`])
+    expect(cad.emitidos).toHaveLength(2)
   })
 })
