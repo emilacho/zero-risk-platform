@@ -3,6 +3,7 @@
  * Imita las garantías de la base que importan: únicos, idempotencia de corridas/esperas, una campaña viva por cliente.
  */
 import type { ResultadoDeAbrirMesa, SobreDeReubicacion } from '../reubicar'
+import type { EncargoDeLaCampana, LecturaDeArreglos, ResultadoDeAbrirMesaDeFallidos, SobreDeFallidos } from '../rehacer-fallidos'
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
 import type { LlaveDeFecha } from '../indicaciones'
 import { claveDeFecha, ordenarLlaves } from '../fechas-del-cliente'
@@ -116,6 +117,31 @@ export class AlmacenMemoria implements Almacen {
   get abrirMesaDeReubicacion(): ((sobre: SobreDeReubicacion) => Promise<ResultadoDeAbrirMesa>) | undefined {
     const f = this.mesaDeReubicacion
     return f ? async (sobre) => { this.sobresDeReubicacion.push(structuredClone(sobre)); return f(sobre) } : undefined
+  }
+  /** 11-nov · fallidos que se rehacen solos · los cuatro puertos; cada uno null = el almacén no lo tiene. La prueba los fija y ve lo que pasó. */
+  encargosPorCampana: Record<string, EncargoDeLaCampana[]> | null = null
+  lecturasDeEncargos = 0
+  fuenteDeArreglos: ((desde: string) => Promise<LecturaDeArreglos>) | null = null
+  lecturasDeArreglos: string[] = []
+  mesaDeFallidos: ((sobre: SobreDeFallidos) => Promise<ResultadoDeAbrirMesaDeFallidos>) | null = null
+  sobresDeFallidos: SobreDeFallidos[] = []
+  reapertura: ((p: { encargo_id: string; causa: string }) => Promise<{ ok: true; encargo_id: string } | { ok: false; motivo: string }>) | null = null
+  reaperturas: Array<{ encargo_id: string; causa: string }> = []
+  get encargosDeLaCampana(): ((campanaId: string) => Promise<EncargoDeLaCampana[]>) | undefined {
+    const m = this.encargosPorCampana
+    return m ? async (id) => { this.lecturasDeEncargos++; return structuredClone(m[id] ?? []) } : undefined
+  }
+  get arreglosPublicados(): ((desde: string) => Promise<LecturaDeArreglos>) | undefined {
+    const f = this.fuenteDeArreglos
+    return f ? async (desde) => { this.lecturasDeArreglos.push(desde); return f(desde) } : undefined
+  }
+  get abrirMesaDeFallidos(): ((sobre: SobreDeFallidos) => Promise<ResultadoDeAbrirMesaDeFallidos>) | undefined {
+    const f = this.mesaDeFallidos
+    return f ? async (sobre) => { this.sobresDeFallidos.push(structuredClone(sobre)); return f(sobre) } : undefined
+  }
+  get reabrirFallido(): ((p: { encargo_id: string; causa: string }) => Promise<{ ok: true; encargo_id: string } | { ok: false; motivo: string }>) | undefined {
+    const f = this.reapertura
+    return f ? async (p) => { this.reaperturas.push(structuredClone(p)); return f(p) } : undefined
   }
   /** 11-nov (#1014 · relectura) · el texto guardado de cada encargo de la mesa; la prueba lo fija */
   textosDeLaMesa: Record<string, string> = {}

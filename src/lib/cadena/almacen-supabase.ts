@@ -30,7 +30,8 @@ import { registrarEventoDeEmilio, type DbDeEventos } from '@/lib/oficina/eventos
 import { TIPO_TARJETA_DE_CONCEPTO } from './almacen'
 import { normalizar } from './texto'
 import { enviosDesdeElRegistro, llavesDelRegistro } from './lote-muerto'
-import { configDeLaPuerta, encargosRealesDe, reservasDeFamiliasActivas, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
+import { configDeLaPuerta, encargoParaReabrirDe, encargosParaRehacerDe, encargosRealesDe, reservasDeFamiliasActivas, topesDeFamiliasActivas, type DbDeGasto } from '@/lib/oficina/gasto-de-encargos'
+import type { SobreDeFallidos } from './rehacer-fallidos'
 import { OPERACION_DE_PRODUCIR } from './tope-de-campana'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
@@ -140,7 +141,7 @@ export async function abrirRevisionConVuelta(db: unknown, entrada: { artifact_ty
  * 10-nov · filas que quedaron atrás · abre la mesa de reubicación de la oficina EN PROCESO (la misma función que `api/oficina/encargos` con `origen: cadena`) y despierta su primer turno.
  * La oficina se importa en el acto (la oficina ya importa este archivo: así no hay ciclo al cargar). Nunca lanza.
  */
-export async function abrirMesaDeReubicacionReal(sobre: SobreDeReubicacion, f: typeof fetch = fetch): Promise<ResultadoDeAbrirMesa> {
+export async function abrirMesaDeReubicacionReal(sobre: SobreDeReubicacion | SobreDeFallidos, f: typeof fetch = fetch): Promise<ResultadoDeAbrirMesa> {
   try {
     const [{ entornoConBase }, { crearPuertos }, { abrirMesaDeLaCadena, validarSobreDeLaCadena }, { avanzar }, { despertarAlFlujoDeLaOficina }] = await Promise.all([
       import('@/lib/oficina/ruta'), import('@/lib/oficina/adaptadores'), import('@/lib/oficina/mesa/de-la-cadena'), import('@/lib/oficina/orquestador'), import('@/lib/oficina/despertar'),
@@ -156,6 +157,79 @@ export async function abrirMesaDeReubicacionReal(sobre: SobreDeReubicacion, f: t
     if (r.cuerpo.accion === 'esperar' && r.cuerpo.turno) { try { await despertarAlFlujoDeLaOficina(f, { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, id, r.cuerpo.turno) } catch { /* lo re-arma el vigía */ } }
     return { estado: 'abierta', encargo_id: id }
   } catch (e) { return { estado: 'error', motivo: e instanceof Error ? e.message : String(e) } }
+}
+
+/**
+ * 11-nov · fallidos que se rehacen solos · reabre un encargo fallido por la vía que ya existe (`reabrir_causa_corregida`, la misma de «rehacer» del tablero), EN PROCESO, y despierta su
+ * primer turno. La oficina decide: no reabre una pieza viva, entregada o con sus versiones agotadas (contesta `ya_existia`). Nunca lanza.
+ */
+export async function reabrirFallidoReal(p: { encargo_id: string; causa: string }, f: typeof fetch = fetch): Promise<{ ok: true; encargo_id: string } | { ok: false; motivo: string }> {
+  try {
+    const [{ entornoConBase }, { crearPuertos }, { abrirEncargo }, { despertarAlFlujoDeLaOficina }, { TARGET_STEP_PRODUCIR }] = await Promise.all([
+      import('@/lib/oficina/ruta'), import('@/lib/oficina/adaptadores'), import('@/lib/oficina/orquestador'), import('@/lib/oficina/despertar'), import('@/lib/oficina/sobre'),
+    ])
+    const db = getSupabaseAdmin()
+    const enc = await encargoParaReabrirDe(db as unknown as DbDeGasto, p.encargo_id)
+    if (!enc) return { ok: false, motivo: 'el encargo ya no existe' }
+    if (enc.dry_run === true || enc.estado !== 'fallido') return { ok: false, motivo: `el encargo ya no está fallido (${enc.estado})` }
+    const sala = enc.sala_ref && typeof enc.sala_ref === 'object' ? enc.sala_ref : {}
+    const fila = sala.fila && typeof sala.fila === 'object' ? (sala.fila as Record<string, unknown>) : {}
+    const cal = Object.fromEntries(Object.entries({ fila_id: fila.id, fecha: fila.fecha, hora: fila.hora }).filter(([, v]) => typeof v === 'string'))
+    const P = crearPuertos(db as never, entornoConBase(VERCEL_DE_LA_PLATAFORMA))
+    const a = await abrirEncargo(P, {
+      cuerpo: { parte_id: enc.parte_id, brief_id: enc.brief_id, dry_run: false, ...(enc.familia ? { familia: enc.familia } : {}), reabrir_causa_corregida: p.causa, ...cal },
+      client_id: String(enc.client_id), target_step_id: TARGET_STEP_PRODUCIR, sala_ref: { _journey_id: sala._journey_id ?? null, _sala_correlation_id: sala._sala_correlation_id ?? null },
+    })
+    const id = typeof a.cuerpo.encargo_id === 'string' ? a.cuerpo.encargo_id : ''
+    if (a.status !== 200 || a.cuerpo.accion === 'cerrado') return { ok: false, motivo: `la oficina contestó ${a.status}: ${JSON.stringify(a.cuerpo).slice(0, 200)}` }
+    if (a.cuerpo.accion === 'ya_existia' || !id || id === p.encargo_id) return { ok: false, motivo: 'la oficina no reabre esta pieza (ya se agotaron sus versiones o ya tiene una más nueva)' }
+    if (a.cuerpo.accion === 'esperar' && a.cuerpo.turno) { try { await despertarAlFlujoDeLaOficina(f, { dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE }, id, a.cuerpo.turno) } catch { /* lo re-arma el vigía */ } }
+    return { ok: true, encargo_id: id }
+  } catch (e) { return { ok: false, motivo: e instanceof Error ? e.message : String(e) } }
+}
+
+/** el proyecto de la plataforma en Vercel (la fuente de los arreglos publicados) · se puede cambiar por entorno */
+export const PROYECTO_DE_LA_PLATAFORMA = 'prj_UNusLHZNj5vOVrvCEHcRL8EUms2i'
+/** la credencial de SOLO LECTURA de publicaciones (Doppler → entorno de producción) · sin ella, la fuente no se lee y lo dice */
+export const CREDENCIAL_DE_PUBLICACIONES = 'VERCEL_TOKEN_LECTURA_PUBLICACIONES'
+/**
+ * 11-nov · fallidos que se rehacen solos · LA FUENTE: las publicaciones de PRODUCCIÓN de la plataforma listas (READY) después de `desde`, con el texto del cambio (el mensaje de la entrega).
+ * Los cambios del servicio de Railway y de los flujos que pasan por una entrega del repositorio salen aquí; lo cambiado en vivo sin entrega no (límite declarado: por eso «dejar» no es definitivo).
+ * Pagina hasta 5 páginas de 100. Nunca lanza.
+ */
+export async function arreglosPublicadosReal(desde: string, f: typeof fetch = fetch, env: Record<string, string | undefined> = process.env): Promise<import('./rehacer-fallidos').LecturaDeArreglos> {
+  const token = (env[CREDENCIAL_DE_PUBLICACIONES] ?? '').trim()
+  if (!token) return { ok: false, motivo: `falta la credencial ${CREDENCIAL_DE_PUBLICACIONES} en el entorno` }
+  const proyecto = (env.VERCEL_PROYECTO_DE_LA_PLATAFORMA ?? '').trim() || PROYECTO_DE_LA_PLATAFORMA
+  const desdeMs = Date.parse(desde)
+  if (!Number.isFinite(desdeMs)) return { ok: false, motivo: `fecha «desde» ilegible: ${desde}` }
+  const out: import('./rehacer-fallidos').ArregloPublicado[] = []
+  let until: number | null = null
+  try {
+    for (let pagina = 0; pagina < 5; pagina++) {
+      const q = new URLSearchParams({ projectId: proyecto, target: 'production', limit: '100', since: String(desdeMs) })
+      if (until !== null) q.set('until', String(until))
+      const r = await f(`https://api.vercel.com/v6/deployments?${q.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!r.ok) return { ok: false, motivo: `la lista de publicaciones contestó ${r.status}` }
+      const j = (await r.json()) as { deployments?: Array<Record<string, unknown>>; pagination?: { next?: number | null } }
+      if (!Array.isArray(j.deployments)) return { ok: false, motivo: 'la lista de publicaciones no trae `deployments`' }
+      for (const d of j.deployments) {
+        const estado = String(d.state ?? d.readyState ?? '')
+        const creado = Number(d.created ?? d.createdAt)
+        const meta = d.meta && typeof d.meta === 'object' ? (d.meta as Record<string, unknown>) : {}
+        const mensaje = typeof meta.githubCommitMessage === 'string' ? meta.githubCommitMessage.trim() : ''
+        if (estado !== 'READY' || !Number.isFinite(creado) || creado <= desdeMs || !mensaje || typeof d.uid !== 'string') continue
+        out.push({ id: d.uid, publicado_en: new Date(creado).toISOString(), mensaje })
+      }
+      const next = j.pagination?.next
+      if (typeof next !== 'number' || next <= desdeMs) break
+      until = next
+    }
+  } catch (e) { return { ok: false, motivo: e instanceof Error ? e.message : String(e) } }
+  // un mismo cambio puede publicarse dos veces (re-publicación): vale la primera
+  const vistos = new Set<string>()
+  const unicos = out.sort((a, b) => (a.publicado_en < b.publicado_en ? -1 : 1)).filter((a) => { const k = a.mensaje; if (vistos.has(k)) return false; vistos.add(k); return true })
+  return { ok: true, arreglos: unicos }
 }
 
 export function almacenDeSupabase(): Almacen {
@@ -177,6 +251,17 @@ export function almacenDeSupabase(): Almacen {
     abrirRevisionDeRegistro: (entrada) => abrirRevisionDeRegistroReal(db, entrada),
     // 10-nov · filas que quedaron atrás: abre la mesa de reubicación de la oficina (nunca lanza)
     abrirMesaDeReubicacion: (sobre) => abrirMesaDeReubicacionReal(sobre),
+    // 11-nov · fallidos que se rehacen solos: los encargos reales de la campaña (los lee la oficina), la fuente de arreglos, la mesa y la reapertura (estas tres nunca lanzan)
+    async encargosDeLaCampana(campanaId) {
+      const tag = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
+      const partes = (await lista<{ id: string; provenance_tag: unknown }>(db.from('client_historical_outputs').select('id, provenance_tag').eq('output_type', 'campaign_brief_pack').eq('provenance_tag->>campana_id', campanaId).limit(500)))
+        .filter((f) => tag(f.provenance_tag).seco !== true && tag(f.provenance_tag).prueba_seco !== true).map((f) => String(f.id))
+      // solo los partes (las piezas): las mesas de la cadena tienen como parte a la campaña misma y no se rehacen por aquí
+      return encargosParaRehacerDe(db as unknown as DbDeGasto, [...new Set(partes)])
+    },
+    arreglosPublicados: (desde) => arreglosPublicadosReal(desde),
+    abrirMesaDeFallidos: (sobre) => abrirMesaDeReubicacionReal(sobre),
+    reabrirFallido: (p) => reabrirFallidoReal(p),
     // 11-nov (#1014 · relectura): el texto que la mesa dejó en su encargo (`pieza_texto`), sin llamar al agente; nunca lanza
     async textoGuardadoDeLaMesa(encargoId) {
       try { return await (await import('@/lib/oficina/mesa/de-la-cadena')).textoGuardadoDeLaMesa(db as never, encargoId) } catch (e) { return { ok: false as const, motivo: e instanceof Error ? e.message : String(e) } }

@@ -31,6 +31,7 @@ import { reglaDeIdioma, reglaDeRegistro } from './registro'
 import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, leerArtifactIdDeRegistro, leerObjetoDeRegistro, objetoDeRegistro, pistasDeRegistro, registroFijado, seRevisaElRegistro, textoDeLaVuelta, type DocDeRegistro } from './registro-en-jefatura'
 import { TIPO_DE_ESPERA as TIPO_DE_ESPERA_DE_JEFATURA } from './revision-jefatura'
 import { recibirReubicacion, type EntregaDeReubicacion } from './reubicar'
+import { recibirFallidos, type EntregaDeFallidos } from './rehacer-fallidos'
 import type { Estrategia, FormatosPorRed } from './tipos'
 import { contextoDeLaMesa } from '../sedes/por-abrir'
 import { bloqueDelPerfil, type PerfilParaLectores } from '../perfil-del-publico/lectores'
@@ -814,7 +815,7 @@ export async function conceptoEntregar(al: Almacen, cuerpo: Record<string, unkno
 
 /** el puerto que la OFICINA recibe en su entorno (`Entorno.puertoDeLaCadena`, CC2): en proceso, sin HTTP; nunca lanza.
  *  El almacén puede venir como fábrica DIFERIDA (se crea en la primera entrega): armar el entorno de la oficina no debe abrir la base. */
-export function puertoDeLaCadena(al: Almacen | (() => Almacen), reloj: () => string = () => new Date().toISOString()): { entregarBrief(p: EntregaDeBrief): Promise<EntregaALaCadena>; entregarConcepto(p: EntregaDeConcepto): Promise<EntregaALaCadena>; entregarReubicacion(p: EntregaDeReubicacion): Promise<EntregaALaCadena> } {
+export function puertoDeLaCadena(al: Almacen | (() => Almacen), reloj: () => string = () => new Date().toISOString()): { entregarBrief(p: EntregaDeBrief): Promise<EntregaALaCadena>; entregarConcepto(p: EntregaDeConcepto): Promise<EntregaALaCadena>; entregarReubicacion(p: EntregaDeReubicacion): Promise<EntregaALaCadena>; entregarFallidos(p: EntregaDeFallidos): Promise<EntregaALaCadena> } {
   let instancia: Almacen | null = typeof al === 'function' ? null : al
   const almacen = (): Almacen => (instancia ??= (al as () => Almacen)())
   const seguro = async (f: (a: Almacen) => Promise<EntregaALaCadena>): Promise<EntregaALaCadena> => { try { return await f(almacen()) } catch (e) { return { ok: false, error: (e instanceof Error ? e.message : String(e)).slice(0, 300) } } }
@@ -823,5 +824,7 @@ export function puertoDeLaCadena(al: Almacen | (() => Almacen), reloj: () => str
     entregarConcepto: (p) => seguro((a) => recibirConcepto(a, p, reloj())),
     // 10-nov · la mesa de reubicación (filas que quedaron atrás): la cadena verifica la decisión por código antes de aplicarla
     entregarReubicacion: (p) => seguro((a) => recibirReubicacion(a, p, reloj())),
+    // 11-nov · la mesa de revisión de fallidos: la cadena verifica cada veredicto por código antes de reabrir
+    entregarFallidos: (p) => seguro((a) => recibirFallidos(a, p, reloj())),
   }
 }

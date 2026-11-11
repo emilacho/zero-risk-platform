@@ -148,6 +148,8 @@ export interface PuertoDeLaCadena {
   entregarConcepto(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null; brief_devuelto?: string | null }): Promise<EntregaALaCadena>
   /** 10-nov · la mesa de reubicación (filas que quedaron atrás sin producir) entrega la decisión del agente; la cadena la VERIFICA por código antes de aplicarla. Opcional: sin él, la entrega no llega y lo dice */
   entregarReubicacion?(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
+  /** 11-nov · la mesa de revisión de fallidos entrega sus veredictos; la cadena los VERIFICA por código antes de reabrir. Opcional: sin él, la entrega no llega y lo dice */
+  entregarFallidos?(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
 }
 
 /** lo que el brazo de video contesta al enviar: en dry_run el puerto NO sale a la red y devuelve `simulado` */
