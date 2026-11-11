@@ -510,6 +510,12 @@ export function almacenDeSupabase(): Almacen {
         return { ok: true, accion: `${r.accion} · slack ${r.slack}` }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'error' } }
     },
+    async cerrarEnElBuzon(prefijo, salvo, nota) {
+      try {
+        const [{ cerrarFamilia }, { dependenciasReales }] = await Promise.all([import('@/lib/avisos/nucleo'), import('@/lib/avisos/adaptadores')])
+        return { ok: true, ...(await cerrarFamilia(dependenciasReales(db as unknown as Parameters<typeof dependenciasReales>[0]), prefijo, salvo, nota)) }
+      } catch (e) { return { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : 'error' } }
+    },
     async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision> {
       if (!isIntakeEnabled()) return { resultado: 'rechazado', detalle: 'intake_apagado · SALA_INTAKE_ENABLED' }
       const llave = process.env.INTERNAL_API_KEY

@@ -34,6 +34,7 @@ vi.mock('@/lib/cadena/almacen-supabase', () => ({
     leerGastoDeCampana: async () => ({ corridas: [], conceptos: [], briefs: [], encargos: [], partes: [], topes_de_familia: { post_img: 1.5, carrusel_ig_v1: 1.5, kit_historias: 1.5 }, soltados: [], revisiones: [] }),
     formatos: async () => ({}),
     avisarAlBuzon: async () => ({ ok: true, accion: 'nuevo' }),
+    cerrarEnElBuzon: async () => ({ ok: true, cerradas: 0 }),
   }),
 }))
 import { puertosDeReintento, reintentoDeLaCadena } from '../reintento-adaptador'

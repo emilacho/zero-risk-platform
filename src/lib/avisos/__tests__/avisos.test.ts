@@ -7,14 +7,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { avisar, cerrar, errorLimpio, validarEntrada, EntradaInvalida, ErrorAlGuardar, type AlmacenDeAvisos, type Dependencias, type EntradaDeAviso, type Guardado, type PublicarEnSlack, type EstadoSlack, type Tipo } from '../nucleo'
+import { avisar, cerrar, cerrarFamilia, esContestada, notaDeContestada, errorLimpio, validarEntrada, EntradaInvalida, ErrorAlGuardar, type AlmacenDeAvisos, type Dependencias, type EntradaDeAviso, type Guardado, type PublicarEnSlack, type EstadoSlack, type Tipo } from '../nucleo'
 import { almacenDeAvisos, canalesDesde, slackEncendido, slackPorBot } from '../adaptadores'
 
 const RESTAURANTE = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
 const B2B = 'df7e47cc-bec4-4fa2-bc24-ff97ba5213a5'
 
 interface FilaFalsa { id: string; clave: string; tipo: Tipo; detalle: string; repeticiones: number; ultima_en: number; cerrado_en: number | null; nota: string | null; slack_ts: string | null; slack_estado: EstadoSlack; slack_error: string | null; client_id: string | null }
-function almacenFalso(o: { fallarGuardar?: boolean; fallarAnotar?: boolean } = {}) {
+function almacenFalso(o: { fallarGuardar?: boolean; fallarAnotar?: boolean; fallarContestada?: boolean } = {}) {
   const filas: FilaFalsa[] = []
   let n = 0, ahora = 1_000_000_000_000
   const almacen: AlmacenDeAvisos = {
@@ -37,6 +37,16 @@ function almacenFalso(o: { fallarGuardar?: boolean; fallarAnotar?: boolean } = {
       if (!f) return null
       f.cerrado_en = ahora; f.nota = nota
       return { aviso_id: f.id, slack_ts: f.slack_ts, tipo: f.tipo }
+    },
+    async contestada(clave) {
+      if (o.fallarContestada) throw new Error('lectura caída')
+      const u = filas.filter((x) => x.clave === clave).at(-1)
+      return u && u.tipo === 'pregunta' && u.cerrado_en !== null && esContestada(u.nota) ? { aviso_id: u.id, slack_ts: u.slack_ts, slack_estado: u.slack_estado } : null
+    },
+    async cerrarFamilia(prefijo, salvo, nota) {
+      const fs = filas.filter((x) => x.clave.startsWith(prefijo) && x.clave !== salvo && x.cerrado_en === null)
+      for (const f of fs) { f.cerrado_en = ahora; f.nota = nota }
+      return fs.map((f) => ({ aviso_id: f.id, slack_ts: f.slack_ts, tipo: f.tipo }))
     },
     async anotarSlack(id, estado, ts, error) {
       if (o.fallarAnotar) throw new Error('timeout')
@@ -206,6 +216,151 @@ describe('adaptadores', () => {
     expect(await slackPorBot(undefined, f)('C', 't')).toEqual({ ok: false, error: 'sin SLACK_BOT_TOKEN' })
     expect(n).toBe(0)
     expect(await slackPorBot('tok', f)('C', 't')).toEqual({ ok: false, error: 'Slack respondió 200 channel_not_found' })
+  })
+})
+
+describe('11-nov · una pregunta CONTESTADA no vuelve a salir (decisión Lenovo 18:50 · la de 40 se repitió 1065 veces)', () => {
+  const pregunta = (clave: string, detalle: string, client_id: string) => aviso(clave, detalle, { tipo: 'pregunta', client_id })
+  for (const [rubro, cliente] of [['restaurante', RESTAURANTE], ['b2b', B2B]] as const) {
+    it(`${rubro}: cerrada como contestada → la misma clave ya no guarda ni publica; otra clave sí`, async () => {
+      const { almacen, filas, pasar } = almacenFalso(); const { slack, llamadas } = slackFalso(); const d = deps(almacen, slack)
+      await avisar(d, pregunta(`tope:${rubro}:40`, 'd1', cliente))
+      expect(await cerrar(d, `tope:${rubro}:40`, 'el dueño subió el tope a 100', { contestada: true })).toEqual({ cerrado: true, slack: 'entregado' })
+      expect(filas[0].nota).toBe('Contestada: el dueño subió el tope a 100')
+      const antes = llamadas.length
+      const r = await avisar(d, pregunta(`tope:${rubro}:40`, 'd2 distinto', cliente))
+      expect(r).toMatchObject({ accion: 'contestada', aviso_id: filas[0].id, slack: 'entregado' })
+      expect(filas).toHaveLength(1); expect(filas[0].repeticiones).toBe(0); expect(llamadas.length).toBe(antes)
+      // ni pasadas 24 h vuelve
+      pasar(25)
+      expect((await avisar(d, pregunta(`tope:${rubro}:40`, 'd2 distinto', cliente))).accion).toBe('contestada')
+      expect((await avisar(d, pregunta(`tope:${rubro}:100`, 'd3', cliente))).accion).toBe('abrio')
+    })
+  }
+  for (const [tipo, cliente] of [['alarma', RESTAURANTE], ['pieza', B2B]] as const) {
+    it(`🟡 CC7 · una ${tipo} nunca se calla: cerrada con nota «Contestada…» o con contestada:true, vuelve a avisar (fila + Slack)`, async () => {
+      const { almacen, filas } = almacenFalso(); const { slack, llamadas } = slackFalso(); const d = deps(almacen, slack)
+      await avisar(d, aviso(`k:${tipo}:1`, 'd', { tipo, client_id: cliente }))
+      await cerrar(d, `k:${tipo}:1`, 'Contestada por Emilio en el hilo')
+      const antes = llamadas.length
+      expect((await avisar(d, aviso(`k:${tipo}:1`, 'd', { tipo, client_id: cliente }))).accion).toBe('abrio')
+      expect(filas).toHaveLength(2); expect(llamadas.length).toBe(antes + 1)
+      await cerrar(d, `k:${tipo}:1`, 'listo', { contestada: true })
+      expect((await avisar(d, aviso(`k:${tipo}:1`, 'd', { tipo, client_id: cliente }))).accion).toBe('abrio')
+      expect(filas).toHaveLength(3); expect(llamadas.length).toBe(antes + 3)
+    })
+  }
+  it('avisar ni siquiera consulta «contestada» para una alarma: aunque el almacén dijera que sí, la alarma sale', async () => {
+    const { almacen } = almacenFalso(); const { slack, llamadas } = slackFalso()
+    let consultas = 0
+    const siempre: AlmacenDeAvisos = { ...almacen, contestada: async () => { consultas++; return { aviso_id: 'vieja', slack_ts: 't', slack_estado: 'entregado' } } }
+    expect((await avisar(deps(siempre, slack), aviso('k:al2', 'd', { tipo: 'alarma', client_id: B2B }))).accion).toBe('abrio')
+    expect(consultas).toBe(0); expect(llamadas).toHaveLength(1)
+    expect((await avisar(deps(siempre, slack), aviso('k:pr2', 'd', { tipo: 'pregunta', client_id: B2B }))).accion).toBe('contestada')
+    expect(consultas).toBe(1)
+  })
+  it('el almacén tampoco cuenta una alarma «contestada» aunque se le pregunte directo (los dos caminos cerrados)', async () => {
+    const { almacen } = almacenFalso(); const { slack } = slackFalso(); const d = deps(almacen, slack)
+    await avisar(d, aviso('k:al', 'd', { tipo: 'alarma' }))
+    await cerrar(d, 'k:al', 'x', { contestada: true })
+    expect(await almacen.contestada('k:al')).toBeNull()
+  })
+  it('un cierre SIN la marca (resuelto, vencido) sí deja que la pregunta vuelva', async () => {
+    const { almacen, pasar } = almacenFalso(); const { slack } = slackFalso(); const d = deps(almacen, slack)
+    await avisar(d, pregunta('tope:x:40', 'd', RESTAURANTE))
+    await cerrar(d, 'tope:x:40', 'todo cabe')
+    expect((await avisar(d, pregunta('tope:x:40', 'd', RESTAURANTE))).accion).toBe('abrio')
+    pasar(25)
+    expect((await avisar(d, pregunta('tope:x:40', 'd', RESTAURANTE))).accion).toBe('reabrio')
+  })
+  it('si se reabre después de contestada (otra fila más nueva, abierta), cuenta la ÚLTIMA fila: se avisa como siempre', async () => {
+    const { almacen, filas } = almacenFalso(); const { slack } = slackFalso(); const d = deps(almacen, slack)
+    await avisar(d, pregunta('tope:y:40', 'd', B2B))
+    await cerrar(d, 'tope:y:40', 'listo', { contestada: true })
+    filas.push({ ...filas[0], id: 'nueva', cerrado_en: null, nota: null })
+    expect((await avisar(d, pregunta('tope:y:40', 'd', B2B))).accion).toBe('repetida')
+  })
+  it('si la lectura de «contestada» falla, se avisa como siempre (nunca se calla por un error)', async () => {
+    const { almacen } = almacenFalso({ fallarContestada: true }); const { slack, llamadas } = slackFalso()
+    expect((await avisar(deps(almacen, slack), pregunta('tope:z:40', 'd', RESTAURANTE))).accion).toBe('abrio')
+    expect(llamadas).toHaveLength(1)
+  })
+  it('la marca: va al principio, no se duplica, sin distinguir mayúsculas; «no contestada» no cuenta', () => {
+    expect(notaDeContestada('subió el tope')).toBe('Contestada: subió el tope')
+    expect(notaDeContestada('Contestada: subió el tope')).toBe('Contestada: subió el tope')
+    expect(notaDeContestada('')).toBe('Contestada')
+    expect(notaDeContestada('x'.repeat(400))).toHaveLength(300)
+    expect(esContestada('contestada: sí')).toBe(true)
+    expect(esContestada('  CONTESTADA')).toBe(true)
+    expect(esContestada('no contestada')).toBe(false)
+    expect(esContestada('sin_actividad_24h')).toBe(false)
+    expect(esContestada(null)).toBe(false)
+  })
+})
+
+describe('11-nov · cerrar una FAMILIA de claves (lo que dejó de aplicar)', () => {
+  it('cierra las abiertas del prefijo salvo la vigente, responde en cada hilo y no toca otras familias ni otra campaña', async () => {
+    const { almacen, filas } = almacenFalso(); const { slack, llamadas } = slackFalso(); const d = deps(almacen, slack)
+    await avisar(d, aviso('tope:camp-a:40', 'd', { tipo: 'pregunta', client_id: RESTAURANTE }))
+    await avisar(d, aviso('tope:camp-a:60', 'd', { tipo: 'pregunta', client_id: RESTAURANTE }))
+    await avisar(d, aviso('tope:camp-a:100', 'd', { tipo: 'pregunta', client_id: RESTAURANTE }))
+    await avisar(d, aviso('tope:camp-ab:40', 'd', { tipo: 'pregunta', client_id: B2B }))
+    await avisar(d, aviso('gasto:camp-a', 'd', { client_id: RESTAURANTE }))
+    const antes = llamadas.length
+    expect(await cerrarFamilia(d, 'tope:camp-a:', 'tope:camp-a:100', 'el tope ahora es 100')).toEqual({ cerradas: 2 })
+    expect(filas.filter((f) => f.cerrado_en !== null).map((f) => f.clave)).toEqual(['tope:camp-a:40', 'tope:camp-a:60'])
+    expect(filas.find((f) => f.clave === 'tope:camp-a:40')!.nota).toBe('el tope ahora es 100')
+    expect(esContestada(filas[0].nota)).toBe(false)
+    const respuestas = llamadas.slice(antes)
+    expect(respuestas.map((l) => [l.canal, l.hilo])).toEqual([['C-BUZON', filas[0].slack_ts], ['C-BUZON', filas[1].slack_ts]])
+    expect(respuestas[0].texto).toBe('✅ Resuelto · el tope ahora es 100')
+    // sin salvo: cierra todas las de la familia
+    expect(await cerrarFamilia(d, 'tope:camp-a:', null, 'todo cabe')).toEqual({ cerradas: 1 })
+    expect(filas.find((f) => f.clave === 'tope:camp-ab:40')!.cerrado_en).toBeNull()
+    expect(filas.find((f) => f.clave === 'gasto:camp-a')!.cerrado_en).toBeNull()
+  })
+  it('un prefijo con comodines o fuera de largo no se acepta; un error de la base se lanza como ErrorAlGuardar', async () => {
+    const { almacen } = almacenFalso(); const { slack } = slackFalso(); const d = deps(almacen, slack)
+    for (const p of ['tope:%', 'tope:_a', 'tope:*', 'to\\pe', 'ab', 'x'.repeat(161)]) await expect(cerrarFamilia(d, p, null, 'n')).rejects.toBeInstanceOf(EntradaInvalida)
+    const roto: AlmacenDeAvisos = { ...almacen, cerrarFamilia: async () => { throw new Error('sin permiso') } }
+    await expect(cerrarFamilia(deps(roto, slack), 'tope:a:', null, 'n')).rejects.toBeInstanceOf(ErrorAlGuardar)
+  })
+  it('con Slack apagado cierra igual y no llama a Slack', async () => {
+    const { almacen, filas } = almacenFalso(); const { slack, llamadas } = slackFalso()
+    await avisar(deps(almacen, slack), aviso('tope:c:1', 'd', { tipo: 'pregunta' }))
+    const antes = llamadas.length
+    expect(await cerrarFamilia(deps(almacen, slack, false), 'tope:c:', null, 'n')).toEqual({ cerradas: 1 })
+    expect(filas[0].cerrado_en).not.toBeNull(); expect(llamadas.length).toBe(antes)
+  })
+})
+
+describe('11-nov · adaptador real: contestada y cierre por familia', () => {
+  type Llamada = [string, ...unknown[]]
+  function dbFalsa(resp: { data: unknown; error: unknown }) {
+    const llamadas: Llamada[] = []
+    const q: Record<string, (...a: unknown[]) => unknown> = {}
+    for (const m of ['select', 'eq', 'order', 'limit', 'update', 'like', 'is', 'neq']) q[m] = (...a: unknown[]) => { llamadas.push([m, ...a]); return q }
+    ;(q as unknown as { then: unknown }).then = (ok: (v: unknown) => unknown) => Promise.resolve(resp).then(ok)
+    return { db: { from: (t: string) => { llamadas.push(['from', t]); return q }, rpc: async () => ({ data: null, error: null }) }, llamadas }
+  }
+  it('contestada: lee la ÚLTIMA fila de la clave y solo cuenta si está cerrada con la marca', async () => {
+    const si = dbFalsa({ data: [{ id: 'u', tipo: 'pregunta', cerrado_en: '2026-11-11T17:47:11Z', nota_cierre: 'Contestada: subió el tope', slack_ts: 't1', slack_estado: 'entregado' }], error: null })
+    expect(await almacenDeAvisos(si.db).contestada('tope:a:40')).toEqual({ aviso_id: 'u', slack_ts: 't1', slack_estado: 'entregado' })
+    expect(si.llamadas).toEqual([['from', 'avisos'], ['select', 'id,tipo,cerrado_en,nota_cierre,slack_ts,slack_estado'], ['eq', 'clave', 'tope:a:40'], ['order', 'abierto_en', { ascending: false }], ['limit', 1]])
+    for (const fila of [{ id: 'u', tipo: 'pregunta', cerrado_en: null, nota_cierre: null }, { id: 'u', tipo: 'pregunta', cerrado_en: null, nota_cierre: 'Contestada' }, { id: 'u', tipo: 'pregunta', cerrado_en: 'x', nota_cierre: 'sin_actividad_24h' }, { id: 'u', tipo: 'alarma', cerrado_en: 'x', nota_cierre: 'Contestada por Emilio en el hilo' }, { id: 'u', tipo: 'pieza', cerrado_en: 'x', nota_cierre: 'Contestada' }]) expect(await almacenDeAvisos(dbFalsa({ data: [fila], error: null }).db).contestada('k')).toBeNull()
+    expect(await almacenDeAvisos(dbFalsa({ data: [], error: null }).db).contestada('k')).toBeNull()
+    expect(await almacenDeAvisos(dbFalsa({ data: null, error: { message: 'caída' } }).db).contestada('k')).toBeNull()
+  })
+  it('cerrarFamilia: update condicional de las ABIERTAS del prefijo, salvo la vigente; un error se lanza', async () => {
+    const f = dbFalsa({ data: [{ id: 'a', slack_ts: 't', tipo: 'pregunta' }], error: null })
+    expect(await almacenDeAvisos(f.db).cerrarFamilia('tope:a:', 'tope:a:100', 'n')).toEqual([{ aviso_id: 'a', slack_ts: 't', tipo: 'pregunta' }])
+    const [, upd] = f.llamadas.find((l) => l[0] === 'update') as [string, Record<string, unknown>]
+    expect(Object.keys(upd).sort()).toEqual(['cerrado_en', 'nota_cierre']); expect(upd.nota_cierre).toBe('n')
+    expect(f.llamadas.filter((l) => ['like', 'is', 'neq', 'select'].includes(l[0]))).toEqual([['like', 'clave', 'tope:a:%'], ['is', 'cerrado_en', null], ['neq', 'clave', 'tope:a:100'], ['select', 'id,slack_ts,tipo']])
+    const sinSalvo = dbFalsa({ data: [], error: null })
+    await almacenDeAvisos(sinSalvo.db).cerrarFamilia('tope:a:', null, 'n')
+    expect(sinSalvo.llamadas.some((l) => l[0] === 'neq')).toBe(false)
+    await expect(almacenDeAvisos(dbFalsa({ data: null, error: { message: 'sin permiso' } }).db).cerrarFamilia('tope:a:', null, 'n')).rejects.toThrow(/cerrar la familia: sin permiso/)
   })
 })
 

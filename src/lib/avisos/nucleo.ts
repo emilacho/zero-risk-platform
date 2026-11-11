@@ -11,7 +11,8 @@
  */
 export type Tipo = 'pieza' | 'pregunta' | 'alarma'
 export type OrigenTipo = 'n8n' | 'plataforma'
-export type Accion = 'abrio' | 'reabrio' | 'repetida' | 'cambio'
+/** 'contestada' (11-nov · CC2 · decisión Lenovo 18:50): la clave ya se cerró como CONTESTADA → no se guarda ni se publica nada */
+export type Accion = 'abrio' | 'reabrio' | 'repetida' | 'cambio' | 'contestada'
 export type EstadoSlack = 'pendiente' | 'entregado' | 'fallo' | 'apagado'
 
 export interface EntradaDeAviso {
@@ -31,6 +32,10 @@ export interface Guardado { aviso_id: string; accion: Accion; slack_ts: string |
 export interface AlmacenDeAvisos {
   avisar(e: EntradaDeAviso): Promise<Guardado>
   cerrar(clave: string, nota: string): Promise<{ aviso_id: string; slack_ts: string | null; tipo: Tipo } | null>
+  /** la ÚLTIMA fila de la clave, si es una PREGUNTA cerrada como contestada (nota que empieza con «Contestada»); si no, o si la lectura falla, null (se avisa como siempre) · una alarma o una pieza nunca cuentan (🟡 CC7) */
+  contestada(clave: string): Promise<{ aviso_id: string; slack_ts: string | null; slack_estado: EstadoSlack } | null>
+  /** cierra las abiertas cuya clave empieza con `prefijo`, salvo `salvo` · devuelve las cerradas (con su tipo, para responder en su hilo) */
+  cerrarFamilia(prefijo: string, salvo: string | null, nota: string): Promise<Array<{ aviso_id: string; slack_ts: string | null; tipo: Tipo }>>
   anotarSlack(aviso_id: string, estado: EstadoSlack, ts: string | null, error: string | null): Promise<void>
 }
 /** puerto de Slack: publicar en un canal (o en un hilo) · devuelve el ts o el error, nunca lanza */
@@ -84,6 +89,10 @@ export interface Resultado extends Guardado { slack: EstadoSlack; slack_anotado:
 /** avisar: guarda primero; Slack después (si toca) · lanza solo `ErrorAlGuardar` (o `EntradaInvalida` si la entrada no sirve) */
 export async function avisar(d: Dependencias, entrada: unknown): Promise<Resultado> {
   const e = validarEntrada(entrada)
+  // una pregunta ya CONTESTADA no vuelve a salir con la misma clave (la de 40 se repitió 1065 veces): ni fila nueva ni Slack
+  // solo las PREGUNTAS se contestan: una alarma o una pieza siempre llegan (regla «menos ruido» · 🟡 CC7)
+  const ya = e.tipo === 'pregunta' ? await d.almacen.contestada(e.clave).catch(() => null) : null
+  if (ya) return { aviso_id: ya.aviso_id, accion: 'contestada', slack_ts: ya.slack_ts, slack_estado: ya.slack_estado, slack: ya.slack_estado, slack_anotado: true }
   let g: Guardado
   try { g = await d.almacen.avisar(e) } catch (x) { throw new ErrorAlGuardar(x instanceof Error ? x.message : String(x)) }
   const anotar = async (estado: EstadoSlack, ts: string | null, error: string | null): Promise<boolean> => {
@@ -102,15 +111,43 @@ export async function avisar(d: Dependencias, entrada: unknown): Promise<Resulta
 }
 
 /** cerrar el incidente abierto de una clave · el cierre va como respuesta en su hilo, en el canal del TIPO DE LA FILA (si hay hilo y Slack está encendido) */
-export async function cerrar(d: Dependencias, clave: string, nota: string): Promise<{ cerrado: boolean; slack: EstadoSlack | 'sin_hilo' }> {
+export async function cerrar(d: Dependencias, clave: string, nota: string, o: { contestada?: boolean } = {}): Promise<{ cerrado: boolean; slack: EstadoSlack | 'sin_hilo' }> {
   const c = texto(clave)
   if (c.length < 3 || c.length > 160) throw new EntradaInvalida('la clave del incidente debe tener entre 3 y 160 caracteres')
+  const n = o.contestada ? notaDeContestada(nota) : texto(nota).slice(0, 300) || 'cerrado'
   let f: { aviso_id: string; slack_ts: string | null; tipo: Tipo } | null
-  try { f = await d.almacen.cerrar(c, texto(nota).slice(0, 300) || 'cerrado') } catch (x) { throw new ErrorAlGuardar(x instanceof Error ? x.message : String(x)) }
+  try { f = await d.almacen.cerrar(c, n) } catch (x) { throw new ErrorAlGuardar(x instanceof Error ? x.message : String(x)) }
   if (!f) return { cerrado: false, slack: 'sin_hilo' }
-  if (!d.slackEncendido) return { cerrado: true, slack: 'apagado' }
+  return { cerrado: true, slack: await responderCierre(d, f, n) }
+}
+
+/** 11-nov · la marca de «contestada» va al principio de la nota de cierre (la tabla no cambia) */
+export const MARCA_DE_CONTESTADA = 'Contestada'
+export const esContestada = (nota: string | null | undefined): boolean => typeof nota === 'string' && nota.trim().toLowerCase().startsWith(MARCA_DE_CONTESTADA.toLowerCase())
+export function notaDeContestada(nota: string): string {
+  const t = texto(nota)
+  return (esContestada(t) ? t : `${MARCA_DE_CONTESTADA}${t ? `: ${t}` : ''}`).slice(0, 300)
+}
+
+async function responderCierre(d: Dependencias, f: { slack_ts: string | null; tipo: Tipo }, nota: string): Promise<EstadoSlack | 'sin_hilo'> {
+  if (!d.slackEncendido) return 'apagado'
   const canal = d.canales[f.tipo]
-  if (!f.slack_ts || !canal) return { cerrado: true, slack: 'sin_hilo' }
-  const r = await d.slack(canal, `✅ Resuelto${texto(nota) ? ` · ${texto(nota).slice(0, 300)}` : ''}`, f.slack_ts)
-  return { cerrado: true, slack: r.ok ? 'entregado' : 'fallo' }
+  if (!f.slack_ts || !canal) return 'sin_hilo'
+  const r = await d.slack(canal, `✅ Resuelto${nota ? ` · ${nota}` : ''}`, f.slack_ts)
+  return r.ok ? 'entregado' : 'fallo'
+}
+
+/**
+ * 11-nov · cerrar las abiertas de una FAMILIA de claves (mismo prefijo), salvo la vigente · cada una responde en su hilo.
+ * Para lo que deja de aplicar solo: p. ej. la pregunta del tope de 40 cuando el tope ya es 100. El cierre NO es «contestada»: si la situación vuelve, se pregunta de nuevo.
+ * El prefijo no admite comodines (%, _, *, \): cierra exactamente esa familia.
+ */
+export async function cerrarFamilia(d: Dependencias, prefijo: string, salvo: string | null, nota: string): Promise<{ cerradas: number }> {
+  const p = texto(prefijo)
+  if (p.length < 3 || p.length > 160 || /[%_*\\]/.test(p)) throw new EntradaInvalida('el prefijo de la familia va de 3 a 160 caracteres y sin comodines')
+  const n = texto(nota).slice(0, 300) || 'cerrado'
+  let fs: Array<{ aviso_id: string; slack_ts: string | null; tipo: Tipo }>
+  try { fs = await d.almacen.cerrarFamilia(p, salvo ? texto(salvo) : null, n) } catch (x) { throw new ErrorAlGuardar(x instanceof Error ? x.message : String(x)) }
+  for (const f of fs) await responderCierre(d, f, n)
+  return { cerradas: fs.length }
 }
