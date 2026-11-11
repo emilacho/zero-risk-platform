@@ -20,6 +20,7 @@ import { mp4Simulado } from './orquestador-video'
 import { identidadVisualDelCliente } from './identidad-visual'
 import { separarFotos } from './material'
 import type { Registro } from './chequeos'
+import { registroDelCliente } from '../cadena/registro'
 import { avisoDelManualConValidados } from '../manual/lectura'
 import { codificarPng } from './encaje'
 import { abrirRevision, armarSalida } from '../jefatura/revision/orquestador'
@@ -79,12 +80,17 @@ export function marcaDelCliente(manual: Fila, cliente: Fila, handles: string[]):
   return identidadVisualDelCliente(manual, cliente, handles).marca
 }
 
-/** el registro (tuteo / voseo) que fija el manual; sin dato, «sin_dato» (el chequeo solo avisa) */
-export function registroDelManual(voz: string | null | undefined): Registro {
-  const t = (voz ?? '').toLowerCase()
-  if (/nunca\s+(?:uses?\s+)?vos|tutea|tuteo|\bt[uú]\b.*siempre/.test(t)) return 'tuteo'
-  if (/\bvoseo\b|usa\s+vos|vosea/.test(t)) return 'voseo'
-  return 'sin_dato'
+/**
+ * el registro (tuteo · voseo · usted) que fija el cliente; sin dato, «sin_dato» (el chequeo solo avisa).
+ * 11-nov · fila #10 del barrido de reglas rígidas (GO Lenovo 03:55Z): lo resuelve el MISMO detector que la cadena (`trato-logica.js` por `registroDelCliente`), que entiende negaciones
+ * («voseo, nunca tuteo» es voseo) y lee también el trato explícito del manual o de la ficha. El trato «habitual del país» (baja confianza) NO cuenta como fijado: queda «sin_dato», como hoy.
+ * Acepta la descripción de voz suelta (texto) o el manual entero.
+ */
+export function registroDelManual(manual: string | Record<string, unknown> | null | undefined, ficha?: Record<string, unknown> | null): Registro {
+  const m = typeof manual === 'string' ? { voice_description: manual } : manual ?? {}
+  const { registro, fuente } = registroDelCliente({ voice_description: m.voice_description, writing_style: m.writing_style, tone_guidelines: m.tone_guidelines }, ficha ? { config: ficha.config, country: ficha.country, market: ficha.market } : null)
+  if (fuente === 'default_por_pais') return 'sin_dato'
+  return registro === 'tu' ? 'tuteo' : registro === 'vos' ? 'voseo' : registro === 'usted' ? 'formal' : 'sin_dato'
 }
 
 /** una alarma de «Slack no entregó» por causa y por hora (UNA por incidente: la repetición no vuelve a sonar). Por proceso: basta para no inundar #alertas con cada aviso del mismo encargo */
@@ -174,7 +180,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
           fuentes: {
             palabras_prohibidas: lista<string>(manual.forbidden_words), palabras_duras: palabrasDuras(manual as never), telefonos, handles, precios, competidores,
             moneda: monedaDelCliente({ country: cliente.country, config: cliente.config }, manual as { currency?: unknown }).codigo,
-            registro: registroDelManual(manual.voice_description as string | null),
+            registro: registroDelManual(manual, cliente),
             telefonos_verificables: telefonos.length > 0, handles_verificables: handles.length > 0,
           },
           propios: { telefonos, handles, urls: cliente.website_url ? [String(cliente.website_url)] : [], marcas_ajenas: competidores.map((c) => c.toLowerCase()) },

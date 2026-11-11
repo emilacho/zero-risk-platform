@@ -107,7 +107,8 @@ export function chequeosDePost(c: ContextoDeChequeo): Ficha[] {
 
   // 4 · hashtags: sin competidores, cantidad
   for (const comp of c.fuentes.competidores) {
-    if ((c.pieza.hashtags ?? []).some((h) => contienePalabra(h.replace(/^#/, ''), comp)) || contienePalabra(texto, comp)) f.push(ficha('hashtags', 'bloquea', `nombra a un competidor del cliente («${comp}»)`, 'competidores del cliente', 'quitar el nombre', n++))
+    // 11-nov · fila #11 del barrido de reglas rígidas (GO Lenovo 03:55Z): que la palabra coincida es un CANDIDATO (un competidor llamado «Mar» o «La Playa» no es una mención cada vez que se dice «mar»); decide el jefe, que lee estas fichas
+    if ((c.pieza.hashtags ?? []).some((h) => contienePalabra(h.replace(/^#/, ''), comp)) || contienePalabra(texto, comp)) f.push(ficha('hashtags', 'sugerencia', `puede estar nombrando a un competidor del cliente («${comp}»): revisar si es una mención o una palabra común`, 'competidores del cliente', 'quitar el nombre si es una mención', n++))
   }
   if ((c.pieza.hashtags ?? []).length > c.limites.hashtags_max) f.push(ficha('hashtags', c.limites.limites_verificados ? 'bloquea' : 'sugerencia', `${c.pieza.hashtags.length} hashtags, más que el límite de ${c.limites.hashtags_max}`, 'límite de la plataforma' + (c.limites.limites_verificados ? '' : ' (no verificado)'), 'reducir los hashtags', n++))
 

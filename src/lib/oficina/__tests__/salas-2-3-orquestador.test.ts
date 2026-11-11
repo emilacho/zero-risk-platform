@@ -164,12 +164,14 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(fichas(M, id).filter((f) => /premium/.test(f.que ?? '')).every((f) => f.gravedad === 'sugerencia')).toBe(true)
     expect(fichas(M, id).some((f) => /premium/.test(f.que ?? ''))).toBe(true)
   })
-  it('un porcentaje inventado en las láminas bloquea', async () => {
+  it('un porcentaje que no está en las fuentes llega al jefe como candidato (aviso): lo decide la revisión, no el código (11-nov · fila #3)', async () => {
     const { M, id } = await abiertoC()
     const base = TEXTO_BASE.replace('Lo preparamos al momento', 'Sube 80% tus ventas')
     const lam = LAMINAS.map((l, i) => (i === 3 ? { ...l, headline: 'Sube 80% tus ventas' } : l))
-    await correr(M, id, guionCarrusel({ texto: () => ({ texto: j({ ...COPIA, texto_base: base }) }), laminas: () => ({ texto: j({ laminas: lam }) }) }))
-    expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && /80%/.test(f.que ?? ''))).toBe(true)
+    const { tareas } = await correr(M, id, guionCarrusel({ texto: () => ({ texto: j({ ...COPIA, texto_base: base }) }), laminas: () => ({ texto: j({ laminas: lam }) }) }))
+    const del80 = fichas(M, id).filter((f) => /80%/.test(f.que ?? '') && f.origen === 'chequeo')
+    expect(del80.length).toBeGreaterThan(0); expect(del80.every((f) => f.gravedad === 'sugerencia')).toBe(true)
+    expect(tareas['revision_jefe'][0]).toMatch(/80%/)
   })
   it('un hallazgo del jefe sobre el texto: corrige el autor, el diseñador vuelve a recortar y se vuelve a dibujar (2 dibujos)', async () => {
     const { M, id } = await abiertoC()
