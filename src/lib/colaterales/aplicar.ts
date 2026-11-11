@@ -103,7 +103,8 @@ export async function aplicarAprobados(d: { almacen: Almacen; escritores: Escrit
 export interface ResultadoDeDeshacer {
   deshechos: { id: string; documento: Documento; version: string }[]
   /** no se deshizo porque alguien escribió encima de lo aplicado (o el documento ya no está): se avisa, no se pisa */
-  no_deshechos: { id: string; motivo: 'version_posterior' | 'sin_escritor' | 'documento_no_existe' | 'base_no_legible' }[]
+  /** 11-nov · `escritura_rechazada`: el escritor no puede guardar la base tal cual hoy (p. ej. el brief de antes ya tendría un bloqueo con el contexto de hoy): se avisa, nunca tumba la corrida */
+  no_deshechos: { id: string; motivo: 'version_posterior' | 'sin_escritor' | 'documento_no_existe' | 'base_no_legible' | 'escritura_rechazada' }[]
   ya_cambiaron: string[]
 }
 
@@ -121,7 +122,11 @@ export async function deshacerEdicion(d: { almacen: Almacen; escritores: Escrito
     if (vig.version !== version_resultante) { no('version_posterior'); continue }
     const base = await esc.leerVersion(documento_ref, version_base)
     if (base === null) { no('base_no_legible'); continue }
-    const nueva = await esc.escribirSiSigue(documento_ref, version_resultante!, base, `colaterales · deshacer edición ${edicion_id}`)
+    let nueva: string | null
+    try { nueva = await esc.escribirSiSigue(documento_ref, version_resultante!, base, `colaterales · deshacer edición ${edicion_id}`) } catch (e) {
+      if (e instanceof EscrituraRechazada) { no('escritura_rechazada'); continue }
+      throw e
+    }
     if (nueva === null) { no('version_posterior'); continue }
     for (const t of grupo) {
       if (await d.almacen.pasarRetoque(t.id, 'aplicado', 'deshecho', { motivo: `deshecho en la versión ${nueva}` })) r.deshechos.push({ id: t.id, documento, version: nueva })

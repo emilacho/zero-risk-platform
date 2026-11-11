@@ -249,8 +249,9 @@ describe('la puerta con el nuevo orden hace el PRÓXIMO paso que falta, contra l
   it('la cadena dice que ya no se puede reabrir (409 con necesita_humano): no se le lleva nada a la oficina', async () => {
     const m = mundo()
     await desdeAbrir(m, 'brief')
+    // la reapertura ya se gastó: DOS versiones de mesa descartadas (11-nov · el contador cuenta filas, no lee el número de versión)
     m.al.briefsCreativos[0].estado = 'descartada'
-    m.al.briefsCreativos[0].version = 2 // la reapertura ya se gastó
+    m.al.briefsCreativos.push({ ...structuredClone(m.al.briefsCreativos[0]), version: 2 })
     const antes = m.llamadas.length
     const r = await desdeAbrir(m, 'brief')
     expect(m.llamadas.slice(antes).map((l) => l.ruta)).toEqual(['/api/cadena/brief'])

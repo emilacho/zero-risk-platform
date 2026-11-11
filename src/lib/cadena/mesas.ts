@@ -39,6 +39,31 @@ import { bloqueDelPerfil, type PerfilParaLectores } from '../perfil-del-publico/
 export const CAP_DE_VUELTAS_DE_CAMBIOS = 2
 /** versión 1 + UNA reapertura (brief devuelto · concepto sin_mesa); a la siguiente, necesita_humano */
 export const MAX_VERSIONES_POR_REAPERTURA = 2
+/**
+ * 11-nov · colaterales · la marca de una versión del brief que NO hizo una mesa: la escribió el motor de colaterales (un retoque aprobado o su
+ * deshacer, `colaterales/escritores.ts`). Una sola constante: la usan el escritor y el contador de reaperturas (nunca un texto suelto).
+ */
+export const MOTIVO_RETOQUE_DE_COLATERALES = 'retoque_de_colaterales'
+export const esRetoqueDeColaterales = (b: Pick<BriefCreativoGuardado, 'motivo'>): boolean => b.motivo === MOTIVO_RETOQUE_DE_COLATERALES
+/**
+ * 11-nov · guarda 1 de CC7 · la marca del retoque la pone SOLO el escritor. Si una MESA manda ese motivo (por error o en el texto del agente), su fila
+ * dejaría de contar como reapertura (una de más, o un bucle). `recibirBrief` lo cambia por este texto, que nunca es la marca. Sin juicio: compara
+ * sin espacios ni mayúsculas.
+ */
+export const MOTIVO_RESERVADO_EN_LA_MESA = 'la mesa mandó el motivo reservado de los retoques; se guarda este en su lugar'
+export const motivoDeLaMesa = (m: string | null): string | null =>
+  m !== null && m.trim().toLowerCase() === MOTIVO_RETOQUE_DE_COLATERALES ? MOTIVO_RESERVADO_EN_LA_MESA : m
+/**
+ * 11-nov · cuántas versiones del brief hizo una MESA hasta `version` (incluida) · puro. Cuenta FILAS, no lee el número: un retoque o un deshacer
+ * suben `version` sin ser una reapertura (CC7). Reemplaza al viejo `version >= MAX_VERSIONES_POR_REAPERTURA` en los seis lugares que deciden el alto.
+ */
+export function versionesDeMesaHasta(briefs: Pick<BriefCreativoGuardado, 'version' | 'motivo'>[], version: number): number {
+  return briefs.filter((b) => b.version <= version && !esRetoqueDeColaterales(b)).length
+}
+/** ¿esa versión ya agotó la única reapertura? (lee las versiones de la campaña; un error de la base se lanza) */
+async function agotoLaReapertura(al: Almacen, campanaId: string, version: number): Promise<boolean> {
+  return versionesDeMesaHasta(await al.briefsDe(campanaId), version) >= MAX_VERSIONES_POR_REAPERTURA
+}
 export const PLAZO_DE_MESA_MIN = { brief: 30, concepto: 90 } as const
 export const HOLGURA_DE_MESA_MIN = 30
 export const TIPO_DE_ESPERA_DE_CONCEPTO = 'aprobacion_concepto'
@@ -254,7 +279,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   const nota = pedido.nota
   if (ultimo?.estado === 'validada' && !nota) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version) } }
   // reapertura por devolución o fallo: UNA vez; con nota de Emilio (cambios) no cuenta como reapertura
-  if (ultimo && (ultimo.estado === 'devuelta' || ultimo.estado === 'descartada') && !nota && ultimo.version >= MAX_VERSIONES_POR_REAPERTURA) {
+  if (ultimo && (ultimo.estado === 'devuelta' || ultimo.estado === 'descartada') && !nota && versionesDeMesaHasta(briefs, ultimo.version) >= MAX_VERSIONES_POR_REAPERTURA) {
     const r = await ponerNecesitaHumano(al, campana, `el brief creativo ya se ${ultimo.estado === 'devuelta' ? 'devolvió' : 'descartó'} ${ultimo.version} veces`, ahora)
     return { status: 409, cuerpo: { error: 'brief_agotado', necesita_humano: true, alerta: r.alerta } }
   }
@@ -278,10 +303,11 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   if (ultimo.estado !== 'borrador') return { ok: true, ya_cerrada: true, estado: ultimo.estado }
   // tramo 2 del revisor de registro: una entrega repetida mientras la jefatura revisa no reabre ni descarta nada (solo un brief retenido tiene texto en `borrador`)
   if (ultimo.texto_md && (await esperaDeRegistroViva(al, campana.id, 'brief', p.version))) return { ok: true, estado: EN_REVISION_DE_REGISTRO }
-  const base = { costo_usd: p.costo_usd, encargo_id: p.encargo_id, motivo: p.motivo }
+  const motivo = motivoDeLaMesa(p.motivo) // guarda 1 de CC7: la mesa nunca escribe la marca del retoque
+  const base = { costo_usd: p.costo_usd, encargo_id: p.encargo_id, motivo }
   if (!texto(p.texto)) {
-    await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado: 'descartada', motivo: p.motivo ?? 'la mesa no entregó texto' })
-    if (p.version >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `la mesa del brief no entregó dos veces (${p.motivo ?? 'sin motivo'})`, ahora)
+    await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado: 'descartada', motivo: motivo ?? 'la mesa no entregó texto' })
+    if (await agotoLaReapertura(al, campana.id, p.version)) await ponerNecesitaHumano(al, campana, `la mesa del brief no entregó dos veces (${motivo ?? 'sin motivo'})`, ahora)
     return { ok: true, estado: 'descartada', ...(await siguienteDespuesDe(al, campana.id)) }
   }
   const estr = await al.ultimaEstrategia(campana.id)
@@ -305,7 +331,7 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   const bloquea = bloqueosDelBrief(leido)
   const estado = bloquea.length ? 'devuelta' : 'validada'
   await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado, texto_md: p.texto, leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
-  if (estado === 'devuelta' && p.version >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
+  if (estado === 'devuelta' && (await agotoLaReapertura(al, campana.id, p.version))) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
   return { ok: true, estado, ...(await siguienteDespuesDe(al, campana.id)) }
 }
 
@@ -397,7 +423,7 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
     const brief = await al.ultimoBriefCreativo(campana.id)
     if (brief) {
       await al.actualizarBriefCreativo(campana.id, brief.version, { estado: 'devuelta', devolucion_texto: devolucion })
-      if (brief.version >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, 'la dirección devolvió el brief y ya era la segunda versión', ahora)
+      if (await agotoLaReapertura(al, campana.id, brief.version)) await ponerNecesitaHumano(al, campana, 'la dirección devolvió el brief y ya era la segunda versión', ahora)
     }
     return { ok: true, estado: 'brief_devuelto', ...(await siguienteDespuesDe(al, campana.id)) }
   }
@@ -436,7 +462,7 @@ async function conceptoSinMesa(al: Almacen, campana: Campana, version: number, t
 
 // ───────────────────────────────────────────────────────── tramo 2 del revisor de registro (10-nov · GO de Lenovo 17:33Z) · ver `registro-en-jefatura.ts`
 export const EN_REVISION_DE_REGISTRO = 'en_revision_de_registro'
-const bloqueosDelBrief = (l: BriefCreativoLeido): string[] => hallazgosDelBrief(l).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
+export const bloqueosDelBrief = (l: BriefCreativoLeido): string[] => hallazgosDelBrief(l).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
 /** los documentos del cliente de los que el texto puede citar: el revisor comprueba sus citas contra ellos */
 export const origenesDelCliente = (ctx: ContextoDelCliente | null): Array<{ titulo: string; texto: string }> => [{ titulo: 'el plan', texto: ctx?.planTexto ?? '' }, { titulo: 'el manual', texto: ctx?.manualTexto ?? '' }]
 const conAvisos = <L extends { avisos: string[] }>(l: L, extra: string[]): L => ({ ...l, avisos: [...l.avisos, ...extra.filter((x) => !l.avisos.includes(x))] })
@@ -447,7 +473,7 @@ async function cerrarBriefDeRegistro(al: Almacen, campana: Campana, version: num
   const estado = bloquea.length ? 'devuelta' : 'validada'
   await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('brief', version))
   await al.actualizarBriefCreativo(campana.id, version, { estado, texto_md: textoFinal, leido: l as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
-  if (estado === 'devuelta' && version >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
+  if (estado === 'devuelta' && (await agotoLaReapertura(al, campana.id, version))) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
   return { ok: true, estado, ...(await siguienteDespuesDe(al, campana.id)) }
 }
 
@@ -718,7 +744,7 @@ export async function cerrarMesasVencidas(al: Almacen, ahora: string): Promise<A
     const motivo = `la mesa del brief (versión ${b.version}) no entregó antes de su plazo más la holgura (${b.plazo_en})`
     await al.actualizarBriefCreativo(b.campana_id, b.version, { estado: 'descartada', motivo })
     const campana = await al.campana(b.campana_id)
-    const agotado = b.version >= MAX_VERSIONES_POR_REAPERTURA
+    const agotado = await agotoLaReapertura(al, b.campana_id, b.version)
     if (campana && agotado) await ponerNecesitaHumano(al, campana, `la mesa del brief no entregó dos veces (la última venció: ${b.plazo_en})`, ahora)
     out.push({ campana_id: b.campana_id, texto: `${motivo}: queda descartada${agotado ? ' · ya son dos: necesita_humano' : ' · se reabre una vez'}` })
   }

@@ -373,6 +373,14 @@ export function almacenDeSupabase(): Almacen {
     async briefsVencidos(ahora) { return lista<BriefCreativoGuardado>(db.from('cadena_brief_creativo').select(COLUMNAS_DEL_BRIEF).eq('estado', 'borrador').lte('plazo_en', ahora).limit(500)) },
     async ultimoBriefCreativo(campanaId) { return (await lista<BriefCreativoGuardado>(db.from('cadena_brief_creativo').select(COLUMNAS_DEL_BRIEF).eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
     async insertarBriefCreativo(b) { const { error } = await db.from('cadena_brief_creativo').insert(b); if (error) fallo(error) },
+    // 11-nov · colaterales · la carrera la decide el UNIQUE (campana_id, version): SOLO el 23505 de ESA restricción es «otra se adelantó»; todo otro error se lanza (nunca se lee como «no se pudo»)
+    async insertarBriefCreativoSiLibre(b) {
+      const { error } = await db.from('cadena_brief_creativo').insert(b)
+      if (!error) return true
+      const e = error as { code?: string; message?: string; details?: string }
+      if (e.code === '23505' && `${e.message ?? ''} ${e.details ?? ''}`.includes('cadena_brief_creativo_version')) return false
+      return fallo(error)
+    },
     async actualizarBriefCreativo(campanaId, version, patch) { const { error } = await db.from('cadena_brief_creativo').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version); if (error) fallo(error) },
     async actualizarBriefCreativoSi(campanaId, version, estado, patch) { const { data, error } = await db.from('cadena_brief_creativo').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version).eq('estado', estado).select('version'); if (error) fallo(error); return ((data as unknown[] | null) ?? []).length > 0 },
     async ultimoConcepto(campanaId) { return (await lista<ConceptoGuardado>(db.from('cadena_conceptos').select('campana_id, version, estado, aprobacion, texto_md, leido, brief_devuelto, motivo, costo_usd, plazo_en, encargo_id, hitl_id, nota_de_emilio, apunta_a, decidido_en, seco').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
