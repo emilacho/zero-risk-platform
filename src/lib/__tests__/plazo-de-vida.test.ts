@@ -132,6 +132,14 @@ describe('las lecturas', () => {
     await expect(lectorDeVidaDeSupabase(caida).duraciones('x')).rejects.toThrow(/caída/)
     await expect(lectorDeVidaDeSupabase(caida).despacho('157555', 'jefe-marketing')).rejects.toThrow(/caída/)
   })
+  it('🔴 el lector de la base ELIGE entre los despachos de la ejecución (no toma el primero que llega)', async () => {
+    const filas = [
+      { status: 'completed', created_at: hace(5), running_at: hace(5), updated_at: hace(4) },
+      { status: 'running', created_at: hace(30), running_at: hace(30), updated_at: hace(1) },
+    ]
+    const db = { from: () => { const a: Record<string, unknown> = { select: () => a, eq: () => a, order: () => a, limit: () => a, then: (res: (x: unknown) => unknown) => Promise.resolve({ data: filas, error: null }).then(res) }; return a } }
+    expect(await lectorDeVidaDeSupabase(db).despacho('158901', 'jefe-marketing')).toBe(filas[1])
+  })
   it('🔴 con un reintento hay 2 despachos de la misma ejecución y agente: vale el que sigue running; si ninguno, el más nuevo', () => {
     const viejoVivo = { status: 'running', created_at: hace(30), running_at: hace(30), updated_at: hace(1) }
     const nuevoListo = { status: 'completed', created_at: hace(10), running_at: hace(10), updated_at: hace(5) }
