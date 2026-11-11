@@ -57,7 +57,9 @@ describe('turno de la oficina · moldes del modelo simulado (modo seco)', () => 
     expect(r.resultado_body.texto).toBeUndefined(); expect(r.resultado_body.error).toMatch(/OFICINA_SIN_MOLDE_SIMULADO/); expect(r.resultado_body.n).toBe(4)
   })
   it('todo esquema de las plantillas tiene molde (o es del revisor externo)', () => {
-    const sinMolde = Object.keys(ESQUEMAS).filter((k) => k !== 'opinion_libre.v1' && !DESPUES.includes(`'${k}'`))
+    // 11-nov · mirada_video.v1 no necesita molde: en ensayo el video es simulado, no salen cuadros y el paso que lo pide no corre (`mirar-el-video.test.ts` · «en ensayo el video no se mira»)
+    const SIN_MOLDE_EN_ENSAYO = ['opinion_libre.v1', 'mirada_video.v1']
+    const sinMolde = Object.keys(ESQUEMAS).filter((k) => !SIN_MOLDE_EN_ENSAYO.includes(k) && !DESPUES.includes(`'${k}'`))
     expect(sinMolde).toEqual([])
   })
 })
