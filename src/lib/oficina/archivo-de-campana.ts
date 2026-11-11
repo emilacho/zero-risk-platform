@@ -146,3 +146,67 @@ export async function recuperarPieza(db: Db, cuerpo: unknown, ahora: Date = new 
   }
   return { status: 200, body: { ok: true, hitl_id: f.id, status: 'pending' } }
 }
+
+// ── 11-nov · ARCHIVAR UNA PIEZA SUELTA (GO Lenovo 04:03Z · opción 2 de CC1 · líneas de CC6) ────────────────────────────────────────────────
+// Para una decisión del dueño sobre UNA pieza (p. ej. «fuera de uso»), sin archivar su campaña. Va por id explícito y con razón obligatoria.
+// Marca la bandeja y su encargo con `archivada_en` y la razón, sin tocar su estado (tampoco una aprobada: es una decisión por id, no una regla).
+// Sin `dry_run:false` solo dice qué haría. Repetir no cambia nada. Desarchivar quita SOLO lo que puso este archivo (misma hora): el estado sigue igual.
+
+/** los encargos de la oficina de una pieza: los que la apuntan como su bandeja y el de su metadata */
+async function encargosDeLaPieza(db: Db, f: Fila): Promise<{ ids: string[] } | Respuesta> {
+  const r = await db.from('oficina_encargos').select('id, archivada_en').eq('hitl_queue_id', f.id)
+  if (r.error) return falla(r.error.message)
+  const ids = new Set(filasDe(r).map((e) => String(e.id)))
+  const m = esObjeto(f.metadata) ? f.metadata.oficina_encargo_id : null
+  if (typeof m === 'string' && m !== '') ids.add(m)
+  return { ids: [...ids] }
+}
+
+async function leerPieza(db: Db, cuerpo: unknown): Promise<{ f: Fila; cuerpo: Fila } | Respuesta> {
+  if (!esObjeto(cuerpo) || typeof cuerpo.hitl_id !== 'string' || !UUID.test(cuerpo.hitl_id)) return mal(400, 'entrada_invalida', '`hitl_id` debe ser un uuid')
+  const r = await db.from('hitl_queue').select('id, client_id, type, status, archivada_en, archivo_motivo, metadata').eq('id', cuerpo.hitl_id).maybeSingle()
+  if (r.error) return falla(r.error.message)
+  const f = r.data as Fila | null
+  if (!f) return mal(404, 'sin_pieza', 'no existe esa pieza')
+  if (f.type !== TIPO_DE_PIEZA) return mal(409, 'no_es_pieza', `esa fila de la bandeja es «${String(f.type)}», no una pieza`)
+  return { f, cuerpo }
+}
+
+/** POST /api/cadena/archivo/archivar-pieza: `{ hitl_id, motivo, dry_run }` */
+export async function archivarPieza(db: Db, cuerpo: unknown, ahora: Date = new Date()): Promise<Respuesta> {
+  const l = await leerPieza(db, cuerpo)
+  if (esRespuesta(l)) return l
+  const { f } = l
+  const motivo = typeof l.cuerpo.motivo === 'string' ? l.cuerpo.motivo.trim() : ''
+  if (!motivo) return mal(400, 'entrada_invalida', '`motivo` es obligatorio: queda escrita la razón del archivo')
+  if (f.archivada_en) return { status: 200, body: { ok: true, ya_archivada: true, hitl_id: f.id, archivada_en: f.archivada_en, archivo_motivo: f.archivo_motivo ?? null } }
+  const enc = await encargosDeLaPieza(db, f)
+  if (esRespuesta(enc)) return enc
+  const resumen = { hitl_id: f.id, client_id: f.client_id, estado: f.status, encargos: enc.ids }
+  if (l.cuerpo.dry_run !== false) return { status: 200, body: { ok: true, dry_run: true, ...resumen } }
+  const hora = ahora.toISOString()
+  const up = await db.from('hitl_queue').update({ archivada_en: hora, archivo_motivo: motivo }).eq('id', f.id).is('archivada_en', null)
+  if (up.error) return falla(up.error.message)
+  if (enc.ids.length) {
+    const ue = await db.from('oficina_encargos').update({ archivada_en: hora, archivo_motivo: motivo }).in('id', enc.ids).is('archivada_en', null)
+    if (ue.error) return falla(ue.error.message)
+  }
+  return { status: 200, body: { ok: true, dry_run: false, archivada_en: hora, archivo_motivo: motivo, ...resumen } }
+}
+
+/** POST /api/cadena/archivo/desarchivar-pieza: `{ hitl_id }` · deja la pieza y su encargo como estaban (solo lo que marcó ese archivo) */
+export async function desarchivarPieza(db: Db, cuerpo: unknown): Promise<Respuesta> {
+  const l = await leerPieza(db, cuerpo)
+  if (esRespuesta(l)) return l
+  const { f } = l
+  if (!f.archivada_en) return mal(409, 'sin_archivar', 'esa pieza no está archivada')
+  const enc = await encargosDeLaPieza(db, f)
+  if (esRespuesta(enc)) return enc
+  const up = await db.from('hitl_queue').update({ archivada_en: null, archivo_motivo: null }).eq('id', f.id).eq('archivada_en', f.archivada_en)
+  if (up.error) return falla(up.error.message)
+  if (enc.ids.length) {
+    const ue = await db.from('oficina_encargos').update({ archivada_en: null, archivo_motivo: null }).in('id', enc.ids).eq('archivada_en', f.archivada_en)
+    if (ue.error) return falla(ue.error.message)
+  }
+  return { status: 200, body: { ok: true, hitl_id: f.id, estado: f.status } }
+}
