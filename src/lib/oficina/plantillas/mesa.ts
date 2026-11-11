@@ -83,3 +83,15 @@ export const REUBICACION_MESA: Plantilla = {
   limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_REUBICACION_USD, max_rondas: 1, mesa: true, plazo_mesa_min: 30 },
   indicaciones: {},
 }
+
+/**
+ * 11-nov · `fallidos_mesa` (GO de Lenovo 16:46 Zúrich · decisión de Emilio 16:43): revisa los encargos fallidos que ya gastaron contra los arreglos publicados después del fallo. Un solo paso `mesa`,
+ * la dirige jefe-marketing, sin miembros ni portero. Tope US$ 2,00 por revisión; plazo 30 min. Nace INACTIVA (la migración la siembra con activo=false): encenderla es otro GO.
+ */
+export const TOPE_DE_LA_MESA_DE_FALLIDOS_USD = 2
+export const FALLIDOS_MESA: Plantilla = {
+  tipo: 'fallidos_mesa', familia: 'fallidos_mesa', clase: 'interna',
+  pasos: [{ ...PASO_DE_LA_MESA }],
+  limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_FALLIDOS_USD, max_rondas: 1, mesa: true, plazo_mesa_min: 30 },
+  indicaciones: {},
+}

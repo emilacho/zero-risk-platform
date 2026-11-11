@@ -176,7 +176,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       const portero = porteroDe(est.directorio_congelado)?.agente
       est = { ...est, marcas: { ...est.marcas, apertura_enriquecida: true } }
       // 10-nov · la mesa de reubicación decide fechas con lo que la cadena le pasa: NO abre con el cerebro (no se toca el cerebro)
-      if (P.cerebro && portero && est.tipo !== 'reubicacion') {
+      if (P.cerebro && portero && est.tipo !== 'reubicacion' && est.tipo !== 'fallidos') {
         let que: string
         if (est.tipo === 'brief' || est.tipo === 'concepto') que = pedidoDeAperturaDeLaCadena(est.tipo, marcoDe(enc.estado_del_motor)?.cliente_nombre || 'este cliente')
         else {
@@ -228,9 +228,9 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
 
     if (acc.accion === 'material') {
       const nPedidos = Number(est.marcas.pedidos_de_material ?? 0)
-      if (!P.cerebro || nPedidos >= MAX_PEDIDOS_DE_MATERIAL || est.tipo === 'reubicacion') {
+      if (!P.cerebro || nPedidos >= MAX_PEDIDOS_DE_MATERIAL || est.tipo === 'reubicacion' || est.tipo === 'fallidos') {
         // sin portero (o con el cupo gastado) el pedido se contesta con «sin dato»: nunca se queda colgado ni se inventa
-        await P.mesa.aportar(aporteNuevo(enc, porteroDe(est.directorio_congelado)?.agente ?? 'portero', acc.de, 'material', est.tipo === 'reubicacion' ? '(la mesa de reubicación no pide material al cerebro: decide con el marco de la cadena)' : P.cerebro ? '(se agotó el cupo de pedidos de material de esta pieza)' : '(el portero del cerebro no está disponible)', { responde_a: acc.pedido_id, profundidad: 1 }))
+        await P.mesa.aportar(aporteNuevo(enc, porteroDe(est.directorio_congelado)?.agente ?? 'portero', acc.de, 'material', est.tipo === 'reubicacion' ? '(la mesa de reubicación no pide material al cerebro: decide con el marco de la cadena)' : est.tipo === 'fallidos' ? '(la revisión de fallidos no pide material al cerebro: decide con el marco de la cadena)' : P.cerebro ? '(se agotó el cupo de pedidos de material de esta pieza)' : '(el portero del cerebro no está disponible)', { responde_a: acc.pedido_id, profundidad: 1 }))
         continue
       }
       const ped = libro.find((a) => a.id === acc.pedido_id)

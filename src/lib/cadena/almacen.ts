@@ -222,6 +222,17 @@ export interface Almacen {
   abrirMesaDeReubicacion?(sobre: import('./reubicar').SobreDeReubicacion): Promise<import('./reubicar').ResultadoDeAbrirMesa>
   /** 11-nov (#1014 · relectura · OPCIONAL): el texto que dejó guardado la mesa de un encargo ya cerrado (sin llamar al agente); null si no hay. Nunca lanza. */
   textoGuardadoDeLaMesa?(encargoId: string): Promise<{ ok: true; texto: string | null } | { ok: false; motivo: string }>
+  /**
+   * 11-nov · fallidos que se rehacen solos (`rehacer-fallidos.ts`) · OPCIONALES: sin ellos, la cadena no revisa fallidos y lo dice una vez.
+   *   · `encargosDeLaCampana`: los encargos REALES (no ensayo, no prueba) de los partes reales de la campaña, con su causa guardada y su fila (lo lee la oficina). LANZA si la base falla.
+   *   · `arreglosPublicados`: los cambios publicados en producción DESPUÉS de `desde` (la fuente). Nunca lanza: un fallo vuelve como `ok: false`.
+   *   · `abrirMesaDeFallidos`: abre la mesa de revisión de fallidos de la oficina (como la de reubicación). Nunca lanza.
+   *   · `reabrirFallido`: reabre el encargo por la vía que ya existe (`reabrir_causa_corregida`). Nunca lanza.
+   */
+  encargosDeLaCampana?(campanaId: string): Promise<import('./rehacer-fallidos').EncargoDeLaCampana[]>
+  arreglosPublicados?(desde: string): Promise<import('./rehacer-fallidos').LecturaDeArreglos>
+  abrirMesaDeFallidos?(sobre: import('./rehacer-fallidos').SobreDeFallidos): Promise<import('./rehacer-fallidos').ResultadoDeAbrirMesaDeFallidos>
+  reabrirFallido?(p: { encargo_id: string; causa: string }): Promise<{ ok: true; encargo_id: string } | { ok: false; motivo: string }>
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>
   escribirConfig(clave: string, valor: unknown): Promise<void>

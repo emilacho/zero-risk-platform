@@ -42,6 +42,8 @@ export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: n
   video: { manual: 7000, marco: 5000, plan: 3000 },
   // la reubicación decide fechas: el marco (las filas, plazos y horarios) completo; el manual y el plan solo como contexto
   reubicacion: { manual: 20000, marco: 60000, plan: 20000 },
+  // 11-nov · la revisión de fallidos juzga causas contra arreglos: el marco (las causas y los arreglos) completo; el manual y el plan no hacen falta
+  fallidos: { manual: 0, marco: 80000, plan: 0 },
 }
 
 /** el tablero: lo más reciente completo, lo antiguo en resumen (el líder mantiene el hilo; los demás no releen todo) */
@@ -227,6 +229,7 @@ const HERRAMIENTAS = [
 
 export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string }): string {
   if (o.c.tipo === 'reubicacion') return tareaDeReubicacion(o)
+  if (o.c.tipo === 'fallidos') return tareaDeFallidos(o)
   const { tipo, agente, est, libro, c } = o
   // la mesa de concepto tiene dos rondas: la 1 elige UNA gran idea entre caminos; la 2 la desarrolla en capítulos, series e ideas (la integración final lleva la convención)
   const ronda = libro.filter((a) => a.tipo === 'integra').length + 1
@@ -340,6 +343,34 @@ function tareaDeReubicacion(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tar
     final
       ? 'Escribe la decisión FINAL: una línea por fila pasada, con la forma exacta de «Cómo responder» del marco. Solo cuentan esas líneas; lo demás es tu nota.'
       : 'Razona fila por fila y escribe tu decisión con la forma exacta de «Cómo responder» del marco. En el turno siguiente la entregas como final.',
+  ].join('\n')
+}
+
+/** 11-nov · la mesa de revisión de fallidos (GO de Lenovo 16:46 Zúrich): juzga, pieza por pieza, si un arreglo publicado corrige la causa guardada del fallo. El código verifica después. */
+function tareaDeFallidos(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; libro: Aporte[]; c: ContextoDeTurno }): string {
+  const { c, agente, libro } = o
+  const final = o.tipo !== 'dirigir'
+  return [
+    `# Revisión de piezas fallidas · ${c.cliente_nombre} · ${c.brief_id}`,
+    `Eres **${agente}**${o.tarjeta ? ` — ${o.tarjeta.especialidad}` : ''}. Algunas piezas de la campaña fallaron después de gastar. Decides si un cambio publicado después ya corrigió la causa de cada fallo.`,
+    '',
+    '## Reglas',
+    `1. **Gasto.** Esta revisión tiene un tope de US$ ${c.tope_usd.toFixed(2)} (ya se gastó US$ ${c.gasto_usd.toFixed(2)}). Rehacer una pieza vuelve a gastar dentro del tope de la campaña.`,
+    '2. **Por cada pieza, un veredicto con su razón:** rehacerla nombrando el cambio que corrige su causa, o dejarla como está. No hay respuesta por defecto: juzga por lo que dice la causa y lo que hace cada cambio.',
+    '3. **El código verifica después** que el cambio nombrado esté en la lista y sea posterior al fallo, que la pieza siga sin rehacerse, que su fecha no haya pasado y que quepa en el tope. Lo que no cumpla no se rehace.',
+    '4. **No inventes cambios ni causas.** Decides con lo que está abajo.',
+    '',
+    o.tarjeta ? seccionDeIndicacion(o.tarjeta, agente) : '',
+    '## El marco (las piezas, sus causas y los cambios publicados)',
+    recorta(c.brief_texto, DIETA.fallidos.marco, 'el marco'),
+    '',
+    '## Tablero (lo que ya escribiste)',
+    tableroEnTexto(libro),
+    '',
+    final ? '## Tu turno · entrega los veredictos finales' : '## Tu turno · decide',
+    final
+      ? 'Escribe los veredictos FINALES: una línea por pieza, con la forma exacta de «Cómo responder» del marco. Solo cuentan esas líneas; lo demás es tu nota.'
+      : 'Razona pieza por pieza y escribe tus veredictos con la forma exacta de «Cómo responder» del marco. En el turno siguiente los entregas como finales.',
   ].join('\n')
 }
 

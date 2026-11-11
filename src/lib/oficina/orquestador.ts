@@ -864,7 +864,7 @@ export async function fallar(P: Puertos, enc: Encargo, motivo: string): Promise<
   const e = conCausaDelFallo(enc.estado_del_motor, motivo, P.ahora())
   enc = { ...enc, estado_del_motor: e }
   // 31-oct · la mesa de brief o de concepto que falla se lo dice a la cadena (que sigue con lo que tenga o pide a un humano); jamás deja a la campaña esperando
-  if (enc.familia === 'brief_mesa' || enc.familia === 'concepto_mesa' || enc.familia === 'reubicacion_mesa') {
+  if (enc.familia === 'brief_mesa' || enc.familia === 'concepto_mesa' || enc.familia === 'reubicacion_mesa' || enc.familia === 'fallidos_mesa') {
     const { entregarALaCadena } = await import('./mesa/de-la-cadena')
     await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 La mesa de la cadena falló · ${enc.brief_id}: ${motivo}`, dry_run: enc.dry_run })
     return entregarALaCadena(P, enc, { texto: null, motivo: `fallo: ${motivo}`.slice(0, 300), estado: 'fallido' })

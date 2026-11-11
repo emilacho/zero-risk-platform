@@ -5,9 +5,9 @@ import zlib from 'node:zlib'
 import { POST_IMG } from '../plantillas/post-img'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
 import { KIT_HISTORIAS } from '../plantillas/kit-historias'
-import { BRIEF_MESA, CARRUSEL_MESA, CONCEPTO_MESA, KIT_MESA, REUBICACION_MESA } from '../plantillas/mesa'
+import { BRIEF_MESA, CARRUSEL_MESA, CONCEPTO_MESA, FALLIDOS_MESA, KIT_MESA, REUBICACION_MESA } from '../plantillas/mesa'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
-const CLASE_DEL_CODIGO: Record<string, string | undefined> = Object.fromEntries([POST_IMG, CARRUSEL_IG_V1, KIT_HISTORIAS, CARRUSEL_MESA, KIT_MESA, BRIEF_MESA, CONCEPTO_MESA, REUBICACION_MESA, VIDEO_MESA].map((p) => [p.familia, p.clase]))
+const CLASE_DEL_CODIGO: Record<string, string | undefined> = Object.fromEntries([POST_IMG, CARRUSEL_IG_V1, KIT_HISTORIAS, CARRUSEL_MESA, KIT_MESA, BRIEF_MESA, CONCEPTO_MESA, REUBICACION_MESA, FALLIDOS_MESA, VIDEO_MESA].map((p) => [p.familia, p.clase]))
 import { avanzar, recibirResultado, type Respuesta } from '../orquestador'
 import type { Almacen, Cambios, Encargo, FuentesCompletas, PedidoDeRender, Puertos, TurnoRegistrado , ResultadoRevisor } from '../puertos'
 import type { FotoEtiquetada } from '../fotos'

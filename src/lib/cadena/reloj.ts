@@ -13,6 +13,7 @@ import { retomarPorCantidades, seguirSinRevisionDelCalendario } from './pasos'
 import { avisoDePrimeraSemana, cerrarMesasVencidas, seguirSinRevisionDeRegistro, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
 import { leerObjetoDeRegistro } from './registro-en-jefatura'
 import { abrirReubicaciones, avisosDeReubicacion } from './reubicar'
+import { abrirRevisionesDeFallidos, avisosDeFallidos } from './rehacer-fallidos'
 import type { Fila } from './tipos'
 
 /** `repetible`: un aviso de ESTADO (no de evento): mientras diga lo mismo, sale una sola vez; si cambia, o desaparece y vuelve, sale de nuevo (31-oct, «vigía sin ruido») */
@@ -110,6 +111,16 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
       aplicado.push(...ab.aplicado)
       lineas.push(...ab.lineas, ...(await avisosDeReubicacion(al, enviar)))
     } catch (e) { lineas.push({ campana_id: 'sistema', texto: `reubicación: no se pudo revisar (${String((e as Error)?.message ?? e).slice(0, 160)})` }) }
+  }
+
+  // 3c · 11-nov · los fallidos que gastaron y cuya causa ya se arregló (interruptor `rehacer_fallidos_corregidos`, apagado = nada): una mesa por campaña juzga y el código verifica.
+  //      Nunca en una pasada en seco (abrir la mesa gasta) y nunca frena el latido.
+  if (!seco) {
+    try {
+      const ab = await abrirRevisionesDeFallidos(al, ahora)
+      aplicado.push(...ab.aplicado)
+      lineas.push(...ab.lineas, ...(await avisosDeFallidos(al, enviar)))
+    } catch (e) { lineas.push({ campana_id: 'sistema', texto: `fallidos: no se pudo revisar (${String((e as Error)?.message ?? e).slice(0, 160)})` }) }
   }
 
   // 4 · el invariante V21 (con el latido ANTERIOR: así se ve que el vigía estuvo parado) y el latido nuevo

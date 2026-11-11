@@ -11,12 +11,12 @@ import type { Cambios, Encargo, Puertos } from '../puertos'
 import { estadoInicial, type Estado } from '../tipos'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
-export type TipoDeMesaDeLaCadena = 'brief' | 'concepto' | 'reubicacion'
-export const FAMILIA_DE: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brief_mesa', concepto: 'concepto_mesa', reubicacion: 'reubicacion_mesa' }
+export type TipoDeMesaDeLaCadena = 'brief' | 'concepto' | 'reubicacion' | 'fallidos'
+export const FAMILIA_DE: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brief_mesa', concepto: 'concepto_mesa', reubicacion: 'reubicacion_mesa', fallidos: 'fallidos_mesa' }
 export const ARTEFACTO_MARCO = 'marco_cadena'
 export const esDeLaCadenaLaFamilia = (familia: string): boolean => Object.values(FAMILIA_DE).includes(familia)
-const PREFIJO_DEL_ID: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brf', concepto: 'con', reubicacion: 'reu' }
-const TOPE_POR_OMISION_USD: Record<TipoDeMesaDeLaCadena, number> = { brief: 1.6, concepto: 5, reubicacion: 3 }
+const PREFIJO_DEL_ID: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brf', concepto: 'con', reubicacion: 'reu', fallidos: 'fal' }
+const TOPE_POR_OMISION_USD: Record<TipoDeMesaDeLaCadena, number> = { brief: 1.6, concepto: 5, reubicacion: 3, fallidos: 2 }
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -42,7 +42,7 @@ export function validarSobreDeLaCadena(x: unknown): { ok: true; sobre: SobreDeLa
   if (!x || typeof x !== 'object' || Array.isArray(x)) return { ok: false, errores: ['el cuerpo debe ser un objeto'] }
   const b = x as Record<string, unknown>
   const errores: string[] = []
-  if (b.tipo_de_mesa !== 'brief' && b.tipo_de_mesa !== 'concepto' && b.tipo_de_mesa !== 'reubicacion') errores.push('`tipo_de_mesa` debe ser «brief», «concepto» o «reubicacion»')
+  if (b.tipo_de_mesa !== 'brief' && b.tipo_de_mesa !== 'concepto' && b.tipo_de_mesa !== 'reubicacion' && b.tipo_de_mesa !== 'fallidos') errores.push('`tipo_de_mesa` debe ser «brief», «concepto», «reubicacion» o «fallidos»')
   if (typeof b.dry_run !== 'boolean') errores.push('`dry_run` es obligatorio y debe ser verdadero o falso (ausente = no se gasta nada)')
   if (typeof b.client_id !== 'string' || !UUID.test(b.client_id)) errores.push('`client_id` debe ser un uuid')
   if (typeof b.campana_id !== 'string' || !UUID.test(b.campana_id)) errores.push('`campana_id` debe ser un uuid')
@@ -164,6 +164,7 @@ export async function entregarALaCadena(P: Puertos, enc: Encargo, o: { texto: st
       const base = { campana_id: ref.campana_id, version: ref.version, encargo_id: enc.id, texto: o.texto, costo_usd: enc.estado_del_motor.gasto_usd, motivo: o.motivo }
       const x = ref.tipo_de_mesa === 'brief' ? await P.cadena.entregarBrief(base)
         : ref.tipo_de_mesa === 'reubicacion' ? (P.cadena.entregarReubicacion ? await P.cadena.entregarReubicacion(base) : { ok: false as const, error: 'la cadena no recibe reubicaciones en este entorno' })
+        : ref.tipo_de_mesa === 'fallidos' ? (P.cadena.entregarFallidos ? await P.cadena.entregarFallidos(base) : { ok: false as const, error: 'la cadena no recibe la revisión de fallidos en este entorno' })
         : await P.cadena.entregarConcepto({ ...base, brief_devuelto: o.brief_devuelto ?? null })
       entrega = x.ok ? { ok: true, detalle: x.estado ?? 'recibida', ...(x.siguiente ? { siguiente: x.siguiente } : {}) } : { ok: false, detalle: x.error ?? 'la cadena no recibió la entrega' }
     } catch (e) { entrega = { ok: false, detalle: e instanceof Error ? e.message : String(e) } }

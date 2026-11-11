@@ -49,6 +49,36 @@ export async function encargosRealesDe(db: DbDeGasto, parteIds: string[]): Promi
   return r.map((e) => ({ id: String(e.id), parte_id: String(e.parte_id), brief_id: typeof e.brief_id === 'string' ? e.brief_id : null, estado: String(e.estado), tope_usd: numero(e.tope_usd), gasto_usd: numero(e.gasto_usd), familia: typeof e.familia === 'string' && e.familia ? e.familia : null }))
 }
 
+/**
+ * 11-nov · fallidos que se rehacen solos (`cadena/rehacer-fallidos.ts`) · los encargos REALES (no ensayo, no prueba) de esos partes, con lo que hace falta para juzgarlos:
+ * su versión, su tipo, la causa guardada (`estado_del_motor.fallo`, #1045) y la fila del calendario (`sala_ref.fila`). LANZA si la base no contesta (un error no es «ningún fallido»).
+ */
+export interface EncargoParaRehacer { id: string; parte_id: string; brief_id: string | null; tipo_de_grupo: string; familia: string | null; estado: string; gasto_usd: number; version_encargo: number; fallo: unknown; fila: unknown; creado_en: string }
+export async function encargosParaRehacerDe(db: DbDeGasto, parteIds: string[]): Promise<EncargoParaRehacer[]> {
+  if (!parteIds.length) return []
+  const r = await filas<Record<string, unknown>>(db.from(TABLAS_DE_GASTO.encargos).select('id, parte_id, brief_id, tipo_de_grupo, familia, estado, gasto_usd, version_encargo, creado_en, fallo:estado_del_motor->fallo, fila:sala_ref->fila').eq('dry_run', false).eq('prueba', false).in('parte_id', parteIds).limit(2000))
+  return r.map((e) => ({
+    id: String(e.id), parte_id: String(e.parte_id), brief_id: typeof e.brief_id === 'string' ? e.brief_id : null, tipo_de_grupo: String(e.tipo_de_grupo ?? ''), familia: typeof e.familia === 'string' ? e.familia : null,
+    estado: String(e.estado), gasto_usd: numero(e.gasto_usd) ?? 0, version_encargo: numero(e.version_encargo) ?? 1, fallo: e.fallo ?? null, fila: e.fila ?? null, creado_en: String(e.creado_en ?? ''),
+  }))
+}
+
+/**
+ * 11-nov · fallidos que se rehacen solos · UN encargo, con lo que hace falta para reabrirlo por `reabrir_causa_corregida` (`cadena/almacen-supabase.ts reabrirFallidoReal`).
+ * Devuelve null si no existe. LANZA si la base no contesta.
+ */
+export interface EncargoParaReabrir { client_id: string; parte_id: string; brief_id: string; familia: string | null; estado: string; dry_run: boolean; sala_ref: Record<string, unknown> | null }
+export async function encargoParaReabrirDe(db: DbDeGasto, encargoId: string): Promise<EncargoParaReabrir | null> {
+  const { data, error } = (await db.from(TABLAS_DE_GASTO.encargos).select('client_id, parte_id, brief_id, familia, estado, dry_run, sala_ref').eq('id', encargoId).maybeSingle()) as Respuesta
+  if (error) throw new Error(`la oficina no contestó: ${error.message ?? 'sin detalle'}`)
+  if (!data) return null
+  const e = data as Record<string, unknown>
+  return {
+    client_id: String(e.client_id), parte_id: String(e.parte_id), brief_id: String(e.brief_id), familia: typeof e.familia === 'string' ? e.familia : null, estado: String(e.estado),
+    dry_run: e.dry_run === true, sala_ref: e.sala_ref && typeof e.sala_ref === 'object' ? (e.sala_ref as Record<string, unknown>) : null,
+  }
+}
+
 export async function topesDeFamiliasActivas(db: DbDeGasto): Promise<Record<string, number>> {
   const out: Record<string, number> = {}
   for (const t of await filas<{ familia: unknown; tope_encargo_usd: unknown }>(db.from(TABLAS_DE_GASTO.plantillas).select('familia, tope_encargo_usd').eq('activo', true))) {

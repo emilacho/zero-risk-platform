@@ -20,9 +20,9 @@ export const DESTINATARIO_DE_AGENTE: Record<string, string> = {
   'design-image-prompt-engineer': 'imagen',
 }
 export const destinatarioDe = (agente: string): string | null => DESTINATARIO_DE_AGENTE[agente] ?? null
-export const FORMATO_DE_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit', brief: 'brief', concepto: 'concepto', video: 'video', reubicacion: 'reubicacion' }
+export const FORMATO_DE_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit', brief: 'brief', concepto: 'concepto', video: 'video', reubicacion: 'reubicacion', fallidos: 'fallidos' }
 /** cómo se nombra cada tipo de pieza en el pedido de un turno (T8 · 31-oct: la mesa de video se suma a las de la cadena) */
-export const NOMBRE_DE_LA_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit de historias', brief: 'brief creativo de la campaña', concepto: 'gran idea de la campaña', video: 'video corto (reel/short)', reubicacion: 'decisión sobre las filas que quedaron atrás' }
+export const NOMBRE_DE_LA_PIEZA: Record<TipoDePieza, string> = { carrusel: 'carrusel', kit: 'kit de historias', brief: 'brief creativo de la campaña', concepto: 'gran idea de la campaña', video: 'video corto (reel/short)', reubicacion: 'decisión sobre las filas que quedaron atrás', fallidos: 'revisión de las piezas que fallaron después de gastar' }
 
 /** el texto con el que el cerebro busca por parecido: qué va a producir este especialista, para qué pieza y de qué trata el encargo */
 export function tareaParaConsultar(o: { cliente_nombre: string; tipo: TipoDePieza; especialidad: string; brief_texto: string }): string {
