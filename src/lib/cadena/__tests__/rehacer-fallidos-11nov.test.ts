@@ -394,3 +394,101 @@ describe.each(CASOS)('$nombre', (k) => {
     expect(al.sobresDeFallidos).toEqual([])
   })
 })
+
+describe.each(CASOS)('$nombre · sondas de CC7 (certificación 11-nov · recorte a 40 y fuente por campaña)', (k) => {
+  it('P1 · con más de 40 arreglos, el que salió justo después del fallo llega a la mesa', async () => {
+    const falloEn = masMin(k.ahora, -600)
+    const arreglos: ArregloPublicado[] = [{ id: 'dpl_fix', publicado_en: masMin(falloEn, 1), mensaje: k.arreglo }]
+    for (let i = 0; i < 45; i++) arreglos.push({ id: `dpl_o${i}`, publicado_en: masMin(falloEn, 10 + i), mensaje: `feat(otro): cambio ${i}` })
+    const al = montar(k, [encargo(k, 'enc-a', 'B1', { falloEn })], { arreglos })
+    await abrirRevisionesDeFallidos(al, k.ahora)
+    const ids = Object.values(mesa(al, k).arreglos).map((a) => a.id)
+    expect(ids).toContain('dpl_fix')
+  })
+  it('P1b · tras un «dejar» con los 40 más nuevos, el arreglo recortado nunca vuelve', async () => {
+    const falloEn = masMin(k.ahora, -600)
+    const arreglos: ArregloPublicado[] = [{ id: 'dpl_fix', publicado_en: masMin(falloEn, 1), mensaje: k.arreglo }]
+    for (let i = 0; i < 45; i++) arreglos.push({ id: `dpl_o${i}`, publicado_en: masMin(falloEn, 10 + i), mensaje: `feat(otro): cambio ${i}` })
+
+    const al = montar(k, [encargo(k, 'enc-a', 'B1', { falloEn })], { arreglos })
+    await abrirRevisionesDeFallidos(al, k.ahora)
+    await recibirFallidos(al, entrega(k, 1, 'F1 · dejar · ninguno corrige'), masMin(k.ahora, 5))
+    arreglos.push({ id: 'dpl_nuevo', publicado_en: masMin(k.ahora, 30), mensaje: 'feat(x): otro' })
+    await abrirRevisionesDeFallidos(al, masMin(k.ahora, 120))
+    // CC2 · con el arreglo, dpl_fix ya llega a la PRIMERA mesa (va entre los más viejos), así que el «dejar» lo cubre y no se repite. La garantía de CC7 es que ningún
+    // arreglo posterior al fallo quede sin mostrarse antes de un «dejar»: entre las dos mesas se ven TODOS, y dpl_fix en la primera.
+    expect(Object.values(mesa(al, k, 1).arreglos).map((a) => a.id)).toContain('dpl_fix')
+    const vistos = new Set([1, 2].flatMap((v) => Object.values(mesa(al, k, v).arreglos).map((a) => a.id)))
+    expect([...arreglos.map((a) => a.id)].filter((id) => !vistos.has(id))).toEqual([])
+  })
+  it('P2 · dos campañas: la segunda ve el arreglo posterior a SU fallo aunque la primera haya fallado después', async () => {
+    const falloA = masMin(k.ahora, -100), falloB = masMin(k.ahora, -600)
+    const arreglos: ArregloPublicado[] = [
+      { id: 'dpl_fixB', publicado_en: masMin(falloB, 10), mensaje: 'fix(b): arregla lo de B' },
+      { id: 'dpl_fixA', publicado_en: masMin(falloA, 10), mensaje: k.arreglo },
+    ]
+    const al = montar(k, [encargo(k, 'enc-a', 'B1', { falloEn: falloA })], { arreglos })
+    const cB = { ...al.campanas[0]!, id: '00000000-0000-4000-8000-0000000000cb' }
+    al.campanas.push(cB)
+    al.encargosPorCampana![cB.id] = [{ ...encargo(k, 'enc-b', 'B2', { falloEn: falloB }), parte_id: PARTE }]
+    await abrirRevisionesDeFallidos(al, k.ahora)
+    const mB = libreta(al).campanas[cB.id]?.mesas['1']
+    expect(Object.values(mB?.arreglos ?? {}).map((a) => a.id)).toContain('dpl_fixB')
+  })
+})
+
+describe.each(CASOS)('$nombre · 🟡 CC7 falla 1 y 2 · lo que no cupo vuelve y cada campaña ve los arreglos de SU fallo', (k) => {
+  it('🔴 con dos piezas en la misma campaña, la que no alcanzó a ver ningún arreglo espera; tras el «dejar» la segunda mesa trae lo que faltó a una y lo suyo a la otra', async () => {
+    const falloA = masMin(k.ahora, -600)
+    const falloB = masMin(k.ahora, -50)
+    const arreglos: ArregloPublicado[] = []
+    for (let i = 0; i < 45; i++) arreglos.push({ id: `dpl_o${i}`, publicado_en: masMin(falloA, 10 + i), mensaje: `feat(otro): cambio ${i}` })
+    arreglos.push({ id: 'dpl_fixB', publicado_en: masMin(falloB, 10), mensaje: k.arreglo })
+    const al = montar(k, [encargo(k, 'enc-a', 'B1', { falloEn: falloA }), encargo(k, 'enc-b', 'B2', { falloEn: falloB })], { arreglos })
+    await abrirRevisionesDeFallidos(al, k.ahora)
+    const m1 = mesa(al, k)
+    expect(Object.values(m1.fallidos)).toEqual(['enc-a'])
+    expect(Object.values(m1.arreglos).map((a) => a.id)).toEqual(Array.from({ length: 40 }, (_, i) => `dpl_o${i}`))
+    expect(m1.vistos_hasta).toEqual({ 'enc-a': masMin(falloA, 49) })
+    expect(libreta(al).fallidos['enc-b']).toBeUndefined()
+    await recibirFallidos(al, entrega(k, 1, 'F1 · dejar · ninguno de estos corrige la causa'), masMin(k.ahora, 5))
+    expect(libreta(al).fallidos['enc-a']).toMatchObject({ estado: 'dejado', visto_hasta: masMin(falloA, 49) })
+    await abrirRevisionesDeFallidos(al, masMin(k.ahora, 120))
+    const m2 = mesa(al, k, 2)
+    expect(Object.values(m2.fallidos).sort()).toEqual(['enc-a', 'enc-b'])
+    expect(Object.values(m2.arreglos).map((a) => a.id)).toEqual(['dpl_o40', 'dpl_o41', 'dpl_o42', 'dpl_o43', 'dpl_o44', 'dpl_fixB'])
+  })
+  it('con un empate de fecha justo en el corte, el «visto hasta» retrocede y el que no cupo vuelve', async () => {
+    const falloEn = masMin(k.ahora, -600)
+    const arreglos: ArregloPublicado[] = []
+    for (let i = 0; i < 39; i++) arreglos.push({ id: `dpl_a${String(i).padStart(2, '0')}`, publicado_en: masMin(falloEn, 10 + i), mensaje: `feat(otro): cambio ${i}` })
+    const empate = masMin(falloEn, 100)
+    arreglos.push({ id: 'dpl_z1', publicado_en: empate, mensaje: 'feat: empate uno' }, { id: 'dpl_z2', publicado_en: empate, mensaje: k.arreglo })
+    const al = montar(k, [encargo(k, 'enc-a', 'B1', { falloEn })], { arreglos })
+    await abrirRevisionesDeFallidos(al, k.ahora)
+    expect(Object.values(mesa(al, k).arreglos).map((a) => a.id)).toContain('dpl_z1')
+    expect(Object.values(mesa(al, k).arreglos).map((a) => a.id)).not.toContain('dpl_z2')
+    expect(mesa(al, k).vistos_hasta).toEqual({ 'enc-a': masMin(falloEn, 48) })
+    await recibirFallidos(al, entrega(k, 1, 'F1 · dejar · no la corrige'), masMin(k.ahora, 5))
+    await abrirRevisionesDeFallidos(al, masMin(k.ahora, 120))
+    expect(Object.values(mesa(al, k, 2).arreglos).map((a) => a.id)).toEqual(['dpl_z1', 'dpl_z2'])
+  })
+  it('🔴 la fuente se lee una vez si la primera campaña ya pidió la fecha más vieja, y otra vez si una campaña siguiente necesita una más vieja', async () => {
+    const viejo = masMin(k.ahora, -600)
+    const nuevo = masMin(k.ahora, -100)
+    const arreglos: ArregloPublicado[] = [{ id: 'dpl_x', publicado_en: masMin(k.ahora, -5), mensaje: k.arreglo }]
+    const dos = (primero: string, segundo: string) => {
+      const al = montar(k, [encargo(k, 'enc-a', 'B1', { falloEn: primero })], { arreglos })
+      const cB = { ...al.campanas[0]!, id: '00000000-0000-4000-8000-0000000000cb' }
+      al.campanas.push(cB)
+      al.encargosPorCampana![cB.id] = [{ ...encargo(k, 'enc-b', 'B2', { falloEn: segundo }), parte_id: PARTE }]
+      return al
+    }
+    const a = dos(viejo, nuevo)
+    await abrirRevisionesDeFallidos(a, k.ahora)
+    expect(a.lecturasDeArreglos).toEqual([viejo])
+    const b = dos(nuevo, viejo)
+    await abrirRevisionesDeFallidos(b, k.ahora)
+    expect(b.lecturasDeArreglos).toEqual([nuevo, viejo])
+  })
+})

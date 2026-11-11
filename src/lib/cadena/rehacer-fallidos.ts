@@ -108,6 +108,11 @@ export interface MesaDeFallidos {
   fallidos: Record<string, string>
   /** A1, A2… → el arreglo que se le mostró */
   arreglos: Record<string, { id: string; publicado_en: string }>
+  /**
+   * 🟡 CC7 falla 1 · por fallido (id del encargo): la fecha del arreglo más nuevo que esta mesa le mostró SIN saltarse ninguno posterior a lo que ya había visto. Un «dejar» guarda esto
+   * (no el más nuevo de la mesa): lo que no cupo vuelve en la mesa siguiente. Ausente en mesas viejas → el más nuevo de la mesa.
+   */
+  vistos_hasta?: Record<string, string | null>
   motivo: string | null
   resumen: string | null
   avisado: boolean
@@ -176,6 +181,7 @@ export function marcoDeFallidos(cliente: string, fallidos: FallidoEnLaMesa[], ar
     'Cada pieza de abajo falló y guardó su causa. Debajo están los cambios que se publicaron en la plataforma DESPUÉS de esos fallos.',
     'Decide, pieza por pieza, si alguno de esos cambios corrige la causa de su fallo. Si la corrige, la pieza se rehace una sola vez; si no, queda como está hasta que se publique otro cambio.',
     'Juzga por lo que dice la causa y lo que hace cada cambio. No hay respuesta por defecto: un cambio de otra parte del sistema no corrige esta causa aunque se parezca en palabras.',
+    '«Publicado» quiere decir fusionado en el repositorio: la plataforma lo publica minutos después, pero un cambio que trae una migración de la base o un flujo nuevo puede no estar aplicado todavía. Si la corrección depende de eso, tenlo en cuenta en tu veredicto.',
     '',
     '## Las piezas',
     ...filas,
@@ -280,6 +286,7 @@ export async function abrirRevisionesDeFallidos(al: Almacen, ahora: string): Pro
   const libreta = await leerLibretaDeFallidos(al)
   let cambio = false
   let fuente: LecturaDeArreglos | null = null
+  let fuenteDesde: string | null = null
   for (const c of await al.campanasActivas()) {
     if (c.seco === true) continue
     try {
@@ -328,10 +335,11 @@ export async function abrirRevisionesDeFallidos(al: Almacen, ahora: string): Pro
         candidatos.push({ e, causa })
       }
       if (!candidatos.length) continue
-      // la fuente se lee UNA vez por pasada, y solo si hay a quién juzgar
-      if (!fuente) {
-        const desde = candidatos.map((x) => x.causa.en).sort()[0]!
+      // la fuente se lee solo si hay a quién juzgar; se reusa en la pasada, y 🟡 CC7 falla 2 · se vuelve a leer si ESTA campaña necesita una fecha más vieja que la de la lectura guardada
+      const desde = candidatos.map((x) => x.causa.en).sort()[0]!
+      if (!fuente || !fuente.ok || fuenteDesde === null || desde < fuenteDesde) {
         fuente = await al.arreglosPublicados(desde)
+        fuenteDesde = fuente.ok ? desde : null
       }
       if (!fuente.ok) { lineas.push({ campana_id: 'sistema', texto: `fallidos: no se pudo leer la lista de arreglos publicados (${fuente.motivo.slice(0, 160)}); se reintenta en la próxima pasada.` }); continue }
       const arreglos = [...fuente.arreglos].sort((a, b) => (a.publicado_en < b.publicado_en ? -1 : 1))
@@ -342,18 +350,36 @@ export async function abrirRevisionesDeFallidos(al: Almacen, ahora: string): Pro
       if (!t.mesa) { lineas.push({ campana_id: c.id, texto: `fallidos: hay ${conNuevos.length} pieza(s) fallida(s) para revisar, pero la mesa no cabe en el tope de la campaña; no se abre.` }); continue }
       const entran = conNuevos.filter((x) => t.sueltan.has(x.e.id))
       if (!entran.length) { lineas.push({ campana_id: c.id, texto: `fallidos: hay ${conNuevos.length} pieza(s) fallida(s) para revisar, pero ninguna cabe en el tope de la campaña si se rehace; no se abre la mesa.` }); continue }
-      const vistos = new Set<string>()
-      const mostrados: ArregloPublicado[] = []
-      for (const x of entran) for (const a of arreglosNuevosPara(x.causa, libreta.fallidos[x.e.id], arreglos)) if (!vistos.has(a.id)) { vistos.add(a.id); mostrados.push(a) }
-      const enElMarco = mostrados.slice(-MAX_ARREGLOS_EN_EL_MARCO)
+      // 🟡 CC7 falla 1 · si no caben todos, entran los MÁS VIEJOS (los que salieron justo después de los fallos): cada pieza ve un tramo SIN huecos desde lo que ya vio,
+      // y su «visto hasta» es el final de ese tramo; lo que no cupo vuelve en la mesa siguiente. Una pieza a la que no le tocó ningún arreglo espera a otra mesa.
+      const nuevosDe = new Map(entran.map((x) => [x.e.id, arreglosNuevosPara(x.causa, libreta.fallidos[x.e.id], arreglos)]))
+      const union = new Map<string, ArregloPublicado>()
+      for (const ns of nuevosDe.values()) for (const a of ns) union.set(a.id, a)
+      const orden = (a: ArregloPublicado, b: ArregloPublicado) => (a.publicado_en < b.publicado_en ? -1 : a.publicado_en > b.publicado_en ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+      const enElMarco = [...union.values()].sort(orden).slice(0, MAX_ARREGLOS_EN_EL_MARCO)
+      const enLaMesa = new Set(enElMarco.map((a) => a.id))
+      const vistosHasta: Record<string, string | null> = {}
+      const juzgables = entran.filter((x) => {
+        const ns = [...nuevosDe.get(x.e.id)!].sort(orden)
+        let n = 0
+        while (n < ns.length && enLaMesa.has(ns[n]!.id)) n++
+        if (n === 0) return false
+        // con un empate de fecha justo en el corte, el «visto hasta» retrocede para que el que no cupo no quede tapado por la misma fecha
+        const siguiente = ns[n]
+        const vistos = siguiente ? ns.slice(0, n).filter((a) => a.publicado_en < siguiente.publicado_en) : ns.slice(0, n)
+        vistosHasta[x.e.id] = vistos.length ? vistos[vistos.length - 1]!.publicado_en : (libreta.fallidos[x.e.id]?.visto_hasta ?? null)
+        return true
+      })
       const claves = enElMarco.map((a, i) => ({ clave: `A${i + 1}`, a }))
-      const enMesa = entran.map((x, i) => ({ clave: `F${i + 1}`, encargo: x.e, causa: x.causa }))
+      const enMesa = juzgables.map((x, i) => ({ clave: `F${i + 1}`, encargo: x.e, causa: x.causa }))
+      if (!enMesa.length) continue
       const ctx = await al.cargarContexto(c.client_id, c.plan_id)
       const v = lc.ultima_version + 1
       const mesa: MesaDeFallidos = {
         version: v, encargo_id: null, estado: 'abierta', abierta_en: ahora, motivo: null, resumen: null, avisado: false,
         fallidos: Object.fromEntries(enMesa.map((x) => [x.clave, x.encargo.id])),
         arreglos: Object.fromEntries(claves.map((x) => [x.clave, { id: x.a.id, publicado_en: x.a.publicado_en }])),
+        vistos_hasta: vistosHasta,
       }
       // 🟡 CC7 punto 3 · la anotación va ANTES de pagar: la libreta queda con la mesa y sus fallidos «en mesa»; la mesa es idempotente por su versión
       lc.ultima_version = v
@@ -419,6 +445,8 @@ export async function recibirFallidos(al: Almacen, p: EntregaDeFallidos, ahora: 
   const fuente = al.arreglosPublicados && masViejo ? await al.arreglosPublicados(new Date(Date.parse(masViejo) - 1).toISOString()) : { ok: false as const, motivo: 'sin fuente' }
   const mensajes = new Map(fuente.ok ? fuente.arreglos.map((a) => [a.id, a.mensaje]) : [])
   const ultimoVisto = Object.values(m.arreglos).map((a) => a.publicado_en).sort().pop() ?? null
+  /** 🟡 CC7 falla 1 · lo que ESTA pieza vio sin huecos (mesas nuevas); en una mesa vieja, el más nuevo de la mesa */
+  const vistoHastaDe = (id: string) => (m.vistos_hasta && Object.prototype.hasOwnProperty.call(m.vistos_hasta, id) ? m.vistos_hasta[id] ?? null : ultimoVisto)
   const reabrir: Array<{ v: Extract<VeredictoDeFallido, { accion: 'reabrir' }>; e: EncargoDeLaCampana; arreglo: { id: string; publicado_en: string } }> = []
   const hechos = { reabiertas: 0, dejadas: 0, rechazadas: 0, sin_veredicto: 0, ya_no_aplica: 0, no_caben: 0 }
   const leidosPorClave = new Map(leidos.map((v) => [v.clave, v]))
@@ -432,7 +460,7 @@ export async function recibirFallidos(al: Almacen, p: EntregaDeFallidos, ahora: 
     if (!e || no || !causa) { libreta.fallidos[id] = { ...a, estado: 'ya_no_aplica', juicios: a.juicios + 1, motivo: no ?? 'sin causa guardada', actualizado_en: ahora }; hechos.ya_no_aplica++; continue }
     if (v.accion === 'dejar') {
       const agotado = a.juicios + 1 >= MAX_JUICIOS
-      libreta.fallidos[id] = { ...a, estado: agotado ? 'agotado' : 'dejado', juicios: a.juicios + 1, visto_hasta: ultimoVisto, motivo: (v.razon || 'sin razón escrita').slice(0, 300), actualizado_en: ahora }
+      libreta.fallidos[id] = { ...a, estado: agotado ? 'agotado' : 'dejado', juicios: a.juicios + 1, visto_hasta: vistoHastaDe(id), motivo: (v.razon || 'sin razón escrita').slice(0, 300), actualizado_en: ahora }
       hechos.dejadas++
       continue
     }
@@ -454,7 +482,7 @@ export async function recibirFallidos(al: Almacen, p: EntregaDeFallidos, ahora: 
     const causa = causaCorregida({ ...arreglo, mensaje: mensajes.get(arreglo.id) ?? '' }, v.razon)
     // la vía que ya existe (`reabrir_causa_corregida`): abre la versión siguiente; la oficina no reabre una pieza viva, entregada o con sus versiones agotadas
     const r = al.reabrirFallido ? await al.reabrirFallido({ encargo_id: e.id, causa }) : { ok: false as const, motivo: 'la cadena no puede reabrir en este entorno' }
-    if (r.ok) { libreta.fallidos[e.id] = { ...a, estado: 'reabierto', juicios: a.juicios + 1, arreglo_id: arreglo.id, visto_hasta: ultimoVisto, motivo: causa, actualizado_en: ahora }; hechos.reabiertas++ }
+    if (r.ok) { libreta.fallidos[e.id] = { ...a, estado: 'reabierto', juicios: a.juicios + 1, arreglo_id: arreglo.id, visto_hasta: vistoHastaDe(e.id), motivo: causa, actualizado_en: ahora }; hechos.reabiertas++ }
     else { libreta.fallidos[e.id] = { ...a, estado: 'pendiente', juicios: a.juicios + 1, motivo: `no se pudo reabrir: ${r.motivo}`.slice(0, 300), actualizado_en: ahora }; hechos.rechazadas++ }
   }
   const total = Object.keys(m.fallidos).length
