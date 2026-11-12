@@ -59,10 +59,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.apify.com/v2/acts/apify~glassdoor-reviews-scraper/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}",
+        "url": "https://api.apify.com/v2/acts/johnvc~glassdoor-reviews-api/run-sync-get-dataset-items?token={{ $env.APIFY_TOKEN }}",
         "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
         "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={ \"companyUrls\": [\"{{ $json.review_profiles.glassdoor_url }}\"], \"maxReviews\": 15 }",
+        "jsonBody": "={ \"companyUrls\": [\"{{ $json.review_profiles.glassdoor_url }}\"], \"maxReviewsPerCompany\": 15 }",
         "options": { "timeout": 180000, "response": { "response": { "neverError": true } } }
       },
       "id": "glassdoor", "name": "Glassdoor", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [900, 620]
@@ -70,7 +70,7 @@
     { "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} }, "id": "merge", "name": "Merge Platforms", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [1160, 380] },
     {
       "parameters": {
-        "jsCode": "const all = $input.all();\nconst client = $node['split'].json;\nconst reviews = [];\nconst sources = ['google','yelp','trustpilot','g2','glassdoor'];\nfor (let i = 0; i < all.length; i++) {\n  const data = Array.isArray(all[i].json) ? all[i].json : (all[i].json?.reviews || all[i].json?.data || []);\n  for (const r of data) {\n    reviews.push({\n      source: sources[i],\n      review_id: r.id || r.reviewId || r.review_id || `${sources[i]}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,\n      rating: r.stars || r.rating || r.score || null,\n      text: (r.text || r.comment || r.reviewText || r.body || '').slice(0, 2000),\n      author: r.author || r.reviewer || r.user?.name || 'Anonymous',\n      date: r.publishedAt || r.date || r.createdAt || new Date().toISOString(),\n      url: r.url || r.link || null\n    });\n  }\n}\nconst since = new Date(Date.now() - 24*60*60*1000);\nconst recent = reviews.filter(r => new Date(r.date) > since);\nreturn recent.map(r => ({ json: { ...r, client_id: client.id, client_name: client.name } }));"
+        "jsCode": "const all = $input.all();\nconst client = $node['split'].json;\nconst reviews = [];\nconst sources = ['google','yelp','trustpilot','g2','glassdoor'];\nfor (let i = 0; i < all.length; i++) {\n  const data = Array.isArray(all[i].json) ? all[i].json : (all[i].json?.reviews || all[i].json?.data || []);\n  for (const r of data) {\n    if (sources[i] === 'glassdoor' && !r.reviewId) continue;\n    reviews.push({\n      source: sources[i],\n      review_id: r.id || r.reviewId || r.review_id || `${sources[i]}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,\n      rating: r.stars || r.rating || r.score || r.overallRating || null,\n      text: (r.text || r.comment || r.reviewText || r.body || [r.reviewSummary, r.pros && `Pros: ${r.pros}`, r.cons && `Cons: ${r.cons}`].filter(Boolean).join('\\n') || '').slice(0, 2000),\n      author: r.author || r.reviewer || r.user?.name || 'Anonymous',\n      date: r.publishedAt || r.date || r.createdAt || r.datePublished || new Date().toISOString(),\n      url: r.url || r.link || r.reviewUrl || null\n    });\n  }\n}\nconst since = new Date(Date.now() - 24*60*60*1000);\nconst recent = reviews.filter(r => new Date(r.date) > since);\nreturn recent.map(r => ({ json: { ...r, client_id: client.id, client_name: client.name } }));"
       },
       "id": "normalize", "name": "Normalize + Filter 24h", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1420, 380]
     },
