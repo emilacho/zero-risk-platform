@@ -72,7 +72,10 @@ export const llevaDosCuadros = (p: PlanoDeLaHoja): boolean =>
 export function promptDelCierre(p: PlanoDeLaHoja, o: { total: number; proporcion: string }): string {
   const fin = esTexto(p.estado_final) ? p.estado_final.trim() : `the moment right after this movement ends: ${String(p.movimiento ?? '').trim()}`
   return [
-    promptDeImagenClave(p, o).replace('It will be the first frame of the clip of this shot.', 'It will be the LAST frame of the clip of this shot.'),
+    // CC7 🟡 (17-nov): el cuerpo heredado no puede pedir a la vez «congela el inicio» y «congela el final»: en el cierre el movimiento es lo que ya pasó
+    promptDeImagenClave(p, o)
+      .replace('It will be the first frame of the clip of this shot.', 'It will be the LAST frame of the clip of this shot.')
+      .replace('The clip will move like this (freeze the starting instant): ', 'The clip has just moved like this (this frame is where that movement ends): '),
     `Freeze the END of the shot, not its start: ${fin}. Same scene, same subject, same product, same light and same framing style as the first frame of this shot.`,
   ].join('\n')
 }

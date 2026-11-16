@@ -322,7 +322,7 @@ async function imagenesClave(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso
   const hojas: Array<{ id: string | null; planos: PlanoDeLaHoja[] }> = fase === 'final'
     ? [{ id: null, planos: Array.isArray(g?.planos) ? g.planos : [] }]
     : (propuestasDe(e)?.propuestas ?? []).map((x) => ({ id: x.id, planos: (Array.isArray(x.guion?.planos) ? x.guion.planos : []) as PlanoDeLaHoja[] }))
-  const vacio = (): SalidaCodigoV => ({ res: { costo_usd: 0, artefacto: { fase, calidad, planos: [], ...(fase === 'borrador' ? { propuestas: [] } : {}), hay_imagenes: false } as unknown as Record<string, unknown>, fichas: [fichaNueva(`${prefijo}-sin-planos`, 'chequeo', 'imagen_clave', 'sugerencia', 'no hubo imágenes clave: la hoja no trae planos', 'hoja de planos de la mesa', 'el video sale sin storyboard')], reemplazar_fichas: reemplazar } })
+  const vacio = (): SalidaCodigoV => ({ res: { costo_usd: 0, artefacto: { fase, calidad, planos: [], ...(fase === 'borrador' ? { propuestas: [] } : {}), hay_imagenes: false } as unknown as Record<string, unknown>, fichas: [fichaNueva(`${prefijo}-sin-planos`, 'chequeo', 'imagen_clave', 'sugerencia', fase === 'borrador' ? 'no hubo imágenes clave: las propuestas de la mesa no traen hojas de planos legibles' : 'no hubo imágenes clave: la hoja no trae planos', fase === 'borrador' ? 'propuestas de la mesa' : 'hoja de planos de la mesa', 'el video sale sin storyboard')], reemplazar_fichas: reemplazar } })
   if (!hojas.some((h) => h.planos.length)) return vacio()
   const propias = fotosPropiasConDireccion(b.F.fotos)
   // la hoja nombra las fotos por su nombre corto (regla del 11-nov): se resuelve al id completo; un nombre que no existe queda como está (no es apto y lo dice la ficha)
@@ -351,8 +351,9 @@ async function imagenesClave(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso
   const tope = Math.max(0, Math.min(Number(paso.tope_usd) || 0, +(pl.limites.tope_encargo_usd - e.gasto_usd).toFixed(4)))
   const gastos: NonNullable<Cambios['gastos']> = []
   let costo = 0, masCara = 0, pedidas = 0
-  // el siguiente cuadro no se pide si ya no cabe otro como el más caro que salió (el primero siempre se pide: su costo se mide)
-  const cabe = (): boolean => enc.dry_run || pedidas === 0 || costo + masCara <= tope + 1e-9
+  // el siguiente cuadro no se pide si ya no cabe otro como el más caro que salió (el primero se pide para medir su costo, SALVO que no quede nada:
+  //   CC7 🟡 17-nov · con el tope en 0, el encargo ya gastó lo suyo y ninguna imagen se pide · regla «nada gasta sin dale»)
+  const cabe = (): boolean => enc.dry_run || (tope > 0 && (pedidas === 0 || costo + masCara <= tope + 1e-9))
   const pedir = async (prompt: string, foto: FotoDeReferencia | null) => {
     pedidas++
     const r = await P.imagen({ prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto, size: calidad.size, quality: calidad.quality })

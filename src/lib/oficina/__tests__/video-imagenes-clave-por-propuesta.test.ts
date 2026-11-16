@@ -50,6 +50,10 @@ describe('los dos cuadros de un plano largo (decisión de Lenovo 16-nov 22:23)',
     expect(arranque).toContain('It will be the first frame of the clip of this shot.')
     // sin estado final, el cierre sale del movimiento
     expect(promptDelCierre({ ...p, estado_final: undefined }, { total: 3, proporcion: '9:16' })).toContain('the moment right after this movement ends: paneo lento')
+    // CC7 🟡: el cierre nunca pide congelar el inicio (el arranque sí)
+    expect(arranque).toContain('freeze the starting instant')
+    expect(cierre).not.toContain('starting instant')
+    expect(cierre).toContain('The clip has just moved like this (this frame is where that movement ends): paneo lento')
   })
 })
 
@@ -148,6 +152,25 @@ describe('el paso imagenes_clave en la fase de PROPUESTAS (borrador)', () => {
       ['imagen-clave-4-P2-tope-cierre-1', expect.stringContaining('el plano 1 de la propuesta P2 dura más de 3 s y quedó con un solo cuadro')],
     ])
     expect(s.res.costo_usd).toBeCloseTo(0.056, 6)
+  })
+  it('🔴 (CC7 #18) con el tope agotado (el encargo ya gastó lo suyo) NO se pide ninguna imagen: cada plano queda con la ficha del tope', async () => {
+    const M = crearMemoria({})
+    const s = await ejecutarCodigoV(M.P, encargoReal({ fase: 'propuesta', gasto: VIDEO_MESA.limites.tope_encargo_usd }) as never, VIDEO_MESA, PASO)
+    expect(M.llamadas.imagen).toBe(0)
+    expect(s.res.costo_usd).toBe(0)
+    expect(s.gastos).toBeUndefined()
+    expect((s.res.fichas ?? []).map((f) => f.id)).toEqual(['imagen-clave-4-P1-tope-1', 'imagen-clave-4-P1-tope-2', 'imagen-clave-4-P2-tope-1', 'imagen-clave-4-P2-tope-2'])
+    expect((s.res.artefacto as unknown as ImagenesClave).propuestas!.map((p) => p.planos_sin_imagen)).toEqual([[1, 2], [1, 2]])
+    // con un centavo, la primera sí se pide (su costo se mide) y ninguna más
+    const M2 = crearMemoria({})
+    await ejecutarCodigoV(M2.P, encargoReal({ fase: 'propuesta', gasto: VIDEO_MESA.limites.tope_encargo_usd - 0.01 }) as never, VIDEO_MESA, PASO)
+    expect(M2.llamadas.imagen).toBe(1)
+  })
+  it('una fase de propuestas sin hojas legibles lo dice así (no «la hoja no trae planos»)', async () => {
+    const M = crearMemoria({})
+    const s = await ejecutarCodigoV(M.P, encargoReal({ fase: 'propuesta', propuestas: [{ id: 'P1', planos: [] }] }) as never, VIDEO_MESA, PASO)
+    expect(M.llamadas.imagen).toBe(0)
+    expect((s.res.fichas ?? []).map((f) => f.que)).toEqual(['no hubo imágenes clave: las propuestas de la mesa no traen hojas de planos legibles'])
   })
   it('🔴 un arranque que falla deja su plano sin imagen (con ficha de SU propuesta) y sin cierre; las demás siguen', async () => {
     const M = crearMemoria({})
