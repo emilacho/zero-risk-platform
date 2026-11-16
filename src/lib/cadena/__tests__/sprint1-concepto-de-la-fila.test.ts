@@ -79,9 +79,9 @@ describe('la hoja escribe el concepto de la pieza y la oficina lo lee', () => {
     expect(h.texto_md).toContain('- EMOCIÓN: bienvenida')
     expect(h.texto_md).toContain('- FOTO A USAR: foto:f-01')
   })
-  it('sin concepto propio: se arma de la idea del banco, se AVISA y la hoja sale igual (no es reja); el mensaje y el llamado son los de siempre', () => {
+  it('sin concepto propio: se arma de la idea del banco y lo que falta queda DECLARADO en el brief; NO suma avisos de la hoja (serían hallazgos del parte: una reja de hecho); el mensaje y el llamado son los de siempre', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-ig-01' })]))
-    expect(h.avisos).toEqual(['F1-S1-ig-01: la fila no trae concepto propio · se arma con la idea del banco C1-I01; la escena la diseña la mesa'])
+    expect(h.avisos).toEqual([])
     const b = parsearBrief(h.texto_md, 'F1-S1-ig-01')!
     expect(b.idea_de_la_pieza).toBe('la primera silla')
     expect(b.que_se_ve).toBe('(la fila no dice qué se ve: la mesa diseña la escena)')

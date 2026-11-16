@@ -114,11 +114,13 @@ function mensajeDe(idea: IdeaDelBanco | null, f: Pick<FilaDeHoja, 'tema'>, aviso
   avisos.push(`${id}: sin idea del banco (${f.tema ? `tema «${limpio(f.tema)}»` : 'sin tema'}) · el mensaje sale del tema y se declara`)
   return `${limpio(f.tema) || '(sin tema)'} · sin idea del banco`
 }
-/** 16-nov · Sprint 1 · Mejora 2 · el concepto de la pieza: el de la fila o, si no lo trae, el de la idea del banco (con aviso). Nunca bloquea. */
-function conceptoDeLaPieza(f: FilaDeHoja, idea: IdeaDelBanco | null, avisos: string[], id: string): { idea: string; que_se_ve: string; mensaje: string; emocion: string; foto: string; llamado: string } {
+/**
+ * 16-nov · Sprint 1 · Mejora 2 · el concepto de la pieza: el de la fila o, si no lo trae, el de la idea del banco. Nunca bloquea.
+ * Sin concepto propio NO se suma a los avisos de la hoja: esos avisos son hallazgos del parte (bajan `chequeos_ok`) y hoy ninguna fila lo trae.
+ * Lo que falta queda DECLARADO en el texto del brief («la fila no dice qué se ve: la mesa diseña la escena»).
+ */
+function conceptoDeLaPieza(f: FilaDeHoja, idea: IdeaDelBanco | null): { idea: string; que_se_ve: string; mensaje: string; emocion: string; foto: string; llamado: string } {
   const k = f.concepto ?? {}
-  const propio = !!(k.idea || k.que_se_ve || k.mensaje)
-  if (!propio) avisos.push(`${id}: la fila no trae concepto propio · se arma con ${idea ? `la idea del banco ${idea.id}` : 'el tema'}; la escena la diseña la mesa`)
   return {
     idea: limpio(k.idea) || idea?.idea || limpio(f.tema) || '',
     que_se_ve: limpio(k.que_se_ve),
@@ -136,7 +138,7 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
   const { proporcion, por_omision, ilegible } = proporcionDeLaTabla(ins.formatos, cab.red, cab.formato, ins.proporciones)
   if (ilegible) avisos.push(`${cab.id}: la proporción «${ilegible}» de ${cab.red.toLowerCase()} · ${cab.formato} en cadena_formatos_por_red no se puede leer · se usa ${proporcion}, la de por omisión del formato`)
   const esKit = cab.formato === 'kit'
-  const pz = conceptoDeLaPieza(f, idea, avisos, cab.id)
+  const pz = conceptoDeLaPieza(f, idea)
   const cuando = `aprobar antes de publicar · publica el ${fechaEnLetras(f.fecha)}${f.hora ? ` a las ${limpio(f.hora).slice(0, 5)}` : ''}`
   const L: string[] = [
     `### ${cab.id} · ${mayuscula(cab.red)} · ${cab.formato}`,

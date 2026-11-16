@@ -18,7 +18,8 @@ END $$;
 
 COMMENT ON COLUMN public.cadena_calendario_filas.concepto IS '16-nov · Sprint 1 · Mejora 2 · el concepto de ESTA pieza: {idea, que_se_ve, mensaje, emocion, foto, llamado}, todas opcionales; NULL = la fila no lo trae (la hoja lo arma de la idea del banco y lo avisa)';
 
--- comprobación final: la columna existe, es jsonb, admite NULL, no tiene valor por omisión, tiene su regla, y todas las filas de hoy quedaron en NULL
+-- comprobación final: la columna existe, es jsonb, admite NULL, no tiene valor por omisión y tiene su regla
+-- (las filas de hoy quedan en NULL por construcción: ADD COLUMN sin valor por omisión; no se comprueba aquí para que la migración se pueda volver a aplicar cuando ya haya conceptos)
 DO $$
 DECLARE c record;
 BEGIN
