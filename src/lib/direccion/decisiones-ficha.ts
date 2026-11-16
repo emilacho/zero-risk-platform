@@ -8,6 +8,7 @@
  */
 import type { Decision } from './decisiones'
 import { DEPARTAMENTOS, DEPARTAMENTO_DE_LA_OFICINA, type ClaveDeDepartamento } from '../nombres-del-sistema'
+import { FUENTE_DE_PROPUESTAS } from '../oficina/video/propuestas-pendientes'
 
 /** el vocabulario fijo: 5 verbos, siempre los mismos */
 export const VERBOS = ['aprobar', 'pedir_cambios', 'responder', 'asumir', 'descartar'] as const
@@ -21,7 +22,7 @@ export type Pantalla = (typeof PANTALLAS)[number]
  * esta copia solo sirve para que la plataforma no mande un nombre que no existe.
  * `dueno-preguntas` es la ruta de la oficina de preguntas (`/api/dueno/preguntas`): en el tablero hoy la llama `decisiones-contestar`; en T1 entra a su lista.
  */
-export const DESTINOS = ['firmar-tablero', 'recalcular-tablero', 'plan-aprobar', 'plan-cambios', 'revision-resolver', 'dueno-preguntas'] as const
+export const DESTINOS = ['firmar-tablero', 'recalcular-tablero', 'plan-aprobar', 'plan-cambios', 'revision-resolver', 'dueno-preguntas', 'propuestas-aprobar', 'propuestas-cambios'] as const
 export type Destino = (typeof DESTINOS)[number]
 export const MAX_ACCIONES = 3
 
@@ -65,7 +66,7 @@ export interface FichaDeDecision {
  * Una oficina que todavía no tiene departamento oficial (jefatura, cerebro, altas) muestra su propio nombre hasta que Emilio lo nombre.
  */
 const POR_FUENTE: Record<string, ClaveDeDepartamento> = {
-  hitl_queue: 'marketing', plan_aprobaciones: 'marketing', cadena_campanas: 'marketing',
+  hitl_queue: 'marketing', plan_aprobaciones: 'marketing', cadena_campanas: 'marketing', [FUENTE_DE_PROPUESTAS]: 'marketing',
   // lo de finanzas (firma, pausa, «no volvió», canal viejo) ya lo resuelve el tipo, arriba: aquí no hace falta (CC7, sabotaje 4)
 }
 const SIN_DEPARTAMENTO_OFICIAL: Record<string, string> = { jefatura: 'Jefatura', cerebro: 'El cerebro del cliente', portero: 'El cerebro del cliente', alta: 'Altas', onboarding: 'Altas' }
@@ -108,16 +109,25 @@ function pantallaDe(d: Pick<Decision, 'tipo' | 'decidir' | 'documento' | 'fuente
  * Cuando una oficina detenga otra cosa, escribe su propio «qué» (T3)
  */
 export const QUE_SE_DETIENE = 'el plan'
+/** 16-nov · S2-1 · lo que para una decisión de propuestas (el mismo texto que la ficha del tablero de CC5) */
+export const QUE_SE_DETIENE_EL_VIDEO = 'la producción'
 /**
  * las fuentes que declaran que no vencen: el tablero financiero no tiene plazo, se reemplaza solo con una versión nueva (v7: «Sin fecha límite»).
  * Las demás sin `vence` quedan como «no se sabe»: la compuerta del plan la cierra un reloj y la bandeja trae su propio vencimiento
  */
-const NO_VENCEN = new Set(['finanzas_tableros'])
+const NO_VENCEN = new Set(['finanzas_tableros', FUENTE_DE_PROPUESTAS])
 
 const largo = (l?: string | null, c?: string | null): CortoYLargo | undefined => (l ? { largo: l, ...(c ? { corto: c } : {}) } : undefined)
 
 /** las acciones de hoy, traducidas al vocabulario fijo. Solo lo que la plataforma ya declara en `permite`; nada nuevo */
 function accionesDe(d: Decision): Accion[] {
+  // 16-nov · S2-1 · propuestas: aprobar siempre; pedir cambios solo si quedan rondas (contrato §1: quedan_vueltas = 0 esconde «Pedir cambios»)
+  if (d.tipo === 'propuestas') {
+    if (!d.propuestas) return []
+    const a: Accion[] = [{ verbo: 'aprobar', principal: true, destino: 'propuestas-aprobar' }]
+    if (d.propuestas.quedan_vueltas > 0) a.push({ verbo: 'pedir_cambios', pide: { que: 'texto', obligatorio: true }, destino: 'propuestas-cambios' })
+    return a
+  }
   const p = d.permite
   if (!p) return []
   if (d.tipo === 'firma_de_finanzas') return p.includes('aceptar') ? [{ verbo: 'aprobar', principal: true, destino: 'firmar-tablero' }] : []
@@ -155,7 +165,7 @@ export function fichaDe(d: Decision): FichaDeDecision {
     ...(d.criticos?.length ? { decisivo: d.criticos.map((c) => ({ largo: c })) } : {}),
     ...(largo(d.para_que, d.para_que_corto) ? { uso: largo(d.para_que, d.para_que_corto) } : {}),
     ...(largo(d.destraba, d.destraba_corto) ? { desbloquea: largo(d.destraba, d.destraba_corto) } : {}),
-    ...(d.detiene === true ? { detiene: { que: QUE_SE_DETIENE } } : {}),
+    ...(d.detiene === true ? { detiene: { que: d.tipo === 'propuestas' ? QUE_SE_DETIENE_EL_VIDEO : QUE_SE_DETIENE } } : {}),
     ...(Object.keys(propuesta).length ? { propuesta } : {}),
     espera: { desde: d.desde, ...(d.vence ? { vence: d.vence } : !d.vence && NO_VENCEN.has(d.fuente) ? { sin_limite: true as const } : {}), ...(al_vencer ? { al_vencer } : {}), ...(d.version_del_documento ? { version_del_documento: d.version_del_documento } : {}) },
     ...(d.costo_nota || d.costo_usd !== null ? { costo: { ...(d.costo_usd !== null ? { usd: d.costo_usd } : {}), nota: d.costo_nota ?? '' } } : {}),

@@ -21,6 +21,7 @@ import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeL
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
 import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
+import { alLlegarAlPaso, decidir, FUNCION_APROBAR_PROPUESTAS, TURNO_DEL_DUENO, type DecisionDelDueno } from './video/aprobacion'
 import { PASO_MIRAR_VIDEO } from './video/mirada'
 import { PASO_REVISAR_IMAGENES_CLAVE } from './video/imagen-clave'
 import { confianzaDeLaFoto } from './fotos'
@@ -154,6 +155,8 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       if (abierto.tipo === 'material') return r(200, { accion: 'esperar_material', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'material', dispatch_key: abierto.dispatch_key } })
       // el turno abierto es el del BRAZO DE VIDEO (el proveedor está filmando): la misma acción que al abrirlo; el vigía sondea y registra cuando termine
       if (abierto.tipo === 'brazo') return r(200, { accion: 'esperar_brazo', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'brazo', dispatch_key: abierto.dispatch_key } })
+      // 16-nov · Sprint 2 · el encargo espera al DUEÑO (propuestas del video): la misma acción que al abrirlo; lo despierta el tablero cuando el dueño decide
+      if (abierto.tipo === TURNO_DEL_DUENO) return r(200, { accion: 'esperar_dueno', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: TURNO_DEL_DUENO, dispatch_key: abierto.dispatch_key } })
       if (abierto.paso.startsWith('mesa:')) return (await import('./mesa/orquestador')).reentregaDelTurno(P, enc, abierto)
       const sg = siguientePaso(enc.estado_del_motor, pl)
       if (sg.accion === 'ejecutar' && (sg.paso.tipo === 'agente' || sg.paso.tipo === 'portero')) {
@@ -178,6 +181,15 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         if (out.esperar) return r(200, out.esperar)
         enc = await aplicar(P, enc, pl, sig.indice, out.res!, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'codigo', agente: null, dispatch_key: null, cost_usd: 0 } })
         continue
+      }
+      if (paso.tipo === 'codigo' && paso.funcion === FUNCION_APROBAR_PROPUESTAS) {
+        // 16-nov · Sprint 2 · S2-1 parte B · la ÚNICA parada del video: con propuestas, el encargo espera al dueño (turno `dueno`); sin propuestas, pasa de largo
+        const ll = alLlegarAlPaso(e)
+        if ('saltar' in ll) { enc = await aplicar(P, enc, pl, sig.indice, ll.saltar, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'codigo', agente: null, dispatch_key: null, cost_usd: 0 } }); continue }
+        const n = turnoDe(e)
+        const dispatch_key = `${enc.id}:${n}`
+        await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: e.gasto_usd, estado: 'en_paso', turno: { n, paso: paso.clave, tipo: TURNO_DEL_DUENO, agente: null, estado: 'corriendo', dispatch_key, cost_usd: 0 } })
+        return r(200, { accion: 'esperar_dueno', turno: { n, paso: paso.clave, tipo: TURNO_DEL_DUENO, dispatch_key }, ronda: ll.ronda })
       }
       if (paso.tipo === 'codigo') {
         // MATERIAL · antes de asignar/elegir fotos: si faltan fotos propias aptas, se le PIDE al portero (apagado por omisión: devuelve null y todo sigue igual)
@@ -252,6 +264,25 @@ export async function recibirJefatura(P: Puertos, encargoId: string, salida: Sal
   const e = enc.estado_del_motor
   await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: costoDeLaJefatura(salida.costo_usd) } })
   return avanzar(P, enc.id)
+}
+
+/**
+ * 16-nov · Sprint 2 · S2-1 parte B · el DUEÑO decidió las propuestas del video (desde el tablero): se aplica al paso que espera y el encargo sigue solo.
+ * Solo vale si el encargo está esperando al dueño en ese paso y la tarjeta muestra la ronda vigente; si no, se dice por qué y no se toca nada.
+ */
+export async function recibirDecisionDelDueno(P: Puertos, encargoId: string, d: DecisionDelDueno): Promise<Respuesta> {
+  const enc = await P.almacen.leerEncargo(encargoId)
+  if (!enc) return r(404, { error: 'encargo_inexistente', detalle: 'no existe ese encargo' })
+  const abierto = await P.almacen.turnoAbierto(enc.id)
+  if (!abierto || abierto.tipo !== TURNO_DEL_DUENO) return r(409, { error: 'no_espera_al_dueno', detalle: `el encargo no está esperando la decisión del dueño (está «${enc.estado}»)` })
+  const pl = await plantillaDe(P, enc)
+  const sig = siguientePaso(enc.estado_del_motor, pl)
+  if (sig.accion !== 'ejecutar' || sig.paso.funcion !== FUNCION_APROBAR_PROPUESTAS) return r(409, { error: 'no_espera_al_dueno', detalle: 'el paso pendiente no es la aprobación de las propuestas' })
+  const dec = decidir(enc.estado_del_motor, sig.paso, d)
+  if (!dec.ok) return r(dec.status, { error: dec.error, detalle: dec.detalle })
+  await aplicar(P, enc, pl, sig.indice, dec.res, { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: TURNO_DEL_DUENO, agente: null, dispatch_key: abierto.dispatch_key, cost_usd: 0 } })
+  const sal = await avanzar(P, enc.id)
+  return r(sal.status, { ...sal.cuerpo, decision: dec.aprobacion })
 }
 
 /** J8a · la revisión nunca contestó (el vigía de la oficina esperó de más): la pieza sigue marcada «sin revisar»; nunca se pierde */

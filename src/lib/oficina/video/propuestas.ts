@@ -22,6 +22,8 @@ export interface PropuestaDeVideo {
   objetivo: string
   por_que: string
   guion: TraduccionDeGuion
+  /** el texto de ESTA propuesta tal como lo escribió la mesa (título, cabecera y hoja): al aprobarse pasa a ser el texto del guion */
+  texto: string
 }
 
 export interface PropuestasDelVideo {
@@ -92,7 +94,7 @@ export function traducirPropuestas(md: string, o: { objetivo: number; segundosMi
     const nombre = limpiarTexto(b.titulo.replace(/^(propuesta|opci[oó]n|camino)\s*\d*\s*[·:–—-]?\s*/i, '')) || id
     const declarados = /(\d+)\s*s\b/i.exec(c.duracion)
     if (declarados && Number(declarados[1]) !== g.segundos) g.avisos.push(`la propuesta dice ${declarados[1]} s y su guion dura ${g.segundos} s: vale el guion`)
-    propuestas.push({ id, nombre, concepto: c.concepto, segundos: g.segundos, red: c.red, objetivo: c.objetivo, por_que: c.por_que, guion: g })
+    propuestas.push({ id, nombre, concepto: c.concepto, segundos: g.segundos, red: c.red, objetivo: c.objetivo, por_que: c.por_que, guion: g, texto: [`# ${b.titulo}`, ...b.lineas].join('\n').trim() })
   }
   if (!propuestas.length) return { ok: false, motivo: 'ninguna propuesta trae un guion que se entienda', avisos }
   if (bloques.length > 1 && propuestas.length < o.objetivo) avisos.push(`se pidieron ${o.objetivo} propuestas y quedan ${propuestas.length}: se presentan las que hay`)

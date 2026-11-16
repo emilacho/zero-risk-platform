@@ -13,6 +13,7 @@ import { manualCambios } from './manual-cambios'
 import { rutaDecidirPalabra, rutaValidarCampo, rutaValidarManual } from '../../manual/edicion-rutas'
 import { soltarEsperaYPedirPlan } from '../../manual/pedir-plan'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
+import { propuestasAprobar, propuestasCambios } from './propuestas'
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
@@ -253,4 +254,6 @@ export const ACCIONES: Record<string, Manejador> = {
   'oficina-tope': oficinaTope,
   'plan-cambios': planCambios,
   'plan-aprobar': planAprobar,
+  'propuestas-aprobar': propuestasAprobar,
+  'propuestas-cambios': propuestasCambios,
 }

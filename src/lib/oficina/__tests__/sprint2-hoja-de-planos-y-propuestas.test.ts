@@ -21,7 +21,7 @@ import { crearMesaEnMemoria } from './mesa-memoria'
 import { INSUMOS, TRAS_2012 } from './mesa-de-video-t8.test'
 import type { EstadoMesa } from '../mesa/tipos'
 
-const PLANO_COMPLETO = [
+export const PLANO_COMPLETO = [
   '## Plano 1 · 0–3 s',
   'Rol: gancho',
   'Dice: el pan sale caliente cada mañana',
@@ -130,7 +130,7 @@ describe('la convención que recibe la mesa del video', () => {
   })
 })
 
-const PROPUESTA = (n: number, nombre: string, segundos: number) => [
+export const PROPUESTA = (n: number, nombre: string, segundos: number) => [
   `# Propuesta ${n} · ${nombre}`,
   `Concepto: ${nombre} contado en ${segundos} segundos`,
   `Duración: ${segundos} s · Red: instagram · Objetivo: que reserven la mesa`,
