@@ -55,7 +55,7 @@ export interface Memoria {
   artefactos: Array<{ encargo_id: string; tipo: string; version: number; sha256: string }>
   gastos: NonNullable<Cambios['gastos']>
   usos: Array<{ foto_id: string; rol: string | null }>
-  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; contenidos: Record<string, string>; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][]; revisorPedidos: string[]; revisorArgs: Array<{ client_id?: string; ref_id?: string; n?: number }>; planes: string[]; imagenFotos: Array<string | null> }
+  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; contenidos: Record<string, string>; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][]; revisorPedidos: string[]; revisorArgs: Array<{ client_id?: string; ref_id?: string; n?: number }>; planes: string[]; imagenFotos: Array<string | null>; imagenCalidades: Array<{ size?: string; quality?: string; prompt: string }> }
   config: ConfigDeOficina
   plantilla: { plantilla: Plantilla; activo: boolean } | null
   /** guion del revisor externo: texto por llamada */
@@ -70,7 +70,7 @@ export interface Memoria {
 export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOficina>; fuentes?: Partial<FuentesCompletas>; tope?: number; plantilla?: Plantilla; plan?: string | null } = {}): Memoria {
   const m: Memoria = {
     encargos: new Map(), turnos: new Map(), artefactos: [], gastos: [], usos: [],
-    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], contenidos: {}, guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [], revisorPedidos: [], revisorArgs: [], planes: [], imagenFotos: [] },
+    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], contenidos: {}, guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [], revisorPedidos: [], revisorArgs: [], planes: [], imagenFotos: [], imagenCalidades: [] },
     config: { estado: 'encendida', familias_activas: o.plantilla ? [o.plantilla.familia] : ['post_img'], clientes_ensayo: [], ...(o.config ?? {}) },
     plantilla: { plantilla: JSON.parse(JSON.stringify(o.plantilla ?? POST_IMG)), activo: true },
     // por omisión el revisor externo no opina nada (texto vacío): no hay opinión que el autor deba decidir
@@ -146,6 +146,7 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
       m.llamadas.imagen++
       if (!p.dry_run) m.llamadas.imagenReal++
       m.llamadas.imagenFotos.push(p.foto?.id ?? null)
+      m.llamadas.imagenCalidades.push({ size: p.size, quality: p.quality, prompt: p.prompt })
       if (m.imagenFalla(m.llamadas.imagen)) return { ok: false, error: 'proveedor caído' }
       const sinFoto = p.foto ? m.referenciaNoUsada(m.llamadas.imagen) : null
       const referencia = p.foto ? (sinFoto ? { referencia: { usada: false, motivo: sinFoto } } : { referencia: { usada: true } }) : {}

@@ -144,6 +144,15 @@ ESQUEMAS['mirada_video.v1'] = {
     para_la_mesa: str(0, 2000),
   },
 }
+// S2-3 · un agente revisa las imágenes clave antes de filmar (ver `video/imagen-clave.ts`): JUZGA él; el código solo lee `coincide`
+ESQUEMAS['revision_imagenes_clave.v1'] = {
+  t: 'obj', req: ['coincide', 'por_plano'],
+  props: {
+    coincide: { t: 'bool' },
+    por_plano: { t: 'arr', max: 40, de: { t: 'obj', req: ['plano', 'coincide'], props: { plano: { t: 'num', min: 0, max: 60 }, coincide: { t: 'bool' }, correccion: str(0, 600) } } },
+    para_la_mesa: str(0, 2000),
+  },
+}
 ESQUEMAS['autorevision.v1'] = {
   t: 'obj', req: ['choca'],
   props: {

@@ -13,9 +13,11 @@ export const FUNCIONES_REGISTRADAS = [
   'leer_notas',
   // el brazo de video desde la oficina (parte 2 · 31-oct): la mesa escribe el guion; esto lo pide, lo filma, lo chequea y lo entrega
   'abrir_video', 'pedido_de_video', 'video', 'cuadros_video', 'chequeos_video', 'empaquetar_entrega_video',
+  // S2-3 · una imagen clave por plano antes de filmar (borrador en las propuestas, final al máximo)
+  'imagenes_clave',
 ] as const
 /** funciones de código que SÍ gastan (un proveedor de imágenes o de video, no un modelo de texto): su tope puede ser mayor que 0 */
-export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video'] as const
+export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video', 'imagenes_clave'] as const
 /** validadores de código sobre la salida de un agente */
 export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'decide_imagen', 'texto_laminas_en_copy', 'contrato_de_lamina', 'sin_texto_en_estructura', 'refs_validos'] as const
 /** esquemas de salida registrados (ver salida.ts) */
@@ -23,6 +25,7 @@ export const ESQUEMAS_REGISTRADOS = [
   'visual_direction.v1', 'prompts.v1', 'observacion_imagen.v1', 'pieza_post.v1', 'fichas.v1', 'resolucion.v1',
   'direccion_imagenes.v1', 'prompts_por_ref.v1', 'observacion_imagenes.v1', 'opinion_libre.v1', 'copy_base.v1', 'laminas.v1', 'estructura.v1', 'copy_kit.v1',
   'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1', 'resolucion_solo.v1', 'autorevision.v1', 'mirada_video.v1',
+  'revision_imagenes_clave.v1',
 ] as const
 /** quién puede hacer cumplir una regla de indicación */
 export const APLICADORES_DE_CODIGO = [

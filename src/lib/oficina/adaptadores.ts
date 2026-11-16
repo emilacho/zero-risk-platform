@@ -232,7 +232,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     async imagen(p): Promise<ResultadoImagen> {
       if (p.dry_run) { const id = `dry-${Math.random().toString(36).slice(2, 10)}`; return { ok: true, url: `${PREFIJO_DRY}${id}.png`, generation_id: id, costo_usd: 0, ...(p.foto ? { referencia: { usada: true, motivo: 'simulado (dry_run)' } } : {}) } }
       try {
-        const r = await f(`${env.baseUrl}/api/images/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify({ prompt: p.prompt, client_id: p.client_id, agent_slug: 'design-image-prompt-engineer', size: '1024x1024', quality: 'medium', ...(p.foto ? { reference_image_url: p.foto.url } : {}) }) })
+        const r = await f(`${env.baseUrl}/api/images/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify({ prompt: p.prompt, client_id: p.client_id, agent_slug: 'design-image-prompt-engineer', size: p.size ?? '1024x1024', quality: p.quality ?? 'medium', ...(p.foto ? { reference_image_url: p.foto.url } : {}) }) })
         const j = (await r.json().catch(() => ({}))) as Fila
         if (!r.ok || !j.image_url) return { ok: false, error: String(j.error ?? j.detail ?? `HTTP ${r.status}`) }
         const ref = j.referencia as { usada?: unknown; motivo?: unknown } | undefined

@@ -11,8 +11,11 @@
  * · lo esperado por pieza para el freno de la campaña US$ 12 (`reserva_por_pieza_usd`, mientras no haya historia). Migración 202611111930 (dato; se baja después).
  */
 import type { Condicion, Plantilla } from '../tipos'
+import { CALIDAD_DE_IMAGEN_CLAVE, ESQUEMA_REVISION_IMAGENES_CLAVE, PASO_IMAGENES_CLAVE, PASO_REVISAR_IMAGENES_CLAVE } from '../video/imagen-clave'
 
-export const TOPE_DE_VIDEO_MESA_USD = 35
+// 16-nov · S2-3 (CC2) · 35 → 45: las imágenes clave (≤ 3) y su revisión (0,5) van ANTES del video y también se repiten en la vuelta de la mirada; con 35 la segunda filmación
+//   (regla premium del 11-nov) ya no cabría. 45 ≥ lo gastado al mirar (≈ 22) + volver (≈ 19,6). Necesita GO de Lenovo al aplicar (es dinero); el máximo de la base es 50.
+export const TOPE_DE_VIDEO_MESA_USD = 45
 /** lo que el brazo puede cobrar por UN video (el mismo tope del brazo): el paso `video` lo reserva antes de enviar */
 export const TOPE_DEL_PASO_VIDEO_USD = 15
 /** lo ESPERADO por video para el freno de la campaña mientras la familia no tenga historia (`gasto-de-encargos.ts` · `reservasDesdeLaHistoria`) */
@@ -28,6 +31,12 @@ const hayCuadros: Condicion = { tipo: 'si_artefacto', artefacto: 'cuadros_video'
 export const AGENTE_QUE_MIRA_EL_VIDEO = 'marketing_video_optimization_specialist'
 /** lo que se le deja gastar al agente que mira (regla premium de Emilio 11-nov: material premium mientras se construye) */
 export const TOPE_DE_LA_MIRADA_USD = 0.5
+/** S2-3 · lo que pueden costar las imágenes clave de un video (una por plano; en final, a la máxima calidad) */
+export const TOPE_DE_LAS_IMAGENES_CLAVE_USD = 3
+/** S2-3 · quién revisa las imágenes clave antes de filmar (DATO): el mismo ojo independiente que mira el video, que no escribe la hoja */
+export const AGENTE_QUE_REVISA_LAS_IMAGENES_CLAVE = AGENTE_QUE_MIRA_EL_VIDEO
+/** S2-3 · la revisión mira solo si salió alguna imagen clave */
+const hayImagenesClave: Condicion = { tipo: 'si_artefacto', artefacto: 'imagenes_clave', campo: 'hay_imagenes', igual: true }
 
 export const VIDEO_MESA: Plantilla = {
   tipo: 'video_mesa',
@@ -48,10 +57,16 @@ export const VIDEO_MESA: Plantilla = {
     mesa: true,
     video: { resolucion: '720p', segundos_min: 8, segundos_max: 15, tope_por_video_usd: TOPE_DEL_PASO_VIDEO_USD },
     reserva_por_pieza_usd: RESERVA_POR_VIDEO_USD,
+    // S2-3 · la calidad de la imagen clave por fase (DATO): borrador barato en las propuestas, final al máximo con la propuesta aprobada; el mismo camino
+    imagen_clave: CALIDAD_DE_IMAGEN_CLAVE,
   },
   pasos: [
     { clave: 'abrir', tipo: 'codigo', quien: 'sala', funcion: 'abrir_video', condicion: siempre, entrada: [], salida_artefacto: 'encargo', tope_usd: 0 },
     { clave: 'mesa', tipo: 'codigo', quien: 'sala', funcion: 'mesa', condicion: siempre, entrada: ['encargo'], salida_artefacto: 'mesa', tope_usd: 0 },
+    // 16-nov · S2-3 · una imagen clave por plano (el storyboard) antes de filmar; un agente con visión la revisa contra la hoja y AVISA: devuelve UNA vez a la mesa y luego sigue
+    { clave: PASO_IMAGENES_CLAVE, tipo: 'codigo', quien: 'sala', funcion: 'imagenes_clave', condicion: siempre, entrada: ['guion', 'encargo'], salida_artefacto: 'imagenes_clave', tope_usd: TOPE_DE_LAS_IMAGENES_CLAVE_USD },
+    { clave: PASO_REVISAR_IMAGENES_CLAVE, tipo: 'agente', quien: AGENTE_QUE_REVISA_LAS_IMAGENES_CLAVE, condicion: hayImagenesClave, entrada: ['imagenes_clave', 'guion'], salida_artefacto: 'revision_imagenes_clave', tope_usd: TOPE_DE_LA_MIRADA_USD, salida: { esquema: ESQUEMA_REVISION_IMAGENES_CLAVE, reintento_formato: 1 },
+      vuelve_a: { paso: 'mesa', max: 1, si: { tipo: 'si_artefacto', artefacto: 'revision_imagenes_clave', campo: 'vuelve_a_la_mesa', igual: true } } },
     // 11-nov · GO Lenovo 16:34 · si el guion nombra fotos que no existen, el pedido vuelve UNA vez a la mesa con el aviso (202611111700); a la segunda sigue de largo
     { clave: 'pedido', tipo: 'codigo', quien: 'sala', funcion: 'pedido_de_video', condicion: siempre, entrada: ['guion', 'copy_video'], salida_artefacto: 'pedido_video', tope_usd: 0,
       vuelve_a: { paso: 'mesa', max: 1, si: { tipo: 'si_artefacto', artefacto: 'pedido_video', campo: 'vuelve_a_la_mesa', igual: true } } },
@@ -71,6 +86,7 @@ export const VIDEO_MESA: Plantilla = {
   indicaciones: {
     [AGENTE_QUE_MIRA_EL_VIDEO]: [
       { regla: 'Cuando miras el video terminado, juzgas tú si cuenta lo que pide el guion y la fila: describe lo que de verdad se ve en cada cuadro, sin suponer lo que no se ve, y di qué falta para que el video cuente la historia.', aplica: 'guia' },
+      { regla: 'Cuando revisas las imágenes clave antes de filmar, juzgas tú si cada una cumple el rol y la intención de su plano y, en los planos de producto, si el producto es el de la foto real; si no, das la corrección concreta para la hoja.', aplica: 'guia' },
     ],
   },
 }

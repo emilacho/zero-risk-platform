@@ -98,6 +98,17 @@ describe('POST /api/images/generate · modelo', () => {
     expect('quality' in sentBody()).toBe(false)
   })
 
+  it('(S2-3) `xhigh` y `max` (modelos 2.5/2.6) sí se mandan: la imagen clave final va al máximo', async () => {
+    openaiOk()
+    await post({ prompt: 'x', model: 'gpt-image-2.5-flare', quality: 'max', size: '1024x1536' })
+    expect(sentBody()).toMatchObject({ quality: 'max', size: '1024x1536' })
+  })
+  it('(S2-3) `xhigh` también se manda', async () => {
+    openaiOk()
+    await post({ prompt: 'x', model: 'gpt-image-2.5-flare', quality: 'xhigh' })
+    expect(sentBody().quality).toBe('xhigh')
+  })
+
   it('acepta respuesta con url (sin b64) y sube con el formato real', async () => {
     const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1])
     fetchMock

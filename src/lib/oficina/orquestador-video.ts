@@ -26,9 +26,11 @@ import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
 import { COTAS } from './mesa/tipos'
-import { armarPedidoDeLaOficina, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
+import { armarPedidoDeLaOficina, buscarFotoPropia, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo } from './video/mirada'
 import { CONTRATOS_EN_TEXTO } from './pedidos'
+import { fotosDeReferencia, type FotoDeReferencia } from './foto-de-referencia'
+import { avisoDeLaRevisionALaMesa, calidadDeLaFase, faseDeProduccion, leerRevisionDeImagenesClave, pedidosDeImagenClave, PASO_REVISAR_IMAGENES_CLAVE, tareaDeLaRevisionDeImagenesClave, type ImagenClaveDelPlano, type ImagenesClave, type PlanoDeLaHoja } from './video/imagen-clave'
 
 /** para la jefatura: qué es el contexto «lo que vio el agente» */
 export const FUNCION_DE_LA_MIRADA = 'lo que un agente con visión vio en los cuadros del video terminado (uno por plano), comparado con el guion y la fila; la imagen manda si no coinciden'
@@ -81,6 +83,7 @@ export async function ejecutarCodigoV(P: Puertos, enc: Encargo, pl: Plantilla, p
     case 'pedido_de_video': return pedido(enc, pl, enc.estado_del_motor)
     case 'chequeos_video': return chequeos(enc.estado_del_motor, pl)
     case 'cuadros_video': return cuadrosDelVideo(P, enc)
+    case 'imagenes_clave': return imagenesClave(P, enc, pl, paso)
     case 'empaquetar_entrega_video': return empaquetar(P, enc)
     default: return { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
   }
@@ -291,6 +294,66 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
   }
 }
 
+// ───────────────────────── S2-3 · una imagen clave por plano antes de filmar (ver `video/imagen-clave.ts`)
+/**
+ * una imagen vertical por plano de la hoja, con la calidad de la fase (borrador en las propuestas, final con la propuesta aprobada · DATO `limites.imagen_clave`).
+ * En los planos de producto se edita sobre la foto real (la que nombra la hoja; si la mesa dejó candidatas, también la mejor apta); sin foto apta se genera desde la hoja.
+ * Sin rejas: un plano cuya imagen falla queda sin imagen y con una ficha (su clip sale como hoy). El gasto nunca pasa el tope del paso ni lo que le queda al encargo.
+ */
+async function imagenesClave(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso): Promise<SalidaCodigoV> {
+  const e = enc.estado_del_motor
+  const b = baseV(e)
+  const g = datos(e, 'guion') as unknown as (GuionDeLaMesa & { planos: PlanoDeLaHoja[] }) | undefined
+  const fase = faseDeProduccion(e)
+  const calidad = calidadDeLaFase(pl.limites as unknown as Record<string, unknown>, fase)
+  const prefijo = `imagen-clave-${e.pasos_ejecutados}`
+  const reemplazar = { origen: 'chequeo' as const, donde: 'imagen_clave' }
+  if (!g || !Array.isArray(g.planos) || !g.planos.length) {
+    return { res: { costo_usd: 0, artefacto: { fase, calidad, planos: [], hay_imagenes: false } as unknown as Record<string, unknown>, fichas: [fichaNueva(`${prefijo}-sin-planos`, 'chequeo', 'imagen_clave', 'sugerencia', 'no hubo imágenes clave: la hoja no trae planos', 'hoja de planos de la mesa', 'el video sale sin storyboard')], reemplazar_fichas: reemplazar } }
+  }
+  const propias = fotosPropiasConDireccion(b.F.fotos)
+  // la hoja nombra las fotos por su nombre corto (regla del 11-nov): se resuelve al id completo; un nombre que no existe queda como está (no es apto y lo dice la ficha)
+  const idCompleto = (x: string | undefined): string | undefined => {
+    if (!x) return x
+    const h = buscarFotoPropia(x, propias)
+    return h && 'url' in h ? propias.find((f) => f.url === h.url)?.id ?? x : x
+  }
+  const planos: PlanoDeLaHoja[] = g.planos.map((p) => ({ ...p, foto_id: idCompleto(p.foto_id) }))
+  // con candidatas (las que muestran el protagonista) se rota sobre ellas; sin candidatas solo vale la foto que la hoja nombra
+  const cands = datos(e, 'candidatas_foto')?.candidatas as Array<{ id: string; cercana?: boolean }> | undefined
+  const nombradas = planos.flatMap((p) => (p.foto_id ? [{ id: p.foto_id }] : []))
+  const aptas: FotoDeReferencia[] = fotosDeReferencia(propias, Array.isArray(cands) ? [...nombradas.filter((n) => cands.some((c) => c.id === n.id && !c.cercana)), ...cands] : nombradas)
+  const { pedidos, no_aptas } = pedidosDeImagenClave({ planos, aptas, proporcion: b.proporcion, rotar: Array.isArray(cands) })
+  const fichas: Ficha[] = []
+  for (const x of no_aptas) {
+    const otra = pedidos.find((p) => p.n === x.n)?.foto
+    fichas.push(fichaNueva(`${prefijo}-foto-no-apta-${x.n}`, 'chequeo', 'imagen_clave', 'sugerencia', `la hoja pide la foto «${x.id}» para el plano ${x.n}, pero no sirve de referencia (no es propia, no tiene dirección o no muestra el producto): ${otra ? `se usa «${otra.id}»` : 'se genera desde la hoja'}`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
+  }
+  const tope = Math.max(0, Math.min(Number(paso.tope_usd) || 0, +(pl.limites.tope_encargo_usd - e.gasto_usd).toFixed(4)))
+  const hechas: ImagenClaveDelPlano[] = []
+  const gastos: NonNullable<Cambios['gastos']> = []
+  let costo = 0
+  for (const ped of pedidos) {
+    // el siguiente plano no se pide si ya no cabe otra imagen como la más cara que salió (la primera siempre se pide: su costo se mide)
+    const masCara = hechas.reduce((m, h) => Math.max(m, h.costo_usd), 0)
+    if (!enc.dry_run && hechas.length > 0 && costo + masCara > tope + 1e-9) {
+      fichas.push(fichaNueva(`${prefijo}-tope-${ped.n}`, 'chequeo', 'imagen_clave', 'sugerencia', `el plano ${ped.n} quedó sin imagen clave: no cabía otra imagen en el tope del paso (US$ ${tope.toFixed(2)}; van US$ ${costo.toFixed(4)})`, 'tope del paso', 'su clip sale desde su foto o su texto'))
+      continue
+    }
+    const r = await P.imagen({ prompt: ped.prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto: ped.foto, size: calidad.size, quality: calidad.quality })
+    if (!r.ok) { fichas.push(fichaNueva(`${prefijo}-falla-${ped.n}`, 'chequeo', 'imagen_clave', 'sugerencia', `el generador no devolvió la imagen clave del plano ${ped.n}: ${r.error}`, 'generador de imágenes', 'su clip sale desde su foto o su texto')); continue }
+    const usada = !!ped.foto && r.referencia?.usada === true
+    if (ped.foto && !usada) fichas.push(fichaNueva(`${prefijo}-sin-foto-${ped.n}`, 'chequeo', 'imagen_clave', 'sugerencia', `la imagen clave del plano ${ped.n} se generó sin la foto real «${ped.foto.id}» (${r.referencia?.motivo ?? 'sin motivo'}): el producto puede no ser el del cliente`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
+    hechas.push({ n: ped.n, url: r.url, prompt: ped.prompt, foto_referencia_id: usada ? ped.foto!.id : null, referencia_usada: usada, costo_usd: r.costo_usd, generation_id: r.generation_id })
+    costo += r.costo_usd
+    gastos.push({ concepto: 'imagen', ref_tabla: 'agent_image_generations', ref_id: r.generation_id, cost_usd: r.costo_usd, base: 'usage' })
+  }
+  const sin = planos.filter((p) => !hechas.some((h) => h.n === p.n)).map((p) => p.n)
+  // en ensayo las imágenes son simuladas (no hay nada que mirar): quedan en el artefacto, pero la revisión con visión no se llama (como los cuadros del video)
+  const artefacto: ImagenesClave = { fase, calidad, planos: hechas, hay_imagenes: hechas.length > 0 && !enc.dry_run, ...(enc.dry_run ? { simulado: true } : {}), ...(sin.length ? { planos_sin_imagen: sin } : {}) }
+  return { res: { costo_usd: +costo.toFixed(6), artefacto: artefacto as unknown as Record<string, unknown>, ...(fichas.length ? { fichas } : {}), reemplazar_fichas: reemplazar }, ...(gastos.length ? { gastos } : {}) }
+}
+
 // ───────────────────────── un agente mira el video antes de la bandeja (GO Lenovo 11-nov 16:43 · ver `video/mirada.ts`)
 /** UN cuadro del medio de cada plano del guion, guardado en la carpeta del encargo. Sin cuadros (sin ffmpeg, mp4 ilegible…) no hay mirada: ficha QUE BLOQUEA, nunca pasa callado. En ensayo no corre */
 async function cuadrosDelVideo(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
@@ -317,6 +380,15 @@ async function cuadrosDelVideo(P: Puertos, enc: Encargo): Promise<SalidaCodigoV>
 
 /** el pedido del agente que mira (solo el paso `mirar_video`; null = no es un paso de video con pedido propio) */
 export function armarPedidoV(paso: Paso, e: Estado, errorDeFormato?: string): { task: string; images: string[]; esquema: string } | null {
+  if (paso.clave === PASO_REVISAR_IMAGENES_CLAVE) {
+    const bv = baseV(e)
+    const gv = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
+    const ic = datos(e, 'imagenes_clave') as unknown as ImagenesClave | undefined
+    const esq = paso.salida?.esquema ?? 'revision_imagenes_clave.v1'
+    const fotos = fotosPropiasConDireccion(bv.F.fotos).map((f) => ({ id: f.id, url: f.url }))
+    const t = tareaDeLaRevisionDeImagenesClave({ imagenes: ic?.planos ?? [], planos: (gv?.planos ?? []) as PlanoDeLaHoja[], fotos, brief_texto: bv.brief.texto, red: bv.brief.red, contrato: CONTRATOS_EN_TEXTO[esq] ?? '', ...(errorDeFormato ? { errorDeFormato } : {}) })
+    return { ...t, esquema: esq }
+  }
   if (paso.clave !== PASO_MIRAR_VIDEO) return null
   const b = baseV(e)
   const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
@@ -328,6 +400,7 @@ export function armarPedidoV(paso: Paso, e: Estado, errorDeFormato?: string): { 
 
 /** lo que el agente vio → el artefacto; si NO coincide queda una ficha que bloquea con lo que faltó (la vuelta a la mesa, si la plantilla la tiene, lee `coincide`) */
 export function procesarValorV(paso: Paso, v: Record<string, unknown>, e: Estado, pl: Plantilla): { res: ResultadoDePaso } | null {
+  if (paso.clave === PASO_REVISAR_IMAGENES_CLAVE) return procesarRevisionDeImagenesClave(paso, v, e, pl)
   if (paso.clave !== PASO_MIRAR_VIDEO) return null
   const m = leerMirada(v)
   const detalle = m.faltantes.map((f) => `${f.plano !== null ? `plano ${f.plano}: ` : ''}${f.que_falta}`).join(' · ') || m.para_la_mesa || 'sin detalle'
@@ -342,6 +415,32 @@ export function procesarValorV(paso: Paso, v: Record<string, unknown>, e: Estado
   const sinTope = queda ? ` · no se rehízo solo: volver a la mesa y filmar otro video (reserva US$ ${costo.toFixed(2)}) pasa el tope del encargo (US$ ${pl.limites.tope_encargo_usd}; van US$ ${e.gasto_usd.toFixed(2)})` : ''
   const fichas: Ficha[] = m.coincide ? [] : [fichaNueva(`video-no-coincide-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `el agente que miró el video dice que no cuenta lo que pide el guion: ${detalle}`.slice(0, 700) + sinTope, 'los cuadros del video contra el guion y la fila', m.para_la_mesa || 'rehacer el video con lo que faltó')]
   return { res: { costo_usd: 0, artefacto: { ...m, vuelve_a_la_mesa: false } as unknown as Record<string, unknown>, fichas, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+}
+
+/**
+ * S2-3 · la revisión de las imágenes clave (decisión de Emilio 16-nov 20:53): AVISA y devuelve a la mesa UNA vez si algo no coincide (y si cabe volver);
+ * a la segunda, o sin espacio, sigue de largo con una ficha de SUGERENCIA (no bloquea: el storyboard lo cuida la mesa, no es puerta de nadie).
+ */
+function procesarRevisionDeImagenesClave(paso: Paso, v: Record<string, unknown>, e: Estado, pl: Plantilla): { res: ResultadoDePaso } {
+  const rv = leerRevisionDeImagenesClave(v)
+  const reemplazar = { origen: 'chequeo' as const, donde: 'revision_imagen_clave' }
+  const queda = !rv.coincide && quedaVueltaDelPaso(paso, e)
+  const costo = queda ? costoDeVolver(pl, paso) : 0
+  if (queda && cabeLaVuelta(pl, e, costo)) return { res: { costo_usd: 0, artefacto: { ...rv, vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeLaRevisionALaMesa(rv) } as unknown as Record<string, unknown>, reemplazar_fichas: reemplazar } }
+  const detalle = rv.por_plano.filter((p) => !p.coincide).map((p) => `plano ${p.plano}: ${p.correccion || 'no coincide'}`).join(' · ') || rv.para_la_mesa || 'sin detalle'
+  const porque = queda ? ' · no volvió a la mesa: rehacer la hoja y sus imágenes no cabe en el tope del encargo' : (e.vueltas?.[paso.clave] ?? 0) > 0 ? ' · ya volvió una vez a la mesa' : ''
+  const fichas: Ficha[] = rv.coincide ? [] : [fichaNueva(`imagen-clave-no-coincide-${e.pasos_ejecutados}`, 'chequeo', 'revision_imagen_clave', 'sugerencia', `el agente que revisó las imágenes clave dice que no todas cuentan lo que pide la hoja: ${detalle}`.slice(0, 700) + porque, 'las imágenes clave contra la hoja de planos', rv.para_la_mesa || 'mirar esos planos en el video')]
+  return { res: { costo_usd: 0, artefacto: { ...rv, vuelve_a_la_mesa: false } as unknown as Record<string, unknown>, fichas, reemplazar_fichas: reemplazar } }
+}
+
+/** la revisión de las imágenes clave no se pudo LEER: el video sigue (la revisión avisa, no frena) con una ficha de sugerencia */
+export function sinLecturaDeRevisarImagenesClaveV(e: Estado, errores: string[]): ResultadoDePaso {
+  return {
+    costo_usd: 0,
+    artefacto: { coincide: true, sin_lectura: true, por_plano: [], para_la_mesa: '', vuelve_a_la_mesa: false },
+    reemplazar_fichas: { origen: 'chequeo' as const, donde: 'revision_imagen_clave' },
+    fichas: [fichaNueva(`imagen-clave-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'revision_imagen_clave', 'sugerencia', `nadie pudo confirmar que las imágenes clave cuentan lo que pide la hoja: la respuesta del agente no se pudo leer (${errores.slice(0, 2).join(' · ')})`, 'formato de la revisión', 'mirar el storyboard antes de aprobar')],
+  }
 }
 
 /** lo que se reserva para VOLVER desde `paso` a su destino: los topes de los pasos que se repiten (destino → paso, inclusive) y, si el destino es la mesa, un turno de la mesa (la mesa se limita sola con su reserva, pero puede integrar una vez). Puro */
