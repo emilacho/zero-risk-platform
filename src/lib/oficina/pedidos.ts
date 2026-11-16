@@ -10,6 +10,7 @@ import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
 import type { ReglasDeImagen } from './reglas-de-imagen'
 import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 import { bloqueDelPerfil } from '../perfil-del-publico/lectores'
+import { textoEnImagenParaChequear } from './composicion'
 
 /** 10-nov · perfil del público T2: el bloque del perfil para la base de la tarea; '' sin perfil (la tarea queda igual que antes) */
 export const seccionDelPerfil = (F: Pick<FuentesCompletas, 'perfil_del_publico'>): string => {
@@ -26,11 +27,11 @@ export const CONTRATOS_EN_TEXTO: Record<string, string> = {
   'visual_direction.v1': '{"resumen": "…", "paleta": ["#RRGGBB"], "estilo": "…", "decision": {"modo": "real|generada|ninguna", "foto_id": "(SOLO si modo=real; en generada o ninguna OMITE la clave: no pongas texto vacío)", "motivo": "…"}, "reglas_de_imagen": {"obligatorio": [{"id": "o1", "texto": "…", "claves": ["palabras que debe cubrir un prompt"], "cita": "copia LITERAL del brief"}], "prohibido": [{"id": "p1", "texto": "…", "claves": ["palabras que no debe nombrar"], "cita": "copia LITERAL del brief"}]}, "necesito": []}',
   'prompts.v1': '{"prompts": [{"prompt": "…", "idea_en_una_linea": "…"}, {"prompt": "…", "idea_en_una_linea": "…"}]}  (2 o 3 prompts; no escribas tamaño ni parámetros: los fija la sala)',
   'observacion_imagen.v1': '{"imagenes": [{"indice": 0, "reglas": [{"id": "o1", "presente": true, "evidencia": "…"}], "texto_en_imagen": ["…"], "marcas": ["…"], "personas": 0, "producto": "…", "elementos_visibles": ["…"], "dato_sin_verificar": false}], "preferencia": [0]}  (presente = true | false | "no_se_ve"; dato_sin_verificar = true si la imagen muestra un precio, una cifra, un sello, una certificación, una etiqueta, una norma o la lectura de un instrumento que nadie verificó; describes, no apruebas)',
-  'pieza_post.v1': '{"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…", "necesito": []}',
+  'pieza_post.v1': '{"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…", "texto_en_imagen": {"etiqueta": "…", "titular": "…", "bajada": "…", "boton": "…"}, "necesito": []}  (texto_en_imagen = lo que va ESCRITO sobre la imagen, en el idioma y el registro del manual; lo dibuja la sala con el logo y los colores de la marca, nunca el generador de imágenes. titular corto (hasta 70), etiqueta y botón hasta 40, bajada hasta 120; omite lo que no haga falta)',
   'fichas.v1': '{"fichas": [{"que": "…", "donde": "texto|hashtags|imagen", "contra_que": "…", "gravedad": "bloquea|sugerencia", "propuesta": "…"}]}',
   'mirada_video.v1': '{"coincide": true, "orden_respetado": true, "faltantes": [{"plano": 2, "que_falta": "…"}], "por_plano": [{"plano": 1, "se_ve": "…"}], "para_la_mesa": "…"}  (decides tú si coincide; faltantes vacío si coincide; para_la_mesa = lo que el equipo tiene que corregir)',
   'resolucion_solo.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}]}',
-  'resolucion.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "pieza": {"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…"}}  (pieza solo si cambias algo)',
+  'resolucion.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "pieza": {"pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…", "texto_en_imagen": {"etiqueta": "…", "titular": "…", "bajada": "…", "boton": "…"}}}  (pieza solo si cambias algo)',
 }
 
 export interface ContextoDePedido {
@@ -48,7 +49,7 @@ export interface ContextoDePedido {
 }
 
 const seccionDeFichas = (fs: Ficha[]) => (fs.length ? fs.map((f) => `- [${f.id}] (${f.gravedad}) en ${f.donde}: ${f.que ?? ''} · contra: ${f.contra_que ?? ''} · propuesta: ${f.propuesta ?? ''}`).join('\n') : '- (ninguna)')
-const pieza = (a: Record<string, unknown> | undefined) => (a ? `Pie de foto:\n${String(a.pie_de_foto ?? '')}\nHashtags: ${((a.hashtags as string[]) ?? []).join(' ')}\nLlamado: ${String(a.llamado ?? '')}` : '(todavía no hay pieza)')
+const pieza = (a: Record<string, unknown> | undefined) => (a ? `Pie de foto:\n${String(a.pie_de_foto ?? '')}\nHashtags: ${((a.hashtags as string[]) ?? []).join(' ')}\nLlamado: ${String(a.llamado ?? '')}${textoEnImagenParaChequear(a) ? `\nTexto escrito sobre la imagen (lo dibuja la sala con la marca):\n${textoEnImagenParaChequear(a)}` : ''}` : '(todavía no hay pieza)')
 
 export function describirReglas(r: ReglasDeImagen): string {
   return `OBLIGATORIO (debe verse / cubrirse):\n${lista(r.obligatorio.map((x) => `[${x.id}] ${x.texto}`))}\nPROHIBIDO (no debe verse / nombrarse):\n${lista(r.prohibido.map((x) => `[${x.id}] ${x.texto}`))}`

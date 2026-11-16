@@ -341,6 +341,11 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         return r.ok ? Buffer.from(await r.arrayBuffer()) : null
       } catch { return null }
     },
+    // Sprint 1 · Mejora 5 · la composición con la marca (satori + resvg, sin proveedor: US$ 0). Un fallo se devuelve, nunca lanza
+    async componer(p) {
+      // el motor de dibujo se carga solo al componer (cargarlo al importar arrastra satori a cada ruta que importa los adaptadores)
+      try { const { renderAnuncio } = await import('../../../packages/carousel-engine/src/anuncio'); const r = await renderAnuncio(p); return { ok: true as const, png: r.png, fonts_faltantes: r.fonts_faltantes } } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) } }
+    },
     // 11-nov · los cuadros del video terminado (ffmpeg del servidor; el mismo que saca las capturas de los videos del cerebro)
     sacarCuadros: (bytes, planos) => sacarCuadros({ bytes, planos }),
     async guardarArchivos(ruta, archivos) {
