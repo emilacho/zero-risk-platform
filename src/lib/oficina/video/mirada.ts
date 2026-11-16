@@ -6,6 +6,7 @@
  * JUZGA EL AGENTE, NO EL CÓDIGO: aquí no hay listas ni frases fijas; el código solo arma el pedido, lee `coincide` y guarda lo que el agente vio.
  * Puro: sin red, sin base, sin ffmpeg (eso vive en `cuadros.ts`). Genérico: cualquier cliente, cualquier red.
  */
+import { MAX_IMAGENES } from '../../imagenes-del-pedido'
 import type { Plano } from './guion'
 
 export const ESQUEMA_MIRADA_VIDEO = 'mirada_video.v1'
@@ -137,22 +138,22 @@ function senalesLegibles(s: SenalesDelPlano | undefined): string {
  */
 export function tareaDeLaMirada(o: {
   cuadros: CuadroDelVideo[]; planos: Plano[]; segundos: number; brief_texto: string; red: string; formato: string; contrato: string; errorDeFormato?: string
-  imagenes_clave?: Array<{ n: number; url: string }>; senales?: SenalesDelVideo | null
+  imagenes_clave?: Array<{ n: number; url: string }>; senales?: SenalesDelVideo | null; max?: number
 }): { task: string; images: string[] } {
   const senalDe = new Map((o.senales?.por_plano ?? []).map((s) => [s.plano, s]))
   // Sprint 2 · S2-1 · el rol del plano en la historia y lo que tenía que decir van primero: el agente juzga si el plano CUMPLE su rol, no solo si se ve lo pedido
   const planos = o.planos.map((p) => `- Plano ${p.n} (${p.desde}–${p.hasta} s)${p.rol ? ` · rol: ${p.rol}` : ''}${p.dice ? ` · tenía que decir: ${p.dice}` : ''}: ${p.se_ve}${p.producto === undefined ? '' : ` · producto en cuadro: ${p.producto ? 'sí' : 'no'}`}${p.movimiento ? ` · cámara: ${p.movimiento}` : ''}${p.estado_final ? ` · cómo termina: ${p.estado_final}` : ''}${p.texto_en_pantalla ? ` · texto en pantalla: «${p.texto_en_pantalla}»` : ''}${o.senales ? senalesLegibles(senalDe.get(p.n)) : ''}`).join('\n')
   // las imágenes van agrupadas por plano: primero su imagen clave (lo que se aprobó antes de filmar), luego sus cuadros en el orden del video
   const claveDe = new Map((o.imagenes_clave ?? []).filter((x) => x.url).map((x) => [x.n, x.url]))
+  const { planos: elegidos, recortados } = elegirImagenes(o.cuadros, claveDe, Math.max(1, o.max ?? MAX_IMAGENES))
   const imagenes: string[] = []
   const lineas: string[] = []
-  const ordenDePlanos = Array.from(new Set(o.cuadros.map((c) => c.plano)))
-  for (const n of ordenDePlanos) {
-    const clave = claveDe.get(n)
-    if (clave) { imagenes.push(clave); lineas.push(`- imagen ${imagenes.length}: IMAGEN CLAVE del plano ${n} (lo que se aprobó antes de filmar: el clip tiene que contarlo así)`) }
-    for (const c of o.cuadros.filter((x) => x.plano === n)) { imagenes.push(c.url); lineas.push(`- imagen ${imagenes.length}: cuadro del plano ${c.plano}${c.parte ? ` (${c.parte})` : ''}, segundo ${c.segundo}`) }
+  for (const e of elegidos) {
+    if (e.clave) { imagenes.push(e.clave); lineas.push(`- imagen ${imagenes.length}: IMAGEN CLAVE del plano ${e.n} (lo que se aprobó antes de filmar: el clip tiene que contarlo así)`) }
+    for (const c of e.cuadros) { imagenes.push(c.url); lineas.push(`- imagen ${imagenes.length}: cuadro del plano ${c.plano}${c.parte ? ` (${c.parte})` : ''}, segundo ${c.segundo}`) }
   }
-  const vistos = ordenDePlanos.length
+  if (recortados.length) lineas.push(`(el pedido admite ${Math.max(1, o.max ?? MAX_IMAGENES)} imágenes: en los planos ${recortados.join(', ')} no van todas las suyas; juzga lo que ves)`)
+  const vistos = elegidos.length
   const duracion = o.senales?.duracion_s
   const task = [
     `## La pieza\nUn video de ${o.segundos} s${duracion ? ` (medido: ${duracion} s)` : ''} para ${o.red} (${o.formato}), ya generado por el modelo de video. Lo que sigue es lo que se pidió y lo que salió.`,
@@ -165,6 +166,30 @@ export function tareaDeLaMirada(o: {
     `## Formato de tu respuesta\nSolo este JSON:\n${o.contrato}`,
   ].join('\n\n')
   return { task, images: imagenes }
+}
+
+/**
+ * CC7 (16-nov · 🔴): el servicio de agentes acepta como mucho MAX_IMAGENES por pedido. Si no caben todas, se elige CON CRITERIO, en este orden:
+ * el cuadro del medio de cada plano (si ni eso cabe, planos repartidos parejo, primero y último incluidos); luego la imagen clave de cada plano;
+ * luego cómo termina (final); luego el arranque (inicio). Cada vuelta recorre los planos en orden. Puro.
+ */
+export function elegirImagenes(cuadros: CuadroDelVideo[], claveDe: Map<number, string>, max: number): { planos: Array<{ n: number; clave: string | null; cuadros: CuadroDelVideo[] }>; recortados: number[] } {
+  const orden = Array.from(new Set(cuadros.map((c) => c.plano)))
+  const deUn = (n: number) => cuadros.filter((c) => c.plano === n)
+  const medioDe = (n: number) => deUn(n).find((c) => c.parte === 'medio') ?? deUn(n)[0]
+  const total = orden.reduce((s, n) => s + deUn(n).length + (claveDe.has(n) ? 1 : 0), 0)
+  if (total <= max) return { planos: orden.map((n) => ({ n, clave: claveDe.get(n) ?? null, cuadros: deUn(n) })), recortados: [] }
+  const planos = orden.length <= max ? orden : Array.from(new Set(Array.from({ length: max }, (_, i) => Math.round((i * (orden.length - 1)) / Math.max(1, max - 1))))).map((i) => orden[i])
+  const sel = new Map(planos.map((n) => [n, { clave: null as string | null, cuadros: new Set<CuadroDelVideo>([medioDe(n)]) }]))
+  let lugar = max - planos.length
+  const vuelta = (tomar: (n: number) => boolean) => { for (const n of planos) { if (lugar <= 0) return; if (tomar(n)) lugar-- } }
+  vuelta((n) => { const k = claveDe.get(n); if (!k) return false; sel.get(n)!.clave = k; return true })
+  for (const parte of ['final', 'inicio'] as const) vuelta((n) => { const c = deUn(n).find((x) => x.parte === parte); if (!c || sel.get(n)!.cuadros.has(c)) return false; sel.get(n)!.cuadros.add(c); return true })
+  // el resto de los cuadros que pudiera tener un plano sin parte declarada
+  vuelta((n) => { const c = deUn(n).find((x) => !sel.get(n)!.cuadros.has(x)); if (!c) return false; sel.get(n)!.cuadros.add(c); return true })
+  const out = planos.map((n) => ({ n, clave: sel.get(n)!.clave, cuadros: deUn(n).filter((c) => sel.get(n)!.cuadros.has(c)) }))
+  const recortados = orden.filter((n) => { const o = out.find((x) => x.n === n); return !o || o.cuadros.length < deUn(n).length || (claveDe.has(n) && !o.clave) })
+  return { planos: out, recortados }
 }
 
 /** lo que la mesa recibe cuando el video vuelve (la dirección lo lee como devolución): qué faltó por plano y lo que el agente pide. Puro */

@@ -13,8 +13,12 @@ import { describe, expect, it } from 'vitest'
 import { rutaDeFfmpeg } from '@/lib/portero-alimenta/videos-del-cerebro'
 import { FILTROS_DE_SENALES, sacarCuadros } from '../video/cuadros'
 import type { Plano } from '../video/guion'
-import { nombreDelCuadro, senalesDeLaSalida, tareaDeLaMirada, type CuadroDelVideo } from '../video/mirada'
+import { nombreDelCuadro, PASO_MIRAR_VIDEO, senalesDeLaSalida, tareaDeLaMirada, type CuadroDelVideo } from '../video/mirada'
 import { CONTRATOS_EN_TEXTO } from '../pedidos'
+import { MAX_IMAGENES } from '@/lib/imagenes-del-pedido'
+import { armarPedidoV } from '../orquestador-video'
+import { VIDEO_MESA } from '../plantillas/video-mesa'
+import type { Estado } from '../tipos'
 
 const REAL = fs.readFileSync(path.join(__dirname, 'fixtures', 'senales-ffmpeg-real.txt'), 'utf8')
 const PLANOS: Plano[] = [
@@ -126,4 +130,52 @@ describe('el sacador: cuadros y señales', () => {
       expect(p.get(4)!.cortes).toEqual([])
     } finally { fs.rmSync(dir, { recursive: true, force: true }) }
   }, 60_000)
+})
+
+describe('el límite de imágenes del servicio (CC7 🔴 · MAX_IMAGENES)', () => {
+  const planosDe = (k: number): Plano[] => Array.from({ length: k }, (_, i) => ({ n: i + 1, desde: i * 2, hasta: i * 2 + 2, se_ve: `p${i + 1}` }))
+  const cuadrosDe = (planos: Plano[]): CuadroDelVideo[] => planos.flatMap((p) => (['inicio', 'medio', 'final'] as const).map((parte) => ({ plano: p.n, segundo: p.desde, parte, url: `https://c/${nombreDelCuadro({ plano: p.n, parte })}` })))
+  const clavesDe = (planos: Plano[]) => planos.map((p) => ({ n: p.n, url: `https://ic/${p.n}.png` }))
+  const pedir = (k: number, conClaves = true) => { const planos = planosDe(k); return tareaDeLaMirada({ cuadros: cuadrosDe(planos), planos, segundos: k * 2, brief_texto: 'x', red: 'youtube', formato: 'short', contrato: '', ...(conClaves ? { imagenes_clave: clavesDe(planos) } : {}) }) }
+  it('🔴 el peor caso (12 planos con imagen clave = 48) no pasa el límite; TODOS los planos llevan su cuadro del medio y el pedido lo declara', () => {
+    const t = pedir(12)
+    expect(t.images.length).toBeLessThanOrEqual(MAX_IMAGENES)
+    expect(t.images).toHaveLength(MAX_IMAGENES)
+    for (let n = 1; n <= 12; n++) expect(t.images).toContain(`https://c/plano-${n}-medio.jpg`)
+    // lo que queda va a las imágenes clave, en orden
+    expect(t.images.filter((u) => u.startsWith('https://ic/'))).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map((n) => `https://ic/${n}.png`))
+    expect(t.task).toContain(`(el pedido admite ${MAX_IMAGENES} imágenes: en los planos 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 no van todas las suyas; juzga lo que ves)`)
+  })
+  it('🔴 un reel de 6 planos (24): medio + imagen clave + final en todos, y el arranque en los que caben; por plano, en orden', () => {
+    const t = pedir(6)
+    expect(t.images).toHaveLength(MAX_IMAGENES)
+    expect(t.images.slice(0, 4)).toEqual(['https://ic/1.png', 'https://c/plano-1-inicio.jpg', 'https://c/plano-1-medio.jpg', 'https://c/plano-1-final.jpg'])
+    expect(t.images.slice(-3)).toEqual(['https://ic/6.png', 'https://c/plano-6-medio.jpg', 'https://c/plano-6-final.jpg'])
+    expect(t.task).toContain('en los planos 3, 4, 5, 6 no van todas las suyas')
+  })
+  it('🔴 hasta el límite exacto (5 planos con imagen clave = 20) no se recorta nada ni se declara', () => {
+    const t = pedir(5)
+    expect(t.images).toHaveLength(20)
+    expect(t.task).not.toContain('el pedido admite')
+  })
+  it('🔴 más planos que el límite: un cuadro del medio por plano, repartidos parejo (primero y último), y dice cuántos de cuántos', () => {
+    const t = pedir(25, false)
+    expect(t.images).toHaveLength(MAX_IMAGENES)
+    expect(t.images.every((u) => u.endsWith('-medio.jpg'))).toBe(true)
+    expect(t.images[0]).toBe('https://c/plano-1-medio.jpg')
+    expect(t.images[MAX_IMAGENES - 1]).toBe('https://c/plano-25-medio.jpg')
+    expect(t.task).toContain(`son ${MAX_IMAGENES} de 25 planos`)
+  })
+  it('🔴 el pedido REAL del paso (armarPedidoV con el dato del encargo) tampoco pasa el límite', () => {
+    const planos = planosDe(12)
+    const art = (d: unknown) => ({ version: 1, version_consumida: 0, datos: d })
+    const e = { ultimo: 1, pasos_ejecutados: 9, gasto_usd: 20, vueltas: {}, fichas: [], artefactos: {
+      encargo: art({ brief: { texto: 'FILA', red: 'youtube', formato: 'short' }, proporcion: '9:16', F: { fotos: [] } }),
+      guion: art({ planos, segundos: 24 }),
+      imagenes_clave: art({ fase: 'final', planos: clavesDe(planos), hay_imagenes: true }),
+      cuadros_video: art({ cuadros: cuadrosDe(planos), hay_cuadros: true, senales: null }),
+    } } as unknown as Estado
+    const t = armarPedidoV(VIDEO_MESA.pasos.find((p) => p.clave === PASO_MIRAR_VIDEO)!, e)!
+    expect(t.images.length).toBeLessThanOrEqual(MAX_IMAGENES)
+  })
 })

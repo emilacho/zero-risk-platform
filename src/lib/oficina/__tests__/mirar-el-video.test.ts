@@ -29,6 +29,7 @@ import { procesarSalida } from '../salida'
 import { validarPlantilla } from '../plantilla'
 import type { Plantilla } from '../tipos'
 import { CONTRATOS_EN_TEXTO } from '../pedidos'
+import { MAX_IMAGENES } from '@/lib/imagenes-del-pedido'
 import { jugar, type Turno } from './mesa-arnes'
 import { FOTOS, PARTE, crearMemoria } from './memoria'
 import { crearMesaEnMemoria } from './mesa-memoria'
@@ -71,7 +72,8 @@ describe('los cuadros: inicio, medio y final de cada plano (S2-7)', () => {
     expect(new Set(x.map((c) => c.plano)).size).toBe(planosVistos)
     expect(instantesPorPlano(PLANOS, null, 6).map((c) => c.plano)).toEqual([1, 1, 1, 3, 3, 3])
     const t = tareaDeLaMirada({ cuadros: x.map((c) => ({ ...c, url: `https://c/${c.plano}-${c.parte}.jpg` })), planos: muchos, segundos: 41, brief_texto: 'x', red: 'youtube', formato: 'short', contrato: '' })
-    expect(t.images).toHaveLength(MAX_CUADROS_DEL_VIDEO)
+    // CC7 🔴 · el pedido nunca pasa el límite de imágenes del servicio (los 36 cuadros se guardan; al agente van como mucho MAX_IMAGENES)
+    expect(t.images).toHaveLength(MAX_IMAGENES)
     expect(t.task).toContain(`son ${planosVistos} de 41 planos`)
   })
   it('planos sin segundos válidos no dan cuadro', () => {
