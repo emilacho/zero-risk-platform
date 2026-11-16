@@ -112,7 +112,8 @@ export interface Almacen {
   hermanosDe?(enc: Encargo): Promise<import('./reapertura').RastroDeEncargo[]>
 }
 
-export type ResultadoImagen = { ok: true; url: string; generation_id: string; costo_usd: number } | { ok: false; error: string }
+/** `referencia` (sprint 1 · mejora 3): si se pidió editar sobre una foto del cliente, si se usó y, si no, por qué (la imagen se generó igual) */
+export type ResultadoImagen = { ok: true; url: string; generation_id: string; costo_usd: number; referencia?: { usada: boolean; motivo?: string } } | { ok: false; error: string }
 /** un intento al revisor GPT y el resultado: viven en el módulo común `src/lib/revisor-gpt.ts` (los comparte la revisión del manual) */
 export type { IntentoDelRevisor } from '../revisor-gpt'
 export type ResultadoRevisor = import('../revisor-gpt').ResultadoDelRevisor
@@ -207,8 +208,8 @@ export interface Puertos {
   parte(parteId: string, clientId: string): Promise<{ texto: string } | null>
   /** el plan de trabajo del que sale la parte (su texto), o null si no se puede leer; solo lectura */
   plan(planId: string, clientId: string): Promise<string | null>
-  /** genera UNA imagen (1024×1024, calidad explícita); en dry_run NO llama al proveedor */
-  imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean }): Promise<ResultadoImagen>
+  /** genera UNA imagen (1024×1024, calidad explícita); con `foto` (una foto PROPIA del cliente, sprint 1 · mejora 3) la edita sobre ella para conservar el producto real; en dry_run NO llama al proveedor */
+  imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean; foto?: import('./foto-de-referencia').FotoDeReferencia | null }): Promise<ResultadoImagen>
   /** J8a · abre UNA revisión de la pieza en la jefatura (misma función que la ruta `/api/jefatura/revisiones`, con `devolver_a` = la ruta de vuelta de la oficina). Opcional: sin él, el paso `jefatura` deja la pieza «sin revisar» */
   jefatura?(sobre: SobreDeRevisionDePieza): Promise<AperturaDeJefatura>
   /** el revisor ciego (otro proveedor); en dry_run NO llama al proveedor */

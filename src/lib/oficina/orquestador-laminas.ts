@@ -5,6 +5,7 @@
  * No publica en ninguna red: la entrega (sala 4) deja los archivos y la hoja de pasos para publicar A MANO.
  */
 import { candidatasDelEncargo } from './material-fotos'
+import { fotoDeReferencia, fotosDeReferencia } from './foto-de-referencia'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { elementosDelKit, planDeOrigen, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
@@ -222,12 +223,18 @@ async function imagenRef(P: Puertos, enc: Encargo, pl: Plantilla, esRe = false):
   const gastos: NonNullable<Cambios['gastos']> = []
   const fichas: Ficha[] = []
   let costo = 0, hubo = false
-  for (const ref of pendientes) {
+  // sprint 1 · mejora 3: cada imagen generada se edita SOBRE una foto propia apta (las versiones de una misma imagen, sobre la misma foto; imágenes distintas, sobre fotos distintas
+  // mientras alcancen, sin repetir las que ya van como foto real en otra lámina); sin foto apta, se genera como siempre
+  const usadasComoReal = arr<ImagenDecidida>(direccion(e)?.imagenes).filter((i) => i.modo === 'real' && i.foto_id).map((i) => i.foto_id!)
+  const aptas = fotosDeReferencia(baseL(e).F.fotos, arr<{ id: string; cercana?: boolean }>(datos(e, 'candidatas_foto')?.candidatas), { excluir: usadasComoReal })
+  for (const [j, ref] of pendientes.entries()) {
     const prompts = porRef[ref].prompts.slice(0, versiones)
+    const foto = fotoDeReferencia(aptas, j)
     for (let k = 0; k < prompts.length; k++) {
-      const g = await P.imagen({ prompt: prompts[k].prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run })
+      const g = await P.imagen({ prompt: prompts[k].prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto })
       if (!g.ok) { fichas.push(fichaNueva(`imagen-${intento}-${ref}-${k}`, 'chequeo', 'imagen', 'sugerencia', `el generador no devolvió una imagen para «${ref}» (prompt ${k + 1}): ${g.error}`)); continue }
-      items.push({ indice: items.length, ref, intento, prompt_idx: k, url: g.url, generation_id: g.generation_id, prompt: prompts[k].prompt })
+      if (foto && !g.referencia?.usada) fichas.push(fichaNueva(`imagen-sin-foto-${intento}-${ref}-${k}`, 'chequeo', 'imagen', 'sugerencia', `la imagen «${ref}» (prompt ${k + 1}) se generó sin la foto real «${foto.id}» (${g.referencia?.motivo ?? 'sin motivo'}): el producto puede no ser el del cliente`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
+      items.push({ indice: items.length, ref, intento, prompt_idx: k, url: g.url, generation_id: g.generation_id, prompt: prompts[k].prompt, ...(foto && g.referencia?.usada ? { foto_referencia_id: foto.id } : {}) })
       costo += g.costo_usd; hubo = true
       gastos.push({ concepto: 'imagen', ref_tabla: 'agent_image_generations', ref_id: g.generation_id, cost_usd: g.costo_usd, base: 'usage' })
     }
