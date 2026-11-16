@@ -108,7 +108,7 @@ export const idDelKit = (loteKey: string): string => `kit-${loteKey.replace(/[^A
 
 // ───────────────────────────────────────────────────────── un brief de la hoja
 /** 16-nov · Sprint 1 · Mejora 2 · la línea VISUAL dice de dónde viene: es el estilo de la campaña, no la escena de la pieza */
-export const PREFIJO_VISUAL_DE_CAMPANA = 'de la campaña (referencia de estilo; la escena de esta pieza está en QUÉ SE VE): '
+export const PREFIJO_VISUAL_DE_CAMPANA = 'de la campaña (referencia de estilo; la escena de esta pieza la decide la mesa): '
 function mensajeDe(idea: IdeaDelBanco | null, f: Pick<FilaDeHoja, 'tema'>, avisos: string[], id: string): string {
   if (idea?.mensaje) return idea.mensaje
   avisos.push(`${id}: sin idea del banco (${f.tema ? `tema «${limpio(f.tema)}»` : 'sin tema'}) · el mensaje sale del tema y se declara`)
@@ -117,19 +117,23 @@ function mensajeDe(idea: IdeaDelBanco | null, f: Pick<FilaDeHoja, 'tema'>, aviso
 /**
  * 16-nov · Sprint 1 · Mejora 2 · el concepto de la pieza: el de la fila o, si no lo trae, el de la idea del banco. Nunca bloquea.
  * Sin concepto propio NO se suma a los avisos de la hoja: esos avisos son hallazgos del parte (bajan `chequeos_ok`) y hoy ninguna fila lo trae.
- * Lo que falta queda DECLARADO en el texto del brief («la fila no dice qué se ve: la mesa diseña la escena»).
+ * Lo que falta queda DECLARADO en el texto del brief.
+ * GO Lenovo 16-nov 22:04 · solo lo ESTRATÉGICO manda (idea, objetivo, mensaje, público, llamado, fotos disponibles); lo creativo de una fila v3 queda como SUGERENCIA.
  */
-function conceptoDeLaPieza(f: FilaDeHoja, idea: IdeaDelBanco | null): { idea: string; que_se_ve: string; mensaje: string; emocion: string; foto: string; llamado: string } {
+function conceptoDeLaPieza(f: FilaDeHoja, idea: IdeaDelBanco | null): { idea: string; objetivo: string; mensaje: string; publico: string; llamado: string; fotos: string[]; sugerencias: string[] } {
   const k = f.concepto ?? {}
-  return {
-    idea: limpio(k.idea) || idea?.idea || limpio(f.tema) || '',
-    que_se_ve: limpio(k.que_se_ve),
-    mensaje: limpio(k.mensaje),
-    emocion: limpio(k.emocion),
-    foto: limpio(k.foto) || (idea?.foto && idea.foto !== 'ninguna' ? idea.foto : ''),
-    llamado: limpio(k.llamado),
+  // GO Lenovo 16-nov 22:04 · las fotos son MATERIAL disponible (la mesa elige): las de la fila, la vieja «foto» de v3 y la que cita la idea del banco, sin repetir
+  const fotos: string[] = []
+  for (const x of [...(k.fotos_disponibles ?? []), k.foto ?? '', idea?.foto && idea.foto !== 'ninguna' ? idea.foto : ''].map(limpio).filter(Boolean)) {
+    const clave = (s: string) => s.replace(/^foto:\s*/i, '').toLowerCase()
+    if (!fotos.some((y) => clave(y) === clave(x))) fotos.push(x)
   }
+  // lo creativo que quedó de antes (fila v3) entra solo como SUGERENCIA para la mesa, nunca como orden
+  const sugerencias = [k.que_se_ve ? `qué se ve: ${limpio(k.que_se_ve)}` : '', k.emocion ? `emoción: ${limpio(k.emocion)}` : '', k.foto ? `foto: ${limpio(k.foto)}` : ''].filter((x) => x && !/:\s*$/.test(x))
+  return { idea: limpio(k.idea) || idea?.idea || limpio(f.tema) || '', objetivo: limpio(k.objetivo), mensaje: limpio(k.mensaje), publico: limpio(k.publico), llamado: limpio(k.llamado), fotos, sugerencias }
 }
+/** GO Lenovo 16-nov 22:04 · quién decide el cómo (lo lee la mesa y quien revise: el brief dice QUÉ y POR QUÉ) */
+export const QUIEN_DECIDE_EL_COMO = 'la mesa de creativos decide la escena, el gancho, la composición, la emoción y qué foto usar; lo de SUGERENCIAS puede mejorarlo o reemplazarlo diciendo por qué'
 function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; formato: string }, f: FilaDeHoja, idea: IdeaDelBanco | null, extra: { fila_ids?: string[]; elementos?: string[] }, avisos: string[]): string[] {
   const b = ins.brief
   const c = ins.concepto
@@ -149,21 +153,22 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     campo('IDEA DEL BANCO', idea ? `${idea.id} · ${idea.idea}${idea.serie ? ` · serie ${idea.serie}` : ''}` : 'ninguna · declarado'),
     campo('BRIEF DE CAMPAÑA', ins.brief_id),
     campo('MENSAJE DE CAMPAÑA', b.mensaje),
-    campo('OBJETIVO', porRed?.objetivo || b.objetivo),
+    campo('OBJETIVO', pz.objetivo || porRed?.objetivo || b.objetivo),
+    campo('PÚBLICO', pz.publico || b.publico || '(el brief no nombra al público)'),
     campo('PROTAGONISTA', idea?.protagonista || limpio(f.tema) || '(sin protagonista declarado)'),
-    // 16-nov · Sprint 1 · Mejora 2 · el CONCEPTO de esta pieza (la idea completa), no los planos de la campaña
+    // GO Lenovo 16-nov 22:04 · el brief es ESTRATÉGICO (qué y por qué); el cómo lo decide la mesa
     campo('IDEA DE LA PIEZA', pz.idea || '(sin idea: la mesa la propone)'),
-    campo('QUÉ SE VE', pz.que_se_ve || '(la fila no dice qué se ve: la mesa diseña la escena)'),
-    campo('EMOCIÓN', pz.emocion || '(sin emoción declarada)'),
-    campo('FOTO A USAR', pz.foto || 'ninguna citada'),
     campo('MENSAJE (uno)', pz.mensaje || mensajeDe(idea, f, avisos, cab.id)),
+    ...(pz.fotos.length ? listaDe('FOTOS DISPONIBLES', pz.fotos.map((x) => `${x} (material; la mesa decide si la usa)`)) : [campo('FOTOS DISPONIBLES', 'ninguna citada (la mesa ve las fotos aptas del cliente)')]),
+    campo('QUIÉN DECIDE EL CÓMO', QUIEN_DECIDE_EL_COMO),
+    ...(pz.sugerencias.length ? listaDe('SUGERENCIAS', pz.sugerencias) : []),
     // FIRMA 01-nov «hoja sin reja»: el gancho de la hoja es SUGERIDO; el final lo escribe la mesa de piezas (video: el coach con el método scripter)
     campo('GANCHO SUGERIDO', idea?.gancho ?? ''),
     campo('LÍMITES', `proporción ${proporcion} (${por_omision ? `por omisión del formato ${cab.formato}` : `dato de la tabla de formatos para ${cab.red.toLowerCase()} · ${cab.formato}`})${esFormatoDeVideo(cab.formato) ? ` · ${NOTA_DE_VIDEO_EN_LIMITES}` : ''} · ${b.obligatorios.no_se_dice.length ? `no se dice: ${b.obligatorios.no_se_dice.join(', ')}` : 'sin «no se dice» en el brief'}${idea?.foto ? ` · foto citada: ${idea.foto}` : ''}`),
     ...listaDe('VOCABULARIO DE LA MARCA', b.obligatorios.vocabulario),
     ...listaDe('PROHIBIDO', b.obligatorios.prohibido),
     campo('SINTAXIS', b.tono),
-    // la línea VISUAL es del concepto de la CAMPAÑA: referencia de estilo, no las tomas de esta pieza (esas están en QUÉ SE VE)
+    // la línea VISUAL es del concepto de la CAMPAÑA: referencia de estilo, no las tomas de esta pieza (esas las decide la mesa)
     campo('VISUAL', (() => { const v = [c.como_se_ve, cap?.como_se_ve, idea?.foto && idea.foto !== 'ninguna' ? `foto ${idea.foto}` : ''].filter(Boolean).join(' · '); return v ? `${PREFIJO_VISUAL_DE_CAMPANA}${v}` : '(el concepto no dice cómo se ve)' })()),
     campo('LLAMADO A LA ACCIÓN', pz.llamado || porRed?.llamado || ''),
     campo('VARIANTES', '1'),

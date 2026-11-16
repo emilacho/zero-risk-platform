@@ -90,6 +90,22 @@ export const ESQUEMA_CALENDARIO_TANDA_V3 = objeto({
   ajustes_al_patron: lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto })),
 })
 
+/**
+ * 16-nov · GO Lenovo 22:04 (CC1) · `calendario_tanda.v4` = v3 con el concepto ESTRATÉGICO de cada pieza: el estratega dice QUÉ y POR QUÉ (idea, objetivo, mensaje, público, llamado y las fotos
+ * propias DISPONIBLES como material); el CÓMO (escena, gancho, composición, emoción, qué foto usar) lo decide la mesa. `calendario_tanda.v3` queda en el registro tal cual era.
+ */
+export const CONCEPTO_ESTRATEGICO_DE_LA_PIEZA = objeto({ idea: texto, objetivo: texto, mensaje: texto, publico: texto, llamado: texto, fotos_disponibles: listaDeTexto })
+export const ESQUEMA_CALENDARIO_TANDA_V4 = objeto({
+  piezas: lista(objeto({
+    semana: entero, dia_semana: entero, slot: texto, hora: texto, red: texto, formato: texto, pilar: texto, tema: texto, sede: texto,
+    requiere_abierto: bool, depende_de: listaDeTexto, pieza_fija: texto, idea_de_mesa: texto,
+    concepto: CONCEPTO_ESTRATEGICO_DE_LA_PIEZA,
+    datos: lista(objeto({ dato: texto, valor: texto, clase: { enum: ['alto', 'medio', 'bajo'] }, ref: texto, nivel: { enum: ['F0', 'F1', 'F2', 'F3'] }, opcional: bool })),
+    pendientes: listaDeTexto,
+  })),
+  ajustes_al_patron: lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto })),
+})
+
 /** solo se usa si el cliente declaró tipos de fechas · `tipo`, `ambito` y `alcance` son texto libre: el esquema no fija categorías de ningún rubro */
 export const ESQUEMA_FECHAS_ESPECIALES = objeto({
   tipo: texto, ambito: texto, anio: entero,
@@ -121,6 +137,7 @@ export const ESQUEMAS = {
   'calendario_tanda.v1': ESQUEMA_CALENDARIO_TANDA,
   'calendario_tanda.v2': ESQUEMA_CALENDARIO_TANDA_V2,
   'calendario_tanda.v3': ESQUEMA_CALENDARIO_TANDA_V3,
+  'calendario_tanda.v4': ESQUEMA_CALENDARIO_TANDA_V4,
   'fechas_especiales.v1': ESQUEMA_FECHAS_ESPECIALES,
   'gancho_video.v1': ESQUEMA_GANCHO_DE_VIDEO,
 } as const
