@@ -14,13 +14,14 @@ import { registrarPaso } from '../motor'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
 import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
-import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, porteroDe } from './directorio'
+import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroDePrompts, porteroDe } from './directorio'
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
+import { aporteDePrompts, promptsParaElBrazo, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -109,10 +110,19 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   let faltanCitas: string | undefined
   if (tipo === 'devolver_citas') faltanCitas = 'algunas especialidades del equipo (revisa cada aporte del tablero)'
   const metodo = await metodoDelAsiento(P, t.agente)
-  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
+  const imagenesARedactar = tipo === 'redactar_prompts' ? imagenesAGenerarDe(enc, est) : undefined
+  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(enc.tope_usd) - enc.estado_del_motor.gasto_usd))
   return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo) }) }
+}
+
+/** Sprint 1 · mejora 4 · las imágenes que la pieza integrada pide generar (ref + lo que pidió la dirección), leídas con el mismo traductor que usa el cierre · puro respecto del estado */
+export function imagenesAGenerarDe(enc: Encargo, est: EstadoMesa): ImagenARedactar[] {
+  if (!est.pieza_texto || esDeLaCadena(est.tipo) || est.tipo === 'video') return []
+  const b = baseDeLaminas(enc.estado_del_motor)
+  const tr = traducirPieza(quitarLineasDeNotas(est.pieza_texto), est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), preguntasHechas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR })
+  return tr.imagenes.filter((i): i is { ref: string; modo: 'generada'; descripcion: string } => i.modo === 'generada').map((g) => ({ ref: g.ref, descripcion: g.descripcion }))
 }
 
 /**
@@ -291,6 +301,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   }
 
   const otros: Record<string, Record<string, unknown>> = {}
+  const avisosDePrompts: string[] = []
   let hayGeneradas = false
   if ('planos' in tr) {
     otros.guion = { ...tr, texto: textoPieza } as unknown as Record<string, unknown>
@@ -305,7 +316,12 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
       imagenes: imagenes.map((i) => (i.modo === 'real' ? { ref: i.ref, modo: 'real', foto_id: i.foto_id, motivo: 'elegida por el equipo' } : i.modo === 'generada' ? { ref: i.ref, modo: 'generada', motivo: 'pedida por el equipo' } : { ref: i.ref, modo: 'ninguna', motivo: 'sin imagen' })),
       refs_generadas: generadas.map((g) => g.ref), hay_generadas: hayGeneradas, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa',
     }
-    otros.prompts_validos = { por_ref: Object.fromEntries(generadas.map((g) => [g.ref, { indices: [0], prompts: [{ prompt: g.descripcion, idea_en_una_linea: g.descripcion.slice(0, 120) }] }])), ninguno: false }
+    // Sprint 1 · mejora 4 · el modelo recibe la instrucción del ingeniero de prompts (escrita sobre ESTA integración); lo que no dejó, la descripción de la dirección con aviso
+    const ingeniero = ingenieroDePrompts(est.directorio_congelado, est.tipo)?.agente ?? null
+    const delIngeniero = aporteDePrompts(libro, ingeniero)
+    const pb = promptsParaElBrazo(generadas.map((g) => ({ ref: g.ref, descripcion: g.descripcion })), ingeniero ? delIngeniero?.texto ?? '' : null)
+    avisosDePrompts.push(...pb.avisos)
+    otros.prompts_validos = { por_ref: Object.fromEntries(generadas.map((g) => { const p = pb.por_ref[g.ref]; return [g.ref, { indices: [0], prompts: [{ prompt: p.prompt, idea_en_una_linea: g.descripcion.slice(0, 120), ...(p.foto_de_referencia ? { foto_de_referencia: p.foto_de_referencia } : {}) }], origen: pb.del_ingeniero.includes(g.ref) ? 'ingeniero_de_prompts' : 'direccion' }] })), ninguno: false, ...(delIngeniero ? { ingeniero: { agente: ingeniero, aporte: delIngeniero.id } } : {}) }
     if (est.tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
     else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
   }
@@ -319,7 +335,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const cambios: Cambios = {
     encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', fichas: nuevo.fichas,
     turno: { n: turnoDe(enc.estado_del_motor), paso: paso.clave, tipo: 'codigo', agente: null, estado: 'hecho', dispatch_key: null, cost_usd: 0 },
-    artefacto: { tipo: paso.salida_artefacto, version: nuevo.artefactos[paso.salida_artefacto].version, contenido: { ...nuevaMesa, avisos_del_traductor: tr.avisos, cierre_forzado_por: forzado } as unknown as Record<string, unknown>, sha256: sha(nuevaMesa), autor: 'mesa' },
+    artefacto: { tipo: paso.salida_artefacto, version: nuevo.artefactos[paso.salida_artefacto].version, contenido: { ...nuevaMesa, avisos_del_traductor: [...tr.avisos, ...avisosDePrompts], cierre_forzado_por: forzado } as unknown as Record<string, unknown>, sha256: sha(nuevaMesa), autor: 'mesa' },
   }
   await P.almacen.guardar(cambios)
   return avanzar(P, enc.id)
@@ -399,7 +415,7 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
   // aunque ese turno no tuviera notas (cerebro vacío, caído o apagado), una línea «N1 apliqué…» suelta no entra al libro ni a la pieza
   const sinLineas = quitarLineasDeNotas(textoFinal)
   if (sinLineas.trim()) textoFinal = sinLineas
-  const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra' }
+  const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra', redactar_prompts: 'aporta' }
   const pedido = t.responde_a ? (await P.mesa.libro(enc.id)).find((a) => a.id === t.responde_a) : undefined
   await P.mesa.aportar(aporteNuevo(enc, t.agente, t.tipo === 'responder' ? pedido?.de ?? null : null, tipoAporte[t.tipo] ?? 'aporta', textoFinal, { responde_a: t.tipo === 'responder' || t.tipo === 'devolver_citas' ? t.responde_a : null, profundidad: pedido ? pedido.profundidad : 0, costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
   const integra = t.tipo === 'integrar' || t.tipo === 'devolver_citas'

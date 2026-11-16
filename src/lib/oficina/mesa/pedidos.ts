@@ -10,8 +10,9 @@ import type { FotoEtiquetada } from '../fotos'
 import { CABECERA_SALTAR_EDITOR } from '../../cadena/constantes'
 import { AGENTE_GANCHO_DE_VIDEO, METODO_GANCHO_POR_OMISION, fichasEnTexto, leerFichasPorRed, metodoDeAsiento } from '../../cadena/metodos'
 import { BRIEF_GUIA_NO_REGLA } from '../brief'
+import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
 
-export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas'
+export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts'
 
 export interface ContextoDeTurno {
   cliente_nombre: string
@@ -227,7 +228,7 @@ const HERRAMIENTAS = [
   `Máximo ${COTAS.MAX_PROFUNDIDAD} niveles de pedidos encadenados y ${COTAS.MAX_IDAS_VUELTAS_POR_PAREJA} idas y vueltas con un mismo compañero: después decide la dirección creativa con lo que haya.`,
 ].join('\n')
 
-export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string }): string {
+export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string; /** Sprint 1 · mejora 4 · las imágenes a generar de la pieza integrada (turno del ingeniero de prompts) */ imagenesARedactar?: ImagenARedactar[] }): string {
   if (o.c.tipo === 'reubicacion') return tareaDeReubicacion(o)
   if (o.c.tipo === 'fallidos') return tareaDeFallidos(o)
   const { tipo, agente, est, libro, c } = o
@@ -305,6 +306,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
       `Tu integración anterior no citó a: ${o.faltanCitas ?? '(ver abajo)'}. Entrega la pieza completa otra vez (la misma convención) y, en “Citas”, di qué usaste y qué descartaste —con motivo— de cada aporte del tablero.`,
       CONVENCION_DE_LA_PIEZA(c.tipo),
     ].join('\n'),
+    redactar_prompts: tareaDelIngeniero(o.imagenesARedactar ?? []),
   }
   return cab + seccionDeIndicacion(o.tarjeta, agente) + (o.metodo ? o.metodo + '\n\n' : '') + tu[tipo]
 }
