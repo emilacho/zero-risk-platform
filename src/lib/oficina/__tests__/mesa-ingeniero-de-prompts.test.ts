@@ -5,7 +5,7 @@ import { CARRUSEL_MESA } from '../plantillas/mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { especialistasPertinentes, esPertinente, ingenieroDePrompts } from '../mesa/directorio'
 import { ingenieroPendiente, siguienteDeLaMesa } from '../mesa/planificador'
-import { aporteDePrompts, leerPromptsDelIngeniero, promptsParaElBrazo, tareaDelIngeniero } from '../mesa/prompts'
+import { aporteDePrompts, conceptoEnTexto, leerPromptsDelIngeniero, promptsParaElBrazo, tareaDelIngeniero } from '../mesa/prompts'
 import type { Aporte, EstadoMesa, Tarjeta } from '../mesa/tipos'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
 import { DIRECTORIO, crearMesaEnMemoria } from './mesa-memoria'
@@ -101,7 +101,14 @@ describe('lectura tolerante de lo que escribe el ingeniero', () => {
   })
   it('la tarea: inglés, escena, lugar, luz, lente, estilo del manual, sin texto en la imagen, foto real del producto, y la lista de imágenes', () => {
     const t = tareaDelIngeniero([{ ref: 'hook', descripcion: 'un plato servido' }])
-    for (const x of [/inglés/, /lugar/, /luz/, /lente/, /manual de marca/, /Sin texto dentro de la imagen/, /no text, no letters, no logos/, /Referencia:/, /\*\*hook\*\* · lo que pidió la dirección: un plato servido/]) expect(t).toMatch(x)
+    for (const x of [/inglés/, /lugar/, /luz/, /lente/, /manual de marca/, /Sin texto dentro de la imagen/, /no text, no letters, no logos/, /Zona libre para texto/, /DÓNDE queda un área limpia/, /Referencia:/, /\*\*hook\*\* · lo que pidió la dirección: un plato servido/]) expect(t).toMatch(x)
+    expect(t).not.toMatch(/Concepto de esta imagen/)
+  })
+  it('el concepto de la imagen (mejora 2 de CC1), si viene, entra en la lista; lo vacío no se escribe', () => {
+    const t = tareaDelIngeniero([{ ref: 'hook', descripcion: 'un plato', concepto: { objetivo: 'dar a conocer la web', que_se_ve: 'el encebollado humeante', mensaje: '', emocion: 'antojo' } }])
+    expect(t).toMatch(/Concepto de esta imagen: objetivo: dar a conocer la web · qué se ve: el encebollado humeante · emoción: antojo/)
+    expect(conceptoEnTexto(undefined)).toBe('')
+    expect(conceptoEnTexto({ idea: '  ' })).toBe('')
   })
 })
 

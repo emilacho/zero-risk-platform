@@ -13,7 +13,17 @@ import type { Aporte } from './tipos'
 /** la marca del directorio que convierte a una tarjeta en el ingeniero de prompts de un tipo de pieza (`carrusel:redacta_prompts`) */
 export const CONDICION_PROMPTS = 'redacta_prompts'
 
-export interface ImagenARedactar { ref: string; descripcion: string }
+/** el concepto de la imagen que la fila y la dirección dejan (mejora 2 de CC1 · `ConceptoDeImagen` en `traductor.ts`): todo opcional; se lee por nombre, sin atarse al tipo */
+export type ConceptoDeLaImagen = Partial<Record<'idea' | 'que_se_ve' | 'mensaje' | 'emocion' | 'objetivo', string>>
+export interface ImagenARedactar { ref: string; descripcion: string; concepto?: ConceptoDeLaImagen }
+
+const ROTULOS_DEL_CONCEPTO: Array<[keyof ConceptoDeLaImagen, string]> = [['objetivo', 'objetivo'], ['idea', 'idea'], ['que_se_ve', 'qué se ve'], ['mensaje', 'mensaje'], ['emocion', 'emoción']]
+/** el concepto en una línea legible (lo que falte no se escribe) */
+export function conceptoEnTexto(c: unknown): string {
+  if (!c || typeof c !== 'object') return ''
+  const o = c as Record<string, unknown>
+  return ROTULOS_DEL_CONCEPTO.map(([k, r]) => (typeof o[k] === 'string' && (o[k] as string).trim() ? `${r}: ${(o[k] as string).trim()}` : '')).filter(Boolean).join(' · ')
+}
 export interface PromptLeido { prompt: string; foto_de_referencia?: string }
 export interface PromptsDeLaPieza { por_ref: Record<string, PromptLeido>; avisos: string[] }
 
@@ -42,7 +52,7 @@ export const CONVENCION_DE_PROMPTS = [
 /** el turno del ingeniero: qué se le pide y sobre qué imágenes (puro: lo arma `armarTarea`) */
 export function tareaDelIngeniero(imagenes: ImagenARedactar[]): string {
   const lista = imagenes.length
-    ? imagenes.map((i) => `- **${i.ref}** · lo que pidió la dirección: ${i.descripcion}`).join('\n')
+    ? imagenes.map((i) => { const c = conceptoEnTexto(i.concepto); return `- **${i.ref}** · lo que pidió la dirección: ${i.descripcion}${c ? `\n  Concepto de esta imagen: ${c}` : ''}` }).join('\n')
     : '- (la integración no dejó imágenes a generar legibles: revisa la última integración del tablero y escribe una sección por cada «generar:»)'
   return [
     '## Tu turno · INGENIERO DE PROMPTS: la instrucción exacta para el modelo de imagen',
@@ -56,7 +66,8 @@ export function tareaDelIngeniero(imagenes: ImagenARedactar[]): string {
     '- La **escena** al servicio del objetivo de la pieza (míralo en el brief): sujeto y acción, y el **lugar** concreto donde ocurre según el brief, el manual y la ciudad o el país del cliente.',
     '- **Composición y encuadre** (plano, ángulo, qué ocupa el centro y dónde queda aire), **luz** (fuente, dirección, hora), **lente/cámara** (focal, profundidad de campo) y **textura/realismo**.',
     '- El **estilo de la marca**: la paleta, el ambiente y el tipo de imagen que fija el manual de marca de este cliente (léelo arriba; no impongas un estilo propio).',
-    '- **Sin texto dentro de la imagen**: ni letras, ni números, ni logos, ni carteles legibles, ni marcas. El texto, el logo y los colores de la marca se componen DESPUÉS sobre la imagen. Escríbelo en el prompt (p. ej. «no text, no letters, no logos, no signage»). Deja aire limpio donde irá el texto si la lámina lo lleva.',
+    '- **Sin texto dentro de la imagen**: ni letras, ni números, ni logos, ni carteles legibles, ni marcas. El texto, el logo y los colores de la marca se componen DESPUÉS sobre la imagen. Escríbelo en el prompt (p. ej. «no text, no letters, no logos, no signage»).',
+    '- **Zona libre para texto**: si la lámina lleva título, texto o llamado, di en el prompt DÓNDE queda un área limpia, de fondo simple y sin detalle importante, para ponerlo encima (p. ej. «clean empty space in the upper third for a headline»), y mantén ahí fuera al sujeto. Elige el lugar según la composición de la escena; si la lámina no lleva texto, no hace falta.',
     '- El **producto del cliente** se muestra como es: si una foto propia lo muestra (lista de fotos arriba), nómbrala en «Referencia:» y describe el producto tal como se ve en ella; no lo inventes ni lo «mejores».',
     '- **No inventes** datos, sellos, precios, marcas ajenas ni personas reales; si la escena lleva personas, que se vean reales y del país del cliente.',
     '- Sin relación de aspecto ni parámetros del modelo: el tamaño lo fija la oficina.',

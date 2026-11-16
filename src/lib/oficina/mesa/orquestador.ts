@@ -21,7 +21,7 @@ import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
-import { aporteDePrompts, promptsParaElBrazo, type ImagenARedactar } from './prompts'
+import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -122,7 +122,8 @@ export function imagenesAGenerarDe(enc: Encargo, est: EstadoMesa): ImagenARedact
   if (!est.pieza_texto || esDeLaCadena(est.tipo) || est.tipo === 'video') return []
   const b = baseDeLaminas(enc.estado_del_motor)
   const tr = traducirPieza(quitarLineasDeNotas(est.pieza_texto), est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), preguntasHechas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR })
-  return tr.imagenes.filter((i): i is { ref: string; modo: 'generada'; descripcion: string } => i.modo === 'generada').map((g) => ({ ref: g.ref, descripcion: g.descripcion }))
+  // el concepto de cada imagen (mejora 2 de CC1) viaja si el traductor lo trae; se lee por nombre para no atarse al tipo
+  return tr.imagenes.filter((i): i is { ref: string; modo: 'generada'; descripcion: string } => i.modo === 'generada').map((g) => { const c = (g as { concepto?: unknown }).concepto; return { ref: g.ref, descripcion: g.descripcion, ...(c && typeof c === 'object' ? { concepto: c as ConceptoDeLaImagen } : {}) } })
 }
 
 /**
