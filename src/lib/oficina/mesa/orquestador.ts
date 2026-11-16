@@ -7,6 +7,7 @@ import crypto from 'node:crypto'
 import { datos } from '../ayudas'
 import { avanzar, cerrarPorTope, fallar, plantillaDe, type Respuesta, type ResultadoDeTurno } from '../orquestador'
 import { baseDeLaminas } from '../orquestador-laminas'
+import { fotosDeReferencia } from '../foto-de-referencia'
 import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
 import { devolucionDelBrief, entregarALaCadena, marcoDe, textoDeLaMesaParaLaCadena } from './de-la-cadena'
 import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
@@ -124,8 +125,12 @@ export function imagenesAGenerarDe(enc: Encargo, est: EstadoMesa): ImagenARedact
   const tr = traducirPieza(quitarLineasDeNotas(est.pieza_texto), est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), preguntasHechas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR,
     // las mismas fuentes que el cierre: si la dirección no declaró objetivo o idea, el ingeniero recibe los del brief de la hoja
     ...(b.brief.objetivo ? { objetivoDelBrief: b.brief.objetivo } : {}), ...(b.brief.idea_de_la_pieza ? { ideaDelBrief: b.brief.idea_de_la_pieza } : {}) })
+  // las fotos propias que servirán para EDITAR las imágenes (mismo criterio que el brazo: `imagenRef`): sin las que la pieza ya usa como foto real
+  const usadasComoReal = tr.imagenes.flatMap((i) => (i.modo === 'real' ? [i.foto_id] : []))
+  const candidatas = (datos(enc.estado_del_motor, 'candidatas_foto')?.candidatas ?? []) as Array<{ id: string; cercana?: boolean }>
+  const fotos_aptas = fotosDeReferencia(b.F?.fotos ?? [], candidatas, { excluir: usadasComoReal }).map((f) => f.id)
   // el concepto de cada imagen (mejora 2 de CC1) viaja si el traductor lo trae; se lee por nombre para no atarse al tipo
-  return tr.imagenes.filter((i): i is { ref: string; modo: 'generada'; descripcion: string } => i.modo === 'generada').map((g) => { const c = (g as { concepto?: unknown }).concepto; return { ref: g.ref, descripcion: g.descripcion, ...(c && typeof c === 'object' ? { concepto: c as ConceptoDeLaImagen } : {}) } })
+  return tr.imagenes.filter((i): i is { ref: string; modo: 'generada'; descripcion: string } => i.modo === 'generada').map((g) => { const c = (g as { concepto?: unknown }).concepto; return { ref: g.ref, descripcion: g.descripcion, fotos_aptas, ...(c && typeof c === 'object' ? { concepto: c as ConceptoDeLaImagen } : {}) } })
 }
 
 /**

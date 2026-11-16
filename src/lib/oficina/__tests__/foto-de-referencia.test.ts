@@ -9,7 +9,7 @@ import { ejecutarCodigoL } from '../orquestador-laminas'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { estadoInicial, type Estado, type Paso } from '../tipos'
-import { fotoDeReferencia, fotosDeReferencia } from '../foto-de-referencia'
+import { fotoDeReferencia, fotosDeReferencia, fotosPorImagen } from '../foto-de-referencia'
 import { BUENOS_PROMPTS, CLIENTE, FICHAS_VACIAS, FOTOS, PARTE, PARTE_OTRO_PRODUCTO, PIEZA_OK, crearMemoria, correr, direccionGenerada, observacion, type Guion, type Memoria } from './memoria'
 
 const indicesDe = (t: string) => [...t.matchAll(/índice (\d+)/g)].map((x) => Number(x[1]))
@@ -38,6 +38,24 @@ describe('qué fotos sirven de referencia (pura)', () => {
     const aptas = fotosDeReferencia(fotos, [{ id: 'a' }, { id: 'b' }])
     expect([0, 1, 2].map((n) => fotoDeReferencia(aptas, n)?.id)).toEqual(['a', 'b', 'a'])
     expect(fotoDeReferencia([], 0)).toBeNull()
+  })
+  it('🔴 una foto por imagen (cruce con el ingeniero de prompts): sin pedidos, la rotación de siempre', () => {
+    const aptas = fotosDeReferencia(fotos, [{ id: 'a' }, { id: 'b' }, { id: 'c' }])
+    expect(fotosPorImagen(aptas, [undefined, null, undefined, undefined]).fotos.map((f) => f?.id)).toEqual(['a', 'b', 'c', 'a'])
+    expect(fotosPorImagen([], ['a']).fotos).toEqual([null])
+  })
+  it('🔴 la pedida y apta se respeta; las otras imágenes no caen en ella por accidente; pedirla dos veces sí la repite', () => {
+    const aptas = fotosDeReferencia(fotos, [{ id: 'a' }, { id: 'b' }, { id: 'c' }])
+    expect(fotosPorImagen(aptas, [undefined, 'a', undefined]).fotos.map((f) => f?.id)).toEqual(['b', 'a', 'c'])
+    expect(fotosPorImagen(aptas, ['c', 'c']).fotos.map((f) => f?.id)).toEqual(['c', 'c'])
+    const una = fotosDeReferencia(fotos, [{ id: 'a' }])
+    expect(fotosPorImagen(una, ['a', undefined]).fotos.map((f) => f?.id)).toEqual(['a', 'a'])
+  })
+  it('🔴 una pedida que no es apta (cercana, sin dirección, inexistente) no se usa y queda anotada; esa imagen rota', () => {
+    const aptas = fotosDeReferencia(fotos, [{ id: 'a', cercana: true }, { id: 'b' }, { id: 'd' }])
+    const r = fotosPorImagen(aptas, ['a', 'd', 'zz'])
+    expect(r.fotos.map((f) => f?.id)).toEqual(['b', 'b', 'b'])
+    expect(r.no_aptas).toEqual([{ i: 0, id: 'a' }, { i: 1, id: 'd' }, { i: 2, id: 'zz' }])
   })
 })
 

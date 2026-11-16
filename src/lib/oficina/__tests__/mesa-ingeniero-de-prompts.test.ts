@@ -105,6 +105,17 @@ describe('lectura tolerante de lo que escribe el ingeniero', () => {
     for (const x of [/inglés/, /lugar/, /luz/, /lente/, /manual de marca/, /Sin texto dentro de la imagen/, /no text, no letters, no logos/, /Zona libre para texto/, /DÓNDE queda un área limpia/, /Referencia:/, /\*\*hook\*\* · lo que pidió la dirección: un plato servido/]) expect(t).toMatch(x)
     expect(t).not.toMatch(/Concepto de esta imagen/)
   })
+  it('cruce con la mejora 3 · con fotos aptas pide escribir una EDICIÓN; sin ellas, la escena desde cero; sin dato, como antes', () => {
+    const editar = tareaDelIngeniero([{ ref: 'hook', descripcion: 'un plato', fotos_aptas: ['a1', 'b2'] }])
+    expect(editar).toMatch(/Se EDITA SOBRE UNA FOTO REAL del cliente \(aptas: foto:a1, foto:b2;/)
+    expect(editar).toMatch(/qué se CONSERVA de la foto/)
+    expect(editar).not.toMatch(/DESDE CERO/)
+    const cero = tareaDelIngeniero([{ ref: 'hook', descripcion: 'un plato', fotos_aptas: [] }])
+    expect(cero).toMatch(/Se GENERA DESDE CERO/)
+    expect(cero).not.toMatch(/Se EDITA SOBRE/)
+    const sinDato = tareaDelIngeniero([{ ref: 'hook', descripcion: 'un plato' }])
+    expect(sinDato).not.toMatch(/Se EDITA SOBRE|DESDE CERO/)
+  })
   it('el concepto de la imagen (mejora 2 de CC1), si viene, entra en la lista; lo vacío no se escribe', () => {
     const t = tareaDelIngeniero([{ ref: 'hook', descripcion: 'un plato', concepto: { objetivo: 'dar a conocer la web', que_se_ve: 'el encebollado humeante', mensaje: '', emocion: 'antojo' } }])
     expect(t).toMatch(/Concepto de esta imagen: objetivo: dar a conocer la web · qué se ve: el encebollado humeante · emoción: antojo/)
@@ -156,6 +167,46 @@ describe('LA MESA · punta a punta con el ingeniero en el directorio (ensayo, en
     expect(pv.por_ref.hook.origen).toBe('ingeniero_de_prompts')
     expect(pv.ingeniero?.agente).toBe(ING)
     expect(M.llamadas.imagen).toBe(1)
+    // cruce con la mejora 3 (CC2): el ingeniero sabe que esta imagen se EDITA sobre una foto real (y cuáles sirven); sin pedir una, el brazo rota como siempre
+    expect(turnos[iIng].task).toMatch(/Se EDITA SOBRE UNA FOTO REAL del cliente \(aptas: foto:6d85f0a0, foto:780fc5e1/)
+    expect(turnos[iIng].task).toMatch(/qué se CONSERVA de la foto .* y qué se CAMBIA/)
+    expect(M.llamadas.imagenFotos).toEqual(['6d85f0a0'])
+  })
+
+  it('cruce con la mejora 3 · la foto que nombra el ingeniero es la que usa el brazo de imagen, si es apta', async () => {
+    const { M, a, id } = await montarConIngeniero()
+    await jugar(M, id, a, (t) => {
+      if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: pieza(LAMINAS_OK, CITAS) }
+      if (t.tipo === 'redactar_prompts') return { texto: `## hook\nPrompt: ${PROMPT}\nReferencia: foto:780fc5e1` }
+      return undefined
+    })
+    expect(M.llamadas.imagenFotos).toEqual(['780fc5e1'])
+    expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id.startsWith('imagen-foto-no-apta'))).toBe(false)
+  })
+
+  it('cruce con la mejora 3 · una foto no apta pedida por el ingeniero no frena nada: rota como siempre y una ficha lo dice', async () => {
+    const { M, a, id } = await montarConIngeniero()
+    await jugar(M, id, a, (t) => {
+      if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: pieza(LAMINAS_OK, CITAS) }
+      if (t.tipo === 'redactar_prompts') return { texto: `## hook\nPrompt: ${PROMPT}\nReferencia: foto:no-existe-77` }
+      return undefined
+    })
+    expect(M.llamadas.imagenFotos).toEqual(['6d85f0a0'])
+    const f = M.encargos.get(id)!.estado_del_motor.fichas.find((x) => x.id.startsWith('imagen-foto-no-apta'))
+    expect(JSON.stringify(f)).toMatch(/pidió la foto «no-existe-77» para «hook».*se usa «6d85f0a0»/)
+  })
+
+  it('cruce con la mejora 3 · la foto que la pieza ya usa como foto real en otra lámina no se le ofrece al ingeniero para editar', async () => {
+    const { M, a, id } = await montarConIngeniero()
+    const conReal = LAMINAS_OK.map((l) => (l[0] === 'problem' ? [l[0], l[1], l[2], 'foto: 6d85f0a0'] : l))
+    const { turnos } = await jugar(M, id, a, (t) => {
+      if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: pieza(conReal, CITAS) }
+      if (t.tipo === 'redactar_prompts') return { texto: `## hook\nPrompt: ${PROMPT}\nReferencia: ninguna` }
+      return undefined
+    })
+    const ing = turnos.find((t) => t.tipo === 'redactar_prompts')!
+    expect(ing.task).toMatch(/Se EDITA SOBRE UNA FOTO REAL del cliente \(aptas: foto:780fc5e1/)
+    expect(ing.task).not.toMatch(/foto:6d85f0a0/)
   })
 
   it('si el ingeniero no deja nada legible, la imagen sale con la descripción de la dirección y la pieza no se frena', async () => {
