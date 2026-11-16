@@ -158,6 +158,13 @@ describe('el límite de imágenes del servicio (CC7 🔴 · MAX_IMAGENES)', () =
     expect(t.images).toHaveLength(20)
     expect(t.task).not.toContain('el pedido admite')
   })
+  it('🔴 en el borde (CC7): con exactamente MAX_IMAGENES + 1 (7 planos sin imagen clave = 21 cuadros) se recorta a MAX_IMAGENES y se declara', () => {
+    expect(7 * 3).toBe(MAX_IMAGENES + 1)
+    const t = pedir(7, false)
+    expect(t.images).toHaveLength(MAX_IMAGENES)
+    for (let n = 1; n <= 7; n++) expect(t.images).toContain(`https://c/plano-${n}-medio.jpg`)
+    expect(t.task).toContain(`(el pedido admite ${MAX_IMAGENES} imágenes: en los planos 7 no van todas las suyas; juzga lo que ves)`)
+  })
   it('🔴 más planos que el límite: un cuadro del medio por plano, repartidos parejo (primero y último), y dice cuántos de cuántos', () => {
     const t = pedir(25, false)
     expect(t.images).toHaveLength(MAX_IMAGENES)
