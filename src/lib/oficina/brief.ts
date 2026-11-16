@@ -37,7 +37,7 @@ export interface BriefLeido {
 /** FIRMA 01-nov «hoja sin reja»: lo que se le dice a todo el que recibe un brief (pedidos, pedidos-laminas y la mesa). Lo único fijo es el manual, lo prohibido y la gran idea. */
 export const BRIEF_GUIA_NO_REGLA = 'guía, no regla al pie de la letra: lo único fijo es el manual, lo prohibido y la gran idea; todo lo demás puedes mejorarlo'
 // la hoja escribe «VOCABULARIO DE LA MARCA» desde la FIRMA 01-nov; los partes anteriores traen «VOCABULARIO OBLIGATORIO» y siguen siendo legibles
-const CAMPOS_LISTA = new Set(['VOCABULARIO DE LA MARCA', 'VOCABULARIO OBLIGATORIO', 'PROHIBIDO', 'NEGATIVOS', 'VISUAL OBLIGATORIO', 'VISUAL PROHIBIDO', 'ELEMENTOS'])
+const CAMPOS_LISTA = new Set(['VOCABULARIO DE LA MARCA', 'VOCABULARIO OBLIGATORIO', 'PROHIBIDO', 'NEGATIVOS', 'VISUAL OBLIGATORIO', 'VISUAL PROHIBIDO', 'ELEMENTOS', 'FOTOS DISPONIBLES', 'SUGERENCIAS'])
 
 /** corta la sección de un brief (desde su «### ID ·» hasta el siguiente «### » o «## ») */
 export function seccionDelBrief(parte: string, id: string): string | null {

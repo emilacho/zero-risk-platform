@@ -150,17 +150,17 @@ function seccionDeFechas(p: PedidoDeCalendario): string {
   return ['# FECHAS ESPECIALES (verificadas por el código)', p.fechasEspeciales?.length ? p.fechasEspeciales.map((x) => `- fecha:${x.id} · ${x.hasta && x.hasta !== x.fecha ? `${x.fecha} → ${x.hasta}` : x.fecha} · ${x.nombre} (${x.tipo})${x.origen === 'cliente' ? ' · temporada del negocio (la dio el cliente)' : ''}`).join('\n') : '(ninguna declarada para esta campaña)'].join('\n')
 }
 
-/** 16-nov · Sprint 1 · Mejora 2 · lo que se le pide al calendario para cada pieza (campo `concepto` de `calendario_tanda.v3`) */
+/** 16-nov · lo que se le pide al calendario para cada pieza (campo `concepto` de `calendario_tanda.v4`, GO Lenovo 22:04: solo lo estratégico) */
 export const CONCEPTO_DE_CADA_PIEZA = [
   '# El concepto de cada pieza',
-  'Cada pieza lleva en `concepto` su idea COMPLETA, pensada para ESA pieza (sale de su idea del banco y de su capítulo; no copies los planos ni el «cómo se ve» de la campaña):',
-  '- `idea`: la idea de la pieza en una frase.',
-  '- `que_se_ve`: la escena de esta pieza (lugar, quién, qué pasa, la luz), lo que mostraría la imagen o el primer plano.',
+  'Cada pieza lleva en `concepto` lo ESTRATÉGICO de ESA pieza: QUÉ tiene que lograr y POR QUÉ (sale de su idea del banco y de su capítulo). El CÓMO (la escena, el gancho, la composición, la emoción y qué foto usar) NO lo escribes tú: lo decide la mesa de creativos.',
+  '- `idea`: la idea de la pieza en una frase (qué cuenta, no cómo se ve).',
+  '- `objetivo`: lo que esta pieza tiene que lograr, atado al objetivo de su fase y de su red.',
   '- `mensaje`: el único mensaje que tiene que quedar.',
-  '- `emocion`: lo que tiene que sentir quien la ve.',
-  '- `foto`: la foto propia del cliente que conviene usar (`foto:<id>` de las referencias) o «» si ninguna.',
+  '- `publico`: a quién le habla esta pieza (del público del plan).',
   '- `llamado`: el llamado a la acción de esta pieza.',
-  'Si no sabes alguna parte, déjala vacía (el código lo avisa y la mesa la completa); no la inventes.',
+  '- `fotos_disponibles`: las fotos propias del cliente que podrían servir como material (`foto:<id>` de las referencias), o la lista vacía; la mesa elige si usa alguna.',
+  'Si no sabes alguna parte, déjala vacía (el código lo avisa); no la inventes.',
 ].join('\n')
 
 export function tareaDeCalendario(p: PedidoDeCalendario): string {

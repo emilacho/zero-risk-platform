@@ -77,7 +77,13 @@ export interface PiezaAgente {
 }
 
 /** 16-nov · Sprint 1 · Mejora 2 · el concepto de UNA pieza del calendario (columna `cadena_calendario_filas.concepto`); solo las partes con texto (lo que falta se avisa) */
-export interface ConceptoDeLaFila { idea?: string; que_se_ve?: string; mensaje?: string; emocion?: string; foto?: string; llamado?: string }
+export interface ConceptoDeLaFila {
+  idea?: string; mensaje?: string; llamado?: string
+  /** 16-nov · GO Lenovo 22:04 · lo ESTRATÉGICO (`calendario_tanda.v4`): lo que la pieza tiene que lograr, a quién le habla y las fotos propias que hay como material (la mesa elige) */
+  objetivo?: string; publico?: string; fotos_disponibles?: string[]
+  /** lo CREATIVO de `calendario_tanda.v3` (filas guardadas antes del GO): se lee solo como SUGERENCIA para la mesa, nunca como orden; no se borra */
+  que_se_ve?: string; emocion?: string; foto?: string
+}
 export interface Ajuste { semana: number; slot: string; accion: 'omitir' | 'mover' | 'agregar'; motivo: string }
 export interface TandaAgente { piezas: PiezaAgente[]; ajustes_al_patron: Ajuste[] }
 

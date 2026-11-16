@@ -63,7 +63,9 @@ export function conceptoLimpio(c: unknown): ConceptoDeLaFila | null {
   if (!c || typeof c !== 'object' || Array.isArray(c)) return null
   const o = c as Record<string, unknown>
   const out: ConceptoDeLaFila = {}
-  for (const k of ['idea', 'que_se_ve', 'mensaje', 'emocion', 'foto', 'llamado'] as const) { const v = typeof o[k] === 'string' ? (o[k] as string).trim() : ''; if (v) out[k] = v }
+  for (const k of ['idea', 'objetivo', 'mensaje', 'publico', 'llamado', 'que_se_ve', 'emocion', 'foto'] as const) { const v = typeof o[k] === 'string' ? (o[k] as string).trim() : ''; if (v) out[k] = v }
+  const fotos = Array.isArray(o.fotos_disponibles) ? [...new Set(o.fotos_disponibles.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean))] : []
+  if (fotos.length) out.fotos_disponibles = fotos
   return Object.keys(out).length ? out : null
 }
 
