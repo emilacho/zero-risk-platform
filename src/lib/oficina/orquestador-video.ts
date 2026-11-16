@@ -27,7 +27,7 @@ import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
 import { COTAS } from './mesa/tipos'
 import { armarPedidoDeLaOficina, buscarFotoPropia, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
-import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo } from './video/mirada'
+import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, nombreDelCuadro, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo, type SenalesDelVideo } from './video/mirada'
 import { CONTRATOS_EN_TEXTO } from './pedidos'
 import { fotosDeReferencia, type FotoDeReferencia } from './foto-de-referencia'
 import { avisoDeLaRevisionALaMesa, calidadDeLaFase, faseDeProduccion, leerRevisionDeImagenesClave, pedidosDeImagenClave, PASO_REVISAR_IMAGENES_CLAVE, tareaDeLaRevisionDeImagenesClave, type ImagenClaveDelPlano, type ImagenesClave, type PlanoDeLaHoja } from './video/imagen-clave'
@@ -355,7 +355,7 @@ async function imagenesClave(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso
 }
 
 // ───────────────────────── un agente mira el video antes de la bandeja (GO Lenovo 11-nov 16:43 · ver `video/mirada.ts`)
-/** UN cuadro del medio de cada plano del guion, guardado en la carpeta del encargo. Sin cuadros (sin ffmpeg, mp4 ilegible…) no hay mirada: ficha QUE BLOQUEA, nunca pasa callado. En ensayo no corre */
+/** los cuadros de cada plano del guion (S2-7: inicio, medio y final) y las señales que midió ffmpeg, guardados en la carpeta del encargo. Sin cuadros (sin ffmpeg, mp4 ilegible…) no hay mirada: ficha QUE BLOQUEA, nunca pasa callado. En ensayo no corre */
 async function cuadrosDelVideo(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
   const e = enc.estado_del_motor
   const v = datos(e, 'video') as unknown as VideoDelEncargo | undefined
@@ -369,13 +369,13 @@ async function cuadrosDelVideo(P: Puertos, enc: Encargo): Promise<SalidaCodigoV>
   if (!bytes) return sin('no se pudo descargar el video')
   const c = await P.sacarCuadros(bytes, g.planos)
   if (!c.cuadros.length) return sin(c.causa ?? 'no salió ningún cuadro')
-  const gu = await P.guardarArchivos(`oficina/${enc.client_id}/${enc.id}/cuadros-${e.pasos_ejecutados}`, c.cuadros.map((x) => ({ nombre: `plano-${x.plano}.jpg`, bytes: x.bytes, tipo: 'image/jpeg' })))
+  const gu = await P.guardarArchivos(`oficina/${enc.client_id}/${enc.id}/cuadros-${e.pasos_ejecutados}`, c.cuadros.map((x) => ({ nombre: nombreDelCuadro(x), bytes: x.bytes, tipo: 'image/jpeg' })))
   if (!gu.ok) return sin(`no se pudieron guardar los cuadros: ${gu.error}`)
-  const cuadros: CuadroDelVideo[] = c.cuadros.map((x) => ({ plano: x.plano, segundo: x.segundo, url: gu.urls[`plano-${x.plano}.jpg`] })).filter((x) => !!x.url)
+  const cuadros: CuadroDelVideo[] = c.cuadros.map((x) => ({ plano: x.plano, segundo: x.segundo, ...(x.parte ? { parte: x.parte } : {}), url: gu.urls[nombreDelCuadro(x)] })).filter((x) => !!x.url)
   if (!cuadros.length) return sin('el almacén no devolvió la dirección de ningún cuadro')
   const faltan = g.planos.filter((p) => !cuadros.some((x) => x.plano === p.n)).map((p) => p.n)
   // cada pasada reemplaza las fichas de la mirada anterior (la de una vuelta a la mesa no arrastra la ficha vieja)
-  return { res: { costo_usd: 0, artefacto: { cuadros, hay_cuadros: true, duracion_s: c.duracion_s, ...(faltan.length ? { planos_sin_cuadro: faltan } : {}) }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+  return { res: { costo_usd: 0, artefacto: { cuadros, hay_cuadros: true, duracion_s: c.duracion_s, senales: c.senales ?? null, ...(faltan.length ? { planos_sin_cuadro: faltan } : {}) }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
 }
 
 /** el pedido del agente que mira (solo el paso `mirar_video`; null = no es un paso de video con pedido propio) */
@@ -392,9 +392,13 @@ export function armarPedidoV(paso: Paso, e: Estado, errorDeFormato?: string): { 
   if (paso.clave !== PASO_MIRAR_VIDEO) return null
   const b = baseV(e)
   const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
-  const cuadros = arr<CuadroDelVideo>(datos(e, 'cuadros_video')?.cuadros)
+  const cv = datos(e, 'cuadros_video')
+  const cuadros = arr<CuadroDelVideo>(cv?.cuadros)
+  // S2-7 · el agente juzga cada clip contra su imagen clave (S2-3) y con lo que midió ffmpeg
+  const imagenes_clave = arr<{ n: number; url: string }>((datos(e, 'imagenes_clave') as unknown as ImagenesClave | undefined)?.planos)
+  const senales = (cv?.senales ?? null) as SenalesDelVideo | null
   const esquema = paso.salida?.esquema ?? 'mirada_video.v1'
-  const t = tareaDeLaMirada({ cuadros, planos: g?.planos ?? [], segundos: g?.segundos ?? 0, brief_texto: b.brief.texto, red: b.brief.red, formato: b.brief.formato, contrato: CONTRATOS_EN_TEXTO[esquema] ?? '', ...(errorDeFormato ? { errorDeFormato } : {}) })
+  const t = tareaDeLaMirada({ cuadros, planos: g?.planos ?? [], segundos: g?.segundos ?? 0, brief_texto: b.brief.texto, red: b.brief.red, formato: b.brief.formato, contrato: CONTRATOS_EN_TEXTO[esquema] ?? '', imagenes_clave, senales, ...(errorDeFormato ? { errorDeFormato } : {}) })
   return { ...t, esquema }
 }
 
@@ -610,8 +614,8 @@ export function contextoDeRevisorV(pl: Plantilla, e: Estado): { pieza: string; i
     '## El video',
     v?.video_url ? `${v.video_url}${v.simulado ? ' (simulado)' : ''}${v.copia === 'solo_proveedor' ? ' (solo en el proveedor)' : ''} · costo US$ ${v.costo_usd.toFixed(4)}` : '(el brazo no entregó video)',
   ].join('\n')
-  const cuadros = arr<CuadroDelVideo>(datos(e, 'cuadros_video')?.cuadros).map((c) => c.url).filter(Boolean)
-  // 11-nov · la jefatura ve también lo que salió (los cuadros de cada plano), no solo las fotos de referencia
+  // 11-nov · la jefatura ve también lo que salió (los cuadros de cada plano), no solo las fotos de referencia · S2-7: solo el del MEDIO de cada plano, como antes (los 3 son para quien mira)
+  const cuadros = arr<CuadroDelVideo>(datos(e, 'cuadros_video')?.cuadros).filter((c) => !c.parte || c.parte === 'medio').map((c) => c.url).filter(Boolean)
   const imagenes = [...(ped?.fotos ?? []), ...cuadros]
   const mirada = datos(e, 'mirada_video') as unknown as (MiradaDelVideo & { sin_lectura?: boolean }) | undefined
   const m = materialDe(e)

@@ -6,6 +6,8 @@
  *  · borrador y final son el MISMO pedido con otra calidad (dato de la plantilla);
  *  · la revisión con visión AVISA: devuelve UNA vez a la mesa y luego sigue con una ficha de sugerencia (nunca bloquea ni tumba el encargo).
  */
+import fs from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { escribirHoja, type FilaDeHoja, type InsumosDeLaHoja } from '@/lib/cadena/hoja'
 import { leerBriefCreativo } from '@/lib/cadena/brief-creativo'
@@ -17,7 +19,7 @@ import { MAX_IMAGENES } from '@/lib/imagenes-del-pedido'
 import { AGENTE_QUE_MIRA_EL_VIDEO, AGENTE_QUE_REVISA_LAS_IMAGENES_CLAVE, TOPE_DE_LAS_IMAGENES_CLAVE_USD, TOPE_DE_VIDEO_MESA_USD, VIDEO_MESA } from '../plantillas/video-mesa'
 import type { PuertoDeVideo } from '../puertos'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
-import { instantesPorPlano, PASO_MIRAR_VIDEO } from '../video/mirada'
+import { instantesPorPlano, PASO_MIRAR_VIDEO, senalesDeLaSalida } from '../video/mirada'
 import {
   avisoDeLaRevisionALaMesa, CALIDAD_DE_IMAGEN_CLAVE, calidadDeLaFase, esPlanoDeProducto, faseDeProduccion, leerRevisionDeImagenesClave, PASO_IMAGENES_CLAVE, PASO_REVISAR_IMAGENES_CLAVE,
   pedidosDeImagenClave, promptDeImagenClave, tareaDeLaRevisionDeImagenesClave, type PlanoDeLaHoja,
@@ -32,6 +34,7 @@ import { crearMesaEnMemoria } from './mesa-memoria'
 import { VIDEO_MESA_ANTES_DE_S2_3 } from './video-mesa-antes-de-s2-3'
 
 const FOTO = FOTOS[0]
+const SENALES_REALES = fs.readFileSync(path.join(__dirname, 'fixtures', 'senales-ffmpeg-real.txt'), 'utf8')
 const OTRA = FOTOS[1]
 const aptas = [{ id: FOTO.id, url: FOTO.url }, { id: OTRA.id, url: OTRA.url }]
 
@@ -184,7 +187,8 @@ async function recorrer(C: Cliente, o: { revision: (k: number) => string; mirada
     cotizar: async () => ({ ok: true, costo_estimado_usd: 2.12, costo_lista_usd: 2.12 }),
   }
   M.P.video = brazo
-  M.P.sacarCuadros = async (_b, planos) => ({ duracion_s: 12, cuadros: instantesPorPlano(planos, 12).map((x) => ({ ...x, bytes: Buffer.from(`jpg-${x.plano}`) })) })
+  // S2-7 · el sacador devuelve 3 cuadros por plano y las señales leídas de una salida REAL de ffmpeg
+  M.P.sacarCuadros = async (_b, planos) => ({ duracion_s: 12, cuadros: instantesPorPlano(planos, 12).map((x) => ({ ...x, bytes: Buffer.from(`jpg-${x.plano}-${x.parte}`) })), senales: senalesDeLaSalida(SENALES_REALES, planos, 12) })
   if (!o.dry_run) M.P.jefatura = async () => ({ estado: 'esperando', review_id: 'rev-1' }) as never
   const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: C.fila, dry_run: o.dry_run === true, familia: 'video_mesa' }, client_id: C.client, target_step_id: TARGET_STEP_PRODUCIR })
   const id = String(a.cuerpo.encargo_id)
@@ -242,6 +246,15 @@ describe.each(CLIENTES)('%s · el camino real con las imágenes clave', (_n, C) 
     expect(r.avisos).toHaveLength(0)
     expect(r.enviados).toHaveLength(1)
     expect(r.miradas).toHaveLength(1)
+    // S2-7 · quien mira el video ve, por plano, la imagen clave y luego inicio, medio y final, con lo que midió ffmpeg
+    const urls = x.planos.map((p) => p.url)
+    expect(r.miradas[0].images!.slice(0, 4)).toEqual([urls[0], expect.stringMatching(/plano-1-inicio.jpg$/), expect.stringMatching(/plano-1-medio.jpg$/), expect.stringMatching(/plano-1-final.jpg$/)])
+    expect(r.miradas[0].images![4]).toBe(urls[1])
+    expect(r.miradas[0].images!).toHaveLength(8)
+    expect(r.miradas[0].task).toContain('- imagen 1: IMAGEN CLAVE del plano 1')
+    expect(r.miradas[0].task).toContain('Lo que midió ffmpeg')
+    expect(r.miradas[0].task.split('\n').find((l) => l.startsWith('- Plano 1 (0–4 s)'))).toContain('medido: 1 cambio(s) de escena dentro del plano (s 1); 1 s en negro')
+    expect(r.enc.estado_del_motor.artefactos['cuadros_video'].datos).toMatchObject({ senales: { duracion_s: 12 } })
     expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
   })
   it('🔴 la revisión NO coincide ⇒ vuelve SOLA a la mesa UNA vez con la corrección; la hoja v2 rehace las imágenes; la segunda coincide: sigue limpio', async () => {
