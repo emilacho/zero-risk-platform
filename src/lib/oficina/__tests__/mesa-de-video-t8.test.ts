@@ -267,7 +267,7 @@ const CONCEPTO = leerConcepto([
   `- C1-I01 · instagram · reel · el pan sale del horno · mensaje: la mesa se llena de a poco · gancho: el vapor del pan · protagonista: el pan · serie: ninguna · foto:${FOTOS[0].id}`,
 ].join('\n'), INS_C)
 const FILA: FilaDeHoja = { id: 'F1-S1-ig-r1', fecha: '2026-11-12', hora: '09:00', red: 'instagram', formato: 'reel', pilar: 'producto', tema: 'el pan sale del horno', datos: [], fase: 'F1', idea_ref: 'C1-I01' }
-const INSUMOS: InsumosDeLaHoja = { client_name: 'Cliente de práctica', plan_id: '29d6daeb-a95a-4328-9c10-cf3cddc236f7', manual_version: 1, manual_id: 'man-1', hoy: '2026-10-31', lote_key: '2026-W46', brief: BRIEF_CREATIVO, brief_id: 'brf-abc-v1', concepto: CONCEPTO, concepto_id: 'con-abc-v1', filas: [FILA], formatos: FORMATOS }
+export const INSUMOS: InsumosDeLaHoja = { client_name: 'Cliente de práctica', plan_id: '29d6daeb-a95a-4328-9c10-cf3cddc236f7', manual_version: 1, manual_id: 'man-1', hoy: '2026-10-31', lote_key: '2026-W46', brief: BRIEF_CREATIVO, brief_id: 'brf-abc-v1', concepto: CONCEPTO, concepto_id: 'con-abc-v1', filas: [FILA], formatos: FORMATOS }
 
 const GUION = (citas: string) => [
   '## Plano 1 · 0–3 s', `Se ve: el pan de masa madre recién salido del horno, el vapor sube sobre la mesa larga`, 'Movimiento: acercamiento lento', `Foto: foto:${FOTOS[0].id}`,

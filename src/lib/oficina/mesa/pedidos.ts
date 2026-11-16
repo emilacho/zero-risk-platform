@@ -25,6 +25,8 @@ export interface ContextoDeTurno {
   /** lo que el portero ya trajo (texto de los aportes `material` va en el tablero) */
   tope_usd: number
   gasto_usd: number
+  /** Sprint 2 · S2-1 · solo video: la duración y las propuestas que dice la plantilla (dato) */
+  video?: ParametrosDelVideo
 }
 
 /** UNA sola función de recorte: nunca corta callado (ADENDAS 5 y 6 de la ORDEN del 31-oct). Sin nombre del documento conserva el aviso corto de siempre. */
@@ -147,34 +149,73 @@ export function reglaDelGanchoPara(agente: string): string {
  */
 export const FRASE_SIN_NOTAS_DE_TRABAJO = 'Tu respuesta ES el guion y nada más: empieza directamente en «## Plano 1». No escribas antes ni después lo que vas a hacer, lo que leíste o que ya tienes lo necesario: todo lo que escribas viaja con el guion.'
 
-/** T8 · 31-oct · el GUION del video corto (la mesa lo escribe; el brazo lo filma tal cual) */
-const CONVENCION_DEL_GUION = [
-  'Escribe el GUION COMPLETO del video con esta convención ligera (no es un formulario: es para que el brazo de video lo filme tal cual):',
-  FRASE_SIN_NOTAS_DE_TRABAJO,
-  '```',
-  '## Plano 1 · 0–3 s',
-  'Se ve: … (qué muestra la cámara: producto, lugar, acción; sin rostros reconocibles de personas reales)',
-  'Movimiento: … (cámara fija, paneo, acercamiento, cámara en mano…)',
-  'Texto en pantalla: … (solo si lo lleva; literal, corto)',
-  'Foto: foto:<id de una foto propia> | ninguna   (la foto real de referencia de ese plano)',
-  '## Plano 2 · 3–8 s   (…una sección por plano; el video dura de 8 a 15 segundos en total)',
-  '## Audio',
-  '<música o sonido ambiente que acompaña; SIN voz ni narración>',
-  '## Pie',
-  '<el pie de foto de la publicación>',
-  '## Etiquetas',
-  '#una #otra',
-  '## Citas',
-  'A3 usé: <qué tomaste de ese aporte>',
-  'A5 descarté: <por qué no lo usaste>',
-  '```',
-  'Lo que escribes en «Se ve», «Movimiento» y «Texto en pantalla» es EXACTAMENTE lo que se le pide al modelo de video: una sola versión final, sin "Variante A/B", sin markdown. Los tiempos de cada plano van en su encabezado y suman la duración del video (8–15 s).',
-  `El Plano 1 es el gancho y hay UNO solo: el que propuso ${VOZ_DEL_GANCHO} e integró ${QUIEN_INTEGRA_EL_GANCHO}. Si en el tablero hay dos ganchos, el guion lleva el de ${VOZ_DEL_GANCHO} y el otro se cita como descartado.`,
-  'Las fotos propias del cliente son la referencia visual de cada plano (el modelo las usa para no inventar el producto ni el lugar): nombra la que corresponda en «Foto:». No inventes textos, precios ni sellos en pantalla que no estén en el brief, el manual o el material del portero.',
-  'El pie ("## Pie") es el texto de publicación final, sin hashtags (esos van solo en "## Etiquetas", una vez cada uno) y con la voz del manual.',
+/**
+ * 16-nov · Sprint 2 · S2-1 (CC1) · lo que la plantilla del video dice de la duración y de las propuestas (DATO: `limites.video`). Sin él, la mesa trabaja como hasta hoy:
+ * un solo guion de 8 a 15 s.
+ */
+export interface ParametrosDelVideo {
+  segundos_min: number
+  segundos_max: number
+  /** cuántas propuestas completas presenta la mesa para la aprobación del dueño (1 = un solo guion, como hasta hoy) */
+  propuestas: number
+}
+export const VIDEO_POR_OMISION: ParametrosDelVideo = { segundos_min: 8, segundos_max: 15, propuestas: 1 }
+
+/** el plano de la HOJA (Sprint 2 · S2-1): lo que se pide por plano; el traductor tolera lo que falte y lo avisa */
+const PLANO_DE_LA_HOJA = (n: number, tiempos: string, extra = '') => [
+  `## Plano ${n} · ${tiempos}${extra}`,
+  'Rol: captar | situar | informar | prueba | giro | conclusion | llamado | ambiente   (guía: si es otro, nómbralo)',
+  'Dice: … (la información NUEVA que da este plano; si no da nada nuevo, sobra)',
+  'Intención: … (lo que logra en quien mira)',
+  'Se ve: … (qué muestra la cámara: producto, lugar, acción, personas)',
+  'Producto: sí | no   (¿sale el producto en cuadro?)',
+  'Tamaño: … (general, medio, primer plano, detalle) · Lente: … · Luz: …',
+  'Movimiento: … (UN solo movimiento de cámara: fija, paneo, acercamiento, cámara en mano…)',
+  'Termina en: … (cómo queda el cuadro al final: posición, luz, utilería; el plano siguiente lo continúa)',
+  'Texto en pantalla: … (solo si lo lleva; literal, corto: se compone en edición, la IA no lo escribe)',
+  'Foto: foto:<id de una foto propia> | ninguna   (solo en los planos de producto)',
+  'Prompt de imagen: … (en inglés: el cuadro clave del plano, sin texto en la imagen)',
+  'Prompt de video: … (en inglés: solo el movimiento y la cámara desde ese cuadro, el proceso de la acción y cómo termina)',
 ].join('\n')
 
-export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'brief' ? CONVENCION_DEL_BRIEF : tipo === 'concepto' ? CONVENCION_DEL_CONCEPTO : tipo === 'video' ? CONVENCION_DEL_GUION : tipo === 'carrusel'
+const CIERRE_DE_LA_PIEZA = ['## Audio', '<música o sonido ambiente que acompaña; SIN voz ni narración>', '## Pie', '<el pie de foto de la publicación>', '## Etiquetas', '#una #otra']
+
+/** T8 · 31-oct · el GUION del video corto (la mesa lo escribe; el brazo lo filma tal cual) · Sprint 2 · S2-1: la HOJA DE PLANOS y, si la plantilla lo pide, N propuestas */
+export function convencionDelGuion(v: ParametrosDelVideo = VIDEO_POR_OMISION): string {
+  const dura = v.segundos_min === v.segundos_max ? `${v.segundos_min} s` : `de ${v.segundos_min} a ${v.segundos_max} s`
+  const variasPropuestas = v.propuestas > 1
+  const cuerpo = variasPropuestas
+    ? [
+        `# Propuesta 1 · <nombre corto>`,
+        'Concepto: <la idea de este video en una frase>',
+        'Duración: <N s> · Red: <la red> · Objetivo: <lo que tiene que lograr>',
+        'Por qué: <por qué esta propuesta logra el objetivo>',
+        PLANO_DE_LA_HOJA(1, '0–3 s'),
+        '## Plano 2 · 3–8 s   (…una sección por plano)',
+        ...CIERRE_DE_LA_PIEZA,
+        `# Propuesta 2 · <nombre corto>   (…lo mismo, hasta la Propuesta ${v.propuestas})`,
+        '# Citas',
+        'A3 usé: <qué tomaste de ese aporte>',
+        'A5 descarté: <por qué no lo usaste>',
+      ]
+    : [PLANO_DE_LA_HOJA(1, '0–3 s'), `## Plano 2 · 3–8 s   (…una sección por plano; el video dura ${dura} en total)`, ...CIERRE_DE_LA_PIEZA, '## Citas', 'A3 usé: <qué tomaste de ese aporte>', 'A5 descarté: <por qué no lo usaste>']
+  return [
+    variasPropuestas
+      ? `Escribe ${v.propuestas} PROPUESTAS COMPLETAS y DISTINTAS del video (concepto, duración, red, objetivo y su hoja de planos cada una). El dueño elige UNA antes de producir: no son variantes de lo mismo, son caminos distintos que valga la pena comparar. Usa esta convención ligera (no es un formulario):`
+      : 'Escribe el GUION COMPLETO del video como HOJA DE PLANOS, con esta convención ligera (no es un formulario: es para que el equipo de video lo filme tal cual):',
+    variasPropuestas ? 'Tu respuesta SON las propuestas y nada más: empieza directamente en «# Propuesta 1». No escribas antes ni después lo que vas a hacer, lo que leíste o que ya tienes lo necesario.' : FRASE_SIN_NOTAS_DE_TRABAJO,
+    '```',
+    ...cuerpo,
+    '```',
+    `La duración la propones tú según el plan, la red y el objetivo de la pieza, ${dura}; los tiempos de cada plano van en su encabezado y suman la duración del video.`,
+    'Cada plano cumple UN rol en la historia y da información nueva; el producto entra pronto. Lo que escribes en cada campo es EXACTAMENTE lo que usa el equipo de video: una sola versión final, sin "Variante A/B", sin markdown.',
+    `El Plano 1 es el gancho y hay UNO solo${variasPropuestas ? ' por propuesta' : ''}: el que propuso ${VOZ_DEL_GANCHO} e integró ${QUIEN_INTEGRA_EL_GANCHO}. Si en el tablero hay dos ganchos, ${variasPropuestas ? 'cada propuesta lleva uno y los demás se citan' : `el guion lleva el de ${VOZ_DEL_GANCHO} y el otro se cita como descartado`}.`,
+    'Las fotos propias del cliente son la referencia del producto en los planos de producto (nómbrala en «Foto:»); los planos de ambiente no la llevan. No inventes textos, precios ni sellos en pantalla que no estén en el brief, el manual o el material del portero. Se pueden mostrar personas y rostros generados; nunca la cara de una persona real identificable sin permiso.',
+    'El pie ("## Pie") es el texto de publicación final, sin hashtags (esos van solo en "## Etiquetas", una vez cada uno) y con la voz del manual.',
+  ].join('\n')
+}
+
+export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza, video?: ParametrosDelVideo): string => tipo === 'brief' ? CONVENCION_DEL_BRIEF : tipo === 'concepto' ? CONVENCION_DEL_CONCEPTO : tipo === 'video' ? convencionDelGuion(video) : tipo === 'carrusel'
   ? [
       'Escribe la PIEZA COMPLETA con esta convención ligera (no es un formulario: es para que el equipo de dibujo la lea):',
       '```',
@@ -218,12 +259,15 @@ export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'b
       '```',
     ].join('\n')
 
+/** «de 8 a 15 s» · la duración que admite la plantilla (dato) */
+const duracionDe = (v?: ParametrosDelVideo) => { const x = v ?? VIDEO_POR_OMISION; return x.segundos_min === x.segundos_max ? `${x.segundos_min} s` : `de ${x.segundos_min} a ${x.segundos_max} s` }
+
 const REGLAS_DURAS = (c: ContextoDeTurno): string => [
   '## Las únicas tres reglas duras',
   `1. **Gasto.** La pieza tiene un tope de US$ ${c.tope_usd.toFixed(2)} (ya se gastó US$ ${c.gasto_usd.toFixed(2)}). Cuida cada turno: no repitas lo que ya está en el tablero.`,
   '2. **No inventes datos que comprometan al cliente**: certificaciones, normas, precios, cifras, teléfonos, usuarios, marcas ajenas ni nada que no esté en el manual, el brief, el plan, las fotos o el material del portero. Si te falta un dato, dilo o pídelo; no lo rellenes. Una imagen generada tampoco debe mostrar textos, sellos, normas ni lecturas de instrumentos inventados.',
   c.tipo === 'video'
-    ? '3. **El guion debe poder filmarse por un modelo de video**: planos con sus segundos (8 a 15 s en total), qué se ve en cada uno, el movimiento de cámara y la foto propia de referencia si la hay. Sin voces ni narración (solo música o ambiente), sin rostros reconocibles de personas reales, sin texto en pantalla que no esté escrito literalmente en el guion. Lo demás es tu criterio.'
+    ? `3. **El guion debe poder filmarse por un modelo de video**: planos con sus segundos (${duracionDe(c.video)} en total), qué se ve en cada uno, el movimiento de cámara y la foto propia de referencia si la hay. Sin voces ni narración (solo música o ambiente), sin la cara de una persona real identificable sin permiso, sin texto en pantalla que no esté escrito literalmente en el guion. Lo demás es tu criterio.`
     : '3. **La pieza debe poder dibujarse**: cada lámina es un título, un texto corto, un llamado (si lo lleva) y una imagen. Lo demás es tu criterio; sin límites de caracteres: si algo es largo, el dibujo se ajusta o el equipo lo parte.',
 ].join('\n')
 
@@ -278,7 +322,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
         : c.tipo === 'concepto'
         ? ['PRIMERO lee el brief de la campaña con estos 6 criterios: (1) un solo mensaje, (2) insight real, (3) objetivo claro, (4) está planteado como problema y no como solución, (5) es fiel al plan y al manual, (6) se puede crear con lo que trajo el portero. Si alguno falla, **devuelve el brief UNA vez**: escribe una sección `## Devolución del brief` con los puntos que fallan y nada más (la mesa se cierra y la cadena pide un brief nuevo). Si el brief sirve, sigue: del brief y el manual, escribe **EL PROBLEMA en una frase**, y reparte lo que necesitas de cada compañero. Cada uno propondrá 2 o 3 caminos distintos con su porqué, pensados para 90 días.']
         : c.tipo === 'video'
-        ? ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora** del video corto: qué vas a contar en 8–15 segundos, con qué estructura de planos, qué fotos propias sirven de referencia y qué necesitas de cada compañero (guion y pedido al generador, storyboard, el gancho final y su puerta de retención (el coach, única voz), texto del pie, coherencia de Instagram o formato nativo de TikTok/Reels si están en la mesa).', REGLA_DEL_GANCHO + ' Tú no propones el gancho: lo pides y lo integras en la pieza.']
+        ? [`Lee el manual, luego el brief y el plan. Escribe tu **idea rectora** del video corto${(c.video?.propuestas ?? 1) > 1 ? ` y los ${c.video!.propuestas} caminos DISTINTOS que vas a proponer al dueño (cada uno con su concepto, duración, red y objetivo)` : ''}: qué vas a contar y en cuántos segundos (los propones tú según el plan, la red y el objetivo: ${duracionDe(c.video)}), con qué estructura de planos y qué rol cumple cada uno, qué fotos propias sirven de referencia y qué necesitas de cada compañero (guion y pedido al generador, storyboard, el gancho final y su puerta de retención (el coach, única voz), texto del pie, coherencia de Instagram o formato nativo de TikTok/Reels si están en la mesa).`, REGLA_DEL_GANCHO + ' Tú no propones el gancho: lo pides y lo integras en la pieza.']
         : ['Lee el manual, luego el brief y el plan. Abre con **`Objetivo de la pieza:`** qué tiene que lograr esta pieza, en una frase, y su llamado (parte del OBJETIVO y del concepto que trae el brief; si el brief no lo dice, decláralo tú y dilo). Luego escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué escena muestra cada lámina o elemento (no copies los planos del brief: el «visual de la campaña» es referencia), qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.']),
       'El equipo completo participa en cada pieza: la oficina se formó con estos especialistas por razones concretas. Cada uno aportará su especialidad; no escribas tú todo. Si ya sabes que te falta material del cliente, pídelo con `pedir_material`.',
     ].join('\n'),
@@ -306,13 +350,13 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
       'Integra lo que aportó el equipo. Decide con criterio: puedes usar, ajustar o descartar cada aporte, pero **cita cuáles usaste y cuáles descartaste, con el motivo**, en la sección “Citas” (referencias A<n>). Cada especialidad del equipo debe aparecer citada.',
       ...(soloEleccion
         ? ['Elige UNA gran idea paraguas entre los caminos del equipo (puedes combinar). Escribe `## Gran idea` (<nombre> · <frase paraguas de 90 días>), por qué la elegiste, y **`## Caminos descartados y por qué`**. Cita lo que usaste y descartaste en `## Citas` (A<n>). Todavía no desarrolles capítulos ni banco: eso es la ronda 2.']
-        : [...(c.tipo === 'video' ? [REGLA_DEL_GANCHO] : []), CONVENCION_DE_LA_PIEZA(c.tipo)]),
+        : [...(c.tipo === 'video' ? [REGLA_DEL_GANCHO] : []), CONVENCION_DE_LA_PIEZA(c.tipo, c.video)]),
       ...(o.extra ? ['', o.extra] : []),
     ].join('\n'),
     devolver_citas: [
       '## Tu turno · DIRECCIÓN CREATIVA: completa las citas',
       `Tu integración anterior no citó a: ${o.faltanCitas ?? '(ver abajo)'}. Entrega la pieza completa otra vez (la misma convención) y, en “Citas”, di qué usaste y qué descartaste —con motivo— de cada aporte del tablero.`,
-      CONVENCION_DE_LA_PIEZA(c.tipo),
+      CONVENCION_DE_LA_PIEZA(c.tipo, c.video),
     ].join('\n'),
     redactar_prompts: tareaDelIngeniero(o.imagenesARedactar ?? []),
   }

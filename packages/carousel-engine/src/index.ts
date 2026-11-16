@@ -11,6 +11,10 @@ export type { RenderOptions } from './render'
 
 export { sinEmojis, sinEmojisEn } from './sin-emojis'
 
+// ── Anuncio (pieza con foto compuesta con la marca · Sprint 1 Mejora 5) ──
+export { renderAnuncio, arbolDeAnuncio, tamanoDeTitular, VARIANTES_DE_ANUNCIO } from './anuncio'
+export type { PedidoDeAnuncio, DisenoDeAnuncio, TextoDeAnuncio, VarianteDeAnuncio, AnuncioDibujado } from './anuncio'
+
 // ── Templates (also importable individually for previews) ──────────────
 export { InstagramFeed } from './templates/InstagramFeed'
 export { InstagramReel } from './templates/InstagramReel'
@@ -35,3 +39,4 @@ export type {
   TemplateRenderer,
 } from './types'
 export { PLATFORM_SPECS } from './types'
+export { htmlDeAnuncio, renderAnuncioHtml, escaparHtml, imagenEmbebida, caraDeFuentes, type PaginaSinPantalla } from './anuncio-html'

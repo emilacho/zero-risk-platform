@@ -145,6 +145,8 @@ async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: Br
 function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
   const b = baseV(e)
   const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
+  // Sprint 2 · S2-1 · con propuestas, el guion es la ELEGIDA: sin aprobación todavía no hay qué filmar (una plantilla que pide propuestas necesita su paso de aprobación antes de este)
+  if ((!g || !Array.isArray(g.planos) || !g.planos.length) && e.artefactos.propuestas_video) return { res: { costo_usd: 0 }, fallido: 'hay propuestas del video sin aprobar y no hay guion elegido que pedir (la plantilla pide propuestas pero no tiene el paso de aprobación del dueño antes del pedido)' }
   if (!g || !Array.isArray(g.planos) || !g.planos.length) return { res: { costo_usd: 0 }, fallido: 'no hay guion traducido que pedir (la mesa no dejó planos)' }
   const lim = (pl.limites.video ?? {}) as { resolucion?: string }
   const clave = `${enc.id}:${enc.brief_id}:v${e.artefactos['guion']?.version ?? 1}`

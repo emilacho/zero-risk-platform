@@ -18,6 +18,8 @@ export type Esq =
 const str = (min = 1, max = 4000): Esq => ({ t: 'str', min, max })
 const regla: Esq = { t: 'obj', props: { id: str(1, 60), texto: str(1, 400), claves: { t: 'arr', de: str(1, 80), max: 12 }, cita: str(1, 600) }, req: ['id', 'texto'] }
 const necesito: Esq = { t: 'arr', max: 3, de: { t: 'obj', props: { que: str(1, 300), para_que: str(1, 300), bloquea: { t: 'bool' } }, req: ['que'] } }
+/** Sprint 1 · Mejora 5 · lo que va ESCRITO sobre la imagen (lo dibuja la sala con la marca). Opcional y holgado: lo largo se avisa al componer, no se rechaza aquí */
+const TEXTO_EN_IMAGEN: Esq = { t: 'obj', req: [], props: { etiqueta: str(0, 300), titular: str(0, 300), bajada: str(0, 300), boton: str(0, 300) } }
 const IGNORAR_TAMANO = ['tamaño', 'tamano', 'size', 'aspect_ratio', 'relacion_de_aspecto', 'ar']
 /** salas 2-3: la plataforma y el tamaño los pone la sala (una sola plataforma por encargo); y nadie le pregunta nada al cliente: `open_questions` se descarta y se anota */
 const IGNORAR_LAMINAS = [...IGNORAR_TAMANO, 'platform', 'plataforma', 'platforms_requested', 'dimensiones', 'open_questions', 'preguntas']
@@ -99,7 +101,7 @@ export const ESQUEMAS: Record<string, Esq> = {
   },
   'pieza_post.v1': {
     t: 'obj', req: ['pie_de_foto', 'hashtags'], ignorar: IGNORAR_TAMANO,
-    props: { pie_de_foto: str(1, 3000), hashtags: { t: 'arr', de: str(1, 80), max: 40 }, llamado: str(0, 300), nota_para_quien_publica: str(0, 600), necesito },
+    props: { pie_de_foto: str(1, 3000), hashtags: { t: 'arr', de: str(1, 80), max: 40 }, llamado: str(0, 300), nota_para_quien_publica: str(0, 600), texto_en_imagen: TEXTO_EN_IMAGEN, necesito },
   },
   'fichas.v1': {
     t: 'obj', req: ['fichas'],
@@ -110,7 +112,7 @@ export const ESQUEMAS: Record<string, Esq> = {
   'resolucion.v1': {
     t: 'obj', req: ['respuestas'], ignorar: IGNORAR_TAMANO,
     props: {
-      pieza: { t: 'obj', req: ['pie_de_foto', 'hashtags'], props: { pie_de_foto: str(1, 3000), hashtags: { t: 'arr', de: str(1, 80), max: 40 }, llamado: str(0, 300), nota_para_quien_publica: str(0, 600) } },
+      pieza: { t: 'obj', req: ['pie_de_foto', 'hashtags'], props: { pie_de_foto: str(1, 3000), hashtags: { t: 'arr', de: str(1, 80), max: 40 }, llamado: str(0, 300), nota_para_quien_publica: str(0, 600), texto_en_imagen: TEXTO_EN_IMAGEN } },
       respuestas: { t: 'arr', max: 12, de: { t: 'obj', req: ['id', 'estado', 'razon'], props: { id: str(1, 80), estado: { t: 'enum', v: ['tomada', 'no_tomada'] }, razon: str(1, 600) } } },
     },
   },
