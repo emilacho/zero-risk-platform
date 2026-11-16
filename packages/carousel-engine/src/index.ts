@@ -39,3 +39,4 @@ export type {
   TemplateRenderer,
 } from './types'
 export { PLATFORM_SPECS } from './types'
+export { htmlDeAnuncio, renderAnuncioHtml, escaparHtml, imagenEmbebida, caraDeFuentes, type PaginaSinPantalla } from './anuncio-html'
