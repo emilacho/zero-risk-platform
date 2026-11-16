@@ -15,7 +15,15 @@ export const CONDICION_PROMPTS = 'redacta_prompts'
 
 /** el concepto de la imagen que la fila y la dirección dejan (mejora 2 de CC1 · `ConceptoDeImagen` en `traductor.ts`): todo opcional; se lee por nombre, sin atarse al tipo */
 export type ConceptoDeLaImagen = Partial<Record<'idea' | 'que_se_ve' | 'mensaje' | 'emocion' | 'objetivo', string>>
-export interface ImagenARedactar { ref: string; descripcion: string; concepto?: ConceptoDeLaImagen }
+/** `fotos_aptas`: las fotos propias que sirven para EDITAR esta imagen (mejora 3 de CC2). Vacía = se genera desde cero. Ausente = no se sabe (se pide como antes) */
+export interface ImagenARedactar { ref: string; descripcion: string; concepto?: ConceptoDeLaImagen; fotos_aptas?: string[] }
+
+/** cómo se escribe el prompt de ESTA imagen según haya o no foto propia apta (el brazo envuelve el prompt de edición con «conserva el producto tal cual», `imagen-sobre-foto.ts`) */
+function modoDeLaImagen(i: ImagenARedactar): string {
+  if (!i.fotos_aptas) return ''
+  if (!i.fotos_aptas.length) return '\n  Se GENERA DESDE CERO (no hay foto propia apta del producto): describe la escena completa.'
+  return `\n  Se EDITA SOBRE UNA FOTO REAL del cliente (aptas: ${i.fotos_aptas.map((f) => `foto:${f}`).join(', ')}; elige una en «Referencia:» o la oficina rota entre ellas). Escribe el prompt como edición: qué se CONSERVA de la foto (el producto tal cual, sin volver a describirlo con otros detalles) y qué se CAMBIA (escena, fondo, luz, encuadre, ambiente).`
+}
 
 const ROTULOS_DEL_CONCEPTO: Array<[keyof ConceptoDeLaImagen, string]> = [['objetivo', 'objetivo'], ['idea', 'idea'], ['que_se_ve', 'qué se ve'], ['mensaje', 'mensaje'], ['emocion', 'emoción']]
 /** el concepto en una línea legible (lo que falte no se escribe) */
@@ -52,7 +60,7 @@ export const CONVENCION_DE_PROMPTS = [
 /** el turno del ingeniero: qué se le pide y sobre qué imágenes (puro: lo arma `armarTarea`) */
 export function tareaDelIngeniero(imagenes: ImagenARedactar[]): string {
   const lista = imagenes.length
-    ? imagenes.map((i) => { const c = conceptoEnTexto(i.concepto); return `- **${i.ref}** · lo que pidió la dirección: ${i.descripcion}${c ? `\n  Concepto de esta imagen: ${c}` : ''}` }).join('\n')
+    ? imagenes.map((i) => { const c = conceptoEnTexto(i.concepto); return `- **${i.ref}** · lo que pidió la dirección: ${i.descripcion}${c ? `\n  Concepto de esta imagen: ${c}` : ''}${modoDeLaImagen(i)}` }).join('\n')
     : '- (la integración no dejó imágenes a generar legibles: revisa la última integración del tablero y escribe una sección por cada «generar:»)'
   return [
     '## Tu turno · INGENIERO DE PROMPTS: la instrucción exacta para el modelo de imagen',

@@ -27,3 +27,23 @@ export function fotosDeReferencia(fotos: FotoConUrl[], candidatas: CandidataMin[
 export function fotoDeReferencia(aptas: FotoDeReferencia[], n: number): FotoDeReferencia | null {
   return aptas.length ? aptas[n % aptas.length] : null
 }
+
+/**
+ * una foto por imagen (cruce mejora 3 ↔ mejora 4): la que pidió el ingeniero de prompts para esa imagen, si es apta (puede repetirse si él la pide para dos);
+ * las demás rotan sobre las aptas que nadie pidió (si se acabaron, sobre todas), para que dos imágenes no caigan en la misma foto por accidente.
+ * Sin pedidos es exactamente la rotación de siempre. `no_aptas`: los pedidos que no se pudieron respetar (cercana, sin dirección o ya usada como foto real).
+ */
+export function fotosPorImagen(aptas: FotoDeReferencia[], pedidas: Array<string | null | undefined>): { fotos: Array<FotoDeReferencia | null>; no_aptas: Array<{ i: number; id: string }> } {
+  const no_aptas: Array<{ i: number; id: string }> = []
+  const respetadas = pedidas.map((id, i) => {
+    if (!id) return null
+    const f = aptas.find((x) => x.id === id) ?? null
+    if (!f) no_aptas.push({ i, id })
+    return f
+  })
+  const tomadas = new Set(respetadas.filter((f): f is FotoDeReferencia => !!f).map((f) => f.id))
+  const libres = aptas.filter((f) => !tomadas.has(f.id))
+  const ronda = libres.length ? libres : aptas
+  let n = 0
+  return { fotos: respetadas.map((f) => f ?? fotoDeReferencia(ronda, n++)), no_aptas }
+}
