@@ -8,7 +8,7 @@
 import { describe, expect, it, type TestContext } from 'vitest'
 import crypto from 'node:crypto'
 import { CONTRASTE_MINIMO_CON_LA_FRANJA, comoDataUri, contraste, disenoDeAnuncio, dominioDe, numeroDe, textoEnImagenDe, textoEnImagenParaChequear, textoSobre, VARIANTES } from '../composicion'
-import { arbolDeAnuncio, renderAnuncio, VARIANTES_DE_ANUNCIO, type PedidoDeAnuncio } from '../../../../packages/carousel-engine/src/anuncio'
+import { arbolDeAnuncio, renderAnuncio, tamanoDeTitular, VARIANTES_DE_ANUNCIO, type PedidoDeAnuncio } from '../../../../packages/carousel-engine/src/anuncio'
 import type { FontEntry } from '../../../../packages/carousel-engine/src'
 import type { MarcaParaRender } from '../puertos'
 import { avanzar, abrirEncargo } from '../orquestador'
@@ -236,3 +236,52 @@ describe('la entrega compone la foto con la marca', () => {
   })
 })
 void avanzar
+
+// ───────────────────────── ADENDA · los 7 sabotajes que sobrevivieron a CC7 (#16 #17 #18 #26 #28 #31 #32)
+describe('ADENDA CC7 · lo que faltaba probar', () => {
+  it('#31 #32 · el `componer` de los adaptadores reales existe y dibuja un PNG del tamaño pedido (se salta si el CDN de tipografías no responde)', async (ctx) => {
+    let cdn = false
+    try { cdn = (await fetch('https://cdn.jsdelivr.net/fontsource/fonts/inter@5.3.0/latin-400-normal.ttf')).ok } catch { cdn = false }
+    const { crearPuertos } = await import('../adaptadores')
+    const { DbFalsa } = await import('./dbfalsa')
+    const P = crearPuertos(new DbFalsa(), { baseUrl: 'https://app.test', internalKey: 'k' }, (async () => new Response('', { status: 404 })) as typeof fetch)
+    expect(typeof P.componer).toBe('function')
+    if (!cdn) { console.warn('[composicion] CDN de tipografías sin respuesta: dibujo real omitido'); ctx.skip() }
+    const r = await P.componer!(pedido({ ancho: 1080, alto: 1350, diseno: { ...disenoDeAnuncio({ ...MARCA, fonts: { family: 'Inter' } }, 'x'), variante: 'abajo_izquierda' } }))
+    expect(r.ok).toBe(true)
+    if (r.ok) { expect(r.png.subarray(1, 4).toString('ascii')).toBe('PNG'); expect(r.png.readUInt32BE(16)).toBe(1080); expect(r.png.readUInt32BE(20)).toBe(1350) }
+  }, 60000)
+  it('#17 · sin identidad visual, la ficha de aviso LLEGA (no solo el motivo)', async () => {
+    const M = crearMemoria({ fuentes: { marca: null } }); M.P.componer = async () => ({ ok: true, png: PNG_COMPUESTO, fonts_faltantes: [] })
+    const { fichas } = await correrEntrega(M)
+    expect(fichas.some((f) => f.donde === 'imagen' && f.gravedad === 'sugerencia' && (f.que ?? '').includes('no tiene identidad visual'))).toBe(true)
+  })
+  it('#18 · un logo que no se puede leer: va el nombre y la ficha lo dice', async () => {
+    const M = crearMemoria({ fuentes: { marca: { colors: { primary: '#112233' }, fonts: { family: 'Inter' }, logo_url: 'https://logo.test/roto.png', brand_handle: '@x' } } })
+    const desc = M.P.descargar; M.P.descargar = async (u) => (u.includes('logo.test') ? Buffer.from('<html>no es una imagen</html>') : desc(u))
+    let p: PedidoDeAnuncio | null = null
+    M.P.componer = async (x) => { p = x; return { ok: true, png: PNG_COMPUESTO, fonts_faltantes: [] } }
+    const { fichas, ent } = await correrEntrega(M)
+    expect(p!.logo).toBeNull(); expect(p!.firma).toBe('@x'); expect(ent.composicion.con_logo).toBe(false)
+    expect(fichas.some((f) => f.donde === 'imagen' && (f.que ?? '').includes('no se pudo leer el logo'))).toBe(true)
+  })
+  it('#16 · el texto de la imagen no cuenta contra el tope del pie: un pie justo en el tope + titular no da «pie demasiado largo»; uno pasado sí', async () => {
+    const tope = Number((await import('../plantillas/post-img')).POST_IMG.limites.pie_de_foto_max)
+    const con = (pie: string) => JSON.stringify({ pie_de_foto: pie, hashtags: ['#ceviche'], texto_en_imagen: { titular: 'El oro que nunca buscaste', boton: 'Pide en naufrago.ec' } })
+    const largo = (fs: Array<{ que?: string }>) => fs.some((f) => (f.que ?? '').includes('caracteres, más que el límite'))
+    const justo = crearMemoria(); justo.P.componer = async () => ({ ok: true, png: PNG_COMPUESTO, fonts_faltantes: [] })
+    expect(largo((await correrEntrega(justo, con('a'.repeat(tope)))).fichas)).toBe(false)
+    const pasado = crearMemoria(); pasado.P.componer = justo.P.componer
+    expect(largo((await correrEntrega(pasado, con('a'.repeat(tope + 1)))).fichas)).toBe(true)
+  })
+  it('#26 · el titular largo se achica (y nunca baja del mínimo legible)', () => {
+    const util = 1080 - 2 * Math.round(1080 * 0.065)
+    expect(tamanoDeTitular('x'.repeat(70), util)).toBeLessThan(tamanoDeTitular('x'.repeat(15), util))
+    expect(tamanoDeTitular('x'.repeat(500), util)).toBe(Math.round(util * 0.055))
+  })
+  it('#28 · la franja lleva el color de la marca (fondo y bloque), no uno fijo', () => {
+    const d = { ...disenoDeAnuncio(MARCA, 'x'), variante: 'franja' as const, franja: { fondo: '#123456', texto: '#ffffff' } }
+    const t = JSON.stringify(arbolDeAnuncio(pedido({ diseno: d })))
+    expect(t.split('"backgroundColor":"#123456"').length - 1).toBeGreaterThanOrEqual(2)
+  })
+})
