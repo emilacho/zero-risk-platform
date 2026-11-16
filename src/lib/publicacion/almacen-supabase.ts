@@ -1,8 +1,11 @@
 /**
- * Los puertos de «publicar lo aprobado» sobre Supabase (CC#2 · 19-oct). Solo toca `hitl_queue` (la bandeja): lee el elemento, lo crea y deja el ensayo en su `metadata`.
- * No toca `social_schedules` ni `social_posts` (la base solo admite ciertos estados ahí y nada publica de esas colas), ni llama a Meta.
+ * Los puertos de «publicar lo aprobado» sobre Supabase (CC#2 · 19-oct · CC3 16-nov). Toca `hitl_queue` (la bandeja: lee el elemento, lo crea y deja el ensayo
+ * o el resultado real en su `metadata`), lee la ficha del cliente (`clients.config.redes_oficiales`) y deja una fila en `agent_invocations` por cada publicación real.
+ * No toca `social_schedules` ni `social_posts`. La llamada a Meta vive en `meta-real.ts`.
  */
-import { TIPO_LOTE_SOCIAL, type ElementoDeBandeja, type PuertosDePublicacion, type ResultadoDeEnsayo } from './en-ensayo'
+import { leerCuentasMeta } from '@/lib/clients/cuentas-meta'
+import { TIPO_LOTE_SOCIAL, type ElementoDeBandeja, type PuertosDePublicacion, type ResultadoDeEnsayo, type ResultadoReal } from './en-ensayo'
+import { publicarPiezaEnMeta } from './meta-real'
 
 export type Db = { from(tabla: string): any }
 type Fila = Record<string, unknown>
@@ -39,6 +42,41 @@ export function puertosDePublicacion(db: Db, env: Record<string, string | undefi
       if (r.error) throw new Error('no pude leer la bandeja: ' + r.error.message)
       const f = Array.isArray(r.data) ? (r.data[0] as Fila | undefined) : undefined
       return f ? { id: String(f.id) } : null
+    },
+    async leerCuentas(client_id) {
+      const l = await leerCuentasMeta(db, client_id)
+      if (!l.ok && l.motivo === 'no_se_pudo_leer_la_ficha') throw new Error('no pude leer la ficha del cliente: ' + (l.detalle ?? ''))
+      return l.ok ? l.cuentas : { pagina_facebook: null, instagram_id: null, publicacion_real: false }
+    },
+    async reclamarReal(id, marca) {
+      // UNA sola vez: solo si no hay publicacion_real, o lo anterior falló sin publicar nada. La condición va en el propio UPDATE (dos llamadas a la vez: solo una gana)
+      const previa = await db.from('hitl_queue').select('metadata').eq('id', id).maybeSingle()
+      if (previa.error) throw new Error('no pude leer la bandeja: ' + previa.error.message)
+      const md = comoObjeto(previa.data?.metadata) ?? {}
+      const r = await db.from('hitl_queue').update({ metadata: { ...md, publicacion_real: marca } }).eq('id', id)
+        .or('metadata->publicacion_real.is.null,metadata->publicacion_real->>estado.eq.fallida').select('id')
+      if (r.error) throw new Error('no pude reclamar la publicación: ' + r.error.message)
+      return Array.isArray(r.data) && r.data.length === 1
+    },
+    async guardarReal(id, real: ResultadoReal) {
+      const previa = await db.from('hitl_queue').select('metadata').eq('id', id).maybeSingle()
+      if (previa.error) throw new Error('no pude leer la bandeja: ' + previa.error.message)
+      const r = await db.from('hitl_queue').update({ metadata: { ...(comoObjeto(previa.data?.metadata) ?? {}), publicacion_real: real } }).eq('id', id)
+      if (r.error) throw new Error('no pude guardar la publicación: ' + r.error.message)
+    },
+    publicarEnMeta: (p, cuentas) => publicarPiezaEnMeta(p, cuentas, env),
+    async registrarPublicacion(f) {
+      const fin = new Date()
+      const r = await db.from('agent_invocations').insert({
+        session_id: `publicar-aprobado-${f.hitl_id}-${f.resultado.canal}`,
+        agent_id: 'social-publisher', agent_name: 'social-publisher', command: null,
+        task_id: f.task_id, workflow_id: `bandeja:${f.hitl_id}`, workflow_execution_id: null, client_id: f.client_id, journey_id: null,
+        model: 'meta-graph-v21', started_at: new Date(fin.getTime() - f.duracion_ms).toISOString(), ended_at: fin.toISOString(), duration_ms: f.duracion_ms,
+        cost_usd: 0, tokens_input: 0, tokens_output: 0, tokens_cache_read: 0, tokens_cache_creation: 0, num_turns: 1,
+        status: f.resultado.ok ? 'completed' : 'failed', exit_code: f.resultado.ok ? 0 : 1, error_message: f.resultado.ok ? null : `${f.resultado.paso}: ${f.resultado.error}`,
+        metadata: { source: 'publicar_aprobado', hitl_id: f.hitl_id, platform: f.resultado.canal, ...(f.resultado.ok ? { post_id: f.resultado.id, ...(f.resultado.creation_id ? { creation_id: f.resultado.creation_id } : {}) } : { paso: f.resultado.paso }) },
+      })
+      if (r.error) throw new Error('no pude registrar la publicación: ' + r.error.message)
     },
     async crearElemento(e) {
       const r = await db.from('hitl_queue').insert({

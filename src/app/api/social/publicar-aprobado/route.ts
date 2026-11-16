@@ -1,12 +1,15 @@
 /**
  * POST /api/social/publicar-aprobado
  *
- * Arma la publicación de un lote que la bandeja APROBÓ, SOLO EN ENSAYO: la solicitud exacta que se mandaría a Meta (sin la llave), qué configuración hay y qué falta.
- * No llama a Meta. Publicar de verdad no está construido: `real: true` responde 409 `real_no_habilitado`.
- * Idempotente: si el ensayo ya está guardado en el elemento de la bandeja, lo devuelve sin rehacerlo.
+ * Publica un elemento que la bandeja APROBÓ (lote de publicación o pieza de la oficina).
+ *  · por defecto, o con `real: false`: ENSAYO · arma la solicitud exacta que se mandaría a Meta (sin la llave) con las cuentas de la ficha del cliente y la guarda.
+ *  · `real: true` (el booleano): publica DE VERDAD en las cuentas de la ficha, solo si la ficha tiene `redes_oficiales.publicacion_real: true`; una sola vez.
+ *    Solo orgánico: nada de pauta ni promoción.
+ * Idempotente: lo ya guardado (ensayo o publicación) se devuelve sin rehacerlo.
  *
- * Auth · `x-api-key: INTERNAL_API_KEY`.   Body · { hitl_id: uuid, real?: false }
- * 200 · { ok, ensayo, ya_estaba }   404 · no_existe   409 · no_aprobado | tipo_no_publicable | lote_ausente | cliente_distinto | real_no_habilitado
+ * Auth · `x-api-key: INTERNAL_API_KEY`.   Body · { hitl_id: uuid, real?: boolean }
+ * 200 · { ok, ensayo | real, ya_estaba }   404 · no_existe
+ * 409 · no_aprobado | tipo_no_publicable | lote_ausente | cliente_distinto | real_invalido | publicacion_real_apagada | no_publicable | entrega_caducada | programada_no_soportada
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
@@ -16,6 +19,7 @@ import { puertosDePublicacion } from '@/lib/publicacion/almacen-supabase'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)

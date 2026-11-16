@@ -1,27 +1,42 @@
 /**
  * PUBLICAR LO APROBADO · SOLO EN ENSAYO (arreglo 5 de la cadena · CC#2 · 19-oct). US$ 0, base simulada, SIN red.
  *  · `encolarLote` deja el lote en la bandeja una sola vez por tarea; `publicarAprobado` solo trabaja sobre lo APROBADO y nunca llama a Meta;
- *  · publicar de verdad se rechaza (`real_no_habilitado`) antes de mirar nada;
+ *  · publicar de verdad (16-nov) solo con la ficha encendida (`redes_oficiales.publicacion_real: true`), una vez, en las cuentas de la ficha (ver «DE VERDAD»);
  *  · el enganche en `PATCH /api/hitl/[id]` solo actúa con el tipo del lote y una aprobación; los demás tipos quedan como estaban.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  armarSolicitud, configuracionDeMeta, contenidoDeLaSalida, encolarLote, loteDeLaPiezaDeOficina, MAX_CAPTION_INSTAGRAM, MAX_PIEZAS_POR_LOTE, publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA, validarLote,
-  type ElementoDeBandeja, type PuertosDePublicacion, type ResultadoDeEnsayo, type SalidaDeOficina,
+  armarSolicitud, configuracionDeCliente, contenidoDeLaSalida, encolarLote, loteDeLaPiezaDeOficina, MAX_CAPTION_INSTAGRAM, MAX_PIEZAS_POR_LOTE, publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA, validarLote,
+  type ElementoDeBandeja, type PuertosDePublicacion, type ResultadoDeEnsayo, type ResultadoReal, type SalidaDeOficina, SIN_IG, SIN_PAGINA,
 } from '../src/lib/publicacion/en-ensayo'
+import type { CuentasMeta } from '../src/lib/clients/cuentas-meta'
+import type { ResultadoDePieza } from '../src/lib/publicacion/meta-real'
 import { puertosDePublicacion } from '../src/lib/publicacion/almacen-supabase'
 
 const CLI = '41dd3d62-d6de-4c9a-9996-6df78c1da118'
 const OTRO = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
-const ENV_COMPLETO = { META_IG_BUSINESS_ACCOUNT_ID: '123', META_IG_ACCESS_TOKEN: 'SECRETO-IG', META_FB_PAGE_ID: '456', META_FB_PAGE_ACCESS_TOKEN: 'SECRETO-FB' }
+// 16-nov · las cuentas salen de la FICHA del cliente; del entorno solo el token. Las variables globales viejas apuntan a OTRA cuenta: nada debe usarlas.
+const ENV_COMPLETO = { META_ACCESS_TOKEN: 'SECRETO-SIS', META_IG_BUSINESS_ACCOUNT_ID: '999999', META_FB_PAGE_ID: '888888', META_IG_ACCESS_TOKEN: 'SECRETO-IG', META_FB_PAGE_ACCESS_TOKEN: 'SECRETO-FB' }
+const IG = '17841464538946870'
+const PAG = '1525854397268597'
+const CUENTAS: CuentasMeta = { pagina_facebook: PAG, instagram_id: IG, publicacion_real: false }
+const ENCENDIDA: CuentasMeta = { ...CUENTAS, publicacion_real: true }
 const PIEZA_IG = { canal: 'instagram', image_url: 'https://cdn.ejemplo.com/a.jpg', caption: 'Hola' }
 const PIEZA_FB = { canal: 'facebook', message: 'Hola Facebook' }
 const LOTE = { task_id: 'social_1', client_id: CLI, piezas: [PIEZA_IG, PIEZA_FB] }
 
 // ───────────────────────────────────────────────────────── puertos en memoria
-interface Mundo { elementos: Map<string, ElementoDeBandeja>; salidas: Map<string, SalidaDeOficina>; creados: number; guardados: Array<{ id: string; ensayo: ResultadoDeEnsayo }>; lecturas: number }
-function puertos(env: Record<string, string | undefined> = {}): { P: PuertosDePublicacion; m: Mundo } {
-  const m: Mundo = { elementos: new Map(), salidas: new Map(), creados: 0, guardados: [], lecturas: 0 }
+interface Mundo {
+  elementos: Map<string, ElementoDeBandeja>; salidas: Map<string, SalidaDeOficina>; creados: number; guardados: Array<{ id: string; ensayo: ResultadoDeEnsayo }>; lecturas: number
+  cuentas: CuentasMeta | null; fichasLeidas: string[]; reclamos: number; reclamoGana: boolean; reales: Array<{ id: string; real: ResultadoReal }>
+  enviadas: Array<{ canal: string; rutas: string[]; cuentas: CuentasMeta }>; respuesta: (canal: string, n: number) => ResultadoDePieza; historial: Array<Record<string, unknown>>; historialFalla: boolean
+}
+function puertos(env: Record<string, string | undefined> = {}, cuentas: CuentasMeta | null = null): { P: PuertosDePublicacion; m: Mundo } {
+  const m: Mundo = {
+    elementos: new Map(), salidas: new Map(), creados: 0, guardados: [], lecturas: 0,
+    cuentas, fichasLeidas: [], reclamos: 0, reclamoGana: true, reales: [], enviadas: [], historial: [], historialFalla: false,
+    respuesta: (canal, n) => ({ canal, ok: true, id: `${canal}-post-${n}`, ...(canal === 'instagram' ? { creation_id: `c-${n}` } : {}) }),
+  }
   const P: PuertosDePublicacion = {
     env, ahora: () => new Date('2026-10-19T20:00:00Z'),
     async leerElemento(id) { m.lecturas++; return m.elementos.get(id) ?? null },
@@ -29,11 +44,25 @@ function puertos(env: Record<string, string | undefined> = {}): { P: PuertosDePu
     async guardarEnsayo(id, ensayo) { m.guardados.push({ id, ensayo }); const e = m.elementos.get(id); if (e) e.metadata = { ...(e.metadata ?? {}), publicacion_ensayo: ensayo } },
     async buscarLote(task_id, client_id) { const e = [...m.elementos.values()].find((x) => x.type === TIPO_LOTE_SOCIAL && x.client_id === client_id && x.metadata?.task_id === task_id); return e ? { id: e.id } : null },
     async crearElemento(e) { m.creados++; const id = 'el-' + m.creados; m.elementos.set(id, { id, type: TIPO_LOTE_SOCIAL, status: 'pending', client_id: e.client_id, metadata: e.metadata }); return { id } },
+    async leerCuentas(client_id) { m.fichasLeidas.push(client_id); return m.cuentas ?? { pagina_facebook: null, instagram_id: null, publicacion_real: false } },
+    async reclamarReal(id, marca) {
+      m.reclamos++
+      const e = m.elementos.get(id); const ya = e?.metadata?.publicacion_real as Record<string, unknown> | undefined
+      if (!m.reclamoGana || (ya && ya.estado !== 'fallida')) return false
+      if (e) e.metadata = { ...(e.metadata ?? {}), publicacion_real: marca }
+      return true
+    },
+    async guardarReal(id, real) { m.reales.push({ id, real }); const e = m.elementos.get(id); if (e) e.metadata = { ...(e.metadata ?? {}), publicacion_real: real } },
+    async publicarEnMeta(p, c) { m.enviadas.push({ canal: p.canal, rutas: p.solicitudes.map((s) => s.ruta), cuentas: c }); return m.respuesta(p.canal, m.enviadas.length) },
+    async registrarPublicacion(f) { if (m.historialFalla) throw new Error('historial caído'); m.historial.push(f as unknown as Record<string, unknown>) },
   }
   return { P, m }
 }
 const aprobado = (m: Mundo, metadata: Record<string, unknown> | null = { task_id: 'social_1', lote: LOTE }, extra: Partial<ElementoDeBandeja> = {}) =>
   m.elementos.set('a1', { id: 'a1', type: TIPO_LOTE_SOCIAL, status: 'approved', client_id: CLI, metadata, ...extra })
+
+type R = { ok: true; ya_estaba: boolean; ensayo: ResultadoDeEnsayo; real: ResultadoReal } | { ok: false; status: number; error: string; detalle?: string; errores?: string[] }
+const publicar = (P: PuertosDePublicacion, n: Parameters<typeof publicarAprobado>[1]) => publicarAprobado(P, n) as Promise<R>
 
 let fetchLlamado = 0
 beforeEach(() => { fetchLlamado = 0; vi.stubGlobal('fetch', async () => { fetchLlamado++; throw new Error('SIN RED: esta prueba no puede llamar a nadie') }) })
@@ -64,7 +93,9 @@ describe('armarSolicitud (lo que se mandaría a Meta, sin llaves)', () => {
   it('instagram: contenedor y publicar, con las rutas reales', () => {
     const a = armarSolicitud(PIEZA_IG)
     expect(a.armada).toBe(true)
-    expect(a.solicitudes.map((s) => s.ruta)).toEqual(['/{META_IG_BUSINESS_ACCOUNT_ID}/media', '/{META_IG_BUSINESS_ACCOUNT_ID}/media_publish'])
+    expect(a.solicitudes.map((s) => s.ruta)).toEqual([`/${SIN_IG}/media`, `/${SIN_IG}/media_publish`])
+    // con la ficha, las rutas llevan la cuenta del cliente (nunca la variable global)
+    expect(armarSolicitud(PIEZA_IG, CUENTAS).solicitudes.map((s) => s.ruta)).toEqual([`/${IG}/media`, `/${IG}/media_publish`])
     expect(a.solicitudes[0].cuerpo).toEqual({ image_url: PIEZA_IG.image_url, caption: 'Hola' })
   })
   it('instagram: sin imagen, o con dirección no https, no se arma', () => {
@@ -79,8 +110,9 @@ describe('armarSolicitud (lo que se mandaría a Meta, sin llaves)', () => {
     expect(larga.armada).toBe(false); expect(larga.solicitudes).toEqual([])
   })
   it('facebook: solo texto va a /feed (con enlace si lo hay); con imagen va a /photos', () => {
-    expect(armarSolicitud({ canal: 'facebook', message: 'Hola', link_url: 'https://ejemplo.com' }).solicitudes[0]).toEqual({ paso: 'publicar', metodo: 'POST', ruta: '/{META_FB_PAGE_ID}/feed', cuerpo: { message: 'Hola', link: 'https://ejemplo.com' } })
-    expect(armarSolicitud({ canal: 'facebook', message: 'Hola', image_url: 'https://c.com/a.jpg' }).solicitudes[0]).toEqual({ paso: 'publicar', metodo: 'POST', ruta: '/{META_FB_PAGE_ID}/photos', cuerpo: { url: 'https://c.com/a.jpg', caption: 'Hola' } })
+    expect(armarSolicitud({ canal: 'facebook', message: 'Hola', link_url: 'https://ejemplo.com' }).solicitudes[0]).toEqual({ paso: 'publicar', metodo: 'POST', ruta: `/${SIN_PAGINA}/feed`, cuerpo: { message: 'Hola', link: 'https://ejemplo.com' } })
+    expect(armarSolicitud({ canal: 'facebook', message: 'Hola', image_url: 'https://c.com/a.jpg' }).solicitudes[0]).toEqual({ paso: 'publicar', metodo: 'POST', ruta: `/${SIN_PAGINA}/photos`, cuerpo: { url: 'https://c.com/a.jpg', caption: 'Hola' } })
+    expect(armarSolicitud({ canal: 'facebook', message: 'Hola' }, CUENTAS).solicitudes[0].ruta).toBe(`/${PAG}/feed`)
     expect(armarSolicitud({ canal: 'facebook', caption: 'solo caption' }).solicitudes[0].cuerpo).toEqual({ message: 'solo caption' })
   })
   it('facebook: sin texto ni imagen no se arma; un enlace no https tampoco', () => {
@@ -93,13 +125,15 @@ describe('armarSolicitud (lo que se mandaría a Meta, sin llaves)', () => {
   })
 })
 
-describe('configuracionDeMeta', () => {
-  it('dice qué falta, acepta el token general y NUNCA devuelve valores', () => {
-    expect(configuracionDeMeta({}).instagram.faltan).toEqual(['META_IG_BUSINESS_ACCOUNT_ID', '(META_IG_ACCESS_TOKEN | META_ACCESS_TOKEN)'])
-    const c = configuracionDeMeta({ META_IG_BUSINESS_ACCOUNT_ID: '1', META_ACCESS_TOKEN: 'SECRETO', META_FB_PAGE_ID: '2' })
+describe('configuracionDeCliente (la cuenta de la ficha + el token del entorno)', () => {
+  it('dice qué falta, mira la ficha y no las variables globales viejas, y NUNCA devuelve valores', () => {
+    const sin = configuracionDeCliente(null, { META_IG_BUSINESS_ACCOUNT_ID: '1', META_FB_PAGE_ID: '2', META_ACCESS_TOKEN: 'SECRETO' })
+    expect(sin.instagram).toEqual({ configurada: false, faltan: ['redes_oficiales.meta.instagram_id (ficha del cliente)'] })
+    expect(sin.facebook).toEqual({ configurada: false, faltan: ['redes_oficiales.meta.pagina_facebook (ficha del cliente)'] })
+    const c = configuracionDeCliente(CUENTAS, { META_ACCESS_TOKEN: 'SECRETO' })
     expect(c.instagram.configurada).toBe(true); expect(c.facebook.configurada).toBe(true)
     expect(JSON.stringify(c)).not.toContain('SECRETO')
-    expect(configuracionDeMeta({ META_IG_BUSINESS_ACCOUNT_ID: '  ', META_ACCESS_TOKEN: 'x' }).instagram.configurada).toBe(false)
+    expect(configuracionDeCliente(CUENTAS, { META_ACCESS_TOKEN: '  ', META_IG_ACCESS_TOKEN: 'x', META_FB_PAGE_ACCESS_TOKEN: 'y' }).instagram.faltan).toEqual(['META_ACCESS_TOKEN'])
   })
 })
 
@@ -128,53 +162,60 @@ describe('encolarLote', () => {
 })
 
 describe('publicarAprobado', () => {
-  it('`real: true` se rechaza ANTES de leer nada (publicar de verdad no está construido)', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); aprobado(m)
-    for (const real of [true, 'true', 1, {}]) { const r = await publicarAprobado(P, { hitl_id: 'a1', real }); expect(r.ok).toBe(false); if (!r.ok) { expect(r.status).toBe(409); expect(r.error).toBe('real_no_habilitado') } }
-    expect(m.lecturas).toBe(0); expect(m.guardados).toEqual([]); expect(fetchLlamado).toBe(0)
+  it('un `real` que no es el booleano se rechaza ANTES de leer nada', async () => {
+    const { P, m } = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(m)
+    for (const real of ['true', 1, {}, null]) { const r = await publicar(P, { hitl_id: 'a1', real }); expect(r.ok).toBe(false); if (!r.ok) { expect(r.status).toBe(409); expect(r.error).toBe('real_invalido') } }
+    expect(m.lecturas).toBe(0); expect(m.guardados).toEqual([]); expect(m.enviadas).toEqual([]); expect(fetchLlamado).toBe(0)
+  })
+  it('`real: true` con la publicación real APAGADA en la ficha se niega sin reclamar ni publicar', async () => {
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); aprobado(m)
+    const r = await publicar(P, { hitl_id: 'a1', real: true }); expect(!r.ok && r.error).toBe('publicacion_real_apagada')
+    expect(m.reclamos).toBe(0); expect(m.enviadas).toEqual([]); expect(m.guardados).toEqual([]); expect(m.reales).toEqual([])
   })
   it('no existe, otro tipo y no aprobado se rechazan con su razón', async () => {
-    const { P, m } = puertos(ENV_COMPLETO)
-    const no = await publicarAprobado(P, { hitl_id: 'zzz' }); expect(!no.ok && no.status).toBe(404)
-    aprobado(m, undefined, { type: 'content_review' }); const otro = await publicarAprobado(P, { hitl_id: 'a1' }); expect(!otro.ok && otro.error).toBe('tipo_no_publicable')
-    for (const status of ['pending', 'rejected', 'edited', 'in_review']) { aprobado(m, undefined, { status }); const r = await publicarAprobado(P, { hitl_id: 'a1' }); expect(!r.ok && r.error).toBe('no_aprobado') }
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS)
+    const no = await publicar(P, { hitl_id: 'zzz' }); expect(!no.ok && no.status).toBe(404)
+    aprobado(m, undefined, { type: 'content_review' }); const otro = await publicar(P, { hitl_id: 'a1' }); expect(!otro.ok && otro.error).toBe('tipo_no_publicable')
+    for (const status of ['pending', 'rejected', 'edited', 'in_review']) { aprobado(m, undefined, { status }); const r = await publicar(P, { hitl_id: 'a1' }); expect(!r.ok && r.error).toBe('no_aprobado') }
     expect(m.guardados).toEqual([]); expect(fetchLlamado).toBe(0)
   })
   it('aprobado sin lote válido, o de otro cliente, no se arma', async () => {
-    const { P, m } = puertos(ENV_COMPLETO)
-    aprobado(m, { task_id: 'x' }); const sin = await publicarAprobado(P, { hitl_id: 'a1' }); expect(!sin.ok && sin.error).toBe('lote_ausente')
-    aprobado(m, { task_id: 'social_1', lote: LOTE }, { client_id: OTRO }); const otro = await publicarAprobado(P, { hitl_id: 'a1' }); expect(!otro.ok && otro.error).toBe('cliente_distinto')
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS)
+    aprobado(m, { task_id: 'x' }); const sin = await publicar(P, { hitl_id: 'a1' }); expect(!sin.ok && sin.error).toBe('lote_ausente')
+    aprobado(m, { task_id: 'social_1', lote: LOTE }, { client_id: OTRO }); const otro = await publicar(P, { hitl_id: 'a1' }); expect(!otro.ok && otro.error).toBe('cliente_distinto')
     expect(m.guardados).toEqual([])
   })
   it('aprobado y con configuración: arma el ensayo, lo guarda y NO llama a Meta', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); aprobado(m)
-    const r = await publicarAprobado(P, { hitl_id: 'a1' })
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); aprobado(m)
+    const r = await publicar(P, { hitl_id: 'a1' })
     expect(r.ok).toBe(true)
     if (r.ok) {
       expect(r.ya_estaba).toBe(false)
       expect(r.ensayo).toMatchObject({ modo: 'ensayo', real: false, publicable: true, task_id: 'social_1', client_id: CLI, hora: '2026-10-19T20:00:00.000Z' })
       expect(r.ensayo.piezas.map((p) => p.armada)).toEqual([true, true])
-      expect(r.ensayo.advertencias[0]).toContain('sin_cuenta_por_cliente')
+      expect(r.ensayo.advertencias).toEqual([])
+      expect(r.ensayo.piezas[0].solicitudes[0].ruta).toBe(`/${IG}/media`)
+      expect(JSON.stringify(r.ensayo)).not.toContain('999999'); expect(JSON.stringify(r.ensayo)).not.toContain('888888')
     }
     expect(m.guardados).toHaveLength(1); expect(fetchLlamado).toBe(0)
     expect(JSON.stringify(m.guardados[0].ensayo)).not.toContain('SECRETO')
   })
   it('sin configuración de Meta queda armado pero NO publicable, y lo dice', async () => {
     const { P, m } = puertos({}); aprobado(m)
-    const r = await publicarAprobado(P, { hitl_id: 'a1' })
+    const r = await publicar(P, { hitl_id: 'a1' })
     expect(r.ok && r.ensayo.publicable).toBe(false)
     if (r.ok) expect(r.ensayo.advertencias.join(' ')).toContain('falta configuración de Meta para: instagram, facebook')
   })
   it('una sola pieza mala hace el lote no publicable; una red sin publicador también', async () => {
-    const { P, m } = puertos(ENV_COMPLETO)
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS)
     aprobado(m, { task_id: 'social_1', lote: { ...LOTE, piezas: [PIEZA_IG, { canal: 'facebook' }] } })
-    const r = await publicarAprobado(P, { hitl_id: 'a1' }); expect(r.ok && r.ensayo.publicable).toBe(false)
+    const r = await publicar(P, { hitl_id: 'a1' }); expect(r.ok && r.ensayo.publicable).toBe(false)
     aprobado(m, { task_id: 'social_1', lote: { ...LOTE, piezas: [PIEZA_IG, { canal: 'tiktok', caption: 'x' }] } })
-    const t = await publicarAprobado(P, { hitl_id: 'a1' }); expect(t.ok && t.ensayo.publicable).toBe(false)
+    const t = await publicar(P, { hitl_id: 'a1' }); expect(t.ok && t.ensayo.publicable).toBe(false)
   })
   it('es idempotente: si el ensayo ya está guardado lo devuelve y no rehace ni vuelve a escribir', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); aprobado(m)
-    const a = await publicarAprobado(P, { hitl_id: 'a1' }); const b = await publicarAprobado(P, { hitl_id: 'a1' })
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); aprobado(m)
+    const a = await publicar(P, { hitl_id: 'a1' }); const b = await publicar(P, { hitl_id: 'a1' })
     expect(a.ok && b.ok && b.ya_estaba && b.ensayo.hora === a.ensayo.hora).toBe(true)
     expect(m.guardados).toHaveLength(1)
   })
@@ -257,22 +298,22 @@ describe('la entrega REAL de la oficina (imágenes + _texto.txt + _publicar.md +
     if (r.ok) { expect(r.lote.piezas[0]).toMatchObject({ canal: 'instagram', imagenes: 1, image_url: URL_DE(base('instagram', 'foto', 'b1', 1, 1) + '.png') }) }
   })
   it('de punta a punta con la entrega real: el ensayo queda publicable y la solicitud lleva la IMAGEN, no el manifiesto', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram', { entrega: entregaRealDeUnaImagen('instagram') })))
-    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m, salidaDe(contenidoPost('instagram', { entrega: entregaRealDeUnaImagen('instagram') })))
+    const r = await publicar(P, { hitl_id: 'p1' })
     expect(r.ok && r.ensayo.publicable).toBe(true); expect(r.ok && r.ensayo.piezas[0].errores).toEqual([])
     expect(r.ok && r.ensayo.piezas[0].solicitudes[0].cuerpo).toMatchObject({ image_url: URL_DE(base('instagram', 'foto', 'b1', 1, 1) + '.png') })
     expect(JSON.stringify(r.ok && r.ensayo.piezas)).not.toContain('manifest.json')
   })
   it('facebook real (una imagen) va a /photos', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('facebook', { entrega: entregaRealDeUnaImagen('facebook') })))
-    const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(r.ok && r.ensayo.piezas[0].solicitudes[0].ruta).toBe('/{META_FB_PAGE_ID}/photos')
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m, salidaDe(contenidoPost('facebook', { entrega: entregaRealDeUnaImagen('facebook') })))
+    const r = await publicar(P, { hitl_id: 'p1' }); expect(r.ok && r.ensayo.piezas[0].solicitudes[0].ruta).toBe(`/${PAG}/photos`)
   })
   it('un carrusel real de 6 láminas (6 imágenes + 6 textos + guía + manifiesto = 14 archivos) se rechaza por tener 6 IMÁGENES, no por tener 14 archivos', async () => {
     const e = entregaRealDeUnCarrusel(6); expect(Object.keys(e.urls)).toHaveLength(14)
     const l = loteDeLaPiezaDeOficina({ elemento: el, salida: salidaDe(contenidoPost('instagram', { entrega: e })) })
     expect(l.ok && l.lote.piezas[0].imagenes).toBe(6)
-    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram', { entrega: e })))
-    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m, salidaDe(contenidoPost('instagram', { entrega: e })))
+    const r = await publicar(P, { hitl_id: 'p1' })
     expect(r.ok && r.ensayo.piezas[0].armada).toBe(false); expect(r.ok && r.ensayo.piezas[0].errores.join()).toContain('6 archivos'); expect(r.ok && r.ensayo.piezas[0].errores.join()).not.toContain('14')
   })
   it('acepta .jpg, .jpeg, .webp y mayúsculas; una entrega sin ninguna imagen (solo texto, guía y manifiesto) se rechaza', () => {
@@ -288,33 +329,33 @@ describe('la entrega REAL de la oficina (imágenes + _texto.txt + _publicar.md +
 
 describe('publicarAprobado · una pieza de la oficina', () => {
   it('aprobada: arma el ensayo con la solicitud real a Meta, lo guarda con su origen y su salida, y NO llama a nadie', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram')))
-    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m, salidaDe(contenidoPost('instagram')))
+    const r = await publicar(P, { hitl_id: 'p1' })
     expect(r.ok).toBe(true)
     if (r.ok) {
       expect(r.ensayo).toMatchObject({ modo: 'ensayo', real: false, origen: 'pieza_de_oficina', output_id: 'o1', task_id: 'oficina:e1', client_id: CLI, publicable: true })
-      expect(r.ensayo.piezas[0].solicitudes[0]).toEqual({ paso: 'contenedor', metodo: 'POST', ruta: '/{META_IG_BUSINESS_ACCOUNT_ID}/media', cuerpo: { image_url: URL_DE(NOMBRE('instagram')), caption: 'Hola desde la oficina\n\n#ceviche #costa' } })
+      expect(r.ensayo.piezas[0].solicitudes[0]).toEqual({ paso: 'contenedor', metodo: 'POST', ruta: `/${IG}/media`, cuerpo: { image_url: URL_DE(NOMBRE('instagram')), caption: 'Hola desde la oficina\n\n#ceviche #costa' } })
     }
     expect(m.guardados).toHaveLength(1); expect(fetchLlamado).toBe(0); expect(JSON.stringify(m.guardados[0].ensayo)).not.toContain('SECRETO')
   })
   it('facebook con imagen va a /photos; una red sin publicador deja el ensayo NO publicable', async () => {
-    const a = puertos(ENV_COMPLETO); piezaAprobada(a.m, salidaDe(contenidoPost('facebook')))
-    const rf = await publicarAprobado(a.P, { hitl_id: 'p1' }); expect(rf.ok && rf.ensayo.piezas[0].solicitudes[0].ruta).toBe('/{META_FB_PAGE_ID}/photos')
-    const b = puertos(ENV_COMPLETO); piezaAprobada(b.m, salidaDe(contenidoPost('tiktok')))
-    const rt = await publicarAprobado(b.P, { hitl_id: 'p1' }); expect(rt.ok && rt.ensayo.publicable).toBe(false); expect(rt.ok && rt.ensayo.piezas[0].errores[0]).toContain('no hay publicador')
+    const a = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(a.m, salidaDe(contenidoPost('facebook')))
+    const rf = await publicar(a.P, { hitl_id: 'p1' }); expect(rf.ok && rf.ensayo.piezas[0].solicitudes[0].ruta).toBe(`/${PAG}/photos`)
+    const b = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(b.m, salidaDe(contenidoPost('tiktok')))
+    const rt = await publicar(b.P, { hitl_id: 'p1' }); expect(rt.ok && rt.ensayo.publicable).toBe(false); expect(rt.ok && rt.ensayo.piezas[0].errores[0]).toContain('no hay publicador')
   })
   it('un carrusel o kit queda armado=false con el motivo (el publicador de Meta publica una sola imagen)', async () => {
-    const { P, m } = puertos(ENV_COMPLETO)
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS)
     const urls = { [NOMBRE('instagram', 1, 2)]: URL_DE('a'), [NOMBRE('instagram', 2, 2)]: URL_DE('b') }
     piezaAprobada(m, salidaDe(contenidoPost('instagram', { entrega: { urls } })))
-    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    const r = await publicar(P, { hitl_id: 'p1' })
     expect(r.ok && r.ensayo.publicable).toBe(false); expect(r.ok && r.ensayo.piezas[0].armada).toBe(false); expect(r.ok && r.ensayo.piezas[0].errores.join()).toContain('2 archivos')
   })
   it('aprobada con desacuerdo lo dice en las advertencias', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram')), { ...META_OFICINA, con_desacuerdo: true })
-    const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(r.ok && r.ensayo.advertencias.join(' ')).toContain('aprobada_con_desacuerdo')
-    const { P: P2, m: m2 } = puertos(ENV_COMPLETO); piezaAprobada(m2, salidaDe(contenidoPost('instagram')))
-    const r2 = await publicarAprobado(P2, { hitl_id: 'p1' }); expect(r2.ok && r2.ensayo.advertencias.join(' ')).not.toContain('aprobada_con_desacuerdo')
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m, salidaDe(contenidoPost('instagram')), { ...META_OFICINA, con_desacuerdo: true })
+    const r = await publicar(P, { hitl_id: 'p1' }); expect(r.ok && r.ensayo.advertencias.join(' ')).toContain('aprobada_con_desacuerdo')
+    const { P: P2, m: m2 } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m2, salidaDe(contenidoPost('instagram')))
+    const r2 = await publicar(P2, { hitl_id: 'p1' }); expect(r2.ok && r2.ensayo.advertencias.join(' ')).not.toContain('aprobada_con_desacuerdo')
   })
   it('no aprobada, de otro origen, sin salida, de otro cliente o sin contenido: se rechaza con su razón y NO guarda nada', async () => {
     const casos: Array<[string, (m: Mundo) => void, string]> = [
@@ -326,14 +367,14 @@ describe('publicarAprobado · una pieza de la oficina', () => {
       ['salida sin contenido válido', (m) => piezaAprobada(m, { id: 'o1', client_id: CLI, content: 'nada' }), 'pieza_no_publicable'],
       ['metadata nula', (m) => piezaAprobada(m, salidaDe(contenidoPost()), null), 'pieza_ajena'],
     ]
-    for (const [, montar, error] of casos) { const { P, m } = puertos(ENV_COMPLETO); montar(m); const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(!r.ok && r.error).toBe(error); expect(m.guardados).toEqual([]) }
+    for (const [, montar, error] of casos) { const { P, m } = puertos(ENV_COMPLETO, CUENTAS); montar(m); const r = await publicar(P, { hitl_id: 'p1' }); expect(!r.ok && r.error).toBe(error); expect(m.guardados).toEqual([]) }
     expect(fetchLlamado).toBe(0)
   })
-  it('es idempotente y `real:true` se sigue rechazando para este tipo', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost('instagram')))
-    const a = await publicarAprobado(P, { hitl_id: 'p1' }); const b = await publicarAprobado(P, { hitl_id: 'p1' })
+  it('es idempotente y `real:true` con la ficha apagada se rechaza', async () => {
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m, salidaDe(contenidoPost('instagram')))
+    const a = await publicar(P, { hitl_id: 'p1' }); const b = await publicar(P, { hitl_id: 'p1' })
     expect(a.ok && b.ok && b.ya_estaba && b.ensayo.hora === a.ensayo.hora).toBe(true); expect(m.guardados).toHaveLength(1)
-    const r = await publicarAprobado(P, { hitl_id: 'p1', real: true }); expect(!r.ok && r.error).toBe('real_no_habilitado')
+    const r = await publicar(P, { hitl_id: 'p1', real: true }); expect(!r.ok && r.error).toBe('publicacion_real_apagada')
   })
 })
 
@@ -348,7 +389,7 @@ function baseFalsa() {
     const ejecutar = () => {
       registro.push({ op: q.op, datos: q.row ?? q.patch, filtros: q.filtros.map((x: any) => x.d) })
       if (q.op === 'insert') { const f = { id: 'f' + ++n, ...q.row }; filas.push(f); return { data: [f], error: null } }
-      if (q.op === 'update') { for (const f of filtrar()) Object.assign(f, q.patch); return { data: filtrar(), error: null } }
+      if (q.op === 'update') { const tocadas = filtrar(); for (const f of tocadas) Object.assign(f, q.patch); return { data: tocadas, error: null } } // como Postgres: devuelve las filas que cambió
       return { data: filtrar(), error: null }
     }
     const api: any = {
@@ -358,7 +399,8 @@ function baseFalsa() {
       // 31-oct (T3 · reserva 5a de CC3): el PATCH excluye la tarjeta de la gran idea con `or('type.is.null,type.neq.…')` (una fila con type nulo sí se decide)
       or: (expr: string) => {
         const alts = expr.split(',').map((p) => { const [k, op, ...v] = p.split('.'); return { k, op, v: v.join('.') } })
-        const fn: any = (f: any) => alts.some((a) => (a.op === 'is' && a.v === 'null' ? f[a.k] == null : a.op === 'neq' ? f[a.k] != null && f[a.k] !== a.v : a.op === 'eq' ? f[a.k] === a.v : false))
+        const val = (f: any, k: string) => k.split(/->>?/).reduce((o: any, p) => (o == null ? undefined : o[p]), f)
+        const fn: any = (f: any) => alts.some((a) => (a.op === 'is' && a.v === 'null' ? val(f, a.k) == null : a.op === 'neq' ? val(f, a.k) != null && val(f, a.k) !== a.v : a.op === 'eq' ? val(f, a.k) === a.v : false))
         fn.d = ['or', expr]; q.filtros.push(fn); return api
       },
       filter: (k: string, op: string, v: unknown) => { const fn: any = (f: any) => (k === 'metadata->>task_id' ? String(f.metadata?.task_id) === v : false); fn.d = [op, k, v]; q.filtros.push(fn); return api },
@@ -430,10 +472,10 @@ describe('POST /api/social/schedule-batch', () => {
 describe('POST /api/social/publicar-aprobado', () => {
   const ruta = '../src/app/api/social/publicar-aprobado/route'
   beforeEach(() => { m.base = baseFalsa(); m.base.filas.push({ id: 'a1', type: TIPO_LOTE_SOCIAL, status: 'approved', client_id: CLI, metadata: { task_id: 'social_1', lote: LOTE } }) })
-  it('sin llave 401; sin hitl_id 400; real:true 409; no aprobado 409; aprobado 200 y repetido ya_estaba', async () => {
+  it('sin llave 401; sin hitl_id 400; real:true sin la ficha encendida 409; no aprobado 409; aprobado 200 y repetido ya_estaba', async () => {
     expect((await llamar(ruta, 'POST', { hitl_id: 'a1' }, null)).status).toBe(401)
     expect((await llamar(ruta, 'POST', {})).status).toBe(400)
-    const real = await llamar(ruta, 'POST', { hitl_id: 'a1', real: true }); expect(real.status).toBe(409); expect(real.json.error).toBe('real_no_habilitado')
+    const real = await llamar(ruta, 'POST', { hitl_id: 'a1', real: true }); expect(real.status).toBe(409); expect(real.json.error).toBe('publicacion_real_apagada')
     m.base.filas.push({ id: 'p1', type: TIPO_LOTE_SOCIAL, status: 'pending', client_id: CLI, metadata: { lote: LOTE } })
     expect((await llamar(ruta, 'POST', { hitl_id: 'p1' })).json.error).toBe('no_aprobado')
     const ok = await llamar(ruta, 'POST', { hitl_id: 'a1' }); expect(ok.status).toBe(200); expect(ok.json.ensayo).toMatchObject({ modo: 'ensayo', real: false })
@@ -525,9 +567,9 @@ describe('lo que realmente se pide a la base (la base falsa devuelve la fila ent
     expect(pedidas.some((x) => x.startsWith('hitl_queue:') && x.split(':')[1].split(',').includes('output_id'))).toBe(true)
   })
   it('una pieza sin `output_id` se rechaza SIN preguntar por la salida (no se manda un id vacío a la base)', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, salidaDe(contenidoPost()), META_OFICINA, { output_id: null })
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m, salidaDe(contenidoPost()), META_OFICINA, { output_id: null })
     let preguntas = 0; const leer = P.leerSalida; P.leerSalida = async (id) => { preguntas++; return leer(id) }
-    const r = await publicarAprobado(P, { hitl_id: 'p1' })
+    const r = await publicar(P, { hitl_id: 'p1' })
     expect(!r.ok && r.error).toBe('salida_ausente'); expect(preguntas).toBe(0)
   })
 })
@@ -536,13 +578,144 @@ describe('las direcciones de la entrega caducan (`entrega.expires_at`)', () => {
   const conCaducidad = (expires_at: unknown) => salidaDe(contenidoPost('instagram', { entrega: { ...entregaRealDeUnaImagen('instagram'), expires_at } }))
   it('vencida (antes de «ahora», 2026-10-19T20:00Z): el ensayo lo dice; vigente, sin fecha o fecha ilegible: no', async () => {
     for (const [expires, avisa] of [['2026-10-19T19:59:59Z', true], ['2026-10-19T20:00:01Z', false], [null, false], ['mañana', false]] as const) {
-      const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, conCaducidad(expires))
-      const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(r.ok).toBe(true)
+      const { P, m } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m, conCaducidad(expires))
+      const r = await publicar(P, { hitl_id: 'p1' }); expect(r.ok).toBe(true)
       expect(r.ok && r.ensayo.advertencias.some((x) => x.startsWith('entrega_caducada'))).toBe(avisa)
     }
   })
   it('la fecha vencida no impide armar el ensayo (solo avisa)', async () => {
-    const { P, m } = puertos(ENV_COMPLETO); piezaAprobada(m, conCaducidad('2026-01-01T00:00:00Z'))
-    const r = await publicarAprobado(P, { hitl_id: 'p1' }); expect(r.ok && r.ensayo.piezas[0].armada).toBe(true)
+    const { P, m } = puertos(ENV_COMPLETO, CUENTAS); piezaAprobada(m, conCaducidad('2026-01-01T00:00:00Z'))
+    const r = await publicar(P, { hitl_id: 'p1' }); expect(r.ok && r.ensayo.piezas[0].armada).toBe(true)
+  })
+})
+
+// ───────────────────────────────────────────────────────── DE VERDAD (16-nov · GO Lenovo · CC3): ficha encendida, una sola vez, cuentas de la ficha, historial
+describe('publicarAprobado · DE VERDAD', () => {
+  it('ficha encendida + segunLaFicha: publica cada pieza en las cuentas de la FICHA, guarda el resultado y deja una fila de historial por pieza', async () => {
+    const { P, m } = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(m)
+    const r = await publicar(P, { hitl_id: 'a1', segunLaFicha: true })
+    expect(r.ok && r.real).toMatchObject({ modo: 'real', real: true, estado: 'publicada', task_id: 'social_1', client_id: CLI })
+    expect(m.enviadas.map((e) => e.rutas)).toEqual([[`/${IG}/media`, `/${IG}/media_publish`], [`/${PAG}/feed`]])
+    expect(JSON.stringify(m.enviadas)).not.toContain('999999'); expect(JSON.stringify(m.enviadas)).not.toContain('888888')
+    expect(m.fichasLeidas).toEqual([CLI]); expect(m.reclamos).toBe(1); expect(m.reales).toHaveLength(1); expect(m.guardados).toEqual([])
+    expect(m.historial.map((h) => [h.client_id, h.task_id, h.hitl_id])).toEqual([[CLI, 'social_1', 'a1'], [CLI, 'social_1', 'a1']])
+    expect(fetchLlamado).toBe(0)
+  })
+  it('real:true explícito también publica con la ficha encendida; real:false ensaya aunque esté encendida', async () => {
+    const a = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(a.m)
+    const r = await publicar(a.P, { hitl_id: 'a1', real: true }); expect(r.ok && r.real.estado).toBe('publicada')
+    const b = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(b.m)
+    const e = await publicar(b.P, { hitl_id: 'a1', real: false, segunLaFicha: true }); expect(e.ok && e.ensayo.modo).toBe('ensayo'); expect(b.m.enviadas).toEqual([]); expect(b.m.reclamos).toBe(0)
+  })
+  it('ficha APAGADA (o sin ficha) + segunLaFicha: ensayo como siempre, nada sale', async () => {
+    for (const c of [CUENTAS, null]) {
+      const { P, m } = puertos(ENV_COMPLETO, c); aprobado(m)
+      const r = await publicar(P, { hitl_id: 'a1', segunLaFicha: true })
+      expect(r.ok && r.ensayo.modo).toBe('ensayo'); expect(m.enviadas).toEqual([]); expect(m.reclamos).toBe(0); expect(m.historial).toEqual([])
+    }
+  })
+  it('una sola vez: repetir devuelve lo publicado sin volver a publicar; si otro ya reclamó, no publica', async () => {
+    const { P, m } = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(m)
+    const a = await publicar(P, { hitl_id: 'a1', real: true }); const b = await publicar(P, { hitl_id: 'a1', real: true })
+    expect(b.ok && b.ya_estaba && a.ok && b.real.hora === a.real.hora).toBe(true); expect(m.enviadas).toHaveLength(2) // 2 piezas, una vez
+    expect(m.reclamos).toBe(1) // lo ya publicado se devuelve sin volver a reclamar
+    const o = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(o.m); o.m.reclamoGana = false
+    const c = await publicar(o.P, { hitl_id: 'a1', real: true }); expect(c.ok && c.ya_estaba).toBe(true); expect(o.m.enviadas).toEqual([]); expect(o.m.reales).toEqual([])
+  })
+  it('lo fallido se puede reintentar; lo parcial NO (ya salió algo a la página)', async () => {
+    const f = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(f.m); f.m.respuesta = (canal) => ({ canal, ok: false, paso: 'publicar', error: 'x' })
+    const r1 = await publicar(f.P, { hitl_id: 'a1', real: true }); expect(r1.ok && r1.real.estado).toBe('fallida')
+    f.m.respuesta = (canal, n) => ({ canal, ok: true, id: 'p' + n })
+    const r2 = await publicar(f.P, { hitl_id: 'a1', real: true }); expect(r2.ok && !r2.ya_estaba && r2.real.estado).toBe('publicada')
+    const p = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(p.m); p.m.respuesta = (canal, n) => (n === 1 ? { canal, ok: true, id: 'p1' } : { canal, ok: false, paso: 'publicar', error: 'x' })
+    const q1 = await publicar(p.P, { hitl_id: 'a1', real: true }); expect(q1.ok && q1.real.estado).toBe('parcial')
+    const q2 = await publicar(p.P, { hitl_id: 'a1', real: true }); expect(q2.ok && q2.ya_estaba).toBe(true); expect(p.m.enviadas).toHaveLength(2)
+  })
+  it('todo o nada: una pieza no lista (o una red sin publicador) frena TODO antes de reclamar', async () => {
+    for (const piezas of [[PIEZA_IG, { canal: 'facebook' }], [PIEZA_IG, { canal: 'tiktok', caption: 'x' }]]) {
+      const { P, m } = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(m, { task_id: 'social_1', lote: { ...LOTE, piezas } })
+      const r = await publicar(P, { hitl_id: 'a1', real: true }); expect(!r.ok && r.error).toBe('no_publicable'); expect(m.reclamos).toBe(0); expect(m.enviadas).toEqual([])
+    }
+    const sinCuenta = puertos(ENV_COMPLETO, { ...ENCENDIDA, instagram_id: null }); aprobado(sinCuenta.m)
+    const s = await publicar(sinCuenta.P, { hitl_id: 'a1', real: true }); expect(!s.ok && s.errores?.join()).toContain('instagram_id'); expect(sinCuenta.m.enviadas).toEqual([])
+    const sinToken = puertos({ META_IG_BUSINESS_ACCOUNT_ID: '1', META_FB_PAGE_ID: '2' }, ENCENDIDA); aprobado(sinToken.m)
+    const t = await publicar(sinToken.P, { hitl_id: 'a1', real: true }); expect(!t.ok && t.errores?.join()).toContain('META_ACCESS_TOKEN'); expect(sinToken.m.enviadas).toEqual([])
+  })
+  it('lo programado a futuro y la entrega caducada no se publican', async () => {
+    const f = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(f.m, { task_id: 'social_1', lote: { ...LOTE, programar_para: '2027-01-01T00:00:00Z' } })
+    const r = await publicar(f.P, { hitl_id: 'a1', real: true }); expect(!r.ok && r.error).toBe('programada_no_soportada'); expect(f.m.enviadas).toEqual([])
+    const c = puertos(ENV_COMPLETO, ENCENDIDA); piezaAprobada(c.m, salidaDe(contenidoPost('instagram', { entrega: { urls: { [NOMBRE('instagram')]: URL_DE(NOMBRE('instagram')) }, expires_at: '2026-01-01T00:00:00Z' } })))
+    const k = await publicar(c.P, { hitl_id: 'p1', real: true }); expect(!k.ok && k.error).toBe('entrega_caducada'); expect(c.m.enviadas).toEqual([])
+  })
+  it('un lote de OTRO cliente que el elemento se niega antes de leer ninguna ficha', async () => {
+    const { P, m } = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(m, { task_id: 'social_1', lote: LOTE }, { client_id: OTRO })
+    const r = await publicar(P, { hitl_id: 'a1', real: true }); expect(!r.ok && r.error).toBe('cliente_distinto'); expect(m.fichasLeidas).toEqual([]); expect(m.enviadas).toEqual([])
+  })
+  it('un error de Meta (lanzado) o del historial no rompe: queda dicho en el resultado', async () => {
+    const { P, m } = puertos(ENV_COMPLETO, ENCENDIDA); aprobado(m); m.historialFalla = true
+    m.respuesta = () => { throw new Error('red caída') }
+    const r = await publicar(P, { hitl_id: 'a1', real: true }); expect(r.ok && r.real.estado).toBe('fallida'); expect(r.ok && r.real.piezas[0]).toMatchObject({ ok: false, paso: 'red', error: 'red caída' })
+  })
+  it('no aprobado no se publica aunque la ficha esté encendida', async () => {
+    const { P, m } = puertos(ENV_COMPLETO, ENCENDIDA)
+    for (const status of ['pending', 'rejected', 'edited']) { aprobado(m, undefined, { status }); const r = await publicar(P, { hitl_id: 'a1', real: true }); expect(!r.ok && r.error).toBe('no_aprobado') }
+    expect(m.enviadas).toEqual([]); expect(m.reclamos).toBe(0)
+  })
+})
+
+describe('puertosDePublicacion · DE VERDAD (base falsa)', () => {
+  it('reclamar es una sola vez: el segundo pierde; un fallido se vuelve a reclamar; guardar conserva el resto de metadata', async () => {
+    const { db, filas } = baseFalsa(); const P = puertosDePublicacion(db, {})
+    filas.push({ id: 'x1', type: TIPO_LOTE_SOCIAL, status: 'approved', client_id: CLI, metadata: { task_id: 'social_1', decision_humana: { frase: 'ok' } } })
+    expect(await P.reclamarReal('x1', { estado: 'en_curso' })).toBe(true)
+    expect(await P.reclamarReal('x1', { estado: 'en_curso' })).toBe(false)
+    await P.guardarReal('x1', { estado: 'fallida' } as ResultadoReal)
+    expect(await P.reclamarReal('x1', { estado: 'en_curso' })).toBe(true)
+    await P.guardarReal('x1', { estado: 'publicada' } as ResultadoReal)
+    expect(await P.reclamarReal('x1', { estado: 'en_curso' })).toBe(false)
+    expect(filas[0].metadata).toEqual({ task_id: 'social_1', decision_humana: { frase: 'ok' }, publicacion_real: { estado: 'publicada' } })
+  })
+  it('dos aprobaciones a la vez: si otra reclama entre la lectura y la escritura, esta PIERDE (la condición va en el UPDATE)', async () => {
+    const { db, filas } = baseFalsa(); const P = puertosDePublicacion(db, {})
+    filas.push({ id: 'x1', type: TIPO_LOTE_SOCIAL, status: 'approved', client_id: CLI, metadata: { task_id: 'social_1' } })
+    const from = db.from
+    db.from = (t: string) => { const api = from(t); const upd = api.update; api.update = (p: any) => { filas[0].metadata = { ...filas[0].metadata, publicacion_real: { estado: 'en_curso', de: 'la otra' } }; return upd(p) }; return api }
+    expect(await P.reclamarReal('x1', { estado: 'en_curso' })).toBe(false)
+  })
+  it('el historial deja client_id, task_id, workflow_id y el elemento de la bandeja; sin costo', async () => {
+    const { db, filas } = baseFalsa(); const P = puertosDePublicacion(db, {})
+    await P.registrarPublicacion({ hitl_id: 'x1', client_id: CLI, task_id: 'social_1', duracion_ms: 10, resultado: { canal: 'instagram', ok: true, id: '777', creation_id: 'c1' } })
+    await P.registrarPublicacion({ hitl_id: 'x1', client_id: CLI, task_id: 'social_1', duracion_ms: 10, resultado: { canal: 'facebook', ok: false, paso: 'publicar', error: 'x' } })
+    expect(filas[0]).toMatchObject({ client_id: CLI, task_id: 'social_1', workflow_id: 'bandeja:x1', agent_id: 'social-publisher', status: 'completed', cost_usd: 0, metadata: { hitl_id: 'x1', platform: 'instagram', post_id: '777' } })
+    expect(filas[1]).toMatchObject({ status: 'failed', error_message: 'publicar: x', metadata: { hitl_id: 'x1', platform: 'facebook', paso: 'publicar' } })
+  })
+  it('leer la ficha: sin cliente da cuentas vacías; una base caída se dice (no se lee como «sin cuenta»)', async () => {
+    const { db } = baseFalsa(); expect(await puertosDePublicacion(db, {}).leerCuentas(CLI)).toEqual({ pagina_facebook: null, instagram_id: null, publicacion_real: false })
+    const rota = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'caída' } }) }) }) }) }
+    await expect(puertosDePublicacion(rota, {}).leerCuentas(CLI)).rejects.toThrow('ficha')
+  })
+})
+
+describe('PATCH /api/hitl/[id] · aprobar con la ficha encendida', () => {
+  const ruta = '../src/app/api/hitl/[id]/route'
+  it('aprobar publica de verdad en las cuentas de la ficha (ninguna variable global de cuenta) y nada más que /feed', async () => {
+    m.base = baseFalsa()
+    m.base.filas.push({ id: CLI, config: { redes_oficiales: { meta: { pagina_facebook: PAG, instagram_id: IG }, publicacion_real: true } } })
+    m.base.filas.push({ id: 'a1', type: TIPO_LOTE_SOCIAL, status: 'pending', client_id: CLI, metadata: { task_id: 'social_1', lote: { ...LOTE, piezas: [{ canal: 'facebook', message: 'Hola' }] } } })
+    const viejo = process.env.META_ACCESS_TOKEN; process.env.META_ACCESS_TOKEN = 'SECRETO-SIS'
+    const llamadas: string[] = []
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      llamadas.push(`${init?.method ?? 'GET'} ${String(u).split('?')[0]}`)
+      if (String(u).includes('fields=access_token')) return new Response(JSON.stringify({ access_token: 'TOKEN-PAG', name: 'Náufrago' }))
+      return new Response(JSON.stringify({ id: `${PAG}_1` }))
+    })
+    try {
+      const r = await llamar(ruta, 'PATCH', { status: 'approved', reviewer: 'emilio' }, 'k', { params: { id: 'a1' } })
+      expect(r.status).toBe(200); expect(r.json.publicacion).toMatchObject({ ok: true, real: { estado: 'publicada', piezas: [{ canal: 'facebook', ok: true, id: `${PAG}_1` }] } })
+      expect(llamadas.filter((l) => l.startsWith('POST'))).toEqual([`POST https://graph.facebook.com/v21.0/${PAG}/feed`])
+      expect(JSON.stringify(r.json)).not.toContain('TOKEN-PAG'); expect(JSON.stringify(r.json)).not.toContain('SECRETO')
+      expect(m.base.filas.find((f: any) => f.id === 'a1').metadata.publicacion_real.estado).toBe('publicada')
+      expect(m.base.filas.filter((f: any) => f.agent_id === 'social-publisher')).toHaveLength(1)
+    } finally { if (viejo === undefined) delete process.env.META_ACCESS_TOKEN; else process.env.META_ACCESS_TOKEN = viejo }
   })
 })
