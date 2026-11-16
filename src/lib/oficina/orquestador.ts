@@ -12,6 +12,7 @@ import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } 
 import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, type BriefLeido } from './brief'
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
+import { comoDataUri, disenoDeAnuncio, textoEnImagenDe, textoEnImagenParaChequear } from './composicion'
 import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoAlRevisor } from './ciego'
@@ -475,9 +476,10 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       if (!pz) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pieza que chequear' }
       const fin = datos(e, 'imagen_final') ?? {}
       const fs = chequeosDePost({
-        pieza: { pie_de_foto: String(pz.pie_de_foto ?? ''), hashtags: (pz.hashtags as string[]) ?? [], llamado: pz.llamado as string | undefined },
+        // Mejora 5 · lo que va escrito sobre la imagen se chequea igual que el pie (prohibidas, registro, teléfonos, @ y precios); el tope del pie no lo cuenta
+        pieza: { pie_de_foto: [String(pz.pie_de_foto ?? ''), textoEnImagenParaChequear(pz)].filter(Boolean).join('\n'), hashtags: (pz.hashtags as string[]) ?? [], llamado: pz.llamado as string | undefined },
         fuentes: b.F.fuentes as FuentesDelCliente,
-        limites: { pie_de_foto_max: Number(pl.limites.pie_de_foto_max ?? 2200), hashtags_max: Number(pl.limites.hashtags_max ?? 30), limites_verificados: pl.limites.limites_verificados === true },
+        limites: { pie_de_foto_max: Number(pl.limites.pie_de_foto_max ?? 2200) + (textoEnImagenParaChequear(pz) ? textoEnImagenParaChequear(pz).length + 1 : 0), hashtags_max: Number(pl.limites.hashtags_max ?? 30), limites_verificados: pl.limites.limites_verificados === true },
         prohibidas_del_brief: b.brief.prohibido,
         imagen: { generada: fin.origen === 'generada', declarada_en_bandeja: true },
       })
@@ -511,6 +513,8 @@ async function empaquetar(P: Puertos, enc: Encargo, pl: Plantilla): Promise<Sali
   const archivos: ArchivoDeEntrega[] = []
   const nombres: string[] = []
   let ajuste: { modo: string; detalle: string } | null = null
+  let composicion: Record<string, unknown> | null = null
+  const avisosDeComposicion: string[] = []
   if (fin.url) {
     let bytes = await P.descargar(String(fin.url))
     if (bytes) {
@@ -520,6 +524,11 @@ async function empaquetar(P: Puertos, enc: Encargo, pl: Plantilla): Promise<Sali
         const enc2 = encajarAProporcion(bytes, { ancho: fila.ancho, alto: fila.alto })
         if (enc2.modo !== 'no_soportada') { bytes = enc2.bytes; ajuste = { modo: enc2.modo, detalle: enc2.detalle } }
       }
+      // Sprint 1 · Mejora 5 · encima de la foto ya encajada, la marca: logo, textos del autor y colores del manual (por código; la IA nunca escribe texto). Sin rejas: lo que falte se dice y la foto sale como siempre
+      const comp = await componerConLaMarca(P, enc, b, pz, bytes)
+      composicion = comp.composicion
+      avisosDeComposicion.push(...comp.avisos)
+      if (comp.bytes) bytes = comp.bytes
       const med = leerMedidas(bytes)
       const ext = med?.tipo === 'jpeg' ? 'jpg' : 'png'
       const nombre = nombreDeArchivo({ fecha: cuando?.de === 'fila' ? cuando.fecha : null, hora: cuando?.de === 'fila' ? cuando.hora : null, red, formato: 'foto', brief_id: b.brief.id, n: 1, de: 1, ext })
@@ -531,6 +540,7 @@ async function empaquetar(P: Puertos, enc: Encargo, pl: Plantilla): Promise<Sali
   const hoja = `# Publicar a mano · ${b.brief.id}\nRed: ${b.brief.red} · formato: ${b.brief.formato} · proporción ${b.proporcion}\nHora de publicación: ${cuando ? (cuando.de === 'fila' ? `${cuando.fecha}${cuando.hora ? ' ' + cuando.hora : ''}${b.F.zona ? ' (' + b.F.zona + ')' : ' (zona del cliente sin registrar)'}` : `(aprobar antes de ${cuando.fecha})`) : 'sin fecha: se decide al aprobar'}\n${(fin.origen === 'generada') ? '⚠️ La imagen es GENERADA, no una foto del producto real.\n' : ''}${fin.nota ? `Nota de la imagen: ${fin.nota}\n` : ''}${pz.nota_para_quien_publica ? `Nota: ${String(pz.nota_para_quien_publica)}\n` : ''}\n## Pasos\n${(fila ? [] : ['(sin especificación de formato)']).join('\n')}\n`
   const man = manifiesto(archivos, { encargo_id: enc.id, brief_id: b.brief.id, aprobada_version: e.artefactos['pieza_post']?.version ?? 1, expires_at: expires, imagen_generada: fin.origen === 'generada' })
   const fichas = chequeosDeEntrega(archivos, fila ?? null, { pie_de_foto: String(pz.pie_de_foto ?? ''), hashtags: (pz.hashtags as string[]) ?? [] }, man)
+  avisosDeComposicion.forEach((a, i) => fichas.push(fichaNueva(`entrega-composicion-${i}`, 'chequeo', 'imagen', 'sugerencia', a, 'composición con la marca', 'mirar la imagen compuesta antes de aprobar')))
   if (ajuste) fichas.push(fichaNueva('entrega-imagen-encajada', 'chequeo', 'imagen', 'sugerencia', `la imagen se ajustó por código al formato: ${ajuste.detalle}`, 'proporción del formato', 'mirar la imagen ajustada antes de aprobar'))
   const sinImagen = archivos.length === 0
   const todos = [...archivos.map((a) => ({ ...a, tipo: a.nombre.endsWith('.jpg') ? 'image/jpeg' : 'image/png' })),
@@ -547,11 +557,36 @@ async function empaquetar(P: Puertos, enc: Encargo, pl: Plantilla): Promise<Sali
   return {
     res: {
       costo_usd: 0,
-      artefacto: { archivos: man.archivos, nombres: todos.map((x) => x.nombre), urls, texto_para_copiar: texto, expires_at: expires, sin_imagen: sinImagen, simulado: enc.dry_run },
+      artefacto: { archivos: man.archivos, nombres: todos.map((x) => x.nombre), urls, texto_para_copiar: texto, expires_at: expires, sin_imagen: sinImagen, simulado: enc.dry_run, ...(composicion ? { composicion } : {}) },
       fichas: [...fichas.map((f, i) => ({ ...f, id: `${prefijo}-${i}` })), ...(sinImagen && fin.origen !== 'ninguna' ? [] : [])],
       reemplazar_fichas: { origen: 'chequeo', donde: 'entrega' },
     },
   }
+}
+
+/**
+ * Sprint 1 · Mejora 5 · la pieza con foto, compuesta con la marca. Devuelve los bytes nuevos (PNG del mismo tamaño) o null para dejar la foto como estaba.
+ * Nunca lanza ni bloquea: sin identidad visual, sin puerto, foto ilegible o un fallo del dibujo ⇒ la foto sale como siempre y queda un aviso.
+ */
+async function componerConLaMarca(P: Puertos, enc: Encargo, b: ReturnType<typeof base>, pz: Record<string, unknown>, foto: Buffer): Promise<{ bytes: Buffer | null; composicion: Record<string, unknown> | null; avisos: string[] }> {
+  if (!P.componer) return { bytes: null, composicion: null, avisos: [] }
+  const marca = b.F.marca
+  if (!marca) return { bytes: null, composicion: { compuesta: false, motivo: 'sin_identidad_visual' }, avisos: ['el cliente no tiene identidad visual legible en el manual: la imagen sale sin logo ni textos de la marca'] }
+  const med = leerMedidas(foto)
+  const fotoUri = comoDataUri(foto)
+  if (!med || !fotoUri) return { bytes: null, composicion: { compuesta: false, motivo: 'foto_ilegible' }, avisos: ['no se pudo leer la foto para componerla con la marca: sale sin logo ni textos'] }
+  const { texto, avisos } = textoEnImagenDe(pz, b.F.propios.urls[0] ?? null)
+  let logo: string | null = null
+  if (marca.logo_url) {
+    logo = comoDataUri(await P.descargar(marca.logo_url).catch(() => null))
+    if (!logo) avisos.push('no se pudo leer el logo del manual: en su lugar va el nombre de la marca')
+  } else avisos.push('el manual no trae logo: en su lugar va el nombre de la marca')
+  const diseno = disenoDeAnuncio(marca, b.brief.id || enc.id)
+  const firma = marca.brand_handle || b.F.cliente_nombre || null
+  const r = await P.componer({ ancho: med.ancho, alto: med.alto, foto: fotoUri, logo, firma: logo ? null : firma, texto, diseno })
+  if (!r.ok) return { bytes: null, composicion: { compuesta: false, motivo: 'fallo_del_dibujo', detalle: r.error }, avisos: [...avisos, `no se pudo componer la imagen con la marca (${r.error}): sale la foto sin textos`] }
+  if (r.fonts_faltantes.length) avisos.push(`tipografías del manual que no se pudieron cargar (se dibujó con la de reserva): ${r.fonts_faltantes.join(', ')}`)
+  return { bytes: r.png, composicion: { compuesta: true, variante: diseno.variante, colores: { etiqueta: diseno.etiqueta.fondo, boton: diseno.boton.fondo, franja: diseno.franja.fondo }, tipografia: diseno.tipografia, texto, con_logo: !!logo, fonts_faltantes: r.fonts_faltantes }, avisos }
 }
 
 // ───────────────────────── re-imagen que pide la opinión
