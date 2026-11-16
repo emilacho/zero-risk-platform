@@ -4,8 +4,8 @@ import path from 'node:path'
 import type { LecturaDeLaBiblioteca } from '../video/biblioteca'
 
 const RAIZ = path.join(__dirname, '..', '..', '..', '..', 'supabase')
-export const SQL = fs.readFileSync(path.join(RAIZ, 'migrations', '202611162230_oficina_biblioteca_de_planos_y_ritmos_de_video.sql'), 'utf8')
-export const REVERSA = fs.readFileSync(path.join(RAIZ, 'reversas', '202611162230_oficina_biblioteca_de_planos_y_ritmos_de_video_REVERSA.sql'), 'utf8')
+export const SQL = fs.readFileSync(path.join(RAIZ, 'migrations', '202611162230_oficina_biblioteca_de_planos_y_ritmos_de_video.sql'), 'utf8').replace(/\r\n/g, '\n') // CC7: en Windows con autocrlf la carpeta puede traer CRLF
+export const REVERSA = fs.readFileSync(path.join(RAIZ, 'reversas', '202611162230_oficina_biblioteca_de_planos_y_ritmos_de_video_REVERSA.sql'), 'utf8').replace(/\r\n/g, '\n') // CC7: en Windows con autocrlf la carpeta puede traer CRLF
 
 // ───────── la semilla de la migración, leída como filas (para cruzarla con el código)
 const arr = (s: string): string[] => (s === "'{}'" ? [] : [...s.matchAll(/(?:\$d\$([^$]*)\$d\$|'([^']*)')/g)].map((m) => m[1] ?? m[2]))

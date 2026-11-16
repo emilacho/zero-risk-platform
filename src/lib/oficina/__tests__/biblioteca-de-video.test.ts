@@ -9,6 +9,7 @@ import { FAMILIAS } from '@/lib/fuentes-publicas/catalogo'
 import { ROLES_DEL_PLANO, avisosDeRitmo, bibliotecaDelCliente, leerFichas, leerRitmos, ritmoPara, seccionDeLaBiblioteca } from '../video/biblioteca'
 import { FILAS_FICHAS, FILAS_RITMOS, LECTURA_DE_LA_SEMILLA as LECTURA, REVERSA, SQL } from './biblioteca-semilla'
 import { bibliotecaDelTurno } from '../mesa/orquestador'
+import { puertoDeLaMesa } from '../mesa/adaptador'
 import type { Encargo, Puertos } from '../puertos'
 import type { EstadoMesa } from '../mesa/tipos'
 
@@ -83,6 +84,8 @@ describe('lo puro', () => {
     ])
     expect(avisosDeRitmo({ segundos: 12, planos: [{ segundos: 3 }, { segundos: 3 }, { segundos: 3 }, { segundos: 3 }] }, rs)).toEqual(['el producto no aparece en ningún plano: la guía de ritmo «reel de 9 a 15 s» sugiere mostrarlo antes de 3 s'])
     expect(avisosDeRitmo({ segundos: 12, planos: [{ segundos: 2, producto: true }, { segundos: 3 }, { segundos: 3 }, { segundos: 4 }] }, rs)).toEqual([])
+    // planos de MÁS también avisa (CC7 · sabotaje #10): un reel de 15 s con 12 planos
+    expect(avisosDeRitmo({ segundos: 15, planos: Array.from({ length: 12 }, (_, i) => ({ segundos: 1.25, producto: i === 0 })) }, rs)).toEqual(['15 s con 12 planos: la guía de ritmo «reel de 9 a 15 s» sugiere de 4 a 6'])
     // el borde: «antes de 3 s» no incluye los 3 s justos
     expect(avisosDeRitmo({ segundos: 12, planos: [{ segundos: 3 }, { segundos: 3, producto: true }, { segundos: 3 }, { segundos: 3 }] }, rs)).toEqual(['el producto entra a los 3 s: la guía de ritmo «reel de 9 a 15 s» sugiere mostrarlo antes de 3 s'])
     expect(avisosDeRitmo({ segundos: 12, planos: [{ segundos: 2.9 }, { segundos: 3, producto: true }, { segundos: 3 }, { segundos: 3.1 }] }, rs)).toEqual([])
@@ -119,3 +122,35 @@ describe('el turno de la mesa', () => {
   })
 })
 
+describe('el adaptador real sobre una base falsa (CC7 · sabotajes #19 y #20)', () => {
+  type Pedido = { tabla: string; filtros: Array<[string, unknown]> }
+  const base = (resp: Record<string, { data?: unknown; error?: { message: string } | null }>) => {
+    const pedidos: Pedido[] = []
+    const db = {
+      from(tabla: string) {
+        const p: Pedido = { tabla, filtros: [] }
+        pedidos.push(p)
+        const q = {
+          select: () => q, order: () => q, limit: () => q,
+          eq: (c: string, v: unknown) => { p.filtros.push([c, v]); return q },
+          then: (ok: (x: unknown) => unknown, ko?: (e: unknown) => unknown) => Promise.resolve({ data: resp[tabla]?.data ?? [], error: resp[tabla]?.error ?? null }).then(ok, ko),
+        }
+        return q
+      },
+    }
+    return { db, pedidos }
+  }
+  it('pide solo las filas activas de las dos tablas y el rubro de ESE cliente', async () => {
+    const { db, pedidos } = base({ oficina_fichas_de_plano: { data: [{ id: 'a', nombre: 'A' }] }, oficina_ritmos_de_video: { data: [] }, clients: { data: [{ industry: 'Restaurante' }] } })
+    const l = await puertoDeLaMesa(db).bibliotecaDeVideo!('cli-9')
+    expect(l).toEqual({ fichas: [{ id: 'a', nombre: 'A' }], ritmos: [], industria: 'Restaurante' })
+    expect(pedidos.find((p) => p.tabla === 'oficina_fichas_de_plano')!.filtros).toEqual([['activo', true]])
+    expect(pedidos.find((p) => p.tabla === 'oficina_ritmos_de_video')!.filtros).toEqual([['activo', true]])
+    expect(pedidos.find((p) => p.tabla === 'clients')!.filtros).toEqual([['id', 'cli-9']])
+  })
+  it('un error de cualquiera de las dos tablas se LANZA (el turno lo toma como «sin biblioteca»); el del cliente solo deja el rubro vacío', async () => {
+    await expect(puertoDeLaMesa(base({ oficina_fichas_de_plano: { error: { message: 'caída' } } }).db).bibliotecaDeVideo!('c')).rejects.toThrow('biblioteca de planos: caída')
+    await expect(puertoDeLaMesa(base({ oficina_ritmos_de_video: { error: { message: 'caída' } } }).db).bibliotecaDeVideo!('c')).rejects.toThrow('ritmos de video: caída')
+    expect((await puertoDeLaMesa(base({ clients: { error: { message: 'x' } } }).db).bibliotecaDeVideo!('c')).industria).toBeNull()
+  })
+})

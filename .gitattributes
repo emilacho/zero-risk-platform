@@ -36,3 +36,5 @@ supabase/reversas/202611012000_*.sql text eol=lf
 supabase/migrations/202611162232_*.sql text eol=lf
 supabase/reversas/202611162232_*.sql text eol=lf
 src/lib/oficina/__tests__/fixtures/video-editor-e4.md text eol=lf
+supabase/migrations/202611162230_*.sql text eol=lf
+supabase/reversas/202611162230_*.sql text eol=lf
