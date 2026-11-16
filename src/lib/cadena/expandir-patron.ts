@@ -5,7 +5,7 @@
  * y arma el panorama de 12 semanas SIN modelo (filas `esquema`, sin tema); las tandas de 4 semanas se materializan después.
  */
 import { diaDeCampana, fechaDeFila } from './fechas'
-import type { Ajuste, Estrategia, Fase, Fila, FormatoPermitido, FormatosPorRed, PiezaAgente, TandaAgente } from './tipos'
+import type { Ajuste, ConceptoDeLaFila, Estrategia, Fase, Fila, FormatoPermitido, FormatosPorRed, PiezaAgente, TandaAgente } from './tipos'
 
 export interface CampanaFechas { fecha_inicio: string; fecha_fin: string }
 
@@ -58,6 +58,15 @@ export interface Fusion { filas: Fila[]; ignoradas: string[] }
  *  · `ajustes_al_patron` con `omitir` quita el slot de esa semana; `mover` no se aplica solo (la pieza trae su día);
  *  · el estado de video lo decide la tabla de formatos, nunca el agente (V20).
  */
+/** el concepto que dejó el agente, solo con las partes que traen texto; nada = null */
+export function conceptoLimpio(c: unknown): ConceptoDeLaFila | null {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return null
+  const o = c as Record<string, unknown>
+  const out: ConceptoDeLaFila = {}
+  for (const k of ['idea', 'que_se_ve', 'mensaje', 'emocion', 'foto', 'llamado'] as const) { const v = typeof o[k] === 'string' ? (o[k] as string).trim() : ''; if (v) out[k] = v }
+  return Object.keys(out).length ? out : null
+}
+
 /** 31-oct (nuevo orden · T3): con la gran idea aprobada, cada fila lleva su `fase` (por el día de campaña) y su `idea_ref` (la `idea_de_mesa` de la pieza si está en el banco; si no, se declara en `avisos`) */
 export interface MesaParaFusionar { banco: ReadonlyArray<{ id: string }>; fases: ReadonlyArray<Pick<Fase, 'clave' | 'dia_desde' | 'dia_hasta'>> }
 export const faseDelDia = (fases: ReadonlyArray<Pick<Fase, 'clave' | 'dia_desde' | 'dia_hasta'>>, dia: number): string | null => fases.find((f) => dia >= f.dia_desde && dia <= f.dia_hasta)?.clave ?? null
@@ -70,12 +79,16 @@ export function fusionarTanda(esquema: Fila[], t: TandaAgente, e: Pick<Estrategi
   if (!mesa) return base // la cadena de hoy: byte a byte (sin `fase` ni `idea_ref`)
   const ideaDe = new Map<string, string>()
   for (const p of t.piezas ?? []) if (typeof p.idea_de_mesa === 'string' && p.idea_de_mesa.trim()) ideaDe.set(idDeFila(p.semana, p.dia_semana, p.slot), p.idea_de_mesa.trim())
+  // 16-nov · Sprint 1 · Mejora 2 · el concepto de cada pieza (`calendario_tanda.v3`) viaja con su fila; vacío = null (la hoja lo arma del banco y lo avisa)
+  // una fila cuya pieza NO vino en esta entrega (la corrección de solo las que fallaron) conserva el concepto que ya tenía: re-guardar nunca lo borra
+  const conceptoDePieza = new Map<string, ConceptoDeLaFila | null>()
+  for (const p of t.piezas ?? []) conceptoDePieza.set(idDeFila(p.semana, p.dia_semana, p.slot), conceptoLimpio(p.concepto))
   const enBanco = new Set(mesa.banco.map((i) => i.id))
   const filas = base.filas.map((f) => {
     const pedida = ideaDe.get(f.id) ?? null
     const idea_ref = pedida && enBanco.has(pedida) ? pedida : null
     const avisos = pedida && !idea_ref ? [...f.avisos, `${PREFIJO_NOTA_DE_IDEA}la idea «${pedida}» no está en el banco del concepto: la fila queda sin idea`] : f.avisos
-    return { ...f, fase: faseDelDia(mesa.fases, diaDeFila(c, f)), idea_ref, avisos }
+    return { ...f, fase: faseDelDia(mesa.fases, diaDeFila(c, f)), idea_ref, concepto: conceptoDePieza.has(f.id) ? conceptoDePieza.get(f.id)! : (f.concepto ?? null), avisos }
   })
   return { filas, ignoradas: base.ignoradas }
 }

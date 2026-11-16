@@ -7,7 +7,7 @@
  * El identificador de cada brief es el `fila_id` (no hay numeración aparte). Las filas de la familia `kit_historias` de un lote van en UN brief de kit (port de `scripts/worker-staging/cadena/kit-de-historias.js`).
  * Puro: sin red, sin base, sin modelo, sin cliente. Lo que falta se DECLARA en la hoja («sin idea del banco»), nunca se inventa.
  */
-import type { DatoDeterminado, Fila, FormatosPorRed } from './tipos'
+import type { ConceptoDeLaFila, DatoDeterminado, Fila, FormatosPorRed } from './tipos'
 import { PROPORCION_POR_FORMATO, proporcionDe, proporcionDeLaTabla } from './proporciones'
 import type { BriefCreativoLeido } from './brief-creativo'
 import { ideaDelBanco, type ConceptoLeido, type IdeaDelBanco } from './conceptos'
@@ -27,6 +27,8 @@ export type FilaDeHoja = Pick<Fila, 'id' | 'fecha' | 'hora' | 'red' | 'formato' 
   fase?: string | null
   /** la idea del banco que la fila realiza (`C<fase>-I<nn>`); sin idea ⇒ la hoja lo declara */
   idea_ref?: string | null
+  /** 16-nov · Sprint 1 · Mejora 2 · el concepto de ESTA pieza (columna `concepto`); sin concepto ⇒ la hoja lo arma del banco y lo avisa */
+  concepto?: ConceptoDeLaFila | null
 }
 export interface InsumosDeLaHoja {
   client_name: string
@@ -105,10 +107,26 @@ export function lineaDeElemento(f: FilaDeHoja): string {
 export const idDelKit = (loteKey: string): string => `kit-${loteKey.replace(/[^A-Za-z0-9_.-]+/g, '-')}`.slice(0, 40)
 
 // ───────────────────────────────────────────────────────── un brief de la hoja
+/** 16-nov · Sprint 1 · Mejora 2 · la línea VISUAL dice de dónde viene: es el estilo de la campaña, no la escena de la pieza */
+export const PREFIJO_VISUAL_DE_CAMPANA = 'de la campaña (referencia de estilo; la escena de esta pieza está en QUÉ SE VE): '
 function mensajeDe(idea: IdeaDelBanco | null, f: Pick<FilaDeHoja, 'tema'>, avisos: string[], id: string): string {
   if (idea?.mensaje) return idea.mensaje
   avisos.push(`${id}: sin idea del banco (${f.tema ? `tema «${limpio(f.tema)}»` : 'sin tema'}) · el mensaje sale del tema y se declara`)
   return `${limpio(f.tema) || '(sin tema)'} · sin idea del banco`
+}
+/** 16-nov · Sprint 1 · Mejora 2 · el concepto de la pieza: el de la fila o, si no lo trae, el de la idea del banco (con aviso). Nunca bloquea. */
+function conceptoDeLaPieza(f: FilaDeHoja, idea: IdeaDelBanco | null, avisos: string[], id: string): { idea: string; que_se_ve: string; mensaje: string; emocion: string; foto: string; llamado: string } {
+  const k = f.concepto ?? {}
+  const propio = !!(k.idea || k.que_se_ve || k.mensaje)
+  if (!propio) avisos.push(`${id}: la fila no trae concepto propio · se arma con ${idea ? `la idea del banco ${idea.id}` : 'el tema'}; la escena la diseña la mesa`)
+  return {
+    idea: limpio(k.idea) || idea?.idea || limpio(f.tema) || '',
+    que_se_ve: limpio(k.que_se_ve),
+    mensaje: limpio(k.mensaje),
+    emocion: limpio(k.emocion),
+    foto: limpio(k.foto) || (idea?.foto && idea.foto !== 'ninguna' ? idea.foto : ''),
+    llamado: limpio(k.llamado),
+  }
 }
 function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; formato: string }, f: FilaDeHoja, idea: IdeaDelBanco | null, extra: { fila_ids?: string[]; elementos?: string[] }, avisos: string[]): string[] {
   const b = ins.brief
@@ -118,6 +136,7 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
   const { proporcion, por_omision, ilegible } = proporcionDeLaTabla(ins.formatos, cab.red, cab.formato, ins.proporciones)
   if (ilegible) avisos.push(`${cab.id}: la proporción «${ilegible}» de ${cab.red.toLowerCase()} · ${cab.formato} en cadena_formatos_por_red no se puede leer · se usa ${proporcion}, la de por omisión del formato`)
   const esKit = cab.formato === 'kit'
+  const pz = conceptoDeLaPieza(f, idea, avisos, cab.id)
   const cuando = `aprobar antes de publicar · publica el ${fechaEnLetras(f.fecha)}${f.hora ? ` a las ${limpio(f.hora).slice(0, 5)}` : ''}`
   const L: string[] = [
     `### ${cab.id} · ${mayuscula(cab.red)} · ${cab.formato}`,
@@ -130,15 +149,21 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     campo('MENSAJE DE CAMPAÑA', b.mensaje),
     campo('OBJETIVO', porRed?.objetivo || b.objetivo),
     campo('PROTAGONISTA', idea?.protagonista || limpio(f.tema) || '(sin protagonista declarado)'),
-    campo('MENSAJE (uno)', mensajeDe(idea, f, avisos, cab.id)),
+    // 16-nov · Sprint 1 · Mejora 2 · el CONCEPTO de esta pieza (la idea completa), no los planos de la campaña
+    campo('IDEA DE LA PIEZA', pz.idea || '(sin idea: la mesa la propone)'),
+    campo('QUÉ SE VE', pz.que_se_ve || '(la fila no dice qué se ve: la mesa diseña la escena)'),
+    campo('EMOCIÓN', pz.emocion || '(sin emoción declarada)'),
+    campo('FOTO A USAR', pz.foto || 'ninguna citada'),
+    campo('MENSAJE (uno)', pz.mensaje || mensajeDe(idea, f, avisos, cab.id)),
     // FIRMA 01-nov «hoja sin reja»: el gancho de la hoja es SUGERIDO; el final lo escribe la mesa de piezas (video: el coach con el método scripter)
     campo('GANCHO SUGERIDO', idea?.gancho ?? ''),
     campo('LÍMITES', `proporción ${proporcion} (${por_omision ? `por omisión del formato ${cab.formato}` : `dato de la tabla de formatos para ${cab.red.toLowerCase()} · ${cab.formato}`})${esFormatoDeVideo(cab.formato) ? ` · ${NOTA_DE_VIDEO_EN_LIMITES}` : ''} · ${b.obligatorios.no_se_dice.length ? `no se dice: ${b.obligatorios.no_se_dice.join(', ')}` : 'sin «no se dice» en el brief'}${idea?.foto ? ` · foto citada: ${idea.foto}` : ''}`),
     ...listaDe('VOCABULARIO DE LA MARCA', b.obligatorios.vocabulario),
     ...listaDe('PROHIBIDO', b.obligatorios.prohibido),
     campo('SINTAXIS', b.tono),
-    campo('VISUAL', [c.como_se_ve, cap?.como_se_ve, idea?.foto && idea.foto !== 'ninguna' ? `foto ${idea.foto}` : ''].filter(Boolean).join(' · ') || '(el concepto no dice cómo se ve)'),
-    campo('LLAMADO A LA ACCIÓN', porRed?.llamado ?? ''),
+    // la línea VISUAL es del concepto de la CAMPAÑA: referencia de estilo, no las tomas de esta pieza (esas están en QUÉ SE VE)
+    campo('VISUAL', (() => { const v = [c.como_se_ve, cap?.como_se_ve, idea?.foto && idea.foto !== 'ninguna' ? `foto ${idea.foto}` : ''].filter(Boolean).join(' · '); return v ? `${PREFIJO_VISUAL_DE_CAMPANA}${v}` : '(el concepto no dice cómo se ve)' })()),
+    campo('LLAMADO A LA ACCIÓN', pz.llamado || porRed?.llamado || ''),
     campo('VARIANTES', '1'),
     ...listaDe('NEGATIVOS', [...b.obligatorios.no_se_dice, ...b.obligatorios.prohibido]),
     campo('APRUEBA Y PARA CUÁNDO', cuando),

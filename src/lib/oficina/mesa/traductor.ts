@@ -23,6 +23,8 @@ export interface ConceptoDeImagen {
   que_se_ve?: string
   /** el mensaje que la imagen acompaña (el título de la lámina) */
   mensaje?: string
+  /** la emoción que la escena tiene que dar (GO Sprint 1 · «concepto, mensaje, emoción, plato/foto a usar») */
+  emocion?: string
   /** lo que la pieza tiene que lograr (lo declaró la dirección o, si no, el brief) */
   objetivo?: string
 }
@@ -53,10 +55,11 @@ export interface Traduccion {
 }
 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-const CAMPOS: Array<[RegExp, 'headline' | 'body' | 'cta' | 'eyebrow' | 'imagen' | 'mood' | 'concepto' | 'que_se_ve' | 'objetivo']> = [
+const CAMPOS: Array<[RegExp, 'headline' | 'body' | 'cta' | 'eyebrow' | 'imagen' | 'mood' | 'concepto' | 'que_se_ve' | 'objetivo' | 'emocion']> = [
   // 16-nov · Mejora 2 · el concepto y la escena de la lámina: NO se dibujan como texto; viajan con la imagen
   [/^(concepto|idea)$/, 'concepto'],
   [/^(que se ve|se ve|escena)$/, 'que_se_ve'],
+  [/^(emocion|sensacion)$/, 'emocion'],
   // 16-nov · Mejora 1 · «Objetivo (de la pieza): …» dentro de una lámina es de la PIEZA (lo lee `objetivoDeclarado`): se guarda aparte para que no se pegue al campo anterior
   [/^objetivo( de (la|esta) pieza)?$/, 'objetivo'],
   [/^(t[ií]tulo|titular|headline|gancho)$/, 'headline'],
@@ -177,7 +180,7 @@ function campos(lineas: string[], rotulo = ''): CamposLeidos {
 /** el concepto que viaja con la imagen: solo las partes que existen (sin claves vacías) */
 function conceptoDe(c: ConceptoDeImagen): ConceptoDeImagen | undefined {
   const out: ConceptoDeImagen = {}
-  for (const k of ['idea', 'que_se_ve', 'mensaje', 'objetivo'] as const) { const v = limpiarTexto(c[k] ?? ''); if (v) out[k] = v }
+  for (const k of ['idea', 'que_se_ve', 'mensaje', 'emocion', 'objetivo'] as const) { const v = limpiarTexto(c[k] ?? ''); if (v) out[k] = v }
   return Object.keys(out).length ? out : undefined
 }
 
@@ -255,7 +258,7 @@ const AVISO_LARGO = { headline: 90, body: 220, cta: 32, eyebrow: 24 } as const
 /** un llamado que es una INSTRUCCIÓN para quien publica («Botón nativo de Facebook “Enviar mensaje”…») no es texto que se dibuje */
 const esInstruccionDeBoton = (v: string) => /^\s*(bot[oó]n|button)\b/i.test(v)
 
-export interface OpcionesDeTraduccion { refsDelKit?: string[]; tipoPorRef?: Record<string, 'historia' | 'estado'>; temaPorRef?: Record<string, string>; preguntasHechas?: number; maxPreguntas?: number; /** 11-nov · fila #20 · el máximo de láminas del formato (dato de la plantilla); sin dato, 10 */ maxLaminas?: number; /** 16-nov · Mejora 1 · el OBJETIVO del brief de la pieza (la hoja): se usa si la dirección no declaró uno */ objetivoDelBrief?: string }
+export interface OpcionesDeTraduccion { refsDelKit?: string[]; tipoPorRef?: Record<string, 'historia' | 'estado'>; temaPorRef?: Record<string, string>; preguntasHechas?: number; maxPreguntas?: number; /** 11-nov · fila #20 · el máximo de láminas del formato (dato de la plantilla); sin dato, 10 */ maxLaminas?: number; /** 16-nov · Mejora 1 · el OBJETIVO del brief de la pieza (la hoja): se usa si la dirección no declaró uno */ objetivoDelBrief?: string; /** 16-nov · Mejora 2 · la IDEA DE LA PIEZA que trae la fila (la hoja): para las láminas sin idea propia cuando la dirección no dejó `## Concepto` */ ideaDelBrief?: string }
 
 export function traducirPieza(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion = {}): Traduccion {
   const t = traducir(md, tipo, o)
@@ -273,7 +276,7 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
   const delBrief = limpiarTexto(o.objetivoDelBrief ?? '')
   const objetivo = declarado || delBrief
   // el aviso de objetivo sin declarar va AL FINAL de la lista (los avisos de la pieza mandan primero): lo agrega la envoltura `traducirPieza`
-  const ideaDeLaPieza = conceptoDeLaPieza(todas)
+  const ideaDeLaPieza = conceptoDeLaPieza(todas) || limpiarTexto(o.ideaDelBrief ?? '')
   const conObjetivo = objetivo ? { objetivo } : {}
   const alternativas: string[] = []
   let pie = ''
@@ -346,7 +349,7 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
       const rol = rolDe(s.titulo, i, Math.min(bloques.length, maxLam), !!cta)
       const l: Lamina = { orden: i + 1, rol, headline, ...(body ? { body } : {}), ...(cta ? { cta } : {}), ...(eyebrow ? { eyebrow } : {}) }
       laminas.push(l)
-      imagenes.push(leerImagen(rol, c.imagen, { idea: c.concepto || ideaDeLaPieza, que_se_ve: c.que_se_ve, mensaje: headline, ...conObjetivo }))
+      imagenes.push(leerImagen(rol, c.imagen, { idea: c.concepto || ideaDeLaPieza, que_se_ve: c.que_se_ve, mensaje: headline, emocion: c.emocion, ...conObjetivo }))
       for (const k of ['headline', 'body', 'cta', 'eyebrow'] as const) {
         const v = l[k]
         if (typeof v === 'string' && v.length > AVISO_LARGO[k]) avisos.push(`lámina ${i + 1}: «${k}» trae ${v.length} caracteres (referencia ${AVISO_LARGO[k]}); el dibujo se ajusta al texto`)
@@ -391,12 +394,30 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
     if (!headline) { faltan.push(ref); return }
     copy.push({ ref, headline, ...(body ? { body } : {}), ...(cta ? { cta } : {}), ...(eyebrow ? { eyebrow } : {}) })
     estructura.push({ ref, rol: o.tipoPorRef?.[ref] ?? 'historia', beat: o.temaPorRef?.[ref] ?? headline.slice(0, 60), mood: c.mood ?? '' })
-    imagenes.push(leerImagen(ref, c.imagen, { idea: c.concepto || ideaDeLaPieza, que_se_ve: c.que_se_ve, mensaje: headline, ...conObjetivo }))
+    imagenes.push(leerImagen(ref, c.imagen, { idea: c.concepto || ideaDeLaPieza, que_se_ve: c.que_se_ve, mensaje: headline, emocion: c.emocion, ...conObjetivo }))
     if (headline.length > 60) avisos.push(`«${ref}»: el titular trae ${headline.length} caracteres; el dibujo se ajusta al texto`)
   })
   if (faltan.length && (o.preguntasHechas ?? 0) < maxP) return { ok: false, pregunta: `No encuentro texto para ${faltan.map((r) => `«${r}»`).join(', ')}. ¿Cuál es el título de ${faltan.length === 1 ? 'ese elemento' : 'esos elementos'}?`, pie_de_foto: pie, hashtags: tags, imagenes: [], avisos }
   if (!copy.length) return falla('ningún elemento del kit trae título')
   return { ok: true, pie_de_foto: pie, hashtags: tags, copy_kit: copy, estructura, imagenes, avisos, ...conObjetivo, ...(alternativas.length ? { alternativas } : {}) }
+}
+
+/**
+ * 16-nov · Mejora 2 · el pedido al generador de imagen: la escena que pidió la dirección y, debajo, el concepto de la pieza como CONTEXTO (no se escribe en la imagen).
+ * Sin concepto, el pedido es la descripción tal cual (como antes). Cuando exista el ingeniero de prompts (Mejora 4), él recibe el mismo `concepto` por la misma vía.
+ */
+export function pedidoDeImagen(descripcion: string, concepto?: ConceptoDeImagen): string {
+  const d = String(descripcion ?? '').trim()
+  if (!concepto) return d
+  const partes = [
+    concepto.idea ? `idea: ${concepto.idea}` : '',
+    concepto.que_se_ve && concepto.que_se_ve !== d ? `qué se ve: ${concepto.que_se_ve}` : '',
+    concepto.mensaje ? `mensaje que acompaña: ${concepto.mensaje}` : '',
+    concepto.emocion ? `emoción: ${concepto.emocion}` : '',
+    concepto.objetivo ? `lo que la pieza tiene que lograr: ${concepto.objetivo}` : '',
+  ].filter(Boolean)
+  if (!partes.length) return d
+  return `${d}\n\nContexto de la pieza (solo para entender la escena; no se escribe en la imagen): ${partes.join(' · ')}.\nLa imagen no lleva textos, letras, logos ni marcas de agua: el texto lo pone la composición.`
 }
 
 /** ¿la pieza pide generar alguna imagen? (para saber si la especialidad de imagen es pertinente) */

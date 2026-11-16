@@ -72,7 +72,12 @@ export interface PiezaAgente {
   datos: DatoDeterminado[]; pendientes: string[]
   /** 31-oct (nuevo orden · `calendario_tanda.v2`): el id de la idea del banco del concepto que la pieza realiza (`C<fase>-I<nn>`) o «»; ausente en la cadena de hoy (v1) */
   idea_de_mesa?: string
+  /** 16-nov · Sprint 1 · Mejora 2 (`calendario_tanda.v3`): la idea completa de ESTA pieza; ausente en v1/v2 */
+  concepto?: ConceptoDeLaFila
 }
+
+/** 16-nov · Sprint 1 · Mejora 2 · el concepto de UNA pieza del calendario (columna `cadena_calendario_filas.concepto`); solo las partes con texto (lo que falta se avisa) */
+export interface ConceptoDeLaFila { idea?: string; que_se_ve?: string; mensaje?: string; emocion?: string; foto?: string; llamado?: string }
 export interface Ajuste { semana: number; slot: string; accion: 'omitir' | 'mover' | 'agregar'; motivo: string }
 export interface TandaAgente { piezas: PiezaAgente[]; ajustes_al_patron: Ajuste[] }
 
@@ -105,6 +110,8 @@ export interface Fila {
   fase?: string | null
   /** 31-oct (nuevo orden): la idea del banco del concepto que la fila realiza (`C<fase>-I<nn>`); null/ausente = sin idea (la hoja lo declara) */
   idea_ref?: string | null
+  /** 16-nov · Sprint 1 · Mejora 2 · el concepto de la pieza (columna `concepto`, jsonb); null/ausente = la fila no lo trae (la hoja lo arma del banco y lo avisa) */
+  concepto?: ConceptoDeLaFila | null
 }
 
 export type Severidad = 'bloquea' | 'aviso'

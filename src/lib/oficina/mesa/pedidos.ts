@@ -174,14 +174,19 @@ const CONVENCION_DEL_GUION = [
   'El pie ("## Pie") es el texto de publicación final, sin hashtags (esos van solo en "## Etiquetas", una vez cada uno) y con la voz del manual.',
 ].join('\n')
 
-const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'brief' ? CONVENCION_DEL_BRIEF : tipo === 'concepto' ? CONVENCION_DEL_CONCEPTO : tipo === 'video' ? CONVENCION_DEL_GUION : tipo === 'carrusel'
+export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'brief' ? CONVENCION_DEL_BRIEF : tipo === 'concepto' ? CONVENCION_DEL_CONCEPTO : tipo === 'video' ? CONVENCION_DEL_GUION : tipo === 'carrusel'
   ? [
       'Escribe la PIEZA COMPLETA con esta convención ligera (no es un formulario: es para que el equipo de dibujo la lea):',
       '```',
+      '## Objetivo',
+      '<qué tiene que lograr esta pieza, en una frase> · <el llamado>',
+      '## Concepto',
+      '<la idea de la pieza entera, en una frase>',
       '## Lámina 1 · hook',
       'Título: …',
       'Texto: …',
       'Llamado: … (solo en la lámina que lo lleve)',
+      'Qué se ve: <la escena de ESTA lámina: lugar, quién, qué pasa, luz>',
       'Imagen: foto:<id de una foto propia> | generar: <qué debe mostrarse> | ninguna',
       '## Lámina 2 · problem   (…una sección por lámina, de 2 a 10)',
       '## Pie',
@@ -198,11 +203,14 @@ const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza): string => tipo === 'brief' ?
   : [
       'Escribe la PIEZA COMPLETA con esta convención ligera: una sección por elemento del brief, con su identificador:',
       '```',
+      '## Objetivo',
+      '<qué tiene que lograr esta pieza, en una frase> · <el llamado>',
       '## <ref del elemento>',
       'Título: …',
       'Texto: …',
       'Llamado: …',
       'Ambiente: …',
+      'Qué se ve: <la escena de ESTE elemento: lugar, quién, qué pasa, luz>',
       'Imagen: foto:<id de una foto propia> | generar: <qué debe mostrarse> | ninguna',
       '## Citas',
       'A3 usé: <qué tomaste de ese aporte>',
@@ -271,7 +279,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
         ? ['PRIMERO lee el brief de la campaña con estos 6 criterios: (1) un solo mensaje, (2) insight real, (3) objetivo claro, (4) está planteado como problema y no como solución, (5) es fiel al plan y al manual, (6) se puede crear con lo que trajo el portero. Si alguno falla, **devuelve el brief UNA vez**: escribe una sección `## Devolución del brief` con los puntos que fallan y nada más (la mesa se cierra y la cadena pide un brief nuevo). Si el brief sirve, sigue: del brief y el manual, escribe **EL PROBLEMA en una frase**, y reparte lo que necesitas de cada compañero. Cada uno propondrá 2 o 3 caminos distintos con su porqué, pensados para 90 días.']
         : c.tipo === 'video'
         ? ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora** del video corto: qué vas a contar en 8–15 segundos, con qué estructura de planos, qué fotos propias sirven de referencia y qué necesitas de cada compañero (guion y pedido al generador, storyboard, el gancho final y su puerta de retención (el coach, única voz), texto del pie, coherencia de Instagram o formato nativo de TikTok/Reels si están en la mesa).', REGLA_DEL_GANCHO + ' Tú no propones el gancho: lo pides y lo integras en la pieza.']
-        : ['Lee el manual, luego el brief y el plan. Escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.']),
+        : ['Lee el manual, luego el brief y el plan. Abre con **`Objetivo de la pieza:`** qué tiene que lograr esta pieza, en una frase, y su llamado (parte del OBJETIVO y del concepto que trae el brief; si el brief no lo dice, decláralo tú y dilo). Luego escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué escena muestra cada lámina o elemento (no copies los planos del brief: el «visual de la campaña» es referencia), qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.']),
       'El equipo completo participa en cada pieza: la oficina se formó con estos especialistas por razones concretas. Cada uno aportará su especialidad; no escribas tú todo. Si ya sabes que te falta material del cliente, pídelo con `pedir_material`.',
     ].join('\n'),
     aportar: [

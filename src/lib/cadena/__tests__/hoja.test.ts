@@ -32,6 +32,8 @@ const FORMATOS: FormatosPorRed = {
   ig: [{ formato: 'carrusel', produccion: 'opera', lead_dias: 2, max_por_dia: 1, familia: 'imagen_fija' }, { formato: 'historia', produccion: 'opera', lead_dias: 1, max_por_dia: 3, familia: 'kit_historias' }, { formato: 'reel', produccion: 'espera_brazo', lead_dias: 5, max_por_dia: 1, familia: null }],
   whatsapp: [{ formato: 'estado', produccion: 'opera', lead_dias: 1, max_por_dia: 2, familia: 'kit_historias' }],
 }
+// 16-nov · Sprint 1 · Mejora 2: las filas de estas pruebas no traen concepto propio (la hoja lo avisa; eso lo cubre sprint1-concepto-de-la-fila.test.ts)
+const sinAvisoDeConcepto = (a: string[]): string[] => a.filter((x) => !x.includes('no trae concepto propio'))
 const fila = (o: Partial<FilaDeHoja> & { id: string }): FilaDeHoja => ({ fecha: '2026-11-12', hora: '09:00', red: 'ig', formato: 'carrusel', pilar: 'producto', tema: 'la primera silla', datos: [], fase: 'F1', idea_ref: 'C1-I01', ...o })
 const INS = (filas: FilaDeHoja[], extra: Partial<InsumosDeLaHoja> = {}): InsumosDeLaHoja => ({
   client_name: 'Cliente de prueba', plan_id: '11111111-2222-3333-4444-555555555555', manual_version: 3, manual_id: 'man-1', hoy: '2026-10-31', lote_key: '2026-W46',
@@ -42,7 +44,7 @@ describe('hoja.v1 · ida y vuelta con el lector de la oficina', () => {
   it('un brief por fila, identificado por el fila_id, que `parsearBrief` lee con todos sus campos', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-ig-01' })]))
     expect(BRIEF.estado).toBe('validada'); expect(CONCEPTO.estado).toBe('ok')
-    expect(h.avisos).toEqual([])
+    expect(sinAvisoDeConcepto(h.avisos)).toEqual([])
     expect(planDeOrigen(h.texto_md)).toBe('11111111-2222-3333-4444-555555555555')
     const b = parsearBrief(h.texto_md, 'F1-S1-ig-01')!
     expect(b).not.toBeNull()
@@ -72,8 +74,8 @@ describe('hoja.v1 · ida y vuelta con el lector de la oficina', () => {
     const b = parsearBrief(h.texto_md, 'F1-S1-ig-02')!
     expect(b.mensaje).toBe('el pan de las siete · sin idea del banco')
     expect(b.texto).toContain('- IDEA DEL BANCO: ninguna · declarado')
-    expect(h.avisos).toEqual(['F1-S1-ig-02: sin idea del banco (tema «el pan de las siete») · el mensaje sale del tema y se declara'])
-    expect(h.texto_md).toContain('## Avisos de la hoja\n- F1-S1-ig-02: sin idea del banco')
+    expect(sinAvisoDeConcepto(h.avisos)).toEqual(['F1-S1-ig-02: sin idea del banco (tema «el pan de las siete») · el mensaje sale del tema y se declara'])
+    expect(h.texto_md).toContain('## Avisos de la hoja\n'); expect(h.texto_md).toContain('\n- F1-S1-ig-02: sin idea del banco')
   })
   it('una idea_ref que no está en el banco se declara; un formato sin familia también (el sobre saldrá sin sala)', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-ig-03', idea_ref: 'C1-I99', formato: 'reel' })]))
@@ -115,7 +117,7 @@ describe('hoja.v1 · ida y vuelta con el lector de la oficina', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-ig-01' }), fila({ id: 'con espacios' })]))
     expect(h.provenance.kit).toBeNull()
     expect(h.briefs).toHaveLength(1)
-    expect(h.avisos).toEqual(['fila «con espacios» con id inválido como brief · se omite de la hoja'])
+    expect(sinAvisoDeConcepto(h.avisos)).toEqual(['fila «con espacios» con id inválido como brief · se omite de la hoja'])
     expect(RE_ID_DE_BRIEF.test('F1-S1-ig-01')).toBe(true)
   })
   it('el modo seco se declara en el encabezado y en la procedencia; sin filas la hoja no es válida', () => {
