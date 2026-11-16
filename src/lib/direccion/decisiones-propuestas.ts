@@ -7,7 +7,8 @@
  * Pura: arma lo que muestra la tarjeta con el estado del motor del encargo.
  */
 import { esObjeto, texto, type Fila } from './comun'
-import { FUNCION_APROBAR_PROPUESTAS } from '../oficina/video/aprobacion'
+import { FUNCION_APROBAR_PROPUESTAS, quedanVueltas } from '../oficina/video/aprobacion'
+import type { Paso } from '../oficina/tipos'
 export const TITULO_PROPUESTAS = 'Propuestas del video: elige una'
 export const PARA_QUE_PROPUESTAS = 'Eliges el video antes de fabricarlo: la propuesta que apruebes es la que se produce en calidad final, sin otra parada.'
 export const PARA_QUE_CORTO_PROPUESTAS = 'elegir el video'
@@ -16,8 +17,6 @@ export const DESTRABA_CORTO_PROPUESTAS = 'fabricar el video'
 /** «Decisivo» de la tarjeta (pedido de CC5 en su ADENDA 1 de campos) */
 export const CRITICOS_PROPUESTAS = ['Solo lo que apruebes se fabrica, en máxima calidad']
 export const COSTO_NOTA_PROPUESTAS = 'aprobar fabrica la elegida dentro del tope ya fijado del encargo; pedir cambios vuelve a correr la mesa y los borradores dentro del mismo tope'
-/** las vueltas por omisión del paso, si la plantilla no dice `max` (contrato §2) */
-const VUELTAS_POR_OMISION = 3
 
 export interface PlanoDeLaTarjeta { n: number; desde: number; hasta: number; rol: string | null; dice: string | null; se_ve: string; texto_en_pantalla: string | null; producto: boolean | null; imagen_url: string | null; imagenes: string[] }
 /** lo que la mesa no escribió va `null` (nunca 0 ni texto vacío: la tarjeta lo muestra con guion rojo · pedido de CC5) */
@@ -40,9 +39,9 @@ export function propuestasDeLaDecision(enc: { id: string; brief_id: string }, mo
   const ik = lista(datosDe(motor, 'imagenes_clave')?.propuestas)
   const bv = lista(datosDe(motor, 'borrador_video')?.propuestas)
   const paso = pasos?.find((p) => p.tipo === 'codigo' && p.funcion === FUNCION_APROBAR_PROPUESTAS)
-  const va = paso && esObjeto(paso.vuelve_a) ? paso.vuelve_a : null
-  const max = num(va?.max) ?? VUELTAS_POR_OMISION
-  const hechas = num((esObjeto(motor.vueltas) ? motor.vueltas : {})[String(paso?.clave ?? '')]) ?? 0
+  // corrección de CC6: la MISMA regla que el motor (`quedanVueltas`): sin `vuelve_a` o sin plantilla legible, 0 (la tarjeta no ofrece «Pedir cambios» que terminaría en 409 `sin_vueltas`)
+  const vueltas = esObjeto(motor.vueltas) ? (motor.vueltas as Record<string, number>) : {}
+  const quedan = quedanVueltas({ vueltas }, paso as unknown as Pick<Paso, 'clave' | 'vuelve_a'> | undefined)
   const listaT = props.map((p, i): PropuestaDeLaTarjeta => {
     const id = String(p.id ?? `P${i + 1}`)
     const img = deLaPropuesta(ik, id, i), vid = deLaPropuesta(bv, id, i)
@@ -60,5 +59,5 @@ export function propuestasDeLaDecision(enc: { id: string; brief_id: string }, mo
     return { id, nombre: texto(p.nombre) ?? id, concepto: texto(p.concepto), segundos: positivo(p.segundos) ?? positivo(g.segundos), red: texto(p.red), objetivo: texto(p.objetivo), por_que: texto(p.por_que), video_url: url(vid?.url), costo: { borrador_usd: borrador, final_usd: null }, planos }
   })
   const avisos = (Array.isArray(pv.avisos) ? pv.avisos : []).filter((a): a is string => typeof a === 'string')
-  return { encargo_id: enc.id, brief_id: enc.brief_id, ronda: num(pv.ronda) ?? 1, quedan_vueltas: Math.max(0, max - hechas), avisos, lista: listaT }
+  return { encargo_id: enc.id, brief_id: enc.brief_id, ronda: num(pv.ronda) ?? 1, quedan_vueltas: quedan, avisos, lista: listaT }
 }

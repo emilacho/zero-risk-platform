@@ -8,6 +8,7 @@ import type { Contexto } from '../src/lib/direccion/comun'
 import { leerDecisiones } from '../src/lib/direccion/decisiones'
 import { problemasDeLaFicha, QUE_SE_DETIENE_EL_VIDEO } from '../src/lib/direccion/decisiones-ficha'
 import { propuestasDeLaDecision, TITULO_PROPUESTAS } from '../src/lib/direccion/decisiones-propuestas'
+import { quedanVueltas } from '../src/lib/oficina/video/aprobacion'
 
 const AHORA = new Date('2026-11-16T23:00:00Z')
 const C1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -54,13 +55,20 @@ describe('lo que muestra la tarjeta (puro)', () => {
     // sin `url`, el primero de `imagenes` es la imagen del plano (ADENDA 3)
     expect(p2.planos[1]).toMatchObject({ imagen_url: 'https://img/p2-2.png', imagenes: ['https://img/p2-2.png'] })
   })
-  it('las rondas que quedan salen del `max` del paso menos las vueltas hechas; sin `max`, 3; nunca negativas', () => {
+  it('🔴 (CC6) las rondas que quedan siguen la regla del motor: `max` del paso menos las hechas; sin `vuelve_a` o sin plantilla, 0; nunca negativas', () => {
     expect(propuestasDeLaDecision({ id: E1, brief_id: 'b' }, motor({ vueltas: { aprobar_propuestas: 1 } }), PASOS)!.quedan_vueltas).toBe(1)
     expect(propuestasDeLaDecision({ id: E1, brief_id: 'b' }, motor({ vueltas: { aprobar_propuestas: 5 } }), PASOS)!.quedan_vueltas).toBe(0)
-    expect(propuestasDeLaDecision({ id: E1, brief_id: 'b' }, motor(), null)!.quedan_vueltas).toBe(3)
+    expect(propuestasDeLaDecision({ id: E1, brief_id: 'b' }, motor(), null)!.quedan_vueltas).toBe(0)
+    const sinVuelta = [{ clave: 'aprobar_propuestas', tipo: 'codigo', funcion: 'aprobar_propuestas' }]
+    expect(propuestasDeLaDecision({ id: E1, brief_id: 'b' }, motor(), sinVuelta)!.quedan_vueltas).toBe(0)
+    // el motor dice lo mismo para el mismo paso y las mismas vueltas
+    expect(quedanVueltas({ vueltas: {} }, sinVuelta[0] as never)).toBe(0)
+    expect(quedanVueltas({ vueltas: { aprobar_propuestas: 1 } }, PASOS[1] as never)).toBe(propuestasDeLaDecision({ id: E1, brief_id: 'b' }, motor({ vueltas: { aprobar_propuestas: 1 } }), PASOS)!.quedan_vueltas)
   })
   it('una dirección que no es http(s) no se muestra como imagen ni video', () => {
     const m = motor()
+    ;(m.artefactos as Record<string, unknown>).imagenes_clave = { datos: { propuestas: [{ id: 'P2', planos: [{ n: 1, imagenes: ['javascript:alert(1)', 'https://img/ok.png'] }] }] } }
+    expect(propuestasDeLaDecision({ id: E1, brief_id: 'b' }, m, PASOS)!.lista[1].planos[0]).toMatchObject({ imagen_url: 'https://img/ok.png', imagenes: ['https://img/ok.png'] })
     ;(m.artefactos as Record<string, unknown>).borrador_video = { datos: { propuestas: [{ id: 'P2', url: 'javascript:alert(1)' }] } }
     expect(propuestasDeLaDecision({ id: E1, brief_id: 'b' }, m, PASOS)!.lista[1].video_url).toBeNull()
   })

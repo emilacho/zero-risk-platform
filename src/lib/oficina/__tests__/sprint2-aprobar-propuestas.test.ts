@@ -302,3 +302,21 @@ describe('la migración 202611162330 (el turno del dueño)', () => {
     expect(REV).toMatch(/RAISE EXCEPTION/)
   })
 })
+
+describe('(CC6 · n11) la decisión solo se aplica sobre el paso de aprobación', () => {
+  it('🔴 con el turno del dueño abierto pero el paso pendiente YA NO es la aprobación: 409 por la SEGUNDA guarda, y nada cambia', async () => {
+    const T = await montar()
+    await T.seguir(T.a)
+    const e = estado(T.M, T.id)
+    // el motor dice que la aprobación ya se ejecutó (el siguiente paso es otro), aunque el turno del dueño siga abierto
+    const pl = conAprobacion(3)
+    e.ultimo = pl.pasos.findIndex((p) => p.clave === 'aprobar_propuestas')
+    const antes = JSON.stringify(e.artefactos)
+    const d = await recibirDecisionDelDueno(T.M.P, T.id, { decision: 'aprobar', ronda: 1, propuesta_id: 'P1' })
+    expect(d.status).toBe(409)
+    expect(d.cuerpo).toMatchObject({ error: 'no_espera_al_dueno', detalle: 'el paso pendiente no es la aprobación de las propuestas' })
+    expect(JSON.stringify(estado(T.M, T.id).artefactos)).toBe(antes)
+    expect(estado(T.M, T.id).artefactos.guion).toBeUndefined()
+    expect(T.enviados).toHaveLength(0)
+  })
+})
