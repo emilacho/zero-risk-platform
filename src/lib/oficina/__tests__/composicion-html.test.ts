@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { caraDeFuentes, escaparHtml, htmlDeAnuncio, imagenEmbebida, renderAnuncioHtml, type PaginaSinPantalla } from '../../../../packages/carousel-engine/src/anuncio-html'
-import { VARIANTES_DE_ANUNCIO, type PedidoDeAnuncio } from '../../../../packages/carousel-engine/src/anuncio'
+import { tamanoDeTitular, VARIANTES_DE_ANUNCIO, type PedidoDeAnuncio } from '../../../../packages/carousel-engine/src/anuncio'
 import type { FontEntry } from '../../../../packages/carousel-engine/src'
 import { disenoDeAnuncio } from '../composicion'
 import type { MarcaParaRender } from '../puertos'
@@ -99,5 +99,27 @@ describe('el dibujo con el navegador sin pantalla (página doble)', () => {
     const { pagina, llamadas } = paginaDoble({ fallaFoto: true })
     await expect(renderAnuncioHtml(pedido(), { fonts: FUENTES, abrirPagina: async () => pagina })).rejects.toThrow('chromium se cayó')
     expect(llamadas.at(-1)).toBe('cierra')
+  })
+})
+
+// ───────────────────────── ADENDA · paridad visual con #1065 (sabotajes de CC7 #13 #14 #18)
+describe('ADENDA CC7 · se ve igual que la versión aprobada', () => {
+  const regla = (h: string, clase: string): string => (new RegExp(`\\.${clase}\\{([^}]*)\\}`).exec(h) ?? ['', ''])[1]
+  it('#14 · el titular usa la tipografía de TITULARES del manual (no la del cuerpo)', () => {
+    const h = htmlDeAnuncio(pedido(), FUENTES)
+    expect(regla(h, 'titular')).toContain("font-family:'Caveat'"); expect(regla(h, 'firma')).toContain("font-family:'Caveat'")
+    expect(regla(h, 'bajada')).not.toContain('Caveat'); expect(h).toMatch(/body\{[^}]*font-family:'Inter'/)
+  })
+  it('#18 · el tamaño del titular sale de tamanoDeTitular: uno largo se achica', () => {
+    const tam = (titular: string) => Number(/font-size:(\d+)px/.exec(regla(htmlDeAnuncio(pedido({ texto: { titular } }), FUENTES), 'titular'))![1])
+    const util = 1080 - 2 * Math.round(1080 * 0.065)
+    expect(tam('x'.repeat(15))).toBe(tamanoDeTitular('x'.repeat(15), util))
+    expect(tam('x'.repeat(70))).toBe(tamanoDeTitular('x'.repeat(70), util))
+    expect(tam('x'.repeat(70))).toBeLessThan(tam('x'.repeat(15)))
+  })
+  it('#13 · con el texto arriba, el velo oscurece ARRIBA; con el texto abajo, abajo', () => {
+    expect(regla(htmlDeAnuncio(conVariante('arriba_izquierda'), FUENTES), 'velo')).toMatch(/top:0[;]/)
+    expect(regla(htmlDeAnuncio(conVariante('abajo_izquierda'), FUENTES), 'velo')).toMatch(/bottom:0[;]/)
+    expect(regla(htmlDeAnuncio(conVariante('arriba_izquierda'), FUENTES), 'velo')).toContain('linear-gradient(0deg')
   })
 })
