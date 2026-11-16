@@ -15,6 +15,10 @@ import type { Plano } from './guion'
 import { faseDeLaProduccion } from './propuestas'
 
 export const PASO_IMAGENES_CLAVE = 'imagenes_clave'
+/** el mismo paso con la propuesta aprobada (orden acordado con CC1: mesa → imagenes_clave → borrador_video → aprobar_propuestas → imagenes_clave_final → pedido…) */
+export const PASO_IMAGENES_CLAVE_FINAL = 'imagenes_clave_final'
+/** decisión de Lenovo 16-nov 22:23: en el BORRADOR de las propuestas, un plano que dura MÁS de esto lleva dos cuadros (cómo arranca y cómo termina), no uno */
+export const SEGUNDOS_PARA_DOS_CUADROS = 3
 export const PASO_REVISAR_IMAGENES_CLAVE = 'revisar_imagenes_clave'
 export const ESQUEMA_REVISION_IMAGENES_CLAVE = 'revision_imagenes_clave.v1'
 
@@ -57,6 +61,22 @@ export function calidadDeLaFase(limites: Record<string, unknown> | null | undefi
 /** ¿es un plano del producto? lo dice la hoja (`producto`); si la hoja no lo dice, un plano que nombra una foto propia lo es */
 export const esPlanoDeProducto = (p: PlanoDeLaHoja): boolean => (typeof p.producto === 'boolean' ? p.producto : esTexto(p.foto_id))
 
+/** ¿el plano lleva dos cuadros? dura más de SEGUNDOS_PARA_DOS_CUADROS y la hoja dice cómo termina (su estado final o su movimiento) */
+export const llevaDosCuadros = (p: PlanoDeLaHoja): boolean =>
+  Number(p.hasta) - Number(p.desde) > SEGUNDOS_PARA_DOS_CUADROS && (esTexto(p.estado_final) || esTexto(p.movimiento))
+
+/**
+ * el segundo cuadro de un plano largo: el MISMO prompt base (misma escena, misma foto) congelado en el instante en que el plano termina.
+ * Así el borrador cuenta el plano entero y el clip tiene adónde llegar.
+ */
+export function promptDelCierre(p: PlanoDeLaHoja, o: { total: number; proporcion: string }): string {
+  const fin = esTexto(p.estado_final) ? p.estado_final.trim() : `the moment right after this movement ends: ${String(p.movimiento ?? '').trim()}`
+  return [
+    promptDeImagenClave(p, o).replace('It will be the first frame of the clip of this shot.', 'It will be the LAST frame of the clip of this shot.'),
+    `Freeze the END of the shot, not its start: ${fin}. Same scene, same subject, same product, same light and same framing style as the first frame of this shot.`,
+  ].join('\n')
+}
+
 /**
  * el prompt de la imagen clave: el de la hoja si lo trae; si no, se compone con todo lo que la hoja sabe del plano. Siempre pide un cuadro vertical, sin texto
  * (el texto en pantalla se compone por código) y que se pueda continuar en movimiento (es el primer cuadro del clip).
@@ -86,6 +106,8 @@ export interface PedidoDeImagenClave {
   foto: FotoDeReferencia | null
   /** el plano es de producto pero no hay foto apta: se genera desde la hoja (no es un error: es el camino de los clientes sin fotos) */
   sin_foto_apta: boolean
+  /** solo los planos largos (`llevaDosCuadros`): el prompt del cuadro de cierre, con la MISMA foto */
+  prompt_cierre?: string
 }
 
 /**
@@ -102,30 +124,59 @@ export function pedidosDeImagenClave(o: { planos: PlanoDeLaHoja[]; aptas: FotoDe
   const pedidos = o.planos.map((p) => {
     const producto = esPlanoDeProducto(p)
     const foto = producto ? fotoDe.get(p.n) ?? null : null
-    return { n: p.n, prompt: promptDeImagenClave(p, { total: o.planos.length, proporcion: o.proporcion }), foto, sin_foto_apta: producto && !foto }
+    const forma = { total: o.planos.length, proporcion: o.proporcion }
+    return { n: p.n, prompt: promptDeImagenClave(p, forma), foto, sin_foto_apta: producto && !foto, ...(llevaDosCuadros(p) ? { prompt_cierre: promptDelCierre(p, forma) } : {}) }
   })
   return { pedidos, no_aptas: porFoto.no_aptas.map(({ i, id }) => ({ n: deProducto[i].n, id })) }
 }
 
 export interface ImagenClaveDelPlano {
   n: number
+  /** el primer cuadro (lo leen el clip de CC3 y la revisión) */
   url: string
+  /** todos los cuadros del plano, en orden: [arranque] o [arranque, cierre] en los planos largos (contrato con CC1/CC5: la tarjeta los muestra) */
+  imagenes?: string[]
   prompt: string
   foto_referencia_id: string | null
   referencia_usada: boolean
+  /** lo que costaron TODOS los cuadros del plano */
   costo_usd: number
   generation_id: string
+}
+
+/** las imágenes clave de UNA propuesta (fase de propuestas: la tarjeta del dueño las lee por id · `decisiones-propuestas.ts` de CC1) */
+export interface ImagenesClaveDeLaPropuesta {
+  id: string
+  planos: ImagenClaveDelPlano[]
+  costo_usd: number
+  planos_sin_imagen?: number[]
 }
 
 /** lo que deja el paso `imagenes_clave` (lo leen la revisión, el clip de cada plano · S2-4 · y la tarjeta de propuestas) */
 export interface ImagenesClave {
   fase: FaseDeProduccion
   calidad: CalidadDeImagenClave
+  /** en final: las del guion. En borrador (propuestas) va vacía y cada propuesta trae las suyas en `propuestas` */
   planos: ImagenClaveDelPlano[]
+  propuestas?: ImagenesClaveDeLaPropuesta[]
+  /** el paso final no regeneró: el encargo no tenía propuestas y `imagenes_clave` ya era final (copia, sin gasto) */
+  copiado_de?: string
   /** hay imágenes REALES que mirar (en ensayo son simuladas: false, y la revisión no se llama) */
   hay_imagenes: boolean
   simulado?: boolean
   planos_sin_imagen?: number[]
+}
+
+/**
+ * las imágenes clave FINALES del encargo (las que leen la revisión, el clip y la mirada): las de `imagenes_clave_final` si ese paso corrió; si no, las de
+ * `imagenes_clave` cuando ya eran finales (el video sin propuestas). Las de borrador de las propuestas NUNCA: esas solo son para que el dueño elija. Puro
+ */
+export function imagenesClaveVigentes(e: Pick<Estado, 'artefactos'>): ImagenesClave | null {
+  for (const k of [PASO_IMAGENES_CLAVE_FINAL, PASO_IMAGENES_CLAVE]) {
+    const d = e.artefactos?.[k]?.datos as unknown as ImagenesClave | undefined
+    if (d && d.fase !== 'borrador') return d
+  }
+  return null
 }
 
 // ───────────────────────── la revisión con visión (decisión de Emilio 16-nov 20:53: AVISA y devuelve a la mesa UNA vez; luego sigue)
