@@ -69,7 +69,7 @@ export function tareaDelIngeniero(imagenes: ImagenARedactar[]): string {
     '- **Sin texto dentro de la imagen**: ni letras, ni números, ni logos, ni carteles legibles, ni marcas. El texto, el logo y los colores de la marca se componen DESPUÉS sobre la imagen. Escríbelo en el prompt (p. ej. «no text, no letters, no logos, no signage»).',
     '- **Zona libre para texto**: si la lámina lleva título, texto o llamado, di en el prompt DÓNDE queda un área limpia, de fondo simple y sin detalle importante, para ponerlo encima (p. ej. «clean empty space in the upper third for a headline»), y mantén ahí fuera al sujeto. Elige el lugar según la composición de la escena; si la lámina no lleva texto, no hace falta.',
     '- El **producto del cliente** se muestra como es: si una foto propia lo muestra (lista de fotos arriba), nómbrala en «Referencia:» y describe el producto tal como se ve en ella; no lo inventes ni lo «mejores».',
-    '- **No inventes** datos, sellos, precios, marcas ajenas ni personas reales; si la escena lleva personas, que se vean reales y del país del cliente.',
+    '- **No inventes** datos, sellos, precios, marcas ajenas ni personas reales; si la escena lleva personas, sigue lo que digan el manual, el brief y las reglas de arriba (no decidas tú cómo se ven sus rostros).',
     '- Sin relación de aspecto ni parámetros del modelo: el tamaño lo fija la oficina.',
     '',
     CONVENCION_DE_PROMPTS,

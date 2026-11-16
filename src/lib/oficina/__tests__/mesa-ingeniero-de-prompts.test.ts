@@ -114,12 +114,22 @@ describe('lectura tolerante de lo que escribe el ingeniero', () => {
 
 describe('LA MESA · punta a punta con el ingeniero en el directorio (ensayo, en memoria)', () => {
   const DIR_ING = DIRECTORIO.map((t) => (t.agente === ING ? { ...t, pertinente_en: ['carrusel:redacta_prompts', 'kit:redacta_prompts'] } : t))
-  async function montarConIngeniero() {
+  /** monta la mesa y guarda el CONTENIDO de cada artefacto que se escribe (la memoria solo guarda su huella): ahí viajan `avisos_del_traductor` */
+  async function montarConIngeniero(directorio: Tarjeta[] = DIR_ING) {
     const M = crearMemoria({ parte: parteCon(BRIEF_CARRUSEL), plantilla: CARRUSEL_MESA })
-    const MS = crearMesaEnMemoria(DIR_ING)
+    const MS = crearMesaEnMemoria(directorio)
     M.P.mesa = MS
+    const contenidos: Array<Record<string, unknown>> = []
+    const guardar = M.P.almacen.guardar.bind(M.P.almacen)
+    M.P.almacen.guardar = async (c) => { if (c.artefacto?.contenido) contenidos.push(c.artefacto.contenido as Record<string, unknown>); return guardar(c) }
     const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0100', dry_run: true, familia: 'carrusel_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
-    return { M, MS, a, id: String(a.cuerpo.encargo_id) }
+    return { M, MS, a, id: String(a.cuerpo.encargo_id), contenidos }
+  }
+  /** los avisos que el cierre de la mesa dejó en el artefacto `mesa` (contenido con `avisos_del_traductor`) */
+  const avisosDelCierre = (contenidos: Array<Record<string, unknown>>): string[] => {
+    const c = [...contenidos].reverse().find((x) => Array.isArray(x.avisos_del_traductor))
+    expect(c, 'el cierre de la mesa escribió su artefacto con avisos_del_traductor').toBeDefined()
+    return c!.avisos_del_traductor as string[]
   }
   const CITAS = '## Citas\nA2 usé: los titulares\nA3 usé: el ritmo de las láminas\nA4 usé: la dirección visual del plato'
   const PROMPT = 'Overhead shot of the dish of the day served on a light wooden table, natural window light from the left, 35mm, shallow depth of field, no text, no letters, no logos.'
@@ -148,7 +158,7 @@ describe('LA MESA · punta a punta con el ingeniero en el directorio (ensayo, en
   })
 
   it('si el ingeniero no deja nada legible, la imagen sale con la descripción de la dirección y la pieza no se frena', async () => {
-    const { M, a, id } = await montarConIngeniero()
+    const { M, a, id, contenidos } = await montarConIngeniero()
     const { ultima } = await jugar(M, id, a, (t) => {
       if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: pieza(LAMINAS_OK, CITAS) }
       if (t.tipo === 'redactar_prompts') return { texto: '## otra cosa\nPrompt: algo que no es de ninguna lámina' }
@@ -158,5 +168,19 @@ describe('LA MESA · punta a punta con el ingeniero en el directorio (ensayo, en
     const pv = M.encargos.get(id)!.estado_del_motor.artefactos.prompts_validos.datos as { por_ref: Record<string, { prompts: Array<{ prompt: string }>; origen: string }> }
     expect(pv.por_ref.hook.prompts[0].prompt).toBe('un plato servido sobre una mesa de madera clara, luz natural')
     expect(pv.por_ref.hook.origen).toBe('direccion')
+    // CC6 m18 · el aviso llega a la pieza (artefacto `mesa`), no solo a la función pura
+    expect(avisosDelCierre(contenidos)).toEqual(expect.arrayContaining([expect.stringMatching(/el ingeniero de prompts no dejó una instrucción legible para «hook»/)]))
+  })
+
+  it('CC6 m19 · con el directorio de hoy (sin `redacta_prompts`) todo queda como antes: sin turno, sin avisos de prompts, origen `direccion`', async () => {
+    const { M, a, id, contenidos } = await montarConIngeniero(DIRECTORIO)
+    const { ultima, turnos } = await jugar(M, id, a, (t) => (t.tipo === 'integrar' || t.tipo === 'devolver_citas' ? { texto: pieza(LAMINAS_OK, CITAS + '\nA5 usé: el prompt de la primera imagen') } : undefined))
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
+    expect(turnos.map((t) => t.tipo)).not.toContain('redactar_prompts')
+    const pv = M.encargos.get(id)!.estado_del_motor.artefactos.prompts_validos.datos as { por_ref: Record<string, { prompts: Array<{ prompt: string }>; origen: string }>; ingeniero?: unknown }
+    expect(pv.por_ref.hook.prompts[0].prompt).toBe('un plato servido sobre una mesa de madera clara, luz natural')
+    expect(pv.por_ref.hook.origen).toBe('direccion')
+    expect(pv.ingeniero).toBeUndefined()
+    expect(avisosDelCierre(contenidos).filter((x) => /ingeniero de prompts/.test(x))).toEqual([])
   })
 })

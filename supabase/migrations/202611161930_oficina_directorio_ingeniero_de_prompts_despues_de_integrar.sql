@@ -4,7 +4,7 @@
 --   instrucción exacta del modelo, y ESA instrucción es la que recibe el brazo de imagen (código `mesa/prompts.ts` + `planificador.ts` paso 8).
 --   Sin esta migración el código no cambia nada (no hay tarjeta con la marca nueva: la mesa trabaja como hoy). Idempotente. La mesa congela el directorio al abrir:
 --   las piezas en vuelo siguen con el directorio con el que abrieron.
---   NO APLICADA: se aplica después de la certificación de CC7 y de publicar el código.
+--   NO APLICADA: se aplica después de la certificación de CC6 (GO 20:05) y de publicar el código.
 --   Reversa: supabase/reversas/202611161930_oficina_directorio_ingeniero_de_prompts_despues_de_integrar_REVERSA.sql
 BEGIN;
 
