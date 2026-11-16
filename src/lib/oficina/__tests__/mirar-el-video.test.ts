@@ -24,7 +24,7 @@ import type { PuertoDeVideo } from '../puertos'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { sacarCuadros, duracionDeLaSalida } from '../video/cuadros'
 import type { Plano } from '../video/guion'
-import { instantesPorPlano, leerMirada, MAX_CUADROS_DEL_VIDEO, PASO_MIRAR_VIDEO, tareaDeLaMirada } from '../video/mirada'
+import { instantesPorPlano, leerMirada, CUADROS_POR_PLANO, MAX_CUADROS_DEL_VIDEO, PASO_MIRAR_VIDEO, tareaDeLaMirada } from '../video/mirada'
 import { procesarSalida } from '../salida'
 import { validarPlantilla } from '../plantilla'
 import type { Plantilla } from '../tipos'
@@ -48,12 +48,17 @@ const PLANOS: Plano[] = [
   { n: 3, desde: 9, hasta: 12, se_ve: 'el cierre con el nombre' },
 ]
 
-describe('los cuadros: uno del medio de cada plano', () => {
+describe('los cuadros: inicio, medio y final de cada plano (S2-7)', () => {
   it('🔴 el instante sale de los segundos del guion, no de una lista fija', () => {
-    expect(instantesPorPlano(PLANOS)).toEqual([{ plano: 1, segundo: 1.5 }, { plano: 2, segundo: 6 }, { plano: 3, segundo: 10.5 }])
+    expect(instantesPorPlano(PLANOS)).toEqual([
+      { plano: 1, segundo: 0.3, parte: 'inicio' }, { plano: 1, segundo: 1.5, parte: 'medio' }, { plano: 1, segundo: 2.7, parte: 'final' },
+      { plano: 2, segundo: 3.3, parte: 'inicio' }, { plano: 2, segundo: 6, parte: 'medio' }, { plano: 2, segundo: 8.7, parte: 'final' },
+      { plano: 3, segundo: 9.3, parte: 'inicio' }, { plano: 3, segundo: 10.5, parte: 'medio' }, { plano: 3, segundo: 11.7, parte: 'final' },
+    ])
   })
   it('🔴 un video más corto que el guion: el cuadro queda dentro del video', () => {
-    expect(instantesPorPlano(PLANOS, 8).map((x) => x.segundo)).toEqual([1.5, 6, 7.9])
+    // el plano 3 cae entero después del final: queda UN cuadro (los tres caían en 7,9)
+    expect(instantesPorPlano(PLANOS, 8).map((x) => [x.plano, x.segundo])).toEqual([[1, 0.3], [1, 1.5], [1, 2.7], [2, 3.3], [2, 6], [2, 7.9], [3, 7.9]])
   })
   it('🔴 con más planos que el máximo: MAX cuadros repartidos parejo, primero y último incluidos; el pedido dice cuántos de cuántos', () => {
     const muchos: Plano[] = Array.from({ length: 41 }, (_, i) => ({ n: i + 1, desde: i, hasta: i + 1, se_ve: `p${i + 1}` }))
@@ -61,30 +66,35 @@ describe('los cuadros: uno del medio de cada plano', () => {
     expect(x).toHaveLength(MAX_CUADROS_DEL_VIDEO)
     expect(x[0].plano).toBe(1)
     expect(x[x.length - 1].plano).toBe(41)
-    expect(new Set(x.map((c) => c.plano)).size).toBe(MAX_CUADROS_DEL_VIDEO)
-    expect(instantesPorPlano(PLANOS, null, 2).map((c) => c.plano)).toEqual([1, 3])
-    const t = tareaDeLaMirada({ cuadros: x.map((c) => ({ ...c, url: `https://c/${c.plano}.jpg` })), planos: muchos, segundos: 41, brief_texto: 'x', red: 'youtube', formato: 'short', contrato: '' })
+    // los planos elegidos conservan sus 3 cuadros
+    const planosVistos = MAX_CUADROS_DEL_VIDEO / CUADROS_POR_PLANO
+    expect(new Set(x.map((c) => c.plano)).size).toBe(planosVistos)
+    expect(instantesPorPlano(PLANOS, null, 6).map((c) => c.plano)).toEqual([1, 1, 1, 3, 3, 3])
+    const t = tareaDeLaMirada({ cuadros: x.map((c) => ({ ...c, url: `https://c/${c.plano}-${c.parte}.jpg` })), planos: muchos, segundos: 41, brief_texto: 'x', red: 'youtube', formato: 'short', contrato: '' })
     expect(t.images).toHaveLength(MAX_CUADROS_DEL_VIDEO)
-    expect(t.task).toContain(`son ${MAX_CUADROS_DEL_VIDEO} de 41 planos`)
+    expect(t.task).toContain(`son ${planosVistos} de 41 planos`)
   })
   it('planos sin segundos válidos no dan cuadro', () => {
-    expect(instantesPorPlano([{ n: 1, desde: 4, hasta: 4, se_ve: 'x' }, { n: 2, desde: Number.NaN, hasta: 3, se_ve: 'y' }, { n: 3, desde: 0, hasta: 2, se_ve: 'z' }])).toEqual([{ plano: 3, segundo: 1 }])
+    expect(instantesPorPlano([{ n: 1, desde: 4, hasta: 4, se_ve: 'x' }, { n: 2, desde: Number.NaN, hasta: 3, se_ve: 'y' }, { n: 3, desde: 0, hasta: 2, se_ve: 'z' }]).map((c) => c.plano)).toEqual([3, 3, 3])
+    // un plano de menos de 1 s da solo el del medio
+    expect(instantesPorPlano([{ n: 4, desde: 2, hasta: 2.6, se_ve: 'w' }])).toEqual([{ plano: 4, segundo: 2.3, parte: 'medio' }])
   })
-  it('🔴 ffmpeg: mide la duración y pide UN cuadro por plano en su segundo; descarta lo que no es JPEG', async () => {
+  it('🔴 ffmpeg: mide la duración y pide los 3 cuadros de cada plano en su segundo; descarta lo que no es JPEG', async () => {
     const llamadas: string[][] = []
     const jpeg = Buffer.concat([Buffer.from('ffd8ff', 'hex'), Buffer.alloc(2000, 1)])
     const ejecutar = async (_c: string, args: string[]) => {
       llamadas.push(args)
+      if (args.includes('-f')) return { ok: true, salida: '' } // la pasada de señales
       if (args.includes('-hide_banner')) return { ok: true, salida: '  Duration: 00:00:12.04, start: 0.000000' }
       const salida = args[args.length - 1]
       // el plano 2 sale como basura (no JPEG): se descarta
-      fs.writeFileSync(salida, salida.endsWith('p2.jpg') ? Buffer.alloc(2000, 7) : jpeg)
+      fs.writeFileSync(salida, /plano-2-/.test(salida) ? Buffer.alloc(2000, 7) : jpeg)
       return { ok: true, salida: '' }
     }
     const r = await sacarCuadros({ bytes: Buffer.from('mp4'), planos: PLANOS, ffmpeg: 'ffmpeg', ejecutar })
     expect(r.duracion_s).toBeCloseTo(12.04, 2)
-    expect(r.cuadros.map((c) => [c.plano, c.segundo])).toEqual([[1, 1.5], [3, 10.5]])
-    expect(llamadas.filter((a) => a.includes('-ss')).map((a) => a[a.indexOf('-ss') + 1])).toEqual(['1.5', '6', '10.5'])
+    expect(r.cuadros.map((c) => [c.plano, c.segundo, c.parte])).toEqual([[1, 0.3, 'inicio'], [1, 1.5, 'medio'], [1, 2.7, 'final'], [3, 9.3, 'inicio'], [3, 10.5, 'medio'], [3, 11.7, 'final']])
+    expect(llamadas.filter((a) => a.includes('-ss')).map((a) => a[a.indexOf('-ss') + 1])).toEqual(['0.3', '1.5', '2.7', '3.3', '6', '8.7', '9.3', '10.5', '11.7'])
   })
   it('sin ffmpeg no saca nada y lo dice', async () => {
     expect(await sacarCuadros({ bytes: Buffer.from('x'), planos: PLANOS, ffmpeg: null })).toMatchObject({ cuadros: [], causa: 'ffmpeg no está disponible en este servidor' })
@@ -201,12 +211,12 @@ describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefa
     expect(r.sacados[0].planos.map((p) => [p.n, p.desde, p.hasta])).toEqual([[1, 0, 4], [2, 4, 12]])
     const cuadros = r.enc.estado_del_motor.artefactos['cuadros_video'].datos as { cuadros: Array<{ plano: number; segundo: number; url: string }>; hay_cuadros: boolean }
     expect(cuadros.hay_cuadros).toBe(true)
-    expect(cuadros.cuadros.map((c) => [c.plano, c.segundo])).toEqual([[1, 2], [2, 8]])
-    expect(cuadros.cuadros[0].url).toMatch(new RegExp(`^https://bucket\\.test/oficina/${C.client}/${r.id}/cuadros-\\d+/plano-1\\.jpg$`))
+    expect(cuadros.cuadros.map((c) => [c.plano, c.segundo])).toEqual([[1, 0.3], [1, 2], [1, 3.7], [2, 4.3], [2, 8], [2, 11.7]])
+    expect(cuadros.cuadros[0].url).toMatch(new RegExp(`^https://bucket\\.test/oficina/${C.client}/${r.id}/cuadros-\\d+/plano-1-inicio\\.jpg$`))
     // el agente que mira es el de la plantilla, ve los cuadros en orden y recibe la fila
     expect(r.miradas).toHaveLength(1)
     expect(r.miradas[0].agente).toBe(AGENTE_QUE_MIRA_EL_VIDEO)
-    expect(r.miradas[0].task).toContain('- imagen 1: cuadro del plano 1, segundo 2')
+    expect(r.miradas[0].task).toContain('- imagen 1: cuadro del plano 1 (inicio), segundo 0.3')
     expect(r.miradas[0].task).toContain('Plano 2 (4–12 s): unas manos trabajando el producto en primer plano')
     expect(r.miradas[0].task).toContain(C.fila)
     expect(r.enc.estado_del_motor.artefactos['mirada_video'].datos).toMatchObject({ coincide: true })
@@ -214,7 +224,8 @@ describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefa
     // la jefatura: los cuadros entre sus imágenes y lo que vio el agente en su contexto
     expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
     expect(r.sobres).toHaveLength(1)
-    for (const c of cuadros.cuadros) expect(r.sobres[0].imagenes).toContain(c.url)
+    // S2-7 · la jefatura recibe solo el cuadro del MEDIO de cada plano (como antes); los 3 son para quien mira
+    for (const c of cuadros.cuadros) expect(r.sobres[0].imagenes.includes(c.url)).toBe(/-medio.jpg$/.test(c.url))
     const ctx = r.sobres[0].contexto.find((x) => x.titulo === 'Lo que vio el agente que miró el video')
     expect(ctx?.texto).toContain('coincide con el guion y la fila')
     expect(ctx?.texto).toContain('plano 1: la fachada con el letrero')

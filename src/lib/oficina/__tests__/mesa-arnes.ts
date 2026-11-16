@@ -36,7 +36,7 @@ export const seccionesDeLaminas = (laminas = LAMINAS_OK) => laminas.map(([rol, t
 export const CITAS_COMPLETAS = '## Citas\nA2 usé: los titulares\nA3 usé: el ritmo de las láminas\nA4 usé: la dirección visual del plato\nA5 usé: el prompt de la primera imagen'
 export const pieza = (laminas = LAMINAS_OK, citas = CITAS_COMPLETAS) => `${seccionesDeLaminas(laminas)}\n## Pie\nEl plato del día te espera.\n## Etiquetas\n#plato #hoy\n${citas}`
 
-export type Turno = { paso: string; agente: string; tipo: string; task: string; n: number }
+export type Turno = { paso: string; agente: string; tipo: string; task: string; n: number; /** S2-7 · las imágenes que recibe el agente (si el pedido las trae) */ images?: string[] }
 export type Responder = (t: Turno, veces: number) => { texto?: string; error?: string; costo_usd?: number } | undefined
 
 export async function montar(o: { dry_run?: boolean; tope?: number; aprendizaje?: NonNullable<Memoria['P']['aprendizaje']> } = {}) {
@@ -61,7 +61,7 @@ export async function jugar(M: Memoria, id: string, primera: Respuesta, responde
   for (let i = 0; i < max && ultima.cuerpo.accion === 'esperar'; i++) {
     const t = ultima.cuerpo.turno as { n: number; paso: string; agente: string; pedido?: { task?: string } }
     const tipo = t.paso.split(':')[1] ?? t.paso
-    const turno: Turno = { paso: t.paso, agente: t.agente, tipo, task: t.pedido?.task ?? '', n: t.n }
+    const turno: Turno = { paso: t.paso, agente: t.agente, tipo, task: t.pedido?.task ?? '', n: t.n, ...((ims) => (Array.isArray(ims) ? { images: ims.map((i) => (typeof i === 'string' ? i : String((i as { url?: unknown })?.url ?? ''))) } : {}))((t.pedido as { images?: unknown } | undefined)?.images) }
     turnos.push(turno)
     veces[t.paso] = (veces[t.paso] ?? 0) + 1
     const r: { texto?: string; error?: string; costo_usd?: number } = responder(turno, veces[t.paso]) ?? POR_OMISION(turno)

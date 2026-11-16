@@ -1,0 +1,13 @@
+  Duration: 00:00:09.04, start: 0.000000, bitrate: 122 kb/s
+[freezedetect @ X] lavfi.freezedetect.freeze_start: 0
+[blackdetect @ X] black_start:0 black_end:1 black_duration:1
+[freezedetect @ X] lavfi.freezedetect.freeze_duration: 1
+[freezedetect @ X] lavfi.freezedetect.freeze_end: 1
+[Parsed_showinfo_3 @ X] n:   0 pts:  12800 pts_time:1       pos:     1287 fmt:rgb24 sar:1/1 s:320x568 i:P iskey:1 type:I checksum:64A47773 plane_checksum:[64A47773] mean:[127 ] stdev:[124.8 ]
+[Parsed_showinfo_3 @ X] n:   1 pts:  51200 pts_time:4       pos:    17359 fmt:rgb24 sar:1/1 s:320x568 i:P iskey:0 type:B checksum:3DE1D713 plane_checksum:[3DE1D713] mean:[84 ] stdev:[119.3 ]
+[freezedetect @ X] lavfi.freezedetect.freeze_start: 4
+[freezedetect @ X] lavfi.freezedetect.freeze_duration: 2
+[freezedetect @ X] lavfi.freezedetect.freeze_end: 6
+[Parsed_showinfo_3 @ X] n:   2 pts:  76800 pts_time:6       pos:    18303 fmt:rgb24 sar:1/1 s:320x568 i:P iskey:1 type:I checksum:8630A2F4 plane_checksum:[8630A2F4] mean:[125 ] stdev:[124.5 ]
+[Parsed_showinfo_3 @ X] n:   3 pts:  96256 pts_time:7.52    pos:   133266 fmt:rgb24 sar:1/1 s:320x568 i:P iskey:1 type:I checksum:34D053FF plane_checksum:[34D053FF] mean:[96 ] stdev:[96.1 ]
+[freezedetect @ X] lavfi.freezedetect.freeze_start: 7.52
