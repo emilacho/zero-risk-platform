@@ -27,6 +27,11 @@ export interface BriefLeido {
   elementos?: string[]
   /** el texto completo de la sección, tal cual (lo que se cita al extraer reglas) */
   texto: string
+  /** 16-nov · Sprint 1 · Mejora 1 · lo que la pieza tiene que lograr (campo `OBJETIVO` de la hoja; antes la oficina no lo leía) */
+  objetivo?: string
+  /** 16-nov · Sprint 1 · Mejora 2 · el concepto de ESTA pieza que trae la fila (`IDEA DE LA PIEZA`, `QUÉ SE VE`); el mensaje y el llamado son los de siempre */
+  idea_de_la_pieza?: string
+  que_se_ve?: string
 }
 
 /** FIRMA 01-nov «hoja sin reja»: lo que se le dice a todo el que recibe un brief (pedidos, pedidos-laminas y la mesa). Lo único fijo es el manual, lo prohibido y la gran idea. */
@@ -73,6 +78,9 @@ export function parsearBrief(parte: string, id: string): BriefLeido | null {
     sintaxis: g('SINTAXIS'), visual: g('VISUAL'), visual_obligatorio: listas['VISUAL OBLIGATORIO'] ?? [], visual_prohibido: listas['VISUAL PROHIBIDO'] ?? [],
     llamado: g('LLAMADO A LA ACCIÓN'), variantes: g('VARIANTES'), negativos: listas['NEGATIVOS'] ?? [], aprueba: g('APRUEBA Y PARA CUÁNDO'), texto: sec,
     ...(listas['ELEMENTOS'] ? { elementos: listas['ELEMENTOS'] } : {}),
+    ...(g('OBJETIVO') ? { objetivo: g('OBJETIVO') } : {}),
+    ...(g('IDEA DE LA PIEZA') ? { idea_de_la_pieza: g('IDEA DE LA PIEZA') } : {}),
+    ...(g('QUÉ SE VE') ? { que_se_ve: g('QUÉ SE VE') } : {}),
   }
 }
 

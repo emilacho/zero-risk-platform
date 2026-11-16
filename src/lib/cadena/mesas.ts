@@ -805,7 +805,7 @@ export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>,
     client_name: ctx.nombreDelNegocio, plan_id: campana.plan_id, manual_id: manual?.id.replace(/^manual:/, '') ?? 'sin-manual', manual_version: cadena(cuerpo.manual_version) ?? 'vigente',
     hoy: ahora.slice(0, 10), lote_key: cadena(cuerpo.lote_key) ?? (ids ? `${campana.id.slice(0, 8)}:v${version}:ids` : `${campana.id.slice(0, 8)}:v${version}:s${semana}`),
     brief: brief.leido as unknown as BriefCreativoLeido, brief_id: idDeBrief(campana.id, brief.version), concepto: mesa.concepto, concepto_id: idDeConcepto(campana.id, mesa.version ?? 1),
-    filas: filas.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora, red: f.red, formato: f.formato, pilar: f.pilar, tema: f.tema, datos: f.datos, fase: f.fase ?? null, idea_ref: f.idea_ref ?? null })),
+    filas: filas.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora, red: f.red, formato: f.formato, pilar: f.pilar, tema: f.tema, datos: f.datos, fase: f.fase ?? null, idea_ref: f.idea_ref ?? null, concepto: f.concepto ?? null })),
     formatos, seco: campana.seco,
   })
   return { status: 200, cuerpo: { hoja: hoja.texto_md, briefs: hoja.briefs, provenance: hoja.provenance, avisos: hoja.avisos, filas: filas.map((f) => f.id), ...(excluidas.length ? { excluidas } : {}), brief_version: brief.version, concepto_version: mesa.version } }

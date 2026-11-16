@@ -9,7 +9,7 @@ import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './auto
 import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, medidaDeCampana, SEMANAS_DE_PANORAMA, TOTAL_DE_TANDAS, topeDelPaso, type MedidaDeCampana, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
 import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
-import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V2, ESQUEMA_ESTRATEGIA } from './esquemas'
+import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V3, ESQUEMA_ESTRATEGIA } from './esquemas'
 import { conceptoParaElCalendario, empujarDesdeElTablero, EN_REVISION_DE_REGISTRO, etapaDeReentrada, nuevoOrdenEncendido, origenesDelCliente, recibirVueltaDeRegistro, siguienteDespuesDe, tramoDeReemision } from './mesas'
 import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, filasConTema, leerArtifactIdDeRegistro, leerObjetoDeRegistro, objetoDeRegistro, pistasDeRegistro, registroFijado, seRevisaElRegistro, temasDeLaVuelta, textoDelCalendario, textoDeLaVuelta, type RegistroFijado } from './registro-en-jefatura'
 import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
@@ -227,7 +227,7 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   const mesa = await conceptoParaElCalendario(al, campana)
   if (mesa.espera) return { status: 200, cuerpo: { accion: 'esperar_concepto', tanda, ...mesa.espera } }
   const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
-  const esquema = validarEsquemaDeSalida(mesa.concepto ? ESQUEMA_CALENDARIO_TANDA_V2 : ESQUEMA_CALENDARIO_TANDA)
+  const esquema = validarEsquemaDeSalida(mesa.concepto ? ESQUEMA_CALENDARIO_TANDA_V3 : ESQUEMA_CALENDARIO_TANDA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema del calendario no es válido')
   const modelo = await modeloDeLaCadena(al)
   const prep = await prepararCorrida(al, campana, 'calendario', `t${tanda}:v${version}:c${correccion ? 1 : 0}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash,
@@ -255,7 +255,7 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
       corrida_id: prep.corrida.id, tanda, semanas, calendario_version: version, intento: prep.corrida.intento, plazo_en: prep.corrida.plazo_en,
       headers: { [CABECERA_SALTAR_EDITOR]: '1' },
       ...(mesa.concepto ? { concepto_version: mesa.version } : {}),
-      run_sdk: cuerpoDeRunSdk('calendario', modelo, tarea, esquema.valor, campana.client_id, { contrato: mesa.concepto ? 'calendario_tanda.v2' : 'calendario_tanda.v1' }),
+      run_sdk: cuerpoDeRunSdk('calendario', modelo, tarea, esquema.valor, campana.client_id, { contrato: mesa.concepto ? 'calendario_tanda.v3' : 'calendario_tanda.v1' }),
     },
   }
 }

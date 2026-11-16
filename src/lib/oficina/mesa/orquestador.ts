@@ -19,7 +19,7 @@ import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
-import { traducirPieza, hayImagenesAGenerar, type Traduccion } from './traductor'
+import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
@@ -121,7 +121,9 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
 export function imagenesAGenerarDe(enc: Encargo, est: EstadoMesa): ImagenARedactar[] {
   if (!est.pieza_texto || esDeLaCadena(est.tipo) || est.tipo === 'video') return []
   const b = baseDeLaminas(enc.estado_del_motor)
-  const tr = traducirPieza(quitarLineasDeNotas(est.pieza_texto), est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), preguntasHechas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR })
+  const tr = traducirPieza(quitarLineasDeNotas(est.pieza_texto), est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), preguntasHechas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR,
+    // las mismas fuentes que el cierre: si la dirección no declaró objetivo o idea, el ingeniero recibe los del brief de la hoja
+    ...(b.brief.objetivo ? { objetivoDelBrief: b.brief.objetivo } : {}), ...(b.brief.idea_de_la_pieza ? { ideaDelBrief: b.brief.idea_de_la_pieza } : {}) })
   // el concepto de cada imagen (mejora 2 de CC1) viaja si el traductor lo trae; se lee por nombre para no atarse al tipo
   return tr.imagenes.filter((i): i is { ref: string; modo: 'generada'; descripcion: string } => i.modo === 'generada').map((g) => { const c = (g as { concepto?: unknown }).concepto; return { ref: g.ref, descripcion: g.descripcion, ...(c && typeof c === 'object' ? { concepto: c as ConceptoDeLaImagen } : {}) } })
 }
@@ -290,7 +292,11 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   // el VIDEO (parte 2 · 31-oct): la pieza es un GUION; el traductor de láminas no aplica (sin imágenes que generar: el brazo filma)
   const tr: Traduccion | TraduccionDeGuion = est.tipo === 'video'
     ? traducirGuion(textoPieza, opcionesDelTraductor)
-    : traducirPieza(textoPieza, est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), ...opcionesDelTraductor })
+    : traducirPieza(textoPieza, est.tipo, {
+      refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), ...opcionesDelTraductor,
+      // 16-nov · Sprint 1 · Mejoras 1 y 2 · lo que trae la fila: el objetivo y la idea de la pieza (se usan si la dirección no declaró los suyos)
+      ...(b.brief.objetivo ? { objetivoDelBrief: b.brief.objetivo } : {}), ...(b.brief.idea_de_la_pieza ? { ideaDelBrief: b.brief.idea_de_la_pieza } : {}),
+    })
   if (!tr.ok && tr.pregunta) {
     await P.mesa!.aportar(aporteNuevo(enc, 'traductor', est.direccion, 'devuelve', tr.pregunta, { responde_a: null, profundidad: 0 }))
     await guardarMesa(P, enc, { ...est, preguntas_del_traductor: est.preguntas_del_traductor + 1, cierre_forzado: est.cierre_forzado })
@@ -311,18 +317,22 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     otros.prompts_validos = { por_ref: {}, ninguno: true }
   } else {
     const imagenes = tr.imagenes
-    const generadas = imagenes.filter((i) => i.modo === 'generada') as Array<{ ref: string; modo: 'generada'; descripcion: string }>
+    const generadas = imagenes.filter((i) => i.modo === 'generada') as Array<{ ref: string; modo: 'generada'; descripcion: string; concepto?: ConceptoDeImagen }>
     hayGeneradas = generadas.length > 0
+    // 16-nov · Sprint 1 · Mejora 2 · el concepto de cada imagen (idea, qué se ve, mensaje, objetivo) queda en la dirección visual —también el de la foto propia— y entra al pedido del generador
+    const conConcepto = (i: { concepto?: ConceptoDeImagen }) => (i.concepto ? { concepto: i.concepto } : {})
     otros.visual_direction = {
-      imagenes: imagenes.map((i) => (i.modo === 'real' ? { ref: i.ref, modo: 'real', foto_id: i.foto_id, motivo: 'elegida por el equipo' } : i.modo === 'generada' ? { ref: i.ref, modo: 'generada', motivo: 'pedida por el equipo' } : { ref: i.ref, modo: 'ninguna', motivo: 'sin imagen' })),
+      imagenes: imagenes.map((i) => (i.modo === 'real' ? { ref: i.ref, modo: 'real', foto_id: i.foto_id, motivo: 'elegida por el equipo', ...conConcepto(i) } : i.modo === 'generada' ? { ref: i.ref, modo: 'generada', motivo: 'pedida por el equipo', ...conConcepto(i) } : { ref: i.ref, modo: 'ninguna', motivo: 'sin imagen' })),
       refs_generadas: generadas.map((g) => g.ref), hay_generadas: hayGeneradas, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa',
+      ...(tr.objetivo ? { objetivo: tr.objetivo } : {}),
     }
     // Sprint 1 · mejora 4 · el modelo recibe la instrucción del ingeniero de prompts (escrita sobre ESTA integración); lo que no dejó, la descripción de la dirección con aviso
+    // Sprint 1 · mejora 2 (CC1) · sin instrucción del ingeniero, la descripción de la dirección va CON el contexto de la pieza; la del ingeniero la reemplaza entera
     const ingeniero = ingenieroDePrompts(est.directorio_congelado, est.tipo)?.agente ?? null
     const delIngeniero = aporteDePrompts(libro, ingeniero)
-    const pb = promptsParaElBrazo(generadas.map((g) => ({ ref: g.ref, descripcion: g.descripcion })), ingeniero ? delIngeniero?.texto ?? '' : null)
+    const pb = promptsParaElBrazo(generadas.map((g) => ({ ref: g.ref, descripcion: pedidoDeImagen(g.descripcion, g.concepto) })), ingeniero ? delIngeniero?.texto ?? '' : null)
     avisosDePrompts.push(...pb.avisos)
-    otros.prompts_validos = { por_ref: Object.fromEntries(generadas.map((g) => { const p = pb.por_ref[g.ref]; return [g.ref, { indices: [0], prompts: [{ prompt: p.prompt, idea_en_una_linea: g.descripcion.slice(0, 120), ...(p.foto_de_referencia ? { foto_de_referencia: p.foto_de_referencia } : {}) }], origen: pb.del_ingeniero.includes(g.ref) ? 'ingeniero_de_prompts' : 'direccion' }] })), ninguno: false, ...(delIngeniero ? { ingeniero: { agente: ingeniero, aporte: delIngeniero.id } } : {}) }
+    otros.prompts_validos = { por_ref: Object.fromEntries(generadas.map((g) => { const p = pb.por_ref[g.ref]; return [g.ref, { indices: [0], prompts: [{ prompt: p.prompt, idea_en_una_linea: g.descripcion.slice(0, 120), ...conConcepto(g), ...(p.foto_de_referencia ? { foto_de_referencia: p.foto_de_referencia } : {}) }], origen: pb.del_ingeniero.includes(g.ref) ? 'ingeniero_de_prompts' : 'direccion' }] })), ninguno: false, ...(delIngeniero ? { ingeniero: { agente: ingeniero, aporte: delIngeniero.id } } : {}) }
     if (est.tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
     else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
   }

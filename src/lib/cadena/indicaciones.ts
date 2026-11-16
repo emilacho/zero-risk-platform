@@ -150,6 +150,19 @@ function seccionDeFechas(p: PedidoDeCalendario): string {
   return ['# FECHAS ESPECIALES (verificadas por el código)', p.fechasEspeciales?.length ? p.fechasEspeciales.map((x) => `- fecha:${x.id} · ${x.hasta && x.hasta !== x.fecha ? `${x.fecha} → ${x.hasta}` : x.fecha} · ${x.nombre} (${x.tipo})${x.origen === 'cliente' ? ' · temporada del negocio (la dio el cliente)' : ''}`).join('\n') : '(ninguna declarada para esta campaña)'].join('\n')
 }
 
+/** 16-nov · Sprint 1 · Mejora 2 · lo que se le pide al calendario para cada pieza (campo `concepto` de `calendario_tanda.v3`) */
+export const CONCEPTO_DE_CADA_PIEZA = [
+  '# El concepto de cada pieza',
+  'Cada pieza lleva en `concepto` su idea COMPLETA, pensada para ESA pieza (sale de su idea del banco y de su capítulo; no copies los planos ni el «cómo se ve» de la campaña):',
+  '- `idea`: la idea de la pieza en una frase.',
+  '- `que_se_ve`: la escena de esta pieza (lugar, quién, qué pasa, la luz), lo que mostraría la imagen o el primer plano.',
+  '- `mensaje`: el único mensaje que tiene que quedar.',
+  '- `emocion`: lo que tiene que sentir quien la ve.',
+  '- `foto`: la foto propia del cliente que conviene usar (`foto:<id>` de las referencias) o «» si ninguna.',
+  '- `llamado`: el llamado a la acción de esta pieza.',
+  'Si no sabes alguna parte, déjala vacía (el código lo avisa y la mesa la completa); no la inventes.',
+].join('\n')
+
 export function tareaDeCalendario(p: PedidoDeCalendario): string {
   const e = p.estrategia
   const corr = p.correccion
@@ -160,6 +173,8 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     `Materializa la TANDA ${p.tanda} del calendario editorial (semanas ${p.semanas.join(', ')}). Para cada slot del patrón semanal y cada semana, escribe el tema de la pieza; agrega las piezas fijas del plan y los ajustes puntuales.`,
     ...seccionesDelConcepto(p),
     ...(p.concepto && p.metodo ? ['', p.metodo] : []),
+    // 16-nov · Sprint 1 · Mejora 2 · cada pieza lleva SU concepto (calendario_tanda.v3): la idea completa de esa pieza, no los planos de la campaña
+    ...(p.concepto ? ['', CONCEPTO_DE_CADA_PIEZA] : []),
     '',
     '# Reglas',
     lineas(reglasComunes(p.ctx.registro, p.ctx.idioma)),

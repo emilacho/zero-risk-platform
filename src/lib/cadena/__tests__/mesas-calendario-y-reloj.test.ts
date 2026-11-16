@@ -117,7 +117,12 @@ describe('palanca encendida: el calendario espera la gran idea', () => {
     expect(p.cuerpo.accion).toBeUndefined()
     expect(p.cuerpo.concepto_version).toBe(1)
     const rs = p.cuerpo.run_sdk as { task: string }
-    expect(JSON.stringify(rs)).toContain('calendario_tanda.v2')
+    expect(JSON.stringify(rs)).toContain('calendario_tanda.v3')
+    // 16-nov · Sprint 1 · Mejora 2: con la gran idea, la tarea pide el concepto de cada pieza
+    expect(rs.task).toContain('# El concepto de cada pieza')
+    // y el ESQUEMA que recibe el agente es el v3 (cada pieza exige `concepto`), no solo el nombre del contrato (sabotaje d17 de CC6)
+    const esquema = (rs as unknown as { output_schema: { properties: { piezas: { items: { required: string[] } } } } }).output_schema
+    expect(esquema.properties.piezas.items.required).toContain('concepto')
     expect(JSON.stringify(rs)).toContain('idea_de_mesa')
     expect(rs.task).toContain('# GRAN IDEA (concepto aprobado · versión 1)\nLa mesa larga · Noventa días para sentarse juntos')
     expect(rs.task).toContain('# CAPÍTULO f1 · Abrir la mesa (días 1–30)')

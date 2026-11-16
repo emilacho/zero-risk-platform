@@ -73,6 +73,23 @@ export const ESQUEMA_CALENDARIO_TANDA_V2 = objeto({
   ajustes_al_patron: lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto })),
 })
 
+/**
+ * 16-nov · Sprint 1 · Mejora 2 (CC1) · `calendario_tanda.v3` = v2 + el CONCEPTO de cada pieza: la idea completa de ESA pieza (no los planos de la campaña).
+ * Todos los campos son obligatorios por la regla de la salida estructurada, pero el texto vacío significa «no lo sé»: el código lo AVISA y la fila sigue (sin reja).
+ * `calendario_tanda.v2` queda en el registro tal cual era (es contra lo que se produjeron las tandas guardadas antes del 16-nov).
+ */
+export const CONCEPTO_DE_LA_PIEZA = objeto({ idea: texto, que_se_ve: texto, mensaje: texto, emocion: texto, foto: texto, llamado: texto })
+export const ESQUEMA_CALENDARIO_TANDA_V3 = objeto({
+  piezas: lista(objeto({
+    semana: entero, dia_semana: entero, slot: texto, hora: texto, red: texto, formato: texto, pilar: texto, tema: texto, sede: texto,
+    requiere_abierto: bool, depende_de: listaDeTexto, pieza_fija: texto, idea_de_mesa: texto,
+    concepto: CONCEPTO_DE_LA_PIEZA,
+    datos: lista(objeto({ dato: texto, valor: texto, clase: { enum: ['alto', 'medio', 'bajo'] }, ref: texto, nivel: { enum: ['F0', 'F1', 'F2', 'F3'] }, opcional: bool })),
+    pendientes: listaDeTexto,
+  })),
+  ajustes_al_patron: lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto })),
+})
+
 /** solo se usa si el cliente declaró tipos de fechas · `tipo`, `ambito` y `alcance` son texto libre: el esquema no fija categorías de ningún rubro */
 export const ESQUEMA_FECHAS_ESPECIALES = objeto({
   tipo: texto, ambito: texto, anio: entero,
@@ -103,6 +120,7 @@ export const ESQUEMAS = {
   'estrategia.v3': ESQUEMA_ESTRATEGIA,
   'calendario_tanda.v1': ESQUEMA_CALENDARIO_TANDA,
   'calendario_tanda.v2': ESQUEMA_CALENDARIO_TANDA_V2,
+  'calendario_tanda.v3': ESQUEMA_CALENDARIO_TANDA_V3,
   'fechas_especiales.v1': ESQUEMA_FECHAS_ESPECIALES,
   'gancho_video.v1': ESQUEMA_GANCHO_DE_VIDEO,
 } as const

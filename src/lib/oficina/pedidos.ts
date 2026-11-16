@@ -127,7 +127,8 @@ export const FUNCION_DEL_PLAN = 'aspiración: lo que el cliente quiere lograr; n
 export const FUNCION_DEL_BRIEF = 'el encargo concreto de esta pieza'
 export const FUNCION_DEL_PORTERO = 'hechos que reunió el portero del cliente (datos, precios, fotos); pueden estar incompletos'
 /** el resumen del encargo sale SOLO del brief; lo que el brief no dice no se inventa */
-export const resumenDelEncargo = (b: ContextoDePedido['brief']): ResumenDelEncargo => ({ red: b.red, formato: b.formato, que_es: b.que_es, objetivo: b.mensaje, llamado: b.llamado })
+// 16-nov · Sprint 1 · Mejora 1 · la jefatura recibe el OBJETIVO de la pieza (el de la hoja); el mensaje queda solo para los partes viejos que no lo traen
+export const resumenDelEncargo = (b: ContextoDePedido['brief']): ResumenDelEncargo => ({ red: b.red, formato: b.formato, que_es: b.que_es, objetivo: b.objetivo || b.mensaje, llamado: b.llamado })
 
 /** lo que el revisor externo recibe de la sala 1: la pieza, su imagen y el cerebro del cliente que lee la sala (manual, plan, brief, lo del portero). Nada del hilo ni de las fichas: esta función no los recibe. */
 export function contextoDelRevisor(c: ContextoDePedido): { pieza: string; imagenes: string[]; contexto: ContextoDelRevisor[]; encargo: ResumenDelEncargo } {

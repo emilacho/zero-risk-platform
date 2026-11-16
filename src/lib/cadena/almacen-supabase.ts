@@ -419,6 +419,8 @@ export function almacenDeSupabase(): Almacen {
         pendientes: f.pendientes, pieza_fija: f.pieza_fija, origen: f.origen, estado: f.estado, avisos: f.avisos, seco,
         // 31-oct (nuevo orden): la fase y la idea del banco viajan con la fila; la cadena de hoy las deja en NULL (ausentes = NULL, nunca «undefined» que el upsert ignoraría)
         fase: f.fase ?? null, idea_ref: f.idea_ref ?? null,
+        // 16-nov · Sprint 1 · Mejora 2 · el concepto de la pieza (columna nueva; la migración 202611161900 va ANTES que este código)
+        concepto: f.concepto ?? null,
       })), { onConflict: 'campana_id,calendario_version,id' })
       if (error) fallo(error)
     },
