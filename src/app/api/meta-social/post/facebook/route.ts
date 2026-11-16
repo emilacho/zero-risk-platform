@@ -6,40 +6,43 @@
  *
  * Auth · `x-api-key: INTERNAL_API_KEY`
  *
- * Required Meta env vars (Vercel project) · 503 'not_configured' if missing:
- *   - META_FB_PAGE_ID · numeric page id
- *   - META_FB_PAGE_ACCESS_TOKEN _or_ META_ACCESS_TOKEN · page-scoped token
- *     with `pages_manage_posts` + `pages_read_engagement` scopes
+ * La página sale de la FICHA DEL CLIENTE (`clients.config.redes_oficiales.meta.pagina_facebook`, ver
+ * `lib/clients/cuentas-meta.ts`), nunca de una variable global (16-nov · CC3). Por eso `client_id` es obligatorio.
+ * Token · `META_ACCESS_TOKEN` (usuario del sistema); con él se pide el token DE LA PÁGINA, el único que Facebook acepta.
+ *
+ * ENSAYO por defecto: sin `dry_run: false` explícito, arma la publicación (ruta + cuerpo) y comprueba el acceso a la
+ * página SOLO LEYENDO; no publica. Publicar de verdad exige además `redes_oficiales.publicacion_real: true` en la ficha.
  *
  * Body shape:
  *   {
- *     message: string,             // post text (required)
+ *     message: string,             // post text (required unless image_url)
  *     image_url?: string,          // optional image · switches to /photos endpoint
  *     link_url?: string,           // optional link preview · sets `link` param
- *     client_id?: string,          // resolved via multi-path resolver
+ *     client_id: string,           // resolved via multi-path resolver · REQUIRED
+ *     dry_run?: boolean,           // solo `false` publica (y solo con la publicación real encendida en la ficha)
  *     task_id?: string,
  *     workflow_id?: string,
  *     agent_slug?: string,
  *   }
  *
- * On success: { ok: true, platform: 'facebook', post_id, ... }
- * Persists agent_invocations row (fire-and-forget) for dashboard visibility.
+ * Ensayo: { ok: true, ensayo: true, platform: 'facebook', cuenta, armado: { metodo, ruta, cuerpo } } (sin escribir nada)
+ * Real:   { ok: true, platform: 'facebook', post_id, ... } + fila en agent_invocations (fire-and-forget).
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
+import { META_GRAPH_BASE, decidirModo, leerCuentasMeta, tokenDePagina } from '@/lib/clients/cuentas-meta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-const META_GRAPH_BASE = 'https://graph.facebook.com/v21.0'
 
 interface PostBody {
   message?: string
   image_url?: string
   link_url?: string
   client_id?: string
+  dry_run?: unknown
   task_id?: string
   workflow_id?: string
   agent_slug?: string
@@ -128,24 +131,61 @@ export async function POST(request: Request) {
     )
   }
 
-  const pageId = process.env.META_FB_PAGE_ID || ''
-  const token = process.env.META_FB_PAGE_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN || ''
-  if (!pageId || !token) {
+  const tokenSistema = process.env.META_ACCESS_TOKEN || ''
+  if (!tokenSistema) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: 'not_configured',
-        code: 'E-META-FB-CONFIG-MISSING',
-        missing: [
-          !pageId && 'META_FB_PAGE_ID',
-          !token && '(META_FB_PAGE_ACCESS_TOKEN | META_ACCESS_TOKEN)',
-        ].filter(Boolean),
-      },
+      { ok: false, error: 'not_configured', code: 'E-META-FB-CONFIG-MISSING', missing: ['META_ACCESS_TOKEN'] },
       { status: 503 },
     )
   }
 
   const clientId = resolveClientIdFromBody(body as unknown)
+  if (!clientId) {
+    return NextResponse.json(
+      { ok: false, error: 'client_id required', code: 'E-META-FB-CLIENT', detail: 'la página sale de la ficha del cliente' },
+      { status: 400 },
+    )
+  }
+  const lectura = await leerCuentasMeta(getSupabaseAdmin(), clientId)
+  if (!lectura.ok) {
+    return NextResponse.json(
+      { ok: false, error: lectura.motivo, code: 'E-META-FB-CLIENT', detail: lectura.detalle ?? null },
+      { status: lectura.motivo === 'cliente_no_existe' ? 404 : 502 },
+    )
+  }
+  const pageId = lectura.cuentas.pagina_facebook
+  if (!pageId) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'cliente_sin_pagina_facebook',
+        code: 'E-META-FB-CLIENT',
+        detail: 'falta config.redes_oficiales.meta.pagina_facebook en la ficha del cliente',
+      },
+      { status: 409 },
+    )
+  }
+  const modo = decidirModo(body.dry_run, lectura.cuentas)
+  if (modo.modo === 'negado') {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: modo.motivo,
+        code: 'E-META-FB-ENSAYO',
+        detail: 'publicar de verdad exige redes_oficiales.publicacion_real: true en la ficha (firma de Emilio)',
+      },
+      { status: 409 },
+    )
+  }
+
+  const pagina = await tokenDePagina(pageId, tokenSistema)
+  if (!pagina.ok) {
+    return NextResponse.json(
+      { ok: false, error: 'sin_acceso_a_la_pagina', code: 'E-META-FB-PAGE', detail: pagina.detalle },
+      { status: 502 },
+    )
+  }
+
   const agentSlug = body.agent_slug || 'social-publisher'
   const sessionId = `meta-fb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const taskId = body.task_id ?? null
@@ -154,7 +194,6 @@ export async function POST(request: Request) {
 
   // Endpoint selection · /photos when image_url present, else /feed
   const endpoint = imageUrl ? 'photos' : 'feed'
-  const url = `${META_GRAPH_BASE}/${pageId}/${endpoint}?access_token=${encodeURIComponent(token)}`
 
   const payload: Record<string, unknown> = {}
   if (imageUrl) {
@@ -164,6 +203,21 @@ export async function POST(request: Request) {
     payload.message = message
     if (linkUrl) payload.link = linkUrl
   }
+
+  if (modo.modo === 'ensayo') {
+    // ENSAYO · nada se publica ni se escribe: se devuelve lo que se mandaría
+    return NextResponse.json({
+      ok: true,
+      ensayo: true,
+      platform: 'facebook',
+      client_id: clientId,
+      cuenta: { pagina_facebook: pageId, nombre: pagina.nombre },
+      armado: { metodo: 'POST', ruta: `/${pageId}/${endpoint}`, cuerpo: payload },
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  const url = `${META_GRAPH_BASE}/${pageId}/${endpoint}?access_token=${encodeURIComponent(pagina.token)}`
 
   let resp: Response
   try {

@@ -7,38 +7,41 @@
  *
  * Auth · `x-api-key: INTERNAL_API_KEY` (matches /api/agents/run-sdk + meta-ads pattern).
  *
- * Required Meta env vars (Vercel project) · 503 'not_configured' if missing:
- *   - META_IG_BUSINESS_ACCOUNT_ID · numeric IG Business Account id
- *   - META_IG_ACCESS_TOKEN _or_ META_ACCESS_TOKEN · page-scoped token with
- *     instagram_basic + instagram_content_publish scopes
+ * La cuenta sale de la FICHA DEL CLIENTE (`clients.config.redes_oficiales.meta.instagram_id`, ver
+ * `lib/clients/cuentas-meta.ts`), nunca de una variable global (16-nov · CC3). Por eso `client_id` es obligatorio.
+ * Token · `META_ACCESS_TOKEN` (usuario del sistema con instagram_basic + instagram_content_publish).
+ *
+ * ENSAYO por defecto: sin `dry_run: false` explícito, arma los dos pasos y comprueba la cuenta SOLO LEYENDO; no crea
+ * el contenedor ni publica. Publicar de verdad exige además `redes_oficiales.publicacion_real: true` en la ficha.
  *
  * Body shape (camelCase or snake_case accepted via resolver):
  *   {
  *     image_url: string,           // public URL · Meta downloads it
  *     caption?: string,            // up to 2200 chars
- *     client_id?: string,          // resolved via multi-path resolver
+ *     client_id: string,           // resolved via multi-path resolver · REQUIRED
+ *     dry_run?: boolean,           // solo `false` publica (y solo con la publicación real encendida en la ficha)
  *     task_id?: string,
  *     workflow_id?: string,
  *     agent_slug?: string,
  *   }
  *
- * On success: { ok: true, platform: 'instagram', media_id, creation_id, ... }
- * Persists an `agent_invocations` row (fire-and-forget) so dashboards see the post.
+ * Ensayo: { ok: true, ensayo: true, platform: 'instagram', cuenta, armado: [paso1, paso2] } (sin escribir nada)
+ * Real:   { ok: true, platform: 'instagram', media_id, creation_id, ... } + fila en agent_invocations.
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
+import { META_GRAPH_BASE, cuentaInstagram, decidirModo, leerCuentasMeta } from '@/lib/clients/cuentas-meta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-const META_GRAPH_BASE = 'https://graph.facebook.com/v21.0'
 
 interface PostBody {
   image_url?: string
   caption?: string
   client_id?: string
+  dry_run?: unknown
   task_id?: string
   workflow_id?: string
   agent_slug?: string
@@ -131,24 +134,76 @@ export async function POST(request: Request) {
     )
   }
 
-  const igUserId = process.env.META_IG_BUSINESS_ACCOUNT_ID || ''
-  const token = process.env.META_IG_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN || ''
-  if (!igUserId || !token) {
+  const token = process.env.META_ACCESS_TOKEN || ''
+  if (!token) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: 'not_configured',
-        code: 'E-META-IG-CONFIG-MISSING',
-        missing: [
-          !igUserId && 'META_IG_BUSINESS_ACCOUNT_ID',
-          !token && '(META_IG_ACCESS_TOKEN | META_ACCESS_TOKEN)',
-        ].filter(Boolean),
-      },
+      { ok: false, error: 'not_configured', code: 'E-META-IG-CONFIG-MISSING', missing: ['META_ACCESS_TOKEN'] },
       { status: 503 },
     )
   }
 
   const clientId = resolveClientIdFromBody(body as unknown)
+  if (!clientId) {
+    return NextResponse.json(
+      { ok: false, error: 'client_id required', code: 'E-META-IG-CLIENT', detail: 'la cuenta sale de la ficha del cliente' },
+      { status: 400 },
+    )
+  }
+  const lectura = await leerCuentasMeta(getSupabaseAdmin(), clientId)
+  if (!lectura.ok) {
+    return NextResponse.json(
+      { ok: false, error: lectura.motivo, code: 'E-META-IG-CLIENT', detail: lectura.detalle ?? null },
+      { status: lectura.motivo === 'cliente_no_existe' ? 404 : 502 },
+    )
+  }
+  const igUserId = lectura.cuentas.instagram_id
+  if (!igUserId) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'cliente_sin_instagram',
+        code: 'E-META-IG-CLIENT',
+        detail: 'falta config.redes_oficiales.meta.instagram_id en la ficha del cliente',
+      },
+      { status: 409 },
+    )
+  }
+  const modo = decidirModo(body.dry_run, lectura.cuentas)
+  if (modo.modo === 'negado') {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: modo.motivo,
+        code: 'E-META-IG-ENSAYO',
+        detail: 'publicar de verdad exige redes_oficiales.publicacion_real: true en la ficha (firma de Emilio)',
+      },
+      { status: 409 },
+    )
+  }
+
+  if (modo.modo === 'ensayo') {
+    // ENSAYO · ni contenedor ni publicación: se comprueba la cuenta leyendo y se devuelve lo que se mandaría
+    const cuenta = await cuentaInstagram(igUserId, token)
+    if (!cuenta.ok) {
+      return NextResponse.json(
+        { ok: false, error: 'sin_acceso_a_instagram', code: 'E-META-IG-ACCOUNT', detail: cuenta.detalle },
+        { status: 502 },
+      )
+    }
+    return NextResponse.json({
+      ok: true,
+      ensayo: true,
+      platform: 'instagram',
+      client_id: clientId,
+      cuenta: { instagram_id: igUserId, usuario: cuenta.usuario },
+      armado: [
+        { metodo: 'POST', ruta: `/${igUserId}/media`, cuerpo: { image_url: imageUrl, caption } },
+        { metodo: 'POST', ruta: `/${igUserId}/media_publish`, cuerpo: { creation_id: '<id del paso 1>' } },
+      ],
+      timestamp: new Date().toISOString(),
+    })
+  }
+
   const agentSlug = body.agent_slug || 'social-publisher'
   const sessionId = `meta-ig-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const taskId = body.task_id ?? null

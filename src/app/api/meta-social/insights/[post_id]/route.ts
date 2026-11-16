@@ -14,24 +14,27 @@
  * default metric set per platform · also `?metrics=metric1,metric2` to
  * override.
  *
- * Default metric sets (per Graph v21 docs):
- *   - facebook · post_impressions, post_clicks, post_reactions_like_total,
- *     post_engaged_users
- *   - instagram · impressions, reach, engagement, saved
+ * Default metric sets (medidos contra Meta el 16-nov · CC3: `post_impressions`, `post_engaged_users`,
+ * `impressions` y `engagement` ya NO existen y hacían fallar TODA la lectura):
+ *   - facebook · post_media_view, post_clicks, post_reactions_like_total, post_reactions_by_type_total
+ *   - instagram · reach, views, likes, comments, saved, shares, total_interactions
+ *
+ * Facebook · con `?client_id=` se lee con el token DE LA PÁGINA del cliente (su ficha, ver
+ * `lib/clients/cuentas-meta.ts`): Facebook rechaza el token del sistema para los posts de una página.
  *
  * Read-only · no agent_invocations write (it's a read).
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import { META_GRAPH_BASE, leerCuentasMeta, tokenDePagina } from '@/lib/clients/cuentas-meta'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const META_GRAPH_BASE = 'https://graph.facebook.com/v21.0'
-
 const DEFAULT_METRICS: Record<'facebook' | 'instagram', string[]> = {
-  facebook: ['post_impressions', 'post_clicks', 'post_reactions_like_total', 'post_engaged_users'],
-  instagram: ['impressions', 'reach', 'engagement', 'saved'],
+  facebook: ['post_media_view', 'post_clicks', 'post_reactions_like_total', 'post_reactions_by_type_total'],
+  instagram: ['reach', 'views', 'likes', 'comments', 'saved', 'shares', 'total_interactions'],
 }
 
 interface InsightValue {
@@ -78,7 +81,7 @@ export async function GET(
   const metrics =
     (metricsParam ? metricsParam.split(',').map(s => s.trim()).filter(Boolean) : DEFAULT_METRICS[platform])
 
-  const token = process.env.META_ACCESS_TOKEN || process.env.META_FB_PAGE_ACCESS_TOKEN || process.env.META_IG_ACCESS_TOKEN || ''
+  let token = process.env.META_ACCESS_TOKEN || process.env.META_FB_PAGE_ACCESS_TOKEN || process.env.META_IG_ACCESS_TOKEN || ''
   if (!token) {
     return NextResponse.json(
       {
@@ -89,6 +92,33 @@ export async function GET(
       },
       { status: 503 },
     )
+  }
+
+  // Facebook + cliente · el token de SU página (el del sistema no sirve para los posts de una página)
+  const clientId = (url.searchParams.get('client_id') || '').trim()
+  if (platform === 'facebook' && clientId) {
+    const lectura = await leerCuentasMeta(getSupabaseAdmin(), clientId)
+    if (!lectura.ok) {
+      return NextResponse.json(
+        { ok: false, error: lectura.motivo, code: 'E-META-INSIGHTS-CLIENT', detail: lectura.detalle ?? null },
+        { status: lectura.motivo === 'cliente_no_existe' ? 404 : 502 },
+      )
+    }
+    const pageId = lectura.cuentas.pagina_facebook
+    if (!pageId) {
+      return NextResponse.json(
+        { ok: false, error: 'cliente_sin_pagina_facebook', code: 'E-META-INSIGHTS-CLIENT' },
+        { status: 409 },
+      )
+    }
+    const pagina = await tokenDePagina(pageId, token)
+    if (!pagina.ok) {
+      return NextResponse.json(
+        { ok: false, error: 'sin_acceso_a_la_pagina', code: 'E-META-INSIGHTS-PAGE', detail: pagina.detalle },
+        { status: 502 },
+      )
+    }
+    token = pagina.token
   }
 
   const graphUrl =
