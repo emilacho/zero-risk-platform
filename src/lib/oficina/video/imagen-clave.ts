@@ -9,7 +9,9 @@
  * Puro: sin red, sin base, sin modelo. Agnóstico: no sabe de rubros ni de clientes; lee lo que la hoja traiga y suple lo que falte sin frenar.
  */
 import { fotosPorImagen, type FotoDeReferencia } from '../foto-de-referencia'
+import type { Estado } from '../tipos'
 import type { Plano } from './guion'
+import { faseDeLaProduccion } from './propuestas'
 
 export const PASO_IMAGENES_CLAVE = 'imagenes_clave'
 export const PASO_REVISAR_IMAGENES_CLAVE = 'revisar_imagenes_clave'
@@ -37,14 +39,9 @@ export type PlanoDeLaHoja = Plano & {
   estado_final?: string
 }
 
-/**
- * la fase: la MISMA regla que `faseDeLaProduccion` de CC1 (#1070 · `video/propuestas.ts`), una sola verdad: borrador mientras hay `propuestas_video` y todavía
- * ninguna aprobada (la aprobada se copia a `guion`); final con una aprobada o si el encargo no tiene propuestas (el video de hoy). Cuando #1070 esté publicada
- * se importa la suya y se borra esta copia.
- */
-export function faseDeProduccion(estado: { artefactos?: Record<string, unknown> } | null | undefined): FaseDeProduccion {
-  const a = estado?.artefactos ?? {}
-  return a['propuestas_video'] && !a['guion'] ? 'borrador' : 'final'
+/** la fase: UNA sola verdad, la de CC1 (`faseDeLaProduccion` · #1070): «propuesta» ⇒ borrador; «final» (aprobada, o sin propuestas: el video de hoy) ⇒ final */
+export function faseDeProduccion(estado: Pick<Estado, 'artefactos'> | null | undefined): FaseDeProduccion {
+  return estado && faseDeLaProduccion(estado) === 'propuesta' ? 'borrador' : 'final'
 }
 
 const esTexto = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0

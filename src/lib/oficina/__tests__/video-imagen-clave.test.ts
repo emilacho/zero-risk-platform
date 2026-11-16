@@ -36,11 +36,13 @@ const aptas = [{ id: FOTO.id, url: FOTO.url }, { id: OTRA.id, url: OTRA.url }]
 
 // ───────────────────────── las piezas puras
 describe('la fase y la calidad son DATO; el borrador y el final piden lo mismo', () => {
-  it('🔴 la fase es la regla de CC1 (#1070): borrador con propuestas sin aprobar; final con la aprobada (ya hay guion) o sin propuestas (el video de hoy)', () => {
-    expect(faseDeProduccion({ artefactos: { propuestas_video: { datos: {} } } })).toBe('borrador')
-    expect(faseDeProduccion({ artefactos: { propuestas_video: { datos: {} }, guion: { datos: {} } } })).toBe('final')
-    expect(faseDeProduccion({ artefactos: { guion: { datos: {} } } })).toBe('final')
-    expect(faseDeProduccion({})).toBe('final')
+  it('🔴 la fase es la de CC1 (`faseDeLaProduccion` · #1070), una sola verdad: borrador con propuestas sin aprobar; final con la aprobada o sin propuestas (el video de hoy)', () => {
+    const art = (x: Record<string, unknown>) => ({ artefactos: Object.fromEntries(Object.entries(x).map(([k, d]) => [k, { version: 1, version_consumida: 0, datos: d }])) }) as unknown as Pick<Estado, 'artefactos'>
+    expect(faseDeProduccion(art({ propuestas_video: {} }))).toBe('borrador')
+    expect(faseDeProduccion(art({ propuestas_video: {}, aprobacion_propuestas: { estado: 'observaciones' } }))).toBe('borrador')
+    expect(faseDeProduccion(art({ propuestas_video: {}, aprobacion_propuestas: { estado: 'aprobada', propuesta_id: 'P2' } }))).toBe('final')
+    expect(faseDeProduccion(art({ guion: {} }))).toBe('final')
+    expect(faseDeProduccion(art({}))).toBe('final')
     expect(faseDeProduccion(null)).toBe('final')
   })
   it('🔴 la calidad de cada fase la dice la plantilla; si está mal escrita, la de por omisión (nunca frena)', () => {
