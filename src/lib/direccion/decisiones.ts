@@ -12,10 +12,12 @@ import { AL_EDITAR_LA_FIRMA, DESTRABA_CORTO_DE_LA_FIRMA, DESTRABA_DE_LA_FIRMA, P
 import { leerPlanesVigentes, motivoDeReemplazo } from './decisiones-reemplazadas'
 import { DESTRABA_CAMPANA_DETENIDA, DESTRABA_CORTO_CAMPANA_DETENIDA, PARA_QUE_CAMPANA_DETENIDA, PARA_QUE_CORTO_CAMPANA_DETENIDA, TITULO_CAMPANA_DETENIDA, leerCampanasDetenidas, type CampanaDetenida } from './decisiones-campanas'
 import { conFicha, type FichaDeDecision } from './decisiones-ficha'
+import { COSTO_NOTA_PROPUESTAS, CRITICOS_PROPUESTAS, DESTRABA_CORTO_PROPUESTAS, DESTRABA_PROPUESTAS, PARA_QUE_CORTO_PROPUESTAS, PARA_QUE_PROPUESTAS, TITULO_PROPUESTAS, type PropuestasDeLaDecision } from './decisiones-propuestas'
+import { FUENTE_DE_PROPUESTAS, leerPropuestasPendientes } from '../oficina/video/propuestas-pendientes'
 import { alertaDe, claveDeAlerta, contadoresDeAlertas, leerRevisadas, type AlertaDeDecision } from './decisiones-alerta'
 import { DIAS_DEL_REGISTRO, ESTADOS_DE_PLAN_QUE_CORRIO, MAX_INTENTOS_DE_DESPERTAR, DESTRABA_CORTO_DE_LA_PAUSA, PARA_QUE_CORTO_DE_LA_PAUSA, PARA_QUE_DE_LA_PAUSA, TITULO_NO_VOLVIO, TOPE_DEL_REGISTRO, destrabaDeLaPausa, encargoDeLaEspera, leerContestadas, loDescartoElDueno, leerPreguntasDeEncargos, motivoDeNoVolver, noVolvio, temaNormal, yaLoSuperoOtroPlan, type AccionDeDecision, type LecturaDelRegistro } from './decisiones-registro'
 
-export type TipoDecision = 'plan' | 'gran_idea' | 'pieza' | 'revision' | 'pregunta_al_dueno' | 'pregunta_de_finanzas' | 'firma_de_finanzas'
+export type TipoDecision = 'plan' | 'gran_idea' | 'pieza' | 'revision' | 'pregunta_al_dueno' | 'pregunta_de_finanzas' | 'firma_de_finanzas' | 'propuestas'
 export interface Decision {
   id: string
   tipo: TipoDecision
@@ -69,6 +71,8 @@ export interface Decision {
   documento?: string
   /** 10-nov · la decisión como alerta: Nueva o Revisada (la marca «✓ Revisar» de Emilio, en `alertas_vistas`). `estado: null` = no se pudo leer */
   alerta?: AlertaDeDecision
+  /** 16-nov · Sprint 2 · S2-1 · las propuestas del video que esperan al dueño (tarjeta «Propuestas» de CC5). Solo en `tipo: 'propuestas'` */
+  propuestas?: PropuestasDeLaDecision
 }
 
 const TOPE = 200
@@ -164,6 +168,7 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   const corridasDeSueltas = noVolvieron.length ? await leer([], 'plan_corridas', db.from('plan_corridas').select('client_id, corrida, estado, espera_desde').in('client_id', [...new Set(noVolvieron.map((e) => String(e.client_id)))]).in('estado', [...ESTADOS_DE_PLAN_QUE_CORRIO]).order('espera_desde', { ascending: false }).limit(TOPE), TOPE) : []
   const sueltas = noVolvieron.filter((e) => noVolvio(e, corridasDeSueltas.find((c) => String(c.client_id) === String(e.client_id) && c.corrida === e.corrida) ?? null, Date.parse(hora)))
   const noVolvieronVigentes = sueltas.filter((e) => !yaLoSuperoOtroPlan(e, corridasDeSueltas))
+  const propuestasPendientes = await leerPropuestasPendientes(db, fuentes)
   const crudas: Omit<Decision, 'cliente' | 'vencida' | 'titulo_interno'>[] = []
   // 01-nov · firma de Emilio: solo lo vigente pide firma. El reloj las cierra; aquí no se muestran aunque el reloj no haya pasado. Si los planes no se leen, se muestra todo.
   const vigentes = await leerPlanesVigentes(db, [...new Set([...bandeja, ...compuertas].map((h) => texto(h.client_id)).filter((c): c is string => !!c))]).catch(() => null)
@@ -203,9 +208,11 @@ export async function leerDecisiones({ db, ahora }: Contexto) {
   for (const p of deFinanzas) crudas.push({ id: String(p.id), tipo: 'pregunta_de_finanzas', subtipo: String(p.clave ?? 'pregunta'), fuente: 'finanzas_preguntas', client_id: texto(p.client_id), titulo: sinSecretos(p.texto, 300) ?? 'Pregunta de la oficina financiera', desde: texto(p.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: null, permite: [], pregunta_de: FINANCIERA })
   // 09-nov · C · las campañas que la cadena dejó esperando a una persona. Vencen con su espera: arriba si la espera vence pronto
   for (const { fila: c, campana } of await leerCampanasDetenidas(db, fuentes)) crudas.push({ id: String(c.id), tipo: 'plan', subtipo: 'campana_necesita_humano', fuente: 'cadena_campanas', client_id: texto(c.client_id), titulo: TITULO_CAMPANA_DETENIDA, desde: texto(c.desde) ?? texto(c.actualizada_en), vence: campana.espera?.vence_en ?? null, prioridad: null, decidir: { ruta: null, accion: null }, costo_usd: null, costo_nota: 'avisar no gasta; reabrir tampoco, y lo que sigue gasta con sus topes', permite: [], detiene: true, para_que: PARA_QUE_CAMPANA_DETENIDA, para_que_corto: PARA_QUE_CORTO_CAMPANA_DETENIDA, destraba: DESTRABA_CAMPANA_DETENIDA, destraba_corto: DESTRABA_CORTO_CAMPANA_DETENIDA, campana })
+  // 16-nov · Sprint 2 · S2-1 · los videos parados en la aprobación del dueño (sin fecha límite: las propuestas no vencen)
+  for (const p of propuestasPendientes.decisiones) crudas.push({ id: p.encargo_id, tipo: 'propuestas', subtipo: 'propuestas_video', fuente: FUENTE_DE_PROPUESTAS, client_id: p.client_id, titulo: TITULO_PROPUESTAS, desde: p.desde, vence: null, prioridad: null, decidir: { ruta: null, accion: 'propuestas-aprobar' }, costo_usd: null, costo_nota: COSTO_NOTA_PROPUESTAS, detiene: true, para_que: PARA_QUE_PROPUESTAS, para_que_corto: PARA_QUE_CORTO_PROPUESTAS, destraba: DESTRABA_PROPUESTAS, destraba_corto: DESTRABA_CORTO_PROPUESTAS, criticos: [...CRITICOS_PROPUESTAS], propuestas: p.propuestas })
   for (const t of tableros) crudas.push({ id: String(t.id), tipo: 'firma_de_finanzas', subtipo: 'tablero_sin_firma', fuente: 'finanzas_tableros', client_id: texto(t.client_id), titulo: `${TABLERO_FINANCIERO}${versionDe(t.version) ? `, versión ${versionDe(t.version)}` : ''}: espera tu firma`, ...(versionDe(t.version) ? { version_del_documento: versionDe(t.version) } : {}), desde: texto(t.creado_en), vence: null, prioridad: null, decidir: { ruta: null, accion: 'firmar-tablero' }, costo_usd: null, costo_nota: null, pregunta_de: FINANCIERA, ...loQueSeFirma(t) })
 
-  const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos, reemplazadas, esperan_el_manual: 0, planes_ya_superados: sueltas.length - noVolvieronVigentes.length }
+  const omitidas = { clientes_de_practica: 0, clientes_de_baja: 0, ensayos: ensayos + propuestasPendientes.ensayos, reemplazadas, esperan_el_manual: 0, planes_ya_superados: sueltas.length - noVolvieronVigentes.length }
   // 3-nov · firma de Emilio: un plan no pide firma antes de su manual. Si el manual no se puede leer, se muestra: mejor una firma de más que una escondida; la puerta del plan igual la frena
   const clientesConPlan = [...new Set(crudas.filter((d) => d.tipo === 'plan' && d.client_id).map((d) => d.client_id as string))]
   const lecturas = await Promise.all(clientesConPlan.map(async (c) => [c, await planEsperaAlManual(db, c).catch(() => ({ ok: false as const, error: 'lectura' }))] as const))

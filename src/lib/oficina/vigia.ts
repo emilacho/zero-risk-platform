@@ -125,6 +125,7 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date, lecto
   const cierres: Array<{ encargo_id: string; resultado_para_la_sala: string; sala_ref: Record<string, unknown> | null; client_id: string; brief_id: string }> = [...videos.cierres]
   for (const t of r.data ?? []) {
     if (t.tipo === 'brazo') continue // el brazo tiene su propio plazo (arriba)
+    if (t.tipo === 'dueno') continue // 16-nov · Sprint 2 · el encargo espera la decisión del DUEÑO: sin plazo (las propuestas no vencen); nunca es un paso muerto
     const enc = await P.almacen.leerEncargo(String(t.encargo_id))
     if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido', 'aprobada'].includes(enc.estado)) continue
     if (reentregar.includes(enc.id)) continue // se acaba de volver a entregar: no se da por muerto

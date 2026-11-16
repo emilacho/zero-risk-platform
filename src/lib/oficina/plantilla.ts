@@ -15,6 +15,8 @@ export const FUNCIONES_REGISTRADAS = [
   'abrir_video', 'pedido_de_video', 'video', 'cuadros_video', 'chequeos_video', 'empaquetar_entrega_video',
   // S2-3 · una imagen clave por plano antes de filmar (borrador en las propuestas, final al máximo)
   'imagenes_clave',
+  // 16-nov · Sprint 2 · S2-1 parte B · la única parada del video: el dueño elige una de las propuestas de la mesa o pide cambios
+  'aprobar_propuestas',
 ] as const
 /** funciones de código que SÍ gastan (un proveedor de imágenes o de video, no un modelo de texto): su tope puede ser mayor que 0 */
 export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video', 'imagenes_clave'] as const
