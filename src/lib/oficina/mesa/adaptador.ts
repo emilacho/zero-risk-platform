@@ -32,6 +32,18 @@ export function puertoDeLaMesa(db: Db, leerConfigDeLaCadena?: (clave: string) =>
       return lista<Fila>(r.data).map(aTarjeta)
     },
     ...(leerConfigDeLaCadena ? { configDeLaCadena: leerConfigDeLaCadena } : {}),
+    // Sprint 2 · S2-2 · la biblioteca es DATO (sembrada por migración); un error se lanza y el turno lo toma como «sin biblioteca» (nunca frena la pieza)
+    async bibliotecaDeVideo(clientId: string) {
+      const [f, r, c] = await Promise.all([
+        db.from('oficina_fichas_de_plano').select('*').eq('activo', true).order('orden', { ascending: true }),
+        db.from('oficina_ritmos_de_video').select('*').eq('activo', true).order('segundos_min', { ascending: true }),
+        db.from('clients').select('industry').eq('id', clientId).limit(1),
+      ])
+      if (f.error) throw new Error(`biblioteca de planos: ${f.error.message}`)
+      if (r.error) throw new Error(`ritmos de video: ${r.error.message}`)
+      const industria = c.error ? null : ((lista<Fila>(c.data)[0]?.industry as string | null | undefined) ?? null)
+      return { fichas: lista<Fila>(f.data), ritmos: lista<Fila>(r.data), industria }
+    },
     async libro(encargoId) {
       const r = await db.from('oficina_mesa_aportes').select('*').eq('encargo_id', encargoId).order('n', { ascending: true })
       if (r.error) throw new Error(`libro de la mesa: ${r.error.message}`)

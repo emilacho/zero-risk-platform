@@ -100,6 +100,8 @@ export interface PuertoMesa {
   directorio(): Promise<Tarjeta[]>
   /** T6: lectura de una llave de `cadena_config` (`metodos`, `fichas_por_red`) · opcional: sin puerto o con error, el turno sigue sin método (leer un método nunca frena una pieza) */
   configDeLaCadena?(clave: string): Promise<unknown>
+  /** Sprint 2 · S2-2: la biblioteca de planos y los ritmos del video (filas activas) y el rubro del cliente · opcional: sin puerto o con error, el turno sigue sin la sección */
+  bibliotecaDeVideo?(clientId: string): Promise<{ fichas: unknown[]; ritmos: unknown[]; industria: string | null }>
   libro(encargoId: string): Promise<Aporte[]>
   aportar(a: NuevoAporte): Promise<{ ok: true; aporte: Aporte } | { ok: false; error: string }>
 }
