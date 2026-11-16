@@ -40,7 +40,8 @@ describe('la pieza REAL de la mesa → láminas con texto final (P1)', () => {
   })
   it('las imágenes: «foto:`0443a42d`» es la foto propia (antes se perdía por las comillas inversas) y lo condicional se queda con lo que SÍ se genera', () => {
     const im = t.imagenes
-    expect(im[0]).toEqual({ ref: 'hook', modo: 'real', foto_id: '0443a42d' })
+    // 16-nov · Sprint 1 · Mejora 2 · la imagen viaja con su concepto (aquí solo el mensaje: la pieza no declara idea, escena ni objetivo)
+    expect(im[0]).toEqual({ ref: 'hook', modo: 'real', foto_id: '0443a42d', concepto: { mensaje: '¿Tu extintor pasa la inspección?' } })
     expect(im[1]).toMatchObject({ modo: 'generada' })
     const manometro = im[2] as { modo: string; descripcion: string }
     expect(manometro.modo).toBe('generada')
