@@ -121,7 +121,9 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
 export function imagenesAGenerarDe(enc: Encargo, est: EstadoMesa): ImagenARedactar[] {
   if (!est.pieza_texto || esDeLaCadena(est.tipo) || est.tipo === 'video') return []
   const b = baseDeLaminas(enc.estado_del_motor)
-  const tr = traducirPieza(quitarLineasDeNotas(est.pieza_texto), est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), preguntasHechas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR })
+  const tr = traducirPieza(quitarLineasDeNotas(est.pieza_texto), est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), preguntasHechas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR,
+    // las mismas fuentes que el cierre: si la dirección no declaró objetivo o idea, el ingeniero recibe los del brief de la hoja
+    ...(b.brief.objetivo ? { objetivoDelBrief: b.brief.objetivo } : {}), ...(b.brief.idea_de_la_pieza ? { ideaDelBrief: b.brief.idea_de_la_pieza } : {}) })
   // el concepto de cada imagen (mejora 2 de CC1) viaja si el traductor lo trae; se lee por nombre para no atarse al tipo
   return tr.imagenes.filter((i): i is { ref: string; modo: 'generada'; descripcion: string } => i.modo === 'generada').map((g) => { const c = (g as { concepto?: unknown }).concepto; return { ref: g.ref, descripcion: g.descripcion, ...(c && typeof c === 'object' ? { concepto: c as ConceptoDeLaImagen } : {}) } })
 }

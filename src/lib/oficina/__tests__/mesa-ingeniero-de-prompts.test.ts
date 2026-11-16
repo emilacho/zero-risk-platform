@@ -5,6 +5,7 @@ import { CARRUSEL_MESA } from '../plantillas/mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { especialistasPertinentes, esPertinente, ingenieroDePrompts } from '../mesa/directorio'
 import { ingenieroPendiente, siguienteDeLaMesa } from '../mesa/planificador'
+import { pedidoDeImagen } from '../mesa/traductor'
 import { aporteDePrompts, conceptoEnTexto, leerPromptsDelIngeniero, promptsParaElBrazo, tareaDelIngeniero } from '../mesa/prompts'
 import type { Aporte, EstadoMesa, Tarjeta } from '../mesa/tipos'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
@@ -166,7 +167,7 @@ describe('LA MESA · punta a punta con el ingeniero en el directorio (ensayo, en
     })
     expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
     const pv = M.encargos.get(id)!.estado_del_motor.artefactos.prompts_validos.datos as { por_ref: Record<string, { prompts: Array<{ prompt: string }>; origen: string }> }
-    expect(pv.por_ref.hook.prompts[0].prompt).toBe('un plato servido sobre una mesa de madera clara, luz natural')
+    expect(pv.por_ref.hook.prompts[0].prompt).toBe(pedidoDeImagen('un plato servido sobre una mesa de madera clara, luz natural', { mensaje: 'Cada mañana empieza igual' })) // la descripción de la dirección + el contexto de la pieza (mejora 2 de CC1)
     expect(pv.por_ref.hook.origen).toBe('direccion')
     // CC6 m18 · el aviso llega a la pieza (artefacto `mesa`), no solo a la función pura
     expect(avisosDelCierre(contenidos)).toEqual(expect.arrayContaining([expect.stringMatching(/el ingeniero de prompts no dejó una instrucción legible para «hook»/)]))
@@ -178,7 +179,7 @@ describe('LA MESA · punta a punta con el ingeniero en el directorio (ensayo, en
     expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
     expect(turnos.map((t) => t.tipo)).not.toContain('redactar_prompts')
     const pv = M.encargos.get(id)!.estado_del_motor.artefactos.prompts_validos.datos as { por_ref: Record<string, { prompts: Array<{ prompt: string }>; origen: string }>; ingeniero?: unknown }
-    expect(pv.por_ref.hook.prompts[0].prompt).toBe('un plato servido sobre una mesa de madera clara, luz natural')
+    expect(pv.por_ref.hook.prompts[0].prompt).toBe(pedidoDeImagen('un plato servido sobre una mesa de madera clara, luz natural', { mensaje: 'Cada mañana empieza igual' })) // la descripción de la dirección + el contexto de la pieza (mejora 2 de CC1)
     expect(pv.por_ref.hook.origen).toBe('direccion')
     expect(pv.ingeniero).toBeUndefined()
     expect(avisosDelCierre(contenidos).filter((x) => /ingeniero de prompts/.test(x))).toEqual([])

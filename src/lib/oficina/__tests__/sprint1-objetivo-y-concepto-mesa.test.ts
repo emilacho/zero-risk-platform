@@ -12,13 +12,14 @@ import { CARRUSEL_MESA } from '../plantillas/mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { BRIEF_CARRUSEL, CITAS_COMPLETAS, LAMINAS_OK, jugar, montar, parteCon, pieza, seccionesDeLaminas } from './mesa-arnes'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
-import { crearMesaEnMemoria } from './mesa-memoria'
+import { DIRECTORIO, crearMesaEnMemoria } from './mesa-memoria'
+import type { Tarjeta } from '../mesa/tipos'
 
 /** la mesa del arnés, con un brief de la hoja que trae OBJETIVO e IDEA DE LA PIEZA (lo que escribe la cadena desde el 16-nov) */
-async function montarConBriefDeLaHoja() {
+async function montarConBriefDeLaHoja(directorio?: Tarjeta[]) {
   const brief = BRIEF_CARRUSEL.replace('- MENSAJE (uno): Pídelo hoy.', '- OBJETIVO: que pidan el plato del día por WhatsApp\n- IDEA DE LA PIEZA: el plato que cambia cada mañana\n- QUÉ SE VE: el plato servido en la barra, luz de la mañana\n- MENSAJE (uno): Pídelo hoy.')
   const M = crearMemoria({ parte: parteCon(brief), plantilla: CARRUSEL_MESA })
-  M.P.mesa = crearMesaEnMemoria()
+  M.P.mesa = crearMesaEnMemoria(directorio)
   const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0100', dry_run: true, familia: 'carrusel_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   return { M, a, id: String(a.cuerpo.encargo_id) }
 }
@@ -82,5 +83,37 @@ describe('de punta a punta · la mesa cierra con el objetivo y el concepto en la
     // el aviso «la dirección no declaró el objetivo…» va en `avisos_del_traductor` del registro de la mesa (la memoria del arnés no guarda contenidos); lo cubre sprint1-objetivo-y-concepto-traductor
     const pv = art.prompts_validos.datos as { por_ref: Record<string, { prompts: Array<{ prompt: string }> }> }
     expect(pv.por_ref.hook.prompts[0].prompt).toContain('lo que la pieza tiene que lograr: que pidan el plato del día por WhatsApp')
+  })
+})
+
+// CC6 m17 de #1064 · el concepto de cada imagen llega a la TAREA del ingeniero de prompts (la cubre quien fusiona segundo: CC1)
+describe('con el ingeniero de prompts en el directorio · el concepto y el objetivo llegan a su tarea', () => {
+  const ING = 'design-image-prompt-engineer'
+  const DIR_ING = DIRECTORIO.map((t) => (t.agente === ING ? { ...t, pertinente_en: ['carrusel:redacta_prompts', 'kit:redacta_prompts'] } : t))
+  const responder = (texto: string) => (t: { tipo: string }) => (t.tipo === 'integrar' || t.tipo === 'devolver_citas' ? { texto } : t.tipo === 'redactar_prompts' ? { texto: '## Lámina 1 · hook\nPrompt: Overhead shot of the dish, natural light, no text.\nReferencia: ninguna' } : undefined)
+
+  it('objetivo e idea que declara la dirección: la tarea del ingeniero los trae en el concepto de la imagen; su prompt reemplaza el pedido entero y el concepto queda al lado', async () => {
+    const { M, a, id } = await montarConBriefDeLaHoja(DIR_ING)
+    const PIEZA = `## Objetivo\nque reserven el plato de hoy\n## Concepto\nel plato que cambia cada día\n${seccionesDeLaminas(LAMINAS_OK)}\n## Pie\nEl plato del día te espera.\n## Etiquetas\n#plato #hoy\n${CITAS_COMPLETAS}`
+    const { ultima, turnos } = await jugar(M, id, a, responder(PIEZA))
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado' })
+    const tarea = turnos.find((t) => t.tipo === 'redactar_prompts')!.task
+    expect(tarea).toMatch(/\*\*hook\*\* · lo que pidió la dirección: un plato servido sobre una mesa de madera clara, luz natural\n {2}Concepto de esta imagen: /)
+    const linea = tarea.split('\n').find((l) => l.includes('Concepto de esta imagen:')) ?? ''
+    expect(linea).toContain('que reserven el plato de hoy')
+    expect(linea).toContain('el plato que cambia cada día')
+    const pv = M.encargos.get(id)!.estado_del_motor.artefactos.prompts_validos.datos as { por_ref: Record<string, { prompts: Array<{ prompt: string; concepto?: Record<string, string> }>; origen: string }> }
+    expect(pv.por_ref.hook.origen).toBe('ingeniero_de_prompts')
+    expect(pv.por_ref.hook.prompts[0].prompt).toBe('Overhead shot of the dish, natural light, no text.')
+    expect(pv.por_ref.hook.prompts[0].concepto).toMatchObject({ objetivo: 'que reserven el plato de hoy', idea: 'el plato que cambia cada día' })
+  })
+  it('la dirección no declara objetivo: el ingeniero recibe el del brief de la hoja (mismas fuentes que el cierre)', async () => {
+    const { M, a, id } = await montarConBriefDeLaHoja(DIR_ING)
+    const { turnos } = await jugar(M, id, a, responder(pieza()))
+    const tarea = turnos.find((t) => t.tipo === 'redactar_prompts')!.task
+    // en la línea del concepto de la imagen (el brief entero ya viene en toda tarea de la mesa: buscarlo suelto no distingue)
+    const linea = tarea.split('\n').find((l) => l.includes('Concepto de esta imagen:')) ?? ''
+    expect(linea).toContain('que pidan el plato del día por WhatsApp')
+    expect(linea).toContain('el plato que cambia cada mañana')
   })
 })
