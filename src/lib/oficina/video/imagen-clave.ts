@@ -8,6 +8,7 @@
  *  · El texto en pantalla NUNCA va a la imagen: se compone por código después (S2-5).
  * Puro: sin red, sin base, sin modelo. Agnóstico: no sabe de rubros ni de clientes; lee lo que la hoja traiga y suple lo que falte sin frenar.
  */
+import { MAX_IMAGENES } from '../../imagenes-del-pedido'
 import { fotosPorImagen, type FotoDeReferencia } from '../foto-de-referencia'
 import type { Estado } from '../tipos'
 import type { Plano } from './guion'
@@ -162,16 +163,26 @@ const lineaDelPlano = (p: PlanoDeLaHoja): string => {
  * el pedido al agente: cada imagen clave con su plano y, en los planos de producto, la foto real que la imagen tenía que respetar.
  * JUZGA EL AGENTE: no hay lista de cosas que buscar; el código solo arma el pedido y lee `coincide`.
  */
-export function tareaDeLaRevisionDeImagenesClave(o: { imagenes: ImagenClaveDelPlano[]; planos: PlanoDeLaHoja[]; fotos: Array<{ id: string; url: string }>; brief_texto: string; red: string; contrato: string; errorDeFormato?: string }): { task: string; images: string[] } {
+export function tareaDeLaRevisionDeImagenesClave(o: { imagenes: ImagenClaveDelPlano[]; planos: PlanoDeLaHoja[]; fotos: Array<{ id: string; url: string }>; brief_texto: string; red: string; contrato: string; errorDeFormato?: string; max?: number }): { task: string; images: string[] } {
+  // CC7 (16-nov): el servicio de agentes acepta como mucho MAX_IMAGENES por pedido (la misma constante que valida la puerta). Primero las imágenes clave
+  //   (repartidas parejo si no caben todas); cada foto real se muestra UNA vez aunque sea la vara de varios planos, y solo si queda lugar. Lo que no cabe, se dice
+  const max = Math.max(1, o.max ?? MAX_IMAGENES)
+  const vistas = o.imagenes.length <= max ? o.imagenes : Array.from(new Set(Array.from({ length: max }, (_, i) => Math.round((i * (o.imagenes.length - 1)) / Math.max(1, max - 1))))).map((i) => o.imagenes[i])
+  let lugar = max - vistas.length
   const images: string[] = []
   const lineas: string[] = []
-  for (const im of o.imagenes) {
+  const fotoEn = new Map<string, number>()
+  for (const im of vistas) {
     images.push(im.url)
     lineas.push(`- imagen ${images.length}: imagen clave del plano ${im.n}${im.foto_referencia_id ? ` (hecha sobre la foto real «${im.foto_referencia_id}»)` : ''}`)
     const real = im.foto_referencia_id ? o.fotos.find((f) => f.id === im.foto_referencia_id) : undefined
-    if (real?.url) { images.push(real.url); lineas.push(`- imagen ${images.length}: la foto REAL «${real.id}» del cliente: es la vara del producto del plano ${im.n}`) }
+    if (!real?.url) continue
+    const ya = fotoEn.get(real.id)
+    if (ya) lineas.push(`  (la vara del producto del plano ${im.n} es la foto REAL «${real.id}», ya mostrada como imagen ${ya})`)
+    else if (lugar > 0) { images.push(real.url); lugar--; fotoEn.set(real.id, images.length); lineas.push(`- imagen ${images.length}: la foto REAL «${real.id}» del cliente: es la vara del producto del plano ${im.n}`) }
+    else lineas.push(`  (la foto real «${real.id}» del plano ${im.n} no se muestra: el pedido admite ${max} imágenes)`)
   }
-  const sinImagen = o.planos.filter((p) => !o.imagenes.some((im) => im.n === p.n)).map((p) => p.n)
+  const sinImagen = o.planos.filter((p) => !vistas.some((im) => im.n === p.n)).map((p) => p.n)
   const task = [
     '## La pieza\nUn video corto en preparación. Antes de filmar, cada plano tiene su imagen clave (el primer cuadro de su clip). Revisas el storyboard ANTES de gastar en el video.',
     `## La fila del brief (lo que la pieza tiene que contar)\n${o.brief_texto.trim() || '(sin texto)'}\nRed: ${o.red || '(sin red)'}`,

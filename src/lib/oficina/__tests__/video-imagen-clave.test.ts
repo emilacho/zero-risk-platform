@@ -14,7 +14,8 @@ import { leerBriefCreativo } from '@/lib/cadena/brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '@/lib/cadena/conceptos'
 import type { FormatosPorRed } from '@/lib/cadena/tipos'
 import { abrirEncargo } from '../orquestador'
-import { armarPedidoV, cabeLaVuelta, costoDeVolver, ejecutarCodigoV, recibirVideo } from '../orquestador-video'
+import { armarPedidoV, cabeLaVuelta, costoDeVolver, ejecutarCodigoV, procesarValorV, recibirVideo } from '../orquestador-video'
+import { MAX_IMAGENES } from '@/lib/imagenes-del-pedido'
 import { AGENTE_QUE_MIRA_EL_VIDEO, AGENTE_QUE_REVISA_LAS_IMAGENES_CLAVE, TOPE_DE_LAS_IMAGENES_CLAVE_USD, TOPE_DE_VIDEO_MESA_USD, VIDEO_MESA } from '../plantillas/video-mesa'
 import type { PuertoDeVideo } from '../puertos'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
@@ -324,6 +325,51 @@ describe.each(CLIENTES)('%s · el camino real con las imágenes clave', (_n, C) 
 })
 
 // ───────────────────────── la fase de propuestas (borrador) · el paso solo, con un encargo armado a mano
+// ───────────────────────── CC7 16-nov · dinero y tope de imágenes
+describe('la revisión de las imágenes clave · dinero y límite del pedido (CC7)', () => {
+  const revisar = VIDEO_MESA.pasos.find((p) => p.clave === PASO_REVISAR_IMAGENES_CLAVE)!
+  const estado = (gasto: number) => ({ ultimo: 1, pasos_ejecutados: 5, gasto_usd: gasto, vueltas: {}, fichas: [], artefactos: {} }) as unknown as Estado
+  const MAL = { coincide: false, por_plano: [{ plano: 2, coincide: false, correccion: 'el producto no es el de la foto' }], para_la_mesa: 'usar el producto real' }
+  it('🔴 NO coincide pero volver NO cabe en el tope: no vuelve a la mesa y deja la ficha de sugerencia que lo dice', () => {
+    const volver = costoDeVolver(VIDEO_MESA, revisar)
+    expect(volver).toBeGreaterThan(0)
+    const sinLugar = procesarValorV(revisar, MAL, estado(TOPE_DE_VIDEO_MESA_USD - volver + 0.01), VIDEO_MESA)!
+    expect(sinLugar.res.artefacto).toMatchObject({ vuelve_a_la_mesa: false })
+    expect(sinLugar.res.fichas).toHaveLength(1)
+    expect(sinLugar.res.fichas![0]).toMatchObject({ gravedad: 'sugerencia', donde: 'revision_imagen_clave' })
+    expect(sinLugar.res.fichas![0].que).toContain('no volvió a la mesa: rehacer la hoja y sus imágenes no cabe en el tope del encargo')
+    // con lugar, la misma revisión SÍ vuelve
+    const conLugar = procesarValorV(revisar, MAL, estado(3), VIDEO_MESA)!
+    expect(conLugar.res.artefacto).toMatchObject({ vuelve_a_la_mesa: true })
+    expect(conLugar.res.fichas ?? []).toHaveLength(0)
+  })
+  const im = (n: number, foto: string | null) => ({ n, url: `https://i/${n}.png`, prompt: '', foto_referencia_id: foto, referencia_usada: !!foto, costo_usd: 0, generation_id: `g${n}` })
+  const base = { brief_texto: 'x', red: 'instagram', contrato: '' }
+  it('🔴 nunca pasa el límite de imágenes del servicio: 12 planos de producto con fotos distintas ⇒ las 12 imágenes clave y las fotos que caben, y dice cuáles no', () => {
+    const fotos = Array.from({ length: 12 }, (_, i) => ({ id: `f${i + 1}`, url: `https://f/${i + 1}.jpg` }))
+    const planos: PlanoDeLaHoja[] = fotos.map((_, i) => ({ n: i + 1, desde: i, hasta: i + 1, se_ve: 'el producto', producto: true }))
+    const t = tareaDeLaRevisionDeImagenesClave({ ...base, imagenes: planos.map((p) => im(p.n, `f${p.n}`)), planos, fotos })
+    expect(t.images).toHaveLength(MAX_IMAGENES)
+    for (const p of planos) expect(t.images).toContain(`https://i/${p.n}.png`)
+    expect(t.task).toContain(`no se muestra: el pedido admite ${MAX_IMAGENES} imágenes`)
+  })
+  it('🔴 la misma foto real de varios planos se muestra UNA vez y los demás la citan', () => {
+    const fotos = [{ id: 'f1', url: 'https://f/1.jpg' }]
+    const planos: PlanoDeLaHoja[] = [1, 2, 3].map((n) => ({ n, desde: n, hasta: n + 1, se_ve: 'x', producto: true }))
+    const t = tareaDeLaRevisionDeImagenesClave({ ...base, imagenes: planos.map((p) => im(p.n, 'f1')), planos, fotos })
+    expect(t.images).toEqual(['https://i/1.png', 'https://f/1.jpg', 'https://i/2.png', 'https://i/3.png'])
+    expect(t.task).toContain('la vara del producto del plano 3 es la foto REAL «f1», ya mostrada como imagen 2')
+  })
+  it('🔴 más imágenes clave que el límite: se reparten parejo (primera y última), el resto se declara sin imagen', () => {
+    const planos: PlanoDeLaHoja[] = Array.from({ length: 30 }, (_, i) => ({ n: i + 1, desde: i, hasta: i + 1, se_ve: 'x' }))
+    const t = tareaDeLaRevisionDeImagenesClave({ ...base, imagenes: planos.map((p) => im(p.n, null)), planos, fotos: [] })
+    expect(t.images).toHaveLength(MAX_IMAGENES)
+    expect(t.images[0]).toBe('https://i/1.png')
+    expect(t.images[MAX_IMAGENES - 1]).toBe('https://i/30.png')
+    expect(t.task).toMatch(/los planos [\d, ]+ no tienen imagen/)
+  })
+})
+
 describe('el paso imagenes_clave por fase', () => {
   const paso = VIDEO_MESA.pasos.find((p) => p.clave === PASO_IMAGENES_CLAVE)!
   const encargo = (_fase: string | undefined, o: { gasto?: number; candidatas?: Array<{ id: string; cercana?: boolean }>; planos?: PlanoDeLaHoja[] } = {}) => ({
