@@ -144,8 +144,15 @@ describe('piezas puras', () => {
   })
   it('🔴 una foto demasiado pesada o vacía no se usa', async () => {
     const grande = { status: 200, ok: true, arrayBuffer: async () => new ArrayBuffer(20 * 1024 * 1024 + 1) } as unknown as Response
-    expect((await bajarFoto(async () => grande, FOTO_URL)).ok).toBe(false)
-    expect((await bajarFoto(async () => fotoOk(Buffer.alloc(0)), FOTO_URL)).ok).toBe(false)
+    const g = await bajarFoto(async () => grande, FOTO_URL)
+    expect(g.ok).toBe(false)
+    if (!g.ok) expect(g.motivo).toMatch(/pesa 20971521 bytes/)
+    // justo en el tope sí baja (si es imagen)
+    const justo = Buffer.concat([JPG, Buffer.alloc(20 * 1024 * 1024 - JPG.length)])
+    expect((await bajarFoto(async () => fotoOk(justo), FOTO_URL)).ok).toBe(true)
+    const v = await bajarFoto(async () => fotoOk(Buffer.alloc(0)), FOTO_URL)
+    expect(v.ok).toBe(false)
+    if (!v.ok) expect(v.motivo).toBe('la foto vino vacía')
   })
   it('🔴 el pedido de edición conserva el producto, cambia solo la escena y prohíbe copiar textos de la foto', () => {
     const t = promptDeEdicion('escena X')

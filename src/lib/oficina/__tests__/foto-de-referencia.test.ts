@@ -71,6 +71,18 @@ describe('post de una imagen · la imagen generada sale de la foto real', () => 
     expect(f!.gravedad).toBe('sugerencia')
     expect(f!.que).toMatch(/no es PNG, JPEG ni WEBP/)
   })
+  it('🔴 (CC7 #27) la foto que eligió el director va PRIMERO: la 1.ª imagen se pide sobre ella', async () => {
+    const M0 = crearMemoria({ parte: PARTE_OTRO_PRODUCTO })
+    const id0 = await abierto(M0)
+    await correr(M0, id0, guion)
+    const aptas = (M0.encargos.get(id0)!.estado_del_motor.artefactos['candidatas_foto'].datos.candidatas as Array<{ id: string; cercana?: boolean }>).filter((c) => !c.cercana).map((c) => c.id)
+    expect(aptas.length).toBeGreaterThan(1)
+    const M = crearMemoria({ parte: PARTE_OTRO_PRODUCTO })
+    const conPreferida = JSON.stringify({ ...JSON.parse(direccionGenerada()), decision: { modo: 'generada', foto_id: aptas[1], motivo: 'esa foto es la mejor base' } })
+    const id = await abierto(M)
+    await correr(M, id, { ...guion, direccion_visual: () => ({ texto: conPreferida }) })
+    expect(M.llamadas.imagenFotos).toEqual([aptas[1], aptas[0]])
+  })
   for (const [caso, o] of [['sin fotos propias del cliente', { parte: PARTE_OTRO_PRODUCTO, fuentes: { fotos: [] } }], ['solo fotos «cercanas» (no muestran el protagonista: el ceviche)', {}]] as const) {
     it(`🔴 ${caso}: se genera como siempre (sin foto) y sin ficha`, async () => {
       const M = crearMemoria(o as never)
@@ -104,6 +116,18 @@ describe('carrusel · cada imagen generada sobre su foto (las versiones de una i
     const s = await ejecutarCodigoL(M.P, encargo(e), CARRUSEL_IG_V1, PASO)
     expect(M.llamadas.imagenFotos).toEqual([f1, f1, f2, f2])
     expect((s.res.artefacto!.items as Array<{ ref: string; foto_referencia_id?: string }>).map((i) => `${i.ref}:${i.foto_referencia_id}`)).toEqual([`l2:${f1}`, `l2:${f1}`, `l3:${f2}`, `l3:${f2}`])
+  })
+  it('🔴 (CC7 #30 #31) si la foto no se pudo usar: la imagen queda SIN marca de referencia y una ficha (sugerencia) dice por qué', async () => {
+    const [f1, f2] = FOTOS.map((f) => f.id)
+    const M = crearMemoria()
+    M.referenciaNoUsada = (n) => (n <= 2 ? 'OpenAI rechazó la edición sobre la foto (400): se generó sin ella' : null)
+    const e = estado({ candidatas: [{ id: f1 }, { id: f2 }], imagenes: [{ ref: 'l2', modo: 'generada' }, { ref: 'l3', modo: 'generada' }] })
+    const s = await ejecutarCodigoL(M.P, encargo(e), CARRUSEL_IG_V1, PASO)
+    const items = s.res.artefacto!.items as Array<{ ref: string; foto_referencia_id?: string }>
+    expect(items.map((i) => `${i.ref}:${i.foto_referencia_id ?? '-'}`)).toEqual(['l2:-', 'l2:-', `l3:${f2}`, `l3:${f2}`])
+    const fichas = (s.res.fichas ?? []).filter((f) => f.id.startsWith('imagen-sin-foto'))
+    expect(fichas).toHaveLength(2)
+    expect(fichas.every((f) => f.gravedad === 'sugerencia' && /l2/.test(f.que ?? '') && /rechazó la edición/.test(f.que ?? ''))).toBe(true)
   })
   it('🔴 solo cercanas (no muestran el protagonista): se genera sin foto', async () => {
     const M = crearMemoria()
