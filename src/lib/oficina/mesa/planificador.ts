@@ -10,9 +10,11 @@
  *  5. especialistas pertinentes sin aporte → se les convoca
  *  6. hay aportes nuevos desde la última integración → la dirección integra
  *  7. la integración no cita lo que usó/descartó → se le devuelve (máx. 1 vez)
- *  8. todo listo → traducir y dibujar
+ *  8. la pieza integrada pide imágenes generadas y hay ingeniero de prompts → su turno (Sprint 1 · mejora 4; también al «cerrar con lo que hay» si cabe bajo el techo)
+ *  9. todo listo → traducir y dibujar
  */
-import { especialistasPertinentes, direccionDe } from './directorio'
+import { especialistasPertinentes, direccionDe, ingenieroDePrompts } from './directorio'
+import { aporteDePrompts, esAporteDePrompts } from './prompts'
 import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 
@@ -25,6 +27,16 @@ const ultimaIntegracion = (libro: Aporte[]): Aporte | null => [...libro].reverse
 /** lo que la pieza todavía gastará después de la mesa (imagen + observador + jefatura; en el video, el brazo + la jefatura; en las mesas de la cadena, lo que diga `posterior`, 0): la mesa no puede gastárselo conversando */
 export const reservaDeLoQueSigue = (hayImagenGenerada: boolean, posterior?: number, tipo?: TipoDePieza): number =>
   posterior !== undefined ? posterior : tipo === 'video' ? COTAS.RESERVA_DE_LO_QUE_SIGUE_VIDEO_USD : hayImagenGenerada ? COTAS.RESERVA_DE_LO_QUE_SIGUE_CON_IMAGEN_USD : COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD
+
+/** Sprint 1 · mejora 4 · ¿le toca al ingeniero de prompts? Solo con una integración hecha, una pieza que pide imágenes generadas, un ingeniero en el directorio congelado,
+ * sin su texto posterior a esa integración y sin agotar sus reintentos. Devuelve su nombre o null */
+export function ingenieroPendiente(est: EstadoMesa, libro: Aporte[], hayImagenGenerada: boolean): string | null {
+  const ing = ingenieroDePrompts(est.directorio_congelado, est.tipo)
+  if (!ing || !hayImagenGenerada || !ultimaIntegracion(libro)) return null
+  if (aporteDePrompts(libro, ing.agente) || fallosDe(libro, ing.agente) >= COTAS.REINTENTOS_DE_TURNO) return null
+  return ing.agente
+}
+const turnoDelIngeniero = (agente: string, motivo: string): Accion => ({ accion: 'turno', agente, tipo: 'redactar_prompts', responde_a: null, motivo })
 
 /** ¿se agotó alguna cota que obliga a «cerrar con lo que hay»? devuelve la razón o null */
 export function cotaAgotada(est: EstadoMesa, ctx: ContextoDeLaMesa): string | null {
@@ -50,6 +62,9 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   const dir = direccionDe(est.directorio_congelado, est.tipo)
   if (!dir) throw new Error('la mesa no tiene dirección creativa en el directorio')
   const porteroNombre = est.directorio_congelado.find((t) => t.rol === 'portero' && t.activo)?.agente ?? null
+  // el texto del ingeniero de prompts sobre la pieza integrada no es un «aporte nuevo» que obligue a integrar otra vez
+  const ingeniero = ingenieroDePrompts(est.directorio_congelado, est.tipo)?.agente ?? null
+  const esNuevo = (a: Aporte, ult: Aporte | null): boolean => ['aporta', 'responde', 'material'].includes(a.tipo) && (!ult || a.n > ult.n) && !esAporteDePrompts(a, ingeniero, ult)
 
   // 2 · la dirección abre
   if (!libro.some((a) => a.tipo === 'dirige')) {
@@ -61,12 +76,15 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   const agotada = est.cierre_forzado ?? cotaAgotada(est, ctx)
   if (agotada) {
     const ult = ultimaIntegracion(libro)
-    const hayAportesNuevos = libro.some((a) => ['aporta', 'responde', 'material'].includes(a.tipo) && (!ult || a.n > ult.n))
+    const hayAportesNuevos = libro.some((a) => esNuevo(a, ult))
     // la integración final puede pasar del tope (hasta el techo ×1,2), pero NUNCA se come lo que viene después: imagen, observador y jefatura también caben bajo el techo
     const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada, ctx.reserva_posterior_usd, ctx.tipo ?? est.tipo) <= techoDe(ctx.tope_usd)
     if ((!ult || hayAportesNuevos) && puedeGastar && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO && est.marcas.integracion_forzada !== true) {
       return { accion: 'turno', agente: dir.agente, tipo: 'integrar', responde_a: null, motivo: `cierra con lo que hay: ${agotada}` }
     }
+    // la pieza ya está integrada: el ingeniero escribe los prompts si cabe bajo el techo (la imagen se va a generar igual; mejor con su instrucción)
+    const ingP = ingenieroPendiente(est, libro, ctx.hayImagenGenerada)
+    if (ingP && puedeGastar) return turnoDelIngeniero(ingP, `cierra con lo que hay: ${agotada} · prompts de la pieza integrada`)
     return { accion: 'seguir_a_dibujar', motivo: agotada }
   }
 
@@ -88,7 +106,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
 
   // 6 · aportes nuevos desde la última integración → integra la dirección
   const ult = ultimaIntegracion(libro)
-  const hayNuevos = libro.some((a) => ['aporta', 'responde', 'material'].includes(a.tipo) && (!ult || a.n > ult.n))
+  const hayNuevos = libro.some((a) => esNuevo(a, ult))
   if (!ult || hayNuevos) {
     if (fallosDe(libro, dir.agente) >= COTAS.REINTENTOS_DE_TURNO) return { accion: 'seguir_a_dibujar', motivo: 'la dirección creativa no pudo integrar tras los reintentos' }
     return { accion: 'turno', agente: dir.agente, tipo: 'integrar', responde_a: null, motivo: ult ? 'hay aportes nuevos' : 'primera integración' }
@@ -100,6 +118,10 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   if (!v.ok && est.devoluciones_por_citas < COTAS.MAX_DEVOLUCIONES_POR_CITAS && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO) {
     return { accion: 'turno', agente: dir.agente, tipo: 'devolver_citas', responde_a: ult.id, motivo: 'faltan citas de aportes usados o descartados' }
   }
+
+  // 8 · Sprint 1 · mejora 4 · la pieza integrada pide imágenes generadas: el ingeniero de prompts traduce el concepto de cada una a la instrucción exacta del modelo
+  const ingP = ingenieroPendiente(est, libro, ctx.hayImagenGenerada)
+  if (ingP) return turnoDelIngeniero(ingP, 'la pieza integrada pide imágenes generadas: instrucción exacta para el modelo de imagen')
 
   return { accion: 'traducir' }
 }

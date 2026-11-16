@@ -137,12 +137,12 @@ export interface EstadoMesa {
   /** el tablero (aportes, citas y lo que el código comprobó) que viaja a la jefatura para que juzgue si cada aporte fue real; lo escribe `cerrarLaMesa` */
   tablero_para_la_jefatura?: string
   /** el turno que está esperando respuesta */
-  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
+  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
 }
 
 /** lo que decide el planificador */
 export type Accion =
-  | { accion: 'turno'; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas'; responde_a: string | null; motivo: string }
+  | { accion: 'turno'; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts'; responde_a: string | null; motivo: string }
   | { accion: 'material'; pedido_id: string; que: string; para_que: string; de: string }
   | { accion: 'traducir' }
   | { accion: 'cierre_por_tope'; razon: 'techo_de_gasto' }

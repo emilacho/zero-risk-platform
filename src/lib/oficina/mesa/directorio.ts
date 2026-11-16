@@ -3,6 +3,7 @@
  * agregar un agente = insertar una fila; quitarlo = `activo=false`. Puro: sin base ni red.
  */
 import { esDeLaCadena, type ClaveDeEquipo, type Tarjeta, type TipoDePieza } from './tipos'
+import { CONDICION_PROMPTS } from './prompts'
 
 const CONDICION_IMAGEN = 'si_imagen_generada'
 /** una tarjeta de dirección que en ESTE tipo de pieza es miembro (no dirige): `concepto:miembro` */
@@ -18,6 +19,8 @@ export function esPertinente(t: Tarjeta, tipo: TipoDePieza, hayImagenGenerada: b
     if (!cond) return true
     if (cond === CONDICION_MIEMBRO) return true
     if (cond === CONDICION_DIRIGE) return false
+    // Sprint 1 · mejora 4 · el ingeniero de prompts no «aporta» antes de la integración: tiene su propio turno DESPUÉS (`ingenieroDePrompts`)
+    if (cond === CONDICION_PROMPTS) return false
     if (cond === CONDICION_IMAGEN) return hayImagenGenerada
     return condiciones.includes(cond)
   })
@@ -44,6 +47,10 @@ export function direccionDe(directorio: Tarjeta[], tipo?: TipoDePieza): Tarjeta 
   // las mesas de la cadena (brief, concepto) solo las dirige quien lo dice; las de piezas conservan el respaldo de siempre
   if (esDeLaCadena(tipo)) return null
   return dirs.find((t) => propios(t).length === 0 && !t.pertinente_en.some((p) => p.endsWith(':dirige'))) ?? null
+}
+/** Sprint 1 · mejora 4 · quién redacta los prompts de imagen de este tipo de pieza después de la integración: la tarjeta ACTIVA (miembro) que marca `<tipo>:redacta_prompts` · sin ella, null (la mesa trabaja como antes) */
+export function ingenieroDePrompts(directorio: Tarjeta[], tipo: TipoDePieza): Tarjeta | null {
+  return directorio.find((t) => t.activo && t.rol === 'miembro' && t.pertinente_en.includes(`${tipo}:${CONDICION_PROMPTS}`)) ?? null
 }
 export const porteroDe = (directorio: Tarjeta[]): Tarjeta | null => directorio.find((t) => t.rol === 'portero' && t.activo) ?? null
 
