@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { abrirEncargo } from '../orquestador'
 import { POST_IMG } from '../plantillas/post-img'
-import { VIDEO_MESA } from '../plantillas/video-mesa'
+import { TOPE_DE_VIDEO_MESA_USD, VIDEO_MESA } from '../plantillas/video-mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { ACCIONES } from '../tablero/acciones'
 import { confirmarGasto, rastroDelTablero, type Contexto } from '../tablero/comun'
@@ -196,7 +196,7 @@ describe('rehacer-pieza', () => {
     expect(s).toMatchObject({ status: 200, cuerpo: { ok: true, tope_usd: 2.5, tope_de_la_familia_usd: 2.5, tope_pedido_usd: 5 } })
     expect([...M.encargos.values()].filter((x) => !antes.has(x.id)).map((x) => x.tope_usd)).toEqual([2.5])
   })
-  it('🔴 GO Lenovo 11-nov (opción A) · un VIDEO puede pedir hasta el tope de SU familia (35 desde 202611111930): con 35 nace con 35; por encima se recorta a 35; nunca sube de lo pedido', async () => {
+  it('🔴 GO Lenovo 11-nov (opción A) · un VIDEO puede pedir hasta el tope de SU familia (35 desde 202611111930; 45 desde 202611162300 · S2-3): con el tope nace con el tope; por encima se recorta al tope; nunca sube de lo pedido', async () => {
     const MV = crearMemoria({ plantilla: VIDEO_MESA, fuentes: FUENTES })
     const video = async (tope: number) => {
       const antes = new Set(MV.encargos.keys())
@@ -204,8 +204,8 @@ describe('rehacer-pieza', () => {
       // (en memoria no hay brazo de video: la pieza se abre con ese tope y luego cae al cotizar, que es otra cosa)
       return { s, topes: [...MV.encargos.values()].filter((x) => !antes.has(x.id)).map((x) => [x.familia, x.tope_usd]) }
     }
-    expect((await video(35)).topes).toEqual([['video_mesa', 35]])
-    expect((await video(40)).topes).toEqual([['video_mesa', 35]])
+    expect((await video(TOPE_DE_VIDEO_MESA_USD)).topes).toEqual([['video_mesa', TOPE_DE_VIDEO_MESA_USD]])
+    expect((await video(TOPE_DE_VIDEO_MESA_USD + 5)).topes).toEqual([['video_mesa', TOPE_DE_VIDEO_MESA_USD]])
     // ⚠️ lo que manda HOY el botón (5) da un video de 5: por eso el tablero tiene que mostrar y mandar el tope de la familia (otra entrega; ver papel de CC2)
     expect((await video(DEL_TABLERO)).topes).toEqual([['video_mesa', 5]])
   })

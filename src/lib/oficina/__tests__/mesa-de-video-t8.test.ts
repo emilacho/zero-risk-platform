@@ -22,7 +22,9 @@ import { QUIEN_INTEGRA_EL_GANCHO, REGLA_DEL_GANCHO, VOZ_DEL_GANCHO, armarTarea, 
 import type { EstadoMesa, Tarjeta } from '../mesa/tipos'
 import { abrirEncargo } from '../orquestador'
 import { productoresDeLaPieza, familiaDePieza } from '../paso-jefatura'
-import { AGENTE_QUE_MIRA_EL_VIDEO, VIDEO_MESA } from '../plantillas/video-mesa'
+import { AGENTE_QUE_MIRA_EL_VIDEO } from '../plantillas/video-mesa'
+// S2-3 · estas pruebas siguen el dato y el camino de ANTES de las imágenes clave (lo nuevo lo prueban video-imagen-clave*.test.ts)
+import { VIDEO_MESA_ANTES_DE_S2_3 as VIDEO_MESA } from './video-mesa-antes-de-s2-3'
 import type { PuertoDeVideo } from '../puertos'
 import { CONFIG_APAGADA, TARGET_STEP_PRODUCIR, decidirPuerta } from '../sobre'
 import { CLIENTE, FOTOS, PARTE, crearMemoria } from './memoria'

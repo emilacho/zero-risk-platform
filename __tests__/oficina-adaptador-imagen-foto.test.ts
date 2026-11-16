@@ -39,6 +39,13 @@ describe('puerto imagen · la foto del cliente viaja a la ruta', () => {
     expect(cuerpos[0]).not.toHaveProperty('reference_image_url')
     expect(r).not.toHaveProperty('referencia')
   })
+  it('🔴 (S2-3) tamaño y calidad: los que pide el llamador (imagen clave vertical a la máxima); sin ellos, 1024x1024 · medium como siempre', async () => {
+    const { P, cuerpos } = falso({})
+    await P.imagen({ ...pedido, size: '1024x1536', quality: 'max' })
+    await P.imagen(pedido)
+    expect([cuerpos[0].size, cuerpos[0].quality]).toEqual(['1024x1536', 'max'])
+    expect([cuerpos[1].size, cuerpos[1].quality]).toEqual(['1024x1024', 'medium'])
+  })
   it('dry_run con foto: no sale a la red y se anota como usada (simulado)', async () => {
     const { P, cuerpos } = falso({})
     expect(await P.imagen({ ...pedido, dry_run: true, foto: FOTO })).toMatchObject({ ok: true, costo_usd: 0, referencia: { usada: true } })

@@ -26,7 +26,8 @@ import { bajarFoto, cuerpoDeEdicion, referenciaPermitida } from '@/lib/imagen-so
 
 const STORAGE_BUCKET = 'agent-images'
 const FALLBACK_MODEL = 'gpt-image-1'
-const QUALITIES = new Set(['low', 'medium', 'high', 'auto'])
+// S2-3 · `xhigh` y `max` los admiten los modelos 2.5 / 2.6 (developers.openai.com/api/docs/models/gpt-image-2.5-flare · 16-nov): la imagen clave FINAL del video va al máximo
+const QUALITIES = new Set(['low', 'medium', 'high', 'xhigh', 'max', 'auto'])
 
 /** Modelo por defecto · leído en cada pedido para que un cambio de env aplique sin redeploy de código. */
 function defaultModel(): string {
@@ -294,7 +295,7 @@ export async function GET() {
       agent_slug: 'string (optional)',
       size: '"1024x1024" | "1024x1536" | "1536x1024"',
       model: 'string (default env IMAGE_MODEL, else gpt-image-1)',
-      quality: '"low" | "medium" | "high" | "auto" (optional · omitted = provider default)',
+      quality: '"low" | "medium" | "high" | "xhigh" | "max" | "auto" (optional · omitted = provider default)',
       caller: 'string (optional · audit attribution)',
     },
   })

@@ -209,7 +209,8 @@ export interface Puertos {
   /** el plan de trabajo del que sale la parte (su texto), o null si no se puede leer; solo lectura */
   plan(planId: string, clientId: string): Promise<string | null>
   /** genera UNA imagen (1024×1024, calidad explícita); con `foto` (una foto PROPIA del cliente, sprint 1 · mejora 3) la edita sobre ella para conservar el producto real; en dry_run NO llama al proveedor */
-  imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean; foto?: import('./foto-de-referencia').FotoDeReferencia | null }): Promise<ResultadoImagen>
+  /** S2-3 · `size` y `quality` son opcionales (sin ellos, 1024x1024 · medium, como siempre): la imagen clave del video los pide por fase (borrador / final) */
+  imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean; foto?: import('./foto-de-referencia').FotoDeReferencia | null; size?: string; quality?: string }): Promise<ResultadoImagen>
   /** J8a · abre UNA revisión de la pieza en la jefatura (misma función que la ruta `/api/jefatura/revisiones`, con `devolver_a` = la ruta de vuelta de la oficina). Opcional: sin él, el paso `jefatura` deja la pieza «sin revisar» */
   jefatura?(sobre: SobreDeRevisionDePieza): Promise<AperturaDeJefatura>
   /** el revisor ciego (otro proveedor); en dry_run NO llama al proveedor */

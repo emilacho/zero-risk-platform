@@ -19,8 +19,9 @@ import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
-import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV } from './orquestador-video'
+import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
 import { PASO_MIRAR_VIDEO } from './video/mirada'
+import { PASO_REVISAR_IMAGENES_CLAVE } from './video/imagen-clave'
 import { confianzaDeLaFoto } from './fotos'
 import { candidatasDelEncargo } from './material-fotos'
 import { fotoDeReferencia, fotosDeReferencia } from './foto-de-referencia'
@@ -372,7 +373,8 @@ export function sinLecturaDeMirar(paso: Paso, e: Estado, errores: string[]): Res
     reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' },
   }
 }
-const ES_MIRAR = (clave: string): boolean => clave === 'mirar' || clave === 'reimagen_mirar' || clave === PASO_MIRAR_VIDEO
+// S2-3 · la revisión de las imágenes clave también es un «mirar»: ilegible tras su reintento, el video sigue (con su ficha de sugerencia), nunca se cae el encargo
+const ES_MIRAR = (clave: string): boolean => clave === 'mirar' || clave === 'reimagen_mirar' || clave === PASO_MIRAR_VIDEO || clave === PASO_REVISAR_IMAGENES_CLAVE
 
 // ───────────────────────── funciones de código
 type SalidaCodigo = { res: ResultadoDePaso; gastos?: Cambios['gastos']; usos?: Cambios['usos_de_fotos']; imagen_generada?: boolean; fallido?: string }
@@ -698,7 +700,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   if (!p.ok && p.accion === 'reintentar') return pedirReintento(p.mensaje_de_error, 'formato: reintento')
   // 11-nov · «mirar» ilegible tras su reintento: la pieza sigue con la imagen SIN juzgar y una ficha que bloquea (una persona mira); nunca se cae el encargo por la forma de la respuesta
   if (!p.ok && ES_MIRAR(paso.clave)) {
-    const sl = familiaDeLaminas(pl) ? sinLecturaDeMirarL(paso, e, p.errores) : paso.clave === PASO_MIRAR_VIDEO ? sinLecturaDeMirarV(e, p.errores) : sinLecturaDeMirar(paso, e, p.errores)
+    const sl = familiaDeLaminas(pl) ? sinLecturaDeMirarL(paso, e, p.errores) : paso.clave === PASO_MIRAR_VIDEO ? sinLecturaDeMirarV(e, p.errores) : paso.clave === PASO_REVISAR_IMAGENES_CLAVE ? sinLecturaDeRevisarImagenesClaveV(e, p.errores) : sinLecturaDeMirar(paso, e, p.errores)
     const { [`fmt:${paso.clave}`]: _fm, ...vueltasSinFmt } = e.vueltas
     void _fm
     await aplicarResultado(P, { ...enc, estado_del_motor: { ...e, vueltas: vueltasSinFmt } }, pl, sig.indice, { ...sl, costo_usd: costo }, { vuelta: sig.vuelta, turno: { ...turnoBase, estado: 'hecho', error: `formato ilegible tras ${intentos + 1} intento(s): ${p.errores.slice(0, 2).join(' · ')} · sigue sin juzgar la imagen` }, gastos: gastoModelo, n })
