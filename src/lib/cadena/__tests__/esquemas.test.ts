@@ -57,7 +57,7 @@ describe('lo que el esquema impide por formato (no solo por indicación)', () =>
     for (const k of v2) expect(k).not.toMatch(/fecha|total|pct|porcentaje/i)
     expect(Object.keys(ESQUEMA_CALENDARIO_TANDA_V2.properties)).toEqual(['piezas', 'ajustes_al_patron'])
     // 31-oct (FIRMA de Emilio · gancho de video): `gancho_video.v1` nace con su tarea en `metodos.ts` (T8 lo cablea)
-    expect(Object.keys(ESQUEMAS)).toEqual(['estrategia.v1', 'estrategia.v2', 'estrategia.v3', 'calendario_tanda.v1', 'calendario_tanda.v2', 'calendario_tanda.v3', 'fechas_especiales.v1', 'gancho_video.v1'])
+    expect(Object.keys(ESQUEMAS)).toEqual(['estrategia.v1', 'estrategia.v2', 'estrategia.v3', 'calendario_tanda.v1', 'calendario_tanda.v2', 'calendario_tanda.v3', 'calendario_tanda.v4', 'fechas_especiales.v1', 'gancho_video.v1'])
   })
 })
 

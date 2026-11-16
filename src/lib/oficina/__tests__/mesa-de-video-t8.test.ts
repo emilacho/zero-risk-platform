@@ -30,6 +30,7 @@ import { CONFIG_APAGADA, TARGET_STEP_PRODUCIR, decidirPuerta } from '../sobre'
 import { CLIENTE, FOTOS, PARTE, crearMemoria } from './memoria'
 import { jugar, type Turno } from './mesa-arnes'
 import { crearMesaEnMemoria } from './mesa-memoria'
+import { LECTURA_DE_LA_SEMILLA } from './biblioteca-semilla'
 
 const RAIZ = path.join(__dirname, '..', '..', '..', '..', 'supabase')
 const SQL = fs.readFileSync(path.join(RAIZ, 'migrations', '202610312012_oficina_mesa_de_video.sql'), 'utf8')
@@ -345,6 +346,41 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
     expect(M.gastos.filter((g) => g.concepto === 'video')).toHaveLength(0)
     expect(M.llamadas.salida).toBe(0); expect(M.llamadas.bandeja).toHaveLength(0); expect(M.llamadas.guardadoDeArchivos).toBe(0)
     expect(M.llamadas.imagen).toBe(0); expect(M.llamadas.render).toBe(0)
+  })
+  // 16-nov · Sprint 2 · S2-2 · la biblioteca de planos y ritmos llega a CADA turno de la mesa de video como contexto (el dato sembrado tal cual); sin ella, la pieza sale igual
+  it.each([
+    ['con la biblioteca (restaurante): cada turno la recibe, con las fichas de su rubro y sin las de otros', 'ok'],
+    ['con la biblioteca caída: ningún turno la recibe y la pieza cierra igual', 'caida'],
+  ] as const)('S2-2 · %s', async (_n, modo) => {
+    const hoja = escribirHoja(INSUMOS)
+    const M = crearMemoria({ parte: hoja.texto_md, plantilla: VIDEO_MESA })
+    const MS = crearMesaEnMemoria(TRAS_2012)
+    const pedidos: string[] = []
+    Object.assign(MS, { bibliotecaDeVideo: async (c: string) => { pedidos.push(c); if (modo === 'caida') throw new Error('tabla caída'); return LECTURA_DE_LA_SEMILLA('Restaurante y panadería') } })
+    M.P.mesa = MS
+    const enviados: Array<Record<string, unknown>> = []
+    M.P.video = brazoSimulado(enviados)
+    const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'video_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    let aportes = 0
+    const { ultima, turnos } = await jugar(M, String(a.cuerpo.encargo_id), a, (t: Turno) => {
+      if (t.tipo === 'dirigir') return { texto: 'Idea rectora: el pan sale del horno y la mesa larga espera.' }
+      if (t.tipo === 'aportar') { aportes++; return { texto: t.agente === VOZ_DEL_GANCHO ? 'Gancho único: el vapor del pan llenando el cuadro.' : `Aporte de ${t.agente}, sin proponer gancho.` } }
+      if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: GUION(Array.from({ length: aportes }, (_, i) => `A${i + 2} usé: lo tomé tal cual para el guion`).join('\n')) }
+      return undefined
+    })
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', simulado: true })
+    expect(enviados).toHaveLength(1)
+    expect(turnos.length).toBeGreaterThan(6)
+    expect(pedidos.length).toBe(turnos.length)
+    expect(new Set(pedidos)).toEqual(new Set([CLIENTE]))
+    for (const t of turnos) {
+      expect(t.task.includes('## Biblioteca de planos y ritmos de la oficina'), `${t.tipo}:${t.agente}`).toBe(modo === 'ok')
+      if (modo === 'ok') {
+        expect(t.task).toContain('**vapor-y-servido**')
+        expect(t.task).not.toContain('**desempaque**')
+        expect(t.task).toContain('de 4 a 6 planos')
+      }
+    }
   })
   // 11-nov · GO Lenovo 03:55Z · regla #17: la proporción es UN dato (`cadena_formatos_por_red.proporcion`) que viaja tabla → hoja → brief → oficina → pedido al brazo
   it.each([

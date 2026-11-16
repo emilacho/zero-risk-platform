@@ -35,7 +35,8 @@ const AGENTES: ReadonlyArray<{ name: string; archivo: string }> = [
   { name: 'video-editor', archivo: 'video-editor.md' },
   { name: 'web_designer', archivo: 'web-designer.md' },
 ]
-const identidad = (archivo: string) => leer(`src/agents/identities/${archivo}`)
+// 16-nov · S2-2 (CC4): video-editor tiene identidad nueva (202611162232); E4 se sigue probando contra el texto que E4 dejó (copia fija en fixtures)
+const identidad = (archivo: string) => leer(archivo === 'video-editor.md' ? 'src/lib/oficina/__tests__/fixtures/video-editor-e4.md' : `src/agents/identities/${archivo}`)
 
 describe('T6b · lo que dicen las identidades corregidas', () => {
   it.each(['carousel-designer.md', 'video-editor.md', 'web-designer.md', 'delivery-coordinator.md', 'ruflo.md'])('🔴 %s ya no cita a creative-director (solo a creative-director-mesa, design-visual-storyteller o design-image-prompt-engineer)', (archivo) => {

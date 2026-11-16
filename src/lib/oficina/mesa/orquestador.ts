@@ -23,6 +23,7 @@ import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
 import { parametrosDelVideo, traducirPropuestas, type PropuestasDelVideo } from '../video/propuestas'
+import { bibliotecaDelCliente, seccionDeLaBiblioteca } from '../video/biblioteca'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 
@@ -102,6 +103,12 @@ async function metodoDelAsiento(P: Puertos, agente: string): Promise<string | un
   return seccionDeMetodo(agente, metodos, fichas, new Date().toISOString()) || undefined
 }
 
+/** Sprint 2 · S2-2 · la biblioteca de planos y ritmos para un turno de la mesa de VIDEO (contexto, no lista cerrada); sin puerto, con error o vacía = nada (nunca frena el turno) */
+export async function bibliotecaDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa): Promise<string | undefined> {
+  if (est.tipo !== 'video' || !P.mesa?.bibliotecaDeVideo) return undefined
+  try { return seccionDeLaBiblioteca(bibliotecaDelCliente(await P.mesa.bibliotecaDeVideo(enc.client_id))) || undefined } catch { return undefined }
+}
+
 /** el pedido del turno de un agente (puro respecto del libro: sirve igual para la primera entrega y para la reentrega) */
 export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, t: NonNullable<EstadoMesa['turno_abierto']>): Promise<{ agente: string; pedido: Record<string, unknown>; paso: string }> {
   const libro = await P.mesa!.libro(enc.id)
@@ -111,7 +118,8 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const tipo = t.tipo as TipoDeTurno
   let faltanCitas: string | undefined
   if (tipo === 'devolver_citas') faltanCitas = 'algunas especialidades del equipo (revisa cada aporte del tablero)'
-  const metodo = await metodoDelAsiento(P, t.agente)
+  const biblioteca = await bibliotecaDelTurno(P, enc, est)
+  const metodo = [await metodoDelAsiento(P, t.agente), biblioteca].filter(Boolean).join('\n\n') || undefined
   const imagenesARedactar = tipo === 'redactar_prompts' ? imagenesAGenerarDe(enc, est) : undefined
   const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
