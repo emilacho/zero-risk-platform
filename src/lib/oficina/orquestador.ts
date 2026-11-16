@@ -23,6 +23,7 @@ import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familia
 import { PASO_MIRAR_VIDEO } from './video/mirada'
 import { confianzaDeLaFoto } from './fotos'
 import { candidatasDelEncargo } from './material-fotos'
+import { fotoDeReferencia, fotosDeReferencia } from './foto-de-referencia'
 import { reglasDeInvencion } from './prompts-sin-invencion'
 import { marcaDeOrigenActiva, origenesDeImagenes } from './marcas-de-origen'
 import { seccionDeCambiosDelDueno } from './cambios-del-dueno'
@@ -426,11 +427,16 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       const gastos: NonNullable<Cambios['gastos']> = []
       let costo = 0
       const fichas: Ficha[] = []
+      // sprint 1 · mejora 3: con foto propia apta del protagonista, la imagen se edita SOBRE la foto real (conserva el producto); sin ella, se genera como siempre
+      const aptas = fotosDeReferencia(b.F.fotos, (datos(e, 'candidatas_foto')?.candidatas ?? []) as Array<{ id: string; cercana?: boolean }>, { preferida: (datos(e, 'visual_direction')?.decision as { foto_id?: string } | undefined)?.foto_id })
       for (let i = 0; i < validos.length; i++) {
-        const g = await P.imagen({ prompt: validos[i].prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run })
+        const foto = fotoDeReferencia(aptas, i)
+        const g = await P.imagen({ prompt: validos[i].prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto })
         if (!g.ok) { fichas.push(fichaNueva(`imagen-${intento}-${i}`, 'chequeo', 'imagen', 'sugerencia', `el generador no devolvió una imagen para el prompt ${i + 1}: ${g.error}`)); continue }
+        const sobre = foto && g.referencia?.usada ? { foto_referencia_id: foto.id } : {}
+        if (foto && !g.referencia?.usada) fichas.push(fichaNueva(`imagen-sin-foto-${intento}-${i}`, 'chequeo', 'imagen', 'sugerencia', `la imagen ${i + 1} se generó sin la foto real «${foto.id}» (${g.referencia?.motivo ?? 'sin motivo'}): el producto puede no ser el del cliente`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
         const indice = items.length
-        items.push({ indice, intento, prompt_idx: i, url: g.url, generation_id: g.generation_id, prompt: validos[i].prompt })
+        items.push({ indice, intento, prompt_idx: i, url: g.url, generation_id: g.generation_id, prompt: validos[i].prompt, ...sobre })
         nuevos.push({ indice, url: g.url })
         costo += g.costo_usd
         gastos.push({ concepto: 'imagen', ref_tabla: 'agent_image_generations', ref_id: g.generation_id, cost_usd: g.costo_usd, base: 'usage' })

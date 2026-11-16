@@ -55,12 +55,14 @@ export interface Memoria {
   artefactos: Array<{ encargo_id: string; tipo: string; version: number; sha256: string }>
   gastos: NonNullable<Cambios['gastos']>
   usos: Array<{ foto_id: string; rol: string | null }>
-  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; contenidos: Record<string, string>; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][]; revisorPedidos: string[]; revisorArgs: Array<{ client_id?: string; ref_id?: string; n?: number }>; planes: string[] }
+  llamadas: { imagen: number; imagenReal: number; revisor: number; revisorReal: number; salida: number; bandeja: Array<Record<string, unknown>>; salidas: Array<Record<string, unknown>>; avisos: Array<{ canal: string; texto: string }>; archivos: string[]; contenidos: Record<string, string>; guardadoDeArchivos: number; render: number; renderReal: number; renderPedidos: PedidoDeRender[]; revisorImagenes: string[][]; revisorPedidos: string[]; revisorArgs: Array<{ client_id?: string; ref_id?: string; n?: number }>; planes: string[]; imagenFotos: Array<string | null> }
   config: ConfigDeOficina
   plantilla: { plantilla: Plantilla; activo: boolean } | null
   /** guion del revisor externo: texto por llamada */
   revisorTexto: (n: number) => ResultadoRevisor
   imagenFalla: (n: number) => boolean
+  /** sprint 1 · mejora 3 · si devuelve un motivo, la imagen n se genera SIN la foto pedida (como cuando la ruta no puede usarla) */
+  referenciaNoUsada: (n: number) => string | null
   /** el brazo que dibuja láminas falla en la llamada n */
   renderFalla: (n: number) => boolean
 }
@@ -68,12 +70,13 @@ export interface Memoria {
 export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOficina>; fuentes?: Partial<FuentesCompletas>; tope?: number; plantilla?: Plantilla; plan?: string | null } = {}): Memoria {
   const m: Memoria = {
     encargos: new Map(), turnos: new Map(), artefactos: [], gastos: [], usos: [],
-    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], contenidos: {}, guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [], revisorPedidos: [], revisorArgs: [], planes: [] },
+    llamadas: { imagen: 0, imagenReal: 0, revisor: 0, revisorReal: 0, salida: 0, bandeja: [], salidas: [], avisos: [], archivos: [], contenidos: {}, guardadoDeArchivos: 0, render: 0, renderReal: 0, renderPedidos: [], revisorImagenes: [], revisorPedidos: [], revisorArgs: [], planes: [], imagenFotos: [] },
     config: { estado: 'encendida', familias_activas: o.plantilla ? [o.plantilla.familia] : ['post_img'], clientes_ensayo: [], ...(o.config ?? {}) },
     plantilla: { plantilla: JSON.parse(JSON.stringify(o.plantilla ?? POST_IMG)), activo: true },
     // por omisión el revisor externo no opina nada (texto vacío): no hay opinión que el autor deba decidir
     revisorTexto: () => ({ ok: true, texto: '', costo_usd: 0.1, modelo: 'revisor-simulado' }),
     imagenFalla: () => false,
+    referenciaNoUsada: () => null,
     renderFalla: () => false,
     P: undefined as unknown as Puertos,
   }
@@ -142,8 +145,11 @@ export function crearMemoria(o: { parte?: string; config?: Partial<ConfigDeOfici
     imagen: async (p) => {
       m.llamadas.imagen++
       if (!p.dry_run) m.llamadas.imagenReal++
+      m.llamadas.imagenFotos.push(p.foto?.id ?? null)
       if (m.imagenFalla(m.llamadas.imagen)) return { ok: false, error: 'proveedor caído' }
-      return p.dry_run ? { ok: true, url: `https://dry.test/${m.llamadas.imagen}.png`, generation_id: `dry-${m.llamadas.imagen}`, costo_usd: 0 } : { ok: true, url: `https://img.test/${m.llamadas.imagen}.png`, generation_id: `g-${m.llamadas.imagen}`, costo_usd: 0.014 }
+      const sinFoto = p.foto ? m.referenciaNoUsada(m.llamadas.imagen) : null
+      const referencia = p.foto ? (sinFoto ? { referencia: { usada: false, motivo: sinFoto } } : { referencia: { usada: true } }) : {}
+      return p.dry_run ? { ok: true, url: `https://dry.test/${m.llamadas.imagen}.png`, generation_id: `dry-${m.llamadas.imagen}`, costo_usd: 0, ...referencia } : { ok: true, url: `https://img.test/${m.llamadas.imagen}.png`, generation_id: `g-${m.llamadas.imagen}`, costo_usd: 0.014, ...referencia }
     },
     revisor: async (p) => { m.llamadas.revisor++; if (!p.dry_run) m.llamadas.revisorReal++; m.llamadas.revisorImagenes.push(p.imagenes_urls); m.llamadas.revisorPedidos.push(p.texto); m.llamadas.revisorArgs.push({ client_id: p.client_id, ref_id: p.ref_id, n: p.n }); return m.revisorTexto(m.llamadas.revisor) },
     renderLaminas: async (p) => {

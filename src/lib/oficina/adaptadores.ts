@@ -230,12 +230,14 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       return typeof c === 'string' ? { texto: c } : null
     },
     async imagen(p): Promise<ResultadoImagen> {
-      if (p.dry_run) { const id = `dry-${Math.random().toString(36).slice(2, 10)}`; return { ok: true, url: `${PREFIJO_DRY}${id}.png`, generation_id: id, costo_usd: 0 } }
+      if (p.dry_run) { const id = `dry-${Math.random().toString(36).slice(2, 10)}`; return { ok: true, url: `${PREFIJO_DRY}${id}.png`, generation_id: id, costo_usd: 0, ...(p.foto ? { referencia: { usada: true, motivo: 'simulado (dry_run)' } } : {}) } }
       try {
-        const r = await f(`${env.baseUrl}/api/images/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify({ prompt: p.prompt, client_id: p.client_id, agent_slug: 'design-image-prompt-engineer', size: '1024x1024', quality: 'medium' }) })
+        const r = await f(`${env.baseUrl}/api/images/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify({ prompt: p.prompt, client_id: p.client_id, agent_slug: 'design-image-prompt-engineer', size: '1024x1024', quality: 'medium', ...(p.foto ? { reference_image_url: p.foto.url } : {}) }) })
         const j = (await r.json().catch(() => ({}))) as Fila
         if (!r.ok || !j.image_url) return { ok: false, error: String(j.error ?? j.detail ?? `HTTP ${r.status}`) }
-        return { ok: true, url: String(j.image_url), generation_id: String(j.generation_id ?? ''), costo_usd: Number(j.cost_usd ?? 0) }
+        const ref = j.referencia as { usada?: unknown; motivo?: unknown } | undefined
+        const referencia = p.foto ? { usada: ref?.usada === true, ...(typeof ref?.motivo === 'string' ? { motivo: ref.motivo } : ref ? {} : { motivo: 'la ruta de imágenes no dijo si usó la foto' }) } : null
+        return { ok: true, url: String(j.image_url), generation_id: String(j.generation_id ?? ''), costo_usd: Number(j.cost_usd ?? 0), ...(referencia ? { referencia } : {}) }
       } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
     },
     /**
