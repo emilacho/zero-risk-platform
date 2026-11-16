@@ -22,6 +22,7 @@ import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
+import { parametrosDelVideo, traducirPropuestas, type PropuestasDelVideo } from '../video/propuestas'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 
@@ -56,7 +57,7 @@ function contextoDe(enc: Encargo, est: EstadoMesa): ContextoDeTurno {
     return { cliente_nombre: m?.cliente_nombre ?? '', tipo: est.tipo, brief_id: enc.brief_id, brief_texto: m?.marco_texto ?? '(sin marco)', manual_texto: m?.manual_texto ?? '', plan_texto: m?.plan_texto ?? null, fotos: m?.fotos ?? [], tope_usd: enc.tope_usd, gasto_usd: enc.estado_del_motor.gasto_usd }
   }
   const b = baseDeLaminas(enc.estado_del_motor)
-  return { cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: enc.tope_usd, gasto_usd: enc.estado_del_motor.gasto_usd }
+  return { cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: enc.tope_usd, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}) }
 }
 
 /** lo que pide ESTA pieza según su brief (puro): fotos propias etiquetadas, hechos del cliente, lo más gustado; el portero decide qué hay */
@@ -172,7 +173,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       if (!tipo) return fallar(P, enc, `la familia «${enc.familia}» no es de la mesa`)
       if (!direccionDe(dir, tipo)) return fallar(P, enc, `el directorio de la mesa no tiene una dirección creativa activa para «${tipo}» (la pieza no abre)`)
       // T8 · la mesa de video suma las condiciones de la red y el formato del brief de la hoja (`si_instagram`, `si_tiktok_o_reels`) a las del texto (`si_personas`, `si_whimsy`: el brief, el manual o el plan)
-      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : (() => { const cx = contextoDe(enc, estadoInicialDeLaMesa(tipo, dir)); const c = [...condicionesDeLaPieza(cx.brief_texto, cx.manual_texto, cx.plan_texto), ...(tipo === 'video' ? condicionesDelVideo(baseDeLaminas(enc.estado_del_motor).brief) : [])]; return c.length ? { condiciones: c } : {} })()) }
+      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(tipo === 'video' ? { video: parametrosDelVideo(pl) } : {}), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : (() => { const cx = contextoDe(enc, estadoInicialDeLaMesa(tipo, dir)); const c = [...condicionesDeLaPieza(cx.brief_texto, cx.manual_texto, cx.plan_texto), ...(tipo === 'video' ? condicionesDelVideo(baseDeLaminas(enc.estado_del_motor).brief) : [])]; return c.length ? { condiciones: c } : {} })()) }
       enc = await guardarMesa(P, enc, est)
     }
     const e = enc.estado_del_motor
@@ -294,9 +295,17 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const b = baseDeLaminas(enc.estado_del_motor)
   const maxLaminas = Number(pl.limites?.laminas_max)
   const opcionesDelTraductor = { preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, ...(Number.isInteger(maxLaminas) && maxLaminas > 0 ? { maxLaminas } : {}) }
+  // 16-nov · Sprint 2 · S2-1 · la plantilla pide N propuestas (dato): la mesa entregó todas en UNA integración; se guardan para la aprobación del dueño y todavía NO hay guion
+  // (la elegida pasa a `guion` al aprobarse). Lo que no se entiende ni en una propuesta va como texto a la jefatura, como siempre.
+  if (est.tipo === 'video' && (est.video?.propuestas ?? 1) > 1) {
+    const rondaAnterior = Number((enc.estado_del_motor.artefactos.propuestas_video?.datos as { ronda?: number } | undefined)?.ronda ?? 0)
+    const tp = traducirPropuestas(textoPieza, { objetivo: est.video!.propuestas, segundosMin: est.video!.segundos_min, segundosMax: est.video!.segundos_max, ronda: rondaAnterior + 1 })
+    if (!tp.ok) return aTextoParaLaJefatura(P, enc, est, textoPieza, tp.motivo)
+    return cerrarConPropuestas(P, enc, pl, indice, est, libro, textoPieza, tp.resultado, forzado, vuelta)
+  }
   // el VIDEO (parte 2 · 31-oct): la pieza es un GUION; el traductor de láminas no aplica (sin imágenes que generar: el brazo filma)
   const tr: Traduccion | TraduccionDeGuion = est.tipo === 'video'
-    ? traducirGuion(textoPieza, opcionesDelTraductor)
+    ? traducirGuion(textoPieza, { ...opcionesDelTraductor, ...(est.video ? { segundosMin: est.video.segundos_min, segundosMax: est.video.segundos_max } : {}) })
     : traducirPieza(textoPieza, est.tipo, {
       refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), ...opcionesDelTraductor,
       // 16-nov · Sprint 1 · Mejoras 1 y 2 · lo que trae la fila: el objetivo y la idea de la pieza (se usan si la dirección no declaró los suyos)
@@ -341,6 +350,11 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     if (est.tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
     else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
   }
+  return guardarElCierre(P, enc, pl, indice, est, libro, textoPieza, otros, [...tr.avisos, ...avisosDePrompts], hayGeneradas, forzado, vuelta)
+}
+
+/** lo común a todo cierre de la mesa: la mesa queda traducida con su tablero para la jefatura, los artefactos de la cola mecánica se registran y el motor sigue */
+async function guardarElCierre(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, est: EstadoMesa, libro: Aporte[], textoPieza: string, otros: Record<string, Record<string, unknown>>, avisosDelTraductor: string[], hayGeneradas: boolean, forzado: string | null, vuelta?: string): Promise<Respuesta> {
   // bloqueante 1 de CC#3: el libro y las citas llegan a la jefatura (contexto de la revisión) para que juzgue si cada aporte fue real
   const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, hayGeneradas, est.condiciones ?? [])
   const nuevaMesa: EstadoMesa = { ...est, fase: 'traducida', pieza_texto: textoPieza, turno_abierto: null, tablero_para_la_jefatura: tableroParaLaJefatura(libro.map((x) => ({ ...x, texto: quitarLineasDeNotas(x.texto) })), textoPieza, pertinentes) }
@@ -351,10 +365,19 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const cambios: Cambios = {
     encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', fichas: nuevo.fichas,
     turno: { n: turnoDe(enc.estado_del_motor), paso: paso.clave, tipo: 'codigo', agente: null, estado: 'hecho', dispatch_key: null, cost_usd: 0 },
-    artefacto: { tipo: paso.salida_artefacto, version: nuevo.artefactos[paso.salida_artefacto].version, contenido: { ...nuevaMesa, avisos_del_traductor: [...tr.avisos, ...avisosDePrompts], cierre_forzado_por: forzado } as unknown as Record<string, unknown>, sha256: sha(nuevaMesa), autor: 'mesa' },
+    artefacto: { tipo: paso.salida_artefacto, version: nuevo.artefactos[paso.salida_artefacto].version, contenido: { ...nuevaMesa, avisos_del_traductor: avisosDelTraductor, cierre_forzado_por: forzado } as unknown as Record<string, unknown>, sha256: sha(nuevaMesa), autor: 'mesa' },
   }
   await P.almacen.guardar(cambios)
   return avanzar(P, enc.id)
+}
+
+/**
+ * 16-nov · Sprint 2 · S2-1 · el cierre con PROPUESTAS: se guardan todas en `propuestas_video` (la elegida pasa a `guion` y `copy_video` recién al aprobarse).
+ * Los avisos del traductor son los de las propuestas y los de cada guion, nombrando a qué propuesta pertenecen.
+ */
+function cerrarConPropuestas(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, est: EstadoMesa, libro: Aporte[], textoPieza: string, pv: PropuestasDelVideo, forzado: string | null, vuelta?: string): Promise<Respuesta> {
+  const avisos = [...pv.avisos, ...pv.propuestas.flatMap((p) => p.guion.avisos.map((a) => `${p.id} · ${a}`))]
+  return guardarElCierre(P, enc, pl, indice, est, libro, textoPieza, { propuestas_video: { ...pv, texto: textoPieza } as unknown as Record<string, unknown> }, avisos, false, forzado, vuelta)
 }
 
 /** la pieza no se pudo traducir: la jefatura la recibe como texto y el encargo cierra marcado «con desacuerdo» (nunca se pierde, nunca se rellena) */
