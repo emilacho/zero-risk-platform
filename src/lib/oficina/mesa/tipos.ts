@@ -137,6 +137,8 @@ export interface EstadoMesa {
   /** el tablero (aportes, citas y lo que el código comprobó) que viaja a la jefatura para que juzgue si cada aporte fue real; lo escribe `cerrarLaMesa` */
   tablero_para_la_jefatura?: string
   /** el turno que está esperando respuesta */
+  /** Sprint 2 · S2-1 · solo video: la duración y las propuestas que dice la plantilla, congeladas al abrir (un cambio de la plantilla no mueve la meta de una pieza en vuelo) */
+  video?: import('./pedidos').ParametrosDelVideo
   turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
 }
 

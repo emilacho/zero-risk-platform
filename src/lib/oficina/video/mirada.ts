@@ -57,7 +57,8 @@ export function leerMirada(v: Record<string, unknown>): MiradaDelVideo {
 
 /** el pedido al agente: los cuadros en orden, cada uno con su plano y su segundo; los planos del guion; la fila del brief. El agente decide si coincide */
 export function tareaDeLaMirada(o: { cuadros: CuadroDelVideo[]; planos: Plano[]; segundos: number; brief_texto: string; red: string; formato: string; contrato: string; errorDeFormato?: string }): { task: string; images: string[] } {
-  const planos = o.planos.map((p) => `- Plano ${p.n} (${p.desde}–${p.hasta} s): ${p.se_ve}${p.movimiento ? ` · cámara: ${p.movimiento}` : ''}${p.texto_en_pantalla ? ` · texto en pantalla: «${p.texto_en_pantalla}»` : ''}`).join('\n')
+  // Sprint 2 · S2-1 · el rol del plano en la historia y lo que tenía que decir van primero: el agente juzga si el plano CUMPLE su rol, no solo si se ve lo pedido
+  const planos = o.planos.map((p) => `- Plano ${p.n} (${p.desde}–${p.hasta} s)${p.rol ? ` · rol: ${p.rol}` : ''}${p.dice ? ` · tenía que decir: ${p.dice}` : ''}: ${p.se_ve}${p.producto === undefined ? '' : ` · producto en cuadro: ${p.producto ? 'sí' : 'no'}`}${p.movimiento ? ` · cámara: ${p.movimiento}` : ''}${p.texto_en_pantalla ? ` · texto en pantalla: «${p.texto_en_pantalla}»` : ''}`).join('\n')
   const cuadros = o.cuadros.map((c, i) => `- imagen ${i + 1}: cuadro del plano ${c.plano}, segundo ${c.segundo}`).join('\n')
   const task = [
     `## La pieza\nUn video de ${o.segundos} s para ${o.red} (${o.formato}), ya generado por el modelo de video. Lo que sigue es lo que se pidió y lo que salió.`,
