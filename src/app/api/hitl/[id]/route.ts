@@ -25,6 +25,8 @@ import { TOPE_DEL_TEXTO_DEL_DUENO } from '@/lib/limites-de-tamano'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+// publicar en Instagram espera a que Meta procese la imagen: el máximo del plan
+export const maxDuration = 800
 
 export async function GET(_request: Request, ctx: { params: { id: string } }) {
   const supabase = getSupabaseAdmin()
@@ -149,11 +151,12 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
     try { await marcarAprobada(supabase as never, String(data.id)) } catch { /* la decisión del aprobador manda */ }
   }
 
-  // Lote de publicación o pieza de la oficina aprobados (arreglo 5 de la cadena): al APROBAR se arma la publicación EN ENSAYO (no se llama a Meta ni se publica nada).
-  // Un fallo del ensayo se dice en la respuesta, pero no deshace la decisión del aprobador.
+  // Lote de publicación o pieza de la oficina aprobados (arreglo 5 de la cadena): al APROBAR se publica SEGÚN LA FICHA DEL CLIENTE (16-nov · CC3):
+  // con `redes_oficiales.publicacion_real: true` se publica de verdad en SUS cuentas (orgánico, una sola vez); sin eso, se arma el ensayo como siempre.
+  // Un fallo se dice en la respuesta, pero no deshace la decisión del aprobador.
   if ((data?.type === TIPO_LOTE_SOCIAL || data?.type === TIPO_PIEZA_DE_OFICINA) && body.status === 'approved') {
     try {
-      const publicacion = await publicarAprobado(puertosDePublicacion(supabase), { hitl_id: String(data.id) })
+      const publicacion = await publicarAprobado(puertosDePublicacion(supabase), { hitl_id: String(data.id), segunLaFicha: true })
       return NextResponse.json({ item: data, publicacion })
     } catch (e) {
       return NextResponse.json({ item: data, publicacion: { ok: false, error: 'ensayo_fallido', detail: e instanceof Error ? e.message : String(e) } })

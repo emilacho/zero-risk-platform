@@ -6,10 +6,14 @@
  *  · `publicarAprobado` solo trabaja sobre un lote APROBADO en la bandeja, arma la solicitud exacta que se mandaría a Meta (sin la llave), comprueba qué configuración hay
  *    y deja el resultado en el propio elemento de la bandeja. NO hay ningún puerto de red aquí: esta función no puede llamar a Meta ni a ningún otro servicio.
  *
- * Publicar de verdad NO está construido: pedirlo (`real: true`) se rechaza. Antes de construirlo hace falta una cuenta de Meta POR CLIENTE (hoy las rutas de Meta
- * usan una sola cuenta del entorno: publicaría en la cuenta de la agencia, no en la del cliente).
- * Puro: lo que toca la base entra por `PuertosDePublicacion`.
+ * 16-nov · PUBLICAR DE VERDAD (GO Lenovo, firma de Emilio 19:07 · CC3). Las cuentas salen de la FICHA del cliente (`config.redes_oficiales.meta`, ver
+ * `lib/clients/cuentas-meta.ts`), nunca de variables globales. Lo real exige `redes_oficiales.publicacion_real: true` en esa ficha (el interruptor POR CLIENTE:
+ * quitarlo o ponerlo en false vuelve todo al ensayo). Solo se publica un elemento APROBADO, una sola vez (se reclama antes de llamar a Meta), y solo orgánico:
+ * nada de pauta ni de promoción. La llamada a Meta vive en `meta-real.ts` y entra por el puerto `publicarEnMeta`.
+ * Puro: lo que toca la base y la red entra por `PuertosDePublicacion`.
  */
+import type { CuentasMeta } from '@/lib/clients/cuentas-meta'
+import type { ResultadoDePieza } from './meta-real'
 
 export const TIPO_LOTE_SOCIAL = 'social_batch_review'
 /** lo que deja la oficina de creativos en la bandeja al entregar una pieza (la salida, con sus archivos y su texto, vive en `client_historical_outputs`) */
@@ -63,6 +67,16 @@ export interface PuertosDePublicacion {
   /** variables de entorno (solo se mira si existen) */
   env: Record<string, string | undefined>
   ahora(): Date
+  /** las cuentas oficiales de la ficha del cliente (un error de la base se LANZA: no se confunde con «sin cuenta») */
+  leerCuentas(client_id: string): Promise<CuentasMeta>
+  /** reclama el elemento para publicarlo de verdad UNA sola vez: true solo si nadie lo reclamó antes (o lo anterior falló sin publicar nada) */
+  reclamarReal(id: string, marca: Record<string, unknown>): Promise<boolean>
+  /** guarda el resultado real dentro de `metadata.publicacion_real` del elemento (sin tocar el resto) */
+  guardarReal(id: string, real: ResultadoReal): Promise<void>
+  /** publica UNA pieza armada en Meta (orgánico) */
+  publicarEnMeta(p: PiezaEnsayada, cuentas: CuentasMeta): Promise<ResultadoDePieza>
+  /** deja la fila de historial de una publicación real (best-effort: un fallo aquí no deshace lo publicado) */
+  registrarPublicacion(f: { hitl_id: string; client_id: string; task_id: string; resultado: ResultadoDePieza; duracion_ms: number }): Promise<void>
 }
 
 // ───────────────────────────────────────────────────────── el lote
@@ -112,8 +126,13 @@ export interface PiezaEnsayada {
   solicitudes: SolicitudMeta[]
 }
 
-/** arma, sin llaves ni ids reales, lo que cada publicador de Meta mandaría. Una pieza con errores no lleva solicitudes. */
-export function armarSolicitud(p: PiezaSocial): PiezaEnsayada {
+export const SIN_IG = '{redes_oficiales.meta.instagram_id}'
+export const SIN_PAGINA = '{redes_oficiales.meta.pagina_facebook}'
+
+/** arma, sin llaves, lo que cada publicador de Meta mandaría, con las cuentas de la FICHA del cliente (sin ficha, el lugar queda marcado). Una pieza con errores no lleva solicitudes. */
+export function armarSolicitud(p: PiezaSocial, cuentas?: CuentasMeta | null): PiezaEnsayada {
+  const ig = cuentas?.instagram_id || SIN_IG
+  const pagina = cuentas?.pagina_facebook || SIN_PAGINA
   const base = { canal: p.canal, publicador: (REDES_CON_PUBLICADOR as readonly string[]).includes(p.canal), armada: false, errores: [] as string[], solicitudes: [] as SolicitudMeta[] }
   if (!base.publicador) return { ...base, errores: [`no hay publicador para «${p.canal}» (solo instagram y facebook)`] }
   const errores: string[] = []
@@ -128,8 +147,8 @@ export function armarSolicitud(p: PiezaSocial): PiezaEnsayada {
     return {
       ...base, armada: true, errores: [],
       solicitudes: [
-        { paso: 'contenedor', metodo: 'POST', ruta: '/{META_IG_BUSINESS_ACCOUNT_ID}/media', cuerpo: { image_url: p.image_url, caption } },
-        { paso: 'publicar', metodo: 'POST', ruta: '/{META_IG_BUSINESS_ACCOUNT_ID}/media_publish', cuerpo: { creation_id: '<id del contenedor>' } },
+        { paso: 'contenedor', metodo: 'POST', ruta: `/${ig}/media`, cuerpo: { image_url: p.image_url, caption } },
+        { paso: 'publicar', metodo: 'POST', ruta: `/${ig}/media_publish`, cuerpo: { creation_id: '<id del contenedor>' } },
       ],
     }
   }
@@ -140,17 +159,17 @@ export function armarSolicitud(p: PiezaSocial): PiezaEnsayada {
   return {
     ...base, armada: true, errores: [],
     solicitudes: [{
-      paso: 'publicar', metodo: 'POST', ruta: conImagen ? '/{META_FB_PAGE_ID}/photos' : '/{META_FB_PAGE_ID}/feed',
+      paso: 'publicar', metodo: 'POST', ruta: conImagen ? `/${pagina}/photos` : `/${pagina}/feed`,
       cuerpo: conImagen ? { url: p.image_url, ...(mensaje ? { caption: mensaje } : {}) } : { message: mensaje, ...(p.link_url ? { link: p.link_url } : {}) },
     }],
   }
 }
 
-/** ¿hay configuración de Meta para esa red? Solo se mira si existen las variables; nunca se devuelve su valor. */
-export function configuracionDeMeta(env: Record<string, string | undefined>): Record<RedConPublicador, { configurada: boolean; faltan: string[] }> {
-  const hay = (k: string) => typeof env[k] === 'string' && env[k]!.trim() !== ''
-  const ig = [!hay('META_IG_BUSINESS_ACCOUNT_ID') && 'META_IG_BUSINESS_ACCOUNT_ID', !(hay('META_IG_ACCESS_TOKEN') || hay('META_ACCESS_TOKEN')) && '(META_IG_ACCESS_TOKEN | META_ACCESS_TOKEN)'].filter(Boolean) as string[]
-  const fb = [!hay('META_FB_PAGE_ID') && 'META_FB_PAGE_ID', !(hay('META_FB_PAGE_ACCESS_TOKEN') || hay('META_ACCESS_TOKEN')) && '(META_FB_PAGE_ACCESS_TOKEN | META_ACCESS_TOKEN)'].filter(Boolean) as string[]
+/** ¿hay configuración para publicar en esa red PARA ESTE CLIENTE? La cuenta sale de su ficha; el token, del entorno (solo se mira si existe, nunca su valor). */
+export function configuracionDeCliente(cuentas: CuentasMeta | null, env: Record<string, string | undefined>): Record<RedConPublicador, { configurada: boolean; faltan: string[] }> {
+  const token = typeof env.META_ACCESS_TOKEN === 'string' && env.META_ACCESS_TOKEN.trim() !== ''
+  const ig = [!cuentas?.instagram_id && 'redes_oficiales.meta.instagram_id (ficha del cliente)', !token && 'META_ACCESS_TOKEN'].filter(Boolean) as string[]
+  const fb = [!cuentas?.pagina_facebook && 'redes_oficiales.meta.pagina_facebook (ficha del cliente)', !token && 'META_ACCESS_TOKEN'].filter(Boolean) as string[]
   return { instagram: { configurada: ig.length === 0, faltan: ig }, facebook: { configurada: fb.length === 0, faltan: fb } }
 }
 
@@ -187,6 +206,21 @@ export interface ResultadoDeEnsayo {
   /** todas las piezas quedaron armadas y la red tiene configuración */
   publicable: boolean
   piezas: Array<PiezaEnsayada & { configuracion: { configurada: boolean; faltan: string[] } | null }>
+  advertencias: string[]
+}
+
+/** lo que quedó al publicar de verdad (en `metadata.publicacion_real` del elemento) */
+export interface ResultadoReal {
+  modo: 'real'
+  real: true
+  /** publicada = todas las piezas; parcial = alguna; fallida = ninguna (solo una fallida se puede volver a intentar) */
+  estado: 'publicada' | 'parcial' | 'fallida'
+  origen: 'lote' | 'pieza_de_oficina'
+  output_id?: string
+  hora: string
+  task_id: string
+  client_id: string
+  piezas: ResultadoDePieza[]
   advertencias: string[]
 }
 
@@ -232,21 +266,31 @@ export function loteDeLaPiezaDeOficina(a: { elemento: ElementoDeBandeja; salida:
   }
 }
 
-export async function publicarAprobado(P: PuertosDePublicacion, n: { hitl_id: string; real?: unknown }): Promise<RespuestaDePublicacion<{ ensayo: ResultadoDeEnsayo; ya_estaba: boolean }>> {
-  // publicar de verdad no está construido: se rechaza ANTES de mirar nada
-  if (n.real !== undefined && n.real !== false) return { ok: false, status: 409, error: 'real_no_habilitado', detalle: 'publicar de verdad no está construido; esta ruta solo arma el ensayo' }
+/**
+ * Publica lo APROBADO. Por defecto arma el ENSAYO (lo que se mandaría, sin llamar a Meta) y lo guarda en el elemento.
+ * De verdad SOLO si:
+ *  · se pide `real: true` (el booleano), o `segunLaFicha` (lo usa la bandeja al aprobar) y la ficha del cliente tiene la publicación real encendida;
+ *  · la ficha tiene `redes_oficiales.publicacion_real: true` (si no: 409 `publicacion_real_apagada`, sin tocar nada);
+ *  · todas las piezas quedan armadas y con su cuenta en la ficha (todo o nada, ANTES de llamar a Meta);
+ *  · el elemento se reclama una sola vez (un reintento devuelve lo que ya quedó, no vuelve a publicar).
+ */
+export async function publicarAprobado(
+  P: PuertosDePublicacion,
+  n: { hitl_id: string; real?: unknown; segunLaFicha?: boolean },
+): Promise<RespuestaDePublicacion<{ ensayo: ResultadoDeEnsayo; ya_estaba: boolean } | { real: ResultadoReal; ya_estaba: boolean }>> {
+  // solo el booleano pide lo real: «true» en texto, 1 u otro valor no se interpretan
+  if (n.real !== undefined && n.real !== false && n.real !== true) return { ok: false, status: 409, error: 'real_invalido', detalle: 'real debe ser true o false' }
   const el = await P.leerElemento(n.hitl_id)
   if (!el) return { ok: false, status: 404, error: 'no_existe' }
   const esLote = el.type === TIPO_LOTE_SOCIAL
   const esPieza = el.type === TIPO_PIEZA_DE_OFICINA
   if (!esLote && !esPieza) return { ok: false, status: 409, error: 'tipo_no_publicable', detalle: `el elemento es de tipo «${el.type ?? 'sin tipo'}»` }
-  if (el.status !== 'approved') return { ok: false, status: 409, error: 'no_aprobado', detalle: `estado actual: ${el.status}; solo se arma lo aprobado en la bandeja` }
+  if (el.status !== 'approved') return { ok: false, status: 409, error: 'no_aprobado', detalle: `estado actual: ${el.status}; solo se publica lo aprobado en la bandeja` }
   const meta = el.metadata ?? {}
-  const previo = meta.publicacion_ensayo
-  if (esObjeto(previo)) return { ok: true, ensayo: previo as unknown as ResultadoDeEnsayo, ya_estaba: true }
-  const advertencias = ['sin_cuenta_por_cliente: las rutas de Meta usan una sola cuenta del entorno, no la del cliente']
+  const advertencias: string[] = []
   let lote: LoteSocial
   let output_id: string | null = null
+  let caducada = false
   if (esLote) {
     const v = validarLote(esObjeto(meta.lote) ? meta.lote : null)
     if (!v.ok) return { ok: false, status: 409, error: 'lote_ausente', detalle: 'el elemento no trae un lote válido', errores: v.errores }
@@ -262,22 +306,69 @@ export async function publicarAprobado(P: PuertosDePublicacion, n: { hitl_id: st
     if (!l.ok) return { ok: false, status: 409, error: 'pieza_no_publicable', detalle: 'no se pudo armar la publicación desde la salida de la oficina', errores: l.errores }
     lote = l.lote
     output_id = el.output_id
-    if (l.caduca && Date.parse(l.caduca) < P.ahora().getTime()) advertencias.push(`entrega_caducada: las direcciones de los archivos vencieron el ${l.caduca}; hay que volver a entregar la pieza antes de publicarla`)
+    if (l.caduca && Date.parse(l.caduca) < P.ahora().getTime()) {
+      caducada = true
+      advertencias.push(`entrega_caducada: las direcciones de los archivos vencieron el ${l.caduca}; hay que volver a entregar la pieza antes de publicarla`)
+    }
     if (meta.con_desacuerdo === true) advertencias.push('aprobada_con_desacuerdo: la oficina dejó desacuerdos sin resolver y una persona la aprobó igual')
   }
   if (el.client_id && lote.client_id !== el.client_id) return { ok: false, status: 409, error: 'cliente_distinto', detalle: 'el lote es de otro cliente que el elemento de la bandeja' }
-  const cfg = configuracionDeMeta(P.env)
+
+  // las cuentas son las de la ficha de ESTE cliente (el del elemento y el del lote, que ya se comprobó que coinciden)
+  const cuentas = await P.leerCuentas(lote.client_id)
+  const pideReal = n.real === true || (n.real === undefined && n.segunLaFicha === true && cuentas.publicacion_real)
+  if (n.real === true && !cuentas.publicacion_real) return { ok: false, status: 409, error: 'publicacion_real_apagada', detalle: 'la ficha del cliente no tiene redes_oficiales.publicacion_real: true' }
+
+  const cfg = configuracionDeCliente(cuentas, P.env)
   const piezas = lote.piezas.map((p) => {
-    const a = armarSolicitud(p)
+    const a = armarSolicitud(p, cuentas)
     return { ...a, configuracion: a.publicador ? cfg[p.canal as RedConPublicador] : null }
   })
   const sinConfig = [...new Set(piezas.filter((x) => x.configuracion && !x.configuracion.configurada).map((x) => x.canal))]
   if (sinConfig.length) advertencias.push(`falta configuración de Meta para: ${sinConfig.join(', ')}`)
-  const ensayo: ResultadoDeEnsayo = {
-    modo: 'ensayo', real: false, origen: esLote ? 'lote' : 'pieza_de_oficina', ...(output_id ? { output_id } : {}), hora: P.ahora().toISOString(), task_id: lote.task_id, client_id: lote.client_id,
-    publicable: piezas.length > 0 && piezas.every((x) => x.armada && x.configuracion?.configurada === true),
-    piezas, advertencias,
+  const publicable = piezas.length > 0 && piezas.every((x) => x.armada && x.configuracion?.configurada === true)
+
+  if (!pideReal) {
+    const previo = meta.publicacion_ensayo
+    if (esObjeto(previo)) return { ok: true, ensayo: previo as unknown as ResultadoDeEnsayo, ya_estaba: true }
+    const ensayo: ResultadoDeEnsayo = {
+      modo: 'ensayo', real: false, origen: esLote ? 'lote' : 'pieza_de_oficina', ...(output_id ? { output_id } : {}), hora: P.ahora().toISOString(), task_id: lote.task_id, client_id: lote.client_id,
+      publicable, piezas, advertencias,
+    }
+    await P.guardarEnsayo(el.id, ensayo)
+    return { ok: true, ensayo, ya_estaba: false }
   }
-  await P.guardarEnsayo(el.id, ensayo)
-  return { ok: true, ensayo, ya_estaba: false }
+
+  // ── DE VERDAD ──
+  const previoReal = meta.publicacion_real
+  if (esObjeto(previoReal) && previoReal.estado !== 'fallida') return { ok: true, real: previoReal as unknown as ResultadoReal, ya_estaba: true }
+  if (!publicable) {
+    const errores = piezas.flatMap((x) => [...x.errores.map((e) => `${x.canal}: ${e}`), ...(x.configuracion && !x.configuracion.configurada ? [`${x.canal}: falta ${x.configuracion.faltan.join(', ')}`] : [])])
+    return { ok: false, status: 409, error: 'no_publicable', detalle: 'no se publica nada si alguna pieza no queda lista', errores }
+  }
+  if (caducada) return { ok: false, status: 409, error: 'entrega_caducada', detalle: advertencias.find((x) => x.startsWith('entrega_caducada')) }
+  if (lote.programar_para && Date.parse(lote.programar_para) > P.ahora().getTime()) return { ok: false, status: 409, error: 'programada_no_soportada', detalle: `el lote pide publicarse el ${lote.programar_para}; el publicador no programa, solo publica al aprobar` }
+
+  const hora = P.ahora().toISOString()
+  if (!(await P.reclamarReal(el.id, { estado: 'en_curso', hora, task_id: lote.task_id, client_id: lote.client_id }))) {
+    const otra = await P.leerElemento(el.id)
+    const ya = otra?.metadata?.publicacion_real
+    return { ok: true, real: (esObjeto(ya) ? ya : { estado: 'en_curso' }) as unknown as ResultadoReal, ya_estaba: true }
+  }
+  const resultados: ResultadoDePieza[] = []
+  for (const pieza of piezas) {
+    const t0 = Date.now()
+    let r: ResultadoDePieza
+    try { r = await P.publicarEnMeta(pieza, cuentas) } catch (e) { r = { canal: pieza.canal, ok: false, paso: 'red', error: e instanceof Error ? e.message : String(e) } }
+    resultados.push(r)
+    try { await P.registrarPublicacion({ hitl_id: el.id, client_id: lote.client_id, task_id: lote.task_id, resultado: r, duracion_ms: Date.now() - t0 }) } catch { /* el historial no deshace lo publicado */ }
+  }
+  const bien = resultados.filter((r) => r.ok).length
+  const real: ResultadoReal = {
+    modo: 'real', real: true, estado: bien === resultados.length ? 'publicada' : bien > 0 ? 'parcial' : 'fallida',
+    origen: esLote ? 'lote' : 'pieza_de_oficina', ...(output_id ? { output_id } : {}), hora, task_id: lote.task_id, client_id: lote.client_id,
+    piezas: resultados, advertencias,
+  }
+  await P.guardarReal(el.id, real)
+  return { ok: true, real, ya_estaba: false }
 }
