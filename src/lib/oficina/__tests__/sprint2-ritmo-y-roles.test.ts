@@ -38,7 +38,10 @@ const GUION = (producto: boolean) => [
 const TRES = [PROPUESTA(1, 'El vapor', 12), PROPUESTA(2, 'La mesa larga', 15), PROPUESTA(3, 'La puerta', 10), '# Citas', 'A2 usé: lo tomé', 'A3 usé: lo tomé', 'A4 usé: lo tomé', 'A5 usé: lo tomé', 'A6 usé: lo tomé'].join('\n')
 const CON_PROPUESTAS: Plantilla = { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, video: { ...(VIDEO_MESA.limites.video as Record<string, unknown>), segundos_min: 6, segundos_max: 30, propuestas: 3 } } }
 
-type Biblioteca = 'ok' | 'caida' | 'sin_puerto' | 'sin_ritmos'
+type Biblioteca = 'ok' | 'caida' | 'sin_puerto' | 'sin_ritmos' | 'con_red'
+/** CC6 (r3/r8) · una guía de la RED del brief (instagram) que cubre la misma duración que la general, con otros topes de planos: debe ganar la de la red */
+const RITMO_DE_LA_RED = { ...FILAS_RITMOS.find((r) => r.id === 'reel-9-15')!, id: 'reel-ig', nombre: 'reel de Instagram', red: 'instagram', planos_min: 5, planos_max: 6 }
+const AVISO_DE_LA_RED = (s: number) => `${s} s con 2 planos: la guía de ritmo «reel de Instagram» sugiere de 5 a 6`
 async function correr(plantilla: Plantilla, texto: string, biblioteca: Biblioteca) {
   const M = crearMemoria({ parte: escribirHoja(INSUMOS).texto_md, plantilla })
   const MS = crearMesaEnMemoria(TRAS_2012)
@@ -49,11 +52,15 @@ async function correr(plantilla: Plantilla, texto: string, biblioteca: Bibliotec
         pedidos++
         if (biblioteca === 'caida') throw new Error('tabla caída')
         const l = LECTURA_DE_LA_SEMILLA('Restaurante y panadería')
-        return biblioteca === 'sin_ritmos' ? { ...l, ritmos: [] } : l
+        return biblioteca === 'sin_ritmos' ? { ...l, ritmos: [] } : biblioteca === 'con_red' ? { ...l, ritmos: [...l.ritmos, RITMO_DE_LA_RED] } : l
       },
     })
   }
   M.P.mesa = MS
+  /** el CONTENIDO de cada artefacto que se escribe (la memoria solo guarda su huella): ahí viajan los avisos del cierre (`avisos_del_traductor`) */
+  const contenidos: Array<Record<string, unknown>> = []
+  const guardar = M.P.almacen.guardar.bind(M.P.almacen)
+  M.P.almacen.guardar = async (c) => { if (c.artefacto?.contenido) contenidos.push(c.artefacto.contenido as Record<string, unknown>); return guardar(c) }
   const enviados: unknown[] = []
   M.P.video = {
     enviar: async (p) => { enviados.push(p); return { ok: true, request_id: 'r', status: 'simulado', costo_estimado_usd: 1, costo_lista_usd: 1, descuento_pct: 0, simulado: true } },
@@ -68,7 +75,8 @@ async function correr(plantilla: Plantilla, texto: string, biblioteca: Bibliotec
     return { texto: `Respuesta de ${t.agente}.` }
   }, 120)
   const e = M.encargos.get(id)!.estado_del_motor
-  return { ultima, e, pedidos, enviados }
+  const cierre = [...contenidos].reverse().find((x) => Array.isArray(x.avisos_del_traductor))?.avisos_del_traductor as string[] | undefined
+  return { ultima, e, pedidos, enviados, cierre }
 }
 const avisosDelGuion = (e: { artefactos: Record<string, { datos: unknown }> }) => (e.artefactos['guion']?.datos as { avisos: string[] }).avisos
 
@@ -143,10 +151,29 @@ describe('el cierre de la mesa de video lleva los avisos de ritmo al guion', () 
     expect(pv.propuestas.map((p) => p.id)).toEqual(['P1', 'P2', 'P3'])
     expect(pv.propuestas.map((p) => p.guion.avisos.filter((a) => a.includes('guía de ritmo')))).toEqual([[AVISO_2_PLANOS(12)], [AVISO_2_PLANOS(15)], [AVISO_2_PLANOS(10)]])
   })
+  it('🔴 (CC6 r3) con una guía de la red del brief y una general para la misma duración, el guion único recibe el aviso de la de la RED', async () => {
+    const r = await correr(VIDEO_MESA_ANTES_DE_S2_3, GUION(true), 'con_red')
+    const deRitmo = avisosDelGuion(r.e).filter((a) => a.includes('guía de ritmo'))
+    expect(deRitmo).toEqual([AVISO_DE_LA_RED(12)])
+  })
+  it('🔴 (CC6 r8) lo mismo con N propuestas: cada guion recibe el aviso de la guía de la RED', async () => {
+    const r = await correr(CON_PROPUESTAS, TRES, 'con_red')
+    const pv = r.e.artefactos['propuestas_video']?.datos as { propuestas: Array<{ guion: { avisos: string[] } }> }
+    expect(pv.propuestas.map((p) => p.guion.avisos.filter((a) => a.includes('guía de ritmo')))).toEqual([[AVISO_DE_LA_RED(12)], [AVISO_DE_LA_RED(15)], [AVISO_DE_LA_RED(10)]])
+  })
+  it('🔴 (CC6 + CC5) la tarjeta «Propuestas» lee `propuestas_video.avisos`: ahí van los de ritmo con el id de su propuesta; el cierre no los repite', async () => {
+    const r = await correr(CON_PROPUESTAS, TRES, 'ok')
+    const pv = r.e.artefactos['propuestas_video']?.datos as { avisos: string[] }
+    const esperados = [`P1 · ${AVISO_2_PLANOS(12)}`, `P2 · ${AVISO_2_PLANOS(15)}`, `P3 · ${AVISO_2_PLANOS(10)}`]
+    expect(pv.avisos.filter((a) => a.includes('guía de ritmo'))).toEqual(esperados)
+    expect(r.cierre?.filter((a) => a.includes('guía de ritmo'))).toEqual(esperados)
+    expect(new Set(r.cierre).size).toBe(r.cierre!.length)
+  })
   it('con N propuestas y la biblioteca caída: ninguna lleva aviso de ritmo', async () => {
     const r = await correr(CON_PROPUESTAS, TRES, 'caida')
     const pv = r.e.artefactos['propuestas_video']?.datos as { propuestas: Array<{ guion: { avisos: string[] } }> }
     expect(pv.propuestas).toHaveLength(3)
     for (const p of pv.propuestas) expect(p.guion.avisos.some((a) => a.includes('guía de ritmo'))).toBe(false)
+    expect((r.e.artefactos['propuestas_video']?.datos as { avisos: string[] }).avisos.some((a) => a.includes('guía de ritmo'))).toBe(false)
   })
 })

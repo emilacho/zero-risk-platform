@@ -334,10 +334,15 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     const rondaAnterior = Number((enc.estado_del_motor.artefactos.propuestas_video?.datos as { ronda?: number } | undefined)?.ronda ?? 0)
     const tp = traducirPropuestas(textoPieza, { objetivo: est.video!.propuestas, segundosMin: est.video!.segundos_min, segundosMax: est.video!.segundos_max, ronda: rondaAnterior + 1 })
     if (!tp.ok) return aTextoParaLaJefatura(P, enc, est, textoPieza, tp.motivo)
-    // 17-nov · los avisos de ritmo de la biblioteca, en el guion de CADA propuesta (la tarjeta y la jefatura los leen con el id de la propuesta)
+    // 17-nov · los avisos de ritmo de la biblioteca, en el guion de CADA propuesta y, con su id (`P1 · …`), en los avisos de las propuestas: la tarjeta
+    // «Propuestas» de Tu oficina lee solo esos (CC6 + CC5), y Emilio elige con ellos
     const ritmos = await ritmosDelVideo(P, enc)
     const red = baseDeLaminas(enc.estado_del_motor).brief.red ?? null
-    for (const p of tp.resultado.propuestas) p.guion.avisos.push(...avisosDeRitmoDelGuion(p.guion, red, ritmos))
+    for (const p of tp.resultado.propuestas) {
+      const deRitmo = avisosDeRitmoDelGuion(p.guion, red, ritmos)
+      p.guion.avisos.push(...deRitmo)
+      tp.resultado.avisos.push(...deRitmo.map((a) => `${p.id} · ${a}`))
+    }
     return cerrarConPropuestas(P, enc, pl, indice, est, libro, textoPieza, tp.resultado, forzado, vuelta)
   }
   // el VIDEO (parte 2 · 31-oct): la pieza es un GUION; el traductor de láminas no aplica (sin imágenes que generar: el brazo filma)
@@ -418,7 +423,7 @@ async function guardarElCierre(P: Puertos, enc: Encargo, pl: Plantilla, indice: 
  * Los avisos del traductor son los de las propuestas y los de cada guion, nombrando a qué propuesta pertenecen.
  */
 function cerrarConPropuestas(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, est: EstadoMesa, libro: Aporte[], textoPieza: string, pv: PropuestasDelVideo, forzado: string | null, vuelta?: string): Promise<Respuesta> {
-  const avisos = [...pv.avisos, ...pv.propuestas.flatMap((p) => p.guion.avisos.map((a) => `${p.id} · ${a}`))]
+  const avisos = [...new Set([...pv.avisos, ...pv.propuestas.flatMap((p) => p.guion.avisos.map((a) => `${p.id} · ${a}`))])]
   return guardarElCierre(P, enc, pl, indice, est, libro, textoPieza, { propuestas_video: { ...pv, texto: textoPieza } as unknown as Record<string, unknown> }, avisos, false, forzado, vuelta)
 }
 
