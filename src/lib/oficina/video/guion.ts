@@ -57,7 +57,7 @@ export interface Plano {
   tamano?: string
   lente?: string
   luz?: string
-  /** ¿sale el producto en cuadro? (true = plano de producto: la foto real del cliente es la vara; false = ambiente, no recibe foto del producto) */
+  /** ¿sale el producto en cuadro? (true = plano de producto: la foto real del cliente es la vara; false = ambiente: lleva la foto propia que nombre, si es apta · 17-nov) */
   producto?: boolean
   /** cómo termina el cuadro (posición, luz, utilería): el clip siguiente lo repite porque el modelo no ve el anterior */
   estado_final?: string
