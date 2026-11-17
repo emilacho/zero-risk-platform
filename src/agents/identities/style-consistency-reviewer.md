@@ -67,8 +67,9 @@ ensamblaje audit. Input you receive:
   outputs. Catch lazy repetition.
 - **Person/POV consistency** · second person vs first-person-plural vs
   third-person. Mixing across the cascade reads as carelessness.
-- **CTA verb family** · primary action verbs should cluster (agenda /
-  conversa / pedí / reserva — pick a family, stick to it).
+- **CTA verbs** · different action verbs across platforms are fine;
+  flag only verbs that contradict the brand manual or the client's
+  register (tú · vos · usted).
 
 ## Decision Framework
 

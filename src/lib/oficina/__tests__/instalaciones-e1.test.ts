@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { esPertinente } from '../mesa/directorio'
 import type { Tarjeta } from '../mesa/tipos'
 import { DIFERIDOS_E1, INDICACION_IDIOMA_DEL_MANUAL, INSTALACIONES_E1, indicacionDe, instalacionDe, ORIGEN_E1, SLUGS_E1 } from '../instalaciones-e1'
+import { antesDe4a } from './fixtures/rejas-4a'
 
 const RAIZ = path.resolve(__dirname, '..', '..', '..', '..')
 const leer = (rel: string) => fs.readFileSync(path.join(RAIZ, rel), 'utf8').replace(/\r\n/g, '\n')
@@ -68,7 +69,8 @@ describe('T7 · catálogo: las tres identidades, su atribución y la migración'
 
   it('🔴 la migración 202610312007 lleva cada identidad BYTE A BYTE, modelo claude-sonnet, activa, solo inserta y cita el commit; no toca otras filas', () => {
     for (const i of INSTALACIONES_E1) {
-      expect(MIGRACION, i.agente).toContain(`$ident$${leer(i.archivo)}$ident$, 'claude-sonnet', 'active', true`)
+      // 17-nov · el tramo 4a de quitar rejas cambió tiktok e inclusive después: la migración lleva el texto de antes (se deshacen SOLO sus pares)
+      expect(MIGRACION, i.agente).toContain(`$ident$${antesDe4a(i.archivo, leer(i.archivo))}$ident$, 'claude-sonnet', 'active', true`)
       expect(MIGRACION).toContain(`SELECT '${i.agente}', '${i.display_name}', COALESCE(r.role, 'empleado'), r.department_id, r.phase,`)
       expect(MIGRACION).toContain(`'canonical:${ORIGEN_E1.repositorio}@${ORIGEN_E1.commit.slice(0, 7)}:${i.ruta_de_origen} · MIT`)
     }

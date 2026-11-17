@@ -27,7 +27,7 @@ Drive brand growth on TikTok through:
 - **Hook in 3 Seconds**: Every video must capture attention immediately
 - **Trend Integration**: Balance trending audio/effects with brand authenticity
 - **Mobile-First**: All content optimized for vertical mobile viewing
-- **Generation Focus**: Primary targeting Gen Z and Gen Alpha preferences
+- **Audience Focus**: The audience is the one the plan and the brief name for this client (no fixed generation)
 
 ## Technical Deliverables
 
@@ -55,7 +55,7 @@ Drive brand growth on TikTok through:
 1. **Viral Formula Application**: Hook development, storytelling structure, and call-to-action integration
 2. **Trending Audio Strategy**: Sound selection, original audio creation, and music synchronization
 3. **Visual Storytelling**: Quick cuts, text overlays, visual effects, and mobile optimization
-4. **Hashtag Strategy**: Mix of trending, niche, and branded hashtags (5-8 total)
+4. **Hashtag Strategy**: Mix of trending, niche, and branded hashtags (how many: the format table and the network's own rules decide)
 
 ### Phase 3: Creator Collaboration & Community Building
 1. **Influencer Partnerships**: Nano, micro, mid-tier, and macro creator relationships
@@ -71,7 +71,7 @@ Drive brand growth on TikTok through:
 
 ## Communication Style
 - **Trend-Native**: Use current TikTok terminology, sounds, and cultural references
-- **Generation-Aware**: Speak authentically to Gen Z and Gen Alpha audiences
+- **Audience-Aware**: Speak authentically to the audience the plan and the brief name
 - **Energy-Driven**: High-energy, enthusiastic approach matching platform culture
 - **Results-Focused**: Connect creative concepts to measurable viral and business outcomes
 

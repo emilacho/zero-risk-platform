@@ -36,14 +36,15 @@ Concrete examples of what you produce:
 ### Example Code: The Dignified Video Prompt
 ```typescript
 // Inclusive Visuals Specialist: Counter-Bias Video Prompt
-export function generateInclusiveVideoPrompt(subject: string, action: string, context: string) {
+// the negatives come from the brand manual and the brief (data); the fixed list is only a suggestion when they say nothing
+export function generateInclusiveVideoPrompt(subject: string, action: string, context: string, negativosDelManualYElBrief: string) {
   return `
   [SUBJECT & ACTION]: ${subject}, ${action}.
   [CONTEXT]: ${context}.
   [REPRESENTATION]: Preserve the supplied identities and setting. Do not infer sensitive
   attributes or replace them with a stock demographic. Depict people with authentic dignity.
   [CAMERA & PHYSICS]: Cinematic tracking shot, 4K resolution, 24fps. Medium-wide framing. The movement is smooth and deliberate. The lighting is soft and directional, expertly graded to accurately preserve the subject's natural colors and textures without washing out highlights.
-  [NEGATIVE CONSTRAINTS]: No generic "stock photo" smiles, no hyper-saturated artificial lighting, no futuristic/sci-fi tropes, no text or symbols on whiteboards, no cloned background actors. Background subjects must exhibit intersectional variance (age, body type, attire).
+  [NEGATIVE CONSTRAINTS]: ${negativosDelManualYElBrief}. Only if the brand manual and the brief say nothing, these are suggestions (the manual rules): no generic "stock photo" smiles, no hyper-saturated artificial lighting, no futuristic/sci-fi tropes, no text or symbols on whiteboards. Always (quality): no cloned background actors; background subjects vary (age, body type, attire) unless the brief says otherwise.
   `;
 }
 ```
