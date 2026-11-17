@@ -49,19 +49,30 @@ export function problemasDeContrato(laminas: Lamina[], cant: LimitesDeCantidad):
   return p
 }
 
-/**
- * 17-nov · quitar rejas (filas 9 y 10 de CC1): lo que solo se AVISA, nunca pide otra vuelta ni bloquea.
- *  · largo de cada campo por encima del sugerido (`LIMITES_DE_LAMINA`): en el carrusel el dibujo se ajusta;
- *  · llamados a la acción por encima de `llamados_max`, SOLO si la plantilla lo trae como dato (sin el dato no hay tope: un carrusel de catálogo puede llevar uno por producto).
- */
-export function avisosDeContrato(laminas: Lamina[], dato: { llamados_max?: number }): string[] {
-  const p: string[] = []
+export type LargosDeLamina = Partial<Record<(typeof CAMPOS)[number], number>>
+/** los campos que pasan su largo: el de la plantilla (`largos_de_lamina`, dato) o, sin dato, la REFERENCIA `LIMITES_DE_LAMINA` (esa solo sirve para avisar) */
+export function largosPasados(laminas: Lamina[], largos?: LargosDeLamina): Array<{ lamina: number; campo: (typeof CAMPOS)[number]; largo: number; tope: number }> {
+  const out: Array<{ lamina: number; campo: (typeof CAMPOS)[number]; largo: number; tope: number }> = []
   laminas.forEach((l, i) => {
     for (const c of CAMPOS) {
-      const t = l[c]
-      if (typeof t === 'string' && t.length > LIMITES_DE_LAMINA[c]) p.push(`texto muy largo para la lámina (el dibujo baja la letra hasta el piso legible): lámina ${i + 1}: «${c}» tiene ${t.length} caracteres (sugerido: hasta ${LIMITES_DE_LAMINA[c]})`)
+      const t = l[c], tope = largos ? largos[c] : LIMITES_DE_LAMINA[c]
+      if (typeof t === 'string' && typeof tope === 'number' && t.length > tope) out.push({ lamina: i + 1, campo: c, largo: t.length, tope })
     }
   })
+  return out
+}
+/** el pedido al diseñador para acortar, campo por campo y en claro (cuánto sobra) */
+export const pedidoDeAcortarLaminas = (xs: ReturnType<typeof largosPasados>): string =>
+  ['Estos textos pasan el largo que pide la plantilla (se cuentan TODOS: letras, espacios y signos):', ...xs.map((x) => `- lámina ${x.lamina}, «${x.campo}»: tiene ${x.largo} caracteres y el tope es ${x.tope} (sobran ${x.largo - x.tope})`), 'Reescríbelos más cortos con la misma idea (no los cortes a la mitad) y devuelve el JSON COMPLETO del contrato, con todo lo demás igual.'].join('\n')
+
+/**
+ * 17-nov · quitar rejas (filas 9 y 10 de CC1) + RESPUESTA de Lenovo: lo que solo se AVISA, nunca bloquea.
+ *  · largo de cada campo por encima del de la plantilla (`largos_de_lamina`; sin el dato, la referencia `LIMITES_DE_LAMINA`): con el dato, antes se devolvió hasta 2 veces; el dibujo baja la letra;
+ *  · llamados a la acción por encima de `llamados_max`, SOLO si la plantilla lo trae como dato (sin el dato no hay tope: un carrusel de catálogo puede llevar uno por producto).
+ */
+export function avisosDeContrato(laminas: Lamina[], dato: { llamados_max?: number; largos?: LargosDeLamina }): string[] {
+  const p: string[] = []
+  for (const x of largosPasados(laminas, dato.largos)) p.push(`texto muy largo para la lámina (el dibujo baja la letra hasta el piso legible): lámina ${x.lamina}: «${x.campo}» tiene ${x.largo} caracteres (${dato.largos ? 'tope de la plantilla' : 'referencia'}: ${x.tope})`)
   const conCta = laminas.filter((l) => typeof l.cta === 'string' && l.cta.trim()).length
   if (typeof dato.llamados_max === 'number' && Number.isFinite(dato.llamados_max) && conCta > dato.llamados_max) p.push(`${conCta} láminas con llamado a la acción; la plantilla sugiere hasta ${dato.llamados_max}`)
   return p

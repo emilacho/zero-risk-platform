@@ -35,7 +35,8 @@ function deLaMesa(v1: Plantilla, tipo: 'carrusel_mesa' | 'kit_mesa'): Plantilla 
   return {
     tipo, familia: tipo, clase: v1.clase, pasos,
     limites: {
-      ...v1.limites,
+      // la mesa no tiene tope de caracteres (el dibujo se ajusta): los `largos_de_lamina` del carrusel v1 (17-nov, RESPUESTA Lenovo) NO pasan a la mesa
+      ...(Object.fromEntries(Object.entries(v1.limites).filter(([k]) => k !== 'largos_de_lamina')) as typeof v1.limites),
       tope_encargo_usd: TOPE_DE_LA_MESA_USD,
       // el margen cubre los turnos de la mesa (≤ 24) además de la cola mecánica
       margen: 50,

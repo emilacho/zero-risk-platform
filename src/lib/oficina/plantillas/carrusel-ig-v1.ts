@@ -47,6 +47,8 @@ export const CARRUSEL_IG_V1: Plantilla = {
     plataforma: 'instagram-feed',
     laminas_min: 5,
     laminas_max: 10,
+    // 17-nov · RESPUESTA Lenovo (punto 6 + fila 9): los largos de cada campo de la lámina son DATO de esta plantilla; pasarse se devuelve al diseñador hasta 2 veces y luego es aviso
+    largos_de_lamina: { eyebrow: 24, headline: 90, body: 220, cta: 32 },
     // a verificar contra la documentación vigente de cada red antes de bloquear con ellos: mientras `limites_verificados` sea false, el chequeo avisa y no bloquea
     pie_de_foto_max: 2200,
     hashtags_max: 30,

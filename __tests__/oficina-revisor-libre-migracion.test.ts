@@ -9,7 +9,7 @@ import { CARRUSEL_IG_V1 } from '../src/lib/oficina/plantillas/carrusel-ig-v1'
 import { KIT_HISTORIAS } from '../src/lib/oficina/plantillas/kit-historias'
 import { POST_IMG } from '../src/lib/oficina/plantillas/post-img'
 import { validarPlantilla } from '../src/lib/oficina/plantilla'
-import { indicacionesAntesDe0800 } from '../src/lib/oficina/__tests__/indicacion-antes-de-0800'
+import { indicacionesAntesDe0800, limitesAntesDe1215 } from '../src/lib/oficina/__tests__/indicacion-antes-de-0800'
 import type { Plantilla } from '../src/lib/oficina/tipos'
 
 const RAIZ = process.cwd()
@@ -39,7 +39,7 @@ describe('la migración del revisor libre', () => {
       const u = updateDe(s, tipo)
       expect(bloque(u, 'pasos')).toEqual(JSON.parse(JSON.stringify(p.pasos)))
       expect(bloque(u, 'ind')).toEqual(indicacionesAntesDe0800(p.indicaciones))
-      expect(bloque(u, 'lim')).toEqual(JSON.parse(JSON.stringify(p.limites)))
+      expect(bloque(u, 'lim')).toEqual(limitesAntesDe1215(p.limites))
       expect(validarPlantilla({ ...p, pasos: bloque(u, 'pasos') as never })).toEqual([])
     }
   })

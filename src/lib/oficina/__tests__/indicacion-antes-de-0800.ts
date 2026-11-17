@@ -37,3 +37,10 @@ export const indicacionesAntesDe1200 = deshacer(REGLAS_ANTES_DE_1200)
 export function indicacionesAntesDe0800(ind: unknown): unknown {
   return JSON.parse(JSON.stringify(indicacionesAntesDe1130(indicacionesAntesDe1200(ind))), (k, v) => (k === 'regla' && v === NUEVA ? REGLA_DEL_DIRECTOR_ANTES_DE_0800 : v))
 }
+
+/** 202611171215 · los `limites` del código (copia JSON) como estaban antes: sin `largos_de_lamina`; lo demás, idéntico */
+export function limitesAntesDe1215(lim: unknown): unknown {
+  const c = JSON.parse(JSON.stringify(lim)) as Record<string, unknown>
+  delete c.largos_de_lamina
+  return c
+}
