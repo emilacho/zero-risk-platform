@@ -16,7 +16,7 @@ const foto = (id: string, owner_role: string, papel: string | null): Fila => ({ 
 const video = (id: string, owner_role: string, papel: string | null): Fila => ({ id, client_id: C, owner_role, papel, estado: 'ok', handle: 'cuenta', tipo: 'reel', path: `v/${id}.mp4`, created_at: '2026-11-10T12:00:00Z' })
 
 // como la base real: devuelve SOLO las columnas que se piden (una lectura que no pide `papel` no lo ve)
-const consultaEstricta = (filas: Fila[]): Consulta => async (p) => ({ filas: filas.filter((x) => Object.entries(p.donde).every(([k, v]) => (v === null ? x[k] == null : x[k] === v))).map((x) => Object.fromEntries(p.columnas.filter((c) => c in x).map((c) => [c, x[c]]))), error: null })
+const consultaEstricta = (filas: Fila[]): Consulta => async (p) => ({ filas: filas.filter((x) => Object.entries(p.donde).every(([k, v]) => (v === null ? x[k] == null : x[k] === v))).map((x) => Object.fromEntries((p.columnas ?? []).filter((c) => c in x).map((c) => [c, x[c]]))), error: null })
 
 describe('rolEfectivo', () => {
   it('el papel manda: propio y competidor tal cual; mercado y referencia → referencia; sin papel (o uno desconocido) → owner_role', () => {
