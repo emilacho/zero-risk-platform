@@ -12,6 +12,7 @@
 import type { Consulta, Fila } from './consulta'
 import { extraerCatalogo, type ItemCatalogo } from './datos-estructurados'
 import { type EstadoDeLectura, pesoDeTexto } from './tipos'
+import { esCapturaDeLaWeb, frasePLF } from './portero/procedencia'
 
 /** ≈ 21.000 «tokens»: cabe de sobra una página o un plan reales (medidos: 26.761 y 23.945 caracteres) */
 export const MAXIMO_DE_CARACTERES_POR_DEFECTO = 60_000
@@ -46,7 +47,7 @@ const LEIBLES: Record<string, Leible> = {
   client_historical_outputs: { columnas: ['id', 'content_text'], texto: (f) => cadena(f.content_text) },
   client_brain_chunks: { columnas: ['id', 'chunk_text'], texto: (f) => cadena(f.chunk_text) },
   client_social_images: {
-    columnas: ['id', 'caption', 'producto', 'posted_at', 'post_url', 'url', 'medio', 'tipo', 'que_muestra', 'producto_visto'],
+    columnas: ['id', 'caption', 'producto', 'posted_at', 'post_url', 'url', 'medio', 'tipo', 'que_muestra', 'producto_visto', 'handle', 'clase', 'clase_motivo', 'procedencia', 'oferta', 'sede_id', 'lugar_fuente', 'fecha_origen', 'fecha_fuente'],
     texto: (f) => [
       `Tipo: ${cadena(f.medio) ?? cadena(f.tipo) ?? 'imagen'}`,
       // una copia que no viene de una publicación (logo o foto del sitio, de Mapas, archivo del dueño) no habla de «la publicación»
@@ -56,6 +57,9 @@ const LEIBLES: Record<string, Leible> = {
       `Archivo: ${cadena(f.url) ?? 'sin archivo'}`,
       ...(cadena(f.que_muestra) ? [`Qué muestra (etiquetador): ${f.que_muestra}`] : []),
       ...(lista(f.producto_visto).length ? [`Producto visto: ${lista(f.producto_visto).join(', ')}`] : []),
+      // 17-nov · procedencia, lugar y fecha con su fuente («no consta» si no hay dato); una captura de la web lo dice
+      frasePLF(f),
+      ...(esCapturaDeLaWeb(f) ? [`Es una captura de pantalla de la web, no una foto${cadena(f.clase_motivo) ? ` (${f.clase_motivo})` : ''}`] : []),
     ].join('\n'),
   },
   client_sede_datos: { columnas: ['id', 'campo', 'valor_texto', 'fuente', 'observado_en', 'reconfirmado_en', 'retirada_en'], texto: (f) => (cadena(f.valor_texto) && !f.retirada_en ? `${cadena(f.campo) ?? 'dato'} · ${cadena(f.fuente) ?? 'fuente desconocida'} · observado ${fecha(f.observado_en)}${cadena(f.reconfirmado_en) ? ` · reconfirmado ${fecha(f.reconfirmado_en)}` : ''}: ${f.valor_texto}` : null) },

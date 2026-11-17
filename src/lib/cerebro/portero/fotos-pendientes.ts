@@ -12,6 +12,7 @@
 import type { Consulta, Fila } from '../consulta'
 import { CLAVE_DE_LA_BODEGA } from './clave-de-la-bodega'
 import { gustoDe, nivelDeOrigen, ordenarPorEmbudo } from '../../portero-alimenta/embudo'
+import { datosPLF, esCapturaDeLaWeb, type FechaDeLaImagen, type Lugar, type NO_CONSTA, type Procedencia } from './procedencia'
 
 /** cuántas etiquetas por cliente y día (≈ US$ 0,08 con el costo medido de ~US$ 0,008 por foto; dentro del tope diario del cliente) */
 export const TOPE_DE_ETIQUETAS_POR_CLIENTE_Y_DIA = 10
@@ -75,16 +76,20 @@ export interface FotoVista {
   formato: string | null
   /** el modelo no pudo leerla tras el reintento: su «etiqueta» es solo la marca con el motivo */
   no_se_pudo_leer: boolean
+  /** 17-nov · de dónde se copió, a qué oferta (y sede) pertenece y de cuándo es, cada uno con su fuente; sin dato → «no consta» */
+  procedencia: Procedencia
+  lugar: Lugar | typeof NO_CONSTA
+  fecha: FechaDeLaImagen | typeof NO_CONSTA
 }
 
-const COLUMNAS_DE_LECTURA = ['video_id', 'id', 'owner_role', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'etiqueta_modelo', 'duplicado_de', 'hash_archivo']
+const COLUMNAS_DE_LECTURA = ['video_id', 'id', 'owner_role', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'etiqueta_modelo', 'duplicado_de', 'hash_archivo', 'post_url', 'clase', 'procedencia', 'oferta', 'sede_id', 'lugar_fuente', 'fecha_origen', 'fecha_fuente']
 
 export interface PedidoDeFotos { cliente: string; origen?: OrigenDeFoto | null; soloEtiquetadas?: boolean; limite?: number }
 export type RespuestaDeFotos =
-  | { ok: true; cliente: string; total: number; devueltas: number; por_origen: Record<OrigenDeFoto, { total: number; etiquetadas: number }>; sin_etiquetar: number; fotos: FotoVista[]; modelos_llamados: 0; costo_usd: 0 }
+  | { ok: true; cliente: string; total: number; devueltas: number; por_origen: Record<OrigenDeFoto, { total: number; etiquetadas: number }>; sin_etiquetar: number; fotos: FotoVista[]; capturas_de_la_web: number; modelos_llamados: 0; costo_usd: 0 }
   | { ok: false; error: string; detalle: string }
 
-/** las fotos de un cliente (solo las que tienen archivo y no son copia de otra), con origen y etiqueta · US$ 0 */
+/** las fotos de un cliente (solo las que tienen archivo, no son copia de otra y no son capturas de la web), con origen, etiqueta, procedencia, lugar y fecha · US$ 0 */
 export async function listarFotos(consulta: Consulta, p: PedidoDeFotos): Promise<RespuestaDeFotos> {
   const cliente = txt(p.cliente)
   if (!cliente) return { ok: false, error: 'entrada_invalida', detalle: 'falta `client_id`' }
@@ -97,18 +102,20 @@ export async function listarFotos(consulta: Consulta, p: PedidoDeFotos): Promise
   const tn = await consulta({ tabla: 'cerebro_tendencias', columnas: ['video_id', 'nivel', 'me_gusta', 'vistas'], donde: { client_id: cliente }, limite: 2000 })
   if (tn.error) return { ok: false, error: 'error_de_lectura', detalle: tn.error.slice(0, 200) }
   const deTendencia = new Map<string, Fila>(tn.filas.filter((f) => txt(f.video_id)).map((f) => [String(f.video_id), f]))
+  // 17-nov · una captura de pantalla de la web se guarda entera, pero NO es una foto: no sale en esta lista (se cuenta aparte)
+  const capturas = r.filas.filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)) && esCapturaDeLaWeb(f)).length
   const vistas: FotoVista[] = r.filas
-    .filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)))
+    .filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)) && !esCapturaDeLaWeb(f))
     .map((f) => ({
       foto_id: String(f.id), origen: origenDeLaFoto(f.owner_role), nivel: nivelDeOrigen(origenDeLaFoto(f.owner_role), txt(deTendencia.get(String(f.video_id))?.nivel)), gusto: gustoDe(deTendencia.get(String(f.video_id)) ?? null), cuenta: txt(f.handle), tipo: txt(f.tipo), medio: txt(f.medio), url: txt(f.url),
       publicada_en: txt(f.posted_at), copiada_en: txt(f.created_at), etiquetada: !!txt(f.etiquetada_en), que_muestra: txt(f.que_muestra), producto_visto: lista(f.producto_visto),
       texto_visible: txt(f.texto_visible), confianza: txt(f.etiqueta_confianza), con_personas: typeof f.con_personas === 'boolean' ? f.con_personas : null,
-      tipo_de_toma: txt(f.tipo_de_toma), formato: txt(f.formato), no_se_pudo_leer: txt(f.etiqueta_modelo) === 'sin-lectura',
+      tipo_de_toma: txt(f.tipo_de_toma), formato: txt(f.formato), no_se_pudo_leer: txt(f.etiqueta_modelo) === 'sin-lectura', ...datosPLF(f),
     }))
   const por_origen = Object.fromEntries(ORIGENES_DE_FOTO.map((o) => [o, { total: 0, etiquetadas: 0 }])) as Record<OrigenDeFoto, { total: number; etiquetadas: number }>
   for (const v of vistas) { por_origen[v.origen].total++; if (v.etiquetada) por_origen[v.origen].etiquetadas++ }
   const filtradas = ordenarPorEmbudo(vistas.filter((v) => (!p.origen || v.origen === p.origen) && (!p.soloEtiquetadas || v.etiquetada)), (v) => ({ nivel: v.nivel, gusto: v.gusto }))
-  return { ok: true, cliente, total: vistas.length, devueltas: Math.min(filtradas.length, limite), por_origen, sin_etiquetar: vistas.filter((v) => !v.etiquetada).length, fotos: filtradas.slice(0, limite), modelos_llamados: 0, costo_usd: 0 }
+  return { ok: true, cliente, total: vistas.length, devueltas: Math.min(filtradas.length, limite), por_origen, sin_etiquetar: vistas.filter((v) => !v.etiquetada).length, fotos: filtradas.slice(0, limite), capturas_de_la_web: capturas, modelos_llamados: 0, costo_usd: 0 }
 }
 
 export interface ResultadoDeUnaEtiqueta { llamo_al_modelo: boolean; escribio: boolean; costo_usd: number; motivo?: string }

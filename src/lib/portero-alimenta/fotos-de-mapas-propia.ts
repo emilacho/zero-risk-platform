@@ -3,10 +3,13 @@
  * Una búsqueda por nombre devuelve VARIAS fichas y casi siempre homónimos. Solo se copian las fotos de la ficha que `fichaPropiaDeMapas` confirma
  * como del cliente (nombre exacto en una de sus sedes, o confirmada por sí sola); si hay más de una candidata (ambigua) o ninguna, NO se copia nada.
  * Cada foto se guarda en nuestro almacén como `propio` / `maps_foto` y entra al etiquetado como cualquier otra. Nunca falla la corrida del portero: devuelve el motivo.
+ * 17-nov (ENCARGO 1 de Cerebro): cada foto lleva su procedencia (`mapas`), su lugar (la oferta y la sede cuya ficha de Mapas es ESTA, si un dato de la sede lo dice) y la fecha
+ * de los metadatos del archivo si la trae. Sin dato, la columna queda vacía y las lecturas dicen «no consta». Leer la sede nunca frena la copia.
  */
 import { createHash } from 'node:crypto'
 import { fichaPropiaDeMapas, type FichaCruda } from './mapas-propia'
 import type { ContextoDelCliente } from './filtro'
+import { fechaDeLosMetadatos, sedeDeLaFichaDeMapas, type DatoDeSede, type SedeDelCliente } from '../cerebro/portero/procedencia'
 
 export const MAX_FOTOS_DE_LA_FICHA = 10
 const BUCKET = 'client-social-images'
@@ -87,6 +90,20 @@ export async function copiarFotosDeMapasPropia(a: {
   const hechas = new Set<string>()
   if (previas.ok) for (const f of (await previas.json()) as Array<{ post_id?: string; estado?: string }>) if (f.estado === 'ok' && f.post_id) hechas.add(f.post_id)
 
+  // la sede cuya ficha de Mapas es esta (por su identificador en los datos de la sede); si no se puede leer o no se sabe, el lugar queda «no consta»
+  let lugar: Record<string, unknown> = {}
+  try {
+    const cid = encodeURIComponent(a.clientId)
+    const [rd, rs] = await Promise.all([
+      traer(`${base}/rest/v1/client_sede_datos?client_id=eq.${cid}&fuente=eq.mapas&select=sede_id,fuente,fuente_ref,retirada_en`, { headers: auth }),
+      traer(`${base}/rest/v1/client_sedes?client_id=eq.${cid}&select=id,clave`, { headers: auth }),
+    ])
+    if (rd.ok && rs.ok) {
+      const sede = sedeDeLaFichaDeMapas(typeof ficha.placeId === 'string' ? ficha.placeId : null, (await rd.json()) as DatoDeSede[], (await rs.json()) as SedeDelCliente[])
+      if (sede) lugar = { oferta: sede.oferta, sede_id: sede.sede_id, lugar_fuente: 'mapas' }
+    }
+  } catch { /* sin lugar: «no consta» */ }
+
   const filas: Array<Record<string, unknown>> = []
   let n = 0
   for (const u of urls) {
@@ -103,7 +120,9 @@ export async function copiarFotosDeMapasPropia(a: {
       const ruta = `${a.clientId}/propio/${handle}/${post_id}.${t.ext}`
       const sube = await traer(`${base}/storage/v1/object/${BUCKET}/${ruta}`, { method: 'POST', headers: { ...auth, 'content-type': t.ct, 'x-upsert': 'true' }, body: new Uint8Array(buf) })
       if (!sube.ok) { res.fallidas.push({ url: u, causa: `subida rechazada · HTTP ${sube.status}` }); continue }
-      filas.push({ client_id: a.clientId, owner_role: 'propio', handle, post_id, tipo: 'maps_foto', url: `${base}/storage/v1/object/public/${BUCKET}/${ruta}`, estado: 'ok', causa: null, caption: `Foto de la ficha de Google Maps · ${titulo}`.slice(0, 300), post_url: postUrl, posicion: n === 1 ? 'portada' : 'unica', medio: 'imagen', hash_archivo: sha256(buf) })
+      const fecha = fechaDeLosMetadatos(buf)
+      filas.push({ client_id: a.clientId, owner_role: 'propio', handle, post_id, tipo: 'maps_foto', url: `${base}/storage/v1/object/public/${BUCKET}/${ruta}`, estado: 'ok', causa: null, caption: `Foto de la ficha de Google Maps · ${titulo}`.slice(0, 300), post_url: postUrl, posicion: n === 1 ? 'portada' : 'unica', medio: 'imagen', hash_archivo: sha256(buf),
+        procedencia: 'mapas', oferta: null, sede_id: null, lugar_fuente: null, ...lugar, fecha_origen: fecha, fecha_fuente: fecha ? 'metadatos' : null })
     } catch (e) {
       res.fallidas.push({ url: u, causa: (e instanceof Error ? e.message : String(e)).slice(0, 100) })
     }
