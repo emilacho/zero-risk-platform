@@ -561,7 +561,8 @@ export function almacenDeSupabase(): Almacen {
       const t = f.provenance_tag && typeof f.provenance_tag === 'object' && !Array.isArray(f.provenance_tag) ? (f.provenance_tag as Record<string, unknown>) : {}
       const lista = Array.isArray(t.familias_por_brief) ? (t.familias_por_brief as Array<Record<string, unknown>>) : []
       const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
-      return { id: String(f.id), client_id: String(f.client_id), valido: t.valido === true, briefs: lista.map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })) }
+      const filaIds = Array.isArray(t.fila_ids) ? (t.fila_ids as unknown[]).map(texto).filter((x): x is string => x !== null) : undefined
+      return { id: String(f.id), client_id: String(f.client_id), valido: t.valido === true, briefs: lista.map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })), ...(filaIds ? { fila_ids: filaIds } : {}) }
     },
     async guardarParteSeco(p) {
       const loteSeco = `seco:${p.lote}`

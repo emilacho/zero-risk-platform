@@ -184,3 +184,31 @@ describe('producir estas filas · la tabla de permisos (migración 202611171500)
     expect(reversa).toMatch(/drop table if exists public\.cadena_filas_elegidas/)
   })
 })
+
+describe('producir estas filas · 1.ª corrida real (17-nov 11:23Z): el kit agrupa sus historias en UN brief sin fila propia', () => {
+  /** la forma real del parte `009abba3`: el reel con su fila y el kit de historias sin `fila_id`; las filas del lote en `fila_ids` */
+  const parteReal = { briefs: [{ brief_id: 'f2', fila_id: 'f2', familia: 'video_mesa' }, { brief_id: 'kit-K', fila_id: null, familia: 'kit_historias' }], fila_ids: ['f1', 'f2'] }
+  const llamar = (al: AlmacenMemoria, c: Campana) => filasAutoproducir(al, { campana_id: c.id, parte_id: PARTE, dry_run: true, workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1' })
+  it('con permiso de TODAS las filas del lote, el kit y el reel salen', async () => {
+    const { al, c } = await montar({ parte: parteReal })
+    await producir(al, c, { fila_ids: ['f1', 'f2'] }, new Date().toISOString())
+    const r = await llamar(al, c)
+    expect(r.status).toBe(200); expect(r.cuerpo.emitidos).toBe(2)
+  })
+  it('si una fila del LOTE no tiene permiso (aunque el kit no la nombre), no sale nada', async () => {
+    const { al, c } = await montar({ parte: parteReal })
+    await producir(al, c, { fila_ids: ['f2'] }, new Date().toISOString())
+    const r = await llamar(al, c)
+    expect(r.status).toBe(409); expect(r.cuerpo.code).toBe('E-CAMPANA-NO-ACTIVA')
+  })
+  it('un brief sin fila en un parte que NO declara las filas de su lote sigue sin salir', async () => {
+    const { al, c } = await montar({ parte: { briefs: parteReal.briefs } })
+    await producir(al, c, { fila_ids: ['f1', 'f2'] }, new Date().toISOString())
+    expect((await llamar(al, c)).cuerpo.code).toBe('E-CAMPANA-NO-ACTIVA')
+  })
+  it('una fila de brief FUERA del lote declarado también necesita permiso', async () => {
+    const { al, c } = await montar({ parte: { briefs: [{ brief_id: 'f9', fila_id: 'f9', familia: 'post_img' }], fila_ids: ['f1'] } })
+    await producir(al, c, { fila_ids: ['f1'] }, new Date().toISOString())
+    expect((await llamar(al, c)).cuerpo.code).toBe('E-CAMPANA-NO-ACTIVA')
+  })
+})
