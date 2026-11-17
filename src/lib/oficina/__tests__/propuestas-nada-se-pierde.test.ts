@@ -42,6 +42,14 @@ describe('el lector de propuestas no pierde nada sin aviso', () => {
     const soloNarracion = ['Voy a leer los aportes antes de integrar.', '', PROPUESTA(1, 'El vapor', 12), PROPUESTA(2, 'La mesa larga', 15), PROPUESTA(3, 'La puerta', 10)].join('\n')
     expect(leer(soloNarracion).avisos.filter((x) => /antes de la primera propuesta/.test(x))).toEqual([])
   })
+  it('🔴 (z3 de CC6) texto previo SOLO con campos de la pieza y sin «#» (Título:, Imagen:): también se AVISA; la narración sola sigue sin avisar', () => {
+    const conCampos = ['Título: La puerta de Olón', 'Imagen: la fachada al atardecer', '', PROPUESTA(1, 'El vapor', 12), PROPUESTA(2, 'La mesa larga', 15), PROPUESTA(3, 'La puerta', 10)].join('\n')
+    const a = leer(conCampos).avisos.filter((x) => /antes de la primera propuesta/.test(x))
+    expect(a).toHaveLength(1)
+    expect(a[0]).toMatch(/^texto antes de la primera propuesta: 2 línea\(s\)/)
+    const narracion = ['Voy a cargar las herramientas de mesa antes de integrar.', 'Reviso los aportes y escribo.', '', PROPUESTA(1, 'El vapor', 12), PROPUESTA(2, 'La mesa larga', 15), PROPUESTA(3, 'La puerta', 10)].join('\n')
+    expect(leer(narracion).avisos.filter((x) => /antes de la primera propuesta/.test(x))).toEqual([])
+  })
   it('🔴 «quedan N» dice CUÁLES y por qué: la descartada por su guion, con su título', () => {
     const md = [PROPUESTA(1, 'El vapor', 12), '# Propuesta 2 · Sin guion', 'Concepto: nada que filmar', PROPUESTA(3, 'La puerta', 10)].join('\n')
     const r = leer(md)
