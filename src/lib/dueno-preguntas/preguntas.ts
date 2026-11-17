@@ -9,6 +9,9 @@
  *    si cambiaron 0 (otro la cerró antes) → 409, nunca «ok». Si el cerebro falla → 502 y la fila sigue pendiente (reintentar es seguro: el cerebro deduplica por `pregunta_id`).
  *  · `descartar`: solo la fila (estado `descartada`, motivo, quién y cuándo). Al cerebro no entra nada.
  *  · Una respuesta del dueño SIN pregunta pendiente igual va al cerebro: es su palabra.
+ *  · 17-nov · UNA sola pendiente por (cliente, sede, tema normalizado): la base lo garantiza con un índice único (202611172330). Una pregunta nueva que
+ *    vuelve sobre una pendiente idéntica más vieja que 72 h la cierra como «vencida»; con `forzar`, como «obsoleta» (motivo). Si dos corridas chocan a la vez,
+ *    la que pierde recibe «ya_preguntada» / «repetida» con el id de la que ganó (`choque: true`). Nada se borra.
  * La plataforma NUNCA nombra tablas del cerebro: habla con él por HTTP (`PuertoDelCerebro`). US$ 0: no llama a ningún modelo.
  */
 import { randomUUID } from 'node:crypto'
@@ -97,10 +100,43 @@ export async function preguntar(deps: Deps, c: Fila): Promise<Respuesta> {
   if (!forzar && otra) return { status: 200, body: { ok: true, registrada: false, ya_preguntada: true, pendiente: { pregunta_id: String(otra.id), oficina: txt(otra.oficina), agente: txt(otra.agente), canal: txt(otra.canal), desde: txt(otra.creado_en) }, nota: 'otra oficina ya le preguntó esto al dueño y espera su respuesta' } }
   const propia = mismas.find(esMia)
   if (!forzar && propia) return { status: 200, body: { ok: true, registrada: false, repetida: true, pregunta_id: String(propia.id), nota: 'tu misma pregunta sigue pendiente' } }
+  // 17-nov · una sola pendiente por tema exacto: la vieja (más de 72 h, o cualquiera con `forzar`) se CIERRA con motivo antes de registrar la nueva; nunca quedan dos
+  const exactas = await pendientesExactas(deps, k.client_id, s.sede, temaNormal(tema))
+  if ('status' in exactas) return exactas
+  const hace = new Date((deps.ahora ?? new Date()).getTime() - HORAS_DE_UNA_PREGUNTA_PENDIENTE * 3_600_000).toISOString()
+  const reciente = exactas.filas.find((p) => txt(p.creado_en) >= hace)
+  if (!forzar && reciente) return respuestaDeChoque(reciente, k, false)
+  for (const v of exactas.filas) {
+    const motivo = forzar ? 'reemplazada por una pregunta nueva del mismo tema (`forzar`)' : `pendiente hace más de ${HORAS_DE_UNA_PREGUNTA_PENDIENTE} h: la reemplaza una pregunta nueva del mismo tema`
+    const c = await cerrar(deps, String(v.id), { estado: forzar ? 'obsoleta' : 'vencida', motivo })
+    if ('status' in c) return c
+  }
   const id = (deps.nuevoId ?? randomUUID)()
   const w = await deps.db.from(TABLA).insert({ id, client_id: k.client_id, sede_clave: s.sede, tema, tema_norm: temaNormal(tema), pregunta, supuesto: supuesto || null, canal, oficina: k.oficina, agente: k.agente, estado: 'pendiente', workflow_id: k.workflow_id, workflow_execution_id: k.workflow_execution_id })
+  if (w.error && String(w.error.code ?? '') === '23505') {
+    // 17-nov · otra corrida registró el mismo tema justo ahora (índice único): se responde con la que ganó, nunca dos preguntas al dueño
+    const ya = await pendientesExactas(deps, k.client_id, s.sede, temaNormal(tema))
+    if ('status' in ya) return ya
+    if (ya.filas[0]) return respuestaDeChoque(ya.filas[0], k, true)
+    return err(409, 'choque', 'otra corrida registró el mismo tema a la vez y ya no está pendiente: reintentar')
+  }
   if (w.error) return err(502, 'registro_fallido', `${TABLA}: ${w.error.message}`)
   return { status: 200, body: { ok: true, registrada: true, pregunta_id: id } }
+}
+
+/** 17-nov · las pendientes con el MISMO tema normalizado y la misma sede, sin ventana de horas (lo que el índice único compara) */
+async function pendientesExactas(deps: Deps, client_id: string, sede: string | null, tema_norm: string): Promise<{ ok: true; filas: Fila[] } | Respuesta> {
+  const r = await deps.db.from(TABLA).select('*').eq('client_id', client_id).eq('estado', 'pendiente').eq('tema_norm', tema_norm).limit(TOPE_DE_LECTURA)
+  if (r.error) return err(502, 'lectura_fallida', `${TABLA}: ${r.error.message}`)
+  return { ok: true, filas: lista(r.data).filter((p) => (txt(p.sede_clave) || null) === sede).sort((a, b) => txt(a.creado_en).localeCompare(txt(b.creado_en))) }
+}
+
+/** la respuesta cuando ya hay una pendiente del mismo tema: de otra oficina → «ya_preguntada»; mía → «repetida» */
+function respuestaDeChoque(p: Fila, k: Comun, choque: boolean): Respuesta {
+  const mia = txt(p.oficina) === k.oficina && txt(p.agente) === k.agente
+  const extra = choque ? { choque: true } : {}
+  if (mia) return { status: 200, body: { ok: true, registrada: false, repetida: true, pregunta_id: String(p.id), ...extra, nota: 'tu misma pregunta sigue pendiente' } }
+  return { status: 200, body: { ok: true, registrada: false, ya_preguntada: true, ...extra, pendiente: { pregunta_id: String(p.id), oficina: txt(p.oficina), agente: txt(p.agente), canal: txt(p.canal), desde: txt(p.creado_en) }, nota: 'otra oficina ya espera esa respuesta: no le preguntes dos veces al dueño' } }
 }
 
 /** cierra UNA fila solo si sigue pendiente y cuenta cuántas cambiaron */

@@ -50,6 +50,8 @@ export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: n
   reubicacion: { manual: 20000, marco: 60000, plan: 20000 },
   // 11-nov · la revisión de fallidos juzga causas contra arreglos: el marco (las causas y los arreglos) completo; el manual y el plan no hacen falta
   fallidos: { manual: 0, marco: 80000, plan: 0 },
+  // 17-nov · la corrección del banco: la idea, la corrección y sus hermanas (el marco) completo; el manual como contexto de la voz; el plan no hace falta
+  banco: { manual: 20000, marco: 30000, plan: 0 },
 }
 
 /** el tablero: lo más reciente completo, lo antiguo en resumen (el líder mantiene el hilo; los demás no releen todo) */
@@ -326,6 +328,7 @@ const HERRAMIENTAS = [
 export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string; /** Sprint 1 · mejora 4 · las imágenes a generar de la pieza integrada (turno del ingeniero de prompts) */ imagenesARedactar?: ImagenARedactar[] }): string {
   if (o.c.tipo === 'reubicacion') return tareaDeReubicacion(o)
   if (o.c.tipo === 'fallidos') return tareaDeFallidos(o)
+  if (o.c.tipo === 'banco') return tareaDelBanco(o)
   const { tipo, agente, est, libro, c } = o
   // la mesa de concepto tiene dos rondas: la 1 elige UNA gran idea entre caminos; la 2 la desarrolla en capítulos, series e ideas (la integración final lleva la convención)
   const ronda = libro.filter((a) => a.tipo === 'integra').length + 1
@@ -473,6 +476,38 @@ function tareaDeFallidos(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjet
     final
       ? 'Escribe los veredictos FINALES: una línea por pieza, con la forma exacta de «Cómo responder» del marco. Solo cuentan esas líneas; lo demás es tu nota.'
       : 'Razona pieza por pieza y escribe tus veredictos con la forma exacta de «Cómo responder» del marco. En el turno siguiente los entregas como finales.',
+  ].join('\n')
+}
+
+/** 17-nov · la mesa «corrección del banco» (GO de Lenovo · cambio 4): la dirección de la gran idea, como CREADORA, toma o no una corrección de la jefatura sobre UNA idea. El código verifica después. */
+function tareaDelBanco(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; libro: Aporte[]; c: ContextoDeTurno }): string {
+  const { c, agente, libro } = o
+  const final = o.tipo !== 'dirigir'
+  return [
+    `# Corrección de una idea del banco · ${c.cliente_nombre} · ${c.brief_id}`,
+    `Eres **${agente}**${o.tarjeta ? ` — ${o.tarjeta.especialidad}` : ''}. Escribiste la gran idea de esta campaña y su banco de ideas. La jefatura encontró un problema en UNA idea y te la devuelve: tú decides si tomas la corrección entera, en parte o no la tomas.`,
+    '',
+    '## Reglas',
+    `1. **Gasto.** Esta corrección tiene un tope de US$ ${c.tope_usd.toFixed(2)} (ya se gastó US$ ${c.gasto_usd.toFixed(2)}).`,
+    '2. **Solo esta idea.** Puedes cambiar su idea, su mensaje, su gancho o su protagonista, o retirarla del banco. No cambias la red, el formato, la serie ni otras ideas.',
+    '3. **Una regla dura se toma sí o sí.** Si el marco dice que la corrección cita una regla dura, «no la tomo» no vale: corrígela o retírala.',
+    '4. **No inventes datos.** La línea de la ficha que cita la jefatura es el dato; no agregues ofertas, precios ni fechas que no estén en el marco.',
+    '5. **El código verifica después** que la idea siga como estaba, que solo cambies esos campos y que expliques lo que no tomas. Lo que no cumpla no se escribe.',
+    '',
+    o.tarjeta ? seccionDeIndicacion(o.tarjeta, agente) : '',
+    '## El marco (la idea, la corrección y las otras ideas de su capítulo)',
+    recorta(c.brief_texto, DIETA.banco.marco, 'el marco'),
+    '',
+    '## El manual de marca (contexto de la voz)',
+    recorta(c.manual_texto || '(sin manual)', DIETA.banco.manual, 'el manual de marca'),
+    '',
+    '## Tablero (lo que ya escribiste)',
+    tableroEnTexto(libro),
+    '',
+    final ? '## Tu turno · entrega tu respuesta final' : '## Tu turno · decide',
+    final
+      ? 'Escribe tu respuesta FINAL con la forma exacta de «Cómo responder» del marco: un solo bloque JSON al final. Solo cuenta ese bloque; lo demás es tu nota.'
+      : 'Razona la corrección y escribe tu respuesta con la forma exacta de «Cómo responder» del marco. En el turno siguiente la entregas como final.',
   ].join('\n')
 }
 

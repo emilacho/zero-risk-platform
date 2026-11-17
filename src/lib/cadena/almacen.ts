@@ -243,6 +243,19 @@ export interface Almacen {
    * OPCIONAL: sin ella, la cadena no abre la mesa y lo avisa una vez. Nunca lanza: un fallo vuelve como `error`.
    */
   abrirMesaDeReubicacion?(sobre: import('./reubicar').SobreDeReubicacion): Promise<import('./reubicar').ResultadoDeAbrirMesa>
+  /**
+   * 17-nov · cambio 4 · entrega 2 · las correcciones de la jefatura a la cadena (`cadena_correcciones`, una por llave «fila_id:destino»). OPCIONALES: sin ellas no se recibe nada.
+   * `correccionInsertar` es idempotente: la llave repetida devuelve la que ya estaba (`nueva: false`). `correccionActualizar` escribe SOLO si el estado sigue siendo `estadoEsperado` (true = escribió).
+   */
+  correccionInsertar?(c: import('./correcciones').Correccion): Promise<{ correccion: import('./correcciones').Correccion; nueva: boolean }>
+  correccion?(llave: string): Promise<import('./correcciones').Correccion | null>
+  correccionesPendientes?(): Promise<import('./correcciones').Correccion[]>
+  correccionesDeEncargo?(encargoId: string): Promise<import('./correcciones').Correccion[]>
+  /** ¿la pieza de esta fila ya se publicó? Sin este método la cadena la da por publicada (una fila aprobada no vuelve atrás) */
+  piezaPublicada?(campanaId: string, filaId: string): Promise<boolean>
+  /** las duras cerradas sin tomar cuya alarma no salió (alarma_en vacío) */
+  alarmasPendientes?(): Promise<import('./correcciones').Correccion[]>
+  correccionActualizar?(llave: string, cambios: Partial<import('./correcciones').Correccion>, estadoEsperado: import('./correcciones').EstadoDeCorreccion): Promise<boolean>
   /** 11-nov (#1014 · relectura · OPCIONAL): el texto que dejó guardado la mesa de un encargo ya cerrado (sin llamar al agente); null si no hay. Nunca lanza. */
   textoGuardadoDeLaMesa?(encargoId: string): Promise<{ ok: true; texto: string | null } | { ok: false; motivo: string }>
   /**
@@ -255,10 +268,16 @@ export interface Almacen {
   encargosDeLaCampana?(campanaId: string): Promise<import('./rehacer-fallidos').EncargoDeLaCampana[]>
   arreglosPublicados?(desde: string): Promise<import('./rehacer-fallidos').LecturaDeArreglos>
   abrirMesaDeFallidos?(sobre: import('./rehacer-fallidos').SobreDeFallidos): Promise<import('./rehacer-fallidos').ResultadoDeAbrirMesaDeFallidos>
+  /** 17-nov · la corrección del banco: abre la mesa de la oficina (el mismo adaptador en proceso que la reubicación; nunca lanza) */
+  abrirMesaDelBanco?(sobre: import('./banco-correcciones').SobreDelBanco): Promise<import('./banco-correcciones').ResultadoDeAbrirMesaDelBanco>
   reabrirFallido?(p: { encargo_id: string; causa: string }): Promise<{ ok: true; encargo_id: string } | { ok: false; motivo: string }>
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>
   escribirConfig(clave: string, valor: unknown): Promise<void>
+  /** 17-nov · escritura CONDICIONAL de una clave (puerto banco · observación de CC6): el valor con su sello (la marca de su última escritura); null si la clave no existe */
+  leerConfigConSello?(clave: string): Promise<{ valor: unknown; sello: string } | null>
+  /** escribe SOLO si la clave sigue con ese sello (`null` = solo si no existe). false = otro la cambió: no se escribió nada */
+  escribirConfigSiSello?(clave: string, valor: unknown, sello: string | null): Promise<boolean>
   plazos(): Promise<PlazoCfg[]>
   formatos(): Promise<FormatosPorRed>
   // contexto del cliente (lecturas)
@@ -293,7 +312,7 @@ export interface Almacen {
   insertarFichas?(f: FichasGuardadas): Promise<void>
   /**
    * 17-nov · los «Hechos del negocio» del cerebro (ENCARGO 2 de CC-CEREBRO), por la consulta del portero: la cadena no nombra tablas del cerebro.
-   * OPCIONAL y todavía SIN implementación: sin él, el lector declara «hechos del negocio: aún no disponibles».
+   * OPCIONAL: sin él (o si la lectura falla), el lector declara «hechos del negocio: aún no disponibles». Supabase: `leerHechosDelNegocio` (#1140).
    */
   hechosDelNegocio?(clientId: string): Promise<HechoDelNegocioPorOferta[] | null>
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>

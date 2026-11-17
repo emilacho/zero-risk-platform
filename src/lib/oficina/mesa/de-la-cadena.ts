@@ -12,18 +12,18 @@ import { estadoInicial, type Estado } from '../tipos'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 import { esCritica } from './critica'
 
-export type TipoDeMesaDeLaCadena = 'brief' | 'concepto' | 'reubicacion' | 'fallidos'
-export const FAMILIA_DE: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brief_mesa', concepto: 'concepto_mesa', reubicacion: 'reubicacion_mesa', fallidos: 'fallidos_mesa' }
+export type TipoDeMesaDeLaCadena = 'brief' | 'concepto' | 'reubicacion' | 'fallidos' | 'banco'
+export const FAMILIA_DE: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brief_mesa', concepto: 'concepto_mesa', reubicacion: 'reubicacion_mesa', fallidos: 'fallidos_mesa', banco: 'banco_mesa' }
 export const ARTEFACTO_MARCO = 'marco_cadena'
 export const esDeLaCadenaLaFamilia = (familia: string): boolean => Object.values(FAMILIA_DE).includes(familia)
-const PREFIJO_DEL_ID: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brf', concepto: 'con', reubicacion: 'reu', fallidos: 'fal' }
-const TOPE_POR_OMISION_USD: Record<TipoDeMesaDeLaCadena, number> = { brief: 1.6, concepto: 5, reubicacion: 3, fallidos: 2 }
+const PREFIJO_DEL_ID: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brf', concepto: 'con', reubicacion: 'reu', fallidos: 'fal', banco: 'bco' }
+const TOPE_POR_OMISION_USD: Record<TipoDeMesaDeLaCadena, number> = { brief: 1.6, concepto: 5, reubicacion: 3, fallidos: 2, banco: 1.5 }
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** lo que la cadena le pasa a la oficina para abrir una mesa de la campaña */
-export interface SobreDeLaCadena { tipo_de_mesa: TipoDeMesaDeLaCadena; client_id: string; campana_id: string; version: number; marco_texto: string; dry_run: boolean; /** condiciones del directorio que la estrategia activa (`si_instagram`, `si_video`…): las calcula la CADENA del plan de canales, no la oficina */ condiciones: string[] }
+export interface SobreDeLaCadena { tipo_de_mesa: TipoDeMesaDeLaCadena; client_id: string; campana_id: string; version: number; marco_texto: string; dry_run: boolean; /** 17-nov · solo BAJA el tope de la plantilla (el reintento de una corrección del banco va dentro del MISMO tope: lo que queda) */ tope_usd?: number; /** condiciones del directorio que la estrategia activa (`si_instagram`, `si_video`…): las calcula la CADENA del plan de canales, no la oficina */ condiciones: string[] }
 
 /** lo que viaja dentro del encargo (artefacto `marco_cadena`): el contexto de la cadena + lo que el cliente tiene (manual, plan, fotos) leído UNA vez al abrir */
 export interface MarcoDeLaCadena {
@@ -43,15 +43,16 @@ export function validarSobreDeLaCadena(x: unknown): { ok: true; sobre: SobreDeLa
   if (!x || typeof x !== 'object' || Array.isArray(x)) return { ok: false, errores: ['el cuerpo debe ser un objeto'] }
   const b = x as Record<string, unknown>
   const errores: string[] = []
-  if (b.tipo_de_mesa !== 'brief' && b.tipo_de_mesa !== 'concepto' && b.tipo_de_mesa !== 'reubicacion' && b.tipo_de_mesa !== 'fallidos') errores.push('`tipo_de_mesa` debe ser «brief», «concepto», «reubicacion» o «fallidos»')
+  if (b.tipo_de_mesa !== 'brief' && b.tipo_de_mesa !== 'concepto' && b.tipo_de_mesa !== 'reubicacion' && b.tipo_de_mesa !== 'fallidos' && b.tipo_de_mesa !== 'banco') errores.push('`tipo_de_mesa` debe ser «brief», «concepto», «reubicacion», «fallidos» o «banco»')
   if (typeof b.dry_run !== 'boolean') errores.push('`dry_run` es obligatorio y debe ser verdadero o falso (ausente = no se gasta nada)')
   if (typeof b.client_id !== 'string' || !UUID.test(b.client_id)) errores.push('`client_id` debe ser un uuid')
   if (typeof b.campana_id !== 'string' || !UUID.test(b.campana_id)) errores.push('`campana_id` debe ser un uuid')
   if (!Number.isInteger(b.version) || (b.version as number) < 1) errores.push('`version` debe ser un entero positivo')
   if (typeof b.marco_texto !== 'string' || b.marco_texto.trim().length < 20) errores.push('`marco_texto` falta (el marco de la mesa)')
   if (b.condiciones !== undefined && (!Array.isArray(b.condiciones) || b.condiciones.some((c) => typeof c !== 'string' || !/^si_[a-z0-9_]{1,30}$/.test(c)))) errores.push('`condiciones` debe ser una lista de claves `si_…`')
+  if (b.tope_usd !== undefined && (typeof b.tope_usd !== 'number' || !Number.isFinite(b.tope_usd) || b.tope_usd <= 0)) errores.push('`tope_usd` debe ser un número positivo')
   if (errores.length) return { ok: false, errores }
-  return { ok: true, sobre: { condiciones: ((b.condiciones as string[] | undefined) ?? []).slice(0, 20), tipo_de_mesa: b.tipo_de_mesa as TipoDeMesaDeLaCadena, client_id: b.client_id as string, campana_id: b.campana_id as string, version: b.version as number, marco_texto: (b.marco_texto as string).slice(0, TOPE_REAL_DEL_PEDIDO), dry_run: b.dry_run as boolean } }
+  return { ok: true, sobre: { ...(typeof b.tope_usd === 'number' ? { tope_usd: b.tope_usd } : {}), condiciones: ((b.condiciones as string[] | undefined) ?? []).slice(0, 20), tipo_de_mesa: b.tipo_de_mesa as TipoDeMesaDeLaCadena, client_id: b.client_id as string, campana_id: b.campana_id as string, version: b.version as number, marco_texto: (b.marco_texto as string).slice(0, TOPE_REAL_DEL_PEDIDO), dry_run: b.dry_run as boolean } }
 }
 
 /**
@@ -69,7 +70,8 @@ export async function abrirMesaDeLaCadena(P: Puertos, s: SobreDeLaCadena, avanza
   const marco: MarcoDeLaCadena = { tipo_de_mesa: s.tipo_de_mesa, campana_id: s.campana_id, version: s.version, cliente_nombre: fu.cliente_nombre, manual_texto: fu.manual_texto, plan_texto: fu.plan_texto, marco_texto: s.marco_texto, condiciones: s.condiciones, fotos: fu.fotos }
   const e0: Estado = estadoInicial()
   const estado: Estado = { ...e0, artefactos: { ...e0.artefactos, [ARTEFACTO_MARCO]: { version: 1, version_consumida: 0, datos: marco as unknown as Record<string, unknown> } } }
-  const tope = pl.plantilla.limites.tope_encargo_usd ?? TOPE_POR_OMISION_USD[s.tipo_de_mesa]
+  const topeDeLaPlantilla = pl.plantilla.limites.tope_encargo_usd ?? TOPE_POR_OMISION_USD[s.tipo_de_mesa]
+  const tope = s.tope_usd !== undefined ? Math.min(topeDeLaPlantilla, s.tope_usd) : topeDeLaPlantilla
   const c = await P.almacen.crearEncargo({
     client_id: s.client_id, parte_id: s.campana_id, brief_id: briefIdDeLaCadena(s.tipo_de_mesa, s.campana_id, s.version), tipo_de_grupo: pl.plantilla.tipo, familia,
     tope_usd: tope, dry_run: s.dry_run, prueba: false, sala_ref: { origen: 'cadena', tipo_de_mesa: s.tipo_de_mesa, campana_id: s.campana_id, version: s.version }, estado_del_motor: estado,
@@ -168,6 +170,7 @@ export async function entregarALaCadena(P: Puertos, enc: Encargo, o: { texto: st
       const x = ref.tipo_de_mesa === 'brief' ? await P.cadena.entregarBrief(base)
         : ref.tipo_de_mesa === 'reubicacion' ? (P.cadena.entregarReubicacion ? await P.cadena.entregarReubicacion(base) : { ok: false as const, error: 'la cadena no recibe reubicaciones en este entorno' })
         : ref.tipo_de_mesa === 'fallidos' ? (P.cadena.entregarFallidos ? await P.cadena.entregarFallidos(base) : { ok: false as const, error: 'la cadena no recibe la revisión de fallidos en este entorno' })
+        : ref.tipo_de_mesa === 'banco' ? (P.cadena.entregarBanco ? await P.cadena.entregarBanco(base) : { ok: false as const, error: 'la cadena no recibe las correcciones del banco en este entorno' })
         : await P.cadena.entregarConcepto({ ...base, brief_devuelto: o.brief_devuelto ?? null })
       entrega = x.ok ? { ok: true, detalle: x.estado ?? 'recibida', ...(x.siguiente ? { siguiente: x.siguiente } : {}) } : { ok: false, detalle: x.error ?? 'la cadena no recibió la entrega' }
     } catch (e) { entrega = { ok: false, detalle: e instanceof Error ? e.message : String(e) } }
