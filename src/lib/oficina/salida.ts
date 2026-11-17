@@ -277,6 +277,25 @@ export function descartarIgnorados(esq: Esq, v: unknown, ruta = '$', quitados: s
 }
 
 /**
+ * 17-nov · GO Lenovo (firma de Emilio 17:22) · AUDITORÍA de la cadena: la corrección del kit murió dos veces por «$.pieza: debe ser un objeto». El agente no tomó
+ * nada y escribió `"pieza": null`, que es como JSON dice «no hay». Un campo OPCIONAL que llega `null` es AUSENTE: se quita y se anota. Un campo REQUERIDO en `null`
+ * se deja tal cual (la validación sigue diciendo «debe ser…»), y cualquier otro valor (un texto suelto donde va un objeto) también: solo `null` se lee como ausente. Puro.
+ */
+export function quitarNulosOpcionales(esq: Esq, v: unknown, ruta = '$', anotados: string[] = []): unknown {
+  if (esq.t === 'arr' && Array.isArray(v)) return v.map((x, i) => quitarNulosOpcionales(esq.de, x, `${ruta}[${i}]`, anotados))
+  if (esq.t === 'obj' && v && typeof v === 'object' && !Array.isArray(v)) {
+    const sale: Record<string, unknown> = {}
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+      const sub = esq.props[k]
+      if (x === null && sub && !(esq.req ?? []).includes(k)) { anotados.push(`${ruta}.${k}: null → ausente (campo opcional)`); continue }
+      sale[k] = sub ? quitarNulosOpcionales(sub, x, `${ruta}.${k}`, anotados) : x
+    }
+    return sale
+  }
+  return v
+}
+
+/**
  * LIMPIAR LA FORMA (21-oct · cierre de la tercera prueba real: las 3 piezas murieron por la FORMA de una salida buena, no por su contenido). Arreglos DETERMINISTAS que no cambian el sentido ni inventan nada, y se anotan:
  *  a) un campo OPCIONAL de texto que llega vacío (`"foto_id": ""` cuando la imagen no es una foto) se omite: vacío = ausente;
  *  b) `paleta[i]` demasiado larga que lleva un `#hex` («#FF4500 (naranja de marca — fondo dominante)») se queda con el hex;
@@ -387,7 +406,7 @@ export function procesarSalida(texto: string, esquemaId: string, intento: number
     } catch { return fallo([`json_invalido: ${e instanceof Error ? e.message : String(e)}`]) }
   }
   const descartados: string[] = []
-  const descartado = descartarIgnorados(esq, crudo, '$', descartados)
+  const descartado = quitarNulosOpcionales(esq, descartarIgnorados(esq, crudo, '$', descartados), '$', normalizados)
   const arreglado = o.limpiarForma ? limpiarForma(esq, descartado, '$', normalizados, typeof o.limpiarForma === 'object' ? o.limpiarForma : {}) : descartado
   const limpio = o.normalizar ? normalizarEnumerados(esq, arreglado, '$', normalizados) : arreglado
   const errores = validar(esq, limpio)
