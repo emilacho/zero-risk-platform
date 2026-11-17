@@ -66,7 +66,8 @@ export function directorioConAsientos(directorio: Tarjeta[], asientos: unknown):
  *  quedan, y su integración final tampoco pasa del tope (`techo_es_el_tope`); las demás, la cifra fija de su tipo · pura */
 export function reservaDeLaMesa(pl: Plantilla, tipo: EstadoMesa['tipo'], e: Estado): Pick<ContextoDeLaMesa, 'reserva_posterior_usd' | 'techo_es_el_tope'> {
   if (esDeLaCadena(tipo)) return { reserva_posterior_usd: 0 }
-  if (tipo === 'video') return { reserva_posterior_usd: loQueSigueDeLaMesa(pl, e), techo_es_el_tope: true }
+  // 17-nov · propuestas en imagen · tramo 2b: la de imagen CON propuestas, igual que el video (los borradores, las rondas que quedan y la final)
+  if (tipo === 'video' || ((FAMILIAS_MESA as Record<string, string>)[String(pl.familia)] === tipo && propuestasDeLaPlantilla(pl) > 1)) return { reserva_posterior_usd: loQueSigueDeLaMesa(pl, e), techo_es_el_tope: true }
   return {}
 }
 
