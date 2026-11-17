@@ -51,12 +51,47 @@ export interface CapituloDelConcepto {
   como_se_ve: string
   series: SerieDelCapitulo[]
 }
+/**
+ * 17-nov · «creativos en cada paso» (GO Lenovo · firma de Emilio 07:18 · punto 2) · «cómo se ve la campaña» en cuatro partes que la gran idea DECIDE una vez y la hoja lleva a
+ * cada pieza: luz, encuadre, fotos propias y lo que nunca se muestra. Se escriben como líneas «- luz: …» dentro de «## Cómo se ve»; una gran idea vieja sin esas líneas no trae
+ * partes (nada se inventa) y su texto libre sigue como siempre.
+ */
+export interface ComoSeVe { luz?: string; encuadre?: string; fotos_propias?: string; nunca_se_muestra?: string }
+export const PARTES_DE_COMO_SE_VE: ReadonlyArray<{ clave: keyof ComoSeVe; etiqueta: string }> = [
+  { clave: 'luz', etiqueta: 'luz' }, { clave: 'encuadre', etiqueta: 'encuadre' }, { clave: 'fotos_propias', etiqueta: 'fotos propias' }, { clave: 'nunca_se_muestra', etiqueta: 'nunca se muestra' },
+]
+const RE_PARTE_DE_COMO_SE_VE = /^\s*(?:[-*•]\s+)?(?:\*\*|__)?(luz|encuadre|fotos? propias?|(?:lo que )?nunca se muestra)(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.*\S)\s*$/iu
+const claveDeParte = (etiqueta: string): keyof ComoSeVe => {
+  const e = etiqueta.toLowerCase()
+  return e.startsWith('luz') ? 'luz' : e.startsWith('encuadre') ? 'encuadre' : e.startsWith('foto') ? 'fotos_propias' : 'nunca_se_muestra'
+}
+/** las partes que el texto de «Cómo se ve» trae como líneas «- <parte>: …» (la primera de cada una manda); `null` si no trae ninguna · puro */
+export function partesDeComoSeVe(texto: string | null | undefined): ComoSeVe | null {
+  const out: ComoSeVe = {}
+  for (const linea of String(texto ?? '').split(/\r?\n/)) {
+    const m = RE_PARTE_DE_COMO_SE_VE.exec(linea)
+    if (!m) continue
+    const k = claveDeParte(m[1])
+    if (!out[k]) out[k] = m[2].trim()
+  }
+  return Object.keys(out).length ? out : null
+}
+/** una parte decidida: lo decidido y su porqué si la gran idea lo escribió («- luz: cálida de ventana · porqué: …»); `porque` null si no lo trae · puro */
+export function decisionDeLaParte(valor: string): { que: string; porque: string | null } {
+  const m = /^(.*?)\s*[·|—-]\s*porqu?[eé]\s*:\s*(.+)$/iu.exec(valor) ?? /^(.*?)\s*[·|—-]\s*por qu[eé]\s*:\s*(.+)$/iu.exec(valor)
+  return m && m[1].trim() ? { que: m[1].trim(), porque: m[2].trim() } : { que: valor.trim(), porque: null }
+}
+/** el texto de «Cómo se ve» SIN las líneas de las partes (lo que queda es la dirección visual libre) · puro */
+export const comoSeVeSinPartes = (texto: string | null | undefined): string => String(texto ?? '').split(/\r?\n/).filter((l) => !RE_PARTE_DE_COMO_SE_VE.test(l)).join('\n').trim()
+
 export interface BancoParcial { red: string; capitulo: string; faltan: number; esperadas: number; hay: number }
 export interface ConceptoLeido {
   contrato: typeof CONTRATO_CONCEPTO
   gran_idea: { nombre: string; frase: string } | null
   por_que_funciona: string
   como_se_ve: string
+  /** 17-nov · las cuatro partes de «cómo se ve la campaña» (solo las que la gran idea escribió); ausente en una gran idea vieja */
+  como_se_ve_partes?: ComoSeVe
   como_suena: string
   capitulos: CapituloDelConcepto[]
   /** las ideas VÁLIDAS (con mensaje y gancho propios, id único, no listadas en «Ideas que salen») */
@@ -415,6 +450,7 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
     gran_idea,
     por_que_funciona: textoDe(porTitulo('Por qué funciona')),
     como_se_ve: textoDe(porTitulo('Cómo se ve')),
+    ...((p) => (p ? { como_se_ve_partes: p } : {}))(partesDeComoSeVe(textoDe(porTitulo('Cómo se ve')))),
     como_suena: textoDe(porTitulo('Cómo suena')),
     capitulos, banco, ideas_descartadas, ideas_que_salen,
     caminos_descartados: textoDe(porTitulo('Caminos descartados y por qué')),

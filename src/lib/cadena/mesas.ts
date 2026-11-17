@@ -195,6 +195,7 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     '',
     '# Formato (concepto.v1) · se lee por código, exacto',
     '## Gran idea · «- nombre: …» y «- frase: …» · ## Por qué funciona · ## Cómo se ve (cita fotos propias como `foto:<id>`) · ## Cómo suena',
+    '«## Cómo se ve» decide UNA vez para toda la campaña, con estas cuatro líneas (cada pieza las recibe como FIJO, no las reinventa): «- luz: … · porqué: …» · «- encuadre: … · porqué: …» · «- fotos propias: … · porqué: …» · «- nunca se muestra: … · porqué: …»; debajo, la dirección visual libre.',
     '## Capítulo <clave de fase> · qué cuenta · «- serie: S1 · nombre · qué cuenta · redes» · y debajo «### Banco de ideas» con UNA idea por línea:',
     '`- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: … · protagonista: … · serie: S1 · foto:<id>|ninguna`',
     'Cada idea trae mensaje y gancho propios y distintos; ids únicos; mínimo por red = huecos del patrón semanal × semanas de la fase (si no alcanza, lo declaras en «## Banco parcial»).',
