@@ -15,7 +15,7 @@ const FIN = { oficina: 'financiera', agente: 'chief-financial-officer' }
 type Fila = Record<string, unknown>
 const clave = (f: Fila) => [f.client_id, f.sede_clave ?? '', f.tema_norm].join('|')
 
-function baseConIndice(semilla: Fila[] = [], opc: { sinIndice?: boolean; fallaAlCerrar?: boolean } = {}) {
+function baseConIndice(semilla: Fila[] = [], opc: { sinIndice?: boolean; fallaAlCerrar?: boolean; chocaYSeCierra?: boolean } = {}) {
   const filas: Fila[] = semilla.map((f) => ({ ...f }))
   const pasos: string[] = []
   const db = {
@@ -31,6 +31,8 @@ function baseConIndice(semilla: Fila[] = [], opc: { sinIndice?: boolean; fallaAl
           pasos.push(op)
           if (op === 'insert') {
             const nueva = { creado_en: AHORA.toISOString(), ...datos }
+            // la otra corrida ganó y ALGUIEN la cerró antes de la relectura: choque, pero no queda ninguna pendiente
+            if (opc.chocaYSeCierra) return ok({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "dueno_preguntas_una_pendiente_por_tema"' } })
             if (!opc.sinIndice && filas.some((r) => r.estado === 'pendiente' && clave(r) === clave(nueva))) return ok({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "dueno_preguntas_una_pendiente_por_tema"' } })
             filas.push(nueva)
             return ok({ data: null, error: null })
@@ -76,6 +78,14 @@ describe('dos corridas a la vez no le preguntan dos veces lo mismo al dueño', (
     const perdedora = [r1, r2].find((r) => r.body.registrada === false)!
     expect(perdedora.body).toMatchObject({ ya_preguntada: true, choque: true })
     expect(perdedora.body.repetida).toBeUndefined()
+  })
+  it('🔴 a9 de CC6: choque y la ganadora ya no está pendiente al releer → 409 «choque», nunca «registrada», ninguna fila nueva', async () => {
+    const b = baseConIndice([], { chocaYSeCierra: true })
+    const r = await rutaPreguntas(deps(b.db), pedir(CEREBRO))
+    expect(r.status).toBe(409)
+    expect(r.body).toMatchObject({ ok: false, error: 'choque' })
+    expect(r.body.registrada).not.toBe(true)
+    expect(b.filas).toHaveLength(0)
   })
   it('🔴 control: SIN el índice la misma carrera deja dos pendientes (la prueba sí mide la carrera)', async () => {
     const b = baseConIndice([], { sinIndice: true })
