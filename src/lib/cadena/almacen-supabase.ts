@@ -34,6 +34,7 @@ import { configDeLaPuerta, encargoParaReabrirDe, encargosParaRehacerDe, encargos
 import type { SobreDeFallidos } from './rehacer-fallidos'
 import { OPERACION_DE_PRODUCIR } from './tope-de-campana'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
+import type { Correccion } from './correcciones'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
@@ -375,6 +376,18 @@ export function almacenDeSupabase(): Almacen {
       return ((data as FichasGuardadas[] | null) ?? [])[0] ?? null
     },
     async insertarFichas(f) { const { error } = await db.from('cadena_fichas_de_oferta').insert(f); if (error && (error as { code?: string }).code !== '23505') fallo(error) },
+    // 17-nov · cambio 4 · entrega 2 · las correcciones de la jefatura (la tabla puede no existir todavía: leer = ninguna · escribir falla ruidoso)
+    async correccionInsertar(c) {
+      const { data, error } = await db.from('cadena_correcciones').insert(c).select('*').limit(1)
+      if (!error) return { correccion: ((data as Correccion[] | null) ?? [])[0] ?? c, nueva: true }
+      if ((error as { code?: string }).code !== '23505') fallo(error)
+      const ya = await lista<Correccion>(db.from('cadena_correcciones').select('*').eq('llave', c.llave).limit(1))
+      return { correccion: ya[0] ?? c, nueva: false }
+    },
+    async correccion(llave) { const { data, error } = await db.from('cadena_correcciones').select('*').eq('llave', llave).limit(1); if (error) { if (TABLA_AUSENTE.has(String((error as { code?: string }).code))) return null; fallo(error) } return ((data as Correccion[] | null) ?? [])[0] ?? null },
+    async correccionesPendientes() { const { data, error } = await db.from('cadena_correcciones').select('*').neq('estado', 'respondida').order('recibida_en', { ascending: true }).limit(200); if (error) { if (TABLA_AUSENTE.has(String((error as { code?: string }).code))) return []; fallo(error) } return (data as Correccion[] | null) ?? [] },
+    async correccionesDeEncargo(encargoId) { const { data, error } = await db.from('cadena_correcciones').select('*').eq('encargo_id', encargoId).limit(50); if (error) { if (TABLA_AUSENTE.has(String((error as { code?: string }).code))) return []; fallo(error) } return (data as Correccion[] | null) ?? [] },
+    async correccionActualizar(llave, cambios, estadoEsperado) { const { data, error } = await db.from('cadena_correcciones').update(cambios).eq('llave', llave).eq('estado', estadoEsperado).select('llave'); if (error) fallo(error); return ((data as unknown[] | null) ?? []).length > 0 },
     async estrategiaEnVersion(campanaId, version) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).eq('version', version).limit(1)))[0] ?? null },
     async insertarEstrategiaSiLibre(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (!error) return true; if ((error as { code?: string }).code === '23505') return false; return fallo(error) },
 

@@ -243,6 +243,15 @@ export interface Almacen {
    * OPCIONAL: sin ella, la cadena no abre la mesa y lo avisa una vez. Nunca lanza: un fallo vuelve como `error`.
    */
   abrirMesaDeReubicacion?(sobre: import('./reubicar').SobreDeReubicacion): Promise<import('./reubicar').ResultadoDeAbrirMesa>
+  /**
+   * 17-nov · cambio 4 · entrega 2 · las correcciones de la jefatura a la cadena (`cadena_correcciones`, una por llave «fila_id:destino»). OPCIONALES: sin ellas no se recibe nada.
+   * `correccionInsertar` es idempotente: la llave repetida devuelve la que ya estaba (`nueva: false`). `correccionActualizar` escribe SOLO si el estado sigue siendo `estadoEsperado` (true = escribió).
+   */
+  correccionInsertar?(c: import('./correcciones').Correccion): Promise<{ correccion: import('./correcciones').Correccion; nueva: boolean }>
+  correccion?(llave: string): Promise<import('./correcciones').Correccion | null>
+  correccionesPendientes?(): Promise<import('./correcciones').Correccion[]>
+  correccionesDeEncargo?(encargoId: string): Promise<import('./correcciones').Correccion[]>
+  correccionActualizar?(llave: string, cambios: Partial<import('./correcciones').Correccion>, estadoEsperado: import('./correcciones').EstadoDeCorreccion): Promise<boolean>
   /** 11-nov (#1014 · relectura · OPCIONAL): el texto que dejó guardado la mesa de un encargo ya cerrado (sin llamar al agente); null si no hay. Nunca lanza. */
   textoGuardadoDeLaMesa?(encargoId: string): Promise<{ ok: true; texto: string | null } | { ok: false; motivo: string }>
   /**
