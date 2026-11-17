@@ -278,6 +278,24 @@ export function almacenDeSupabase(): Almacen {
       try { return await (await import('@/lib/oficina/mesa/de-la-cadena')).textoGuardadoDeLaMesa(db as never, encargoId) } catch (e) { return { ok: false as const, motivo: e instanceof Error ? e.message : String(e) } }
     },
     async leerConfig(k) { return (await uno<{ valor: unknown }>(db.from('cadena_config').select('valor').eq('clave', k).maybeSingle()))?.valor },
+    // 17-nov · escritura condicional por `actualizado_en` (puerto banco): insertar solo si no existe; actualizar solo si el sello sigue igual
+    async leerConfigConSello(k) {
+      const f = await uno<{ valor: unknown; actualizado_en: string }>(db.from('cadena_config').select('valor, actualizado_en').eq('clave', k).maybeSingle())
+      return f ? { valor: f.valor, sello: String(f.actualizado_en) } : null
+    },
+    async escribirConfigSiSello(k, v, sello) {
+      const ahora = new Date().toISOString()
+      if (sello === null) {
+        const { error } = await db.from('cadena_config').insert({ clave: k, valor: v, actualizado_en: ahora })
+        if (error && (error as { code?: string }).code === '23505') return false
+        if (error) fallo(error)
+        return true
+      }
+      const nuevo = Date.parse(ahora) <= Date.parse(sello) ? new Date(Date.parse(sello) + 1).toISOString() : ahora
+      const { data, error } = await db.from('cadena_config').update({ valor: v, actualizado_en: nuevo }).eq('clave', k).eq('actualizado_en', sello).select('clave')
+      if (error) fallo(error)
+      return Array.isArray(data) && data.length === 1
+    },
     async escribirConfig(k, v) { const { error } = await db.from('cadena_config').upsert({ clave: k, valor: v, actualizado_en: new Date().toISOString() }); if (error) fallo(error) },
     async plazos() { return lista<PlazoCfg>(db.from('cadena_plazos').select('*').limit(100)) },
     async formatos() {

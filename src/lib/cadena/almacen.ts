@@ -261,6 +261,10 @@ export interface Almacen {
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>
   escribirConfig(clave: string, valor: unknown): Promise<void>
+  /** 17-nov · escritura CONDICIONAL de una clave (puerto banco · observación de CC6): el valor con su sello (la marca de su última escritura); null si la clave no existe */
+  leerConfigConSello?(clave: string): Promise<{ valor: unknown; sello: string } | null>
+  /** escribe SOLO si la clave sigue con ese sello (`null` = solo si no existe). false = otro la cambió: no se escribió nada */
+  escribirConfigSiSello?(clave: string, valor: unknown, sello: string | null): Promise<boolean>
   plazos(): Promise<PlazoCfg[]>
   formatos(): Promise<FormatosPorRed>
   // contexto del cliente (lecturas)

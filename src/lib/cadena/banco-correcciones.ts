@@ -132,13 +132,22 @@ export async function aplicarCorreccionDelBanco(al: Almacen, c: CorreccionAlBanc
 // ───────────────────────────────────────────────────────── E2 · la mesa «corrección del banco» (GO de Lenovo · nace APAGADA · tope US$ 1,50 por corrección)
 /** el interruptor (`cadena_config`): solo `true` enciende. Apagado = `no_dicha` «mesa apagada» al instante, sin modelo y sin escribir nada */
 export const INTERRUPTOR_DEL_BANCO = 'corregir_el_banco'
-export const CLAVE_DE_LA_LIBRETA_DEL_BANCO = 'banco_correcciones_libreta'
-/** un turno de dirección más un reintento, los dos DENTRO de este tope (el reintento abre con lo que queda) */
+/**
+ * 17-nov (observación de CC6 al certificar #1149): UNA entrada por corrección, cada una en su clave de `cadena_config`, escrita SOLO si nadie la cambió desde que se leyó
+ * (escritura condicional por su `actualizado_en`). Dos correcciones nunca se pisan; el reloj y la entrega de la oficina sobre la misma corrección tampoco.
+ * El índice `banco_encargo:<encargo>` → `correccion_id` se escribe UNA vez (solo si no existe): la entrega de la oficina encuentra su corrección sin una libreta compartida.
+ */
+export const PREFIJO_DE_LA_CORRECCION = 'banco_correccion:'
+export const PREFIJO_DEL_ENCARGO = 'banco_encargo:'
+/** un turno de dirección más un reintento, los dos DENTRO de este tope. El reintento SOLO abre cuando ya se sabe lo que costó el anterior: el peor caso es este tope */
 export const TOPE_DE_LA_CORRECCION_USD = 1.5
+/** debajo de esto no vale la pena abrir otra mesa (un turno de dirección cuesta más) */
+export const MINIMO_PARA_REINTENTAR_USD = 0.2
 export const MAX_INTENTOS_DEL_BANCO = 2
-/** cuánto espera la cadena a la mesa antes de dar el intento por perdido: el plazo de la mesa (30 min) más la holgura */
+/** cuánto espera la cadena a la mesa antes de darla por perdida: el plazo de la mesa (30 min) más la holgura. Una mesa perdida NO se reintenta (su costo no se conoce) */
 export const PLAZO_DE_LA_MESA_DEL_BANCO_MIN = 60
 export const MESA_APAGADA = 'mesa apagada: la corrección del banco no está encendida'
+export const SIN_ESCRITURA_CONDICIONAL = 'la cadena no tiene escritura condicional en este entorno: no se abre la mesa del banco'
 
 /** lo que la cadena le pide al almacén para abrir la mesa de la oficina (adaptador real en `almacen-supabase.ts`, el mismo de la reubicación) */
 export interface SobreDelBanco { tipo_de_mesa: 'banco'; client_id: string; campana_id: string; version: number; dry_run: boolean; marco_texto: string; condiciones: string[]; tope_usd: number }
@@ -146,17 +155,18 @@ export type ResultadoDeAbrirMesaDelBanco = { estado: 'abierta'; encargo_id: stri
 
 export interface CorreccionEnLaLibreta {
   correccion: CorreccionAlBanco
-  /** la versión del sobre del intento vigente (la oficina la usa en el nombre del encargo) */
+  /** la versión del sobre del intento vigente: única por corrección e intento (`versionDeLaMesa`) */
   version: number | null
   intentos: number
-  estado: 'abierta' | 'fallida' | 'respondida'
+  /** `abriendo` = el intento quedó reservado antes de abrir la mesa (si algo se corta, el intento ya cuenta) */
+  estado: 'abriendo' | 'abierta' | 'fallida' | 'respondida'
   encargo_id: string | null
   abierta_en: string
+  /** lo que costaron las mesas que YA entregaron */
   gasto_usd: number
   motivo: string | null
   resultado: ResultadoDeLaCorreccion | null
 }
-export interface LibretaDelBanco { versiones: Record<string, number>; correcciones: Record<string, CorreccionEnLaLibreta> }
 
 /** lo que ve el receptor (CC3): sigue en curso (vuelve a llamar en el próximo tic) o ya tiene la respuesta final para guardar en `cadena_correcciones` */
 export type EstadoDeLaCorreccionDelBanco = { estado: 'en_curso'; encargo_id: string | null; intentos: number } | { estado: 'respondida'; resultado: ResultadoDeLaCorreccion }
@@ -167,19 +177,20 @@ const centavos = (x: number) => Math.round(x * 10000) / 10000
 const sinEscribir = (respuesta: RespuestaDelBanco, version: number | null = null): ResultadoDeLaCorreccion => ({ respuesta, version, idea: null, reasignadas: [], con_brief_sin_tocar: [] })
 export const bancoEncendido = async (al: Pick<Almacen, 'leerConfig'>): Promise<boolean> => (await al.leerConfig(INTERRUPTOR_DEL_BANCO)) === true
 
-async function leerLibretaDelBanco(al: Almacen): Promise<LibretaDelBanco> {
-  const x = await al.leerConfig(CLAVE_DE_LA_LIBRETA_DEL_BANCO)
-  if (!esObjeto(x)) return { versiones: {}, correcciones: {} }
-  const l = structuredClone(x) as Partial<LibretaDelBanco>
-  return { versiones: esObjeto(l.versiones) ? (l.versiones as Record<string, number>) : {}, correcciones: esObjeto(l.correcciones) ? (l.correcciones as Record<string, CorreccionEnLaLibreta>) : {} }
+/** la versión del sobre: distinta por corrección e intento sin un contador compartido (la oficina nombra el encargo `bco-<campaña>-v<versión>` y es idempotente por ese nombre) */
+export function versionDeLaMesa(correccionId: string, intento: number): number {
+  let h = 2166136261
+  for (const ch of correccionId) { h ^= ch.codePointAt(0)!; h = Math.imul(h, 16777619) >>> 0 }
+  return (h % 100_000_000) * 10 + intento
 }
-/** guarda UNA corrección (y la versión de su campaña) releyendo la libreta justo antes: el reloj y la oficina escriben entradas distintas */
-async function guardarEnLaLibreta(al: Almacen, e: CorreccionEnLaLibreta): Promise<void> {
-  const l = await leerLibretaDelBanco(al)
-  l.correcciones[e.correccion.correccion_id] = e
-  if (e.version !== null) l.versiones[e.correccion.campana_id] = Math.max(l.versiones[e.correccion.campana_id] ?? 0, e.version)
-  await al.escribirConfig(CLAVE_DE_LA_LIBRETA_DEL_BANCO, l)
+
+type Leida = { e: CorreccionEnLaLibreta | null; sello: string | null }
+async function leerEntrada(al: Almacen, id: string): Promise<Leida> {
+  const x = await al.leerConfigConSello!(PREFIJO_DE_LA_CORRECCION + id)
+  return x && esObjeto(x.valor) ? { e: structuredClone(x.valor) as unknown as CorreccionEnLaLibreta, sello: x.sello } : { e: null, sello: x?.sello ?? null }
 }
+/** escribe la entrada SOLO si sigue como se leyó; false = otro la cambió (quien llama no decide nada y vuelve en el próximo tic) */
+const guardarSiSigue = (al: Almacen, l: Leida, e: CorreccionEnLaLibreta): Promise<boolean> => al.escribirConfigSiSello!(PREFIJO_DE_LA_CORRECCION + e.correccion.correccion_id, e, l.sello)
 
 /** una corrección que no se puede ni leer: la decide el código, sin mesa */
 export function problemaDeLaCorreccion(c: unknown): string | null {
@@ -243,29 +254,34 @@ function yaEscritaPorEstaCorreccion(historial: ReadonlyArray<Record<string, unkn
 
 /**
  * EL TIC del receptor (CC3 lo llama en cada vuelta del reloj, con la misma corrección, hasta que vuelve `respondida`). Idempotente por `correccion_id`. Nunca lanza.
- *  · Apagado → `no_dicha` «mesa apagada» al instante (sin modelo, sin libreta).
+ *  · Apagado → `no_dicha` «mesa apagada» al instante (sin modelo, sin escribir).
  *  · Lo que se decide sin mesa (gratis): corrección ilegible, idea fuera del banco, idea cambiada, ya escrita por esta misma corrección.
- *  · Si no: abre la mesa (o la reabre si venció o pidió reintento) con el tope que queda; tras MAX_INTENTOS_DEL_BANCO o con el tope gastado, `no_dicha` con el motivo.
+ *  · Si no: RESERVA el intento (escritura condicional), abre la mesa con el tope que queda y anota el encargo. Una mesa que vence NO se reintenta (su costo no se conoce):
+ *    queda `no_dicha`. Tras MAX_INTENTOS_DEL_BANCO, o sin tope para otro turno, `no_dicha` con el motivo.
  */
 export async function abrirCorreccionDelBanco(al: Almacen, c: CorreccionAlBanco, ahora: string): Promise<EstadoDeLaCorreccionDelBanco> {
   const respondida = (resultado: ResultadoDeLaCorreccion): EstadoDeLaCorreccionDelBanco => ({ estado: 'respondida', resultado })
+  const enCurso = (e: CorreccionEnLaLibreta | null): EstadoDeLaCorreccionDelBanco => ({ estado: 'en_curso', encargo_id: e?.encargo_id ?? null, intentos: e?.intentos ?? -1 })
   try {
     const mal = problemaDeLaCorreccion(c)
     if (mal) return respondida(sinEscribir(noDicha(mal)))
     if (!(await bancoEncendido(al))) return respondida(sinEscribir(noDicha(MESA_APAGADA)))
-    const lib = await leerLibretaDelBanco(al)
-    const e = lib.correcciones[c.correccion_id]
+    if (!al.leerConfigConSello || !al.escribirConfigSiSello) return respondida(sinEscribir(noDicha(SIN_ESCRITURA_CONDICIONAL)))
+    const l = await leerEntrada(al, c.correccion_id)
+    const e = l.e
     if (e?.estado === 'respondida' && e.resultado) return respondida(e.resultado)
     const vence = (x: CorreccionEnLaLibreta) => Date.parse(ahora) > Date.parse(x.abierta_en) + PLAZO_DE_LA_MESA_DEL_BANCO_MIN * 60_000
-    if (e?.estado === 'abierta' && !vence(e)) return { estado: 'en_curso', encargo_id: e.encargo_id, intentos: e.intentos }
+    if ((e?.estado === 'abierta' || e?.estado === 'abriendo') && !vence(e)) return enCurso(e)
     // la corrección guardada manda (un tic posterior no puede cambiarle la idea ni el sello)
     const base: CorreccionEnLaLibreta = e ?? { correccion: c, version: null, intentos: 0, estado: 'fallida', encargo_id: null, abierta_en: ahora, gasto_usd: 0, motivo: null, resultado: null }
-    const motivo = e?.estado === 'abierta' ? 'la mesa no devolvió la respuesta a tiempo' : e?.motivo ?? null
-    const cerrar = async (resultado: ResultadoDeLaCorreccion) => { await guardarEnLaLibreta(al, { ...base, estado: 'respondida', motivo, resultado }); return respondida(resultado) }
+    const perdida = e?.estado === 'abierta' || e?.estado === 'abriendo'
+    const motivo = perdida ? 'la mesa no devolvió la respuesta a tiempo (no se reintenta: su costo no se conoce)' : e?.motivo ?? null
+    const cerrar = async (resultado: ResultadoDeLaCorreccion) => (await guardarSiSigue(al, l, { ...base, estado: 'respondida', motivo, resultado })) ? respondida(resultado) : enCurso(base)
     const v = await ideaVigente(al, base.correccion.campana_id, base.correccion.idea_id)
     const escrita = yaEscritaPorEstaCorreccion(v.historial, base.correccion, v.version)
     if (escrita) return cerrar(escrita)
-    if (base.intentos >= MAX_INTENTOS_DEL_BANCO || base.gasto_usd >= TOPE_DE_LA_CORRECCION_USD) {
+    const queda = centavos(TOPE_DE_LA_CORRECCION_USD - base.gasto_usd)
+    if (perdida || base.intentos >= MAX_INTENTOS_DEL_BANCO || queda < MINIMO_PARA_REINTENTAR_USD) {
       return cerrar(sinEscribir(noDicha(`la mesa no dio una respuesta válida tras ${base.intentos} intento(s) (US$ ${base.gasto_usd.toFixed(2)})${motivo ? `: ${motivo}` : ''}`.slice(0, LARGO_MAXIMO_DE_EXPLICACION)), v.version))
     }
     // gratis: la idea fuera del banco o cambiada no necesita mesa
@@ -274,17 +290,28 @@ export async function abrirCorreccionDelBanco(al: Almacen, c: CorreccionAlBanco,
     const cam = await al.campana(base.correccion.campana_id)
     if (!cam) return cerrar(sinEscribir(noDicha('la campaña de la corrección no existe'), v.version))
     if (!al.abrirMesaDelBanco) return cerrar(sinEscribir(noDicha('la cadena no puede abrir la mesa del banco en este entorno'), v.version))
+    // 1) reservar el intento ANTES de abrir: si otro tic llegó primero, la escritura condicional falla y no se abre nada
+    const intento = base.intentos + 1
+    const version = versionDeLaMesa(base.correccion.correccion_id, intento)
+    const reservada: CorreccionEnLaLibreta = { ...base, version, intentos: intento, estado: 'abriendo', encargo_id: null, abierta_en: ahora, motivo }
+    if (!(await guardarSiSigue(al, l, reservada))) return enCurso(base)
+    // 2) abrir la mesa con lo que queda del tope
     const calVersion = await al.ultimaVersionDeCalendario(cam.id)
     const filas = calVersion ? (await al.filas(cam.id, calVersion)).filter((f) => f.idea_ref === base.correccion.idea_id || base.correccion.filas_afectadas.includes(f.id)) : []
     const ctx = await al.cargarContexto(cam.client_id, cam.plan_id)
     const marco = marcoDelBanco({ cliente: ctx?.nombreDelNegocio || 'el cliente', correccion: base.correccion, idea: v.idea!, banco: v.banco, filas: filas.map((f) => ({ id: f.id, fecha: f.fecha, red: f.red, formato: f.formato, estado: f.estado })), anterior: base.intentos > 0 ? motivo : null })
-    const version = Math.max(lib.versiones[cam.id] ?? 0, base.version ?? 0) + 1
-    const r = await al.abrirMesaDelBanco({ tipo_de_mesa: 'banco', client_id: cam.client_id, campana_id: cam.id, version, dry_run: cam.seco === true, marco_texto: marco, condiciones: [], tope_usd: centavos(TOPE_DE_LA_CORRECCION_USD - base.gasto_usd) })
-    const nueva: CorreccionEnLaLibreta = r.estado === 'abierta'
-      ? { ...base, version, intentos: base.intentos + 1, estado: 'abierta', encargo_id: r.encargo_id, abierta_en: ahora, motivo }
-      : { ...base, version, intentos: base.intentos + 1, estado: 'fallida', encargo_id: null, abierta_en: ahora, motivo: `la mesa no abrió: ${r.motivo}`.slice(0, LARGO_MAXIMO_DE_EXPLICACION) }
-    await guardarEnLaLibreta(al, nueva)
-    return { estado: 'en_curso', encargo_id: nueva.encargo_id, intentos: nueva.intentos }
+    const r = await al.abrirMesaDelBanco({ tipo_de_mesa: 'banco', client_id: cam.client_id, campana_id: cam.id, version, dry_run: cam.seco === true, marco_texto: marco, condiciones: [], tope_usd: queda })
+    // 3) el índice encargo → corrección (una sola vez) y la entrada abierta
+    const l2 = await leerEntrada(al, base.correccion.correccion_id)
+    if (r.estado !== 'abierta') {
+      const fallida: CorreccionEnLaLibreta = { ...reservada, estado: 'fallida', motivo: `la mesa no abrió: ${r.motivo}`.slice(0, LARGO_MAXIMO_DE_EXPLICACION) }
+      await guardarSiSigue(al, l2, fallida)
+      return enCurso(fallida)
+    }
+    await al.escribirConfigSiSello(PREFIJO_DEL_ENCARGO + r.encargo_id, base.correccion.correccion_id, null)
+    const abierta: CorreccionEnLaLibreta = { ...reservada, estado: 'abierta', encargo_id: r.encargo_id }
+    await guardarSiSigue(al, l2, abierta)
+    return enCurso(abierta)
   } catch {
     // un error pasajero no decide nada: el receptor vuelve a llamar en el próximo tic
     return { estado: 'en_curso', encargo_id: null, intentos: -1 }
@@ -294,29 +321,35 @@ export async function abrirCorreccionDelBanco(al: Almacen, c: CorreccionAlBanco,
 export interface EntregaDelBanco { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }
 
 /**
- * La vuelta de la mesa (puerto de la cadena, en proceso). SOLO aplica la entrega del intento VIGENTE de una corrección abierta (misma campaña, versión y encargo); cualquier otra
- * contesta `ya_cerrada` sin escribir. Una respuesta ilegible o un «no_tomada» con regla dura pide UN reintento (dentro del mismo tope); si no queda, se responde lo que hay.
+ * La vuelta de la mesa (puerto de la cadena, en proceso). SOLO aplica la entrega del intento VIGENTE de una corrección (el índice del encargo lleva a ella; misma campaña,
+ * versión y encargo, y la entrada `abierta` o recién `abriendo`); cualquier otra contesta `ya_cerrada` sin escribir. Una respuesta ilegible o un «no_tomada» con regla dura
+ * pide UN reintento (dentro del mismo tope); si no queda, se responde lo que hay. La entrada se escribe con escritura condicional.
  */
 export async function recibirCorreccionDelBanco(al: Almacen, p: EntregaDelBanco, ahora: string): Promise<{ ok: true; estado?: string; ya_cerrada?: boolean } | { ok: false; error: string }> {
-  const lib = await leerLibretaDelBanco(al)
-  const e = Object.values(lib.correcciones).find((x) => x.estado === 'abierta' && x.correccion.campana_id === p.campana_id && x.version === p.version && x.encargo_id === p.encargo_id)
-  if (!e) return { ok: true, ya_cerrada: true }
+  if (!al.leerConfigConSello || !al.escribirConfigSiSello) return { ok: false, error: SIN_ESCRITURA_CONDICIONAL }
+  const ix = await al.leerConfigConSello(PREFIJO_DEL_ENCARGO + p.encargo_id)
+  const id = typeof ix?.valor === 'string' ? ix.valor : null
+  if (!id) return { ok: true, ya_cerrada: true }
+  const l = await leerEntrada(al, id)
+  const e = l.e
+  if (!e || (e.estado !== 'abierta' && e.estado !== 'abriendo') || e.correccion.campana_id !== p.campana_id || e.version !== p.version || (e.estado === 'abierta' && e.encargo_id !== p.encargo_id)) return { ok: true, ya_cerrada: true }
   const gasto = centavos(e.gasto_usd + (Number.isFinite(p.costo_usd) && p.costo_usd > 0 ? p.costo_usd : 0))
   const r = leerRespuestaDelBanco(p.texto)
   const duraRechazada = r.respuesta === 'no_tomada' && esReglaDura(e.correccion.regla)
-  if ((r.respuesta === 'no_dicha' || duraRechazada) && e.intentos < MAX_INTENTOS_DEL_BANCO && gasto < TOPE_DE_LA_CORRECCION_USD) {
+  const queda = centavos(TOPE_DE_LA_CORRECCION_USD - gasto)
+  if ((r.respuesta === 'no_dicha' || duraRechazada) && e.intentos < MAX_INTENTOS_DEL_BANCO && queda >= MINIMO_PARA_REINTENTAR_USD) {
     const motivo = r.respuesta === 'no_tomada'
       ? `la corrección cita la regla dura ${e.correccion.regla}: «no_tomada» no vale («${r.explicacion.slice(0, 200)}»)`
       : p.texto ? r.respuesta === 'no_dicha' && r.motivo ? r.motivo : 'respuesta ilegible' : `la mesa no entregó texto${p.motivo ? ` (${p.motivo})` : ''}`
-    await guardarEnLaLibreta(al, { ...e, estado: 'fallida', gasto_usd: gasto, motivo: motivo.slice(0, LARGO_MAXIMO_DE_EXPLICACION) })
-    return { ok: true, estado: 'reintento' }
+    return (await guardarSiSigue(al, l, { ...e, estado: 'fallida', encargo_id: p.encargo_id, gasto_usd: gasto, motivo: motivo.slice(0, LARGO_MAXIMO_DE_EXPLICACION) })) ? { ok: true, estado: 'reintento' } : { ok: true, ya_cerrada: true }
   }
   const resultado = await aplicarCorreccionDelBanco(al, e.correccion, r, ahora)
-  await guardarEnLaLibreta(al, { ...e, estado: 'respondida', gasto_usd: gasto, resultado })
-  return { ok: true, estado: 'respondida' }
+  // si otra entrega llegó primero, la escritura condicional pierde: el banco ya quedó escrito una sola vez (el sello de la idea lo cuida) y esta contesta ya_cerrada
+  return (await guardarSiSigue(al, l, { ...e, estado: 'respondida', encargo_id: p.encargo_id, gasto_usd: gasto, resultado })) ? { ok: true, estado: 'respondida' } : { ok: true, ya_cerrada: true }
 }
 
-/** lectura para el receptor y el tablero: la entrada de la libreta de una corrección (null si nunca se abrió). Nunca escribe */
+/** lectura para el receptor y el tablero: la entrada de una corrección (null si nunca se abrió). Nunca escribe */
 export async function correccionDelBanco(al: Almacen, correccionId: string): Promise<CorreccionEnLaLibreta | null> {
-  return (await leerLibretaDelBanco(al)).correcciones[correccionId] ?? null
+  if (!al.leerConfigConSello) return null
+  return (await leerEntrada(al, correccionId)).e
 }
