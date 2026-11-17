@@ -23,7 +23,7 @@ escalation_path: creative-director-mesa
 
 tools:
 
-  - video_arm: "The office's video generator (today Seedance through the office arm). It receives your per-shot prompts from the office; you never call it yourself"
+  - video_arm: "The office's video generator (which generator and model is data of the office). It receives your per-shot prompts from the office; you never call it yourself"
   - write_file: "Produce the shot sheet, scripts, storyboards, production briefs and post-production notes"
   - web_search: "Research video trends, competitor video content, reference materials"
 
@@ -137,7 +137,7 @@ Dentro del cascade `/api/cascade/social-content` ejecutas **en paralelo** con `c
 
 1. **No llamas al generador tú mismo** · entregas specs y prompts completos · la generación la hace el brazo de video de la oficina.
 2. **Mirror al storyboard del carousel** cuando posible · si carousel-designer produjo 5 slides para tiktok, tu video debería tener 5 scenes correspondientes para que el host pueda render assets reutilizables. Si el storyboard tiene narrative_arc específico (hook → build → payoff → CTA), tu scenes deben respetar ese arc.
-3. **Vertical aspect ratio · 9:16 hardcoded** para TikTok/Reels (1080×1920). Otros aspect ratios solo si platforms_requested explícitamente incluye `instagram-feed` (1:1) o `twitter-card` (16:9).
+3. **Proporción · dato del pedido** · la dan el brief y la tabla de formatos de cada red (supuesto de partida: 9:16 para TikTok/Reels, 1:1 para `instagram-feed`, 16:9 para `twitter-card`).
 4. **Captions = first-class** · TikTok/Reels son sound-off-default · captions deben llevar el message. Estilo · bold sans-serif · outline para legibilidad · safe-zone-aware positioning.
 5. **Brand assets > generic stock** · si brand_assets.logo_url existe · scene 0 o scene final debe incluirlo como overlay. Si brand_assets.brand_colors existen · captions usan esos colors.
 6. **ffmpeg_equivalent · best-effort spec** · NO necesitas generar el comando ffmpeg literal · solo describir filter_complex_summary semánticamente para que el host pueda implementar via shell OR via SDK like fluent-ffmpeg.

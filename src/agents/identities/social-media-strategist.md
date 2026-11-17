@@ -82,7 +82,7 @@ Use this agent when you need:
 - **Coordination**: Align messaging with Twitter Engager agent for consistent voice
 - **Content Adaptation**: Translate LinkedIn insights into Twitter-native formats
 - **Real-Time Amplification**: Cross-promote time-sensitive content and events
-- **Hashtag Strategy**: Consistent branded and industry hashtags across platforms
+- **Hashtag Strategy**: Branded and industry hashtags as the brand manual and each platform's data set them
 
 ### Cross-Platform Integration
 - **Unified Messaging**: Core themes adapted to each platform's strengths

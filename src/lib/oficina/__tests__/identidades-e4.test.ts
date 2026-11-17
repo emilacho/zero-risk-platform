@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { antesDe4a } from './fixtures/rejas-4a'
+import { antesDe4b } from './fixtures/rejas-4b'
 
 const RAIZ = path.resolve(__dirname, '..', '..', '..', '..')
 const leer = (rel: string) => fs.readFileSync(path.join(RAIZ, rel), 'utf8').replace(/\r\n/g, '\n')
@@ -95,7 +96,7 @@ describe('T6b · lo que dicen las identidades corregidas', () => {
 describe('T6b · la migración 202610312008 y su reversa (protocolo identity_content)', () => {
   it.each(AGENTES.map((a) => [a.name, a] as const))('🔴 %s: la migración lleva el .md byte a byte con guarda md5 del texto vivo; la reversa restaura solo sobre el texto nuevo', (_n, a) => {
     // 17-nov · el tramo 4a de quitar rejas cambió carousel-designer después: la migración lleva el texto de antes (se deshacen SOLO sus pares)
-    const nuevo = antesDe4a(a.archivo, identidad(a.archivo))
+    const nuevo = antesDe4a(a.archivo, a.archivo === 'video-editor.md' ? identidad(a.archivo) : antesDe4b(a.archivo, identidad(a.archivo))) // video-editor se lee de su copia congelada: el 4b no la toca
     expect(MIGRACION, a.name).toContain(`$ident$${nuevo}$ident$`)
     // las 3 filas que viven en CRLF aceptan dos md5 (el CRLF de hoy y el LF que deja la reversa); las demás uno solo
     const dos = ['delivery-coordinator', 'style-consistency-reviewer', 'web_designer'].includes(a.name)
