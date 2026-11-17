@@ -3,7 +3,7 @@
  * Náufrago y 2 dobles, con la hoja armada por la función real de la cadena.
  */
 import { describe, expect, it } from 'vitest'
-import { centavos, chequeosExactos, fichaConCierreVivo, preciosDelTexto } from '../exactos-de-la-ficha'
+import { campoDeLaHoja, centavos, chequeosExactos, fichaConCierreVivo, preciosDelTexto } from '../exactos-de-la-ficha'
 import type { HechoDelNegocioPorOferta } from '../../cadena/ficha-de-oferta'
 import { aplicarSalidaDeJefatura, datosDeLaJefatura, prefijoDeLaBandeja } from '../paso-jefatura'
 import { fichaDeLaHoja } from '../sentido-contra-la-ficha'
@@ -89,6 +89,17 @@ describe('dato VENCIDO / AÚN NO VIGENTE que se usa igual · con la fecha DE LA 
     const f = fichaDeLaHoja(hoja('olon', ficha, '2026-11-20'))
     expect(chequeosExactos(f, 'Hoy 2x1 en todo').hallazgos).toEqual([expect.objectContaining({ destino: 'pieza', que: expect.stringMatching(/^D2 · .*«2x1»/) })])
     expect(chequeosExactos(f, 'Hoy 12x1 en todo').hallazgos).toEqual([])
+    // CC7 ADENDA 1 · n6 · el borde de DETRÁS: «2x12» no es «2x1» (un falso D2 frenaría por error)
+    expect(chequeosExactos(f, 'Hoy 2x12 en todo').hallazgos).toEqual([])
+  })
+
+  it('el destino «hoja» lleva el rótulo de la hoja donde aparece el dato (para que el receptor sepa a qué insumo vuelve)', () => {
+    const { ficha, precioMal } = CLIENTES[0]
+    const precio = chequeosExactos(fichaDeLaHoja(hoja(ficha.clave, ficha, '2026-11-20', ['- LLAMADO A LA ACCIÓN: pide el combo a $9,90'])), precioMal).hallazgos[0]
+    expect(precio).toMatchObject({ destino: 'hoja', campo_de_la_hoja: 'LLAMADO A LA ACCIÓN' })
+    const vencido = chequeosExactos(fichaDeLaHoja(hoja('linea-hogar', CLIENTES[1].ficha, '2026-11-20', ['- SUGERENCIAS:', '  - envío gratis desde $50'])), 'Sábanas').hallazgos[0]
+    expect(vencido).toMatchObject({ destino: 'hoja', campo_de_la_hoja: 'SUGERENCIAS' })
+    expect(campoDeLaHoja('texto suelto con $9,90', () => true)).toBeNull()
   })
   it('negativo: nadie lo usa → nada', () => {
     const f = fichaDeLaHoja(hoja('linea-hogar', CLIENTES[1].ficha, '2026-11-20'))

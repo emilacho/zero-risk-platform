@@ -41,7 +41,7 @@ const salida = (desacuerdos: string[]): SalidaDeRevision => ({ revision_id: 'rev
 
 const HALLAZGO = `texto: sentido · pieza: da a entender que ya atiende en persona — ficha: «${LINEA_NO}»`
 
-async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: HechoDelNegocioPorOferta[]; fecha?: string } = {}) {
+async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: HechoDelNegocioPorOferta[]; fecha?: string; real?: boolean } = {}) {
   const pl: Plantilla = JSON.parse(JSON.stringify(KIT_MESA))
   const M = crearMemoria({ parte: parteCon(BRIEF), plantilla: pl, config: { familias_activas: ['kit_historias'] } })
   const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = { kit_historias: { plantilla: KIT_HISTORIAS_CON_JEFATURA, activo: true }, kit_mesa: { plantilla: pl, activo: true } }
@@ -51,7 +51,7 @@ async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: H
   const revisiones: string[] = []
   if (o.hechos) M.P.hechosPorOferta = async () => o.hechos!
   M.P.jefatura = async (sobre) => { revisiones.push(sobre.payload.texto); return { estado: 'cerrada', salida: salida(desacuerdos[Math.min(revisiones.length - 1, desacuerdos.length - 1)]) } }
-  let r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0300', dry_run: true, familia: 'kit_historias' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+  let r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0300', dry_run: !o.real, familia: 'kit_historias' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   const id = String(r.cuerpo.encargo_id)
   // la fila del calendario que guarda el encargo (`sala_ref.fila`): de ahí sale la fecha con que se miden los hechos vivos
   if (o.fecha) M.encargos.get(id)!.sala_ref = { fila: { id: 'F-0300', fecha: o.fecha } }
@@ -68,7 +68,7 @@ async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: H
     r = await recibirResultado(M.P, id, t.n, { texto, costo_usd: 0, workflow_execution_id: `t-${t.n}` })
   }
   const enc = M.encargos.get(id)!
-  return { r, revisiones, avisos: MS.filas.filter((f) => f.encargo_id === id && f.tipo === 'devuelve' && f.de === 'oficina-creativa').map((f) => f.texto), e: enc.estado_del_motor }
+  return { r, revisiones, avisos: MS.filas.filter((f) => f.encargo_id === id && f.tipo === 'devuelve' && f.de === 'oficina-creativa').map((f) => f.texto), e: enc.estado_del_motor, llamadas: M.llamadas }
 }
 
 describe('firma de Emilio · la vuelta con respuesta del creador, de punta a punta', () => {
@@ -98,7 +98,7 @@ describe('firma de Emilio · la vuelta con respuesta del creador, de punta a pun
     expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'encargo_en_bandeja', con_desacuerdo: false })
   })
 
-  it('🔴 regla dura D3 en la pieza: vuelve con «regla dura»; si el creador la corrige, sale limpia; si no, queda como desacuerdo', async () => {
+  it('🔴 regla dura D3 en la pieza: vuelve con «regla dura»; si el creador la corrige, sale limpia; si no, la pieza se FRENA (RESPUESTA-LENOVO punto 3)', async () => {
     const mal = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo desde casa a $9,90.')
     const bien = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo desde casa a $7.')
     const ok = await correr([[], []], [mal, `${bien}\nRESPUESTA A LA JEFATURA S1: tomada`])
@@ -106,8 +106,36 @@ describe('firma de Emilio · la vuelta con respuesta del creador, de punta a pun
     expect(datosDeLaJefatura(ok.e)!.sentido!.respuestas_del_creador).toEqual([expect.objectContaining({ id: 'S1', respuesta: 'tomada', dura: true })])
     expect(ok.r.cuerpo).toMatchObject({ con_desacuerdo: false })
     const no = await correr([[], []], [mal, `${mal}\nRESPUESTA A LA JEFATURA S1: no tomada: prefiero ese precio`])
-    expect(no.r.cuerpo).toMatchObject({ con_desacuerdo: true })
+    expect(no.r.cuerpo).toMatchObject({ con_desacuerdo: true, frenada: true })
     expect(no.e.fichas.filter((f) => f.gravedad === 'bloquea' && f.estado === 'no_tomada').map((f) => f.que).join(' ')).toMatch(/D3 · el precio/)
+  })
+
+  it.each([
+    ['«no tomada» con motivo', (mal: string) => `${mal}\nRESPUESTA A LA JEFATURA S1: no tomada: prefiero ese precio`],
+    ['sin respuesta («no dicha»)', (mal: string) => mal],
+  ])('🔴 RESPUESTA-LENOVO punto 3 · regla dura que sigue rota tras la vuelta, %s: la pieza NO se publica (ni salida ni bandeja), con su motivo, sin «una persona» y con UNA alarma', async (_c, segunda) => {
+    const mal = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo desde casa a $9,90.')
+    const m = await correr([[], []], [mal, segunda(mal)], { real: true })
+    expect(m.r.cuerpo).toMatchObject({ accion: 'cerrado', frenada: true, con_desacuerdo: true, output_id: null, hitl_queue_id: null })
+    expect(m.llamadas.salidas).toEqual([])
+    expect(m.llamadas.bandeja).toEqual([])
+    const j = datosDeLaJefatura(m.e)!
+    expect(j.sentido!.duras_no_tomadas).toEqual([expect.objectContaining({ destino: 'pieza', origen: 'codigo', que: expect.stringMatching(/^D3 · el precio «\$9,90»/) })])
+    const ficha = m.e.fichas.find((f) => f.gravedad === 'bloquea' && f.estado === 'no_tomada' && /D3 · el precio/.test(f.que ?? ''))!
+    expect(ficha.propuesta).toMatch(/regla dura no tomada tras la vuelta: la pieza no se publica/)
+    const alarmas = m.llamadas.avisos.filter((a) => a.canal === 'alertas')
+    expect(alarmas).toHaveLength(1)
+    expect(alarmas[0].texto).toMatch(/^🛑 Pieza frenada · BRF-0300: regla dura no tomada tras la vuelta — pieza: D3 · el precio «\$9,90»/)
+    expect(JSON.stringify({ e: m.e, a: m.llamadas.avisos })).not.toMatch(/una persona decide|decide una persona|a_humano/)
+  })
+
+  it('la regla dura que el creador SÍ corrigió (aunque no lo diga) no frena: manda la medición del código, no la respuesta', async () => {
+    const mal = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo desde casa a $9,90.')
+    const bien = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo desde casa a $7.')
+    const m = await correr([[], []], [mal, bien], { real: true })
+    expect(m.r.cuerpo).not.toHaveProperty('frenada')
+    expect(datosDeLaJefatura(m.e)!.sentido!.duras_no_tomadas).toBeUndefined()
+    expect(m.llamadas.avisos.filter((a) => a.canal === 'alertas' && /Pieza frenada/.test(a.texto))).toEqual([])
   })
 
   it('🔴 D1 con los hechos VIVOS: la hoja no trae cierre, el cerebro registró uno después ⇒ la pieza vuelve al calendario como regla dura (no se publica sola)', async () => {

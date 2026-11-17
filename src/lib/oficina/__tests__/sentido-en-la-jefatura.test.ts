@@ -7,7 +7,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fichaEnLineas, type FichaDeOferta } from '../../cadena/ficha-de-oferta'
 import { abrirEncargo } from '../orquestador'
-import { aplicarSalidaDeJefatura, datosDeLaJefatura, llavesYaDevueltas, prefijoDeLaBandeja } from '../paso-jefatura'
+import { aplicarSalidaDeJefatura, datosDeLaJefatura, llavesYaDevueltas, prefijoDeLaBandeja, reglasDurasNoTomadas, REGLA_DURA_NO_TOMADA } from '../paso-jefatura'
 import { fichaDeLaHoja, hallazgosDelJefe, leerRespuestas, separarRespuestas, TITULO_DE_LA_FICHA } from '../sentido-contra-la-ficha'
 import { chequeosExactos } from '../exactos-de-la-ficha'
 import { CARRUSEL_MESA } from '../plantillas/mesa'
@@ -123,10 +123,20 @@ describe('con ficha · cada hallazgo a su destino', () => {
     const j = datosDeLaJefatura(e)!
     expect(j.sentido!.devoluciones).toEqual([])
     expect(j.sentido!.duras_pendientes!.map((h) => h.destino)).toEqual(['hoja'])
+    // antes de la vuelta de la mesa lo devuelto a la cadena lo frena el receptor (CC3), no el cierre de la oficina
+    expect(j.sentido!.duras_no_tomadas).toBeUndefined()
     expect(j.sentido!.no_reabre).toEqual([])
     expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBeUndefined()
     expect(e.fichas).toEqual([expect.objectContaining({ gravedad: 'bloquea', donde: 'hoja', estado: 'no_tomada', que: expect.stringMatching(/D3 · el precio/) })])
     expect(JSON.stringify(res)).not.toMatch(/una persona/)
+  })
+
+  it('CC7 ADENDA 1 · n8 · regla dura ya devuelta + hallazgo de criterio a la pieza en la misma revisión: la pieza NO vuelve a la mesa y la ficha dura bloquea', () => {
+    const hojaConPrecio = BRIEF_CON_FICHA.replace('- PROTAGONISTA:', '- LLAMADO A LA ACCIÓN: el principal a $9,90\n- PROTAGONISTA:')
+    const e = estado()
+    const res = aplicarSalidaDeJefatura(PL, e, salida([`texto: sentido · pieza: dice que ya atiende en persona — ficha: «${LINEA_NO}»`]), { reImagen: () => ({ re_imagen: false }), puedeVolverALaMesa: () => true, sentido: { ...sentido(hojaConPrecio, 'El principal a $9,90', ['F-7:hoja']), exactos: chequeosExactos } })
+    expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBeUndefined()
+    expect(res.fichas).toEqual(expect.arrayContaining([expect.objectContaining({ gravedad: 'bloquea', donde: 'hoja', que: expect.stringMatching(/D3 · el precio/) })]))
   })
 
   it('lo ya devuelto a ese destino NO reabre: queda registrado, sin ficha, sin marca de vuelta y sin salida a persona', () => {
@@ -183,12 +193,14 @@ describe('firma de Emilio · tras la vuelta, el creador ya respondió', () => {
     expect(prefijo).toContain('⚠️ CORRECCIÓN SIN RESPUESTA · ')
   })
 
-  it('regla dura · si el código la vuelve a encontrar, queda como desacuerdo aunque el creador diga «no tomada»', () => {
+  it('regla dura · si el código la vuelve a encontrar aunque el creador diga «no tomada»: NO TOMADA (frena la pieza · RESPUESTA-LENOVO punto 3), sin «una persona decide»', () => {
     const { j, e, res } = tras([], ['RESPUESTA A LA JEFATURA S2: no tomada: me gusta más así'], 'El principal a $9,90', [S2])
     expect(j.sentido!.respuestas_del_creador![0]).toMatchObject({ respuesta: 'no_tomada', dura: true, declarado: expect.stringMatching(/regla dura/) })
+    expect(j.sentido!.duras_no_tomadas).toEqual([expect.objectContaining({ destino: 'pieza', que: expect.stringMatching(/^D3 · /) })])
+    expect(reglasDurasNoTomadas(e)).toHaveLength(1)
     expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBeUndefined()
-    expect(e.fichas).toEqual([expect.objectContaining({ gravedad: 'bloquea', estado: 'no_tomada' })])
-    expect(e.fichas[0].que).toMatch(/regla dura/)
+    expect(e.fichas).toEqual([expect.objectContaining({ gravedad: 'bloquea', estado: 'no_tomada', donde: 'pieza', propuesta: REGLA_DURA_NO_TOMADA })])
+    expect(JSON.stringify(e.fichas)).not.toMatch(/una persona decide/)
   })
 
   it('regla dura corregida · el código ya no la encuentra: la pieza sigue limpia', () => {

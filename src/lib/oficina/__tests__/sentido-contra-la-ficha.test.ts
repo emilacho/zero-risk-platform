@@ -117,6 +117,11 @@ describe('el regreso · llave única y tope', () => {
     expect(r.duras_pendientes.map((x) => x.destino)).toEqual(['hoja'])
     expect(r.no_reabre.map((x) => x.destino)).toEqual(['calendario'])
   })
+  it('el campo de la hoja viaja en la devolución «hoja» (el receptor reparte por él); sin campo, no aparece', () => {
+    const r = repartir([{ ...h('hoja'), origen: 'codigo', campo_de_la_hoja: 'LLAMADO A LA ACCIÓN' }], 'F-01', 'enc-2', new Set())
+    expect(r.devoluciones[0]).toMatchObject({ llave: 'F-01:hoja', campo_de_la_hoja: 'LLAMADO A LA ACCIÓN', dura: true })
+    expect(repartir([h('calendario')], 'F-01', 'enc-2', new Set()).devoluciones[0]).not.toHaveProperty('campo_de_la_hoja')
+  })
   it('una devolución del código a la cadena va marcada dura', () => {
     expect(repartir([{ ...h('hoja'), origen: 'codigo' }], 'F-01', 'enc-1', new Set()).devoluciones[0].dura).toBe(true)
   })

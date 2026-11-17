@@ -55,6 +55,21 @@ function preciosDelDato(valor: string): number[] {
 export interface ResultadoExacto { hallazgos: Hallazgo[]; declarado: string[] }
 
 /**
+ * el rótulo de la hoja (`- LLAMADO A LA ACCIÓN:`, `- DATOS DEL CALENDARIO:`…) en cuya línea (o lista) aparece el dato: así el receptor sabe a qué insumo vuelve
+ * (RESPUESTA-CC4-a-CC3 · (b) corregida). Tal como lo escribe `hoja.ts`; sin rótulo conocido ⇒ null (el receptor lo manda a la pieza).
+ */
+export function campoDeLaHoja(resto: string, aparece: (linea: string) => boolean): string | null {
+  let campo: string | null = null
+  for (const l of String(resto ?? '').split('\n')) {
+    const c = /^-\s+([^:]+):/.exec(l)
+    if (c) campo = c[1].replace(/\s+/g, ' ').trim()
+    else if (!/^\s{2,}-\s+/.test(l)) campo = null
+    if (aparece(l)) return campo
+  }
+  return null
+}
+
+/**
  * ¿el texto usa el dato? Con 4 o más letras basta que aparezca; uno CORTO (p. ej. «2x1») se mide como palabra entera (CC7 🟡 3: antes no se medía y nadie lo sabía).
  * «12x1» no es «2x1». Un dato vacío no se mide.
  */
@@ -91,13 +106,14 @@ export function chequeosExactos(f: FichaDeLaHoja, textoDeLaPieza: string): Resul
       if (vigentes.has(p.centavos) || vistos.has(p.centavos)) continue
       vistos.add(p.centavos)
       const origen = enLaHoja.has(p.centavos) ? 'hoja' : 'pieza'
-      hallazgos.push({ destino: origen, origen: 'codigo', que: `D3 · el precio «${p.visto}» no está entre los precios vigentes de la ficha${origen === 'hoja' ? ' y viene de la hoja' : ''}`, linea_de_la_ficha: deprecio.find((d) => !d.marca)?.linea ?? null })
+      const campo = origen === 'hoja' ? campoDeLaHoja(f.resto, (l) => preciosDelTexto(l).some((x) => x.centavos === p.centavos)) : null
+      hallazgos.push({ destino: origen, origen: 'codigo', que: `D3 · el precio «${p.visto}» no está entre los precios vigentes de la ficha${origen === 'hoja' ? ' y viene de la hoja' : ''}`, linea_de_la_ficha: deprecio.find((d) => !d.marca)?.linea ?? null, ...(campo ? { campo_de_la_hoja: campo } : {}) })
     }
   }
   for (const d of datos) {
     if (!d.marca) continue
     const como = d.marca === 'vencido' ? 'VENCIDO' : 'AÚN NO VIGENTE'
-    if (contieneNormal(f.resto, d.valor)) hallazgos.push({ destino: 'hoja', origen: 'codigo', que: `D2 · la hoja usa un dato ${como} en la fecha de la pieza: «${d.valor}»`, linea_de_la_ficha: d.linea })
+    if (contieneNormal(f.resto, d.valor)) { const campo = campoDeLaHoja(f.resto, (l) => contieneNormal(l, d.valor)); hallazgos.push({ destino: 'hoja', origen: 'codigo', que: `D2 · la hoja usa un dato ${como} en la fecha de la pieza: «${d.valor}»`, linea_de_la_ficha: d.linea, ...(campo ? { campo_de_la_hoja: campo } : {}) }) }
     else if (contieneNormal(textoDeLaPieza, d.valor)) hallazgos.push({ destino: 'pieza', origen: 'codigo', que: `D2 · la pieza usa un dato ${como} en su fecha: «${d.valor}»`, linea_de_la_ficha: d.linea })
   }
   return { hallazgos, declarado }

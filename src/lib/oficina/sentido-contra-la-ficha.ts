@@ -114,6 +114,8 @@ export interface Hallazgo {
   origen: 'codigo' | 'jefe'
   /** el jefe citó algo que no está en la ficha: va a la pieza y no cuenta como aprobado */
   cita_no_verificada?: true
+  /** solo destino `hoja`: el rótulo de la hoja donde aparece el dato (el insumo al que vuelve · lo reparte el receptor de CC3) */
+  campo_de_la_hoja?: string
 }
 
 // ───────────────────────── el sentido (jefe) · lectura y verificación exacta
@@ -161,7 +163,7 @@ export function hallazgosDelJefe(lineas: string[], f: FichaDeLaHoja): { hallazgo
 // ───────────────────────── el regreso (firma de Emilio 17-nov 20:34 · automático, sin persona en el medio: el creador del paso responde)
 /** regla dura = lo que verifica el código (D2 · D3 firmadas): el creador la toma SÍ O SÍ. Lo del jefe es criterio: el creador la toma, en parte o no, con motivo */
 export const esDura = (h: Pick<Hallazgo, 'origen'>): boolean => h.origen === 'codigo'
-export interface Devolucion { llave: string; fila_id: string; destino: Exclude<Destino, 'pieza'>; motivo: string; linea_de_la_ficha: string | null; encargo_id: string; origen: Hallazgo['origen']; dura: boolean }
+export interface Devolucion { llave: string; fila_id: string; destino: Exclude<Destino, 'pieza'>; motivo: string; linea_de_la_ficha: string | null; encargo_id: string; origen: Hallazgo['origen']; dura: boolean; campo_de_la_hoja?: string }
 /** UNA devolución por fila y destino (la llave); repetirla no duplica */
 export const llaveDeDevolucion = (filaId: string, destino: Destino): string => `${filaId}:${destino}`
 /** una corrección que vuelve a la mesa (al creador de la pieza), con su número para que la responda */
@@ -199,7 +201,7 @@ export function repartir(hallazgos: Hallazgo[], filaId: string | null, encargoId
     if (yaDevueltas.has(llave)) { (dura ? r.duras_pendientes : r.no_reabre).push(h); continue }
     if (nuevas.has(llave)) continue
     nuevas.add(llave)
-    r.devoluciones.push({ llave, fila_id: filaId, destino: h.destino, motivo: h.que, linea_de_la_ficha: h.linea_de_la_ficha, encargo_id: encargoId, origen: h.origen, dura })
+    r.devoluciones.push({ llave, fila_id: filaId, destino: h.destino, motivo: h.que, linea_de_la_ficha: h.linea_de_la_ficha, encargo_id: encargoId, origen: h.origen, dura, ...(h.campo_de_la_hoja ? { campo_de_la_hoja: h.campo_de_la_hoja } : {}) })
     if (!r.vuelve_a.includes(h.destino)) r.vuelve_a.push(h.destino)
   }
   return r

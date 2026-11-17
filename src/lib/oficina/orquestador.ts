@@ -17,7 +17,7 @@ import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoAlRevisor } from './ciego'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
-import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, llavesYaDevueltas, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision, type OpcionesDeAplicacion } from './paso-jefatura'
+import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, llavesYaDevueltas, metadataDeLaJefatura, prefijoDeLaBandeja, reglasDurasNoTomadas, revisionIncompleta, sobreDeLaRevision, type OpcionesDeAplicacion } from './paso-jefatura'
 import { contextoDeLaFicha, fichaDeLaHoja } from './sentido-contra-la-ficha'
 import { chequeosExactos, fichaConCierreVivo } from './exactos-de-la-ficha'
 import { fechaDeLaFila } from './piezas-por-publicar'
@@ -1079,8 +1079,10 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
   const b = datos(e, 'encargo') ? base(e) : null
   const generada = lam ? lam.generada : fin?.origen === 'generada'
   let output_id: string | null = null, hitl_id: string | null = null
+  // RESPUESTA-LENOVO 17-nov punto 3 · una regla dura que sigue rota tras la vuelta FRENA: la pieza no va a la salida ni a la bandeja (nadie la aprueba encima) y sale UNA alarma con el motivo
+  const frenoDuro = reglasDurasNoTomadas(e)
   const desacuerdos = [...abiertasQueBloquean.map((f) => `${f.donde}: ${f.que ?? ''}`), ...(revisionIncompleta(e) ? [datosDeLaJefatura(e)?.sin_revisar ? 'revisión: sin revisar (la jefatura no abrió o no contestó)' : `revisión: incompleta (${datosDeLaJefatura(e)?.resultado})`] : [])]
-  if (!enc.dry_run && (pz || lam) && b) {
+  if (!enc.dry_run && (pz || lam) && b && !frenoDuro.length) {
     // la opinión libre del revisor externo viaja con la pieza, rotulada como OPINIÓN (y lo que el autor decidió con ella)
     const opinion = opinionExterna(e)
     const sinSegunda = datos(e, 'fichas_externas')?.sin_revision === true
@@ -1096,6 +1098,10 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
     }
   }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: estadoFinal, con_desacuerdo: conDesacuerdo, imagen_generada: generada, salida_output_id: output_id, hitl_queue_id: hitl_id })
+  if (frenoDuro.length) {
+    await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 Pieza frenada · ${enc.brief_id}: regla dura no tomada tras la vuelta — ${frenoDuro.slice(0, 3).map((h) => `${h.destino}: ${h.que}`).join(' | ')}. No se publica (firma de Emilio: se toma sí o sí).`, dry_run: enc.dry_run })
+    return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos })
+  }
   await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: conDesacuerdo ? `⚠️ Con desacuerdo · ${enc.brief_id}${nota ? ` · ${nota}` : ''}` : `✅ En la bandeja · ${enc.brief_id} · US$ ${e.gasto_usd.toFixed(3)}`, dry_run: enc.dry_run })
   if (conDesacuerdo && !parcial) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ Encargo con desacuerdo · ${enc.brief_id}: ${desacuerdos.slice(0, 3).join(' | ')}`, dry_run: enc.dry_run })
   return r(200, {
