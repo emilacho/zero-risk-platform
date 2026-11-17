@@ -301,7 +301,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       async enviar(p): Promise<EnvioDeVideo> {
         if (p.dry_run) return { ok: true, request_id: `dry-${p.pedido.clave}`, status: 'simulado', costo_estimado_usd: 0, simulado: true }
         try {
-          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, ...((p.pedido as { plano?: boolean }).plano === true ? { plano: true } : {}), tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: false }
+          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, ...((p.pedido as { plano?: boolean }).plano === true ? { plano: true } : {}), ...(p.pedido.huella ? { huella: p.pedido.huella } : {}), tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: false }
           const r = await f(`${env.baseUrl}/api/video/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(60000) })
           const j = (await r.json().catch(() => ({}))) as Fila
           if (!r.ok || typeof j.request_id !== 'string') return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`), http: r.status, ...(typeof j.descripcion_del_proveedor === 'string' ? { descripcion: j.descripcion_del_proveedor } : {}) }
@@ -341,6 +341,26 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
           const bytes = Buffer.from(await r.arrayBuffer())
           return bytes.length ? { ok: true, bytes } : { ok: false, error: 'el unidor devolvió un video vacío' }
         } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+      },
+      /** 17-nov · S2-4 tramo 3 · lo ya pagado: filas del libro del cliente terminadas y cobradas con esa huella, cuya copia en NUESTRO almacén sigue respondiendo (gratis) */
+      async buscarPagados(p) {
+        try {
+          if (!p.huellas.length) return []
+          const r = (await db.from('agent_invocations').select('cost_usd, output_summary, metadata').eq('client_id', p.client_id).eq('status', 'completed').in('metadata->>huella', p.huellas).order('ended_at', { ascending: false }).limit(50)) as { data: Fila[] | null; error: { message: string } | null }
+          if (r.error || !r.data) return []
+          const out: Array<{ huella: string; request_id: string; video_url: string; costo_usd: number }> = []
+          for (const fila of r.data) {
+            const m = (fila.metadata ?? {}) as Fila
+            const huella = typeof m.huella === 'string' ? m.huella : ''
+            const url = /^video listo · (https?:\/\/\S+)$/.exec(String(fila.output_summary ?? ''))?.[1] ?? ''
+            const costo = Number(fila.cost_usd)
+            if (!huella || !p.huellas.includes(huella) || out.some((x) => x.huella === huella) || typeof m.request_id !== 'string') continue
+            if (!url.includes('/storage/v1/object/public/') || !(costo > 0)) continue
+            const h = await f(url, { method: 'HEAD', signal: AbortSignal.timeout(15000) }).catch(() => null)
+            if (h?.ok) out.push({ huella, request_id: m.request_id, video_url: url, costo_usd: costo })
+          }
+          return out
+        } catch { return [] }
       },
       async estado(requestId): Promise<EstadoDelBrazo> {
         try {

@@ -4,6 +4,7 @@
  * el guion; si pide menos que el mínimo del proveedor (4 s), se genera de 4 s y al unir se corta a lo que pide el guion (`cortar_a_s`). Genérico: cualquier
  * cliente, cualquier cantidad de planos. Puro: sin base, sin red, sin modelo.
  */
+import { createHash } from 'node:crypto'
 import { DURACION_MAX_PLANO_S, DURACION_MIN_PLANO_S, RESOLUCION_APROBADA, armarPedidoDePlano } from '../../video/parametros'
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
@@ -31,6 +32,16 @@ export interface PedidoDePlano {
   clave: string
   /** 17-nov · S2-4 · de dónde sale el primer cuadro del clip: su imagen clave final (#1072/#1076), la foto propia del plano o solo el texto */
   primer_cuadro: 'imagen_clave' | 'foto_propia' | 'texto'
+  /**
+   * 17-nov · S2-4 tramo 3 · la HUELLA del contenido del clip: lo que decide qué genera el proveedor (el primer cuadro ORIGINAL —antes del encuadre—, el texto, el formato,
+   * los segundos, la resolución, la proporción y el audio). Mismo contenido = misma huella, en este encargo o en otro del mismo cliente: un clip ya pagado se reutiliza.
+   */
+  huella: string
+}
+
+/** la huella del contenido de un clip (ver `PedidoDePlano.huella`) · el cliente no entra: la búsqueda en el libro ya filtra por cliente */
+export function huellaDelClip(c: { fuente: string | null; prompt: string; formato: string; segundos: number; resolucion: string; relacion: string; audio: boolean }): string {
+  return createHash('sha256').update(JSON.stringify(['clip.v1', c.fuente, c.prompt, c.formato, c.segundos, c.resolucion, c.relacion, c.audio])).digest('hex').slice(0, 40)
 }
 
 /** la imagen clave de un plano tal como la deja el paso `imagenes_clave` (solo hace falta su primer cuadro) */
@@ -92,7 +103,7 @@ export function pedidosPorPlano(o: {
     const primer_cuadro: PedidoDePlano['primer_cuadro'] = ic ? 'imagen_clave' : url ? 'foto_propia' : 'texto'
     const v = armarPedidoDePlano({ prompt: ic ? promptDelClip(p, o.guion.audio) : promptDelPlano(p, o.guion.audio), formato, segundos: Math.max(DURACION_MIN_PLANO_S, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [] })
     if (!v.ok) { errores.push(...v.errores.map((e) => `plano ${p.n}: ${e}`)); continue }
-    pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url && !ic ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}` , primer_cuadro })
+    pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url && !ic ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}`, primer_cuadro, huella: huellaDelClip({ fuente: url, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: v.pedido.audio === true }) })
   }
   if (errores.length) return { ok: false, errores }
   return { ok: true, pedidos }

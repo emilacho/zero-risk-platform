@@ -32,6 +32,8 @@ export interface DatosDelVideo {
   workflowId?: string | null
   workflowExecutionId?: string | null
   claveIdempotente: string
+  /** 17-nov · S2-4 tramo 3 · la huella del contenido del clip (camino B de la oficina): con ella se halla un clip ya pagado */
+  huella?: string | null
   correlacion?: string | null
 }
 
@@ -65,7 +67,7 @@ export function filaDeEnvio(d: DatosDelVideo): Record<string, unknown> {
     exit_code: null,
     error_message: null,
     output_summary: `video enviado · ${d.segundos} s · ${d.resolucion} · ${d.relacion} · ${d.conFotos} foto(s) de referencia`,
-    metadata: { ...(d.trabajo ? metadataDelTrabajo(d.trabajo) : {}), kind: 'video_generation', source: 'video-generate', request_id: d.requestId, ruta: d.ruta, cost_basis: 'estimate_formula', segundos: d.segundos, resolucion: d.resolucion, relacion: d.relacion, con_fotos: d.conFotos, caller: d.caller, idempotency_key: d.claveIdempotente, correlation_id: d.correlacion ?? null },
+    metadata: { ...(d.trabajo ? metadataDelTrabajo(d.trabajo) : {}), kind: 'video_generation', source: 'video-generate', request_id: d.requestId, ruta: d.ruta, cost_basis: 'estimate_formula', segundos: d.segundos, resolucion: d.resolucion, relacion: d.relacion, con_fotos: d.conFotos, caller: d.caller, idempotency_key: d.claveIdempotente, correlation_id: d.correlacion ?? null, ...(d.huella ? { huella: d.huella } : {}) },
   }
 }
 

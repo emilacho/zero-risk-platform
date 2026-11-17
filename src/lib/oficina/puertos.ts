@@ -181,6 +181,11 @@ export interface PuertoDeVideo {
   encuadrar?(p: { url: string; relacion: string }): Promise<{ ok: true; bytes: Buffer } | { ok: false; error: string }>
   /** 11-nov · camino B · une los clips en orden, cada uno cortado a `segundos`, con el sonido fundido entre planos */
   unir?(p: { clips: Array<{ url: string; segundos: number }>; relacion: string; resolucion: string }): Promise<{ ok: true; bytes: Buffer } | { ok: false; error: string }>
+  /**
+   * 17-nov · S2-4 tramo 3 · «lo pagado se reutiliza»: los clips del cliente que el libro ya tiene TERMINADOS y COBRADOS con esa huella, con su copia en nuestro almacén
+   * todavía ahí. Gratis (lee el libro). Nunca lanza: si no puede leer, devuelve [] y el clip se paga como siempre. Sin este método no se reutiliza nada.
+   */
+  buscarPagados?(p: { client_id: string; huellas: string[] }): Promise<Array<{ huella: string; request_id: string; video_url: string; costo_usd: number }>>
 }
 
 export interface Puertos {

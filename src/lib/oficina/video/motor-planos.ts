@@ -16,11 +16,33 @@ import type { PedidoDeVideoDeLaOficina } from './pedido'
 export interface ClipCobrado { n: number; request_id: string; costo_usd: number }
 
 /** lo que el paso guarda de cada plano enviado */
-export interface PlanoEnviado { n: number; request_id: string; costo_estimado_usd: number; segundos: number; cortar_a_s: number }
+export interface PlanoEnviado {
+  n: number; request_id: string; costo_estimado_usd: number; segundos: number; cortar_a_s: number
+  /** 17-nov · S2-4 tramo 3 · el clip ya estaba pagado (mismo contenido): se usa su copia, a US$ 0; no se envía ni se sondea */
+  reutilizado?: { video_url: string; costo_pagado_usd: number }
+}
+
+/**
+ * 17-nov · S2-4 tramo 3 · antes de cotizar: los planos cuyo clip ya está pagado (misma huella, mismo cliente) se reutilizan a US$ 0; solo el resto se cotiza y se envía.
+ * En seco no se busca nada (no sale a la red). Si el puerto no busca o falla, se paga todo como siempre.
+ */
+export async function separarPagados(P: Pick<Puertos, 'video'>, enc: { client_id: string; dry_run: boolean }, planos: PedidoDePlano[]): Promise<{ reutilizados: PlanoEnviado[]; faltan: PedidoDePlano[] }> {
+  if (enc.dry_run || !P.video?.buscarPagados || !planos.length) return { reutilizados: [], faltan: planos }
+  let hallados: Awaited<ReturnType<NonNullable<NonNullable<Puertos['video']>['buscarPagados']>>> = []
+  try { hallados = await P.video.buscarPagados({ client_id: enc.client_id, huellas: [...new Set(planos.map((p) => p.huella))] }) } catch { hallados = [] }
+  const reutilizados: PlanoEnviado[] = []
+  const faltan: PedidoDePlano[] = []
+  for (const p of planos) {
+    const h = hallados.find((x) => x.huella === p.huella && /^https?:\/\//.test(x.video_url))
+    if (h) reutilizados.push({ n: p.n, request_id: h.request_id, costo_estimado_usd: 0, segundos: p.segundos, cortar_a_s: p.cortar_a_s, reutilizado: { video_url: h.video_url, costo_pagado_usd: h.costo_usd } })
+    else faltan.push(p)
+  }
+  return { reutilizados, faltan }
+}
 
 /** el pedido de un plano tal como lo entiende el puerto del brazo (`plano: true` lo manda por imagen a video) */
 export const comoPedidoDelBrazo = (p: PedidoDePlano): PedidoDeVideoDeLaOficina & { plano: true } => ({
-  prompt: p.prompt, formato: p.formato, segundos: p.segundos, resolucion: p.resolucion, relacion: p.relacion, audio: true, fotos: p.fotos, fotos_no_halladas: p.foto_no_hallada ? [p.foto_no_hallada] : [], clave: p.clave, prompt_recortado: false, plano: true,
+  prompt: p.prompt, formato: p.formato, segundos: p.segundos, resolucion: p.resolucion, relacion: p.relacion, audio: true, fotos: p.fotos, fotos_no_halladas: p.foto_no_hallada ? [p.foto_no_hallada] : [], clave: p.clave, prompt_recortado: false, plano: true, huella: p.huella,
 })
 
 const ctx = (encargoId: string, n: number) => ({ workflow_id: 'oficina:video_mesa', workflow_execution_id: `${encargoId}:${n}` })
@@ -96,6 +118,7 @@ export function leerPlanos(enviados: PlanoEnviado[], estados: EstadoDelBrazo[], 
   let pendientes = 0
   let fallo: { status: string; error: string } | null = null
   for (const [i, p] of enviados.entries()) {
+    if (p.reutilizado) { clips.push({ n: p.n, request_id: p.request_id, video_url: p.reutilizado.video_url, cortar_a_s: p.cortar_a_s, costo_usd: 0, expires_at: null }); continue }
     const st = estados[i]
     if (!st || !st.ok) { pendientes++; continue }
     if (st.simulado) { clips.push({ n: p.n, request_id: p.request_id, video_url: `https://dry.invalid/plano-${p.n}.mp4`, cortar_a_s: p.cortar_a_s, costo_usd: 0, expires_at: null }); continue }

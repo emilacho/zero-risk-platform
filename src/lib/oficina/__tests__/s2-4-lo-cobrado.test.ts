@@ -4,27 +4,12 @@
  * mitad no dice que «reabrir los reutiliza»: espera a los ya enviados, anota lo que cobraron y el lote incompleto NUNCA se une. US$ 0: todo con puertos falsos.
  */
 import { describe, expect, it } from 'vitest'
-import { escribirHoja } from '@/lib/cadena/hoja'
 import { sessionIdDeVideo } from '../../video/libro'
-import { VOZ_DEL_GANCHO } from '../mesa/pedidos'
 import { recibirVideo, sondearPlanos, sondearVideos } from '../orquestador-video'
-import { abrirEncargo } from '../orquestador'
-import { VIDEO_MESA } from '../plantillas/video-mesa'
-import { TARGET_STEP_PRODUCIR } from '../sobre'
-import type { EstadoDelBrazo, PuertoDeVideo } from '../puertos'
-import type { Plantilla } from '../tipos'
-import { leerPlanos, textoDeLoCobrado, type PlanoEnviado } from '../video/motor-planos'
-import { CLIENTE, PARTE, crearMemoria } from './memoria'
-import { jugar, type Turno } from './mesa-arnes'
-import { crearMesaEnMemoria } from './mesa-memoria'
-import { INSUMOS, TRAS_2012 } from './mesa-de-video-t8.test'
-import { VIDEO_MESA_ANTES_DE_S2_3 } from './video-mesa-antes-de-s2-3'
+import type { EstadoDelBrazo } from '../puertos'
+import { leerPlanos, textoDeLoCobrado } from '../video/motor-planos'
+import { ALMACEN, brazo, enCurso, enviados3, fallo, gastoAntes, hastaElBrazo, hecho } from './s2-4-arnes'
 
-const ALMACEN = 'https://abcd.supabase.co/storage/v1/object/public/oficina'
-const enviados3: PlanoEnviado[] = [1, 2, 3].map((n) => ({ n, request_id: `req-${n}`, costo_estimado_usd: 1, segundos: 4, cortar_a_s: 4 }))
-const hecho = (n: number, extra: Record<string, unknown> = {}): EstadoDelBrazo => ({ ok: true, terminal: true, status: 'completed', video_url: `${ALMACEN}/videos/req-${n}.mp4`, url_proveedor: null, costo_usd: 1.06, expires_at: null, copia: 'bucket', aviso: null, ...extra } as EstadoDelBrazo)
-const enCurso: EstadoDelBrazo = { ok: true, terminal: false, status: 'in_progress' } as EstadoDelBrazo
-const fallo: EstadoDelBrazo = { ok: true, terminal: true, status: 'nsfw', error: 'bloqueado' } as EstadoDelBrazo
 
 describe('leerPlanos · espera a TODOS y devuelve lo cobrado aunque el video falle', () => {
   it('🔴 un plano falló y los otros dos terminaron: cierra con los DOS cobrados', () => {
@@ -68,20 +53,6 @@ describe('textoDeLoCobrado · el motivo dice cuánto', () => {
   })
 })
 
-/** un brazo falso con TODO lo del camino B (cotizar, enviar, estado, encuadrar, unir) */
-function brazo(o: { estados: (id: string) => EstadoDelBrazo; une?: boolean; falla_envio_en?: number }) {
-  const reg = { enviados: [] as string[], uniones: 0 }
-  let k = 0
-  const v: PuertoDeVideo = {
-    async cotizar() { return { ok: true, costo_estimado_usd: 1.06, costo_lista_usd: 1.06 } },
-    async enviar(p) { k++; if (o.falla_envio_en === k) return { ok: false, error: 'rechazado' }; reg.enviados.push(p.pedido.clave); return { ok: true, request_id: `req-${k}`, status: 'queued', costo_estimado_usd: 1.06, simulado: false } },
-    async estado(id) { return o.estados(id) },
-    async encuadrar() { return { ok: true as const, bytes: Buffer.from('jpg') } },
-    async unir() { reg.uniones++; return o.une === false ? { ok: false as const, error: 'ffmpeg murió' } : { ok: true as const, bytes: Buffer.from('mp4') } },
-  }
-  return { v, reg }
-}
-
 describe('sondearPlanos · el fallo lleva lo cobrado', () => {
   const pv = (extra: Record<string, unknown> = {}) => ({ pedido_video: { version: 2, datos: { pedido: { relacion: '9:16', resolucion: '720p' }, envio: { planos: enviados3, ...extra } } } })
   const enc = (extra: Record<string, unknown> = {}) => ({ id: 'enc1', client_id: 'cli1', brief_id: 'b', estado_del_motor: { artefactos: pv(extra), gasto_usd: 0 } })
@@ -113,31 +84,6 @@ describe('sondearPlanos · el fallo lleva lo cobrado', () => {
   })
 })
 
-// ───────────────────────── el camino ENTERO: la mesa → el pedido por plano → el envío real (falso) → el vigía → el encargo fallido con lo cobrado
-const PLANTILLA_B: Plantilla = { ...VIDEO_MESA_ANTES_DE_S2_3, limites: { ...VIDEO_MESA_ANTES_DE_S2_3.limites, video: { ...(VIDEO_MESA_ANTES_DE_S2_3.limites.video as Record<string, unknown>), plano_por_plano: true } } }
-const GUION = [
-  '## Plano 1 · 0–4 s', 'Se ve: el pan recién salido del horno, el vapor sube', 'Producto: sí', 'Movimiento: acercamiento lento', 'Foto: ninguna',
-  '## Plano 2 · 4–8 s', 'Se ve: una mano parte el pan en la mesa larga', 'Producto: sí', 'Movimiento: cámara fija', 'Foto: ninguna',
-  '## Plano 3 · 8–12 s', 'Se ve: la puerta abierta con la mesa puesta', 'Producto: no', 'Movimiento: cámara fija', 'Foto: ninguna',
-  '## Audio', 'ambiente de cocina, sin voz', '## Pie', 'Hay mesa desde las siete.', '## Etiquetas', '#pan',
-  '## Citas', 'A2 usé: lo tomé', 'A3 usé: lo tomé', 'A4 usé: lo tomé', 'A5 usé: lo tomé', 'A6 usé: lo tomé',
-].join('\n')
-
-async function hastaElBrazo(b: ReturnType<typeof brazo>) {
-  const M = crearMemoria({ parte: escribirHoja(INSUMOS).texto_md, plantilla: PLANTILLA_B })
-  M.P.mesa = crearMesaEnMemoria(TRAS_2012)
-  M.P.video = b.v
-  const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: false, familia: 'video_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
-  const id = String(a.cuerpo.encargo_id)
-  const { ultima } = await jugar(M, id, a, (t: Turno) => {
-    if (t.tipo === 'dirigir') return { texto: 'Idea rectora: el pan sale del horno.' }
-    if (t.tipo === 'aportar') return { texto: t.agente === VOZ_DEL_GANCHO ? 'Gancho: el vapor.' : `Aporte de ${t.agente}.` }
-    if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: GUION }
-    return { texto: `Respuesta de ${t.agente}.` }
-  }, 120)
-  return { M, id, ultima }
-}
-const gastoAntes = (M: ReturnType<typeof crearMemoria>, id: string) => M.encargos.get(id)!.gasto_usd
 
 describe('el camino entero · el encargo fallido lleva lo cobrado en su gasto y en el libro (un gasto por clip)', () => {
   it('🔴 no_se_unio con 3 clips cobrados ⇒ fallido, gasto = antes + 3,18 y 3 gastos «video» en el libro; el motivo lo dice', async () => {

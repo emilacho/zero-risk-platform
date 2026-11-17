@@ -33,7 +33,7 @@ import { fotosDeReferencia, type FotoDeReferencia } from './foto-de-referencia'
 import { avisoDeLaRevisionALaMesa, calidadDeLaFase, faseDeProduccion, imagenesClaveVigentes, leerRevisionDeImagenesClave, pedidosDeImagenClave, PASO_IMAGENES_CLAVE, PASO_REVISAR_IMAGENES_CLAVE, SEGUNDOS_PARA_DOS_CUADROS, tareaDeLaRevisionDeImagenesClave, type ImagenClaveDelPlano, type ImagenesClave, type PlanoDeLaHoja } from './video/imagen-clave'
 import { propuestasDe } from './video/aprobacion'
 import { pedidosPorPlano, type PedidoDePlano } from './video/planos'
-import { cotizarYEnviar, encuadrarFotos, leerPlanos, textoDeLoCobrado, unirClips, type ClipCobrado, type PlanoEnviado } from './video/motor-planos'
+import { cotizarYEnviar, encuadrarFotos, leerPlanos, separarPagados, textoDeLoCobrado, unirClips, type ClipCobrado, type PlanoEnviado } from './video/motor-planos'
 
 /** para la jefatura: qué es el contexto «lo que vio el agente» */
 export const FUNCION_DE_LA_MIRADA = 'lo que un agente con visión vio en los cuadros del video terminado (uno por plano), comparado con el guion y la fila; la imagen manda si no coinciden'
@@ -595,13 +595,16 @@ export async function enviarVideo(P: Puertos, enc: Encargo, pl: Plantilla, paso:
 /** 11-nov · camino B · encuadra, cotiza la suma, envía cada plano y deja el turno `brazo` esperando a TODOS (en seco: todo simulado, sin red) */
 async function enviarPlanos(P: Puertos, enc: Encargo, paso: Paso, e: Estado, planos: PedidoDePlano[], tope: number, n: number): Promise<{ fallido?: string; esperar?: Record<string, unknown>; res?: ResultadoDePaso }> {
   const ahora = P.ahora()
-  const en = await encuadrarFotos(P, enc, planos, ahora.getTime())
+  // 17-nov · S2-4 tramo 3 · lo pagado se reutiliza: solo lo que falta se encuadra, se cotiza (la SUMA de lo que falta contra el tope) y se envía
+  const { reutilizados, faltan } = await separarPagados(P, enc, planos)
+  const juntos = (xs: PlanoEnviado[]) => [...reutilizados, ...xs].sort((a, b) => a.n - b.n)
+  const en = await encuadrarFotos(P, enc, faltan, ahora.getTime())
   if (!en.ok) return { fallido: en.motivo }
   const env = await cotizarYEnviar(P, enc, en.planos, tope, n)
   if (!env.ok && !env.enviados?.length) return { fallido: env.motivo }
   const iso = ahora.toISOString()
   if (!env.ok) {
-    const enviados = env.enviados!
+    const enviados = juntos(env.enviados!)
     const e2 = conEnvio(e, { request_id: enviados[0].request_id, status: 'queued', costo_estimado_usd: +enviados.reduce((s, x) => s + x.costo_estimado_usd, 0).toFixed(4), enviado_en: iso, n, planos: enviados, lote_incompleto: env.motivo })
     const dispatch_key = `${enc.id}:${n}`
     await P.almacen.guardar({
@@ -615,14 +618,15 @@ async function enviarPlanos(P: Puertos, enc: Encargo, paso: Paso, e: Estado, pla
     const v: VideoDelEncargo = { request_id: env.enviados[0].request_id, status: 'simulado', simulado: true, video_url: `${PREFIJO_DRY}video-unido.mp4`, url_proveedor: null, copia: 'simulada', costo_usd: 0, costo_estimado_usd: 0, expires_at: null, enviado_en: iso, terminado_en: iso, planos: env.enviados.map((x) => ({ n: x.n, request_id: x.request_id, costo_usd: 0, video_url: `${PREFIJO_DRY}plano-${x.n}.mp4` })) }
     return { res: { costo_usd: 0, artefacto: v as unknown as Record<string, unknown> } }
   }
-  const e2 = conEnvio(e, { request_id: env.enviados[0].request_id, status: 'queued', costo_estimado_usd: env.costo_estimado_usd, enviado_en: iso, n, planos: env.enviados })
+  const todos = juntos(env.enviados)
+  const e2 = conEnvio(e, { request_id: todos[0].request_id, status: 'queued', costo_estimado_usd: env.costo_estimado_usd, enviado_en: iso, n, planos: todos })
   const dispatch_key = `${enc.id}:${n}`
   await P.almacen.guardar({
     encargo_id: enc.id, estado_del_motor: e2, gasto_usd: e2.gasto_usd, estado: 'en_paso',
     turno: { n, paso: paso.clave, tipo: 'brazo', agente: null, estado: 'corriendo', dispatch_key, cost_usd: 0 },
     artefacto: { tipo: 'pedido_video', version: e2.artefactos['pedido_video'].version, contenido: e2.artefactos['pedido_video'].datos, sha256: sha(e2.artefactos['pedido_video'].datos), autor: 'sala' },
   })
-  return { esperar: { accion: 'esperar_brazo', turno: { n, paso: paso.clave, tipo: 'brazo', dispatch_key, request_id: env.enviados[0].request_id }, video: { costo_estimado_usd: env.costo_estimado_usd, planos: env.enviados.length, plazo_min: MINUTOS_PARA_ESPERAR_AL_BRAZO } } }
+  return { esperar: { accion: 'esperar_brazo', turno: { n, paso: paso.clave, tipo: 'brazo', dispatch_key, request_id: todos[0].request_id }, video: { costo_estimado_usd: env.costo_estimado_usd, planos: todos.length, ...(reutilizados.length ? { reutilizados: reutilizados.map((x) => x.n) } : {}), plazo_min: MINUTOS_PARA_ESPERAR_AL_BRAZO } } }
 }
 
 /** lo que el video gasta en el libro de la oficina · camino B: un gasto por clip (cada uno tiene su fila en el libro central); camino A: uno solo. Puro */
@@ -712,7 +716,8 @@ export async function sondearVideos(P: Puertos, turnos: Array<{ encargo_id: stri
 /** 11-nov · camino B · lee el estado de cada plano; cuando volvieron TODOS, los une (Railway) y devuelve el video unido; null = todavía no */
 export async function sondearPlanos(P: Puertos, enc: Encargo, enviados: PlanoEnviado[], inicio: string, ahora: Date): Promise<ResultadoDelBrazo | null> {
   const estados: EstadoDelBrazo[] = []
-  for (const p of enviados) estados.push(await P.video!.estado(p.request_id))
+  // el reutilizado no se pregunta al proveedor (ya está en nuestro almacén y ya se pagó en su día)
+  for (const p of enviados) estados.push(p.reutilizado ? ({ ok: true, terminal: true, status: 'reutilizado' } as EstadoDelBrazo) : await P.video!.estado(p.request_id))
   const vencido = new Date(inicio).getTime() < ahora.getTime() - MINUTOS_PARA_ESPERAR_AL_BRAZO * 60_000
   const l = leerPlanos(enviados, estados, vencido, MINUTOS_PARA_ESPERAR_AL_BRAZO)
   if (!l.listo) return null
