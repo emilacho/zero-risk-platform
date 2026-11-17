@@ -42,7 +42,8 @@ describe('elegir los reels exitosos', () => {
   })
   it('solo entra lo de afuera, bajado, de tipo video, con suficientes momentos etiquetados', () => {
     const vs = [video('ok'), video('propio', { owner_role: 'propio' }), video('roto', { estado: 'no_bajo' }), video('historia', { tipo: 'historia' }), video('pocos'), video('sin-tag')]
-    const caps = [...momentos('ok'), ...momentos('propio'), ...momentos('roto'), ...momentos('historia'), ...momentos('pocos', MOMENTOS_MINIMOS - 1), ...momentos('sin-tag', 5, { que_muestra: '' }), ...momentos('pocos', 2, { estado: 'error', posicion: 'hijo-9' })]
+    const caps = [...momentos('ok'), ...momentos('propio'), ...momentos('roto'), ...momentos('historia'), ...momentos('pocos', 2), ...momentos('sin-tag', 5, { que_muestra: '' }), ...momentos('pocos', 2, { estado: 'error', posicion: 'hijo-9' })]
+    expect(MOMENTOS_MINIMOS).toBe(3) // la regla del plan: 3 o más capturas etiquetadas («pocos» lleva 2, en literal)
     expect(ids(desarmarReferencias(filas(vs, [], caps), { maximo: 5 }))).toEqual(['ok'])
     // un dueño desconocido tampoco (solo competencia y referencia)
     expect(desarmarReferencias(filas([video('raro', { owner_role: 'otro' }), video('nulo', { owner_role: null })]))).toEqual([])
