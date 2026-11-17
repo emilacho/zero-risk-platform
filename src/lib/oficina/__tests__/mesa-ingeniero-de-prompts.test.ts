@@ -102,8 +102,13 @@ describe('lectura tolerante de lo que escribe el ingeniero', () => {
   })
   it('la tarea: inglés, escena, lugar, luz, lente, estilo del manual, sin texto en la imagen, foto real del producto, y la lista de imágenes', () => {
     const t = tareaDelIngeniero([{ ref: 'hook', descripcion: 'un plato servido' }])
-    for (const x of [/inglés/, /lugar/, /luz/, /lente/, /manual de marca/, /Sin texto dentro de la imagen/, /no text, no letters, no logos/, /Zona libre para texto/, /DÓNDE queda un área limpia/, /Referencia:/, /\*\*hook\*\* · lo que pidió la dirección: un plato servido/]) expect(t).toMatch(x)
+    for (const x of [/inglés/, /lugar/, /luz/, /lente/, /manual de marca/, /Texto dentro de la imagen\*\*: lo deciden el manual de marca y el brief/, /Si no lo dicen, sin texto/, /no text, no letters, no logos/, /Zona libre para texto/, /DÓNDE queda un área limpia/, /Referencia:/, /\*\*hook\*\* · lo que pidió la dirección: un plato servido/]) expect(t).toMatch(x)
     expect(t).not.toMatch(/Concepto de esta imagen/)
+    // GO Lenovo 17-nov «quitar rejas» · filas 1 y 2 de CC1: el texto en la imagen es DATO del manual/brief; los rostros generados sin estilo impuesto, solo la ley
+    expect(t).not.toMatch(/\*\*Sin texto dentro de la imagen\*\*/)
+    expect(t).not.toMatch(/naturales y del país del cliente|de frente/)
+    expect(t).toContain('nunca la cara de una persona real identificable sin su permiso registrado')
+    expect(t).toContain('cómo se ven (edad, aspecto, encuadre) lo deciden el manual, el brief y la escena')
   })
   it('cruce con la mejora 3 · con fotos aptas pide escribir una EDICIÓN; sin ellas, la escena desde cero; sin dato, como antes', () => {
     const editar = tareaDelIngeniero([{ ref: 'hook', descripcion: 'un plato', fotos_aptas: ['a1', 'b2'] }])

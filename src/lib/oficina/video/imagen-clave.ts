@@ -3,7 +3,8 @@
  * Antes de filmar, cada plano de la hoja de la mesa tiene su imagen vertical: el storyboard. En las PROPUESTAS sale en borrador (barato y rápido) y,
  * con la propuesta aprobada, en final con la mejor calidad. El borrador y el final son el MISMO camino con otra calidad (DATO de la plantilla):
  * mismo prompt, misma foto, mismo encuadre; aprobar el borrador significa algo.
- *  · La foto real del cliente SOLO en los planos de producto (la que nombra la hoja si sirve; si no, la mejor apta). Los planos de ambiente no llevan la foto del producto.
+ *  · La foto real del cliente en los planos de producto (la que nombra la hoja si sirve; si no, la mejor apta). 17-nov · GO Lenovo «quitar rejas» (fila 3 de CC1): un plano de
+ *    ambiente lleva la foto propia que la hoja le NOMBRE si es apta (la fachada, el local); sin foto nombrada se genera, como antes. No rota sobre las aptas.
  *  · Sin foto apta se GENERA desde la hoja: es el camino de los clientes sin fotos y tiene que salir igual de bueno (el prompt lleva todo lo que la hoja sabe del plano).
  *  · El texto en pantalla NUNCA va a la imagen: se compone por código después (S2-5).
  * Puro: sin red, sin base, sin modelo. Agnóstico: no sabe de rubros ni de clientes; lee lo que la hoja traiga y suple lo que falte sin frenar.
@@ -118,6 +119,9 @@ export interface PedidoDeImagenClave {
  * los planos de producto sin foto nombrada rotan sobre las aptas que nadie pidió (`fotosPorImagen`, la misma regla del Sprint 1). Determinista: el borrador y el final
  * de la misma hoja piden lo MISMO. `rotar: false` (no se sabe qué fotos muestran el protagonista): solo lleva foto el plano que la nombra; los demás se generan. Puro.
  */
+/** 17-nov · fila 3 de CC1: el plano de ambiente que nombra una foto propia APTA la lleva (no rota: solo la que nombra) */
+const fotoNombradaApta = (p: PlanoDeLaHoja, aptas: FotoDeReferencia[]): FotoDeReferencia | null => (esTexto(p.foto_id) ? aptas.find((f) => f.id === p.foto_id!.trim()) ?? null : null)
+
 export function pedidosDeImagenClave(o: { planos: PlanoDeLaHoja[]; aptas: FotoDeReferencia[]; proporcion: string; rotar?: boolean }): { pedidos: PedidoDeImagenClave[]; no_aptas: Array<{ n: number; id: string }> } {
   const deProducto = o.planos.filter(esPlanoDeProducto)
   const pedidas = deProducto.map((p) => (esTexto(p.foto_id) ? p.foto_id.trim() : null))
@@ -126,7 +130,7 @@ export function pedidosDeImagenClave(o: { planos: PlanoDeLaHoja[]; aptas: FotoDe
   const fotoDe = new Map(deProducto.map((p, i) => [p.n, porFoto.fotos[i] ?? null]))
   const pedidos = o.planos.map((p) => {
     const producto = esPlanoDeProducto(p)
-    const foto = producto ? fotoDe.get(p.n) ?? null : null
+    const foto = producto ? fotoDe.get(p.n) ?? null : fotoNombradaApta(p, o.aptas)
     const forma = { total: o.planos.length, proporcion: o.proporcion }
     return { n: p.n, prompt: promptDeImagenClave(p, forma), foto, sin_foto_apta: producto && !foto, ...(llevaDosCuadros(p) ? { prompt_cierre: promptDelCierre(p, forma) } : {}) }
   })

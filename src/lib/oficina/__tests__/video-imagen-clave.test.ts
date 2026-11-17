@@ -66,15 +66,18 @@ describe('la fase y la calidad son DATO; el borrador y el final piden lo mismo',
     expect(propio).not.toContain('Scene: el plato en la mesa')
     expect(propio).toContain('No text, letters')
   })
-  it('🔴 la foto real SOLO en los planos de producto; la que nombra la hoja si es apta; los de ambiente nunca llevan la foto', () => {
+  it('🔴 la foto real en los planos de producto; la que nombra la hoja si es apta; 17-nov: un plano de ambiente lleva la foto que NOMBRA si es apta (no rota)', () => {
     const planos: PlanoDeLaHoja[] = [
-      { n: 1, desde: 0, hasta: 3, se_ve: 'la calle', producto: false, foto_id: FOTO.id }, // ambiente aunque nombre foto: sin foto
+      { n: 1, desde: 0, hasta: 3, se_ve: 'la calle', producto: false, foto_id: FOTO.id }, // 17-nov · ambiente que nombra una foto apta: la lleva
       { n: 2, desde: 3, hasta: 6, se_ve: 'el plato', producto: true, foto_id: OTRA.id },
       { n: 3, desde: 6, hasta: 9, se_ve: 'el plato de cerca', producto: true },
       { n: 4, desde: 9, hasta: 12, se_ve: 'el cierre' },
     ]
     const r = pedidosDeImagenClave({ planos, aptas, proporcion: '9:16' })
-    expect(r.pedidos.map((x) => x.foto?.id ?? null)).toEqual([null, OTRA.id, FOTO.id, null])
+    expect(r.pedidos.map((x) => x.foto?.id ?? null)).toEqual([FOTO.id, OTRA.id, FOTO.id, null])
+    // un plano de ambiente que nombra una foto que NO es apta, o que no nombra ninguna, se genera (no rota sobre las aptas)
+    const sinApta = pedidosDeImagenClave({ planos: [{ n: 1, desde: 0, hasta: 3, se_ve: 'la calle', producto: false, foto_id: 'no-existe' }, { n: 2, desde: 3, hasta: 6, se_ve: 'el cielo', producto: false }], aptas, proporcion: '9:16' })
+    expect(sinApta.pedidos.map((x) => [x.foto, x.sin_foto_apta])).toEqual([[null, false], [null, false]])
     expect(r.pedidos.map((x) => x.sin_foto_apta)).toEqual([false, false, false, false])
     expect(r.no_aptas).toEqual([])
     // determinista: el borrador y el final de la misma hoja piden EXACTAMENTE lo mismo

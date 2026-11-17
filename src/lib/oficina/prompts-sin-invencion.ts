@@ -51,6 +51,6 @@ export function seccionDeImagenSinFoto(F: { fotos: Array<{ que_muestra?: string 
     `Parte SOLO de lo que el cliente es. Productos verificados: ${F.vocabulario_de_productos.length ? F.vocabulario_de_productos.slice(0, 12).join(', ') : '(ninguno verificado: no nombres un producto concreto)'}.`,
     `Estilo de sus fotos propias (en palabras): ${propias.length ? propias.join(' | ') : '(sin fotos propias descritas)'}.`,
     `Referencias de estilo de otras cuentas (SOLO palabras, jamás copies su texto, su enlace ni su usuario): ${refs.length ? refs.join(' | ') : '(ninguna)'}.`,
-    'La imagen generada NO inventa datos: no pidas precios, cifras, teléfonos, usuarios ni enlaces; no pidas logotipos, eslóganes, rótulos ni texto legible; no pidas etiquetas, sellos, certificaciones, normas ni lecturas de instrumentos (un manómetro con un valor, un sello en un equipo de seguridad serían datos inventados). Escribe el objeto y la escena, sin texto en la imagen.',
+    'La imagen generada NO inventa datos: no pidas precios, cifras, teléfonos, usuarios ni enlaces; no pidas logotipos ni texto inventado (si el manual o el brief piden texto dentro de la imagen, solo el texto de la pieza); no pidas etiquetas, sellos, certificaciones, normas ni lecturas de instrumentos (un manómetro con un valor, un sello en un equipo de seguridad serían datos inventados). Escribe el objeto y la escena, sin texto en la imagen.',
   ].join('\n')
 }
