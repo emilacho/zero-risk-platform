@@ -56,7 +56,8 @@ export const KIT_MESA: Plantilla = deLaMesa(KIT_HISTORIAS_CON_JEFATURA, 'kit_mes
  * Se siembran ACTIVAS: la palanca por cliente vive en la cadena (`cadena_config.nuevo_orden`).
  */
 export const TOPE_DE_LA_MESA_DE_BRIEF_USD = 1.6
-export const TOPE_DE_LA_MESA_DE_CONCEPTO_USD = 5
+/** 17-nov · 5 → 7 (202611170900): un encargo real terminado gastó 6,15 y la mesa corta en 1,2 × tope (= 6 con 5) · ADENDA 08:06 de Lenovo */
+export const TOPE_DE_LA_MESA_DE_CONCEPTO_USD = 7
 const PASO_DE_LA_MESA: Plantilla['pasos'][number] = { clave: 'mesa', tipo: 'codigo', quien: 'sala', funcion: 'mesa', condicion: { tipo: 'siempre' }, entrada: [], salida_artefacto: 'mesa', tope_usd: 0 }
 export const BRIEF_MESA: Plantilla = {
   tipo: 'brief_mesa', familia: 'brief_mesa', clase: 'interna',
