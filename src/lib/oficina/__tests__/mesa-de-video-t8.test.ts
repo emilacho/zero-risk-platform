@@ -487,9 +487,10 @@ describe.each([
   ]],
 ] as const)('17-nov · Sprint 3 · T1b · %s · persona real solo con permiso registrado (decisión Lenovo B)', (_n, cliente, fotos) => {
   const conPersonas = fotos.filter((f) => f.con_personas === true).map((f) => f.id)
-  async function jugarCon(permisos?: () => Promise<unknown>) {
+  async function jugarCon(permisos?: () => Promise<unknown>, o: { ahora?: string; zona?: string | null } = {}) {
     const hoja = escribirHoja({ ...INSUMOS, client_name: cliente })
-    const M = crearMemoria({ parte: hoja.texto_md, plantilla: VIDEO_MESA, fuentes: { fotos: fotos as never } })
+    const M = crearMemoria({ parte: hoja.texto_md, plantilla: VIDEO_MESA, fuentes: { fotos: fotos as never, ...('zona' in o ? { zona: o.zona as never } : {}) } })
+    if (o.ahora) { const t = new Date(o.ahora); M.P.ahora = () => t }
     M.P.mesa = crearMesaEnMemoria(TRAS_2012)
     if (permisos) M.P.permisosDePersonaReal = permisos as never
     const enviados: Array<Record<string, unknown>> = []
@@ -525,6 +526,14 @@ describe.each([
     expect(datos.F.fotos.map((f) => f.id)).toEqual(fotos.map((f) => f.id))
     expect(datos.fotos_sin_permiso).toBeUndefined()
     expect(hojaDePublicar).not.toContain('personas reales')
+  })
+  it('🔴 (🟡 de CC7) por abrir(): el vencimiento se cuenta en el día del CLIENTE · a las 22:00 del 17 en Guayaquil un permiso que vence el 17 vale; en UTC (sin zona) ya no', async () => {
+    const vence17 = async () => [{ id: 'p1', persona: 'el equipo', fotos: conPersonas, alcance: ['video'], vence_en: '2026-11-17', evidencia: 'contrato de prueba', revocado_en: null }]
+    const enGuayaquil = await jugarCon(vence17, { ahora: '2026-11-18T03:00:00Z', zona: 'America/Guayaquil' })
+    expect(enGuayaquil.datos.fotos_sin_permiso).toBeUndefined()
+    expect(enGuayaquil.datos.F.fotos.map((f) => f.id)).toEqual(fotos.map((f) => f.id))
+    const sinZona = await jugarCon(vence17, { ahora: '2026-11-18T03:00:00Z', zona: null })
+    expect(sinZona.datos.fotos_sin_permiso!.map((x) => x.motivo)).toEqual(conPersonas.map(() => 'permiso_vencido'))
   })
   it('🔴 sin el puerto del registro (no se puede leer): lo seguro, ninguna foto con personas viaja', async () => {
     const { datos } = await jugarCon()
