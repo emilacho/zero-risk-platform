@@ -3,6 +3,7 @@
  * (así lo que se prueba contra los flujos es EXACTAMENTE lo que la ruta ejecuta).
  */
 import { abrirCampana, avanzarCampana, reabrirCampana, campanasActivas, cierreDeCampana, estadoDeLaCadena, verificarViaje } from './campanas'
+import { filasProducir } from './elegidas'
 import { fechasCobertura, fechasGuardar, fechasPreparar, filasListar, filasLotes, filasMarcar } from './datos'
 import { calendarioGuardar, calendarioPreparar, calendarioSiguiente, estrategiaGuardar, estrategiaPreparar, validarSinEscribir } from './pasos'
 import { relojDeLaCadena } from './reloj'
@@ -36,7 +37,7 @@ export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'valida
   estrategia: { preparar: estrategiaPreparar, guardar: estrategiaGuardar, pasar: (al, c) => estrategiaPasar(al, c) },
   calendario: { preparar: calendarioPreparar, guardar: calendarioGuardar, siguiente: calendarioSiguiente, pasar: (al, c) => calendarioPasar(al, c) },
   validar: { validar: validarSinEscribir },
-  filas: { listar: (al, c) => filasListar(al, c), lotes: filasLotes, marcar: filasMarcar, autoproducir: (al, c) => filasAutoproducir(al, c) },
+  filas: { listar: (al, c) => filasListar(al, c), lotes: filasLotes, marcar: filasMarcar, autoproducir: (al, c) => filasAutoproducir(al, c), producir: (al, c) => filasProducir(al, c, new Date().toISOString()) },
   // 11-nov · leer_pdf (GO Lenovo 19:30 · opción b): el texto de los PDF oficiales que «② Juntar» descartó, solo de las fuentes cargadas
   fechas: { cobertura: (al, c) => fechasCobertura(al, c), preparar: fechasPreparar, guardar: (al, c) => fechasGuardar(al, c), leer_pdf: (al, c) => fechasLeerPdf(al, c) },
   esperas: { reloj: relojDeLaCadena },

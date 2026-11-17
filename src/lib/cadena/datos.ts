@@ -44,7 +44,9 @@ export async function filasListar(al: Almacen, cuerpo: Record<string, unknown>):
   const formatos = await al.formatos()
   // r63 · cada fila trae la familia de la oficina que produce su formato (por dato; null = sin sala → pieza simple, como hoy)
   const filas = (await al.filas(id, version)).filter((f) => !estado || f.estado === estado).map((f) => ({ ...f, familia: familiaDeFila(f, formatos) }))
-  return { status: 200, cuerpo: { filas, total: filas.length, version, campana: { id: c.id, plan_id: c.plan_id, client_id: c.client_id, fecha_inicio: c.fecha_inicio, fecha_fin: c.fecha_fin, estado: c.estado, seco: c.seco } } }
+  // 17-nov · «producir estas filas» · con la campaña pausada, los ids con permiso vigente: la guarda del flujo de brief deja pasar SOLO un lote cuyas filas estén todas aquí
+  const elegidas = c.estado === 'pausada' && al.filasElegidas ? await al.filasElegidas(c.id, new Date().toISOString()) : []
+  return { status: 200, cuerpo: { filas, total: filas.length, version, elegidas, campana: { id: c.id, plan_id: c.plan_id, client_id: c.client_id, fecha_inicio: c.fecha_inicio, fecha_fin: c.fecha_fin, estado: c.estado, seco: c.seco } } }
 }
 
 /**

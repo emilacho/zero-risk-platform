@@ -18,6 +18,7 @@ import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } fr
 import { avisoDeGastoIlegible, avisoDelTope, cierreDelTope, costoEsperadoDeLaPieza, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
 import { hoyEnZona } from './campanas'
 import { familiaDeFila } from './familia'
+import { filasPermitidas } from './elegidas'
 import { CLAVE_DE_LA_PALANCA, topesConMesa } from '../oficina/mesa/con-mesa'
 import { filaSinFamilia } from './sin-familia'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, type ConfigDeOficina, type Sobre } from '@/lib/oficina/sobre'
@@ -153,7 +154,8 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
   // candado 2 · la compuerta de la cadena (`dry_run: true` corre con todo apagado)
   const cerrada = await compuerta(al, c.client_id, s.seco)
   if (cerrada) return cerrada
-  if (c.estado !== 'activa') return err(409, 'E-CAMPANA-NO-ACTIVA', `la campaña está ${c.estado}: solo una campaña activa deja briefs listos`)
+  // 17-nov · una campaña PAUSADA solo deja briefs listos de las filas con permiso de «producir estas filas» (`elegidas.ts`); se comprueba con el parte en la mano
+  if (c.estado !== 'activa' && c.estado !== 'pausada') return err(409, 'E-CAMPANA-NO-ACTIVA', `la campaña está ${c.estado}: solo una campaña activa deja briefs listos`)
   const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null)
   let idDelParteSeco: string | null = null
   if (parteSeco && filaSeca) {
@@ -176,6 +178,11 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
     : await al.parteDe(parteId)
   if (!parte) return err(404, 'E-PARTE', 'el parte no existe (o no es un parte de trabajo)')
   if (parte.client_id !== c.client_id) return err(403, 'E-PARTE-AJENO', 'el parte no es del cliente de esta campaña')
+  if (c.estado === 'pausada') {
+    const ids = parte.briefs.map((b) => b.fila_id)
+    const conPermiso = ids.length > 0 && ids.every((x): x is string => typeof x === 'string' && x !== '') && (await filasPermitidas(al, c, ids as string[], new Date().toISOString()))
+    if (!conPermiso) return err(409, 'E-CAMPANA-NO-ACTIVA', 'la campaña está pausada: solo suelta las filas elegidas con «producir estas filas» (permiso vigente), y este parte trae otras')
+  }
   if (!parte.valido) return { status: 200, cuerpo: { accion: 'autoproducir', emite: false, motivo: 'parte_no_valido', emitidos: 0, duplicados: 0, rechazados: 0, omitidos: [], sobres: [] } }
   // el freno de gasto: solo lo real gasta
   if (!s.seco) {

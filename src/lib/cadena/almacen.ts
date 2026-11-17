@@ -321,6 +321,12 @@ export interface Almacen {
    * que siga en el lote de hoy (ADENDA 3 de CC7). Si falla, LANZA (un error no es «cero envíos»).
    * `avisarLoteMuerto` = abre (o suma una repetición a) el incidente del buzón C1; nunca lanza: devuelve la acción o el error.
    */
+  /**
+   * 17-nov · «PRODUCIR ESTAS FILAS» (`elegidas.ts`) · OPCIONALES: sin ellos una campaña pausada no suelta nada (como antes).
+   * `elegirFilas` guarda un permiso por fila (solo inserta); `filasElegidas` = los ids de fila con permiso VIGENTE (`vence_en > ahora`). Si falla, LANZA.
+   */
+  elegirFilas?(permisos: import('./elegidas').PermisoDeFila[]): Promise<void>
+  filasElegidas?(campanaId: string, ahora: string): Promise<string[]>
   enviosDeLote?(clientId: string, lote: string, llave: string, filasDeHoy: readonly string[]): Promise<import('./lote-muerto').EnviosDeLote>
   avisarLoteMuerto?(a: { clave: string; client_id: string; titulo: string; detalle: string; workflow_id: string | null; workflow_execution_id: string | null; /** 11-nov · de dónde sale el aviso (sin él: «lote sin parte») */ origen?: string }): Promise<{ ok: true; accion: string } | { ok: false; error: string }>
   // validaciones
