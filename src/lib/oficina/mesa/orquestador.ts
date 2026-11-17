@@ -12,7 +12,7 @@ import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
 import { devolucionDelBrief, entregarALaCadena, marcoDe, textoDeLaMesaParaLaCadena } from './de-la-cadena'
 import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
-import { loQueSigueDeLaMesa } from '../topes-por-duracion'
+import { cotaDeLaMesa, loQueSigueDeLaMesa, pasadasDeLaMesa } from '../topes-por-duracion'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
 import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
@@ -69,6 +69,13 @@ export function reservaDeLaMesa(pl: Plantilla, tipo: EstadoMesa['tipo'], e: Esta
   // 17-nov · propuestas en imagen · tramo 2b: la de imagen CON propuestas, igual que el video (los borradores, las rondas que quedan y la final)
   if (tipo === 'video' || ((FAMILIAS_MESA as Record<string, string>)[String(pl.familia)] === tipo && propuestasDeLaPlantilla(pl) > 1)) return { reserva_posterior_usd: loQueSigueDeLaMesa(pl, e), techo_es_el_tope: true }
   return {}
+}
+
+/** 17-nov · GO Lenovo · la COTA DE LA MESA (dato `limites.cota_de_la_mesa_usd`, por pasada): lo que llevan sus turnos contra la cota × las pasadas que van (la de hoy
+ *  incluida). Sin el dato, nada (la mesa como hoy) · pura */
+export function cotaDeLaMesaEnCurso(pl: Plantilla, est: EstadoMesa, e: Estado): Pick<ContextoDeLaMesa, 'cota_de_la_mesa'> {
+  const c = cotaDeLaMesa(pl)
+  return c === null ? {} : { cota_de_la_mesa: { gastado: est.gasto_de_los_turnos_usd ?? 0, permitido: +(c * pasadasDeLaMesa(pl, e)).toFixed(6) } }
 }
 
 function estadoInicialDeLaMesa(tipo: EstadoMesa['tipo'], directorio: Tarjeta[]): EstadoMesa {
@@ -334,7 +341,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       // 17-nov · con propuestas en imagen: hay imágenes a generar si ALGUNA propuesta las pide (la lista del ingeniero, la misma que recibe)
       : esDeImagen(est.tipo) && (est.imagen?.propuestas ?? 1) > 1 ? imagenesAGenerarDe(enc, est).length > 0
       : hayImagenesAGenerar(est.pieza_texto, est.tipo, (b!.elementos ?? []).map((x) => x.ref))
-    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...reservaDeLaMesa(pl, est.tipo, enc.estado_del_motor), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}) })
+    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...reservaDeLaMesa(pl, est.tipo, enc.estado_del_motor), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}), ...cotaDeLaMesaEnCurso(pl, est, enc.estado_del_motor) })
 
     if (acc.accion === 'cierre_por_tope') {
       await guardarMesa(P, enc, { ...est, fase: 'cerrada' })
@@ -606,7 +613,7 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
     // el turno murió o devolvió nada: queda anotado en el libro (la mesa lo reintenta hasta 3 veces por agente y luego sigue sin él; nunca se inventa un aporte)
     await P.mesa.aportar(aporteNuevo(enc, t.agente, null, 'nota', `turno_fallido: ${res.error ?? 'respuesta vacía'}`.slice(0, 400), { costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
     const e2: Estado = { ...e, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: nuevoGasto }
-    const est2: EstadoMesa = { ...est, turnos: est.turnos + 1, turno_abierto: null }
+    const est2: EstadoMesa = { ...est, turnos: est.turnos + 1, turno_abierto: null, gasto_de_los_turnos_usd: +((est.gasto_de_los_turnos_usd ?? 0) + costo).toFixed(6) }
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(e2, est2), gasto_usd: nuevoGasto, estado: 'en_paso', turno: { ...turnoBase, n, estado: 'fallo', error: res.error ?? 'respuesta vacía' }, ...(gasto.length ? { gastos: gasto } : {}) })
     return avanzar(P, enc.id)
   }
@@ -628,7 +635,7 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
   await P.mesa.aportar(aporteNuevo(enc, t.agente, t.tipo === 'responder' ? pedido?.de ?? null : null, tipoAporte[t.tipo] ?? 'aporta', textoFinal, { responde_a: t.tipo === 'responder' || t.tipo === 'devolver_citas' ? t.responde_a : null, profundidad: pedido ? pedido.profundidad : 0, costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
   const integra = t.tipo === 'integrar' || t.tipo === 'devolver_citas'
   const e2: Estado = { ...e, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: nuevoGasto }
-  const est2: EstadoMesa = { ...est, turnos: est.turnos + 1, turno_abierto: null, ...(integra ? { integraciones: est.integraciones + 1, devoluciones_por_citas: est.devoluciones_por_citas + (t.tipo === 'devolver_citas' ? 1 : 0), pieza_texto: textoFinal } : {}), ...(t.tipo === 'integrar' && est.cierre_forzado ? { marcas: { ...est.marcas, integracion_forzada: true } } : {}) }
+  const est2: EstadoMesa = { ...est, turnos: est.turnos + 1, turno_abierto: null, gasto_de_los_turnos_usd: +((est.gasto_de_los_turnos_usd ?? 0) + costo).toFixed(6), ...(integra ? { integraciones: est.integraciones + 1, devoluciones_por_citas: est.devoluciones_por_citas + (t.tipo === 'devolver_citas' ? 1 : 0), pieza_texto: textoFinal } : {}), ...(t.tipo === 'integrar' && est.cierre_forzado ? { marcas: { ...est.marcas, integracion_forzada: true } } : {}) }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(e2, est2), gasto_usd: nuevoGasto, estado: 'en_paso', turno: { ...turnoBase, n, estado: 'hecho' }, ...(gasto.length ? { gastos: gasto } : {}) })
   return avanzar(P, enc.id)
 }
