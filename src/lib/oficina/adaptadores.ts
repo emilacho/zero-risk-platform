@@ -18,6 +18,7 @@ import { ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt } from '../revisor-gpt'
 import { llamarRevisorGptConLibro } from '../revisor-gpt-libro'
 import type { CotizacionDeVideo, EnvioDeVideo, EstadoDelBrazo, FuentesCompletas, MarcaParaRender, Puertos, ResultadoImagen, ResultadoRender, ResultadoRevisor } from './puertos'
 import { mp4Simulado } from './orquestador-video'
+import { esCapturaDeLaWeb } from '../cerebro/portero/procedencia'
 import { identidadVisualDelCliente } from './identidad-visual'
 import { separarFotos } from './material'
 import type { Registro } from './chequeos'
@@ -181,10 +182,11 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         if (mb.error) return { error: `manual: ${mb.error.message}` }
         const manual = mb.data?.[0]
         if (!manual) return { error: 'el cliente no tiene manual de marca' }
-        const fo = (await db.from('client_social_images').select('id,owner_role,url,estado,que_muestra,producto_visto,texto_visible,con_personas,tipo_de_toma,formato,etiqueta_confianza').eq('client_id', clientId).eq('estado', 'ok')) as { data: Fila[] | null; error: { message: string } | null }
+        const fo = (await db.from('client_social_images').select('id,owner_role,url,estado,que_muestra,producto_visto,texto_visible,con_personas,tipo_de_toma,formato,etiqueta_confianza,tipo,clase,oferta').eq('client_id', clientId).eq('estado', 'ok')) as { data: Fila[] | null; error: { message: string } | null }
         if (fo.error) return { error: `fotos: ${fo.error.message}` }
         // propio / competencia / referencia: UNA sola implementación (la del portero). Solo las PROPIAS son fotos del cliente; el resto es referencia de estilo, jamás candidata
-        const { propias: fotos, referencias } = separarFotos(lista<Fila>(fo.data))
+        // 17-nov · Sprint 4 · D · una captura de la web (página o red) NO es una foto: fuera, con la regla del cerebro (`esCapturaDeLaWeb`, #1135)
+        const { propias: fotos, referencias } = separarFotos(lista<Fila>(fo.data).filter((f) => !esCapturaDeLaWeb(f)))
         const desde = new Date(ahora().getTime() - DIAS_DE_USO * 86_400_000).toISOString()
         const us = (await db.from('oficina_uso_de_fotos').select('foto_id,usada_en').eq('client_id', clientId).gte('usada_en', desde)) as { data: Fila[] | null; error: { message: string } | null }
         const usos: Record<string, string> = {}

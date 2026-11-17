@@ -322,3 +322,23 @@ describe('la oficina apagada con el almacén real', () => {
   })
   it('vi.fn de apoyo: ningún adaptador usa la llave interna salvo para la imagen', () => { expect(vi.isMockFunction(fetch)).toBe(false) })
 })
+
+describe('17-nov · Sprint 4 · D · la mesa no recibe capturas de la web como fotos (#1135 · regla del cerebro)', () => {
+  const capturas = [
+    { id: 'cap-clase', owner_role: 'propio', client_id: CLIENTE, estado: 'ok', url: 'https://fotos.test/cap-clase.jpg', que_muestra: 'pantalla del sitio con el menú', clase: 'captura_web', tipo: 'post' },
+    { id: 'cap-tipo', owner_role: 'propio', client_id: CLIENTE, estado: 'ok', url: 'https://fotos.test/cap-tipo.jpg', que_muestra: 'portada de la página', clase: 'foto', tipo: 'web_captura' },
+  ]
+  const conOferta = { id: 'foto-olon', owner_role: 'propio', client_id: CLIENTE, estado: 'ok', url: 'https://fotos.test/foto-olon.jpg', que_muestra: 'la terraza frente al mar', clase: 'foto', tipo: 'mapas', oferta: 'olon' }
+  it('🔴 las capturas (por clase o por el tipo del raspado) quedan FUERA de las fotos propias; una foto real con su oferta entra y la oferta viaja con ella', async () => {
+    const db = sembrar(); db.tablas['client_social_images'].push(...capturas, conOferta)
+    const fu = await crearPuertos(db, ENV, fetchFalso().f).fuentes(CLIENTE)
+    if ('error' in fu) throw new Error(fu.error)
+    const ids = fu.fotos.map((f) => f.id)
+    expect(ids).not.toContain('cap-clase')
+    expect(ids).not.toContain('cap-tipo')
+    expect(ids).toContain('foto-olon')
+    expect(fu.fotos.find((f) => f.id === 'foto-olon')!.oferta).toBe('olon')
+    // las fotos de siempre (sin clase) siguen entrando
+    expect(ids).toEqual(expect.arrayContaining(FOTOS.map((f) => f.id)))
+  })
+})
