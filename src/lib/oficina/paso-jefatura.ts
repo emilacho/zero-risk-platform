@@ -114,14 +114,23 @@ function partirDesacuerdo(linea: string): { donde: string; que: string } {
 export interface OpcionesDeAplicacion {
   /** la re-imagen que ya sabe hacer la oficina (post: `decidirReImagen`; láminas: `decisionDeReImagenL`); recibe si el que dirige la imagen tomó la opinión */
   reImagen: (tomada: { razon: string } | null) => Record<string, unknown>
+  /**
+   * 17-nov · GO Lenovo (d) · ¿puede la pieza VOLVER a la mesa con los desacuerdos? (el paso tiene `vuelve_a` a la mesa, le queda la vuelta y cabe en el tope, contando lo que costó esta revisión).
+   * Sin la función (plantillas sin mesa), nunca vuelve: los desacuerdos van a la bandeja como siempre.
+   */
+  puedeVolverALaMesa?: (costoDeEstaRevision: number) => boolean
 }
 
 export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>, e: Estado, salida: SalidaDeRevision, o: OpcionesDeAplicacion): ResultadoDePaso {
   const familia = familiaDePieza(pl)
   const incompleta = salida.resultado === 'fallida' || salida.resultado === 'incompleta_por_tope'
   const respuestas = Array.isArray(salida.respuestas) ? salida.respuestas : []
+  // 17-nov · GO Lenovo (d) · un desacuerdo que la jefatura no pudo resolver (p. ej. falta en la pieza un dato que el brief pide) vuelve UNA vez a la mesa como corrección; solo si sigue, va a la bandeja marcado
+  const lineas = (Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []).map((d) => String(d).trim()).filter(Boolean)
+  const vuelve = lineas.length > 0 && o.puedeVolverALaMesa?.(costoDeLaJefatura(salida.costo_usd)) === true
   // fichas de FONDO que siguen sin tomarse: el mismo desacuerdo de siempre (jefe · bloquea · sin tomar); `cerrar` ya sabe contarlas
-  const fichas: Ficha[] = (Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []).map((d, i) => {
+  //   (si la pieza vuelve a la mesa, el desacuerdo viaja como corrección y NO queda como ficha: la revisión de la vuelta decide)
+  const fichas: Ficha[] = (vuelve ? [] : Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []).map((d, i) => {
     const p = partirDesacuerdo(String(d))
     return { ...fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', p.donde, 'bloquea', p.que, 'revisión de la jefatura', 'una persona decide'), estado: 'no_tomada' as const, razon: 'la jefatura cerró sin que se tomara' }
   })
@@ -130,7 +139,8 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   const opinion = salida.opinion_externa
   externas.forEach((r, i) => fichas.push({ ...fichaNueva(i === 0 ? `ext-opinion-${e.pasos_ejecutados}` : `ext-opinion-${e.pasos_ejecutados}-${r.donde}`, 'externa', r.donde, 'sugerencia', opinion?.texto ?? '', 'opinión libre del revisor externo (sin criterios ni reglas)', 'quien hizo la parte decide qué toma y qué no'), estado: r.estado === 'tomada' || r.estado === 'no_tomada' ? r.estado : 'no_tomada', ...(r.razon ? { razon: r.razon } : {}) }))
   const tomadaImagen = respuestas.find((r) => r.origen === 'externa' && r.donde === 'imagen' && r.estado === 'tomada')
-  const rehacer = salida.imagen_por_rehacer === true && !incompleta
+  // la pieza que vuelve a la mesa se rehace entera (la mesa traduce otra vez): no se pide además una re-imagen
+  const rehacer = salida.imagen_por_rehacer === true && !incompleta && !vuelve
   const reimagen = rehacer ? o.reImagen({ razon: tomadaImagen?.razon ?? 'quien dirige la imagen tomó la opinión' }) : { re_imagen: false, por_rehacer_humano: false, motivo: null, razon: null }
   const jefatura: DatosDeLaJefatura = {
     revision_id: salida.revision_id ?? null, resultado: salida.resultado, marcas: salida.marcas ?? { con_desacuerdo: false, sin_segunda_mirada: false }, desacuerdos: salida.desacuerdos ?? [], respuestas,
@@ -154,7 +164,17 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   else if (opinion?.texto) otros['fichas_externas'] = { opinion: opinion.texto, modelo: opinion.modelo ?? null }
   // 💰 el gasto de la revisión SUMA al del encargo (R1 de CC#3): la oficina le pasó `tope − gasto` a la jefatura y los pasos que siguen (la re-imagen) deben ver lo que queda de verdad.
   // Solo suma al estado del encargo: NO se escribe otra fila en el libro (`oficina_gastos` no la lleva; el libro central `agent_invocations` ya la tiene).
-  return { costo_usd: jefatura.costo_usd, artefacto: { ...reimagen, jefatura }, ...(fichas.length ? { fichas } : {}), ...(Object.keys(otros).length ? { otros_artefactos: otros } : {}) }
+  const aLaMesa = vuelve ? { vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeLaJefaturaALaMesa(lineas) } : {}
+  return { costo_usd: jefatura.costo_usd, artefacto: { ...reimagen, jefatura, ...aLaMesa }, ...(fichas.length ? { fichas } : {}), ...(Object.keys(otros).length ? { otros_artefactos: otros } : {}) }
+}
+
+/** 17-nov · GO Lenovo (d) · lo que la mesa recibe cuando la pieza vuelve: los desacuerdos de la jefatura como corrección (la dirección integra y la mesa traduce otra vez). Puro */
+export function avisoDeLaJefaturaALaMesa(desacuerdos: string[]): string {
+  return [
+    'La jefatura revisó la pieza y quedaron estos desacuerdos sin resolver. Corrígelos en la pieza (si falta un dato que el brief pide, inclúyelo; si no lo tienes, dilo en la pieza y no lo inventes):',
+    ...desacuerdos.slice(0, 8).map((d) => `- ${d.slice(0, 400)}`),
+    'Es la única vuelta: después, la pieza va a la bandeja con lo que quede marcado.',
+  ].join('\n')
 }
 
 /** la revisión no pudo abrirse o nunca contestó: la pieza sigue, sin fichas nuevas, marcada «sin revisar» (nunca se pierde y nunca se hace pasar por revisada) */

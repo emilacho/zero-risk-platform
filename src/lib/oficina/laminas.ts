@@ -10,8 +10,11 @@ import type { Ficha } from './tipos'
 
 export interface Lamina { orden?: number; rol: string; eyebrow?: string; headline: string; body?: string; cta?: string }
 export interface CopiaCarrusel { texto_base: string; pie_de_foto: string; hashtags: string[]; llamado?: string; nota_para_quien_publica?: string }
-export interface ElementoDeCopyKit { ref: string; eyebrow?: string; headline: string; body?: string; cta?: string; acompanamiento?: string; hashtags?: string[] }
-export interface ElementoDeEstructura { ref: string; rol: string; beat: string; foto_slot?: string; mood: string; sugerencia_interactiva?: string }
+export interface ElementoDeCopyKit { ref: string; eyebrow?: string; headline: string; body?: string; cta?: string; acompanamiento?: string; hashtags?: string[]; /** 17-nov · GO Lenovo (a) · el cuadro n (≥ 2) de un elemento: `de` = el ref del elemento del brief */ de?: string; cuadro?: number; /** 17-nov · GO Lenovo (c) · la firma o pie del cuadro (letra chica abajo) */ firma?: string }
+export interface ElementoDeEstructura { ref: string; rol: string; beat: string; foto_slot?: string; mood: string; sugerencia_interactiva?: string; /** 17-nov · GO Lenovo (a) · el cuadro n (≥ 2) de un elemento: el ref del elemento del brief */ de?: string }
+/** 17-nov · GO Lenovo (a) · el ref del cuadro n (≥ 2) de un elemento del kit, y de vuelta: el ref del elemento del brief al que pertenece un cuadro (el 1.º es el mismo ref) */
+export const refDeCuadro = (ref: string, n: number): string => `${ref}-c${n}`
+export const refDelElemento = (ref: string): string => String(ref ?? '').replace(/-c\d+$/, '')
 /** lo que el brazo dibuja (subconjunto de `SlideContent` del motor de carruseles + los dos campos opcionales que agrega el PR del brazo) */
 export interface LaminaParaDibujar { headline: string; body?: string; cta?: string; eyebrow?: string; background_image_url?: string | null; pie?: string | null; ocultar_indicador?: boolean }
 export interface ImagenDeRef { origen: 'real' | 'generada'; url: string; foto_id?: string; generation_id?: string }
@@ -122,7 +125,8 @@ export function armarLaminasDeKit(estructura: ElementoDeEstructura[], copia: Ele
     const c = porRef.get(e.ref)
     if (!c) continue
     const img = imagenesPorRef[e.foto_slot || e.ref] ?? imagenesPorRef[e.ref]
-    slides.push({ ...limpia({ headline: c.headline, body: c.body, cta: c.cta, eyebrow: c.eyebrow, background_image_url: img?.url ?? null }), pie: null, ocultar_indicador: true })
+    // 17-nov · GO Lenovo (c) · la firma del cuadro va en el pie (letra chica abajo); sin firma, sin pie
+    slides.push({ ...limpia({ headline: c.headline, body: c.body, cta: c.cta, eyebrow: c.eyebrow, background_image_url: img?.url ?? null }), pie: c.firma?.trim() ? c.firma.trim() : null, ocultar_indicador: true })
     refs.push(e.ref)
   }
   return { slides, refs, problemas }

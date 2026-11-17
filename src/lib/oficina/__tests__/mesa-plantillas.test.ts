@@ -20,12 +20,16 @@ function filaDe(tipo: string): { pasos: unknown; indicaciones: unknown; limites:
 
 const MESA_CORTA = fs.readFileSync(path.join(RAIZ, 'supabase', 'migrations', '202611171030_oficina_kit_mesa_corta.sql'), 'utf8')
 const limitesDeLaMesaCorta = (): unknown => JSON.parse(/\$lim\$([\s\S]*?)\$lim\$/.exec(MESA_CORTA)![1])
+// 17-nov · GO Lenovo (d) · 202611172000 suma `vuelve_a` (a la mesa) al paso `jefatura` de kit_mesa: el dato vigente es el de 202610281500 con esa vuelta
+const VUELTA = fs.readFileSync(path.join(RAIZ, 'supabase', 'migrations', '202611172000_oficina_kit_mesa_jefatura_vuelve_a_la_mesa.sql'), 'utf8')
+const vueltaDeLaJefatura = (): unknown => JSON.parse(/\$vuelta\$([\s\S]*?)\$vuelta\$/.exec(VUELTA)![1])
+const pasosVigentes = (tipo: string, pasos: unknown): unknown => (tipo === 'kit_mesa' ? (pasos as Array<Record<string, unknown>>).map((p) => (p.clave === 'jefatura' ? { ...p, vuelve_a: vueltaDeLaJefatura() } : p)) : pasos)
 
 describe('LA MESA · plantillas como dato', () => {
   for (const [tipo, P] of [['carrusel_mesa', CARRUSEL_MESA], ['kit_mesa', KIT_MESA]] as Array<[string, Plantilla]>) {
     it(`${tipo}: el dato sembrado en la migración es EXACTAMENTE el que produce el código`, () => {
       const f = filaDe(tipo)
-      expect(f.pasos).toEqual(JSON.parse(JSON.stringify(P.pasos)))
+      expect(pasosVigentes(tipo, f.pasos)).toEqual(JSON.parse(JSON.stringify(P.pasos)))
       expect(f.indicaciones).toEqual(JSON.parse(JSON.stringify(P.indicaciones)))
       // 17-nov · la mesa corta (202611171030) reescribe los límites de kit_mesa: el dato vigente es el de esa migración
       expect(tipo === 'kit_mesa' ? limitesDeLaMesaCorta() : f.limites).toEqual(JSON.parse(JSON.stringify(P.limites)))

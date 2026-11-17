@@ -283,7 +283,7 @@ export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza, video?: ParametrosDelV
     ].join('\n')
   : tipo === 'post' ? CONVENCION_DEL_POST
   : [
-      'Escribe la PIEZA COMPLETA con esta convención ligera: una sección por elemento del brief, con su identificador:',
+      'Escribe la PIEZA COMPLETA con esta convención ligera: una sección por elemento del brief, con su identificador. Si un elemento necesita más de un cuadro (p. ej. un «swipe» a otra imagen), escribe una sección por cuadro con el MISMO identificador («## e01 · cuadro 2»): cada cuadro es una historia más, con el mismo destino, día y hora:',
       '```',
       '## Objetivo',
       '<qué tiene que lograr esta pieza, en una frase> · <el llamado>',
@@ -293,6 +293,7 @@ export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza, video?: ParametrosDelV
       'Llamado: …',
       'Ambiente: …',
       'Qué se ve: <la escena de ESTE elemento: lugar, quién, qué pasa, luz>',
+      'Firma: <la línea chica al pie del cuadro (marca · zona · web), si lleva; si no, no escribas el campo>',
       'Imagen: foto:<id de una foto propia> | generar: <qué debe mostrarse> | ninguna',
       '## Citas',
       'A3 usé: <qué tomaste de ese aporte>',
