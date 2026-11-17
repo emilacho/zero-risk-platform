@@ -10,8 +10,9 @@
  * Condición 1 de CC6 · el INVARIANTE va en el código (`coberturaDelTope`): el tope del encargo cubre una pasada por todos los pasos que gastan, cada uno a su tope,
  * más un turno de la mesa si la plantilla la tiene. Si no, el encargo NO abre (409 claro en `abrirEncargo`), nada de abrir para cortarse después.
  */
-import { COTAS } from './mesa/tipos'
-import type { Paso, Plantilla } from './tipos'
+import { COTAS, FAMILIAS_MESA } from './mesa/tipos'
+import { evaluar } from './motor'
+import type { Estado, Paso, Plantilla } from './tipos'
 
 const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null)
 const r4 = (n: number) => Math.round(n * 10000) / 10000
@@ -131,11 +132,18 @@ export function coberturaDelTope(p: Plantilla, tope: number): { requerido: numbe
   const vueltas = pasos
     .filter((s) => (num(s.vuelve_a?.max) ?? 0) > 0 && !seSalta(s))
     .map((s) => ({ clave: s.clave, max: num(s.vuelve_a?.max) as number, costo: costoDeVolver(p, s) }))
-  const requerido = r4(pasada + vueltas.reduce((a, x) => a + x.max * x.costo, 0))
+  const porPasos = r4(pasada + vueltas.reduce((a, x) => a + x.max * x.costo, 0))
+  // 17-nov · T7b · condición de CC6 (CERTIFICACIÓN 1118, una sola cuenta): en el video la mesa guarda lo que sigue con `loQueSigueDeLaMesa` (+ la jefatura) antes de su
+  //   primer turno; lo requerido nunca es menos que eso, o el encargo abriría y la mesa cerraría sin pieza
+  const iMesa = pasos.findIndex((s) => s.funcion === 'mesa')
+  const deLaMesa = iMesa >= 0 && (FAMILIAS_MESA as Record<string, string>)[String(p.familia)] === 'video'
+    ? r4(pasos.slice(0, iMesa).reduce((a, s) => a + Math.max(0, num(s.tope_usd) ?? 0), 0) + COTAS.RESERVA_POR_TURNO_USD + loQueSigueDeLaMesa(p, { vueltas: {} }))
+    : 0
+  const requerido = Math.max(porPasos, deLaMesa)
   const cubre = num(tope) !== null && tope + 1e-9 >= requerido
   const partes = gastan.map((s) => `${s.clave} ${s.tope_usd}`).concat(mesa ? [`un turno de la mesa ${mesa}`] : [])
   const deVueltas = vueltas.map((x) => `${x.max} × la vuelta de «${x.clave}» (${r4(x.costo)})`)
-  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} el peor caso con cada paso a su tope (US$ ${requerido}: una pasada ${partes.join(' + ') || 'sin gasto'}${deVueltas.length ? ` + ${deVueltas.join(' + ')}` : ''})` }
+  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} el peor caso con cada paso a su tope (US$ ${requerido}: una pasada ${partes.join(' + ') || 'sin gasto'}${deVueltas.length ? ` + ${deVueltas.join(' + ')}` : ''} = ${porPasos}${deLaMesa > porPasos ? `; pero la mesa del video guarda ${deLaMesa} antes de su primer turno (su turno + lo que sigue + la jefatura), y manda eso` : ''})` }
 }
 
 /**
@@ -143,16 +151,22 @@ export function coberturaDelTope(p: Plantilla, tope: number): { requerido: numbe
  * de la mesa (cada uno una vez, a su tope) + la revisión de cada paso de la jefatura (su tope en la plantilla es 0 y gasta de lo que queda: se le guarda
  * `COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD`, 1,5 + margen, como en la cifra fija vieja) + las vueltas que no se saltan y aún quedan (`vuelve_a.max` − las ya hechas) × `costoDeVolver`. Con esto la mesa del
  * video se frena a tiempo (`cotaAgotada`) y nunca se come lo que necesita el borrador, el video o una ronda del dueño. Antes era una cifra fija (6,5, del 31-oct). Pura.
+ * 17-nov · CC6 (RESPUESTA aplicar-1118): la vuelta EN CURSO cuenta como hecha. El motor la suma recién al registrar el primer paso de la vuelta (la mesa), así
+ *   que mientras la mesa trabaja la ronda del dueño `e.vueltas` aún no la tiene; si el último paso hecho vuelve a ESTA mesa y su condición se cumple (lo mismo
+ *   que decide `siguientePaso`), esa ronda ya está ocurriendo y no se reserva otra vez.
  */
-export function loQueSigueDeLaMesa(p: Plantilla, e: { vueltas?: Record<string, number> }): number {
+export function loQueSigueDeLaMesa(p: Plantilla, e: { vueltas?: Record<string, number> } & Partial<Estado>): number {
   const pasos = Array.isArray(p?.pasos) ? p.pasos : []
   const i = pasos.findIndex((s) => s.funcion === 'mesa')
   if (i < 0) return 0
   const despues = pasos.slice(i + 1)
+  const ult = typeof e.ultimo === 'number' && e.ultimo >= 0 ? pasos[e.ultimo] : undefined
+  const v = ult?.vuelve_a
+  const enCurso = ult && v && v.paso === pasos[i].clave && (e.vueltas?.[ult.clave] ?? 0) < v.max && evaluar(v.si, e as Estado) ? ult.clave : null
   const pasada = despues.reduce((a, s) => a + Math.max(0, num(s.tope_usd) ?? 0) + (s.tipo === 'jefatura' ? COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD : 0), 0)
   const vueltas = despues
     .filter((s) => (num(s.vuelve_a?.max) ?? 0) > 0 && !seSalta(s))
-    .reduce((a, s) => a + Math.max(0, (num(s.vuelve_a?.max) as number) - (e.vueltas?.[s.clave] ?? 0)) * costoDeVolver(p, s), 0)
+    .reduce((a, s) => a + Math.max(0, (num(s.vuelve_a?.max) as number) - (e.vueltas?.[s.clave] ?? 0) - (s.clave === enCurso ? 1 : 0)) * costoDeVolver(p, s), 0)
   return r4(pasada + vueltas)
 }
 
