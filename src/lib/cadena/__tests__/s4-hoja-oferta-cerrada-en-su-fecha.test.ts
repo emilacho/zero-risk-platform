@@ -31,7 +31,7 @@ const hoja = (fichas: FichaDeOferta[] | undefined, filas: FilaDeHoja[]) => escri
 } as InsumosDeLaHoja)
 const seccion = (texto: string, id: string) => parsearBrief(texto, id)!.texto
 const hecho = (o: Partial<HechoDelNegocioPorOferta> & Pick<HechoDelNegocioPorOferta, 'tipo' | 'valor'>): HechoDelNegocioPorOferta =>
-  ({ oferta: 'brunch', sede_id: null, vigente_desde: null, vigente_hasta: null, fuente: 'dueno · cerebro_fichas:f1', fecha_de_la_fuente: '2026-11-17', confianza: 'alta', ...o })
+  ({ oferta: 'brunch', sede_id: null, vigente_desde: null, vigente_hasta: null, fuente: 'dueno · ficha:f1', fecha_de_la_fuente: '2026-11-17', confianza: 'alta', ...o })
 const BASE: FichaDeOferta[] = [{ clave: 'brunch', que_es: { valor: 'brunch de domingo', fuente: 'manual:menu' } }]
 const CAMPO = `- ${CAMPO_OFERTA_CERRADA}:`
 
@@ -39,7 +39,7 @@ describe('D1 · la hoja escribe si la oferta está cerrada en la fecha de la fil
   it('🔴 cierre del cerebro vigente en la fecha de la fila ⇒ el campo, con valor y fuente, justo DESPUÉS de la lista de la ficha', () => {
     const fichas = fichasConHechos(BASE, [hecho({ tipo: 'cierre_retiro', valor: 'el brunch se retiró del menú', vigente_desde: '2026-11-18' })])
     const s = seccion(hoja(fichas, [fila({ id: 'p-1', oferta: 'brunch' })]).texto_md, 'p-1')
-    expect(s).toContain(`${CAMPO} el brunch se retiró del menú (fuente: cerebro:dueno · cerebro_fichas:f1 · dicho el 2026-11-17 · confianza alta)`)
+    expect(s).toContain(`${CAMPO} el brunch se retiró del menú (fuente: cerebro:dueno · ficha:f1 · dicho el 2026-11-17 · confianza alta)`)
     const l = s.split('\n')
     const i = l.findIndex((x) => x.startsWith(`- ${CAMPO_FICHA}:`)), j = l.findIndex((x) => x.startsWith(CAMPO))
     expect(i).toBeGreaterThanOrEqual(0)
