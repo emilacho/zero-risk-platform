@@ -10,7 +10,7 @@
 export const CLAVE_DE_LA_PALANCA = 'creativos_con_mesa'
 
 /** la familia de siempre → su versión con mesa (dato del diseño; agregar una es una línea aquí y su plantilla activa) */
-export const FAMILIA_CON_MESA: Readonly<Record<string, string>> = { kit_historias: 'kit_mesa' }
+export const FAMILIA_CON_MESA: Readonly<Record<string, string>> = { kit_historias: 'kit_mesa', post_img: 'post_mesa' }
 
 /** ¿la palanca está encendida para este cliente? cualquier forma que no sea `{ clientes: string[] }` con el cliente adentro = apagada */
 export function palancaEncendida(valor: unknown, clientId: string): boolean {

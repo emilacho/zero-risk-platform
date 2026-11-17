@@ -48,6 +48,8 @@ export interface Traduccion {
   copy_kit?: ElementoDeCopyKit[]
   estructura?: ElementoDeEstructura[]
   imagenes: ImagenPedida[]
+  /** 17-nov · post (foto con mesa): la pieza con la forma que lee la cola de la sala 1 (`pieza_post.v1`) */
+  pieza_post?: { pie_de_foto: string; hashtags: string[]; llamado?: string; texto_en_imagen: { etiqueta?: string; titular?: string; bajada?: string; boton?: string } }
   /** avisos para el equipo (nunca rechazos) */
   avisos: string[]
   /** las variantes que el director dejó y NO se usaron (quedan anotadas; no se dibujan) */
@@ -366,6 +368,31 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
       ok: true, pie_de_foto: pie || (laminas[0].headline), hashtags: tags, laminas, imagenes, avisos, ...conObjetivo, ...(alternativas.length ? { alternativas } : {}),
       copy_carrusel: { texto_base: todoElTexto, pie_de_foto: pie || laminas[0].headline, hashtags: tags, ...(llamado ? { llamado } : {}) },
     }
+  }
+
+  // 17-nov · la FOTO con mesa (tramo B): UNA pieza · lo que va escrito sobre la imagen (etiqueta, titular, bajada, botón), su imagen y el texto de la publicación
+  if (tipo === 'post') {
+    const lineas = cuerpo.flatMap((s) => s.lineas)
+    const leidos = campos(lineas, 'la pieza')
+    const c = leidos.valores
+    alternativas.push(...leidos.alternativas); avisos.push(...leidos.avisos)
+    const limpio = (campo: string, v: string, parrafos = false): string => {
+      const t = limpiarTexto(v, parrafos)
+      if (t && esNotaDelDirector(t)) { avisos.push(`el ${campo} traía una nota del director y no se escribió sobre la imagen`); return '' }
+      return t
+    }
+    const titular = limpio('título', c.headline ?? '')
+    const bajada = limpio('texto', c.body ?? '', true)
+    const etiqueta = limpio('sobre-título', c.eyebrow ?? '')
+    const llamado = esInstruccionDeBoton(c.cta ?? '') ? '' : limpio('llamado', c.cta ?? '')
+    // sin texto de publicación ni titular no hay pieza: UNA pregunta a la dirección; después, lo que haya
+    if (!pie && !titular && (o.preguntasHechas ?? 0) < maxP) return { ok: false, pregunta: 'No encuentro ni el texto de la publicación (## Pie) ni el titular de la imagen. ¿Cuál es el texto de esta publicación?', pie_de_foto: pie, hashtags: tags, imagenes: [], avisos }
+    const pieFinal = pie || [titular, bajada].filter(Boolean).join('\n\n')
+    if (!pieFinal) return falla('la pieza no trae texto de publicación ni titular')
+    if (!pie) avisos.push('la dirección no dejó texto de publicación (## Pie): se usa el titular y el texto de la imagen')
+    imagenes.push(leerImagen('pieza', c.imagen, { idea: c.concepto || ideaDeLaPieza, que_se_ve: c.que_se_ve, mensaje: titular || pieFinal.slice(0, 120), emocion: c.emocion, ...conObjetivo }))
+    const texto_en_imagen = { ...(etiqueta ? { etiqueta } : {}), ...(titular ? { titular } : {}), ...(bajada ? { bajada } : {}), ...(llamado ? { boton: llamado } : {}) }
+    return { ok: true, pie_de_foto: pieFinal, hashtags: tags, imagenes, avisos, ...conObjetivo, ...(alternativas.length ? { alternativas } : {}), pieza_post: { pie_de_foto: pieFinal, hashtags: tags, ...(llamado ? { llamado } : {}), texto_en_imagen } }
   }
 
   // kit de historias: una sección por elemento del brief (por ref, o por orden)

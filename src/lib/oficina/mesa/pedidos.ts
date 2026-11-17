@@ -40,6 +40,7 @@ const recorta = (t: string, n: number, doc?: string) => (t.length <= n ? t : t.s
 export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: number }> = {
   carrusel: { manual: 7000, marco: 5000, plan: 3000 },
   kit: { manual: 7000, marco: 5000, plan: 3000 },
+  post: { manual: 7000, marco: 5000, plan: 3000 },
   brief: { manual: 120000, marco: 40000, plan: 120000 },
   concepto: { manual: 120000, marco: 60000, plan: 0 },
   video: { manual: 7000, marco: 5000, plan: 3000 },
@@ -219,6 +220,32 @@ export function convencionDelGuion(v: ParametrosDelVideo = VIDEO_POR_OMISION): s
   ].join('\n')
 }
 
+/** 17-nov · tramo B · la FOTO con mesa: UNA imagen (foto propia, generada o ninguna), lo que va escrito sobre ella y el texto de la publicación. Lo escrito sobre la imagen es opcional: la mesa decide si la foto lleva texto */
+const CONVENCION_DEL_POST = [
+  'Escribe la PIEZA COMPLETA con esta convención ligera (es para quien compone y publica; no es un formulario):',
+  '```',
+  '## Objetivo',
+  '<qué tiene que lograr esta publicación, en una frase> · <el llamado>',
+  '## Concepto',
+  '<la idea de la pieza, en una frase>',
+  '## Pieza',
+  'Sobre-título: … (opcional)',
+  'Título: … (lo que va escrito sobre la imagen; vacío si la imagen va sin texto)',
+  'Texto: … (opcional)',
+  'Llamado: … (opcional)',
+  'Qué se ve: <la escena: lugar, quién, qué pasa, luz>',
+  'Imagen: foto:<id de una foto propia> | generar: <qué debe mostrarse> | ninguna',
+  '## Pie',
+  '<el texto de la publicación>',
+  '## Etiquetas',
+  '#una #otra',
+  '## Citas',
+  'A3 usé: <qué tomaste de ese aporte>',
+  'A5 descarté: <por qué no lo usaste>',
+  '```',
+  'Lo que escribes en Sobre-título, Título, Texto y Llamado es EXACTAMENTE lo que se compone sobre la imagen: una sola versión final por campo. El pie («## Pie») es el texto de publicación final, sin hashtags (van solo en «## Etiquetas») y con la voz del manual.',
+].join('\n')
+
 export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza, video?: ParametrosDelVideo): string => tipo === 'brief' ? CONVENCION_DEL_BRIEF : tipo === 'concepto' ? CONVENCION_DEL_CONCEPTO : tipo === 'video' ? convencionDelGuion(video) : tipo === 'carrusel'
   ? [
       'Escribe la PIEZA COMPLETA con esta convención ligera (no es un formulario: es para que el equipo de dibujo la lea):',
@@ -245,6 +272,7 @@ export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza, video?: ParametrosDelV
       'Lo que escribes en Título, Texto y Llamado es EXACTAMENTE lo que se dibuja: una sola versión final por campo, sin "Variante A/B", sin etiquetas de formato ("Titular nativo", "Texto en imagen"), sin límites entre paréntesis ni markdown. Si quieres dejar alternativas, ponlas bajo "## Alternativas" (no se dibujan). Las instrucciones para quien dibuja o publica van en "Imagen:" o en tus aportes, no dentro del texto de la lámina.',
       'El pie ("## Pie") es el texto de publicación final, sin hashtags (esos van solo en "## Etiquetas", una vez cada uno) y con la voz del manual.',
     ].join('\n')
+  : tipo === 'post' ? CONVENCION_DEL_POST
   : [
       'Escribe la PIEZA COMPLETA con esta convención ligera: una sección por elemento del brief, con su identificador:',
       '```',

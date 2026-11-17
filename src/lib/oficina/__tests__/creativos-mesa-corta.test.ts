@@ -36,13 +36,13 @@ describe('la palanca por cliente (puro)', () => {
     expect(familiaConMesa('video_mesa', ON, CLIENTE, () => true)).toBe('video_mesa')
     expect(familiaConMesa(null, ON, CLIENTE, () => true)).toBeNull()
   })
-  it('hoy solo las historias tienen versión con mesa por palanca (la foto llega en su tramo)', () => {
-    expect(FAMILIA_CON_MESA).toEqual({ kit_historias: 'kit_mesa' })
+  it('las historias y la foto tienen versión con mesa por palanca (tramo B: la foto); el carrusel no', () => {
+    expect(FAMILIA_CON_MESA).toEqual({ kit_historias: 'kit_mesa', post_img: 'post_mesa' })
   })
   it('la misma pieza por las dos líneas cuenta como una (versiones y reaperturas)', () => {
     expect(gruposHermanos('kit_mesa').sort()).toEqual(['kit_historias', 'kit_mesa'])
     expect(gruposHermanos('kit_historias').sort()).toEqual(['kit_historias', 'kit_mesa'])
-    expect(gruposHermanos('post_img')).toEqual(['post_img'])
+    expect(gruposHermanos('carrusel_ig_v1')).toEqual(['carrusel_ig_v1'])
   })
 })
 

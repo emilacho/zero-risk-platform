@@ -23,8 +23,9 @@ export async function observarImagenes(P: Puertos, enc: Encargo, _pl: Plantilla)
   const b = baseDeLaminas(e)
   const im = datos(e, 'imagenes')
   const ult = (im?.ultimo_intento as number | undefined) ?? 0
-  const items = ((im?.items ?? []) as Array<{ indice: number; ref: string; url: string; prompt?: string; intento: number }>).filter((x) => x.intento === ult && x.url)
-  const permitido = [...cadenasDe(datos(e, 'copy_carrusel')), ...cadenasDe(datos(e, 'laminas')), ...cadenasDe(datos(e, 'copy_kit')), ...cadenasDe(datos(e, 'estructura')), b.F.marca?.brand_handle ?? '']
+  // 17-nov · tramo B · la imagen de la FOTO (sala 1) no lleva `ref`: es la única de la pieza, «pieza»
+  const items = ((im?.items ?? []) as Array<{ indice: number; ref?: string; url: string; prompt?: string; intento: number }>).filter((x) => x.intento === ult && x.url).map((x) => ({ ...x, ref: x.ref ?? 'pieza' }))
+  const permitido = [...cadenasDe(datos(e, 'copy_carrusel')), ...cadenasDe(datos(e, 'laminas')), ...cadenasDe(datos(e, 'copy_kit')), ...cadenasDe(datos(e, 'estructura')), ...cadenasDe(datos(e, 'pieza_post')), b.F.marca?.brand_handle ?? '']
   const lecturas: Record<number, LecturaDelObservador> = {}
   const gastos: NonNullable<Cambios['gastos']> = []
   let costo = 0
