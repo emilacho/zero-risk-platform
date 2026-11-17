@@ -141,6 +141,8 @@ export interface EstadoMesa {
   pieza_texto: string | null
   /** el tablero (aportes, citas y lo que el código comprobó) que viaja a la jefatura para que juzgue si cada aporte fue real; lo escribe `cerrarLaMesa` */
   tablero_para_la_jefatura?: string
+  /** cambio 4 · firma de Emilio · las líneas «RESPUESTA A LA JEFATURA S<n>: …» con que la dirección respondió las correcciones de la vuelta (fuera de la pieza) */
+  respuestas_a_la_jefatura?: string[]
   /** el turno que está esperando respuesta */
   /** Sprint 2 · S2-1 · solo video: la duración y las propuestas que dice la plantilla, congeladas al abrir (un cambio de la plantilla no mueve la meta de una pieza en vuelo) */
   video?: import('./pedidos').ParametrosDelVideo

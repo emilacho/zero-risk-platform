@@ -152,39 +152,93 @@ export function hallazgosDelJefe(lineas: string[], f: FichaDeLaHoja): { hallazgo
   return { hallazgos, resto }
 }
 
-// ───────────────────────── el regreso
-export interface Devolucion { llave: string; fila_id: string; destino: Exclude<Destino, 'pieza'>; motivo: string; linea_de_la_ficha: string | null; encargo_id: string; origen: Hallazgo['origen'] }
+// ───────────────────────── el regreso (firma de Emilio 17-nov 20:34 · automático, sin persona en el medio: el creador del paso responde)
+/** regla dura = lo que verifica el código (D2 · D3 firmadas): el creador la toma SÍ O SÍ. Lo del jefe es criterio: el creador la toma, en parte o no, con motivo */
+export const esDura = (h: Pick<Hallazgo, 'origen'>): boolean => h.origen === 'codigo'
+export interface Devolucion { llave: string; fila_id: string; destino: Exclude<Destino, 'pieza'>; motivo: string; linea_de_la_ficha: string | null; encargo_id: string; origen: Hallazgo['origen']; dura: boolean }
 /** UNA devolución por fila y destino (la llave); repetirla no duplica */
 export const llaveDeDevolucion = (filaId: string, destino: Destino): string => `${filaId}:${destino}`
+/** una corrección que vuelve a la mesa (al creador de la pieza), con su número para que la responda */
+export interface Enviada { id: string; texto: string; dura: boolean }
 
 export interface Regreso {
-  /** líneas que vuelven a la mesa como corrección (destino pieza) */
+  /** líneas que vuelven a la mesa como corrección (destino pieza), cada una con su número [S1]… */
   a_la_mesa: string[]
+  enviadas: Enviada[]
   /** devoluciones nuevas a la cadena (una por fila y destino) */
   devoluciones: Devolucion[]
-  /** lo que ya se había devuelto a ese destino: va a una PERSONA (tope · §16), no abre otra devolución */
-  a_humano: Hallazgo[]
-  /** los destinos de la cadena a los que vuelve (para la marca de la bandeja) */
+  /** ese destino ya se devolvió y su creador ya respondió: la jefatura NO reabre; queda registrado y sigue (firma de Emilio) */
+  no_reabre: Hallazgo[]
+  /** los destinos de la cadena a los que vuelve ahora (para la marca informativa de la bandeja) */
   vuelve_a: Destino[]
   cita_no_verificada: boolean
 }
 
 /** reparte los hallazgos por destino. `yaDevueltas`: las llaves que ya existen (del encargo o de la cadena) */
 export function repartir(hallazgos: Hallazgo[], filaId: string | null, encargoId: string, yaDevueltas: ReadonlySet<string>): Regreso {
-  const r: Regreso = { a_la_mesa: [], devoluciones: [], a_humano: [], vuelve_a: [], cita_no_verificada: hallazgos.some((h) => h.cita_no_verificada) }
+  const r: Regreso = { a_la_mesa: [], enviadas: [], devoluciones: [], no_reabre: [], vuelve_a: [], cita_no_verificada: hallazgos.some((h) => h.cita_no_verificada) }
   const nuevas = new Set<string>()
   for (const h of hallazgos) {
-    const texto = `${ROTULO_DE_SENTIDO} · ${h.destino}: ${h.que}${h.linea_de_la_ficha ? ` — ficha: «${h.linea_de_la_ficha}»` : ''}${h.cita_no_verificada ? ' (cita no verificada)' : ''}`
-    if (h.destino === 'pieza' || !filaId) { r.a_la_mesa.push(texto); continue }
+    const dura = esDura(h)
+    if (h.destino === 'pieza' || !filaId) {
+      const id = `S${r.enviadas.length + 1}`
+      const texto = `[${id}] ${ROTULO_DE_SENTIDO} · ${h.destino}: ${h.que}${h.linea_de_la_ficha ? ` — ficha: «${h.linea_de_la_ficha}»` : ''}${h.cita_no_verificada ? ' (cita no verificada)' : ''}${dura ? ' (regla dura: se toma sí o sí)' : ''}`
+      r.enviadas.push({ id, texto, dura })
+      r.a_la_mesa.push(texto)
+      continue
+    }
     const llave = llaveDeDevolucion(filaId, h.destino)
-    if (yaDevueltas.has(llave)) { r.a_humano.push(h); continue }
+    if (yaDevueltas.has(llave)) { r.no_reabre.push(h); continue }
     if (nuevas.has(llave)) continue
     nuevas.add(llave)
-    r.devoluciones.push({ llave, fila_id: filaId, destino: h.destino, motivo: h.que, linea_de_la_ficha: h.linea_de_la_ficha, encargo_id: encargoId, origen: h.origen })
+    r.devoluciones.push({ llave, fila_id: filaId, destino: h.destino, motivo: h.que, linea_de_la_ficha: h.linea_de_la_ficha, encargo_id: encargoId, origen: h.origen, dura })
     if (!r.vuelve_a.includes(h.destino)) r.vuelve_a.push(h.destino)
   }
-  for (const h of r.a_humano) if (!r.vuelve_a.includes(h.destino)) r.vuelve_a.push(h.destino)
   return r
+}
+
+// ───────────────────────── la respuesta del creador (firma de Emilio: «tomada», «tomada en parte: …» o «no tomada: …», con motivo)
+export const ROTULO_DE_RESPUESTA = 'RESPUESTA A LA JEFATURA'
+export type QueHizo = 'tomada' | 'tomada_en_parte' | 'no_tomada'
+export interface RespuestaDelCreador { id: string; respuesta: QueHizo | 'no_dicha'; motivo: string | null; dura: boolean; texto: string; declarado?: string }
+const RE_RESPUESTA = /^[\s>*•\-–—]*\*{0,2}RESPUESTA A LA JEFATURA\s*\[?\s*(S\d{1,2})\s*\]?\s*\*{0,2}\s*[:·–—-]\s*(.*)$/iu
+/** lo que el autor escribe para pedirle la respuesta (va al final del aviso de la vuelta; solo si hay correcciones de sentido) */
+export function pedidoDeRespuesta(enviadas: Enviada[]): string[] {
+  if (!enviadas.length) return []
+  return [
+    `Responde cada corrección marcada [S…] en una línea aparte, al final de tu integración: «${ROTULO_DE_RESPUESTA} S1: tomada», «${ROTULO_DE_RESPUESTA} S1: tomada en parte: <por qué>» o «${ROTULO_DE_RESPUESTA} S1: no tomada: <por qué>». Esas líneas no salen en la pieza.`,
+    ...(enviadas.some((x) => x.dura) ? ['Las marcadas «regla dura» se toman sí o sí: corrígelas en la pieza.'] : []),
+  ]
+}
+/** separa las líneas de respuesta del texto de la integración: la pieza queda SIN ellas (si no hay, el texto es el mismo) */
+export function separarRespuestas(texto: string): { pieza: string; lineas: string[] } {
+  const todas = String(texto ?? '').split(/\r?\n/)
+  const lineas = todas.filter((l) => RE_RESPUESTA.test(l)).map((l) => l.trim())
+  if (!lineas.length) return { pieza: String(texto ?? ''), lineas: [] }
+  return { pieza: todas.filter((l) => !RE_RESPUESTA.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trimEnd(), lineas }
+}
+/**
+ * lee la respuesta del creador para cada corrección enviada. Falta, no se entiende o viene sin motivo (en parte / no tomada) ⇒ «no_dicha», declarada: NUNCA se da por tomada.
+ * Una regla dura respondida «no tomada» o «en parte» se declara: la regla dura no se negocia (la revisión siguiente la vuelve a medir por código).
+ */
+export function leerRespuestas(enviadas: Enviada[], lineas: string[]): RespuestaDelCreador[] {
+  const por = new Map<string, string>()
+  for (const l of lineas) { const m = RE_RESPUESTA.exec(l); if (m && !por.has(m[1].toUpperCase())) por.set(m[1].toUpperCase(), m[2].trim()) }
+  return enviadas.map((x) => {
+    const base = { id: x.id, dura: x.dura, texto: x.texto }
+    const dicho = por.get(x.id)
+    if (dicho === undefined) return { ...base, respuesta: 'no_dicha', motivo: null, declarado: 'el creador no respondió esta corrección' }
+    const n = normal(dicho)
+    const conMotivo = (pref: string): string | null => { const r = dicho.replace(new RegExp(`^\\s*${pref}\\s*[:·–—-]?\\s*`, 'iu'), '').trim(); return r.length >= 3 ? r : null }
+    let respuesta: QueHizo | null = null
+    let motivo: string | null = null
+    if (/^tomada en parte(?!\p{L})/u.test(n)) { respuesta = 'tomada_en_parte'; motivo = conMotivo('tomada en parte') }
+    else if (/^no tomada(?!\p{L})/u.test(n)) { respuesta = 'no_tomada'; motivo = conMotivo('no tomada') }
+    else if (/^tomada(?!\p{L})/u.test(n)) { respuesta = 'tomada'; motivo = conMotivo('tomada') }
+    if (!respuesta) return { ...base, respuesta: 'no_dicha', motivo: null, declarado: `respuesta que no se entiende: «${dicho.slice(0, 120)}»` }
+    if (respuesta !== 'tomada' && !motivo) return { ...base, respuesta: 'no_dicha', motivo: null, declarado: `«${respuesta === 'no_tomada' ? 'no tomada' : 'tomada en parte'}» sin motivo: no cuenta` }
+    return { ...base, respuesta, motivo, ...(x.dura && respuesta !== 'tomada' ? { declarado: 'regla dura: no se puede dejar de tomar; la revisión la vuelve a medir' } : {}) }
+  })
 }
 
 /** la marca de la bandeja: «⚠️ VUELVE A HOJA · CALENDARIO · » (vacía si no vuelve a la cadena) */

@@ -299,7 +299,11 @@ const briefDe = (e: Estado): BriefLeido | null => (datos(e, 'encargo') as unknow
 /** cambio 4 · lo que la aplicación necesita para el sentido: la ficha de la hoja, la pieza, la fila (la del calendario o, si no viaja, el brief, que es su id) y lo ya devuelto */
 function sentidoDe(enc: Pick<Encargo, 'id' | 'brief_id' | 'sala_ref'>, e: Estado, textoDeLaPieza: string): OpcionesDeAplicacion['sentido'] {
   const fila = (enc.sala_ref?.fila as { id?: unknown } | undefined)?.id
-  return { ficha: fichaDeLaHoja(briefDe(e)?.texto), textoDeLaPieza, filaId: typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos }
+  // firma de Emilio · si la revisión anterior mandó correcciones a la mesa, esta revisión lee lo que respondió el creador (la mesa guardó sus líneas al cerrar)
+  const enviadas = datosDeLaJefatura(e)?.sentido?.enviadas ?? []
+  const lineas = datos(e, 'mesa')?.respuestas_a_la_jefatura
+  const previas = enviadas.length ? { enviadas, lineasDeRespuesta: Array.isArray(lineas) ? lineas.filter((l): l is string => typeof l === 'string') : [] } : null
+  return { ficha: fichaDeLaHoja(briefDe(e)?.texto), textoDeLaPieza, filaId: typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos, previas }
 }
 
 export function puedeVolverALaMesa(pl: Plantilla, paso: Paso, e: Estado): ((costo: number) => boolean) | undefined {

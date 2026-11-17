@@ -11,7 +11,7 @@ import type { PayloadDeRevision, Productor, SalidaDeRevision } from '../jefatura
 import { datos, fichaNueva } from './ayudas'
 import { claseDe } from './clase'
 import { quedaDesacuerdoDeHechos } from './hechos-del-negocio'
-import { hallazgosDelJefe, marcaDeVuelta, repartir, type Destino, type Devolucion, type FichaDeLaHoja, type Hallazgo } from './sentido-contra-la-ficha'
+import { esDura, hallazgosDelJefe, leerRespuestas, marcaDeVuelta, pedidoDeRespuesta, repartir, type Destino, type Devolucion, type Enviada, type FichaDeLaHoja, type Hallazgo, type RespuestaDelCreador } from './sentido-contra-la-ficha'
 import type { ContextoDelRevisor } from './ciego'
 import type { Encargo } from './puertos'
 import type { ResultadoDePaso } from './motor'
@@ -106,15 +106,19 @@ export interface DatosDeLaJefatura {
   /** cambio 4 · el sentido contra la ficha (solo si la hoja trae ficha; sin ficha no aparece y nada cambia) */
   sentido?: DatosDelSentido
 }
-/** cambio 4 · lo que se guarda del sentido: las devoluciones a la cadena quedan GUARDADAS y visibles aquí (entrega 1: todavía sin receptor en la cadena) */
+/** cambio 4 · lo que se guarda del sentido (firma de Emilio 17-nov 20:34: el regreso es automático y responde el creador de cada paso; sin persona en el medio) */
 export interface DatosDelSentido {
   ficha: 'con_ficha'
   declarado: string[]
   /** hallazgos del código (exactos) y del jefe (sentido, con su cita verificada) */
   hallazgos: Hallazgo[]
   devoluciones: Devolucion[]
-  /** ya se había devuelto a ese destino: una persona decide (tope · §16) */
-  a_humano: Hallazgo[]
+  /** correcciones que volvieron a la mesa (al creador de la pieza), con su número para que las responda */
+  enviadas: Enviada[]
+  /** ya se había devuelto (o el creador ya respondió): la jefatura NO reabre; queda registrado aquí y la pieza sigue */
+  no_reabre: Hallazgo[]
+  /** lo que respondió el creador de la pieza a las correcciones de la vuelta anterior (solo en la revisión que sigue a esa vuelta) */
+  respuestas_del_creador?: RespuestaDelCreador[]
   vuelve_a: Destino[]
   cita_no_verificada: boolean
 }
@@ -138,9 +142,10 @@ export interface OpcionesDeAplicacion {
   /**
    * cambio 4 · la ficha de la oferta que trae la hoja y lo necesario para el regreso. Sin esto (o sin ficha) la aplicación es EXACTAMENTE la de antes.
    * `yaDevueltas`: las llaves fila:destino ya devueltas (una por fila y destino; la segunda va a una persona).
-   * `exactos`: los chequeos exactos por código (punto 2 · `exactos-de-la-ficha.ts`); sin él, solo el jefe juzga el sentido (Emilio decide antes de meter verificaciones por código).
+   * `exactos`: las reglas duras por código (D2 · D3 firmadas por Emilio · `exactos-de-la-ficha.ts`); sin él, solo el jefe juzga el sentido.
+   * `previas`: la revisión anterior mandó correcciones a la mesa y la mesa ya volvió: lo que respondió el creador (sus líneas «RESPUESTA A LA JEFATURA S<n>: …»).
    */
-  sentido?: { ficha: FichaDeLaHoja; textoDeLaPieza: string; filaId: string | null; encargoId: string; yaDevueltas: ReadonlySet<string>; exactos?: (f: FichaDeLaHoja, textoDeLaPieza: string) => { hallazgos: Hallazgo[]; declarado: string[] } }
+  sentido?: { ficha: FichaDeLaHoja; textoDeLaPieza: string; filaId: string | null; encargoId: string; yaDevueltas: ReadonlySet<string>; exactos?: (f: FichaDeLaHoja, textoDeLaPieza: string) => { hallazgos: Hallazgo[]; declarado: string[] }; previas?: { enviadas: Enviada[]; lineasDeRespuesta: string[] } | null }
 }
 
 /** cambio 4 · las llaves ya devueltas que guarda el encargo (de una revisión anterior del mismo encargo, p. ej. tras la vuelta a la mesa) */
@@ -155,8 +160,8 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   // cambio 4 · con ficha: lo exacto (código) + el sentido del jefe (cita y destino verificados) se reparten por destino. Sin ficha, `sen` es null y todo sigue como antes
   const sen = o.sentido && o.sentido.ficha.estado === 'con_ficha' && !incompleta ? sentidoDeLaRevision(crudas, o.sentido) : null
   const lineas = sen ? sen.lineas : crudas
-  // lo que vuelve a un paso de la cadena (o ya volvió) NO se arregla rehaciendo la pieza: no hay vuelta a la mesa, la pieza va a la bandeja marcada
-  const haciaAtras = !!sen && (sen.datos.devoluciones.length > 0 || sen.datos.a_humano.length > 0)
+  // lo que vuelve a un paso de la cadena NO se arregla rehaciendo la pieza: no hay vuelta a la mesa. Tras una vuelta con correcciones de sentido, la jefatura no reabre
+  const haciaAtras = !!sen && (sen.datos.devoluciones.length > 0 || sen.tras_la_vuelta)
   const vuelve = lineas.length > 0 && !haciaAtras && o.puedeVolverALaMesa?.(costoDeLaJefatura(salida.costo_usd)) === true
   // fichas de FONDO que siguen sin tomarse: el mismo desacuerdo de siempre (jefe · bloquea · sin tomar); `cerrar` ya sabe contarlas
   //   (si la pieza vuelve a la mesa, el desacuerdo viaja como corrección y NO queda como ficha: la revisión de la vuelta decide)
@@ -164,10 +169,11 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
     const p = partirDesacuerdo(String(d))
     return { ...fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', p.donde, 'bloquea', p.que, 'revisión de la jefatura', 'una persona decide'), estado: 'no_tomada' as const, razon: 'la jefatura cerró sin que se tomara' }
   })
-  // cambio 4 · cada regreso a la cadena (o el que ya se había devuelto) es un desacuerdo que BLOQUEA: la pieza no se publica sola; una persona acepta, devuelve o descarta desde la bandeja
+  // cambio 4 · firma de Emilio · cada regreso a la cadena vuelve SOLO a su creador (automático): la pieza no se publica mientras esa corrección no tenga respuesta (ficha que bloquea).
+  //   La corrección que el creador de la pieza dejó sin responder también bloquea (no se da por tomada). Lo que no reabre queda registrado en `sentido.no_reabre`, sin ficha.
   if (sen) {
-    const aCadena = [...sen.datos.devoluciones.map((d) => ({ destino: d.destino as Destino, que: d.motivo, linea: d.linea_de_la_ficha, humano: false })), ...sen.datos.a_humano.map((h) => ({ destino: h.destino, que: h.que, linea: h.linea_de_la_ficha, humano: true }))]
-    aCadena.forEach((x, i) => fichas.push({ ...fichaNueva(`sentido-${e.pasos_ejecutados}-${i}`, 'jefe', x.destino, 'bloquea', `sentido · ${x.destino}: ${x.que}`, x.linea ? `ficha de la oferta: «${x.linea}»` : 'ficha de la oferta', x.humano ? `ya se devolvió a ${x.destino}: decide una persona` : `vuelve a ${x.destino}: una persona aprueba el regreso`), estado: 'no_tomada' as const, razon: x.humano ? 'tope: una devolución por fila y destino' : `devuelto a ${x.destino}` }))
+    sen.datos.devoluciones.forEach((d, i) => fichas.push({ ...fichaNueva(`sentido-${e.pasos_ejecutados}-${i}`, 'jefe', d.destino, 'bloquea', `sentido · ${d.destino}: ${d.motivo}`, d.linea_de_la_ficha ? `ficha de la oferta: «${d.linea_de_la_ficha}»` : 'ficha de la oferta', d.dura ? `vuelve a ${d.destino}: regla dura, su creador la toma sí o sí` : `vuelve a ${d.destino}: su creador la toma, la toma en parte o no la toma, y dice por qué`), estado: 'no_tomada' as const, razon: `devuelto a ${d.destino}` }))
+    ;(sen.datos.respuestas_del_creador ?? []).filter((r) => r.respuesta === 'no_dicha' && !r.dura).forEach((r, i) => fichas.push({ ...fichaNueva(`sentido-sin-respuesta-${e.pasos_ejecutados}-${i}`, 'jefe', 'pieza', 'bloquea', `el creador no respondió la corrección ${r.id}: ${r.declarado ?? ''}`.trim(), r.texto, 'que el creador diga si la tomó, en parte o no, y por qué'), estado: 'no_tomada' as const, razon: 'corrección sin respuesta' }))
   }
   // la opinión libre de GPT llega como OPINIÓN (una ficha `externa` por dueño, nunca bloquea ni cuenta como desacuerdo), con lo que cada dueño decidió
   const externas = respuestas.filter((r) => r.origen === 'externa').sort((a, b) => (a.donde === 'texto' ? -1 : b.donde === 'texto' ? 1 : 0))
@@ -200,7 +206,7 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   else if (opinion?.texto) otros['fichas_externas'] = { opinion: opinion.texto, modelo: opinion.modelo ?? null }
   // 💰 el gasto de la revisión SUMA al del encargo (R1 de CC#3): la oficina le pasó `tope − gasto` a la jefatura y los pasos que siguen (la re-imagen) deben ver lo que queda de verdad.
   // Solo suma al estado del encargo: NO se escribe otra fila en el libro (`oficina_gastos` no la lleva; el libro central `agent_invocations` ya la tiene).
-  const aLaMesa = vuelve ? { vuelve_a_la_mesa: true, aviso_a_la_mesa: avisoDeLaJefaturaALaMesa(lineas) } : {}
+  const aLaMesa = vuelve ? { vuelve_a_la_mesa: true, aviso_a_la_mesa: [avisoDeLaJefaturaALaMesa(lineas), ...(sen ? pedidoDeRespuesta(sen.datos.enviadas) : [])].join('\n') } : {}
   return { costo_usd: jefatura.costo_usd, artefacto: { ...reimagen, jefatura, ...aLaMesa }, ...(fichas.length ? { fichas } : {}), ...(Object.keys(otros).length ? { otros_artefactos: otros } : {}) }
 }
 
@@ -208,12 +214,19 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
  * cambio 4 · reparte: lo exacto del código + lo que el jefe rotuló «sentido · <destino>» (verificado). Las demás líneas del jefe siguen como siempre;
  * los hallazgos que vuelven a la pieza se suman como líneas (van a la mesa o quedan como desacuerdo); los de la cadena quedan como devoluciones.
  */
-function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicacion['sentido']>): { lineas: string[]; datos: DatosDelSentido } {
+function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicacion['sentido']>): { lineas: string[]; datos: DatosDelSentido; tras_la_vuelta: boolean } {
   const ex = s.exactos ? s.exactos(s.ficha, s.textoDeLaPieza) : { hallazgos: [], declarado: [] }
   const jefe = hallazgosDelJefe(crudas, s.ficha)
   const hallazgos = [...ex.hallazgos, ...jefe.hallazgos]
-  const r = repartir(hallazgos, s.filaId, s.encargoId, s.yaDevueltas)
-  return { lineas: [...jefe.resto, ...r.a_la_mesa], datos: { ficha: 'con_ficha', declarado: ex.declarado, hallazgos, devoluciones: r.devoluciones, a_humano: r.a_humano, vuelve_a: r.vuelve_a, cita_no_verificada: r.cita_no_verificada } }
+  const tras = !!s.previas && s.previas.enviadas.length > 0
+  // tras la vuelta (el creador ya respondió): la regla dura se vuelve a medir y, si sigue, queda como desacuerdo; lo de criterio para la pieza NO reabre (queda registrado y sigue)
+  const aPieza = (h: Hallazgo) => h.destino === 'pieza' || !s.filaId
+  const sigue = tras ? hallazgos.filter((h) => !aPieza(h) || esDura(h)) : hallazgos
+  const noReabrePieza = tras ? hallazgos.filter((h) => aPieza(h) && !esDura(h)) : []
+  const r = repartir(sigue, s.filaId, s.encargoId, s.yaDevueltas)
+  const respuestas = tras ? leerRespuestas(s.previas!.enviadas, s.previas!.lineasDeRespuesta) : null
+  const datos: DatosDelSentido = { ficha: 'con_ficha', declarado: ex.declarado, hallazgos, devoluciones: r.devoluciones, enviadas: tras ? [] : r.enviadas, no_reabre: [...noReabrePieza, ...r.no_reabre], ...(respuestas ? { respuestas_del_creador: respuestas } : {}), vuelve_a: r.vuelve_a, cita_no_verificada: r.cita_no_verificada }
+  return { lineas: [...jefe.resto, ...r.a_la_mesa], datos, tras_la_vuelta: tras }
 }
 
 /** 17-nov · GO Lenovo (d) · lo que la mesa recibe cuando la pieza vuelve: los desacuerdos de la jefatura como corrección (la dirección integra y la mesa traduce otra vez). Puro */
@@ -235,7 +248,7 @@ export function aplicarSinRevisar(motivo: string): ResultadoDePaso {
 export function prefijoDeLaBandeja(e: Estado): string {
   const j = datosDeLaJefatura(e)
   if (!j) return ''
-  return (j.incompleta ? '⚠️ REVISIÓN INCOMPLETA · ' : '') + (j.sin_revisar ? '⚠️ SIN REVISAR · ' : '') + (quedaDesacuerdoDeHechos(e.fichas) ? '⚠️ DESACUERDO DE HECHOS · ' : '') + marcaDeVuelta(j.sentido?.vuelve_a ?? []) + (j.sentido?.cita_no_verificada ? '⚠️ CITA NO VERIFICADA · ' : '')
+  return (j.incompleta ? '⚠️ REVISIÓN INCOMPLETA · ' : '') + (j.sin_revisar ? '⚠️ SIN REVISAR · ' : '') + (quedaDesacuerdoDeHechos(e.fichas) ? '⚠️ DESACUERDO DE HECHOS · ' : '') + marcaDeVuelta(j.sentido?.vuelve_a ?? []) + (j.sentido?.cita_no_verificada ? '⚠️ CITA NO VERIFICADA · ' : '') + ((j.sentido?.respuestas_del_creador ?? []).some((r) => r.respuesta === 'no_dicha') ? '⚠️ CORRECCIÓN SIN RESPUESTA · ' : '')
 }
 export function metadataDeLaJefatura(e: Estado): Record<string, unknown> {
   const j = datosDeLaJefatura(e)

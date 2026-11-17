@@ -90,11 +90,22 @@ describe('el regreso · llave única y tope', () => {
     const r = repartir([h('hoja'), h('hoja'), h('calendario')], 'F-01', 'enc-1', new Set())
     expect(r.devoluciones.map((d) => d.llave)).toEqual(['F-01:hoja', 'F-01:calendario'])
   })
-  it('el segundo hallazgo del mismo destino (ya devuelto) va a una persona y no abre otra devolución', () => {
+  it('el mismo destino ya devuelto NO reabre (firma de Emilio): queda registrado, sin devolución nueva y sin salida a persona', () => {
     const r = repartir([h('hoja')], 'F-01', 'enc-2', new Set(['F-01:hoja']))
     expect(r.devoluciones).toEqual([])
-    expect(r.a_humano).toHaveLength(1)
-    expect(r.vuelve_a).toEqual(['hoja'])
+    expect(r.no_reabre).toHaveLength(1)
+    expect(r.vuelve_a).toEqual([])
+    expect(Object.keys(r)).not.toContain('a_humano')
+  })
+  it('lo que vuelve a la mesa lleva su número [S1]…; lo del código va marcado «regla dura»', () => {
+    const r = repartir([h('pieza'), { ...h('pieza'), origen: 'codigo' }], 'F-01', 'enc-1', new Set())
+    expect(r.enviadas.map((x) => [x.id, x.dura])).toEqual([['S1', false], ['S2', true]])
+    expect(r.a_la_mesa[0]).toMatch(/^\[S1\] sentido · pieza: x/)
+    expect(r.a_la_mesa[1]).toMatch(/regla dura: se toma sí o sí/)
+    expect(r.devoluciones).toEqual([])
+  })
+  it('una devolución del código a la cadena va marcada dura', () => {
+    expect(repartir([{ ...h('hoja'), origen: 'codigo' }], 'F-01', 'enc-1', new Set()).devoluciones[0].dura).toBe(true)
   })
   it('sin fila conocida, nada se devuelve a la cadena: va a la pieza', () => {
     expect(repartir([h('calendario')], null, 'enc-1', new Set()).a_la_mesa).toHaveLength(1)

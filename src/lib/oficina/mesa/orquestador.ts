@@ -20,6 +20,7 @@ import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type 
 import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroDePrompts, porteroDe } from './directorio'
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
+import { separarRespuestas } from '../sentido-contra-la-ficha'
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type OpcionesDeTraduccion, type Traduccion } from './traductor'
@@ -396,7 +397,10 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     const entregada = forzado ? await entregarPorTopeDeLaMesa(P, enc, `la mesa no alcanzó a integrar la pieza (${forzado})`) : null
     return entregada ?? fallar(P, enc, `la mesa no produjo ninguna pieza${forzado ? ` (${forzado})` : ''}`)
   }
-  const textoPieza = quitarLineasDeNotas(ult.texto)
+  // cambio 4 · firma de Emilio · la dirección responde las correcciones de la jefatura en líneas propias: se guardan aparte y NO salen en la pieza (sin ellas, el texto es el mismo)
+  const resp = separarRespuestas(ult.texto)
+  if (resp.lineas.length) est = { ...est, respuestas_a_la_jefatura: resp.lineas }
+  const textoPieza = quitarLineasDeNotas(resp.pieza)
   const b = baseDeLaminas(enc.estado_del_motor)
   const maxLaminas = Number(pl.limites?.laminas_max)
   // 17-nov · GO Lenovo (a) · el máximo de cuadros por elemento del kit es dato de la plantilla (sin dato, el traductor usa 10)

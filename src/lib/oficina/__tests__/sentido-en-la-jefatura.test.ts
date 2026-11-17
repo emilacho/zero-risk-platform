@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest'
 import { fichaEnLineas, type FichaDeOferta } from '../../cadena/ficha-de-oferta'
 import { abrirEncargo } from '../orquestador'
 import { aplicarSalidaDeJefatura, datosDeLaJefatura, llavesYaDevueltas, prefijoDeLaBandeja } from '../paso-jefatura'
-import { fichaDeLaHoja, hallazgosDelJefe, TITULO_DE_LA_FICHA } from '../sentido-contra-la-ficha'
+import { fichaDeLaHoja, hallazgosDelJefe, leerRespuestas, separarRespuestas, TITULO_DE_LA_FICHA } from '../sentido-contra-la-ficha'
+import { chequeosExactos } from '../exactos-de-la-ficha'
 import { CARRUSEL_MESA } from '../plantillas/mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import type { SalidaDeRevision } from '../../jefatura/revision/contrato'
@@ -61,7 +62,7 @@ describe('con ficha · cada hallazgo a su destino', () => {
   it('sentido · calendario con cita verificada: NO vuelve a la mesa, queda una devolución guardada, bloquea y marca la bandeja', () => {
     const { res, j, prefijo, e } = aplicar([`texto: sentido · calendario: la pieza dice que ya atiende en persona — ficha: «${LINEA_NO}»`], { hoja: BRIEF_CON_FICHA })
     expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBeUndefined()
-    expect(j.sentido!.devoluciones).toEqual([{ llave: 'F-7:calendario', fila_id: 'F-7', destino: 'calendario', motivo: 'la pieza dice que ya atiende en persona', linea_de_la_ficha: LINEA_NO, encargo_id: 'enc-1', origen: 'jefe' }])
+    expect(j.sentido!.devoluciones).toEqual([{ llave: 'F-7:calendario', fila_id: 'F-7', destino: 'calendario', motivo: 'la pieza dice que ya atiende en persona', linea_de_la_ficha: LINEA_NO, encargo_id: 'enc-1', origen: 'jefe', dura: false }])
     expect(e.fichas).toEqual([expect.objectContaining({ origen: 'jefe', gravedad: 'bloquea', estado: 'no_tomada', donde: 'calendario' })])
     expect(prefijo).toContain('⚠️ VUELVE A CALENDARIO · ')
     expect(llavesYaDevueltas(e)).toEqual(new Set(['F-7:calendario']))
@@ -70,8 +71,19 @@ describe('con ficha · cada hallazgo a su destino', () => {
   it('sentido · pieza con cita verificada: vuelve a la mesa como corrección, sin devolución', () => {
     const { res, j } = aplicar([`texto: sentido · pieza: dice que ya atiende en persona — ficha: «${LINEA_NO}»`], { hoja: BRIEF_CON_FICHA })
     expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBe(true)
-    expect((res.artefacto as { aviso_a_la_mesa: string }).aviso_a_la_mesa).toContain('sentido · pieza: dice que ya atiende en persona — ficha: «')
+    const aviso = (res.artefacto as { aviso_a_la_mesa: string }).aviso_a_la_mesa
+    expect(aviso).toContain('[S1] sentido · pieza: dice que ya atiende en persona — ficha: «')
+    // firma de Emilio · el creador responde cada corrección
+    expect(aviso).toContain('RESPUESTA A LA JEFATURA S1: tomada')
+    expect(aviso).toContain('no tomada: <por qué>')
+    expect(aviso).not.toContain('regla dura')
     expect(j.sentido!.devoluciones).toEqual([])
+    expect(j.sentido!.enviadas.map((x) => x.id)).toEqual(['S1'])
+  })
+
+  it('sin hallazgos de sentido, el aviso de la vuelta es el de siempre (no pide respuesta)', () => {
+    const { res } = aplicar(['texto: falta el llamado'], { hoja: BRIEF_CON_FICHA })
+    expect((res.artefacto as { aviso_a_la_mesa: string }).aviso_a_la_mesa).not.toContain('RESPUESTA A LA JEFATURA')
   })
 
   it('sin hallazgos la pieza sigue limpia (con ficha, solo el jefe juzga: un precio raro no dispara nada sin el chequeo exacto)', () => {
@@ -96,11 +108,19 @@ describe('con ficha · cada hallazgo a su destino', () => {
     expect(prefijo).not.toContain('VUELVE A')
   })
 
-  it('tope · lo ya devuelto a ese destino va a una persona: no abre otra devolución', () => {
-    const { j, e } = aplicar([`texto: sentido · calendario: sigue sin cuadrar — ficha: «${LINEA_NO}»`], { hoja: BRIEF_CON_FICHA, ya: ['F-7:calendario'] })
+  it('el regreso a la cadena es automático: la ficha dice que responde su creador, nunca «una persona»', () => {
+    const { e } = aplicar([`texto: sentido · calendario: no va — ficha: «${LINEA_NO}»`], { hoja: BRIEF_CON_FICHA })
+    expect(e.fichas[0].propuesta).toBe('vuelve a calendario: su creador la toma, la toma en parte o no la toma, y dice por qué')
+    expect(JSON.stringify(e.fichas)).not.toMatch(/una persona/)
+  })
+
+  it('lo ya devuelto a ese destino NO reabre: queda registrado, sin ficha, sin marca de vuelta y sin salida a persona', () => {
+    const { j, e, prefijo, res } = aplicar([`texto: sentido · calendario: sigue sin cuadrar — ficha: «${LINEA_NO}»`], { hoja: BRIEF_CON_FICHA, ya: ['F-7:calendario'] })
     expect(j.sentido!.devoluciones).toEqual([])
-    expect(j.sentido!.a_humano).toHaveLength(1)
-    expect(e.fichas[0].propuesta).toMatch(/ya se devolvió a calendario: decide una persona/)
+    expect(j.sentido!.no_reabre).toHaveLength(1)
+    expect(e.fichas).toEqual([])
+    expect(prefijo).toBe('')
+    expect(JSON.stringify(res)).not.toMatch(/una persona|a_humano/)
   })
 
   it('una revisión fallida no lee el sentido (la pieza sigue como «revisión incompleta», como antes)', () => {
@@ -108,6 +128,70 @@ describe('con ficha · cada hallazgo a su destino', () => {
     const s = { ...salida([`texto: sentido · calendario: x — ficha: «${LINEA_NO}»`]), resultado: 'fallida' } as SalidaDeRevision
     const res = aplicarSalidaDeJefatura(PL, e, s, { reImagen: () => ({ re_imagen: false }), sentido: sentido(BRIEF_CON_FICHA, '') })
     expect((res.artefacto as { jefatura: { sentido?: unknown } }).jefatura.sentido).toBeUndefined()
+  })
+})
+
+describe('firma de Emilio · tras la vuelta, el creador ya respondió', () => {
+  const S1 = { id: 'S1', texto: `[S1] sentido · pieza: dice que ya atiende en persona — ficha: «${LINEA_NO}»`, dura: false }
+  const S2 = { id: 'S2', texto: '[S2] sentido · pieza: el precio «$9,90» no está (regla dura: se toma sí o sí)', dura: true }
+  const tras = (desacuerdos: string[], respuestas: string[], pieza = '', enviadas = [S1]) => {
+    const e = estado()
+    const res = aplicarSalidaDeJefatura(PL, e, salida(desacuerdos), { reImagen: () => ({ re_imagen: false }), puedeVolverALaMesa: () => true, sentido: { ...sentido(BRIEF_CON_FICHA, pieza), exactos: chequeosExactos, previas: { enviadas, lineasDeRespuesta: respuestas } } })
+    e.fichas = res.fichas ?? []
+    e.artefactos = { respuesta_imagen: { version: 1, datos: res.artefacto } } as never
+    return { e, res, prefijo: prefijoDeLaBandeja(e), j: datosDeLaJefatura(e)! }
+  }
+  const mismo = [`texto: sentido · pieza: sigue diciendo que atiende en persona — ficha: «${LINEA_NO}»`]
+
+  it.each([
+    ['tomada', 'RESPUESTA A LA JEFATURA S1: tomada', 'tomada', null],
+    ['tomada en parte', 'RESPUESTA A LA JEFATURA S1: tomada en parte: quité la frase, dejé la foto', 'tomada_en_parte', 'quité la frase, dejé la foto'],
+    ['no tomada', 'RESPUESTA A LA JEFATURA S1: no tomada: la frase habla de la entrega, no de atender', 'no_tomada', 'la frase habla de la entrega, no de atender'],
+  ])('%s · queda guardada con su motivo; el mismo hallazgo NO reabre (ni vuelta, ni ficha, ni persona)', (_c, linea, respuesta, motivo) => {
+    const { j, e, res, prefijo } = tras(mismo, [linea])
+    expect(j.sentido!.respuestas_del_creador).toEqual([expect.objectContaining({ id: 'S1', respuesta, motivo })])
+    expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBeUndefined()
+    expect(e.fichas).toEqual([])
+    expect(j.sentido!.no_reabre).toHaveLength(1)
+    expect(prefijo).toBe('')
+  })
+
+  it.each([
+    ['sin respuesta', []],
+    ['«no tomada» sin motivo', ['RESPUESTA A LA JEFATURA S1: no tomada']],
+    ['respuesta que no se entiende', ['RESPUESTA A LA JEFATURA S1: ya veremos']],
+  ])('%s · se declara «no dicha», nunca se da por tomada, y la pieza no sale sola', (_c, lineas) => {
+    const { j, e, prefijo } = tras([], lineas)
+    expect(j.sentido!.respuestas_del_creador![0]).toMatchObject({ respuesta: 'no_dicha' })
+    expect(j.sentido!.respuestas_del_creador![0].declarado).toBeTruthy()
+    expect(e.fichas).toEqual([expect.objectContaining({ gravedad: 'bloquea', donde: 'pieza' })])
+    expect(prefijo).toContain('⚠️ CORRECCIÓN SIN RESPUESTA · ')
+  })
+
+  it('regla dura · si el código la vuelve a encontrar, queda como desacuerdo aunque el creador diga «no tomada»', () => {
+    const { j, e, res } = tras([], ['RESPUESTA A LA JEFATURA S2: no tomada: me gusta más así'], 'El principal a $9,90', [S2])
+    expect(j.sentido!.respuestas_del_creador![0]).toMatchObject({ respuesta: 'no_tomada', dura: true, declarado: expect.stringMatching(/regla dura/) })
+    expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBeUndefined()
+    expect(e.fichas).toEqual([expect.objectContaining({ gravedad: 'bloquea', estado: 'no_tomada' })])
+    expect(e.fichas[0].que).toMatch(/regla dura/)
+  })
+
+  it('regla dura corregida · el código ya no la encuentra: la pieza sigue limpia', () => {
+    const { e, prefijo } = tras([], ['RESPUESTA A LA JEFATURA S2: tomada'], 'El principal a $7', [S2])
+    expect(e.fichas).toEqual([])
+    expect(prefijo).toBe('')
+  })
+})
+
+describe('la mesa separa la respuesta del creador de la pieza', () => {
+  it('las líneas de respuesta se guardan aparte y no salen en la pieza; sin ellas el texto es idéntico', () => {
+    const texto = 'Titular\nCuerpo de la pieza\nRESPUESTA A LA JEFATURA S1: tomada\n**RESPUESTA A LA JEFATURA [S2]**: no tomada: porque sí lo dice la ficha'
+    const r = separarRespuestas(texto)
+    expect(r.pieza).toBe('Titular\nCuerpo de la pieza')
+    expect(r.lineas).toHaveLength(2)
+    expect(leerRespuestas([{ id: 'S1', texto: 'a', dura: false }, { id: 'S2', texto: 'b', dura: false }], r.lineas).map((x) => x.respuesta)).toEqual(['tomada', 'no_tomada'])
+    const sin = 'Titular\n\n\nCuerpo'
+    expect(separarRespuestas(sin)).toEqual({ pieza: sin, lineas: [] })
   })
 })
 
