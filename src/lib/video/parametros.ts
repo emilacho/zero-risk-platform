@@ -107,12 +107,39 @@ export function armarPedido(e: Entrada): { ok: true; pedido: PedidoDeVideo } | {
   return { ok: true, pedido: { prompt, formato, segundos, resolucion, relacion, modelo, audio: e.audio === undefined ? true : (e.audio as boolean), fotos } }
 }
 
-/** la ruta del modelo según haya fotos propias (referencia) o no (texto) · doc: /docs/models/seedance-2-5.md */
-export const rutaDelModelo = (p: Pick<PedidoDeVideo, 'modelo' | 'fotos'>) => `${p.modelo}/${p.fotos.length ? 'reference-to-video' : 'text-to-video'}`
+/**
+ * 11-nov · GO Lenovo 16:43 (decisión de Emilio 16:41, camino B): un video de varios planos se genera PLANO POR PLANO, cada uno desde su foto propia
+ * (imagen a video) o, sin foto, desde su texto, y después se unen. El mínimo de 4 s es POR PLANO; el máximo es el que admite el proveedor
+ * (Seedance 2.5 imagen a video: 4–30 s enteros, doc `/docs/models/seedance-2-5/image-to-video.md`, leída el 11-nov). «Los límites técnicos, al máximo».
+ */
+export const DURACION_MIN_PLANO_S = 4
+export const DURACION_MAX_PLANO_S = 30
 
-/** el cuerpo exacto que se manda a Higgsfield (sirve igual para `/estimate/{ruta}` y para `/{ruta}`) */
-export function cuerpoParaHiggsfield(p: PedidoDeVideo): Record<string, unknown> {
+/** un pedido de UN plano: misma validación que `armarPedido`, con la duración del plano (4–30 s) y como mucho UNA foto (la de ese plano) */
+export function armarPedidoDePlano(e: Entrada): { ok: true; pedido: PedidoDeVideo } | { ok: false; errores: string[] } {
+  const segundos = e.segundos === undefined ? DURACION_MIN_PLANO_S : Number(e.segundos)
+  const errores: string[] = []
+  if (!Number.isInteger(segundos) || segundos < DURACION_MIN_PLANO_S || segundos > DURACION_MAX_PLANO_S) errores.push(`\`segundos\` de un plano es un entero de ${DURACION_MIN_PLANO_S} a ${DURACION_MAX_PLANO_S}`)
+  if (e.fotos !== undefined && Array.isArray(e.fotos) && e.fotos.length > 1) errores.push('un plano lleva como mucho una foto (la de ese plano)')
+  // el resto (prompt, formato, resolución, relación, modelo, audio, forma de las fotos) con la validación de siempre, con una duración que ella admite
+  const v = armarPedido({ ...e, segundos: DURACION_MIN_S })
+  if (!v.ok) errores.push(...v.errores)
+  if (errores.length || !v.ok) return { ok: false, errores }
+  return { ok: true, pedido: { ...v.pedido, segundos } }
+}
+
+/** la ruta del modelo según haya fotos propias (referencia) o no (texto) · un PLANO con foto va por imagen a video · doc: /docs/models/seedance-2-5.md */
+export const rutaDelModelo = (p: Pick<PedidoDeVideo, 'modelo' | 'fotos'> & { plano?: boolean }) =>
+  `${p.modelo}/${p.fotos.length ? (p.plano ? 'image-to-video' : 'reference-to-video') : 'text-to-video'}`
+
+/**
+ * el cuerpo exacto que se manda a Higgsfield (sirve igual para `/estimate/{ruta}` y para `/{ruta}`).
+ * Un PLANO con foto va por imagen a video: la foto como `image_url` (imagen de partida) y SIN `aspect_ratio` — esa ruta no lo admite (`additionalProperties:false`)
+ * y el encuadre sale de la foto, por eso la foto ya tiene que venir encuadrada a la proporción de la red.
+ */
+export function cuerpoParaHiggsfield(p: PedidoDeVideo & { plano?: boolean }): Record<string, unknown> {
   const cuerpo: Record<string, unknown> = { prompt: `${p.prompt}\n\n${REGLAS_DEL_PEDIDO.join(' ')}`, duration: p.segundos, resolution: p.resolucion, aspect_ratio: p.relacion, generate_audio: p.audio }
-  if (p.fotos.length) cuerpo.image_urls = p.fotos
+  if (p.fotos.length && p.plano) { delete cuerpo.aspect_ratio; cuerpo.image_url = p.fotos[0] }
+  else if (p.fotos.length) cuerpo.image_urls = p.fotos
   return cuerpo
 }
