@@ -5,7 +5,7 @@
  * cliente, cualquier cantidad de planos. Puro: sin base, sin red, sin modelo.
  */
 import { createHash } from 'node:crypto'
-import { RESOLUCION_APROBADA, armarPedidoDePlano, fichaPorOmision, type CatalogoDeModelos } from '../../video/parametros'
+import { MODELO_APROBADO, RESOLUCION_APROBADA, armarPedidoDePlano, fichaPorOmision, type CatalogoDeModelos } from '../../video/parametros'
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
 import { buscarFotoPropia, formatoDeVideo, fotosPropiasConDireccion } from './pedido'
@@ -29,6 +29,8 @@ export interface PedidoDePlano {
   /** el id que citó el guion y no se halló entre las propias (el plano sale desde su texto) */
   foto_no_hallada: string | null
   plano: true
+  /** 17-nov · T1b · el modelo del catálogo con que se abrió el encargo: la ruta usa ESE (no el por omisión vigente al enviar) */
+  modelo?: string
   /** clave idempotente del plano: `<clave del guion>:p<n>` */
   clave: string
   /** 17-nov · S2-4 · de dónde sale el primer cuadro del clip: su imagen clave final (#1072/#1076), la foto propia del plano o solo el texto */
@@ -47,9 +49,10 @@ export interface PedidoDePlano {
 }
 
 /** la huella del contenido de un clip (ver `PedidoDePlano.huella`) · el cliente no entra: la búsqueda en el libro ya filtra por cliente */
-export function huellaDelClip(c: { fuente: string | null; prompt: string; formato: string; segundos: number; resolucion: string; relacion: string; audio: boolean; /** Sprint 3 · T2 · la ficha del clip (sin ficha, la huella es la de siempre: los clips pagados se siguen reutilizando) */ referencias?: string[] }): string {
+export function huellaDelClip(c: { fuente: string | null; prompt: string; formato: string; segundos: number; resolucion: string; relacion: string; audio: boolean; /** Sprint 3 · T2 · la ficha del clip (sin ficha, la huella es la de siempre: los clips pagados se siguen reutilizando) */ referencias?: string[]; /** Sprint 3 · T1b · el modelo que lo genera (con el aprobado de siempre, la huella es la de siempre: los clips pagados se siguen reutilizando) */ modelo?: string }): string {
   const base: unknown[] = ['clip.v1', c.fuente, c.prompt, c.formato, c.segundos, c.resolucion, c.relacion, c.audio]
   if (c.referencias?.length) base.push(c.referencias)
+  if (c.modelo && c.modelo !== MODELO_APROBADO) base.push({ modelo: c.modelo })
   return createHash('sha256').update(JSON.stringify(base)).digest('hex').slice(0, 40)
 }
 
@@ -123,7 +126,7 @@ export function pedidosPorPlano(o: {
     const v = armarPedidoDePlano({ prompt: ref.texto ? `${ref.texto}\n\n${delClip}`.slice(0, 4000) : delClip, formato, segundos: Math.max(ficha.segundos_min, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [], ...(ref.urls.length ? { referencias: ref.urls } : {}) }, o.catalogo)
     if (!v.ok) { errores.push(...v.errores.map((e) => `plano ${p.n}: ${e}`)); continue }
     const referencias = v.pedido.referencias ?? []
-    pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url && !ic ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}`, primer_cuadro, huella: huellaDelClip({ fuente: url, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: v.pedido.audio === true, referencias }), ...(referencias.length ? { referencias } : {}), ...(p.personajes?.length ? { personajes: p.personajes } : {}) })
+    pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url && !ic ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}`, primer_cuadro, huella: huellaDelClip({ fuente: url, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: v.pedido.audio === true, referencias, modelo: v.pedido.modelo }), modelo: v.pedido.modelo, ...(referencias.length ? { referencias } : {}), ...(p.personajes?.length ? { personajes: p.personajes } : {}) })
   }
   if (errores.length) return { ok: false, errores }
   return { ok: true, pedidos, fichas }

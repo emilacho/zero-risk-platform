@@ -141,6 +141,10 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/lib\/oficina\/mesa\/lectura-referencias\.ts$/,
   /^src\/lib\/oficina\/video\/referencias\.ts$/,
   /^src\/lib\/oficina\/__tests__\/(referencias-de-video|mesa-de-video-t8)\.test\.ts$/,
+  // 17-nov · Sprint 3 · T1b (decisión Lenovo B · persona real solo con permiso registrado): la sala de video LEE `con_personas` de las fotos propias que ya trae
+  //   `fuentes` para pedir permiso; no escribe ni consulta el cerebro. Solo la regla pura y su prueba (bases falsas)
+  /^src\/lib\/oficina\/video\/permisos\.ts$/,
+  /^src\/lib\/oficina\/__tests__\/s3-t1b-permisos-persona-real\.test\.ts$/,
   // oficina · el MATERIAL que se le pide al portero (27-oct): LEE las etiquetas (nunca escribe) para rotular lo que el portero trae, armar las referencias de estilo en palabras y marcar el origen de cada imagen
   /^src\/lib\/oficina\/(material|prompts-sin-invencion|marcas-de-origen)\.ts$/,
   /^src\/lib\/oficina\/__tests__\/(material|material-imagen-y-reapertura|adaptadores)\.test\.ts$/,

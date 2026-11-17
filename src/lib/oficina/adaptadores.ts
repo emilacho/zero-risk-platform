@@ -165,6 +165,12 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     ...(env.aprendizajeDelDueno ? { aprendizaje: puertoDeAprendizaje(db, env, f) } : {}),
     // el segundo cerebro del productor (apagado por omisión): las notas que el agente puede ver y el rastro de cada auto-revisión
     ...(env.notasDelDueno ? { notas: { leer: (clientId: string) => leerNotasParaElProductor(db, { baseUrl: env.baseUrl, internalKey: env.internalKey }, f, clientId), registrar: (r: Parameters<typeof registrarAutorevision>[1]) => registrarAutorevision(db, r) } } : {}),
+    /** 17-nov · Sprint 3 · T1b · el registro de permisos de persona real del cliente: SOLO lectura; los permisos revocados también vienen (la regla los declara) */
+    async permisosDePersonaReal(clientId) {
+      const r = (await db.from('oficina_permisos_persona_real').select('id,persona,fotos,alcance,vence_en,evidencia,revocado_en').eq('client_id', clientId)) as { data: Fila[] | null; error: { message: string } | null }
+      if (r.error) return { error: r.error.message }
+      return lista<Fila>(r.data).map((x) => ({ id: String(x.id), persona: String(x.persona ?? ''), fotos: lista<unknown>(x.fotos).map(String), alcance: lista<unknown>(x.alcance).map(String), vence_en: x.vence_en == null ? null : String(x.vence_en), evidencia: String(x.evidencia ?? ''), revocado_en: x.revocado_en == null ? null : String(x.revocado_en) }))
+    },
     async fuentes(clientId) {
       try {
         const cl = (await db.from('clients').select('id,name,country,language,config,slug,logo_url,website_url,brand_colors,brand_fonts').eq('id', clientId).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
@@ -318,7 +324,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       async enviar(p): Promise<EnvioDeVideo> {
         if (p.dry_run) return { ok: true, request_id: `dry-${p.pedido.clave}`, status: 'simulado', costo_estimado_usd: 0, simulado: true }
         try {
-          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, ...((p.pedido as { plano?: boolean }).plano === true ? { plano: true } : {}), ...(p.pedido.referencias?.length ? { referencias: p.pedido.referencias } : {}), ...(p.pedido.huella ? { huella: p.pedido.huella } : {}), tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: false }
+          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, ...((p.pedido as { plano?: boolean }).plano === true ? { plano: true } : {}), ...(p.pedido.referencias?.length ? { referencias: p.pedido.referencias } : {}), ...(p.pedido.huella ? { huella: p.pedido.huella } : {}), ...(p.pedido.modelo ? { modelo: p.pedido.modelo } : {}), tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: false }
           const r = await f(`${env.baseUrl}/api/video/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(60000) })
           const j = (await r.json().catch(() => ({}))) as Fila
           if (!r.ok || typeof j.request_id !== 'string') return { ok: false, error: String(j.detail ?? j.error ?? `HTTP ${r.status}`), http: r.status, ...(typeof j.descripcion_del_proveedor === 'string' ? { descripcion: j.descripcion_del_proveedor } : {}) }
@@ -328,7 +334,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       /** 11-nov · «cotizar primero»: el mismo `POST /api/video/generate` en `dry_run` (estima GRATIS con el proveedor y compara con el tope; no envía ni anota el libro) */
       async cotizar(p): Promise<CotizacionDeVideo> {
         try {
-          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, ...((p.pedido as { plano?: boolean }).plano === true ? { plano: true } : {}), ...(p.pedido.referencias?.length ? { referencias: p.pedido.referencias } : {}), tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: true }
+          const cuerpo = { prompt: p.pedido.prompt, formato: p.pedido.formato, segundos: p.pedido.segundos, resolucion: p.pedido.resolucion, relacion: p.pedido.relacion, audio: p.pedido.audio, fotos: p.pedido.fotos, clave: p.pedido.clave, ...((p.pedido as { plano?: boolean }).plano === true ? { plano: true } : {}), ...(p.pedido.referencias?.length ? { referencias: p.pedido.referencias } : {}), ...(p.pedido.modelo ? { modelo: p.pedido.modelo } : {}), tope_usd: p.tope_usd, client_id: p.client_id, agent_slug: 'video-editor', caller: 'oficina', workflow_id: p.workflow_id, workflow_execution_id: p.workflow_execution_id, dry_run: true }
           const r = await f(`${env.baseUrl}/api/video/generate`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(60000) })
           const j = (await r.json().catch(() => ({}))) as Fila
           const costo = Number(j.costo_estimado_usd)

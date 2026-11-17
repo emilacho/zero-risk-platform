@@ -35,6 +35,8 @@ export interface PedidoDeVideoDeLaOficina {
   fotos_no_halladas: string[]
   clave: string
   prompt_recortado: boolean
+  /** 17-nov · T1b · el modelo del catálogo con que se abrió el encargo (la ruta usa ESE, no el por omisión vigente al enviar) */
+  modelo?: string
   /** 17-nov · S2-4 tramo 3 · la huella del contenido de un clip (camino B): el brazo la anota en el libro para que un clip pagado se reutilice */
   huella?: string
   /** 17-nov · Sprint 3 · T2 · solo en un plano: la ficha de sus personajes (el brazo lo manda por `reference-to-video`) */
@@ -73,7 +75,7 @@ export function armarPedidoDeLaOficina(o: { /** 17-nov · T1 · el catálogo que
   const entrada = { prompt, formato, segundos: o.guion.segundos, resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: urls } // el tope de fotos lo aplica `armarPedido` con la ficha del catálogo
   const v = armarPedido(entrada, o.catalogo)
   if (!v.ok) return { ok: false, errores: v.errores }
-  return { ok: true, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: noHalladas, clave: o.clave, prompt_recortado: recortado }, ambiguas }
+  return { ok: true, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: noHalladas, clave: o.clave, prompt_recortado: recortado, modelo: v.pedido.modelo }, ambiguas }
 }
 
 /** 11-nov · el texto de los pedidos de COTIZACIÓN: nunca se filma (la cotización usa `dry_run` del brazo, que solo estima) */
@@ -92,7 +94,7 @@ export function pedidosParaCotizar(o: { /** 17-nov · T1 · el mismo catálogo q
   for (const r of rutas) {
     const v = armarPedido({ prompt: PROMPT_DE_COTIZACION, formato, segundos: fichaPorOmision(o.catalogo).segundos_min, resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: r.fotos }, o.catalogo)
     if (!v.ok) return { ok: false, errores: v.errores }
-    pedidos.push({ ruta: r.ruta, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: [], clave: `${o.clave}:cotizar:${r.ruta}`, prompt_recortado: false } })
+    pedidos.push({ ruta: r.ruta, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: [], clave: `${o.clave}:cotizar:${r.ruta}`, prompt_recortado: false, modelo: v.pedido.modelo } })
   }
   return { ok: true, pedidos }
 }

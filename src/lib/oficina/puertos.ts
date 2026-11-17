@@ -216,6 +216,8 @@ export interface Puertos {
   formatosDeLaCadena?(): Promise<FormatosPorRed>
   ahora(): Date
   fuentes(clientId: string): Promise<FuentesCompletas | { error: string }>
+  /** 17-nov · Sprint 3 · T1b · el registro de permisos de persona real del cliente (`oficina_permisos_persona_real`) · gratis. Sin el método o con error: nadie tiene permiso (lo seguro) */
+  permisosDePersonaReal?(clientId: string): Promise<import('./video/permisos').PermisoDePersonaReal[] | { error: string }>
   parte(parteId: string, clientId: string): Promise<{ texto: string } | null>
   /** el plan de trabajo del que sale la parte (su texto), o null si no se puede leer; solo lectura */
   plan(planId: string, clientId: string): Promise<string | null>

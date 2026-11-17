@@ -20,6 +20,7 @@ import { avanzar, fallar, plantillaDe, type Respuesta } from './orquestador'
 import { FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO } from './pedidos'
 import { FUNCION_DEL_TABLERO } from './pedidos-laminas'
 import type { Cambios, Encargo, EstadoDelBrazo, FuentesCompletas, Puertos } from './puertos'
+import { fotosPropiasConPersonas, type PermisoDePersonaReal } from './video/permisos'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 import { CATALOGO_POR_OMISION, RELACIONES_PERMITIDAS, RELACION_POR_FORMATO, fichaPorOmision, type CatalogoDeModelos } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
@@ -58,7 +59,7 @@ const txt = (x: unknown): string => (typeof x === 'string' ? x : x == null ? '' 
 const arr = <T = string>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
 const turnoDe = (e: Estado) => e.pasos_ejecutados + 1
 
-export interface BaseV { brief: BriefLeido; proporcion: string; /** 11-nov · regla #17 · la proporción del brief no la admitía el generador: se usó la de por omisión (se avisa en la hoja de publicar) */ aviso_proporcion?: string; F: FuentesCompletas; familia: 'video'; plataforma: string; elementos: never[]; formato_video: string; /** 17-nov · Sprint 3 · T1 · el catálogo de modelos que leyó el encargo al ABRIR (el mismo que valida la ruta); los encargos de antes no lo traen: el del código */ catalogo_de_modelos?: CatalogoDeModelos }
+export interface BaseV { brief: BriefLeido; proporcion: string; /** 11-nov · regla #17 · la proporción del brief no la admitía el generador: se usó la de por omisión (se avisa en la hoja de publicar) */ aviso_proporcion?: string; F: FuentesCompletas; familia: 'video'; plataforma: string; elementos: never[]; formato_video: string; /** 17-nov · Sprint 3 · T1 · el catálogo de modelos que leyó el encargo al ABRIR (el mismo que valida la ruta); los encargos de antes no lo traen: el del código */ catalogo_de_modelos?: CatalogoDeModelos; /** 17-nov · T1b (corrección Lenovo) · las fotos propias con personas: viajan como material del cliente (él responde por su material); se dejan anotadas */ fotos_con_personas_del_cliente?: string[] }
 const baseV = (e: Estado): BaseV => datos(e, 'encargo') as unknown as BaseV
 
 /** lo que la mesa deja en el artefacto `guion` */
@@ -104,6 +105,10 @@ export async function ejecutarCodigoV(P: Puertos, enc: Encargo, pl: Plantilla, p
 async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCodigoV> {
   const fu = await P.fuentes(enc.client_id)
   if ('error' in fu) return { res: { costo_usd: 0 }, fallido: `no se pudieron leer las fuentes del cliente: ${fu.error}` }
+  // 17-nov · Sprint 3 · T1b · corrección Lenovo (RESPUESTA a CC3/CC7): las fotos PROPIAS que entrega el cliente cuentan como autorizadas por él (responde por su material).
+  //   No se retira ninguna: se anotan como dato del cliente. El registro de permisos es para GENERAR o clonar a una persona real o para material de terceros
+  //   (las fotos de terceros ya no llegan aquí: `separarFotos` solo deja las propias)
+  const fotos_con_personas_del_cliente = fotosPropiasConPersonas(fu.fotos ?? [])
   const parte = await P.parte(enc.parte_id, enc.client_id)
   if (!parte) return { res: { costo_usd: 0 }, fallido: `la parte ${enc.parte_id} no existe para este cliente` }
   const brief = parsearBrief(parte.texto, enc.brief_id)
@@ -127,7 +132,7 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const catalogo_de_modelos = await catalogoDelBrazo(P)
   const cotizacion = enc.dry_run ? null : await cotizarPrimero(P, enc, pl, brief, fu.fotos, proporcion, catalogo_de_modelos)
   if (cotizacion && !cotizacion.ok) return { res: { costo_usd: 0 }, fallido: cotizacion.motivo }
-  return { res: { costo_usd: 0, artefacto: { brief, proporcion, ...(aviso_proporcion ? { aviso_proporcion } : {}), F: fu, familia: 'video', plataforma, elementos: [], formato_video, catalogo_de_modelos, ...(cotizacion ? { cotizacion: cotizacion.rutas } : {}) } } }
+  return { res: { costo_usd: 0, artefacto: { brief, proporcion, ...(aviso_proporcion ? { aviso_proporcion } : {}), F: fu, familia: 'video', plataforma, elementos: [], formato_video, catalogo_de_modelos, ...(fotos_con_personas_del_cliente.length ? { fotos_con_personas_del_cliente } : {}), ...(cotizacion ? { cotizacion: cotizacion.rutas } : {}) } } }
 }
 
 /** cuánto se le deja gastar al video al cotizar: el tope por video de la plantilla, sin pasar el del encargo (el brazo además lo recorta al aprobado) */
@@ -137,6 +142,14 @@ const topeDeLaCotizacion = (pl: Plantilla): number => {
 }
 
 /** la cotización gratis de cada ruta posible · el texto que devolvió el proveedor, si lo hubo, queda en el motivo del fallo (para poder verlo) */
+/** 17-nov · T1b · el registro de permisos del cliente por su puerto · sin método o con error: null (nadie tiene permiso: lo seguro) · nunca lanza */
+export async function permisosDelCliente(P: Pick<Puertos, 'permisosDePersonaReal'>, clientId: string): Promise<PermisoDePersonaReal[] | null> {
+  if (!P.permisosDePersonaReal) return null
+  try {
+    const r = await P.permisosDePersonaReal(clientId)
+    return Array.isArray(r) ? r : null
+  } catch { return null }
+}
 /** 17-nov · T1 · el catálogo del brazo por su puerto · sin método, o si falla o devuelve algo raro: el del código (nunca lanza) */
 export async function catalogoDelBrazo(P: Pick<Puertos, 'video'>): Promise<CatalogoDeModelos> {
   if (!P.video?.catalogo) return CATALOGO_POR_OMISION
