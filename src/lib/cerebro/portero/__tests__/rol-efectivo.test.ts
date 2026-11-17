@@ -15,6 +15,9 @@ const consultaCon = (filas: Fila[]): Consulta => async (p) => ({ filas: filas.fi
 const foto = (id: string, owner_role: string, papel: string | null): Fila => ({ id, client_id: C, owner_role, papel, estado: 'ok', handle: 'cuenta', tipo: 'post_image', url: `https://x/${id}.jpg`, created_at: '2026-11-10T12:00:00Z', duplicado_de: null })
 const video = (id: string, owner_role: string, papel: string | null): Fila => ({ id, client_id: C, owner_role, papel, estado: 'ok', handle: 'cuenta', tipo: 'reel', path: `v/${id}.mp4`, created_at: '2026-11-10T12:00:00Z' })
 
+// como la base real: devuelve SOLO las columnas que se piden (una lectura que no pide `papel` no lo ve)
+const consultaEstricta = (filas: Fila[]): Consulta => async (p) => ({ filas: filas.filter((x) => Object.entries(p.donde).every(([k, v]) => (v === null ? x[k] == null : x[k] === v))).map((x) => Object.fromEntries(p.columnas.filter((c) => c in x).map((c) => [c, x[c]]))), error: null })
+
 describe('rolEfectivo', () => {
   it('el papel manda: propio y competidor tal cual; mercado y referencia → referencia; sin papel (o uno desconocido) → owner_role', () => {
     expect(rolEfectivo({ owner_role: 'competidor', papel: 'propio' })).toBe('propio')
@@ -54,5 +57,15 @@ describe('🔴 los lectores del cerebro leen el papel', () => {
     const r = await leerFotos({ consulta: consultaCon([foto('dup', 'competidor', 'propio'), foto('hash', 'competidor', 'mercado'), foto('vieja', 'propio', null)]), cliente: C, ahora: new Date('2026-11-17T12:00:00Z'), plazos: PLAZOS_EN_DIAS })
     const por = Object.fromEntries(r.lineas.map((l) => [l.ref.split(':')[1], l.origen]))
     expect(por).toEqual({ dup: 'su_fuente', hash: 'tercero', vieja: 'su_fuente' })
+  })
+  it('los tres lectores PIDEN la columna papel (con una base que solo devuelve lo pedido)', async () => {
+    const f = await listarFotos(consultaEstricta([foto('dup', 'competidor', 'propio')]), { cliente: C })
+    if (!f.ok) throw new Error('debía leer')
+    expect(f.fotos[0].origen).toBe('propia')
+    const v = await listarVideos(consultaEstricta([video('dup', 'competidor', 'propio')]), { cliente: C })
+    if (!v.ok) throw new Error('debía leer')
+    expect(v.videos[0].origen).toBe('propia')
+    const l = await leerFotos({ consulta: consultaEstricta([foto('dup', 'competidor', 'propio')]), cliente: C, ahora: new Date('2026-11-17T12:00:00Z'), plazos: PLAZOS_EN_DIAS })
+    expect(l.lineas[0].origen).toBe('su_fuente')
   })
 })
