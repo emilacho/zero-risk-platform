@@ -38,11 +38,59 @@ export const pasoDeAprobacion = (pl: Pick<Plantilla, 'pasos'>): Paso | undefined
 /**
  * Al llegar al paso: sin propuestas (una plantilla que no las pide, o una mesa que escribió un solo guion) no hay nada que aprobar y el paso pasa de largo sin parar.
  * Con propuestas: se espera al dueño.
+ * 17-nov · DECISIÓN Lenovo 00:51 · la parada es ÚNICA: si el dueño YA aprobó (la revisión o la jefatura devolvieron el trabajo a la mesa y la mesa corrigió la elegida),
+ * el paso pasa de largo y deja la aprobación tal cual (la fase sigue «final»; el guion corregido de la mesa NO se pisa con la propuesta vieja).
  */
 export function alLlegarAlPaso(e: Pick<Estado, 'artefactos'>): { esperar: true; ronda: number } | { saltar: ResultadoDePaso } {
   const pv = propuestasDe(e)
   if (!pv || !pv.propuestas?.length) return { saltar: { costo_usd: 0, artefacto: { estado: 'sin_propuestas', ronda: 0, vuelve_a_la_mesa: false } } }
+  const ya = aprobacionDe(e)
+  if (ya?.estado === 'aprobada' && pv.propuestas.some((p) => p.id === ya.propuesta_id)) return { saltar: { costo_usd: 0, artefacto: { ...ya, vuelve_a_la_mesa: false, ya_aprobada: true } } }
   return { esperar: true, ronda: pv.ronda }
+}
+
+/** la aprobación guardada por el paso (o null) */
+export const aprobacionDe = (e: Pick<Estado, 'artefactos'>): AprobacionDePropuestas | null => (e.artefactos?.[ARTEFACTO_APROBACION]?.datos as unknown as AprobacionDePropuestas | undefined) ?? null
+
+/** la propuesta que el dueño aprobó (null si no hay propuestas o todavía no aprobó ninguna) */
+export function propuestaAprobada(e: Pick<Estado, 'artefactos'>): PropuestaDeVideo | null {
+  const a = aprobacionDe(e)
+  if (a?.estado !== 'aprobada') return null
+  return propuestasDe(e)?.propuestas?.find((p) => p.id === a.propuesta_id) ?? null
+}
+
+/** la línea con la que la dirección declara que la corrección pedía cambiar el concepto aprobado (excepción de la decisión de Lenovo 17-nov 00:51) */
+export const ROTULO_AVISO_DE_CONCEPTO = 'Aviso de concepto:'
+
+/**
+ * 17-nov · la mesa vuelve DESPUÉS de la aprobación: corrige SOLO la elegida (un guion; no vuelve a presentar propuestas ni a parar). Lo que la dirección recibe al reabrir.
+ * Si corregir obligaría a cambiar el concepto aprobado (no solo la ejecución), no lo cambia: escribe la mejor versión fiel al concepto y lo dice en una línea (va a la ficha).
+ */
+export function avisoDeLaParadaUnica(p: PropuestaDeVideo): string {
+  return [
+    `El dueño YA APROBÓ la propuesta ${p.id} · «${p.nombre}» (concepto: ${p.concepto || 'el de la propuesta'}). Ya no se presentan propuestas ni se vuelve a pedir aprobación.`,
+    'Corrige SOLO esa propuesta con lo que te devuelven: escribe UN guion (su hoja de planos completa), fiel a su concepto. No escribas «# Propuesta N».',
+    `Si la corrección obligaría a cambiar el concepto aprobado (no solo la ejecución), NO lo cambies: escribe la mejor versión fiel al concepto y explícalo en una línea que empiece con «${ROTULO_AVISO_DE_CONCEPTO}».`,
+    '',
+    'La propuesta aprobada, tal como la escribió la mesa:',
+    p.texto,
+  ].join('\n')
+}
+
+/** las líneas «Aviso de concepto: …» que dejó la dirección en su guion corregido (vacío si no hay) */
+export function avisosDeConcepto(texto: string): string[] {
+  const rotulo = ROTULO_AVISO_DE_CONCEPTO.replace(/:$/, '').toLowerCase()
+  const fuera: string[] = []
+  for (const cruda of String(texto ?? '').split('\n')) {
+    const linea = cruda.replace(/^[\s*_>-]+/, '')
+    if (!linea.toLowerCase().startsWith(rotulo)) continue
+    const tras = linea.slice(rotulo.length)
+    const resto = tras.replace(/^\s*:/, '')
+    if (resto.length === tras.length) continue
+    const dice = resto.replace(/^[\s*_]+/, '').replace(/[\s*_]+$/, '')
+    if (dice) fuera.push('la corrección pedía cambiar el concepto aprobado: ' + dice)
+  }
+  return fuera
 }
 
 /** lo que la mesa deja en el estado cuando escribe un solo guion (la elegida queda igual: los pasos que siguen no distinguen de dónde vino) */
