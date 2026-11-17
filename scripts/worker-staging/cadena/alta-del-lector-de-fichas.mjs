@@ -7,7 +7,7 @@
  * 🔴 SOLO con el 🟢 del certificador, el GO de Lenovo, la migración 202611172300 YA aplicada y n8n 0/0.
  * Orden (cada paso verifica el anterior):
  *   1 · la puerta viva es IGUAL al respaldo `puerta-s4-fichas-ANTES.json` (si cambió, no se sigue: rehacer el respaldo y el parche)
- *   2 · crea el sub-flujo «cadena · fichas» (nace apagado, como los otros sub-flujos de la cadena)
+ *   2 · crea el sub-flujo «cadena · fichas» (o reusa el de un alta a medias, si es idéntico) y lo PUBLICA: n8n no deja que la puerta publicada llame a un sub-flujo sin publicar
  *   3 · imprime el SQL que suma su id a `cadena_config.flujos` (sin eso la ruta responde 403 y el lector no corre · NO se aplica aquí)
  *   4 · parcha la puerta con `construir-s4-fichas-puerta.mjs` y la verifica nodo por nodo
  * REVERSA: `node scripts/ops/n8n-flujo.mjs restaurar pBAp5Cx7R39U585i scripts/worker-staging/cadena/puerta-s4-fichas-ANTES.json --ejecutar` y quitar el id de `cadena_config.flujos`.
@@ -36,26 +36,48 @@ const ID_PUERTA = 'pBAp5Cx7R39U585i'
 const ANTES = JSON.parse(fs.readFileSync(path.join(AQUI, 'puerta-s4-fichas-ANTES.json'), 'utf8'))
 
 const vivo = await api('GET', `/workflows/${ID_PUERTA}`)
-if (huella(vivo) !== huella(ANTES)) { console.error('🔴 la puerta viva NO es igual al respaldo: no se sigue (rehacer el respaldo y revisar el parche)'); process.exit(1) }
-console.log('1 · la puerta viva es igual al respaldo')
+// 17-nov (AVISO-CC3 · alta a medias): esta versión de n8n separa lo PUBLICADO (`activeVersion`) del BORRADOR (`nodes`).
+// Lo que corre es lo publicado: ESO tiene que ser igual al respaldo. El borrador puede ser el respaldo o ya el parche (un alta que quedó a medias).
+const publicada = vivo.activeVersion?.nodes ? vivo.activeVersion : vivo
+if (huella(publicada) !== huella(ANTES)) { console.error('🔴 la puerta PUBLICADA no es igual al respaldo: no se sigue (rehacer el respaldo y revisar el parche)'); process.exit(1) }
+console.log('1 · la puerta publicada es igual al respaldo')
 const sub = construirFlujos()['cadena-fichas']
 const existentes = []
 let cursor
 do { const r = await api('GET', `/workflows?limit=100${cursor ? '&cursor=' + cursor : ''}`); existentes.push(...r.data); cursor = r.nextCursor } while (cursor)
-if (existentes.some((w) => w.name === sub.name)) { console.error(`🔴 ya existe un flujo «${sub.name}»: no se duplica`); process.exit(1) }
+const previos = existentes.filter((w) => w.name === sub.name && !w.isArchived)
+if (previos.length > 1) { console.error(`🔴 hay ${previos.length} flujos «${sub.name}»: no se sigue`); process.exit(1) }
+let idFichas = previos[0]?.id ?? null
+if (idFichas) {
+  // un alta a medias: se reusa SOLO si es exactamente el sub-flujo que arma construir.mjs
+  const previo = await api('GET', `/workflows/${idFichas}`)
+  if (huella(previo) !== huella(sub)) { console.error(`🔴 ya existe «${sub.name}» (${idFichas}) y NO es igual al que arma construir.mjs: no se sigue`); process.exit(1) }
+  console.log(`   el sub-flujo ya existe y es igual al de construir.mjs → se reusa ${idFichas} (activo: ${previo.active})`)
+}
+const borradorOk = (id) => huella(vivo) === huella(ANTES) || (id && huella(vivo) === huella(conLector(ANTES, id)))
+if (!borradorOk(idFichas)) { console.error('🔴 el BORRADOR de la puerta no es ni el respaldo ni el parche: no se sigue'); process.exit(1) }
 const prueba = conLector(ANTES, '@@ID_FICHAS@@')
-console.log(`2 · plan: crear «${sub.name}» (${sub.nodes.length} nodos, apagado) · la puerta pasa de ${ANTES.nodes.length} a ${prueba.nodes.length} nodos`)
+console.log(`2 · plan: ${idFichas ? 'reusar' : 'crear'} «${sub.name}» (${sub.nodes.length} nodos) y PUBLICARLO (n8n no deja que la puerta publicada llame a un sub-flujo sin publicar; los otros sub-flujos de la cadena están activos) · la puerta pasa de ${ANTES.nodes.length} a ${prueba.nodes.length} nodos`)
 if (!ejecutar) { console.log('\n(plan solamente: no se creó nada · agregar --ejecutar)'); process.exit(0) }
 
-const creado = await api('POST', '/workflows', { name: sub.name, nodes: sub.nodes, connections: sub.connections, settings: sub.settings })
-if (creado.active === true) throw new Error('🔴 el sub-flujo quedó ACTIVO: esto no debía pasar')
-console.log(`   creado fichas → ${creado.id} (activo: ${creado.active})`)
+if (!idFichas) {
+  const creado = await api('POST', '/workflows', { name: sub.name, nodes: sub.nodes, connections: sub.connections, settings: sub.settings })
+  idFichas = creado.id
+  console.log(`   creado fichas → ${idFichas}`)
+}
+// el sub-flujo solo lo dispara la llamada de la puerta: publicarlo no corre nada. Sin su id en `cadena_config.flujos` la ruta responde 403 y la puerta sigue «sin fichas» (no es reja)
+await api('POST', `/workflows/${idFichas}/activate`)
+const subVivo = await api('GET', `/workflows/${idFichas}`)
+if (subVivo.active !== true) throw new Error('🔴 el sub-flujo no quedó publicado: la puerta no se toca')
+console.log(`   sub-flujo publicado (activo: ${subVivo.active})`)
 console.log('\n3 · SQL para sumar su id a la lista de flujos autorizados (NO se aplicó · aplicarlo ANTES de que corra una campaña):\n')
-console.log(`UPDATE public.cadena_config SET valor = valor || '${JSON.stringify([creado.id])}'::jsonb, actualizado_en = now() WHERE clave = 'flujos' AND NOT (valor ? '${creado.id}');\n`)
-const nueva = conLector(ANTES, creado.id)
+console.log(`UPDATE public.cadena_config SET valor = valor || '${JSON.stringify([idFichas])}'::jsonb, actualizado_en = now() WHERE clave = 'flujos' AND NOT (valor ? '${idFichas}');\n`)
+const nueva = conLector(ANTES, idFichas)
 await api('PUT', `/workflows/${ID_PUERTA}`, { name: vivo.name, nodes: nueva.nodes, connections: nueva.connections, settings: vivo.settings })
-const despues = await api('GET', `/workflows/${ID_PUERTA}`)
-if (huella(despues) !== huella(nueva)) throw new Error('🔴 la puerta guardada no es igual al parche: restaurar con puerta-s4-fichas-ANTES.json')
-console.log(`4 · puerta parchada y verificada (${despues.nodes.length} nodos · activa: ${despues.active})`)
-fs.writeFileSync(path.join(AQUI, 'lector-de-fichas-creado.json'), JSON.stringify({ fichas: creado.id, puerta: ID_PUERTA, fecha: new Date().toISOString() }, null, 1))
+let despues = await api('GET', `/workflows/${ID_PUERTA}`)
+if (despues.activeVersionId && despues.activeVersionId !== despues.versionId) { await api('POST', `/workflows/${ID_PUERTA}/activate`); despues = await api('GET', `/workflows/${ID_PUERTA}`) }
+const pub = despues.activeVersion?.nodes ? despues.activeVersion : despues
+if (huella(despues) !== huella(nueva) || huella(pub) !== huella(nueva)) throw new Error('🔴 la puerta guardada o la PUBLICADA no es igual al parche: restaurar con puerta-s4-fichas-ANTES.json')
+console.log(`4 · puerta parchada, publicada y verificada (${pub.nodes.length} nodos · activa: ${despues.active} · versión publicada = borrador: ${despues.activeVersionId === despues.versionId})`)
+fs.writeFileSync(path.join(AQUI, 'lector-de-fichas-creado.json'), JSON.stringify({ fichas: idFichas, puerta: ID_PUERTA, fecha: new Date().toISOString() }, null, 1))
 await new Promise((r) => setTimeout(r, 100))
