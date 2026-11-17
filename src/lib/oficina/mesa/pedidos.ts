@@ -12,7 +12,7 @@ import { AGENTE_GANCHO_DE_VIDEO, METODO_GANCHO_POR_OMISION, fichasEnTexto, leerF
 import { BRIEF_GUIA_NO_REGLA } from '../brief'
 import { fichaPorOmision } from '../../video/parametros'
 import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
-import { PLAN_DE_LA_CRITICA, seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
+import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar'
 
@@ -347,9 +347,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     recorta(c.brief_texto, DIETA[c.tipo].marco, 'el marco'),
     '',
     '## 3 · El plan de trabajo',
-    // Sprint 4 · E · la crítica confronta con el PLAN: lo lee completo (en la mesa de la gran idea los demás no lo reciben)
-    tipo === 'criticar' ? (c.plan_texto ? recorta(c.plan_texto, PLAN_DE_LA_CRITICA, 'el plan') : '(sin plan: dilo en tu crítica; no lo supongas)')
-      : c.tipo === 'concepto' ? '(el brief de la campaña ya es la lectura del plan: no se repite aquí)' : c.plan_texto ? recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan') : '(sin plan)',
+    c.tipo === 'concepto' ? '(el brief de la campaña ya es la lectura del plan: no se repite aquí)' : c.plan_texto ? recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan') : '(sin plan)',
     '',
     '## Fotos propias del cliente (ids para `Imagen: foto:<id>`)',
     LISTA_DE_FOTOS(c.fotos),
@@ -360,7 +358,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
   ].join('\n')
 
   // Sprint 4 · E · lo que la dirección sabe de la crítica de esta ronda (solo si la mesa tiene crítico; sin él, la tarea es la de siempre)
-  const laCritica = tipo === 'integrar' || tipo === 'devolver_citas' ? seccionDeLaCriticaParaLaDireccion(est, libro) : null
+  const laCritica = tipo === 'integrar' ? seccionDeLaCriticaParaLaDireccion(est, libro) : null
   const tu: Record<TipoDeTurno, string> = {
     dirigir: [
       '## Tu turno · DIRECCIÓN CREATIVA: abre la pieza',

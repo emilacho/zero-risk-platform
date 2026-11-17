@@ -14,6 +14,9 @@ import { ideasDeLosAportes, textoParaLaCadena } from '../mesa/de-la-cadena'
 import { estadoDeLaMesa } from '../mesa/orquestador'
 import { MARCA_DE_LA_CRITICA, PREFIJO_DE_LA_CRITICA, conMarcaDeLaCritica, criticaPendiente, estadoDeLaCritica, seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from '../mesa/critica'
 import { traducirPieza } from '../mesa/traductor'
+import { leerCitas, verificarCitas } from '../mesa/libro'
+import { traducirPropuestas } from '../video/propuestas'
+import { traducirGuion } from '../video/guion'
 import type { Aporte, EstadoMesa, Tarjeta, TipoDePieza } from '../mesa/tipos'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
 import { DIRECTORIO, crearMesaEnMemoria } from './mesa-memoria'
@@ -101,16 +104,17 @@ describe('E · el planificador: la crítica va después de los aportes y antes d
 const C = (tipo: TipoDePieza, plan: string | null = 'PLAN · objetivo: ventas del trimestre · público: compradores nuevos · ruta 1 y ruta 2'): ContextoDeTurno => ({ cliente_nombre: 'Cliente', tipo, brief_id: 'B1', brief_texto: 'brief', manual_texto: 'manual', plan_texto: plan, fotos: [], tope_usd: 8, gasto_usd: 1 })
 
 describe('E · lo que lee la crítica y lo que sabe la dirección', () => {
-  it('en la mesa de la gran idea los demás no reciben el plan; la crítica sí, completo', () => {
+  it('un solo camino para el plan (CC6 · a): la crítica recibe EXACTAMENTE la misma sección del plan que los demás asientos, en piezas y en la gran idea', () => {
     const l = ronda1()
-    const e = est({ tipo: 'concepto' })
-    const deCritica = armarTarea({ tipo: 'criticar', agente: CRITICO, tarjeta: TARJETA_CRITICA, est: e, libro: l, c: C('concepto') })
-    const deMiembro = armarTarea({ tipo: 'aportar', agente: 'content-creator', tarjeta: DIR[1], est: e, libro: l, c: C('concepto') })
-    expect(deCritica).toContain('ventas del trimestre')
-    expect(deMiembro).not.toContain('ventas del trimestre')
-    expect(deCritica).toContain('## Tu turno · CRÍTICA')
-    const sinPlan = armarTarea({ tipo: 'criticar', agente: CRITICO, tarjeta: TARJETA_CRITICA, est: e, libro: l, c: C('concepto', null) })
-    expect(sinPlan).toMatch(/sin plan: dilo/)
+    const seccion = (t: string) => t.slice(t.indexOf('## 3 · El plan de trabajo'), t.indexOf('## Fotos propias'))
+    for (const tipo of ['carrusel', 'concepto'] as const) {
+      const e = est({ tipo })
+      const deCritica = armarTarea({ tipo: 'criticar', agente: CRITICO, tarjeta: TARJETA_CRITICA, est: e, libro: l, c: C(tipo) })
+      const deMiembro = armarTarea({ tipo: 'aportar', agente: 'content-creator', tarjeta: DIR[1], est: e, libro: l, c: C(tipo) })
+      expect(seccion(deCritica)).toBe(seccion(deMiembro))
+      expect(deCritica).toContain('## Tu turno · CRÍTICA')
+    }
+    expect(tareaDeLaCritica(CRITICO)).toMatch(/«sin dato» y no lo supongas/)
   })
   it('la dirección recibe la crítica COMPLETA y el pedido de escribir «Crítica:» en las citas', () => {
     const larga = `A2 choca con un hecho. ${'detalle '.repeat(500)}FIN-DE-LA-CRITICA`
@@ -162,6 +166,69 @@ describe('E · la crítica no se cuela como idea del banco ni como lámina', () 
     const a = traducirPieza(base, 'carrusel'), b = traducirPieza(conCritica, 'carrusel')
     expect(b.laminas).toEqual(a.laminas)
     expect(b.avisos).toEqual(a.avisos)
+  })
+})
+
+describe('E · las líneas «Crítica:» no son citas (CC6 · condición 2) ni contenido en ningún lector (CC7 · 2)', () => {
+  const CRIT = [`${PREFIJO_DE_LA_CRITICA} tomé A4 sobre A2: cambié la lámina 1 porque prometía algo que el manual no sostiene`, `${PREFIJO_DE_LA_CRITICA} no tomé lo de A3: es opinión, no un hecho`, `${PREFIJO_DE_LA_CRITICA} no llegó (falló 3 veces)`]
+  it('el lector de A<n> no las toma y el chequeo de citas no devuelve por ellas: ni cita mal formada, ni aporte inexistente, ni turno extra', () => {
+    const l = [...ronda1(), critica()]
+    const base = '## Lámina 1\nTítulo: x\n## Citas\nA2 usé: el texto del titular\nA3 usé: el ritmo de las láminas'
+    for (const linea of CRIT) {
+      expect(leerCitas(linea)).toEqual([])
+      expect(leerCitas(`${base}\n${linea}`)).toEqual(leerCitas(base))
+      expect(verificarCitas(`${base}\n${linea}`, l, ['content-creator', 'carousel-designer'])).toEqual(verificarCitas(base, l, ['content-creator', 'carousel-designer']))
+      const conIntegra = [...l, A({ de: DIRECCION, tipo: 'integra', texto: `${base}\n${linea}` })]
+      expect(siguienteDeLaMesa(est(), conIntegra, ctx())).not.toMatchObject({ tipo: 'devolver_citas' })
+    }
+  })
+  it('control: una cita de verdad mal hecha SÍ devuelve (el chequeo sigue vivo)', () => {
+    const l = [...ronda1(), critica(), A({ de: DIRECCION, tipo: 'integra', texto: `## Citas\nA2 usé: el texto del titular\n${CRIT[0]}` })]
+    expect(siguienteDeLaMesa(est(), l, ctx())).toMatchObject({ tipo: 'devolver_citas' })
+  })
+  it('kit: las mismas piezas con o sin las líneas', () => {
+    const kit = '## BRF-1 · la oferta del día\nTítulo: La oferta\nTexto: Hoy\n## segunda\nTítulo: Horario\nCTA: Escríbenos\n## Citas\nA2 usé: el texto del titular'
+    const o = { refsDelKit: ['BRF-1', 'BRF-2'], tipoPorRef: { 'BRF-1': 'historia' as const, 'BRF-2': 'estado' as const } }
+    const a = traducirPieza(kit, 'kit', o), b = traducirPieza(`${kit}\n${CRIT.join('\n')}`, 'kit', o)
+    expect(b.laminas).toEqual(a.laminas)
+    expect(b.avisos).toEqual(a.avisos)
+  })
+  it('video: el guion y las propuestas (una o dos) no cambian con las líneas', () => {
+    const guion = ['## Plano 1 · 0–3 s', 'Rol: gancho', 'Dice: llega en un día', 'Se ve: la caja sobre la mesa, alguien la abre', 'Producto: sí', '## Plano 2 · 3–8 s', 'Rol: dar prueba', 'Se ve: la mesa de trabajo', 'Producto: no'].join('\n')
+    const conCitas = (md: string, extra: string) => `${md}\n## Citas\nA2 usé: el gancho del guionista${extra}`
+    const g0 = traducirGuion(conCitas(guion, '')), g1 = traducirGuion(conCitas(guion, `\n${CRIT.join('\n')}`))
+    expect(g1.planos).toEqual(g0.planos)
+    expect(g1.audio).toEqual(g0.audio)
+    expect(g1.segundos).toEqual(g0.segundos)
+    for (const md of [`# Propuesta 1 · Uno\n${guion}`, `# Propuesta 1 · Uno\n${guion}\n# Propuesta 2 · Dos\n${guion}`]) {
+      const p0 = traducirPropuestas(conCitas(md, ''), { objetivo: 2 }), p1 = traducirPropuestas(conCitas(md, `\n${CRIT.join('\n')}`), { objetivo: 2 })
+      expect(p0.ok && p1.ok).toBe(true)
+      if (!p0.ok || !p1.ok) return
+      expect(p1.resultado.propuestas.map((p) => [p.nombre, p.guion.planos, p.guion.segundos])).toEqual(p0.resultado.propuestas.map((p) => [p.nombre, p.guion.planos, p.guion.segundos]))
+      expect(p1.resultado.avisos).toEqual(p0.resultado.avisos)
+    }
+  })
+})
+
+describe('E · la cota cubre a la crítica (CC7 · 4) y los tres «no llegó» (CC7 · 3)', () => {
+  it('el turno de crítica cuenta en los turnos y en el gasto como cualquier turno; si es el que agota la cota, la dirección integra igual («cierra con lo que hay»)', () => {
+    // por turnos: en el turno 23 de 24 critica; con la crítica hecha (turno 24) la cota se agotó y la dirección integra
+    expect(siguienteDeLaMesa(est({ turnos: 23 }), ronda1(), ctx())).toMatchObject({ agente: CRITICO, tipo: 'criticar' })
+    expect(siguienteDeLaMesa(est({ turnos: 24 }), [...ronda1(), critica()], ctx())).toMatchObject({ agente: DIRECCION, tipo: 'integrar', motivo: expect.stringContaining('cierra con lo que hay: se usaron los 24 turnos') })
+    // por gasto (tope 8 · reserva de un turno 0,6 + lo que sigue 1,7): con 5,6 critica; con la crítica pagada (5,9) la dirección integra, todavía bajo el techo
+    expect(siguienteDeLaMesa(est(), ronda1(), ctx(5.6, 8))).toMatchObject({ agente: CRITICO, tipo: 'criticar' })
+    expect(siguienteDeLaMesa(est(), [...ronda1(), critica()], ctx(5.9, 8))).toMatchObject({ agente: DIRECCION, tipo: 'integrar', motivo: expect.stringContaining('cierra con lo que hay: el gasto') })
+    // con la cota ya agotada antes de la crítica, no hay crítica
+    expect(siguienteDeLaMesa(est(), ronda1(), ctx(5.9, 8))).toMatchObject({ agente: DIRECCION, tipo: 'integrar' })
+  })
+  it('no llegó porque falló · porque no cabe · porque no hay crítico: la dirección integra en los tres; los dos primeros lo dicen', () => {
+    const fallo = [...ronda1(), ...[1, 2, 3].map(() => A({ de: CRITICO, tipo: 'nota', texto: 'turno_fallido: x' }))]
+    const t1 = armarTarea({ tipo: 'integrar', agente: DIRECCION, tarjeta: DIR[0], est: est(), libro: fallo, c: C('carrusel') })
+    expect(t1).toMatch(/La crítica no llegó: el turno de social-media-strategist falló 3 veces/)
+    const t2 = armarTarea({ tipo: 'integrar', agente: DIRECCION, tarjeta: DIR[0], est: est({ cierre_forzado: 'tope' }), libro: ronda1(), c: C('carrusel') })
+    expect(t2).toMatch(/La crítica no llegó: la mesa cierra con lo que hay/)
+    const t3 = armarTarea({ tipo: 'integrar', agente: DIRECCION, tarjeta: DIR[0], est: est({ directorio_congelado: SIN_CRITICO }), libro: ronda1(), c: C('carrusel') })
+    expect(t3).not.toMatch(/crítica/i)
   })
 })
 

@@ -83,14 +83,11 @@ export function seccionDeLaCriticaParaLaDireccion(est: EstadoMesa, libro: Aporte
   return ['## La crítica de esta ronda', `La crítica no llegó: ${e.motivo}. Integra igual y dilo en una línea dentro de \`## Citas\` que empiece por «${PREFIJO_DE_LA_CRITICA} no llegó».`].join('\n')
 }
 
-/** cuánto del plan lee la crítica (el plan es su fuente: en la mesa de la gran idea los demás no lo reciben) */
-export const PLAN_DE_LA_CRITICA = 60000
-
 /** la tarea del turno de crítica (va debajo de la cabecera común: manual, brief, plan, fotos y tablero) */
 export function tareaDeLaCritica(agente: string): string {
   return [
     `## Tu turno · CRÍTICA (${agente})`,
-    'El equipo ya aportó (míralo en el tablero) y la dirección todavía no integra. Tu rol es el de un estratega de agencia: **confronta lo que se propuso con los hechos y con el plan**, antes de que la dirección decida.',
+    'El equipo ya aportó (míralo en el tablero) y la dirección todavía no integra. Tu rol es el de un estratega de agencia: **confronta lo que se propuso con los hechos y con el plan**, antes de que la dirección decida. Lees lo mismo que el resto de la mesa (manual, brief, plan, fichas y tablero): si falta un dato que necesitas (el plan, la ficha de una oferta), dilo como «sin dato» y no lo supongas.',
     'Para cada propuesta o idea que lo amerite, citándola por su referencia (A<n>, o el id de la idea):',
     '- **Qué choca con un hecho**: algo que la oferta no es, no tiene, no ofrece, no está disponible donde o cuando se dice, o no se puede afirmar según el manual, el brief, el plan o el material del portero. Di cuál es el hecho y dónde está.',
     '- **Qué choca con el plan**: objetivo, público, fase, ruta o mensaje que el plan no sostiene.',
