@@ -6,6 +6,7 @@
  * Puro: sin base, sin red, sin modelo. Nada se inventa: lo que la mesa no escribió va ausente.
  */
 import { avisosDeCuantasQuedan, cabecera, nombreDeLaPropuesta, partirEnPropuestas } from '../video/propuestas'
+import type { Plantilla } from '../tipos'
 import { traducirPieza, type ImagenPedida, type OpcionesDeTraduccion, type Traduccion } from './traductor'
 
 export const ARTEFACTO_PROPUESTAS_IMAGEN = 'propuestas_imagen'
@@ -37,6 +38,9 @@ export interface PropuestaDeImagen {
   laminas: LaminaDeLaPropuesta[]
   /** el texto de ESTA propuesta tal cual (título + cuerpo): al aprobar, es la pieza que se traduce y se fabrica en final (campo del motor; la tarjeta no lo lee) */
   texto: string
+  /** tramo 2 · los artefactos de la cola que deja ESTA propuesta (los mismos que deja una pieza sola: `visual_direction`, `prompts_validos`, copy, estructura o láminas,
+   *  `pieza_post`): al aprobarse pasan tal cual. Campo del motor; la tarjeta no lo lee */
+  artefactos?: Record<string, Record<string, unknown>>
 }
 export interface PropuestasDeImagen { ronda: number; clase: ClaseDeImagen; avisos: string[]; propuestas: PropuestaDeImagen[]; citas: string }
 
@@ -88,9 +92,10 @@ const copyDe = (tipo: 'kit' | 'carrusel' | 'post', tr: Traduccion): PropuestaDeI
  * se descarta CON su motivo y su título; uno sin láminas también (avisado). Si ninguna queda, `ok: false`. Los avisos de cada traducción viajan con el id de su propuesta.
  */
 export function traducirPropuestasDeImagen(md: string, tipo: 'kit' | 'carrusel' | 'post', o: { objetivo: number; ronda?: number; traduccion?: OpcionesDeTraduccion }):
-  { ok: true; resultado: PropuestasDeImagen } | { ok: false; motivo: string; avisos: string[] } {
+  { ok: true; resultado: PropuestasDeImagen; traducciones: TraduccionDeLaPropuesta[] } | { ok: false; motivo: string; avisos: string[] } {
   const { bloques, citas, avisos } = partirEnPropuestas(md, o.objetivo)
   const propuestas: PropuestaDeImagen[] = []
+  const traducciones: TraduccionDeLaPropuesta[] = []
   const descartadas: string[] = []
   for (const b of bloques) {
     const cuerpo = sinCabeceraDeLaPropuesta(b.lineas).join('\n')
@@ -104,9 +109,47 @@ export function traducirPropuestasDeImagen(md: string, tipo: 'kit' | 'carrusel' 
       id, nombre: nombreDeLaPropuesta(b.titulo, id), concepto: c.concepto || undefined, objetivo: c.objetivo || tr.objetivo || undefined, por_que: c.por_que || undefined, red: c.red || undefined,
       copy: copyDe(tipo, tr), laminas, texto: [`# ${b.titulo}`, ...b.lineas].join('\n').trim(),
     }) as PropuestaDeImagen)
+    traducciones.push({ tr })
   }
   if (!propuestas.length) return { ok: false, motivo: 'ninguna propuesta trae láminas que se puedan leer', avisos }
   avisos.push(...avisosDeCuantasQuedan(o.objetivo, bloques.length, propuestas.length, descartadas, 'por sus láminas'))
-  return { ok: true, resultado: { ronda: o.ronda ?? 1, clase: CLASE_DE_IMAGEN[tipo], avisos, propuestas, citas } }
+  return { ok: true, resultado: { ronda: o.ronda ?? 1, clase: CLASE_DE_IMAGEN[tipo], avisos, propuestas, citas }, traducciones }
 }
+
+/** la traducción completa de cada propuesta que quedó (mismo orden que `propuestas`): el motor arma con ella SUS artefactos */
+export interface TraduccionDeLaPropuesta { tr: Traduccion }
+
+/**
+ * el ref con que el INGENIERO DE PROMPTS ve una imagen de una propuesta («P2-hook»): las N propuestas repiten refs (todas tienen su «hook» o su «e01») y el ingeniero
+ * escribe una sección por imagen; con el id delante, cada propuesta toma SOLO las suyas (nunca las instrucciones de otra). Sin propuestas, el ref de siempre.
+ */
+export const refDelIngeniero = (propuestaId: string, ref: string): string => `${propuestaId}-${ref}`
+
+/** las clases de la mesa que presentan propuestas en imagen */
+export type TipoDeImagen = 'kit' | 'carrusel' | 'post'
+export const esDeImagen = (t: string): t is TipoDeImagen => t === 'kit' || t === 'carrusel' || t === 'post'
+
+/**
+ * cuántas propuestas pide la plantilla de imagen (DATO genérico `limites.propuestas`: `{ n }` o un número). Sin dato, o 1, la mesa trabaja exactamente como hoy:
+ * una sola pieza, sin parada del dueño.
+ */
+export function propuestasDeLaPlantilla(pl: Pick<Plantilla, 'limites'>): number {
+  const v = (pl.limites as Record<string, unknown> | undefined)?.propuestas
+  const n = typeof v === 'number' ? v : v && typeof v === 'object' ? (v as { n?: unknown }).n : null
+  return typeof n === 'number' && Number.isInteger(n) && n > 1 ? n : 1
+}
+
+/** la parada es ÚNICA también en imagen (decisión de Lenovo 17-nov 00:51): si la mesa vuelve después de aprobar, corrige SOLO la elegida */
+export const ROTULO_PARADA_UNICA_IMAGEN = 'Escribe UNA pieza'
+export function avisoDeLaParadaUnicaDeImagen(p: Pick<PropuestaDeImagen, 'id' | 'nombre' | 'concepto' | 'texto'>, rotuloDeConcepto: string): string {
+  return [
+    `El dueño YA APROBÓ la propuesta ${p.id} · «${p.nombre}» (concepto: ${p.concepto || 'el de la propuesta'}). Ya no se presentan propuestas ni se vuelve a pedir aprobación.`,
+    `Corrige SOLO esa propuesta con lo que te devuelven. ${ROTULO_PARADA_UNICA_IMAGEN} (todas sus láminas completas), fiel a su concepto. No escribas «# Propuesta N».`,
+    `Si la corrección obligaría a cambiar el concepto aprobado (no solo la ejecución), NO lo cambies: escribe la mejor versión fiel al concepto y explícalo en una línea que empiece con «${rotuloDeConcepto}».`,
+    '',
+    'La propuesta aprobada, tal como la escribió la mesa:',
+    p.texto,
+  ].join('\n')
+}
+
 
