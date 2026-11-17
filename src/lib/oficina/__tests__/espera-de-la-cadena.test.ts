@@ -206,6 +206,32 @@ describe('eslabón 3 · lo que dice `para_la_pieza`', () => {
     expect(m.M.llamadas.bandeja).toEqual([])
     expect(m.M.llamadas.salidas).toEqual([])
   })
+  it.each([
+    ['ausente', undefined],
+    ['nulo', null],
+    ['vacío', ''],
+    ['desconocido', 'publicar'],
+    ['en mayúsculas', 'SIGUE'],
+  ])('🔴 CC6 s4 · `para_la_pieza` %s: la falta de dato NO suelta la pieza · espera, sin salida ni bandeja, también tras el vigía', async (_n, valor) => {
+    // la lectura del receptor se reescribe DESPUÉS del ayudante (que rellena con 'esperando'): llega sin el campo, nulo o con un valor que no es de los cuatro
+    const rec = receptor({ para: () => 'sigue' })
+    const lectura = rec.puerto.correccionesDelEncargo
+    rec.puerto.correccionesDelEncargo = async (id) => {
+      const r = await lectura(id)
+      ;(r.cuerpo.correcciones as Array<Record<string, unknown>>).forEach((c) => { if (valor === undefined) delete c.para_la_pieza; else c.para_la_pieza = valor })
+      return r
+    }
+    const m = await correr({ rec })
+    const leida = (await rec.puerto.correccionesDelEncargo(m.enc().id)).cuerpo.correcciones as Array<Record<string, unknown>>
+    expect(leida.length).toBeGreaterThan(0)
+    expect(leida.every((c) => (valor === undefined ? !('para_la_pieza' in c) : c.para_la_pieza === valor))).toBe(true)
+    expect(m.r.cuerpo).toMatchObject({ estado: 'cerrado', resultado_para_la_sala: 'esperando_a_la_cadena', para_la_pieza: 'esperando', output_id: null })
+    expect(m.espera()).toMatchObject({ pendiente: true, veredicto: 'esperando' })
+    await m.vigia()
+    expect(m.M.llamadas.salidas).toEqual([])
+    expect(m.M.llamadas.bandeja).toEqual([])
+    expect(m.espera()).toMatchObject({ pendiente: true, veredicto: 'esperando' })
+  })
   it('🔴 frenada: no sale y la oficina NO manda otra alarma (la mandó el receptor)', async () => {
     const m = await correr({ rec: receptor({ para: () => 'frenada' }) })
     expect(m.r.cuerpo).toMatchObject({ frenada: true, para_la_pieza: 'frenada', output_id: null })
@@ -278,6 +304,29 @@ describe('las medidas de CC7', () => {
     const v = await m.vigia()
     expect(v.cuerpo).toMatchObject({ resultado_para_la_sala: 'esperando_a_la_cadena' })
     expect(m.M.llamadas.bandeja.length).toBe(bandejaAntes)
+  })
+  it.each([['desconocido', 'publicar'], ['en mayúsculas', 'SIGUE']])('🔴 CC6 s4 · dos correcciones, una `sigue` y otra con `para_la_pieza` %s: la rara cuenta como `esperando`, no como ausente · la pieza no sale', async (_n, valor) => {
+    const rec = receptor({ para: () => 'sigue' })
+    const lectura = rec.puerto.correccionesDelEncargo
+    rec.puerto.correccionesDelEncargo = async (id) => {
+      const r = await lectura(id)
+      ;(r.cuerpo.correcciones as Array<Record<string, unknown>>).forEach((c) => { if (c.llave === 'F-0301:calendario') c.para_la_pieza = valor })
+      return r
+    }
+    const m = await correr({ rec })
+    const e = m.enc().estado_del_motor
+    delete e.artefactos[ARTEFACTO_ESPERA_DE_LA_CADENA]
+    const jef = Object.values(e.artefactos).find((x) => (x.datos as { jefatura?: unknown }).jefatura)!.datos as { jefatura: { sentido: { devoluciones: Array<Record<string, unknown>> } } }
+    const d0 = jef.jefatura.sentido.devoluciones[0]
+    jef.jefatura.sentido.devoluciones.push({ ...d0, fila_id: 'F-0301', llave: 'F-0301:calendario' })
+    const bandejaAntes = m.M.llamadas.bandeja.length
+    const salidasAntes = m.M.llamadas.salidas.length
+    const v = await m.vigia()
+    const leida = (await rec.puerto.correccionesDelEncargo(m.enc().id)).cuerpo.correcciones as Array<Record<string, unknown>>
+    expect(leida.map((c) => [c.llave, c.para_la_pieza]).sort()).toEqual([['F-0300:calendario', 'sigue'], ['F-0301:calendario', valor]])
+    expect(v.cuerpo).toMatchObject({ resultado_para_la_sala: 'esperando_a_la_cadena', para_la_pieza: 'esperando' })
+    expect(m.M.llamadas.bandeja.length).toBe(bandejaAntes)
+    expect(m.M.llamadas.salidas.length).toBe(salidasAntes)
   })
   it('🔴 CC7 punto 3 · la misma fila ya tiene la corrección de OTRO encargo (`ya_estaba` y no está en la lectura de este): FRENA con UNA alarma, nunca espera para siempre', async () => {
     const rec = receptor({ para: () => 'reemplazada' })
