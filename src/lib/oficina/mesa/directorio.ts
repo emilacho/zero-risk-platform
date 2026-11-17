@@ -9,6 +9,8 @@ const CONDICION_IMAGEN = 'si_imagen_generada'
 /** una tarjeta de dirección que en ESTE tipo de pieza es miembro (no dirige): `concepto:miembro` */
 const CONDICION_MIEMBRO = 'miembro'
 const CONDICION_DIRIGE = 'dirige'
+/** Sprint 4 · E · la tarjeta que hace la CRÍTICA en este tipo de pieza (`concepto:critica`): no «aporta» con los demás, tiene su turno propio antes de que la dirección integre */
+export const CONDICION_CRITICA = 'critica'
 
 /** ¿esta tarjeta es de aporte obligatorio en este tipo de pieza? `carrusel` siempre · `carrusel:si_imagen_generada` solo si alguna imagen se genera */
 export function esPertinente(t: Tarjeta, tipo: TipoDePieza, hayImagenGenerada: boolean, condiciones: readonly string[] = []): boolean {
@@ -21,6 +23,8 @@ export function esPertinente(t: Tarjeta, tipo: TipoDePieza, hayImagenGenerada: b
     if (cond === CONDICION_DIRIGE) return false
     // Sprint 1 · mejora 4 · el ingeniero de prompts no «aporta» antes de la integración: tiene su propio turno DESPUÉS (`ingenieroDePrompts`)
     if (cond === CONDICION_PROMPTS) return false
+    // Sprint 4 · E · la crítica tampoco: su turno va después de los aportes y antes de la integración (`criticoDe`)
+    if (cond === CONDICION_CRITICA) return false
     if (cond === CONDICION_IMAGEN) return hayImagenGenerada
     return condiciones.includes(cond)
   })
@@ -52,7 +56,15 @@ export function direccionDe(directorio: Tarjeta[], tipo?: TipoDePieza): Tarjeta 
 export function ingenieroDePrompts(directorio: Tarjeta[], tipo: TipoDePieza): Tarjeta | null {
   return directorio.find((t) => t.activo && t.rol === 'miembro' && t.pertinente_en.includes(`${tipo}:${CONDICION_PROMPTS}`)) ?? null
 }
-export const porteroDe = (directorio: Tarjeta[]): Tarjeta | null => directorio.find((t) => t.rol === 'portero' && t.activo) ?? null
+/**
+ * Sprint 4 · E (GO Lenovo · firma de Emilio 17:01 Zúrich) · quién hace la CRÍTICA en este tipo de pieza: la tarjeta ACTIVA (miembro) que marca `<tipo>:critica`.
+ * Es un ROL, como en una agencia: un estratega confronta lo que propuso el equipo con los hechos y el plan antes de que la dirección integre. Quién se sienta es DATO.
+ * Sin esa tarjeta, null: la mesa trabaja exactamente como antes.
+ */
+export function criticoDe(directorio: Tarjeta[], tipo: TipoDePieza): Tarjeta | null {
+  return directorio.find((t) => t.activo && t.rol === 'miembro' && t.pertinente_en.includes(`${tipo}:${CONDICION_CRITICA}`)) ?? null
+}
+export const porteroDe =(directorio: Tarjeta[]): Tarjeta | null => directorio.find((t) => t.rol === 'portero' && t.activo) ?? null
 
 /**
  * 01-nov · el directorio AGRUPADO por equipo del departamento (MAPA «ESTRUCTURA FINAL: 6 EQUIPOS»). Es una lectura, no cambia quién se sienta en qué mesa.

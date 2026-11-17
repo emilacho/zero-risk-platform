@@ -8,6 +8,7 @@
  *  3. cotas agotadas (turnos o tope de la pieza) → «cierra con lo que hay»: una sola integración y a dibujar
  *  4. pedidos sin contestar (dentro de las cotas) → al portero: material; a un compañero: su turno
  *  5. especialistas pertinentes sin aporte → se les convoca
+ *  5b. Sprint 4 · E · hay crítico y aportes nuevos sin criticar → turno de la crítica (una vez por ronda; nunca frena: si falla o no cabe, se integra igual)
  *  6. hay aportes nuevos desde la última integración → la dirección integra
  *  7. la integración no cita lo que usó/descartó → se le devuelve (máx. 1 vez)
  *  8. la pieza integrada pide imágenes generadas y hay ingeniero de prompts → su turno (Sprint 1 · mejora 4; también al «cerrar con lo que hay» si cabe bajo el techo)
@@ -15,6 +16,7 @@
  */
 import { especialistasPertinentes, direccionDe, ingenieroDePrompts } from './directorio'
 import { aporteDePrompts, esAporteDePrompts } from './prompts'
+import { criticaPendiente } from './critica'
 import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 
@@ -109,6 +111,11 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   const hizo = participacion(libro, ultInt && integrasHechas < rondasMin ? ultInt.n : 0)
   const faltan = rondasHechas ? [] : especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada, est.condiciones ?? []).filter((a) => !hizo[a] && fallosDe(libro, a) < COTAS.REINTENTOS_DE_TURNO)
   if (faltan.length) return { accion: 'turno', agente: faltan[0], tipo: 'aportar', responde_a: null, motivo: 'su especialidad es obligatoria en esta pieza' }
+
+  // 5b · Sprint 4 · E · la CRÍTICA: con los aportes de la ronda hechos y antes de integrar, el estratega los confronta con los hechos y el plan (una vez por ronda).
+  //   No es una reja: si falla, no cabe o no hay crítico, la mesa sigue igual (la dirección lo declara al integrar)
+  const critico = criticaPendiente(est, libro, rondasHechas)
+  if (critico) return { accion: 'turno', agente: critico, tipo: 'criticar', responde_a: null, motivo: 'la crítica confronta lo propuesto con los hechos y el plan antes de integrar' }
 
   // 6 · aportes nuevos desde la última integración → integra la dirección
   const ult = ultimaIntegracion(libro)
