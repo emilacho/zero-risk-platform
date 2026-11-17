@@ -8,7 +8,7 @@
  * Lo de afuera es dato no confiable: cada texto va recortado, en una línea y marcado como dato, nunca como instrucción.
  * Los momentos NO son cortes de plano (son los 5 capturados); el desarme por corte real queda para un tramo con gasto.
  */
-import { gustoDe, nivelDeOrigen, ordenarPorEmbudo } from '../../portero-alimenta/embudo'
+import { gustoDe, nivelDeOrigen, ordenarPorEmbudo, rolEfectivo } from '../../portero-alimenta/embudo'
 import { instantesDeCaptura } from '../../portero-alimenta/videos-del-cerebro'
 
 type Fila = Record<string, unknown>
@@ -103,8 +103,9 @@ export function desarmarReferencias(f: FilasDeReferencias, o: { segundos?: { min
     if (!id || c.estado !== 'ok' || !txt(c.que_muestra) || numeroDeMomento(c.posicion) == null) continue
     momentosDe.set(id, [...(momentosDe.get(id) ?? []), c])
   }
-  const candidatos = filas(f.videos).filter((v) => v.estado === 'ok' && (v.owner_role === 'competidor' || v.owner_role === 'referencia') && TIPOS_DE_REEL.has(String(v.tipo)) && (momentosDe.get(String(v.id))?.length ?? 0) >= MOMENTOS_MINIMOS)
-  const nivelDe = (v: Fila) => nivelDeOrigen(String(v.owner_role), txt(tendencia.get(String(v.id))?.nivel))
+  // 18-nov · fase B del cerebro: el rol sale de `papel` (`rolEfectivo`); lo ajeno sin motivo no es referencia (va aparte, nunca mezclado)
+  const candidatos = filas(f.videos).filter((v) => v.estado === 'ok' && (rolEfectivo(v) === 'competidor' || rolEfectivo(v) === 'referencia') && v.sin_motivo !== true && TIPOS_DE_REEL.has(String(v.tipo)) && (momentosDe.get(String(v.id))?.length ?? 0) >= MOMENTOS_MINIMOS)
+  const nivelDe = (v: Fila) => nivelDeOrigen(rolEfectivo(v), txt(tendencia.get(String(v.id))?.nivel))
   const gustoDelVideo = (v: Fila) => gustoDe(v.metricas && typeof v.metricas === 'object' ? (v.metricas as Fila) : null) ?? gustoDe(tendencia.get(String(v.id)) ?? null)
   const lejania = (v: Fila): number => {
     const d = num(v.duracion_s)

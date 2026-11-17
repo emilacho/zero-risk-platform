@@ -12,7 +12,7 @@ const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
 
 export async function leerReferenciasDeVideo(db: Db, clientId: string): Promise<{ videos: Fila[]; tendencias: Fila[]; capturas: Fila[] }> {
   const [v, t, c] = await Promise.all([
-    db.from('client_videos').select('id,owner_role,handle,tipo,estado,duracion_s,caption,transcripcion,metricas').eq('client_id', clientId).in('owner_role', ['competidor', 'referencia']).eq('estado', 'ok').order('created_at', { ascending: false }).limit(500),
+    db.from('client_videos').select('id,owner_role,papel,sin_motivo,handle,tipo,estado,duracion_s,caption,transcripcion,metricas').eq('client_id', clientId).in('owner_role', ['competidor', 'referencia']).eq('estado', 'ok').order('created_at', { ascending: false }).limit(500),
     db.from('cerebro_tendencias').select('video_id,nivel,red,vistas,me_gusta').eq('client_id', clientId).not('video_id', 'is', null).limit(2000),
     db.from('client_social_images').select('video_id,posicion,estado,que_muestra,tipo_de_toma,texto_visible,producto_visto,con_personas').eq('client_id', clientId).eq('tipo', 'video_captura').limit(3000),
   ])

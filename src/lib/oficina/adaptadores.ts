@@ -181,7 +181,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         if (mb.error) return { error: `manual: ${mb.error.message}` }
         const manual = mb.data?.[0]
         if (!manual) return { error: 'el cliente no tiene manual de marca' }
-        const fo = (await db.from('client_social_images').select('id,owner_role,url,estado,que_muestra,producto_visto,texto_visible,con_personas,tipo_de_toma,formato,etiqueta_confianza,tipo,clase,oferta').eq('client_id', clientId).eq('estado', 'ok')) as { data: Fila[] | null; error: { message: string } | null }
+        const fo = (await db.from('client_social_images').select('id,owner_role,papel,sin_motivo,duplicado_de,url,estado,que_muestra,producto_visto,texto_visible,con_personas,tipo_de_toma,formato,etiqueta_confianza,tipo,clase,oferta').eq('client_id', clientId).eq('estado', 'ok')) as { data: Fila[] | null; error: { message: string } | null }
         if (fo.error) return { error: `fotos: ${fo.error.message}` }
         // propio / competencia / referencia: UNA sola implementación (la del portero). Solo las PROPIAS son fotos del cliente; el resto es referencia de estilo, jamás candidata
         // 17-nov · Sprint 4 · D · una captura de la web (página o red) NO es foto propia, pero SÍ referencia de estilo, marcada (GO Lenovo · regla del cerebro, #1135)

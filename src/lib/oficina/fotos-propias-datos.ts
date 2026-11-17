@@ -9,7 +9,7 @@ import { esCapturaDeLaWeb } from '../cerebro/portero/procedencia'
 
 export async function idsDeFotosPropias(db: SupabaseClient, clientId: string): Promise<string[]> {
   try {
-    const r = (await db.from('client_social_images').select('id, owner_role, tipo, clase').eq('client_id', clientId).eq('estado', 'ok').limit(5000)) as { data: Array<Record<string, unknown>> | null; error: { message: string } | null }
+    const r = (await db.from('client_social_images').select('id, owner_role, papel, sin_motivo, duplicado_de, tipo, clase').eq('client_id', clientId).eq('estado', 'ok').limit(5000)) as { data: Array<Record<string, unknown>> | null; error: { message: string } | null }
     if (r.error) return []
     // 17-nov · Sprint 4 · D · las capturas de la web no son fotos propias (regla del cerebro, #1135)
     return separarFotos(((r.data ?? []) as Array<Record<string, unknown>>).filter((f) => !esCapturaDeLaWeb(f)) as never).propias.map((f) => f.id)
