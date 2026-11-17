@@ -102,6 +102,8 @@ export interface PuertoMesa {
   configDeLaCadena?(clave: string): Promise<unknown>
   /** Sprint 2 · S2-2: la biblioteca de planos y los ritmos del video (filas activas) y el rubro del cliente · opcional: sin puerto o con error, el turno sigue sin la sección */
   bibliotecaDeVideo?(clientId: string): Promise<{ fichas: unknown[]; ritmos: unknown[]; industria: string | null }>
+  /** Sprint 2 · S2-6: los reels de afuera del cliente (competencia y referencia) con su tendencia y sus momentos etiquetados, en crudo · opcional: sin puerto o con error, el turno sigue sin la sección */
+  referenciasDeVideo?(clientId: string): Promise<{ videos: unknown[]; tendencias: unknown[]; capturas: unknown[] }>
   libro(encargoId: string): Promise<Aporte[]>
   aportar(a: NuevoAporte): Promise<{ ok: true; aporte: Aporte } | { ok: false; error: string }>
 }

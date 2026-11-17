@@ -385,6 +385,39 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
       }
     }
   })
+  // 17-nov · Sprint 2 · S2-6 · las referencias desarmadas llegan a CADA turno de la mesa de video como contexto (los reels del cliente que ya guardó el portero); sin ellas, la pieza sale igual
+  it.each([
+    ['con reels guardados: cada turno recibe la sección, sin la cuenta ajena', 'ok'],
+    ['con la lectura caída: ningún turno la recibe y la pieza cierra igual', 'caida'],
+  ] as const)('S2-6 · %s', async (_n, modo) => {
+    const hoja = escribirHoja(INSUMOS)
+    const M = crearMemoria({ parte: hoja.texto_md, plantilla: VIDEO_MESA })
+    const MS = crearMesaEnMemoria(TRAS_2012)
+    const pedidos: string[] = []
+    const momentos = Array.from({ length: 5 }, (_, i) => ({ video_id: 'r1', posicion: `hijo-${i + 1}`, estado: 'ok', que_muestra: `el pan sale del horno, momento ${i + 1}`, tipo_de_toma: 'producto', producto_visto: ['Pan'] }))
+    Object.assign(MS, { referenciasDeVideo: async (c: string) => { pedidos.push(c); if (modo === 'caida') throw new Error('tabla caída'); return { videos: [{ id: 'r1', owner_role: 'competidor', handle: 'panaderia-vecina', tipo: 'reel', estado: 'ok', duracion_s: 12, caption: 'Pan del día', metricas: { views: 12000 } }], tendencias: [], capturas: momentos } } })
+    M.P.mesa = MS
+    const enviados: Array<Record<string, unknown>> = []
+    M.P.video = brazoSimulado(enviados)
+    const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'video_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    let aportes = 0
+    const { ultima, turnos } = await jugar(M, String(a.cuerpo.encargo_id), a, (t: Turno) => {
+      if (t.tipo === 'dirigir') return { texto: 'Idea rectora: el pan sale del horno y la mesa larga espera.' }
+      if (t.tipo === 'aportar') { aportes++; return { texto: t.agente === VOZ_DEL_GANCHO ? 'Gancho único: el vapor del pan llenando el cuadro.' : `Aporte de ${t.agente}, sin proponer gancho.` } }
+      if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: GUION(Array.from({ length: aportes }, (_, i) => `A${i + 2} usé: lo tomé tal cual para el guion`).join('\n')) }
+      return undefined
+    })
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', simulado: true })
+    expect(enviados).toHaveLength(1)
+    expect(turnos.length).toBeGreaterThan(6)
+    expect(pedidos.length).toBe(turnos.length)
+    expect(new Set(pedidos)).toEqual(new Set([CLIENTE]))
+    for (const t of turnos) {
+      expect(t.task.includes('## Referencias desarmadas'), `${t.tipo}:${t.agente}`).toBe(modo === 'ok')
+      expect(t.task).not.toContain('panaderia-vecina')
+      if (modo === 'ok') expect(t.task).toContain('- ~1 s: el pan sale del horno, momento 1 (toma: producto · sale producto)')
+    }
+  })
   // 11-nov · GO Lenovo 03:55Z · regla #17: la proporción es UN dato (`cadena_formatos_por_red.proporcion`) que viaja tabla → hoja → brief → oficina → pedido al brazo
   it.each([
     // [caso, cliente, dato en la tabla, lo que recibe el brazo, aviso esperado: 'hoja' (dato ilegible) · 'sala' (el generador no lo admite) · null]

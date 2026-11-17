@@ -25,6 +25,7 @@ import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
 import { parametrosDelVideo, traducirPropuestas, type PropuestasDelVideo } from '../video/propuestas'
 import { avisoDeLaParadaUnica, PREFIJO_AVISO_DE_CONCEPTO, propuestaAprobada, textosDeConcepto } from '../video/aprobacion'
 import { avisosDeRitmo, bibliotecaDelCliente, seccionDeLaBiblioteca, type RitmoDeVideo } from '../video/biblioteca'
+import { desarmarReferencias, seccionDeReferencias } from '../video/referencias'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 
@@ -124,6 +125,15 @@ export async function bibliotecaDelTurno(P: Puertos, enc: Encargo, est: EstadoMe
   try { return seccionDeLaBiblioteca(bibliotecaDelCliente(await P.mesa.bibliotecaDeVideo(enc.client_id))) || undefined } catch { return undefined }
 }
 
+/** Sprint 2 · S2-6 · los reels exitosos del cliente desarmados en momentos, para un turno de la mesa de VIDEO (contexto, no plantilla); sin puerto, con error o sin reels = nada (nunca frena el turno) */
+export async function referenciasDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa): Promise<string | undefined> {
+  if (est.tipo !== 'video' || !P.mesa?.referenciasDeVideo) return undefined
+  try {
+    const v = est.video
+    return seccionDeReferencias(desarmarReferencias(await P.mesa.referenciasDeVideo(enc.client_id), v ? { segundos: { min: v.segundos_min, max: v.segundos_max } } : {})) || undefined
+  } catch { return undefined }
+}
+
 /** el pedido del turno de un agente (puro respecto del libro: sirve igual para la primera entrega y para la reentrega) */
 export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, t: NonNullable<EstadoMesa['turno_abierto']>): Promise<{ agente: string; pedido: Record<string, unknown>; paso: string }> {
   const libro = await P.mesa!.libro(enc.id)
@@ -134,7 +144,8 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   let faltanCitas: string | undefined
   if (tipo === 'devolver_citas') faltanCitas = 'algunas especialidades del equipo (revisa cada aporte del tablero)'
   const biblioteca = await bibliotecaDelTurno(P, enc, est)
-  const metodo = [await metodoDelAsiento(P, t.agente), biblioteca].filter(Boolean).join('\n\n') || undefined
+  const referencias = await referenciasDelTurno(P, enc, est)
+  const metodo = [await metodoDelAsiento(P, t.agente), biblioteca, referencias].filter(Boolean).join('\n\n') || undefined
   const imagenesARedactar = tipo === 'redactar_prompts' ? imagenesAGenerarDe(enc, est) : undefined
   const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
