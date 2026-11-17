@@ -3,7 +3,7 @@
 --   Se enciende SOLO como crítico de las piezas: `carrusel:critica`, `kit:critica`, `post:critica`, `video:critica`. Después de los aportes y antes de que la dirección
 --   integre, confronta lo propuesto con los hechos y el plan (código `mesa/critica.ts` + `planificador.ts` paso 5b, #1130). No aporta como miembro en esos tipos:
 --   la tarjeta NO lleva la marca sola del tipo (observación de CC7: una tarjeta con `<tipo>` y `<tipo>:critica` a la vez rompería el rol).
---   La gran idea (`concepto:critica`) va en la migración 202611172110, que se aplica DESPUÉS de que CC1 suba el tope de `concepto_mesa`.
+--   La gran idea (`concepto:critica`) va en la migración 202611172210, que se aplica DESPUÉS de que CC1 suba el tope de `concepto_mesa`.
 --   Idempotente. La mesa congela el directorio al abrir: las piezas en vuelo siguen con el directorio con el que abrieron.
 --   NO APLICADA: se aplica después del 🟢 de CC7, de publicar #1130 y del GO de Lenovo al paso; CC7 verifica en vivo.
 --   Reversa: supabase/reversas/202611172100_oficina_directorio_critica_en_las_piezas_REVERSA.sql

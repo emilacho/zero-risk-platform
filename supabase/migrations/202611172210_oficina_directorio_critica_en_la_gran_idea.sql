@@ -1,9 +1,9 @@
 -- 17-nov · Sprint 4 · fase 1 · E · ENCENDIDO del rol de crítica EN LA GRAN IDEA (`concepto:critica`) · GO Lenovo (`RESPUESTA-LENOVO-a-CC2-CC1-encendido-critica-y-tope-gran-idea.md`) · CC2.
---   ORDEN: se aplica DESPUÉS de 202611172100 (la crítica en las piezas) y DESPUÉS de que CC1 suba el tope de la fila `concepto_mesa` (hoy 7,00; peor caso medido con
+--   ORDEN: se aplica DESPUÉS de 202611172100 (la crítica en las piezas) y DESPUÉS de la 202611172200 de CC1, que sube el tope de la fila `concepto_mesa` de 7 a 10 (hoy 7,00; peor caso medido con
 --   la crítica ≈ 7,6 · condición 1 de CC6). Sin ese tope, la mesa de la gran idea cerraría por tope, que es cortar a medias. La guarda de abajo frena si el tope sigue en 7.
 --   Agrega SOLO `concepto:critica` (sin `concepto` suelto: la tarjeta critica y no aporta en ese tipo). Idempotente.
 --   NO APLICADA: con el 🟢 de CC7, el tope de CC1 aplicado y el GO de Lenovo al paso; CC7 verifica en vivo.
---   Reversa: supabase/reversas/202611172110_oficina_directorio_critica_en_la_gran_idea_REVERSA.sql
+--   Reversa: supabase/reversas/202611172210_oficina_directorio_critica_en_la_gran_idea_REVERSA.sql
 BEGIN;
 
 DO $$

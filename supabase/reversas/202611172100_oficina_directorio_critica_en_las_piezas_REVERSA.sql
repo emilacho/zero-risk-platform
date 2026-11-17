@@ -1,5 +1,5 @@
 -- REVERSA de 202611172100_oficina_directorio_critica_en_las_piezas.sql · deja `social-media-strategist` como estaba (fila viva leída el 17-nov):
---   activo=false, pertinente_en='{}', especialidad 'estrategia de redes sociales y calendario'. Si la 202611172110 (concepto) ya se aplicó, correr antes SU reversa.
+--   activo=false, pertinente_en='{}', especialidad 'estrategia de redes sociales y calendario'. Si la 202611172210 (concepto) ya se aplicó, correr antes SU reversa.
 --   Con la tarjeta apagada, la mesa vuelve a ser la de antes (sin crítico, `criticoDe` → null). Las mesas en vuelo siguen con el directorio que congelaron.
 BEGIN;
 

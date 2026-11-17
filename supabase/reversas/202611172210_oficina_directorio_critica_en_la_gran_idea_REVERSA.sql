@@ -1,4 +1,4 @@
--- REVERSA de 202611172110_oficina_directorio_critica_en_la_gran_idea.sql · quita SOLO `concepto:critica` de `social-media-strategist`; la crítica en las piezas sigue.
+-- REVERSA de 202611172210_oficina_directorio_critica_en_la_gran_idea.sql · quita SOLO `concepto:critica` de `social-media-strategist`; la crítica en las piezas sigue.
 --   No toca el tope de `concepto_mesa` (eso es de CC1 y tiene su propia reversa).
 BEGIN;
 
