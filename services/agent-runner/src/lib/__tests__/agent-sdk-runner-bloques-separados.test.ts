@@ -31,6 +31,17 @@ describe('el runner une los textos del agente sin pegarlos', () => {
     const d = await drenar(asistente({ type: 'text', text: 'uno' }, { type: 'text', text: ' y dos' }), asistente({ type: 'text', text: ' y tres' }), fin())
     expect(d.responseText).toBe('uno y dos y tres')
   })
+  it('🔴 (w2 de CC6) tras una herramienta, un turno partido en DOS mensajes: el salto va solo al principio, nunca entre los dos', async () => {
+    const d = await drenar(
+      asistente({ type: 'text', text: 'Voy a leer.' }, { type: 'tool_use', id: 't1', name: 'Read', input: {} }),
+      herramienta(),
+      asistente({ type: 'text', text: '{"titulo": "a' }),
+      asistente({ type: 'text', text: 'b", "texto": "c"}' }),
+      fin(),
+    )
+    expect(d.responseText).toBe('Voy a leer.\n\n{"titulo": "ab", "texto": "c"}')
+    expect(d.textoFinal).toBe('{"titulo": "ab", "texto": "c"}')
+  })
   it('no duplica saltos: si el acumulado ya termina en salto de línea o el bloque empieza con uno, se une tal cual', () => {
     expect(unirBloqueDeTexto('a\n', '# T', true)).toBe('a\n# T')
     expect(unirBloqueDeTexto('a', '\n# T', true)).toBe('a\n# T')
