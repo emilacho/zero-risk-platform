@@ -263,7 +263,7 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
   if (sinRol.length) avisos.push(faltan(sinRol, 'su rol en la historia: la mirada lo juzga contra lo que se ve'))
   const sinProducto = planos.filter((p) => p.producto === undefined).map((p) => p.n)
   if (sinProducto.length) avisos.push(faltan(sinProducto, 'si sale el producto: se toma de la foto (con foto propia, sí; sin foto, no)'))
-  if (!audio) avisos.push('el guion no dice nada del audio: el modelo pone música o ambiente a su criterio (sin voz, por regla)')
+  if (!audio) avisos.push('el guion no dice nada del audio: el modelo pone música o ambiente a su criterio')
   return { ok: true, planos, segundos: total, audio, pie_de_foto: pie, hashtags: tags, fotos_ids: fotos, avisos }
 }
 
@@ -284,7 +284,7 @@ export function guionLegible(t: Pick<TraduccionDeGuion, 'planos' | 'audio' | 'se
   return [
     // Sprint 2 · S2-1 · el rol, lo que dice y lo que logra van primero: quien revisa juzga el plano contra lo que tenía que hacer en la historia
     ...t.planos.map((p) => `Plano ${p.n} · ${p.desde}–${p.hasta} s${p.rol ? ` · ${p.rol}` : ''}${p.dice ? `\n  Dice: ${p.dice}` : ''}${p.intencion ? `\n  Intención: ${p.intencion}` : ''}\n  Se ve: ${p.se_ve}${p.producto === undefined ? '' : `\n  Producto en cuadro: ${p.producto ? 'sí' : 'no'}`}${p.movimiento ? `\n  Movimiento: ${p.movimiento}` : ''}${p.texto_en_pantalla ? `\n  Texto en pantalla: ${p.texto_en_pantalla}` : ''}${p.foto_id ? `\n  Foto de referencia: ${p.foto_id}` : ''}${p.estado_final ? `\n  Termina en: ${p.estado_final}` : ''}`),
-    `Audio: ${t.audio || '(a criterio del modelo: música o ambiente, sin voz)'}`,
+    `Audio: ${t.audio || '(a criterio del modelo: música o ambiente)'}`,
     `Duración: ${t.segundos} s`,
   ].join('\n')
 }

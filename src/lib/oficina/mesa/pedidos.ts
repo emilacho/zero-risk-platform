@@ -178,7 +178,7 @@ const PLANO_DE_LA_HOJA = (n: number, tiempos: string, extra = '') => [
   'Prompt de video: … (en inglés: solo el movimiento y la cámara desde ese cuadro, el proceso de la acción y cómo termina)',
 ].join('\n')
 
-const CIERRE_DE_LA_PIEZA = ['## Audio', '<música o sonido ambiente que acompaña; SIN voz ni narración>', '## Pie', '<el pie de foto de la publicación>', '## Etiquetas', '#una #otra']
+const CIERRE_DE_LA_PIEZA = ['## Audio', '<lo que suena: música, ambiente, voz, diálogo o locución, lo que pida la pieza>', '## Pie', '<el pie de foto de la publicación>', '## Etiquetas', '#una #otra']
 
 /** T8 · 31-oct · el GUION del video corto (la mesa lo escribe; el brazo lo filma tal cual) · Sprint 2 · S2-1: la HOJA DE PLANOS y, si la plantilla lo pide, N propuestas */
 export function convencionDelGuion(v: ParametrosDelVideo = VIDEO_POR_OMISION): string {
@@ -267,7 +267,7 @@ const REGLAS_DURAS = (c: ContextoDeTurno): string => [
   `1. **Gasto.** La pieza tiene un tope de US$ ${c.tope_usd.toFixed(2)} (ya se gastó US$ ${c.gasto_usd.toFixed(2)}). Cuida cada turno: no repitas lo que ya está en el tablero.`,
   '2. **No inventes datos que comprometan al cliente**: certificaciones, normas, precios, cifras, teléfonos, usuarios, marcas ajenas ni nada que no esté en el manual, el brief, el plan, las fotos o el material del portero. Si te falta un dato, dilo o pídelo; no lo rellenes. Una imagen generada tampoco debe mostrar textos, sellos, normas ni lecturas de instrumentos inventados.',
   c.tipo === 'video'
-    ? `3. **El guion debe poder filmarse por un modelo de video**: planos con sus segundos (${duracionDe(c.video)} en total), qué se ve en cada uno, el movimiento de cámara y la foto propia de referencia si la hay. Sin voces ni narración (solo música o ambiente), sin la cara de una persona real identificable sin permiso. El modelo no escribe letras: el texto que deba verse va en «Texto en pantalla» del plano y se compone después con la marca. Lo demás es tu criterio.`
+    ? `3. **El guion debe poder filmarse por un modelo de video**: planos con sus segundos (${duracionDe(c.video)} en total), qué se ve en cada uno, el movimiento de cámara y la foto propia de referencia si la hay. Voz, diálogo, locución, rostros y personajes generados los decides tú según la pieza; lo único que no va es la cara o la voz de una persona real identificable sin su permiso registrado. El modelo no escribe letras: el texto que deba verse va en «Texto en pantalla» del plano y se compone después con la marca. Lo demás es tu criterio.`
     : '3. **La pieza debe poder dibujarse**: cada lámina es un título, un texto corto, un llamado (si lo lleva) y una imagen. Lo demás es tu criterio; sin límites de caracteres: si algo es largo, el dibujo se ajusta o el equipo lo parte.',
 ].join('\n')
 

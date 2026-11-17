@@ -122,7 +122,10 @@ describe('la convención que recibe la mesa del video', () => {
     const c = { cliente_nombre: 'X', tipo: 'video' as const, brief_id: 'B', brief_texto: 'b', manual_texto: 'm', plan_texto: null, fotos: [], tope_usd: 35, gasto_usd: 0, video: { segundos_min: 6, segundos_max: 40, propuestas: 3 } }
     const tarea = armarTarea({ tipo: 'integrar', agente: 'creative-director-mesa', tarjeta: undefined, est, libro: [], c })
     expect(tarea).toContain('planos con sus segundos (de 6 a 40 s en total)')
-    expect(tarea).toContain('sin la cara de una persona real identificable sin permiso')
+    expect(tarea).toContain('la cara o la voz de una persona real identificable sin su permiso registrado')
+    // DECISIÓN Emilio 17-nov: voz, diálogo, locución y rostros generados los decide la mesa
+    expect(tarea).toContain('Voz, diálogo, locución, rostros y personajes generados los decides tú según la pieza')
+    expect(tarea).not.toMatch(/Sin voces|sin narración|solo música o ambiente/i)
     expect(tarea).not.toContain('8 a 15 s')
     const dirige = armarTarea({ tipo: 'dirigir', agente: 'creative-director-mesa', tarjeta: undefined, est, libro: [], c })
     expect(dirige).toContain('los 3 caminos DISTINTOS que vas a proponer al dueño')
