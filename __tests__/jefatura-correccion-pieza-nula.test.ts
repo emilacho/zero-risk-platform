@@ -102,12 +102,13 @@ describe('punta a punta en la jefatura de la pieza (motor real, arnés en memori
     await correrCon((ids) => { vistos.push(ids); return [PRIMERO] })
     expect(vistos[0]).toEqual(['jefe-0-1', 'jefe-0-3'])
   })
-  it('con la salida real: NO falla por formato; las fichas quedan no tomadas con su razón ⇒ con desacuerdo, pieza sin versión nueva', async () => {
+  it('con la salida real: NO falla por formato; las fichas quedan no tomadas con su razón ⇒ observaciones declaradas (revisión 2 = A), pieza sin versión nueva', async () => {
     const c = await correrCon(() => [PRIMERO, SEGUNDO])
-    expect(c.final.cuerpo.resultado).toBe('con_desacuerdo')
+    expect(c.final.cuerpo.resultado).toBe('limpia')
     expect(c.turnos.filter((t) => t.paso === 'correccion:content-creator')).toHaveLength(1)
-    const s = c.final.cuerpo.salida as { desacuerdos: string[]; respuestas: Array<{ id: string; estado: string; razon: string }> }
-    expect(s.desacuerdos.join(' ')).toContain('Lámina 2')
+    const s = c.final.cuerpo.salida as { desacuerdos: string[]; observaciones: string[]; respuestas: Array<{ id: string; estado: string; razon: string }> }
+    expect(s.desacuerdos).toEqual([])
+    expect(s.observaciones.join(' ')).toContain('Lámina 2')
   })
   it('«tomada» con pieza null: no muere por formato ni inventa una versión (límite J2: lo tomado sin pieza se aplica a mano desde la bandeja, como antes)', async () => {
     const c = await correrCon((ids) => [JSON.stringify({ respuestas: ids.map((id) => ({ id, estado: 'tomada', razon: 'lo agrego' })), pieza: null })])

@@ -11,6 +11,8 @@ export type { Esq, ResultadoDeSalida } from '../oficina/salida'
 export { estadoInicial } from '../oficina/tipos'
 export type { Artefacto, Condicion, Estado, Ficha, Gravedad, Limites, OrigenDeFicha, Paso, Plantilla, Siguiente } from '../oficina/tipos'
 export { fichaNueva } from '../oficina/ayudas'
+/** revisión 2 = A · la regla única del cierre: solo lo duro cuenta, lo de criterio es observación (oficina y jefatura) */
+export { duroYCriterio } from '../oficina/reglas-duras'
 export { armarPedido as armarPedidoAlRevisor, ESPERAS_DEL_REVISOR_MS, llamarRevisorGpt, PREGUNTA_AL_REVISOR, preguntaAlRevisor } from '../revisor-gpt'
 export type { ContextoDelRevisor, HuecosDeLaPregunta, IntentoDelRevisor, PedidoAlRevisor, ResultadoDelRevisor } from '../revisor-gpt'
 /** la llamada a GPT que además anota su costo en el libro central de invocaciones (condición 5 de CC#3) */

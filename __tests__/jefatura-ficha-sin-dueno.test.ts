@@ -131,11 +131,12 @@ describe('(b) cierre · piezas puras', () => {
   it('un dueño comodín atiende todo: no hay ficha sin dueño', () => {
     expect(fichasSinDueno([abierta('lo que sea')], duenosDe([{ donde: '*', agente: 'planner' }]))).toHaveLength(0)
   })
-  it('resolverCierre sin `duenos` se comporta como antes (compatibilidad)', () => {
+  it('resolverCierre sin `duenos`: no hay cómo saber si falta dueño · la abierta de criterio queda como observación (revisión 2 = A)', () => {
     const e = { ...estadoInicial(), fichas: [abierta('texto — x')] }
     const c = resolverCierre(e, { tope: false, fallida: false })
-    expect(c.marcas).toEqual({ con_desacuerdo: true, sin_segunda_mirada: false })
-    expect(c.desacuerdos[0]).toContain('(sin dueño o sin camino de corrección)')
+    expect(c.marcas).toEqual({ con_desacuerdo: false, sin_segunda_mirada: false })
+    expect(c.desacuerdos).toEqual([])
+    expect(c.observaciones[0]).toContain('(sin respuesta del creador)')
   })
   it('con `duenos` marca y rotula; el aviso lo dice', () => {
     const e = { ...estadoInicial(), fichas: [abierta('texto — x')] }

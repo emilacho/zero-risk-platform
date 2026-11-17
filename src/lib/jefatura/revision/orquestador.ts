@@ -482,7 +482,7 @@ export function armarSalida(rev: Revision, c: Cierre): SalidaDeRevision {
     imagen_por_rehacer: e.fichas.some((f) => f.id === 'imagen-por-rehacer'),
     ...(() => { const av = [...(e.avisos ?? []), ...(((datos(e, 'fichas_jefe')?.avisos_de_registro as string[] | undefined) ?? []))]; return av.length ? { avisos: av } : {} })(),
     ...(rev.artifact_type === 'colateral' ? { veredictos: veredictosDe(e, rev) } : {}),
-    desacuerdos: c.desacuerdos, costo_usd: e.gasto_usd, pasos: e.pasos_ejecutados, trace_id: `jefatura:${rev.id}`, devolver_a: rev.devolver_a, simulado: rev.dry_run,
+    desacuerdos: c.desacuerdos, ...(c.observaciones.length ? { observaciones: c.observaciones } : {}), costo_usd: e.gasto_usd, pasos: e.pasos_ejecutados, trace_id: `jefatura:${rev.id}`, devolver_a: rev.devolver_a, simulado: rev.dry_run,
   }
 }
 
