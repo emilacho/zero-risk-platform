@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { avanzar, recibirResultado, type Respuesta } from '../orquestador'
 import { direccionDe, especialistasPertinentes } from '../mesa/directorio'
 import { abrirMesaDeLaCadena, briefIdDeLaCadena, devolucionDelBrief, textoParaLaCadena, validarSobreDeLaCadena, type SobreDeLaCadena } from '../mesa/de-la-cadena'
-import { cotaAgotada, siguienteDeLaMesa } from '../mesa/planificador'
+import { cotaAgotada, siguienteDeLaMesa, techoDe } from '../mesa/planificador'
 import { ROTULO_DE_MATERIAL, pedidoDeAperturaDeLaCadena } from '../mesa/orquestador'
 import { DIETA, armarTarea } from '../mesa/pedidos'
 import { BRIEF_MESA, CONCEPTO_MESA } from '../plantillas/mesa'
@@ -87,13 +87,13 @@ describe('las plantillas y la migración', () => {
     expect(i).toBeGreaterThan(0)
     return JSON.parse(new RegExp(`\\$${m}\\$([\\s\\S]*?)\\$${m}\\$`).exec(MIGRACION.slice(i))![1])
   }
-  it('el dato sembrado es EXACTAMENTE el que produce el código (un solo paso mesa; brief 1,60 una ronda; concepto 5,00 dos rondas mínimas, plazo 90 min)', () => {
+  it('el dato sembrado es EXACTAMENTE el que produce el código (un solo paso mesa; brief 1,60 una ronda; concepto 5,00 dos rondas mínimas, plazo 90 min · el tope del concepto lo subió a 7 la 202611170900)', () => {
     expect(tomar('brief_mesa', 'pasos')).toEqual(JSON.parse(JSON.stringify(BRIEF_MESA.pasos)))
     expect(tomar('brief_mesa', 'lim')).toEqual(JSON.parse(JSON.stringify(BRIEF_MESA.limites)))
     expect(tomar('concepto_mesa', 'pasos2')).toEqual(JSON.parse(JSON.stringify(CONCEPTO_MESA.pasos)))
-    expect(tomar('concepto_mesa', 'lim2')).toEqual(JSON.parse(JSON.stringify(CONCEPTO_MESA.limites)))
+    expect(tomar('concepto_mesa', 'lim2')).toEqual(JSON.parse(JSON.stringify({ ...CONCEPTO_MESA.limites, tope_encargo_usd: 5 })))
     expect(BRIEF_MESA.limites).toMatchObject({ tope_encargo_usd: 1.6, max_rondas: 1, mesa: true })
-    expect(CONCEPTO_MESA.limites).toMatchObject({ tope_encargo_usd: 5, max_rondas: 2, rondas_minimas: 2, plazo_mesa_min: 90, mesa: true })
+    expect(CONCEPTO_MESA.limites).toMatchObject({ tope_encargo_usd: 7, max_rondas: 2, rondas_minimas: 2, plazo_mesa_min: 90, mesa: true })
     expect(BRIEF_MESA.pasos).toHaveLength(1)
     expect(CONCEPTO_MESA.pasos[0].funcion).toBe('mesa')
     expect(MIGRACION).toMatch(/1, 1\.60, true\s*\)/)
@@ -291,7 +291,7 @@ describe('la mesa del CONCEPTO de punta a punta', () => {
     expect(m.hecho.conceptos[0].texto).toBe(m.MS.filas.filter((x) => x.tipo === 'integra').at(-1)!.texto)
     expect(m.M.llamadas.bandeja).toHaveLength(0)
     expect(m.M.llamadas.salida).toBe(0)
-    expect(m.M.encargos.get(m.id)!.tope_usd).toBe(5)
+    expect(m.M.encargos.get(m.id)!.tope_usd).toBe(7)
   })
 
   it('el curador de Instagram participa SOLO si la cadena declaró si_instagram', async () => {
@@ -329,7 +329,7 @@ describe('la mesa del CONCEPTO de punta a punta', () => {
     const m = await montar('concepto')
     const r = await jugar(m, (t) => (t.tipo === 'integrar' || t.tipo === 'devolver_citas' ? { texto: integracionCon(m.MS.filas.filter((x) => x.encargo_id === m.id), '## Gran idea\nLa isla · frase'), costo_usd: 0.6 } : { texto: `aporte de ${t.agente}`, costo_usd: 1.2 }))
     expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado' })
-    expect(m.M.encargos.get(m.id)!.estado_del_motor.gasto_usd).toBeLessThanOrEqual(6 + 1e-9)
+    expect(m.M.encargos.get(m.id)!.estado_del_motor.gasto_usd).toBeLessThanOrEqual(techoDe(7) + 1e-9)
     expect(m.hecho.conceptos).toHaveLength(1)
     expect(m.hecho.conceptos[0].texto).toContain('Gran idea')
     expect(m.M.llamadas.bandeja).toHaveLength(0)
