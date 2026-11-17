@@ -350,3 +350,37 @@ describe('🟡 3 de CC6 · los sobrevivientes', () => {
     expect(al.corridas.find((x) => x.paso === 'fichas')?.revision_editor).toBe('saltada_por_diseno')
   })
 })
+
+// ─────────────────────────────────────────────── ADENDA 1 de CC6 a #1138 (cabeza 8b82c8e): n7 y n3
+describe('🟡 ADENDA 1 de CC6 · n7 y n3', () => {
+  it('🔴 (n7) un hecho de TODO el negocio (oferta: null) acota lo afirmable de TODAS las fichas y declara el choque en cada una', () => {
+    const base = leerFichasDelLector({ fichas: [
+      { ...vacia('of-1'), se_puede_afirmar: [D('atiende todo el año', 'web')] },
+      { ...vacia('of-2'), como_se_compra: [D('por la tienda en línea', 'web')] },
+    ] }).fichas
+    const hecho = { oferta: null, sede_id: null, tipo: 'aun_no_existe', valor: 'el negocio todavía no abre', vigente_desde: null, vigente_hasta: '2026-12-31', fuente: 'dueno', fecha_de_la_fuente: '2026-11-01', confianza: 'alta' } as HechoDelNegocioPorOferta
+    const [a, b] = fichasConHechos(base, [hecho])
+    expect(a.se_puede_afirmar!.find((d) => d.valor === 'atiende todo el año')!.vigente_desde).toBe('2027-01-01')
+    expect(b.como_se_compra!.find((d) => d.valor === 'por la tienda en línea')!.vigente_desde).toBe('2027-01-01')
+    for (const f of [a, b]) expect(f.no_se_puede_afirmar!.some((d) => d.valor.startsWith('choque con el cerebro: esta oferta todavía no existe (hasta 2026-12-31)'))).toBe(true)
+    const [c, d] = fichasConHechos(base, [{ ...hecho, tipo: 'cierre_retiro', valor: 'el negocio cerró', vigente_hasta: null }])
+    expect(c.se_puede_afirmar).toBeUndefined()
+    expect(d.como_se_compra).toBeUndefined()
+  })
+  it('🔴 (n3) la reserva cuenta solo las tandas que FALTAN: con 2 tandas ya hechas, reserva = (total − 2) × tope', async () => {
+    const c = clienteA(), al = almacen(c), id = await conEstrategia(al, c)
+    const campana = al.campanas.find((x) => x.id === id)!
+    const total = medidaDeCampana(campana).totalTandas
+    expect(total).toBeGreaterThan(2)
+    const modelo = al.corridas.find((x) => x.paso === 'estrategia')!
+    let sig = Math.max(...al.corridas.map((x) => x.id)) + 1
+    for (const t of [1, 2]) al.corridas.push({ ...modelo, id: sig++, paso: 'calendario', clave_idempotencia: `t${t}:v1:c0`, estado: 'ok', costo_usd: 0 })
+    // una tanda que falló NO cuenta como hecha
+    al.corridas.push({ ...modelo, id: sig++, paso: 'calendario', clave_idempotencia: 't3:v1:c0', estado: 'fallida', costo_usd: 0 })
+    const justo = (await gastoDeCampana(al, id)) + topeDelPaso('fichas') + (total - 2) * topeDelPaso('calendario')
+    campana.presupuesto_planificacion_usd = justo - 0.01
+    expect((await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)).cuerpo.corrida_id).toBeUndefined()
+    campana.presupuesto_planificacion_usd = justo
+    expect((await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)).cuerpo.corrida_id).toBeDefined()
+  })
+})
