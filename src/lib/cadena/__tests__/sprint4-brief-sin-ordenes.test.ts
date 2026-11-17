@@ -302,6 +302,13 @@ describe('Sprint 4 · C · el marco del brief recibe las fichas de las ofertas',
       expect(m.split(BLOQUE_EN_SU_LINEA)).toHaveLength(2)
     }
   })
+  it('con la fecha de hoy, lo que todavía no rige llega marcado, nunca como presente (CC6 · 🟡 3 a #1131)', () => {
+    const apertura: FichaDeOferta[] = [{ clave: 'nueva', se_puede_afirmar: [{ valor: 'ya abrimos en el norte', fuente: 'plan:fase-2', vigente_desde: '2026-11-21' }] }]
+    const m = marcoDelBrief({ ctx, estrategia: clienteA().estrategia, version: 1, devolucion: null, nota: null, fichas: apertura, hoy: '2026-11-17' })
+    expect(m).toContain(fichasEnTexto(apertura, '2026-11-17'))
+    expect(fichasEnTexto(apertura, '2026-11-17')).not.toBe(fichasEnTexto(apertura))
+    expect(m).toMatch(/AÚN NO VIGENTE/)
+  })
   it('las fichas van antes del plan, junto a la estrategia, y una sola vez', () => {
     const m = marco(FICHAS['tienda en línea de ropa'])
     const donde = m.indexOf(BLOQUE_EN_SU_LINEA)
