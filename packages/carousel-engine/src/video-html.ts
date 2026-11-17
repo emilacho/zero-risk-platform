@@ -33,7 +33,14 @@ export interface PedidoDeVideoCompuesto {
   cierre: CierreDelVideo | null
   /** el video trae sonido (música o ambiente): se conserva; false = se declara mudo. Por omisión, con sonido */
   con_audio?: boolean
+  /** Sprint 3 · T5 (CC4) · los subtítulos palabra por palabra (grupos de `agruparPalabras`); sin ellos, el video sale como siempre */
+  subtitulos?: GrupoDeSubtitulo[]
 }
+
+/** Sprint 3 · T5 · una palabra dicha, con sus segundos en el video unido */
+export interface PalabraConTiempo { texto: string; desde: number; hasta: number }
+/** Sprint 3 · T5 · un subtítulo: un grupo corto de palabras que se muestra entero, con la palabra que suena resaltada */
+export interface GrupoDeSubtitulo { desde: number; hasta: number; palabras: PalabraConTiempo[] }
 
 /** el nombre del video: simple, sin rutas (igual que acepta el servicio) */
 export const NOMBRE_DE_VIDEO = /^[a-z0-9][a-z0-9_-]{0,79}\.(mp4|mov|webm)$/i
@@ -66,6 +73,39 @@ export function capasDeTexto(p: Pick<PedidoDeVideoCompuesto, 'segundos' | 'texto
   return capas
 }
 
+/** Sprint 3 · T5 · un tramo del subtítulo: el grupo entero con UNA palabra resaltada (la que suena), en sus segundos */
+export interface TramoDeSubtitulo { desde: number; hasta: number; grupo: number; palabras: string[]; resaltada: number }
+/** un tramo más corto que esto no se dibuja (no llega a un cuadro a 24 fps) */
+export const SEGUNDOS_MINIMOS_DE_TRAMO = 0.04
+
+/**
+ * los tramos de los subtítulos: cada grupo se parte en un tramo por palabra (del inicio de esa palabra al de la siguiente; el primero desde que abre el
+ * grupo y el último hasta que cierra), dentro del video y ANTES del cierre (el cierre con la marca no lleva subtítulos encima). Un grupo nunca pisa al
+ * anterior. Sin capas con guion: cada tramo aparece y desaparece en sus segundos, como los textos de los planos.
+ */
+export function tramosDeSubtitulos(p: Pick<PedidoDeVideoCompuesto, 'segundos' | 'subtitulos' | 'cierre'>): TramoDeSubtitulo[] {
+  const c = p.cierre && Number.isFinite(p.cierre.desde) ? Math.max(0, p.cierre.desde) : p.segundos
+  const fin = Math.min(p.segundos, c)
+  const tramos: TramoDeSubtitulo[] = []
+  let ultimo = 0
+  ;(p.subtitulos ?? []).forEach((g, gi) => {
+    const ps = (g.palabras ?? []).map((w) => ({ ...w, texto: limpio(w.texto) })).filter((w) => w.texto && Number.isFinite(w.desde))
+    if (!ps.length || !Number.isFinite(g.desde) || !Number.isFinite(g.hasta)) return
+    const abre = Math.max(0, g.desde, ultimo)
+    const cierra = Math.min(fin, g.hasta)
+    if (cierra - abre < SEGUNDOS_MINIMOS_DE_TRAMO) return
+    const textos = ps.map((w) => w.texto)
+    ps.forEach((w, i) => {
+      const desde = Math.max(abre, i === 0 ? abre : w.desde)
+      const hasta = Math.min(cierra, i === ps.length - 1 ? cierra : ps[i + 1].desde)
+      if (hasta - desde < SEGUNDOS_MINIMOS_DE_TRAMO) return
+      tramos.push({ desde, hasta, grupo: gi, palabras: textos, resaltada: i })
+    })
+    ultimo = cierra
+  })
+  return tramos
+}
+
 /** el cierre efectivo: desde cuándo, recortado al video; sin ningún texto ni marca que mostrar, no hay cierre */
 export function cierreEfectivo(p: Pick<PedidoDeVideoCompuesto, 'segundos' | 'cierre' | 'logo' | 'firma'>): (CierreDelVideo & { hasta: number }) | null {
   if (!p.cierre) return null
@@ -96,6 +136,13 @@ export function htmlDeVideo(p: PedidoDeVideoCompuesto, fonts: FontEntry[]): stri
   const firma = limpio(p.firma)
   // legibilidad (shotcraft): el texto de un plano mide al menos el 5 % del alto del video
   const tamTexto = (t: string) => Math.max(Math.round(H * 0.05), tamanoDeTitular(t, util))
+  // Sprint 3 · T5 · subtítulos: en vertical, por encima del texto del plano (≈ 34 % del alto desde abajo); en horizontal, bajo él (≈ 8 %)
+  // los subtítulos terminan donde empieza el cierre EFECTIVO (un cierre vacío no corta nada)
+  const tramos = tramosDeSubtitulos({ segundos: p.segundos, subtitulos: p.subtitulos, cierre: c })
+  const vertical = H > W
+  const abajoSub = Math.round(H * (vertical ? 0.34 : 0.08))
+  const tamBaseSub = Math.round((vertical ? W : H) * (vertical ? 0.062 : 0.065))
+  const tamSub = (palabras: string[]) => Math.max(Math.round(tamBaseSub * 0.6), Math.min(tamBaseSub, Math.floor(util / Math.max(1, palabras.join(' ').length * 0.56))))
 
   const css = `
 ${caraDeFuentes(fonts)}
@@ -113,11 +160,16 @@ body{font-family:'${fCuerpo}',sans-serif;-webkit-font-smoothing:antialiased}
 .etiqueta{padding:${Math.round(W * 0.01)}px ${Math.round(W * 0.025)}px;border-radius:999px;background:${color(d.etiqueta.fondo, '#111111')};color:${color(d.etiqueta.texto, '#ffffff')};font-size:${Math.round(W * 0.03)}px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:${Math.round(W * 0.02)}px}
 .titular{font-family:'${fTitular}',sans-serif;font-weight:700;line-height:1.05;color:#ffffff;text-align:${alinear};text-shadow:0 2px 12px rgba(0,0,0,0.55);margin-bottom:${Math.round(W * 0.018)}px;overflow-wrap:anywhere}
 .bajada{font-size:${Math.round(util * 0.042)}px;line-height:1.3;color:#ffffff;text-align:${alinear};text-shadow:0 2px 12px rgba(0,0,0,0.55);margin-bottom:${Math.round(W * 0.03)}px}
+.sub{position:absolute;left:${m}px;width:${util}px;bottom:${abajoSub}px;text-align:center;font-family:'${fTitular}',sans-serif;font-weight:700;line-height:1.15;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.75);overflow:visible;overflow-wrap:anywhere}
+.sub .p{padding:0 0.12em;border-radius:0.18em}
+.sub .ya{background:${color(d.boton.fondo, '#111111')};color:${color(d.boton.texto, '#ffffff')};text-shadow:none}
 .boton{padding:${Math.round(W * 0.018)}px ${Math.round(W * 0.04)}px;border-radius:999px;background:${color(d.boton.fondo, '#111111')};color:${color(d.boton.texto, '#ffffff')};font-size:${Math.round(W * 0.036)}px;font-weight:700}`
 
   const capa = (id: string, clase: string, desde: number, hasta: number, pista: number, dentro: string, estilo = '') =>
     `<div id="${id}" class="clip ${clase}" data-start="${s(desde)}" data-duration="${s(hasta - desde)}" data-track-index="${pista}"${estilo ? ` style="${estilo}"` : ''}>${dentro}</div>`
   const textos = capas.map((t, i) => capa(`texto-${i + 1}`, 'texto', t.desde, t.hasta, 1, escaparHtml(t.texto), `font-size:${tamTexto(t.texto)}px`)).join('')
+  const subs = tramos.map((t, i) => capa(`sub-${i + 1}`, 'sub', t.desde, t.hasta, 3,
+    t.palabras.map((w, k) => `<span class="p${k === t.resaltada ? ' ya' : ''}">${escaparHtml(w)}</span>`).join(' '), `font-size:${tamSub(t.palabras)}px`)).join('')
   let cierre = ''
   if (c) {
     const titular = limpio(c.titular)
@@ -130,5 +182,5 @@ body{font-family:'${fCuerpo}',sans-serif;-webkit-font-smoothing:antialiased}
     ].join('')
     cierre = capa('cierre', 'cierre', c.desde, c.hasta, 2, `<div class="velo"></div><div class="bloque">${piezas}</div>`)
   }
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><style>${css}</style></head><body><div id="raiz" data-composition-id="main" data-start="0" data-duration="${s(p.segundos)}" data-width="${W}" data-height="${H}" data-no-timeline><video id="base" class="clip base" src="${p.video}" data-start="0" data-duration="${s(p.segundos)}" data-track-index="0"${p.con_audio === false ? ' muted' : ' data-has-audio="true"'} playsinline></video>${textos}${cierre}</div></body></html>`
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><style>${css}</style></head><body><div id="raiz" data-composition-id="main" data-start="0" data-duration="${s(p.segundos)}" data-width="${W}" data-height="${H}" data-no-timeline><video id="base" class="clip base" src="${p.video}" data-start="0" data-duration="${s(p.segundos)}" data-track-index="0"${p.con_audio === false ? ' muted' : ' data-has-audio="true"'} playsinline></video>${textos}${subs}${cierre}</div></body></html>`
 }
