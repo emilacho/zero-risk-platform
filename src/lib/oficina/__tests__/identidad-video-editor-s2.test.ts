@@ -16,6 +16,9 @@ const md5 = (t: string) => crypto.createHash('md5').update(t, 'utf8').digest('he
 const ID = leer('src/agents/identities/video-editor.md')
 const MIG = leer('supabase/migrations/202611162232_agents_video_editor_identidad_s2.sql')
 const REV = leer('supabase/reversas/202611162232_agents_video_editor_identidad_s2_REVERSA.sql')
+// 17-nov · A·6 (202611171500) cambió el .md después: la migración del 16-nov lleva el texto S2, cuyo md5 queda fijo aquí
+const ID_S2 = /\$ident\$([\s\S]*?)\$ident\$/.exec(MIG)![1]
+const MD5_S2 = '7c79ae8b8d8b901aeb60d0f7ed71ff89'
 const E4 = leer('src/lib/oficina/__tests__/fixtures/video-editor-e4.md')
 // voseo: las formas que el barrido del 11-oct encontró más las de este texto (omití, dejá, incluí)
 const VOSEO = /\b(vos|sos|hacés|recibís|devolvés|producís|detectá|capturás|ejecutás|generás|necesitás|sabés|consolidás|tenés|podés|decí|escribí|omití|dejá|incluí|usá|elegí|nombrá|decidí|seguí|integrás|proponés)\b/i
@@ -57,9 +60,9 @@ describe('la identidad nueva de video-editor', () => {
 
 describe('202611162232 · la migración y su reversa (protocolo identity_content)', () => {
   it('la migración lleva el .md byte a byte, con guarda md5 del texto vivo del 16-nov, y verifica el resultado; solo toca identity_content de video-editor', () => {
-    expect(MIG).toContain(`$ident$${ID}$ident$`)
+    expect(md5(ID_S2)).toBe(MD5_S2)
     expect(MIG).toContain("WHERE name = 'video-editor' AND md5(identity_content) = '9b401cee3f253715d2a3573d6b6c9971';")
-    expect(MIG).toContain(`md5(identity_content) = '${md5(ID)}'`)
+    expect(MIG).toContain(`md5(identity_content) = '${MD5_S2}'`)
     expect(MIG.match(/^UPDATE public\.agents SET identity_content = /gm)).toHaveLength(1)
     expect(MIG).not.toMatch(/\b(DELETE|DROP|INSERT|ALTER|TRUNCATE)\b|SET model/)
   })
@@ -67,7 +70,7 @@ describe('202611162232 · la migración y su reversa (protocolo identity_content
     const b = /\$antes\$([\s\S]*?)\$antes\$/.exec(REV)
     expect(b).not.toBeNull()
     expect(md5(b![1])).toBe('9b401cee3f253715d2a3573d6b6c9971')
-    expect(b![1]).not.toBe(ID)
-    expect(REV).toContain(`WHERE name = 'video-editor' AND md5(identity_content) = '${md5(ID)}';`)
+    expect(b![1]).not.toBe(ID_S2)
+    expect(REV).toContain(`WHERE name = 'video-editor' AND md5(identity_content) = '${MD5_S2}';`)
   })
 })
