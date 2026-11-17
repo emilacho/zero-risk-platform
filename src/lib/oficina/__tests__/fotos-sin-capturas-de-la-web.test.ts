@@ -8,6 +8,7 @@ import { idsDeFotosPropias } from '../fotos-propias-datos'
 import { LISTA_DE_FOTOS } from '../mesa/pedidos'
 import { FOTOS } from './memoria'
 import { ROTULO_CAPTURA_WEB, referenciasDeEstilo, separarFotosYCapturas } from '../material'
+import { reglasDeInvencion } from '../prompts-sin-invencion'
 
 type Fila = Record<string, unknown>
 const FILAS: Fila[] = [
@@ -67,5 +68,30 @@ describe('las capturas siguen como referencia de estilo, marcadas (GO Lenovo sob
     expect(t[0].startsWith(`captura de la web · ${ROTULO_CAPTURA_WEB}: `)).toBe(true)
     expect(ROTULO_CAPTURA_WEB).toBe('referencia, no se publica')
     expect(t[1].startsWith('competencia: ')).toBe(true)
+  })
+})
+
+describe('la captura del propio cliente no alimenta «no copiar» (observación CC6 a #1139)', () => {
+  const [f1] = FOTOS.slice(0, 1)
+  const LIM = { generar_cuando_no_hay_foto: true }
+  it('🔴 la propia queda marcada `del_cliente`; la de la competencia no', () => {
+    const r = separarFotosYCapturas([
+      { ...f1, id: 'cap-propia', owner_role: 'propio', clase: 'captura_web' },
+      { ...f1, id: 'cap-comp', owner_role: 'competidor', clase: 'captura_web' },
+    ])
+    expect(r.referencias.map((x) => [x.id, x.del_cliente ?? false])).toEqual([['cap-propia', true], ['cap-comp', false]])
+  })
+  it('🔴 su usuario y su web NO entran a «no copiar»; los de la competencia sí, como siempre', () => {
+    const r = separarFotosYCapturas([
+      { ...f1, id: 'cap-propia', owner_role: 'propio', clase: 'captura_web', handle: '@naufragocliente', url: 'https://naufrago-propio.test/menu' },
+      { ...f1, id: 'cap-comp', owner_role: 'competidor', clase: 'captura_web', handle: '@rivalcomp', url: 'https://rival-comp.test/x' },
+    ])
+    const copiar = reglasDeInvencion(LIM, r.referencias)!.copiar
+    expect(copiar).toContain('rivalcomp')
+    expect(copiar).toContain('rival-comp.test')
+    expect(copiar.some((c) => c.includes('naufragocliente') || c.includes('naufrago-propio'))).toBe(false)
+  })
+  it('🔴 solo salta la marcada: `del_cliente: false` sigue en «no copiar»', () => {
+    expect(reglasDeInvencion(LIM, [{ handle: '@otrorival', del_cliente: false }])!.copiar).toContain('otrorival')
   })
 })
