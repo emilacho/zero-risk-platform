@@ -21,6 +21,7 @@ import type { ResultadoDeEmision } from './autoproducir'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto } from './cambios-pedidos'
 import { hallazgosDelBrief, insumosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
+import { fichasEnTexto as fichasDeOfertaEnTexto, type FichaDeOferta } from './ficha-de-oferta'
 import { filaSinFamilia, notaSinFamilia } from './sin-familia'
 import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
 import { sumarDias } from './fechas'
@@ -138,7 +139,12 @@ const canalesEnTexto = (e: Estrategia): string => e.canales.map((c) => `- ${c.re
 
 const reglaDeLengua = (ctx: ContextoDelCliente): string => [reglaDeRegistro(ctx.registro), reglaDeIdioma(ctx.idioma)].filter(Boolean).join(' ')
 
-export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null }): string {
+/**
+ * 17-nov (Sprint 4 · C · ADENDA 2 de Emilio): el brief es el ÚNICO camino del plan a los creativos y cita los hechos de cada oferta desde la ficha (A · CC3).
+ * El bloque `# FICHAS DE LAS OFERTAS` sale de `fichasEnTexto` de CC3, tal cual; sin fichas, el mismo bloque lo DICE (nunca falta en silencio).
+ * Quién trae las fichas aquí lo cablea la entrega 2 de A (el lector y su tabla); hasta entonces los llamadores no las pasan y el bloque declara que no hay.
+ */
+export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null; fichas?: ReadonlyArray<FichaDeOferta> | null; hoy?: string | null }): string {
   const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
     '# Qué te pido',
@@ -160,6 +166,9 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     canalesEnTexto(a.estrategia),
     '# ESTRATEGIA · fases',
     fasesEnTexto(a.estrategia),
+    '',
+    // 17-nov (CC6 · 🟡 3 a #1131): con la fecha de hoy, lo que aún no rige o ya venció llega marcado («AÚN NO VIGENTE» / «VENCIDO»), nunca como presente
+    fichasDeOfertaEnTexto(a.fichas, a.hoy),
     ...(a.informeDeMercado ? ['', '# INFORME DE MERCADO (PROPUESTA · no es dato del cliente · contexto, no mandato)', a.informeDeMercado] : []),
     // 10-nov · perfil del público T2: lo OBSERVADO en voces públicas (contexto, no mandato) · sin perfil no se agrega nada (el marco queda como hoy)
     ...(perfil ? ['', perfil] : []),
@@ -265,7 +274,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
       marco_texto: marcoDelBrief({
-        ctx, estrategia, version: ultimo.version,
+        ctx, estrategia, version: ultimo.version, hoy: ahora.slice(0, 10),
         devolucion: previo?.estado === 'devuelta' && previo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? previo.devolucion_texto : null,
         nota: pedido.nota,
         anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null,
@@ -290,7 +299,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   await al.insertarBriefCreativo(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelBrief({ ctx, estrategia, version, devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null, perfil: await perfilParaLaMesa(al, campana.client_id, 'brief') }),
+    marco_texto: marcoDelBrief({ ctx, estrategia, version, hoy: ahora.slice(0, 10), devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null, perfil: await perfilParaLaMesa(al, campana.client_id, 'brief') }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }

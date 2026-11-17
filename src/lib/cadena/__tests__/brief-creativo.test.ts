@@ -56,7 +56,7 @@ describe('brief_creativo.v1 · lectura', () => {
       { red: 'ig', objetivo: 'que miren el pan recién salido', llamado: '«ven a desayunar»' },
       { red: 'fb', objetivo: 'que guarden el horario', llamado: '«guarda el horario»' },
     ])
-    expect(b.obligatorios).toEqual({ vocabulario: ['pan de masa madre', 'mesa larga'], prohibido: ['delicioso', 'promo'], no_se_dice: ['precios'] })
+    expect(b.obligatorios).toEqual({ vocabulario: ['pan de masa madre', 'mesa larga'], prohibido: ['delicioso', 'promo'], no_se_dice: ['precios'], legales: [] }) // 17-nov (ADENDA 2): «- legales:» ausente = lista vacía
     expect(b.faltantes).toEqual([{ campo: 'público', que_falta: 'el manual no dice edades; se asume barrio, sin cifra' }])
     expect(b.contradicciones).toEqual([])
     expect(b.tono).toContain('Cercano')
@@ -148,10 +148,11 @@ describe('brief_creativo.v1 · chequeos (brief-chequeos.js portado)', () => {
     expect(b.faltantes).toEqual([])
     expect(b.citas).toBe('')
   })
-  it('una red de la estrategia sin objetivo o sin llamado se declara (aviso)', () => {
+  // 17-nov (Sprint 4 · C · el brief sin órdenes): el llamado ya no es del brief (va en la ficha de la oferta) · una red sin llamado NO se avisa; sin objetivo, sí
+  it('una red de la estrategia sin objetivo se declara (aviso); sin llamado, ya no', () => {
     const b = leerBriefCreativo(con({ '- fb: que guarden el horario · «guarda el horario»': '- fb: que guarden el horario' }), { ...INS, redes: ['ig', 'fb', 'tiktok'] })
     expect(b.estado).toBe('validada')
-    expect(b.avisos).toEqual(['la red fb no tiene llamado («- fb: objetivo · llamado»)', 'la red tiktok no tiene objetivo ni llamado en el brief'])
+    expect(b.avisos).toEqual(['la red tiktok no tiene objetivo en el brief'])
   })
 })
 
@@ -172,8 +173,9 @@ describe('brief_creativo.v1 · salidas', () => {
     expect(publicoEsTodos('')).toBe(false)
     expect(publicoEsTodos('vecinas del barrio que salen a trabajar antes de las ocho')).toBe(false)
   })
-  it('la referencia del brief nombra las 9 secciones y no fija país ni idioma', () => {
-    for (const s of ['De qué parte del plan sale', 'Insight', 'Mensaje', 'Objetivo', 'Tono', 'Obligatorios', 'Faltantes', 'Contradicciones plan vs manual', 'Citas']) expect(REFERENCIA_DEL_BRIEF_CREATIVO).toContain(`## ${s}`)
+  it('la referencia del brief nombra sus secciones y no fija país ni idioma', () => {
+    // 17-nov (Sprint 4 · C): «Mensaje» se pide como «Lo único que hay que comunicar» (el lector acepta los dos)
+    for (const s of ['De qué parte del plan sale', 'Problema de negocio', 'Insight', 'Lo único que hay que comunicar', 'Razones para creer', 'Rutas vivas del plan', 'Objetivo', 'Tono', 'Obligatorios', 'Faltantes', 'Contradicciones plan vs manual', 'Citas']) expect(REFERENCIA_DEL_BRIEF_CREATIVO).toContain(`## ${s}`)
     expect(REFERENCIA_DEL_BRIEF_CREATIVO).toMatch(/trato del manual/)
     expect(REFERENCIA_DEL_BRIEF_CREATIVO).not.toMatch(/Ecuador|tuteo|voseo|español/i)
   })

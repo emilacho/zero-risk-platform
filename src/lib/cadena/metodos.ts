@@ -198,11 +198,12 @@ export const METODO_BRIEF_POR_OMISION: string = [
   cabecera('message-house-builder', METODOS_ORIGEN),
   GUIA_NO_FORMATO,
   lineas([
-    'La casa del mensaje: un TECHO (el mensaje único del brief, en una frase que el público entienda sin contexto) sostenido por TRES PILARES de valor, cada uno rastreable al plan o al manual (cita de dónde sale). Dos mensajes = ninguno; cuatro pilares = tres y uno que sobra.',
+    // 17-nov (Sprint 4 · C · el brief sin órdenes): el techo es «Lo único que hay que comunicar» y los pilares son las «Razones para creer»; el techo es una proposición, no un anuncio
+    'La casa del mensaje: un TECHO («Lo único que hay que comunicar»: una proposición en una frase que el público entienda sin contexto; no es un anuncio ni un eslogan) sostenido por TRES PILARES de valor («Razones para creer»), cada uno rastreable al plan o al manual (cita de dónde sale). Dos mensajes = ninguno; cuatro pilares = tres y uno que sobra.',
     'Cada pilar lleva su PRUEBA: un hecho del material del cliente (dato con referencia), un hecho del plan, o «[sin fuente]». Nunca presentes como hecho lo que no tenga referencia; nunca inventes una comparación ni una cifra para llenar un pilar: va a «Faltantes».',
     'Números antes que adjetivos, pero solo números con referencia; si no hay número, deja el adjetivo fuera y declara el hueco.',
     'La prueba de la silla vacía: lee el brief como el público que el plan describe; cada frase que a esa persona no le importa, sobra.',
-    'Ángulos por red, no copia: el objetivo por red del brief es un ÁNGULO (qué pilar lidera y qué acción pide) para que la pieza de cada red diga lo mismo con otra forma. Lo que el anuncio, la página y la oferta prometan tiene que ser lo mismo.',
+    'Ángulos por red, no copia: el objetivo por red del brief es un ÁNGULO (qué pilar lidera y qué acción busca) para que la pieza de cada red diga lo mismo con otra forma; el llamado exacto y el formato los deciden los creativos con la ficha de la oferta. Lo que el anuncio, la página y la oferta prometan tiene que ser lo mismo.',
     'Las palabras prohibidas del manual y las muletillas vacías («único», «el mejor», «revolucionario», «de calidad») no sostienen un pilar: si un pilar solo se sostiene con ellas, no es un pilar.',
     'No adjudicas promesas: lo comparativo o lo que afirma un resultado sin referencia queda marcado «[sin fuente]» en «Faltantes»; la jefatura y el humano deciden, no tú.',
   ]),
