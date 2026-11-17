@@ -17,8 +17,10 @@ export const PROPUESTAS_DE_IMAGEN = 3
 /** 🟡 CC6 #1128 · el tope del paso del borrador SALE DEL COSTO MEDIDO: las 3 propuestas × `imagenes_generadas_max` de la plantilla × lo cotizado por imagen en baja
  *  (0,02 · medido: máx. 0,0183 con foto de referencia); el dibujo no cobra. Con la calidad cambiada por dato, el freno del paso deja ausentes las que no caben */
 /** GO Lenovo · la COTA DE LA MESA por pasada con 3 propuestas: medido en prd (17-nov, solo lectura, turnos del paso «mesa»): imagen de UNA pieza ≈ 1,2 (kit 1,17 · carrusel 1,18);
- *  video con 3 propuestas 2,0–2,6 (mediana 2,34, máx. 2,56). Tres propuestas de imagen escriben como el video: 2,5 por pasada */
-export const COTA_DE_LA_MESA_CON_PROPUESTAS_USD = 2.5
+ *  video con 3 propuestas 2,0–2,6 (mediana 2,34, máx. 2,56). Tres propuestas de imagen escriben como el video.
+ *  🟡 CC6 #1129: la cota es el MÁXIMO medido de una pasada + un turno de reserva (nunca la mediana): 2,558 + 0,6 ≈ 3,2. Con 2,5 la pasada real `2ed549cc`
+ *  (2,558) se habría cerrado antes de la revisión de citas del director: cortar a medias */
+export const COTA_DE_LA_MESA_CON_PROPUESTAS_USD = 3.2
 
 export const topeDelBorradorDeImagenDe = (pl: Pick<Plantilla, 'limites'>): number =>
   Math.round(PROPUESTAS_DE_IMAGEN * Number(pl.limites.imagenes_generadas_max ?? 2) * COSTO_ESTIMADO_POR_IMAGEN_DEL_BORRADOR_USD.low * 100) / 100
