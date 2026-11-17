@@ -421,7 +421,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     // 16-nov · Sprint 1 · Mejora 2 · el concepto de cada imagen (idea, qué se ve, mensaje, objetivo) queda en la dirección visual —también el de la foto propia— y entra al pedido del generador
     const conConcepto = (i: { concepto?: ConceptoDeImagen }) => (i.concepto ? { concepto: i.concepto } : {})
     otros.visual_direction = {
-      imagenes: imagenes.map((i) => (i.modo === 'real' ? { ref: i.ref, modo: 'real', foto_id: i.foto_id, motivo: 'elegida por el equipo', ...conConcepto(i) } : i.modo === 'generada' ? { ref: i.ref, modo: 'generada', motivo: 'pedida por el equipo', ...conConcepto(i) } : { ref: i.ref, modo: 'ninguna', motivo: 'sin imagen' })),
+      imagenes: imagenes.map((i) => (i.modo === 'real' ? { ref: i.ref, modo: 'real', foto_id: i.foto_id, motivo: 'elegida por el equipo', ...conConcepto(i) } : i.modo === 'generada' ? { ref: i.ref, modo: 'generada', motivo: 'pedida por el equipo', ...conConcepto(i) } : { ref: i.ref, modo: 'ninguna', motivo: 'sin imagen', ...conConcepto(i) })),
       refs_generadas: generadas.map((g) => g.ref), hay_generadas: hayGeneradas, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa',
       ...(tr.objetivo ? { objetivo: tr.objetivo } : {}),
     }

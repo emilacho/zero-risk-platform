@@ -26,7 +26,7 @@ import { crearMesaEnMemoria } from './mesa-memoria'
 // la pieza REAL de la mini-prueba (forma de `mesa.pieza_texto` del encargo 503a8f5b): 2 láminas, sin ref, «—» en los campos vacíos y la firma escrita aparte
 const DOS_LAMINAS = [
   '## Objetivo', 'Que la zona norte sepa que ya llega el encebollado · pedir por naufrago.ec',
-  '## Lámina 1 · El gancho', 'Título: ya llegó.', 'Texto: —', 'Llamado: —', 'Firma: el encebollado de Olón · zona norte · naufrago.ec', 'Imagen: ninguna',
+  '## Lámina 1 · El gancho', 'Título: ya llegó.', 'Texto: —', 'Llamado: —', 'Firma: el encebollado de Olón · zona norte · naufrago.ec', 'Qué se ve: «ya llegó» en Caveat turquesa sobre púrpura oscuro', 'Imagen: ninguna',
   '## Lámina 2 · La prueba de origen', 'Título: Nació en Olón.', 'Texto: Ahora pídelo desde casa.', 'Llamado: naufrago.ec', 'Imagen: foto:062ec4fa',
 ].join('\n')
 
@@ -95,6 +95,9 @@ describe('(b) «—» es vacío · (c) la firma tiene campo propio', () => {
     expect(t.copy_kit![0].cta).toBeUndefined()
     const sinImagen = traducirPieza(['## e01', 'Título: hola', 'Qué se ve: una playa al amanecer', 'Imagen: —'].join('\n'), 'kit', { refsDelKit: ['e01'] })
     expect(sinImagen.imagenes[0].modo).toBe('ninguna')
+    // 17-nov · nada se pierde sin aviso (observación de CC1 en #1125): sin imagen, pero el «Qué se ve» de la lámina se conserva
+    expect(sinImagen.imagenes[0]).toMatchObject({ modo: 'ninguna', concepto: { que_se_ve: 'una playa al amanecer' } })
+    expect(traducirPieza(['## e01', 'Título: hola', 'Qué se ve: el bowl en la mesa', 'Imagen: ninguna'].join('\n'), 'kit', { refsDelKit: ['e01'] }).imagenes[0]).toMatchObject({ modo: 'ninguna', concepto: { que_se_ve: 'el bowl en la mesa' } })
     // control: sin «Imagen» y con escena, se genera esa escena (Mejora 2, igual que antes)
     expect(traducirPieza(['## e01', 'Título: hola', 'Qué se ve: una playa al amanecer'].join('\n'), 'kit', { refsDelKit: ['e01'] }).imagenes[0].modo).toBe('generada')
     // también en el carrusel: «—» nunca es texto
@@ -230,6 +233,8 @@ describe('(d) un desacuerdo de la jefatura vuelve UNA vez a la mesa', () => {
     expect(ultimo.slides[0].pie).toBe('el encebollado de Olón · zona norte · naufrago.ec')
     expect(ultimo.slides[1].background_image_url).toBe('https://fotos.test/062ec4fa.jpg')
     expect(datos(e, 'laminas_armadas')?.refs).toEqual(['e01', 'e01-c2'])
+    // nada se pierde sin aviso (observación de CC1 en #1125): la lámina sin imagen conserva su «Qué se ve» en la dirección visual
+    expect((datos(e, 'visual_direction')?.imagenes as Array<Record<string, unknown>>)[0]).toMatchObject({ ref: 'e01', modo: 'ninguna', concepto: { que_se_ve: '«ya llegó» en Caveat turquesa sobre púrpura oscuro' } })
     // la entrega: los dos cuadros con el día, la hora y el destino de su elemento
     expect(datos(e, 'entrega')?.laminas).toEqual(['2026-11-20_1000_instagram_historia_BRF-0300_01-de-02.png', '2026-11-20_1000_instagram_historia_BRF-0300_02-de-02.png'])
     // la bandeja: una pieza, sin desacuerdo (la segunda revisión cerró limpia)
