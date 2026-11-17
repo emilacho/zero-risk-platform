@@ -134,6 +134,12 @@ export const PUEDEN_NOMBRARLAS = [
   // oficina de creativos (sala 1) · LECTURA de las etiquetas de las fotos para descartar las que no sirven: los ÚNICOS que las nombran son el lector `fotos.ts` y el adaptador que las SELECCIONA (`adaptadores.ts`); no escriben nada
   /^src\/lib\/oficina\/(fotos|adaptadores)\.ts$/,
   /^src\/lib\/oficina\/__tests__\/fotos-chequeos\.test\.ts$/,
+  // 17-nov · S2-6 DESARMAR REFERENCIAS (mesa de video): el adaptador de la mesa LEE, por `client_id` y con columnas nombradas, los reels ajenos ya guardados
+  //   (`client_videos`), su tendencia (`cerebro_tendencias`: nivel, red, vistas, me_gusta) y las etiquetas de sus capturas (`que_muestra`, `tipo_de_toma`,
+  //   `texto_visible`, `producto_visto`, `con_personas`); `referencias.ts` las convierte en momentos para el guion. Solo SELECT: no escribe nada. Sus pruebas usan bases falsas
+  /^src\/lib\/oficina\/mesa\/adaptador\.ts$/,
+  /^src\/lib\/oficina\/video\/referencias\.ts$/,
+  /^src\/lib\/oficina\/__tests__\/(referencias-de-video|mesa-de-video-t8)\.test\.ts$/,
   // oficina · el MATERIAL que se le pide al portero (27-oct): LEE las etiquetas (nunca escribe) para rotular lo que el portero trae, armar las referencias de estilo en palabras y marcar el origen de cada imagen
   /^src\/lib\/oficina\/(material|prompts-sin-invencion|marcas-de-origen)\.ts$/,
   /^src\/lib\/oficina\/__tests__\/(material|material-imagen-y-reapertura|adaptadores)\.test\.ts$/,
