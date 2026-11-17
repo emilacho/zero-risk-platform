@@ -132,6 +132,8 @@ function conceptoDeLaPieza(f: FilaDeHoja, idea: IdeaDelBanco | null): { idea: st
   const sugerencias = [k.que_se_ve ? `qué se ve: ${limpio(k.que_se_ve)}` : '', k.emocion ? `emoción: ${limpio(k.emocion)}` : '', k.foto ? `foto: ${limpio(k.foto)}` : ''].filter((x) => x && !/:\s*$/.test(x))
   return { idea: limpio(k.idea) || idea?.idea || limpio(f.tema) || '', objetivo: limpio(k.objetivo), mensaje: limpio(k.mensaje), publico: limpio(k.publico), llamado: limpio(k.llamado), fotos, sugerencias }
 }
+/** 17-nov · GO «quitar rejas» C3 · cuántas versiones de la pieza: ningún dato lo fija (antes «1» fijo), lo decide la mesa */
+export const VARIANTES_SIN_DATO = 'las que decida la mesa de la pieza (ningún dato del brief ni de la tabla de formatos las fija)'
 /** GO Lenovo 16-nov 22:04 · quién decide el cómo (lo lee la mesa y quien revise: el brief dice QUÉ y POR QUÉ) */
 export const QUIEN_DECIDE_EL_COMO = 'la mesa de creativos decide la escena, el gancho, la composición, la emoción y qué foto usar; lo de SUGERENCIAS puede mejorarlo o reemplazarlo diciendo por qué'
 /** 17-nov · el campo de la hoja con lo decidido (lista); lo lee `parsearBrief` como `lo_decidido` */
@@ -194,7 +196,8 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     // la línea VISUAL es del concepto de la CAMPAÑA: referencia de estilo, no las tomas de esta pieza (esas las decide la mesa)
     campo('VISUAL', (() => { const v = [c.como_se_ve_partes ? comoSeVeSinPartes(c.como_se_ve) : c.como_se_ve, cap?.como_se_ve, idea?.foto && idea.foto !== 'ninguna' ? `foto ${idea.foto}` : ''].filter(Boolean).join(' · '); return v ? `${PREFIJO_VISUAL_DE_CAMPANA}${v}` : '(el concepto no dice cómo se ve)' })()),
     campo('LLAMADO A LA ACCIÓN', pz.llamado || porRed?.llamado || ''),
-    campo('VARIANTES', '1'),
+    // 17-nov · GO «quitar rejas» C3: ya no «1» fijo · ningún dato (brief, tabla de formatos) fija cuántas versiones: decide la mesa de la pieza
+    campo('VARIANTES', VARIANTES_SIN_DATO),
     ...listaDe('NEGATIVOS', [...b.obligatorios.no_se_dice, ...b.obligatorios.prohibido]),
     campo('APRUEBA Y PARA CUÁNDO', cuando),
   ]

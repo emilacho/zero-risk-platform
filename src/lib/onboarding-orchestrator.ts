@@ -17,7 +17,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { dispatchJourney } from './journey-orchestrator/index'
 import { WebDiscovery } from './web-discovery'
 import { ingestDiscoveryToBrain } from './web-discovery-brain-ingest'
-import { BrandAnalyzer } from './brand-analyzer'
+import { BrandAnalyzer, declaracionesDelAnalisis } from './brand-analyzer'
 import { MissionControlBridge } from './mc-bridge'
 import { chunksFromBrandBook, persistChunks } from './brain/persist-chunks'
 import { persistContactsFromDiscovery } from './crm/persist-contacts'
@@ -296,6 +296,8 @@ export class OnboardingOrchestrator {
       )
       totalCost += brandResult.costUsd
       totalTokens += brandResult.tokensUsed
+      // 17-nov · GO «quitar rejas» A·13: sin análisis legible el alta sigue, con los campos vacíos y DECLARADO aquí (antes: estilo inventado)
+      errors.push(...declaracionesDelAnalisis(brandResult.analysis))
 
       // 4b: Write brand book to DB
       const brandBookId = await analyzer.writeBrandBookToDB(
