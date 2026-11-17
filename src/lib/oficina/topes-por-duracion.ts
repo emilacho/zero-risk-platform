@@ -1,0 +1,112 @@
+/**
+ * 17-nov · Sprint 3 · T7a · EL TOPE POR SEGUNDO TERMINADO (CC2 · 🟢 de CC6 con 4 condiciones: `REVISION-CC6-a-CC2-LENOVO-t7-tope-por-segundo`).
+ *
+ * Un tope que depende del largo de la pieza se escribe como DATO en dos partes: la fija (`tope_usd`, `limites.tope_encargo_usd`) y la que crece con la pieza
+ * (`tope_usd_por_segundo` × `limites.video.segundos_max`, `tope_usd_por_plano` × `limites.video.planos_max`, `limites.tope_encargo_usd_por_segundo` × `segundos_max`).
+ * Se calcula con el MÁXIMO que la mesa puede elegir, al cargar la plantilla (antes de abrir el encargo): un video corto reserva de más, pero ninguno se corta a medias.
+ * El motor NO cambia: sigue viendo números. Lo aplica quien CARGA la plantilla (`almacen-supabase.leerPlantilla`) y, por si el almacén es otro, `abrirEncargo` y `plantillaDe`.
+ * Es IDEMPOTENTE: la salida ya no trae las partes por segundo/plano, así que aplicarla dos veces da lo mismo.
+ *
+ * Condición 1 de CC6 · el INVARIANTE va en el código (`coberturaDelTope`): el tope del encargo cubre una pasada por todos los pasos que gastan, cada uno a su tope,
+ * más un turno de la mesa si la plantilla la tiene. Si no, el encargo NO abre (409 claro en `abrirEncargo`), nada de abrir para cortarse después.
+ */
+import { COTAS } from './mesa/tipos'
+import type { Paso, Plantilla } from './tipos'
+
+const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null)
+const r4 = (n: number) => Math.round(n * 10000) / 10000
+const objeto = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Record<string, unknown>) : {})
+
+/** los campos que crecen con la pieza: se leen de la plantilla de la base (dato) y desaparecen al aplicar */
+export const POR_SEGUNDO_DEL_PASO = 'tope_usd_por_segundo'
+export const POR_PLANO_DEL_PASO = 'tope_usd_por_plano'
+export const POR_SEGUNDO_DEL_ENCARGO = 'tope_encargo_usd_por_segundo'
+
+const tieneUnidades = (p: Plantilla): boolean =>
+  (p.limites as Record<string, unknown>)[POR_SEGUNDO_DEL_ENCARGO] !== undefined || p.pasos.some((s) => (s as unknown as Record<string, unknown>)[POR_SEGUNDO_DEL_PASO] !== undefined || (s as unknown as Record<string, unknown>)[POR_PLANO_DEL_PASO] !== undefined)
+
+/** lo que tiene que cumplir el dato por segundo/plano · puro (lo usa `validarPlantilla` y el cargador) */
+export function erroresDeLosTopesPorDuracion(p: Plantilla): string[] {
+  if (!p || !Array.isArray(p.pasos) || !p.limites) return []
+  const e: string[] = []
+  const v = objeto((p.limites as Record<string, unknown>).video)
+  const seg = num(v.segundos_max), planos = num(v.planos_max)
+  const lim = p.limites as Record<string, unknown>
+  const pideSegundos = (campo: string, x: unknown) => {
+    if (x === undefined) return false
+    if (!(num(x) !== null && (x as number) >= 0)) e.push(`${campo} debe ser un número ≥ 0`)
+    return true
+  }
+  let usaSegundos = pideSegundos(`\`limites.${POR_SEGUNDO_DEL_ENCARGO}\``, lim[POR_SEGUNDO_DEL_ENCARGO])
+  let usaPlanos = false
+  for (const s of p.pasos) {
+    const x = s as unknown as Record<string, unknown>
+    if (pideSegundos(`paso «${s.clave}»: \`${POR_SEGUNDO_DEL_PASO}\``, x[POR_SEGUNDO_DEL_PASO])) usaSegundos = true
+    if (x[POR_PLANO_DEL_PASO] !== undefined) {
+      usaPlanos = true
+      if (!(num(x[POR_PLANO_DEL_PASO]) !== null && (x[POR_PLANO_DEL_PASO] as number) >= 0)) e.push(`paso «${s.clave}»: \`${POR_PLANO_DEL_PASO}\` debe ser un número ≥ 0`)
+    }
+  }
+  if (usaSegundos && !(seg !== null && seg > 0)) e.push('un tope por segundo pide `limites.video.segundos_max` (> 0): sin el largo máximo no hay tope')
+  if (usaPlanos && !(planos !== null && planos > 0 && Number.isInteger(planos))) e.push('un tope por plano pide `limites.video.planos_max` (entero > 0): sin el máximo de planos no hay tope')
+  return e
+}
+
+/**
+ * La plantilla con cada tope YA calculado para la pieza más larga que se puede pedir · pura, idempotente.
+ * Sin partes por segundo/plano devuelve la MISMA plantilla (las demás familias no cambian). Con un dato inválido no calcula nada y devuelve los errores.
+ * El paso de función `video` con parte por segundo/plano fija además `limites.video.tope_por_video_usd` (el que usa la cotización), para que no haya dos cifras.
+ */
+export function aplicarTopesPorDuracion(p: Plantilla): { plantilla: Plantilla; errores: string[] } {
+  if (!p || !Array.isArray(p.pasos) || !p.limites || !tieneUnidades(p)) return { plantilla: p, errores: [] }
+  const errores = erroresDeLosTopesPorDuracion(p)
+  if (errores.length) return { plantilla: p, errores }
+  const lim = p.limites as Record<string, unknown>
+  const v = objeto(lim.video)
+  const seg = num(v.segundos_max) ?? 0, planos = num(v.planos_max) ?? 0
+  let topeDelVideo: number | null = null
+  const pasos: Paso[] = p.pasos.map((s) => {
+    const x = s as unknown as Record<string, unknown>
+    if (x[POR_SEGUNDO_DEL_PASO] === undefined && x[POR_PLANO_DEL_PASO] === undefined) return s
+    const { [POR_SEGUNDO_DEL_PASO]: ps, [POR_PLANO_DEL_PASO]: pp, ...resto } = x
+    const tope = r4((num(s.tope_usd) ?? 0) + (num(ps) ?? 0) * seg + (num(pp) ?? 0) * planos)
+    if (s.funcion === 'video') topeDelVideo = tope
+    return { ...(resto as unknown as Paso), tope_usd: tope }
+  })
+  const { [POR_SEGUNDO_DEL_ENCARGO]: pe, ...limResto } = lim
+  const limites = {
+    ...limResto,
+    tope_encargo_usd: r4((num(p.limites.tope_encargo_usd) ?? 0) + (num(pe) ?? 0) * seg),
+    ...(topeDelVideo !== null ? { video: { ...v, tope_por_video_usd: topeDelVideo } } : {}),
+  } as Plantilla['limites']
+  return { plantilla: { ...p, pasos, limites }, errores: [] }
+}
+
+/**
+ * Condición 1 de CC6 · ¿el tope de este encargo cubre una pasada por la plantilla? · pura (sobre la plantilla YA aplicada).
+ * Lo requerido = la suma de los topes de TODOS los pasos que gastan, cada uno una vez (sale de los pasos de la plantilla, no de una lista a mano),
+ * más un turno de la mesa (`COTAS.RESERVA_POR_TURNO_USD`, lo mismo que reserva `costoDeVolver`) si la plantilla tiene mesa.
+ * Las vueltas NO se suman aquí: las de chequeo (guion, imágenes clave, mirada) ya se saltan si no caben (`cabeLaVuelta`); las rondas del dueño las cubre
+ * la cuenta por el motor hasta el cierre de cada cambio de cifras (condición 4).
+ */
+export function coberturaDelTope(p: Plantilla, tope: number): { requerido: number; cubre: boolean; detalle: string } {
+  const pasos = Array.isArray(p?.pasos) ? p.pasos : []
+  const gastan = pasos.filter((s) => (num(s.tope_usd) ?? 0) > 0)
+  const mesa = pasos.some((s) => s.funcion === 'mesa') ? COTAS.RESERVA_POR_TURNO_USD : 0
+  const requerido = r4(gastan.reduce((a, s) => a + (num(s.tope_usd) ?? 0), 0) + mesa)
+  const cubre = num(tope) !== null && tope + 1e-9 >= requerido
+  const partes = gastan.map((s) => `${s.clave} ${s.tope_usd}`).concat(mesa ? [`un turno de la mesa ${mesa}`] : [])
+  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} una pasada por los pasos que gastan, cada uno a su tope (US$ ${requerido}: ${partes.join(' + ') || 'ninguno'})` }
+}
+
+/** el tope del encargo de una FILA de la base (`tope_encargo_usd`, `limites`, `pasos`) con la misma cuenta: para el freno de la campaña (condición 2) · puro.
+ *  Sin partes por segundo, la columna (como siempre). Con dato inválido, `null` (quien lo lee se queda del lado seguro). */
+export function topeDelEncargoDeLaFila(f: { tope_encargo_usd: unknown; limites?: unknown; pasos?: unknown }): number | null {
+  const col = num(typeof f.tope_encargo_usd === 'string' ? Number(f.tope_encargo_usd) : f.tope_encargo_usd)
+  const limites = objeto(f.limites)
+  if (!Array.isArray(f.pasos) || !Object.keys(limites).length) return col
+  const pl = { tipo: '', familia: '', pasos: f.pasos as Paso[], limites: limites as Plantilla['limites'], indicaciones: {} } as Plantilla
+  if (!tieneUnidades(pl)) return col
+  const a = aplicarTopesPorDuracion(pl)
+  return a.errores.length ? null : a.plantilla.limites.tope_encargo_usd
+}

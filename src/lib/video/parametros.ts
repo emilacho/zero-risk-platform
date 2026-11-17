@@ -88,7 +88,7 @@ export const TOPE_POR_VIDEO_USD = 5
  */
 export const CLAVE_DE_CONFIG_DEL_BRAZO = 'brazo_de_video'
 export interface DescuentoDelProveedor { pct: number; hasta: string; modelos: readonly string[] }
-export interface ConfigDelBrazo { tope_por_video_usd: number; descuento: DescuentoDelProveedor | null; /** 17-nov · T1: los modelos y sus fichas */ catalogo: CatalogoDeModelos }
+export interface ConfigDelBrazo { tope_por_video_usd: number; descuento: DescuentoDelProveedor | null; /** 17-nov · T7a · tope por SEGUNDO de cada llamada (opcional, dato): una llamada no pasa de `tope_por_segundo_usd × sus segundos` */ tope_por_segundo_usd?: number; /** 17-nov · T1: los modelos y sus fichas */ catalogo: CatalogoDeModelos }
 export const CONFIG_DEL_BRAZO_POR_OMISION: ConfigDelBrazo = { tope_por_video_usd: TOPE_POR_VIDEO_USD, descuento: null, catalogo: CATALOGO_POR_OMISION }
 
 /** normaliza el valor guardado · cada parte inválida vuelve a su valor por omisión (nunca lanza) · pura */
@@ -99,7 +99,17 @@ export function configDelBrazo(valor: unknown): ConfigDelBrazo {
   const descuento = d && typeof d.pct === 'number' && d.pct > 0 && d.pct < 1 && typeof d.hasta === 'string' && Number.isFinite(Date.parse(d.hasta)) && Array.isArray(d.modelos)
     ? { pct: d.pct, hasta: d.hasta, modelos: d.modelos.map(String) }
     : null
-  return { tope_por_video_usd: tope, descuento, catalogo: catalogoDeModelos(v) }
+  const porSegundo = typeof v.tope_por_segundo_usd === 'number' && Number.isFinite(v.tope_por_segundo_usd) && v.tope_por_segundo_usd > 0 ? v.tope_por_segundo_usd : null
+  return { tope_por_video_usd: tope, descuento, ...(porSegundo !== null ? { tope_por_segundo_usd: porSegundo } : {}), catalogo: catalogoDeModelos(v) }
+}
+
+/** 17-nov · T7a · el tope de UNA llamada al brazo: el de la configuración por video y, si hay cifra por segundo, no más que ella × los segundos de ESA llamada
+ *  (en plano por plano, cada plano es una llamada: un plano de 4 s no puede gastar lo de uno de 15). Lo que mande el llamador solo puede bajarlo · pura */
+export function topeDeLaLlamada(cfg: ConfigDelBrazo, segundos: number, pedido?: unknown): number {
+  const porVideo = cfg.tope_por_video_usd
+  const porSegundo = typeof cfg.tope_por_segundo_usd === 'number' && Number.isFinite(segundos) && segundos > 0 ? Math.round(cfg.tope_por_segundo_usd * segundos * 10000) / 10000 : Number.POSITIVE_INFINITY
+  const delBrazo = Math.min(porVideo, porSegundo)
+  return typeof pedido === 'number' && Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, delBrazo) : delBrazo
 }
 
 /** lee la configuración del brazo con el lector de la cadena (`almacen.leerConfig`: el único que nombra sus tablas) · sin valor o cualquier error ⇒ la de por omisión (tope aprobado, sin descuento) */

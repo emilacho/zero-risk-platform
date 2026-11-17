@@ -133,3 +133,27 @@ function encender(base: Plantilla): Plantilla {
 }
 /** la plantilla VIVA de `video_mesa` desde el encendido (202611170720): lo que la migración escribe, EXACTO */
 export const VIDEO_MESA_ENCENDIDA: Plantilla = encender(VIDEO_MESA)
+
+/**
+ * 17-nov · Sprint 3 · T7a · EL TOPE POR SEGUNDO TERMINADO (CC2 · 🟢 CC6 `REVISION-CC6-a-CC2-LENOVO-t7-tope-por-segundo`): la plantilla viva escrita como DATO por segundo.
+ * Con las cifras que REPRODUCEN HOY a 15 s (sin decisión de dinero): paso `video` = 0 + 1,0/s × 15 = 15 · encargo = 43 + 1,0/s × 15 = 58. Al cargarla
+ * (`aplicarTopesPorDuracion`) da EXACTAMENTE `VIDEO_MESA_ENCENDIDA`. Cuando T1 (CC3) suba `limites.video.segundos_max`, los dos topes suben solos con el largo;
+ * las cifras reales y el techo de la base son T7b (DECISIÓN Lenovo + migración que certifica CC6). Migración 202611171800 + su reversa.
+ */
+/** lo que puede cobrar el video por cada segundo de la pieza más larga (hoy: 15 / 15 s) */
+export const TOPE_DEL_VIDEO_POR_SEGUNDO_USD = 1
+/** la parte del tope del encargo que no depende del largo: mesa, imágenes clave, borradores, revisiones y las rondas del dueño (hoy: 58 − 15) */
+export const TOPE_FIJO_DEL_ENCARGO_DE_VIDEO_USD = 43
+/** lo que crece el tope del encargo por cada segundo de la pieza más larga (el del video: es lo único que hoy crece con el largo) */
+export const TOPE_DEL_ENCARGO_DE_VIDEO_POR_SEGUNDO_USD = 1
+
+function porSegundo(base: Plantilla): Plantilla {
+  const { tope_por_video_usd: _sinCifraFija, ...video } = base.limites.video as Record<string, unknown>
+  return {
+    ...base,
+    pasos: base.pasos.map((p) => (p.funcion === 'video' ? { ...p, tope_usd: 0, tope_usd_por_segundo: TOPE_DEL_VIDEO_POR_SEGUNDO_USD } : p)),
+    limites: { ...base.limites, tope_encargo_usd: TOPE_FIJO_DEL_ENCARGO_DE_VIDEO_USD, tope_encargo_usd_por_segundo: TOPE_DEL_ENCARGO_DE_VIDEO_POR_SEGUNDO_USD, video },
+  }
+}
+/** la plantilla de `video_mesa` como la escribe 202611171800 (dato por segundo); cargada = `VIDEO_MESA_ENCENDIDA` */
+export const VIDEO_MESA_POR_SEGUNDO: Plantilla = porSegundo(VIDEO_MESA_ENCENDIDA)

@@ -39,6 +39,9 @@ export interface Paso {
   salida_artefacto: string
   /** tope de gasto del paso (US$); 0 = sin modelo */
   tope_usd: number
+  /** 17-nov · T7a · la parte del tope que crece con la pieza: × `limites.video.segundos_max` / × `limites.video.planos_max` (ver `topes-por-duracion.ts`; desaparece al cargar) */
+  tope_usd_por_segundo?: number
+  tope_usd_por_plano?: number
   /** ronda de crítica a la que pertenece (1 = jefe, 2 = externo); las vueltas no la cruzan */
   ronda?: 1 | 2
   /** solo `agente`/`externo`: contrato de formato que hace cumplir el CÓDIGO */
@@ -55,6 +58,8 @@ export interface Limites {
   /** pasos extra permitidos por encima del largo de la plantilla (reintentos y vueltas) */
   margen: number
   tope_encargo_usd: number
+  /** 17-nov · T7a · la parte del tope del encargo que crece con la pieza: × `limites.video.segundos_max` (ver `topes-por-duracion.ts`; desaparece al cargar) */
+  tope_encargo_usd_por_segundo?: number
   max_rondas: number
   /** mesa de concepto: integraciones mínimas (rondas) antes de dar por buena la pieza */
   rondas_minimas?: number

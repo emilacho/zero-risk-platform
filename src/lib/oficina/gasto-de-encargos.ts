@@ -29,6 +29,7 @@ export async function configDeLaPuerta(db: DbDeGasto): Promise<ConfigDeOficina> 
 }
 
 type Respuesta = { data: unknown; error: { message?: string } | null }
+import { topeDelEncargoDeLaFila } from './topes-por-duracion'
 import type { ConfigDeOficina } from './sobre'
 import { esClaseDePieza, tienePasarela } from './clase'
 // la forma mínima del cliente de la base que se usa aquí (la de Supabase la cumple)
@@ -81,8 +82,9 @@ export async function encargoParaReabrirDe(db: DbDeGasto, encargoId: string): Pr
 
 export async function topesDeFamiliasActivas(db: DbDeGasto): Promise<Record<string, number>> {
   const out: Record<string, number> = {}
-  for (const t of await filas<{ familia: unknown; tope_encargo_usd: unknown }>(db.from(TABLAS_DE_GASTO.plantillas).select('familia, tope_encargo_usd').eq('activo', true))) {
-    const n = numero(t.tope_encargo_usd)
+  // 17-nov · T7a · condición 2 de CC6: el tope de la familia con la MISMA cuenta que usa el encargo (fijo + por segundo × largo máximo), no la columna sola
+  for (const t of await filas<{ familia: unknown; tope_encargo_usd: unknown; limites: unknown; pasos: unknown }>(db.from(TABLAS_DE_GASTO.plantillas).select('familia, tope_encargo_usd, limites, pasos').eq('activo', true))) {
+    const n = topeDelEncargoDeLaFila(t)
     if (typeof t.familia === 'string' && n !== null && n > 0) out[t.familia] = n
   }
   return out
@@ -105,10 +107,10 @@ export const MIN_HISTORIA = 3
  * Fuera de la historia: los ensayos (`dry_run`) y los encargos de PRUEBA (`prueba`, CC7/CC6 sobre 2e852b67): uno de prueba con gasto real fijaría lo esperado de todos los clientes.
  * Nunca pasa del tope de la familia.
  */
-export function reservasDesdeLaHistoria(plantillas: Array<{ familia: unknown; tope_encargo_usd: unknown; limites: unknown }>, historia: Array<{ familia: unknown; gasto_usd: unknown }>): Record<string, number> {
+export function reservasDesdeLaHistoria(plantillas: Array<{ familia: unknown; tope_encargo_usd: unknown; limites: unknown; pasos?: unknown }>, historia: Array<{ familia: unknown; gasto_usd: unknown }>): Record<string, number> {
   const out: Record<string, number> = {}
   for (const p of plantillas) {
-    const tope = numero(p.tope_encargo_usd)
+    const tope = topeDelEncargoDeLaFila(p)
     if (typeof p.familia !== 'string' || tope === null || tope <= 0) continue
     const gastos = historia.filter((h) => h.familia === p.familia).map((h) => numero(h.gasto_usd)).filter((g): g is number => g !== null && g > 0).slice(0, HISTORIA_POR_FAMILIA)
     const lim = p.limites && typeof p.limites === 'object' && !Array.isArray(p.limites) ? (p.limites as Record<string, unknown>) : {}
@@ -123,7 +125,7 @@ export function reservasDesdeLaHistoria(plantillas: Array<{ familia: unknown; to
 
 export async function reservasDeFamiliasActivas(db: DbDeGasto): Promise<Record<string, number>> {
   const [plantillas, historia] = await Promise.all([
-    filas<{ familia: unknown; tope_encargo_usd: unknown; limites: unknown }>(db.from(TABLAS_DE_GASTO.plantillas).select('familia, tope_encargo_usd, limites').eq('activo', true)),
+    filas<{ familia: unknown; tope_encargo_usd: unknown; limites: unknown; pasos: unknown }>(db.from(TABLAS_DE_GASTO.plantillas).select('familia, tope_encargo_usd, limites, pasos').eq('activo', true)),
     filas<{ familia: unknown; gasto_usd: unknown }>(db.from(TABLAS_DE_GASTO.encargos).select('familia, gasto_usd').eq('dry_run', false).eq('prueba', false).in('estado', [...ESTADOS_TERMINADOS]).order('creado_en', { ascending: false }).limit(2000)),
   ])
   return reservasDesdeLaHistoria(plantillas, historia)
