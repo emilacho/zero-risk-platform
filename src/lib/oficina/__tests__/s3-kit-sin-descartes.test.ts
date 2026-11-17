@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { abrirEncargo, puedeVolverALaMesa, recibirResultado } from '../orquestador'
 import { CLAVE_DE_LA_PALANCA } from '../mesa/con-mesa'
-import { traducirPieza, gruposDelKit } from '../mesa/traductor'
+import { traducirPieza, gruposDelKit, separarTitulosPegados, textoAntesDelPrimerTitulo, traeCamposDeLaPieza } from '../mesa/traductor'
 import { CONVENCION_DE_LA_PIEZA } from '../mesa/pedidos'
 import { armarLaminasDeKit, refDeCuadro, refDelElemento } from '../laminas'
 import { aplicarSalidaDeJefatura, avisoDeLaJefaturaALaMesa } from '../paso-jefatura'
@@ -116,6 +116,37 @@ describe('(b) «—» es vacío · (c) la firma tiene campo propio', () => {
     const k = CONVENCION_DE_LA_PIEZA('kit')
     expect(k).toMatch(/Firma: </)
     expect(k).toMatch(/## e01 · cuadro 2/)
+  })
+})
+
+describe('un solo molde «nada se pierde sin aviso» (REAPERTURA de CC6 · GO Lenovo 13:00Z)', () => {
+  it('🔴 el título pegado al texto anterior pasa a su línea (el caso del reel: «…citas.**# Propuesta 1»); «#etiqueta» sin espacio no se toca', () => {
+    expect(separarTitulosPegados('Voy a integrar las citas.**# Propuesta 1 · La puerta')).toBe('Voy a integrar las citas.**\n# Propuesta 1 · La puerta')
+    expect(separarTitulosPegados('Imagen: ninguna.## Lámina 2')).toBe('Imagen: ninguna.\n## Lámina 2')
+    expect(separarTitulosPegados('fin)### e02')).toBe('fin)\n### e02')
+    expect(separarTitulosPegados('Pide ya. #encebollado #zonanorte')).toBe('Pide ya. #encebollado #zonanorte')
+    expect(separarTitulosPegados('## e01\nTítulo: hola')).toBe('## e01\nTítulo: hola')
+    expect(separarTitulosPegados('a\r\nb')).toBe('a\nb')
+  })
+  it('🔴 en el kit: el cuadro con el título pegado NO se pierde, y se avisa', () => {
+    const md = '## Lámina 1 · El gancho\nTítulo: ya llegó.\nImagen: ninguna.## Lámina 2 · La prueba\nTítulo: Nació en Olón.'
+    const t = traducirPieza(md, 'kit', { refsDelKit: ['e01'] })
+    expect(t.copy_kit!.map((c) => c.headline)).toEqual(['ya llegó.', 'Nació en Olón.'])
+    expect(t.avisos.join(' | ')).toMatch(/un título venía pegado al texto anterior/)
+    // control: sin título pegado, no hay aviso
+    expect(traducirPieza(md.replace('ninguna.## ', 'ninguna.\n## '), 'kit', { refsDelKit: ['e01'] }).avisos.join(' | ')).not.toMatch(/pegado/)
+  })
+  it('🔴 lo que trae campos ANTES del primer título se avisa y queda como alternativa; la narración del agente, no', () => {
+    const conCampos = 'Título: un título suelto\nTexto: perdido\n## e01\nTítulo: hola'
+    expect(textoAntesDelPrimerTitulo(conCampos)).toBe('Título: un título suelto\nTexto: perdido')
+    expect(traeCamposDeLaPieza('Título: x')).toBe(true)
+    expect(traeCamposDeLaPieza('Voy a leer los aportes del tablero antes de integrar.')).toBe(false)
+    const t = traducirPieza(conCampos, 'kit', { refsDelKit: ['e01'] })
+    expect(t.avisos.join(' | ')).toMatch(/texto antes del primer título: 2 línea\(s\) sin título/)
+    expect(t.alternativas!.join(' | ')).toMatch(/texto sin título: Título: un título suelto/)
+    const n = traducirPieza('Voy a leer los aportes del tablero.\n## e01\nTítulo: hola', 'kit', { refsDelKit: ['e01'] })
+    expect(n.avisos.join(' | ')).not.toMatch(/antes del primer título/)
+    expect(textoAntesDelPrimerTitulo('sin títulos')).toBe('')
   })
 })
 
@@ -265,6 +296,18 @@ describe('(d) las reglas puras de la vuelta', () => {
     expect((sin.fichas ?? []).map((f) => f.que)).toEqual(['falta la zona norte', 'falta el precio'])
     const nada = aplicarSalidaDeJefatura(KIT_MESA, e, salida([]), { reImagen: () => ({ re_imagen: false }), puedeVolverALaMesa: () => true })
     expect(nada.artefacto?.vuelve_a_la_mesa).toBeUndefined()
+  })
+  it('🔴 (sabotaje sobreviviente de CC6) si la pieza vuelve a la mesa NO se pide además re-imagen; sin vuelta, sí', () => {
+    const e = estadoInicial()
+    const s = { ...salida(['texto: falta la zona norte']), imagen_por_rehacer: true }
+    const pedidas: unknown[] = []
+    const reImagen = (t: unknown) => { pedidas.push(t); return { re_imagen: true } }
+    const con = aplicarSalidaDeJefatura(KIT_MESA, e, s, { reImagen, puedeVolverALaMesa: () => true })
+    expect(con.artefacto).toMatchObject({ vuelve_a_la_mesa: true, re_imagen: false })
+    expect(pedidas).toHaveLength(0)
+    const sin = aplicarSalidaDeJefatura(KIT_MESA, e, s, { reImagen, puedeVolverALaMesa: () => false })
+    expect(sin.artefacto).toMatchObject({ re_imagen: true })
+    expect(pedidas).toHaveLength(1)
   })
   it('el aviso a la mesa nombra cada desacuerdo y dice que es la única vuelta', () => {
     const a = avisoDeLaJefaturaALaMesa(['texto: falta la zona norte'])

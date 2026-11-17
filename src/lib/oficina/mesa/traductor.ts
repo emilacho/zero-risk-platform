@@ -129,10 +129,29 @@ function variantesEnLinea(valor: string): Variante[] {
 interface Seccion { titulo: string; lineas: string[] }
 
 /** divide en secciones por encabezados Markdown (`#`…`####`) */
+/**
+ * 17-nov · un solo molde «nada se pierde sin aviso» (REAPERTURA de CC6 · GO Lenovo 13:00Z) · un título pegado al texto anterior («…las citas.**# Propuesta 1 · …»)
+ * pasa a su propia línea: si no, su sección desaparece dentro de la anterior. Solo corta `#`–`####` + espacio DESPUÉS de un signo de cierre o de `**` (un «#etiqueta» sin espacio no se toca).
+ * Lo reusan el reel y el corte de propuestas en imagen (CC1). Puro.
+ */
+export function separarTitulosPegados(md: string): string {
+  return String(md ?? '').replace(/\r/g, '').replace(/([.!?…:;»"”)\]]|\*\*)[ \t]*(#{1,4}[ \t]+\S)/g, '$1\n$2')
+}
+
+/** lo que la pieza trae ANTES de su primer título (sin títulos pegados): ahí no hay sección y el corte no lo lee. Puro */
+export function textoAntesDelPrimerTitulo(md: string): string {
+  const lineas = separarTitulosPegados(md).split('\n')
+  const i = lineas.findIndex((l) => /^\s{0,3}#{1,4}\s+\S/.test(l))
+  return (i < 0 ? [] : lineas.slice(0, i)).join('\n').trim()
+}
+
+/** ¿ese texto trae campos de la pieza («Título: …», «Imagen: …»)? (si es solo la narración del agente, no) */
+export const traeCamposDeLaPieza = (texto: string): boolean => Object.keys(campos(texto.split('\n')).valores).some((k) => k !== 'suelto')
+
 function secciones(md: string): Seccion[] {
   const out: Seccion[] = []
   let cur: Seccion | null = null
-  for (const l of String(md ?? '').replace(/\r/g, '').split('\n')) {
+  for (const l of separarTitulosPegados(md).split('\n')) {
     const h = /^\s{0,3}#{1,4}\s+(.*?)\s*#*\s*$/.exec(l)
     if (h) { cur = { titulo: h[1].trim(), lineas: [] }; out.push(cur) } else if (cur) cur.lineas.push(l)
   }
@@ -288,6 +307,13 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
   const ideaDeLaPieza = conceptoDeLaPieza(todas) || limpiarTexto(o.ideaDelBrief ?? '')
   const conObjetivo = objetivo ? { objetivo } : {}
   const alternativas: string[] = []
+  // 17-nov · un solo molde «nada se pierde sin aviso»: el título pegado se separa (y se dice); lo que trae campos ANTES del primer título no se dibuja, se dice y queda anotado
+  if (separarTitulosPegados(md) !== String(md ?? '').replace(/\r/g, '')) avisos.push('un título venía pegado al texto anterior: se separó para no perder su sección')
+  const antes = textoAntesDelPrimerTitulo(md)
+  if (antes && traeCamposDeLaPieza(antes)) {
+    avisos.push(`texto antes del primer título: ${antes.split('\n').filter((l) => l.trim()).length} línea(s) sin título; no se dibujaron y quedan anotadas como alternativa`)
+    alternativas.push(`texto sin título: ${limpiarTexto(antes)}`.slice(0, 600))
+  }
   let pie = ''
   let tags: string[] = []
   const publicaciones: Variante[] = []
