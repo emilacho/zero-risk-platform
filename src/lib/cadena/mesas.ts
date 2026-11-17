@@ -160,7 +160,7 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     ...(a.nota && a.anterior ? ['', a.anterior] : []),
     // 01-nov: el brief no lista las sedes; solo se añade la que tenga un estado que decir (sin ninguna, el pedido queda idéntico a hoy)
     // 10-nov (Lenovo por Emilio): la sede ABIERTA también se dice, con su fecha (contextoDeLaMesa)
-    ...(a.ctx.sedes.some((s) => contextoDeLaMesa(s.estado, s.abierta_desde)) ? ['', '# SEDES', ...a.ctx.sedes.filter((s) => contextoDeLaMesa(s.estado, s.abierta_desde)).map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''} · ${contextoDeLaMesa(s.estado, s.abierta_desde)}`)] : []),
+    ...(a.ctx.sedes.some((s) => contextoDeLaMesa(s.estado, s.abierta_desde)) ? ['', '# OFERTAS', ...a.ctx.sedes.filter((s) => contextoDeLaMesa(s.estado, s.abierta_desde)).map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''} · ${contextoDeLaMesa(s.estado, s.abierta_desde)}`)] : []),
     '',
     '# ESTRATEGIA · canales',
     canalesEnTexto(a.estrategia),
@@ -195,7 +195,7 @@ export function fechasDelConcepto(estrategia: Pick<Estrategia, 'fases'>, inicio:
   return [`# HOY · ${hoy} (la campaña empezó el ${inicio})`, 'Ninguna idea es para un día que ya pasó. Lo que anuncia algo que ya ocurrió (una apertura, un lanzamiento, un «llega hoy» de una fecha pasada) se cuenta como hecho, no como promesa.', ...lineas].join('\n')
 }
 
-export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null }): string {
+export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null; fichas?: ReadonlyArray<FichaDeOferta> | null }): string {
   const fechas = fechasDelConcepto(a.estrategia, a.inicio, a.hoy)
   const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
@@ -208,8 +208,9 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     '## Capítulo <clave de fase> · qué cuenta · «- serie: S1 · nombre · qué cuenta · redes» · y debajo «### Banco de ideas» con UNA idea por línea:',
     '`- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: … · protagonista: … · serie: S1 · cuadros: <n> · foto:<id>|ninguna`',
     '`cuadros` = cuántas pantallas pide la idea tal como la imaginas (una historia o un post = 1; «swipe a…» o una secuencia = una por pantalla). La cadena lo compara con los elementos del kit y avisa si no cuadran.',
-    'Cada idea trae mensaje y gancho propios y distintos; ids únicos; mínimo por red = huecos del patrón semanal × semanas de la fase (si no alcanza, lo declaras en «## Banco parcial»).',
-    'Sin cifras con decimales inventadas, sin datos con valor (precios, horarios: los pone el estratega con su referencia), sin claims propios que no se puedan probar. ## Caminos descartados · ## Citas.',
+    // 17-nov · Sprint 4 · D · sin la orden «mínimo = huecos del patrón × semanas» (la mesa crea ideas, no relleno de calendario) ni «sin datos con valor» (llegan por la ficha, con su fuente)
+    'Cada idea trae mensaje y gancho propios y distintos; ids únicos.',
+    'Sin cifras con decimales inventadas, sin claims propios que no se puedan probar. ## Caminos descartados · ## Citas.',
     'Si la dirección decide que el brief no sirve, escribe «## Devolución del brief» con los puntos de los 6 criterios que fallan (UNA sola vez por campaña) y la mesa cierra.',
     ...(a.nota ? ['', '# CAMBIOS PEDIDOS POR EL CLIENTE (sobre la versión anterior)', a.nota] : []),
     // 10-nov (FASE 2 · opción A): el RESUMEN de la versión sobre la que el cliente pidió cambios (nunca el texto entero)
@@ -229,7 +230,11 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     canalesEnTexto(a.estrategia),
     a.estrategia.patron_semanal.map((s) => `- ${s.slot}: ${s.red} · ${s.formato} · día ${s.dia_semana} ${s.hora}`).join('\n') || '(sin patrón)',
     '',
-    `# SEDES\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}${contextoDeLaMesa(s.estado, s.abierta_desde) ? ` · ${contextoDeLaMesa(s.estado, s.abierta_desde)}` : ''}`).join('\n') : '(sin sedes)'}`,
+    // 17-nov · Sprint 4 · D · las FICHAS DE LAS OFERTAS (el bloque de CC3, tal cual): los hechos con su fuente · sin fichas lo DICE (nunca un bloque vacío)
+    fichasDeOfertaEnTexto(a.fichas, a.hoy),
+    '',
+    // 17-nov · Sprint 4 · D (g) · agnóstico: «ofertas» (lo que se vende), aunque el dato venga de las sedes del cliente
+    `# OFERTAS\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}${contextoDeLaMesa(s.estado, s.abierta_desde) ? ` · ${contextoDeLaMesa(s.estado, s.abierta_desde)}` : ''}`).join('\n') : '(sin ofertas registradas)'}`,
     ...(a.ctx.eslogan ? [`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
     `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
   ].join('\n')

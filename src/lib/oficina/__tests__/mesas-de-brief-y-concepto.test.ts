@@ -13,7 +13,9 @@ import { abrirMesaDeLaCadena, briefIdDeLaCadena, devolucionDelBrief, textoParaLa
 import { cotaAgotada, siguienteDeLaMesa, techoDe } from '../mesa/planificador'
 import { ROTULO_DE_MATERIAL, pedidoDeAperturaDeLaCadena } from '../mesa/orquestador'
 import { DIETA, armarTarea } from '../mesa/pedidos'
-import { BRIEF_MESA, CONCEPTO_MESA } from '../plantillas/mesa'
+import { BRIEF_MESA, CONCEPTO_MESA, TOPE_DE_LA_MESA_DE_CONCEPTO_USD } from '../plantillas/mesa'
+// 17-nov · Sprint 4 · D (ADENDA 4): el tope de la gran idea subió de 7 a 10; los turnos «caros» de las pruebas de tope guardan la MISMA proporción con el tope (3,1 de 7)
+const TURNO_CARO_CONCEPTO = (3.1 / 7) * TOPE_DE_LA_MESA_DE_CONCEPTO_USD
 import { vencerMesasPorPlazo } from '../vigia'
 import { DbFalsa } from './dbfalsa'
 import { crearMemoria, CLIENTE } from './memoria'
@@ -93,7 +95,7 @@ describe('las plantillas y la migración', () => {
     expect(tomar('concepto_mesa', 'pasos2')).toEqual(JSON.parse(JSON.stringify(CONCEPTO_MESA.pasos)))
     expect(tomar('concepto_mesa', 'lim2')).toEqual(JSON.parse(JSON.stringify({ ...CONCEPTO_MESA.limites, tope_encargo_usd: 5 })))
     expect(BRIEF_MESA.limites).toMatchObject({ tope_encargo_usd: 1.6, max_rondas: 1, mesa: true })
-    expect(CONCEPTO_MESA.limites).toMatchObject({ tope_encargo_usd: 7, max_rondas: 2, rondas_minimas: 2, plazo_mesa_min: 90, mesa: true })
+    expect(CONCEPTO_MESA.limites).toMatchObject({ tope_encargo_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, max_rondas: 2, rondas_minimas: 2, plazo_mesa_min: 90, mesa: true })
     expect(BRIEF_MESA.pasos).toHaveLength(1)
     expect(CONCEPTO_MESA.pasos[0].funcion).toBe('mesa')
     expect(MIGRACION).toMatch(/1, 1\.60, true\s*\)/)
@@ -291,7 +293,7 @@ describe('la mesa del CONCEPTO de punta a punta', () => {
     expect(m.hecho.conceptos[0].texto).toBe(m.MS.filas.filter((x) => x.tipo === 'integra').at(-1)!.texto)
     expect(m.M.llamadas.bandeja).toHaveLength(0)
     expect(m.M.llamadas.salida).toBe(0)
-    expect(m.M.encargos.get(m.id)!.tope_usd).toBe(7)
+    expect(m.M.encargos.get(m.id)!.tope_usd).toBe(TOPE_DE_LA_MESA_DE_CONCEPTO_USD)
   })
 
   it('el curador de Instagram participa SOLO si la cadena declaró si_instagram', async () => {
@@ -337,7 +339,7 @@ describe('la mesa del CONCEPTO de punta a punta', () => {
 
   it('si el techo se pasa antes de integrar, lo escrito va a la cadena como «cerrado por tope» (no a la bandeja)', async () => {
     const m = await montar('concepto')
-    const { ultima } = await jugar(m, (t) => ({ texto: t.tipo === 'dirigir' ? 'el problema en una frase' : `aporte de ${t.agente}`, costo_usd: 3.1 }))
+    const { ultima } = await jugar(m, (t) => ({ texto: t.tipo === 'dirigir' ? 'el problema en una frase' : `aporte de ${t.agente}`, costo_usd: TURNO_CARO_CONCEPTO }))
     expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado_por_tope', resultado_para_la_sala: 'concepto_mesa' })
     expect(m.hecho.conceptos).toHaveLength(1)
     expect(m.hecho.conceptos[0].texto).toContain('el problema en una frase')
@@ -514,7 +516,7 @@ describe('reservas de CC3 (U5 · U12)', () => {
     await jugar(bien)
     expect(bien.M.encargos.get(bien.id)!.con_desacuerdo).toBe(false)
     const tope = await montar('concepto')
-    await jugar(tope, (t) => ({ texto: t.tipo === 'dirigir' ? 'el problema en una frase' : `aporte de ${t.agente}`, costo_usd: 3.1 }))
+    await jugar(tope, (t) => ({ texto: t.tipo === 'dirigir' ? 'el problema en una frase' : `aporte de ${t.agente}`, costo_usd: TURNO_CARO_CONCEPTO }))
     expect(tope.M.encargos.get(tope.id)!.con_desacuerdo).toBe(true)
   })
   it('las condiciones del sobre se recortan a 20 (no entra una lista sin fin)', () => {

@@ -91,7 +91,9 @@ export const KIT_MESA: Plantilla = {
  */
 export const TOPE_DE_LA_MESA_DE_BRIEF_USD = 1.6
 /** 17-nov · 5 → 7 (202611170900): un encargo real terminado gastó 6,15 y la mesa corta en 1,2 × tope (= 6 con 5) · ADENDA 08:06 de Lenovo */
-export const TOPE_DE_LA_MESA_DE_CONCEPTO_USD = 7
+/** 17-nov · Sprint 4 · D (ADENDA 4 · pedido de Lenovo): 7 → 10. Peor caso con la crítica (2 turnos × 0,79) y el brief largo ≈ 7,80 + la reserva de un turno (0,6) = 8,40 + margen.
+ *  Así la gran idea no cierra por tope a medias. La fila viva cambia con 202611172200 (con su reversa) */
+export const TOPE_DE_LA_MESA_DE_CONCEPTO_USD = 10
 const PASO_DE_LA_MESA: Plantilla['pasos'][number] = { clave: 'mesa', tipo: 'codigo', quien: 'sala', funcion: 'mesa', condicion: { tipo: 'siempre' }, entrada: [], salida_artefacto: 'mesa', tope_usd: 0 }
 export const BRIEF_MESA: Plantilla = {
   tipo: 'brief_mesa', familia: 'brief_mesa', clase: 'interna',
