@@ -311,15 +311,14 @@ describe('carrusel y kit de historias', () => {
     expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
     expect(reg.find((x) => x.paso === 'autorevision_diseno')).toMatchObject({ choco: true, agente: 'carousel-designer' })
   })
-  it('carrusel: una lámina corregida con texto que no está en el copy (inventado) se descarta y la original sigue', async () => {
-    const { M, id, reg } = await carrusel(NOTAS)
-    const inventada = LAMINAS.map((l, i) => (i === 1 ? { ...l, headline: 'Hoy cambia tu almuerzo' } : l))
-    const r = await correr(M, id, guion({ autorevision_diseno: () => ({ texto: conChoque({ laminas: inventada }, 'laminas', 'nota-2') }) }), 80)
+  it('carrusel (17-nov · quitar rejas, tramo 3): una lámina corregida con palabras que no son un trozo exacto del copy ya NO se descarta: queda, con una ficha de sugerencia para revisar', async () => {
+    const { M, id } = await carrusel(NOTAS)
+    const ajustada = LAMINAS.map((l, i) => (i === 1 ? { ...l, headline: 'Hoy cambia tu almuerzo' } : l))
+    const r = await correr(M, id, guion({ autorevision_diseno: () => ({ texto: conChoque({ laminas: ajustada }, 'laminas', 'nota-2') }) }), 80)
     expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
-    expect(arte(M, id, 'laminas').laminas[1].headline).toBe('Hoy cambia el plato del día')
-    // el reintento lleva el mensaje ESPECÍFICO del validador (no uno genérico)
-    expect(r.tareas['autorevision_diseno'][1]).toContain('no cumple lo que la sala comprueba por código')
-    expect(reg.find((x) => x.paso === 'autorevision_diseno')).toMatchObject({ choco: false })
+    expect(arte(M, id, 'laminas').laminas[1].headline).toBe('Hoy cambia tu almuerzo')
+    expect(r.tareas['autorevision_diseno']).toHaveLength(1)
+    expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => /no es un trozo exacto del texto del autor/.test(f.que ?? '') && f.gravedad === 'sugerencia')).toBe(true)
   })
   it('carrusel: una lámina corregida que rompe el contrato (headline de 200 caracteres) se descarta y la original sigue', async () => {
     const { M, id, reg } = await carrusel(NOTAS)
