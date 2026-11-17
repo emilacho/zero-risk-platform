@@ -22,6 +22,8 @@ export interface FotoEtiquetada {
   origen?: 'propia' | 'competencia' | 'referencia'
   /** 17-nov · Sprint 4 · D · la oferta que muestra (clave de la sede u oferta), si consta con su fuente (#1135); sin ella, nada */
   oferta?: string | null
+  /** 17-nov · es una captura de la web (página o red): solo referencia de estilo, jamás candidata ni publicable */
+  captura_web?: boolean
 }
 export interface PedidoDeFoto {
   /** lo que protagoniza el brief (p. ej. el producto); si está vacío no se filtra por producto */

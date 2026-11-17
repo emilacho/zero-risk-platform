@@ -8,6 +8,7 @@
  */
 import crypto from 'node:crypto'
 import { origenDeLaFoto, type OrigenDeFoto } from '../cerebro/portero/fotos-pendientes'
+import { esCapturaDeLaWeb } from '../cerebro/portero/procedencia'
 import type { FotoEtiquetada } from './fotos'
 
 export { origenDeLaFoto, type OrigenDeFoto }
@@ -166,10 +167,25 @@ export function separarFotos(filas: FilaDeFoto[]): { propias: FotoEtiquetada[]; 
   }
   return { propias, referencias }
 }
+/**
+ * 17-nov · Sprint 4 · D (GO Lenovo sobre la observación de CC6 a #1137): una captura de la web NO es foto propia, pero SÍ sigue siendo referencia de estilo.
+ * Las capturas (propias o de la competencia) salen de las propias y van a las referencias marcadas `captura_web`; una propia pasa como `referencia` (nunca se publica).
+ * La regla de qué es captura es la del cerebro (`esCapturaDeLaWeb`, #1135).
+ */
+export function separarFotosYCapturas(filas: FilaDeFoto[]): { propias: FotoEtiquetada[]; referencias: FotoEtiquetada[] } {
+  const { propias, referencias } = separarFotos(filas.filter((f) => !esCapturaDeLaWeb(f)))
+  const cap = separarFotos(filas.filter((f) => esCapturaDeLaWeb(f)))
+  const capturas = [...cap.propias, ...cap.referencias].map((f) => ({ ...f, origen: f.origen === 'propia' ? 'referencia' : f.origen, captura_web: true }) as FotoEtiquetada)
+  return { propias, referencias: [...referencias, ...capturas] }
+}
+
 /** el rótulo que ve quien aprueba en la bandeja y el curador en su pedido */
 export const rotuloDeOrigen = (o: OrigenDeFoto | undefined): string => (o === 'propia' ? 'foto propia del cliente' : o === 'competencia' ? 'foto de la competencia (solo referencia, no se publica)' : o === 'referencia' ? 'foto de referencia (solo referencia, no se publica)' : 'foto propia del cliente')
 
+/** 17-nov · cómo se marca una captura de la web entre las referencias */
+export const ROTULO_CAPTURA_WEB = 'referencia, no se publica'
+
 /** el estilo que sale de las fotos de referencia: SOLO texto (lo que muestran), nunca la imagen ni su dirección */
-export function referenciasDeEstilo(refs: Array<{ origen?: OrigenDeFoto; que_muestra?: string | null; producto_visto?: string[] | null }>, max = 6): string[] {
-  return refs.filter((r) => r.origen !== 'propia' && txt(r.que_muestra)).slice(0, max).map((r) => `${r.origen === 'referencia' ? 'referencia' : 'competencia'}: ${txt(r.que_muestra).slice(0, 220)}`)
+export function referenciasDeEstilo(refs: Array<{ origen?: OrigenDeFoto; que_muestra?: string | null; producto_visto?: string[] | null; captura_web?: boolean }>, max = 6): string[] {
+  return refs.filter((r) => r.origen !== 'propia' && txt(r.que_muestra)).slice(0, max).map((r) => `${r.captura_web ? `captura de la web · ${ROTULO_CAPTURA_WEB}` : r.origen === 'referencia' ? 'referencia' : 'competencia'}: ${txt(r.que_muestra).slice(0, 220)}`)
 }

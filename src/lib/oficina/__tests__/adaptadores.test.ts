@@ -341,4 +341,19 @@ describe('17-nov · Sprint 4 · D · la mesa no recibe capturas de la web como f
     // las fotos de siempre (sin clase) siguen entrando
     expect(ids).toEqual(expect.arrayContaining(FOTOS.map((f) => f.id)))
   })
+  it('🔴 GO Lenovo: las capturas SIGUEN como referencia de estilo, marcadas; la propia pasa a «referencia» (nunca se publica); la de la competencia sigue de competencia', async () => {
+    const competencia = { id: 'cap-comp', owner_role: 'competidor', client_id: CLIENTE, estado: 'ok', url: 'https://fotos.test/cap-comp.jpg', que_muestra: 'la página del competidor', clase: 'captura_web', tipo: 'post' }
+    const db = sembrar(); db.tablas['client_social_images'].push(...capturas, competencia)
+    const fu = await crearPuertos(db, ENV, fetchFalso().f).fuentes(CLIENTE)
+    if ('error' in fu) throw new Error(fu.error)
+    const refs = fu.referencias ?? []
+    const de = (id: string) => refs.find((r) => r.id === id)
+    for (const id of ['cap-clase', 'cap-tipo']) expect(de(id)).toMatchObject({ origen: 'referencia', captura_web: true })
+    expect(de('cap-comp')).toMatchObject({ origen: 'competencia', captura_web: true })
+    // la referencia que ya estaba (una foto de la competencia, no captura) sigue igual y sin marca
+    expect(de('ajena-1')).toMatchObject({ origen: 'competencia' })
+    expect(de('ajena-1')!.captura_web).toBeUndefined()
+    // ninguna captura es candidata
+    expect(fu.fotos.some((f) => f.captura_web)).toBe(false)
+  })
 })
