@@ -3,6 +3,7 @@
  * Falla CERRADO: un error de lectura se lanza (nunca se lee como «directorio vacío»: una pieza con el directorio mal leído no abre). Un duplicado del número de aporte (23505) se reintenta con el siguiente.
  */
 import type { Db } from '../almacen-supabase'
+import { leerReferenciasDeVideo } from './lectura-referencias'
 import { esClaveDeEquipo, TIPOS_DE_APORTE, type Aporte, type NuevoAporte, type PuertoMesa, type Tarjeta, type TipoDeAporte } from './tipos'
 
 type Fila = Record<string, unknown>
@@ -44,18 +45,8 @@ export function puertoDeLaMesa(db: Db, leerConfigDeLaCadena?: (clave: string) =>
       const industria = c.error ? null : ((lista<Fila>(c.data)[0]?.industry as string | null | undefined) ?? null)
       return { fichas: lista<Fila>(f.data), ritmos: lista<Fila>(r.data), industria }
     },
-    // Sprint 2 · S2-6 · solo lectura, siempre por client_id (con más de 500 reels de afuera entran los 500 más NUEVOS; hoy son decenas); un error se lanza y el turno lo toma como «sin referencias» (nunca frena la pieza)
-    async referenciasDeVideo(clientId: string) {
-      const [v, t, c] = await Promise.all([
-        db.from('client_videos').select('id,owner_role,handle,tipo,estado,duracion_s,caption,transcripcion,metricas').eq('client_id', clientId).in('owner_role', ['competidor', 'referencia']).eq('estado', 'ok').order('created_at', { ascending: false }).limit(500),
-        db.from('cerebro_tendencias').select('video_id,nivel,red,vistas,me_gusta').eq('client_id', clientId).not('video_id', 'is', null).limit(2000),
-        db.from('client_social_images').select('video_id,posicion,estado,que_muestra,tipo_de_toma,texto_visible,producto_visto,con_personas').eq('client_id', clientId).eq('tipo', 'video_captura').limit(3000),
-      ])
-      if (v.error) throw new Error(`videos de referencia: ${v.error.message}`)
-      if (t.error) throw new Error(`tendencias de los videos: ${t.error.message}`)
-      if (c.error) throw new Error(`momentos de los videos: ${c.error.message}`)
-      return { videos: lista<Fila>(v.data), tendencias: lista<Fila>(t.data), capturas: lista<Fila>(c.data) }
-    },
+    // Sprint 2 · S2-6 · la lectura de referencias vive en SU archivo (la única puerta de la mesa al cerebro, versión «estrecha» de Lenovo 17-nov); aquí solo se pasa
+    referenciasDeVideo: (clientId: string) => leerReferenciasDeVideo(db, clientId),
     async libro(encargoId) {
       const r = await db.from('oficina_mesa_aportes').select('*').eq('encargo_id', encargoId).order('n', { ascending: true })
       if (r.error) throw new Error(`libro de la mesa: ${r.error.message}`)
