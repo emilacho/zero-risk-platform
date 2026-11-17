@@ -98,12 +98,12 @@ export const VIDEO_MESA: Plantilla = {
 // ───────────────────────────────────────────────────────── 17-nov · EL ENCENDIDO DEL SPRINT 2 (video)
 // DECISIÓN Lenovo 07:18 · Emilio FIRMÓ el encendido (encender no gasta): plano por plano (camino B) + las propuestas con su borrador en video, en la plantilla VIVA.
 // El orden acordado (S2-4): mesa → imágenes clave de borrador → borrador en video de las propuestas → aprobación del dueño → imágenes clave finales (con la propuesta
-// aprobada) → su revisión → pedido → video… Topes: el encargo sigue en US$ 45, el video en 15; el borrador de las 3 propuestas juntas, US$ 20 (DECISIÓN 04:47).
+// aprobada) → su revisión → pedido → video… Topes: el encargo sigue en US$ 45, el video en 15; el borrador de las 3 propuestas juntas, US$ 10 (DECISIÓN 04:47 en 20; bajado a 10 por DECISIÓN Lenovo 17-nov: reserva menos, cubre el 7,06 cotizado).
 // `video_mesa` en `familias_activas` NO entra aquí: se activa con el «dale» de Emilio a la prueba de la semana (gasto). Migración 202611170720 + su reversa.
 /** cuántas propuestas presenta la mesa (DATO · `limites.video.propuestas`) */
 export const PROPUESTAS_DE_VIDEO = 3
-/** lo que se acepta gastar en los borradores en video de TODAS las propuestas juntas, por ronda (DECISIÓN 04:47: US$ 20) */
-export const TOPE_DEL_BORRADOR_DE_VIDEO_USD = 20
+/** lo que se acepta gastar en los borradores en video de TODAS las propuestas juntas, por ronda (US$ 10 · DECISIÓN Lenovo 17-nov «tope-borrador-video-10»; migración 202611170830) */
+export const TOPE_DEL_BORRADOR_DE_VIDEO_USD = 10
 /** la calidad del borrador en video (DATO; la cotización real del 17-nov: US$ 0,1177/s a 480p) */
 export const RESOLUCION_DEL_BORRADOR = '480p'
 /** rondas de cambios del dueño sobre las propuestas antes de que solo quede aprobar */
