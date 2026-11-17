@@ -10,6 +10,7 @@ import type { FotoEtiquetada } from '../fotos'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import { estadoInicial, type Estado } from '../tipos'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
+import { esCritica } from './critica'
 
 export type TipoDeMesaDeLaCadena = 'brief' | 'concepto' | 'reubicacion' | 'fallidos'
 export const FAMILIA_DE: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brief_mesa', concepto: 'concepto_mesa', reubicacion: 'reubicacion_mesa', fallidos: 'fallidos_mesa' }
@@ -102,7 +103,8 @@ export function lineaDeIdeaLimpia(linea: string): string {
  */
 export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: string; texto: string }>, integracion: string): string[] {
   const dir = [...libro].reverse().find((a) => a.tipo === 'integra')?.de ?? null
-  const aportes = libro.filter((a) => (a.tipo === 'aporta' || a.tipo === 'responde') && a.de !== dir && a.texto.trim())
+  // Sprint 4 · E · la crítica cita ideas para confrontarlas, no las propone: sus líneas no entran al banco
+  const aportes = libro.filter((a) => (a.tipo === 'aporta' || a.tipo === 'responde') && a.de !== dir && a.texto.trim() && !esCritica(a.texto))
   const citados: number[] = []
   for (const m of integracion.matchAll(/\bA(\d{1,4})\b/g)) { const n = Number(m[1]); if (!citados.includes(n)) citados.push(n) }
   const orden = [
@@ -133,7 +135,8 @@ export function textoParaLaCadena(libro: Array<{ n?: number; de: string; tipo: s
     return ideas.length ? `${integracion}\n\n${TITULO_IDEAS_DE_LOS_APORTES}\n\n${ideas.join('\n')}` : integracion
   }
   if (piezaTexto?.trim()) return piezaTexto.trim()
-  return libro.filter((a) => ['dirige', 'aporta', 'responde'].includes(a.tipo) && a.texto.trim()).map((a) => `[${a.de}] ${a.texto.trim()}`).join('\n\n')
+  // sin integración, lo que el equipo escribió (la crítica no: confronta, no propone; sus citas de ideas no deben leerse como ideas)
+  return libro.filter((a) => ['dirige', 'aporta', 'responde'].includes(a.tipo) && a.texto.trim() && !esCritica(a.texto)).map((a) => `[${a.de}] ${a.texto.trim()}`).join('\n\n')
 }
 /** lo que la mesa le entrega a la cadena: la de concepto lleva las ideas de los aportes */
 export const textoDeLaMesaParaLaCadena = (enc: Pick<Encargo, 'familia'>, libro: Array<{ n?: number; de: string; tipo: string; texto: string }>, piezaTexto: string | null | undefined): string =>

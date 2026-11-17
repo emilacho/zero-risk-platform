@@ -10,6 +10,7 @@ import { baseDeLaminas } from '../orquestador-laminas'
 import { fotosDeReferencia } from '../foto-de-referencia'
 import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
 import { devolucionDelBrief, entregarALaCadena, marcoDe, textoDeLaMesaParaLaCadena } from './de-la-cadena'
+import { conMarcaDeLaCritica } from './critica'
 import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
 import { cotaDeLaMesa, loQueSigueDeLaMesa, pasadasDeLaMesa } from '../topes-por-duracion'
@@ -630,7 +631,9 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
   // aunque ese turno no tuviera notas (cerebro vacío, caído o apagado), una línea «N1 apliqué…» suelta no entra al libro ni a la pieza
   const sinLineas = quitarLineasDeNotas(textoFinal)
   if (sinLineas.trim()) textoFinal = sinLineas
-  const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra', redactar_prompts: 'aporta' }
+  // Sprint 4 · E · la crítica se rotula en el tablero: todos (y la jefatura) saben que es la crítica, y sus citas de ideas no se leen como ideas del banco
+  if (t.tipo === 'criticar') textoFinal = conMarcaDeLaCritica(textoFinal)
+  const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra', redactar_prompts: 'aporta', criticar: 'aporta' }
   const pedido = t.responde_a ? (await P.mesa.libro(enc.id)).find((a) => a.id === t.responde_a) : undefined
   await P.mesa.aportar(aporteNuevo(enc, t.agente, t.tipo === 'responder' ? pedido?.de ?? null : null, tipoAporte[t.tipo] ?? 'aporta', textoFinal, { responde_a: t.tipo === 'responder' || t.tipo === 'devolver_citas' ? t.responde_a : null, profundidad: pedido ? pedido.profundidad : 0, costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
   const integra = t.tipo === 'integrar' || t.tipo === 'devolver_citas'

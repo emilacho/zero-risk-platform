@@ -12,8 +12,9 @@ import { AGENTE_GANCHO_DE_VIDEO, METODO_GANCHO_POR_OMISION, fichasEnTexto, leerF
 import { BRIEF_GUIA_NO_REGLA } from '../brief'
 import { fichaPorOmision } from '../../video/parametros'
 import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
+import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
 
-export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts'
+export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar'
 
 export interface ContextoDeTurno {
   cliente_nombre: string
@@ -356,6 +357,8 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     '',
   ].join('\n')
 
+  // Sprint 4 · E · lo que la dirección sabe de la crítica de esta ronda (solo si la mesa tiene crítico; sin él, la tarea es la de siempre)
+  const laCritica = tipo === 'integrar' || tipo === 'devolver_citas' ? seccionDeLaCriticaParaLaDireccion(est, libro) : null
   const tu: Record<TipoDeTurno, string> = {
     dirigir: [
       '## Tu turno · DIRECCIÓN CREATIVA: abre la pieza',
@@ -394,13 +397,16 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
         ? ['Elige UNA gran idea paraguas entre los caminos del equipo (puedes combinar). Escribe `## Gran idea` (<nombre> · <frase paraguas de 90 días>), por qué la elegiste, y **`## Caminos descartados y por qué`**. Cita lo que usaste y descartaste en `## Citas` (A<n>). Todavía no desarrolles capítulos ni banco: eso es la ronda 2.']
         : [...(c.tipo === 'video' ? [REGLA_DEL_GANCHO] : []), CONVENCION_DE_LA_PIEZA(c.tipo, c.video)]),
       ...(o.extra ? ['', o.extra] : []),
+      ...(laCritica ? ['', laCritica] : []),
     ].join('\n'),
     devolver_citas: [
       '## Tu turno · DIRECCIÓN CREATIVA: completa las citas',
       `Tu integración anterior no citó a: ${o.faltanCitas ?? '(ver abajo)'}. Entrega la pieza completa otra vez (la misma convención) y, en “Citas”, di qué usaste y qué descartaste —con motivo— de cada aporte del tablero.`,
       CONVENCION_DE_LA_PIEZA(c.tipo, c.video),
+      ...(laCritica ? ['', laCritica] : []),
     ].join('\n'),
     redactar_prompts: tareaDelIngeniero(o.imagenesARedactar ?? []),
+    criticar: tareaDeLaCritica(agente),
   }
   return cab + seccionDeIndicacion(o.tarjeta, agente) + (o.metodo ? o.metodo + '\n\n' : '') + tu[tipo]
 }
