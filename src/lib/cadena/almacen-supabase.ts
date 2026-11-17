@@ -34,6 +34,7 @@ import { configDeLaPuerta, encargoParaReabrirDe, encargosParaRehacerDe, encargos
 import type { SobreDeFallidos } from './rehacer-fallidos'
 import { OPERACION_DE_PRODUCIR } from './tope-de-campana'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
+import { leerHechosDelNegocio } from '@/lib/portero-alimenta/hechos-del-negocio'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
@@ -375,6 +376,9 @@ export function almacenDeSupabase(): Almacen {
       return ((data as FichasGuardadas[] | null) ?? [])[0] ?? null
     },
     async insertarFichas(f) { const { error } = await db.from('cadena_fichas_de_oferta').insert(f); if (error && (error as { code?: string }).code !== '23505') fallo(error) },
+    // 17-nov · los «Hechos del negocio» por la consulta del portero (#1140): la cadena no nombra tablas del cerebro
+    // no se pudo leer (o lectura recortada) = null → el lector declara «hechos del negocio: aún no disponibles» · nunca frena
+    async hechosDelNegocio(clientId) { const l = await leerHechosDelNegocio(db, clientId); return l.estado === 'ok' ? l.hechos : null },
     async estrategiaEnVersion(campanaId, version) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).eq('version', version).limit(1)))[0] ?? null },
     async insertarEstrategiaSiLibre(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (!error) return true; if ((error as { code?: string }).code === '23505') return false; return fallo(error) },
 
