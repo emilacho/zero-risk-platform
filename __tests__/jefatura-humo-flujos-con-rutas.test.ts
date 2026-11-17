@@ -126,10 +126,11 @@ describe('lo que se entrega y por qué camino (con las rutas reales)', () => {
       expect(r.entrega?.ruta, version_nueva).toBe('webhook')
     }
   })
-  it('toma:nada → `con_desacuerdo` viaja en la entrega', async () => {
+  it('toma:nada → revisión 2 = A · lo de criterio viaja como `observaciones`, sin `con_desacuerdo`', async () => {
     const r = await recorrer(await abrir('pieza', { simulacion: { fichas: 'bloquea', toma: 'nada' } }))
-    expect(r.entrega?.entrega_cuerpo.resultado).toBe('con_desacuerdo')
-    expect(r.entrega?.entrega_cuerpo.marcas.con_desacuerdo).toBe(true)
+    expect(r.entrega?.entrega_cuerpo.resultado).toBe('limpia')
+    expect(r.entrega?.entrega_cuerpo.marcas.con_desacuerdo).toBe(false)
+    expect(r.entrega?.entrega_cuerpo.salida.observaciones?.length).toBeGreaterThan(0)
   })
   it('GPT sin respuesta (falla_red) → `sin_segunda_mirada`, y el cable a la sala lo dice con las palabras de la sala', async () => {
     const r = await recorrer(await abrir('pieza', { simulacion: { fichas: 'bloquea', gpt: 'falla_red' }, devolver_a: { tipo: 'sala_ref', destino: 'corr-123' } }))

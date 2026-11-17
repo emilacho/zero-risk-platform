@@ -336,7 +336,9 @@ describe('el material CERCANO es una respuesta válida (con su etiqueta)', () =>
   })
   it('la bandeja trae la marca de origen solo si la plantilla la pide', async () => {
     const con = await escena({ fotos: [FOTO_BUENA], limites: { generar_cuando_no_hay_foto: true } })
-    await correr(con.M, con.id, guion())
+    // revisión 2 · sin imagen que pase el brief, el post queda sin archivo y la regla 6 lo FRENA: aquí quien mira responde también el dato sin verificar, para que haya imagen
+    const mirarCompleto = (_n: number, t: string) => { const o = JSON.parse(observacion(indicesDe(t))); for (const i of o.imagenes) i.dato_sin_verificar = false; return { texto: JSON.stringify(o) } }
+    await correr(con.M, con.id, guion({ mirar: mirarCompleto, reimagen_mirar: mirarCompleto }))
     expect(con.M.llamadas.bandeja[0].metadata).toMatchObject({ origen_de_imagenes_resumen: expect.stringMatching(/generada/) })
     expect(String(con.M.llamadas.bandeja[0].vista_previa)).toMatch(/^🖼️ /)
     const sin = await escena({ fotos: [FOTO_BUENA], limites: { material_activo: false } })

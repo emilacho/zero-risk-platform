@@ -569,12 +569,12 @@ async function aTextoParaLaJefatura(P: Puertos, enc: Encargo, est: EstadoMesa, t
   if (!enc.dry_run) {
     const s = await P.salida({ client_id: enc.client_id, titulo: `Pieza ${enc.brief_id} (texto de la mesa, sin dibujar)`, contenido: { pieza_texto: texto, motivo }, metadata: { origen: 'oficina', familia: enc.familia, oficina_encargo_id: enc.id, brief_id: enc.brief_id, con_desacuerdo: true, desacuerdos: [`mesa: ${motivo}`], sin_dibujar: true, ...(porTope ? { cerrado_por_tope: true } : {}) } })
     if (s.ok) {
-      const q = await P.bandeja({ client_id: enc.client_id, output_id: s.output_id, titulo: `⚠️ SIN DIBUJAR (decide una persona) · Pieza ${enc.brief_id}`, vista_previa: texto.slice(0, 280), metadata: { oficina_encargo_id: enc.id, costo_usd: e.gasto_usd, sin_dibujar: true, motivo }, expires_at: null })
+      const q = await P.bandeja({ client_id: enc.client_id, output_id: s.output_id, titulo: `⚠️ SIN DIBUJAR (declarado) · Pieza ${enc.brief_id}`, vista_previa: texto.slice(0, 280), metadata: { oficina_encargo_id: enc.id, costo_usd: e.gasto_usd, sin_dibujar: true, motivo }, expires_at: null })
       salida = { ...salida, output_id: s.output_id, hitl_queue_id: q.ok ? q.id : null }
     }
   }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(e, { ...est, fase: 'cerrada', pieza_texto: texto }), gasto_usd: e.gasto_usd, estado: estadoFinal, con_desacuerdo: true, salida_output_id: (salida.output_id as string | undefined) ?? null, hitl_queue_id: (salida.hitl_queue_id as string | undefined) ?? null })
-  await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: porTope ? `🛑 Cierre por tope · ${enc.brief_id}: ${motivo}; el texto de la mesa quedó en la bandeja para una persona (no se perdió la pieza)` : `⚠️ La mesa no pudo traducir la pieza ${enc.brief_id} a láminas (${motivo}); el texto quedó en la bandeja para una persona`, dry_run: enc.dry_run })
+  await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: porTope ? `🛑 Cierre por tope · ${enc.brief_id}: ${motivo}; el texto de la mesa quedó en la bandeja, declarado «sin dibujar» (no se perdió la pieza)` : `⚠️ La mesa no pudo traducir la pieza ${enc.brief_id} a láminas (${motivo}); el texto quedó en la bandeja, declarado «sin dibujar»`, dry_run: enc.dry_run })
   return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, sin_dibujar: true, motivo, simulado: enc.dry_run, gasto_usd: e.gasto_usd, resultado_para_la_sala: porTope ? 'cerrado_por_tope' : 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos: [`mesa: ${motivo}`], output_id: (salida.output_id as string | undefined) ?? null, hitl_queue_id: (salida.hitl_queue_id as string | undefined) ?? null })
 }
 

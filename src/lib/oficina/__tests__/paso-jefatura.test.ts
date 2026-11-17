@@ -317,18 +317,19 @@ describe('una revisión fallida, incompleta, que no abrió o que no contestó: l
         expect(enc.estado).toBe('cerrado')
         expect(M.llamadas.bandeja).toHaveLength(1)
         expect(String(M.llamadas.bandeja[0].titulo)).toMatch(marca)
-        expect(M.llamadas.bandeja[0].metadata).toMatchObject({ con_desacuerdo: true, ...meta })
+        // REVISIÓN 2 (Lenovo · confirmado) · la revisión incompleta o sin revisar es una MARCA DECLARADA: sin «con desacuerdo» y sin la alarma de desacuerdo
+        expect(M.llamadas.bandeja[0].metadata).toMatchObject({ con_desacuerdo: false, observaciones: expect.arrayContaining([expect.stringMatching(/^revisión: /)]), ...meta })
         expect(M.llamadas.salidas).toHaveLength(1)
-        expect(enc.con_desacuerdo).toBe(true)
-        expect(M.llamadas.avisos.some((a) => a.canal === 'alertas')).toBe(true)
+        expect(enc.con_desacuerdo).toBe(false)
+        expect(M.llamadas.avisos.some((a) => a.canal === 'alertas' && /con desacuerdo/.test(a.texto))).toBe(false)
       }
       it('la revisión FALLA de verdad (el jefe no contesta): «REVISIÓN INCOMPLETA»', async () => {
         const { M, id } = await abrir(f, f.nueva)
         conLaJefatura(M, { responder: (() => ({ error: 'el empleado murió' })) as never })
         const r = await correr(M, id, f.guionBase)
-        expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', con_desacuerdo: true, resultado_para_la_sala: 'con_desacuerdo' })
+        expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', con_desacuerdo: false, resultado_para_la_sala: 'encargo_en_bandeja' })
         llegaMarcada(M, id, /^⚠️ REVISIÓN INCOMPLETA · /, { revision_incompleta: true, jefatura_resultado: 'fallida' })
-        expect(r.ultima.cuerpo.desacuerdos).toEqual(expect.arrayContaining([expect.stringMatching(/revisión: incompleta \(fallida\)/)]))
+        expect(r.ultima.cuerpo.observaciones).toEqual(expect.arrayContaining([expect.stringMatching(/revisión: incompleta \(fallida\)/)]))
       })
       it('la revisión se corta por TOPE: «REVISIÓN INCOMPLETA»', async () => {
         const { M, id } = await abrir(f, f.nueva)
@@ -396,7 +397,8 @@ describe('el encargo espera a la jefatura y se reanuda cuando entrega', () => {
     const { M, id } = await esperando()
     const salida = salidaSintetica('con_desacuerdo', { artifact_id: id, marcas: { con_desacuerdo: true, sin_segunda_mirada: false }, desacuerdos: ['texto: falta el precio (no tomada: no lo sé)'], artefacto_final: { pieza: { pie_de_foto: 'Pie corregido por la jefatura', hashtags: ['#ceviche'], llamado: 'Pídelo' } } })
     const r = await recibirJefatura(M.P, id, salida)
-    expect(r.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', con_desacuerdo: true })
+    // punto 9 · el desacuerdo del jefe es criterio: queda como observación declarada, la pieza sigue sin «con desacuerdo»
+    expect(r.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', con_desacuerdo: false, observaciones: ['texto: falta el precio (no tomada: no lo sé)'] })
     expect(M.llamadas.bandeja).toHaveLength(1)
     expect((M.llamadas.salidas[0] as { contenido: { pie_de_foto: string } }).contenido.pie_de_foto).toBe('Pie corregido por la jefatura')
     expect([...M.turnos.get(id)!.values()].find((x) => x.paso === 'jefatura')).toMatchObject({ estado: 'hecho', tipo: 'jefatura' })
@@ -417,7 +419,7 @@ describe('el encargo espera a la jefatura y se reanuda cuando entrega', () => {
   it('si la revisión nunca contesta, el vigía la da por perdida: la pieza sigue «SIN REVISAR» y avisa; repetirlo no duplica', async () => {
     const { M, id } = await esperando()
     const r = await jefaturaSinRespuesta(M.P, id, 'sin vuelta en 90 min')
-    expect(r.cuerpo).toMatchObject({ accion: 'cerrado', con_desacuerdo: true })
+    expect(r.cuerpo).toMatchObject({ accion: 'cerrado', con_desacuerdo: false })
     expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/^⚠️ SIN REVISAR · /)
     expect(M.llamadas.avisos.some((a) => a.canal === 'alertas' && /no contestó/.test(a.texto))).toBe(true)
     await jefaturaSinRespuesta(M.P, id, 'otra vez'); expect(M.llamadas.bandeja).toHaveLength(1)

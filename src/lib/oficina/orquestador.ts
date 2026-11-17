@@ -17,13 +17,14 @@ import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoAlRevisor } from './ciego'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
+import { fichasAlCierre, marcaDeObservaciones } from './reglas-duras'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, llavesYaDevueltas, metadataDeLaJefatura, prefijoDeLaBandeja, reglasDurasNoTomadas, revisionIncompleta, sobreDeLaRevision, type OpcionesDeAplicacion } from './paso-jefatura'
 import { contextoDeLaFicha, fichaDeLaHoja } from './sentido-contra-la-ficha'
 import { chequeosExactos, fichaConCierreVivo } from './exactos-de-la-ficha'
 import { fechaDeLaFila } from './piezas-por-publicar'
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
-import { armarPedidoV, cabeLaVuelta, contextoDeRevisorV, costoDeVolver, ejecutarCodigoV, quedaVueltaDelPaso, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
+import { armarPedidoV, cabeLaVuelta, contextoDeRevisorV, costoDeVolver, ejecutarCodigoV, quedaVueltaDelPaso, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV, TOPE_POR_VIDEO } from './orquestador-video'
 import { FUNCION_BORRADOR_VIDEO } from './video/borradores'
 import { alLlegarAlPaso, decidir, FUNCION_APROBAR_PROPUESTAS, metadataDeAvisosDeConcepto, TURNO_DEL_DUENO, type DecisionDelDueno } from './video/aprobacion'
 import { PASO_MIRAR_VIDEO } from './video/mirada'
@@ -464,12 +465,12 @@ function saltoPorFalta(paso: Paso, e: Estado): ResultadoDePaso | null {
  */
 export function sinLecturaDeMirar(paso: Paso, e: Estado, errores: string[]): ResultadoDePaso {
   const motivo = errores.slice(0, 2).join(' · ')
-  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'una persona decide si se rehace')] }
+  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'queda declarado: la re-imagen fue la vuelta de su creador')] }
   const items = imagenesAMirar(e)
   return {
     costo_usd: 0,
     artefacto: { observaciones: [], preferencia: [], veredicto: { pasan: items.map((i) => i.indice), porImagen: [], regenerar: false }, sin_lectura: true },
-    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que la imagen cumple el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); la imagen sigue en la pieza sin juzgar`, 'formato de la observación', 'una persona mira la imagen antes de aprobar')],
+    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que la imagen cumple el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); la imagen sigue en la pieza sin juzgar`, 'formato de la observación', 'su creador ya tuvo su reintento: queda declarado y la pieza sigue')],
     reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' },
   }
 }
@@ -509,7 +510,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       const fichasDeAviso = ch.avisos.map((a, n) => fichaNueva(`prompts-aviso-${e.pasos_ejecutados}-${n}`, 'chequeo', 'imagen', 'sugerencia', a, 'palabras declaradas por norma, por el dueño o por el brief', 'revisar si corresponde'))
       const esRe = paso.clave.startsWith('reimagen_')
       const repeticion = (e.vueltas['chequear_prompts'] ?? 0) >= 1
-      if (esRe && ch.ninguno) return { res: { costo_usd: 0, artefacto: { indices: [], ninguno: true, fallan: ch.fallan, prompts: [] }, fichas: [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se queda la imagen anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
+      if (esRe && ch.ninguno) return { res: { costo_usd: 0, artefacto: { indices: [], ninguno: true, fallan: ch.fallan, prompts: [] }, fichas: [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se queda la imagen anterior', 'reglas de imagen del brief', 'queda declarado: la re-imagen fue la vuelta de su creador')] } }
       const res: ResultadoDePaso = {
         costo_usd: 0,
         artefacto: { indices: ch.pasan, ninguno: ch.ninguno, fallan: ch.fallan, prompts: ch.pasan.map((i) => prompts[i]) },
@@ -985,7 +986,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
       const puede = !esRe && modo === 'generada' && (e.vueltas['mirar'] ?? 0) < Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
       const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, puede, { exigirDato: reglasDeInvencion(pl.limites) !== null, esGenerada: () => modo === 'generada' })
       // re-imagen que no cumple el brief: NO se pisa la observación ni la imagen anterior (se queda la que estaba) y se dice
-      if (esRe && ver.pasan.length === 0) return { res: { costo_usd: 0, fichas: [fichaNueva(`reimagen-no-cumplio-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'la imagen nueva (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
+      if (esRe && ver.pasan.length === 0) return { res: { costo_usd: 0, fichas: [fichaNueva(`reimagen-no-cumplio-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'la imagen nueva (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior', 'reglas de imagen del brief', 'queda declarado: la re-imagen fue la vuelta de su creador')] } }
       const fichas: Ficha[] = []
       if (ver.pasan.length === 0 && !ver.regenerar) fichas.push(fichaNueva(`mirar-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `ninguna imagen cumple el brief: ${ver.porImagen.flatMap((x) => x.fallas.map((f) => f.detalle)).slice(0, 4).join(' · ') || 'sin observaciones'}`, 'reglas de imagen del brief', 'la pieza sale sin imagen o con la mejor disponible, declarado'))
       return { res: { costo_usd: 0, artefacto: { observaciones: filtradas, preferencia: v.preferencia, veredicto: ver }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' } } }
@@ -1069,9 +1070,10 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
   const e = enc.estado_del_motor
   // salas 2 y 3: el resumen de lo que va a la salida y a la bandeja sale de las láminas; el video, del guion y del video (null para el post de la sala 1)
   const lam = resumenDeCierreL(enc, e, pl) ?? resumenDeCierreV(enc, e, pl)
-  const abiertasQueBloquean = e.fichas.filter((f) => f.gravedad === 'bloquea' && (f.estado === 'abierta' || f.estado === 'no_tomada'))
-  // J8a · una revisión incompleta (fallida o cortada por tope) o que no pudo abrirse NO se pierde: la pieza va a la bandeja marcada y una persona la mira antes de aprobarla
-  const conDesacuerdo = abiertasQueBloquean.length > 0 || parcial || revisionIncompleta(e)
+  // REVISIÓN 2 · el único lugar que decide (`fichasAlCierre`): frena SOLO una regla dura de la lista que sigue rota; la devuelta a la cadena va «con desacuerdo»;
+  //   lo demás (criterio de cualquier agente, lo que antes «decidía una persona», la revisión incompleta o sin revisar) es una OBSERVACIÓN DECLARADA: la pieza sigue
+  const cierre = fichasAlCierre(e)
+  const conDesacuerdo = cierre.en_la_cadena.length > 0 || parcial
   const estadoFinal: Encargo['estado'] = parcial ? 'cerrado_por_tope' : 'cerrado'
   const pz = datos(e, 'pieza_post')
   const fin = datos(e, 'imagen_final')
@@ -1080,8 +1082,9 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
   const generada = lam ? lam.generada : fin?.origen === 'generada'
   let output_id: string | null = null, hitl_id: string | null = null
   // RESPUESTA-LENOVO 17-nov punto 3 · una regla dura que sigue rota tras la vuelta FRENA: la pieza no va a la salida ni a la bandeja (nadie la aprueba encima) y sale UNA alarma con el motivo
-  const frenoDuro = reglasDurasNoTomadas(e)
-  const desacuerdos = [...abiertasQueBloquean.map((f) => `${f.donde}: ${f.que ?? ''}`), ...(revisionIncompleta(e) ? [datosDeLaJefatura(e)?.sin_revisar ? 'revisión: sin revisar (la jefatura no abrió o no contestó)' : `revisión: incompleta (${datosDeLaJefatura(e)?.resultado})`] : [])]
+  const frenoDuro = cierre.frenan
+  const desacuerdos = [...cierre.frenan, ...cierre.en_la_cadena].map((f) => `${f.donde}: ${f.que ?? ''}`)
+  const observaciones = [...cierre.observaciones.map((f) => `${f.donde}: ${f.que ?? ''}`), ...(revisionIncompleta(e) ? [datosDeLaJefatura(e)?.sin_revisar ? 'revisión: sin revisar (la jefatura no abrió o no contestó)' : `revisión: incompleta (${datosDeLaJefatura(e)?.resultado})`] : [])]
   if (!enc.dry_run && (pz || lam) && b && !frenoDuro.length) {
     // la opinión libre del revisor externo viaja con la pieza, rotulada como OPINIÓN (y lo que el autor decidió con ella)
     const opinion = opinionExterna(e)
@@ -1089,23 +1092,31 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
     const contenido = { ...(lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }), ...(opinion ? { opinion_externa: opinion } : {}) }
     // de dónde viene cada imagen (foto propia · cercana · generada · tipográfica): solo con la plantilla que lo pide
     const origenes = marcaDeOrigenActiva(pl.limites) ? origenesDeImagenes(e, pl.limites) : null
-    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}), ...metadataDeLaJefatura(e), ...(origenes ? { origen_de_imagenes: origenes.por_imagen, origen_de_imagenes_resumen: origenes.resumen } : {}), ...metadataDeAvisosDeConcepto(e) }
+    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(observaciones.length ? { observaciones } : {}), ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}), ...metadataDeLaJefatura(e), ...(origenes ? { origen_de_imagenes: origenes.por_imagen, origen_de_imagenes_resumen: origenes.resumen } : {}), ...metadataDeAvisosDeConcepto(e) }
     const s = await P.salida({ client_id: enc.client_id, titulo: lam ? lam.titulo : `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
     if (s.ok) {
       output_id = s.output_id
-      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: prefijoDeLaBandeja(e) + (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (imagenPorRehacer(e) ? '🖼️ IMAGEN POR REHACER (decide una persona) · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: (origenes?.resumen ? `🖼️ ${origenes.resumen} — ` : '') + (lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280)), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
+      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: prefijoDeLaBandeja(e) + marcaDeObservaciones(cierre.observaciones) + (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (imagenPorRehacer(e) ? '🖼️ IMAGEN POR REHACER (declarado) · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: (origenes?.resumen ? `🖼️ ${origenes.resumen} — ` : '') + (lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280)), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
       if (q.ok) hitl_id = q.id
     }
   }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: estadoFinal, con_desacuerdo: conDesacuerdo, imagen_generada: generada, salida_output_id: output_id, hitl_queue_id: hitl_id })
+  // revisión 2 · pregunta 4 · el video que cobró más que su tope: alarma de gasto (sin bloquear, sin persona); si además frena, va DENTRO de la misma alarma del freno
+  const sobreTope = e.fichas.filter((f) => f.contra_que === TOPE_POR_VIDEO)
+  const textoDelGasto = sobreTope.length ? `💸 Gasto sobre el tope · ${enc.brief_id}: ${sobreTope[0].que ?? ''}.` : ''
   if (frenoDuro.length) {
-    await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 Pieza frenada · ${enc.brief_id}: regla dura no tomada tras la vuelta — ${frenoDuro.slice(0, 3).map((h) => `${h.destino}: ${h.que}`).join(' | ')}. No se publica (firma de Emilio: se toma sí o sí).`, dry_run: enc.dry_run })
-    return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos })
+    // una alarma por incidente: si el cierre fue por tope (ya avisó a #alertas) o es la versión 2 o más del mismo brief, va al hilo (ADENDA 2 de CC7 a #1148)
+    const nt = reglasDurasNoTomadas(e)
+    const motivos = [...nt.map((h) => `${h.destino}: ${h.que}`), ...frenoDuro.filter((f) => !f.id.startsWith('sentido-no-tomada-')).map((f) => `${f.donde}: ${f.que ?? ''}`)]
+    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🛑 Pieza frenada · ${enc.brief_id}: regla dura no tomada tras la vuelta — ${motivos.slice(0, 3).join(' | ')}. No se publica (firma de Emilio: se toma sí o sí).${textoDelGasto ? ` ${textoDelGasto}` : ''}`, dry_run: enc.dry_run })
+    return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}) })
   }
+  // la alarma de gasto sola (la pieza sigue): las versiones 2+ y el cierre por tope (ya avisó) van al hilo
+  if (textoDelGasto) await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `${textoDelGasto} La pieza sigue (el dinero ya se gastó).`, dry_run: enc.dry_run })
   await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: conDesacuerdo ? `⚠️ Con desacuerdo · ${enc.brief_id}${nota ? ` · ${nota}` : ''}` : `✅ En la bandeja · ${enc.brief_id} · US$ ${e.gasto_usd.toFixed(3)}`, dry_run: enc.dry_run })
   if (conDesacuerdo && !parcial) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ Encargo con desacuerdo · ${enc.brief_id}: ${desacuerdos.slice(0, 3).join(' | ')}`, dry_run: enc.dry_run })
   return r(200, {
     accion: 'cerrado', estado: estadoFinal, con_desacuerdo: conDesacuerdo, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id, hitl_queue_id: hitl_id,
-    resultado_para_la_sala: parcial ? 'cerrado_por_tope' : conDesacuerdo ? 'con_desacuerdo' : 'encargo_en_bandeja', sala_ref: enc.sala_ref, desacuerdos,
+    resultado_para_la_sala: parcial ? 'cerrado_por_tope' : conDesacuerdo ? 'con_desacuerdo' : 'encargo_en_bandeja', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}),
   })
 }

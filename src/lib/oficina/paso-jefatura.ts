@@ -160,7 +160,9 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   const incompleta = salida.resultado === 'fallida' || salida.resultado === 'incompleta_por_tope'
   const respuestas = Array.isArray(salida.respuestas) ? salida.respuestas : []
   // 17-nov · GO Lenovo (d) · un desacuerdo que la jefatura no pudo resolver (p. ej. falta en la pieza un dato que el brief pide) vuelve UNA vez a la mesa como corrección; solo si sigue, va a la bandeja marcado
-  const crudas = (Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []).map((d) => String(d).trim()).filter(Boolean)
+  // revisión 2 = A · la jefatura ya separa lo de criterio en `observaciones`: la oficina recibe las dos listas y las pasa por SU misma regla (`fichasAlCierre`)
+  const deLaJefatura = [...(Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []), ...(Array.isArray(salida.observaciones) ? salida.observaciones : [])]
+  const crudas = deLaJefatura.map((d) => String(d).trim()).filter(Boolean)
   // cambio 4 · con ficha: lo exacto (código) + el sentido del jefe (cita y destino verificados) se reparten por destino. Sin ficha, `sen` es null y todo sigue como antes
   const sen = o.sentido && o.sentido.ficha.estado === 'con_ficha' && !incompleta ? sentidoDeLaRevision(crudas, o.sentido) : null
   const lineas = sen ? sen.lineas : crudas
@@ -169,17 +171,17 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   const vuelve = lineas.length > 0 && !haciaAtras && o.puedeVolverALaMesa?.(costoDeLaJefatura(salida.costo_usd)) === true
   // fichas de FONDO que siguen sin tomarse: el mismo desacuerdo de siempre (jefe · bloquea · sin tomar); `cerrar` ya sabe contarlas
   //   (si la pieza vuelve a la mesa, el desacuerdo viaja como corrección y NO queda como ficha: la revisión de la vuelta decide)
-  const fichas: Ficha[] = (vuelve ? [] : sen ? lineas : Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []).map((d, i) => {
+  const fichas: Ficha[] = (vuelve ? [] : sen ? lineas : deLaJefatura).map((d, i) => {
     const p = partirDesacuerdo(String(d))
-    return { ...fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', p.donde, 'bloquea', p.que, 'revisión de la jefatura', 'una persona decide'), estado: 'no_tomada' as const, razon: 'la jefatura cerró sin que se tomara' }
+    return { ...fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', p.donde, 'bloquea', p.que, 'revisión de la jefatura', 'observación de criterio: su creador ya la tuvo en su vuelta; queda declarada y la pieza sigue'), estado: 'no_tomada' as const, razon: 'la jefatura cerró sin que se tomara' }
   })
   // cambio 4 · firma de Emilio · cada regreso a la cadena vuelve SOLO a su creador (automático): la pieza no se publica mientras esa corrección no tenga respuesta (ficha que bloquea).
   //   La corrección que el creador de la pieza dejó sin responder NO bloquea (DECISION-EMILIO reglas duras: nada fuera de la lista bloquea): queda «no dicha», declarada y marcada en la bandeja;
   //   nunca se da por tomada. Lo que no reabre queda registrado en `sentido.no_reabre`, sin ficha.
   if (sen) {
-    sen.datos.devoluciones.forEach((d, i) => fichas.push({ ...fichaNueva(`sentido-${e.pasos_ejecutados}-${i}`, 'jefe', d.destino, 'bloquea', `sentido · ${d.destino}: ${d.motivo}`, d.linea_de_la_ficha ? `ficha de la oferta: «${d.linea_de_la_ficha}»` : 'ficha de la oferta', d.dura ? `vuelve a ${d.destino}: regla dura, su creador la toma sí o sí` : `vuelve a ${d.destino}: su creador la toma, la toma en parte o no la toma, y dice por qué`), estado: 'no_tomada' as const, razon: `devuelto a ${d.destino}` }))
-    ;(sen.datos.duras_pendientes ?? []).forEach((h, i) => fichas.push({ ...fichaNueva(`sentido-dura-${e.pasos_ejecutados}-${i}`, 'jefe', h.destino, 'bloquea', `sentido · ${h.destino}: ${h.que}`, h.linea_de_la_ficha ? `ficha de la oferta: «${h.linea_de_la_ficha}»` : 'ficha de la oferta', `regla dura ya devuelta a ${h.destino} y sigue sin corregirse: no se publica hasta que su creador la corrija`), estado: 'no_tomada' as const, razon: `regla dura ya devuelta a ${h.destino}` }))
-    ;(sen.datos.duras_no_tomadas ?? []).filter((h) => h.destino === 'pieza' || !o.sentido?.filaId).forEach((h, i) => fichas.push({ ...fichaNueva(`sentido-no-tomada-${e.pasos_ejecutados}-${i}`, 'jefe', 'pieza', 'bloquea', `sentido · pieza: ${h.que}`, h.linea_de_la_ficha ? `ficha de la oferta: «${h.linea_de_la_ficha}»` : 'ficha de la oferta', REGLA_DURA_NO_TOMADA), estado: 'no_tomada' as const, razon: 'regla dura no tomada tras la vuelta' }))
+    sen.datos.devoluciones.forEach((d, i) => fichas.push({ ...fichaNueva(`sentido-${e.pasos_ejecutados}-${i}`, 'jefe', d.destino, 'bloquea', `sentido · ${d.destino}: ${d.motivo}`, d.linea_de_la_ficha ? `ficha de la oferta: «${d.linea_de_la_ficha}»` : 'ficha de la oferta', d.dura ? `vuelve a ${d.destino}: regla dura, su creador la toma sí o sí` : `vuelve a ${d.destino}: su creador la toma, la toma en parte o no la toma, y dice por qué`), ...(d.dura ? { dura: true as const } : {}), estado: 'no_tomada' as const, razon: `devuelto a ${d.destino}` }))
+    ;(sen.datos.duras_pendientes ?? []).forEach((h, i) => fichas.push({ ...fichaNueva(`sentido-dura-${e.pasos_ejecutados}-${i}`, 'jefe', h.destino, 'bloquea', `sentido · ${h.destino}: ${h.que}`, h.linea_de_la_ficha ? `ficha de la oferta: «${h.linea_de_la_ficha}»` : 'ficha de la oferta', `regla dura ya devuelta a ${h.destino} y sigue sin corregirse: no se publica hasta que su creador la corrija`), dura: true as const, estado: 'no_tomada' as const, razon: `regla dura ya devuelta a ${h.destino}` }))
+    ;(sen.datos.duras_no_tomadas ?? []).filter((h) => h.destino === 'pieza' || !o.sentido?.filaId).forEach((h, i) => fichas.push({ ...fichaNueva(`sentido-no-tomada-${e.pasos_ejecutados}-${i}`, 'jefe', 'pieza', 'bloquea', `sentido · pieza: ${h.que}`, h.linea_de_la_ficha ? `ficha de la oferta: «${h.linea_de_la_ficha}»` : 'ficha de la oferta', REGLA_DURA_NO_TOMADA), dura: true as const, estado: 'no_tomada' as const, razon: 'regla dura no tomada tras la vuelta' }))
   }
   // la opinión libre de GPT llega como OPINIÓN (una ficha `externa` por dueño, nunca bloquea ni cuenta como desacuerdo), con lo que cada dueño decidió
   const externas = respuestas.filter((r) => r.origen === 'externa').sort((a, b) => (a.donde === 'texto' ? -1 : b.donde === 'texto' ? 1 : 0))

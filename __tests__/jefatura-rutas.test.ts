@@ -242,10 +242,11 @@ describe('el recorrido por HTTP, en seco', () => {
     expect(r.final.j.salida.versiones[0].texto).toBe(TEXTO_DEL_PLAN)
     expect(r.pedidos.map((p) => p.paso)).toEqual(['revision_fondo', 'correccion:campaign-brief-agent', 'decision:campaign-brief-agent'])
   })
-  it('brief («solo marca»): un solo turno de agente y cierra con_desacuerdo si el jefe deja una ficha que bloquea', async () => {
+  it('brief («solo marca»): un solo turno de agente; la ficha de criterio que bloquea queda como observación (revisión 2 = A)', async () => {
     const r = await recorrer(sobre('brief', { simulacion: { fichas: 'bloquea' } }) as Json)
     expect(r.pedidos.map((p) => p.paso)).toEqual(['revision_fondo'])
-    expect(r.final.j.resultado).toBe('con_desacuerdo')
+    expect(r.final.j.resultado).toBe('limpia')
+    expect(r.final.j.salida.observaciones.length).toBeGreaterThan(0)
   })
   it('abrir dos veces la misma revisión: la base lo impide (índice único) y se devuelve la existente', async () => {
     const a = await llamar(REVISIONES, 'revisiones', sobre('brief', { id: 'b-9' }))

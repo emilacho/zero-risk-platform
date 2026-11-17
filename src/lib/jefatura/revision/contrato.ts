@@ -134,6 +134,8 @@ export interface SalidaDeRevision {
   /** 11-nov · colateral: los veredictos YA verificados por el código (atados por id; lo sin veredicto nunca se aprueba) */
   veredictos?: VeredictosVerificados
   desacuerdos: string[]
+  /** revisión 2 = A · lo de criterio que no se tomó, con la respuesta del creador: declarado, no frena ni avisa (plan y manual: en la tarjeta de aprobación) */
+  observaciones?: string[]
   costo_usd: number
   pasos: number
   trace_id: string
