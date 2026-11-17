@@ -79,15 +79,25 @@ describe('T7b · las cifras por segundo y por resolución', () => {
 })
 
 describe('T7b · condición de CC6 · las rondas del dueño van DENTRO de lo requerido', () => {
-  it('lo requerido = una pasada + 2 × la vuelta de «aprobar_propuestas» (y la cubre el encargo a 15 s, 720p)', () => {
+  it('lo requerido = una pasada + 2 × la vuelta de «aprobar_propuestas» (61,3), pero nunca menos de lo que la mesa del video guarda antes de su primer turno (63)', () => {
     const c = coberturaDelTope(VIDEO_MESA_ENCENDIDA, 103.5)
-    expect(c.requerido).toBe(61.3)
+    expect(c.requerido).toBe(63)
     expect(c.cubre).toBe(true)
-    expect(c.detalle).toContain('2 × la vuelta de «aprobar_propuestas» (14.1)')
+    expect(c.detalle).toContain('2 × la vuelta de «aprobar_propuestas» (14.1) = 61.3')
+    expect(c.detalle).toContain('la mesa del video guarda 63')
   })
-  it('a 1080p y 120 s lo requerido (590,8) lo cubre el encargo (633)', () => {
-    expect(coberturaDelTope(con(120, '1080p'), 633)).toMatchObject({ requerido: 590.8, cubre: true })
-    expect(coberturaDelTope(con(120, '720p'), 513)).toMatchObject({ requerido: 470.8, cubre: true })
+  it('🔴 condición de CC6 (CERTIFICACIÓN 1118 · una sola cuenta): en el video, lo requerido ≥ un turno + lo que guarda la mesa; con un tope entre 61,3 y 63 el encargo NO abre', () => {
+    for (const pl of [VIDEO_MESA_ENCENDIDA, con(15, '1080p'), con(120, '720p'), con(120, '1080p')]) {
+      expect(coberturaDelTope(pl, 1).requerido).toBeGreaterThanOrEqual(COTAS.RESERVA_POR_TURNO_USD + loQueSigueDeLaMesa(pl, { vueltas: {} }))
+    }
+    expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 62).cubre).toBe(false)
+    // las mesas que no son de video conservan su cuenta (guardan su cifra fija, no esta)
+    const carrusel = { ...VIDEO_MESA_ENCENDIDA, familia: 'carrusel_mesa' }
+    expect(coberturaDelTope(carrusel, 103.5).requerido).toBe(61.3)
+  })
+  it('a 1080p y 120 s lo requerido (592,5) lo cubre el encargo (633)', () => {
+    expect(coberturaDelTope(con(120, '1080p'), 633)).toMatchObject({ requerido: 592.5, cubre: true })
+    expect(coberturaDelTope(con(120, '720p'), 513)).toMatchObject({ requerido: 472.5, cubre: true })
   })
   it('🔴 las vueltas que se saltan si no caben son las de los guardas del código (no otras)', () => {
     expect(VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves).toEqual([PASO_REVISAR_IMAGENES_CLAVE, PASO_MIRAR_VIDEO])

@@ -10,7 +10,7 @@
  * Condición 1 de CC6 · el INVARIANTE va en el código (`coberturaDelTope`): el tope del encargo cubre una pasada por todos los pasos que gastan, cada uno a su tope,
  * más un turno de la mesa si la plantilla la tiene. Si no, el encargo NO abre (409 claro en `abrirEncargo`), nada de abrir para cortarse después.
  */
-import { COTAS } from './mesa/tipos'
+import { COTAS, FAMILIAS_MESA } from './mesa/tipos'
 import type { Paso, Plantilla } from './tipos'
 
 const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null)
@@ -131,11 +131,18 @@ export function coberturaDelTope(p: Plantilla, tope: number): { requerido: numbe
   const vueltas = pasos
     .filter((s) => (num(s.vuelve_a?.max) ?? 0) > 0 && !seSalta(s))
     .map((s) => ({ clave: s.clave, max: num(s.vuelve_a?.max) as number, costo: costoDeVolver(p, s) }))
-  const requerido = r4(pasada + vueltas.reduce((a, x) => a + x.max * x.costo, 0))
+  const porPasos = r4(pasada + vueltas.reduce((a, x) => a + x.max * x.costo, 0))
+  // 17-nov · T7b · condición de CC6 (CERTIFICACIÓN 1118, una sola cuenta): en el video la mesa guarda lo que sigue con `loQueSigueDeLaMesa` (+ la jefatura) antes de su
+  //   primer turno; lo requerido nunca es menos que eso, o el encargo abriría y la mesa cerraría sin pieza
+  const iMesa = pasos.findIndex((s) => s.funcion === 'mesa')
+  const deLaMesa = iMesa >= 0 && (FAMILIAS_MESA as Record<string, string>)[String(p.familia)] === 'video'
+    ? r4(pasos.slice(0, iMesa).reduce((a, s) => a + Math.max(0, num(s.tope_usd) ?? 0), 0) + COTAS.RESERVA_POR_TURNO_USD + loQueSigueDeLaMesa(p, { vueltas: {} }))
+    : 0
+  const requerido = Math.max(porPasos, deLaMesa)
   const cubre = num(tope) !== null && tope + 1e-9 >= requerido
   const partes = gastan.map((s) => `${s.clave} ${s.tope_usd}`).concat(mesa ? [`un turno de la mesa ${mesa}`] : [])
   const deVueltas = vueltas.map((x) => `${x.max} × la vuelta de «${x.clave}» (${r4(x.costo)})`)
-  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} el peor caso con cada paso a su tope (US$ ${requerido}: una pasada ${partes.join(' + ') || 'sin gasto'}${deVueltas.length ? ` + ${deVueltas.join(' + ')}` : ''})` }
+  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} el peor caso con cada paso a su tope (US$ ${requerido}: una pasada ${partes.join(' + ') || 'sin gasto'}${deVueltas.length ? ` + ${deVueltas.join(' + ')}` : ''} = ${porPasos}${deLaMesa > porPasos ? `; pero la mesa del video guarda ${deLaMesa} antes de su primer turno (su turno + lo que sigue + la jefatura), y manda eso` : ''})` }
 }
 
 /**

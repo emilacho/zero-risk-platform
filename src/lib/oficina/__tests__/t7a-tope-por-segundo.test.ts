@@ -118,24 +118,24 @@ describe('T7a · el tope crece con el largo máximo de la pieza', () => {
 })
 
 describe('T7a · condición 1 de CC6 · el invariante está en el CÓDIGO', () => {
-  it('lo requerido sale de los pasos de la plantilla: una pasada (imágenes 3 + borrador 10 + finales 3 + revisar 0,5 + video 15 + mirar 0,5 + un turno de la mesa 0,6 = 32,6) + desde T7b las 2 rondas del dueño (2 × 13,6) = 59,8: el 58 de 1800 ya NO cubre', () => {
+  it('lo requerido sale de los pasos de la plantilla: una pasada (imágenes 3 + borrador 10 + finales 3 + revisar 0,5 + video 15 + mirar 0,5 + un turno de la mesa 0,6 = 32,6) + desde T7b las 2 rondas del dueño (2 × 13,6) = 59,8; y nunca menos de lo que guarda la mesa del video antes de su primer turno (0,6 + 60,9 con la jefatura = 61,5): el 58 de 1800 ya NO cubre', () => {
     const c = coberturaDelTope(VIDEO_MESA_ENCENDIDA, 58)
-    expect(c.requerido).toBe(59.8)
+    expect(c.requerido).toBe(61.5)
     expect(c.cubre).toBe(false)
-    expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 59.79).cubre).toBe(false)
-    expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 59.8).cubre).toBe(true)
+    expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 61.49).cubre).toBe(false)
+    expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 61.5).cubre).toBe(true)
   })
-  it('con 120 s el requerido crece con el video (59,8 − 15 + 120 = 164,8) y el 163 de la forma de 1800 no lo cubre', () => {
+  it('con 120 s el requerido crece con el video (61,5 − 15 + 120 = 166,5) y el 163 de la forma de 1800 no lo cubre', () => {
     const a = aplicarTopesPorDuracion(conSegundos(VIDEO_MESA_POR_SEGUNDO, 120)).plantilla
-    expect(coberturaDelTope(a, a.limites.tope_encargo_usd)).toMatchObject({ requerido: 164.8, cubre: false })
+    expect(coberturaDelTope(a, a.limites.tope_encargo_usd)).toMatchObject({ requerido: 166.5, cubre: false })
   })
   it('🔴 un encargo cuyo tope no cubre la pasada NO abre (409 claro, sin crear nada)', async () => {
     const mal = copia(VIDEO_MESA_POR_SEGUNDO); mal.limites.tope_encargo_usd_por_segundo = 0 // encargo 43 · video 15 → cubre (32,6)
-    const peor = conSegundos(mal, 120) // encargo 43 y video 120 → requerido 164,8 (con las 2 rondas): NO cubre
+    const peor = conSegundos(mal, 120) // encargo 43 y video 120 → requerido 166,5 (lo que guarda la mesa): NO cubre
     const M = crearMemoria({ plantilla: peor })
     const r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-T7A', dry_run: true, familia: peor.familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
     expect(r.status).toBe(409)
-    expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', requerido_usd: 164.8, tope_usd: 43 })
+    expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', requerido_usd: 166.5, tope_usd: 43 })
     expect(M.encargos.size).toBe(0)
   })
   it('🔴 condición 2 · un sobre que pide MENOS que lo requerido tampoco abre', async () => {
@@ -145,11 +145,11 @@ describe('T7a · condición 1 de CC6 · el invariante está en el CÓDIGO', () =
     expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', tope_usd: 30 })
     expect(M.encargos.size).toBe(0)
   })
-  it('🔴 T7b · con el dato de 1800 (58) el video ya NO abre: lo requerido con las 2 rondas es 59,8 (por eso 202611171900); sin cortar nada, solo no empieza', async () => {
+  it('🔴 T7b · con el dato de 1800 (58) el video ya NO abre: lo requerido es 61,5 (por eso 202611171900); sin cortar nada, solo no empieza', async () => {
     const M = crearMemoria({ plantilla: VIDEO_MESA_POR_SEGUNDO })
     const r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-T7A', dry_run: true, familia: VIDEO_MESA_POR_SEGUNDO.familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
     expect(r.status).toBe(409)
-    expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', requerido_usd: 59.8, tope_usd: 58 })
+    expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', requerido_usd: 61.5, tope_usd: 58 })
     expect(M.encargos.size).toBe(0)
   })
   it('dato inválido: el encargo no abre (409 `topes_invalidos`)', async () => {
