@@ -2,6 +2,7 @@
  * PUERTOS DEL ORQUESTADOR · todo lo que toca el mundo (base, modelos, imágenes, bandeja, Slack) entra por aquí, así el orquestador se prueba con modelo simulado y sin red.
  * Los adaptadores reales (Supabase, imágenes, bandeja, Slack, revisor externo) viven aparte y NO se encienden: la oficina nace apagada.
  */
+import type { LecturaDeHechos } from './hechos-del-negocio'
 import type { FuentesDelCliente } from './chequeos'
 import type { FotoEtiquetada } from './fotos'
 import type { PropiosDelCliente } from './reglas-de-imagen'
@@ -193,6 +194,8 @@ export interface PuertoDeVideo {
 export interface Puertos {
   /** (01-nov) lo que el revisor de la jefatura debe tener además del manual y el brief: resumen vivo, informes, lo que dijo el dueño y las páginas del sitio */
   carpetaParaRevisar?(clientId: string): Promise<Array<{ titulo: string; funcion?: string; texto: string }>>
+  /** (17-nov · coherencia con los hechos) el bloque de hechos del negocio que define Cerebro. Opcional: sin él (o si falla) la revisión recibe el aviso «no hay bloque» y compara contra el manual y el plan */
+  hechosDelNegocio?(clientId: string): Promise<LecturaDeHechos>
   almacen: Almacen
   /** LA CADENA (opcional): solo la mesa de creativos del calendario la usa. Sin él esa familia falla visible (y la cadena ordena el calendario sin ideas al vencer el plazo) */
   cadena?: PuertoDeLaCadena

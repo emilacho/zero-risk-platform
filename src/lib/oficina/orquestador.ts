@@ -33,6 +33,7 @@ import { marcaDeOrigenActiva, origenesDeImagenes } from './marcas-de-origen'
 import { seccionDeCambiosDelDueno } from './cambios-del-dueno'
 import { antesDeLasFotos, despuesDeUnAgente, pedirLoQueElAgenteNecesita, seccionDeMaterialParaElAgente } from './material-orquestador'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
+import { contextoDeHechos } from './hechos-del-negocio'
 import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, type ContextoDePedido } from './pedidos'
 import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../notas-del-dueno/autorevision'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
@@ -238,7 +239,9 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         const material = familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : familiaDeVideo(pl) ? contextoDeRevisorV(pl, e) : contextoDelRevisor(contexto(e))
         // 01-nov · un revisor nunca tiene menos contexto que quien escribe; si el puerto falla, se dice y la revisión sigue
         const carpeta = P.carpetaParaRevisar ? await P.carpetaParaRevisar(String(enc.client_id)).catch((x: unknown) => [{ titulo: 'La carpeta del cliente', funcion: 'lo que el negocio sabe', texto: `(no se pudo leer: ${x instanceof Error ? x.message : String(x)}. No lo tomes como que no existe.)` }]) : []
-        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...material.contexto, ...carpeta] })
+        // 17-nov · coherencia con los hechos: el bloque de Cerebro (o el aviso de que no lo hay) va SIEMPRE como un documento más del revisor
+        const hechos = contextoDeHechos(P.hechosDelNegocio ? await P.hechosDelNegocio(String(enc.client_id)).catch((x: unknown) => ({ no_se_pudo_leer: x instanceof Error ? x.message : String(x) })) : null)
+        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...material.contexto, ...carpeta, hechos] })
         const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
         if (ap.estado === 'esperando') {
           const n = turnoDe(e)
