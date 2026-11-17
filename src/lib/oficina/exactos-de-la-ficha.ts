@@ -1,6 +1,7 @@
 /**
  * CAMBIO 4 · LAS REGLAS DURAS contra la ficha de la oferta, por código (FIRMADAS por Emilio 17-nov 20:37 · DECISION-EMILIO-reglas-duras-de-la-jefatura) · puro.
  *  D1 · vende una oferta cerrada o que aún no existe en su fecha (el campo que escribe la hoja con `ofertaCerradaOInexistenteEn`) ⇒ calendario.
+ *       🔴 Límite declarado (CC7 / CC6): la hoja es la foto de cuando se armó; un cierre que el cerebro registra DESPUÉS no llega aquí (propuesta a Lenovo en la ADENDA 2 del cambio 4).
  *  D2 · usa un dato vencido o aún no vigente en su fecha ⇒ hoja si la hoja lo trae, si no pieza.
  *  D3 · precio que no está en la ficha vigente ⇒ hoja si la hoja lo trae, si no pieza (la regla 3 de texto · se une a la de `chequeos.ts`).
  * Una regla dura se toma SÍ O SÍ: el creador no puede dejar de tomarla.
