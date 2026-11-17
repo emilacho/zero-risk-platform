@@ -32,7 +32,7 @@ import { CONTRATOS_EN_TEXTO } from './pedidos'
 import { fotosDeReferencia, type FotoDeReferencia } from './foto-de-referencia'
 import { avisoDeLaRevisionALaMesa, calidadDeLaFase, faseDeProduccion, imagenesClaveVigentes, leerRevisionDeImagenesClave, pedidosDeImagenClave, PASO_IMAGENES_CLAVE, PASO_REVISAR_IMAGENES_CLAVE, SEGUNDOS_PARA_DOS_CUADROS, tareaDeLaRevisionDeImagenesClave, type ImagenClaveDelPlano, type ImagenesClave, type PlanoDeLaHoja } from './video/imagen-clave'
 import { propuestasDe } from './video/aprobacion'
-import { ARTEFACTO_PEDIDO_BORRADOR, borradoresOmitidos, FUNCION_BORRADOR_VIDEO, pedidosDeLosBorradores, RESOLUCION_DEL_BORRADOR_POR_OMISION, resolucionDelBorrador, type BorradorDeLaPropuesta, type BorradoresDeVideo } from './video/borradores'
+import { ARTEFACTO_PEDIDO_BORRADOR, avisoDeBorradorIncompleto, borradoresOmitidos, FUNCION_BORRADOR_VIDEO, pedidosDeLosBorradores, RESOLUCION_DEL_BORRADOR_POR_OMISION, resolucionDelBorrador, type BorradorDeLaPropuesta, type BorradoresDeVideo } from './video/borradores'
 import { pedidosPorPlano, type PedidoDePlano } from './video/planos'
 import { cotizarYEnviar, encuadrarFotos, leerPlanos, separarPagados, textoDeLoCobrado, unirClips, type ClipCobrado, type PlanoEnviado } from './video/motor-planos'
 
@@ -848,6 +848,9 @@ async function recibirBorradores(P: Puertos, enc: Encargo, pl: Plantilla, indice
     artefacto: { tipo: paso.salida_artefacto, version: nuevo.artefactos[paso.salida_artefacto].version, contenido: art as unknown as Record<string, unknown>, sha256: sha(art), autor: 'brazo-video' },
     ...(gastos.length ? { gastos } : {}),
   })
+  // 17-nov · arreglo (e) de CC6: un lote con propuestas sin video avisa UNA vez en #alertas antes de que el encargo pare en «Propuestas» (lo que falta y por qué, tal cual)
+  const aviso = avisoDeBorradorIncompleto(enc.brief_id, art)
+  if (aviso) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: aviso, dry_run: enc.dry_run })
   return avanzar(P, enc.id)
 }
 

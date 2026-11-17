@@ -45,6 +45,19 @@ export interface BorradoresDeVideo {
   simulado?: boolean
 }
 
+/**
+ * 17-nov · REAPERTURA del reel `2ed549cc` (arreglo (e) de CC6): la P2 se quedó sin video porque el proveedor se quedó sin saldo a medio lote, y nadie avisó antes de llegar a «Propuestas».
+ * El aviso de UN lote de borradores incompleto (una vez por lote = una vez por incidente): cada propuesta sin video, con el motivo que dio el proveedor tal cual. null si no falta ninguno.
+ * No juzga el motivo (no hay lista de errores): lo copia; quien lo lee decide si es saldo y recarga antes de aprobar.
+ */
+export function avisoDeBorradorIncompleto(briefId: string, b: Pick<BorradoresDeVideo, 'propuestas' | 'omitido'>): string | null {
+  if (b.omitido) return null
+  const sin = b.propuestas.filter((p) => !p.url)
+  if (!sin.length) return null
+  const cuales = sin.map((p) => `${p.id} sin video${p.error ? ` (${p.error.replace(/\s+/g, ' ').trim().slice(0, 200)})` : ''}`).join(' · ')
+  return `🎞️ Borrador de video incompleto · ${briefId}: ${cuales}. Las propuestas siguen a «Propuestas» como están. Si el motivo es saldo del proveedor, hay que recargar ANTES de aprobar: el video final fallaría igual y cobraría los planos que alcance.`
+}
+
 /** la calidad del borrador (DATO de la plantilla); mal escrita o ausente → 480p (nunca frena) */
 export function resolucionDelBorrador(limites: Record<string, unknown> | null | undefined): string {
   const r = ((limites?.video as { borrador?: { resolucion?: unknown } } | undefined)?.borrador?.resolucion)

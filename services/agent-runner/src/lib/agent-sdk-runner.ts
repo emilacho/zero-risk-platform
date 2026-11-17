@@ -697,6 +697,13 @@ export interface StreamDrainResult {
   fidelityScoresToolCall: DiscoveryToolCallCapture | null
 }
 
+/** 17-nov · une un bloque de texto del agente al acumulado: si viene de OTRO turno (después del resultado de una herramienta) y el acumulado no termina en salto de línea, va
+ * un salto de párrafo en medio; dentro del mismo turno, pegado como siempre. Nunca quita texto. */
+export function unirBloqueDeTexto(acumulado: string, bloque: string, deOtroMensaje: boolean): string {
+  if (!acumulado || !bloque || !deOtroMensaje || /\n\s*$/.test(acumulado) || /^\s*\n/.test(bloque)) return acumulado + bloque
+  return `${acumulado}\n\n${bloque}`
+}
+
 /**
  * Drain the SDK stream and accumulate text + usage stats.
  * Throws on stream error; caller wraps in try/catch.
@@ -706,6 +713,9 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
   let responseText = ''
   // texto del CIERRE: se vacía cada vez que el empleado pide una herramienta o llega un resultado de herramienta · lo que queda al final es lo escrito después de la última
   let textoFinal = ''
+  // 17-nov · REAPERTURA «nada se pierde sin aviso» (reel 2ed549cc: «…con sus citas.# Propuesta 1 · …») · el texto que el agente escribe DESPUÉS del resultado de una herramienta
+  // (otro turno suyo) se une con un salto de párrafo; los bloques de un mismo turno (el SDK puede mandarlos en mensajes separados) van pegados como siempre. Así, no pegado: así un título que el agente escribió al empezar su respuesta sigue al principio de su línea. No quita ni cambia nada
+  let otroMensaje = false
   let resultStopReason: string | null = null
   let resultSubtype: string | null = null
   let structuredOutput: unknown = undefined
@@ -746,8 +756,9 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
         for (const block of content) {
           if (block.type === 'tool_use') textoFinal = ''
           if (block.type === 'text' && typeof block.text === 'string') {
-            responseText += block.text
-            textoFinal += block.text
+            responseText = unirBloqueDeTexto(responseText, block.text, otroMensaje)
+            textoFinal = unirBloqueDeTexto(textoFinal, block.text, otroMensaje)
+            otroMensaje = false
           } else if (
             block.type === 'tool_use' &&
             typeof block.name === 'string' &&
@@ -796,6 +807,7 @@ export async function drainStream(stream: AsyncIterable<SDKMessage>, opciones?: 
     } else if (msg.type === 'user') {
       // resultado de una herramienta: el turno siguiente es otro; lo escrito antes ya no es el cierre
       textoFinal = ''
+      otroMensaje = true
     } else if (msg.type === 'result') {
       const r = msg as SDKResultStreamMessage
       inputTokens = r.usage?.input_tokens ?? 0
