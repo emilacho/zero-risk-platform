@@ -12,9 +12,9 @@ import { criticoDe, especialistasPertinentes } from '@/lib/oficina/mesa/director
 import type { Tarjeta } from '@/lib/oficina/mesa/tipos'
 
 const leer = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
-const PIEZAS = leer('supabase/migrations/202611172100_oficina_directorio_critica_en_las_piezas.sql')
+const PIEZAS = leer('supabase/migrations/202611172120_oficina_directorio_critica_en_las_piezas.sql')
 const CONCEPTO = leer('supabase/migrations/202611172210_oficina_directorio_critica_en_la_gran_idea.sql')
-const REV_PIEZAS = leer('supabase/reversas/202611172100_oficina_directorio_critica_en_las_piezas_REVERSA.sql')
+const REV_PIEZAS = leer('supabase/reversas/202611172120_oficina_directorio_critica_en_las_piezas_REVERSA.sql')
 const REV_CONCEPTO = leer('supabase/reversas/202611172210_oficina_directorio_critica_en_la_gran_idea_REVERSA.sql')
 
 /** el ARRAY de `SET pertinente_en = ARRAY[...]` de la migración de piezas */

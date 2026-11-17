@@ -6,7 +6,7 @@
 --   La gran idea (`concepto:critica`) va en la migración 202611172210, que se aplica DESPUÉS de que CC1 suba el tope de `concepto_mesa`.
 --   Idempotente. La mesa congela el directorio al abrir: las piezas en vuelo siguen con el directorio con el que abrieron.
 --   NO APLICADA: se aplica después del 🟢 de CC7, de publicar #1130 y del GO de Lenovo al paso; CC7 verifica en vivo.
---   Reversa: supabase/reversas/202611172100_oficina_directorio_critica_en_las_piezas_REVERSA.sql
+--   Reversa: supabase/reversas/202611172120_oficina_directorio_critica_en_las_piezas_REVERSA.sql
 BEGIN;
 
 UPDATE public.oficina_directorio
