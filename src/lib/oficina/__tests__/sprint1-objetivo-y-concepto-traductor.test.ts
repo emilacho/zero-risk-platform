@@ -84,7 +84,8 @@ describe('Mejora 2 · el concepto viaja con la imagen', () => {
   })
   it('«Imagen: ninguna» sigue mandando aunque haya escena', () => {
     const r = traducirPieza('## Lámina 1 · hook\nTítulo: a\nQué se ve: una mesa\nImagen: ninguna', 'carrusel')
-    expect(r.imagenes[0]).toEqual({ ref: 'hook', modo: 'ninguna' })
+    // 17-nov · nada se pierde sin aviso (observación de CC1 en #1125): sigue SIN imagen (no se genera la escena), pero la escena se conserva como concepto
+    expect(r.imagenes[0]).toEqual({ ref: 'hook', modo: 'ninguna', concepto: { que_se_ve: 'una mesa', mensaje: 'a' } })
   })
   it('la foto propia también lleva su concepto (para editarla sobre la foto real)', () => {
     const r = traducirPieza('## Lámina 1 · hook\nTítulo: a\nEscena: el plato en la barra\nImagen: foto:abcd1234', 'carrusel')

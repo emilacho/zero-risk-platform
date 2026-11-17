@@ -29,7 +29,7 @@ export interface ConceptoDeImagen {
   objetivo?: string
 }
 type ConConcepto = { concepto?: ConceptoDeImagen }
-export type ImagenPedida = ({ ref: string; modo: 'real'; foto_id: string } & ConConcepto) | ({ ref: string; modo: 'generada'; descripcion: string } & ConConcepto) | { ref: string; modo: 'ninguna' }
+export type ImagenPedida = ({ ref: string; modo: 'real'; foto_id: string } & ConConcepto) | ({ ref: string; modo: 'generada'; descripcion: string } & ConConcepto) | ({ ref: string; modo: 'ninguna' } & ConConcepto)
 
 export interface Traduccion {
   /** false = no se pudo traducir: la pieza completa va a la jefatura como texto */
@@ -217,7 +217,8 @@ function leerImagen(ref: string, texto: string | undefined, concepto: ConceptoDe
   let t = String(texto ?? '').replace(/`/g, '').replace(/\*\*/g, '').trim()
   const con = conceptoDe(concepto)
   const extra = con ? { concepto: con } : {}
-  if (t && /^(ninguna|sin imagen|no)\b/i.test(t)) return { ref, modo: 'ninguna' }
+  // 17-nov · nada se pierde sin aviso (REAPERTURA · observación de CC1 en #1125 · GO Lenovo): sin imagen, pero la dirección visual de la lámina («Qué se ve», idea) se conserva
+  if (t && /^(ninguna|sin imagen|no)\b/i.test(t)) return { ref, modo: 'ninguna', ...extra }
   // 16-nov · Mejora 2 · sin «Imagen:» pero con la escena de la lámina («Qué se ve:»): se genera esa escena (antes: ninguna imagen)
   if (!t) return con?.que_se_ve ? { ref, modo: 'generada', descripcion: con.que_se_ve, ...extra } : { ref, modo: 'ninguna' }
   const f = /^(?:foto(?: propia)?|real)\s*[:·-]\s*([A-Za-z0-9_.-]{4,80})/i.exec(t)
