@@ -66,7 +66,8 @@ describe('① drainStream reconoce el cierre', () => {
     const d = await drainStream(stream(CIERRE_CORTADO))
     expect(d.cierreConTexto).toBe(true)
     expect(d.textoFinal).toBe(FINAL)
-    expect(d.responseText).toBe(NARRACION + FINAL)
+    // 17-nov · antes quedaba «…primero.# Calendario» PEGADO (la falla del reel 2ed549cc); ahora va un salto de párrafo y no se pierde ni cambia nada
+    expect(d.responseText).toBe(NARRACION + '\n\n' + FINAL)
   })
   it('varios bloques de texto seguidos del cierre se juntan', async () => {
     const d = await drainStream(stream([INIT, texto('Parte A. '), texto('Parte B.'), resultado('error_max_budget_usd', 'end_turn')]))
@@ -150,7 +151,7 @@ describe('③ la corrida completa del corredor (SDK simulado)', () => {
   it('sin tope en el pedido el mismo flujo NO se toca (opt-in puro): ni marca ni cambio de respuesta', async () => {
     const r = await corrida({})
     expect(r.cerradaPorTope).toBeUndefined()
-    expect(r.response).toBe(NARRACION + FINAL) // la respuesta de siempre: todo el texto
+    expect(r.response).toBe(NARRACION + '\n\n' + FINAL) // la respuesta de siempre: todo el texto (17-nov · con el salto de párrafo tras la herramienta)
   })
   it('el corte con cierre y la excepción de salida del proceso (el caso real) también guarda la respuesta', async () => {
     flujo = [...CIERRE_CORTADO, { __lanza: 'Claude Code process exited with code 1' }]
