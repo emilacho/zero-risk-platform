@@ -21,6 +21,7 @@ import { AGENTE_GANCHO_DE_VIDEO, METODO_GANCHO_POR_OMISION } from '@/lib/cadena/
 import { QUIEN_INTEGRA_EL_GANCHO, REGLA_DEL_GANCHO, VOZ_DEL_GANCHO, armarTarea, reglaDelGanchoPara } from '../mesa/pedidos'
 import type { EstadoMesa, Tarjeta } from '../mesa/tipos'
 import { abrirEncargo } from '../orquestador'
+import { ejecutarCodigoV } from '../orquestador-video'
 import { productoresDeLaPieza, familiaDePieza } from '../paso-jefatura'
 import { AGENTE_QUE_MIRA_EL_VIDEO } from '../plantillas/video-mesa'
 // S2-3 · estas pruebas siguen el dato y el camino de ANTES de las imágenes clave (lo nuevo lo prueban video-imagen-clave*.test.ts)
@@ -475,5 +476,59 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
     const no = await abrirCon('carrusel_mesa')
     expect(no.cuerpo).toMatchObject({ estado: 'fallido' })
     expect(String(no.cuerpo.motivo)).toMatch(/manda a la familia carrusel_mesa; esta sala es reel_nuevo/)
+  })
+})
+
+describe.each([
+  ['restaurante (fotos reales del cliente de práctica, 5 con personas)', 'Cliente de práctica', FOTOS],
+  ['B2B de seguridad industrial (una foto de la planta y una de un operario)', 'Cliente B2B de práctica', [
+    { id: 'b2b00001-0000-4000-8000-000000000001', url: 'https://fotos.test/planta.jpg', con_personas: false, origen: 'propia' as const, que_muestra: 'la planta' },
+    { id: 'b2b00002-0000-4000-8000-000000000002', url: 'https://fotos.test/operario.jpg', con_personas: true, origen: 'propia' as const, que_muestra: 'un operario con casco' },
+  ]],
+] as const)('17-nov · Sprint 3 · T1b · %s · persona real solo con permiso registrado (decisión Lenovo B)', (_n, cliente, fotos) => {
+  const conPersonas = fotos.filter((f) => f.con_personas === true).map((f) => f.id)
+  async function jugarCon(permisos?: () => Promise<unknown>) {
+    const hoja = escribirHoja({ ...INSUMOS, client_name: cliente })
+    const M = crearMemoria({ parte: hoja.texto_md, plantilla: VIDEO_MESA, fuentes: { fotos: fotos as never } })
+    M.P.mesa = crearMesaEnMemoria(TRAS_2012)
+    if (permisos) M.P.permisosDePersonaReal = permisos as never
+    const enviados: Array<Record<string, unknown>> = []
+    M.P.video = brazoSimulado(enviados)
+    const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'video_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    let aportes = 0
+    await jugar(M, String(a.cuerpo.encargo_id), a, (t: Turno) => {
+      if (t.tipo === 'dirigir') return { texto: 'Idea rectora: el oficio de cerca.' }
+      if (t.tipo === 'aportar') { aportes++; return { texto: t.agente === VOZ_DEL_GANCHO ? 'Gancho único: el primer gesto.' : `Aporte de ${t.agente}, sin proponer gancho.` } }
+      if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: GUION(Array.from({ length: aportes }, (_, i) => `A${i + 2} usé: lo tomé tal cual para el guion`).join('\n')) }
+      return undefined
+    })
+    const enc = M.encargos.get(String(a.cuerpo.encargo_id))!
+    const datos = enc.estado_del_motor.artefactos['encargo'].datos as { F: { fotos: Array<{ id: string }> }; fotos_sin_permiso?: Array<{ foto_id: string; motivo: string }>; aviso_personas?: string }
+    // en seco la entrega no guarda archivos: el MISMO paso de entrega, sobre este encargo ya cerrado, sin el modo seco (el video es simulado: no descarga nada, US$ 0)
+    const paso = VIDEO_MESA.pasos.find((x) => x.funcion === 'empaquetar_entrega_video')!
+    await ejecutarCodigoV(M.P, { ...enc, dry_run: false }, VIDEO_MESA, paso)
+    const hojaDePublicar = Object.entries(M.llamadas.contenidos).find(([k]) => /_publicar\.md$/.test(k))?.[1] ?? ''
+    return { enc, datos, enviados, hojaDePublicar }
+  }
+  it('🔴 sin permiso registrado: las fotos con personas NO llegan a la mesa ni al brazo; la pieza sale igual y la hoja de publicar lo declara', async () => {
+    const { enc, datos, enviados, hojaDePublicar } = await jugarCon(async () => [])
+    expect(datos.F.fotos.map((f) => f.id).filter((id) => conPersonas.includes(id))).toEqual([])
+    expect(datos.fotos_sin_permiso!.map((x) => [x.foto_id, x.motivo])).toEqual(conPersonas.map((id) => [id, 'sin_permiso']))
+    expect(enc.estado).toBe('cerrado')
+    expect(enviados).toHaveLength(1)
+    for (const id of conPersonas) expect(JSON.stringify(enviados[0])).not.toContain(id)
+    expect(hojaDePublicar).toContain(`⚠️ ${datos.aviso_personas}`)
+    expect(datos.aviso_personas).toContain('no se')
+  })
+  it('🔴 con permiso de video vigente para esas fotos: viajan y no se declara nada', async () => {
+    const { datos, hojaDePublicar } = await jugarCon(async () => [{ id: 'p1', persona: 'el equipo', fotos: conPersonas, alcance: ['video'], vence_en: null, evidencia: 'contrato de prueba', revocado_en: null }])
+    expect(datos.F.fotos.map((f) => f.id)).toEqual(fotos.map((f) => f.id))
+    expect(datos.fotos_sin_permiso).toBeUndefined()
+    expect(hojaDePublicar).not.toContain('personas reales')
+  })
+  it('🔴 sin el puerto del registro (no se puede leer): lo seguro, ninguna foto con personas viaja', async () => {
+    const { datos } = await jugarCon()
+    expect(datos.fotos_sin_permiso!.every((x) => x.motivo === 'registro_no_leido')).toBe(true)
+    expect(datos.F.fotos.some((f) => conPersonas.includes(f.id))).toBe(false)
   })
 })

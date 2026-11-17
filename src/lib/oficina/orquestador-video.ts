@@ -20,6 +20,7 @@ import { avanzar, fallar, plantillaDe, type Respuesta } from './orquestador'
 import { FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO } from './pedidos'
 import { FUNCION_DEL_TABLERO } from './pedidos-laminas'
 import type { Cambios, Encargo, EstadoDelBrazo, FuentesCompletas, Puertos } from './puertos'
+import { avisoDePersonasReales, fotosConPermiso, type FotoRetirada, type PermisoDePersonaReal } from './video/permisos'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 import { CATALOGO_POR_OMISION, RELACIONES_PERMITIDAS, RELACION_POR_FORMATO, fichaPorOmision, type CatalogoDeModelos } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
@@ -58,7 +59,7 @@ const txt = (x: unknown): string => (typeof x === 'string' ? x : x == null ? '' 
 const arr = <T = string>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
 const turnoDe = (e: Estado) => e.pasos_ejecutados + 1
 
-export interface BaseV { brief: BriefLeido; proporcion: string; /** 11-nov · regla #17 · la proporción del brief no la admitía el generador: se usó la de por omisión (se avisa en la hoja de publicar) */ aviso_proporcion?: string; F: FuentesCompletas; familia: 'video'; plataforma: string; elementos: never[]; formato_video: string; /** 17-nov · Sprint 3 · T1 · el catálogo de modelos que leyó el encargo al ABRIR (el mismo que valida la ruta); los encargos de antes no lo traen: el del código */ catalogo_de_modelos?: CatalogoDeModelos }
+export interface BaseV { brief: BriefLeido; proporcion: string; /** 11-nov · regla #17 · la proporción del brief no la admitía el generador: se usó la de por omisión (se avisa en la hoja de publicar) */ aviso_proporcion?: string; F: FuentesCompletas; familia: 'video'; plataforma: string; elementos: never[]; formato_video: string; /** 17-nov · Sprint 3 · T1 · el catálogo de modelos que leyó el encargo al ABRIR (el mismo que valida la ruta); los encargos de antes no lo traen: el del código */ catalogo_de_modelos?: CatalogoDeModelos; /** 17-nov · T1b · las fotos con personas reales que no viajaron (sin permiso vigente) y lo que se declara */ fotos_sin_permiso?: FotoRetirada[]; aviso_personas?: string }
 const baseV = (e: Estado): BaseV => datos(e, 'encargo') as unknown as BaseV
 
 /** lo que la mesa deja en el artefacto `guion` */
@@ -104,6 +105,12 @@ export async function ejecutarCodigoV(P: Puertos, enc: Encargo, pl: Plantilla, p
 async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCodigoV> {
   const fu = await P.fuentes(enc.client_id)
   if ('error' in fu) return { res: { costo_usd: 0 }, fallido: `no se pudieron leer las fuentes del cliente: ${fu.error}` }
+  // 17-nov · Sprint 3 · T1b · decisión Lenovo (B): una foto propia con personas reales solo viaja con su permiso registrado. Se filtra AQUÍ, una vez: la mesa, la cotización,
+  //   el pedido, las fichas de personaje y las imágenes clave leen estas fotos. Lo retirado se declara; la pieza sigue (sin revisión humana nueva)
+  const permisos = await permisosDelCliente(P, enc.client_id)
+  const pf = fotosConPermiso(fu.fotos ?? [], permisos, 'video', P.ahora())
+  fu.fotos = pf.fotos
+  const aviso_personas = avisoDePersonasReales(pf.retiradas)
   const parte = await P.parte(enc.parte_id, enc.client_id)
   if (!parte) return { res: { costo_usd: 0 }, fallido: `la parte ${enc.parte_id} no existe para este cliente` }
   const brief = parsearBrief(parte.texto, enc.brief_id)
@@ -127,7 +134,7 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const catalogo_de_modelos = await catalogoDelBrazo(P)
   const cotizacion = enc.dry_run ? null : await cotizarPrimero(P, enc, pl, brief, fu.fotos, proporcion, catalogo_de_modelos)
   if (cotizacion && !cotizacion.ok) return { res: { costo_usd: 0 }, fallido: cotizacion.motivo }
-  return { res: { costo_usd: 0, artefacto: { brief, proporcion, ...(aviso_proporcion ? { aviso_proporcion } : {}), F: fu, familia: 'video', plataforma, elementos: [], formato_video, catalogo_de_modelos, ...(cotizacion ? { cotizacion: cotizacion.rutas } : {}) } } }
+  return { res: { costo_usd: 0, artefacto: { brief, proporcion, ...(aviso_proporcion ? { aviso_proporcion } : {}), F: fu, familia: 'video', plataforma, elementos: [], formato_video, catalogo_de_modelos, ...(pf.retiradas.length ? { fotos_sin_permiso: pf.retiradas, aviso_personas } : {}), ...(cotizacion ? { cotizacion: cotizacion.rutas } : {}) } } }
 }
 
 /** cuánto se le deja gastar al video al cotizar: el tope por video de la plantilla, sin pasar el del encargo (el brazo además lo recorta al aprobado) */
@@ -137,6 +144,14 @@ const topeDeLaCotizacion = (pl: Plantilla): number => {
 }
 
 /** la cotización gratis de cada ruta posible · el texto que devolvió el proveedor, si lo hubo, queda en el motivo del fallo (para poder verlo) */
+/** 17-nov · T1b · el registro de permisos del cliente por su puerto · sin método o con error: null (nadie tiene permiso: lo seguro) · nunca lanza */
+export async function permisosDelCliente(P: Pick<Puertos, 'permisosDePersonaReal'>, clientId: string): Promise<PermisoDePersonaReal[] | null> {
+  if (!P.permisosDePersonaReal) return null
+  try {
+    const r = await P.permisosDePersonaReal(clientId)
+    return Array.isArray(r) ? r : null
+  } catch { return null }
+}
 /** 17-nov · T1 · el catálogo del brazo por su puerto · sin método, o si falla o devuelve algo raro: el del código (nunca lanza) */
 export async function catalogoDelBrazo(P: Pick<Puertos, 'video'>): Promise<CatalogoDeModelos> {
   if (!P.video?.catalogo) return CATALOGO_POR_OMISION
@@ -297,6 +312,7 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
     `Red: ${b.brief.red} · formato: ${b.brief.formato} (${b.formato_video}, ${b.proporcion}) · ${g?.segundos ?? pedidoEnviado?.segundos ?? '?'} s`,
     `Hora de publicación: ${cuando ? (cuando.de === 'fila' ? `${cuando.fecha}${cuando.hora ? ' ' + cuando.hora : ''}${b.F.zona ? ' (' + b.F.zona + ')' : ' (zona del cliente sin registrar)'}` : `(aprobar antes de ${cuando.fecha})`) : 'sin fecha: se decide al aprobar'}`,
     b.aviso_proporcion ? `⚠️ ${b.aviso_proporcion}.` : '',
+    b.aviso_personas ? `⚠️ ${b.aviso_personas}` : '',
     ROTULO_DEL_VIDEO_GENERADO,
     v.copia === 'solo_proveedor' ? `⚠️ El video quedó solo en el proveedor${v.expires_at ? ` y vence ${v.expires_at}` : ''}: descargarlo al aprobar.` : '',
     v.simulado ? '(ensayo: el video es simulado)' : '',
