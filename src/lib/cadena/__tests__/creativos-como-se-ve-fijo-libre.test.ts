@@ -109,25 +109,33 @@ describe('punto 2 · «cómo se ve» llega a la hoja de CADA pieza (una por fami
       expect(b!.visual).toBe(`${PREFIJO_VISUAL_DE_CAMPANA}Madera y pan, nada de estudio. · planos cerrados${id === 'F1-S1-ig-foto' ? ' · foto f-01' : ''}`)
     })
   }
-  it('la idea elegida de cada pieza viaja como FIJO con su porqué', () => {
-    expect(parsearBrief(h.texto_md, 'F1-S1-ig-reel')!.lo_decidido).toContain('FIJO · idea de esta pieza: C1-I04 · la puerta que se abre · PORQUÉ: la eligió el calendario del banco de ideas del capítulo F1')
+  it('la idea elegida de cada pieza viaja como FIJO con su porqué; su descripción visual NO es lo fijo: va a SUGERENCIAS', () => {
+    // 17-nov (RESPUESTA a Lenovo «el brief trae el cómo»): lo fijo de la idea es el qué y el quién (id, mensaje, protagonista); «la puerta que se abre» es el cómo que imaginó el banco
+    const fijo = parsearBrief(h.texto_md, 'F1-S1-ig-reel')!.lo_decidido!.find((x) => x.startsWith('FIJO · idea de esta pieza: C1-I04'))!
+    expect(fijo).toMatch(/^FIJO · idea de esta pieza: C1-I04 · mensaje: .+ · PORQUÉ: la eligió el calendario del banco de ideas del capítulo F1$/)
+    expect(fijo).not.toContain('la puerta que se abre')
+    expect(parsearBrief(h.texto_md, 'F1-S1-ig-reel')!.texto).toContain('  - cómo la imaginó el banco (C1-I04): la puerta que se abre · la mesa puede mejorarla o reemplazarla diciendo por qué')
   })
 })
 
-describe('gran idea vieja · la hoja sale EXACTA como hoy', () => {
-  it('sin partes no hay LO DECIDIDO y la línea VISUAL es la de siempre', () => {
+describe('gran idea vieja (sin las partes de «cómo se ve») · 17-nov (RESPUESTA a Lenovo «el brief trae el cómo»): igual lleva FIJO (la idea) y LIBRE', () => {
+  it('LO DECIDIDO trae solo la idea y lo LIBRE (ningún FIJO de «cómo se ve» que la gran idea no decidió); la línea VISUAL es la de siempre', () => {
     const h = escribirHoja(INS(VIEJA))
-    expect(h.texto_md).not.toContain(`- ${CAMPO_LO_DECIDIDO}:`)
-    expect(h.texto_md).not.toMatch(/FIJO ·|LIBRE ·/)
+    expect(h.texto_md).toContain(`- ${CAMPO_LO_DECIDIDO}:`)
+    const ld = parsearBrief(h.texto_md, 'F1-S1-ig-foto')!.lo_decidido!
+    expect(ld).toHaveLength(2)
+    expect(ld[0]).toMatch(/^FIJO · idea de esta pieza: C1-I\d+ · mensaje: /)
+    expect(ld[1]).toBe(LIBRE_DE_LA_PIEZA)
+    expect(h.texto_md).not.toMatch(/FIJO · (luz|encuadre|fotos propias|nunca se muestra):/)
     expect(parsearBrief(h.texto_md, 'F1-S1-ig-foto')!.visual).toBe(`${PREFIJO_VISUAL_DE_CAMPANA}Luz cálida, madera, manos sobre la mesa. · planos cerrados · foto f-01`)
-    expect(parsearBrief(h.texto_md, 'F1-S1-ig-foto')!.lo_decidido).toBeUndefined()
   })
   it('la misma gran idea vieja con y sin el campo nuevo en el tipo escribe el mismo texto (control: quitar las partes deja la hoja idéntica a la vieja salvo la dirección libre)', () => {
     const sinPartes = { ...CON_PARTES, como_se_ve_partes: undefined, como_se_ve: 'Luz cálida, madera, manos sobre la mesa.' }
     expect(escribirHoja(INS(sinPartes)).texto_md).toBe(escribirHoja(INS(VIEJA)).texto_md)
   })
-  it('loDecidido: sin partes, vacío', () => {
-    expect(loDecidido(VIEJA, null, null)).toEqual([])
+  it('loDecidido sin partes: sin idea ni mensaje, solo LIBRE; sin idea con el mensaje de la fila, FIJO del mensaje y LIBRE', () => {
+    expect(loDecidido(VIEJA, null, null)).toEqual([LIBRE_DE_LA_PIEZA])
+    expect(loDecidido(VIEJA, null, null, 'hay mesa desde las siete')).toEqual(['FIJO · mensaje de esta pieza: hay mesa desde las siete · PORQUÉ: lo fija la fila del calendario (no tiene idea del banco)', LIBRE_DE_LA_PIEZA])
   })
 })
 
