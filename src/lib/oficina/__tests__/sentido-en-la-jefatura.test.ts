@@ -67,18 +67,26 @@ describe('con ficha · cada hallazgo a su destino', () => {
     expect(llavesYaDevueltas(e)).toEqual(new Set(['F-7:calendario']))
   })
 
-  it('sentido · pieza (o lo exacto que es de la pieza): vuelve a la mesa como corrección, sin devolución', () => {
-    const { res, j } = aplicar([], { hoja: BRIEF_CON_FICHA, pieza: 'El principal a $9,90' })
+  it('sentido · pieza con cita verificada: vuelve a la mesa como corrección, sin devolución', () => {
+    const { res, j } = aplicar([`texto: sentido · pieza: dice que ya atiende en persona — ficha: «${LINEA_NO}»`], { hoja: BRIEF_CON_FICHA })
     expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBe(true)
-    expect((res.artefacto as { aviso_a_la_mesa: string }).aviso_a_la_mesa).toMatch(/sentido · pieza: el precio «\$9,90»/)
+    expect((res.artefacto as { aviso_a_la_mesa: string }).aviso_a_la_mesa).toContain('sentido · pieza: dice que ya atiende en persona — ficha: «')
     expect(j.sentido!.devoluciones).toEqual([])
   })
 
-  it('el precio vigente no da hallazgo: sin desacuerdos la pieza sigue limpia', () => {
-    const { res, j, prefijo } = aplicar([], { hoja: BRIEF_CON_FICHA, pieza: 'El principal a $7' })
+  it('sin hallazgos la pieza sigue limpia (con ficha, solo el jefe juzga: un precio raro no dispara nada sin el chequeo exacto)', () => {
+    const { res, j, prefijo } = aplicar([], { hoja: BRIEF_CON_FICHA, pieza: 'El principal a $9,90' })
     expect(res.fichas).toBeUndefined()
+    expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBeUndefined()
     expect(j.sentido!.hallazgos).toEqual([])
     expect(prefijo).toBe('')
+  })
+
+  it('un hallazgo de la pieza JUNTO a uno de la cadena: no vuelve a la mesa (rehacer la pieza no arregla el calendario); los dos quedan como desacuerdo', () => {
+    const { res, e, j } = aplicar(['texto: falta el llamado', `texto: sentido · calendario: no va en esta fecha — ficha: «${LINEA_NO}»`], { hoja: BRIEF_CON_FICHA })
+    expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBeUndefined()
+    expect(j.sentido!.devoluciones.map((d) => d.destino)).toEqual(['calendario'])
+    expect(e.fichas.map((f) => f.donde).sort()).toEqual(['calendario', 'texto'])
   })
 
   it('cita que no está en la ficha: va a la pieza, marcada en la bandeja, nunca a la cadena', () => {

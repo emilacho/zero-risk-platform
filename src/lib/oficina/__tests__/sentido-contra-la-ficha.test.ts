@@ -1,42 +1,12 @@
 /**
  * CAMBIO 4 · la jefatura de piezas revisa el sentido contra la ficha (PLAN CC4 + ADENDA 1 · lo que mide CC7 en su RESPUESTA al plan).
  * La hoja de cada cliente se arma con la función REAL de la cadena (`fichaEnLineas`), así la prueba lee lo mismo que lee la oficina: Náufrago y 2 dobles de otro rubro.
+ * Lo exacto por código (punto 2) se prueba aparte, en `exactos-de-la-ficha.test.ts`.
  */
 import { describe, expect, it } from 'vitest'
-import { fichaEnLineas, type FichaDeOferta } from '../../cadena/ficha-de-oferta'
-import {
-  centavos, chequeosExactos, citaVerificada, contextoDeLaFicha, fichaDeLaHoja, hallazgosDelJefe, leerHallazgoDeSentido, marcaDeVuelta, preciosDelTexto, repartir,
-  type Hallazgo,
-} from '../sentido-contra-la-ficha'
-
-/** una sección de hoja como la escribe `src/lib/cadena/hoja.ts` (OFERTA + FICHA DE LA OFERTA como lista + el resto de campos) */
-function hoja(oferta: string | null, ficha: FichaDeOferta | null | 'sin_fichas', fecha: string, extra: string[] = []): string {
-  const L = ['### F-01 · Instagram · post', `- QUÉ ES: post para Instagram`, `- OFERTA: ${oferta ?? 'sin oferta en la fila · declarado'}`]
-  if (ficha === 'sin_fichas') L.push('- FICHA DE LA OFERTA: sin fichas de hechos todavía · declarado')
-  else if (!ficha) L.push(`- FICHA DE LA OFERTA: sin ficha para «${oferta}» · declarado`)
-  else { L.push('- FICHA DE LA OFERTA:'); for (const l of fichaEnLineas(ficha, fecha)) L.push(`  - ${l}`) }
-  L.push('- MENSAJE (uno): lo de la pieza', ...extra)
-  return L.join('\n')
-}
-
-// tres clientes de rubros distintos (agnóstico: «oferta», nunca un rubro en el código)
-const CLIENTES: Array<{ nombre: string; ficha: FichaDeOferta; precioBien: string; precioMal: string }> = [
-  {
-    nombre: 'Náufrago (comida)',
-    ficha: { clave: 'olon', nombre: 'Olón', que_es: { valor: 'cocina de mar a domicilio', fuente: 'ficha:1' }, oferta_y_precio: [{ valor: 'combo del día $8,50', fuente: 'manual:precios' }, { valor: 'promo de apertura $5', fuente: 'plan:p2', vigente_hasta: '2026-11-10' }], no_se_puede_afirmar: [{ valor: 'atención en local antes de diciembre', fuente: 'cerebro:dueno · client_sede_datos:9', vigente_desde: '2026-11-01' }] },
-    precioBien: 'Pide el combo del día a $8.50', precioMal: 'Pide el combo del día a $9.90',
-  },
-  {
-    nombre: 'tienda en línea (doble)',
-    ficha: { clave: 'linea-hogar', nombre: 'Línea hogar', que_es: { valor: 'textiles para el hogar', fuente: 'ficha:2' }, oferta_y_precio: [{ valor: 'juego de sábanas USD 1.200', fuente: 'manual:catalogo' }, { valor: 'envío gratis desde $50', fuente: 'plan:p1', vigente_hasta: '2026-11-10' }] },
-    precioBien: 'Juego de sábanas a USD 1200', precioMal: 'Juego de sábanas a USD 1,2',
-  },
-  {
-    nombre: 'servicio profesional (doble)',
-    ficha: { clave: 'asesoria-tributaria', nombre: 'Asesoría tributaria', que_es: { valor: 'declaración anual para personas', fuente: 'ficha:3' }, oferta_y_precio: [{ valor: 'declaración anual 120 dólares', fuente: 'manual:tarifas' }, { valor: 'primera consulta gratis', fuente: 'plan:p3', vigente_desde: '2026-12-01' }] },
-    precioBien: 'La declaración anual por 120 dólares', precioMal: 'La declaración anual por 150 dólares',
-  },
-]
+import { fichaEnLineas } from '../../cadena/ficha-de-oferta'
+import { citaVerificada, contextoDeLaFicha, fichaDeLaHoja, hallazgosDelJefe, leerHallazgoDeSentido, marcaDeVuelta, repartir, type Hallazgo } from '../sentido-contra-la-ficha'
+import { CLIENTES, hoja } from './_ficha-de-prueba'
 
 describe('la ficha se lee tal cual de la hoja', () => {
   it.each(CLIENTES)('$nombre · con ficha: las líneas son las de fichaEnLineas, sin copiar aparte', ({ ficha }) => {
@@ -60,9 +30,6 @@ describe('la ficha se lee tal cual de la hoja', () => {
     for (const f of casos) {
       expect(f.estado).toBe('sin_ficha')
       expect(contextoDeLaFicha(f)).toBeNull()
-      const ex = chequeosExactos(f, 'Pide el combo a $99')
-      expect(ex.hallazgos).toEqual([])
-      expect(ex.declarado[0]).toMatch(/^sin ficha para esta oferta/)
       // el jefe no tiene contra qué citar: nada se lee como sentido, NADA vuelve al calendario
       const j = hallazgosDelJefe(['texto: sentido · calendario: la oferta no existe — ficha: «qué es: algo»'], f)
       expect(j.hallazgos).toEqual([])
@@ -72,75 +39,6 @@ describe('la ficha se lee tal cual de la hoja', () => {
 
   it('una oferta «… · declarado» no se toma como oferta', () => {
     expect(fichaDeLaHoja(hoja(null, 'sin_fichas', '2026-11-20')).oferta).toBeNull()
-  })
-})
-
-describe('el precio · exacto, por código (casos de CC7)', () => {
-  it('cifras: 12,50 = 12.5 = $12.50 · 1.200 = 1200 ≠ 1,2', () => {
-    expect(centavos('12,50')).toBe(1250)
-    expect(centavos('12.5')).toBe(1250)
-    expect(preciosDelTexto('$12.50')[0].centavos).toBe(1250)
-    expect(centavos('1.200')).toBe(120000)
-    expect(centavos('1200')).toBe(120000)
-    expect(centavos('1,2')).toBe(120)
-    expect(centavos('1.200')).not.toBe(centavos('1,2'))
-  })
-
-  it('lo que no es precio no dispara: fechas, horas, %, teléfonos, 2x1, cantidades sueltas', () => {
-    expect(preciosDelTexto('Del 21/11 al 30/11, de 12:30 a 15:00, 20 % menos, llama al 0991234567, 2x1 y 3 sabores')).toEqual([])
-  })
-
-  it.each(CLIENTES)('$nombre · el precio vigente no da hallazgo; uno que no está, sí (va a la pieza si la hoja no lo trae)', ({ ficha, precioBien, precioMal }) => {
-    const f = fichaDeLaHoja(hoja(ficha.clave, ficha, '2026-11-20'))
-    expect(chequeosExactos(f, precioBien).hallazgos).toEqual([])
-    const mal = chequeosExactos(f, precioMal).hallazgos
-    expect(mal).toHaveLength(1)
-    expect(mal[0]).toMatchObject({ destino: 'pieza', origen: 'codigo' })
-  })
-
-  it('el precio equivocado que trae la HOJA vuelve a la hoja, no a la pieza', () => {
-    const { ficha, precioMal } = CLIENTES[0]
-    const f = fichaDeLaHoja(hoja(ficha.clave, ficha, '2026-11-20', ['- LLAMADO A LA ACCIÓN: pide el combo a $9,90']))
-    expect(chequeosExactos(f, precioMal).hallazgos[0].destino).toBe('hoja')
-  })
-
-  it('una pieza sin precio no dispara nada · una ficha sin precio vigente no compara y lo declara', () => {
-    const f = fichaDeLaHoja(hoja('olon', CLIENTES[0].ficha, '2026-11-20'))
-    expect(chequeosExactos(f, 'Ven a probar lo nuevo').hallazgos).toEqual([])
-    const sinPrecio: FichaDeOferta = { clave: 'x', que_es: { valor: 'algo', fuente: 'ficha:9' } }
-    const g = fichaDeLaHoja(hoja('x', sinPrecio, '2026-11-20'))
-    const r = chequeosExactos(g, 'por $10')
-    expect(r.hallazgos).toEqual([])
-    expect(r.declarado.join(' ')).toMatch(/no trae un precio vigente/)
-  })
-
-  it('un precio VENCIDO en la fecha de la fila no cuenta como vigente', () => {
-    // «promo de apertura $5» venció el 10-nov: en una fila del 20-nov, $5 en la pieza es un hallazgo
-    const f = fichaDeLaHoja(hoja('olon', CLIENTES[0].ficha, '2026-11-20'))
-    const r = chequeosExactos(f, 'promo a $5').hallazgos
-    expect(r.some((h) => /\$5/.test(h.que))).toBe(true)
-  })
-})
-
-describe('dato VENCIDO / AÚN NO VIGENTE que se usa igual · con la fecha DE LA FILA, nunca con hoy', () => {
-  it('positivo: la hoja usa el dato vencido → hoja', () => {
-    const f = fichaDeLaHoja(hoja('linea-hogar', CLIENTES[1].ficha, '2026-11-20', ['- LLAMADO A LA ACCIÓN: envío gratis desde $50']))
-    const h = chequeosExactos(f, 'Sábanas nuevas').hallazgos
-    expect(h).toEqual([expect.objectContaining({ destino: 'hoja', origen: 'codigo' })])
-    expect(h[0].linea_de_la_ficha).toMatch(/^oferta y precio: VENCIDO · envío gratis desde \$50/)
-  })
-  it('positivo: solo la pieza lo usa → pieza', () => {
-    const f = fichaDeLaHoja(hoja('asesoria-tributaria', CLIENTES[2].ficha, '2026-11-20'))
-    expect(chequeosExactos(f, 'Tu primera consulta gratis').hallazgos).toEqual([expect.objectContaining({ destino: 'pieza' })])
-  })
-  it('negativo: nadie lo usa → nada', () => {
-    const f = fichaDeLaHoja(hoja('linea-hogar', CLIENTES[1].ficha, '2026-11-20'))
-    expect(chequeosExactos(f, 'Sábanas nuevas').hallazgos).toEqual([])
-  })
-  it('fila FUTURA: lo que hoy está «aún no vigente» en su fecha ya vale → sin hallazgo', () => {
-    // «primera consulta gratis» empieza el 1-dic: la fila es del 5-dic, así que la ficha de la hoja ya no lo marca
-    const f = fichaDeLaHoja(hoja('asesoria-tributaria', CLIENTES[2].ficha, '2026-12-05'))
-    expect(chequeosExactos(f, 'Tu primera consulta gratis').hallazgos).toEqual([])
   })
 })
 
@@ -187,7 +85,7 @@ describe('el sentido · lo juzga el jefe, el código verifica la cita y el desti
 })
 
 describe('el regreso · llave única y tope', () => {
-  const h = (destino: Hallazgo['destino']): Hallazgo => ({ destino, origen: 'codigo', que: 'x', linea_de_la_ficha: 'l' })
+  const h = (destino: Hallazgo['destino']): Hallazgo => ({ destino, origen: 'jefe', que: 'x', linea_de_la_ficha: 'l' })
   it('una devolución por fila y destino: repetir el hallazgo no la duplica', () => {
     const r = repartir([h('hoja'), h('hoja'), h('calendario')], 'F-01', 'enc-1', new Set())
     expect(r.devoluciones.map((d) => d.llave)).toEqual(['F-01:hoja', 'F-01:calendario'])

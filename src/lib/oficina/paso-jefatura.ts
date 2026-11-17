@@ -11,7 +11,7 @@ import type { PayloadDeRevision, Productor, SalidaDeRevision } from '../jefatura
 import { datos, fichaNueva } from './ayudas'
 import { claseDe } from './clase'
 import { quedaDesacuerdoDeHechos } from './hechos-del-negocio'
-import { chequeosExactos, hallazgosDelJefe, marcaDeVuelta, repartir, type Destino, type Devolucion, type FichaDeLaHoja, type Hallazgo } from './sentido-contra-la-ficha'
+import { hallazgosDelJefe, marcaDeVuelta, repartir, type Destino, type Devolucion, type FichaDeLaHoja, type Hallazgo } from './sentido-contra-la-ficha'
 import type { ContextoDelRevisor } from './ciego'
 import type { Encargo } from './puertos'
 import type { ResultadoDePaso } from './motor'
@@ -138,8 +138,9 @@ export interface OpcionesDeAplicacion {
   /**
    * cambio 4 · la ficha de la oferta que trae la hoja y lo necesario para el regreso. Sin esto (o sin ficha) la aplicación es EXACTAMENTE la de antes.
    * `yaDevueltas`: las llaves fila:destino ya devueltas (una por fila y destino; la segunda va a una persona).
+   * `exactos`: los chequeos exactos por código (punto 2 · `exactos-de-la-ficha.ts`); sin él, solo el jefe juzga el sentido (Emilio decide antes de meter verificaciones por código).
    */
-  sentido?: { ficha: FichaDeLaHoja; textoDeLaPieza: string; filaId: string | null; encargoId: string; yaDevueltas: ReadonlySet<string> }
+  sentido?: { ficha: FichaDeLaHoja; textoDeLaPieza: string; filaId: string | null; encargoId: string; yaDevueltas: ReadonlySet<string>; exactos?: (f: FichaDeLaHoja, textoDeLaPieza: string) => { hallazgos: Hallazgo[]; declarado: string[] } }
 }
 
 /** cambio 4 · las llaves ya devueltas que guarda el encargo (de una revisión anterior del mismo encargo, p. ej. tras la vuelta a la mesa) */
@@ -208,7 +209,7 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
  * los hallazgos que vuelven a la pieza se suman como líneas (van a la mesa o quedan como desacuerdo); los de la cadena quedan como devoluciones.
  */
 function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicacion['sentido']>): { lineas: string[]; datos: DatosDelSentido } {
-  const ex = chequeosExactos(s.ficha, s.textoDeLaPieza)
+  const ex = s.exactos ? s.exactos(s.ficha, s.textoDeLaPieza) : { hallazgos: [], declarado: [] }
   const jefe = hallazgosDelJefe(crudas, s.ficha)
   const hallazgos = [...ex.hallazgos, ...jefe.hallazgos]
   const r = repartir(hallazgos, s.filaId, s.encargoId, s.yaDevueltas)
