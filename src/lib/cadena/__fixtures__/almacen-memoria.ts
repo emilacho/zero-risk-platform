@@ -396,6 +396,10 @@ export class AlmacenMemoria implements Almacen {
     return { ok: true, cerradas: 0 }
   }
   sobresEmitidos: unknown[] = []
+  /** 17-nov · los permisos de «producir estas filas» */
+  permisosDeFilas: import('../elegidas').PermisoDeFila[] = []
+  async elegirFilas(permisos: import('../elegidas').PermisoDeFila[]): Promise<void> { this.permisosDeFilas.push(...structuredClone(permisos)) }
+  async filasElegidas(campanaId: string, ahora: string): Promise<string[]> { return [...new Set(this.permisosDeFilas.filter((p) => p.campana_id === campanaId && p.vence_en > ahora).map((p) => p.fila_id))] }
   async emitirSobre(sobre: SobreDeProducir | SobreDeLote | SobreDePlan | SobreDeTanda): Promise<ResultadoDeEmision> {
     this.sobresEmitidos.push(sobre)
     if (this.semilla.intakeApagado) return { resultado: 'rechazado', detalle: 'intake_apagado' }

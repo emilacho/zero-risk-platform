@@ -450,6 +450,15 @@ export function almacenDeSupabase(): Almacen {
     async cambiarEstadoDeFilas(campanaId, version, ids, estado) { const { error } = await db.from('cadena_calendario_filas').update({ estado }).eq('campana_id', campanaId).eq('calendario_version', version).in('id', ids); if (error) fallo(error) },
     // 10-nov · LOTE MUERTO · los envíos de ESTA llave según la sala: las llaves exactas de su entrada (original + reintentos), no cliente + semana
     // ADENDA 3 de CC7: con las filas de cada sobre (`payload.envelope_payload.fila_ids`), para no contar envíos cuyas filas ya salieron
+    // 17-nov · «producir estas filas» · un permiso por fila elegida (solo inserta) y la lectura de los vigentes
+    async elegirFilas(permisos) {
+      const { error } = await db.from('cadena_filas_elegidas').insert(permisos)
+      if (error) throw new Error(`cadena_filas_elegidas · ${error.message}`)
+    },
+    async filasElegidas(campanaId, ahora) {
+      const filas = await lista<{ fila_id: string }>(db.from('cadena_filas_elegidas').select('fila_id').eq('campana_id', campanaId).gt('vence_en', ahora))
+      return [...new Set(filas.map((f) => f.fila_id))]
+    },
     async enviosDeLote(clientId, lote, llave, filasDeHoy) {
       const llaves = llavesDelRegistro(clientId, lote, llave)
       const filas = await lista<{ idempotency_key: string; created_at: string; payload: unknown }>(db.from('sala_event_log').select('idempotency_key, created_at, payload').eq('client_id', clientId).in('idempotency_key', llaves))
