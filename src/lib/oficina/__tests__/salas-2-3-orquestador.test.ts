@@ -324,6 +324,7 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     const deManual = { obligatorio: [{ id: 'o1', texto: 'una idea por lámina', claves: ['plato'], fuente: 'manual', cita: 'una idea por frase' }], prohibido: [] }
     await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada('hook', deManual as never) }), mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }) }))
     expect(arte(M, id, 'visual_direction').reglas_marcadas).toEqual([])
+    expect(arte(M, id, 'visual_direction').reglas_comprobadas).toEqual([{ id: 'o1', fuente: 'manual', por: 'cita' }])
     expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id === 'vd-regla-o1')).toBe(false)
   })
   it('🔴 17-nov · una regla de imagen con cita INVENTADA NO se descarta: queda marcada, a la vista, con su ficha', async () => {

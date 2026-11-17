@@ -538,7 +538,7 @@ function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Pl
   for (const x of ci.marcadas) fichas.push(fichaNueva(`vd-regla-${x.id}`, 'chequeo', 'imagen', 'sugerencia', `regla de imagen «${x.id}» sin referencia comprobable (${x.motivo}): se usa igual, marcada`, 'referencias al brief, la hoja, la gran idea, el manual o el plan'))
   const gen = efectivas.filter((i) => i.modo === 'generada').map((i) => i.ref)
   const requiere = gen.length > 0 || efectivas.some((i) => i.modo === 'real' && confianzaDeLaFoto(b.F.fotos, i.foto_id) !== 'alta')
-  return { res: { costo_usd: 0, artefacto: { ...v, imagenes: efectivas, reglas_de_imagen: ci.validas, reglas_marcadas: ci.marcadas, refs_generadas: gen, hay_generadas: gen.length > 0, requiere_mirar: requiere }, ...(fichas.length ? { fichas } : {}) } }
+  return { res: { costo_usd: 0, artefacto: { ...v, imagenes: efectivas, reglas_de_imagen: ci.validas, reglas_marcadas: ci.marcadas, reglas_comprobadas: ci.comprobadas, refs_generadas: gen, hay_generadas: gen.length > 0, requiere_mirar: requiere }, ...(fichas.length ? { fichas } : {}) } }
 }
 
 function mirar(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, esRe = false): ProcesoL {

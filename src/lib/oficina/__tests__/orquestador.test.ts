@@ -294,7 +294,8 @@ describe('lo que el código decide aunque el curador diga otra cosa', () => {
     await correr(M, id, { ...guionGenerada(), direccion_visual: () => ({ texto: direccionGenerada(porCampo as unknown as typeof REGLAS_CEVICHE) }) })
     const e = M.encargos.get(id)!.estado_del_motor
     expect(e.fichas.some((f) => f.id === 'vd-regla-o8')).toBe(false)
-    expect((e.artefactos['visual_direction'].datos.reglas_de_imagen as { obligatorio: Array<{ id: string; fuente?: string; campo?: string; marcada?: string }> }).obligatorio.find((r) => r.id === 'o8')).toEqual({ id: 'o8', texto: 'el plato de la pieza', claves: ['plato'], fuente: 'hoja', campo: 'Qué es' })
+    expect((e.artefactos['visual_direction'].datos.reglas_de_imagen as { obligatorio: Array<{ id: string; fuente?: string; campo?: string; marcada?: string }> }).obligatorio.find((r) => r.id === 'o8')).toEqual({ id: 'o8', texto: 'el plato de la pieza', claves: ['plato'], fuente: 'hoja', campo: 'Qué es', comprobada: 'campo' })
+    expect(e.artefactos['visual_direction'].datos.reglas_comprobadas as unknown[]).toContainEqual({ id: 'o8', fuente: 'hoja', por: 'campo' })
   })
 })
 

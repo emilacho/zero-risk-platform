@@ -53,7 +53,7 @@ const seccionDeFichas = (fs: Ficha[]) => (fs.length ? fs.map((f) => `- [${f.id}]
 const pieza = (a: Record<string, unknown> | undefined) => (a ? `Pie de foto:\n${String(a.pie_de_foto ?? '')}\nHashtags: ${((a.hashtags as string[]) ?? []).join(' ')}\nLlamado: ${String(a.llamado ?? '')}${textoEnImagenParaChequear(a) ? `\nTexto escrito sobre la imagen (lo dibuja la sala con la marca):\n${textoEnImagenParaChequear(a)}` : ''}` : '(todavía no hay pieza)')
 
 // 17-nov · una regla MARCADA (sin referencia comprobable) se muestra igual, con su marca a la vista
-const lineaDeRegla = (x: ReglasDeImagen['obligatorio'][number]) => `[${x.id}] ${x.texto}${x.marcada ? ` (marcada: ${x.marcada})` : ''}`
+const lineaDeRegla = (x: ReglasDeImagen['obligatorio'][number]) => `[${x.id}] ${x.texto}${x.marcada ? ` (marcada: ${x.marcada})` : x.comprobada === 'campo' ? ' (comprobada solo por campo: el campo existe en la fuente, no que la regla salga de él)' : ''}`
 export function describirReglas(r: ReglasDeImagen): string {
   return `OBLIGATORIO (debe verse / cubrirse):\n${lista(r.obligatorio.map(lineaDeRegla))}\nPROHIBIDO (no debe verse / nombrarse):\n${lista(r.prohibido.map(lineaDeRegla))}`
 }
