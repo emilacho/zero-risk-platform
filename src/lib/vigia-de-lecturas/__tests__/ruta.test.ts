@@ -8,7 +8,7 @@ vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin }))
 vi.mock('@/lib/portero-alimenta/alertas', () => ({ avisarPorIncidente: () => avisar, resolverIncidente: () => resolver }))
 
 const pedir = (cuerpo: unknown, llave = 'llave-de-prueba') => new Request('http://x/api/vigia/lecturas', { method: 'POST', headers: { 'x-api-key': llave, 'content-type': 'application/json' }, body: JSON.stringify(cuerpo) })
-const LLAVE_ROTA = { proveedor: 'apify', estado: 401, tipo_error: 'user-or-token-not-found' }
+const LLAVE_ROTA = { proveedor: 'apify', estado: 401, tipo_error: 'user-or-token-not-found', caidas_seguidas: 1 }
 
 describe('POST /api/vigia/lecturas', () => {
   beforeEach(() => { vi.stubEnv('INTERNAL_API_KEY', 'llave-de-prueba'); avisar.mockClear(); resolver.mockClear(); getSupabaseAdmin.mockClear() })

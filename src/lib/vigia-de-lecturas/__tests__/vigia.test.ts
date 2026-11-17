@@ -34,7 +34,7 @@ describe('un incidente por proveedor', () => {
     expect(decidir([{ proveedor: 'apify', estado: 503, caidas_seguidas: 1 }])).toEqual([{ tipo: 'esperar', clave: 'lectura:apify', motivo: expect.any(String) }])
     expect(decidir([{ proveedor: 'apify', estado: null }])[0].tipo).toBe('esperar')
     expect(decidir([{ proveedor: 'apify', estado: null, caidas_seguidas: 2 }])[0]).toMatchObject({ tipo: 'avisar', texto: expect.stringContaining('sin respuesta') })
-    expect(decidir([{ proveedor: 'apify', estado: 504, caidas_seguidas: 3 }])[0]).toMatchObject({ tipo: 'avisar', texto: expect.stringContaining('respondió 504') })
+    expect(decidir([{ proveedor: 'apify', estado: 504, caidas_seguidas: 3 }])[0]).toMatchObject({ tipo: 'avisar', texto: expect.stringContaining('no responde (5xx)') })
   })
   it('la caída no cierra el incidente abierto (no manda «volvió»)', () => {
     expect(decidir([{ proveedor: 'apify', estado: 500, caidas_seguidas: 1 }]).some((x) => x.tipo === 'resolver')).toBe(false)
@@ -47,6 +47,26 @@ describe('un incidente por proveedor', () => {
     expect(textoDeIncidente({ ...LLAVE_ROTA }, 'llave')).toBe(t1)
     expect(textoDeIncidente({ proveedor: 'apify', estado: 402 }, 'tope')).not.toBe(t1)
     expect(t1).not.toMatch(/\d{2}:\d{2}/) // sin hora: cada hora sería «otro detalle» y se publicaría en el hilo
+  })
+  it('🟡3 de CC6 · la MISMA lectura decidida en dos momentos distintos da el mismo texto, carácter por carácter, en las 3 clases', () => {
+    const lecturas = [LLAVE_ROTA, { proveedor: 'openai', estado: 403, tipo_error: 'x' }, { proveedor: 'supabase', estado: 503, caidas_seguidas: 2 }]
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-11-17T07:00:00Z'))
+      const a = decidir(lecturas)
+      vi.setSystemTime(new Date('2026-11-18T19:37:41Z'))
+      const b = decidir(lecturas)
+      expect(a.map((x) => x.tipo)).toEqual(['avisar', 'avisar', 'avisar'])
+      expect(b).toEqual(a)
+    } finally { vi.useRealTimers() }
+  })
+  it('🟡5 de CC6 · una caída con otro código del mismo tipo da el mismo texto (502 y 504 no van al hilo)', () => {
+    const t = (e: number | null) => (decidir([{ proveedor: 'apify', estado: e, caidas_seguidas: 2 }])[0] as { texto: string }).texto
+    expect(t(502)).toBe(t(504))
+    expect(t(502)).toContain('(5xx)')
+    expect(t(404)).toContain('(4xx)')
+    expect(t(null)).toContain('(sin respuesta)')
+    expect(t(502)).not.toBe(t(null))
   })
   it('cada proveedor es su propio incidente; repetido en la lista, manda el primero', () => {
     const a = decidir([LLAVE_ROTA, { proveedor: 'supabase', estado: 200 }, { proveedor: 'apify', estado: 200 }])
@@ -100,20 +120,27 @@ describe('ejecutar', () => {
 })
 
 describe('cuerpo', () => {
-  it('dry_run obligatorio, lista de 1 a 10, proveedor en minúsculas, estado HTTP o null', () => {
-    expect(leerCuerpo({ lecturas: [LLAVE_ROTA] }).ok).toBe(false)
-    expect(leerCuerpo({ dry_run: true, lecturas: [] }).ok).toBe(false)
-    expect(leerCuerpo({ dry_run: true, lecturas: Array(11).fill(LLAVE_ROTA) }).ok).toBe(false)
-    expect(leerCuerpo({ dry_run: true, lecturas: [{ proveedor: 'Apify', estado: 401 }] }).ok).toBe(false)
-    expect(leerCuerpo({ dry_run: true, lecturas: [{ proveedor: 'apify', estado: '401' }] }).ok).toBe(false)
-    expect(leerCuerpo({ dry_run: true, lecturas: [{ proveedor: 'apify', estado: 99 }] }).ok).toBe(false)
-    expect(leerCuerpo({ dry_run: true, lecturas: [{ proveedor: 'apify' }] }).ok).toBe(false)
-    expect(leerCuerpo({ dry_run: false, lecturas: [{ proveedor: 'apify', estado: null }] })).toMatchObject({ ok: true, dry_run: false })
+  it('dry_run obligatorio, lista de 1 a 10, proveedor en minúsculas, estado HTTP o null (cada caso falla SOLO por lo suyo)', () => {
+    const BUENA = { ...LLAVE_ROTA, caidas_seguidas: 1 }
+    expect(leerCuerpo({ dry_run: true, lecturas: [BUENA] }).ok).toBe(true)
+    expect(leerCuerpo({ dry_run: true, lecturas: Array(10).fill(BUENA) }).ok).toBe(true)
+    expect(leerCuerpo({ lecturas: [BUENA] })).toMatchObject({ ok: false, detalle: expect.stringContaining('dry_run') })
+    expect(leerCuerpo({ dry_run: true, lecturas: [] })).toMatchObject({ ok: false, detalle: expect.stringContaining('1 a 10') })
+    expect(leerCuerpo({ dry_run: true, lecturas: Array(11).fill(BUENA) })).toMatchObject({ ok: false, detalle: expect.stringContaining('1 a 10') })
+    expect(leerCuerpo({ dry_run: true, lecturas: [{ ...BUENA, proveedor: 'Apify' }] })).toMatchObject({ ok: false, detalle: expect.stringContaining('proveedor') })
+    for (const estado of ['401', 99, 600, 401.5, undefined]) expect(leerCuerpo({ dry_run: true, lecturas: [{ ...BUENA, estado }] }), String(estado)).toMatchObject({ ok: false, detalle: expect.stringContaining('código HTTP') })
+    expect(leerCuerpo({ dry_run: false, lecturas: [{ proveedor: 'apify', estado: null, caidas_seguidas: 1 }] })).toMatchObject({ ok: true, dry_run: false })
+  })
+  it('🟡4 de CC6 · una lectura que no dio 2xx sin `caidas_seguidas` (o con 0, negativo, decimal, texto) FALLA en la puerta; un 2xx no lo necesita', () => {
+    for (const estado of [null, 401, 403, 503]) {
+      for (const cs of [undefined, 0, -1, 1.5, '2']) expect(leerCuerpo({ dry_run: true, lecturas: [{ proveedor: 'apify', estado, caidas_seguidas: cs }] }), `${estado}/${cs}`).toMatchObject({ ok: false, detalle: expect.stringContaining('caidas_seguidas') })
+    }
+    expect(leerCuerpo({ dry_run: true, lecturas: [{ proveedor: 'apify', estado: 200 }] }).ok).toBe(true)
   })
   it('un uso a medias se descarta (no inventa un tope)', () => {
     const c = leerCuerpo({ dry_run: true, lecturas: [{ proveedor: 'apify', estado: 200, uso: { usado_usd: 29.1 } }] })
     expect(c.ok && c.lecturas[0].uso).toBeNull()
-    const d = leerCuerpo({ dry_run: true, lecturas: [{ proveedor: 'apify', estado: 200, caidas_seguidas: 2, uso: USO_REAL }] })
+    const d = leerCuerpo({ dry_run: true, lecturas: [{ proveedor: 'apify', estado: 503, caidas_seguidas: 2, uso: USO_REAL }] })
     expect(d.ok && d.lecturas[0]).toMatchObject({ caidas_seguidas: 2, uso: USO_REAL })
   })
 })

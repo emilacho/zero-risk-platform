@@ -49,8 +49,10 @@ export function textoDeIncidente(l: Lectura, clase: Clase): string {
   const tipo = l.tipo_error ? ` · ${String(l.tipo_error).slice(0, 60)}` : ''
   if (clase === 'llave') return `🔴 ${n} · la llave no sirve: respondió 401${tipo}. Todo lo que se lee o se pide a ${n} falla, y su gasto queda «sin datos» (no es cero) hasta cambiar la llave.`
   if (clase === 'tope') return `🟠 ${n} · la cuenta frena por tope o permiso: respondió ${l.estado}${tipo}. Lo que se pide a ${n} no corre hasta subir el tope o empezar el ciclo nuevo.`
-  return `🟠 ${n} · no responde (${l.estado === null ? 'sin respuesta' : `respondió ${l.estado}`}) en ${CAIDAS_SEGUIDAS_PARA_AVISAR} lecturas seguidas. Su gasto queda «sin datos» (no es cero) mientras siga así.`
+  return `🟠 ${n} · no responde (${familiaDe(l.estado)}) en ${CAIDAS_SEGUIDAS_PARA_AVISAR} lecturas seguidas. Su gasto queda «sin datos» (no es cero) mientras siga así.`
 }
+/** la familia del código, no el código: 502 y 504 son la misma caída (si no, cada código distinto iría al hilo) */
+export const familiaDe = (estado: number | null): string => (estado === null ? 'sin respuesta' : `${Math.floor(estado / 100)}xx`)
 
 const finito = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x)
 
@@ -104,7 +106,11 @@ export function leerCuerpo(b: unknown): { ok: true; dry_run: boolean; lecturas: 
     if (!(e === null || (typeof e === 'number' && Number.isInteger(e) && e >= 100 && e <= 599))) return { ok: false, detalle: '`estado` debe ser un código HTTP o null' }
     const u = (r.uso && typeof r.uso === 'object' ? r.uso : null) as Record<string, unknown> | null
     const uso = u && finito(u.usado_usd) && finito(u.tope_usd) ? { usado_usd: u.usado_usd, tope_usd: u.tope_usd, ciclo_hasta: typeof u.ciclo_hasta === 'string' ? u.ciclo_hasta : null } : null
-    lecturas.push({ proveedor: r.proveedor, estado: e as number | null, tipo_error: typeof r.tipo_error === 'string' ? r.tipo_error : null, caidas_seguidas: Number.isInteger(r.caidas_seguidas) ? (r.caidas_seguidas as number) : undefined, uso })
+    // una lectura que no leyó TIENE que decir cuántas van seguidas: si el flujo lo olvida, falla aquí (y no queda una caída que nunca alarma)
+    const cs = r.caidas_seguidas
+    const csValido = typeof cs === 'number' && Number.isInteger(cs) && cs >= 1
+    if (claseDe(e as number | null) !== 'ok' && !csValido) return { ok: false, detalle: 'una lectura que no dio 2xx necesita `caidas_seguidas` (entero ≥ 1)' }
+    lecturas.push({ proveedor: r.proveedor, estado: e as number | null, tipo_error: typeof r.tipo_error === 'string' ? r.tipo_error : null, caidas_seguidas: csValido ? cs : undefined, uso })
   }
   return { ok: true, dry_run: o.dry_run, lecturas }
 }
