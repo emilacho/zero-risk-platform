@@ -103,6 +103,16 @@ export function lineaDeElemento(f: FilaDeHoja): string {
   const t = (s: unknown) => limpio(s).replace(/\|/g, '/')
   return `${cuando} | ${kitDestino(f)} | ${t(f.tema)} | ${t(f.pilar)}${datos ? ` | ${datos}` : ''}`
 }
+/** 17-nov · un elemento del kit cuya idea del banco declara más de 1 cuadro (lo declara quien escribe el banco: `cuadros: N`; la cadena solo compara números) */
+export interface CuadrosDeLaIdea { fila_id: string; cuando: string; idea: string; cuadros: number }
+export function cuadrosDeMasEnElKit(filas: readonly FilaDeHoja[], concepto: Pick<ConceptoLeido, 'banco'>): CuadrosDeLaIdea[] {
+  const out: CuadrosDeLaIdea[] = []
+  for (const f of filas) {
+    const idea = ideaDelBanco(concepto, f.idea_ref)
+    if (idea?.cuadros && idea.cuadros > 1) out.push({ fila_id: f.id, cuando: [limpio(f.fecha), f.hora ? limpio(f.hora).slice(0, 5) : ''].filter(Boolean).join(' '), idea: idea.id, cuadros: idea.cuadros })
+  }
+  return out
+}
 /** el id del brief de kit del lote: `kit-<lote_key>` saneado al criterio de RE_ID_DE_BRIEF */
 export const idDelKit = (loteKey: string): string => `kit-${loteKey.replace(/[^A-Za-z0-9_.-]+/g, '-')}`.slice(0, 40)
 
@@ -159,7 +169,7 @@ export function loDecidido(c: Pick<ConceptoLeido, 'gran_idea' | 'como_se_ve_part
   out.push(LIBRE_DE_LA_PIEZA)
   return out
 }
-function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; formato: string }, f: FilaDeHoja, idea: IdeaDelBanco | null, extra: { fila_ids?: string[]; elementos?: string[] }, avisos: string[]): string[] {
+function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; formato: string }, f: FilaDeHoja, idea: IdeaDelBanco | null, extra: { fila_ids?: string[]; elementos?: string[]; cuadros?: CuadrosDeLaIdea[] }, avisos: string[]): string[] {
   const b = ins.brief
   const c = ins.concepto
   const cap = c.capitulos.find((x) => (f.fase && x.clave === f.fase) || (idea && x.clave === idea.capitulo)) ?? null
@@ -208,6 +218,7 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
   if (f.datos?.length && !esKit) L.push(campo('DATOS DEL CALENDARIO', datosEnTexto(f.datos)))
   if (extra.fila_ids) L.push(campo('FILAS', extra.fila_ids.join(', ')))
   if (extra.elementos) L.push(...listaDe('ELEMENTOS', extra.elementos))
+  if (extra.cuadros?.length) L.push(...listaDe('CUADROS QUE PIDE LA IDEA', extra.cuadros.map((x) => `${x.cuando} (${x.fila_id}): ${x.cuadros} cuadros · idea ${x.idea}`)))
   return L
 }
 
@@ -247,10 +258,13 @@ export function escribirHoja(ins: InsumosDeLaHoja): HojaEscrita {
   if (kitFilas.length) {
     const id = idDelKit(ins.lote_key)
     const elementos = kitFilas.map(lineaDeElemento)
+    // 17-nov · DIAGNÓSTICO de la historia pobre (e) · una idea del banco que declara más de 1 cuadro en un elemento del kit: se AVISA (no bloquea) y la mesa lo recibe dicho
+    const masDeUnCuadro = cuadrosDeMasEnElKit(kitFilas, ins.concepto)
+    for (const x of masDeUnCuadro) avisos.push(`${id}: la idea ${x.idea} pide ${x.cuadros} cuadros y el kit la cuenta como 1 elemento (${x.fila_id}) · la mesa lo recibe en «CUADROS QUE PIDE LA IDEA»`)
     const conIdea = kitFilas.map((f) => ({ f, idea: ideaDelBanco(ins.concepto, f.idea_ref) })).find((x) => x.idea) ?? { f: kitFilas[0], idea: null }
     const primera = kitFilas.find((f) => f.red.toLowerCase() !== 'whatsapp') ?? kitFilas[0]
     p('')
-    L.push(...lineasDelBrief(ins, { id, red: primera.red, formato: 'kit' }, conIdea.f, conIdea.idea, { fila_ids: kitFilas.map((f) => f.id), elementos }, avisos))
+    L.push(...lineasDelBrief(ins, { id, red: primera.red, formato: 'kit' }, conIdea.f, conIdea.idea, { fila_ids: kitFilas.map((f) => f.id), elementos, ...(masDeUnCuadro.length ? { cuadros: masDeUnCuadro } : {}) }, avisos))
     briefs.push({ brief_id: id, fila_id: null, fila_ids: kitFilas.map((f) => f.id), familia: FAMILIA_DEL_KIT, red: primera.red, formato: 'kit', idea_ref: conIdea.idea?.id ?? null })
     kit = { brief_id: id, fila_ids: kitFilas.map((f) => f.id), elementos }
   }
