@@ -21,34 +21,36 @@ import { resolveModel } from './models'
 
 export interface BrandAnalysis {
   // Brand Identity
-  brand_purpose: string
+  brand_purpose: string | null
   brand_vision: string | null
   brand_mission: string | null
   brand_values: { name: string; description: string }[]
-  brand_personality: string
+  brand_personality: string | null
   // Voice & Tone
-  voice_description: string
+  voice_description: string | null
   tone_guidelines: Record<string, string>  // context → tone description
-  writing_style: string
+  writing_style: string | null
   // Messaging
   tagline: string | null
   /** Statement de posicionamiento · campo PROPIO. NO es el elevator_pitch: el pitch
    *  presenta, el posicionamiento ubica frente a la competencia. Columna propia desde
    *  H1.2 (2026-08-21). Opcional porque un analysis viejo puede no traerlo. */
   positioning?: string | null
-  elevator_pitch: string
+  elevator_pitch: string | null
   key_messages: string[]
   value_propositions: string[]
   // Visual Identity
   primary_colors: string[]
-  imagery_style: string
+  imagery_style: string | null
   // Industry
-  detected_industry: string
-  detected_market: string      // B2B, B2C, etc.
+  detected_industry: string | null
+  detected_market: string | null      // B2B, B2C, etc.
   // Guardrails (initial — will be refined by human)
   suggested_forbidden_words: string[]
   suggested_required_terminology: string[]
-  competitor_mentions_policy: string
+  competitor_mentions_policy: string | null
+  /** 17-nov · GO «quitar rejas» A·13: si el análisis no se pudo leer, los campos quedan VACÍOS y aquí se DECLARA por qué (antes se rellenaban con un estilo inventado) */
+  sin_analisis?: string
 }
 
 export interface ICPAnalysis {
@@ -127,7 +129,7 @@ export class BrandAnalyzer {
 
 REGLAS:
 - Basa tu análisis SOLO en la evidencia del contenido web proporcionado.
-- Si no hay suficiente información para un campo, pon un valor razonable basado en la industria o marca null.
+- Si no hay suficiente información para un campo, déjalo en null (o la lista vacía): no lo rellenes con un valor «razonable» de la industria. Lo completa el manual de marca o una persona.
 - Sé específico y accionable — esto será usado directamente por agentes de marketing.
 - Los valores de marca deben reflejar lo que la empresa MUESTRA, no lo que tú crees que debería ser.
 - El tone_guidelines debe tener variantes por contexto (social_media, email, blog, ads).
@@ -181,7 +183,7 @@ Genera un JSON con esta estructura exacta:
       analysis = JSON.parse(jsonStr)
     } catch {
       console.error('[BrandAnalyzer] Failed to parse brand analysis JSON')
-      analysis = this.defaultBrandAnalysis(companyName)
+      analysis = this.analisisVacio(companyName)
     }
 
     return {
@@ -373,35 +375,33 @@ Genera JSON:
   }
 
   // ----------------------------------------------------------
-  // Default brand analysis (fallback)
+  // Sin análisis: VACÍO y declarado (17-nov · GO «quitar rejas» A·13)
   // ----------------------------------------------------------
 
-  private defaultBrandAnalysis(companyName: string): BrandAnalysis {
+  /** el análisis de la marca no se pudo leer: NADA se inventa (antes: «Professional», «Friendly and engaging», «never_mention», industria «Unknown»…).
+   *  El alta sigue y termina; los campos quedan vacíos y `sin_analisis` dice por qué. Lo completa el manual de marca o una persona. */
+  private analisisVacio(companyName: string): BrandAnalysis {
     return {
-      brand_purpose: `${companyName} — purpose to be determined from manual review`,
+      brand_purpose: null,
       brand_vision: null,
       brand_mission: null,
       brand_values: [],
-      brand_personality: 'Professional',
-      voice_description: 'Professional and approachable',
-      tone_guidelines: {
-        social_media: 'Friendly and engaging',
-        email: 'Professional and direct',
-        blog: 'Informative and expert',
-        ads: 'Compelling and clear',
-      },
-      writing_style: 'Clear and concise',
+      brand_personality: null,
+      voice_description: null,
+      tone_guidelines: {},
+      writing_style: null,
       tagline: null,
-      elevator_pitch: `${companyName} provides solutions to its target market.`,
+      elevator_pitch: null,
       key_messages: [],
       value_propositions: [],
       primary_colors: [],
-      imagery_style: 'Professional',
-      detected_industry: 'Unknown',
-      detected_market: 'Unknown',
+      imagery_style: null,
+      detected_industry: null,
+      detected_market: null,
       suggested_forbidden_words: [],
       suggested_required_terminology: [],
-      competitor_mentions_policy: 'never_mention',
+      competitor_mentions_policy: null,
+      sin_analisis: `el análisis de marca de ${companyName} no se pudo leer (respuesta no es JSON): campos vacíos, sin inventar; los completa el manual de marca o una persona`,
     }
   }
 

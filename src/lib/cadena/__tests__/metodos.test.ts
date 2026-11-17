@@ -158,7 +158,8 @@ describe('gancho de video corto · UNA voz, método short-video-scripter', () =>
     expect(t).not.toContain('Idioma de todo lo que escribas')
     const en = tareaDeGanchoDeVideo({ ...pedido, ctx: { registro: 'sin_dato', idioma: 'english' }, metodo: METODO_GANCHO_POR_OMISION })
     expect(en).toContain('- Idioma de todo lo que escribas: english.')
-    expect(en).toContain('no está fijado ni por su manual ni por su país')
+    expect(en).toContain('no está fijado ni por su manual, ni por su ficha, ni por su país')
+    expect(en).not.toMatch(/segunda persona/)
     expect(METODO_GANCHO_POR_OMISION).not.toMatch(FIJA_IDIOMA_O_TRATO)
   })
   it('sin método (apagado) la tarea conserva las reglas y los insumos; la estrategia de la red entra como contexto, nunca como autoría; medios sintéticos SÍ se declara', () => {

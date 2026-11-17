@@ -21,7 +21,8 @@ export function reglaDeRegistro(r: RegistroDelCliente | undefined): string {
   if (r === 'tu') return 'Escribe en tuteo (tú). Nada de voseo.'
   if (r === 'vos') return 'Escribe en voseo (vos). Nada de tuteo.'
   if (r === 'usted') return 'Trata de usted. Nada de tuteo ni de voseo.'
-  return 'El registro del cliente (tú · vos · usted) no está fijado ni por su manual ni por su país: no lo inventes y evita la segunda persona marcada en los temas.'
+  // 17-nov · GO «quitar rejas» C1: el país ya manda cuando el manual y la ficha callan (`trato-logica.js`); si tampoco hay país, la misma salida que la pieza: el trato de los ejemplos del manual, DECLARADO · ya no «evita la segunda persona» (reja de estilo)
+  return 'El registro del cliente (tú · vos · usted) no está fijado ni por su manual, ni por su ficha, ni por su país: escribe con el trato que usen los ejemplos del manual y declara que el trato no está definido. No es una regla: nada se bloquea por el trato.'
 }
 
 /** 31-oct (T3 · idioma agnóstico): la regla de IDIOMA de las indicaciones · solo si la ficha lo fija (`clients.idioma`); sin dato no se agrega NADA (byte a byte con hoy) */

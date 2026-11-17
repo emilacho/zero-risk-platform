@@ -296,6 +296,8 @@ export class OnboardingOrchestrator {
       )
       totalCost += brandResult.costUsd
       totalTokens += brandResult.tokensUsed
+      // 17-nov · GO «quitar rejas» A·13: sin análisis legible el alta sigue, con los campos vacíos y DECLARADO aquí (antes: estilo inventado)
+      if (brandResult.analysis.sin_analisis) errors.push(brandResult.analysis.sin_analisis)
 
       // 4b: Write brand book to DB
       const brandBookId = await analyzer.writeBrandBookToDB(

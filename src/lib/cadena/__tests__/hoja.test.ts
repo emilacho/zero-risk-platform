@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { elementosDelKit, esKitDeHistorias, parsearBrief, planDeOrigen, proporcionDelBrief, fechaLimiteDelBrief } from '@/lib/oficina/brief'
 import { leerBriefCreativo } from '../brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '../conceptos'
-import { escribirHoja, fechaEnLetras, filasDelKit, idDelKit, kitDestino, lineaDeElemento, RE_ID_DE_BRIEF, type FilaDeHoja, type InsumosDeLaHoja } from '../hoja'
+import { VARIANTES_SIN_DATO, escribirHoja, fechaEnLetras, filasDelKit, idDelKit, kitDestino, lineaDeElemento, RE_ID_DE_BRIEF, type FilaDeHoja, type InsumosDeLaHoja } from '../hoja'
 import type { FormatosPorRed } from '../tipos'
 
 const PLAN = '## Fase 1\nObjetivo: que el barrio sepa que la cocina abre temprano.'
@@ -55,7 +55,7 @@ describe('hoja.v1 · ida y vuelta con el lector de la oficina', () => {
     expect(b.llamado).toBe('«ven a desayunar»')
     expect(b.sintaxis).toBe('Cercano y directo.')
     expect(b.visual).toContain('Luz cálida'); expect(b.visual).toContain('planos cerrados'); expect(b.visual).toContain('foto f-01')
-    expect(b.variantes).toBe('1')
+    expect(b.variantes).toBe(VARIANTES_SIN_DATO) // 17-nov · GO «quitar rejas» C3: ya no «1» fijo
     expect(proporcionDelBrief(b)).toBe('4:5')
     expect(fechaLimiteDelBrief(b.aprueba)).toEqual({ fecha: '2026-11-12', hora: '00:00' })
     expect(b.aprueba).toContain('a las 09:00')
