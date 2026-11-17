@@ -65,6 +65,24 @@ export interface Plano {
   prompt_imagen?: string
   /** el pedido del CLIP desde su imagen clave (S2-4 · CC3): solo movimiento y cámara, el proceso de la acción y su estado final */
   prompt_video?: string
+  /** 17-nov · Sprint 3 · T2 · los personajes que salen en el plano (ids de `TraduccionDeGuion.personajes`): su ficha va como referencia del clip */
+  personajes?: string[]
+}
+
+/**
+ * 17-nov · Sprint 3 · T2 · un PERSONAJE de la pieza (herramienta opcional: la mesa decide si la pieza lleva personajes · Emilio 11:58 «nada obligatorio»).
+ * Su ficha son las imágenes que lo muestran: fotos propias del cliente que lo nombran (una persona real, solo con su permiso registrado) o, si no hay,
+ * la imagen clave del primer plano donde sale. Ver `ficha.ts`.
+ */
+export interface PersonajeDeLaHoja {
+  /** la clave del personaje (su nombre sin tildes ni espacios): la usan los planos */
+  id: string
+  /** el nombre tal como lo escribió la mesa */
+  nombre: string
+  /** cómo es (rasgos, ropa, edad): va al pedido de cada clip donde sale */
+  descripcion?: string
+  /** fotos propias del cliente que lo muestran */
+  fotos_ids: string[]
 }
 
 export interface TraduccionDeGuion {
@@ -81,6 +99,8 @@ export interface TraduccionDeGuion {
   /** las fotos de referencia en el orden de los planos, sin repetir */
   fotos_ids: string[]
   avisos: string[]
+  /** 17-nov · Sprint 3 · T2 · los personajes de la pieza (solo si la mesa escribió la sección «## Personajes») */
+  personajes?: PersonajeDeLaHoja[]
 }
 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -100,8 +120,10 @@ const esPlano = (t: string) => /^(plano|toma|escena|shot|cuadro)\b/i.test(sinTil
 const esAudio = (t: string) => /^(audio|sonido|m[uú]sica)\b/i.test(t.trim())
 const esPie = (t: string) => /^(pie( de foto)?|caption|texto de publicaci[oó]n|descripci[oó]n)\b/i.test(t.trim())
 const esEtiquetas = (t: string) => /^(etiquetas|hashtags)\b/i.test(t.trim())
+/** 17-nov · Sprint 3 · T2 · «## Personajes» (la lista) o «## Personaje · Ana» (uno por sección) */
+const esPersonajes = (t: string) => /^(personajes?|reparto|elenco)\b/.test(sinTildes(t).trim())
 
-type CampoDelPlano = 'se_ve' | 'movimiento' | 'texto_en_pantalla' | 'foto' | 'rol' | 'dice' | 'intencion' | 'tamano' | 'lente' | 'luz' | 'producto' | 'estado_final' | 'prompt_imagen' | 'prompt_video'
+type CampoDelPlano = 'se_ve' | 'movimiento' | 'texto_en_pantalla' | 'foto' | 'rol' | 'dice' | 'intencion' | 'tamano' | 'lente' | 'luz' | 'producto' | 'estado_final' | 'prompt_imagen' | 'prompt_video' | 'personajes'
 const CAMPOS: Array<[RegExp, CampoDelPlano]> = [
   [/^(se ve|imagen|descripcion|accion|escena|visual|que se ve)$/, 'se_ve'],
   [/^(movimiento|camara|camara y movimiento|ritmo|movimiento de camara)$/, 'movimiento'],
@@ -118,6 +140,8 @@ const CAMPOS: Array<[RegExp, CampoDelPlano]> = [
   [/^(estado final|termina|termina en|como termina|continuidad)$/, 'estado_final'],
   [/^(prompt de imagen|prompt imagen|imagen clave|pedido de imagen)$/, 'prompt_imagen'],
   [/^(prompt de video|prompt video|pedido de video|prompt del clip)$/, 'prompt_video'],
+  // Sprint 3 · T2 · quién sale en el plano (su ficha va al clip)
+  [/^(personajes?|quien sale|quienes salen|salen|reparto)$/, 'personajes'],
 ]
 
 /** «sí», «si», «yes», «true» → true · «no», «false» → false · otra cosa → sin dato (no se adivina) */
@@ -183,6 +207,77 @@ function leerFoto(texto: string | undefined): string | undefined {
   return f ? f[1] : undefined
 }
 
+/** la clave de un personaje: su nombre sin tildes, en minúsculas y con guiones */
+export const idDelPersonaje = (nombre: string): string => sinTildes(nombre).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
+
+/** «foto:abc, foto:def y foto:ghi» → ['abc', 'def', 'ghi'] (sin repetir; «ninguna» → []) */
+function leerFotos(texto: string | undefined): string[] {
+  const out: string[] = []
+  for (const t of String(texto ?? '').split(/\s*(?:,|;|\by\b|\s·\s)\s*/)) { const f = leerFoto(t); if (f && !out.includes(f)) out.push(f) }
+  return out
+}
+
+/** el texto de un personaje sin la parte «Fotos: …» → su descripción y sus fotos */
+function descripcionYFotos(texto: string): { descripcion: string; fotos_ids: string[] } {
+  const m = /(?:^|[\s·(,;-])\*{0,2}(?:fotos?(?: propias?)?|referencias?)\*{0,2}\s*:\s*([^)\n]*)\)?/i.exec(texto)
+  const fotos_ids = m ? leerFotos(m[1]) : []
+  const resto = m ? texto.slice(0, m.index) + texto.slice(m.index + m[0].length) : texto
+  const descripcion = limpiarTexto(resto.replace(/\(\s*\)/g, '').replace(/[\s·(,;-]+$/, ''))
+  return { descripcion, fotos_ids }
+}
+
+/**
+ * 17-nov · Sprint 3 · T2 · los personajes de la pieza. Dos formas (la mesa escoge; ninguna es obligatoria):
+ *  · «## Personajes» con una línea por personaje: «- Ana: mujer de 40 años, delantal verde · Fotos: foto:abc, foto:def»;
+ *  · «## Personaje · Ana» con «Descripción: …» y «Fotos: …».
+ * Un nombre repetido se une al primero. Puro.
+ */
+export function leerPersonajes(ss: Array<{ titulo: string; lineas: string[] }>): PersonajeDeLaHoja[] {
+  const out: PersonajeDeLaHoja[] = []
+  const agregar = (nombre: string, descripcion: string, fotos_ids: string[]) => {
+    const n = limpiarTexto(nombre.replace(/[*`_]/g, '')).trim()
+    const id = idDelPersonaje(n)
+    if (!id) return
+    const ya = out.find((x) => x.id === id)
+    if (ya) { if (!ya.descripcion && descripcion) ya.descripcion = descripcion; for (const f of fotos_ids) if (!ya.fotos_ids.includes(f)) ya.fotos_ids.push(f); return }
+    out.push({ id, nombre: n, ...(descripcion ? { descripcion } : {}), fotos_ids })
+  }
+  for (const s of ss) {
+    if (!esPersonajes(s.titulo)) continue
+    const unico = /^\s*(?:personaje|reparto|elenco)\s*[·:\-–—]\s*(.+)$/i.exec(s.titulo)
+    if (unico) {
+      const texto = s.lineas.map((l) => l.replace(/^\s*[-*•]\s+/, '').trim()).filter(Boolean)
+      const desc = texto.map((l) => l.replace(/^\*{0,2}(descripci[oó]n|c[oó]mo es|rasgos|aspecto)\*{0,2}\s*:\s*/i, '')).join(' · ')
+      const { descripcion, fotos_ids } = descripcionYFotos(desc)
+      agregar(unico[1], descripcion, fotos_ids)
+      continue
+    }
+    for (const raw of s.lineas) {
+      const l = raw.replace(/^\s*[-*•]\s+/, '').trim()
+      const m = /^\*{0,2}([^:*—–\n]{1,40}?)\*{0,2}\s*(?::|—|–| - )\s*(.*)$/.exec(l)
+      if (!m || /^(fotos?|referencias?|descripci[oó]n)$/i.test(m[1].trim())) continue
+      const { descripcion, fotos_ids } = descripcionYFotos(m[2])
+      agregar(m[1], descripcion, fotos_ids)
+    }
+  }
+  return out
+}
+
+/** «Ana y Luis», «Ana, Luis», «ninguno» → los ids declarados (por id exacto o por el único que empieza así) y los nombres que no se hallaron */
+function personajesDelPlano(texto: string | undefined, declarados: PersonajeDeLaHoja[]): { ids: string[]; no_hallados: string[] } {
+  const ids: string[] = [], no_hallados: string[] = []
+  const t = limpiarTexto(String(texto ?? '').replace(/[*`]/g, ''))
+  if (!t || /^(ninguno|ninguna|nadie|no)\b/i.test(t)) return { ids, no_hallados }
+  for (const nombre of t.split(/\s*(?:,|;|\by\b|\s·\s|\+)\s*/)) {
+    const id = idDelPersonaje(nombre)
+    if (!id) continue
+    const exacto = declarados.find((d) => d.id === id)
+    const empiezan = exacto ? [exacto] : declarados.filter((d) => d.id.startsWith(`${id}-`) || id.startsWith(`${d.id}-`))
+    if (empiezan.length === 1) { if (!ids.includes(empiezan[0].id)) ids.push(empiezan[0].id) } else no_hallados.push(nombre.trim())
+  }
+  return { ids, no_hallados }
+}
+
 export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreguntas?: number; /** Sprint 2 · S2-1 · la duración aprobada es DATO de la plantilla (`limites.video.segundos_min/max`); sin ella, la de siempre (8–15 s) */ segundosMin?: number; segundosMax?: number } = {}): TraduccionDeGuion {
   const maxP = o.maxPreguntas ?? 1
   const MIN = Number.isFinite(o.segundosMin) && (o.segundosMin as number) > 0 ? Math.round(o.segundosMin as number) : fichaPorOmision().segundos_min
@@ -196,6 +291,7 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
     if (esAudio(s.titulo)) audio = limpiarTexto(s.lineas.join('\n'), true)
     else if (esPie(s.titulo)) pie = s.lineas.join('\n').trim()
     else if (esEtiquetas(s.titulo)) tags = hashtagsDe(s.lineas)
+    else if (esPersonajes(s.titulo)) continue // Sprint 3 · T2 · se leen aparte (`leerPersonajes`)
     else if (esPlano(s.titulo)) bloques.push(s)
   }
   if (!pie || !tags.length) {
@@ -212,6 +308,8 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
     return vacio('no encontré planos (un encabezado por plano)')
   }
 
+  const personajes = leerPersonajes(todas)
+  const nombradosSinFicha = new Set<string>()
   const planos: Plano[] = []
   const sinQueVer: number[] = []
   bloques.slice(0, 12).forEach((s, i) => {
@@ -233,6 +331,11 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
     for (const k of ['prompt_imagen', 'prompt_video'] as const) { const v = limpiarTexto(c[k] ?? '', true); if (v) p[k] = v }
     const prod = leerSiNo(c.producto)
     if (prod !== undefined) p.producto = prod
+    if (c.personajes) {
+      const q = personajesDelPlano(c.personajes, personajes)
+      if (q.ids.length) p.personajes = q.ids
+      for (const x of q.no_hallados) nombradosSinFicha.add(x)
+    }
     planos.push(p)
   })
   if (sinQueVer.length && (o.preguntasHechas ?? 0) < maxP) {
@@ -264,7 +367,9 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
   const sinProducto = planos.filter((p) => p.producto === undefined).map((p) => p.n)
   if (sinProducto.length) avisos.push(faltan(sinProducto, 'si sale el producto: se toma de la foto (con foto propia, sí; sin foto, no)'))
   if (!audio) avisos.push('el guion no dice nada del audio: el modelo pone música o ambiente a su criterio')
-  return { ok: true, planos, segundos: total, audio, pie_de_foto: pie, hashtags: tags, fotos_ids: fotos, avisos }
+  // Sprint 3 · T2 · un nombre que un plano cita y no está en «## Personajes» sale sin ficha (se avisa; no se adivina)
+  if (nombradosSinFicha.size) avisos.push(`${[...nombradosSinFicha].map((x) => `«${x}»`).join(', ')} sale${nombradosSinFicha.size === 1 ? '' : 'n'} en un plano pero no está${nombradosSinFicha.size === 1 ? '' : 'n'} en «## Personajes»: sin ficha`)
+  return { ok: true, planos, segundos: total, audio, pie_de_foto: pie, hashtags: tags, fotos_ids: fotos, avisos, ...(personajes.length ? { personajes } : {}) }
 }
 
 /**
@@ -280,10 +385,12 @@ export function promptDelGuion(t: Pick<TraduccionDeGuion, 'planos' | 'audio' | '
 }
 
 /** el guion legible para quien revisa o aprueba (la jefatura y la hoja de entrega) */
-export function guionLegible(t: Pick<TraduccionDeGuion, 'planos' | 'audio' | 'segundos'>): string {
+export function guionLegible(t: Pick<TraduccionDeGuion, 'planos' | 'audio' | 'segundos'> & { personajes?: TraduccionDeGuion['personajes'] }): string {
   return [
+    // Sprint 3 · T2 · los personajes de la pieza (solo si la mesa los escribió)
+    ...(t.personajes?.length ? [`Personajes: ${t.personajes.map((x) => `${x.nombre}${x.descripcion ? ` (${x.descripcion})` : ''}`).join(' · ')}`] : []),
     // Sprint 2 · S2-1 · el rol, lo que dice y lo que logra van primero: quien revisa juzga el plano contra lo que tenía que hacer en la historia
-    ...t.planos.map((p) => `Plano ${p.n} · ${p.desde}–${p.hasta} s${p.rol ? ` · ${p.rol}` : ''}${p.dice ? `\n  Dice: ${p.dice}` : ''}${p.intencion ? `\n  Intención: ${p.intencion}` : ''}\n  Se ve: ${p.se_ve}${p.producto === undefined ? '' : `\n  Producto en cuadro: ${p.producto ? 'sí' : 'no'}`}${p.movimiento ? `\n  Movimiento: ${p.movimiento}` : ''}${p.texto_en_pantalla ? `\n  Texto en pantalla: ${p.texto_en_pantalla}` : ''}${p.foto_id ? `\n  Foto de referencia: ${p.foto_id}` : ''}${p.estado_final ? `\n  Termina en: ${p.estado_final}` : ''}`),
+    ...t.planos.map((p) => `Plano ${p.n} · ${p.desde}–${p.hasta} s${p.rol ? ` · ${p.rol}` : ''}${p.dice ? `\n  Dice: ${p.dice}` : ''}${p.intencion ? `\n  Intención: ${p.intencion}` : ''}\n  Se ve: ${p.se_ve}${p.producto === undefined ? '' : `\n  Producto en cuadro: ${p.producto ? 'sí' : 'no'}`}${p.movimiento ? `\n  Movimiento: ${p.movimiento}` : ''}${p.texto_en_pantalla ? `\n  Texto en pantalla: ${p.texto_en_pantalla}` : ''}${p.foto_id ? `\n  Foto de referencia: ${p.foto_id}` : ''}${p.personajes?.length ? `\n  Personajes: ${p.personajes.map((id) => t.personajes?.find((x) => x.id === id)?.nombre ?? id).join(', ')}` : ''}${p.estado_final ? `\n  Termina en: ${p.estado_final}` : ''}`),
     `Audio: ${t.audio || '(a criterio del modelo: música o ambiente)'}`,
     `Duración: ${t.segundos} s`,
   ].join('\n')

@@ -37,6 +37,8 @@ export interface PedidoDeVideoDeLaOficina {
   prompt_recortado: boolean
   /** 17-nov · S2-4 tramo 3 · la huella del contenido de un clip (camino B): el brazo la anota en el libro para que un clip pagado se reutilice */
   huella?: string
+  /** 17-nov · Sprint 3 · T2 · solo en un plano: la ficha de sus personajes (el brazo lo manda por `reference-to-video`) */
+  referencias?: string[]
 }
 
 /**

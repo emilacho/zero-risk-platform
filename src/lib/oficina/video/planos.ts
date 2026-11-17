@@ -9,6 +9,7 @@ import { RESOLUCION_APROBADA, armarPedidoDePlano, fichaPorOmision, type Catalogo
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
 import { buscarFotoPropia, formatoDeVideo, fotosPropiasConDireccion } from './pedido'
+import { fichasDeLaPieza, referenciasDelPlano, type FichaDePersonaje } from './ficha'
 import type { Plano, TraduccionDeGuion } from './guion'
 
 export interface PedidoDePlano {
@@ -39,11 +40,17 @@ export interface PedidoDePlano {
   huella: string
   /** 17-nov · S2-4 tramo 4 · el plano es del BORRADOR de esta propuesta («P1»…): el lote se une por propuesta */
   propuesta?: string
+  /** 17-nov · Sprint 3 · T2 · la ficha de los personajes del plano (después de su foto): con ella el clip va por `reference-to-video` */
+  referencias?: string[]
+  /** 17-nov · Sprint 3 · T2 · los personajes que salen en el plano (ids de la hoja) */
+  personajes?: string[]
 }
 
 /** la huella del contenido de un clip (ver `PedidoDePlano.huella`) · el cliente no entra: la búsqueda en el libro ya filtra por cliente */
-export function huellaDelClip(c: { fuente: string | null; prompt: string; formato: string; segundos: number; resolucion: string; relacion: string; audio: boolean }): string {
-  return createHash('sha256').update(JSON.stringify(['clip.v1', c.fuente, c.prompt, c.formato, c.segundos, c.resolucion, c.relacion, c.audio])).digest('hex').slice(0, 40)
+export function huellaDelClip(c: { fuente: string | null; prompt: string; formato: string; segundos: number; resolucion: string; relacion: string; audio: boolean; /** Sprint 3 · T2 · la ficha del clip (sin ficha, la huella es la de siempre: los clips pagados se siguen reutilizando) */ referencias?: string[] }): string {
+  const base: unknown[] = ['clip.v1', c.fuente, c.prompt, c.formato, c.segundos, c.resolucion, c.relacion, c.audio]
+  if (c.referencias?.length) base.push(c.referencias)
+  return createHash('sha256').update(JSON.stringify(base)).digest('hex').slice(0, 40)
 }
 
 /** la imagen clave de un plano tal como la deja el paso `imagenes_clave` (solo hace falta su primer cuadro) */
@@ -82,7 +89,7 @@ export function buscadorDeFotos(fotos: FotoEtiquetada[]): (id: string) => string
 }
 
 export function pedidosPorPlano(o: {
-  guion: Pick<TraduccionDeGuion, 'planos' | 'audio'>
+  guion: Pick<TraduccionDeGuion, 'planos' | 'audio' | 'personajes'>
   brief: Pick<BriefLeido, 'formato' | 'red'>
   fotos: FotoEtiquetada[]
   clave: string
@@ -94,7 +101,7 @@ export function pedidosPorPlano(o: {
   imagenesClave?: PrimerCuadro[]
   /** 17-nov · T1 · el catálogo de modelos que leyó el encargo al abrir (el MISMO que valida la ruta); sin él, el del código */
   catalogo?: CatalogoDeModelos
-}): { ok: true; pedidos: PedidoDePlano[] } | { ok: false; errores: string[] } {
+}): { ok: true; pedidos: PedidoDePlano[]; /** Sprint 3 · T2 · las fichas de la pieza (vacío si la hoja no trae personajes) */ fichas: FichaDePersonaje[] } | { ok: false; errores: string[] } {
   const ficha = fichaPorOmision(o.catalogo)
   const planos = [...(o.guion.planos ?? [])].sort((a, b) => a.n - b.n || a.desde - b.desde)
   if (!planos.length) return { ok: false, errores: ['el guion no tiene planos'] }
@@ -102,18 +109,24 @@ export function pedidosPorPlano(o: {
   const formato = formatoDeVideo(o.brief)
   const errores: string[] = []
   const pedidos: PedidoDePlano[] = []
+  // Sprint 3 · T2 · la ficha de cada personaje (fotos propias que la hoja le nombra o la imagen clave de su primer plano) · sin «## Personajes», ninguna
+  const fichas = fichasDeLaPieza({ personajes: o.guion.personajes, planos, buscarFoto: buscar, imagenesClave: o.imagenesClave })
   for (const p of planos) {
     const dura = duracionDelPlano(p)
     if (dura > ficha.segundos_max) { errores.push(`el plano ${p.n} dura ${dura} s y el modelo admite hasta ${ficha.segundos_max} s por plano`); continue }
     const ic = (o.imagenesClave ?? []).find((x) => x.n === p.n && typeof x.url === 'string' && x.url.trim() !== '')
     const url = ic ? ic.url : p.foto_id ? buscar(p.foto_id) : null
     const primer_cuadro: PedidoDePlano['primer_cuadro'] = ic ? 'imagen_clave' : url ? 'foto_propia' : 'texto'
-    const v = armarPedidoDePlano({ prompt: ic ? promptDelClip(p, o.guion.audio) : promptDelPlano(p, o.guion.audio), formato, segundos: Math.max(ficha.segundos_min, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [] }, o.catalogo)
+    // Sprint 3 · T2 · cuántas imágenes admite el modelo que se va a usar: la ficha del catálogo del encargo (el mismo que valida la ruta · CC7 sobre #1108)
+    const ref = referenciasDelPlano(p, fichas, url, ficha.referencias_max)
+    const delClip = ic ? promptDelClip(p, o.guion.audio) : promptDelPlano(p, o.guion.audio)
+    const v = armarPedidoDePlano({ prompt: ref.texto ? `${ref.texto}\n\n${delClip}`.slice(0, 4000) : delClip, formato, segundos: Math.max(ficha.segundos_min, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [], ...(ref.urls.length ? { referencias: ref.urls } : {}) }, o.catalogo)
     if (!v.ok) { errores.push(...v.errores.map((e) => `plano ${p.n}: ${e}`)); continue }
-    pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url && !ic ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}`, primer_cuadro, huella: huellaDelClip({ fuente: url, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: v.pedido.audio === true }) })
+    const referencias = v.pedido.referencias ?? []
+    pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url && !ic ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}`, primer_cuadro, huella: huellaDelClip({ fuente: url, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: v.pedido.audio === true, referencias }), ...(referencias.length ? { referencias } : {}), ...(p.personajes?.length ? { personajes: p.personajes } : {}) })
   }
   if (errores.length) return { ok: false, errores }
-  return { ok: true, pedidos }
+  return { ok: true, pedidos, fichas }
 }
 
 /** lo que se generará en total (segundos pedidos al proveedor) y lo que durará el video unido · para cotizar la suma contra el tope */
