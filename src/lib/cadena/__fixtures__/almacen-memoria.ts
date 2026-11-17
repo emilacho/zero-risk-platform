@@ -230,6 +230,17 @@ export class AlmacenMemoria implements Almacen {
     Object.assign(c, patch)
     return true
   }
+  /** 17-nov · banco de ideas: el sello es el contenido entero de la versión (cambia con CUALQUIER escritura, como `actualizada_en` en la base) */
+  async conceptoConSello(campanaId: string, version: number) {
+    const c = this.conceptos.find((x) => x.campana_id === campanaId && x.version === version)
+    return c ? { concepto: structuredClone(c), sello: JSON.stringify(c) } : null
+  }
+  async actualizarConceptoSiSello(campanaId: string, version: number, sello: string, patch: Partial<ConceptoGuardado>) {
+    const c = this.conceptos.find((x) => x.campana_id === campanaId && x.version === version)
+    if (!c || JSON.stringify(c) !== sello) return false
+    Object.assign(c, structuredClone(patch))
+    return true
+  }
   /** el libro de las mesas de la oficina, por encargo (09-nov · revalidar la gran idea) */
   libros: Record<string, Array<{ n: number; de: string; tipo: string; texto: string }>> = {}
   async libroDeLaMesa(encargoId: string) { return structuredClone(this.libros[encargoId] ?? []) }
@@ -247,6 +258,12 @@ export class AlmacenMemoria implements Almacen {
     const f = this.filasGuardadas.find((x) => x.campana_id === campanaId && x.calendario_version === version && x.id === filaId)
     if (!f || !(desde ?? ['validada', 'lista_para_brief']).includes(f.estado)) return false
     Object.assign(f, patch, { avisos: [...f.avisos, aviso] })
+    return true
+  }
+  async reasignarIdeaDeFila(campanaId: string, version: number, filaId: string, ideaVieja: string, ideaNueva: string | null, aviso: string, desde: readonly Fila['estado'][]) {
+    const f = this.filasGuardadas.find((x) => x.campana_id === campanaId && x.calendario_version === version && x.id === filaId)
+    if (!f || f.idea_ref !== ideaVieja || !desde.includes(f.estado)) return false
+    Object.assign(f, { idea_ref: ideaNueva, concepto: null, avisos: [...f.avisos, aviso] })
     return true
   }
   async cambiarEstadoDeFilas(campanaId: string, version: number, ids: string[], estado: Fila['estado']) {
