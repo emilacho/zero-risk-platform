@@ -5,8 +5,15 @@
 import { describe, it, expect } from 'vitest'
 import { convencionDelGuion } from '../mesa/pedidos'
 import { seccionDeImagenSinFoto } from '../prompts-sin-invencion'
+import { tareaDelIngeniero } from '../mesa/prompts'
 
 describe('rejas · tramo 1 de CC1', () => {
+  it('🔴 fila 1 · abierta la puerta del texto en la imagen, la guarda sigue: SOLO el texto de la pieza, nada inventado; sin dato, sin texto; nunca un logo generado', () => {
+    const t = tareaDelIngeniero([{ ref: 'hook', descripcion: 'un plato servido' }])
+    expect(t).toContain('Si lo piden, la imagen lleva SOLO texto de la pieza (nada inventado).')
+    expect(t).toContain('Si no lo dicen, sin texto')
+    expect(t).toContain('Nunca un logo generado ni marcas de otro negocio.')
+  })
   it('fila 3 · el guion ya no prohíbe la foto propia en los planos de ambiente: la mesa decide en qué plano va cada foto', () => {
     for (const propuestas of [1, 3]) {
       const c = convencionDelGuion({ segundos_min: 8, segundos_max: 15, propuestas })
