@@ -21,6 +21,7 @@ import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeL
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
 import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
+import { FUNCION_BORRADOR_VIDEO } from './video/borradores'
 import { alLlegarAlPaso, decidir, FUNCION_APROBAR_PROPUESTAS, metadataDeAvisosDeConcepto, TURNO_DEL_DUENO, type DecisionDelDueno } from './video/aprobacion'
 import { PASO_MIRAR_VIDEO } from './video/mirada'
 import { PASO_REVISAR_IMAGENES_CLAVE } from './video/imagen-clave'
@@ -174,7 +175,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
     const e = enc.estado_del_motor
     try {
       if (paso.tipo === 'codigo' && paso.funcion === 'mesa') return (await import('./mesa/orquestador')).avanzarMesa(P, enc, pl, sig.indice, sig.vuelta)
-      if (paso.tipo === 'codigo' && paso.funcion === 'video') {
+      if (paso.tipo === 'codigo' && (paso.funcion === 'video' || paso.funcion === FUNCION_BORRADOR_VIDEO)) {
         // EL BRAZO DE VIDEO (parte 2 · 31-oct): en dry_run el paso cierra en el acto (simulado); en real abre un turno `brazo` y espera al vigía
         const out = await enviarVideo(P, enc, pl, paso)
         if (out.fallido) return fallar(P, enc, out.fallido)

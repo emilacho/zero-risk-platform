@@ -20,7 +20,12 @@ export interface PlanoEnviado {
   n: number; request_id: string; costo_estimado_usd: number; segundos: number; cortar_a_s: number
   /** 17-nov · S2-4 tramo 3 · el clip ya estaba pagado (mismo contenido): se usa su copia, a US$ 0; no se envía ni se sondea */
   reutilizado?: { video_url: string; costo_pagado_usd: number }
+  /** 17-nov · S2-4 tramo 4 · el clip es del borrador de esta propuesta */
+  propuesta?: string
 }
+
+/** la propuesta del plano, si la tiene (para copiarla a lo enviado) */
+const deLaPropuesta = (p: { propuesta?: string }) => (p.propuesta ? { propuesta: p.propuesta } : {})
 
 /**
  * 17-nov · S2-4 tramo 3 · antes de cotizar: los planos cuyo clip ya está pagado (misma huella, mismo cliente) se reutilizan a US$ 0; solo el resto se cotiza y se envía.
@@ -34,7 +39,7 @@ export async function separarPagados(P: Pick<Puertos, 'video'>, enc: { client_id
   const faltan: PedidoDePlano[] = []
   for (const p of planos) {
     const h = hallados.find((x) => x.huella === p.huella && /^https?:\/\//.test(x.video_url))
-    if (h) reutilizados.push({ n: p.n, request_id: h.request_id, costo_estimado_usd: 0, segundos: p.segundos, cortar_a_s: p.cortar_a_s, reutilizado: { video_url: h.video_url, costo_pagado_usd: h.costo_usd } })
+    if (h) reutilizados.push({ n: p.n, request_id: h.request_id, costo_estimado_usd: 0, segundos: p.segundos, cortar_a_s: p.cortar_a_s, reutilizado: { video_url: h.video_url, costo_pagado_usd: h.costo_usd }, ...deLaPropuesta(p) })
     else faltan.push(p)
   }
   return { reutilizados, faltan }
@@ -56,7 +61,7 @@ export async function encuadrarFotos(P: Pick<Puertos, 'video' | 'guardarArchivos
     if (!p.fotos.length) { salida.push(p); continue }
     const e = await P.video.encuadrar({ url: p.fotos[0], relacion: p.relacion })
     if (!e.ok) return { ok: false, motivo: `no se pudo encuadrar la foto del plano ${p.n}: ${e.error} (no se gastó nada; el encargo queda recuperable)` }
-    const nombre = `p${p.n}-${ahoraMs}.jpg`
+    const nombre = `${p.propuesta ? `${p.propuesta}-` : ''}p${p.n}-${ahoraMs}.jpg`
     const g = await P.guardarArchivos(`oficina/${enc.client_id}/${enc.id}/encuadres`, [{ nombre, bytes: e.bytes, tipo: 'image/jpeg' }])
     if (!g.ok) return { ok: false, motivo: `no se pudo guardar el encuadre del plano ${p.n}: ${g.error} (no se gastó nada; el encargo queda recuperable)` }
     salida.push({ ...p, fotos: [g.urls[nombre]] })
@@ -74,7 +79,7 @@ export async function cotizarYEnviar(P: Pick<Puertos, 'video'>, enc: { id: strin
     for (const p of planos) {
       const e = await v.enviar({ pedido: comoPedidoDelBrazo(p), client_id: enc.client_id, encargo_id: enc.id, dry_run: true, tope_usd: tope, ...ctx(enc.id, n) })
       if (!e.ok) return { ok: false, motivo: `el brazo de video no aceptó el plano ${p.n}: ${e.error}` }
-      enviados.push({ n: p.n, request_id: e.request_id, costo_estimado_usd: 0, segundos: p.segundos, cortar_a_s: p.cortar_a_s })
+      enviados.push({ n: p.n, request_id: e.request_id, costo_estimado_usd: 0, segundos: p.segundos, cortar_a_s: p.cortar_a_s, ...deLaPropuesta(p) })
     }
     return { ok: true, enviados, simulado: true, costo_estimado_usd: 0 }
   }
@@ -97,7 +102,7 @@ export async function cotizarYEnviar(P: Pick<Puertos, 'video'>, enc: { id: strin
       if (!enviados.length) return { ok: false, motivo: `el brazo de video no aceptó el plano ${p.n}: ${e.error} (${sinGastar})` }
       return { ok: false, enviados, motivo: `el brazo de video no aceptó el plano ${p.n}: ${e.error} · ya se habían enviado los planos ${enviados.map((x) => x.n).join(', ')}: se cobran si terminan, el encargo espera a que terminen para anotar lo cobrado y el lote incompleto no se une` }
     }
-    enviados.push({ n: p.n, request_id: e.request_id, costo_estimado_usd: e.costo_estimado_usd || costos[i], segundos: p.segundos, cortar_a_s: p.cortar_a_s })
+    enviados.push({ n: p.n, request_id: e.request_id, costo_estimado_usd: e.costo_estimado_usd || costos[i], segundos: p.segundos, cortar_a_s: p.cortar_a_s, ...deLaPropuesta(p) })
   }
   return { ok: true, enviados, simulado: false, costo_estimado_usd: +enviados.reduce((s, x) => s + x.costo_estimado_usd, 0).toFixed(4) }
 }
@@ -145,12 +150,12 @@ export function textoDeLoCobrado(cobrados: ClipCobrado[]): string {
 }
 
 /** 5 · une los clips (Railway) y guarda el mp4 en el almacén de la oficina · en seco devuelve el simulado sin salir a la red */
-export async function unirClips(P: Pick<Puertos, 'video' | 'guardarArchivos'>, enc: { id: string; client_id: string }, clips: Array<{ video_url: string; cortar_a_s: number }>, relacion: string, resolucion: string, ahoraMs: number): Promise<{ ok: true; video_url: string } | { ok: false; error: string }> {
+export async function unirClips(P: Pick<Puertos, 'video' | 'guardarArchivos'>, enc: { id: string; client_id: string }, clips: Array<{ video_url: string; cortar_a_s: number }>, relacion: string, resolucion: string, ahoraMs: number, /** 17-nov · tramo 4 · el borrador de cada propuesta lleva su nombre */ nombreBase = 'video-unido'): Promise<{ ok: true; video_url: string } | { ok: false; error: string }> {
   if (clips.every((c) => c.video_url.startsWith('https://dry.invalid/'))) return { ok: true, video_url: 'https://dry.invalid/video-unido.mp4' }
   if (!P.video?.unir) return { ok: false, error: 'el unidor de video no está conectado' }
   const u = await P.video.unir({ clips: clips.map((c) => ({ url: c.video_url, segundos: c.cortar_a_s })), relacion, resolucion })
   if (!u.ok) return { ok: false, error: `no se pudieron unir los clips: ${u.error}` }
-  const nombre = `video-unido-${ahoraMs}.mp4`
+  const nombre = `${nombreBase}-${ahoraMs}.mp4`
   const g = await P.guardarArchivos(`oficina/${enc.client_id}/${enc.id}`, [{ nombre, bytes: u.bytes, tipo: 'video/mp4' }])
   if (!g.ok) return { ok: false, error: `no se pudo guardar el video unido: ${g.error}` }
   return { ok: true, video_url: g.urls[nombre] }

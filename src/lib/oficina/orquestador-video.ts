@@ -32,6 +32,7 @@ import { CONTRATOS_EN_TEXTO } from './pedidos'
 import { fotosDeReferencia, type FotoDeReferencia } from './foto-de-referencia'
 import { avisoDeLaRevisionALaMesa, calidadDeLaFase, faseDeProduccion, imagenesClaveVigentes, leerRevisionDeImagenesClave, pedidosDeImagenClave, PASO_IMAGENES_CLAVE, PASO_REVISAR_IMAGENES_CLAVE, SEGUNDOS_PARA_DOS_CUADROS, tareaDeLaRevisionDeImagenesClave, type ImagenClaveDelPlano, type ImagenesClave, type PlanoDeLaHoja } from './video/imagen-clave'
 import { propuestasDe } from './video/aprobacion'
+import { ARTEFACTO_PEDIDO_BORRADOR, borradoresOmitidos, FUNCION_BORRADOR_VIDEO, pedidosDeLosBorradores, RESOLUCION_DEL_BORRADOR_POR_OMISION, resolucionDelBorrador, type BorradorDeLaPropuesta, type BorradoresDeVideo } from './video/borradores'
 import { pedidosPorPlano, type PedidoDePlano } from './video/planos'
 import { cotizarYEnviar, encuadrarFotos, leerPlanos, separarPagados, textoDeLoCobrado, unirClips, type ClipCobrado, type PlanoEnviado } from './video/motor-planos'
 
@@ -553,18 +554,25 @@ export function sinLecturaDeMirarV(e: Estado, errores: string[]): ResultadoDePas
 }
 
 // ───────────────────────── el paso `video`: enviar al brazo y esperar
-const conEnvio = (e: Estado, envio: EnvioGuardado): Estado => {
-  const antes = e.artefactos['pedido_video']
+const conEnvio = (e: Estado, envio: EnvioGuardado, art = 'pedido_video'): Estado => {
+  const antes = e.artefactos[art]
   if (!antes) return e
-  return { ...e, artefactos: { ...e.artefactos, pedido_video: { ...antes, version: antes.version + 1, datos: { ...antes.datos, envio } } } }
+  return { ...e, artefactos: { ...e.artefactos, [art]: { ...antes, version: antes.version + 1, datos: { ...antes.datos, envio } } } }
 }
-export const envioDe = (e: Estado): EnvioGuardado | null => ((datos(e, 'pedido_video')?.envio as EnvioGuardado | undefined) ?? null)
+export const envioDe = (e: Estado): EnvioGuardado | null => {
+  // 17-nov · S2-4 tramo 4 · el borrador de las propuestas guarda su envío aparte; manda el del turno más reciente
+  const deVideo = (datos(e, 'pedido_video')?.envio as EnvioGuardado | undefined) ?? null
+  const deBorrador = (datos(e, ARTEFACTO_PEDIDO_BORRADOR)?.envio as EnvioGuardado | undefined) ?? null
+  if (deBorrador && (!deVideo || deBorrador.n > deVideo.n)) return deBorrador
+  return deVideo
+}
 
 /**
  * el paso `video` del motor: manda el pedido al brazo. En dry_run el puerto no sale a la red y el paso se registra en el acto con un video simulado; en real se abre un turno `brazo`
  * (sin agente) y el encargo espera: el vigía sondea el estado y `recibirVideo` registra el paso cuando el brazo termina. El tope del paso nunca pasa de lo que le queda al encargo.
  */
 export async function enviarVideo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso): Promise<{ fallido?: string; esperar?: Record<string, unknown>; res?: ResultadoDePaso }> {
+  if (paso.funcion === FUNCION_BORRADOR_VIDEO) return enviarBorradores(P, enc, pl, paso)
   const e = enc.estado_del_motor
   const pv = datos(e, 'pedido_video')
   const ped = pv?.pedido as PedidoDeVideoDeLaOficina | undefined
@@ -592,8 +600,35 @@ export async function enviarVideo(P: Puertos, enc: Encargo, pl: Plantilla, paso:
   return { esperar: { accion: 'esperar_brazo', turno: { n, paso: paso.clave, tipo: 'brazo', dispatch_key, request_id: envio.request_id }, video: { costo_estimado_usd: envio.costo_estimado_usd, costo_lista_usd: envio.costo_lista_usd ?? null, descuento_pct: envio.descuento_pct ?? 0, plazo_min: MINUTOS_PARA_ESPERAR_AL_BRAZO } } }
 }
 
+/**
+ * 17-nov · S2-4 tramo 4 · el BORRADOR EN VIDEO de cada propuesta (ver `video/borradores.ts`): el mismo camino B a calidad de borrador, todas las propuestas en UN lote.
+ * Fuera de la fase de propuestas (aprobada, o sin propuestas) pasa de largo SIN GASTAR. Una propuesta sin pedido válido no frena a las demás.
+ */
+async function enviarBorradores(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso): Promise<{ fallido?: string; esperar?: Record<string, unknown>; res?: ResultadoDePaso }> {
+  const e = enc.estado_del_motor
+  const resolucion = resolucionDelBorrador(pl.limites)
+  const pasa = (motivo: string) => ({ res: { costo_usd: 0, artefacto: borradoresOmitidos(resolucion, motivo) as unknown as Record<string, unknown> } })
+  if (!propuestasDe(e)?.propuestas?.length) return pasa('sin_propuestas')
+  if (faseDeProduccion(e) !== 'borrador') return pasa('propuesta_aprobada')
+  const b = baseV(e)
+  const arm = pedidosDeLosBorradores({ e, enc, brief: b.brief, fotos: b.F.fotos, relacion: b.proporcion, resolucion })
+  if (!arm.pedidos.length) return { res: { costo_usd: 0, artefacto: { fase: 'borrador', resolucion, costo_usd: 0, propuestas: arm.ids.map((id) => ({ id, url: null, costo_usd: 0, planos: 0, error: arm.errores.find((x) => x.id === id)?.error ?? 'sin planos' })) } satisfies BorradoresDeVideo as unknown as Record<string, unknown> } }
+  if (!P.video) return { fallido: 'el puerto del brazo de video no está configurado' }
+  const tope = Math.max(0, Math.min(paso.tope_usd, +(pl.limites.tope_encargo_usd - e.gasto_usd).toFixed(4)))
+  const n = turnoDe(e)
+  const antes = e.artefactos[ARTEFACTO_PEDIDO_BORRADOR]
+  const conPedido: Estado = { ...e, artefactos: { ...e.artefactos, [ARTEFACTO_PEDIDO_BORRADOR]: { version: (antes?.version ?? 0) + 1, version_consumida: antes?.version_consumida ?? 0, datos: { planos: arm.pedidos, resolucion, errores: arm.errores, ids: arm.ids } } } }
+  return enviarPlanos(P, enc, paso, conPedido, arm.pedidos, tope, n, ARTEFACTO_PEDIDO_BORRADOR)
+}
+
+/** el artefacto del borrador a partir de lo que volvió: una entrada por propuesta, en el orden de la mesa */
+function borradoresDe(ids: string[], resolucion: string, hechos: BorradorDeLaPropuesta[], errores: Array<{ id: string; error: string }>, simulado = false): BorradoresDeVideo {
+  const propuestas = ids.map((id) => hechos.find((h) => h.id === id) ?? { id, url: null, costo_usd: 0, planos: 0, error: errores.find((x) => x.id === id)?.error ?? 'sin planos' })
+  return { fase: 'borrador', resolucion, propuestas, costo_usd: +propuestas.reduce((s, x) => s + x.costo_usd, 0).toFixed(4), ...(simulado ? { simulado: true } : {}) }
+}
+
 /** 11-nov · camino B · encuadra, cotiza la suma, envía cada plano y deja el turno `brazo` esperando a TODOS (en seco: todo simulado, sin red) */
-async function enviarPlanos(P: Puertos, enc: Encargo, paso: Paso, e: Estado, planos: PedidoDePlano[], tope: number, n: number): Promise<{ fallido?: string; esperar?: Record<string, unknown>; res?: ResultadoDePaso }> {
+async function enviarPlanos(P: Puertos, enc: Encargo, paso: Paso, e: Estado, planos: PedidoDePlano[], tope: number, n: number, art = 'pedido_video'): Promise<{ fallido?: string; esperar?: Record<string, unknown>; res?: ResultadoDePaso }> {
   const ahora = P.ahora()
   // 17-nov · S2-4 tramo 3 · lo pagado se reutiliza: solo lo que falta se encuadra, se cotiza (la SUMA de lo que falta contra el tope) y se envía
   const { reutilizados, faltan } = await separarPagados(P, enc, planos)
@@ -605,26 +640,31 @@ async function enviarPlanos(P: Puertos, enc: Encargo, paso: Paso, e: Estado, pla
   const iso = ahora.toISOString()
   if (!env.ok) {
     const enviados = juntos(env.enviados!)
-    const e2 = conEnvio(e, { request_id: enviados[0].request_id, status: 'queued', costo_estimado_usd: +enviados.reduce((s, x) => s + x.costo_estimado_usd, 0).toFixed(4), enviado_en: iso, n, planos: enviados, lote_incompleto: env.motivo })
+    const e2 = conEnvio(e, { request_id: enviados[0].request_id, status: 'queued', costo_estimado_usd: +enviados.reduce((s, x) => s + x.costo_estimado_usd, 0).toFixed(4), enviado_en: iso, n, planos: enviados, lote_incompleto: env.motivo }, art)
     const dispatch_key = `${enc.id}:${n}`
     await P.almacen.guardar({
       encargo_id: enc.id, estado_del_motor: e2, gasto_usd: e2.gasto_usd, estado: 'en_paso',
       turno: { n, paso: paso.clave, tipo: 'brazo', agente: null, estado: 'corriendo', dispatch_key, cost_usd: 0 },
-      artefacto: { tipo: 'pedido_video', version: e2.artefactos['pedido_video'].version, contenido: e2.artefactos['pedido_video'].datos, sha256: sha(e2.artefactos['pedido_video'].datos), autor: 'sala' },
+      artefacto: { tipo: art, version: e2.artefactos[art].version, contenido: e2.artefactos[art].datos, sha256: sha(e2.artefactos[art].datos), autor: 'sala' },
     })
     return { esperar: { accion: 'esperar_brazo', lote_incompleto: true, turno: { n, paso: paso.clave, tipo: 'brazo', dispatch_key, request_id: enviados[0].request_id }, video: { planos: enviados.length, plazo_min: MINUTOS_PARA_ESPERAR_AL_BRAZO } } }
+  }
+  if (env.simulado && art === ARTEFACTO_PEDIDO_BORRADOR) {
+    const d = e.artefactos[art].datos as { ids: string[]; resolucion: string; errores: Array<{ id: string; error: string }> }
+    const hechos = d.ids.filter((id) => env.enviados.some((x) => x.propuesta === id)).map((id) => ({ id, url: `${PREFIJO_DRY}borrador-${id}.mp4`, costo_usd: 0, planos: env.enviados.filter((x) => x.propuesta === id).length }))
+    return { res: { costo_usd: 0, artefacto: borradoresDe(d.ids, d.resolucion, hechos, d.errores, true) as unknown as Record<string, unknown> } }
   }
   if (env.simulado) {
     const v: VideoDelEncargo = { request_id: env.enviados[0].request_id, status: 'simulado', simulado: true, video_url: `${PREFIJO_DRY}video-unido.mp4`, url_proveedor: null, copia: 'simulada', costo_usd: 0, costo_estimado_usd: 0, expires_at: null, enviado_en: iso, terminado_en: iso, planos: env.enviados.map((x) => ({ n: x.n, request_id: x.request_id, costo_usd: 0, video_url: `${PREFIJO_DRY}plano-${x.n}.mp4` })) }
     return { res: { costo_usd: 0, artefacto: v as unknown as Record<string, unknown> } }
   }
   const todos = juntos(env.enviados)
-  const e2 = conEnvio(e, { request_id: todos[0].request_id, status: 'queued', costo_estimado_usd: env.costo_estimado_usd, enviado_en: iso, n, planos: todos })
+  const e2 = conEnvio(e, { request_id: todos[0].request_id, status: 'queued', costo_estimado_usd: env.costo_estimado_usd, enviado_en: iso, n, planos: todos }, art)
   const dispatch_key = `${enc.id}:${n}`
   await P.almacen.guardar({
     encargo_id: enc.id, estado_del_motor: e2, gasto_usd: e2.gasto_usd, estado: 'en_paso',
     turno: { n, paso: paso.clave, tipo: 'brazo', agente: null, estado: 'corriendo', dispatch_key, cost_usd: 0 },
-    artefacto: { tipo: 'pedido_video', version: e2.artefactos['pedido_video'].version, contenido: e2.artefactos['pedido_video'].datos, sha256: sha(e2.artefactos['pedido_video'].datos), autor: 'sala' },
+    artefacto: { tipo: art, version: e2.artefactos[art].version, contenido: e2.artefactos[art].datos, sha256: sha(e2.artefactos[art].datos), autor: 'sala' },
   })
   return { esperar: { accion: 'esperar_brazo', turno: { n, paso: paso.clave, tipo: 'brazo', dispatch_key, request_id: todos[0].request_id }, video: { costo_estimado_usd: env.costo_estimado_usd, planos: todos.length, ...(reutilizados.length ? { reutilizados: reutilizados.map((x) => x.n) } : {}), plazo_min: MINUTOS_PARA_ESPERAR_AL_BRAZO } } }
 }
@@ -641,8 +681,11 @@ export type ResultadoDelBrazo =
   | { ok: true; status: 'completed'; video_url: string; url_proveedor: string | null; costo_usd: number; expires_at: string | null; copia: 'bucket' | 'solo_proveedor'; aviso: string | null; /** camino B · los clips unidos (cada uno es un gasto en el libro) */ planos?: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }> }
   | { ok: false; status: string; error: string; /** 17-nov · §2 de CC7 · camino B: lo que el proveedor YA cobró aunque el video falle */ cobrado?: ClipCobrado[] }
 
+/** 17-nov · S2-4 tramo 4 · lo que vuelve del lote de borradores: uno por propuesta + los clips que se cobraron (un gasto por clip) */
+export interface ResultadoDeLosBorradores { ok: true; status: 'borradores'; borradores: BorradorDeLaPropuesta[]; planos: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }>; costo_usd: number }
+
 /** el brazo terminó: se registra el paso `video` (artefacto + gasto en el libro de la oficina) y el encargo sigue; si falló, cierra FALLIDO visible. IDEMPOTENTE: una entrega repetida solo avanza */
-export async function recibirVideo(P: Puertos, encargoId: string, n: number, res: ResultadoDelBrazo): Promise<Respuesta> {
+export async function recibirVideo(P: Puertos, encargoId: string, n: number, res: ResultadoDelBrazo | ResultadoDeLosBorradores): Promise<Respuesta> {
   const enc = await P.almacen.leerEncargo(encargoId)
   if (!enc) return r(404, { error: 'encargo_inexistente' })
   const pl = await plantillaDe(P, enc)
@@ -653,7 +696,9 @@ export async function recibirVideo(P: Puertos, encargoId: string, n: number, res
   }
   const e = enc.estado_del_motor
   const sig = siguientePaso(e, pl)
-  if (sig.accion !== 'ejecutar' || sig.paso.funcion !== 'video') return r(409, { error: 'sin_paso_pendiente' })
+  if (sig.accion !== 'ejecutar' || (sig.paso.funcion !== 'video' && sig.paso.funcion !== FUNCION_BORRADOR_VIDEO)) return r(409, { error: 'sin_paso_pendiente' })
+  if (res.ok && res.status === 'borradores') return recibirBorradores(P, enc, pl, sig.indice, sig.paso, sig.vuelta, n, abierto, res)
+  if (sig.paso.funcion === FUNCION_BORRADOR_VIDEO && res.ok) return r(409, { error: 'resultado_no_es_de_borradores' })
   const envio = envioDe(e)
   const request_id = envio?.request_id ?? ''
   const turnoBase = { n, paso: sig.paso.clave, tipo: 'brazo', agente: null, dispatch_key: abierto.dispatch_key, workflow_execution_id: abierto.workflow_execution_id ?? null }
@@ -699,7 +744,7 @@ export async function sondearVideos(P: Puertos, turnos: Array<{ encargo_id: stri
     const enc = await P.almacen.leerEncargo(t.encargo_id)
     if (!enc || ['cerrado', 'cerrado_por_tope', 'fallido', 'aprobada'].includes(enc.estado)) continue
     const envio = envioDe(enc.estado_del_motor)
-    let res: ResultadoDelBrazo | null
+    let res: ResultadoDelBrazo | ResultadoDeLosBorradores | null
     if (!envio?.request_id) res = { ok: false, status: 'sin_request_id', error: 'el turno del brazo no tiene pedido registrado' }
     else if (!P.video) res = { ok: false, status: 'sin_puerto', error: 'el puerto del brazo de video no está configurado' }
     else if (envio.planos?.length) res = await sondearPlanos(P, enc, envio.planos, t.inicio, ahora)
@@ -714,7 +759,8 @@ export async function sondearVideos(P: Puertos, turnos: Array<{ encargo_id: stri
 }
 
 /** 11-nov · camino B · lee el estado de cada plano; cuando volvieron TODOS, los une (Railway) y devuelve el video unido; null = todavía no */
-export async function sondearPlanos(P: Puertos, enc: Encargo, enviados: PlanoEnviado[], inicio: string, ahora: Date): Promise<ResultadoDelBrazo | null> {
+export async function sondearPlanos(P: Puertos, enc: Encargo, enviados: PlanoEnviado[], inicio: string, ahora: Date): Promise<ResultadoDelBrazo | ResultadoDeLosBorradores | null> {
+  if (enviados.some((p) => p.propuesta)) return sondearBorradores(P, enc, enviados, inicio, ahora)
   const estados: EstadoDelBrazo[] = []
   // el reutilizado no se pregunta al proveedor (ya está en nuestro almacén y ya se pagó en su día)
   for (const p of enviados) estados.push(p.reutilizado ? ({ ok: true, terminal: true, status: 'reutilizado' } as EstadoDelBrazo) : await P.video!.estado(p.request_id))
@@ -732,6 +778,56 @@ export async function sondearPlanos(P: Puertos, enc: Encargo, enviados: PlanoEnv
   const costo = +l.clips.reduce((s, c) => s + c.costo_usd, 0).toFixed(4)
   const vence = l.clips.map((c) => c.expires_at).filter((x): x is string => !!x).sort()[0] ?? null
   return { ok: true, status: 'completed', video_url: u.video_url, url_proveedor: null, costo_usd: costo, expires_at: vence, copia: 'bucket', aviso: null, planos: l.clips.map((c) => ({ n: c.n, request_id: c.request_id, costo_usd: c.costo_usd, video_url: c.video_url })) }
+}
+
+/**
+ * 17-nov · S2-4 tramo 4 · el lote de borradores: se espera a TODOS los clips de todas las propuestas; cada propuesta completa se une con su nombre; una que falló
+ * (o un lote cortado a mitad: lote completo o nada) queda sin video y con su error. Todo lo cobrado vuelve para el gasto y el libro. Nunca devuelve fallo: no frena el encargo.
+ */
+async function sondearBorradores(P: Puertos, enc: Encargo, enviados: PlanoEnviado[], inicio: string, ahora: Date): Promise<ResultadoDeLosBorradores | null> {
+  const estados: EstadoDelBrazo[] = []
+  for (const p of enviados) estados.push(p.reutilizado ? ({ ok: true, terminal: true, status: 'reutilizado' } as EstadoDelBrazo) : await P.video!.estado(p.request_id))
+  const vencido = new Date(inicio).getTime() < ahora.getTime() - MINUTOS_PARA_ESPERAR_AL_BRAZO * 60_000
+  const ids = [...new Set(enviados.map((p) => p.propuesta ?? ''))]
+  const lecturas = ids.map((id) => { const idx = enviados.flatMap((p, i) => (p.propuesta === id ? [i] : [])); return { id, l: leerPlanos(idx.map((i) => enviados[i]), idx.map((i) => estados[i]), vencido, MINUTOS_PARA_ESPERAR_AL_BRAZO) } })
+  if (lecturas.some((x) => !x.l.listo)) return null
+  const d = datos(enc.estado_del_motor, ARTEFACTO_PEDIDO_BORRADOR) as { resolucion?: string; envio?: EnvioGuardado; planos?: PedidoDePlano[] } | undefined
+  const incompleto = d?.envio?.lote_incompleto
+  const relacion = d?.planos?.[0]?.relacion ?? '9:16'
+  const resolucion = d?.resolucion ?? RESOLUCION_DEL_BORRADOR_POR_OMISION
+  const hechos: BorradorDeLaPropuesta[] = []
+  const planos: ResultadoDeLosBorradores['planos'] = []
+  for (const { id, l } of lecturas) {
+    if (!l.listo) continue
+    if (!l.ok) {
+      for (const c of l.cobrados) planos.push({ n: c.n, request_id: c.request_id, costo_usd: c.costo_usd, video_url: '' })
+      hechos.push({ id, url: null, costo_usd: +l.cobrados.reduce((s, c) => s + c.costo_usd, 0).toFixed(4), planos: enviados.filter((p) => p.propuesta === id).length, error: `${l.status}: ${l.error}` })
+      continue
+    }
+    for (const c of l.clips) if (c.costo_usd > 0) planos.push({ n: c.n, request_id: c.request_id, costo_usd: c.costo_usd, video_url: c.video_url })
+    const costo = +l.clips.reduce((s, c) => s + c.costo_usd, 0).toFixed(4)
+    if (incompleto) { hechos.push({ id, url: null, costo_usd: costo, planos: l.clips.length, error: `lote_incompleto: ${incompleto}` }); continue }
+    const u = await unirClips(P, enc, l.clips, relacion, resolucion, ahora.getTime(), `borrador-${id}`)
+    hechos.push(u.ok ? { id, url: u.video_url, costo_usd: costo, planos: l.clips.length } : { id, url: null, costo_usd: costo, planos: l.clips.length, error: `no_se_unio: ${u.error}` })
+  }
+  return { ok: true, status: 'borradores', borradores: hechos, planos, costo_usd: +planos.reduce((s, c) => s + c.costo_usd, 0).toFixed(4) }
+}
+
+/** 17-nov · S2-4 tramo 4 · el lote de borradores volvió: el artefacto `borrador_video` (lo lee la tarjeta), su costo al encargo y un gasto por clip cobrado; el encargo sigue */
+async function recibirBorradores(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, paso: Paso, vuelta: string | undefined, n: number, abierto: { dispatch_key: string | null; workflow_execution_id?: string | null }, res: ResultadoDeLosBorradores): Promise<Respuesta> {
+  const e = enc.estado_del_motor
+  const d = datos(e, ARTEFACTO_PEDIDO_BORRADOR) as { ids?: string[]; resolucion?: string; errores?: Array<{ id: string; error: string }> } | undefined
+  const art = borradoresDe(d?.ids ?? res.borradores.map((x) => x.id), d?.resolucion ?? RESOLUCION_DEL_BORRADOR_POR_OMISION, res.borradores, d?.errores ?? [])
+  const costo = res.costo_usd
+  const nuevo = registrarPaso(e, pl, indice, { costo_usd: costo, artefacto: art as unknown as Record<string, unknown>, ...(vuelta ? { vuelta } : {}) })
+  const gastos = res.planos.filter((c) => c.costo_usd > 0).map((c) => ({ concepto: 'video' as const, ref_tabla: 'agent_invocations', ref_id: sessionIdDeVideo(c.request_id), cost_usd: c.costo_usd, base: 'usage' as const }))
+  await P.almacen.guardar({
+    encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', fichas: nuevo.fichas,
+    turno: { n, paso: paso.clave, tipo: 'brazo', agente: null, dispatch_key: abierto.dispatch_key, workflow_execution_id: abierto.workflow_execution_id ?? null, estado: 'hecho', cost_usd: costo },
+    artefacto: { tipo: paso.salida_artefacto, version: nuevo.artefactos[paso.salida_artefacto].version, contenido: art as unknown as Record<string, unknown>, sha256: sha(art), autor: 'brazo-video' },
+    ...(gastos.length ? { gastos } : {}),
+  })
+  return avanzar(P, enc.id)
 }
 
 // ───────────────────────── la jefatura y el cierre

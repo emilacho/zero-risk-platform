@@ -37,6 +37,8 @@ export interface PedidoDePlano {
    * los segundos, la resolución, la proporción y el audio). Mismo contenido = misma huella, en este encargo o en otro del mismo cliente: un clip ya pagado se reutiliza.
    */
   huella: string
+  /** 17-nov · S2-4 tramo 4 · el plano es del BORRADOR de esta propuesta («P1»…): el lote se une por propuesta */
+  propuesta?: string
 }
 
 /** la huella del contenido de un clip (ver `PedidoDePlano.huella`) · el cliente no entra: la búsqueda en el libro ya filtra por cliente */
