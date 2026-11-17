@@ -51,6 +51,11 @@ describe('pedidosPorPlano · el primer cuadro de cada clip', () => {
     const con = (pedidosPorPlano({ guion: g, brief, fotos: FOTOS, clave: 'k', relacion: '9:16', imagenesClave: [{ n: 3, url: IC(3) }] }) as { ok: true; pedidos: PedidoDePlano[] }).pedidos
     expect(con[2].foto_no_hallada).toBeFalsy()
   })
+  it('🔴 el texto en pantalla NO va en el pedido del plano (S2-5 · aviso de CC2: se compone después con la marca)', () => {
+    const p = { n: 1, desde: 0, hasta: 4, se_ve: 'La fachada', movimiento: 'paneo', texto_en_pantalla: 'Hay mesa desde las siete' }
+    expect(promptDelPlano(p, 'olas')).toBe('La fachada Cámara: paneo. Audio: olas')
+    expect(promptDelClip({ ...p, prompt_video: 'Paneo lento' }, 'olas')).not.toContain('Hay mesa')
+  })
   it('promptDelClip · respeta el máximo y sin audio pone el de omisión', () => {
     expect(promptDelClip({ ...guion.planos[0] }, '', 3600)).toBe('Acercamiento lento hacia la puerta; termina con la puerta abierta. Audio: música o sonido ambiente acorde a la escena.')
     expect(promptDelClip({ ...guion.planos[0] }, 'olas', 20)).toHaveLength(20)

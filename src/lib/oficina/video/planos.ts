@@ -52,12 +52,14 @@ export interface PrimerCuadro { n: number; url: string }
 /** cuánto dura un plano en el guion (entero ≥ 1) */
 export const duracionDelPlano = (p: Pick<Plano, 'desde' | 'hasta'>): number => Math.max(1, Math.round(p.hasta - p.desde))
 
-/** el texto de UN plano para el modelo: lo que se ve, la cámara, el texto literal y el audio del video entero (para que los clips suenen parecido) */
+/**
+ * el texto de UN plano para el modelo: lo que se ve, la cámara y el audio del video entero (para que los clips suenen parecido).
+ * 17-nov · S2-5 (aviso de CC2) · el texto en pantalla NO va al modelo: se compone después, por código, con la marca (la regla fija del pedido dice «sin texto en pantalla»).
+ */
 export function promptDelPlano(p: Plano, audio: string, max = 3600): string {
   const t = [
     p.se_ve,
     p.movimiento ? `Cámara: ${p.movimiento}.` : '',
-    p.texto_en_pantalla ? `Texto en pantalla, literal: «${p.texto_en_pantalla}».` : '',
     audio ? `Audio: ${audio}` : 'Audio: música o sonido ambiente acorde a la escena.',
   ].filter(Boolean).join(' ')
   return t.slice(0, max)

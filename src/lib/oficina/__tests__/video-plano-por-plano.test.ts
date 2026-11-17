@@ -48,11 +48,11 @@ describe('un pedido por plano (cliente con fotos)', () => {
     expect(segundosGenerados(ps)).toBe(16)
     expect(segundosDelVideoUnido(ps)).toBe(12)
   })
-  it('el texto de cada plano habla SOLO de ese plano (más la cámara, el texto literal y el audio)', () => {
+  it('el texto de cada plano habla SOLO de ese plano (más la cámara y el audio; el texto en pantalla NO va: se compone después · S2-5)', () => {
     expect(ps[1].prompt).toContain('Olla hirviendo')
     expect(ps[1].prompt).toContain('Cámara: cenital lento.')
     expect(ps[1].prompt).not.toContain('Fachada')
-    expect(ps[3].prompt).toContain('«vine buscando oro. encontré encebollado.»')
+    expect(ps[3].prompt).not.toContain('vine buscando oro')
     expect(ps.every((p) => p.prompt.includes('olas y guitarra suave'))).toBe(true)
   })
   it('una foto de la competencia nunca entra, aunque el guion la cite', () => {
