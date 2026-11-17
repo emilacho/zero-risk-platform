@@ -2,6 +2,7 @@
  * EL ALMACÉN REAL de la oficina sobre Supabase (las 9 tablas de la migración 202610090100, SIN aplicar todavía). Recibe el cliente de base por parámetro (así se prueba con una base falsa).
  * Falla CERRADO: si no puede leer la config, la oficina se considera APAGADA. Un error de lectura se lanza (nunca se lee como «vacío»); un duplicado esperado (23505) no es error.
  */
+import { gruposHermanos } from './mesa/con-mesa'
 import type { FilaDeFormato } from './entrega'
 import type { Almacen, Cambios, Encargo, NuevoEncargo, TurnoRegistrado } from './puertos'
 import { CONFIG_APAGADA, type ConfigDeOficina } from './sobre'
@@ -50,7 +51,8 @@ export function almacenDeSupabase(db: Db): Almacen {
     },
     async crearEncargo(n: NuevoEncargo) {
       // 21-oct · si ya hay encargos del brief: el de mayor versión manda; un `fallido` recuperable se reabre como la versión siguiente (sin tocar la fila vieja), tope 3
-      const previos = await db.from('oficina_encargos').select('*').eq('parte_id', n.parte_id).eq('brief_id', n.brief_id).eq('tipo_de_grupo', n.tipo_de_grupo).order('version_encargo', { ascending: false }).limit(20)
+      // 17-nov · la misma pieza por la línea de siempre o por su versión con mesa cuenta como UNA (`gruposHermanos`): nunca se abre dos veces
+      const previos = await db.from('oficina_encargos').select('*').eq('parte_id', n.parte_id).eq('brief_id', n.brief_id).in('tipo_de_grupo', gruposHermanos(n.tipo_de_grupo)).order('version_encargo', { ascending: false }).limit(20)
       if (previos.error) return { ok: false as const, error: previos.error.message }
       // 29-oct · un ENSAYO (dry_run) nunca ocupa el lugar de una pieza real: la pieza real se mide solo contra encargos reales (reabrir, tope de versiones) y toma el número libre siguiente al del ensayo
       const todos = (previos.data as Fila[] | null) ?? []
@@ -90,7 +92,7 @@ export function almacenDeSupabase(db: Db): Almacen {
     },
     // 11-nov · regla (b) · las versiones REALES del mismo brief y grupo (para el aviso del tope y el del techo de cortadas al cerrar fallido)
     async hermanosDe(enc): Promise<RastroDeEncargo[]> {
-      const d = ok(await db.from('oficina_encargos').select('estado,gasto_usd,version_encargo,estado_del_motor').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).eq('tipo_de_grupo', enc.tipo_de_grupo).eq('dry_run', false).order('version_encargo', { ascending: false }).limit(50), 'leer las versiones del brief') as Fila[] | null
+      const d = ok(await db.from('oficina_encargos').select('estado,gasto_usd,version_encargo,estado_del_motor').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).in('tipo_de_grupo', gruposHermanos(enc.tipo_de_grupo)).eq('dry_run', false).order('version_encargo', { ascending: false }).limit(50), 'leer las versiones del brief') as Fila[] | null
       return (d ?? []).map(rastroDe)
     },
     async leerEncargo(id) {

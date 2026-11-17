@@ -226,6 +226,18 @@ describe('rehacer-pieza', () => {
     const s = await llamar('rehacer-pieza', db, { encargo_id: ENC, ...gasto })
     expect(s.status).toBe(409); expect(s.cuerpo.error).toBe('hay_una_version_mas_nueva')
   })
+  it('17-nov (m11 de CC7) · la versión más nueva de la MISMA pieza por su línea con mesa también cuenta: no se rehace la vieja (nunca dos veces la misma pieza)', async () => {
+    const kit = (extra: Record<string, unknown>) => fila({ tipo_de_grupo: 'kit_historias', familia: 'kit_historias', ...extra })
+    const plantillas = (db: DbFalsa) => db.semilla('oficina_tipos_de_grupo', [{ tipo: 'kit_historias', familia: 'kit_historias', limites: { tope_encargo_usd: 5 } }])
+    const db = plantillas(new DbFalsa().semilla('oficina_encargos', [kit({}), kit({ id: '44444444-4444-4444-8444-444444444444', version_encargo: 2, tipo_de_grupo: 'kit_mesa', familia: 'kit_mesa' })]))
+    const s = await llamar('rehacer-pieza', db, { encargo_id: ENC, ...gasto })
+    expect(s.status).toBe(409); expect(s.cuerpo.error).toBe('hay_una_version_mas_nueva')
+    // control: la versión más nueva de OTRA familia (otra pieza) no cuenta
+    const otra = plantillas(new DbFalsa().semilla('oficina_encargos', [kit({}), kit({ id: '44444444-4444-4444-8444-444444444444', version_encargo: 2, tipo_de_grupo: 'post_img', familia: 'post_img' })]))
+    // (pasado el control de versiones intenta abrir la oficina, que aquí no está: eso basta para saber que no lo frenó)
+    const c = await llamar('rehacer-pieza', otra, { encargo_id: ENC, ...gasto }).catch(() => ({ status: 0, cuerpo: { error: 'pasó el control de versiones' } }))
+    expect(c.cuerpo.error).not.toBe('hay_una_version_mas_nueva')
+  })
   it('de punta a punta: una pieza fallida que ya gastó se reabre como versión 2 con el tope pedido; a la tercera versión ya no', async () => {
     const M = crearMemoria({ plantilla: POST_IMG, fuentes: FUENTES })
     const sobre = { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: false, familia: 'post_img' }

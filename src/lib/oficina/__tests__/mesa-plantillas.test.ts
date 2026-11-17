@@ -18,13 +18,17 @@ function filaDe(tipo: string): { pasos: unknown; indicaciones: unknown; limites:
   return { pasos: toma('pasos'), indicaciones: toma('ind'), limites: toma('lim') }
 }
 
+const MESA_CORTA = fs.readFileSync(path.join(RAIZ, 'supabase', 'migrations', '202611171030_oficina_kit_mesa_corta.sql'), 'utf8')
+const limitesDeLaMesaCorta = (): unknown => JSON.parse(/\$lim\$([\s\S]*?)\$lim\$/.exec(MESA_CORTA)![1])
+
 describe('LA MESA · plantillas como dato', () => {
   for (const [tipo, P] of [['carrusel_mesa', CARRUSEL_MESA], ['kit_mesa', KIT_MESA]] as Array<[string, Plantilla]>) {
     it(`${tipo}: el dato sembrado en la migración es EXACTAMENTE el que produce el código`, () => {
       const f = filaDe(tipo)
       expect(f.pasos).toEqual(JSON.parse(JSON.stringify(P.pasos)))
       expect(f.indicaciones).toEqual(JSON.parse(JSON.stringify(P.indicaciones)))
-      expect(f.limites).toEqual(JSON.parse(JSON.stringify(P.limites)))
+      // 17-nov · la mesa corta (202611171030) reescribe los límites de kit_mesa: el dato vigente es el de esa migración
+      expect(tipo === 'kit_mesa' ? limitesDeLaMesaCorta() : f.limites).toEqual(JSON.parse(JSON.stringify(P.limites)))
     })
 
     it(`${tipo}: tope US$ ${TOPE_DE_LA_MESA_USD}, un solo paso de mesa, cola mecánica con jefatura y SIN pasos de agente (el equipo trabaja en el tablero)`, () => {

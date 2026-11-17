@@ -49,6 +49,17 @@ async function guardarMesa(P: Puertos, enc: Encargo, est: EstadoMesa, extra: Par
   return { ...enc, estado_del_motor: e, gasto_usd: e.gasto_usd }
 }
 
+/**
+ * 17-nov · «creativos en cada paso» (punto 1) · los ASIENTOS de la plantilla (`limites.asientos`, dato): si la plantilla los declara, en la mesa se sientan SOLO esos especialistas,
+ * más quien dirige y el portero (que no aportan: dirigen o traen material). Sin `asientos`, el directorio entero como siempre. Puro.
+ */
+export function directorioConAsientos(directorio: Tarjeta[], asientos: unknown): Tarjeta[] {
+  const activos = directorio.filter((t) => t.activo)
+  if (!Array.isArray(asientos) || !asientos.length) return activos
+  const lista = new Set(asientos.filter((a): a is string => typeof a === 'string'))
+  return activos.filter((t) => t.rol === 'direccion' || t.rol === 'portero' || lista.has(t.agente))
+}
+
 function estadoInicialDeLaMesa(tipo: EstadoMesa['tipo'], directorio: Tarjeta[]): EstadoMesa {
   return { tipo, directorio_congelado: directorio.filter((t) => t.activo), direccion: direccionDe(directorio, tipo)?.agente ?? '', turnos: 0, integraciones: 0, devoluciones_por_citas: 0, libro_visto: 0, preguntas_del_traductor: 0, marcas: {}, fase: 'trabajando', cierre_forzado: null, pieza_texto: null, turno_abierto: null }
 }
@@ -207,7 +218,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
   for (let vuelta = 0; vuelta < 60; vuelta++) {
     let est = estadoDeLaMesa(enc.estado_del_motor)
     if (!est) {
-      const dir = await P.mesa.directorio()
+      const dir = directorioConAsientos(await P.mesa.directorio(), pl.limites.asientos)
       const tipo = FAMILIAS_MESA[enc.familia as keyof typeof FAMILIAS_MESA]
       if (!tipo) return fallar(P, enc, `la familia «${enc.familia}» no es de la mesa`)
       if (!direccionDe(dir, tipo)) return fallar(P, enc, `el directorio de la mesa no tiene una dirección creativa activa para «${tipo}» (la pieza no abre)`)
@@ -286,7 +297,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     const b = deCalendario ? null : baseDeLaminas(enc.estado_del_motor)
     // antes de que exista una pieza se cuenta con imágenes generadas (los especialistas de imagen participan); después manda lo que la pieza realmente pide. El video nunca genera imágenes: el brazo filma.
     const hayImagenGenerada = deCalendario || est.tipo === 'video' ? false : est.pieza_texto == null ? true : hayImagenesAGenerar(est.pieza_texto, est.tipo, b!.elementos.map((x) => x.ref))
-    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...(deCalendario ? { reserva_posterior_usd: 0 } : {}), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}) })
+    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...(deCalendario ? { reserva_posterior_usd: 0 } : {}), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}) })
 
     if (acc.accion === 'cierre_por_tope') {
       await guardarMesa(P, enc, { ...est, fase: 'cerrada' })

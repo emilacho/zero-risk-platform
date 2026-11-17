@@ -129,7 +129,7 @@ describe('el almacén REAL (base falsa)', () => {
   it('dos sobres a la vez: el segundo pierde la carrera por el índice único y devuelve la v2 que ganó, sin abrir otra', async () => {
     const real = new DbFalsa().semilla('oficina_encargos', [fila('BRF-0001'), fila('BRF-0001', { version_encargo: 2, estado: 'abierto', id: 'ganadora' })])
     let primera = true
-    const db = { from: (t: string) => { const c = real.from(t); return { select: (cols?: string) => { if (primera && t === 'oficina_encargos') { primera = false; const l = real.tablas['oficina_encargos'].filter((f) => f.version_encargo === 1); return { eq() { return this }, order() { return this }, limit() { return Promise.resolve({ data: l, error: null }) } } } return c.select(cols) }, insert: (f: Record<string, unknown>) => c.insert(f) } } }
+    const db = { from: (t: string) => { const c = real.from(t); return { select: (cols?: string) => { if (primera && t === 'oficina_encargos') { primera = false; const l = real.tablas['oficina_encargos'].filter((f) => f.version_encargo === 1); return { eq() { return this }, in() { return this }, order() { return this }, limit() { return Promise.resolve({ data: l, error: null }) } } } return c.select(cols) }, insert: (f: Record<string, unknown>) => c.insert(f) } } }
     const r = await almacenDeSupabase(db as never).crearEncargo(nuevo())
     expect(r.ok && !r.nuevo && r.encargo.id === 'ganadora' && r.encargo.version_encargo === 2).toBe(true)
     expect(real.tablas['oficina_encargos']).toHaveLength(2)
@@ -202,5 +202,26 @@ describe('la puerta y el cierre (almacén de memoria)', () => {
     await fallar(M.P, { ...enc, version_encargo: MAX_VERSIONES_POR_BRIEF }, 'x')
     expect(hilos()).toBe(1)
     expect(M.llamadas.avisos.find((x) => x.texto.includes('🧱'))!.texto).toContain(enc.brief_id)
+  })
+})
+
+describe('17-nov (m10 de CC7) · la misma pieza por su línea con mesa cuenta como una en el almacén REAL', () => {
+  const kit = (o: Record<string, unknown> = {}) => fila('BRF-0004', { tipo_de_grupo: 'kit_historias', familia: 'kit_historias', ...o })
+  const nuevoKit = (grupo: string) => nuevo('BRF-0004', { tipo_de_grupo: grupo, familia: grupo })
+  it('la pieza ya vive en kit_mesa (abierta): un sobre por kit_historias NO abre otra; devuelve la que hay', async () => {
+    const db = new DbFalsa().semilla('oficina_encargos', [kit({ id: 'en-mesa', tipo_de_grupo: 'kit_mesa', familia: 'kit_mesa', estado: 'abierto' })])
+    const r = await almacenDeSupabase(db as never).crearEncargo(nuevoKit('kit_historias'))
+    expect(r.ok && !r.nuevo && r.encargo.id === 'en-mesa').toBe(true)
+    expect(db.tablas['oficina_encargos']).toHaveLength(1)
+  })
+  it('las versiones siguen la cuenta de las DOS líneas: v1 fallida sin gasto en kit_historias → la nueva por kit_mesa es la v2', async () => {
+    const db = new DbFalsa().semilla('oficina_encargos', [kit()])
+    const r = await almacenDeSupabase(db as never).crearEncargo(nuevoKit('kit_mesa'))
+    expect(r.ok && r.nuevo && r.encargo.version_encargo === 2).toBe(true)
+  })
+  it('control: una pieza de OTRA familia no cuenta (la nueva es la v1)', async () => {
+    const db = new DbFalsa().semilla('oficina_encargos', [kit({ tipo_de_grupo: 'post_img', familia: 'post_img', estado: 'abierto' })])
+    const r = await almacenDeSupabase(db as never).crearEncargo(nuevoKit('kit_mesa'))
+    expect(r.ok && r.nuevo && r.encargo.version_encargo === 1).toBe(true)
   })
 })
