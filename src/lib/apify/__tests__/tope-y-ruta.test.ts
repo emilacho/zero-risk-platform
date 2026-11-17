@@ -19,6 +19,20 @@ function cuenta(o: { credito?: unknown; limite?: unknown; usado?: unknown; fin?:
   return { fetchImpl, pedidos }
 }
 
+describe('17-nov · tramo 3 de la prevención: la cuenta se lee SIEMPRE en vivo', () => {
+  it('las dos lecturas piden «no-store» (nunca una respuesta guardada en la caché de datos de Next) y llevan la llave', async () => {
+    const inits: Array<RequestInit | undefined> = []
+    const c = cuenta({ credito: 29, limite: 29, usado: 29.14 })
+    const r = await leerUsoDelMes({ token: 't', fetchImpl: async (u, i) => { inits.push(i); return c.fetchImpl(u) } })
+    expect(r.ok).toBe(true)
+    expect(inits).toHaveLength(2)
+    for (const i of inits) {
+      expect(i?.cache).toBe('no-store')
+      expect((i?.headers as Record<string, string>).Authorization).toBe('Bearer t')
+    }
+  })
+})
+
 describe('el tope del mes: primero el límite de gasto, después el crédito del plan', () => {
   it('🟢 caso de CC7: crédito 29, límite 50, uso 29,12 → HAY crédito (Apify no bloquea hasta 50)', async () => {
     const c = cuenta({ credito: 29, limite: 50, usado: 29.12 })
