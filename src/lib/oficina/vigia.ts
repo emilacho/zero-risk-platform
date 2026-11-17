@@ -10,7 +10,8 @@
 import type { Db } from './almacen-supabase'
 import { filasQueVencen, NOTA_DE_VENCIMIENTO } from './entrega'
 import type { Puertos } from './puertos'
-import { fallar, jefaturaSinRespuesta, plantillaDe } from './orquestador'
+import { cerrar, fallar, jefaturaSinRespuesta, plantillaDe } from './orquestador'
+import { ARTEFACTO_ESPERA_DE_LA_CADENA } from './espera-de-la-cadena'
 import { resolverMaterialVencido } from './material-orquestador'
 import { entregarPorTopeDeLaMesa, esTurnoDeLaMesa, recibirResultadoMesa } from './mesa/orquestador'
 import { FAMILIAS_MESA, esDeLaCadena } from './mesa/tipos'
@@ -64,6 +65,29 @@ export async function vencerBandeja(db: Db, ahora: Date): Promise<{ vencidas: st
  * El PLAZO de la mesa entera (brief 30 min, concepto 90): pasado el plazo desde que se abrió el encargo, la mesa cierra con lo que hay y se lo entrega a la cadena con motivo «plazo» (cerrado_por_tope).
  * Es el freno de una mesa que sigue viva sin llegar a integrar (turnos que vuelven, pero sin fin). Solo las mesas de la cadena; nunca la bandeja. Un encargo ya cerrado no se toca.
  */
+/**
+ * ③ ESLABONES 1 y 3 de #1150 · los encargos que ESPERAN A LA CADENA (cerrados, con `espera_de_la_cadena.pendiente`): se vuelve a correr su cierre, que reintenta lo que no
+ * llegó al receptor y vuelve a leer `para_la_pieza`. US$ 0: no abre turnos ni suma gasto. Uno resuelto (`pendiente: false`) ya no se elige. Nunca lanza: lo que falle se devuelve.
+ */
+export async function revisarEsperasDeLaCadena(P: Puertos, db: Db): Promise<{ revisados: Array<{ encargo_id: string; resultado_para_la_sala: unknown; para_la_pieza: unknown }>; error: string | null }> {
+  const revisados: Array<{ encargo_id: string; resultado_para_la_sala: unknown; para_la_pieza: unknown }> = []
+  try {
+    const r = (await db.from('oficina_encargos').select('id').in('estado', ['cerrado', 'cerrado_por_tope']).eq(`estado_del_motor->artefactos->${ARTEFACTO_ESPERA_DE_LA_CADENA}->datos->>pendiente`, 'true')) as { data: Fila[] | null; error: { message: string } | null }
+    if (r.error) return { revisados, error: `leer las esperas de la cadena: ${r.error.message}` }
+    for (const f of r.data ?? []) {
+      const enc = await P.almacen.leerEncargo(String(f.id))
+      const espera = enc?.estado_del_motor.artefactos[ARTEFACTO_ESPERA_DE_LA_CADENA]?.datos as { pendiente?: boolean } | undefined
+      if (!enc || espera?.pendiente !== true) continue
+      const pl = await plantillaDe(P, enc)
+      const c = await cerrar(P, enc, pl, enc.estado === 'cerrado_por_tope')
+      revisados.push({ encargo_id: enc.id, resultado_para_la_sala: c.cuerpo.resultado_para_la_sala, para_la_pieza: c.cuerpo.para_la_pieza ?? 'sigue' })
+    }
+    return { revisados, error: null }
+  } catch (e) {
+    return { revisados, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 export async function vencerMesasPorPlazo(P: Puertos, db: Db, ahora: Date): Promise<{ vencidas: string[] }> {
   const familias = Object.entries(FAMILIAS_MESA).filter(([, t]) => esDeLaCadena(t)).map(([f]) => f)
   const r = (await db.from('oficina_encargos').select('id,creado_en').in('familia', familias).in('estado', ['abierto', 'en_paso'])) as { data: Fila[] | null; error: { message: string } | null }

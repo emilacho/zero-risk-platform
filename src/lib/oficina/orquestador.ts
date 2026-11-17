@@ -6,6 +6,7 @@
  * Reglas de oficio: `dry_run` explícito (en dry_run no se llama a ningún proveedor ni se escribe salida/bandeja); la oficina APAGADA no abre encargos (409); un fallo de formato tras el
  * reintento cierra el encargo como `fallido` (visible, nunca relleno); un fallo de Slack nunca frena nada; nadie pregunta al cliente.
  */
+import { ARTEFACTO_ESPERA_DE_LA_CADENA, RESULTADO_ESPERANDO_A_LA_CADENA, RESULTADO_REEMPLAZADA, consultarLaCadena } from './espera-de-la-cadena'
 import crypto from 'node:crypto'
 import { CABECERA_SALTAR_EDITOR } from '../cadena/constantes'
 import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } from './ayudas'
@@ -1073,18 +1074,34 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
   // REVISIÓN 2 · el único lugar que decide (`fichasAlCierre`): frena SOLO una regla dura de la lista que sigue rota; la devuelta a la cadena va «con desacuerdo»;
   //   lo demás (criterio de cualquier agente, lo que antes «decidía una persona», la revisión incompleta o sin revisar) es una OBSERVACIÓN DECLARADA: la pieza sigue
   const cierre = fichasAlCierre(e)
-  const conDesacuerdo = cierre.en_la_cadena.length > 0 || parcial
+  let conDesacuerdo = cierre.en_la_cadena.length > 0 || parcial
   const estadoFinal: Encargo['estado'] = parcial ? 'cerrado_por_tope' : 'cerrado'
   const pz = datos(e, 'pieza_post')
   const fin = datos(e, 'imagen_final')
   const ent = datos(e, 'entrega')
   const b = datos(e, 'encargo') ? base(e) : null
   const generada = lam ? lam.generada : fin?.origen === 'generada'
+  // RESPUESTA-LENOVO 17-nov punto 3 · una regla dura que sigue rota tras la vuelta FRENA (ver abajo)
+  const frenoDuro = cierre.frenan
+  // ESLABONES 1 y 3 de #1150 · lo devuelto a la cadena: el receptor dice qué hace la pieza. Solo `sigue` la deja ir a la bandeja;
+  //   reemplazada / frenada / esperando: ni salida ni bandeja. El que espera queda `cerrado` con `esperando_a_la_cadena` y lo vuelve a mirar el vigía
+  const cadena = cierre.en_la_cadena.length ? await consultarLaCadena(P, enc, e) : null
+  if (cadena) {
+    const antes = e.artefactos[ARTEFACTO_ESPERA_DE_LA_CADENA]
+    e.artefactos[ARTEFACTO_ESPERA_DE_LA_CADENA] = { version: (antes?.version ?? 0) + 1, version_consumida: antes?.version_consumida ?? 0, datos: cadena.espera as unknown as Record<string, unknown> }
+    for (const a of cadena.alarmas) await P.avisar({ canal: a.canal, encargo_id: enc.id, texto: a.texto, dry_run: enc.dry_run })
+    if (cadena.veredicto === 'sigue') conDesacuerdo = parcial
+    else if (!frenoDuro.length) {
+      const frenada = cadena.veredicto === 'frenada'
+      await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: estadoFinal, con_desacuerdo: frenada, imagen_generada: generada, salida_output_id: null, hitl_queue_id: null })
+      const resultado = cadena.veredicto === 'esperando' ? RESULTADO_ESPERANDO_A_LA_CADENA : cadena.veredicto === 'reemplazada' ? RESULTADO_REEMPLAZADA : 'con_desacuerdo'
+      return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: frenada, ...(frenada ? { frenada: true } : {}), para_la_pieza: cadena.veredicto, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: resultado, sala_ref: enc.sala_ref })
+    }
+  }
   let output_id: string | null = null, hitl_id: string | null = null
   // RESPUESTA-LENOVO 17-nov punto 3 · una regla dura que sigue rota tras la vuelta FRENA: la pieza no va a la salida ni a la bandeja (nadie la aprueba encima) y sale UNA alarma con el motivo
-  const frenoDuro = cierre.frenan
-  const desacuerdos = [...cierre.frenan, ...cierre.en_la_cadena].map((f) => `${f.donde}: ${f.que ?? ''}`)
-  const observaciones = [...cierre.observaciones.map((f) => `${f.donde}: ${f.que ?? ''}`), ...(revisionIncompleta(e) ? [datosDeLaJefatura(e)?.sin_revisar ? 'revisión: sin revisar (la jefatura no abrió o no contestó)' : `revisión: incompleta (${datosDeLaJefatura(e)?.resultado})`] : [])]
+  const desacuerdos = [...cierre.frenan, ...(cadena?.veredicto === 'sigue' ? [] : cierre.en_la_cadena)].map((f) => `${f.donde}: ${f.que ?? ''}`)
+  const observaciones = [...(cadena?.veredicto === 'sigue' ? cadena.observaciones : []), ...cierre.observaciones.map((f) => `${f.donde}: ${f.que ?? ''}`), ...(revisionIncompleta(e) ? [datosDeLaJefatura(e)?.sin_revisar ? 'revisión: sin revisar (la jefatura no abrió o no contestó)' : `revisión: incompleta (${datosDeLaJefatura(e)?.resultado})`] : [])]
   if (!enc.dry_run && (pz || lam) && b && !frenoDuro.length) {
     // la opinión libre del revisor externo viaja con la pieza, rotulada como OPINIÓN (y lo que el autor decidió con ella)
     const opinion = opinionExterna(e)

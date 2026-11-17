@@ -145,7 +145,9 @@ describe('firma de Emilio · la vuelta con respuesta del creador, de punta a pun
     expect(j.sentido!.devoluciones).toEqual([expect.objectContaining({ llave: 'F-0300:calendario', destino: 'calendario', dura: true, origen: 'codigo' })])
     expect(j.sentido!.declarado.join(' ')).toMatch(/hechos vivos/)
     expect(m.e.fichas.some((f) => f.donde === 'calendario' && f.gravedad === 'bloquea' && /^sentido · calendario: D1 · /.test(f.que ?? ""))).toBe(true)
-    expect(m.r.cuerpo).toMatchObject({ con_desacuerdo: true })
+    // eslabones 1 y 3 de #1150 · en ENSAYO no se llama al receptor (medida 5 de CC7): la devolución queda declarada y la pieza sigue, simulada · lo real: espera-de-la-cadena.test.ts
+    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'encargo_en_bandeja', simulado: true })
+    expect(m.r.cuerpo.observaciones).toEqual(expect.arrayContaining([expect.stringMatching(/^calendario: \(ensayo\) no se devolvió a la cadena: D1 · /)]))
   })
   it('sin hecho vivo de cierre (o con uno que empieza después), la misma pieza sale limpia', async () => {
     const hechos: HechoDelNegocioPorOferta[] = [{ oferta: 'oferta-a', tipo: 'cierre_retiro', valor: 'la oferta se suspende', vigente_desde: '2026-11-25', fuente: 'dueno:chat-17nov' }]

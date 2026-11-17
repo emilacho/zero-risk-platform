@@ -24,7 +24,7 @@ export interface ReRevision { desde_encargo: string; desde_hitl: string; pedido_
 /** el paso desde el que arranca: los chequeos duros (antes de la jefatura) */
 export const PASO_DE_ARRANQUE = 'chequeos'
 /** lo que la versión original produjo DESPUÉS de ese punto, o se recalcula: no se hereda (la revisión nueva y el cierre los vuelven a producir) */
-const NO_SE_HEREDA = new Set(['chequeos', 'fichas_externas', 'respuesta_imagen', 'entrega', 'cierre'])
+const NO_SE_HEREDA = new Set(['chequeos', 'fichas_externas', 'respuesta_imagen', 'entrega', 'cierre', 'espera_de_la_cadena'])
 
 /** Puro. El estado con el que arranca la re-revisión, o por qué no se puede. */
 export function estadoParaReRevisar(pl: Pick<Plantilla, 'pasos'>, anterior: Estado): { ok: true; estado: Estado; indiceDeArranque: number } | { ok: false; error: string } {
