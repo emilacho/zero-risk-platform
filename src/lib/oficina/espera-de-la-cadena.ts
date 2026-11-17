@@ -40,10 +40,12 @@ export interface EsperaDeLaCadena {
   enviadas: string[]
   /** llaves que el receptor dijo que son de la pieza (no se guardan allá): quedan como observación */
   a_la_pieza: string[]
+  /** llaves que el receptor contestó `ya_estaba`: si no aparecen en la lectura de ESTE encargo, la corrección es de OTRO encargo de la misma fila (CERTIFICACION-CC7 punto 3) */
+  ya_estaban?: string[]
   correcciones: CorreccionLeida[]
   veredicto: ParaLaPieza
   /** la marca de «ya avisé», una por incidente */
-  avisos: { receptor_caido?: string; seis_horas?: string; sin_campana?: string; sin_devoluciones?: string }
+  avisos: { receptor_caido?: string; seis_horas?: string; sin_campana?: string; sin_devoluciones?: string; de_otro_encargo?: string }
 }
 
 export interface ResultadoDeLaCadena {
@@ -75,7 +77,7 @@ export async function consultarLaCadena(P: Puertos, enc: Encargo, e: Estado): Pr
   const devs = devolucionesDelEncargo(e, previa)
   const espera: EsperaDeLaCadena = {
     pendiente: true, desde: previa?.desde ?? ahora, ultima_mirada: ahora, devoluciones: devs,
-    enviadas: [...(previa?.enviadas ?? [])], a_la_pieza: [...(previa?.a_la_pieza ?? [])], correcciones: previa?.correcciones ?? [], veredicto: 'esperando', avisos: { ...(previa?.avisos ?? {}) },
+    enviadas: [...(previa?.enviadas ?? [])], a_la_pieza: [...(previa?.a_la_pieza ?? [])], ya_estaban: [...(previa?.ya_estaban ?? [])], correcciones: previa?.correcciones ?? [], veredicto: 'esperando', avisos: { ...(previa?.avisos ?? {}) },
   }
   const alarmas: ResultadoDeLaCadena['alarmas'] = []
   const unaVez = (clave: keyof EsperaDeLaCadena['avisos'], t: string) => {
@@ -122,7 +124,8 @@ export async function consultarLaCadena(P: Puertos, enc: Encargo, e: Estado): Pr
       accion: 'recibir', campana_id: campana, fila_id: d.fila_id, destino: d.destino, motivo: d.motivo, linea_de_la_ficha: d.linea_de_la_ficha, encargo_id: enc.id,
       dura: d.dura, llave: d.llave, origen: d.origen, ...(regla ? { regla } : {}), ...(d.campo_de_la_hoja ? { campo_de_la_hoja: d.campo_de_la_hoja } : {}),
     })
-    if (r.status === 201 || (r.status === 200 && r.cuerpo?.ya_estaba === true)) espera.enviadas.push(d.llave)
+    if (r.status === 201) espera.enviadas.push(d.llave)
+    else if (r.status === 200 && r.cuerpo?.ya_estaba === true) { espera.enviadas.push(d.llave); espera.ya_estaban!.push(d.llave) }
     else if (r.status === 200 && r.cuerpo?.va_a === 'pieza') { espera.enviadas.push(d.llave); espera.a_la_pieza.push(d.llave) }
     else caido = true
   }
@@ -139,8 +142,13 @@ export async function consultarLaCadena(P: Puertos, enc: Encargo, e: Estado): Pr
   if (caido) unaVez('receptor_caido', `🛑 El receptor de la cadena no contestó · ${enc.brief_id}: la pieza no sale; la oficina reintenta en la próxima vuelta del vigía.`)
   // la que se mandó y todavía no aparece en la lectura cuenta como `esperando`
   const deLaCadena = espera.enviadas.filter((l) => !espera.a_la_pieza.includes(l))
-  const faltan = deLaCadena.some((l) => !espera.correcciones.some((c) => c.llave === l)) || devs.some((d) => !espera.enviadas.includes(d.llave))
-  const veredicto = veredictoDe([...espera.correcciones.map((c) => c.para_la_pieza), ...(caido || faltan ? ['esperando' as const] : []), ...(deLaCadena.length ? [] : ['sigue' as const])])
+  const noLeida = (l: string) => !espera.correcciones.some((c) => c.llave === l)
+  // CC7 punto 3 · `ya_estaba` y no está en la lectura de este encargo: la fila ya tiene esa corrección de OTRO encargo y esta regla dura no llega a ningún creador.
+  //   Nunca se espera para siempre ni se suelta: FRENA, con UNA alarma (el arreglo de fondo es del receptor: abrir una corrección nueva para este encargo)
+  const deOtro = lista ? deLaCadena.filter((l) => (espera.ya_estaban ?? []).includes(l) && noLeida(l)) : []
+  if (deOtro.length) unaVez('de_otro_encargo', `🛑 Pieza frenada · ${enc.brief_id}: la fila ya tenía esta corrección de otro encargo (${deOtro.join(', ')}), así que la regla dura no llega a ningún creador. No se publica.`)
+  const faltan = deLaCadena.some((l) => noLeida(l) && !deOtro.includes(l)) || devs.some((d) => !espera.enviadas.includes(d.llave))
+  const veredicto = veredictoDe([...espera.correcciones.map((c) => c.para_la_pieza), ...(deOtro.length ? ['frenada' as const] : []), ...(caido || faltan ? ['esperando' as const] : []), ...(deLaCadena.length ? [] : ['sigue' as const])])
   const observaciones = veredicto === 'sigue' ? [
     ...espera.correcciones.map((c) => `${c.destino}: la cadena respondió «${c.respuesta ?? 'sin respuesta'}»${c.explicacion ? ` — ${c.explicacion}` : ''}`),
     ...devs.filter((d) => espera.a_la_pieza.includes(d.llave)).map((d) => `pieza: ${d.motivo} (no era de la cadena)`),

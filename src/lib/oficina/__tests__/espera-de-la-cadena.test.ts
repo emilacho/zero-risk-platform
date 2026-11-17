@@ -20,6 +20,14 @@ import type { PuertoDeLaCadena, RespuestaDeLaCadena } from '../puertos'
 import type { SalidaDeRevision } from '../../jefatura/revision/contrato'
 import type { Tarjeta } from '../mesa/tipos'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
+import { AlmacenMemoria } from '../../cadena/__fixtures__/almacen-memoria'
+import { clienteA, contextoDe } from '../../cadena/__fixtures__/clientes'
+import { puertoDeLaCadena } from '../../cadena/mesas'
+import { relojDeLaCadena } from '../../cadena/reloj'
+import { VERSION_BASE_DE_CORRECCION } from '../../cadena/correcciones-calendario'
+import { diaSemanaIso } from '../../cadena/fechas'
+import type { Campana } from '../../cadena/almacen'
+import type { Fila as FilaDeLaCadena } from '../../cadena/tipos'
 import { crearMesaEnMemoria } from './mesa-memoria'
 
 const FICHA: FichaDeOferta = { clave: 'oferta-a', nombre: 'Oferta A', que_es: { valor: 'lo que se vende', fuente: 'ficha:1' }, oferta_y_precio: [{ valor: 'el principal $7,00', fuente: 'manual:precios' }], no_se_puede_afirmar: [] } as unknown as FichaDeOferta
@@ -74,7 +82,7 @@ function receptor(o: { para?: (llave: string) => ParaLaPieza; recibir?: (llave: 
   }
 }
 
-async function correr(o: { real?: boolean; campana?: string | null; rec?: ReturnType<typeof receptor> | null } = {}) {
+async function correr(o: { real?: boolean; campana?: string | null; rec?: ReturnType<typeof receptor> | null; cadena?: Partial<PuertoDeLaCadena> } = {}) {
   const pl: Plantilla = JSON.parse(JSON.stringify(KIT_MESA))
   const M = crearMemoria({ parte: parteCon(BRIEF), plantilla: pl, config: { familias_activas: ['kit_historias'] } })
   const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = { kit_historias: { plantilla: KIT_HISTORIAS_CON_JEFATURA, activo: true }, kit_mesa: { plantilla: pl, activo: true } }
@@ -87,6 +95,7 @@ async function correr(o: { real?: boolean; campana?: string | null; rec?: Return
   M.P.parte = async (id, c) => { const p = await parteOriginal(id, c); return p ? { ...p, campana_id: o.campana === undefined ? CAMPANA : o.campana } : p }
   const rec = o.rec === undefined ? receptor() : o.rec
   if (rec) M.P.cadena = { ...(M.P.cadena as PuertoDeLaCadena), ...rec.puerto }
+  if (o.cadena) M.P.cadena = { ...(M.P.cadena as PuertoDeLaCadena), ...o.cadena }
   let r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0300', dry_run: o.real === false, familia: 'kit_historias' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   const id = String(r.cuerpo.encargo_id)
   M.encargos.get(id)!.sala_ref = { fila: { id: 'F-0300', fecha: '2026-11-20' } }
@@ -270,6 +279,26 @@ describe('las medidas de CC7', () => {
     expect(v.cuerpo).toMatchObject({ resultado_para_la_sala: 'esperando_a_la_cadena' })
     expect(m.M.llamadas.bandeja.length).toBe(bandejaAntes)
   })
+  it('🔴 CC7 punto 3 · la misma fila ya tiene la corrección de OTRO encargo (`ya_estaba` y no está en la lectura de este): FRENA con UNA alarma, nunca espera para siempre', async () => {
+    const rec = receptor({ para: () => 'reemplazada' })
+    // el encargo 1 de la fila dejó su corrección: el receptor la tiene con OTRO encargo_id
+    rec.guardadas.set('F-0300:calendario', { llave: 'F-0300:calendario', destino: 'calendario', encargo_id: 'encargo-anterior' })
+    const m = await correr({ rec })
+    expect(m.r.cuerpo).toMatchObject({ frenada: true, para_la_pieza: 'frenada', output_id: null, hitl_queue_id: null })
+    await m.vigia(); await m.vigia()
+    expect(m.M.llamadas.bandeja).toEqual([])
+    expect(m.alertas().filter((a) => /de otro encargo/.test(a.texto))).toHaveLength(1)
+    expect(m.espera()!.pendiente).toBe(false)
+  })
+  it('🔴 mi propio reintento que vuelve `ya_estaba` SÍ está en la lectura: no es de otro encargo, se lee su `para_la_pieza`', async () => {
+    const rec = receptor({ recibir: (_l, vez) => (vez === 1 ? { status: 500, cuerpo: { ok: false } } : null), para: () => 'sigue' })
+    const m = await correr({ rec })
+    // el primer envío llegó pero la respuesta se perdió: el receptor la guardó para ESTE encargo
+    rec.guardadas.set('F-0300:calendario', { llave: 'F-0300:calendario', destino: 'calendario', encargo_id: m.id })
+    const v = await m.vigia()
+    expect(v.cuerpo).toMatchObject({ resultado_para_la_sala: 'encargo_en_bandeja' })
+    expect(m.alertas().filter((a) => /de otro encargo/.test(a.texto))).toEqual([])
+  })
   it('sin el puerto del receptor: la pieza espera y lo dice UNA vez (nunca se suelta en silencio)', async () => {
     const m = await correr({ rec: null })
     expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'esperando_a_la_cadena' })
@@ -289,6 +318,19 @@ describe('el vigía ③ y los lectores de `resultado_para_la_sala` (medida de CC
     const otra = await revisarEsperasDeLaCadena(m.M.P, dbCon([m.id]) as never)
     expect(otra.revisados).toEqual([]) // ya no está pendiente
     expect(m.M.llamadas.bandeja).toHaveLength(1)
+  })
+  it('🔴 CC7 punto 4 · regla dura rota EN LA PIEZA + devolución a la cadena que sigue esperando: 3 vueltas del vigía → UNA sola alarma de freno', async () => {
+    const m = await correr()
+    expect(m.espera()!.pendiente).toBe(true)
+    // la misma pieza, además, rompe una regla dura propia (la que no vuelve a la cadena): el cierre la frena
+    m.enc().estado_del_motor.fichas.push({ id: 'regla-6-0', origen: 'chequeo', donde: 'archivos', gravedad: 'bloquea', que: 'falta el archivo que la red exige', estado: 'abierta', dura: true } as never)
+    await m.vigia()
+    const frenos = () => m.alertas().filter((a) => /frenada/i.test(a.texto) && !/cadena/.test(a.texto))
+    expect(frenos()).toHaveLength(1)
+    expect(m.espera()!.pendiente).toBe(false)
+    for (let i = 0; i < 3; i++) await revisarEsperasDeLaCadena(m.M.P, dbCon([m.id]) as never)
+    expect(frenos()).toHaveLength(1)
+    expect(m.M.llamadas.bandeja).toEqual([])
   })
   it('🔴 el vigía nunca lanza: una base que falla vuelve como `error`', async () => {
     const db = { from: () => ({ select: () => ({ in: () => ({ eq: async () => ({ data: null, error: { message: 'sin red' } }) }) }) }) }
@@ -321,5 +363,49 @@ describe('la versión siguiente no hereda la espera', () => {
     const r = estadoParaReRevisar(pl, m.enc().estado_del_motor)
     expect(r.ok).toBe(true)
     if (r.ok) expect(Object.keys(r.estado.artefactos)).not.toContain(ARTEFACTO_ESPERA_DE_LA_CADENA)
+  })
+})
+
+
+describe('de punta a punta con el RECEPTOR REAL de CC3 (#1150 · puerto en proceso · almacén en memoria) · CERTIFICACION-CC7 punto 3 + TOMO-CC6', () => {
+  const k = { c: clienteA(), ahora: '2026-11-12T15:00:00Z', abierto: '2026-11-19', hora: '09:00' }
+  const CAMP_REAL = '00000000-0000-4000-8000-0000000c4c4c'
+  const CLI_REAL = '11111111-1111-4111-8111-aaaaaaaaaaaa'
+  function cadenaReal() {
+    const al = new AlmacenMemoria({ contextos: { [CLI_REAL]: { ...contextoDe(k.c), clientId: CLI_REAL } }, config: { flujos: ['wf-cadena', 'wf-vigia'], estado_cadena: 'encendida' } })
+    const campana: Campana = {
+      id: CAMP_REAL, client_id: CLI_REAL, plan_id: 'plan-1', fecha_inicio: k.c.campana.fecha_inicio, fecha_inicio_origen: 'regla', fecha_fin: k.c.campana.fecha_fin, zona_horaria: 'UTC', pais: 'pais-de-practica', sedes: k.c.sedes.map((s) => s.clave),
+      estado: 'activa', estado_motivo: null, presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: false, sala_ref: {}, reemplaza_a: null, seco: false,
+    } as Campana
+    al.campanas.push(campana)
+    const fila = (id: string, fecha: string, estado: string) => ({ id, tanda: 1, semana: 1, dia_semana: diaSemanaIso(fecha), fecha, hora: k.hora, red: 'instagram', formato: 'foto', pilar: 'p', tema: 't', sede: k.c.sedes[0].clave, requiere_abierto: true, depende_de: [], datos: [], pendientes: [], pide_video: false, estado, avisos: [], campana_id: CAMP_REAL, calendario_version: 1 }) as unknown as FilaDeLaCadena & { campana_id: string; calendario_version: number }
+    al.filasGuardadas.push(fila('F-0300', '2026-11-15', 'en_oficina'), fila('otra', '2026-12-03', 'validada'))
+    let n = 0
+    al.mesaDeReubicacion = async () => ({ estado: 'abierta', encargo_id: `enc-m${++n}` })
+    const puerto = puertoDeLaCadena(al, () => k.ahora)
+    return { al, puerto }
+  }
+  it('🔴 encargo 1: la D1 llega al receptor real, espera; la reubicación tomada la deja `reemplazada` y la pieza vieja NO sale · encargo 2 de la MISMA fila: `ya_estaba` de otro encargo → FRENA con UNA alarma', async () => {
+    const { al, puerto } = cadenaReal()
+    const cadena = { devolverCorreccion: puerto.devolverCorreccion, correccionesDelEncargo: puerto.correccionesDelEncargo }
+    const m = await correr({ rec: null, campana: CAMP_REAL, cadena })
+    expect(al.correcciones).toHaveLength(1)
+    expect(al.correcciones[0]).toMatchObject({ llave: 'F-0300:calendario', encargo_id: m.id, dura: true, regla: 'D1' })
+    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'esperando_a_la_cadena', para_la_pieza: 'esperando' })
+    // el creador del calendario la toma: la fila se mueve y vuelve a validada
+    await relojDeLaCadena(al, { workflow_id: 'wf-vigia', workflow_execution_id: 'v1' }, k.ahora)
+    const ent = await puerto.entregarReubicacion({ campana_id: CAMP_REAL, version: VERSION_BASE_DE_CORRECCION + 1, encargo_id: 'enc-m1', texto: `- F-0300 · reubicar · ${k.abierto} · ${k.hora} · ese día ya vale la oferta\nRESPUESTA A LA JEFATURA C1: tomada`, costo_usd: 0, motivo: null })
+    expect(ent, JSON.stringify({ ent, sobres: al.sobresDeReubicacion.length, corr: al.correcciones[0]?.estado })).toMatchObject({ ok: true, estado: 'aplicada' })
+    const v = await m.vigia()
+    expect(v.cuerpo).toMatchObject({ resultado_para_la_sala: 'reemplazada', para_la_pieza: 'reemplazada', output_id: null })
+    expect(m.M.llamadas.bandeja).toEqual([])
+    // encargo 2 · el brief nuevo de la misma fila (otro encargo) y la jefatura vuelve a hallar una D1 para el calendario
+    al.correcciones[0].encargo_id = 'encargo-1-de-la-fila'
+    const m2 = await correr({ rec: null, campana: CAMP_REAL, cadena })
+    expect(al.correcciones).toHaveLength(1) // la llave fila:destino no abre otra (el arreglo de fondo es del receptor)
+    expect(m2.r.cuerpo).toMatchObject({ frenada: true, para_la_pieza: 'frenada', output_id: null, hitl_queue_id: null })
+    await m2.vigia(); await m2.vigia()
+    expect(m2.M.llamadas.bandeja).toEqual([])
+    expect(m2.alertas().filter((a) => /de otro encargo/.test(a.texto))).toHaveLength(1)
   })
 })

@@ -1087,6 +1087,9 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
   //   reemplazada / frenada / esperando: ni salida ni bandeja. El que espera queda `cerrado` con `esperando_a_la_cadena` y lo vuelve a mirar el vigía
   const cadena = cierre.en_la_cadena.length ? await consultarLaCadena(P, enc, e) : null
   if (cadena) {
+    // CERTIFICACION-CC7 punto 4 · la pieza que ya FRENA por su propia regla dura no sale nunca: la devolución igual llegó al receptor (corrige la cadena),
+    //   pero el encargo NO queda pendiente de la cadena · el vigía no lo vuelve a correr y su alarma de freno sale UNA vez
+    if (frenoDuro.length) cadena.espera.pendiente = false
     const antes = e.artefactos[ARTEFACTO_ESPERA_DE_LA_CADENA]
     e.artefactos[ARTEFACTO_ESPERA_DE_LA_CADENA] = { version: (antes?.version ?? 0) + 1, version_consumida: antes?.version_consumida ?? 0, datos: cadena.espera as unknown as Record<string, unknown> }
     for (const a of cadena.alarmas) await P.avisar({ canal: a.canal, encargo_id: enc.id, texto: a.texto, dry_run: enc.dry_run })
