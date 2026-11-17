@@ -53,10 +53,11 @@ describe('calendario_tanda.v3 · el concepto de cada pieza', () => {
     expect(ESQUEMAS['calendario_tanda.v2']).toBe(ESQUEMA_CALENDARIO_TANDA_V2)
     expect(ESQUEMAS['calendario_tanda.v3']).toBe(ESQUEMA_CALENDARIO_TANDA_V3)
   })
-  it('(GO 22:04) la tarea pide solo lo ESTRATÉGICO de ESA pieza; el cómo es de la mesa; lo que no sepa queda vacío', () => {
-    for (const k of ['idea', 'objetivo', 'mensaje', 'publico', 'llamado', 'fotos_disponibles']) expect(CONCEPTO_DE_CADA_PIEZA).toContain(`\`${k}\``)
-    for (const k of ['que_se_ve', 'emocion', '`foto`']) expect(CONCEPTO_DE_CADA_PIEZA).not.toContain(k)
-    expect(CONCEPTO_DE_CADA_PIEZA).toMatch(/lo decide la mesa/)
+  // 17-nov · Sprint 4 · F (v5): el calendario ya no escribe la idea, el mensaje, el llamado ni las fotos: solo objetivo y público de la fecha
+  it('(Sprint 4 · F) la tarea pide solo objetivo y público; NO pide idea, mensaje, llamado ni fotos; no reescribe la idea; lo que no sepa queda vacío', () => {
+    for (const k of ['objetivo', 'publico']) expect(CONCEPTO_DE_CADA_PIEZA).toContain(`\`${k}\``)
+    for (const k of ['`idea`', '`mensaje`', '`llamado`', '`fotos_disponibles`', 'que_se_ve', 'emocion', '`foto`']) expect(CONCEPTO_DE_CADA_PIEZA).not.toContain(k)
+    expect(CONCEPTO_DE_CADA_PIEZA).toMatch(/NO reescribes su idea, su mensaje/)
     expect(CONCEPTO_DE_CADA_PIEZA).toMatch(/déjala vacía/)
   })
   it('(GO 22:04) v4 = v3 con el concepto estratégico; v3 sigue en el registro tal cual (filas guardadas)', () => {
@@ -82,17 +83,20 @@ describe('calendario_tanda.v3 · el concepto de cada pieza', () => {
 })
 
 describe('la hoja escribe el concepto de la pieza y la oficina lo lee', () => {
-  it('(GO 22:04) fila v3 guardada (con lo creativo): qué se ve, emoción y foto llegan SOLO como SUGERENCIAS, nunca como orden; su mensaje y su llamado mandan; sin aviso', () => {
+  // 17-nov · Sprint 4 · F: con idea del banco, la idea y el mensaje de la fila vieja NO llegan (manda la idea de los creativos); su llamado queda como respaldo (paso 3)
+  it('(GO 22:04 · Sprint 4 F) fila v3 guardada: lo creativo llega SOLO como SUGERENCIAS; su idea y su mensaje NO llegan (manda el banco); su llamado es respaldo; sin aviso', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-ig-01', concepto: CONCEPTO_PROPIO })]))
     expect(h.avisos).toEqual([])
     const b = parsearBrief(h.texto_md, 'F1-S1-ig-01')!
-    expect(b.idea_de_la_pieza).toBe('la silla vacía que espera al vecino')
+    expect(b.idea_de_la_pieza).toBeUndefined()
+    expect(h.texto_md).not.toContain('la silla vacía que espera al vecino')
     expect(b.que_se_ve).toBeUndefined()
-    expect(b.mensaje).toBe('siempre hay una silla para ti')
+    expect(b.mensaje).toBe('aquí siempre hay una silla para ti')
+    expect(h.texto_md).not.toMatch(/^- MENSAJE \(uno\): siempre hay una silla para ti$/m)
     expect(b.llamado).toBe('ven a desayunar mañana')
     expect(h.texto_md).not.toMatch(/^- (QUÉ SE VE|EMOCIÓN|FOTO A USAR):/m)
-    // 17-nov (RESPUESTA a Lenovo «el brief trae el cómo»): la descripción de la idea del banco es la primera sugerencia; lo creativo de la fila v3 sigue después
-    expect(h.texto_md).toContain('- SUGERENCIAS:\n  - cómo la imaginó el banco (C1-I01): la primera silla · la mesa puede mejorarla o reemplazarla diciendo por qué\n  - qué se ve: una silla de madera')
+    expect(h.texto_md).toMatch(/^- IDEA DEL BANCO: C1-I01 · la primera silla · mensaje: aquí siempre hay una silla para ti/m)
+    expect(h.texto_md).toContain('- SUGERENCIAS:\n  - qué se ve: una silla de madera')
     expect(h.texto_md).toContain('  - emoción: bienvenida')
     expect(h.texto_md).toContain('  - foto: foto:f-01')
     expect(h.texto_md).toContain(`- QUIÉN DECIDE EL CÓMO: ${QUIEN_DECIDE_EL_COMO}`)
@@ -107,16 +111,18 @@ describe('la hoja escribe el concepto de la pieza y la oficina lo lee', () => {
     expect(h.texto_md).toContain('- PÚBLICO: vecinos madrugadores')
     expect(h.texto_md).toContain('  - foto:f-09 (material; la mesa decide si la usa)')
     expect(h.texto_md).toContain('  - f-01 (material; la mesa decide si la usa)')
-    expect(h.texto_md).toContain('- SUGERENCIAS:\n  - cómo la imaginó el banco (C1-I01): la primera silla · la mesa puede mejorarla o reemplazarla diciendo por qué\n- GANCHO SUGERIDO:')
+    // 17-nov · Sprint 4 · F: sin lo creativo de una v3 no hay SUGERENCIAS; la idea del banco va tal cual en IDEA DEL BANCO y el mensaje de la fila no llega
+    expect(h.texto_md).not.toContain('- SUGERENCIAS:')
+    expect(h.texto_md).not.toContain('- MENSAJE (uno): m\n')
   })
   it('sin concepto propio: se arma de la idea del banco; NO suma avisos de la hoja (serían hallazgos del parte: una reja de hecho); el mensaje, el llamado y el público son los de siempre; ninguna escena impuesta', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-ig-01' })]))
     expect(h.avisos).toEqual([])
     const b = parsearBrief(h.texto_md, 'F1-S1-ig-01')!
-    // 17-nov (RESPUESTA a Lenovo «el brief trae el cómo»): sin idea propia de la fila NO hay IDEA DE LA PIEZA (la propone la mesa): la descripción del banco va UNA vez y como sugerencia
+    // sin idea propia de la fila NO hay IDEA DE LA PIEZA; 17-nov · Sprint 4 · F: la descripción del banco va UNA vez, tal cual, en IDEA DEL BANCO
     expect(b.idea_de_la_pieza).toBeUndefined()
     expect(h.texto_md.split('la primera silla').length - 1).toBe(1)
-    expect(h.texto_md).toContain('  - cómo la imaginó el banco (C1-I01): la primera silla')
+    expect(h.texto_md).toMatch(/^- IDEA DEL BANCO: C1-I01 · la primera silla · /m)
     expect(b.que_se_ve).toBeUndefined()
     expect(b.mensaje).toBe('aquí siempre hay una silla para ti')
     expect(b.llamado).toBe('«ven a desayunar»')
@@ -142,7 +148,8 @@ describe('Mejora 1 · la jefatura recibe el objetivo, no el mensaje', () => {
   })
   it('un parte viejo sin OBJETIVO sigue con el mensaje (no queda vacío)', () => {
     const viejo = { ...b, objetivo: undefined }
-    expect(resumenDelEncargo(viejo).objetivo).toBe('siempre hay una silla para ti')
+    // 17-nov · Sprint 4 · F: el mensaje es el de la idea del banco (el de la fila vieja ya no manda)
+    expect(resumenDelEncargo(viejo).objetivo).toBe('aquí siempre hay una silla para ti')
   })
 })
 

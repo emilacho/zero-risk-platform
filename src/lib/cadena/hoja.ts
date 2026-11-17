@@ -11,6 +11,7 @@ import type { ConceptoDeLaFila, DatoDeterminado, Fila, FormatosPorRed } from './
 import { PROPORCION_POR_FORMATO, proporcionDe, proporcionDeLaTabla } from './proporciones'
 import type { BriefCreativoLeido } from './brief-creativo'
 import { comoSeVeSinPartes, decisionDeLaParte, ideaDelBanco, PARTES_DE_COMO_SE_VE, type CapituloDelConcepto, type ConceptoLeido, type IdeaDelBanco } from './conceptos'
+import { comoSeCompraParaLaRed, datosSinFuente, fichaDeLaOferta, fichaEnLineas, type FichaDeOferta } from './ficha-de-oferta'
 
 export const FAMILIA_DEL_KIT = 'kit_historias'
 /** el id de un brief del parte (mismo criterio que `autoproducir.ts` RE_BRIEF) */
@@ -29,6 +30,8 @@ export type FilaDeHoja = Pick<Fila, 'id' | 'fecha' | 'hora' | 'red' | 'formato' 
   idea_ref?: string | null
   /** 16-nov · Sprint 1 · Mejora 2 · el concepto de ESTA pieza (columna `concepto`); sin concepto ⇒ la hoja lo arma del banco y lo avisa */
   concepto?: ConceptoDeLaFila | null
+  /** 17-nov · Sprint 4 · A · la oferta que vende la pieza (la clave que trae la fila; hoy la columna `sede`) · sin oferta ⇒ la hoja lo declara */
+  oferta?: string | null
 }
 export interface InsumosDeLaHoja {
   client_name: string
@@ -48,6 +51,8 @@ export interface InsumosDeLaHoja {
   /** ensayo en seco: la hoja lo dice en su encabezado y en la procedencia */
   seco?: boolean
   proporciones?: Readonly<Record<string, string>>
+  /** 17-nov · Sprint 4 · A · las fichas de hechos por oferta (la orden de trabajo de cada pieza); sin fichas ⇒ cada pieza lo declara, nada se bloquea */
+  fichas?: ReadonlyArray<FichaDeOferta> | null
 }
 export interface BriefDeLaHoja { brief_id: string; fila_id: string | null; fila_ids: string[]; familia: string | null; red: string; formato: string; idea_ref: string | null }
 export interface ProcedenciaDeLaHoja {
@@ -132,24 +137,41 @@ function mensajeDe(idea: IdeaDelBanco | null, f: Pick<FilaDeHoja, 'tema'>, aviso
  */
 function conceptoDeLaPieza(f: FilaDeHoja, idea: IdeaDelBanco | null): { idea: string; objetivo: string; mensaje: string; publico: string; llamado: string; fotos: string[]; sugerencias: string[] } {
   const k = f.concepto ?? {}
-  // GO Lenovo 16-nov 22:04 · las fotos son MATERIAL disponible (la mesa elige): las de la fila, la vieja «foto» de v3 y la que cita la idea del banco, sin repetir
+  // 17-nov · Sprint 4 · F · la pieza nace de la idea: con idea del banco, la idea y el mensaje son los de los creativos. La idea y el mensaje que
+  // una fila vieja (`calendario_tanda.v4`) escribió NO llegan a la hoja (ADENDA 1 del DISEÑO · NOTA CC6 punto 5); su llamado queda solo como respaldo
+  // (paso 3 del orden del llamado) y lo creativo de una fila v3 sigue como sugerencia
+  if (idea) {
+    const fotos = fotosDeLaPieza(k, idea)
+    const sugerencias = [k.que_se_ve ? `qué se ve: ${limpio(k.que_se_ve)}` : '', k.emocion ? `emoción: ${limpio(k.emocion)}` : '', k.foto ? `foto: ${limpio(k.foto)}` : ''].filter((x) => x && !/:\s*$/.test(x))
+    return { idea: '', objetivo: limpio(k.objetivo), mensaje: limpio(idea.mensaje), publico: limpio(k.publico), llamado: limpio(k.llamado), fotos, sugerencias }
+  }
+  // sin idea del banco (fila sin `idea_ref`): lo que trae la fila es lo único que hay; lo creativo de una fila v3 entra solo como SUGERENCIA
+  const fotos = fotosDeLaPieza(k, null)
+  const sugerencias = [k.que_se_ve ? `qué se ve: ${limpio(k.que_se_ve)}` : '', k.emocion ? `emoción: ${limpio(k.emocion)}` : '', k.foto ? `foto: ${limpio(k.foto)}` : ''].filter((x) => x && !/:\s*$/.test(x))
+  return { idea: limpio(k.idea), objetivo: limpio(k.objetivo), mensaje: limpio(k.mensaje), publico: limpio(k.publico), llamado: limpio(k.llamado), fotos, sugerencias }
+}
+/** GO Lenovo 16-nov 22:04 · las fotos son MATERIAL disponible (la mesa elige): las de la fila, la vieja «foto» de v3 y la que cita la idea del banco, sin repetir */
+function fotosDeLaPieza(k: ConceptoDeLaFila, idea: IdeaDelBanco | null): string[] {
   const fotos: string[] = []
   for (const x of [...(k.fotos_disponibles ?? []), k.foto ?? '', idea?.foto && idea.foto !== 'ninguna' ? idea.foto : ''].map(limpio).filter(Boolean)) {
     const clave = (s: string) => s.replace(/^foto:\s*/i, '').toLowerCase()
     if (!fotos.some((y) => clave(y) === clave(x))) fotos.push(x)
   }
-  // lo creativo que quedó de antes (fila v3) entra solo como SUGERENCIA para la mesa, nunca como orden
-  const sugerencias = [k.que_se_ve ? `qué se ve: ${limpio(k.que_se_ve)}` : '', k.emocion ? `emoción: ${limpio(k.emocion)}` : '', k.foto ? `foto: ${limpio(k.foto)}` : ''].filter((x) => x && !/:\s*$/.test(x))
-  // 17-nov · RESPUESTA a Lenovo «el brief trae el cómo» · la línea del banco mezcla la idea con su cómo visual: llega UNA vez y como SUGERENCIA (antes: QUÉ ES + IDEA DEL BANCO + IDEA DE LA PIEZA, como dato)
-  if (idea?.idea) sugerencias.unshift(sugerenciaDelBanco(idea))
-  return { idea: limpio(k.idea), objetivo: limpio(k.objetivo), mensaje: limpio(k.mensaje), publico: limpio(k.publico), llamado: limpio(k.llamado), fotos, sugerencias }
+  return fotos
 }
+/**
+ * 17-nov · Sprint 4 · F · la idea del banco TAL COMO LA CREARON los creativos de la gran idea (qué cuenta, mensaje, gancho, protagonista y la foto que citaron).
+ * Es la idea de la pieza: la mesa la materializa. Antes (17-nov, «quitar rejas») llegaba solo como sugerencia reemplazable.
+ */
+export const ideaTalCual = (idea: Pick<IdeaDelBanco, 'id' | 'idea' | 'mensaje' | 'gancho' | 'protagonista' | 'foto' | 'serie'>): string =>
+  [`${idea.id}${idea.serie && !/^ninguna$/i.test(limpio(idea.serie)) ? ` · serie ${limpio(idea.serie)}` : ''}`, limpio(idea.idea), idea.mensaje ? `mensaje: ${limpio(idea.mensaje)}` : '', idea.gancho ? `gancho: ${limpio(idea.gancho)}` : '', idea.protagonista ? `protagonista: ${limpio(idea.protagonista)}` : '', idea.foto ? `foto que citaron: ${limpio(idea.foto)}` : ''].filter(Boolean).join(' · ')
 /** 17-nov · la descripción de la idea del banco, como sugerencia que la mesa puede mejorar (nunca como orden) */
 export const sugerenciaDelBanco = (idea: Pick<IdeaDelBanco, 'id' | 'idea'>): string => `cómo la imaginó el banco (${idea.id}): ${limpio(idea.idea)} · la mesa puede mejorarla o reemplazarla diciendo por qué`
 /** 17-nov · GO «quitar rejas» C3 · cuántas versiones de la pieza: ningún dato lo fija (antes «1» fijo), lo decide la mesa */
 export const VARIANTES_SIN_DATO = 'las que decida la mesa de la pieza (ningún dato del brief ni de la tabla de formatos las fija)'
 /** GO Lenovo 16-nov 22:04 · quién decide el cómo (lo lee la mesa y quien revise: el brief dice QUÉ y POR QUÉ) */
-export const QUIEN_DECIDE_EL_COMO = 'la mesa de creativos decide la escena, el gancho, la composición, la emoción y qué foto usar; lo de SUGERENCIAS puede mejorarlo o reemplazarlo diciendo por qué'
+// 17-nov · Sprint 4 · F · la pieza nace de la idea: la mesa MATERIALIZA la idea del banco (no la reemplaza); el cómo final es suyo
+export const QUIEN_DECIDE_EL_COMO = 'la mesa de creativos materializa la IDEA DEL BANCO (la crearon los creativos de la gran idea): decide la escena final, el gancho final, la composición, la emoción y qué foto usar dentro de esa idea, con los hechos de la ficha de la oferta cuando la hay; lo de SUGERENCIAS es contexto'
 /** 17-nov · el campo de la hoja con lo decidido (lista); lo lee `parsearBrief` como `lo_decidido` */
 export const CAMPO_LO_DECIDIDO = 'LO DECIDIDO'
 /** lo LIBRE de cada pieza: lo que decide su mesa, dentro de lo FIJO */
@@ -169,10 +191,41 @@ export function loDecidido(c: Pick<ConceptoLeido, 'gran_idea' | 'como_se_ve_part
     out.push(`FIJO · ${etiqueta}: ${limpio(d.que)} · PORQUÉ: ${limpio(d.porque ?? porDefecto)}`)
   }
   // 17-nov · la idea es el QUÉ y el QUIÉN (id, mensaje, protagonista); su descripción visual es una SUGERENCIA (`sugerenciaDelBanco`), no lo fijo
-  if (idea) out.push(`FIJO · idea de esta pieza: ${idea.id}${idea.mensaje ? ` · mensaje: ${limpio(idea.mensaje)}` : ''}${idea.protagonista ? ` · protagonista: ${limpio(idea.protagonista)}` : ''} · PORQUÉ: la eligió el calendario del banco de ideas${cap ? ` del capítulo ${cap.clave}` : ''}`)
+  if (idea) out.push(`FIJO · idea de esta pieza: ${idea.id}${idea.mensaje ? ` · mensaje: ${limpio(idea.mensaje)}` : ''}${idea.protagonista ? ` · protagonista: ${limpio(idea.protagonista)}` : ''} · PORQUÉ: la crearon los creativos de la gran idea${cap ? ` en el capítulo ${cap.clave}` : ''}; el calendario solo le puso fecha, red y formato`)
   else if (limpio(mensajeSinIdea)) out.push(`FIJO · mensaje de esta pieza: ${limpio(mensajeSinIdea)} · PORQUÉ: lo fija la fila del calendario (no tiene idea del banco)`)
   out.push(LIBRE_DE_LA_PIEZA)
   return out
+}
+/** el campo de la hoja con la ficha de hechos de la oferta (lista); lo lee la mesa como texto */
+export const CAMPO_FICHA = 'FICHA DE LA OFERTA'
+/**
+ * 17-nov · Sprint 4 · A · la ficha de la oferta de la pieza, como lista de datos con fuente.
+ * Sin fichas cargadas se DECLARA (🟡 2 de CC6 a #1131: nunca en silencio); con fichas pero sin la de esta oferta, se declara y se avisa.
+ */
+export const SIN_FICHAS = 'sin fichas de hechos todavía · declarado'
+function fichaDeLaPieza(ins: InsumosDeLaHoja, f: FilaDeHoja, id: string, avisos: string[]): string[] {
+  if (!ins.fichas?.length) return [campo(CAMPO_FICHA, SIN_FICHAS)]
+  const ficha = fichaDeLaOferta(ins.fichas, f.oferta)
+  if (!ficha) {
+    avisos.push(`${id}: ${f.oferta ? `la oferta «${limpio(f.oferta)}» no tiene ficha de hechos` : 'la fila no dice su oferta'} · la mesa trabaja sin ficha`)
+    return [campo(CAMPO_FICHA, f.oferta ? `sin ficha para «${limpio(f.oferta)}» · declarado` : 'sin oferta, sin ficha · declarado')]
+  }
+  const sinFuente = datosSinFuente(ficha)
+  if (sinFuente) avisos.push(`${id}: la ficha de «${limpio(ficha.clave)}» trae ${sinFuente} ${sinFuente === 1 ? 'dato' : 'datos'} sin fuente · no ${sinFuente === 1 ? 'entra' : 'entran'} en la hoja`)
+  return listaDe(CAMPO_FICHA, fichaEnLineas(ficha, f.fecha))
+}
+/**
+ * 17-nov · Sprint 4 · el llamado a la acción con su orden de respaldo (DISEÑO CC3 · borde b con CC5 · 🟢 CC6): escribirlo es trabajo creativo (la mesa);
+ * el HECHO de cómo se compra sale de la ficha. Cada paso dice de dónde viene; el último lo DECLARA (nunca vacío en silencio):
+ *   1. la ficha, «cómo se compra» de ESA red · 2. la ficha, sin red · 3. el llamado de una fila vieja del calendario · 4. el llamado por red de un brief viejo · 5. declarado.
+ */
+export const SIN_LLAMADO = 'sin llamado: la mesa lo escribe con los hechos de la oferta'
+export function llamadoDeLaPieza(ins: Pick<InsumosDeLaHoja, 'fichas'>, f: Pick<FilaDeHoja, 'oferta' | 'fecha'>, red: string, llamadoDeLaFila?: string | null, llamadoDelBrief?: string | null): string {
+  const dato = comoSeCompraParaLaRed(fichaDeLaOferta(ins.fichas, f.oferta), red, f.fecha)
+  if (dato) return `${limpio(dato.valor)} (de la ficha de la oferta · fuente: ${limpio(dato.fuente)}${dato.red ? ` · ${limpio(dato.red)}` : ''}) · la mesa escribe el llamado con este dato`
+  if (limpio(llamadoDeLaFila)) return limpio(llamadoDeLaFila)
+  if (limpio(llamadoDelBrief)) return limpio(llamadoDelBrief)
+  return SIN_LLAMADO
 }
 function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; formato: string }, f: FilaDeHoja, idea: IdeaDelBanco | null, extra: { fila_ids?: string[]; elementos?: string[]; cuadros?: CuadrosDeLaIdea[] }, avisos: string[]): string[] {
   const b = ins.brief
@@ -191,7 +244,11 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     campo('DE QUÉ PARTE DEL PLAN SALE', b.de_que_parte_del_plan),
     campo('GRAN IDEA', c.gran_idea ? `${c.gran_idea.nombre} · ${c.gran_idea.frase}` : '(sin gran idea)'),
     campo('CAPÍTULO DE LA FASE', cap ? `${cap.clave} · ${cap.nombre} · ${cap.que_cuenta}` : f.fase ? `${f.fase} · (sin capítulo en el concepto)` : '(sin fase)'),
-    campo('IDEA DEL BANCO', idea ? `${idea.id}${idea.serie ? ` · serie ${idea.serie}` : ''} · cómo la imaginó el banco: en SUGERENCIAS` : 'ninguna · declarado'),
+    // 17-nov · Sprint 4 · F · la idea tal como la crearon los creativos (antes: solo el id y la descripción como sugerencia)
+    campo('IDEA DEL BANCO', idea ? ideaTalCual(idea) : 'ninguna · declarado'),
+    // 17-nov · Sprint 4 · A · qué oferta vende la pieza y sus hechos (la orden de trabajo); sin ficha se declara, nada se bloquea
+    campo('OFERTA', f.oferta ? limpio(f.oferta) : 'sin oferta en la fila · declarado'),
+    ...fichaDeLaPieza(ins, f, cab.id, avisos),
     campo('BRIEF DE CAMPAÑA', ins.brief_id),
     campo('MENSAJE DE CAMPAÑA', b.mensaje),
     campo('OBJETIVO', pz.objetivo || porRed?.objetivo || b.objetivo),
@@ -212,10 +269,11 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     campo('SINTAXIS', b.tono),
     // la línea VISUAL es del concepto de la CAMPAÑA: referencia de estilo, no las tomas de esta pieza (esas las decide la mesa)
     campo('VISUAL', (() => { const v = [c.como_se_ve_partes ? comoSeVeSinPartes(c.como_se_ve) : c.como_se_ve, cap?.como_se_ve, idea?.foto && idea.foto !== 'ninguna' ? `foto ${idea.foto}` : ''].filter(Boolean).join(' · '); return v ? `${PREFIJO_VISUAL_DE_CAMPANA}${v}` : '(el concepto no dice cómo se ve)' })()),
-    campo('LLAMADO A LA ACCIÓN', pz.llamado || porRed?.llamado || ''),
+    campo('LLAMADO A LA ACCIÓN', llamadoDeLaPieza(ins, f, cab.red, pz.llamado, porRed?.llamado)),
     // 17-nov · GO «quitar rejas» C3: ya no «1» fijo · ningún dato (brief, tabla de formatos) fija cuántas versiones: decide la mesa de la pieza
     campo('VARIANTES', VARIANTES_SIN_DATO),
-    ...listaDe('NEGATIVOS', [...b.obligatorios.no_se_dice, ...b.obligatorios.prohibido]),
+    // 17-nov (GO Lenovo · auditoría `07-hojas-piezas.md`): lo prohibido ya va UNA vez en PROHIBIDO; NEGATIVOS lleva solo «lo que no se dice»
+    ...listaDe('NEGATIVOS', b.obligatorios.no_se_dice),
     campo('APRUEBA Y PARA CUÁNDO', cuando),
   ]
   // 17-nov · puntos 2 y 3 de «creativos en cada paso» · lo que la gran idea DECIDIÓ llega como decisión (FIJO / LIBRE / PORQUÉ), no como texto para copiar.
