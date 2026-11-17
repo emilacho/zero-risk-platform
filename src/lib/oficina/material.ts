@@ -175,7 +175,7 @@ export function separarFotos(filas: FilaDeFoto[]): { propias: FotoEtiquetada[]; 
 export function separarFotosYCapturas(filas: FilaDeFoto[]): { propias: FotoEtiquetada[]; referencias: FotoEtiquetada[] } {
   const { propias, referencias } = separarFotos(filas.filter((f) => !esCapturaDeLaWeb(f)))
   const cap = separarFotos(filas.filter((f) => esCapturaDeLaWeb(f)))
-  const capturas = [...cap.propias, ...cap.referencias].map((f) => ({ ...f, origen: f.origen === 'propia' ? 'referencia' : f.origen, captura_web: true }) as FotoEtiquetada)
+  const capturas = [...cap.propias, ...cap.referencias].map((f) => ({ ...f, origen: f.origen === 'propia' ? 'referencia' : f.origen, captura_web: true, ...(f.origen === 'propia' ? { del_cliente: true } : {}) }) as FotoEtiquetada)
   return { propias, referencias: [...referencias, ...capturas] }
 }
 

@@ -24,6 +24,8 @@ export interface FotoEtiquetada {
   oferta?: string | null
   /** 17-nov · es una captura de la web (página o red): solo referencia de estilo, jamás candidata ni publicable */
   captura_web?: boolean
+  /** 17-nov · la captura es del PROPIO cliente (su web o su red): referencia de estilo, pero su texto, usuario y enlace NO van a «no copiar» (observación CC6 a #1139) */
+  del_cliente?: boolean
 }
 export interface PedidoDeFoto {
   /** lo que protagoniza el brief (p. ej. el producto); si está vacío no se filtra por producto */

@@ -17,11 +17,13 @@ const RE_PORCENTAJE = /\d\s?%/
 export interface ReglasDeInvencion { terminos: string[]; copiar: string[] }
 
 /** `null` = apagado (la sala se comporta como antes). `referencias` = las fotos de la competencia/referencia: de ellas sale lo que NO se puede copiar (su texto visible, su enlace, su usuario) */
-export function reglasDeInvencion(limites: Record<string, unknown> | undefined, referencias: Array<{ url?: string | null; texto_visible?: string | string[] | null; handle?: string | null }> = []): ReglasDeInvencion | null {
+export function reglasDeInvencion(limites: Record<string, unknown> | undefined, referencias: Array<{ url?: string | null; texto_visible?: string | string[] | null; handle?: string | null; del_cliente?: boolean }> = []): ReglasDeInvencion | null {
   if (limites?.generar_cuando_no_hay_foto !== true) return null
   const propios = Array.isArray(limites.terminos_no_inventados) ? (limites.terminos_no_inventados as unknown[]).map(String).filter(Boolean) : [...TERMINOS_NO_INVENTADOS]
   const copiar = new Set<string>()
   for (const r of referencias) {
+    // 17-nov · una captura del PROPIO cliente es referencia de estilo, pero sus frases, su usuario y su web son suyos: no se prohíben en sus prompts (observación CC6 a #1139)
+    if (r.del_cliente) continue
     const t = Array.isArray(r.texto_visible) ? r.texto_visible : r.texto_visible ? [r.texto_visible] : []
     for (const x of t) { const n = normalizar(String(x)).trim(); if (n.length >= 4) copiar.add(n) }
     if (r.handle) { const h = normalizar(String(r.handle)).replace(/^@/, '').trim(); if (h.length >= 3) copiar.add(h) }
