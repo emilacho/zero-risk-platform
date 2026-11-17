@@ -3,12 +3,16 @@
 -- Efecto: si la revisión de la jefatura deja desacuerdos (p. ej. falta en la historia un dato que el brief pide), la pieza vuelve UNA vez a la mesa con esos desacuerdos
 -- como corrección; la dirección integra, la mesa traduce otra vez y la jefatura revisa de nuevo. Solo si sigue, va a la bandeja marcada (como hoy).
 -- El código vuelve solo si la vuelta cabe en el tope del encargo; sin este dato, nunca vuelve. Es el dato EXACTO de src/lib/oficina/plantillas/mesa.ts (KIT_MESA); una prueba lo mantiene igual.
--- No toca límites, indicaciones, tope ni `activo`. Se niega con encargos vivos. Reversa: supabase/reversas/202611172000_oficina_kit_mesa_jefatura_vuelve_a_la_mesa_REVERSA.sql
+-- No toca límites, indicaciones, tope ni `activo`. Se niega con encargos vivos (no cuenta el que solo espera al dueño). Reversa: supabase/reversas/202611172000_oficina_kit_mesa_jefatura_vuelve_a_la_mesa_REVERSA.sql
 BEGIN;
 
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM public.oficina_encargos WHERE estado IN ('abierto', 'en_paso')) THEN
+  -- encargo vivo = abierto o en paso, SALVO el que solo espera al dueño (todos sus turnos abiertos son `dueno`, y tiene al menos uno): el motor solo responde
+  --   `esperar_dueno` y no gasta (regla de Lenovo 13:26Z; la misma guarda de 202611171900_oficina_video_t7b, CC2, certificada por CC6). Cualquier otro encargo vivo frena.
+  IF EXISTS (SELECT 1 FROM public.oficina_encargos e WHERE e.estado IN ('abierto', 'en_paso') AND NOT (
+       EXISTS (SELECT 1 FROM public.oficina_turnos t WHERE t.encargo_id = e.id AND t.estado IN ('pendiente', 'corriendo') AND t.tipo = 'dueno')
+       AND NOT EXISTS (SELECT 1 FROM public.oficina_turnos t WHERE t.encargo_id = e.id AND t.estado IN ('pendiente', 'corriendo') AND t.tipo <> 'dueno'))) THEN
     RAISE EXCEPTION '202611172000: hay encargos de la oficina vivos; esperar a que cierren';
   END IF;
   IF (SELECT count(*) FROM public.oficina_tipos_de_grupo t, jsonb_array_elements(t.pasos) p WHERE t.tipo = 'kit_mesa' AND p->>'clave' = 'jefatura') IS DISTINCT FROM 1 THEN
