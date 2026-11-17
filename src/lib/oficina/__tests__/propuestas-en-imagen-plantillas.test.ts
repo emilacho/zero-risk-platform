@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { abrirEncargo, recibirDecisionDelDueno } from '../orquestador'
 import { CARRUSEL_MESA, KIT_MESA, POST_MESA } from '../plantillas/mesa'
-import { CARRUSEL_MESA_CON_PROPUESTAS, KIT_MESA_CON_PROPUESTAS, POST_MESA_CON_PROPUESTAS, PROPUESTAS_DE_IMAGEN, TOPE_DEL_BORRADOR_DE_IMAGEN_USD } from '../plantillas/imagen-propuestas'
+import { CARRUSEL_MESA_CON_PROPUESTAS, KIT_MESA_CON_PROPUESTAS, POST_MESA_CON_PROPUESTAS, PROPUESTAS_DE_IMAGEN, topeDelBorradorDeImagenDe } from '../plantillas/imagen-propuestas'
 import { coberturaDelTope } from '../topes-por-duracion'
 import { propuestasDeLaPlantilla } from '../mesa/propuestas-imagen'
 import { ARTEFACTO_BORRADOR_IMAGEN, correrBorradorDeImagen, type BorradoresDeImagen } from '../mesa/borrador-imagen'
@@ -26,7 +26,9 @@ describe('las plantillas de imagen con propuestas (solo código)', () => {
     const i = claves.indexOf('mesa')
     expect(claves.slice(i, i + 3)).toEqual(['mesa', 'borrador_imagen', 'aprobar_propuestas'])
     expect(claves.filter((c) => c !== 'borrador_imagen' && c !== 'aprobar_propuestas')).toEqual(hoy.pasos.map((p) => p.clave))
-    expect(con.pasos[i + 1]).toMatchObject({ funcion: 'borrador_imagen', tope_usd: TOPE_DEL_BORRADOR_DE_IMAGEN_USD })
+    expect(con.pasos[i + 1]).toMatchObject({ funcion: 'borrador_imagen', tope_usd: topeDelBorradorDeImagenDe(hoy) })
+    // sale del costo medido: 3 × imagenes_generadas_max × 0,02
+    expect(topeDelBorradorDeImagenDe(hoy)).toBe(Math.round(3 * Number(hoy.limites.imagenes_generadas_max) * 0.02 * 100) / 100)
     expect(con.pasos[i + 2].vuelve_a).toMatchObject({ paso: 'mesa', max: 2 })
     expect(propuestasDeLaPlantilla(con)).toBe(PROPUESTAS_DE_IMAGEN)
     expect(con.limites.tope_encargo_usd).toBe(Number(hoy.limites.tope_encargo_usd) * 3)
