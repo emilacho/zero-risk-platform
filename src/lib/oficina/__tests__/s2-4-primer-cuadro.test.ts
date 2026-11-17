@@ -4,8 +4,8 @@
  * El texto del clip es el «Prompt de video» de la hoja cuando arranca de su imagen clave. US$ 0: puertos falsos.
  */
 import { describe, expect, it } from 'vitest'
-import { ejecutarCodigoV } from '../orquestador-video'
-import { catalogoDeModelos } from '../../video/parametros'
+import { catalogoDelEncargo, ejecutarCodigoV } from '../orquestador-video'
+import { CATALOGO_POR_OMISION, catalogoDeModelos } from '../../video/parametros'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
 import { encuadrarFotos } from '../video/motor-planos'
 import { pedidosPorPlano, promptDelClip, promptDelPlano, type PedidoDePlano } from '../video/planos'
@@ -123,6 +123,12 @@ describe('17-nov · Sprint 3 · T1 · el paso «pedido» usa el catálogo que el
     const r = await ejecutarCodigoV({} as never, conCatalogo(con20, largo(20)) as never, VIDEO_MESA, pasoPedido)
     expect(r.fallido).toMatch(/de 4 a 15/)
     expect((await ejecutarCodigoV({} as never, conCatalogo(undefined, largo(20)) as never, VIDEO_MESA, pasoPedido)).fallido).toBeUndefined()
+  })
+  it('🔴 `catalogoDelEncargo` (la vía para T2 y lo que venga) lee el guardado desde el estado o desde su base; sin él, el del código', () => {
+    const e = conCatalogo(con20, largo(10)).estado_del_motor as never
+    expect(catalogoDelEncargo(e)).toEqual(con20)
+    expect(catalogoDelEncargo((e as { artefactos: { encargo: { datos: never } } }).artefactos.encargo.datos)).toEqual(con20)
+    expect(catalogoDelEncargo(conCatalogo(undefined, largo(10)).estado_del_motor as never)).toEqual(CATALOGO_POR_OMISION)
   })
   it('un catálogo guardado roto no frena: se usa el del código', async () => {
     expect((await ejecutarCodigoV({} as never, conCatalogo({ fichas: {}, por_omision: 'x/y' }, largo(20)) as never, conB, pasoPedido)).fallido).toBeUndefined()

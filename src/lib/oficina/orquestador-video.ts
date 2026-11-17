@@ -147,7 +147,11 @@ export async function catalogoDelBrazo(P: Pick<Puertos, 'video'>): Promise<Catal
 }
 /** el catálogo con que se abrió el encargo (los de antes de T1 no lo traen: el del código) */
 const catalogoValido = (c: unknown): c is CatalogoDeModelos => !!c && typeof c === 'object' && !!(c as CatalogoDeModelos).fichas && typeof (c as CatalogoDeModelos).fichas === 'object' && !!(c as CatalogoDeModelos).fichas[(c as CatalogoDeModelos).por_omision]
-const catalogoDelEncargo = (b: BaseV): CatalogoDeModelos => catalogoValido(b.catalogo_de_modelos) ? b.catalogo_de_modelos : CATALOGO_POR_OMISION
+/**
+ * 17-nov · T1 · LA vía de la oficina para la ficha del modelo: `fichaPorOmision(catalogoDelEncargo(estado))` · el catálogo que el encargo guardó al abrir (el mismo que valida la ruta).
+ * Acepta el estado del encargo o su base. Nunca la ficha del código sola (`fichaPorOmision()`): repetiría el desajuste ruta/oficina.
+ */
+export const catalogoDelEncargo = (x: BaseV | Estado): CatalogoDeModelos => { const b = (x as Estado).artefactos ? baseV(x as Estado) : (x as BaseV); return catalogoValido(b?.catalogo_de_modelos) ? b.catalogo_de_modelos : CATALOGO_POR_OMISION }
 
 async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: BriefLeido, fotos: FuentesCompletas['fotos'], relacion: string, catalogo: CatalogoDeModelos = CATALOGO_POR_OMISION): Promise<{ ok: true; rutas: Array<{ ruta: string; costo_estimado_usd: number; costo_lista_usd: number | null }> } | { ok: false; motivo: string }> {
   const sinGastar = 'no se gastó nada; el encargo queda recuperable'
