@@ -387,6 +387,14 @@ export function almacenDeSupabase(): Almacen {
     async insertarConcepto(c) { const { error } = await db.from('cadena_conceptos').insert(c); if (error) fallo(error) },
     async actualizarConcepto(campanaId, version, patch) { const { error } = await db.from('cadena_conceptos').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version); if (error) fallo(error) },
     async actualizarConceptoSi(campanaId, version, estado, patch) { const { data, error } = await db.from('cadena_conceptos').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version).eq('estado', estado).select('version'); if (error) fallo(error); return ((data as unknown[] | null) ?? []).length > 0 },
+    // 17-nov · banco de ideas (medida 3 de CC6): leer con sello y escribir solo si el sello sigue igual
+    async conceptoConSello(campanaId, version) {
+      const r = await uno<ConceptoGuardado & { actualizada_en: string }>(db.from('cadena_conceptos').select('campana_id, version, estado, aprobacion, texto_md, leido, brief_devuelto, motivo, costo_usd, plazo_en, encargo_id, hitl_id, nota_de_emilio, apunta_a, decidido_en, seco, actualizada_en').eq('campana_id', campanaId).eq('version', version).maybeSingle())
+      if (!r) return null
+      const { actualizada_en, ...concepto } = r
+      return { concepto: concepto as ConceptoGuardado, sello: actualizada_en }
+    },
+    async actualizarConceptoSiSello(campanaId, version, sello, patch) { const { data, error } = await db.from('cadena_conceptos').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version).eq('actualizada_en', sello).select('version'); if (error) fallo(error); return ((data as unknown[] | null) ?? []).length > 0 },
     async libroDeLaMesa(encargoId) { return lista<{ n: number; de: string; tipo: string; texto: string }>(db.from('oficina_mesa_aportes').select('n, de, tipo, texto').eq('encargo_id', encargoId).order('n', { ascending: true }).limit(500)) },
     async conceptosVencidos(ahora) { return lista<ConceptoGuardado>(db.from('cadena_conceptos').select('campana_id, version, estado, aprobacion, texto_md, leido, brief_devuelto, motivo, costo_usd, plazo_en, encargo_id, hitl_id, nota_de_emilio, apunta_a, decidido_en, seco').eq('estado', 'abierta').lte('plazo_en', ahora).limit(500)) },
     // 31-oct (T3) · la gran idea: todas sus versiones, su tarjeta en la bandeja y la decisión de Emilio
@@ -430,6 +438,13 @@ export function almacenDeSupabase(): Almacen {
       if (!f) return false
       // condicional: solo si sigue sin producir (otra vía que la tomó entre la lectura y la escritura gana)
       const r = await lista<{ id: string }>(db.from('cadena_calendario_filas').update({ ...patch, avisos: [...(f.avisos ?? []), aviso] }).eq('campana_id', campanaId).eq('calendario_version', version).eq('id', filaId).in('estado', SIN_PRODUCIR).select('id'))
+      return r.length > 0
+    },
+    async reasignarIdeaDeFila(campanaId, version, filaId, ideaVieja, ideaNueva, aviso, desde) {
+      const f = await uno<{ avisos: string[] | null }>(db.from('cadena_calendario_filas').select('avisos').eq('campana_id', campanaId).eq('calendario_version', version).eq('id', filaId).eq('idea_ref', ideaVieja).in('estado', [...desde]).maybeSingle())
+      if (!f) return false
+      // condicional: solo si sigue citando la idea vieja y sin brief (otra vía que la tomó entre la lectura y la escritura gana)
+      const r = await lista<{ id: string }>(db.from('cadena_calendario_filas').update({ idea_ref: ideaNueva, concepto: null, avisos: [...(f.avisos ?? []), aviso] }).eq('campana_id', campanaId).eq('calendario_version', version).eq('id', filaId).eq('idea_ref', ideaVieja).in('estado', [...desde]).select('id'))
       return r.length > 0
     },
     async cambiarEstadoDeFilas(campanaId, version, ids, estado) { const { error } = await db.from('cadena_calendario_filas').update({ estado }).eq('campana_id', campanaId).eq('calendario_version', version).in('id', ids); if (error) fallo(error) },

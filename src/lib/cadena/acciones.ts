@@ -11,13 +11,16 @@ import { filasAutoproducir } from './autoproducir'
 import { fechasLeerPdf } from './fechas-pdf'
 import { briefAbrir, briefEntregar, conceptoAbrir, conceptoDecidir, conceptoEntregar, hojaEscribir } from './mesas'
 import { briefRevalidar, conceptoRevalidar } from './revalidar'
+import { bancoEditar, bancoRetirar } from './banco-de-ideas'
 import type { Manejador } from './puerta-http'
 
-export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'validar' | 'filas' | 'fechas' | 'esperas' | 'brief' | 'concepto' | 'hojas', Record<string, Manejador>> = {
+export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'validar' | 'filas' | 'fechas' | 'esperas' | 'brief' | 'concepto' | 'banco' | 'hojas', Record<string, Manejador>> = {
   // 31-oct · nuevo orden (T3): las mesas de brief y de concepto y la hoja por código; solo con la palanca `nuevo_orden` encendida para el cliente
   // 09-nov · revalidar lo ya escrito (opción B firmada por Emilio): un brief devuelto EN FALSO por el verificador vuelve a pasar el verificador de hoy · US$ 0
   brief: { abrir: briefAbrir, entregar: briefEntregar, revalidar: briefRevalidar },
   // 09-nov · revalidar la gran idea ya pagada (ALTO de Lenovo): una versión que el lector dejó sin_mesa se relee con la entrega de hoy desde el libro de su mesa · US$ 0
+  // 17-nov · el banco de ideas de la gran idea APROBADA, editable desde el tablero (`/api/cadena/concepto/banco`) · editar en tanda · retirar con reasignación · US$ 0
+  banco: { editar: bancoEditar, retirar: bancoRetirar },
   concepto: { abrir: conceptoAbrir, entregar: conceptoEntregar, decidir: conceptoDecidir, revalidar: conceptoRevalidar },
   hojas: { escribir: hojaEscribir },
   campanas: {

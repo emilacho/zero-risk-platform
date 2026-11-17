@@ -287,6 +287,10 @@ export interface Almacen {
   actualizarConcepto(campanaId: string, version: number, patch: Partial<ConceptoGuardado>): Promise<void>
   /** escritura CONDICIONAL (09-nov · revalidar la gran idea): solo si la versión SIGUE en `estado`; true = escribió */
   actualizarConceptoSi(campanaId: string, version: number, estado: ConceptoGuardado['estado'], patch: Partial<ConceptoGuardado>): Promise<boolean>
+  /** 17-nov (banco de ideas · medida 3 de CC6): una versión del concepto con su SELLO (`actualizada_en`), para escribir solo si nadie la cambió entre la lectura y la escritura */
+  conceptoConSello(campanaId: string, version: number): Promise<{ concepto: ConceptoGuardado; sello: string } | null>
+  /** escritura CONDICIONAL al sello leído: true = escribió; false = otra escritura se adelantó (se relee y se vuelve a aplicar) */
+  actualizarConceptoSiSello(campanaId: string, version: number, sello: string, patch: Partial<ConceptoGuardado>): Promise<boolean>
   /** 09-nov (revalidar la gran idea): el libro de la mesa de un encargo de la oficina (`oficina_mesa_aportes`, en orden), para rearmar lo que la mesa entregó · solo lectura */
   libroDeLaMesa(encargoId: string): Promise<Array<{ n: number; de: string; tipo: string; texto: string }>>
   /** los conceptos abiertos cuyo plazo propio ya pasó (el vigía los cierra `sin_mesa`) */
@@ -302,6 +306,11 @@ export interface Almacen {
   filas(campanaId: string, calendarioVersion?: number): Promise<Fila[]>
   guardarFilas(campanaId: string, calendarioVersion: number, estrategiaVersion: number, filas: Fila[], seco: boolean): Promise<void>
   cambiarEstadoDeFilas(campanaId: string, calendarioVersion: number, ids: string[], estado: Fila['estado']): Promise<void>
+  /**
+   * 17-nov (banco de ideas · «Retirar»): la fila deja la idea retirada y realiza `ideaNueva` (null = sin idea); su `concepto` propio se borra (era de la idea vieja: la hoja lo arma del banco)
+   * y suma `aviso`. CONDICIONAL: solo si la fila sigue citando `ideaVieja` y está en `desde`. Devuelve si se aplicó.
+   */
+  reasignarIdeaDeFila(campanaId: string, calendarioVersion: number, filaId: string, ideaVieja: string, ideaNueva: string | null, aviso: string, desde: readonly Fila['estado'][]): Promise<boolean>
   /** 10-nov · escritura CONDICIONAL de una fila que quedó atrás: solo si sigue sin producir (`validada` o `lista_para_brief`); suma `aviso` a sus avisos. Devuelve si se aplicó. */
   /** 11-nov (#1014 · relectura): `desde` cambia los estados en que la fila tiene que estar para que se aplique (por omisión, sin producir) */
   reubicarFila(campanaId: string, calendarioVersion: number, filaId: string, patch: Partial<Pick<Fila, 'fecha' | 'hora' | 'semana' | 'dia_semana' | 'estado'>>, aviso: string, desde?: readonly Fila['estado'][]): Promise<boolean>
