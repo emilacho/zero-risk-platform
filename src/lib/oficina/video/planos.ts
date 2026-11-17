@@ -5,7 +5,7 @@
  * cliente, cualquier cantidad de planos. Puro: sin base, sin red, sin modelo.
  */
 import { createHash } from 'node:crypto'
-import { DURACION_MAX_PLANO_S, DURACION_MIN_PLANO_S, RESOLUCION_APROBADA, armarPedidoDePlano } from '../../video/parametros'
+import { RESOLUCION_APROBADA, armarPedidoDePlano, fichaPorOmision } from '../../video/parametros'
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
 import { buscarFotoPropia, formatoDeVideo, fotosPropiasConDireccion } from './pedido'
@@ -101,11 +101,11 @@ export function pedidosPorPlano(o: {
   const pedidos: PedidoDePlano[] = []
   for (const p of planos) {
     const dura = duracionDelPlano(p)
-    if (dura > DURACION_MAX_PLANO_S) { errores.push(`el plano ${p.n} dura ${dura} s y el proveedor admite hasta ${DURACION_MAX_PLANO_S} s por plano`); continue }
+    if (dura > fichaPorOmision().segundos_max) { errores.push(`el plano ${p.n} dura ${dura} s y el modelo admite hasta ${fichaPorOmision().segundos_max} s por plano`); continue }
     const ic = (o.imagenesClave ?? []).find((x) => x.n === p.n && typeof x.url === 'string' && x.url.trim() !== '')
     const url = ic ? ic.url : p.foto_id ? buscar(p.foto_id) : null
     const primer_cuadro: PedidoDePlano['primer_cuadro'] = ic ? 'imagen_clave' : url ? 'foto_propia' : 'texto'
-    const v = armarPedidoDePlano({ prompt: ic ? promptDelClip(p, o.guion.audio) : promptDelPlano(p, o.guion.audio), formato, segundos: Math.max(DURACION_MIN_PLANO_S, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [] })
+    const v = armarPedidoDePlano({ prompt: ic ? promptDelClip(p, o.guion.audio) : promptDelPlano(p, o.guion.audio), formato, segundos: Math.max(fichaPorOmision().segundos_min, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [] })
     if (!v.ok) { errores.push(...v.errores.map((e) => `plano ${p.n}: ${e}`)); continue }
     pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url && !ic ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}`, primer_cuadro, huella: huellaDelClip({ fuente: url, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: v.pedido.audio === true }) })
   }

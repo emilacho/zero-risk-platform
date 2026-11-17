@@ -21,7 +21,7 @@ import { FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PO
 import { FUNCION_DEL_TABLERO } from './pedidos-laminas'
 import type { Cambios, Encargo, EstadoDelBrazo, FuentesCompletas, Puertos } from './puertos'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
-import { DURACION_MIN_PLANO_S, RELACIONES_PERMITIDAS, RELACION_POR_FORMATO } from '../video/parametros'
+import { RELACIONES_PERMITIDAS, RELACION_POR_FORMATO, fichaPorOmision } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
@@ -153,7 +153,7 @@ async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: Br
   // 11-nov · camino B encendido: también se cotiza UN plano con foto (imagen a video, 4 s) · es la ruta que usarán los planos con foto propia
   const conFoto = ps.pedidos.find((x) => x.ruta === 'foto')?.pedido
   if (planoPorPlanoEncendido(pl) && conFoto) {
-    const ped = { ...conFoto, segundos: DURACION_MIN_PLANO_S, clave: `${conFoto.clave.replace(/:foto$/, '')}:plano_foto`, plano: true as const }
+    const ped = { ...conFoto, segundos: fichaPorOmision().segundos_min, clave: `${conFoto.clave.replace(/:foto$/, '')}:plano_foto`, plano: true as const }
     const c = await P.video.cotizar({ pedido: ped, client_id: enc.client_id, encargo_id: enc.id, tope_usd: topeDeLaCotizacion(pl), workflow_id: `oficina:${enc.familia}`, workflow_execution_id: `${enc.id}:cotizar` })
     if (!c.ok) return { ok: false, motivo: `el brazo de video no pudo cotizar (un plano con foto propia) antes de abrir la mesa: ${c.error}${c.descripcion ? ` · lo que dijo el proveedor sobre sus precios: «${c.descripcion.replace(/\s+/g, ' ').slice(0, 800)}»` : ''} (${sinGastar})` }
     rutas.push({ ruta: 'plano_foto', costo_estimado_usd: c.costo_estimado_usd, costo_lista_usd: c.costo_lista_usd ?? null })

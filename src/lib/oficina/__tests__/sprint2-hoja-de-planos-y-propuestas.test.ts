@@ -82,10 +82,11 @@ describe('el traductor lee la hoja de planos (tolerante)', () => {
 })
 
 describe('la duración aprobada es DATO de la plantilla', () => {
-  it('sin dato: 8–15 s como siempre (un guion de 20 s se encaja en 15 con aviso)', () => {
-    const g = traducirGuion(['## Plano 1 · 0–20 s', 'Se ve: el pan'].join('\n'))
-    expect(g.segundos).toBe(15)
-    expect(g.avisos.some((a) => /se encaja en 15 s/.test(a))).toBe(true)
+  it('sin dato: lo que admite el modelo por omisión (17-nov · T1: su ficha, 4–30 s; antes 8–15 fijos) · un guion de 20 s queda en 20 y uno de 40 s se encaja en 30 con aviso', () => {
+    expect(traducirGuion(['## Plano 1 · 0–20 s', 'Se ve: el pan'].join('\n')).segundos).toBe(20)
+    const g = traducirGuion(['## Plano 1 · 0–40 s', 'Se ve: el pan'].join('\n'))
+    expect(g.segundos).toBe(30)
+    expect(g.avisos.some((a) => /se encaja en 30 s/.test(a))).toBe(true)
   })
   it('con dato 6–30: un guion de 20 s queda en 20 y uno de 4 s se alarga a 6', () => {
     expect(traducirGuion(['## Plano 1 · 0–20 s', 'Se ve: el pan'].join('\n'), { segundosMin: 6, segundosMax: 30 }).segundos).toBe(20)

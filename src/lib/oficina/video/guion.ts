@@ -2,12 +2,12 @@
  * EL TRADUCTOR DEL GUION · parte 2 del brazo de video (31-oct · orden «construir todo antes de probar»). Pasa el GUION que integra la dirección creativa de la mesa
  * (Markdown con una convención ligera, como la pieza de láminas) a lo que el brazo de video entiende: planos con segundos, qué se ve en cada uno, la foto propia de
  * referencia, el audio, y el pie y las etiquetas de la publicación.
- *  · Un largo NUNCA rechaza: queda un aviso y la duración se encaja en lo aprobado (8–15 s).
+ *  · Un largo NUNCA rechaza: queda un aviso y la duración se encaja en lo aprobado (dato de la plantilla; sin él, lo que admite el modelo).
  *  · Como máximo UNA pregunta a la dirección por pieza (la misma regla que el traductor de láminas); si aun así no se entiende, el texto completo va a la jefatura.
  *  · Convención: `## Plano 1 · 0–3 s` + líneas `Se ve:`, `Movimiento:`, `Texto en pantalla:`, `Foto: foto:<id> | ninguna`; luego `## Audio`, `## Pie`, `## Etiquetas`, `## Citas`.
  * Puro: sin base, sin red, sin modelo.
  */
-import { DURACION_MAX_S, DURACION_MIN_S } from '../../video/parametros'
+import { fichaPorOmision } from '../../video/parametros'
 import { limpiarPie, limpiarTexto } from '../mesa/traductor'
 
 /**
@@ -73,7 +73,7 @@ export interface TraduccionDeGuion {
   pregunta?: string
   motivo?: string
   planos: Plano[]
-  /** duración total del video (8–15 s) */
+  /** duración total del video (dentro de lo aprobado por la plantilla) */
   segundos: number
   audio: string
   pie_de_foto: string
@@ -185,8 +185,8 @@ function leerFoto(texto: string | undefined): string | undefined {
 
 export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreguntas?: number; /** Sprint 2 · S2-1 · la duración aprobada es DATO de la plantilla (`limites.video.segundos_min/max`); sin ella, la de siempre (8–15 s) */ segundosMin?: number; segundosMax?: number } = {}): TraduccionDeGuion {
   const maxP = o.maxPreguntas ?? 1
-  const MIN = Number.isFinite(o.segundosMin) && (o.segundosMin as number) > 0 ? Math.round(o.segundosMin as number) : DURACION_MIN_S
-  const MAX = Number.isFinite(o.segundosMax) && (o.segundosMax as number) >= MIN ? Math.round(o.segundosMax as number) : Math.max(MIN, DURACION_MAX_S)
+  const MIN = Number.isFinite(o.segundosMin) && (o.segundosMin as number) > 0 ? Math.round(o.segundosMin as number) : fichaPorOmision().segundos_min
+  const MAX = Number.isFinite(o.segundosMax) && (o.segundosMax as number) >= MIN ? Math.round(o.segundosMax as number) : Math.max(MIN, fichaPorOmision().segundos_max)
   const todas = secciones(md)
   const avisos: string[] = []
   let pie = '', audio = ''

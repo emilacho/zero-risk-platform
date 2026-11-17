@@ -42,7 +42,9 @@ export async function POST(request: Request) {
 
   // 11-nov · camino B (GO Lenovo 16:43): `plano: true` = UN plano de un video de varios (4–30 s, como mucho su foto, por imagen a video); sin él, el video de una sola toma de siempre
   const plano = body.plano === true
-  const armado = plano ? armarPedidoDePlano(body) : armarPedido(body)
+  // 17-nov · T1: la configuración del brazo se lee ANTES de armar el pedido: trae el catálogo de modelos (fichas con sus límites)
+  const cfg = await leerConfigDelBrazo((clave) => almacenDeSupabase().leerConfig(clave))
+  const armado = plano ? armarPedidoDePlano(body, cfg.catalogo) : armarPedido(body, cfg.catalogo)
   if (!armado.ok) return json(400, { error: 'pedido_invalido', errores: armado.errores })
   const pedido = armado.pedido
   const dryRun = body.dry_run === true
@@ -57,7 +59,6 @@ export async function POST(request: Request) {
   const claveIdempotente = sanitizeString(body.clave as string | undefined, 200)
   if (!claveIdempotente) return json(400, { error: 'falta_clave', detail: 'clave (Idempotency-Key) es obligatoria: sin ella un reintento cobraría dos veces' })
   // 11-nov · regla #18: el tope por video y el descuento del proveedor salen de la configuración (`cadena_config.brazo_de_video`); sin ella, el tope aprobado y sin descuento
-  const cfg = await leerConfigDelBrazo((clave) => almacenDeSupabase().leerConfig(clave))
   const tope = typeof body.tope_usd === 'number' && body.tope_usd > 0 ? Math.min(body.tope_usd, cfg.tope_por_video_usd) : cfg.tope_por_video_usd
   const ruta = rutaDelModelo({ ...pedido, plano })
   const cuerpo = cuerpoParaHiggsfield({ ...pedido, plano })

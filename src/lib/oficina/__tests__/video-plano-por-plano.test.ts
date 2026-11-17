@@ -3,7 +3,8 @@
  * con la duración del guion (mínimo 4 s por plano; si pide menos, se genera de 4 y se corta al unir). Un cliente con fotos y uno sin fotos.
  */
 import { describe, expect, it } from 'vitest'
-import { armarPedidoDePlano, cuerpoParaHiggsfield, rutaDelModelo, DURACION_MIN_PLANO_S, DURACION_MAX_PLANO_S, MODELO_APROBADO, REGLAS_DEL_PEDIDO } from '../../video/parametros'
+import { armarPedidoDePlano, cuerpoParaHiggsfield, rutaDelModelo, fichaPorOmision, MODELO_APROBADO, REGLAS_DEL_PEDIDO } from '../../video/parametros'
+const { segundos_min: DURACION_MIN_PLANO_S, segundos_max: DURACION_MAX_PLANO_S } = fichaPorOmision() // 17-nov · T1: los límites del plano son los de la ficha del modelo
 import { pedidosPorPlano, promptDelPlano, segundosDelVideoUnido, segundosGenerados } from '../video/planos'
 import type { Plano } from '../video/guion'
 import type { FotoEtiquetada } from '../fotos'

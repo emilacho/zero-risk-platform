@@ -1,6 +1,6 @@
 /**
  * PARÁMETROS APROBADOS DEL BRAZO DE VIDEO (Emilio, 31-oct 11:55Z, «aprobado todo» · adenda 1 del encargo):
- * Seedance 2.5 · 8–15 s para reel/tiktok/short · 1080p (adenda 4: por omisión 720p hasta medir el descuento real) · audio generado · fotos propias del cliente como referencia
+ * Seedance 2.5 · 8–15 s para reel/tiktok/short (17-nov · T1: la duración ya no es fija aquí; ver FICHAS_POR_OMISION) · 1080p (adenda 4: por omisión 720p hasta medir el descuento real) · audio generado · fotos propias del cliente como referencia
  * siempre que existan · tope US$ 5 por video · cantidad = la que pida el calendario.
  * 17-nov · DECISIÓN de Emilio («un sistema agnóstico tiene que tener la libertad de trabajar como tal»): SIN reglas fijas de voz, diálogo, locución, rostros ni personajes
  * generados — los decide la mesa de creativos por pieza. Solo queda lo que es ley o términos del proveedor: la cara o la voz de una persona real identificable solo con su
@@ -11,9 +11,70 @@
 import { PROPORCION_POR_FORMATO } from '../cadena/proporciones'
 
 export const MODELO_APROBADO = 'bytedance/seedance-2.5'
-export const MODELOS_PERMITIDOS: ReadonlySet<string> = new Set(['bytedance/seedance-2.5', 'bytedance/seedance-2.0'])
-export const DURACION_MIN_S = 8
-export const DURACION_MAX_S = 15
+
+/**
+ * 17-nov · Sprint 3 · T1 «abrir el pedido» (GO Lenovo, Emilio firmó 11:54): los modelos y sus límites son DATO, una FICHA por modelo.
+ * Antes: dos modelos fijos en el código, 8–15 s por video y 9 fotos para todos. Ahora cada modelo trae sus límites (los del proveedor)
+ * y la configuración del brazo (`cadena_config.brazo_de_video.modelos`) puede corregir una ficha o sumar un modelo sin tocar el código.
+ * La duración de UNA pieza (cuánto dura este reel) no vive aquí: es dato de la plantilla y del brief, dentro de lo que admite el modelo.
+ */
+export interface FichaDeModelo {
+  /** duración de un clip que admite el proveedor (segundos enteros) */
+  segundos_min: number
+  segundos_max: number
+  /** cuántas imágenes de referencia admite un pedido */
+  referencias_max: number
+  /** si genera el audio junto al clip (`generate_audio`) */
+  audio: boolean
+  /** precio de lista por segundo, si se conoce («desde»); la cifra que se cobra la da siempre la cotización del proveedor */
+  precio_usd_s: number | null
+  /** de dónde salen estos límites (doc leída y fecha) */
+  fuente: string
+}
+export const FICHAS_POR_OMISION: Readonly<Record<string, FichaDeModelo>> = {
+  'bytedance/seedance-2.5': { segundos_min: 4, segundos_max: 30, referencias_max: 30, audio: true, precio_usd_s: 0.118, fuente: 'docs.higgsfield.ai/docs/models/seedance-2-5/{text,image,reference}-to-video.md, leídas el 17-nov (4–30 s en las tres rutas, hasta 30 imágenes); precio «desde» de la investigación de CC5 del 17-nov' },
+  'bytedance/seedance-2.0': { segundos_min: 4, segundos_max: 15, referencias_max: 9, audio: true, precio_usd_s: null, fuente: 'la página del proveedor no está (404 el 17-nov): se conservan los límites que ya usaba el código (hasta 15 s, 9 imágenes)' },
+}
+export interface CatalogoDeModelos { fichas: Readonly<Record<string, FichaDeModelo>>; por_omision: string }
+export const CATALOGO_POR_OMISION: CatalogoDeModelos = { fichas: FICHAS_POR_OMISION, por_omision: MODELO_APROBADO }
+/** la ficha del modelo por omisión del catálogo (la que usa quien no elige modelo) */
+export const fichaPorOmision = (c: CatalogoDeModelos = CATALOGO_POR_OMISION): FichaDeModelo => c.fichas[c.por_omision] ?? FICHAS_POR_OMISION[MODELO_APROBADO]
+
+const entero = (x: unknown): number | null => typeof x === 'number' && Number.isInteger(x) && x > 0 ? x : null
+/** una ficha leída de la configuración, sobre la de por omisión del mismo modelo (si existe) · inválida ⇒ null (nunca lanza) · pura */
+export function fichaDeModelo(valor: unknown, base?: FichaDeModelo): FichaDeModelo | null {
+  const v = valor && typeof valor === 'object' && !Array.isArray(valor) ? (valor as Record<string, unknown>) : null
+  if (!v) return null
+  const smin = entero(v.segundos_min) ?? base?.segundos_min ?? null
+  const smax = entero(v.segundos_max) ?? base?.segundos_max ?? null
+  const refs = typeof v.referencias_max === 'number' && Number.isInteger(v.referencias_max) && v.referencias_max >= 0 ? v.referencias_max : base?.referencias_max ?? null
+  if (smin === null || smax === null || refs === null || smax < smin) return null
+  return {
+    segundos_min: smin, segundos_max: smax, referencias_max: refs,
+    audio: typeof v.audio === 'boolean' ? v.audio : base?.audio ?? false,
+    precio_usd_s: typeof v.precio_usd_s === 'number' && Number.isFinite(v.precio_usd_s) && v.precio_usd_s > 0 ? v.precio_usd_s : base?.precio_usd_s ?? null,
+    fuente: typeof v.fuente === 'string' && v.fuente.trim() ? v.fuente.trim() : base?.fuente ?? 'configuración del brazo',
+  }
+}
+/**
+ * el catálogo con lo que traiga la configuración: `modelos` = { id: ficha } (corrige la ficha de por omisión o suma un modelo con sus límites completos;
+ * `null` lo quita) y `modelo_por_omision`. Lo inválido se ignora y queda lo de por omisión; nunca queda vacío · pura.
+ */
+export function catalogoDeModelos(valor: unknown): CatalogoDeModelos {
+  const v = valor && typeof valor === 'object' && !Array.isArray(valor) ? (valor as Record<string, unknown>) : {}
+  const m = v.modelos && typeof v.modelos === 'object' && !Array.isArray(v.modelos) ? (v.modelos as Record<string, unknown>) : {}
+  const fichas: Record<string, FichaDeModelo> = { ...FICHAS_POR_OMISION }
+  for (const [id, f] of Object.entries(m)) {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(id)) continue
+    if (f === null) { delete fichas[id]; continue }
+    const ficha = fichaDeModelo(f, FICHAS_POR_OMISION[id])
+    if (ficha) fichas[id] = ficha
+  }
+  if (!Object.keys(fichas).length) return CATALOGO_POR_OMISION
+  const pedido = typeof v.modelo_por_omision === 'string' ? v.modelo_por_omision : ''
+  const por_omision = fichas[pedido] ? pedido : fichas[MODELO_APROBADO] ? MODELO_APROBADO : Object.keys(fichas)[0]
+  return { fichas, por_omision }
+}
 /** adenda 4 (Emilio, 31-oct 12:30Z, opción B): la prueba va a 720p y queda como valor por omisión; 1080p sigue admitida para después, cuando se mida el descuento real */
 export const RESOLUCION_APROBADA = '720p'
 export const RESOLUCIONES_PERMITIDAS: ReadonlySet<string> = new Set(['480p', '720p', '1080p'])
@@ -27,8 +88,8 @@ export const TOPE_POR_VIDEO_USD = 5
  */
 export const CLAVE_DE_CONFIG_DEL_BRAZO = 'brazo_de_video'
 export interface DescuentoDelProveedor { pct: number; hasta: string; modelos: readonly string[] }
-export interface ConfigDelBrazo { tope_por_video_usd: number; descuento: DescuentoDelProveedor | null }
-export const CONFIG_DEL_BRAZO_POR_OMISION: ConfigDelBrazo = { tope_por_video_usd: TOPE_POR_VIDEO_USD, descuento: null }
+export interface ConfigDelBrazo { tope_por_video_usd: number; descuento: DescuentoDelProveedor | null; /** 17-nov · T1: los modelos y sus fichas */ catalogo: CatalogoDeModelos }
+export const CONFIG_DEL_BRAZO_POR_OMISION: ConfigDelBrazo = { tope_por_video_usd: TOPE_POR_VIDEO_USD, descuento: null, catalogo: CATALOGO_POR_OMISION }
 
 /** normaliza el valor guardado · cada parte inválida vuelve a su valor por omisión (nunca lanza) · pura */
 export function configDelBrazo(valor: unknown): ConfigDelBrazo {
@@ -38,7 +99,7 @@ export function configDelBrazo(valor: unknown): ConfigDelBrazo {
   const descuento = d && typeof d.pct === 'number' && d.pct > 0 && d.pct < 1 && typeof d.hasta === 'string' && Number.isFinite(Date.parse(d.hasta)) && Array.isArray(d.modelos)
     ? { pct: d.pct, hasta: d.hasta, modelos: d.modelos.map(String) }
     : null
-  return { tope_por_video_usd: tope, descuento }
+  return { tope_por_video_usd: tope, descuento, catalogo: catalogoDeModelos(v) }
 }
 
 /** lee la configuración del brazo con el lector de la cadena (`almacen.leerConfig`: el único que nombra sus tablas) · sin valor o cualquier error ⇒ la de por omisión (tope aprobado, sin descuento) */
@@ -63,7 +124,6 @@ export function conDescuento(costoListaUsd: number, modelo: string, ahoraMs: num
 export const FORMATOS_DEL_BRAZO = ['reel', 'short', 'tiktok', 'video', 'historia', 'estado'] as const
 export const RELACION_POR_FORMATO: Readonly<Record<string, string>> = Object.fromEntries(FORMATOS_DEL_BRAZO.map((f) => [f, PROPORCION_POR_FORMATO[f] ?? '9:16']))
 export const RELACIONES_PERMITIDAS: ReadonlySet<string> = new Set(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'])
-export const MAX_FOTOS_DE_REFERENCIA = 9 // el mínimo común de 2.0 (9) y 2.5 (30): nunca se manda más que lo que admite cualquiera de los dos
 
 /** lo que viaja SIEMPRE en el pedido al modelo (texto del guion + estas líneas): solo ley/términos del proveedor y lo que el código compone después (texto y marca) · 17-nov: nada de voz ni de rostros, eso lo decide la mesa */
 export const REGLAS_DEL_PEDIDO: readonly string[] = [
@@ -85,50 +145,49 @@ export interface PedidoDeVideo {
 
 export interface Entrada { prompt?: unknown; formato?: unknown; segundos?: unknown; resolucion?: unknown; relacion?: unknown; modelo?: unknown; audio?: unknown; fotos?: unknown }
 
-/** valida y completa un pedido con los valores aprobados; devuelve la lista de errores (vacía = válido) */
-export function armarPedido(e: Entrada): { ok: true; pedido: PedidoDeVideo } | { ok: false; errores: string[] } {
+/**
+ * valida y completa un pedido; devuelve la lista de errores (vacía = válido).
+ * 17-nov · T1: el modelo sale del catálogo (dato) y la duración y las fotos, de SU ficha: sin `segundos`, la mínima del modelo.
+ */
+export function armarPedido(e: Entrada, catalogo: CatalogoDeModelos = CATALOGO_POR_OMISION): { ok: true; pedido: PedidoDeVideo } | { ok: false; errores: string[] } {
   const errores: string[] = []
   const prompt = typeof e.prompt === 'string' ? e.prompt.trim() : ''
   if (prompt.length < 10 || prompt.length > 4000) errores.push('`prompt` es un texto de 10 a 4000 caracteres')
   const formato = typeof e.formato === 'string' ? e.formato.trim().toLowerCase() : ''
   if (!formato || !(formato in RELACION_POR_FORMATO)) errores.push(`\`formato\` es uno de: ${Object.keys(RELACION_POR_FORMATO).join(', ')}`)
-  const segundos = e.segundos === undefined ? DURACION_MIN_S : Number(e.segundos)
-  if (!Number.isInteger(segundos) || segundos < DURACION_MIN_S || segundos > DURACION_MAX_S) errores.push(`\`segundos\` es un entero de ${DURACION_MIN_S} a ${DURACION_MAX_S}`)
+  const modelo = e.modelo === undefined ? catalogo.por_omision : String(e.modelo)
+  const ficha = catalogo.fichas[modelo]
+  if (!ficha) errores.push(`\`modelo\` es uno de: ${Object.keys(catalogo.fichas).join(', ')}`)
+  const segundos = e.segundos === undefined ? (ficha ?? fichaPorOmision(catalogo)).segundos_min : Number(e.segundos)
+  if (ficha && (!Number.isInteger(segundos) || segundos < ficha.segundos_min || segundos > ficha.segundos_max)) errores.push(`\`segundos\` es un entero de ${ficha.segundos_min} a ${ficha.segundos_max} (lo que admite ${modelo})`)
   const resolucion = e.resolucion === undefined ? RESOLUCION_APROBADA : String(e.resolucion).toLowerCase()
   if (!RESOLUCIONES_PERMITIDAS.has(resolucion)) errores.push('`resolucion` es 480p, 720p o 1080p')
   const relacion = e.relacion === undefined ? (RELACION_POR_FORMATO[formato] ?? '9:16') : String(e.relacion)
   if (!RELACIONES_PERMITIDAS.has(relacion)) errores.push('`relacion` es 16:9, 4:3, 1:1, 3:4, 9:16 o 21:9')
-  const modelo = e.modelo === undefined ? MODELO_APROBADO : String(e.modelo)
-  if (!MODELOS_PERMITIDOS.has(modelo)) errores.push(`\`modelo\` es uno de: ${[...MODELOS_PERMITIDOS].join(', ')}`)
   if (e.audio !== undefined && typeof e.audio !== 'boolean') errores.push('`audio` es verdadero o falso')
   let fotos: string[] = []
   if (e.fotos !== undefined) {
     if (!Array.isArray(e.fotos) || e.fotos.some((u) => typeof u !== 'string' || !/^https:\/\/\S+$/.test(u))) errores.push('`fotos` es una lista de direcciones https públicas')
-    else fotos = [...new Set(e.fotos as string[])].slice(0, MAX_FOTOS_DE_REFERENCIA)
+    else fotos = [...new Set(e.fotos as string[])].slice(0, (ficha ?? fichaPorOmision(catalogo)).referencias_max)
   }
   if (errores.length) return { ok: false, errores }
-  return { ok: true, pedido: { prompt, formato, segundos, resolucion, relacion, modelo, audio: e.audio === undefined ? true : (e.audio as boolean), fotos } }
+  return { ok: true, pedido: { prompt, formato, segundos, resolucion, relacion, modelo, audio: e.audio === undefined ? ficha!.audio : (e.audio as boolean), fotos } }
 }
 
 /**
  * 11-nov · GO Lenovo 16:43 (decisión de Emilio 16:41, camino B): un video de varios planos se genera PLANO POR PLANO, cada uno desde su foto propia
- * (imagen a video) o, sin foto, desde su texto, y después se unen. El mínimo de 4 s es POR PLANO; el máximo es el que admite el proveedor
- * (Seedance 2.5 imagen a video: 4–30 s enteros, doc `/docs/models/seedance-2-5/image-to-video.md`, leída el 11-nov). «Los límites técnicos, al máximo».
+ * (imagen a video) o, sin foto, desde su texto, y después se unen. «Los límites técnicos, al máximo»: 17-nov · T1, los del plano son los de la FICHA del modelo.
  */
-export const DURACION_MIN_PLANO_S = 4
-export const DURACION_MAX_PLANO_S = 30
 
-/** un pedido de UN plano: misma validación que `armarPedido`, con la duración del plano (4–30 s) y como mucho UNA foto (la de ese plano) */
-export function armarPedidoDePlano(e: Entrada): { ok: true; pedido: PedidoDeVideo } | { ok: false; errores: string[] } {
-  const segundos = e.segundos === undefined ? DURACION_MIN_PLANO_S : Number(e.segundos)
+/** un pedido de UN plano: misma validación que `armarPedido`, con la duración que admite el modelo para un clip y como mucho UNA foto (la de ese plano) */
+export function armarPedidoDePlano(e: Entrada, catalogo: CatalogoDeModelos = CATALOGO_POR_OMISION): { ok: true; pedido: PedidoDeVideo } | { ok: false; errores: string[] } {
   const errores: string[] = []
-  if (!Number.isInteger(segundos) || segundos < DURACION_MIN_PLANO_S || segundos > DURACION_MAX_PLANO_S) errores.push(`\`segundos\` de un plano es un entero de ${DURACION_MIN_PLANO_S} a ${DURACION_MAX_PLANO_S}`)
   if (e.fotos !== undefined && Array.isArray(e.fotos) && e.fotos.length > 1) errores.push('un plano lleva como mucho una foto (la de ese plano)')
-  // el resto (prompt, formato, resolución, relación, modelo, audio, forma de las fotos) con la validación de siempre, con una duración que ella admite
-  const v = armarPedido({ ...e, segundos: DURACION_MIN_S })
-  if (!v.ok) errores.push(...v.errores)
+  // la validación de siempre (prompt, formato, resolución, relación, modelo, audio, fotos y la duración contra la ficha del modelo)
+  const v = armarPedido(e, catalogo)
+  if (!v.ok) errores.push(...v.errores.map((x) => x.startsWith('`segundos`') ? x.replace('`segundos`', '`segundos` de un plano') : x))
   if (errores.length || !v.ok) return { ok: false, errores }
-  return { ok: true, pedido: { ...v.pedido, segundos } }
+  return { ok: true, pedido: v.pedido }
 }
 
 /** la ruta del modelo según haya fotos propias (referencia) o no (texto) · un PLANO con foto va por imagen a video · doc: /docs/models/seedance-2-5.md */
