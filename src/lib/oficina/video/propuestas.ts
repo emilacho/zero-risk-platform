@@ -50,7 +50,7 @@ const esTituloDePropuesta = (l: string) => /^\s{0,3}#{1,3}\s*(propuesta|opci[oó
 const esTituloDeCitas = (l: string) => /^\s{0,3}#{1,3}\s*citas\b/i.test(l)
 
 /** «Concepto: …», «Duración: 12 s · Red: instagram · Objetivo: …» (en una línea o en varias) */
-function cabecera(lineas: string[]): Record<'concepto' | 'duracion' | 'red' | 'objetivo' | 'por_que', string> {
+export function cabecera(lineas: string[]): Record<'concepto' | 'duracion' | 'red' | 'objetivo' | 'por_que', string> {
   const r = { concepto: '', duracion: '', red: '', objetivo: '', por_que: '' }
   const claves: Array<[RegExp, keyof typeof r]> = [[/^(concepto|idea)$/, 'concepto'], [/^(duracion|dura)$/, 'duracion'], [/^(red|plataforma)$/, 'red'], [/^objetivo$/, 'objetivo'], [/^(por que|porque|razon)$/, 'por_que']]
   for (const raw of lineas) {
@@ -68,14 +68,22 @@ function cabecera(lineas: string[]): Record<'concepto' | 'duracion' | 'red' | 'o
  * La integración de la mesa → las propuestas. `objetivo` = cuántas pidió la plantilla. Si la dirección no escribió títulos de propuesta, el texto entero es UNA
  * propuesta (con aviso si se pedían más). Una propuesta cuyo guion no se entiende se descarta con su motivo; si ninguna se entiende, `ok: false`.
  */
-export function traducirPropuestas(md: string, o: { objetivo: number; segundosMin?: number; segundosMax?: number; ronda?: number }): { ok: true; resultado: PropuestasDelVideo } | { ok: false; motivo: string; avisos: string[] } {
+/** un bloque de la integración: el título de la propuesta y sus líneas */
+export interface BloqueDePropuesta { titulo: string; lineas: string[] }
+
+/**
+ * 17-nov · el corte por propuesta, UNO para video y para imagen (propuestas también en imagen · contrato CC5 v1): parte la integración de la mesa en bloques
+ * «# Propuesta N · …» (títulos pegados cortados con el molde de CC3), aparta las citas y AVISA lo que no puede presentar (texto con estructura antes del primer título;
+ * sin títulos separados → el texto entero es UNA propuesta, con aviso si se pedían más). Puro.
+ */
+export function partirEnPropuestas(md: string, objetivo: number): { bloques: BloqueDePropuesta[]; citas: string; avisos: string[] } {
   // 17-nov · REAPERTURA del reel 2ed549cc (arreglo (b) de CC6): un título pegado a mitad de línea («…con sus citas.# Propuesta 1 · …») se corta a su propia línea con el
   // MISMO molde del traductor del kit (CC3 · #1120), sin otra copia; antes la Propuesta 1 entera se tiraba en silencio
   const lineas = separarTitulosPegados(String(md ?? '')).split('\n')
   const avisos: string[] = []
-  const bloques: Array<{ titulo: string; lineas: string[] }> = []
+  const bloques: BloqueDePropuesta[] = []
   const citas: string[] = []
-  let cur: { titulo: string; lineas: string[] } | null = null
+  let cur: BloqueDePropuesta | null = null
   let enCitas = false
   for (const l of lineas) {
     if (esTituloDePropuesta(l)) { cur = { titulo: l.replace(/^\s*#+\s*/, '').trim(), lineas: [] }; bloques.push(cur); enCitas = false; continue }
@@ -91,8 +99,34 @@ export function traducirPropuestas(md: string, o: { objetivo: number; segundosMi
   }
   if (!bloques.length) {
     bloques.push({ titulo: 'Propuesta 1', lineas })
-    if (o.objetivo > 1) avisos.push(`la mesa no escribió propuestas separadas («# Propuesta 1 · …»): se presenta el texto entero como una sola propuesta (se pedían ${o.objetivo})`)
+    if (objetivo > 1) avisos.push(`la mesa no escribió propuestas separadas («# Propuesta 1 · …»): se presenta el texto entero como una sola propuesta (se pedían ${objetivo})`)
   }
+  return { bloques, citas: citas.join('\n').trim(), avisos }
+}
+
+/** (c) «quedan N» dice CUÁLES faltan y por qué (descartadas por su contenido, con su título, y/o la mesa escribió menos títulos); y si sobran, que se presentan todas. Puro */
+export function avisosDeCuantasQuedan(objetivo: number, bloques: number, quedan: number, descartadas: string[], porQue: string): string[] {
+  const avisos: string[] = []
+  if (bloques > 1 && quedan < objetivo) {
+    const por = [
+      ...(descartadas.length ? [`se descartó ${descartadas.map((x) => `«${x}»`).join(', ')} ${porQue}`] : []),
+      ...(bloques < objetivo ? [`la mesa escribió ${bloques} título(s) de propuesta`] : []),
+    ]
+    avisos.push(`se pidieron ${objetivo} propuestas y quedan ${quedan}${por.length ? ` (${por.join('; ')})` : ''}: se presentan las que hay`)
+  }
+  if (quedan > objetivo) avisos.push(`la mesa escribió ${quedan} propuestas (se pidieron ${objetivo}): se presentan todas`)
+  return avisos
+}
+
+/** el nombre de la propuesta: su título sin «Propuesta N ·» */
+export const nombreDeLaPropuesta = (titulo: string, id: string): string => limpiarTexto(titulo.replace(/^(propuesta|opci[oó]n|camino)\s*\d*\s*[·:–—-]?\s*/i, '')) || id
+
+/**
+ * La integración de la mesa → las propuestas. `objetivo` = cuántas pidió la plantilla. Si la dirección no escribió títulos de propuesta, el texto entero es UNA
+ * propuesta (con aviso si se pedían más). Una propuesta cuyo guion no se entiende se descarta con su motivo; si ninguna se entiende, `ok: false`.
+ */
+export function traducirPropuestas(md: string, o: { objetivo: number; segundosMin?: number; segundosMax?: number; ronda?: number }): { ok: true; resultado: PropuestasDelVideo } | { ok: false; motivo: string; avisos: string[] } {
+  const { bloques, citas, avisos } = partirEnPropuestas(md, o.objetivo)
   const propuestas: PropuestaDeVideo[] = []
   const descartadas: string[] = []
   for (const b of bloques) {
@@ -100,22 +134,14 @@ export function traducirPropuestas(md: string, o: { objetivo: number; segundosMi
     const id = `P${propuestas.length + 1}`
     if (!g.ok) { avisos.push(`«${b.titulo}» se descartó: ${g.motivo ?? 'no se pudo traducir su guion'}`); descartadas.push(b.titulo); continue }
     const c = cabecera(b.lineas)
-    const nombre = limpiarTexto(b.titulo.replace(/^(propuesta|opci[oó]n|camino)\s*\d*\s*[·:–—-]?\s*/i, '')) || id
+    const nombre = nombreDeLaPropuesta(b.titulo, id)
     const declarados = /(\d+)\s*s\b/i.exec(c.duracion)
     if (declarados && Number(declarados[1]) !== g.segundos) g.avisos.push(`la propuesta dice ${declarados[1]} s y su guion dura ${g.segundos} s: vale el guion`)
     propuestas.push({ id, nombre, concepto: c.concepto, segundos: g.segundos, red: c.red, objetivo: c.objetivo, por_que: c.por_que, guion: g, texto: [`# ${b.titulo}`, ...b.lineas].join('\n').trim() })
   }
   if (!propuestas.length) return { ok: false, motivo: 'ninguna propuesta trae un guion que se entienda', avisos }
-  // (c) «quedan N» dice CUÁLES faltan y por qué: descartadas por su guion (con su título) y/o la mesa escribió menos títulos de los pedidos
-  if (bloques.length > 1 && propuestas.length < o.objetivo) {
-    const por = [
-      ...(descartadas.length ? [`se descartó ${descartadas.map((x) => `«${x}»`).join(', ')} por su guion`] : []),
-      ...(bloques.length < o.objetivo ? [`la mesa escribió ${bloques.length} título(s) de propuesta`] : []),
-    ]
-    avisos.push(`se pidieron ${o.objetivo} propuestas y quedan ${propuestas.length}${por.length ? ` (${por.join('; ')})` : ''}: se presentan las que hay`)
-  }
-  if (propuestas.length > o.objetivo) avisos.push(`la mesa escribió ${propuestas.length} propuestas (se pidieron ${o.objetivo}): se presentan todas`)
-  return { ok: true, resultado: { ronda: o.ronda ?? 1, propuestas, citas: citas.join('\n').trim(), avisos } }
+  avisos.push(...avisosDeCuantasQuedan(o.objetivo, bloques.length, propuestas.length, descartadas, 'por su guion'))
+  return { ok: true, resultado: { ronda: o.ronda ?? 1, propuestas, citas, avisos } }
 }
 
 /** el artefacto de la aprobación del dueño (lo escribe el paso `aprobar_propuestas` cuando llega la respuesta) */
