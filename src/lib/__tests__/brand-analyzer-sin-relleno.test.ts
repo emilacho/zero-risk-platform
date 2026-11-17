@@ -63,3 +63,19 @@ describe('A·13 · el pedido al modelo tampoco empuja a rellenar', () => {
     expect(sistema).toMatch(/déjalo en null \(o la lista vacía\): no lo rellenes/)
   })
 })
+
+describe('A·13 · la declaración llega a los errores del alta (CC7 r8)', () => {
+  it('un análisis ilegible produce su declaración para `errors`; uno bueno, ninguna', async () => {
+    const { declaracionesDelAnalisis } = await import('../brand-analyzer')
+    const { r } = await analizarCon('esto no es json')
+    expect(declaracionesDelAnalisis(r.analysis)).toEqual([r.analysis.sin_analisis])
+    expect(declaracionesDelAnalisis({})).toEqual([])
+  })
+  it('el alta suma esa declaración a sus `errors` justo después de analizar la marca', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const src = fs.readFileSync(path.join(__dirname, '..', 'onboarding-orchestrator.ts'), 'utf8')
+    expect(src).toMatch(/import \{ BrandAnalyzer, declaracionesDelAnalisis \} from '\.\/brand-analyzer'/)
+    expect(src).toMatch(/const brandResult = await analyzer\.analyzeBrand\([\s\S]{0,400}?errors\.push\(\.\.\.declaracionesDelAnalisis\(brandResult\.analysis\)\)/)
+  })
+})

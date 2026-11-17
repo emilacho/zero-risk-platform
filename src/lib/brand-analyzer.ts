@@ -53,6 +53,11 @@ export interface BrandAnalysis {
   sin_analisis?: string
 }
 
+/** 17-nov · GO «quitar rejas» A·13: lo que el alta DECLARA en sus `errors` sobre el análisis de marca (vacío → por qué). Sin análisis fallido, nada. */
+export function declaracionesDelAnalisis(a: Pick<BrandAnalysis, 'sin_analisis'>): string[] {
+  return a.sin_analisis ? [a.sin_analisis] : []
+}
+
 export interface ICPAnalysis {
   segments: {
     audience_segment: string
