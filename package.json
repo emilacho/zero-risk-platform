@@ -21,7 +21,10 @@
     "onlyBuiltDependencies": [
       "braintrust",
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "vitest>vite": "$vite"
+    }
   },
   "scripts": {
     "dev": "next dev",

@@ -27,14 +27,18 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: |
-          rm -f pnpm-lock.yaml
-          pnpm install
+        # CC2 · 17-nov (RESPUESTA-LENOVO-a-CC2-CC7-ci-fijar-agent-runner): se instala con el lockfile CONGELADO. Antes se borraba
+        # (`rm -f pnpm-lock.yaml`, 14-may, porque el lockfile hecho en Windows no traía los binarios de Linux) y cada corrida resolvía
+        # de nuevo contra npm: el 17-nov rollup 4.68.5 salió como `latest` con su archivo en 404 y tumbó el CI. Hoy el lockfile ya
+        # trae los binarios de Linux (`.npmrc` · supportedArchitectures linux/x64/glibc) y una versión nueva de npm no entra sola.
+        # Si cambia package.json sin actualizar pnpm-lock.yaml, este paso FALLA: es a propósito (actualizar el lockfile en el mismo PR).
+        run: pnpm install --frozen-lockfile
 
       - name: Install agent-runner dependencies
         # 🔴 (CC#1 · 01-oct · PR #418) las pruebas «de punta a punta» de mirar_afuera arrancan el servidor MCP REAL y le hablan con el cliente del SDK de MCP: ambos viven en las dependencias del
         # SERVICIO (`services/agent-runner`), no en las de la raíz. Sin este paso esas pruebas no encontraban `@modelcontextprotocol/sdk` y el CI fallaba (medido en el CI de GitHub). NO se saltan: corren.
-        run: pnpm --dir services/agent-runner install --frozen-lockfile=false
+        # CC2 · 17-nov: también con su lockfile congelado (`services/agent-runner/pnpm-lock.yaml`), por la misma razón.
+        run: pnpm --dir services/agent-runner install --frozen-lockfile
 
       - name: Typecheck
         run: pnpm typecheck
