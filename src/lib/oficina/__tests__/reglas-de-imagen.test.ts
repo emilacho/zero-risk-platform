@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { describirReglas } from '../pedidos'
 import { chequearPrompts, decideImagen, veredictoDeImagenes, elegirVersion, citasExisten, datosAjenos, derivarDecision } from '../reglas-de-imagen'
 import type { ReglasDeImagen, PropiosDelCliente, ObservacionDeImagen } from '../reglas-de-imagen'
 
@@ -186,7 +187,21 @@ describe('17-nov · GO creativos punto 5 · las reglas de imagen se citan POR RE
   })
   it('una marca que el agente mande por su cuenta no se confía: la sala la recalcula', () => {
     const r = citasExisten({ obligatorio: [{ id: 'a', texto: 'completo', cita: 'aparece completo', marcada: 'yo misma' }], prohibido: [] }, brief)
-    expect(r.validas.obligatorio[0]).toEqual({ id: 'a', texto: 'completo', cita: 'aparece completo' })
+    expect(r.validas.obligatorio[0]).toEqual({ id: 'a', texto: 'completo', cita: 'aparece completo', comprobada: 'cita' })
+  })
+  it('🔴 cuidado 1 de CC6: la regla dice CÓMO se comprobó (cita ≠ campo); un «comprobada» que mande el agente se recalcula; una marcada no lleva «comprobada»', () => {
+    const r = citasExisten({ obligatorio: [
+      { id: 'c', texto: 'completo', cita: 'aparece completo' },
+      { id: 'k', texto: 'x', fuente: 'brief', campo: 'objetivo', comprobada: 'cita' },
+      { id: 'm', texto: 'y', cita: 'no existe en ningún lado', comprobada: 'cita' },
+    ] as never, prohibido: [] }, 'Objetivo: el plato aparece completo y central')
+    expect(r.validas.obligatorio.map((x) => [x.id, x.comprobada, !!x.marcada])).toEqual([['c', 'cita', false], ['k', 'campo', false], ['m', undefined, true]])
+    expect(r.comprobadas.map((x) => [x.id, x.por])).toEqual([['c', 'cita'], ['k', 'campo']])
+  })
+  it('🔴 la tarea de los siguientes avisa cuando una regla está comprobada SOLO por campo (no dice nada de más para las de cita)', () => {
+    const t = describirReglas({ obligatorio: [{ id: 'c', texto: 'uno', comprobada: 'cita' }, { id: 'k', texto: 'dos', comprobada: 'campo' }], prohibido: [] })
+    expect(t).toContain('[k] dos (comprobada solo por campo: el campo existe en la fuente, no que la regla salga de él)')
+    expect(t).toContain('[c] uno\n')
   })
 })
 

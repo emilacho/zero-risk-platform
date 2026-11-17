@@ -19,6 +19,8 @@ export interface ReglaDeImagen {
   campo?: string
   /** 17-nov · la sala no pudo comprobar de dónde sale: la regla se usa igual y se dice por qué (no se descarta) */
   marcada?: string
+  /** 17-nov · cuidado 1 de CC6 sobre #1090: CÓMO la comprobó la sala. «cita» = el texto está en la fuente; «campo» = solo que el campo existe (no que la regla salga de él) */
+  comprobada?: 'cita' | 'campo'
   /** una palabra declarada: se avisa, no descarta el prompt */ solo_aviso?: boolean
 }
 export interface ReglasDeImagen { obligatorio: ReglaDeImagen[]; prohibido: ReglaDeImagen[] }
@@ -195,9 +197,11 @@ export function citasExisten(reglas: ReglasDeImagen, fuentes: FuentesDeCitas | s
   }
   const marca = (rs: ReglaDeImagen[]) => rs.map((r) => {
     const c = comprobar(r)
-    if (typeof c !== 'string') { comprobadas.push({ id: r.id, ...c }); const { marcada: _m, ...limpia } = r; return limpia }
+    // `marcada` y `comprobada` los pone SOLO la sala: lo que mande el agente se descarta y se recalcula
+    const { marcada: _m, comprobada: _c, ...limpia } = r
+    if (typeof c !== 'string') { comprobadas.push({ id: r.id, ...c }); return { ...limpia, comprobada: c.por } }
     marcadas.push({ id: r.id, motivo: c })
-    return { ...r, marcada: c }
+    return { ...limpia, marcada: c }
   })
   return { validas: { obligatorio: marca(reglas.obligatorio ?? []), prohibido: marca(reglas.prohibido ?? []) }, marcadas, comprobadas }
 }
