@@ -90,11 +90,6 @@ const CASES: Case[] = [
     bad: { name: 'Juan' }, // missing source
   },
   {
-    schema: 'agents-generate-content',
-    happy: { product: 'EPP', audience: 'PYMES' },
-    bad: { product: 'EPP' }, // missing audience
-  },
-  {
     schema: 'campaigns-block-launch',
     happy: { campaign_id: 'c-1', match_score: 0.4, reason: 'mismatch' },
     bad: { match_score: 1.5 }, // > maximum

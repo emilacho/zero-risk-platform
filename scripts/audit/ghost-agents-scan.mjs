@@ -34,7 +34,7 @@ if (manifestBlock) {
 }
 
 const KNOWN_FIELDS = ['agent', 'agent_slug', 'agentSlug', 'slug', 'agent_name', 'agentName']
-const RESERVED_PATHS = new Set(['run', 'run-sdk', 'generate-content', 'list', 'health'])
+const RESERVED_PATHS = new Set(['run', 'run-sdk', 'list', 'health']) // 17-nov · A·12: generate-content retirada
 
 const slugSources = new Map() // slug → workflows[]
 
