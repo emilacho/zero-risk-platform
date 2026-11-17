@@ -360,3 +360,33 @@ describe('🟡 CC7 22:02 · el hueco entre encargos: la misma fila vuelve con ot
     expect(al.correcciones[0].encargos_cubiertos).toEqual(['enc-2'])
   })
 })
+
+describe('🟡 CC6 q5 · la carrera del insert: dos encargos de la misma fila en el mismo instante', () => {
+  const k = CASOS[0]
+  const cuerpo = (encargo: string, dura: boolean) => ({ campana_id: CAMP(k), fila_id: 'pieza', destino: 'calendario', motivo: 'la oferta está cerrada ese día', encargo_id: encargo, dura, ...(dura ? { regla: 'D1' } : {}) })
+  it('🔴 el que PIERDE el insert vuelve a mirar la misma llave: la cubre (una sola corrección, una sola mesa), no abre «#2»', async () => {
+    const al = almacen(k)
+    const puerto = puertoDeLaCadena(al, () => k.ahora)
+    const original = al.correccionInsertar.bind(al)
+    let una = true
+    // justo antes de su insert, otro encargo de la misma fila inserta primero: este pierde (nueva:false) una vez
+    al.correccionInsertar = async (c) => {
+      if (una) { una = false; await original({ ...c, encargo_id: 'enc-1' }) }
+      return original(c)
+    }
+    expect(await puerto.devolverCorreccion(cuerpo('enc-2', true))).toMatchObject({ status: 200, cuerpo: { ya_estaba: true, correccion: { llave_guardada: 'pieza:calendario' } } })
+    expect(al.correcciones.map((c) => [c.llave, c.encargo_id, c.encargos_cubiertos])).toEqual([['pieza:calendario', 'enc-1', ['enc-2']]])
+    await reloj(al, k.ahora)
+    expect(al.sobresDeReubicacion).toHaveLength(1)
+  })
+  it('🔴 lo mismo con una de CRITERIO: la previa sigue abierta → la cubre, NO queda como observación', async () => {
+    const al = almacen(k)
+    const puerto = puertoDeLaCadena(al, () => k.ahora)
+    const original = al.correccionInsertar.bind(al)
+    let una = true
+    al.correccionInsertar = async (c) => { if (una) { una = false; await original({ ...c, encargo_id: 'enc-1', dura: true, regla: 'D1' }) } return original(c) }
+    expect(await puerto.devolverCorreccion(cuerpo('enc-2', false))).toMatchObject({ status: 200, cuerpo: { ya_estaba: true } })
+    expect(al.correcciones).toHaveLength(1)
+    expect(al.correcciones[0]).toMatchObject({ estado: 'recibida', encargos_cubiertos: ['enc-2'] })
+  })
+})
