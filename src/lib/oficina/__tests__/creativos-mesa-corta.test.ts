@@ -6,7 +6,7 @@
  *  · en la mesa se sientan SOLO los 3 asientos (más quien dirige y el portero) y hay UNA ronda de aportes.
  */
 import { describe, expect, it } from 'vitest'
-import { abrirEncargo } from '../orquestador'
+import { abrirEncargo, recibirResultado } from '../orquestador'
 import { CLAVE_DE_LA_PALANCA, FAMILIA_CON_MESA, familiaConMesa, gruposHermanos, palancaEncendida, topesConMesa } from '../mesa/con-mesa'
 import { directorioConAsientos } from '../mesa/orquestador'
 import { siguienteDeLaMesa } from '../mesa/planificador'
@@ -209,6 +209,43 @@ describe('la mesa corta de las historias: 3 asientos y 1 ronda', () => {
     // la pregunta del traductor (una devolución A la dirección) se atiende aunque la ronda esté hecha
     const pregunta = ap('traductor', 'devuelve', '¿cuál es el titular de e02?', { para: 'creative-director-mesa' })
     expect(siguienteDeLaMesa(est({ integraciones: 1 }), [...base, integra, pregunta], ctx)).toMatchObject({ accion: 'turno', agente: 'creative-director-mesa', tipo: 'responder' })
+  })
+
+  // por la puerta y la mesa REALES: la ronda única sale del DATO de la plantilla (sin él, el mismo pedido abre otro turno de aporte)
+  async function hastaDespuesDeIntegrar(sinLimite: boolean): Promise<{ agente: string; paso: string }> {
+    const mesaPl: Plantilla = JSON.parse(JSON.stringify(KIT_MESA))
+    if (sinLimite) delete (mesaPl.limites as Record<string, unknown>).rondas_de_la_mesa
+    const M = crearMemoria({ parte: parteCon(BRIEF_KIT), plantilla: mesaPl, config: { familias_activas: ['kit_historias'] } })
+    const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = { kit_historias: { plantilla: KIT_HISTORIAS_CON_JEFATURA, activo: true }, kit_mesa: { plantilla: mesaPl, activo: true } }
+    M.P.almacen.leerPlantilla = async (f) => plantillas[f] ?? null
+    const MS = crearMesaEnMemoria(DIRECTORIO_VIVO)
+    M.P.mesa = { ...MS, configDeLaCadena: async (k: string) => (k === CLAVE_DE_LA_PALANCA ? ON : undefined) }
+    let r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0200', dry_run: true, familia: 'kit_historias' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    const id = String(r.cuerpo.encargo_id)
+    expect(M.encargos.get(id)!.familia).toBe('kit_mesa')
+    for (let i = 0; i < 12 && r.cuerpo.accion === 'esperar'; i++) {
+      const t = r.cuerpo.turno as { n: number; paso: string; agente: string }
+      const tipo = t.paso.split(':')[1]
+      let texto = `(${t.agente}) aporte breve`
+      if (tipo === 'integrar') {
+        // durante su turno de integrar, la dirección pide otra vuelta de texto a un especialista
+        await MS.aportar({ encargo_id: id, de: 'creative-director-mesa', para: 'content-creator', tipo: 'pide', texto: 'otra vuelta de texto, por favor', refs: [], responde_a: null, profundidad: 0, costo_usd: 0, workflow_execution_id: null })
+        const citas = MS.filas.filter((x) => x.encargo_id === id && x.tipo === 'aporta').map((x) => `A${x.n} usé: ${x.de === 'content-creator' ? 'los titulares y el llamado de cada historia' : 'la dirección visual de fondo sólido'}`).join('\n')
+        texto = `## e01\nRol: el plato del día\nTítulo: El plato de hoy\nImagen: generar: un plato\n## e02\nRol: el horario\nTítulo: Abrimos a las siete\nImagen: generar: un reloj\n## Citas\n${citas}`
+        r = await recibirResultado(M.P, id, t.n, { texto, costo_usd: 0, workflow_execution_id: `t-${t.n}` })
+        const sig = r.cuerpo.turno as { agente: string; paso: string } | undefined
+        return { agente: sig?.agente ?? String(r.cuerpo.accion), paso: sig?.paso ?? '' }
+      }
+      r = await recibirResultado(M.P, id, t.n, { texto, costo_usd: 0, workflow_execution_id: `t-${t.n}` })
+    }
+    throw new Error('no llegó a integrar')
+  }
+  it('por la puerta y la mesa reales: con la ronda única de la plantilla, el pedido tras integrar NO abre turno del especialista; sin el dato, sí (control)', async () => {
+    const conLimite = await hastaDespuesDeIntegrar(false)
+    expect(conLimite.agente).not.toBe('content-creator')
+    expect(conLimite.paso).toBe('mesa:redactar_prompts:design-image-prompt-engineer')
+    const sinLimite = await hastaDespuesDeIntegrar(true)
+    expect(sinLimite).toMatchObject({ agente: 'content-creator' })
   })
 
   it('después de la ronda escribe los prompts el ingeniero (su asiento) y luego se traduce', () => {
