@@ -96,8 +96,8 @@ describe('verificarRespuestaDelBanco · el código decide si se escribe', () => 
   })
   it('🔴 regla dura (D1/D2): «no_tomada» no vale → «no_dicha» con el motivo (se toma sí o sí); sin regla dura, «no_tomada» queda', () => {
     const no = { respuesta: 'no_tomada' as const, explicacion: 'no aplica' }
-    for (const regla of ['D1', 'D2', 'd1 ']) expect(verificarRespuestaDelBanco(CORR({ regla }), I, no)).toMatchObject({ respuesta: 'no_dicha', motivo: expect.stringContaining('regla dura') })
-    expect(verificarRespuestaDelBanco(CORR({ regla: '3' }), I, no)).toEqual(no)
+    for (const regla of ['D1', 'D2', 'D3', 'd1 ', 'd3']) expect(verificarRespuestaDelBanco(CORR({ regla }), I, no)).toMatchObject({ respuesta: 'no_dicha', motivo: expect.stringContaining('regla dura') })
+    for (const regla of ['3', 'D4', 'D', 'criterio']) expect(verificarRespuestaDelBanco(CORR({ regla }), I, no)).toEqual(no)
     expect(verificarRespuestaDelBanco(CORR(), I, no)).toEqual(no)
   })
   it('🔴 los cambios pasan por las MISMAS reglas del tablero: solo campos editables, no vacíos, sin «·» que cambie la lectura, y al menos uno distinto', () => {

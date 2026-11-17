@@ -1,7 +1,7 @@
 /**
  * 17-nov · EL PUERTO «BANCO» DEL RECEPTOR DE CORRECCIONES (asignado por Lenovo · `RESPUESTA-LENOVO-a-CC3-CC1-receptor-de-correcciones` · contrato de CC3 en su PROPUESTA).
  * Firma de Emilio (cambio 4): la jefatura DEVUELVE la corrección al creador; el creador la toma entera, a medias o no la toma, con motivo. Sin persona en el medio.
- * Lo que la jefatura marca como REGLA DURA (D1 · oferta cerrada o que aún no existe en su fecha · D2 · dato vencido o aún no vigente) se toma sí o sí.
+ * Lo que la jefatura marca como REGLA DURA firmada (D1 · oferta cerrada o que aún no existe en su fecha · D2 · dato vencido o aún no vigente · D3 · precios) se toma sí o sí.
  *
  *  · El creador de una idea del banco es la MESA DE LA GRAN IDEA: decide en su mesa chica («corrección del banco», E2) y entrega un bloque JSON que lee `leerRespuestaDelBanco`.
  *  · `verificarRespuestaDelBanco`: el CÓDIGO verifica antes de escribir: la idea sigue igual (`idea_sello` = su `linea` al armar la corrección), los campos son editables y no vacíos,
@@ -15,7 +15,7 @@ import { CAMPOS_EDITABLES, editarEnElBanco, leerCambios, retirarDelBanco, type C
 import type { IdeaDelBanco } from './conceptos'
 
 /** las reglas duras firmadas que alcanzan a una idea del banco (hechos de la oferta, cambio 4): con ellas `no_tomada` no vale */
-export const REGLAS_DURAS_DEL_BANCO = ['D1', 'D2'] as const
+export const REGLAS_DURAS_DEL_BANCO = ['D1', 'D2', 'D3'] as const
 export const LARGO_MAXIMO_DE_EXPLICACION = 600
 export const IDEA_CAMBIADA = 'la idea ya cambió; corrección vieja'
 export const IDEA_FUERA_DEL_BANCO = 'la idea ya no está en el banco'
