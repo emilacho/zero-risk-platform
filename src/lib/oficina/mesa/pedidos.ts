@@ -72,7 +72,7 @@ export function tableroEnTexto(libro: Aporte[], max = 12000): string {
 export const LISTA_DE_FOTOS = (fotos: FotoEtiquetada[]): string => {
   const propias = fotos.filter((f) => (f.origen ?? 'propia') === 'propia').slice(0, 24)
   if (!propias.length) return '(el cliente no tiene fotos propias disponibles)'
-  return propias.map((f) => `- ${f.id} · ${f.que_muestra ?? 'sin descripción'}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}`).join('\n')
+  return propias.map((f) => `- ${f.id} · ${f.que_muestra ?? 'sin descripción'}${f.oferta?.trim() ? ` · oferta: ${f.oferta.trim()}` : ''}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}`).join('\n')
 }
 
 /** 31-oct · brief creativo de la campaña (`brief_creativo.v1`): UN brief corto, con secciones fijas que el código lee; lo que falta se declara en «Faltantes», nunca se rellena */

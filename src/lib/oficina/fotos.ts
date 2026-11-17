@@ -20,6 +20,8 @@ export interface FotoEtiquetada {
   etiqueta_confianza?: 'alta' | 'media' | 'baja' | null
   /** de quién es la foto: propia | competencia | referencia (sale de `owner_role`; solo las PROPIAS pueden ser candidatas) */
   origen?: 'propia' | 'competencia' | 'referencia'
+  /** 17-nov · Sprint 4 · D · la oferta que muestra (clave de la sede u oferta), si consta con su fuente (#1135); sin ella, nada */
+  oferta?: string | null
 }
 export interface PedidoDeFoto {
   /** lo que protagoniza el brief (p. ej. el producto); si está vacío no se filtra por producto */
