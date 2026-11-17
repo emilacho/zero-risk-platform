@@ -29,7 +29,12 @@ export interface PedidoDePlano {
   plano: true
   /** clave idempotente del plano: `<clave del guion>:p<n>` */
   clave: string
+  /** 17-nov · S2-4 · de dónde sale el primer cuadro del clip: su imagen clave final (#1072/#1076), la foto propia del plano o solo el texto */
+  primer_cuadro: 'imagen_clave' | 'foto_propia' | 'texto'
 }
+
+/** la imagen clave de un plano tal como la deja el paso `imagenes_clave` (solo hace falta su primer cuadro) */
+export interface PrimerCuadro { n: number; url: string }
 
 /** cuánto dura un plano en el guion (entero ≥ 1) */
 export const duracionDelPlano = (p: Pick<Plano, 'desde' | 'hasta'>): number => Math.max(1, Math.round(p.hasta - p.desde))
@@ -43,6 +48,16 @@ export function promptDelPlano(p: Plano, audio: string, max = 3600): string {
     audio ? `Audio: ${audio}` : 'Audio: música o sonido ambiente acorde a la escena.',
   ].filter(Boolean).join(' ')
   return t.slice(0, max)
+}
+
+/**
+ * 17-nov · S2-4 · el texto del CLIP cuando arranca de su imagen clave: el «Prompt de video» de la hoja (S2-1: solo movimiento y cámara, el proceso de la acción
+ * y su estado final; lo que se ve ya está en el cuadro) + el audio del video entero. Sin ese campo, el de siempre (`promptDelPlano`).
+ */
+export function promptDelClip(p: Plano, audio: string, max = 3600): string {
+  const pv = typeof p.prompt_video === 'string' ? p.prompt_video.trim() : ''
+  if (!pv) return promptDelPlano(p, audio, max)
+  return [pv, audio ? `Audio: ${audio}` : 'Audio: música o sonido ambiente acorde a la escena.'].join(' ').slice(0, max)
 }
 
 /** el buscador de fotos por omisión: el MISMO del pedido de una toma (#1047 · id exacto o nombre corto que empieza una sola foto propia; uno ambiguo no se adivina) */
@@ -60,6 +75,8 @@ export function pedidosPorPlano(o: {
   relacion?: string
   /** cómo se halla la dirección de una foto citada por el guion · por omisión, el de #1047 (exacto o nombre corto único) */
   buscarFoto?: (id: string) => string | null
+  /** 17-nov · S2-4 · las imágenes clave FINALES vigentes: la de cada plano es el primer cuadro de su clip (manda sobre la foto propia, que ya fue su referencia) */
+  imagenesClave?: PrimerCuadro[]
 }): { ok: true; pedidos: PedidoDePlano[] } | { ok: false; errores: string[] } {
   const planos = [...(o.guion.planos ?? [])].sort((a, b) => a.n - b.n || a.desde - b.desde)
   if (!planos.length) return { ok: false, errores: ['el guion no tiene planos'] }
@@ -70,10 +87,12 @@ export function pedidosPorPlano(o: {
   for (const p of planos) {
     const dura = duracionDelPlano(p)
     if (dura > DURACION_MAX_PLANO_S) { errores.push(`el plano ${p.n} dura ${dura} s y el proveedor admite hasta ${DURACION_MAX_PLANO_S} s por plano`); continue }
-    const url = p.foto_id ? buscar(p.foto_id) : null
-    const v = armarPedidoDePlano({ prompt: promptDelPlano(p, o.guion.audio), formato, segundos: Math.max(DURACION_MIN_PLANO_S, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [] })
+    const ic = (o.imagenesClave ?? []).find((x) => x.n === p.n && typeof x.url === 'string' && x.url.trim() !== '')
+    const url = ic ? ic.url : p.foto_id ? buscar(p.foto_id) : null
+    const primer_cuadro: PedidoDePlano['primer_cuadro'] = ic ? 'imagen_clave' : url ? 'foto_propia' : 'texto'
+    const v = armarPedidoDePlano({ prompt: ic ? promptDelClip(p, o.guion.audio) : promptDelPlano(p, o.guion.audio), formato, segundos: Math.max(DURACION_MIN_PLANO_S, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [] })
     if (!v.ok) { errores.push(...v.errores.map((e) => `plano ${p.n}: ${e}`)); continue }
-    pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}` })
+    pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url && !ic ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}` , primer_cuadro })
   }
   if (errores.length) return { ok: false, errores }
   return { ok: true, pedidos }

@@ -181,7 +181,9 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
   // 11-nov · camino B: con 2 o más planos y el interruptor encendido, además del pedido de una toma (lo que ven la jefatura y la hoja) va un pedido POR PLANO
   let planos: PedidoDePlano[] | undefined
   if (planoPorPlanoEncendido(pl) && g.planos.length >= 2) {
-    const pp = pedidosPorPlano({ guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
+    // 17-nov · S2-4 · cada clip arranca de la imagen clave FINAL de su plano (#1072/#1076); el encuadre la lleva a la proporción de la red como a cualquier foto
+    const ic = imagenesClaveVigentes(e)
+    const pp = pedidosPorPlano({ guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}), ...(ic?.planos?.length ? { imagenesClave: ic.planos.map((x) => ({ n: x.n, url: x.url })) } : {}) })
     if (!pp.ok) return { res: { costo_usd: 0 }, fallido: `los pedidos por plano no son válidos: ${pp.errores.join(' · ')}` }
     planos = pp.pedidos
   }
