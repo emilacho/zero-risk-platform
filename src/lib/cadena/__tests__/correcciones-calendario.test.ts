@@ -267,3 +267,23 @@ describe('lo que lee la oficina del calendario (para_la_pieza · CC4)', () => {
     expect(await leer(b)).toEqual(['sigue'])
   })
 })
+
+describe('el puerto en proceso de la oficina (CC4 · devolverCorreccion · correccionesDelEncargo)', () => {
+  it('🔴 la oficina devuelve SIN workflow_id (en proceso, de confianza): misma validación, misma llave; la ruta HTTP sigue exigiendo autorización', async () => {
+    const k = CASOS[0]
+    const al = almacen(k)
+    const puerto = puertoDeLaCadena(al, () => k.ahora)
+    const cuerpo = { campana_id: CAMP(k), fila_id: 'pieza', destino: 'calendario', motivo: 'la oferta está cerrada ese día', linea_de_la_ficha: 'cierre: se retira', encargo_id: 'enc-pieza', dura: true, regla: 'D1' }
+    expect(await puerto.devolverCorreccion(cuerpo)).toMatchObject({ status: 201, cuerpo: { ok: true, correccion: { llave: 'pieza:calendario', para_la_pieza: 'esperando', bloquea_la_pieza: true } } })
+    expect(await puerto.devolverCorreccion(cuerpo)).toMatchObject({ status: 200, cuerpo: { ya_estaba: true } })
+    expect((await puerto.devolverCorreccion({ ...cuerpo, destino: 'otra' })).status).toBe(400)
+    // por la ruta, sin workflow_id, no entra (la autorización de siempre) y no guarda nada
+    expect((await ACCIONES.correcciones.recibir(al, { ...cuerpo, fila_id: 'otra' }, k.ahora)).status).toBeGreaterThanOrEqual(400)
+    expect(al.correcciones.map((c) => c.llave)).toEqual(['pieza:calendario'])
+    expect(await puerto.correccionesDelEncargo('enc-pieza')).toMatchObject({ status: 200, cuerpo: { correcciones: [{ llave: 'pieza:calendario', para_la_pieza: 'esperando' }] } })
+  })
+  it('🔴 nunca lanza: un almacén que falla devuelve 500 con el motivo', async () => {
+    const puerto = puertoDeLaCadena(() => { throw new Error('sin base') })
+    expect(await puerto.correccionesDelEncargo('x')).toMatchObject({ status: 500, cuerpo: { ok: false, error: 'sin base' } })
+  })
+})

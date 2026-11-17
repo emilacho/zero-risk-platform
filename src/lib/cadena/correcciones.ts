@@ -88,13 +88,14 @@ const esDestino = (x: unknown): x is DestinoDeCorreccion => typeof x === 'string
 const recortar = (x: string | null): string | null => (x === null ? null : x.slice(0, LARGO_MAXIMO_DE_TEXTO))
 
 // ───────────────────────────────────────────── 1 · recibir (POST /api/cadena/correcciones · accion recibir)
-export async function correccionRecibir(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+/** `enProceso`: la oficina llega por `puertoDeLaCadena` (CC4 · en proceso, de confianza, sin HTTP): misma validación y misma llave, sin `autorizarLlamada` */
+export async function correccionRecibir(al: Almacen, cuerpo: Record<string, unknown>, ahora: string, enProceso = false): Promise<Respuesta> {
   if (!al.correccionInsertar) return err(503, 'E-SIN-CORRECCIONES', 'este almacén no guarda correcciones todavía')
   const campanaId = cadena(cuerpo.campana_id)
   if (!campanaId) return err(400, 'E-CAMPANA', 'falta campana_id')
   const campana = await al.campana(campanaId)
   if (!campana) return err(404, 'E-CAMPANA-NO-EXISTE', 'esa campaña no existe')
-  const auth = await autorizarLlamada(al, cuerpo, campana.client_id)
+  const auth = enProceso ? null : await autorizarLlamada(al, cuerpo, campana.client_id)
   if (auth) return auth
   const filaId = cadena(cuerpo.fila_id), destino = cuerpo.destino, motivo = cadena(cuerpo.motivo), encargoId = cadena(cuerpo.encargo_id)
   if (!filaId) return err(400, 'E-FILA', 'falta fila_id')
