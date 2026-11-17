@@ -212,6 +212,16 @@ export class AlmacenMemoria implements Almacen {
   async ultimasFichas(campanaId: string) { return this.fichasDeOferta.filter((f) => f.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarFichas(f: FichasGuardadas) { if (!this.fichasDeOferta.some((x) => x.campana_id === f.campana_id && x.version === f.version)) this.fichasDeOferta.push(f) }
   async hechosDelNegocio(_clientId: string) { return this.hechos ?? null }
+  // 17-nov · cambio 4 · entrega 2 · imita el UNIQUE (llave) y la escritura condicional al estado
+  correcciones: import('../correcciones').Correccion[] = []
+  async correccionInsertar(c: import('../correcciones').Correccion) { const ya = this.correcciones.find((x) => x.llave === c.llave); if (ya) return { correccion: structuredClone(ya), nueva: false }; this.correcciones.push(structuredClone(c)); return { correccion: structuredClone(c), nueva: true } }
+  async correccion(llave: string) { const c = this.correcciones.find((x) => x.llave === llave); return c ? structuredClone(c) : null }
+  async correccionesPendientes() { return structuredClone(this.correcciones.filter((x) => x.estado !== 'respondida')) }
+  /** sin fijar = el almacén no sabe si se publicó (la cadena lo da por publicado) */
+  piezaPublicada?: (campanaId: string, filaId: string) => Promise<boolean>
+  async alarmasPendientes() { return structuredClone(this.correcciones.filter((x) => x.estado === 'respondida' && x.frena && !x.alarma_en).sort((a, b) => String(a.respondida_en).localeCompare(String(b.respondida_en))).slice(0, 50)) }
+  async correccionesDeEncargo(encargoId: string) { return structuredClone(this.correcciones.filter((x) => x.encargo_id === encargoId || (x.encargos_cubiertos ?? []).includes(encargoId))) }
+  async correccionActualizar(llave: string, cambios: Partial<import('../correcciones').Correccion>, estadoEsperado: import('../correcciones').EstadoDeCorreccion) { const c = this.correcciones.find((x) => x.llave === llave); if (!c || c.estado !== estadoEsperado) return false; Object.assign(c, structuredClone(cambios)); return true }
   async estrategiaEnVersion(campanaId: string, version: number) { return this.estrategias.find((e) => e.campana_id === campanaId && e.version === version) ?? null }
   async insertarEstrategiaSiLibre(e: EstrategiaGuardada) { if (this.estrategias.some((x) => x.campana_id === e.campana_id && x.version === e.version)) return false; this.estrategias.push(e); return true }
   // 31-oct (nuevo orden · T1) · imita el UNIQUE (campana_id, version) de la base

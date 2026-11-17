@@ -14,6 +14,9 @@ import { avisoDePrimeraSemana, cerrarMesasVencidas, seguirSinRevisionDeRegistro,
 import { leerObjetoDeRegistro } from './registro-en-jefatura'
 import { abrirReubicaciones, avisosDeReubicacion } from './reubicar'
 import { abrirRevisionesDeFallidos, avisosDeFallidos } from './rehacer-fallidos'
+import { repartirCorrecciones, sondeoDelBanco } from './correcciones'
+import { abrirCorreccionDelBanco } from './banco-correcciones'
+import { creadorDelCalendario } from './correcciones-calendario'
 import type { Fila } from './tipos'
 
 /** `repetible`: un aviso de ESTADO (no de evento): mientras diga lo mismo, sale una sola vez; si cambia, o desaparece y vuelve, sale de nuevo (31-oct, «vigía sin ruido») */
@@ -121,6 +124,16 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
       aplicado.push(...ab.aplicado)
       lineas.push(...ab.lineas, ...(await avisosDeFallidos(al, enviar)))
     } catch (e) { lineas.push({ campana_id: 'sistema', texto: `fallidos: no se pudo revisar (${String((e as Error)?.message ?? e).slice(0, 160)})` }) }
+  }
+
+  // 3d · 17-nov · cambio 4 · entrega 2 · las correcciones de la jefatura a la cadena: cada una a su creador (calendario por entrada propia, SIN interruptor: firma de Emilio,
+  //      «automático, sin persona en el medio»). El banco entra cuando exista el puerto de CC1; la hoja, con la decisión de Lenovo. Nunca en seco (abrir la mesa gasta).
+  if (!seco) {
+    try {
+      const rc = await repartirCorrecciones(al, ahora, { calendario: creadorDelCalendario }, { banco: sondeoDelBanco(abrirCorreccionDelBanco) })
+      aplicado.push(...rc.aplicado)
+      lineas.push(...rc.lineas.map((texto) => ({ campana_id: 'sistema', texto: `corrección: ${texto}` })))
+    } catch (e) { lineas.push({ campana_id: 'sistema', texto: `correcciones: no se pudieron repartir (${String((e as Error)?.message ?? e).slice(0, 160)})` }) }
   }
 
   // 4 · el invariante V21 (con el latido ANTERIOR: así se ve que el vigía estuvo parado) y el latido nuevo
