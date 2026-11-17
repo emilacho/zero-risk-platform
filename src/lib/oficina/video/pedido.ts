@@ -35,6 +35,8 @@ export interface PedidoDeVideoDeLaOficina {
   fotos_no_halladas: string[]
   clave: string
   prompt_recortado: boolean
+  /** 17-nov · S2-4 tramo 3 · la huella del contenido de un clip (camino B): el brazo la anota en el libro para que un clip pagado se reutilice */
+  huella?: string
 }
 
 /**

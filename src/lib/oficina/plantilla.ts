@@ -17,9 +17,11 @@ export const FUNCIONES_REGISTRADAS = [
   'imagenes_clave',
   // 16-nov · Sprint 2 · S2-1 parte B · la única parada del video: el dueño elige una de las propuestas de la mesa o pide cambios
   'aprobar_propuestas',
+  // 17-nov · S2-4 tramo 4 · el borrador en video de cada propuesta (el camino B a calidad de borrador, antes de la parada del dueño)
+  'borrador_video',
 ] as const
 /** funciones de código que SÍ gastan (un proveedor de imágenes o de video, no un modelo de texto): su tope puede ser mayor que 0 */
-export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video', 'imagenes_clave'] as const
+export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video', 'imagenes_clave', 'borrador_video'] as const
 /** validadores de código sobre la salida de un agente */
 export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'decide_imagen', 'texto_laminas_en_copy', 'contrato_de_lamina', 'sin_texto_en_estructura', 'refs_validos'] as const
 /** esquemas de salida registrados (ver salida.ts) */

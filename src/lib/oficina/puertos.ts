@@ -177,6 +177,15 @@ export interface PuertoDeVideo {
   /** 11-nov · GO Lenovo 02:52Z · «cotizar primero»: la sala de video lo llama al ABRIR (antes de la mesa). Sin este método, un encargo real de video no abre (no se puede cotizar) */
   cotizar?(p: { pedido: import('./video/pedido').PedidoDeVideoDeLaOficina; client_id: string; encargo_id: string; tope_usd: number; workflow_id: string; workflow_execution_id: string }): Promise<CotizacionDeVideo>
   estado(request_id: string): Promise<EstadoDelBrazo>
+  /** 11-nov · camino B · el unidor (Railway · ffmpeg): recorta una foto propia al centro a la proporción de la red (imagen a video no admite proporción) */
+  encuadrar?(p: { url: string; relacion: string }): Promise<{ ok: true; bytes: Buffer } | { ok: false; error: string }>
+  /** 11-nov · camino B · une los clips en orden, cada uno cortado a `segundos`, con el sonido fundido entre planos */
+  unir?(p: { clips: Array<{ url: string; segundos: number }>; relacion: string; resolucion: string }): Promise<{ ok: true; bytes: Buffer } | { ok: false; error: string }>
+  /**
+   * 17-nov · S2-4 tramo 3 · «lo pagado se reutiliza»: los clips del cliente que el libro ya tiene TERMINADOS y COBRADOS con esa huella, con su copia en nuestro almacén
+   * todavía ahí. Gratis (lee el libro). Nunca lanza: si no puede leer, devuelve [] y el clip se paga como siempre. Sin este método no se reutiliza nada.
+   */
+  buscarPagados?(p: { client_id: string; huellas: string[] }): Promise<Array<{ huella: string; request_id: string; video_url: string; costo_usd: number }>>
 }
 
 export interface Puertos {
