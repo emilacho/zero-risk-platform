@@ -25,7 +25,14 @@ export interface Correccion {
   llave: string
   campana_id: string
   fila_id: string
-  destino: DestinoDeCorreccion
+  /** a dónde va (calendario | banco): la hoja ya se repartió al recibir */
+  destino: DestinoGuardado
+  /** el destino que pidió la oficina (el de la llave) */
+  destino_pedido: DestinoDeCorreccion
+  /** el rótulo de la hoja donde apareció el dato (solo para destino hoja · CC4) */
+  campo_de_la_hoja: string | null
+  /** banco: la idea de la fila (`idea_ref`) al recibir */
+  idea_id: string | null
   motivo: string
   linea_de_la_ficha: string | null
   dura: boolean
@@ -39,9 +46,39 @@ export interface Correccion {
   recibida_en: string
   entregada_en: string | null
   respondida_en: string | null
+  /** la alarma de una dura no tomada salió (una por incidente · Lenovo 17-nov) */
+  alarma_en: string | null
 }
 
 export const llaveDeCorreccion = (filaId: string, destino: DestinoDeCorreccion): string => `${filaId}:${destino}`
+export type DestinoGuardado = Exclude<DestinoDeCorreccion, 'hoja'>
+
+/**
+ * RESPUESTA-LENOVO (17-nov · 4) · la hoja no tiene creador propio: la corrección va al INSUMO de donde salió la línea (CC3 + CC4 · opción b con `campo_de_la_hoja`).
+ *   lo de la fila (datos del calendario, llamado, oferta, objetivo, público) → calendario
+ *   lo de la idea (idea, mensaje, gancho, protagonista, lo decidido) → banco, SOLO si la fila tiene `idea_ref` y NO es pieza fija (CC1: el banco solo cambia la idea);
+ *       pieza fija → calendario (su texto fijo es de la fila) · sin idea → pieza
+ *   sin campo o un campo que no está aquí → pieza (la vuelta a la mesa que ya existe)
+ * Un destino «banco» pedido directo cumple la misma condición de la idea.
+ */
+export const CAMPOS_DEL_CALENDARIO: readonly string[] = ['DATOS DEL CALENDARIO', 'LLAMADO A LA ACCIÓN', 'OFERTA', 'OBJETIVO', 'PÚBLICO']
+export const CAMPOS_DE_LA_IDEA: readonly string[] = ['IDEA DEL BANCO', 'IDEA DE LA PIEZA', 'MENSAJE (UNO)', 'GANCHO SUGERIDO', 'PROTAGONISTA', 'LO DECIDIDO', 'FIJO · MENSAJE']
+const rotulo = (x: string) => x.replace(/^[\s\-*•]+/, '').replace(/[\s:]+$/, '').replace(/\s+/g, ' ').toUpperCase()
+type FilaParaRepartir = { idea_ref?: string | null; pieza_fija?: string | null }
+export function destinoFinal(pedido: DestinoDeCorreccion, campo: string | null, fila: FilaParaRepartir | null): { destino: DestinoGuardado | 'pieza'; motivo: string } {
+  const aLaIdea = (): { destino: DestinoGuardado | 'pieza'; motivo: string } =>
+    !fila ? { destino: 'pieza', motivo: 'la fila no está en el calendario vigente' }
+      : fila.pieza_fija ? { destino: 'calendario', motivo: 'la fila es una pieza fija: su texto es de la fila, no de una idea del banco' }
+      : !fila.idea_ref ? { destino: 'pieza', motivo: 'la fila no tiene idea del banco' }
+      : { destino: 'banco', motivo: `la idea ${fila.idea_ref}` }
+  if (pedido === 'calendario') return { destino: 'calendario', motivo: 'pedido al calendario' }
+  if (pedido === 'banco') return aLaIdea()
+  const k = campo ? rotulo(campo) : null
+  if (!k) return { destino: 'pieza', motivo: 'la hoja sin el campo de donde salió el dato' }
+  if (CAMPOS_DEL_CALENDARIO.includes(k)) return { destino: 'calendario', motivo: `el campo «${k}» sale de la fila` }
+  if (CAMPOS_DE_LA_IDEA.includes(k)) return aLaIdea()
+  return { destino: 'pieza', motivo: `el campo «${k}» no sale de un paso de la cadena` }
+}
 const esDestino = (x: unknown): x is DestinoDeCorreccion => typeof x === 'string' && (DESTINOS_DE_CORRECCION as readonly string[]).includes(x)
 const recortar = (x: string | null): string | null => (x === null ? null : x.slice(0, LARGO_MAXIMO_DE_TEXTO))
 
@@ -60,11 +97,19 @@ export async function correccionRecibir(al: Almacen, cuerpo: Record<string, unkn
   if (!motivo) return err(400, 'E-MOTIVO', 'falta el motivo: qué vio la jefatura')
   if (!encargoId) return err(400, 'E-ENCARGO', 'falta encargo_id: el encargo de la pieza donde quedó la devolución')
   if (cuerpo.dura !== undefined && typeof cuerpo.dura !== 'boolean') return err(400, 'E-DURA', 'dura debe ser true o false')
+  // la llave es la de la oficina: con el destino que ELLA pidió (la hoja se reparte aquí, pero la llave no cambia)
   const llave = llaveDeCorreccion(filaId, destino)
   if (cuerpo.llave !== undefined && cadena(cuerpo.llave) !== llave) return err(400, 'E-LLAVE', `la llave no corresponde a la fila y el destino (se esperaba «${llave}»)`)
+  const campoDeLaHoja = cadena(cuerpo.campo_de_la_hoja)
+  const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
+  const fila = (await al.filas(campana.id, version)).find((f) => f.id === filaId) ?? null
+  const r = destinoFinal(destino, campoDeLaHoja, fila)
+  // a la pieza: no es de la cadena (la oficina la devuelve a su mesa); no se guarda nada aquí
+  if (r.destino === 'pieza') return { status: 200, cuerpo: { ok: true, va_a: 'pieza', motivo: r.motivo, llave } }
   const nueva: Correccion = {
-    llave, campana_id: campana.id, fila_id: filaId, destino, motivo: recortar(motivo)!, linea_de_la_ficha: recortar(cadena(cuerpo.linea_de_la_ficha)), dura: cuerpo.dura === true,
-    origen: cadena(cuerpo.origen), encargo_id: encargoId, estado: 'recibida', respuesta: null, explicacion: null, version_nueva: null, intentos: 0, recibida_en: ahora, entregada_en: null, respondida_en: null,
+    llave, campana_id: campana.id, fila_id: filaId, destino: r.destino, destino_pedido: destino, campo_de_la_hoja: campoDeLaHoja, idea_id: r.destino === 'banco' ? fila?.idea_ref ?? null : null,
+    motivo: recortar(motivo)!, linea_de_la_ficha: recortar(cadena(cuerpo.linea_de_la_ficha)), dura: cuerpo.dura === true,
+    origen: cadena(cuerpo.origen), encargo_id: encargoId, estado: 'recibida', respuesta: null, explicacion: null, version_nueva: null, intentos: 0, recibida_en: ahora, entregada_en: null, respondida_en: null, alarma_en: null,
   }
   const { correccion, nueva: esNueva } = await al.correccionInsertar(nueva)
   return { status: esNueva ? 201 : 200, cuerpo: { ok: true, ya_estaba: !esNueva, correccion: vista(correccion) } }
@@ -88,7 +133,7 @@ export function bloqueaLaPieza(c: Pick<Correccion, 'estado' | 'respuesta' | 'dur
   if (c.estado !== 'respondida') return true
   return c.dura && c.respuesta === 'no_dicha'
 }
-const vista = (c: Correccion) => ({ llave: c.llave, fila_id: c.fila_id, destino: c.destino, estado: c.estado, respuesta: c.respuesta, explicacion: c.explicacion, dura: c.dura, intentos: c.intentos, respondida_en: c.respondida_en, bloquea_la_pieza: bloqueaLaPieza(c) })
+const vista = (c: Correccion) => ({ llave: c.llave, fila_id: c.fila_id, destino: c.destino, destino_pedido: c.destino_pedido, estado: c.estado, respuesta: c.respuesta, explicacion: c.explicacion, dura: c.dura, intentos: c.intentos, respondida_en: c.respondida_en, bloquea_la_pieza: bloqueaLaPieza(c) })
 
 // ───────────────────────────────────────────── 3 · la respuesta del creador (una línea fija · el mismo formato de la oficina)
 export const ROTULO_DE_RESPUESTA = 'RESPUESTA A LA JEFATURA'
@@ -144,8 +189,25 @@ export async function guardarRespuesta(al: Almacen, llave: string, leida: Respue
     return { estado: 'recibida', respuesta: null }
   }
   const explicacion = leida.respuesta === 'no_dicha' ? (leida.motivo_no_dicha ?? 'sin respuesta del creador') : leida.explicacion
-  await al.correccionActualizar(llave, { estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva, respondida_en: ahora }, c.estado)
+  const cerro = await al.correccionActualizar(llave, { estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva, respondida_en: ahora }, c.estado)
+  if (cerro) await alarmaSiFrena(al, { ...c, estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion) }, ahora)
   return { estado: 'respondida', respuesta: leida.respuesta }
+}
+
+/**
+ * RESPUESTA-LENOVO (17-nov · 3): una DURA que el creador no tomó tras el reintento FRENA (esas piezas no se publican) y deja UNA alarma en #alertas con el motivo.
+ * Una por incidente: solo quien cierra la corrección la manda (la escritura condicional al estado la cierra una sola vez) · si Slack no confirma, `alarma_en` queda vacío
+ * y la vigía la reintenta (`alarmasPendientes`): un aviso que no salió no se da por avisado.
+ */
+export function textoDeLaAlarma(c: Pick<Correccion, 'fila_id' | 'campana_id' | 'destino' | 'motivo' | 'linea_de_la_ficha' | 'explicacion'>): string {
+  return `⛔ Regla dura sin tomar · la pieza de la fila ${c.fila_id} (campaña ${c.campana_id}) NO se publica. La jefatura vio: ${c.motivo}${c.linea_de_la_ficha ? ` (ficha: «${c.linea_de_la_ficha}»)` : ''}. El creador (${c.destino}) no la tomó tras el reintento: ${c.explicacion ?? 'sin respuesta'}.`
+}
+async function alarmaSiFrena(al: Almacen, c: Correccion, ahora: string): Promise<void> {
+  if (!bloqueaLaPieza(c) || c.estado !== 'respondida' || c.alarma_en) return
+  try {
+    const r = await al.avisarAlarma(textoDeLaAlarma(c))
+    if (r.ok && al.correccionActualizar) await al.correccionActualizar(c.llave, { alarma_en: ahora }, 'respondida')
+  } catch { /* la vigía la reintenta */ }
 }
 
 // ───────────────────────────────────────────── 2 · el reparto (la vigía de la cadena, una vez por vuelta)
@@ -163,6 +225,8 @@ const vencida = (c: Correccion, ahora: string) => !!c.entregada_en && Date.parse
 export async function repartirCorrecciones(al: Almacen, ahora: string, creadores: Partial<Record<DestinoDeCorreccion, CreadorDeCorreccion>>): Promise<{ aplicado: string[]; lineas: string[] }> {
   const aplicado: string[] = [], lineas: string[] = []
   if (!al.correccionesPendientes || !al.correccionActualizar) return { aplicado, lineas }
+  // las alarmas de duras sin tomar que Slack no confirmó (una por incidente: se reintentan, no se duplican)
+  if (al.alarmasPendientes) for (const c of await al.alarmasPendientes()) { await alarmaSiFrena(al, c, ahora); if (c.alarma_en === null) aplicado.push(`${c.llave}: alarma de regla dura reintentada`) }
   for (const c of await al.correccionesPendientes()) {
     try {
       if (c.estado === 'en_manos_del_creador') {
@@ -175,7 +239,7 @@ export async function repartirCorrecciones(al: Almacen, ahora: string, creadores
       // sin creador: queda recibida y visible en la corrección (la bandeja la lee); no se avisa en cada vuelta (menos ruido)
       if (!creador) continue
       if (c.intentos >= INTENTOS_POR_CORRECCION) {
-        await al.correccionActualizar(c.llave, { estado: 'respondida', respuesta: 'no_dicha', explicacion: c.explicacion ?? 'intentos agotados', respondida_en: ahora }, c.estado)
+        if (await al.correccionActualizar(c.llave, { estado: 'respondida', respuesta: 'no_dicha', explicacion: c.explicacion ?? 'intentos agotados', respondida_en: ahora }, c.estado)) await alarmaSiFrena(al, { ...c, estado: 'respondida', respuesta: 'no_dicha', explicacion: c.explicacion ?? 'intentos agotados' }, ahora)
         aplicado.push(`${c.llave}: intentos agotados → no_dicha`)
         continue
       }

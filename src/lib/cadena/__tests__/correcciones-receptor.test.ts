@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { ACCIONES } from '../acciones'
-import { bloqueaLaPieza, guardarRespuesta, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
+import { bloqueaLaPieza, destinoFinal, guardarRespuesta, textoDeLaAlarma, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
 import type { Campana } from '../almacen'
 
 const AHORA = '2026-11-17T21:00:00.000Z'
@@ -15,6 +15,9 @@ const CAMPANA = { id: 'cmp-1', client_id: 'cli-1', estado: 'activa' } as unknown
 function almacen() {
   const al = new AlmacenMemoria({ config: { flujos: ['wf-cadena'] } })
   al.campanas.push(CAMPANA)
+  // filas del calendario vigente: con idea del banco, pieza fija y sin idea (el reparto de la hoja y del banco las lee)
+  const f = (id: string, extra: Record<string, unknown>) => ({ id, campana_id: 'cmp-1', calendario_version: 1, estado: 'en_oficina', fecha: '2026-11-20', avisos: [], idea_ref: null, pieza_fija: null, ...extra }) as unknown as AlmacenMemoria['filasGuardadas'][number]
+  al.filasGuardadas.push(f('f-7', { idea_ref: 'C1-I01' }), f('f-8', { idea_ref: 'C1-I02' }), f('f-fija', { pieza_fija: 'texto fijo de la fila' }), f('f-sin', {}))
   return al
 }
 const wf = { workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1' }
@@ -99,8 +102,8 @@ async function conUna(extra: Record<string, unknown> = {}) {
 const abre: CreadorDeCorreccion = async () => ({ estado: 'entregada' })
 
 describe('2 · el reparto de la vigía', () => {
-  it('🔴 sin creador para el destino (hoja hoy · banco sin el puerto): queda recibida y visible, SIN gastar intentos', async () => {
-    const al = await conUna({ destino: 'hoja' })
+  it('🔴 sin creador para el destino (banco sin el puerto de CC1): queda recibida y visible, SIN gastar intentos', async () => {
+    const al = await conUna({ destino: 'banco' })
     const r = await repartirCorrecciones(al, AHORA, { calendario: abre })
     expect(r.lineas).toEqual([])
     expect(r.aplicado).toEqual([])
@@ -193,5 +196,85 @@ describe('4 · ¿la pieza sigue frenada? (🟡 CC6 punto 5 · la decisión final
     await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(R, true), mas(7))
     const v = (await ACCIONES.correcciones.del_encargo(al, { encargo_id: 'enc-1' }, AHORA)).cuerpo.correcciones as Array<Record<string, unknown>>
     expect(v[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', bloquea_la_pieza: true })
+  })
+})
+
+describe('5 · la hoja va al insumo de donde salió la línea (RESPUESTA-LENOVO 4 · CC3 + CC4 · b con campo_de_la_hoja)', () => {
+  it('🔴 el reparto por campo, puro', () => {
+    const conIdea = { idea_ref: 'C1-I01', pieza_fija: null }, fija = { idea_ref: 'C1-I01', pieza_fija: 'x' }, sinIdea = { idea_ref: null, pieza_fija: null }
+    for (const campo of ['DATOS DEL CALENDARIO', '- LLAMADO A LA ACCIÓN:', 'oferta', 'OBJETIVO', 'PÚBLICO']) expect(destinoFinal('hoja', campo, conIdea).destino, campo).toBe('calendario')
+    for (const campo of ['IDEA DEL BANCO', 'MENSAJE (uno)', 'GANCHO SUGERIDO', 'PROTAGONISTA', 'LO DECIDIDO', 'FIJO · mensaje']) {
+      expect(destinoFinal('hoja', campo, conIdea).destino, campo).toBe('banco')
+      expect(destinoFinal('hoja', campo, fija).destino, `${campo} fija`).toBe('calendario')
+      expect(destinoFinal('hoja', campo, sinIdea).destino, `${campo} sin idea`).toBe('pieza')
+      expect(destinoFinal('hoja', campo, null).destino, `${campo} sin fila`).toBe('pieza')
+    }
+    for (const campo of [null, '', 'TONO', 'BRIEF DE CAMPAÑA', 'VOCABULARIO DE LA MARCA']) expect(destinoFinal('hoja', campo, conIdea).destino, String(campo)).toBe('pieza')
+    // «banco» pedido directo cumple la MISMA condición de la idea (CC1)
+    expect(destinoFinal('banco', null, conIdea).destino).toBe('banco')
+    expect(destinoFinal('banco', null, fija).destino).toBe('calendario')
+    expect(destinoFinal('banco', null, sinIdea).destino).toBe('pieza')
+    expect(destinoFinal('calendario', 'IDEA DEL BANCO', conIdea).destino).toBe('calendario')
+  })
+  it('🔴 por la ruta: hoja + campo de la idea → se guarda como banco con su idea; la llave conserva «hoja»; a la pieza no se guarda y lo dice', async () => {
+    const al = almacen()
+    const r = await recibir(al, pedido({ destino: 'hoja', campo_de_la_hoja: 'MENSAJE (uno)' }))
+    expect(r.status).toBe(201)
+    expect(al.correcciones[0]).toMatchObject({ llave: 'f-7:hoja', destino: 'banco', destino_pedido: 'hoja', idea_id: 'C1-I01', campo_de_la_hoja: 'MENSAJE (uno)' })
+    const p = await recibir(al, pedido({ fila_id: 'f-sin', destino: 'hoja', campo_de_la_hoja: 'MENSAJE (uno)' }))
+    expect(p.status).toBe(200)
+    expect(p.cuerpo).toMatchObject({ va_a: 'pieza', llave: 'f-sin:hoja' })
+    expect(al.correcciones).toHaveLength(1)
+    const fija = await recibir(al, pedido({ fila_id: 'f-fija', destino: 'banco' }))
+    expect(fija.status).toBe(201)
+    expect(al.correcciones[1]).toMatchObject({ llave: 'f-fija:banco', destino: 'calendario', idea_id: null })
+  })
+})
+
+describe('6 · regla dura sin tomar: FRENA y deja UNA alarma (RESPUESTA-LENOVO 3)', () => {
+  const NO = 'RESPUESTA A LA JEFATURA C1: no tomada: no me parece'
+  async function cerrarDura(al: AlmacenMemoria) {
+    await recibir(al, pedido({ dura: true }))
+    await repartirCorrecciones(al, AHORA, { calendario: abre })
+    await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(NO, true), mas(5))
+    await repartirCorrecciones(al, mas(6), { calendario: abre })
+    await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(NO, true), mas(7))
+  }
+  it('🔴 una alarma, con la fila, la campaña y el motivo; la vigía no la repite', async () => {
+    const al = almacen()
+    await cerrarDura(al)
+    expect(al.alarmasEnviadas).toHaveLength(1)
+    expect(al.alarmasEnviadas[0]).toContain('fila f-7')
+    expect(al.alarmasEnviadas[0]).toContain('NO se publica')
+    expect(al.alarmasEnviadas[0]).toContain('la oferta está cerrada ese día')
+    expect(al.correcciones[0].alarma_en).toBe(mas(7))
+    await repartirCorrecciones(al, mas(60), { calendario: abre })
+    await guardarRespuesta(al, 'f-7:calendario', { respuesta: 'no_dicha', explicacion: null }, mas(61))
+    expect(al.alarmasEnviadas).toHaveLength(1)
+  })
+  it('🔴 si Slack no confirma, la alarma queda pendiente y la vigía la reintenta: sale UNA vez', async () => {
+    const al = almacen()
+    al.falloDeAviso = 'slack caído'
+    await cerrarDura(al)
+    expect(al.alarmasEnviadas).toHaveLength(0)
+    expect(al.correcciones[0].alarma_en).toBeNull()
+    al.falloDeAviso = null
+    await repartirCorrecciones(al, mas(30), { calendario: abre })
+    await repartirCorrecciones(al, mas(31), { calendario: abre })
+    expect(al.alarmasEnviadas).toHaveLength(1)
+  })
+  it('🔴 una de criterio no tomada, o una dura TOMADA: ninguna alarma', async () => {
+    const a = almacen()
+    await recibir(a, pedido({ dura: false }))
+    await repartirCorrecciones(a, AHORA, { calendario: abre })
+    await guardarRespuesta(a, 'f-7:calendario', leerRespuestaDelCreador(NO, false), mas(5))
+    const b = almacen()
+    await recibir(b, pedido({ dura: true }))
+    await repartirCorrecciones(b, AHORA, { calendario: abre })
+    await guardarRespuesta(b, 'f-7:calendario', leerRespuestaDelCreador('RESPUESTA A LA JEFATURA C1: tomada', true), mas(5))
+    expect([...a.alarmasEnviadas, ...b.alarmasEnviadas]).toEqual([])
+  })
+  it('el texto de la alarma', () => {
+    expect(textoDeLaAlarma({ fila_id: 'f', campana_id: 'c', destino: 'banco', motivo: 'm', linea_de_la_ficha: null, explicacion: null })).toContain('⛔ Regla dura sin tomar · la pieza de la fila f (campaña c) NO se publica.')
   })
 })
