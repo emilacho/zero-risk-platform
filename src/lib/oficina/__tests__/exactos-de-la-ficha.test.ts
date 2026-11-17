@@ -3,7 +3,8 @@
  * Náufrago y 2 dobles, con la hoja armada por la función real de la cadena.
  */
 import { describe, expect, it } from 'vitest'
-import { centavos, chequeosExactos, preciosDelTexto } from '../exactos-de-la-ficha'
+import { centavos, chequeosExactos, fichaConCierreVivo, preciosDelTexto } from '../exactos-de-la-ficha'
+import type { HechoDelNegocioPorOferta } from '../../cadena/ficha-de-oferta'
 import { aplicarSalidaDeJefatura, datosDeLaJefatura, prefijoDeLaBandeja } from '../paso-jefatura'
 import { fichaDeLaHoja } from '../sentido-contra-la-ficha'
 import type { SalidaDeRevision } from '../../jefatura/revision/contrato'
@@ -113,6 +114,43 @@ describe('D1 · oferta cerrada o que aún no existe en la fecha de la fila (por 
   it('sin ficha no hay D1 aunque la hoja traiga el campo', () => {
     const h = `${hoja('x', null, '2026-11-20')}\n- OFERTA CERRADA EN SU FECHA: cerrada (fuente: cerebro:x)`
     expect(chequeosExactos(fichaDeLaHoja(h), '').hallazgos).toEqual([])
+  })
+})
+
+describe('D1 con los hechos VIVOS (CC7 19:44Z): un cierre registrado después de armar la hoja también frena', () => {
+  const { ficha } = CLIENTES[2]
+  const cierre = (d: Partial<HechoDelNegocioPorOferta> = {}): HechoDelNegocioPorOferta => ({ oferta: ficha.clave, tipo: 'cierre_retiro', valor: 'la oferta se suspende', vigente_desde: '2026-11-18', fuente: 'dueno:chat-17nov', ...d })
+  const sinCierre = () => fichaDeLaHoja(hoja(ficha.clave, ficha, '2026-11-20'))
+  it('🔴 ficha guardada SIN cierre + hecho vivo de cierre en la fecha de la fila → D1 frena (calendario, regla dura) y se declara de dónde viene', () => {
+    expect(sinCierre().cierre).toBeUndefined()
+    const v = fichaConCierreVivo(sinCierre(), [cierre()], '2026-11-20')
+    expect(v.ficha.cierre).toMatch(/^la oferta se suspende \(fuente: cerebro:dueno:chat-17nov/)
+    expect(v.declarado.join(' ')).toMatch(/hechos vivos/)
+    const h = chequeosExactos(v.ficha, '').hallazgos
+    expect(h).toEqual([expect.objectContaining({ destino: 'calendario', origen: 'codigo', que: expect.stringMatching(/^D1 · /) })])
+    expect(v.ficha.lineas).toContain(h[0].linea_de_la_ficha)
+  })
+  it('el cierre vivo que empieza DESPUÉS de la fila no frena; el de otra oferta tampoco; uno de todo el negocio sí', () => {
+    expect(fichaConCierreVivo(sinCierre(), [cierre({ vigente_desde: '2026-11-25' })], '2026-11-20').ficha.cierre).toBeUndefined()
+    expect(fichaConCierreVivo(sinCierre(), [cierre({ oferta: 'otra-oferta' })], '2026-11-20').ficha.cierre).toBeUndefined()
+    expect(fichaConCierreVivo(sinCierre(), [cierre({ oferta: null })], '2026-11-20').ficha.cierre).toBeTruthy()
+  })
+  it('una sede o una apertura viva no cierra', () => {
+    expect(fichaConCierreVivo(sinCierre(), [cierre({ tipo: 'sede' }), cierre({ tipo: 'apertura' })], '2026-11-20').ficha.cierre).toBeUndefined()
+  })
+  it('sin fecha legible de la fila, sin hechos o sin ficha: la ficha queda igual y se declara por qué (nunca afirma)', () => {
+    for (const fecha of [null, 'ilegible'] as const) {
+      const v = fichaConCierreVivo(sinCierre(), [cierre()], fecha)
+      expect(v.ficha).toEqual(sinCierre())
+      expect(v.declarado.join(' ')).toMatch(/sin fecha legible/)
+    }
+    expect(fichaConCierreVivo(sinCierre(), null, '2026-11-20').declarado.join(' ')).toMatch(/no se pudieron leer/)
+    const sf = fichaDeLaHoja(hoja('x', null, '2026-11-20'))
+    expect(fichaConCierreVivo(sf, [cierre({ oferta: null })], '2026-11-20')).toEqual({ ficha: sf, declarado: [] })
+  })
+  it('si la hoja ya trae el cierre, los hechos vivos no lo duplican', () => {
+    const conCierre = fichaDeLaHoja(hoja(ficha.clave, { ...ficha, no_se_puede_afirmar: [{ valor: 'cerrada', fuente: 'cerebro:x', tipo: 'cierre_retiro' }] }, '2026-11-20'))
+    expect(fichaConCierreVivo(conCierre, [cierre()], '2026-11-20').ficha).toBe(conCierre)
   })
 })
 

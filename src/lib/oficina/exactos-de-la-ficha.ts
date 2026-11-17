@@ -1,12 +1,13 @@
 /**
  * CAMBIO 4 · LAS REGLAS DURAS contra la ficha de la oferta, por código (FIRMADAS por Emilio 17-nov 20:37 · DECISION-EMILIO-reglas-duras-de-la-jefatura) · puro.
  *  D1 · vende una oferta cerrada o que aún no existe en su fecha (el campo que escribe la hoja con `ofertaCerradaOInexistenteEn`) ⇒ calendario.
- *       🔴 Límite declarado (CC7 / CC6): la hoja es la foto de cuando se armó; un cierre que el cerebro registra DESPUÉS no llega aquí (propuesta a Lenovo en la ADENDA 2 del cambio 4).
+ *       Un cierre que el cerebro registra DESPUÉS de armar la hoja también frena: `fichaConCierreVivo` (los hechos vivos, solo lectura · puerto `hechosPorOferta`).
  *  D2 · usa un dato vencido o aún no vigente en su fecha ⇒ hoja si la hoja lo trae, si no pieza.
  *  D3 · precio que no está en la ficha vigente ⇒ hoja si la hoja lo trae, si no pieza (la regla 3 de texto · se une a la de `chequeos.ts`).
  * Una regla dura se toma SÍ O SÍ: el creador no puede dejar de tomarla.
  * Regla de Emilio: «juzgar = agente; verificar exacto = código». Ante la duda NO dispara y lo declara (CC7).
  */
+import { fichasConHechos, ofertaCerradaOInexistenteEn, type HechoDelNegocioPorOferta } from '../cadena/ficha-de-oferta'
 import { CAMPO_CIERRE_DE_LA_HOJA, leerDato, normal, type DatoLeido, type FichaDeLaHoja, type Hallazgo } from './sentido-contra-la-ficha'
 
 const limpio = (v: unknown): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
@@ -90,3 +91,17 @@ export function chequeosExactos(f: FichaDeLaHoja, textoDeLaPieza: string): Resul
   return { hallazgos, declarado }
 }
 
+// ───────────────────────── D1 con los HECHOS VIVOS (CC7 19:44Z · CC6 sobre #1145): un cierre que el cerebro registra DESPUÉS de armar la hoja también frena
+/**
+ * suma a la ficha de la hoja el cierre que dicen los hechos vivos del cerebro en la fecha de la fila (mismas funciones de la cadena: `fichasConHechos` + `ofertaCerradaOInexistenteEn`).
+ * Solo lectura y puro: la lectura la hace el orquestador. Sin ficha, sin oferta, si la hoja ya trae el cierre, sin fecha legible o sin hechos ⇒ la ficha queda igual (y se declara por qué no se midió).
+ */
+export function fichaConCierreVivo(f: FichaDeLaHoja, hechos: ReadonlyArray<HechoDelNegocioPorOferta> | null, fecha: string | null | 'ilegible'): { ficha: FichaDeLaHoja; declarado: string[] } {
+  if (f.estado !== 'con_ficha' || !f.oferta || f.cierre) return { ficha: f, declarado: [] }
+  if (!fecha || fecha === 'ilegible') return { ficha: f, declarado: ['D1 con los hechos vivos: sin fecha legible de la fila, no se mide'] }
+  if (!hechos) return { ficha: f, declarado: ['D1 con los hechos vivos: los hechos del cerebro no se pudieron leer, vale el cierre que trae la hoja'] }
+  const d = ofertaCerradaOInexistenteEn(fichasConHechos([{ clave: f.oferta }], hechos)[0], fecha)
+  if (!d) return { ficha: f, declarado: [] }
+  const cierre = `${d.valor} (fuente: ${d.fuente})`
+  return { ficha: { ...f, cierre, lineas: [...f.lineas, `${CAMPO_CIERRE_DE_LA_HOJA.toLowerCase()}: ${cierre}`] }, declarado: ['D1: el cierre viene de los hechos vivos del cerebro (registrado después de armar la hoja)'] }
+}

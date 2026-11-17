@@ -145,7 +145,7 @@ export interface OpcionesDeAplicacion {
    * `exactos`: las reglas duras por código (D2 · D3 firmadas por Emilio · `exactos-de-la-ficha.ts`); sin él, solo el jefe juzga el sentido.
    * `previas`: la revisión anterior mandó correcciones a la mesa y la mesa ya volvió: lo que respondió el creador (sus líneas «RESPUESTA A LA JEFATURA S<n>: …»).
    */
-  sentido?: { ficha: FichaDeLaHoja; textoDeLaPieza: string; filaId: string | null; encargoId: string; yaDevueltas: ReadonlySet<string>; exactos?: (f: FichaDeLaHoja, textoDeLaPieza: string) => { hallazgos: Hallazgo[]; declarado: string[] }; previas?: { enviadas: Enviada[]; lineasDeRespuesta: string[] } | null }
+  sentido?: { ficha: FichaDeLaHoja; textoDeLaPieza: string; filaId: string | null; encargoId: string; yaDevueltas: ReadonlySet<string>; exactos?: (f: FichaDeLaHoja, textoDeLaPieza: string) => { hallazgos: Hallazgo[]; declarado: string[] }; previas?: { enviadas: Enviada[]; lineasDeRespuesta: string[] } | null; declarado?: string[] }
 }
 
 /** cambio 4 · las llaves ya devueltas que guarda el encargo (de una revisión anterior del mismo encargo, p. ej. tras la vuelta a la mesa) */
@@ -225,7 +225,7 @@ function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicaci
   const noReabrePieza = tras ? hallazgos.filter((h) => aPieza(h) && !esDura(h)) : []
   const r = repartir(sigue, s.filaId, s.encargoId, s.yaDevueltas)
   const respuestas = tras ? leerRespuestas(s.previas!.enviadas, s.previas!.lineasDeRespuesta) : null
-  const datos: DatosDelSentido = { ficha: 'con_ficha', declarado: ex.declarado, hallazgos, devoluciones: r.devoluciones, enviadas: tras ? [] : r.enviadas, no_reabre: [...noReabrePieza, ...r.no_reabre], ...(respuestas ? { respuestas_del_creador: respuestas } : {}), vuelve_a: r.vuelve_a, cita_no_verificada: r.cita_no_verificada }
+  const datos: DatosDelSentido = { ficha: 'con_ficha', declarado: [...(s.declarado ?? []), ...ex.declarado], hallazgos, devoluciones: r.devoluciones, enviadas: tras ? [] : r.enviadas, no_reabre: [...noReabrePieza, ...r.no_reabre], ...(respuestas ? { respuestas_del_creador: respuestas } : {}), vuelve_a: r.vuelve_a, cita_no_verificada: r.cita_no_verificada }
   return { lineas: [...jefe.resto, ...r.a_la_mesa], datos, tras_la_vuelta: tras }
 }
 

@@ -4,7 +4,7 @@
  * esa línea NO sale en la pieza, queda guardada, y la revisión siguiente la lee. El mismo hallazgo no reabre y nadie lo manda a una persona.
  */
 import { describe, expect, it } from 'vitest'
-import { fichaEnLineas, type FichaDeOferta } from '../../cadena/ficha-de-oferta'
+import { fichaEnLineas, type FichaDeOferta, type HechoDelNegocioPorOferta } from '../../cadena/ficha-de-oferta'
 import { abrirEncargo, recibirResultado } from '../orquestador'
 import { CLAVE_DE_LA_PALANCA } from '../mesa/con-mesa'
 import { datosDeLaJefatura } from '../paso-jefatura'
@@ -41,7 +41,7 @@ const salida = (desacuerdos: string[]): SalidaDeRevision => ({ revision_id: 'rev
 
 const HALLAZGO = `texto: sentido · pieza: da a entender que ya atiende en persona — ficha: «${LINEA_NO}»`
 
-async function correr(desacuerdos: string[][], piezas: string[]) {
+async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: HechoDelNegocioPorOferta[]; fecha?: string } = {}) {
   const pl: Plantilla = JSON.parse(JSON.stringify(KIT_MESA))
   const M = crearMemoria({ parte: parteCon(BRIEF), plantilla: pl, config: { familias_activas: ['kit_historias'] } })
   const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = { kit_historias: { plantilla: KIT_HISTORIAS_CON_JEFATURA, activo: true }, kit_mesa: { plantilla: pl, activo: true } }
@@ -49,9 +49,12 @@ async function correr(desacuerdos: string[][], piezas: string[]) {
   const MS = crearMesaEnMemoria(DIRECTORIO)
   M.P.mesa = { ...MS, configDeLaCadena: async (k: string) => (k === CLAVE_DE_LA_PALANCA ? { clientes: [CLIENTE] } : undefined) }
   const revisiones: string[] = []
+  if (o.hechos) M.P.hechosPorOferta = async () => o.hechos!
   M.P.jefatura = async (sobre) => { revisiones.push(sobre.payload.texto); return { estado: 'cerrada', salida: salida(desacuerdos[Math.min(revisiones.length - 1, desacuerdos.length - 1)]) } }
   let r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0300', dry_run: true, familia: 'kit_historias' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   const id = String(r.cuerpo.encargo_id)
+  // la fila del calendario que guarda el encargo (`sala_ref.fila`): de ahí sale la fecha con que se miden los hechos vivos
+  if (o.fecha) M.encargos.get(id)!.sala_ref = { fila: { id: 'F-0300', fecha: o.fecha } }
   for (let i = 0; i < 40 && r.cuerpo.accion === 'esperar'; i++) {
     const t = r.cuerpo.turno as { n: number; paso: string; agente: string }
     const [, tipo] = t.paso.split(':')
@@ -105,5 +108,21 @@ describe('firma de Emilio · la vuelta con respuesta del creador, de punta a pun
     const no = await correr([[], []], [mal, `${mal}\nRESPUESTA A LA JEFATURA S1: no tomada: prefiero ese precio`])
     expect(no.r.cuerpo).toMatchObject({ con_desacuerdo: true })
     expect(no.e.fichas.filter((f) => f.gravedad === 'bloquea' && f.estado === 'no_tomada').map((f) => f.que).join(' ')).toMatch(/D3 · el precio/)
+  })
+
+  it('🔴 D1 con los hechos VIVOS: la hoja no trae cierre, el cerebro registró uno después ⇒ la pieza vuelve al calendario como regla dura (no se publica sola)', async () => {
+    const hechos: HechoDelNegocioPorOferta[] = [{ oferta: 'oferta-a', tipo: 'cierre_retiro', valor: 'la oferta se suspende', vigente_desde: '2026-11-18', fuente: 'dueno:chat-17nov' }]
+    const m = await correr([[]], [PIEZA], { hechos, fecha: '2026-11-20' })
+    const j = datosDeLaJefatura(m.e)!
+    expect(j.sentido!.devoluciones).toEqual([expect.objectContaining({ llave: 'F-0300:calendario', destino: 'calendario', dura: true, origen: 'codigo' })])
+    expect(j.sentido!.declarado.join(' ')).toMatch(/hechos vivos/)
+    expect(m.e.fichas.some((f) => f.donde === 'calendario' && f.gravedad === 'bloquea' && /^sentido · calendario: D1 · /.test(f.que ?? ""))).toBe(true)
+    expect(m.r.cuerpo).toMatchObject({ con_desacuerdo: true })
+  })
+  it('sin hecho vivo de cierre (o con uno que empieza después), la misma pieza sale limpia', async () => {
+    const hechos: HechoDelNegocioPorOferta[] = [{ oferta: 'oferta-a', tipo: 'cierre_retiro', valor: 'la oferta se suspende', vigente_desde: '2026-11-25', fuente: 'dueno:chat-17nov' }]
+    const m = await correr([[]], [PIEZA], { hechos, fecha: '2026-11-20' })
+    expect(datosDeLaJefatura(m.e)!.sentido!.devoluciones).toEqual([])
+    expect(m.r.cuerpo).toMatchObject({ con_desacuerdo: false })
   })
 })
