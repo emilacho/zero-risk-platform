@@ -385,7 +385,7 @@ describe('de punta a punta con el RECEPTOR REAL de CC3 (#1150 · puerto en proce
     const puerto = puertoDeLaCadena(al, () => k.ahora)
     return { al, puerto }
   }
-  it('🔴 encargo 1: la D1 llega al receptor real, espera; la reubicación tomada la deja `reemplazada` y la pieza vieja NO sale · encargo 2 de la MISMA fila: `ya_estaba` de otro encargo → FRENA con UNA alarma', async () => {
+  it('🔴 encargo 1: la D1 llega al receptor real, espera; la reubicación tomada la deja `reemplazada` y la pieza vieja NO sale · encargo 2 de la MISMA fila (CC3 f352d81): su propia corrección, esperando → tomada → `reemplazada`', async () => {
     const { al, puerto } = cadenaReal()
     const cadena = { devolverCorreccion: puerto.devolverCorreccion, correccionesDelEncargo: puerto.correccionesDelEncargo }
     const m = await correr({ rec: null, campana: CAMP_REAL, cadena })
@@ -402,10 +402,17 @@ describe('de punta a punta con el RECEPTOR REAL de CC3 (#1150 · puerto en proce
     // encargo 2 · el brief nuevo de la misma fila (otro encargo) y la jefatura vuelve a hallar una D1 para el calendario
     al.correcciones[0].encargo_id = 'encargo-1-de-la-fila'
     const m2 = await correr({ rec: null, campana: CAMP_REAL, cadena })
-    expect(al.correcciones).toHaveLength(1) // la llave fila:destino no abre otra (el arreglo de fondo es del receptor)
-    expect(m2.r.cuerpo).toMatchObject({ frenada: true, para_la_pieza: 'frenada', output_id: null, hitl_queue_id: null })
-    await m2.vigia(); await m2.vigia()
+    // CC3 f352d81 · con la 1.ª ya respondida, la dura del encargo 2 abre su PROPIA corrección (#2): llega a su creador, no se pierde
+    expect(al.correcciones).toHaveLength(2)
+    expect(m2.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'esperando_a_la_cadena', para_la_pieza: 'esperando', output_id: null })
+    await relojDeLaCadena(al, { workflow_id: 'wf-vigia', workflow_execution_id: 'v2' }, k.ahora)
+    const ent2 = await puerto.entregarReubicacion({ campana_id: CAMP_REAL, version: VERSION_BASE_DE_CORRECCION + 2, encargo_id: 'enc-m2', texto: `- F-0300 · reubicar · 2026-11-26 · ${k.hora} · la oferta sigue cerrada el 19
+RESPUESTA A LA JEFATURA C1: tomada`, costo_usd: 0, motivo: null })
+    expect(ent2, JSON.stringify(ent2)).toMatchObject({ ok: true, estado: 'aplicada' })
+    const v2 = await m2.vigia()
+    expect(v2.cuerpo).toMatchObject({ resultado_para_la_sala: 'reemplazada', para_la_pieza: 'reemplazada' })
     expect(m2.M.llamadas.bandeja).toEqual([])
-    expect(m2.alertas().filter((a) => /de otro encargo/.test(a.texto))).toHaveLength(1)
+    // la red de la oficina (`de otro encargo`) no se dispara cuando el receptor ya resuelve el hueco
+    expect(m2.alertas().filter((x) => /de otro encargo/.test(x.texto))).toEqual([])
   })
 })
