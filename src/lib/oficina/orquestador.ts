@@ -20,7 +20,7 @@ import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
-import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
+import { armarPedidoV, cabeLaVuelta, contextoDeRevisorV, costoDeVolver, ejecutarCodigoV, quedaVueltaDelPaso, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
 import { FUNCION_BORRADOR_VIDEO } from './video/borradores'
 import { alLlegarAlPaso, decidir, FUNCION_APROBAR_PROPUESTAS, metadataDeAvisosDeConcepto, TURNO_DEL_DUENO, type DecisionDelDueno } from './video/aprobacion'
 import { PASO_MIRAR_VIDEO } from './video/mirada'
@@ -250,7 +250,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
           return r(200, { accion: 'esperar_jefatura', turno: { n, paso: paso.clave, tipo: 'jefatura', dispatch_key }, revision_id: ap.revision_id })
         }
         if (ap.estado !== 'cerrada') await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ La jefatura no revisó la pieza · ${enc.brief_id}: ${ap.motivo}; sigue a la bandeja marcada «sin revisar»`, dry_run: enc.dry_run })
-        const res = ap.estado === 'cerrada' ? aplicarSalidaDeJefatura(pl, e, ap.salida, { reImagen: reImagenDe(pl, e) }) : aplicarSinRevisar(ap.motivo)
+        const res = ap.estado === 'cerrada' ? aplicarSalidaDeJefatura(pl, e, ap.salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, paso, e) }) : aplicarSinRevisar(ap.motivo)
         enc = await aplicar(P, enc, pl, sig.indice, res, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'jefatura', agente: null, dispatch_key: null, cost_usd: res.costo_usd } })
         continue
       }
@@ -283,6 +283,15 @@ const reImagenDe = (pl: Plantilla, e: Estado) => (tomada: { razon: string } | nu
 }
 
 /**
+ * 17-nov · GO Lenovo (d) · ¿la pieza puede volver a la mesa desde el paso `jefatura`? Solo si la plantilla lo declara (`vuelve_a` a la mesa), le queda la vuelta y cabe en el tope
+ * contando lo que costó ESTA revisión (la vuelta repite la mesa y lo que sigue, incluida otra revisión). Sin `vuelve_a`, nunca (la pieza va a la bandeja como siempre).
+ */
+export function puedeVolverALaMesa(pl: Plantilla, paso: Paso, e: Estado): ((costo: number) => boolean) | undefined {
+  if (paso.vuelve_a?.paso !== 'mesa' || !quedaVueltaDelPaso(paso, e)) return undefined
+  return (costo) => cabeLaVuelta(pl, { ...e, gasto_usd: e.gasto_usd + costo }, costoDeVolver(pl, paso))
+}
+
+/**
  * J8a · la revisión de la jefatura cerró y entregó (webhook a `/api/jefatura/oficina-vuelta`): se aplica al encargo y sigue. IDEMPOTENTE: si el paso ya se aplicó (entrega repetida), solo avanza.
  */
 export async function recibirJefatura(P: Puertos, encargoId: string, salida: SalidaDeRevision): Promise<Respuesta> {
@@ -295,7 +304,7 @@ export async function recibirJefatura(P: Puertos, encargoId: string, salida: Sal
   const sig = siguientePaso(enc.estado_del_motor, pl)
   if (sig.accion !== 'ejecutar' || sig.paso.tipo !== 'jefatura') return r(409, { error: 'sin_paso_pendiente' })
   const e = enc.estado_del_motor
-  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: costoDeLaJefatura(salida.costo_usd) } })
+  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, sig.paso, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: costoDeLaJefatura(salida.costo_usd) } })
   return avanzar(P, enc.id)
 }
 

@@ -363,7 +363,9 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const textoPieza = quitarLineasDeNotas(ult.texto)
   const b = baseDeLaminas(enc.estado_del_motor)
   const maxLaminas = Number(pl.limites?.laminas_max)
-  const opcionesDelTraductor = { preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, ...(Number.isInteger(maxLaminas) && maxLaminas > 0 ? { maxLaminas } : {}) }
+  // 17-nov · GO Lenovo (a) · el máximo de cuadros por elemento del kit es dato de la plantilla (sin dato, el traductor usa 10)
+  const maxCuadros = Number(pl.limites?.cuadros_por_elemento_max)
+  const opcionesDelTraductor = { preguntasHechas: est.preguntas_del_traductor, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, ...(Number.isInteger(maxLaminas) && maxLaminas > 0 ? { maxLaminas } : {}), ...(Number.isInteger(maxCuadros) && maxCuadros > 0 ? { maxCuadros } : {}) }
   // 16-nov · Sprint 2 · S2-1 · la plantilla pide N propuestas (dato): la mesa entregó todas en UNA integración; se guardan para la aprobación del dueño y todavía NO hay guion
   // (la elegida pasa a `guion` al aprobarse). Lo que no se entiende ni en una propuesta va como texto a la jefatura, como siempre.
   if (est.tipo === 'video' && (est.video?.propuestas ?? 1) > 1) {

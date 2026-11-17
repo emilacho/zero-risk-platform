@@ -9,7 +9,7 @@
  * Puro: sin base ni red.
  */
 import { ROLES_DE_LAMINA } from '../salida'
-import type { ElementoDeCopyKit, ElementoDeEstructura, Lamina } from '../laminas'
+import { refDeCuadro, type ElementoDeCopyKit, type ElementoDeEstructura, type Lamina } from '../laminas'
 import type { TipoDePieza } from './tipos'
 
 /**
@@ -57,7 +57,9 @@ export interface Traduccion {
 }
 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-const CAMPOS: Array<[RegExp, 'headline' | 'body' | 'cta' | 'eyebrow' | 'imagen' | 'mood' | 'concepto' | 'que_se_ve' | 'objetivo' | 'emocion']> = [
+const CAMPOS: Array<[RegExp, 'headline' | 'body' | 'cta' | 'eyebrow' | 'imagen' | 'mood' | 'concepto' | 'que_se_ve' | 'objetivo' | 'emocion' | 'firma']> = [
+  // 17-nov · GO Lenovo (c) · la firma o pie del cuadro (marca, zona, web, en letra chica abajo): campo PROPIO; antes iba dentro de «Qué se ve» y se perdía
+  [/^(firma|pie de (la )?lamina|pie del cuadro|firma de (la )?lamina)$/, 'firma'],
   // 16-nov · Mejora 2 · el concepto y la escena de la lámina: NO se dibujan como texto; viajan con la imagen
   [/^(concepto|idea)$/, 'concepto'],
   [/^(que se ve|se ve|escena)$/, 'que_se_ve'],
@@ -127,15 +129,37 @@ function variantesEnLinea(valor: string): Variante[] {
 interface Seccion { titulo: string; lineas: string[] }
 
 /** divide en secciones por encabezados Markdown (`#`…`####`) */
+/**
+ * 17-nov · un solo molde «nada se pierde sin aviso» (REAPERTURA de CC6 · GO Lenovo 13:00Z) · un título pegado al texto anterior («…las citas.**# Propuesta 1 · …»)
+ * pasa a su propia línea: si no, su sección desaparece dentro de la anterior. Solo corta `#`–`####` + espacio DESPUÉS de un signo de cierre o de `**` (un «#etiqueta» sin espacio no se toca).
+ * Lo reusan el reel y el corte de propuestas en imagen (CC1). Puro.
+ */
+export function separarTitulosPegados(md: string): string {
+  return String(md ?? '').replace(/\r/g, '').replace(/([.!?…:;»"”)\]]|\*\*)[ \t]*(#{1,4}[ \t]+\S)/g, '$1\n$2')
+}
+
+/** lo que la pieza trae ANTES de su primer título (sin títulos pegados): ahí no hay sección y el corte no lo lee. Puro */
+export function textoAntesDelPrimerTitulo(md: string): string {
+  const lineas = separarTitulosPegados(md).split('\n')
+  const i = lineas.findIndex((l) => /^\s{0,3}#{1,4}\s+\S/.test(l))
+  return (i < 0 ? [] : lineas.slice(0, i)).join('\n').trim()
+}
+
+/** ¿ese texto trae campos de la pieza («Título: …», «Imagen: …»)? (si es solo la narración del agente, no) */
+export const traeCamposDeLaPieza = (texto: string): boolean => Object.keys(campos(texto.split('\n')).valores).some((k) => k !== 'suelto')
+
 function secciones(md: string): Seccion[] {
   const out: Seccion[] = []
   let cur: Seccion | null = null
-  for (const l of String(md ?? '').replace(/\r/g, '').split('\n')) {
+  for (const l of separarTitulosPegados(md).split('\n')) {
     const h = /^\s{0,3}#{1,4}\s+(.*?)\s*#*\s*$/.exec(l)
     if (h) { cur = { titulo: h[1].trim(), lineas: [] }; out.push(cur) } else if (cur) cur.lineas.push(l)
   }
   return out
 }
+
+/** un campo que solo trae un guion («—», «–», «-», «−») está vacío */
+const ES_GUION_SOLO = /^[\s—–\-−]+$/
 
 interface CamposLeidos { valores: Record<string, string>; alternativas: string[]; avisos: string[] }
 
@@ -175,6 +199,8 @@ function campos(lineas: string[], rotulo = ''): CamposLeidos {
       }
     }
     r[k] = r[k].trim()
+    // 17-nov · GO Lenovo (b) · «—» (o un guion solo) es VACÍO, nunca texto: en un campo de texto no se dibuja; en «Imagen» vale «ninguna»
+    if (ES_GUION_SOLO.test(r[k])) r[k] = k === 'imagen' ? 'ninguna' : ''
   }
   return { valores: r, alternativas, avisos }
 }
@@ -260,7 +286,7 @@ const AVISO_LARGO = { headline: 90, body: 220, cta: 32, eyebrow: 24 } as const
 /** un llamado que es una INSTRUCCIÓN para quien publica («Botón nativo de Facebook “Enviar mensaje”…») no es texto que se dibuje */
 const esInstruccionDeBoton = (v: string) => /^\s*(bot[oó]n|button)\b/i.test(v)
 
-export interface OpcionesDeTraduccion { refsDelKit?: string[]; tipoPorRef?: Record<string, 'historia' | 'estado'>; temaPorRef?: Record<string, string>; preguntasHechas?: number; maxPreguntas?: number; /** 11-nov · fila #20 · el máximo de láminas del formato (dato de la plantilla); sin dato, 10 */ maxLaminas?: number; /** 16-nov · Mejora 1 · el OBJETIVO del brief de la pieza (la hoja): se usa si la dirección no declaró uno */ objetivoDelBrief?: string; /** 16-nov · Mejora 2 · la IDEA DE LA PIEZA que trae la fila (la hoja): para las láminas sin idea propia cuando la dirección no dejó `## Concepto` */ ideaDelBrief?: string }
+export interface OpcionesDeTraduccion { refsDelKit?: string[]; tipoPorRef?: Record<string, 'historia' | 'estado'>; temaPorRef?: Record<string, string>; preguntasHechas?: number; maxPreguntas?: number; /** 11-nov · fila #20 · el máximo de láminas del formato (dato de la plantilla); sin dato, 10 */ maxLaminas?: number; /** 16-nov · Mejora 1 · el OBJETIVO del brief de la pieza (la hoja): se usa si la dirección no declaró uno */ objetivoDelBrief?: string; /** 16-nov · Mejora 2 · la IDEA DE LA PIEZA que trae la fila (la hoja): para las láminas sin idea propia cuando la dirección no dejó `## Concepto` */ ideaDelBrief?: string; /** 17-nov · GO Lenovo (a) · el máximo de cuadros por elemento del kit (dato de la plantilla: `cuadros_por_elemento_max`); sin dato, 10 */ maxCuadros?: number }
 
 export function traducirPieza(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion = {}): Traduccion {
   const t = traducir(md, tipo, o)
@@ -281,6 +307,13 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
   const ideaDeLaPieza = conceptoDeLaPieza(todas) || limpiarTexto(o.ideaDelBrief ?? '')
   const conObjetivo = objetivo ? { objetivo } : {}
   const alternativas: string[] = []
+  // 17-nov · un solo molde «nada se pierde sin aviso»: el título pegado se separa (y se dice); lo que trae campos ANTES del primer título no se dibuja, se dice y queda anotado
+  if (separarTitulosPegados(md) !== String(md ?? '').replace(/\r/g, '')) avisos.push('un título venía pegado al texto anterior: se separó para no perder su sección')
+  const antes = textoAntesDelPrimerTitulo(md)
+  if (antes && traeCamposDeLaPieza(antes)) {
+    avisos.push(`texto antes del primer título: ${antes.split('\n').filter((l) => l.trim()).length} línea(s) sin título; no se dibujaron y quedan anotadas como alternativa`)
+    alternativas.push(`texto sin título: ${limpiarTexto(antes)}`.slice(0, 600))
+  }
   let pie = ''
   let tags: string[] = []
   const publicaciones: Variante[] = []
@@ -395,38 +428,82 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
     return { ok: true, pie_de_foto: pieFinal, hashtags: tags, imagenes, avisos, ...conObjetivo, ...(alternativas.length ? { alternativas } : {}), pieza_post: { pie_de_foto: pieFinal, hashtags: tags, ...(llamado ? { llamado } : {}), texto_en_imagen } }
   }
 
-  // kit de historias: una sección por elemento del brief (por ref, o por orden)
+  // kit de historias · 17-nov · GO Lenovo (a) «el traductor del kit no tira nada»: cada elemento del brief recibe TODAS las secciones que la dirección le escribió, como cuadros
+  //   de su historia (el 1.º con el ref del elemento; los siguientes, `<ref>-c2`, `-c3`…, del mismo destino, día y hora). El máximo es dato del formato (`maxCuadros`; sin dato, 10):
+  //   lo que pasa del máximo se AVISA y queda anotado como alternativa, igual que en el carrusel. Antes: una sección por elemento y la sobrante desaparecía sin aviso.
   const refs = o.refsDelKit ?? []
   if (!refs.length) return falla('el kit no tiene elementos de referencia')
+  const maxC = typeof o.maxCuadros === 'number' && Number.isInteger(o.maxCuadros) && o.maxCuadros > 0 ? o.maxCuadros : 10
+  const grupos = gruposDelKit(cuerpo, refs)
+  if (grupos.repartidas) avisos.push(`la dirección escribió ${cuerpo.length} secciones sin nombrar su elemento y el brief tiene ${refs.length}: ${grupos.repartidas}`)
   const copy: ElementoDeCopyKit[] = []
   const estructura: ElementoDeEstructura[] = []
   const faltan: string[] = []
-  refs.forEach((ref, i) => {
-    const s = cuerpo.find((x) => sinTildes(x.titulo).includes(sinTildes(ref))) ?? cuerpo[i]
-    if (!s) { faltan.push(ref); return }
-    const leidos = campos(s.lineas, `«${ref}»`)
-    const c = leidos.valores
-    alternativas.push(...leidos.alternativas); avisos.push(...leidos.avisos)
-    let headline = c.headline ?? ''
-    let body = c.body ?? ''
-    if (!headline && c.suelto) { const [primera, ...resto] = c.suelto.split('\n'); headline = primera; body = body || resto.join(' ').trim() }
-    const limpio = (campo: string, v: string, parrafos = false): string => {
-      const t = limpiarTexto(v, parrafos)
-      if (t && esNotaDelDirector(t)) { avisos.push(`«${ref}»: el ${campo} traía una nota del director y no se dibujó`); return '' }
-      return t
+  const sinTituloExtra: Array<{ ref: string; s: Seccion }> = []
+  refs.forEach((ref) => {
+    const suyas = grupos.porRef.get(ref) ?? []
+    if (!suyas.length) { faltan.push(ref); return }
+    if (suyas.length > maxC) {
+      avisos.push(`«${ref}»: la dirección dejó ${suyas.length} cuadros y el formato admite ${maxC}: se dibujan los primeros ${maxC}; los otros ${suyas.length - maxC} quedan anotados como alternativa`)
+      for (const s of suyas.slice(maxC)) alternativas.push(`cuadro de «${ref}» que no entró (${s.titulo.trim()}): ${limpiarTexto(s.lineas.join(' '))}`.slice(0, 600))
     }
-    headline = limpio('título', headline); body = limpio('texto', body, true)
-    const cta = esInstruccionDeBoton(c.cta ?? '') ? '' : limpio('llamado', c.cta ?? '')
-    const eyebrow = limpio('sobre-título', c.eyebrow ?? '')
-    if (!headline) { faltan.push(ref); return }
-    copy.push({ ref, headline, ...(body ? { body } : {}), ...(cta ? { cta } : {}), ...(eyebrow ? { eyebrow } : {}) })
-    estructura.push({ ref, rol: o.tipoPorRef?.[ref] ?? 'historia', beat: o.temaPorRef?.[ref] ?? headline.slice(0, 60), mood: c.mood ?? '' })
-    imagenes.push(leerImagen(ref, c.imagen, { idea: c.concepto || ideaDeLaPieza, que_se_ve: c.que_se_ve, mensaje: headline, emocion: c.emocion, ...conObjetivo }))
-    if (headline.length > 60) avisos.push(`«${ref}»: el titular trae ${headline.length} caracteres; el dibujo se ajusta al texto`)
+    suyas.slice(0, maxC).forEach((s, j) => {
+      const refC = j === 0 ? ref : refDeCuadro(ref, j + 1)
+      const leidos = campos(s.lineas, `«${refC}»`)
+      const c = leidos.valores
+      alternativas.push(...leidos.alternativas); avisos.push(...leidos.avisos)
+      let headline = c.headline ?? ''
+      let body = c.body ?? ''
+      if (!headline && c.suelto) { const [primera, ...resto] = c.suelto.split('\n'); headline = primera; body = body || resto.join(' ').trim() }
+      const limpio = (campo: string, v: string, parrafos = false): string => {
+        const t = limpiarTexto(v, parrafos)
+        if (t && esNotaDelDirector(t)) { avisos.push(`«${refC}»: el ${campo} traía una nota del director y no se dibujó`); return '' }
+        return t
+      }
+      headline = limpio('título', headline); body = limpio('texto', body, true)
+      const cta = esInstruccionDeBoton(c.cta ?? '') ? '' : limpio('llamado', c.cta ?? '')
+      const eyebrow = limpio('sobre-título', c.eyebrow ?? '')
+      const firma = limpio('firma', c.firma ?? '')
+      if (!headline) { if (j === 0) faltan.push(ref); else { faltan.push(refC); sinTituloExtra.push({ ref: refC, s }) } return }
+      copy.push({ ref: refC, ...(j > 0 ? { de: ref, cuadro: j + 1 } : {}), headline, ...(body ? { body } : {}), ...(cta ? { cta } : {}), ...(eyebrow ? { eyebrow } : {}), ...(firma ? { firma } : {}) })
+      estructura.push({ ref: refC, ...(j > 0 ? { de: ref } : {}), rol: o.tipoPorRef?.[ref] ?? 'historia', beat: (j === 0 ? o.temaPorRef?.[ref] : undefined) ?? headline.slice(0, 60), mood: c.mood ?? '' })
+      imagenes.push(leerImagen(refC, c.imagen, { idea: c.concepto || ideaDeLaPieza, que_se_ve: c.que_se_ve, mensaje: headline, emocion: c.emocion, ...conObjetivo }))
+      if (headline.length > 60) avisos.push(`«${refC}»: el titular trae ${headline.length} caracteres; el dibujo se ajusta al texto`)
+    })
   })
-  if (faltan.length && (o.preguntasHechas ?? 0) < maxP) return { ok: false, pregunta: `No encuentro texto para ${faltan.map((r) => `«${r}»`).join(', ')}. ¿Cuál es el título de ${faltan.length === 1 ? 'ese elemento' : 'esos elementos'}?`, pie_de_foto: pie, hashtags: tags, imagenes: [], avisos }
+  if (faltan.length && (o.preguntasHechas ?? 0) < maxP) return { ok: false, pregunta: `No encuentro texto para ${faltan.map((r) => `«${r}»`).join(', ')}. ¿Cuál es el título de ${faltan.length === 1 ? 'ese elemento' : 'esos elementos'}? Escríbelo en su sección (## <ref>, con «Título: …»).`, pie_de_foto: pie, hashtags: tags, imagenes, avisos, ...conObjetivo }
+  // un cuadro de más que sigue sin título tras la pregunta NO se pierde en silencio: se avisa y queda como alternativa
+  for (const x of sinTituloExtra) {
+    avisos.push(`«${x.ref}»: el cuadro no trae título y no se dibujó; queda anotado como alternativa`)
+    alternativas.push(`cuadro sin título (${x.s.titulo.trim()}): ${limpiarTexto(x.s.lineas.join(' '))}`.slice(0, 600))
+  }
   if (!copy.length) return falla('ningún elemento del kit trae título')
   return { ok: true, pie_de_foto: pie, hashtags: tags, copy_kit: copy, estructura, imagenes, avisos, ...conObjetivo, ...(alternativas.length ? { alternativas } : {}) }
+}
+
+/**
+ * 17-nov · GO Lenovo (a) · qué secciones de la pieza son de qué elemento del kit (puro):
+ *  · una sección que NOMBRA un ref es de ese elemento;
+ *  · una que no nombra ninguno va, en orden, al próximo elemento que ninguna sección nombra (como antes: por orden); si ya no queda ninguno, es un cuadro más del elemento de la sección anterior;
+ *  · si NINGUNA nombra un ref: una por elemento en orden y las de más, como cuadros del ÚLTIMO elemento (se avisa).
+ */
+export function gruposDelKit<S extends { titulo: string }>(cuerpo: S[], refs: string[]): { porRef: Map<string, S[]>; repartidas: string | null } {
+  const porRef = new Map<string, S[]>(refs.map((r) => [r, [] as S[]]))
+  if (!refs.length) return { porRef, repartidas: null }
+  const nombra = cuerpo.map((s) => refs.find((r) => sinTildes(s.titulo).includes(sinTildes(r))) ?? null)
+  if (!nombra.some(Boolean)) {
+    cuerpo.forEach((s, i) => porRef.get(refs[Math.min(i, refs.length - 1)])!.push(s))
+    const de = cuerpo.length - refs.length
+    return { porRef, repartidas: de > 0 && refs.length > 1 ? `las ${de} de más quedaron como cuadros de «${refs[refs.length - 1]}»` : null }
+  }
+  const libres = refs.filter((r) => !nombra.includes(r))
+  let previo: string | null = null
+  cuerpo.forEach((s, i) => {
+    const ref = nombra[i] ?? libres.shift() ?? previo ?? refs[0]
+    porRef.get(ref)!.push(s)
+    previo = ref
+  })
+  return { porRef, repartidas: null }
 }
 
 /**

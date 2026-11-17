@@ -5,6 +5,7 @@
  */
 import type { Paso, Plantilla } from '../tipos'
 import { CARRUSEL_IG_CON_JEFATURA, KIT_HISTORIAS_CON_JEFATURA, POST_IMG_CON_JEFATURA } from './con-jefatura'
+import { ARTEFACTO_DE_LA_JEFATURA, CLAVE_DEL_PASO_JEFATURA } from '../paso-jefatura'
 
 /** el tope de una pieza de la mesa (Emilio, 28-oct): US$ 5 incluyendo jefatura y herramientas; el techo absoluto ×1,2 lo pone la mesa */
 export const TOPE_DE_LA_MESA_USD = 5
@@ -71,7 +72,16 @@ export const DE_LA_LINEA_DE_HISTORIAS = {
  */
 export const DIFERENCIAS_CON_LAS_HISTORIAS = ['mesa', 'asientos', 'rondas_de_la_mesa', 'margen', 'reserva_por_pieza_usd'] as const
 const KIT_MESA_BASE = deLaMesa(KIT_HISTORIAS_CON_JEFATURA, 'kit_mesa')
-export const KIT_MESA: Plantilla = { ...KIT_MESA_BASE, limites: { ...KIT_MESA_BASE.limites, ...DE_LA_LINEA_DE_HISTORIAS, roles_sin_imagen: [...DE_LA_LINEA_DE_HISTORIAS.roles_sin_imagen], asientos: [...ASIENTOS_DE_LA_MESA_CORTA], rondas_de_la_mesa: RONDAS_DE_LA_MESA_CORTA } }
+/**
+ * 17-nov · GO Lenovo (d) «arreglo de la historia pobre» · un desacuerdo de la jefatura vuelve UNA vez a la mesa como corrección (la dirección integra y la mesa traduce otra vez);
+ * solo si sigue, la pieza va a la bandeja marcada. Es DATO del paso `jefatura` de `kit_mesa` (el código lo hace solo si la plantilla lo declara y la vuelta cabe en el tope).
+ */
+export const VUELTA_DE_LA_JEFATURA_A_LA_MESA: NonNullable<Paso['vuelve_a']> = { paso: 'mesa', max: 1, si: { tipo: 'si_artefacto', artefacto: ARTEFACTO_DE_LA_JEFATURA, campo: 'vuelve_a_la_mesa', igual: true } }
+export const KIT_MESA: Plantilla = {
+  ...KIT_MESA_BASE,
+  pasos: KIT_MESA_BASE.pasos.map((p) => (p.clave === CLAVE_DEL_PASO_JEFATURA ? { ...p, vuelve_a: structuredClone(VUELTA_DE_LA_JEFATURA_A_LA_MESA) } : p)),
+  limites: { ...KIT_MESA_BASE.limites, ...DE_LA_LINEA_DE_HISTORIAS, roles_sin_imagen: [...DE_LA_LINEA_DE_HISTORIAS.roles_sin_imagen], asientos: [...ASIENTOS_DE_LA_MESA_CORTA], rondas_de_la_mesa: RONDAS_DE_LA_MESA_CORTA },
+}
 
 /**
  * 31-oct · nuevo orden de la cadena · `brief_mesa` y `concepto_mesa`: las dos mesas de la CADENA. Un solo paso `mesa`: no hay imágenes, observador, traductor ni jefatura de pieza;

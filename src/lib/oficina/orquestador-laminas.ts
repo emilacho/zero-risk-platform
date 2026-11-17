@@ -15,7 +15,7 @@ import { aUtc, chequeosDeEntrega, cuandoSePublica, leerMedidas, manifiesto, nomb
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import {
   armarLaminasDeCarrusel, armarLaminasDeKit, avisosDeContrato, largosPasados, pedidoDeAcortarLaminas, type LargosDeLamina, chequeosDeLaminas, problemasDeContrato, problemasDeHistoria, problemasDeKit, refsInvalidos, textoFueraDelAutor,
-  type ElementoDeCopyKit, type ElementoDeEstructura, type ImagenDeRef, type Lamina,
+  refDelElemento, type ElementoDeCopyKit, type ElementoDeEstructura, type ImagenDeRef, type Lamina,
 } from './laminas'
 import type { ResultadoDePaso } from './motor'
 import { construirTareaLaminas, contextoDelRevisorLaminas, type ContextoLaminas } from './pedidos-laminas'
@@ -407,7 +407,8 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoL> {
   const expiraciones: string[] = []
   const delaFila = cuandoSePublica(enc.sala_ref, null)
   for (let i = 0; i < png.length; i++) {
-    const el = b.elementos.find((x) => x.ref === refs[i])
+    // 17-nov · GO Lenovo (a) · el cuadro n de un elemento (`e01-c2`) publica con el destino, día y hora de SU elemento
+    const el = b.elementos.find((x) => x.ref === refDelElemento(refs[i]))
     const destino = el?.destino ?? 'historia'
     const red = destino === 'estado' ? 'whatsapp' : redBrief
     png[i].nombre = nombreDeArchivo({ fecha: el?.fecha ?? delaFila?.fecha ?? null, hora: el?.fecha ? (el.hora ?? null) : (delaFila?.hora ?? null), red, formato: destino, brief_id: b.brief.id, n: i + 1, de: N, ext: leerMedidas(png[i].bytes)?.tipo === 'jpeg' ? 'jpg' : 'png' })
@@ -427,11 +428,11 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoL> {
   // medidas, tipo, peso y cantidad por destino (cada destino con su propia especificación)
   for (const [clave, fila] of filas) {
     const [red, destino] = clave.split('/')
-    const grupo = png.filter((_, i) => (b.elementos.find((x) => x.ref === refs[i])?.destino ?? 'historia') === destino && (destino === 'estado' ? 'whatsapp' : redBrief) === red)
+    const grupo = png.filter((_, i) => (b.elementos.find((x) => x.ref === refDelElemento(refs[i]))?.destino ?? 'historia') === destino && (destino === 'estado' ? 'whatsapp' : redBrief) === red)
     const manG = manifiesto(grupo, {})
     fichasTodas.push(...chequeosDeEntrega(grupo, fila, { pie_de_foto: '', hashtags: [] }, manG))
     if (fila) for (const c of copia) {
-      const el = b.elementos.find((x) => x.ref === c.ref)
+      const el = b.elementos.find((x) => x.ref === refDelElemento(c.ref))
       if (el && el.destino === destino && (c.acompanamiento ?? '').length > fila.texto_max) fichasTodas.push({ id: `ent-txt-${c.ref}`, origen: 'chequeo', donde: 'texto', gravedad: fila.verificado ? 'bloquea' : 'sugerencia', estado: 'abierta', que: `el acompañamiento de «${c.ref}» tiene ${(c.acompanamiento ?? '').length} caracteres y el límite de ${destino} es ${fila.texto_max}`, contra_que: 'especificación del formato', propuesta: 'acortar' })
     }
   }
