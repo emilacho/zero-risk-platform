@@ -4,7 +4,9 @@
 --   pendientes  = lo que el lector no encontró en las fuentes (se dice, no se inventa)
 --   descartados = cuántos datos vinieron sin fuente y NO entraron
 -- La cadena lee la tabla aunque no exista (leer = «sin fichas»): esta migración puede aplicarse después de publicar el código.
--- Sin cambios a ninguna otra tabla. La `paso` de cadena_corridas es texto libre: 'fichas' no necesita permiso nuevo.
+-- La `paso` de cadena_corridas es texto libre: 'fichas' no necesita permiso nuevo.
+-- RESPUESTA-LENOVO a CC3 (17-nov, opción b): cadena_campanas suma `presupuesto_lector_usd` (la bolsa propia del lector, US$ 2 por omisión).
+--   El código lee la columna aunque no exista (sin valor = 2): también puede aplicarse después de publicar.
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.cadena_fichas_de_oferta (
@@ -41,6 +43,17 @@ END
 $fichas$;
 REVOKE ALL ON SEQUENCE public.cadena_fichas_de_oferta_id_seq FROM PUBLIC, anon, authenticated;
 GRANT USAGE, SELECT ON SEQUENCE public.cadena_fichas_de_oferta_id_seq TO service_role;
+
+-- la bolsa propia del lector: no le quita al presupuesto de planificación (estrategia, calendario…)
+ALTER TABLE public.cadena_campanas ADD COLUMN IF NOT EXISTS presupuesto_lector_usd numeric(8,2) NOT NULL DEFAULT 2;
+DO $bolsa$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cadena_campanas_presupuesto_lector_no_negativo') THEN
+    ALTER TABLE public.cadena_campanas ADD CONSTRAINT cadena_campanas_presupuesto_lector_no_negativo CHECK (presupuesto_lector_usd >= 0);
+  END IF;
+END
+$bolsa$;
+COMMENT ON COLUMN public.cadena_campanas.presupuesto_lector_usd IS 'CADENA · Sprint 4 · la bolsa PROPIA del lector de fichas (US$). No sale del presupuesto de planificación.';
 
 COMMENT ON TABLE public.cadena_fichas_de_oferta IS 'CADENA · Sprint 4 · las fichas de hechos por oferta que escribió el lector (una vez por campaña). No es reja: sin fila, la hoja declara «sin fichas».';
 

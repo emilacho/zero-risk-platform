@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto'
 import type { Almacen, Campana, Corrida, EsperaFila } from './almacen'
 import { calcularReloj, type ContextoPlazo } from './esperas'
-import { MAXIMO_DE_INTENTOS, plazoDeLlamadaMinutos, topeDelPaso, type Paso } from './constantes'
+import { MAXIMO_DE_INTENTOS, PASOS_CON_PRESUPUESTO_PROPIO, PRESUPUESTO_LECTOR_POR_OMISION, plazoDeLlamadaMinutos, topeDelPaso, type Paso } from './constantes'
 
 export const sello = (s: string): string => createHash('sha256').update(s).digest('hex').slice(0, 12)
 export const semanaDeId = (id: string): number => Number(/^s(\d+)-/.exec(id)?.[1] ?? 0)
@@ -56,6 +56,22 @@ export async function gastoDeCampana(al: Almacen, campanaId: string): Promise<nu
   return (await al.corridasDeCampana(campanaId)).reduce((s, c) => s + costoEfectivo(c), 0)
 }
 
+/** el presupuesto propio del lector de una campaña: su dato (`presupuesto_lector_usd`) o, sin él, el valor por omisión */
+export function presupuestoDelLector(campana: Pick<Campana, 'presupuesto_lector_usd'>): number {
+  const v = Number(campana.presupuesto_lector_usd)
+  return campana.presupuesto_lector_usd !== null && campana.presupuesto_lector_usd !== undefined && Number.isFinite(v) && v >= 0 ? v : PRESUPUESTO_LECTOR_POR_OMISION
+}
+
+/**
+ * RESPUESTA-LENOVO a CC3 (17-nov, opción b) · DOS bolsas en la campaña: el lector gasta de la SUYA (`presupuesto_lector_usd`) y nada más;
+ * los demás pasos gastan del presupuesto de planificación SIN contar lo del lector. Así el lector no le quita al calendario, y una estrategia cara no deja sin fichas.
+ */
+export async function bolsaDelPaso(al: Almacen, campana: Campana, paso: Paso): Promise<{ gastado: number; presupuesto: number }> {
+  const delLector = PASOS_CON_PRESUPUESTO_PROPIO.has(paso)
+  const gastado = (await al.corridasDeCampana(campana.id)).filter((c) => PASOS_CON_PRESUPUESTO_PROPIO.has(c.paso as Paso) === delLector).reduce((s, c) => s + costoEfectivo(c), 0)
+  return { gastado, presupuesto: delLector ? presupuestoDelLector(campana) : campana.presupuesto_planificacion_usd }
+}
+
 export type ResultadoDePreparar =
   | { tipo: 'lista'; corrida: Corrida }
   | { tipo: 'ya_hecha'; corrida: Corrida }
@@ -71,8 +87,6 @@ export async function prepararCorrida(
   al: Almacen, campana: Campana, paso: Paso, clave: string, workflowId: string, workflowExecutionId: string, ahora: string, modelo: string, esquemaHash: string | null,
   /** r79 · D1: una corrida `ok` solo vale como «ya hecha» si el objeto validado EXISTE. Sin esta función (fechas) se confía en la corrida. */
   existeElObjeto?: () => Promise<boolean>,
-  /** 🟡 1 de CC6 a #1138: lo que este paso debe dejar LIBRE del presupuesto para otros (el lector deja la reserva de las tandas del calendario) · 0 = como siempre */
-  reservaUsd = 0,
 ): Promise<ResultadoDePreparar> {
   const previas = (await al.corridasDeCampana(campana.id)).filter((c) => c.paso === paso && c.clave_idempotencia === clave)
   const ok = previas.find((c) => c.estado === 'ok')
@@ -85,8 +99,8 @@ export async function prepararCorrida(
   const fallidas = (await al.corridasDeCampana(campana.id)).filter((c) => c.paso === paso && c.clave_idempotencia === clave).length
   const intento = fallidas + 1
   if (intento > MAXIMO_DE_INTENTOS) return { tipo: 'intentos_agotados' }
-  const gastado = await gastoDeCampana(al, campana.id)
-  if (gastado + topeDelPaso(paso) + reservaUsd > campana.presupuesto_planificacion_usd) return { tipo: 'presupuesto_agotado', gastado, presupuesto: campana.presupuesto_planificacion_usd }
+  const { gastado, presupuesto } = await bolsaDelPaso(al, campana, paso)
+  if (gastado + topeDelPaso(paso) > presupuesto) return { tipo: 'presupuesto_agotado', gastado, presupuesto }
   const plazoMin = await plazoDeLlamadaMinutos(al)
   const { corrida, creada } = await al.abrirCorrida({
     campana_id: campana.id, paso, clave_idempotencia: clave, intento, workflow_id: workflowId, workflow_execution_id: workflowExecutionId,

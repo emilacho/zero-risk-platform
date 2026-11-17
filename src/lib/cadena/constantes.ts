@@ -58,6 +58,10 @@ export const CABECERA_SALTAR_EDITOR = 'x-skip-editor-middleware'
 
 /** pasos que saltan la revisión del editor por diseño (§8): estructura interna, no texto que se publica */
 export const PASOS_SIN_REVISION: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'fichas']
+/** RESPUESTA-LENOVO a CC3 (17-nov, opción b) · los pasos que gastan de su PROPIA bolsa (no de la de planificación) */
+export const PASOS_CON_PRESUPUESTO_PROPIO: ReadonlySet<Paso> = new Set<Paso>(['fichas'])
+/** el presupuesto del lector cuando la campaña no trae el suyo (US$ 2: hasta 3 intentos de ~0,5, o 2 si fallan sin costo registrado) */
+export const PRESUPUESTO_LECTOR_POR_OMISION = 2
 
 export async function modeloDeLaCadena(al: Almacen): Promise<string> {
   const v = await al.leerConfig('modelo_cadena')

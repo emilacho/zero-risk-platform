@@ -18,8 +18,8 @@ import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, clienteB, contextoDe, type ClienteFixture } from '../__fixtures__/clientes'
 import { fichasConHechos, fichasEnTexto, hechoEnTexto, leerFichasDelLector, type HechoDelNegocioPorOferta } from '../ficha-de-oferta'
 import { ESQUEMAS } from '../esquemas'
-import { gastoDeCampana } from '../nucleo'
-import { medidaDeCampana, PASOS_SIN_REVISION, topeDelPaso } from '../constantes'
+import { bolsaDelPaso, gastoDeCampana, presupuestoDelLector } from '../nucleo'
+import { PASOS_CON_PRESUPUESTO_PROPIO, PASOS_SIN_REVISION, PRESUPUESTO_LECTOR_POR_OMISION, topeDelPaso } from '../constantes'
 
 const AHORA = '2026-10-09T12:00:00Z'
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
@@ -259,46 +259,72 @@ describe('el parche de la puerta VIVA (respaldo 17-nov)', () => {
   })
 })
 
-// ─────────────────────────────────────────────── 🟡 de CC6 a #1138 (cabeza aad6a21)
-describe('🟡 1 de CC6 · el lector no puede volverse reja por el presupuesto', () => {
-  const reserva = (al: AlmacenMemoria, id: string) => medidaDeCampana(al.campanas.find((x) => x.id === id)!).totalTandas * topeDelPaso('calendario')
-  it('🔴 (l1) si su intento se comería la reserva de las tandas: 200 «ya hecha · sin fichas por presupuesto», sin corrida, sin necesita humano; y el calendario abre', async () => {
+// ─────────────────────────────────────────────── 🟡 1 de CC6 a #1138 + RESPUESTA-LENOVO (17-nov, opción b): la bolsa PROPIA del lector
+describe('🟡 1 de CC6 · RESPUESTA-LENOVO (b) · el lector gasta de su PROPIA bolsa: ni le quita al calendario ni se queda sin correr por una estrategia cara', () => {
+  const campanaDe = (al: AlmacenMemoria, id: string) => al.campanas.find((x) => x.id === id)!
+  it('🔴 (l1) si su bolsa no alcanza para otro intento: 200 «ya hecha · sin fichas», sin corrida, sin necesita humano; y el calendario abre', async () => {
     const c = clienteA(), al = almacen(c), id = await conEstrategia(al, c)
-    const campana = al.campanas.find((x) => x.id === id)!
-    campana.presupuesto_planificacion_usd = (await gastoDeCampana(al, id)) + topeDelPaso('fichas') + reserva(al, id) - 0.01
+    const campana = campanaDe(al, id)
+    campana.presupuesto_lector_usd = topeDelPaso('fichas') - 0.01
     const antes = campana.estado
     const p = await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect(p.status).toBe(200)
     expect(p.cuerpo.ya_hecha).toBe(true)
-    expect(String(p.cuerpo.sin_fichas)).toMatch(/no alcanza para el lector sin quitarle al calendario/)
+    expect(String(p.cuerpo.sin_fichas)).toMatch(/el presupuesto propio del lector no alcanza para otro intento \(gastado US\$ 0\.00 de 0\.99\)/)
     expect(al.corridas.filter((x) => x.paso === 'fichas')).toHaveLength(0)
-    expect(al.campanas.find((x) => x.id === id)!.estado).toBe(antes)
+    expect(campanaDe(al, id).estado).toBe(antes)
     expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).status).toBe(200)
   })
-  it('🔴 con lo justo (gastado + su tope + la reserva = presupuesto), el lector sí corre', async () => {
+  it('🔴 con lo justo (su bolsa = su tope), el lector sí corre', async () => {
     const c = clienteB(), al = almacen(c), id = await conEstrategia(al, c)
-    al.campanas.find((x) => x.id === id)!.presupuesto_planificacion_usd = (await gastoDeCampana(al, id)) + topeDelPaso('fichas') + reserva(al, id)
+    campanaDe(al, id).presupuesto_lector_usd = topeDelPaso('fichas')
     expect((await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)).cuerpo.corrida_id).toBeDefined()
   })
-  it.each([[0.7, true], [2.02, false]])('🔴 un lector que falla todo lo que puede deja SIEMPRE el tope de cada tanda libre (estrategia de US$ %s · ¿corre? %s)', async (costoEstrategia, corre) => {
+  it('🔴 EL CASO REAL (estrategia US$ 2,02 con planificación de 6): el lector corre, y sus 3 intentos fallidos (~0,5) no le quitan nada al calendario', async () => {
     const c = clienteC(), al = almacen(c)
     const ab = await abrirCampana(al, { ...wf(), client_id: c.clientId, seco: true }, AHORA)
     const id = (ab.cuerpo.campana as { id: string }).id
     const pe = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
-    await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: ok(c.estrategia, costoEstrategia) }, AHORA)
-    for (let i = 0; i < 4; i++) {
+    await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: ok(c.estrategia, 2.02) }, AHORA)
+    const campana = campanaDe(al, id)
+    expect(campana.presupuesto_planificacion_usd).toBe(6)
+    expect(presupuestoDelLector(campana)).toBe(PRESUPUESTO_LECTOR_POR_OMISION)
+    for (let i = 0; i < 5; i++) {
       const p = await fichasPreparar(al, { ...wf(), workflow_execution_id: `ex-${i}`, campana_id: id }, AHORA)
       if (!p.cuerpo.corrida_id) break
-      await fichasGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, error: 'x', cost_usd: 1 } })
+      await fichasGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, error: 'x', cost_usd: 0.5 } })
     }
-    const campana = al.campanas.find((x) => x.id === id)!
-    // con la estrategia cara (la última campaña real gastó US$ 2,02 en ella), el lector NI SIQUIERA abre: la reserva ya no deja lugar
-    expect(al.corridas.filter((x) => x.paso === 'fichas').length > 0).toBe(corre)
-    // corra o no, lo que el lector gastó nunca le quita a la reserva: sin él, gasto = solo la estrategia
-    const sinLector = costoEstrategia + reserva(al, id) > campana.presupuesto_planificacion_usd
-    if (sinLector) expect(await gastoDeCampana(al, id)).toBe(costoEstrategia)
-    else expect((await gastoDeCampana(al, id)) + reserva(al, id)).toBeLessThanOrEqual(campana.presupuesto_planificacion_usd)
-    expect(campana.estado).not.toBe('necesita_humano')
+    expect(al.corridas.filter((x) => x.paso === 'fichas').map((x) => x.estado)).toEqual(['fallida', 'fallida', 'fallida'])
+    expect((await bolsaDelPaso(al, campana, 'fichas')).gastado).toBe(1.5)
+    // la planificación ve SOLO lo suyo: la estrategia
+    expect(await bolsaDelPaso(al, campana, 'calendario')).toEqual({ gastado: 2.02, presupuesto: 6 })
+    expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).status).toBe(200)
+    expect(campanaDe(al, id).estado).not.toBe('necesita_humano')
+  })
+  it('🔴 lo que gastó el lector no cuenta en la planificación: con la planificación justa para la tanda, el calendario abre igual', async () => {
+    const c = clienteA(), al = almacen(c), id = await conEstrategia(al, c)
+    const p = await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    await fichasGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, error: 'x', cost_usd: 0.9 } })
+    const campana = campanaDe(al, id)
+    const { gastado: planificacion } = await bolsaDelPaso(al, campana, 'calendario')
+    expect(planificacion).toBeCloseTo((await gastoDeCampana(al, id)) - 0.9, 6)
+    campana.presupuesto_planificacion_usd = planificacion + topeDelPaso('calendario')
+  })
+  it('🔴 …y al revés: la estrategia gastada no cuenta en la bolsa del lector', async () => {
+    const c = clienteB(), al = almacen(c), id = await conEstrategia(al, c)
+    const campana = campanaDe(al, id)
+    campana.presupuesto_planificacion_usd = 0
+    campana.presupuesto_lector_usd = topeDelPaso('fichas')
+    expect((await gastoDeCampana(al, id))).toBeGreaterThan(0)
+    expect((await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)).cuerpo.corrida_id).toBeDefined()
+  })
+  it('🔴 el dato de la campaña: sin valor (o sin la columna aún) vale US$ 2; un número (aunque llegue como texto) vale ese; basura o negativo, 2', () => {
+    expect(PRESUPUESTO_LECTOR_POR_OMISION).toBe(2)
+    for (const v of [undefined, null, 'abc', -1, Number.NaN]) expect(presupuestoDelLector({ presupuesto_lector_usd: v as number })).toBe(2)
+    expect(presupuestoDelLector({ presupuesto_lector_usd: 3.5 })).toBe(3.5)
+    expect(presupuestoDelLector({ presupuesto_lector_usd: '1.25' as unknown as number })).toBe(1.25)
+    expect(presupuestoDelLector({ presupuesto_lector_usd: 0 })).toBe(0)
+    expect([...PASOS_CON_PRESUPUESTO_PROPIO]).toEqual(['fichas'])
   })
 })
 
@@ -352,7 +378,7 @@ describe('🟡 3 de CC6 · los sobrevivientes', () => {
 })
 
 // ─────────────────────────────────────────────── ADENDA 1 de CC6 a #1138 (cabeza 8b82c8e): n7 y n3
-describe('🟡 ADENDA 1 de CC6 · n7 y n3', () => {
+describe('🟡 ADENDA 1 de CC6 · n7 (n3 cae con la reserva: el lector ya no reserva nada, tiene su bolsa)', () => {
   it('🔴 (n7) un hecho de TODO el negocio (oferta: null) acota lo afirmable de TODAS las fichas y declara el choque en cada una', () => {
     const base = leerFichasDelLector({ fichas: [
       { ...vacia('of-1'), se_puede_afirmar: [D('atiende todo el año', 'web')] },
@@ -366,21 +392,5 @@ describe('🟡 ADENDA 1 de CC6 · n7 y n3', () => {
     const [c, d] = fichasConHechos(base, [{ ...hecho, tipo: 'cierre_retiro', valor: 'el negocio cerró', vigente_hasta: null }])
     expect(c.se_puede_afirmar).toBeUndefined()
     expect(d.como_se_compra).toBeUndefined()
-  })
-  it('🔴 (n3) la reserva cuenta solo las tandas que FALTAN: con 2 tandas ya hechas, reserva = (total − 2) × tope', async () => {
-    const c = clienteA(), al = almacen(c), id = await conEstrategia(al, c)
-    const campana = al.campanas.find((x) => x.id === id)!
-    const total = medidaDeCampana(campana).totalTandas
-    expect(total).toBeGreaterThan(2)
-    const modelo = al.corridas.find((x) => x.paso === 'estrategia')!
-    let sig = Math.max(...al.corridas.map((x) => x.id)) + 1
-    for (const t of [1, 2]) al.corridas.push({ ...modelo, id: sig++, paso: 'calendario', clave_idempotencia: `t${t}:v1:c0`, estado: 'ok', costo_usd: 0 })
-    // una tanda que falló NO cuenta como hecha
-    al.corridas.push({ ...modelo, id: sig++, paso: 'calendario', clave_idempotencia: 't3:v1:c0', estado: 'fallida', costo_usd: 0 })
-    const justo = (await gastoDeCampana(al, id)) + topeDelPaso('fichas') + (total - 2) * topeDelPaso('calendario')
-    campana.presupuesto_planificacion_usd = justo - 0.01
-    expect((await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)).cuerpo.corrida_id).toBeUndefined()
-    campana.presupuesto_planificacion_usd = justo
-    expect((await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)).cuerpo.corrida_id).toBeDefined()
   })
 })

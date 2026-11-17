@@ -33,6 +33,8 @@ export interface Campana {
   estado: EstadoCampana
   estado_motivo: string | null
   presupuesto_planificacion_usd: number
+  /** RESPUESTA-LENOVO a CC3 (17-nov) · la bolsa PROPIA del lector de fichas · sin valor (o sin la columna aún) vale PRESUPUESTO_LECTOR_POR_OMISION */
+  presupuesto_lector_usd?: number | null
   ventana_parte_dias: number
   sustituir_video_por: 'ninguna' | 'carrusel' | 'foto'
   autoproducir: boolean
