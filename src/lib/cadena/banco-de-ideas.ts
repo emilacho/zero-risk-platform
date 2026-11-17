@@ -74,6 +74,8 @@ export function ideaDeReemplazo(banco: IdeaDelBanco[], retirada: IdeaDelBanco, u
   return candidatas[0] ?? null
 }
 
+/** cómo se nombra cada campo en los mensajes que lee Emilio (sin códigos: el tablero muestra `detalle` tal cual) */
+const NOMBRE_DE_CAMPO: Record<string, string> = { idea: 'la idea', mensaje: 'el mensaje', gancho: 'el gancho', protagonista: 'el protagonista' }
 const limpiarCampo = (x: unknown): string | null => (typeof x === 'string' ? x.replace(/\s*[\r\n]+\s*/g, ' ').trim() : null)
 
 interface Contexto { campana_id: string; version: number; autor: string }
@@ -117,17 +119,17 @@ function leerCambios(x: unknown): { ok: true; cambios: CambioPedido[] } | { ok: 
     const idea_id = o ? cadena(o.idea_id) : null
     const campos = o?.campos && typeof o.campos === 'object' && !Array.isArray(o.campos) ? (o.campos as Record<string, unknown>) : null
     if (!idea_id || !campos) return { ok: false, r: fallo(400, 'E-CAMBIOS', 'cada cambio necesita idea_id y campos') }
-    if (vistos.has(idea_id)) return { ok: false, r: fallo(400, 'E-IDEA-REPETIDA', `la idea ${idea_id} viene dos veces en la tanda: junta sus campos en un solo cambio`, { idea_id }) }
+    if (vistos.has(idea_id)) return { ok: false, r: fallo(400, 'E-IDEA-REPETIDA', 'una misma idea viene dos veces en los cambios: junta sus campos en un solo cambio', { idea_id }) }
     vistos.add(idea_id)
     const limpios: Partial<Record<CampoEditable, string>> = {}
     for (const [k, v] of Object.entries(campos)) {
-      if (!(CAMPOS_EDITABLES as readonly string[]).includes(k)) return { ok: false, r: fallo(400, 'E-CAMPO-NO-EDITABLE', `«${k}» no se edita desde el tablero (solo ${CAMPOS_EDITABLES.join(', ')})`, { idea_id, campo: k }) }
+      if (!(CAMPOS_EDITABLES as readonly string[]).includes(k)) return { ok: false, r: fallo(400, 'E-CAMPO-NO-EDITABLE', `ese dato de la idea no se edita desde aquí (solo la idea, el mensaje, el gancho y el protagonista)`, { idea_id, campo: k }) }
       const t = limpiarCampo(v)
-      if (!t) return { ok: false, r: fallo(400, 'E-CAMPO-VACIO', `el campo «${k}» de una idea no puede quedar vacío`, { idea_id, campo: k }) }
-      if (t.length > LARGO_MAXIMO_DE_CAMPO) return { ok: false, r: fallo(400, 'E-CAMPO-LARGO', `el campo «${k}» pasa de ${LARGO_MAXIMO_DE_CAMPO} caracteres`, { idea_id, campo: k }) }
+      if (!t) return { ok: false, r: fallo(400, 'E-CAMPO-VACIO', `${NOMBRE_DE_CAMPO[k] ?? k} de una idea no puede quedar vacío`, { idea_id, campo: k }) }
+      if (t.length > LARGO_MAXIMO_DE_CAMPO) return { ok: false, r: fallo(400, 'E-CAMPO-LARGO', `${NOMBRE_DE_CAMPO[k] ?? k} de una idea pasa de ${LARGO_MAXIMO_DE_CAMPO} caracteres`, { idea_id, campo: k }) }
       limpios[k as CampoEditable] = t
     }
-    if (!Object.keys(limpios).length) return { ok: false, r: fallo(400, 'E-CAMBIOS', `el cambio de ${idea_id} no trae campos`, { idea_id }) }
+    if (!Object.keys(limpios).length) return { ok: false, r: fallo(400, 'E-CAMBIOS', 'un cambio no trae ningún campo editado', { idea_id }) }
     cambios.push({ idea_id, campos: limpios })
   }
   return { ok: true, cambios }
@@ -147,8 +149,8 @@ export async function bancoEditar(al: Almacen, cuerpo: Record<string, unknown>, 
     for (const cambio of lc.cambios) {
       const k = v.banco.findIndex((i) => i.id === cambio.idea_id)
       if (k < 0) {
-        if (v.retiradas.some((i) => i.id === cambio.idea_id)) return fallo(409, 'E-IDEA-RETIRADA', `la idea ${cambio.idea_id} ya se retiró del banco: no se edita`, { idea_id: cambio.idea_id })
-        return fallo(404, 'E-IDEA-NO-EXISTE', `la idea ${cambio.idea_id} no está en el banco de la versión ${p.ctx.version}`, { idea_id: cambio.idea_id })
+        if (v.retiradas.some((i) => i.id === cambio.idea_id)) return fallo(409, 'E-IDEA-RETIRADA', 'esa idea ya se retiró del banco: no se edita', { idea_id: cambio.idea_id })
+        return fallo(404, 'E-IDEA-NO-EXISTE', 'esa idea ya no está en el banco de la gran idea: vuelve a abrirla', { idea_id: cambio.idea_id })
       }
       const actual = v.banco[k]
       const distintos = CAMPOS_EDITABLES.filter((c) => cambio.campos[c] !== undefined && cambio.campos[c] !== actual[c])
@@ -156,7 +158,7 @@ export async function bancoEditar(al: Almacen, cuerpo: Record<string, unknown>, 
       const sinLinea: IdeaDelBanco = { ...actual, ...cambio.campos }
       const linea = lineaDeIdea(sinLinea)
       const nueva: IdeaDelBanco = { ...sinLinea, linea }
-      if (!lineaSeLeeIgual(nueva, linea)) return fallo(400, 'E-CAMPO-INVALIDO', `un campo de la idea ${cambio.idea_id} trae « · » seguido de otra etiqueta (mensaje:, gancho:…) y la idea se leería distinta: quítalo`, { idea_id: cambio.idea_id })
+      if (!lineaSeLeeIgual(nueva, linea)) return fallo(400, 'E-CAMPO-INVALIDO', 'un texto trae « · » seguido de «mensaje:», «gancho:» u otra etiqueta y la idea se leería distinta: quita ese « · »', { idea_id: cambio.idea_id })
       v.banco[k] = nueva
       md = textoConIdea(md, cambio.idea_id, linea).md
       ideas.push(nueva)
@@ -185,7 +187,7 @@ export async function bancoRetirar(al: Almacen, cuerpo: Record<string, unknown>,
   const enBanco = v0.banco.find((i) => i.id === ideaId) ?? null
   const yaRetirada = v0.retiradas.find((i) => i.id === ideaId) ?? null
   const retirada: IdeaDelBanco | null = enBanco ?? yaRetirada
-  if (!retirada) return fallo(404, 'E-IDEA-NO-EXISTE', `la idea ${ideaId} no está en el banco de la versión ${p.ctx.version}`, { idea_id: ideaId })
+  if (!retirada) return fallo(404, 'E-IDEA-NO-EXISTE', 'esa idea ya no está en el banco de la gran idea: vuelve a abrirla', { idea_id: ideaId })
 
   // 1) las filas primero: si algo se corta después, las filas ya apuntan a ideas vivas y repetir el retiro termina de sacar la idea
   const calVersion = await al.ultimaVersionDeCalendario(p.ctx.campana_id)
@@ -212,7 +214,7 @@ export async function bancoRetirar(al: Almacen, cuerpo: Record<string, unknown>,
     const v = intento === 1 ? v0 : await leerVigente(al, p.ctx)
     if (!v.ok) return v.r
     const k = v.banco.findIndex((i) => i.id === ideaId)
-    if (k < 0 && !reasignadas.length) return fallo(409, 'E-IDEA-RETIRADA', `la idea ${ideaId} ya se retiró del banco`, { idea_id: ideaId })
+    if (k < 0 && !reasignadas.length) return fallo(409, 'E-IDEA-RETIRADA', 'esa idea ya se retiró del banco', { idea_id: ideaId })
     const entrada: EntradaDelHistorial = { accion: 'retirar', idea_id: ideaId, version: p.ctx.version, antes: { ...retirada }, despues: null, quien: p.ctx.autor, cuando: ahora, reasignadas, con_brief_sin_tocar }
     const leido: Record<string, unknown> = { ...v.leido, historial_del_banco: [...v.historial, entrada] }
     let md = v.c.texto_md

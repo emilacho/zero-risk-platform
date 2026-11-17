@@ -293,6 +293,29 @@ describe('la idea de reemplazo', () => {
   })
 })
 
+describe('los mensajes que lee Emilio no traen códigos de idea (menor de CC6 a #343: el tablero muestra `detalle` tal cual)', () => {
+  it('ningún detalle de error nombra un C<x>-I<nn>; el código viaja aparte en idea_id', async () => {
+    const al = almacen()
+    await bancoRetirar(al, tablero({ idea_id: 'C1-I07' }), AHORA)
+    const errores = [
+      await bancoEditar(al, { ...tablero(), cambios: [{ idea_id: 'C9-I99', campos: { mensaje: 'x' } }] }, AHORA),
+      await bancoEditar(al, { ...tablero(), cambios: [{ idea_id: 'C1-I07', campos: { mensaje: 'x' } }] }, AHORA),
+      await bancoEditar(al, { ...tablero(), cambios: [{ idea_id: 'C1-I23', campos: { mensaje: 'a' } }, { idea_id: 'C1-I23', campos: { gancho: 'b' } }] }, AHORA),
+      await bancoEditar(al, { ...tablero(), cambios: [{ idea_id: 'C1-I23', campos: { mensaje: '' } }] }, AHORA),
+      await bancoEditar(al, { ...tablero(), cambios: [{ idea_id: 'C1-I23', campos: { red: 'x' } }] }, AHORA),
+      await bancoEditar(al, { ...tablero(), cambios: [{ idea_id: 'C1-I23', campos: {} }] }, AHORA),
+      await bancoEditar(al, { ...tablero(), cambios: [{ idea_id: 'C1-I23', campos: { mensaje: 'a · gancho: b' } }] }, AHORA),
+      await bancoRetirar(al, tablero({ idea_id: 'C1-I07' }), AHORA),
+      await bancoRetirar(al, tablero({ idea_id: 'C9-I99' }), AHORA),
+    ]
+    for (const r of errores) {
+      expect(r.cuerpo.ok).toBe(false)
+      expect(String(r.cuerpo.detalle)).not.toMatch(/C[A-Za-z0-9_]+-I[0-9]{2,}/)
+    }
+    expect(errores[0].cuerpo.idea_id).toBe('C9-I99')
+  })
+})
+
 describe('la ruta', () => {
   it('las acciones están en la tabla de la ruta /api/cadena/concepto/banco', () => {
     expect(ACCIONES.banco.editar).toBe(bancoEditar)
