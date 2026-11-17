@@ -7,11 +7,13 @@ import { describe, expect, it } from 'vitest'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { antesDe4b } from './fixtures/rejas-4b'
 
 const RAIZ = path.resolve(__dirname, '../../../..')
 const leer = (rel: string) => fs.readFileSync(path.join(RAIZ, rel), 'utf8').replace(/\r\n/g, '\n')
 const md5 = (t: string) => crypto.createHash('md5').update(t, 'utf8').digest('hex')
-const ID = leer('src/agents/identities/video-editor.md')
+// el texto del A·6: el de hoy sin los cambios posteriores del tramo 4b (generador nombrado y 9:16)
+const ID = antesDe4b('video-editor.md', leer('src/agents/identities/video-editor.md'))
 const MIG = leer('supabase/migrations/202611171500_agents_video_editor_a6_rostros.sql')
 const REV = leer('supabase/reversas/202611171500_agents_video_editor_a6_rostros_REVERSA.sql')
 const VIVO_17NOV = '7c79ae8b8d8b901aeb60d0f7ed71ff89'

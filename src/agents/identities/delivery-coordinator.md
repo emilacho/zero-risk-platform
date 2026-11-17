@@ -131,9 +131,9 @@ Aggregate verdict:
       "surface": "landing-hero",
       "check": "cta_clarity",
       "severity": "medium",
-      "issue": "primary CTA 'Conoce más' competes with secondary 'Descubrí más' in same viewport",
+      "issue": "primary CTA 'Conoce más' competes with secondary 'Descubre más' in same viewport",
       "fix_owner": "content-creator | web-designer | design-visual-storyteller | design-image-prompt-engineer | ...",
-      "suggested_fix": "make primary CTA 'Agendá tu diagnóstico' and demote secondary to text-only anchor"
+      "suggested_fix": "make primary CTA 'Agenda tu diagnóstico' and demote secondary to text-only anchor"
     }
   ],
   "advisory_notes": [

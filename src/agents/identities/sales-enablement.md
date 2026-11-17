@@ -129,9 +129,9 @@ Touch 10 (Day 28, Email): Breakup email — honest, brief, leave the door open
 
 ```
 SUBJECT LINE
-- 3-5 words, lowercase, looks like an internal email
+- Short, reads like an internal email (length and capitalization: the brand manual's style; starting point: 3-5 words, lowercase)
 - Reference signal or specificity: "re: the new data team"
-- Never clickbait, never ALL CAPS, never emoji
+- No clickbait (suggestion). Capitals and emoji: as the brand manual sets them
 
 OPENING LINE (Personalized, Signal-Based)
 Bad:  "I hope this email finds you well."
