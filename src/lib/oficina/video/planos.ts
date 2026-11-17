@@ -5,7 +5,7 @@
  * cliente, cualquier cantidad de planos. Puro: sin base, sin red, sin modelo.
  */
 import { createHash } from 'node:crypto'
-import { DURACION_MAX_PLANO_S, DURACION_MIN_PLANO_S, RESOLUCION_APROBADA, armarPedidoDePlano } from '../../video/parametros'
+import { RESOLUCION_APROBADA, armarPedidoDePlano, fichaPorOmision, type CatalogoDeModelos } from '../../video/parametros'
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
 import { buscarFotoPropia, formatoDeVideo, fotosPropiasConDireccion } from './pedido'
@@ -92,7 +92,10 @@ export function pedidosPorPlano(o: {
   buscarFoto?: (id: string) => string | null
   /** 17-nov · S2-4 · las imágenes clave FINALES vigentes: la de cada plano es el primer cuadro de su clip (manda sobre la foto propia, que ya fue su referencia) */
   imagenesClave?: PrimerCuadro[]
+  /** 17-nov · T1 · el catálogo de modelos que leyó el encargo al abrir (el MISMO que valida la ruta); sin él, el del código */
+  catalogo?: CatalogoDeModelos
 }): { ok: true; pedidos: PedidoDePlano[] } | { ok: false; errores: string[] } {
+  const ficha = fichaPorOmision(o.catalogo)
   const planos = [...(o.guion.planos ?? [])].sort((a, b) => a.n - b.n || a.desde - b.desde)
   if (!planos.length) return { ok: false, errores: ['el guion no tiene planos'] }
   const buscar = o.buscarFoto ?? buscadorDeFotos(o.fotos)
@@ -101,11 +104,11 @@ export function pedidosPorPlano(o: {
   const pedidos: PedidoDePlano[] = []
   for (const p of planos) {
     const dura = duracionDelPlano(p)
-    if (dura > DURACION_MAX_PLANO_S) { errores.push(`el plano ${p.n} dura ${dura} s y el proveedor admite hasta ${DURACION_MAX_PLANO_S} s por plano`); continue }
+    if (dura > ficha.segundos_max) { errores.push(`el plano ${p.n} dura ${dura} s y el modelo admite hasta ${ficha.segundos_max} s por plano`); continue }
     const ic = (o.imagenesClave ?? []).find((x) => x.n === p.n && typeof x.url === 'string' && x.url.trim() !== '')
     const url = ic ? ic.url : p.foto_id ? buscar(p.foto_id) : null
     const primer_cuadro: PedidoDePlano['primer_cuadro'] = ic ? 'imagen_clave' : url ? 'foto_propia' : 'texto'
-    const v = armarPedidoDePlano({ prompt: ic ? promptDelClip(p, o.guion.audio) : promptDelPlano(p, o.guion.audio), formato, segundos: Math.max(DURACION_MIN_PLANO_S, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [] })
+    const v = armarPedidoDePlano({ prompt: ic ? promptDelClip(p, o.guion.audio) : promptDelPlano(p, o.guion.audio), formato, segundos: Math.max(ficha.segundos_min, dura), resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: url ? [url] : [] }, o.catalogo)
     if (!v.ok) { errores.push(...v.errores.map((e) => `plano ${p.n}: ${e}`)); continue }
     pedidos.push({ n: p.n, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, cortar_a_s: dura, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, foto_no_hallada: p.foto_id && !url && !ic ? p.foto_id : null, plano: true, clave: `${o.clave}:p${p.n}`, primer_cuadro, huella: huellaDelClip({ fuente: url, prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: v.pedido.audio === true }) })
   }

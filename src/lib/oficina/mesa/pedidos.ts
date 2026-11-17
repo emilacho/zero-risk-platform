@@ -10,6 +10,7 @@ import type { FotoEtiquetada } from '../fotos'
 import { CABECERA_SALTAR_EDITOR } from '../../cadena/constantes'
 import { AGENTE_GANCHO_DE_VIDEO, METODO_GANCHO_POR_OMISION, fichasEnTexto, leerFichasPorRed, metodoDeAsiento } from '../../cadena/metodos'
 import { BRIEF_GUIA_NO_REGLA } from '../brief'
+import { fichaPorOmision } from '../../video/parametros'
 import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts'
@@ -156,7 +157,7 @@ export const FRASE_SIN_NOTAS_DE_TRABAJO = 'Tu respuesta ES el guion y nada más:
 
 /**
  * 16-nov · Sprint 2 · S2-1 (CC1) · lo que la plantilla del video dice de la duración y de las propuestas (DATO: `limites.video`). Sin él, la mesa trabaja como hasta hoy:
- * un solo guion de 8 a 15 s.
+ * un solo guion, con la duración que admite el modelo por omisión (17-nov · T1: su ficha; antes, 8 a 15 s fijos).
  */
 export interface ParametrosDelVideo {
   segundos_min: number
@@ -164,7 +165,7 @@ export interface ParametrosDelVideo {
   /** cuántas propuestas completas presenta la mesa para la aprobación del dueño (1 = un solo guion, como hasta hoy) */
   propuestas: number
 }
-export const VIDEO_POR_OMISION: ParametrosDelVideo = { segundos_min: 8, segundos_max: 15, propuestas: 1 }
+export const VIDEO_POR_OMISION: ParametrosDelVideo = { segundos_min: fichaPorOmision().segundos_min, segundos_max: fichaPorOmision().segundos_max, propuestas: 1 }
 
 /** el plano de la HOJA (Sprint 2 · S2-1): lo que se pide por plano; el traductor tolera lo que falte y lo avisa */
 const PLANO_DE_LA_HOJA = (n: number, tiempos: string, extra = '') => [
@@ -291,7 +292,7 @@ export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza, video?: ParametrosDelV
       '```',
     ].join('\n')
 
-/** «de 8 a 15 s» · la duración que admite la plantilla (dato) */
+/** «de 8 a 15 s» · la duración que admite la plantilla (dato; sin él, la del modelo) */
 const duracionDe = (v?: ParametrosDelVideo) => { const x = v ?? VIDEO_POR_OMISION; return x.segundos_min === x.segundos_max ? `${x.segundos_min} s` : `de ${x.segundos_min} a ${x.segundos_max} s` }
 
 const REGLAS_DURAS = (c: ContextoDeTurno): string => [

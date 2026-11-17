@@ -50,14 +50,14 @@ describe('la fórmula del proveedor (leída de /estimate)', () => {
 })
 
 describe('lo aprobado por Emilio (31-oct) · armarPedido', () => {
-  it('por omisión (adenda 4): Seedance 2.5 · 8 s · 720p · 9:16 para reel · audio sí · sin fotos → text-to-video; 1080p sigue admitida', () => {
+  it('por omisión (adenda 4): Seedance 2.5 · la duración mínima de SU ficha (17-nov · T1: 4 s, antes 8 fijos) · 720p · 9:16 para reel · audio sí · sin fotos → text-to-video; 1080p sigue admitida', () => {
     const r = armarPedido({ prompt: 'Así servimos un encebollado en Náufrago, de la olla al plato', formato: 'reel' })
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    expect(r.pedido).toMatchObject({ modelo: 'bytedance/seedance-2.5', segundos: 8, resolucion: '720p', relacion: '9:16', audio: true, fotos: [] })
+    expect(r.pedido).toMatchObject({ modelo: 'bytedance/seedance-2.5', segundos: 4, resolucion: '720p', relacion: '9:16', audio: true, fotos: [] })
     expect(rutaDelModelo(r.pedido)).toBe('bytedance/seedance-2.5/text-to-video')
     const c = cuerpoParaHiggsfield(r.pedido)
-    expect(c).toMatchObject({ duration: 8, resolution: '720p', aspect_ratio: '9:16', generate_audio: true })
+    expect(c).toMatchObject({ duration: 4, resolution: '720p', aspect_ratio: '9:16', generate_audio: true })
     expect(armarPedido({ prompt: 'Así servimos un encebollado en Náufrago', formato: 'reel', resolucion: '1080p' })).toMatchObject({ ok: true, pedido: { resolucion: '1080p' } })
     expect('image_urls' in c).toBe(false)
     for (const regla of REGLAS_DEL_PEDIDO) expect(String(c.prompt)).toContain(regla)
@@ -65,22 +65,26 @@ describe('lo aprobado por Emilio (31-oct) · armarPedido', () => {
     expect(String(c.prompt)).not.toMatch(/Sin voces|sin narración|de espaldas|Sin rostros/i)
     expect(String(c.prompt)).toContain('Ni la cara ni la voz de una persona real identificable, salvo que el cliente tenga registrado su permiso')
   })
-  it('con fotos propias → reference-to-video con `image_urls` (máximo 9, sin repetidas); video de youtube → 16:9', () => {
+  it('con fotos propias → reference-to-video con `image_urls` (sin repetidas, hasta lo que admite el modelo: 30 en 2.5, 9 en 2.0); video de youtube → 16:9', () => {
     const fotos = Array.from({ length: 12 }, (_, i) => `https://x/f${i % 10}.jpg`)
     // regla #17: el 16:9 del video largo de YouTube es DATO (`cadena_formatos_por_red.proporcion`) que llega en el pedido; sin él, la de por omisión de la hoja (9:16)
     expect(armarPedido({ prompt: 'Ceviche en Náufrago: cómo lo montamos', formato: 'video' })).toMatchObject({ ok: true, pedido: { relacion: '9:16' } })
     const r = armarPedido({ prompt: 'Ceviche en Náufrago: cómo lo montamos', formato: 'video', relacion: '16:9', segundos: 15, fotos })
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    expect(r.pedido.fotos).toHaveLength(9)
+    expect(r.pedido.fotos).toHaveLength(10) // 12 direcciones, 10 distintas: todas caben en las 30 de Seedance 2.5
+    const r20 = armarPedido({ prompt: 'Ceviche en Náufrago: cómo lo montamos', formato: 'video', modelo: 'bytedance/seedance-2.0', segundos: 15, fotos })
+    expect(r20.ok && r20.pedido.fotos).toHaveLength(9)
     expect(r.pedido.relacion).toBe('16:9')
     expect(rutaDelModelo(r.pedido)).toBe('bytedance/seedance-2.5/reference-to-video')
-    expect(cuerpoParaHiggsfield(r.pedido).image_urls).toHaveLength(9)
+    expect(cuerpoParaHiggsfield(r.pedido).image_urls).toHaveLength(10)
   })
-  it('rechaza lo que se sale de lo aprobado: 5 s, 30 s, 4k, modelo ajeno, formato desconocido, foto http', () => {
+  it('rechaza lo que se sale de lo que admite el modelo: 3 s, 31 s (16 s en 2.0), 4k, modelo fuera del catálogo, formato desconocido, foto http', () => {
     const base = { prompt: 'un pedido suficientemente largo', formato: 'reel' }
-    expect(armarPedido({ ...base, segundos: 5 })).toMatchObject({ ok: false })
-    expect(armarPedido({ ...base, segundos: 30 })).toMatchObject({ ok: false })
+    expect(armarPedido({ ...base, segundos: 3 })).toMatchObject({ ok: false })
+    expect(armarPedido({ ...base, segundos: 31 })).toMatchObject({ ok: false })
+    expect(armarPedido({ ...base, segundos: 30 })).toMatchObject({ ok: true })
+    expect(armarPedido({ ...base, modelo: 'bytedance/seedance-2.0', segundos: 16 })).toMatchObject({ ok: false })
     expect(armarPedido({ ...base, resolucion: '4k' })).toMatchObject({ ok: false })
     expect(armarPedido({ ...base, modelo: 'kling/3.0' })).toMatchObject({ ok: false })
     expect(armarPedido({ ...base, formato: 'carrusel' })).toMatchObject({ ok: false })
@@ -148,7 +152,7 @@ async function get(qs: string, llave = 'k') {
   return GET(new Request(`http://x/api/video/generate?${qs}`, { headers: { 'x-api-key': llave } }))
 }
 const llamadas = () => fetchMock.mock.calls.map((c) => ({ url: String(c[0]), init: c[1] as RequestInit | undefined }))
-const PEDIDO = { prompt: 'Así servimos un encebollado en Náufrago, de la olla al plato', formato: 'reel', client_id: 'c1', clave: 'enc1:fila1:v1', workflow_id: 'wf-0', workflow_execution_id: 'ex-0' }
+const PEDIDO = { prompt: 'Así servimos un encebollado en Náufrago, de la olla al plato', formato: 'reel', segundos: 8, client_id: 'c1', clave: 'enc1:fila1:v1', workflow_id: 'wf-0', workflow_execution_id: 'ex-0' }
 
 describe('POST /api/video/generate', () => {
   it('sin llave interna → 401 y ninguna llamada al proveedor', async () => {
@@ -156,7 +160,7 @@ describe('POST /api/video/generate', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
   it('pedido fuera de lo aprobado → 400 sin llamar al proveedor', async () => {
-    const r = await post({ ...PEDIDO, segundos: 30 })
+    const r = await post({ ...PEDIDO, segundos: 31 })
     expect(r.status).toBe(400)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -425,10 +429,11 @@ describe('regla #18 · el descuento y el tope del proveedor salen de la configur
     expect(j.costo_estimado_usd).toBeCloseTo(1.849, 3)
   })
   it('🔴 config ilegible (error de la base) o con valores raros: la de por omisión, del lado seguro', async () => {
-    const { configDelBrazo } = await import('@/lib/video/parametros')
-    expect(configDelBrazo(null)).toEqual({ tope_por_video_usd: 5, descuento: null })
-    expect(configDelBrazo({ tope_por_video_usd: -1, descuento: { pct: 1.5, hasta: 'mañana', modelos: [] } })).toEqual({ tope_por_video_usd: 5, descuento: null })
-    expect(configDelBrazo({ tope_por_video_usd: 3.5 })).toEqual({ tope_por_video_usd: 3.5, descuento: null })
+    const { configDelBrazo, FICHAS_POR_OMISION } = await import('@/lib/video/parametros')
+    expect(configDelBrazo(null)).toMatchObject({ tope_por_video_usd: 5, descuento: null })
+    expect(configDelBrazo(null).catalogo.fichas).toEqual(FICHAS_POR_OMISION)
+    expect(configDelBrazo({ tope_por_video_usd: -1, descuento: { pct: 1.5, hasta: 'mañana', modelos: [] } })).toMatchObject({ tope_por_video_usd: 5, descuento: null })
+    expect(configDelBrazo({ tope_por_video_usd: 3.5 })).toMatchObject({ tope_por_video_usd: 3.5, descuento: null })
     // CC7: tope no numérico, ≤ 0 o vacío ⇒ US$ 5 (nunca «sin tope»); descuento fuera de su modelo o con fecha ilegible ⇒ sin descuento
     for (const t of [0, '', '3', null, Number.NaN, Number.POSITIVE_INFINITY]) expect(configDelBrazo({ tope_por_video_usd: t }).tope_por_video_usd, String(t)).toBe(5)
     expect(configDelBrazo({ descuento: { pct: 0.3, hasta: 'pronto', modelos: ['bytedance/seedance-2.5'] } }).descuento).toBeNull()
@@ -439,5 +444,46 @@ describe('regla #18 · el descuento y el tope del proveedor salen de la configur
     configRows.value = null; configRows.error = { message: 'la base no contesta' }
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
     expect(await (await post({ ...PEDIDO, dry_run: true })).json()).toMatchObject({ descuento_pct: 0, tope_usd: 5 })
+  })
+})
+
+describe('17-nov · Sprint 3 · T1 · los modelos y sus límites son DATO (la ruta lee el catálogo de la configuración ANTES de validar)', () => {
+  const KLING = { segundos_min: 3, segundos_max: 10, referencias_max: 4, audio: false, fuente: 'cotización gratis' }
+  const CLIENTES = [['restaurante', { ...PEDIDO, client_id: 'cli-restaurante' }], ['B2B de seguridad', { ...PEDIDO, client_id: 'cli-seguridad', formato: 'short', prompt: 'Así se revisa un extintor en una planta industrial, paso a paso' }]] as const
+  it.each(CLIENTES)('🔴 %s · un modelo sumado por configuración se cotiza por su ruta; sin la configuración, el mismo pedido es 400 sin llamar al proveedor', async (_n, ped) => {
+    configRows.value = [{ valor: { modelos: { 'kling/kling-4.0': KLING } } }]
+    fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
+    const j = await (await post({ ...ped, modelo: 'kling/kling-4.0', segundos: 10, dry_run: true })).json()
+    expect(j).toMatchObject({ ruta: 'kling/kling-4.0/text-to-video', modelo: 'kling/kling-4.0', segundos: 10, audio: false })
+    fetchMock.mockClear()
+    configRows.value = []
+    expect((await post({ ...ped, modelo: 'kling/kling-4.0', segundos: 10, dry_run: true })).status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it.each(CLIENTES)('🔴 %s · la duración la limita la ficha: 30 s pasa con Seedance 2.5; si la configuración le baja el máximo a 20, 30 s es 400 sin llamar', async (_n, ped) => {
+    configRows.value = []
+    fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
+    expect(await (await post({ ...ped, segundos: 30, dry_run: true })).json()).toMatchObject({ segundos: 30 })
+    fetchMock.mockClear()
+    configRows.value = [{ valor: { modelos: { 'bytedance/seedance-2.5': { segundos_max: 20 } } } }]
+    const r = await post({ ...ped, segundos: 30, dry_run: true })
+    expect(r.status).toBe(400)
+    expect(JSON.stringify(await r.json())).toContain('de 4 a 20')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('17-nov · Sprint 3 · T1 · el camino PLANO POR PLANO de la ruta también valida con el catálogo de la configuración (sabotaje de CC7)', () => {
+  const CLIENTES = [['restaurante', { ...PEDIDO, client_id: 'cli-restaurante' }], ['B2B de seguridad', { ...PEDIDO, client_id: 'cli-seguridad', formato: 'short', prompt: 'Así se revisa un extintor en una planta industrial, paso a paso' }]] as const
+  it.each(CLIENTES)('🔴 %s · un plano de 25 s pasa con la ficha del código (hasta 30); si la configuración baja el máximo a 20, es 400 sin llamar al proveedor', async (_n, ped) => {
+    configRows.value = []
+    fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
+    expect(await (await post({ ...ped, plano: true, segundos: 25, dry_run: true })).json()).toMatchObject({ plano: true, segundos: 25 })
+    fetchMock.mockClear()
+    configRows.value = [{ valor: { modelos: { 'bytedance/seedance-2.5': { segundos_max: 20 } } } }]
+    const r = await post({ ...ped, plano: true, segundos: 25, dry_run: true })
+    expect(r.status).toBe(400)
+    expect(JSON.stringify(await r.json())).toContain('`segundos` de un plano es un entero de 4 a 20')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

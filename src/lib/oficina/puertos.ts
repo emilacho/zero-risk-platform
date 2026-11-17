@@ -177,6 +177,8 @@ export interface PuertoDeVideo {
   /** 11-nov · GO Lenovo 02:52Z · «cotizar primero»: la sala de video lo llama al ABRIR (antes de la mesa). Sin este método, un encargo real de video no abre (no se puede cotizar) */
   cotizar?(p: { pedido: import('./video/pedido').PedidoDeVideoDeLaOficina; client_id: string; encargo_id: string; tope_usd: number; workflow_id: string; workflow_execution_id: string }): Promise<CotizacionDeVideo>
   estado(request_id: string): Promise<EstadoDelBrazo>
+  /** 17-nov · Sprint 3 · T1 · el catálogo de modelos de la configuración del brazo (el MISMO que valida la ruta). Gratis; sin el método, o si falla, el del código */
+  catalogo?(): Promise<import('../video/parametros').CatalogoDeModelos>
   /** 11-nov · camino B · el unidor (Railway · ffmpeg): recorta una foto propia al centro a la proporción de la red (imagen a video no admite proporción) */
   encuadrar?(p: { url: string; relacion: string }): Promise<{ ok: true; bytes: Buffer } | { ok: false; error: string }>
   /** 11-nov · camino B · une los clips en orden, cada uno cortado a `segundos`, con el sonido fundido entre planos */
