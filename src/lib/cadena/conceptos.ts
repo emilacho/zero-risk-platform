@@ -36,6 +36,8 @@ export interface IdeaDelBanco {
   protagonista: string
   serie: string | null
   foto: string | null
+  /** 17-nov · cuántos cuadros (pantallas) pide la idea, DECLARADO por quien la escribe (una historia = 1; «swipe a…» = 2). Ausente = no lo dijo (ideas viejas). La cadena solo compara */
+  cuadros?: number
   /** la línea tal cual (lo que se cita) */
   linea: string
 }
@@ -226,6 +228,8 @@ function titularDe(s: Seccion): { titulo: string; resto: string } {
 const textoDe = (s: Seccion | undefined): string => (s ? [titularDe(s).resto, s.cuerpo].filter(Boolean).join('\n').trim() : '')
 
 // ───────────────────────────────────────────────────────── el banco
+/** 17-nov · el máximo de cuadros que se lee de una idea (más es un error de escritura, no una idea) */
+export const MAXIMO_DE_CUADROS_POR_IDEA = 10
 /** lee UNA línea de idea `- C1-I01 · <red> · <formato> · <idea> · mensaje: … · gancho: … · protagonista: … · serie: S1 · foto:<id>|ninguna`; `null` si no es una idea */
 export function leerIdea(linea: string): IdeaDelBanco | null {
   // reserva 2 de CC3 (31-oct): la viñeta puede ser «-», «*», «•» o «1.», y el id puede ir en negrita; el id sigue siendo exacto (mayúsculas)
@@ -236,7 +240,7 @@ export function leerIdea(linea: string): IdeaDelBanco | null {
   const libres: string[] = []
   let ultimo: string | null = null
   for (const p of partes) {
-    const c = /^(mensaje|gancho|protagonista|serie|foto)\s*:\s*(.*)$/i.exec(p)
+    const c = /^(mensaje|gancho|protagonista|serie|cuadros|foto)\s*:\s*(.*)$/i.exec(p)
     if (c) { ultimo = c[1].toLowerCase(); campos[ultimo] = c[2].trim() }
     // reserva 3 de CC3: un « · » DENTRO de un campo etiquetado no lo corta: el fragmento sin etiqueta se queda en ese campo
     else if (ultimo) campos[ultimo] = `${campos[ultimo]} · ${p}`
@@ -244,11 +248,13 @@ export function leerIdea(linea: string): IdeaDelBanco | null {
   }
   const foto = (campos.foto ?? '').trim()
   const serie = (campos.serie ?? '').trim()
+  // 17-nov · `cuadros: N` (entero 1..10) · otra cosa no se lee (no se adivina un número)
+  const cuadros = /^\d{1,2}$/.test((campos.cuadros ?? '').trim()) ? Number(campos.cuadros.trim()) : 0
   return {
     id: m[1], capitulo: null, red: libres[0] ?? '', formato: libres[1] ?? '', idea: libres.slice(2).join(' · '),
     mensaje: campos.mensaje ?? '', gancho: campos.gancho ?? '', protagonista: campos.protagonista ?? '',
     serie: serie && RE_ID_DE_SERIE.test(serie.toUpperCase()) ? serie.toUpperCase() : serie || null,
-    foto: foto && !/^ninguna$/i.test(foto) ? foto : null, linea: linea.trim(),
+    foto: foto && !/^ninguna$/i.test(foto) ? foto : null, ...(cuadros >= 1 && cuadros <= MAXIMO_DE_CUADROS_POR_IDEA ? { cuadros } : {}), linea: linea.trim(),
   }
 }
 /**

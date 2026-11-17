@@ -42,14 +42,14 @@ type IdeaRetirada = IdeaDelBanco & { retirada_en: string; retirada_por: string }
 const fallo = (status: number, code: string, detalle: string, extra: Record<string, unknown> = {}): Respuesta => err(status, code, detalle, { ok: false, ...extra })
 
 /** la línea de una idea, como la escribe la mesa: `- C1-I23 · red · formato · idea · mensaje: … · gancho: … · protagonista: … · serie: S1 · foto:<id>|ninguna` */
-export function lineaDeIdea(i: Pick<IdeaDelBanco, 'id' | 'red' | 'formato' | 'idea' | 'mensaje' | 'gancho' | 'protagonista' | 'serie' | 'foto'>): string {
-  return [`- ${i.id}`, i.red, i.formato, i.idea, `mensaje: ${i.mensaje}`, `gancho: ${i.gancho}`, `protagonista: ${i.protagonista}`, ...(i.serie ? [`serie: ${i.serie}`] : []), `foto:${i.foto ?? 'ninguna'}`].join(' · ')
+export function lineaDeIdea(i: Pick<IdeaDelBanco, 'id' | 'red' | 'formato' | 'idea' | 'mensaje' | 'gancho' | 'protagonista' | 'serie' | 'foto' | 'cuadros'>): string {
+  return [`- ${i.id}`, i.red, i.formato, i.idea, `mensaje: ${i.mensaje}`, `gancho: ${i.gancho}`, `protagonista: ${i.protagonista}`, ...(i.serie ? [`serie: ${i.serie}`] : []), ...(i.cuadros ? [`cuadros: ${i.cuadros}`] : []), `foto:${i.foto ?? 'ninguna'}`].join(' · ')
 }
 
 /** la línea se vuelve a leer igual: si un campo trae algo que el lector tomaría por otra etiqueta (« · gancho: …»), la edición se rechaza en vez de guardar una línea que se lee distinto */
 export function lineaSeLeeIgual(i: IdeaDelBanco, linea: string): boolean {
   const r = leerIdea(linea)
-  return !!r && r.id === i.id && r.red === i.red && r.formato === i.formato && r.idea === i.idea && r.mensaje === i.mensaje && r.gancho === i.gancho && r.protagonista === i.protagonista && (r.serie ?? null) === (i.serie ?? null) && (r.foto ?? null) === (i.foto ?? null)
+  return !!r && r.id === i.id && r.red === i.red && r.formato === i.formato && r.idea === i.idea && r.mensaje === i.mensaje && r.gancho === i.gancho && r.protagonista === i.protagonista && (r.serie ?? null) === (i.serie ?? null) && (r.cuadros ?? null) === (i.cuadros ?? null) && (r.foto ?? null) === (i.foto ?? null)
 }
 
 /** el texto de la mesa con la idea `id` cambiada por `nueva` (o quitada si `null`) en TODAS sus apariciones; respeta el fin de línea del texto */
