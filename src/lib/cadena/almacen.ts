@@ -255,6 +255,8 @@ export interface Almacen {
   encargosDeLaCampana?(campanaId: string): Promise<import('./rehacer-fallidos').EncargoDeLaCampana[]>
   arreglosPublicados?(desde: string): Promise<import('./rehacer-fallidos').LecturaDeArreglos>
   abrirMesaDeFallidos?(sobre: import('./rehacer-fallidos').SobreDeFallidos): Promise<import('./rehacer-fallidos').ResultadoDeAbrirMesaDeFallidos>
+  /** 17-nov · la corrección del banco: abre la mesa de la oficina (el mismo adaptador en proceso que la reubicación; nunca lanza) */
+  abrirMesaDelBanco?(sobre: import('./banco-correcciones').SobreDelBanco): Promise<import('./banco-correcciones').ResultadoDeAbrirMesaDelBanco>
   reabrirFallido?(p: { encargo_id: string; causa: string }): Promise<{ ok: true; encargo_id: string } | { ok: false; motivo: string }>
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>

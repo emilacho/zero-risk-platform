@@ -10,6 +10,8 @@ import type { Campana, ConceptoGuardado } from '../almacen'
 import type { Fila } from '../tipos'
 import type { ConceptoLeido, IdeaDelBanco } from '../conceptos'
 import { bancoEditar, bancoRetirar, editarEnElBanco, retirarDelBanco } from '../banco-de-ideas'
+import { puertoDeLaCadena } from '../mesas'
+import { abrirCorreccionDelBanco, CLAVE_DE_LA_LIBRETA_DEL_BANCO, correccionDelBanco, INTERRUPTOR_DEL_BANCO, MESA_APAGADA, PLAZO_DE_LA_MESA_DEL_BANCO_MIN, recibirCorreccionDelBanco, TOPE_DE_LA_CORRECCION_USD } from '../banco-correcciones'
 import { aplicarCorreccionDelBanco, IDEA_CAMBIADA, IDEA_FUERA_DEL_BANCO, leerRespuestaDelBanco, quienCorrige, verificarRespuestaDelBanco, type CorreccionAlBanco, type RespuestaDelBanco } from '../banco-correcciones'
 
 const A = clienteA()
@@ -252,5 +254,155 @@ describe('el núcleo con línea esperada (solo el puerto la pasa)', () => {
     expect(r.cuerpo.code).toBe('E-IDEA-CAMBIADA')
     expect(bancoDe(al).find((x) => x.id === 'C1-I23')!.mensaje).toBe(idea('C1-I23').mensaje)
     expect((await editarEnElBanco(al, ctx, [{ idea_id: 'C1-I23', campos: { mensaje: 'm' } }], AHORA)).status).toBe(200)
+  })
+})
+
+// ───────────────────────────────────────────────────────── E2 · el tic del receptor y la vuelta de la mesa (US$ 0: la mesa es un doble)
+describe('E2 · la mesa «corrección del banco» desde la cadena', () => {
+  const T0 = '2026-11-17T21:00:00Z'
+  const mas = (min: number) => new Date(Date.parse(T0) + min * 60_000).toISOString()
+  function encendido(o: { abre?: 'si' | 'no' } = {}) {
+    const al = almacen()
+    al.config.set(INTERRUPTOR_DEL_BANCO, true)
+    let n = 0
+    al.mesaDelBanco = async () => (o.abre === 'no' ? { estado: 'no_abre', motivo: 'plantilla_inactiva' } : { estado: 'abierta', encargo_id: `enc-${++n}` })
+    return al
+  }
+  const entrega = (al: AlmacenMemoria, texto: string | null, costo = 0.6) => {
+    const s = al.sobresDelBanco.at(-1)!
+    return recibirCorreccionDelBanco(al, { campana_id: s.campana_id, version: s.version, encargo_id: `enc-${al.sobresDelBanco.length}`, texto, costo_usd: costo, motivo: null }, mas(5))
+  }
+  const editar = bloque({ respuesta: 'tomada', accion: 'editar', cambios: { mensaje: 'el encebollado de siempre' }, explicacion: 'quito la fecha' })
+  const noLaTomo = bloque({ respuesta: 'no_tomada', explicacion: 'la idea no promete la oferta' })
+
+  it('🔴 condición 6 · APAGADA (interruptor ausente o distinto de true): «no_dicha · mesa apagada» al instante, sin abrir mesa ni escribir la libreta', async () => {
+    for (const v of [undefined, false, 'true', 1]) {
+      const al = almacen()
+      if (v !== undefined) al.config.set(INTERRUPTOR_DEL_BANCO, v)
+      al.mesaDelBanco = async () => ({ estado: 'abierta', encargo_id: 'x' })
+      const r = await abrirCorreccionDelBanco(al, CORR(), T0)
+      expect(r).toEqual({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_dicha', motivo: MESA_APAGADA }, version: null, idea: null, reasignadas: [], con_brief_sin_tocar: [] } })
+      expect(al.sobresDelBanco).toHaveLength(0)
+      expect(al.config.has(CLAVE_DE_LA_LIBRETA_DEL_BANCO)).toBe(false)
+    }
+  })
+  it('🔴 abre UNA mesa con tope US$ 1,50 y un marco con la idea, la corrección y las hermanas (sin el cerebro); un tic en plazo no abre otra', async () => {
+    const al = encendido()
+    expect(await abrirCorreccionDelBanco(al, CORR({ regla: 'D1' }), T0)).toEqual({ estado: 'en_curso', encargo_id: 'enc-1', intentos: 1 })
+    const s = al.sobresDelBanco[0]
+    expect(s).toMatchObject({ tipo_de_mesa: 'banco', client_id: A.clientId, campana_id: CAMP, version: 1, dry_run: false, tope_usd: TOPE_DE_LA_CORRECCION_USD, condiciones: [] })
+    expect(s.marco_texto).toContain(idea('C1-I23').linea)
+    expect(s.marco_texto).toContain(CORR().motivo)
+    expect(s.marco_texto).toContain(CORR().linea_de_la_ficha!)
+    expect(s.marco_texto).toContain('Regla dura D1: se toma sí o sí')
+    expect(s.marco_texto).toContain('## Cómo responder')
+    expect(s.marco_texto).not.toMatch(/cerebro|client_brain|chunk/i)
+    const hermana = BANCO_NAUFRAGO_V4.find((i) => i.id !== 'C1-I23' && i.capitulo === idea('C1-I23').capitulo)!
+    expect(s.marco_texto).toContain(hermana.linea.slice(0, 60))
+    expect(await abrirCorreccionDelBanco(al, CORR(), mas(10))).toMatchObject({ estado: 'en_curso', encargo_id: 'enc-1' })
+    expect(al.sobresDelBanco).toHaveLength(1)
+  })
+  it('🔴 la entrega de la mesa VIGENTE escribe el banco; el tic siguiente devuelve la respuesta final; repetir la entrega no escribe dos veces', async () => {
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR(), T0)
+    expect(await entrega(al, editar)).toEqual({ ok: true, estado: 'respondida' })
+    expect(bancoDe(al).find((i) => i.id === 'C1-I23')!.mensaje).toBe('el encebollado de siempre')
+    const r = await abrirCorreccionDelBanco(al, CORR(), mas(6))
+    expect(r).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'tomada', accion: 'editar' }, version: 4 } })
+    const n = historialDe(al).length
+    expect(await entrega(al, editar)).toEqual({ ok: true, ya_cerrada: true })
+    expect(historialDe(al)).toHaveLength(n)
+    expect(al.sobresDelBanco).toHaveLength(1)
+  })
+  it('🔴 condición 2 · una entrega que NO es de la mesa de esta corrección (otro encargo, otra versión u otra campaña) no escribe nada', async () => {
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR(), T0)
+    const antes = JSON.stringify(v4(al))
+    for (const p of [{ encargo_id: 'enc-otro', version: 1, campana_id: CAMP }, { encargo_id: 'enc-1', version: 2, campana_id: CAMP }, { encargo_id: 'enc-1', version: 1, campana_id: '00000000-0000-4000-8000-000000000000' }]) {
+      expect(await recibirCorreccionDelBanco(al, { ...p, texto: editar, costo_usd: 0.5, motivo: null }, mas(5))).toEqual({ ok: true, ya_cerrada: true })
+    }
+    expect(JSON.stringify(v4(al))).toBe(antes)
+  })
+  it('🔴 condición 5 · regla dura: «no la tomo» pide UN reintento con lo que queda del tope y el motivo en el marco; si insiste, queda «no_dicha» y el banco no se toca', async () => {
+    const al = encendido()
+    const c = CORR({ regla: 'D1' })
+    await abrirCorreccionDelBanco(al, c, T0)
+    expect(await entrega(al, noLaTomo, 0.6)).toEqual({ ok: true, estado: 'reintento' })
+    expect(await abrirCorreccionDelBanco(al, c, mas(6))).toMatchObject({ estado: 'en_curso', encargo_id: 'enc-2', intentos: 2 })
+    const s2 = al.sobresDelBanco[1]
+    expect(s2).toMatchObject({ version: 2, tope_usd: 0.9 })
+    expect(s2.marco_texto).toContain('## Tu respuesta anterior no valió')
+    expect(s2.marco_texto).toContain('regla dura D1')
+    const antes = JSON.stringify(v4(al))
+    expect(await entrega(al, noLaTomo, 0.6)).toEqual({ ok: true, estado: 'respondida' })
+    const r = await abrirCorreccionDelBanco(al, c, mas(12))
+    expect(r).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_dicha', motivo: expect.stringContaining('regla dura D1') }, idea: null } })
+    expect(JSON.stringify(v4(al))).toBe(antes)
+    expect(al.sobresDelBanco).toHaveLength(2)
+    expect((await correccionDelBanco(al, 'corr-1'))!.gasto_usd).toBe(1.2)
+  })
+  it('🔴 sin regla dura, «no_tomada» es la respuesta final al primer intento (no gasta un reintento)', async () => {
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR(), T0)
+    expect(await entrega(al, noLaTomo)).toEqual({ ok: true, estado: 'respondida' })
+    expect(await abrirCorreccionDelBanco(al, CORR(), mas(6))).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_tomada', explicacion: 'la idea no promete la oferta' } } })
+    expect(al.sobresDelBanco).toHaveLength(1)
+  })
+  it('🔴 una respuesta ilegible, una entrega sin texto o una mesa que vence piden reintento; tras 2 intentos, «no_dicha» con el motivo', async () => {
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR(), T0)
+    expect(await entrega(al, 'tomo la corrección, gracias')).toEqual({ ok: true, estado: 'reintento' })
+    await abrirCorreccionDelBanco(al, CORR(), mas(6))
+    // la segunda mesa no entrega nunca: al pasar el plazo, el tic la da por perdida y cierra
+    const r = await abrirCorreccionDelBanco(al, CORR(), mas(6 + PLAZO_DE_LA_MESA_DEL_BANCO_MIN + 1))
+    expect(r).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_dicha', motivo: expect.stringContaining('no devolvió la respuesta a tiempo') } } })
+    expect(al.sobresDelBanco).toHaveLength(2)
+    const al2 = encendido()
+    await abrirCorreccionDelBanco(al2, CORR(), T0)
+    expect(await entrega(al2, null)).toEqual({ ok: true, estado: 'reintento' })
+    expect((await correccionDelBanco(al2, 'corr-1'))!.motivo).toBe('la mesa no entregó texto')
+  })
+  it('🔴 condición 6 · el reintento va DENTRO del mismo tope: si el primer intento ya lo gastó, no se abre otra mesa', async () => {
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR({ regla: 'D2' }), T0)
+    expect(await entrega(al, noLaTomo, 1.6)).toEqual({ ok: true, estado: 'respondida' })
+    expect(await abrirCorreccionDelBanco(al, CORR({ regla: 'D2' }), mas(6))).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_dicha' } } })
+    expect(al.sobresDelBanco).toHaveLength(1)
+  })
+  it('🔴 lo que se decide GRATIS no abre mesa: idea cambiada, idea fuera del banco, corrección ilegible, campaña inexistente', async () => {
+    const al = encendido()
+    expect(await abrirCorreccionDelBanco(al, CORR({ idea_sello: 'otra' }), T0)).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_tomada', explicacion: IDEA_CAMBIADA } } })
+    expect(await abrirCorreccionDelBanco(al, CORR({ correccion_id: 'c2', idea_id: 'C9-I99' }), T0)).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_tomada', explicacion: IDEA_FUERA_DEL_BANCO } } })
+    expect(await abrirCorreccionDelBanco(al, { ...CORR({ correccion_id: 'c3' }), motivo: '' }, T0)).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_dicha' } } })
+    expect(await abrirCorreccionDelBanco(al, CORR({ correccion_id: 'c4', campana_id: '00000000-0000-4000-8000-000000000000' }), T0)).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_tomada' } } })
+    expect(al.sobresDelBanco).toHaveLength(0)
+  })
+  it('🔴 la mesa que no abre (plantilla apagada) cuenta como intento: al segundo, «no_dicha» con el motivo; nunca queda en curso para siempre', async () => {
+    const al = encendido({ abre: 'no' })
+    expect(await abrirCorreccionDelBanco(al, CORR(), T0)).toMatchObject({ estado: 'en_curso', encargo_id: null, intentos: 1 })
+    expect(await abrirCorreccionDelBanco(al, CORR(), mas(1))).toMatchObject({ estado: 'en_curso', intentos: 2 })
+    expect(await abrirCorreccionDelBanco(al, CORR(), mas(2))).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'no_dicha', motivo: expect.stringContaining('plantilla_inactiva') } } })
+  })
+  it('🔴 si se escribió el banco pero se perdió la libreta, el tic reconoce SU escritura en el historial (no la lee como «corrección vieja»)', async () => {
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR(), T0)
+    await entrega(al, editar)
+    al.config.delete(CLAVE_DE_LA_LIBRETA_DEL_BANCO)
+    expect(await abrirCorreccionDelBanco(al, CORR(), mas(6))).toMatchObject({ estado: 'respondida', resultado: { respuesta: { respuesta: 'tomada', accion: 'editar', cambios: { mensaje: 'el encebollado de siempre' } } } })
+    expect(al.sobresDelBanco).toHaveLength(1)
+  })
+  it('🔴 la corrección GUARDADA manda: un tic posterior con otra idea para el mismo id no cambia lo que se corrige', async () => {
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR(), T0)
+    await entrega(al, 'ilegible')
+    await abrirCorreccionDelBanco(al, CORR({ idea_id: 'C1-I07', idea_sello: idea('C1-I07').linea }), mas(6))
+    expect(al.sobresDelBanco[1].marco_texto).toContain(idea('C1-I23').linea)
+    expect((await correccionDelBanco(al, 'corr-1'))!.correccion.idea_id).toBe('C1-I23')
+  })
+  it('el puerto de la oficina lleva la entrega del banco a la cadena', async () => {
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR(), T0)
+    const p = puertoDeLaCadena(al, () => mas(5))
+    expect(await p.entregarBanco({ campana_id: CAMP, version: 1, encargo_id: 'enc-1', texto: editar, costo_usd: 0.5, motivo: null })).toEqual({ ok: true, estado: 'respondida' })
   })
 })

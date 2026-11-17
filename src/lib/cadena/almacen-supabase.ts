@@ -143,7 +143,7 @@ export async function abrirRevisionConVuelta(db: unknown, entrada: { artifact_ty
  * 10-nov · filas que quedaron atrás · abre la mesa de reubicación de la oficina EN PROCESO (la misma función que `api/oficina/encargos` con `origen: cadena`) y despierta su primer turno.
  * La oficina se importa en el acto (la oficina ya importa este archivo: así no hay ciclo al cargar). Nunca lanza.
  */
-export async function abrirMesaDeReubicacionReal(sobre: SobreDeReubicacion | SobreDeFallidos, f: typeof fetch = fetch): Promise<ResultadoDeAbrirMesa> {
+export async function abrirMesaDeReubicacionReal(sobre: SobreDeReubicacion | SobreDeFallidos | import('./banco-correcciones').SobreDelBanco, f: typeof fetch = fetch): Promise<ResultadoDeAbrirMesa> {
   try {
     const [{ entornoConBase }, { crearPuertos }, { abrirMesaDeLaCadena, validarSobreDeLaCadena }, { avanzar }, { despertarAlFlujoDeLaOficina }] = await Promise.all([
       import('@/lib/oficina/ruta'), import('@/lib/oficina/adaptadores'), import('@/lib/oficina/mesa/de-la-cadena'), import('@/lib/oficina/orquestador'), import('@/lib/oficina/despertar'),
@@ -270,6 +270,8 @@ export function almacenDeSupabase(): Almacen {
     },
     arreglosPublicados: (desde) => arreglosPublicadosReal(desde),
     abrirMesaDeFallidos: (sobre) => abrirMesaDeReubicacionReal(sobre),
+    // 17-nov · la corrección del banco (nace apagada): la misma apertura en proceso
+    abrirMesaDelBanco: (sobre) => abrirMesaDeReubicacionReal(sobre),
     reabrirFallido: (p) => reabrirFallidoReal(p),
     // 11-nov (#1014 · relectura): el texto que la mesa dejó en su encargo (`pieza_texto`), sin llamar al agente; nunca lanza
     async textoGuardadoDeLaMesa(encargoId) {

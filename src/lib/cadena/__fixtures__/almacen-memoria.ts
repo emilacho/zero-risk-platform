@@ -139,6 +139,13 @@ export class AlmacenMemoria implements Almacen {
     const f = this.fuenteDeArreglos
     return f ? async (desde) => { this.lecturasDeArreglos.push(desde); return f(desde) } : undefined
   }
+  /** 17-nov · la corrección del banco · la apertura de su mesa; null = el almacén no la tiene. La prueba la fija y ve los sobres */
+  mesaDelBanco: ((sobre: import('../banco-correcciones').SobreDelBanco) => Promise<import('../banco-correcciones').ResultadoDeAbrirMesaDelBanco>) | null = null
+  sobresDelBanco: import('../banco-correcciones').SobreDelBanco[] = []
+  get abrirMesaDelBanco(): ((sobre: import('../banco-correcciones').SobreDelBanco) => Promise<import('../banco-correcciones').ResultadoDeAbrirMesaDelBanco>) | undefined {
+    const f = this.mesaDelBanco
+    return f ? async (sobre) => { this.sobresDelBanco.push(structuredClone(sobre)); return f(sobre) } : undefined
+  }
   get abrirMesaDeFallidos(): ((sobre: SobreDeFallidos) => Promise<ResultadoDeAbrirMesaDeFallidos>) | undefined {
     const f = this.mesaDeFallidos
     return f ? async (sobre) => { this.sobresDeFallidos.push(structuredClone(sobre)); return f(sobre) } : undefined

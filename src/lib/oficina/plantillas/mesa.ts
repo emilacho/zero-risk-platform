@@ -134,6 +134,19 @@ export const FALLIDOS_MESA: Plantilla = {
 }
 
 /**
+ * 17-nov · `banco_mesa` (GO de Lenovo · cambio 4 · `RESPUESTA-LENOVO-a-CC1-CC3-CC4-puerto-banco-y-regla-dura-no-tomada`): la dirección de la gran idea responde, como creadora, a UNA corrección
+ * de la jefatura sobre una idea del banco. Un solo paso `mesa`, sin miembros ni portero. Tope US$ 1,50 por corrección (un turno de dirección y un reintento, dentro del mismo tope); plazo 30 min.
+ * Nace INACTIVA (la migración la siembra con activo=false): se enciende para la prueba final.
+ */
+export const TOPE_DE_LA_MESA_DEL_BANCO_USD = 1.5
+export const BANCO_MESA: Plantilla = {
+  tipo: 'banco_mesa', familia: 'banco_mesa', clase: 'interna',
+  pasos: [{ ...PASO_DE_LA_MESA }],
+  limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DEL_BANCO_USD, max_rondas: 1, mesa: true, plazo_mesa_min: 30 },
+  indicaciones: {},
+}
+
+/**
  * 17-nov · «creativos en cada paso», tramo B (GO Lenovo · firma de Emilio 07:18 · punto 1) · `post_mesa`: la FOTO con su mesa corta.
  * Los 3 agentes que decidían cada uno por su lado (dirección visual, prompts, texto) se sientan en UNA mesa (mismos 3 asientos, UNA ronda); la cola mecánica es la de la sala 1
  * (`imagen` → observador de OTRO proveedor → `elegir_version` → `acabado` → chequeos → jefatura → entrega) y lee lo que la mesa deja con su forma de siempre (`artefactosDeLaFoto`).
