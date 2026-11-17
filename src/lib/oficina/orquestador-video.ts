@@ -26,7 +26,7 @@ import { CATALOGO_POR_OMISION, RELACIONES_PERMITIDAS, RELACION_POR_FORMATO, fich
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
-import { COTAS } from './mesa/tipos'
+import { costoDeVolver } from './topes-por-duracion'
 import { armarPedidoDeLaOficina, buscarFotoPropia, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, nombreDelCuadro, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo, type SenalesDelVideo } from './video/mirada'
 import { CONTRATOS_EN_TEXTO } from './pedidos'
@@ -554,16 +554,9 @@ export function sinLecturaDeRevisarImagenesClaveV(e: Estado, errores: string[]):
   }
 }
 
-/** lo que se reserva para VOLVER desde `paso` a su destino: los topes de los pasos que se repiten (destino → paso, inclusive) y, si el destino es la mesa, un turno de la mesa (la mesa se limita sola con su reserva, pero puede integrar una vez). Puro */
-export function costoDeVolver(pl: Plantilla, paso: Paso): number {
-  const de = pl.pasos.findIndex((x) => x.clave === paso.vuelve_a?.paso)
-  const a = pl.pasos.findIndex((x) => x.clave === paso.clave)
-  if (de < 0 || a < de) return Number.POSITIVE_INFINITY
-  const topes = pl.pasos.slice(de, a + 1).reduce((s, x) => s + (Number(x.tope_usd) || 0), 0)
-  return +(topes + (pl.pasos[de].funcion === 'mesa' ? COTAS.RESERVA_POR_TURNO_USD : 0)).toFixed(6)
-}
+/** 17-nov · T7b · `costoDeVolver` vive en `topes-por-duracion` (la misma cuenta para la guarda de las vueltas y para lo requerido al abrir); se re-exporta aquí */
+export { costoDeVolver }
 
-/** ¿cabe la vuelta en el tope del encargo (y en la holgura de la prueba, si la hay)? lo mismo que mira el motor antes de cada paso, por adelantado. Puro */
 export function cabeLaVuelta(pl: Plantilla, e: Estado, costo: number): boolean {
   if (e.gasto_usd + costo > pl.limites.tope_encargo_usd + 1e-9) return false
   const pr = pl.limites.prueba

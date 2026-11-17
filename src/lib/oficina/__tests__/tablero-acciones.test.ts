@@ -174,7 +174,8 @@ describe('oficina-estado / oficina-tope', () => {
 
 describe('rehacer-pieza', () => {
   const ENC = '33333333-3333-4333-8333-333333333333'
-  const gasto = { confirmo_gasto: true, tope_usd: 3 }
+  // 17-nov · T7b · 3 → 4 (el tope de la familia): con las vueltas que no se saltan dentro de lo requerido, la foto de código pide 3,51 en el peor caso y con 3 ya no abre
+  const gasto = { confirmo_gasto: true, tope_usd: 4 }
   const fila = (extra: Record<string, unknown> = {}) => ({ id: ENC, client_id: CLIENTE, parte_id: PARTE, brief_id: 'BRF-0003', tipo_de_grupo: 'post_img', familia: 'post_img', version_encargo: 1, estado: 'fallido', dry_run: false, sala_ref: null, ...extra })
   /** las plantillas como las lee la oficina (por familia, con `limites`): DOS familias con topes DISTINTOS (el dato, no el código, decide el máximo) */
   /** las plantillas con los topes VIVOS (SELECT de CC7 11-nov 17:2xZ: post_img 2,5 · video_mesa 10), como las lee la oficina (por familia, con `limites`) */
@@ -213,12 +214,12 @@ describe('rehacer-pieza', () => {
     expect(cinco.topes).toEqual([])
     expect(JSON.stringify(cinco.s)).toContain('tope_no_cubre')
   })
-  it('🔴 17-nov · T7a · con la plantilla por segundo el tablero lee el tope CALCULADO (58), no la parte fija (43)', async () => {
+  it('🔴 17-nov · T7a/T7b · con la plantilla por segundo el tablero lee el tope CALCULADO (103,5 desde T7b), no la parte fija (45)', async () => {
     const MV = crearMemoria({ plantilla: VIDEO_MESA_POR_SEGUNDO, fuentes: FUENTES })
     const db = new DbFalsa().semilla('oficina_encargos', [fila({ tipo_de_grupo: 'video_mesa', familia: 'video_mesa' })]).semilla('oficina_tipos_de_grupo', [{ tipo: 'video_mesa', familia: 'video_mesa', limites: { ...VIDEO_MESA_POR_SEGUNDO.limites }, pasos: VIDEO_MESA_POR_SEGUNDO.pasos }])
     // (en memoria no hay brazo de video: la pieza nace con su tope y luego cae al cotizar, que es otra cosa; como en la prueba de arriba, se mira el tope con que nace)
-    await llamar('rehacer-pieza', db, { encargo_id: ENC, confirmo_gasto: true, tope_usd: 100 }, MV.P)
-    expect([...MV.encargos.values()].map((x) => x.tope_usd)).toEqual([58])
+    await llamar('rehacer-pieza', db, { encargo_id: ENC, confirmo_gasto: true, tope_usd: 200 }, MV.P)
+    expect([...MV.encargos.values()].map((x) => x.tope_usd)).toEqual([103.5])
   })
   it('sin plantilla de su familia, sin tope legible o sin familia → 409 y no reabre', async () => {
     const sola = new DbFalsa().semilla('oficina_encargos', [fila()])
@@ -261,7 +262,7 @@ describe('rehacer-pieza', () => {
     const nuevo = M.encargos.get(String(s.cuerpo.encargo_id))!
     expect(nuevo.id).not.toBe(viejo.id)
     expect(nuevo.version_encargo).toBe(2)
-    expect(nuevo.tope_usd).toBeLessThanOrEqual(3)
+    expect(nuevo.tope_usd).toBeLessThanOrEqual(gasto.tope_usd)
     expect(nuevo.sala_ref).toMatchObject({ reapertura: { causa_corregida: 'se arregló el generador de imágenes' } })
     expect(s.toca).toMatchObject({ encargo_id: nuevo.id })
     // la versión 3 fallida ya no se reabre

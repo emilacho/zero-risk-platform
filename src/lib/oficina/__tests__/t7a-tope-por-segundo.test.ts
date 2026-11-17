@@ -13,7 +13,8 @@ import { registrarPaso, siguientePaso } from '../motor'
 import { abrirEncargo, plantillaDe } from '../orquestador'
 import { validarPlantilla } from '../plantilla'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
-import { VIDEO_MESA_ENCENDIDA, VIDEO_MESA_POR_SEGUNDO } from '../plantillas/video-mesa'
+// 17-nov · T7b: este archivo prueba T7a con su forma (202611171800: cifras que reproducían los topes fijos de 0930). Desde 202611171900 la viva es otra (ver t7b-*)
+import { VIDEO_MESA_ENCENDIDA_0930 as VIDEO_MESA_ENCENDIDA, VIDEO_MESA_POR_SEGUNDO_1800 as VIDEO_MESA_POR_SEGUNDO } from '../plantillas/video-mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import type { Estado, Plantilla } from '../tipos'
 import { aplicarTopesPorDuracion, coberturaDelTope, topeDelEncargoDeLaFila } from '../topes-por-duracion'
@@ -117,24 +118,24 @@ describe('T7a · el tope crece con el largo máximo de la pieza', () => {
 })
 
 describe('T7a · condición 1 de CC6 · el invariante está en el CÓDIGO', () => {
-  it('lo requerido sale de los pasos de la plantilla: imágenes 3 + borrador 10 + finales 3 + revisar 0,5 + video 15 + mirar 0,5 + un turno de la mesa 0,6 = 32,6', () => {
+  it('lo requerido sale de los pasos de la plantilla: una pasada (imágenes 3 + borrador 10 + finales 3 + revisar 0,5 + video 15 + mirar 0,5 + un turno de la mesa 0,6 = 32,6) + desde T7b las 2 rondas del dueño (2 × 13,6) = 59,8: el 58 de 1800 ya NO cubre', () => {
     const c = coberturaDelTope(VIDEO_MESA_ENCENDIDA, 58)
-    expect(c.requerido).toBe(32.6)
-    expect(c.cubre).toBe(true)
-    expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 32.59).cubre).toBe(false)
-    expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 32.6).cubre).toBe(true)
+    expect(c.requerido).toBe(59.8)
+    expect(c.cubre).toBe(false)
+    expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 59.79).cubre).toBe(false)
+    expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 59.8).cubre).toBe(true)
   })
-  it('con 120 s el requerido crece con el video (32,6 − 15 + 120 = 137,6) y 163 lo cubre', () => {
+  it('con 120 s el requerido crece con el video (59,8 − 15 + 120 = 164,8) y el 163 de la forma de 1800 no lo cubre', () => {
     const a = aplicarTopesPorDuracion(conSegundos(VIDEO_MESA_POR_SEGUNDO, 120)).plantilla
-    expect(coberturaDelTope(a, a.limites.tope_encargo_usd)).toMatchObject({ requerido: 137.6, cubre: true })
+    expect(coberturaDelTope(a, a.limites.tope_encargo_usd)).toMatchObject({ requerido: 164.8, cubre: false })
   })
   it('🔴 un encargo cuyo tope no cubre la pasada NO abre (409 claro, sin crear nada)', async () => {
     const mal = copia(VIDEO_MESA_POR_SEGUNDO); mal.limites.tope_encargo_usd_por_segundo = 0 // encargo 43 · video 15 → cubre (32,6)
-    const peor = conSegundos(mal, 120) // encargo 43 y video 120 → requerido 137,6: NO cubre
+    const peor = conSegundos(mal, 120) // encargo 43 y video 120 → requerido 164,8 (con las 2 rondas): NO cubre
     const M = crearMemoria({ plantilla: peor })
     const r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-T7A', dry_run: true, familia: peor.familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
     expect(r.status).toBe(409)
-    expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', requerido_usd: 137.6, tope_usd: 43 })
+    expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', requerido_usd: 164.8, tope_usd: 43 })
     expect(M.encargos.size).toBe(0)
   })
   it('🔴 condición 2 · un sobre que pide MENOS que lo requerido tampoco abre', async () => {
@@ -144,14 +145,12 @@ describe('T7a · condición 1 de CC6 · el invariante está en el CÓDIGO', () =
     expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', tope_usd: 30 })
     expect(M.encargos.size).toBe(0)
   })
-  it('con el dato de hoy el encargo abre con su tope calculado (58), aunque el almacén no aplique la cuenta', async () => {
+  it('🔴 T7b · con el dato de 1800 (58) el video ya NO abre: lo requerido con las 2 rondas es 59,8 (por eso 202611171900); sin cortar nada, solo no empieza', async () => {
     const M = crearMemoria({ plantilla: VIDEO_MESA_POR_SEGUNDO })
-    await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-T7A', dry_run: true, familia: VIDEO_MESA_POR_SEGUNDO.familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
-    const [enc] = [...M.encargos.values()]
-    expect(enc?.tope_usd).toBe(58)
-    const pl = await plantillaDe(M.P, enc)
-    expect(video(pl).tope_usd).toBe(15)
-    expect(pl.limites.tope_encargo_usd).toBe(58)
+    const r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-T7A', dry_run: true, familia: VIDEO_MESA_POR_SEGUNDO.familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    expect(r.status).toBe(409)
+    expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', requerido_usd: 59.8, tope_usd: 58 })
+    expect(M.encargos.size).toBe(0)
   })
   it('dato inválido: el encargo no abre (409 `topes_invalidos`)', async () => {
     const sin = copia(VIDEO_MESA_POR_SEGUNDO); delete (sin.limites.video as Record<string, unknown>).segundos_max

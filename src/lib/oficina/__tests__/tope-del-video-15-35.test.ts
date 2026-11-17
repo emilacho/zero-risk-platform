@@ -46,13 +46,13 @@ describe('la plantilla de código: video 15, encargo 35, lo esperado 12', () => 
     const fila = { familia: 'video_mesa', tope_encargo_usd: 35, limites: tomar(MIG, 'lim') }
     expect(reservasDesdeLaHistoria([fila], [])).toEqual({ video_mesa: 12 })
   })
-  it('🔴 un sobre puede pedir hasta el techo de la base (50 en esta migración; 60 desde 202611170930), no más; se abre con el menor entre lo pedido y el tope de la familia', () => {
-    expect(TOPE_MAXIMO_DEL_SOBRE_USD).toBe(60)
+  it('🔴 un sobre puede pedir hasta el techo de la base (50 en esta migración; 60 desde 202611170930; 650 desde 202611171900 · T7b), no más; se abre con el menor entre lo pedido y el tope de la familia', () => {
+    expect(TOPE_MAXIMO_DEL_SOBRE_USD).toBe(650)
     expect(MIG).toContain('CHECK (tope_usd > 0 AND tope_usd <= 50)')
     expect(MIG).toContain('CHECK (tope_encargo_usd > 0 AND tope_encargo_usd <= 50)')
     const base = { parte_id: '11111111-1111-4111-8111-111111111111', brief_id: 'b1', dry_run: true }
     expect(validarSobre({ ...base, tope_usd: 35 }).ok).toBe(true)
-    expect(validarSobre({ ...base, tope_usd: 60.01 }).ok).toBe(false)
+    expect(validarSobre({ ...base, tope_usd: TOPE_MAXIMO_DEL_SOBRE_USD + 0.01 }).ok).toBe(false)
   })
 })
 

@@ -42,7 +42,9 @@ const conBorradores = (propuestas: number, borrador?: Record<string, unknown>): 
   return {
     ...VIDEO_MESA,
     pasos: [...sin.slice(0, i + 1), PASO_IC, PASO_BORRADOR, PASO_APROBAR, PASO_FINAL, revFinal, ...sin.slice(i + 1)],
-    limites: { ...VIDEO_MESA.limites, tope_encargo_usd: 50, video: { ...(VIDEO_MESA.limites.video as Record<string, unknown>), segundos_min: 6, segundos_max: 15, propuestas, ...(borrador ? { borrador } : {}) } },
+    // 17-nov · T7b · 50 → 70: con las 2 rondas del dueño dentro de lo requerido (condición fuerte de CC6) esta plantilla pide 59,8 (con 50 ya no abre: 409 `tope_no_cubre`),
+    //   y la mesa del video ahora guarda lo que sigue con la cuenta de la plantilla (+ la jefatura): con 60 justos no le queda ni para integrar; 70 le deja lugar
+    limites: { ...VIDEO_MESA.limites, tope_encargo_usd: 70, video: { ...(VIDEO_MESA.limites.video as Record<string, unknown>), segundos_min: 6, segundos_max: 15, propuestas, ...(borrador ? { borrador } : {}) } },
   }
 }
 

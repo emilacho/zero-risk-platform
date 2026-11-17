@@ -9,11 +9,12 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { escribirHoja } from '@/lib/cadena/hoja'
 import { VOZ_DEL_GANCHO } from '../mesa/pedidos'
+// 17-nov · T7b: lo que prueba la FORMA de la plantilla es la HISTORIA de 0720/0930 (topes fijos); la corrida en seco por el orquestador usa la VIGENTE (cifras por segundo, 202611171900)
 import { abrirEncargo } from '../orquestador'
 import { planoPorPlanoEncendido } from '../orquestador-video'
 import { validarPlantilla } from '../plantilla'
 import {
-  PASO_APROBAR_PROPUESTAS, PROPUESTAS_DE_VIDEO, RESERVA_POR_VIDEO_USD, TOPE_DE_VIDEO_MESA_USD, TOPE_DEL_BORRADOR_DE_VIDEO_USD, TOPE_DEL_PASO_VIDEO_USD, VIDEO_MESA, VIDEO_MESA_ENCENDIDA,
+  PASO_APROBAR_PROPUESTAS, PROPUESTAS_DE_VIDEO, RESERVA_POR_VIDEO_USD, TOPE_DE_VIDEO_MESA_USD, TOPE_DEL_BORRADOR_DE_VIDEO_USD, TOPE_DEL_PASO_VIDEO_USD, VIDEO_MESA, VIDEO_MESA_ENCENDIDA_0930 as VIDEO_MESA_ENCENDIDA, VIDEO_MESA_ENCENDIDA as VIDEO_MESA_ENCENDIDA_VIGENTE,
 } from '../plantillas/video-mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { ARTEFACTO_BORRADOR_VIDEO, resolucionDelBorrador, type BorradoresDeVideo } from '../video/borradores'
@@ -129,7 +130,7 @@ describe('202611170720 · la migración', () => {
 describe('en seco, la plantilla encendida corre hasta la aprobación del dueño (US$ 0)', () => {
   it('la mesa presenta 3 propuestas, sale el borrador simulado de las 3 a 480p y el encargo espera al dueño; nada se filma', async () => {
     const b = brazo({ estados: () => hecho(1) })
-    const M = crearMemoria({ parte: escribirHoja(INSUMOS).texto_md, plantilla: VIDEO_MESA_ENCENDIDA })
+    const M = crearMemoria({ parte: escribirHoja(INSUMOS).texto_md, plantilla: VIDEO_MESA_ENCENDIDA_VIGENTE })
     M.P.mesa = crearMesaEnMemoria(TRAS_2012)
     M.P.video = b.v
     const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'video_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
