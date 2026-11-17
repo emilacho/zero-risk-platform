@@ -293,7 +293,7 @@ export interface Almacen {
   insertarFichas?(f: FichasGuardadas): Promise<void>
   /**
    * 17-nov · los «Hechos del negocio» del cerebro (ENCARGO 2 de CC-CEREBRO), por la consulta del portero: la cadena no nombra tablas del cerebro.
-   * OPCIONAL y todavía SIN implementación: sin él, el lector declara «hechos del negocio: aún no disponibles».
+   * OPCIONAL: sin él (o si la lectura falla), el lector declara «hechos del negocio: aún no disponibles». Supabase: `leerHechosDelNegocio` (#1140).
    */
   hechosDelNegocio?(clientId: string): Promise<HechoDelNegocioPorOferta[] | null>
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>
