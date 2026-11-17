@@ -13,7 +13,8 @@ export const TARGET_STEP_PRODUCIR = 'router.dispatch.brief/parte-listo.producir'
 export interface Sobre { /** 29-oct · el dueño devolvió una pieza cerrada con cambios: abre la versión siguiente SIN gastar el tope de 3 versiones (límite propio de 5 rondas) */ cambios_del_dueno?: CambiosDelDueno; /** la causa de un fallo que ya se corrigió: permite reabrir un encargo que ya gastó (tope de versiones intacto) */ reabrir_causa_corregida?: string; parte_id: string; brief_id: string; dry_run: boolean; tope_usd?: number; familia?: string; fila_id?: string; fecha?: string; hora?: string }
 /** 11-nov · el techo de lo que un sobre puede PEDIR: el mismo que las reglas de la base (`oficina_encargos_tope_valido` / `oficina_tipos_tope_valido`, 202611111930).
  *  No es lo que se gasta: la oficina abre con el MENOR entre lo pedido y el tope de la familia (`orquestador.ts`). Antes era 10 y dejaba sin rehacer un video de tope 35. */
-export const TOPE_MAXIMO_DEL_SOBRE_USD = 50
+/** 17-nov · 50 → 60 (202611170930 · RESPUESTA Lenovo «check-base-60»): el techo técnico de la base; ninguna familia pasa de su propio tope */
+export const TOPE_MAXIMO_DEL_SOBRE_USD = 60
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RE_BRIEF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/
 const RE_FAMILIA = /^[a-z][a-z0-9_]{0,39}$/
