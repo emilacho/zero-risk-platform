@@ -18,7 +18,7 @@ import { trabajoDeLaLlamada } from '@/lib/trabajo-de-la-llamada'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { VARIABLE_DE_LA_LLAVE, costoEstimadoUsd, enviar, estado, estimar, ESTADOS_TERMINALES } from '@/lib/video/higgsfield'
 import { almacenDeSupabase } from '@/lib/cadena/almacen-supabase'
-import { armarPedido, armarPedidoDePlano, conDescuento, cuerpoParaHiggsfield, leerConfigDelBrazo, rutaDelModelo } from '@/lib/video/parametros'
+import { armarPedido, armarPedidoDePlano, conDescuento, cuerpoParaHiggsfield, leerConfigDelBrazo, rutaDelModelo, topeDeLaLlamada } from '@/lib/video/parametros'
 import { cerrarEnElLibro, cierreDeFila, registrarEnvioEnElLibro, sessionIdDeVideo } from '@/lib/video/libro'
 import { destinoPublico, REQUEST_ID_VALIDO } from '@/lib/video/destino'
 
@@ -59,7 +59,8 @@ export async function POST(request: Request) {
   const claveIdempotente = sanitizeString(body.clave as string | undefined, 200)
   if (!claveIdempotente) return json(400, { error: 'falta_clave', detail: 'clave (Idempotency-Key) es obligatoria: sin ella un reintento cobraría dos veces' })
   // 11-nov · regla #18: el tope por video y el descuento del proveedor salen de la configuración (`cadena_config.brazo_de_video`); sin ella, el tope aprobado y sin descuento
-  const tope = typeof body.tope_usd === 'number' && body.tope_usd > 0 ? Math.min(body.tope_usd, cfg.tope_por_video_usd) : cfg.tope_por_video_usd
+  // 17-nov · T7a · y, si la configuración trae cifra por segundo, no más que ella × los segundos de esta llamada (`topeDeLaLlamada`)
+  const tope = topeDeLaLlamada(cfg, pedido.segundos, body.tope_usd)
   const ruta = rutaDelModelo({ ...pedido, plano })
   const cuerpo = cuerpoParaHiggsfield({ ...pedido, plano })
   const base = { ruta, plano, modelo: pedido.modelo, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, audio: pedido.audio, fotos: pedido.fotos.length, tope_usd: tope, clave: claveIdempotente }

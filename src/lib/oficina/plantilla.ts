@@ -3,6 +3,7 @@
  * esquema fuera de las listas NO SE PUEDE ACTIVAR (la siembra y la prueba la rechazan). Pura.
  */
 import { TIPOS_DE_CONDICION, TIPOS_DE_PASO, type Condicion, type Plantilla } from './tipos'
+import { erroresDeLosTopesPorDuracion } from './topes-por-duracion'
 
 /** funciones de código registradas (lista CERRADA; se amplía con cada sala, por PR) */
 export const FUNCIONES_REGISTRADAS = [
@@ -73,6 +74,8 @@ export function validarPlantilla(p: Plantilla): string[] {
   const artefactos = new Set(p.pasos.map((x) => x.salida_artefacto).filter(Boolean))
   const lim = p.limites
   if (!lim || !(lim.tope_encargo_usd > 0)) e.push('`limites.tope_encargo_usd` debe ser mayor que 0')
+  // 17-nov · T7a · el dato por segundo/plano (topes que crecen con la pieza)
+  e.push(...erroresDeLosTopesPorDuracion(p))
   if (!lim || ![1, 2].includes(lim.max_rondas)) e.push('`limites.max_rondas` debe ser 1 o 2')
 
   let sumaVueltas = 0
@@ -85,12 +88,14 @@ export function validarPlantilla(p: Plantilla): string[] {
     if (s.tipo === 'codigo') {
       if (!s.funcion || !en(FUNCIONES_REGISTRADAS, s.funcion)) e.push(`${d}: función «${s.funcion}» no registrada`)
       if (s.tope_usd !== 0 && !en(FUNCIONES_CON_GASTO, s.funcion ?? '')) e.push(`${d}: un paso de código no tiene modelo, su tope debe ser 0`)
+      if ((s.tope_usd_por_segundo !== undefined || s.tope_usd_por_plano !== undefined) && !en(FUNCIONES_CON_GASTO, s.funcion ?? '')) e.push(`${d}: un paso de código sin gasto no lleva tope por segundo ni por plano`)
     } else if (s.funcion) e.push(`${d}: solo los pasos de código llevan función`)
     if (s.tipo === 'brazo') e.push(`${d}: el tipo «brazo» está reservado y esta plantilla no lo usa`)
     // J8a · el paso `jefatura` no tiene modelo propio (su gasto lo lleva la revisión, con su tope), ni contrato de salida del oficio, ni función de código
     if (s.tipo === 'jefatura') {
       if (s.quien !== 'jefatura') e.push(`${d}: el paso de la jefatura se llama «jefatura» en \`quien\``)
       if (s.tope_usd !== 0) e.push(`${d}: el paso de la jefatura no gasta por su cuenta, su tope debe ser 0 (el tope de la revisión lo pone la jefatura)`)
+      if (s.tope_usd_por_segundo !== undefined || s.tope_usd_por_plano !== undefined) e.push(`${d}: el paso de la jefatura no lleva tope por segundo ni por plano`)
     }
     e.push(...erroresDeCondicion(s.condicion, d, artefactos))
     if (s.salida) {

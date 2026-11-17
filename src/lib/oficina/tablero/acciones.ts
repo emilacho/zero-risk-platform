@@ -2,6 +2,7 @@
  * Las acciones del tablero, TRAMO 1 (30-oct): rehacer una pieza que falló, el cliente (editar · nuevo · baja) y la oficina (encender/apagar · tope de gasto).
  * Ciclo del plan (01-nov · tramo 2): plan-cambios · plan-aprobar (en `plan.ts`). (manual-campos es la ruta PATCH /api/manual/{client_id}/campos; pieza-nueva se retiró: las piezas salen solo de la campaña.)
  */
+import { topeDelEncargoDeLaFila } from '../topes-por-duracion'
 import { gruposHermanos } from '../mesa/con-mesa'
 import { almacenDeSupabase } from '../../cadena/almacen-supabase'
 import { abrirEncargo } from '../orquestador'
@@ -21,10 +22,11 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 /** el tope por pieza de una familia, de su plantilla (`limites.tope_encargo_usd`, lo que lee la oficina al abrir el encargo) · sin plantilla o sin tope legible → no se rehace */
 async function topeDeLaFamilia(db: Parameters<Manejador>[0]['db'], familia: unknown): Promise<{ ok: true; tope: number } | { ok: false; status: number; error: string; detalle: string }> {
   if (typeof familia !== 'string' || !familia) return { ok: false, status: 409, error: 'sin_familia', detalle: 'la pieza no tiene familia: no se sabe su tope' }
-  const p = await db.from('oficina_tipos_de_grupo').select('familia, limites').eq('familia', familia).limit(1)
+  const p = await db.from('oficina_tipos_de_grupo').select('familia, limites, pasos').eq('familia', familia).limit(1)
   if (p.error) return { ok: false, status: 500, error: 'oficina_error', detalle: p.error.message }
   const f = ((p.data as Fila[] | null) ?? [])[0]
-  const tope = f && esObjeto(f.limites) ? num(f.limites.tope_encargo_usd) : null
+  // 17-nov · T7a · con la MISMA cuenta que la oficina (fijo + por segundo × largo máximo): con el dato por segundo, `limites.tope_encargo_usd` es solo la parte fija
+  const tope = f && esObjeto(f.limites) ? topeDelEncargoDeLaFila({ tope_encargo_usd: f.limites.tope_encargo_usd, limites: f.limites, pasos: f.pasos }) : null
   if (tope === null || tope <= 0) return { ok: false, status: 409, error: 'sin_tope_de_familia', detalle: `la familia ${familia} no tiene un tope por pieza legible` }
   return { ok: true, tope }
 }

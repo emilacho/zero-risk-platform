@@ -43,6 +43,7 @@ import { conCausaDelFallo, type OrigenDeCorteNuestro } from './causa-del-fallo'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
 import { CLAVE_DE_LA_PALANCA, FAMILIA_CON_MESA, familiaConMesa } from './mesa/con-mesa'
 import { claseDe, tienePasarela } from './clase'
+import { aplicarTopesPorDuracion, coberturaDelTope } from './topes-por-duracion'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
@@ -115,6 +116,14 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   // fila #19 · una plantilla que no declara su clase no abre encargos: no se adivina por el nombre (antes caía como «post»)
   if (!clase) return r(409, { error: 'plantilla_sin_clase', familia: dec.familia, detalle: `la plantilla ${dec.familia} no declara su clase (post_img · carrusel · kit · video · interna) en oficina_tipos_de_grupo.clase: la oficina no la abre hasta que la declare` })
   if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia, ...(!tienePasarela(clase) ? { sin_pasarela: true } : {}) })
+  // 17-nov · T7a · los topes que crecen con la pieza (idempotente: el almacén real ya los aplicó) y la condición 1 de CC6: el tope con que nace el encargo (el menor entre
+  //   el sobre y la plantilla) cubre una pasada por los pasos que gastan; si no, el encargo NO nace (antes nacía y se cortaba a medias, con lo gastado perdido)
+  const topes = aplicarTopesPorDuracion(pl.plantilla)
+  if (topes.errores.length) return r(409, { error: 'topes_invalidos', familia: dec.familia, detalle: topes.errores.join(' · ') })
+  const plantillaDelEncargo = topes.plantilla
+  const topeDelEncargo = Math.min(v.sobre.tope_usd ?? plantillaDelEncargo.limites.tope_encargo_usd, plantillaDelEncargo.limites.tope_encargo_usd)
+  const cobertura = coberturaDelTope(plantillaDelEncargo, topeDelEncargo)
+  if (!cobertura.cubre) return r(409, { error: 'tope_no_cubre', familia: dec.familia, requerido_usd: cobertura.requerido, tope_usd: topeDelEncargo, detalle: `${cobertura.detalle}: el encargo no se abre para no cortarse a medias` })
   // 28-oct · CHEQUEO GRATIS de la puerta del portero: si el portero no contesta (llave rota tras una rotación, flujo apagado), el encargo NO se crea ni gasta; una sola alarma por incidente
   if (P.chequearPortero && pl.plantilla.pasos.some((x) => x.tipo === 'portero')) {
     const ch = await P.chequearPortero()
@@ -130,7 +139,7 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
     if (falta) return r(409, { error: falta.error, familia: dec.familia, detalle: falta.detalle, pendiente: 'reproceso_visual' })
   }
   const s: Sobre = v.sobre
-  const tope = Math.min(s.tope_usd ?? pl.plantilla.limites.tope_encargo_usd, pl.plantilla.limites.tope_encargo_usd)
+  const tope = topeDelEncargo
   const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: ruta ? ruta.familia : dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: ruta ? { ...(salaRefConFila(entrada.sala_ref, s) ?? {}), con_mesa: { de: dec.familia, a: ruta.familia } } : salaRefConFila(entrada.sala_ref, s), estado_del_motor: estadoInicial(), ...(s.reabrir_causa_corregida ? { reabrir_causa: s.reabrir_causa_corregida } : {}), ...(s.cambios_del_dueno ? { cambios_del_dueno: s.cambios_del_dueno } : {}) })
   if (!c.ok) return r(500, { error: 'almacen_error', detalle: c.error })
   if (!c.nuevo) return r(200, { accion: 'ya_existia', encargo_id: c.encargo.id, estado: c.encargo.estado })
@@ -143,7 +152,9 @@ export async function plantillaDe(P: Puertos, enc: Encargo): Promise<Plantilla> 
   const p = await P.almacen.leerPlantilla(enc.familia)
   if (!p) throw new Error(`plantilla «${enc.familia}» no existe`)
   // el tope de ESTE encargo (el del sobre, nunca más que el de la plantilla) manda sobre el de la plantilla
-  return { ...p.plantilla, limites: { ...p.plantilla.limites, tope_encargo_usd: Math.min(p.plantilla.limites.tope_encargo_usd, enc.tope_usd) } }
+  // 17-nov · T7a · idempotente (el almacén real ya los aplicó): un almacén que no los aplica no deja al motor con la parte fija sola
+  const pl = aplicarTopesPorDuracion(p.plantilla).plantilla
+  return { ...pl, limites: { ...pl.limites, tope_encargo_usd: Math.min(pl.limites.tope_encargo_usd, enc.tope_usd) } }
 }
 
 async function aplicar(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, res: ResultadoDePaso, extra: { vuelta?: string; turno: Omit<TurnoRegistrado, 'n' | 'estado'>; gastos?: Cambios['gastos']; usos?: Cambios['usos_de_fotos']; imagen_generada?: boolean; autor?: string | null; estado?: Encargo['estado'] }): Promise<Encargo> {

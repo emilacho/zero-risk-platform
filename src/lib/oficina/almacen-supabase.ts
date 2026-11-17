@@ -2,6 +2,7 @@
  * EL ALMACÉN REAL de la oficina sobre Supabase (las 9 tablas de la migración 202610090100, SIN aplicar todavía). Recibe el cliente de base por parámetro (así se prueba con una base falsa).
  * Falla CERRADO: si no puede leer la config, la oficina se considera APAGADA. Un error de lectura se lanza (nunca se lee como «vacío»); un duplicado esperado (23505) no es error.
  */
+import { aplicarTopesPorDuracion } from './topes-por-duracion'
 import { gruposHermanos } from './mesa/con-mesa'
 import type { FilaDeFormato } from './entrega'
 import type { Almacen, Cambios, Encargo, NuevoEncargo, TurnoRegistrado } from './puertos'
@@ -41,7 +42,9 @@ export function almacenDeSupabase(db: Db): Almacen {
       const f = d?.[0]
       if (!f) return null
       const plantilla: Plantilla = { tipo: String(f.tipo), familia: String(f.familia), ...(typeof f.clase === 'string' ? { clase: f.clase } : {}), pasos: f.pasos as Plantilla['pasos'], indicaciones: (f.indicaciones ?? {}) as Plantilla['indicaciones'], limites: f.limites as Plantilla['limites'] }
-      return { plantilla, activo: f.activo === true }
+      // 17-nov · T7a · los topes que crecen con la pieza se calculan AL CARGAR (para la pieza más larga): el motor ve números. Dato inválido → la plantilla no se activa
+      const t = aplicarTopesPorDuracion(plantilla)
+      return { plantilla: t.plantilla, activo: f.activo === true && t.errores.length === 0 }
     },
     async leerFormato(red, formato): Promise<FilaDeFormato | null> {
       const d = ok(await db.from('oficina_entrega_formatos').select('*').eq('red', red).eq('formato', formato).limit(1), 'leer el formato de entrega') as Fila[] | null

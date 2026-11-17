@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { abrirEncargo } from '../orquestador'
 import { POST_IMG } from '../plantillas/post-img'
-import { TOPE_DE_VIDEO_MESA_USD, VIDEO_MESA } from '../plantillas/video-mesa'
+import { TOPE_DE_VIDEO_MESA_USD, VIDEO_MESA, VIDEO_MESA_POR_SEGUNDO } from '../plantillas/video-mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { ACCIONES } from '../tablero/acciones'
 import { confirmarGasto, rastroDelTablero, type Contexto } from '../tablero/comun'
@@ -178,7 +178,8 @@ describe('rehacer-pieza', () => {
   const fila = (extra: Record<string, unknown> = {}) => ({ id: ENC, client_id: CLIENTE, parte_id: PARTE, brief_id: 'BRF-0003', tipo_de_grupo: 'post_img', familia: 'post_img', version_encargo: 1, estado: 'fallido', dry_run: false, sala_ref: null, ...extra })
   /** las plantillas como las lee la oficina (por familia, con `limites`): DOS familias con topes DISTINTOS (el dato, no el código, decide el máximo) */
   /** las plantillas con los topes VIVOS (SELECT de CC7 11-nov 17:2xZ: post_img 2,5 · video_mesa 10), como las lee la oficina (por familia, con `limites`) */
-  const PLANTILLAS = [{ tipo: 'post_img', familia: 'post_img', limites: { ...POST_IMG.limites, tope_encargo_usd: 2.5 } }, { tipo: 'video_mesa', familia: 'video_mesa', limites: { ...VIDEO_MESA.limites } }]
+  // 17-nov · T7a · el tope vivo de post_img es 4 (lectura de la base del 17-nov; era 2,5 el 11-nov): con 2,5 no cubre una pasada por los pasos de POST_IMG (2,91) y desde T7a no abriría
+  const PLANTILLAS = [{ tipo: 'post_img', familia: 'post_img', limites: { ...POST_IMG.limites, tope_encargo_usd: 4 } }, { tipo: 'video_mesa', familia: 'video_mesa', limites: { ...VIDEO_MESA.limites } }]
   /** lo que manda HOY el botón del tablero (`zero-risk-dashboard` lib/tablero-acciones.ts: TOPE_POR_PIEZA_USD = 5) */
   const DEL_TABLERO = 5
   const conPlantillas = (db: DbFalsa) => db.semilla('oficina_tipos_de_grupo', PLANTILLAS.map((x) => ({ ...x, limites: { ...x.limites } })))
@@ -189,12 +190,12 @@ describe('rehacer-pieza', () => {
     expect((await llamar('rehacer-pieza', db, { encargo_id: ENC, confirmo_gasto: true, tope_usd: 0 })).status).toBe(400)
     expect((await llamar('rehacer-pieza', db, { encargo_id: 'x', ...gasto })).status).toBe(400)
   })
-  it('🔴 CC7 · con los topes vivos y el cuerpo que manda el tablero (5): una FOTO se sigue rehaciendo, recortada a su 2,5, y la respuesta dice el tope efectivo y el de la familia', async () => {
+  it('🔴 CC7 · con los topes vivos y el cuerpo que manda el tablero (5): una FOTO se sigue rehaciendo, recortada a su tope (4), y la respuesta dice el tope efectivo y el de la familia', async () => {
     const M = crearMemoria({ plantilla: POST_IMG, fuentes: FUENTES })
     const antes = new Set(M.encargos.keys())
     const s = await llamar('rehacer-pieza', conPlantillas(new DbFalsa().semilla('oficina_encargos', [fila()])), { encargo_id: ENC, confirmo_gasto: true, tope_usd: DEL_TABLERO }, M.P)
-    expect(s).toMatchObject({ status: 200, cuerpo: { ok: true, tope_usd: 2.5, tope_de_la_familia_usd: 2.5, tope_pedido_usd: 5 } })
-    expect([...M.encargos.values()].filter((x) => !antes.has(x.id)).map((x) => x.tope_usd)).toEqual([2.5])
+    expect(s).toMatchObject({ status: 200, cuerpo: { ok: true, tope_usd: 4, tope_de_la_familia_usd: 4, tope_pedido_usd: 5 } })
+    expect([...M.encargos.values()].filter((x) => !antes.has(x.id)).map((x) => x.tope_usd)).toEqual([4])
   })
   it('🔴 GO Lenovo 11-nov (opción A) · un VIDEO puede pedir hasta el tope de SU familia (35 desde 202611111930; 45 desde 202611162300 · S2-3): con el tope nace con el tope; por encima se recorta al tope; nunca sube de lo pedido', async () => {
     const MV = crearMemoria({ plantilla: VIDEO_MESA, fuentes: FUENTES })
@@ -206,8 +207,18 @@ describe('rehacer-pieza', () => {
     }
     expect((await video(TOPE_DE_VIDEO_MESA_USD)).topes).toEqual([['video_mesa', TOPE_DE_VIDEO_MESA_USD]])
     expect((await video(TOPE_DE_VIDEO_MESA_USD + 5)).topes).toEqual([['video_mesa', TOPE_DE_VIDEO_MESA_USD]])
-    // ⚠️ lo que manda HOY el botón (5) da un video de 5: por eso el tablero tiene que mostrar y mandar el tope de la familia (otra entrega; ver papel de CC2)
-    expect((await video(DEL_TABLERO)).topes).toEqual([['video_mesa', 5]])
+    // ⚠️ lo que manda HOY el botón (5) daba un video de 5 que se cortaba a medias. 17-nov · T7a (condición 2 de CC6): ya NO abre — 5 no cubre una pasada por
+    //   los pasos que gastan (19,6) — y la respuesta lo dice; el tablero tiene que mandar el tope de la familia (otra entrega)
+    const cinco = await video(DEL_TABLERO)
+    expect(cinco.topes).toEqual([])
+    expect(JSON.stringify(cinco.s)).toContain('tope_no_cubre')
+  })
+  it('🔴 17-nov · T7a · con la plantilla por segundo el tablero lee el tope CALCULADO (58), no la parte fija (43)', async () => {
+    const MV = crearMemoria({ plantilla: VIDEO_MESA_POR_SEGUNDO, fuentes: FUENTES })
+    const db = new DbFalsa().semilla('oficina_encargos', [fila({ tipo_de_grupo: 'video_mesa', familia: 'video_mesa' })]).semilla('oficina_tipos_de_grupo', [{ tipo: 'video_mesa', familia: 'video_mesa', limites: { ...VIDEO_MESA_POR_SEGUNDO.limites }, pasos: VIDEO_MESA_POR_SEGUNDO.pasos }])
+    // (en memoria no hay brazo de video: la pieza nace con su tope y luego cae al cotizar, que es otra cosa; como en la prueba de arriba, se mira el tope con que nace)
+    await llamar('rehacer-pieza', db, { encargo_id: ENC, confirmo_gasto: true, tope_usd: 100 }, MV.P)
+    expect([...MV.encargos.values()].map((x) => x.tope_usd)).toEqual([58])
   })
   it('sin plantilla de su familia, sin tope legible o sin familia → 409 y no reabre', async () => {
     const sola = new DbFalsa().semilla('oficina_encargos', [fila()])
