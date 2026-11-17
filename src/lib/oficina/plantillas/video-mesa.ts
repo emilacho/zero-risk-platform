@@ -19,7 +19,9 @@ export const TOPE_DE_VIDEO_MESA_USD = 45
 /** lo que el brazo puede cobrar por UN video (el mismo tope del brazo): el paso `video` lo reserva antes de enviar */
 export const TOPE_DEL_PASO_VIDEO_USD = 15
 /** lo ESPERADO por video para el freno de la campaña mientras la familia no tenga historia (`gasto-de-encargos.ts` · `reservasDesdeLaHistoria`) */
-export const RESERVA_POR_VIDEO_USD = 12
+// 17-nov · DECISION Lenovo 05:07 + CORRECCIÓN 05:16 · 12 → 30: que un video no se frene por la reserva de la campaña (el costo real medido de un video es ≈ 12–25).
+//   El tope del encargo se queda en 45 y el del paso video en 15. Migración 202611170520 (solo este dato).
+export const RESERVA_POR_VIDEO_USD = 30
 
 const siempre: Condicion = { tipo: 'siempre' }
 const cambioCopy: Condicion = { tipo: 'si_cambio', artefacto: 'copy_video' }
