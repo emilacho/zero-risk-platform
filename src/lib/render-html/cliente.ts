@@ -77,3 +77,60 @@ export async function bajarVideo(s: ServicioDeRender, id: string, f: Fetch = fet
     return { ok: true, mp4 }
   } catch (e) { return deRed(e) }
 }
+
+// ───────────────────────── Sprint 3 · T5 (CC4) · el análisis del sonido: palabras con su tiempo y golpes de la música
+export interface PedidoDeAnalisisAlServicio {
+  /** el archivo cuya voz se transcribe (el video unido o la locución) */
+  voz?: { nombre: string; url: string }
+  /** la pista de música cuyos golpes se miden */
+  musica?: { nombre: string; url: string }
+  /** el idioma de la pieza (dos letras); por omisión español */
+  idioma?: string
+}
+export interface ResultadoDelAnalisis {
+  /** tal cual las da el transcriptor: las limpia `leerPalabras` (video/subtitulos.ts) */
+  palabras: unknown[] | null
+  inicio_de_voz: number | null
+  motor: string | null
+  golpes: number[] | null
+  bpm: number | null
+  confianza: 'high' | 'low' | 'uncertain' | null
+  avisos: string[]
+}
+
+/** encola el análisis (va en la misma fila que los renders) */
+export async function iniciarAnalisis(s: ServicioDeRender, p: PedidoDeAnalisisAlServicio, f: Fetch = fetch): Promise<Resultado<{ id: string }>> {
+  try {
+    const r = await f(`${s.url}/analizar`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-render-key': s.llave }, body: JSON.stringify(p), signal: AbortSignal.timeout(60_000) })
+    if (r.status !== 202) return errorDe(r)
+    const j = (await r.json()) as { id?: unknown }
+    return typeof j.id === 'string' && j.id ? { ok: true, id: j.id } : { ok: false, error: 'el servicio de render no devolvió el id del análisis', reintentar: false }
+  } catch (e) { return deRed(e) }
+}
+
+const lista = <T>(v: unknown, es: (x: unknown) => x is T): T[] | null => (Array.isArray(v) ? v.filter(es) : null)
+const esNumero = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x)
+
+/** el estado del análisis; cuando está listo, su resultado (lo que no tiene la forma esperada queda en null, nunca se inventa) */
+export async function estadoDeAnalisis(s: ServicioDeRender, id: string, f: Fetch = fetch): Promise<Resultado<{ estado: EstadoDeVideo; error: string | null; resultado: ResultadoDelAnalisis | null }>> {
+  try {
+    const r = await f(`${s.url}/analisis/${encodeURIComponent(id)}`, { headers: { 'x-render-key': s.llave }, signal: AbortSignal.timeout(30_000) })
+    if (!r.ok) return errorDe(r)
+    const j = (await r.json()) as { estado?: unknown; error?: unknown; resultado?: unknown }
+    const estado = j.estado
+    if (estado !== 'en_fila' && estado !== 'rindiendo' && estado !== 'listo' && estado !== 'fallido') return { ok: false, error: 'estado desconocido del servicio de render', reintentar: false }
+    const o = (estado === 'listo' && j.resultado && typeof j.resultado === 'object' ? j.resultado : null) as Record<string, unknown> | null
+    if (estado === 'listo' && !o) return { ok: false, error: 'el análisis terminó sin resultado', reintentar: false }
+    const conf = o?.confianza
+    const resultado: ResultadoDelAnalisis | null = o ? {
+      palabras: Array.isArray(o.palabras) ? o.palabras : null,
+      inicio_de_voz: esNumero(o.inicio_de_voz) ? o.inicio_de_voz : null,
+      motor: typeof o.motor === 'string' ? o.motor : null,
+      golpes: lista(o.golpes, esNumero),
+      bpm: esNumero(o.bpm) ? o.bpm : null,
+      confianza: conf === 'high' || conf === 'low' || conf === 'uncertain' ? conf : null,
+      avisos: lista(o.avisos, (x): x is string => typeof x === 'string') ?? [],
+    } : null
+    return { ok: true, estado, error: typeof j.error === 'string' ? j.error : null, resultado }
+  } catch (e) { return deRed(e) }
+}
