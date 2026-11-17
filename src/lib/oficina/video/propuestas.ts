@@ -160,7 +160,8 @@ export interface AprobacionDePropuestas {
  *  · `final` = hay una aprobada, o el encargo no tiene propuestas (lo de hoy).
  */
 export function faseDeLaProduccion(e: Pick<Estado, 'artefactos'>): 'propuesta' | 'final' {
-  if (!e.artefactos?.propuestas_video) return 'final'
+  // 17-nov · también las propuestas de IMAGEN (contrato CC5 v1): la misma verdad para el borrador y la final de kit, carrusel y foto
+  if (!e.artefactos?.propuestas_video && !e.artefactos?.propuestas_imagen) return 'final'
   const a = e.artefactos.aprobacion_propuestas?.datos as Partial<AprobacionDePropuestas> | undefined
   return a?.estado === 'aprobada' ? 'final' : 'propuesta'
 }

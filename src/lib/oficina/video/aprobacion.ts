@@ -10,6 +10,7 @@
 import type { Estado, Paso, Plantilla } from '../tipos'
 import type { ResultadoDePaso } from '../motor'
 import type { AprobacionDePropuestas, PropuestaDeVideo, PropuestasDelVideo } from './propuestas'
+import { ARTEFACTO_PROPUESTAS_IMAGEN, type PropuestaDeImagen, type PropuestasDeImagen } from '../mesa/propuestas-imagen'
 
 /** la función de código del paso (registrada en `plantilla.ts`) */
 export const FUNCION_APROBAR_PROPUESTAS = 'aprobar_propuestas'
@@ -23,10 +24,26 @@ export type DecisionDelDueno =
   | { decision: 'aprobar'; ronda: number; propuesta_id: string }
   | { decision: 'cambios'; ronda: number; observaciones: string }
 
-export type Rechazo = { ok: false; status: number; error: 'no_espera_al_dueno' | 'ronda_vieja' | 'propuesta_inexistente' | 'sin_vueltas' | 'entrada_invalida'; detalle: string }
+export type Rechazo = { ok: false; status: number; error: 'no_espera_al_dueno' | 'ronda_vieja' | 'propuesta_inexistente' | 'propuesta_incompleta' | 'sin_vueltas' | 'entrada_invalida'; detalle: string }
 
 type PropuestasGuardadas = PropuestasDelVideo & { texto?: string }
 export const propuestasDe = (e: Pick<Estado, 'artefactos'>): PropuestasGuardadas | null => (e.artefactos?.propuestas_video?.datos as unknown as PropuestasGuardadas | undefined) ?? null
+/** 17-nov · propuestas también en IMAGEN (contrato CC5 v1): las de kit, carrusel o foto que dejó la mesa */
+export const propuestasDeImagenDe = (e: Pick<Estado, 'artefactos'>): (PropuestasDeImagen & { texto?: string }) | null =>
+  (e.artefactos?.[ARTEFACTO_PROPUESTAS_IMAGEN]?.datos as unknown as (PropuestasDeImagen & { texto?: string }) | undefined) ?? null
+
+/**
+ * lo que el dueño decide, de video o de imagen: la ronda y, por propuesta, lo que pasa a la cola si se aprueba (video: su guion y su copy, como hasta hoy; imagen: SUS
+ * artefactos, los mismos de una pieza sola). Si hay propuestas de video, mandan ellas: el video no cambia en nada.
+ */
+interface Elegibles { ronda: number; propuestas: Array<{ id: string; otros: () => Record<string, Record<string, unknown>> | null }> }
+function elegiblesDe(e: Pick<Estado, 'artefactos'>): Elegibles | null {
+  const pv = propuestasDe(e)
+  if (pv) return { ronda: pv.ronda, propuestas: (pv.propuestas ?? []).map((p) => ({ id: p.id, otros: () => guionDeLaElegida(p) })) }
+  const pi = propuestasDeImagenDe(e)
+  if (pi) return { ronda: pi.ronda, propuestas: (pi.propuestas ?? []).map((p) => ({ id: p.id, otros: () => (p.artefactos && Object.keys(p.artefactos).length ? p.artefactos : null) })) }
+  return null
+}
 
 /** cuántas vueltas de cambios le quedan al dueño (el `vuelve_a.max` del paso menos las ya hechas; sin `vuelve_a`, ninguna) */
 export function quedanVueltas(e: Pick<Estado, 'vueltas'>, paso: Pick<Paso, 'clave' | 'vuelve_a'> | undefined): number {
@@ -42,8 +59,8 @@ export const pasoDeAprobacion = (pl: Pick<Plantilla, 'pasos'>): Paso | undefined
  * el paso pasa de largo y deja la aprobación tal cual (la fase sigue «final»; el guion corregido de la mesa NO se pisa con la propuesta vieja).
  */
 export function alLlegarAlPaso(e: Pick<Estado, 'artefactos'>): { esperar: true; ronda: number } | { saltar: ResultadoDePaso } {
-  const pv = propuestasDe(e)
-  if (!pv || !pv.propuestas?.length) return { saltar: { costo_usd: 0, artefacto: { estado: 'sin_propuestas', ronda: 0, vuelve_a_la_mesa: false } } }
+  const pv = elegiblesDe(e)
+  if (!pv || !pv.propuestas.length) return { saltar: { costo_usd: 0, artefacto: { estado: 'sin_propuestas', ronda: 0, vuelve_a_la_mesa: false } } }
   const ya = aprobacionDe(e)
   if (ya?.estado === 'aprobada' && pv.propuestas.some((p) => p.id === ya.propuesta_id)) return { saltar: { costo_usd: 0, artefacto: { ...ya, vuelve_a_la_mesa: false, ya_aprobada: true } } }
   return { esperar: true, ronda: pv.ronda }
@@ -57,6 +74,12 @@ export function propuestaAprobada(e: Pick<Estado, 'artefactos'>): PropuestaDeVid
   const a = aprobacionDe(e)
   if (a?.estado !== 'aprobada') return null
   return propuestasDe(e)?.propuestas?.find((p) => p.id === a.propuesta_id) ?? null
+}
+/** 17-nov · la propuesta de IMAGEN que el dueño aprobó (null si no hay propuestas de imagen o todavía no aprobó ninguna) */
+export function propuestaDeImagenAprobada(e: Pick<Estado, 'artefactos'>): PropuestaDeImagen | null {
+  const a = aprobacionDe(e)
+  if (a?.estado !== 'aprobada') return null
+  return propuestasDeImagenDe(e)?.propuestas?.find((p) => p.id === a.propuesta_id) ?? null
 }
 
 /** la línea con la que la dirección declara que la corrección pedía cambiar el concepto aprobado (excepción de la decisión de Lenovo 17-nov 00:51) */
@@ -124,14 +147,17 @@ export const avisoDeObservaciones = (ronda: number, n: number, obs: string): str
 
 /** la decisión del dueño → el resultado del paso (o por qué no se puede) */
 export function decidir(e: Pick<Estado, 'artefactos' | 'vueltas'>, paso: Pick<Paso, 'clave' | 'vuelve_a'>, d: DecisionDelDueno): { ok: true; res: ResultadoDePaso; aprobacion: AprobacionDePropuestas } | Rechazo {
-  const pv = propuestasDe(e)
+  const pv = elegiblesDe(e)
   if (!pv) return { ok: false, status: 409, error: 'no_espera_al_dueno', detalle: 'el encargo no tiene propuestas que decidir' }
   if (!Number.isInteger(d.ronda) || d.ronda !== pv.ronda) return { ok: false, status: 409, error: 'ronda_vieja', detalle: `la tarjeta muestra la ronda ${d.ronda} y la vigente es la ${pv.ronda}: recarga` }
   if (d.decision === 'aprobar') {
     const p = pv.propuestas.find((x) => x.id === d.propuesta_id)
     if (!p) return { ok: false, status: 409, error: 'propuesta_inexistente', detalle: `no hay una propuesta «${d.propuesta_id}» en la ronda ${pv.ronda}` }
+    // imagen: una propuesta sin sus artefactos no se puede fabricar; se dice y no se toca nada (nunca se aprueba algo que la cola no puede producir)
+    const otros = p.otros()
+    if (!otros) return { ok: false, status: 409, error: 'propuesta_incompleta', detalle: `la propuesta «${p.id}» no trae lo que necesita la producción: pide cambios para que la mesa la rehaga` }
     const aprobacion: AprobacionDePropuestas = { estado: 'aprobada', propuesta_id: p.id, ronda: pv.ronda }
-    return { ok: true, aprobacion, res: { costo_usd: 0, artefacto: { ...aprobacion, vuelve_a_la_mesa: false }, otros_artefactos: guionDeLaElegida(p) } }
+    return { ok: true, aprobacion, res: { costo_usd: 0, artefacto: { ...aprobacion, vuelve_a_la_mesa: false }, otros_artefactos: otros } }
   }
   const obs = String(d.observaciones ?? '').trim()
   if (!obs || obs.length > OBSERVACIONES_MAX) return { ok: false, status: 400, error: 'entrada_invalida', detalle: `las observaciones deben tener de 1 a ${OBSERVACIONES_MAX} caracteres` }

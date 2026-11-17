@@ -144,6 +144,8 @@ export interface EstadoMesa {
   /** el turno que está esperando respuesta */
   /** Sprint 2 · S2-1 · solo video: la duración y las propuestas que dice la plantilla, congeladas al abrir (un cambio de la plantilla no mueve la meta de una pieza en vuelo) */
   video?: import('./pedidos').ParametrosDelVideo
+  /** 17-nov · propuestas también en IMAGEN · solo kit, carrusel y foto: cuántas propuestas presenta la mesa (`limites.propuestas`), congelado al abrir; ausente = una pieza, como hoy */
+  imagen?: { propuestas: number }
   turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
 }
 
