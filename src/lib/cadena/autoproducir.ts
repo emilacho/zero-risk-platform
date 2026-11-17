@@ -138,6 +138,12 @@ export async function decidirTopeDelParte(
   return decidirTope(c.tope_gasto_usd, { gastado: medido.gastado, comprometido }, candidatas, l.topes_de_familia, [...porVenir, ...esperandoPorVenir(esperando, cuando)], l.reservas_de_familia)
 }
 
+/** 17-nov · con la campaña pausada, las filas del calendario por las que el freno guarda lugar: SOLO las que tienen permiso vigente de «producir estas filas» (`elegidas.ts`) */
+export async function filasQueGuardanLugarEnPausa<F extends { id: string }>(al: Pick<Almacen, 'filasElegidas'>, campanaId: string, filas: readonly F[], ahora: string = new Date().toISOString()): Promise<F[]> {
+  const vigentes = new Set(al.filasElegidas ? await al.filasElegidas(campanaId, ahora) : [])
+  return filas.filter((f) => vigentes.has(f.id))
+}
+
 export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
   const campanaId = cadena(cuerpo.campana_id)
   // r74 · F7 · EN SECO el parte no se guarda: el flujo de la parte manda un `parte_seco` con lo que HABRÍA guardado (válido + briefs con su familia) y se ensaya autoproducir sin sembrar nada a mano.
@@ -211,7 +217,9 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
     const avisar = (a: AvisoDelTope) => al.avisarAlBuzon({ ...a, ...firma })
     let d: DecisionDelTope
     try {
-      d = await decidirTopeDelParte(al, c, parte.id, todos, filasDelCalendario, cuando)
+      // 17-nov (RESPUESTA Lenovo · mini-prueba) · con la campaña PAUSADA solo se producen las filas con permiso vigente: el freno guarda lugar SOLO para ellas (las demás no van a salir mientras siga en pausa)
+      const filasDelFreno = c.estado === 'pausada' && filasDelCalendario && al.filasElegidas ? await filasQueGuardanLugarEnPausa(al, c.id, filasDelCalendario) : filasDelCalendario
+      d = await decidirTopeDelParte(al, c, parte.id, todos, filasDelFreno, cuando)
     } catch (e) {
       // un error no es «cero gastado»: no sale nada y se avisa (UNA vez por campaña)
       const aviso = await avisar(avisoDeGastoIlegible(c, e instanceof Error ? e.message : String(e)))
