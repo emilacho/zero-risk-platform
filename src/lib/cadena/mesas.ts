@@ -278,7 +278,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
     const pedido = pedidoDeCambiosVigente(briefs, ultimo.version, null)
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      marco_texto: marcoDelBrief({
+      marco_texto: marcoDelBrief({ fichas: await fichasDeLaCampana(al, campana.id),
         ctx, estrategia, version: ultimo.version, hoy: ahora.slice(0, 10),
         devolucion: previo?.estado === 'devuelta' && previo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? previo.devolucion_texto : null,
         nota: pedido.nota,
@@ -304,7 +304,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   await al.insertarBriefCreativo(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelBrief({ ctx, estrategia, version, hoy: ahora.slice(0, 10), devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null, perfil: await perfilParaLaMesa(al, campana.client_id, 'brief') }),
+    marco_texto: marcoDelBrief({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, version, hoy: ahora.slice(0, 10), devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null, perfil: await perfilParaLaMesa(al, campana.client_id, 'brief') }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }
@@ -381,7 +381,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
+      marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
   }
@@ -402,7 +402,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelConcepto({ ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
+    marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
 }
@@ -796,6 +796,11 @@ export async function avisoDePrimeraSemana(al: Almacen, campana: Pick<Campana, '
 // ───────────────────────────────────────────────────────── LA HOJA DE PRODUCCIÓN por código (hoja.v1) · `POST /api/cadena/hojas {accion: 'escribir'}`
 const ESTADOS_QUE_NO_VAN_A_LA_HOJA = new Set(['esquema', 'cancelada', 'espera_video', 'vencida_sin_brazo', 'perdio_su_fecha', 'descartada_sin_fuente'])
 /** la hoja de un lote de filas (por `fila_ids` o por `semana`): brief creativo validado + gran idea aprobada + filas con su `idea_ref` → el texto que la oficina ya lee (`parsearBrief`). No llama a nadie ni gasta. */
+/** 17-nov · Sprint 4 · A entrega 2: las fichas que escribió el lector de ESTA campaña (brief, gran idea y hoja leen las mismas) · sin ellas, cada bloque lo DICE */
+async function fichasDeLaCampana(al: Almacen, campanaId: string): Promise<FichaDeOferta[] | null> {
+  return (await al.ultimasFichas?.(campanaId))?.contenido ?? null
+}
+
 export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   const c = await cargar(al, cuerpo, true)
   if (!c.ok) return c.r
@@ -818,7 +823,7 @@ export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>,
   if (!filas.length) return err(409, 'E-SIN-FAMILIA', `ninguna fila del lote tiene un formato con familia: ${excluidas.map((x) => x.fila_id).join(', ')} · no se escribe la hoja ni se gasta`)
   const manual = ctx.referencias.find((r) => r.origen === 'manual')
   // 17-nov · Sprint 4 · A entrega 2: las fichas que escribió el lector de ESTA campaña; sin ellas (o sin almacén que las guarde) la hoja lo declara
-  const fichas = (await al.ultimasFichas?.(campana.id))?.contenido ?? null
+  const fichas = await fichasDeLaCampana(al, campana.id)
   const hoja = escribirHoja({
     client_name: ctx.nombreDelNegocio, plan_id: campana.plan_id, manual_id: manual?.id.replace(/^manual:/, '') ?? 'sin-manual', manual_version: cadena(cuerpo.manual_version) ?? 'vigente',
     hoy: ahora.slice(0, 10), lote_key: cadena(cuerpo.lote_key) ?? (ids ? `${campana.id.slice(0, 8)}:v${version}:ids` : `${campana.id.slice(0, 8)}:v${version}:s${semana}`),
