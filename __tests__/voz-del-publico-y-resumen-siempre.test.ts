@@ -62,7 +62,8 @@ describe('3 · las opiniones guardan la fecha REAL y no vencen', () => {
 describe('2/5 · el adjunto único `contexto_del_cliente`', () => {
   it('cliente SIN resumen vivo: lo dice («sin_resumen_vivo») y los informes van vacíos; no inventa', async () => {
     const r = await adjuntoDelCliente(mundo([ficha('f1')]).db as never, c.id, AHORA)
-    expect(r).toEqual({ resumen_vivo: { estado: 'sin_resumen_vivo' }, informes: [], informes_estado: 'ok' })
+    // 17-nov (ENCARGO 2 de Cerebro): el adjunto lleva SIEMPRE el bloque esencial de hechos del negocio (se prueba entero en `hechos-del-negocio.test.ts`)
+    expect(r).toEqual({ resumen_vivo: { estado: 'sin_resumen_vivo' }, informes: [], informes_estado: 'ok', hechos_del_negocio: expect.objectContaining({ estado: 'ok' }) })
   })
   it('con resumen vivo: va ENTERO (el del cliente y el de cada sede), con su ficha y fecha; el retirado o descartado no cuenta', async () => {
     const largo = 'Quién es: restaurante de mariscos en Olón. '.repeat(40)

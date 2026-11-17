@@ -15,7 +15,14 @@
  * `vigente_desde` (16:32Z · CC6): lo que empieza después de la fecha de la pieza (p. ej. una apertura futura) llega «AÚN NO VIGENTE», nunca como presente.
  * `red`: solo para lo que cambia por red (p. ej. cómo se compra desde una red u otra); sin `red` vale para todas.
  */
-export interface DatoDeFicha { valor: string; fuente: string; vigente_desde?: string | null; vigente_hasta?: string | null; red?: string | null }
+export interface DatoDeFicha {
+  valor: string; fuente: string; vigente_desde?: string | null; vigente_hasta?: string | null; red?: string | null
+  /**
+   * 17-nov · cambio 4 (firma de Emilio, 20:34 Zúrich) · SOLO en datos que vienen de un hecho del cerebro: su tipo, para que el código decida EXACTO
+   * «cerrada / aún no existe en la fecha» (`ofertaCerradaOInexistenteEn`). Lo del lector nunca lo trae (su lectura no lo copia).
+   */
+  tipo?: HechoDelNegocioPorOferta['tipo'] | null
+}
 /** el objetivo de la oferta para un tramo de fechas (AAAA-MM-DD, ambos incluidos; sin `desde` o `hasta` = abierto) */
 export interface ObjetivoPorFecha { desde?: string | null; hasta?: string | null; objetivo: string; fuente: string }
 
@@ -196,7 +203,22 @@ export function datoDelHecho(h: HechoDelNegocioPorOferta): DatoDeFicha | null {
     fuente: [`cerebro:${limpio(h.fuente)}`, ...extra].join(' · '),
     ...(limpio(h.vigente_desde) ? { vigente_desde: limpio(h.vigente_desde) } : {}),
     ...(limpio(h.vigente_hasta) ? { vigente_hasta: limpio(h.vigente_hasta) } : {}),
+    tipo: h.tipo,
   }
+}
+
+/** los tipos de hecho que dicen que la oferta NO se puede ofrecer en la fecha */
+const TIPOS_QUE_CIERRAN: ReadonlySet<string> = new Set(['cierre_retiro', 'aun_no_existe'])
+
+/**
+ * 17-nov · cambio 4 · ¿la ficha AFIRMA (por un hecho del cerebro) que la oferta está cerrada o aún no existe en `fecha`? → ese dato; si no, null.
+ * Por código y exacto: mira solo datos con `tipo` (del cerebro) y su vigencia ES la del cierre (cierre: desde D · aún no existe: hasta E, ambos incluidos).
+ * Sin fecha legible de la pieza no afirma nada (null): nunca se devuelve una pieza por una fecha que no se pudo leer.
+ */
+export function ofertaCerradaOInexistenteEn(ficha: FichaDeOferta | null | undefined, fecha: string | null | undefined): DatoDeFicha | null {
+  if (!ficha || !esFecha(limpio(fecha))) return null
+  const todos = [ficha.que_es, ficha.para_quien_y_donde, ...(ficha.se_puede_afirmar ?? []), ...(ficha.no_se_puede_afirmar ?? []), ...(ficha.oferta_y_precio ?? []), ...(ficha.como_se_compra ?? []), ...(ficha.que_mostrar ?? []), ...(ficha.que_nunca_mostrar ?? []), ...(ficha.obligatorios_legales ?? [])]
+  return todos.find((d): d is DatoDeFicha => !!d && !!d.tipo && TIPOS_QUE_CIERRAN.has(d.tipo) && !vencido(d, fecha) && !aunNoVigente(d, fecha)) ?? null
 }
 
 /**
