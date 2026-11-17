@@ -817,12 +817,14 @@ export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>,
   const filas = pedidas.filter((f) => !filaSinFamilia(f, formatos))
   if (!filas.length) return err(409, 'E-SIN-FAMILIA', `ninguna fila del lote tiene un formato con familia: ${excluidas.map((x) => x.fila_id).join(', ')} · no se escribe la hoja ni se gasta`)
   const manual = ctx.referencias.find((r) => r.origen === 'manual')
+  // 17-nov · Sprint 4 · A entrega 2: las fichas que escribió el lector de ESTA campaña; sin ellas (o sin almacén que las guarde) la hoja lo declara
+  const fichas = (await al.ultimasFichas?.(campana.id))?.contenido ?? null
   const hoja = escribirHoja({
     client_name: ctx.nombreDelNegocio, plan_id: campana.plan_id, manual_id: manual?.id.replace(/^manual:/, '') ?? 'sin-manual', manual_version: cadena(cuerpo.manual_version) ?? 'vigente',
     hoy: ahora.slice(0, 10), lote_key: cadena(cuerpo.lote_key) ?? (ids ? `${campana.id.slice(0, 8)}:v${version}:ids` : `${campana.id.slice(0, 8)}:v${version}:s${semana}`),
     brief: brief.leido as unknown as BriefCreativoLeido, brief_id: idDeBrief(campana.id, brief.version), concepto: mesa.concepto, concepto_id: idDeConcepto(campana.id, mesa.version ?? 1),
     filas: filas.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora, red: f.red, formato: f.formato, pilar: f.pilar, tema: f.tema, datos: f.datos, fase: f.fase ?? null, idea_ref: f.idea_ref ?? null, concepto: f.concepto ?? null, oferta: f.sede ?? null })),
-    formatos, seco: campana.seco,
+    formatos, seco: campana.seco, fichas,
   })
   return { status: 200, cuerpo: { hoja: hoja.texto_md, briefs: hoja.briefs, provenance: hoja.provenance, avisos: hoja.avisos, filas: filas.map((f) => f.id), ...(excluidas.length ? { excluidas } : {}), brief_version: brief.version, concepto_version: mesa.version } }
 }

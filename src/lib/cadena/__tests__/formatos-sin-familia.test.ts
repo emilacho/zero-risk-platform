@@ -346,3 +346,30 @@ describe('la hoja (hojaEscribir) · segunda red, para un lote que ya viene con f
     expect(guardaDeLaParte(r.cuerpo.avisos as string[])).toEqual([])
   })
 })
+
+describe('17-nov · Sprint 4 · A entrega 2 · la hoja trae las fichas que escribió el lector de ESTA campaña', () => {
+  const ficha = (campana_id: string, valor: string) => ({
+    campana_id, version: 1, estado: 'validada' as const, pendientes: [], descartados: 0, agente: 'x', modelo: null, costo_usd: null, workflow_execution_id: null, seco: true,
+    contenido: [{ clave: 'centro', nombre: 'La oferta del centro', que_es: { valor, fuente: 'manual:1' } }],
+  })
+  it('🔴 con fichas guardadas, la pieza de esa oferta trae su ficha (y no la declara ausente)', async () => {
+    const al = almacenHoja(formatosReales())
+    await conGranIdea(al)
+    await al.guardarFilas(CAMP, 1, 1, [filaH('f-foto', 'instagram', 'foto')])
+    al.fichasDeOferta.push(ficha(CAMP, 'un dato que solo dice la ficha'))
+    const r = await hojaEscribir(al, wfh({ semana: 1 }), AHORA)
+    expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
+    expect(r.cuerpo.hoja).toContain('un dato que solo dice la ficha')
+    expect(r.cuerpo.hoja).not.toContain('sin fichas de hechos todavía')
+  })
+  it('🔴 sabotaje · las fichas de OTRA campaña no entran; sin las de esta, la hoja lo declara', async () => {
+    const al = almacenHoja(formatosReales())
+    await conGranIdea(al)
+    await al.guardarFilas(CAMP, 1, 1, [filaH('f-foto', 'instagram', 'foto')])
+    al.fichasDeOferta.push(ficha('otra-campana', 'un dato de otra campaña'))
+    const r = await hojaEscribir(al, wfh({ semana: 1 }), AHORA)
+    expect(r.status).toBe(200)
+    expect(r.cuerpo.hoja).not.toContain('un dato de otra campaña')
+    expect(r.cuerpo.hoja).toContain('sin fichas de hechos todavía · declarado')
+  })
+})

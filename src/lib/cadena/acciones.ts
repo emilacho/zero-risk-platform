@@ -5,7 +5,7 @@
 import { abrirCampana, avanzarCampana, reabrirCampana, campanasActivas, cierreDeCampana, estadoDeLaCadena, verificarViaje } from './campanas'
 import { filasProducir } from './elegidas'
 import { fechasCobertura, fechasGuardar, fechasPreparar, filasListar, filasLotes, filasMarcar } from './datos'
-import { calendarioGuardar, calendarioPreparar, calendarioSiguiente, estrategiaGuardar, estrategiaPreparar, validarSinEscribir } from './pasos'
+import { calendarioGuardar, calendarioPreparar, calendarioSiguiente, estrategiaGuardar, estrategiaPreparar, fichasGuardar, fichasPreparar, validarSinEscribir } from './pasos'
 import { relojDeLaCadena } from './reloj'
 import { calendarioPasar, estrategiaPasar } from './revision-jefatura'
 import { filasAutoproducir } from './autoproducir'
@@ -15,7 +15,7 @@ import { briefRevalidar, conceptoRevalidar } from './revalidar'
 import { bancoEditar, bancoRetirar } from './banco-de-ideas'
 import type { Manejador } from './puerta-http'
 
-export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'validar' | 'filas' | 'fechas' | 'esperas' | 'brief' | 'concepto' | 'banco' | 'hojas', Record<string, Manejador>> = {
+export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'validar' | 'filas' | 'fechas' | 'esperas' | 'brief' | 'concepto' | 'banco' | 'hojas' | 'fichas', Record<string, Manejador>> = {
   // 31-oct · nuevo orden (T3): las mesas de brief y de concepto y la hoja por código; solo con la palanca `nuevo_orden` encendida para el cliente
   // 09-nov · revalidar lo ya escrito (opción B firmada por Emilio): un brief devuelto EN FALSO por el verificador vuelve a pasar el verificador de hoy · US$ 0
   brief: { abrir: briefAbrir, entregar: briefEntregar, revalidar: briefRevalidar },
@@ -34,6 +34,8 @@ export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'valida
     verificar_viaje: (al, c) => verificarViaje(al, c),
     activas: (al, c) => campanasActivas(al, c),
   },
+  // 17-nov · Sprint 4 · A entrega 2: el lector de las fichas de hechos por oferta (una vez por campaña, antes del calendario · no es reja)
+  fichas: { preparar: fichasPreparar, guardar: (al, c) => fichasGuardar(al, c) },
   estrategia: { preparar: estrategiaPreparar, guardar: estrategiaGuardar, pasar: (al, c) => estrategiaPasar(al, c) },
   calendario: { preparar: calendarioPreparar, guardar: calendarioGuardar, siguiente: calendarioSiguiente, pasar: (al, c) => calendarioPasar(al, c) },
   validar: { validar: validarSinEscribir },
