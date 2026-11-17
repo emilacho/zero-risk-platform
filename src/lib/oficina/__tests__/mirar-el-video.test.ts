@@ -16,7 +16,7 @@ import { leerBriefCreativo } from '@/lib/cadena/brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '@/lib/cadena/conceptos'
 import type { FormatosPorRed } from '@/lib/cadena/tipos'
 import { abrirEncargo, indicacionDe } from '../orquestador'
-import { cabeLaVuelta, costoDeVolver, quedaVueltaALaMesa, recibirVideo } from '../orquestador-video'
+import { cabeLaVuelta, costoDeVolver, quedaVueltaALaMesa, recibirVideo, TOPE_POR_VIDEO } from '../orquestador-video'
 import { AGENTE_QUE_MIRA_EL_VIDEO } from '../plantillas/video-mesa'
 // S2-3 · estas pruebas siguen el dato y el camino de ANTES de las imágenes clave (lo nuevo lo prueban video-imagen-clave*.test.ts)
 import { VIDEO_MESA_ANTES_DE_S2_3 as VIDEO_MESA } from './video-mesa-antes-de-s2-3'
@@ -157,7 +157,7 @@ const MIRADA_BIEN = JSON.stringify({ coincide: true, orden_respetado: true, falt
 const MIRADA_MAL = JSON.stringify({ coincide: false, orden_respetado: true, faltantes: [{ plano: 1, que_falta: 'no se ve la fachada: sale una calle vacía' }], por_plano: [{ plano: 1, se_ve: 'una calle vacía' }, { plano: 2, se_ve: 'manos trabajando' }], para_la_mesa: 'el plano 1 tiene que mostrar la fachada con el letrero' })
 
 /** recorre el encargo ENTERO: mesa → brazo → cuadros → mirada (y, si el video vuelve, otra vez mesa → brazo → mirada) hasta la jefatura. `mirada(k)` = la k-ésima respuesta del agente (desde 0) */
-async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacador?: boolean; costoVideo?: number; costoIntegrar?: number; tope?: number }) {
+async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacador?: boolean; costoVideo?: number; costoIntegrar?: number; tope?: number; costoReal?: number }) {
   const costoVideo = o.costoVideo ?? 2.12
   const plantilla = o.tope ? { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, tope_encargo_usd: o.tope } } : VIDEO_MESA
   const M = crearMemoria({ parte: parteDe(C), plantilla, fuentes: { fotos: C.fotos } })
@@ -194,7 +194,7 @@ async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacad
   turnos.push(...r.turnos)
   for (let vez = 1; vez <= 3 && r.ultima.cuerpo.accion === 'esperar_brazo'; vez++) {
     const nBrazo = Number((r.ultima.cuerpo.turno as { n: number }).n)
-    const tras = await recibirVideo(M.P, id, nBrazo, { ok: true, status: 'completed', video_url: `https://bucket.test/video-final-${vez}.mp4`, url_proveedor: null, costo_usd: costoVideo, expires_at: null, copia: 'bucket', aviso: null })
+    const tras = await recibirVideo(M.P, id, nBrazo, { ok: true, status: 'completed', video_url: `https://bucket.test/video-final-${vez}.mp4`, url_proveedor: null, costo_usd: o.costoReal ?? costoVideo, expires_at: null, copia: 'bucket', aviso: null })
     r = await jugar(M, id, tras, responder)
     turnos.push(...r.turnos)
   }
@@ -294,6 +294,15 @@ describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefa
     expect(f!.que).toContain('plano 1: no se ve la fachada: sale una calle vacía')
     expect(f!.que).toContain('no se rehízo solo: volver a la mesa y filmar otro video (reserva US$ 16.10) pasa el tope del encargo (US$ 20')
     expect((r.enc.estado_del_motor.artefactos['mirada_video'].datos as { vuelve_a_la_mesa: boolean }).vuelve_a_la_mesa).toBe(false)
+  })
+  it('revisión 2 · pregunta 4 · el brazo cobró MÁS que el tope por video: la ficha NO bloquea ni es dura (alarma de gasto al cierre); la pieza sigue a la jefatura', async () => {
+    const tope = Number((VIDEO_MESA.limites.video as { tope_por_video_usd: number }).tope_por_video_usd)
+    const r = await recorrer(C, { mirada: () => MIRADA_BIEN, costoReal: tope + 1, tope: 100 })
+    const f = r.enc.estado_del_motor.fichas.find((x) => x.contra_que === TOPE_POR_VIDEO)
+    expect(f).toMatchObject({ gravedad: 'sugerencia' })
+    expect(f!.dura).toBeUndefined()
+    expect(f!.propuesta).not.toMatch(/una persona/)
+    expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
   })
   it('🔴 sin quien saque los cuadros: el agente NO se llama y queda una ficha que bloquea («nadie miró el video»)', async () => {
     const r = await recorrer(C, { mirada: () => MIRADA_BIEN, sinSacador: true })

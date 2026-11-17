@@ -1101,16 +1101,18 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
     }
   }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: estadoFinal, con_desacuerdo: conDesacuerdo, imagen_generada: generada, salida_output_id: output_id, hitl_queue_id: hitl_id })
+  // revisión 2 · pregunta 4 · el video que cobró más que su tope: alarma de gasto (sin bloquear, sin persona); si además frena, va DENTRO de la misma alarma del freno
+  const sobreTope = e.fichas.filter((f) => f.contra_que === TOPE_POR_VIDEO)
+  const textoDelGasto = sobreTope.length ? `💸 Gasto sobre el tope · ${enc.brief_id}: ${sobreTope[0].que ?? ''}.` : ''
   if (frenoDuro.length) {
     // una alarma por incidente: si el cierre fue por tope (ya avisó a #alertas) o es la versión 2 o más del mismo brief, va al hilo (ADENDA 2 de CC7 a #1148)
     const nt = reglasDurasNoTomadas(e)
     const motivos = [...nt.map((h) => `${h.destino}: ${h.que}`), ...frenoDuro.filter((f) => !f.id.startsWith('sentido-no-tomada-')).map((f) => `${f.donde}: ${f.que ?? ''}`)]
-    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🛑 Pieza frenada · ${enc.brief_id}: regla dura no tomada tras la vuelta — ${motivos.slice(0, 3).join(' | ')}. No se publica (firma de Emilio: se toma sí o sí).`, dry_run: enc.dry_run })
+    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🛑 Pieza frenada · ${enc.brief_id}: regla dura no tomada tras la vuelta — ${motivos.slice(0, 3).join(' | ')}. No se publica (firma de Emilio: se toma sí o sí).${textoDelGasto ? ` ${textoDelGasto}` : ''}`, dry_run: enc.dry_run })
     return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}) })
   }
-  // revisión 2 · pregunta 4 · el video que cobró más que su tope: UNA alarma de gasto (sin bloquear, sin persona); las versiones 2+ van al hilo
-  const sobreTope = e.fichas.filter((f) => f.contra_que === TOPE_POR_VIDEO)
-  if (sobreTope.length) await P.avisar({ canal: enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `💸 Gasto sobre el tope · ${enc.brief_id}: ${sobreTope[0].que ?? ''}. La pieza sigue (el dinero ya se gastó).`, dry_run: enc.dry_run })
+  // la alarma de gasto sola (la pieza sigue): las versiones 2+ y el cierre por tope (ya avisó) van al hilo
+  if (textoDelGasto) await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `${textoDelGasto} La pieza sigue (el dinero ya se gastó).`, dry_run: enc.dry_run })
   await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: conDesacuerdo ? `⚠️ Con desacuerdo · ${enc.brief_id}${nota ? ` · ${nota}` : ''}` : `✅ En la bandeja · ${enc.brief_id} · US$ ${e.gasto_usd.toFixed(3)}`, dry_run: enc.dry_run })
   if (conDesacuerdo && !parcial) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ Encargo con desacuerdo · ${enc.brief_id}: ${desacuerdos.slice(0, 3).join(' | ')}`, dry_run: enc.dry_run })
   return r(200, {

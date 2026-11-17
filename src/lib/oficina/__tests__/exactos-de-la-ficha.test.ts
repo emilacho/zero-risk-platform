@@ -101,6 +101,12 @@ describe('dato VENCIDO / AÚN NO VIGENTE que se usa igual · con la fecha DE LA 
     expect(vencido).toMatchObject({ destino: 'hoja', campo_de_la_hoja: 'SUGERENCIAS' })
     expect(campoDeLaHoja('texto suelto con $9,90', () => true)).toBeNull()
   })
+  it('CC7 m4 · el dato de la hoja que está FUERA de todo rótulo: vuelve a la hoja, pero SIN `campo_de_la_hoja` (no se inventa un insumo)', () => {
+    const { ficha, precioMal } = CLIENTES[0]
+    const h = chequeosExactos(fichaDeLaHoja(hoja(ficha.clave, ficha, '2026-11-20', ['pide el combo a $9,90'])), precioMal).hallazgos[0]
+    expect(h).toMatchObject({ destino: 'hoja' })
+    expect(h).not.toHaveProperty('campo_de_la_hoja')
+  })
   it('negativo: nadie lo usa → nada', () => {
     const f = fichaDeLaHoja(hoja('linea-hogar', CLIENTES[1].ficha, '2026-11-20'))
     expect(chequeosExactos(f, 'Sábanas nuevas').hallazgos).toEqual([])

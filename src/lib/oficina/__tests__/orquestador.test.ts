@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { abrirEncargo, avanzar, recibirResultado } from '../orquestador'
+import { TOPE_POR_VIDEO } from '../orquestador-video'
 import { TARGET_STEP_PRODUCIR, validarSobre } from '../sobre'
 import { codificarPng } from '../encaje'
 import { POST_IMG } from '../plantillas/post-img'
@@ -631,6 +632,28 @@ describe('salida real (dry_run = false): pieza draft + bandeja con output_id y v
     const alarmas = M.llamadas.avisos.filter((a) => a.canal === 'alertas')
     expect(alarmas).toHaveLength(1)
     expect(alarmas[0].texto).toMatch(/^🛑 Pieza frenada · .*precio/)
+  })
+  // revisión 2 · pregunta 4 · el gasto sobre el tope por video (la ficha llega aquí por el jefe: lo que se mide es el CIERRE, no quién la puso)
+  const fichaDeTope = { que: 'el video cobró US$ 6.0000, más que el tope por video (US$ 5)', donde: 'video', contra_que: TOPE_POR_VIDEO, gravedad: 'sugerencia', propuesta: 'alarma de gasto' }
+  it('gasto sobre el tope por video: UNA alarma de gasto, la pieza sigue a la bandeja (sin bloquear, sin persona)', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const { ultima } = await correr(M, id, guionGenerada({ jefe: () => ({ texto: JSON.stringify({ fichas: [fichaDeTope] }) }) }))
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', con_desacuerdo: false })
+    expect(M.llamadas.bandeja).toHaveLength(1)
+    const alarmas = M.llamadas.avisos.filter((a) => a.canal === 'alertas')
+    expect(alarmas).toHaveLength(1)
+    expect(alarmas[0].texto).toMatch(/^💸 Gasto sobre el tope · .*La pieza sigue/)
+    expect(JSON.stringify(M.llamadas.avisos)).not.toMatch(/una persona/)
+  })
+  it('freno y gasto sobre el tope en el MISMO cierre: UNA sola alarma que dice las dos cosas', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const { ultima } = await correr(M, id, guionGenerada({ texto: JSON.stringify({ pie_de_foto: 'Ceviche a $9.99.', hashtags: [] }), jefe: () => ({ texto: JSON.stringify({ fichas: [fichaDeTope] }) }) }))
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', frenada: true })
+    const alarmas = M.llamadas.avisos.filter((a) => a.canal === 'alertas')
+    expect(alarmas).toHaveLength(1)
+    expect(alarmas[0].texto).toMatch(/^🛑 Pieza frenada · .*precio.*💸 Gasto sobre el tope/)
   })
   it('solo observaciones (criterio) al cierre: la pieza llega a la bandeja con su marca, sin «con desacuerdo» y con 0 alarmas', async () => {
     const M = crearMemoria()

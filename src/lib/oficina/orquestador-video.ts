@@ -302,9 +302,10 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
   const nombreBase = (ext: string) => nombreDeArchivo({ fecha: cuando?.de === 'fila' ? cuando.fecha : null, hora: cuando?.de === 'fila' ? cuando.hora : null, red, formato: b.formato_video, brief_id: b.brief.id, n: 1, de: 1, ext })
   const archivos: ArchivoDeEntrega[] = []
   const fichasExtra: Ficha[] = []
-  const bytes = v.simulado || v.video_url.startsWith(PREFIJO_DRY) ? mp4Simulado() : await P.descargar(v.video_url)
+  // revisión 2 · pregunta 2 · la copia que falla vuelve a intentarse UNA vez; si sigue fallando, la pieza sigue con el enlace del brazo y lo declara (sin persona)
+  const bytes = v.simulado || v.video_url.startsWith(PREFIJO_DRY) ? mp4Simulado() : ((await P.descargar(v.video_url)) ?? (await P.descargar(v.video_url)))
   if (bytes) archivos.push({ nombre: nombreBase('mp4'), bytes })
-  else fichasExtra.push(fichaNueva('entrega-video-no-descargado', 'chequeo', 'entrega', 'bloquea', 'no se pudo descargar el video del brazo para la entrega', 'copia de la entrega', 'vuelve a intentar la copia; si sigue fallando, la pieza sigue con el enlace del brazo y lo declara'))
+  else fichasExtra.push(fichaNueva('entrega-video-no-descargado', 'chequeo', 'entrega', 'bloquea', `no se pudo descargar el video del brazo para la entrega (dos intentos): la pieza sigue con el enlace del brazo${v.url_proveedor ? ` (${v.url_proveedor})` : ''}`, 'copia de la entrega', 'vuelve a intentar la copia; si sigue fallando, la pieza sigue con el enlace del brazo y lo declara'))
   const texto = textoParaCopiar({ pie_de_foto: txt(cv.pie_de_foto), hashtags: arr(cv.hashtags) })
   const base = nombreBase('txt').replace(/\.txt$/, '')
   const pedidoEnviado = (pv?.pedido as PedidoDeVideoDeLaOficina | undefined)
@@ -331,7 +332,9 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
     g?.avisos?.length ? `## Avisos del traductor\n${g.avisos.map((a) => `- ${a}`).join('\n')}` : '',
   ].filter((l) => l !== '').join('\n')
   const man = manifiesto(archivos, { encargo_id: enc.id, brief_id: b.brief.id, aprobada_version: e.artefactos['copy_video']?.version ?? 1, expires_at: expires, video_generado: true, request_id: v.request_id, video_url_proveedor: v.url_proveedor, video_expires_at: v.expires_at, simulado: v.simulado })
-  const fichas = [...chequeosDeEntrega(archivos, fila ?? null, { pie_de_foto: txt(cv.pie_de_foto), hashtags: arr(cv.hashtags) }, man), ...fichasExtra]
+  // sin la copia, la entrega va por el enlace del brazo: la regla 6 no cuenta un archivo que no tenemos (sí mide todo lo demás)
+  const filaDeLaEntrega = fila && !bytes ? { ...fila, n_min: 0 } : fila
+  const fichas = [...chequeosDeEntrega(archivos, filaDeLaEntrega ?? null, { pie_de_foto: txt(cv.pie_de_foto), hashtags: arr(cv.hashtags) }, man), ...fichasExtra]
   const todos = [
     ...archivos.map((a) => ({ ...a, tipo: 'video/mp4' })),
     { nombre: `${base}_texto.txt`, bytes: Buffer.from(texto, 'utf8'), tipo: 'text/plain' },
