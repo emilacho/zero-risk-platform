@@ -190,7 +190,7 @@ export async function encuadrar(url: string, ancho: number, alto: number, f: typ
   }))
 }
 
-/** el anfitrión de nuestro almacén, de SUPABASE_URL */
+/** el anfitrión de nuestro almacén, de SUPABASE_URL o, si falta, de NEXT_PUBLIC_SUPABASE_URL (el nombre que tiene el servicio de Railway, como lee `supabase.ts`) */
 export function anfitrionDelAlmacen(env: NodeJS.ProcessEnv = process.env): string | null {
-  try { return new URL(String(env.SUPABASE_URL ?? '')).hostname || null } catch { return null }
+  try { return new URL(String(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || '')).hostname || null } catch { return null }
 }

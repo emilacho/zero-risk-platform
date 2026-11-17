@@ -45,6 +45,10 @@ describe('solo se baja de nuestro almacén', () => {
   it('el anfitrión sale de SUPABASE_URL', () => {
     expect(anfitrionDelAlmacen({ SUPABASE_URL: `https://${ALMACEN}` } as NodeJS.ProcessEnv)).toBe(ALMACEN)
     expect(anfitrionDelAlmacen({} as NodeJS.ProcessEnv)).toBeNull()
+    // 17-nov · Railway solo tiene NEXT_PUBLIC_SUPABASE_URL: sin esto, encuadrar y unir respondían 400 en producción
+    expect(anfitrionDelAlmacen({ NEXT_PUBLIC_SUPABASE_URL: `https://${ALMACEN}` } as NodeJS.ProcessEnv)).toBe(ALMACEN)
+    expect(anfitrionDelAlmacen({ SUPABASE_URL: '', NEXT_PUBLIC_SUPABASE_URL: `https://${ALMACEN}` } as NodeJS.ProcessEnv)).toBe(ALMACEN)
+    expect(anfitrionDelAlmacen({ SUPABASE_URL: `https://${ALMACEN}`, NEXT_PUBLIC_SUPABASE_URL: 'https://otro.example' } as NodeJS.ProcessEnv)).toBe(ALMACEN)
   })
 })
 
