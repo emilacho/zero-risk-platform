@@ -19,6 +19,7 @@ import { armarPedidoAlRevisor } from './ciego'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
 import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, llavesYaDevueltas, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision, type OpcionesDeAplicacion } from './paso-jefatura'
 import { contextoDeLaFicha, fichaDeLaHoja } from './sentido-contra-la-ficha'
+import { chequeosExactos } from './exactos-de-la-ficha'
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
 import { armarPedidoV, cabeLaVuelta, contextoDeRevisorV, costoDeVolver, ejecutarCodigoV, quedaVueltaDelPaso, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
@@ -298,7 +299,7 @@ const briefDe = (e: Estado): BriefLeido | null => (datos(e, 'encargo') as unknow
 /** cambio 4 · lo que la aplicación necesita para el sentido: la ficha de la hoja, la pieza, la fila (la del calendario o, si no viaja, el brief, que es su id) y lo ya devuelto */
 function sentidoDe(enc: Pick<Encargo, 'id' | 'brief_id' | 'sala_ref'>, e: Estado, textoDeLaPieza: string): OpcionesDeAplicacion['sentido'] {
   const fila = (enc.sala_ref?.fila as { id?: unknown } | undefined)?.id
-  return { ficha: fichaDeLaHoja(briefDe(e)?.texto), textoDeLaPieza, filaId: typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e) }
+  return { ficha: fichaDeLaHoja(briefDe(e)?.texto), textoDeLaPieza, filaId: typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos }
 }
 
 export function puedeVolverALaMesa(pl: Plantilla, paso: Paso, e: Estado): ((costo: number) => boolean) | undefined {
