@@ -34,19 +34,21 @@ function porElMotor(pl: Plantilla, rondas: number) {
   }
   throw new Error('no terminó')
 }
-const conBorrador = (t: number): Plantilla => ({ ...VIDEO_MESA_ENCENDIDA, pasos: VIDEO_MESA_ENCENDIDA.pasos.map((p) => (p.clave === 'borrador_video' ? { ...p, tope_usd: t } : p)) })
+/** el estado que dejó 0830: el encargo en 45 (202611170930 lo subió a 55; esa cuenta vive en `techo-60-y-video-55.test.ts`) */
+const EN_45: Plantilla = { ...VIDEO_MESA_ENCENDIDA, limites: { ...VIDEO_MESA_ENCENDIDA.limites, tope_encargo_usd: 45 } }
+const conBorrador = (t: number): Plantilla => ({ ...EN_45, pasos: VIDEO_MESA_ENCENDIDA.pasos.map((p) => (p.clave === 'borrador_video' ? { ...p, tope_usd: t } : p)) })
 const veces = (h: string[], c: string) => h.filter((x) => x === c).length
 
 describe('el borrador reserva 10, por el motor real (peor caso de CC6)', () => {
-  it('🔴 el código: el paso borrador_video reserva 10; el encargo sigue en 45 y el video en 15', () => {
+  it('🔴 el código: el paso borrador_video reserva 10; el video en 15 (el encargo, 55 desde 0930)', () => {
     expect(TOPE_DEL_BORRADOR_DE_VIDEO_USD).toBe(10)
     expect(VIDEO_MESA_ENCENDIDA.pasos.find((p) => p.clave === 'borrador_video')!.tope_usd).toBe(10)
     expect(VIDEO_MESA_ENCENDIDA.pasos.find((p) => p.clave === 'video')!.tope_usd).toBe(15)
-    expect(VIDEO_MESA_ENCENDIDA.limites.tope_encargo_usd).toBe(45)
+    expect(VIDEO_MESA_ENCENDIDA.limites.tope_encargo_usd).toBe(55)
   })
   it('🔴 0 y 1 ronda de cambios del dueño: entrega con el video (25,71 y 37,37)', () => {
     for (const [r, g] of [[0, 25.71], [1, 37.37]] as const) {
-      const x = porElMotor(VIDEO_MESA_ENCENDIDA, r)
+      const x = porElMotor(EN_45, r)
       expect(x.fin.accion, `rondas ${r}`).toBe('fin')
       expect(x.hechos).toContain('video')
       expect(veces(x.hechos, 'borrador_video')).toBe(r + 1)
@@ -57,12 +59,12 @@ describe('el borrador reserva 10, por el motor real (peor caso de CC6)', () => {
     const con20 = porElMotor(conBorrador(20), 2)
     expect(con20.fin).toMatchObject({ accion: 'cierre_por_tope', razon: 'tope_de_gasto' })
     expect(veces(con20.hechos, 'borrador_video')).toBe(2)
-    const con10 = porElMotor(VIDEO_MESA_ENCENDIDA, 2)
+    const con10 = porElMotor(EN_45, 2)
     expect(veces(con10.hechos, 'borrador_video')).toBe(3)
     expect(veces(con10.hechos, 'aprobar_propuestas')).toBe(3)
   })
   it('⚠️ (para la PREGUNTA a Lenovo) 2 rondas con 10: se corta ANTES del video, 36,03 + 15 > 45 · no se esconde', () => {
-    const x = porElMotor(VIDEO_MESA_ENCENDIDA, 2)
+    const x = porElMotor(EN_45, 2)
     expect(x.fin).toMatchObject({ accion: 'cierre_por_tope', razon: 'tope_de_gasto' })
     expect('detalle' in x.fin && x.fin.detalle).toBe('gasto 36.0300 + tope del paso «video» 15 > 45')
     expect(x.hechos).not.toContain('video')
@@ -73,7 +75,7 @@ describe('202611170830 · la migración', () => {
   it('🔴 de los pasos EXACTOS de 0720 a los EXACTOS del código; solo cambia el tope del borrador (20 → 10)', () => {
     expect(tomar(MIG, 'pasos_antes')).toEqual(tomar(M0720, 'pasos'))
     expect(tomar(MIG, 'pasos')).toEqual(json(VIDEO_MESA_ENCENDIDA.pasos))
-    expect(tomar(MIG, 'lim')).toEqual(json(VIDEO_MESA_ENCENDIDA.limites))
+    expect(tomar(MIG, 'lim')).toEqual(json(EN_45.limites))
     expect(tomar(MIG, 'lim')).toEqual(tomar(M0720, 'lim'))
     const antes = tomar(MIG, 'pasos_antes') as Array<{ clave: string; tope_usd: number }>
     const despues = tomar(MIG, 'pasos') as Array<{ clave: string; tope_usd: number }>
