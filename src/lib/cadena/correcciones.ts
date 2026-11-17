@@ -153,9 +153,11 @@ export function paraLaPieza(c: Pick<Correccion, 'estado' | 'respuesta' | 'dura' 
   if (c.estado !== 'respondida') return 'esperando'
   if (frenadaPorReglaDura(c)) return 'frenada'
   if (c.respuesta !== 'tomada' && c.respuesta !== 'tomada_en_parte') return 'sigue'
-  const vn = (c.version_nueva ?? {}) as { accion?: unknown; filas_al_brief?: unknown }
+  const vn = (c.version_nueva ?? {}) as { accion?: unknown; filas_al_brief?: unknown; fila_publicada?: unknown }
   const movida = c.destino === 'calendario' ? typeof vn.accion === 'string' : Array.isArray(vn.filas_al_brief) && vn.filas_al_brief.includes(c.fila_id)
-  return movida ? 'reemplazada' : 'sigue'
+  if (movida) return 'reemplazada'
+  // 🔴 CC6 · una DURA tomada sin mover la fila: la pieza vieja rompe la regla → frena (con su alarma), salvo que se sepa que ya se publicó
+  return c.dura && vn.fila_publicada !== true ? 'frenada' : 'sigue'
 }
 const vista = (c: Correccion) => ({ llave: c.llave, fila_id: c.fila_id, destino: c.destino, destino_pedido: c.destino_pedido, estado: c.estado, respuesta: c.respuesta, explicacion: c.explicacion, dura: c.dura, intentos: c.intentos, respondida_en: c.respondida_en, bloquea_la_pieza: bloqueaLaPieza(c), para_la_pieza: paraLaPieza(c), regla: c.regla })
 
@@ -214,7 +216,7 @@ export async function guardarRespuesta(al: Almacen, llave: string, leida: Respue
   }
   const explicacion = leida.respuesta === 'no_dicha' ? (leida.motivo_no_dicha ?? 'sin respuesta del creador') : leida.explicacion
   const cerro = await al.correccionActualizar(llave, { estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva, respondida_en: ahora }, c.estado)
-  if (cerro) await alarmaSiFrena(al, { ...c, estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion) }, ahora)
+  if (cerro) await alarmaSiFrena(al, { ...c, estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva }, ahora)
   return { estado: 'respondida', respuesta: leida.respuesta }
 }
 
@@ -259,10 +261,12 @@ export async function devolverFilasAlBrief(al: Almacen, c: Pick<Correccion, 'cam
     // la regla dura se mira en un solo lugar: el «desde» de la escritura condicional (sin dura, «aprobada» no está y la fila no se mueve)
     if (f.estado === 'aprobada' && (!al.piezaPublicada || (await al.piezaPublicada(c.campana_id, f.id)))) continue
     const desde: readonly Fila['estado'][] = c.dura ? [...ESTADOS_QUE_VUELVEN_AL_BRIEF, 'aprobada'] : ESTADOS_QUE_VUELVEN_AL_BRIEF
-    if (await al.reubicarFila(c.campana_id, version, f.id, { estado: 'lista_para_brief' }, `la jefatura corrigió su idea del banco (corrección ${c.llave}): el brief se rehace y la pieza vieja queda reemplazada`, desde)) vueltas.push(f.id)
+    if (await al.reubicarFila(c.campana_id, version, f.id, { estado: 'lista_para_brief' }, avisoDeLaVuelta(c.llave), desde)) vueltas.push(f.id)
   }
   return vueltas
 }
+/** la marca que deja la vuelta en la fila: con ella, una vuelta repetida (el cierre perdió) sabe que la fila YA volvió por esta corrección (🔴 CC6 21:40) */
+export const avisoDeLaVuelta = (llave: string) => `la jefatura corrigió su idea del banco (corrección ${llave}): el brief se rehace y la pieza vieja queda reemplazada`
 
 export function sondeoDelBanco(puerto: PuertoDelBanco): SondeoDeCorreccion {
   return async (al, c, ahora) => {
@@ -280,8 +284,15 @@ export function sondeoDelBanco(puerto: PuertoDelBanco): SondeoDeCorreccion {
     const tomada = leida.respuesta === 'tomada' || leida.respuesta === 'tomada_en_parte'
     // al editar el puerto no dice qué filas tenían brief (al retirar, sí: `con_brief_sin_tocar`, ya reasignadas): las que citan la idea corregida, más esas
     const citan = c.idea_id ? (await al.filas(c.campana_id, Math.max(1, await al.ultimaVersionDeCalendario(c.campana_id)))).filter((f) => f.idea_ref === c.idea_id).map((f) => f.id) : []
-    const filas_al_brief = tomada ? await devolverFilasAlBrief(al, c, [...citan, ...(e.resultado.con_brief_sin_tocar ?? [])]) : []
-    return { estado: 'respondida', leida, version_nueva: { version: e.resultado.version, accion: x.accion ?? null, reasignadas: e.resultado.reasignadas ?? [], con_brief_sin_tocar: e.resultado.con_brief_sin_tocar ?? [], filas_al_brief } }
+    const candidatas = [...citan, ...(e.resultado.con_brief_sin_tocar ?? [])]
+    if (tomada) await devolverFilasAlBrief(al, c, candidatas)
+    // las devueltas se cuentan por el ESTADO de la fila y la marca de ESTA corrección, no por lo que movió esta llamada: repetir da lo mismo
+    const ahoraFilas = tomada ? await al.filas(c.campana_id, Math.max(1, await al.ultimaVersionDeCalendario(c.campana_id))) : []
+    const filas_al_brief = ahoraFilas.filter((f) => candidatas.includes(f.id) && f.estado === 'lista_para_brief' && f.avisos.includes(avisoDeLaVuelta(c.llave))).map((f) => f.id)
+    // 🔴 CC6 · una dura tomada cuya fila NO volvió: solo «sigue» si se SABE que la pieza ya se publicó; si no, frena
+    const propia = ahoraFilas.find((f) => f.id === c.fila_id)
+    const fila_publicada = !!(tomada && propia && !filas_al_brief.includes(c.fila_id) && al.piezaPublicada && (await al.piezaPublicada(c.campana_id, c.fila_id)))
+    return { estado: 'respondida', leida, version_nueva: { version: e.resultado.version, accion: x.accion ?? null, reasignadas: e.resultado.reasignadas ?? [], con_brief_sin_tocar: e.resultado.con_brief_sin_tocar ?? [], filas_al_brief, fila_publicada } }
   }
 }
 
@@ -290,11 +301,14 @@ export function sondeoDelBanco(puerto: PuertoDelBanco): SondeoDeCorreccion {
  * Una por incidente: solo quien cierra la corrección la manda (la escritura condicional al estado la cierra una sola vez) · si Slack no confirma, `alarma_en` queda vacío
  * y la vigía la reintenta (`alarmasPendientes`): un aviso que no salió no se da por avisado.
  */
-export function textoDeLaAlarma(c: Pick<Correccion, 'fila_id' | 'campana_id' | 'destino' | 'motivo' | 'linea_de_la_ficha' | 'explicacion'>): string {
-  return `⛔ Regla dura sin tomar · la pieza de la fila ${c.fila_id} (campaña ${c.campana_id}) NO se publica. La jefatura vio: ${c.motivo}${c.linea_de_la_ficha ? ` (ficha: «${c.linea_de_la_ficha}»)` : ''}. El creador (${c.destino}) no la tomó tras el reintento: ${c.explicacion ?? 'sin respuesta'}.`
+export function textoDeLaAlarma(c: Pick<Correccion, 'fila_id' | 'campana_id' | 'destino' | 'motivo' | 'linea_de_la_ficha' | 'explicacion'> & { respuesta?: Correccion['respuesta'] }): string {
+  const porque = c.respuesta === 'tomada' || c.respuesta === 'tomada_en_parte'
+    ? `El creador (${c.destino}) la tomó, pero la fila no pudo volver al brief (la pieza vieja sigue rompiendo la regla): ${c.explicacion ?? 'sin explicación'}.`
+    : `El creador (${c.destino}) no la tomó tras el reintento: ${c.explicacion ?? 'sin respuesta'}.`
+  return `⛔ Regla dura sin tomar · la pieza de la fila ${c.fila_id} (campaña ${c.campana_id}) NO se publica. La jefatura vio: ${c.motivo}${c.linea_de_la_ficha ? ` (ficha: «${c.linea_de_la_ficha}»)` : ''}. ${porque}`
 }
 async function alarmaSiFrena(al: Almacen, c: Correccion, ahora: string): Promise<void> {
-  if (!frenadaPorReglaDura(c) || c.alarma_en) return
+  if (paraLaPieza(c) !== 'frenada' || c.alarma_en) return
   try {
     const r = await al.avisarAlarma(textoDeLaAlarma(c))
     if (r.ok && al.correccionActualizar) await al.correccionActualizar(c.llave, { alarma_en: ahora }, 'respondida')

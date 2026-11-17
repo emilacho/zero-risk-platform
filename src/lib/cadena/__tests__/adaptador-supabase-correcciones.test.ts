@@ -66,9 +66,9 @@ describe('adaptador · cadena_correcciones', () => {
     expect(await al.correccionActualizar!('a:calendario', { estado: 'respondida', respuesta: 'no_dicha' }, 'en_manos_del_creador')).toBe(false)
     expect(filas[0].respuesta).toBe('tomada')
   })
-  it('🔴 a2 · las alarmas pendientes son SOLO las duras cerradas no_dicha que todavía no se avisaron', async () => {
+  it('🔴 a2 · las alarmas pendientes son SOLO las duras cerradas que todavía no se avisaron (el receptor manda solo las frenadas)', async () => {
     const al = almacenDeSupabase()
-    expect((await al.alarmasPendientes!()).map((c) => c.llave)).toEqual(['c:calendario'])
+    expect((await al.alarmasPendientes!()).map((c) => c.llave)).toEqual(['c:calendario', 'e:calendario'])
   })
   it('🔴 a3 · las pendientes de repartir no incluyen las respondidas', async () => {
     const al = almacenDeSupabase()

@@ -91,4 +91,63 @@ describe('el banco de punta a punta por el reloj', () => {
     expect(al.alarmasEnviadas[0]).toContain(`fila ${FILA}`)
     expect(await paraLaPiezaDe(al)).toEqual(['frenada'])
   })
+  const tomarla = bloque({ respuesta: 'tomada', accion: 'editar', cambios: { mensaje: 'el encebollado de siempre, en la sede abierta' }, explicacion: 'quito la fecha' })
+  it('🔴 CC6 · el cierre PIERDE una vez: la 2.ª vuelta igual da «reemplazada» (cuenta por el estado de la fila y la marca de esta corrección)', async () => {
+    const { al, entrega } = almacen()
+    await devolver(al)
+    await relojDeLaCadena(al, VIGIA, T0)
+    await entrega(tomarla, mas(5))
+    const original = al.correccionActualizar.bind(al)
+    let perder = true
+    al.correccionActualizar = async (llave, cambios, esperado) => { if (perder && cambios.estado === 'respondida') { perder = false; return false } return original(llave, cambios, esperado) }
+    await relojDeLaCadena(al, VIGIA, mas(6))
+    expect(al.correcciones[0].estado).toBe('en_manos_del_creador')
+    expect(filaDe(al, FILA).estado).toBe('lista_para_brief')
+    await relojDeLaCadena(al, VIGIA, mas(7))
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'tomada', version_nueva: { filas_al_brief: [FILA] } })
+    expect(await paraLaPiezaDe(al)).toEqual(['reemplazada'])
+    expect(al.alarmasEnviadas).toEqual([])
+  })
+  it('🔴 CC6 · dos vigías A LA VEZ sondean la respondida: queda «reemplazada», una sola vuelta de la fila', async () => {
+    const { al, entrega } = almacen()
+    await devolver(al)
+    await relojDeLaCadena(al, VIGIA, T0)
+    await entrega(tomarla, mas(5))
+    await Promise.all([relojDeLaCadena(al, VIGIA, mas(6)), relojDeLaCadena(al, { ...VIGIA, workflow_execution_id: 'v2' }, mas(6))])
+    expect(await paraLaPiezaDe(al)).toEqual(['reemplazada'])
+    expect(filaDe(al, FILA).avisos.filter((a) => a.includes(`corrección ${FILA}:hoja`))).toHaveLength(1)
+  })
+  it('🔴 CC6 · una DURA tomada cuya fila está aprobada y NO se sabe si se publicó: FRENADA con una alarma; si se sabe que ya se publicó, «sigue»', async () => {
+    const correr = async (publicada?: boolean) => {
+      const { al, entrega } = almacen()
+      filaDe(al, FILA).estado = 'aprobada'
+      if (publicada !== undefined) al.piezaPublicada = async () => publicada
+      await devolver(al)
+      await relojDeLaCadena(al, VIGIA, T0)
+      await entrega(tomarla, mas(5))
+      await relojDeLaCadena(al, VIGIA, mas(6))
+      return al
+    }
+    const sin = await correr()
+    expect(filaDe(sin, FILA).estado).toBe('aprobada')
+    expect(await paraLaPiezaDe(sin)).toEqual(['frenada'])
+    expect(sin.alarmasEnviadas).toHaveLength(1)
+    expect(sin.alarmasEnviadas[0]).toContain('la fila no pudo volver al brief')
+    const ya = await correr(true)
+    expect(await paraLaPiezaDe(ya)).toEqual(['sigue'])
+    expect(ya.alarmasEnviadas).toEqual([])
+    // aprobada, dura y NO publicada: vuelve al brief → reemplazada
+    const no = await correr(false)
+    expect(filaDe(no, FILA).estado).toBe('lista_para_brief')
+    expect(await paraLaPiezaDe(no)).toEqual(['reemplazada'])
+  })
+  it('🔴 CC6 · «filas_al_brief» cuenta solo las que volvieron por ESTA corrección: una fila que ya esperaba brief por otra razón no se anota', async () => {
+    const { al, entrega } = almacen()
+    al.filasGuardadas.push({ ...filaDe(al, FILA), id: 's5-ya-esperaba', estado: 'lista_para_brief', avisos: ['volvió por otra corrección'] })
+    await devolver(al)
+    await relojDeLaCadena(al, VIGIA, T0)
+    await entrega(tomarla, mas(5))
+    await relojDeLaCadena(al, VIGIA, mas(6))
+    expect(al.correcciones[0].version_nueva).toMatchObject({ filas_al_brief: [FILA] })
+  })
 })

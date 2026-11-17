@@ -219,7 +219,7 @@ export class AlmacenMemoria implements Almacen {
   async correccionesPendientes() { return structuredClone(this.correcciones.filter((x) => x.estado !== 'respondida')) }
   /** sin fijar = el almacén no sabe si se publicó (la cadena lo da por publicado) */
   piezaPublicada?: (campanaId: string, filaId: string) => Promise<boolean>
-  async alarmasPendientes() { return structuredClone(this.correcciones.filter((x) => x.estado === 'respondida' && x.dura && x.respuesta === 'no_dicha' && !x.alarma_en)) }
+  async alarmasPendientes() { return structuredClone(this.correcciones.filter((x) => x.estado === 'respondida' && x.dura && !x.alarma_en)) }
   async correccionesDeEncargo(encargoId: string) { return structuredClone(this.correcciones.filter((x) => x.encargo_id === encargoId)) }
   async correccionActualizar(llave: string, cambios: Partial<import('../correcciones').Correccion>, estadoEsperado: import('../correcciones').EstadoDeCorreccion) { const c = this.correcciones.find((x) => x.llave === llave); if (!c || c.estado !== estadoEsperado) return false; Object.assign(c, structuredClone(cambios)); return true }
   async estrategiaEnVersion(campanaId: string, version: number) { return this.estrategias.find((e) => e.campana_id === campanaId && e.version === version) ?? null }
