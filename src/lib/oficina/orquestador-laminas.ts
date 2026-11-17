@@ -533,11 +533,12 @@ function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Pl
     if (modo === 'generada') { generadas++; if (generadas > maxGen) { fichas.push(fichaNueva(`vd-tope-${i.ref}`, 'chequeo', 'imagen', 'sugerencia', `se pidieron más de ${maxGen} imágenes generadas: «${i.ref}» sale sin imagen`, 'tope de imágenes generadas')); modo = 'ninguna' } }
     return { ...i, modo, foto_id: foto }
   })
-  const ci = citasExisten((v.reglas_de_imagen ?? { obligatorio: [], prohibido: [] }) as ReglasDeImagen, b.brief.texto)
-  for (const x of ci.rechazadas) fichas.push(fichaNueva(`vd-regla-${x.id}`, 'chequeo', 'imagen', 'sugerencia', `regla de imagen «${x.id}» descartada: ${x.motivo}`, 'citas literales del brief'))
+  // 17-nov · GO creativos punto 5: referencia comprobada contra lo que el agente recibió; lo no comprobable se MARCA (sin rejas), no se descarta
+  const ci = citasExisten((v.reglas_de_imagen ?? { obligatorio: [], prohibido: [] }) as ReglasDeImagen, { brief: b.brief.texto, manual: b.F.manual_texto, plan: b.F.plan_texto })
+  for (const x of ci.marcadas) fichas.push(fichaNueva(`vd-regla-${x.id}`, 'chequeo', 'imagen', 'sugerencia', `regla de imagen «${x.id}» sin referencia comprobable (${x.motivo}): se usa igual, marcada`, 'referencias al brief, la hoja, la gran idea, el manual o el plan'))
   const gen = efectivas.filter((i) => i.modo === 'generada').map((i) => i.ref)
   const requiere = gen.length > 0 || efectivas.some((i) => i.modo === 'real' && confianzaDeLaFoto(b.F.fotos, i.foto_id) !== 'alta')
-  return { res: { costo_usd: 0, artefacto: { ...v, imagenes: efectivas, reglas_de_imagen: ci.validas, reglas_rechazadas: ci.rechazadas, refs_generadas: gen, hay_generadas: gen.length > 0, requiere_mirar: requiere }, ...(fichas.length ? { fichas } : {}) } }
+  return { res: { costo_usd: 0, artefacto: { ...v, imagenes: efectivas, reglas_de_imagen: ci.validas, reglas_marcadas: ci.marcadas, refs_generadas: gen, hay_generadas: gen.length > 0, requiere_mirar: requiere }, ...(fichas.length ? { fichas } : {}) } }
 }
 
 function mirar(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, esRe = false): ProcesoL {

@@ -5,12 +5,22 @@
  *     11-nov · #12 del barrido de reglas rígidas (GO Lenovo 18:50): que el prompt NO REPITA la palabra de un obligatorio, que escriba algo con forma de proporción («10:30») o «estilo de <Nombre>»
  *     ya NO descartan: pasan como AVISO y lo juzga quien mira la imagen (el curador responde regla por regla en ③; una regla omitida sigue contando como falla).
  *  ③ la imagen contra el brief: el curador SOLO describe; `decideImagen` decide por código; si falla se regenera (≤ 2 veces, lo manda el motor); si sigue fallando se descarta esa versión.
- * Más: `citasExisten` (una regla extraída de un brief de texto debe traer una cita que EXISTA en el brief) y `datosAjenos` (teléfono, @ o enlace que no son del cliente).
+ * Más: `citasExisten` (17-nov · GO creativos punto 5: cada regla dice DE DÓNDE sale —brief, hoja, gran idea, manual o plan— por cita o por campo; la que no se puede
+ *  comprobar queda MARCADA, no descartada: «sin rejas») y `datosAjenos` (teléfono, @ o enlace que no son del cliente).
  */
 import { aparicionesDe, contienePalabra, datosDeContacto, esTelefonoDeLaLista, normalizar } from './texto'
 import { motivosDeInvencion, type ReglasDeInvencion } from './prompts-sin-invencion'
 
-export interface ReglaDeImagen { id: string; texto: string; claves?: string[]; cita?: string; /** una palabra declarada: se avisa, no descarta el prompt */ solo_aviso?: boolean }
+export interface ReglaDeImagen {
+  id: string; texto: string; claves?: string[]; cita?: string
+  /** 17-nov · de dónde sale la regla (referencia): brief · hoja · gran_idea · manual · plan */
+  fuente?: string
+  /** 17-nov · el campo o sección de esa fuente (p. ej. «VISUAL», «GRAN IDEA», «paleta»): referirse, no copiar */
+  campo?: string
+  /** 17-nov · la sala no pudo comprobar de dónde sale: la regla se usa igual y se dice por qué (no se descarta) */
+  marcada?: string
+  /** una palabra declarada: se avisa, no descarta el prompt */ solo_aviso?: boolean
+}
 export interface ReglasDeImagen { obligatorio: ReglaDeImagen[]; prohibido: ReglaDeImagen[] }
 export interface PropiosDelCliente { telefonos: string[]; handles: string[]; urls: string[]; marcas_ajenas: string[] }
 
@@ -133,18 +143,63 @@ export function elegirVersion(pasan: number[], preferencia: number[]): number | 
   return pasan[0]
 }
 
-// ── citas literales (briefs de texto) ───────────────────────────────────────────────
+// ── citas por referencia (17-nov · GO creativos punto 5) ──────────────────────────────
 const comparable = (s: string) => normalizar(s).replace(/[^a-z0-9ñ]+/g, ' ').trim()
-/** una regla extraída de un brief de texto debe traer la cita literal y esa cita debe EXISTIR en el brief. Devuelve las reglas válidas y las rechazadas con el motivo. */
-export function citasExisten(reglas: ReglasDeImagen, textoDelBrief: string): { validas: ReglasDeImagen; rechazadas: Array<{ id: string; motivo: string }> } {
-  const base = comparable(textoDelBrief)
-  const rechazadas: Array<{ id: string; motivo: string }> = []
-  const filtra = (rs: ReglaDeImagen[]) => rs.filter((r) => {
-    if (!r.cita || !comparable(r.cita)) { rechazadas.push({ id: r.id, motivo: 'sin cita literal del brief' }); return false }
-    if (!base.includes(comparable(r.cita))) { rechazadas.push({ id: r.id, motivo: `la cita no está en el brief: «${r.cita.slice(0, 60)}»` }); return false }
-    return true
+/** los textos que el agente recibió y contra los que se comprueba una referencia. La hoja (y su GRAN IDEA) llega dentro del brief de la pieza. */
+export interface FuentesDeCitas { brief: string; manual?: string | null; plan?: string | null }
+/** las fuentes que una regla puede nombrar → el texto donde se busca. «hoja» y «gran_idea» viven en el brief de la pieza (`escribirHoja`). */
+export const FUENTES_DE_REGLAS = ['brief', 'hoja', 'gran_idea', 'manual', 'plan'] as const
+const textoDeLaFuente = (f: FuentesDeCitas, fuente: string): string | null => {
+  const k = comparable(fuente).replace(/ /g, '_')
+  if (k === 'brief' || k === 'hoja' || k === 'gran_idea') return f.brief || null
+  if (k === 'manual') return f.manual || null
+  if (k === 'plan') return f.plan || null
+  return null
+}
+const SIN_GRAN_IDEA = comparable('(sin gran idea)')
+export interface ReferenciaComprobada { id: string; fuente: string; por: 'cita' | 'campo' }
+export interface ResultadoDeCitas {
+  /** TODAS las reglas del agente: ninguna se descarta; las que no se pudieron comprobar llevan `marcada` con el motivo */
+  validas: ReglasDeImagen
+  marcadas: Array<{ id: string; motivo: string }>
+  comprobadas: ReferenciaComprobada[]
+}
+/**
+ * cada regla dice de dónde sale: por CITA (el texto aparece en la fuente, sin importar tildes, mayúsculas ni signos) o por CAMPO (la sección o campo nombrado existe en esa
+ * fuente: referirse, no copiar). Sin fuente declarada, la cita vale si está en cualquiera de las fuentes. Lo que no se puede comprobar se usa IGUAL, marcado y con su motivo.
+ */
+export function citasExisten(reglas: ReglasDeImagen, fuentes: FuentesDeCitas | string): ResultadoDeCitas {
+  const f: FuentesDeCitas = typeof fuentes === 'string' ? { brief: fuentes } : fuentes
+  const marcadas: ResultadoDeCitas['marcadas'] = []
+  const comprobadas: ReferenciaComprobada[] = []
+  const comprobar = (r: ReglaDeImagen): { fuente: string; por: 'cita' | 'campo' } | string => {
+    const cita = r.cita ? comparable(r.cita) : ''
+    const campo = r.campo ? comparable(r.campo) : ''
+    const fuente = r.fuente?.trim() ?? ''
+    if (fuente) {
+      const t = textoDeLaFuente(f, fuente)
+      if (t === null) return FUENTES_DE_REGLAS.includes(comparable(fuente).replace(/ /g, '_') as (typeof FUENTES_DE_REGLAS)[number]) ? `la fuente «${fuente}» no llegó a este encargo` : `fuente desconocida «${fuente.slice(0, 30)}»`
+      const base = comparable(t)
+      const esGranIdea = comparable(fuente).replace(/ /g, '_') === 'gran_idea'
+      if (esGranIdea && (!base.includes('gran idea') || base.includes(`gran idea ${SIN_GRAN_IDEA}`))) return 'esta pieza no trae gran idea'
+      if (cita && base.includes(cita)) return { fuente, por: 'cita' }
+      if (campo && base.includes(campo)) return { fuente, por: 'campo' }
+      if (esGranIdea && !cita && !campo) return { fuente, por: 'campo' }
+      if (cita) return `la cita no está en ${fuente}: «${r.cita!.slice(0, 60)}»`
+      if (campo) return `el campo «${r.campo!.slice(0, 40)}» no está en ${fuente}`
+      return `dice que sale de ${fuente} pero no nombra el campo ni cita`
+    }
+    if (!cita) return 'sin referencia: no dice de qué fuente ni qué campo sale'
+    for (const [nombre, t] of [['brief', f.brief], ['manual', f.manual], ['plan', f.plan]] as const) if (t && comparable(t).includes(cita)) return { fuente: nombre, por: 'cita' }
+    return `la cita no está en ninguna fuente: «${r.cita!.slice(0, 60)}»`
+  }
+  const marca = (rs: ReglaDeImagen[]) => rs.map((r) => {
+    const c = comprobar(r)
+    if (typeof c !== 'string') { comprobadas.push({ id: r.id, ...c }); const { marcada: _m, ...limpia } = r; return limpia }
+    marcadas.push({ id: r.id, motivo: c })
+    return { ...r, marcada: c }
   })
-  return { validas: { obligatorio: filtra(reglas.obligatorio), prohibido: filtra(reglas.prohibido) }, rechazadas }
+  return { validas: { obligatorio: marca(reglas.obligatorio ?? []), prohibido: marca(reglas.prohibido ?? []) }, marcadas, comprobadas }
 }
 
 /** campos que la SALA (no el agente) deriva de la decisión del curador */

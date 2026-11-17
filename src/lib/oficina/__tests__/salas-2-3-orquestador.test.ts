@@ -303,11 +303,13 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     expect(tareas['direccion_visual']).toHaveLength(2); expect(tareas['direccion_visual'][1]).toMatch(/portada/)
     expect(arte(M, id, 'visual_direction').imagenes).toEqual([])
   })
-  it('una regla de imagen con cita INVENTADA se descarta', async () => {
+  it('🔴 17-nov · una regla de imagen con cita INVENTADA NO se descarta: queda marcada, a la vista, con su ficha', async () => {
     const { M, id } = await abiertoC()
     const inventada = { obligatorio: [{ id: 'o1', texto: 'x', claves: ['plato'], cita: 'Esta frase no está en el brief' }], prohibido: [] }
     await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada('hook', inventada as never) }), mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }) }))
-    expect(arte(M, id, 'visual_direction').reglas_rechazadas).toHaveLength(1)
+    expect(arte(M, id, 'visual_direction').reglas_marcadas).toHaveLength(1)
+    expect((arte(M, id, 'visual_direction').reglas_de_imagen as { obligatorio: Array<{ id: string; marcada?: string }> }).obligatorio).toMatchObject([{ id: 'o1', marcada: expect.stringContaining('la cita no está') }])
+    expect(M.encargos.get(id)!.estado_del_motor.fichas.find((f) => f.id === 'vd-regla-o1')).toMatchObject({ gravedad: 'sugerencia', que: expect.stringContaining('se usa igual, marcada') })
   })
   it('foto REAL candidata: se usa, se mira si su confianza no es alta, no se genera nada y queda el uso registrado con su rol', async () => {
     const { M, id } = await abiertoC({ dry_run: false })

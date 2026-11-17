@@ -119,7 +119,7 @@ describe('rama FOTO GENERADA · punta a punta con modelo simulado (dry_run)', ()
     const M = crearMemoria()
     const id = await abierto(M)
     const { tareas } = await correr(M, id, guionGenerada())
-    expect(tareas['direccion_visual'][0]).toMatch(/cerebro/); expect(tareas['direccion_visual'][0]).toMatch(/BRF-0003/); expect(tareas['direccion_visual'][0]).toMatch(/la sala comprueba que la cita existe/)
+    expect(tareas['direccion_visual'][0]).toMatch(/cerebro/); expect(tareas['direccion_visual'][0]).toMatch(/BRF-0003/); expect(tareas['direccion_visual'][0]).toMatch(/La sala comprueba la referencia/)
     expect(tareas['prompts'][0]).toMatch(/OBLIGATORIO/); expect(tareas['prompts'][0]).toMatch(/no escribas tamaño/)
     expect(tareas['mirar'][0]).toMatch(/índice 0/); expect(tareas['mirar'][0]).toMatch(/DESCRIBES/)
     expect(tareas['texto'][0]).toMatch(/997 744 288/) // datos verificados del cliente
@@ -265,15 +265,27 @@ describe('lo que el código decide aunque el curador diga otra cosa', () => {
     expect(e.fichas.some((f) => f.id === 'vd-ninguna')).toBe(true)
     expect((e.artefactos['visual_direction'].datos.decision as { modo: string }).modo).toBe('generada')
   })
-  it('una regla de imagen con cita INVENTADA se descarta y el prompt ya no la ve', async () => {
+  it('🔴 17-nov · sin rejas: una regla con cita INVENTADA se usa MARCADA; el paso siguiente la ve con su marca y la ficha lo dice', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
     const inventada = { ...REGLAS_CEVICHE, obligatorio: [...REGLAS_CEVICHE.obligatorio, { id: 'o9', texto: 'una flor en el plato', claves: ['flor'], cita: 'El plato lleva una flor de hibisco encima' }] }
     const { tareas } = await correr(M, id, { ...guionGenerada(), direccion_visual: () => ({ texto: direccionGenerada(inventada) }) })
     const e = M.encargos.get(id)!.estado_del_motor
-    expect(e.fichas.some((f) => f.id === 'vd-regla-o9')).toBe(true)
-    expect((e.artefactos['visual_direction'].datos.reglas_de_imagen as { obligatorio: unknown[] }).obligatorio).toHaveLength(2)
-    expect(tareas['prompts'][0]).not.toMatch(/flor/)
+    expect(e.fichas.find((f) => f.id === 'vd-regla-o9')).toMatchObject({ gravedad: 'sugerencia', que: expect.stringContaining('se usa igual, marcada') })
+    const obligatorio = (e.artefactos['visual_direction'].datos.reglas_de_imagen as { obligatorio: Array<{ id: string; marcada?: string }> }).obligatorio
+    expect(obligatorio).toHaveLength(3)
+    expect(obligatorio.find((r) => r.id === 'o9')?.marcada).toMatch(/la cita no está en ninguna fuente/)
+    expect(obligatorio.filter((r) => r.id !== 'o9').every((r) => r.marcada === undefined)).toBe(true)
+    expect(tareas['prompts'][0]).toMatch(/\[o9\] una flor en el plato \(marcada: la cita no está/)
+  })
+  it('🔴 17-nov · por referencia: una regla que sale de un CAMPO de la hoja (sin copiar frase) pasa sin marca y su fuente llega al artefacto', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M)
+    const porCampo = { ...REGLAS_CEVICHE, obligatorio: [...REGLAS_CEVICHE.obligatorio, { id: 'o8', texto: 'el plato de la pieza', claves: ['plato'], fuente: 'hoja', campo: 'Qué es' }] }
+    await correr(M, id, { ...guionGenerada(), direccion_visual: () => ({ texto: direccionGenerada(porCampo as unknown as typeof REGLAS_CEVICHE) }) })
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect(e.fichas.some((f) => f.id === 'vd-regla-o8')).toBe(false)
+    expect((e.artefactos['visual_direction'].datos.reglas_de_imagen as { obligatorio: Array<{ id: string; fuente?: string; campo?: string; marcada?: string }> }).obligatorio.find((r) => r.id === 'o8')).toEqual({ id: 'o8', texto: 'el plato de la pieza', claves: ['plato'], fuente: 'hoja', campo: 'Qué es' })
   })
 })
 

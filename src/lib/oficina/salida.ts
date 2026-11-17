@@ -16,7 +16,8 @@ export type Esq =
   | { t: 'obj'; props: Record<string, Esq>; req?: string[]; extra?: boolean; ignorar?: string[] }
 
 const str = (min = 1, max = 4000): Esq => ({ t: 'str', min, max })
-const regla: Esq = { t: 'obj', props: { id: str(1, 60), texto: str(1, 400), claves: { t: 'arr', de: str(1, 80), max: 12 }, cita: str(1, 600) }, req: ['id', 'texto'] }
+// 17-nov · GO creativos punto 5: la regla dice de dónde sale (`fuente` + `campo`); `marcada` NO está: la pone solo la sala (si el agente la manda, se ignora)
+const regla: Esq = { t: 'obj', props: { id: str(1, 60), texto: str(1, 400), claves: { t: 'arr', de: str(1, 80), max: 12 }, cita: str(1, 600), fuente: str(1, 30), campo: str(1, 120) }, req: ['id', 'texto'] }
 const necesito: Esq = { t: 'arr', max: 3, de: { t: 'obj', props: { que: str(1, 300), para_que: str(1, 300), bloquea: { t: 'bool' } }, req: ['que'] } }
 /** Sprint 1 · Mejora 5 · lo que va ESCRITO sobre la imagen (lo dibuja la sala con la marca). Opcional y holgado: lo largo se avisa al componer, no se rechaza aquí */
 const TEXTO_EN_IMAGEN: Esq = { t: 'obj', req: [], props: { etiqueta: str(0, 300), titular: str(0, 300), bajada: str(0, 300), boton: str(0, 300) } }
