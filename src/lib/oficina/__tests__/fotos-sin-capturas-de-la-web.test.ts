@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { idsDeFotosPropias } from '../fotos-propias-datos'
 import { LISTA_DE_FOTOS } from '../mesa/pedidos'
 import { FOTOS } from './memoria'
+import { ROTULO_CAPTURA_WEB, referenciasDeEstilo, separarFotosYCapturas } from '../material'
 
 type Fila = Record<string, unknown>
 const FILAS: Fila[] = [
@@ -46,5 +47,25 @@ describe('la oferta de cada foto en el pedido de la mesa', () => {
   })
   it('🔴 sin oferta, o con una vacía, no se dice nada (no se inventa)', () => {
     expect(LISTA_DE_FOTOS([{ ...f2, origen: 'propia' }, { ...f3, origen: 'propia', oferta: '  ' }])).not.toMatch(/oferta:/)
+  })
+})
+
+describe('las capturas siguen como referencia de estilo, marcadas (GO Lenovo sobre #1137)', () => {
+  const [f1, f2] = FOTOS.slice(0, 2)
+  it('🔴 separarFotosYCapturas: fuera de las propias; en las referencias con `captura_web`; la propia pasa a «referencia»', () => {
+    const r = separarFotosYCapturas([
+      { ...f1, owner_role: 'propio', clase: 'foto' },
+      { ...f2, id: 'cap-propia', owner_role: 'propio', clase: 'captura_web' },
+      { ...f2, id: 'cap-comp', owner_role: 'competidor', tipo: 'web_captura' },
+      { ...f2, id: 'ref-normal', owner_role: 'competidor' },
+    ])
+    expect(r.propias.map((x) => x.id)).toEqual([f1.id])
+    expect(r.referencias.map((x) => [x.id, x.origen, x.captura_web ?? false])).toEqual([['ref-normal', 'competencia', false], ['cap-propia', 'referencia', true], ['cap-comp', 'competencia', true]])
+  })
+  it('🔴 la referencia de estilo dice «captura de la web · referencia, no se publica»; las demás, como siempre', () => {
+    const t = referenciasDeEstilo([{ ...f1, origen: 'competencia', captura_web: true }, { ...f2, origen: 'competencia' }])
+    expect(t[0].startsWith(`captura de la web · ${ROTULO_CAPTURA_WEB}: `)).toBe(true)
+    expect(ROTULO_CAPTURA_WEB).toBe('referencia, no se publica')
+    expect(t[1].startsWith('competencia: ')).toBe(true)
   })
 })
