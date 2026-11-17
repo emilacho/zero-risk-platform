@@ -125,13 +125,18 @@ export async function bibliotecaDelTurno(P: Puertos, enc: Encargo, est: EstadoMe
   try { return seccionDeLaBiblioteca(bibliotecaDelCliente(await P.mesa.bibliotecaDeVideo(enc.client_id))) || undefined } catch { return undefined }
 }
 
-/** Sprint 2 · S2-6 · los reels exitosos del cliente desarmados en momentos, para un turno de la mesa de VIDEO (contexto, no plantilla); sin puerto, con error o sin reels = nada (nunca frena el turno) */
+/** S2-6 · lo que el turno dice cuando la lectura de las referencias FALLÓ (≠ «no hay reels»): queda a la vista en el pedido y en el registro, y el turno sigue */
+export const AVISO_SIN_REFERENCIAS = '## Referencias desarmadas: hoy no se pudieron leer (falló la lectura de la base, no es que no haya reels). Trabaja sin ellas; la oficina ya lo sabe.'
+/** Sprint 2 · S2-6 · los reels exitosos del cliente desarmados en momentos, para un turno de la mesa de VIDEO (contexto, no plantilla) · sin puerto o sin reels = nada; con error = el aviso (nunca frena el turno) */
 export async function referenciasDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa): Promise<string | undefined> {
   if (est.tipo !== 'video' || !P.mesa?.referenciasDeVideo) return undefined
   try {
     const v = est.video
     return seccionDeReferencias(desarmarReferencias(await P.mesa.referenciasDeVideo(enc.client_id), v ? { segundos: { min: v.segundos_min, max: v.segundos_max } } : {})) || undefined
-  } catch { return undefined }
+  } catch (e) {
+    console.warn(`[mesa · referencias] encargo ${enc.id}: no se pudieron leer las referencias de video · ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`)
+    return AVISO_SIN_REFERENCIAS
+  }
 }
 
 /** el pedido del turno de un agente (puro respecto del libro: sirve igual para la primera entrega y para la reentrega) */

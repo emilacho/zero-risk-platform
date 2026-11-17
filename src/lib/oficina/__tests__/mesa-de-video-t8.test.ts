@@ -388,7 +388,7 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
   // 17-nov · Sprint 2 · S2-6 · las referencias desarmadas llegan a CADA turno de la mesa de video como contexto (los reels del cliente que ya guardó el portero); sin ellas, la pieza sale igual
   it.each([
     ['con reels guardados: cada turno recibe la sección, sin la cuenta ajena', 'ok'],
-    ['con la lectura caída: ningún turno la recibe y la pieza cierra igual', 'caida'],
+    ['con la lectura caída: cada turno recibe el aviso (no la sección) y la pieza cierra igual', 'caida'],
   ] as const)('S2-6 · %s', async (_n, modo) => {
     const hoja = escribirHoja(INSUMOS)
     const M = crearMemoria({ parte: hoja.texto_md, plantilla: VIDEO_MESA })
@@ -413,7 +413,9 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
     expect(pedidos.length).toBe(turnos.length)
     expect(new Set(pedidos)).toEqual(new Set([CLIENTE]))
     for (const t of turnos) {
-      expect(t.task.includes('## Referencias desarmadas'), `${t.tipo}:${t.agente}`).toBe(modo === 'ok')
+      expect(t.task.includes('## Referencias desarmadas: reels'), `${t.tipo}:${t.agente}`).toBe(modo === 'ok')
+      // la lectura caída queda A LA VISTA en cada turno (no es «no hay reels»)
+      expect(t.task.includes('hoy no se pudieron leer (falló la lectura de la base'), `${t.tipo}:${t.agente}`).toBe(modo === 'caida')
       expect(t.task).not.toContain('panaderia-vecina')
       if (modo === 'ok') expect(t.task).toContain('- ~1 s: el pan sale del horno, momento 1 (toma: producto · sale producto)')
     }
