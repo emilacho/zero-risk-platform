@@ -8,6 +8,7 @@ import { REGLAS_DEL_PEDIDO, cuerpoParaHiggsfield, armarPedido } from '../../vide
 import { NOTA_DE_VIDEO_EN_LIMITES } from '../../cadena/hoja'
 import { convencionDelGuion } from '../mesa/pedidos'
 import { ROTULO_DEL_VIDEO_GENERADO } from '../orquestador-video'
+import { guionLegible, traducirGuion } from '../video/guion'
 
 const VIEJAS = /sin voz|sin voces|sin diálogo|sin narraci|solo música|de espaldas|sin rostros|sólo manos|solo manos/i
 
@@ -36,5 +37,14 @@ describe('DECISIÓN Emilio 17-nov · el video sin reglas fijas de voz ni de rost
   it('el rótulo de la entrega dice que el video y su audio son generados, sin afirmar «sin voces»', () => {
     expect(ROTULO_DEL_VIDEO_GENERADO).not.toMatch(VIEJAS)
     expect(ROTULO_DEL_VIDEO_GENERADO).toContain('su audio también es generado')
+  })
+  it('🔴 CC6 17-nov · el guion sin audio ya no dice «sin voz» (ni «por regla»): ni el aviso ni lo que leen la jefatura y la hoja de entrega', () => {
+    const legible = guionLegible({ planos: [{ n: 1, desde_s: 0, hasta_s: 8, que_se_ve: 'la cocinera sirve el plato', camara: 'fija', foto: null }] as never, audio: '', segundos: 8 })
+    expect(legible).toContain('Audio: (a criterio del modelo: música o ambiente)')
+    expect(legible).not.toMatch(VIEJAS)
+    const t = traducirGuion(['## Plano 1 · 0–8 s', 'Qué se ve: la cocinera sirve el plato', 'Cámara: fija'].join('\n'))
+    const avisos = (t as { avisos?: string[] }).avisos ?? []
+    expect(avisos.some((a) => a.includes('el guion no dice nada del audio'))).toBe(true)
+    expect(avisos.join(' ')).not.toMatch(/sin voz|por regla/i)
   })
 })
