@@ -35,6 +35,8 @@ export default defineConfig({
       '__tests__/**/*.test.ts',
       'src/**/*.test.ts',
       'services/agent-runner/src/**/*.test.ts',
+      // S2-5 · el servicio de render HTML: solo sus reglas puras (sin hyperframes ni navegador instalados)
+      'services/render-html/src/**/*.test.ts',
       // RedAquario (tools/redaquario · §144) · JS puro · entra al gate `pnpm test` existente
       // (cero infra CI nueva). @slack/bolt sólo se importa en el camino vivo · los tests no lo tocan.
       'tools/**/*.test.js',

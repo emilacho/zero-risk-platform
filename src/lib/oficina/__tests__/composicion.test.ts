@@ -217,6 +217,20 @@ describe('la entrega compone la foto con la marca', () => {
     for (const r of [r1, r2, r3]) expect((r.ent.archivos as Array<{ sha256: string }>).some((x) => x.sha256 === sha(PNG_COMPUESTO))).toBe(false)
     expect(r1.enc.estado).toBe(r3.enc.estado)
   })
+  it('S2-5 · la entrega deja dicho quién dibujó; si el servicio de render falló, sale igual con el dibujo de siempre y un aviso', async () => {
+    const h = crearMemoria(); h.P.componer = async () => ({ ok: true, png: PNG_COMPUESTO, fonts_faltantes: [], motor: 'html' })
+    const r1 = await correrEntrega(h)
+    expect(r1.ent.composicion).toMatchObject({ compuesta: true, motor: 'html' })
+    expect(r1.fichas.some((f) => (f.que ?? '').includes('servicio de render'))).toBe(false)
+    const s = crearMemoria(); s.P.componer = async () => ({ ok: true, png: PNG_COMPUESTO, fonts_faltantes: [], motor: 'satori', aviso_motor: 'servicio de render 503: dormido' })
+    const r2 = await correrEntrega(s)
+    expect(r2.ent.composicion).toMatchObject({ compuesta: true, motor: 'satori' })
+    expect((r2.ent.archivos as Array<{ sha256: string }>).some((x) => x.sha256 === sha(PNG_COMPUESTO))).toBe(true)
+    expect(r2.fichas.some((f) => f.donde === 'imagen' && (f.que ?? '').includes('el servicio de render HTML falló (servicio de render 503: dormido)') && f.gravedad === 'sugerencia')).toBe(true)
+    // un puerto viejo (sin motor) no deja el campo
+    const v = crearMemoria(); v.P.componer = async () => ({ ok: true, png: PNG_COMPUESTO, fonts_faltantes: [] })
+    expect((await correrEntrega(v)).ent.composicion).not.toHaveProperty('motor')
+  })
   it('las tipografías que no cargaron se avisan', async () => {
     const M = crearMemoria(); M.P.componer = async () => ({ ok: true, png: PNG_COMPUESTO, fonts_faltantes: ['Caveat'] })
     const { fichas } = await correrEntrega(M)

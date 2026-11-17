@@ -3,6 +3,7 @@
  * la llave interna NO vale aquí (patrón de `/api/sala/recados`). Toda ruta es `nodejs` y `force-dynamic`.
  */
 import crypto from 'node:crypto'
+import { servicioDeRender } from '../render-html/cliente'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { crearPuertos, type Entorno } from './adaptadores'
 import type { Db } from './almacen-supabase'
@@ -27,6 +28,8 @@ export function entornoConBase(baseUrl: string): Entorno {
     openaiKey: process.env.OPENAI_API_KEY, revisorModelo: process.env.OFICINA_REVISOR_MODEL,
     revisorPrecioEntrada: num(process.env.OFICINA_REVISOR_PRECIO_ENTRADA_USD_M), revisorPrecioSalida: num(process.env.OFICINA_REVISOR_PRECIO_SALIDA_USD_M),
     bucket: process.env.OFICINA_BUCKET, dispatchKey: process.env.SALA_DISPATCH_KEY, n8nWebhookBase: process.env.N8N_WEBHOOK_BASE, porteroWebhookKey: process.env.PORTERO_WEBHOOK_KEY ?? '', slackToken: process.env.SLACK_BOT_TOKEN, notasDelDueno: process.env.NOTAS_DEL_DUENO === '1', aprendizajeDelDueno: process.env.APRENDIZAJE_DEL_DUENO !== '0', slackCanalHilo: process.env.OFICINA_SLACK_CANAL, slackCanalAlertas: process.env.OFICINA_SLACK_ALERTAS,
+    // S2-5 · el servicio de render HTML (Railway): sin las dos variables, el anuncio fijo se dibuja como siempre
+    renderHtml: servicioDeRender({ RENDER_HTML_URL: process.env.RENDER_HTML_URL, RENDER_HTML_KEY: process.env.RENDER_HTML_KEY }),
     // 31-oct · T3 (CC1): las mesas de brief y de concepto entregan a la cadena EN PROCESO (sin HTTP) por su almacén (diferido: la base se abre en la primera entrega); antes la entrega decía «no recibida»
     puertoDeLaCadena: puertoDeLaCadena(() => almacenDeSupabase()),
   }

@@ -32,13 +32,14 @@ import { enviarPiezaASlack, leerNotasParaElProductor, piezaParaSlackDeLaBandeja,
 import { carpetaParaRevisar } from '../jefatura/revision/carpeta-para-revisar'
 import { adjuntoDelCliente } from '../portero-alimenta/contexto-del-cliente'
 import { sacarCuadros } from './video/cuadros'
+import { pedirPng, type ServicioDeRender } from '../render-html/cliente'
 import { perfilDelAdjunto, type PerfilParaLectores } from '../perfil-del-publico/lectores'
 
 export const SIN_RECEPCION_DE_LA_CADENA = 'la cadena aún no conecta la recepción del brief y del concepto (T3)'
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { /** T3 de CC1: la recepción de la cadena para el brief y el concepto (mientras no exista, la entrega dice «no recibida») */ puertoDeLaCadena?: import('./puertos').PuertoDeLaCadena; /** la mesa lee las notas del dueño (encendida por omisión; `APRENDIZAJE_DEL_DUENO=0` la apaga): cada agente consulta al cerebro al abrirse su turno */ aprendizajeDelDueno?: boolean;/** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string; }
+export interface Entorno { /** T3 de CC1: la recepción de la cadena para el brief y el concepto (mientras no exista, la entrega dice «no recibida») */ puertoDeLaCadena?: import('./puertos').PuertoDeLaCadena; /** la mesa lee las notas del dueño (encendida por omisión; `APRENDIZAJE_DEL_DUENO=0` la apaga): cada agente consulta al cerebro al abrirse su turno */ aprendizajeDelDueno?: boolean;/** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string; /** S2-5 · el servicio de render HTML de Railway (RENDER_HTML_URL + RENDER_HTML_KEY); sin él, el anuncio fijo se dibuja como siempre */ renderHtml?: import('../render-html/cliente').ServicioDeRender | null; }
 
 /** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
 export { ESPERAS_DEL_REVISOR_MS }
@@ -103,6 +104,21 @@ export const olvidarAlarmasDeSlack = (): void => ALARMAS_DE_SLACK.clear()
  * LA MESA LEE LO QUE EL DUEÑO HA DICHO · `consultar` llama a la lectura instantánea del cerebro (sin modelo; la llave interna viaja SOLO a nuestra propia casa) y `registrar` deja el rastro en `autorevisiones_del_productor`.
  * En ensayo (`dry_run`) la consulta no marca las notas como usadas (`marcar_uso=0`): un ensayo no cambia cuánto pesa una nota. Nunca lanza desde `consultar`: un fallo se devuelve como `{ ok: false }`.
  */
+/**
+ * S2-5 · el anuncio fijo con la plantilla HTML (#1068) dibujado por el servicio de render de Railway: las mismas fuentes de marca
+ * (empaquetadas en el documento) y el mismo documento de `htmlDeAnuncio`. Nunca lanza: un fallo vuelve en palabras.
+ */
+export async function componerConServicio(s: ServicioDeRender, p: import('../../../packages/carousel-engine/src/anuncio').PedidoDeAnuncio, f: Fetch = fetch, fuentes?: import('../../../packages/carousel-engine/src/fonts').FontEntry[]): Promise<{ ok: true; png: Buffer; fonts_faltantes: string[] } | { ok: false; error: string }> {
+  try {
+    const { htmlDeAnuncio } = await import('../../../packages/carousel-engine/src/anuncio-html')
+    const { cargarFuentesDeMarca, informeDeFuentes } = await import('../../../packages/carousel-engine/src/fonts')
+    const familias = [p.diseno.tipografia.cuerpo || 'Inter', p.diseno.tipografia.titular || p.diseno.tipografia.cuerpo || 'Inter']
+    const fonts = fuentes ?? (await cargarFuentesDeMarca(familias)).fonts
+    const r = await pedirPng(s, { html: htmlDeAnuncio(p, fonts), ancho: p.ancho, alto: p.alto }, f)
+    return r.ok ? { ok: true, png: r.png, fonts_faltantes: informeDeFuentes(familias, fonts).faltantes } : { ok: false, error: r.error }
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+}
+
 export function puertoDeAprendizaje(db: Db, env: Pick<Entorno, 'baseUrl' | 'internalKey'>, f: Fetch = fetch): NonNullable<Puertos['aprendizaje']> {
   return {
     async consultar(p) {
@@ -344,7 +360,14 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     // Sprint 1 · Mejora 5 · la composición con la marca (satori + resvg, sin proveedor: US$ 0). Un fallo se devuelve, nunca lanza
     async componer(p) {
       // el motor de dibujo se carga solo al componer (cargarlo al importar arrastra satori a cada ruta que importa los adaptadores)
-      try { const { renderAnuncio } = await import('../../../packages/carousel-engine/src/anuncio'); const r = await renderAnuncio(p); return { ok: true as const, png: r.png, fonts_faltantes: r.fonts_faltantes } } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) } }
+      // S2-5 · con el servicio de render configurado, la plantilla HTML (#1068); si falla, el dibujo de siempre y un aviso (nunca se queda sin imagen por el servicio)
+      let aviso_motor: string | undefined
+      if (env.renderHtml) {
+        const h = await componerConServicio(env.renderHtml, p, f)
+        if (h.ok) return { ok: true as const, png: h.png, fonts_faltantes: h.fonts_faltantes, motor: 'html' as const }
+        aviso_motor = h.error
+      }
+      try { const { renderAnuncio } = await import('../../../packages/carousel-engine/src/anuncio'); const r = await renderAnuncio(p); return { ok: true as const, png: r.png, fonts_faltantes: r.fonts_faltantes, motor: 'satori' as const, ...(aviso_motor ? { aviso_motor } : {}) } } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) } }
     },
     // 11-nov · los cuadros del video terminado (ffmpeg del servidor; el mismo que saca las capturas de los videos del cerebro)
     sacarCuadros: (bytes, planos) => sacarCuadros({ bytes, planos }),
