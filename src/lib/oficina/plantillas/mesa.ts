@@ -54,8 +54,23 @@ export const CARRUSEL_MESA: Plantilla = deLaMesa(CARRUSEL_IG_CON_JEFATURA, 'carr
  */
 export const ASIENTOS_DE_LA_MESA_CORTA = ['marketing_instagram_curator', 'design-image-prompt-engineer', 'content-creator'] as const
 export const RONDAS_DE_LA_MESA_CORTA = 1
+/**
+ * 17-nov (🟡 1 de CC7 sobre #1088) · lo que la fila VIVA de `kit_historias` tiene y `kit_mesa` también debe tener, con el MISMO valor de hoy (leído en producción):
+ * pedir material al portero, generar imagen cuando falta foto, roles sin imagen. Sin esto, con la palanca encendida las historias perderían algo que hoy hacen.
+ */
+export const DE_LA_LINEA_DE_HISTORIAS = {
+  material_activo: true, material_tope_usd: 0.4, material_plazo_min: 20, material_techo_min: 30, material_max_pedidos_por_encargo: 1,
+  generar_cuando_no_hay_foto: true, roles_sin_imagen: ['cta', 'cierre'],
+} as const
+/**
+ * las ÚNICAS diferencias permitidas entre los límites de `kit_mesa` y los de `kit_historias` (una prueba las nombra):
+ *  · `mesa`, `asientos`, `rondas_de_la_mesa`: es la línea con mesa corta;
+ *  · `margen`: la mesa conversa varios turnos (margen de pasos de la mesa, 50);
+ *  · `reserva_por_pieza_usd`: sin ese dato el freno de la campaña reserva el tope ENTERO de la mesa (5), que es lo seguro mientras no haya historia de lo que cuesta.
+ */
+export const DIFERENCIAS_CON_LAS_HISTORIAS = ['mesa', 'asientos', 'rondas_de_la_mesa', 'margen', 'reserva_por_pieza_usd'] as const
 const KIT_MESA_BASE = deLaMesa(KIT_HISTORIAS_CON_JEFATURA, 'kit_mesa')
-export const KIT_MESA: Plantilla = { ...KIT_MESA_BASE, limites: { ...KIT_MESA_BASE.limites, asientos: [...ASIENTOS_DE_LA_MESA_CORTA], rondas_de_la_mesa: RONDAS_DE_LA_MESA_CORTA } }
+export const KIT_MESA: Plantilla = { ...KIT_MESA_BASE, limites: { ...KIT_MESA_BASE.limites, ...DE_LA_LINEA_DE_HISTORIAS, roles_sin_imagen: [...DE_LA_LINEA_DE_HISTORIAS.roles_sin_imagen], asientos: [...ASIENTOS_DE_LA_MESA_CORTA], rondas_de_la_mesa: RONDAS_DE_LA_MESA_CORTA } }
 
 /**
  * 31-oct · nuevo orden de la cadena · `brief_mesa` y `concepto_mesa`: las dos mesas de la CADENA. Un solo paso `mesa`: no hay imágenes, observador, traductor ni jefatura de pieza;

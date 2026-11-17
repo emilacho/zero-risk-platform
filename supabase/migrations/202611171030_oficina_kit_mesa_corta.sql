@@ -1,6 +1,7 @@
 -- 202611171030 · LA MESA CORTA DE LAS HISTORIAS · CC3 · «creativos en cada paso» (GO Lenovo 17-nov · firma de Emilio 07:18 · punto 1)
 -- Solo DATO, y la plantilla sigue APAGADA (activo=false): esto no enciende nada.
 --   1) `oficina_tipos_de_grupo` kit_mesa · `limites` suma `asientos` (los 3 especialistas que se sientan: dirección visual, prompts, texto) y `rondas_de_la_mesa` = 1.
+--      Y lo que la fila viva de kit_historias ya hace (🟡 1 de CC7): material del portero (material_*), generar imagen sin foto y roles sin imagen, con sus valores de hoy.
 --      Es el dato EXACTO de src/lib/oficina/plantillas/mesa.ts (KIT_MESA); una prueba lo mantiene igual. Pasos, indicaciones, tope (5) y activo NO cambian.
 --   2) `cadena_config.creativos_con_mesa` = {"clientes": []} · la palanca por cliente, APAGADA para todos (ausente o vacía = la ruta de siempre). Si ya existe, no se toca.
 -- Encender = otro GO (aviso a Emilio): activo=true de kit_mesa, kit_mesa en `oficina_config.familias_activas` y el cliente en la palanca.
@@ -20,7 +21,7 @@ BEGIN
   END IF;
 END $$;
 
-UPDATE public.oficina_tipos_de_grupo SET limites = $lim${"margen":50,"tope_encargo_usd":5,"max_rondas":2,"imagenes_generadas_max":8,"versiones_por_ref":2,"reuso_dias":14,"plataforma":"instagram-reel","headline_historia":60,"body_historia":140,"acompanamiento_max":700,"pie_de_foto_max":2200,"hashtags_max":30,"limites_verificados":false,"formato_por_omision":"9:16","mesa":true,"asientos":["marketing_instagram_curator","design-image-prompt-engineer","content-creator"],"rondas_de_la_mesa":1}$lim$::jsonb WHERE tipo = 'kit_mesa';
+UPDATE public.oficina_tipos_de_grupo SET limites = $lim${"margen":50,"tope_encargo_usd":5,"max_rondas":2,"imagenes_generadas_max":8,"versiones_por_ref":2,"reuso_dias":14,"plataforma":"instagram-reel","headline_historia":60,"body_historia":140,"acompanamiento_max":700,"pie_de_foto_max":2200,"hashtags_max":30,"limites_verificados":false,"formato_por_omision":"9:16","mesa":true,"material_activo":true,"material_tope_usd":0.4,"material_plazo_min":20,"material_techo_min":30,"material_max_pedidos_por_encargo":1,"generar_cuando_no_hay_foto":true,"roles_sin_imagen":["cta","cierre"],"asientos":["marketing_instagram_curator","design-image-prompt-engineer","content-creator"],"rondas_de_la_mesa":1}$lim$::jsonb WHERE tipo = 'kit_mesa';
 
 INSERT INTO public.cadena_config (clave, valor) VALUES ('creativos_con_mesa', '{"clientes": []}'::jsonb) ON CONFLICT (clave) DO NOTHING;
 
@@ -28,6 +29,8 @@ DO $$
 BEGIN
   IF (SELECT limites->'rondas_de_la_mesa' FROM public.oficina_tipos_de_grupo WHERE tipo = 'kit_mesa') IS DISTINCT FROM '1'::jsonb
      OR (SELECT jsonb_array_length(limites->'asientos') FROM public.oficina_tipos_de_grupo WHERE tipo = 'kit_mesa') IS DISTINCT FROM 3
+     OR (SELECT limites->'material_activo' FROM public.oficina_tipos_de_grupo WHERE tipo = 'kit_mesa') IS DISTINCT FROM 'true'::jsonb
+     OR (SELECT limites->'generar_cuando_no_hay_foto' FROM public.oficina_tipos_de_grupo WHERE tipo = 'kit_mesa') IS DISTINCT FROM 'true'::jsonb
      OR (SELECT activo FROM public.oficina_tipos_de_grupo WHERE tipo = 'kit_mesa') IS DISTINCT FROM false THEN
     RAISE EXCEPTION '202611171030: kit_mesa no quedó como mesa corta apagada';
   END IF;
