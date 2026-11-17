@@ -177,7 +177,7 @@ describe('traducirPropuestas · la integración con N propuestas', () => {
     expect(r.resultado.propuestas.map((p) => p.id)).toEqual(['P1', 'P2'])
     expect(r.resultado.propuestas[1].nombre).toBe('La puerta')
     expect(r.resultado.avisos).toContain('«Propuesta 2 · Vacía» se descartó: no encontré planos (un encabezado por plano)')
-    expect(r.resultado.avisos).toContain('se pidieron 3 propuestas y quedan 2: se presentan las que hay')
+    expect(r.resultado.avisos).toContain('se pidieron 3 propuestas y quedan 2 (se descartó «Propuesta 2 · Vacía» por su guion): se presentan las que hay') // 17-nov · el aviso dice cuál y por qué (REAPERTURA reel 2ed549cc)
     const nada = traducirPropuestas('# Propuesta 1 · A\nConcepto: x\n# Propuesta 2 · B\nConcepto: y', { objetivo: 2 })
     expect(nada.ok).toBe(false)
   })
