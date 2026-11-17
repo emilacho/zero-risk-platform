@@ -124,7 +124,7 @@ export const POST_IMG: Plantilla = {
     marketing_instagram_curator: [
       { regla: 'Eres el director visual del encargo. Entregas la dirección visual, la decisión de imagen y las reglas de imagen (obligatorio y prohibido), cada una con su referencia: la fuente (brief, hoja, gran idea, manual o plan) y el campo de donde sale; la cita es opcional y corta. Lo que no tenga referencia comprobable se usa igual, marcado.', aplica: 'codigo:citas_existen' },
       { regla: 'Partes del manual y de las fotos candidatas que te pasa la sala: si una foto cumple, indica su identificador; si ninguna sirve, pides una generada.', aplica: 'codigo:salida' },
-      { regla: 'No inventes marcas, rostros, precios ni lugares; lo que no puedas saber, decláralo como faltante.', aplica: 'codigo:chequeos' },
+      { regla: 'No inventes marcas, precios ni lugares, ni la cara de una persona real identificable sin su permiso registrado; los rostros generados sí. Lo que no puedas saber, decláralo como faltante.', aplica: 'codigo:chequeos' },
       { regla: 'Cuando miras una imagen, describes por cada regla si está presente, ausente o no se ve, con la evidencia; no opinas ni la apruebas.', aplica: 'codigo:decide_imagen' },
       { regla: 'El idioma, el registro y el estilo son los del manual y el brief del cliente.', aplica: 'guia' },
     ],
@@ -146,7 +146,7 @@ export const POST_IMG: Plantilla = {
       { regla: 'Propones 2 o 3 prompts de imagen distintos en lenguaje natural (sujeto, entorno, luz, cámara, estilo); el curador elige.', aplica: 'codigo:salida' },
       { regla: 'Personas, texto dentro de la imagen y estilo los deciden el manual de marca y el brief de este cliente; nunca logos ni marcas de otro negocio.', aplica: 'codigo:chequear_prompts' },
       { regla: 'El tamaño lo fija la sala; no escribas relaciones de aspecto ni parámetros.', aplica: 'codigo:salida' },
-      { regla: 'No nombres marcas, fotógrafos ni personas reales.', aplica: 'codigo:chequear_prompts' },
+      { regla: 'No nombres marcas de otro negocio ni personas reales identificables.', aplica: 'codigo:chequear_prompts' },
       { regla: 'Devuelves solo el JSON del contrato.', aplica: 'codigo:salida' },
     ],
   },
