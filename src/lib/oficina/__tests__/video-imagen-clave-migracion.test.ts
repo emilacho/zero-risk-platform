@@ -5,7 +5,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { TOPE_DE_VIDEO_MESA_USD, VIDEO_MESA } from '../plantillas/video-mesa'
+import { TOPE_DE_VIDEO_MESA_USD } from '../plantillas/video-mesa'
+// 17-nov · 2300 escribió la plantilla con la reserva en 12; hoy el código dice 30 (202611170520)
+import { VIDEO_MESA_ANTES_DE_RESERVA_30 as VIDEO_MESA } from './video-mesa-antes-de-reserva-30'
 import { TOPE_DE_VIDEO_MESA_ANTES_DE_S2_3_USD, VIDEO_MESA_ANTES_DE_S2_3 } from './video-mesa-antes-de-s2-3'
 
 const RAIZ = path.resolve(__dirname, '../../../../supabase')

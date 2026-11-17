@@ -28,7 +28,7 @@
  * Aviso: una pieza en el borde puede gastar algo más que su tope (la oficina cierra «por tope» al pasarlo); el freno corta con los topes, no con ese exceso.
  *
  * 11-nov · OPCIÓN (b) de Lenovo 19:07 · el freno RESERVA el costo ESPERADO de cada pieza, no el tope máximo de su familia (el tope sigue siendo el techo de cada encargo):
- *   · lo esperado de una familia lo calcula la oficina (`reservasDesdeLaHistoria`): el promedio del gasto real de sus últimos encargos terminados (de cualquier cliente);
+ *   · lo esperado de una familia lo calcula la oficina (`reservasDesdeLaHistoria`): (17-nov) el mayor entre el dato de la plantilla y el promedio del gasto real de sus últimos encargos terminados (de cualquier cliente);
  *     sin historia suficiente, el dato `limites.reserva_por_pieza_usd` de su plantilla; sin ninguno de los dos, NO hay reserva y se cuenta el tope, como antes (del lado seguro);
  *   · la reserva nunca pasa del tope de la familia (`costoEsperadoDeLaPieza`);
  *   · se usa en los 4 lugares donde antes iba el tope: lo que se va a soltar, lo comprometido (en la sala sin encargo), el lugar guardado por fecha y un encargo ABIERTO

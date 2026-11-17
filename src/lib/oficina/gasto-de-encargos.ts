@@ -97,7 +97,9 @@ export const MIN_HISTORIA = 3
 
 /**
  * lo ESPERADO por pieza de cada familia activa · genérico, de cualquier cliente (11-nov · opción b de Lenovo 19:07) · pura:
- *   · con ≥ `MIN_HISTORIA` encargos reales terminados con gasto: el promedio de los últimos `HISTORIA_POR_FAMILIA` (`historia` viene del más reciente al más viejo);
+ *   · con ≥ `MIN_HISTORIA` encargos reales terminados con gasto: el MAYOR entre el promedio de los últimos `HISTORIA_POR_FAMILIA` (`historia` viene del más reciente al
+ *     más viejo) y el dato `limites.reserva_por_pieza_usd` de su plantilla (17-nov · DECISIÓN Lenovo · respuesta al 🟡 de CC6 sobre #1082: una historia de un flujo
+ *     viejo y más barato no baja lo esperado por debajo de lo que la plantilla dice que cuesta hoy; el dato es un PISO);
  *   · si no, el dato `limites.reserva_por_pieza_usd` de su plantilla;
  *   · sin ninguno, la familia NO aparece (el freno cuenta su tope, del lado seguro).
  * Fuera de la historia: los ensayos (`dry_run`) y los encargos de PRUEBA (`prueba`, CC7/CC6 sobre 2e852b67): uno de prueba con gasto real fijaría lo esperado de todos los clientes.
@@ -111,7 +113,9 @@ export function reservasDesdeLaHistoria(plantillas: Array<{ familia: unknown; to
     const gastos = historia.filter((h) => h.familia === p.familia).map((h) => numero(h.gasto_usd)).filter((g): g is number => g !== null && g > 0).slice(0, HISTORIA_POR_FAMILIA)
     const lim = p.limites && typeof p.limites === 'object' && !Array.isArray(p.limites) ? (p.limites as Record<string, unknown>) : {}
     const dato = numero(lim.reserva_por_pieza_usd)
-    const r = gastos.length >= MIN_HISTORIA ? gastos.reduce((a, g) => a + g, 0) / gastos.length : dato !== null && dato > 0 ? dato : null
+    const piso = dato !== null && dato > 0 ? dato : null
+    const promedio = gastos.length >= MIN_HISTORIA ? gastos.reduce((a, g) => a + g, 0) / gastos.length : null
+    const r = promedio !== null && piso !== null ? Math.max(promedio, piso) : (promedio ?? piso)
     if (r !== null) out[p.familia] = Math.round(Math.min(r, tope) * 10000) / 10000
   }
   return out

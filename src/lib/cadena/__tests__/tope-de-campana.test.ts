@@ -493,13 +493,26 @@ describe('opción (b) · la cuenta pura de lo esperado', () => {
     expect(reservasDesdeLaHistoria([P('video_mesa', 35)], [{ familia: 'video_mesa', gasto_usd: 5.7 }])).toEqual({})
     expect(reservasDesdeLaHistoria([P('video_mesa', 35, { reserva_por_pieza_usd: 'x' })], [])).toEqual({})
   })
-  it('🔴 con historia, el promedio de los ÚLTIMOS `HISTORIA_POR_FAMILIA` con gasto (el orden llega del más reciente); los de gasto 0 y los de otra familia no cuentan; el dato no pisa la historia', () => {
+  it('🔴 con historia, el promedio de los ÚLTIMOS `HISTORIA_POR_FAMILIA` con gasto (el orden llega del más reciente); los de gasto 0 y los de otra familia no cuentan', () => {
     const recientes = Array.from({ length: HISTORIA_POR_FAMILIA }, () => ({ familia: 'post_img', gasto_usd: 1 }))
     const viejos = Array.from({ length: 10 }, () => ({ familia: 'post_img', gasto_usd: 2.4 }))
-    expect(reservasDesdeLaHistoria([P('post_img', 2.5, { reserva_por_pieza_usd: 2 })], [{ familia: 'post_img', gasto_usd: 0 }, { familia: 'otra', gasto_usd: 9 }, ...recientes, ...viejos])).toEqual({ post_img: 1 })
+    expect(reservasDesdeLaHistoria([P('post_img', 2.5)], [{ familia: 'post_img', gasto_usd: 0 }, { familia: 'otra', gasto_usd: 9 }, ...recientes, ...viejos])).toEqual({ post_img: 1 })
     expect(reservasDesdeLaHistoria([P('post_img', 2.5)], [{ familia: 'post_img', gasto_usd: 1 }, { familia: 'post_img', gasto_usd: 2 }, { familia: 'post_img', gasto_usd: '1.5' }])).toEqual({ post_img: 1.5 })
     // (CC7 R3) la ventana es POR FAMILIA: 25 de otra familia delante no le quitan su historia a la que se mueve poco
     expect(reservasDesdeLaHistoria([P('post_img', 2.5)], [...Array.from({ length: 25 }, () => ({ familia: 'carrusel_mesa', gasto_usd: 1.6 })), ...[0.9, 1.1, 1].map((g) => ({ familia: 'post_img', gasto_usd: g }))])).toEqual({ post_img: 1 })
+  })
+  it('🔴 (17-nov · DECISIÓN Lenovo · 🟡 de CC6 sobre #1082) con historia Y dato: el MAYOR de los dos: el dato es un piso que una historia vieja y barata no baja; una historia más cara que el dato manda', () => {
+    const recientes = Array.from({ length: HISTORIA_POR_FAMILIA }, () => ({ familia: 'post_img', gasto_usd: 1 }))
+    expect(reservasDesdeLaHistoria([P('post_img', 2.5, { reserva_por_pieza_usd: 2 })], recientes)).toEqual({ post_img: 2 })
+    expect(reservasDesdeLaHistoria([P('post_img', 2.5, { reserva_por_pieza_usd: 0.5 })], recientes)).toEqual({ post_img: 1 })
+    // el caso real: video_mesa con los 3 encargos del flujo viejo (11-nov · ≈ 5,7 de promedio) y el dato 30 ⇒ 30 (no 5,71); sin el dato, el promedio
+    const once = [6.26, 5.12, 5.74].map((g) => ({ familia: 'video_mesa', gasto_usd: g }))
+    expect(reservasDesdeLaHistoria([P('video_mesa', 45, { reserva_por_pieza_usd: 30 })], once)).toEqual({ video_mesa: 30 })
+    expect(reservasDesdeLaHistoria([P('video_mesa', 45)], once)).toEqual({ video_mesa: 5.7067 })
+    // con menos de `MIN_HISTORIA` sigue mandando el dato, aunque lo poco que haya sea más caro (no cambia)
+    expect(reservasDesdeLaHistoria([P('video_mesa', 45, { reserva_por_pieza_usd: 30 })], [{ familia: 'video_mesa', gasto_usd: 40 }])).toEqual({ video_mesa: 30 })
+    // el piso tampoco pasa del tope
+    expect(reservasDesdeLaHistoria([P('video_mesa', 45, { reserva_por_pieza_usd: 60 })], once)).toEqual({ video_mesa: 45 })
   })
   it('🔴 nunca pasa del tope de la familia (ni por historia ni por dato); una plantilla sin tope válido no da reserva', () => {
     expect(reservasDesdeLaHistoria([P('a', 2.5, { reserva_por_pieza_usd: 9 })], [])).toEqual({ a: 2.5 })

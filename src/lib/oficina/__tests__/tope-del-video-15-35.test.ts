@@ -7,7 +7,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { cabeLaVuelta, costoDeVolver } from '../orquestador-video'
-import { RESERVA_POR_VIDEO_USD, TOPE_DEL_PASO_VIDEO_USD } from '../plantillas/video-mesa'
+import { TOPE_DEL_PASO_VIDEO_USD } from '../plantillas/video-mesa'
+// 17-nov · la reserva de 1930 era 12; hoy el código dice 30 (202611170520)
+import { RESERVA_POR_VIDEO_ANTES_DE_30_USD as RESERVA_POR_VIDEO_USD } from './video-mesa-antes-de-reserva-30'
 // S2-3 · estas pruebas siguen el dato y el camino de ANTES de las imágenes clave (lo nuevo lo prueban video-imagen-clave*.test.ts)
 import { VIDEO_MESA_ANTES_DE_S2_3 as VIDEO_MESA, TOPE_DE_VIDEO_MESA_ANTES_DE_S2_3_USD as TOPE_DE_VIDEO_MESA_USD } from './video-mesa-antes-de-s2-3'
 import { reservasDesdeLaHistoria } from '../gasto-de-encargos'
