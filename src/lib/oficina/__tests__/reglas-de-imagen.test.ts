@@ -128,16 +128,65 @@ describe('datos ajenos', () => {
   it('un subdominio del dominio propio es propio', () => { expect(datosAjenos(['https://menu.marca-propia.ec/x'], propios)).toEqual([]) })
 })
 
-describe('citas literales: una regla extraída de un brief de texto debe CITARLO', () => {
+describe('17-nov · GO creativos punto 5 · las reglas de imagen se citan POR REFERENCIA; lo no comprobable se MARCA, no se descarta', () => {
   const brief = 'El plato aparece completo y central. Sin personas, sin logo sobre el plato, sin texto quemado. Luz natural.'
+  // la hoja real escribe sus campos así (`escribirHoja`): el brief de la pieza la trae entera, con su GRAN IDEA
+  const hoja = 'QUÉ ES: reel de la mesa larga\nGRAN IDEA: La mesa larga · todos comen juntos\nVISUAL: mesa de madera, luz de tarde, manos pasando platos\nLLAMADO: reserva'
+  const manual = '## Paleta\nazul océano, arena\n## Fotografía\nluz natural, nada de flash'
+  const plan = 'Objetivo del trimestre: llenar las noches de semana'
   it('acepta la cita que está en el brief (sin importar tildes, mayúsculas ni signos)', () => {
     const r = citasExisten({ obligatorio: [{ id: 'a', texto: 'completo', cita: 'El plato aparece COMPLETO y central' }], prohibido: [{ id: 'b', texto: 'personas', cita: 'sin personas' }] }, brief)
-    expect(r.rechazadas).toEqual([]); expect(r.validas.obligatorio).toHaveLength(1)
+    expect(r.marcadas).toEqual([]); expect(r.validas.obligatorio).toHaveLength(1)
+    expect(r.comprobadas).toEqual([{ id: 'a', fuente: 'brief', por: 'cita' }, { id: 'b', fuente: 'brief', por: 'cita' }])
   })
-  it('rechaza la cita inventada y la regla sin cita', () => {
+  it('🔴 sin rejas: la cita inventada y la regla sin cita se USAN igual, marcadas con su motivo (no se descartan)', () => {
     const r = citasExisten({ obligatorio: [{ id: 'a', texto: 'x', cita: 'El plato debe llevar flores' }], prohibido: [{ id: 'b', texto: 'y' }] }, brief)
-    expect(r.rechazadas.map((x) => x.id).sort()).toEqual(['a', 'b'])
-    expect(r.validas.obligatorio).toHaveLength(0)
+    expect(r.marcadas.map((x) => x.id).sort()).toEqual(['a', 'b'])
+    expect(r.validas.obligatorio).toEqual([{ id: 'a', texto: 'x', cita: 'El plato debe llevar flores', marcada: 'la cita no está en ninguna fuente: «El plato debe llevar flores»' }])
+    expect(r.validas.prohibido).toEqual([{ id: 'b', texto: 'y', marcada: 'sin referencia: no dice de qué fuente ni qué campo sale' }])
+  })
+  it('🔴 por CAMPO, sin copiar: la sección nombrada existe en su fuente (hoja · gran idea · manual)', () => {
+    const r = citasExisten({
+      obligatorio: [{ id: 'o1', texto: 'mesa de madera a la luz de la tarde', fuente: 'hoja', campo: 'VISUAL' }, { id: 'o2', texto: 'paleta azul y arena', fuente: 'manual', campo: 'paleta' }, { id: 'o3', texto: 'todos alrededor de una misma mesa', fuente: 'gran_idea' }],
+      prohibido: [{ id: 'p1', texto: 'flash duro', fuente: 'manual', campo: 'Fotografía' }],
+    }, { brief: hoja, manual, plan })
+    expect(r.marcadas).toEqual([])
+    expect(r.comprobadas).toEqual([
+      { id: 'o1', fuente: 'hoja', por: 'campo' }, { id: 'o2', fuente: 'manual', por: 'campo' }, { id: 'o3', fuente: 'gran_idea', por: 'campo' }, { id: 'p1', fuente: 'manual', por: 'campo' },
+    ])
+  })
+  it('🔴 la cita cuenta en la fuente que la regla nombra, o en cualquiera si no nombra ninguna', () => {
+    const r = citasExisten({ obligatorio: [{ id: 'm', texto: 'luz natural', cita: 'nada de flash', fuente: 'manual' }, { id: 'p', texto: 'noches', cita: 'llenar las noches' }, { id: 'x', texto: 'flash', cita: 'nada de flash', fuente: 'plan' }], prohibido: [] }, { brief, manual, plan })
+    expect(r.comprobadas).toEqual([{ id: 'm', fuente: 'manual', por: 'cita' }, { id: 'p', fuente: 'plan', por: 'cita' }])
+    expect(r.marcadas).toEqual([{ id: 'x', motivo: 'la cita no está en plan: «nada de flash»' }])
+  })
+  it('🔴 lo que no se puede comprobar se marca con su porqué: campo que no existe, fuente que no llegó, fuente desconocida, gran idea ausente', () => {
+    const sinIdea = 'QUÉ ES: foto\nGRAN IDEA: (sin gran idea)\nVISUAL: plato'
+    const r = citasExisten({ obligatorio: [
+      { id: 'c', texto: 'a', fuente: 'hoja', campo: 'PALETA SECRETA' },
+      { id: 'f', texto: 'b', fuente: 'manual', campo: 'paleta' },
+      { id: 'd', texto: 'c', fuente: 'el chat', campo: 'algo' },
+      { id: 'g', texto: 'd', fuente: 'gran_idea' },
+      { id: 'n', texto: 'e', fuente: 'hoja' },
+    ], prohibido: [] }, { brief: sinIdea, manual: null })
+    expect(r.marcadas).toEqual([
+      { id: 'c', motivo: 'el campo «PALETA SECRETA» no está en hoja' },
+      { id: 'f', motivo: 'la fuente «manual» no llegó a este encargo' },
+      { id: 'd', motivo: 'fuente desconocida «el chat»' },
+      { id: 'g', motivo: 'esta pieza no trae gran idea' },
+      { id: 'n', motivo: 'dice que sale de hoja pero no nombra el campo ni cita' },
+    ])
+    expect(r.validas.obligatorio).toHaveLength(5)
+    expect(r.comprobadas).toEqual([])
+  })
+  it('🔴 la cita cuenta SOLO en la fuente que la regla nombra: está en el brief pero la regla dice «manual» → marcada', () => {
+    const r = citasExisten({ obligatorio: [{ id: 'q', texto: 'central', cita: 'aparece completo y central', fuente: 'manual' }], prohibido: [] }, { brief, manual, plan })
+    expect(r.comprobadas).toEqual([])
+    expect(r.marcadas).toEqual([{ id: 'q', motivo: 'la cita no está en manual: «aparece completo y central»' }])
+  })
+  it('una marca que el agente mande por su cuenta no se confía: la sala la recalcula', () => {
+    const r = citasExisten({ obligatorio: [{ id: 'a', texto: 'completo', cita: 'aparece completo', marcada: 'yo misma' }], prohibido: [] }, brief)
+    expect(r.validas.obligatorio[0]).toEqual({ id: 'a', texto: 'completo', cita: 'aparece completo' })
   })
 })
 

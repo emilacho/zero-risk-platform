@@ -141,6 +141,22 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(tareas['laminas']).toHaveLength(2); expect(tareas['laminas'][1]).toMatch(/recorte literal/)
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
   })
+  it('🔴 17-nov · punto 6 · un titular que pasa su tope DOS veces seguidas no mata el encargo: se le devuelve para acortar (con la medida) y, al tercer intento corto, sigue limpio', async () => {
+    const { M, id } = await abiertoC()
+    const larga = LAMINAS.map((l, i) => (i === 0 ? { ...l, headline: 'x'.repeat(95) } : l))
+    const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: (n) => ({ texto: j({ laminas: n <= 2 ? larga : LAMINAS }) }) }))
+    expect(tareas['laminas']).toHaveLength(3)
+    expect(tareas['laminas'][1]).toContain('$.laminas[0].headline: tiene 95 caracteres y el tope es 90 (sobran 5)')
+    expect(tareas['laminas'][2]).toContain('sobran 5')
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+  })
+  it('🔴 17-nov · punto 6 · el tope de vueltas es explícito: si sigue largo tras 1 + 2 correcciones, falla visible (nunca un ciclo sin fin)', async () => {
+    const { M, id } = await abiertoC()
+    const larga = LAMINAS.map((l, i) => (i === 0 ? { ...l, headline: 'x'.repeat(95) } : l))
+    const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: () => ({ texto: j({ laminas: larga }) }) }))
+    expect(tareas['laminas']).toHaveLength(4)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'fallido' })
+  })
   it('si el diseñador sigue escribiendo texto nuevo tras el reintento, la pieza sale con desacuerdo (ficha que bloquea), nunca se corrige a mano', async () => {
     const { M, id } = await abiertoC()
     const mala = LAMINAS.map((l, i) => (i === 1 ? { ...l, headline: 'Hoy todo cambia para siempre' } : l))
@@ -303,11 +319,20 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     expect(tareas['direccion_visual']).toHaveLength(2); expect(tareas['direccion_visual'][1]).toMatch(/portada/)
     expect(arte(M, id, 'visual_direction').imagenes).toEqual([])
   })
-  it('una regla de imagen con cita INVENTADA se descarta', async () => {
+  it('🔴 17-nov · la sala de láminas también comprueba contra el MANUAL que recibió el agente: una regla citada del manual pasa sin marca', async () => {
+    const { M, id } = await abiertoC()
+    const deManual = { obligatorio: [{ id: 'o1', texto: 'una idea por lámina', claves: ['plato'], fuente: 'manual', cita: 'una idea por frase' }], prohibido: [] }
+    await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada('hook', deManual as never) }), mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }) }))
+    expect(arte(M, id, 'visual_direction').reglas_marcadas).toEqual([])
+    expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id === 'vd-regla-o1')).toBe(false)
+  })
+  it('🔴 17-nov · una regla de imagen con cita INVENTADA NO se descarta: queda marcada, a la vista, con su ficha', async () => {
     const { M, id } = await abiertoC()
     const inventada = { obligatorio: [{ id: 'o1', texto: 'x', claves: ['plato'], cita: 'Esta frase no está en el brief' }], prohibido: [] }
     await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada('hook', inventada as never) }), mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }) }))
-    expect(arte(M, id, 'visual_direction').reglas_rechazadas).toHaveLength(1)
+    expect(arte(M, id, 'visual_direction').reglas_marcadas).toHaveLength(1)
+    expect((arte(M, id, 'visual_direction').reglas_de_imagen as { obligatorio: Array<{ id: string; marcada?: string }> }).obligatorio).toMatchObject([{ id: 'o1', marcada: expect.stringContaining('la cita no está') }])
+    expect(M.encargos.get(id)!.estado_del_motor.fichas.find((f) => f.id === 'vd-regla-o1')).toMatchObject({ gravedad: 'sugerencia', que: expect.stringContaining('se usa igual, marcada') })
   })
   it('foto REAL candidata: se usa, se mira si su confianza no es alta, no se genera nada y queda el uso registrado con su rol', async () => {
     const { M, id } = await abiertoC({ dry_run: false })

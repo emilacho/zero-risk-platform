@@ -122,7 +122,7 @@ export const POST_IMG: Plantilla = {
   ],
   indicaciones: {
     marketing_instagram_curator: [
-      { regla: 'Eres el director visual del encargo. Entregas la dirección visual, la decisión de imagen y las reglas de imagen (obligatorio y prohibido), cada una con la cita literal del brief de la que sale cuando el brief es de texto.', aplica: 'codigo:citas_existen' },
+      { regla: 'Eres el director visual del encargo. Entregas la dirección visual, la decisión de imagen y las reglas de imagen (obligatorio y prohibido), cada una con su referencia: la fuente (brief, hoja, gran idea, manual o plan) y el campo de donde sale; la cita es opcional y corta. Lo que no tenga referencia comprobable se usa igual, marcado.', aplica: 'codigo:citas_existen' },
       { regla: 'Partes del manual y de las fotos candidatas que te pasa la sala: si una foto cumple, indica su identificador; si ninguna sirve, pides una generada.', aplica: 'codigo:salida' },
       { regla: 'No inventes marcas, rostros, precios ni lugares; lo que no puedas saber, decláralo como faltante.', aplica: 'codigo:chequeos' },
       { regla: 'Cuando miras una imagen, describes por cada regla si está presente, ausente o no se ve, con la evidencia; no opinas ni la apruebas.', aplica: 'codigo:decide_imagen' },

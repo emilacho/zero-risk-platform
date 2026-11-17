@@ -167,12 +167,17 @@ describe('los esquemas de salida de las salas 2 y 3 los hace cumplir el código'
       expect(r.descartados.join('|')).toMatch(/platform/); expect(r.descartados.join('|')).toMatch(/open_questions/); expect(r.descartados.join('|')).toMatch(/size/)
     }
   })
-  it('laminas.v1: un titular de 91 caracteres, un rol inventado o un campo extra → reintento 1 vez; y luego falla visible', () => {
-    for (const mal of [lam({ headline: 'x'.repeat(91) }), lam({ rol: 'gancho' }), lam({ video: 'a.mp4' })]) {
+  it('laminas.v1: un rol inventado o un campo extra → reintento 1 vez; y luego falla visible', () => {
+    for (const mal of [lam({ rol: 'gancho' }), lam({ video: 'a.mp4' })]) {
       const t = JSON.stringify({ laminas: [mal] })
       expect(procesarSalida(t, 'laminas.v1', 0, 1)).toMatchObject({ ok: false, accion: 'reintentar' })
       expect(procesarSalida(t, 'laminas.v1', 1, 1)).toMatchObject({ ok: false, accion: 'falla_visible' })
     }
+  })
+  it('laminas.v1: un titular de 91 caracteres (SOLO largo · 17-nov punto 6) → se devuelve para acortar hasta 2 veces más que el reintento; luego falla visible', () => {
+    const t = JSON.stringify({ laminas: [lam({ headline: 'x'.repeat(91) })] })
+    for (const i of [0, 1, 2]) expect(procesarSalida(t, 'laminas.v1', i, 1)).toMatchObject({ ok: false, accion: 'reintentar' })
+    expect(procesarSalida(t, 'laminas.v1', 3, 1)).toMatchObject({ ok: false, accion: 'falla_visible' })
   })
   it('estructura.v1 NO admite ningún texto de imagen (el narrador solo pone estructura)', () => {
     const buena = { elementos: [{ ref: 'e01', rol: 'apertura', beat: 'presentar', mood: 'cálido', foto_slot: 'e01' }] }

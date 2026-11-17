@@ -16,7 +16,8 @@ export type Esq =
   | { t: 'obj'; props: Record<string, Esq>; req?: string[]; extra?: boolean; ignorar?: string[] }
 
 const str = (min = 1, max = 4000): Esq => ({ t: 'str', min, max })
-const regla: Esq = { t: 'obj', props: { id: str(1, 60), texto: str(1, 400), claves: { t: 'arr', de: str(1, 80), max: 12 }, cita: str(1, 600) }, req: ['id', 'texto'] }
+// 17-nov · GO creativos punto 5: la regla dice de dónde sale (`fuente` + `campo`); `marcada` NO está: la pone solo la sala (si el agente la manda, se ignora)
+const regla: Esq = { t: 'obj', props: { id: str(1, 60), texto: str(1, 400), claves: { t: 'arr', de: str(1, 80), max: 12 }, cita: str(1, 600), fuente: str(1, 30), campo: str(1, 120) }, req: ['id', 'texto'] }
 const necesito: Esq = { t: 'arr', max: 3, de: { t: 'obj', props: { que: str(1, 300), para_que: str(1, 300), bloquea: { t: 'bool' } }, req: ['que'] } }
 /** Sprint 1 · Mejora 5 · lo que va ESCRITO sobre la imagen (lo dibuja la sala con la marca). Opcional y holgado: lo largo se avisa al componer, no se rechaza aquí */
 const TEXTO_EN_IMAGEN: Esq = { t: 'obj', req: [], props: { etiqueta: str(0, 300), titular: str(0, 300), bajada: str(0, 300), boton: str(0, 300) } }
@@ -40,9 +41,11 @@ const elementoDeCopyKit: Esq = {
   props: { ref: str(1, 60), eyebrow: str(0, LIMITES_DE_LAMINA.eyebrow), headline: str(1, LIMITES_DE_LAMINA.headline), body: str(0, LIMITES_DE_LAMINA.body), cta: str(0, LIMITES_DE_LAMINA.cta), acompanamiento: str(0, 1500), hashtags: { t: 'arr', de: str(1, 80), max: 40 } },
 }
 /** un elemento de ESTRUCTURA del kit: sin ningún campo de texto de imagen (extra: false ⇒ cualquier clave de más falla el formato) */
+/** 17-nov · GO creativos punto 6: los topes de la estructura, en UN lugar (el esquema y el contrato que lee el agente salen de aquí) */
+export const LIMITES_DE_ESTRUCTURA = { rol: 60, beat: 200, mood: 120, sugerencia_interactiva: 160 } as const
 const elementoDeEstructura: Esq = {
   t: 'obj', req: ['ref', 'rol', 'beat', 'mood'],
-  props: { ref: str(1, 60), rol: str(1, 60), beat: str(1, 200), foto_slot: str(0, 80), mood: str(1, 120), sugerencia_interactiva: str(0, 160) },
+  props: { ref: str(1, 60), rol: str(1, LIMITES_DE_ESTRUCTURA.rol), beat: str(1, LIMITES_DE_ESTRUCTURA.beat), foto_slot: str(0, 80), mood: str(1, LIMITES_DE_ESTRUCTURA.mood), sugerencia_interactiva: str(0, LIMITES_DE_ESTRUCTURA.sugerencia_interactiva) },
 }
 const respuestas: Esq = { t: 'arr', max: 12, de: { t: 'obj', req: ['id', 'estado', 'razon'], props: { id: str(1, 80), estado: { t: 'enum', v: ['tomada', 'no_tomada'] }, razon: str(1, 600) } } }
 
@@ -346,14 +349,30 @@ export type ResultadoDeSalida =
   | { ok: false; accion: 'reintentar'; mensaje_de_error: string }
   | { ok: false; accion: 'falla_visible'; errores: string[]; ficha: Pick<Ficha, 'origen' | 'donde' | 'gravedad' | 'que'> }
 
-/** `intento` = cuántos intentos de formato ya se hicieron (0 en el primero). Un reintento como máximo cuando `reintento_formato` = 1. */
-export function procesarSalida(texto: string, esquemaId: string, intento: number, reintento_formato: number, o: { normalizar?: boolean; /** la oficina de piezas lo pide: ver `limpiarForma` */ limpiarForma?: boolean | { descartarEyebrowLargo?: boolean } } = {}): ResultadoDeSalida {
+/**
+ * 17-nov · GO creativos punto 6: un texto que solo PASA SU TOPE de caracteres no mata el encargo: se devuelve al agente para que lo acorte, con cada campo, su largo y su
+ * tope, hasta `CORRECCIONES_DE_LARGO` veces más que el reintento de formato (tope explícito: nunca un ciclo sin fin). El texto del autor NUNCA se recorta por código.
+ * Si hay cualquier otro error junto al largo, manda la regla de siempre (`reintento_formato`).
+ */
+export const CORRECCIONES_DE_LARGO = 2
+const RE_DEMASIADO_LARGO = /^(.+): texto demasiado largo \(máx\. (\d+); el tuyo tiene (\d+)\)$/
+export const soloTextosLargos = (errores: string[]): boolean => errores.length > 0 && errores.every((x) => RE_DEMASIADO_LARGO.test(x))
+/** el pedido de corrección, campo por campo y en claro (cuánto sobra) */
+export function pedidoDeAcortar(errores: string[]): string {
+  const lineas = errores.map((x) => { const m = RE_DEMASIADO_LARGO.exec(x)!; const sobra = Number(m[3]) - Number(m[2]); return `- ${m[1]}: tiene ${m[3]} caracteres y el tope es ${m[2]} (sobran ${sobra})` })
+  return ['Estos textos pasan su tope de caracteres (se cuentan TODOS: letras, espacios y signos):', ...lineas, 'Reescríbelos más cortos con la misma idea (no los cortes a la mitad) y devuelve el JSON COMPLETO del contrato, con todo lo demás igual.'].join('\n')
+}
+/** `intento` = cuántos intentos de formato ya se hicieron (0 en el primero). Un reintento como máximo cuando `reintento_formato` = 1; si SOLO sobran caracteres, hasta `CORRECCIONES_DE_LARGO` más. */
+export function procesarSalida(texto: string, esquemaId: string, intento: number, reintento_formato: number, o: { normalizar?: boolean; /** la oficina de piezas lo pide: ver `limpiarForma` */ limpiarForma?: boolean | { descartarEyebrowLargo?: boolean }; /** 17-nov · punto 6: si SOLO sobran caracteres, se devuelve a acortar (por omisión sí; la jefatura lo apaga: su tope de vueltas es central) */ corregirLargo?: boolean } = {}): ResultadoDeSalida {
   const esq = ESQUEMAS[esquemaId]
   if (!esq) return { ok: false, accion: 'falla_visible', errores: [`esquema «${esquemaId}» no registrado`], ficha: { origen: 'chequeo', donde: 'formato', gravedad: 'bloquea', que: `esquema «${esquemaId}» no registrado` } }
-  const fallo = (errores: string[]): ResultadoDeSalida =>
-    intento < reintento_formato
+  const fallo = (errores: string[]): ResultadoDeSalida => {
+    const largo = o.corregirLargo !== false && soloTextosLargos(errores)
+    if (largo && intento < reintento_formato + CORRECCIONES_DE_LARGO) return { ok: false, accion: 'reintentar', mensaje_de_error: pedidoDeAcortar(errores) }
+    return intento < reintento_formato
       ? { ok: false, accion: 'reintentar', mensaje_de_error: `Tu respuesta no cumple el formato. Errores: ${errores.slice(0, 8).join(' · ')}. Devuelve solo el JSON del contrato.` }
       : { ok: false, accion: 'falla_visible', errores, ficha: { origen: 'chequeo', donde: 'formato', gravedad: 'bloquea', que: `la salida del agente no cumple el formato «${esquemaId}» tras ${intento + 1} intento(s): ${errores.slice(0, 3).join(' · ')}` } }
+  }
   const l = limpiarSalida(texto)
   if (!l.ok) return fallo([l.error])
   let crudo: unknown

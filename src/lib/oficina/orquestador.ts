@@ -889,11 +889,12 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
         fichas.push(fichaNueva('vd-prohibida', 'chequeo', 'imagen', 'bloquea', 'la política del cliente prohíbe imágenes generadas y no hay foto real apta: la pieza sale sin imagen', 'política de imagen generada'))
       }
       const reglasBrutas = v.reglas_de_imagen as ReglasDeImagen
-      const ci = citasExisten(reglasBrutas, b.brief.texto)
-      for (const x of ci.rechazadas) fichas.push(fichaNueva(`vd-regla-${x.id}`, 'chequeo', 'imagen', 'sugerencia', `regla de imagen «${x.id}» descartada: ${x.motivo}`, 'citas literales del brief'))
+      // 17-nov · GO creativos punto 5: la referencia se comprueba contra lo que el agente recibió; lo no comprobable se MARCA (sin rejas), no se descarta
+      const ci = citasExisten(reglasBrutas, { brief: b.brief.texto, manual: b.F.manual_texto, plan: b.F.plan_texto })
+      for (const x of ci.marcadas) fichas.push(fichaNueva(`vd-regla-${x.id}`, 'chequeo', 'imagen', 'sugerencia', `regla de imagen «${x.id}» sin referencia comprobable (${x.motivo}): se usa igual, marcada`, 'referencias al brief, la hoja, la gran idea, el manual o el plan'))
       const conf = modo === 'real' ? confianzaDeLaFoto(b.F.fotos, fotoId) : null
       const derivada = derivarDecision(modo, conf)
-      return { res: { costo_usd: 0, artefacto: { ...v, reglas_de_imagen: ci.validas, reglas_rechazadas: ci.rechazadas, decision: { ...dec, foto_id: fotoId, ...derivada } }, ...(fichas.length ? { fichas } : {}) } }
+      return { res: { costo_usd: 0, artefacto: { ...v, reglas_de_imagen: ci.validas, reglas_marcadas: ci.marcadas, decision: { ...dec, foto_id: fotoId, ...derivada } }, ...(fichas.length ? { fichas } : {}) } }
     }
     case 'prompts': case 'reimagen_prompts': return { res: { costo_usd: 0, artefacto: v } }
     case 'mirar': case 'reimagen_mirar': {
