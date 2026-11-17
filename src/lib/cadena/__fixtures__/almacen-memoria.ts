@@ -4,7 +4,8 @@
  */
 import type { ResultadoDeAbrirMesa, SobreDeReubicacion } from '../reubicar'
 import type { EncargoDeLaCampana, LecturaDeArreglos, ResultadoDeAbrirMesaDeFallidos, SobreDeFallidos } from '../rehacer-fallidos'
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, FichasGuardadas, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
+import type { HechoDelNegocioPorOferta } from '../ficha-de-oferta'
 import type { LlaveDeFecha } from '../indicaciones'
 import { claveDeFecha, ordenarLlaves } from '../fechas-del-cliente'
 import type { PlazoCfg } from '../esperas'
@@ -60,6 +61,9 @@ export class AlmacenMemoria implements Almacen {
   ])
   campanas: Campana[] = []
   estrategias: EstrategiaGuardada[] = []
+  fichasDeOferta: FichasGuardadas[] = []
+  /** los hechos del cerebro que sirve este doble; undefined = el almacén no los sabe leer (aún no disponibles) */
+  hechos?: HechoDelNegocioPorOferta[]
   briefsCreativos: BriefCreativoGuardado[] = []
   conceptos: ConceptoGuardado[] = []
   filasGuardadas: (Fila & { campana_id: string; calendario_version: number })[] = []
@@ -188,6 +192,9 @@ export class AlmacenMemoria implements Almacen {
   async campanasActivas() { return structuredClone(this.campanas.filter((c) => c.estado === 'activa')) }
   async ultimaEstrategia(campanaId: string) { return this.estrategias.filter((e) => e.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarEstrategia(e: EstrategiaGuardada) { this.estrategias.push(e) }
+  async ultimasFichas(campanaId: string) { return this.fichasDeOferta.filter((f) => f.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
+  async insertarFichas(f: FichasGuardadas) { if (!this.fichasDeOferta.some((x) => x.campana_id === f.campana_id && x.version === f.version)) this.fichasDeOferta.push(f) }
+  async hechosDelNegocio(_clientId: string) { return this.hechos ?? null }
   async estrategiaEnVersion(campanaId: string, version: number) { return this.estrategias.find((e) => e.campana_id === campanaId && e.version === version) ?? null }
   async insertarEstrategiaSiLibre(e: EstrategiaGuardada) { if (this.estrategias.some((x) => x.campana_id === e.campana_id && x.version === e.version)) return false; this.estrategias.push(e); return true }
   // 31-oct (nuevo orden · T1) · imita el UNIQUE (campana_id, version) de la base

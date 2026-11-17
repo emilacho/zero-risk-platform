@@ -5,11 +5,12 @@ import { modeloPorCorridaValido } from '@/lib/modelo-por-corrida'
 import type { Almacen } from './almacen'
 import { diasEntre, esFechaIso, lunesDe } from './fechas'
 
-export type Paso = 'estrategia' | 'calendario' | 'fechas' | 'brief'
-export const PASOS: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'brief']
+// 17-nov · Sprint 4 · A entrega 2: `fichas` · el lector de las fichas de hechos por oferta (una vez por campaña · no es reja)
+export type Paso = 'estrategia' | 'calendario' | 'fechas' | 'brief' | 'fichas'
+export const PASOS: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'brief', 'fichas']
 
 /** costo esperado por llamada (US$, estimación del diseño §12, no medida) · el tope de la corrida = 2 × esperado, mínimo 1,00 */
-const ESPERADO_USD: Record<Paso, number> = { estrategia: 0.45, calendario: 0.4, fechas: 0.3, brief: 0.25 }
+const ESPERADO_USD: Record<Paso, number> = { estrategia: 0.45, calendario: 0.4, fechas: 0.3, brief: 0.25, fichas: 0.5 }
 export const topeDelPaso = (p: Paso): number => Math.max(1, Math.round(2 * ESPERADO_USD[p] * 100) / 100)
 
 export const AGENTE_POR_PASO: Record<Paso, string> = {
@@ -17,6 +18,8 @@ export const AGENTE_POR_PASO: Record<Paso, string> = {
   calendario: 'social-media-strategist',
   fechas: 'social-media-strategist',
   brief: 'campaign-brief-agent',
+  // el lector de la ficha (el ejecutivo de cuentas de *Launch!*): el mismo agente de la planificación; lo que cambia es su tarea
+  fichas: 'social-media-strategist',
 }
 
 export const MODELO_POR_DEFECTO = 'claude-opus-5-5'
@@ -54,7 +57,11 @@ export const PLAZO_DE_LLAMADA_POR_DEFECTO_MIN = 6
 export const CABECERA_SALTAR_EDITOR = 'x-skip-editor-middleware'
 
 /** pasos que saltan la revisión del editor por diseño (§8): estructura interna, no texto que se publica */
-export const PASOS_SIN_REVISION: readonly Paso[] = ['estrategia', 'calendario', 'fechas']
+export const PASOS_SIN_REVISION: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'fichas']
+/** RESPUESTA-LENOVO a CC3 (17-nov, opción b) · los pasos que gastan de su PROPIA bolsa (no de la de planificación) */
+export const PASOS_CON_PRESUPUESTO_PROPIO: ReadonlySet<Paso> = new Set<Paso>(['fichas'])
+/** el presupuesto del lector cuando la campaña no trae el suyo (US$ 2: hasta 3 intentos de ~0,5, o 2 si fallan sin costo registrado) */
+export const PRESUPUESTO_LECTOR_POR_OMISION = 2
 
 export async function modeloDeLaCadena(al: Almacen): Promise<string> {
   const v = await al.leerConfig('modelo_cadena')

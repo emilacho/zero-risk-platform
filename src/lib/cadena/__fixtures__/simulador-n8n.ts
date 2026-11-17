@@ -89,11 +89,17 @@ export class SimuladorN8n {
         case 'executeWorkflow': {
           const id = nodo.parameters.workflowId?.value ?? nodo.parameters.workflowId
           if (!this.o.flujos[id]) throw new Error(`«${nombre}» llama al flujo ${String(id)}, que el simulador no tiene`)
-          if (nodo.parameters.mode === 'each') {
-            const out: Item[] = []
-            for (const it of items) out.push(...(await this.ejecutar(id, [it])))
-            salidas = [out]
-          } else salidas = [await this.ejecutar(id, items)]
+          try {
+            if (nodo.parameters.mode === 'each') {
+              const out: Item[] = []
+              for (const it of items) out.push(...(await this.ejecutar(id, [it])))
+              salidas = [out]
+            } else salidas = [await this.ejecutar(id, items)]
+          } catch (e) {
+            // como n8n: un sub-flujo que falla con `onError: continueRegularOutput` entrega `{ error: { message } }` y el flujo sigue
+            if (nodo.onError !== 'continueRegularOutput') throw e
+            salidas = [[{ json: { error: { message: (e as Error).message } } }]]
+          }
           break
         }
         default: throw new Error(`el simulador no soporta el nodo «${nombre}» de tipo ${nodo.type}`)

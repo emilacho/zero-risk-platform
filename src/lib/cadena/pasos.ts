@@ -9,14 +9,15 @@ import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './auto
 import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, medidaDeCampana, SEMANAS_DE_PANORAMA, TOTAL_DE_TANDAS, topeDelPaso, type MedidaDeCampana, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
 import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
-import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V5, ESQUEMA_ESTRATEGIA } from './esquemas'
+import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V5, ESQUEMA_ESTRATEGIA, ESQUEMA_FICHAS_DE_OFERTA } from './esquemas'
+import { fichasConHechos, hechoEnTexto, leerFichasDelLector, type HechoDelNegocioPorOferta } from './ficha-de-oferta'
 import { conceptoParaElCalendario, empujarDesdeElTablero, EN_REVISION_DE_REGISTRO, etapaDeReentrada, nuevoOrdenEncendido, origenesDelCliente, recibirVueltaDeRegistro, siguienteDespuesDe, tramoDeReemision } from './mesas'
 import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, filasConTema, leerArtifactIdDeRegistro, leerObjetoDeRegistro, objetoDeRegistro, pistasDeRegistro, registroFijado, seRevisaElRegistro, temasDeLaVuelta, textoDelCalendario, textoDeLaVuelta, type RegistroFijado } from './registro-en-jefatura'
 import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
 import { hoyEnZona } from './campanas'
 import { fueraDePlazoDeProduccion } from './lotes'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
-import { tareaDeCalendario, tareaDeEstrategia } from './indicaciones'
+import { tareaDeCalendario, tareaDeEstrategia, tareaDeFichas } from './indicaciones'
 import { metodoDeCalendario } from './metodos'
 import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
@@ -173,6 +174,75 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
   return { status: 200, cuerpo: { ok: true, version, fechas_pedidas: fechasPedidas, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que), ...conTemporadas } }
 }
 
+// ─────────────────────────────────────────────────────────────── FICHAS (Sprint 4 · A entrega 2 · el lector)
+/** estados en que la campaña ya no se trabaja: el lector no corre */
+const CAMPANA_TERMINADA = new Set(['cerrada', 'reemplazada'])
+
+/** los hechos del cerebro, si el almacén los sabe leer; un fallo = «aún no disponibles» (nunca frena) */
+async function hechosDe(al: Almacen, clientId: string): Promise<HechoDelNegocioPorOferta[] | null> {
+  if (!al.hechosDelNegocio) return null
+  try { return await al.hechosDelNegocio(clientId) } catch { return null }
+}
+
+/**
+ * 17-nov · Sprint 4 · A entrega 2 · el LECTOR de las fichas de hechos por oferta: UNA vez por campaña, antes del calendario.
+ * NO es reja (ficha-de-oferta.ts): si no puede (sin almacén de fichas, intentos o presupuesto agotados), la campaña sigue y la hoja dice «sin fichas».
+ */
+export async function fichasPreparar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
+  const c = await cargar(al, cuerpo)
+  if (!c.ok) return c.r
+  const { campana, ctx } = c.p
+  if (!al.insertarFichas || !al.ultimasFichas) return { status: 200, cuerpo: { ya_hecha: true, sin_fichas: 'este almacén no guarda fichas' } }
+  const ultima = await al.ultimasFichas(campana.id)
+  if (ultima) return { status: 200, cuerpo: { ya_hecha: true, version: ultima.version } }
+  if (CAMPANA_TERMINADA.has(campana.estado)) return err(409, 'E-ESTADO', `la campaña está ${campana.estado}: el lector no corre`)
+  const version = 1
+  const esquema = validarEsquemaDeSalida(ESQUEMA_FICHAS_DE_OFERTA)
+  if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema de las fichas no es válido')
+  const modelo = await modeloDeLaCadena(al)
+  const prep = await prepararCorrida(al, campana, 'fichas', `v${version}:c0`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash, async () => !!(await al.ultimasFichas!(campana.id)))
+  const corto = respuestaDePreparar(prep)
+  if (corto) return corto
+  if (prep.tipo === 'intentos_agotados' || prep.tipo === 'presupuesto_agotado') {
+    // no es reja: sin fichas la hoja lo declara · nada pasa a «necesita humano»
+    // «ya hecha» con su motivo: el sub-flujo genérico lo entiende como un fin declarado (nunca un error que frene la puerta)
+    return { status: 200, cuerpo: { ya_hecha: true, sin_fichas: prep.tipo === 'intentos_agotados' ? 'el lector agotó sus 3 intentos' : `el presupuesto propio del lector no alcanza para otro intento (gastado US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})` } }
+  }
+  const hechos = await hechosDe(al, campana.client_id)
+  const tarea = tareaDeFichas({ ctx, version, hoy: ahora.slice(0, 10), hechosDelCerebro: hechos === null ? null : hechos.map(hechoEnTexto) })
+  return {
+    status: 200,
+    cuerpo: {
+      corrida_id: prep.corrida.id, version, intento: prep.corrida.intento, plazo_en: prep.corrida.plazo_en,
+      headers: { [CABECERA_SALTAR_EDITOR]: '1' },
+      run_sdk: cuerpoDeRunSdk('fichas', modelo, tarea, esquema.valor, campana.client_id, { contrato: 'fichas_de_oferta.v1' }),
+    },
+  }
+}
+
+export async function fichasGuardar(al: Almacen, cuerpo: Record<string, unknown>): Promise<Respuesta> {
+  const c = await cargar(al, cuerpo)
+  if (!c.ok) return c.r
+  const { campana } = c.p
+  if (!al.insertarFichas || !al.ultimasFichas) return { status: 200, cuerpo: { ya_guardada: true, sin_fichas: 'este almacén no guarda fichas' } }
+  const corridaId = Number(cuerpo.corrida_id)
+  const corrida = (await al.corridasDeCampana(campana.id)).find((x) => x.id === corridaId && x.paso === 'fichas')
+  if (!corrida) return err(404, 'E-CORRIDA', 'la corrida no existe para esta campaña')
+  if (corrida.estado !== 'en_curso') return { status: 200, cuerpo: { ya_guardada: true, estado: corrida.estado } }
+  const resultado = leerResultado(cuerpo.resultado)
+  const { objeto, reintentar } = await cerrarSegunResultado(al, corrida, resultado)
+  if (objeto === null) return { status: 200, cuerpo: reintentar ? { reintentar: true } : { ya_guardada: true, sin_fichas: 'la llamada del lector no entregó el objeto estructurado tras 3 intentos' } }
+  const ultima = await al.ultimasFichas(campana.id)
+  if (ultima) return { status: 200, cuerpo: { ya_guardada: true, version: ultima.version } }
+  const leidas = leerFichasDelLector(objeto)
+  // el cerebro es el dueño del hecho: se suma después y manda (se relee: lo que cambió entre preparar y guardar también vale)
+  const hechos = await hechosDe(al, campana.client_id)
+  const fichas = fichasConHechos(leidas.fichas, hechos)
+  const avisos = [...leidas.avisos, ...(hechos === null ? ['hechos del negocio: aún no disponibles'] : [])]
+  await al.insertarFichas({ campana_id: campana.id, version: 1, estado: 'validada', contenido: fichas, pendientes: leidas.pendientes, descartados: leidas.descartados, agente: AGENTE_POR_PASO.fichas, modelo: corrida.modelo, costo_usd: resultado.cost_usd ?? null, workflow_execution_id: corrida.workflow_execution_id, seco: campana.seco })
+  return { status: 200, cuerpo: { ok: true, fichas: fichas.length, descartados: leidas.descartados, pendientes: leidas.pendientes, avisos } }
+}
+
 // ─────────────────────────────────────────────────────────────── CALENDARIO
 async function fechasDeclaradas(al: Almacen, ctx: ContextoDelCliente, e: Estrategia, c: Campana): Promise<FechaEspecialVerificada[]> {
   // la llave estable (10-nov · D): la que guardó el código, no la grafía de turno; las temporadas son SOLO de este cliente (C)
@@ -246,6 +316,8 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
     concepto: mesa.concepto ? { leido: mesa.concepto, version: mesa.version ?? 0 } : undefined,
     // 11-nov (reglas rígidas #5): las fechas verificadas van SIEMPRE (con o sin gran idea): el agente declara la que cita (`fecha:<id>`) y V07 verifica esa
     fechasEspeciales: await fechasDeclaradas(al, ctx, estr.contenido, campana),
+    // 17-nov · Sprint 4 · A entrega 2: las ofertas con ficha (el lector corre antes): su clave va a `sede` y la hoja trae la ficha de cada pieza
+    ofertas: ((await al.ultimasFichas?.(campana.id))?.contenido ?? []).map((f) => ({ clave: f.clave, nombre: f.nombre ?? null })),
     // 31-oct (FIRMA de Emilio): el método de colocación como capa local, solo con la gran idea; `cadena_config.metodos.calendario` lo apaga o lo reemplaza
     metodo: mesa.concepto ? await metodoDeCalendario(al) : undefined,
   })

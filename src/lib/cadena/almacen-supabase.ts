@@ -22,7 +22,7 @@ import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDe
 import { resolverCierre } from '../jefatura/revision/cierre'
 import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA } from '../jefatura/revision/contrato'
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, ResultadoDeAbrirRegistro } from './almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, FichasGuardadas, ResultadoDeAbrirRegistro } from './almacen'
 import { horarioDeNorm } from './horario'
 import { registroDelCliente } from './registro'
 import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
@@ -63,6 +63,8 @@ export function esloganParaLaCadena(m: { tagline?: string | null; content_text?:
   return e ? { texto: e.texto, regla: `${e.fuente}; ${reglaDelEslogan(e.fuente)}` } : null
 }
 
+/** la tabla o la vista no existe (Postgres · PostgREST): solo se usa para leer lo que una migración todavía no aplicada crea */
+const TABLA_AUSENTE = new Set(['42P01', 'PGRST205'])
 const fallo = (e: { message?: string; code?: string } | null): never => { throw Object.assign(new Error(e?.message ?? 'error de la base'), { code: e?.code }) }
 const clave = (x: string) => normalizar(x).replace(/\s+/g, '_')
 const FUENTE_FUERTE: Record<string, number> = { sitio: 3, instagram: 2, mapas: 1 }
@@ -365,6 +367,14 @@ export function almacenDeSupabase(): Almacen {
 
     async ultimaEstrategia(campanaId) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
     async insertarEstrategia(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (error) fallo(error) },
+    // 17-nov · Sprint 4 · A entrega 2 · las fichas de hechos por oferta (una fila por campaña y versión · único en la base: la primera que cierra gana)
+    // la tabla puede no existir todavía (código publicado antes que la migración): leer = «sin fichas» (la hoja lo declara) · escribir sí falla ruidoso
+    async ultimasFichas(campanaId) {
+      const { data, error } = await db.from('cadena_fichas_de_oferta').select('*').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)
+      if (error) { if (TABLA_AUSENTE.has(String((error as { code?: string }).code))) return null; fallo(error) }
+      return ((data as FichasGuardadas[] | null) ?? [])[0] ?? null
+    },
+    async insertarFichas(f) { const { error } = await db.from('cadena_fichas_de_oferta').insert(f); if (error && (error as { code?: string }).code !== '23505') fallo(error) },
     async estrategiaEnVersion(campanaId, version) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).eq('version', version).limit(1)))[0] ?? null },
     async insertarEstrategiaSiLibre(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (!error) return true; if ((error as { code?: string }).code === '23505') return false; return fallo(error) },
 

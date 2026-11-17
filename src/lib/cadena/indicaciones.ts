@@ -59,6 +59,53 @@ export function lineaDelDiaUno(fechaInicio: string | null | undefined, fechaFin:
   return `${base} Todo «dia», «dia_desde» y «dia_hasta» se cuenta desde ese día 1: si el plan da una FECHA, conviértela a su día de campaña contando desde el día 1.`
 }
 
+/**
+ * 17-nov · Sprint 4 · A entrega 2 · el LECTOR de las fichas de hechos por oferta (el ejecutivo de cuentas de *Launch!* §11.2: junta los hechos del trabajo
+ * antes de que los creativos escriban). Una vez por campaña. Escribe DATOS citados, nunca piezas ni ideas. Los hechos del cerebro (lugar, fechas, zonas)
+ * los suma el código después y mandan sobre lo que el lector lea: aquí se le muestran para que no los contradiga ni los vuelva a deducir.
+ */
+export interface PedidoDeFichas {
+  ctx: ContextoDelCliente
+  version: number
+  /** la fecha de hoy (AAAA-MM-DD): para decir qué ya venció o todavía no empieza */
+  hoy: string
+  /** los hechos del negocio que sirve el cerebro, ya como texto; `null` = todavía no disponibles */
+  hechosDelCerebro: string[] | null
+}
+export function tareaDeFichas(p: PedidoDeFichas): string {
+  return [
+    '# Qué te pido',
+    'Eres quien junta los HECHOS de lo que vende este negocio, antes de que los creativos escriban. Lee el PLAN, el MANUAL de marca y las REFERENCIAS, y devuelve UNA ficha por cada OFERTA: lo que una pieza puede vender (un lugar, un producto, un plan, un servicio, una línea o un evento).',
+    'No escribes piezas, ideas, mensajes ni llamados: solo datos, cada uno con su fuente.',
+    '',
+    '# Reglas',
+    lineas(reglasComunes(p.ctx.registro, p.ctx.idioma)),
+    lineas([
+      '`clave`: si la oferta es una de las SEDES de la lista, usa su clave TAL CUAL; si no, una clave corta en minúsculas con guiones (ejemplo inventado: «plan-anual»). La misma clave que el calendario pondrá en la pieza.',
+      'Cada dato lleva `fuente`: el id de una REFERENCIA (por ejemplo `manual:…`, `plan:…`) o una cita literal corta del plan o del manual. Un dato sin fuente se descarta: no lo escribas.',
+      '`vigente_desde` y `vigente_hasta` (`AAAA-MM-DD`): solo si la fuente dice desde o hasta cuándo vale (una promoción, una apertura, un cierre). Si no lo dice, déjalos vacíos.',
+      '`red`: solo para lo que cambia según la red (por ejemplo, cómo se compra desde una red u otra). Si vale para todas, vacío.',
+      '`no_se_puede_afirmar`: lo que el material dice que NO es cierto o que todavía no existe. `que_nunca_mostrar`: lo que una imagen no puede enseñar de esta oferta.',
+      '`objetivo_por_fecha`: lo que el PLAN quiere de esta oferta en cada tramo de fechas, con su cita.',
+      'Lo que no encuentres queda vacío; no lo rellenes. Lo que falte y haga falta para una pieza va en `pendientes`, en una línea.',
+      'Los HECHOS DEL NEGOCIO (del cerebro) mandan: no los contradigas ni los repitas con otras palabras; el sistema los suma a la ficha.',
+    ]),
+    '',
+    `# Hoy\n${p.hoy} (lo que ya venció a esta fecha o todavía no empieza se escribe igual, con sus fechas: el sistema lo marca)`,
+    '',
+    `# SEDES del negocio\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` (${s.nombre})` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(el negocio no tiene sedes registradas)'}`,
+    '',
+    `# HECHOS DEL NEGOCIO (del cerebro)\n${p.hechosDelCerebro === null ? '(hechos del negocio: aún no disponibles)' : p.hechosDelCerebro.length ? p.hechosDelCerebro.map((h) => `- ${h}`).join('\n') : '(el cerebro no tiene hechos de este negocio: no consta)'}`,
+    '',
+    `# REFERENCIAS (ids que puedes citar en \`fuente\`)\n${referencias(p.ctx)}`,
+    '',
+    `# PLAN\n${p.ctx.planTexto}`,
+    '',
+    `# MANUAL DE MARCA\n${p.ctx.manualTexto}`,
+    `\n(versión de las fichas ${p.version})`,
+  ].join('\n')
+}
+
 export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
   const corr = p.correccion?.length
     ? `\n\n# CORRECCIÓN (única)\nTu respuesta anterior falló estos chequeos. Corrige SOLO esto, sin rehacer lo demás:\n${p.correccion.map((f, i) => `${i + 1}. [${f.donde}] ${f.que} → ${f.propuesta}`).join('\n')}`
@@ -113,6 +160,15 @@ export interface PedidoDeCalendario {
   fechasEspeciales?: FechaEspecialVerificada[]
   /** 31-oct (FIRMA de Emilio · capa local): el MÉTODO de colocación (`metodos.ts`, `social-calendar-builder` sin sus dependencias) · solo se pega con `concepto`; `null`/ausente = sin método (la tarea de hoy) */
   metodo?: string | null
+  /** 17-nov · Sprint 4 · A entrega 2: las ofertas que tienen ficha de hechos (el lector corre antes); sin ellas la tarea queda como antes, byte a byte */
+  ofertas?: Array<{ clave: string; nombre?: string | null }>
+}
+
+/** las ofertas con ficha: el calendario pone su clave en `sede` (es lo que la hoja usa para traer la ficha de cada pieza) */
+function seccionDeOfertas(p: PedidoDeCalendario): string[] {
+  if (!p.ofertas?.length) return []
+  const lista = p.ofertas.map((o) => `- ${o.clave}${o.nombre ? ` (${o.nombre})` : ''}`).join('\n')
+  return [`# OFERTAS (las que tienen ficha de hechos)\n${lista}\nEn \`sede\` pon la clave de la oferta que vende cada pieza, TAL CUAL: una de esta lista o la de una sede. Si la pieza no vende ninguna, déjala vacía.`, '']
 }
 
 /** las secciones de la gran idea para la tanda: solo los capítulos (fases) que caen en sus semanas; el banco de cada uno con sus ideas tal cual */
@@ -193,6 +249,7 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     '',
     `# SEDES y horarios\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}: ${s.horario ? JSON.stringify(s.horario) : '(sin horario conocido)'}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
     '',
+    ...seccionDeOfertas(p),
     seccionDeFechas(p),
     '',
     `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,

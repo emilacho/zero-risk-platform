@@ -147,6 +147,22 @@ export const ESQUEMA_GANCHO_DE_VIDEO = objeto({
   pendientes: listaDeTexto,
 })
 
+/**
+ * 17-nov · Sprint 4 · A entrega 2 · las fichas de hechos por oferta que escribe el lector (`fichas_de_oferta.v1`). La forma de `FichaDeOferta`
+ * (`ficha-de-oferta.ts`) llevada al modo estricto: todo obligatorio, «» = ninguno, `que_es` y `para_quien_y_donde` como lista (vale el primero).
+ */
+const DATO_DE_FICHA = objeto({ valor: texto, fuente: texto, vigente_desde: texto, vigente_hasta: texto, red: texto })
+const datos = lista(DATO_DE_FICHA)
+export const ESQUEMA_FICHAS_DE_OFERTA = objeto({
+  fichas: lista(objeto({
+    clave: texto, nombre: texto,
+    que_es: datos, para_quien_y_donde: datos, se_puede_afirmar: datos, no_se_puede_afirmar: datos, oferta_y_precio: datos,
+    como_se_compra: datos, que_mostrar: datos, que_nunca_mostrar: datos, obligatorios_legales: datos,
+    objetivo_por_fecha: lista(objeto({ desde: texto, hasta: texto, objetivo: texto, fuente: texto })),
+  })),
+  pendientes: listaDeTexto,
+})
+
 export const ESQUEMAS = {
   'estrategia.v1': ESQUEMA_ESTRATEGIA_V1,
   'estrategia.v2': ESQUEMA_ESTRATEGIA_V2,
@@ -158,4 +174,5 @@ export const ESQUEMAS = {
   'calendario_tanda.v5': ESQUEMA_CALENDARIO_TANDA_V5,
   'fechas_especiales.v1': ESQUEMA_FECHAS_ESPECIALES,
   'gancho_video.v1': ESQUEMA_GANCHO_DE_VIDEO,
+  'fichas_de_oferta.v1': ESQUEMA_FICHAS_DE_OFERTA,
 } as const

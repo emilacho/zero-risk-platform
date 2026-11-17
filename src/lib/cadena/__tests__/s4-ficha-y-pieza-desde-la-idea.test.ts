@@ -268,7 +268,7 @@ describe('fichasEnTexto con fecha de referencia', () => {
 
 describe('agnóstico', () => {
   it('el código nuevo de la ficha no nombra ningún rubro, lugar ni cliente', () => {
-    const src = readFileSync(join(__dirname, '..', 'ficha-de-oferta.ts'), 'utf-8').replace(/`sede`/g, '') // el nombre de la columna de la base no cambia en esta fase
+    const src = readFileSync(join(__dirname, '..', 'ficha-de-oferta.ts'), 'utf-8').replace(/`sede`/g, '').replace(/'sede'|sede:|sede_id/g, '') // la columna de la base y el `tipo` del cerebro (nombres acordados con CC-CEREBRO) no cambian en esta fase
     expect(src).not.toMatch(/\b(sedes?|local(es)?|plato|restaurante|men[uú]|cocina|Náufrago|Olón|Guayaquil)\b/i)
   })
   it('la instrucción al calendario solo dice «sede» como nombre del campo de la base', () => {

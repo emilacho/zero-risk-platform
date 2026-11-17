@@ -14,6 +14,7 @@ import type { SobreDePlan } from './campanas'
 import type { SobreDeTanda } from './mesas'
 import type { AvisoDelTope, LecturaDeGasto } from './tope-de-campana'
 import type { PerfilParaLectores } from '../perfil-del-publico/lectores'
+import type { FichaDeOferta, HechoDelNegocioPorOferta } from './ficha-de-oferta'
 
 export type EstadoCampana = 'abierta' | 'estrategia' | 'calendario' | 'activa' | 'pausada' | 'necesita_humano' | 'cerrada' | 'reemplazada'
 
@@ -32,6 +33,8 @@ export interface Campana {
   estado: EstadoCampana
   estado_motivo: string | null
   presupuesto_planificacion_usd: number
+  /** RESPUESTA-LENOVO a CC3 (17-nov) · la bolsa PROPIA del lector de fichas · sin valor (o sin la columna aún) vale PRESUPUESTO_LECTOR_POR_OMISION */
+  presupuesto_lector_usd?: number | null
   ventana_parte_dias: number
   sustituir_video_por: 'ninguna' | 'carrusel' | 'foto'
   autoproducir: boolean
@@ -47,6 +50,26 @@ export interface EstrategiaGuardada {
   version: number
   estado: 'borrador' | 'validada' | 'aprobada' | 'descartada'
   contenido: Estrategia
+  agente: string | null
+  modelo: string | null
+  costo_usd: number | null
+  workflow_execution_id: string | null
+  seco: boolean
+}
+
+/**
+ * 17-nov · Sprint 4 · A entrega 2: las fichas de hechos por oferta de una campaña (`cadena_fichas_de_oferta`), las que escribió el lector.
+ * UNA fila por (campaña, versión). Sin fuente un dato no entra (se cuenta en `descartados`). No es reja: sin fichas, la hoja lo declara.
+ */
+export interface FichasGuardadas {
+  campana_id: string
+  version: number
+  estado: 'validada'
+  contenido: FichaDeOferta[]
+  /** lo que el lector no pudo saber (se declara, nunca se rellena) */
+  pendientes: string[]
+  /** datos que vinieron sin fuente y no entraron */
+  descartados: number
   agente: string | null
   modelo: string | null
   costo_usd: number | null
@@ -265,6 +288,14 @@ export interface Almacen {
   campanasEnArmado(): Promise<Campana[]>
   // estrategias
   ultimaEstrategia(campanaId: string): Promise<EstrategiaGuardada | null>
+  /** 17-nov · Sprint 4 · A entrega 2 · OPCIONALES: un almacén sin ellas = sin fichas (la hoja lo declara; nada se frena) */
+  ultimasFichas?(campanaId: string): Promise<FichasGuardadas | null>
+  insertarFichas?(f: FichasGuardadas): Promise<void>
+  /**
+   * 17-nov · los «Hechos del negocio» del cerebro (ENCARGO 2 de CC-CEREBRO), por la consulta del portero: la cadena no nombra tablas del cerebro.
+   * OPCIONAL y todavía SIN implementación: sin él, el lector declara «hechos del negocio: aún no disponibles».
+   */
+  hechosDelNegocio?(clientId: string): Promise<HechoDelNegocioPorOferta[] | null>
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>
   /** colaterales (tramo 2c) · una versión CONCRETA de la estrategia (deshacer vuelve a su base) */
   estrategiaEnVersion(campanaId: string, version: number): Promise<EstrategiaGuardada | null>

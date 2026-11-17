@@ -18,7 +18,7 @@ import { crearPdf, textoPagina } from '@/lib/cerebro/archivos/__tests__/muestras
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
 const AHORA = '2026-10-09T12:00:00Z'
 const UUID = '11111111-1111-4111-8111-111111111111'
-const IDS = { estrategia: 'F-EST', calendario: 'F-CAL', fechas: 'F-FEC', puerta: 'F-PUE' }
+const IDS = { estrategia: 'F-EST', calendario: 'F-CAL', fechas: 'F-FEC', puerta: 'F-PUE', fichas: 'F-FIC' }
 const ID_VIGIA = 'F-VIG', ID_PARTE = 'F-PAR'
 const ENV = { SALA_DISPATCH_KEY: 'k-sala', INTERNAL_API_KEY: 'k-int', SALA_INGRESS_API_KEY: 'k-ing', SLACK_BOT_TOKEN: 'xoxb-prueba', ZERO_RISK_API_URL: 'https://api.test', N8N_PUBLIC_URL: 'https://n8n.test', SALA_CALLBACK_API_KEY: 'k-cb' }
 
@@ -30,10 +30,10 @@ beforeAll(async () => {
   const mod: any = await import(/* @vite-ignore */ pathToFileURL(join(RAIZ, 'scripts', 'worker-staging', 'cadena', 'construir.mjs')).href)
   const vivo = (f: string) => JSON.parse(readFileSync(join(RAIZ, 'scripts', 'worker-staging', 'cadena', 'vivos', f), 'utf8'))
   FLUJOS = mod.construirFlujos({ ids: IDS, parteViva: vivo('PQdIgbuFexuBsoh8.json'), planViva: vivo('X9F0zp6LQ2xGEYVS.json') })
-  POR_ID = { [IDS.estrategia]: FLUJOS['cadena-estrategia'], [IDS.calendario]: FLUJOS['cadena-calendario'], [IDS.fechas]: FLUJOS['cadena-fechas'], [IDS.puerta]: FLUJOS['cadena-puerta'], [ID_VIGIA]: FLUJOS['cadena-vigia'], [ID_PARTE]: FLUJOS['cadena-parte-por-filas'] }
+  POR_ID = { [IDS.estrategia]: FLUJOS['cadena-estrategia'], [IDS.calendario]: FLUJOS['cadena-calendario'], [IDS.fechas]: FLUJOS['cadena-fechas'], [IDS.fichas]: FLUJOS['cadena-fichas'], [IDS.puerta]: FLUJOS['cadena-puerta'], [ID_VIGIA]: FLUJOS['cadena-vigia'], [ID_PARTE]: FLUJOS['cadena-parte-por-filas'] }
 })
 
-const NUEVOS = ['cadena-estrategia', 'cadena-calendario', 'cadena-fechas', 'cadena-vigia', 'cadena-puerta']
+const NUEVOS = ['cadena-estrategia', 'cadena-calendario', 'cadena-fechas', 'cadena-fichas', 'cadena-vigia', 'cadena-puerta']
 
 describe('ESTRUCTURA · los flujos nuevos y la copia', () => {
   it('se construyen los 7 flujos pedidos (5 nuevos + la parte por filas + la copia de planeación), TODOS sin `active` (nacen apagados)', () => {
@@ -67,7 +67,7 @@ describe('ESTRUCTURA · los flujos nuevos y la copia', () => {
   it('🔴 la cabecera de saltar la revisión del editor está SOLO en el agente de estrategia, calendario y fechas; en ningún otro flujo ni nodo', () => {
     const con: string[] = []
     for (const [k, f] of Object.entries(FLUJOS)) for (const n of f.nodes) if (JSON.stringify(n.parameters).toLowerCase().includes('x-skip-editor-middleware')) con.push(`${k}|${n.name}`)
-    expect(con.sort()).toEqual(['cadena-calendario|② Agente (run-sdk)', 'cadena-estrategia|② Agente (run-sdk)', 'cadena-fechas|④ Agente (run-sdk)'])
+    expect(con.sort()).toEqual(['cadena-calendario|② Agente (run-sdk)', 'cadena-estrategia|② Agente (run-sdk)', 'cadena-fechas|④ Agente (run-sdk)', 'cadena-fichas|② Agente (run-sdk)'])
   })
   it('🔴 toda llamada a /api/cadena/* y a run-sdk lleva workflow_id y workflow_execution_id (la causa del 403 conocido)', () => {
     for (const k of NUEVOS) for (const n of FLUJOS[k].nodes.filter((x) => x.type === 'n8n-nodes-base.httpRequest')) {
@@ -200,7 +200,7 @@ const entrada = (cuerpo: Record<string, unknown>, llave = 'k-sala'): Item[] => [
 const correr = (m: Mundo, cuerpo: Record<string, unknown>, llave?: string) => m.sim.ejecutar(IDS.puerta, entrada(cuerpo, llave))
 const simulacros = (c: ClienteFixture, extra: Record<string, unknown> = {}) => ({ estrategia: [c.estrategia], calendario: [tandaBuena(c)], ...extra })
 const agenteQueDevuelve = (objetos: Record<string, any>): ((b: any) => RespuestaHttp) => (b) => {
-  const k = /^estrategia\.v[123]$/.test(String(b.extra?.contrato)) ? 'estrategia' : b.extra?.contrato === 'calendario_tanda.v1' ? 'calendario' : 'fechas'
+  const k = /^estrategia\.v[123]$/.test(String(b.extra?.contrato)) ? 'estrategia' : b.extra?.contrato === 'calendario_tanda.v1' ? 'calendario' : b.extra?.contrato === 'fichas_de_oferta.v1' ? 'fichas' : 'fechas'
   const o = objetos[k]
   return { statusCode: 200, body: { success: true, structured_output: Array.isArray(o) ? o.shift() : o, cost_usd: 0.31 } }
 }
@@ -345,10 +345,10 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
     expect(m.al.estrategias).toHaveLength(0)
   })
   it('sin simulacro, el agente se llama con el cuerpo COMPLETO: esquema, tope, modelo, razonamiento, workflow ids, dry_run booleano y la cabecera de saltar el editor', async () => {
-    const m = mundo({ agente: agenteQueDevuelve({ estrategia: clienteUuid().estrategia, calendario: tandaBuena(clienteUuid()) }) })
+    const m = mundo({ agente: agenteQueDevuelve({ estrategia: clienteUuid().estrategia, calendario: tandaBuena(clienteUuid()), fichas: { fichas: [], pendientes: [] } }) })
     const r = await correr(m, sobreAbrir())
     expect(r[0].json.resultado).toBe('cadena_abierta')
-    expect(m.reg.agente).toHaveLength(2) // estrategia + tanda 1
+    expect(m.reg.agente).toHaveLength(3) // estrategia + el lector de fichas (17-nov) + tanda 1
     for (const p of m.reg.agente) {
       const b = p.cuerpo as any
       expect(p.cabeceras['x-skip-editor-middleware']).toBe('1')
@@ -359,7 +359,34 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
       expect(typeof b.workflow_id).toBe('string'); expect(typeof b.workflow_execution_id).toBe('string')
       expect(p.timeout).toBe(290000)
     }
-    expect(m.al.corridas.map((c) => c.costo_usd)).toEqual([0.31, 0.31])
+    expect(m.al.corridas.map((c) => c.costo_usd)).toEqual([0.31, 0.31, 0.31])
+  })
+  it('🔴 17-nov · el lector de fichas NO es reja: si sus 3 llamadas fallan, la cadena abre igual, sin fichas y sin necesita_humano', async () => {
+    const m = mundo()
+    const r = await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente, { fichas: [{ __fallo: 'x' }, { __fallo: 'x' }, { __fallo: 'x' }] }) }))
+    expect(r[0].json.resultado).toBe('cadena_abierta')
+    // fallas SIN costo registrado cuentan su tope (US$ 1, cota pesimista): la bolsa propia del lector (US$ 2) alcanza para 2; el 3.º ya no abre (RESPUESTA-LENOVO, opción b)
+    expect(m.al.corridas.filter((c) => c.paso === 'fichas').map((c) => c.estado)).toEqual(['fallida', 'fallida'])
+    expect(m.al.corridas.some((c) => c.paso === 'calendario' && c.estado === 'ok')).toBe(true)
+    expect(m.al.fichasDeOferta).toEqual([])
+    expect(m.al.campanas.every((c) => c.estado !== 'necesita_humano')).toBe(true)
+  })
+  it('🔴 17-nov · el sub-flujo del lector que SE CAE (su id fuera de la lista de flujos → 403) no frena: la cadena abre igual, sin fichas', async () => {
+    const m = mundo({ config: { flujos: [...Object.values(IDS).filter((x) => x !== IDS.fichas), ID_VIGIA, ID_PARTE] } })
+    const r = await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente, { fichas: [{ fichas: [], pendientes: [] }] }) }))
+    expect(r[0].json.resultado).toBe('cadena_abierta')
+    expect(m.al.corridas.filter((c) => c.paso === 'fichas')).toEqual([])
+    expect(m.al.fichasDeOferta).toEqual([])
+  })
+  it('🔴 17-nov · con fichas simuladas, la cadena las guarda (US$ 0) antes del calendario', async () => {
+    const m = mundo()
+    const sede = m.cliente.sedes[0].clave
+    const vacia = { nombre: '', que_es: [], para_quien_y_donde: [], se_puede_afirmar: [], no_se_puede_afirmar: [], oferta_y_precio: [], como_se_compra: [], que_mostrar: [], que_nunca_mostrar: [], obligatorios_legales: [], objetivo_por_fecha: [] }
+    const ficha = { ...vacia, clave: sede, que_es: [{ valor: 'qué es', fuente: 'manual:1', vigente_desde: '', vigente_hasta: '', red: '' }] }
+    const r = await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente, { fichas: [{ fichas: [ficha], pendientes: [] }] }) }))
+    expect(r[0].json.resultado).toBe('cadena_abierta')
+    expect(m.al.fichasDeOferta.map((f) => f.contenido.map((x) => x.clave))).toEqual([[sede]])
+    expect(m.reg.agente).toHaveLength(0)
   })
   it('una llamada al agente que NO entrega el objeto se reintenta (máx. 3) y luego es necesita_humano: nunca un bucle', async () => {
     const m = mundo({ agente: () => ({ statusCode: 500, body: { error: 'E-OUTPUT-SCHEMA-MISSING', cost_usd: 0.2 } }) })

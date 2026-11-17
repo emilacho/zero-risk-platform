@@ -21,7 +21,7 @@ import { prepararCorrida } from '../nucleo'
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
 const AHORA = '2026-10-09T12:00:00Z'
 const UUID = '11111111-1111-4111-8111-111111111111'
-const IDS = { estrategia: 'F-EST', calendario: 'F-CAL', fechas: 'F-FEC', puerta: 'F-PUE' }
+const IDS = { estrategia: 'F-EST', calendario: 'F-CAL', fechas: 'F-FEC', puerta: 'F-PUE', fichas: 'F-FIC' }
 const ID_VIGIA = 'F-VIG', ID_PARTE = 'F-PAR'
 const ENV: Record<string, string> = { SALA_DISPATCH_KEY: 'k-sala', INTERNAL_API_KEY: 'k-int', SALA_INGRESS_API_KEY: 'k-ing', SLACK_BOT_TOKEN: 'xoxb-prueba', ZERO_RISK_API_URL: 'https://api.test', N8N_PUBLIC_URL: 'https://n8n.test', SALA_CALLBACK_URL: 'https://api.test/api/sala/callback', SALA_INTAKE_URL: 'https://api.test/api/sala/intake', SUPABASE_URL: 'https://db.test', SUPABASE_SERVICE_ROLE_KEY: 'k-db' }
 
@@ -31,7 +31,7 @@ beforeAll(async () => {
   const mod: any = await import(/* @vite-ignore */ pathToFileURL(join(RAIZ, 'scripts', 'worker-staging', 'cadena', 'construir.mjs')).href)
   const vivo = (f: string) => JSON.parse(readFileSync(join(RAIZ, 'scripts', 'worker-staging', 'cadena', 'vivos', f), 'utf8'))
   FLUJOS = mod.construirFlujos({ ids: IDS, parteViva: vivo('PQdIgbuFexuBsoh8.json'), planViva: vivo('X9F0zp6LQ2xGEYVS.json') })
-  POR_ID = { [IDS.estrategia]: FLUJOS['cadena-estrategia'], [IDS.calendario]: FLUJOS['cadena-calendario'], [IDS.fechas]: FLUJOS['cadena-fechas'], [IDS.puerta]: FLUJOS['cadena-puerta'], [ID_VIGIA]: FLUJOS['cadena-vigia'], [ID_PARTE]: FLUJOS['cadena-parte-por-filas'] }
+  POR_ID = { [IDS.estrategia]: FLUJOS['cadena-estrategia'], [IDS.calendario]: FLUJOS['cadena-calendario'], [IDS.fechas]: FLUJOS['cadena-fechas'], [IDS.fichas]: FLUJOS['cadena-fichas'], [IDS.puerta]: FLUJOS['cadena-puerta'], [ID_VIGIA]: FLUJOS['cadena-vigia'], [ID_PARTE]: FLUJOS['cadena-parte-por-filas'] }
 })
 
 function clienteUuid() {
