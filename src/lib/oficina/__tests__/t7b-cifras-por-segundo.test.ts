@@ -91,6 +91,12 @@ describe('T7b · condición de CC6 · las rondas del dueño van DENTRO de lo req
       expect(coberturaDelTope(pl, 1).requerido).toBeGreaterThanOrEqual(COTAS.RESERVA_POR_TURNO_USD + loQueSigueDeLaMesa(pl, { vueltas: {} }))
     }
     expect(coberturaDelTope(VIDEO_MESA_ENCENDIDA, 62).cubre).toBe(false)
+    // pedido de CC6 (CERTIFICACIÓN 1121): un paso que GASTA antes de la mesa también entra (hoy `abrir` tiene tope 0 y quitarlo no se notaba)
+    const i = VIDEO_MESA_ENCENDIDA.pasos.findIndex((x) => x.funcion === 'mesa')
+    const previo = { ...VIDEO_MESA_ENCENDIDA.pasos[i - 1], clave: 'previo_que_gasta', tope_usd: 2 }
+    const conPrevio = { ...VIDEO_MESA_ENCENDIDA, pasos: [...VIDEO_MESA_ENCENDIDA.pasos.slice(0, i), previo, ...VIDEO_MESA_ENCENDIDA.pasos.slice(i)] }
+    expect(coberturaDelTope(conPrevio, 1).requerido).toBe(Math.round((2 + COTAS.RESERVA_POR_TURNO_USD + loQueSigueDeLaMesa(conPrevio, { vueltas: {} })) * 10000) / 10000)
+    expect(coberturaDelTope(conPrevio, 1).requerido).toBe(65)
     // las mesas que no son de video conservan su cuenta (guardan su cifra fija, no esta)
     const carrusel = { ...VIDEO_MESA_ENCENDIDA, familia: 'carrusel_mesa' }
     expect(coberturaDelTope(carrusel, 103.5).requerido).toBe(61.3)
