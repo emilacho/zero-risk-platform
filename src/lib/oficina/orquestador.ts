@@ -553,6 +553,8 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       try { if (P.notas) { const l = await P.notas.leer(enc.client_id); notas = l.notas; error = l.error } } catch (err) { error = err instanceof Error ? err.message : String(err) }
       return { res: { costo_usd: 0, artefacto: { hay: notas.length > 0, notas, ...(error ? { error } : {}) } } }
     }
+    // 17-nov · tramo B · la foto con mesa usa el observador de la mesa (otro proveedor), que no se sienta en ella
+    case 'mesa_observar': return (await import('./mesa/observar')).observarImagenes(P, enc, pl)
     default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : familiaDeVideo(pl) ? ejecutarCodigoV(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
   }
 }

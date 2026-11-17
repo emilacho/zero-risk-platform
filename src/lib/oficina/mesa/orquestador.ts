@@ -173,7 +173,7 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
 export function imagenesAGenerarDe(enc: Encargo, est: EstadoMesa): ImagenARedactar[] {
   if (!est.pieza_texto || esDeLaCadena(est.tipo) || est.tipo === 'video') return []
   const b = baseDeLaminas(enc.estado_del_motor)
-  const tr = traducirPieza(quitarLineasDeNotas(est.pieza_texto), est.tipo, { refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), preguntasHechas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR,
+  const tr = traducirPieza(quitarLineasDeNotas(est.pieza_texto), est.tipo, { refsDelKit: (b.elementos ?? []).map((x) => x.ref), tipoPorRef: Object.fromEntries((b.elementos ?? []).map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries((b.elementos ?? []).map((x) => [x.ref, x.tema])), preguntasHechas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR, maxPreguntas: COTAS.MAX_PREGUNTAS_DEL_TRADUCTOR,
     // las mismas fuentes que el cierre: si la dirección no declaró objetivo o idea, el ingeniero recibe los del brief de la hoja
     ...(b.brief.objetivo ? { objetivoDelBrief: b.brief.objetivo } : {}), ...(b.brief.idea_de_la_pieza ? { ideaDelBrief: b.brief.idea_de_la_pieza } : {}) })
   // las fotos propias que servirán para EDITAR las imágenes (mismo criterio que el brazo: `imagenRef`): sin las que la pieza ya usa como foto real
@@ -296,7 +296,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     const deCalendario = esDeLaCadena(est.tipo)
     const b = deCalendario ? null : baseDeLaminas(enc.estado_del_motor)
     // antes de que exista una pieza se cuenta con imágenes generadas (los especialistas de imagen participan); después manda lo que la pieza realmente pide. El video nunca genera imágenes: el brazo filma.
-    const hayImagenGenerada = deCalendario || est.tipo === 'video' ? false : est.pieza_texto == null ? true : hayImagenesAGenerar(est.pieza_texto, est.tipo, b!.elementos.map((x) => x.ref))
+    const hayImagenGenerada = deCalendario || est.tipo === 'video' ? false : est.pieza_texto == null ? true : hayImagenesAGenerar(est.pieza_texto, est.tipo, (b!.elementos ?? []).map((x) => x.ref))
     const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...(deCalendario ? { reserva_posterior_usd: 0 } : {}), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}) })
 
     if (acc.accion === 'cierre_por_tope') {
@@ -376,7 +376,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const tr: Traduccion | TraduccionDeGuion = est.tipo === 'video'
     ? traducirGuion(textoPieza, { ...opcionesDelTraductor, ...(est.video ? { segundosMin: est.video.segundos_min, segundosMax: est.video.segundos_max } : {}) })
     : traducirPieza(textoPieza, est.tipo, {
-      refsDelKit: b.elementos.map((x) => x.ref), tipoPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries(b.elementos.map((x) => [x.ref, x.tema])), ...opcionesDelTraductor,
+      refsDelKit: (b.elementos ?? []).map((x) => x.ref), tipoPorRef: Object.fromEntries((b.elementos ?? []).map((x) => [x.ref, x.destino])), temaPorRef: Object.fromEntries((b.elementos ?? []).map((x) => [x.ref, x.tema])), ...opcionesDelTraductor,
       // 16-nov · Sprint 1 · Mejoras 1 y 2 · lo que trae la fila: el objetivo y la idea de la pieza (se usan si la dirección no declaró los suyos)
       ...(b.brief.objetivo ? { objetivoDelBrief: b.brief.objetivo } : {}), ...(b.brief.idea_de_la_pieza ? { ideaDelBrief: b.brief.idea_de_la_pieza } : {}),
     })
@@ -422,9 +422,26 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     avisosDePrompts.push(...pb.avisos)
     otros.prompts_validos = { por_ref: Object.fromEntries(generadas.map((g) => { const p = pb.por_ref[g.ref]; return [g.ref, { indices: [0], prompts: [{ prompt: p.prompt, idea_en_una_linea: g.descripcion.slice(0, 120), ...conConcepto(g), ...(p.foto_de_referencia ? { foto_de_referencia: p.foto_de_referencia } : {}) }], origen: pb.del_ingeniero.includes(g.ref) ? 'ingeniero_de_prompts' : 'direccion' }] })), ninguno: false, ...(delIngeniero ? { ingeniero: { agente: ingeniero, aporte: delIngeniero.id } } : {}) }
     if (est.tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
+    else if (est.tipo === 'post') Object.assign(otros, artefactosDeLaFoto(tr, otros))
     else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }
   }
   return guardarElCierre(P, enc, pl, indice, est, libro, textoPieza, otros, [...tr.avisos, ...avisosDePrompts], hayGeneradas, forzado, vuelta)
+}
+
+/**
+ * 17-nov · tramo B · la FOTO con mesa: la cola de la sala 1 (`imagen`, `elegir_version`, `acabado_imagen`, `chequeos`, `jefatura`, entrega) lee
+ * `visual_direction.decision`, `prompts_validos.prompts` y `pieza_post`. La mesa los deja con ESA forma; la cola no cambia. Puro.
+ */
+export function artefactosDeLaFoto(tr: Traduccion, otros: Record<string, Record<string, unknown>>): Record<string, Record<string, unknown>> {
+  const im = tr.imagenes[0]
+  const decision = im?.modo === 'real' ? { modo: 'real', foto_id: im.foto_id, motivo: 'elegida por la mesa' } : im?.modo === 'generada' ? { modo: 'generada', motivo: 'pedida por la mesa' } : { modo: 'ninguna', motivo: 'la mesa decidió la pieza sin imagen' }
+  const porRef = (otros.prompts_validos?.por_ref ?? {}) as Record<string, { prompts?: Array<Record<string, unknown>> }>
+  const prompts = im?.modo === 'generada' ? porRef[im.ref]?.prompts ?? [] : []
+  return {
+    visual_direction: { ...(otros.visual_direction ?? {}), decision },
+    prompts_validos: { ...(otros.prompts_validos ?? {}), indices: prompts.map((_, i) => i), ninguno: prompts.length === 0, fallan: [], prompts },
+    pieza_post: { ...(tr.pieza_post ?? { pie_de_foto: tr.pie_de_foto, hashtags: tr.hashtags, texto_en_imagen: {} }) },
+  }
 }
 
 /** lo común a todo cierre de la mesa: la mesa queda traducida con su tablero para la jefatura, los artefactos de la cola mecánica se registran y el motor sigue */

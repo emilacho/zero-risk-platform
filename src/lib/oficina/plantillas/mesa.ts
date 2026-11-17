@@ -4,7 +4,7 @@
  * (generar imágenes → observar → elegir → armar → dibujar → chequeos → jefatura → entrega). No hay reglas de forma sobre lo que escribe cada empleado.
  */
 import type { Paso, Plantilla } from '../tipos'
-import { CARRUSEL_IG_CON_JEFATURA, KIT_HISTORIAS_CON_JEFATURA } from './con-jefatura'
+import { CARRUSEL_IG_CON_JEFATURA, KIT_HISTORIAS_CON_JEFATURA, POST_IMG_CON_JEFATURA } from './con-jefatura'
 
 /** el tope de una pieza de la mesa (Emilio, 28-oct): US$ 5 incluyendo jefatura y herramientas; el techo absoluto ×1,2 lo pone la mesa */
 export const TOPE_DE_LA_MESA_USD = 5
@@ -119,3 +119,43 @@ export const FALLIDOS_MESA: Plantilla = {
   limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_FALLIDOS_USD, max_rondas: 1, mesa: true, plazo_mesa_min: 30 },
   indicaciones: {},
 }
+
+/**
+ * 17-nov · «creativos en cada paso», tramo B (GO Lenovo · firma de Emilio 07:18 · punto 1) · `post_mesa`: la FOTO con su mesa corta.
+ * Los 3 agentes que decidían cada uno por su lado (dirección visual, prompts, texto) se sientan en UNA mesa (mismos 3 asientos, UNA ronda); la cola mecánica es la de la sala 1
+ * (`imagen` → observador de OTRO proveedor → `elegir_version` → `acabado` → chequeos → jefatura → entrega) y lee lo que la mesa deja con su forma de siempre (`artefactosDeLaFoto`).
+ * Sin la ronda de re-imagen: lo que el observador no acepta no se elige y se declara (como en las otras mesas). Nace INACTIVA; encenderla es otro GO.
+ */
+export const DE_LA_LINEA_DE_LA_FOTO = {
+  material_activo: true, material_tope_usd: 0.4, material_plazo_min: 20, material_techo_min: 30, material_max_pedidos_por_encargo: 1,
+  generar_cuando_no_hay_foto: true, roles_sin_imagen: ['cta', 'cierre'],
+} as const
+/** las ÚNICAS diferencias permitidas entre `post_mesa` y la fila viva de `post_img` (una prueba las nombra): las de la mesa corta y el tope de la mesa (4 → 5) */
+export const DIFERENCIAS_CON_LA_FOTO = ['mesa', 'asientos', 'rondas_de_la_mesa', 'margen', 'reserva_por_pieza_usd', 'tope_encargo_usd'] as const
+const CLAVES_DE_LA_FOTO = ['abrir', 'elegir_foto', 'imagen', 'elegir_version', 'acabado', 'chequeos', 'jefatura', 'chequeos_2', 'entrega', 'cierre']
+function laFotoConMesa(v1: Plantilla): Plantilla {
+  const de = (clave: string): Paso => v1.pasos.find((p) => p.clave === clave) as Paso
+  const generada = de('imagen').condicion
+  const pasos: Paso[] = []
+  for (const clave of CLAVES_DE_LA_FOTO) {
+    const p = structuredClone(de(clave))
+    if (clave === 'elegir_foto') p.entrada = ['encargo']
+    if (clave === 'imagen') p.entrada = ['prompts_validos']
+    if (clave === 'elegir_version') p.entrada = ['imagenes', 'observacion_imagen', 'visual_direction']
+    pasos.push(p)
+    if (clave === 'elegir_foto') pasos.push({ clave: 'mesa', tipo: 'codigo', quien: 'sala', funcion: 'mesa', condicion: { tipo: 'siempre' }, entrada: ['candidatas_foto'], salida_artefacto: 'mesa', tope_usd: 0 })
+    if (clave === 'imagen') pasos.push({ clave: 'observar', tipo: 'codigo', quien: 'sala', funcion: 'mesa_observar', condicion: generada, entrada: ['imagenes', 'visual_direction'], salida_artefacto: 'observacion_imagen', tope_usd: 0.1 })
+  }
+  const { reserva_por_pieza_usd: _sinReserva, ...lim } = v1.limites
+  void _sinReserva
+  return {
+    tipo: 'post_mesa', familia: 'post_mesa', clase: v1.clase, pasos,
+    limites: {
+      ...lim, ...DE_LA_LINEA_DE_LA_FOTO, roles_sin_imagen: [...DE_LA_LINEA_DE_LA_FOTO.roles_sin_imagen],
+      tope_encargo_usd: TOPE_DE_LA_MESA_USD, margen: 50, mesa: true,
+      asientos: [...ASIENTOS_DE_LA_MESA_CORTA], rondas_de_la_mesa: RONDAS_DE_LA_MESA_CORTA,
+    },
+    indicaciones: {},
+  }
+}
+export const POST_MESA: Plantilla = laFotoConMesa(POST_IMG_CON_JEFATURA)
