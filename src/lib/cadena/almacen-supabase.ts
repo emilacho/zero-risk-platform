@@ -35,6 +35,7 @@ import type { SobreDeFallidos } from './rehacer-fallidos'
 import { OPERACION_DE_PRODUCIR } from './tope-de-campana'
 import { idsDeFotosPropias } from '@/lib/oficina/fotos-propias-datos'
 import type { Correccion } from './correcciones'
+import { leerHechosDelNegocio } from '@/lib/portero-alimenta/hechos-del-negocio'
 import type { ConfianzaTrozo, Ficha, Fila, FormatosPorRed, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
@@ -389,6 +390,9 @@ export function almacenDeSupabase(): Almacen {
     async alarmasPendientes() { const { data, error } = await db.from('cadena_correcciones').select('*').eq('estado', 'respondida').eq('dura', true).eq('respuesta', 'no_dicha').is('alarma_en', null).limit(50); if (error) { if (TABLA_AUSENTE.has(String((error as { code?: string }).code))) return []; fallo(error) } return (data as Correccion[] | null) ?? [] },
     async correccionesDeEncargo(encargoId) { const { data, error } = await db.from('cadena_correcciones').select('*').eq('encargo_id', encargoId).limit(50); if (error) { if (TABLA_AUSENTE.has(String((error as { code?: string }).code))) return []; fallo(error) } return (data as Correccion[] | null) ?? [] },
     async correccionActualizar(llave, cambios, estadoEsperado) { const { data, error } = await db.from('cadena_correcciones').update(cambios).eq('llave', llave).eq('estado', estadoEsperado).select('llave'); if (error) fallo(error); return ((data as unknown[] | null) ?? []).length > 0 },
+    // 17-nov · los «Hechos del negocio» por la consulta del portero (#1140): la cadena no nombra tablas del cerebro
+    // no se pudo leer (o lectura recortada) = null → el lector declara «hechos del negocio: aún no disponibles» · nunca frena
+    async hechosDelNegocio(clientId) { const l = await leerHechosDelNegocio(db, clientId); return l.estado === 'ok' ? l.hechos : null },
     async estrategiaEnVersion(campanaId, version) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).eq('version', version).limit(1)))[0] ?? null },
     async insertarEstrategiaSiLibre(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (!error) return true; if ((error as { code?: string }).code === '23505') return false; return fallo(error) },
 
