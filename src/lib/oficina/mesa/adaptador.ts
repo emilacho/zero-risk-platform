@@ -3,6 +3,7 @@
  * Falla CERRADO: un error de lectura se lanza (nunca se lee como «directorio vacío»: una pieza con el directorio mal leído no abre). Un duplicado del número de aporte (23505) se reintenta con el siguiente.
  */
 import type { Db } from '../almacen-supabase'
+import { leerReferenciasDeVideo } from './lectura-referencias'
 import { esClaveDeEquipo, TIPOS_DE_APORTE, type Aporte, type NuevoAporte, type PuertoMesa, type Tarjeta, type TipoDeAporte } from './tipos'
 
 type Fila = Record<string, unknown>
@@ -44,6 +45,8 @@ export function puertoDeLaMesa(db: Db, leerConfigDeLaCadena?: (clave: string) =>
       const industria = c.error ? null : ((lista<Fila>(c.data)[0]?.industry as string | null | undefined) ?? null)
       return { fichas: lista<Fila>(f.data), ritmos: lista<Fila>(r.data), industria }
     },
+    // Sprint 2 · S2-6 · la lectura de referencias vive en SU archivo (la única puerta de la mesa al cerebro, versión «estrecha» de Lenovo 17-nov); aquí solo se pasa
+    referenciasDeVideo: (clientId: string) => leerReferenciasDeVideo(db, clientId),
     async libro(encargoId) {
       const r = await db.from('oficina_mesa_aportes').select('*').eq('encargo_id', encargoId).order('n', { ascending: true })
       if (r.error) throw new Error(`libro de la mesa: ${r.error.message}`)
