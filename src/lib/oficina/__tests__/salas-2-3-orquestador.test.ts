@@ -334,12 +334,12 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     expect(M.llamadas.imagen).toBe(0)
     expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && f.donde === 'imagen')).toBe(true)
   })
-  it('control ③: si la imagen no cumple, se regenera ≤ 2 veces; a la 3.ª se descarta, la lámina sale sin imagen y la pieza con desacuerdo', async () => {
+  it('control ③: si la imagen no cumple, se regenera ≤ 2 veces; a la 3.ª se descarta, la lámina sale sin imagen y la pieza lo DECLARA (observación, no «con desacuerdo»)', async () => {
     const { M, id } = await abiertoC()
     const { pasos, ultima } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada() }), mirar: (_n, t) => ({ texto: observacion(indicesDe(t), { falta: true }) }) }))
     expect(pasos.filter((p) => p === 'mirar')).toHaveLength(3)
     expect(M.llamadas.imagen).toBe(6) // 2 versiones × 3 intentos
-    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: true })
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false, observaciones: expect.arrayContaining([expect.stringMatching(/^imagen: .*hook/)]) })
     expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && f.donde === 'imagen' && /hook/.test(f.que ?? ''))).toBe(true)
     expect(arte(M, id, 'imagenes_elegidas').por_ref).toEqual({})
   })

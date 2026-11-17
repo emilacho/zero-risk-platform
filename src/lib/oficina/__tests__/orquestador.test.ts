@@ -408,12 +408,12 @@ describe('rondas: jefe-marketing → el que escribe corrige → revisor ciego �
     expect(pasos.slice(-2)).toEqual(['decide', 'decide_imagen'])
     expect(String(M.encargos.get(id)!.estado_del_motor.artefactos['pieza_post'].datos.pie_de_foto)).toMatch(/delivery/)
   })
-  it('una ficha del jefe sobre la IMAGEN que bloquea no tiene dueño en esta ronda: se declara sin tomar y el encargo sale con desacuerdo', async () => {
+  it('una ficha del jefe sobre la IMAGEN que bloquea no tiene dueño en esta ronda: se declara sin tomar y queda como OBSERVACIÓN (punto 9: el jefe no bloquea por criterio)', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
     const { pasos, ultima } = await correr(M, id, guionGenerada({ jefe: () => ({ texto: JSON.stringify({ fichas: [{ que: 'la imagen no se parece al plato', donde: 'imagen', contra_que: 'brief', gravedad: 'bloquea', propuesta: 'rehacer' }] }) }) }))
     expect(pasos).not.toContain('corrige')
-    expect(ultima.cuerpo).toMatchObject({ con_desacuerdo: true })
+    expect(ultima.cuerpo).toMatchObject({ con_desacuerdo: false, observaciones: ['imagen: la imagen no se parece al plato'] })
   })
   it('si el revisor externo no responde (tras sus reintentos): la pieza sigue SIN desacuerdo, va a la bandeja marcada «sin segunda mirada», se avisa en el hilo y se cuenta el costo de los intentos', async () => {
     const M = crearMemoria()
@@ -621,11 +621,26 @@ describe('salida real (dry_run = false): pieza draft + bandeja con output_id y v
     await correr(M, id, guionGenerada())
     expect((M.llamadas.bandeja[0] as { expires_at: string | null }).expires_at).toBeNull()
   })
-  it('con desacuerdo avisa a #alertas además del hilo', async () => {
+  it('regla dura 3 (precio fuera de la lista) que sigue rota tras la corrección: la pieza se FRENA (ni salida ni bandeja) y avisa UNA vez a #alertas', async () => {
     const M = crearMemoria()
     const id = await abierto(M, sobre({ dry_run: false }))
-    await correr(M, id, guionGenerada({ texto: JSON.stringify({ pie_de_foto: 'Ceviche a $9.99.', hashtags: [] }) }))
-    expect(M.llamadas.avisos.some((a) => a.canal === 'alertas' && /desacuerdo/i.test(a.texto))).toBe(true)
+    const { ultima } = await correr(M, id, guionGenerada({ texto: JSON.stringify({ pie_de_foto: 'Ceviche a $9.99.', hashtags: [] }) }))
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', frenada: true })
+    expect(M.llamadas.salidas).toEqual([])
+    expect(M.llamadas.bandeja).toEqual([])
+    const alarmas = M.llamadas.avisos.filter((a) => a.canal === 'alertas')
+    expect(alarmas).toHaveLength(1)
+    expect(alarmas[0].texto).toMatch(/^🛑 Pieza frenada · .*precio/)
+  })
+  it('solo observaciones (criterio) al cierre: la pieza llega a la bandeja con su marca, sin «con desacuerdo» y con 0 alarmas', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const { ultima } = await correr(M, id, guionGenerada({ jefe: () => ({ texto: JSON.stringify({ fichas: [{ que: 'la imagen no se parece al plato', donde: 'imagen', contra_que: 'brief', gravedad: 'bloquea', propuesta: 'rehacer' }] }) }) }))
+    expect(ultima.cuerpo).toMatchObject({ con_desacuerdo: false })
+    expect(M.llamadas.bandeja).toHaveLength(1)
+    expect(String(M.llamadas.bandeja[0].titulo)).toMatch(/📝 CON 1 OBSERVACIÓN · /)
+    expect(M.llamadas.bandeja[0].metadata).toMatchObject({ con_desacuerdo: false, observaciones: ['imagen: la imagen no se parece al plato'] })
+    expect(M.llamadas.avisos.filter((a) => a.canal === 'alertas')).toEqual([])
   })
 })
 

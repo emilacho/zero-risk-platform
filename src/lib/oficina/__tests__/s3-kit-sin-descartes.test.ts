@@ -241,22 +241,22 @@ describe('(d) un desacuerdo de la jefatura vuelve UNA vez a la mesa', () => {
     expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'encargo_en_bandeja', con_desacuerdo: false })
     expect(e.fichas.filter((f) => f.origen === 'jefe' && f.estado === 'no_tomada')).toEqual([])
   })
-  it('🔴 si el desacuerdo sigue tras la vuelta: NO vuelve otra vez; va a la bandeja marcado (con desacuerdo)', async () => {
+  it('🔴 si el desacuerdo sigue tras la vuelta: NO vuelve otra vez; va a la bandeja con la OBSERVACIÓN declarada (punto 9: no «con desacuerdo»)', async () => {
     const x = montar({ desacuerdos: [['texto: falta la zona norte'], ['texto: falta la zona norte']] })
     const m = await correr(x, [DOS_LAMINAS, DOS_LAMINAS])
     expect(x.revisiones).toHaveLength(2)
     expect(x.MS.filas.filter((f) => f.encargo_id === m.id && f.tipo === 'devuelve' && f.de === 'oficina-creativa')).toHaveLength(1)
-    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'con_desacuerdo', con_desacuerdo: true })
+    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'encargo_en_bandeja', con_desacuerdo: false, observaciones: ['texto: falta la zona norte'] })
     expect(m.enc().estado_del_motor.fichas.filter((f) => f.origen === 'jefe' && f.estado === 'no_tomada').map((f) => f.que)).toEqual(['falta la zona norte'])
   })
-  it('control: sin la vuelta en la plantilla (dato), la pieza va directo a la bandeja con el desacuerdo (como hoy)', async () => {
+  it('control: sin la vuelta en la plantilla (dato), la pieza va directo a la bandeja con el desacuerdo como observación declarada', async () => {
     const sin: Plantilla = JSON.parse(JSON.stringify(KIT_MESA))
     for (const p of sin.pasos) delete p.vuelve_a
     const x = montar({ plantilla: sin, desacuerdos: [['texto: falta la zona norte']] })
     const m = await correr(x, [DOS_LAMINAS])
     expect(x.revisiones).toHaveLength(1)
     expect(x.MS.filas.filter((f) => f.encargo_id === m.id && f.tipo === 'devuelve' && f.de === 'oficina-creativa')).toHaveLength(0)
-    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'con_desacuerdo', con_desacuerdo: true })
+    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'encargo_en_bandeja', con_desacuerdo: false, observaciones: ['texto: falta la zona norte'] })
   })
   it('sin desacuerdos: no vuelve (una sola revisión)', async () => {
     const x = montar({ desacuerdos: [[]] })

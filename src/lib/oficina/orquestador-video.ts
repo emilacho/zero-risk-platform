@@ -38,6 +38,9 @@ import { pedidosPorPlano, type PedidoDePlano } from './video/planos'
 import { cotizarYEnviar, encuadrarFotos, leerPlanos, separarPagados, textoDeLoCobrado, unirClips, type ClipCobrado, type PlanoEnviado } from './video/motor-planos'
 
 /** 17-nov · DECISIÓN de Emilio: el rótulo de la entrega dice que el video y su audio son GENERADOS; ya no afirma «sin voces» (la voz la decide la mesa) */
+/** revisión 2 · pregunta 4 · el rótulo de la ficha del gasto sobre el tope por video: no bloquea; el cierre lo convierte en UNA alarma de gasto */
+export const TOPE_POR_VIDEO = 'tope por video'
+
 export const ROTULO_DEL_VIDEO_GENERADO = '⚠️ El video es GENERADO por un modelo (Seedance), no una grabación real; su audio también es generado.'
 
 /** para la jefatura: qué es el contexto «lo que vio el agente» */
@@ -263,11 +266,11 @@ function chequeos(e: Estado, pl: Plantilla): SalidaCodigoV {
   const lim = (pl.limites.video ?? {}) as { tope_por_video_usd?: number }
   let k = 0
   const nueva = (gravedad: Ficha['gravedad'], que: string, contra: string, propuesta: string) => fichas.push(fichaNueva(`${prefijo}-video-${k++}`, 'chequeo', 'video', gravedad, que, contra, propuesta))
-  if (!v || !v.video_url) nueva('bloquea', 'el brazo no entregó un video', 'respuesta del brazo de video', 'una persona decide: rehacer o cerrar')
+  if (!v || !v.video_url) nueva('bloquea', 'el brazo no entregó un video', 'respuesta del brazo de video', 'vuelve a su creador (el brazo); si sigue sin video, se declara')
   else {
     if (v.copia === 'solo_proveedor') nueva('sugerencia', `el video quedó solo en el proveedor (no se pudo copiar a nuestro bucket)${v.expires_at ? `; vence ${v.expires_at}` : ''}`, 'copia de la entrega', 'descargarlo al aprobar, antes de que venza')
     if (!v.simulado && v.costo_usd > 0 && v.costo_estimado_usd > 0 && v.costo_usd > v.costo_estimado_usd * 1.05) nueva('sugerencia', `el video cobró US$ ${v.costo_usd.toFixed(4)} y se habían reservado US$ ${v.costo_estimado_usd.toFixed(4)}`, 'reserva del paso', 'revisar el libro del brazo')
-    if (typeof lim.tope_por_video_usd === 'number' && v.costo_usd > lim.tope_por_video_usd + 1e-9) nueva('bloquea', `el video cobró US$ ${v.costo_usd.toFixed(4)}, más que el tope por video (US$ ${lim.tope_por_video_usd})`, 'tope por video', 'una persona decide')
+    if (typeof lim.tope_por_video_usd === 'number' && v.costo_usd > lim.tope_por_video_usd + 1e-9) nueva('sugerencia', `el video cobró US$ ${v.costo_usd.toFixed(4)}, más que el tope por video (US$ ${lim.tope_por_video_usd})`, TOPE_POR_VIDEO, 'alarma de gasto al cierre: el dinero ya se gastó, la pieza sigue (Lenovo · revisión 2, pregunta 4: no bloquea)')
   }
   for (const a of arr(pv?.avisos_del_guion)) nueva('sugerencia', `el traductor del guion avisó: ${a}`, 'guion de la mesa', 'mirar el video con eso en mente')
   return { res: { costo_usd: 0, artefacto: { fichas: fichas.length }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'video'] } } }
@@ -301,7 +304,7 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
   const fichasExtra: Ficha[] = []
   const bytes = v.simulado || v.video_url.startsWith(PREFIJO_DRY) ? mp4Simulado() : await P.descargar(v.video_url)
   if (bytes) archivos.push({ nombre: nombreBase('mp4'), bytes })
-  else fichasExtra.push(fichaNueva('entrega-video-no-descargado', 'chequeo', 'entrega', 'bloquea', 'no se pudo descargar el video del brazo para la entrega', 'copia de la entrega', 'una persona lo baja del enlace del proveedor antes de que venza'))
+  else fichasExtra.push(fichaNueva('entrega-video-no-descargado', 'chequeo', 'entrega', 'bloquea', 'no se pudo descargar el video del brazo para la entrega', 'copia de la entrega', 'vuelve a intentar la copia; si sigue fallando, la pieza sigue con el enlace del brazo y lo declara'))
   const texto = textoParaCopiar({ pie_de_foto: txt(cv.pie_de_foto), hashtags: arr(cv.hashtags) })
   const base = nombreBase('txt').replace(/\.txt$/, '')
   const pedidoEnviado = (pv?.pedido as PedidoDeVideoDeLaOficina | undefined)
@@ -467,7 +470,7 @@ async function cuadrosDelVideo(P: Puertos, enc: Encargo): Promise<SalidaCodigoV>
   const e = enc.estado_del_motor
   const v = datos(e, 'video') as unknown as VideoDelEncargo | undefined
   const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
-  const sin = (causa: string): SalidaCodigoV => ({ res: { costo_usd: 0, artefacto: { cuadros: [], hay_cuadros: false, causa }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' }, fichas: [fichaNueva(`video-sin-mirar-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `nadie miró el video antes de la bandeja: ${causa}`, 'el video contra el guion y la fila', 'una persona mira el video antes de aprobar')] } })
+  const sin = (causa: string): SalidaCodigoV => ({ res: { costo_usd: 0, artefacto: { cuadros: [], hay_cuadros: false, causa }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' }, fichas: [fichaNueva(`video-sin-mirar-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `nadie miró el video antes de la bandeja: ${causa}`, 'el video contra el guion y la fila', 'su creador ya tuvo su reintento: queda declarado y la pieza sigue')] } })
   if (enc.dry_run || v?.simulado) return { res: { costo_usd: 0, artefacto: { cuadros: [], hay_cuadros: false, simulado: true } } }
   if (!v?.video_url) return sin('el brazo no entregó un video')
   if (!g || !Array.isArray(g.planos) || !g.planos.length) return sin('el guion no trae planos')
@@ -576,7 +579,7 @@ export function sinLecturaDeMirarV(e: Estado, errores: string[]): ResultadoDePas
     costo_usd: 0,
     artefacto: { coincide: true, sin_lectura: true, faltantes: [], por_plano: [], para_la_mesa: '', orden_respetado: null },
     reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' },
-    fichas: [fichaNueva(`video-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `nadie pudo confirmar que el video cuenta lo que pide el guion: la respuesta del agente que lo miró no se pudo leer (${errores.slice(0, 2).join(' · ')})`, 'formato de la mirada', 'una persona mira el video antes de aprobar')],
+    fichas: [fichaNueva(`video-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'mirada', 'bloquea', `nadie pudo confirmar que el video cuenta lo que pide el guion: la respuesta del agente que lo miró no se pudo leer (${errores.slice(0, 2).join(' · ')})`, 'formato de la mirada', 'su creador ya tuvo su reintento: queda declarado y la pieza sigue')],
   }
 }
 
