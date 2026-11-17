@@ -36,6 +36,7 @@ import { recibirFallidos, type EntregaDeFallidos } from './rehacer-fallidos'
 import type { Estrategia, FormatosPorRed } from './tipos'
 import { contextoDeLaMesa } from '../sedes/por-abrir'
 import { bloqueDelPerfil, type PerfilParaLectores } from '../perfil-del-publico/lectores'
+import { fichasEnTexto, type FichaDeOferta } from './ficha-de-oferta'
 
 export const CAP_DE_VUELTAS_DE_CAMBIOS = 2
 /** versión 1 + UNA reapertura (brief devuelto · concepto sin_mesa); a la siguiente, necesita_humano */
@@ -195,7 +196,7 @@ export function fechasDelConcepto(estrategia: Pick<Estrategia, 'fases'>, inicio:
   return [`# HOY · ${hoy} (la campaña empezó el ${inicio})`, 'Ninguna idea es para un día que ya pasó. Lo que anuncia algo que ya ocurrió (una apertura, un lanzamiento, un «llega hoy» de una fecha pasada) se cuenta como hecho, no como promesa.', ...lineas].join('\n')
 }
 
-export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null }): string {
+export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estrategia; briefTexto: string; version: number; nota: string | null; inicio?: string | null; hoy?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null; fichas?: ReadonlyArray<FichaDeOferta> | null }): string {
   const fechas = fechasDelConcepto(a.estrategia, a.inicio, a.hoy)
   const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
@@ -229,6 +230,9 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     '# ESTRATEGIA · canales y patrón semanal',
     canalesEnTexto(a.estrategia),
     a.estrategia.patron_semanal.map((s) => `- ${s.slot}: ${s.red} · ${s.formato} · día ${s.dia_semana} ${s.hora}`).join('\n') || '(sin patrón)',
+    '',
+    // 17-nov · Sprint 4 · D · las FICHAS DE LAS OFERTAS (el bloque de CC3, tal cual): los hechos con su fuente · sin fichas lo DICE (nunca un bloque vacío)
+    fichasEnTexto(a.fichas, a.hoy),
     '',
     // 17-nov · Sprint 4 · D (g) · agnóstico: «ofertas» (lo que se vende), aunque el dato venga de las sedes del cliente
     `# OFERTAS\n${a.ctx.sedes.length ? a.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` · ${s.nombre}` : ''}${contextoDeLaMesa(s.estado, s.abierta_desde) ? ` · ${contextoDeLaMesa(s.estado, s.abierta_desde)}` : ''}`).join('\n') : '(sin ofertas registradas)'}`,
