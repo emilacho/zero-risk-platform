@@ -234,6 +234,11 @@ describe('la migración 202611171900 y su reversa', () => {
     expect(MIG).toContain(`ADD CONSTRAINT oficina_encargos_tope_valido CHECK (tope_usd > 0 AND tope_usd <= ${TOPE_MAXIMO_DEL_SOBRE_USD});`)
     expect(MIG).toContain(`ADD CONSTRAINT oficina_tipos_tope_valido CHECK (tope_encargo_usd > 0 AND tope_encargo_usd <= ${TOPE_MAXIMO_DEL_SOBRE_USD});`)
     expect(MIG).toMatch(/estado IN \('abierto', 'en_paso'\)/)
+    // un encargo parado esperando al dueño no frena (Lenovo + CC6, 17-nov): solo si TODOS sus turnos abiertos son `dueno` y hay al menos uno
+    for (const sql of [MIG, REV]) {
+      expect(sql).toContain("t.estado IN ('pendiente', 'corriendo') AND t.tipo = 'dueno')")
+      expect(sql).toContain("AND NOT EXISTS (SELECT 1 FROM public.oficina_turnos t WHERE t.encargo_id = e.id AND t.estado IN ('pendiente', 'corriendo') AND t.tipo <> 'dueno')")
+    }
     expect(MIG.trim().startsWith('BEGIN;') || MIG.includes('\nBEGIN;')).toBe(true)
     expect(MIG.trim().endsWith('COMMIT;')).toBe(true)
   })
