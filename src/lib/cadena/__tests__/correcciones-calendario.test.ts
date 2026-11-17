@@ -300,3 +300,63 @@ describe('fusionar (🟡 CC6 c6 · una prueba por transición)', () => {
     expect(al.correcciones[0]).toMatchObject({ respuesta: 'tomada', version_nueva: { accion: 'fusionar', destino: 'otra' } })
   })
 })
+
+describe('🟡 CC7 22:02 · el hueco entre encargos: la misma fila vuelve con otro encargo (por el puerto real de la oficina)', () => {
+  const k = CASOS[0]
+  const cuerpo = (encargo: string, dura: boolean) => ({ campana_id: CAMP(k), fila_id: 'pieza', destino: 'calendario', motivo: 'la oferta está cerrada ese día', linea_de_la_ficha: 'cierre: se retira', encargo_id: encargo, dura, ...(dura ? { regla: 'D1' } : {}), llave: 'pieza:calendario' })
+  const lee = async (al: AlmacenMemoria, encargo: string) => ((await puertoDeLaCadena(al, () => k.ahora).correccionesDelEncargo(encargo)).cuerpo as { correcciones: Array<{ llave: string; llave_guardada: string; para_la_pieza: string }> }).correcciones
+  const entregarA = (al: AlmacenMemoria, version: number, encargo: string, texto: string, min: number) => puertoDeLaCadena(al, () => masMin(k.ahora, min)).entregarReubicacion({ campana_id: CAMP(k), version, encargo_id: encargo, texto, costo_usd: 0.3, motivo: null } as never)
+  /** encargo 1 con regla dura: el creador la toma → la pieza vieja queda reemplazada; el brief se rehace y la pieza vuelve a la oficina con el encargo 2 */
+  async function primeraRespondida() {
+    const al = almacen(k)
+    const puerto = puertoDeLaCadena(al, () => k.ahora)
+    expect((await puerto.devolverCorreccion(cuerpo('enc-1', true))).status).toBe(201)
+    await reloj(al, k.ahora)
+    expect(await entregarA(al, V1, 'enc-m1', `- pieza · reubicar · ${k.abierto} · ${k.hora} · la oferta vale ese día\n${R}: tomada`, 5)).toMatchObject({ ok: true, estado: 'aplicada' })
+    expect(await lee(al, 'enc-1')).toMatchObject([{ para_la_pieza: 'reemplazada' }])
+    filaDe(al, 'pieza').estado = 'en_oficina'
+    return { al, puerto }
+  }
+  it('🔴 DURA en el encargo 2 con la 1.ª ya respondida: abre una corrección NUEVA (la oficina ve su llave), llega al creador y la pieza 2 espera su respuesta', async () => {
+    const { al, puerto } = await primeraRespondida()
+    const r = await puerto.devolverCorreccion(cuerpo('enc-2', true))
+    expect(r).toMatchObject({ status: 201, cuerpo: { ya_estaba: false, correccion: { llave: 'pieza:calendario', llave_guardada: 'pieza:calendario#2', estado: 'recibida', para_la_pieza: 'esperando' } } })
+    expect(await lee(al, 'enc-2')).toMatchObject([{ llave: 'pieza:calendario', para_la_pieza: 'esperando' }])
+    expect(await lee(al, 'enc-1')).toMatchObject([{ llave_guardada: 'pieza:calendario', para_la_pieza: 'reemplazada' }])
+    // el mismo encargo 2 otra vez: idempotente
+    expect(await puerto.devolverCorreccion(cuerpo('enc-2', true))).toMatchObject({ status: 200, cuerpo: { ya_estaba: true, correccion: { llave_guardada: 'pieza:calendario#2' } } })
+    await reloj(al, masMin(k.ahora, 10))
+    expect(al.sobresDeReubicacion).toHaveLength(2)
+    expect(await entregarA(al, V2, 'enc-m2', `- pieza · descartar · la oferta no vale\n${R}: tomada`, 15)).toMatchObject({ ok: true, estado: 'aplicada' })
+    expect(await lee(al, 'enc-2')).toMatchObject([{ para_la_pieza: 'reemplazada' }])
+    expect(al.correcciones.map((c) => c.llave)).toEqual(['pieza:calendario', 'pieza:calendario#2'])
+    // los dos encargos reenvían ya respondidos (la oficina reintenta): ninguno abre otra ni se cubre a sí mismo
+    expect(await puerto.devolverCorreccion(cuerpo('enc-1', true))).toMatchObject({ status: 200, cuerpo: { ya_estaba: true, correccion: { llave_guardada: 'pieza:calendario' } } })
+    expect(await puerto.devolverCorreccion(cuerpo('enc-2', true))).toMatchObject({ status: 200, cuerpo: { ya_estaba: true, correccion: { llave_guardada: 'pieza:calendario#2' } } })
+    expect(al.correcciones.map((c) => [c.llave, c.encargos_cubiertos])).toEqual([['pieza:calendario', []], ['pieza:calendario#2', []]])
+  })
+  it('🔴 CRITERIO en el encargo 2 con la 1.ª ya respondida: NO se reabre (firma de Emilio) · queda como observación y la pieza 2 sigue', async () => {
+    const { al, puerto } = await primeraRespondida()
+    expect(await puerto.devolverCorreccion(cuerpo('enc-2', false))).toMatchObject({ status: 201, cuerpo: { correccion: { llave: 'pieza:calendario', estado: 'respondida', respuesta: 'no_tomada', para_la_pieza: 'sigue' } } })
+    await reloj(al, masMin(k.ahora, 10))
+    expect(al.sobresDeReubicacion).toHaveLength(1)
+    expect(await lee(al, 'enc-2')).toMatchObject([{ para_la_pieza: 'sigue' }])
+  })
+  it('🔴 el encargo 2 llega con la 1.ª todavía ABIERTA: la misma corrección lo cubre · no se abre otra mesa · la respuesta vale para los dos', async () => {
+    const al = almacen(k)
+    const puerto = puertoDeLaCadena(al, () => k.ahora)
+    await puerto.devolverCorreccion(cuerpo('enc-1', true))
+    await reloj(al, k.ahora)
+    expect(await puerto.devolverCorreccion(cuerpo('enc-2', true))).toMatchObject({ status: 200, cuerpo: { ya_estaba: true, correccion: { llave_guardada: 'pieza:calendario' } } })
+    expect(await lee(al, 'enc-2')).toMatchObject([{ llave: 'pieza:calendario', para_la_pieza: 'esperando' }])
+    await reloj(al, masMin(k.ahora, 2))
+    expect(al.sobresDeReubicacion).toHaveLength(1)
+    await entregarA(al, V1, 'enc-m1', `- pieza · reubicar · ${k.abierto} · ${k.hora} · la oferta vale ese día\n${R}: tomada`, 5)
+    expect(await lee(al, 'enc-1')).toMatchObject([{ para_la_pieza: 'reemplazada' }])
+    expect(await lee(al, 'enc-2')).toMatchObject([{ para_la_pieza: 'reemplazada' }])
+    // el encargo 2 (cubierto) reenvía ya respondida: es la misma, no abre otra ni se repite en la lista
+    expect(await puerto.devolverCorreccion(cuerpo('enc-2', true))).toMatchObject({ status: 200, cuerpo: { ya_estaba: true } })
+    expect(al.correcciones).toHaveLength(1)
+    expect(al.correcciones[0].encargos_cubiertos).toEqual(['enc-2'])
+  })
+})

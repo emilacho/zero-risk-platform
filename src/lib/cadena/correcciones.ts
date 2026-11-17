@@ -53,9 +53,19 @@ export interface Correccion {
   respondida_en: string | null
   /** la alarma de una dura no tomada salió (una por incidente · Lenovo 17-nov) */
   alarma_en: string | null
+  /** 🟡 CC6 22:00 · se guarda al CERRAR: ¿quedó frenada? La fila de alarmas por reintentar trae solo éstas (las tomadas no la tapan) */
+  frena: boolean
+  /** 🟡 CC7 22:02 · los OTROS encargos de la misma fila que llegaron mientras ésta seguía abierta: la respuesta del creador vale también para ellos */
+  encargos_cubiertos: string[]
 }
 
 export const llaveDeCorreccion = (filaId: string, destino: DestinoDeCorreccion): string => `${filaId}:${destino}`
+/**
+ * 🟡 CC7 22:02 (el hueco entre encargos) · la llave de la OFICINA es «fila:destino»; la guardada lleva «#n» desde la 2.ª corrección de esa fila y destino
+ * (un encargo nuevo cuando la anterior ya se respondió). La oficina siempre ve SU llave (`vista`).
+ */
+export const llaveGuardada = (llave: string, n: number): string => (n <= 1 ? llave : `${llave}#${n}`)
+export const llaveDeLaOficina = (guardada: string): string => guardada.replace(/#\d+$/, '')
 export type DestinoGuardado = Exclude<DestinoDeCorreccion, 'hoja'>
 
 /**
@@ -121,10 +131,46 @@ export async function correccionRecibir(al: Almacen, cuerpo: Record<string, unkn
   const nueva: Correccion = {
     llave, campana_id: campana.id, fila_id: filaId, destino: r.destino, destino_pedido: destino, campo_de_la_hoja: campoDeLaHoja, idea_id: r.destino === 'banco' ? fila?.idea_ref ?? null : null, idea_sello: sello, regla,
     motivo: recortar(motivo)!, linea_de_la_ficha: recortar(cadena(cuerpo.linea_de_la_ficha)), dura: cuerpo.dura === true || !!regla,
-    origen: cadena(cuerpo.origen), encargo_id: encargoId, estado: 'recibida', respuesta: null, explicacion: null, version_nueva: null, intentos: 0, recibida_en: ahora, entregada_en: null, respondida_en: null, alarma_en: null,
+    origen: cadena(cuerpo.origen), encargo_id: encargoId, encargos_cubiertos: [], estado: 'recibida', respuesta: null, explicacion: null, version_nueva: null, frena: false, intentos: 0, recibida_en: ahora, entregada_en: null, respondida_en: null, alarma_en: null,
   }
-  const { correccion, nueva: esNueva } = await al.correccionInsertar(nueva)
-  return { status: esNueva ? 201 : 200, cuerpo: { ok: true, ya_estaba: !esNueva, correccion: vista(correccion) } }
+  return insertarPorEncargo(al, nueva, llave, ahora)
+}
+
+/**
+ * 🟡 CC7 22:02 · una corrección por (fila, destino) Y por encargo, sin perder la idempotencia:
+ *  · el MISMO encargo otra vez → `ya_estaba` con la suya;
+ *  · otro encargo y la última sigue abierta → la misma corrección lo cubre (`encargos_cubiertos`): la respuesta del creador vale para los dos;
+ *  · otro encargo y la última ya se respondió → una DURA abre una corrección nueva («se toman sí o sí», firma de Emilio);
+ *    una de CRITERIO no se reabre: queda cerrada al llegar como observación (`no_tomada`), y la pieza sigue.
+ */
+export const MAX_CORRECCIONES_POR_FILA = 20
+async function insertarPorEncargo(al: Almacen, nueva: Correccion, llave: string, ahora: string): Promise<Respuesta> {
+  const ya = (c: Correccion) => ({ status: 200, cuerpo: { ok: true, ya_estaba: true, correccion: vista(c) } })
+  for (let n = 1, vueltas = 0; n <= MAX_CORRECCIONES_POR_FILA && vueltas < MAX_CORRECCIONES_POR_FILA * 3; n++, vueltas++) {
+    const guardada = llaveGuardada(llave, n)
+    const existe = await al.correccion!(guardada)
+    if (!existe) {
+      const previa = n > 1 ? await al.correccion!(llaveGuardada(llave, n - 1)) : null
+      const cerradaComoObservacion = !!previa && !nueva.dura
+      const fila: Correccion = cerradaComoObservacion
+        ? { ...nueva, llave: guardada, estado: 'respondida', respuesta: 'no_tomada', explicacion: recortar(`la misma fila ya tuvo su corrección de criterio (${previa!.llave}, respondida «${previa!.respuesta}»): no se reabre, va como observación`), respondida_en: ahora }
+        : { ...nueva, llave: guardada }
+      const { correccion, nueva: esNueva } = await al.correccionInsertar!(fila)
+      if (esNueva) return { status: 201, cuerpo: { ok: true, ya_estaba: false, correccion: vista(correccion) } }
+      n-- // otro la insertó en el medio: se vuelve a mirar esa misma
+      continue
+    }
+    const cubiertos = existe.encargos_cubiertos ?? []
+    if (existe.encargo_id === nueva.encargo_id || cubiertos.includes(nueva.encargo_id)) return ya(existe)
+    if (existe.estado !== 'respondida') {
+      // sigue abierta: la cubre (escritura condicional al estado; si cambió en el medio, se vuelve a mirar)
+      const con = [...cubiertos, nueva.encargo_id]
+      if (await al.correccionActualizar!(existe.llave, { encargos_cubiertos: con }, existe.estado)) return ya({ ...existe, encargos_cubiertos: con })
+      n--
+      continue
+    }
+  }
+  return err(409, 'E-DEMASIADAS', `la fila ya tiene ${MAX_CORRECCIONES_POR_FILA} correcciones a ${nueva.destino_pedido}: la revisa una persona`)
 }
 
 /** GET por encargo (la bandeja de la oficina lee el estado y la respuesta del creador) */
@@ -159,7 +205,7 @@ export function paraLaPieza(c: Pick<Correccion, 'estado' | 'respuesta' | 'dura' 
   // 🔴 CC6 · una DURA tomada sin mover la fila: la pieza vieja rompe la regla → frena (con su alarma), salvo que se sepa que ya se publicó
   return c.dura && vn.fila_publicada !== true ? 'frenada' : 'sigue'
 }
-const vista = (c: Correccion) => ({ llave: c.llave, fila_id: c.fila_id, destino: c.destino, destino_pedido: c.destino_pedido, estado: c.estado, respuesta: c.respuesta, explicacion: c.explicacion, dura: c.dura, intentos: c.intentos, respondida_en: c.respondida_en, bloquea_la_pieza: bloqueaLaPieza(c), para_la_pieza: paraLaPieza(c), regla: c.regla })
+const vista = (c: Correccion) => ({ llave: llaveDeLaOficina(c.llave), llave_guardada: c.llave, fila_id: c.fila_id, destino: c.destino, destino_pedido: c.destino_pedido, estado: c.estado, respuesta: c.respuesta, explicacion: c.explicacion, dura: c.dura, intentos: c.intentos, respondida_en: c.respondida_en, bloquea_la_pieza: bloqueaLaPieza(c), para_la_pieza: paraLaPieza(c), regla: c.regla })
 
 // ───────────────────────────────────────────── 3 · la respuesta del creador (una línea fija · el mismo formato de la oficina)
 export const ROTULO_DE_RESPUESTA = 'RESPUESTA A LA JEFATURA'
@@ -215,8 +261,10 @@ export async function guardarRespuesta(al: Almacen, llave: string, leida: Respue
     return { estado: 'recibida', respuesta: null }
   }
   const explicacion = leida.respuesta === 'no_dicha' ? (leida.motivo_no_dicha ?? 'sin respuesta del creador') : leida.explicacion
-  const cerro = await al.correccionActualizar(llave, { estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva, respondida_en: ahora }, c.estado)
-  if (cerro) await alarmaSiFrena(al, { ...c, estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva }, ahora)
+  const cerrada: Correccion = { ...c, estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva, respondida_en: ahora }
+  const frena = paraLaPieza(cerrada) === 'frenada'
+  const cerro = await al.correccionActualizar(llave, { estado: 'respondida', respuesta: leida.respuesta, explicacion: cerrada.explicacion, version_nueva: versionNueva, respondida_en: ahora, frena }, c.estado)
+  if (cerro) await alarmaSiFrena(al, { ...cerrada, frena }, ahora)
   return { estado: 'respondida', respuesta: leida.respuesta }
 }
 

@@ -253,7 +253,7 @@ export interface Almacen {
   correccionesDeEncargo?(encargoId: string): Promise<import('./correcciones').Correccion[]>
   /** ¿la pieza de esta fila ya se publicó? Sin este método la cadena la da por publicada (una fila aprobada no vuelve atrás) */
   piezaPublicada?(campanaId: string, filaId: string): Promise<boolean>
-  /** las duras cerradas cuya alarma no salió (alarma_en vacío): el receptor manda solo las que quedaron FRENADAS (`paraLaPieza`) */
+  /** las cerradas FRENADAS (`frena`, guardado al cerrar) cuya alarma no salió (alarma_en vacío), las más viejas primero */
   alarmasPendientes?(): Promise<import('./correcciones').Correccion[]>
   correccionActualizar?(llave: string, cambios: Partial<import('./correcciones').Correccion>, estadoEsperado: import('./correcciones').EstadoDeCorreccion): Promise<boolean>
   /** 11-nov (#1014 · relectura · OPCIONAL): el texto que dejó guardado la mesa de un encargo ya cerrado (sin llamar al agente); null si no hay. Nunca lanza. */
