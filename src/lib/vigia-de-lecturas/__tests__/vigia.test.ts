@@ -94,6 +94,22 @@ describe('tope del mes (condición 2 de CC6)', () => {
     expect(textoDelTope('apify', USO_REAL, 90)).toBe(textoDelTope('apify', { ...USO_REAL, usado_usd: 26.3 }, 90))
     expect(textoDelTope('apify', USO_REAL, 90)).not.toContain('29.14')
   })
+  it('🟡 w4 de CC6 · el aviso del tope, decidido a dos horas distintas (al 90 % y al 100 %), da el MISMO texto carácter por carácter', () => {
+    const al90 = { ...USO_REAL, usado_usd: 26.2 }
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-11-17T07:00:00Z'))
+      const a = decidir([{ proveedor: 'apify', estado: 200, uso: al90 }])
+      const a100 = decidir([{ proveedor: 'apify', estado: 200, uso: USO_REAL }])
+      vi.setSystemTime(new Date('2026-11-23T21:13:09Z'))
+      const b = decidir([{ proveedor: 'apify', estado: 200, uso: al90 }])
+      const b100 = decidir([{ proveedor: 'apify', estado: 200, uso: USO_REAL }])
+      expect(a[1]).toMatchObject({ clave: 'tope-del-mes:apify:90:2026-11-24' })
+      expect(b).toEqual(a)
+      expect(b100).toEqual(a100)
+      expect(a100[1]).toEqual(a[1])
+    } finally { vi.useRealTimers() }
+  })
   it('al 80 % es la del 75; el ciclo nuevo da otra clave', () => {
     const a = decidir([{ proveedor: 'apify', estado: 200, uso: { usado_usd: 23.2, tope_usd: 29, ciclo_hasta: '2026-12-24T23:59:59.999Z' } }])
     expect(a[1]).toMatchObject({ tipo: 'avisar', clave: 'tope-del-mes:apify:75:2026-12-24' })
