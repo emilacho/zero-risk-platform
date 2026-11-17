@@ -167,6 +167,29 @@ describe('el camino entero · las propuestas traen su borrador en video', () => 
   })
 })
 
+describe('o2 de CC6 · una propuesta rota NO frena a las demás', () => {
+  const guionOk = (k: number) => ({ planos: [{ n: 1, desde: 0, hasta: 4, se_ve: `escena ${k}.1` }, { n: 2, desde: 4, hasta: 8, se_ve: `escena ${k}.2` }], audio: 'olas' })
+  const estado = (rota: Record<string, unknown>) => ({
+    artefactos: {
+      encargo: { version: 1, version_consumida: 0, datos: { brief: { id: 'F1-S1-ig-r1', red: 'Instagram', formato: 'reel', prohibido: [], aprueba: '', texto: 'brief' }, proporcion: '9:16', F: { fotos: [] } } },
+      propuestas_video: { version: 1, version_consumida: 0, datos: { ronda: 1, propuestas: [{ id: 'P1', guion: guionOk(1) }, { id: 'P2', guion: rota }, { id: 'P3', guion: guionOk(3) }] } },
+    },
+    gasto_usd: 0, pasos_ejecutados: 3, fichas: [], vueltas: {}, ultimo: 2,
+  })
+  const enc = (rota: Record<string, unknown>) => ({ id: 'e1', client_id: 'c1', brief_id: 'F1-S1-ig-r1', familia: 'video_mesa', dry_run: true, estado_del_motor: estado(rota) })
+  it.each([
+    ['sin planos', { planos: [], audio: 'olas' }, /la propuesta no trae planos/],
+    ['con planos que no forman pedido (un plano de 60 s: más que el máximo por plano)', { planos: [{ n: 1, desde: 0, hasta: 60, se_ve: 'eterno' }, { n: 2, desde: 60, hasta: 64, se_ve: 'cierre' }], audio: 'olas' }, /los planos no forman un pedido válido/],
+  ])('🔴 P2 %s: P1 y P3 llevan sus pedidos y su borrador; P2 queda con url null y su error', async (_n, rota, error) => {
+    const b = brazo({ estados: () => hecho(1) })
+    const out = await enviarVideo({ video: b.v, ahora: () => new Date('2026-11-17T03:00:00Z') } as never, enc(rota) as never, conBorradores(3), PASO_BORRADOR)
+    const bv = out.res!.artefacto as unknown as BorradoresDeVideo
+    expect(bv.propuestas.map((p) => [p.id, p.url])).toEqual([['P1', 'https://dry.invalid/borrador-P1.mp4'], ['P2', null], ['P3', 'https://dry.invalid/borrador-P3.mp4']])
+    expect(bv.propuestas[1].error).toMatch(error)
+    expect(b.reg.enviados.map((c) => c.split(':').slice(-3, -2)[0])).toEqual(['P1', 'P1', 'P3', 'P3'])
+  })
+})
+
 describe('pasa de largo SIN GASTAR', () => {
   const enc = (artefactos: Record<string, unknown>) => ({ id: 'e1', client_id: 'c1', brief_id: 'F1', familia: 'video_mesa', dry_run: false, estado_del_motor: { artefactos, gasto_usd: 0, pasos_ejecutados: 3, fichas: [], vueltas: {}, ultimo: 2 } })
   const prop = { version: 1, version_consumida: 0, datos: { ronda: 1, propuestas: [{ id: 'P1', guion: { planos: [{ n: 1, desde: 0, hasta: 4, se_ve: 'a' }, { n: 2, desde: 4, hasta: 8, se_ve: 'b' }] } }] } }
