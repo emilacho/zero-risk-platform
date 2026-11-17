@@ -358,7 +358,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
   ].join('\n')
 
   // Sprint 4 · E · lo que la dirección sabe de la crítica de esta ronda (solo si la mesa tiene crítico; sin él, la tarea es la de siempre)
-  const laCritica = tipo === 'integrar' ? seccionDeLaCriticaParaLaDireccion(est, libro) : null
+  const laCritica = tipo === 'integrar' || tipo === 'devolver_citas' ? seccionDeLaCriticaParaLaDireccion(est, libro) : null
   const tu: Record<TipoDeTurno, string> = {
     dirigir: [
       '## Tu turno · DIRECCIÓN CREATIVA: abre la pieza',
