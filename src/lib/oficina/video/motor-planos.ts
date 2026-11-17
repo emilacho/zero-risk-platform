@@ -47,7 +47,7 @@ export async function separarPagados(P: Pick<Puertos, 'video'>, enc: { client_id
 
 /** el pedido de un plano tal como lo entiende el puerto del brazo (`plano: true` lo manda por imagen a video) */
 export const comoPedidoDelBrazo = (p: PedidoDePlano): PedidoDeVideoDeLaOficina & { plano: true } => ({
-  prompt: p.prompt, formato: p.formato, segundos: p.segundos, resolucion: p.resolucion, relacion: p.relacion, audio: true, fotos: p.fotos, fotos_no_halladas: p.foto_no_hallada ? [p.foto_no_hallada] : [], clave: p.clave, prompt_recortado: false, plano: true, huella: p.huella,
+  prompt: p.prompt, formato: p.formato, segundos: p.segundos, resolucion: p.resolucion, relacion: p.relacion, audio: true, fotos: p.fotos, fotos_no_halladas: p.foto_no_hallada ? [p.foto_no_hallada] : [], clave: p.clave, prompt_recortado: false, plano: true, huella: p.huella, ...(p.referencias?.length ? { referencias: p.referencias } : {}),
 })
 
 const ctx = (encargoId: string, n: number) => ({ workflow_id: 'oficina:video_mesa', workflow_execution_id: `${encargoId}:${n}` })

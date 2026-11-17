@@ -62,7 +62,7 @@ export async function POST(request: Request) {
   const tope = typeof body.tope_usd === 'number' && body.tope_usd > 0 ? Math.min(body.tope_usd, cfg.tope_por_video_usd) : cfg.tope_por_video_usd
   const ruta = rutaDelModelo({ ...pedido, plano })
   const cuerpo = cuerpoParaHiggsfield({ ...pedido, plano })
-  const base = { ruta, plano, modelo: pedido.modelo, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, audio: pedido.audio, fotos: pedido.fotos.length, tope_usd: tope, clave: claveIdempotente }
+  const base = { ruta, plano, modelo: pedido.modelo, segundos: pedido.segundos, resolucion: pedido.resolucion, relacion: pedido.relacion, audio: pedido.audio, fotos: pedido.fotos.length, ...(pedido.referencias?.length ? { referencias: pedido.referencias.length } : {}), tope_usd: tope, clave: claveIdempotente }
 
   const k = llave()
   if (!k) return json(500, { error: 'llave_no_configurada', detail: `${VARIABLE_DE_LA_LLAVE} no está en el entorno` })

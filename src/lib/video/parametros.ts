@@ -141,9 +141,11 @@ export interface PedidoDeVideo {
   modelo: string
   audio: boolean
   fotos: string[]
+  /** 17-nov · Sprint 3 · T2 · solo en un PLANO: las imágenes de la ficha de sus personajes (van después de su foto; con ellas el plano va por `reference-to-video`) */
+  referencias?: string[]
 }
 
-export interface Entrada { prompt?: unknown; formato?: unknown; segundos?: unknown; resolucion?: unknown; relacion?: unknown; modelo?: unknown; audio?: unknown; fotos?: unknown }
+export interface Entrada { prompt?: unknown; formato?: unknown; segundos?: unknown; resolucion?: unknown; relacion?: unknown; modelo?: unknown; audio?: unknown; fotos?: unknown; referencias?: unknown }
 
 /**
  * valida y completa un pedido; devuelve la lista de errores (vacía = válido).
@@ -186,13 +188,25 @@ export function armarPedidoDePlano(e: Entrada, catalogo: CatalogoDeModelos = CAT
   // la validación de siempre (prompt, formato, resolución, relación, modelo, audio, fotos y la duración contra la ficha del modelo)
   const v = armarPedido(e, catalogo)
   if (!v.ok) errores.push(...v.errores.map((x) => x.startsWith('`segundos`') ? x.replace('`segundos`', '`segundos` de un plano') : x))
+  // Sprint 3 · T2 · la ficha de sus personajes: direcciones https, sin repetir, y con la foto del plano no más de lo que admite el modelo (su ficha del catálogo)
+  let referencias: string[] = []
+  if (e.referencias !== undefined) {
+    if (!Array.isArray(e.referencias) || e.referencias.some((u) => typeof u !== 'string' || !/^https:\/\/\S+$/.test(u))) errores.push('`referencias` es una lista de direcciones https públicas')
+    else if (v.ok) {
+      referencias = [...new Set(e.referencias as string[])]
+      const max = (catalogo.fichas[v.pedido.modelo] ?? fichaPorOmision(catalogo)).referencias_max
+      const conFoto = referencias.length + (v.pedido.fotos.length ? 1 : 0)
+      if (conFoto > max) errores.push(`un plano lleva como mucho ${max} imágenes de referencia contando su foto, lo que admite ${v.pedido.modelo} (pidió ${conFoto})`)
+    }
+  }
   if (errores.length || !v.ok) return { ok: false, errores }
-  return { ok: true, pedido: v.pedido }
+  return { ok: true, pedido: { ...v.pedido, ...(referencias.length ? { referencias } : {}) } }
 }
 
 /** la ruta del modelo según haya fotos propias (referencia) o no (texto) · un PLANO con foto va por imagen a video · doc: /docs/models/seedance-2-5.md */
-export const rutaDelModelo = (p: Pick<PedidoDeVideo, 'modelo' | 'fotos'> & { plano?: boolean }) =>
-  `${p.modelo}/${p.fotos.length ? (p.plano ? 'image-to-video' : 'reference-to-video') : 'text-to-video'}`
+export const rutaDelModelo = (p: Pick<PedidoDeVideo, 'modelo' | 'fotos' | 'referencias'> & { plano?: boolean }) =>
+  // 17-nov · Sprint 3 · T2 · un plano con la ficha de sus personajes va por referencias (su foto, si la tiene, es la primera)
+  `${p.modelo}/${p.plano && p.referencias?.length ? 'reference-to-video' : p.fotos.length ? (p.plano ? 'image-to-video' : 'reference-to-video') : 'text-to-video'}`
 
 /**
  * el cuerpo exacto que se manda a Higgsfield (sirve igual para `/estimate/{ruta}` y para `/{ruta}`).
@@ -201,7 +215,9 @@ export const rutaDelModelo = (p: Pick<PedidoDeVideo, 'modelo' | 'fotos'> & { pla
  */
 export function cuerpoParaHiggsfield(p: PedidoDeVideo & { plano?: boolean }): Record<string, unknown> {
   const cuerpo: Record<string, unknown> = { prompt: `${p.prompt}\n\n${REGLAS_DEL_PEDIDO.join(' ')}`, duration: p.segundos, resolution: p.resolucion, aspect_ratio: p.relacion, generate_audio: p.audio }
-  if (p.fotos.length && p.plano) { delete cuerpo.aspect_ratio; cuerpo.image_url = p.fotos[0] }
+  // 17-nov · Sprint 3 · T2 · un plano con ficha: `reference-to-video` admite la proporción; primero su foto (el primer cuadro) y después la ficha (el tope del modelo ya lo validó `armarPedidoDePlano`)
+  if (p.plano && p.referencias?.length) cuerpo.image_urls = [...p.fotos.slice(0, 1), ...p.referencias]
+  else if (p.fotos.length && p.plano) { delete cuerpo.aspect_ratio; cuerpo.image_url = p.fotos[0] }
   else if (p.fotos.length) cuerpo.image_urls = p.fotos
   return cuerpo
 }
