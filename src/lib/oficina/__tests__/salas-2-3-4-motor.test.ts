@@ -312,6 +312,22 @@ describe('chequeos duros de las láminas', () => {
     const fs = chequeosDeLaminas(c).filter((x) => /80%/.test(x.que ?? ''))
     expect(fs).toHaveLength(1); expect(fs[0].gravedad).toBe('sugerencia')
   })
+  it('🔴 quitar rejas, fila 4 (🟡 de CC6) · lo que va SOLO en una lámina pasa por los mismos chequeos de datos que el texto del autor, con la misma gravedad', () => {
+    const fuentes = { palabras_prohibidas: ['barato'], palabras_duras: [], telefonos: ['0991111111'], telefonos_verificables: true, handles: ['@naufrago'], precios: ['7.00'], competidores: ['Sushi Pop'], registro: 'tuteo' } as ContextoDeChequeoLaminas['fuentes']
+    const casos = ['Llama al 0998887777', 'Escribe a @otro', 'Desde $9.99', 'Lo más barato del puerto', 'Mejor que Sushi Pop']
+    for (const malo of casos) {
+      const enAutor = base(); enAutor.fuentes = fuentes; enAutor.texto_del_autor = { texto: malo, hashtags: [] }; enAutor.textos_de_laminas = [malo]
+      const soloLamina = base(); soloLamina.fuentes = fuentes; soloLamina.textos_de_laminas = ['Pruébalo hoy', malo]
+      const datos = (fs: ReturnType<typeof chequeosDeLaminas>) => fs.filter((x) => x.donde === 'texto' || x.donde === 'hashtags').map((x) => `${x.gravedad}|${x.que}`).sort()
+      const delAutor = datos(chequeosDeLaminas(enAutor))
+      expect(delAutor.length, malo).toBeGreaterThan(0)
+      expect(datos(chequeosDeLaminas(soloLamina)), malo).toEqual(delAutor)
+    }
+    // y lo que ya salió del texto del autor no se repite por estar también en la lámina
+    const ambos = base(); ambos.fuentes = fuentes; ambos.texto_del_autor = { texto: 'Llama al 0998887777', hashtags: [] }; ambos.textos_de_laminas = ['Llama al 0998887777']
+    const solo = base(); solo.fuentes = fuentes; solo.texto_del_autor = { texto: 'Llama al 0998887777', hashtags: [] }; solo.textos_de_laminas = []
+    expect(chequeosDeLaminas(ambos).filter((x) => x.donde === 'texto')).toHaveLength(chequeosDeLaminas(solo).filter((x) => x.donde === 'texto').length)
+  })
   it('todas las fichas son del origen «chequeo» y tienen id único', () => {
     const c = base(); c.problemas_de_contrato = ['a', 'b']; c.imagenes_sin_lamina = ['x', 'y']
     const fs = chequeosDeLaminas(c)

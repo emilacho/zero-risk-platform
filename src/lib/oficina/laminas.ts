@@ -190,6 +190,14 @@ export function chequeosDeLaminas(c: ContextoDeChequeoLaminas): Ficha[] {
       fuentes: c.fuentes, limites: { pie_de_foto_max: 1_000_000, hashtags_max: 1_000, limites_verificados: c.limites.limites_verificados }, prohibidas_del_brief: c.prohibidas_del_brief,
     })) if (!f.some((y) => y.que === x.que && y.donde === x.donde)) f.push({ ...x, id: `lam-${x.id}-${n++}` })
   }
+  // 17-nov · quitar rejas, fila 4 (🟡 de CC6): el diseñador ya puede ajustar palabras, así que lo que va EN cada lámina pasa por los MISMOS chequeos de datos
+  // que el texto del autor (teléfonos, @, precios, palabras del manual, competidores, registro), con la misma gravedad; lo que ya salió del autor no se repite
+  if (c.familia === 'carrusel') {
+    for (const t of c.textos_de_laminas) for (const x of chequeosDePost({
+      pieza: { pie_de_foto: t, hashtags: [], llamado: undefined },
+      fuentes: c.fuentes, limites: { pie_de_foto_max: 1_000_000, hashtags_max: 1_000, limites_verificados: c.limites.limites_verificados }, prohibidas_del_brief: c.prohibidas_del_brief,
+    })) if (!f.some((y) => y.que === x.que && y.donde === x.donde)) f.push({ ...x, id: `lam-${x.id}-${n++}` })
+  }
   // 2 · contrato de lámina y recortes literales
   for (const p of c.problemas_de_contrato) nueva('laminas', 'bloquea', p, 'contrato de lámina', 'ajustar las láminas al contrato')
   for (const p of c.avisos_de_contrato ?? []) nueva('laminas', 'sugerencia', p, 'largos sugeridos de la lámina', 'acortar si no se lee bien')
