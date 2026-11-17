@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ACCIONES } from '../acciones'
 import { filasProducir, filasPermitidas, loteElegido, HORAS_DE_VIDA_DEL_PERMISO, MAXIMO_DE_FILAS_ELEGIDAS } from '../elegidas'
 import { filasAutoproducir, type Campana, type Fila, type ParteGuardada } from '../index'
+import { filasQueGuardanLugarEnPausa } from '../autoproducir'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 
 const CLIENTE = '96864e88-79bc-47ff-8f8e-5bf88610ec7d'
@@ -210,5 +211,42 @@ describe('producir estas filas · 1.ª corrida real (17-nov 11:23Z): el kit agru
     const { al, c } = await montar({ parte: { briefs: [{ brief_id: 'f9', fila_id: 'f9', familia: 'post_img' }], fila_ids: ['f1'] } })
     await producir(al, c, { fila_ids: ['f1'] }, new Date().toISOString())
     expect((await llamar(al, c)).cuerpo.code).toBe('E-CAMPANA-NO-ACTIVA')
+  })
+})
+
+describe('producir estas filas · el freno de la campaña en PAUSA guarda lugar solo para las filas con permiso (RESPUESTA Lenovo 17-nov)', () => {
+  const PARTE_KIT = { briefs: [{ brief_id: 'kit-K', fila_id: null, familia: 'kit_historias' }], fila_ids: ['f2'] }
+  /** f0 y f1 van ANTES que la elegida f2 y no tienen permiso: en pausa no van a salir */
+  // f2 ya salió briefeada (como en producción: el flujo de brief marca las filas ANTES de autoproducir); el permiso se da antes, con la fila lista
+  const filas = () => [fila('f0', { fecha: '2099-11-18' }), fila('f1', { fecha: '2099-11-19' }), fila('f2', { fecha: '2099-11-20' })]
+  const marcarBriefeada = (al: AlmacenMemoria, id: string) => { for (const x of al.filasGuardadas) if (x.id === id) x.estado = 'briefeada' }
+  async function conTope(estado: 'pausada' | 'activa', tope: number) {
+    const { al, c } = await montar({ campana: { estado, seco: false, tope_gasto_usd: tope } as Partial<Campana>, filas: filas(), parte: PARTE_KIT })
+    await al.escribirConfig('estado_cadena', 'encendida')
+    al.lecturaDeGasto = { corridas: [{ costo_usd: 26.28, estado: 'ok', paso: 'estrategia' }] }
+    return { al, c }
+  }
+  const llamar = (al: AlmacenMemoria, c: Campana) => filasAutoproducir(al, { campana_id: c.id, parte_id: PARTE, dry_run: false, workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1' })
+  it('la MISMA campaña y el mismo tope: activa, las filas de antes le quitan lugar al kit; pausada con permiso solo del kit, el kit sale', async () => {
+    const activa = await conTope('activa', 29)
+    marcarBriefeada(activa.al, 'f2')
+    const ra = await llamar(activa.al, activa.c)
+    expect(ra.cuerpo).toMatchObject({ emitidos: 0, tope: { decision: 'corta' } })
+    const pausada = await conTope('pausada', 29)
+    await filasProducir(pausada.al, { campana_id: pausada.c.id, fila_ids: ['f2'], dry_run: false, ...WF }, new Date().toISOString())
+    marcarBriefeada(pausada.al, 'f2')
+    const rp = await llamar(pausada.al, pausada.c)
+    expect(rp.cuerpo).toMatchObject({ emite: true, emitidos: 1, tope: { decision: 'cabe' } })
+  })
+  it('en pausa, una fila CON permiso que va antes sí guarda lugar (no se salta el orden entre las elegidas)', async () => {
+    const { al, c } = await conTope('pausada', 29)
+    await filasProducir(al, { campana_id: c.id, fila_ids: ['f0', 'f1', 'f2'], dry_run: false, ...WF }, new Date().toISOString())
+    marcarBriefeada(al, 'f2')
+    expect((await llamar(al, c)).cuerpo).toMatchObject({ emitidos: 0, tope: { decision: 'corta' } })
+  })
+  it('`filasQueGuardanLugarEnPausa` deja solo las filas con permiso vigente', async () => {
+    const { al, c } = await conTope('pausada', 100)
+    await filasProducir(al, { campana_id: c.id, fila_ids: ['f1'], dry_run: false, ...WF }, new Date().toISOString())
+    expect((await filasQueGuardanLugarEnPausa(al, c.id, filas())).map((f) => f.id)).toEqual(['f1'])
   })
 })
