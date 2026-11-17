@@ -36,13 +36,17 @@ export function topeDelMes(limiteDelMes: unknown, creditoDelPlan: unknown): { us
   return c !== null && c > 0 ? { usd: c, de: 'credito_del_plan' } : null
 }
 
-/** lee `/v2/users/me` (crédito del plan) y `/v2/users/me/limits` (límite, uso y ciclo): solo lectura, US$ 0 */
+/**
+ * lee `/v2/users/me` (crédito del plan) y `/v2/users/me/limits` (límite, uso y ciclo): solo lectura, US$ 0.
+ * 17-nov (tramo 3 de la prevención · GO Lenovo con «dale» de Emilio): SIEMPRE en vivo (`cache: 'no-store'`). En Next 14 un `fetch` del servidor puede quedar en la caché
+ * de datos aunque la ruta sea dinámica; el 17-nov la puerta respondió `leido: true · usado 27,03` cuando Apify decía 29,14 de 29 y la llave del despliegue ya daba 401.
+ */
 export async function leerUsoDelMes(o: { token?: string; fetchImpl?: (u: string, i?: RequestInit) => Promise<Response> } = {}): Promise<{ ok: true; uso: UsoDelMes } | { ok: false; detalle: string }> {
   const token = o.token ?? process.env.APIFY_API_TOKEN ?? process.env.APIFY_TOKEN ?? ''
   if (!token) return { ok: false, detalle: 'sin token de Apify' }
   const f = o.fetchImpl ?? ((u: string, i?: RequestInit) => fetch(u, i))
   try {
-    const cab = { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) }
+    const cab: RequestInit = { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: AbortSignal.timeout(15_000) }
     const [a, b] = await Promise.all([f('https://api.apify.com/v2/users/me', cab), f('https://api.apify.com/v2/users/me/limits', cab)])
     if (!a.ok || !b.ok) return { ok: false, detalle: `Apify respondió ${a.ok ? b.status : a.status}` }
     const me = obj(obj(await a.json()).data), lim = obj(obj(await b.json()).data)
