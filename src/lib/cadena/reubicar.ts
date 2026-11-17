@@ -9,7 +9,7 @@
  * La libreta vive en `cadena_config.reubicacion_libreta` (por campaña: la última versión usada y una entrada por huella).
  */
 import type { Almacen, Campana } from './almacen'
-import { decisionDeCorreccion, recibirCorreccionDelCalendario } from './correcciones-calendario'
+import { esEntregaDeCorreccion, recibirCorreccionDelCalendario } from './correcciones-calendario'
 import { hoyEnZona } from './campanas'
 import { descarteDeSegundaVez, filasPasadas, huellaDeReubicacion, yaReubicada, leerDecisiones, marcoDeReubicacion, MAX_INTENTOS_DE_REUBICACION, PREFIJO_REUBICACION, verificarDecisiones, type Cambio, type ContextoDeReubicacion } from './reubicacion'
 
@@ -153,7 +153,7 @@ export async function recibirReubicacion(al: Almacen, p: EntregaDeReubicacion, a
   const lc = libreta[p.campana_id]
   const d = lc ? Object.values(lc.decisiones).find((x) => x.version === p.version) : undefined
   // 17-nov · cambio 4 · entrega 2: una corrección de la jefatura usa la misma mesa y la misma libreta, pero vuelve por su propio camino (nunca descarta por error de la mesa)
-  if (decisionDeCorreccion(lc, p.version)) return recibirCorreccionDelCalendario(al, p, ahora)
+  if (esEntregaDeCorreccion(p.version)) return recibirCorreccionDelCalendario(al, p, ahora)
   if (!lc || !d) return { ok: false, error: `la cadena no tiene una reubicación con la versión ${p.version} en esa campaña` }
   if (d.estado !== 'abierta') return { ok: true, ya_cerrada: true, estado: d.estado }
   const guardar = async (cambios: Partial<Decision>) => { lc.decisiones[d.huella] = { ...d, ...cambios }; await al.escribirConfig(CLAVE_DE_LA_LIBRETA, libreta) }

@@ -251,6 +251,8 @@ export interface Almacen {
   correccion?(llave: string): Promise<import('./correcciones').Correccion | null>
   correccionesPendientes?(): Promise<import('./correcciones').Correccion[]>
   correccionesDeEncargo?(encargoId: string): Promise<import('./correcciones').Correccion[]>
+  /** ¿la pieza de esta fila ya se publicó? Sin este método la cadena la da por publicada (una fila aprobada no vuelve atrás) */
+  piezaPublicada?(campanaId: string, filaId: string): Promise<boolean>
   /** las duras cerradas sin tomar cuya alarma no salió (alarma_en vacío) */
   alarmasPendientes?(): Promise<import('./correcciones').Correccion[]>
   correccionActualizar?(llave: string, cambios: Partial<import('./correcciones').Correccion>, estadoEsperado: import('./correcciones').EstadoDeCorreccion): Promise<boolean>

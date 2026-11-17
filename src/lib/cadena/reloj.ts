@@ -14,7 +14,8 @@ import { avisoDePrimeraSemana, cerrarMesasVencidas, seguirSinRevisionDeRegistro,
 import { leerObjetoDeRegistro } from './registro-en-jefatura'
 import { abrirReubicaciones, avisosDeReubicacion } from './reubicar'
 import { abrirRevisionesDeFallidos, avisosDeFallidos } from './rehacer-fallidos'
-import { repartirCorrecciones } from './correcciones'
+import { repartirCorrecciones, sondeoDelBanco } from './correcciones'
+import { abrirCorreccionDelBanco } from './banco-correcciones'
 import { creadorDelCalendario } from './correcciones-calendario'
 import type { Fila } from './tipos'
 
@@ -129,7 +130,7 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
   //      «automático, sin persona en el medio»). El banco entra cuando exista el puerto de CC1; la hoja, con la decisión de Lenovo. Nunca en seco (abrir la mesa gasta).
   if (!seco) {
     try {
-      const rc = await repartirCorrecciones(al, ahora, { calendario: creadorDelCalendario })
+      const rc = await repartirCorrecciones(al, ahora, { calendario: creadorDelCalendario }, { banco: sondeoDelBanco(abrirCorreccionDelBanco) })
       aplicado.push(...rc.aplicado)
       lineas.push(...rc.lineas.map((texto) => ({ campana_id: 'sistema', texto: `corrección: ${texto}` })))
     } catch (e) { lineas.push({ campana_id: 'sistema', texto: `correcciones: no se pudieron repartir (${String((e as Error)?.message ?? e).slice(0, 160)})` }) }

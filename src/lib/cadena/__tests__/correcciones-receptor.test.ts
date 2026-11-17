@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { ACCIONES } from '../acciones'
-import { bloqueaLaPieza, destinoFinal, guardarRespuesta, sondeoDelBanco, textoDeLaAlarma, type PuertoDelBanco, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
+import { bloqueaLaPieza, destinoFinal, devolverFilasAlBrief, paraLaPieza, guardarRespuesta, sondeoDelBanco, textoDeLaAlarma, type PuertoDelBanco, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
 import type { Campana } from '../almacen'
 
 const AHORA = '2026-11-17T21:00:00.000Z'
@@ -179,15 +179,16 @@ describe('3b · guardar la respuesta', () => {
   })
 })
 
-describe('4 · ¿la pieza sigue frenada? (🟡 CC6 punto 5 · la decisión final es de Lenovo)', () => {
-  it('🔴 sin responder frena; tomada, en parte y no tomada liberan; una DURA cerrada no_dicha SIGUE frenando; una de criterio no_dicha libera', () => {
-    for (const estado of ['recibida', 'en_manos_del_creador'] as const) expect(bloqueaLaPieza({ estado, respuesta: null, dura: false })).toBe(true)
-    for (const respuesta of ['tomada', 'tomada_en_parte', 'no_tomada'] as const) {
-      expect(bloqueaLaPieza({ estado: 'respondida', respuesta, dura: false })).toBe(false)
-      if (respuesta !== 'no_tomada') expect(bloqueaLaPieza({ estado: 'respondida', respuesta, dura: true })).toBe(false)
-    }
-    expect(bloqueaLaPieza({ estado: 'respondida', respuesta: 'no_dicha', dura: true })).toBe(true)
-    expect(bloqueaLaPieza({ estado: 'respondida', respuesta: 'no_dicha', dura: false })).toBe(false)
+describe('4 · ¿la pieza vieja NO sale? (Lenovo 3 + 🟡 CC6 21:19: todo lo que no es «sigue» bloquea)', () => {
+  it('🔴 sin responder bloquea · tomada que movió la fila bloquea (reemplazada) · dura no_dicha bloquea · criterio no tomado, o tomada sin mover la fila, NO bloquea', () => {
+    const b = (x: Record<string, unknown>) => bloqueaLaPieza({ estado: 'respondida', respuesta: 'tomada', dura: false, destino: 'calendario', fila_id: 'f', version_nueva: null, ...x } as Parameters<typeof bloqueaLaPieza>[0])
+    for (const estado of ['recibida', 'en_manos_del_creador']) expect(b({ estado, respuesta: null })).toBe(true)
+    expect(b({ version_nueva: { accion: 'reubicar' } })).toBe(true)
+    expect(b({ destino: 'banco', version_nueva: { filas_al_brief: ['f'] } })).toBe(true)
+    expect(b({ respuesta: 'no_dicha', dura: true })).toBe(true)
+    expect(b({ respuesta: 'no_tomada' })).toBe(false)
+    expect(b({ respuesta: 'no_dicha', dura: false })).toBe(false)
+    expect(b({ destino: 'banco', version_nueva: { filas_al_brief: [] } })).toBe(false)
   })
   it('🔴 de punta a punta: una DURA que el creador no toma dos veces queda cerrada no_dicha y la bandeja la ve frenando', async () => {
     const al = await conUna({ dura: true })
@@ -365,3 +366,69 @@ describe('7 · el banco por el puerto de CC1 (CONTRATO-CC1 · se sondea en cada 
     expect(al.correcciones[0].idea_sello).toBe('el atardecer como plan')
   })
 })
+
+describe('8 · los bordes que pidió CC6 (#1150 r5 · r13)', () => {
+  it('🔴 r5 · si la escritura que cierra PIERDE (otra vigía cerró antes), no sale ninguna alarma', async () => {
+    const al = almacen()
+    await recibir(al, pedido({ dura: true }))
+    await repartirCorrecciones(al, AHORA, { calendario: abre })
+    al.correcciones[0] = { ...al.correcciones[0], intentos: INTENTOS_POR_CORRECCION }
+    const original = al.correccionActualizar.bind(al)
+    al.correccionActualizar = async (llave, cambios, esperado) => (cambios.estado === 'respondida' ? false : original(llave, cambios, esperado))
+    await guardarRespuesta(al, 'f-7:calendario', { respuesta: 'no_dicha', explicacion: null, motivo_no_dicha: 'x' }, mas(5))
+    expect(al.alarmasEnviadas).toEqual([])
+  })
+  it('🔴 r13 · en el borde exacto (intentos = tope) no se abre otro intento: se cierra no_dicha', async () => {
+    const al = almacen()
+    let llamadas = 0
+    const cuenta: CreadorDeCorreccion = async () => { llamadas++; return { estado: 'entregada' } }
+    await recibir(al, pedido({ dura: false }))
+    al.correcciones[0] = { ...al.correcciones[0], intentos: INTENTOS_POR_CORRECCION }
+    await repartirCorrecciones(al, AHORA, { calendario: cuenta })
+    expect(llamadas).toBe(0)
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', intentos: INTENTOS_POR_CORRECCION })
+  })
+})
+
+describe('9 · la vuelta de las filas al brief (RESPUESTA-LENOVO-a-CC3 · una por transición)', () => {
+  const estados = async (pares: Array<[string, string]>, c: { dura: boolean }, publicada?: boolean) => {
+    const al = almacen()
+    for (const [id, e] of pares) (al.filasGuardadas.find((x) => x.id === id) as unknown as { estado: string }).estado = e
+    if (publicada !== undefined) al.piezaPublicada = async () => publicada
+    const vueltas = await devolverFilasAlBrief(al, { campana_id: 'cmp-1', llave: 'f-7:banco', ...c }, pares.map(([id]) => id))
+    return { vueltas, estado: (id: string) => al.filasGuardadas.find((x) => x.id === id)!.estado }
+  }
+  it('🔴 briefeada → lista_para_brief y en_oficina → lista_para_brief, siempre', async () => {
+    const r = await estados([['f-7', 'briefeada'], ['f-8', 'en_oficina']], { dura: false })
+    expect(r.vueltas).toEqual(['f-7', 'f-8'])
+    expect([r.estado('f-7'), r.estado('f-8')]).toEqual(['lista_para_brief', 'lista_para_brief'])
+  })
+  it('🔴 aprobada → lista_para_brief SOLO con regla dura y pieza NO publicada', async () => {
+    expect((await estados([['f-7', 'aprobada']], { dura: true }, false)).vueltas).toEqual(['f-7'])
+    expect((await estados([['f-7', 'aprobada']], { dura: false }, false)).vueltas).toEqual([])
+    expect((await estados([['f-7', 'aprobada']], { dura: true }, true)).vueltas).toEqual([])
+    expect((await estados([['f-7', 'aprobada']], { dura: true })).vueltas).toEqual([])
+  })
+  it('🔴 lo que no tiene brief, o ya volvió, no se mueve (una sola vuelta)', async () => {
+    const r = await estados([['f-7', 'validada'], ['f-8', 'lista_para_brief'], ['f-fija', 'cancelada']], { dura: true }, false)
+    expect(r.vueltas).toEqual([])
+    expect([r.estado('f-7'), r.estado('f-8'), r.estado('f-fija')]).toEqual(['validada', 'lista_para_brief', 'cancelada'])
+  })
+})
+
+describe('10 · para la pieza (lo que lee la oficina · CC4)', () => {
+  const c = (x: Record<string, unknown>) => ({ estado: 'respondida', respuesta: 'tomada', dura: false, destino: 'calendario', fila_id: 'f', version_nueva: null, ...x }) as Parameters<typeof paraLaPieza>[0]
+  it('🔴 los cuatro desenlaces', () => {
+    expect(paraLaPieza(c({ estado: 'recibida', respuesta: null }))).toBe('esperando')
+    expect(paraLaPieza(c({ estado: 'en_manos_del_creador', respuesta: null }))).toBe('esperando')
+    expect(paraLaPieza(c({ respuesta: 'no_dicha', dura: true }))).toBe('frenada')
+    expect(paraLaPieza(c({ version_nueva: { accion: 'reubicar' } }))).toBe('reemplazada')
+    expect(paraLaPieza(c({ respuesta: 'tomada_en_parte', version_nueva: { accion: 'descartar' } }))).toBe('reemplazada')
+    expect(paraLaPieza(c({ destino: 'banco', version_nueva: { filas_al_brief: ['f'] } }))).toBe('reemplazada')
+    expect(paraLaPieza(c({ destino: 'banco', version_nueva: { filas_al_brief: ['otra'] } }))).toBe('sigue')
+    expect(paraLaPieza(c({ destino: 'calendario', version_nueva: null }))).toBe('sigue')
+    expect(paraLaPieza(c({ respuesta: 'no_tomada', version_nueva: { accion: 'reubicar' } }))).toBe('sigue')
+    expect(paraLaPieza(c({ respuesta: 'no_dicha', dura: false }))).toBe('sigue')
+  })
+})
+
