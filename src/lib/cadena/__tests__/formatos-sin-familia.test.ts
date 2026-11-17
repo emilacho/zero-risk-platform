@@ -403,3 +403,26 @@ describe('17-nov · Sprint 4 · A entrega 2 · el brief y la gran idea leen las 
     expect(marco(c)).toContain('sin fichas de hechos todavía')
   })
 })
+
+describe('17-nov · 🟡 de CC7 (cert. #1133) · con fichas, los DOS caminos del brief y de la gran idea llevan la fecha de hoy', () => {
+  // un dato que empieza después de hoy (AHORA = 2026-10-09) llega «AÚN NO VIGENTE» solo si el marco conoce la fecha: sin ella saldría como presente
+  const futura = (campana_id: string) => ({
+    campana_id, version: 1, estado: 'validada' as const, pendientes: [], descartados: 0, agente: 'x', modelo: null, costo_usd: null, workflow_execution_id: null, seco: true,
+    contenido: [{ clave: 'centro', se_puede_afirmar: [{ valor: 'abre la terraza nueva', fuente: 'manual:1', vigente_desde: '2026-12-01' }] }],
+  })
+  const marco = (r: { cuerpo: Record<string, unknown> }) => String((r.cuerpo.sobre as { marco_texto: string }).marco_texto)
+  const linea = (t: string) => t.split('\n').find((l) => l.includes('abre la terraza nueva')) ?? ''
+  it('🔴 brief: abrir y rescatar la mesa abierta marcan «AÚN NO VIGENTE»; gran idea: igual en sus dos caminos', async () => {
+    const al = almacenHoja(formatosReales())
+    al.fichasDeOferta.push(futura(CAMP))
+    const abrir = await briefAbrir(al, wfh(), AHORA)
+    const rescatar = await briefAbrir(al, wfh(), AHORA)
+    expect(rescatar.cuerpo.ya_abierta).toBe(true)
+    for (const r of [abrir, rescatar]) expect(linea(marco(r))).toContain('AÚN NO VIGENTE')
+    await recibirBrief(al, { campana_id: CAMP, version: 1, encargo_id: 'enc-1', texto: BRIEF, costo_usd: 0.1, motivo: null }, AHORA)
+    const cAbrir = await conceptoAbrir(al, wfh(), AHORA)
+    const cRescatar = await conceptoAbrir(al, wfh(), AHORA)
+    expect(cRescatar.cuerpo.ya_abierta).toBe(true)
+    for (const r of [cAbrir, cRescatar]) expect(linea(marco(r))).toContain('AÚN NO VIGENTE')
+  })
+})
