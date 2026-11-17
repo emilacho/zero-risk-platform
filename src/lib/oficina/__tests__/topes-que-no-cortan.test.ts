@@ -57,8 +57,10 @@ describe('por el motor real, el peor caso', () => {
   }
   it('🔴 concepto_mesa: la mesa corta en 1,2 × tope; con 5 (6,00) un encargo real terminado de 6,15 no entraba, con 7 (8,40) sí', () => {
     expect(techoDe(5)).toBeLessThan(6.15)
-    expect(TOPE_DE_LA_MESA_DE_CONCEPTO_USD).toBe(7)
-    expect(CONCEPTO_MESA.limites.tope_encargo_usd).toBe(7)
+    // 17-nov · Sprint 4 · D (ADENDA 4): el vigente sube a 10 (crítica + brief largo); 202611170900 sigue diciendo 7 (historia)
+    expect(TOPE_DE_LA_MESA_DE_CONCEPTO_USD).toBe(10)
+    expect(CONCEPTO_MESA.limites.tope_encargo_usd).toBe(10)
+    expect(TOPE_DE_LA_MESA_DE_CONCEPTO_USD).toBeGreaterThanOrEqual(6.15 + 2 * 0.79 + 0.07 + 0.6) // peor caso + reserva de un turno = 8,40
     expect(techoDe(7)).toBeGreaterThanOrEqual(6.15)
   })
 })
@@ -68,7 +70,7 @@ describe('202611170900 · la migración', () => {
     const valores = /FROM \(VALUES ([^\n]*)\) AS n\(familia, tope, reserva\)/.exec(MIG)![1]
     expect(valores).toBe("('post_img', 4::numeric, 2.5::numeric), ('kit_historias', 5::numeric, 2.5::numeric), ('carrusel_ig_v1', 7::numeric, 2.5::numeric), ('concepto_mesa', 7::numeric, NULL::numeric)")
     for (const [f, , nuevo] of CASOS) expect(valores).toContain(`('${f}', ${nuevo}::numeric`)
-    expect(valores).toContain(`('concepto_mesa', ${TOPE_DE_LA_MESA_DE_CONCEPTO_USD}::numeric`)
+    expect(valores).toContain(`('concepto_mesa', 7::numeric`)
   })
   it('🔴 la campaña no cambia: las 3 de pieza llevan reserva 2,5 (lo que hoy reserva); concepto (con historia) no lleva dato', () => {
     expect(MIG).toContain("'{reserva_por_pieza_usd}', to_jsonb(n.reserva)")
@@ -93,5 +95,20 @@ describe('202611170900 · la migración', () => {
     expect(s).toContain("FROM (VALUES ('post_img', 2.5::numeric), ('kit_historias', 2.5::numeric), ('carrusel_ig_v1', 2.5::numeric), ('concepto_mesa', 5::numeric)) AS n(familia, tope)")
     expect(s).toContain("limites = jsonb_set(t.limites - 'reserva_por_pieza_usd', '{tope_encargo_usd}', to_jsonb(n.tope))")
     expect(s.indexOf('IS DISTINCT FROM 4 THEN')).toBeLessThan(s.indexOf('UPDATE public.oficina_tipos_de_grupo'))
+  })
+})
+
+describe('202611172200 · el tope de la gran idea 7 → 10 (Sprint 4 · D · ADENDA 4)', () => {
+  const MIG10 = leer('migrations', '202611172200_oficina_tope_de_la_gran_idea.sql')
+  const REV10 = leer('reversas', '202611172200_oficina_tope_de_la_gran_idea_REVERSA.sql')
+  it('🔴 la migración pone en la fila EXACTAMENTE el tope del código (columna y límite), exige el leído (7) y frena con una gran idea en curso', () => {
+    expect(MIG10).toContain(`SET tope_encargo_usd = ${TOPE_DE_LA_MESA_DE_CONCEPTO_USD},`)
+    expect(MIG10).toContain(`jsonb_build_object('tope_encargo_usd', ${TOPE_DE_LA_MESA_DE_CONCEPTO_USD})`)
+    expect(MIG10).toMatch(/g\.tope_encargo_usd = 7 AND \(g\.limites->>'tope_encargo_usd'\)::numeric = 7/)
+    expect(MIG10).toMatch(/e\.estado IN \('abierto', 'en_paso'\) AND e\.familia = 'concepto_mesa'/)
+  })
+  it('la reversa vuelve a 7 en columna y límite', () => {
+    expect(REV10).toContain('SET tope_encargo_usd = 7,')
+    expect(REV10).toContain("jsonb_build_object('tope_encargo_usd', 7)")
   })
 })
