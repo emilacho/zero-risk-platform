@@ -1,11 +1,11 @@
-/** La ruta del vigía: llave interna, cuerpo validado, `dry_run` no toca la base ni Slack, y lo real pasa por la puerta de incidentes (`avisarPorIncidente` / `resolverIncidente`). */
+/** La ruta del vigía: llave interna, cuerpo validado, `dry_run` no toca la base ni Slack, y lo real pasa por la puerta de incidentes PROPIA del vigía (`incidentes.ts`). */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const avisar = vi.fn(async () => ({ ok: true, accion: 'abrio', detalle: 'entregado' }))
 const resolver = vi.fn(async () => ({ ok: true, accion: 'sin_incidente', detalle: 'nada' }))
 const getSupabaseAdmin = vi.fn(() => ({ from: () => ({ select: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }) }) }))
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin }))
-vi.mock('@/lib/portero-alimenta/alertas', () => ({ avisarPorIncidente: () => avisar, resolverIncidente: () => resolver }))
+vi.mock('@/lib/vigia-de-lecturas/incidentes', () => ({ avisar: () => avisar, resolver: () => resolver, publicarEnSlack: () => vi.fn() }))
 
 const pedir = (cuerpo: unknown, llave = 'llave-de-prueba') => new Request('http://x/api/vigia/lecturas', { method: 'POST', headers: { 'x-api-key': llave, 'content-type': 'application/json' }, body: JSON.stringify(cuerpo) })
 const LLAVE_ROTA = { proveedor: 'apify', estado: 401, tipo_error: 'user-or-token-not-found', caidas_seguidas: 1 }

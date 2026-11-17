@@ -8,7 +8,7 @@
  *    un 200 lo cierra en su hilo («volvió»).
  *  · el tope del mes: UNA alarma por umbral (75 % · 90 %) y ciclo (clave `tope-del-mes:<proveedor>:<umbral>:<fin del ciclo>`); si ya se pasaron los dos, solo la del mayor.
  *    Su texto es FIJO dentro del ciclo (sin el uso del momento): cada hora se repite igual y la puerta de incidentes solo lo cuenta, sin publicar.
- * PURO: la ruta `POST /api/vigia/lecturas` ejecuta lo que esto decide con `avisarPorIncidente` / `resolverIncidente` (la puerta de incidentes: un incidente = una fila, con su hilo).
+ * PURO: la ruta `POST /api/vigia/lecturas` ejecuta lo que esto decide con su propia puerta de incidentes (`incidentes.ts`, tabla `proveedor_incidentes`: un incidente = una fila, con su hilo).
  */
 export type Clase = 'llave' | 'tope' | 'caida'
 export const UMBRALES_DEL_TOPE = [75, 90] as const
