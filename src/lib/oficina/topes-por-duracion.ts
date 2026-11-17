@@ -11,7 +11,8 @@
  * más un turno de la mesa si la plantilla la tiene. Si no, el encargo NO abre (409 claro en `abrirEncargo`), nada de abrir para cortarse después.
  */
 import { COTAS, FAMILIAS_MESA } from './mesa/tipos'
-import type { Paso, Plantilla } from './tipos'
+import { evaluar } from './motor'
+import type { Estado, Paso, Plantilla } from './tipos'
 
 const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null)
 const r4 = (n: number) => Math.round(n * 10000) / 10000
@@ -150,16 +151,22 @@ export function coberturaDelTope(p: Plantilla, tope: number): { requerido: numbe
  * de la mesa (cada uno una vez, a su tope) + la revisión de cada paso de la jefatura (su tope en la plantilla es 0 y gasta de lo que queda: se le guarda
  * `COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD`, 1,5 + margen, como en la cifra fija vieja) + las vueltas que no se saltan y aún quedan (`vuelve_a.max` − las ya hechas) × `costoDeVolver`. Con esto la mesa del
  * video se frena a tiempo (`cotaAgotada`) y nunca se come lo que necesita el borrador, el video o una ronda del dueño. Antes era una cifra fija (6,5, del 31-oct). Pura.
+ * 17-nov · CC6 (RESPUESTA aplicar-1118): la vuelta EN CURSO cuenta como hecha. El motor la suma recién al registrar el primer paso de la vuelta (la mesa), así
+ *   que mientras la mesa trabaja la ronda del dueño `e.vueltas` aún no la tiene; si el último paso hecho vuelve a ESTA mesa y su condición se cumple (lo mismo
+ *   que decide `siguientePaso`), esa ronda ya está ocurriendo y no se reserva otra vez.
  */
-export function loQueSigueDeLaMesa(p: Plantilla, e: { vueltas?: Record<string, number> }): number {
+export function loQueSigueDeLaMesa(p: Plantilla, e: { vueltas?: Record<string, number> } & Partial<Estado>): number {
   const pasos = Array.isArray(p?.pasos) ? p.pasos : []
   const i = pasos.findIndex((s) => s.funcion === 'mesa')
   if (i < 0) return 0
   const despues = pasos.slice(i + 1)
+  const ult = typeof e.ultimo === 'number' && e.ultimo >= 0 ? pasos[e.ultimo] : undefined
+  const v = ult?.vuelve_a
+  const enCurso = ult && v && v.paso === pasos[i].clave && (e.vueltas?.[ult.clave] ?? 0) < v.max && evaluar(v.si, e as Estado) ? ult.clave : null
   const pasada = despues.reduce((a, s) => a + Math.max(0, num(s.tope_usd) ?? 0) + (s.tipo === 'jefatura' ? COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD : 0), 0)
   const vueltas = despues
     .filter((s) => (num(s.vuelve_a?.max) ?? 0) > 0 && !seSalta(s))
-    .reduce((a, s) => a + Math.max(0, (num(s.vuelve_a?.max) as number) - (e.vueltas?.[s.clave] ?? 0)) * costoDeVolver(p, s), 0)
+    .reduce((a, s) => a + Math.max(0, (num(s.vuelve_a?.max) as number) - (e.vueltas?.[s.clave] ?? 0) - (s.clave === enCurso ? 1 : 0)) * costoDeVolver(p, s), 0)
   return r4(pasada + vueltas)
 }
 

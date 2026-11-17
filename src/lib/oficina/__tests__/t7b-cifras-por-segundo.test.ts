@@ -123,15 +123,16 @@ describe('T7b · condición de CC6 · las rondas del dueño van DENTRO de lo req
  * sin contar el tope de 24 turnos, que solo baja el gasto), cada paso gasta su tope entero, la jefatura su revisión entera (1,5) si queda, y el dueño devuelve
  * a la mesa `rondas` veces. Las vueltas que se saltan si no caben no se piden (así lo deciden sus guardas).
  */
-function hastaElCierre(pl: Plantilla, rondas: number) {
-  const top = pl.limites.tope_encargo_usd
+function hastaElCierre(pl: Plantilla, rondas: number, tope?: number) {
+  const top = tope ?? pl.limites.tope_encargo_usd
   let e: Estado = { ultimo: -1, pasos_ejecutados: 0, gasto_usd: 0, vueltas: {}, artefactos: {}, fichas: [] }
   let quedan = rondas
   const hechos: string[] = []
+  const mesas: number[] = []
   let jefatura = 0
   for (let k = 0; k < 200; k++) {
     const s = siguientePaso(e, pl)
-    if (s.accion !== 'ejecutar') return { fin: s, hechos, gasto: r2(e.gasto_usd), jefatura }
+    if (s.accion !== 'ejecutar') return { fin: s, hechos, gasto: r2(e.gasto_usd), jefatura, mesas }
     const p = s.paso
     let costo = p.tope_usd
     if (p.funcion === 'mesa') {
@@ -139,6 +140,7 @@ function hastaElCierre(pl: Plantilla, rondas: number) {
       let g = e.gasto_usd
       while (cotaAgotada({ turnos: 0, tipo: 'video' } as unknown as EstadoMesa, { ...ctx, gasto_usd: g }) === null) g += COTAS.RESERVA_POR_TURNO_USD
       costo = g - e.gasto_usd
+      mesas.push(r2(costo))
     }
     if (p.tipo === 'jefatura') { costo = Math.min(1.5, Math.max(0, top - e.gasto_usd)); jefatura = costo }
     const artefacto = p.clave === 'aprobar_propuestas' ? { vuelve_a_la_mesa: quedan-- > 0 } : { hay_imagenes: true, hay_cuadros: true, ok: true, vuelve_a_la_mesa: false }
@@ -160,6 +162,26 @@ describe('T7b · condición fuerte de CC6 · por el motor real hasta el cierre, 
       expect(x.gasto).toBeLessThanOrEqual(pl.limites.tope_encargo_usd)
     })
   }
+  it('🔴 CC6 (RESPUESTA aplicar-1118) · con el tope JUSTO = lo requerido (63), la mesa trabaja en CADA ronda del dueño (la ronda en curso no se reserva otra vez) y llega al cierre', () => {
+    const justo = coberturaDelTope(VIDEO_MESA_ENCENDIDA, 1).requerido
+    expect(justo).toBe(63)
+    const x = hastaElCierre(VIDEO_MESA_ENCENDIDA, 2, justo)
+    expect(x.fin.accion).toBe('fin')
+    expect(x.mesas).toHaveLength(3)
+    for (const m of x.mesas) expect(m).toBeGreaterThanOrEqual(COTAS.RESERVA_POR_TURNO_USD)
+    expect(x.hechos.slice(-2)).toEqual(['entrega', 'cierre'])
+    expect(x.gasto).toBeLessThanOrEqual(justo)
+  })
+  it('🔴 la ronda en curso: con el último paso «aprobar_propuestas» pidiendo volver a la mesa, la mesa guarda 1 ronda menos', () => {
+    const iA = VIDEO_MESA_ENCENDIDA.pasos.findIndex((s) => s.clave === 'aprobar_propuestas')
+    const base = { pasos_ejecutados: 6, gasto_usd: 14.1, fichas: [] }
+    const pide = (n: number, vueltas: Record<string, number>) => ({ ...base, ultimo: n, vueltas, artefactos: { aprobacion_propuestas: { version: 1, datos: { vuelve_a_la_mesa: true } } } }) as unknown as Estado
+    expect(loQueSigueDeLaMesa(VIDEO_MESA_ENCENDIDA, pide(iA, {}))).toBe(48.3)
+    expect(loQueSigueDeLaMesa(VIDEO_MESA_ENCENDIDA, pide(iA, { aprobar_propuestas: 1 }))).toBe(34.2)
+    // si el dueño aprobó (no vuelve), no hay ronda en curso
+    const aprobo = { ...pide(iA, {}), artefactos: { aprobacion_propuestas: { version: 1, datos: { vuelve_a_la_mesa: false } } } } as unknown as Estado
+    expect(loQueSigueDeLaMesa(VIDEO_MESA_ENCENDIDA, aprobo)).toBe(62.4)
+  })
   it('🔴 control: sin las rondas en la reserva de la mesa (la cifra fija vieja de 6,5) el mismo peor caso se corta antes de la entrega', () => {
     const pl = VIDEO_MESA_ENCENDIDA
     let e: Estado = { ultimo: -1, pasos_ejecutados: 0, gasto_usd: 0, vueltas: {}, artefactos: {}, fichas: [] }
