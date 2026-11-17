@@ -175,6 +175,15 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
 }
 
 // ─────────────────────────────────────────────────────────────── FICHAS (Sprint 4 · A entrega 2 · el lector)
+/**
+ * 🟡 1 de CC6 a #1138 · el lector NO puede volverse reja por el presupuesto: gasta del mismo presupuesto de planificación que el calendario, y el
+ * calendario sin presupuesto pone la campaña en «necesita humano». El lector solo abre un intento si deja libre el tope de cada tanda que falta.
+ */
+async function reservaDelCalendario(al: Almacen, campana: Campana): Promise<number> {
+  const hechas = new Set((await al.corridasDeCampana(campana.id)).filter((c) => c.paso === 'calendario' && c.estado === 'ok').map((c) => /^t(\d+):/.exec(c.clave_idempotencia)?.[1]).filter(Boolean))
+  return Math.max(0, medidaDeCampana(campana).totalTandas - hechas.size) * topeDelPaso('calendario')
+}
+
 /** estados en que la campaña ya no se trabaja: el lector no corre */
 const CAMPANA_TERMINADA = new Set(['cerrada', 'reemplazada'])
 
@@ -200,13 +209,14 @@ export async function fichasPreparar(al: Almacen, cuerpo: Record<string, unknown
   const esquema = validarEsquemaDeSalida(ESQUEMA_FICHAS_DE_OFERTA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema de las fichas no es válido')
   const modelo = await modeloDeLaCadena(al)
-  const prep = await prepararCorrida(al, campana, 'fichas', `v${version}:c0`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash, async () => !!(await al.ultimasFichas!(campana.id)))
+  const prep = await prepararCorrida(al, campana, 'fichas', `v${version}:c0`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash, async () => !!(await al.ultimasFichas!(campana.id)),
+    await reservaDelCalendario(al, campana))
   const corto = respuestaDePreparar(prep)
   if (corto) return corto
   if (prep.tipo === 'intentos_agotados' || prep.tipo === 'presupuesto_agotado') {
     // no es reja: sin fichas la hoja lo declara · nada pasa a «necesita humano»
     // «ya hecha» con su motivo: el sub-flujo genérico lo entiende como un fin declarado (nunca un error que frene la puerta)
-    return { status: 200, cuerpo: { ya_hecha: true, sin_fichas: prep.tipo === 'intentos_agotados' ? 'el lector agotó sus 3 intentos' : `el presupuesto de planificación se agotó (US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})` } }
+    return { status: 200, cuerpo: { ya_hecha: true, sin_fichas: prep.tipo === 'intentos_agotados' ? 'el lector agotó sus 3 intentos' : `el presupuesto de planificación no alcanza para el lector sin quitarle al calendario (gastado US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto}; reserva de las tandas que faltan US$ ${(await reservaDelCalendario(al, campana)).toFixed(2)})` } }
   }
   const hechos = await hechosDe(al, campana.client_id)
   const tarea = tareaDeFichas({ ctx, version, hoy: ahora.slice(0, 10), hechosDelCerebro: hechos === null ? null : hechos.map(hechoEnTexto) })

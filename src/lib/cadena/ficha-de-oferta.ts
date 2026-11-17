@@ -219,7 +219,55 @@ export function fichasConHechos(fichas: ReadonlyArray<FichaDeOferta>, hechos: Re
       f[campo] = [d, ...lista]
     }
   }
+  // 🟡 2 de CC6 a #1138 · el cerebro manda también sobre lo que el lector AFIRMA de una oferta que cierra o que todavía no existe
+  for (const h of hechos ?? []) {
+    if ((h.tipo !== 'cierre_retiro' && h.tipo !== 'aun_no_existe') || !datoDelHecho(h)) continue
+    for (const f of h.oferta ? out.filter((x) => clave(x.clave) === clave(h.oferta)) : out) acotarAlCerebro(f, h)
+  }
   return out
+}
+
+const AFIRMABLES = ['para_quien_y_donde', 'se_puede_afirmar', 'como_se_compra'] as const
+const delCerebro = (d: DatoDeFicha): boolean => d.fuente.startsWith('cerebro:')
+const masDias = (f: string, n: number): string => new Date(Date.parse(`${f}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
+
+/**
+ * Lo que el lector afirma de una oferta que el cerebro da por cerrada (`cierre_retiro`) o por inexistente (`aun_no_existe`):
+ * - cierra el día D → lo del lector vale hasta D−1 (desde D la hoja lo marca VENCIDO);
+ * - todavía no existe hasta E → lo del lector vale desde E+1 (antes, AÚN NO VIGENTE);
+ * - sin fecha → lo del lector NO se afirma (sale de los campos afirmables).
+ * Cuando algo cambió, la ficha DECLARA el choque en `no_se_puede_afirmar` (con la fuente del cerebro). Lo que dice el cerebro no se toca.
+ */
+function acotarAlCerebro(f: FichaDeOferta, h: HechoDelNegocioPorOferta): void {
+  const desde = limpio(h.vigente_desde), hasta = limpio(h.vigente_hasta)
+  const cierra = h.tipo === 'cierre_retiro'
+  const fecha = cierra ? (esFecha(desde) ? desde : null) : (esFecha(hasta) ? hasta : null)
+  let tocados = 0
+  const acotar = (d: DatoDeFicha): DatoDeFicha | null => {
+    if (delCerebro(d)) return d
+    tocados++
+    if (!fecha) return null
+    if (cierra) { const tope = masDias(fecha, -1); return { ...d, vigente_hasta: d.vigente_hasta && esFecha(d.vigente_hasta) && d.vigente_hasta < tope ? d.vigente_hasta : tope } }
+    const inicio = masDias(fecha, 1)
+    return { ...d, vigente_desde: d.vigente_desde && esFecha(d.vigente_desde) && d.vigente_desde > inicio ? d.vigente_desde : inicio }
+  }
+  for (const campo of AFIRMABLES) {
+    if (campo === 'para_quien_y_donde') {
+      if (!f.para_quien_y_donde) continue
+      const d = acotar(f.para_quien_y_donde)
+      if (d) f.para_quien_y_donde = d
+      else delete f.para_quien_y_donde
+      continue
+    }
+    if (!f[campo]) continue
+    const lista = f[campo]!.map(acotar).filter((d): d is DatoDeFicha => d !== null)
+    if (lista.length) f[campo] = lista
+    else delete f[campo]
+  }
+  if (!tocados) return
+  const que = cierra ? `cierra desde ${fecha ?? '(sin fecha: ya cerrada)'}` : `todavía no existe${fecha ? ` (hasta ${fecha})` : ''}`
+  const vale = !fecha ? 'no se afirma' : cierra ? `vale solo hasta ${masDias(fecha, -1)}` : `vale solo desde ${masDias(fecha, 1)}`
+  f.no_se_puede_afirmar = [...(f.no_se_puede_afirmar ?? []), { valor: `choque con el cerebro: esta oferta ${que} · lo que se afirmaba de ella por otras fuentes ${vale}`, fuente: datoDelHecho(h)!.fuente }]
 }
 
 // ─────────────────────────────────────────────── lo que entrega el lector (contrato `fichas_de_oferta.v1`, modo estricto) → la forma de la ficha

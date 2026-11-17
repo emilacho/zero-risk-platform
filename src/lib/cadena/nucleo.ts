@@ -71,6 +71,8 @@ export async function prepararCorrida(
   al: Almacen, campana: Campana, paso: Paso, clave: string, workflowId: string, workflowExecutionId: string, ahora: string, modelo: string, esquemaHash: string | null,
   /** r79 · D1: una corrida `ok` solo vale como «ya hecha» si el objeto validado EXISTE. Sin esta función (fechas) se confía en la corrida. */
   existeElObjeto?: () => Promise<boolean>,
+  /** 🟡 1 de CC6 a #1138: lo que este paso debe dejar LIBRE del presupuesto para otros (el lector deja la reserva de las tandas del calendario) · 0 = como siempre */
+  reservaUsd = 0,
 ): Promise<ResultadoDePreparar> {
   const previas = (await al.corridasDeCampana(campana.id)).filter((c) => c.paso === paso && c.clave_idempotencia === clave)
   const ok = previas.find((c) => c.estado === 'ok')
@@ -84,7 +86,7 @@ export async function prepararCorrida(
   const intento = fallidas + 1
   if (intento > MAXIMO_DE_INTENTOS) return { tipo: 'intentos_agotados' }
   const gastado = await gastoDeCampana(al, campana.id)
-  if (gastado + topeDelPaso(paso) > campana.presupuesto_planificacion_usd) return { tipo: 'presupuesto_agotado', gastado, presupuesto: campana.presupuesto_planificacion_usd }
+  if (gastado + topeDelPaso(paso) + reservaUsd > campana.presupuesto_planificacion_usd) return { tipo: 'presupuesto_agotado', gastado, presupuesto: campana.presupuesto_planificacion_usd }
   const plazoMin = await plazoDeLlamadaMinutos(al)
   const { corrida, creada } = await al.abrirCorrida({
     campana_id: campana.id, paso, clave_idempotencia: clave, intento, workflow_id: workflowId, workflow_execution_id: workflowExecutionId,

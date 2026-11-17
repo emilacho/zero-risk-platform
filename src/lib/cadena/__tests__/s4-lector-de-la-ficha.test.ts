@@ -16,8 +16,10 @@ import { fichasGuardar, fichasPreparar } from '../pasos'
 import { ACCIONES } from '../acciones'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, clienteB, contextoDe, type ClienteFixture } from '../__fixtures__/clientes'
-import { fichasConHechos, hechoEnTexto, leerFichasDelLector, type HechoDelNegocioPorOferta } from '../ficha-de-oferta'
+import { fichasConHechos, fichasEnTexto, hechoEnTexto, leerFichasDelLector, type HechoDelNegocioPorOferta } from '../ficha-de-oferta'
 import { ESQUEMAS } from '../esquemas'
+import { gastoDeCampana } from '../nucleo'
+import { medidaDeCampana, PASOS_SIN_REVISION, topeDelPaso } from '../constantes'
 
 const AHORA = '2026-10-09T12:00:00Z'
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
@@ -254,5 +256,97 @@ describe('el parche de la puerta VIVA (respaldo 17-nov)', () => {
     const otra = JSON.parse(JSON.stringify(ANTES)) as Flujo
     otra.connections['2 · ¿Sigue?'].main[0] = [{ node: '4 · Entrada del calendario' }]
     expect(() => construirFlujo(otra, 'X')).toThrow(/rehacer desde el vivo/)
+  })
+})
+
+// ─────────────────────────────────────────────── 🟡 de CC6 a #1138 (cabeza aad6a21)
+describe('🟡 1 de CC6 · el lector no puede volverse reja por el presupuesto', () => {
+  const reserva = (al: AlmacenMemoria, id: string) => medidaDeCampana(al.campanas.find((x) => x.id === id)!).totalTandas * topeDelPaso('calendario')
+  it('🔴 (l1) si su intento se comería la reserva de las tandas: 200 «ya hecha · sin fichas por presupuesto», sin corrida, sin necesita humano; y el calendario abre', async () => {
+    const c = clienteA(), al = almacen(c), id = await conEstrategia(al, c)
+    const campana = al.campanas.find((x) => x.id === id)!
+    campana.presupuesto_planificacion_usd = (await gastoDeCampana(al, id)) + topeDelPaso('fichas') + reserva(al, id) - 0.01
+    const antes = campana.estado
+    const p = await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    expect(p.status).toBe(200)
+    expect(p.cuerpo.ya_hecha).toBe(true)
+    expect(String(p.cuerpo.sin_fichas)).toMatch(/no alcanza para el lector sin quitarle al calendario/)
+    expect(al.corridas.filter((x) => x.paso === 'fichas')).toHaveLength(0)
+    expect(al.campanas.find((x) => x.id === id)!.estado).toBe(antes)
+    expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).status).toBe(200)
+  })
+  it('🔴 con lo justo (gastado + su tope + la reserva = presupuesto), el lector sí corre', async () => {
+    const c = clienteB(), al = almacen(c), id = await conEstrategia(al, c)
+    al.campanas.find((x) => x.id === id)!.presupuesto_planificacion_usd = (await gastoDeCampana(al, id)) + topeDelPaso('fichas') + reserva(al, id)
+    expect((await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)).cuerpo.corrida_id).toBeDefined()
+  })
+  it.each([[0.7, true], [2.02, false]])('🔴 un lector que falla todo lo que puede deja SIEMPRE el tope de cada tanda libre (estrategia de US$ %s · ¿corre? %s)', async (costoEstrategia, corre) => {
+    const c = clienteC(), al = almacen(c)
+    const ab = await abrirCampana(al, { ...wf(), client_id: c.clientId, seco: true }, AHORA)
+    const id = (ab.cuerpo.campana as { id: string }).id
+    const pe = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: ok(c.estrategia, costoEstrategia) }, AHORA)
+    for (let i = 0; i < 4; i++) {
+      const p = await fichasPreparar(al, { ...wf(), workflow_execution_id: `ex-${i}`, campana_id: id }, AHORA)
+      if (!p.cuerpo.corrida_id) break
+      await fichasGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, error: 'x', cost_usd: 1 } })
+    }
+    const campana = al.campanas.find((x) => x.id === id)!
+    // con la estrategia cara (la última campaña real gastó US$ 2,02 en ella), el lector NI SIQUIERA abre: la reserva ya no deja lugar
+    expect(al.corridas.filter((x) => x.paso === 'fichas').length > 0).toBe(corre)
+    // corra o no, lo que el lector gastó nunca le quita a la reserva: sin él, gasto = solo la estrategia
+    const sinLector = costoEstrategia + reserva(al, id) > campana.presupuesto_planificacion_usd
+    if (sinLector) expect(await gastoDeCampana(al, id)).toBe(costoEstrategia)
+    else expect((await gastoDeCampana(al, id)) + reserva(al, id)).toBeLessThanOrEqual(campana.presupuesto_planificacion_usd)
+    expect(campana.estado).not.toBe('necesita_humano')
+  })
+})
+
+describe('🟡 2 de CC6 · el cerebro manda también sobre lo que el lector afirma (la ficha no se contradice)', () => {
+  const h = (x: Partial<HechoDelNegocioPorOferta>): HechoDelNegocioPorOferta => ({ oferta: 'of-1', sede_id: null, tipo: 'cierre_retiro', valor: 'se retira la oferta', vigente_desde: null, vigente_hasta: null, fuente: 'manual', fecha_de_la_fuente: '2026-11-01', confianza: 'alta', ...x } as HechoDelNegocioPorOferta)
+  const lector = () => leerFichasDelLector({ fichas: [{ ...vacia('of-1'), para_quien_y_donde: [D('en la plaza central y el barrio norte', 'web')], se_puede_afirmar: [D('está abierta todos los días', 'web')], como_se_compra: [D('se pide por mensaje', 'web')], que_mostrar: [D('la vitrina', 'web')] }] }).fichas
+  const lineaCon = (t: string, x: string) => t.split('\n').find((l) => l.includes(x)) ?? ''
+  it('🔴 cierra el día D (valor que NO coincide con lo del lector): lo afirmado vale hasta D−1 · desde D sale VENCIDO · la ficha declara el choque', () => {
+    const f = fichasConHechos(lector(), [h({ vigente_desde: '2026-12-01' })])[0]
+    for (const d of [f.para_quien_y_donde!, ...f.se_puede_afirmar!.filter((x) => !x.fuente.startsWith('cerebro:')), ...f.como_se_compra!]) expect(d.vigente_hasta).toBe('2026-11-30')
+    expect(f.que_mostrar![0].vigente_hasta).toBeUndefined() // solo los campos que afirman
+    expect(f.no_se_puede_afirmar!.map((d) => d.valor)).toContain('choque con el cerebro: esta oferta cierra desde 2026-12-01 · lo que se afirmaba de ella por otras fuentes vale solo hasta 2026-11-30')
+    expect(lineaCon(fichasEnTexto([f], '2026-12-02'), 'está abierta todos los días')).toMatch(/VENCIDO/)
+    expect(lineaCon(fichasEnTexto([f], '2026-11-15'), 'está abierta todos los días')).not.toMatch(/VENCIDO/)
+  })
+  it('🔴 cierre SIN fecha: lo que el lector afirmaba de esa oferta no se afirma (sale) y se declara; las demás ofertas no se tocan', () => {
+    const base = [...lector(), ...leerFichasDelLector({ fichas: [{ ...vacia('of-2'), se_puede_afirmar: [D('otra cosa', 'web')] }] }).fichas]
+    const [f, otra] = fichasConHechos(base, [h({})])
+    expect(f.para_quien_y_donde).toBeUndefined()
+    expect(f.como_se_compra).toBeUndefined()
+    expect(f.se_puede_afirmar).toBeUndefined()
+    expect(f.no_se_puede_afirmar!.some((d) => /choque con el cerebro: esta oferta cierra desde \(sin fecha: ya cerrada\) · .* no se afirma/.test(d.valor))).toBe(true)
+    expect(otra.se_puede_afirmar!.map((d) => d.valor)).toEqual(['otra cosa'])
+  })
+  it('🔴 «todavía no existe» hasta E: lo afirmado vale desde E+1 (antes AÚN NO VIGENTE); lo que dice el cerebro no se toca', () => {
+    const f = fichasConHechos(lector(), [h({ tipo: 'aun_no_existe', valor: 'la oferta aún no abre', vigente_hasta: '2026-12-31' }), h({ tipo: 'sede', valor: 'local del cerebro' })])[0]
+    expect(f.para_quien_y_donde).toMatchObject({ valor: 'local del cerebro' })
+    expect(f.para_quien_y_donde!.vigente_desde).toBeUndefined()
+    expect(f.se_puede_afirmar!.find((d) => d.valor === 'está abierta todos los días')!.vigente_desde).toBe('2027-01-01')
+    expect(lineaCon(fichasEnTexto([f], '2026-12-15'), 'está abierta todos los días')).toMatch(/AÚN NO VIGENTE/)
+  })
+})
+
+describe('🟡 3 de CC6 · los sobrevivientes', () => {
+  it('🔴 (l11) un hecho del cerebro SIN fuente no entra a la ficha', () => {
+    const r = fichasConHechos([], [{ oferta: 'of-1', sede_id: null, tipo: 'apertura', valor: 'abre de noche', vigente_desde: null, vigente_hasta: null, fuente: '  ', fecha_de_la_fuente: null, confianza: null } as unknown as HechoDelNegocioPorOferta])
+    expect(JSON.stringify(r)).not.toContain('abre de noche')
+  })
+  it('🔴 (l12) un hecho con vigente_hasta de ayer sale VENCIDO en el bloque (una sede retirada no llega como vigente)', () => {
+    const f = fichasConHechos([], [{ oferta: 'of-1', sede_id: null, tipo: 'sede', valor: 'la sede de la costa', vigente_desde: null, vigente_hasta: '2026-11-10', fuente: 'manual', fecha_de_la_fuente: '2026-11-01', confianza: 'alta' } as HechoDelNegocioPorOferta])
+    expect(f[0].para_quien_y_donde?.vigente_hasta).toBe('2026-11-10')
+    expect((fichasEnTexto(f, '2026-11-11').split('\n').find((l) => l.includes('la sede de la costa')) ?? '')).toMatch(/VENCIDO/)
+  })
+  it('🔴 (l15) el lector va sin la revisión del editor, igual que dice su cabecera', async () => {
+    expect(PASOS_SIN_REVISION).toContain('fichas')
+    const c = clienteA(), al = almacen(c), id = await conEstrategia(al, c)
+    const p = await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    expect(p.cuerpo.headers).toEqual({ 'x-skip-editor-middleware': '1' })
+    expect(al.corridas.find((x) => x.paso === 'fichas')?.revision_editor).toBe('saltada_por_diseno')
   })
 })
