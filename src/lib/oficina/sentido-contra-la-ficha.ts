@@ -173,8 +173,10 @@ export interface Regreso {
   enviadas: Enviada[]
   /** devoluciones nuevas a la cadena (una por fila y destino) */
   devoluciones: Devolucion[]
-  /** ese destino ya se devolvió y su creador ya respondió: la jefatura NO reabre; queda registrado y sigue (firma de Emilio) */
+  /** ese destino ya se devolvió y su creador ya respondió: la jefatura NO reabre lo de CRITERIO; queda registrado y sigue (firma de Emilio) */
   no_reabre: Hallazgo[]
+  /** REGLA DURA cuyo destino ya se devolvió y sigue rota: no abre otra devolución pero SIGUE FRENANDO (se toma sí o sí · CC7 🟡 1) */
+  duras_pendientes: Hallazgo[]
   /** los destinos de la cadena a los que vuelve ahora (para la marca informativa de la bandeja) */
   vuelve_a: Destino[]
   cita_no_verificada: boolean
@@ -182,7 +184,7 @@ export interface Regreso {
 
 /** reparte los hallazgos por destino. `yaDevueltas`: las llaves que ya existen (del encargo o de la cadena) */
 export function repartir(hallazgos: Hallazgo[], filaId: string | null, encargoId: string, yaDevueltas: ReadonlySet<string>): Regreso {
-  const r: Regreso = { a_la_mesa: [], enviadas: [], devoluciones: [], no_reabre: [], vuelve_a: [], cita_no_verificada: hallazgos.some((h) => h.cita_no_verificada) }
+  const r: Regreso = { a_la_mesa: [], enviadas: [], devoluciones: [], no_reabre: [], duras_pendientes: [], vuelve_a: [], cita_no_verificada: hallazgos.some((h) => h.cita_no_verificada) }
   const nuevas = new Set<string>()
   for (const h of hallazgos) {
     const dura = esDura(h)
@@ -194,7 +196,7 @@ export function repartir(hallazgos: Hallazgo[], filaId: string | null, encargoId
       continue
     }
     const llave = llaveDeDevolucion(filaId, h.destino)
-    if (yaDevueltas.has(llave)) { r.no_reabre.push(h); continue }
+    if (yaDevueltas.has(llave)) { (dura ? r.duras_pendientes : r.no_reabre).push(h); continue }
     if (nuevas.has(llave)) continue
     nuevas.add(llave)
     r.devoluciones.push({ llave, fila_id: filaId, destino: h.destino, motivo: h.que, linea_de_la_ficha: h.linea_de_la_ficha, encargo_id: encargoId, origen: h.origen, dura })

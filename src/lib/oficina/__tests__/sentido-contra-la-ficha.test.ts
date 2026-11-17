@@ -75,6 +75,13 @@ describe('el sentido · lo juzga el jefe, el código verifica la cita y el desti
     expect(r.a_la_mesa[0]).toMatch(/cita no verificada/)
   })
 
+  it('CC7 🟡 2 · un PEDAZO de la línea no es cita: «combo» (o «atención en local») queda «cita no verificada»', () => {
+    for (const cita of ['combo', 'atención en local', 'combo del día']) {
+      expect(citaVerificada(cita, f)).toBeNull()
+      expect(hallazgosDelJefe([`texto: sentido · hoja: no cuadra — ficha: «${cita}»`], f).hallazgos[0]).toMatchObject({ destino: 'pieza', cita_no_verificada: true })
+    }
+  })
+
   it('sin cita → pieza, marcada', () => {
     expect(hallazgosDelJefe(['texto: sentido · hoja: no cuadra'], f).hallazgos[0]).toMatchObject({ destino: 'pieza', cita_no_verificada: true })
   })
@@ -103,6 +110,12 @@ describe('el regreso · llave única y tope', () => {
     expect(r.a_la_mesa[0]).toMatch(/^\[S1\] sentido · pieza: x/)
     expect(r.a_la_mesa[1]).toMatch(/regla dura: se toma sí o sí/)
     expect(r.devoluciones).toEqual([])
+  })
+  it('CC7 🟡 1 · una REGLA DURA cuyo destino ya se devolvió NO pasa a «no reabre»: sigue pendiente (frena), sin abrir otra devolución', () => {
+    const r = repartir([{ ...h('hoja'), origen: 'codigo' }, h('calendario')], 'F-01', 'enc-2', new Set(['F-01:hoja', 'F-01:calendario']))
+    expect(r.devoluciones).toEqual([])
+    expect(r.duras_pendientes.map((x) => x.destino)).toEqual(['hoja'])
+    expect(r.no_reabre.map((x) => x.destino)).toEqual(['calendario'])
   })
   it('una devolución del código a la cadena va marcada dura', () => {
     expect(repartir([{ ...h('hoja'), origen: 'codigo' }], 'F-01', 'enc-1', new Set()).devoluciones[0].dura).toBe(true)

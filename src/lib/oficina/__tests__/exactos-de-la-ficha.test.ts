@@ -34,6 +34,11 @@ describe('el precio · exacto, por código (casos de CC7)', () => {
     expect(centavos('1.200')).not.toBe(centavos('1,2'))
   })
 
+  it('CC7 🟡 4 · una moneda de letras pegada a otra palabra no es precio: «IQ 100», «XBs 5», «AS/ 3» → 0 precios; «Q 100» y «Bs 5» sí', () => {
+    expect(preciosDelTexto('Un test de IQ 100, el modelo XBs 5 y la talla AS/ 3')).toEqual([])
+    expect(preciosDelTexto('Q 100 y Bs 5').map((p) => p.centavos)).toEqual([10000, 500])
+  })
+
   it('lo que no es precio no dispara: fechas, horas, %, teléfonos, 2x1, cantidades sueltas', () => {
     expect(preciosDelTexto('Del 21/11 al 30/11, de 12:30 a 15:00, 20 % menos, llama al 0991234567, 2x1 y 3 sabores')).toEqual([])
   })
@@ -78,6 +83,12 @@ describe('dato VENCIDO / AÚN NO VIGENTE que se usa igual · con la fecha DE LA 
   it('positivo: solo la pieza lo usa → pieza', () => {
     const f = fichaDeLaHoja(hoja('asesoria-tributaria', CLIENTES[2].ficha, '2026-11-20'))
     expect(chequeosExactos(f, 'Tu primera consulta gratis').hallazgos).toEqual([expect.objectContaining({ destino: 'pieza' })])
+  })
+  it('CC7 🟡 3 · un dato vencido CORTO («2x1») se mide como palabra entera: la pieza que lo usa da hallazgo; «12x1» no', () => {
+    const ficha = { ...CLIENTES[0].ficha, oferta_y_precio: [{ valor: 'combo del día $8,50', fuente: 'manual:precios' }, { valor: '2x1', fuente: 'plan:p9', vigente_hasta: '2026-11-10' }] }
+    const f = fichaDeLaHoja(hoja('olon', ficha, '2026-11-20'))
+    expect(chequeosExactos(f, 'Hoy 2x1 en todo').hallazgos).toEqual([expect.objectContaining({ destino: 'pieza', que: expect.stringMatching(/^D2 · .*«2x1»/) })])
+    expect(chequeosExactos(f, 'Hoy 12x1 en todo').hallazgos).toEqual([])
   })
   it('negativo: nadie lo usa → nada', () => {
     const f = fichaDeLaHoja(hoja('linea-hogar', CLIENTES[1].ficha, '2026-11-20'))

@@ -29,9 +29,10 @@ export function centavos(num: string): number | null {
   return Number(e) * 100 + (dec ? Number(dec.padEnd(2, '0')) : 0)
 }
 
-const MONEDA_ANTES = String.raw`(?:US\$|USD|U\$S|\$|€|£|S\/\.?|R\$|Q|₡|₲|Bs\.?)`
+// CC7 🟡 4 · la moneda de letras necesita borde de palabra delante: «IQ 100» no es «Q 100» (ante la duda, no dispara)
+const MONEDA_ANTES = String.raw`(?<![\p{L}\p{N}])(?:US\$|USD|U\$S|\$|€|£|S\/\.?|R\$|Q|₡|₲|Bs\.?)`
 const MONEDA_DESPUES = String.raw`(?:dólares|dolares|usd|eur|euros|soles|pesos|€|\$)`
-const RE_PRECIO = new RegExp(String.raw`${MONEDA_ANTES}\s?(\d[\d.,]*\d|\d)|(\d[\d.,]*\d|\d)\s?${MONEDA_DESPUES}(?![a-z])`, 'gi')
+const RE_PRECIO = new RegExp(String.raw`${MONEDA_ANTES}\s?(\d[\d.,]*\d|\d)|(\d[\d.,]*\d|\d)\s?${MONEDA_DESPUES}(?![\p{L}])`, 'giu')
 /**
  * los precios del texto: SOLO cifras con moneda (antes o después). Fechas «21/11», horas, «20 %», teléfonos y «2x1» no tienen moneda: no cuentan (CC7 · ante la duda, no disparar).
  * Devuelve los centavos y el texto tal cual se vio.
@@ -53,7 +54,18 @@ function preciosDelDato(valor: string): number[] {
 
 export interface ResultadoExacto { hallazgos: Hallazgo[]; declarado: string[] }
 
-const contieneNormal = (texto: string, valor: string): boolean => { const v = normal(valor); return v.length >= 4 && normal(texto).includes(v) }
+/**
+ * ¿el texto usa el dato? Con 4 o más letras basta que aparezca; uno CORTO (p. ej. «2x1») se mide como palabra entera (CC7 🟡 3: antes no se medía y nadie lo sabía).
+ * «12x1» no es «2x1». Un dato vacío no se mide.
+ */
+const contieneNormal = (texto: string, valor: string): boolean => {
+  const v = normal(valor)
+  if (!v) return false
+  const t = normal(texto)
+  if (v.length >= 4) return t.includes(v)
+  const esc = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${esc}(?:$|[^\\p{L}\\p{N}])`, 'u').test(t)
+}
 
 /**
  * LO EXACTO · solo con ficha. Sin ficha: nada (y lo declara).

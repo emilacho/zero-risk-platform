@@ -114,6 +114,21 @@ describe('con ficha · cada hallazgo a su destino', () => {
     expect(JSON.stringify(e.fichas)).not.toMatch(/una persona/)
   })
 
+  it('CC7 🟡 1 · una REGLA DURA a un destino ya devuelto sigue FRENANDO (ficha que bloquea, sin otra devolución, sin vuelta a la mesa, sin persona)', () => {
+    const hojaConPrecio = BRIEF_CON_FICHA.replace('- PROTAGONISTA:', '- LLAMADO A LA ACCIÓN: el principal a $9,90\n- PROTAGONISTA:')
+    const e = estado()
+    const res = aplicarSalidaDeJefatura(PL, e, salida([]), { reImagen: () => ({ re_imagen: false }), puedeVolverALaMesa: () => true, sentido: { ...sentido(hojaConPrecio, 'El principal a $9,90', ['F-7:hoja']), exactos: chequeosExactos } })
+    e.fichas = res.fichas ?? []
+    e.artefactos = { respuesta_imagen: { version: 1, datos: res.artefacto } } as never
+    const j = datosDeLaJefatura(e)!
+    expect(j.sentido!.devoluciones).toEqual([])
+    expect(j.sentido!.duras_pendientes!.map((h) => h.destino)).toEqual(['hoja'])
+    expect(j.sentido!.no_reabre).toEqual([])
+    expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBeUndefined()
+    expect(e.fichas).toEqual([expect.objectContaining({ gravedad: 'bloquea', donde: 'hoja', estado: 'no_tomada', que: expect.stringMatching(/D3 · el precio/) })])
+    expect(JSON.stringify(res)).not.toMatch(/una persona/)
+  })
+
   it('lo ya devuelto a ese destino NO reabre: queda registrado, sin ficha, sin marca de vuelta y sin salida a persona', () => {
     const { j, e, prefijo, res } = aplicar([`texto: sentido · calendario: sigue sin cuadrar — ficha: «${LINEA_NO}»`], { hoja: BRIEF_CON_FICHA, ya: ['F-7:calendario'] })
     expect(j.sentido!.devoluciones).toEqual([])

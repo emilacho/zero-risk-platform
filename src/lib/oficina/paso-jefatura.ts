@@ -117,6 +117,8 @@ export interface DatosDelSentido {
   enviadas: Enviada[]
   /** ya se había devuelto (o el creador ya respondió): la jefatura NO reabre; queda registrado aquí y la pieza sigue */
   no_reabre: Hallazgo[]
+  /** regla dura cuyo destino ya se devolvió y sigue rota: sin devolución nueva, pero sigue frenando la pieza (CC7 🟡 1) */
+  duras_pendientes?: Hallazgo[]
   /** lo que respondió el creador de la pieza a las correcciones de la vuelta anterior (solo en la revisión que sigue a esa vuelta) */
   respuestas_del_creador?: RespuestaDelCreador[]
   vuelve_a: Destino[]
@@ -161,7 +163,7 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   const sen = o.sentido && o.sentido.ficha.estado === 'con_ficha' && !incompleta ? sentidoDeLaRevision(crudas, o.sentido) : null
   const lineas = sen ? sen.lineas : crudas
   // lo que vuelve a un paso de la cadena NO se arregla rehaciendo la pieza: no hay vuelta a la mesa. Tras una vuelta con correcciones de sentido, la jefatura no reabre
-  const haciaAtras = !!sen && (sen.datos.devoluciones.length > 0 || sen.tras_la_vuelta)
+  const haciaAtras = !!sen && (sen.datos.devoluciones.length > 0 || (sen.datos.duras_pendientes?.length ?? 0) > 0 || sen.tras_la_vuelta)
   const vuelve = lineas.length > 0 && !haciaAtras && o.puedeVolverALaMesa?.(costoDeLaJefatura(salida.costo_usd)) === true
   // fichas de FONDO que siguen sin tomarse: el mismo desacuerdo de siempre (jefe · bloquea · sin tomar); `cerrar` ya sabe contarlas
   //   (si la pieza vuelve a la mesa, el desacuerdo viaja como corrección y NO queda como ficha: la revisión de la vuelta decide)
@@ -174,6 +176,7 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   //   nunca se da por tomada. Lo que no reabre queda registrado en `sentido.no_reabre`, sin ficha.
   if (sen) {
     sen.datos.devoluciones.forEach((d, i) => fichas.push({ ...fichaNueva(`sentido-${e.pasos_ejecutados}-${i}`, 'jefe', d.destino, 'bloquea', `sentido · ${d.destino}: ${d.motivo}`, d.linea_de_la_ficha ? `ficha de la oferta: «${d.linea_de_la_ficha}»` : 'ficha de la oferta', d.dura ? `vuelve a ${d.destino}: regla dura, su creador la toma sí o sí` : `vuelve a ${d.destino}: su creador la toma, la toma en parte o no la toma, y dice por qué`), estado: 'no_tomada' as const, razon: `devuelto a ${d.destino}` }))
+    ;(sen.datos.duras_pendientes ?? []).forEach((h, i) => fichas.push({ ...fichaNueva(`sentido-dura-${e.pasos_ejecutados}-${i}`, 'jefe', h.destino, 'bloquea', `sentido · ${h.destino}: ${h.que}`, h.linea_de_la_ficha ? `ficha de la oferta: «${h.linea_de_la_ficha}»` : 'ficha de la oferta', `regla dura ya devuelta a ${h.destino} y sigue sin corregirse: no se publica hasta que su creador la corrija`), estado: 'no_tomada' as const, razon: `regla dura ya devuelta a ${h.destino}` }))
   }
   // la opinión libre de GPT llega como OPINIÓN (una ficha `externa` por dueño, nunca bloquea ni cuenta como desacuerdo), con lo que cada dueño decidió
   const externas = respuestas.filter((r) => r.origen === 'externa').sort((a, b) => (a.donde === 'texto' ? -1 : b.donde === 'texto' ? 1 : 0))
@@ -225,7 +228,7 @@ function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicaci
   const noReabrePieza = tras ? hallazgos.filter((h) => aPieza(h) && !esDura(h)) : []
   const r = repartir(sigue, s.filaId, s.encargoId, s.yaDevueltas)
   const respuestas = tras ? leerRespuestas(s.previas!.enviadas, s.previas!.lineasDeRespuesta) : null
-  const datos: DatosDelSentido = { ficha: 'con_ficha', declarado: [...(s.declarado ?? []), ...ex.declarado], hallazgos, devoluciones: r.devoluciones, enviadas: tras ? [] : r.enviadas, no_reabre: [...noReabrePieza, ...r.no_reabre], ...(respuestas ? { respuestas_del_creador: respuestas } : {}), vuelve_a: r.vuelve_a, cita_no_verificada: r.cita_no_verificada }
+  const datos: DatosDelSentido = { ficha: 'con_ficha', declarado: [...(s.declarado ?? []), ...ex.declarado], hallazgos, devoluciones: r.devoluciones, enviadas: tras ? [] : r.enviadas, no_reabre: [...noReabrePieza, ...r.no_reabre], ...(r.duras_pendientes.length ? { duras_pendientes: r.duras_pendientes } : {}), ...(respuestas ? { respuestas_del_creador: respuestas } : {}), vuelve_a: r.vuelve_a, cita_no_verificada: r.cita_no_verificada }
   return { lineas: [...jefe.resto, ...r.a_la_mesa], datos, tras_la_vuelta: tras }
 }
 
