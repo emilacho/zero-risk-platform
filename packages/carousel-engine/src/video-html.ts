@@ -159,10 +159,10 @@ body{font-family:'${fCuerpo}',sans-serif;-webkit-font-smoothing:antialiased}
 .firma{font-family:'${fTitular}',sans-serif;font-size:${Math.round(W * 0.05)}px;font-weight:700;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.6);margin-bottom:${Math.round(W * 0.03)}px}
 .etiqueta{padding:${Math.round(W * 0.01)}px ${Math.round(W * 0.025)}px;border-radius:999px;background:${color(d.etiqueta.fondo, '#111111')};color:${color(d.etiqueta.texto, '#ffffff')};font-size:${Math.round(W * 0.03)}px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:${Math.round(W * 0.02)}px}
 .titular{font-family:'${fTitular}',sans-serif;font-weight:700;line-height:1.05;color:#ffffff;text-align:${alinear};text-shadow:0 2px 12px rgba(0,0,0,0.55);margin-bottom:${Math.round(W * 0.018)}px;overflow-wrap:anywhere}
-.bajada{font-size:${Math.round(util * 0.042)}px;line-height:1.3;color:#ffffff;text-align:${alinear};text-shadow:0 2px 12px rgba(0,0,0,0.55);margin-bottom:${Math.round(W * 0.03)}px}
+.bajada{font-size:${Math.round(util * 0.042)}px;line-height:1.3;color:#ffffff;text-align:${alinear};text-shadow:0 2px 12px rgba(0,0,0,0.55);margin-bottom:${Math.round(W * 0.03)}px}${tramos.length ? `
 .sub{position:absolute;left:${m}px;width:${util}px;bottom:${abajoSub}px;text-align:center;font-family:'${fTitular}',sans-serif;font-weight:700;line-height:1.15;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.75);overflow:visible;overflow-wrap:anywhere}
 .sub .p{padding:0 0.12em;border-radius:0.18em}
-.sub .ya{background:${color(d.boton.fondo, '#111111')};color:${color(d.boton.texto, '#ffffff')};text-shadow:none}
+.sub .ya{background:${color(d.boton.fondo, '#111111')};color:${color(d.boton.texto, '#ffffff')};text-shadow:none}` : ''}
 .boton{padding:${Math.round(W * 0.018)}px ${Math.round(W * 0.04)}px;border-radius:999px;background:${color(d.boton.fondo, '#111111')};color:${color(d.boton.texto, '#ffffff')};font-size:${Math.round(W * 0.036)}px;font-weight:700}`
 
   const capa = (id: string, clase: string, desde: number, hasta: number, pista: number, dentro: string, estilo = '') =>

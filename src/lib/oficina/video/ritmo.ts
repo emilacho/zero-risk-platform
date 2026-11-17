@@ -7,7 +7,8 @@
  *  · solo se confía en los golpes cuando el tempo es claro (`confianza: 'high'`); con música tranquila el detector inventa un metrónomo:
  *    entonces NO se mueve nada y queda el aviso (el corte por frases es otra pieza);
  *  · un corte se corre como mucho `tolerancia_s` (por omisión 0,6 s) y nunca deja un plano más largo que su clip ni más corto que `minimo_s`;
- *  · el largo total se conserva (el último plano termina donde terminaba), salvo que su clip no alcance.
+ *  · el largo total se conserva: un corte solo se corre si lo que queda después CABE en los clips que siguen (🟡 1 de CC7: 4+4+4 con clips 6/4/4 y
+ *    un golpe en 3,8 daba 11,8 s); solo si el guion ya pedía más de lo que los clips dan, el total sale más corto, y `total_s` lo dice.
  * Un corte que no tiene golpe cerca se queda donde estaba. Puro: sin red, sin base. Agnóstico: no sabe de rubros ni de clientes.
  */
 
@@ -52,7 +53,9 @@ export function montarAlRitmo(planos: PlanoParaElRitmo[], mapa: MapaDeGolpes | n
     plan += p.cortar_a_s
     // lo que falta después de este corte tiene que caber en los planos que quedan (cada uno al menos el mínimo)
     const techo = total - minimo * (planos.length - 1 - i)
-    const dentro = (c: number) => c - previo >= Math.min(minimo, p.cortar_a_s) && c - previo <= p.segundos && c <= techo
+    // y lo que falta no puede pasar de lo que dan los clips que quedan: si no, el total se acortaría (🟡 1 de CC7)
+    const piso = total - planos.slice(i + 1).reduce((s, q) => s + q.segundos, 0)
+    const dentro = (c: number) => c - previo >= Math.min(minimo, p.cortar_a_s) && c - previo <= p.segundos && c <= techo && c >= piso - 1e-9
     const candidatos = golpes.filter((g) => Math.abs(g - plan) <= tol && dentro(g))
     let corte: number
     if (candidatos.length) {

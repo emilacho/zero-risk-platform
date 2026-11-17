@@ -5,6 +5,7 @@
  *  · la plantilla del video: un tramo por palabra con la que suena resaltada, escapado, antes del cierre, sin guion;
  *  · el ritmo: cortes al golpe más cercano solo con tempo claro, dentro del clip y del mínimo; el total se conserva.
  */
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { agruparPalabras, energiaDe, FRACCION_MAXIMA_DE_SIMBOLOS, leerPalabras, PALABRAS_POR_GRUPO, PAUSA_QUE_CORTA_S, ENTRADA_MINIMA_S } from '../video/subtitulos'
 import { montarAlRitmo, MINIMO_POR_OMISION_S, TOLERANCIA_POR_OMISION_S } from '../video/ritmo'
@@ -121,8 +122,16 @@ describe('T5 · la plantilla del video con subtítulos', () => {
     expect(h).toContain('data-start="9" data-duration="2" data-track-index="3"')
     expect(h).not.toContain('id="cierre"')
   })
-  it('sin subtítulos el documento es el de siempre (nada nuevo en la página)', () => {
-    expect(htmlDeVideo(ped({ subtitulos: undefined }), [])).not.toContain('class="clip sub"')
+  it('sin subtítulos el documento es BYTE A BYTE el de main (🟡 3 de CC7): ni capas ni estilo de subtítulos', () => {
+    // la huella es la del `htmlDeVideo` de main (antes de T5) con este mismo pedido, medida el 17-nov comparando las dos versiones en la misma corrida
+    const p = ped({ subtitulos: undefined, textos: [{ desde: 0.5, hasta: 3, texto: 'Hola' }], cierre: { desde: 9.5, etiqueta: 'E', titular: 'Pide ya', bajada: 'b', boton: 'B' } })
+    const h = htmlDeVideo(p, [])
+    expect(h).toHaveLength(2531)
+    expect(createHash('sha256').update(h).digest('hex')).toBe('e5b5fe676747d7d54a36cec5b68b823f7f301f9a44b8024a4b7d21180538cabc')
+    expect(h).not.toMatch(/\.sub|class="clip sub"/)
+    expect(htmlDeVideo({ ...p, subtitulos: [] }, [])).toBe(h)
+    // con subtítulos, el estilo sí entra
+    expect(htmlDeVideo(ped(), [])).toContain('.sub .ya{')
   })
 })
 
@@ -172,9 +181,30 @@ describe('T5 · montaje al ritmo', () => {
     expect(r).toMatchObject({ movido: true, planos: [{ n: 1, cortar_a_s: 2.5 }, { n: 2, cortar_a_s: 4.2 }, { n: 3, cortar_a_s: 3.3 }] })
     expect(r.total_s).toBe(10)
   })
-  it('el último plano no pasa de su clip (el total se acorta antes que estirar un clip)', () => {
+  it('el total se conserva: un corte no se adelanta si lo que queda no cabe en los clips que siguen (🟡 1 de CC7)', () => {
+    // el caso de CC7: guion 4+4+4, clips 6/4/4, golpe a 3,8 → antes daba [3,8 · 4 · 4] = 11,8 s
+    const cc7 = [{ n: 1, cortar_a_s: 4, segundos: 6 }, { n: 2, cortar_a_s: 4, segundos: 4 }, { n: 3, cortar_a_s: 4, segundos: 4 }]
+    expect(montarAlRitmo(cc7, { golpes: [3.8], confianza: 'high' })).toMatchObject({ movido: false, total_s: 12 })
+    // atrasar sí cabe (el primer clip da 6); el segundo corte queda donde estaba (8): 4,3 · 3,7 · 4 = 12
+    const r = montarAlRitmo(cc7, { golpes: [4.3], confianza: 'high' })
+    expect(r).toMatchObject({ movido: true, planos: [{ n: 1, cortar_a_s: 4.3 }, { n: 2, cortar_a_s: 3.7 }, { n: 3, cortar_a_s: 4 }], total_s: 12 })
+    // el último plano tampoco pasa de su clip: con dos planos, adelantar el corte lo estiraría
     const ps = [{ n: 1, cortar_a_s: 3, segundos: 5 }, { n: 2, cortar_a_s: 3, segundos: 3 }]
-    expect(montarAlRitmo(ps, { golpes: [2.5], confianza: 'high' })).toMatchObject({ movido: true, planos: [{ n: 1, cortar_a_s: 2.5 }, { n: 2, cortar_a_s: 3 }], total_s: 5.5 })
+    expect(montarAlRitmo(ps, { golpes: [2.5], confianza: 'high' })).toMatchObject({ movido: false, total_s: 6 })
+    // con el clip 2 de 3,1 el golpe a 2,9 sí cabe (lo que queda, 3,1, es justo lo que da el clip)
+    const holgado = [{ n: 1, cortar_a_s: 3, segundos: 5 }, { n: 2, cortar_a_s: 3, segundos: 3.1 }]
+    expect(montarAlRitmo(holgado, { golpes: [2.9], confianza: 'high' })).toMatchObject({ movido: true, planos: [{ n: 1, cortar_a_s: 2.9 }, { n: 2, cortar_a_s: 3.1 }], total_s: 6 })
+  })
+  it('con golpes al azar y clips de todos los largos, el total nunca baja del guion cuando los clips alcanzan', () => {
+    let semilla = 7
+    const azar = () => ((semilla = (semilla * 16807) % 2147483647) / 2147483647)
+    for (let k = 0; k < 300; k++) {
+      const ps = Array.from({ length: 2 + Math.floor(azar() * 4) }, (_, i) => { const c = Math.round((1.5 + azar() * 4) * 10) / 10; return { n: i + 1, cortar_a_s: c, segundos: Math.round((c + azar() * 2) * 10) / 10 } })
+      const total = Math.round(ps.reduce((s, p) => s + p.cortar_a_s, 0) * 1000) / 1000
+      const r = montarAlRitmo(ps, { golpes: Array.from({ length: 30 }, () => Math.round(azar() * total * 100) / 100), confianza: 'high' })
+      expect(r.total_s).toBeCloseTo(total, 6)
+      r.planos.forEach((p, i) => { expect(p.cortar_a_s).toBeLessThanOrEqual(ps[i].segundos + 1e-9) })
+    }
   })
 })
 
