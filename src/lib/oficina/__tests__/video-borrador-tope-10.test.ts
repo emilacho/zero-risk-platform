@@ -7,7 +7,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { registrarPaso, siguientePaso } from '../motor'
-import { TOPE_DEL_BORRADOR_DE_VIDEO_USD, VIDEO_MESA_ENCENDIDA } from '../plantillas/video-mesa'
+// 17-nov · T7b: este archivo prueba la HISTORIA de 202611170830 (topes fijos); desde 202611171900 la plantilla viva sale de las cifras por segundo (`VIDEO_MESA_ENCENDIDA`)
+import { TOPE_DEL_BORRADOR_DE_VIDEO_USD, VIDEO_MESA_ENCENDIDA_0930 as VIDEO_MESA_ENCENDIDA } from '../plantillas/video-mesa'
 import type { Estado, Plantilla } from '../tipos'
 
 const RAIZ = path.resolve(__dirname, '../../../../supabase')

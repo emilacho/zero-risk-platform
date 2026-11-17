@@ -18,7 +18,7 @@ import { aporteDePrompts, esAporteDePrompts } from './prompts'
 import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 
-export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza; /** 17-nov · «creativos en cada paso» · cuántas RONDAS de aportes tiene la mesa (dato `limites.rondas_de_la_mesa`): hechas esas integraciones, los especialistas ya no aportan ni contestan pedidos; la dirección sí cierra (citas, prompts, pregunta del traductor). Sin él, sin límite de rondas (lo de siempre) */ rondas_max?: number }
+export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** 17-nov · T7b · lo que sigue es EXACTO (sale de los pasos de la plantilla, como en el video): la integración final tampoco pasa del TOPE (el motor frena en el tope, no en el techo; pasarlo cortaría el encargo después) */ techo_es_el_tope?: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza; /** 17-nov · «creativos en cada paso» · cuántas RONDAS de aportes tiene la mesa (dato `limites.rondas_de_la_mesa`): hechas esas integraciones, los especialistas ya no aportan ni contestan pedidos; la dirección sí cierra (citas, prompts, pregunta del traductor). Sin él, sin límite de rondas (lo de siempre) */ rondas_max?: number }
 
 export const techoDe = (tope: number): number => +(tope * COTAS.TECHO_SOBRE_TOPE).toFixed(6)
 const fallosDe = (libro: Aporte[], agente: string): number => libro.filter((a) => a.tipo === 'nota' && a.de === agente && a.texto.startsWith('turno_fallido')).length
@@ -78,7 +78,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
     const ult = ultimaIntegracion(libro)
     const hayAportesNuevos = libro.some((a) => esNuevo(a, ult))
     // la integración final puede pasar del tope (hasta el techo ×1,2), pero NUNCA se come lo que viene después: imagen, observador y jefatura también caben bajo el techo
-    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada, ctx.reserva_posterior_usd, ctx.tipo ?? est.tipo) <= techoDe(ctx.tope_usd)
+    const puedeGastar = ctx.gasto_usd + COTAS.RESERVA_POR_TURNO_USD + reservaDeLoQueSigue(ctx.hayImagenGenerada, ctx.reserva_posterior_usd, ctx.tipo ?? est.tipo) <= (ctx.techo_es_el_tope ? ctx.tope_usd : techoDe(ctx.tope_usd))
     if ((!ult || hayAportesNuevos) && puedeGastar && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO && est.marcas.integracion_forzada !== true) {
       return { accion: 'turno', agente: dir.agente, tipo: 'integrar', responde_a: null, motivo: `cierra con lo que hay: ${agotada}` }
     }

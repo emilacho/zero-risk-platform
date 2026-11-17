@@ -12,6 +12,7 @@ import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
 import { devolucionDelBrief, entregarALaCadena, marcoDe, textoDeLaMesaParaLaCadena } from './de-la-cadena'
 import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
+import { loQueSigueDeLaMesa } from '../topes-por-duracion'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
 import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
@@ -19,7 +20,7 @@ import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroD
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { tableroParaLaJefatura } from './libro'
-import { siguienteDeLaMesa, techoDe } from './planificador'
+import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
 import { parametrosDelVideo, traducirPropuestas, type PropuestasDelVideo } from '../video/propuestas'
@@ -58,6 +59,14 @@ export function directorioConAsientos(directorio: Tarjeta[], asientos: unknown):
   if (!Array.isArray(asientos) || !asientos.length) return activos
   const lista = new Set(asientos.filter((a): a is string => typeof a === 'string'))
   return activos.filter((t) => t.rol === 'direccion' || t.rol === 'portero' || lista.has(t.agente))
+}
+
+/** lo que la mesa guarda para lo que viene después: la de la cadena nada; la del VIDEO (17-nov · T7b) lo que piden los pasos de su plantilla, con las rondas que
+ *  quedan, y su integración final tampoco pasa del tope (`techo_es_el_tope`); las demás, la cifra fija de su tipo · pura */
+export function reservaDeLaMesa(pl: Plantilla, tipo: EstadoMesa['tipo'], e: Estado): Pick<ContextoDeLaMesa, 'reserva_posterior_usd' | 'techo_es_el_tope'> {
+  if (esDeLaCadena(tipo)) return { reserva_posterior_usd: 0 }
+  if (tipo === 'video') return { reserva_posterior_usd: loQueSigueDeLaMesa(pl, e), techo_es_el_tope: true }
+  return {}
 }
 
 function estadoInicialDeLaMesa(tipo: EstadoMesa['tipo'], directorio: Tarjeta[]): EstadoMesa {
@@ -297,7 +306,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     const b = deCalendario ? null : baseDeLaminas(enc.estado_del_motor)
     // antes de que exista una pieza se cuenta con imágenes generadas (los especialistas de imagen participan); después manda lo que la pieza realmente pide. El video nunca genera imágenes: el brazo filma.
     const hayImagenGenerada = deCalendario || est.tipo === 'video' ? false : est.pieza_texto == null ? true : hayImagenesAGenerar(est.pieza_texto, est.tipo, (b!.elementos ?? []).map((x) => x.ref))
-    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...(deCalendario ? { reserva_posterior_usd: 0 } : {}), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}) })
+    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...reservaDeLaMesa(pl, est.tipo, enc.estado_del_motor), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}) })
 
     if (acc.accion === 'cierre_por_tope') {
       await guardarMesa(P, enc, { ...est, fase: 'cerrada' })

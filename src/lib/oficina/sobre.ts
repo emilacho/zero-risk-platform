@@ -14,7 +14,8 @@ export interface Sobre { /** 29-oct · el dueño devolvió una pieza cerrada con
 /** 11-nov · el techo de lo que un sobre puede PEDIR: el mismo que las reglas de la base (`oficina_encargos_tope_valido` / `oficina_tipos_tope_valido`, 202611111930).
  *  No es lo que se gasta: la oficina abre con el MENOR entre lo pedido y el tope de la familia (`orquestador.ts`). Antes era 10 y dejaba sin rehacer un video de tope 35. */
 /** 17-nov · 50 → 60 (202611170930 · RESPUESTA Lenovo «check-base-60»): el techo técnico de la base; ninguna familia pasa de su propio tope */
-export const TOPE_MAXIMO_DEL_SOBRE_USD = 60
+/** 17-nov · T7b · 60 → 650 (Lenovo 12:30: techo de la base 650 = 2 min a 1080p (633) · migración 202611171900): techo técnico, no gasto; ninguna familia pasa de su propio tope */
+export const TOPE_MAXIMO_DEL_SOBRE_USD = 650
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RE_BRIEF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/
 const RE_FAMILIA = /^[a-z][a-z0-9_]{0,39}$/

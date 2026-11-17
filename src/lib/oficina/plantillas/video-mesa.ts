@@ -12,7 +12,8 @@
  */
 import type { Condicion, Paso, Plantilla } from '../tipos'
 import { CALIDAD_DE_IMAGEN_CLAVE, ESQUEMA_REVISION_IMAGENES_CLAVE, PASO_IMAGENES_CLAVE, PASO_IMAGENES_CLAVE_FINAL, PASO_REVISAR_IMAGENES_CLAVE } from '../video/imagen-clave'
-import { pasoDelBorradorDeVideo } from '../video/borradores'
+import { FUNCION_BORRADOR_VIDEO, pasoDelBorradorDeVideo } from '../video/borradores'
+import { aplicarTopesPorDuracion } from '../topes-por-duracion'
 import { FUNCION_APROBAR_PROPUESTAS, ARTEFACTO_APROBACION } from '../video/aprobacion'
 
 // 16-nov · S2-3 (CC2) · 35 → 45: las imágenes clave (≤ 3) y su revisión (0,5) van ANTES del video y también se repiten en la vuelta de la mirada; con 35 la segunda filmación
@@ -131,8 +132,9 @@ function encender(base: Plantilla): Plantilla {
     limites: { ...base.limites, tope_encargo_usd: TOPE_DEL_ENCARGO_DE_VIDEO_ENCENDIDO_USD, video: { ...(base.limites.video as Record<string, unknown>), plano_por_plano: true, propuestas: PROPUESTAS_DE_VIDEO, borrador: { resolucion: RESOLUCION_DEL_BORRADOR } } },
   }
 }
-/** la plantilla VIVA de `video_mesa` desde el encendido (202611170720): lo que la migración escribe, EXACTO */
-export const VIDEO_MESA_ENCENDIDA: Plantilla = encender(VIDEO_MESA)
+/** HISTORIA · la plantilla de `video_mesa` con topes FIJOS, como la dejaron 202611170720 (encendido) + 0830 (borrador 10) + 0930 (encargo 58): lo que
+ *  esas migraciones escriben, EXACTO. Desde T7b la viva es `VIDEO_MESA_ENCENDIDA` (abajo), que sale de las cifras por segundo. */
+export const VIDEO_MESA_ENCENDIDA_0930: Plantilla = encender(VIDEO_MESA)
 
 /**
  * 17-nov · Sprint 3 · T7a · EL TOPE POR SEGUNDO TERMINADO (CC2 · 🟢 CC6 `REVISION-CC6-a-CC2-LENOVO-t7-tope-por-segundo`): la plantilla viva escrita como DATO por segundo.
@@ -142,7 +144,7 @@ export const VIDEO_MESA_ENCENDIDA: Plantilla = encender(VIDEO_MESA)
  */
 /** lo que puede cobrar el video por cada segundo de la pieza más larga (hoy: 15 / 15 s) */
 export const TOPE_DEL_VIDEO_POR_SEGUNDO_USD = 1
-/** la parte del tope del encargo que no depende del largo: mesa, imágenes clave, borradores, revisiones y las rondas del dueño (hoy: 58 − 15) */
+/** HISTORIA (202611171800) · la parte del tope del encargo que no dependía del largo: 58 − 15 */
 export const TOPE_FIJO_DEL_ENCARGO_DE_VIDEO_USD = 43
 /** lo que crece el tope del encargo por cada segundo de la pieza más larga (el del video: es lo único que hoy crece con el largo) */
 export const TOPE_DEL_ENCARGO_DE_VIDEO_POR_SEGUNDO_USD = 1
@@ -155,5 +157,42 @@ function porSegundo(base: Plantilla): Plantilla {
     limites: { ...base.limites, tope_encargo_usd: TOPE_FIJO_DEL_ENCARGO_DE_VIDEO_USD, tope_encargo_usd_por_segundo: TOPE_DEL_ENCARGO_DE_VIDEO_POR_SEGUNDO_USD, video },
   }
 }
-/** la plantilla de `video_mesa` como la escribe 202611171800 (dato por segundo); cargada = `VIDEO_MESA_ENCENDIDA` */
-export const VIDEO_MESA_POR_SEGUNDO: Plantilla = porSegundo(VIDEO_MESA_ENCENDIDA)
+/** HISTORIA · la plantilla de `video_mesa` como la escribe 202611171800 (dato por segundo, cifras que reproducían la de topes fijos); cargada = `VIDEO_MESA_ENCENDIDA_0930` */
+export const VIDEO_MESA_POR_SEGUNDO_1800: Plantilla = porSegundo(VIDEO_MESA_ENCENDIDA_0930)
+
+/**
+ * 17-nov · Sprint 3 · T7b · LAS CIFRAS POR SEGUNDO (Lenovo: «cifras T7b» + RESPUESTAS 12:23 «A» + 12:30) · regla de Emilio 08:06: el tope es techo de seguridad
+ * y nunca corta a medias; lo que se gasta es lo real medido. Todo lo que crece con el largo crece por segundo de la pieza más larga (`limites.video.segundos_max`):
+ *   · el video: 1,0/s a 720p · 2,0/s a 1080p (según `limites.video.resolucion`) · el borrador de las propuestas: 0,7/s (3 propuestas a 480p; medido ≈ 0,47/s)
+ *   · cada tanda de imágenes clave (la de la hoja y la final): 0,2/s
+ *   · el encargo: 45 fijo + 3,9/s a 720p · 4,9/s a 1080p = lo que pide el peor caso (una pasada + las 2 rondas del dueño, cada paso a su tope): 2,8 + 3,9/s · 2,8 + 4,9/s
+ * A 15 s y 720p: video 15 · borrador 10,5 · imágenes 3 + 3 · encargo 103,5 (techo, no gasto: lo esperado sigue en 30). Techo de la base 650 (2 min a 1080p = 633).
+ * Migración 202611171900 + su reversa.
+ */
+export const CIFRAS_POR_SEGUNDO_T7B = {
+  video: { '720p': 1, '1080p': 2 },
+  borrador: 0.7,
+  imagenes_clave: 0.2,
+  encargo_fijo: 45,
+  encargo: { '720p': 3.9, '1080p': 4.9 },
+} as const
+
+function porSegundoT7b(base: Plantilla): Plantilla {
+  const C = CIFRAS_POR_SEGUNDO_T7B
+  const { tope_por_video_usd: _sinCifraFija, ...video } = base.limites.video as Record<string, unknown>
+  const porPaso = (p: Paso): Paso => {
+    if (p.funcion === 'video') return { ...p, tope_usd: 0, tope_usd_por_segundo: { ...C.video } }
+    if (p.funcion === FUNCION_BORRADOR_VIDEO) return { ...p, tope_usd: 0, tope_usd_por_segundo: C.borrador }
+    if (p.funcion === PASO_IMAGENES_CLAVE) return { ...p, tope_usd: 0, tope_usd_por_segundo: C.imagenes_clave }
+    return p
+  }
+  return {
+    ...base,
+    pasos: base.pasos.map(porPaso),
+    limites: { ...base.limites, tope_encargo_usd: C.encargo_fijo, tope_encargo_usd_por_segundo: { ...C.encargo }, video },
+  }
+}
+/** la plantilla de `video_mesa` como la escribe 202611171900 (dato por segundo, cifras de T7b) */
+export const VIDEO_MESA_POR_SEGUNDO: Plantilla = porSegundoT7b(VIDEO_MESA_ENCENDIDA_0930)
+/** la plantilla VIVA de `video_mesa` desde 202611171900, YA CARGADA (lo que ve el motor a 15 s y 720p) */
+export const VIDEO_MESA_ENCENDIDA: Plantilla = aplicarTopesPorDuracion(VIDEO_MESA_POR_SEGUNDO).plantilla

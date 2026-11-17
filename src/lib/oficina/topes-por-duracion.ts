@@ -22,6 +22,22 @@ export const POR_SEGUNDO_DEL_PASO = 'tope_usd_por_segundo'
 export const POR_PLANO_DEL_PASO = 'tope_usd_por_plano'
 export const POR_SEGUNDO_DEL_ENCARGO = 'tope_encargo_usd_por_segundo'
 
+/**
+ * 17-nov · T7b · una cifra por segundo puede depender de la RESOLUCIÓN del video final (Lenovo: 720p 1,0/s · 1080p 2,0/s): `{ "720p": 1, "1080p": 2 }`.
+ * Se toma la de `limites.video.resolucion` de la plantilla (la que se filma de verdad). Un número suelto vale para todas. Sin la de esa resolución → dato inválido.
+ */
+const porSegundoDe = (x: unknown, resolucion: unknown): number | null => {
+  if (num(x) !== null) return x as number
+  const m = objeto(x)
+  return typeof resolucion === 'string' ? num(m[resolucion]) : null
+}
+const cifraValida = (x: unknown, resolucion: unknown): boolean => {
+  if (num(x) !== null) return (x as number) >= 0
+  const m = objeto(x)
+  if (!Object.keys(m).length || !Object.values(m).every((v) => num(v) !== null && (v as number) >= 0)) return false
+  return porSegundoDe(x, resolucion) !== null
+}
+
 const tieneUnidades = (p: Plantilla): boolean =>
   (p.limites as Record<string, unknown>)[POR_SEGUNDO_DEL_ENCARGO] !== undefined || p.pasos.some((s) => (s as unknown as Record<string, unknown>)[POR_SEGUNDO_DEL_PASO] !== undefined || (s as unknown as Record<string, unknown>)[POR_PLANO_DEL_PASO] !== undefined)
 
@@ -34,7 +50,7 @@ export function erroresDeLosTopesPorDuracion(p: Plantilla): string[] {
   const lim = p.limites as Record<string, unknown>
   const pideSegundos = (campo: string, x: unknown) => {
     if (x === undefined) return false
-    if (!(num(x) !== null && (x as number) >= 0)) e.push(`${campo} debe ser un número ≥ 0`)
+    if (!cifraValida(x, v.resolucion)) e.push(`${campo} debe ser un número ≥ 0 o una cifra por resolución que incluya la del video (\`limites.video.resolucion\` = ${String(v.resolucion)})`)
     return true
   }
   let usaSegundos = pideSegundos(`\`limites.${POR_SEGUNDO_DEL_ENCARGO}\``, lim[POR_SEGUNDO_DEL_ENCARGO])
@@ -69,34 +85,75 @@ export function aplicarTopesPorDuracion(p: Plantilla): { plantilla: Plantilla; e
     const x = s as unknown as Record<string, unknown>
     if (x[POR_SEGUNDO_DEL_PASO] === undefined && x[POR_PLANO_DEL_PASO] === undefined) return s
     const { [POR_SEGUNDO_DEL_PASO]: ps, [POR_PLANO_DEL_PASO]: pp, ...resto } = x
-    const tope = r4((num(s.tope_usd) ?? 0) + (num(ps) ?? 0) * seg + (num(pp) ?? 0) * planos)
+    const tope = r4((num(s.tope_usd) ?? 0) + (porSegundoDe(ps, v.resolucion) ?? 0) * seg + (num(pp) ?? 0) * planos)
     if (s.funcion === 'video') topeDelVideo = tope
     return { ...(resto as unknown as Paso), tope_usd: tope }
   })
   const { [POR_SEGUNDO_DEL_ENCARGO]: pe, ...limResto } = lim
   const limites = {
     ...limResto,
-    tope_encargo_usd: r4((num(p.limites.tope_encargo_usd) ?? 0) + (num(pe) ?? 0) * seg),
+    tope_encargo_usd: r4((num(p.limites.tope_encargo_usd) ?? 0) + (porSegundoDe(pe, v.resolucion) ?? 0) * seg),
     ...(topeDelVideo !== null ? { video: { ...v, tope_por_video_usd: topeDelVideo } } : {}),
   } as Plantilla['limites']
   return { plantilla: { ...p, pasos, limites }, errores: [] }
 }
 
+/** lo que se reserva para VOLVER desde `paso` a su destino: los topes de los pasos que se repiten (destino → paso, inclusive) y, si el destino es la mesa,
+ *  un turno de la mesa · pura · sin destino válido, infinito (nunca cabe). 17-nov · T7b: vive aquí para que la guarda de las vueltas (`orquestador-video`)
+ *  y lo requerido al abrir (`coberturaDelTope`) usen LA MISMA cuenta. */
+export function costoDeVolver(pl: Plantilla, paso: Paso): number {
+  const de = pl.pasos.findIndex((x) => x.clave === paso.vuelve_a?.paso)
+  const a = pl.pasos.findIndex((x) => x.clave === paso.clave)
+  if (de < 0 || a < de) return Number.POSITIVE_INFINITY
+  const topes = pl.pasos.slice(de, a + 1).reduce((s, x) => s + (Number(x.tope_usd) || 0), 0)
+  return +(topes + (pl.pasos[de].funcion === 'mesa' ? COTAS.RESERVA_POR_TURNO_USD : 0)).toFixed(6)
+}
+
 /**
- * Condición 1 de CC6 · ¿el tope de este encargo cubre una pasada por la plantilla? · pura (sobre la plantilla YA aplicada).
- * Lo requerido = la suma de los topes de TODOS los pasos que gastan, cada uno una vez (sale de los pasos de la plantilla, no de una lista a mano),
- * más un turno de la mesa (`COTAS.RESERVA_POR_TURNO_USD`, lo mismo que reserva `costoDeVolver`) si la plantilla tiene mesa.
- * Las vueltas NO se suman aquí: las de chequeo (guion, imágenes clave, mirada) ya se saltan si no caben (`cabeLaVuelta`); las rondas del dueño las cubre
- * la cuenta por el motor hasta el cierre de cada cambio de cifras (condición 4).
+ * 17-nov · T7b · las vueltas que el código SALTA si no caben en el tope (las guarda `cabeLaVuelta` en `orquestador-video`): el pedido que vuelve por fotos,
+ * la revisión de las imágenes clave y la mirada del video. Esas nunca cortan un encargo, así que no se reservan al abrir. TODA otra vuelta (hoy: la ronda del
+ * dueño, `aprobar_propuestas`, que el dueño pide y el código no puede saltar) SÍ se reserva, a su máximo. Una vuelta nueva cuenta por omisión (lado seguro).
+ */
+export const VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN = { funciones: ['pedido_de_video'], claves: ['revisar_imagenes_clave', 'mirar_video'] } as const
+const seSalta = (s: Paso) => (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.funciones as readonly string[]).includes(String(s.funcion ?? '')) || (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves as readonly string[]).includes(s.clave)
+
+/**
+ * Condición 1 de CC6 · ¿el tope de este encargo cubre el PEOR caso de la plantilla? · pura (sobre la plantilla YA aplicada).
+ * Lo requerido = una pasada (la suma de los topes de TODOS los pasos que gastan, cada uno una vez, + un turno de la mesa si la hay) MÁS cada vuelta que no se
+ * salta, a su máximo (`vuelve_a.max` × `costoDeVolver`, con cada paso a su tope). 17-nov · T7b (condición fuerte de CC6 + regla de Emilio 08:06 «nunca corta a
+ * medias»): las 2 rondas del dueño entran aquí. Sale de los pasos de la plantilla, no de una lista a mano.
  */
 export function coberturaDelTope(p: Plantilla, tope: number): { requerido: number; cubre: boolean; detalle: string } {
   const pasos = Array.isArray(p?.pasos) ? p.pasos : []
   const gastan = pasos.filter((s) => (num(s.tope_usd) ?? 0) > 0)
   const mesa = pasos.some((s) => s.funcion === 'mesa') ? COTAS.RESERVA_POR_TURNO_USD : 0
-  const requerido = r4(gastan.reduce((a, s) => a + (num(s.tope_usd) ?? 0), 0) + mesa)
+  const pasada = gastan.reduce((a, s) => a + (num(s.tope_usd) ?? 0), 0) + mesa
+  const vueltas = pasos
+    .filter((s) => (num(s.vuelve_a?.max) ?? 0) > 0 && !seSalta(s))
+    .map((s) => ({ clave: s.clave, max: num(s.vuelve_a?.max) as number, costo: costoDeVolver(p, s) }))
+  const requerido = r4(pasada + vueltas.reduce((a, x) => a + x.max * x.costo, 0))
   const cubre = num(tope) !== null && tope + 1e-9 >= requerido
   const partes = gastan.map((s) => `${s.clave} ${s.tope_usd}`).concat(mesa ? [`un turno de la mesa ${mesa}`] : [])
-  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} una pasada por los pasos que gastan, cada uno a su tope (US$ ${requerido}: ${partes.join(' + ') || 'ninguno'})` }
+  const deVueltas = vueltas.map((x) => `${x.max} × la vuelta de «${x.clave}» (${r4(x.costo)})`)
+  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} el peor caso con cada paso a su tope (US$ ${requerido}: una pasada ${partes.join(' + ') || 'sin gasto'}${deVueltas.length ? ` + ${deVueltas.join(' + ')}` : ''})` }
+}
+
+/**
+ * 17-nov · T7b · lo que la MESA tiene que dejar para lo que viene DESPUÉS de ella, con la misma cuenta que `coberturaDelTope`: los pasos que gastan después
+ * de la mesa (cada uno una vez, a su tope) + la revisión de cada paso de la jefatura (su tope en la plantilla es 0 y gasta de lo que queda: se le guarda
+ * `COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD`, 1,5 + margen, como en la cifra fija vieja) + las vueltas que no se saltan y aún quedan (`vuelve_a.max` − las ya hechas) × `costoDeVolver`. Con esto la mesa del
+ * video se frena a tiempo (`cotaAgotada`) y nunca se come lo que necesita el borrador, el video o una ronda del dueño. Antes era una cifra fija (6,5, del 31-oct). Pura.
+ */
+export function loQueSigueDeLaMesa(p: Plantilla, e: { vueltas?: Record<string, number> }): number {
+  const pasos = Array.isArray(p?.pasos) ? p.pasos : []
+  const i = pasos.findIndex((s) => s.funcion === 'mesa')
+  if (i < 0) return 0
+  const despues = pasos.slice(i + 1)
+  const pasada = despues.reduce((a, s) => a + Math.max(0, num(s.tope_usd) ?? 0) + (s.tipo === 'jefatura' ? COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD : 0), 0)
+  const vueltas = despues
+    .filter((s) => (num(s.vuelve_a?.max) ?? 0) > 0 && !seSalta(s))
+    .reduce((a, s) => a + Math.max(0, (num(s.vuelve_a?.max) as number) - (e.vueltas?.[s.clave] ?? 0)) * costoDeVolver(p, s), 0)
+  return r4(pasada + vueltas)
 }
 
 /** el tope del encargo de una FILA de la base (`tope_encargo_usd`, `limites`, `pasos`) con la misma cuenta: para el freno de la campaña (condición 2) · puro.

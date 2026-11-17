@@ -7,8 +7,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { registrarPaso, siguientePaso } from '../motor'
-import { TOPE_DEL_ENCARGO_DE_VIDEO_ENCENDIDO_USD, TOPE_DEL_PASO_VIDEO_USD, VIDEO_MESA_ENCENDIDA } from '../plantillas/video-mesa'
-import { TOPE_MAXIMO_DEL_SOBRE_USD, validarSobre } from '../sobre'
+// 17-nov · T7b: este archivo prueba la HISTORIA de 202611170930 (techo 60, encargo 58 con topes fijos). Desde 202611171900 el techo es 650 y la plantilla viva
+//   sale de las cifras por segundo; aquí se usan la forma y el techo DE ENTONCES
+import { TOPE_DEL_ENCARGO_DE_VIDEO_ENCENDIDO_USD, TOPE_DEL_PASO_VIDEO_USD, VIDEO_MESA_ENCENDIDA_0930 as VIDEO_MESA_ENCENDIDA } from '../plantillas/video-mesa'
+import { TOPE_MAXIMO_DEL_SOBRE_USD as TECHO_VIGENTE, validarSobre } from '../sobre'
+const TOPE_MAXIMO_DEL_SOBRE_USD = 60
 import type { Estado, Plantilla } from '../tipos'
 
 const RAIZ = path.resolve(__dirname, '../../../../supabase')
@@ -54,11 +57,11 @@ describe('por el motor real, hasta el cierre', () => {
     expect(c52.hechos).not.toContain('entrega')
     expect(hastaElCierre(53, 2).fin.accion).toBe('fin')
   })
-  it('🔴 el techo de la base sube a 60: un sobre pide hasta 60 y el video (58) cabe', () => {
-    expect(TOPE_MAXIMO_DEL_SOBRE_USD).toBe(60)
+  it('🔴 el techo de la base sube a 60: un sobre pide hasta 60 y el video (58) cabe (desde 202611171900 el techo vigente es 650)', () => {
+    expect(TECHO_VIGENTE).toBe(650)
     const base = { parte_id: '11111111-1111-4111-8111-111111111111', brief_id: 'b1', dry_run: true }
     expect(validarSobre({ ...base, tope_usd: 58 }).ok).toBe(true)
-    expect(validarSobre({ ...base, tope_usd: 60.01 }).ok).toBe(false)
+    expect(validarSobre({ ...base, tope_usd: TECHO_VIGENTE + 0.01 }).ok).toBe(false)
     expect(TOPE_DEL_ENCARGO_DE_VIDEO_ENCENDIDO_USD).toBeLessThanOrEqual(TOPE_MAXIMO_DEL_SOBRE_USD)
   })
 })
