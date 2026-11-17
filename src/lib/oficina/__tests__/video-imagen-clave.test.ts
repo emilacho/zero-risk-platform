@@ -175,16 +175,19 @@ const REV_MAL = JSON.stringify({ coincide: false, por_plano: [{ plano: 1, coinci
 const MIRADA_BIEN = JSON.stringify({ coincide: true, orden_respetado: true, faltantes: [], por_plano: [{ plano: 1, se_ve: 'la fachada' }, { plano: 2, se_ve: 'manos trabajando' }], para_la_mesa: '' })
 const MIRADA_MAL = JSON.stringify({ coincide: false, orden_respetado: true, faltantes: [{ plano: 1, que_falta: 'no se ve la fachada' }], por_plano: [{ plano: 1, se_ve: 'una calle' }], para_la_mesa: 'mostrar la fachada' })
 
-async function recorrer(C: Cliente, o: { revision: (k: number) => string; mirada?: (k: number) => string; dry_run?: boolean; imagenFalla?: (n: number) => boolean }) {
+// 17-nov (CC1 · condición de CC6 para la reserva 30) · `costoVideo`: lo que cobra cada filmación (720p ≈ 5,3 · 1080p ≈ 13); `gastoPrevio`: lo que la mesa (y, cuando se encienda, el borrador) ya gastó, cargado en el PRIMER turno de dirección
+async function recorrer(C: Cliente, o: { revision: (k: number) => string; mirada?: (k: number) => string; dry_run?: boolean; imagenFalla?: (n: number) => boolean; costoVideo?: number; gastoPrevio?: number }) {
+  const costoVideo = o.costoVideo ?? 2.12
+  let previoCargado = false
   const M = crearMemoria({ parte: parteDe(C), plantilla: VIDEO_MESA, fuentes: { fotos: C.fotos } })
   if (o.imagenFalla) M.imagenFalla = o.imagenFalla
   M.P.mesa = crearMesaEnMemoria()
   const MS = M.P.mesa as ReturnType<typeof crearMesaEnMemoria>
   const enviados: string[] = []
   const brazo: PuertoDeVideo = {
-    enviar: async (p) => { enviados.push(p.workflow_execution_id); return { ok: true, request_id: `req-${enviados.length}`, status: 'queued', costo_estimado_usd: 2.12, simulado: p.dry_run } },
+    enviar: async (p) => { enviados.push(p.workflow_execution_id); return { ok: true, request_id: `req-${enviados.length}`, status: 'queued', costo_estimado_usd: costoVideo, simulado: p.dry_run } },
     estado: async () => ({ ok: true, simulado: true }),
-    cotizar: async () => ({ ok: true, costo_estimado_usd: 2.12, costo_lista_usd: 2.12 }),
+    cotizar: async () => ({ ok: true, costo_estimado_usd: costoVideo, costo_lista_usd: costoVideo }),
   }
   M.P.video = brazo
   // S2-7 · el sacador devuelve 3 cuadros por plano y las señales leídas de una salida REAL de ffmpeg
@@ -202,14 +205,14 @@ async function recorrer(C: Cliente, o: { revision: (k: number) => string; mirada
     if (t.tipo === 'aportar') { aportes++; return { texto: `Aporte de ${t.agente}.` } }
     if (t.tipo === 'responder') return { texto: 'Entendido: corrijo la hoja.' }
     if (t.tipo === 'integrar' || t.tipo === 'devolver_citas') return { texto: GUION(C, Array.from({ length: aportes }, (_, i) => `A${i + 2} usé: lo tomé tal cual`).join('\n')) }
-    if (t.tipo === 'dirigir') return { texto: 'Idea rectora: el oficio a mano.' }
+    if (t.tipo === 'dirigir') { const previo = !previoCargado && o.gastoPrevio !== undefined ? o.gastoPrevio : undefined; previoCargado = true; return { texto: 'Idea rectora: el oficio a mano.', ...(previo !== undefined ? { costo_usd: previo } : {}) } }
     return undefined
   }
   let r = await jugar(M, id, a, responder)
   turnos.push(...r.turnos)
   for (let vez = 1; vez <= 3 && r.ultima.cuerpo.accion === 'esperar_brazo'; vez++) {
     const nBrazo = Number((r.ultima.cuerpo.turno as { n: number }).n)
-    const tras = await recibirVideo(M.P, id, nBrazo, { ok: true, status: 'completed', video_url: `https://bucket.test/video-${vez}.mp4`, url_proveedor: null, costo_usd: 2.12, expires_at: null, copia: 'bucket', aviso: null })
+    const tras = await recibirVideo(M.P, id, nBrazo, { ok: true, status: 'completed', video_url: `https://bucket.test/video-${vez}.mp4`, url_proveedor: null, costo_usd: costoVideo, expires_at: null, copia: 'bucket', aviso: null })
     r = await jugar(M, id, tras, responder)
     turnos.push(...r.turnos)
   }
@@ -441,4 +444,38 @@ describe('el paso imagenes_clave por fase', () => {
     expect(t.esquema).toBe('revision_imagenes_clave.v1')
     expect(t.images).toEqual(['https://img.test/2.png', FOTO.url])
   })
+})
+
+// ───────────────────────── 17-nov · CC1 · la segunda filmación con el encargo en 45 (condición de CC6 para la reserva 30 · RESPUESTA Lenovo 05:20)
+// Lo previo al video (mesa + imágenes clave) ≈ 17 según la NOTA de CC6: se carga en el primer turno de dirección (16,6 + lo que cuestan aquí las imágenes y su revisión).
+// La regla: la mirada solo vuelve a filmar si lo gastado al mirar + volver (19,6) ≤ 45. Si no cabe, NO se cierra por tope antes de la jefatura: sigue con una ficha
+// que bloquea y dice cuánto haría falta y cuánto va (la ve una persona). Ningún gasto fuera del libro: lo que el encargo dice que gastó es la suma del libro.
+describe.each(CLIENTES)('%s · la segunda filmación con el encargo en 45 (3 casos de CC6)', (_n, C) => {
+  const PREVIO = 16.6
+  // cada recorrido tiene su propia memoria con UN encargo: el libro entero es el de ese encargo
+  const suma = (r: Awaited<ReturnType<typeof recorrer>>) => +r.M.gastos.reduce((t, g) => t + Number(g.cost_usd), 0).toFixed(4)
+  it('🔴 1 · la primera a 720p (≈ 5,3): la segunda ENTRA: 2 filmaciones, 2 miradas, sin cierre por tope y dentro de 45', async () => {
+    const r = await recorrer(C, { revision: () => REV_BIEN, mirada: (k) => (k === 0 ? MIRADA_MAL : MIRADA_BIEN), costoVideo: 5.3, gastoPrevio: PREVIO })
+    expect(r.enviados).toHaveLength(2)
+    expect(r.miradas).toHaveLength(2)
+    expect(r.enc.estado).not.toBe('cerrado_por_tope')
+    expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
+    expect(r.enc.estado_del_motor.gasto_usd).toBeLessThanOrEqual(45)
+    expect(r.enc.estado_del_motor.fichas.some((x) => (x.que ?? '').includes('no se rehízo solo'))).toBe(false)
+    expect(+r.enc.estado_del_motor.gasto_usd.toFixed(4)).toBe(suma(r))
+  })
+  for (const [nombre, costoVideo, previo] of [['2 · la primera a 1080p (≈ 13)', 13, PREVIO], ['3 · con el borrador delante (≈ 7) y la primera a 720p', 5.3, PREVIO + 7]] as const) {
+    it(`🔴 ${nombre}: la segunda NO cabe ⇒ UNA filmación, sin cierre por tope, a la jefatura con la ficha que bloquea y dice la reserva, el tope y lo que va; el gasto es el del libro`, async () => {
+      const r = await recorrer(C, { revision: () => REV_BIEN, mirada: () => MIRADA_MAL, costoVideo, gastoPrevio: previo })
+      expect(r.enviados).toHaveLength(1)
+      expect(r.miradas).toHaveLength(1)
+      expect(r.enc.estado).not.toBe('cerrado_por_tope')
+      expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
+      const f = r.enc.estado_del_motor.fichas.find((x) => x.donde === 'mirada' && x.estado === 'abierta')!
+      expect(f).toMatchObject({ gravedad: 'bloquea' })
+      expect(f.que).toContain('no se rehízo solo: volver a la mesa y filmar otro video (reserva US$ 19.60) pasa el tope del encargo (US$ 45; van US$ ')
+      expect(r.enc.estado_del_motor.gasto_usd + 19.6).toBeGreaterThan(45)
+      expect(+r.enc.estado_del_motor.gasto_usd.toFixed(4)).toBe(suma(r))
+    })
+  }
 })
