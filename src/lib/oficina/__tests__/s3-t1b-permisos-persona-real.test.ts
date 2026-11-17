@@ -8,17 +8,28 @@ import { crearPuertos } from '../adaptadores'
 import type { FotoEtiquetada } from '../fotos'
 import { permisosDelCliente } from '../orquestador-video'
 import { armarPedidoDeLaOficina, pedidosParaCotizar } from '../video/pedido'
-import { avisoDePersonasReales, fotosConPermiso, motivoDelPermiso, type PermisoDePersonaReal } from '../video/permisos'
+import { avisoDePersonasReales, fotosConPermiso, fotosPropiasConPersonas, motivoDelPermiso, type PermisoDePersonaReal } from '../video/permisos'
 import { huellaDelClip, pedidosPorPlano } from '../video/planos'
 import { traducirGuion } from '../video/guion'
 import { DbFalsa } from './dbfalsa'
 
 const HOY = new Date('2026-11-17T12:00:00Z')
-const foto = (id: string, con_personas: boolean | null): FotoEtiquetada => ({ id, url: `https://x/${id}.jpg`, con_personas, origen: 'propia' })
+// la regla del registro rige para material de TERCEROS (corrección Lenovo 17-nov); las propias, abajo, viajan siempre
+const foto = (id: string, con_personas: boolean | null, origen: FotoEtiquetada['origen'] = 'referencia'): FotoEtiquetada => ({ id, url: `https://x/${id}.jpg`, con_personas, origen })
 const permiso = (o: Partial<PermisoDePersonaReal> = {}): PermisoDePersonaReal => ({ id: 'p1', persona: 'Ana (chef)', fotos: ['con-ana'], alcance: ['video'], vence_en: null, evidencia: 'contrato firmado 2026-11-01', revocado_en: null, ...o })
 const FOTOS = [foto('plato', false), foto('con-ana', true), foto('sin-etiqueta', null), foto('con-otro', true)]
 
 describe('la regla · una foto propia con personas solo viaja con su permiso vigente', () => {
+  it('🔴 (corrección Lenovo) una foto PROPIA con personas viaja siempre: sin permiso, sin registro, con el permiso vencido; y la que no trae origen cuenta como propia', () => {
+    const propias = [foto('ana-propia', true, 'propia'), { id: 'sin-origen', url: 'https://x/sin-origen.jpg', con_personas: true }]
+    for (const permisos of [[], null, [permiso({ fotos: ['ana-propia', 'sin-origen'], vence_en: '2026-01-01' })]]) {
+      const r = fotosConPermiso(propias, permisos, 'video', HOY)
+      expect(r.fotos.map((f) => f.id)).toEqual(['ana-propia', 'sin-origen'])
+      expect(r.retiradas).toEqual([])
+    }
+    expect(fotosConPermiso([foto('de-la-competencia', true, 'competencia')], [], 'video', HOY).retiradas).toEqual([{ foto_id: 'de-la-competencia', motivo: 'sin_permiso' }])
+    expect(fotosPropiasConPersonas([...propias, foto('plato', false, 'propia'), foto('ajena', true, 'referencia')])).toEqual(['ana-propia', 'sin-origen'])
+  })
   it('🔴 sin personas o sin etiqueta: viaja; con personas y permiso vigente de video: viaja; con personas sin permiso: no viaja y se declara', () => {
     const r = fotosConPermiso(FOTOS, [permiso()], 'video', HOY)
     expect(r.fotos.map((f) => f.id)).toEqual(['plato', 'con-ana', 'sin-etiqueta'])
@@ -60,7 +71,7 @@ describe('la regla · una foto propia con personas solo viaja con su permiso vig
   it('el aviso nombra cada foto (nombre corto), la persona y el motivo; vacío si no se retiró nada', () => {
     expect(avisoDePersonasReales([])).toBe('')
     const a = avisoDePersonasReales(fotosConPermiso(FOTOS, [permiso({ vence_en: '2026-01-01' })], 'video', HOY).retiradas)
-    expect(a).toContain('2 fotos propias con personas reales no se usaron')
+    expect(a).toContain('2 fotos de terceros con personas reales no se usaron')
     expect(a).toContain('con-ana (Ana (chef)): su permiso venció')
     expect(a).toContain('con-otro: sin permiso registrado')
   })

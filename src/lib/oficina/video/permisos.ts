@@ -1,7 +1,9 @@
 /**
  * SPRINT 3 · T1b · EL REGISTRO DE PERMISOS DE PERSONA REAL (DECISIONES Lenovo 17-nov 13:10 Zúrich, opción B).
  * La cara o la voz de una persona real identificable solo con su permiso registrado (es ley). Las personas, voces y locuciones GENERADAS son libres.
- *  · Una foto propia del cliente CON personas (`con_personas: true`, etiqueta del curador) solo viaja a una pieza si un permiso vigente la cubre:
+ *  · CORRECCIÓN Lenovo 17-nov: las fotos PROPIAS que entrega el cliente cuentan como autorizadas por él (responde por su material): viajan siempre.
+ *    El registro aplica a GENERAR o clonar la cara o la voz de una persona real, y al material de TERCEROS.
+ *  · Una foto de terceros CON personas (`con_personas: true`, etiqueta del curador) solo viaja si un permiso vigente la cubre:
  *    el permiso la nombra en `fotos`, tiene el alcance de la pieza (`video`), no venció y no fue revocado.
  *  · Sin permiso, la pieza NO la usa y lo DECLARA (artefacto del encargo + hoja de publicar). No bloquea la pieza ni pide revisión humana nueva.
  *  · Si el registro no se pudo leer, se hace lo seguro: ninguna foto con personas viaja, y se declara por qué.
@@ -54,6 +56,12 @@ export function motivoDelPermiso(p: PermisoDePersonaReal, alcance: AlcanceDePerm
   return null
 }
 
+/** una foto PROPIA (o sin origen: las fuentes solo traen propias) es material del cliente: no pide permiso */
+export const esPropia = (f: Pick<FotoEtiquetada, 'origen'>): boolean => !f.origen || f.origen === 'propia'
+
+/** las fotos PROPIAS con personas (sus ids, en orden): viajan como material del cliente y se dejan anotadas · corrección Lenovo 17-nov */
+export const fotosPropiasConPersonas = (fotos: FotoEtiquetada[]): string[] => fotos.filter((f) => f.con_personas === true && esPropia(f)).map((f) => f.id)
+
 /** orden de lo que se declara cuando varios permisos nombran la foto y ninguno sirve: el más cercano a servir */
 const CERCANIA: MotivoDeRetiro[] = ['sin_alcance', 'permiso_vencido', 'sin_evidencia', 'permiso_revocado']
 
@@ -65,7 +73,7 @@ export function fotosConPermiso(fotos: FotoEtiquetada[], permisos: PermisoDePers
   const quedan: FotoEtiquetada[] = []
   const retiradas: FotoRetirada[] = []
   for (const f of fotos) {
-    if (f.con_personas !== true) { quedan.push(f); continue }
+    if (f.con_personas !== true || esPropia(f)) { quedan.push(f); continue }
     if (permisos === null) { retiradas.push({ foto_id: f.id, motivo: 'registro_no_leido' }); continue }
     const suyos = permisos.filter((p) => Array.isArray(p.fotos) && p.fotos.includes(f.id))
     if (!suyos.length) { retiradas.push({ foto_id: f.id, motivo: 'sin_permiso' }); continue }
@@ -89,5 +97,5 @@ const TEXTO_DEL_MOTIVO: Record<MotivoDeRetiro, string> = {
 export function avisoDePersonasReales(retiradas: FotoRetirada[]): string {
   if (!retiradas.length) return ''
   const partes = retiradas.map((r) => `${r.foto_id.slice(0, 8)}${r.persona ? ` (${r.persona})` : ''}: ${TEXTO_DEL_MOTIVO[r.motivo]}`)
-  return `${retiradas.length === 1 ? 'Una foto propia con personas reales no se usó' : `${retiradas.length} fotos propias con personas reales no se usaron`} en esta pieza (${partes.join(' · ')}). Si la pieza muestra personas, son generadas.`
+  return `${retiradas.length === 1 ? 'Una foto de terceros con personas reales no se usó' : `${retiradas.length} fotos de terceros con personas reales no se usaron`} en esta pieza (${partes.join(' · ')}). Si la pieza muestra personas, son generadas.`
 }

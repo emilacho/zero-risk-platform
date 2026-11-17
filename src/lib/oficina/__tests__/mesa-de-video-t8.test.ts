@@ -485,7 +485,7 @@ describe.each([
     { id: 'b2b00001-0000-4000-8000-000000000001', url: 'https://fotos.test/planta.jpg', con_personas: false, origen: 'propia' as const, que_muestra: 'la planta' },
     { id: 'b2b00002-0000-4000-8000-000000000002', url: 'https://fotos.test/operario.jpg', con_personas: true, origen: 'propia' as const, que_muestra: 'un operario con casco' },
   ]],
-] as const)('17-nov · Sprint 3 · T1b · %s · persona real solo con permiso registrado (decisión Lenovo B)', (_n, cliente, fotos) => {
+] as const)('17-nov · Sprint 3 · T1b · %s · las fotos propias con personas son material del cliente (corrección Lenovo a la decisión B)', (_n, cliente, fotos) => {
   const conPersonas = fotos.filter((f) => f.con_personas === true).map((f) => f.id)
   async function jugarCon(permisos?: () => Promise<unknown>, o: { ahora?: string; zona?: string | null } = {}) {
     const hoja = escribirHoja({ ...INSUMOS, client_name: cliente })
@@ -504,40 +504,25 @@ describe.each([
       return undefined
     })
     const enc = M.encargos.get(String(a.cuerpo.encargo_id))!
-    const datos = enc.estado_del_motor.artefactos['encargo'].datos as { F: { fotos: Array<{ id: string }> }; fotos_sin_permiso?: Array<{ foto_id: string; motivo: string }>; aviso_personas?: string }
+    const datos = enc.estado_del_motor.artefactos['encargo'].datos as { F: { fotos: Array<{ id: string }> }; fotos_con_personas_del_cliente?: string[] }
     // en seco la entrega no guarda archivos: el MISMO paso de entrega, sobre este encargo ya cerrado, sin el modo seco (el video es simulado: no descarga nada, US$ 0)
     const paso = VIDEO_MESA.pasos.find((x) => x.funcion === 'empaquetar_entrega_video')!
     await ejecutarCodigoV(M.P, { ...enc, dry_run: false }, VIDEO_MESA, paso)
     const hojaDePublicar = Object.entries(M.llamadas.contenidos).find(([k]) => /_publicar\.md$/.test(k))?.[1] ?? ''
     return { enc, datos, enviados, hojaDePublicar }
   }
-  it('🔴 sin permiso registrado: las fotos con personas NO llegan a la mesa ni al brazo; la pieza sale igual y la hoja de publicar lo declara', async () => {
+  it('🔴 (corrección Lenovo) sin permiso registrado: las fotos PROPIAS con personas viajan a la mesa y al brazo; quedan anotadas como material del cliente y la hoja no avisa nada', async () => {
     const { enc, datos, enviados, hojaDePublicar } = await jugarCon(async () => [])
-    expect(datos.F.fotos.map((f) => f.id).filter((id) => conPersonas.includes(id))).toEqual([])
-    expect(datos.fotos_sin_permiso!.map((x) => [x.foto_id, x.motivo])).toEqual(conPersonas.map((id) => [id, 'sin_permiso']))
+    expect(datos.F.fotos.map((f) => f.id)).toEqual(fotos.map((f) => f.id))
+    expect(datos.fotos_con_personas_del_cliente).toEqual(conPersonas)
+    expect(datos).not.toHaveProperty('fotos_sin_permiso')
     expect(enc.estado).toBe('cerrado')
     expect(enviados).toHaveLength(1)
-    for (const id of conPersonas) expect(JSON.stringify(enviados[0])).not.toContain(id)
-    expect(hojaDePublicar).toContain(`⚠️ ${datos.aviso_personas}`)
-    expect(datos.aviso_personas).toContain('no se')
-  })
-  it('🔴 con permiso de video vigente para esas fotos: viajan y no se declara nada', async () => {
-    const { datos, hojaDePublicar } = await jugarCon(async () => [{ id: 'p1', persona: 'el equipo', fotos: conPersonas, alcance: ['video'], vence_en: null, evidencia: 'contrato de prueba', revocado_en: null }])
-    expect(datos.F.fotos.map((f) => f.id)).toEqual(fotos.map((f) => f.id))
-    expect(datos.fotos_sin_permiso).toBeUndefined()
     expect(hojaDePublicar).not.toContain('personas reales')
   })
-  it('🔴 (🟡 de CC7) por abrir(): el vencimiento se cuenta en el día del CLIENTE · a las 22:00 del 17 en Guayaquil un permiso que vence el 17 vale; en UTC (sin zona) ya no', async () => {
-    const vence17 = async () => [{ id: 'p1', persona: 'el equipo', fotos: conPersonas, alcance: ['video'], vence_en: '2026-11-17', evidencia: 'contrato de prueba', revocado_en: null }]
-    const enGuayaquil = await jugarCon(vence17, { ahora: '2026-11-18T03:00:00Z', zona: 'America/Guayaquil' })
-    expect(enGuayaquil.datos.fotos_sin_permiso).toBeUndefined()
-    expect(enGuayaquil.datos.F.fotos.map((f) => f.id)).toEqual(fotos.map((f) => f.id))
-    const sinZona = await jugarCon(vence17, { ahora: '2026-11-18T03:00:00Z', zona: null })
-    expect(sinZona.datos.fotos_sin_permiso!.map((x) => x.motivo)).toEqual(conPersonas.map(() => 'permiso_vencido'))
-  })
-  it('🔴 sin el puerto del registro (no se puede leer): lo seguro, ninguna foto con personas viaja', async () => {
-    const { datos } = await jugarCon()
-    expect(datos.fotos_sin_permiso!.every((x) => x.motivo === 'registro_no_leido')).toBe(true)
-    expect(datos.F.fotos.some((f) => conPersonas.includes(f.id))).toBe(false)
+  it('🔴 sin el puerto del registro (no se puede leer) y a cualquier hora: igual viajan todas (el registro no decide sobre las fotos propias)', async () => {
+    const { datos } = await jugarCon(undefined, { ahora: '2026-11-18T03:00:00Z', zona: null })
+    expect(datos.F.fotos.map((f) => f.id)).toEqual(fotos.map((f) => f.id))
+    expect(datos.fotos_con_personas_del_cliente).toEqual(conPersonas)
   })
 })
