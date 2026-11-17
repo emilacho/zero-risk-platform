@@ -8,11 +8,11 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/portero-alimenta/alimentar'
 import { avisarPorIncidente, resolverIncidente } from '@/lib/portero-alimenta/alertas'
-import { decidir, ejecutar, leerCuerpo, type DbDeAlertas } from '@/lib/vigia-de-lecturas/vigia'
+import { decidir, ejecutar, leerCuerpo } from '@/lib/vigia-de-lecturas/vigia'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   if (c.dry_run) return NextResponse.json({ ok: true, dry_run: true, acciones })
   try {
     const db = getSupabaseAdmin() as unknown as Db
-    const resultados = await ejecutar(acciones, { db: db as unknown as DbDeAlertas, avisar: avisarPorIncidente({ db }), resolver: resolverIncidente({ db }) })
+    const resultados = await ejecutar(acciones, { avisar: avisarPorIncidente({ db }), resolver: resolverIncidente({ db }) })
     const ok = resultados.every((r) => r.ok)
     return NextResponse.json({ ok, dry_run: false, resultados }, { status: ok ? 200 : 502 })
   } catch (e) {

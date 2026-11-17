@@ -3,7 +3,7 @@
  * Fixtures de lo REAL medido el 17-nov: Apify con la llave vieja → 401 `user-or-token-not-found`; con la nueva → `/v2/users/me/limits` 200, usado 29.13657240315892 de 29, ciclo hasta 2026-11-24T23:59:59.999Z.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { claseDe, decidir, ejecutar, leerCuerpo, textoDeIncidente, umbralCruzado, type Accion, type DbDeAlertas } from '../vigia'
+import { claseDe, decidir, ejecutar, leerCuerpo, textoDeIncidente, textoDelTope, umbralCruzado } from '../vigia'
 
 const USO_REAL = { usado_usd: 29.13657240315892, tope_usd: 29, ciclo_hasta: '2026-11-24T23:59:59.999Z' }
 const LLAVE_ROTA = { proveedor: 'apify', estado: 401, tipo_error: 'user-or-token-not-found' }
@@ -65,53 +65,37 @@ describe('tope del mes (condición 2 de CC6)', () => {
   })
   it('primer encendido con lo real (100,5 %): UNA alarma, la del 90, con la clave del ciclo', () => {
     const a = decidir([{ proveedor: 'apify', estado: 200, uso: USO_REAL }])
-    const topes = a.filter((x) => x.tipo === 'avisar_una_vez')
+    const topes = a.filter((x) => x.clave.startsWith('tope-del-mes:'))
     expect(topes).toHaveLength(1)
-    expect(topes[0]).toMatchObject({ clave: 'tope-del-mes:apify:90:2026-11-24', texto: expect.stringContaining('ya pasó el 90 % del tope (100.5 %: US$ 29.14 de 29.00)') })
+    expect(topes[0]).toMatchObject({ tipo: 'avisar', clave: 'tope-del-mes:apify:90:2026-11-24', texto: expect.stringContaining('ya pasó el 90 % del tope de US$ 29.00') })
     expect((topes[0] as { texto: string }).texto).toContain('El ciclo corta el 2026-11-24')
+  })
+  it('el texto del tope es FIJO en el ciclo: con otro uso, el mismo texto (la puerta lo cuenta y no lo publica)', () => {
+    expect(textoDelTope('apify', USO_REAL, 90)).toBe(textoDelTope('apify', { ...USO_REAL, usado_usd: 26.3 }, 90))
+    expect(textoDelTope('apify', USO_REAL, 90)).not.toContain('29.14')
   })
   it('al 80 % es la del 75; el ciclo nuevo da otra clave', () => {
     const a = decidir([{ proveedor: 'apify', estado: 200, uso: { usado_usd: 23.2, tope_usd: 29, ciclo_hasta: '2026-12-24T23:59:59.999Z' } }])
-    expect(a[1]).toMatchObject({ tipo: 'avisar_una_vez', clave: 'tope-del-mes:apify:75:2026-12-24' })
+    expect(a[1]).toMatchObject({ tipo: 'avisar', clave: 'tope-del-mes:apify:75:2026-12-24' })
+  })
+  it('sin ciclo conocido, la clave lo dice (no se mezcla con un ciclo real)', () => {
+    expect(decidir([{ proveedor: 'apify', estado: 200, uso: { ...USO_REAL, ciclo_hasta: null } }])[1]).toMatchObject({ clave: 'tope-del-mes:apify:90:sin-ciclo' })
   })
   it('sin lectura buena no hay alarma de tope (un 401 no trae uso)', () => {
-    expect(decidir([{ ...LLAVE_ROTA, uso: USO_REAL }]).some((x) => x.tipo === 'avisar_una_vez')).toBe(false)
+    expect(decidir([{ ...LLAVE_ROTA, uso: USO_REAL }]).some((x) => x.clave.startsWith('tope-del-mes:'))).toBe(false)
   })
 })
 
 describe('ejecutar', () => {
-  const dbCon = (r: { data: unknown; error: unknown }): DbDeAlertas & { pedidas: string[] } => {
-    const pedidas: string[] = []
-    return { pedidas, from: () => ({ select: () => ({ eq: (_c: string, v: string) => ({ limit: async () => { pedidas.push(v); return r } }) }) }) }
-  }
-  const ejecutores = (db: DbDeAlertas) => ({ db, avisar: vi.fn(async () => ({ ok: true, accion: 'abrio', detalle: 'entregado' })), resolver: vi.fn(async () => ({ ok: true, accion: 'sin_incidente', detalle: 'nada' })) })
-  const TOPE: Accion = { tipo: 'avisar_una_vez', clave: 'tope-del-mes:apify:90:2026-11-24', texto: 't' }
-
-  it('tope ya avisado en el ciclo (fila existe, abierta o cerrada) → no publica', async () => {
-    const x = ejecutores(dbCon({ data: [{ clave: TOPE.clave }], error: null }))
-    const r = await ejecutar([TOPE], x)
-    expect(x.avisar).not.toHaveBeenCalled()
-    expect(r[0]).toMatchObject({ accion: 'ya_avisado', ok: true })
-  })
-  it('tope sin fila → publica una vez con su clave', async () => {
-    const db = dbCon({ data: [], error: null })
-    const x = ejecutores(db)
-    await ejecutar([TOPE], x)
-    expect(db.pedidas).toEqual([TOPE.clave])
-    expect(x.avisar).toHaveBeenCalledWith('t', TOPE.clave)
-  })
-  it('tope con la base caída → NO publica (no se repite cada hora) y lo dice como falla', async () => {
-    const x = ejecutores(dbCon({ data: null, error: { message: 'x' } }))
-    const r = await ejecutar([TOPE], x)
-    expect(x.avisar).not.toHaveBeenCalled()
-    expect(r[0]).toMatchObject({ accion: 'sin_base', ok: false })
-  })
-  it('avisar y resolver van a su ejecutor; esperar no toca nada; un error no corta el resto', async () => {
-    const x = ejecutores(dbCon({ data: [], error: null }))
+  const ejecutores = () => ({ avisar: vi.fn(async () => ({ ok: true, accion: 'abrio', detalle: 'entregado' })), resolver: vi.fn(async () => ({ ok: true, accion: 'sin_incidente', detalle: 'nada' })) })
+  it('avisar y resolver van a su ejecutor con su clave; esperar no toca nada; un error no corta el resto', async () => {
+    const x = ejecutores()
     x.resolver.mockRejectedValueOnce(new Error('boom'))
     const r = await ejecutar([{ tipo: 'resolver', clave: 'lectura:supabase', nota: 'n' }, { tipo: 'esperar', clave: 'lectura:openai', motivo: 'm' }, { tipo: 'avisar', clave: 'lectura:apify', texto: 'a' }], x)
-    expect(r.map((y) => `${y.accion} ${y.ok}`)).toEqual(['fallo false', 'esperar true', 'abrio true'])
+    expect(r.map((y) => `${y.tipo} ${y.accion} ${y.ok}`)).toEqual(['resolver fallo false', 'esperar esperar true', 'avisar abrio true'])
+    expect(x.avisar).toHaveBeenCalledTimes(1)
     expect(x.avisar).toHaveBeenCalledWith('a', 'lectura:apify')
+    expect(x.resolver).toHaveBeenCalledWith('lectura:supabase', 'n')
   })
 })
 

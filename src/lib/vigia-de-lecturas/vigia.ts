@@ -7,7 +7,8 @@
  *    401/402/403 abren a la PRIMERA (son deterministas); `caida` pide 2 lecturas seguidas (un parpadeo no alarma). Un cambio de clase va en el hilo; repetir la misma clase no escribe nada;
  *    un 200 lo cierra en su hilo («volvió»).
  *  · el tope del mes: UNA alarma por umbral (75 % · 90 %) y ciclo (clave `tope-del-mes:<proveedor>:<umbral>:<fin del ciclo>`); si ya se pasaron los dos, solo la del mayor.
- * PURO: la ruta `POST /api/vigia/lecturas` ejecuta lo que esto decide con `avisarPorIncidente` / `resolverIncidente` (tabla `cerebro_alertas`: un incidente = una fila).
+ *    Su texto es FIJO dentro del ciclo (sin el uso del momento): cada hora se repite igual y la puerta de incidentes solo lo cuenta, sin publicar.
+ * PURO: la ruta `POST /api/vigia/lecturas` ejecuta lo que esto decide con `avisarPorIncidente` / `resolverIncidente` (la puerta de incidentes: un incidente = una fila, con su hilo).
  */
 export type Clase = 'llave' | 'tope' | 'caida'
 export const UMBRALES_DEL_TOPE = [75, 90] as const
@@ -27,7 +28,6 @@ export interface Lectura {
 
 export type Accion =
   | { tipo: 'avisar'; clave: string; texto: string }
-  | { tipo: 'avisar_una_vez'; clave: string; texto: string }
   | { tipo: 'resolver'; clave: string; nota: string }
   | { tipo: 'esperar'; clave: string; motivo: string }
 
@@ -62,11 +62,11 @@ export function umbralCruzado(uso: UsoDelMes): number | null {
   return pasados.length ? pasados[pasados.length - 1] : null
 }
 
+/** FIJO dentro del ciclo: sin el uso del momento (si cambiara cada hora, cada hora sería un mensaje en el hilo) */
 export function textoDelTope(proveedor: string, uso: UsoDelMes, umbral: number): string {
   const n = nombreDe(proveedor)
-  const pct = Math.round((uso.usado_usd / uso.tope_usd) * 1000) / 10
   const corte = uso.ciclo_hasta ? ` El ciclo corta el ${uso.ciclo_hasta.slice(0, 10)}.` : ''
-  return `🟠 ${n} · el gasto del mes ya pasó el ${umbral} % del tope (${pct} %: US$ ${uso.usado_usd.toFixed(2)} de ${uso.tope_usd.toFixed(2)}).${corte} Al llegar al 100 % ${n} frena lo que se le pide hasta el ciclo nuevo.`
+  return `🟠 ${n} · el gasto del mes ya pasó el ${umbral} % del tope de US$ ${uso.tope_usd.toFixed(2)}.${corte} Al llegar al 100 % ${n} frena lo que se le pide hasta el ciclo nuevo.`
 }
 
 /** qué hacer con lo que leyó el vigilante. Una lectura por proveedor (si viene repetido, manda la primera) */
@@ -81,7 +81,7 @@ export function decidir(lecturas: Lectura[]): Accion[] {
     if (clase === 'ok') {
       acciones.push({ tipo: 'resolver', clave, nota: `volvió: ${nombreDe(l.proveedor)} responde bien` })
       const umbral = l.uso ? umbralCruzado(l.uso) : null
-      if (l.uso && umbral !== null) acciones.push({ tipo: 'avisar_una_vez', clave: `tope-del-mes:${l.proveedor}:${umbral}:${(l.uso.ciclo_hasta ?? 'sin-ciclo').slice(0, 10)}`, texto: textoDelTope(l.proveedor, l.uso, umbral) })
+      if (l.uso && umbral !== null) acciones.push({ tipo: 'avisar', clave: `tope-del-mes:${l.proveedor}:${umbral}:${(l.uso.ciclo_hasta ?? 'sin-ciclo').slice(0, 10)}`, texto: textoDelTope(l.proveedor, l.uso, umbral) })
       continue
     }
     if (clase === 'caida' && (l.caidas_seguidas ?? 1) < CAIDAS_SEGUIDAS_PARA_AVISAR) { acciones.push({ tipo: 'esperar', clave, motivo: 'primera lectura sin respuesta: se avisa si la siguiente tampoco responde' }); continue }
@@ -109,32 +109,20 @@ export function leerCuerpo(b: unknown): { ok: true; dry_run: boolean; lecturas: 
   return { ok: true, dry_run: o.dry_run, lecturas }
 }
 
-/** lo mínimo de la base que usa `ejecutar` (la misma forma que `cerebro_alertas` en `alertas.ts`) */
-export interface DbDeAlertas { from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => { limit: (n: number) => PromiseLike<{ data: unknown; error: unknown }> } } } }
 export interface Ejecutores {
   avisar: (texto: string, clave: string) => Promise<{ ok: boolean; accion: string; detalle: string }>
   resolver: (clave: string, nota: string) => Promise<{ ok: boolean; accion: string; detalle: string }>
-  db: DbDeAlertas
 }
 export interface Resultado { clave: string; tipo: Accion['tipo']; accion: string; ok: boolean; detalle: string }
 
-/**
- * Ejecuta las acciones. `avisar_una_vez` mira primero si esa clave ya existe (abierta o cerrada): si existe no publica nada; si la base no deja leer,
- * TAMPOCO publica (un aviso por ciclo no puede repetirse cada hora porque la base falle: la próxima hora se vuelve a intentar).
- */
+/** ejecuta las acciones en orden; un error en una no corta las demás */
 export async function ejecutar(acciones: Accion[], x: Ejecutores): Promise<Resultado[]> {
   const out: Resultado[] = []
   for (const a of acciones) {
     try {
-      if (a.tipo === 'esperar') { out.push({ clave: a.clave, tipo: a.tipo, accion: 'esperar', ok: true, detalle: a.motivo }); continue }
-      if (a.tipo === 'resolver') { const r = await x.resolver(a.clave, a.nota); out.push({ clave: a.clave, tipo: a.tipo, ...r }); continue }
-      if (a.tipo === 'avisar_una_vez') {
-        const q = await x.db.from('cerebro_alertas').select('clave').eq('clave', a.clave).limit(1)
-        if (q.error) { out.push({ clave: a.clave, tipo: a.tipo, accion: 'sin_base', ok: false, detalle: 'la base no dejó leer los incidentes: no se publica (se reintenta la próxima hora)' }); continue }
-        if (Array.isArray(q.data) && q.data.length > 0) { out.push({ clave: a.clave, tipo: a.tipo, accion: 'ya_avisado', ok: true, detalle: 'este umbral ya se avisó en este ciclo' }); continue }
-      }
-      const r = await x.avisar(a.texto, a.clave)
-      out.push({ clave: a.clave, tipo: a.tipo, ...r })
+      if (a.tipo === 'esperar') out.push({ clave: a.clave, tipo: a.tipo, accion: 'esperar', ok: true, detalle: a.motivo })
+      else if (a.tipo === 'resolver') out.push({ clave: a.clave, tipo: a.tipo, ...(await x.resolver(a.clave, a.nota)) })
+      else out.push({ clave: a.clave, tipo: a.tipo, ...(await x.avisar(a.texto, a.clave)) })
     } catch (e) { out.push({ clave: a.clave, tipo: a.tipo, accion: 'fallo', ok: false, detalle: e instanceof Error ? e.message : String(e) }) }
   }
   return out
