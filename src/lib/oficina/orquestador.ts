@@ -21,7 +21,7 @@ import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeL
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
 import { armarPedidoV, contextoDeRevisorV, ejecutarCodigoV, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
-import { alLlegarAlPaso, decidir, FUNCION_APROBAR_PROPUESTAS, TURNO_DEL_DUENO, type DecisionDelDueno } from './video/aprobacion'
+import { alLlegarAlPaso, decidir, FUNCION_APROBAR_PROPUESTAS, metadataDeAvisosDeConcepto, TURNO_DEL_DUENO, type DecisionDelDueno } from './video/aprobacion'
 import { PASO_MIRAR_VIDEO } from './video/mirada'
 import { PASO_REVISAR_IMAGENES_CLAVE } from './video/imagen-clave'
 import { confianzaDeLaFoto } from './fotos'
@@ -1004,7 +1004,7 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
     const contenido = { ...(lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }), ...(opinion ? { opinion_externa: opinion } : {}) }
     // de dónde viene cada imagen (foto propia · cercana · generada · tipográfica): solo con la plantilla que lo pide
     const origenes = marcaDeOrigenActiva(pl.limites) ? origenesDeImagenes(e, pl.limites) : null
-    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}), ...metadataDeLaJefatura(e), ...(origenes ? { origen_de_imagenes: origenes.por_imagen, origen_de_imagenes_resumen: origenes.resumen } : {}) }
+    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}), ...metadataDeLaJefatura(e), ...(origenes ? { origen_de_imagenes: origenes.por_imagen, origen_de_imagenes_resumen: origenes.resumen } : {}), ...metadataDeAvisosDeConcepto(e) }
     const s = await P.salida({ client_id: enc.client_id, titulo: lam ? lam.titulo : `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
     if (s.ok) {
       output_id = s.output_id

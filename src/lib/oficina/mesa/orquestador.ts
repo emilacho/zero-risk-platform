@@ -23,6 +23,7 @@ import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
 import { parametrosDelVideo, traducirPropuestas, type PropuestasDelVideo } from '../video/propuestas'
+import { avisoDeLaParadaUnica, PREFIJO_AVISO_DE_CONCEPTO, propuestaAprobada, textosDeConcepto } from '../video/aprobacion'
 import { bibliotecaDelCliente, seccionDeLaBiblioteca } from '../video/biblioteca'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
@@ -218,6 +219,16 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       }
       enc = await guardarMesa(P, enc, est)
     }
+    // 17-nov · DECISIÓN Lenovo 00:51 · la parada del dueño es ÚNICA: si la mesa vuelve DESPUÉS de la aprobación (la revisión o la jefatura la devolvieron), escribe UN guion
+    //   (la elegida corregida), no N propuestas: desde aquí la mesa pide y traduce un solo guion, y la dirección recibe la propuesta aprobada UNA vez, antes del aviso de la vuelta.
+    if (est.tipo === 'video' && (est.video?.propuestas ?? 1) > 1) {
+      const elegida = propuestaAprobada(enc.estado_del_motor)
+      if (elegida) {
+        await P.mesa.aportar(aporteNuevo(enc, 'oficina-creativa', est.direccion, 'devuelve', avisoDeLaParadaUnica(elegida)))
+        est = { ...est, video: { ...est.video!, propuestas: 1 }, marcas: { ...est.marcas, parada_unica: elegida.id } }
+        enc = await guardarMesa(P, enc, est)
+      }
+    }
     // 11-nov · GO Lenovo 16:34 · la mesa volvió por un paso con `vuelve_a` (el pedido del video halló fotos que no existen): el aviso de ese paso entra UNA vez al libro
     //   como devolución a la dirección, que contesta e integra; la mesa traduce otra vez y el encargo sigue. Al cerrar, la vuelta se cuenta (no se repite).
     if (vueltaDe) {
@@ -333,7 +344,10 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const avisosDePrompts: string[] = []
   let hayGeneradas = false
   if ('planos' in tr) {
-    otros.guion = { ...tr, texto: textoPieza } as unknown as Record<string, unknown>
+    // 17-nov · la excepción de la parada única: si la dirección declaró que la corrección pedía cambiar el concepto aprobado, el aviso va al guion (la ficha) y sigue
+    const deConcepto = est.marcas.parada_unica ? textosDeConcepto(textoPieza) : []
+    if (deConcepto.length) tr.avisos.push(...deConcepto.map((t) => PREFIJO_AVISO_DE_CONCEPTO + t))
+    otros.guion = { ...tr, texto: textoPieza, ...(deConcepto.length ? { avisos_de_concepto: deConcepto } : {}) } as unknown as Record<string, unknown>
     otros.copy_video = { pie_de_foto: tr.pie_de_foto, hashtags: tr.hashtags }
     otros.visual_direction = { imagenes: [], refs_generadas: [], hay_generadas: false, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa' }
     otros.prompts_validos = { por_ref: {}, ninguno: true }
