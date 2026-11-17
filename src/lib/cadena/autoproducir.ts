@@ -32,7 +32,11 @@ const RE_BRIEF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/
 
 export interface BriefDeParte { brief_id: string | null; fila_id: string | null; familia: string | null }
 /** el parte tal como lo dejó la copia por filas (`client_historical_outputs` · `campaign_brief_pack`) */
-export interface ParteGuardada { id: string; client_id: string; valido: boolean; briefs: BriefDeParte[] }
+export interface ParteGuardada {
+  id: string; client_id: string; valido: boolean; briefs: BriefDeParte[]
+  /** 17-nov · las filas del LOTE que briefeó este parte (`provenance_tag.fila_ids`): un kit agrupa varias filas en UN brief sin `fila_id` propio; el candado de la campaña pausada las lee de aquí */
+  fila_ids?: string[]
+}
 
 export interface SobreDeProducir {
   source: typeof FUENTE_DEL_SOBRE
@@ -174,13 +178,17 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
     }
   }
   const parte: ParteGuardada | null = parteSeco
-    ? { id: idDelParteSeco ?? parteId, client_id: c.client_id, valido: parteSeco.valido === true, briefs: (Array.isArray(parteSeco.briefs) ? (parteSeco.briefs as Array<Record<string, unknown>>) : []).map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })) }
+    ? { id: idDelParteSeco ?? parteId, client_id: c.client_id, valido: parteSeco.valido === true, briefs: (Array.isArray(parteSeco.briefs) ? (parteSeco.briefs as Array<Record<string, unknown>>) : []).map((b) => ({ brief_id: texto(b?.brief_id), fila_id: texto(b?.fila_id), familia: texto(b?.familia) })), ...(Array.isArray(parteSeco.fila_ids) ? { fila_ids: (parteSeco.fila_ids as unknown[]).filter((x): x is string => typeof x === 'string' && x !== '') } : {}) }
     : await al.parteDe(parteId)
   if (!parte) return err(404, 'E-PARTE', 'el parte no existe (o no es un parte de trabajo)')
   if (parte.client_id !== c.client_id) return err(403, 'E-PARTE-AJENO', 'el parte no es del cliente de esta campaña')
   if (c.estado === 'pausada') {
-    const ids = parte.briefs.map((b) => b.fila_id)
-    const conPermiso = ids.length > 0 && ids.every((x): x is string => typeof x === 'string' && x !== '') && (await filasPermitidas(al, c, ids as string[], new Date().toISOString()))
+    // 17-nov (1.ª corrida real): las filas del parte son las de su LOTE más las de cada brief; un brief sin fila (el kit) solo pasa si el parte declara las filas de su lote
+    const delLote = Array.isArray(parte.fila_ids) ? parte.fila_ids.filter((x) => typeof x === 'string' && x !== '') : []
+    const deBriefs = parte.briefs.map((b) => b.fila_id)
+    const briefsCubiertos = deBriefs.every((x) => (typeof x === 'string' && x !== '') || delLote.length > 0)
+    const ids = [...new Set([...delLote, ...deBriefs.filter((x): x is string => typeof x === 'string' && x !== '')])]
+    const conPermiso = ids.length > 0 && briefsCubiertos && (await filasPermitidas(al, c, ids, new Date().toISOString()))
     if (!conPermiso) return err(409, 'E-CAMPANA-NO-ACTIVA', 'la campaña está pausada: solo suelta las filas elegidas con «producir estas filas» (permiso vigente), y este parte trae otras')
   }
   if (!parte.valido) return { status: 200, cuerpo: { accion: 'autoproducir', emite: false, motivo: 'parte_no_valido', emitidos: 0, duplicados: 0, rechazados: 0, omitidos: [], sobres: [] } }
