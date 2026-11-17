@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { crearBaseFalsa } from './base-falsa'
 import {
-  bloqueDeHechosEnTexto, fechaExactaEnElTexto, TOPE_DE_LECTURA, formaDeLaOficina, hechosDelNegocio, leerHechosDelNegocio, NO_CONSTA, temaDeApertura, temaDeEstado, temaDeZona, TEMA_SIN_OFERTAS,
+  bloqueDeHechosEnTexto, diaAnterior, fechaExactaEnElTexto, TOPE_DE_LECTURA, formaDeLaOficina, hechosDelNegocio, leerHechosDelNegocio, NO_CONSTA, temaDeApertura, temaDeEstado, temaDeZona, TEMA_SIN_OFERTAS,
   type EntradaDeHechos,
 } from '../hechos-del-negocio'
 import { actualizarHechosDeLosClientes, hechosDeLaCorridaDelVigilante, preguntarHuecos, TOPE_DE_PREGUNTAS_POR_CORRIDA, type Preguntar } from '../hechos-preguntas'
@@ -151,7 +151,7 @@ describe('🔴 retiro de una oferta → deja de ser actual', () => {
     const h = hechosDelNegocio(e, AHORA)
     expect(h.huecos).toEqual([])
     const of = formaDeLaOficina(h, AHORA)
-    expect(of.find((x) => x.que === 'aún no existe')?.valor).toBe('Guayaquil (guayaquil) por abrir (todavía no atiende) · hasta 2026-11-18')
+    expect(of.find((x) => x.que === 'aún no existe')?.valor).toBe('Guayaquil (guayaquil) por abrir (todavía no atiende) · hasta 2026-11-17')
     expect(of.find((x) => x.que === 'apertura')?.valor).toMatch(/AÚN NO VIGENTE \(empieza el 2026-11-18\)$/)
   })
   it('sin estado declarado pero con la fecha exacta del dueño: la apertura es su respuesta (y deja de preguntarse)', () => {
@@ -166,6 +166,30 @@ describe('🔴 retiro de una oferta → deja de ser actual', () => {
     const h = hechosDelNegocio(e, AHORA)
     expect(h.hechos.map((x) => [x.tipo, x.vigente_hasta])).toEqual([['aun_no_existe', null]])
     expect(h.huecos).toEqual([expect.objectContaining({ tema: temaDeApertura('guayaquil'), pregunta: '¿Qué fecha tienes prevista para abrir Guayaquil (guayaquil)?' })])
+  })
+  it('🔴 el DÍA en que abre (E): «aún no existe» vale hasta E−1 y ya no llega; la apertura llega como vigente, sin «AÚN NO VIGENTE»', () => {
+    const e: EntradaDeHechos = { sedes: [GYE], datosDeSede: [dato('s-gye', 'estado_de_la_sede', 'por abrir', 'dueno', '2026-10-15T00:00:00Z')], fichasDelDueno: [respuesta('fecha apertura guayaquil', 'el 17/11/2026', '2026-10-20T00:00:00Z')] }
+    const h = hechosDelNegocio(e, AHORA)
+    expect(de(h, 'guayaquil', 'aun_no_existe')[0].vigente_hasta).toBe('2026-11-16')
+    const of = formaDeLaOficina(h, AHORA)
+    expect(of.map((x) => x.que)).toEqual(['apertura'])
+    expect(of[0].valor).not.toMatch(/AÚN NO VIGENTE/)
+    // la víspera (E−1) todavía es «por abrir»
+    expect(formaDeLaOficina(h, new Date('2026-11-16T12:00:00Z')).map((x) => x.que)).toEqual(['aún no existe', 'apertura'])
+  })
+  it('el día anterior cruza meses y años', () => {
+    expect([diaAnterior('2026-03-01'), diaAnterior('2027-01-01'), diaAnterior('2028-03-01')]).toEqual(['2026-02-28', '2026-12-31', '2028-02-29'])
+  })
+  it('🔴 una respuesta del dueño DESCARTADA no cuenta: no da fecha, no cierra el hueco ni frena la pregunta', () => {
+    const e: EntradaDeHechos = { sedes: [OLON], datosDeSede: [], fichasDelDueno: [respuesta('fecha apertura olon', 'el 2019-03-03', '2026-11-01T00:00:00Z', [], { descartada: true })] }
+    const h = hechosDelNegocio(e, AHORA)
+    expect(de(h, 'olon', 'apertura')).toHaveLength(0)
+    expect(h.sin_dato).toContainEqual({ oferta: 'olon', tipo: 'apertura', que_falta: 'desde qué fecha atiende' })
+    expect(h.huecos.map((x) => x.tema)).toEqual([temaDeApertura('olon')])
+  })
+  it('una respuesta del dueño RETIRADA tampoco cuenta', () => {
+    const e: EntradaDeHechos = { sedes: [OLON], datosDeSede: [], fichasDelDueno: [respuesta('fecha apertura olon', 'el 2019-03-03', '2026-11-01T00:00:00Z', [], { retirada_en: '2026-11-02T00:00:00Z' })] }
+    expect(hechosDelNegocio(e, AHORA).huecos.map((x) => x.tema)).toEqual([temaDeApertura('olon')])
   })
   it('si el dueño respondió dos veces el mismo tema, vale la respuesta MÁS NUEVA', () => {
     const e: EntradaDeHechos = { sedes: [OLON], datosDeSede: [], fichasDelDueno: [respuesta('fecha apertura olon', 'el 2019-03-03', '2026-11-01T00:00:00Z'), respuesta('fecha apertura olon', 'el 2018-05-05', '2026-11-15T00:00:00Z')] }

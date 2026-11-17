@@ -94,6 +94,9 @@ export function fechaExactaEnElTexto(texto: string): string | null {
 }
 
 // ── temas de las preguntas (texto fijo por oferta: así el tema se reconoce igual en la plataforma y en la puerta del dueño) ──
+/** el día anterior a una fecha AAAA-MM-DD (calendario, en UTC) */
+export const diaAnterior = (f: string): string => new Date(Date.parse(`${f}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10)
+
 export const temaDeApertura = (clave: string): string => `fecha apertura ${clave}`
 export const temaDeCierre = (clave: string): string => `fecha cierre ${clave}`
 export const temaDeZona = (clave: string): string => `zona entrega ${clave}`
@@ -194,7 +197,8 @@ export function hechosDelNegocio(e: EntradaDeHechos, _ahora: Date): HechosDelNeg
     }
     if (estado === 'por_abrir') {
       // aún no existe: no es una oferta actual; si se sabe cuándo abre, la apertura queda como hecho futuro («AÚN NO VIGENTE» en la ficha)
-      hechos.push(hecho('aun_no_existe', `${nombre} por abrir (todavía no atiende)`, vigente!.fuente, { vigente_hasta: fechaApertura }))
+      // `vigente_hasta` es el ÚLTIMO día que vale (igual que en todo el sistema): el día anterior a abrir; el día de la apertura ya no es «por abrir» (CC6 · acordado con CC3)
+      hechos.push(hecho('aun_no_existe', `${nombre} por abrir (todavía no atiende)`, vigente!.fuente, { vigente_hasta: fechaApertura ? diaAnterior(fechaApertura) : null }))
       // la fecha prevista la dijo el dueño: esa respuesta ES la fuente de este hecho
       if (fechaApertura && rApertura) hechos.push(hecho('apertura', `${nombre} abre el ${fechaApertura} · el dueño dijo «${rApertura.r.respuesta}»`, fuenteDeLaFecha(rApertura), { vigente_desde: fechaApertura }))
       else sin_dato.push({ oferta: clave, tipo: 'apertura', que_falta: `qué fecha tiene prevista para abrir${rApertura ? ` (el dueño dijo «${rApertura.r.respuesta}», sin fecha exacta)` : ''}` })
