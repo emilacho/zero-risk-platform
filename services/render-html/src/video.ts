@@ -8,24 +8,9 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { argumentosDelRender, conCsp, CSP_VIDEO, entornoDeHyperframes, LIMITES, type PedidoVideo } from './logica'
+import { bajarArchivo } from './bajada'
 
 const require = createRequire(import.meta.url)
-
-/** baja un archivo sin seguir redirecciones (no se puede saltar a un host fuera de la lista) y con tope de tamaño */
-async function bajar(url: string, destino: string): Promise<void> {
-  const r = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(120_000) })
-  if (!r.ok || !r.body) throw new Error(`no se pudo bajar un archivo (${r.status})`)
-  const largo = Number(r.headers.get('content-length') ?? 0)
-  if (largo > LIMITES.archivo_max_bytes) throw new Error(`archivo de más de ${LIMITES.archivo_max_bytes} bytes`)
-  const partes: Buffer[] = []
-  let total = 0
-  for await (const trozo of r.body as unknown as AsyncIterable<Uint8Array>) {
-    total += trozo.length
-    if (total > LIMITES.archivo_max_bytes) throw new Error(`archivo de más de ${LIMITES.archivo_max_bytes} bytes`)
-    partes.push(Buffer.from(trozo))
-  }
-  await writeFile(destino, Buffer.concat(partes))
-}
 
 /** corre el CLI de hyperframes en la carpeta del trabajo; un render que pasa del tope se corta */
 function correrHyperframes(carpeta: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
@@ -51,7 +36,7 @@ export async function renderVideo(p: PedidoVideo, id: string): Promise<Buffer> {
   const carpeta = join(tmpdir(), 'render-html', id)
   await mkdir(carpeta, { recursive: true })
   try {
-    for (const a of p.archivos) await bajar(a.url, join(carpeta, a.nombre))
+    for (const a of p.archivos) await writeFile(join(carpeta, a.nombre), await bajarArchivo(a.url))
     await writeFile(join(carpeta, 'index.html'), conCsp(p.html, CSP_VIDEO), 'utf8')
     const env = entornoDeHyperframes(process.env, {
       navegador: process.env.CHROME_PATH || undefined,

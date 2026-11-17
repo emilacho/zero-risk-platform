@@ -107,6 +107,13 @@ describe('la página queda cerrada a internet', () => {
     const h = conCsp('<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>', CSP_PNG)
     expect(h).toBe(`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${CSP_PNG}"><meta charset="utf-8"></head><body></body></html>`)
   })
+  it('un <header> NO es el <head> (🟡 de CC6): la CSP no queda dentro del body, donde el navegador la ignora', () => {
+    expect(conCsp('<html><body><header>hola</header></body></html>', 'X')).toBe('<html><head><meta http-equiv="Content-Security-Policy" content="X"></head><body><header>hola</header></body></html>')
+    expect(conCsp('<html><head data-x="1"><title>t</title></head><body><header>h</header></body></html>', 'X')).toBe('<html><head data-x="1"><meta http-equiv="Content-Security-Policy" content="X"><title>t</title></head><body><header>h</header></body></html>')
+    // aunque un <header> aparezca ANTES que el <head>, la meta va en el <head>
+    expect(conCsp('<header>a</header><head></head><body></body>', 'X')).toBe('<header>a</header><head><meta http-equiv="Content-Security-Policy" content="X"></head><body></body>')
+    expect(conCsp('<html><HEAD><title>t</title></HEAD><body></body></html>', 'X')).toBe('<html><HEAD><meta http-equiv="Content-Security-Policy" content="X"><title>t</title></HEAD><body></body></html>')
+  })
   it('sin <head> la crea; sin <html> envuelve el documento', () => {
     expect(conCsp('<html lang="es"><body>x</body></html>', CSP_PNG)).toBe(`<html lang="es"><head><meta http-equiv="Content-Security-Policy" content="${CSP_PNG}"></head><body>x</body></html>`)
     expect(conCsp('<p>x</p>', CSP_PNG)).toBe(`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${CSP_PNG}"></head><body><p>x</p></body></html>`)

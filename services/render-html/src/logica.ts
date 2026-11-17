@@ -42,7 +42,8 @@ export const CSP_VIDEO = "default-src 'self'; script-src 'self' 'unsafe-inline';
 /** pone la CSP del servicio como PRIMER elemento del <head> (si el documento trae otra, el navegador aplica las dos: gana la más cerrada) */
 export function conCsp(html: string, csp: string): string {
   const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`
-  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (h) => `${h}${meta}`)
+  // <head> exacto (con o sin atributos): un <header> NO es el <head> (ahí el navegador ignora la CSP · 🟡 de CC6)
+  if (/<head(\s[^>]*)?>/i.test(html)) return html.replace(/<head(\s[^>]*)?>/i, (h) => `${h}${meta}`)
   if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (h) => `${h}<head>${meta}</head>`)
   return `<!doctype html><html><head>${meta}</head><body>${html}</body></html>`
 }
