@@ -7,6 +7,7 @@ import * as P from '../parametros'
 import { armarPedido, armarPedidoDePlano, catalogoDeModelos, configDelBrazo, fichaPorOmision, CATALOGO_POR_OMISION, FICHAS_POR_OMISION, MODELO_APROBADO } from '../parametros'
 import { VIDEO_POR_OMISION } from '../../oficina/mesa/pedidos'
 import { traducirGuion } from '../../oficina/video/guion'
+import { pedidosPorPlano } from '../../oficina/video/planos'
 
 const base = { prompt: 'un pedido suficientemente largo para el modelo', formato: 'reel' }
 const KLING = { segundos_min: 3, segundos_max: 10, referencias_max: 4, audio: false, precio_usd_s: 0.126, fuente: 'cotización gratis del 17-nov' }
@@ -89,5 +90,22 @@ describe('la oficina usa la ficha del modelo cuando la plantilla no trae la dura
   })
   it('lo que diga la plantilla (dato) sigue mandando dentro de eso', () => {
     expect(traducirGuion(['## Plano 1 · 0–25 s', 'Se ve: el pan'].join('\n'), { segundosMin: 8, segundosMax: 15 }).segundos).toBe(15)
+  })
+})
+
+describe('🔴 la pieza y el clip no se mezclan (nota de CC7): la pieza la limita la plantilla; cada clip, la ficha del modelo', () => {
+  const brief = { formato: 'reel', red: 'instagram' }
+  const tresPlanos = ['## Plano 1 · 0–15 s', 'Se ve: la puerta', '## Plano 2 · 15–30 s', 'Se ve: la olla', '## Plano 3 · 30–45 s', 'Se ve: el plato'].join('\n')
+  it('una pieza de 45 s con tres clips de 15 s NO está fuera de rango si la plantilla admite hasta 60', () => {
+    const g = traducirGuion(tresPlanos, { segundosMin: 8, segundosMax: 60 })
+    expect(g.ok && g.segundos).toBe(45)
+    const r = pedidosPorPlano({ guion: g, brief, fotos: [], clave: 'k' })
+    expect(r.ok && r.pedidos.map((p) => p.segundos)).toEqual([15, 15, 15])
+  })
+  it('un CLIP que pasa lo que admite el modelo sí se rechaza, con su razón, aunque la pieza quepa en la plantilla', () => {
+    const g = traducirGuion(['## Plano 1 · 0–40 s', 'Se ve: la puerta'].join('\n'), { segundosMin: 8, segundosMax: 60 })
+    expect(g.ok && g.segundos).toBe(40)
+    const r = pedidosPorPlano({ guion: g, brief, fotos: [], clave: 'k' })
+    expect(r).toMatchObject({ ok: false, errores: [expect.stringContaining('el plano 1 dura 40 s y el modelo admite hasta 30 s por plano')] })
   })
 })
