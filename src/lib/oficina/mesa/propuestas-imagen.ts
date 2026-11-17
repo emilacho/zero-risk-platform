@@ -43,8 +43,13 @@ export interface PropuestasDeImagen { ronda: number; clase: ClaseDeImagen; aviso
 const sinVacios = <T extends Record<string, unknown>>(o: T): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== '' && !(Array.isArray(v) && !v.length))) as T
 const fotoDe = (img: ImagenPedida | undefined): LaminaDeLaPropuesta['foto'] =>
   !img || img.modo === 'ninguna' ? undefined : img.modo === 'real' ? { origen: 'real', foto_id: img.foto_id } : { origen: 'generada' }
-const seVeDe = (img: ImagenPedida | undefined): string | undefined =>
-  !img || img.modo === 'ninguna' ? undefined : (img.concepto?.que_se_ve || (img.modo === 'generada' ? img.descripcion : '') || undefined)
+/** 17-nov · 🟡 CC6 a #1125 · el «Qué se ve» de la lámina también SIN imagen: con el arreglo de CC3 (#1126) el traductor conserva el concepto en «ninguna»; leerlo aquí
+ *  para que la tarjeta muestre la dirección visual de esa lámina (sin imagen y sin foto, pero no perdida). Se lee por nombre: no se ata al tipo de la rama */
+const seVeDe = (img: ImagenPedida | undefined): string | undefined => {
+  if (!img) return undefined
+  const queSeVe = (img as { concepto?: { que_se_ve?: unknown } }).concepto?.que_se_ve
+  return (typeof queSeVe === 'string' && queSeVe.trim() ? queSeVe : '') || (img.modo === 'generada' ? img.descripcion : '') || undefined
+}
 
 /**
  * la cabecera de la PROPUESTA («Concepto: … · Objetivo: … · Por qué: …», antes de su primera lámina) es de la propuesta, no de la pieza: se aparta SOLO si cada línea son

@@ -5,7 +5,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { propuestasDeLaDecision, TITULO_PROPUESTAS_IMAGEN, DESTRABA_PROPUESTAS_IMAGEN } from '../../direccion/decisiones-propuestas'
-import { traducirPropuestasDeImagen } from '../mesa/propuestas-imagen'
+import { laminasDeLaTraduccion, traducirPropuestasDeImagen } from '../mesa/propuestas-imagen'
+import type { Traduccion } from '../mesa/traductor'
 
 const ENC = { id: 'enc-1', brief_id: 'F1-S1-ig-r1' }
 const PASOS = [{ clave: 'aprobar_propuestas', tipo: 'codigo', funcion: 'aprobar_propuestas', vuelve_a: { paso: 'mesa', max: 2 } }]
@@ -43,6 +44,22 @@ describe('la tarjeta de propuestas en imagen (contrato §2)', () => {
     expect(d.lista[1].planos[0]).toMatchObject({ imagen_url: 'https://x/p2.jpg', imagenes: ['https://x/p2.jpg'] })
     expect(d.lista[2].planos[0]).toMatchObject({ imagen_url: null, imagenes: [] })
     expect(d.lista.map((p) => p.costo?.borrador_usd ?? null)).toEqual([0.02, null, null])
+  })
+  it('🔴 v6 · con 2 láminas, CADA una muestra SU borrador (se busca por n, nunca el de la primera para todas)', () => {
+    const r = traducirPropuestasDeImagen(['# Propuesta 1 · Dos láminas', '## Lámina 1 · hook', 'Título: uno', 'Imagen: generar: el plato', '## Lámina 2 · cta', 'Título: dos', 'Llamado: Escríbenos', 'Imagen: foto:f-01', '# Propuesta 2 · Otra', '## Lámina 1 · hook', 'Título: tres', 'Imagen: ninguna', '## Lámina 2 · cta', 'Título: cuatro', 'Imagen: ninguna'].join('\n'), 'carrusel', { objetivo: 2 })
+    if (!r.ok) throw new Error(r.motivo)
+    // el borrador viene en OTRO orden que las láminas: el de la 2 primero
+    const bi = { propuestas: [{ id: 'P1', laminas: [{ n: 2, png_url: 'https://x/p1-l2.png' }, { n: 1, png_url: 'https://x/p1-l1.png' }] }] }
+    const d = propuestasDeLaDecision(ENC, motor({ propuestas_imagen: r.resultado, borrador_imagen: bi }), PASOS)!
+    expect(d.lista[0].planos.map((p) => [p.n, p.imagen_url])).toEqual([[1, 'https://x/p1-l1.png'], [2, 'https://x/p1-l2.png']])
+  })
+  it('🔴 «Qué se ve» sin imagen: la lámina «ninguna» con dirección visual la muestra (se_ve presente, foto ausente)', () => {
+    // la forma que deja el traductor con el arreglo de CC3 (#1126): «ninguna» conserva su concepto
+    const tr = { ok: true, avisos: [], imagenes: [{ ref: 'hook', modo: 'ninguna', concepto: { que_se_ve: 'la mesa vacía al amanecer' } }], laminas: [{ rol: 'hook', headline: 'uno' }] } as unknown as Traduccion
+    expect(laminasDeLaTraduccion('carrusel', tr)).toEqual([{ n: 1, rol: 'hook', headline: 'uno', se_ve: 'la mesa vacía al amanecer' }])
+    // sin concepto, ausente (nada se inventa)
+    const sin = { ...tr, imagenes: [{ ref: 'hook', modo: 'ninguna' }] } as unknown as Traduccion
+    expect(laminasDeLaTraduccion('carrusel', sin)[0].se_ve).toBeUndefined()
   })
   it('una url que no es http no pasa (nada se inventa ni se muestra roto)', () => {
     const bi = { propuestas: [{ id: 'P1', laminas: [{ n: 1, png_url: 'oficina/p1.png' }] }] }
