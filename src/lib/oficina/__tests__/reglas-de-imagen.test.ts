@@ -179,6 +179,11 @@ describe('17-nov · GO creativos punto 5 · las reglas de imagen se citan POR RE
     expect(r.validas.obligatorio).toHaveLength(5)
     expect(r.comprobadas).toEqual([])
   })
+  it('🔴 la cita cuenta SOLO en la fuente que la regla nombra: está en el brief pero la regla dice «manual» → marcada', () => {
+    const r = citasExisten({ obligatorio: [{ id: 'q', texto: 'central', cita: 'aparece completo y central', fuente: 'manual' }], prohibido: [] }, { brief, manual, plan })
+    expect(r.comprobadas).toEqual([])
+    expect(r.marcadas).toEqual([{ id: 'q', motivo: 'la cita no está en manual: «aparece completo y central»' }])
+  })
   it('una marca que el agente mande por su cuenta no se confía: la sala la recalcula', () => {
     const r = citasExisten({ obligatorio: [{ id: 'a', texto: 'completo', cita: 'aparece completo', marcada: 'yo misma' }], prohibido: [] }, brief)
     expect(r.validas.obligatorio[0]).toEqual({ id: 'a', texto: 'completo', cita: 'aparece completo' })

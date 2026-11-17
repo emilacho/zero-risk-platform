@@ -319,6 +319,13 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     expect(tareas['direccion_visual']).toHaveLength(2); expect(tareas['direccion_visual'][1]).toMatch(/portada/)
     expect(arte(M, id, 'visual_direction').imagenes).toEqual([])
   })
+  it('🔴 17-nov · la sala de láminas también comprueba contra el MANUAL que recibió el agente: una regla citada del manual pasa sin marca', async () => {
+    const { M, id } = await abiertoC()
+    const deManual = { obligatorio: [{ id: 'o1', texto: 'una idea por lámina', claves: ['plato'], fuente: 'manual', cita: 'una idea por frase' }], prohibido: [] }
+    await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: conImagenGenerada('hook', deManual as never) }), mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }) }))
+    expect(arte(M, id, 'visual_direction').reglas_marcadas).toEqual([])
+    expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id === 'vd-regla-o1')).toBe(false)
+  })
   it('🔴 17-nov · una regla de imagen con cita INVENTADA NO se descarta: queda marcada, a la vista, con su ficha', async () => {
     const { M, id } = await abiertoC()
     const inventada = { obligatorio: [{ id: 'o1', texto: 'x', claves: ['plato'], cita: 'Esta frase no está en el brief' }], prohibido: [] }

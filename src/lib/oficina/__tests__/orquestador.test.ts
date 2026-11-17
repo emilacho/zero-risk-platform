@@ -278,6 +278,15 @@ describe('lo que el código decide aunque el curador diga otra cosa', () => {
     expect(obligatorio.filter((r) => r.id !== 'o9').every((r) => r.marcada === undefined)).toBe(true)
     expect(tareas['prompts'][0]).toMatch(/\[o9\] una flor en el plato \(marcada: la cita no está/)
   })
+  it('🔴 17-nov · por referencia al MANUAL y al PLAN: la sala comprueba contra lo que el agente recibió (no solo el brief)', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M)
+    const deManual = { ...REGLAS_CEVICHE, obligatorio: [...REGLAS_CEVICHE.obligatorio, { id: 'o7', texto: 'una sola idea por imagen', claves: ['idea'], fuente: 'manual', cita: 'una idea por frase' }] }
+    await correr(M, id, { ...guionGenerada(), direccion_visual: () => ({ texto: direccionGenerada(deManual as unknown as typeof REGLAS_CEVICHE) }) })
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect(e.fichas.some((f) => f.id === 'vd-regla-o7')).toBe(false)
+    expect((e.artefactos['visual_direction'].datos.reglas_de_imagen as { obligatorio: Array<{ id: string; marcada?: string }> }).obligatorio.find((r) => r.id === 'o7')?.marcada).toBeUndefined()
+  })
   it('🔴 17-nov · por referencia: una regla que sale de un CAMPO de la hoja (sin copiar frase) pasa sin marca y su fuente llega al artefacto', async () => {
     const M = crearMemoria()
     const id = await abierto(M)
