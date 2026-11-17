@@ -57,10 +57,30 @@ export const FIN_DE_LO_AJENO = '<<<FIN DEL MATERIAL DE TERCEROS>>>'
 export function limpio(v: unknown, max: number): string | null {
   const t = txt(v)
   if (!t) return null
-  const una = t.replace(/[\r\n\t]+/g, ' ').replace(/[#`*_<>|«»]/g, '').replace(/\s{2,}/g, ' ').trim()
+  const una = t.replace(/[\r\n\t]+/g, ' ').replace(/[#`*_<>|«»"“”]/g, '').replace(/\s{2,}/g, ' ').trim()
   if (!una) return null
   return una.length > max ? `${una.slice(0, max - 1).trimEnd()}…` : una
 }
+
+/** CC7 · 🟡 3 · los datos de contacto de la competencia NO viajan a la mesa (un modelo podría copiar el WhatsApp ajeno en un video del cliente):
+ * teléfonos (7 o más dígitos, con espacios, puntos, guiones o paréntesis), `@cuentas`, direcciones web y la propia cuenta de la referencia se tapan ANTES de limpiar */
+const DOMINIOS = 'com|net|org|ec|pe|co|mx|es|ar|cl|io|app|shop|store|site|online|info|biz|me|tv|us|uk|sa'
+export function taparContactos(v: unknown, cuenta?: unknown): string | null {
+  let t = txt(v)
+  if (!t) return null
+  const c = txt(cuenta)?.replace(/^@/, '')
+  if (c && c.length >= 3) t = t.replace(new RegExp(c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '[cuenta]')
+  t = t.replace(/\b(?:https?:\/\/|www\.)\S+/gi, '[web]')
+  t = t.replace(new RegExp(`\\b[\\w-]+(?:\\.[\\w-]+)*\\.(?:${DOMINIOS})\\b(?:/\\S*)?`, 'gi'), (m) => (/^\d+(?:\.\d+)*$/.test(m) ? m : '[web]'))
+  t = t.replace(/@[\w.]+/g, '[cuenta]')
+  // nombres de usuario sin @ (la marca de agua del video): partes unidas por punto o guion bajo con alguna letra («ismael.sanchez.clips»), o letras seguidas de 2+ dígitos («ismaelsanchez18»)
+  t = t.replace(/\b(?=[\w.]*[a-z])[a-z0-9]{2,}(?:[._][a-z0-9]{2,})+\b/gi, '[cuenta]')
+  t = t.replace(/\b[a-z][a-z._]{2,}\d{2,}\b/gi, '[cuenta]')
+  t = t.replace(/\+?\(?\d[\d\s.\-()]{5,}\d/g, (m) => ((m.match(/\d/g) ?? []).length >= 7 ? '[contacto]' : m))
+  return t
+}
+/** un texto ajeno de UNA referencia: primero se tapan los contactos, luego se limpia y se recorta */
+const ajeno = (v: unknown, max: number, cuenta: unknown): string | null => limpio(taparContactos(v, cuenta), max)
 /** una transcripción que solo es una marca («[sin voz]», «[música]») no dice nada */
 const dichoReal = (t: string | null): string | null => (t && !/^\[[^\]]*\]$/.test(t) ? t : null)
 const numeroDeMomento = (posicion: unknown): number | null => { const m = /^hijo-(\d+)$/.exec(String(posicion ?? '')); return m ? Number(m[1]) : null }
@@ -118,13 +138,13 @@ export function desarmarReferencias(f: FilasDeReferencias, o: { segundos?: { min
     return {
       video_id: id, cuenta: limpio(v.handle, 60), nivel: nivelDe(v), red: limpio(t?.red, 20), duracion_s: duracion, gusto: gustoDelVideo(v),
       vistas: num(m.views) ?? num(m.videoViewCount) ?? num(m.videoPlayCount) ?? num(t?.vistas),
-      pie: limpio(v.caption, 160), dice: dichoReal(limpio(v.transcripcion, 280)),
+      pie: ajeno(v.caption, 160, v.handle), dice: dichoReal(ajeno(v.transcripcion, 280, v.handle)),
       momentos: caps.map((c) => {
         const k = numeroDeMomento(c.posicion) ?? 0
         const productos = Array.isArray(c.producto_visto) ? (c.producto_visto as unknown[]).filter((x) => typeof x === 'string' && x.trim()) : []
         return {
-          segundo: instantes[k - 1] != null ? Math.round(instantes[k - 1]) : null, que_se_ve: limpio(c.que_muestra, 150) ?? '', toma: limpio(c.tipo_de_toma, 30),
-          texto_en_pantalla: limpio(c.texto_visible, 80), producto: productos.length > 0 || c.tipo_de_toma === 'producto', personas: typeof c.con_personas === 'boolean' ? c.con_personas : null,
+          segundo: instantes[k - 1] != null ? Math.round(instantes[k - 1]) : null, que_se_ve: ajeno(c.que_muestra, 150, v.handle) ?? '', toma: limpio(c.tipo_de_toma, 30),
+          texto_en_pantalla: ajeno(c.texto_visible, 80, v.handle), producto: productos.length > 0 || c.tipo_de_toma === 'producto', personas: typeof c.con_personas === 'boolean' ? c.con_personas : null,
         }
       }),
     }

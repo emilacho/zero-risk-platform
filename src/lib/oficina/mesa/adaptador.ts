@@ -44,10 +44,10 @@ export function puertoDeLaMesa(db: Db, leerConfigDeLaCadena?: (clave: string) =>
       const industria = c.error ? null : ((lista<Fila>(c.data)[0]?.industry as string | null | undefined) ?? null)
       return { fichas: lista<Fila>(f.data), ritmos: lista<Fila>(r.data), industria }
     },
-    // Sprint 2 · S2-6 · solo lectura, siempre por client_id; un error se lanza y el turno lo toma como «sin referencias» (nunca frena la pieza)
+    // Sprint 2 · S2-6 · solo lectura, siempre por client_id (con más de 500 reels de afuera entran los 500 más NUEVOS; hoy son decenas); un error se lanza y el turno lo toma como «sin referencias» (nunca frena la pieza)
     async referenciasDeVideo(clientId: string) {
       const [v, t, c] = await Promise.all([
-        db.from('client_videos').select('id,owner_role,handle,tipo,estado,duracion_s,caption,transcripcion,metricas').eq('client_id', clientId).in('owner_role', ['competidor', 'referencia']).eq('estado', 'ok').limit(500),
+        db.from('client_videos').select('id,owner_role,handle,tipo,estado,duracion_s,caption,transcripcion,metricas').eq('client_id', clientId).in('owner_role', ['competidor', 'referencia']).eq('estado', 'ok').order('created_at', { ascending: false }).limit(500),
         db.from('cerebro_tendencias').select('video_id,nivel,red,vistas,me_gusta').eq('client_id', clientId).not('video_id', 'is', null).limit(2000),
         db.from('client_social_images').select('video_id,posicion,estado,que_muestra,tipo_de_toma,texto_visible,producto_visto,con_personas').eq('client_id', clientId).eq('tipo', 'video_captura').limit(3000),
       ])
