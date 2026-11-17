@@ -844,4 +844,26 @@ describe('🟡 de CC6 al tramo 4 · los roles SIN imagen salen del dato de la pl
     expect(rolesSinImagen({ roles_sin_imagen: ['final'] })).toEqual(['final'])
     expect(rolesSinImagen({})).toEqual(['cta', 'cierre'])
   })
+  it('🔴 el ARMADO (lo que gasta) también lee el dato: con `roles_sin_imagen: [«final»]` y «generar cuando no hay foto», se genera «portada» y «final» queda sin imagen', async () => {
+    const pl = { ...CARRUSEL_IG_V1, limites: { ...CARRUSEL_IG_V1.limites, generar_cuando_no_hay_foto: true, roles_sin_imagen: ['final'] } } as Plantilla
+    const { M, id } = await abierto(pl, BRIEF_CARRUSEL, 'BRF-0100')
+    await correr(M, id, guionCarrusel({
+      direccion_visual: () => ({ texto: j({ resumen: 'sin fotos aptas', imagenes: [{ ref: 'portada', modo: 'ninguna', motivo: 'sin foto' }, { ref: 'final', modo: 'ninguna', motivo: 'tipográfica' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } }) }),
+    }))
+    const dv = arte(M, id, 'visual_direction') as { imagenes: Array<{ ref: string; modo: string }>; refs_generadas: string[] }
+    expect(dv.refs_generadas).toEqual(['portada'])
+    expect(dv.imagenes.find((i) => i.ref === 'final')?.modo).toBe('ninguna')
+    const ids = fichas(M, id).map((f) => f.id)
+    expect(ids).toContain('vd-generada-por-falta-portada')
+    expect(ids).not.toContain('vd-generada-por-falta-final')
+  })
+  it('🔴 sin el dato (cta/cierre por omisión), la misma «final» SÍ se genera: la diferencia es el dato, no el nombre', async () => {
+    const pl = { ...CARRUSEL_IG_V1, limites: { ...CARRUSEL_IG_V1.limites, generar_cuando_no_hay_foto: true, roles_sin_imagen: undefined } } as Plantilla
+    const { M, id } = await abierto(pl, BRIEF_CARRUSEL, 'BRF-0100')
+    await correr(M, id, guionCarrusel({
+      direccion_visual: () => ({ texto: j({ resumen: 'sin fotos aptas', imagenes: [{ ref: 'final', modo: 'ninguna', motivo: 'sin foto' }, { ref: 'cierre', modo: 'ninguna', motivo: 'tipográfica' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } }) }),
+    }))
+    const dv = arte(M, id, 'visual_direction') as { refs_generadas: string[] }
+    expect(dv.refs_generadas).toEqual(['final'])
+  })
 })
