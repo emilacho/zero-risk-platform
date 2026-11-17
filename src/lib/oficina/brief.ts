@@ -139,8 +139,9 @@ export function protagonistasDelBrief(b: Pick<BriefLeido, 'protagonista'>, vocab
 }
 
 /** ¿el brief (o el manual) prohíbe personas? Basta una mención NEGADA de «personas» en lo visual, los negativos o los prohibidos visuales («No aparecen personas»). */
-export function prohibePersonas(b: Pick<BriefLeido, 'visual' | 'negativos' | 'visual_prohibido'>): boolean {
-  const textos = [b.visual, ...b.negativos, ...b.visual_prohibido]
+// 17-nov (🟡 1 de CC7 sobre #1089) · «nunca se muestra» de la gran idea sale de VISUAL y viaja en LO DECIDIDO: también cuenta
+export function prohibePersonas(b: Pick<BriefLeido, 'visual' | 'negativos' | 'visual_prohibido'> & Partial<Pick<BriefLeido, 'lo_decidido'>>): boolean {
+  const textos = [b.visual, ...b.negativos, ...b.visual_prohibido, ...(b.lo_decidido ?? [])]
   return textos.some((t) => aparicionesDe(t, 'personas').some((a) => a.negada) || aparicionesDe(t, 'persona').some((a) => a.negada))
 }
 

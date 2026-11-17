@@ -6,10 +6,12 @@
  * Solo por las puertas que ya existen (concepto → hoja → parte → brief de la oficina); ninguna lectura nueva del CEREBRO.
  */
 import { describe, expect, it } from 'vitest'
-import { parsearBrief } from '@/lib/oficina/brief'
-import { armarTarea } from '@/lib/oficina/mesa/pedidos'
+import { parsearBrief, prohibePersonas } from '@/lib/oficina/brief'
+import { armarTarea, CONVENCION_DE_LA_PIEZA } from '@/lib/oficina/mesa/pedidos'
 import type { EstadoMesa } from '@/lib/oficina/mesa/tipos'
+import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import { leerBriefCreativo } from '../brief-creativo'
+import { marcoDelConcepto } from '../mesas'
 import { comoSeVeSinPartes, decisionDeLaParte, leerConcepto, partesDeComoSeVe, type InsumosDelConcepto } from '../conceptos'
 import { CAMPO_LO_DECIDIDO, escribirHoja, LIBRE_DE_LA_PIEZA, loDecidido, PREFIJO_VISUAL_DE_CAMPANA, type FilaDeHoja, type InsumosDeLaHoja } from '../hoja'
 import type { FormatosPorRed } from '../tipos'
@@ -146,4 +148,44 @@ describe('punto 3 · el paso siguiente recibe la DECISIÓN, no texto para copiar
       expect(t).toContain(LIBRE_DE_LA_PIEZA)
     })
   }
+})
+
+// ───────────────────────── certificación CC7 de #1089
+describe('🟡 1 de CC7 · «nunca se muestra: personas» sigue protegiendo la elección de fotos', () => {
+  const conNunca = (linea: string) => leerConcepto(['## Gran idea  La mesa larga · Noventa días para sentarse juntos', '## Cómo se ve', 'Madera y pan.', '- luz: cálida de ventana', linea, ...CAPITULO, ...BANCO].join('\n'), INS_C)
+  it('la gran idea escribe «- nunca se muestra: no aparecen personas»: la VISUAL ya no lo dice, pero LO DECIDIDO sí y la oficina prohíbe personas', () => {
+    const b = parsearBrief(escribirHoja(INS(conNunca('- nunca se muestra: no aparecen personas'))).texto_md, 'F1-S1-ig-foto')!
+    expect(b.visual).not.toMatch(/personas/)
+    expect(prohibePersonas(b)).toBe(true)
+    // control: sin leer LO DECIDIDO, la misma pieza ya no prohibiría personas (lo que medía CC7)
+    expect(prohibePersonas({ ...b, lo_decidido: undefined })).toBe(false)
+  })
+  it('«- nunca se muestra: personas ni platos» también cuenta (la etiqueta ya es la negación)', () => {
+    const b = parsearBrief(escribirHoja(INS(conNunca('- nunca se muestra: personas ni platos'))).texto_md, 'F1-S1-ig-foto')!
+    expect(prohibePersonas(b)).toBe(true)
+  })
+  it('sin nada sobre personas, no prohíbe (no inventa una reja)', () => {
+    expect(prohibePersonas(parsearBrief(escribirHoja(INS(CON_PARTES)).texto_md, 'F1-S1-ig-foto')!)).toBe(false)
+  })
+})
+
+describe('🟡 2 de CC7 · los dos pedidos de la gran idea piden las cuatro partes, y LO DECIDIDO va justo después de VISUAL', () => {
+  const CUATRO = ['- luz:', '- encuadre:', '- fotos propias:', '- nunca se muestra:']
+  it('el pedido de la cadena (marcoDelConcepto)', () => {
+    const t = marcoDelConcepto({ ctx: contextoDe(clienteA()), estrategia: clienteA().estrategia, briefTexto: 'brief', version: 1, nota: null })
+    for (const p of CUATRO) expect(t).toContain(`«${p} … · porqué: …»`)
+  })
+  it('el pedido de la mesa de la gran idea (convención concepto.v1)', () => {
+    const t = CONVENCION_DE_LA_PIEZA('concepto')
+    const i = t.indexOf('## Cómo se ve'), j = t.indexOf('## Cómo suena')
+    expect(i).toBeGreaterThan(-1)
+    const bloque = t.slice(i, j)
+    for (const p of CUATRO) expect(bloque).toContain(`${p} <`)
+    expect(bloque).toContain('· porqué: <por qué>')
+  })
+  it('en la hoja, LO DECIDIDO sigue inmediatamente a la línea VISUAL', () => {
+    const lineas = parsearBrief(escribirHoja(INS(CON_PARTES)).texto_md, 'F1-S1-ig-carr')!.texto.split('\n')
+    const v = lineas.findIndex((l) => l.startsWith('- VISUAL:'))
+    expect(lineas[v + 1]).toBe(`- ${CAMPO_LO_DECIDIDO}:`)
+  })
 })
