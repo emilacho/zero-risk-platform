@@ -77,8 +77,23 @@ export function avisoDeLaParadaUnica(p: PropuestaDeVideo): string {
   ].join('\n')
 }
 
-/** las líneas «Aviso de concepto: …» que dejó la dirección en su guion corregido (vacío si no hay) */
-export function avisosDeConcepto(texto: string): string[] {
+/** el aviso tal como lo ve quien revisa (va a los avisos del guion) */
+export const PREFIJO_AVISO_DE_CONCEPTO = 'la corrección pedía cambiar el concepto aprobado: '
+/** las líneas «Aviso de concepto: …» de la dirección, con el prefijo de los avisos del guion */
+export const avisosDeConcepto = (texto: string): string[] => textosDeConcepto(texto).map((t) => PREFIJO_AVISO_DE_CONCEPTO + t)
+
+/**
+ * 17-nov · lo que la ficha de la pieza muestra (pedido de CC5 · RESPUESTA-CC5-a-CC1-aviso-de-concepto-en-la-ficha): la fila de la bandeja lleva
+ * `metadata.avisos_de_concepto: string[]` con el texto SIN el rótulo; sin aviso, el campo no va.
+ */
+export function metadataDeAvisosDeConcepto(e: Pick<Estado, 'artefactos'>): { avisos_de_concepto?: string[] } {
+  const g = e.artefactos?.guion?.datos as { avisos_de_concepto?: unknown } | undefined
+  const t = Array.isArray(g?.avisos_de_concepto) ? g!.avisos_de_concepto.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim()) : []
+  return t.length ? { avisos_de_concepto: t } : {}
+}
+
+/** las líneas «Aviso de concepto: …» que dejó la dirección en su guion corregido, SIN el rótulo (vacío si no hay) */
+export function textosDeConcepto(texto: string): string[] {
   const rotulo = ROTULO_AVISO_DE_CONCEPTO.replace(/:$/, '').toLowerCase()
   const fuera: string[] = []
   for (const cruda of String(texto ?? '').split('\n')) {
@@ -88,7 +103,7 @@ export function avisosDeConcepto(texto: string): string[] {
     const resto = tras.replace(/^\s*:/, '')
     if (resto.length === tras.length) continue
     const dice = resto.replace(/^[\s*_]+/, '').replace(/[\s*_]+$/, '')
-    if (dice) fuera.push('la corrección pedía cambiar el concepto aprobado: ' + dice)
+    if (dice) fuera.push(dice)
   }
   return fuera
 }

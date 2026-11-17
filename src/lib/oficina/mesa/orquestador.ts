@@ -23,7 +23,7 @@ import { siguienteDeLaMesa, techoDe } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
 import { parametrosDelVideo, traducirPropuestas, type PropuestasDelVideo } from '../video/propuestas'
-import { avisoDeLaParadaUnica, avisosDeConcepto, propuestaAprobada } from '../video/aprobacion'
+import { avisoDeLaParadaUnica, PREFIJO_AVISO_DE_CONCEPTO, propuestaAprobada, textosDeConcepto } from '../video/aprobacion'
 import { bibliotecaDelCliente, seccionDeLaBiblioteca } from '../video/biblioteca'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
@@ -345,9 +345,9 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   let hayGeneradas = false
   if ('planos' in tr) {
     // 17-nov · la excepción de la parada única: si la dirección declaró que la corrección pedía cambiar el concepto aprobado, el aviso va al guion (la ficha) y sigue
-    const deConcepto = est.marcas.parada_unica ? avisosDeConcepto(textoPieza) : []
-    if (deConcepto.length) tr.avisos.push(...deConcepto)
-    otros.guion = { ...tr, texto: textoPieza } as unknown as Record<string, unknown>
+    const deConcepto = est.marcas.parada_unica ? textosDeConcepto(textoPieza) : []
+    if (deConcepto.length) tr.avisos.push(...deConcepto.map((t) => PREFIJO_AVISO_DE_CONCEPTO + t))
+    otros.guion = { ...tr, texto: textoPieza, ...(deConcepto.length ? { avisos_de_concepto: deConcepto } : {}) } as unknown as Record<string, unknown>
     otros.copy_video = { pie_de_foto: tr.pie_de_foto, hashtags: tr.hashtags }
     otros.visual_direction = { imagenes: [], refs_generadas: [], hay_generadas: false, requiere_mirar: false, reglas_de_imagen: { obligatorio: [], prohibido: [] }, reglas_rechazadas: [], origen: 'mesa' }
     otros.prompts_validos = { por_ref: {}, ninguno: true }

@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import { escribirHoja } from '@/lib/cadena/hoja'
 import { VOZ_DEL_GANCHO } from '../mesa/pedidos'
-import { alLlegarAlPaso, avisoDeLaParadaUnica, avisosDeConcepto, propuestaAprobada, ROTULO_AVISO_DE_CONCEPTO } from '../video/aprobacion'
+import { alLlegarAlPaso, avisoDeLaParadaUnica, avisosDeConcepto, metadataDeAvisosDeConcepto, propuestaAprobada, ROTULO_AVISO_DE_CONCEPTO, textosDeConcepto } from '../video/aprobacion'
 import { faseDeLaProduccion, type PropuestaDeVideo } from '../video/propuestas'
 import { abrirEncargo, recibirDecisionDelDueno, type Respuesta } from '../orquestador'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
@@ -37,13 +37,13 @@ const TRES = [PROPUESTA(1, 'El vapor', 12), CON_FOTO_INEXISTENTE(PROPUESTA(2, 'L
 const UNO = (extra: string[] = []) => [PROPUESTA(2, 'La mesa larga corregida', 15).split('\n').slice(1).join('\n'), ...extra].join('\n')
 const CITAS = ['# Citas', 'A2 usé: lo tomé', 'A3 usé: lo tomé', 'A4 usé: lo tomé', 'A5 usé: lo tomé', 'A6 usé: lo tomé']
 
-async function montar(correccion: string) {
+async function montar(correccion: string, dry_run = true) {
   const M = crearMemoria({ parte: escribirHoja(INSUMOS).texto_md, plantilla: PLANTILLA })
   const MS = crearMesaEnMemoria(TRAS_2012)
   M.P.mesa = MS
   const enviados: Array<Record<string, unknown>> = []
-  M.P.video = { enviar: async (p) => { enviados.push(p as unknown as Record<string, unknown>); return { ok: true, request_id: 'r', status: 'simulado', costo_estimado_usd: 1, costo_lista_usd: 1, descuento_pct: 0, simulado: true } }, estado: async () => ({ ok: true, simulado: true }) }
-  const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run: true, familia: 'video_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+  M.P.video = { enviar: async (p) => { enviados.push(p as unknown as Record<string, unknown>); return { ok: true, request_id: 'r', status: 'simulado', costo_estimado_usd: 1, costo_lista_usd: 1, descuento_pct: 0, simulado: true } }, estado: async () => ({ ok: true, simulado: true }), cotizar: async () => ({ ok: true, costo_estimado_usd: 1, costo_lista_usd: 1 }) }
+  const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'F1-S1-ig-r1', dry_run, familia: 'video_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   const id = String(a.cuerpo.encargo_id)
   let aprobado = false
   const tareas: string[] = []
@@ -112,6 +112,22 @@ describe('la parada del dueño es ÚNICA · la mesa vuelve DESPUÉS de aprobar',
     const avisos = datos<{ avisos: string[] }>(estado(T), 'guion').avisos
     expect(avisos).toContain('la corrección pedía cambiar el concepto aprobado: quitar la foto obligaba a perder la mesa larga; la mantengo con otra toma.')
   })
+  it('🔴 (CC5) la fila de la bandeja lleva `metadata.avisos_de_concepto` con el texto SIN el rótulo; la ficha lo muestra desde ahí', async () => {
+    const T = await montar(UNO([`**${ROTULO_AVISO_DE_CONCEPTO}** la mantengo con otra toma.`]), false)
+    await T.seguir(await T.aprobar())
+    const filas = T.M.llamadas.bandeja as Array<{ metadata: Record<string, unknown> }>
+    expect(filas).toHaveLength(1)
+    expect(filas[0].metadata.avisos_de_concepto).toEqual(['la mantengo con otra toma.'])
+    expect(datos<{ avisos_de_concepto: string[] }>(estado(T), 'guion').avisos_de_concepto).toEqual(['la mantengo con otra toma.'])
+  })
+  it('🔴 (CC5) sin aviso, la fila de la bandeja NO lleva el campo', async () => {
+    const T = await montar(UNO(), false)
+    await T.seguir(await T.aprobar())
+    const filas = T.M.llamadas.bandeja as Array<{ metadata: Record<string, unknown> }>
+    expect(filas).toHaveLength(1)
+    expect('avisos_de_concepto' in filas[0].metadata).toBe(false)
+    expect('avisos_de_concepto' in datos(estado(T), 'guion')).toBe(false)
+  })
   it('sin la excepción, el guion no trae aviso de concepto', async () => {
     const T = await montar(UNO())
     await T.seguir(await T.aprobar())
@@ -174,6 +190,14 @@ describe('las piezas puras', () => {
     expect(avisosDeConcepto('Aviso de concepto :  dos')).toEqual(['la corrección pedía cambiar el concepto aprobado: dos'])
     expect(avisosDeConcepto('el concepto se mantiene')).toEqual([])
     expect(avisosDeConcepto('Aviso de concepto aprobado por todos')).toEqual([])
+    expect(textosDeConcepto(`${ROTULO_AVISO_DE_CONCEPTO} uno\n- ${ROTULO_AVISO_DE_CONCEPTO} dos`)).toEqual(['uno', 'dos'])
+  })
+  it('metadataDeAvisosDeConcepto: solo textos no vacíos, recortados; sin ellos, nada', () => {
+    const G = (v: unknown): Pick<Estado, 'artefactos'> => ({ artefactos: { guion: { version: 1, datos: { avisos_de_concepto: v } } } as unknown as Estado['artefactos'] })
+    expect(metadataDeAvisosDeConcepto(G([' uno ', '', 3, 'dos']))).toEqual({ avisos_de_concepto: ['uno', 'dos'] })
+    expect(metadataDeAvisosDeConcepto(G(['  ']))).toEqual({})
+    expect(metadataDeAvisosDeConcepto(G('uno'))).toEqual({})
+    expect(metadataDeAvisosDeConcepto({ artefactos: {} as Estado['artefactos'] })).toEqual({})
     expect(avisosDeConcepto(`${ROTULO_AVISO_DE_CONCEPTO}   `)).toEqual([])
   })
 })
