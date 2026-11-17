@@ -140,8 +140,12 @@ function conceptoDeLaPieza(f: FilaDeHoja, idea: IdeaDelBanco | null): { idea: st
   }
   // lo creativo que quedó de antes (fila v3) entra solo como SUGERENCIA para la mesa, nunca como orden
   const sugerencias = [k.que_se_ve ? `qué se ve: ${limpio(k.que_se_ve)}` : '', k.emocion ? `emoción: ${limpio(k.emocion)}` : '', k.foto ? `foto: ${limpio(k.foto)}` : ''].filter((x) => x && !/:\s*$/.test(x))
-  return { idea: limpio(k.idea) || idea?.idea || limpio(f.tema) || '', objetivo: limpio(k.objetivo), mensaje: limpio(k.mensaje), publico: limpio(k.publico), llamado: limpio(k.llamado), fotos, sugerencias }
+  // 17-nov · RESPUESTA a Lenovo «el brief trae el cómo» · la línea del banco mezcla la idea con su cómo visual: llega UNA vez y como SUGERENCIA (antes: QUÉ ES + IDEA DEL BANCO + IDEA DE LA PIEZA, como dato)
+  if (idea?.idea) sugerencias.unshift(sugerenciaDelBanco(idea))
+  return { idea: limpio(k.idea), objetivo: limpio(k.objetivo), mensaje: limpio(k.mensaje), publico: limpio(k.publico), llamado: limpio(k.llamado), fotos, sugerencias }
 }
+/** 17-nov · la descripción de la idea del banco, como sugerencia que la mesa puede mejorar (nunca como orden) */
+export const sugerenciaDelBanco = (idea: Pick<IdeaDelBanco, 'id' | 'idea'>): string => `cómo la imaginó el banco (${idea.id}): ${limpio(idea.idea)} · la mesa puede mejorarla o reemplazarla diciendo por qué`
 /** 17-nov · GO «quitar rejas» C3 · cuántas versiones de la pieza: ningún dato lo fija (antes «1» fijo), lo decide la mesa */
 export const VARIANTES_SIN_DATO = 'las que decida la mesa de la pieza (ningún dato del brief ni de la tabla de formatos las fija)'
 /** GO Lenovo 16-nov 22:04 · quién decide el cómo (lo lee la mesa y quien revise: el brief dice QUÉ y POR QUÉ) */
@@ -152,11 +156,10 @@ export const CAMPO_LO_DECIDIDO = 'LO DECIDIDO'
 export const LIBRE_DE_LA_PIEZA = 'LIBRE · la escena, el gancho, la composición, la emoción y qué foto usar, dentro de lo FIJO · PORQUÉ: la mesa de esta pieza es su única instancia creativa'
 /**
  * lo que la gran idea decidió para toda la campaña, como decisiones: «FIJO · <parte>: <qué> · PORQUÉ: <por qué>», la idea elegida del banco y lo LIBRE.
- * Vacío si la gran idea no trae las partes de «cómo se ve» (gran idea vieja: la hoja no cambia). Puro.
+ * 17-nov · SIEMPRE trae FIJO (la idea: id, mensaje, protagonista; o el mensaje si la fila no tiene idea) y LIBRE; los FIJO de «cómo se ve» solo si la gran idea trae sus partes. Puro.
  */
-export function loDecidido(c: Pick<ConceptoLeido, 'gran_idea' | 'como_se_ve_partes'>, idea: Pick<IdeaDelBanco, 'id' | 'idea'> | null, cap: Pick<CapituloDelConcepto, 'clave'> | null): string[] {
-  const partes = c.como_se_ve_partes
-  if (!partes) return []
+export function loDecidido(c: Pick<ConceptoLeido, 'gran_idea' | 'como_se_ve_partes'>, idea: Pick<IdeaDelBanco, 'id' | 'mensaje' | 'protagonista'> | null, cap: Pick<CapituloDelConcepto, 'clave'> | null, mensajeSinIdea = ''): string[] {
+  const partes = c.como_se_ve_partes ?? {}
   const porDefecto = c.gran_idea ? `lo decidió la gran idea «${c.gran_idea.nombre}» para toda la campaña` : 'lo decidió la gran idea para toda la campaña'
   const out: string[] = []
   for (const { clave, etiqueta } of PARTES_DE_COMO_SE_VE) {
@@ -165,7 +168,9 @@ export function loDecidido(c: Pick<ConceptoLeido, 'gran_idea' | 'como_se_ve_part
     const d = decisionDeLaParte(v)
     out.push(`FIJO · ${etiqueta}: ${limpio(d.que)} · PORQUÉ: ${limpio(d.porque ?? porDefecto)}`)
   }
-  if (idea) out.push(`FIJO · idea de esta pieza: ${idea.id} · ${limpio(idea.idea)} · PORQUÉ: la eligió el calendario del banco de ideas${cap ? ` del capítulo ${cap.clave}` : ''}`)
+  // 17-nov · la idea es el QUÉ y el QUIÉN (id, mensaje, protagonista); su descripción visual es una SUGERENCIA (`sugerenciaDelBanco`), no lo fijo
+  if (idea) out.push(`FIJO · idea de esta pieza: ${idea.id}${idea.mensaje ? ` · mensaje: ${limpio(idea.mensaje)}` : ''}${idea.protagonista ? ` · protagonista: ${limpio(idea.protagonista)}` : ''} · PORQUÉ: la eligió el calendario del banco de ideas${cap ? ` del capítulo ${cap.clave}` : ''}`)
+  else if (limpio(mensajeSinIdea)) out.push(`FIJO · mensaje de esta pieza: ${limpio(mensajeSinIdea)} · PORQUÉ: lo fija la fila del calendario (no tiene idea del banco)`)
   out.push(LIBRE_DE_LA_PIEZA)
   return out
 }
@@ -178,22 +183,24 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
   if (ilegible) avisos.push(`${cab.id}: la proporción «${ilegible}» de ${cab.red.toLowerCase()} · ${cab.formato} en cadena_formatos_por_red no se puede leer · se usa ${proporcion}, la de por omisión del formato`)
   const esKit = cab.formato === 'kit'
   const pz = conceptoDeLaPieza(f, idea)
+  const mensajeDeLaPieza = pz.mensaje || mensajeDe(idea, f, avisos, cab.id)
   const cuando = `aprobar antes de publicar · publica el ${fechaEnLetras(f.fecha)}${f.hora ? ` a las ${limpio(f.hora).slice(0, 5)}` : ''}`
   const L: string[] = [
     `### ${cab.id} · ${mayuscula(cab.red)} · ${cab.formato}`,
-    campo('QUÉ ES', esKit ? `Kit semanal de historias y estados (${extra.elementos?.length ?? 0} ${extra.elementos?.length === 1 ? 'elemento' : 'elementos'}) · ${idea?.idea ?? f.tema ?? ''}` : `${cab.formato} para ${mayuscula(cab.red)} · ${idea?.idea ?? limpio(f.tema) ?? ''}`),
+    campo('QUÉ ES', `${esKit ? `Kit semanal de historias y estados (${extra.elementos?.length ?? 0} ${extra.elementos?.length === 1 ? 'elemento' : 'elementos'})` : `${cab.formato} para ${mayuscula(cab.red)}`}${mensajeDeLaPieza ? ` · mensaje: ${mensajeDeLaPieza}` : ''}`),
     campo('DE QUÉ PARTE DEL PLAN SALE', b.de_que_parte_del_plan),
     campo('GRAN IDEA', c.gran_idea ? `${c.gran_idea.nombre} · ${c.gran_idea.frase}` : '(sin gran idea)'),
     campo('CAPÍTULO DE LA FASE', cap ? `${cap.clave} · ${cap.nombre} · ${cap.que_cuenta}` : f.fase ? `${f.fase} · (sin capítulo en el concepto)` : '(sin fase)'),
-    campo('IDEA DEL BANCO', idea ? `${idea.id} · ${idea.idea}${idea.serie ? ` · serie ${idea.serie}` : ''}` : 'ninguna · declarado'),
+    campo('IDEA DEL BANCO', idea ? `${idea.id}${idea.serie ? ` · serie ${idea.serie}` : ''} · cómo la imaginó el banco: en SUGERENCIAS` : 'ninguna · declarado'),
     campo('BRIEF DE CAMPAÑA', ins.brief_id),
     campo('MENSAJE DE CAMPAÑA', b.mensaje),
     campo('OBJETIVO', pz.objetivo || porRed?.objetivo || b.objetivo),
     campo('PÚBLICO', pz.publico || b.publico || '(el brief no nombra al público)'),
     campo('PROTAGONISTA', idea?.protagonista || limpio(f.tema) || '(sin protagonista declarado)'),
     // GO Lenovo 16-nov 22:04 · el brief es ESTRATÉGICO (qué y por qué); el cómo lo decide la mesa
-    campo('IDEA DE LA PIEZA', pz.idea || '(sin idea: la mesa la propone)'),
-    campo('MENSAJE (uno)', pz.mensaje || mensajeDe(idea, f, avisos, cab.id)),
+    // 17-nov · solo la idea PROPIA de la fila; sin ella la propone la mesa (no se rellena con la descripción del banco: esa va a SUGERENCIAS)
+    ...(pz.idea ? [campo('IDEA DE LA PIEZA', pz.idea)] : []),
+    campo('MENSAJE (uno)', mensajeDeLaPieza),
     ...(pz.fotos.length ? listaDe('FOTOS DISPONIBLES', pz.fotos.map((x) => `${x} (material; la mesa decide si la usa)`)) : [campo('FOTOS DISPONIBLES', 'ninguna citada (la mesa ve las fotos aptas del cliente)')]),
     campo('QUIÉN DECIDE EL CÓMO', QUIEN_DECIDE_EL_COMO),
     ...(pz.sugerencias.length ? listaDe('SUGERENCIAS', pz.sugerencias) : []),
@@ -213,7 +220,7 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
   ]
   // 17-nov · puntos 2 y 3 de «creativos en cada paso» · lo que la gran idea DECIDIÓ llega como decisión (FIJO / LIBRE / PORQUÉ), no como texto para copiar.
   // Solo si la gran idea trae las partes de «cómo se ve»: una gran idea vieja escribe la hoja EXACTA de antes
-  const decidido = loDecidido(c, idea, cap)
+  const decidido = loDecidido(c, idea, cap, mensajeDeLaPieza)
   if (decidido.length) L.splice(L.findIndex((x) => x.startsWith('- VISUAL:')) + 1, 0, ...listaDe(CAMPO_LO_DECIDIDO, decidido))
   if (f.datos?.length && !esKit) L.push(campo('DATOS DEL CALENDARIO', datosEnTexto(f.datos)))
   if (extra.fila_ids) L.push(campo('FILAS', extra.fila_ids.join(', ')))

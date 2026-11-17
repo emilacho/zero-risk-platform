@@ -91,14 +91,15 @@ describe('la hoja escribe el concepto de la pieza y la oficina lo lee', () => {
     expect(b.mensaje).toBe('siempre hay una silla para ti')
     expect(b.llamado).toBe('ven a desayunar mañana')
     expect(h.texto_md).not.toMatch(/^- (QUÉ SE VE|EMOCIÓN|FOTO A USAR):/m)
-    expect(h.texto_md).toContain('- SUGERENCIAS:\n  - qué se ve: una silla de madera')
+    // 17-nov (RESPUESTA a Lenovo «el brief trae el cómo»): la descripción de la idea del banco es la primera sugerencia; lo creativo de la fila v3 sigue después
+    expect(h.texto_md).toContain('- SUGERENCIAS:\n  - cómo la imaginó el banco (C1-I01): la primera silla · la mesa puede mejorarla o reemplazarla diciendo por qué\n  - qué se ve: una silla de madera')
     expect(h.texto_md).toContain('  - emoción: bienvenida')
     expect(h.texto_md).toContain('  - foto: foto:f-01')
     expect(h.texto_md).toContain(`- QUIÉN DECIDE EL CÓMO: ${QUIEN_DECIDE_EL_COMO}`)
     // la foto de la fila y la del banco son la misma (foto:f-01 = f-01): una sola, como material
     expect(h.texto_md).toContain('- FOTOS DISPONIBLES:\n  - foto:f-01 (material; la mesa decide si la usa)\n- QUIÉN')
   })
-  it('(GO 22:04) fila v4 (estratégica): su objetivo y su público mandan; las fotos son material; no hay SUGERENCIAS', () => {
+  it('(GO 22:04) fila v4 (estratégica): su objetivo y su público mandan; las fotos son material; la única SUGERENCIA es cómo imaginó la idea el banco', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-ig-01', concepto: { idea: 'la silla', objetivo: 'que guarden la publicación', mensaje: 'm', publico: 'vecinos madrugadores', llamado: 'ven', fotos_disponibles: ['foto:f-09'] } })]))
     expect(h.avisos).toEqual([])
     const b = parsearBrief(h.texto_md, 'F1-S1-ig-01')!
@@ -106,19 +107,21 @@ describe('la hoja escribe el concepto de la pieza y la oficina lo lee', () => {
     expect(h.texto_md).toContain('- PÚBLICO: vecinos madrugadores')
     expect(h.texto_md).toContain('  - foto:f-09 (material; la mesa decide si la usa)')
     expect(h.texto_md).toContain('  - f-01 (material; la mesa decide si la usa)')
-    expect(h.texto_md).not.toContain('- SUGERENCIAS:')
+    expect(h.texto_md).toContain('- SUGERENCIAS:\n  - cómo la imaginó el banco (C1-I01): la primera silla · la mesa puede mejorarla o reemplazarla diciendo por qué\n- GANCHO SUGERIDO:')
   })
   it('sin concepto propio: se arma de la idea del banco; NO suma avisos de la hoja (serían hallazgos del parte: una reja de hecho); el mensaje, el llamado y el público son los de siempre; ninguna escena impuesta', () => {
     const h = escribirHoja(INS([fila({ id: 'F1-S1-ig-01' })]))
     expect(h.avisos).toEqual([])
     const b = parsearBrief(h.texto_md, 'F1-S1-ig-01')!
-    expect(b.idea_de_la_pieza).toBe('la primera silla')
+    // 17-nov (RESPUESTA a Lenovo «el brief trae el cómo»): sin idea propia de la fila NO hay IDEA DE LA PIEZA (la propone la mesa): la descripción del banco va UNA vez y como sugerencia
+    expect(b.idea_de_la_pieza).toBeUndefined()
+    expect(h.texto_md.split('la primera silla').length - 1).toBe(1)
+    expect(h.texto_md).toContain('  - cómo la imaginó el banco (C1-I01): la primera silla')
     expect(b.que_se_ve).toBeUndefined()
     expect(b.mensaje).toBe('aquí siempre hay una silla para ti')
     expect(b.llamado).toBe('«ven a desayunar»')
     expect(h.texto_md).toContain('- PÚBLICO: Vecinos del barrio que desayunan fuera entre semana (del plan).')
     expect(h.texto_md).toContain('  - f-01 (material; la mesa decide si la usa)')
-    expect(h.texto_md).not.toContain('- SUGERENCIAS:')
   })
   it('la línea VISUAL dice que es la referencia de estilo de la CAMPAÑA (los planos del capítulo no se confunden con la escena de la pieza)', () => {
     const b = parsearBrief(escribirHoja(INS([fila({ id: 'F1-S1-ig-01', concepto: CONCEPTO_PROPIO })])).texto_md, 'F1-S1-ig-01')!
