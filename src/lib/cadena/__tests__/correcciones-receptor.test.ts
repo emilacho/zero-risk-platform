@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { ACCIONES } from '../acciones'
-import { bloqueaLaPieza, destinoFinal, guardarRespuesta, textoDeLaAlarma, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
+import { bloqueaLaPieza, destinoFinal, guardarRespuesta, sondeoDelBanco, textoDeLaAlarma, type PuertoDelBanco, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
 import type { Campana } from '../almacen'
 
 const AHORA = '2026-11-17T21:00:00.000Z'
@@ -17,6 +17,8 @@ function almacen() {
   al.campanas.push(CAMPANA)
   // filas del calendario vigente: con idea del banco, pieza fija y sin idea (el reparto de la hoja y del banco las lee)
   const f = (id: string, extra: Record<string, unknown>) => ({ id, campana_id: 'cmp-1', calendario_version: 1, estado: 'en_oficina', fecha: '2026-11-20', avisos: [], idea_ref: null, pieza_fija: null, ...extra }) as unknown as AlmacenMemoria['filasGuardadas'][number]
+  // la gran idea aprobada: C1-I01 y C1-I02 están en su banco (el sello del banco es su `linea`)
+  al.conceptos.push({ campana_id: 'cmp-1', version: 1, estado: 'lista', aprobacion: 'aprobado', texto_md: null, brief_devuelto: null, leido: { banco: [{ id: 'C1-I01', linea: 'el atardecer como plan' }, { id: 'C1-I02', linea: 'la mesa larga del domingo' }] } } as unknown as AlmacenMemoria['conceptos'][number])
   al.filasGuardadas.push(f('f-7', { idea_ref: 'C1-I01' }), f('f-8', { idea_ref: 'C1-I02' }), f('f-fija', { pieza_fija: 'texto fijo de la fila' }), f('f-sin', {}))
   return al
 }
@@ -276,5 +278,90 @@ describe('6 · regla dura sin tomar: FRENA y deja UNA alarma (RESPUESTA-LENOVO 3
   })
   it('el texto de la alarma', () => {
     expect(textoDeLaAlarma({ fila_id: 'f', campana_id: 'c', destino: 'banco', motivo: 'm', linea_de_la_ficha: null, explicacion: null })).toContain('⛔ Regla dura sin tomar · la pieza de la fila f (campaña c) NO se publica.')
+  })
+})
+
+describe('7 · el banco por el puerto de CC1 (CONTRATO-CC1 · se sondea en cada vuelta)', () => {
+  type Llamada = Parameters<PuertoDelBanco>[1]
+  function puerto(guion: Array<'en_curso' | 'pasajero' | { respuesta: 'tomada' | 'tomada_en_parte' | 'no_tomada' | 'no_dicha'; explicacion?: string; motivo?: string }>) {
+    const llamadas: Array<{ c: Llamada; estadoEnLaBase: string | undefined }> = []
+    let al: AlmacenMemoria | null = null
+    const fn: PuertoDelBanco = async (a, c) => {
+      llamadas.push({ c, estadoEnLaBase: (a as AlmacenMemoria).correcciones.find((x) => x.llave === c.correccion_id)?.estado })
+      const paso = guion[Math.min(llamadas.length - 1, guion.length - 1)]
+      if (paso === 'en_curso') return { estado: 'en_curso', encargo_id: 'enc-b', intentos: 1 }
+      if (paso === 'pasajero') return { estado: 'en_curso', encargo_id: null, intentos: -1 }
+      return { estado: 'respondida', resultado: { respuesta: { ...paso, accion: 'editar' }, version: 2, reasignadas: [], con_brief_sin_tocar: ['f-7'] } }
+    }
+    return { fn, llamadas, set al(x: AlmacenMemoria) { al = x }, get al() { return al! } }
+  }
+  const banco = (al: AlmacenMemoria, extra: Record<string, unknown> = {}) => recibir(al, pedido({ destino: 'banco', ...extra }))
+  it('🔴 la llamada lleva la idea, su sello leído AL RECIBIR, la fila y la regla; la corrección ya está «en manos del creador»', async () => {
+    const al = almacen(); const p = puerto(['en_curso'])
+    await banco(al, { regla: 'd1' })
+    // la idea cambia después de recibir: el sello es el de antes (el puerto de CC1 decide «corrección vieja»)
+    ;((al.conceptos[0].leido as { banco: Array<{ linea: string }> }).banco[0]).linea = 'otra cosa'
+    await repartirCorrecciones(al, AHORA, {}, { banco: sondeoDelBanco(p.fn) })
+    expect(p.llamadas).toHaveLength(1)
+    expect(p.llamadas[0].c).toEqual({ correccion_id: 'f-7:banco', campana_id: 'cmp-1', idea_id: 'C1-I01', idea_sello: 'el atardecer como plan', filas_afectadas: ['f-7'], motivo: 'la oferta está cerrada ese día', linea_de_la_ficha: expect.anything(), regla: 'D1' })
+    expect(p.llamadas[0].estadoEnLaBase).toBe('en_manos_del_creador')
+    expect(al.correcciones[0]).toMatchObject({ estado: 'en_manos_del_creador', intentos: 1, dura: true, regla: 'D1' })
+  })
+  it('🔴 en curso, error pasajero, y al final respondida: se sondea en cada vuelta y la respuesta queda FINAL (sin reintentos del receptor)', async () => {
+    const al = almacen(); const p = puerto(['en_curso', 'pasajero', { respuesta: 'tomada_en_parte', explicacion: 'cambié la línea, no el gancho' }])
+    await banco(al)
+    const v1 = await repartirCorrecciones(al, AHORA, {}, { banco: sondeoDelBanco(p.fn) })
+    const v2 = await repartirCorrecciones(al, mas(10), {}, { banco: sondeoDelBanco(p.fn) })
+    expect(v1.lineas).toEqual([]); expect(v2.lineas).toEqual(['f-7:banco: error pasajero del puerto'])
+    // el plazo del creador NO corta al banco (el puerto lleva su propio plazo): a los 90 min se sigue sondeando
+    await repartirCorrecciones(al, mas(90), {}, { banco: sondeoDelBanco(p.fn) })
+    expect(p.llamadas).toHaveLength(3)
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'tomada_en_parte', explicacion: 'cambié la línea, no el gancho', intentos: 1, version_nueva: { version: 2, accion: 'editar', con_brief_sin_tocar: ['f-7'] } })
+    await repartirCorrecciones(al, mas(100), {}, { banco: sondeoDelBanco(p.fn) })
+    expect(p.llamadas).toHaveLength(3)
+  })
+  it('🔴 no_dicha del puerto (p. ej. mesa apagada) cierra a la primera: el puerto ya reintentó; una dura así frena con UNA alarma', async () => {
+    const al = almacen(); const p = puerto([{ respuesta: 'no_dicha', motivo: 'mesa apagada: la corrección del banco no está encendida' }])
+    await banco(al, { regla: 'D2' })
+    await repartirCorrecciones(al, AHORA, {}, { banco: sondeoDelBanco(p.fn) })
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', explicacion: 'mesa apagada: la corrección del banco no está encendida', intentos: 1 })
+    expect(bloqueaLaPieza(al.correcciones[0])).toBe(true)
+    expect(al.alarmasEnviadas).toHaveLength(1)
+  })
+  it('🔴 una dura que el puerto deja «no_tomada» cuenta como no dicha y frena; una de criterio «no_tomada» queda y no frena', async () => {
+    const a = almacen(); await banco(a, { regla: 'D1' })
+    await repartirCorrecciones(a, AHORA, {}, { banco: sondeoDelBanco(puerto([{ respuesta: 'no_tomada', explicacion: 'no' }]).fn) })
+    expect(a.correcciones[0]).toMatchObject({ respuesta: 'no_dicha' }); expect(bloqueaLaPieza(a.correcciones[0])).toBe(true)
+    const b = almacen(); await banco(b, { dura: false })
+    await repartirCorrecciones(b, AHORA, {}, { banco: sondeoDelBanco(puerto([{ respuesta: 'no_tomada', explicacion: 'no aplica a esta idea' }]).fn) })
+    expect(b.correcciones[0]).toMatchObject({ respuesta: 'no_tomada' }); expect(bloqueaLaPieza(b.correcciones[0])).toBe(false)
+    expect(b.alarmasEnviadas).toEqual([])
+  })
+  it('🔴 la idea que no está en la gran idea aprobada → a la pieza (no se guarda); una regla mal escrita → 400', async () => {
+    const al = almacen()
+    ;(al.filasGuardadas.find((x) => x.id === 'f-8') as unknown as { idea_ref: string }).idea_ref = 'C1-I99'
+    const r = await recibir(al, pedido({ fila_id: 'f-8', destino: 'banco' }))
+    expect(r.cuerpo).toMatchObject({ va_a: 'pieza' })
+    expect(al.correcciones).toEqual([])
+    expect((await banco(al, { regla: 'urgente' })).status).toBe(400)
+  })
+  it('🔴 una corrección del calendario no pasa por el sondeo del banco', async () => {
+    const al = almacen(); const p = puerto(['en_curso'])
+    await recibir(al, pedido())
+    await repartirCorrecciones(al, AHORA, { calendario: abre }, { banco: sondeoDelBanco(p.fn) })
+    expect(p.llamadas).toEqual([])
+    // la abrió su creador (el calendario), no se cerró como «sin idea» del banco
+    expect(al.correcciones[0]).toMatchObject({ estado: 'en_manos_del_creador', respuesta: null })
+  })
+  it('🔴 una regla citada hace dura la corrección aunque la oficina no mande «dura»', async () => {
+    const al = almacen()
+    await banco(al, { dura: false, regla: 'D3' })
+    expect(al.correcciones[0]).toMatchObject({ dura: true, regla: 'D3' })
+  })
+  it('🔴 el sello sale de la gran idea APROBADA, no de una versión nueva pendiente', async () => {
+    const al = almacen()
+    al.conceptos.push({ campana_id: 'cmp-1', version: 2, estado: 'lista', aprobacion: 'pendiente', texto_md: null, brief_devuelto: null, leido: { banco: [{ id: 'C1-I01', linea: 'borrador sin aprobar' }] } } as unknown as AlmacenMemoria['conceptos'][number])
+    await banco(al)
+    expect(al.correcciones[0].idea_sello).toBe('el atardecer como plan')
   })
 })

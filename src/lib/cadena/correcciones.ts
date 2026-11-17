@@ -33,6 +33,10 @@ export interface Correccion {
   campo_de_la_hoja: string | null
   /** banco: la idea de la fila (`idea_ref`) al recibir */
   idea_id: string | null
+  /** banco: la `linea` de esa idea en la gran idea aprobada vigente, leída AL RECIBIR (CC1: si cambió, la corrección es vieja) */
+  idea_sello: string | null
+  /** la regla dura que citó la jefatura (D1, D2, D3…), si la citó; una corrección con regla es dura */
+  regla: string | null
   motivo: string
   linea_de_la_ficha: string | null
   dura: boolean
@@ -101,14 +105,20 @@ export async function correccionRecibir(al: Almacen, cuerpo: Record<string, unkn
   const llave = llaveDeCorreccion(filaId, destino)
   if (cuerpo.llave !== undefined && cadena(cuerpo.llave) !== llave) return err(400, 'E-LLAVE', `la llave no corresponde a la fila y el destino (se esperaba «${llave}»)`)
   const campoDeLaHoja = cadena(cuerpo.campo_de_la_hoja)
+  const reglaCruda = cadena(cuerpo.regla)
+  if (reglaCruda && !/^D\d{1,2}$/i.test(reglaCruda)) return err(400, 'E-REGLA', 'la regla dura va como «D1», «D2»…')
+  const regla = reglaCruda ? reglaCruda.toUpperCase() : null
   const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
   const fila = (await al.filas(campana.id, version)).find((f) => f.id === filaId) ?? null
-  const r = destinoFinal(destino, campoDeLaHoja, fila)
+  const repartida = destinoFinal(destino, campoDeLaHoja, fila)
+  // banco: el sello es la línea de la idea en la gran idea aprobada vigente; sin la idea en el banco, no hay a quién corregir → pieza
+  const sello = repartida.destino === 'banco' && fila?.idea_ref ? await selloDeLaIdea(al, campana.id, fila.idea_ref) : null
+  const r = repartida.destino === 'banco' && !sello ? { destino: 'pieza' as const, motivo: `la idea ${fila?.idea_ref} no está en la gran idea aprobada` } : repartida
   // a la pieza: no es de la cadena (la oficina la devuelve a su mesa); no se guarda nada aquí
   if (r.destino === 'pieza') return { status: 200, cuerpo: { ok: true, va_a: 'pieza', motivo: r.motivo, llave } }
   const nueva: Correccion = {
-    llave, campana_id: campana.id, fila_id: filaId, destino: r.destino, destino_pedido: destino, campo_de_la_hoja: campoDeLaHoja, idea_id: r.destino === 'banco' ? fila?.idea_ref ?? null : null,
-    motivo: recortar(motivo)!, linea_de_la_ficha: recortar(cadena(cuerpo.linea_de_la_ficha)), dura: cuerpo.dura === true,
+    llave, campana_id: campana.id, fila_id: filaId, destino: r.destino, destino_pedido: destino, campo_de_la_hoja: campoDeLaHoja, idea_id: r.destino === 'banco' ? fila?.idea_ref ?? null : null, idea_sello: sello, regla,
+    motivo: recortar(motivo)!, linea_de_la_ficha: recortar(cadena(cuerpo.linea_de_la_ficha)), dura: cuerpo.dura === true || !!regla,
     origen: cadena(cuerpo.origen), encargo_id: encargoId, estado: 'recibida', respuesta: null, explicacion: null, version_nueva: null, intentos: 0, recibida_en: ahora, entregada_en: null, respondida_en: null, alarma_en: null,
   }
   const { correccion, nueva: esNueva } = await al.correccionInsertar(nueva)
@@ -179,12 +189,12 @@ export function marcoDeLaCorreccion(c: Pick<Correccion, 'motivo' | 'linea_de_la_
  * Guarda la respuesta de UN intento del creador. Idempotente: si ya está respondida, no cambia nada.
  * `no_dicha` con intentos por delante deja la corrección `recibida` (la vigía la vuelve a repartir); agotados, queda respondida `no_dicha` y visible.
  */
-export async function guardarRespuesta(al: Almacen, llave: string, leida: RespuestaLeida, ahora: string, versionNueva: Record<string, unknown> | null = null): Promise<{ estado: EstadoDeCorreccion; respuesta: RespuestaDeCorreccion | null; ya_respondida?: boolean } | null> {
+export async function guardarRespuesta(al: Almacen, llave: string, leida: RespuestaLeida, ahora: string, versionNueva: Record<string, unknown> | null = null, final = false): Promise<{ estado: EstadoDeCorreccion; respuesta: RespuestaDeCorreccion | null; ya_respondida?: boolean } | null> {
   if (!al.correccion || !al.correccionActualizar) return null
   const c = await al.correccion(llave)
   if (!c) return null
   if (c.estado === 'respondida') return { estado: c.estado, respuesta: c.respuesta, ya_respondida: true }
-  if (leida.respuesta === 'no_dicha' && c.intentos < INTENTOS_POR_CORRECCION) {
+  if (leida.respuesta === 'no_dicha' && !final && c.intentos < INTENTOS_POR_CORRECCION) {
     await al.correccionActualizar(llave, { estado: 'recibida', explicacion: recortar(leida.motivo_no_dicha ?? null) }, c.estado)
     return { estado: 'recibida', respuesta: null }
   }
@@ -192,6 +202,44 @@ export async function guardarRespuesta(al: Almacen, llave: string, leida: Respue
   const cerro = await al.correccionActualizar(llave, { estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva, respondida_en: ahora }, c.estado)
   if (cerro) await alarmaSiFrena(al, { ...c, estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion) }, ahora)
   return { estado: 'respondida', respuesta: leida.respuesta }
+}
+
+/** la `linea` de la idea en la gran idea aprobada vigente (la misma regla que el calendario, el tablero y el puerto del banco de CC1) */
+export async function selloDeLaIdea(al: Almacen, campanaId: string, ideaId: string): Promise<string | null> {
+  const aprobado = [...(await al.conceptosDe(campanaId))].reverse().find((x) => x.aprobacion === 'aprobado' && x.leido)
+  const banco = aprobado && Array.isArray((aprobado.leido as Record<string, unknown>).banco) ? ((aprobado.leido as Record<string, unknown>).banco as Array<{ id?: unknown; linea?: unknown }>) : []
+  const idea = banco.find((i) => i.id === ideaId)
+  return idea && typeof idea.linea === 'string' && idea.linea.trim() ? idea.linea : null
+}
+
+/**
+ * CONTRATO-CC1 (17-nov) · un creador que se SONDEA en cada vuelta: el puerto abre su mesa, reintenta adentro y responde al final.
+ * El receptor solo marca la corrección «en manos del creador» (la puerta de CC1 exige eso), lo llama con la misma corrección hasta `respondida`
+ * y guarda esa respuesta como FINAL (los reintentos ya los hizo el puerto; aquí no se repiten).
+ */
+export type SondeoDeCorreccion = (al: Almacen, c: Correccion, ahora: string) => Promise<{ estado: 'en_curso'; detalle?: string } | { estado: 'respondida'; leida: RespuestaLeida; version_nueva: Record<string, unknown> | null }>
+
+/** la forma del puerto de CC1 que usa el receptor (estructural: el módulo del banco no se importa aquí) */
+export interface CorreccionAlBancoDelReceptor { correccion_id: string; campana_id: string; idea_id: string; idea_sello: string; filas_afectadas: string[]; motivo: string; linea_de_la_ficha: string | null; regla: string | null }
+export type PuertoDelBanco = (al: Almacen, c: CorreccionAlBancoDelReceptor, ahora: string) => Promise<
+  | { estado: 'en_curso'; encargo_id?: string | null; intentos?: number }
+  | { estado: 'respondida'; resultado: { respuesta: { respuesta: RespuestaDeCorreccion; explicacion?: string | null; motivo?: string | null; accion?: string }; version: number | null; reasignadas?: unknown[]; con_brief_sin_tocar?: string[] } }
+>
+
+export function sondeoDelBanco(puerto: PuertoDelBanco): SondeoDeCorreccion {
+  return async (al, c, ahora) => {
+    if (!c.idea_id || !c.idea_sello) return { estado: 'respondida', leida: { respuesta: 'no_dicha', explicacion: null, motivo_no_dicha: 'la corrección al banco llegó sin la idea o sin su sello' }, version_nueva: null }
+    const e = await puerto(al, { correccion_id: c.llave, campana_id: c.campana_id, idea_id: c.idea_id, idea_sello: c.idea_sello, filas_afectadas: [c.fila_id], motivo: c.motivo, linea_de_la_ficha: c.linea_de_la_ficha, regla: c.regla }, ahora)
+    if (e.estado === 'en_curso') return { estado: 'en_curso', detalle: e.intentos === -1 ? 'error pasajero del puerto' : undefined }
+    const x = e.resultado.respuesta
+    const explicacion = recortar(cadena(x.explicacion ?? null))
+    const leida: RespuestaLeida = x.respuesta === 'no_dicha'
+      ? { respuesta: 'no_dicha', explicacion: null, motivo_no_dicha: cadena(x.motivo ?? null) ?? 'el banco no respondió' }
+      // una dura no se puede «no tomar» (se toma sí o sí): si el puerto la deja así, cuenta como no dicha
+      : c.dura && x.respuesta === 'no_tomada' ? { respuesta: 'no_dicha', explicacion, motivo_no_dicha: 'es una regla dura y el banco dijo «no tomada»' }
+      : { respuesta: x.respuesta, explicacion }
+    return { estado: 'respondida', leida, version_nueva: { version: e.resultado.version, accion: x.accion ?? null, reasignadas: e.resultado.reasignadas ?? [], con_brief_sin_tocar: e.resultado.con_brief_sin_tocar ?? [] } }
+  }
 }
 
 /**
@@ -222,13 +270,24 @@ const vencida = (c: Correccion, ahora: string) => !!c.entregada_en && Date.parse
  *   recibida → se entrega al creador (cuenta un intento) · en manos del creador y vencida → vuelve a recibida (o se cierra no_dicha si no quedan intentos)
  *   destino sin creador (hoja, mientras Lenovo decide · banco sin el puerto de CC1) → queda recibida y visible, sin gastar intentos.
  */
-export async function repartirCorrecciones(al: Almacen, ahora: string, creadores: Partial<Record<DestinoDeCorreccion, CreadorDeCorreccion>>): Promise<{ aplicado: string[]; lineas: string[] }> {
+export async function repartirCorrecciones(al: Almacen, ahora: string, creadores: Partial<Record<DestinoDeCorreccion, CreadorDeCorreccion>>, sondeos: Partial<Record<DestinoGuardado, SondeoDeCorreccion>> = {}): Promise<{ aplicado: string[]; lineas: string[] }> {
   const aplicado: string[] = [], lineas: string[] = []
   if (!al.correccionesPendientes || !al.correccionActualizar) return { aplicado, lineas }
   // las alarmas de duras sin tomar que Slack no confirmó (una por incidente: se reintentan, no se duplican)
   if (al.alarmasPendientes) for (const c of await al.alarmasPendientes()) { await alarmaSiFrena(al, c, ahora); if (c.alarma_en === null) aplicado.push(`${c.llave}: alarma de regla dura reintentada`) }
   for (const c of await al.correccionesPendientes()) {
     try {
+      const sondeo = sondeos[c.destino]
+      if (sondeo) {
+        // la marca va antes de la primera llamada (la puerta del puerto exige «en manos del creador»); después, se sondea en cada vuelta
+        if (c.estado === 'recibida' && !(await al.correccionActualizar(c.llave, { estado: 'en_manos_del_creador', intentos: c.intentos + 1, entregada_en: ahora }, 'recibida'))) continue
+        const enManos: Correccion = c.estado === 'recibida' ? { ...c, estado: 'en_manos_del_creador', intentos: c.intentos + 1, entregada_en: ahora } : c
+        const s = await sondeo(al, enManos, ahora)
+        if (s.estado === 'en_curso') { if (s.detalle) lineas.push(`${c.llave}: ${s.detalle}`); continue }
+        const g = await guardarRespuesta(al, c.llave, s.leida, ahora, s.version_nueva, true)
+        aplicado.push(`${c.llave}: el ${c.destino} respondió ${g?.respuesta ?? s.leida.respuesta}`)
+        continue
+      }
       if (c.estado === 'en_manos_del_creador') {
         if (!vencida(c, ahora)) continue
         const r = await guardarRespuesta(al, c.llave, { respuesta: 'no_dicha', explicacion: null, motivo_no_dicha: `el creador no respondió en ${PLAZO_DEL_CREADOR_MIN} min` }, ahora)
